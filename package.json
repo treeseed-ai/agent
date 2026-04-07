@@ -1,0 +1,52 @@
+{
+  "name": "@treeseed/agent",
+  "version": "0.0.1",
+  "description": "Treeseed agent service runtime package.",
+  "license": "AGPL-3.0-only",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/treeseed-ai/agent.git",
+    "directory": "."
+  },
+  "homepage": "https://treeseed.ai",
+  "bugs": {
+    "url": "https://github.com/treeseed-ai/agent/issues"
+  },
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "types": "./dist/index.d.ts",
+  "files": [
+    "README.md",
+    "dist",
+    "Dockerfile"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "setup": "npm install",
+    "setup:ci": "npm ci",
+    "build:dist": "node ./scripts/run-ts.mjs ./scripts/build-dist.ts",
+    "prepare": "npm run build:dist",
+    "prepack": "npm run build:dist",
+    "test:smoke": "node ./scripts/run-ts.mjs ./scripts/test-smoke.ts",
+    "release:setup": "npm run setup:ci",
+    "release:check-tag": "node ./scripts/run-ts.mjs ./scripts/assert-release-tag-version.ts",
+    "release:verify": "node ./scripts/run-ts.mjs ./scripts/release-verify.ts",
+    "release:publish": "node ./scripts/run-ts.mjs ./scripts/publish-package.ts"
+  },
+  "dependencies": {
+    "@treeseed/core": "^0.0.1",
+    "@treeseed/sdk": "^0.0.1",
+    "esbuild": "^0.25.10",
+    "typescript": "^5.9.3"
+  },
+  "devDependencies": {
+    "@types/node": "^24.6.0"
+  },
+  "bin": {
+    "treeseed-agents": "./dist/scripts/treeseed-agents.js"
+  }
+}

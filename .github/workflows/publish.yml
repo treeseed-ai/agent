@@ -1,0 +1,40 @@
+name: Publish @treeseed/agent
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'treeseed-agent-v*'
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: https://registry.npmjs.org
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate release tag version
+        if: startsWith(github.ref, 'refs/tags/')
+        run: npm run release:check-tag -- "${GITHUB_REF_NAME}"
+
+      - name: Verify package
+        run: npm run release:verify
+
+      - name: Publish package
+        run: npm run release:publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

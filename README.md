@@ -53,10 +53,10 @@ Available commands:
 - `npm run build`: build the distributable package
 - `npm test`: run the smoke test
 - `npm run release:verify`: verify build, smoke test, and packed-install behavior
-- `npm run release:check-tag -- <tag>`: validate `treeseed-agent-v*` tags against `package.json`
+- `npm run release:check-tag -- <tag>`: validate plain semver tags like `0.1.1` against `package.json`
 - `npm run release:publish`: publish to npm
 
 ## GitHub Actions
 
 - `.github/workflows/ci.yml` runs `npm ci`, `npm run build`, `npm test`, and `npm run release:verify` on pushes and pull requests.
-- `.github/workflows/publish.yml` runs the same verification steps before publishing on `treeseed-agent-v*` tags or manual dispatch.
+- `.github/workflows/publish.yml` runs the same verification steps before publishing on `*.*.*` version tags or manual dispatch.

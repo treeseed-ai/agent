@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { cpSync, mkdirSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync, existsSync } from 'node:fs';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, extname, join, resolve } from 'node:path';
@@ -110,6 +110,34 @@ function installPackagedPackage(extractRoot: string, tempRoot: string, tarballPa
 	rmSync(resolve(extractRoot, 'package'), { recursive: true, force: true });
 }
 
+function isInstalledDependencyPackage(root: string) {
+	return root.includes(`${process.platform === 'win32' ? '\\' : '/'}node_modules${process.platform === 'win32' ? '\\' : '/'}`);
+}
+
+function installDependencyPackage(root: string, extractRoot: string, tempRoot: string, folderName: string, fallbackName: string) {
+	if (isInstalledDependencyPackage(root) && existsSync(resolve(root, 'dist')) && existsSync(resolve(root, 'package.json'))) {
+		const targetRoot = resolve(tempRoot, 'node_modules', '@treeseed', folderName);
+		mkdirSync(resolve(tempRoot, 'node_modules', '@treeseed'), { recursive: true });
+		cpSync(root, targetRoot, {
+			recursive: true,
+			filter(source) {
+				const relativePath = source.slice(root.length).replace(/^[/\\]/, '');
+				if (!relativePath) {
+					return true;
+				}
+				return !(
+					relativePath === 'node_modules'
+					|| relativePath.startsWith(`node_modules${process.platform === 'win32' ? '\\' : '/'}`)
+				);
+			},
+		});
+		return;
+	}
+
+	const tarballPath = pack(root, fallbackName);
+	installPackagedPackage(extractRoot, tempRoot, tarballPath, folderName);
+}
+
 run('npm', ['run', 'build:dist']);
 scanDirectory(resolve(packageRoot, 'dist'));
 run('npm', ['run', 'test:smoke']);
@@ -120,12 +148,10 @@ const installRoot = resolve(stageRoot, 'install');
 
 try {
 	mkdirSync(extractRoot, { recursive: true });
-	const sdkTarball = pack(sdkPackageRoot, 'treeseed-sdk.tgz');
-	const coreTarball = pack(corePackageRoot, 'treeseed-core.tgz');
 	const agentTarball = pack(packageRoot, 'treeseed-agent.tgz');
 
-	installPackagedPackage(extractRoot, installRoot, sdkTarball, 'sdk');
-	installPackagedPackage(extractRoot, installRoot, coreTarball, 'core');
+	installDependencyPackage(sdkPackageRoot, extractRoot, installRoot, 'sdk', 'treeseed-sdk.tgz');
+	installDependencyPackage(corePackageRoot, extractRoot, installRoot, 'core', 'treeseed-core.tgz');
 	installPackagedPackage(extractRoot, installRoot, agentTarball, 'agent');
 	mirrorDependencies(installRoot);
 	writeFileSync(resolve(installRoot, 'package.json'), `${JSON.stringify({ name: 'treeseed-agent-smoke', private: true, type: 'module' }, null, 2)}\n`, 'utf8');

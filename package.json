@@ -42,7 +42,7 @@
   "dependencies": {
     "@treeseed/core": "^0.1.2",
     "@treeseed/sdk": "^0.1.2",
-    "esbuild": "^0.25.10",
+    "esbuild": "0.28.0",
     "typescript": "^5.9.3"
   },
   "devDependencies": {

@@ -4,11 +4,13 @@ on:
   workflow_dispatch:
   push:
     tags:
-      - 'treeseed-agent-v*'
+      - '*.*.*'
 
 jobs:
   publish:
     runs-on: ubuntu-latest
+    environment:
+      name: Production
     permissions:
       contents: read
       id-token: write

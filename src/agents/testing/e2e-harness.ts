@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { createRequire } from 'node:module';
+import ts from 'typescript';
 import type { AgentExecutionAdapter, AgentMutationAdapter } from '../runtime-types.ts';
 import { MemoryAgentDatabase } from '../d1-store.ts';
 import { resolveModelDefinition } from '../model-registry.ts';
@@ -126,6 +127,26 @@ async function patchFixtureAgentSpecs(repoRoot: string) {
 		if (next !== source) {
 			await writeFile(filePath, next, 'utf8');
 		}
+	}
+}
+
+async function transpileFixtureAgentHandlers(repoRoot: string) {
+	const agentsRoot = path.join(repoRoot, 'src', 'agents');
+	const agentFiles = (await readdir(agentsRoot, { withFileTypes: true }).catch(() => []))
+		.filter((entry) => entry.isFile() && entry.name.endsWith('.ts'))
+		.map((entry) => entry.name);
+
+	for (const filename of agentFiles) {
+		const sourcePath = path.join(agentsRoot, filename);
+		const outputPath = path.join(agentsRoot, filename.replace(/\.ts$/u, '.js'));
+		const source = await readFile(sourcePath, 'utf8');
+		const transformed = ts.transpileModule(source, {
+			compilerOptions: {
+				module: ts.ModuleKind.ESNext,
+				target: ts.ScriptTarget.ES2022,
+			},
+		}).outputText.replace(/(['"`])(\.[^'"`\n]+)\.ts\1/g, '$1$2.js$1');
+		await writeFile(outputPath, transformed, 'utf8');
 	}
 }
 
@@ -271,6 +292,7 @@ export async function createAgentTestRuntime(options?: {
 	if (existsSync(sharedNodeModules)) {
 		await symlink(sharedNodeModules, path.join(repoRoot, 'node_modules'), 'dir');
 	}
+	await transpileFixtureAgentHandlers(repoRoot);
 	await patchFixtureAgentSpecs(repoRoot);
 
 	process.env.TREESEED_AGENT_CONTENT_ROOT = path.join(repoRoot, 'src', 'content');

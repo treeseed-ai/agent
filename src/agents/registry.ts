@@ -27,11 +27,14 @@ const HANDLER_EXPORT_NAMES: Record<(typeof BUILTIN_HANDLER_KINDS)[number], strin
 	releaser: 'releaserHandler',
 };
 
-export function getTenantAgentHandlerModulePath(
+export function getTenantAgentHandlerModulePaths(
 	kind: AgentHandlerKind,
 	tenantRoot = resolveTreeseedTenantRoot(),
 ) {
-	return resolve(tenantRoot, 'src/agents', `${kind}.ts`);
+	return [
+		resolve(tenantRoot, 'src/agents', `${kind}.js`),
+		resolve(tenantRoot, 'src/agents', `${kind}.ts`),
+	];
 }
 
 export async function loadTenantAgentHandlerRegistry(
@@ -40,8 +43,8 @@ export async function loadTenantAgentHandlerRegistry(
 	const registry: Record<string, AgentHandler> = {};
 
 	for (const kind of BUILTIN_HANDLER_KINDS) {
-		const modulePath = getTenantAgentHandlerModulePath(kind, tenantRoot);
-		if (!existsSync(modulePath)) {
+		const modulePath = getTenantAgentHandlerModulePaths(kind, tenantRoot).find((candidate) => existsSync(candidate));
+		if (!modulePath) {
 			continue;
 		}
 
@@ -86,7 +89,7 @@ export function resolveAgentHandler(kind: AgentHandlerKind) {
 	const handler = AGENT_HANDLER_REGISTRY[kind] ?? runtimeProviders.handlers.get(kind);
 	if (!handler) {
 		if ((BUILTIN_HANDLER_KINDS as readonly string[]).includes(kind)) {
-			const expectedPath = getTenantAgentHandlerModulePath(kind);
+			const expectedPath = getTenantAgentHandlerModulePaths(kind).join('" or "');
 			const expectedExport = HANDLER_EXPORT_NAMES[kind as (typeof BUILTIN_HANDLER_KINDS)[number]];
 			throw new Error(
 				`No runtime handler is registered for agent handler "${kind}". Expected tenant file "${expectedPath}" exporting "${expectedExport}" or a plugin contribution.`,

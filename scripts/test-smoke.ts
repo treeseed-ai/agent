@@ -13,7 +13,7 @@ try {
 			relatedObjectives: ['release-smoke-objective'],
 		},
 	]);
-	await runtime.runCycle();
+	await runtime.runAgent('planner-agent');
 	const runs = await runtime.readRunLogs();
 	if (runs.length === 0) {
 		throw new Error('Agent smoke did not produce any run logs.');

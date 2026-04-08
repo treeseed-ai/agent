@@ -1,15 +1,13 @@
 import { execFile } from 'node:child_process';
-import { access, cp, mkdtemp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
+import { access, cp, mkdtemp, mkdir, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
-import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import type { AgentExecutionAdapter, AgentMutationAdapter } from '../runtime-types.ts';
 import { MemoryAgentDatabase } from '../d1-store.ts';
-import { AgentKernel } from '../kernel/agent-kernel.ts';
 import { resolveModelDefinition } from '../model-registry.ts';
-import { AgentSdk } from '../sdk.ts';
 import { runFromRecord } from '../stores/run-store.ts';
 import { serializeFrontmatterDocument } from '../frontmatter.ts';
 import type {
@@ -17,6 +15,8 @@ import type {
 	SdkMessageEntity,
 	SdkRunEntity,
 } from '../sdk-types';
+import type { AgentKernel } from '../kernel/agent-kernel.ts';
+import type { AgentSdk } from '../sdk.ts';
 
 const execFileAsync = promisify(execFile);
 const require = createRequire(import.meta.url);
@@ -30,8 +30,25 @@ function resolveDocsRoot() {
 		return path.resolve(process.env.TREESEED_AGENT_FIXTURE_ROOT);
 	}
 
+	const cwd = process.cwd();
 	const corePackageRoot = path.resolve(path.dirname(require.resolve('@treeseed/core')), '..');
-	return path.resolve(corePackageRoot, 'fixture');
+	const candidates = [
+		path.resolve(cwd, 'fixture'),
+		path.resolve(cwd, '..', 'fixtures', 'sites', 'working-site'),
+		path.resolve(cwd, '..', '..', 'fixtures', 'sites', 'working-site'),
+		path.resolve(corePackageRoot, 'fixture'),
+		path.resolve(corePackageRoot, '.fixtures', 'treeseed-fixtures', 'sites', 'working-site'),
+	];
+
+	for (const candidate of candidates) {
+		if (existsSync(path.join(candidate, 'src', 'manifest.yaml'))) {
+			return candidate;
+		}
+	}
+
+	throw new Error(
+		`Unable to resolve an agent smoke fixture root. Checked: ${candidates.join(', ')}`,
+	);
 }
 
 async function resolveWranglerBin() {
@@ -74,6 +91,31 @@ async function walkFiles(root: string): Promise<string[]> {
 		}),
 	);
 	return nested.flat();
+}
+
+async function patchFixtureAgentSpecs(repoRoot: string) {
+	const updates = new Map<string, string>([
+		['architecture-agent.mdx', '    operations: [pick, update, create]'],
+		['engineer-agent.mdx', '    operations: [pick, update, create]'],
+		['releaser-agent.mdx', '    operations: [pick, update, get, create]'],
+		['researcher-agent.mdx', '    operations: [pick, update, create]'],
+		['reviewer-agent.mdx', '    operations: [pick, update, get, create]'],
+	]);
+
+	for (const [filename, permissionLine] of updates) {
+		const filePath = path.join(repoRoot, 'src', 'content', 'agents', filename);
+		const source = await readFile(filePath, 'utf8').catch(() => null);
+		if (!source) {
+			continue;
+		}
+		const next = source.replace(
+			/(\n  - model: message\n)    operations: \[[^\]]+\]/,
+			`$1${permissionLine}`,
+		);
+		if (next !== source) {
+			await writeFile(filePath, next, 'utf8');
+		}
+	}
 }
 
 async function migrateDatabase(repoRoot: string, persistTo: string) {
@@ -194,6 +236,9 @@ export async function createAgentTestRuntime(options?: {
 	const docsRoot = resolveDocsRoot();
 	const previousContentRoot = process.env.TREESEED_AGENT_CONTENT_ROOT;
 	const previousExecutionMode = process.env.TREESEED_AGENT_EXECUTION_PROVIDER;
+	const previousTenantRoot = process.env.TREESEED_TENANT_ROOT;
+	const previousCwd = process.cwd();
+	const sharedNodeModules = path.join(previousCwd, 'node_modules');
 
 	await cp(docsRoot, repoRoot, {
 		recursive: true,
@@ -212,12 +257,22 @@ export async function createAgentTestRuntime(options?: {
 			].some((prefix) => relativePath === prefix || relativePath.startsWith(`${prefix}${path.sep}`));
 		},
 	});
+	if (existsSync(sharedNodeModules)) {
+		await symlink(sharedNodeModules, path.join(repoRoot, 'node_modules'), 'dir');
+	}
+	await patchFixtureAgentSpecs(repoRoot);
 
 	process.env.TREESEED_AGENT_CONTENT_ROOT = path.join(repoRoot, 'src', 'content');
 	process.env.TREESEED_AGENT_EXECUTION_PROVIDER = options?.executionMode ?? 'stub';
+	process.env.TREESEED_TENANT_ROOT = repoRoot;
+	process.chdir(repoRoot);
 
 	await mkdir(persistTo, { recursive: true });
 	await initializeSandboxRepo(repoRoot);
+	const [{ AgentKernel }, { AgentSdk }] = await Promise.all([
+		import('../kernel/agent-kernel.ts'),
+		import('../sdk.ts'),
+	]);
 	const sdk =
 		options?.databaseMode === 'local-d1'
 			? (await migrateDatabase(repoRoot, persistTo), AgentSdk.createLocal({
@@ -402,6 +457,12 @@ export async function createAgentTestRuntime(options?: {
 			} else {
 				process.env.TREESEED_AGENT_EXECUTION_PROVIDER = previousExecutionMode;
 			}
+			if (previousTenantRoot === undefined) {
+				delete process.env.TREESEED_TENANT_ROOT;
+			} else {
+				process.env.TREESEED_TENANT_ROOT = previousTenantRoot;
+			}
+			process.chdir(previousCwd);
 			await rm(rootDir, { recursive: true, force: true });
 		},
 	};

@@ -1,6 +1,6 @@
 {
   "name": "@treeseed/agent",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "Treeseed agent service runtime package.",
   "license": "AGPL-3.0-only",
   "repository": {
@@ -28,7 +28,9 @@
   "scripts": {
     "setup": "npm install",
     "setup:ci": "npm ci",
+    "build": "npm run build:dist",
     "build:dist": "node ./scripts/run-ts.mjs ./scripts/build-dist.ts",
+    "test": "npm run test:smoke",
     "prepare": "npm run build:dist",
     "prepack": "npm run build:dist",
     "test:smoke": "node ./scripts/run-ts.mjs ./scripts/test-smoke.ts",
@@ -38,8 +40,8 @@
     "release:publish": "node ./scripts/run-ts.mjs ./scripts/publish-package.ts"
   },
   "dependencies": {
-    "@treeseed/core": "^0.0.1",
-    "@treeseed/sdk": "^0.0.1",
+    "@treeseed/core": "^0.1.2",
+    "@treeseed/sdk": "^0.1.2",
     "esbuild": "^0.25.10",
     "typescript": "^5.9.3"
   },

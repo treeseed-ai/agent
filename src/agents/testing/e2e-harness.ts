@@ -32,13 +32,24 @@ function resolveDocsRoot() {
 
 	const cwd = process.cwd();
 	const corePackageRoot = path.resolve(path.dirname(require.resolve('@treeseed/core')), '..');
-	const candidates = [
-		path.resolve(cwd, 'fixture'),
-		path.resolve(cwd, '..', 'fixtures', 'sites', 'working-site'),
-		path.resolve(cwd, '..', '..', 'fixtures', 'sites', 'working-site'),
-		path.resolve(corePackageRoot, 'fixture'),
+	const candidates: string[] = [];
+	let current = cwd;
+	while (true) {
+		candidates.push(
+			path.resolve(current, '.fixtures', 'treeseed-fixtures', 'sites', 'working-site'),
+			path.resolve(current, 'fixture'),
+			path.resolve(current, 'fixtures', 'sites', 'working-site'),
+		);
+		const parent = path.resolve(current, '..');
+		if (parent === current) {
+			break;
+		}
+		current = parent;
+	}
+	candidates.push(
 		path.resolve(corePackageRoot, '.fixtures', 'treeseed-fixtures', 'sites', 'working-site'),
-	];
+		path.resolve(corePackageRoot, 'fixture'),
+	);
 
 	for (const candidate of candidates) {
 		if (existsSync(path.join(candidate, 'src', 'manifest.yaml'))) {

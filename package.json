@@ -31,7 +31,6 @@
     "build": "npm run build:dist",
     "build:dist": "node ./scripts/run-ts.mjs ./scripts/build-dist.ts",
     "test": "npm run test:smoke",
-    "prepare": "npm run build:dist",
     "prepack": "npm run build:dist",
     "test:smoke": "node ./scripts/run-ts.mjs ./scripts/test-smoke.ts",
     "release:setup": "npm run setup:ci",

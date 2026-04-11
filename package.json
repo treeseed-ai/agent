@@ -1,6 +1,6 @@
 {
   "name": "@treeseed/agent",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "Treeseed agent service runtime package.",
   "license": "AGPL-3.0-only",
   "repository": {
@@ -48,8 +48,8 @@
     "release:publish": "node ./scripts/run-ts.mjs ./scripts/publish-package.ts"
   },
   "dependencies": {
-    "@treeseed/core": "^0.1.2",
-    "@treeseed/sdk": "^0.1.2",
+    "@treeseed/core": "^0.2.0",
+    "@treeseed/sdk": "^0.2.0",
     "esbuild": "0.28.0",
     "typescript": "^5.9.3"
   },

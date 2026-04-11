@@ -125,6 +125,54 @@ export function createManagerApp(sdk: AgentSdk = createServiceSdk()) {
 		return c.json({ ok: true, payload });
 	});
 
+	app.post('/internal/graph/query', async (c) => {
+		const body = await c.req.json().catch(() => ({}));
+		const payload = await sdk.queryGraph(body as any);
+		if (typeof body.workDayId === 'string' && body.workDayId) {
+			await sdk.create({
+				model: 'graph_run',
+				data: {
+					workDayId: body.workDayId,
+					corpusHash: String(body.corpusHash ?? 'query-graph'),
+					graphVersion: String(body.graphVersion ?? ''),
+					queryJson: JSON.stringify(body ?? {}),
+					seedIdsJson: JSON.stringify(payload.seedIds),
+					selectedNodeIdsJson: JSON.stringify(payload.nodes.map((entry) => entry.node.id)),
+					statsJson: JSON.stringify({ nodeCount: payload.nodes.length, edgeCount: payload.edges.length }),
+				},
+				actor: 'manager',
+			});
+		}
+		return c.json({ ok: true, payload });
+	});
+
+	app.post('/internal/graph/context-pack', async (c) => {
+		const body = await c.req.json().catch(() => ({}));
+		const payload = await sdk.buildContextPack(body as any);
+		if (typeof body.workDayId === 'string' && body.workDayId) {
+			await sdk.create({
+				model: 'graph_run',
+				data: {
+					workDayId: body.workDayId,
+					corpusHash: String(body.corpusHash ?? 'context-pack'),
+					graphVersion: String(body.graphVersion ?? ''),
+					queryJson: JSON.stringify(body ?? {}),
+					seedIdsJson: JSON.stringify(payload.seedIds),
+					selectedNodeIdsJson: JSON.stringify(payload.includedNodeIds),
+					statsJson: JSON.stringify({ nodeCount: payload.nodes.length, edgeCount: payload.edges.length, totalTokenEstimate: payload.totalTokenEstimate }),
+				},
+				actor: 'manager',
+			});
+		}
+		return c.json({ ok: true, payload });
+	});
+
+	app.post('/internal/graph/parse-dsl', async (c) => {
+		const body = await c.req.json().catch(() => ({}));
+		const payload = await sdk.parseGraphDsl(String(body.source ?? body.query ?? ''));
+		return c.json({ ok: true, payload });
+	});
+
 	app.get('/internal/graph/node/:id', async (c) => {
 		const payload = await sdk.getGraphNode(c.req.param('id'));
 		return payload ? c.json({ ok: true, payload }) : c.json({ ok: false, error: 'Unknown graph node.' }, 404);

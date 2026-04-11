@@ -1,0 +1,38 @@
+name: Verify
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      CI: "true"
+      TREESEED_GITHUB_AUTOMATION_MODE: stub
+      TREESEED_STAGE_WAIT_MODE: skip
+      TREESEED_AGENT_DISABLE_GIT: "true"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: |
+          if test -f package-lock.json; then
+            npm ci
+          else
+            npm install --no-audit --no-fund
+          fi
+
+      - name: Verify package
+        run: npm run verify:direct

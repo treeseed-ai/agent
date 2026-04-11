@@ -24,7 +24,7 @@ The hybrid laptop-manager flow is explicitly supported. The manager is just a No
 
 ## Requirements
 
-- Node `>=20`
+- Node `>=22`
 - npm
 - a Treeseed tenant repository for runtime commands such as `doctor` and `start`
 

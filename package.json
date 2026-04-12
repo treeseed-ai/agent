@@ -1,6 +1,6 @@
 {
   "name": "@treeseed/agent",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Treeseed agent service runtime package.",
   "license": "AGPL-3.0-only",
   "repository": {
@@ -25,6 +25,10 @@
     "./runtime-types": {
       "types": "./dist/src/agents/runtime-types.d.ts",
       "default": "./dist/agents/runtime-types.js"
+    },
+    "./cli": {
+      "types": "./dist/src/agents/cli.d.ts",
+      "default": "./dist/agents/cli.js"
     },
     "./contracts/messages": {
       "types": "./dist/src/agents/contracts/messages.d.ts",

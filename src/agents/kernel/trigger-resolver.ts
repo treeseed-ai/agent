@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
-import type { AgentRuntimeSpec, AgentTriggerConfig } from '@treeseed/core/types/agents';
-import type { ScopedAgentSdk } from '../sdk.ts';
+import type { AgentRuntimeSpec, AgentTriggerConfig } from '@treeseed/sdk/types/agents';
+import type { ScopedAgentSdk } from '@treeseed/sdk/sdk';
 import type { AgentTriggerInvocation } from '../runtime-types.ts';
 
 export type TriggerDecisionKind =

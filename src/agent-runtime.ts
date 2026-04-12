@@ -1,4 +1,4 @@
-import { loadTreeseedPluginRuntime } from '@treeseed/core/plugins/runtime';
+import { loadTreeseedPluginRuntime } from '@treeseed/sdk/platform/plugins';
 import {
 	CopilotExecutionAdapter,
 	ManualExecutionAdapter,

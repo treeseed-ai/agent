@@ -29,7 +29,7 @@ async function main() {
 
 	const [{ AgentKernel }, { AgentSdk }] = await Promise.all([
 		import('./kernel/agent-kernel.ts'),
-		import('./sdk.ts'),
+		import('@treeseed/sdk/sdk'),
 	]);
 
 	const repoRoot = process.cwd();

@@ -31,7 +31,7 @@ The hybrid laptop-manager flow is explicitly supported. The manager is just a No
 ## Install
 
 ```bash
-npm install @treeseed/agent @treeseed/core @treeseed/sdk
+npm install @treeseed/agent @treeseed/sdk
 ```
 
 ## Build And Test

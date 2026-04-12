@@ -3,10 +3,10 @@ import type {
 	AgentRuntimeSpec,
 	AgentRunStatus,
 	AgentTriggerConfig,
-} from '@treeseed/core/types/agents';
+} from '@treeseed/sdk/types/agents';
 import type { AgentErrorCategory } from './contracts/run.ts';
-import type { ScopedAgentSdk } from './sdk.ts';
-import type { SdkMessageEntity } from './sdk-types';
+import type { ScopedAgentSdk } from '@treeseed/sdk/sdk';
+import type { SdkMessageEntity } from '@treeseed/sdk/types';
 
 export interface AgentTriggerInvocation {
 	kind: 'startup' | 'schedule' | 'message' | 'manual' | 'follow';

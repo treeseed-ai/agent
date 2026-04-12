@@ -1,4 +1,4 @@
-import type { AgentRuntimeSpec } from '@treeseed/core/types/agents';
+import type { AgentRuntimeSpec } from '@treeseed/sdk/types/agents';
 import { createExecutionAdapter } from '../adapters/execution.ts';
 import { LocalBranchMutationAdapter } from '../adapters/mutations.ts';
 import { createNotificationAdapter } from '../adapters/notification.ts';
@@ -17,10 +17,10 @@ import type {
 	AgentVerificationAdapter,
 } from '../runtime-types.ts';
 import type { AgentRunTrace, AgentErrorCategory } from '../contracts/run.ts';
-import { AgentSdk } from '../sdk.ts';
+import { AgentSdk } from '@treeseed/sdk/sdk';
 import { resolveTriggerDecision } from './trigger-resolver.ts';
 import { loadActiveAgentSpecs, loadAllAgentSpecs, summarizeAgentSpec } from '../spec-loader.ts';
-import { getTreeseedAgentProviderSelections } from '@treeseed/core/deploy/runtime';
+import { getTreeseedAgentProviderSelections } from '@treeseed/sdk/platform/deploy-runtime';
 import { resolveAgentRuntimeProviders } from '../../agent-runtime.ts';
 
 function nowIso() {

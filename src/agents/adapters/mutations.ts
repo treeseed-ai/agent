@@ -1,6 +1,6 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { GitRuntime } from '../git-runtime.ts';
+import { GitRuntime } from '@treeseed/sdk/git-runtime';
 import type { AgentMutationAdapter } from '../runtime-types.ts';
 
 export class LocalBranchMutationAdapter implements AgentMutationAdapter {

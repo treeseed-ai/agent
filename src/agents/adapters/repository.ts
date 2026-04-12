@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import type { AgentRepositoryInspectionAdapter } from '../runtime-types.ts';
-import { getTreeseedAgentProviderSelections } from '@treeseed/core/deploy/runtime';
+import { getTreeseedAgentProviderSelections } from '@treeseed/sdk/platform/deploy-runtime';
 
 const execFileAsync = promisify(execFile);
 

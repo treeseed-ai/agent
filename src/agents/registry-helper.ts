@@ -1,4 +1,4 @@
-import type { AgentHandlerKind } from '@treeseed/core/types/agents';
+import type { AgentHandlerKind } from '@treeseed/sdk/types/agents';
 import type { AgentHandler } from './runtime-types.ts';
 
 export function defineAgentHandlerRegistry(

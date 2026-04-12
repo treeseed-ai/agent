@@ -7,7 +7,7 @@ import {
 	type AgentPermissionOperation,
 	type AgentTriggerConfig,
 	type AgentTriggerKind,
-} from '@treeseed/core/types/agents';
+} from '@treeseed/sdk/types/agents';
 import { AGENT_MESSAGE_TYPES } from './contracts/messages.ts';
 import { normalizeAgentCliOptions } from './cli-tools.ts';
 import type {

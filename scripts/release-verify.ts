@@ -7,7 +7,6 @@ import { createRequire } from 'node:module';
 import { packageRoot } from './package-tools.ts';
 
 const require = createRequire(import.meta.url);
-const corePackageRoot = resolve(dirname(require.resolve('@treeseed/core')), '..');
 const sdkPackageRoot = resolve(dirname(require.resolve('@treeseed/sdk')), '..');
 const npmCacheDir = resolve(tmpdir(), 'treeseed-npm-cache');
 const textExtensions = new Set(['.js', '.ts', '.mjs', '.cjs', '.d.ts', '.json', '.md']);
@@ -162,7 +161,6 @@ try {
 	const agentTarball = pack(packageRoot, 'treeseed-agent.tgz');
 
 	installDependencyPackage(sdkPackageRoot, extractRoot, installRoot, 'sdk', 'treeseed-sdk.tgz');
-	installDependencyPackage(corePackageRoot, extractRoot, installRoot, 'core', 'treeseed-core.tgz');
 	installPackagedPackage(extractRoot, installRoot, agentTarball, 'agent');
 	mirrorDependencies(installRoot);
 	writeFileSync(resolve(installRoot, 'package.json'), `${JSON.stringify({ name: 'treeseed-agent-smoke', private: true, type: 'module' }, null, 2)}\n`, 'utf8');

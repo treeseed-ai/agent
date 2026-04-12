@@ -1,7 +1,7 @@
-import type { AgentRuntimeSpec } from '@treeseed/core/types/agents';
+import type { AgentRuntimeSpec } from '@treeseed/sdk/types/agents';
+import { AgentSdk } from '@treeseed/sdk/sdk';
 import { AGENT_MESSAGE_TYPES } from './contracts/messages.ts';
 import { listRegisteredAgentHandlers } from './registry.ts';
-import { AgentSdk } from './sdk.ts';
 import { normalizeAgentRuntimeSpec } from './spec-normalizer.ts';
 import type {
 	AgentSpecDiagnostic,

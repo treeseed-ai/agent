@@ -6,7 +6,7 @@ import type {
 	AgentPermissionConfig,
 	AgentRuntimeSpec,
 	AgentTriggerConfig,
-} from '@treeseed/core/types/agents';
+} from '@treeseed/sdk/types/agents';
 
 export type AgentSpecDiagnosticSeverity = 'error' | 'warning';
 

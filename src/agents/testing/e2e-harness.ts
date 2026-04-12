@@ -6,18 +6,20 @@ import path from 'node:path';
 import { promisify } from 'node:util';
 import { createRequire } from 'node:module';
 import ts from 'typescript';
+import type { AgentSdk } from '@treeseed/sdk/sdk';
+import {
+	MemoryAgentDatabase,
+} from '@treeseed/sdk/d1-store';
+import { resolveModelDefinition } from '@treeseed/sdk/models';
+import { serializeFrontmatterDocument } from '@treeseed/sdk/frontmatter';
+import {
+	type SdkCreateMessageRequest,
+	type SdkMessageEntity,
+	type SdkRunEntity,
+} from '@treeseed/sdk/types';
+import { runFromRecord } from '@treeseed/sdk/stores/run-store';
 import type { AgentExecutionAdapter, AgentMutationAdapter } from '../runtime-types.ts';
-import { MemoryAgentDatabase } from '../d1-store.ts';
-import { resolveModelDefinition } from '../model-registry.ts';
-import { runFromRecord } from '../stores/run-store.ts';
-import { serializeFrontmatterDocument } from '../frontmatter.ts';
-import type {
-	SdkCreateMessageRequest,
-	SdkMessageEntity,
-	SdkRunEntity,
-} from '../sdk-types';
 import type { AgentKernel } from '../kernel/agent-kernel.ts';
-import type { AgentSdk } from '../sdk.ts';
 
 const execFileAsync = promisify(execFile);
 const require = createRequire(import.meta.url);
@@ -32,7 +34,8 @@ function resolveDocsRoot() {
 	}
 
 	const cwd = process.cwd();
-	const corePackageRoot = path.resolve(path.dirname(require.resolve('@treeseed/core')), '..');
+	const workspaceSdkPackageRoot = path.resolve(cwd, '../sdk');
+	const installedSdkPackageRoot = path.resolve(path.dirname(require.resolve('@treeseed/sdk/platform/tenant-config')), '../..');
 	const candidates: string[] = [];
 	let current = cwd;
 	while (true) {
@@ -48,8 +51,10 @@ function resolveDocsRoot() {
 		current = parent;
 	}
 	candidates.push(
-		path.resolve(corePackageRoot, '.fixtures', 'treeseed-fixtures', 'sites', 'working-site'),
-		path.resolve(corePackageRoot, 'fixture'),
+		path.resolve(workspaceSdkPackageRoot, '.fixtures', 'treeseed-fixtures', 'sites', 'working-site'),
+		path.resolve(workspaceSdkPackageRoot, 'fixture'),
+		path.resolve(installedSdkPackageRoot, '.fixtures', 'treeseed-fixtures', 'sites', 'working-site'),
+		path.resolve(installedSdkPackageRoot, 'fixture'),
 	);
 
 	for (const candidate of candidates) {
@@ -60,6 +65,34 @@ function resolveDocsRoot() {
 
 	throw new Error(
 		`Unable to resolve an agent smoke fixture root. Checked: ${candidates.join(', ')}`,
+	);
+}
+
+function resolveSharedNodeModules(startDir: string) {
+	const requiredPackages = ['@treeseed/sdk'];
+	const checked: string[] = [];
+	let current = startDir;
+
+	while (true) {
+		const candidate = path.join(current, 'node_modules');
+		checked.push(candidate);
+		if (
+			existsSync(candidate)
+			&& requiredPackages.every((packageName) =>
+				existsSync(path.join(candidate, ...packageName.split('/'))))
+		) {
+			return candidate;
+		}
+
+		const parent = path.resolve(current, '..');
+		if (parent === current) {
+			break;
+		}
+		current = parent;
+	}
+
+	throw new Error(
+		`Unable to resolve a shared node_modules directory containing ${requiredPackages.join(', ')}. Checked: ${checked.join(', ')}`,
 	);
 }
 
@@ -89,6 +122,52 @@ async function runCommand(command: string, args: string[], cwd: string) {
 		env: process.env,
 		maxBuffer: 10 * 1024 * 1024,
 	});
+}
+
+async function linkWorkspaceNodeModules(sharedNodeModules: string, repoRoot: string, localAgentPackageRoot: string) {
+	const targetRoot = path.join(repoRoot, 'node_modules');
+	await mkdir(targetRoot, { recursive: true });
+
+	const entries = await readdir(sharedNodeModules, { withFileTypes: true }).catch(() => []);
+	for (const entry of entries) {
+		if (entry.name === '@treeseed') {
+			const scopedSource = path.join(sharedNodeModules, entry.name);
+			const scopedTarget = path.join(targetRoot, entry.name);
+			await mkdir(scopedTarget, { recursive: true });
+			const scopedEntries = await readdir(scopedSource, { withFileTypes: true }).catch(() => []);
+			for (const scopedEntry of scopedEntries) {
+				const sourcePath = path.join(scopedSource, scopedEntry.name);
+				const targetPath = path.join(scopedTarget, scopedEntry.name);
+				if (scopedEntry.name === 'agent') {
+					continue;
+				}
+				await symlink(sourcePath, targetPath, scopedEntry.isDirectory() ? 'dir' : 'file').catch(() => undefined);
+			}
+			continue;
+		}
+
+		const sourcePath = path.join(sharedNodeModules, entry.name);
+		const targetPath = path.join(targetRoot, entry.name);
+		await symlink(sourcePath, targetPath, entry.isDirectory() ? 'dir' : 'file').catch(() => undefined);
+	}
+
+	const installedAgentRoot = path.join(targetRoot, '@treeseed', 'agent');
+	await mkdir(installedAgentRoot, { recursive: true });
+	await cp(path.join(localAgentPackageRoot, 'dist'), path.join(installedAgentRoot, 'dist'), { recursive: true });
+	await writeFile(
+		path.join(installedAgentRoot, 'package.json'),
+		JSON.stringify({
+			name: '@treeseed/agent',
+			type: 'module',
+			exports: {
+				'.': './dist/index.js',
+				'./runtime-types': './dist/agents/runtime-types.js',
+				'./contracts/messages': './dist/agents/contracts/messages.js',
+				'./contracts/run': './dist/agents/contracts/run.js',
+			},
+		}, null, 2),
+		'utf8',
+	);
 }
 
 async function walkFiles(root: string): Promise<string[]> {
@@ -270,7 +349,7 @@ export async function createAgentTestRuntime(options?: {
 	const previousExecutionMode = process.env.TREESEED_AGENT_EXECUTION_PROVIDER;
 	const previousTenantRoot = process.env.TREESEED_TENANT_ROOT;
 	const previousCwd = process.cwd();
-	const sharedNodeModules = path.join(previousCwd, 'node_modules');
+	const sharedNodeModules = resolveSharedNodeModules(previousCwd);
 
 	await cp(docsRoot, repoRoot, {
 		recursive: true,
@@ -290,7 +369,7 @@ export async function createAgentTestRuntime(options?: {
 		},
 	});
 	if (existsSync(sharedNodeModules)) {
-		await symlink(sharedNodeModules, path.join(repoRoot, 'node_modules'), 'dir');
+		await linkWorkspaceNodeModules(sharedNodeModules, repoRoot, previousCwd);
 	}
 	await transpileFixtureAgentHandlers(repoRoot);
 	await patchFixtureAgentSpecs(repoRoot);
@@ -304,7 +383,7 @@ export async function createAgentTestRuntime(options?: {
 	await initializeSandboxRepo(repoRoot);
 	const [{ AgentKernel }, { AgentSdk }] = await Promise.all([
 		import('../kernel/agent-kernel.ts'),
-		import('../sdk.ts'),
+		import('@treeseed/sdk/sdk'),
 	]);
 	const sdk =
 		options?.databaseMode === 'local-d1'

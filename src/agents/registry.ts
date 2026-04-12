@@ -1,9 +1,9 @@
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import type { AgentHandlerKind } from '@treeseed/core/types/agents';
-import { getTreeseedAgentProviderSelections } from '@treeseed/core/deploy/runtime';
-import { resolveTreeseedTenantRoot } from '@treeseed/core/tenant-config';
+import type { AgentHandlerKind } from '@treeseed/sdk/types/agents';
+import { getTreeseedAgentProviderSelections } from '@treeseed/sdk/platform/deploy-runtime';
+import { resolveTreeseedTenantRoot } from '@treeseed/sdk/platform/tenant-config';
 import type { AgentHandler } from './runtime-types.ts';
 import { resolveAgentRuntimeProviders } from '../agent-runtime.ts';
 

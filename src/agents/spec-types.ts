@@ -4,7 +4,6 @@ import type {
 	AgentHandlerKind,
 	AgentOutputContract,
 	AgentPermissionConfig,
-	AgentRuntimeSpec,
 	AgentTriggerConfig,
 } from '@treeseed/sdk/types/agents';
 
@@ -15,16 +14,6 @@ export interface AgentSpecDiagnostic {
 	slug: string;
 	field: string;
 	message: string;
-}
-
-export interface NormalizedAgentRuntimeSpec extends AgentRuntimeSpec {
-	name?: string;
-	description?: string;
-	summary?: string;
-	operator?: string;
-	runtimeStatus?: string;
-	capabilities?: string[];
-	tags?: string[];
 }
 
 export interface AgentSpecValidationContext {
@@ -78,3 +67,13 @@ export interface AgentSpecParts {
 	execution: AgentExecutionConfig;
 	outputs: AgentOutputContract;
 }
+
+export type NormalizedAgentRuntimeSpec = AgentSpecParts & {
+	name?: string;
+	description?: string;
+	summary?: string;
+	operator?: string;
+	runtimeStatus?: string;
+	capabilities?: string[];
+	tags?: string[];
+};

@@ -1,10 +1,7 @@
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
-import { normalizeAgentCliOptions, buildCopilotAllowToolArgs } from '../cli-tools.ts';
+import { normalizeAgentCliOptions } from '../cli-tools.ts';
 import type { AgentExecutionAdapter } from '../runtime-types.ts';
 import { getTreeseedAgentProviderSelections } from '@treeseed/sdk/platform/deploy-runtime';
-
-const execFileAsync = promisify(execFile);
+import { runTreeseedCopilotTask } from '@treeseed/sdk/copilot';
 
 export class StubExecutionAdapter implements AgentExecutionAdapter {
 	async runTask(input: { prompt: string; runId: string }) {
@@ -28,39 +25,20 @@ export class StubExecutionAdapter implements AgentExecutionAdapter {
 export class CopilotExecutionAdapter implements AgentExecutionAdapter {
 	async runTask(input: { agent: { cli?: { model?: string; allowTools?: string[]; additionalArgs?: string[] } }; prompt: string }) {
 		const cli = normalizeAgentCliOptions(input.agent.cli);
-		const args = ['copilot', '-p', input.prompt];
-		if (cli.model) {
-			args.push('--model', cli.model);
-		}
-		args.push(...buildCopilotAllowToolArgs(cli.allowTools));
-		args.push(...(cli.additionalArgs ?? []));
-
-		try {
-			const { stdout, stderr } = await execFileAsync('gh', args, {
-				cwd: process.cwd(),
-				env: process.env,
-				maxBuffer: 10 * 1024 * 1024,
-			});
-			return {
-				status: 'completed' as const,
-				summary: 'Copilot task completed.',
-				stdout,
-				stderr,
-			};
-		} catch (error) {
-			const stderr =
-				error && typeof error === 'object' && 'stderr' in error
-					? String((error as { stderr?: string }).stderr ?? '')
-					: error instanceof Error
-						? error.message
-						: String(error);
-			return {
-				status: 'failed' as const,
-				summary: 'Copilot task failed.',
-				stdout: '',
-				stderr,
-			};
-		}
+		const result = await runTreeseedCopilotTask({
+			prompt: input.prompt,
+			cwd: process.cwd(),
+			model: cli.model,
+			allowTools: cli.allowTools,
+			env: process.env,
+		});
+		const ignoredArgs = cli.additionalArgs?.length
+			? `Ignored Copilot CLI-only arguments because Treeseed uses @github/copilot-sdk internally: ${cli.additionalArgs.join(' ')}`
+			: '';
+		return {
+			...result,
+			stderr: [result.stderr, ignoredArgs].filter(Boolean).join('\n'),
+		};
 	}
 }
 

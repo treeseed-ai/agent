@@ -44,8 +44,9 @@ export async function loadAgentSpecs(
 	const specs: NormalizedAgentRuntimeSpec[] = [];
 
 	for (const entry of entries as Record<string, unknown>[]) {
+		const registeredHandlers = await listRegisteredAgentHandlers();
 		const result = normalizeAgentRuntimeSpec(extractRawSpec(entry), {
-			registeredHandlers: listRegisteredAgentHandlers() as NormalizedAgentRuntimeSpec['handler'][],
+			registeredHandlers: registeredHandlers as NormalizedAgentRuntimeSpec['handler'][],
 			messageTypes: [...AGENT_MESSAGE_TYPES],
 		});
 		diagnostics.push(...result.diagnostics);

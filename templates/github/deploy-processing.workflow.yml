@@ -1,0 +1,113 @@
+name: Treeseed Processing Deploy
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        required: true
+        type: string
+      action_kind:
+        required: true
+        type: string
+      project_id:
+        required: false
+        type: string
+      preview_id:
+        required: false
+        type: string
+  workflow_dispatch:
+    inputs:
+      environment:
+        required: true
+        default: staging
+        type: choice
+        options:
+          - staging
+          - prod
+      action_kind:
+        required: true
+        default: deploy_processing
+        type: choice
+        options:
+          - deploy_processing
+          - monitor
+      project_id:
+        required: false
+        type: string
+      preview_id:
+        required: false
+        type: string
+
+jobs:
+  processing:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    environment: ${{ inputs.environment == 'prod' && 'production' || 'staging' }}
+    env:
+      TREESEED_BOOTSTRAP_MODE: auto
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+      RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
+      TREESEED_RAILWAY_WORKSPACE: ${{ vars.TREESEED_RAILWAY_WORKSPACE }}
+      TREESEED_API_BASE_URL: ${{ vars.TREESEED_API_BASE_URL }}
+      TREESEED_API_AUTH_SECRET: ${{ secrets.TREESEED_API_AUTH_SECRET }}
+      TREESEED_API_D1_DATABASE_ID: ${{ vars.TREESEED_API_D1_DATABASE_ID }}
+      TREESEED_API_WEB_SERVICE_ID: ${{ vars.TREESEED_API_WEB_SERVICE_ID }}
+      TREESEED_API_WEB_SERVICE_SECRET: ${{ secrets.TREESEED_API_WEB_SERVICE_SECRET }}
+      TREESEED_API_WEB_ASSERTION_SECRET: ${{ secrets.TREESEED_API_WEB_ASSERTION_SECRET }}
+      TREESEED_API_BOOTSTRAP_ADMIN_ALLOWLIST: ${{ vars.TREESEED_API_BOOTSTRAP_ADMIN_ALLOWLIST }}
+      TREESEED_PROJECT_ID: ${{ inputs.project_id || vars.TREESEED_PROJECT_ID }}
+      TREESEED_PROJECT_RUNNER_TOKEN: ${{ secrets.TREESEED_PROJECT_RUNNER_TOKEN }}
+      TREESEED_WORKER_POOL_SCALER: ${{ vars.TREESEED_WORKER_POOL_SCALER }}
+      TREESEED_AGENT_POOL_MIN_WORKERS: ${{ vars.TREESEED_AGENT_POOL_MIN_WORKERS }}
+      TREESEED_AGENT_POOL_MAX_WORKERS: ${{ vars.TREESEED_AGENT_POOL_MAX_WORKERS }}
+      TREESEED_AGENT_POOL_TARGET_QUEUE_DEPTH: ${{ vars.TREESEED_AGENT_POOL_TARGET_QUEUE_DEPTH }}
+      TREESEED_AGENT_POOL_COOLDOWN_SECONDS: ${{ vars.TREESEED_AGENT_POOL_COOLDOWN_SECONDS }}
+      TREESEED_WORKDAY_TIMEZONE: ${{ vars.TREESEED_WORKDAY_TIMEZONE }}
+      TREESEED_WORKDAY_WINDOWS_JSON: ${{ vars.TREESEED_WORKDAY_WINDOWS_JSON }}
+      TREESEED_WORKDAY_TASK_CREDIT_BUDGET: ${{ vars.TREESEED_WORKDAY_TASK_CREDIT_BUDGET }}
+      TREESEED_MANAGER_MAX_QUEUED_TASKS: ${{ vars.TREESEED_MANAGER_MAX_QUEUED_TASKS }}
+      TREESEED_MANAGER_MAX_QUEUED_CREDITS: ${{ vars.TREESEED_MANAGER_MAX_QUEUED_CREDITS }}
+      TREESEED_MANAGER_PRIORITY_MODELS: ${{ vars.TREESEED_MANAGER_PRIORITY_MODELS }}
+      TREESEED_TASK_CREDIT_WEIGHTS_JSON: ${{ vars.TREESEED_TASK_CREDIT_WEIGHTS_JSON }}
+      TREESEED_RAILWAY_PROJECT_ID: ${{ vars.TREESEED_RAILWAY_PROJECT_ID }}
+      TREESEED_RAILWAY_ENVIRONMENT_ID: ${{ vars.TREESEED_RAILWAY_ENVIRONMENT_ID }}
+      TREESEED_RAILWAY_WORKER_SERVICE_ID: ${{ vars.TREESEED_RAILWAY_WORKER_SERVICE_ID }}
+      TREESEED_CAPACITY_PROVIDER_ID: ${{ vars.TREESEED_CAPACITY_PROVIDER_ID }}
+      TREESEED_CAPACITY_PROVIDER_TEAM_ID: ${{ vars.TREESEED_CAPACITY_PROVIDER_TEAM_ID }}
+      TREESEED_CAPACITY_PROVIDER_SERVICE_BASE_URL: ${{ vars.TREESEED_CAPACITY_PROVIDER_SERVICE_BASE_URL }}
+      TREESEED_PROCESSING_DRAIN: ${{ vars.TREESEED_PROCESSING_DRAIN }}
+      TREESEED_WORKFLOW_ACTION: ${{ inputs.action_kind }}
+      TREESEED_WORKFLOW_ENVIRONMENT: ${{ inputs.environment }}
+      TREESEED_WORKFLOW_PROJECT: ${{ inputs.project_id || vars.TREESEED_PROJECT_ID }}
+      TREESEED_WORKFLOW_PREVIEW_ID: ${{ inputs.preview_id }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - run: npm ci --ignore-scripts
+
+      - name: Build package artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          for dir in packages/sdk packages/agent packages/cli; do
+            if test -f "${dir}/package.json"; then npm --prefix "${dir}" run build:dist; fi
+          done
+
+      - name: Run processing workflow action
+        shell: bash
+        run: |
+          set -euo pipefail
+          EXTRA_ARGS=()
+          if [[ -n "${TREESEED_WORKFLOW_PROJECT:-}" ]]; then EXTRA_ARGS+=(--project-id "${TREESEED_WORKFLOW_PROJECT}"); fi
+          if [[ -n "${TREESEED_WORKFLOW_PREVIEW_ID:-}" ]]; then EXTRA_ARGS+=(--preview-id "${TREESEED_WORKFLOW_PREVIEW_ID}"); fi
+          node ./packages/sdk/scripts/run-ts.mjs ./packages/sdk/scripts/tenant-workflow-action.ts --action "${TREESEED_WORKFLOW_ACTION}" --environment "${TREESEED_WORKFLOW_ENVIRONMENT}" "${EXTRA_ARGS[@]}"

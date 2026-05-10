@@ -14,9 +14,9 @@ jobs:
       contents: read
     env:
       CI: "true"
-      TREESEED_GITHUB_AUTOMATION_MODE: stub
       TREESEED_STAGE_WAIT_MODE: skip
       TREESEED_AGENT_DISABLE_GIT: "true"
+      TREESEED_FIXTURE_ID: treeseed-working-site
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -26,15 +26,30 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24.12.0
+
+      - name: Assert node:sqlite availability
+        run: node -e "import('node:sqlite').then(() => console.log('node:sqlite available')).catch((error) => { console.error(error); process.exit(1); })"
 
       - name: Install dependencies
         run: |
+          node -e "const fs = require('fs'); const p = JSON.parse(fs.readFileSync('package.json', 'utf8')); if (p.scripts) delete p.scripts.prepare; fs.writeFileSync('package.json', JSON.stringify(p, null, '\t') + '\n');"
+          install_with_retry() {
+            for attempt in 1 2 3; do
+              if "$@"; then
+                return 0
+              fi
+              echo "dependency install failed; retrying (${attempt}/3)."
+              sleep $((attempt * 5))
+            done
+            "$@"
+          }
           if test -f package-lock.json; then
-            npm ci
+            install_with_retry npm ci
           else
-            npm install --no-audit --no-fund
+            install_with_retry npm install --no-audit --no-fund
           fi
+          git checkout -- package.json
 
       - name: Verify package
         run: npm run verify:direct

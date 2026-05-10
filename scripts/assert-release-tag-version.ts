@@ -12,7 +12,7 @@ if (!tagName) {
 	process.exit(1);
 }
 
-if (!/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/.test(tagName)) {
+if (!/^\d+\.\d+\.\d+$/.test(tagName)) {
 	console.error(`Release tag "${tagName}" must be a plain semver tag like "${packageVersion}".`);
 	process.exit(1);
 }

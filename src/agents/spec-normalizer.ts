@@ -3,6 +3,8 @@ import {
 	type AgentExecutionConfig,
 	type AgentHandlerKind,
 	type AgentOutputContract,
+	type AgentProviderFallbackPolicy,
+	type AgentProviderProfile,
 	type AgentPermissionConfig,
 	type AgentPermissionOperation,
 	type AgentTriggerConfig,
@@ -169,6 +171,86 @@ function normalizeExecution(
 		leaseSeconds: ensurePositiveNumber(next.leaseSeconds, 'execution.leaseSeconds', diagnostics, slug, 300),
 		retryLimit: ensurePositiveNumber(next.retryLimit, 'execution.retryLimit', diagnostics, slug, 3, true),
 		branchPrefix: ensureString(next.branchPrefix ?? 'agent', 'execution.branchPrefix', diagnostics, slug) || 'agent',
+		providerProfile: normalizeProviderProfile(next.providerProfile, diagnostics, slug),
+	};
+}
+
+function normalizeWeightedLaneList(value: unknown, field: string, diagnostics: AgentSpecDiagnostic[], slug: string) {
+	if (value === undefined) return [];
+	if (!Array.isArray(value)) {
+		diagnostics.push({
+			severity: 'error',
+			slug,
+			field,
+			message: `Expected ${field} to be an array.`,
+		});
+		return [];
+	}
+	return value.flatMap((entry, index) => {
+		if (!isPlainObject(entry)) {
+			diagnostics.push({
+				severity: 'error',
+				slug,
+				field: `${field}[${index}]`,
+				message: 'Expected provider lane entry to be an object.',
+			});
+			return [];
+		}
+		return [{
+			providerId: typeof entry.providerId === 'string' ? entry.providerId : undefined,
+			provider: typeof entry.provider === 'string' ? entry.provider : undefined,
+			laneId: typeof entry.laneId === 'string' ? entry.laneId : undefined,
+			model: typeof entry.model === 'string' ? entry.model : undefined,
+			modelClass: typeof entry.modelClass === 'string' ? entry.modelClass : undefined,
+			weight: ensurePositiveNumber(entry.weight, `${field}[${index}].weight`, diagnostics, slug, 1, true),
+			reason: typeof entry.reason === 'string' ? entry.reason : undefined,
+			maxQualityPenalty: typeof entry.maxQualityPenalty === 'number' ? entry.maxQualityPenalty : undefined,
+		}];
+	});
+}
+
+function normalizeProviderProfile(
+	value: unknown,
+	diagnostics: AgentSpecDiagnostic[],
+	slug: string,
+): AgentProviderProfile | undefined {
+	if (value === undefined) return undefined;
+	if (!isPlainObject(value)) {
+		diagnostics.push({
+			severity: 'error',
+			slug,
+			field: 'execution.providerProfile',
+			message: 'Expected execution.providerProfile to be an object.',
+		});
+		return undefined;
+	}
+	const fallbackPolicy = typeof value.fallbackPolicy === 'string'
+		? value.fallbackPolicy as AgentProviderFallbackPolicy
+		: 'allow_substitution';
+	if (!['allow_substitution', 'require_same_model_class', 'fail_if_unavailable', 'ask_for_approval'].includes(fallbackPolicy)) {
+		diagnostics.push({
+			severity: 'error',
+			slug,
+			field: 'execution.providerProfile.fallbackPolicy',
+			message: `Unsupported fallback policy "${String(value.fallbackPolicy)}".`,
+		});
+	}
+	return {
+		requiredCapabilities: Array.isArray(value.requiredCapabilities)
+			? value.requiredCapabilities.filter((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0)
+			: [],
+		preferredLanes: normalizeWeightedLaneList(value.preferredLanes, 'execution.providerProfile.preferredLanes', diagnostics, slug),
+		acceptableFallbacks: normalizeWeightedLaneList(value.acceptableFallbacks, 'execution.providerProfile.acceptableFallbacks', diagnostics, slug).map((entry) => ({
+			providerId: entry.providerId,
+			provider: entry.provider,
+			laneId: entry.laneId,
+			model: entry.model,
+			modelClass: entry.modelClass,
+			maxQualityPenalty: entry.maxQualityPenalty,
+		})),
+		disallowedProviders: Array.isArray(value.disallowedProviders) ? value.disallowedProviders.filter((entry): entry is string => typeof entry === 'string') : undefined,
+		disallowedRegions: Array.isArray(value.disallowedRegions) ? value.disallowedRegions.filter((entry): entry is string => typeof entry === 'string') : undefined,
+		fallbackPolicy,
 	};
 }
 

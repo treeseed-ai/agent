@@ -18,7 +18,7 @@ import type {
 } from '../runtime-types.ts';
 import type { AgentRunTrace, AgentErrorCategory } from '../contracts/run.ts';
 import { AgentSdk } from '@treeseed/sdk/sdk';
-import { resolveTriggerDecision } from './trigger-resolver.ts';
+import { followCursorKey, resolveTriggerDecision } from './trigger-resolver.ts';
 import { loadActiveAgentSpecs, loadAllAgentSpecs, summarizeAgentSpec } from '../spec-loader.ts';
 import { getTreeseedAgentProviderSelections } from '@treeseed/sdk/platform/deploy-runtime';
 import { resolveAgentRuntimeProviders } from '../../agent-runtime.ts';
@@ -61,7 +61,7 @@ export class AgentKernel {
 	async doctor() {
 		const { specs, diagnostics } = await loadAllAgentSpecs(this.sdk);
 		for (const agent of specs.filter((entry) => entry.enabled)) {
-			resolveAgentHandler(agent.handler);
+			await resolveAgentHandler(agent.handler);
 		}
 		const errors = diagnostics.filter((entry) => entry.severity === 'error');
 		if (errors.length) {
@@ -162,7 +162,7 @@ export class AgentKernel {
 		this.activeRuns.add(agent.slug);
 
 		const runId = crypto.randomUUID();
-		const handler = resolveAgentHandler(agent.handler);
+		const handler = await resolveAgentHandler(agent.handler);
 		const scopedSdk = this.sdk.scopeForAgent(agent);
 		const context: AgentContext = {
 			runId,
@@ -214,6 +214,13 @@ export class AgentKernel {
 				cursorKey: 'last_run_at',
 				cursorValue: nowIso(),
 			});
+			if (trigger.kind === 'follow') {
+				await this.sdk.upsertCursor({
+					agentSlug: agent.slug,
+					cursorKey: followCursorKey(trigger.followModels),
+					cursorValue: nowIso(),
+				});
+			}
 			this.lastRunAt.set(agent.slug, Date.now());
 			return output;
 		} catch (error) {
@@ -237,7 +244,7 @@ export class AgentKernel {
 		}
 	}
 
-	async runAgent(slug: string, mode: 'auto' | 'manual' = 'manual') {
+	async runAgent(slug: string, mode: 'auto' | 'manual' = 'manual', invocation?: AgentTriggerInvocation | null) {
 		const { specs, diagnostics } = await loadActiveAgentSpecs(this.sdk);
 		const errors = diagnostics.filter((entry) => entry.severity === 'error');
 		if (errors.length) {
@@ -250,7 +257,7 @@ export class AgentKernel {
 		if (!agent) {
 			throw new Error(`Unknown or disabled agent "${slug}".`);
 		}
-		const trigger = await this.resolveTrigger(agent, mode);
+		const trigger = invocation ?? await this.resolveTrigger(agent, mode);
 		if (!trigger) {
 			return {
 				status: 'waiting',

@@ -135,3 +135,5 @@ export interface AgentHandler<TInputs = unknown, TResult = unknown> {
 	execute(context: AgentContext, inputs: TInputs): Promise<TResult>;
 	emitOutputs(context: AgentContext, result: TResult): Promise<AgentExecutionResult>;
 }
+
+export {};

@@ -4,6 +4,12 @@ import { fileURLToPath } from 'node:url';
 
 const packageRoot = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const extraArgs = process.argv.slice(2);
+const tagName = process.env.GITHUB_REF_NAME;
+
+if (tagName && !/^\d+\.\d+\.\d+$/.test(tagName)) {
+	console.error(`Refusing to publish @treeseed/agent from non-stable tag "${tagName}".`);
+	process.exit(1);
+}
 
 const npmArgs = ['publish', '.', '--access', 'public'];
 if (process.env.GITHUB_ACTIONS === 'true') npmArgs.push('--provenance');

@@ -1,4 +1,4 @@
-import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync, chmodSync } from 'node:fs';
+import { copyFileSync, cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync, chmodSync } from 'node:fs';
 import { dirname, extname, join, relative, resolve } from 'node:path';
 import { build } from 'esbuild';
 import ts from 'typescript';
@@ -6,9 +6,10 @@ import { packageRoot } from './package-tools.ts';
 
 const srcRoot = resolve(packageRoot, 'src');
 const scriptsRoot = resolve(packageRoot, 'scripts');
+const templatesRoot = resolve(packageRoot, 'templates');
 const distRoot = resolve(packageRoot, 'dist');
 
-const COPY_EXTENSIONS = new Set(['.d.ts', '.json', '.md']);
+const COPY_EXTENSIONS = new Set(['.d.ts', '.json', '.md', '.yaml', '.yml']);
 
 function walkFiles(root) {
 	const files = [];
@@ -97,9 +98,17 @@ for (const filePath of walkFiles(scriptsRoot)) {
 
 emitDeclarations();
 
+if (existsSync(resolve(distRoot, 'src'))) {
+	cpSync(resolve(distRoot, 'src'), distRoot, { recursive: true });
+	rmSync(resolve(distRoot, 'src'), { recursive: true, force: true });
+}
+
 if (existsSync(resolve(packageRoot, 'README.md'))) {
 	copyFileSync(resolve(packageRoot, 'README.md'), resolve(distRoot, '..', 'README.md'));
 }
 if (existsSync(resolve(packageRoot, 'Dockerfile'))) {
 	copyFileSync(resolve(packageRoot, 'Dockerfile'), resolve(distRoot, '..', 'Dockerfile'));
+}
+if (existsSync(templatesRoot)) {
+	cpSync(templatesRoot, resolve(distRoot, 'templates'), { recursive: true });
 }

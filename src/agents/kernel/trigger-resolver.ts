@@ -27,6 +27,10 @@ export interface TriggerResolverInput {
 	sdk: ScopedAgentSdk;
 }
 
+export function followCursorKey(models: string[] | undefined) {
+	return `follow:${(models ?? []).join(',') || 'all'}`;
+}
+
 function buildManualInvocation(agent: AgentRuntimeSpec): AgentTriggerInvocation | null {
 	const scheduleLike = agent.triggers.find((trigger) => trigger.type === 'schedule' || trigger.type === 'startup');
 	if (!scheduleLike) {
@@ -86,7 +90,7 @@ async function resolveFollowTrigger(
 	const since =
 		(await sdk.getCursor({
 			agentSlug: agent.slug,
-			cursorKey: `follow:${models.join(',') || 'all'}`,
+			cursorKey: followCursorKey(models),
 		})).payload ?? trigger.sinceField ?? new Date(0).toISOString();
 
 	for (const model of models) {

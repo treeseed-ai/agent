@@ -1,22 +1,12 @@
 #!/usr/bin/env node
 
 import { fileURLToPath } from 'node:url';
-import { resolveWorkerConfig } from './common.ts';
+import { runManagerAction } from './manager.ts';
 
 export async function runWorkdayStart() {
-	const managerBaseUrl = resolveWorkerConfig().managerBaseUrl;
-	const response = await fetch(`${managerBaseUrl}/internal/workdays/start`, {
-		method: 'POST',
-		headers: {
-			accept: 'application/json',
-			'content-type': 'application/json',
-		},
-		body: JSON.stringify({}),
+	return runManagerAction({
+		mode: 'open-workday',
 	});
-	if (!response.ok) {
-		throw new Error(`Workday start failed with ${response.status}.`);
-	}
-	return response.json();
 }
 
 const currentFile = fileURLToPath(import.meta.url);

@@ -2,8 +2,6 @@ name: Verify
 
 on:
   push:
-    tags-ignore:
-      - '*'
   pull_request:
   workflow_dispatch:
 

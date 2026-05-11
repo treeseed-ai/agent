@@ -94,13 +94,18 @@ jobs:
           cache: npm
           cache-dependency-path: package-lock.json
 
-      - run: npm ci --ignore-scripts
+      - name: Install dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          node -e "const fs = require('fs'); for (const file of ['packages/sdk/package.json', 'packages/agent/package.json', 'packages/core/package.json', 'packages/cli/package.json']) { if (!fs.existsSync(file)) continue; const p = JSON.parse(fs.readFileSync(file, 'utf8')); if (p.scripts) delete p.scripts.prepare; fs.writeFileSync(file, JSON.stringify(p, null, '\t') + '\n'); }"
+          npm ci --ignore-scripts
 
       - name: Build package artifacts
         shell: bash
         run: |
           set -euo pipefail
-          for dir in packages/sdk packages/agent packages/cli; do
+          for dir in packages/sdk packages/agent packages/core packages/cli; do
             if test -f "${dir}/package.json"; then npm --prefix "${dir}" run build:dist; fi
           done
 

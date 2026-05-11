@@ -105,7 +105,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for dir in packages/sdk packages/agent packages/cli; do
+          for dir in packages/sdk packages/agent packages/core packages/cli; do
             if test -f "${dir}/package.json"; then npm --prefix "${dir}" run build:dist; fi
           done
 

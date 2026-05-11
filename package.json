@@ -1,6 +1,6 @@
 {
   "name": "@treeseed/agent",
-  "version": "0.8.6-dev.staging.20260511T034601Z",
+  "version": "0.8.6-dev.staging.20260511T035105Z",
   "description": "Treeseed agent service runtime package.",
   "license": "AGPL-3.0-only",
   "repository": {

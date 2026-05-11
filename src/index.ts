@@ -10,7 +10,6 @@ export {
 	resolveApiConfig,
 	resolveApiRuntimeProviders,
 } from './api/index.ts';
-export { createManagerApp } from './services/manager.ts';
 export { runScheduledWorkdayManager } from './services/workday-manager.ts';
 export { runWorkerCycle, startWorkerLoop } from './services/worker.ts';
 export { runWorkdayStart } from './services/workday-start.ts';

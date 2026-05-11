@@ -1,4 +1,4 @@
-import { copyFileSync, cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync, chmodSync } from 'node:fs';
+import { chmodSync, copyFileSync, cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, extname, join, relative, resolve } from 'node:path';
 import { build } from 'esbuild';
 import ts from 'typescript';
@@ -9,7 +9,8 @@ const scriptsRoot = resolve(packageRoot, 'scripts');
 const templatesRoot = resolve(packageRoot, 'templates');
 const distRoot = resolve(packageRoot, 'dist');
 
-const COPY_EXTENSIONS = new Set(['.d.ts', '.json', '.md', '.yaml', '.yml']);
+const JS_SOURCE_EXTENSIONS = new Set(['.mjs', '.ts']);
+const COPY_EXTENSIONS = new Set(['.d.ts', '.json', '.jsonc', '.md', '.yaml', '.yml']);
 
 function walkFiles(root) {
 	const files = [];
@@ -71,8 +72,9 @@ function transpileScript(filePath) {
 }
 
 function emitDeclarations() {
-	const configPath = ts.findConfigFile(packageRoot, ts.sys.fileExists, 'tsconfig.json');
-	if (!configPath) throw new Error('Unable to locate tsconfig.json for declaration build.');
+	const configPath = ts.findConfigFile(packageRoot, ts.sys.fileExists, 'tsconfig.dist.json')
+		?? ts.findConfigFile(packageRoot, ts.sys.fileExists, 'tsconfig.json');
+	if (!configPath) throw new Error('Unable to locate a tsconfig for declaration build.');
 	const configFile = ts.readConfigFile(configPath, ts.sys.readFile);
 	const parsed = ts.parseJsonConfigFileContent(configFile.config, ts.sys, packageRoot);
 	const program = ts.createProgram({
@@ -87,13 +89,13 @@ rmSync(distRoot, { recursive: true, force: true });
 
 for (const filePath of walkFiles(srcRoot)) {
 	const extension = extname(filePath);
-	if (extension === '.ts') await compileModule(filePath, srcRoot, distRoot);
+	if (JS_SOURCE_EXTENSIONS.has(extension)) await compileModule(filePath, srcRoot, distRoot);
 	else if (COPY_EXTENSIONS.has(extension)) copyAsset(filePath, srcRoot, distRoot);
 }
 
 for (const filePath of walkFiles(scriptsRoot)) {
 	const extension = extname(filePath);
-	if (extension === '.ts' || extension === '.ts') transpileScript(filePath);
+	if (JS_SOURCE_EXTENSIONS.has(extension)) transpileScript(filePath);
 }
 
 emitDeclarations();
@@ -103,12 +105,6 @@ if (existsSync(resolve(distRoot, 'src'))) {
 	rmSync(resolve(distRoot, 'src'), { recursive: true, force: true });
 }
 
-if (existsSync(resolve(packageRoot, 'README.md'))) {
-	copyFileSync(resolve(packageRoot, 'README.md'), resolve(distRoot, '..', 'README.md'));
-}
-if (existsSync(resolve(packageRoot, 'Dockerfile'))) {
-	copyFileSync(resolve(packageRoot, 'Dockerfile'), resolve(distRoot, '..', 'Dockerfile'));
-}
 if (existsSync(templatesRoot)) {
 	cpSync(templatesRoot, resolve(distRoot, 'templates'), { recursive: true });
 }

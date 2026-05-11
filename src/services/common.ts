@@ -229,7 +229,7 @@ export function resolveManagerConfig() {
 		host: process.env.HOST?.trim() || '0.0.0.0',
 		port: integerFromEnv('PORT', 3100),
 		projectId: process.env.TREESEED_PROJECT_ID?.trim() || 'treeseed-market',
-		defaultCapacityBudget: integerFromEnv('TREESEED_WORKDAY_CAPACITY_BUDGET', 100),
+		defaultCapacityBudget: integerFromEnv('TREESEED_WORKDAY_TASK_CREDIT_BUDGET', 100),
 	};
 }
 

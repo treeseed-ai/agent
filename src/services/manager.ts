@@ -5,7 +5,7 @@ import type { AgentRuntimeSpec } from '@treeseed/sdk/types/agents';
 import {
 	createControlPlaneReporter,
 	reserveCreditsForEstimate,
-	selectBestCapacityLane,
+	routeAndReserveCapacity,
 	summarizeCapacityPlan,
 	type ControlPlaneReporter,
 	type PrioritySnapshot,
@@ -608,9 +608,26 @@ async function openWorkday(
 	reporter?: ControlPlaneReporter,
 ) {
 	const capacityPlan = await reporter?.getProjectCapacityPlan(config.environment as ProjectEnvironmentName).catch(() => null) ?? null;
+	const capacitySummary = capacityPlan ? summarizeCapacityPlan(capacityPlan) : null;
+	const providerDailyBudget = capacityPlan
+		? capacityPlan.providers
+			.filter((provider) => provider.status === 'active')
+			.reduce((total, provider) => total + (Number(provider.dailyCreditBudget ?? 0) || 0), 0)
+		: 0;
+	const effectiveBudget = Math.max(0, Math.min(
+		Number(policy.dailyTaskCreditBudget ?? 0),
+		Number(capacitySummary?.remainingDailyCredits ?? policy.dailyTaskCreditBudget ?? 0),
+		providerDailyBudget > 0 ? providerDailyBudget : Number(policy.dailyTaskCreditBudget ?? 0),
+	));
+	if (effectiveBudget <= 0) {
+		return null;
+	}
 	const capacityEnvelope = await reserveWorkdayCapacity({
 		config,
-		policy,
+		policy: {
+			...policy,
+			dailyTaskCreditBudget: effectiveBudget,
+		},
 		capacityPlan,
 		reporter,
 		now,
@@ -620,13 +637,14 @@ async function openWorkday(
 	}
 	const created = await sdk.startWorkDay({
 		projectId: config.projectId,
-		capacityBudget: policy.dailyTaskCreditBudget,
+		capacityBudget: effectiveBudget,
 		graphVersion: null,
 		summary: {
 			openedAt: now.toISOString(),
 			environment: config.environment,
 			graphRefresh: { state: 'queued' },
-			capacityPlan: capacityPlan ? summarizeCapacityPlan(capacityPlan) : null,
+			capacityPlan: capacitySummary,
+			effectiveDailyCreditBudget: effectiveBudget,
 			capacityEnvelope,
 		},
 		actor: 'manager',
@@ -651,64 +669,41 @@ async function reserveWorkdayCapacity(options: {
 	if (!options.capacityPlan || options.capacityPlan.grants.length === 0 || options.capacityPlan.lanes.length === 0) {
 		return null;
 	}
-	const activeGrants = options.capacityPlan.grants.filter((grant) => grant.state === 'active');
-	const candidates = activeGrants.flatMap((grant) => {
-		const lane = grant.laneId
-			? options.capacityPlan?.lanes.find((entry) => entry.id === grant.laneId)
-			: options.capacityPlan?.lanes.find((entry) => entry.capacityProviderId === grant.capacityProviderId);
-		if (!lane) return [];
-		return [{
-			lane,
-			grant,
-			remainingCredits: grant.dailyCreditLimit ?? options.capacityPlan?.remaining.dailyCredits ?? null,
-			taskKind: 'workday',
-		}];
-	});
-	const selected = selectBestCapacityLane(candidates).selected;
-	if (!selected || !options.reporter?.enabled) {
+	if (!options.reporter?.enabled) {
 		return null;
 	}
-	const grant = activeGrants.find((entry) => entry.laneId === selected.laneId || entry.capacityProviderId === selected.capacityProviderId);
 	const estimate = reserveCreditsForEstimate({
-		taskKind: 'workday',
+		taskKind: 'workday.report',
 		confidence: 'medium',
 		estimatedCreditsP50: options.policy.dailyTaskCreditBudget,
 		estimatedCreditsP90: options.policy.dailyTaskCreditBudget,
 	});
-	const reservation = await options.reporter.createCapacityReservation({
-		capacityProviderId: selected.capacityProviderId,
-		laneId: selected.laneId,
-		teamId: options.capacityPlan.teamId,
-		projectId: options.config.projectId,
-		workDayId: null,
-		taskId: null,
-		reservedCredits: estimate.reservedCredits,
+	const route = routeAndReserveCapacity({
+		plan: options.capacityPlan,
+		estimate,
+		taskKind: 'workday.report',
+		requiredCapabilities: ['agent_execution', 'reporting'],
+		priorityClass: 'background',
+		source: 'manager.openWorkday',
 		metadata: {
 			environment: options.config.environment,
-			grantId: grant?.id ?? null,
 			createdBy: 'manager.openWorkday',
 			createdAt: options.now.toISOString(),
 		},
-	}).catch(() => null);
+	});
+	if (!route.ok) return null;
+	const reservation = await options.reporter.createCapacityReservation(route.reservation).catch(() => null);
 	if (!reservation) {
 		return null;
 	}
-	await options.reporter.reportCapacityRoutingDecision({
-		projectId: options.config.projectId,
-		selectedProviderId: selected.capacityProviderId,
-		selectedLaneId: selected.laneId,
-		decision: 'workday_capacity_reserved',
-		reason: 'Selected eligible capacity lane for workday reservation.',
-		scores: { selected },
-		candidates: candidates.map((candidate) => ({
-			laneId: candidate.lane.id,
-			capacityProviderId: candidate.lane.capacityProviderId,
-			grantId: candidate.grant?.id ?? null,
-		})),
+	await options.reporter.reportCapacityRoutingDecision(route.routingDecision).catch(() => null);
+	await options.reporter.reportCapacityUsage({
+		...route.ledgerEntry,
+		reservationId: reservation.id,
 	}).catch(() => null);
 	return {
-		providerId: selected.capacityProviderId,
-		laneId: selected.laneId,
+		providerId: route.provider.id,
+		laneId: route.lane.id,
 		reservationIds: [reservation.id],
 		maxCredits: estimate.reservedCredits,
 		approvalBehavior: 'pause_task',
@@ -716,8 +711,9 @@ async function reserveWorkdayCapacity(options: {
 			onOverrun: 'pause_for_approval',
 		},
 		metadata: {
-			grantId: grant?.id ?? null,
-			scarcityLevel: options.capacityPlan.lanes.find((lane) => lane.id === selected.laneId)?.scarcityLevel ?? null,
+			grantId: route.grant.id,
+			routingDecisionId: null,
+			scarcityLevel: route.lane.scarcityLevel ?? null,
 		},
 	};
 }

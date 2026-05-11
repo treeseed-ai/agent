@@ -77,16 +77,25 @@ export async function loadTenantAgentHandlerRegistry(
 	return registry;
 }
 
-export const AGENT_HANDLER_REGISTRY = await loadTenantAgentHandlerRegistry();
+let agentHandlerRegistryPromise: Promise<Record<string, AgentHandler>> | null = null;
 
-export function listRegisteredAgentHandlers() {
-	const runtimeProviders = resolveAgentRuntimeProviders(resolveTreeseedTenantRoot(), getTreeseedAgentProviderSelections());
-	return [...new Set([...Object.keys(AGENT_HANDLER_REGISTRY), ...runtimeProviders.handlers.keys()])];
+async function getAgentHandlerRegistry() {
+	if (!agentHandlerRegistryPromise) {
+		agentHandlerRegistryPromise = loadTenantAgentHandlerRegistry();
+	}
+	return agentHandlerRegistryPromise;
 }
 
-export function resolveAgentHandler(kind: AgentHandlerKind) {
+export async function listRegisteredAgentHandlers() {
+	const registry = await getAgentHandlerRegistry();
 	const runtimeProviders = resolveAgentRuntimeProviders(resolveTreeseedTenantRoot(), getTreeseedAgentProviderSelections());
-	const handler = AGENT_HANDLER_REGISTRY[kind] ?? runtimeProviders.handlers.get(kind);
+	return [...new Set([...Object.keys(registry), ...runtimeProviders.handlers.keys()])];
+}
+
+export async function resolveAgentHandler(kind: AgentHandlerKind) {
+	const registry = await getAgentHandlerRegistry();
+	const runtimeProviders = resolveAgentRuntimeProviders(resolveTreeseedTenantRoot(), getTreeseedAgentProviderSelections());
+	const handler = registry[kind] ?? runtimeProviders.handlers.get(kind);
 	if (!handler) {
 		if ((BUILTIN_HANDLER_KINDS as readonly string[]).includes(kind)) {
 			const expectedPath = getTenantAgentHandlerModulePaths(kind).join('" or "');

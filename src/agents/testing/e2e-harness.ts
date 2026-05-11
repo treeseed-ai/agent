@@ -152,6 +152,7 @@ async function linkWorkspaceNodeModules(sharedNodeModules: string, repoRoot: str
 	}
 
 	const installedAgentRoot = path.join(targetRoot, '@treeseed', 'agent');
+	await rm(installedAgentRoot, { recursive: true, force: true });
 	await mkdir(installedAgentRoot, { recursive: true });
 	await cp(path.join(localAgentPackageRoot, 'dist'), path.join(installedAgentRoot, 'dist'), { recursive: true });
 	await writeFile(

@@ -5,9 +5,9 @@ import {
 	StubExecutionAdapter,
 } from './agents/adapters/execution.ts';
 import { LocalBranchMutationAdapter } from './agents/adapters/mutations.ts';
-import { StubNotificationAdapter } from './agents/adapters/notification.ts';
+import { SdkMessageNotificationAdapter, StubNotificationAdapter } from './agents/adapters/notification.ts';
 import { GitRepositoryInspectionAdapter, StubRepositoryInspectionAdapter } from './agents/adapters/repository.ts';
-import { StubResearchAdapter } from './agents/adapters/research.ts';
+import { ProjectGraphResearchAdapter, StubResearchAdapter } from './agents/adapters/research.ts';
 import { LocalVerificationAdapter, StubVerificationAdapter } from './agents/adapters/verification.ts';
 import type {
 	AgentExecutionAdapter,
@@ -70,8 +70,14 @@ function buildAgentRuntime() {
 		['stub', () => new StubVerificationAdapter()],
 		['local', () => new LocalVerificationAdapter()],
 	]);
-	const notification = new Map<string, () => AgentNotificationAdapter>([['stub', () => new StubNotificationAdapter()]]);
-	const research = new Map<string, () => AgentResearchAdapter>([['stub', () => new StubResearchAdapter()]]);
+	const notification = new Map<string, () => AgentNotificationAdapter>([
+		['stub', () => new StubNotificationAdapter()],
+		['sdk_message', () => new SdkMessageNotificationAdapter()],
+	]);
+	const research = new Map<string, () => AgentResearchAdapter>([
+		['stub', () => new StubResearchAdapter()],
+		['project_graph', () => new ProjectGraphResearchAdapter()],
+	]);
 	const handlers = new Map<string, AgentHandler>();
 
 	for (const pluginEntry of runtime.plugins) {

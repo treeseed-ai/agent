@@ -1,11 +1,11 @@
 {
   "name": "@treeseed/agent",
-  "version": "0.8.4",
+  "version": "0.8.5-dev.staging.20260511T005323Z",
   "description": "Treeseed agent service runtime package.",
   "license": "AGPL-3.0-only",
   "repository": {
     "type": "git",
-    "url": "https://github.com/treeseed-ai/agent.git",
+    "url": "git+https://github.com/treeseed-ai/agent.git",
     "directory": "."
   },
   "homepage": "https://treeseed.ai",
@@ -129,8 +129,8 @@
     "vitest": "^4.1.2"
   },
   "bin": {
-    "treeseed-agents": "./dist/scripts/treeseed-agents.js",
-    "treeseed-agent-api": "./dist/scripts/treeseed-agent-api.js",
-    "treeseed-agent-service": "./dist/scripts/treeseed-agent-service.js"
+    "treeseed-agents": "dist/scripts/treeseed-agents.js",
+    "treeseed-agent-api": "dist/scripts/treeseed-agent-api.js",
+    "treeseed-agent-service": "dist/scripts/treeseed-agent-service.js"
   }
 }

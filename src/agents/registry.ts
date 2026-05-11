@@ -1,6 +1,8 @@
-import { existsSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync } from 'node:fs';
+import { dirname, extname, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { build } from 'esbuild';
 import type { AgentHandlerKind } from '@treeseed/sdk/types/agents';
 import { getTreeseedAgentProviderSelections } from '@treeseed/sdk/platform/deploy-runtime';
 import { resolveTreeseedTenantRoot } from '@treeseed/sdk/platform/tenant-config';
@@ -37,6 +39,57 @@ export function getTenantAgentHandlerModulePaths(
 	];
 }
 
+function findNearestTsconfig(startPath: string) {
+	let current = dirname(startPath);
+	while (true) {
+		const candidate = resolve(current, 'tsconfig.json');
+		if (existsSync(candidate)) {
+			return candidate;
+		}
+		const parent = resolve(current, '..');
+		if (parent === current) {
+			return null;
+		}
+		current = parent;
+	}
+}
+
+async function importTenantAgentHandlerModule(modulePath: string) {
+	if (extname(modulePath) !== '.ts') {
+		return await import(/* @vite-ignore */ pathToFileURL(modulePath).href) as Record<string, unknown>;
+	}
+
+	const outputParent = resolve(process.cwd(), '.treeseed');
+	mkdirSync(outputParent, { recursive: true });
+	const outputRoot = mkdtempSync(resolve(outputParent, 'agent-handler-'));
+	const outputFile = resolve(outputRoot, `${Date.now()}-${Math.random().toString(36).slice(2)}.mjs`);
+	const tsconfig = findNearestTsconfig(modulePath);
+	try {
+		await build({
+			entryPoints: [modulePath],
+			outfile: outputFile,
+			bundle: true,
+			format: 'esm',
+			platform: 'node',
+			packages: 'external',
+			logLevel: 'silent',
+			tsconfig: tsconfig ?? undefined,
+			tsconfigRaw: tsconfig
+				? undefined
+				: {
+					compilerOptions: {
+						allowImportingTsExtensions: true,
+						module: 'ESNext',
+						target: 'ES2022',
+					},
+				},
+		});
+		return await import(/* @vite-ignore */ pathToFileURL(outputFile).href) as Record<string, unknown>;
+	} finally {
+		rmSync(outputRoot, { recursive: true, force: true });
+	}
+}
+
 export async function loadTenantAgentHandlerRegistry(
 	tenantRoot = resolveTreeseedTenantRoot(),
 ): Promise<Record<string, AgentHandler>> {
@@ -50,7 +103,7 @@ export async function loadTenantAgentHandlerRegistry(
 
 		let moduleExports: Record<string, unknown>;
 		try {
-			moduleExports = await import(/* @vite-ignore */ pathToFileURL(modulePath).href);
+			moduleExports = await importTenantAgentHandlerModule(modulePath);
 		} catch (error) {
 			const reason = error instanceof Error ? error.message : String(error);
 			throw new Error(`Failed to import tenant agent handler "${kind}" from ${modulePath}: ${reason}`);

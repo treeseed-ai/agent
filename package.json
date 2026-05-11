@@ -1,6 +1,6 @@
 {
   "name": "@treeseed/agent",
-  "version": "0.8.5",
+  "version": "0.8.6",
   "description": "Treeseed agent service runtime package.",
   "license": "AGPL-3.0-only",
   "repository": {
@@ -93,6 +93,7 @@
     "setup:ci": "npm ci",
     "build": "npm run build:dist",
     "build:dist": "node ./scripts/run-ts.mjs ./scripts/build-dist.ts",
+    "prepare": "node ./scripts/prepare.mjs",
     "dev:manager": "node ./scripts/run-ts.mjs ./src/services/manager.ts",
     "dev:worker": "node ./scripts/run-ts.mjs ./src/services/worker.ts",
     "dev:workday-start": "node ./scripts/run-ts.mjs ./src/services/workday-start.ts",
@@ -109,16 +110,16 @@
     "prepack": "npm run build:dist",
     "test:smoke": "node ./scripts/run-ts.mjs ./scripts/test-smoke.ts",
     "verify:direct": "npm run release:verify",
-    "verify:local": "node --input-type=module -e \"process.env.TREESEED_VERIFY_DRIVER='direct'; await import('@treeseed/sdk/scripts/verify-driver')\"",
-    "verify:action": "node --input-type=module -e \"process.env.TREESEED_VERIFY_DRIVER='act'; await import('@treeseed/sdk/scripts/verify-driver')\"",
-    "verify": "node --input-type=module -e \"await import('@treeseed/sdk/scripts/verify-driver')\"",
+    "verify:local": "TREESEED_VERIFY_DRIVER=direct node ./scripts/verify-driver.mjs",
+    "verify:action": "TREESEED_VERIFY_DRIVER=act node ./scripts/verify-driver.mjs",
+    "verify": "node ./scripts/verify-driver.mjs",
     "release:setup": "npm run setup:ci",
     "release:check-tag": "node ./scripts/run-ts.mjs ./scripts/assert-release-tag-version.ts",
     "release:verify": "node ./scripts/run-ts.mjs ./scripts/release-verify.ts",
     "release:publish": "node ./scripts/run-ts.mjs ./scripts/publish-package.ts"
   },
   "dependencies": {
-    "@treeseed/sdk": "0.8.5",
+    "@treeseed/sdk": "0.8.6",
     "esbuild": "0.28.0",
     "hono": "^4.8.2",
     "typescript": "^5.9.3",

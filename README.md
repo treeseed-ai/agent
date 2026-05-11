@@ -1,32 +1,56 @@
 # `@treeseed/agent`
 
-Treeseed agent service runtime package.
+Treeseed backend API and processing framework package.
 
-This package publishes the `treeseed-agents` CLI, the shared runtime exports for TreeSeed agents, and the Node service entrypoints used by the unified agent-hosting system.
+`@treeseed/agent` owns the reusable processing plane for Treeseed. It provides the Hono API foundation, agent runtime, manager service, worker runner service, cron-style workday entrypoints, processing-host templates, and processing env registry. It depends on `@treeseed/sdk` for contracts, stores, deployment primitives, and provider-neutral runtime helpers. It does not depend on `@treeseed/core`.
 
-## What It Provides
+## Package Role
 
-- the existing `treeseed-agents` CLI for local runtime inspection and execution
-- `manager` for work-day orchestration, graph ownership, and context assembly
-- `worker` for bounded task execution against Cloudflare Queue deliveries
-- `workday-start` and `workday-report` for cron-friendly kickoff and reporting
-- helper scripts for running a local manager against a deployed Cloudflare site and gateway
+The Treeseed package split is:
 
-## Deployment Shapes
+- `@treeseed/sdk`: shared contracts, stores, graph/query/runtime primitives, deployment config, and registry merge runtime
+- `@treeseed/core`: Astro/Starlight web framework, content, forms, web cache, and web-only Cloudflare integration
+- `@treeseed/agent`: backend API, agent runtime, processing services, processing-host manifests, and capacity-provider health/reporting
+- `@treeseed/market`: product app that composes `@treeseed/core`, `@treeseed/agent`, and `@treeseed/sdk`
 
-This package supports three useful shapes:
+Ordinary hosted projects should not need their own API, manager, worker, or workday services. They reference assigned processing capacity. Market and team-owned processing hosts use this package to run that capacity.
 
-1. Fully local
-2. Cloudflare site + local manager on your laptop
-3. Cloudflare control plane + Railway manager/worker services
+## Public Surfaces
 
-The hybrid laptop-manager flow is explicitly supported. The manager is just a Node process and can talk to a deployed Cloudflare gateway and queue as long as the right env vars are set.
+Package exports:
 
-## Requirements
+- `@treeseed/agent`
+- `@treeseed/agent/api`
+- `@treeseed/agent/api/app`
+- `@treeseed/agent/api/auth/d1-provider`
+- `@treeseed/agent/services/manager`
+- `@treeseed/agent/services/worker`
+- `@treeseed/agent/services/remote-runner`
+- `@treeseed/agent/services/workday-manager`
+- `@treeseed/agent/services/workday-start`
+- `@treeseed/agent/services/workday-report`
+- `@treeseed/agent/runtime-types`
+- `@treeseed/agent/cli`
+- `@treeseed/agent/contracts/messages`
+- `@treeseed/agent/contracts/run`
 
-- Node `>=22`
-- npm
-- a Treeseed tenant repository for runtime commands such as `doctor` and `start`
+Published binaries:
+
+- `treeseed-agents`
+- `treeseed-agent-api`
+- `treeseed-agent-service`
+
+The API foundation exposes `createTreeseedApiApp`, `createTreeseedApiRouter`, `createTreeseedNodeServer`, and the `TreeseedApiExtension` contract. Market-specific routes should mount through extensions owned by the market app.
+
+## Source Layout
+
+- `src/api`: Hono API app, auth providers, base routes, runtime provider resolution, and Node/Railway server helpers
+- `src/agents`: agent kernel, handler registry, adapters, contracts, spec normalization, CLI, and test harnesses
+- `src/services`: manager, worker, workday, remote runner, worker capacity, scaler, and shared processing service helpers
+- `src/env.yaml`: processing/API env registry entries owned by this package
+- `templates/github/deploy-processing.workflow.yml`: reusable processing-plane workflow template
+
+Tests mirror the source domains under `test/api` and `test/services`, with package-shape checks under `test/package`.
 
 ## Install
 
@@ -34,59 +58,24 @@ The hybrid laptop-manager flow is explicitly supported. The manager is just a No
 npm install @treeseed/agent @treeseed/sdk
 ```
 
-## Build And Test
+For workspace development, work from this package root:
 
 ```bash
 npm install
 npm run build
 npm test
-npm run release:verify
+npm run verify:local
 ```
 
-`npm test` runs the package smoke test. `npm run release:verify` rebuilds the package, runs the smoke test, and verifies that the packed tarball installs cleanly with the published `treeseed-agents` binary.
+## Development Commands
 
-`npm test` currently validates the legacy smoke path. For the new hosting stack, the minimum package-local verification is:
-
-```bash
-npm run build
-npm run dev:manager
-```
-
-and, when configured:
-
-```bash
-npm run dev:worker
-npm run dev:workday-start
-npm run dev:workday-report
-```
-
-## CLI
-
-Run the CLI from a Treeseed tenant repository root, or set `TREESEED_TENANT_ROOT` to point at one.
-
-```bash
-treeseed-agents doctor
-treeseed-agents run-agent planner-agent
-treeseed-agents start
-```
-
-Available commands:
-
-- `doctor`
-- `run-agent <slug>`
-- `drain-messages`
-- `release-leases`
-- `replay-message <id>`
-- `start`
-
-## Service Commands
-
-Development entrypoints:
+Source entrypoints:
 
 - `npm run dev:manager`
 - `npm run dev:worker`
 - `npm run dev:workday-start`
 - `npm run dev:workday-report`
+- `npm run dev:remote-runner`
 
 Built entrypoints:
 
@@ -95,104 +84,102 @@ Built entrypoints:
 - `npm run start:workday-start`
 - `npm run start:workday-report`
 
-Hybrid convenience entrypoint:
+Hybrid local helper:
 
 - `npm run start:local-manager-cloudflare`
 
+Package verification:
+
+- `npm run build:dist`
+- `npm run test:unit`
+- `npm run test:smoke`
+- `npm run release:verify`
+- `npm run verify:local`
+
+`npm test` runs both unit tests and the package smoke test. `npm run release:verify` checks local dependency hygiene, rebuilds the distributable package, scans generated output for publish-unsafe source references, runs tests, packs the package, installs it into a temporary project, and verifies the published CLI binary.
+
+## API Composition
+
+Create a backend app with the reusable agent foundation:
+
+```ts
+import { createTreeseedApiApp } from '@treeseed/agent/api';
+
+export default createTreeseedApiApp({
+	extensions: [
+		createMarketApiExtension(),
+	],
+});
+```
+
+The agent package owns generic API capabilities such as health, auth/session helpers, task dispatch, queue/capacity endpoints, workday routes, and SDK operation dispatch. Product routes such as market catalog, accounts, billing, invites, and hosted-project management belong in the market app extension.
+
+## Processing Host Shape
+
+A processing host can run:
+
+- API service: `treeseed-agent-api`
+- manager service: `treeseed-agent-service manager`
+- worker runner service: `treeseed-agent-service worker`
+- workday start cron: `treeseed-agent-service workday-start`
+- workday report cron: `treeseed-agent-service workday-report`
+
+The processing host registers as a capacity provider and reports health, capabilities, queue metrics, drain state, and workday summaries to the market control plane. Web-only projects should use assigned capacity instead of owning these services.
+
+## Environment Registry
+
+`src/env.yaml` is the package-owned processing/API env registry. It contains Railway, API, manager, worker, workday, queue, capacity provider, and processing drain entries.
+
+Common processing entries include:
+
+- `RAILWAY_API_TOKEN`
+- `RAILWAY_TOKEN`
+- `TREESEED_RAILWAY_WORKSPACE`
+- `TREESEED_PROJECT_RUNNER_TOKEN`
+- `TREESEED_AGENT_POOL_MIN_WORKERS`
+- `TREESEED_AGENT_POOL_MAX_WORKERS`
+- `TREESEED_AGENT_POOL_TARGET_QUEUE_DEPTH`
+- `TREESEED_AGENT_POOL_COOLDOWN_SECONDS`
+- `TREESEED_WORKDAY_TIMEZONE`
+- `TREESEED_WORKDAY_WINDOWS_JSON`
+- `TREESEED_WORKDAY_TASK_CREDIT_BUDGET`
+- `TREESEED_MANAGER_MAX_QUEUED_TASKS`
+- `TREESEED_MANAGER_MAX_QUEUED_CREDITS`
+- `TREESEED_MANAGER_PRIORITY_MODELS`
+- `TREESEED_TASK_CREDIT_WEIGHTS_JSON`
+- `TREESEED_WORKER_POOL_SCALER`
+- `TREESEED_RAILWAY_PROJECT_ID`
+- `TREESEED_RAILWAY_ENVIRONMENT_ID`
+- `TREESEED_RAILWAY_WORKER_SERVICE_ID`
+- `TREESEED_API_BASE_URL`
+- `TREESEED_API_AUTH_SECRET`
+- `TREESEED_API_D1_DATABASE_ID`
+- `TREESEED_API_WEB_SERVICE_ID`
+- `TREESEED_API_WEB_SERVICE_SECRET`
+- `TREESEED_API_WEB_ASSERTION_SECRET`
+- `TREESEED_CAPACITY_PROVIDER_ID`
+- `TREESEED_CAPACITY_PROVIDER_TEAM_ID`
+- `TREESEED_CAPACITY_PROVIDER_SERVICE_BASE_URL`
+- `TREESEED_PROCESSING_DRAIN`
+
+Provider-neutral shared entries belong in `@treeseed/sdk`. Web/forms/Astro entries belong in `@treeseed/core`. Market product auth, billing, account, hosted-hub, and UI/API entries belong in the root market env overlay.
+
 ## Local Manager With Cloudflare
 
-Use this when:
-
-- your site is deployed on Cloudflare
-- your gateway Worker is deployed on Cloudflare
-- you want the agent manager running on your laptop instead of Railway
-
-Setup:
+Use this helper when the web plane is deployed but the processing plane should run locally:
 
 ```bash
 cp .env.local-manager-cloudflare.example .env.local-manager-cloudflare
-```
-
-Required values:
-
-- `TREESEED_AGENT_REPO_ROOT`
-- `TREESEED_GATEWAY_BASE_URL`
-- `TREESEED_GATEWAY_BEARER_TOKEN`
-- `CLOUDFLARE_ACCOUNT_ID`
-- `TREESEED_QUEUE_ID`
-
-If you also want a local worker, set:
-
-- `TREESEED_QUEUE_PULL_TOKEN`
-
-Start the manager:
-
-```bash
+npm run build
 npm run start:local-manager-cloudflare
 ```
 
-Start a local worker in another shell:
-
-```bash
-set -a; source ./.env.local-manager-cloudflare; set +a
-npm run dev:worker
-```
-
-Kick off the work day:
-
-```bash
-set -a; source ./.env.local-manager-cloudflare; set +a
-npm run dev:workday-start
-```
-
-Generate the report:
-
-```bash
-set -a; source ./.env.local-manager-cloudflare; set +a
-npm run dev:workday-report
-```
-
-## Environment
-
-Common runtime variables:
-
-- `TREESEED_AGENT_REPO_ROOT`
-- `TREESEED_AGENT_D1_DATABASE`
-- `TREESEED_AGENT_D1_PERSIST_TO`
-- `TREESEED_PROJECT_ID`
-- `TREESEED_WORKDAY_CAPACITY_BUDGET`
-- `TREESEED_GATEWAY_BASE_URL`
-- `TREESEED_GATEWAY_BEARER_TOKEN`
-- `TREESEED_MANAGER_BASE_URL`
-- `TREESEED_WORKER_ID`
-- `TREESEED_QUEUE_BATCH_SIZE`
-- `TREESEED_QUEUE_VISIBILITY_TIMEOUT_MS`
-- `TREESEED_TASK_LEASE_SECONDS`
-- `TREESEED_WORKER_POLL_INTERVAL_MS`
-- `CLOUDFLARE_ACCOUNT_ID`
-- `TREESEED_QUEUE_ID`
-- `TREESEED_QUEUE_PULL_TOKEN`
-
-## Package Scripts
-
-- `npm run setup`: install dependencies with `npm install`
-- `npm run setup:ci`: install dependencies with `npm ci`
-- `npm run build`: build the distributable package
-- `npm run dev:manager`: run the manager directly from source
-- `npm run dev:worker`: run the worker directly from source
-- `npm run dev:workday-start`: run the cron-style start entrypoint directly from source
-- `npm run dev:workday-report`: run the cron-style report entrypoint directly from source
-- `npm run start:manager`: run the built manager
-- `npm run start:worker`: run the built worker
-- `npm run start:workday-start`: run the built workday-start entrypoint
-- `npm run start:workday-report`: run the built workday-report entrypoint
-- `npm run start:local-manager-cloudflare`: load the local-manager env file and start the built manager
-- `npm test`: run the smoke test
-- `npm run release:verify`: verify build, smoke test, and packed-install behavior
-- `npm run release:check-tag -- <tag>`: validate plain semver tags like `0.1.1` against `package.json`
-- `npm run release:publish`: publish to npm
+The purpose-specific env file supplies local processing credentials and Cloudflare queue/D1 pointers without mixing processing-plane secrets into a generic web `.env.local`. Start a local worker, workday start, or workday report in another shell after loading the same env file.
 
 ## GitHub Actions
 
-- `.github/workflows/ci.yml` runs `npm ci`, `npm run build`, `npm test`, and `npm run release:verify` on pushes and pull requests.
-- `.github/workflows/publish.yml` runs the same verification steps before publishing on `*.*.*` version tags or manual dispatch.
+- `.github/workflows/verify.yml` runs package verification for pushes and pull requests.
+- `.github/workflows/publish.yml` validates production version tags and publishes the package.
+- `templates/github/deploy-processing.workflow.yml` is the processing-plane workflow template consumed by hosted processing deployments.
+
+Web-only hosted projects should dispatch web workflows from `@treeseed/core`/`@treeseed/sdk` templates. Processing deployments should use the agent processing template explicitly.

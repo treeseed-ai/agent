@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.8.6] - 2026-05-11
+
+### Added
+
+- feat(agents): implement esbuild-based loading for tenant TypeScript (ab85b13d5a76)
+
+### Tests
+
+- refactor(agent): update documentation and environment configuration (ca85defa5d6d)
+
+### Dependencies
+
+- build(build): sync package dependency references (b19cdcdbcae4)
+- Release @treeseed/agent 0.8.6.
+
 ## [0.8.5] - 2026-05-11
 
 ### Dependencies

@@ -29,6 +29,9 @@ jobs:
           cache: npm
           cache-dependency-path: package-lock.json
 
+      - name: Assert node:sqlite availability
+        run: node -e "import('node:sqlite').then(() => console.log('node:sqlite available')).catch((error) => { console.error(error); process.exit(1); })"
+
       - name: Install dependencies
         run: |
           node -e "const fs = require('fs'); const p = JSON.parse(fs.readFileSync('package.json', 'utf8')); if (p.scripts) delete p.scripts.prepare; fs.writeFileSync('package.json', JSON.stringify(p, null, '\t') + '\n');"

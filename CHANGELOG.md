@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.8.8] - 2026-05-11
+
+### Added
+
+- feat(agent): implement provider registration and update capacity routing (e1ede801328e)
+
+### Dependencies
+
+- build(build): sync package dependency references (675a57bb54ff)
+- Release @treeseed/agent 0.8.8.
+
 ## [0.8.7] - 2026-05-11
 
 ### Dependencies

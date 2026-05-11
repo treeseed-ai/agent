@@ -27,6 +27,23 @@ function readCapacityEnvelope(payload: Record<string, unknown>): CapacityTaskExe
 	return Object.keys(envelope).length > 0 ? envelope as CapacityTaskExecutionEnvelope : null;
 }
 
+function readCapacityMetadata(payload: Record<string, unknown>) {
+	const capacity = asRecord(payload.capacity);
+	const providerId = typeof capacity.providerId === 'string' ? capacity.providerId : null;
+	const laneId = typeof capacity.laneId === 'string' ? capacity.laneId : null;
+	if (!providerId || !laneId) return null;
+	return {
+		providerId,
+		laneId,
+		grantId: typeof capacity.grantId === 'string' ? capacity.grantId : null,
+		reservationId: typeof capacity.reservationId === 'string' ? capacity.reservationId : null,
+		routingDecisionId: typeof capacity.routingDecisionId === 'string' ? capacity.routingDecisionId : null,
+		estimatedCreditsP50: Number.isFinite(Number(capacity.estimatedCreditsP50)) ? Number(capacity.estimatedCreditsP50) : null,
+		estimatedCreditsP90: Number.isFinite(Number(capacity.estimatedCreditsP90)) ? Number(capacity.estimatedCreditsP90) : null,
+		reservedCredits: Number.isFinite(Number(capacity.reservedCredits)) ? Number(capacity.reservedCredits) : null,
+	};
+}
+
 function runnerRepositoryPath(volumeRoot: string, repositoryId: string, taskId: string) {
 	const repositoryRoot = join(volumeRoot, 'repositories', repositoryId);
 	return {
@@ -107,6 +124,7 @@ async function executeQueuedTask(options: {
 		payloadJson: JSON.stringify(payload),
 	});
 	const capacityEnvelope = readCapacityEnvelope(payload);
+	const capacityMetadata = readCapacityMetadata(payload);
 	const explicitApproval = asRecord(payload.approvalRequest);
 	if (Object.keys(explicitApproval).length > 0 || capacityEnvelope?.maxCredits === 0) {
 		throw new WorkerPausedForApproval({
@@ -253,7 +271,17 @@ async function executeQueuedTask(options: {
 				credits: Number(payload.estimatedCredits ?? capacityEnvelope.maxCredits ?? 1),
 				source: 'worker',
 			}
-			: null,
+			: capacityMetadata
+				? {
+					capacityProviderId: capacityMetadata.providerId,
+					laneId: capacityMetadata.laneId,
+					reservationId: capacityMetadata.reservationId,
+					credits: Number(payload.actualCredits ?? capacityMetadata.estimatedCreditsP50 ?? capacityMetadata.reservedCredits ?? 1),
+					source: 'worker',
+					taskSignature: typeof payload.taskSignature === 'string' ? payload.taskSignature : String(task?.type ?? task?.taskType ?? 'agent_trigger'),
+					reservedCredits: capacityMetadata.reservedCredits,
+				}
+				: null,
 	};
 }
 
@@ -313,6 +341,29 @@ export async function runWorkerCycle() {
 				},
 				actor: 'worker',
 			});
+
+			const startContext = await buildTaskContext(sdk, message.body.taskId);
+			const startPayload = parseTaskPayload(startContext.task as Record<string, unknown> | null);
+			const startCapacity = readCapacityMetadata(startPayload);
+			if (startCapacity?.reservationId) {
+				const reporter = createControlPlaneReporter();
+				await reporter.reportCapacityUsage({
+					capacityProviderId: startCapacity.providerId,
+					laneId: startCapacity.laneId,
+					reservationId: startCapacity.reservationId,
+					teamId: String(process.env.TREESEED_TEAM_ID ?? ''),
+					projectId: String(process.env.TREESEED_PROJECT_ID ?? ''),
+					workDayId: message.body.workDayId,
+					taskId: message.body.taskId,
+					phase: 'task_started',
+					credits: 0,
+					source: 'worker',
+					metadata: {
+						workerId: config.workerId,
+						queueAttempt: message.attempts,
+					},
+				}).catch(() => null);
+			}
 
 			let output;
 			try {
@@ -377,12 +428,21 @@ export async function runWorkerCycle() {
 					projectId: String(process.env.TREESEED_PROJECT_ID ?? ''),
 					workDayId: message.body.workDayId,
 					taskId: message.body.taskId,
-					phase: 'consume',
+					phase: output.capacityUsage.reservationId ? 'task_completed_actual_settlement' : 'consume',
 					credits: output.capacityUsage.credits,
 					source: 'worker',
 					metadata: {
 						workerId: config.workerId,
 						queueAttempt: message.attempts,
+						reservedCredits: output.capacityUsage.reservedCredits ?? null,
+					},
+					usageActual: {
+						taskSignature: output.capacityUsage.taskSignature ?? String(output.agentSlug ?? 'agent_trigger'),
+						actualCredits: output.capacityUsage.credits,
+						retryCount: Math.max(0, message.attempts - 1),
+						metadata: {
+							workerId: config.workerId,
+						},
 					},
 				}).catch(() => null);
 			}
@@ -390,6 +450,28 @@ export async function runWorkerCycle() {
 			await queue.ack([message.leaseId]);
 			return 1;
 		} catch (error) {
+			const failureContext = await buildTaskContext(sdk, message.body.taskId).catch(() => null);
+			const failurePayload = parseTaskPayload(failureContext?.task as Record<string, unknown> | null);
+			const failureCapacity = readCapacityMetadata(failurePayload);
+			if (failureCapacity?.reservationId) {
+				const reporter = createControlPlaneReporter();
+				await reporter.reportCapacityUsage({
+					capacityProviderId: failureCapacity.providerId,
+					laneId: failureCapacity.laneId,
+					reservationId: failureCapacity.reservationId,
+					teamId: String(process.env.TREESEED_TEAM_ID ?? ''),
+					projectId: String(process.env.TREESEED_PROJECT_ID ?? ''),
+					workDayId: message.body.workDayId,
+					taskId: message.body.taskId,
+					phase: 'task_failed_refund',
+					credits: -Number(failureCapacity.reservedCredits ?? 0),
+					source: 'worker',
+					metadata: {
+						workerId: config.workerId,
+						message: error instanceof Error ? error.message : String(error),
+					},
+				}).catch(() => null);
+			}
 			const retryDelaySeconds = Math.min(300, Math.max(15, message.attempts * 30));
 			await sdk.failTask({
 				id: message.body.taskId,

@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.8.7] - 2026-05-11
+
+### Dependencies
+
+- build(agent): bump version and update @treeseed/sdk dependency (bd3f5c325cd7)
+- build(agent): update version and @treeseed/sdk dependency (5aac9b52028e)
+- build(agent): bump version and update @treeseed/sdk (8266bca67e0a)
+- Release @treeseed/agent 0.8.7.
+
 ## [0.8.6] - 2026-05-11
 
 ### Added

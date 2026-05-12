@@ -1,8 +1,8 @@
 import type { Hono } from 'hono';
 import type { AgentSdk } from '@treeseed/sdk';
 import {
-	buildKnowledgeCoopKnowledgePackPackage,
-	buildKnowledgeCoopTemplatePackage,
+	buildKnowledgePackMarketPackage,
+	buildTemplateMarketPackage,
 	TreeseedWorkflowSdk,
 } from '@treeseed/sdk';
 import {
@@ -24,7 +24,7 @@ import type {
 	WorkstreamState,
 	WorkstreamSummary,
 } from '@treeseed/sdk';
-import { normalizeKnowledgeCoopJobStatus } from '@treeseed/sdk';
+import { normalizeProjectJobStatus } from '@treeseed/sdk';
 import { requireTeamCapability } from './capabilities.ts';
 import { jsonError } from './http.ts';
 import type { ApiConfig } from './types.ts';
@@ -605,7 +605,7 @@ export function registerProjectRoutes(
 				})
 				: null;
 			const packageResult = kind === 'template'
-				? buildKnowledgeCoopTemplatePackage(options.config.repoRoot, {
+				? buildTemplateMarketPackage(options.config.repoRoot, {
 					id: typeof body.id === 'string' ? body.id : undefined,
 					title: typeof body.title === 'string' && body.title.trim() ? body.title.trim() : undefined,
 					summary: typeof body.summary === 'string' ? body.summary : null,
@@ -621,7 +621,7 @@ export function registerProjectRoutes(
 					},
 				})
 				: kind === 'knowledge_pack'
-					? buildKnowledgeCoopKnowledgePackPackage(options.config.repoRoot, {
+					? buildKnowledgePackMarketPackage(options.config.repoRoot, {
 						id: typeof body.id === 'string' ? body.id : undefined,
 						title: typeof body.title === 'string' && body.title.trim() ? body.title.trim() : undefined,
 						summary: typeof body.summary === 'string' ? body.summary : null,

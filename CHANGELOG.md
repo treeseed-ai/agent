@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.8.9] - 2026-05-12
+
+### Dependencies
+
+- build(agent): update version and @treeseed/sdk dependency (b033f16e94d7)
+- build(build): sync package dependency references (3cb295140b90)
+- chore(agent): bump version and update @treeseed/sdk dependency (3b934a52ee34)
+- chore(agent): bump version and update @treeseed/sdk (891c534d3db5)
+- build(build): sync package dependency references (a1d6fc017c0b)
+- Release @treeseed/agent 0.8.9.
+
 ## [0.8.8] - 2026-05-11
 
 ### Added

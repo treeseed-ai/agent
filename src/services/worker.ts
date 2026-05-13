@@ -3,11 +3,40 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { AgentTriggerInvocation } from '../agents/runtime-types.ts';
+import type { AgentContext, AgentHandler } from '../agents/runtime-types.ts';
 import { AgentKernel } from '../agents/kernel/agent-kernel.ts';
 import { createControlPlaneReporter } from '@treeseed/sdk';
 import type { CapacityTaskExecutionEnvelope } from '@treeseed/sdk';
 import { isDirectEntrypoint } from '../entrypoint.ts';
-import { buildTaskContext, createQueueClient, createServiceSdk, resolveServiceRepoRoot, resolveWorkerConfig } from './common.ts';
+import { buildTaskContext, createQueueClient, createQueuePushClient, createServiceSdk, queueEnvelopeForTask, resolveServiceRepoRoot, resolveWorkerConfig } from './common.ts';
+import { researcherHandler } from '../agents/handlers/researcher.ts';
+import { knowledgeGeneratorHandler } from '../agents/handlers/knowledge-generator.ts';
+import { knowledgeOptimizerHandler } from '../agents/handlers/knowledge-optimizer.ts';
+import type { KnowledgeDraft, OptimizationReport } from '../agents/contracts/knowledge.ts';
+import type { ResearchNote } from '../agents/contracts/research.ts';
+import {
+	agentSpecForResearchKnowledgeHandler,
+	followupTaskIdempotencyKey,
+	graphVersionForTask,
+	invocationForResearchKnowledgeTask,
+	isResearchKnowledgeTaskKind,
+	summarizeKnowledgeDraftArtifact,
+	summarizeOptimizationReportArtifact,
+	summarizePromotionRequestArtifact,
+	summarizeReleaseRequestArtifact,
+	summarizeResearchNoteArtifact,
+	taskPayload,
+	taskRecordId,
+	workDayIdForTask,
+	type ResearchKnowledgeTaskKind,
+	type ResearchKnowledgeTaskOutputEnvelope,
+} from './research-knowledge-workday.ts';
+import {
+	defaultReleaseGrant,
+	type KnowledgePromotionDependencies,
+	normalizeKnowledgePromotionTaskInput,
+	runKnowledgePromotionToStaging,
+} from './knowledge-promotion.ts';
 
 function parseTaskPayload(task: Record<string, unknown> | null) {
 	const raw = typeof task?.payloadJson === 'string' ? task.payloadJson : '{}';
@@ -20,6 +49,10 @@ function parseTaskPayload(task: Record<string, unknown> | null) {
 
 function asRecord(value: unknown): Record<string, unknown> {
 	return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function readString(value: unknown) {
+	return typeof value === 'string' && value.trim() ? value.trim() : '';
 }
 
 function readCapacityEnvelope(payload: Record<string, unknown>): CapacityTaskExecutionEnvelope | null {
@@ -108,6 +141,367 @@ class WorkerPausedForApproval extends Error {
 	}
 }
 
+function scopedSdkForHandler(sdk: ReturnType<typeof createServiceSdk>, agent: ReturnType<typeof agentSpecForResearchKnowledgeHandler>) {
+	const maybeScoped = sdk as unknown as {
+		scopeForAgent?: (agent: ReturnType<typeof agentSpecForResearchKnowledgeHandler>) => unknown;
+		buildContextPack?: unknown;
+		createMessage?: (request: Record<string, unknown>) => Promise<unknown>;
+		appendTaskEvent?: (request: Record<string, unknown>) => Promise<unknown>;
+	};
+	if (typeof maybeScoped.scopeForAgent === 'function') {
+		return maybeScoped.scopeForAgent(agent);
+	}
+	return {
+		buildContextPack: maybeScoped.buildContextPack?.bind(sdk),
+		createMessage: (request: Record<string, unknown>) => maybeScoped.createMessage?.({ ...request, actor: agent.slug }),
+		appendTaskEvent: maybeScoped.appendTaskEvent?.bind(sdk),
+	};
+}
+
+function contextForResearchKnowledgeHandler(input: {
+	sdk: ReturnType<typeof createServiceSdk>;
+	repoRoot: string;
+	kind: 'researcher' | 'knowledge_generator' | 'knowledge_optimizer';
+	payload: Record<string, unknown>;
+}) {
+	const agent = agentSpecForResearchKnowledgeHandler(input.kind);
+	return {
+		runId: `${input.kind}-${Date.now()}`,
+		repoRoot: input.repoRoot,
+		agent,
+		sdk: scopedSdkForHandler(input.sdk, agent),
+		trigger: invocationForResearchKnowledgeTask(
+			input.kind === 'researcher'
+				? 'research_question'
+				: input.kind === 'knowledge_generator'
+					? 'generate_knowledge_draft'
+					: 'optimize_knowledge_draft',
+			input.payload,
+		),
+		execution: {},
+		mutations: {},
+		repository: {},
+		verification: {},
+		notifications: {},
+		research: {},
+		operations: {},
+	} as AgentContext;
+}
+
+async function runBuiltInHandler<TInputs, TResult>(
+	handler: AgentHandler<TInputs, TResult>,
+	context: AgentContext,
+) {
+	const inputs = await handler.resolveInputs(context);
+	const result = await handler.execute(context, inputs);
+	const output = await handler.emitOutputs(context, result);
+	return { result, output };
+}
+
+async function createFollowupTask(input: {
+	sdk: ReturnType<typeof createServiceSdk>;
+	workDayId: string;
+	agentId: string;
+	type: ResearchKnowledgeTaskKind;
+	priority: number;
+	idempotencyKey: string;
+	payload: Record<string, unknown>;
+	graphVersion: string | null;
+	enqueue: boolean;
+}) {
+	const created = await input.sdk.createTask({
+		workDayId: input.workDayId,
+		agentId: input.agentId,
+		type: input.type,
+		priority: input.priority,
+		idempotencyKey: input.idempotencyKey,
+		payload: input.payload,
+		graphVersion: input.graphVersion,
+		state: input.enqueue ? undefined : 'waiting',
+		actor: 'worker',
+	});
+	const createdTask = asRecord(created.payload);
+	const createdTaskId = readString(createdTask.id);
+	if (createdTaskId && input.enqueue) {
+		const queue = createQueuePushClient();
+		if (queue) {
+			await queue.enqueue({
+				message: queueEnvelopeForTask(createdTask),
+				delaySeconds: 0,
+			});
+			await input.sdk.recordTaskProgress({
+				id: createdTaskId,
+				state: 'queued',
+				appendEvent: {
+					kind: 'queued',
+					data: { queueName: process.env.TREESEED_QUEUE_ID ?? null },
+				},
+				actor: 'worker',
+			});
+		}
+	}
+	return createdTaskId || null;
+}
+
+function envelope(input: Omit<ResearchKnowledgeTaskOutputEnvelope, 'summary'> & {
+	status: ResearchKnowledgeTaskOutputEnvelope['summary']['status'];
+	summary: string;
+}) {
+	return {
+		...input,
+		summary: {
+			status: input.status,
+			summary: input.summary,
+		},
+	};
+}
+
+export async function executeResearchKnowledgeTask(input: {
+	sdk: ReturnType<typeof createServiceSdk>;
+	task: Record<string, unknown>;
+	taskKind: ResearchKnowledgeTaskKind;
+	workerId: string;
+	queueAttempt: number;
+	enqueueFollowups?: boolean;
+	promotionDependencies?: KnowledgePromotionDependencies;
+}) {
+	const payload = taskPayload(input.task);
+	const workDayId = workDayIdForTask(input.task);
+	const graphVersion = graphVersionForTask(input.task);
+	const taskId = taskRecordId(input.task);
+	const repoRoot = resolveServiceRepoRoot();
+	const enqueueFollowups = input.enqueueFollowups ?? true;
+
+	if (input.taskKind === 'research_question') {
+		const context = contextForResearchKnowledgeHandler({
+			sdk: input.sdk,
+			repoRoot,
+			kind: 'researcher',
+			payload: { ...payload, taskId },
+		});
+		const { result, output } = await runBuiltInHandler(researcherHandler, context);
+		const note = result as ResearchNote | null;
+		const generatedArtifacts = note ? [summarizeResearchNoteArtifact(note, taskId)] : [];
+		const nextTaskId = note && workDayId
+			? await createFollowupTask({
+					sdk: input.sdk,
+					workDayId,
+					agentId: 'knowledge-generator-agent',
+					type: 'generate_knowledge_draft',
+					priority: 90,
+					idempotencyKey: followupTaskIdempotencyKey(workDayId, 'generate_knowledge_draft', note.id),
+					payload: {
+						executionKind: 'research_knowledge_pipeline',
+						researchNote: note,
+						question: payload.question,
+						sourceTaskId: taskId,
+						taskKind: 'generate_knowledge_draft',
+					},
+					graphVersion,
+					enqueue: enqueueFollowups,
+				})
+			: null;
+		return envelope({
+			artifactKind: 'research_note',
+			researchNote: note ?? undefined,
+			generatedArtifacts,
+			nextTaskId,
+			status: output.status,
+			summary: output.summary,
+		});
+	}
+
+	if (input.taskKind === 'generate_knowledge_draft') {
+		const context = contextForResearchKnowledgeHandler({
+			sdk: input.sdk,
+			repoRoot,
+			kind: 'knowledge_generator',
+			payload: { ...payload, taskId },
+		});
+		const { result, output } = await runBuiltInHandler(knowledgeGeneratorHandler, context);
+		const draft = result as KnowledgeDraft | null;
+		const generatedArtifacts = draft ? [summarizeKnowledgeDraftArtifact(draft, taskId)] : [];
+		const nextTaskId = draft && workDayId
+			? await createFollowupTask({
+					sdk: input.sdk,
+					workDayId,
+					agentId: 'knowledge-optimizer-agent',
+					type: 'optimize_knowledge_draft',
+					priority: 85,
+					idempotencyKey: followupTaskIdempotencyKey(workDayId, 'optimize_knowledge_draft', draft.id),
+					payload: {
+						executionKind: 'research_knowledge_pipeline',
+						researchNote: payload.researchNote,
+						knowledgeDraft: draft,
+						question: payload.question,
+						sourceTaskId: taskId,
+						taskKind: 'optimize_knowledge_draft',
+					},
+					graphVersion,
+					enqueue: enqueueFollowups,
+				})
+			: null;
+		return envelope({
+			artifactKind: 'knowledge_draft',
+			knowledgeDraft: draft ?? undefined,
+			generatedArtifacts,
+			nextTaskId,
+			status: output.status,
+			summary: output.summary,
+		});
+	}
+
+	if (input.taskKind === 'optimize_knowledge_draft') {
+		const context = contextForResearchKnowledgeHandler({
+			sdk: input.sdk,
+			repoRoot,
+			kind: 'knowledge_optimizer',
+			payload: { ...payload, taskId },
+		});
+		const { result, output } = await runBuiltInHandler(knowledgeOptimizerHandler, context);
+		const report = result as OptimizationReport | null;
+		const generatedArtifacts = report ? [summarizeOptimizationReportArtifact(report, taskId)] : [];
+		const draft = asRecord(payload.knowledgeDraft) as unknown as KnowledgeDraft;
+		const note = asRecord(payload.researchNote) as unknown as ResearchNote;
+		const promotionRequest = report?.recommendation === 'promote'
+			? {
+					id: `promotion:${report.draftId}`,
+					draftId: report.draftId,
+					targetPath: draft.targetPath,
+					recommendation: report.recommendation,
+					totalScore: report.totalScore,
+					sourceQuestionId: draft.sourceQuestionId,
+					sourceResearchIds: draft.sourceResearchIds,
+					sourceResearchNoteId: note.id,
+					optimizationReportId: report.id,
+					sourceTaskId: taskId,
+				}
+			: null;
+		const nextTaskId = promotionRequest && workDayId
+			? await createFollowupTask({
+					sdk: input.sdk,
+					workDayId,
+					agentId: 'knowledge-reviewer-agent',
+					type: 'promote_knowledge_draft_request',
+					priority: 80,
+					idempotencyKey: followupTaskIdempotencyKey(workDayId, 'promote_knowledge_draft_request', report.draftId),
+					payload: {
+						executionKind: 'research_knowledge_pipeline',
+						promotionRequest,
+						sourceTaskId: taskId,
+						taskKind: 'promote_knowledge_draft_request',
+					},
+					graphVersion,
+					enqueue: false,
+				})
+			: null;
+		return envelope({
+			artifactKind: 'optimization_report',
+			optimizationReport: report ?? undefined,
+			promotionRequest: promotionRequest ?? undefined,
+			generatedArtifacts: [
+				...generatedArtifacts,
+				...(promotionRequest ? [summarizePromotionRequestArtifact(promotionRequest, nextTaskId ?? undefined)] : []),
+			],
+			nextTaskId,
+			status: output.status,
+			summary: output.summary,
+		});
+	}
+
+	if (input.taskKind === 'promote_knowledge_to_staging') {
+		const config = resolveWorkerConfig();
+		const normalized = normalizeKnowledgePromotionTaskInput({
+			task: input.task,
+			payload,
+			repoRoot,
+			projectId: config.projectId,
+			environment: config.environment,
+		});
+		if (!normalized) {
+			return envelope({
+				artifactKind: 'promotion_request',
+				generatedArtifacts: [],
+				nextTaskId: null,
+				status: 'waiting',
+				summary: 'Knowledge promotion is waiting for an approved draft and approval decision.',
+			});
+		}
+		const promotion = await runKnowledgePromotionToStaging({
+			task: normalized,
+			sdk: input.sdk,
+			dependencies: input.promotionDependencies,
+		});
+		const releaseRequest = promotion.releaseRequest;
+		const nextTaskId = releaseRequest && workDayId
+			? await createFollowupTask({
+					sdk: input.sdk,
+					workDayId,
+					agentId: 'releaser-agent',
+					type: 'release_staged_knowledge_request',
+					priority: 75,
+					idempotencyKey: followupTaskIdempotencyKey(workDayId, 'release_staged_knowledge_request', releaseRequest.id),
+					payload: {
+						executionKind: 'research_knowledge_pipeline',
+						releaseRequest,
+						sourceTaskId: taskId,
+						taskKind: 'release_staged_knowledge_request',
+						projectId: normalized.projectId,
+						environment: normalized.environment,
+						releaseInput: releaseRequest.releaseInput,
+						operationGrants: [
+							defaultReleaseGrant({
+								taskId: `release:${taskId}`,
+								projectId: normalized.projectId,
+								environment: normalized.environment,
+								approvalId: releaseRequest.id,
+							}),
+						],
+					},
+					graphVersion,
+					enqueue: false,
+				})
+			: null;
+		return envelope({
+			artifactKind: releaseRequest ? 'release_request' : 'promotion_request',
+			promotionRequest: asRecord(payload.promotionRequest),
+			releaseRequest: releaseRequest ?? undefined,
+			generatedArtifacts: [
+				...(releaseRequest ? [summarizeReleaseRequestArtifact(releaseRequest, nextTaskId ?? undefined)] : []),
+			],
+			nextTaskId,
+			status: promotion.status === 'staged' ? 'completed' : promotion.status === 'waiting' ? 'waiting' : 'failed',
+			summary: promotion.summary,
+			promotionToStaging: promotion,
+		} as unknown as Omit<ResearchKnowledgeTaskOutputEnvelope, 'summary'> & {
+			status: ResearchKnowledgeTaskOutputEnvelope['summary']['status'];
+			summary: string;
+		});
+	}
+
+	if (input.taskKind === 'release_staged_knowledge_request') {
+		const releaseRequest = asRecord(payload.releaseRequest);
+		return envelope({
+			artifactKind: 'release_request',
+			releaseRequest,
+			generatedArtifacts: [summarizeReleaseRequestArtifact(releaseRequest, taskId)],
+			nextTaskId: null,
+			status: 'waiting',
+			summary: 'Staged knowledge release is waiting for explicit human release approval.',
+		});
+	}
+
+	const promotionRequest = asRecord(payload.promotionRequest);
+	return envelope({
+		artifactKind: 'promotion_request',
+		promotionRequest,
+		generatedArtifacts: [summarizePromotionRequestArtifact(promotionRequest, taskId)],
+		nextTaskId: null,
+		status: 'waiting',
+		summary: 'Knowledge draft promotion is waiting for an approval decision.',
+	});
+}
+
 async function executeQueuedTask(options: {
 	sdk: ReturnType<typeof createServiceSdk>;
 	kernel: AgentKernel;
@@ -143,7 +537,24 @@ async function executeQueuedTask(options: {
 		});
 	}
 	const executionKind = typeof payload.executionKind === 'string' ? payload.executionKind : null;
-	if (String(task?.type ?? task?.taskType ?? '') === 'refresh_project_graph') {
+	const taskKind = String(task?.type ?? task?.taskType ?? '');
+	if (isResearchKnowledgeTaskKind(taskKind)) {
+		const output = await executeResearchKnowledgeTask({
+			sdk: options.sdk,
+			task: task ?? {},
+			taskKind,
+			workerId: options.workerId,
+			queueAttempt: options.queueAttempt,
+		});
+		return {
+			workerId: options.workerId,
+			queueAttempt: options.queueAttempt,
+			executionKind: 'research_knowledge_pipeline',
+			taskKind,
+			...output,
+		};
+	}
+	if (taskKind === 'refresh_project_graph') {
 		const config = resolveWorkerConfig();
 		const projectId = typeof payload.projectId === 'string' ? payload.projectId : config.projectId;
 		const repositoryId = typeof payload.repositoryId === 'string' ? payload.repositoryId : projectId;

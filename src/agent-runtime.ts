@@ -4,6 +4,7 @@ import {
 	ManualExecutionAdapter,
 	StubExecutionAdapter,
 } from './agents/adapters/execution.ts';
+import { CodexSubscriptionExecutionAdapter } from './agents/adapters/execution-codex.ts';
 import { LocalBranchMutationAdapter } from './agents/adapters/mutations.ts';
 import { SdkMessageNotificationAdapter, StubNotificationAdapter } from './agents/adapters/notification.ts';
 import { GitRepositoryInspectionAdapter, StubRepositoryInspectionAdapter } from './agents/adapters/repository.ts';
@@ -58,6 +59,8 @@ function buildAgentRuntime() {
 		['stub', () => new StubExecutionAdapter()],
 		['manual', () => new ManualExecutionAdapter()],
 		['copilot', () => new CopilotExecutionAdapter()],
+		['codex', () => new CodexSubscriptionExecutionAdapter()],
+		['codex_subscription', () => new CodexSubscriptionExecutionAdapter()],
 	]);
 	const mutation = new Map<string, (repoRoot: string) => AgentMutationAdapter>([
 		['local_branch', (repoRoot) => new LocalBranchMutationAdapter(repoRoot)],

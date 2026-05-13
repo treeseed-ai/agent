@@ -1,0 +1,370 @@
+import type { AgentRuntimeSpec } from '@treeseed/sdk/types/agents';
+import type { AgentTriggerInvocation } from '../agents/runtime-types.ts';
+import type { KnowledgeDraft, OptimizationReport } from '../agents/contracts/knowledge.ts';
+import type { ResearchNote } from '../agents/contracts/research.ts';
+import {
+	TREESEED_PLATFORM_KNOWLEDGE_QUESTIONS,
+	type KnowledgePipelineQuestion,
+} from '../agents/knowledge/pipeline.ts';
+
+export const RESEARCH_KNOWLEDGE_TASK_KINDS = [
+	'research_question',
+	'generate_knowledge_draft',
+	'optimize_knowledge_draft',
+	'promote_knowledge_draft_request',
+	'promote_knowledge_to_staging',
+	'release_staged_knowledge_request',
+] as const;
+
+export type ResearchKnowledgeTaskKind = typeof RESEARCH_KNOWLEDGE_TASK_KINDS[number];
+
+export interface GeneratedAgentArtifactSummary {
+	artifactKind: 'research_note' | 'knowledge_draft' | 'optimization_report' | 'promotion_request' | 'release_request';
+	id: string;
+	title?: string;
+	taskId?: string;
+	questionId?: string;
+	researchNoteId?: string;
+	draftId?: string;
+	reportId?: string;
+	targetPath?: string;
+	sourceRefs?: string[];
+	sourceResearchIds?: string[];
+	recommendation?: string;
+	totalScore?: number;
+	approvalKind?: string;
+	stagingBranch?: string;
+	featureBranch?: string;
+	changedPaths?: string[];
+	releaseDecision?: string;
+}
+
+export interface ResearchKnowledgeTaskOutputEnvelope {
+	artifactKind: GeneratedAgentArtifactSummary['artifactKind'];
+	researchNote?: ResearchNote;
+	knowledgeDraft?: KnowledgeDraft;
+	optimizationReport?: OptimizationReport;
+	promotionRequest?: Record<string, unknown>;
+	releaseRequest?: Record<string, unknown>;
+	generatedArtifacts: GeneratedAgentArtifactSummary[];
+	nextTaskId?: string | null;
+	summary: {
+		status: 'completed' | 'waiting' | 'failed';
+		summary: string;
+	};
+}
+
+interface TaskRecord {
+	[key: string]: unknown;
+	id?: string;
+	workDayId?: string;
+	work_day_id?: string;
+	type?: string;
+	idempotencyKey?: string;
+	idempotency_key?: string;
+	payloadJson?: string;
+	payload_json?: string;
+}
+
+interface ResearchKnowledgeSdk {
+	searchTasks(request: { workDayId?: string; limit?: number; state?: string | string[] }): Promise<{ payload: unknown }>;
+	createTask(request: {
+		workDayId: string;
+		agentId: string;
+		type: string;
+		priority: number;
+		idempotencyKey: string;
+		payload: Record<string, unknown>;
+		graphVersion?: string | null;
+		actor: string;
+		state?: string;
+	}): Promise<{ payload: unknown }>;
+	recordTaskCredits?: (request: {
+		projectId: string;
+		workDayId: string;
+		taskId: string;
+		phase: string;
+		credits: number;
+		metadata: Record<string, unknown>;
+	}) => Promise<unknown>;
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+	return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function asRecords(value: unknown) {
+	return Array.isArray(value) ? value.filter((entry): entry is Record<string, unknown> => Boolean(entry) && typeof entry === 'object' && !Array.isArray(entry)) : [];
+}
+
+function readString(record: Record<string, unknown>, ...keys: string[]) {
+	for (const key of keys) {
+		const value = record[key];
+		if (typeof value === 'string' && value.trim()) {
+			return value.trim();
+		}
+	}
+	return '';
+}
+
+function parsePayload(task: TaskRecord) {
+	const raw = typeof task.payloadJson === 'string' ? task.payloadJson : typeof task.payload_json === 'string' ? task.payload_json : '{}';
+	try {
+		return asRecord(JSON.parse(raw));
+	} catch {
+		return {};
+	}
+}
+
+function taskId(task: unknown) {
+	const record = asRecord(task);
+	return readString(record, 'id');
+}
+
+export function isResearchKnowledgeTaskKind(value: unknown): value is ResearchKnowledgeTaskKind {
+	return typeof value === 'string' && (RESEARCH_KNOWLEDGE_TASK_KINDS as readonly string[]).includes(value);
+}
+
+export function researchQuestionTaskIdempotencyKey(workDayId: string, questionId: string) {
+	return `${workDayId}:research_question:${questionId}`;
+}
+
+export function followupTaskIdempotencyKey(workDayId: string, kind: ResearchKnowledgeTaskKind, artifactId: string) {
+	return `${workDayId}:${kind}:${artifactId}`;
+}
+
+export function invocationForResearchKnowledgeTask(
+	kind: ResearchKnowledgeTaskKind,
+	payload: Record<string, unknown>,
+): AgentTriggerInvocation {
+	return {
+		kind: 'message',
+		source: kind,
+		trigger: { type: 'message', messageTypes: [kind] },
+		message: {
+			id: 0,
+			type: kind,
+			status: 'claimed',
+			payloadJson: JSON.stringify(payload),
+			relatedModel: null,
+			relatedId: null,
+			priority: 100,
+			availableAt: '',
+			claimedBy: null,
+			claimedAt: null,
+			leaseExpiresAt: null,
+			attempts: 0,
+			maxAttempts: 1,
+			createdAt: '',
+			updatedAt: '',
+		},
+	};
+}
+
+export function agentSpecForResearchKnowledgeHandler(kind: 'researcher' | 'knowledge_generator' | 'knowledge_optimizer'): AgentRuntimeSpec {
+	return {
+		slug: `${kind}-agent`,
+		handler: kind,
+		enabled: true,
+		systemPrompt: `Deterministic ${kind} handler.`,
+		persona: kind,
+		cli: {},
+		triggers: [{ type: 'message', messageTypes: [kind] }],
+		permissions: [
+			{ model: 'knowledge', operations: ['search', 'follow'] },
+			{ model: 'question', operations: ['search', 'follow'] },
+			{ model: 'message', operations: ['create', 'update', 'pick'] },
+		],
+		execution: {
+			maxConcurrency: 1,
+			timeoutSeconds: 900,
+			cooldownSeconds: 0,
+			leaseSeconds: 300,
+			retryLimit: 0,
+			branchPrefix: 'agent/research-knowledge',
+		},
+		outputs: { messageTypes: [], modelMutations: [] },
+	};
+}
+
+export async function seedResearchKnowledgeWorkdayTasks(input: {
+	sdk: ResearchKnowledgeSdk;
+	workDay: Record<string, unknown>;
+	projectId: string;
+	graphVersion?: string | null;
+	actor?: string;
+	questions?: KnowledgePipelineQuestion[];
+}) {
+	const workDayId = readString(input.workDay, 'id');
+	if (!workDayId) {
+		return [] as TaskRecord[];
+	}
+	const existingTasks = asRecords((await input.sdk.searchTasks({ workDayId, limit: 1000 })).payload);
+	const existingKeys = new Set(existingTasks.map((task) => readString(task, 'idempotencyKey', 'idempotency_key')));
+	const created: TaskRecord[] = [];
+
+	for (const question of input.questions ?? TREESEED_PLATFORM_KNOWLEDGE_QUESTIONS) {
+		const idempotencyKey = researchQuestionTaskIdempotencyKey(workDayId, question.id);
+		if (existingKeys.has(idempotencyKey)) {
+			continue;
+		}
+		const envelope = {
+			executionKind: 'research_knowledge_pipeline',
+			question,
+			taskKind: 'research_question',
+			createdAt: new Date().toISOString(),
+		};
+		const result = await input.sdk.createTask({
+			workDayId,
+			agentId: 'researcher-agent',
+			type: 'research_question',
+			priority: 95,
+			idempotencyKey,
+			payload: envelope,
+			graphVersion: input.graphVersion ?? null,
+			actor: input.actor ?? 'manager',
+		});
+		const task = asRecord(result.payload) as TaskRecord;
+		if (task.id) {
+			created.push(task);
+			existingKeys.add(idempotencyKey);
+			await input.sdk.recordTaskCredits?.({
+				projectId: input.projectId,
+				workDayId,
+				taskId: String(task.id),
+				phase: 'seed',
+				credits: 1,
+				metadata: {
+					taskKind: 'research_question',
+					questionId: question.id,
+				},
+			});
+		}
+	}
+	return created;
+}
+
+export function summarizeResearchNoteArtifact(note: ResearchNote, taskIdValue?: string): GeneratedAgentArtifactSummary {
+	return {
+		artifactKind: 'research_note',
+		id: note.id,
+		taskId: taskIdValue,
+		questionId: note.questionId,
+		sourceRefs: note.sourceRefs.map((source) => source.ref),
+	};
+}
+
+export function summarizeKnowledgeDraftArtifact(draft: KnowledgeDraft, taskIdValue?: string): GeneratedAgentArtifactSummary {
+	return {
+		artifactKind: 'knowledge_draft',
+		id: draft.id,
+		taskId: taskIdValue,
+		title: draft.title,
+		questionId: draft.sourceQuestionId,
+		draftId: draft.id,
+		targetPath: draft.targetPath,
+		sourceResearchIds: draft.sourceResearchIds,
+	};
+}
+
+export function summarizeOptimizationReportArtifact(report: OptimizationReport, taskIdValue?: string): GeneratedAgentArtifactSummary {
+	return {
+		artifactKind: 'optimization_report',
+		id: report.id,
+		taskId: taskIdValue,
+		draftId: report.draftId,
+		reportId: report.id,
+		recommendation: report.recommendation,
+		totalScore: report.totalScore,
+	};
+}
+
+export function summarizePromotionRequestArtifact(request: Record<string, unknown>, taskIdValue?: string): GeneratedAgentArtifactSummary {
+	return {
+		artifactKind: 'promotion_request',
+		id: readString(request, 'id') || readString(request, 'draftId') || 'promotion-request',
+		taskId: taskIdValue,
+		approvalKind: readString(request, 'approvalKind') || 'promote_knowledge_draft',
+		draftId: readString(request, 'draftId') || undefined,
+		targetPath: readString(request, 'targetPath') || undefined,
+		recommendation: readString(request, 'recommendation') || undefined,
+		totalScore: Number.isFinite(Number(request.totalScore)) ? Number(request.totalScore) : undefined,
+		sourceResearchIds: Array.isArray(request.sourceResearchIds) ? request.sourceResearchIds.filter((entry): entry is string => typeof entry === 'string') : undefined,
+	};
+}
+
+export function summarizeReleaseRequestArtifact(request: Record<string, unknown>, taskIdValue?: string): GeneratedAgentArtifactSummary {
+	return {
+		artifactKind: 'release_request',
+		id: readString(request, 'id') || readString(request, 'draftId') || 'release-request',
+		taskId: taskIdValue,
+		approvalKind: readString(request, 'approvalKind') || 'release_staged_knowledge',
+		draftId: readString(request, 'draftId') || undefined,
+		targetPath: readString(request, 'targetPath') || undefined,
+		recommendation: readString(request, 'recommendation') || undefined,
+		stagingBranch: readString(request, 'stagingBranch') || undefined,
+		featureBranch: readString(request, 'featureBranch') || undefined,
+		changedPaths: Array.isArray(request.changedPaths) ? request.changedPaths.filter((entry): entry is string => typeof entry === 'string') : undefined,
+		sourceResearchIds: Array.isArray(request.sourceResearchIds) ? request.sourceResearchIds.filter((entry): entry is string => typeof entry === 'string') : undefined,
+	};
+}
+
+export function extractGeneratedArtifactsFromTaskOutputs(outputs: unknown[]): GeneratedAgentArtifactSummary[] {
+	const artifacts: GeneratedAgentArtifactSummary[] = [];
+	for (const output of outputs) {
+		const record = asRecord(output);
+		const outputTaskId = readString(record, 'taskId');
+		const explicit = Array.isArray(record.generatedArtifacts) ? record.generatedArtifacts : [];
+		for (const artifact of explicit) {
+			const artifactRecord = asRecord(artifact);
+			if (artifactRecord.artifactKind && artifactRecord.id) {
+				artifacts.push(artifactRecord as unknown as GeneratedAgentArtifactSummary);
+			}
+		}
+		if (asRecord(record.researchNote).kind === 'research_note') {
+			artifacts.push(summarizeResearchNoteArtifact(asRecord(record.researchNote) as unknown as ResearchNote, outputTaskId || undefined));
+		}
+		if (asRecord(record.knowledgeDraft).kind === 'knowledge_draft') {
+			artifacts.push(summarizeKnowledgeDraftArtifact(asRecord(record.knowledgeDraft) as unknown as KnowledgeDraft, outputTaskId || undefined));
+		}
+		if (asRecord(record.optimizationReport).kind === 'knowledge_optimization_report') {
+			artifacts.push(summarizeOptimizationReportArtifact(asRecord(record.optimizationReport) as unknown as OptimizationReport, outputTaskId || undefined));
+		}
+		if (record.promotionRequest) {
+			artifacts.push(summarizePromotionRequestArtifact(asRecord(record.promotionRequest), outputTaskId || undefined));
+		}
+		if (record.releaseRequest) {
+			artifacts.push(summarizeReleaseRequestArtifact(asRecord(record.releaseRequest), outputTaskId || undefined));
+		}
+	}
+	const seen = new Set<string>();
+	return artifacts.filter((artifact) => {
+		const key = `${artifact.artifactKind}:${artifact.id}:${artifact.taskId ?? ''}`;
+		if (seen.has(key)) {
+			return false;
+		}
+		seen.add(key);
+		return true;
+	});
+}
+
+export function readTaskPayloadQuestion(task: TaskRecord): KnowledgePipelineQuestion | null {
+	const question = asRecord(parsePayload(task).question);
+	return question.id ? question as unknown as KnowledgePipelineQuestion : null;
+}
+
+export function workDayIdForTask(task: TaskRecord) {
+	return readString(task, 'workDayId', 'work_day_id');
+}
+
+export function graphVersionForTask(task: TaskRecord) {
+	return readString(task, 'graphVersion', 'graph_version') || null;
+}
+
+export function taskPayload(task: TaskRecord) {
+	return parsePayload(task);
+}
+
+export function taskRecordId(task: TaskRecord) {
+	return taskId(task);
+}

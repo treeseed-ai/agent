@@ -1,6 +1,6 @@
 {
   "name": "@treeseed/agent",
-  "version": "0.8.10",
+  "version": "0.8.11",
   "description": "Treeseed agent service runtime package.",
   "license": "AGPL-3.0-only",
   "repository": {
@@ -62,6 +62,10 @@
       "types": "./dist/services/workday-report.d.ts",
       "default": "./dist/services/workday-report.js"
     },
+    "./services/runtime-readiness": {
+      "types": "./dist/services/runtime-readiness.d.ts",
+      "default": "./dist/services/runtime-readiness.js"
+    },
     "./runtime-types": {
       "types": "./dist/agents/runtime-types.d.ts",
       "default": "./dist/agents/runtime-types.js"
@@ -98,15 +102,19 @@
     "dev:worker": "node ./scripts/run-ts.mjs ./src/services/worker.ts",
     "dev:workday-start": "node ./scripts/run-ts.mjs ./src/services/workday-start.ts",
     "dev:workday-report": "node ./scripts/run-ts.mjs ./src/services/workday-report.ts",
+    "runtime:readiness": "node ./scripts/run-ts.mjs ./scripts/runtime-readiness.ts",
     "dev:remote-runner": "node ./scripts/run-ts.mjs ./src/services/remote-runner.ts",
     "start:manager": "node ./dist/services/manager.js",
     "start:worker": "node ./dist/services/worker.js",
     "start:workday-start": "node ./dist/services/workday-start.js",
     "start:workday-report": "node ./dist/services/workday-report.js",
+    "start:runtime-readiness": "node ./dist/scripts/runtime-readiness.js",
     "start:local-manager-cloudflare": "bash ./scripts/run-local-manager-cloudflare.sh",
     "lint": "npm run build:dist",
     "test": "npm run test:unit && npm run test:smoke",
     "test:unit": "vitest run --config ./vitest.config.ts",
+    "test:market-knowledge-dogfood": "node ./scripts/run-ts.mjs ./scripts/test-market-knowledge-dogfood.ts",
+    "test:local-e2e-verification": "node ./scripts/run-ts.mjs ./scripts/test-local-e2e-verification.ts",
     "prepack": "npm run build:dist",
     "test:smoke": "node ./scripts/run-ts.mjs ./scripts/test-smoke.ts",
     "verify:direct": "npm run release:verify",
@@ -119,7 +127,8 @@
     "release:publish": "node ./scripts/run-ts.mjs ./scripts/publish-package.ts"
   },
   "dependencies": {
-    "@treeseed/sdk": "0.8.10",
+    "@openai/codex-sdk": "^0.130.0",
+    "@treeseed/sdk": "0.8.11",
     "esbuild": "0.28.0",
     "hono": "^4.8.2",
     "typescript": "^5.9.3",

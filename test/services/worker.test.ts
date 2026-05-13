@@ -32,7 +32,20 @@ const runAgentMock = vi.fn();
 vi.mock('../../src/services/common.ts', () => ({
 	buildTaskContext: vi.fn(async () => taskContext),
 	createQueueClient: vi.fn(() => queue),
+	createQueuePushClient: vi.fn(() => null),
 	createServiceSdk: vi.fn(() => sdk),
+	queueEnvelopeForTask: vi.fn((task) => ({
+		messageId: `message-${task.id ?? 'task'}`,
+		taskId: String(task.id ?? ''),
+		workDayId: String(task.workDayId ?? ''),
+		agentId: String(task.agentId ?? ''),
+		taskType: String(task.type ?? ''),
+		idempotencyKey: String(task.idempotencyKey ?? ''),
+		attempt: 1,
+		payloadRef: `d1:tasks/${String(task.id ?? '')}`,
+		graphVersion: task.graphVersion ?? null,
+		budgetHint: 1,
+	})),
 	resolveServiceRepoRoot: vi.fn(() => '/tmp/treeseed'),
 	resolveWorkerConfig: vi.fn(() => workerConfig),
 }));
@@ -112,7 +125,7 @@ describe('worker service', () => {
 			}),
 		}));
 		expect(queue.ack).toHaveBeenCalledWith(['lease-1']);
-	});
+	}, 10_000);
 
 	it('identifies when a deployed worker loop should exit after idle timeout', async () => {
 		const { shouldExitWorkerLoopAfterIdle } = await import('../../src/services/worker.ts');

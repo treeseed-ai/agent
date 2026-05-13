@@ -7,6 +7,11 @@ import type {
 import type { AgentErrorCategory } from './contracts/run.ts';
 import type { ScopedAgentSdk } from '@treeseed/sdk/sdk';
 import type { SdkMessageEntity } from '@treeseed/sdk/types';
+import type {
+	AgentOperationGrant,
+	AgentOperationRequest,
+	AgentOperationResult,
+} from '@treeseed/sdk/operations/agent-tools';
 
 export interface AgentTriggerInvocation {
 	kind: 'startup' | 'schedule' | 'message' | 'manual' | 'follow';
@@ -93,6 +98,7 @@ export interface AgentVerificationAdapter {
 		agent: AgentRuntimeSpec;
 		runId: string;
 		commands: string[];
+		cwd?: string;
 	}): Promise<AgentVerificationResult>;
 }
 
@@ -115,6 +121,14 @@ export interface AgentResearchAdapter {
 	}): Promise<AgentResearchResult>;
 }
 
+export interface AgentOperationsAdapter {
+	runOperation(input: {
+		request: AgentOperationRequest;
+		grants: AgentOperationGrant[];
+		sdk?: Pick<ScopedAgentSdk, 'appendTaskEvent'>;
+	}): Promise<AgentOperationResult>;
+}
+
 export interface AgentContext {
 	runId: string;
 	repoRoot: string;
@@ -127,6 +141,7 @@ export interface AgentContext {
 	verification: AgentVerificationAdapter;
 	notifications: AgentNotificationAdapter;
 	research: AgentResearchAdapter;
+	operations: AgentOperationsAdapter;
 }
 
 export interface AgentHandler<TInputs = unknown, TResult = unknown> {

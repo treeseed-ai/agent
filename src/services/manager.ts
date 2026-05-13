@@ -31,6 +31,11 @@ import {
 } from './worker-capacity.ts';
 import { writeWorkdayContentSnapshot, type WorkdayContentReleaseRecord, type WorkdayContentTaskSummary } from './workday-content.ts';
 import { createWorkerPoolScaler, type WorkerPoolScalerKind } from './worker-pool-scaler.ts';
+import {
+	extractGeneratedArtifactsFromTaskOutputs,
+	seedResearchKnowledgeWorkdayTasks,
+	type GeneratedAgentArtifactSummary,
+} from './research-knowledge-workday.ts';
 
 type ManagerSdk = ReturnType<typeof createServiceSdk>;
 type ManagerMode = 'reconcile' | 'open-workday' | 'close-workday' | 'report-workday' | 'loop';
@@ -183,6 +188,10 @@ function asRecords(value: unknown) {
 	return Array.isArray(value) ? value as Record<string, unknown>[] : [];
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
 function readString(record: Record<string, unknown>, ...keys: string[]) {
 	for (const key of keys) {
 		const value = record[key];
@@ -201,6 +210,10 @@ function readArray(record: Record<string, unknown>, ...keys: string[]) {
 		}
 	}
 	return [];
+}
+
+function readStringArray(value: unknown) {
+	return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0) : [];
 }
 
 function readNumber(record: Record<string, unknown>, ...keys: string[]) {
@@ -229,10 +242,13 @@ function readDate(record: Record<string, unknown>, ...keys: string[]) {
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
-	return typeof value === 'object' && value !== null ? value as unknown as Record<string, unknown> : {};
+	return isRecord(value) ? value : {};
 }
 
 function parseJsonString(value: unknown, fallback: Record<string, unknown> = {}) {
+	if (isRecord(value)) {
+		return value;
+	}
 	if (typeof value !== 'string' || !value.trim()) {
 		return fallback;
 	}
@@ -267,6 +283,178 @@ function normalizeChangedFilesFromValue(value: unknown, changedFiles = new Set<s
 		}
 	}
 	return changedFiles;
+}
+
+function operationEventFromTaskEvent(input: {
+	event: Record<string, unknown>;
+	task: Record<string, unknown>;
+	data: Record<string, unknown>;
+}) {
+	const result = asRecord(input.data.result);
+	const operation = readString(input.data, 'operation') || readString(result, 'operation');
+	if (!operation) {
+		return null;
+	}
+	return {
+		id: readString(input.event, 'id') || `${readString(input.event, 'taskId', 'task_id')}:operation:${readString(input.event, 'seq')}`,
+		source: 'task_event',
+		taskId: readString(input.event, 'taskId', 'task_id') || readString(input.task, 'id') || undefined,
+		workDayId: readString(input.task, 'workDayId', 'work_day_id') || undefined,
+		taskType: readString(input.task, 'type') || undefined,
+		seq: readNumber(input.event, 'seq') ?? undefined,
+		operation,
+		mode: readString(input.data, 'mode') || undefined,
+		agentRole: readString(input.data, 'agentRole') || undefined,
+		permissionGrantId: readString(input.data, 'permissionGrantId') || undefined,
+		status: readString(result, 'status') || undefined,
+		summary: readString(result, 'summary') || undefined,
+		changedPaths: readStringArray(result.changedPaths),
+		stagedPaths: readStringArray(result.stagedPaths),
+		mergedToStaging: typeof result.mergedToStaging === 'boolean' ? result.mergedToStaging : undefined,
+		mergeFailure: Object.keys(asRecord(result.mergeFailure)).length ? asRecord(result.mergeFailure) : undefined,
+		error: Object.keys(asRecord(result.error)).length ? asRecord(result.error) : undefined,
+		createdAt: readString(input.data, 'createdAt') || readString(input.event, 'createdAt', 'created_at') || undefined,
+	};
+}
+
+function approvalDecisionLifecycleFromTaskEvent(input: {
+	event: Record<string, unknown>;
+	task: Record<string, unknown>;
+	data: Record<string, unknown>;
+}) {
+	const taskMeta = {
+		taskId: readString(input.event, 'taskId', 'task_id') || readString(input.task, 'id') || undefined,
+		workDayId: readString(input.task, 'workDayId', 'work_day_id') || undefined,
+		taskType: readString(input.task, 'type') || undefined,
+		createdAt: readString(input.event, 'createdAt', 'created_at') || undefined,
+	};
+	const releaseResult = asRecord(input.data.releaseResult);
+	return {
+		approval: {
+			id: readString(input.data, 'approvalId') || readString(input.event, 'id') || undefined,
+			approvalKind: readString(input.data, 'approvalKind') || undefined,
+			decision: readString(input.data, 'decision') || undefined,
+			reason: readString(input.data, 'reason') || undefined,
+			actor: readString(input.event, 'actor') || undefined,
+			releaseAttempted: input.data.releaseAttempted === true,
+			stagingAttempted: input.data.stagingAttempted === true,
+			stagingTaskCreated: input.data.stagingTaskCreated === true,
+			createdTaskId: readString(input.data, 'createdTaskId') || undefined,
+			...taskMeta,
+		},
+		releaseResult: Object.keys(releaseResult).length > 0
+			? {
+					...releaseResult,
+					approvalId: readString(input.data, 'approvalId') || undefined,
+					decision: readString(input.data, 'decision') || undefined,
+					actor: readString(input.event, 'actor') || undefined,
+					...taskMeta,
+				}
+			: null,
+	};
+}
+
+function operationEventFromResult(input: {
+	result: Record<string, unknown>;
+	task: Record<string, unknown>;
+	index: number;
+}) {
+	const result = input.result;
+	return {
+		id: `task_output:${readString(input.task, 'id') || 'task'}:${input.index}`,
+		source: 'task_output',
+		taskId: readString(input.task, 'id') || undefined,
+		workDayId: readString(input.task, 'workDayId', 'work_day_id') || undefined,
+		taskType: readString(input.task, 'type') || undefined,
+		operation: readString(result, 'operation') || 'operation',
+		status: readString(result, 'status') || undefined,
+		summary: readString(result, 'summary') || undefined,
+		changedPaths: readStringArray(result.changedPaths),
+		stagedPaths: readStringArray(result.stagedPaths),
+		mergedToStaging: typeof result.mergedToStaging === 'boolean' ? result.mergedToStaging : undefined,
+		mergeFailure: Object.keys(asRecord(result.mergeFailure)).length ? asRecord(result.mergeFailure) : undefined,
+		error: Object.keys(asRecord(result.error)).length ? asRecord(result.error) : undefined,
+	};
+}
+
+function outputRecordsForLifecycle(record: Record<string, unknown>) {
+	return [
+		record,
+		asRecord(record.implementationResult),
+		asRecord(record.promotionToStaging),
+		asRecord(record.artifact),
+		asRecord(record.result),
+	].filter((entry) => Object.keys(entry).length > 0);
+}
+
+function collectLifecycleFromOutput(input: {
+	output: Record<string, unknown>;
+	task: Record<string, unknown>;
+	lifecycle: {
+		operationEvents: Record<string, unknown>[];
+		worktreeSnapshots: Record<string, unknown>[];
+		stagingMerges: Record<string, unknown>[];
+		mergeFailures: Record<string, unknown>[];
+		repairTasks: Record<string, unknown>[];
+		releaseApprovals: Record<string, unknown>[];
+		releaseResults: Record<string, unknown>[];
+		codexUsage: Record<string, unknown>[];
+	};
+}) {
+	const taskMeta = {
+		taskId: readString(input.task, 'id') || undefined,
+		workDayId: readString(input.task, 'workDayId', 'work_day_id') || undefined,
+		taskType: readString(input.task, 'type') || undefined,
+	};
+	for (const record of outputRecordsForLifecycle(input.output)) {
+		for (const [index, result] of (Array.isArray(record.operationResults) ? record.operationResults.map(asRecord).entries() : [])) {
+			input.lifecycle.operationEvents.push(operationEventFromResult({
+				result,
+				task: input.task,
+				index,
+			}));
+		}
+		for (const snapshot of (Array.isArray(record.snapshots) ? record.snapshots.map(asRecord) : [])) {
+			input.lifecycle.worktreeSnapshots.push({ ...snapshot, ...taskMeta });
+		}
+		if (record.mergedToStaging !== undefined || record.mergeCommitSha || record.stagedCommitSha) {
+			input.lifecycle.stagingMerges.push({
+				mergedToStaging: Boolean(record.mergedToStaging),
+				featureBranch: readString(record, 'featureBranch') || undefined,
+				stagingBranch: readString(record, 'stagingBranch') || undefined,
+				commitSha: readString(record, 'mergeCommitSha', 'stagedCommitSha') || undefined,
+				changedPaths: readStringArray(record.changedPaths),
+				...taskMeta,
+			});
+		}
+		const mergeFailure = asRecord(record.mergeFailure);
+		if (Object.keys(mergeFailure).length > 0) {
+			input.lifecycle.mergeFailures.push({ ...mergeFailure, ...taskMeta });
+		}
+		const repairTask = asRecord(record.repairTask);
+		if (Object.keys(repairTask).length > 0) {
+			input.lifecycle.repairTasks.push({ ...repairTask, ...taskMeta });
+		}
+		const releaseRequest = asRecord(record.releaseRequest);
+		if (Object.keys(releaseRequest).length > 0) {
+			input.lifecycle.releaseApprovals.push({ ...releaseRequest, ...taskMeta });
+		}
+		const releaseResult = asRecord(record.releaseResult);
+		if (Object.keys(releaseResult).length > 0) {
+			input.lifecycle.releaseResults.push({ ...releaseResult, ...taskMeta });
+		}
+		const codexResult = asRecord(record.codexResult);
+		const usage = asRecord(codexResult.usage);
+		if (Object.keys(usage).length > 0 || readString(codexResult, 'provider')) {
+			input.lifecycle.codexUsage.push({
+				provider: readString(codexResult, 'provider') || undefined,
+				threadId: readString(codexResult, 'threadId') || undefined,
+				status: readString(codexResult, 'status') || undefined,
+				usage,
+				...taskMeta,
+			});
+		}
+	}
 }
 
 function isoDateOrNull(value: string | null | undefined) {
@@ -996,6 +1184,20 @@ async function materializeAgentTriggerTasks(
 	return createdTasks;
 }
 
+async function materializeResearchKnowledgeTasks(
+	sdk: ManagerSdk,
+	config: ManagerConfig,
+	workDay: WorkDayRecord,
+) {
+	return seedResearchKnowledgeWorkdayTasks({
+		sdk,
+		workDay,
+		projectId: config.projectId,
+		graphVersion: typeof workDay.graphVersion === 'string' ? workDay.graphVersion : null,
+		actor: 'manager',
+	});
+}
+
 async function registerHeartbeat(
 	reporter: ControlPlaneReporter,
 	config: ManagerConfig,
@@ -1055,10 +1257,50 @@ async function buildWorkdaySummary(
 		]);
 		const taskEvents = asRecords(eventsEnvelope.payload);
 		const taskOutputs = asRecords(outputsEnvelope.payload);
+		const outputValues = taskOutputs.map((output) => parseJsonString(output.outputJson ?? output.output_json));
+		const lifecycle = {
+			operationEvents: [] as Record<string, unknown>[],
+			worktreeSnapshots: [] as Record<string, unknown>[],
+			stagingMerges: [] as Record<string, unknown>[],
+			mergeFailures: [] as Record<string, unknown>[],
+			repairTasks: [] as Record<string, unknown>[],
+			releaseApprovals: [] as Record<string, unknown>[],
+			releaseResults: [] as Record<string, unknown>[],
+			codexUsage: [] as Record<string, unknown>[],
+		};
 		const changedFiles = new Set<string>();
-		for (const output of taskOutputs) {
-			normalizeChangedFilesFromValue(parseJsonString(output.outputJson ?? output.output_json), changedFiles);
+		for (const outputValue of outputValues) {
+			normalizeChangedFilesFromValue(outputValue, changedFiles);
+			collectLifecycleFromOutput({
+				output: outputValue,
+				task,
+				lifecycle,
+			});
 		}
+		for (const event of taskEvents.filter((entry) => readString(entry, 'kind') === 'operation_event')) {
+			const eventData = parseJsonString(event.dataJson ?? event.data_json ?? event.data);
+			const operationEvent = operationEventFromTaskEvent({
+				event,
+				task,
+				data: eventData,
+			});
+			if (operationEvent) {
+				lifecycle.operationEvents.push(operationEvent);
+			}
+		}
+		for (const event of taskEvents.filter((entry) => readString(entry, 'kind') === 'approval_decision_recorded')) {
+			const eventData = parseJsonString(event.dataJson ?? event.data_json ?? event.data);
+			const approvalDecision = approvalDecisionLifecycleFromTaskEvent({
+				event,
+				task,
+				data: eventData,
+			});
+			lifecycle.releaseApprovals.push(approvalDecision.approval);
+			if (approvalDecision.releaseResult) {
+				lifecycle.releaseResults.push(approvalDecision.releaseResult);
+			}
+		}
+		const generatedArtifacts = extractGeneratedArtifactsFromTaskOutputs(outputValues);
 		const latestEvent = [...taskEvents]
 			.sort((left, right) => Number(readNumber(right, 'seq') ?? 0) - Number(readNumber(left, 'seq') ?? 0))[0];
 		return {
@@ -1077,8 +1319,11 @@ async function buildWorkdaySummary(
 				lastEventKind: latestEvent ? readString(latestEvent, 'kind') || null : null,
 				outputCount: taskOutputs.length,
 				changedFiles: [...changedFiles],
+				generatedArtifacts,
 			} satisfies WorkdayContentTaskSummary,
 			changedFiles,
+			generatedArtifacts,
+			...lifecycle,
 		};
 	}));
 	const changedFiles = [...taskDetails.reduce((set, detail) => {
@@ -1087,6 +1332,27 @@ async function buildWorkdaySummary(
 		}
 		return set;
 	}, new Set<string>())].sort((left, right) => left.localeCompare(right));
+	const generatedArtifacts = taskDetails
+		.flatMap((detail) => detail.generatedArtifacts)
+		.reduce((items, artifact) => {
+			const key = `${artifact.artifactKind}:${artifact.id}:${artifact.taskId ?? ''}`;
+			if (!items.seen.has(key)) {
+				items.seen.add(key);
+				items.artifacts.push(artifact);
+			}
+			return items;
+		}, { seen: new Set<string>(), artifacts: [] as GeneratedAgentArtifactSummary[] })
+		.artifacts;
+	const lifecycle = {
+		operationEvents: taskDetails.flatMap((detail) => detail.operationEvents),
+		worktreeSnapshots: taskDetails.flatMap((detail) => detail.worktreeSnapshots),
+		stagingMerges: taskDetails.flatMap((detail) => detail.stagingMerges),
+		mergeFailures: taskDetails.flatMap((detail) => detail.mergeFailures),
+		repairTasks: taskDetails.flatMap((detail) => detail.repairTasks),
+		releaseApprovals: taskDetails.flatMap((detail) => detail.releaseApprovals),
+		releaseResults: taskDetails.flatMap((detail) => detail.releaseResults),
+		codexUsage: taskDetails.flatMap((detail) => detail.codexUsage),
+	};
 	const releases = filterDeploymentsForWorkday(deployments, workDay, generatedAt).map((deployment) => ({
 		id: readString(deployment, 'id') || undefined,
 		deploymentKind: readString(deployment, 'deploymentKind', 'deployment_kind') || 'code',
@@ -1119,6 +1385,8 @@ async function buildWorkdaySummary(
 		priorityItems: currentSnapshot?.items ?? [],
 		taskItems: taskDetails.map((detail) => detail.task),
 		changedFiles,
+		generatedArtifacts,
+		...lifecycle,
 		releases,
 		scaleDecision,
 		scaleResult,
@@ -1171,7 +1439,16 @@ async function reportWorkdaySummary(
 		scaleResult,
 		tasks: (Array.isArray(enrichedSummary.taskItems) ? enrichedSummary.taskItems : []) as WorkdayContentTaskSummary[],
 		changedFiles: Array.isArray(enrichedSummary.changedFiles) ? enrichedSummary.changedFiles.filter((entry): entry is string => typeof entry === 'string') : [],
+		generatedArtifacts: (Array.isArray(enrichedSummary.generatedArtifacts) ? enrichedSummary.generatedArtifacts : []) as GeneratedAgentArtifactSummary[],
 		releases: (Array.isArray(enrichedSummary.releases) ? enrichedSummary.releases : []) as WorkdayContentReleaseRecord[],
+		operationEvents: Array.isArray(enrichedSummary.operationEvents) ? enrichedSummary.operationEvents as Record<string, unknown>[] : [],
+		worktreeSnapshots: Array.isArray(enrichedSummary.worktreeSnapshots) ? enrichedSummary.worktreeSnapshots as Record<string, unknown>[] : [],
+		stagingMerges: Array.isArray(enrichedSummary.stagingMerges) ? enrichedSummary.stagingMerges as Record<string, unknown>[] : [],
+		mergeFailures: Array.isArray(enrichedSummary.mergeFailures) ? enrichedSummary.mergeFailures as Record<string, unknown>[] : [],
+		repairTasks: Array.isArray(enrichedSummary.repairTasks) ? enrichedSummary.repairTasks as Record<string, unknown>[] : [],
+		releaseApprovals: Array.isArray(enrichedSummary.releaseApprovals) ? enrichedSummary.releaseApprovals as Record<string, unknown>[] : [],
+		releaseResults: Array.isArray(enrichedSummary.releaseResults) ? enrichedSummary.releaseResults as Record<string, unknown>[] : [],
+		codexUsage: Array.isArray(enrichedSummary.codexUsage) ? enrichedSummary.codexUsage as Record<string, unknown>[] : [],
 		generatedAt: String(enrichedSummary.generatedAt ?? new Date().toISOString()),
 	});
 	const report = await sdk.createReport({
@@ -1301,7 +1578,14 @@ async function reconcileManager(options: {
 	if (activeWorkDay && insideWorkWindow && seedResult.remainingCredits > 0) {
 		seedResult = await topUpQueuedTasks(sdk, config, policy, activeWorkDay, currentSnapshot, now);
 	}
-	if (activeWorkDay && insideWorkWindow) {
+	if (activeWorkDay && insideWorkWindow && policy.maxQueuedTasks > 0 && policy.maxQueuedCredits > 0 && seedResult.remainingCredits > 0) {
+		const researchKnowledgeTasks = await materializeResearchKnowledgeTasks(sdk, config, activeWorkDay);
+		if (researchKnowledgeTasks.length > 0) {
+			seedResult = {
+				...seedResult,
+				createdTasks: [...seedResult.createdTasks, ...researchKnowledgeTasks],
+			};
+		}
 		const triggerTasks = await materializeAgentTriggerTasks(sdk, activeWorkDay, now);
 		if (triggerTasks.length > 0) {
 			seedResult = {

@@ -8,6 +8,10 @@ import type { D1DatabaseLike, D1PreparedStatementLike } from '@treeseed/sdk/type
 import { createTreeseedApiApp } from '../../src/api/app.ts';
 import { D1AuthProvider } from '../../src/api/auth/d1-provider.ts';
 import { resolveApiConfig } from '../../src/api/config.ts';
+import {
+	AgentApprovalDecisionError,
+	recordAgentApprovalDecision,
+} from '../../src/api/agent-artifacts.ts';
 import { isDirectEntrypoint } from '../../src/entrypoint.ts';
 
 const packageRoot = process.cwd();
@@ -229,6 +233,610 @@ apiRuntimeDescribe('@treeseed/agent api runtime', () => {
 		const agentHealthResponse = await app.request('/agent/healthz');
 		expect(agentHealthResponse.status).toBe(200);
 		expect(await json(agentHealthResponse)).toMatchObject({ ok: true });
+	});
+
+	it('exposes generated agent artifacts and ignores malformed task outputs', async () => {
+		const sdk = {
+			searchTasks: vi.fn(async () => ({
+				payload: [
+					{
+						id: 'task-research-1',
+						workDayId: 'workday-1',
+						type: 'research_question',
+						state: 'completed',
+						createdAt: '2026-05-13T00:00:00.000Z',
+						updatedAt: '2026-05-13T00:01:00.000Z',
+						payloadJson: '{}',
+					},
+					{
+						id: 'task-optimize-1',
+						workDayId: 'workday-1',
+						type: 'optimize_knowledge_draft',
+						state: 'completed',
+						createdAt: '2026-05-13T00:02:00.000Z',
+						updatedAt: '2026-05-13T00:03:00.000Z',
+						payloadJson: '{}',
+					},
+				],
+			})),
+			search: vi.fn(async (request) => {
+				if (request.model === 'task_output') {
+					return {
+						payload: [
+							{
+								id: 'output-research-1',
+								taskId: 'task-research-1',
+								outputJson: JSON.stringify({
+									taskId: 'task-research-1',
+									researchNote: {
+										id: 'research:runtime-v1',
+										kind: 'research_note',
+										questionId: 'question:runtime',
+										state: 'draft',
+										contextQueries: [],
+										contextPackSummary: 'Runtime context.',
+										sourceRefs: [{ ref: 'packages/agent/src/services/worker.ts', kind: 'path', title: 'Worker' }],
+										observedFacts: [],
+										inferences: [],
+										uncertainties: [],
+										recommendedKnowledgeArtifacts: [],
+										recommendedImplementationProposal: null,
+										createdAt: '2026-05-13T00:00:00.000Z',
+									},
+									generatedArtifacts: [],
+								}),
+							},
+							{
+								id: 'output-optimize-1',
+								taskId: 'task-optimize-1',
+								outputJson: JSON.stringify({
+									taskId: 'task-optimize-1',
+									knowledgeDraft: {
+										id: 'knowledge:runtime',
+										kind: 'knowledge_draft',
+										title: 'Runtime',
+										book: 'architecture',
+										section: 'runtime',
+										targetPath: 'src/content/knowledge/architecture/runtime/runtime.mdx',
+										state: 'draft',
+										sourceQuestionId: 'question:runtime',
+										sourceResearchIds: ['research:runtime-v1'],
+										frontmatter: {},
+										body: '# Runtime',
+										reviewState: 'pending_review',
+										createdAt: '2026-05-13T00:02:00.000Z',
+										updatedAt: '2026-05-13T00:02:00.000Z',
+									},
+									optimizationReport: {
+										id: 'optimization:runtime',
+										kind: 'knowledge_optimization_report',
+										draftId: 'knowledge:runtime',
+										score: {
+											factual_grounding: 4,
+											book_fit: 4,
+											structure: 5,
+											future_agent_usefulness: 4,
+											human_reviewability: 4,
+											link_quality: 4,
+											uncertainty_visibility: 4,
+										},
+										totalScore: 29,
+										recommendation: 'promote',
+										remainingIssues: [],
+										createdAt: '2026-05-13T00:03:00.000Z',
+									},
+								}),
+							},
+							{
+								id: 'output-bad',
+								taskId: 'task-research-1',
+								outputJson: '{bad json',
+							},
+						],
+					};
+				}
+				if (request.model === 'work_day') {
+					return { payload: [{ id: 'workday-1', projectId: 'treeseed-api-test', state: 'active', updatedAt: '2026-05-13T00:04:00.000Z' }] };
+				}
+				if (request.model === 'report') {
+					return { payload: [{ id: 'report-1', workDayId: 'workday-1', kind: 'workday_summary', bodyJson: '{"generatedArtifacts":[]}', createdAt: '2026-05-13T00:05:00.000Z' }] };
+				}
+				return { payload: [] };
+			}),
+			appendTaskEvent: vi.fn(),
+		};
+		const app = createTestApp({
+			sdk: sdk as any,
+			config: {
+				projectId: 'treeseed-api-test',
+				projectApiKey: 'project-secret',
+			},
+		});
+		const headers = { authorization: 'Bearer project-secret' };
+
+		const artifacts = await json(await app.request('/v1/agent-artifacts', { headers }));
+		expect(artifacts.payload.items).toEqual(expect.arrayContaining([
+			expect.objectContaining({ artifactKind: 'research_note', id: 'research:runtime-v1', taskId: 'task-research-1' }),
+			expect.objectContaining({ artifactKind: 'knowledge_draft', id: 'knowledge:runtime', targetPath: 'src/content/knowledge/architecture/runtime/runtime.mdx' }),
+			expect.objectContaining({ artifactKind: 'optimization_report', id: 'optimization:runtime', totalScore: 29 }),
+		]));
+		expect(artifacts.payload.warnings).toEqual(expect.arrayContaining([
+			expect.stringContaining('Skipped malformed JSON'),
+		]));
+
+		const notes = await json(await app.request('/v1/research-notes', { headers }));
+		expect(notes.payload.items[0].researchNote.id).toBe('research:runtime-v1');
+
+		const drafts = await json(await app.request('/v1/knowledge-drafts', { headers }));
+		expect(drafts.payload.items[0].knowledgeDraft.id).toBe('knowledge:runtime');
+
+		const reports = await json(await app.request('/v1/optimization-reports', { headers }));
+		expect(reports.payload.items[0].optimizationReport.id).toBe('optimization:runtime');
+
+		const currentWorkday = await json(await app.request('/v1/workdays/current', { headers }));
+		expect(currentWorkday.payload).toMatchObject({ id: 'workday-1', state: 'active' });
+
+		const workdayReports = await json(await app.request('/v1/workdays/reports', { headers }));
+		expect(workdayReports.payload.items[0]).toMatchObject({ id: 'report-1', body: { generatedArtifacts: [] } });
+	});
+
+	it('lists promotion approvals and records approval decisions without release side effects', async () => {
+		const sdk = {
+			searchTasks: vi.fn(async () => ({
+				payload: [{
+					id: 'task-promote-1',
+					workDayId: 'workday-1',
+					type: 'promote_knowledge_draft_request',
+					state: 'pending',
+					createdAt: '2026-05-13T00:00:00.000Z',
+					updatedAt: '2026-05-13T00:00:00.000Z',
+					payloadJson: JSON.stringify({
+						promotionRequest: {
+							id: 'promotion:knowledge-runtime',
+							draftId: 'knowledge:runtime',
+							targetPath: 'src/content/knowledge/architecture/runtime/runtime.mdx',
+							recommendation: 'promote',
+							totalScore: 29,
+							sourceQuestionId: 'question:runtime',
+							sourceResearchIds: ['research:runtime-v1'],
+							optimizationReportId: 'optimization:runtime',
+						},
+					}),
+				}],
+			})),
+			search: vi.fn(async () => ({ payload: [] })),
+			appendTaskEvent: vi.fn(async () => ({ payload: { id: 'event-1' } })),
+		};
+		const app = createTestApp({
+			sdk: sdk as any,
+			config: {
+				projectId: 'treeseed-api-test',
+				projectApiKey: 'project-secret',
+			},
+		});
+		const headers = { authorization: 'Bearer project-secret' };
+
+		const approvals = await json(await app.request('/v1/approvals', { headers }));
+		expect(approvals.payload.items).toEqual([expect.objectContaining({
+			id: 'promotion:knowledge-runtime',
+			taskId: 'task-promote-1',
+			draftId: 'knowledge:runtime',
+		})]);
+
+		for (const allowedDecision of ['approve_as_book_content', 'request_more_research', 'reject']) {
+			const decision = await app.request('/v1/approvals/promotion%3Aknowledge-runtime/decision', {
+				method: 'POST',
+				headers: {
+					...headers,
+					'content-type': 'application/json',
+				},
+				body: JSON.stringify({ decision: allowedDecision, reason: 'Needs source review.' }),
+			});
+
+			expect(decision.status).toBe(200);
+			expect(sdk.appendTaskEvent).toHaveBeenCalledWith(expect.objectContaining({
+				taskId: 'task-promote-1',
+				kind: 'approval_decision_recorded',
+				data: expect.objectContaining({
+					decision: allowedDecision,
+					releaseAttempted: false,
+					stagingAttempted: false,
+				}),
+			}));
+		}
+
+		const beforeInvalidCount = sdk.appendTaskEvent.mock.calls.length;
+		const invalidDecision = await app.request('/v1/approvals/promotion%3Aknowledge-runtime/decision', {
+			method: 'POST',
+			headers: {
+				...headers,
+				'content-type': 'application/json',
+			},
+			body: JSON.stringify({ decision: 'publish_release' }),
+		});
+		expect(invalidDecision.status).toBe(400);
+		expect(sdk.appendTaskEvent).toHaveBeenCalledTimes(beforeInvalidCount);
+
+		const unknownApproval = await app.request('/v1/approvals/unknown/decision', {
+			method: 'POST',
+			headers: {
+				...headers,
+				'content-type': 'application/json',
+			},
+			body: JSON.stringify({ decision: 'reject' }),
+		});
+		expect(unknownApproval.status).toBe(404);
+	});
+
+	it('lists operation grants/events and performs policy-only operation dry-runs', async () => {
+		const operationGrant = {
+			id: 'grant-stage-docs',
+			state: 'active',
+			operations: ['stage'],
+			modes: ['dry_run'],
+			agentRoles: ['reviewer'],
+			taskKinds: ['implementation'],
+			projectIds: ['treeseed-api-test'],
+			environments: ['local'],
+			allowedPaths: ['docs/**'],
+			forbiddenPaths: ['secrets/**'],
+		};
+		const sdk = {
+			searchTasks: vi.fn(async () => ({
+				payload: [{
+					id: 'task-ops-1',
+					workDayId: 'workday-1',
+					type: 'implementation',
+					state: 'completed',
+					payloadJson: JSON.stringify({ operationGrants: [operationGrant] }),
+				}],
+			})),
+			search: vi.fn(async (request) => {
+				if (request.model === 'task_output') {
+					return {
+						payload: [{
+							id: 'output-ops-1',
+							taskId: 'task-ops-1',
+							outputJson: JSON.stringify({
+								operationResults: [{
+									operation: 'save',
+									status: 'completed',
+									summary: 'Saved verified snapshot.',
+									changedPaths: ['docs/guide.md'],
+									stagedPaths: [],
+								}],
+								snapshots: [{
+									kind: 'verified_snapshot',
+									ref: 'snapshot:task-ops-1',
+									changedPaths: ['docs/guide.md'],
+								}],
+								mergedToStaging: true,
+								mergeCommitSha: 'abc123',
+								changedPaths: ['docs/guide.md'],
+								releaseResult: {
+									status: 'completed',
+									releaseTag: 'v1.0.1',
+								},
+								codexResult: {
+									provider: 'codex',
+									threadId: 'thread-1',
+									status: 'completed',
+									usage: { wallMs: 20 },
+								},
+							}),
+						}],
+					};
+				}
+				if (request.model === 'task_event') {
+					return {
+						payload: [{
+							id: 'event-ops-1',
+							taskId: 'task-ops-1',
+							kind: 'operation_event',
+							seq: 1,
+							createdAt: '2026-05-13T00:00:00.000Z',
+							dataJson: JSON.stringify({
+								operation: 'stage',
+								mode: 'dry_run',
+								agentRole: 'reviewer',
+								permissionGrantId: 'grant-stage-docs',
+								result: {
+									operation: 'stage',
+									status: 'completed',
+									summary: 'Policy allowed staging.',
+									changedPaths: ['docs/guide.md'],
+									stagedPaths: ['docs/guide.md'],
+								},
+							}),
+						}],
+					};
+				}
+				if (request.model === 'work_day') {
+					return { payload: [{ id: 'workday-1', projectId: 'treeseed-api-test', state: 'active' }] };
+				}
+				if (request.model === 'report') {
+					return { payload: [] };
+				}
+				return { payload: [] };
+			}),
+			appendTaskEvent: vi.fn(),
+		};
+		const app = createTestApp({
+			sdk: sdk as any,
+			config: {
+				projectId: 'treeseed-api-test',
+				projectApiKey: 'project-secret',
+			},
+		});
+		const headers = { authorization: 'Bearer project-secret' };
+
+		const grants = await json(await app.request('/v1/operations/grants', { headers }));
+		expect(grants.payload.items).toEqual([expect.objectContaining({
+			id: 'grant-stage-docs',
+			operations: ['stage'],
+			allowedPaths: ['docs/**'],
+		})]);
+
+		const events = await json(await app.request('/v1/operations/events', { headers }));
+		expect(events.payload.items).toEqual(expect.arrayContaining([
+			expect.objectContaining({
+				operation: 'save',
+				status: 'completed',
+				source: 'task_output',
+			}),
+			expect.objectContaining({
+				operation: 'stage',
+				status: 'completed',
+				source: 'task_event',
+			}),
+		]));
+		expect(events.payload.lifecycle).toMatchObject({
+			worktreeSnapshots: [expect.objectContaining({ kind: 'verified_snapshot' })],
+			stagingMerges: [expect.objectContaining({ mergedToStaging: true, commitSha: 'abc123' })],
+			releaseResults: [expect.objectContaining({ releaseTag: 'v1.0.1' })],
+			codexUsage: [expect.objectContaining({ provider: 'codex', threadId: 'thread-1' })],
+		});
+
+		const dryRun = await json(await app.request('/v1/operations/stage/dry-run', {
+			method: 'POST',
+			headers: {
+				...headers,
+				'content-type': 'application/json',
+			},
+			body: JSON.stringify({
+				request: {
+					mode: 'dry_run',
+					taskId: 'task-ops-1',
+					taskKind: 'implementation',
+					agentRole: 'reviewer',
+					changedPaths: ['docs/guide.md'],
+				},
+			}),
+		}));
+		expect(dryRun.payload).toMatchObject({
+			dryRun: true,
+			decision: { allowed: true },
+			result: { status: 'completed', stagedPaths: ['docs/guide.md'] },
+		});
+
+		const denied = await json(await app.request('/v1/operations/stage/dry-run', {
+			method: 'POST',
+			headers: {
+				...headers,
+				'content-type': 'application/json',
+			},
+			body: JSON.stringify({
+				request: {
+					mode: 'dry_run',
+					taskId: 'task-ops-1',
+					taskKind: 'implementation',
+					agentRole: 'reviewer',
+					changedPaths: ['secrets/token.txt'],
+				},
+			}),
+		}));
+		expect(denied.payload).toMatchObject({
+			dryRun: true,
+			decision: {
+				allowed: false,
+				code: 'operation_path_forbidden',
+			},
+			result: { status: 'failed' },
+		});
+	});
+
+	it('enqueues approved knowledge promotion tasks and gates release decisions with a second approval', async () => {
+		const knowledgeDraft = {
+			id: 'knowledge:runtime',
+			kind: 'knowledge_draft',
+			title: 'Runtime',
+			book: 'architecture',
+			section: 'runtime',
+			targetPath: 'src/content/knowledge/architecture/runtime/runtime.mdx',
+			state: 'draft',
+			sourceQuestionId: 'question:runtime',
+			sourceResearchIds: ['research:runtime-v1'],
+			frontmatter: {
+				title: 'Runtime',
+				summary: 'Runtime knowledge.',
+				status: 'draft',
+				generated_by: 'treeseed-agent',
+				agent_role: 'knowledge_generator',
+				source_question: 'question:runtime',
+				source_research: ['research:runtime-v1'],
+				review_state: 'pending_review',
+				book_target: 'architecture',
+				section_target: 'runtime',
+				confidence: 'medium',
+				updated: '2026-05-13',
+				related: { objectives: [], questions: ['question:runtime'], proposals: [] },
+			},
+			body: '# Runtime\n\n## Source map\n- packages/agent/src/services/worker.ts\n',
+			reviewState: 'pending_review',
+			createdAt: '2026-05-13T00:00:00.000Z',
+			updatedAt: '2026-05-13T00:00:00.000Z',
+		};
+		const sdk = {
+			searchTasks: vi.fn(async () => ({
+				payload: [
+					{
+						id: 'task-draft-1',
+						workDayId: 'workday-1',
+						type: 'generate_knowledge_draft',
+						state: 'completed',
+						payloadJson: '{}',
+					},
+					{
+						id: 'task-promote-1',
+						workDayId: 'workday-1',
+						type: 'promote_knowledge_draft_request',
+						state: 'waiting',
+						payloadJson: JSON.stringify({
+							promotionRequest: {
+								id: 'promotion:knowledge-runtime',
+								approvalKind: 'promote_knowledge_draft',
+								draftId: 'knowledge:runtime',
+								targetPath: knowledgeDraft.targetPath,
+								recommendation: 'promote',
+								sourceResearchIds: ['research:runtime-v1'],
+							},
+						}),
+					},
+					{
+						id: 'task-release-1',
+						workDayId: 'workday-1',
+						type: 'release_staged_knowledge_request',
+						state: 'waiting',
+						payloadJson: JSON.stringify({
+							releaseRequest: {
+								id: 'release:knowledge:runtime',
+								approvalKind: 'release_staged_knowledge',
+								draftId: 'knowledge:runtime',
+								targetPath: knowledgeDraft.targetPath,
+								recommendation: 'approve_release',
+								changedPaths: [knowledgeDraft.targetPath],
+								releaseInput: { bump: 'patch' },
+							},
+						}),
+					},
+				],
+			})),
+			search: vi.fn(async (request) => {
+				if (request.model === 'task_output') {
+					return {
+						payload: [{
+							id: 'output-draft-1',
+							taskId: 'task-draft-1',
+							outputJson: JSON.stringify({ knowledgeDraft }),
+						}],
+					};
+				}
+				if (request.model === 'work_day') {
+					return { payload: [{ id: 'workday-1', state: 'active' }] };
+				}
+				return { payload: [] };
+			}),
+			appendTaskEvent: vi.fn(async () => ({ payload: { id: 'event-1' } })),
+			createTask: vi.fn(async (request) => ({
+				payload: {
+					id: 'task-promote-to-staging-1',
+					type: request.type,
+					workDayId: request.workDayId,
+					payloadJson: JSON.stringify(request.payload),
+				},
+			})),
+		};
+		const operations = {
+			runOperation: vi.fn(async () => ({
+				operation: 'release',
+				status: 'completed',
+				summary: 'released',
+				changedPaths: [knowledgeDraft.targetPath],
+				stagedPaths: [],
+				commandsRun: ['release'],
+				artifacts: [],
+				metadata: { workflowResult: { payload: { releaseTag: 'v1.0.1' } } },
+			})),
+		};
+
+		const promotion = await recordAgentApprovalDecision({
+			sdk: sdk as any,
+			projectId: 'project-1',
+			approvalId: 'promotion:knowledge-runtime',
+			decision: 'approve_as_book_content',
+			reason: 'Looks good.',
+			actor: 'user-1',
+			actorType: 'user',
+			repoRoot: '/repo',
+			operations: operations as any,
+		});
+		expect(promotion?.createdTask).toEqual(expect.objectContaining({
+			id: 'task-promote-to-staging-1',
+			type: 'promote_knowledge_to_staging',
+		}));
+		expect(sdk.createTask).toHaveBeenCalledWith(expect.objectContaining({
+			type: 'promote_knowledge_to_staging',
+			payload: expect.objectContaining({
+				knowledgeDraft,
+				allowedPaths: [knowledgeDraft.targetPath],
+			}),
+		}));
+
+		const release = await recordAgentApprovalDecision({
+			sdk: sdk as any,
+			projectId: 'project-1',
+			approvalId: 'release:knowledge:runtime',
+			decision: 'approve_release',
+			actor: 'user-1',
+			actorType: 'user',
+			repoRoot: '/repo',
+			operations: operations as any,
+		});
+		expect(release?.releaseAttempted).toBe(true);
+		expect(operations.runOperation).toHaveBeenCalledWith(expect.objectContaining({
+			request: expect.objectContaining({
+				operation: 'release',
+				input: { bump: 'patch' },
+				approval: expect.objectContaining({ state: 'approved' }),
+			}),
+		}));
+
+		await expect(recordAgentApprovalDecision({
+			sdk: sdk as any,
+			projectId: 'project-1',
+			approvalId: 'release:knowledge:runtime',
+			decision: 'approve_release',
+			actor: 'service-1',
+			actorType: 'service',
+			repoRoot: '/repo',
+			operations: operations as any,
+		})).rejects.toMatchObject({
+			status: 403,
+		} satisfies Partial<AgentApprovalDecisionError>);
+	});
+
+	it('reports Codex readiness through the project runtime API without starting a thread', async () => {
+		vi.stubEnv('TREESEED_EXECUTION_PROVIDER', 'codex_subscription');
+		const app = createTestApp({
+			config: {
+				projectApiKey: 'project-secret',
+			},
+		});
+
+		const response = await app.request('/v1/providers/codex/readiness', {
+			headers: { authorization: 'Bearer project-secret' },
+		});
+
+		expect(response.status).toBe(200);
+		expect(await json(response)).toMatchObject({
+			ok: true,
+			payload: {
+				subscriptionPlan: expect.any(String),
+				sdkInstalled: expect.any(Boolean),
+				warnings: expect.any(Array),
+				blockingIssues: expect.any(Array),
+			},
+		});
 	});
 
 	it('mounts internal project routes behind a prefix and accepts project API keys', async () => {

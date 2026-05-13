@@ -25,6 +25,15 @@ import type {
 	WorkstreamSummary,
 } from '@treeseed/sdk';
 import { normalizeProjectJobStatus } from '@treeseed/sdk';
+import { checkCodexProviderReadiness } from '../agents/adapters/codex-readiness.ts';
+import {
+	AgentApprovalDecisionError,
+	collectAgentArtifactApiState,
+	collectAgentOperationApiState,
+	dryRunAgentOperation,
+	recordAgentApprovalDecision,
+} from './agent-artifacts.ts';
+import { PROMOTION_APPROVAL_DECISIONS, RELEASE_APPROVAL_DECISIONS } from '../services/knowledge-promotion.ts';
 import { requireTeamCapability } from './capabilities.ts';
 import { jsonError } from './http.ts';
 import type { ApiConfig } from './types.ts';
@@ -33,6 +42,11 @@ function withPrefix(prefix: string, path: string) {
 	if (!prefix) return path;
 	return `${prefix}${path}`.replace(/\/{2,}/g, '/');
 }
+
+const AGENT_APPROVAL_DECISIONS = new Set([
+	...PROMOTION_APPROVAL_DECISIONS,
+	...RELEASE_APPROVAL_DECISIONS,
+]);
 
 function slugify(value: string) {
 	return value
@@ -691,5 +705,175 @@ export function registerProjectRoutes(
 		if (!principal) return jsonError(c, 401, 'Authentication required.');
 		const payload = await summarizeAgents(options.sharedSdk, options.config.projectId);
 		return c.json({ ok: true, payload: payload.messages });
+	});
+
+	app.get(withPrefix(prefix, '/v1/agent-artifacts'), async (c) => {
+		const principal = c.get('principal');
+		if (!principal) return jsonError(c, 401, 'Authentication required.');
+		const state = await collectAgentArtifactApiState({
+			sdk: options.sharedSdk,
+			projectId: options.config.projectId,
+		});
+		return c.json({
+			ok: true,
+			payload: {
+				projectId: options.config.projectId,
+				items: state.artifacts,
+				warnings: state.warnings,
+			},
+		});
+	});
+
+	app.get(withPrefix(prefix, '/v1/research-notes'), async (c) => {
+		const principal = c.get('principal');
+		if (!principal) return jsonError(c, 401, 'Authentication required.');
+		const state = await collectAgentArtifactApiState({
+			sdk: options.sharedSdk,
+			projectId: options.config.projectId,
+		});
+		return c.json({ ok: true, payload: { projectId: options.config.projectId, items: state.researchNotes, warnings: state.warnings } });
+	});
+
+	app.get(withPrefix(prefix, '/v1/knowledge-drafts'), async (c) => {
+		const principal = c.get('principal');
+		if (!principal) return jsonError(c, 401, 'Authentication required.');
+		const state = await collectAgentArtifactApiState({
+			sdk: options.sharedSdk,
+			projectId: options.config.projectId,
+		});
+		return c.json({ ok: true, payload: { projectId: options.config.projectId, items: state.knowledgeDrafts, warnings: state.warnings } });
+	});
+
+	app.get(withPrefix(prefix, '/v1/optimization-reports'), async (c) => {
+		const principal = c.get('principal');
+		if (!principal) return jsonError(c, 401, 'Authentication required.');
+		const state = await collectAgentArtifactApiState({
+			sdk: options.sharedSdk,
+			projectId: options.config.projectId,
+		});
+		return c.json({ ok: true, payload: { projectId: options.config.projectId, items: state.optimizationReports, warnings: state.warnings } });
+	});
+
+	app.get(withPrefix(prefix, '/v1/approvals'), async (c) => {
+		const principal = c.get('principal');
+		if (!principal) return jsonError(c, 401, 'Authentication required.');
+		const state = await collectAgentArtifactApiState({
+			sdk: options.sharedSdk,
+			projectId: options.config.projectId,
+		});
+		return c.json({ ok: true, payload: { projectId: options.config.projectId, items: state.approvals, warnings: state.warnings } });
+	});
+
+	app.get(withPrefix(prefix, '/v1/operations/grants'), async (c) => {
+		const principal = c.get('principal');
+		if (!principal) return jsonError(c, 401, 'Authentication required.');
+		const state = await collectAgentOperationApiState({
+			sdk: options.sharedSdk,
+			projectId: options.config.projectId,
+		});
+		return c.json({ ok: true, payload: { projectId: options.config.projectId, items: state.grants, warnings: state.warnings } });
+	});
+
+	app.get(withPrefix(prefix, '/v1/operations/events'), async (c) => {
+		const principal = c.get('principal');
+		if (!principal) return jsonError(c, 401, 'Authentication required.');
+		const state = await collectAgentOperationApiState({
+			sdk: options.sharedSdk,
+			projectId: options.config.projectId,
+		});
+		return c.json({
+			ok: true,
+			payload: {
+				projectId: options.config.projectId,
+				items: state.events,
+				lifecycle: state.lifecycle,
+				warnings: state.warnings,
+			},
+		});
+	});
+
+	app.post(withPrefix(prefix, '/v1/operations/:operation/dry-run'), async (c) => {
+		const principal = c.get('principal');
+		if (!principal) return jsonError(c, 401, 'Authentication required.');
+		const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
+		try {
+			const payload = await dryRunAgentOperation({
+				sdk: options.sharedSdk,
+				projectId: options.config.projectId,
+				operation: c.req.param('operation'),
+				body,
+				repoRoot: options.config.repoRoot,
+				environment: 'local',
+			});
+			return c.json({ ok: true, payload });
+		} catch (error) {
+			if (error instanceof AgentApprovalDecisionError) {
+				return jsonError(c, error.status, error.message, error.details);
+			}
+			throw error;
+		}
+	});
+
+	app.post(withPrefix(prefix, '/v1/approvals/:approvalId/decision'), async (c) => {
+		const principal = c.get('principal');
+		if (!principal) return jsonError(c, 401, 'Authentication required.');
+		const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
+		const decision = typeof body.decision === 'string' && body.decision.trim() ? body.decision.trim() : '';
+		if (!decision) {
+			return jsonError(c, 400, 'Approval decision is required.');
+		}
+		if (!AGENT_APPROVAL_DECISIONS.has(decision)) {
+			return jsonError(c, 400, 'Unsupported approval decision.');
+		}
+		try {
+			const result = await recordAgentApprovalDecision({
+				sdk: options.sharedSdk,
+				projectId: options.config.projectId,
+				approvalId: c.req.param('approvalId'),
+				decision,
+				reason: typeof body.reason === 'string' ? body.reason : null,
+				actor: typeof principal.id === 'string' && principal.id ? principal.id : 'api',
+				actorType: c.get('actorType'),
+				repoRoot: options.config.repoRoot,
+				environment: 'local',
+			});
+			return result
+				? c.json({ ok: true, payload: result })
+				: jsonError(c, 404, 'Unknown approval request.');
+		} catch (error) {
+			if (error instanceof AgentApprovalDecisionError) {
+				return jsonError(c, error.status, error.message, error.details);
+			}
+			throw error;
+		}
+	});
+
+	app.get(withPrefix(prefix, '/v1/workdays/current'), async (c) => {
+		const principal = c.get('principal');
+		if (!principal) return jsonError(c, 401, 'Authentication required.');
+		const state = await collectAgentArtifactApiState({
+			sdk: options.sharedSdk,
+			projectId: options.config.projectId,
+		});
+		return c.json({ ok: true, payload: state.currentWorkday });
+	});
+
+	app.get(withPrefix(prefix, '/v1/workdays/reports'), async (c) => {
+		const principal = c.get('principal');
+		if (!principal) return jsonError(c, 401, 'Authentication required.');
+		const state = await collectAgentArtifactApiState({
+			sdk: options.sharedSdk,
+			projectId: options.config.projectId,
+		});
+		return c.json({ ok: true, payload: { projectId: options.config.projectId, items: state.reports, warnings: state.warnings } });
+	});
+
+	app.get(withPrefix(prefix, '/v1/providers/codex/readiness'), async (c) => {
+		const principal = c.get('principal');
+		if (!principal) return jsonError(c, 401, 'Authentication required.');
+		return c.json({
+			ok: true,
+			payload: checkCodexProviderReadiness({ env: process.env }),
+		});
 	});
 }

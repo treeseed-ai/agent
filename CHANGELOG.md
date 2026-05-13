@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.8.11] - 2026-05-13
+
+### Added
+
+- feat(agent): add Codex execution adapter and testing scripts (6b1363c2d09f)
+
+### Dependencies
+
+- build(agent): bump version and update @treeseed/sdk (100a2dc543dd)
+- Release @treeseed/agent 0.8.11.
+
 ## [0.8.10] - 2026-05-13
 
 ### Tests

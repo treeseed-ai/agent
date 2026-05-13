@@ -10,6 +10,7 @@ import {
 	type AgentTriggerConfig,
 	type AgentTriggerKind,
 } from '@treeseed/sdk/types/agents';
+import type { DeclarativeContextQuery } from '@treeseed/sdk/graph/context-query-contracts';
 import { AGENT_MESSAGE_TYPES } from './contracts/messages.ts';
 import { normalizeAgentCliOptions } from './cli-tools.ts';
 import type {
@@ -23,6 +24,12 @@ import type {
 
 const TRIGGER_KINDS: readonly AgentTriggerKind[] = ['schedule', 'message', 'follow', 'startup'];
 const PERMISSION_OPERATIONS: readonly AgentPermissionOperation[] = ['get', 'search', 'follow', 'pick', 'create', 'update'];
+const EXECUTION_PROVIDERS = new Set(['codex', 'codex_subscription', 'stub', 'manual', 'copilot']);
+const APPROVAL_POLICIES = new Set(['never', 'on_request', 'always']);
+const SANDBOX_MODES = new Set(['read_only', 'workspace_write']);
+const REASONING_EFFORTS = new Set(['low', 'medium', 'high']);
+const DEFAULT_CODEX_ALLOWED_PATHS = ['**'];
+const DEFAULT_CODEX_FORBIDDEN_PATHS = ['.git/**', '.agent-worktrees/**', '.treeseed/secrets/**', 'node_modules/**'];
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
 	return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -78,6 +85,72 @@ function ensurePositiveNumber(
 		return fallback;
 	}
 	return value;
+}
+
+function normalizeOptionalString(value: unknown, field: string, diagnostics: AgentSpecDiagnostic[], slug: string): string | undefined {
+	if (value === undefined) return undefined;
+	if (typeof value !== 'string' || !value.trim()) {
+		diagnostics.push({
+			severity: 'error',
+			slug,
+			field,
+			message: `Expected ${field} to be a non-empty string.`,
+		});
+		return undefined;
+	}
+	return value.trim();
+}
+
+function normalizeStringChoice<T extends string>(
+	value: unknown,
+	field: string,
+	allowed: Set<T>,
+	diagnostics: AgentSpecDiagnostic[],
+	slug: string,
+	fallback: T,
+	options: { warnOnUnknown?: boolean } = {},
+): T | string {
+	if (value === undefined) return fallback;
+	const normalized = normalizeOptionalString(value, field, diagnostics, slug)?.toLowerCase().replaceAll('-', '_');
+	if (!normalized) return fallback;
+	if (allowed.has(normalized as T)) return normalized as T;
+	diagnostics.push({
+		severity: options.warnOnUnknown ? 'warning' : 'error',
+		slug,
+		field,
+		message: `Unsupported ${field} "${String(value)}".`,
+	});
+	return normalized;
+}
+
+function normalizeStringArray(
+	value: unknown,
+	field: string,
+	diagnostics: AgentSpecDiagnostic[],
+	slug: string,
+	fallback: string[],
+) {
+	if (value === undefined) return [...fallback];
+	if (!Array.isArray(value)) {
+		diagnostics.push({
+			severity: 'error',
+			slug,
+			field,
+			message: `Expected ${field} to be an array of strings.`,
+		});
+		return [...fallback];
+	}
+	const values = value.filter((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0)
+		.map((entry) => entry.trim());
+	if (values.length !== value.length) {
+		diagnostics.push({
+			severity: 'error',
+			slug,
+			field,
+			message: `Expected ${field} to contain only non-empty strings.`,
+		});
+	}
+	return values;
 }
 
 function normalizeTrigger(
@@ -158,13 +231,130 @@ function normalizePermissions(
 	});
 }
 
+function normalizeContext(
+	value: unknown,
+	diagnostics: AgentSpecDiagnostic[],
+	slug: string,
+): { queries: DeclarativeContextQuery[] } | undefined {
+	if (value === undefined) return undefined;
+	if (!isPlainObject(value)) {
+		diagnostics.push({
+			severity: 'error',
+			slug,
+			field: 'context',
+			message: 'Expected context to be an object.',
+		});
+		return undefined;
+	}
+	if (value.queries === undefined) {
+		return { queries: [] };
+	}
+	if (!Array.isArray(value.queries)) {
+		diagnostics.push({
+			severity: 'error',
+			slug,
+			field: 'context.queries',
+			message: 'Expected context.queries to be an array.',
+		});
+		return { queries: [] };
+	}
+
+	const queries = value.queries.flatMap((entry, index) => {
+		if (!isPlainObject(entry)) {
+			diagnostics.push({
+				severity: 'error',
+				slug,
+				field: `context.queries[${index}]`,
+				message: 'Expected context query to be an object.',
+			});
+			return [];
+		}
+		for (const field of ['id', 'purpose', 'query']) {
+			if (typeof entry[field] !== 'string' || !entry[field].trim()) {
+				diagnostics.push({
+					severity: 'error',
+					slug,
+					field: `context.queries[${index}].${field}`,
+					message: `Expected context query ${field} to be a non-empty string.`,
+				});
+			}
+		}
+		if (entry.scope !== undefined && typeof entry.scope !== 'string') {
+			diagnostics.push({
+				severity: 'error',
+				slug,
+				field: `context.queries[${index}].scope`,
+				message: 'Expected context query scope to be a string.',
+			});
+		}
+		if (entry.relations !== undefined && (!Array.isArray(entry.relations) || entry.relations.some((relation) => typeof relation !== 'string'))) {
+			diagnostics.push({
+				severity: 'error',
+				slug,
+				field: `context.queries[${index}].relations`,
+				message: 'Expected context query relations to be an array of strings.',
+			});
+		}
+		if (entry.depth !== undefined && typeof entry.depth !== 'number') {
+			diagnostics.push({
+				severity: 'error',
+				slug,
+				field: `context.queries[${index}].depth`,
+				message: 'Expected context query depth to be a number.',
+			});
+		}
+		if (entry.budget !== undefined && typeof entry.budget !== 'number') {
+			diagnostics.push({
+				severity: 'error',
+				slug,
+				field: `context.queries[${index}].budget`,
+				message: 'Expected context query budget to be a number.',
+			});
+		}
+		if (entry.format !== undefined && typeof entry.format !== 'string') {
+			diagnostics.push({
+				severity: 'error',
+				slug,
+				field: `context.queries[${index}].format`,
+				message: 'Expected context query format to be a string.',
+			});
+		}
+		return [entry as unknown as DeclarativeContextQuery];
+	});
+
+	return { queries };
+}
+
 function normalizeExecution(
 	value: unknown,
 	diagnostics: AgentSpecDiagnostic[],
 	slug: string,
 ): AgentExecutionConfig {
 	const next = isPlainObject(value) ? value : {};
+	const worktree = isPlainObject(next.worktree) ? next.worktree : {};
+	if (next.worktree !== undefined && !isPlainObject(next.worktree)) {
+		diagnostics.push({
+			severity: 'error',
+			slug,
+			field: 'execution.worktree',
+			message: 'Expected execution.worktree to be an object.',
+		});
+	}
 	return {
+		provider: normalizeStringChoice(next.provider, 'execution.provider', EXECUTION_PROVIDERS, diagnostics, slug, 'codex', {
+			warnOnUnknown: true,
+		}),
+		model: normalizeOptionalString(next.model, 'execution.model', diagnostics, slug) ?? 'gpt-5.5',
+		approvalPolicy: normalizeStringChoice(next.approvalPolicy, 'execution.approvalPolicy', APPROVAL_POLICIES, diagnostics, slug, 'never'),
+		sandboxMode: normalizeStringChoice(next.sandboxMode, 'execution.sandboxMode', SANDBOX_MODES, diagnostics, slug, 'workspace_write'),
+		reasoningEffort: normalizeStringChoice(next.reasoningEffort, 'execution.reasoningEffort', REASONING_EFFORTS, diagnostics, slug, 'medium'),
+		allowedPaths: normalizeStringArray(next.allowedPaths, 'execution.allowedPaths', diagnostics, slug, DEFAULT_CODEX_ALLOWED_PATHS),
+		forbiddenPaths: normalizeStringArray(next.forbiddenPaths, 'execution.forbiddenPaths', diagnostics, slug, DEFAULT_CODEX_FORBIDDEN_PATHS),
+		worktree: {
+			enabled: ensureBoolean(worktree.enabled, 'execution.worktree.enabled', diagnostics, slug, true),
+			root: normalizeOptionalString(worktree.root, 'execution.worktree.root', diagnostics, slug),
+			branchPrefix: normalizeOptionalString(worktree.branchPrefix, 'execution.worktree.branchPrefix', diagnostics, slug),
+		},
 		maxConcurrency: ensurePositiveNumber(next.maxConcurrency, 'execution.maxConcurrency', diagnostics, slug, 1),
 		timeoutSeconds: ensurePositiveNumber(next.timeoutSeconds, 'execution.timeoutSeconds', diagnostics, slug, 900),
 		cooldownSeconds: ensurePositiveNumber(next.cooldownSeconds, 'execution.cooldownSeconds', diagnostics, slug, 30, true),
@@ -303,6 +493,7 @@ function normalizeParts(
 				}
 				: undefined,
 			permissions: normalizePermissions(raw.permissions, diagnostics, slug),
+			context: normalizeContext(raw.context, diagnostics, slug),
 			execution: normalizeExecution(raw.execution, diagnostics, slug),
 			outputs: normalizeOutputs(raw.outputs, diagnostics, slug),
 		};

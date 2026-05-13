@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { fileURLToPath } from 'node:url';
+import { isDirectEntrypoint } from '../entrypoint.ts';
 import { runManagerAction } from './manager.ts';
 
 export async function runWorkdayReport() {
@@ -9,8 +9,6 @@ export async function runWorkdayReport() {
 	});
 }
 
-const currentFile = fileURLToPath(import.meta.url);
-const entryFile = process.argv[1] ?? '';
-if (entryFile === currentFile) {
+if (isDirectEntrypoint(import.meta.url, 'workday-report.ts')) {
 	process.stdout.write(`${JSON.stringify(await runWorkdayReport(), null, 2)}\n`);
 }

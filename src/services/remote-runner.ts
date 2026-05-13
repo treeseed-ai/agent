@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
-import { fileURLToPath } from 'node:url';
 import { AgentSdk, RemoteTreeseedClient, RemoteTreeseedRunnerClient, TreeseedOperationsSdk } from '@treeseed/sdk';
+import { isDirectEntrypoint } from '../entrypoint.ts';
 import { createServiceSdk } from './common.ts';
 
 function integerFromEnv(name: string, fallback: number) {
@@ -255,8 +255,6 @@ export async function startRemoteRunnerLoop(options: {
 	}
 }
 
-const currentFile = fileURLToPath(import.meta.url);
-const entryFile = process.argv[1] ?? '';
-if (entryFile === currentFile) {
+if (isDirectEntrypoint(import.meta.url, 'remote-runner.ts')) {
 	await startRemoteRunnerLoop();
 }

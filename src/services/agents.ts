@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
-import { fileURLToPath } from 'node:url';
 import { AgentKernel } from '../agents/kernel/agent-kernel.ts';
+import { isDirectEntrypoint } from '../entrypoint.ts';
 import { createServiceSdk, resolveServiceRepoRoot } from './common.ts';
 
 function integerFromEnv(name: string, fallback: number) {
@@ -41,8 +41,6 @@ export async function startAgentsLoop() {
 	}
 }
 
-const currentFile = fileURLToPath(import.meta.url);
-const entryFile = process.argv[1] ?? '';
-if (entryFile === currentFile) {
+if (isDirectEntrypoint(import.meta.url, 'agents.ts')) {
 	await startAgentsLoop();
 }

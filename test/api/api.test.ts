@@ -1,12 +1,14 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { describe, expect, it, vi } from 'vitest';
 import { parseTemplateCatalogResponse } from '@treeseed/sdk';
 import type { D1DatabaseLike, D1PreparedStatementLike } from '@treeseed/sdk/types/cloudflare';
 import { createTreeseedApiApp } from '../../src/api/app.ts';
 import { D1AuthProvider } from '../../src/api/auth/d1-provider.ts';
 import { resolveApiConfig } from '../../src/api/config.ts';
+import { isDirectEntrypoint } from '../../src/entrypoint.ts';
 
 const packageRoot = process.cwd();
 const authMigrationPathCandidates = [
@@ -185,6 +187,18 @@ apiRuntimeDescribe('@treeseed/agent api runtime', () => {
 			importMatches = '';
 		}
 		expect(importMatches).toBe('');
+	});
+
+	it('recognizes run-ts bundled entrypoints as direct entrypoints', () => {
+		const previousEntry = process.argv[1];
+		try {
+			process.argv[1] = resolve(packageRoot, 'src/api/server.ts');
+			const bundledUrl = pathToFileURL(resolve(packageRoot, 'src/api/.ts-run-test.mjs')).href;
+			expect(isDirectEntrypoint(bundledUrl, 'server.ts')).toBe(true);
+			expect(isDirectEntrypoint(bundledUrl, 'worker.ts')).toBe(false);
+		} finally {
+			process.argv[1] = previousEntry;
+		}
 	});
 
 	it('derives Railway-aware config without contaminating local defaults', () => {

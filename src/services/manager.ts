@@ -1,6 +1,5 @@
 #!/usr/bin/env node
 
-import { fileURLToPath } from 'node:url';
 import type { AgentRuntimeSpec } from '@treeseed/sdk/types/agents';
 import {
 	createControlPlaneReporter,
@@ -18,6 +17,7 @@ import {
 	type WorkerPoolScaleResult,
 	type WorkerPoolScaler,
 } from '@treeseed/sdk';
+import { isDirectEntrypoint } from '../entrypoint.ts';
 import type { CapacityPlan, CapacityTaskExecutionEnvelope } from '@treeseed/sdk';
 import { loadActiveAgentSpecs } from '../agents/spec-loader.ts';
 import { followCursorKey, resolveTriggerDecision } from '../agents/kernel/trigger-resolver.ts';
@@ -1594,9 +1594,7 @@ function readCliMode() {
 	return undefined;
 }
 
-const currentFile = fileURLToPath(import.meta.url);
-const entryFile = process.argv[1] ?? '';
-if (entryFile === currentFile) {
+if (isDirectEntrypoint(import.meta.url, 'manager.ts')) {
 	const mode = readCliMode() ?? resolveManagerServiceConfig().mode;
 	if (mode === 'loop') {
 		await startManagerLoop({

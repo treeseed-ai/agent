@@ -2,6 +2,7 @@ import { normalizeAgentCliOptions } from '../cli-tools.ts';
 import type { AgentExecutionAdapter } from '../runtime-types.ts';
 import { getTreeseedAgentProviderSelections } from '@treeseed/sdk/platform/deploy-runtime';
 import { runTreeseedCopilotTask } from '@treeseed/sdk/copilot';
+import { CodexSubscriptionExecutionAdapter } from './execution-codex.ts';
 
 export class StubExecutionAdapter implements AgentExecutionAdapter {
 	async runTask(input: { prompt: string; runId: string }) {
@@ -60,12 +61,15 @@ export class ManualExecutionAdapter implements AgentExecutionAdapter {
 	}
 }
 
-export function createExecutionAdapter() {
+export function createExecutionAdapter(configuredModeInput?: string) {
 	const configuredMode = String(
-		process.env.TREESEED_AGENT_EXECUTION_PROVIDER ?? getTreeseedAgentProviderSelections().execution,
+		configuredModeInput ?? process.env.TREESEED_AGENT_EXECUTION_PROVIDER ?? getTreeseedAgentProviderSelections().execution,
 	).toLowerCase();
 	if (configuredMode === 'manual') {
 		return new ManualExecutionAdapter();
+	}
+	if (configuredMode === 'codex' || configuredMode === 'codex_subscription') {
+		return new CodexSubscriptionExecutionAdapter();
 	}
 	if (configuredMode !== 'copilot') {
 		return new StubExecutionAdapter();

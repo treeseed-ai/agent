@@ -8,6 +8,12 @@ import { getTreeseedAgentProviderSelections } from '@treeseed/sdk/platform/deplo
 import { resolveTreeseedTenantRoot } from '@treeseed/sdk/platform/tenant-config';
 import type { AgentHandler } from './runtime-types.ts';
 import { resolveAgentRuntimeProviders } from '../agent-runtime.ts';
+import { researcherHandler } from './handlers/researcher.ts';
+import { knowledgeGeneratorHandler } from './handlers/knowledge-generator.ts';
+import { knowledgeOptimizerHandler } from './handlers/knowledge-optimizer.ts';
+import { engineerHandler } from './handlers/engineer.ts';
+import { reviewerHandler } from './handlers/reviewer.ts';
+import { releaserHandler } from './handlers/releaser.ts';
 
 const BUILTIN_HANDLER_KINDS = [
 	'planner',
@@ -15,6 +21,8 @@ const BUILTIN_HANDLER_KINDS = [
 	'engineer',
 	'notifier',
 	'researcher',
+	'knowledge_generator',
+	'knowledge_optimizer',
 	'reviewer',
 	'releaser',
 ] as const;
@@ -25,9 +33,20 @@ const HANDLER_EXPORT_NAMES: Record<(typeof BUILTIN_HANDLER_KINDS)[number], strin
 	engineer: 'engineerHandler',
 	notifier: 'notifierHandler',
 	researcher: 'researcherHandler',
+	knowledge_generator: 'knowledgeGeneratorHandler',
+	knowledge_optimizer: 'knowledgeOptimizerHandler',
 	reviewer: 'reviewerHandler',
 	releaser: 'releaserHandler',
 };
+
+const PACKAGE_BUILTIN_HANDLERS = new Map<string, AgentHandler>([
+	[researcherHandler.kind, researcherHandler],
+	[knowledgeGeneratorHandler.kind, knowledgeGeneratorHandler],
+	[knowledgeOptimizerHandler.kind, knowledgeOptimizerHandler],
+	[engineerHandler.kind, engineerHandler],
+	[reviewerHandler.kind, reviewerHandler],
+	[releaserHandler.kind, releaserHandler],
+]);
 
 export function getTenantAgentHandlerModulePaths(
 	kind: AgentHandlerKind,
@@ -130,28 +149,34 @@ export async function loadTenantAgentHandlerRegistry(
 	return registry;
 }
 
-let agentHandlerRegistryPromise: Promise<Record<string, AgentHandler>> | null = null;
+const agentHandlerRegistryPromises = new Map<string, Promise<Record<string, AgentHandler>>>();
 
-async function getAgentHandlerRegistry() {
-	if (!agentHandlerRegistryPromise) {
-		agentHandlerRegistryPromise = loadTenantAgentHandlerRegistry();
+async function getAgentHandlerRegistry(tenantRoot = resolveTreeseedTenantRoot()) {
+	if (!agentHandlerRegistryPromises.has(tenantRoot)) {
+		agentHandlerRegistryPromises.set(tenantRoot, loadTenantAgentHandlerRegistry(tenantRoot));
 	}
-	return agentHandlerRegistryPromise;
+	return agentHandlerRegistryPromises.get(tenantRoot)!;
 }
 
-export async function listRegisteredAgentHandlers() {
-	const registry = await getAgentHandlerRegistry();
-	const runtimeProviders = resolveAgentRuntimeProviders(resolveTreeseedTenantRoot(), getTreeseedAgentProviderSelections());
-	return [...new Set([...Object.keys(registry), ...runtimeProviders.handlers.keys()])];
+export async function listRegisteredAgentHandlers(options: { tenantRoot?: string } = {}) {
+	const tenantRoot = options.tenantRoot ?? resolveTreeseedTenantRoot();
+	const registry = await getAgentHandlerRegistry(tenantRoot);
+	const runtimeProviders = resolveAgentRuntimeProviders(tenantRoot, getTreeseedAgentProviderSelections());
+	return [...new Set([
+		...Object.keys(registry),
+		...runtimeProviders.handlers.keys(),
+		...PACKAGE_BUILTIN_HANDLERS.keys(),
+	])];
 }
 
-export async function resolveAgentHandler(kind: AgentHandlerKind) {
-	const registry = await getAgentHandlerRegistry();
-	const runtimeProviders = resolveAgentRuntimeProviders(resolveTreeseedTenantRoot(), getTreeseedAgentProviderSelections());
-	const handler = registry[kind] ?? runtimeProviders.handlers.get(kind);
+export async function resolveAgentHandler(kind: AgentHandlerKind, options: { tenantRoot?: string } = {}) {
+	const tenantRoot = options.tenantRoot ?? resolveTreeseedTenantRoot();
+	const registry = await getAgentHandlerRegistry(tenantRoot);
+	const runtimeProviders = resolveAgentRuntimeProviders(tenantRoot, getTreeseedAgentProviderSelections());
+	const handler = registry[kind] ?? runtimeProviders.handlers.get(kind) ?? PACKAGE_BUILTIN_HANDLERS.get(kind);
 	if (!handler) {
 		if ((BUILTIN_HANDLER_KINDS as readonly string[]).includes(kind)) {
-			const expectedPath = getTenantAgentHandlerModulePaths(kind).join('" or "');
+			const expectedPath = getTenantAgentHandlerModulePaths(kind, tenantRoot).join('" or "');
 			const expectedExport = HANDLER_EXPORT_NAMES[kind as (typeof BUILTIN_HANDLER_KINDS)[number]];
 			throw new Error(
 				`No runtime handler is registered for agent handler "${kind}". Expected tenant file "${expectedPath}" exporting "${expectedExport}" or a plugin contribution.`,

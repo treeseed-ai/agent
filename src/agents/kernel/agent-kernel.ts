@@ -2,6 +2,7 @@ import type { AgentRuntimeSpec } from '@treeseed/sdk/types/agents';
 import { createExecutionAdapter } from '../adapters/execution.ts';
 import { LocalBranchMutationAdapter } from '../adapters/mutations.ts';
 import { createNotificationAdapter } from '../adapters/notification.ts';
+import { createOperationsAdapter } from '../adapters/operations.ts';
 import { createRepositoryInspectionAdapter } from '../adapters/repository.ts';
 import { createResearchAdapter } from '../adapters/research.ts';
 import { createVerificationAdapter } from '../adapters/verification.ts';
@@ -11,6 +12,7 @@ import type {
 	AgentExecutionAdapter,
 	AgentMutationAdapter,
 	AgentNotificationAdapter,
+	AgentOperationsAdapter,
 	AgentRepositoryInspectionAdapter,
 	AgentResearchAdapter,
 	AgentTriggerInvocation,
@@ -29,11 +31,14 @@ function nowIso() {
 
 export class AgentKernel {
 	private readonly execution;
+	private readonly executionOverride;
+	private readonly providerSelections;
 	private readonly mutations;
 	private readonly repository;
 	private readonly verification;
 	private readonly notifications;
 	private readonly research;
+	private readonly operations;
 	private readonly activeRuns = new Set<string>();
 	private readonly lastRunAt = new Map<string, number>();
 
@@ -47,15 +52,33 @@ export class AgentKernel {
 			verification?: AgentVerificationAdapter;
 			notifications?: AgentNotificationAdapter;
 			research?: AgentResearchAdapter;
+			operations?: AgentOperationsAdapter;
 		},
 	) {
-		const runtimeProviders = resolveAgentRuntimeProviders(repoRoot, getTreeseedAgentProviderSelections());
+		this.providerSelections = getTreeseedAgentProviderSelections();
+		const runtimeProviders = resolveAgentRuntimeProviders(repoRoot, this.providerSelections);
+		this.executionOverride = options?.execution;
 		this.execution = options?.execution ?? runtimeProviders.execution ?? createExecutionAdapter();
 		this.mutations = options?.mutations ?? runtimeProviders.mutations ?? new LocalBranchMutationAdapter(repoRoot);
 		this.repository = options?.repository ?? runtimeProviders.repository ?? createRepositoryInspectionAdapter();
 		this.verification = options?.verification ?? runtimeProviders.verification ?? createVerificationAdapter();
 		this.notifications = options?.notifications ?? runtimeProviders.notifications ?? createNotificationAdapter();
 		this.research = options?.research ?? runtimeProviders.research ?? createResearchAdapter();
+		this.operations = options?.operations ?? createOperationsAdapter();
+	}
+
+	private executionForAgent(agent: AgentRuntimeSpec) {
+		if (this.executionOverride) {
+			return this.executionOverride;
+		}
+		const provider = agent.execution.provider ?? this.providerSelections.execution;
+		if (provider === this.providerSelections.execution) {
+			return this.execution;
+		}
+		return resolveAgentRuntimeProviders(this.repoRoot, {
+			...this.providerSelections,
+			execution: provider,
+		}).execution;
 	}
 
 	async doctor() {
@@ -170,12 +193,13 @@ export class AgentKernel {
 			agent,
 			sdk: scopedSdk,
 			trigger,
-			execution: this.execution,
+			execution: this.executionForAgent(agent),
 			mutations: this.mutations,
 			repository: this.repository,
 			verification: this.verification,
 			notifications: this.notifications,
 			research: this.research,
+			operations: this.operations,
 		};
 
 		await this.recordRunTrace(this.buildTrace(agent, runId, trigger, {}));

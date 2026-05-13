@@ -19,7 +19,7 @@ export class StubVerificationAdapter implements AgentVerificationAdapter {
 }
 
 export class LocalVerificationAdapter implements AgentVerificationAdapter {
-	async runChecks(input: { commands: string[] }) {
+	async runChecks(input: { commands: string[]; cwd?: string }) {
 		if (!input.commands.length) {
 			return {
 				status: 'waiting' as const,
@@ -34,6 +34,7 @@ export class LocalVerificationAdapter implements AgentVerificationAdapter {
 		for (const command of input.commands) {
 			try {
 				const { stdout, stderr } = await execFileAsync('/bin/bash', ['-lc', command], {
+					cwd: input.cwd ?? process.cwd(),
 					env: process.env,
 					maxBuffer: 10 * 1024 * 1024,
 				});

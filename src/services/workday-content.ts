@@ -7,6 +7,7 @@ import type {
 	WorkerPoolScaleResult,
 } from '@treeseed/sdk';
 import { stringify as stringifyYaml } from 'yaml';
+import type { GeneratedAgentArtifactSummary } from './research-knowledge-workday.ts';
 
 type JsonRecord = Record<string, unknown>;
 
@@ -25,6 +26,7 @@ export interface WorkdayContentTaskSummary {
 	lastEventKind?: string | null;
 	outputCount?: number;
 	changedFiles?: string[];
+	generatedArtifacts?: GeneratedAgentArtifactSummary[];
 }
 
 export interface WorkdayContentReleaseRecord {
@@ -51,7 +53,16 @@ export interface WorkdayContentSnapshotInput {
 	scaleResult: WorkerPoolScaleResult;
 	tasks: WorkdayContentTaskSummary[];
 	changedFiles: string[];
+	generatedArtifacts: GeneratedAgentArtifactSummary[];
 	releases: WorkdayContentReleaseRecord[];
+	operationEvents?: JsonRecord[];
+	worktreeSnapshots?: JsonRecord[];
+	stagingMerges?: JsonRecord[];
+	mergeFailures?: JsonRecord[];
+	repairTasks?: JsonRecord[];
+	releaseApprovals?: JsonRecord[];
+	releaseResults?: JsonRecord[];
+	codexUsage?: JsonRecord[];
 	generatedAt: string;
 }
 
@@ -118,6 +129,22 @@ function renderChangedFiles(changedFiles: string[]) {
 	return changedFiles.map((filePath) => `- \`${filePath}\``).join('\n') + '\n';
 }
 
+function renderGeneratedArtifacts(artifacts: GeneratedAgentArtifactSummary[]) {
+	if (artifacts.length === 0) {
+		return '- No generated research or knowledge artifacts were recorded.\n';
+	}
+	return artifacts.map((artifact) => {
+		const label = artifact.title || artifact.id;
+		const details = [
+			artifact.artifactKind,
+			artifact.targetPath,
+			artifact.recommendation ? `recommendation: ${artifact.recommendation}` : null,
+			Number.isFinite(artifact.totalScore) ? `score: ${artifact.totalScore}` : null,
+		].filter(Boolean).join(', ');
+		return `- \`${label}\`${details ? ` (${details})` : ''}`;
+	}).join('\n') + '\n';
+}
+
 function renderReleases(releases: WorkdayContentReleaseRecord[]) {
 	if (releases.length === 0) {
 		return '- No releases or deployments were recorded during this workday.\n';
@@ -140,6 +167,53 @@ function renderPriorityItems(snapshot: PrioritySnapshot | null) {
 			Number.isFinite(item.estimatedCredits) ? `credits: ${item.estimatedCredits}` : null,
 		].filter(Boolean).join(', ');
 		return `- \`${item.id}\`${item.title ? ` ${item.title}` : ''}${details ? ` (${details})` : ''}`;
+	}).join('\n') + '\n';
+}
+
+function renderOperationEvents(events: JsonRecord[]) {
+	if (events.length === 0) {
+		return '- No operation events were recorded.\n';
+	}
+	return events.map((event) => {
+		const details = [
+			event.status ? `status: ${event.status}` : null,
+			event.agentRole ? `role: ${event.agentRole}` : null,
+			event.taskId ? `task: ${event.taskId}` : null,
+		].filter(Boolean).join(', ');
+		return `- \`${String(event.operation ?? 'operation')}\`${details ? ` (${details})` : ''}`;
+	}).join('\n') + '\n';
+}
+
+function renderSnapshots(snapshots: JsonRecord[]) {
+	if (snapshots.length === 0) {
+		return '- No worktree snapshots were recorded.\n';
+	}
+	return snapshots.map((snapshot) => {
+		const label = String(snapshot.summary ?? snapshot.kind ?? snapshot.ref ?? 'snapshot');
+		const changed = Array.isArray(snapshot.changedPaths) ? snapshot.changedPaths.length : 0;
+		return `- \`${label}\` (${changed} changed path(s)${snapshot.taskId ? `, task: ${snapshot.taskId}` : ''})`;
+	}).join('\n') + '\n';
+}
+
+function renderStagingAndRelease(input: WorkdayContentSnapshotInput) {
+	const rows = [
+		`- Staging merges: ${input.stagingMerges?.length ?? 0}`,
+		`- Merge failures: ${input.mergeFailures?.length ?? 0}`,
+		`- Release approvals: ${input.releaseApprovals?.length ?? 0}`,
+		`- Release results: ${input.releaseResults?.length ?? 0}`,
+		`- Codex usage records: ${input.codexUsage?.length ?? 0}`,
+	];
+	return `${rows.join('\n')}\n`;
+}
+
+function renderRepairTasks(repairTasks: JsonRecord[]) {
+	if (repairTasks.length === 0) {
+		return '- No repair tasks were created.\n';
+	}
+	return repairTasks.map((task) => {
+		const label = String(task.kind ?? task.id ?? 'repair_task');
+		const target = typeof task.targetPath === 'string' ? ` (${task.targetPath})` : '';
+		return `- \`${label}\`${target}`;
 	}).join('\n') + '\n';
 }
 
@@ -166,6 +240,26 @@ function buildMarkdownBody(input: WorkdayContentSnapshotInput) {
 		'## Changed Files',
 		'',
 		renderChangedFiles(input.changedFiles).trimEnd(),
+		'',
+		'## Generated Artifacts',
+		'',
+		renderGeneratedArtifacts(input.generatedArtifacts).trimEnd(),
+		'',
+		'## Operation Events',
+		'',
+		renderOperationEvents(input.operationEvents ?? []).trimEnd(),
+		'',
+		'## Worktree Snapshots',
+		'',
+		renderSnapshots(input.worktreeSnapshots ?? []).trimEnd(),
+		'',
+		'## Staging And Release',
+		'',
+		renderStagingAndRelease(input).trimEnd(),
+		'',
+		'## Repair Tasks',
+		'',
+		renderRepairTasks(input.repairTasks ?? []).trimEnd(),
 		'',
 		'## Releases',
 		'',
@@ -197,7 +291,16 @@ export function writeWorkdayContentSnapshot(input: WorkdayContentSnapshotInput):
 		generatedAt,
 		summary: input.summary,
 		changedFiles: input.changedFiles,
+		generatedArtifacts: input.generatedArtifacts,
 		releases: input.releases,
+		operationEvents: input.operationEvents ?? [],
+		worktreeSnapshots: input.worktreeSnapshots ?? [],
+		stagingMerges: input.stagingMerges ?? [],
+		mergeFailures: input.mergeFailures ?? [],
+		repairTasks: input.repairTasks ?? [],
+		releaseApprovals: input.releaseApprovals ?? [],
+		releaseResults: input.releaseResults ?? [],
+		codexUsage: input.codexUsage ?? [],
 	})).slice(0, 8);
 	const reportVersion = `${compactTimestamp(generatedAt)}-${identityHash}`;
 	const title = `Workday ${workDayId} Report ${generatedAt.slice(0, 10)}`;
@@ -233,7 +336,16 @@ export function writeWorkdayContentSnapshot(input: WorkdayContentSnapshotInput):
 		activeTasks: Number(input.summary.activeTasks ?? 0),
 		taskItems: input.tasks,
 		changedFiles: input.changedFiles,
+		generatedArtifacts: input.generatedArtifacts,
 		releases: input.releases,
+		operationEvents: input.operationEvents ?? [],
+		worktreeSnapshots: input.worktreeSnapshots ?? [],
+		stagingMerges: input.stagingMerges ?? [],
+		mergeFailures: input.mergeFailures ?? [],
+		repairTasks: input.repairTasks ?? [],
+		releaseApprovals: input.releaseApprovals ?? [],
+		releaseResults: input.releaseResults ?? [],
+		codexUsage: input.codexUsage ?? [],
 		scaleDecision: input.scaleDecision,
 		scaleResult: input.scaleResult,
 		metadata: {

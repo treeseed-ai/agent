@@ -1,7 +1,18 @@
+import { execFile } from 'node:child_process';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { promisify } from 'node:util';
 import { GitRuntime } from '@treeseed/sdk/git-runtime';
 import type { AgentMutationAdapter } from '../runtime-types.ts';
+
+const execFileAsync = promisify(execFile);
+
+function isNothingToCommit(error: unknown) {
+	if (!error || typeof error !== 'object') return false;
+	const stdout = 'stdout' in error ? String((error as { stdout?: string }).stdout ?? '') : '';
+	const stderr = 'stderr' in error ? String((error as { stderr?: string }).stderr ?? '') : '';
+	return `${stdout}\n${stderr}`.includes('nothing to commit');
+}
 
 export class LocalBranchMutationAdapter implements AgentMutationAdapter {
 	private readonly git: GitRuntime;
@@ -25,7 +36,22 @@ export class LocalBranchMutationAdapter implements AgentMutationAdapter {
 		const filePath = path.join(worktreePath, input.relativePath);
 		await mkdir(path.dirname(filePath), { recursive: true });
 		await writeFile(filePath, input.content, 'utf8');
-		const git = await this.git.commitFileChange(filePath, branchName, input.commitMessage);
+		let git;
+		try {
+			git = await this.git.commitFileChange(filePath, branchName, input.commitMessage);
+		} catch (error) {
+			if (!isNothingToCommit(error)) {
+				throw error;
+			}
+			const { stdout } = await execFileAsync('git', ['rev-parse', 'HEAD'], { cwd: worktreePath });
+			git = {
+				branchName,
+				commitMessage: input.commitMessage,
+				worktreePath,
+				commitSha: stdout.trim() || null,
+				changedPaths: [filePath],
+			};
+		}
 		return {
 			branchName: git.branchName,
 			commitMessage: git.commitMessage,

@@ -33,6 +33,22 @@ export interface ResearchCompletedMessage {
 	researcherRunId: string;
 }
 
+export interface KnowledgeDraftCreatedMessage {
+	draftId: string;
+	targetPath: string;
+	sourceQuestionId: string;
+	sourceResearchIds: string[];
+	generatorRunId: string;
+}
+
+export interface KnowledgeOptimizationCompletedMessage {
+	reportId: string;
+	draftId: string;
+	recommendation: string;
+	totalScore: number;
+	optimizerRunId: string;
+}
+
 export interface TaskCompleteMessage {
 	branchName: string | null;
 	changedTargets: string[];
@@ -86,6 +102,8 @@ export interface AgentMessageContracts {
 	subscriber_notified: SubscriberNotifiedMessage;
 	research_started: ResearchStartedMessage;
 	research_completed: ResearchCompletedMessage;
+	knowledge_draft_created: KnowledgeDraftCreatedMessage;
+	knowledge_optimization_completed: KnowledgeOptimizationCompletedMessage;
 	task_complete: TaskCompleteMessage;
 	task_waiting: TaskWaitingMessage;
 	task_failed: TaskFailedMessage;
@@ -106,6 +124,8 @@ export const AGENT_MESSAGE_TYPES = [
 	'subscriber_notified',
 	'research_started',
 	'research_completed',
+	'knowledge_draft_created',
+	'knowledge_optimization_completed',
 	'task_complete',
 	'task_waiting',
 	'task_failed',
@@ -186,6 +206,22 @@ export function parseAgentMessagePayload<TType extends AgentMessageType>(
 				questionId: ensureString(parsed.questionId, 'questionId'),
 				knowledgeId: ensureOptionalString(parsed.knowledgeId, 'knowledgeId'),
 				researcherRunId: ensureString(parsed.researcherRunId, 'researcherRunId'),
+			} as AgentMessagePayload<TType>;
+		case 'knowledge_draft_created':
+			return {
+				draftId: ensureString(parsed.draftId, 'draftId'),
+				targetPath: ensureString(parsed.targetPath, 'targetPath'),
+				sourceQuestionId: ensureString(parsed.sourceQuestionId, 'sourceQuestionId'),
+				sourceResearchIds: ensureStringArray(parsed.sourceResearchIds, 'sourceResearchIds'),
+				generatorRunId: ensureString(parsed.generatorRunId, 'generatorRunId'),
+			} as AgentMessagePayload<TType>;
+		case 'knowledge_optimization_completed':
+			return {
+				reportId: ensureString(parsed.reportId, 'reportId'),
+				draftId: ensureString(parsed.draftId, 'draftId'),
+				recommendation: ensureString(parsed.recommendation, 'recommendation'),
+				totalScore: ensureNumber(parsed.totalScore, 'totalScore'),
+				optimizerRunId: ensureString(parsed.optimizerRunId, 'optimizerRunId'),
 			} as AgentMessagePayload<TType>;
 		case 'task_complete':
 			return {

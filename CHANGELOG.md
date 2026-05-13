@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.8.10] - 2026-05-13
+
+### Tests
+
+- build(source): sync package dependency references (dd0caf6470b8)
+
+### Dependencies
+
+- Release @treeseed/agent 0.8.10.
+
 ## [0.8.9] - 2026-05-12
 
 ### Dependencies

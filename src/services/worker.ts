@@ -2,11 +2,11 @@
 
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import type { AgentTriggerInvocation } from '../agents/runtime-types.ts';
 import { AgentKernel } from '../agents/kernel/agent-kernel.ts';
 import { createControlPlaneReporter } from '@treeseed/sdk';
 import type { CapacityTaskExecutionEnvelope } from '@treeseed/sdk';
+import { isDirectEntrypoint } from '../entrypoint.ts';
 import { buildTaskContext, createQueueClient, createServiceSdk, resolveServiceRepoRoot, resolveWorkerConfig } from './common.ts';
 
 function parseTaskPayload(task: Record<string, unknown> | null) {
@@ -553,8 +553,6 @@ export async function startWorkerLoop() {
 	}
 }
 
-const currentFile = fileURLToPath(import.meta.url);
-const entryFile = process.argv[1] ?? '';
-if (entryFile === currentFile) {
+if (isDirectEntrypoint(import.meta.url, 'worker.ts')) {
 	await startWorkerLoop();
 }

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { fileURLToPath } from 'node:url';
+import { isDirectEntrypoint } from '../entrypoint.ts';
 import { createServiceSdk } from './common.ts';
 import {
 	resolveManagerServiceConfig,
@@ -183,8 +183,6 @@ export async function runScheduledWorkdayManager(options: {
 	}
 }
 
-const currentFile = fileURLToPath(import.meta.url);
-const entryFile = process.argv[1] ?? '';
-if (entryFile === currentFile) {
+if (isDirectEntrypoint(import.meta.url, 'workday-manager.ts')) {
 	process.stdout.write(`${JSON.stringify(await runScheduledWorkdayManager(), null, 2)}\n`);
 }

@@ -1,4 +1,6 @@
 import crypto from 'node:crypto';
+import { existsSync, readdirSync, statSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { AgentSdk } from '@treeseed/sdk';
 import { CloudflareQueuePullClient } from '@treeseed/sdk/remote';
 import type { SdkQueueMessageEnvelope } from '@treeseed/sdk';
@@ -14,11 +16,26 @@ export function resolveServiceRepoRoot() {
 	return process.env.TREESEED_AGENT_REPO_ROOT?.trim() || process.cwd();
 }
 
+function resolveLocalD1PersistTo() {
+	const explicit = process.env.TREESEED_AGENT_D1_PERSIST_TO?.trim();
+	if (explicit) return explicit;
+	const d1Root = resolve(resolveServiceRepoRoot(), '.treeseed/generated/environments/local/.wrangler/state/v3/d1/miniflare-D1DatabaseObject');
+	if (!existsSync(d1Root)) return undefined;
+	const candidates = readdirSync(d1Root)
+		.filter((entry) => entry.endsWith('.sqlite') && entry !== 'metadata.sqlite')
+		.map((entry) => {
+			const path = resolve(d1Root, entry);
+			return { path, size: statSync(path).size };
+		})
+		.sort((left, right) => right.size - left.size);
+	return candidates[0]?.path;
+}
+
 export function createServiceSdk() {
 	return AgentSdk.createLocal({
 		repoRoot: resolveServiceRepoRoot(),
 		databaseName: process.env.TREESEED_AGENT_D1_DATABASE ?? 'karyon-docs-site-data',
-		persistTo: process.env.TREESEED_AGENT_D1_PERSIST_TO ?? undefined,
+		persistTo: resolveLocalD1PersistTo(),
 	});
 }
 

@@ -16,6 +16,7 @@ function createReporter() {
 		reportWorkdaySummary: vi.fn(async () => undefined),
 		getProjectCapacityPlan: vi.fn(async () => null),
 		createCapacityReservation: vi.fn(async () => null),
+		reportCapacityEstimate: vi.fn(async () => null),
 		reportCapacityUsage: vi.fn(async () => undefined),
 		reportCapacityRoutingDecision: vi.fn(async () => null),
 		createApprovalRequest: vi.fn(async () => null),
@@ -41,6 +42,7 @@ function createSdkStub() {
 	let latestScaleDecision: Record<string, unknown> | null = null;
 	const tasks: Array<Record<string, unknown>> = [];
 	const creditLedger: Array<Record<string, unknown>> = [];
+	const taskOutputs: Array<Record<string, unknown>> = [];
 
 	return {
 		getWorkPolicy: vi.fn(async () => ({ payload: null })),
@@ -83,6 +85,12 @@ function createSdkStub() {
 						relatedObjectives: ['reduce-spend'],
 						updated_at: '2026-04-09T00:00:00.000Z',
 					}],
+				};
+			}
+			if (request.model === 'task_output') {
+				const taskId = request.filters?.find((filter: Record<string, unknown>) => filter.field === 'taskId')?.value;
+				return {
+					payload: taskOutputs.filter((output) => !taskId || output.taskId === taskId),
 				};
 			}
 			return { payload: [] };
@@ -148,6 +156,7 @@ function createSdkStub() {
 				idempotencyKey: request.idempotencyKey,
 				payloadJson: JSON.stringify(request.payload),
 				graphVersion: request.graphVersion,
+				parentTaskId: request.parentTaskId ?? null,
 				createdAt: '2026-04-15T13:00:00.000Z',
 				updatedAt: '2026-04-15T13:00:00.000Z',
 			};
@@ -173,6 +182,12 @@ function createSdkStub() {
 			const task = tasks.find((entry) => entry.id === request.id);
 			if (task) {
 				task.state = request.state ?? task.state;
+				if (request.patch) {
+					task.payloadJson = JSON.stringify({
+						...JSON.parse(String(task.payloadJson ?? '{}')),
+						...request.patch,
+					});
+				}
 			}
 			return { payload: task ?? null };
 		}),
@@ -199,6 +214,11 @@ function createSdkStub() {
 		}),
 		listTaskCredits: vi.fn(async () => ({ payload: creditLedger })),
 		getLatestPrioritySnapshot: vi.fn(async () => ({ payload: prioritySnapshot })),
+		__tasks: tasks,
+		__taskOutputs: taskOutputs,
+		__setActiveWorkDay: (value: Record<string, unknown>) => {
+			activeWorkDay = value;
+		},
 	};
 }
 
@@ -295,6 +315,94 @@ describe('manager service', () => {
 			poolName: config.poolName,
 		});
 		expect((reporter.reportScaleDecision as any).mock.calls).toHaveLength(1);
+	});
+
+	it('materializes completed planning proposals progressively and marks them idempotent', async () => {
+		const sdk = createSdkStub();
+		const reporter = createReporter();
+		const scaler = createScaler();
+		(sdk.listAgentSpecs as any).mockResolvedValue([]);
+		(sdk as any).__setActiveWorkDay({
+			id: 'workday-1',
+			projectId: 'project-1',
+			state: 'active',
+			capacityBudget: 30,
+			capacityUsed: 0,
+			graphVersion: 'graph-1',
+			startedAt: '2026-04-15T13:00:00.000Z',
+		});
+		(sdk as any).__tasks.push({
+			id: 'planning-1',
+			workDayId: 'workday-1',
+			agentId: 'planner-agent',
+			type: 'planning_task',
+			state: 'completed',
+			priority: 70,
+			idempotencyKey: 'workday-1:planning:source-1',
+			parentTaskId: 'source-1',
+			payloadJson: JSON.stringify({
+				executionKind: 'planning',
+				planning: { sourceTaskId: 'source-1', planningDepth: 0 },
+			}),
+			graphVersion: 'graph-1',
+			createdAt: '2026-04-15T13:00:00.000Z',
+			updatedAt: '2026-04-15T13:00:00.000Z',
+		});
+		(sdk as any).__taskOutputs.push({
+			id: 'output-1',
+			taskId: 'planning-1',
+			outputJson: JSON.stringify({
+				planningProposal: {
+					schemaVersion: 1,
+					planId: 'plan-1',
+					sourceTaskId: 'source-1',
+					parentTaskId: 'planning-1',
+					planningDepth: 0,
+					tasks: [
+						{ id: 'verify', type: 'workflow_followup', priority: 10, taskSignature: 'workflow.dispatch', estimatedCreditsP50: 2, estimatedCreditsP90: 4, payload: { executionKind: 'workflow_dispatch', namespace: 'workflow', operation: 'verify' } },
+						{ id: 'refactor', type: 'workflow_followup', priority: 9, taskSignature: 'workflow.dispatch', estimatedCreditsP50: 10, estimatedCreditsP90: 20, payload: { executionKind: 'workflow_dispatch', namespace: 'workflow', operation: 'refactor' } },
+					],
+				},
+			}),
+			createdAt: '2026-04-15T13:01:00.000Z',
+		});
+		const config = {
+			...resolveManagerServiceConfig(),
+			mode: 'reconcile' as const,
+			projectId: 'project-1',
+			teamId: 'team-1',
+			environment: 'staging' as const,
+			defaultSchedule: {
+				timezone: 'UTC',
+				windows: [{ days: [3], startTime: '00:00', endTime: '23:59' }],
+			},
+			dailyTaskCreditBudget: 30,
+			maxQueuedTasks: 1,
+			maxQueuedCredits: 10,
+			priorityModels: [],
+			autoscale: {
+				minWorkers: 0,
+				maxWorkers: 3,
+				targetQueueDepth: 1,
+				cooldownSeconds: 0,
+			},
+		};
+
+		const result = await runManagerCycle({
+			sdk: sdk as any,
+			reporter: reporter as any,
+			scaler: scaler as any,
+			config,
+			now: new Date('2026-04-15T13:02:00.000Z'),
+		});
+
+		expect(result.seededTasks.map((task: Record<string, unknown>) => task.type)).toContain('workflow_followup');
+		const planningTask = (sdk as any).__tasks.find((task: Record<string, unknown>) => task.id === 'planning-1');
+		expect(JSON.parse(String(planningTask.payloadJson))).toMatchObject({
+			planningMaterializedAt: '2026-04-15T13:02:00.000Z',
+		});
+		expect((sdk.createTask as any).mock.calls.filter((call) => call[0]?.parentTaskId === 'planning-1')).toHaveLength(1);
+		expect((sdk.recordTaskProgress as any).mock.calls.some((call) => call[0]?.appendEvent?.kind === 'plan_partially_admitted')).toBe(true);
 	});
 
 	it('holds manager scale-down during cooldown', async () => {

@@ -5,8 +5,8 @@ import { join } from 'node:path';
 import type { AgentTriggerInvocation } from '../agents/runtime-types.ts';
 import type { AgentContext, AgentHandler } from '../agents/runtime-types.ts';
 import { AgentKernel } from '../agents/kernel/agent-kernel.ts';
-import { createControlPlaneReporter } from '@treeseed/sdk';
-import type { CapacityTaskExecutionEnvelope } from '@treeseed/sdk';
+import { createControlPlaneReporter, shouldInterruptForCapacity } from '@treeseed/sdk';
+import type { CapacityTaskExecutionEnvelope, TaskCheckpointArtifact } from '@treeseed/sdk';
 import { isDirectEntrypoint } from '../entrypoint.ts';
 import { buildTaskContext, createQueueClient, createQueuePushClient, createServiceSdk, queueEnvelopeForTask, resolveServiceRepoRoot, resolveWorkerConfig } from './common.ts';
 import { researcherHandler } from '../agents/handlers/researcher.ts';
@@ -37,6 +37,9 @@ import {
 	normalizeKnowledgePromotionTaskInput,
 	runKnowledgePromotionToStaging,
 } from './knowledge-promotion.ts';
+import { admissionForTaskProposal } from './task-admission.ts';
+import { buildPlanningProposalFromTask } from './task-planning.ts';
+import type { WorkdayPolicy } from '@treeseed/sdk';
 
 function parseTaskPayload(task: Record<string, unknown> | null) {
 	const raw = typeof task?.payloadJson === 'string' ? task.payloadJson : '{}';
@@ -60,6 +63,66 @@ function readCapacityEnvelope(payload: Record<string, unknown>): CapacityTaskExe
 	return Object.keys(envelope).length > 0 ? envelope as CapacityTaskExecutionEnvelope : null;
 }
 
+function readExecutionProfileId(payload: Record<string, unknown>, fallback = 'standard-code-model') {
+	const direct = readString(payload.executionProfileId);
+	if (direct) return direct;
+	const profile = asRecord(payload.executionProfile);
+	const profileId = readString(profile.id);
+	if (profileId) return profileId;
+	const envelope = asRecord(payload.capacityEnvelope);
+	const envelopeMetadata = asRecord(envelope.metadata);
+	const envelopeProfile = readString(envelopeMetadata.executionProfileId);
+	if (envelopeProfile) return envelopeProfile;
+	const capacity = asRecord(payload.capacity);
+	const capacityProfile = readString(capacity.executionProfileId);
+	return capacityProfile || fallback;
+}
+
+function readAttentionEstimate(payload: Record<string, unknown>) {
+	const direct = asRecord(payload.attentionEstimate);
+	const envelope = asRecord(payload.capacityEnvelope);
+	const envelopeMetadata = asRecord(envelope.metadata);
+	const envelopeAttention = asRecord(envelopeMetadata.attentionEstimate);
+	const capacityRoute = asRecord(payload.capacityRoute);
+	const routeAttention = asRecord(capacityRoute.attentionEstimate);
+	const candidate = Object.keys(direct).length > 0
+		? direct
+		: Object.keys(envelopeAttention).length > 0
+			? envelopeAttention
+			: routeAttention;
+	return Object.keys(candidate).length > 0 ? candidate : null;
+}
+
+function readUtilityEstimate(payload: Record<string, unknown>) {
+	const direct = asRecord(payload.utilityEstimate);
+	const envelope = asRecord(payload.capacityEnvelope);
+	const envelopeMetadata = asRecord(envelope.metadata);
+	const envelopeUtility = asRecord(envelopeMetadata.utilityEstimate);
+	const capacityRoute = asRecord(payload.capacityRoute);
+	const routeUtility = asRecord(capacityRoute.utilityEstimate);
+	const candidate = Object.keys(direct).length > 0
+		? direct
+		: Object.keys(envelopeUtility).length > 0
+			? envelopeUtility
+			: routeUtility;
+	return Object.keys(candidate).length > 0 ? candidate : null;
+}
+
+function readHybridExecutionPlan(payload: Record<string, unknown>) {
+	const direct = asRecord(payload.hybridExecutionPlan);
+	const envelope = asRecord(payload.capacityEnvelope);
+	const envelopeMetadata = asRecord(envelope.metadata);
+	const envelopeHybrid = asRecord(envelopeMetadata.hybridExecutionPlan);
+	const capacityRoute = asRecord(payload.capacityRoute);
+	const routeHybrid = asRecord(capacityRoute.hybridExecutionPlan);
+	const candidate = Object.keys(direct).length > 0
+		? direct
+		: Object.keys(envelopeHybrid).length > 0
+			? envelopeHybrid
+			: routeHybrid;
+	return Object.keys(candidate).length > 0 ? candidate : null;
+}
+
 function readCapacityMetadata(payload: Record<string, unknown>) {
 	const capacity = asRecord(payload.capacity);
 	const providerId = typeof capacity.providerId === 'string' ? capacity.providerId : null;
@@ -74,7 +137,147 @@ function readCapacityMetadata(payload: Record<string, unknown>) {
 		estimatedCreditsP50: Number.isFinite(Number(capacity.estimatedCreditsP50)) ? Number(capacity.estimatedCreditsP50) : null,
 		estimatedCreditsP90: Number.isFinite(Number(capacity.estimatedCreditsP90)) ? Number(capacity.estimatedCreditsP90) : null,
 		reservedCredits: Number.isFinite(Number(capacity.reservedCredits)) ? Number(capacity.reservedCredits) : null,
+		executionProfileId: readExecutionProfileId(payload),
+		attentionEstimate: readAttentionEstimate(payload),
+		utilityEstimate: readUtilityEstimate(payload),
+		hybridExecutionPlan: readHybridExecutionPlan(payload),
 	};
+}
+
+function lowConfidenceResult(output: Record<string, unknown>) {
+	const result = asRecord(output.result);
+	return result.insufficientConfidence === true
+		|| result.confidence === 'low'
+		|| asRecord(output.summary).confidence === 'low';
+}
+
+function defaultWorkerAdmissionPolicy(projectId: string): WorkdayPolicy {
+	return {
+		projectId: projectId || 'project',
+		environment: 'local',
+		enabled: true,
+		schedule: { timezone: 'UTC', windows: [] },
+		startCron: '0 9 * * 1-5',
+		durationMinutes: 480,
+		maxRunners: 1,
+		maxWorkersPerRunner: 1,
+		dailyCreditBudget: 100,
+		closeoutGraceMinutes: 10,
+		dailyTaskCreditBudget: 100,
+		maxQueuedTasks: 10,
+		maxQueuedCredits: 100,
+		autoscale: { minWorkers: 0, maxWorkers: 1, targetQueueDepth: 1, cooldownSeconds: 60 },
+		creditWeights: [],
+		metadata: {
+			reserveBufferPercent: 10,
+			recoveryBudgetCredits: 5,
+			planningThresholdCredits: 20,
+			approvalThresholdCredits: 50,
+			maxDownstreamTasks: 5,
+		},
+	};
+}
+
+async function createHybridEscalationTask(input: {
+	sdk: ReturnType<typeof createServiceSdk>;
+	task: Record<string, unknown> | null;
+	taskId: string;
+	output: Record<string, unknown>;
+	payload: Record<string, unknown>;
+	workerId: string;
+}) {
+	if (!lowConfidenceResult(input.output)) return;
+	const hybridPlan = readHybridExecutionPlan(input.payload);
+	const phases = Array.isArray(hybridPlan?.phases) ? hybridPlan.phases.map(asRecord) : [];
+	const phase = phases.find((entry) => entry.kind === 'review') ?? phases.find((entry) => entry.kind === 'human_escalation');
+	if (!phase) return;
+	const workDayId = readString(input.task?.workDayId ?? input.task?.work_day_id);
+	if (!workDayId) return;
+	const taskSignature = readString(phase.taskSignature) || (phase.kind === 'human_escalation' ? 'human.review_escalation' : 'review.verify');
+	const executionProfileId = readString(phase.executionProfileId) || 'cheap-review-model';
+	const payload = {
+		taskSignature,
+		executionProfileId,
+		hybridExecutionPlan: hybridPlan,
+		hybridPhase: phase,
+		parentTaskId: input.taskId,
+		sourceOutput: input.output,
+		reason: 'insufficient_confidence',
+		requiresApproval: phase.kind === 'human_escalation',
+		createdBy: input.workerId,
+	};
+	const admission = admissionForTaskProposal({
+		type: 'hybrid_escalation',
+		payload,
+		workDay: {
+			id: workDayId,
+			capacityBudget: Number(input.payload.capacityBudget ?? 100),
+			capacityUsed: Number(input.payload.capacityUsed ?? 0),
+		},
+		policy: defaultWorkerAdmissionPolicy(String(process.env.TREESEED_PROJECT_ID ?? 'project')),
+		capacityPlan: null,
+		queuedCredits: 0,
+		source: 'worker.hybrid_escalation',
+	});
+	const created = await input.sdk.createTask({
+		workDayId,
+		agentId: readString(input.payload.escalationAgentId) || 'reviewer',
+		type: 'hybrid_escalation',
+		state: admission.state,
+		priority: Math.max(1, Number(input.task?.priority ?? 50)),
+		idempotencyKey: `${workDayId}:hybrid_escalation:${input.taskId}:${String(phase.id ?? phase.kind ?? 'review')}`,
+		payload: admission.payload,
+		graphVersion: typeof input.task?.graphVersion === 'string' ? input.task.graphVersion : null,
+		parentTaskId: input.taskId,
+		actor: 'worker',
+	});
+	if (created.payload) {
+		const createdTaskId = readString(created.payload.id);
+		await input.sdk.recordTaskProgress({
+			id: createdTaskId,
+			state: admission.state,
+			appendEvent: {
+				kind: 'classified',
+				data: admission.classification as unknown as Record<string, unknown>,
+			},
+			actor: 'worker',
+		});
+		await input.sdk.recordTaskProgress({
+			id: createdTaskId,
+			state: admission.state,
+			appendEvent: {
+				kind: 'admission_decided',
+				data: admission.admission as unknown as Record<string, unknown>,
+			},
+			actor: 'worker',
+		});
+		if (admission.admission.outcome === 'budget_blocked' || admission.admission.outcome === 'deferred') {
+			await input.sdk.recordTaskProgress({
+				id: createdTaskId,
+				state: admission.state,
+				appendEvent: {
+					kind: 'deferred_for_budget',
+					data: admission.admission as unknown as Record<string, unknown>,
+				},
+				actor: 'worker',
+			});
+		}
+		await input.sdk.recordTaskProgress({
+			id: input.taskId,
+			workerId: input.workerId,
+			appendEvent: {
+				kind: 'hybrid_escalation_created',
+				data: {
+					taskId: createdTaskId,
+					taskSignature,
+					executionProfileId,
+					admissionOutcome: admission.admission.outcome,
+					reason: 'insufficient_confidence',
+				},
+			},
+			actor: 'worker',
+		});
+	}
 }
 
 function runnerRepositoryPath(volumeRoot: string, repositoryId: string, taskId: string) {
@@ -138,6 +341,12 @@ async function ensureRunnerComposedWorkspace(volumeRoot: string, task: Record<st
 class WorkerPausedForApproval extends Error {
 	constructor(readonly request: Record<string, unknown>) {
 		super(String(request.summary ?? request.title ?? 'Task paused for approval.'));
+	}
+}
+
+class WorkerCapacityInterrupted extends Error {
+	constructor(readonly request: Record<string, unknown>) {
+		super(String(request.summary ?? 'Task interrupted by capacity policy.'));
 	}
 }
 
@@ -254,6 +463,103 @@ function envelope(input: Omit<ResearchKnowledgeTaskOutputEnvelope, 'summary'> & 
 			summary: input.summary,
 		},
 	};
+}
+
+function buildCheckpointArtifact(input: {
+	taskId: string;
+	reason: string;
+	payload: Record<string, unknown>;
+	output?: Record<string, unknown> | null;
+	workerId: string;
+}): TaskCheckpointArtifact {
+	const output = asRecord(input.output);
+	const summary = asRecord(output.summary);
+	const capacityUsage = asRecord(output.capacityUsage);
+	const changedPaths = Array.isArray(output.changedPaths)
+		? output.changedPaths.filter((entry): entry is string => typeof entry === 'string')
+		: Array.isArray(summary.changedPaths)
+			? summary.changedPaths.filter((entry): entry is string => typeof entry === 'string')
+			: [];
+	const estimatedRemainingP50 = Number(input.payload.estimatedRemainingCreditsP50 ?? input.payload.estimatedRemainingP50 ?? 0);
+	const estimatedRemainingP90 = Number(input.payload.estimatedRemainingCreditsP90 ?? input.payload.estimatedRemainingP90 ?? estimatedRemainingP50);
+	return {
+		taskId: input.taskId,
+		checkpointId: `${input.taskId}:checkpoint:${Date.now()}`,
+		branch: readString(input.payload.branchName) || readString(output.branchName) || null,
+		baseCommit: readString(input.payload.baseCommit) || null,
+		currentCommit: readString(output.commitSha) || null,
+		currentGoal: readString(input.payload.currentGoal) || readString(input.payload.taskSignature) || null,
+		currentPhase: 'capacity_interrupt',
+		filesChanged: changedPaths,
+		commandsRun: Array.isArray(output.commandsRun) ? output.commandsRun.filter((entry): entry is string => typeof entry === 'string') : [],
+		testStatus: readString(output.testStatus) || 'unknown',
+		knownFailures: Array.isArray(output.knownFailures) ? output.knownFailures.filter((entry): entry is string => typeof entry === 'string') : [],
+		completedWork: [readString(summary.summary) || readString(output.summary) || 'Task interrupted before completion.'],
+		remainingWorkEstimate: estimatedRemainingP50 > 0 || estimatedRemainingP90 > 0
+			? { p50: Math.max(0, estimatedRemainingP50), p90: Math.max(estimatedRemainingP50, estimatedRemainingP90) }
+			: null,
+		rollbackStrategy: 'Preserve branch/worktree and revert to base commit if continuation is rejected.',
+		continuationStrategy: 'Resume from checkpoint artifact and complete the remaining work through normal admission.',
+		repositoryState: changedPaths.length > 0 || Number(capacityUsage.filesChanged ?? 0) > 0 ? 'checkpointed_dirty' : 'clean',
+		createdAt: new Date().toISOString(),
+		metadata: {
+			reason: input.reason,
+			workerId: input.workerId,
+		},
+	};
+}
+
+async function checkpointInterruptedTask(input: {
+	sdk: ReturnType<typeof createServiceSdk>;
+	taskId: string;
+	workerId: string;
+	reason: string;
+	payload: Record<string, unknown>;
+	output?: Record<string, unknown> | null;
+	request?: Record<string, unknown>;
+}) {
+	const checkpoint = buildCheckpointArtifact({
+		taskId: input.taskId,
+		reason: input.reason,
+		payload: input.payload,
+		output: input.output,
+		workerId: input.workerId,
+	});
+	await input.sdk.recordTaskProgress({
+		id: input.taskId,
+		workerId: input.workerId,
+		state: 'checkpointing',
+		appendEvent: {
+			kind: 'checkpoint_started',
+			data: { reason: input.reason },
+		},
+		actor: 'worker',
+	});
+	await input.sdk.recordTaskProgress({
+		id: input.taskId,
+		workerId: input.workerId,
+		state: 'checkpointed',
+		appendEvent: {
+			kind: 'checkpointed',
+			data: checkpoint as unknown as Record<string, unknown>,
+		},
+		actor: 'worker',
+	});
+	await input.sdk.recordTaskProgress({
+		id: input.taskId,
+		workerId: input.workerId,
+		state: 'continuation_required',
+		appendEvent: {
+			kind: 'continuation_required',
+			data: {
+				reason: input.reason,
+				checkpoint,
+				...(input.request ?? {}),
+			},
+		},
+		actor: 'worker',
+	});
+	return checkpoint;
 }
 
 export async function executeResearchKnowledgeTask(input: {
@@ -519,6 +825,9 @@ async function executeQueuedTask(options: {
 	});
 	const capacityEnvelope = readCapacityEnvelope(payload);
 	const capacityMetadata = readCapacityMetadata(payload);
+	const attentionEstimate = readAttentionEstimate(payload);
+	const utilityEstimate = readUtilityEstimate(payload);
+	const hybridExecutionPlan = readHybridExecutionPlan(payload);
 	const explicitApproval = asRecord(payload.approvalRequest);
 	if (Object.keys(explicitApproval).length > 0 || capacityEnvelope?.maxCredits === 0) {
 		throw new WorkerPausedForApproval({
@@ -536,8 +845,55 @@ async function executeQueuedTask(options: {
 			},
 		});
 	}
+	const explicitInterrupt = asRecord(payload.capacityInterrupt);
+	if (Object.keys(explicitInterrupt).length > 0 || payload.providerAvailable === false) {
+		const interruption = shouldInterruptForCapacity({
+			reservedCredits: Number(capacityMetadata?.reservedCredits ?? capacityEnvelope?.maxCredits ?? 0),
+			consumedCredits: Number(explicitInterrupt.consumedCredits ?? payload.consumedCredits ?? 0),
+			estimatedRemainingCreditsP50: Number(explicitInterrupt.estimatedRemainingP50 ?? payload.estimatedRemainingCreditsP50 ?? 0),
+			estimatedRemainingCreditsP90: Number(explicitInterrupt.estimatedRemainingP90 ?? payload.estimatedRemainingCreditsP90 ?? 0),
+			providerAvailable: payload.providerAvailable === false ? false : explicitInterrupt.providerAvailable as boolean | undefined,
+			recoveryBudgetRemainingCredits: Number(explicitInterrupt.recoveryBudgetRemainingCredits ?? payload.recoveryBudgetRemainingCredits ?? Number.NaN),
+		});
+		if (interruption.interrupt) {
+			throw new WorkerCapacityInterrupted({
+				reason: interruption.reasons[0] ?? 'capacity_interrupt',
+				summary: 'Task interrupted by capacity policy before execution.',
+				interruption,
+				capacityEnvelope,
+				capacityMetadata,
+			});
+		}
+	}
 	const executionKind = typeof payload.executionKind === 'string' ? payload.executionKind : null;
 	const taskKind = String(task?.type ?? task?.taskType ?? '');
+	if (executionKind === 'planning' || taskKind === 'planning_task') {
+		const planningProposal = buildPlanningProposalFromTask({
+			task: task ?? {},
+			payload,
+		});
+		await options.sdk.recordTaskProgress({
+			id: options.taskId,
+			workerId: options.workerId,
+			state: 'running',
+			appendEvent: {
+				kind: 'plan_proposed',
+				data: planningProposal as unknown as Record<string, unknown>,
+			},
+			actor: 'worker',
+		});
+		return {
+			workerId: options.workerId,
+			queueAttempt: options.queueAttempt,
+			executionKind: 'planning',
+			planningProposal,
+			summary: {
+				status: 'completed',
+				workerId: options.workerId,
+				summary: `Proposed ${planningProposal.tasks.length} downstream task${planningProposal.tasks.length === 1 ? '' : 's'}.`,
+			},
+		};
+	}
 	if (isResearchKnowledgeTaskKind(taskKind)) {
 		const output = await executeResearchKnowledgeTask({
 			sdk: options.sdk,
@@ -681,6 +1037,11 @@ async function executeQueuedTask(options: {
 				reservationId: capacityEnvelope.reservationIds?.[0] ?? null,
 				credits: Number(payload.estimatedCredits ?? capacityEnvelope.maxCredits ?? 1),
 				source: 'worker',
+				taskSignature: typeof payload.taskSignature === 'string' ? payload.taskSignature : String(task?.type ?? task?.taskType ?? 'agent_trigger'),
+				executionProfileId: readExecutionProfileId(payload),
+				attentionEstimate,
+				utilityEstimate,
+				hybridExecutionPlan,
 			}
 			: capacityMetadata
 				? {
@@ -691,14 +1052,43 @@ async function executeQueuedTask(options: {
 					source: 'worker',
 					taskSignature: typeof payload.taskSignature === 'string' ? payload.taskSignature : String(task?.type ?? task?.taskType ?? 'agent_trigger'),
 					reservedCredits: capacityMetadata.reservedCredits,
+					executionProfileId: capacityMetadata.executionProfileId,
+					attentionEstimate: capacityMetadata.attentionEstimate,
+					utilityEstimate: capacityMetadata.utilityEstimate,
+					hybridExecutionPlan: capacityMetadata.hybridExecutionPlan,
 				}
 				: null,
 	};
 }
 
+function createLocalTaskQueue(sdk: ReturnType<typeof createServiceSdk>, config: ReturnType<typeof resolveWorkerConfig>) {
+	return {
+		async pull() {
+			const envelope = await sdk.searchTasks({
+				state: ['queued', 'pending'],
+				limit: config.batchSize,
+			});
+			const tasks = Array.isArray(envelope.payload) ? envelope.payload as Array<Record<string, unknown>> : [];
+			return {
+				messages: tasks.map((task) => ({
+					leaseId: `local:${String(task.id ?? '')}`,
+					attempts: Number(task.attemptCount ?? task.attempt_count ?? 0) + 1,
+					body: queueEnvelopeForTask(task),
+				})),
+			};
+		},
+		async ack() {
+			return undefined;
+		},
+		async retry() {
+			return undefined;
+		},
+	};
+}
+
 export async function runWorkerCycle() {
 	const sdk = createServiceSdk();
-	const queue = createQueueClient();
+	let queue = createQueueClient();
 	const config = resolveWorkerConfig();
 	const kernel = new AgentKernel(sdk, resolveServiceRepoRoot());
 	if (typeof sdk.recordWorkerRunner === 'function') {
@@ -717,10 +1107,11 @@ export async function runWorkerCycle() {
 		}).catch(() => null);
 	}
 	if (!queue) {
-		if (process.env.TREESEED_LOCAL_DEV_MODE?.trim()) {
-			return { ok: true, processed: 0, idle: true, reason: 'queue_unconfigured' };
+		if (process.env.TREESEED_LOCAL_DEV_MODE?.trim() || process.env.NODE_ENV !== 'production') {
+			queue = createLocalTaskQueue(sdk, config);
+		} else {
+			throw new Error('Worker requires CLOUDFLARE_ACCOUNT_ID, TREESEED_QUEUE_ID, and TREESEED_QUEUE_PULL_TOKEN.');
 		}
-		throw new Error('Worker requires CLOUDFLARE_ACCOUNT_ID, TREESEED_QUEUE_ID, and TREESEED_QUEUE_PULL_TOKEN.');
 	}
 
 	const pulled = await queue.pull({
@@ -787,6 +1178,83 @@ export async function runWorkerCycle() {
 					volumeRoot: config.volumeRoot,
 				});
 			} catch (error) {
+				if (error instanceof WorkerCapacityInterrupted) {
+					const context = await buildTaskContext(sdk, message.body.taskId);
+					const task = context.task as Record<string, unknown> | null;
+					const payload = parseTaskPayload(task);
+					const checkpoint = await checkpointInterruptedTask({
+						sdk,
+						taskId: message.body.taskId,
+						workerId: config.workerId,
+						reason: String(error.request.reason ?? 'capacity_interrupt'),
+						payload,
+						request: error.request,
+					});
+					const reporter = createControlPlaneReporter();
+					const capacityMetadata = readCapacityMetadata(payload);
+					const attentionEstimate = readAttentionEstimate(payload);
+					const utilityEstimate = readUtilityEstimate(payload);
+					const hybridExecutionPlan = readHybridExecutionPlan(payload);
+					if (capacityMetadata?.providerId && capacityMetadata.laneId) {
+						await reporter.reportCapacityUsage({
+							capacityProviderId: capacityMetadata.providerId,
+							laneId: capacityMetadata.laneId,
+							reservationId: capacityMetadata.reservationId,
+							teamId: String(process.env.TREESEED_TEAM_ID ?? ''),
+							projectId: String(process.env.TREESEED_PROJECT_ID ?? ''),
+							workDayId: message.body.workDayId,
+							taskId: message.body.taskId,
+							phase: 'overrun_hold',
+							credits: Number(error.request.interruption?.consumedCredits ?? 0),
+							source: 'worker',
+							metadata: {
+								interrupted: true,
+								reason: error.request.reason ?? 'capacity_interrupt',
+								checkpointId: checkpoint.checkpointId,
+								attentionEstimate,
+								utilityEstimate,
+								hybridExecutionPlan,
+							},
+								usageActual: {
+									taskSignature: typeof payload.taskSignature === 'string' ? payload.taskSignature : String(task?.type ?? 'unknown'),
+									executionProfileId: capacityMetadata.executionProfileId,
+									actualCredits: Number(error.request.interruption?.consumedCredits ?? 0),
+								metadata: {
+									interrupted: true,
+									partial: true,
+									attentionEstimate,
+									utilityEstimate,
+									hybridExecutionPlan,
+								},
+							},
+						}).catch(() => null);
+					}
+					const projectId = String(process.env.TREESEED_PROJECT_ID ?? '');
+					await reporter.createApprovalRequest({
+						projectId,
+						teamId: String(process.env.TREESEED_TEAM_ID ?? ''),
+						workDayId: message.body.workDayId,
+						taskId: message.body.taskId,
+						kind: 'continuation_required',
+						severity: 'medium',
+						requestedByType: 'worker',
+						requestedById: config.workerId,
+						title: 'Continuation required',
+						summary: String(error.request.summary ?? 'Task was checkpointed and needs a continuation decision.'),
+						options: [
+							{ id: 'continue_later', label: 'Continue later' },
+							{ id: 'split_remaining_work', label: 'Split remaining work' },
+							{ id: 'rollback', label: 'Rollback' },
+						],
+						recommendation: { optionId: 'continue_later' },
+						policySnapshot: {
+							...error.request,
+							checkpoint,
+						},
+					}).catch(() => null);
+					await queue.ack([message.leaseId]);
+					return 1;
+				}
 				if (error instanceof WorkerPausedForApproval) {
 					const reporter = createControlPlaneReporter();
 					const context = await buildTaskContext(sdk, message.body.taskId);
@@ -823,12 +1291,117 @@ export async function runWorkerCycle() {
 				throw error;
 			}
 
+			const outputCapacity = asRecord(output.capacityUsage);
+			const reservedCredits = Number(outputCapacity.reservedCredits ?? 0);
+			const consumedCredits = Number(outputCapacity.credits ?? 0);
+			const postExecutionInterrupt = shouldInterruptForCapacity({
+				reservedCredits,
+				consumedCredits,
+				estimatedRemainingCreditsP50: Number(outputCapacity.estimatedRemainingP50 ?? 0),
+				estimatedRemainingCreditsP90: Number(outputCapacity.estimatedRemainingP90 ?? 0),
+				reservationUsedPercentThreshold: 100,
+			});
+			if (postExecutionInterrupt.interrupt || (reservedCredits > 0 && consumedCredits > reservedCredits)) {
+				const context = await buildTaskContext(sdk, message.body.taskId);
+				const payload = parseTaskPayload(context.task as Record<string, unknown> | null);
+				const checkpoint = await checkpointInterruptedTask({
+					sdk,
+					taskId: message.body.taskId,
+					workerId: config.workerId,
+					reason: 'reservation_exhaustion_risk',
+					payload,
+					output,
+					request: {
+						interruption: postExecutionInterrupt,
+						consumedCredits,
+						reservedCredits,
+					},
+				});
+				const reporter = createControlPlaneReporter();
+				const outputProviderId = typeof outputCapacity.capacityProviderId === 'string' ? outputCapacity.capacityProviderId : null;
+				const outputLaneId = typeof outputCapacity.laneId === 'string' ? outputCapacity.laneId : null;
+				const attentionEstimate = asRecord(outputCapacity.attentionEstimate);
+				const utilityEstimate = asRecord(outputCapacity.utilityEstimate);
+				const hybridExecutionPlan = asRecord(outputCapacity.hybridExecutionPlan);
+				if (outputProviderId && outputLaneId) {
+					await reporter.reportCapacityUsage({
+						capacityProviderId: outputProviderId,
+						laneId: outputLaneId,
+						reservationId: typeof outputCapacity.reservationId === 'string' ? outputCapacity.reservationId : null,
+						teamId: String(process.env.TREESEED_TEAM_ID ?? ''),
+						projectId: String(process.env.TREESEED_PROJECT_ID ?? ''),
+						workDayId: message.body.workDayId,
+						taskId: message.body.taskId,
+						phase: 'overrun_hold',
+						credits: consumedCredits,
+						source: 'worker',
+						metadata: {
+							interrupted: true,
+							reason: 'reservation_exhaustion_risk',
+							reservedCredits,
+							checkpointId: checkpoint.checkpointId,
+							attentionEstimate,
+							utilityEstimate,
+							hybridExecutionPlan,
+						},
+							usageActual: {
+								taskSignature: typeof outputCapacity.taskSignature === 'string' ? outputCapacity.taskSignature : 'unknown',
+								executionProfileId: typeof outputCapacity.executionProfileId === 'string' ? outputCapacity.executionProfileId : readExecutionProfileId(payload),
+								actualCredits: consumedCredits,
+							metadata: {
+								interrupted: true,
+								partial: true,
+								attentionEstimate,
+								utilityEstimate,
+								hybridExecutionPlan,
+							},
+						},
+					}).catch(() => null);
+				}
+				await reporter.createApprovalRequest({
+					projectId: String(process.env.TREESEED_PROJECT_ID ?? ''),
+					teamId: String(process.env.TREESEED_TEAM_ID ?? ''),
+					workDayId: message.body.workDayId,
+					taskId: message.body.taskId,
+					kind: 'continuation_required',
+					severity: 'medium',
+					requestedByType: 'worker',
+					requestedById: config.workerId,
+					title: 'Continuation required',
+					summary: 'Task used more capacity than reserved and was checkpointed for continuation.',
+					options: [
+						{ id: 'continue_with_more_budget', label: 'Continue with more budget' },
+						{ id: 'split_remaining_work', label: 'Split remaining work' },
+						{ id: 'rollback', label: 'Rollback' },
+					],
+					recommendation: { optionId: 'continue_with_more_budget' },
+					policySnapshot: {
+						interruption: postExecutionInterrupt,
+						checkpoint,
+					},
+				}).catch(() => null);
+				await queue.ack([message.leaseId]);
+				return 1;
+			}
+
 			await sdk.completeTask({
 				id: message.body.taskId,
 				output,
 				summary: output.summary,
 				actor: 'worker',
 			});
+			if (lowConfidenceResult(output as Record<string, unknown>)) {
+				const context = await buildTaskContext(sdk, message.body.taskId);
+				const task = context.task as Record<string, unknown> | null;
+				await createHybridEscalationTask({
+					sdk,
+					task,
+					taskId: message.body.taskId,
+					output: output as Record<string, unknown>,
+					payload: parseTaskPayload(task),
+					workerId: config.workerId,
+				}).catch(() => null);
+			}
 			if (output.capacityUsage?.capacityProviderId && output.capacityUsage?.laneId) {
 				const reporter = createControlPlaneReporter();
 				await reporter.reportCapacityUsage({
@@ -846,13 +1419,22 @@ export async function runWorkerCycle() {
 						workerId: config.workerId,
 						queueAttempt: message.attempts,
 						reservedCredits: output.capacityUsage.reservedCredits ?? null,
+						attentionEstimate: output.capacityUsage.attentionEstimate ?? null,
+						utilityEstimate: output.capacityUsage.utilityEstimate ?? null,
+						hybridExecutionPlan: output.capacityUsage.hybridExecutionPlan ?? null,
 					},
-					usageActual: {
-						taskSignature: output.capacityUsage.taskSignature ?? String(output.agentSlug ?? 'agent_trigger'),
-						actualCredits: output.capacityUsage.credits,
+						usageActual: {
+							taskSignature: output.capacityUsage.taskSignature ?? String(output.agentSlug ?? 'agent_trigger'),
+							executionProfileId: output.capacityUsage.executionProfileId ?? 'standard-code-model',
+							actualCredits: output.capacityUsage.credits,
 						retryCount: Math.max(0, message.attempts - 1),
 						metadata: {
 							workerId: config.workerId,
+							attentionEstimate: output.capacityUsage.attentionEstimate ?? null,
+							utilityEstimate: output.capacityUsage.utilityEstimate ?? null,
+							hybridExecutionPlan: output.capacityUsage.hybridExecutionPlan ?? null,
+							confidenceOutcome: asRecord(output.result).confidence ?? null,
+							escalationReason: asRecord(output.result).insufficientConfidence === true ? 'insufficient_confidence' : null,
 						},
 					},
 				}).catch(() => null);

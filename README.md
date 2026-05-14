@@ -92,6 +92,7 @@ Package verification:
 
 - `npm run build:dist`
 - `npm run test:unit`
+- `npm run test:capacity-scheduling-e2e`
 - `npm run test:smoke`
 - `npm run release:verify`
 - `npm run verify:local`
@@ -125,6 +126,14 @@ A processing host can run:
 - workday report cron: `treeseed-agent-service workday-report`
 
 The processing host registers as a capacity provider and reports health, capabilities, queue metrics, drain state, and workday summaries to the market control plane. Web-only projects should use assigned capacity instead of owning these services.
+
+## Capacity Scheduling Runtime
+
+The manager and API may propose work, but executable tasks pass through classification and admission before they are queued. Admission attaches task signatures, learned estimates, execution profile selection, route/reservation metadata, attention/context load, utility and predictive reserve snapshots, and hybrid phase metadata to the task payload.
+
+The worker records completed usage actuals with the selected execution profile, provider/lane/reservation, attention/context, utility, and hybrid metadata. Capacity interruptions are checkpointed and moved to `continuation_required` with partial usage metadata, so interrupted work does not poison completed-cost estimate profiles.
+
+Use `npm run test:capacity-scheduling-e2e` for the deterministic completion harness. It verifies admission-before-queueing, learned estimate reuse, bounded planning materialization, deferred budget behavior, checkpoint/continuation events, useful backfill/idling, and hybrid escalation admission.
 
 ## Environment Registry
 

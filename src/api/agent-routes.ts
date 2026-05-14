@@ -2,9 +2,11 @@ import type { Hono } from 'hono';
 import type {
 	AgentSdk,
 	SdkTaskEntity,
+	WorkdayPolicy,
 } from '@treeseed/sdk';
 import { listRegisteredAgentHandlers as listCoreRegisteredAgentHandlers } from '../agents/registry.ts';
 import { buildTaskContext, enqueueTaskFromSdk } from '../services/common.ts';
+import { admissionForTaskProposal } from '../services/task-admission.ts';
 import type { ApiContext } from './http.ts';
 import { jsonError, requireScope } from './http.ts';
 
@@ -41,6 +43,28 @@ function withPrefix(prefix: string, path: string) {
 
 function actor(body: Record<string, unknown>, fallback: string) {
 	return String(body.actor ?? fallback);
+}
+
+function defaultFollowupPolicy(projectId: string, workDay: Record<string, unknown>): WorkdayPolicy {
+	const budget = Number(workDay.capacityBudget ?? 100);
+	return {
+		projectId,
+		environment: 'local',
+		enabled: true,
+		schedule: { timezone: 'UTC', windows: [] },
+		startCron: '0 9 * * 1-5',
+		durationMinutes: 480,
+		maxRunners: 1,
+		maxWorkersPerRunner: 1,
+		dailyCreditBudget: budget,
+		closeoutGraceMinutes: 10,
+		dailyTaskCreditBudget: budget,
+		maxQueuedTasks: 100,
+		maxQueuedCredits: budget,
+		autoscale: { minWorkers: 0, maxWorkers: 1, targetQueueDepth: 1, cooldownSeconds: 60 },
+		creditWeights: [],
+		metadata: {},
+	};
 }
 
 function authorizeRequest(c: ApiContext, options: RegisterAgentRoutesOptions) {
@@ -222,19 +246,64 @@ export function registerAgentRoutes(
 		}
 		const currentTask = current.payload as SdkTaskEntity & Record<string, unknown>;
 		const followups = Array.isArray(body.followups) ? body.followups : [];
+		const workDayId = String(currentTask.workDayId ?? '');
+		const workDay = workDayId
+			? ((await options.sdk.get({ model: 'work_day', id: workDayId }).catch(() => ({ payload: null }))).payload as Record<string, unknown> | null)
+			: null;
+		const projectId = options.projectId ?? String(workDay?.projectId ?? '');
+		const policy = projectId
+			? ((await options.sdk.getWorkPolicy(projectId, String(workDay?.environment ?? 'local')).catch(() => ({ payload: null }))).payload as WorkdayPolicy | null)
+			: null;
 		const created = [];
 		for (const followup of followups as Array<Record<string, unknown>>) {
-			created.push(await options.sdk.createTask({
+			const type = String(followup.type ?? 'followup');
+			const payload = (followup.payload as Record<string, unknown> | undefined) ?? {};
+			const admission = admissionForTaskProposal({
+				type,
+				payload,
+				workDay: workDay ?? {
+					id: workDayId,
+					capacityBudget: policy?.dailyTaskCreditBudget ?? 100,
+					capacityUsed: 0,
+				},
+				policy: policy ?? defaultFollowupPolicy(projectId || 'project', workDay ?? {}),
+				capacityPlan: null,
+				queuedCredits: 0,
+				source: 'agent-api.followups',
+			});
+			const result = await options.sdk.createTask({
 				workDayId: String(followup.workDayId ?? currentTask.workDayId ?? ''),
 				agentId: String(followup.agentId ?? currentTask.agentId ?? ''),
-				type: String(followup.type ?? 'followup'),
+				type,
+				state: admission.state,
 				priority: followup.priority === undefined ? undefined : Number(followup.priority),
 				idempotencyKey: String(followup.idempotencyKey ?? `${c.req.param('id')}:${created.length}`),
-				payload: (followup.payload as Record<string, unknown> | undefined) ?? {},
+				payload: admission.payload,
 				graphVersion: typeof followup.graphVersion === 'string' ? followup.graphVersion : null,
 				parentTaskId: c.req.param('id'),
 				actor: actor(followup, defaultActor),
-			}));
+			});
+			if (result.payload) {
+				await options.sdk.recordTaskProgress({
+					id: String((result.payload as Record<string, unknown>).id ?? ''),
+					state: admission.state,
+					appendEvent: {
+						kind: 'classified',
+						data: admission.classification as unknown as Record<string, unknown>,
+					},
+					actor: actor(followup, defaultActor),
+				});
+				await options.sdk.recordTaskProgress({
+					id: String((result.payload as Record<string, unknown>).id ?? ''),
+					state: admission.state,
+					appendEvent: {
+						kind: 'admission_decided',
+						data: admission.admission as unknown as Record<string, unknown>,
+					},
+					actor: actor(followup, defaultActor),
+				});
+			}
+			created.push(result);
 		}
 		return c.json({ ok: true, payload: created.map((entry) => entry.payload) });
 	});

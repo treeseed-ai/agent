@@ -1,7 +1,7 @@
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { runManagerAction, runManagerCycle, resolveManagerServiceConfig } from '../../src/services/manager.ts';
 
 function createReporter() {
@@ -223,9 +223,20 @@ function createSdkStub() {
 }
 
 describe('manager service', () => {
+	let testRepoRoot: string | null = null;
+
+	beforeEach(() => {
+		testRepoRoot = mkdtempSync(join(tmpdir(), 'treeseed-manager-test-root-'));
+		vi.stubEnv('TREESEED_AGENT_REPO_ROOT', testRepoRoot);
+	});
+
 	afterEach(() => {
 		vi.restoreAllMocks();
 		vi.unstubAllEnvs();
+		if (testRepoRoot) {
+			rmSync(testRepoRoot, { recursive: true, force: true });
+			testRepoRoot = null;
+		}
 	});
 
 	it('skips opening a workday outside the active schedule and scales to zero', async () => {

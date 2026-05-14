@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.8.12] - 2026-05-14
+
+### Tests
+
+- chore(agent): bump version and update manager service tests (b527e82992fa)
+- build(source): sync package dependency references (a9b864864fdd)
+
+### Dependencies
+
+- Release @treeseed/agent 0.8.12.
+
 ## [0.8.11] - 2026-05-13
 
 ### Added

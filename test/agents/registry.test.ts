@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -16,6 +16,7 @@ import { parseAgentMessagePayload } from '../../src/agents/contracts/messages.ts
 
 const tempRoots: string[] = [];
 const marketRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../../..');
+const hasIntegratedMarketAgentContent = existsSync(resolve(marketRoot, 'src/content/agents/treeseed-docs-planner.mdx'));
 
 function createTenantRoot() {
 	const tenantRoot = mkdtempSync(resolve(tmpdir(), 'treeseed-agent-registry-'));
@@ -220,7 +221,7 @@ export const plannerHandler: AgentHandler = {
 		});
 	});
 
-	it('loads top-level Market documentation agents as active runtime specs', async () => {
+	it.skipIf(!hasIntegratedMarketAgentContent)('loads top-level Market documentation agents as active runtime specs', async () => {
 		const sdk = new AgentSdk({
 			repoRoot: marketRoot,
 			database: new MemoryAgentDatabase(),

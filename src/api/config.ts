@@ -38,6 +38,25 @@ function resolveBaseUrl(env: NodeJS.ProcessEnv, host: string, port: number) {
 	return normalizeUrl(`http://${host}:${port}`);
 }
 
+function resolveAuthApprovalBaseUrl(env: NodeJS.ProcessEnv, baseUrl: string) {
+	const explicit = env.TREESEED_API_AUTH_APPROVAL_BASE_URL?.trim()
+		|| env.TREESEED_SITE_URL?.trim()
+		|| env.BETTER_AUTH_URL?.trim();
+	if (explicit) {
+		return normalizeUrl(explicit);
+	}
+	try {
+		const url = new URL(baseUrl);
+		if ((url.hostname === '127.0.0.1' || url.hostname === 'localhost') && url.port === '3000') {
+			url.port = '4321';
+			return normalizeUrl(url.toString());
+		}
+	} catch {
+		// Fall back to the API URL when the configured value is not parseable as a URL.
+	}
+	return baseUrl;
+}
+
 export function resolveApiConfig(env: NodeJS.ProcessEnv = process.env): ApiConfig {
 	const host = env.HOST?.trim() || '0.0.0.0';
 	const port = parseInteger(env.PORT, 3000);
@@ -50,6 +69,7 @@ export function resolveApiConfig(env: NodeJS.ProcessEnv = process.env): ApiConfi
 		host,
 		port,
 		baseUrl,
+		authApprovalBaseUrl: resolveAuthApprovalBaseUrl(env, baseUrl),
 		issuer,
 		repoRoot,
 		projectId: env.TREESEED_PROJECT_ID?.trim() || 'treeseed-project',

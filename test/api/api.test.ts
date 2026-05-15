@@ -218,6 +218,28 @@ apiRuntimeDescribe('@treeseed/agent api runtime', () => {
 		expect(config.providers.auth).toBe('d1');
 	});
 
+	it('uses the web URL for local device approval links', async () => {
+		const config = resolveApiConfig({
+			HOST: '127.0.0.1',
+			PORT: '3000',
+			TREESEED_SITE_URL: 'http://127.0.0.1:4321',
+		});
+
+		expect(config.baseUrl).toBe('http://127.0.0.1:3000');
+		expect(config.authApprovalBaseUrl).toBe('http://127.0.0.1:4321');
+
+		const app = createTestApp({
+			config: {
+				baseUrl: 'http://127.0.0.1:3000',
+				authApprovalBaseUrl: 'http://127.0.0.1:4321',
+			},
+		});
+		const response = await app.request('/auth/device/approve?user_code=ABCD-EFGH');
+
+		expect(response.status).toBe(302);
+		expect(response.headers.get('location')).toBe('http://127.0.0.1:4321/auth/device/approve?user_code=ABCD-EFGH');
+	});
+
 	it('serves health, templates, and the agent health surface', async () => {
 		const app = createTestApp();
 

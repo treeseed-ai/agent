@@ -104,6 +104,7 @@ export interface ApiConfig {
 	host: string;
 	port: number;
 	baseUrl: string;
+	authApprovalBaseUrl?: string;
 	issuer: string;
 	repoRoot: string;
 	projectId: string;

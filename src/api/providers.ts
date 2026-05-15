@@ -35,8 +35,14 @@ export function resolveApiRuntimeProviders(config: ApiConfig, overrides: ApiRunt
 	const agentVerification = new Map<string, unknown>();
 
 	addProviders(authRegistry, {
-		memory: ({ config: runtimeConfig }) => new MemoryDeviceCodeAuthProvider(runtimeConfig),
-		d1: ({ config: runtimeConfig }) => new D1AuthProvider(runtimeConfig, { db: resolveApiD1Database(runtimeConfig) }),
+		memory: ({ config: runtimeConfig }) => new MemoryDeviceCodeAuthProvider({
+			...runtimeConfig,
+			baseUrl: runtimeConfig.authApprovalBaseUrl ?? runtimeConfig.baseUrl,
+		}),
+		d1: ({ config: runtimeConfig }) => new D1AuthProvider({
+			...runtimeConfig,
+			baseUrl: runtimeConfig.authApprovalBaseUrl ?? runtimeConfig.baseUrl,
+		}, { db: resolveApiD1Database(runtimeConfig) }),
 	}, 'auth');
 	addProviders(authRegistry, overrides.auth, 'auth');
 

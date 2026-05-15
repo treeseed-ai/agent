@@ -51,6 +51,25 @@ function normalizePrefix(prefix: string | undefined) {
 	return normalized.startsWith('/') ? normalized : `/${normalized}`;
 }
 
+function authApprovalUrl(config: ReturnType<typeof mergeApiOptions>['config'], userCode?: string | null) {
+	const baseUrl = (config.authApprovalBaseUrl ?? config.baseUrl).replace(/\/+$/u, '');
+	const url = new URL('/auth/device/approve', `${baseUrl}/`);
+	if (userCode) {
+		url.searchParams.set('user_code', userCode);
+	}
+	return url.toString();
+}
+
+async function readJsonOrFormBody(c: any) {
+	const contentType = c.req.header('content-type') ?? '';
+	if (contentType.includes('application/json')) {
+		const json = await c.req.json().catch(() => null);
+		return json && typeof json === 'object' && !Array.isArray(json) ? json : {};
+	}
+	const form = await c.req.parseBody?.().catch(() => null);
+	return form && typeof form === 'object' ? form : {};
+}
+
 function principalScopes(permissions: string[]) {
 	const scopes = new Set<string>(['auth:me']);
 	if (permissions.includes('*:*:*') || permissions.includes('sdk:execute:global')) scopes.add('sdk');
@@ -262,6 +281,14 @@ export function createTreeseedApiRouter(options: ApiServerOptions = {}) {
 	}
 
 	if (resolved.surfaces.auth) {
+		app.get('/auth/device/approve', (c) => {
+			const target = authApprovalUrl(resolved.config, c.req.query('user_code'));
+			if (target === c.req.url) {
+				return jsonError(c, 404, 'Open the TreeSeed web app to approve CLI device login.');
+			}
+			return c.redirect(target, 302);
+		});
+
 		app.post('/auth/device/start', async (c) => {
 			const body = await c.req.json().catch(() => ({}));
 			return c.json(await runtimeProviders.auth.startDeviceFlow(body));
@@ -274,9 +301,23 @@ export function createTreeseedApiRouter(options: ApiServerOptions = {}) {
 		});
 
 		app.post('/auth/device/approve', async (c) => {
-			const body = await c.req.json().catch(() => ({}));
+			const body = await readJsonOrFormBody(c);
 			try {
-				return c.json(await runtimeProviders.auth.approveDeviceFlow(body));
+				const approved = await runtimeProviders.auth.approveDeviceFlow({
+					userCode: String(body.userCode ?? ''),
+					principalId: String(body.principalId ?? ''),
+					displayName: typeof body.displayName === 'string' ? body.displayName : undefined,
+					metadata: typeof body.metadata === 'string'
+						? JSON.parse(body.metadata || '{}')
+						: body.metadata && typeof body.metadata === 'object'
+							? body.metadata
+							: undefined,
+					scopes: Array.isArray(body.scopes) ? body.scopes.map(String) : undefined,
+				});
+				if (typeof body.redirectTo === 'string' && body.redirectTo.startsWith('http')) {
+					return c.redirect(body.redirectTo, 303);
+				}
+				return c.json(approved);
 			} catch (error) {
 				return jsonError(c, 400, error instanceof Error ? error.message : String(error));
 			}

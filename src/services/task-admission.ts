@@ -80,11 +80,14 @@ function taskSignatureFor(type: string, payload: TaskPayload) {
 	}
 	if (type === 'planning_task') return 'planner.dag_proposal';
 	if (type === 'refresh_project_graph') return 'system.refresh_graph';
+	if (type === 'scan_codebase_documentation_surface') return 'system.scan_codebase_documentation_surface';
 	if (type === 'agent_trigger' || type === 'agent_root') return 'agent.activation';
 	if (type === 'research_question') return 'researcher.research_question';
 	if (type === 'generate_knowledge_draft') return 'knowledge.generate_draft';
 	if (type === 'optimize_knowledge_draft') return 'knowledge.optimize_draft';
 	if (type === 'promote_knowledge_draft_request' || type === 'promote_knowledge_to_staging') return 'review.promote_request';
+	if (type === 'apply_approved_docs_mutation') return 'docs.apply_approved_mutation';
+	if (type === 'create_repair_task') return 'docs.create_repair_task';
 	if (type === 'release_staged_knowledge_request') return 'review.promote_request';
 	if (readString(payload, 'executionKind') === 'workflow_dispatch' || readString(payload, 'executionKind') === 'sdk_dispatch') return 'workflow.dispatch';
 	if (type.endsWith('_review')) return 'agent.activation';
@@ -93,11 +96,14 @@ function taskSignatureFor(type: string, payload: TaskPayload) {
 
 function defaultCreditsForSignature(signature: string) {
 	if (signature === 'system.refresh_graph') return 1;
+	if (signature === 'system.scan_codebase_documentation_surface') return 1;
 	if (signature === 'agent.activation') return 1;
 	if (signature === 'researcher.research_question') return 3;
 	if (signature === 'knowledge.generate_draft') return 5;
 	if (signature === 'knowledge.optimize_draft') return 4;
 	if (signature === 'review.promote_request') return 2;
+	if (signature === 'docs.apply_approved_mutation') return 5;
+	if (signature === 'docs.create_repair_task') return 1;
 	if (signature === 'workflow.dispatch') return 3;
 	if (signature === 'planner.dag_proposal') return 2;
 	return 2;
@@ -106,7 +112,7 @@ function defaultCreditsForSignature(signature: string) {
 function riskFor(type: string, payload: TaskPayload): TaskRiskClass {
 	const explicit = readString(payload, 'risk');
 	if (explicit === 'low' || explicit === 'medium' || explicit === 'high') return explicit;
-	if (type === 'promote_knowledge_to_staging' || type === 'release_staged_knowledge_request') return 'high';
+	if (type === 'promote_knowledge_to_staging' || type === 'apply_approved_docs_mutation' || type === 'release_staged_knowledge_request') return 'high';
 	if (readString(payload, 'executionKind') === 'workflow_dispatch') return 'medium';
 	return 'low';
 }
@@ -115,7 +121,10 @@ function mutationScopeFor(type: string, payload: TaskPayload): TaskMutationScope
 	const explicit = readString(payload, 'mutationScope');
 	if (explicit === 'none' || explicit === 'repository_read' || explicit === 'repository_write' || explicit === 'production') return explicit;
 	if (type === 'planning_task') return 'none';
+	if (type === 'scan_codebase_documentation_surface') return 'none';
+	if (type === 'create_repair_task') return 'none';
 	if (type === 'promote_knowledge_to_staging') return 'repository_write';
+	if (type === 'apply_approved_docs_mutation') return 'repository_write';
 	if (type === 'release_staged_knowledge_request') return 'production';
 	if (readString(payload, 'executionKind') === 'workflow_dispatch') return 'repository_read';
 	return 'repository_read';

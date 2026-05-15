@@ -60,10 +60,15 @@ describe('service orchestration helpers', () => {
 			workDay: { id: 'workday-1' },
 		});
 		expect(sdk.refreshGraph).not.toHaveBeenCalled();
-		expect((sdk.createTask as any).mock.calls).toHaveLength(3);
+		expect((sdk.createTask as any).mock.calls).toHaveLength(4);
 		expect((sdk.createTask as any).mock.calls[0]?.[0]).toMatchObject({
 			type: 'refresh_project_graph',
 			idempotencyKey: 'workday-1:refresh_project_graph',
+		});
+		expect((sdk.createTask as any).mock.calls[1]?.[0]).toMatchObject({
+			type: 'scan_codebase_documentation_surface',
+			idempotencyKey: 'workday-1:scan_codebase_documentation_surface',
+			agentId: 'treeseed-codebase-cartographer',
 		});
 	});
 

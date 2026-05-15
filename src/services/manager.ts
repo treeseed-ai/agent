@@ -26,14 +26,26 @@ import type { CapacityPlan, CapacityTaskExecutionEnvelope } from '@treeseed/sdk'
 import { loadActiveAgentSpecs } from '../agents/spec-loader.ts';
 import { followCursorKey, resolveTriggerDecision } from '../agents/kernel/trigger-resolver.ts';
 import type { AgentTriggerInvocation } from '../agents/runtime-types.ts';
-import { createQueuePushClient, createServiceSdk, queueEnvelopeForTask, resolveManagerConfig, seedGraphRefreshTask } from './common.ts';
+import {
+	createQueuePushClient,
+	createServiceSdk,
+	queueEnvelopeForTask,
+	resolveManagerConfig,
+	seedCodebaseDocumentationScanTask,
+	seedGraphRefreshTask,
+} from './common.ts';
 import {
 	applyInteractiveWakeUpOverride,
 	applyScaleCooldown,
 	collectTaskMetrics,
 	computeDesiredWorkerCount,
 } from './worker-capacity.ts';
-import { writeWorkdayContentSnapshot, type WorkdayContentReleaseRecord, type WorkdayContentTaskSummary } from './workday-content.ts';
+import {
+	summarizeDocsAutomationWorkday,
+	writeWorkdayContentSnapshot,
+	type WorkdayContentReleaseRecord,
+	type WorkdayContentTaskSummary,
+} from './workday-content.ts';
 import { createWorkerPoolScaler, type WorkerPoolScalerKind } from './worker-pool-scaler.ts';
 import {
 	extractGeneratedArtifactsFromTaskOutputs,
@@ -56,9 +68,18 @@ type ManagerConfig = ReturnType<typeof resolveManagerServiceConfig>;
 type WorkDayRecord = Record<string, unknown>;
 type TaskRecord = Record<string, unknown>;
 type PriorityOverrideRecord = Record<string, unknown>;
+type ManagerLeaseRecord = Record<string, unknown>;
+
+export interface StaleTaskRecoveryResult {
+	recoveredTasks: TaskRecord[];
+	failedTasks: TaskRecord[];
+	checkedTaskCount: number;
+}
 
 const DEFAULT_WORK_DAYS = [1, 2, 3, 4, 5];
 const DEFAULT_PRIORITY_MODELS = ['objective', 'question', 'note', 'page', 'book', 'knowledge'];
+const TASK_RETRY_BACKOFF_BASE_SECONDS = 15;
+const TASK_RETRY_BACKOFF_MAX_SECONDS = 300;
 
 function integerFromEnv(name: string, fallback: number) {
 	const value = process.env[name];
@@ -78,6 +99,144 @@ function booleanFromEnv(name: string, fallback = false) {
 		return fallback;
 	}
 	return ['1', 'true', 'yes', 'on'].includes(value);
+}
+
+function managerLeaseTtlSeconds(config: ManagerConfig) {
+	return Math.max(60, Math.ceil(config.pollIntervalMs / 1000) * 4);
+}
+
+function managerLeaseStaleAfterSeconds(config: ManagerConfig) {
+	return Math.max(120, Math.ceil(config.pollIntervalMs / 1000) * 8);
+}
+
+function taskRetryDelaySeconds(attemptCount: number) {
+	const exponent = Math.max(0, Math.min(8, attemptCount - 1));
+	return Math.min(TASK_RETRY_BACKOFF_MAX_SECONDS, TASK_RETRY_BACKOFF_BASE_SECONDS * (2 ** exponent));
+}
+
+function docsAutomationEnabled(config: ManagerConfig) {
+	return config.docsAutomationMode !== 'off';
+}
+
+async function claimManagerLease(input: {
+	sdk: ManagerSdk;
+	config: ManagerConfig;
+	workDayId?: string | null;
+	now: Date;
+	metadata?: Record<string, unknown>;
+}) {
+	if (typeof input.sdk.claimWorkdayManagerLease !== 'function') {
+		return {
+			payload: {
+				id: `local:${input.config.managerId}`,
+				managerId: input.config.managerId,
+				state: 'active',
+				metadata: input.metadata ?? {},
+			},
+		};
+	}
+	return input.sdk.claimWorkdayManagerLease({
+		projectId: input.config.projectId,
+		environment: input.config.environment,
+		workDayId: input.workDayId ?? null,
+		managerId: input.config.managerId,
+		ttlSeconds: managerLeaseTtlSeconds(input.config),
+		staleAfterSeconds: managerLeaseStaleAfterSeconds(input.config),
+		now: input.now.toISOString(),
+		metadata: {
+			service: 'workdayManager',
+			mode: input.config.mode,
+			pid: process.pid,
+			...input.metadata,
+		},
+	});
+}
+
+async function appendTaskEventIfSupported(sdk: ManagerSdk, taskId: string, kind: string, data: Record<string, unknown>) {
+	if (typeof sdk.appendTaskEvent !== 'function') return;
+	await sdk.appendTaskEvent({
+		taskId,
+		kind,
+		data,
+		actor: 'manager',
+	}).catch(() => null);
+}
+
+function isExpiredLease(task: TaskRecord, now: Date) {
+	const raw = typeof task.leaseExpiresAt === 'string'
+		? task.leaseExpiresAt
+		: typeof task.lease_expires_at === 'string'
+			? task.lease_expires_at
+			: '';
+	if (!raw) return false;
+	const expiresAt = Date.parse(raw);
+	return Number.isFinite(expiresAt) && expiresAt <= now.valueOf();
+}
+
+async function recoverStaleTasks(
+	sdk: ManagerSdk,
+	workDayId: string | null,
+	now: Date,
+	limit = 100,
+): Promise<StaleTaskRecoveryResult> {
+	const activeEnvelope = await sdk.searchTasks({
+		workDayId: workDayId ?? undefined,
+		limit,
+		state: ['claimed', 'running'],
+	});
+	const activeTasks = Array.isArray(activeEnvelope.payload) ? activeEnvelope.payload as TaskRecord[] : [];
+	const staleTasks = activeTasks.filter((task) => isExpiredLease(task, now));
+	const result: StaleTaskRecoveryResult = {
+		recoveredTasks: [],
+		failedTasks: [],
+		checkedTaskCount: activeTasks.length,
+	};
+	for (const task of staleTasks) {
+		const taskId = String(task.id ?? '');
+		if (!taskId) continue;
+		const attemptCount = Number(task.attemptCount ?? task.attempt_count ?? 0);
+		const maxAttempts = Number(task.maxAttempts ?? task.max_attempts ?? 3);
+		const retryable = attemptCount < maxAttempts;
+		const delaySeconds = taskRetryDelaySeconds(Math.max(1, attemptCount));
+		const nextVisibleAt = new Date(now.valueOf() + (delaySeconds * 1000)).toISOString();
+		if (retryable) {
+			await appendTaskEventIfSupported(sdk, taskId, 'stale_task_recovered', {
+				workDayId: task.workDayId ?? task.work_day_id ?? workDayId,
+				claimedBy: task.claimedBy ?? task.claimed_by ?? null,
+				leaseExpiresAt: task.leaseExpiresAt ?? task.lease_expires_at ?? null,
+				attemptCount,
+				maxAttempts,
+				nextVisibleAt,
+				retryDelaySeconds: delaySeconds,
+			});
+			const updated = await sdk.failTask({
+				id: taskId,
+				errorCode: 'stale_task_recovered',
+				errorMessage: 'Task lease expired before completion; manager returned it to the queue.',
+				retryable: true,
+				nextVisibleAt,
+				actor: 'manager',
+			}).catch(() => ({ payload: null }));
+			result.recoveredTasks.push((updated.payload as TaskRecord | null) ?? task);
+		} else {
+			await appendTaskEventIfSupported(sdk, taskId, 'stale_task_failed', {
+				workDayId: task.workDayId ?? task.work_day_id ?? workDayId,
+				claimedBy: task.claimedBy ?? task.claimed_by ?? null,
+				leaseExpiresAt: task.leaseExpiresAt ?? task.lease_expires_at ?? null,
+				attemptCount,
+				maxAttempts,
+			});
+			const updated = await sdk.failTask({
+				id: taskId,
+				errorCode: 'stale_task_retry_limit_exceeded',
+				errorMessage: 'Task lease expired and retry limit was already reached.',
+				retryable: false,
+				actor: 'manager',
+			}).catch(() => ({ payload: null }));
+			result.failedTasks.push((updated.payload as TaskRecord | null) ?? task);
+		}
+	}
+	return result;
 }
 
 function parseDays(value: string) {
@@ -842,6 +1001,7 @@ async function openWorkday(
 		return null;
 	}
 	const created = await sdk.startWorkDay({
+		id: config.workDayId ?? undefined,
 		projectId: config.projectId,
 		capacityBudget: effectiveBudget,
 		graphVersion: null,
@@ -855,7 +1015,7 @@ async function openWorkday(
 		},
 		actor: 'manager',
 	});
-	if (created.payload) {
+	if (created.payload && docsAutomationEnabled(config)) {
 		const graphTask = await seedGraphRefreshTask(sdk, {
 			workDayId: String(created.payload.id),
 			projectId: config.projectId,
@@ -904,6 +1064,66 @@ async function openWorkday(
 					reporter,
 					task: {
 						...(graphTask as TaskRecord),
+						payloadJson: JSON.stringify(admission.payload),
+					},
+					admission,
+					projectId: config.projectId,
+					workDayId: String(created.payload.id ?? ''),
+					actor: 'manager',
+				});
+				if (capacityReady.enqueue) {
+					await maybeEnqueueTask(sdk, capacityReady.task);
+				}
+			}
+		}
+		const scanTask = await seedCodebaseDocumentationScanTask(sdk, {
+			workDayId: String(created.payload.id),
+			projectId: config.projectId,
+			actor: 'manager',
+		});
+		if (scanTask) {
+			const admission = admissionForTaskProposal({
+				type: 'scan_codebase_documentation_surface',
+				payload: parseJsonString((scanTask as TaskRecord).payloadJson ?? (scanTask as TaskRecord).payload_json),
+				workDay: created.payload as WorkDayRecord,
+				policy,
+				capacityPlan,
+				queuedCredits: 0,
+				source: 'manager.openWorkday',
+			});
+			await sdk.recordTaskProgress({
+				id: String((scanTask as TaskRecord).id ?? ''),
+				state: admission.state,
+				patch: admission.payload,
+				appendEvent: {
+					kind: 'classified',
+					data: admission.classification as unknown as Record<string, unknown>,
+				},
+				actor: 'manager',
+			});
+			await sdk.recordTaskProgress({
+				id: String((scanTask as TaskRecord).id ?? ''),
+				state: admission.state,
+				appendEvent: {
+					kind: 'admission_decided',
+					data: admission.admission as unknown as Record<string, unknown>,
+				},
+				actor: 'manager',
+			});
+			await recordAdmissionEstimate({
+				reporter,
+				projectId: config.projectId,
+				workDayId: String(created.payload.id ?? ''),
+				taskId: String((scanTask as TaskRecord).id ?? ''),
+				admission,
+				estimatePhase: 'intent',
+			});
+			if (admission.enqueue) {
+				const capacityReady = await finalizeAdmittedTaskCapacity({
+					sdk,
+					reporter,
+					task: {
+						...(scanTask as TaskRecord),
 						payloadJson: JSON.stringify(admission.payload),
 					},
 					admission,
@@ -2246,7 +2466,7 @@ async function reportWorkdaySummary(
 			}
 			: null,
 	};
-	const snapshot = writeWorkdayContentSnapshot({
+	const contentInput = {
 		repoRoot: process.env.TREESEED_AGENT_REPO_ROOT?.trim() || process.cwd(),
 		projectId: config.projectId,
 		teamId: config.teamId,
@@ -2269,23 +2489,84 @@ async function reportWorkdaySummary(
 		releaseResults: Array.isArray(enrichedSummary.releaseResults) ? enrichedSummary.releaseResults as Record<string, unknown>[] : [],
 		codexUsage: Array.isArray(enrichedSummary.codexUsage) ? enrichedSummary.codexUsage as Record<string, unknown>[] : [],
 		generatedAt: String(enrichedSummary.generatedAt ?? new Date().toISOString()),
+	};
+	const docsAutomation = summarizeDocsAutomationWorkday(contentInput);
+	const linkedTasks = (Array.isArray(enrichedSummary.taskItems) ? enrichedSummary.taskItems : []).map((task) => ({
+		id: readString(task as Record<string, unknown>, 'id'),
+		type: readString(task as Record<string, unknown>, 'type') || null,
+		state: readString(task as Record<string, unknown>, 'state') || null,
+	}));
+	const linkedArtifacts = (Array.isArray(enrichedSummary.generatedArtifacts) ? enrichedSummary.generatedArtifacts : []).map((artifact) => ({
+		id: readString(artifact as Record<string, unknown>, 'id'),
+		kind: readString(artifact as Record<string, unknown>, 'artifactKind'),
+		taskId: readString(artifact as Record<string, unknown>, 'taskId') || null,
+		targetPath: readString(artifact as Record<string, unknown>, 'targetPath') || null,
+	}));
+	const linkedApprovals = (Array.isArray(enrichedSummary.generatedArtifacts) ? enrichedSummary.generatedArtifacts : [])
+		.filter((artifact) => ['promotion_request', 'release_request'].includes(readString(artifact as Record<string, unknown>, 'artifactKind')))
+		.map((artifact) => ({
+			id: readString(artifact as Record<string, unknown>, 'id'),
+			kind: readString(artifact as Record<string, unknown>, 'approvalKind', 'artifactKind'),
+			taskId: readString(artifact as Record<string, unknown>, 'taskId') || null,
+		}));
+	const linkedMutations = (Array.isArray(enrichedSummary.generatedArtifacts) ? enrichedSummary.generatedArtifacts : [])
+		.filter((artifact) => readString(artifact as Record<string, unknown>, 'artifactKind') === 'docs_mutation_result')
+		.map((artifact) => ({
+			id: readString(artifact as Record<string, unknown>, 'id'),
+			taskId: readString(artifact as Record<string, unknown>, 'taskId') || null,
+			targetPath: readString(artifact as Record<string, unknown>, 'targetPath') || null,
+			changedPaths: readStringArray((artifact as Record<string, unknown>).changedPaths),
+			verificationStatus: readString(artifact as Record<string, unknown>, 'verificationStatus') || null,
+			repairTaskId: readString(artifact as Record<string, unknown>, 'repairTaskId') || null,
+		}));
+	const reportSummary = {
+		...enrichedSummary,
+		docsAutomation,
+		linkedTasks,
+		linkedArtifacts,
+		linkedApprovals,
+		linkedMutations,
+	};
+	const snapshot = writeWorkdayContentSnapshot({
+		...contentInput,
+		summary: reportSummary,
 	});
+	const contentSnapshot = {
+		relativePath: snapshot.relativePath,
+		slug: snapshot.slug,
+		reportVersion: snapshot.reportVersion,
+		title: snapshot.title,
+		status: snapshot.status,
+	};
 	const report = await sdk.createReport({
 		workDayId: String(workDay.id ?? ''),
 		kind: 'workday_summary',
 		body: {
-			...enrichedSummary,
-			contentSnapshot: {
-				relativePath: snapshot.relativePath,
-				slug: snapshot.slug,
-				reportVersion: snapshot.reportVersion,
-				title: snapshot.title,
-			},
+			...reportSummary,
+			contentSnapshot,
 		},
 		renderedRef: snapshot.relativePath,
-		sentAt: String(enrichedSummary.generatedAt ?? new Date().toISOString()),
+		sentAt: String(reportSummary.generatedAt ?? new Date().toISOString()),
 		actor: 'manager',
 	});
+	const reportId = report.payload ? readString(report.payload as Record<string, unknown>, 'id') || null : null;
+	const messageSdk = sdk as unknown as {
+		createMessage?: (input: Record<string, unknown>) => Promise<unknown>;
+	};
+	if (typeof messageSdk.createMessage === 'function') {
+		await messageSdk.createMessage({
+			type: 'workday_report_created',
+			payload: {
+				workDayId: String(workDay.id ?? ''),
+				reportId,
+				contentSnapshot,
+				docsAutomation,
+			},
+			relatedModel: 'work_day',
+			relatedId: String(workDay.id ?? ''),
+			priority: 50,
+		}).catch(() => null);
+	}
 	await reporter.reportWorkdaySummary({
 		environment: config.environment as ProjectEnvironmentName,
 		workDayId: String(workDay.id ?? ''),
@@ -2293,25 +2574,19 @@ async function reportWorkdaySummary(
 		state: String(workDay.state ?? 'active'),
 		startedAt: readString(workDay, 'startedAt', 'started_at') || null,
 		endedAt: readString(workDay, 'endedAt', 'ended_at') || null,
-		summary: enrichedSummary,
+		summary: {
+			...reportSummary,
+			contentSnapshot,
+		},
 		metadata: {
 			projectId: config.projectId,
-			contentSnapshot: {
-				relativePath: snapshot.relativePath,
-				slug: snapshot.slug,
-				reportVersion: snapshot.reportVersion,
-			},
-			reportId: report.payload ? readString(report.payload as Record<string, unknown>, 'id') || null : null,
+			contentSnapshot,
+			reportId,
 		},
 	});
 	return {
-		...enrichedSummary,
-		contentSnapshot: {
-			relativePath: snapshot.relativePath,
-			slug: snapshot.slug,
-			reportVersion: snapshot.reportVersion,
-			title: snapshot.title,
-		},
+		...reportSummary,
+		contentSnapshot,
 	};
 }
 
@@ -2370,14 +2645,63 @@ async function reconcileManager(options: {
 		: [];
 	const manualRunRequested = pendingWorkdayRequests.some((entry) => entry.type === 'one_off_run' || entry.type === 'retry_open');
 	const earlyCloseRequested = pendingWorkdayRequests.some((entry) => entry.type === 'early_close');
-	const insideWorkWindow = !earlyCloseRequested && (manualRunRequested || isWithinWorkWindow(now, policy.schedule));
+	const pauseRequested = pendingWorkdayRequests.some((entry) => entry.type === 'pause') && !manualRunRequested;
+	const insideWorkWindow = !pauseRequested && !earlyCloseRequested && (manualRunRequested || isWithinWorkWindow(now, policy.schedule));
 	let activeWorkDay = await getActiveWorkDay(sdk, config.projectId);
+	const initialLease = await claimManagerLease({
+		sdk,
+		config,
+		workDayId: activeWorkDay ? String(activeWorkDay.id ?? '') : null,
+		now,
+		metadata: {
+			insideWorkWindow,
+			pauseRequested,
+			pendingWorkdayRequestCount: pendingWorkdayRequests.length,
+			lastCycleResult: 'claiming',
+		},
+	});
+	const managerLease = (initialLease.payload as ManagerLeaseRecord | null) ?? null;
+	if (!managerLease) {
+		return {
+			ok: true,
+			mode: 'reconcile' as const,
+			skipped: true,
+			reason: 'healthy_manager_lease_exists',
+			managerId: config.managerId,
+			projectId: config.projectId,
+			environment: config.environment,
+			insideWorkWindow,
+			workPolicy: policy,
+			workDay: activeWorkDay,
+			prioritySnapshot: null,
+			seededTasks: [],
+			queuedCount: 0,
+			activeLeases: 0,
+			desiredWorkers: 0,
+			managerLease: null,
+			staleTaskRecovery: { recoveredTasks: [], failedTasks: [], checkedTaskCount: 0 },
+			scaleResult: { applied: false, provider: 'noop', desiredWorkers: 0, metadata: { reason: 'healthy_manager_lease_exists' } },
+			workdaySummary: null,
+		};
+	}
 	let currentSnapshot: PrioritySnapshot | null = null;
 
 	if (!activeWorkDay && insideWorkWindow && policy.dailyTaskCreditBudget > 0) {
 		const previewSnapshot = await buildPrioritySnapshot(sdk, config, policy, now, null);
 		if ((previewSnapshot?.items.length ?? 0) > 0) {
 			activeWorkDay = await openWorkday(sdk, config, policy, now, reporter);
+			await claimManagerLease({
+				sdk,
+				config,
+				workDayId: activeWorkDay ? String(activeWorkDay.id ?? '') : null,
+				now,
+				metadata: {
+					insideWorkWindow,
+					pauseRequested,
+					openedWorkDay: Boolean(activeWorkDay),
+					lastCycleResult: 'workday_opened',
+				},
+			}).catch(() => null);
 			currentSnapshot = activeWorkDay
 				? await buildPrioritySnapshot(sdk, config, policy, now, String(activeWorkDay.id ?? ''))
 				: previewSnapshot;
@@ -2390,6 +2714,9 @@ async function reconcileManager(options: {
 	const activeCapacityPlan = activeWorkDay
 		? await reporter.getProjectCapacityPlan(config.environment as ProjectEnvironmentName).catch(() => null)
 		: null;
+	const staleTaskRecovery = activeWorkDay
+		? await recoverStaleTasks(sdk, String(activeWorkDay.id ?? ''), now)
+		: { recoveredTasks: [], failedTasks: [], checkedTaskCount: 0 };
 
 	let seedResult = {
 		createdTasks: [] as TaskRecord[],
@@ -2397,10 +2724,10 @@ async function reconcileManager(options: {
 		remainingCredits: remainingCredits(activeWorkDay, policy),
 	};
 
-	if (activeWorkDay && insideWorkWindow && seedResult.remainingCredits > 0) {
+	if (activeWorkDay && insideWorkWindow && docsAutomationEnabled(config) && seedResult.remainingCredits > 0) {
 		seedResult = await topUpQueuedTasks(sdk, config, policy, activeWorkDay, currentSnapshot, now, activeCapacityPlan, reporter);
 	}
-	if (activeWorkDay && insideWorkWindow && policy.maxQueuedTasks > 0 && policy.maxQueuedCredits > 0 && seedResult.remainingCredits > 0) {
+	if (activeWorkDay && insideWorkWindow && docsAutomationEnabled(config) && policy.maxQueuedTasks > 0 && policy.maxQueuedCredits > 0 && seedResult.remainingCredits > 0) {
 		const plannedTasks = await materializeCompletedPlanningTasks(sdk, config, activeWorkDay, policy, now, activeCapacityPlan, reporter);
 		if (plannedTasks.length > 0) {
 			seedResult = {
@@ -2429,12 +2756,14 @@ async function reconcileManager(options: {
 		? computeDesiredWorkerCount(policy.autoscale, metrics)
 		: 0;
 	const latestScaleDecision = await sdk.getLatestScaleDecision(config.projectId, config.environment, config.poolName);
-	const desiredWorkers = applyInteractiveWakeUpOverride({
-		priorityClass: 'background',
-		queuedCount: metrics.queuedCount,
-		currentWorkers: Number(latestScaleDecision.payload?.desiredWorkers ?? 0),
-		desiredWorkers: applyScaleCooldown(policy.autoscale, latestScaleDecision.payload, rawDesiredWorkers, now),
-	});
+	const desiredWorkers = pauseRequested
+		? 0
+		: applyInteractiveWakeUpOverride({
+				priorityClass: 'background',
+				queuedCount: metrics.queuedCount,
+				currentWorkers: Number(latestScaleDecision.payload?.desiredWorkers ?? 0),
+				desiredWorkers: applyScaleCooldown(policy.autoscale, latestScaleDecision.payload, rawDesiredWorkers, now),
+			});
 	const scaleDecision = {
 		projectId: config.projectId,
 		environment: config.environment,
@@ -2443,11 +2772,19 @@ async function reconcileManager(options: {
 		desiredWorkers,
 		observedQueueDepth: metrics.queuedCount,
 		observedActiveLeases: metrics.activeLeases,
-		reason: desiredWorkers !== rawDesiredWorkers ? 'cooldown_hold' : 'reconcile',
+		reason: pauseRequested ? 'automation_paused' : desiredWorkers !== rawDesiredWorkers ? 'cooldown_hold' : 'reconcile',
 		metadata: {
 			insideWorkWindow,
+			pauseRequested,
 			remainingCredits: seedResult.remainingCredits,
 			seededTaskCount: seedResult.createdTasks.length,
+			staleTaskRecovery: {
+				recoveredTaskCount: staleTaskRecovery.recoveredTasks.length,
+				failedTaskCount: staleTaskRecovery.failedTasks.length,
+				checkedTaskCount: staleTaskRecovery.checkedTaskCount,
+				backoffBaseSeconds: TASK_RETRY_BACKOFF_BASE_SECONDS,
+				backoffMaxSeconds: TASK_RETRY_BACKOFF_MAX_SECONDS,
+			},
 		},
 	};
 	const recordedScaleDecision = await sdk.recordScaleDecision(scaleDecision);
@@ -2514,6 +2851,12 @@ async function reconcileManager(options: {
 		queuedCount: metrics.queuedCount,
 		activeLeases: metrics.activeLeases,
 		desiredWorkers,
+		managerLease,
+		staleTaskRecovery,
+		retryBackoffPolicy: {
+			baseSeconds: TASK_RETRY_BACKOFF_BASE_SECONDS,
+			maxSeconds: TASK_RETRY_BACKOFF_MAX_SECONDS,
+		},
 		scaleResult,
 		workdaySummary,
 	};
@@ -2540,6 +2883,16 @@ async function runOpenWorkday(options: {
 	if (!isWithinWorkWindow(now, policy.schedule)) {
 		return { ok: true, created: false, skipped: true, reason: 'outside_work_window' };
 	}
+	const lease = await claimManagerLease({
+		sdk,
+		config,
+		workDayId: null,
+		now,
+		metadata: { action: 'open_workday', lastCycleResult: 'claiming' },
+	});
+	if (!lease.payload) {
+		return { ok: true, created: false, skipped: true, reason: 'healthy_manager_lease_exists' };
+	}
 	const workDay = await openWorkday(sdk, config, policy, now, reporter);
 	const prioritySnapshot = workDay
 		? await buildPrioritySnapshot(sdk, config, policy, now, String(workDay.id ?? ''))
@@ -2561,6 +2914,16 @@ async function runCloseWorkday(options: {
 	const activeWorkDay = await getActiveWorkDay(sdk, config.projectId);
 	if (!activeWorkDay) {
 		return { ok: true, skipped: true, reason: 'no_active_workday' };
+	}
+	const lease = await claimManagerLease({
+		sdk,
+		config,
+		workDayId: String(activeWorkDay.id ?? ''),
+		now: new Date(),
+		metadata: { action: 'close_workday', lastCycleResult: 'claiming' },
+	});
+	if (!lease.payload) {
+		return { ok: true, skipped: true, reason: 'healthy_manager_lease_exists', workDay: activeWorkDay };
 	}
 	const decision = {
 		projectId: config.projectId,
@@ -2610,6 +2973,16 @@ async function runReportWorkday(options: {
 	const activeWorkDay = await getActiveWorkDay(sdk, config.projectId);
 	if (!activeWorkDay) {
 		return { ok: true, skipped: true, reason: 'no_active_workday' };
+	}
+	const lease = await claimManagerLease({
+		sdk,
+		config,
+		workDayId: String(activeWorkDay.id ?? ''),
+		now: new Date(),
+		metadata: { action: 'report_workday', lastCycleResult: 'claiming' },
+	});
+	if (!lease.payload) {
+		return { ok: true, skipped: true, reason: 'healthy_manager_lease_exists', workDay: activeWorkDay };
 	}
 	const latestScaleDecision = await sdk.getLatestScaleDecision(config.projectId, config.environment, config.poolName);
 	const latestSnapshot = await sdk.getLatestPrioritySnapshot(config.projectId, String(activeWorkDay.id ?? ''));

@@ -128,13 +128,9 @@ describe('market knowledge dogfood harness', () => {
 		expect(result.generated.map((generated) => generated.questionId)).toEqual(
 			TREESEED_PLATFORM_KNOWLEDGE_QUESTIONS.map((question) => question.id),
 		);
-		expect(result.generated.map((generated) => generated.knowledgeDraft.targetPath)).toEqual([
-			'src/content/knowledge/architecture/runtime/agent-processing-platform.mdx',
-			'src/content/knowledge/developer/workflow/local-agent-research-workday.mdx',
-			'src/content/knowledge/research/evidence/research-to-knowledge-loop.mdx',
-			'src/content/knowledge/developer/providers/codex-subscription-provider.mdx',
-			'src/content/knowledge/operations/workdays/supervising-agent-workdays.mdx',
-		]);
+		expect(result.generated.map((generated) => generated.knowledgeDraft.targetPath)).toEqual(
+			TREESEED_PLATFORM_KNOWLEDGE_QUESTIONS.map((question) => question.targetPath),
+		);
 		expect(result.releaseAttempted).toBe(false);
 		expect(result.stagingAttempted).toBe(false);
 

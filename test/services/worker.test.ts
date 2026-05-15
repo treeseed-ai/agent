@@ -1,11 +1,104 @@
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { KnowledgeDraft } from '../../src/agents/contracts/knowledge.ts';
+
+function docsDraft(): KnowledgeDraft {
+	return {
+		id: 'knowledge:worker',
+		kind: 'knowledge_draft',
+		title: 'Worker Docs',
+		book: 'architecture',
+		section: 'runtime',
+		targetPath: 'src/content/knowledge/architecture/runtime/worker-docs.mdx',
+		state: 'draft',
+		sourceQuestionId: 'question:worker',
+		sourceResearchIds: ['research:worker'],
+		frontmatter: {
+			type: 'architecture',
+			title: 'Worker Docs',
+			summary: 'Worker docs.',
+			status: 'pending_review',
+			generated_by: 'treeseed-agent',
+			agent_role: 'knowledge_generator',
+			source_question: 'question:worker',
+			source_research: ['research:worker'],
+			review_state: 'pending_review',
+			book_target: 'architecture',
+			section_target: 'runtime',
+			confidence: 'medium',
+			source_map: [{
+				claim: 'Worker executes tasks.',
+				sourceFiles: ['packages/agent/src/services/worker.ts'],
+				sourceSymbolsOrSections: ['executeResearchKnowledgeTask'],
+				evidenceStrength: 'direct',
+				uncertainty: '',
+				lastObservedRef: 'graph-1',
+			}],
+			updated: '2026-05-13',
+			related: { objectives: [], questions: ['question:worker'], proposals: [], decisions: [] },
+		},
+		body: [
+			'# Worker Docs',
+			'',
+			'## What this explains',
+			'Worker docs.',
+			'',
+			'## Current implementation',
+			'Worker executes tasks.',
+			'',
+			'## Main flow',
+			'Task is claimed and executed.',
+			'',
+			'## Important files',
+			'- packages/agent/src/services/worker.ts',
+			'',
+			'## Source map',
+			'- Worker executes tasks. (packages/agent/src/services/worker.ts)',
+			'',
+			'## Governance and safety boundaries',
+			'Promotion is approval gated.',
+			'',
+			'## Open questions',
+			'- None recorded.',
+			'',
+			'## Verification notes',
+			'Run tests.',
+		].join('\n'),
+		reviewState: 'pending_review',
+		createdAt: '2026-05-13T00:00:00.000Z',
+		updatedAt: '2026-05-13T00:00:00.000Z',
+	};
+}
+
+function fakeMutationWorktrees(changedPaths = ['docs/worker.md']) {
+	return {
+		plannedWorktreePath: vi.fn(() => '/tmp/treeseed/.agent-worktrees/docs-mutation'),
+		createOrResumeWorktree: vi.fn(async () => ({ branchName: 'agent/docs-mutation/task-1', worktreeRoot: '/tmp/treeseed/.agent-worktrees/docs-mutation', created: true })),
+		inspectChangedPaths: vi.fn(async () => changedPaths),
+		assertChangedPathsAllowed: vi.fn(),
+		saveSnapshot: vi.fn(async (snapshot) => ({
+			kind: snapshot.kind,
+			ref: `/tmp/${snapshot.kind}.json`,
+			summary: snapshot.summary,
+			changedPaths: snapshot.changedPaths,
+			createdAt: '2026-05-13T00:00:00.000Z',
+		})),
+		stageAndCommit: vi.fn(async () => 'feature-sha'),
+		mergeToStaging: vi.fn(async () => ({ status: 'completed', mergedToStaging: true, commitSha: 'staging-sha' })),
+	};
+}
 
 const sdk = {
 	claimTask: vi.fn(),
 	createTask: vi.fn(),
 	recordTaskProgress: vi.fn(),
+	appendTaskEvent: vi.fn(),
+	createMessage: vi.fn(),
 	completeTask: vi.fn(),
 	failTask: vi.fn(),
+	recordWorkerRunner: vi.fn(),
 	dispatch: vi.fn(),
 };
 
@@ -34,6 +127,7 @@ let taskContext: Record<string, unknown> = {
 };
 
 const runAgentMock = vi.fn();
+const resolveServiceRepoRootMock = vi.hoisted(() => vi.fn(() => '/tmp/treeseed'));
 
 vi.mock('@treeseed/sdk', async (importOriginal) => {
 	const actual = await importOriginal<typeof import('@treeseed/sdk')>();
@@ -60,7 +154,7 @@ vi.mock('../../src/services/common.ts', () => ({
 		graphVersion: task.graphVersion ?? null,
 		budgetHint: 1,
 	})),
-	resolveServiceRepoRoot: vi.fn(() => '/tmp/treeseed'),
+	resolveServiceRepoRoot: resolveServiceRepoRootMock,
 	resolveWorkerConfig: vi.fn(() => workerConfig),
 }));
 
@@ -79,8 +173,11 @@ describe('worker service', () => {
 		sdk.claimTask.mockResolvedValue({ payload: { id: 'task-1' } });
 		sdk.createTask.mockResolvedValue({ payload: { id: 'task-followup' } });
 		sdk.recordTaskProgress.mockResolvedValue({ payload: { id: 'task-1', state: 'running' } });
+		sdk.appendTaskEvent.mockResolvedValue({ payload: { id: 'event-1' } });
+		sdk.createMessage.mockResolvedValue({ payload: { id: 1 } });
 		sdk.completeTask.mockResolvedValue({ payload: { id: 'task-1', state: 'completed' } });
 		sdk.failTask.mockResolvedValue({ payload: { id: 'task-1', state: 'failed' } });
+		sdk.recordWorkerRunner.mockResolvedValue({ payload: { id: 'runner-1' } });
 		sdk.dispatch.mockResolvedValue({
 			ok: true,
 			mode: 'inline',
@@ -96,6 +193,7 @@ describe('worker service', () => {
 		});
 		reporter.reportCapacityUsage.mockClear();
 		reporter.createApprovalRequest.mockClear();
+		resolveServiceRepoRootMock.mockReturnValue('/tmp/treeseed');
 	});
 
 	afterEach(() => {
@@ -144,6 +242,72 @@ describe('worker service', () => {
 		expect(queue.ack).toHaveBeenCalledWith(['lease-1']);
 	}, 20_000);
 
+	it('executes codebase documentation scanner tasks and emits capped gap messages', async () => {
+		const repoRoot = mkdtempSync(join(tmpdir(), 'treeseed-worker-scan-'));
+		try {
+			mkdirSync(join(repoRoot, 'packages/agent/src/services'), { recursive: true });
+			writeFileSync(join(repoRoot, 'packages/agent/src/services/worker.ts'), 'export function workerLoop() { return true; }\n', 'utf8');
+			writeFileSync(join(repoRoot, 'packages/agent/src/services/manager.ts'), 'export function managerLoop() { return true; }\n', 'utf8');
+			mkdirSync(join(repoRoot, 'packages/agent/src/agents'), { recursive: true });
+			writeFileSync(join(repoRoot, 'packages/agent/src/agents/registry.ts'), 'export const registry = new Map();\n', 'utf8');
+			resolveServiceRepoRootMock.mockReturnValue(repoRoot);
+			taskContext = {
+				task: {
+					id: 'scan-1',
+					workDayId: 'workday-1',
+					agentId: 'treeseed-codebase-cartographer',
+					type: 'scan_codebase_documentation_surface',
+					graphVersion: 'graph-1',
+					payloadJson: JSON.stringify({
+						executionKind: 'codebase_documentation_scan',
+						maxKnowledgeGapMessages: 1,
+					}),
+				},
+				agent: { slug: 'treeseed-codebase-cartographer' },
+			};
+			queue.pull.mockResolvedValue({
+				messages: [{
+					body: { taskId: 'scan-1', workDayId: 'workday-1' },
+					attempts: 1,
+					leaseId: 'lease-scan',
+				}],
+			});
+
+			const { runWorkerCycle } = await import('../../src/services/worker.ts');
+			const result = await runWorkerCycle();
+
+			expect(result).toMatchObject({ ok: true, processed: 1 });
+			expect(sdk.appendTaskEvent).toHaveBeenCalledWith(expect.objectContaining({
+				taskId: 'scan-1',
+				kind: 'codebase_inventory_completed',
+				data: expect.objectContaining({
+					knowledgeGapCount: expect.any(Number),
+					emittedGapMessages: 1,
+				}),
+			}));
+			expect(sdk.createMessage).toHaveBeenCalledTimes(1);
+			expect(sdk.createMessage).toHaveBeenCalledWith(expect.objectContaining({
+				type: 'knowledge_gap_detected',
+				payload: expect.objectContaining({
+					recommendedTaskKind: 'research_code_surface',
+					sourcePaths: expect.any(Array),
+				}),
+				relatedModel: 'codebase_inventory',
+			}));
+			expect(sdk.completeTask).toHaveBeenCalledWith(expect.objectContaining({
+				id: 'scan-1',
+				output: expect.objectContaining({
+					artifactKind: 'codebase_inventory',
+					codebaseInventory: expect.objectContaining({ kind: 'codebase_inventory' }),
+					generatedArtifacts: [expect.objectContaining({ artifactKind: 'codebase_inventory' })],
+				}),
+			}));
+			expect(queue.ack).toHaveBeenCalledWith(['lease-scan']);
+		} finally {
+			rmSync(repoRoot, { recursive: true, force: true });
+		}
+	}, 20_000);
+
 	it('identifies when a deployed worker loop should exit after idle timeout', async () => {
 		const { shouldExitWorkerLoopAfterIdle } = await import('../../src/services/worker.ts');
 
@@ -165,6 +329,59 @@ describe('worker service', () => {
 			now: 61000,
 			processed: 0,
 		})).toBe(false);
+	});
+
+	it('records worker runner heartbeat state during idle and active cycles', async () => {
+		queue.pull.mockResolvedValueOnce({ messages: [] });
+		const { runWorkerCycle } = await import('../../src/services/worker.ts');
+
+		await runWorkerCycle();
+		expect(sdk.recordWorkerRunner).toHaveBeenCalledWith(expect.objectContaining({
+			runnerId: 'worker-test',
+			state: 'active',
+			activeLocalWorkers: 0,
+			metadata: expect.objectContaining({ phase: 'polling' }),
+		}));
+		expect(sdk.recordWorkerRunner).toHaveBeenCalledWith(expect.objectContaining({
+			runnerId: 'worker-test',
+			state: 'idle',
+			activeLocalWorkers: 0,
+			metadata: expect.objectContaining({ phase: 'idle' }),
+		}));
+
+		sdk.recordWorkerRunner.mockClear();
+		taskContext = {
+			task: {
+				id: 'task-heartbeat',
+				workDayId: 'workday-1',
+				agentId: 'workflow-dispatch',
+				payloadJson: JSON.stringify({
+					executionKind: 'workflow_dispatch',
+					namespace: 'workflow',
+					operation: 'verify',
+				}),
+			},
+			agent: null,
+		};
+		queue.pull.mockResolvedValueOnce({
+			messages: [{
+				body: { taskId: 'task-heartbeat', workDayId: 'workday-1' },
+				attempts: 1,
+				leaseId: 'lease-heartbeat',
+			}],
+		});
+
+		await runWorkerCycle();
+		expect(sdk.recordWorkerRunner).toHaveBeenCalledWith(expect.objectContaining({
+			state: 'active',
+			activeLocalWorkers: 1,
+			metadata: expect.objectContaining({ phase: 'processing', selectedMessageCount: 1 }),
+		}));
+		expect(sdk.recordWorkerRunner).toHaveBeenCalledWith(expect.objectContaining({
+			state: 'idle',
+			activeLocalWorkers: 0,
+			metadata: expect.objectContaining({ phase: 'cycle_complete', processed: 1 }),
+		}));
 	});
 
 	it('executes manager-materialized agent trigger tasks with the provided invocation', async () => {
@@ -263,6 +480,150 @@ describe('worker service', () => {
 			}),
 		}));
 		expect(queue.ack).toHaveBeenCalledWith(['lease-planning']);
+	});
+
+	it('creates a visible repair task when approved deterministic docs promotion fails verification', async () => {
+		const { executeResearchKnowledgeTask } = await import('../../src/services/worker.ts');
+		const draft = docsDraft();
+		const output = await executeResearchKnowledgeTask({
+			sdk: sdk as any,
+			task: {
+				id: 'task-promote',
+				workDayId: 'workday-1',
+				type: 'promote_knowledge_to_staging',
+				graphVersion: 'graph-1',
+				payloadJson: JSON.stringify({
+					taskKind: 'promote_knowledge_to_staging',
+					projectId: 'project-1',
+					environment: 'local',
+					knowledgeDraft: draft,
+					approvalDecision: {
+						approvalId: 'promotion:worker',
+						decision: 'approve_as_book_content',
+						actor: 'user-1',
+					},
+					allowedPaths: [draft.targetPath],
+					forbiddenPaths: [],
+					verificationCommands: ['npm run test:unit'],
+				}),
+			},
+			taskKind: 'promote_knowledge_to_staging',
+			workerId: 'worker-test',
+			queueAttempt: 1,
+			promotionDependencies: {
+				worktrees: {
+					plannedWorktreePath: vi.fn(() => '/tmp/promotion'),
+					createOrResumeWorktree: vi.fn(async () => ({ branchName: 'agent/knowledge-promotion/task-promote', worktreeRoot: '/tmp/promotion', created: true })),
+					inspectChangedPaths: vi.fn(async () => [draft.targetPath]),
+					assertChangedPathsAllowed: vi.fn(),
+					saveSnapshot: vi.fn(async (snapshot) => ({
+						kind: snapshot.kind,
+						ref: `/tmp/${snapshot.kind}.json`,
+						summary: snapshot.summary,
+						changedPaths: snapshot.changedPaths,
+						createdAt: '2026-05-13T00:00:00.000Z',
+					})),
+					stageAndCommit: vi.fn(),
+					mergeToStaging: vi.fn(),
+				} as any,
+				verify: vi.fn(async () => ({ ok: false, summary: 'links failed', commandsRun: ['npm run test:unit'], errors: ['links failed'] })),
+			},
+		});
+
+		expect(output).toMatchObject({
+			artifactKind: 'docs_mutation_result',
+			summary: { status: 'failed', summary: 'links failed' },
+			nextTaskId: 'task-followup',
+			repairTask: expect.objectContaining({
+				kind: 'knowledge_promotion_verification_repair',
+				taskId: 'task-followup',
+			}),
+		});
+		expect(output.generatedArtifacts).toEqual([expect.objectContaining({
+			artifactKind: 'docs_mutation_result',
+			id: 'task-promote',
+			verificationStatus: 'failed',
+		})]);
+		expect(sdk.createTask).toHaveBeenCalledWith(expect.objectContaining({
+			type: 'create_repair_task',
+			idempotencyKey: 'workday-1:create_repair_task:verification:task-promote',
+			payload: expect.objectContaining({
+				repairTask: expect.objectContaining({
+					kind: 'knowledge_promotion_verification_repair',
+					failedCommands: ['npm run test:unit'],
+				}),
+			}),
+			state: 'waiting',
+		}));
+	});
+
+	it('delegates approved docs mutation tasks to the existing Codex docs lifecycle', async () => {
+		const { executeResearchKnowledgeTask } = await import('../../src/services/worker.ts');
+		const operationGrants = [{
+			id: 'grant-docs-mutation',
+			state: 'active',
+			operations: ['switch', 'dev', 'verify', 'save', 'stage', 'merge_to_staging', 'close'],
+			modes: ['dry_run', 'read_only', 'mutating'],
+			agentRoles: ['engineer'],
+			taskKinds: ['apply_approved_docs_mutation'],
+			projectIds: ['project-1'],
+			environments: ['local'],
+			allowedPaths: ['docs/**'],
+			forbiddenPaths: [],
+		}];
+		const output = await executeResearchKnowledgeTask({
+			sdk: sdk as any,
+			task: {
+				id: 'task-docs-mutation',
+				workDayId: 'workday-1',
+				type: 'apply_approved_docs_mutation',
+				graphVersion: 'graph-1',
+				payloadJson: JSON.stringify({
+					provider: 'codex',
+					projectId: 'project-1',
+					environment: 'local',
+					agentRole: 'engineer',
+					goal: 'Update docs/worker.md',
+					featureBranch: 'agent/docs-mutation/task-docs-mutation',
+					approval: { id: 'approval:docs', kind: 'apply_docs_mutation', state: 'approved' },
+					allowedPaths: ['docs/**'],
+					forbiddenPaths: [],
+					verificationCommands: ['npm run test:unit'],
+					operationGrants,
+				}),
+			},
+			taskKind: 'apply_approved_docs_mutation',
+			workerId: 'worker-test',
+			queueAttempt: 1,
+			docsMutationDependencies: {
+				worktrees: fakeMutationWorktrees(['docs/worker.md']) as any,
+				runCodexTask: vi.fn(async () => ({
+					provider: 'codex',
+					status: 'completed',
+					summary: 'Codex updated docs.',
+					changedPaths: ['docs/worker.md'],
+					usage: {},
+				})),
+			},
+		});
+
+		expect(output).toMatchObject({
+			artifactKind: 'docs_mutation_result',
+			summary: {
+				status: 'completed',
+				summary: 'Codex docs mutation task-docs-mutation merged to staging.',
+			},
+			docsMutationResult: expect.objectContaining({
+				status: 'staged',
+				changedPaths: ['docs/worker.md'],
+				mergedToStaging: true,
+			}),
+		});
+		expect(output.generatedArtifacts).toEqual([expect.objectContaining({
+			artifactKind: 'docs_mutation_result',
+			id: 'task-docs-mutation',
+			mergedToStaging: true,
+		})]);
 	});
 
 	it('checkpoints over-budget work as continuation_required instead of completing it', async () => {

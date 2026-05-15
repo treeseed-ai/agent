@@ -249,6 +249,15 @@ apiRuntimeDescribe('@treeseed/agent api runtime', () => {
 						payloadJson: '{}',
 					},
 					{
+						id: 'task-scan-1',
+						workDayId: 'workday-1',
+						type: 'scan_codebase_documentation_surface',
+						state: 'completed',
+						createdAt: '2026-05-13T00:00:30.000Z',
+						updatedAt: '2026-05-13T00:00:45.000Z',
+						payloadJson: '{}',
+					},
+					{
 						id: 'task-optimize-1',
 						workDayId: 'workday-1',
 						type: 'optimize_knowledge_draft',
@@ -257,12 +266,47 @@ apiRuntimeDescribe('@treeseed/agent api runtime', () => {
 						updatedAt: '2026-05-13T00:03:00.000Z',
 						payloadJson: '{}',
 					},
+					{
+						id: 'task-promote-to-staging-1',
+						workDayId: 'workday-1',
+						type: 'promote_knowledge_to_staging',
+						state: 'completed',
+						createdAt: '2026-05-13T00:04:00.000Z',
+						updatedAt: '2026-05-13T00:05:00.000Z',
+						payloadJson: '{}',
+					},
 				],
 			})),
 			search: vi.fn(async (request) => {
 				if (request.model === 'task_output') {
 					return {
 						payload: [
+							{
+								id: 'output-scan-1',
+								taskId: 'task-scan-1',
+								outputJson: JSON.stringify({
+									taskId: 'task-scan-1',
+									artifactKind: 'codebase_inventory',
+									codebaseInventory: {
+										id: 'codebase_inventory:2026-05-13',
+										kind: 'codebase_inventory',
+										title: 'TreeSeed Codebase Documentation Surface Inventory',
+										generatedAt: '2026-05-13T00:00:45.000Z',
+										graphVersion: 'graph-1',
+										repoRef: 'local',
+										scanTargets: [],
+										ignoredPatterns: [],
+										packages: [],
+										modules: [{
+											path: 'packages/agent/src/services',
+											importantFiles: ['packages/agent/src/services/worker.ts'],
+										}],
+										knowledgeGaps: [],
+										warnings: [],
+									},
+									generatedArtifacts: [],
+								}),
+							},
 							{
 								id: 'output-research-1',
 								taskId: 'task-research-1',
@@ -276,6 +320,14 @@ apiRuntimeDescribe('@treeseed/agent api runtime', () => {
 										contextQueries: [],
 										contextPackSummary: 'Runtime context.',
 										sourceRefs: [{ ref: 'packages/agent/src/services/worker.ts', kind: 'path', title: 'Worker' }],
+										sourceMap: [{
+											claim: 'Worker runtime evidence.',
+											sourceFiles: ['packages/agent/src/services/worker.ts'],
+											sourceSymbolsOrSections: ['Worker'],
+											evidenceStrength: 'direct',
+											uncertainty: 'Fixture evidence.',
+											lastObservedRef: 'graph-1',
+										}],
 										observedFacts: [],
 										inferences: [],
 										uncertainties: [],
@@ -323,8 +375,41 @@ apiRuntimeDescribe('@treeseed/agent api runtime', () => {
 										totalScore: 29,
 										recommendation: 'promote',
 										remainingIssues: [],
+										criticalIssues: [],
 										createdAt: '2026-05-13T00:03:00.000Z',
 									},
+								}),
+							},
+							{
+								id: 'output-promotion-1',
+								taskId: 'task-promote-to-staging-1',
+								outputJson: JSON.stringify({
+									taskId: 'task-promote-to-staging-1',
+									artifactKind: 'docs_mutation_result',
+									promotionToStaging: {
+										status: 'staged',
+										summary: 'Knowledge draft was staged.',
+										taskId: 'task-promote-to-staging-1',
+										draftId: 'knowledge:runtime',
+										targetPath: 'src/content/knowledge/architecture/runtime/runtime.mdx',
+										featureBranch: 'agent/knowledge-promotion/task-promote-to-staging-1',
+										stagingBranch: 'staging',
+										changedPaths: ['src/content/knowledge/architecture/runtime/runtime.mdx'],
+										verification: { ok: true, summary: 'ok', commandsRun: ['npm run test:unit'], errors: [] },
+										snapshots: [],
+										operationResults: [],
+										mergedToStaging: true,
+									},
+									docsMutationResult: {
+										status: 'staged',
+										taskId: 'task-promote-to-staging-1',
+										draftId: 'knowledge:runtime',
+										targetPath: 'src/content/knowledge/architecture/runtime/runtime.mdx',
+										changedPaths: ['src/content/knowledge/architecture/runtime/runtime.mdx'],
+										verification: { ok: true, summary: 'ok', commandsRun: ['npm run test:unit'], errors: [] },
+										mergedToStaging: true,
+									},
+									generatedArtifacts: [],
 								}),
 							},
 							{
@@ -356,9 +441,11 @@ apiRuntimeDescribe('@treeseed/agent api runtime', () => {
 
 		const artifacts = await json(await app.request('/v1/agent-artifacts', { headers }));
 		expect(artifacts.payload.items).toEqual(expect.arrayContaining([
+			expect.objectContaining({ artifactKind: 'codebase_inventory', id: 'codebase_inventory:2026-05-13', taskId: 'task-scan-1' }),
 			expect.objectContaining({ artifactKind: 'research_note', id: 'research:runtime-v1', taskId: 'task-research-1' }),
 			expect.objectContaining({ artifactKind: 'knowledge_draft', id: 'knowledge:runtime', targetPath: 'src/content/knowledge/architecture/runtime/runtime.mdx' }),
 			expect.objectContaining({ artifactKind: 'optimization_report', id: 'optimization:runtime', totalScore: 29 }),
+			expect.objectContaining({ artifactKind: 'docs_mutation_result', id: 'task-promote-to-staging-1', mergedToStaging: true }),
 		]));
 		expect(artifacts.payload.warnings).toEqual(expect.arrayContaining([
 			expect.stringContaining('Skipped malformed JSON'),
@@ -406,6 +493,62 @@ apiRuntimeDescribe('@treeseed/agent api runtime', () => {
 			})),
 			search: vi.fn(async () => ({ payload: [] })),
 			appendTaskEvent: vi.fn(async () => ({ payload: { id: 'event-1' } })),
+			listApprovalRequests: vi.fn(async () => ({
+				payload: [{
+					id: 'promotion:knowledge-persisted',
+					teamId: 'team-1',
+					projectId: 'treeseed-api-test',
+					workDayId: 'workday-1',
+					taskId: 'task-promote-persisted',
+					kind: 'promote_knowledge_draft',
+					state: 'pending',
+					severity: 'medium',
+					title: 'Promote persisted runtime knowledge',
+					summary: 'Persisted approval waiting for human review.',
+					options: [{ id: 'approve_as_book_content', label: 'Approve content' }],
+					recommendation: { recommendation: 'promote', totalScore: 30 },
+					policySnapshot: { approvalPolicy: 'manual' },
+					metadata: {
+						approvalKind: 'promote_knowledge_draft',
+						draftId: 'knowledge:persisted-runtime',
+						targetPath: 'src/content/knowledge/architecture/runtime/persisted.mdx',
+						sourceMapRefs: [{ claim: 'Runtime claim', sourceFiles: ['packages/agent/src/services/worker.ts'] }],
+						artifactRefs: [{ artifactKind: 'knowledge_draft', id: 'knowledge:persisted-runtime' }],
+						verificationPlan: { commands: [], sourceMapRequired: true },
+						promotionRequest: {
+							id: 'promotion:knowledge-persisted',
+							draftId: 'knowledge:persisted-runtime',
+							targetPath: 'src/content/knowledge/architecture/runtime/persisted.mdx',
+							recommendation: 'promote',
+						},
+					},
+					decision: null,
+					createdAt: '2026-05-13T00:00:00.000Z',
+					updatedAt: '2026-05-13T00:00:00.000Z',
+				}],
+			})),
+			decideApprovalRequest: vi.fn(async (id: string, request: any) => ({
+				payload: {
+					id,
+					teamId: 'team-1',
+					projectId: 'treeseed-api-test',
+					workDayId: 'workday-1',
+					taskId: 'task-promote-1',
+					kind: 'promote_knowledge_draft',
+					state: request.state,
+					severity: 'medium',
+					title: 'Promote runtime knowledge',
+					summary: 'Decision recorded.',
+					options: [],
+					recommendation: {},
+					policySnapshot: {},
+					metadata: {},
+					decision: request.decision,
+					createdAt: '2026-05-13T00:00:00.000Z',
+					updatedAt: '2026-05-13T00:01:00.000Z',
+				},
+			})),
+			upsertTeamInboxItem: vi.fn(async (request) => ({ payload: request })),
 		};
 		const app = createTestApp({
 			sdk: sdk as any,
@@ -417,13 +560,27 @@ apiRuntimeDescribe('@treeseed/agent api runtime', () => {
 		const headers = { authorization: 'Bearer project-secret' };
 
 		const approvals = await json(await app.request('/v1/approvals', { headers }));
-		expect(approvals.payload.items).toEqual([expect.objectContaining({
+		expect(approvals.payload.items).toEqual(expect.arrayContaining([expect.objectContaining({
+			id: 'promotion:knowledge-persisted',
+			state: 'pending',
+			severity: 'medium',
+			sourceMapRefs: [expect.objectContaining({ claim: 'Runtime claim' })],
+			policySnapshot: { approvalPolicy: 'manual' },
+		}), expect.objectContaining({
 			id: 'promotion:knowledge-runtime',
 			taskId: 'task-promote-1',
 			draftId: 'knowledge:runtime',
-		})]);
+		})]));
 
-		for (const allowedDecision of ['approve_as_book_content', 'request_more_research', 'reject']) {
+		const persistedDetail = await json(await app.request('/v1/approvals/promotion%3Aknowledge-persisted', { headers }));
+		expect(persistedDetail.payload.approval).toMatchObject({
+			id: 'promotion:knowledge-persisted',
+			draftId: 'knowledge:persisted-runtime',
+			state: 'pending',
+			verificationPlan: { commands: [], sourceMapRequired: true },
+		});
+
+		for (const allowedDecision of ['approve', 'request_changes', 'defer', 'reject']) {
 			const decision = await app.request('/v1/approvals/promotion%3Aknowledge-runtime/decision', {
 				method: 'POST',
 				headers: {
@@ -434,16 +591,37 @@ apiRuntimeDescribe('@treeseed/agent api runtime', () => {
 			});
 
 			expect(decision.status).toBe(200);
+			const canonicalDecision = allowedDecision === 'approve'
+				? 'approve_as_book_content'
+				: allowedDecision === 'request_changes'
+					? 'request_more_research'
+					: allowedDecision;
 			expect(sdk.appendTaskEvent).toHaveBeenCalledWith(expect.objectContaining({
 				taskId: 'task-promote-1',
 				kind: 'approval_decision_recorded',
 				data: expect.objectContaining({
-					decision: allowedDecision,
+					decision: canonicalDecision,
 					releaseAttempted: false,
 					stagingAttempted: false,
 				}),
 			}));
 		}
+		expect(sdk.decideApprovalRequest).toHaveBeenCalledWith('promotion:knowledge-runtime', expect.objectContaining({
+			state: 'approved',
+			optionId: 'approve_as_book_content',
+		}));
+		expect(sdk.decideApprovalRequest).toHaveBeenCalledWith('promotion:knowledge-runtime', expect.objectContaining({
+			state: 'changes_requested',
+			optionId: 'request_more_research',
+		}));
+		expect(sdk.decideApprovalRequest).toHaveBeenCalledWith('promotion:knowledge-runtime', expect.objectContaining({
+			state: 'deferred',
+			optionId: 'defer',
+		}));
+		expect(sdk.upsertTeamInboxItem).toHaveBeenCalledWith(expect.objectContaining({
+			id: 'approval:promotion:knowledge-runtime',
+			state: 'action_required',
+		}));
 
 		const beforeInvalidCount = sdk.appendTaskEvent.mock.calls.length;
 		const invalidDecision = await app.request('/v1/approvals/promotion%3Aknowledge-runtime/decision', {
@@ -657,9 +835,10 @@ apiRuntimeDescribe('@treeseed/agent api runtime', () => {
 			sourceQuestionId: 'question:runtime',
 			sourceResearchIds: ['research:runtime-v1'],
 			frontmatter: {
+				type: 'architecture',
 				title: 'Runtime',
 				summary: 'Runtime knowledge.',
-				status: 'draft',
+				status: 'pending_review',
 				generated_by: 'treeseed-agent',
 				agent_role: 'knowledge_generator',
 				source_question: 'question:runtime',
@@ -668,17 +847,100 @@ apiRuntimeDescribe('@treeseed/agent api runtime', () => {
 				book_target: 'architecture',
 				section_target: 'runtime',
 				confidence: 'medium',
+				source_map: [{
+					claim: 'Runtime knowledge is grounded in worker code.',
+					sourceFiles: ['packages/agent/src/services/worker.ts'],
+					sourceSymbolsOrSections: ['runWorkerCycle'],
+					evidenceStrength: 'direct',
+					uncertainty: '',
+					lastObservedRef: 'graph-1',
+				}],
 				updated: '2026-05-13',
-				related: { objectives: [], questions: ['question:runtime'], proposals: [] },
+				related: { objectives: [], questions: ['question:runtime'], proposals: [], decisions: [] },
 			},
-			body: '# Runtime\n\n## Source map\n- packages/agent/src/services/worker.ts\n',
+			body: [
+				'# Runtime',
+				'',
+				'## What this explains',
+				'Runtime knowledge.',
+				'',
+				'## Current implementation',
+				'Grounded in worker code.',
+				'',
+				'## Main flow',
+				'The worker runs tasks.',
+				'',
+				'## Important files',
+				'- packages/agent/src/services/worker.ts',
+				'',
+				'## Source map',
+				'- Runtime knowledge is grounded in worker code. (packages/agent/src/services/worker.ts)',
+				'',
+				'## Governance and safety boundaries',
+				'Pending review.',
+				'',
+				'## Open questions',
+				'- None recorded.',
+				'',
+				'## Verification notes',
+				'Review source map before promotion.',
+			].join('\n'),
 			reviewState: 'pending_review',
 			createdAt: '2026-05-13T00:00:00.000Z',
 			updatedAt: '2026-05-13T00:00:00.000Z',
 		};
+		const researchNote = {
+			id: 'research:runtime-v1',
+			kind: 'research_note',
+			questionId: 'question:runtime',
+			state: 'draft',
+			contextQueries: [],
+			contextPackSummary: 'Runtime context.',
+			sourceRefs: [{ ref: 'packages/agent/src/services/worker.ts', kind: 'path', title: 'Worker' }],
+			sourceMap: [{
+				claim: 'Runtime knowledge is grounded in worker code.',
+				sourceFiles: ['packages/agent/src/services/worker.ts'],
+				sourceSymbolsOrSections: ['runWorkerCycle'],
+				evidenceStrength: 'direct',
+				uncertainty: '',
+				lastObservedRef: 'graph-1',
+			}],
+			observedFacts: ['The worker runs knowledge tasks.'],
+			inferences: [],
+			uncertainties: [],
+			recommendedKnowledgeArtifacts: [],
+			recommendedImplementationProposal: null,
+			createdAt: '2026-05-13T00:00:00.000Z',
+		};
+		const optimizationReport = {
+			id: 'optimization:runtime',
+			kind: 'knowledge_optimization_report',
+			draftId: knowledgeDraft.id,
+			score: {
+				factual_grounding: 5,
+				book_fit: 4,
+				structure: 5,
+				future_agent_usefulness: 4,
+				human_reviewability: 4,
+				link_quality: 3,
+				uncertainty_visibility: 3,
+			},
+			totalScore: 28,
+			recommendation: 'promote',
+			remainingIssues: [],
+			criticalIssues: [],
+			createdAt: '2026-05-13T00:00:00.000Z',
+		};
 		const sdk = {
 			searchTasks: vi.fn(async () => ({
 				payload: [
+					{
+						id: 'task-research-1',
+						workDayId: 'workday-1',
+						type: 'research_question',
+						state: 'completed',
+						payloadJson: '{}',
+					},
 					{
 						id: 'task-draft-1',
 						workDayId: 'workday-1',
@@ -699,6 +961,7 @@ apiRuntimeDescribe('@treeseed/agent api runtime', () => {
 								targetPath: knowledgeDraft.targetPath,
 								recommendation: 'promote',
 								sourceResearchIds: ['research:runtime-v1'],
+								optimizationReportId: 'optimization:runtime',
 							},
 						}),
 					},
@@ -724,11 +987,23 @@ apiRuntimeDescribe('@treeseed/agent api runtime', () => {
 			search: vi.fn(async (request) => {
 				if (request.model === 'task_output') {
 					return {
-						payload: [{
-							id: 'output-draft-1',
-							taskId: 'task-draft-1',
-							outputJson: JSON.stringify({ knowledgeDraft }),
-						}],
+						payload: [
+							{
+								id: 'output-research-1',
+								taskId: 'task-research-1',
+								outputJson: JSON.stringify({ researchNote }),
+							},
+							{
+								id: 'output-draft-1',
+								taskId: 'task-draft-1',
+								outputJson: JSON.stringify({ knowledgeDraft }),
+							},
+							{
+								id: 'output-optimize-1',
+								taskId: 'task-promote-1',
+								outputJson: JSON.stringify({ optimizationReport }),
+							},
+						],
 					};
 				}
 				if (request.model === 'work_day') {
@@ -739,12 +1014,34 @@ apiRuntimeDescribe('@treeseed/agent api runtime', () => {
 			appendTaskEvent: vi.fn(async () => ({ payload: { id: 'event-1' } })),
 			createTask: vi.fn(async (request) => ({
 				payload: {
-					id: 'task-promote-to-staging-1',
+					id: request.type === 'generate_knowledge_draft' ? 'task-revise-draft-1' : 'task-promote-to-staging-1',
 					type: request.type,
 					workDayId: request.workDayId,
 					payloadJson: JSON.stringify(request.payload),
 				},
 			})),
+			decideApprovalRequest: vi.fn(async (id: string, request: any) => ({
+				payload: {
+					id,
+					teamId: 'team-1',
+					projectId: 'project-1',
+					workDayId: 'workday-1',
+					taskId: 'task-promote-1',
+					kind: 'promote_knowledge_draft',
+					state: request.state,
+					severity: 'medium',
+					title: 'Promote runtime knowledge',
+					summary: 'Decision recorded.',
+					options: [],
+					recommendation: {},
+					policySnapshot: {},
+					metadata: {},
+					decision: request.decision,
+					createdAt: '2026-05-13T00:00:00.000Z',
+					updatedAt: '2026-05-13T00:01:00.000Z',
+				},
+			})),
+			upsertTeamInboxItem: vi.fn(async (request: any) => ({ payload: request })),
 		};
 		const operations = {
 			runOperation: vi.fn(async () => ({
@@ -779,7 +1076,43 @@ apiRuntimeDescribe('@treeseed/agent api runtime', () => {
 			payload: expect.objectContaining({
 				knowledgeDraft,
 				allowedPaths: [knowledgeDraft.targetPath],
+				forbiddenPaths: expect.arrayContaining(['**/node_modules/**', 'src/lib/**', 'migrations/**']),
+				verificationCommands: ['npm run test:unit', 'npm run build'],
+				approval: expect.objectContaining({ id: 'promotion:knowledge-runtime', state: 'approved' }),
+				policySnapshot: expect.any(Object),
 			}),
+		}));
+
+		sdk.createTask.mockClear();
+		const requestedChanges = await recordAgentApprovalDecision({
+			sdk: sdk as any,
+			projectId: 'project-1',
+			approvalId: 'promotion:knowledge-runtime',
+			decision: 'request_changes',
+			reason: 'Clarify the worker source map.',
+			actor: 'user-1',
+			actorType: 'user',
+			repoRoot: '/repo',
+			operations: operations as any,
+		});
+		expect(requestedChanges?.state).toBe('changes_requested');
+		expect(requestedChanges?.createdTask).toEqual(expect.objectContaining({
+			id: 'task-revise-draft-1',
+			type: 'generate_knowledge_draft',
+		}));
+		expect(sdk.createTask).toHaveBeenCalledWith(expect.objectContaining({
+			type: 'generate_knowledge_draft',
+			idempotencyKey: 'workday-1:generate_knowledge_draft_revision:promotion:knowledge-runtime',
+			payload: expect.objectContaining({
+				researchNote,
+				previousKnowledgeDraft: knowledgeDraft,
+				optimizationReport,
+				revisionOfDraftId: knowledgeDraft.id,
+			}),
+		}));
+		expect(sdk.decideApprovalRequest).toHaveBeenCalledWith('promotion:knowledge-runtime', expect.objectContaining({
+			state: 'changes_requested',
+			optionId: 'request_more_research',
 		}));
 
 		const release = await recordAgentApprovalDecision({

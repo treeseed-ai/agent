@@ -6,6 +6,8 @@ import {
 	type ResolvedHandlerContextPack,
 } from '@treeseed/sdk/graph/context-query-contracts';
 import type { AgentRuntimeSpec } from '@treeseed/sdk/types/agents';
+import type { CodebaseInventoryArtifact } from '../../services/codebase-documentation-scanner.ts';
+import { buildCodeContextPacksForQuery } from './code-context-packs.ts';
 
 interface QueryCandidate {
 	query: DeclarativeContextQuery;
@@ -58,6 +60,12 @@ const SOURCE_PRIORITIES: Record<HandlerContextPackSource, number> = {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
 	return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function codebaseInventoryFromPayload(value: unknown): CodebaseInventoryArtifact | null {
+	if (!isRecord(value)) return null;
+	const inventory = isRecord(value.codebaseInventory) ? value.codebaseInventory : null;
+	return inventory?.kind === 'codebase_inventory' ? inventory as unknown as CodebaseInventoryArtifact : null;
 }
 
 function contextQueriesFromRecord(value: unknown): DeclarativeContextQuery[] {
@@ -176,6 +184,15 @@ export async function resolveHandlerContextPacks(
 			pack,
 			warnings: compiled.compiled.warnings,
 		});
+		const inventory = codebaseInventoryFromPayload(input.taskPayload);
+		if (inventory) {
+			packs.push(...buildCodeContextPacksForQuery({
+				query: compiled.compiled.query,
+				inventory,
+				source: candidate.source,
+				sourceRef: candidate.sourceRef,
+			}));
+		}
 	}
 
 	return {

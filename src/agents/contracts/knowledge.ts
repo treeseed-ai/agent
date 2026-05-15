@@ -1,3 +1,5 @@
+import type { ResearchSourceMapEntry } from './research.ts';
+
 export type KnowledgeReviewState =
 	| 'pending_review'
 	| 'verified_for_staging'
@@ -7,7 +9,8 @@ export type KnowledgeReviewState =
 export interface KnowledgeDraftFrontmatter {
 	title: string;
 	summary: string;
-	status: 'draft' | 'feature_branch' | 'staged' | 'released';
+	type: 'guide' | 'architecture' | 'reference' | 'operations' | 'governance' | 'api' | 'cli' | 'ui';
+	status: 'draft' | 'pending_review' | 'canonical' | 'deprecated';
 	generated_by: 'treeseed-agent';
 	agent_role: 'knowledge_generator' | string;
 	source_question: string;
@@ -16,11 +19,13 @@ export interface KnowledgeDraftFrontmatter {
 	book_target: string;
 	section_target: string;
 	confidence: 'low' | 'medium' | 'high';
+	source_map: ResearchSourceMapEntry[];
 	updated: string;
 	related: {
 		objectives: string[];
 		questions: string[];
 		proposals: string[];
+		decisions: string[];
 	};
 }
 
@@ -57,8 +62,9 @@ export interface OptimizationReport {
 	draftId: string;
 	score: KnowledgeOptimizationScore;
 	totalScore: number;
-	recommendation: 'promote' | 'optimize_again' | 'request_more_research';
+	recommendation: 'promote' | 'revise' | 'defer' | 'reject';
 	remainingIssues: string[];
+	criticalIssues: string[];
 	createdAt: string;
 }
 
@@ -83,7 +89,24 @@ export function validateKnowledgeDraft(draft: KnowledgeDraft) {
 	if (!draft.targetPath.startsWith('src/content/knowledge/')) errors.push('Knowledge draft targetPath must be a canonical knowledge path.');
 	if (!draft.sourceQuestionId) errors.push('Knowledge draft sourceQuestionId is required.');
 	if (!draft.sourceResearchIds.length) errors.push('Knowledge draft sourceResearchIds is required.');
-	if (!draft.body.includes('## Source map')) errors.push('Knowledge draft body must include a Source map section.');
+	if (!draft.frontmatter.type) errors.push('Knowledge draft frontmatter type is required.');
+	if (draft.frontmatter.status !== 'pending_review') errors.push('Knowledge draft frontmatter status must be pending_review.');
+	if (!draft.frontmatter.source_map.length) errors.push('Knowledge draft frontmatter source_map is required.');
+	if (!Array.isArray(draft.frontmatter.related.decisions)) {
+		errors.push('Knowledge draft frontmatter related.decisions must be an array.');
+	}
+	for (const section of [
+		'## What this explains',
+		'## Current implementation',
+		'## Main flow',
+		'## Important files',
+		'## Source map',
+		'## Governance and safety boundaries',
+		'## Open questions',
+		'## Verification notes',
+	]) {
+		if (!draft.body.includes(section)) errors.push(`Knowledge draft body must include ${section}.`);
+	}
 	return {
 		ok: errors.length === 0,
 		errors,
@@ -99,6 +122,12 @@ export function validateOptimizationReport(report: OptimizationReport) {
 	});
 	if (report.totalScore !== sumKnowledgeOptimizationScore(report.score)) {
 		errors.push('Optimization report totalScore must equal the sum of score fields.');
+	}
+	if (!['promote', 'revise', 'defer', 'reject'].includes(report.recommendation)) {
+		errors.push('Optimization report recommendation is invalid.');
+	}
+	if (!Array.isArray(report.criticalIssues)) {
+		errors.push('Optimization report criticalIssues must be an array.');
 	}
 	return {
 		ok: errors.length === 0,

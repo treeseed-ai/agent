@@ -46,6 +46,9 @@ function withPrefix(prefix: string, path: string) {
 const AGENT_APPROVAL_DECISIONS = new Set([
 	...PROMOTION_APPROVAL_DECISIONS,
 	...RELEASE_APPROVAL_DECISIONS,
+	'approve',
+	'request_changes',
+	'defer',
 ]);
 
 function slugify(value: string) {
@@ -720,6 +723,9 @@ export function registerProjectRoutes(
 				projectId: options.config.projectId,
 				items: state.artifacts,
 				warnings: state.warnings,
+				taskHealth: state.taskHealth,
+				workerRunners: state.workerRunners,
+				managerLease: state.managerLease,
 			},
 		});
 	});
@@ -762,6 +768,20 @@ export function registerProjectRoutes(
 			projectId: options.config.projectId,
 		});
 		return c.json({ ok: true, payload: { projectId: options.config.projectId, items: state.approvals, warnings: state.warnings } });
+	});
+
+	app.get(withPrefix(prefix, '/v1/approvals/:approvalId'), async (c) => {
+		const principal = c.get('principal');
+		if (!principal) return jsonError(c, 401, 'Authentication required.');
+		const approvalId = c.req.param('approvalId');
+		const state = await collectAgentArtifactApiState({
+			sdk: options.sharedSdk,
+			projectId: options.config.projectId,
+		});
+		const approval = state.approvals.find((entry) => entry.id === approvalId || entry.taskId === approvalId);
+		return approval
+			? c.json({ ok: true, payload: { projectId: options.config.projectId, approval, warnings: state.warnings } })
+			: jsonError(c, 404, 'Unknown approval request.');
 	});
 
 	app.get(withPrefix(prefix, '/v1/operations/grants'), async (c) => {

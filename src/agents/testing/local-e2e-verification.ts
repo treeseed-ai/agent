@@ -142,6 +142,8 @@ class InMemoryE2eSdk {
 	taskOutputs: JsonRecord[] = [];
 	taskEvents: JsonRecord[] = [];
 	messages: JsonRecord[] = [];
+	approvalRequests: JsonRecord[] = [];
+	teamInboxItems: JsonRecord[] = [];
 	reports: JsonRecord[] = [];
 	workDays: JsonRecord[];
 	private nextTaskNumber = 1;
@@ -226,6 +228,77 @@ class InMemoryE2eSdk {
 		};
 		this.messages.push(message);
 		return { payload: message };
+	}
+
+	async createApprovalRequest(request: JsonRecord) {
+		const existing = this.approvalRequests.find((entry) => readString(entry, 'id') === readString(request, 'id'));
+		if (existing) {
+			if (readString(existing, 'state') !== 'pending') return { payload: existing };
+			Object.assign(existing, {
+				...request,
+				state: readString(request, 'state') || readString(existing, 'state') || 'pending',
+				createdAt: readString(existing, 'createdAt') || this.nowIso,
+				updatedAt: this.nowIso,
+			});
+			return { payload: existing };
+		}
+		const approval = {
+			...request,
+			id: readString(request, 'id') || `approval-${this.approvalRequests.length + 1}`,
+			state: readString(request, 'state') || 'pending',
+			createdAt: this.nowIso,
+			updatedAt: this.nowIso,
+		};
+		this.approvalRequests.push(approval);
+		return { payload: approval };
+	}
+
+	async listApprovalRequests(request: { projectId?: string; teamId?: string; state?: string | string[]; limit?: number } = {}) {
+		const states = Array.isArray(request.state) ? new Set(request.state) : request.state ? new Set([request.state]) : null;
+		const payload = this.approvalRequests
+			.filter((approval) => !request.projectId || readString(approval, 'projectId') === request.projectId)
+			.filter((approval) => !request.teamId || readString(approval, 'teamId') === request.teamId)
+			.filter((approval) => !states || states.has(readString(approval, 'state')))
+			.slice(0, request.limit ?? this.approvalRequests.length);
+		return { payload };
+	}
+
+	async decideApprovalRequest(id: string, request: JsonRecord) {
+		const approval = this.approvalRequests.find((entry) => readString(entry, 'id') === id);
+		if (!approval) return { payload: null };
+		approval.state = readString(request, 'state') || readString(approval, 'state') || 'pending';
+		approval.decision = request.decision ?? {
+			optionId: request.optionId ?? null,
+			note: request.note ?? null,
+		};
+		approval.decidedByType = request.decidedByType ?? null;
+		approval.decidedById = request.decidedById ?? null;
+		approval.decidedAt = this.nowIso;
+		approval.updatedAt = this.nowIso;
+		return { payload: approval };
+	}
+
+	async upsertTeamInboxItem(request: JsonRecord) {
+		const id = readString(request, 'id') || `inbox-${this.teamInboxItems.length + 1}`;
+		const itemKey = readString(request, 'itemKey', 'item_key');
+		const existing = this.teamInboxItems.find((entry) => readString(entry, 'id') === id || (itemKey && readString(entry, 'itemKey', 'item_key') === itemKey));
+		if (existing) {
+			Object.assign(existing, {
+				...request,
+				id: readString(existing, 'id') || id,
+				createdAt: readString(existing, 'createdAt') || this.nowIso,
+				updatedAt: this.nowIso,
+			});
+			return { payload: existing };
+		}
+		const item = {
+			...request,
+			id,
+			createdAt: this.nowIso,
+			updatedAt: this.nowIso,
+		};
+		this.teamInboxItems.push(item);
+		return { payload: item };
 	}
 
 	async buildContextPack(request: JsonRecord) {

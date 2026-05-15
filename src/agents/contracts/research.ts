@@ -13,6 +13,15 @@ export interface ResearchSourceRef {
 	title?: string;
 }
 
+export interface ResearchSourceMapEntry {
+	claim: string;
+	sourceFiles: string[];
+	sourceSymbolsOrSections: string[];
+	evidenceStrength: 'direct' | 'supporting' | 'inferred';
+	uncertainty: string;
+	lastObservedRef: string;
+}
+
 export interface ResearchInference {
 	statement: string;
 	sourceRefs: string[];
@@ -33,6 +42,7 @@ export interface ResearchNote {
 	contextQueries: ResearchContextQueryProvenance[];
 	contextPackSummary: string;
 	sourceRefs: ResearchSourceRef[];
+	sourceMap: ResearchSourceMapEntry[];
 	observedFacts: string[];
 	inferences: ResearchInference[];
 	uncertainties: ResearchUncertainty[];
@@ -48,6 +58,12 @@ export function validateResearchNote(note: ResearchNote) {
 	if (!note.questionId) errors.push('Research note questionId is required.');
 	if (!note.contextQueries.length) errors.push('Research note must record context query provenance.');
 	if (!note.sourceRefs.length) errors.push('Research note must include source refs.');
+	if (!note.sourceMap.length) errors.push('Research note must include source map entries.');
+	for (const [index, entry] of note.sourceMap.entries()) {
+		if (!entry.claim) errors.push(`Research note sourceMap[${index}] claim is required.`);
+		if (!entry.sourceFiles.length) errors.push(`Research note sourceMap[${index}] must include source files.`);
+		if (!['direct', 'supporting', 'inferred'].includes(entry.evidenceStrength)) errors.push(`Research note sourceMap[${index}] has invalid evidence strength.`);
+	}
 	if (!note.observedFacts.length) errors.push('Research note must include observed facts.');
 	return {
 		ok: errors.length === 0,

@@ -2,6 +2,8 @@ import type { AgentRuntimeSpec } from '@treeseed/sdk/types/agents';
 import type { AgentTriggerInvocation } from '../agents/runtime-types.ts';
 import type { KnowledgeDraft, OptimizationReport } from '../agents/contracts/knowledge.ts';
 import type { ResearchNote } from '../agents/contracts/research.ts';
+import type { CodebaseInventoryArtifact } from './codebase-documentation-scanner.ts';
+import { summarizeCodebaseInventoryArtifact } from './codebase-documentation-scanner.ts';
 import {
 	TREESEED_PLATFORM_KNOWLEDGE_QUESTIONS,
 	type KnowledgePipelineQuestion,
@@ -13,13 +15,15 @@ export const RESEARCH_KNOWLEDGE_TASK_KINDS = [
 	'optimize_knowledge_draft',
 	'promote_knowledge_draft_request',
 	'promote_knowledge_to_staging',
+	'apply_approved_docs_mutation',
+	'create_repair_task',
 	'release_staged_knowledge_request',
 ] as const;
 
 export type ResearchKnowledgeTaskKind = typeof RESEARCH_KNOWLEDGE_TASK_KINDS[number];
 
 export interface GeneratedAgentArtifactSummary {
-	artifactKind: 'research_note' | 'knowledge_draft' | 'optimization_report' | 'promotion_request' | 'release_request';
+	artifactKind: 'codebase_inventory' | 'research_note' | 'knowledge_draft' | 'optimization_report' | 'promotion_request' | 'docs_mutation_result' | 'release_request';
 	id: string;
 	title?: string;
 	taskId?: string;
@@ -37,15 +41,30 @@ export interface GeneratedAgentArtifactSummary {
 	featureBranch?: string;
 	changedPaths?: string[];
 	releaseDecision?: string;
+	confidence?: string;
+	issueCount?: number;
+	criticalIssueCount?: number;
+	verificationStatus?: string;
+	mergedToStaging?: boolean;
+	repairTaskId?: string;
 }
 
 export interface ResearchKnowledgeTaskOutputEnvelope {
 	artifactKind: GeneratedAgentArtifactSummary['artifactKind'];
+	codebaseInventory?: CodebaseInventoryArtifact;
 	researchNote?: ResearchNote;
 	knowledgeDraft?: KnowledgeDraft;
 	optimizationReport?: OptimizationReport;
 	promotionRequest?: Record<string, unknown>;
+	docsMutationResult?: Record<string, unknown>;
+	promotionToStaging?: Record<string, unknown>;
+	implementationResult?: Record<string, unknown>;
 	releaseRequest?: Record<string, unknown>;
+	changedPaths?: string[];
+	verification?: Record<string, unknown>;
+	snapshots?: Record<string, unknown>[];
+	repairTask?: Record<string, unknown>;
+	mergedToStaging?: boolean;
 	generatedArtifacts: GeneratedAgentArtifactSummary[];
 	nextTaskId?: string | null;
 	summary: {
@@ -68,6 +87,12 @@ interface TaskRecord {
 
 interface ResearchKnowledgeSdk {
 	searchTasks(request: { workDayId?: string; limit?: number; state?: string | string[] }): Promise<{ payload: unknown }>;
+	search?: (request: {
+		model: string;
+		filters?: Array<Record<string, unknown>>;
+		sort?: Array<Record<string, unknown>>;
+		limit?: number;
+	}) => Promise<{ payload: unknown }>;
 	createTask(request: {
 		workDayId: string;
 		agentId: string;
@@ -109,6 +134,18 @@ function readString(record: Record<string, unknown>, ...keys: string[]) {
 
 function parsePayload(task: TaskRecord) {
 	const raw = typeof task.payloadJson === 'string' ? task.payloadJson : typeof task.payload_json === 'string' ? task.payload_json : '{}';
+	try {
+		return asRecord(JSON.parse(raw));
+	} catch {
+		return {};
+	}
+}
+
+function parseOutputRecord(value: unknown) {
+	const record = asRecord(value);
+	const raw = typeof record.outputJson === 'string' ? record.outputJson : typeof record.output_json === 'string' ? record.output_json : record.output;
+	if (raw && typeof raw === 'object') return asRecord(raw);
+	if (typeof raw !== 'string' || !raw.trim()) return {};
 	try {
 		return asRecord(JSON.parse(raw));
 	} catch {
@@ -244,6 +281,33 @@ export async function seedResearchKnowledgeWorkdayTasks(input: {
 	return created;
 }
 
+export async function loadLatestCodebaseInventoryForWorkday(input: {
+	sdk: ResearchKnowledgeSdk;
+	workDayId: string;
+}) {
+	if (typeof input.sdk.search !== 'function') return null;
+	const tasks = asRecords((await input.sdk.searchTasks({ workDayId: input.workDayId, limit: 1000 })).payload);
+	const scanTaskIds = tasks
+		.filter((task) => readString(task, 'type') === 'scan_codebase_documentation_surface')
+		.map((task) => taskId(task))
+		.filter(Boolean);
+	if (!scanTaskIds.length) return null;
+	const outputs = asRecords((await input.sdk.search({
+		model: 'task_output',
+		filters: [{ field: 'task_id', op: 'in', value: scanTaskIds }],
+		sort: [{ field: 'created_at', direction: 'desc' }],
+		limit: 20,
+	})).payload);
+	for (const output of outputs) {
+		const envelope = parseOutputRecord(output);
+		const inventory = asRecord(envelope.codebaseInventory);
+		if (envelope.artifactKind === 'codebase_inventory' && inventory.kind === 'codebase_inventory') {
+			return inventory as unknown as CodebaseInventoryArtifact;
+		}
+	}
+	return null;
+}
+
 export function summarizeResearchNoteArtifact(note: ResearchNote, taskIdValue?: string): GeneratedAgentArtifactSummary {
 	return {
 		artifactKind: 'research_note',
@@ -264,6 +328,7 @@ export function summarizeKnowledgeDraftArtifact(draft: KnowledgeDraft, taskIdVal
 		draftId: draft.id,
 		targetPath: draft.targetPath,
 		sourceResearchIds: draft.sourceResearchIds,
+		confidence: draft.frontmatter.confidence,
 	};
 }
 
@@ -276,6 +341,8 @@ export function summarizeOptimizationReportArtifact(report: OptimizationReport, 
 		reportId: report.id,
 		recommendation: report.recommendation,
 		totalScore: report.totalScore,
+		issueCount: report.remainingIssues.length,
+		criticalIssueCount: report.criticalIssues.length,
 	};
 }
 
@@ -309,6 +376,24 @@ export function summarizeReleaseRequestArtifact(request: Record<string, unknown>
 	};
 }
 
+export function summarizeDocsMutationResultArtifact(result: Record<string, unknown>, taskIdValue?: string): GeneratedAgentArtifactSummary {
+	const repairTask = asRecord(result.repairTask);
+	const verification = asRecord(result.verification);
+	return {
+		artifactKind: 'docs_mutation_result',
+		id: readString(result, 'taskId') || taskIdValue || readString(result, 'draftId') || 'docs-mutation-result',
+		taskId: taskIdValue || readString(result, 'taskId') || undefined,
+		draftId: readString(result, 'draftId') || undefined,
+		targetPath: readString(result, 'targetPath') || undefined,
+		stagingBranch: readString(result, 'stagingBranch') || undefined,
+		featureBranch: readString(result, 'featureBranch') || undefined,
+		changedPaths: Array.isArray(result.changedPaths) ? result.changedPaths.filter((entry): entry is string => typeof entry === 'string') : undefined,
+		verificationStatus: readString(verification, 'status') || (verification.ok === true ? 'completed' : verification.ok === false ? 'failed' : undefined),
+		mergedToStaging: typeof result.mergedToStaging === 'boolean' ? result.mergedToStaging : undefined,
+		repairTaskId: readString(repairTask, 'id') || readString(repairTask, 'taskId') || undefined,
+	};
+}
+
 export function extractGeneratedArtifactsFromTaskOutputs(outputs: unknown[]): GeneratedAgentArtifactSummary[] {
 	const artifacts: GeneratedAgentArtifactSummary[] = [];
 	for (const output of outputs) {
@@ -324,6 +409,9 @@ export function extractGeneratedArtifactsFromTaskOutputs(outputs: unknown[]): Ge
 		if (asRecord(record.researchNote).kind === 'research_note') {
 			artifacts.push(summarizeResearchNoteArtifact(asRecord(record.researchNote) as unknown as ResearchNote, outputTaskId || undefined));
 		}
+		if (asRecord(record.codebaseInventory).kind === 'codebase_inventory') {
+			artifacts.push(summarizeCodebaseInventoryArtifact(asRecord(record.codebaseInventory) as unknown as CodebaseInventoryArtifact, outputTaskId || undefined));
+		}
 		if (asRecord(record.knowledgeDraft).kind === 'knowledge_draft') {
 			artifacts.push(summarizeKnowledgeDraftArtifact(asRecord(record.knowledgeDraft) as unknown as KnowledgeDraft, outputTaskId || undefined));
 		}
@@ -332,6 +420,18 @@ export function extractGeneratedArtifactsFromTaskOutputs(outputs: unknown[]): Ge
 		}
 		if (record.promotionRequest) {
 			artifacts.push(summarizePromotionRequestArtifact(asRecord(record.promotionRequest), outputTaskId || undefined));
+		}
+		const docsMutationResult = asRecord(record.docsMutationResult);
+		const promotionToStaging = asRecord(record.promotionToStaging);
+		const implementationResult = asRecord(record.implementationResult);
+		if (Object.keys(docsMutationResult).length > 0) {
+			artifacts.push(summarizeDocsMutationResultArtifact(docsMutationResult, outputTaskId || undefined));
+		}
+		if (Object.keys(promotionToStaging).length > 0) {
+			artifacts.push(summarizeDocsMutationResultArtifact(promotionToStaging, outputTaskId || undefined));
+		}
+		if (Object.keys(implementationResult).length > 0) {
+			artifacts.push(summarizeDocsMutationResultArtifact(implementationResult, outputTaskId || undefined));
 		}
 		if (record.releaseRequest) {
 			artifacts.push(summarizeReleaseRequestArtifact(asRecord(record.releaseRequest), outputTaskId || undefined));

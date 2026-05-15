@@ -116,6 +116,14 @@ export interface KnowledgePromotionTaskInput {
 	verificationCommands: string[];
 	operationGrants: AgentOperationGrant[];
 	permissionGrantId?: string;
+	repositoryClaim?: {
+		id?: string;
+		repositoryId?: string;
+		runnerId?: string;
+		volumeIdentity?: string;
+		claimState?: string;
+		metadata?: Record<string, unknown>;
+	} | null;
 }
 
 export interface KnowledgePromotionDependencies {
@@ -137,6 +145,40 @@ function readString(value: unknown, fallback = '') {
 
 function readStringArray(value: unknown) {
 	return Array.isArray(value) ? value.map(String).filter(Boolean) : [];
+}
+
+function hostedRuntimeEnabled() {
+	return process.env.TREESEED_AGENT_RUNTIME_MODE?.trim() === 'hosted';
+}
+
+function readRepositoryClaim(value: unknown): KnowledgePromotionTaskInput['repositoryClaim'] {
+	const claim = readRecord(value);
+	if (!Object.keys(claim).length) return null;
+	return {
+		id: readString(claim.id) || undefined,
+		repositoryId: readString(claim.repositoryId ?? claim.repository_id) || undefined,
+		runnerId: readString(claim.runnerId ?? claim.runner_id) || undefined,
+		volumeIdentity: readString(claim.volumeIdentity ?? claim.volume_identity) || undefined,
+		claimState: readString(claim.claimState ?? claim.claim_state, 'active'),
+		metadata: readRecord(claim.metadata),
+	};
+}
+
+function repoRootFromClaim(claim: KnowledgePromotionTaskInput['repositoryClaim'], fallback: string) {
+	if (!claim || claim.claimState !== 'active') return fallback;
+	const metadata = readRecord(claim.metadata);
+	const candidates = [
+		metadata.worktreeRoot,
+		metadata.repositoryRoot,
+		metadata.checkoutRoot,
+		metadata.volumeRepositoryRoot,
+		claim.volumeIdentity,
+	];
+	for (const candidate of candidates) {
+		const value = readString(candidate);
+		if (value) return value;
+	}
+	return fallback;
 }
 
 function slugify(value: string) {
@@ -225,9 +267,13 @@ export function normalizeKnowledgePromotionTaskInput(input: {
 		allowedPaths: allowedPaths.length ? allowedPaths : [targetPath],
 		forbiddenPaths,
 	};
-	const operationGrants = Array.isArray(input.payload.operationGrants) && input.payload.operationGrants.length
+	const explicitOperationGrants = Array.isArray(input.payload.operationGrants) && input.payload.operationGrants.length
 		? input.payload.operationGrants as AgentOperationGrant[]
-		: [defaultPromotionGrant(grantInput)];
+		: null;
+	const hostedRuntimeRequiresExplicitGrants = hostedRuntimeEnabled();
+	const operationGrants = explicitOperationGrants
+		?? (hostedRuntimeRequiresExplicitGrants ? [] : [defaultPromotionGrant(grantInput)]);
+	const repositoryClaim = readRepositoryClaim(input.payload.repositoryClaim ?? input.payload.repository_claim);
 	return {
 		taskId,
 		workDayId: readString(input.task.workDayId, readString(input.task.work_day_id)) || readString(input.payload.workDayId) || undefined,
@@ -235,7 +281,7 @@ export function normalizeKnowledgePromotionTaskInput(input: {
 		environment,
 		agentSlug: readString(input.payload.agentSlug, 'engineer-agent'),
 		agentRole,
-		repoRoot: input.repoRoot,
+		repoRoot: hostedRuntimeRequiresExplicitGrants ? repoRootFromClaim(repositoryClaim, input.repoRoot) : input.repoRoot,
 		taskKind,
 		approvalDecision: decision,
 		knowledgeDraft: draft,
@@ -246,6 +292,7 @@ export function normalizeKnowledgePromotionTaskInput(input: {
 		verificationCommands: readStringArray(input.payload.verificationCommands ?? input.payload.verification),
 		operationGrants,
 		permissionGrantId: readString(input.payload.permissionGrantId) || undefined,
+		repositoryClaim,
 	};
 }
 
@@ -448,6 +495,29 @@ function repairTaskFor(input: {
 	};
 }
 
+function verificationRepairTaskFor(input: {
+	task: KnowledgePromotionTaskInput;
+	worktreeRoot: string;
+	snapshotRef?: string | null;
+	changedPaths: string[];
+	verification: NonNullable<KnowledgePromotionToStagingResult['verification']>;
+}) {
+	return {
+		kind: 'knowledge_promotion_verification_repair',
+		sourceTaskId: input.task.taskId,
+		draftId: input.task.knowledgeDraft.id,
+		targetPath: input.task.knowledgeDraft.targetPath,
+		worktreeRoot: input.worktreeRoot,
+		featureBranch: input.task.featureBranch,
+		stagingBranch: input.task.stagingBranch,
+		snapshotRef: input.snapshotRef ?? null,
+		failedCommands: input.verification.commandsRun,
+		changedPaths: input.changedPaths,
+		verificationErrors: input.verification.errors,
+		verificationSummary: input.verification.summary,
+	};
+}
+
 export async function runKnowledgePromotionToStaging(input: {
 	task: KnowledgePromotionTaskInput;
 	sdk?: { appendTaskEvent?: (request: { taskId: string; kind: string; data: Record<string, unknown>; actor: string }) => Promise<unknown> };
@@ -465,6 +535,27 @@ export async function runKnowledgePromotionToStaging(input: {
 			status: 'waiting',
 			summary: 'Knowledge promotion requires an approve_as_book_content decision.',
 			code: 'approval_required',
+			operationResults,
+		});
+	}
+
+	if (hostedRuntimeEnabled() && task.repositoryClaim?.claimState !== 'active') {
+		await input.sdk?.appendTaskEvent?.({
+			taskId: task.taskId,
+			kind: 'hosted_repository_claim_required',
+			data: {
+				projectId: task.projectId,
+				environment: task.environment,
+				runnerId: task.repositoryClaim?.runnerId ?? null,
+				repositoryClaimId: task.repositoryClaim?.id ?? null,
+			},
+			actor: task.agentSlug,
+		});
+		return failedResult({
+			task,
+			status: 'waiting',
+			summary: 'Hosted knowledge promotion requires an active runner repository claim.',
+			code: 'repository_claim_required',
 			operationResults,
 		});
 	}
@@ -495,7 +586,7 @@ export async function runKnowledgePromotionToStaging(input: {
 		reviewState: 'verified_for_staging',
 		frontmatter: {
 			...task.knowledgeDraft.frontmatter,
-			status: 'feature_branch',
+			status: 'canonical',
 			review_state: 'verified_for_staging',
 			updated: new Date().toISOString().slice(0, 10),
 		},
@@ -569,6 +660,13 @@ export async function runKnowledgePromotionToStaging(input: {
 			metadata: { verification },
 		});
 		snapshots.push(snapshot);
+		const repairTask = verificationRepairTaskFor({
+			task,
+			worktreeRoot: worktree.worktreeRoot,
+			snapshotRef: snapshot.ref,
+			changedPaths,
+			verification,
+		});
 		const closeResult = await lifecycleOperation({
 			sdk: input.sdk,
 			task,
@@ -578,7 +676,7 @@ export async function runKnowledgePromotionToStaging(input: {
 			changedPaths,
 			status: 'failed',
 			summary: 'Closed failed knowledge promotion after verification failure.',
-			metadata: { verification },
+			metadata: { verification, repairTask },
 		});
 		operationResults.push(closeResult);
 		return failedResult({
@@ -590,6 +688,7 @@ export async function runKnowledgePromotionToStaging(input: {
 			operationResults,
 			snapshots,
 			verification,
+			repairTask,
 		});
 	}
 

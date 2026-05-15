@@ -12,6 +12,12 @@ import { buildTaskContext, createQueueClient, createQueuePushClient, createServi
 import { researcherHandler } from '../agents/handlers/researcher.ts';
 import { knowledgeGeneratorHandler } from '../agents/handlers/knowledge-generator.ts';
 import { knowledgeOptimizerHandler } from '../agents/handlers/knowledge-optimizer.ts';
+import { createVerificationAdapter } from '../agents/adapters/verification.ts';
+import {
+	normalizeCodexDocsMutationInput,
+	runCodexDocsMutationLifecycle,
+	type CodexDocsMutationDependencies,
+} from '../agents/implementation/codex-docs-mutation.ts';
 import type { KnowledgeDraft, OptimizationReport } from '../agents/contracts/knowledge.ts';
 import type { ResearchNote } from '../agents/contracts/research.ts';
 import {
@@ -20,7 +26,9 @@ import {
 	graphVersionForTask,
 	invocationForResearchKnowledgeTask,
 	isResearchKnowledgeTaskKind,
+	loadLatestCodebaseInventoryForWorkday,
 	summarizeKnowledgeDraftArtifact,
+	summarizeDocsMutationResultArtifact,
 	summarizeOptimizationReportArtifact,
 	summarizePromotionRequestArtifact,
 	summarizeReleaseRequestArtifact,
@@ -37,6 +45,13 @@ import {
 	normalizeKnowledgePromotionTaskInput,
 	runKnowledgePromotionToStaging,
 } from './knowledge-promotion.ts';
+import { persistPromotionApprovalRequest } from './governance-approvals.ts';
+import {
+	CODEBASE_DOCUMENTATION_SCAN_TASK_KIND,
+	scanCodebaseDocumentationSurface,
+	summarizeCodebaseInventoryArtifact,
+	type KnowledgeGap,
+} from './codebase-documentation-scanner.ts';
 import { admissionForTaskProposal } from './task-admission.ts';
 import { buildPlanningProposalFromTask } from './task-planning.ts';
 import type { WorkdayPolicy } from '@treeseed/sdk';
@@ -56,6 +71,15 @@ function asRecord(value: unknown): Record<string, unknown> {
 
 function readString(value: unknown) {
 	return typeof value === 'string' && value.trim() ? value.trim() : '';
+}
+
+function readStringArray(value: unknown) {
+	return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0) : [];
+}
+
+function docsMutationExecutionDisabled() {
+	const mode = process.env.TREESEED_DOCS_AUTOMATION_MODE?.trim();
+	return mode === 'dry-run' || mode === 'off';
 }
 
 function readCapacityEnvelope(payload: Record<string, unknown>): CapacityTaskExecutionEnvelope | null {
@@ -142,6 +166,49 @@ function readCapacityMetadata(payload: Record<string, unknown>) {
 		utilityEstimate: readUtilityEstimate(payload),
 		hybridExecutionPlan: readHybridExecutionPlan(payload),
 	};
+}
+
+async function emitKnowledgeGapMessages(input: {
+	sdk: ReturnType<typeof createServiceSdk>;
+	inventoryId: string;
+	gaps: KnowledgeGap[];
+	maxMessages: number;
+}) {
+	const createMessage = (input.sdk as unknown as {
+		createMessage?: (request: {
+			type: string;
+			payload: Record<string, unknown>;
+			relatedModel?: string | null;
+			relatedId?: string | null;
+			priority?: number;
+			maxAttempts?: number;
+			actor: string;
+		}) => Promise<unknown>;
+	}).createMessage;
+	if (typeof createMessage !== 'function') return 0;
+	const selected = input.gaps
+		.filter((gap) => gap.severity === 'high' || gap.severity === 'medium')
+		.slice(0, Math.max(0, input.maxMessages));
+	for (const gap of selected) {
+		await createMessage.call(input.sdk, {
+			type: 'knowledge_gap_detected',
+			payload: {
+				gapId: gap.id,
+				surfacePath: gap.surfacePath,
+				surfaceKind: gap.surfaceKind,
+				severity: gap.severity,
+				summary: gap.summary,
+				recommendedTaskKind: gap.recommendedTaskKind,
+				sourcePaths: gap.sourcePaths,
+			},
+			relatedModel: 'codebase_inventory',
+			relatedId: input.inventoryId,
+			priority: gap.severity === 'high' ? 90 : 70,
+			maxAttempts: 3,
+			actor: 'worker',
+		});
+	}
+	return selected.length;
 }
 
 function lowConfidenceResult(output: Record<string, unknown>) {
@@ -397,6 +464,51 @@ function contextForResearchKnowledgeHandler(input: {
 	} as AgentContext;
 }
 
+function contextForDocsMutationHandler(input: {
+	sdk: ReturnType<typeof createServiceSdk>;
+	repoRoot: string;
+	payload: Record<string, unknown>;
+	taskId: string;
+}) {
+	const agent = {
+		slug: 'treeseed-docs-engineer',
+		handler: 'engineer',
+		enabled: true,
+		systemPrompt: 'Apply approved TreeSeed documentation mutations inside governed worktrees.',
+		persona: 'Careful documentation engineer.',
+		cli: {},
+		triggers: [{ type: 'message', messageTypes: ['apply_approved_docs_mutation'] }],
+		permissions: [
+			{ model: 'approval', operations: ['get', 'update'] },
+			{ model: 'task', operations: ['get', 'update', 'create'] },
+			{ model: 'message', operations: ['create', 'update', 'pick'] },
+		],
+		execution: {
+			maxConcurrency: 1,
+			timeoutSeconds: 1800,
+			cooldownSeconds: 0,
+			leaseSeconds: 600,
+			retryLimit: 0,
+			branchPrefix: 'agent/docs-mutation',
+		},
+		outputs: { messageTypes: [], modelMutations: [] },
+	};
+	return {
+		runId: input.taskId,
+		repoRoot: input.repoRoot,
+		agent,
+		sdk: scopedSdkForHandler(input.sdk, agent),
+		trigger: invocationForResearchKnowledgeTask('apply_approved_docs_mutation', input.payload),
+		execution: {},
+		mutations: {},
+		repository: {},
+		verification: createVerificationAdapter(),
+		notifications: {},
+		research: {},
+		operations: {},
+	} as AgentContext;
+}
+
 async function runBuiltInHandler<TInputs, TResult>(
 	handler: AgentHandler<TInputs, TResult>,
 	context: AgentContext,
@@ -450,6 +562,41 @@ async function createFollowupTask(input: {
 		}
 	}
 	return createdTaskId || null;
+}
+
+async function createRepairFollowupTask(input: {
+	sdk: ReturnType<typeof createServiceSdk>;
+	workDayId: string;
+	graphVersion: string | null;
+	sourceTaskId: string;
+	repairTask: Record<string, unknown>;
+	failureKind: 'verification' | 'merge' | 'implementation';
+	enqueue?: boolean;
+}) {
+	const idempotencyKey = `${input.workDayId}:create_repair_task:${input.failureKind}:${input.sourceTaskId}`;
+	return await createFollowupTask({
+		sdk: input.sdk,
+		workDayId: input.workDayId,
+		agentId: 'treeseed-docs-engineer',
+		type: 'create_repair_task',
+		priority: 70,
+		idempotencyKey,
+		payload: {
+			executionKind: 'research_knowledge_pipeline',
+			taskKind: 'create_repair_task',
+			repairTask: input.repairTask,
+			sourceTaskId: input.sourceTaskId,
+			failureKind: input.failureKind,
+		},
+		graphVersion: input.graphVersion,
+		enqueue: input.enqueue ?? false,
+	});
+}
+
+function mutationSummaryStatus(status: unknown): ResearchKnowledgeTaskOutputEnvelope['summary']['status'] {
+	if (status === 'staged' || status === 'completed') return 'completed';
+	if (status === 'waiting') return 'waiting';
+	return 'failed';
 }
 
 function envelope(input: Omit<ResearchKnowledgeTaskOutputEnvelope, 'summary'> & {
@@ -570,6 +717,7 @@ export async function executeResearchKnowledgeTask(input: {
 	queueAttempt: number;
 	enqueueFollowups?: boolean;
 	promotionDependencies?: KnowledgePromotionDependencies;
+	docsMutationDependencies?: CodexDocsMutationDependencies;
 }) {
 	const payload = taskPayload(input.task);
 	const workDayId = workDayIdForTask(input.task);
@@ -579,11 +727,21 @@ export async function executeResearchKnowledgeTask(input: {
 	const enqueueFollowups = input.enqueueFollowups ?? true;
 
 	if (input.taskKind === 'research_question') {
+		const payloadInventory = asRecord(payload.codebaseInventory);
+		const codebaseInventory = payloadInventory.kind === 'codebase_inventory'
+			? payloadInventory
+			: workDayId
+				? await loadLatestCodebaseInventoryForWorkday({ sdk: input.sdk, workDayId })
+				: null;
 		const context = contextForResearchKnowledgeHandler({
 			sdk: input.sdk,
 			repoRoot,
 			kind: 'researcher',
-			payload: { ...payload, taskId },
+			payload: {
+				...payload,
+				taskId,
+				...(codebaseInventory ? { codebaseInventory } : {}),
+			},
 		});
 		const { result, output } = await runBuiltInHandler(researcherHandler, context);
 		const note = result as ResearchNote | null;
@@ -669,6 +827,18 @@ export async function executeResearchKnowledgeTask(input: {
 		const generatedArtifacts = report ? [summarizeOptimizationReportArtifact(report, taskId)] : [];
 		const draft = asRecord(payload.knowledgeDraft) as unknown as KnowledgeDraft;
 		const note = asRecord(payload.researchNote) as unknown as ResearchNote;
+		const revisionRequest = report?.recommendation === 'revise'
+			? {
+					executionKind: 'research_knowledge_pipeline',
+					researchNote: note,
+					question: payload.question,
+					previousKnowledgeDraft: draft,
+					optimizationReport: report,
+					sourceTaskId: taskId,
+					taskKind: 'generate_knowledge_draft',
+					revisionOfDraftId: draft.id,
+				}
+			: null;
 		const promotionRequest = report?.recommendation === 'promote'
 			? {
 					id: `promotion:${report.draftId}`,
@@ -700,7 +870,35 @@ export async function executeResearchKnowledgeTask(input: {
 					graphVersion,
 					enqueue: false,
 				})
+			: revisionRequest && report && workDayId
+				? await createFollowupTask({
+						sdk: input.sdk,
+						workDayId,
+						agentId: 'knowledge-generator-agent',
+						type: 'generate_knowledge_draft',
+						priority: 88,
+						idempotencyKey: `${workDayId}:generate_knowledge_draft_revision:${report.id}`,
+						payload: revisionRequest,
+						graphVersion,
+						enqueue: enqueueFollowups,
+						})
 			: null;
+		if (promotionRequest && report && workDayId) {
+			const config = resolveWorkerConfig();
+			await persistPromotionApprovalRequest({
+				sdk: input.sdk,
+				projectId: typeof payload.projectId === 'string' ? payload.projectId : config.projectId,
+				teamId: typeof payload.teamId === 'string' ? payload.teamId : null,
+				workDayId,
+				taskId,
+				draft,
+				report,
+				note,
+				promotionRequest,
+				promotionTaskId: nextTaskId,
+				policySnapshot: asRecord(payload.policySnapshot),
+			});
+		}
 		return envelope({
 			artifactKind: 'optimization_report',
 			optimizationReport: report ?? undefined,
@@ -716,6 +914,15 @@ export async function executeResearchKnowledgeTask(input: {
 	}
 
 	if (input.taskKind === 'promote_knowledge_to_staging') {
+		if (docsMutationExecutionDisabled()) {
+			return envelope({
+				artifactKind: 'docs_mutation_result',
+				generatedArtifacts: [],
+				nextTaskId: null,
+				status: 'waiting',
+				summary: 'Docs automation is running without repository mutation; approved promotion was not applied.',
+			});
+		}
 		const config = resolveWorkerConfig();
 		const normalized = normalizeKnowledgePromotionTaskInput({
 			task: input.task,
@@ -739,7 +946,7 @@ export async function executeResearchKnowledgeTask(input: {
 			dependencies: input.promotionDependencies,
 		});
 		const releaseRequest = promotion.releaseRequest;
-		const nextTaskId = releaseRequest && workDayId
+		const releaseTaskId = releaseRequest && workDayId
 			? await createFollowupTask({
 					sdk: input.sdk,
 					workDayId,
@@ -768,20 +975,132 @@ export async function executeResearchKnowledgeTask(input: {
 					enqueue: false,
 				})
 			: null;
+		const repairTask = asRecord(promotion.repairTask);
+		const repairTaskId = !releaseRequest && workDayId && Object.keys(repairTask).length > 0
+			? await createRepairFollowupTask({
+					sdk: input.sdk,
+					workDayId,
+					graphVersion,
+					sourceTaskId: taskId,
+					repairTask,
+					failureKind: promotion.error?.code === 'verification_failed' ? 'verification' : 'merge',
+				})
+			: null;
+		const nextTaskId = releaseTaskId ?? repairTaskId;
 		return envelope({
-			artifactKind: releaseRequest ? 'release_request' : 'promotion_request',
+			artifactKind: 'docs_mutation_result',
 			promotionRequest: asRecord(payload.promotionRequest),
 			releaseRequest: releaseRequest ?? undefined,
+			docsMutationResult: promotion as unknown as Record<string, unknown>,
+			promotionToStaging: promotion as unknown as Record<string, unknown>,
+			changedPaths: promotion.changedPaths,
+			verification: asRecord(promotion.verification),
+			snapshots: promotion.snapshots as unknown as Record<string, unknown>[],
+			repairTask: repairTaskId ? { ...repairTask, taskId: repairTaskId } : repairTask,
+			mergedToStaging: promotion.mergedToStaging,
 			generatedArtifacts: [
-				...(releaseRequest ? [summarizeReleaseRequestArtifact(releaseRequest, nextTaskId ?? undefined)] : []),
+				summarizeDocsMutationResultArtifact(promotion as unknown as Record<string, unknown>, taskId),
+				...(releaseRequest ? [summarizeReleaseRequestArtifact(releaseRequest, releaseTaskId ?? undefined)] : []),
 			],
 			nextTaskId,
 			status: promotion.status === 'staged' ? 'completed' : promotion.status === 'waiting' ? 'waiting' : 'failed',
 			summary: promotion.summary,
-			promotionToStaging: promotion,
 		} as unknown as Omit<ResearchKnowledgeTaskOutputEnvelope, 'summary'> & {
 			status: ResearchKnowledgeTaskOutputEnvelope['summary']['status'];
 			summary: string;
+		});
+	}
+
+	if (input.taskKind === 'apply_approved_docs_mutation') {
+		if (docsMutationExecutionDisabled()) {
+			return envelope({
+				artifactKind: 'docs_mutation_result',
+				generatedArtifacts: [],
+				nextTaskId: null,
+				status: 'waiting',
+				summary: 'Docs automation is running without repository mutation; approved docs mutation was not applied.',
+			});
+		}
+		const approval = asRecord(payload.approval);
+		if (readString(approval.state) !== 'approved') {
+			return envelope({
+				artifactKind: 'docs_mutation_result',
+				generatedArtifacts: [],
+				nextTaskId: null,
+				status: 'waiting',
+				summary: 'Approved docs mutation is waiting for approved approval metadata.',
+			});
+		}
+		const allowedPaths = readStringArray(payload.allowedPaths);
+		if (allowedPaths.length === 0) {
+			return envelope({
+				artifactKind: 'docs_mutation_result',
+				generatedArtifacts: [],
+				nextTaskId: null,
+				status: 'waiting',
+				summary: 'Approved docs mutation is waiting for explicit allowed paths.',
+			});
+		}
+		const context = contextForDocsMutationHandler({
+			sdk: input.sdk,
+			repoRoot,
+			payload: {
+				...payload,
+				taskId,
+				workDayId,
+				taskKind: 'apply_approved_docs_mutation',
+			},
+			taskId,
+		});
+		const task = normalizeCodexDocsMutationInput({
+			...payload,
+			taskId,
+			workDayId,
+			taskKind: 'apply_approved_docs_mutation',
+		}, context);
+		const result = await runCodexDocsMutationLifecycle(context, task, input.docsMutationDependencies);
+		const repairTask = asRecord(result.repairTask);
+		const repairTaskId = workDayId && Object.keys(repairTask).length > 0
+			? await createRepairFollowupTask({
+					sdk: input.sdk,
+					workDayId,
+					graphVersion,
+					sourceTaskId: taskId,
+					repairTask,
+					failureKind: 'implementation',
+				})
+			: null;
+		return envelope({
+			artifactKind: 'docs_mutation_result',
+			docsMutationResult: result as unknown as Record<string, unknown>,
+			implementationResult: result as unknown as Record<string, unknown>,
+			changedPaths: result.changedPaths,
+			verification: asRecord(result.verification),
+			snapshots: result.snapshots as unknown as Record<string, unknown>[],
+			repairTask: repairTaskId ? { ...repairTask, taskId: repairTaskId } : repairTask,
+			mergedToStaging: result.mergedToStaging,
+			generatedArtifacts: [summarizeDocsMutationResultArtifact(result as unknown as Record<string, unknown>, taskId)],
+			nextTaskId: repairTaskId,
+			status: mutationSummaryStatus(result.status),
+			summary: result.summary,
+		});
+	}
+
+	if (input.taskKind === 'create_repair_task') {
+		const repairTask = asRecord(payload.repairTask);
+		return envelope({
+			artifactKind: 'docs_mutation_result',
+			docsMutationResult: {
+				taskId,
+				status: 'waiting',
+				summary: 'Repair task is visible and waiting for a later repair executor.',
+				repairTask,
+			},
+			repairTask,
+			generatedArtifacts: [],
+			nextTaskId: null,
+			status: 'waiting',
+			summary: 'Repair task is visible and waiting for a later repair executor.',
 		});
 	}
 
@@ -974,6 +1293,49 @@ async function executeQueuedTask(options: {
 		};
 	}
 
+	if (taskKind === CODEBASE_DOCUMENTATION_SCAN_TASK_KIND) {
+		const inventory = scanCodebaseDocumentationSurface({
+			repoRoot: resolveServiceRepoRoot(),
+			graphVersion: graphVersionForTask(task ?? {}) ?? (typeof payload.graphVersion === 'string' ? payload.graphVersion : null),
+			repoRef: typeof payload.repoRef === 'string' ? payload.repoRef : typeof payload.commitSha === 'string' ? payload.commitSha : undefined,
+		});
+		const taskId = taskRecordId(task ?? {}) || options.taskId;
+		const emittedGapMessages = await emitKnowledgeGapMessages({
+			sdk: options.sdk,
+			inventoryId: inventory.id,
+			gaps: inventory.knowledgeGaps,
+			maxMessages: Number.isFinite(Number(payload.maxKnowledgeGapMessages)) ? Number(payload.maxKnowledgeGapMessages) : 8,
+		});
+		const appendTaskEvent = (options.sdk as unknown as {
+			appendTaskEvent?: (request: { taskId: string; kind: string; data?: Record<string, unknown>; actor: string }) => Promise<unknown>;
+		}).appendTaskEvent;
+		await appendTaskEvent?.call(options.sdk, {
+			taskId: options.taskId,
+			kind: 'codebase_inventory_completed',
+			data: {
+				inventoryId: inventory.id,
+				packageCount: inventory.packages.length,
+				moduleCount: inventory.packages.reduce((count, item) => count + item.modules.length, 0),
+				knowledgeGapCount: inventory.knowledgeGaps.length,
+				emittedGapMessages,
+			},
+			actor: 'worker',
+		});
+		return {
+			workerId: options.workerId,
+			queueAttempt: options.queueAttempt,
+			executionKind: 'codebase_documentation_scan',
+			artifactKind: 'codebase_inventory',
+			codebaseInventory: inventory,
+			generatedArtifacts: [summarizeCodebaseInventoryArtifact(inventory, taskId)],
+			summary: {
+				status: 'completed',
+				workerId: options.workerId,
+				summary: `Scanned ${inventory.packages.length} package surfaces and found ${inventory.knowledgeGaps.length} documentation gap${inventory.knowledgeGaps.length === 1 ? '' : 's'}.`,
+			},
+		};
+	}
+
 	if (executionKind === 'workflow_dispatch' || executionKind === 'sdk_dispatch') {
 		const namespace = typeof payload.namespace === 'string' ? payload.namespace : 'workflow';
 		const operation = typeof payload.operation === 'string' ? payload.operation : '';
@@ -1086,26 +1448,39 @@ function createLocalTaskQueue(sdk: ReturnType<typeof createServiceSdk>, config: 
 	};
 }
 
+async function recordWorkerRunnerHeartbeat(
+	sdk: ReturnType<typeof createServiceSdk>,
+	config: ReturnType<typeof resolveWorkerConfig>,
+	state: 'active' | 'idle' | 'draining' | 'offline',
+	activeLocalWorkers: number,
+	metadata: Record<string, unknown> = {},
+) {
+	if (typeof sdk.recordWorkerRunner !== 'function') {
+		return;
+	}
+	await sdk.recordWorkerRunner({
+		projectId: config.projectId,
+		environment: config.environment as 'local' | 'staging' | 'prod',
+		runnerId: config.workerId,
+		runnerServiceName: config.runnerServiceName,
+		volumeIdentity: config.volumeIdentity,
+		state,
+		maxLocalWorkers: config.maxLocalWorkers,
+		activeLocalWorkers,
+		metadata: {
+			volumeRoot: config.volumeRoot,
+			pid: process.pid,
+			...metadata,
+		},
+	}).catch(() => null);
+}
+
 export async function runWorkerCycle() {
 	const sdk = createServiceSdk();
 	let queue = createQueueClient();
 	const config = resolveWorkerConfig();
 	const kernel = new AgentKernel(sdk, resolveServiceRepoRoot());
-	if (typeof sdk.recordWorkerRunner === 'function') {
-		await sdk.recordWorkerRunner({
-			projectId: config.projectId,
-			environment: config.environment as 'local' | 'staging' | 'prod',
-			runnerId: config.workerId,
-			runnerServiceName: config.runnerServiceName,
-			volumeIdentity: config.volumeIdentity,
-			state: 'active',
-			maxLocalWorkers: config.maxLocalWorkers,
-			activeLocalWorkers: 0,
-			metadata: {
-				volumeRoot: config.volumeRoot,
-			},
-		}).catch(() => null);
-	}
+	await recordWorkerRunnerHeartbeat(sdk, config, 'active', 0, { phase: 'polling' });
 	if (!queue) {
 		if (process.env.TREESEED_LOCAL_DEV_MODE?.trim() || process.env.NODE_ENV !== 'production') {
 			queue = createLocalTaskQueue(sdk, config);
@@ -1119,11 +1494,17 @@ export async function runWorkerCycle() {
 		visibilityTimeoutMs: config.visibilityTimeoutMs,
 	});
 	if (pulled.messages.length === 0) {
+		await recordWorkerRunnerHeartbeat(sdk, config, 'idle', 0, { phase: 'idle' });
 		return { ok: true, processed: 0 };
 	}
 
 	const maxLocalWorkers = Number.isFinite(Number(config.maxLocalWorkers)) ? Math.max(1, Number(config.maxLocalWorkers)) : 1;
 	const selectedMessages = pulled.messages.slice(0, maxLocalWorkers);
+	await recordWorkerRunnerHeartbeat(sdk, config, 'active', selectedMessages.length, {
+		phase: 'processing',
+		pulledMessageCount: pulled.messages.length,
+		selectedMessageCount: selectedMessages.length,
+	});
 	const results = await Promise.all(selectedMessages.map(async (message) => {
 		try {
 			await sdk.claimTask({
@@ -1478,7 +1859,9 @@ export async function runWorkerCycle() {
 		}
 	}));
 
-	return { ok: true, processed: results.reduce((sum, value) => sum + value, 0) };
+	const processed = results.reduce((sum, value) => sum + value, 0);
+	await recordWorkerRunnerHeartbeat(sdk, config, processed > 0 ? 'idle' : 'active', 0, { phase: 'cycle_complete', processed });
+	return { ok: true, processed };
 }
 
 export function shouldExitWorkerLoopAfterIdle(options: {
@@ -1499,23 +1882,10 @@ export function shouldExitWorkerLoopAfterIdle(options: {
 
 async function recordWorkerLoopExitState(config: ReturnType<typeof resolveWorkerConfig>) {
 	const sdk = createServiceSdk();
-	if (typeof sdk.recordWorkerRunner !== 'function') {
-		return;
-	}
-	await sdk.recordWorkerRunner({
-		projectId: config.projectId,
-		environment: config.environment as 'local' | 'staging' | 'prod',
-		runnerId: config.workerId,
-		runnerServiceName: config.runnerServiceName,
-		volumeIdentity: config.volumeIdentity,
-		state: 'sleeping',
-		maxLocalWorkers: config.maxLocalWorkers,
-		activeLocalWorkers: 0,
-		metadata: {
-			volumeRoot: config.volumeRoot,
-			reason: 'idle_exit',
-		},
-	}).catch(() => null);
+	await recordWorkerRunnerHeartbeat(sdk, config, 'offline', 0, {
+		phase: 'loop_exit',
+		reason: 'idle_exit',
+	});
 }
 
 export async function startWorkerLoop() {

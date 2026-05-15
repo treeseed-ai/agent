@@ -240,6 +240,23 @@ apiRuntimeDescribe('@treeseed/agent api runtime', () => {
 		expect(response.headers.get('location')).toBe('http://127.0.0.1:4321/auth/device/approve?user_code=ABCD-EFGH');
 	});
 
+	it('uses the configured web URL for production device approval links', () => {
+		const config = resolveApiConfig({
+			TREESEED_API_BASE_URL: 'https://api.treeseed.ai',
+			TREESEED_SITE_URL: 'https://treeseed.ai',
+		});
+
+		expect(config.baseUrl).toBe('https://api.treeseed.ai');
+		expect(config.authApprovalBaseUrl).toBe('https://treeseed.ai');
+	});
+
+	it('rejects loopback approval links for remote APIs', () => {
+		expect(() => resolveApiConfig({
+			TREESEED_API_BASE_URL: 'https://api-treeseed-market-staging-ca844c56.treeseed.ai',
+			TREESEED_SITE_URL: 'http://127.0.0.1:4321',
+		})).toThrow(/Refusing loopback device approval URL/u);
+	});
+
 	it('serves health, templates, and the agent health surface', async () => {
 		const app = createTestApp();
 

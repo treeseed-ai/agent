@@ -19,6 +19,15 @@ function normalizeUrl(value: string) {
 	return value.endsWith('/') ? value.slice(0, -1) : value;
 }
 
+function isLoopbackUrl(value: string) {
+	try {
+		const url = new URL(value);
+		return url.hostname === '127.0.0.1' || url.hostname === 'localhost';
+	} catch {
+		return false;
+	}
+}
+
 function parseCsv(value: string | undefined) {
 	return (value ?? '')
 		.split(',')
@@ -42,17 +51,27 @@ function resolveAuthApprovalBaseUrl(env: NodeJS.ProcessEnv, baseUrl: string) {
 	const explicit = env.TREESEED_API_AUTH_APPROVAL_BASE_URL?.trim()
 		|| env.TREESEED_SITE_URL?.trim()
 		|| env.BETTER_AUTH_URL?.trim();
-	if (explicit) {
-		return normalizeUrl(explicit);
-	}
+	const explicitIsLoopback = explicit ? isLoopbackUrl(explicit) : false;
 	try {
 		const url = new URL(baseUrl);
-		if ((url.hostname === '127.0.0.1' || url.hostname === 'localhost') && url.port === '3000') {
+		const isLocalApi = url.hostname === '127.0.0.1' || url.hostname === 'localhost';
+		if (!isLocalApi && explicit && explicitIsLoopback) {
+			throw new Error(`Refusing loopback device approval URL "${explicit}" for remote API "${baseUrl}".`);
+		}
+		if (explicit) {
+			return normalizeUrl(explicit);
+		}
+		if (isLocalApi && url.port === '3000') {
 			url.port = '4321';
 			return normalizeUrl(url.toString());
 		}
-	} catch {
-		// Fall back to the API URL when the configured value is not parseable as a URL.
+	} catch (error) {
+		if (error instanceof Error && error.message.includes('Refusing loopback device approval URL')) {
+			throw error;
+		}
+		if (explicit && /^https?:\/\//u.test(explicit)) {
+			throw new Error(`Invalid device approval URL configuration for API "${baseUrl}".`);
+		}
 	}
 	return baseUrl;
 }

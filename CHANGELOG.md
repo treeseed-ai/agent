@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.8.15] - 2026-05-15
+
+### Added
+
+- feat(api): implement device flow approval redirection and improved body (27399a661658)
+
+### Dependencies
+
+- Release @treeseed/agent 0.8.15.
+
 ## [0.8.14] - 2026-05-15
 
 ### Added

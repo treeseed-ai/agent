@@ -1,4 +1,4 @@
-import type { AgentSdk } from '@treeseed/sdk';
+import type { AgentSdk, ApprovalRequest } from '@treeseed/sdk';
 import {
 	decideAgentOperationPermission,
 	deniedAgentOperationResult,
@@ -29,7 +29,9 @@ import {
 	type GeneratedAgentArtifactSummary,
 } from '../services/research-knowledge-workday.ts';
 
-type SdkLike = Pick<AgentSdk, 'searchTasks' | 'search' | 'appendTaskEvent'> & Partial<Pick<AgentSdk, 'createTask'>>;
+type SdkLike = Pick<AgentSdk, 'searchTasks' | 'search' | 'appendTaskEvent'> & Partial<Pick<AgentSdk,
+	'createTask' | 'listApprovalRequests' | 'decideApprovalRequest' | 'upsertTeamInboxItem' | 'listWorkerRunners' | 'listWorkdayManagerLeases'
+>>;
 
 export interface AgentArtifactApiItem extends GeneratedAgentArtifactSummary {
 	workDayId?: string;
@@ -63,6 +65,18 @@ export interface AgentArtifactApiState {
 	approvals: AgentApprovalRequestSummary[];
 	currentWorkday: Record<string, unknown> | null;
 	reports: Array<Record<string, unknown>>;
+	taskHealth: {
+		activeTasks: Record<string, unknown>[];
+		staleTasks: Record<string, unknown>[];
+		recoveredTaskCount: number;
+		failedStaleTaskCount: number;
+		retryBackoffPolicy: {
+			baseSeconds: number;
+			maxSeconds: number;
+		};
+	};
+	workerRunners: Record<string, unknown>[];
+	managerLease: Record<string, unknown> | null;
 	warnings: string[];
 }
 
@@ -130,6 +144,10 @@ export interface AgentApprovalRequestSummary {
 	taskId: string;
 	workDayId?: string;
 	taskState?: string;
+	state?: string;
+	severity?: string;
+	title?: string;
+	summary?: string;
 	draftId?: string;
 	targetPath?: string;
 	recommendation?: string;
@@ -141,6 +159,12 @@ export interface AgentApprovalRequestSummary {
 	featureBranch?: string;
 	stagingBranch?: string;
 	changedPaths?: string[];
+	options?: Record<string, unknown>[];
+	policySnapshot?: Record<string, unknown>;
+	artifactRefs?: Record<string, unknown>[];
+	sourceMapRefs?: Record<string, unknown>[];
+	verificationPlan?: Record<string, unknown>;
+	decision?: Record<string, unknown> | null;
 	releaseInput?: Record<string, unknown>;
 	createdAt?: string;
 	updatedAt?: string;
@@ -224,7 +248,17 @@ function taskById(tasks: Record<string, unknown>[]) {
 }
 
 function hasResearchKnowledgeOutput(output: Record<string, unknown>) {
-	if (output.researchNote || output.knowledgeDraft || output.optimizationReport || output.promotionRequest || output.releaseRequest) return true;
+	if (
+		output.codebaseInventory
+		|| output.researchNote
+		|| output.knowledgeDraft
+		|| output.optimizationReport
+		|| output.promotionRequest
+		|| output.docsMutationResult
+		|| output.promotionToStaging
+		|| output.implementationResult
+		|| output.releaseRequest
+	) return true;
 	if (Array.isArray(output.generatedArtifacts) && output.generatedArtifacts.length > 0) return true;
 	return false;
 }
@@ -249,6 +283,10 @@ function promotionRequestFrom(task: Record<string, unknown>, promotionRequest: R
 		taskId: taskId(task),
 		workDayId: taskWorkDayId(task),
 		taskState: taskState(task),
+		state: taskState(task) === 'completed' ? 'approved' : 'pending',
+		severity: 'medium',
+		title: readString(promotionRequest, 'title') || `Promote ${readString(promotionRequest, 'draftId') || id}`,
+		summary: readString(promotionRequest, 'summary') || 'Generated knowledge is waiting for promotion approval.',
 		draftId: readString(promotionRequest, 'draftId') || undefined,
 		targetPath: readString(promotionRequest, 'targetPath') || undefined,
 		recommendation: readString(promotionRequest, 'recommendation') || undefined,
@@ -271,6 +309,10 @@ function releaseRequestFrom(task: Record<string, unknown>, releaseRequest: Recor
 		taskId: taskId(task),
 		workDayId: taskWorkDayId(task),
 		taskState: taskState(task),
+		state: taskState(task) === 'completed' ? 'approved' : 'pending',
+		severity: 'medium',
+		title: readString(releaseRequest, 'title') || `Release ${readString(releaseRequest, 'draftId') || id}`,
+		summary: readString(releaseRequest, 'summary') || 'Staged knowledge is waiting for release approval.',
 		draftId: readString(releaseRequest, 'draftId') || undefined,
 		targetPath: readString(releaseRequest, 'targetPath') || undefined,
 		recommendation: readString(releaseRequest, 'recommendation') || undefined,
@@ -284,6 +326,52 @@ function releaseRequestFrom(task: Record<string, unknown>, releaseRequest: Recor
 		updatedAt: taskUpdatedAt(task),
 		payload: releaseRequest,
 	} satisfies AgentApprovalRequestSummary;
+}
+
+function persistedApprovalFrom(request: ApprovalRequest): AgentApprovalRequestSummary {
+	const metadata = asRecord(request.metadata);
+	const recommendation = asRecord(request.recommendation);
+	const promotionRequest = asRecord(metadata.promotionRequest);
+	const releaseRequest = asRecord(metadata.releaseRequest);
+	const payload = Object.keys(promotionRequest).length
+		? promotionRequest
+		: Object.keys(releaseRequest).length
+			? releaseRequest
+			: metadata;
+	const artifactRefs = asRecords(metadata.artifactRefs ?? recommendation.artifactRefs);
+	const sourceMapRefs = asRecords(metadata.sourceMapRefs ?? recommendation.sourceMapRefs);
+	return {
+		id: request.id,
+		approvalKind: readString(metadata, 'approvalKind') || request.kind,
+		taskId: request.taskId ?? readString(metadata, 'promotionTaskId', 'taskId') ?? '',
+		workDayId: request.workDayId ?? undefined,
+		taskState: request.state,
+		state: request.state,
+		severity: request.severity,
+		title: request.title,
+		summary: request.summary,
+		draftId: readString(metadata, 'draftId') || readString(payload, 'draftId') || undefined,
+		targetPath: readString(metadata, 'targetPath') || readString(payload, 'targetPath') || undefined,
+		recommendation: readString(recommendation, 'recommendation', 'action') || readString(payload, 'recommendation') || undefined,
+		totalScore: Number.isFinite(Number(recommendation.totalScore ?? payload.totalScore)) ? Number(recommendation.totalScore ?? payload.totalScore) : undefined,
+		sourceQuestionId: readString(metadata, 'sourceQuestionId') || readString(payload, 'sourceQuestionId') || undefined,
+		sourceResearchIds: readStringArray(metadata.sourceResearchIds ?? payload.sourceResearchIds),
+		sourceResearchNoteId: readString(metadata, 'sourceResearchNoteId') || readString(payload, 'sourceResearchNoteId') || undefined,
+		optimizationReportId: readString(metadata, 'optimizationReportId') || readString(payload, 'optimizationReportId') || undefined,
+		featureBranch: readString(metadata, 'featureBranch') || readString(payload, 'featureBranch') || undefined,
+		stagingBranch: readString(metadata, 'stagingBranch') || readString(payload, 'stagingBranch') || undefined,
+		changedPaths: readStringArray(metadata.changedPaths ?? recommendation.changedPaths ?? payload.changedPaths),
+		options: request.options,
+		policySnapshot: request.policySnapshot,
+		artifactRefs,
+		sourceMapRefs,
+		verificationPlan: asRecord(metadata.verificationPlan ?? recommendation.verificationPlan),
+		decision: request.decision,
+		releaseInput: asRecord(metadata.releaseInput ?? payload.releaseInput),
+		createdAt: request.createdAt,
+		updatedAt: request.updatedAt,
+		payload,
+	};
 }
 
 function uniqueArtifacts(items: AgentArtifactApiItem[]) {
@@ -328,6 +416,37 @@ async function safeSearch(input: {
 		input.warnings.push(`Unable to search ${input.model}: ${error instanceof Error ? error.message : String(error)}`);
 		return [];
 	}
+}
+
+function readTaskLeaseExpiresAt(task: Record<string, unknown>) {
+	const raw = readString(task, 'leaseExpiresAt', 'lease_expires_at');
+	if (!raw) return null;
+	const parsed = Date.parse(raw);
+	return Number.isFinite(parsed) ? parsed : null;
+}
+
+function summarizeTaskHealth(tasks: Record<string, unknown>[], now = new Date()) {
+	const activeTasks = tasks.filter((task) => ['claimed', 'running'].includes(readString(task, 'state')));
+	const staleTasks = activeTasks.filter((task) => {
+		const expiresAt = readTaskLeaseExpiresAt(task);
+		return expiresAt !== null && expiresAt <= now.valueOf();
+	});
+	const recoveredTaskCount = tasks.filter((task) => readString(task, 'lastErrorCode', 'last_error_code') === 'stale_task_recovered').length;
+	const failedStaleTaskCount = tasks.filter((task) => readString(task, 'lastErrorCode', 'last_error_code') === 'stale_task_retry_limit_exceeded').length;
+	return {
+		activeTasks,
+		staleTasks,
+		recoveredTaskCount,
+		failedStaleTaskCount,
+		retryBackoffPolicy: {
+			baseSeconds: 15,
+			maxSeconds: 300,
+		},
+	};
+}
+
+function environmentFromState(currentWorkday: Record<string, unknown> | null) {
+	return readString(currentWorkday ?? {}, 'environment') || process.env.TREESEED_DEPLOY_ENVIRONMENT?.trim() || (process.env.NODE_ENV === 'production' ? 'prod' : 'local');
 }
 
 export async function collectAgentArtifactApiState(input: {
@@ -458,6 +577,30 @@ export async function collectAgentArtifactApiState(input: {
 		limit: 50,
 		warnings,
 	});
+	const persistedApprovals = typeof input.sdk.listApprovalRequests === 'function'
+		? await input.sdk.listApprovalRequests({
+				projectId: input.projectId,
+				limit: taskLimit,
+			}).then((result) => Array.isArray(result.payload) ? result.payload.map(persistedApprovalFrom) : [])
+			.catch((error) => {
+				warnings.push(`Unable to list persisted approval requests: ${error instanceof Error ? error.message : String(error)}`);
+				return [] as AgentApprovalRequestSummary[];
+			})
+		: [];
+	const taskHealth = summarizeTaskHealth(tasks);
+	const environment = environmentFromState(currentWorkday);
+	const workerRunners = typeof input.sdk.listWorkerRunners === 'function'
+		? await input.sdk.listWorkerRunners(input.projectId, environment).then((result) => asRecords(result.payload)).catch((error) => {
+				warnings.push(`Unable to list worker runners: ${error instanceof Error ? error.message : String(error)}`);
+				return [] as Record<string, unknown>[];
+			})
+		: [];
+	const managerLeases = typeof input.sdk.listWorkdayManagerLeases === 'function'
+		? await input.sdk.listWorkdayManagerLeases(input.projectId, environment).then((result) => asRecords(result.payload)).catch((error) => {
+				warnings.push(`Unable to list manager leases: ${error instanceof Error ? error.message : String(error)}`);
+				return [] as Record<string, unknown>[];
+			})
+		: [];
 
 	return {
 		projectId: input.projectId,
@@ -465,12 +608,15 @@ export async function collectAgentArtifactApiState(input: {
 		researchNotes,
 		knowledgeDrafts,
 		optimizationReports,
-		approvals: uniqueApprovals(approvals),
+		approvals: uniqueApprovals([...persistedApprovals, ...approvals]),
 		currentWorkday,
 		reports: reports.map((report) => ({
 			...report,
 			body: parseReportBody(report, warnings),
 		})),
+		taskHealth,
+		workerRunners,
+		managerLease: managerLeases[0] ?? null,
 		warnings,
 	};
 }
@@ -897,8 +1043,39 @@ function decisionAllowedForKind(kind: string, decision: string) {
 	if (kind === 'release_staged_knowledge') {
 		return (RELEASE_APPROVAL_DECISIONS as readonly string[]).includes(decision);
 	}
-	return (PROMOTION_APPROVAL_DECISIONS as readonly string[]).includes(decision);
+	return ([...PROMOTION_APPROVAL_DECISIONS, 'defer'] as readonly string[]).includes(decision);
 }
+
+function normalizeApprovalDecision(decision: string) {
+	if (decision === 'approve') return 'approve_as_book_content';
+	if (decision === 'request_changes') return 'request_more_research';
+	return decision;
+}
+
+function stateForDecision(kind: string, decision: string) {
+	if (kind === 'release_staged_knowledge') {
+		return decision === 'approve_release' ? 'approved' : 'rejected';
+	}
+	if (decision === 'approve_as_book_content') return 'approved';
+	if (decision === 'request_more_research') return 'changes_requested';
+	if (decision === 'defer') return 'deferred';
+	return 'rejected';
+}
+
+const DEFAULT_DOCS_MUTATION_VERIFICATION_COMMANDS = ['npm run test:unit', 'npm run build'];
+
+const DEFAULT_DOCS_AUTOMATION_FORBIDDEN_PATHS = [
+	'.env*',
+	'**/.env*',
+	'**/.git/**',
+	'**/node_modules/**',
+	'.treeseed/worktrees/**',
+	'.treeseed/exports/**',
+	'packages/*/src/**',
+	'src/lib/**',
+	'src/pages/api/**',
+	'migrations/**',
+];
 
 function promotionTaskPayload(input: {
 	approval: AgentApprovalRequestSummary;
@@ -908,17 +1085,27 @@ function promotionTaskPayload(input: {
 	actor: string;
 	projectId: string;
 }) {
+	const verificationCommands = readStringArray(asRecord(input.approval.verificationPlan).commands);
+	const forbiddenPaths = readStringArray(input.approval.payload.forbiddenPaths);
+	const repositoryClaim = asRecord(input.approval.payload.repositoryClaim ?? input.approval.payload.repository_claim);
+	const runtimeMode = readString(input.approval.payload, 'runtimeMode') || readString(input.approval.payload, 'runtime_mode');
 	return {
 		executionKind: 'research_knowledge_pipeline',
 		taskKind: 'promote_knowledge_to_staging',
 		agentRole: 'engineer',
 		agentSlug: 'engineer-agent',
 		projectId: input.projectId,
-		environment: 'local',
-		provider: 'local_branch',
+		environment: runtimeMode === 'hosted' ? 'staging' : 'local',
+		runtimeMode: runtimeMode || undefined,
+		provider: runtimeMode === 'hosted' ? 'hosted_runner' : 'local_branch',
 		releaseAllowed: false,
 		knowledgeDraft: input.draft,
 		promotionRequest: input.approval.payload,
+		approval: {
+			id: input.approval.id,
+			kind: input.approval.approvalKind,
+			state: 'approved',
+		},
 		approvalDecision: {
 			approvalId: input.approval.id,
 			decision: input.decision,
@@ -927,8 +1114,15 @@ function promotionTaskPayload(input: {
 			decidedAt: new Date().toISOString(),
 		},
 		allowedPaths: [input.draft.targetPath],
-		forbiddenPaths: [],
-		verificationCommands: [],
+		forbiddenPaths: forbiddenPaths.length ? forbiddenPaths : DEFAULT_DOCS_AUTOMATION_FORBIDDEN_PATHS,
+		verificationCommands: verificationCommands.length ? verificationCommands : DEFAULT_DOCS_MUTATION_VERIFICATION_COMMANDS,
+		sourceMapRefs: input.approval.sourceMapRefs ?? [],
+		changedPaths: input.approval.changedPaths?.length ? input.approval.changedPaths : [input.draft.targetPath],
+		verificationPlan: input.approval.verificationPlan ?? { commands: DEFAULT_DOCS_MUTATION_VERIFICATION_COMMANDS },
+		policySnapshot: input.approval.policySnapshot ?? {},
+		repositoryClaim: Object.keys(repositoryClaim).length > 0 ? repositoryClaim : undefined,
+		repositoryClaimId: readString(repositoryClaim, 'id') || readString(input.approval.payload, 'repositoryClaimId') || undefined,
+		runnerId: readString(repositoryClaim, 'runnerId', 'runner_id') || readString(input.approval.payload, 'runnerId') || undefined,
 		sourceTaskId: input.approval.taskId,
 	};
 }
@@ -979,6 +1173,76 @@ async function createPromotionTask(input: {
 	return asRecord(created.payload);
 }
 
+async function createRevisionTask(input: {
+	sdk: SdkLike;
+	state: AgentArtifactApiState;
+	approval: AgentApprovalRequestSummary;
+	reason?: string | null;
+	actor: string;
+}) {
+	if (typeof input.sdk.createTask !== 'function') {
+		return null;
+	}
+	const draft = input.state.knowledgeDrafts.find((entry) => entry.knowledgeDraft.id === input.approval.draftId)?.knowledgeDraft
+		?? asRecord(input.approval.payload.knowledgeDraft) as unknown as KnowledgeDraft;
+	if (draft.kind !== 'knowledge_draft') {
+		throw new AgentApprovalDecisionError(409, 'Cannot request draft changes without the source draft artifact.', {
+			approvalId: input.approval.id,
+			draftId: input.approval.draftId ?? null,
+		});
+	}
+	const note = input.state.researchNotes.find((entry) => entry.researchNote.id === input.approval.sourceResearchNoteId)?.researchNote
+		?? input.state.researchNotes.find((entry) => draft.sourceResearchIds.includes(entry.researchNote.id))?.researchNote
+		?? asRecord(input.approval.payload.researchNote) as unknown as ResearchNote;
+	if (note.kind !== 'research_note') {
+		throw new AgentApprovalDecisionError(409, 'Cannot request draft changes without the source research note artifact.', {
+			approvalId: input.approval.id,
+			draftId: input.approval.draftId ?? null,
+		});
+	}
+	const report = input.state.optimizationReports.find((entry) => entry.optimizationReport.id === input.approval.optimizationReportId)?.optimizationReport
+		?? asRecord(input.approval.payload.optimizationReport) as unknown as OptimizationReport;
+	const workDayId = input.approval.workDayId ?? (input.state.currentWorkday ? readString(input.state.currentWorkday, 'id') : '');
+	if (!workDayId) {
+		throw new AgentApprovalDecisionError(409, 'Cannot request draft changes without a workday id.', {
+			approvalId: input.approval.id,
+		});
+	}
+	const created = await input.sdk.createTask({
+		workDayId,
+		agentId: 'knowledge-generator-agent',
+		type: 'generate_knowledge_draft',
+		priority: 88,
+		idempotencyKey: `${workDayId}:generate_knowledge_draft_revision:${input.approval.id}`,
+		payload: {
+			executionKind: 'research_knowledge_pipeline',
+			researchNote: note,
+			question: {
+				id: draft.sourceQuestionId,
+				title: draft.title,
+				book: draft.book,
+				section: draft.section,
+				targetPath: draft.targetPath,
+			},
+			previousKnowledgeDraft: draft,
+			optimizationReport: report.kind === 'knowledge_optimization_report' ? report : null,
+			approvalDecision: {
+				approvalId: input.approval.id,
+				decision: 'request_more_research',
+				reason: input.reason ?? null,
+				actor: input.actor,
+				decidedAt: new Date().toISOString(),
+			},
+			sourceTaskId: input.approval.taskId,
+			taskKind: 'generate_knowledge_draft',
+			revisionOfDraftId: draft.id,
+		},
+		graphVersion: null,
+		actor: input.actor,
+	});
+	return asRecord(created.payload);
+}
+
 function releaseGrantsFromApproval(input: {
 	approval: AgentApprovalRequestSummary;
 	projectId: string;
@@ -1013,7 +1277,8 @@ export async function recordAgentApprovalDecision(input: {
 	});
 	const approval = state.approvals.find((entry) => entry.id === input.approvalId || entry.taskId === input.approvalId);
 	if (!approval) return null;
-	if (!decisionAllowedForKind(approval.approvalKind, input.decision)) {
+	const decision = normalizeApprovalDecision(input.decision);
+	if (!decisionAllowedForKind(approval.approvalKind, decision)) {
 		throw new AgentApprovalDecisionError(400, `Decision ${input.decision} is not valid for ${approval.approvalKind}.`, {
 			approvalKind: approval.approvalKind,
 			decision: input.decision,
@@ -1023,19 +1288,28 @@ export async function recordAgentApprovalDecision(input: {
 	let createdTask: Record<string, unknown> | null = null;
 	let releaseAttempted = false;
 	let releaseResult: AgentOperationResult | null = null;
-	if (approval.approvalKind === 'promote_knowledge_draft' && input.decision === 'approve_as_book_content') {
+	if (approval.approvalKind === 'promote_knowledge_draft' && decision === 'approve_as_book_content') {
 		createdTask = await createPromotionTask({
 			sdk: input.sdk,
 			state,
 			approval,
-			decision: input.decision,
+			decision,
 			reason: input.reason,
 			actor: input.actor,
 			projectId: input.projectId,
 		});
 	}
+	if (approval.approvalKind === 'promote_knowledge_draft' && decision === 'request_more_research') {
+		createdTask = await createRevisionTask({
+			sdk: input.sdk,
+			state,
+			approval,
+			reason: input.reason,
+			actor: input.actor,
+		});
+	}
 
-	if (approval.approvalKind === 'release_staged_knowledge' && input.decision === 'approve_release') {
+	if (approval.approvalKind === 'release_staged_knowledge' && decision === 'approve_release') {
 		if (input.actorType && input.actorType !== 'user') {
 			throw new AgentApprovalDecisionError(403, 'Only a human user may approve a production release.', {
 				approvalId: approval.id,
@@ -1079,17 +1353,62 @@ export async function recordAgentApprovalDecision(input: {
 		});
 	}
 
+	const persistedDecision = typeof input.sdk.decideApprovalRequest === 'function'
+		? await input.sdk.decideApprovalRequest(approval.id, {
+				state: stateForDecision(approval.approvalKind, decision),
+				optionId: decision,
+				note: input.reason ?? null,
+				decision: {
+					approvalId: approval.id,
+					approvalKind: approval.approvalKind,
+					decision,
+					inputDecision: input.decision,
+					reason: input.reason ?? null,
+					createdTaskId: readString(createdTask ?? {}, 'id') || null,
+					releaseAttempted,
+				},
+				decidedByType: input.actorType ?? 'user',
+				decidedById: input.actor,
+			}).catch(() => null)
+		: null;
+	if (typeof input.sdk.upsertTeamInboxItem === 'function') {
+		await input.sdk.upsertTeamInboxItem({
+			id: `approval:${approval.id}`,
+			teamId: String(persistedDecision?.payload?.teamId ?? process.env.TREESEED_TEAM_ID ?? process.env.TREESEED_HOSTING_TEAM_ID ?? input.projectId),
+			projectId: input.projectId,
+			kind: 'approval_required',
+			state: decision === 'approve_as_book_content' || decision === 'approve_release'
+				? 'approved'
+				: decision === 'request_more_research'
+					? 'action_required'
+					: decision === 'defer'
+						? 'deferred'
+						: 'rejected',
+			title: approval.title ?? `Approval ${approval.id}`,
+			summary: input.reason ?? approval.summary ?? null,
+			href: `/app/teams/${String(persistedDecision?.payload?.teamId ?? process.env.TREESEED_TEAM_ID ?? process.env.TREESEED_HOSTING_TEAM_ID ?? input.projectId)}/projects/${input.projectId}/agents`,
+			itemKey: `approval:${approval.id}`,
+			metadata: {
+				approvalId: approval.id,
+				approvalKind: approval.approvalKind,
+				decision,
+				createdTaskId: readString(createdTask ?? {}, 'id') || null,
+			},
+		}).catch(() => null);
+	}
+
 	await input.sdk.appendTaskEvent({
 		taskId: approval.taskId,
 		kind: 'approval_decision_recorded',
 		data: {
 			approvalId: approval.id,
 			approvalKind: approval.approvalKind,
-			decision: input.decision,
+			decision,
+			inputDecision: input.decision,
 			reason: input.reason ?? null,
 			releaseAttempted,
 			stagingAttempted: false,
-			stagingTaskCreated: approval.approvalKind === 'promote_knowledge_draft' && input.decision === 'approve_as_book_content',
+			stagingTaskCreated: approval.approvalKind === 'promote_knowledge_draft' && decision === 'approve_as_book_content',
 			createdTaskId: readString(createdTask ?? {}, 'id') || null,
 			releaseResult,
 		},
@@ -1097,7 +1416,8 @@ export async function recordAgentApprovalDecision(input: {
 	});
 	return {
 		...approval,
-		decision: input.decision,
+		state: persistedDecision?.payload?.state ?? stateForDecision(approval.approvalKind, decision),
+		decision,
 		reason: input.reason ?? null,
 		createdTask,
 		releaseAttempted,

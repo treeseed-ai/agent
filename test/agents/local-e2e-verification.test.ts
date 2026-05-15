@@ -10,38 +10,39 @@ describe('local end-to-end verification harness', () => {
 			now: new Date('2026-05-13T12:00:00.000Z'),
 		});
 		try {
+			const questionCount = TREESEED_PLATFORM_KNOWLEDGE_QUESTIONS.length;
 			expect(result.ok).toBe(true);
-			expect(result.seededTaskCount).toBe(TREESEED_PLATFORM_KNOWLEDGE_QUESTIONS.length);
+			expect(result.seededTaskCount).toBe(questionCount);
 			expect(result.taskCounts.byKind).toMatchObject({
-				research_question: 5,
-				generate_knowledge_draft: 5,
-				optimize_knowledge_draft: 5,
-				promote_knowledge_draft_request: 5,
-				promote_knowledge_to_staging: 5,
-				release_staged_knowledge_request: 5,
+				research_question: questionCount,
+				generate_knowledge_draft: questionCount,
+				optimize_knowledge_draft: questionCount,
+				promote_knowledge_draft_request: questionCount,
+				promote_knowledge_to_staging: questionCount,
+				release_staged_knowledge_request: questionCount,
 			});
-			expect(result.taskCounts.completed).toBe(20);
-			expect(result.taskCounts.waiting).toBe(10);
+			expect(result.taskCounts.completed).toBe(questionCount * 4);
+			expect(result.taskCounts.waiting).toBe(questionCount * 2);
 			expect(result.artifactCounts).toMatchObject({
-				research_note: 5,
-				knowledge_draft: 5,
-				optimization_report: 5,
-				promotion_request: 5,
-				release_request: 5,
+				research_note: questionCount,
+				knowledge_draft: questionCount,
+				optimization_report: questionCount,
+				promotion_request: questionCount,
+				release_request: questionCount,
 			});
-			expect(result.approvalCount).toBe(10);
-			expect(result.releaseApprovalCount).toBe(5);
-			expect(result.stagedPathCount).toBe(5);
-			expect(result.releaseResultCount).toBeGreaterThanOrEqual(5);
+			expect(result.approvalCount).toBe(questionCount * 2);
+			expect(result.releaseApprovalCount).toBe(questionCount);
+			expect(result.stagedPathCount).toBe(questionCount);
+			expect(result.releaseResultCount).toBeGreaterThanOrEqual(questionCount);
 			expect(result.generatedTargetPaths).toEqual(expect.arrayContaining(
 				TREESEED_PLATFORM_KNOWLEDGE_QUESTIONS.map((question) => question.targetPath),
 			));
 			expect(result.api).toMatchObject({
-				researchNoteCount: 5,
-				knowledgeDraftCount: 5,
-				optimizationReportCount: 5,
-				approvalCount: 10,
-				releaseApprovalCount: 5,
+				researchNoteCount: questionCount,
+				knowledgeDraftCount: questionCount,
+				optimizationReportCount: questionCount,
+				approvalCount: questionCount * 2,
+				releaseApprovalCount: questionCount,
 				releaseResultCount: expect.any(Number),
 				reportCount: 1,
 				currentWorkdayReported: true,

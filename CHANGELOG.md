@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.8.14] - 2026-05-15
+
+### Added
+
+- feat(agent): implement code context pack generation (bf585ae3cd52)
+
+### Tests
+
+- build(agent): bump version and conditionally skip registry test (78d760a5031c)
+
+### Dependencies
+
+- chore(agent): bump version and update @treeseed/sdk (939338d4072e)
+- build(build): sync package dependency references (91a765ba6e2e)
+- Release @treeseed/agent 0.8.14.
+
 ## [0.8.13] - 2026-05-14
 
 ### Dependencies

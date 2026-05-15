@@ -287,6 +287,14 @@ function normalizeContext(
 				message: 'Expected context query scope to be a string.',
 			});
 		}
+		if (entry.codeScopes !== undefined && (!Array.isArray(entry.codeScopes) || entry.codeScopes.some((scope) => typeof scope !== 'string'))) {
+			diagnostics.push({
+				severity: 'error',
+				slug,
+				field: `context.queries[${index}].codeScopes`,
+				message: 'Expected context query codeScopes to be an array of strings.',
+			});
+		}
 		if (entry.relations !== undefined && (!Array.isArray(entry.relations) || entry.relations.some((relation) => typeof relation !== 'string'))) {
 			diagnostics.push({
 				severity: 'error',
@@ -462,7 +470,14 @@ function normalizeParts(
 	diagnostics: AgentSpecDiagnostic[],
 ): AgentSpecParts | null {
 	const slug = ensureString(raw.slug ?? slugHint, 'slug', diagnostics, slugHint) || slugHint;
-	const handler = ensureString(raw.handler, 'handler', diagnostics, slug) as AgentHandlerKind;
+	const rawHandler = ensureString(raw.handler, 'handler', diagnostics, slug);
+	const handler = (
+		rawHandler === 'knowledge-generator'
+			? 'knowledge_generator'
+			: rawHandler === 'knowledge-optimizer'
+				? 'knowledge_optimizer'
+				: rawHandler
+	) as AgentHandlerKind;
 	const triggers = Array.isArray(raw.triggers)
 		? raw.triggers.map((entry, index) => normalizeTrigger(entry, index, diagnostics, slug)).filter((entry): entry is AgentTriggerConfig => Boolean(entry))
 		: [];

@@ -95,6 +95,11 @@ export interface ReleaseFailedMessage {
 	releaserRunId: string;
 }
 
+export interface DocumentationAutomationEventMessage extends Record<string, unknown> {
+	summary?: string;
+	agentRunId?: string;
+}
+
 export interface AgentMessageContracts {
 	question_priority_updated: QuestionPriorityUpdatedMessage;
 	objective_priority_updated: ObjectivePriorityUpdatedMessage;
@@ -113,6 +118,32 @@ export interface AgentMessageContracts {
 	release_started: ReleaseStartedMessage;
 	release_completed: ReleaseCompletedMessage;
 	release_failed: ReleaseFailedMessage;
+	documentation_gap_detected: DocumentationAutomationEventMessage;
+	research_task_requested: DocumentationAutomationEventMessage;
+	documentation_plan_updated: DocumentationAutomationEventMessage;
+	codebase_inventory_completed: DocumentationAutomationEventMessage;
+	research_note_created: DocumentationAutomationEventMessage;
+	source_map_created: DocumentationAutomationEventMessage;
+	knowledge_gap_detected: DocumentationAutomationEventMessage;
+	draft_requires_context: DocumentationAutomationEventMessage;
+	promotion_request_created: DocumentationAutomationEventMessage;
+	revision_requested: DocumentationAutomationEventMessage;
+	draft_rejected: DocumentationAutomationEventMessage;
+	docs_mutation_completed: DocumentationAutomationEventMessage;
+	docs_mutation_waiting_for_review: DocumentationAutomationEventMessage;
+	docs_mutation_failed: DocumentationAutomationEventMessage;
+	repair_task_created: DocumentationAutomationEventMessage;
+	review_passed: DocumentationAutomationEventMessage;
+	human_approval_recommended: DocumentationAutomationEventMessage;
+	approval_request_created: DocumentationAutomationEventMessage;
+	governance_item_created: DocumentationAutomationEventMessage;
+	policy_violation_detected: DocumentationAutomationEventMessage;
+	approval_ready_for_human: DocumentationAutomationEventMessage;
+	workday_report_created: DocumentationAutomationEventMessage;
+	project_summary_updated: DocumentationAutomationEventMessage;
+	team_inbox_item_created: DocumentationAutomationEventMessage;
+	release_candidate_created: DocumentationAutomationEventMessage;
+	release_waiting_for_approval: DocumentationAutomationEventMessage;
 }
 
 export type AgentMessageType = keyof AgentMessageContracts;
@@ -135,7 +166,62 @@ export const AGENT_MESSAGE_TYPES = [
 	'release_started',
 	'release_completed',
 	'release_failed',
+	'documentation_gap_detected',
+	'research_task_requested',
+	'documentation_plan_updated',
+	'codebase_inventory_completed',
+	'research_note_created',
+	'source_map_created',
+	'knowledge_gap_detected',
+	'draft_requires_context',
+	'promotion_request_created',
+	'revision_requested',
+	'draft_rejected',
+	'docs_mutation_completed',
+	'docs_mutation_waiting_for_review',
+	'docs_mutation_failed',
+	'repair_task_created',
+	'review_passed',
+	'human_approval_recommended',
+	'approval_request_created',
+	'governance_item_created',
+	'policy_violation_detected',
+	'approval_ready_for_human',
+	'workday_report_created',
+	'project_summary_updated',
+	'team_inbox_item_created',
+	'release_candidate_created',
+	'release_waiting_for_approval',
 ] as const satisfies readonly AgentMessageType[];
+
+const DOCUMENTATION_AUTOMATION_MESSAGE_TYPES = new Set<string>([
+	'documentation_gap_detected',
+	'research_task_requested',
+	'documentation_plan_updated',
+	'codebase_inventory_completed',
+	'research_note_created',
+	'source_map_created',
+	'knowledge_gap_detected',
+	'draft_requires_context',
+	'promotion_request_created',
+	'revision_requested',
+	'draft_rejected',
+	'docs_mutation_completed',
+	'docs_mutation_waiting_for_review',
+	'docs_mutation_failed',
+	'repair_task_created',
+	'review_passed',
+	'human_approval_recommended',
+	'approval_request_created',
+	'governance_item_created',
+	'policy_violation_detected',
+	'approval_ready_for_human',
+	'workday_report_created',
+	'project_summary_updated',
+	'team_inbox_item_created',
+	'release_candidate_created',
+	'release_waiting_for_approval',
+]);
 
 function ensureString(value: unknown, label: string) {
 	if (typeof value !== 'string' || value.trim().length === 0) {
@@ -270,6 +356,9 @@ export function parseAgentMessagePayload<TType extends AgentMessageType>(
 				releaserRunId: ensureString(parsed.releaserRunId, 'releaserRunId'),
 			} as AgentMessagePayload<TType>;
 		default:
+			if (DOCUMENTATION_AUTOMATION_MESSAGE_TYPES.has(type)) {
+				return parsed as AgentMessagePayload<TType>;
+			}
 			throw new Error(`Unsupported message type "${type}".`);
 	}
 }

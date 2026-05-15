@@ -35,6 +35,7 @@ function context(payload: Record<string, unknown>, sdkOverrides: Record<string, 
 					purpose: 'research',
 					query: 'agent runtime',
 					scope: '/knowledge',
+					codeScopes: ['packages/agent/src/agents'],
 				}],
 			},
 		} as AgentContext['agent'],
@@ -88,10 +89,88 @@ function context(payload: Record<string, unknown>, sdkOverrides: Record<string, 
 	};
 }
 
+function codebaseInventory() {
+	return {
+		id: 'codebase_inventory:test',
+		kind: 'codebase_inventory',
+		title: 'Test Inventory',
+		generatedAt: '2026-05-14T12:00:00.000Z',
+		graphVersion: 'graph-1',
+		repoRef: 'commit-test',
+		scanTargets: [],
+		ignoredPatterns: [],
+		packages: [{
+			name: 'agent',
+			purpose: 'Agent runtime.',
+			root: 'packages/agent',
+			entrypoints: ['packages/agent/src/index.ts'],
+			publicExports: ['AgentKernel'],
+			commands: [],
+			runtimeServices: [],
+			moduleCount: 1,
+			fileCount: 2,
+			tests: [],
+			relatedDocs: [],
+			knownGaps: [],
+			modules: [],
+			warnings: [],
+		}],
+		modules: [{
+			path: 'packages/agent/src/agents',
+			packageName: 'agent',
+			responsibility: 'Agent definitions and runtime behavior.',
+			fileCount: 2,
+			importantFiles: ['packages/agent/src/agents/kernel/agent-kernel.ts'],
+			exportedSymbols: ['AgentKernel'],
+			imports: ['@treeseed/sdk'],
+			tests: ['packages/agent/test/agents/kernel.test.ts'],
+			relatedDocs: [],
+			warnings: [],
+		}],
+		knowledgeGaps: [],
+		warnings: [],
+	};
+}
+
+function researchNote(overrides: Partial<ResearchNote> = {}): ResearchNote {
+	return {
+		id: 'research:runtime-v1',
+		kind: 'research_note',
+		questionId: 'question:runtime',
+		state: 'draft',
+		contextQueries: [{ id: 'runtime', purpose: 'research', source: 'task_payload', includedNodeIds: ['node:runtime'], warnings: [] }],
+		contextPackSummary: 'runtime: Agent runtime',
+		sourceRefs: [{ ref: 'packages/agent/src/agents/kernel/agent-kernel.ts', kind: 'path', title: 'Agent Kernel' }],
+		sourceMap: [{
+			claim: 'The runtime is grounded in AgentKernel.',
+			sourceFiles: ['packages/agent/src/agents/kernel/agent-kernel.ts'],
+			sourceSymbolsOrSections: ['AgentKernel'],
+			evidenceStrength: 'direct',
+			uncertainty: 'Human review is still required.',
+			lastObservedRef: 'commit-test',
+		}],
+		observedFacts: ['The runtime has an AgentKernel.'],
+		inferences: [{
+			statement: 'The generated article should separate current implementation facts from planned architecture.',
+			sourceRefs: ['packages/agent/src/agents/kernel/agent-kernel.ts'],
+			confidence: 'medium',
+		}],
+		uncertainties: [{
+			statement: 'This deterministic dogfood pass does not claim human-reviewed completeness.',
+			impact: 'medium',
+		}],
+		recommendedKnowledgeArtifacts: ['knowledge:runtime'],
+		recommendedImplementationProposal: null,
+		createdAt: '2026-05-13T12:00:00.000Z',
+		...overrides,
+	};
+}
+
 describe('package-owned knowledge handlers', () => {
 	it('researcher resolves context packs and emits a valid research note', async () => {
 		const ctx = context({
 			taskId: 'task-1',
+			codebaseInventory: codebaseInventory(),
 			question: {
 				id: 'question:runtime',
 				title: 'What is the runtime?',
@@ -113,7 +192,21 @@ describe('package-owned knowledge handlers', () => {
 			source: 'task_payload',
 			includedNodeIds: ['node:runtime'],
 		});
+		expect(note.contextQueries).toEqual(expect.arrayContaining([
+			expect.objectContaining({
+				id: expect.stringContaining('runtime:code:'),
+				includedNodeIds: expect.arrayContaining(['code-module:packages/agent/src/agents']),
+			}),
+		]));
 		expect(note.sourceRefs[0]?.ref).toBe('packages/agent/src/agents/kernel/agent-kernel.ts');
+		expect(note.sourceMap).toEqual(expect.arrayContaining([
+			expect.objectContaining({
+				sourceFiles: expect.arrayContaining(['packages/agent/src/agents/kernel/agent-kernel.ts']),
+				sourceSymbolsOrSections: expect.arrayContaining(['AgentKernel']),
+				evidenceStrength: 'direct',
+				lastObservedRef: 'commit-test',
+			}),
+		]));
 		expect((ctx.sdk as any).appendTaskEvent).toHaveBeenCalledWith(expect.objectContaining({
 			taskId: 'task-1',
 			kind: 'research_note_created',
@@ -143,7 +236,15 @@ describe('package-owned knowledge handlers', () => {
 		expect(output.status).toBe('completed');
 		const draft = output.metadata?.knowledgeDraft as KnowledgeDraft;
 		expect(draft.kind).toBe('knowledge_draft');
-		expect(draft.body).toContain('## Source map');
+		expect(draft.frontmatter).toMatchObject({
+			type: 'architecture',
+			status: 'pending_review',
+			confidence: 'medium',
+			source_map: expect.any(Array),
+		});
+		for (const section of ['What this explains', 'Current implementation', 'Main flow', 'Important files', 'Source map', 'Governance and safety boundaries', 'Open questions', 'Verification notes']) {
+			expect(draft.body).toContain(`## ${section}`);
+		}
 		expect((ctx.sdk as any).createMessage).toHaveBeenCalledWith(expect.objectContaining({
 			type: 'knowledge_draft_created',
 			payload: expect.objectContaining({
@@ -153,22 +254,54 @@ describe('package-owned knowledge handlers', () => {
 		}));
 	});
 
-	it('optimizer scores drafts and requests more work for weak evidence', async () => {
-		const weakNote = {
+	it('optimizer promotes strong source-mapped drafts', async () => {
+		const note = researchNote();
+		const generatorInputs = await knowledgeGeneratorHandler.resolveInputs(context({
+			researchNote: note,
+			question: {
+				id: note.questionId,
+				title: 'Runtime Knowledge',
+				book: 'architecture',
+				section: 'runtime',
+				targetPath: 'src/content/knowledge/architecture/runtime/runtime.mdx',
+			},
+		}));
+		const draft = await knowledgeGeneratorHandler.execute(context({}), generatorInputs) as KnowledgeDraft;
+		const ctx = context({
+			taskId: 'task-3',
+			researchNote: note,
+			knowledgeDraft: draft,
+		});
+
+		const inputs = await knowledgeOptimizerHandler.resolveInputs(ctx);
+		const report = await knowledgeOptimizerHandler.execute(ctx, inputs);
+		const output = await knowledgeOptimizerHandler.emitOutputs(ctx, report);
+
+		expect(output.status).toBe('completed');
+		expect(output.metadata?.optimizationReport).toMatchObject({
+			recommendation: 'promote',
+			totalScore: 29,
+			criticalIssues: [],
+		});
+	});
+
+	it('optimizer defers inferred-only evidence', async () => {
+		const weakNote = researchNote({
 			id: 'research:weak-v1',
-			kind: 'research_note',
 			questionId: 'question:weak',
-			state: 'draft',
-			contextQueries: [{ id: 'weak', purpose: 'research', source: 'task_payload', includedNodeIds: [], warnings: [] }],
-			contextPackSummary: '',
 			sourceRefs: [],
+			sourceMap: [{
+				claim: 'No source-backed evidence was found.',
+				sourceFiles: ['src/content/knowledge/research/evidence/weak.mdx'],
+				sourceSymbolsOrSections: [],
+				evidenceStrength: 'inferred',
+				uncertainty: 'No source-backed evidence was found.',
+				lastObservedRef: 'test',
+			}],
 			observedFacts: ['No source-backed evidence was found.'],
 			inferences: [],
 			uncertainties: [],
-			recommendedKnowledgeArtifacts: ['knowledge:weak'],
-			recommendedImplementationProposal: null,
-			createdAt: '2026-05-13T12:00:00.000Z',
-		} as ResearchNote;
+		});
 		const generatorCtx = context({
 			researchNote: weakNote,
 			targetPath: 'src/content/knowledge/research/evidence/weak.mdx',
@@ -187,12 +320,67 @@ describe('package-owned knowledge handlers', () => {
 
 		expect(output.status).toBe('completed');
 		expect(output.metadata?.optimizationReport).toMatchObject({
-			recommendation: 'optimize_again',
+			recommendation: 'defer',
 			totalScore: 24,
 		});
 		expect((ctx.sdk as any).createMessage).toHaveBeenCalledWith(expect.objectContaining({
 			type: 'knowledge_optimization_completed',
 		}));
+	});
+
+	it('optimizer revises incomplete source maps and rejects unsupported core claims', async () => {
+		const incompleteNote = researchNote({
+			sourceMap: [{
+				claim: 'Runtime evidence needs source files.',
+				sourceFiles: [],
+				sourceSymbolsOrSections: ['AgentKernel'],
+				evidenceStrength: 'supporting',
+				uncertainty: 'Source files are missing.',
+				lastObservedRef: 'commit-test',
+			}],
+		});
+		const incompleteDraft = await knowledgeGeneratorHandler.execute(context({}), await knowledgeGeneratorHandler.resolveInputs(context({
+			researchNote: incompleteNote,
+			question: {
+				id: incompleteNote.questionId,
+				title: 'Runtime Knowledge',
+				book: 'architecture',
+				section: 'runtime',
+				targetPath: 'src/content/knowledge/architecture/runtime/runtime.mdx',
+			},
+		}))) as KnowledgeDraft;
+		const reviseReport = await knowledgeOptimizerHandler.execute(context({}), await knowledgeOptimizerHandler.resolveInputs(context({
+			researchNote: incompleteNote,
+			knowledgeDraft: incompleteDraft,
+		})));
+
+		expect(reviseReport).toMatchObject({
+			recommendation: 'revise',
+			remainingIssues: expect.arrayContaining(['Source map is incomplete.']),
+		});
+
+		const unsupportedNote = researchNote({
+			observedFacts: ['Unsupported core claim: the runtime mutates production without approval.'],
+		});
+		const unsupportedDraft = await knowledgeGeneratorHandler.execute(context({}), await knowledgeGeneratorHandler.resolveInputs(context({
+			researchNote: unsupportedNote,
+			question: {
+				id: unsupportedNote.questionId,
+				title: 'Runtime Knowledge',
+				book: 'architecture',
+				section: 'runtime',
+				targetPath: 'src/content/knowledge/architecture/runtime/runtime.mdx',
+			},
+		}))) as KnowledgeDraft;
+		const rejectReport = await knowledgeOptimizerHandler.execute(context({}), await knowledgeOptimizerHandler.resolveInputs(context({
+			researchNote: unsupportedNote,
+			knowledgeDraft: unsupportedDraft,
+		})));
+
+		expect(rejectReport).toMatchObject({
+			recommendation: 'reject',
+			criticalIssues: ['Unsupported core claim detected in draft or research evidence.'],
+		});
 	});
 
 	it('returns waiting when required upstream artifacts are missing', async () => {

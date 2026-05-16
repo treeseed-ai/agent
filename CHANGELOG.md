@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.8.17] - 2026-05-16
+
+### Tests
+
+- refactor(auth): improve device approval URL construction (c088fa6703fc)
+
+### Dependencies
+
+- Release @treeseed/agent 0.8.17.
+
 ## [0.8.16] - 2026-05-15
 
 ### Added

@@ -250,6 +250,22 @@ apiRuntimeDescribe('@treeseed/agent api runtime', () => {
 		expect(config.authApprovalBaseUrl).toBe('https://treeseed.ai');
 	});
 
+	it('keeps device approval links on the web page route when the configured approval base has a path', async () => {
+		const app = createTestApp({
+			config: {
+				baseUrl: 'https://treeseed.ai/v1',
+			},
+		});
+		const started = await json(await app.request('/auth/device/start', {
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify({ clientName: 'treeseed-cli', scopes: ['auth:me'] }),
+		}));
+
+		expect(started.verificationUri).toBe('https://treeseed.ai/auth/device/approve');
+		expect(started.verificationUriComplete).toBe(`https://treeseed.ai/auth/device/approve?user_code=${encodeURIComponent(started.userCode)}`);
+	});
+
 	it('rejects loopback approval links for remote APIs', () => {
 		expect(() => resolveApiConfig({
 			TREESEED_API_BASE_URL: 'https://api-treeseed-market-staging-ca844c56.treeseed.ai',

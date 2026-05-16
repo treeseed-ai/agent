@@ -17,6 +17,14 @@ import type {
 import { DEFAULT_PERMISSIONS, DEFAULT_ROLES } from './rbac.ts';
 import { createAccessToken, nextOpaqueToken, principalFromAccessTokenPayload, verifyAccessToken } from './tokens.ts';
 
+function approvalUrl(baseUrl: string, userCode?: string | null) {
+	const url = new URL('/auth/device/approve', `${baseUrl.replace(/\/+$/u, '')}/`);
+	if (userCode) {
+		url.searchParams.set('user_code', userCode);
+	}
+	return url.toString();
+}
+
 const AUTH_SCHEMA_SQL = [
 	`CREATE TABLE IF NOT EXISTS users (
 		id TEXT PRIMARY KEY,
@@ -642,8 +650,8 @@ export class D1AuthStore {
 			ok: true,
 			deviceCode,
 			userCode,
-			verificationUri: `${this.config.baseUrl}/auth/device/approve`,
-			verificationUriComplete: `${this.config.baseUrl}/auth/device/approve?user_code=${encodeURIComponent(userCode)}`,
+			verificationUri: approvalUrl(this.config.baseUrl),
+			verificationUriComplete: approvalUrl(this.config.baseUrl, userCode),
 			intervalSeconds: this.config.deviceCodePollIntervalSeconds,
 			expiresAt: expiresAt.toISOString(),
 			expiresInSeconds: this.config.deviceCodeTtlSeconds,

@@ -50,6 +50,14 @@ function nextUserCode() {
 		+ Math.random().toString(36).slice(2, 6).toUpperCase();
 }
 
+function approvalUrl(baseUrl: string, userCode?: string | null) {
+	const url = new URL('/auth/device/approve', `${baseUrl.replace(/\/+$/u, '')}/`);
+	if (userCode) {
+		url.searchParams.set('user_code', userCode);
+	}
+	return url.toString();
+}
+
 export class MemoryDeviceCodeAuthProvider implements ApiAuthProvider {
 	readonly id = 'memory';
 	private readonly devices = new Map<string, DeviceFlowRecord>();
@@ -75,8 +83,8 @@ export class MemoryDeviceCodeAuthProvider implements ApiAuthProvider {
 			ok: true,
 			deviceCode,
 			userCode,
-			verificationUri: `${this.config.baseUrl}/auth/device/approve`,
-			verificationUriComplete: `${this.config.baseUrl}/auth/device/approve?user_code=${encodeURIComponent(userCode)}`,
+			verificationUri: approvalUrl(this.config.baseUrl),
+			verificationUriComplete: approvalUrl(this.config.baseUrl, userCode),
 			intervalSeconds: this.config.deviceCodePollIntervalSeconds,
 			expiresAt: formatExpiry(expiresAt),
 			expiresInSeconds: this.config.deviceCodeTtlSeconds,

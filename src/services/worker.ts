@@ -82,6 +82,12 @@ function docsMutationExecutionDisabled() {
 	return mode === 'dry-run' || mode === 'off';
 }
 
+function booleanFromEnv(name: string, fallback = false) {
+	const value = process.env[name]?.trim().toLowerCase();
+	if (!value) return fallback;
+	return ['1', 'true', 'yes', 'on'].includes(value);
+}
+
 function readCapacityEnvelope(payload: Record<string, unknown>): CapacityTaskExecutionEnvelope | null {
 	const envelope = asRecord(payload.capacityEnvelope);
 	return Object.keys(envelope).length > 0 ? envelope as CapacityTaskExecutionEnvelope : null;
@@ -1891,14 +1897,25 @@ async function recordWorkerLoopExitState(config: ReturnType<typeof resolveWorker
 export async function startWorkerLoop() {
 	const config = resolveWorkerConfig();
 	let idleSince: number | null = null;
+	let idleCycleCount = 0;
+	const logCycles = booleanFromEnv('TREESEED_WORKER_CONSOLE_SUMMARY', false);
 	for (;;) {
 		try {
 			const result = await runWorkerCycle();
 			const processed = Number((result as { processed?: unknown }).processed ?? 0);
 			if (processed > 0) {
 				idleSince = null;
+				idleCycleCount = 0;
+				if (logCycles) {
+					process.stdout.write(`[worker] cycle processed=${processed} state=active\n`);
+				}
 			} else {
 				idleSince ??= Date.now();
+				idleCycleCount += 1;
+				if (logCycles && (idleCycleCount === 1 || idleCycleCount % 6 === 0)) {
+					const idleForSeconds = Math.max(0, Math.round((Date.now() - idleSince) / 1000));
+					process.stdout.write(`[worker] cycle processed=0 state=idle idleFor=${idleForSeconds}s\n`);
+				}
 				if (shouldExitWorkerLoopAfterIdle({
 					idleExitMs: config.idleExitMs,
 					idleSince,

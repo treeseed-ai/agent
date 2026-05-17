@@ -2,6 +2,10 @@ import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import type { ApiConfig } from './types.ts';
 
+const LOCAL_DEV_AUTH_TTL_SECONDS = 365 * 24 * 60 * 60;
+const DEFAULT_AUTH_TTL_SECONDS = 15 * 60;
+const DEFAULT_REFRESH_TTL_SECONDS = 7 * 24 * 60 * 60;
+
 function parseInteger(value: string | undefined, fallback: number) {
 	if (!value) return fallback;
 	const parsed = Number.parseInt(value, 10);
@@ -82,6 +86,9 @@ export function resolveApiConfig(env: NodeJS.ProcessEnv = process.env): ApiConfi
 	const baseUrl = resolveBaseUrl(env, host === '0.0.0.0' ? '127.0.0.1' : host, port);
 	const issuer = normalizeUrl(env.TREESEED_API_ISSUER?.trim() || baseUrl);
 	const repoRoot = resolve(env.TREESEED_API_REPO_ROOT?.trim() || process.cwd());
+	const localDevAuth = env.TREESEED_LOCAL_DEV_MODE === 'cloudflare' || isLoopbackUrl(baseUrl);
+	const defaultAccessTokenTtl = localDevAuth ? LOCAL_DEV_AUTH_TTL_SECONDS : DEFAULT_AUTH_TTL_SECONDS;
+	const defaultRefreshTokenTtl = localDevAuth ? LOCAL_DEV_AUTH_TTL_SECONDS : DEFAULT_REFRESH_TTL_SECONDS;
 
 	return {
 		name: env.TREESEED_API_NAME?.trim() || '@treeseed/agent/api',
@@ -110,8 +117,8 @@ export function resolveApiConfig(env: NodeJS.ProcessEnv = process.env): ApiConfi
 		webAssertionSecret: env.TREESEED_API_WEB_ASSERTION_SECRET?.trim() || env.TREESEED_API_AUTH_SECRET?.trim() || 'treeseed-web-assertion-dev-secret',
 		webExchangeTtlSeconds: parseInteger(env.TREESEED_API_WEB_EXCHANGE_TTL, 300),
 		bootstrapAdminAllowlist: parseCsv(env.TREESEED_API_BOOTSTRAP_ADMIN_ALLOWLIST),
-		accessTokenTtlSeconds: parseInteger(env.TREESEED_API_ACCESS_TOKEN_TTL, 900),
-		refreshTokenTtlSeconds: parseInteger(env.TREESEED_API_REFRESH_TOKEN_TTL, 7 * 24 * 60 * 60),
+		accessTokenTtlSeconds: parseInteger(env.TREESEED_API_ACCESS_TOKEN_TTL, defaultAccessTokenTtl),
+		refreshTokenTtlSeconds: parseInteger(env.TREESEED_API_REFRESH_TOKEN_TTL, defaultRefreshTokenTtl),
 		deviceCodeTtlSeconds: parseInteger(env.TREESEED_API_DEVICE_CODE_TTL, 10 * 60),
 		deviceCodePollIntervalSeconds: parseInteger(env.TREESEED_API_DEVICE_CODE_POLL_INTERVAL, 5),
 		templateCatalogPath: env.TREESEED_API_TEMPLATE_CATALOG_PATH?.trim() || undefined,

@@ -101,6 +101,31 @@ function booleanFromEnv(name: string, fallback = false) {
 	return ['1', 'true', 'yes', 'on'].includes(value);
 }
 
+function consoleSummaryEnabled(name: string) {
+	return booleanFromEnv(name, false);
+}
+
+function writeManagerCycleSummary(result: Record<string, unknown>) {
+	const workDay = result.workDay && typeof result.workDay === 'object' ? result.workDay as Record<string, unknown> : null;
+	const scaleResult = result.scaleResult && typeof result.scaleResult === 'object' ? result.scaleResult as Record<string, unknown> : null;
+	const workDayLabel = workDay
+		? `${String(workDay.state ?? 'active')} ${String(workDay.id ?? '').slice(0, 8)}`.trim()
+		: 'none';
+	const seededTasks = Array.isArray(result.seededTasks) ? result.seededTasks.length : 0;
+	const skipped = result.skipped === true ? ` skipped=${String(result.reason ?? 'true')}` : '';
+	process.stdout.write([
+		'[manager] cycle',
+		`window=${result.insideWorkWindow ? 'open' : 'closed'}`,
+		`workday=${workDayLabel}`,
+		`queued=${Number(result.queuedCount ?? 0)}`,
+		`active=${Number(result.activeLeases ?? 0)}`,
+		`seeded=${seededTasks}`,
+		`desiredWorkers=${Number(result.desiredWorkers ?? 0)}`,
+		`scale=${String(scaleResult?.provider ?? 'noop')}`,
+		`${skipped}`,
+	].join(' ') + '\n');
+}
+
 function managerLeaseTtlSeconds(config: ManagerConfig) {
 	return Math.max(60, Math.ceil(config.pollIntervalMs / 1000) * 4);
 }
@@ -2643,7 +2668,8 @@ async function reconcileManager(options: {
 	const pendingWorkdayRequests = typeof sdk.listWorkdayRequests === 'function'
 		? ((await sdk.listWorkdayRequests(config.projectId, config.environment, 'pending').catch(() => ({ payload: [] }))).payload ?? []) as Array<Record<string, unknown>>
 		: [];
-	const manualRunRequested = pendingWorkdayRequests.some((entry) => entry.type === 'one_off_run' || entry.type === 'retry_open');
+	const explicitWorkdayRequested = Boolean(config.workDayId);
+	const manualRunRequested = explicitWorkdayRequested || pendingWorkdayRequests.some((entry) => entry.type === 'one_off_run' || entry.type === 'retry_open');
 	const earlyCloseRequested = pendingWorkdayRequests.some((entry) => entry.type === 'early_close');
 	const pauseRequested = pendingWorkdayRequests.some((entry) => entry.type === 'pause') && !manualRunRequested;
 	const insideWorkWindow = !pauseRequested && !earlyCloseRequested && (manualRunRequested || isWithinWorkWindow(now, policy.schedule));
@@ -2688,7 +2714,7 @@ async function reconcileManager(options: {
 
 	if (!activeWorkDay && insideWorkWindow && policy.dailyTaskCreditBudget > 0) {
 		const previewSnapshot = await buildPrioritySnapshot(sdk, config, policy, now, null);
-		if ((previewSnapshot?.items.length ?? 0) > 0) {
+		if (manualRunRequested || (previewSnapshot?.items.length ?? 0) > 0) {
 			activeWorkDay = await openWorkday(sdk, config, policy, now, reporter);
 			await claimManagerLease({
 				sdk,
@@ -2698,6 +2724,8 @@ async function reconcileManager(options: {
 				metadata: {
 					insideWorkWindow,
 					pauseRequested,
+					explicitWorkdayRequested,
+					manualRunRequested,
 					openedWorkDay: Boolean(activeWorkDay),
 					lastCycleResult: 'workday_opened',
 				},
@@ -3058,12 +3086,16 @@ export async function startManagerLoop(options: {
 	scaler?: WorkerPoolScaler;
 } = {}) {
 	const config = options.config ?? resolveManagerServiceConfig();
+	const logCycles = consoleSummaryEnabled('TREESEED_MANAGER_CONSOLE_SUMMARY');
 	for (;;) {
 		try {
-			await reconcileManager({
+			const result = await reconcileManager({
 				...options,
 				config,
 			});
+			if (logCycles) {
+				writeManagerCycleSummary(result as Record<string, unknown>);
+			}
 		} catch (error) {
 			process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
 		}

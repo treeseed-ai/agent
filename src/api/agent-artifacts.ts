@@ -1386,7 +1386,7 @@ export async function recordAgentApprovalDecision(input: {
 						: 'rejected',
 			title: approval.title ?? `Approval ${approval.id}`,
 			summary: input.reason ?? approval.summary ?? null,
-			href: `/app/teams/${String(persistedDecision?.payload?.teamId ?? process.env.TREESEED_TEAM_ID ?? process.env.TREESEED_HOSTING_TEAM_ID ?? input.projectId)}/projects/${input.projectId}/agents`,
+			href: `/app/governance/${encodeURIComponent(approval.id)}`,
 			itemKey: `approval:${approval.id}`,
 			metadata: {
 				approvalId: approval.id,

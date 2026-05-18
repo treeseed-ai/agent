@@ -339,6 +339,7 @@ export async function runCodexDocsMutationLifecycle(
 		reasoningEffort: task.reasoningEffort,
 		metadata: {
 			subscriptionPlan: 'unknown',
+			coreObjective: context.coreObjective?.content,
 			contextPackSummary: task.contextPackSummary,
 			workPackage: task.workPackage,
 			approvalId: task.approvalId,

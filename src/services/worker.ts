@@ -4,6 +4,7 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { AgentTriggerInvocation } from '../agents/runtime-types.ts';
 import type { AgentContext, AgentHandler } from '../agents/runtime-types.ts';
+import { loadCoreObjectiveContext } from '../agents/core-objective.ts';
 import { AgentKernel } from '../agents/kernel/agent-kernel.ts';
 import { createControlPlaneReporter, shouldInterruptForCapacity } from '@treeseed/sdk';
 import type { CapacityTaskExecutionEnvelope, TaskCheckpointArtifact } from '@treeseed/sdk';
@@ -451,6 +452,7 @@ function contextForResearchKnowledgeHandler(input: {
 		runId: `${input.kind}-${Date.now()}`,
 		repoRoot: input.repoRoot,
 		agent,
+		coreObjective: loadCoreObjectiveContext(input.repoRoot),
 		sdk: scopedSdkForHandler(input.sdk, agent),
 		trigger: invocationForResearchKnowledgeTask(
 			input.kind === 'researcher'
@@ -503,6 +505,7 @@ function contextForDocsMutationHandler(input: {
 		runId: input.taskId,
 		repoRoot: input.repoRoot,
 		agent,
+		coreObjective: loadCoreObjectiveContext(input.repoRoot),
 		sdk: scopedSdkForHandler(input.sdk, agent),
 		trigger: invocationForResearchKnowledgeTask('apply_approved_docs_mutation', input.payload),
 		execution: {},

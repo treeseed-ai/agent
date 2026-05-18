@@ -842,7 +842,7 @@ export function resolveManagerServiceConfig() {
 	const environment = envValue('TREESEED_DEPLOY_ENVIRONMENT')
 		|| (process.env.NODE_ENV === 'production' ? 'prod' : 'local');
 	const projectId = envValue('TREESEED_PROJECT_ID') || shared.projectId;
-	const teamId = envValue('TREESEED_HOSTING_TEAM_ID') || envValue('TREESEED_CONTENT_DEFAULT_TEAM_ID') || projectId;
+	const teamId = envValue('TREESEED_TEAM_ID') || envValue('TREESEED_HOSTING_TEAM_ID') || envValue('TREESEED_CONTENT_DEFAULT_TEAM_ID') || projectId;
 	const dailyTaskCreditBudget = integerFromEnv('TREESEED_WORKDAY_TASK_CREDIT_BUDGET', shared.defaultCapacityBudget);
 	const maxQueuedTasks = integerFromEnv('TREESEED_MANAGER_MAX_QUEUED_TASKS', Math.max(1, Math.min(20, dailyTaskCreditBudget)));
 	const maxQueuedCredits = integerFromEnv('TREESEED_MANAGER_MAX_QUEUED_CREDITS', Math.max(1, Math.min(dailyTaskCreditBudget, maxQueuedTasks * 4)));

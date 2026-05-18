@@ -2,6 +2,7 @@ import { Codex } from '@openai/codex-sdk';
 import { basename, dirname } from 'node:path';
 import type { AgentRuntimeSpec } from '@treeseed/sdk/types/agents';
 import type { AgentExecutionAdapter, AgentExecutionResult } from '../runtime-types.ts';
+import { prependCoreObjectiveToPrompt } from '../core-objective.ts';
 import {
 	type CodexApprovalPolicy,
 	type CodexSandboxMode,
@@ -236,7 +237,7 @@ export function buildCodexPrompt(request: CodexExecutionRequest) {
 			'- Do not release.',
 		].join('\n')
 		: '- Treat this as read-only/planning unless the handler grants a later mutation stage.';
-	return [
+	const taskPrompt = [
 		'You are operating as a TreeSeed implementation agent.',
 		'',
 		'Goal:',
@@ -274,6 +275,13 @@ export function buildCodexPrompt(request: CodexExecutionRequest) {
 		'Work package:',
 		formatMetadataBlock(workPackage),
 	].join('\n');
+	return prependCoreObjectiveToPrompt({
+		prompt: taskPrompt,
+		repoRoot: request.repoRoot,
+		coreObjective: typeof request.metadata?.coreObjective === 'string'
+			? request.metadata.coreObjective
+			: null,
+	});
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

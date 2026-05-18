@@ -1,4 +1,5 @@
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { KnowledgeDraft } from '../../src/agents/contracts/knowledge.ts';
@@ -7,6 +8,7 @@ import {
 	normalizeKnowledgePromotionTaskInput,
 	runKnowledgePromotionToStaging,
 } from '../../src/services/knowledge-promotion.ts';
+import { AgentWorktreeManager } from '../../src/services/agent-worktrees.ts';
 
 function draft(): KnowledgeDraft {
 	return {
@@ -184,6 +186,19 @@ describe('knowledge promotion to staging', () => {
 		expect(sdk.appendTaskEvent).toHaveBeenCalledWith(expect.objectContaining({
 			kind: 'operation_event',
 		}));
+	});
+
+	it('reports untracked nested files instead of their parent directories', async () => {
+		const root = mkdtempSync(`${tmpdir()}/treeseed-promotion-git-`);
+		roots.push(root);
+		execFileSync('git', ['init'], { cwd: root, stdio: 'ignore' });
+		mkdirSync(`${root}/src/content/knowledge/cli/dev`, { recursive: true });
+		writeFileSync(`${root}/src/content/knowledge/cli/dev/local-surfaces.mdx`, '# Local surfaces\n', 'utf8');
+
+		const manager = new AgentWorktreeManager(root);
+		await expect(manager.inspectChangedPaths(root)).resolves.toEqual([
+			'src/content/knowledge/cli/dev/local-surfaces.mdx',
+		]);
 	});
 
 	it('saves a failure snapshot when verification fails', async () => {

@@ -1062,8 +1062,6 @@ function stateForDecision(kind: string, decision: string) {
 	return 'rejected';
 }
 
-const DEFAULT_DOCS_MUTATION_VERIFICATION_COMMANDS = ['npm run test:unit', 'npm run build'];
-
 const DEFAULT_DOCS_AUTOMATION_FORBIDDEN_PATHS = [
 	'.env*',
 	'**/.env*',
@@ -1085,7 +1083,8 @@ function promotionTaskPayload(input: {
 	actor: string;
 	projectId: string;
 }) {
-	const verificationCommands = readStringArray(asRecord(input.approval.verificationPlan).commands);
+	const verificationPlan = asRecord(input.approval.verificationPlan);
+	const verificationCommands = readStringArray(verificationPlan.commands);
 	const forbiddenPaths = readStringArray(input.approval.payload.forbiddenPaths);
 	const repositoryClaim = asRecord(input.approval.payload.repositoryClaim ?? input.approval.payload.repository_claim);
 	const runtimeMode = readString(input.approval.payload, 'runtimeMode') || readString(input.approval.payload, 'runtime_mode');
@@ -1115,10 +1114,10 @@ function promotionTaskPayload(input: {
 		},
 		allowedPaths: [input.draft.targetPath],
 		forbiddenPaths: forbiddenPaths.length ? forbiddenPaths : DEFAULT_DOCS_AUTOMATION_FORBIDDEN_PATHS,
-		verificationCommands: verificationCommands.length ? verificationCommands : DEFAULT_DOCS_MUTATION_VERIFICATION_COMMANDS,
+		verificationCommands,
 		sourceMapRefs: input.approval.sourceMapRefs ?? [],
 		changedPaths: input.approval.changedPaths?.length ? input.approval.changedPaths : [input.draft.targetPath],
-		verificationPlan: input.approval.verificationPlan ?? { commands: DEFAULT_DOCS_MUTATION_VERIFICATION_COMMANDS },
+		verificationPlan,
 		policySnapshot: input.approval.policySnapshot ?? {},
 		repositoryClaim: Object.keys(repositoryClaim).length > 0 ? repositoryClaim : undefined,
 		repositoryClaimId: readString(repositoryClaim, 'id') || readString(input.approval.payload, 'repositoryClaimId') || undefined,

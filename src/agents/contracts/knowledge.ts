@@ -82,15 +82,21 @@ export function sumKnowledgeOptimizationScore(score: KnowledgeOptimizationScore)
 	return SCORE_FIELDS.reduce((total, field) => total + score[field], 0);
 }
 
-export function validateKnowledgeDraft(draft: KnowledgeDraft) {
+export function validateKnowledgeDraft(
+	draft: KnowledgeDraft,
+	options: { allowedStatuses?: KnowledgeDraft['frontmatter']['status'][] } = {},
+) {
 	const errors: string[] = [];
+	const allowedStatuses = options.allowedStatuses ?? ['pending_review'];
 	if (!draft.id) errors.push('Knowledge draft id is required.');
 	if (draft.kind !== 'knowledge_draft') errors.push('Knowledge draft kind must be knowledge_draft.');
 	if (!draft.targetPath.startsWith('src/content/knowledge/')) errors.push('Knowledge draft targetPath must be a canonical knowledge path.');
 	if (!draft.sourceQuestionId) errors.push('Knowledge draft sourceQuestionId is required.');
 	if (!draft.sourceResearchIds.length) errors.push('Knowledge draft sourceResearchIds is required.');
 	if (!draft.frontmatter.type) errors.push('Knowledge draft frontmatter type is required.');
-	if (draft.frontmatter.status !== 'pending_review') errors.push('Knowledge draft frontmatter status must be pending_review.');
+	if (!allowedStatuses.includes(draft.frontmatter.status)) {
+		errors.push(`Knowledge draft frontmatter status must be ${allowedStatuses.join(' or ')}.`);
+	}
 	if (!draft.frontmatter.source_map.length) errors.push('Knowledge draft frontmatter source_map is required.');
 	if (!Array.isArray(draft.frontmatter.related.decisions)) {
 		errors.push('Knowledge draft frontmatter related.decisions must be an array.');

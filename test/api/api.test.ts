@@ -1132,7 +1132,7 @@ apiRuntimeDescribe('@treeseed/agent api runtime', () => {
 				knowledgeDraft,
 				allowedPaths: [knowledgeDraft.targetPath],
 				forbiddenPaths: expect.arrayContaining(['**/node_modules/**', 'src/lib/**', 'migrations/**']),
-				verificationCommands: ['npm run test:unit', 'npm run build'],
+				verificationCommands: [],
 				approval: expect.objectContaining({ id: 'promotion:knowledge-runtime', state: 'approved' }),
 				policySnapshot: expect.any(Object),
 			}),

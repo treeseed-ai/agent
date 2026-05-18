@@ -106,7 +106,7 @@ export class AgentWorktreeManager {
 	}
 
 	async inspectChangedPaths(worktreeRoot: string) {
-		const { stdout } = await this.exec('git', ['status', '--porcelain'], {
+		const { stdout } = await this.exec('git', ['status', '--porcelain', '--untracked-files=all'], {
 			cwd: worktreeRoot,
 			env: process.env,
 		});
@@ -237,10 +237,21 @@ export class AgentWorktreeManager {
 				env: process.env,
 			});
 			const commitSha = stdout.trim() || null;
-			await this.exec('git', ['branch', '-f', input.stagingBranch, commitSha ?? 'HEAD'], {
+			const { stdout: currentBranchOutput } = await this.exec('git', ['branch', '--show-current'], {
 				cwd: this.repoRoot,
 				env: process.env,
 			});
+			if (currentBranchOutput.trim() === input.stagingBranch) {
+				await this.exec('git', ['merge', '--ff-only', commitSha ?? 'HEAD'], {
+					cwd: this.repoRoot,
+					env: process.env,
+				});
+			} else {
+				await this.exec('git', ['branch', '-f', input.stagingBranch, commitSha ?? 'HEAD'], {
+					cwd: this.repoRoot,
+					env: process.env,
+				});
+			}
 			return {
 				status: 'completed',
 				mergedToStaging: true,

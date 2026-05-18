@@ -140,6 +140,10 @@ function targetSpec(pattern: string): TargetSpec {
 
 function isIgnored(relativePath: string) {
 	const normalized = normalizePath(relativePath);
+	const basename = path.basename(normalized);
+	if (basename.startsWith('.ts-run-')) {
+		return true;
+	}
 	if (DEFAULT_IGNORED_PREFIXES.some((prefix) => normalized === prefix.slice(0, -1) || normalized.startsWith(prefix))) {
 		return true;
 	}

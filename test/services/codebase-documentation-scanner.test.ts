@@ -63,6 +63,7 @@ describe('codebase documentation scanner', () => {
 
 	it('ignores generated worktrees, exports, node_modules, and package build output', () => {
 		write(repoRoot, 'packages/agent/src/services/manager.ts', 'export const manager = true;\n');
+		write(repoRoot, 'packages/agent/src/services/.ts-run-1234-temp.mjs', 'export const ignoredTsRun = true;\n');
 		write(repoRoot, 'packages/agent/src/services/dist/generated.ts', 'export const ignoredDist = true;\n');
 		write(repoRoot, 'packages/agent/src/services/node_modules/nope.ts', 'export const ignoredNodeModules = true;\n');
 		write(repoRoot, '.treeseed/worktrees/task/packages/agent/src/services/nope.ts', 'export const ignoredWorktree = true;\n');
@@ -76,6 +77,7 @@ describe('codebase documentation scanner', () => {
 
 		const serviceModule = inventory.modules.find((entry) => entry.path === 'packages/agent/src/services');
 		expect(serviceModule?.importantFiles).toEqual(['packages/agent/src/services/manager.ts']);
+		expect(JSON.stringify(inventory)).not.toContain('ignoredTsRun');
 		expect(JSON.stringify(inventory)).not.toContain('ignoredDist');
 		expect(JSON.stringify(inventory)).not.toContain('ignoredWorktree');
 	});

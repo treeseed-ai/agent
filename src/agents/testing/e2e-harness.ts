@@ -236,6 +236,7 @@ async function migrateDatabase(repoRoot: string, persistTo: string) {
 		'0001_subscribers.sql',
 		'0002_agent_runtime.sql',
 		'0003_agent_run_trace.sql',
+		'0025_agent_runtime_state.sql',
 	]) {
 		await runCommand(
 			wrangler,

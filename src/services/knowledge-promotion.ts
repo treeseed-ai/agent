@@ -423,7 +423,7 @@ async function defaultVerify(input: {
 	commands: string[];
 	draft: KnowledgeDraft;
 }) {
-	const validation = validateKnowledgeDraft(input.draft);
+	const validation = validateKnowledgeDraft(input.draft, { allowedStatuses: ['pending_review', 'canonical'] });
 	if (!validation.ok) {
 		return {
 			ok: false,

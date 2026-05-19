@@ -6,6 +6,7 @@ import { CloudflareQueuePullClient } from '@treeseed/sdk/remote';
 import type { SdkQueueMessageEnvelope } from '@treeseed/sdk';
 import { CODEBASE_DOCUMENTATION_SCAN_TASK_KIND } from './codebase-documentation-scanner.ts';
 import { HostedControlPlaneAgentSdk, HostedRunnerControlPlaneClient } from './hosted-control-plane-sdk.ts';
+import { resolveProcessingDataDir } from './runtime-paths.ts';
 
 function integerFromEnv(name: string, fallback: number) {
 	const value = process.env[name];
@@ -348,7 +349,7 @@ export function resolveWorkerConfig() {
 		batchSize: integerFromEnv('TREESEED_QUEUE_BATCH_SIZE', integerFromEnv('TREESEED_RUNNER_MAX_LOCAL_WORKERS', 4)),
 		maxLocalWorkers: integerFromEnv('TREESEED_RUNNER_MAX_LOCAL_WORKERS', 4),
 		runnerServiceName: process.env.TREESEED_RUNNER_SERVICE_NAME?.trim() || process.env.RAILWAY_SERVICE_NAME?.trim() || `worker-runner-${process.pid}`,
-		volumeRoot: process.env.TREESEED_RUNNER_VOLUME_ROOT?.trim() || process.env.RAILWAY_VOLUME_MOUNT_PATH?.trim() || '.treeseed-runner',
+		volumeRoot: resolveProcessingDataDir(),
 		volumeIdentity: process.env.TREESEED_RUNNER_VOLUME_ID?.trim() || process.env.RAILWAY_VOLUME_ID?.trim() || process.env.RAILWAY_VOLUME_NAME?.trim() || 'local-runner-volume',
 		projectId: process.env.TREESEED_PROJECT_ID?.trim() || 'treeseed-market',
 		environment: process.env.TREESEED_DEPLOY_ENVIRONMENT?.trim() || (process.env.NODE_ENV === 'production' ? 'prod' : 'local'),

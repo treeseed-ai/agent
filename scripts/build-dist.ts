@@ -15,6 +15,9 @@ const COPY_EXTENSIONS = new Set(['.d.ts', '.json', '.jsonc', '.md', '.yaml', '.y
 function walkFiles(root) {
 	const files = [];
 	for (const entry of readdirSync(root, { withFileTypes: true })) {
+		if (entry.name.startsWith('.ts-run-')) {
+			continue;
+		}
 		const fullPath = join(root, entry.name);
 		if (entry.isDirectory()) files.push(...walkFiles(fullPath));
 		else files.push(fullPath);

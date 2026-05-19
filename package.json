@@ -1,6 +1,6 @@
 {
   "name": "@treeseed/agent",
-  "version": "0.8.20-dev.staging.20260518T051257Z",
+  "version": "0.8.20-dev.staging.20260519T110923Z",
   "description": "Treeseed agent service runtime package.",
   "license": "AGPL-3.0-only",
   "repository": {
@@ -125,11 +125,18 @@
     "release:setup": "npm run setup:ci",
     "release:check-tag": "node ./scripts/run-ts.mjs ./scripts/assert-release-tag-version.ts",
     "release:verify": "node ./scripts/run-ts.mjs ./scripts/release-verify.ts",
-    "release:publish": "node ./scripts/run-ts.mjs ./scripts/publish-package.ts"
+    "release:publish": "node ./scripts/run-ts.mjs ./scripts/publish-package.ts",
+    "test:agent-contracts": "vitest run --config ./vitest.config.ts test/agents/agent-contracts.test.ts test/agents/agent-test-catalog.test.ts",
+    "test:agent-handlers": "vitest run --config ./vitest.config.ts test/agents/handler-fixtures.test.ts test/agents/knowledge-handlers.test.ts",
+    "test:agent-message-chains": "vitest run --config ./vitest.config.ts test/agents/message-chain.test.ts test/services/research-knowledge-workday.test.ts",
+    "test:manager-worker": "vitest run --config ./vitest.config.ts test/services/manager.test.ts test/services/worker.test.ts test/services/manager-worker-parity-report.test.ts",
+    "test:processing-parity-local": "vitest run --config ./vitest.config.ts test/services/processing-parity.test.ts",
+    "test:market-docs-governed-mutation": "vitest run --config ./vitest.config.ts test/agents/local-e2e-verification.test.ts && npm run test:local-e2e-verification",
+    "test:processing-local": "node ./scripts/run-ts.mjs ./scripts/test-processing-local.ts"
   },
   "dependencies": {
     "@openai/codex-sdk": "^0.130.0",
-    "@treeseed/sdk": "github:treeseed-ai/sdk#0.8.20-dev.staging.20260518T050926Z",
+    "@treeseed/sdk": "github:treeseed-ai/sdk#0.8.20-dev.staging.20260519T110614Z",
     "esbuild": "0.28.0",
     "hono": "^4.8.2",
     "typescript": "^5.9.3",
@@ -142,6 +149,7 @@
   "bin": {
     "treeseed-agents": "dist/scripts/treeseed-agents.js",
     "treeseed-agent-api": "dist/scripts/treeseed-agent-api.js",
-    "treeseed-agent-service": "dist/scripts/treeseed-agent-service.js"
+    "treeseed-agent-service": "dist/scripts/treeseed-agent-service.js",
+    "treeseed-processing": "dist/scripts/treeseed-processing.js"
   }
 }

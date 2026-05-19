@@ -1,7 +1,6 @@
 import { createRequire } from 'node:module';
 import { existsSync } from 'node:fs';
-import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { resolveCodexAuthFile } from './codex-auth.ts';
 
 export type CodexSubscriptionPlan = 'plus' | 'pro' | 'business' | 'edu' | 'enterprise' | 'unknown';
 export type CodexApprovalPolicy = 'never' | 'on_request' | 'always';
@@ -85,15 +84,6 @@ function parseNodeMajor(version: string) {
 	return Number.parseInt(major ?? '', 10);
 }
 
-function resolveCodexAuthPath(env: NodeJS.ProcessEnv) {
-	const explicit = env.TREESEED_CODEX_AUTH_FILE?.trim() || env.CODEX_AUTH_FILE?.trim();
-	if (explicit) return explicit;
-	const codexHome = env.CODEX_HOME?.trim();
-	if (codexHome) return join(codexHome, 'auth.json');
-	const home = env.HOME?.trim() || homedir();
-	return join(home, '.codex', 'auth.json');
-}
-
 export function resolveCodexProviderConfig(env: NodeJS.ProcessEnv = process.env): CodexProviderConfig {
 	return {
 		providerId: 'codex',
@@ -151,7 +141,7 @@ export function checkCodexProviderReadiness(
 		blockingIssues.push('Codex provider support requires Node.js 22 or newer in the TreeSeed agent runtime.');
 	}
 
-	const authPath = resolveCodexAuthPath(env);
+	const authPath = resolveCodexAuthFile(env);
 	const authJsonDetected = fileExists(authPath);
 	const apiKeyDetected = Boolean(env.CODEX_API_KEY?.trim());
 	const authDetected = authJsonDetected || apiKeyDetected;

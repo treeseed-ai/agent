@@ -72,6 +72,32 @@ function safeEnv(env: NodeJS.ProcessEnv | undefined) {
 	return env ?? process.env;
 }
 
+async function withRuntimeEnv<T>(env: NodeJS.ProcessEnv, callback: () => Promise<T> | T): Promise<T> {
+	const previous = new Map<string, string | undefined>();
+	const keys = new Set([
+		...Object.keys(process.env),
+		...Object.keys(env),
+	].filter((key) =>
+		key.startsWith('TREESEED_')
+		|| key.startsWith('CLOUDFLARE_')
+		|| key.startsWith('RAILWAY_')
+		|| ['HOST', 'PORT', 'NODE_ENV', 'SITE_DATA_DB'].includes(key),
+	));
+	for (const key of keys) {
+		previous.set(key, process.env[key]);
+		if (env[key] === undefined) delete process.env[key];
+		else process.env[key] = env[key];
+	}
+	try {
+		return await callback();
+	} finally {
+		for (const [key, value] of previous) {
+			if (value === undefined) delete process.env[key];
+			else process.env[key] = value;
+		}
+	}
+}
+
 function readEnvironment(env: NodeJS.ProcessEnv) {
 	return env.TREESEED_DEPLOY_ENVIRONMENT?.trim() || (env.NODE_ENV === 'production' ? 'prod' : 'local');
 }
@@ -449,7 +475,7 @@ export async function collectRuntimeReadiness(
 	const checkedAt = (options.now ?? new Date()).toISOString();
 	const rootBlockingIssues = await checkRootPaths(repoRoot, packageRoot);
 
-	const checks = await Promise.all([
+	const checks = await withRuntimeEnv(env, () => Promise.all([
 		Promise.resolve(collectApiReadiness(repoRoot, env)),
 		Promise.resolve(collectManagerReadiness(env)),
 		Promise.resolve(collectWorkerReadiness()),
@@ -459,7 +485,7 @@ export async function collectRuntimeReadiness(
 		Promise.resolve(collectOperationsReadiness(repoRoot)),
 		collectArtifactReadiness(repoRoot, env),
 		Promise.resolve(collectCodexReadiness(env, options.resolvePackage ?? ((specifier) => import.meta.resolve(specifier)))),
-	]);
+	]));
 	const [api, manager, worker, workdayPolicy, providers, graphContext, operations, artifacts, codex] = checks;
 	const combined = statusFromChecks(checks);
 	const blockingIssues = [...rootBlockingIssues, ...combined.blockingIssues];

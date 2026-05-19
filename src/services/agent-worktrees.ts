@@ -4,12 +4,15 @@ import { existsSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import type { AgentWorktreeSnapshot } from '../agents/contracts/implementation.ts';
+import { resolveProcessingDataDir, resolveRunnerRepositoryPaths } from './runtime-paths.ts';
 
 const execFileAsync = promisify(execFile);
 
 export interface AgentWorktreeManagerOptions {
 	now?: () => Date;
 	exec?: typeof execFileAsync;
+	env?: NodeJS.ProcessEnv;
+	repositoryId?: string;
 }
 
 export interface AgentMergeToStagingResult {
@@ -30,6 +33,11 @@ function sanitizeRefSegment(value: string) {
 
 function normalizePath(value: string) {
 	return value.replace(/\\/gu, '/').replace(/^\.?\//u, '').replace(/\/+/gu, '/');
+}
+
+function processingParityEnabled(env: NodeJS.ProcessEnv) {
+	const value = env.TREESEED_PROCESSING_PARITY?.trim().toLowerCase();
+	return Boolean(value && !['0', 'false', 'off', 'no'].includes(value));
 }
 
 function matchesPattern(path: string, pattern: string) {
@@ -80,19 +88,30 @@ export function changedPathViolations(input: {
 export class AgentWorktreeManager {
 	private readonly exec;
 	private readonly now;
+	private readonly env;
+	private readonly repositoryId;
 
 	constructor(private readonly repoRoot: string, options: AgentWorktreeManagerOptions = {}) {
 		this.exec = options.exec ?? execFileAsync;
 		this.now = options.now ?? (() => new Date());
+		this.env = options.env ?? process.env;
+		this.repositoryId = options.repositoryId ?? sanitizeRefSegment(this.env.TREESEED_REPOSITORY_ID?.trim() || this.env.TREESEED_PROJECT_ID?.trim() || repoRoot.split(/[\\/]/u).filter(Boolean).pop() || 'repository');
 	}
 
-	plannedWorktreePath(featureBranch: string) {
+	plannedWorktreePath(featureBranch: string, taskId = featureBranch) {
+		if (processingParityEnabled(this.env)) {
+			return resolveRunnerRepositoryPaths({
+				volumeRoot: resolveProcessingDataDir(this.env),
+				repositoryId: this.repositoryId,
+				taskId: sanitizeRefSegment(taskId).replace(/\//gu, '-'),
+			}).worktree;
+		}
 		return join(this.repoRoot, '.agent-worktrees', sanitizeRefSegment(featureBranch));
 	}
 
-	async createOrResumeWorktree(featureBranch: string) {
+	async createOrResumeWorktree(featureBranch: string, taskId = featureBranch) {
 		const branchName = sanitizeRefSegment(featureBranch);
-		const worktreeRoot = this.plannedWorktreePath(branchName);
+		const worktreeRoot = this.plannedWorktreePath(branchName, taskId);
 		await mkdir(dirname(worktreeRoot), { recursive: true });
 		if (existsSync(worktreeRoot)) {
 			await this.exec('git', ['switch', branchName], { cwd: worktreeRoot, env: process.env });
@@ -194,7 +213,9 @@ export class AgentWorktreeManager {
 		featureBranch: string;
 		stagingBranch: string;
 	}) {
-		const mergeWorktree = join(this.repoRoot, '.agent-worktrees', `.merge-${sanitizeRefSegment(input.taskId)}`);
+		const mergeWorktree = processingParityEnabled(this.env)
+			? join(resolveProcessingDataDir(this.env), 'tmp', `.merge-${sanitizeRefSegment(input.taskId)}`)
+			: join(this.repoRoot, '.agent-worktrees', `.merge-${sanitizeRefSegment(input.taskId)}`);
 		await rm(mergeWorktree, { recursive: true, force: true });
 		await mkdir(dirname(mergeWorktree), { recursive: true });
 		try {

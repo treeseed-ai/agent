@@ -1,0 +1,6 @@
+{
+  "taskId": "task-engineer",
+  "messageType": "approval_request_approved",
+  "provider": "codex",
+  "allowedPaths": []
+}

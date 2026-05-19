@@ -56,6 +56,7 @@ import {
 import { admissionForTaskProposal } from './task-admission.ts';
 import { buildPlanningProposalFromTask } from './task-planning.ts';
 import type { WorkdayPolicy } from '@treeseed/sdk';
+import { resolveRunnerRepositoryPaths, resolveRunnerWorkspaceRoot } from './runtime-paths.ts';
 
 function parseTaskPayload(task: Record<string, unknown> | null) {
 	const raw = typeof task?.payloadJson === 'string' ? task.payloadJson : '{}';
@@ -355,16 +356,11 @@ async function createHybridEscalationTask(input: {
 }
 
 function runnerRepositoryPath(volumeRoot: string, repositoryId: string, taskId: string) {
-	const repositoryRoot = join(volumeRoot, 'repositories', repositoryId);
-	return {
-		repositoryRoot,
-		bareGit: join(repositoryRoot, 'bare.git'),
-		worktree: join(repositoryRoot, 'worktrees', taskId),
-	};
+	return resolveRunnerRepositoryPaths({ volumeRoot, repositoryId, taskId });
 }
 
 function runnerComposedWorkspacePath(volumeRoot: string, hubId: string) {
-	const workspaceRoot = join(volumeRoot, 'workspaces', hubId);
+	const workspaceRoot = resolveRunnerWorkspaceRoot(volumeRoot, hubId);
 	return {
 		root: workspaceRoot,
 		parent: join(workspaceRoot, 'workspace-root'),

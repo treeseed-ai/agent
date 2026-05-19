@@ -193,7 +193,7 @@ describe('Codex docs mutation lifecycle', () => {
 		});
 
 		expect(result.status).toBe('staged');
-		expect(worktrees.createOrResumeWorktree).toHaveBeenCalledWith('agent/docs-mutation');
+		expect(worktrees.createOrResumeWorktree).toHaveBeenCalledWith('agent/docs-mutation', task.taskId);
 		expect(ctx.verification.runChecks).toHaveBeenCalledWith(expect.objectContaining({
 			cwd: '/repo/.agent-worktrees/agent/docs-mutation',
 			commands: ['npm run test:unit'],

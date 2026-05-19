@@ -1,4 +1,5 @@
-import { readFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it, vi } from 'vitest';
@@ -7,6 +8,11 @@ import {
 	checkCodexProviderReadiness,
 	resolveCodexProviderConfig,
 } from '../../src/agents/adapters/codex-readiness.ts';
+import {
+	codexClientEnvironment,
+	materializeCodexAuthFromEnv,
+	resolveCodexAuthFile,
+} from '../../src/agents/adapters/codex-auth.ts';
 import {
 	CodexSubscriptionExecutionAdapter,
 	runCodexSubscriptionTask,
@@ -143,6 +149,37 @@ describe('codex subscription provider skeleton', () => {
 			authMode: 'api_key',
 			authPath: '/home/test/.codex/auth.json',
 		});
+	});
+
+	it('resolves parity auth under /data/codex and materializes auth JSON secrets once', async () => {
+		const root = await mkdtemp(resolve(tmpdir(), 'treeseed-codex-auth-'));
+		const authJson = JSON.stringify({ OPENAI_CODEX_LOGIN: 'test-login', refresh_token: 'test-refresh' });
+		const env = {
+			TREESEED_PROCESSING_PARITY: '1',
+			TREESEED_DATA_DIR: root,
+			TREESEED_CODEX_AUTH_JSON_B64: Buffer.from(authJson).toString('base64'),
+		} as NodeJS.ProcessEnv;
+		try {
+			expect(resolveCodexAuthFile(env)).toBe(resolve(root, 'codex/auth.json'));
+			const first = await materializeCodexAuthFromEnv(env);
+			expect(first).toMatchObject({ materialized: true, reason: 'created' });
+			expect(env.TREESEED_CODEX_AUTH_FILE).toBe(resolve(root, 'codex/auth.json'));
+			expect(env.CODEX_HOME).toBe(resolve(root, 'codex'));
+			expect(await readFile(resolve(root, 'codex/auth.json'), 'utf8')).toContain('test-refresh');
+
+			const second = await materializeCodexAuthFromEnv({
+				...env,
+				TREESEED_CODEX_AUTH_JSON_B64: Buffer.from(JSON.stringify({ refresh_token: 'stale-copy' })).toString('base64'),
+			} as NodeJS.ProcessEnv);
+			expect(second).toMatchObject({ materialized: false, reason: 'exists' });
+			expect(await readFile(resolve(root, 'codex/auth.json'), 'utf8')).toContain('test-refresh');
+			expect(codexClientEnvironment(env)).toMatchObject({
+				CODEX_HOME: resolve(root, 'codex'),
+				TREESEED_CODEX_AUTH_FILE: resolve(root, 'codex/auth.json'),
+			});
+		} finally {
+			await rm(root, { recursive: true, force: true });
+		}
 	});
 
 	it('keeps the legacy codex_subscription selection working', () => {
@@ -305,6 +342,7 @@ describe('codex subscription provider skeleton', () => {
 	it('keeps provider code free of direct command invocation APIs', async () => {
 		const files = [
 			resolve(testDir, '../../src/agents/adapters/codex-readiness.ts'),
+			resolve(testDir, '../../src/agents/adapters/codex-auth.ts'),
 			resolve(testDir, '../../src/agents/adapters/execution-codex.ts'),
 		];
 		const disallowed = [

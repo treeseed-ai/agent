@@ -17,13 +17,14 @@ const forbiddenPatterns = [
 	/['"`][^'"`\n]*\/packages\/[^'"`\n]*\/src\/[^'"`\n]*['"`]/,
 ];
 
-function run(command: string, args: string[], cwd = packageRoot, capture = false) {
+function run(command: string, args: string[], cwd = packageRoot, capture = false, extraEnv: Record<string, string> = {}) {
 	const result = spawnSync(command, args, {
 		cwd,
 		stdio: capture ? 'pipe' : 'inherit',
 		encoding: 'utf8',
 		env: {
 			...process.env,
+			...extraEnv,
 			npm_config_cache: npmCacheDir,
 			NPM_CONFIG_CACHE: npmCacheDir,
 		},
@@ -34,6 +35,71 @@ function run(command: string, args: string[], cwd = packageRoot, capture = false
 	}
 
 	return (result.stdout ?? '').trim();
+}
+
+function runPackedProcessingSmoke(installRoot: string) {
+	const dataRoot = resolve(installRoot, 'data');
+	mkdirSync(dataRoot, { recursive: true });
+	mkdirSync(resolve(installRoot, 'src/content/knowledge'), { recursive: true });
+	mkdirSync(resolve(installRoot, 'src/content/workdays'), { recursive: true });
+	mkdirSync(resolve(installRoot, 'src/content/agents'), { recursive: true });
+	writeFileSync(resolve(installRoot, 'src/manifest.yaml'), [
+		'siteConfigPath: treeseed.site.yaml',
+		'content:',
+		'  docs: src/content/knowledge',
+		'  agents: src/content/agents',
+		'',
+	].join('\n'), 'utf8');
+	writeFileSync(resolve(installRoot, 'treeseed.site.yaml'), [
+		'name: Treeseed Agent Packed Smoke',
+		'slug: treeseed-agent-packed-smoke',
+		'siteUrl: https://example.com',
+		'contactEmail: hello@example.com',
+		'cloudflare:',
+		'  workerName: treeseed-agent-packed-smoke',
+		'providers:',
+		'  agents:',
+		'    execution: stub',
+		'    mutation: local_branch',
+		'    repository: stub',
+		'    verification: stub',
+		'    notification: stub',
+		'    research: stub',
+		'',
+	].join('\n'), 'utf8');
+	const env = {
+		TREESEED_PROCESSING_PARITY: '1',
+		TREESEED_DATA_DIR: dataRoot,
+		TREESEED_RUNNER_VOLUME_ROOT: dataRoot,
+		TREESEED_MANAGER_MODE: 'reconcile',
+		TREESEED_ENVIRONMENT: 'local',
+		TREESEED_DEPLOY_ENVIRONMENT: 'local',
+		TREESEED_PROJECT_ID: 'treeseed-agent-packed-smoke',
+		TREESEED_TEAM_ID: 'treeseed-agent-packed-smoke',
+		TREESEED_TENANT_ROOT: installRoot,
+	};
+	const processingBin = 'node_modules/@treeseed/agent/dist/scripts/treeseed-processing.js';
+	run(process.execPath, [processingBin, 'healthcheck'], installRoot, false, env);
+	run(process.execPath, [processingBin, 'api', '--help'], installRoot, false, env);
+	run(process.execPath, [processingBin, 'manager', '--dry-run', '--json'], installRoot, false, env);
+	run(process.execPath, [processingBin, 'worker', '--dry-run', '--json'], installRoot, false, env);
+	run(process.execPath, ['--input-type=module', '-e', [
+		"const modules = await Promise.all([",
+		"  import('./node_modules/@treeseed/agent/dist/services/manager.js'),",
+		"  import('./node_modules/@treeseed/agent/dist/services/worker.js'),",
+		"  import('./node_modules/@treeseed/agent/dist/services/processing-plan.js'),",
+		"  import('./node_modules/@treeseed/agent/dist/services/processing-doctor.js'),",
+		"  import('./node_modules/@treeseed/agent/dist/services/runtime-paths.js'),",
+		"  import('./node_modules/@treeseed/agent/dist/agents/registry.js'),",
+		"]);",
+		"const registry = modules.at(-1);",
+		"if (registry.listRegisteredAgentHandlers().length < 7) throw new Error('built-in handler registry is incomplete');",
+		"if (typeof modules[0].runManagerAction !== 'function') throw new Error('manager runtime import missing runManagerAction');",
+		"if (typeof modules[1].runWorkerCycle !== 'function') throw new Error('worker runtime import missing runWorkerCycle');",
+		"if (typeof modules[2].collectProcessingPlan !== 'function') throw new Error('processing-plan import missing collectProcessingPlan');",
+		"if (typeof modules[3].runProcessingDoctor !== 'function') throw new Error('processing-doctor import missing runProcessingDoctor');",
+		"if (typeof modules[4].resolveRunnerRepositoryPaths !== 'function') throw new Error('runtime-paths import missing resolveRunnerRepositoryPaths');",
+	].join('\n')], installRoot, false, env);
 }
 
 function walkFiles(root: string): string[] {
@@ -199,6 +265,7 @@ try {
 	mirrorDependencies(installRoot);
 	writeFileSync(resolve(installRoot, 'package.json'), `${JSON.stringify({ name: 'treeseed-agent-smoke', private: true, type: 'module' }, null, 2)}\n`, 'utf8');
 	run(process.execPath, ['node_modules/@treeseed/agent/dist/scripts/treeseed-agents.js', '--help'], installRoot);
+	runPackedProcessingSmoke(installRoot);
 	console.log('Agent packed-install bin smoke passed.');
 } finally {
 	rmSync(stageRoot, { recursive: true, force: true });

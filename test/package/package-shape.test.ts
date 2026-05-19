@@ -1,4 +1,5 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { dirname, extname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
@@ -44,6 +45,7 @@ describe('agent package shape', () => {
 			'treeseed-agents': 'dist/scripts/treeseed-agents.js',
 			'treeseed-agent-api': 'dist/scripts/treeseed-agent-api.js',
 			'treeseed-agent-service': 'dist/scripts/treeseed-agent-service.js',
+			'treeseed-processing': 'dist/scripts/treeseed-processing.js',
 		});
 
 		for (const [exportName, exportValue] of Object.entries(packageJson.exports)) {
@@ -59,6 +61,66 @@ describe('agent package shape', () => {
 		expect(packageJson.scripts.verify).toBe('node ./scripts/verify-driver.mjs');
 		expect(packageJson.scripts['verify:local']).toContain('./scripts/verify-driver.mjs');
 		expect(packageJson.scripts['verify:action']).toContain('./scripts/verify-driver.mjs');
+	});
+
+	it('ships processing runtime bins and support modules without source-mode temp artifacts', () => {
+		const requiredRuntimeFiles = [
+			'dist/scripts/treeseed-processing.js',
+			'dist/scripts/treeseed-agent-api.js',
+			'dist/scripts/treeseed-agent-service.js',
+			'dist/api/server.js',
+			'dist/services/manager.js',
+			'dist/services/worker.js',
+			'dist/services/workday-start.js',
+			'dist/services/workday-report.js',
+			'dist/services/processing-plan.js',
+			'dist/services/processing-doctor.js',
+			'dist/services/runtime-paths.js',
+			'dist/services/common.js',
+			'dist/agents/adapters/codex-auth.js',
+			'dist/agents/adapters/codex-readiness.js',
+			'dist/agents/adapters/execution-codex.js',
+			'dist/agents/registry.js',
+			'dist/agents/kernel/agent-kernel.js',
+			'dist/agents/handlers/planner.js',
+			'dist/agents/handlers/researcher.js',
+			'dist/agents/handlers/knowledge-generator.js',
+			'dist/agents/handlers/knowledge-optimizer.js',
+			'dist/agents/handlers/reviewer.js',
+			'dist/agents/handlers/engineer.js',
+			'dist/agents/handlers/reporter.js',
+			'dist/agents/handlers/releaser.js',
+			'dist/templates/github/deploy-processing.workflow.yml',
+		];
+
+		for (const filePath of requiredRuntimeFiles) {
+			expect(existsSync(resolve(packageRoot, filePath)), `${filePath} exists`).toBe(true);
+		}
+
+		const distFiles = walkFiles(resolve(packageRoot, 'dist'))
+			.map((filePath) => filePath.slice(packageRoot.length + 1).replace(/\\/gu, '/'));
+		expect(distFiles.filter((filePath) => /(^|\/)\.ts-run-/u.test(filePath))).toEqual([]);
+	});
+
+	it('packs runtime closure without source-mode temp artifacts', () => {
+		const output = execFileSync('npm', ['pack', '--dry-run', '--json', '--ignore-scripts'], {
+			cwd: packageRoot,
+			encoding: 'utf8',
+			env: {
+				...process.env,
+				TREESEED_SKIP_PACKAGE_PREPARE: '1',
+			},
+		});
+		const [pack] = JSON.parse(output) as Array<{ files: Array<{ path: string }> }>;
+		const paths = pack.files.map((entry) => entry.path);
+
+		expect(paths).toContain('dist/scripts/treeseed-processing.js');
+		expect(paths).toContain('dist/services/manager.js');
+		expect(paths).toContain('dist/services/worker.js');
+		expect(paths).toContain('dist/services/processing-plan.js');
+		expect(paths).toContain('dist/services/processing-doctor.js');
+		expect(paths).toContain('dist/services/runtime-paths.js');
+		expect(paths.filter((filePath) => /(^|\/)\.ts-run-/u.test(filePath))).toEqual([]);
 	});
 
 	it('does not import web/core runtime surfaces', () => {

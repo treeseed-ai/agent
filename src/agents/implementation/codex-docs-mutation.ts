@@ -258,7 +258,7 @@ export async function runCodexDocsMutationLifecycle(
 	const operationResults: AgentOperationResult[] = [];
 	const snapshots: CodexDocsMutationResult['snapshots'] = [];
 	const worktrees = dependencies.worktrees ?? new AgentWorktreeManager(context.repoRoot);
-	const plannedWorktreeRoot = worktrees.plannedWorktreePath(task.featureBranch);
+	const plannedWorktreeRoot = worktrees.plannedWorktreePath(task.featureBranch, task.taskId);
 
 	if (task.provider !== 'codex' && task.provider !== 'codex_subscription') {
 		return waitingResult({
@@ -299,7 +299,7 @@ export async function runCodexDocsMutationLifecycle(
 		});
 	}
 
-	const worktree = await worktrees.createOrResumeWorktree(task.featureBranch);
+	const worktree = await worktrees.createOrResumeWorktree(task.featureBranch, task.taskId);
 	const worktreeRoot = worktree.worktreeRoot;
 
 	const devResult = await lifecycleOperation({
@@ -339,6 +339,7 @@ export async function runCodexDocsMutationLifecycle(
 		reasoningEffort: task.reasoningEffort,
 		metadata: {
 			subscriptionPlan: 'unknown',
+			coreObjective: context.coreObjective?.content,
 			contextPackSummary: task.contextPackSummary,
 			workPackage: task.workPackage,
 			approvalId: task.approvalId,

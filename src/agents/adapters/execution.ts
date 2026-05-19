@@ -3,9 +3,11 @@ import type { AgentExecutionAdapter } from '../runtime-types.ts';
 import { getTreeseedAgentProviderSelections } from '@treeseed/sdk/platform/deploy-runtime';
 import { runTreeseedCopilotTask } from '@treeseed/sdk/copilot';
 import { CodexSubscriptionExecutionAdapter } from './execution-codex.ts';
+import { prependCoreObjectiveToPrompt } from '../core-objective.ts';
 
 export class StubExecutionAdapter implements AgentExecutionAdapter {
 	async runTask(input: { prompt: string; runId: string }) {
+		const prompt = prependCoreObjectiveToPrompt({ prompt: input.prompt, repoRoot: process.cwd() });
 		return {
 			status: 'completed' as const,
 			summary: `Stubbed Copilot execution for ${input.runId}.`,
@@ -16,7 +18,7 @@ export class StubExecutionAdapter implements AgentExecutionAdapter {
 				'2. Produce a safe local change artifact.',
 				'3. Summarize the implementation intent.',
 				'',
-				`Prompt digest: ${input.prompt.slice(0, 240)}`,
+				`Prompt digest: ${prompt.slice(0, 240)}`,
 			].join('\n'),
 			stderr: '',
 		};
@@ -26,8 +28,9 @@ export class StubExecutionAdapter implements AgentExecutionAdapter {
 export class CopilotExecutionAdapter implements AgentExecutionAdapter {
 	async runTask(input: { agent: { cli?: { model?: string; allowTools?: string[]; additionalArgs?: string[] } }; prompt: string }) {
 		const cli = normalizeAgentCliOptions(input.agent.cli);
+		const prompt = prependCoreObjectiveToPrompt({ prompt: input.prompt, repoRoot: process.cwd() });
 		const result = await runTreeseedCopilotTask({
-			prompt: input.prompt,
+			prompt,
 			cwd: process.cwd(),
 			model: cli.model,
 			allowTools: cli.allowTools,
@@ -45,6 +48,7 @@ export class CopilotExecutionAdapter implements AgentExecutionAdapter {
 
 export class ManualExecutionAdapter implements AgentExecutionAdapter {
 	async runTask(input: { prompt: string; runId: string }) {
+		const prompt = prependCoreObjectiveToPrompt({ prompt: input.prompt, repoRoot: process.cwd() });
 		return {
 			status: 'completed' as const,
 			summary: `Manual execution mode is enabled for ${input.runId}.`,
@@ -54,7 +58,7 @@ export class ManualExecutionAdapter implements AgentExecutionAdapter {
 				'This agent run is configured for manual execution.',
 				'Review the prompt below and complete the work outside the automated adapter.',
 				'',
-				input.prompt,
+				prompt,
 			].join('\n'),
 			stderr: '',
 		};

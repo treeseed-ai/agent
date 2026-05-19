@@ -133,7 +133,7 @@ export async function persistPromotionApprovalRequest(input: {
 			state: 'waiting_for_approval',
 			title: `Approval required: ${input.draft.title}`,
 			summary: `Generated knowledge scored ${input.report.totalScore} and is waiting for promotion review.`,
-			href: `/app/teams/${teamId}/projects/${input.projectId}/agents`,
+			href: `/app/governance/${encodeURIComponent(approvalId)}`,
 			itemKey: `approval:${approvalId}`,
 			metadata: {
 				approvalId,

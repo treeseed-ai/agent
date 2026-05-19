@@ -24,6 +24,7 @@ import { followCursorKey, resolveTriggerDecision } from './trigger-resolver.ts';
 import { loadActiveAgentSpecs, loadAllAgentSpecs, summarizeAgentSpec } from '../spec-loader.ts';
 import { getTreeseedAgentProviderSelections } from '@treeseed/sdk/platform/deploy-runtime';
 import { resolveAgentRuntimeProviders } from '../../agent-runtime.ts';
+import { loadCoreObjectiveContext } from '../core-objective.ts';
 
 function nowIso() {
 	return new Date().toISOString();
@@ -191,6 +192,7 @@ export class AgentKernel {
 			runId,
 			repoRoot: this.repoRoot,
 			agent,
+			coreObjective: loadCoreObjectiveContext(this.repoRoot),
 			sdk: scopedSdk,
 			trigger,
 			execution: this.executionForAgent(agent),

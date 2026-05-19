@@ -1,3 +1,6 @@
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import {
 	buildCodexPrompt,
@@ -108,6 +111,34 @@ describe('codex provider execution', () => {
 		expect(prompt).toContain('Do not merge to staging directly.');
 		expect(prompt).toContain('Runtime context pack summary.');
 		expect(prompt).toContain('"kind": "implementation"');
+	});
+
+	it('places the core objective before the agent task when available', () => {
+		const repoRoot = mkdtempSync(join(tmpdir(), 'treeseed-core-objective-'));
+		try {
+			mkdirSync(join(repoRoot, 'src/content/objectives'), { recursive: true });
+			writeFileSync(
+				join(repoRoot, 'src/content/objectives/core.md'),
+				[
+					'---',
+					'id: objective:core',
+					'title: Core TreeSeed Objective',
+					'---',
+					'',
+					'Coordinate durable organizational work through governed workdays.',
+				].join('\n'),
+				'utf8',
+			);
+
+			const prompt = buildCodexPrompt({ ...request, repoRoot });
+
+			expect(prompt.startsWith('TreeSeed Core Objective')).toBe(true);
+			expect(prompt).toContain('Source: src/content/objectives/core.md');
+			expect(prompt.indexOf('Coordinate durable organizational work')).toBeLessThan(prompt.indexOf('Agent Task'));
+			expect(prompt.indexOf('Agent Task')).toBeLessThan(prompt.indexOf('You are operating as a TreeSeed implementation agent.'));
+		} finally {
+			rmSync(repoRoot, { recursive: true, force: true });
+		}
 	});
 
 	it('starts a new SDK thread and normalizes run output', async () => {

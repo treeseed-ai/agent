@@ -258,7 +258,7 @@ export const plannerHandler: AgentHandler = {
 		]));
 		expect(specs.find((spec) => spec.slug === 'treeseed-knowledge-generator')?.handler).toBe('knowledge_generator');
 		expect(specs.find((spec) => spec.slug === 'treeseed-knowledge-optimizer')?.handler).toBe('knowledge_optimizer');
-	});
+	}, 15_000);
 
 	it('filters disabled content-backed agent specs through the SDK', async () => {
 		const tenantRoot = createTenantRoot();

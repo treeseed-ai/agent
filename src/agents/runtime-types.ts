@@ -133,6 +133,11 @@ export interface AgentContext {
 	runId: string;
 	repoRoot: string;
 	agent: AgentRuntimeSpec;
+	coreObjective?: {
+		path: string;
+		content: string;
+		message: string;
+	} | null;
 	sdk: ScopedAgentSdk;
 	trigger: AgentTriggerInvocation;
 	execution: AgentExecutionAdapter;

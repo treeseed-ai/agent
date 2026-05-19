@@ -4,6 +4,7 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { AgentTriggerInvocation } from '../agents/runtime-types.ts';
 import type { AgentContext, AgentHandler } from '../agents/runtime-types.ts';
+import { loadCoreObjectiveContext } from '../agents/core-objective.ts';
 import { AgentKernel } from '../agents/kernel/agent-kernel.ts';
 import { createControlPlaneReporter, shouldInterruptForCapacity } from '@treeseed/sdk';
 import type { CapacityTaskExecutionEnvelope, TaskCheckpointArtifact } from '@treeseed/sdk';
@@ -55,6 +56,7 @@ import {
 import { admissionForTaskProposal } from './task-admission.ts';
 import { buildPlanningProposalFromTask } from './task-planning.ts';
 import type { WorkdayPolicy } from '@treeseed/sdk';
+import { resolveRunnerRepositoryPaths, resolveRunnerWorkspaceRoot } from './runtime-paths.ts';
 
 function parseTaskPayload(task: Record<string, unknown> | null) {
 	const raw = typeof task?.payloadJson === 'string' ? task.payloadJson : '{}';
@@ -80,6 +82,12 @@ function readStringArray(value: unknown) {
 function docsMutationExecutionDisabled() {
 	const mode = process.env.TREESEED_DOCS_AUTOMATION_MODE?.trim();
 	return mode === 'dry-run' || mode === 'off';
+}
+
+function booleanFromEnv(name: string, fallback = false) {
+	const value = process.env[name]?.trim().toLowerCase();
+	if (!value) return fallback;
+	return ['1', 'true', 'yes', 'on'].includes(value);
 }
 
 function readCapacityEnvelope(payload: Record<string, unknown>): CapacityTaskExecutionEnvelope | null {
@@ -348,16 +356,11 @@ async function createHybridEscalationTask(input: {
 }
 
 function runnerRepositoryPath(volumeRoot: string, repositoryId: string, taskId: string) {
-	const repositoryRoot = join(volumeRoot, 'repositories', repositoryId);
-	return {
-		repositoryRoot,
-		bareGit: join(repositoryRoot, 'bare.git'),
-		worktree: join(repositoryRoot, 'worktrees', taskId),
-	};
+	return resolveRunnerRepositoryPaths({ volumeRoot, repositoryId, taskId });
 }
 
 function runnerComposedWorkspacePath(volumeRoot: string, hubId: string) {
-	const workspaceRoot = join(volumeRoot, 'workspaces', hubId);
+	const workspaceRoot = resolveRunnerWorkspaceRoot(volumeRoot, hubId);
 	return {
 		root: workspaceRoot,
 		parent: join(workspaceRoot, 'workspace-root'),
@@ -445,6 +448,7 @@ function contextForResearchKnowledgeHandler(input: {
 		runId: `${input.kind}-${Date.now()}`,
 		repoRoot: input.repoRoot,
 		agent,
+		coreObjective: loadCoreObjectiveContext(input.repoRoot),
 		sdk: scopedSdkForHandler(input.sdk, agent),
 		trigger: invocationForResearchKnowledgeTask(
 			input.kind === 'researcher'
@@ -497,6 +501,7 @@ function contextForDocsMutationHandler(input: {
 		runId: input.taskId,
 		repoRoot: input.repoRoot,
 		agent,
+		coreObjective: loadCoreObjectiveContext(input.repoRoot),
 		sdk: scopedSdkForHandler(input.sdk, agent),
 		trigger: invocationForResearchKnowledgeTask('apply_approved_docs_mutation', input.payload),
 		execution: {},
@@ -1891,14 +1896,25 @@ async function recordWorkerLoopExitState(config: ReturnType<typeof resolveWorker
 export async function startWorkerLoop() {
 	const config = resolveWorkerConfig();
 	let idleSince: number | null = null;
+	let idleCycleCount = 0;
+	const logCycles = booleanFromEnv('TREESEED_WORKER_CONSOLE_SUMMARY', false);
 	for (;;) {
 		try {
 			const result = await runWorkerCycle();
 			const processed = Number((result as { processed?: unknown }).processed ?? 0);
 			if (processed > 0) {
 				idleSince = null;
+				idleCycleCount = 0;
+				if (logCycles) {
+					process.stdout.write(`[worker] cycle processed=${processed} state=active\n`);
+				}
 			} else {
 				idleSince ??= Date.now();
+				idleCycleCount += 1;
+				if (logCycles && (idleCycleCount === 1 || idleCycleCount % 6 === 0)) {
+					const idleForSeconds = Math.max(0, Math.round((Date.now() - idleSince) / 1000));
+					process.stdout.write(`[worker] cycle processed=0 state=idle idleFor=${idleForSeconds}s\n`);
+				}
 				if (shouldExitWorkerLoopAfterIdle({
 					idleExitMs: config.idleExitMs,
 					idleSince,

@@ -3,6 +3,7 @@
 import { AgentSdk, RemoteTreeseedClient, RemoteTreeseedRunnerClient, TreeseedOperationsSdk } from '@treeseed/sdk';
 import { isDirectEntrypoint } from '../entrypoint.ts';
 import { createServiceSdk } from './common.ts';
+import { resolveProcessingDataDir, resolveRunnerWorkspaceRoot } from './runtime-paths.ts';
 
 function integerFromEnv(name: string, fallback: number) {
 	const value = process.env[name];
@@ -56,8 +57,8 @@ function asRecord(value: unknown): Record<string, unknown> {
 }
 
 function runnerWorkspacePaths(projectId: string) {
-	const volumeRoot = envValue('TREESEED_WORKER_VOLUME_ROOT') || '/data';
-	const workspaceRoot = `${volumeRoot}/workspaces/${projectId}`;
+	const volumeRoot = envValue('TREESEED_WORKER_VOLUME_ROOT') || resolveProcessingDataDir();
+	const workspaceRoot = resolveRunnerWorkspaceRoot(volumeRoot, projectId);
 	return {
 		root: workspaceRoot,
 		site: `${workspaceRoot}/site`,

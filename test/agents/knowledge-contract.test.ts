@@ -148,6 +148,10 @@ describe('research and knowledge artifact contracts', () => {
 		};
 
 		expect(validateKnowledgeDraft(draft)).toEqual({ ok: true, errors: [] });
+		expect(validateKnowledgeDraft({
+			...draft,
+			frontmatter: { ...draft.frontmatter, status: 'canonical' },
+		}, { allowedStatuses: ['pending_review', 'canonical'] })).toEqual({ ok: true, errors: [] });
 		expect(sumKnowledgeOptimizationScore(report.score)).toBe(29);
 		expect(validateOptimizationReport(report)).toEqual({ ok: true, errors: [] });
 	});

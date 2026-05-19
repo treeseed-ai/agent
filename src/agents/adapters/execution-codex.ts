@@ -1,12 +1,13 @@
 import { Codex } from '@openai/codex-sdk';
-import { basename, dirname } from 'node:path';
 import type { AgentRuntimeSpec } from '@treeseed/sdk/types/agents';
 import type { AgentExecutionAdapter, AgentExecutionResult } from '../runtime-types.ts';
+import { prependCoreObjectiveToPrompt } from '../core-objective.ts';
 import {
 	type CodexApprovalPolicy,
 	type CodexSandboxMode,
 	resolveCodexProviderConfig,
 } from './codex-readiness.ts';
+import { codexClientEnvironment } from './codex-auth.ts';
 import { AgentWorktreeManager } from '../../services/agent-worktrees.ts';
 
 export type CodexExecutionStatus = 'completed' | 'waiting' | 'failed';
@@ -178,17 +179,6 @@ function safetyResult(request: CodexExecutionRequest, error: CodexRequestSafetyE
 	};
 }
 
-function codexClientEnvironment(env: NodeJS.ProcessEnv = process.env) {
-	const authFile = env.TREESEED_CODEX_AUTH_FILE?.trim() || env.CODEX_AUTH_FILE?.trim();
-	if (authFile && basename(authFile) === 'auth.json') {
-		return {
-			...env,
-			CODEX_HOME: dirname(authFile),
-		};
-	}
-	return env;
-}
-
 async function createDefaultCodexClient(): Promise<CodexSubscriptionClient> {
 	return new Codex({ env: codexClientEnvironment() } as ConstructorParameters<typeof Codex>[0]);
 }
@@ -236,7 +226,7 @@ export function buildCodexPrompt(request: CodexExecutionRequest) {
 			'- Do not release.',
 		].join('\n')
 		: '- Treat this as read-only/planning unless the handler grants a later mutation stage.';
-	return [
+	const taskPrompt = [
 		'You are operating as a TreeSeed implementation agent.',
 		'',
 		'Goal:',
@@ -274,6 +264,13 @@ export function buildCodexPrompt(request: CodexExecutionRequest) {
 		'Work package:',
 		formatMetadataBlock(workPackage),
 	].join('\n');
+	return prependCoreObjectiveToPrompt({
+		prompt: taskPrompt,
+		repoRoot: request.repoRoot,
+		coreObjective: typeof request.metadata?.coreObjective === 'string'
+			? request.metadata.coreObjective
+			: null,
+	});
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -477,7 +474,7 @@ async function prepareDefaultWorktree(input: {
 		sanitizeBranchPart(input.agent.slug),
 		sanitizeBranchPart(input.runId),
 	].filter(Boolean).join('/');
-	return new AgentWorktreeManager(input.repoRoot).createOrResumeWorktree(featureBranch);
+	return new AgentWorktreeManager(input.repoRoot).createOrResumeWorktree(featureBranch, input.runId);
 }
 
 export class CodexSubscriptionExecutionAdapter implements AgentExecutionAdapter {

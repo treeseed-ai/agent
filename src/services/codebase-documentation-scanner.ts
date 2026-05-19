@@ -12,8 +12,7 @@ export const CODEBASE_DOCUMENTATION_SCAN_TARGETS = [
 	'packages/sdk/src/**',
 	'packages/cli/src/cli/**',
 	'packages/core/src/**',
-	'src/components/app/project/**',
-	'src/components/team/**',
+	'src/components/app/operations/**',
 	'src/pages/app/**',
 	'src/pages/v1/**',
 	'src/content/**',
@@ -141,6 +140,10 @@ function targetSpec(pattern: string): TargetSpec {
 
 function isIgnored(relativePath: string) {
 	const normalized = normalizePath(relativePath);
+	const basename = path.basename(normalized);
+	if (basename.startsWith('.ts-run-')) {
+		return true;
+	}
 	if (DEFAULT_IGNORED_PREFIXES.some((prefix) => normalized === prefix.slice(0, -1) || normalized.startsWith(prefix))) {
 		return true;
 	}
@@ -223,11 +226,10 @@ function packagePurpose(name: ModuleSurfaceInventory['packageName']) {
 function responsibilityForModule(modulePath: string) {
 	if (modulePath.includes('/agents')) return 'Agent definitions, handlers, contracts, context, and runtime behavior.';
 	if (modulePath.includes('/services')) return 'Service orchestration, manager, worker, workday, promotion, and operational flows.';
-	if (modulePath.includes('/api')) return 'HTTP API routes and state collectors for agent and project governance.';
+	if (modulePath.includes('/api')) return 'HTTP API routes and state collectors for operational governance.';
 	if (modulePath.includes('/cli')) return 'CLI command parsing, registry, and command handlers.';
-	if (modulePath.includes('/components/app/project')) return 'Market project UI surfaces, including agents, workstreams, and governance state.';
-	if (modulePath.includes('/components/team')) return 'Team-level UI surfaces such as inbox, capacity, products, and hosts.';
-	if (modulePath.includes('/pages/app')) return 'Application routes for Market team/project workflows.';
+	if (modulePath.includes('/components/app/operations')) return 'Operational app UI components for workdays, governance, knowledge, and infrastructure.';
+	if (modulePath.includes('/pages/app')) return 'Application routes for Mission Control, Workdays, Governance, Knowledge, and Infrastructure.';
 	if (modulePath.includes('/pages/v1')) return 'Versioned API route entrypoints.';
 	if (modulePath.includes('/content')) return 'Content-backed TreeSeed project records and public knowledge surfaces.';
 	if (modulePath === 'docs' || modulePath.startsWith('docs/')) return 'Developer and agent-facing documentation plans and references.';

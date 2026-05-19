@@ -7,6 +7,11 @@ export {
 	resolveCodexProviderConfig,
 } from './agents/adapters/codex-readiness.ts';
 export {
+	codexClientEnvironment,
+	materializeCodexAuthFromEnv,
+	resolveCodexAuthFile,
+} from './agents/adapters/codex-auth.ts';
+export {
 	CodexRequestSafetyError,
 	CodexSubscriptionExecutionAdapter,
 	runCodexSubscriptionTask,
@@ -73,6 +78,7 @@ export type * from './agents/knowledge/pipeline.ts';
 export type * from './services/runtime-readiness.ts';
 export type * from './services/agent-worktrees.ts';
 export type * from './agents/adapters/codex-readiness.ts';
+export type * from './agents/adapters/codex-auth.ts';
 export type * from './agents/adapters/execution-codex.ts';
 export type * from './services/research-knowledge-workday.ts';
 export type * from './services/codebase-documentation-scanner.ts';

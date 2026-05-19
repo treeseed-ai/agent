@@ -289,6 +289,44 @@ describe('manager service', () => {
 		expect((reporter.registerAgentPoolHeartbeat as any).mock.calls).toHaveLength(1);
 	});
 
+	it('opens an explicit local workday outside schedule and seeds starter tasks', async () => {
+		const sdk = createSdkStub();
+		const reporter = createReporter();
+		const scaler = createScaler();
+		const config = {
+			...resolveManagerServiceConfig(),
+			mode: 'reconcile' as const,
+			projectId: 'project-1',
+			teamId: 'team-1',
+			environment: 'local' as const,
+			workDayId: 'local-docs-1',
+			defaultSchedule: {
+				timezone: 'UTC',
+				windows: [{ days: [2], startTime: '09:00', endTime: '17:00' }],
+			},
+			dailyTaskCreditBudget: 8,
+			maxQueuedTasks: 2,
+			maxQueuedCredits: 4,
+			priorityModels: [],
+		};
+
+		const result = await runManagerCycle({
+			sdk: sdk as any,
+			reporter: reporter as any,
+			scaler: scaler as any,
+			config,
+			now: new Date('2026-04-15T13:00:00.000Z'),
+		});
+
+		expect(result.insideWorkWindow).toBe(true);
+		expect((sdk.startWorkDay as any).mock.calls).toHaveLength(1);
+		expect((sdk.startWorkDay as any).mock.calls[0]?.[0]).toMatchObject({ id: 'local-docs-1' });
+		const createdTaskTypes = (sdk.createTask as any).mock.calls.map((call) => call[0]?.type);
+		expect(createdTaskTypes).toContain('refresh_project_graph');
+		expect(createdTaskTypes).toContain('scan_codebase_documentation_surface');
+		expect(result.seededTasks.length).toBeGreaterThan(0);
+	});
+
 	it('skips reconciliation when another healthy manager holds the lease', async () => {
 		const sdk = {
 			...createSdkStub(),

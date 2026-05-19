@@ -1,0 +1,11 @@
+{
+  "taskId": "task-cartographer",
+  "messageType": "research_task_requested",
+  "question": {
+    "id": "question:runtime",
+    "title": "How does the runtime work?",
+    "book": "architecture",
+    "section": "runtime",
+    "targetPath": "src/content/knowledge/architecture/runtime/runtime.mdx"
+  }
+}

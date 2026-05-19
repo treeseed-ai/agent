@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.9.0] - 2026-05-19
+
+### Added
+
+- feat(agent): implement processing bin and expand testing infrastructure (44d5887593c8)
+- feat(agents): integrate core objective into agent prompts (f09df37a9168)
+
+### Infrastructure
+
+- chore(agent): bump version and update gitignore (8a319a4ce796)
+
+### Tests
+
+- refactor(agent): adjust agent test catalog and contract validation logic (fb143243f8d2)
+- build(build): sync package dependency references (d5fc675bc77a)
+
+### Dependencies
+
+- refactor(agent): update governance and operational UI references (71c68c9c7b10)
+- Release @treeseed/agent 0.9.0.
+
 ## [0.8.19] - 2026-05-16
 
 ### Dependencies

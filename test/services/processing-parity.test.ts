@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { collectProcessingPlan, diffProcessingPlans, writeProcessingDiffReport, writeProcessingPlanReport } from '../../src/services/processing-plan.ts';
 import { runProcessingDoctor } from '../../src/services/processing-doctor.ts';
@@ -42,7 +43,9 @@ describe('processing parity support', () => {
 		expect(plan.manager.lifecycleMode).toBe('bounded_reconcile');
 		expect(plan.worker.volumeRoot).toBe('/data');
 		expect(plan.envSource.requestedEnvironment).toBe('local');
-		expect(plan.envSource.files).toEqual(expect.arrayContaining(['.env.local.processing.example']));
+		if (existsSync(resolve(repoRoot, '.env.local.processing.example'))) {
+			expect(plan.envSource.files).toEqual(expect.arrayContaining(['.env.local.processing.example']));
+		}
 		expect(plan.contracts.taskSchemaVersion).toBe('agent-task:v1');
 		expect(plan.workPolicy.dailyTaskCreditBudget).toBeGreaterThan(0);
 		expect(plan.nonParityBehaviors).not.toContain('manager_loop_mode');

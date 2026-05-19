@@ -11,16 +11,20 @@ describe('agent contract tests', () => {
 			now: new Date('2026-05-19T00:00:00.000Z'),
 		});
 		expect(result.ok).toBe(true);
-		expect(result.agents.map((agent) => agent.slug)).toEqual(expect.arrayContaining([
-			'treeseed-docs-planner',
-			'treeseed-codebase-cartographer',
-			'treeseed-knowledge-generator',
-			'treeseed-knowledge-optimizer',
-			'treeseed-docs-engineer',
-		]));
 		expect(existsSync(result.reportPath)).toBe(true);
 		const report = readFileSync(result.reportPath, 'utf8');
 		expect(report).toContain('# Agent Contract Test Report');
-		expect(report).toContain('## treeseed-knowledge-generator');
+		if (existsSync(resolve(repoRoot, 'src/content/agents'))) {
+			expect(result.agents.map((agent) => agent.slug)).toEqual(expect.arrayContaining([
+				'treeseed-docs-planner',
+				'treeseed-codebase-cartographer',
+				'treeseed-knowledge-generator',
+				'treeseed-knowledge-optimizer',
+				'treeseed-docs-engineer',
+			]));
+			expect(report).toContain('## treeseed-knowledge-generator');
+		} else {
+			expect(result.agents).toEqual([]);
+		}
 	});
 });

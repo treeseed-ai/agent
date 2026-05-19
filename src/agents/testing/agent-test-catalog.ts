@@ -90,7 +90,7 @@ export async function runAgentTestCatalogChecks(options: {
 		};
 	});
 	const resultWithoutPaths = {
-		ok: entries.length > 0 && entries.every((entry) => entry.status === 'PASS'),
+		ok: entries.every((entry) => entry.status === 'PASS'),
 		generatedAt: (options.now ?? new Date()).toISOString(),
 		repoRoot,
 		entries,

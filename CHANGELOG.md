@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.2] - 2026-05-20
+
+### Dependencies
+
+- ci(build): create github releases for package publishes (139ca034dd6c)
+- Release @treeseed/agent 0.9.2.
+
 ## [0.9.1] - 2026-05-20
 
 ### Tests

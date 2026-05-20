@@ -1,8 +1,8 @@
 # `@treeseed/agent`
 
-Treeseed backend API and processing framework package.
+Treeseed agent and capacity-provider runtime package.
 
-`@treeseed/agent` owns the reusable processing plane for Treeseed. It provides the Hono API foundation, agent runtime, manager service, worker runner service, cron-style workday entrypoints, processing-host templates, and processing env registry. It depends on `@treeseed/sdk` for contracts, stores, deployment primitives, and provider-neutral runtime helpers. It does not depend on `@treeseed/core`.
+`@treeseed/agent` owns the standalone capacity-provider runtime for Treeseed. It provides the provider entrypoint, local provider API, manager/runner runtime, agent kernel, package-owned Docker/Compose assets, deployment templates, and provider environment registry. Shared API substrate and provider contracts live in `@treeseed/sdk`; Market/root apps compose those SDK surfaces directly and do not own the provider runtime. The package does not depend on `@treeseed/core`.
 
 ## Package Role
 
@@ -10,10 +10,10 @@ The Treeseed package split is:
 
 - `@treeseed/sdk`: shared contracts, stores, graph/query/runtime primitives, deployment config, and registry merge runtime
 - `@treeseed/core`: Astro/Starlight web framework, content, forms, web cache, and web-only Cloudflare integration
-- `@treeseed/agent`: backend API, agent runtime, processing services, processing-host manifests, and capacity-provider health/reporting
-- `@treeseed/market`: product app that composes `@treeseed/core`, `@treeseed/agent`, and `@treeseed/sdk`
+- `@treeseed/agent`: package-owned capacity-provider runtime, local provider API, manager/runner services, and agent execution internals
+- `@treeseed/market`: product app that composes `@treeseed/core` and `@treeseed/sdk`, while capacity providers run externally through `@treeseed/agent`
 
-Ordinary hosted projects should not need their own API, manager, worker, or workday services. They reference assigned processing capacity. Market and team-owned processing hosts use this package to run that capacity.
+Ordinary hosted projects should not need their own provider API, manager, runner, or workday services. They reference assigned capacity. Market and team-owned capacity providers use this package to run that capacity through `trsd capacity ...`.
 
 ## Public Surfaces
 
@@ -44,11 +44,11 @@ The API foundation exposes `createTreeseedApiApp`, `createTreeseedApiRouter`, `c
 
 ## Source Layout
 
-- `src/api`: Hono API app, auth providers, base routes, runtime provider resolution, and Node/Railway server helpers
+- `src/api`: agent/provider API composition, local provider API app, and Node server helpers
 - `src/agents`: agent kernel, handler registry, adapters, contracts, spec normalization, CLI, and test harnesses
 - `src/services`: manager, worker, workday, remote runner, worker capacity, scaler, and shared processing service helpers
-- `src/env.yaml`: processing/API env registry entries owned by this package
-- `templates/github/deploy-processing.workflow.yml`: reusable processing-plane workflow template
+- `src/env.yaml`: agent/provider env registry entries owned by this package
+- `templates/github/deploy-capacity-provider.workflow.yml`: inert capacity-provider deployment workflow template
 
 Tests mirror the source domains under `test/api` and `test/services`, with package-shape checks under `test/package`.
 
@@ -101,7 +101,7 @@ Package verification:
 
 ## API Composition
 
-Create a backend app with the reusable agent foundation:
+Create an agent runtime API with the package-owned agent extension:
 
 ```ts
 import { createTreeseedApiApp } from '@treeseed/agent/api';
@@ -113,19 +113,19 @@ export default createTreeseedApiApp({
 });
 ```
 
-The agent package owns generic API capabilities such as health, auth/session helpers, task dispatch, queue/capacity endpoints, workday routes, and SDK operation dispatch. Product routes such as market catalog, accounts, billing, invites, and hosted-project management belong in the market app extension.
+Shared health, auth/session helpers, D1 support, template catalog loading, and generic SDK operation routes live in `@treeseed/sdk/api`. The agent package composes those helpers with agent-only runtime routes. Product routes such as market catalog, accounts, billing, invites, and hosted-project management belong in the market app, not in this package.
 
-## Processing Host Shape
+## Capacity Provider Shape
 
-A processing host can run:
+A capacity provider can run:
 
-- API service: `treeseed-agent-api`
-- manager service: `treeseed-agent-service manager`
-- worker runner service: `treeseed-agent-service worker`
-- workday start cron: `treeseed-agent-service workday-start`
-- workday report cron: `treeseed-agent-service workday-report`
+- API service: `node ./dist/provider/entrypoint.js api`
+- manager service: `node ./dist/provider/entrypoint.js manager`
+- runner service: `node ./dist/provider/entrypoint.js runner`
+- diagnostics: `node ./dist/provider/entrypoint.js doctor`
+- package container lifecycle: `trsd capacity build`, `trsd capacity up`, `trsd capacity logs`, and `trsd capacity down`
 
-The processing host registers as a capacity provider and reports health, capabilities, queue metrics, drain state, and workday summaries to the market control plane. Web-only projects should use assigned capacity instead of owning these services.
+The provider registers with Market through `/v1/provider/*`, heartbeats, reports capabilities and budgets, fetches portfolio manifests, and processes provider-authenticated task lifecycle calls. Web-only projects should use assigned capacity instead of owning these services.
 
 ## Capacity Scheduling Runtime
 
@@ -137,7 +137,7 @@ Use `npm run test:capacity-scheduling-e2e` for the deterministic completion harn
 
 ## Environment Registry
 
-`src/env.yaml` is the package-owned processing/API env registry. It contains Railway, API, manager, worker, workday, queue, capacity provider, and processing drain entries.
+`src/env.yaml` is the package-owned agent/provider env registry. It contains API, manager, runner, workday, queue, capacity provider, and provider launch entries.
 
 Common processing entries include:
 
@@ -169,26 +169,17 @@ Common processing entries include:
 - `TREESEED_CAPACITY_PROVIDER_ID`
 - `TREESEED_CAPACITY_PROVIDER_TEAM_ID`
 - `TREESEED_CAPACITY_PROVIDER_SERVICE_BASE_URL`
-- `TREESEED_PROCESSING_DRAIN`
 
 Provider-neutral shared entries belong in `@treeseed/sdk`. Web/forms/Astro entries belong in `@treeseed/core`. Market product auth, billing, account, hosted-hub, and UI/API entries belong in the root market env overlay.
 
-## Local Manager With Cloudflare
+## Local Capacity Provider
 
-Use this helper when the web plane is deployed but the processing plane should run locally:
-
-```bash
-cp .env.local-manager-cloudflare.example .env.local-manager-cloudflare
-npm run build
-npm run start:local-manager-cloudflare
-```
-
-The purpose-specific env file supplies local processing credentials and Cloudflare queue/D1 pointers without mixing processing-plane secrets into a generic web `.env.local`. Start a local worker, workday start, or workday report in another shell after loading the same env file.
+Use `trsd config` to store provider connection values in encrypted Treeseed machine config, then use `trsd capacity ...` to build and run the package-owned provider container. Do not create plaintext provider `.env` files.
 
 ## GitHub Actions
 
 - `.github/workflows/verify.yml` runs package verification for pushes and pull requests.
 - `.github/workflows/publish.yml` validates production version tags and publishes the package.
-- `templates/github/deploy-processing.workflow.yml` is the processing-plane workflow template consumed by hosted processing deployments.
+- `templates/github/deploy-capacity-provider.workflow.yml` is an inert capacity-provider deployment template for later hosted provider deployment phases.
 
-Web-only hosted projects should dispatch web workflows from `@treeseed/core`/`@treeseed/sdk` templates. Processing deployments should use the agent processing template explicitly.
+Web/API hosted projects should dispatch Market web workflows from `@treeseed/core`/`@treeseed/sdk` templates. Capacity-provider lifecycle is package-owned here and operator-driven through `trsd capacity ...`.

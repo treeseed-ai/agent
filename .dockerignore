@@ -1,0 +1,12 @@
+**
+!package.json
+!package-lock.json
+!Dockerfile
+!dist/**
+!templates/**
+!docs/**
+!.treeseed/
+!.treeseed/docker/
+!.treeseed/docker/treeseed-sdk.tgz
+!.treeseed/docker/runtime/
+!.treeseed/docker/runtime/**

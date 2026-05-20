@@ -1,0 +1,189 @@
+#!/usr/bin/env node
+
+import { materializeCodexAuthFromEnv } from '../agents/adapters/codex-auth.ts';
+import { createCapacityProviderNodeServer } from '../api/provider-app.ts';
+import { checkProviderHealth, buildProviderPlan, okPayload, runManagerSkeleton, runRunnerSkeleton } from './lifecycle.ts';
+import { providerRuntimeVersion, resolveProviderConfig, type ProviderRole } from './config.ts';
+import { buildProviderRegistrationRequest, registerProvider } from './registration.ts';
+import { startProviderHeartbeatLoop } from './heartbeat.ts';
+
+const ROLES = ['api', 'manager', 'runner', 'doctor', 'healthcheck', 'register', 'plan', 'version'] as const satisfies ProviderRole[];
+
+function args() {
+	return process.argv.slice(2);
+}
+
+function roleArg(): ProviderRole {
+	const role = args()[0] ?? 'api';
+	if (!ROLES.includes(role as ProviderRole)) {
+		throw new Error(`Unknown capacity provider role "${role}".`);
+	}
+	return role as ProviderRole;
+}
+
+function flagEnabled(name: string) {
+	return args().includes(name);
+}
+
+function wantsJson() {
+	return flagEnabled('--json') || process.env.TREESEED_PROVIDER_JSON === '1';
+}
+
+function diagnosticMode() {
+	return flagEnabled('--diagnostic') || process.env.TREESEED_PROVIDER_STARTUP_MODE === 'diagnostic';
+}
+
+function printHelp() {
+	process.stdout.write([
+		'capacity-provider <role>',
+		'',
+		'Roles:',
+		...ROLES.map((role) => `  ${role}`),
+		'',
+		'Examples:',
+		'  node ./dist/provider/entrypoint.js version',
+		'  node ./dist/provider/entrypoint.js healthcheck',
+		'  node ./dist/provider/entrypoint.js register --dry-run',
+		'  node ./dist/provider/entrypoint.js manager --dry-run --json',
+		'  node ./dist/provider/entrypoint.js runner --dry-run --json',
+		'',
+	].join('\n'));
+}
+
+function emit(payload: unknown) {
+	if (wantsJson() || typeof payload !== 'string') {
+		process.stdout.write(`${JSON.stringify(payload, null, 2)}\n`);
+		return;
+	}
+	process.stdout.write(`${payload}\n`);
+}
+
+function pollSeconds(name: string, fallback: number) {
+	const raw = process.env[name]?.trim() ?? '';
+	const parsed = Number.parseInt(raw, 10);
+	return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function sleep(ms: number) {
+	return new Promise((resolve) => {
+		setTimeout(resolve, ms);
+	});
+}
+
+async function runLoop(role: 'manager' | 'runner', intervalSeconds: number, runOnce: () => Promise<unknown>) {
+	emit(okPayload(role, {
+		status: 'running',
+		intervalSeconds,
+	}));
+	for (;;) {
+		try {
+			emit(await runOnce());
+		} catch (error) {
+			emit({
+				ok: false,
+				role,
+				error: error instanceof Error ? error.message : String(error),
+			});
+		}
+		await sleep(intervalSeconds * 1000);
+	}
+}
+
+function requireConnection(role: ProviderRole, dryRun: boolean) {
+	return !dryRun && ['api', 'manager', 'runner', 'register'].includes(role);
+}
+
+async function main() {
+	if (flagEnabled('--help') || flagEnabled('-h') || args()[0] === 'help') {
+		printHelp();
+		return;
+	}
+	const role = roleArg();
+	const dryRun = flagEnabled('--dry-run');
+	const diagnostic = diagnosticMode();
+	const config = resolveProviderConfig({ requireConnection: requireConnection(role, dryRun) && !diagnostic });
+	if (requireConnection(role, dryRun) && !diagnostic) {
+		await materializeCodexAuthFromEnv(process.env);
+	}
+	if (role === 'version') {
+		emit(okPayload('version', {
+			package: '@treeseed/agent',
+			version: providerRuntimeVersion(),
+			entrypoint: 'packages/agent/dist/provider/entrypoint.js',
+			roles: ROLES,
+		}));
+		return;
+	}
+	if (role === 'healthcheck' || role === 'doctor') {
+		emit(await checkProviderHealth(config));
+		return;
+	}
+	if (role === 'register') {
+		if (dryRun) {
+			emit(okPayload('register', {
+				dryRun: true,
+				request: buildProviderRegistrationRequest(config),
+				redactedEnv: config.redactedEnv,
+			}));
+			return;
+		}
+		emit(await registerProvider(config));
+		return;
+	}
+	if (role === 'plan') {
+		emit(await buildProviderPlan(config, { dryRun }));
+		return;
+	}
+	if (role === 'manager') {
+		if (dryRun || diagnostic) {
+			emit(await runManagerSkeleton(config, { dryRun: true }));
+			return;
+		}
+		await runLoop('manager', pollSeconds('TREESEED_PROVIDER_MANAGER_POLL_SECONDS', 60), () => runManagerSkeleton(config));
+		return;
+	}
+	if (role === 'runner') {
+		if (dryRun || diagnostic) {
+			emit(await runRunnerSkeleton(config, { dryRun: true }));
+			return;
+		}
+		await runLoop('runner', pollSeconds('TREESEED_PROVIDER_RUNNER_POLL_SECONDS', 15), () => runRunnerSkeleton(config));
+		return;
+	}
+	if (role === 'api') {
+		if (dryRun || diagnostic) {
+			emit(okPayload('api', {
+				dryRun: true,
+				diagnostic,
+				port: config.apiPort,
+				endpoints: ['/healthz', '/readyz', '/provider/health', '/provider/register', '/provider/portfolio'],
+				redactedEnv: config.redactedEnv,
+			}));
+			if (diagnostic && !dryRun) {
+				const server = await createCapacityProviderNodeServer(config);
+				process.stdout.write(`${JSON.stringify(okPayload('api', {
+					url: server.url,
+					diagnostic: true,
+				}))}\n`);
+			}
+			return;
+		}
+		const registration = await registerProvider(config);
+		startProviderHeartbeatLoop(config, registration.heartbeatIntervalSeconds);
+		const server = await createCapacityProviderNodeServer(config);
+		process.stdout.write(`${JSON.stringify(okPayload('api', {
+			url: server.url,
+			provider: registration.provider,
+			heartbeatIntervalSeconds: registration.heartbeatIntervalSeconds,
+		}))}\n`);
+		return;
+	}
+}
+
+main().catch((error) => {
+	process.stderr.write(`${JSON.stringify({
+		ok: false,
+		error: error instanceof Error ? error.message : String(error),
+	}, null, 2)}\n`);
+	process.exitCode = 1;
+});

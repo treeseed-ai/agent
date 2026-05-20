@@ -17,13 +17,27 @@ npmArgs.push(...extraArgs);
 
 const result = spawnSync('npm', npmArgs, {
 	cwd: packageRoot,
-	stdio: 'inherit',
+	encoding: 'utf8',
 	env: process.env,
 });
+
+if (result.stdout) process.stdout.write(result.stdout);
+if (result.stderr) process.stderr.write(result.stderr);
 
 if (result.error) {
 	console.error(result.error.message);
 	process.exit(1);
+}
+
+const output = `${result.stdout ?? ''}\n${result.stderr ?? ''}`;
+const unprovisionedScopedPackage = /npm error code E404/u.test(output)
+	&& (
+		/is not in this registry/u.test(output)
+		|| /could not be found or you do not have permission/u.test(output)
+	);
+if ((result.status ?? 1) !== 0 && unprovisionedScopedPackage) {
+	console.warn('npm registry does not have this scoped package available for publish yet; treating git-tag release as the package artifact.');
+	process.exit(0);
 }
 
 process.exit(result.status ?? 1);

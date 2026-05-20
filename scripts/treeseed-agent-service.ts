@@ -29,41 +29,8 @@ if (command === '--help' || command === '-h' || command === 'help') {
 		'',
 		'Services:',
 		...services.keys(),
-		'register-provider',
 		'',
 	].join('\n'));
-	process.exit(0);
-}
-
-if (command === 'register-provider') {
-	const marketUrl = String(argValue('--market-url') ?? process.env.TREESEED_MARKET_API_BASE_URL ?? '').replace(/\/+$/u, '');
-	const providerApiKey = argValue('--provider-api-key') ?? argValue('--registration-token') ?? process.env.TREESEED_PROVIDER_API_KEY ?? '';
-	if (!marketUrl || !providerApiKey) {
-		process.stderr.write('Usage: treeseed-agent-service register-provider --market-url <url> --provider-api-key <security-code>\n');
-		process.exit(1);
-	}
-	const response = await fetch(`${marketUrl}/v1/processing/register`, {
-		method: 'POST',
-		headers: {
-			authorization: `Bearer ${providerApiKey}`,
-			'content-type': 'application/json',
-		},
-		body: JSON.stringify({
-			status: 'active',
-			queueDepth: Number(argValue('--queue-depth') ?? 0),
-			activeWorkers: Number(argValue('--active-workers') ?? 0),
-			maxWorkers: Number(argValue('--max-workers') ?? 1),
-			draining: false,
-			capabilities: ['agent_execution', 'repository_work', 'reporting'],
-			environments: [argValue('--environment') ?? process.env.TREESEED_ENVIRONMENT ?? 'staging'],
-		}),
-	});
-	const payload = await response.json().catch(() => null);
-	if (!response.ok || payload?.ok === false) {
-		process.stderr.write(`${payload?.error ?? `Provider registration failed with ${response.status}`}\n`);
-		process.exit(1);
-	}
-	process.stdout.write(`${JSON.stringify(payload.payload, null, 2)}\n`);
 	process.exit(0);
 }
 

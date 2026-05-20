@@ -1,6 +1,6 @@
 {
   "name": "@treeseed/agent",
-  "version": "0.9.0",
+  "version": "0.9.1",
   "description": "Treeseed agent service runtime package.",
   "license": "AGPL-3.0-only",
   "repository": {
@@ -87,6 +87,8 @@
     "README.md",
     "dist",
     "Dockerfile",
+    "compose.capacity-provider.yml",
+    "docs",
     "templates"
   ],
   "publishConfig": {
@@ -97,6 +99,8 @@
     "setup:ci": "npm ci",
     "build": "npm run build:dist",
     "build:dist": "node ./scripts/run-ts.mjs ./scripts/build-dist.ts",
+    "capacity-provider:build": "node ./scripts/run-ts.mjs ./scripts/build-capacity-provider-container.ts",
+    "capacity-provider:test-local": "node ./dist/scripts/test-capacity-provider-container.js",
     "prepare": "node ./scripts/prepare.mjs",
     "dev:manager": "node ./scripts/run-ts.mjs ./src/services/manager.ts",
     "dev:worker": "node ./scripts/run-ts.mjs ./src/services/worker.ts",
@@ -130,13 +134,12 @@
     "test:agent-handlers": "vitest run --config ./vitest.config.ts test/agents/handler-fixtures.test.ts test/agents/knowledge-handlers.test.ts",
     "test:agent-message-chains": "vitest run --config ./vitest.config.ts test/agents/message-chain.test.ts test/services/research-knowledge-workday.test.ts",
     "test:manager-worker": "vitest run --config ./vitest.config.ts test/services/manager.test.ts test/services/worker.test.ts test/services/manager-worker-parity-report.test.ts",
-    "test:processing-parity-local": "vitest run --config ./vitest.config.ts test/services/processing-parity.test.ts",
-    "test:market-docs-governed-mutation": "vitest run --config ./vitest.config.ts test/agents/local-e2e-verification.test.ts && npm run test:local-e2e-verification",
-    "test:processing-local": "node ./scripts/run-ts.mjs ./scripts/test-processing-local.ts"
+    "test:capacity-provider-runtime": "vitest run --config ./vitest.config.ts test/provider/capacity-provider-runtime.test.ts",
+    "test:market-docs-governed-mutation": "vitest run --config ./vitest.config.ts test/agents/local-e2e-verification.test.ts && npm run test:local-e2e-verification"
   },
   "dependencies": {
     "@openai/codex-sdk": "^0.130.0",
-    "@treeseed/sdk": "0.9.0",
+    "@treeseed/sdk": "github:treeseed-ai/sdk#0.10.3",
     "esbuild": "0.28.0",
     "hono": "^4.8.2",
     "typescript": "^5.9.3",
@@ -149,7 +152,6 @@
   "bin": {
     "treeseed-agents": "dist/scripts/treeseed-agents.js",
     "treeseed-agent-api": "dist/scripts/treeseed-agent-api.js",
-    "treeseed-agent-service": "dist/scripts/treeseed-agent-service.js",
-    "treeseed-processing": "dist/scripts/treeseed-processing.js"
+    "treeseed-agent-service": "dist/scripts/treeseed-agent-service.js"
   }
 }

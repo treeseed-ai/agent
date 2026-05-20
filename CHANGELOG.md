@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.9.1] - 2026-05-20
+
+### Tests
+
+- refactor(provider): complete capacity provider migration (679f232e9ee5)
+
+### Dependencies
+
+- build(build): tolerate npm scoped package permission 404 (51f7c4657565)
+- build(agent): bump version to 0.9.1-dev.staging.20260520T122346Z (3dbb5d8edd16)
+- build(build): make package publish tolerate unprovisioned npm scope (90960da2f0c1)
+- Release @treeseed/agent 0.9.1.
+
 ## [0.9.0] - 2026-05-19
 
 ### Added

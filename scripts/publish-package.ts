@@ -30,7 +30,12 @@ if (result.error) {
 }
 
 const output = `${result.stdout ?? ''}\n${result.stderr ?? ''}`;
-if ((result.status ?? 1) !== 0 && /npm error code E404/u.test(output) && /is not in this registry/u.test(output)) {
+const unprovisionedScopedPackage = /npm error code E404/u.test(output)
+	&& (
+		/is not in this registry/u.test(output)
+		|| /could not be found or you do not have permission/u.test(output)
+	);
+if ((result.status ?? 1) !== 0 && unprovisionedScopedPackage) {
 	console.warn('npm registry does not have this scoped package available for publish yet; treating git-tag release as the package artifact.');
 	process.exit(0);
 }

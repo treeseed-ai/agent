@@ -37,7 +37,7 @@ function run(command: string, args: string[], cwd = packageRoot, capture = false
 	return (result.stdout ?? '').trim();
 }
 
-function runPackedProcessingSmoke(installRoot: string) {
+function runPackedProviderRuntimeSmoke(installRoot: string) {
 	const dataRoot = resolve(installRoot, 'data');
 	mkdirSync(dataRoot, { recursive: true });
 	mkdirSync(resolve(installRoot, 'src/content/knowledge'), { recursive: true });
@@ -78,27 +78,32 @@ function runPackedProcessingSmoke(installRoot: string) {
 		TREESEED_TEAM_ID: 'treeseed-agent-packed-smoke',
 		TREESEED_TENANT_ROOT: installRoot,
 	};
-	const processingBin = 'node_modules/@treeseed/agent/dist/scripts/treeseed-processing.js';
-	run(process.execPath, [processingBin, 'healthcheck'], installRoot, false, env);
-	run(process.execPath, [processingBin, 'api', '--help'], installRoot, false, env);
-	run(process.execPath, [processingBin, 'manager', '--dry-run', '--json'], installRoot, false, env);
-	run(process.execPath, [processingBin, 'worker', '--dry-run', '--json'], installRoot, false, env);
+	const providerEntrypoint = 'node_modules/@treeseed/agent/dist/provider/entrypoint.js';
+	run(process.execPath, [providerEntrypoint, 'version'], installRoot, false, env);
+	run(process.execPath, [providerEntrypoint, 'healthcheck'], installRoot, false, env);
+	run(process.execPath, [providerEntrypoint, 'register', '--dry-run'], installRoot, false, env);
+	run(process.execPath, [providerEntrypoint, 'manager', '--dry-run', '--json'], installRoot, false, env);
+	run(process.execPath, [providerEntrypoint, 'runner', '--dry-run', '--json'], installRoot, false, env);
 	run(process.execPath, ['--input-type=module', '-e', [
 		"const modules = await Promise.all([",
-		"  import('./node_modules/@treeseed/agent/dist/services/manager.js'),",
-		"  import('./node_modules/@treeseed/agent/dist/services/worker.js'),",
-		"  import('./node_modules/@treeseed/agent/dist/services/processing-plan.js'),",
-		"  import('./node_modules/@treeseed/agent/dist/services/processing-doctor.js'),",
-		"  import('./node_modules/@treeseed/agent/dist/services/runtime-paths.js'),",
-		"  import('./node_modules/@treeseed/agent/dist/agents/registry.js'),",
-		"]);",
+		"  import('./node_modules/@treeseed/agent/dist/provider/config.js'),",
+		"  import('./node_modules/@treeseed/agent/dist/provider/registration.js'),",
+		"  import('./node_modules/@treeseed/agent/dist/provider/lifecycle.js'),",
+			"  import('./node_modules/@treeseed/agent/dist/api/provider-app.js'),",
+			"  import('./node_modules/@treeseed/agent/dist/services/manager.js'),",
+			"  import('./node_modules/@treeseed/agent/dist/services/worker.js'),",
+			"  import('./node_modules/@treeseed/agent/dist/services/runtime-paths.js'),",
+			"  import('./node_modules/@treeseed/agent/dist/agents/registry.js'),",
+			"]);",
 		"const registry = modules.at(-1);",
 		"if (registry.listRegisteredAgentHandlers().length < 7) throw new Error('built-in handler registry is incomplete');",
-		"if (typeof modules[0].runManagerAction !== 'function') throw new Error('manager runtime import missing runManagerAction');",
-		"if (typeof modules[1].runWorkerCycle !== 'function') throw new Error('worker runtime import missing runWorkerCycle');",
-		"if (typeof modules[2].collectProcessingPlan !== 'function') throw new Error('processing-plan import missing collectProcessingPlan');",
-		"if (typeof modules[3].runProcessingDoctor !== 'function') throw new Error('processing-doctor import missing runProcessingDoctor');",
-		"if (typeof modules[4].resolveRunnerRepositoryPaths !== 'function') throw new Error('runtime-paths import missing resolveRunnerRepositoryPaths');",
+		"if (typeof modules[0].resolveProviderConfig !== 'function') throw new Error('provider config import missing resolveProviderConfig');",
+		"if (typeof modules[1].buildProviderRegistrationRequest !== 'function') throw new Error('provider registration import missing buildProviderRegistrationRequest');",
+		"if (typeof modules[2].buildProviderPlan !== 'function') throw new Error('provider lifecycle import missing buildProviderPlan');",
+			"if (typeof modules[3].createCapacityProviderApp !== 'function') throw new Error('provider app import missing createCapacityProviderApp');",
+			"if (typeof modules[4].runManagerAction !== 'function') throw new Error('manager runtime import missing runManagerAction');",
+			"if (typeof modules[5].runWorkerCycle !== 'function') throw new Error('worker runtime import missing runWorkerCycle');",
+			"if (typeof modules[6].resolveRunnerRepositoryPaths !== 'function') throw new Error('runtime-paths import missing resolveRunnerRepositoryPaths');",
 	].join('\n')], installRoot, false, env);
 }
 
@@ -265,8 +270,8 @@ try {
 	mirrorDependencies(installRoot);
 	writeFileSync(resolve(installRoot, 'package.json'), `${JSON.stringify({ name: 'treeseed-agent-smoke', private: true, type: 'module' }, null, 2)}\n`, 'utf8');
 	run(process.execPath, ['node_modules/@treeseed/agent/dist/scripts/treeseed-agents.js', '--help'], installRoot);
-	runPackedProcessingSmoke(installRoot);
-	console.log('Agent packed-install bin smoke passed.');
+	runPackedProviderRuntimeSmoke(installRoot);
+	console.log('Agent packed-install provider runtime smoke passed.');
 } finally {
 	rmSync(stageRoot, { recursive: true, force: true });
 }

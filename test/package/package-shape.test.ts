@@ -45,7 +45,6 @@ describe('agent package shape', () => {
 			'treeseed-agents': 'dist/scripts/treeseed-agents.js',
 			'treeseed-agent-api': 'dist/scripts/treeseed-agent-api.js',
 			'treeseed-agent-service': 'dist/scripts/treeseed-agent-service.js',
-			'treeseed-processing': 'dist/scripts/treeseed-processing.js',
 		});
 
 		for (const [exportName, exportValue] of Object.entries(packageJson.exports)) {
@@ -58,24 +57,34 @@ describe('agent package shape', () => {
 			expect(existsSync(sourcePathForBinSpecifier(binPath)), `${binName} source file`).toBe(true);
 		}
 
-		expect(packageJson.scripts.verify).toBe('node ./scripts/verify-driver.mjs');
-		expect(packageJson.scripts['verify:local']).toContain('./scripts/verify-driver.mjs');
-		expect(packageJson.scripts['verify:action']).toContain('./scripts/verify-driver.mjs');
-	});
+			expect(packageJson.scripts.verify).toBe('node ./scripts/verify-driver.mjs');
+			expect(packageJson.scripts['verify:local']).toContain('./scripts/verify-driver.mjs');
+			expect(packageJson.scripts['verify:action']).toContain('./scripts/verify-driver.mjs');
+			expect(Object.keys(packageJson.scripts).some((name) => name.includes('processing'))).toBe(false);
+			expect(Object.values(packageJson.scripts).some((command) => command.includes('treeseed-processing'))).toBe(false);
+		});
 
-	it('ships processing runtime bins and support modules without source-mode temp artifacts', () => {
+	it('ships provider runtime entrypoint and support modules without source-mode temp artifacts', () => {
 		const requiredRuntimeFiles = [
-			'dist/scripts/treeseed-processing.js',
 			'dist/scripts/treeseed-agent-api.js',
 			'dist/scripts/treeseed-agent-service.js',
-			'dist/api/server.js',
-			'dist/services/manager.js',
-			'dist/services/worker.js',
-			'dist/services/workday-start.js',
-			'dist/services/workday-report.js',
-			'dist/services/processing-plan.js',
-			'dist/services/processing-doctor.js',
-			'dist/services/runtime-paths.js',
+			'dist/provider/entrypoint.js',
+			'dist/provider/config.js',
+			'dist/provider/registration.js',
+			'dist/provider/heartbeat.js',
+			'dist/provider/portfolio.js',
+			'dist/provider/portfolio-processing.js',
+			'dist/provider/runner.js',
+			'dist/provider/lifecycle.js',
+			'dist/scripts/build-capacity-provider-container.js',
+			'dist/scripts/test-capacity-provider-container.js',
+			'dist/api/provider-app.js',
+				'dist/api/server.js',
+				'dist/services/manager.js',
+				'dist/services/worker.js',
+				'dist/services/workday-start.js',
+				'dist/services/workday-report.js',
+				'dist/services/runtime-paths.js',
 			'dist/services/common.js',
 			'dist/agents/adapters/codex-auth.js',
 			'dist/agents/adapters/codex-readiness.js',
@@ -90,7 +99,8 @@ describe('agent package shape', () => {
 			'dist/agents/handlers/engineer.js',
 			'dist/agents/handlers/reporter.js',
 			'dist/agents/handlers/releaser.js',
-			'dist/templates/github/deploy-processing.workflow.yml',
+			'dist/templates/github/deploy-capacity-provider.workflow.yml',
+			'dist/templates/railway/capacity-provider.yml',
 		];
 
 		for (const filePath of requiredRuntimeFiles) {
@@ -114,13 +124,53 @@ describe('agent package shape', () => {
 		const [pack] = JSON.parse(output) as Array<{ files: Array<{ path: string }> }>;
 		const paths = pack.files.map((entry) => entry.path);
 
-		expect(paths).toContain('dist/scripts/treeseed-processing.js');
-		expect(paths).toContain('dist/services/manager.js');
-		expect(paths).toContain('dist/services/worker.js');
-		expect(paths).toContain('dist/services/processing-plan.js');
-		expect(paths).toContain('dist/services/processing-doctor.js');
-		expect(paths).toContain('dist/services/runtime-paths.js');
+		expect(paths).toContain('dist/provider/entrypoint.js');
+		expect(paths).toContain('dist/provider/config.js');
+		expect(paths).toContain('dist/provider/registration.js');
+		expect(paths).toContain('dist/provider/heartbeat.js');
+		expect(paths).toContain('dist/provider/portfolio.js');
+		expect(paths).toContain('dist/provider/portfolio-processing.js');
+		expect(paths).toContain('dist/provider/runner.js');
+		expect(paths).toContain('dist/provider/lifecycle.js');
+		expect(paths).toContain('dist/scripts/build-capacity-provider-container.js');
+		expect(paths).toContain('dist/scripts/test-capacity-provider-container.js');
+			expect(paths).toContain('dist/api/provider-app.js');
+			expect(paths).toContain('dist/services/manager.js');
+			expect(paths).toContain('dist/services/worker.js');
+			expect(paths).toContain('dist/services/runtime-paths.js');
+		expect(paths).toContain('Dockerfile');
+		expect(paths).toContain('compose.capacity-provider.yml');
+		expect(paths).toContain('docs/capacity-provider-runtime.md');
+		expect(paths).toContain('templates/github/deploy-capacity-provider.workflow.yml');
+		expect(paths).toContain('templates/railway/capacity-provider.yml');
 		expect(paths.filter((filePath) => /(^|\/)\.ts-run-/u.test(filePath))).toEqual([]);
+	});
+
+	it('ships secure package-owned container assets', () => {
+		const dockerfile = readFileSync(resolve(packageRoot, 'Dockerfile'), 'utf8');
+		const compose = readFileSync(resolve(packageRoot, 'compose.capacity-provider.yml'), 'utf8');
+		const docs = readFileSync(resolve(packageRoot, 'docs/capacity-provider-runtime.md'), 'utf8');
+
+		expect(dockerfile).toContain('ENTRYPOINT ["node", "./dist/provider/entrypoint.js"]');
+		expect(dockerfile).toContain('FROM node:22');
+		expect(dockerfile).not.toContain('COPY . .');
+		expect(dockerfile).not.toContain('treeseed-processing');
+		expect(dockerfile).not.toContain('packages/core');
+		expect(compose).toContain('TREESEED_PROVIDER_STARTUP_MODE');
+		expect(compose).toContain('TREESEED_CAPACITY_PROVIDER_API_KEY: ${TREESEED_CAPACITY_PROVIDER_API_KEY:-}');
+		expect(compose).not.toContain('env_file');
+		expect(compose).not.toMatch(/tscp_[A-Za-z0-9_]+|tsp_[A-Za-z0-9_]+|sk-[A-Za-z0-9_]+/u);
+		expect(docs).toContain('trsd config');
+		expect(docs).toContain('Do not create plaintext `.env` files');
+		const railwayTemplate = readFileSync(resolve(packageRoot, 'templates/railway/capacity-provider.yml'), 'utf8');
+		const deployWorkflow = readFileSync(resolve(packageRoot, 'templates/github/deploy-capacity-provider.workflow.yml'), 'utf8');
+		expect(railwayTemplate).toContain('api:');
+		expect(railwayTemplate).toContain('manager:');
+		expect(railwayTemplate).toContain('runner:');
+		expect(railwayTemplate).toContain('node ./dist/provider/entrypoint.js api');
+		expect(railwayTemplate).not.toMatch(/tscp_[A-Za-z0-9_]+|tsp_[A-Za-z0-9_]+|sk-[A-Za-z0-9_]+/u);
+		expect(deployWorkflow).toContain('Build package-owned provider image');
+		expect(deployWorkflow).not.toContain('placeholder');
 	});
 
 	it('does not import web/core runtime surfaces', () => {
@@ -159,7 +209,7 @@ describe('agent package shape', () => {
 		].join('\n');
 
 		expect(readme).toContain('.github/workflows/verify.yml');
-		expect(readme).toContain('templates/github/deploy-processing.workflow.yml');
+		expect(readme).toContain('templates/github/deploy-capacity-provider.workflow.yml');
 		expect(readme).toContain('TREESEED_WORKDAY_TASK_CREDIT_BUDGET');
 		expect(readme).not.toContain(staleWorkflowName);
 		expect(readme).not.toContain(staleSmokePhrase);

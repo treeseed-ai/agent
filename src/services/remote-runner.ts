@@ -120,14 +120,7 @@ async function prepareLaunchIntentWithCredentialSessions(
 			config: webSession.config,
 		};
 	}
-	const processingSession = await consume('processingHost');
-	if (processingSession?.config) {
-		providerLaunchInput.processingHost = {
-			...asRecord(providerLaunchInput.processingHost),
-			config: processingSession.config,
-		};
-	}
-	nextIntent.execution = {
+		nextIntent.execution = {
 		...execution,
 		providerLaunchInput,
 	};

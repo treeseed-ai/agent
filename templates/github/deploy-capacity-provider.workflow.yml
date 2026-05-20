@@ -1,0 +1,23 @@
+name: Treeseed Capacity Provider Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        required: true
+        default: staging
+        type: choice
+        options:
+          - staging
+          - prod
+
+jobs:
+  deploy-capacity-provider:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build package-owned provider image
+        run: docker build -t treeseed-capacity-provider:${{ inputs.environment }} .
+      - name: Deployment handoff
+        run: |
+          echo "Deploy api, manager, and runner with Market-managed host secrets."

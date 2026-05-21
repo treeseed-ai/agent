@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.3] - 2026-05-21
+
+### Dependencies
+
+- build(build): fail package release when npm publish fails (7f15890aaaad)
+- Release @treeseed/agent 0.9.3.
+
 ## [0.9.2] - 2026-05-20
 
 ### Dependencies

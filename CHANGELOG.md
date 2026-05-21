@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.10.0] - 2026-05-21
+
+### Fixed
+
+- fix(build): rehearse repair releases against stable dependencies (c85c1daebcd8)
+- fix(build): keep release package lines aligned (b13fe7d0b850)
+
+### Dependencies
+
+- Release @treeseed/agent 0.10.0.
+
 ## [0.9.3] - 2026-05-21
 
 ### Dependencies

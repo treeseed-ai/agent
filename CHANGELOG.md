@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.10.2] - 2026-05-22
+
+### Dependencies
+
+- build(agent): update version and @treeseed/sdk dependency (39bacc6cd72a)
+- chore(deps): update package version and @treeseed/sdk (f609baa2fd41)
+- build(agent): bump version and update @treeseed/sdk (0a9eb1735397)
+- Release @treeseed/agent 0.10.2.
+
 ## [0.10.1] - 2026-05-22
 
 ### Dependencies

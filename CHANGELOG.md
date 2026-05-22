@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.10.1] - 2026-05-22
+
+### Dependencies
+
+- chore(agent): update version and dependencies (ba06b0aad330)
+- build(agent): bump version and update @treeseed/sdk dependency (506d398fe95d)
+- Release @treeseed/agent 0.10.1.
+
 ## [0.10.0] - 2026-05-21
 
 ### Fixed

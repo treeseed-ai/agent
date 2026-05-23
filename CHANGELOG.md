@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.10.5] - 2026-05-23
+
+### Dependencies
+
+- Release @treeseed/agent 0.10.5.
+
 ## [0.10.4] - 2026-05-23
 
 ### Dependencies

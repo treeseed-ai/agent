@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.3] - 2026-05-23
+
+### Dependencies
+
+- chore(deps): bump version and update @treeseed/sdk (d76b51c789c9)
+- Release @treeseed/agent 0.10.3.
+
 ## [0.10.2] - 2026-05-22
 
 ### Dependencies

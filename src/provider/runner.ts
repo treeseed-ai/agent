@@ -210,11 +210,13 @@ export async function runProviderDryRunTask(input: {
 		},
 	});
 	try {
+		const startedAt = Date.now();
 		const output = await runDryRunHandler({
 			repoRoot: project.repository.path,
 			agent,
 			task: input.task,
 		});
+		const wallMinutes = Math.max(0, (Date.now() - startedAt) / 60_000);
 		await input.client.appendTaskEvent(id, {
 			kind: 'provider_runner_dry_run_completed',
 			data: output,
@@ -225,7 +227,11 @@ export async function runProviderDryRunTask(input: {
 			projectId,
 			taskSignature: `${agent.handler}.${agent.slug}.dry_run`,
 			executionProfileId: 'provider-dry-run',
-			actualCredits: 0,
+			nativeUsage: {
+				nativeUnit: 'wall_minute',
+				wallMinutes,
+				source: 'provider_runner_dry_run',
+			},
 			metadata: {
 				dryRun: true,
 				handler: agent.handler,

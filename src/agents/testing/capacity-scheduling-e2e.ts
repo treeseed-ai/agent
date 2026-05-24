@@ -133,6 +133,7 @@ function baseCapacityPlan(profiles: TaskEstimateProfile[] = [], activeReservatio
 			billingScope: 'team',
 			monthlyCreditBudget: 1000,
 			dailyCreditBudget: 100,
+			creditBudgetMode: 'static',
 			maxConcurrentWorkdays: 1,
 			maxConcurrentWorkers: 2,
 			capacityModel: {},

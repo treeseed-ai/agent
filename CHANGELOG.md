@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.10.6] - 2026-05-24
+
+### Fixed
+
+- build(build): fix sdk template source cache reuse (08c2cfdc9c90)
+
+### Tests
+
+- build(source): complete dynamic capacity budgeting (c5563abce576)
+
+### Dependencies
+
+- build(build): add market postgres baseline adoption columns (f6363948107f)
+- build(build): make market postgres baseline adopt existing schema (816ecfa6503f)
+- build(build): make static hub d1 baseline idempotent (a050a140bd4f)
+- Release @treeseed/agent 0.10.6.
+
 ## [0.10.5] - 2026-05-23
 
 ### Dependencies

@@ -17,7 +17,8 @@ import { isDirectEntrypoint } from '../../src/entrypoint.ts';
 const packageRoot = process.cwd();
 const authMigrationPathCandidates = [
 	resolve(packageRoot, 'test/fixtures/0007_site_web_sessions.sql'),
-	resolve(packageRoot, '../../migrations/0007_site_web_sessions.sql'),
+	resolve(packageRoot, '../sdk/drizzle/d1/0000_treeseed_d1.sql'),
+	resolve(packageRoot, '../../packages/sdk/drizzle/d1/0000_treeseed_d1.sql'),
 ];
 const authMigrationPath = authMigrationPathCandidates.find((candidate) => existsSync(candidate));
 const sqliteModule = await import('node:sqlite').catch(() => null);
@@ -1131,7 +1132,7 @@ apiRuntimeDescribe('@treeseed/agent api runtime', () => {
 			payload: expect.objectContaining({
 				knowledgeDraft,
 				allowedPaths: [knowledgeDraft.targetPath],
-				forbiddenPaths: expect.arrayContaining(['**/node_modules/**', 'src/lib/**', 'migrations/**']),
+				forbiddenPaths: expect.arrayContaining(['**/node_modules/**', 'src/lib/**', 'packages/sdk/drizzle/**']),
 				verificationCommands: [],
 				approval: expect.objectContaining({ id: 'promotion:knowledge-runtime', state: 'approved' }),
 				policySnapshot: expect.any(Object),

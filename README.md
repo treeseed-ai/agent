@@ -113,7 +113,7 @@ export default createTreeseedApiApp({
 });
 ```
 
-Shared health, auth/session helpers, D1 support, template catalog loading, and generic SDK operation routes live in `@treeseed/sdk/api`. The agent package composes those helpers with agent-only runtime routes. Product routes such as market catalog, accounts, billing, invites, and hosted-project management belong in the market app, not in this package.
+Shared health, template catalog loading, static-hub D1 form support, and generic SDK operation routes live in `@treeseed/sdk/api`. The agent package composes those helpers with agent-only runtime routes. Product routes such as market auth, teams, projects, catalog, accounts, billing, invites, and hosted-project management belong in the market app, not in this package.
 
 ## Capacity Provider Shape
 
@@ -169,6 +169,8 @@ Common processing entries include:
 - `TREESEED_CAPACITY_PROVIDER_ID`
 - `TREESEED_CAPACITY_PROVIDER_TEAM_ID`
 - `TREESEED_CAPACITY_PROVIDER_SERVICE_BASE_URL`
+
+The package-local `TREESEED_API_D1_*` settings are for provider/API auth compatibility surfaces only. Market control-plane state such as users, teams, projects, capacity, tasks, and usage lives in the Market PostgreSQL database and is reached through the Market API.
 
 Provider-neutral shared entries belong in `@treeseed/sdk`. Web/forms/Astro entries belong in `@treeseed/core`. Market product auth, billing, account, hosted-hub, and UI/API entries belong in the root market env overlay.
 

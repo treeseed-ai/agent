@@ -51,6 +51,12 @@ export interface CodexExecutionResult {
 		subscriptionPlan?: string;
 		estimatedCredits?: number;
 		wallMs?: number;
+		wallMinutes?: number;
+		nativeUnit?: 'wall_minute';
+		inputTokens?: number | null;
+		outputTokens?: number | null;
+		cachedInputTokens?: number | null;
+		filesChanged?: number;
 	};
 	metadata?: Record<string, unknown>;
 }
@@ -329,6 +335,9 @@ function failedScopeResult(input: {
 		usage: {
 			subscriptionPlan: String(input.request.metadata?.subscriptionPlan ?? ''),
 			wallMs: input.wallMs,
+			wallMinutes: input.wallMs / 60_000,
+			nativeUnit: 'wall_minute',
+			filesChanged: input.changedPaths.length,
 		},
 		metadata: {
 			allowedPaths: input.request.allowedPaths,
@@ -387,6 +396,12 @@ export function normalizeCodexRunResult(input: {
 			subscriptionPlan: String(input.request.metadata?.subscriptionPlan ?? ''),
 			estimatedCredits: undefined,
 			wallMs: input.wallMs,
+			wallMinutes: input.wallMs / 60_000,
+			nativeUnit: 'wall_minute',
+			inputTokens: input.result.usage?.input_tokens ?? null,
+			outputTokens: input.result.usage?.output_tokens ?? null,
+			cachedInputTokens: input.result.usage?.cached_input_tokens ?? null,
+			filesChanged: changedPaths.length,
 		},
 		metadata: {
 			usage: input.result.usage ?? null,

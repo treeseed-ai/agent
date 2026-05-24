@@ -51,7 +51,7 @@ export function resolveAgentServiceRuntimeMode(): AgentServiceRuntimeMode {
 function createLocalServiceSdk() {
 	return AgentSdk.createLocal({
 		repoRoot: resolveServiceRepoRoot(),
-		databaseName: process.env.TREESEED_AGENT_D1_DATABASE ?? 'karyon-docs-site-data',
+		databaseName: process.env.TREESEED_AGENT_D1_DATABASE ?? 'docs-site-data',
 		persistTo: resolveLocalD1PersistTo(),
 	});
 }

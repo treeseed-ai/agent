@@ -243,7 +243,7 @@ async function migrateDatabase(repoRoot: string, persistTo: string) {
 			[
 				'd1',
 				'execute',
-				'karyon-docs-site-data',
+				'docs-site-data',
 				'--local',
 				'--persist-to',
 				persistTo,
@@ -343,7 +343,7 @@ export async function createAgentTestRuntime(options?: {
 	executionMode?: 'stub' | 'copilot';
 	databaseMode?: 'memory' | 'local-d1';
 }) : Promise<AgentTestRuntime> {
-	const rootDir = await mkdtemp(path.join(os.tmpdir(), 'karyon-agents-e2e-'));
+	const rootDir = await mkdtemp(path.join(os.tmpdir(), 'agents-e2e-'));
 	const repoRoot = path.join(rootDir, 'docs');
 	const persistTo = path.join(rootDir, '.wrangler-state');
 	const docsRoot = resolveDocsRoot();
@@ -391,7 +391,7 @@ export async function createAgentTestRuntime(options?: {
 		options?.databaseMode === 'local-d1'
 			? (await migrateDatabase(repoRoot, persistTo), AgentSdk.createLocal({
 				repoRoot,
-				databaseName: 'karyon-docs-site-data',
+				databaseName: 'docs-site-data',
 				persistTo,
 			}))
 			: new AgentSdk({

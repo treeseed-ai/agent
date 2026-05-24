@@ -3,19 +3,11 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PACKAGE_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
-DEFAULT_ENV_FILE="${PACKAGE_ROOT}/.env.local-manager-cloudflare"
-ENV_FILE="${TREESEED_AGENT_ENV_FILE:-${DEFAULT_ENV_FILE}}"
 
-if [[ ! -f "${ENV_FILE}" ]]; then
-  echo "Missing env file: ${ENV_FILE}"
-  echo "Copy ${PACKAGE_ROOT}/.env.local-manager-cloudflare.example to ${DEFAULT_ENV_FILE} and fill in the Cloudflare and gateway values."
+if [[ -n "${TREESEED_AGENT_ENV_FILE:-}" ]]; then
+  echo "TREESEED_AGENT_ENV_FILE is deprecated. Store provider values with trsd config and launch through Treeseed commands so the environment is injected."
   exit 1
 fi
-
-set -a
-# shellcheck disable=SC1090
-source "${ENV_FILE}"
-set +a
 
 cd "${PACKAGE_ROOT}"
 

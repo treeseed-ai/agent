@@ -17,7 +17,7 @@ export const CODEBASE_DOCUMENTATION_SCAN_TARGETS = [
 	'src/pages/v1/**',
 	'src/content/**',
 	'docs/**',
-	'migrations/**',
+	'packages/sdk/drizzle/**',
 ] as const;
 
 const DEFAULT_IGNORED_SEGMENTS = new Set([
@@ -233,7 +233,7 @@ function responsibilityForModule(modulePath: string) {
 	if (modulePath.includes('/pages/v1')) return 'Versioned API route entrypoints.';
 	if (modulePath.includes('/content')) return 'Content-backed TreeSeed project records and public knowledge surfaces.';
 	if (modulePath === 'docs' || modulePath.startsWith('docs/')) return 'Developer and agent-facing documentation plans and references.';
-	if (modulePath === 'migrations' || modulePath.startsWith('migrations/')) return 'Database schema migrations for workdays, tasks, governance, and runtime state.';
+	if (modulePath === 'packages/sdk/drizzle' || modulePath.startsWith('packages/sdk/drizzle/')) return 'Drizzle-generated database migration artifacts for Market PostgreSQL and SDK D1 runtime state.';
 	if (modulePath === 'packages/sdk/src') return 'SDK source surfaces, graph, stores, workflow, platform, and operations contracts.';
 	if (modulePath === 'packages/core/src') return 'Core source surfaces for content, platform, Astro runtime, components, and utilities.';
 	return `TreeSeed implementation surface at ${modulePath}.`;

@@ -1072,7 +1072,7 @@ const DEFAULT_DOCS_AUTOMATION_FORBIDDEN_PATHS = [
 	'packages/*/src/**',
 	'src/lib/**',
 	'src/pages/api/**',
-	'migrations/**',
+	'packages/sdk/drizzle/**',
 ];
 
 function promotionTaskPayload(input: {

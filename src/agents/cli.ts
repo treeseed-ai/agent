@@ -83,7 +83,7 @@ export async function runTreeseedAgentCli(argv: string[], context: TreeseedAgent
 	const env = { ...process.env, ...(context.env ?? {}) };
 	const sdk = AgentSdk.createLocal({
 		repoRoot,
-		databaseName: env.TREESEED_AGENT_D1_DATABASE ?? 'karyon-docs-site-data',
+		databaseName: env.TREESEED_AGENT_D1_DATABASE ?? 'docs-site-data',
 		persistTo: env.TREESEED_AGENT_D1_PERSIST_TO ?? undefined,
 	});
 	const kernel = new AgentKernel(sdk, repoRoot);

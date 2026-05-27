@@ -219,6 +219,18 @@ apiRuntimeDescribe('@treeseed/agent api runtime', () => {
 		expect(config.providers.auth).toBe('d1');
 	});
 
+	it('accepts canonical web service env names for hosted API credentials', () => {
+		const config = resolveApiConfig({
+			TREESEED_WEB_SERVICE_ID: 'web-hosted',
+			TREESEED_WEB_SERVICE_SECRET: 'hosted-service-secret',
+			TREESEED_WEB_ASSERTION_SECRET: 'hosted-assertion-secret',
+		});
+
+		expect(config.webServiceId).toBe('web-hosted');
+		expect(config.webServiceSecret).toBe('hosted-service-secret');
+		expect(config.webAssertionSecret).toBe('hosted-assertion-secret');
+	});
+
 	it('uses the web URL for local device approval links', async () => {
 		const config = resolveApiConfig({
 			HOST: '127.0.0.1',

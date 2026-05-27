@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.10.7] - 2026-05-27
+
+### Dependencies
+
+- build(deps): update @treeseed/sdk and package version (c31a65fa6ee9)
+- chore(deps): bump version and update @treeseed/sdk (5fe1fea28801)
+- build(package): bump version and @treeseed/sdk dependency (836204e14206)
+- build(build): sync package dependency references (91e46475ee75)
+- build(source): sync package dependency references (c174482e54a8)
+- Release @treeseed/agent 0.10.7.
+
 ## [0.10.6] - 2026-05-24
 
 ### Fixed

@@ -39,6 +39,14 @@ function parseCsv(value: string | undefined) {
 		.filter(Boolean);
 }
 
+function firstEnvValue(env: NodeJS.ProcessEnv, ...keys: string[]) {
+	for (const key of keys) {
+		const value = env[key]?.trim();
+		if (value) return value;
+	}
+	return undefined;
+}
+
 function resolveBaseUrl(env: NodeJS.ProcessEnv, host: string, port: number) {
 	if (env.TREESEED_API_BASE_URL?.trim()) {
 		return normalizeUrl(env.TREESEED_API_BASE_URL.trim());
@@ -112,9 +120,9 @@ export function resolveApiConfig(env: NodeJS.ProcessEnv = process.env): ApiConfi
 		d1DatabaseName: env.TREESEED_API_D1_DATABASE_NAME?.trim() || env.SITE_DATA_DB?.trim() || undefined,
 		d1LocalPersistTo: env.TREESEED_API_D1_LOCAL_PERSIST_TO?.trim() || resolve(repoRoot, '.wrangler/state/v3/d1'),
 		d1WranglerConfigPath: resolveLocalWranglerConfigPath(repoRoot, env),
-		webServiceId: env.TREESEED_API_WEB_SERVICE_ID?.trim() || 'web',
-		webServiceSecret: env.TREESEED_API_WEB_SERVICE_SECRET?.trim() || 'treeseed-web-service-dev-secret',
-		webAssertionSecret: env.TREESEED_API_WEB_ASSERTION_SECRET?.trim() || env.TREESEED_API_AUTH_SECRET?.trim() || 'treeseed-web-assertion-dev-secret',
+		webServiceId: firstEnvValue(env, 'TREESEED_API_WEB_SERVICE_ID', 'TREESEED_WEB_SERVICE_ID') || 'web',
+		webServiceSecret: firstEnvValue(env, 'TREESEED_API_WEB_SERVICE_SECRET', 'TREESEED_WEB_SERVICE_SECRET') || 'treeseed-web-service-dev-secret',
+		webAssertionSecret: firstEnvValue(env, 'TREESEED_API_WEB_ASSERTION_SECRET', 'TREESEED_WEB_ASSERTION_SECRET', 'TREESEED_API_AUTH_SECRET') || 'treeseed-web-assertion-dev-secret',
 		webExchangeTtlSeconds: parseInteger(env.TREESEED_API_WEB_EXCHANGE_TTL, 300),
 		bootstrapAdminAllowlist: parseCsv(env.TREESEED_API_BOOTSTRAP_ADMIN_ALLOWLIST),
 		accessTokenTtlSeconds: parseInteger(env.TREESEED_API_ACCESS_TOKEN_TTL, defaultAccessTokenTtl),

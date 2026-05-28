@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.10.14] - 2026-05-28
+
+### Dependencies
+
+- build(build): redeploy staging from clean provider state (e53fad67fe14)
+- build(build): allow railway context link by project id (14c549c321ae)
+- build(build): link railway context before cli volume fallback (8eddea9c83a6)
+- build(build): fallback railway environment creation when API is opaque (6506b73a0266)
+- Release @treeseed/agent 0.10.14.
+
 ## [0.10.13] - 2026-05-28
 
 ### Dependencies

@@ -81,7 +81,7 @@ function inputForRunnerJob(job: { namespace: string; operation: string; projectI
 	};
 }
 
-async function prepareLaunchIntentWithCredentialSessions(
+export async function prepareLaunchIntentWithCredentialSessions(
 	runner: ReturnType<typeof createRunnerClient>,
 	jobId: string,
 	launchJobInput: Record<string, unknown>,
@@ -115,9 +115,28 @@ async function prepareLaunchIntentWithCredentialSessions(
 	}
 	const webSession = await consume('webHost');
 	if (webSession?.config) {
+		const webConfig = asRecord(webSession.config);
+		for (const [key, value] of Object.entries(webConfig)) {
+			if (typeof value === 'string' && value.trim()) {
+				envOverlay[key] = value;
+			}
+		}
 		providerLaunchInput.cloudflareHost = {
 			...asRecord(providerLaunchInput.cloudflareHost),
-			config: webSession.config,
+			config: webConfig,
+		};
+	}
+	const emailSession = await consume('emailHost');
+	if (emailSession?.config) {
+		const emailConfig = asRecord(emailSession.config);
+		for (const [key, value] of Object.entries(emailConfig)) {
+			if (typeof value === 'string' && value.trim()) {
+				envOverlay[key] = value;
+			}
+		}
+		providerLaunchInput.emailHost = {
+			...asRecord(providerLaunchInput.emailHost),
+			config: emailConfig,
 		};
 	}
 		nextIntent.execution = {

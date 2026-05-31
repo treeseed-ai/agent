@@ -221,7 +221,8 @@ export const plannerHandler: AgentHandler = {
 		});
 	});
 
-	it.skipIf(!hasIntegratedMarketAgentContent)('loads top-level Market documentation agents as active runtime specs', async () => {
+	it('loads top-level Market documentation agents as active runtime specs', async () => {
+		expect(hasIntegratedMarketAgentContent, 'integrated Market documentation agent content must exist').toBe(true);
 		const sdk = new AgentSdk({
 			repoRoot: marketRoot,
 			database: new MemoryAgentDatabase(),

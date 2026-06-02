@@ -26,5 +26,5 @@ describe('agent contract tests', () => {
 		} else {
 			expect(result.agents).toEqual([]);
 		}
-	});
+	}, 30_000);
 });

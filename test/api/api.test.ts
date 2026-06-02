@@ -23,12 +23,15 @@ const authMigrationPathCandidates = [
 const authMigrationPath = authMigrationPathCandidates.find((candidate) => existsSync(candidate));
 const sqliteModule = await import('node:sqlite').catch(() => null);
 const DatabaseSyncCtor = sqliteModule?.DatabaseSync ?? null;
-const apiRuntimeDescribe = DatabaseSyncCtor ? describe : describe.skip;
+const apiRuntimeDescribe = describe;
 
 if (!authMigrationPath) {
 	throw new Error(
 		`Unable to resolve auth migration fixture. Checked: ${authMigrationPathCandidates.join(', ')}`,
 	);
+}
+if (!DatabaseSyncCtor) {
+	throw new Error('node:sqlite DatabaseSync is required for agent API runtime tests.');
 }
 
 class TestPreparedStatement implements D1PreparedStatementLike {

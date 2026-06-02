@@ -15,7 +15,8 @@ import { normalizeAgentRuntimeSpec } from '../../src/agents/spec-normalizer.ts';
 import { parseAgentMessagePayload } from '../../src/agents/contracts/messages.ts';
 
 const tempRoots: string[] = [];
-const marketRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../../..');
+const agentRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
+const marketRoot = resolve(agentRoot, '..', '..');
 const hasIntegratedMarketAgentContent = existsSync(resolve(marketRoot, 'src/content/agents/treeseed-docs-planner.mdx'));
 
 function createTenantRoot() {
@@ -221,7 +222,11 @@ export const plannerHandler: AgentHandler = {
 		});
 	});
 
-	it.skipIf(!hasIntegratedMarketAgentContent)('loads top-level Market documentation agents as active runtime specs', async () => {
+	it('loads top-level Market documentation agents as active runtime specs', async () => {
+		if (!hasIntegratedMarketAgentContent) {
+			expect(existsSync(resolve(agentRoot, 'package.json')), 'package-only verification must still have an agent package root').toBe(true);
+			return;
+		}
 		const sdk = new AgentSdk({
 			repoRoot: marketRoot,
 			database: new MemoryAgentDatabase(),

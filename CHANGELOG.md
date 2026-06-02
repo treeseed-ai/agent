@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.10.17] - 2026-06-02
+
+### Added
+
+- feat(remote-runner): project web and email host configs into environment (345f41be246d)
+
+### Tests
+
+- chore(agents): bump version and update registry test paths (b54d27ad1ee7)
+- build(build): update package metadata (7fa31c36b1dc)
+
+### Dependencies
+
+- chore(agent): bump version and @treeseed/sdk (9bee4f57b964)
+- chore(agent): bump version and @treeseed/sdk (564c422d9103)
+- build(agent): bump version and @treeseed/sdk dependency (c50999c698e2)
+- build(build): sync package dependency references (d5834e40bfd7)
+- build(build): sync package dependency references (e028f847db79)
+- build(build): sync package dependency references (eaf84732d93b)
+- build(build): avoid Railway volume update after attach (e21445316a80)
+- build(build): harden Railway runner volume reconciliation (891fa4436633)
+- Release @treeseed/agent 0.10.17.
+
 ## [0.10.16] - 2026-05-28
 
 ### Dependencies

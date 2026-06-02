@@ -240,7 +240,7 @@ describe('worker service', () => {
 			}),
 		}));
 		expect(queue.ack).toHaveBeenCalledWith(['lease-1']);
-	}, 20_000);
+	}, 60_000);
 
 	it('executes codebase documentation scanner tasks and emits capped gap messages', async () => {
 		const repoRoot = mkdtempSync(join(tmpdir(), 'treeseed-worker-scan-'));

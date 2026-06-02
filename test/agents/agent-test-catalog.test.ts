@@ -36,8 +36,16 @@ describe('agent test catalog', () => {
 			resolve(repoRoot, 'starters/engineering/template'),
 			resolve(repoRoot, 'starters/information-hub/template'),
 		];
+		const availableStarterRoots = starterRoots
+			.filter((starterRoot) => existsSync(resolve(starterRoot, 'src/content/agent-tests')));
 
-		for (const starterRoot of starterRoots) {
+		if (availableStarterRoots.length === 0) {
+			expect(starterRoots.some((starterRoot) => existsSync(starterRoot))).toBe(false);
+			return;
+		}
+		expect(availableStarterRoots).toHaveLength(starterRoots.length);
+
+		for (const starterRoot of availableStarterRoots) {
 			const reportRoot = mkdtempSync(join(tmpdir(), 'treeseed-starter-agent-tests-'));
 			const result = await runAgentTestCatalogChecks({
 				repoRoot: starterRoot,

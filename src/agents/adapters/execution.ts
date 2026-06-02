@@ -65,7 +65,7 @@ export class ManualExecutionAdapter implements AgentExecutionAdapter {
 	}
 }
 
-export function createExecutionAdapter(configuredModeInput?: string) {
+export function createExecutionAdapter(configuredModeInput?: string, options: { repoRoot?: string } = {}) {
 	const configuredMode = String(
 		configuredModeInput ?? process.env.TREESEED_AGENT_EXECUTION_PROVIDER ?? getTreeseedAgentProviderSelections().execution,
 	).toLowerCase();
@@ -73,7 +73,7 @@ export function createExecutionAdapter(configuredModeInput?: string) {
 		return new ManualExecutionAdapter();
 	}
 	if (configuredMode === 'codex' || configuredMode === 'codex_subscription') {
-		return new CodexSubscriptionExecutionAdapter();
+		return new CodexSubscriptionExecutionAdapter({ repoRoot: options.repoRoot });
 	}
 	if (configuredMode !== 'copilot') {
 		return new StubExecutionAdapter();

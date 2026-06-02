@@ -23,11 +23,25 @@ import { AgentSdk } from '@treeseed/sdk/sdk';
 import { followCursorKey, resolveTriggerDecision } from './trigger-resolver.ts';
 import { loadActiveAgentSpecs, loadAllAgentSpecs, summarizeAgentSpec } from '../spec-loader.ts';
 import { getTreeseedAgentProviderSelections } from '@treeseed/sdk/platform/deploy-runtime';
+import { loadTreeseedDeployConfigFromPath } from '@treeseed/sdk/platform/deploy-config';
 import { resolveAgentRuntimeProviders } from '../../agent-runtime.ts';
 import { loadCoreObjectiveContext } from '../core-objective.ts';
+import { existsSync } from 'node:fs';
+import { resolve } from 'node:path';
 
 function nowIso() {
 	return new Date().toISOString();
+}
+
+function resolveExecutionRoot(tenantRoot: string) {
+	const configPath = resolve(tenantRoot, 'treeseed.site.yaml');
+	if (!existsSync(configPath)) {
+		return tenantRoot;
+	}
+	const deployConfig = loadTreeseedDeployConfigFromPath(configPath) as {
+		__projectRoot?: string;
+	};
+	return deployConfig.__projectRoot ?? tenantRoot;
 }
 
 export class AgentKernel {
@@ -42,11 +56,13 @@ export class AgentKernel {
 	private readonly operations;
 	private readonly activeRuns = new Set<string>();
 	private readonly lastRunAt = new Map<string, number>();
+	private readonly executionRoot;
 
 	constructor(
 		private readonly sdk: AgentSdk,
-		private readonly repoRoot: string,
+		repoRoot: string,
 		options?: {
+			executionRoot?: string;
 			execution?: AgentExecutionAdapter;
 			mutations?: AgentMutationAdapter;
 			repository?: AgentRepositoryInspectionAdapter;
@@ -56,11 +72,14 @@ export class AgentKernel {
 			operations?: AgentOperationsAdapter;
 		},
 	) {
+		this.executionRoot = options?.executionRoot ?? resolveExecutionRoot(repoRoot);
 		this.providerSelections = getTreeseedAgentProviderSelections();
-		const runtimeProviders = resolveAgentRuntimeProviders(repoRoot, this.providerSelections);
+		const runtimeProviders = resolveAgentRuntimeProviders(this.executionRoot, this.providerSelections);
 		this.executionOverride = options?.execution;
-		this.execution = options?.execution ?? runtimeProviders.execution ?? createExecutionAdapter();
-		this.mutations = options?.mutations ?? runtimeProviders.mutations ?? new LocalBranchMutationAdapter(repoRoot);
+		this.execution = options?.execution ?? runtimeProviders.execution ?? createExecutionAdapter(undefined, {
+			repoRoot: this.executionRoot,
+		});
+		this.mutations = options?.mutations ?? runtimeProviders.mutations ?? new LocalBranchMutationAdapter(this.executionRoot);
 		this.repository = options?.repository ?? runtimeProviders.repository ?? createRepositoryInspectionAdapter();
 		this.verification = options?.verification ?? runtimeProviders.verification ?? createVerificationAdapter();
 		this.notifications = options?.notifications ?? runtimeProviders.notifications ?? createNotificationAdapter();
@@ -76,7 +95,7 @@ export class AgentKernel {
 		if (provider === this.providerSelections.execution) {
 			return this.execution;
 		}
-		return resolveAgentRuntimeProviders(this.repoRoot, {
+		return resolveAgentRuntimeProviders(this.executionRoot, {
 			...this.providerSelections,
 			execution: provider,
 		}).execution;
@@ -190,9 +209,9 @@ export class AgentKernel {
 		const scopedSdk = this.sdk.scopeForAgent(agent);
 		const context: AgentContext = {
 			runId,
-			repoRoot: this.repoRoot,
+			repoRoot: this.executionRoot,
 			agent,
-			coreObjective: loadCoreObjectiveContext(this.repoRoot),
+			coreObjective: loadCoreObjectiveContext(this.executionRoot),
 			sdk: scopedSdk,
 			trigger,
 			execution: this.executionForAgent(agent),

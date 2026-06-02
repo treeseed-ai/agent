@@ -24,7 +24,7 @@ type RuntimePluginEntry = ReturnType<typeof loadTreeseedPluginRuntime>['plugins'
 
 let cachedAgentRuntime: null | {
 	providers: {
-		execution: Map<string, () => AgentExecutionAdapter>;
+		execution: Map<string, (repoRoot: string) => AgentExecutionAdapter>;
 		mutation: Map<string, (repoRoot: string) => AgentMutationAdapter>;
 		repository: Map<string, () => AgentRepositoryInspectionAdapter>;
 		verification: Map<string, () => AgentVerificationAdapter>;
@@ -55,12 +55,12 @@ function collectAgentHandlersFromPlugin(pluginEntry: RuntimePluginEntry, registr
 
 function buildAgentRuntime() {
 	const runtime = loadTreeseedPluginRuntime();
-	const execution = new Map<string, () => AgentExecutionAdapter>([
+	const execution = new Map<string, (repoRoot: string) => AgentExecutionAdapter>([
 		['stub', () => new StubExecutionAdapter()],
 		['manual', () => new ManualExecutionAdapter()],
 		['copilot', () => new CopilotExecutionAdapter()],
-		['codex', () => new CodexSubscriptionExecutionAdapter()],
-		['codex_subscription', () => new CodexSubscriptionExecutionAdapter()],
+		['codex', (repoRoot) => new CodexSubscriptionExecutionAdapter({ repoRoot })],
+		['codex_subscription', (repoRoot) => new CodexSubscriptionExecutionAdapter({ repoRoot })],
 	]);
 	const mutation = new Map<string, (repoRoot: string) => AgentMutationAdapter>([
 		['local_branch', (repoRoot) => new LocalBranchMutationAdapter(repoRoot)],
@@ -85,7 +85,7 @@ function buildAgentRuntime() {
 
 	for (const pluginEntry of runtime.plugins) {
 		const agentProviders = readPluginRecord<Record<string, unknown>>(pluginEntry, 'agentProviders');
-		for (const [id, factory] of Object.entries((agentProviders.execution ?? {}) as Record<string, () => AgentExecutionAdapter>)) {
+		for (const [id, factory] of Object.entries((agentProviders.execution ?? {}) as Record<string, (repoRoot: string) => AgentExecutionAdapter>)) {
 			assertUniqueProvider(execution, id, pluginEntry.package);
 			execution.set(id, factory);
 		}
@@ -148,7 +148,7 @@ export function resolveAgentRuntimeProviders(
 	if (!researchFactory) throw new Error(`Treeseed agent research provider "${selections.research}" is not registered.`);
 
 	return {
-		execution: executionFactory(),
+		execution: executionFactory(repoRoot),
 		mutations: mutationFactory(repoRoot),
 		repository: repositoryFactory(),
 		verification: verificationFactory(),

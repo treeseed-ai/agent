@@ -1,6 +1,6 @@
 {
   "name": "@treeseed/agent",
-  "version": "0.10.18-dev.staging.20260602T171309Z",
+  "version": "0.10.18",
   "description": "Treeseed agent service runtime package.",
   "license": "AGPL-3.0-only",
   "repository": {
@@ -139,7 +139,7 @@
   },
   "dependencies": {
     "@openai/codex-sdk": "^0.130.0",
-    "@treeseed/sdk": "github:treeseed-ai/sdk#0.10.24-dev.staging.20260602T170345Z",
+    "@treeseed/sdk": "github:treeseed-ai/sdk#0.10.24",
     "esbuild": "0.28.0",
     "hono": "^4.8.2",
     "typescript": "^5.9.3",

@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.10.18] - 2026-06-02
+
+### Added
+
+- feat(kernel): resolve execution root from treeseed.site.yaml (fa3f17e4d1c6)
+
+### Tests
+
+- chore(agent): bump version and update agent test catalog (a1488694acc9)
+
+### Dependencies
+
+- build(agent): update version and @treeseed/sdk dependency (afe52de569c8)
+- Release @treeseed/agent 0.10.18.
+
 ## [0.10.17] - 2026-06-02
 
 ### Added

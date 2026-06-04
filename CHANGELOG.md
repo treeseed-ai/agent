@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.10.19] - 2026-06-04
+
+### Dependencies
+
+- build(build): sync package dependency references (03af636c0597)
+- build(package): bump version and update @treeseed/sdk (671ee9098637)
+- build(build): sync package dependency references (c64c8cd70482)
+- build(build): sync package dependency references (bef94f1656b3)
+- build(build): sync package dependency references (6093556bae94)
+- build(agent): bump version and update @treeseed/sdk dependency (b14285e8172c)
+- build(agent): bump version and update @treeseed/sdk (33129a26743d)
+- Release @treeseed/agent 0.10.19.
+
 ## [0.10.18] - 2026-06-02
 
 ### Added

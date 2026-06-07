@@ -14,8 +14,7 @@ export function resolveSdkInstance(
 	request: RemoteSdkOperationRequest,
 ) {
 	if (!request.repoRoot || request.repoRoot === config.repoRoot) {
-		return sharedSdk ?? new AgentSdkClass({ repoRoot: config.repoRoot });
+		return sharedSdk ?? AgentSdkClass.createLocal({ repoRoot: config.repoRoot });
 	}
-	return new AgentSdkClass({ repoRoot: request.repoRoot });
+	return AgentSdkClass.createLocal({ repoRoot: request.repoRoot });
 }
-

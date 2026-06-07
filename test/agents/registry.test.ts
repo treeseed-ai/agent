@@ -230,6 +230,7 @@ export const plannerHandler: AgentHandler = {
 		const sdk = new AgentSdk({
 			repoRoot: marketRoot,
 			database: new MemoryAgentDatabase(),
+			contentRepository: { adapter: 'local' },
 		});
 
 		const rawSpecs = await sdk.listAgentSpecs();
@@ -303,6 +304,7 @@ Disabled.
 		const sdk = new AgentSdk({
 			repoRoot: tenantRoot,
 			database: new MemoryAgentDatabase(),
+			contentRepository: { adapter: 'local' },
 		});
 
 		await expect(sdk.listAgentSpecs({ enabled: true })).resolves.toEqual([

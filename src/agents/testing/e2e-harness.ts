@@ -397,6 +397,7 @@ export async function createAgentTestRuntime(options?: {
 			: new AgentSdk({
 				repoRoot,
 				database: new MemoryAgentDatabase(),
+				contentRepository: { adapter: 'local' },
 			});
 	const kernel = new AgentKernel(sdk, repoRoot, {
 		execution: options?.execution,

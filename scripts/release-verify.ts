@@ -35,6 +35,15 @@ function resolveSdkPackageRoot() {
 
 const sdkPackageRoot = resolveSdkPackageRoot();
 
+function ensureSdkRuntimeLink() {
+	const linkPath = resolve(packageRoot, 'node_modules', '@treeseed', 'sdk');
+	if (existsSync(linkPath)) {
+		return;
+	}
+	mkdirSync(dirname(linkPath), { recursive: true });
+	symlinkSync(sdkPackageRoot, linkPath, 'dir');
+}
+
 function run(command: string, args: string[], cwd = packageRoot, capture = false, extraEnv: Record<string, string> = {}) {
 	const result = spawnSync(command, args, {
 		cwd,
@@ -270,6 +279,7 @@ function installDependencyPackage(root: string, extractRoot: string, tempRoot: s
 }
 
 assertNoLocalDependencyLinks();
+ensureSdkRuntimeLink();
 run('npm', ['run', 'lint']);
 scanDirectory(resolve(packageRoot, 'dist'));
 run('npm', ['run', 'test:unit']);

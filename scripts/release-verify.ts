@@ -7,7 +7,6 @@ import { createRequire } from 'node:module';
 import { packageRoot } from './package-tools.ts';
 
 const require = createRequire(import.meta.url);
-const sdkPackageRoot = resolve(dirname(require.resolve('@treeseed/sdk')), '..');
 const npmCacheDir = resolve(tmpdir(), 'treeseed-npm-cache');
 const textExtensions = new Set(['.js', '.ts', '.mjs', '.cjs', '.d.ts', '.json', '.md']);
 const forbiddenPatterns = [
@@ -16,6 +15,25 @@ const forbiddenPatterns = [
 	/['"`](?:\.\.\/|\.\/)[^'"`\n]*src\/[^'"`\n]*\.(?:[cm]?js|ts|tsx|json|astro|css)['"`]/,
 	/['"`][^'"`\n]*\/packages\/[^'"`\n]*\/src\/[^'"`\n]*['"`]/,
 ];
+
+function resolveSdkPackageRoot() {
+	try {
+		return resolve(dirname(require.resolve('@treeseed/sdk')), '..');
+	} catch (error) {
+		if (!(error && typeof error === 'object' && 'code' in error && error.code === 'MODULE_NOT_FOUND')) {
+			throw error;
+		}
+	}
+
+	const siblingSdkRoot = resolve(packageRoot, '..', 'sdk');
+	if (existsSync(resolve(siblingSdkRoot, 'package.json'))) {
+		return siblingSdkRoot;
+	}
+
+	throw new Error('@treeseed/sdk must be installed or available as a sibling package checkout for release verification.');
+}
+
+const sdkPackageRoot = resolveSdkPackageRoot();
 
 function run(command: string, args: string[], cwd = packageRoot, capture = false, extraEnv: Record<string, string> = {}) {
 	const result = spawnSync(command, args, {

@@ -2,7 +2,7 @@
 
 Treeseed agent and capacity-provider runtime package.
 
-`@treeseed/agent` owns the standalone capacity-provider runtime for Treeseed. It provides the provider entrypoint, local provider API, manager/runner runtime, agent kernel, package-owned Docker/Compose assets, deployment templates, and provider environment registry. Shared API substrate and provider contracts live in `@treeseed/sdk`; Market/root apps compose those SDK surfaces directly and do not own the provider runtime. The package does not depend on `@treeseed/core`.
+`@treeseed/agent` owns the standalone capacity-provider runtime for Treeseed. It provides the provider entrypoint, local provider API, manager/runner runtime, agent kernel, package-owned Docker/Compose assets, deployment templates, and provider environment registry. Shared API substrate and provider contracts live in `@treeseed/sdk`; the Market backend API and Market operations runner live in `@treeseed/api`; root Market apps do not own the provider runtime. The package does not depend on `@treeseed/core`.
 
 ## Package Role
 
@@ -11,7 +11,8 @@ The Treeseed package split is:
 - `@treeseed/sdk`: shared contracts, stores, graph/query/runtime primitives, deployment config, and registry merge runtime
 - `@treeseed/core`: Astro/Starlight web framework, content, forms, web cache, and web-only Cloudflare integration
 - `@treeseed/agent`: package-owned capacity-provider runtime, local provider API, manager/runner services, and agent execution internals
-- `@treeseed/market`: product app that composes `@treeseed/core` and `@treeseed/sdk`, while capacity providers run externally through `@treeseed/agent`
+- `@treeseed/api`: Market backend API, Market PostgreSQL adapter, operation lifecycle, route descriptors, and Market operations runner
+- `@treeseed/market`: product web app that composes `@treeseed/core` and proxies HTTP to `@treeseed/api`, while capacity providers run externally through `@treeseed/agent`
 
 Ordinary hosted projects should not need their own provider API, manager, runner, or workday services. They reference assigned capacity. Market and team-owned capacity providers use this package to run that capacity through `trsd capacity ...`.
 
@@ -40,7 +41,7 @@ Published binaries:
 - `treeseed-agent-api`
 - `treeseed-agent-service`
 
-The API foundation exposes `createTreeseedApiApp`, `createTreeseedApiRouter`, `createTreeseedNodeServer`, and the `TreeseedApiExtension` contract. Market-specific routes should mount through extensions owned by the market app.
+The agent API foundation exposes `createTreeseedApiApp`, `createTreeseedApiRouter`, `createTreeseedNodeServer`, and the `TreeseedApiExtension` contract for provider/agent runtime composition. Market-specific product routes belong in `@treeseed/api`, not in the root web app or the capacity-provider runtime.
 
 ## Source Layout
 
@@ -108,12 +109,12 @@ import { createTreeseedApiApp } from '@treeseed/agent/api';
 
 export default createTreeseedApiApp({
 	extensions: [
-		createMarketApiExtension(),
+		createProviderRuntimeExtension(),
 	],
 });
 ```
 
-Shared health, template catalog loading, static-hub D1 form support, and generic SDK operation routes live in `@treeseed/sdk/api`. The agent package composes those helpers with agent-only runtime routes. Product routes such as market auth, teams, projects, catalog, accounts, billing, invites, and hosted-project management belong in the market app, not in this package.
+Shared health, template catalog loading, static-hub D1 form support, and generic SDK operation routes live in `@treeseed/sdk/api`. The agent package composes those helpers with agent-only runtime routes. Product routes such as market auth, teams, projects, catalog, accounts, billing, invites, and hosted-project management belong in `@treeseed/api`, not in this package.
 
 ## Capacity Provider Shape
 

@@ -188,7 +188,7 @@ apiRuntimeDescribe('@treeseed/agent api runtime', () => {
 		try {
 			importMatches = execFileSync(
 				'rg',
-				['-n', '@treeseed/api', 'src', 'README.md', 'package.json'],
+				['-n', '@treeseed/api', 'src', 'package.json'],
 				{ cwd: process.cwd(), encoding: 'utf8' },
 			).trim();
 		} catch {

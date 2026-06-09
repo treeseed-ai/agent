@@ -2,7 +2,7 @@
 
 Treeseed agent and capacity-provider runtime package.
 
-`@treeseed/agent` owns the standalone capacity-provider runtime for Treeseed. It provides the provider entrypoint, local provider API, manager/runner runtime, agent kernel, package-owned Docker/Compose assets, deployment templates, and provider environment registry. Shared API substrate and provider contracts live in `@treeseed/sdk`; the Market backend API and Market operations runner live in `@treeseed/api`; root Market apps do not own the provider runtime. The package does not depend on `@treeseed/core`.
+`@treeseed/agent` owns the standalone capacity-provider runtime for Treeseed. It provides the provider entrypoint, local provider API, manager/runner runtime, agent kernel, package-owned Docker/Compose assets, deployment templates, and provider environment registry. Shared API substrate and provider contracts live in `@treeseed/sdk`; the Treeseed backend API and Treeseed operations runner live in `@treeseed/api`; root web apps do not own the provider runtime. The package does not depend on `@treeseed/core`.
 
 ## Package Role
 
@@ -11,10 +11,12 @@ The Treeseed package split is:
 - `@treeseed/sdk`: shared contracts, stores, graph/query/runtime primitives, deployment config, and registry merge runtime
 - `@treeseed/core`: Astro/Starlight web framework, content, forms, web cache, and web-only Cloudflare integration
 - `@treeseed/agent`: package-owned capacity-provider runtime, local provider API, manager/runner services, and agent execution internals
-- `@treeseed/api`: Market backend API, Market PostgreSQL adapter, operation lifecycle, route descriptors, and Market operations runner
+- `@treeseed/api`: Treeseed backend API, Treeseed PostgreSQL adapter, operation lifecycle, route descriptors, and Treeseed operations runner
 - `@treeseed/market`: product web app that composes `@treeseed/core` and proxies HTTP to `@treeseed/api`, while capacity providers run externally through `@treeseed/agent`
 
 Ordinary hosted projects should not need their own provider API, manager, runner, or workday services. They reference assigned capacity. Market and team-owned capacity providers use this package to run that capacity through `trsd capacity ...`.
+
+Capacity provider infrastructure is reconciled through the SDK-owned platform documented in the root `docs/reconciliation-platform.md`. `trsd capacity ...` commands must compile desired provider resources, sync secrets through central config, verify live postconditions, and report blocking drift instead of mutating provider infrastructure through bespoke flows.
 
 ## Public Surfaces
 
@@ -171,7 +173,7 @@ Common processing entries include:
 - `TREESEED_CAPACITY_PROVIDER_TEAM_ID`
 - `TREESEED_CAPACITY_PROVIDER_SERVICE_BASE_URL`
 
-The package-local `TREESEED_API_D1_*` settings are for provider/API auth compatibility surfaces only. Market control-plane state such as users, teams, projects, capacity, tasks, and usage lives in the Market PostgreSQL database and is reached through the Market API.
+The package-local `TREESEED_API_D1_*` settings are for provider/API auth compatibility surfaces only. Market control-plane state such as users, teams, projects, capacity, tasks, and usage lives in the Market PostgreSQL database and is reached through the TreeSeed API.
 
 Provider-neutral shared entries belong in `@treeseed/sdk`. Web/forms/Astro entries belong in `@treeseed/core`. Market product auth, billing, account, hosted-hub, and UI/API entries belong in the root market env overlay.
 

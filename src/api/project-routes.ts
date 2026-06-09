@@ -256,7 +256,7 @@ async function summarizeProject(sdk: AgentSdk, config: ApiConfig, principal: { m
 		const runnerHostId = typeof marketSettings?.runnerHostId === 'string' && marketSettings.runnerHostId.trim()
 			? marketSettings.runnerHostId.trim()
 			: (typeof marketSettings?.projectId === 'string' && marketSettings.projectId.trim()
-				? `market-runner:${marketSettings.projectId.trim()}`
+				? `operations-runner:${marketSettings.projectId.trim()}`
 				: null);
 		const runnerSession = runnerHostId ? resolveTreeseedRemoteSession(config.repoRoot, runnerHostId) : null;
 		const runtimeReady = runtimeMode === 'none'

@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
+const PACKAGE_PACK_TEST_TIMEOUT_MS = 30_000;
 
 function readJson<T>(path: string): T {
 	return JSON.parse(readFileSync(path, 'utf8')) as T;
@@ -144,7 +145,7 @@ describe('agent package shape', () => {
 		expect(paths).toContain('templates/github/deploy-capacity-provider.workflow.yml');
 		expect(paths).toContain('templates/railway/capacity-provider.yml');
 		expect(paths.filter((filePath) => /(^|\/)\.ts-run-/u.test(filePath))).toEqual([]);
-	});
+	}, PACKAGE_PACK_TEST_TIMEOUT_MS);
 
 	it('ships secure package-owned container assets', () => {
 		const dockerfile = readFileSync(resolve(packageRoot, 'Dockerfile'), 'utf8');

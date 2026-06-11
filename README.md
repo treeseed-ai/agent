@@ -95,9 +95,13 @@ npm run release:verify
 npm run verify:local
 ```
 
+CI runs `.github/workflows/verify.yml`. Capacity-provider image publication uses `templates/github/deploy-capacity-provider.workflow.yml`.
+
 ## Environment Registry
 
 `src/env.yaml` is the package-owned provider/runtime environment registry. It contains API, manager, runner, workday, queue, capacity-provider, and provider-launch entries.
+
+Workday task budgeting is configured with `TREESEED_WORKDAY_TASK_CREDIT_BUDGET`.
 
 Provider-neutral shared entries belong in `@treeseed/sdk`. Web/forms/Astro entries belong in `@treeseed/core`. Admin UI expectations belong in `@treeseed/admin`. Backend control-plane entries belong in `@treeseed/api`.
 

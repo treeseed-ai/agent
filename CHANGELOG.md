@@ -1,5 +1,55 @@
 # Changelog
 
+## [0.11.0] - 2026-06-12
+
+### Fixed
+
+- build(build): fix package deploy gate timeout and hybrid save validation (54b27e021e1c)
+- build(build): fix package deploy gate timeout and hybrid save validation (a1bc4af63654)
+- build(build): fix railway live deploy readiness retry (74ece243bd23)
+- build(build): fix staging web monitor and ui edge theme runtime (4c5fcccbc499)
+- build(build): fix workspace deployment install readiness (2ee881da7a9b)
+- build(build): fix ui pages staging reconciliation (39942e1e2e2d)
+- build(build): fix package app cloudflare auth (6cbb3c523d52)
+- build(build): fix package hosted config sync and api deploy environment (07dc7c3aae3e)
+- build(build): fix hosted repository gates and root lockfile refresh (e2f26d50e746)
+- build(build): fix manifest package save gates (47a6c2dc059d)
+- build(build): complete Market API package migration hosted checker fix (3c81607c006b)
+- fix(api): default agent sdk content to local (376851d0eec4)
+
+### Tests
+
+- test(tests): stabilize agent verification under save load (59f6e2b8c175)
+- build(build): stabilize github credential test for configured scoped (53e3fef56ba0)
+- test(tests): Move API deployment acceptance into API package (bec7ff78d3d3)
+- build(build): Save reconciliation platform and live acceptance updates (b83c20392788)
+- chore(scripts): ensure @treeseed/sdk runtime link during release (0a6bb1029a20)
+- build(release): complete Market API package migration (0cf99204fdf0)
+
+### Dependencies
+
+- build(build): stage package submodule restructuring (6bcb0fb1b0db)
+- build(build): stage package submodule restructuring (17b759afd2f5)
+- build(build): add fast and promotion save lanes (041f787a172b)
+- build(deps): bump version and update @treeseed/sdk (7f62dea1b180)
+- build(build): bound git dependency smoke checks (f2c3e986b547)
+- build(build): build ui artifacts for hosted deploy (9ee82e878995)
+- build(build): migrate reusable ui components to treeseed ui (db859342e6f1)
+- build(build): integrate treeseed ui (28d2e6213d21)
+- chore(deps): bump version and update @treeseed/sdk (86e7d03a95ee)
+- build(build): Push clean hosted project repositories during save (64a9575d561a)
+- build(build): Install project dependencies before hosted project (4ee0b4212c99)
+- build(build): Install project dependencies before hosted project (f68cc6b55c74)
+- build(build): Install project dependencies before hosted project (1574e92a72d0)
+- build(build): Treat API as a hosted project with verification gates (34395e0bdda7)
+- build(build): Move API deployment acceptance into API package (d3a4af86b7e8)
+- build(build): Save reconciliation platform and live acceptance updates (c32952b41d6a)
+- build(build): Save reconciliation platform and live acceptance updates (d13d5b8c95ca)
+- build(build): document and harden staging release workflow (541a65cd037c)
+- build(build): complete Market API package migration (d85c16bab3e5)
+- build(agent): bump version and update @treeseed/sdk (34edf2aaafc3)
+- 15 additional changes omitted from this summary.
+
 ## [0.10.21] - 2026-06-05
 
 ### Dependencies

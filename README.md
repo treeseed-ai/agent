@@ -1,56 +1,17 @@
-# `@treeseed/agent`
+# @treeseed/agent
 
-Treeseed agent and capacity-provider runtime package.
+`@treeseed/agent` runs Treeseed capacity providers. It provides the provider API, manager, runner, worker runtime, capacity scheduling internals, package-owned Docker/Compose assets, and deployment templates.
 
-`@treeseed/agent` owns the standalone capacity-provider runtime for Treeseed. It provides the provider entrypoint, local provider API, manager/runner runtime, agent kernel, package-owned Docker/Compose assets, deployment templates, and provider environment registry. Shared API substrate and provider contracts live in `@treeseed/sdk`; Market/root apps compose those SDK surfaces directly and do not own the provider runtime. The package does not depend on `@treeseed/core`.
+Use this package when your organization needs to run or maintain capacity that executes Treeseed work. Ordinary hosted projects can consume assigned capacity without owning a provider runtime.
 
-## Package Role
+## What You Can Run With Agent
 
-The Treeseed package split is:
-
-- `@treeseed/sdk`: shared contracts, stores, graph/query/runtime primitives, deployment config, and registry merge runtime
-- `@treeseed/core`: Astro/Starlight web framework, content, forms, web cache, and web-only Cloudflare integration
-- `@treeseed/agent`: package-owned capacity-provider runtime, local provider API, manager/runner services, and agent execution internals
-- `@treeseed/market`: product app that composes `@treeseed/core` and `@treeseed/sdk`, while capacity providers run externally through `@treeseed/agent`
-
-Ordinary hosted projects should not need their own provider API, manager, runner, or workday services. They reference assigned capacity. Market and team-owned capacity providers use this package to run that capacity through `trsd capacity ...`.
-
-## Public Surfaces
-
-Package exports:
-
-- `@treeseed/agent`
-- `@treeseed/agent/api`
-- `@treeseed/agent/api/app`
-- `@treeseed/agent/api/auth/d1-provider`
-- `@treeseed/agent/services/manager`
-- `@treeseed/agent/services/worker`
-- `@treeseed/agent/services/remote-runner`
-- `@treeseed/agent/services/workday-manager`
-- `@treeseed/agent/services/workday-start`
-- `@treeseed/agent/services/workday-report`
-- `@treeseed/agent/runtime-types`
-- `@treeseed/agent/cli`
-- `@treeseed/agent/contracts/messages`
-- `@treeseed/agent/contracts/run`
-
-Published binaries:
-
-- `treeseed-agents`
-- `treeseed-agent-api`
-- `treeseed-agent-service`
-
-The API foundation exposes `createTreeseedApiApp`, `createTreeseedApiRouter`, `createTreeseedNodeServer`, and the `TreeseedApiExtension` contract. Market-specific routes should mount through extensions owned by the market app.
-
-## Source Layout
-
-- `src/api`: agent/provider API composition, local provider API app, and Node server helpers
-- `src/agents`: agent kernel, handler registry, adapters, contracts, spec normalization, CLI, and test harnesses
-- `src/services`: manager, worker, workday, remote runner, worker capacity, scaler, and shared processing service helpers
-- `src/env.yaml`: agent/provider env registry entries owned by this package
-- `templates/github/deploy-capacity-provider.workflow.yml`: inert capacity-provider deployment workflow template
-
-Tests mirror the source domains under `test/api` and `test/services`, with package-shape checks under `test/package`.
+- a capacity-provider API service
+- manager and runner roles
+- worker execution services
+- local provider diagnostics
+- provider containers and compose workflows
+- runtime tests for capacity scheduling and provider lifecycle
 
 ## Install
 
@@ -58,7 +19,7 @@ Tests mirror the source domains under `test/api` and `test/services`, with packa
 npm install @treeseed/agent @treeseed/sdk
 ```
 
-For workspace development, work from this package root:
+For package development:
 
 ```bash
 npm install
@@ -67,121 +28,102 @@ npm test
 npm run verify:local
 ```
 
-## Development Commands
+## Operate A Capacity Provider
+
+Use the CLI for provider lifecycle:
+
+```bash
+trsd capacity build
+trsd capacity up
+trsd capacity status
+trsd capacity logs
+trsd capacity down
+trsd capacity test-local
+```
+
+The package-owned provider image starts:
+
+```bash
+node ./dist/provider/entrypoint.js api
+node ./dist/provider/entrypoint.js manager
+node ./dist/provider/entrypoint.js runner
+node ./dist/provider/entrypoint.js doctor
+```
+
+Store provider credentials through `trsd config` or host secret managers. Do not create plaintext provider `.env` files.
+
+## How Agent Fits With Other Packages
+
+- `@treeseed/admin` may display and manage capacity-provider configuration, status, and diagnostics.
+- `@treeseed/ui` owns reusable capacity/status components.
+- `@treeseed/api` owns backend control-plane routes, operation state, and provider-authenticated API behavior.
+- `@treeseed/sdk` owns shared provider contracts, scheduling types, config, and reconciliation primitives.
+- `@treeseed/cli` owns the operator command surface for provider lifecycle.
+- root market hosts the admin UI and future marketplace/business overlays.
+
+Agent runtime must stay external to the root web app and API process.
+
+## Common Commands
 
 Source entrypoints:
 
-- `npm run dev:manager`
-- `npm run dev:worker`
-- `npm run dev:workday-start`
-- `npm run dev:workday-report`
-- `npm run dev:remote-runner`
+```bash
+npm run dev:manager
+npm run dev:worker
+npm run dev:workday-start
+npm run dev:workday-report
+npm run dev:remote-runner
+```
 
 Built entrypoints:
 
-- `npm run start:manager`
-- `npm run start:worker`
-- `npm run start:workday-start`
-- `npm run start:workday-report`
-
-Hybrid local helper:
-
-- `npm run start:local-manager-cloudflare`
-
-Package verification:
-
-- `npm run build:dist`
-- `npm run test:unit`
-- `npm run test:capacity-scheduling-e2e`
-- `npm run test:smoke`
-- `npm run release:verify`
-- `npm run verify:local`
-
-`npm test` runs both unit tests and the package smoke test. `npm run release:verify` checks local dependency hygiene, rebuilds the distributable package, scans generated output for publish-unsafe source references, runs tests, packs the package, installs it into a temporary project, and verifies the published CLI binary.
-
-## API Composition
-
-Create an agent runtime API with the package-owned agent extension:
-
-```ts
-import { createTreeseedApiApp } from '@treeseed/agent/api';
-
-export default createTreeseedApiApp({
-	extensions: [
-		createMarketApiExtension(),
-	],
-});
+```bash
+npm run start:manager
+npm run start:worker
+npm run start:workday-start
+npm run start:workday-report
 ```
 
-Shared health, template catalog loading, static-hub D1 form support, and generic SDK operation routes live in `@treeseed/sdk/api`. The agent package composes those helpers with agent-only runtime routes. Product routes such as market auth, teams, projects, catalog, accounts, billing, invites, and hosted-project management belong in the market app, not in this package.
+Verification:
 
-## Capacity Provider Shape
+```bash
+npm run build:dist
+npm run test:unit
+npm run test:capacity-scheduling-e2e
+npm run test:smoke
+npm run release:verify
+npm run verify:local
+```
 
-A capacity provider can run:
-
-- API service: `node ./dist/provider/entrypoint.js api`
-- manager service: `node ./dist/provider/entrypoint.js manager`
-- runner service: `node ./dist/provider/entrypoint.js runner`
-- diagnostics: `node ./dist/provider/entrypoint.js doctor`
-- package container lifecycle: `trsd capacity build`, `trsd capacity up`, `trsd capacity logs`, and `trsd capacity down`
-
-The provider registers with Market through `/v1/provider/*`, heartbeats, reports capabilities and budgets, fetches portfolio manifests, and processes provider-authenticated task lifecycle calls. Web-only projects should use assigned capacity instead of owning these services.
-
-## Capacity Scheduling Runtime
-
-The manager and API may propose work, but executable tasks pass through classification and admission before they are queued. Admission attaches task signatures, learned estimates, execution profile selection, route/reservation metadata, attention/context load, utility and predictive reserve snapshots, and hybrid phase metadata to the task payload.
-
-The worker records completed usage actuals with the selected execution profile, provider/lane/reservation, attention/context, utility, and hybrid metadata. Capacity interruptions are checkpointed and moved to `continuation_required` with partial usage metadata, so interrupted work does not poison completed-cost estimate profiles.
-
-Use `npm run test:capacity-scheduling-e2e` for the deterministic completion harness. It verifies admission-before-queueing, learned estimate reuse, bounded planning materialization, deferred budget behavior, checkpoint/continuation events, useful backfill/idling, and hybrid escalation admission.
+CI runs `.github/workflows/verify.yml`. Capacity-provider image publication uses `templates/github/deploy-capacity-provider.workflow.yml`.
 
 ## Environment Registry
 
-`src/env.yaml` is the package-owned agent/provider env registry. It contains API, manager, runner, workday, queue, capacity provider, and provider launch entries.
+`src/env.yaml` is the package-owned provider/runtime environment registry. It contains API, manager, runner, workday, queue, capacity-provider, and provider-launch entries.
 
-Common processing entries include:
+Workday task budgeting is configured with `TREESEED_WORKDAY_TASK_CREDIT_BUDGET`.
 
-- `RAILWAY_API_TOKEN`
-- `RAILWAY_TOKEN`
-- `TREESEED_RAILWAY_WORKSPACE`
-- `TREESEED_PROJECT_RUNNER_TOKEN`
-- `TREESEED_AGENT_POOL_MIN_WORKERS`
-- `TREESEED_AGENT_POOL_MAX_WORKERS`
-- `TREESEED_AGENT_POOL_TARGET_QUEUE_DEPTH`
-- `TREESEED_AGENT_POOL_COOLDOWN_SECONDS`
-- `TREESEED_WORKDAY_TIMEZONE`
-- `TREESEED_WORKDAY_WINDOWS_JSON`
-- `TREESEED_WORKDAY_TASK_CREDIT_BUDGET`
-- `TREESEED_MANAGER_MAX_QUEUED_TASKS`
-- `TREESEED_MANAGER_MAX_QUEUED_CREDITS`
-- `TREESEED_MANAGER_PRIORITY_MODELS`
-- `TREESEED_TASK_CREDIT_WEIGHTS_JSON`
-- `TREESEED_WORKER_POOL_SCALER`
-- `TREESEED_RAILWAY_PROJECT_ID`
-- `TREESEED_RAILWAY_ENVIRONMENT_ID`
-- `TREESEED_RAILWAY_WORKER_SERVICE_ID`
-- `TREESEED_API_BASE_URL`
-- `TREESEED_API_AUTH_SECRET`
-- `TREESEED_API_D1_DATABASE_ID`
-- `TREESEED_API_WEB_SERVICE_ID`
-- `TREESEED_API_WEB_SERVICE_SECRET`
-- `TREESEED_API_WEB_ASSERTION_SECRET`
-- `TREESEED_CAPACITY_PROVIDER_ID`
-- `TREESEED_CAPACITY_PROVIDER_TEAM_ID`
-- `TREESEED_CAPACITY_PROVIDER_SERVICE_BASE_URL`
+Provider-neutral shared entries belong in `@treeseed/sdk`. Web/forms/Astro entries belong in `@treeseed/core`. Admin UI expectations belong in `@treeseed/admin`. Backend control-plane entries belong in `@treeseed/api`.
 
-The package-local `TREESEED_API_D1_*` settings are for provider/API auth compatibility surfaces only. Market control-plane state such as users, teams, projects, capacity, tasks, and usage lives in the Market PostgreSQL database and is reached through the Market API.
+## Public Surfaces
 
-Provider-neutral shared entries belong in `@treeseed/sdk`. Web/forms/Astro entries belong in `@treeseed/core`. Market product auth, billing, account, hosted-hub, and UI/API entries belong in the root market env overlay.
+Exports include runtime APIs, service helpers, contracts, and binaries needed by provider deployments and package tests. Prefer SDK-owned contracts for shared model types so root market and admin code do not import agent runtime internals.
 
-## Local Capacity Provider
+Published binaries:
 
-Use `trsd config` to store provider connection values in encrypted Treeseed machine config, then use `trsd capacity ...` to build and run the package-owned provider container. Do not create plaintext provider `.env` files.
+- `treeseed-agents`
+- `treeseed-agent-api`
+- `treeseed-agent-service`
 
-## GitHub Actions
+## What Agent Does Not Own
 
-- `.github/workflows/verify.yml` runs package verification for pushes and pull requests.
-- `.github/workflows/publish.yml` validates production version tags and publishes the package.
-- `templates/github/deploy-capacity-provider.workflow.yml` is an inert capacity-provider deployment template for later hosted provider deployment phases.
+- root market web app
+- admin routes or UI pages
+- reusable UI components
+- backend PostgreSQL adapter, API routes, migrations, or operations runner
+- SDK reconciliation engine
+- CLI command parsing
+- TreeDX repository service internals
+- ecommerce, billing, licensing, or marketplace policy
 
-Web/API hosted projects should dispatch Market web workflows from `@treeseed/core`/`@treeseed/sdk` templates. Capacity-provider lifecycle is package-owned here and operator-driven through `trsd capacity ...`.
+See the root [Package Ownership](../../docs/package-ownership.md) guide for cross-package boundaries.

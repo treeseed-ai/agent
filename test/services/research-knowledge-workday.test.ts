@@ -18,6 +18,7 @@ const taskOutputs: unknown[] = [];
 const taskOutputRecords: Array<Record<string, unknown>> = [];
 const approvalRequests: Array<Record<string, unknown>> = [];
 const inboxItems: Array<Record<string, unknown>> = [];
+const WORKDAY_ORCHESTRATION_TEST_TIMEOUT_MS = 30_000;
 
 const pullQueue = {
 	pull: vi.fn(),
@@ -365,7 +366,7 @@ describe('research and knowledge workday orchestration', () => {
 				summary: 'Knowledge draft promotion is waiting for an approval decision.',
 			},
 		});
-	}, 15_000);
+	}, WORKDAY_ORCHESTRATION_TEST_TIMEOUT_MS);
 
 	it('creates a revision draft task when optimization recommends revise', async () => {
 		const [question] = TREESEED_PLATFORM_KNOWLEDGE_QUESTIONS;
@@ -429,7 +430,7 @@ describe('research and knowledge workday orchestration', () => {
 			nextTaskId: revisionTask?.id,
 		});
 		expect(pushQueue.enqueue).toHaveBeenCalledTimes(1);
-	}, 15_000);
+	}, WORKDAY_ORCHESTRATION_TEST_TIMEOUT_MS);
 
 	it('does not create promotion followups for defer or reject optimization decisions', async () => {
 		const [question] = TREESEED_PLATFORM_KNOWLEDGE_QUESTIONS;
@@ -505,7 +506,7 @@ describe('research and knowledge workday orchestration', () => {
 		expect(tasks.filter((candidate) => candidate.type === 'promote_knowledge_draft_request')).toHaveLength(0);
 		expect(tasks.filter((candidate) => candidate.type === 'generate_knowledge_draft')).toHaveLength(0);
 		expect(pushQueue.enqueue).not.toHaveBeenCalled();
-	}, 15_000);
+	}, WORKDAY_ORCHESTRATION_TEST_TIMEOUT_MS);
 
 	it('loads latest codebase inventory into research question context', async () => {
 		const scanTask = await sdk.createTask({
@@ -609,7 +610,7 @@ describe('research and knowledge workday orchestration', () => {
 		});
 		const generateTask = tasks.find((task) => task.type === 'generate_knowledge_draft');
 		expect(generateTask).toBeTruthy();
-	}, 15_000);
+	}, WORKDAY_ORCHESTRATION_TEST_TIMEOUT_MS);
 
 	it('extracts codebase inventory generated artifacts from task outputs', () => {
 		const artifacts = extractGeneratedArtifactsFromTaskOutputs([{

@@ -3,9 +3,19 @@ import {
 	type ApiServerOptions,
 	type TreeseedApiContext,
 } from '@treeseed/sdk/api';
+import { AgentSdk } from '@treeseed/sdk';
+import { MemoryAgentDatabase } from '@treeseed/sdk/d1-store';
 import { registerAgentRoutes } from './agent-routes.ts';
 import { registerOperationRoutes } from './operations-routes.ts';
 import { registerProjectRoutes } from './project-routes.ts';
+
+function createDefaultAgentApiSdk(repoRoot: string | undefined) {
+	return new AgentSdk({
+		repoRoot,
+		database: new MemoryAgentDatabase(),
+		contentRepository: { adapter: 'local' },
+	});
+}
 
 export function createTreeseedApiRouter(options: ApiServerOptions = {}) {
 	const surfaces = {
@@ -52,6 +62,7 @@ export function createTreeseedApiRouter(options: ApiServerOptions = {}) {
 
 	return createSharedTreeseedApiRouter({
 		...options,
+		sdk: options.sdk ?? createDefaultAgentApiSdk(options.config?.repoRoot),
 		config: {
 			name: '@treeseed/agent/api',
 			...(options.config ?? {}),

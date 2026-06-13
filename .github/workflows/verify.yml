@@ -15,5 +15,5 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: npm ci || (echo "dependency install failed; retrying" && npm ci)
+      - run: npm run release:setup
       - run: bash -lc 'npm run verify:local'

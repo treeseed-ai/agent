@@ -72,14 +72,12 @@ export function resolveProviderConfig(options: {
 	const env = options.env ?? process.env;
 	const input = resolveProviderEnvironmentInput(env);
 	const missing = [
-		!input.marketUrl ? 'TREESEED_MARKET_URL' : null,
-		!input.marketId ? 'TREESEED_MARKET_ID' : null,
 		!input.apiKey ? 'TREESEED_CAPACITY_PROVIDER_API_KEY' : null,
 	].filter((entry): entry is string => Boolean(entry));
 	if (options.requireConnection && missing.length > 0) {
 		throw new Error(`Capacity provider connection is missing: ${missing.join(', ')}.`);
 	}
-	const resolvedEnv = input.marketUrl && input.marketId && input.apiKey
+	const resolvedEnv = input.marketUrl && input.apiKey
 		? resolveCapacityProviderEnvironment(input)
 		: {
 			TREESEED_MARKET_URL: input.marketUrl || '',

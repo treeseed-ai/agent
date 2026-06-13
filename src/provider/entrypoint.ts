@@ -168,14 +168,27 @@ async function main() {
 			}
 			return;
 		}
-		const registration = await registerProvider(config);
-		startProviderHeartbeatLoop(config, registration.heartbeatIntervalSeconds);
 		const server = await createCapacityProviderNodeServer(config);
 		process.stdout.write(`${JSON.stringify(okPayload('api', {
 			url: server.url,
-			provider: registration.provider,
-			heartbeatIntervalSeconds: registration.heartbeatIntervalSeconds,
+			status: 'running',
 		}))}\n`);
+		void registerProvider(config)
+			.then((registration) => {
+				startProviderHeartbeatLoop(config, registration.heartbeatIntervalSeconds);
+				process.stdout.write(`${JSON.stringify(okPayload('api', {
+					event: 'capacity-provider.registered',
+					provider: registration.provider,
+					heartbeatIntervalSeconds: registration.heartbeatIntervalSeconds,
+				}))}\n`);
+			})
+			.catch((error) => {
+				process.stderr.write(`${JSON.stringify({
+					ok: false,
+					event: 'capacity-provider.registration_failed',
+					error: error instanceof Error ? error.message : String(error),
+				})}\n`);
+			});
 		return;
 	}
 }

@@ -30,7 +30,7 @@ export async function checkProviderHealth(config: ProviderRuntimeConfig) {
 		environment: config.environment,
 		dataDir: config.dataDir,
 		dataDirWritable,
-		marketConfigured: Boolean(config.marketUrl && config.marketId),
+		marketConfigured: Boolean(config.marketUrl),
 		apiKeyConfigured: Boolean(config.apiKey),
 		codexReady: Boolean(config.codexAuthFile || config.codexAuthJsonB64),
 	});
@@ -47,7 +47,7 @@ export async function buildProviderPlan(config: ProviderRuntimeConfig, options: 
 		budgets: discoverProviderBudgets(config),
 		redactedEnv: config.redactedEnv,
 	};
-	if (options.dryRun || !config.apiKey || !config.marketUrl || !config.marketId) {
+	if (options.dryRun || !config.apiKey || !config.marketUrl) {
 		return okPayload('plan', {
 			...base,
 			portfolio: null,
@@ -63,7 +63,7 @@ export async function buildProviderPlan(config: ProviderRuntimeConfig, options: 
 }
 
 export async function runManagerSkeleton(config: ProviderRuntimeConfig, options: { dryRun?: boolean } = {}) {
-	if (!options.dryRun && config.apiKey && config.marketUrl && config.marketId) {
+	if (!options.dryRun && config.apiKey && config.marketUrl) {
 		const client = createProviderMarketClient(config);
 		const result = await processProviderPortfolio({ config, client });
 		return okPayload('manager', {
@@ -86,7 +86,7 @@ export async function runRunnerSkeleton(config: ProviderRuntimeConfig, options: 
 		'append provider-local dry-run event',
 		'complete or fail task without executing handlers',
 	];
-	if (options.dryRun || !config.apiKey || !config.marketUrl || !config.marketId) {
+	if (options.dryRun || !config.apiKey || !config.marketUrl) {
 		return okPayload('runner', {
 			dryRun: true,
 			flow,

@@ -41,8 +41,8 @@ export function createCapacityProviderApp(config: ProviderRuntimeConfig) {
 	app.get('/healthz', (c) => c.json({ ok: true, service: 'capacity-provider', role: 'api' }));
 	app.get('/readyz', (c) => c.json({
 		ok: true,
-		ready: Boolean(config.marketUrl && config.marketId && config.apiKey),
-		marketConfigured: Boolean(config.marketUrl && config.marketId),
+		ready: Boolean(config.apiKey),
+		marketConfigured: Boolean(config.marketUrl),
 		apiKeyConfigured: Boolean(config.apiKey),
 	}));
 	app.get('/provider/health', async (c) => c.json(await checkProviderHealth(config)));

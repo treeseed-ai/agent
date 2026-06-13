@@ -5,8 +5,7 @@ import { createProviderMarketClient } from './client.ts';
 import { providerRuntimeVersion, type ProviderRuntimeConfig } from './config.ts';
 
 export function buildProviderRegistrationRequest(config: ProviderRuntimeConfig): CapacityProviderRegistrationRequest {
-	return {
-		marketId: config.marketId || 'local',
+	const request: CapacityProviderRegistrationRequest = {
 		runtime: {
 			package: '@treeseed/agent',
 			version: providerRuntimeVersion(),
@@ -20,6 +19,10 @@ export function buildProviderRegistrationRequest(config: ProviderRuntimeConfig):
 			codexReady: Boolean(config.codexAuthFile || config.codexAuthJsonB64),
 		},
 	};
+	if (config.marketId) {
+		request.marketId = config.marketId;
+	}
+	return request;
 }
 
 export async function registerProvider(config: ProviderRuntimeConfig) {

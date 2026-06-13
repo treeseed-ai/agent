@@ -127,11 +127,22 @@ describe('capacity provider runtime', () => {
 		expect(config.redactedEnv.TREESEED_CAPACITY_PROVIDER_API_KEY).not.toBe(config.apiKey);
 	});
 
-	it('requires market URL, market ID, and provider API key for connected roles', () => {
+	it('requires only the provider API key for connected roles', () => {
 		expect(() => resolveProviderConfig({
 			env: { TREESEED_MARKET_URL: 'http://127.0.0.1:8787' },
 			requireConnection: true,
-		})).toThrow(/TREESEED_MARKET_ID.*TREESEED_CAPACITY_PROVIDER_API_KEY/u);
+		})).toThrow(/TREESEED_CAPACITY_PROVIDER_API_KEY/u);
+
+		const config = resolveProviderConfig({
+			env: {
+				TREESEED_CAPACITY_PROVIDER_API_KEY: 'tscp_secret_local_provider_key',
+				TREESEED_PROVIDER_DATA_DIR: tempDir(),
+			},
+			requireConnection: true,
+		});
+		expect(config.apiKey).toBe('tscp_secret_local_provider_key');
+		expect(config.marketUrl).toBe('');
+		expect(config.marketId).toBe('');
 	});
 
 	it('builds the package-owned registration request from SDK capacity provider contracts', () => {

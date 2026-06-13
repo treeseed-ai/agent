@@ -51,7 +51,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
-      - run: npm run release:setup || (echo "dependency install failed; retrying" && npm run release:setup)
+      - run: npm ci --ignore-scripts || (echo "dependency install failed; retrying" && npm ci --ignore-scripts)
       - run: npm run capacity-provider:build -- --prepare-only
       - name: Compute image tags
         id: tags

@@ -14,4 +14,4 @@ jobs:
         with:
           node-version: 22
       - run: npm ci || (echo "dependency install failed; retrying" && npm ci)
-      - run: bash -lc npm run verify:local
+      - run: bash -lc 'npm run verify:local'

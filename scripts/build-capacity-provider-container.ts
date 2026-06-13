@@ -45,8 +45,24 @@ function resolveSdkPackageRoot() {
 	if (existsSync(resolve(siblingRoot, 'package.json'))) {
 		return siblingRoot;
 	}
-	const resolved = require.resolve('@treeseed/sdk/package.json', { paths: [packageRoot] });
-	return dirname(resolved);
+	let current = dirname(require.resolve('@treeseed/sdk', { paths: [packageRoot] }));
+	while (true) {
+		const candidate = resolve(current, 'package.json');
+		if (existsSync(candidate)) {
+			try {
+				const pkg = JSON.parse(readFileSync(candidate, 'utf8')) as { name?: string };
+				if (pkg.name === '@treeseed/sdk') {
+					return current;
+				}
+			} catch {
+				// Continue walking upward; package root discovery is best-effort.
+			}
+		}
+		const parent = dirname(current);
+		if (parent === current) break;
+		current = parent;
+	}
+	throw new Error('Unable to resolve @treeseed/sdk package root.');
 }
 
 function resolveInstalledNodeModulesRoot() {

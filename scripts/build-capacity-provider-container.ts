@@ -8,6 +8,7 @@ const require = createRequire(import.meta.url);
 const dockerContextRoot = resolve(packageRoot, '.treeseed', 'docker');
 const sdkTarballPath = resolve(dockerContextRoot, 'treeseed-sdk.tgz');
 const runtimeRoot = resolve(dockerContextRoot, 'runtime');
+const prepareOnly = process.argv.includes('--prepare-only');
 const imageTag = process.env.TREESEED_AGENT_IMAGE_TAG || 'local';
 const roleImages = {
 	api: process.env.TREESEED_AGENT_API_IMAGE || `treeseed/agent-api:${imageTag}`,
@@ -140,6 +141,10 @@ function pruneDevDependenciesFromRuntimeTree() {
 run('npm', ['run', 'build:dist'], packageRoot);
 packSdk();
 prepareRuntimeDependencies();
+if (prepareOnly) {
+	console.log(`Prepared capacity provider Docker context at ${dockerContextRoot}.`);
+	process.exit(0);
+}
 run('docker', ['build', '--target', 'agent-api', '-t', roleImages.api, '.'], packageRoot);
 run('docker', ['build', '--target', 'agent-manager', '-t', roleImages.manager, '.'], packageRoot);
 run('docker', ['build', '--target', 'agent-runner', '-t', roleImages.runner, '.'], packageRoot);

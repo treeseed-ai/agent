@@ -87,6 +87,8 @@ function packSdk() {
 	const sdkRoot = resolveSdkPackageRoot();
 	if (existsSync(resolve(sdkRoot, 'src'))) {
 		run('npm', ['run', 'build:dist'], sdkRoot);
+	} else {
+		return sdkRoot;
 	}
 	mkdirSync(dockerContextRoot, { recursive: true });
 	rmSync(sdkTarballPath, { force: true });
@@ -103,9 +105,10 @@ function packSdk() {
 	if (packedPath !== sdkTarballPath) {
 		renameSync(packedPath, sdkTarballPath);
 	}
+	return null;
 }
 
-function prepareRuntimeDependencies() {
+function prepareRuntimeDependencies(installedSdkRoot: string | null) {
 	const installedNodeModules = resolveInstalledNodeModulesRoot();
 	rmSync(runtimeRoot, { recursive: true, force: true });
 	mkdirSync(runtimeRoot, { recursive: true });
@@ -122,13 +125,23 @@ function prepareRuntimeDependencies() {
 			return true;
 		},
 	});
-	const extractRoot = resolve(dockerContextRoot, 'sdk-extract');
-	rmSync(extractRoot, { recursive: true, force: true });
-	mkdirSync(extractRoot, { recursive: true });
-	run('tar', ['-xzf', sdkTarballPath, '-C', extractRoot], packageRoot);
 	mkdirSync(resolve(runtimeRoot, 'node_modules', '@treeseed'), { recursive: true });
-	cpSync(resolve(extractRoot, 'package'), resolve(runtimeRoot, 'node_modules', '@treeseed', 'sdk'), { recursive: true });
-	rmSync(extractRoot, { recursive: true, force: true });
+	if (installedSdkRoot) {
+		cpSync(installedSdkRoot, resolve(runtimeRoot, 'node_modules', '@treeseed', 'sdk'), {
+			recursive: true,
+			filter(source) {
+				const relativePath = source.slice(installedSdkRoot.length).replace(/^[/\\]/u, '');
+				return !relativePath.startsWith(`node_modules${process.platform === 'win32' ? '\\' : '/'}`);
+			},
+		});
+	} else {
+		const extractRoot = resolve(dockerContextRoot, 'sdk-extract');
+		rmSync(extractRoot, { recursive: true, force: true });
+		mkdirSync(extractRoot, { recursive: true });
+		run('tar', ['-xzf', sdkTarballPath, '-C', extractRoot], packageRoot);
+		cpSync(resolve(extractRoot, 'package'), resolve(runtimeRoot, 'node_modules', '@treeseed', 'sdk'), { recursive: true });
+		rmSync(extractRoot, { recursive: true, force: true });
+	}
 	pruneDevDependenciesFromRuntimeTree();
 }
 
@@ -155,8 +168,8 @@ function pruneDevDependenciesFromRuntimeTree() {
 }
 
 run('npm', ['run', 'build:dist'], packageRoot);
-packSdk();
-prepareRuntimeDependencies();
+const installedSdkRoot = packSdk();
+prepareRuntimeDependencies(installedSdkRoot);
 if (prepareOnly) {
 	console.log(`Prepared capacity provider Docker context at ${dockerContextRoot}.`);
 	process.exit(0);

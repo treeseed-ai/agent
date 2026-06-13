@@ -16,8 +16,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Build package-owned provider image
-        run: docker build -t treeseed-capacity-provider:${{ inputs.environment }} .
+      - name: Build package-owned provider role images
+        run: |
+          docker build --target agent-api -t treeseed/agent-api:${{ inputs.environment }} .
+          docker build --target agent-manager -t treeseed/agent-manager:${{ inputs.environment }} .
+          docker build --target agent-runner -t treeseed/agent-runner:${{ inputs.environment }} .
       - name: Deployment handoff
         run: |
-          echo "Deploy api, manager, and runner with Market-managed host secrets."
+          echo "Deploy api, manager, and runner role images with Market-managed host secrets."

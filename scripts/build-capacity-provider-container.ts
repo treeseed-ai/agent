@@ -8,7 +8,12 @@ const require = createRequire(import.meta.url);
 const dockerContextRoot = resolve(packageRoot, '.treeseed', 'docker');
 const sdkTarballPath = resolve(dockerContextRoot, 'treeseed-sdk.tgz');
 const runtimeRoot = resolve(dockerContextRoot, 'runtime');
-const imageTag = process.env.TREESEED_CAPACITY_PROVIDER_IMAGE || 'capacity-provider:local';
+const imageTag = process.env.TREESEED_AGENT_IMAGE_TAG || 'local';
+const roleImages = {
+	api: process.env.TREESEED_AGENT_API_IMAGE || `treeseed/agent-api:${imageTag}`,
+	manager: process.env.TREESEED_AGENT_MANAGER_IMAGE || `treeseed/agent-manager:${imageTag}`,
+	runner: process.env.TREESEED_AGENT_RUNNER_IMAGE || `treeseed/agent-runner:${imageTag}`,
+} as const;
 
 function run(command: string, args: string[], cwd: string) {
 	const result = spawnSync(command, args, {
@@ -135,5 +140,12 @@ function pruneDevDependenciesFromRuntimeTree() {
 run('npm', ['run', 'build:dist'], packageRoot);
 packSdk();
 prepareRuntimeDependencies();
-run('docker', ['build', '-t', imageTag, '.'], packageRoot);
-console.log(`Built ${imageTag} from ${packageRoot}.`);
+run('docker', ['build', '--target', 'agent-api', '-t', roleImages.api, '.'], packageRoot);
+run('docker', ['build', '--target', 'agent-manager', '-t', roleImages.manager, '.'], packageRoot);
+run('docker', ['build', '--target', 'agent-runner', '-t', roleImages.runner, '.'], packageRoot);
+if (!process.env.TREESEED_CAPACITY_PROVIDER_IMAGE) {
+	run('docker', ['tag', roleImages.api, 'capacity-provider:local'], packageRoot);
+} else {
+	run('docker', ['tag', roleImages.api, process.env.TREESEED_CAPACITY_PROVIDER_IMAGE], packageRoot);
+}
+console.log(`Built ${roleImages.api}, ${roleImages.manager}, and ${roleImages.runner} from ${packageRoot}.`);

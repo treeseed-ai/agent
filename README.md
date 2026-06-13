@@ -41,7 +41,15 @@ trsd capacity down
 trsd capacity test-local
 ```
 
-The package-owned provider image starts:
+The package-owned role images are:
+
+```text
+treeseed/agent-api
+treeseed/agent-manager
+treeseed/agent-runner
+```
+
+Release and development images are published for `linux/amd64` and `linux/arm64`. The images start:
 
 ```bash
 node ./dist/provider/entrypoint.js api
@@ -51,6 +59,8 @@ node ./dist/provider/entrypoint.js doctor
 ```
 
 Store provider credentials through `trsd config` or host secret managers. Do not create plaintext provider `.env` files.
+
+Advanced launch configuration can be declared in `treeseed.capacity-provider.yaml` and passed to `trsd capacity up --config treeseed.capacity-provider.yaml`. The manifest can select official role images or derived images built from `treeseed/agent-api`, `treeseed/agent-manager`, and `treeseed/agent-runner`. Secrets belong in encrypted Treeseed config or host secret managers, not in the manifest.
 
 ## How Agent Fits With Other Packages
 
@@ -95,7 +105,7 @@ npm run release:verify
 npm run verify:local
 ```
 
-CI runs `.github/workflows/verify.yml`. Capacity-provider image publication uses `templates/github/deploy-capacity-provider.workflow.yml`.
+CI runs `.github/workflows/verify.yml`. Capacity-provider image publication uses `.github/workflows/dev-image.yml` for staging development images and `.github/workflows/publish.yml` for tagged releases.
 
 ## Environment Registry
 

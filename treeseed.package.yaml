@@ -1,0 +1,82 @@
+id: "@treeseed/agent"
+name: TreeSeed Agent
+kind: node-typescript
+type: runtime-provider
+repository: treeseed-ai/agent
+publishTarget: docker
+workflowTemplateVersion: "1"
+githubEnvironments:
+  - staging
+  - production
+requiredSecrets:
+  - DOCKERHUB_TOKEN
+verify:
+  fast: npm run verify
+  local: npm run verify:local
+  release: npm run release:verify
+artifacts:
+  - provider: docker
+    name: treeseed/agent-api
+    dockerfile: Dockerfile
+    target: agent-api
+    role: api
+    architectures:
+      - amd64
+      - arm64
+  - provider: docker
+    name: treeseed/agent-manager
+    dockerfile: Dockerfile
+    target: agent-manager
+    role: manager
+    architectures:
+      - amd64
+      - arm64
+  - provider: docker
+    name: treeseed/agent-runner
+    dockerfile: Dockerfile
+    target: agent-runner
+    role: runner
+    architectures:
+      - amd64
+      - arm64
+releaseGate:
+  workflow: verify.yml
+dockerImages:
+  releaseWorkflow: publish.yml
+  developmentWorkflow: dev-image.yml
+  architectures:
+    - amd64
+    - arm64
+  tags:
+    release:
+      - "<version>"
+      - latest
+    staging:
+      - "dev-staging-<short-sha>"
+      - dev-staging
+capacityProvider:
+  roles:
+    api:
+      image: treeseed/agent-api
+      target: agent-api
+    manager:
+      image: treeseed/agent-manager
+      target: agent-manager
+    runner:
+      image: treeseed/agent-runner
+      target: agent-runner
+  local:
+    composeFile: compose.capacity-provider.yml
+    projectName: treeseed-capacity-provider
+    sharedVolume: true
+    dataDir: .treeseed/local-capacity-provider/data
+    health:
+      api: http://127.0.0.1:${TREESEED_PROVIDER_HOST_API_PORT}/health
+  railway:
+    runnerCount: 1
+    runnerVolumePolicy: per-service
+    volumeMountPath: /data
+  capabilities: []
+  executionProviders: []
+  envBindings: []
+  resourceLimits: {}

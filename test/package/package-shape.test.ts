@@ -140,7 +140,9 @@ describe('agent package shape', () => {
 			expect(paths).toContain('dist/services/worker.js');
 			expect(paths).toContain('dist/services/runtime-paths.js');
 		expect(paths).toContain('Dockerfile');
+		expect(paths).toContain('docker-entrypoint.sh');
 		expect(paths).toContain('compose.capacity-provider.yml');
+		expect(paths).toContain('treeseed.package.yaml');
 		expect(paths).toContain('docs/capacity-provider-runtime.md');
 		expect(paths).toContain('templates/github/deploy-capacity-provider.workflow.yml');
 		expect(paths).toContain('templates/railway/capacity-provider.yml');
@@ -149,14 +151,25 @@ describe('agent package shape', () => {
 
 	it('ships secure package-owned container assets', () => {
 		const dockerfile = readFileSync(resolve(packageRoot, 'Dockerfile'), 'utf8');
+		const entrypoint = readFileSync(resolve(packageRoot, 'docker-entrypoint.sh'), 'utf8');
 		const compose = readFileSync(resolve(packageRoot, 'compose.capacity-provider.yml'), 'utf8');
 		const docs = readFileSync(resolve(packageRoot, 'docs/capacity-provider-runtime.md'), 'utf8');
 
-		expect(dockerfile).toContain('ENTRYPOINT ["node", "./dist/provider/entrypoint.js"]');
+		expect(dockerfile).toContain('FROM runtime-base AS agent-api');
+		expect(dockerfile).toContain('FROM runtime-with-git AS agent-manager');
+		expect(dockerfile).toContain('FROM runtime-with-git AS agent-runner');
+		expect(dockerfile).toContain('ENTRYPOINT ["tini", "--", "/usr/local/bin/treeseed-agent-entrypoint"]');
+		expect(entrypoint).toContain('setpriv');
 		expect(dockerfile).toContain('FROM node:22');
 		expect(dockerfile).not.toContain('COPY . .');
 		expect(dockerfile).not.toContain('treeseed-processing');
 		expect(dockerfile).not.toContain('packages/core');
+		expect(compose).toContain('target: agent-api');
+		expect(compose).toContain('target: agent-manager');
+		expect(compose).toContain('target: agent-runner');
+		expect(compose).toContain('treeseed/agent-api');
+		expect(compose).toContain('treeseed/agent-manager');
+		expect(compose).toContain('treeseed/agent-runner');
 		expect(compose).toContain('TREESEED_PROVIDER_STARTUP_MODE');
 		expect(compose).toContain('TREESEED_CAPACITY_PROVIDER_API_KEY: ${TREESEED_CAPACITY_PROVIDER_API_KEY:-}');
 		expect(compose).not.toContain('env_file');
@@ -170,7 +183,7 @@ describe('agent package shape', () => {
 		expect(railwayTemplate).toContain('runner:');
 		expect(railwayTemplate).toContain('node ./dist/provider/entrypoint.js api');
 		expect(railwayTemplate).not.toMatch(/tscp_[A-Za-z0-9_]+|tsp_[A-Za-z0-9_]+|sk-[A-Za-z0-9_]+/u);
-		expect(deployWorkflow).toContain('Build package-owned provider image');
+		expect(deployWorkflow).toContain('Build package-owned provider role images');
 		expect(deployWorkflow).not.toContain('placeholder');
 	});
 
@@ -210,7 +223,8 @@ describe('agent package shape', () => {
 		].join('\n');
 
 		expect(readme).toContain('.github/workflows/verify.yml');
-		expect(readme).toContain('templates/github/deploy-capacity-provider.workflow.yml');
+		expect(readme).toContain('.github/workflows/dev-image.yml');
+		expect(readme).toContain('.github/workflows/publish.yml');
 		expect(readme).toContain('TREESEED_WORKDAY_TASK_CREDIT_BUDGET');
 		expect(readme).not.toContain(staleWorkflowName);
 		expect(readme).not.toContain(staleSmokePhrase);

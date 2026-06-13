@@ -1,4 +1,4 @@
-name: Publish Image TreeSeed Agent
+name: Development Image TreeSeed Agent
 
 on:
   workflow_dispatch:
@@ -34,7 +34,7 @@ jobs:
         id: meta
         with:
           images: ${{ matrix.image }}
-          tags: type=semver,pattern={{version}}
+          tags: type=raw,value=dev-${{ github.ref_name }}-${{ github.sha }}
       - uses: docker/build-push-action@v6
         with:
           context: .

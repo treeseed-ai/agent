@@ -1,9 +1,10 @@
 services:
   api:
-    image: capacity-provider:local
+    image: ${TREESEED_AGENT_API_IMAGE:-treeseed/agent-api:${TREESEED_AGENT_IMAGE_TAG:-local}}
     build:
       context: .
       dockerfile: Dockerfile
+      target: agent-api
     command: ["api"]
     environment:
       TREESEED_PROVIDER_ROLE: api
@@ -29,7 +30,11 @@ services:
       - "${TREESEED_PROVIDER_HOST_DATA_DIR:-.treeseed/local-capacity-provider/data}:/data"
 
   manager:
-    image: capacity-provider:local
+    image: ${TREESEED_AGENT_MANAGER_IMAGE:-treeseed/agent-manager:${TREESEED_AGENT_IMAGE_TAG:-local}}
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: agent-manager
     command: ["manager"]
     depends_on:
       - api
@@ -54,7 +59,11 @@ services:
       - "${TREESEED_PROVIDER_HOST_DATA_DIR:-.treeseed/local-capacity-provider/data}:/data"
 
   runner:
-    image: capacity-provider:local
+    image: ${TREESEED_AGENT_RUNNER_IMAGE:-treeseed/agent-runner:${TREESEED_AGENT_IMAGE_TAG:-local}}
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: agent-runner
     command: ["runner"]
     depends_on:
       - api

@@ -3,8 +3,6 @@ name: Publish Image TreeSeed Agent
 on:
   workflow_dispatch:
   push:
-    branches:
-      - staging
     tags:
       - "v*"
 
@@ -19,8 +17,11 @@ jobs:
       matrix:
         include:
           - image: treeseed/agent-api
+            target: agent-api
           - image: treeseed/agent-manager
+            target: agent-manager
           - image: treeseed/agent-runner
+            target: agent-runner
     steps:
       - uses: actions/checkout@v4
         with:
@@ -40,6 +41,7 @@ jobs:
       - uses: docker/build-push-action@v6
         with:
           context: .
+          target: ${{ matrix.target }}
           platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.meta.outputs.tags }}

@@ -23,6 +23,8 @@ jobs:
           - image: treeseed/agent-runner
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive
       - run: npm ci || (echo "dependency install failed; retrying" && npm ci)
       - uses: docker/setup-qemu-action@v3
       - uses: docker/setup-buildx-action@v3

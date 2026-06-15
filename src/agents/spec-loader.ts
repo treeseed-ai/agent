@@ -42,9 +42,10 @@ export async function loadAgentSpecs(
 			) as Record<string, unknown>[]);
 	const diagnostics: AgentSpecDiagnostic[] = [];
 	const specs: NormalizedAgentRuntimeSpec[] = [];
+	const tenantRoot = typeof sdk.repoRoot === 'string' ? sdk.repoRoot : undefined;
+	const registeredHandlers = await listRegisteredAgentHandlers({ tenantRoot });
 
 	for (const entry of entries as Record<string, unknown>[]) {
-		const registeredHandlers = await listRegisteredAgentHandlers();
 		const result = normalizeAgentRuntimeSpec(extractRawSpec(entry), {
 			registeredHandlers: registeredHandlers as NormalizedAgentRuntimeSpec['handler'][],
 			messageTypes: [...AGENT_MESSAGE_TYPES],

@@ -26,5 +26,10 @@ export function buildProviderRegistrationRequest(config: ProviderRuntimeConfig):
 }
 
 export async function registerProvider(config: ProviderRuntimeConfig) {
-	return createProviderMarketClient(config).register(buildProviderRegistrationRequest(config));
+	const registration = await createProviderMarketClient(config).register(buildProviderRegistrationRequest(config));
+	if (typeof registration.sessionToken === 'string' && registration.sessionToken.trim()) {
+		config.apiKey = registration.sessionToken.trim();
+		config.env.TREESEED_CAPACITY_PROVIDER_API_KEY = config.apiKey;
+	}
+	return registration;
 }

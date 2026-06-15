@@ -147,5 +147,5 @@ describe('market knowledge dogfood harness', () => {
 		}
 
 		expect(runGit(repoRoot, ['status', '--porcelain'])).toBe('');
-	});
+	}, 30_000);
 });

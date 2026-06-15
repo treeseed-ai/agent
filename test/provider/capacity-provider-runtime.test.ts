@@ -27,6 +27,7 @@ function env(overrides: Record<string, string> = {}): NodeJS.ProcessEnv {
 		TREESEED_CAPACITY_PROVIDER_API_KEY: 'tscp_secret_local_provider_key',
 		TREESEED_PROVIDER_DATA_DIR: tempDir(),
 		TREESEED_PROVIDER_ENVIRONMENT: 'local',
+		HOME: tempDir(),
 		...overrides,
 	};
 }
@@ -47,8 +48,22 @@ function git(cwd: string, args: string[]) {
 
 function createProjectRepository() {
 	const root = tempDir();
+	mkdirSync(resolve(root, 'src/agents'), { recursive: true });
 	mkdirSync(resolve(root, 'src/content/agents'), { recursive: true });
 	mkdirSync(resolve(root, 'src/content/agent-tests/fixtures'), { recursive: true });
+	writeFileSync(resolve(root, 'src/agents/planner.ts'), `export const plannerHandler = {
+	kind: 'planner',
+	async resolveInputs(context) {
+		return { runId: context.runId };
+	},
+	async execute(_context, inputs) {
+		return { ...inputs, summary: 'Project-owned provider planner completed.' };
+	},
+	async emitOutputs(_context, result) {
+		return { status: 'completed', summary: result.summary };
+	},
+};
+`, 'utf8');
 	writeFileSync(resolve(root, 'src/content/agent-tests/fixtures/input.json'), '{}\n', 'utf8');
 	writeFileSync(resolve(root, 'src/content/agents/provider-planner.mdx'), `---
 slug: provider-planner
@@ -120,8 +135,8 @@ describe('capacity provider runtime', () => {
 			requireConnection: false,
 		});
 
-		expect(config.marketUrl).toBe('');
-		expect(config.marketId).toBe('');
+		expect(config.marketUrl).toBe('https://api.treeseed.ai');
+		expect(config.marketId).toBe('local');
 		expect(config.apiKey).toBe('tscp_secret_local_provider_key');
 		expect(config.redactedEnv.TREESEED_CAPACITY_PROVIDER_API_KEY).toContain('<redacted>');
 		expect(config.redactedEnv.TREESEED_CAPACITY_PROVIDER_API_KEY).not.toBe(config.apiKey);
@@ -141,8 +156,45 @@ describe('capacity provider runtime', () => {
 			requireConnection: true,
 		});
 		expect(config.apiKey).toBe('tscp_secret_local_provider_key');
-		expect(config.marketUrl).toBe('');
-		expect(config.marketId).toBe('');
+		expect(config.marketUrl).toBe('https://api.treeseed.ai');
+		expect(config.marketId).toBe('local');
+	});
+
+	it('prefers central management API URL over market URL for startup registration', () => {
+		const config = resolveProviderConfig({
+			env: {
+				TREESEED_MANAGEMENT_API_URL: 'https://api.example.test',
+				TREESEED_MARKET_URL: 'http://127.0.0.1:8787',
+				TREESEED_MARKET_ID: 'local',
+				TREESEED_CAPACITY_PROVIDER_ID: 'provider-local',
+				TREESEED_CAPACITY_PROVIDER_TEAM_ID: 'team-local',
+				TREESEED_CAPACITY_PROVIDER_API_KEY: 'tscp_secret_local_provider_key',
+				TREESEED_PROVIDER_DATA_DIR: tempDir(),
+			},
+			requireConnection: true,
+		});
+		expect(config.marketUrl).toBe('https://api.example.test');
+		expect(config.env.TREESEED_CAPACITY_PROVIDER_ID).toBe('provider-local');
+		expect(config.env.TREESEED_CAPACITY_PROVIDER_TEAM_ID).toBe('team-local');
+	});
+
+	it('uses the default Codex auth file when ~/.codex/auth.json exists', () => {
+		const home = tempDir();
+		mkdirSync(resolve(home, '.codex'), { recursive: true });
+		writeFileSync(resolve(home, '.codex/auth.json'), JSON.stringify({ OPENAI_CODEX_LOGIN: 'test' }), 'utf8');
+
+		const config = resolveProviderConfig({
+			env: env({
+				HOME: home,
+				TREESEED_CODEX_AUTH_FILE: '',
+				TREESEED_CODEX_AUTH_JSON_B64: '',
+			}),
+		});
+		const request = buildProviderRegistrationRequest(config);
+
+		expect(config.codexAuthFile).toBe(resolve(home, '.codex/auth.json'));
+		expect(config.env.TREESEED_CODEX_AUTH_FILE).toBe(resolve(home, '.codex/auth.json'));
+		expect(request.health.codexReady).toBe(true);
 	});
 
 	it('builds the package-owned registration request from SDK capacity provider contracts', () => {
@@ -403,7 +455,7 @@ describe('capacity provider runtime', () => {
 		]);
 	});
 
-	it('fails claimed tasks that do not explicitly request dry-run execution', async () => {
+	it('fails live claimed tasks when the provider has not synced project state', async () => {
 		const config = resolveProviderConfig({ env: env() });
 		const events: Array<{ method: string; body?: unknown }> = [];
 		const client = {
@@ -436,7 +488,7 @@ describe('capacity provider runtime', () => {
 		expect(result).toMatchObject({ ok: true, claimed: 1, taskId: 'task_2' });
 		expect(events.map((event) => event.method)).toEqual(['appendTaskEvent', 'failTask']);
 		expect(events.find((event) => event.method === 'failTask')?.body).toMatchObject({
-			errorCode: 'provider_task_requires_dry_run',
+			errorCode: 'provider_project_not_synced',
 		});
 	});
 });

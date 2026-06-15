@@ -143,30 +143,14 @@ export const plannerHandler: AgentHandler = {
 		});
 	});
 
-	it('resolves package-owned built-in research, knowledge, and lifecycle handlers', async () => {
+	it('does not fall back to package-owned project handlers', async () => {
 		const tenantRoot = createTenantRoot();
 
-		await expect(resolveAgentHandler('planner', { tenantRoot })).resolves.toMatchObject({ kind: 'planner' });
-		await expect(resolveAgentHandler('researcher', { tenantRoot })).resolves.toMatchObject({ kind: 'researcher' });
-		await expect(resolveAgentHandler('knowledge_generator', { tenantRoot })).resolves.toMatchObject({ kind: 'knowledge_generator' });
-		await expect(resolveAgentHandler('knowledge-generator', { tenantRoot })).resolves.toMatchObject({ kind: 'knowledge_generator' });
-		await expect(resolveAgentHandler('knowledge_optimizer', { tenantRoot })).resolves.toMatchObject({ kind: 'knowledge_optimizer' });
-		await expect(resolveAgentHandler('knowledge-optimizer', { tenantRoot })).resolves.toMatchObject({ kind: 'knowledge_optimizer' });
-		await expect(resolveAgentHandler('engineer', { tenantRoot })).resolves.toMatchObject({ kind: 'engineer' });
-		await expect(resolveAgentHandler('reviewer', { tenantRoot })).resolves.toMatchObject({ kind: 'reviewer' });
-		await expect(resolveAgentHandler('reporter', { tenantRoot })).resolves.toMatchObject({ kind: 'reporter' });
-		await expect(resolveAgentHandler('releaser', { tenantRoot })).resolves.toMatchObject({ kind: 'releaser' });
+		await expect(resolveAgentHandler('planner', { tenantRoot })).rejects.toThrow('No runtime handler is registered');
+		await expect(resolveAgentHandler('researcher', { tenantRoot })).rejects.toThrow('No runtime handler is registered');
+		await expect(resolveAgentHandler('knowledge-generator', { tenantRoot })).rejects.toThrow('No runtime handler is registered');
 
-		await expect(listRegisteredAgentHandlers({ tenantRoot })).resolves.toEqual(expect.arrayContaining([
-			'planner',
-			'researcher',
-			'knowledge_generator',
-			'knowledge_optimizer',
-			'engineer',
-			'reviewer',
-			'reporter',
-			'releaser',
-		]));
+		await expect(listRegisteredAgentHandlers({ tenantRoot })).resolves.toEqual([]);
 	});
 
 	it('normalizes hyphenated documentation knowledge handler names', () => {
@@ -312,7 +296,7 @@ Disabled.
 		]);
 	});
 
-	it('keeps tenant handlers ahead of package-owned built-ins', async () => {
+	it('resolves tenant project handlers without package-owned fallbacks', async () => {
 		const tenantRoot = createTenantRoot();
 		writeFileSync(
 			resolve(tenantRoot, 'src/agents/researcher.ts'),

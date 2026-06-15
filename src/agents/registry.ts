@@ -8,14 +8,6 @@ import { getTreeseedAgentProviderSelections } from '@treeseed/sdk/platform/deplo
 import { resolveTreeseedTenantRoot } from '@treeseed/sdk/platform/tenant-config';
 import type { AgentHandler } from './runtime-types.ts';
 import { resolveAgentRuntimeProviders } from '../agent-runtime.ts';
-import { researcherHandler } from './handlers/researcher.ts';
-import { knowledgeGeneratorHandler } from './handlers/knowledge-generator.ts';
-import { knowledgeOptimizerHandler } from './handlers/knowledge-optimizer.ts';
-import { plannerHandler } from './handlers/planner.ts';
-import { engineerHandler } from './handlers/engineer.ts';
-import { reviewerHandler } from './handlers/reviewer.ts';
-import { reporterHandler } from './handlers/reporter.ts';
-import { releaserHandler } from './handlers/releaser.ts';
 
 const BUILTIN_HANDLER_KINDS = [
 	'planner',
@@ -42,17 +34,6 @@ const HANDLER_EXPORT_NAMES: Record<(typeof BUILTIN_HANDLER_KINDS)[number], strin
 	reporter: 'reporterHandler',
 	releaser: 'releaserHandler',
 };
-
-const PACKAGE_BUILTIN_HANDLERS = new Map<string, AgentHandler>([
-	[plannerHandler.kind, plannerHandler],
-	[researcherHandler.kind, researcherHandler],
-	[knowledgeGeneratorHandler.kind, knowledgeGeneratorHandler],
-	[knowledgeOptimizerHandler.kind, knowledgeOptimizerHandler],
-	[engineerHandler.kind, engineerHandler],
-	[reviewerHandler.kind, reviewerHandler],
-	[reporterHandler.kind, reporterHandler],
-	[releaserHandler.kind, releaserHandler],
-]);
 
 function normalizeHandlerKind(kind: AgentHandlerKind): AgentHandlerKind {
 	if (kind === 'knowledge-generator') return 'knowledge_generator';
@@ -177,7 +158,6 @@ export async function listRegisteredAgentHandlers(options: { tenantRoot?: string
 	return [...new Set([
 		...Object.keys(registry),
 		...runtimeProviders.handlers.keys(),
-		...PACKAGE_BUILTIN_HANDLERS.keys(),
 	])];
 }
 
@@ -186,7 +166,7 @@ export async function resolveAgentHandler(kind: AgentHandlerKind, options: { ten
 	const tenantRoot = options.tenantRoot ?? resolveTreeseedTenantRoot();
 	const registry = await getAgentHandlerRegistry(tenantRoot);
 	const runtimeProviders = resolveAgentRuntimeProviders(tenantRoot, getTreeseedAgentProviderSelections());
-	const handler = registry[normalizedKind] ?? runtimeProviders.handlers.get(normalizedKind) ?? PACKAGE_BUILTIN_HANDLERS.get(normalizedKind);
+	const handler = registry[normalizedKind] ?? runtimeProviders.handlers.get(normalizedKind);
 	if (!handler) {
 		if ((BUILTIN_HANDLER_KINDS as readonly string[]).includes(normalizedKind)) {
 			const expectedPath = getTenantAgentHandlerModulePaths(normalizedKind, tenantRoot).join('" or "');

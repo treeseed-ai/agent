@@ -49,14 +49,6 @@ export {
 } from './services/codebase-documentation-scanner.ts';
 export { parseAgentMessagePayload, AGENT_MESSAGE_TYPES } from './agents/contracts/messages.ts';
 export { resolveHandlerContextPacks } from './agents/context/context-processor.ts';
-export { plannerHandler } from './agents/handlers/planner.ts';
-export { researcherHandler } from './agents/handlers/researcher.ts';
-export { knowledgeGeneratorHandler } from './agents/handlers/knowledge-generator.ts';
-export { knowledgeOptimizerHandler } from './agents/handlers/knowledge-optimizer.ts';
-export { engineerHandler } from './agents/handlers/engineer.ts';
-export { reviewerHandler } from './agents/handlers/reviewer.ts';
-export { reporterHandler } from './agents/handlers/reporter.ts';
-export { releaserHandler } from './agents/handlers/releaser.ts';
 export {
 	normalizeCodexDocsMutationInput,
 	runCodexDocsMutationLifecycle,

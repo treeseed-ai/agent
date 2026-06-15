@@ -59,7 +59,7 @@ async function validateAgent(agent: NormalizedAgentRuntimeSpec, knownHandlers: s
 	if (!knownHandlers.includes(agent.handler)) {
 		issues.push(issue(agent, 'handler', `Handler "${agent.handler}" is not registered.`));
 	} else {
-		await resolveAgentHandler(agent.handler).catch((error) => {
+		await resolveAgentHandler(agent.handler, { tenantRoot: repoRoot }).catch((error) => {
 			issues.push(issue(agent, 'handler', error instanceof Error ? error.message : String(error)));
 		});
 	}

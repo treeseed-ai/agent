@@ -110,6 +110,7 @@ function packSdk() {
 
 function prepareRuntimeDependencies(installedSdkRoot: string | null) {
 	const installedNodeModules = resolveInstalledNodeModulesRoot();
+	const runtimePackages = runtimePackageFilter();
 	rmSync(runtimeRoot, { recursive: true, force: true });
 	mkdirSync(runtimeRoot, { recursive: true });
 	copyFileSync(resolve(packageRoot, 'package.json'), resolve(runtimeRoot, 'package.json'));
@@ -122,7 +123,7 @@ function prepareRuntimeDependencies(installedSdkRoot: string | null) {
 			if (relativePath === '.bin' || relativePath.startsWith(`.bin${process.platform === 'win32' ? '\\' : '/'}`)) return false;
 			if (relativePath === '.vite' || relativePath.startsWith(`.vite${process.platform === 'win32' ? '\\' : '/'}`)) return false;
 			if (relativePath === '@treeseed' || relativePath.startsWith(`@treeseed${process.platform === 'win32' ? '\\' : '/'}`)) return false;
-			return true;
+			return runtimePackages(relativePath);
 		},
 	});
 	mkdirSync(resolve(runtimeRoot, 'node_modules', '@treeseed'), { recursive: true });
@@ -142,7 +143,76 @@ function prepareRuntimeDependencies(installedSdkRoot: string | null) {
 		cpSync(resolve(extractRoot, 'package'), resolve(runtimeRoot, 'node_modules', '@treeseed', 'sdk'), { recursive: true });
 		rmSync(extractRoot, { recursive: true, force: true });
 	}
+	pruneExtraneousDependenciesFromRuntimeTree();
 	pruneDevDependenciesFromRuntimeTree();
+}
+
+function runtimePackageFilter() {
+	const lockfile = JSON.parse(readFileSync(resolve(packageRoot, 'package-lock.json'), 'utf8')) as {
+		packages?: Record<string, { dev?: boolean }>;
+	};
+	const allowed = new Set<string>();
+	const allowedScopes = new Set<string>();
+	for (const [packagePath, metadata] of Object.entries(lockfile.packages ?? {})) {
+		if (!packagePath.startsWith('node_modules/') || metadata.dev === true) continue;
+		const packageName = topLevelPackageName(packagePath.slice('node_modules/'.length));
+		if (!packageName) continue;
+		allowed.add(packageName);
+		if (packageName.startsWith('@')) allowedScopes.add(packageName.split('/')[0] ?? '');
+	}
+	return (relativePath: string) => {
+		const packageName = topLevelPackageName(relativePath);
+		if (!packageName) return false;
+		if (packageName.startsWith('@') && !packageName.includes('/')) return allowedScopes.has(packageName);
+		return allowed.has(packageName);
+	};
+}
+
+function topLevelPackageName(relativePath: string) {
+	const normalized = relativePath.replace(/\\/gu, '/').replace(/^\/+/u, '');
+	const parts = normalized.split('/').filter(Boolean);
+	if (parts.length === 0) return null;
+	if (parts[0]?.startsWith('@')) {
+		return parts.length >= 2 ? `${parts[0]}/${parts[1]}` : parts[0];
+	}
+	return parts[0] ?? null;
+}
+
+function pruneExtraneousDependenciesFromRuntimeTree() {
+	const lockfile = JSON.parse(readFileSync(resolve(packageRoot, 'package-lock.json'), 'utf8')) as {
+		packages?: Record<string, unknown>;
+	};
+	const allowed = new Set<string>();
+	for (const packagePath of Object.keys(lockfile.packages ?? {})) {
+		if (!packagePath.startsWith('node_modules/')) continue;
+		const parts = packagePath.slice('node_modules/'.length).split('/');
+		if (parts[0]?.startsWith('@')) {
+			if (parts.length >= 2) allowed.add(`${parts[0]}/${parts[1]}`);
+		} else if (parts[0]) {
+			allowed.add(parts[0]);
+		}
+	}
+	allowed.add('@treeseed/sdk');
+	const nodeModulesRoot = resolve(runtimeRoot, 'node_modules');
+	for (const entry of readdirSync(nodeModulesRoot)) {
+		const entryPath = resolve(nodeModulesRoot, entry);
+		if (!entry.startsWith('@')) {
+			if (!allowed.has(entry)) rmSync(entryPath, { recursive: true, force: true });
+			continue;
+		}
+		for (const scopedEntry of readdirSync(entryPath)) {
+			const packageName = `${entry}/${scopedEntry}`;
+			if (!allowed.has(packageName)) {
+				rmSync(resolve(entryPath, scopedEntry), { recursive: true, force: true });
+			}
+		}
+		try {
+			if (readdirSync(entryPath).length === 0) {
+				rmSync(entryPath, { recursive: true, force: true });
+			}
+		} catch {
+		}
+	}
 }
 
 function pruneDevDependenciesFromRuntimeTree() {

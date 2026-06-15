@@ -3,6 +3,8 @@ import {
 	resolveCapacityProviderEnvironment,
 	type CapacityProviderEnvironmentInput,
 } from '@treeseed/sdk/capacity-provider';
+import { existsSync } from 'node:fs';
+import { resolveCodexAuthFile } from '../agents/adapters/codex-auth.ts';
 
 export type ProviderRole = 'api' | 'manager' | 'runner' | 'doctor' | 'healthcheck' | 'register' | 'plan' | 'version';
 
@@ -45,11 +47,27 @@ function booleanValue(value: string) {
 	return ['1', 'true', 'yes', 'on'].includes(value.toLowerCase());
 }
 
+function managementApiUrl(env: NodeJS.ProcessEnv) {
+	return envValue(env, 'TREESEED_MANAGEMENT_API_URL')
+		|| envValue(env, 'TREESEED_MARKET_URL')
+		|| 'https://api.treeseed.ai';
+}
+
+function configuredCodexAuthFile(env: NodeJS.ProcessEnv) {
+	const explicit = envValue(env, 'TREESEED_CODEX_AUTH_FILE') || envValue(env, 'CODEX_AUTH_FILE');
+	const resolved = resolveCodexAuthFile(env);
+	if (explicit) return resolved;
+	return existsSync(resolved) ? resolved : '';
+}
+
 export function resolveProviderEnvironmentInput(env: NodeJS.ProcessEnv = process.env): CapacityProviderEnvironmentInput {
+	const codexAuthFile = configuredCodexAuthFile(env);
 	return {
-		marketUrl: envValue(env, 'TREESEED_MARKET_URL'),
-		marketId: envValue(env, 'TREESEED_MARKET_ID'),
+		marketUrl: managementApiUrl(env),
+		marketId: envValue(env, 'TREESEED_MARKET_ID') || envValue(env, 'TREESEED_MANAGER_ID') || 'local',
 		apiKey: envValue(env, 'TREESEED_CAPACITY_PROVIDER_API_KEY'),
+		providerId: envValue(env, 'TREESEED_CAPACITY_PROVIDER_ID') || undefined,
+		teamId: envValue(env, 'TREESEED_CAPACITY_PROVIDER_TEAM_ID') || undefined,
 		providerDataDir: envValue(env, 'TREESEED_PROVIDER_DATA_DIR') || '/data',
 		providerApiPort: envValue(env, 'TREESEED_PROVIDER_API_PORT') || '3100',
 		providerEnvironment: envValue(env, 'TREESEED_PROVIDER_ENVIRONMENT') || envValue(env, 'TREESEED_ENVIRONMENT') || 'local',
@@ -59,7 +77,7 @@ export function resolveProviderEnvironmentInput(env: NodeJS.ProcessEnv = process
 		maxConcurrentRunners: envValue(env, 'TREESEED_PROVIDER_MAX_CONCURRENT_RUNNERS') || undefined,
 		dailyCreditBudget: envValue(env, 'TREESEED_PROVIDER_DAILY_CREDIT_BUDGET') || undefined,
 		monthlyCreditBudget: envValue(env, 'TREESEED_PROVIDER_MONTHLY_CREDIT_BUDGET') || undefined,
-		codexAuthFile: envValue(env, 'TREESEED_CODEX_AUTH_FILE') || undefined,
+		codexAuthFile: codexAuthFile || undefined,
 		codexAuthJsonB64: envValue(env, 'TREESEED_CODEX_AUTH_JSON_B64') || undefined,
 		codexAuthOverwrite: envValue(env, 'TREESEED_CODEX_AUTH_OVERWRITE') || undefined,
 	};
@@ -71,6 +89,7 @@ export function resolveProviderConfig(options: {
 } = {}): ProviderRuntimeConfig {
 	const env = options.env ?? process.env;
 	const input = resolveProviderEnvironmentInput(env);
+	const codexAuthFile = configuredCodexAuthFile(env);
 	const missing = [
 		!input.apiKey ? 'TREESEED_CAPACITY_PROVIDER_API_KEY' : null,
 	].filter((entry): entry is string => Boolean(entry));
@@ -100,7 +119,7 @@ export function resolveProviderConfig(options: {
 		maxConcurrentRunners: intValue(envValue(env, 'TREESEED_PROVIDER_MAX_CONCURRENT_RUNNERS'), 4),
 		dailyCreditBudget: optionalIntValue(envValue(env, 'TREESEED_PROVIDER_DAILY_CREDIT_BUDGET')),
 		monthlyCreditBudget: optionalIntValue(envValue(env, 'TREESEED_PROVIDER_MONTHLY_CREDIT_BUDGET')),
-		codexAuthFile: envValue(env, 'TREESEED_CODEX_AUTH_FILE') || null,
+		codexAuthFile: codexAuthFile || null,
 		codexAuthJsonB64: envValue(env, 'TREESEED_CODEX_AUTH_JSON_B64') || null,
 		codexAuthOverwrite: booleanValue(envValue(env, 'TREESEED_CODEX_AUTH_OVERWRITE')),
 		env: resolvedEnv,

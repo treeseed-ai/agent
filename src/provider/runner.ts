@@ -4,6 +4,7 @@ import type { AgentRuntimeSpec } from '@treeseed/sdk/types/agents';
 import type { MarketProviderClient } from '@treeseed/sdk/capacity-provider';
 import { loadAllAgentSpecs } from '../agents/spec-loader.ts';
 import { resolveAgentHandler } from '../agents/registry.ts';
+import { createExecutionAdapter } from '../agents/adapters/execution.ts';
 import type { ProviderRuntimeConfig } from './config.ts';
 import { processProviderPortfolio, readProviderPortfolioIndex } from './portfolio-processing.ts';
 
@@ -155,6 +156,96 @@ async function runDryRunHandler(input: {
 	};
 }
 
+async function runLiveCodexHandler(input: {
+	config: ProviderRuntimeConfig;
+	repoRoot: string;
+	agent: AgentRuntimeSpec;
+	task: Record<string, unknown>;
+}) {
+	if (!input.config.codexAuthFile && !input.config.codexAuthJsonB64) {
+		throw new Error('Live provider tasks require TREESEED_CODEX_AUTH_FILE or TREESEED_CODEX_AUTH_JSON_B64.');
+	}
+	const handler = await resolveAgentHandler(input.agent.handler, { tenantRoot: input.repoRoot });
+	const sdk = makeSdkProxy();
+	const payload = taskInput(input.task);
+	const runId = `provider-live:${taskId(input.task)}`;
+	const context = {
+		runId,
+		repoRoot: input.repoRoot,
+		agent: input.agent,
+		sdk: sdk.sdk,
+		coreObjective: null,
+		trigger: {
+			kind: 'manual',
+			source: 'capacity-provider-live',
+			trigger: { type: 'startup' },
+			message: {
+				id: 1,
+				type: stringValue(payload.messageType, payload.type) ?? 'provider.live_codex',
+				status: 'claimed',
+				payloadJson: JSON.stringify({
+					...payload,
+					taskId: taskId(input.task),
+				}),
+			},
+		},
+		execution: createExecutionAdapter('codex', { repoRoot: input.repoRoot }),
+		mutations: {
+			writeArtifact: async () => ({
+				branchName: null,
+				commitMessage: null,
+				worktreePath: null,
+				commitSha: null,
+				changedPaths: [],
+			}),
+		},
+		repository: {
+			inspectBranch: async () => ({
+				branchName: null,
+				changedPaths: [],
+				commitSha: null,
+				summary: 'Provider live task repository inspection completed.',
+			}),
+		},
+		verification: {
+			runChecks: async () => waitingResult('Provider live task verification is recorded by the task output.'),
+		},
+		notifications: {
+			deliver: async () => ({
+				status: 'waiting',
+				summary: 'Provider live task notification delivery skipped.',
+				deliveredCount: 0,
+			}),
+		},
+		research: {
+			research: async () => ({
+				status: 'waiting',
+				summary: 'Provider live task research skipped.',
+				markdown: '',
+			}),
+		},
+		operations: {
+			runOperation: async () => ({
+				ok: true,
+				dryRun: false,
+				summary: 'Provider live task operation completed.',
+				events: [],
+			}),
+		},
+	} satisfies AgentContext;
+	const resolvedInputs = await handler.resolveInputs(context);
+	const executed = await handler.execute(context, resolvedInputs);
+	const emitted = await handler.emitOutputs(context, executed);
+	return {
+		status: emitted.status,
+		summary: emitted.summary,
+		metadata: {
+			...(emitted.metadata ?? {}),
+			sdkCalls: sdk.calls,
+		},
+	};
+}
+
 async function failTask(client: ProviderRunnerClient, id: string, code: string, message: string) {
 	await client.appendTaskEvent(id, {
 		kind: 'provider_runner_failed',
@@ -173,9 +264,6 @@ export async function runProviderDryRunTask(input: {
 	task: Record<string, unknown>;
 }) {
 	const id = taskId(input.task);
-	if (!dryRunRequested(input.task)) {
-		return failTask(input.client, id, 'provider_task_requires_dry_run', 'Phase 8 provider runner only executes explicit dry-run tasks.');
-	}
 	const payload = taskInput(input.task);
 	const projectId = stringValue(input.task.projectId, payload.projectId);
 	const agentSlug = stringValue(input.task.agentSlug, input.task.agentId, payload.agentSlug, payload.agentId);
@@ -211,52 +299,80 @@ export async function runProviderDryRunTask(input: {
 	});
 	try {
 		const startedAt = Date.now();
-		const output = await runDryRunHandler({
-			repoRoot: project.repository.path,
-			agent,
-			task: input.task,
-		});
+		const dryRun = dryRunRequested(input.task);
+		const output = dryRun
+			? await runDryRunHandler({
+				repoRoot: project.repository.path,
+				agent,
+				task: input.task,
+			})
+			: await runLiveCodexHandler({
+				config: input.config,
+				repoRoot: project.repository.path,
+				agent,
+				task: input.task,
+			});
 		const wallMinutes = Math.max(0, (Date.now() - startedAt) / 60_000);
 		await input.client.appendTaskEvent(id, {
-			kind: 'provider_runner_dry_run_completed',
+			kind: dryRun ? 'provider_runner_dry_run_completed' : 'provider_runner_live_codex_completed',
 			data: output,
 		});
 		await input.client.reportUsage({
 			taskId: id,
 			workDayId: stringValue(input.task.workDayId, payload.workDayId),
 			projectId,
-			taskSignature: `${agent.handler}.${agent.slug}.dry_run`,
-			executionProfileId: 'provider-dry-run',
+			taskSignature: `${agent.handler}.${agent.slug}.${dryRun ? 'dry_run' : 'live_codex'}`,
+			executionProfileId: dryRun ? 'provider-dry-run' : 'provider-live-codex',
 			nativeUsage: {
 				nativeUnit: 'wall_minute',
 				wallMinutes,
-				source: 'provider_runner_dry_run',
+				source: dryRun ? 'provider_runner_dry_run' : 'provider_runner_live_codex',
 			},
 			metadata: {
-				dryRun: true,
+				dryRun,
+				liveCodex: !dryRun,
 				handler: agent.handler,
 				status: output.status,
 			},
 		});
 		return input.client.completeTask(id, {
 			output: {
-				dryRun: true,
+				dryRun,
+				liveCodex: !dryRun,
 				projectId,
 				agentSlug,
 				status: output.status,
 				summary: output.summary,
 				metadata: output.metadata,
+				generatedArtifacts: [{
+					id: `provider-artifact:${id}`,
+					title: dryRun ? 'Provider dry-run artifact' : 'Live Codex provider artifact',
+					description: output.summary,
+					type: 'knowledge_artifact',
+					state: output.status === 'completed' ? 'generated' : output.status,
+					artifactKind: 'provider_work_result',
+					projectId,
+					agentSlug,
+					taskId: id,
+					workDayId: stringValue(input.task.workDayId, payload.workDayId),
+					metadata: {
+						liveCodex: !dryRun,
+						providerRuntime: '@treeseed/agent',
+					},
+				}],
 			},
 			summary: {
-				dryRun: true,
+				dryRun,
+				liveCodex: !dryRun,
 				summary: output.summary,
 			},
 		});
 	} catch (error) {
+		const dryRun = dryRunRequested(input.task);
 		return failTask(
 			input.client,
 			id,
-			'provider_dry_run_handler_failed',
+			dryRun ? 'provider_dry_run_handler_failed' : 'provider_live_codex_handler_failed',
 			error instanceof Error ? error.message : String(error),
 		);
 	}

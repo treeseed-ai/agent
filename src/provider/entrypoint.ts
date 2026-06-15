@@ -46,6 +46,7 @@ function printHelp() {
 		'  node ./dist/provider/entrypoint.js register --dry-run',
 		'  node ./dist/provider/entrypoint.js manager --dry-run --json',
 		'  node ./dist/provider/entrypoint.js runner --dry-run --json',
+		'  node ./dist/provider/entrypoint.js runner --once --json',
 		'',
 	].join('\n'));
 }
@@ -100,6 +101,7 @@ async function main() {
 	}
 	const role = roleArg();
 	const dryRun = flagEnabled('--dry-run');
+	const once = flagEnabled('--once');
 	const diagnostic = diagnosticMode();
 	const config = resolveProviderConfig({ requireConnection: requireConnection(role, dryRun) && !diagnostic });
 	if (requireConnection(role, dryRun) && !diagnostic) {
@@ -139,12 +141,20 @@ async function main() {
 			emit(await runManagerSkeleton(config, { dryRun: true }));
 			return;
 		}
+		if (once) {
+			emit(await runManagerSkeleton(config));
+			return;
+		}
 		await runLoop('manager', pollSeconds('TREESEED_PROVIDER_MANAGER_POLL_SECONDS', 60), () => runManagerSkeleton(config));
 		return;
 	}
 	if (role === 'runner') {
 		if (dryRun || diagnostic) {
 			emit(await runRunnerSkeleton(config, { dryRun: true }));
+			return;
+		}
+		if (once) {
+			emit(await runRunnerSkeleton(config));
 			return;
 		}
 		await runLoop('runner', pollSeconds('TREESEED_PROVIDER_RUNNER_POLL_SECONDS', 15), () => runRunnerSkeleton(config));

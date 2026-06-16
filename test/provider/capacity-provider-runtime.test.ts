@@ -54,13 +54,13 @@ function createProjectRepository() {
 	writeFileSync(resolve(root, 'src/agents/planner.ts'), `export const plannerHandler = {
 	kind: 'planner',
 	async resolveInputs(context) {
-		return { runId: context.runId };
+		return { runId: context.runId, mode: context.capacity?.mode ?? null };
 	},
 	async execute(_context, inputs) {
-		return { ...inputs, summary: 'Project-owned provider planner completed.' };
+		return { ...inputs, summary: \`Project-owned provider planner completed in \${inputs.mode ?? 'unbounded'} mode.\` };
 	},
 	async emitOutputs(_context, result) {
-		return { status: 'completed', summary: result.summary };
+		return { status: 'completed', summary: result.summary, metadata: { mode: result.mode } };
 	},
 };
 `, 'utf8');
@@ -254,8 +254,7 @@ describe('capacity provider runtime', () => {
 			ok: true,
 			role: 'runner',
 			dryRun: true,
-			claimRequest: {
-				limit: 1,
+			assignmentRequest: {
 				capabilities: ['codex-docs-work'],
 			},
 		});
@@ -345,50 +344,50 @@ describe('capacity provider runtime', () => {
 		});
 		const events: Array<{ method: string; body?: unknown }> = [];
 		const client = {
-			async claimTask() {
-				events.push({ method: 'claimTask' });
+			async nextAssignment() {
+				events.push({ method: 'nextAssignment' });
 				return {
 					ok: true,
-					tasks: [{
+					leaseToken: 'lease_1',
+					payload: {
 						id: 'task_1',
 						projectId: 'project_123',
-						agentSlug: 'provider-planner',
-						input: { dryRun: true, projectId: 'project_123', agentSlug: 'provider-planner' },
-					}],
+						agentId: 'provider-planner',
+						mode: 'planning',
+						decisionInput: { input: { dryRun: true, projectId: 'project_123', agentSlug: 'provider-planner' } },
+						capacityEnvelope: { projectId: 'project_123', mode: 'planning' },
+					},
 				};
 			},
-			async appendTaskEvent(_taskId: string, body: unknown) {
-				events.push({ method: 'appendTaskEvent', body });
-				return { ok: true, event: { id: `event_${events.length}` } };
+			async createAssignmentModeRun(_assignmentId: string, body: unknown) {
+				events.push({ method: 'createAssignmentModeRun', body });
+				return { ok: true, payload: { id: `mode_run_${events.length}` } };
 			},
-			async reportUsage(body: unknown) {
-				events.push({ method: 'reportUsage', body });
-				return { ok: true, usage: { id: 'usage_1' } };
+			async completeAssignment(_assignmentId: string, body: unknown) {
+				events.push({ method: 'completeAssignment', body });
+				return { ok: true, payload: { id: 'task_1', status: 'completed' } };
 			},
-			async completeTask(_taskId: string, body: unknown) {
-				events.push({ method: 'completeTask', body });
-				return { ok: true, task: { id: 'task_1', status: 'completed' } };
-			},
-			async failTask(_taskId: string, body: unknown) {
-				events.push({ method: 'failTask', body });
-				return { ok: true, task: { id: 'task_1', status: 'failed' } };
+			async failAssignment(_assignmentId: string, body: unknown) {
+				events.push({ method: 'failAssignment', body });
+				return { ok: true, payload: { id: 'task_1', status: 'failed' } };
 			},
 		};
 
 		const result = await runProviderRunnerOnce({ config, client });
 
-		expect(result).toMatchObject({ ok: true, role: 'runner', claimed: 1, taskId: 'task_1' });
+		expect(result).toMatchObject({ ok: true, role: 'runner', assigned: 1, assignmentId: 'task_1' });
 		expect(events.map((event) => event.method)).toEqual([
-			'claimTask',
-			'appendTaskEvent',
-			'appendTaskEvent',
-			'reportUsage',
-			'completeTask',
+			'nextAssignment',
+			'createAssignmentModeRun',
+			'createAssignmentModeRun',
+			'completeAssignment',
 		]);
-		expect(events.find((event) => event.method === 'completeTask')?.body).toMatchObject({
+		expect(events.filter((event) => event.method === 'createAssignmentModeRun').map((event) => (event.body as Record<string, unknown>).status)).toEqual(['running', 'succeeded']);
+		expect(events.find((event) => event.method === 'completeAssignment')?.body).toMatchObject({
 			output: {
 				dryRun: true,
 				agentSlug: 'provider-planner',
+				mode: 'planning',
 			},
 		});
 	});
@@ -410,85 +409,144 @@ describe('capacity provider runtime', () => {
 				events.push({ method: 'writeReport', body });
 				return { ok: true, report: { id: 'report_hosted' } };
 			},
-			async claimTask() {
-				events.push({ method: 'claimTask' });
+			async nextAssignment() {
+				events.push({ method: 'nextAssignment' });
 				return {
 					ok: true,
-					tasks: [{
+					leaseToken: 'lease_hosted',
+					payload: {
 						id: 'task_hosted',
 						projectId: 'project_123',
-						agentSlug: 'provider-planner',
-						input: { dryRun: true, projectId: 'project_123', agentSlug: 'provider-planner' },
-					}],
+						agentId: 'provider-planner',
+						mode: 'planning',
+						decisionInput: { input: { dryRun: true, projectId: 'project_123', agentSlug: 'provider-planner' } },
+						capacityEnvelope: { projectId: 'project_123', mode: 'planning' },
+					},
 				};
 			},
-			async appendTaskEvent(_taskId: string, body: unknown) {
-				events.push({ method: 'appendTaskEvent', body });
-				return { ok: true, event: { id: `event_${events.length}` } };
+			async createAssignmentModeRun(_assignmentId: string, body: unknown) {
+				events.push({ method: 'createAssignmentModeRun', body });
+				return { ok: true, payload: { id: `mode_run_${events.length}` } };
 			},
-			async reportUsage(body: unknown) {
-				events.push({ method: 'reportUsage', body });
-				return { ok: true, usage: { id: 'usage_hosted' } };
+			async completeAssignment(_assignmentId: string, body: unknown) {
+				events.push({ method: 'completeAssignment', body });
+				return { ok: true, payload: { id: 'task_hosted', status: 'completed' } };
 			},
-			async completeTask(_taskId: string, body: unknown) {
-				events.push({ method: 'completeTask', body });
-				return { ok: true, task: { id: 'task_hosted', status: 'completed' } };
-			},
-			async failTask(_taskId: string, body: unknown) {
-				events.push({ method: 'failTask', body });
-				return { ok: true, task: { id: 'task_hosted', status: 'failed' } };
+			async failAssignment(_assignmentId: string, body: unknown) {
+				events.push({ method: 'failAssignment', body });
+				return { ok: true, payload: { id: 'task_hosted', status: 'failed' } };
 			},
 		};
 
 		const result = await runProviderRunnerOnce({ config, client });
 
-		expect(result).toMatchObject({ ok: true, claimed: 1, taskId: 'task_hosted' });
+		expect(result).toMatchObject({ ok: true, assigned: 1, assignmentId: 'task_hosted' });
 		expect(events.map((event) => event.method)).toEqual([
-			'claimTask',
+			'nextAssignment',
 			'portfolio',
 			'createWorkday',
 			'writeReport',
-			'appendTaskEvent',
-			'appendTaskEvent',
-			'reportUsage',
-			'completeTask',
+			'createAssignmentModeRun',
+			'createAssignmentModeRun',
+			'completeAssignment',
 		]);
+	});
+
+	it('executes acting assignments through the kernel with acting mode telemetry', async () => {
+		const sourceRepo = createProjectRepository();
+		const config = resolveProviderConfig({ env: env() });
+		await processProviderPortfolio({
+			config,
+			client: {
+				async portfolio() { return portfolio(sourceRepo); },
+				async createWorkday(body: unknown) { return { ok: true, workDay: { id: 'wd_provider_1', ...(body as Record<string, unknown>) } }; },
+				async writeReport() { return { ok: true, report: { id: 'report_1' } }; },
+			},
+		});
+		const events: Array<{ method: string; body?: unknown }> = [];
+		const client = {
+			async nextAssignment() {
+				events.push({ method: 'nextAssignment' });
+				return {
+					ok: true,
+					leaseToken: 'lease_acting',
+					payload: {
+						id: 'assignment_acting',
+						projectId: 'project_123',
+						agentId: 'provider-planner',
+						mode: 'acting',
+						decisionInput: { input: { dryRun: true, projectId: 'project_123', agentSlug: 'provider-planner' } },
+						capacityEnvelope: { projectId: 'project_123', mode: 'acting' },
+					},
+				};
+			},
+			async createAssignmentModeRun(_assignmentId: string, body: unknown) {
+				events.push({ method: 'createAssignmentModeRun', body });
+				return { ok: true, payload: { id: `mode_run_${events.length}` } };
+			},
+			async completeAssignment(_assignmentId: string, body: unknown) {
+				events.push({ method: 'completeAssignment', body });
+				return { ok: true, payload: { id: 'assignment_acting', status: 'completed' } };
+			},
+			async failAssignment(_assignmentId: string, body: unknown) {
+				events.push({ method: 'failAssignment', body });
+				return { ok: true, payload: { id: 'assignment_acting', status: 'failed' } };
+			},
+		};
+
+		const result = await runProviderRunnerOnce({ config, client });
+
+		expect(result).toMatchObject({ ok: true, assigned: 1, assignmentId: 'assignment_acting' });
+		expect(events.filter((event) => event.method === 'createAssignmentModeRun').map((event) => (event.body as Record<string, unknown>).capacityEnvelope)).toEqual([
+			expect.objectContaining({ mode: 'acting' }),
+			expect.objectContaining({ mode: 'acting' }),
+		]);
+		expect(events.find((event) => event.method === 'completeAssignment')?.body).toMatchObject({
+			output: {
+				mode: 'acting',
+				summary: 'Project-owned provider planner completed in acting mode.',
+			},
+		});
 	});
 
 	it('fails live claimed tasks when the provider has not synced project state', async () => {
 		const config = resolveProviderConfig({ env: env() });
 		const events: Array<{ method: string; body?: unknown }> = [];
 		const client = {
-			async claimTask() {
+			async nextAssignment() {
 				return {
 					ok: true,
-					tasks: [{ id: 'task_2', projectId: 'project_123', agentSlug: 'provider-planner', input: {} }],
+					leaseToken: 'lease_2',
+					payload: {
+						id: 'task_2',
+						projectId: 'project_123',
+						agentId: 'provider-planner',
+						mode: 'planning',
+						decisionInput: { input: {} },
+						capacityEnvelope: { projectId: 'project_123', mode: 'planning' },
+					},
 				};
 			},
-			async appendTaskEvent(_taskId: string, body: unknown) {
-				events.push({ method: 'appendTaskEvent', body });
-				return { ok: true, event: { id: 'event_1' } };
+			async createAssignmentModeRun(_assignmentId: string, body: unknown) {
+				events.push({ method: 'createAssignmentModeRun', body });
+				return { ok: true, payload: { id: 'mode_run_1' } };
 			},
-			async completeTask() {
-				events.push({ method: 'completeTask' });
+			async completeAssignment() {
+				events.push({ method: 'completeAssignment' });
 				throw new Error('non-dry-run task must not complete');
 			},
-			async failTask(_taskId: string, body: unknown) {
-				events.push({ method: 'failTask', body });
-				return { ok: true, task: { id: 'task_2', status: 'failed' } };
-			},
-			async reportUsage() {
-				events.push({ method: 'reportUsage' });
-				throw new Error('non-dry-run task must not report usage');
+			async failAssignment(_assignmentId: string, body: unknown) {
+				events.push({ method: 'failAssignment', body });
+				return { ok: true, payload: { id: 'task_2', status: 'failed' } };
 			},
 		};
 
 		const result = await runProviderRunnerOnce({ config, client });
 
-		expect(result).toMatchObject({ ok: true, claimed: 1, taskId: 'task_2' });
-		expect(events.map((event) => event.method)).toEqual(['appendTaskEvent', 'failTask']);
-		expect(events.find((event) => event.method === 'failTask')?.body).toMatchObject({
-			errorCode: 'provider_project_not_synced',
+		expect(result).toMatchObject({ ok: true, assigned: 1, assignmentId: 'task_2' });
+		expect(events.map((event) => event.method)).toEqual(['failAssignment']);
+		expect(events.find((event) => event.method === 'failAssignment')?.body).toMatchObject({
+			code: 'provider_project_not_synced',
 		});
 	});
 });

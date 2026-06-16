@@ -47,19 +47,34 @@ Do not create plaintext `.env` files for provider keys. Do not render provider A
 
 ## Assignment Protocol
 
-The target runtime protocol is provider-initiated and outbound-friendly:
+The implemented Phase 2 and Phase 3 runtime protocol is provider-initiated and outbound-friendly:
 
-1. The provider manager checks in with the Treeseed API.
+1. The provider manager calls `POST /v1/provider/check-in`.
 2. The check-in reports execution providers, native limits, observations, availability window, grants, capabilities, runner concurrency, and provider-local pressure.
-3. The API records a `ProviderAvailabilitySession`.
-4. The API assignment function may return leased `ProviderAssignment` records.
-5. The provider manager claims or renews leases and dispatches provider runners.
-6. The provider runner executes the project-bundled agent/handler under `AgentCapacityEnvelope` and `DecisionExecutionInput`.
-7. The provider runner records `AgentModeRun` status and usage actuals.
-8. The provider manager completes, fails, or returns the assignment.
-9. The API settles usage into the capacity ledger.
+3. The API records a `ProviderAvailabilitySession` as generic supply.
+4. The provider runner calls `POST /v1/provider/assignments/next`.
+5. The API leases one existing eligible `ProviderAssignment` for the authenticated provider and returns a lease token.
+6. The provider runner calls `AgentKernel.runAssignment` with the leased assignment, `AgentCapacityEnvelope`, and `DecisionExecutionInput`.
+7. The AgentKernel validates mode/profile/envelope bounds, resolves the project-bundled agent handler, and executes it with optional `AgentContext.capacity` runtime context.
+8. The provider runner records `AgentModeRun` telemetry through `POST /v1/provider/assignments/:assignmentId/mode-runs`.
+9. The provider runner renews, completes, fails, or returns the assignment through the assignment lifecycle routes.
+10. The API settles usage into durable mode-run, usage, reservation, and ledger bridge records where ids are supplied.
 
 The API does not require inbound network reachability to local or self-hosted providers.
+
+The provider runner polls assignment lifecycle routes and executes assignments through the AgentKernel. The API may synthesize planning assignments from open planning-input requests and acting assignments from accepted capacity-plan work units before next-assignment leasing, but the provider runner does not synthesize project work locally. Raw accepted execution inputs remain planning artifacts until the API aggregates and accepts a durable capacity plan. Legacy task-claim routes remain available for compatibility.
+
+The provider runner does not use `claimTask`, `appendTaskEvent`, `completeTask`, or `failTask` for package-owned assignment execution. Those SDK methods and API routes remain compatibility surfaces for older callers.
+
+Lifecycle routes:
+
+- `POST /v1/provider/check-in`
+- `POST /v1/provider/assignments/next`
+- `POST /v1/provider/assignments/:assignmentId/renew`
+- `POST /v1/provider/assignments/:assignmentId/return`
+- `POST /v1/provider/assignments/:assignmentId/complete`
+- `POST /v1/provider/assignments/:assignmentId/fail`
+- `POST /v1/provider/assignments/:assignmentId/mode-runs`
 
 ## Provider Versus Project Ownership
 
@@ -88,7 +103,7 @@ Provider runners execute assigned project-bundled agents. They must not invent p
 
 Provider assignments should include a project-scoped TreeDX proxy handle, not raw TreeDX service credentials.
 
-The runner calls the TreeSeed API using `TREESEED_CAPACITY_PROVIDER_API_KEY` and scoped proxy paths such as `/v1/dx/projects/:projectId/...`. The API authenticates the provider, verifies project/task scope, resolves the TreeDX node, holds TreeDX node credentials, and forwards only allowed repository/workspace operations.
+The runner calls the TreeSeed API using `TREESEED_CAPACITY_PROVIDER_API_KEY` and scoped proxy paths such as `/v1/dx/projects/:projectId/...`. The API authenticates the provider, verifies project/task or assignment scope, resolves the TreeDX node, holds TreeDX node credentials, forwards only allowed repository/workspace operations, and records proxy audit evidence.
 
 ## Runtime Images
 
@@ -132,4 +147,13 @@ npm -w packages/agent run capacity-provider:test-local
 npm -w packages/agent run verify:local
 ```
 
-Future assignment-protocol acceptance should prove that an isolated provider runtime can check in, receive a diagnostic assignment, execute one planning or acting mode run, report usage, and clean up provider infrastructure.
+Live assignment-protocol acceptance is exposed through SDK reconciliation:
+
+```bash
+trsd reconcile test-live --provider local --mode acceptance --yes --json
+trsd reconcile test-live --provider railway --environment staging --mode cleanup --yes --json
+trsd reconcile test-live --provider railway --environment staging --mode acceptance --yes --json
+trsd reconcile test-live --provider railway --environment staging --mode cleanup --yes --json
+```
+
+The capacity runtime proof checks in with the provider API key, creates a tagged diagnostic assignment through the existing team API, leases the assignment through the provider protocol, emits `AgentModeRun` telemetry, completes the assignment, and verifies mode-run visibility. The proof requires `TREESEED_CAPACITY_ACCEPTANCE_API_URL`, `TREESEED_CAPACITY_ACCEPTANCE_ADMIN_TOKEN`, `TREESEED_CAPACITY_ACCEPTANCE_TEAM_ID`, `TREESEED_CAPACITY_ACCEPTANCE_PROJECT_ID`, `TREESEED_CAPACITY_ACCEPTANCE_PROVIDER_ID`, `TREESEED_CAPACITY_ACCEPTANCE_AGENT_CLASS_ID`, and `TREESEED_CAPACITY_PROVIDER_API_KEY`.

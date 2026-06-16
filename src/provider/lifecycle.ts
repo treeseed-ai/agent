@@ -65,10 +65,31 @@ export async function buildProviderPlan(config: ProviderRuntimeConfig, options: 
 export async function runManagerSkeleton(config: ProviderRuntimeConfig, options: { dryRun?: boolean } = {}) {
 	if (!options.dryRun && config.apiKey && config.marketUrl) {
 		const client = createProviderMarketClient(config);
+		const checkIn = await client.checkIn({
+			environment: config.environment,
+			status: 'open',
+			capabilities: discoverProviderCapabilities(config).map((capability) => capability.id),
+			nativeLimits: {
+				budgets: discoverProviderBudgets(config),
+			},
+			runnerPressure: {
+				activeRunners: 0,
+				maxConcurrentRunners: config.maxConcurrentRunners,
+				maxConcurrentWorkdays: config.maxConcurrentWorkdays,
+			},
+			constraints: {
+				outboundOnly: true,
+				dataDir: config.dataDir,
+			},
+			metadata: {
+				source: '@treeseed/agent/provider-manager',
+			},
+		});
 		const result = await processProviderPortfolio({ config, client });
 		return okPayload('manager', {
 			action: 'portfolio-processing',
 			dryRun: false,
+			checkIn: checkIn.payload,
 			result,
 		});
 	}
@@ -82,16 +103,15 @@ export async function runManagerSkeleton(config: ProviderRuntimeConfig, options:
 
 export async function runRunnerSkeleton(config: ProviderRuntimeConfig, options: { dryRun?: boolean } = {}) {
 	const flow = [
-		'claim task from Market provider endpoint',
-		'append provider-local dry-run event',
-		'complete or fail task without executing handlers',
+		'request next leased assignment from Market provider endpoint',
+		'record provider-local mode-run telemetry',
+		'complete or fail assignment without widening scope',
 	];
 	if (options.dryRun || !config.apiKey || !config.marketUrl) {
 		return okPayload('runner', {
 			dryRun: true,
 			flow,
-			claimRequest: {
-				limit: 1,
+			assignmentRequest: {
 				capabilities: discoverProviderCapabilities(config).map((capability) => capability.id),
 			},
 		});

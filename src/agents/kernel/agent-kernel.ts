@@ -10,6 +10,7 @@ import { resolveAgentHandler } from '../registry.ts';
 import type {
 	AgentContext,
 	AgentExecutionAdapter,
+	AgentExecutionResult,
 	AgentMutationAdapter,
 	AgentNotificationAdapter,
 	AgentOperationsAdapter,
@@ -18,6 +19,19 @@ import type {
 	AgentTriggerInvocation,
 	AgentVerificationAdapter,
 } from '../runtime-types.ts';
+import {
+	createAgentKernelModeFallback,
+	deriveAgentCapacityEnvelopeFromAssignment,
+	deriveDecisionExecutionInputFromAssignment,
+	normalizeAgentExecutionMode,
+	validateAgentKernelModeExecutionInput,
+	type AgentCapacityEnvelope,
+	type AgentKernelModeExecutionInput,
+	type AgentKernelModeExecutionResult,
+	type AgentKernelModeFallback,
+	type AgentModeRunStatus,
+	type DecisionExecutionInput,
+} from '@treeseed/sdk/agent-capacity';
 import type { AgentRunTrace, AgentErrorCategory } from '../contracts/run.ts';
 import { AgentSdk } from '@treeseed/sdk/sdk';
 import { followCursorKey, resolveTriggerDecision } from './trigger-resolver.ts';
@@ -31,6 +45,25 @@ import { resolve } from 'node:path';
 
 function nowIso() {
 	return new Date().toISOString();
+}
+
+export interface AgentKernelModeRunTelemetryInput {
+	status: AgentModeRunStatus;
+	selectedInput: Record<string, unknown>;
+	capacityEnvelope: AgentCapacityEnvelope;
+	outputs?: Record<string, unknown>;
+	traceRefs?: Record<string, unknown>;
+	usageActual?: Record<string, unknown> | null;
+	validation?: Record<string, unknown>;
+	fallbackReason?: string | null;
+	startedAt?: string | null;
+	completedAt?: string | null;
+	failedAt?: string | null;
+	metadata?: Record<string, unknown>;
+}
+
+export interface AgentKernelAssignmentRunOptions extends AgentKernelModeExecutionInput {
+	recordModeRun?: (run: AgentKernelModeRunTelemetryInput) => Promise<unknown>;
 }
 
 function resolveExecutionRoot(tenantRoot: string) {
@@ -56,6 +89,7 @@ export class AgentKernel {
 	private readonly operations;
 	private readonly activeRuns = new Set<string>();
 	private readonly lastRunAt = new Map<string, number>();
+	private readonly tenantRoot;
 	private readonly executionRoot;
 
 	constructor(
@@ -72,6 +106,7 @@ export class AgentKernel {
 			operations?: AgentOperationsAdapter;
 		},
 	) {
+		this.tenantRoot = repoRoot;
 		this.executionRoot = options?.executionRoot ?? resolveExecutionRoot(repoRoot);
 		this.providerSelections = getTreeseedAgentProviderSelections();
 		const runtimeProviders = resolveAgentRuntimeProviders(this.executionRoot, this.providerSelections);
@@ -104,7 +139,7 @@ export class AgentKernel {
 	async doctor() {
 		const { specs, diagnostics } = await loadAllAgentSpecs(this.sdk);
 		for (const agent of specs.filter((entry) => entry.enabled)) {
-			await resolveAgentHandler(agent.handler);
+			await resolveAgentHandler(agent.handler, { tenantRoot: this.tenantRoot });
 		}
 		const errors = diagnostics.filter((entry) => entry.severity === 'error');
 		if (errors.length) {
@@ -195,22 +230,30 @@ export class AgentKernel {
 		return 'sdk_error';
 	}
 
-	private async executeAgent(agent: AgentRuntimeSpec, trigger: AgentTriggerInvocation) {
+	private async executeAgentInternal(
+		agent: AgentRuntimeSpec,
+		trigger: AgentTriggerInvocation,
+		options: { capacity?: AgentContext['capacity'] } = {},
+	): Promise<{ runId: string; output: AgentExecutionResult }> {
 		if (this.activeRuns.has(agent.slug)) {
 			return {
-				status: 'waiting',
-				summary: `Agent ${agent.slug} is already running.`,
+				runId: '',
+				output: {
+					status: 'waiting',
+					summary: `Agent ${agent.slug} is already running.`,
+				},
 			};
 		}
 		this.activeRuns.add(agent.slug);
 
 		const runId = crypto.randomUUID();
-		const handler = await resolveAgentHandler(agent.handler);
+		const handler = await resolveAgentHandler(agent.handler, { tenantRoot: this.tenantRoot });
 		const scopedSdk = this.sdk.scopeForAgent(agent);
 		const context: AgentContext = {
 			runId,
 			repoRoot: this.executionRoot,
 			agent,
+			capacity: options.capacity,
 			coreObjective: loadCoreObjectiveContext(this.executionRoot),
 			sdk: scopedSdk,
 			trigger,
@@ -267,7 +310,7 @@ export class AgentKernel {
 				});
 			}
 			this.lastRunAt.set(agent.slug, Date.now());
-			return output;
+			return { runId, output };
 		} catch (error) {
 			if (trigger.message) {
 				await scopedSdk.ackMessage({
@@ -286,6 +329,246 @@ export class AgentKernel {
 			throw error;
 		} finally {
 			this.activeRuns.delete(agent.slug);
+		}
+	}
+
+	private async executeAgent(agent: AgentRuntimeSpec, trigger: AgentTriggerInvocation) {
+		return (await this.executeAgentInternal(agent, trigger)).output;
+	}
+
+	private async recordAssignmentModeRun(
+		options: AgentKernelAssignmentRunOptions,
+		run: AgentKernelModeRunTelemetryInput,
+	) {
+		if (!options.recordModeRun) return null;
+		return options.recordModeRun(run);
+	}
+
+	private async boundedAssignmentResult(
+		options: AgentKernelAssignmentRunOptions,
+		fallback: AgentKernelModeFallback,
+		status: AgentKernelModeExecutionResult['status'] = fallback.retryable ? 'returned' : 'failed',
+	): Promise<AgentKernelModeExecutionResult> {
+		const assignment = options.assignment;
+		const mode = normalizeAgentExecutionMode(assignment.mode);
+		const capacityEnvelope = options.capacityEnvelope ?? deriveAgentCapacityEnvelopeFromAssignment(assignment);
+		const decisionInput = options.decisionInput ?? deriveDecisionExecutionInputFromAssignment(assignment);
+		const selectedInput = decisionInput.input;
+		const timestamp = nowIso();
+		await this.recordAssignmentModeRun(options, {
+			status: status === 'failed' ? 'failed' : 'cancelled',
+			selectedInput,
+			capacityEnvelope,
+			outputs: {
+				status,
+				summary: fallback.reason,
+			},
+			validation: {
+				code: fallback.code,
+				retryable: fallback.retryable,
+				...(fallback.metadata ?? {}),
+			},
+			fallbackReason: fallback.reason,
+			failedAt: status === 'failed' ? timestamp : null,
+			completedAt: status !== 'failed' ? timestamp : null,
+			metadata: {
+				source: 'agent_kernel_mode_runtime',
+				assignmentId: assignment.id,
+				runnerId: options.runnerId ?? null,
+			},
+		});
+		return {
+			status,
+			mode,
+			assignmentId: assignment.id,
+			projectId: assignment.projectId,
+			projectAgentClassId: assignment.projectAgentClassId,
+			agentId: decisionInput.agentId ?? assignment.agentId ?? null,
+			handlerId: decisionInput.handlerId ?? assignment.handlerId ?? null,
+			summary: fallback.reason,
+			outputs: {
+				status,
+				summary: fallback.reason,
+			},
+			selectedInput,
+			capacityEnvelope,
+			traceRefs: {},
+			fallback,
+			metadata: {
+				source: 'agent_kernel_mode_runtime',
+			},
+		};
+	}
+
+	private isAssignmentReadyForActing(readiness: Record<string, unknown> | null | undefined): boolean {
+		if (!readiness) return false;
+		const executionReadiness = readiness.executionReadiness;
+		const planningInputsStatus = readiness.planningInputsStatus;
+		return (executionReadiness === 'ready' || executionReadiness === 'waived')
+			&& (planningInputsStatus === 'complete' || planningInputsStatus === 'waived');
+	}
+
+	async runAssignment(options: AgentKernelAssignmentRunOptions): Promise<AgentKernelModeExecutionResult> {
+		const assignment = options.assignment;
+		const mode = normalizeAgentExecutionMode(assignment.mode);
+		const capacityEnvelope = options.capacityEnvelope ?? deriveAgentCapacityEnvelopeFromAssignment(assignment);
+		const decisionInput = options.decisionInput ?? deriveDecisionExecutionInputFromAssignment(assignment);
+		const validationFallback = validateAgentKernelModeExecutionInput({
+			...options,
+			capacityEnvelope,
+			decisionInput,
+			readiness: options.readiness ?? null,
+			treedxProxyHandle: options.treedxProxyHandle ?? assignment.treedxProxyHandle ?? null,
+		});
+		if (validationFallback) {
+			return this.boundedAssignmentResult(options, validationFallback);
+		}
+		if (mode === 'acting' && options.readiness && !this.isAssignmentReadyForActing(options.readiness as Record<string, unknown>)) {
+			return this.boundedAssignmentResult(options, createAgentKernelModeFallback(
+				'assignment_decision_not_ready',
+				`Assignment ${assignment.id} is not ready for acting execution.`,
+				{ retryable: true, metadata: { readiness: options.readiness } },
+			));
+		}
+
+		const { specs, diagnostics } = await loadActiveAgentSpecs(this.sdk);
+		const errors = diagnostics.filter((entry) => entry.severity === 'error');
+		if (errors.length) {
+			return this.boundedAssignmentResult(options, createAgentKernelModeFallback(
+				'assignment_agent_not_found',
+				`Agent spec validation failed: ${errors.map((entry) => `${entry.slug}:${entry.field}:${entry.message}`).join(' | ')}`,
+				{ retryable: false },
+			), 'failed');
+		}
+		const agents = this.sortAgents(specs);
+		const agentSlug = decisionInput.agentId ?? assignment.agentId;
+		const agent = agentSlug ? agents.find((entry) => entry.slug === agentSlug) : null;
+		if (!agent) {
+			return this.boundedAssignmentResult(options, createAgentKernelModeFallback(
+				'assignment_agent_not_found',
+				`Agent ${agentSlug ?? '<missing>'} is not enabled or was not found in project ${assignment.projectId}.`,
+				{ retryable: false },
+			), 'failed');
+		}
+
+		const trigger: AgentTriggerInvocation = {
+			kind: 'manual',
+			source: `capacity-provider-assignment:${mode}`,
+			trigger: { type: 'startup' },
+		};
+		const startedAt = nowIso();
+		await this.recordAssignmentModeRun(options, {
+			status: 'running',
+			selectedInput: decisionInput.input,
+			capacityEnvelope,
+			startedAt,
+			validation: {
+				mode,
+				projectAgentClassId: assignment.projectAgentClassId,
+			},
+			metadata: {
+				source: 'agent_kernel_mode_runtime',
+				assignmentId: assignment.id,
+				runnerId: options.runnerId ?? null,
+			},
+		});
+
+		try {
+			const executed = await this.executeAgentInternal(agent, trigger, {
+				capacity: {
+					assignmentId: assignment.id,
+					providerId: assignment.capacityProviderId,
+					mode,
+					envelope: capacityEnvelope,
+					decisionInput,
+					projectAgentClass: options.projectAgentClass ?? null,
+					kernelProfile: options.kernelProfile ?? options.projectAgentClass?.kernelProfile ?? null,
+					kernelPolicy: options.kernelPolicy ?? options.projectAgentClass?.kernelPolicy ?? null,
+					assignment,
+					readiness: options.readiness ?? null,
+					treedxProxyHandle: options.treedxProxyHandle ?? assignment.treedxProxyHandle ?? null,
+					fallbackReason: null,
+				},
+			});
+			const completedAt = nowIso();
+			const outputStatus = executed.output.status;
+			const modeRunStatus: AgentModeRunStatus = outputStatus === 'completed'
+				? 'succeeded'
+				: outputStatus === 'failed'
+					? 'failed'
+					: 'cancelled';
+			const fallback = outputStatus === 'waiting'
+				? createAgentKernelModeFallback(
+					'assignment_missing_decision_input',
+					executed.output.summary,
+					{ retryable: true },
+				)
+				: null;
+			await this.recordAssignmentModeRun(options, {
+				status: modeRunStatus,
+				selectedInput: decisionInput.input,
+				capacityEnvelope,
+				outputs: {
+					status: outputStatus,
+					summary: executed.output.summary,
+					stdout: executed.output.stdout ?? null,
+					stderr: executed.output.stderr ?? null,
+					metadata: executed.output.metadata ?? {},
+				},
+				traceRefs: {
+					agentRunId: executed.runId,
+					agentSlug: agent.slug,
+					handlerKind: agent.handler,
+				},
+				fallbackReason: fallback?.reason ?? null,
+				completedAt: modeRunStatus === 'succeeded' ? completedAt : null,
+				failedAt: modeRunStatus === 'failed' ? completedAt : null,
+				metadata: {
+					source: 'agent_kernel_mode_runtime',
+					assignmentId: assignment.id,
+					runnerId: options.runnerId ?? null,
+				},
+			});
+			return {
+				status: outputStatus === 'completed'
+					? 'completed'
+					: outputStatus === 'failed'
+						? 'failed'
+						: 'returned',
+				mode,
+				assignmentId: assignment.id,
+				projectId: assignment.projectId,
+				projectAgentClassId: assignment.projectAgentClassId,
+				agentId: agent.slug,
+				handlerId: String(agent.handler),
+				summary: executed.output.summary,
+				outputs: {
+					status: outputStatus,
+					summary: executed.output.summary,
+					stdout: executed.output.stdout ?? null,
+					stderr: executed.output.stderr ?? null,
+					metadata: executed.output.metadata ?? {},
+				},
+				selectedInput: decisionInput.input,
+				capacityEnvelope,
+				traceRefs: {
+					agentRunId: executed.runId,
+					agentSlug: agent.slug,
+					handlerKind: agent.handler,
+				},
+				fallback,
+				metadata: {
+					source: 'agent_kernel_mode_runtime',
+					startedAt,
+					completedAt,
+				},
+			};
+		} catch (error) {
+			return this.boundedAssignmentResult(options, createAgentKernelModeFallback(
+				'assignment_handler_failed',
+				error instanceof Error ? error.message : String(error),
+				{ retryable: false },
+			), 'failed');
 		}
 	}
 

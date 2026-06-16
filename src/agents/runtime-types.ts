@@ -12,6 +12,15 @@ import type {
 	AgentOperationRequest,
 	AgentOperationResult,
 } from '@treeseed/sdk/operations/agent-tools';
+import type {
+	AgentCapacityEnvelope,
+	AgentExecutionMode,
+	AgentKernelPolicy,
+	AgentKernelProfile,
+	DecisionExecutionInput,
+	ProviderAssignment,
+	ProjectAgentClass,
+} from '@treeseed/sdk/agent-capacity';
 
 export interface AgentTriggerInvocation {
 	kind: 'startup' | 'schedule' | 'message' | 'manual' | 'follow';
@@ -133,6 +142,20 @@ export interface AgentContext {
 	runId: string;
 	repoRoot: string;
 	agent: AgentRuntimeSpec;
+	capacity?: {
+		assignmentId: string;
+		providerId: string;
+		mode: AgentExecutionMode;
+		envelope: AgentCapacityEnvelope;
+		decisionInput: DecisionExecutionInput;
+		projectAgentClass?: ProjectAgentClass | null;
+		kernelProfile?: AgentKernelProfile | null;
+		kernelPolicy?: AgentKernelPolicy | null;
+		assignment?: ProviderAssignment;
+		readiness?: Record<string, unknown> | null;
+		treedxProxyHandle?: Record<string, unknown> | null;
+		fallbackReason?: string | null;
+	};
 	coreObjective?: {
 		path: string;
 		content: string;

@@ -2,13 +2,17 @@ import type { AgentContext, AgentExecutionResult } from '../agents/runtime-types
 import { AgentSdk } from '@treeseed/sdk/sdk';
 import type { AgentRuntimeSpec } from '@treeseed/sdk/types/agents';
 import type { MarketProviderClient } from '@treeseed/sdk/capacity-provider';
+import type { ProviderAssignment } from '@treeseed/sdk/agent-capacity';
+import { deriveAgentCapacityEnvelopeFromAssignment, deriveDecisionExecutionInputFromAssignment } from '@treeseed/sdk/agent-capacity';
 import { loadAllAgentSpecs } from '../agents/spec-loader.ts';
 import { resolveAgentHandler } from '../agents/registry.ts';
 import { createExecutionAdapter } from '../agents/adapters/execution.ts';
+import { AgentKernel } from '../agents/kernel/agent-kernel.ts';
 import type { ProviderRuntimeConfig } from './config.ts';
 import { processProviderPortfolio, readProviderPortfolioIndex } from './portfolio-processing.ts';
 
-type ProviderRunnerClient = Pick<MarketProviderClient, 'claimTask' | 'appendTaskEvent' | 'completeTask' | 'failTask' | 'reportUsage'> & Partial<Pick<MarketProviderClient, 'portfolio' | 'createWorkday' | 'writeReport'>>;
+type ProviderTaskClient = Pick<MarketProviderClient, 'claimTask' | 'appendTaskEvent' | 'completeTask' | 'failTask' | 'reportUsage'> & Partial<Pick<MarketProviderClient, 'portfolio' | 'createWorkday' | 'writeReport'>>;
+type ProviderAssignmentClient = Pick<MarketProviderClient, 'nextAssignment' | 'createAssignmentModeRun' | 'completeAssignment' | 'failAssignment'> & Partial<Pick<MarketProviderClient, 'portfolio' | 'createWorkday' | 'writeReport' | 'renewAssignment' | 'returnAssignment'>>;
 
 function record(value: unknown): Record<string, unknown> {
 	return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -246,7 +250,7 @@ async function runLiveCodexHandler(input: {
 	};
 }
 
-async function failTask(client: ProviderRunnerClient, id: string, code: string, message: string) {
+async function failTask(client: ProviderTaskClient, id: string, code: string, message: string) {
 	await client.appendTaskEvent(id, {
 		kind: 'provider_runner_failed',
 		data: { code, message },
@@ -260,7 +264,7 @@ async function failTask(client: ProviderRunnerClient, id: string, code: string, 
 
 export async function runProviderDryRunTask(input: {
 	config: ProviderRuntimeConfig;
-	client: ProviderRunnerClient;
+	client: ProviderTaskClient;
 	task: Record<string, unknown>;
 }) {
 	const id = taskId(input.task);
@@ -283,7 +287,17 @@ export async function runProviderDryRunTask(input: {
 	if (!project?.repository.ok) {
 		return failTask(input.client, id, 'provider_project_not_synced', `Project ${projectId} has not been synced by the provider manager.`);
 	}
-	const sdk = AgentSdk.createLocal({ repoRoot: project.repository.path });
+	const localSdk = AgentSdk.createLocal({ repoRoot: project.repository.path });
+	const sdk = {
+		repoRoot: localSdk.repoRoot,
+		listRawAgentSpecs: localSdk.listRawAgentSpecs.bind(localSdk),
+		listAgentSpecs: localSdk.listAgentSpecs.bind(localSdk),
+		scopeForAgent() { return this; },
+		async recordRun() { return { ok: true, payload: null }; },
+		async ackMessage() { return { ok: true, payload: null }; },
+		async upsertCursor() { return { ok: true, payload: null }; },
+		async releaseAllLeases() { return { ok: true, payload: null }; },
+	} as unknown as AgentSdk;
 	const loaded = await loadAllAgentSpecs(sdk);
 	const agent = loaded.specs.find((entry) => entry.slug === agentSlug);
 	if (!agent) {
@@ -380,35 +394,345 @@ export async function runProviderDryRunTask(input: {
 
 export async function runProviderRunnerOnce(input: {
 	config: ProviderRuntimeConfig;
-	client: ProviderRunnerClient;
+	client: ProviderAssignmentClient;
 	runnerId?: string;
 }) {
-	const claimed = await input.client.claimTask({
-		limit: 1,
+	const runnerId = input.runnerId ?? `provider-runner-${process.pid}`;
+	const leased = await input.client.nextAssignment({
 		runnerId: input.runnerId ?? `provider-runner-${process.pid}`,
 		capabilities: ['codex-docs-work'],
 	});
-	const task = claimed.tasks[0];
-	if (!task) {
+	const assignment = record(leased.payload ?? leased.assignment);
+	if (!Object.keys(assignment).length) {
 		return {
 			ok: true,
 			role: 'runner',
 			dryRun: false,
-			claimed: 0,
+			assigned: 0,
 			result: null,
 		};
 	}
-	const result = await runProviderDryRunTask({
+	const leaseToken = stringValue(leased.leaseToken, assignment.leaseToken);
+	const task = assignmentToTask(assignment);
+	if (leaseToken && input.client.renewAssignment) {
+		await input.client.renewAssignment(String(assignment.id), {
+			leaseToken,
+			runnerId,
+			leaseSeconds: Number(leased.leaseSeconds ?? 300),
+		});
+	}
+	const result = await runProviderAssignment({
 		config: input.config,
 		client: input.client,
-		task,
+		assignment,
+		leaseToken,
+		runnerId,
 	});
 	return {
 		ok: true,
 		role: 'runner',
 		dryRun: false,
-		claimed: 1,
-		taskId: taskId(task),
+		assigned: 1,
+		assignmentId: stringValue(assignment.id),
+		taskId: stringValue(assignment.taskId) ?? taskId(task),
 		result,
+	};
+}
+
+async function runProviderAssignment(input: {
+	config: ProviderRuntimeConfig;
+	client: ProviderAssignmentClient;
+	assignment: Record<string, unknown>;
+	leaseToken: string | null;
+	runnerId: string;
+}) {
+	const assignmentId = stringValue(input.assignment.id) ?? '';
+	const decisionInput = record(input.assignment.decisionInput);
+	const decisionPayload = record(decisionInput.input);
+	const capacityEnvelope = record(input.assignment.capacityEnvelope);
+	const projectId = stringValue(input.assignment.projectId, decisionInput.projectId, capacityEnvelope.projectId);
+	const agentSlug = stringValue(input.assignment.agentId, decisionInput.agentId, decisionPayload.agentSlug, decisionPayload.agentId);
+	if (!projectId || !agentSlug) {
+		return input.client.failAssignment(assignmentId, {
+			leaseToken: input.leaseToken,
+			runnerId: input.runnerId,
+			code: 'assignment_missing_project_or_agent',
+			message: 'Provider assignment requires projectId and agentId.',
+			retryable: false,
+		});
+	}
+	let index = await readProviderPortfolioIndex(input.config);
+	let project = index?.projects.find((entry) => entry.projectId === projectId);
+	if (!project && input.client.portfolio && input.client.createWorkday && input.client.writeReport) {
+		await processProviderPortfolio({
+			config: input.config,
+			client: input.client as Pick<MarketProviderClient, 'portfolio' | 'createWorkday' | 'writeReport'>,
+		});
+		index = await readProviderPortfolioIndex(input.config);
+		project = index?.projects.find((entry) => entry.projectId === projectId);
+	}
+	if (!project?.repository.ok) {
+		const body = {
+			leaseToken: input.leaseToken,
+			runnerId: input.runnerId,
+			reason: `Project ${projectId} has not been synced by the provider manager.`,
+			code: 'provider_project_not_synced',
+			retryable: true,
+			metadata: {
+				projectId,
+				agentSlug,
+			},
+		};
+		if (input.client.returnAssignment) {
+			return input.client.returnAssignment(assignmentId, body);
+		}
+		return input.client.failAssignment(assignmentId, {
+			...body,
+			message: body.reason,
+		});
+	}
+	const localSdk = AgentSdk.createLocal({ repoRoot: project.repository.path });
+	const sdk = {
+		repoRoot: localSdk.repoRoot,
+		listRawAgentSpecs: localSdk.listRawAgentSpecs.bind(localSdk),
+		listAgentSpecs: localSdk.listAgentSpecs.bind(localSdk),
+		scopeForAgent() { return this; },
+		async recordRun() { return { ok: true, payload: null }; },
+		async ackMessage() { return { ok: true, payload: null }; },
+		async upsertCursor() { return { ok: true, payload: null }; },
+		async releaseAllLeases() { return { ok: true, payload: null }; },
+	} as unknown as AgentSdk;
+	const dryRun = decisionPayload.dryRun !== false && !input.config.codexAuthFile && !input.config.codexAuthJsonB64;
+	const kernel = new AgentKernel(sdk, project.repository.path, {
+		execution: dryRun
+			? {
+				runTask: async () => waitingResult('Dry-run execution adapter skipped external model execution.'),
+			}
+			: createExecutionAdapter('codex', { repoRoot: project.repository.path }),
+		mutations: {
+			writeArtifact: async () => ({
+				branchName: null,
+				commitMessage: null,
+				worktreePath: null,
+				commitSha: null,
+				changedPaths: [],
+			}),
+		},
+		repository: {
+			inspectBranch: async () => ({
+				branchName: null,
+				changedPaths: [],
+				commitSha: null,
+				summary: dryRun ? 'Dry-run repository inspection skipped.' : 'Provider live assignment repository inspection completed.',
+			}),
+		},
+		verification: {
+			runChecks: async () => waitingResult(dryRun ? 'Dry-run verification skipped command execution.' : 'Provider live assignment verification is recorded by the assignment output.'),
+		},
+		notifications: {
+			deliver: async () => ({
+				status: 'waiting',
+				summary: 'Provider assignment notification delivery skipped.',
+				deliveredCount: 0,
+			}),
+		},
+		research: {
+			research: async () => ({
+				status: 'waiting',
+				summary: 'Provider assignment research skipped.',
+				markdown: '',
+			}),
+		},
+		operations: {
+			runOperation: async () => ({
+				ok: true,
+				dryRun,
+				summary: 'Provider assignment operation skipped.',
+				events: [],
+			}),
+		},
+	});
+	const typedAssignment = {
+		...input.assignment,
+		id: assignmentId,
+		teamId: stringValue(input.assignment.teamId, decisionInput.teamId, capacityEnvelope.teamId) ?? '',
+		projectId,
+		capacityProviderId: stringValue(input.assignment.capacityProviderId, capacityEnvelope.capacityProviderId) ?? '',
+		projectAgentClassId: stringValue(input.assignment.projectAgentClassId, decisionInput.projectAgentClassId, capacityEnvelope.projectAgentClassId) ?? agentSlug,
+		mode: stringValue(input.assignment.mode, decisionInput.mode, capacityEnvelope.mode) ?? 'planning',
+		status: stringValue(input.assignment.status) ?? 'leased',
+		leaseState: stringValue(input.assignment.leaseState) ?? 'leased',
+		agentId: agentSlug,
+		handlerId: stringValue(input.assignment.handlerId, decisionInput.handlerId),
+		capacityEnvelope: {
+			...capacityEnvelope,
+			teamId: stringValue(capacityEnvelope.teamId, input.assignment.teamId, decisionInput.teamId) ?? '',
+			projectId,
+			mode: stringValue(capacityEnvelope.mode, input.assignment.mode, decisionInput.mode) ?? 'planning',
+			projectAgentClassId: stringValue(capacityEnvelope.projectAgentClassId, input.assignment.projectAgentClassId, decisionInput.projectAgentClassId) ?? agentSlug,
+			capacityProviderId: stringValue(capacityEnvelope.capacityProviderId, input.assignment.capacityProviderId) ?? '',
+		},
+		decisionInput: {
+			...decisionInput,
+			teamId: stringValue(decisionInput.teamId, input.assignment.teamId, capacityEnvelope.teamId) ?? '',
+			projectId,
+			projectAgentClassId: stringValue(decisionInput.projectAgentClassId, input.assignment.projectAgentClassId, capacityEnvelope.projectAgentClassId) ?? agentSlug,
+			mode: stringValue(decisionInput.mode, input.assignment.mode, capacityEnvelope.mode) ?? 'planning',
+			agentId: agentSlug,
+			input: {
+				...decisionPayload,
+				projectId,
+				agentSlug,
+				assignmentId,
+			},
+		},
+	} as ProviderAssignment;
+	const modeResult = await kernel.runAssignment({
+		assignment: typedAssignment,
+		capacityEnvelope: deriveAgentCapacityEnvelopeFromAssignment(typedAssignment),
+		decisionInput: deriveDecisionExecutionInputFromAssignment(typedAssignment),
+		leaseToken: input.leaseToken,
+		runnerId: input.runnerId,
+		recordModeRun: (body) => input.client.createAssignmentModeRun(assignmentId, body as unknown as Record<string, unknown>),
+	});
+	if (modeResult.status === 'completed') {
+		return input.client.completeAssignment(assignmentId, {
+			leaseToken: input.leaseToken,
+			runnerId: input.runnerId,
+			output: {
+				dryRun,
+				liveCodex: !dryRun,
+				projectId,
+				agentSlug,
+				mode: modeResult.mode,
+				status: modeResult.status,
+				summary: modeResult.summary,
+				metadata: modeResult.metadata ?? {},
+				traceRefs: modeResult.traceRefs ?? {},
+			},
+			summary: {
+				dryRun,
+				liveCodex: !dryRun,
+				summary: modeResult.summary,
+				mode: modeResult.mode,
+			},
+		});
+	}
+	if (modeResult.status === 'returned' && input.client.returnAssignment) {
+		return input.client.returnAssignment(assignmentId, {
+			leaseToken: input.leaseToken,
+			runnerId: input.runnerId,
+			reason: modeResult.fallback?.reason ?? modeResult.summary,
+			code: modeResult.fallback?.code ?? 'provider_assignment_returned',
+			retryable: modeResult.fallback?.retryable ?? true,
+			output: modeResult.outputs ?? {},
+		});
+	}
+	return input.client.failAssignment(assignmentId, {
+		leaseToken: input.leaseToken,
+		runnerId: input.runnerId,
+		code: modeResult.fallback?.code ?? 'provider_assignment_failed',
+		message: modeResult.fallback?.reason ?? modeResult.summary,
+		retryable: modeResult.fallback?.retryable ?? false,
+		output: modeResult.outputs ?? {},
+	});
+}
+
+function assignmentToTask(assignment: Record<string, unknown>) {
+	const decisionInput = record(assignment.decisionInput);
+	const decisionPayload = record(decisionInput.input);
+	const capacityEnvelope = record(assignment.capacityEnvelope);
+	return {
+		id: stringValue(assignment.id) ?? 'assignment',
+		taskId: stringValue(assignment.taskId) ?? null,
+		projectId: stringValue(assignment.projectId, decisionInput.projectId, capacityEnvelope.projectId),
+		workDayId: stringValue(assignment.workDayId, decisionInput.workDayId, capacityEnvelope.workDayId),
+		agentSlug: stringValue(assignment.agentId, decisionInput.agentId, decisionPayload.agentSlug, decisionPayload.agentId),
+		agentId: stringValue(assignment.agentId, decisionInput.agentId, decisionPayload.agentId),
+		handlerId: stringValue(assignment.handlerId, decisionInput.handlerId),
+		input: {
+			...decisionPayload,
+			...record(assignment.workspaceContext),
+			dryRun: decisionPayload.dryRun ?? true,
+			projectId: stringValue(assignment.projectId, decisionInput.projectId, capacityEnvelope.projectId),
+			agentSlug: stringValue(assignment.agentId, decisionInput.agentId, decisionPayload.agentSlug, decisionPayload.agentId),
+			assignmentId: stringValue(assignment.id),
+			projectAgentClassId: stringValue(assignment.projectAgentClassId, decisionInput.projectAgentClassId),
+			mode: stringValue(assignment.mode, decisionInput.mode),
+			capacityEnvelope,
+		},
+	};
+}
+
+function assignmentClientAdapter(
+	client: ProviderAssignmentClient,
+	assignment: Record<string, unknown>,
+	lease: { leaseToken: string | null; runnerId: string },
+): ProviderTaskClient {
+	const assignmentId = stringValue(assignment.id) ?? '';
+	return {
+		portfolio: client.portfolio?.bind(client),
+		createWorkday: client.createWorkday?.bind(client),
+		writeReport: client.writeReport?.bind(client),
+		async claimTask() {
+			return { ok: true, tasks: [assignmentToTask(assignment)] };
+		},
+		async appendTaskEvent(_taskId: string, body: Record<string, unknown>) {
+			const kind = stringValue(body.kind);
+			const data = record(body.data);
+			const status = kind?.includes('failed')
+				? 'failed'
+				: kind?.includes('completed')
+					? 'succeeded'
+					: 'running';
+			return client.createAssignmentModeRun(assignmentId, {
+				status,
+				selectedInput: assignmentToTask(assignment).input,
+				outputs: data,
+				traceRefs: { eventKind: kind },
+				startedAt: status === 'running' ? new Date().toISOString() : undefined,
+				completedAt: status === 'succeeded' ? new Date().toISOString() : undefined,
+				failedAt: status === 'failed' ? new Date().toISOString() : undefined,
+				metadata: {
+					source: 'provider_runner_assignment_event',
+					runnerId: lease.runnerId,
+				},
+			});
+		},
+		async reportUsage(body: Record<string, unknown>) {
+			return client.createAssignmentModeRun(assignmentId, {
+				status: 'succeeded',
+				selectedInput: assignmentToTask(assignment).input,
+				usageActual: {
+					actualCredits: body.actualCredits ?? null,
+					actualUsd: body.actualUsd ?? null,
+					nativeUsage: record(body.nativeUsage),
+					metadata: record(body.metadata),
+				},
+				completedAt: new Date().toISOString(),
+				metadata: {
+					source: 'provider_runner_assignment_usage',
+					taskSignature: body.taskSignature,
+					executionProfileId: body.executionProfileId,
+				},
+			});
+		},
+		async completeTask(_taskId: string, body: Record<string, unknown>) {
+			return client.completeAssignment(assignmentId, {
+				leaseToken: lease.leaseToken,
+				runnerId: lease.runnerId,
+				output: record(body.output),
+				summary: record(body.summary),
+			});
+		},
+		async failTask(_taskId: string, body: Record<string, unknown>) {
+			return client.failAssignment(assignmentId, {
+				leaseToken: lease.leaseToken,
+				runnerId: lease.runnerId,
+				code: stringValue(body.errorCode, body.code) ?? 'provider_assignment_failed',
+				message: stringValue(body.errorMessage, body.message) ?? 'Provider assignment failed.',
+				retryable: body.retryable === true,
+			});
+		},
 	};
 }

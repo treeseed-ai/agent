@@ -1,6 +1,6 @@
 {
   "name": "@treeseed/agent",
-  "version": "0.11.1-dev.ecommerce.20260615T175415Z",
+  "version": "0.11.1-dev.ecommerce.20260616T003653Z",
   "description": "Treeseed agent service runtime package.",
   "license": "AGPL-3.0-only",
   "repository": {
@@ -141,7 +141,7 @@
   },
   "dependencies": {
     "@openai/codex-sdk": "^0.130.0",
-    "@treeseed/sdk": "github:treeseed-ai/sdk#0.11.1-dev.ecommerce.20260615T175339Z",
+    "@treeseed/sdk": "github:treeseed-ai/sdk#0.11.1-dev.ecommerce.20260616T003618Z",
     "esbuild": "0.28.0",
     "hono": "^4.8.2",
     "typescript": "^5.9.3",

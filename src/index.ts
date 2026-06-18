@@ -1,4 +1,4 @@
-export { AgentKernel } from './agents/kernel/agent-kernel.ts';
+export { AgentKernel, FallbackController, ModeScheduler, OutputValidator, PriorityResolver, QueueObserver } from './agents/kernel/agent-kernel.ts';
 export { listTreeseedAgentCommands, renderTreeseedAgentHelp, runTreeseedAgentCli } from './agents/cli.ts';
 export { resolveAgentHandler, listRegisteredAgentHandlers } from './agents/registry.ts';
 export { resolveAgentRuntimeProviders } from './agent-runtime.ts';

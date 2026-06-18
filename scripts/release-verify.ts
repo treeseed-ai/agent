@@ -94,6 +94,12 @@ function runPackedProviderRuntimeSmoke(installRoot: string) {
 		'    research: stub',
 		'',
 	].join('\n'), 'utf8');
+	const hostCodexAuthFile = process.env.TREESEED_CODEX_AUTH_FILE
+		|| process.env.CODEX_AUTH_FILE
+		|| (process.env.HOME ? resolve(process.env.HOME, '.codex/auth.json') : '');
+	const codexAuthEnv = hostCodexAuthFile && existsSync(hostCodexAuthFile)
+		? { TREESEED_CODEX_AUTH_FILE: hostCodexAuthFile }
+		: {};
 	const env = {
 		TREESEED_PROCESSING_PARITY: '1',
 		TREESEED_DATA_DIR: dataRoot,
@@ -104,6 +110,7 @@ function runPackedProviderRuntimeSmoke(installRoot: string) {
 		TREESEED_PROJECT_ID: 'treeseed-agent-packed-smoke',
 		TREESEED_TEAM_ID: 'treeseed-agent-packed-smoke',
 		TREESEED_TENANT_ROOT: installRoot,
+		...codexAuthEnv,
 	};
 	const providerEntrypoint = 'node_modules/@treeseed/agent/dist/provider/entrypoint.js';
 	run(process.execPath, [providerEntrypoint, 'version'], installRoot, false, env);

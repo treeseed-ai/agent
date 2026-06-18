@@ -1,6 +1,6 @@
 {
   "name": "@treeseed/agent",
-  "version": "0.11.1-dev.demo.20260616T162151Z",
+  "version": "0.11.1-dev.demo.20260618T214824Z",
   "description": "Treeseed agent service runtime package.",
   "license": "AGPL-3.0-only",
   "repository": {
@@ -120,6 +120,7 @@
     "test": "npm run test:unit && npm run test:smoke",
     "test:unit": "vitest run --config ./vitest.config.ts",
     "test:market-knowledge-dogfood": "node ./scripts/run-ts.mjs ./scripts/test-market-knowledge-dogfood.ts",
+    "test:study-knowledge-packs": "node ./scripts/run-ts.mjs ./scripts/run-study-knowledge-pack-scenario.ts",
     "test:capacity-scheduling-e2e": "node ./scripts/run-ts.mjs ./scripts/test-capacity-scheduling-e2e.ts",
     "test:local-e2e-verification": "node ./scripts/run-ts.mjs ./scripts/test-local-e2e-verification.ts",
     "prepack": "npm run build:dist",
@@ -141,7 +142,7 @@
   },
   "dependencies": {
     "@openai/codex-sdk": "^0.130.0",
-    "@treeseed/sdk": "github:treeseed-ai/sdk#0.11.1-dev.demo.20260616T162035Z",
+    "@treeseed/sdk": "github:treeseed-ai/sdk#0.11.1-dev.demo.20260618T214811Z",
     "esbuild": "0.28.0",
     "hono": "^4.8.2",
     "typescript": "^5.9.3",

@@ -131,11 +131,11 @@ describe('codex subscription provider skeleton', () => {
 		});
 	});
 
-	it('uses CODEX_API_KEY as an API-billed fallback when auth.json is absent', () => {
+	it('uses TREESEED_CODEX_API_KEY as an API-billed fallback when auth.json is absent', () => {
 		const readiness = checkCodexProviderReadiness({
 			env: {
 				TREESEED_EXECUTION_PROVIDER: 'codex',
-				CODEX_API_KEY: 'codex-test-key-1234567890',
+				TREESEED_CODEX_API_KEY: 'codex-test-key-1234567890',
 				HOME: '/home/test',
 			},
 			nodeVersion: 'v24.0.0',
@@ -316,7 +316,7 @@ describe('codex subscription provider skeleton', () => {
 			}),
 			env: {
 				TREESEED_CODEX_SUBSCRIPTION_PLAN: 'pro',
-				CODEX_API_KEY: 'codex-test-key-1234567890',
+				TREESEED_CODEX_API_KEY: 'codex-test-key-1234567890',
 			},
 		});
 

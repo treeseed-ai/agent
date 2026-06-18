@@ -79,7 +79,7 @@ export function createServiceSdk() {
 }
 
 function createQueueClientConfig(token: string) {
-	const accountId = process.env.CLOUDFLARE_ACCOUNT_ID?.trim();
+	const accountId = process.env.TREESEED_CLOUDFLARE_ACCOUNT_ID?.trim();
 	const queueId = process.env.TREESEED_QUEUE_ID?.trim();
 	if (!accountId || !queueId || !token) {
 		return null;
@@ -103,7 +103,7 @@ export function createQueueClient() {
 export function createQueuePushClient() {
 	const config = createQueueClientConfig(
 		process.env.TREESEED_QUEUE_PUSH_TOKEN?.trim()
-		|| process.env.CLOUDFLARE_API_TOKEN?.trim()
+		|| process.env.TREESEED_CLOUDFLARE_API_TOKEN?.trim()
 		|| '',
 	);
 	if (!config) {

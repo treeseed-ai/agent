@@ -16,6 +16,7 @@ import type {
 	AgentOperationsAdapter,
 	AgentRepositoryInspectionAdapter,
 	AgentResearchAdapter,
+	AgentTreeDxAdapter,
 	AgentTriggerInvocation,
 	AgentVerificationAdapter,
 } from '../runtime-types.ts';
@@ -26,9 +27,11 @@ import {
 	normalizeAgentExecutionMode,
 	validateAgentKernelModeExecutionInput,
 	type AgentCapacityEnvelope,
+	type AgentKernelModeDecision,
 	type AgentKernelModeExecutionInput,
 	type AgentKernelModeExecutionResult,
 	type AgentKernelModeFallback,
+	type AgentKernelQueueObservation,
 	type AgentModeRunStatus,
 	type DecisionExecutionInput,
 } from '@treeseed/sdk/agent-capacity';
@@ -45,6 +48,36 @@ import { resolve } from 'node:path';
 
 function nowIso() {
 	return new Date().toISOString();
+}
+
+function record(value: unknown): Record<string, unknown> {
+	return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function validateAssignmentOutputs(input: {
+	mode: string;
+	outputs?: Record<string, unknown> | null;
+	allowedOutputs?: Record<string, unknown> | null;
+}) {
+	const allowed = record(input.allowedOutputs);
+	if (!Object.keys(allowed).length) return { ok: true };
+	const outputs = record(input.outputs);
+	const allowedStatuses = Array.isArray(allowed.statuses) ? allowed.statuses.map(String) : [];
+	const status = typeof outputs.status === 'string' ? outputs.status : null;
+	if (allowedStatuses.length && (!status || !allowedStatuses.includes(status))) {
+		return { ok: false, reason: `Output status ${status ?? '<missing>'} is not allowed for ${input.mode}.`, metadata: { status, allowedStatuses } };
+	}
+	const allowedTypes = Array.isArray(allowed.types) ? allowed.types.map(String) : [];
+	const metadata = record(outputs.metadata);
+	const outputType = typeof metadata.type === 'string'
+		? metadata.type
+		: typeof metadata.kind === 'string'
+			? metadata.kind
+			: null;
+	if (allowedTypes.length && (!outputType || !allowedTypes.includes(outputType))) {
+		return { ok: false, reason: `Output type ${outputType ?? '<missing>'} is not allowed for ${input.mode}.`, metadata: { outputType, allowedTypes } };
+	}
+	return { ok: true };
 }
 
 export interface AgentKernelModeRunTelemetryInput {
@@ -64,6 +97,92 @@ export interface AgentKernelModeRunTelemetryInput {
 
 export interface AgentKernelAssignmentRunOptions extends AgentKernelModeExecutionInput {
 	recordModeRun?: (run: AgentKernelModeRunTelemetryInput) => Promise<unknown>;
+	recordFallbackOutput?: (output: Record<string, unknown>) => Promise<unknown>;
+}
+
+export class QueueObserver {
+	observe(input: AgentKernelQueueObservation): AgentKernelQueueObservation {
+		return {
+			planningReady: Number(input.planningReady ?? 0),
+			actingReady: Number(input.actingReady ?? 0),
+			fallbackReady: Number(input.fallbackReady ?? 0),
+			planningBudgetCredits: input.planningBudgetCredits ?? null,
+			actingBudgetCredits: input.actingBudgetCredits ?? null,
+			modePreference: input.modePreference ?? null,
+			metadata: input.metadata ?? {},
+		};
+	}
+}
+
+export class PriorityResolver {
+	resolve(observation: AgentKernelQueueObservation): AgentKernelQueueObservation {
+		return observation;
+	}
+}
+
+function selectKernelModeDecisionLocal(observation: AgentKernelQueueObservation): AgentKernelModeDecision {
+	const planningReady = Math.max(0, Number(observation.planningReady ?? 0));
+	const actingReady = Math.max(0, Number(observation.actingReady ?? 0));
+	const fallbackReady = Math.max(0, Number(observation.fallbackReady ?? 0));
+	const planningBudget = Number(observation.planningBudgetCredits ?? 0);
+	const actingBudget = Number(observation.actingBudgetCredits ?? 0);
+	const hasPlanningBudget = !Number.isFinite(planningBudget) || planningBudget > 0;
+	const hasActingBudget = !Number.isFinite(actingBudget) || actingBudget > 0;
+	if (observation.modePreference === 'planning' && planningReady > 0 && hasPlanningBudget) {
+		return { kind: 'mode', mode: 'planning', reason: 'preferred_planning_ready', metadata: observation.metadata ?? {} };
+	}
+	if (observation.modePreference === 'acting' && actingReady > 0 && hasActingBudget) {
+		return { kind: 'mode', mode: 'acting', reason: 'preferred_acting_ready', metadata: observation.metadata ?? {} };
+	}
+	if (actingReady > 0 && hasActingBudget) {
+		return { kind: 'mode', mode: 'acting', reason: 'acting_queue_ready', metadata: observation.metadata ?? {} };
+	}
+	if (planningReady > 0 && hasPlanningBudget) {
+		return { kind: 'mode', mode: 'planning', reason: 'planning_queue_ready', metadata: observation.metadata ?? {} };
+	}
+	if (fallbackReady > 0) {
+		return { kind: 'fallback', mode: null, reason: 'fallback_queue_ready', metadata: observation.metadata ?? {} };
+	}
+	return { kind: 'idle', mode: null, reason: 'no_eligible_work', metadata: observation.metadata ?? {} };
+}
+
+export class ModeScheduler {
+	constructor(
+		private readonly observer = new QueueObserver(),
+		private readonly priorityResolver = new PriorityResolver(),
+	) {}
+
+	decide(observation: AgentKernelQueueObservation): AgentKernelModeDecision {
+		return selectKernelModeDecisionLocal(this.priorityResolver.resolve(this.observer.observe(observation)));
+	}
+}
+
+export class FallbackController {
+	buildOutput(input: { assignmentId: string; mode: string; fallback: AgentKernelModeFallback; projectId: string; metadata?: Record<string, unknown> }) {
+		return {
+			assignmentId: input.assignmentId,
+			projectId: input.projectId,
+			mode: input.mode,
+			code: input.fallback.code,
+			status: input.fallback.retryable ? 'draft' : 'suppressed',
+			output: {
+				summary: input.fallback.reason,
+				type: input.mode === 'planning' ? 'planning_documentation_draft' : 'weakness_proposal_draft',
+			},
+			provenance: {
+				source: 'agent_kernel_fallback',
+				assignmentId: input.assignmentId,
+			},
+			quota: input.fallback.metadata?.quota ? { quota: input.fallback.metadata.quota } : {},
+			metadata: input.metadata ?? {},
+		};
+	}
+}
+
+export class OutputValidator {
+	validate(input: { mode: string; outputs?: Record<string, unknown> | null; allowedOutputs?: Record<string, unknown> | null }) {
+		return validateAssignmentOutputs(input);
+	}
 }
 
 function resolveExecutionRoot(tenantRoot: string) {
@@ -87,6 +206,10 @@ export class AgentKernel {
 	private readonly notifications;
 	private readonly research;
 	private readonly operations;
+	private readonly treeDx;
+	private readonly scheduler;
+	private readonly fallbackController;
+	private readonly outputValidator;
 	private readonly activeRuns = new Set<string>();
 	private readonly lastRunAt = new Map<string, number>();
 	private readonly tenantRoot;
@@ -104,6 +227,10 @@ export class AgentKernel {
 			notifications?: AgentNotificationAdapter;
 			research?: AgentResearchAdapter;
 			operations?: AgentOperationsAdapter;
+			treeDx?: AgentTreeDxAdapter | null;
+			scheduler?: ModeScheduler;
+			fallbackController?: FallbackController;
+			outputValidator?: OutputValidator;
 		},
 	) {
 		this.tenantRoot = repoRoot;
@@ -120,6 +247,14 @@ export class AgentKernel {
 		this.notifications = options?.notifications ?? runtimeProviders.notifications ?? createNotificationAdapter();
 		this.research = options?.research ?? runtimeProviders.research ?? createResearchAdapter();
 		this.operations = options?.operations ?? createOperationsAdapter();
+		this.treeDx = options?.treeDx ?? null;
+		this.scheduler = options?.scheduler ?? new ModeScheduler();
+		this.fallbackController = options?.fallbackController ?? new FallbackController();
+		this.outputValidator = options?.outputValidator ?? new OutputValidator();
+	}
+
+	decideMode(observation: AgentKernelQueueObservation): AgentKernelModeDecision {
+		return this.scheduler.decide(observation);
 	}
 
 	private executionForAgent(agent: AgentRuntimeSpec) {
@@ -233,7 +368,7 @@ export class AgentKernel {
 	private async executeAgentInternal(
 		agent: AgentRuntimeSpec,
 		trigger: AgentTriggerInvocation,
-		options: { capacity?: AgentContext['capacity'] } = {},
+		options: { capacity?: AgentContext['capacity']; treeDx?: AgentContext['treeDx'] } = {},
 	): Promise<{ runId: string; output: AgentExecutionResult }> {
 		if (this.activeRuns.has(agent.slug)) {
 			return {
@@ -264,6 +399,7 @@ export class AgentKernel {
 			notifications: this.notifications,
 			research: this.research,
 			operations: this.operations,
+			treeDx: options.treeDx ?? null,
 		};
 
 		await this.recordRunTrace(this.buildTrace(agent, runId, trigger, {}));
@@ -377,6 +513,18 @@ export class AgentKernel {
 				runnerId: options.runnerId ?? null,
 			},
 		});
+		if (options.recordFallbackOutput) {
+			await options.recordFallbackOutput(this.fallbackController.buildOutput({
+				assignmentId: assignment.id,
+				projectId: assignment.projectId,
+				mode,
+				fallback,
+				metadata: {
+					status,
+					runnerId: options.runnerId ?? null,
+				},
+			}));
+		}
 		return {
 			status,
 			mode,
@@ -487,9 +635,27 @@ export class AgentKernel {
 					assignment,
 					readiness: options.readiness ?? null,
 					treedxProxyHandle: options.treedxProxyHandle ?? assignment.treedxProxyHandle ?? null,
+					capabilityHandles: assignment.capabilityHandles ?? assignment.workspaceContext?.capabilityHandles ?? null,
+					workspaceAccessMode: assignment.capabilityHandles?.workspaceAccessMode ?? assignment.workspaceContext?.workspaceAccessMode ?? null,
 					fallbackReason: null,
 				},
+				treeDx: this.treeDx,
 			});
+			const outputValidation = this.outputValidator.validate({
+				mode,
+				outputs: {
+					status: executed.output.status,
+					metadata: executed.output.metadata ?? {},
+				},
+				allowedOutputs: assignment.allowedOutputs ?? null,
+			});
+			if (!outputValidation.ok) {
+				return this.boundedAssignmentResult(options, createAgentKernelModeFallback(
+					'assignment_output_invalid',
+					outputValidation.reason ?? 'Agent output is not allowed for this assignment.',
+					{ retryable: false, metadata: outputValidation.metadata },
+				), 'failed');
+			}
 			const completedAt = nowIso();
 			const outputStatus = executed.output.status;
 			const modeRunStatus: AgentModeRunStatus = outputStatus === 'completed'

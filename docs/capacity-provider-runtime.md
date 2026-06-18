@@ -55,16 +55,16 @@ The implemented Phase 2 and Phase 3 runtime protocol is provider-initiated and o
 4. The provider runner calls `POST /v1/provider/assignments/next`.
 5. The API leases one existing eligible `ProviderAssignment` for the authenticated provider and returns a lease token.
 6. The provider runner calls `AgentKernel.runAssignment` with the leased assignment, `AgentCapacityEnvelope`, and `DecisionExecutionInput`.
-7. The AgentKernel validates mode/profile/envelope bounds, resolves the project-bundled agent handler, and executes it with optional `AgentContext.capacity` runtime context.
+7. The AgentKernel validates mode/profile/envelope bounds, resolves the project-bundled agent handler, and executes it with optional `AgentContext.capacity` runtime context and optional `AgentContext.treeDx` repository-context adapter.
 8. The provider runner records `AgentModeRun` telemetry through `POST /v1/provider/assignments/:assignmentId/mode-runs`.
 9. The provider runner renews, completes, fails, or returns the assignment through the assignment lifecycle routes.
 10. The API settles usage into durable mode-run, usage, reservation, and ledger bridge records where ids are supplied.
 
 The API does not require inbound network reachability to local or self-hosted providers.
 
-The provider runner polls assignment lifecycle routes and executes assignments through the AgentKernel. The API may synthesize planning assignments from open planning-input requests and acting assignments from accepted capacity-plan work units before next-assignment leasing, but the provider runner does not synthesize project work locally. Raw accepted execution inputs remain planning artifacts until the API aggregates and accepts a durable capacity plan. Legacy task-claim routes remain available for compatibility.
+The provider runner polls assignment lifecycle routes and executes assignments through the AgentKernel. The API may synthesize planning assignments from open planning-input requests and acting assignments from accepted capacity-plan work units before next-assignment leasing, but the provider runner does not synthesize project work locally. Raw accepted execution inputs remain planning artifacts until the API aggregates and accepts a durable capacity plan.
 
-The provider runner does not use `claimTask`, `appendTaskEvent`, `completeTask`, or `failTask` for package-owned assignment execution. Those SDK methods and API routes remain compatibility surfaces for older callers.
+Provider task claim/update HTTP routes are not part of the provider runtime contract. Package-owned provider execution uses assignment APIs only.
 
 Lifecycle routes:
 
@@ -103,7 +103,9 @@ Provider runners execute assigned project-bundled agents. They must not invent p
 
 Provider assignments should include a project-scoped TreeDX proxy handle, not raw TreeDX service credentials.
 
-The runner calls the TreeSeed API using `TREESEED_CAPACITY_PROVIDER_API_KEY` and scoped proxy paths such as `/v1/dx/projects/:projectId/...`. The API authenticates the provider, verifies project/task or assignment scope, resolves the TreeDX node, holds TreeDX node credentials, forwards only allowed repository/workspace operations, and records proxy audit evidence.
+The runner calls the TreeSeed API using `TREESEED_CAPACITY_PROVIDER_API_KEY` and scoped proxy paths such as `/v1/dx/projects/:projectId/...`. Provider calls must include `x-treeseed-assignment-id` and `x-treeseed-treedx-proxy-handle-id`. The API authenticates the provider, verifies the active assignment lease, loads the durable handle record when present, checks issued/revoked/expired state, validates handle token material when configured, enforces project, repository, workspace, allowed operation, and allowed path constraints, resolves the TreeDX node, holds TreeDX node credentials, forwards only allowed operations, and records allowed or denied proxy audit evidence.
+
+Handlers should use `AgentContext.treeDx` for context build, repository file readback, workspace search, workspace file writes, and commits. The adapter is hydrated from the assignment proxy handle, applies handle-bound repository and workspace defaults, rejects out-of-scope path or operation requests before calling the API, and never exposes raw TreeDX node credentials.
 
 ## Runtime Images
 

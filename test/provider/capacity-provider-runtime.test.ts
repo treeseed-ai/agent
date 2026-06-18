@@ -54,13 +54,43 @@ function createProjectRepository() {
 	writeFileSync(resolve(root, 'src/agents/planner.ts'), `export const plannerHandler = {
 	kind: 'planner',
 	async resolveInputs(context) {
-		return { runId: context.runId, mode: context.capacity?.mode ?? null };
+		const decisionInput = context.capacity?.decisionInput?.input ?? {};
+		return {
+			runId: context.runId,
+			mode: context.capacity?.mode ?? null,
+			workspaceAccessMode: context.capacity?.workspaceAccessMode ?? null,
+			workflowOperationHandleCount: context.capacity?.capabilityHandles?.workflowOperations?.length ?? 0,
+			dispatchWorkflowOperation: decisionInput.dispatchWorkflowOperation ?? false,
+			workflowOperationId: decisionInput.workflowOperationId ?? null,
+			workflowOperationHandleId: decisionInput.workflowOperationHandleId ?? null,
+		};
 	},
-	async execute(_context, inputs) {
-		return { ...inputs, summary: \`Project-owned provider planner completed in \${inputs.mode ?? 'unbounded'} mode.\` };
+	async execute(context, inputs) {
+		let operationResult = null;
+		if (inputs.dispatchWorkflowOperation) {
+			operationResult = await context.operations.runOperation({
+				request: {
+					operation: 'verify',
+					mode: 'mutating',
+					taskId: context.capacity?.assignmentId ?? context.runId,
+					agentSlug: context.agent.slug,
+					agentRole: 'engineer',
+					projectId: context.capacity?.assignment?.projectId ?? 'project_123',
+					environment: 'local',
+					repoRoot: context.repoRoot,
+					input: {
+						workflowOperationId: inputs.workflowOperationId,
+						workflowOperationHandleId: inputs.workflowOperationHandleId,
+						inputs: { planId: 'plan-1' },
+					},
+				},
+				grants: [],
+			});
+		}
+		return { ...inputs, operationResult, summary: \`Project-owned provider planner completed in \${inputs.mode ?? 'unbounded'} mode.\` };
 	},
 	async emitOutputs(_context, result) {
-		return { status: 'completed', summary: result.summary, metadata: { mode: result.mode } };
+		return { status: 'completed', summary: result.summary, metadata: { mode: result.mode, workspaceAccessMode: result.workspaceAccessMode, workflowOperationHandleCount: result.workflowOperationHandleCount, operationStatus: result.operationResult?.status ?? null } };
 	},
 };
 `, 'utf8');
@@ -218,8 +248,8 @@ describe('capacity provider runtime', () => {
 			},
 		});
 		expect(request.capabilities[0]).toMatchObject({
-			id: 'codex-docs-work',
-			agents: expect.arrayContaining(['treeseed-docs-planner', 'treeseed-docs-engineer', 'treeseed-docs-reviewer']),
+			id: 'agent_execution',
+			agents: expect.arrayContaining(['*']),
 			operations: expect.arrayContaining(['plan', 'mutate', 'verify', 'report']),
 		});
 	});
@@ -255,7 +285,7 @@ describe('capacity provider runtime', () => {
 			role: 'runner',
 			dryRun: true,
 			assignmentRequest: {
-				capabilities: ['codex-docs-work'],
+				capabilities: ['agent_execution'],
 			},
 		});
 	});
@@ -475,8 +505,21 @@ describe('capacity provider runtime', () => {
 						projectId: 'project_123',
 						agentId: 'provider-planner',
 						mode: 'acting',
-						decisionInput: { input: { dryRun: true, projectId: 'project_123', agentSlug: 'provider-planner' } },
-						capacityEnvelope: { projectId: 'project_123', mode: 'acting' },
+						decisionInput: {
+							input: { dryRun: true, projectId: 'project_123', agentSlug: 'provider-planner' },
+							metadata: {
+								capacityPlanId: 'plan_acting',
+								capacityPlanStatus: 'accepted',
+								readiness: { executionReadiness: 'ready', planningInputsStatus: 'complete' },
+							},
+						},
+						capacityEnvelope: {
+							projectId: 'project_123',
+							mode: 'acting',
+							reservationId: 'reservation_acting',
+							reservedCredits: 1,
+							metadata: { capacityPlanId: 'plan_acting', capacityPlanStatus: 'accepted' },
+						},
 					},
 				};
 			},
@@ -505,6 +548,119 @@ describe('capacity provider runtime', () => {
 			output: {
 				mode: 'acting',
 				summary: 'Project-owned provider planner completed in acting mode.',
+			},
+		});
+	});
+
+	it('dispatches workflow operations only through assignment-scoped handles', async () => {
+		const sourceRepo = createProjectRepository();
+		const config = resolveProviderConfig({ env: env() });
+		await processProviderPortfolio({
+			config,
+			client: {
+				async portfolio() { return portfolio(sourceRepo); },
+				async createWorkday(body: unknown) { return { ok: true, workDay: { id: 'wd_provider_1', ...(body as Record<string, unknown>) } }; },
+				async writeReport() { return { ok: true, report: { id: 'report_1' } }; },
+			},
+		});
+		const events: Array<{ method: string; assignmentId?: string; operationId?: string; body?: unknown }> = [];
+		const client = {
+			async nextAssignment() {
+				events.push({ method: 'nextAssignment' });
+				return {
+					ok: true,
+					leaseToken: 'lease_workflow',
+					payload: {
+						id: 'assignment_workflow',
+						teamId: 'team_123',
+						projectId: 'project_123',
+						capacityProviderId: 'provider_123',
+						agentId: 'provider-planner',
+						mode: 'acting',
+						synthesizedFrom: 'capacity_plan',
+						decisionInput: {
+							input: {
+								dryRun: true,
+								projectId: 'project_123',
+								agentSlug: 'provider-planner',
+								dispatchWorkflowOperation: true,
+								workflowOperationId: 'verify-private-repo',
+								workflowOperationHandleId: 'workflow-handle-1',
+							},
+							metadata: {
+								capacityPlanId: 'plan_workflow',
+								capacityPlanStatus: 'accepted',
+								readiness: { executionReadiness: 'ready', planningInputsStatus: 'complete' },
+							},
+						},
+						capacityEnvelope: {
+							teamId: 'team_123',
+							projectId: 'project_123',
+							mode: 'acting',
+							capacityProviderId: 'provider_123',
+							reservationId: 'reservation_workflow',
+							reservedCredits: 1,
+							metadata: { capacityPlanId: 'plan_workflow', capacityPlanStatus: 'accepted' },
+						},
+						capabilityHandles: {
+							workspaceAccessMode: 'full_workspace_no_credentials',
+							workflowOperations: [{
+								id: 'workflow-handle-1',
+								kind: 'workflow_operation',
+								teamId: 'team_123',
+								projectId: 'project_123',
+								assignmentId: 'assignment_workflow',
+								status: 'active',
+								workspaceAccessMode: 'full_workspace_no_credentials',
+								operations: ['dispatch_workflow'],
+								operationId: 'verify-private-repo',
+								repository: 'treeseed/project',
+								workflowFile: '.github/workflows/verify.yml',
+								ref: 'refs/heads/main',
+								secretBearing: true,
+							}],
+						},
+					},
+				};
+			},
+			async dispatchAssignmentWorkflowOperation(assignmentId: string, operationId: string, body: unknown) {
+				events.push({ method: 'dispatchAssignmentWorkflowOperation', assignmentId, operationId, body });
+				return { ok: true, payload: { dispatch: { id: 'dispatch-1', status: 'dispatched' } } };
+			},
+			async createAssignmentModeRun(_assignmentId: string, body: unknown) {
+				events.push({ method: 'createAssignmentModeRun', body });
+				return { ok: true, payload: { id: `mode_run_${events.length}` } };
+			},
+			async completeAssignment(_assignmentId: string, body: unknown) {
+				events.push({ method: 'completeAssignment', body });
+				return { ok: true, payload: { id: 'assignment_workflow', status: 'completed' } };
+			},
+			async failAssignment(_assignmentId: string, body: unknown) {
+				events.push({ method: 'failAssignment', body });
+				return { ok: true, payload: { id: 'assignment_workflow', status: 'failed' } };
+			},
+		};
+
+		const result = await runProviderRunnerOnce({ config, client });
+
+		expect(result).toMatchObject({ ok: true, assigned: 1, assignmentId: 'assignment_workflow' });
+		expect(events.find((event) => event.method === 'dispatchAssignmentWorkflowOperation')).toMatchObject({
+			assignmentId: 'assignment_workflow',
+			operationId: 'verify-private-repo',
+			body: {
+				leaseToken: 'lease_workflow',
+				handleId: 'workflow-handle-1',
+				inputs: { planId: 'plan-1' },
+			},
+		});
+		expect(JSON.stringify(events)).not.toContain('ghs_');
+		expect(events.filter((event) => event.method === 'createAssignmentModeRun').at(-1)?.body).toMatchObject({
+			outputs: {
+				metadata: {
+					workspaceAccessMode: 'full_workspace_no_credentials',
+					workflowOperationHandleCount: 1,
+					operationStatus: 'completed',
+				},
 			},
 		});
 	});

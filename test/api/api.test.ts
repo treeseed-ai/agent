@@ -1530,13 +1530,13 @@ apiRuntimeDescribe('@treeseed/agent api runtime', () => {
 	});
 
 	it('queues remote-job workflow operations and reports warm worker capacity', async () => {
-		vi.stubEnv('CLOUDFLARE_ACCOUNT_ID', 'cf-test-account');
+		vi.stubEnv('TREESEED_CLOUDFLARE_ACCOUNT_ID', 'cf-test-account');
 		vi.stubEnv('TREESEED_QUEUE_ID', 'queue-123');
 		vi.stubEnv('TREESEED_QUEUE_PUSH_TOKEN', 'queue-secret');
 		vi.stubEnv('TREESEED_WORKER_POOL_SCALER', 'railway');
 		vi.stubEnv('TREESEED_RAILWAY_WORKER_SERVICE_ID', 'svc-worker');
 		vi.stubEnv('TREESEED_RAILWAY_ENVIRONMENT_ID', 'env-test');
-		vi.stubEnv('RAILWAY_API_TOKEN', 'railway-token');
+		vi.stubEnv('TREESEED_RAILWAY_API_TOKEN', 'railway-token');
 		const fetchMock = vi.fn(async (input: string | URL) => {
 			const url = String(input);
 			if (url.endsWith('/messages')) {
@@ -1684,13 +1684,13 @@ apiRuntimeDescribe('@treeseed/agent api runtime', () => {
 	});
 
 	it('queues remote-job workflow operations and reports cold-starting worker capacity', async () => {
-		vi.stubEnv('CLOUDFLARE_ACCOUNT_ID', 'cf-test-account');
+		vi.stubEnv('TREESEED_CLOUDFLARE_ACCOUNT_ID', 'cf-test-account');
 		vi.stubEnv('TREESEED_QUEUE_ID', 'queue-123');
 		vi.stubEnv('TREESEED_QUEUE_PUSH_TOKEN', 'queue-secret');
 		vi.stubEnv('TREESEED_WORKER_POOL_SCALER', 'railway');
 		vi.stubEnv('TREESEED_RAILWAY_WORKER_SERVICE_ID', 'svc-worker');
 		vi.stubEnv('TREESEED_RAILWAY_ENVIRONMENT_ID', 'env-test');
-		vi.stubEnv('RAILWAY_API_TOKEN', 'railway-token');
+		vi.stubEnv('TREESEED_RAILWAY_API_TOKEN', 'railway-token');
 		const fetchMock = vi.fn(async (input: string | URL) => {
 			const url = String(input);
 			if (url.endsWith('/messages')) {
@@ -1821,7 +1821,7 @@ apiRuntimeDescribe('@treeseed/agent api runtime', () => {
 	});
 
 	it('accepts remote-job workflow operations even when scaling is unapplied', async () => {
-		vi.stubEnv('CLOUDFLARE_ACCOUNT_ID', 'cf-test-account');
+		vi.stubEnv('TREESEED_CLOUDFLARE_ACCOUNT_ID', 'cf-test-account');
 		vi.stubEnv('TREESEED_QUEUE_ID', 'queue-123');
 		vi.stubEnv('TREESEED_QUEUE_PUSH_TOKEN', 'queue-secret');
 		const fetchMock = vi.fn(async () => new Response(JSON.stringify({ success: true, result: {} }), {

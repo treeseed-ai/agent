@@ -1,5 +1,6 @@
 import { createRequire } from 'node:module';
 import { existsSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { resolveCodexAuthFile } from './codex-auth.ts';
 
 export type CodexSubscriptionPlan = 'plus' | 'pro' | 'business' | 'edu' | 'enterprise' | 'unknown';
@@ -48,6 +49,34 @@ export interface CheckCodexProviderReadinessOptions {
 }
 
 const requireFromHere = createRequire(import.meta.url);
+
+function resolveInstalledPackage(specifier: string) {
+	try {
+		return requireFromHere.resolve(specifier);
+	} catch (error) {
+		const esmResolve = (import.meta as ImportMeta & { resolve?: (specifier: string) => string }).resolve;
+		if (esmResolve) {
+			try {
+				return esmResolve(specifier);
+			} catch {
+				// Fall back to package-root candidates below.
+			}
+		}
+		const candidates = [
+			process.cwd(),
+			resolve(process.cwd(), '..'),
+			resolve(process.cwd(), '../..'),
+		];
+		for (const candidate of candidates) {
+			try {
+				return createRequire(resolve(candidate, 'package.json')).resolve(specifier);
+			} catch {
+				// Try the next workspace/package root.
+			}
+		}
+		throw error;
+	}
+}
 
 const SUBSCRIPTION_PLANS = new Set<CodexSubscriptionPlan>([
 	'plus',
@@ -106,7 +135,7 @@ export function checkCodexProviderReadiness(
 ): CodexProviderReadiness {
 	const env = options.env ?? process.env;
 	const config = resolveCodexProviderConfig(env);
-	const resolvePackage = options.resolvePackage ?? ((specifier: string) => requireFromHere.resolve(specifier));
+	const resolvePackage = options.resolvePackage ?? resolveInstalledPackage;
 	const fileExists = options.fileExists ?? existsSync;
 	const providerSelected = [
 		env.TREESEED_EXECUTION_PROVIDER,
@@ -143,11 +172,11 @@ export function checkCodexProviderReadiness(
 
 	const authPath = resolveCodexAuthFile(env);
 	const authJsonDetected = fileExists(authPath);
-	const apiKeyDetected = Boolean(env.CODEX_API_KEY?.trim());
+	const apiKeyDetected = Boolean(env.TREESEED_CODEX_API_KEY?.trim());
 	const authDetected = authJsonDetected || apiKeyDetected;
 	const authMode = authJsonDetected ? 'codex_auth_json' : apiKeyDetected ? 'api_key' : 'missing';
 	if (!authDetected) {
-		const message = `Codex authentication was not detected. For subscription-backed Codex, run Codex login so ${authPath} exists; alternatively set CODEX_API_KEY as an API-billed fallback from https://platform.openai.com/api-keys. Never commit or print either credential.`;
+		const message = `Codex authentication was not detected. For subscription-backed Codex, run Codex login so ${authPath} exists; alternatively set TREESEED_CODEX_API_KEY as an API-billed fallback from https://platform.openai.com/api-keys. Never commit or print either credential.`;
 		if (providerSelected) {
 			blockingIssues.push(message);
 		} else {

@@ -14,6 +14,8 @@ import type {
 } from '@treeseed/sdk/operations/agent-tools';
 import type {
 	AgentCapacityEnvelope,
+	ProviderAssignmentCapabilityHandles,
+	AgentAssignmentWorkspaceAccessMode,
 	AgentExecutionMode,
 	AgentKernelPolicy,
 	AgentKernelProfile,
@@ -138,6 +140,15 @@ export interface AgentOperationsAdapter {
 	}): Promise<AgentOperationResult>;
 }
 
+export interface AgentTreeDxAdapter {
+	buildContext(input: { repoId: string; query?: string | null; paths?: string[]; body?: Record<string, unknown> }): Promise<Record<string, unknown>>;
+	readRepositoryFiles(input: { repoId: string; paths: string[]; ref?: string | null; body?: Record<string, unknown> }): Promise<Record<string, unknown>>;
+	searchWorkspace(input: { workspaceId: string; query: string; body?: Record<string, unknown> }): Promise<Record<string, unknown>>;
+	readWorkspaceFile(input: { workspaceId: string; path: string }): Promise<Record<string, unknown>>;
+	writeWorkspaceFile(input: { workspaceId: string; path: string; content: string; body?: Record<string, unknown> }): Promise<Record<string, unknown>>;
+	commitWorkspace(input: { workspaceId: string; message: string; body?: Record<string, unknown> }): Promise<Record<string, unknown>>;
+}
+
 export interface AgentContext {
 	runId: string;
 	repoRoot: string;
@@ -154,6 +165,8 @@ export interface AgentContext {
 		assignment?: ProviderAssignment;
 		readiness?: Record<string, unknown> | null;
 		treedxProxyHandle?: Record<string, unknown> | null;
+		capabilityHandles?: ProviderAssignmentCapabilityHandles | Record<string, unknown> | null;
+		workspaceAccessMode?: AgentAssignmentWorkspaceAccessMode | string | null;
 		fallbackReason?: string | null;
 	};
 	coreObjective?: {
@@ -170,6 +183,7 @@ export interface AgentContext {
 	notifications: AgentNotificationAdapter;
 	research: AgentResearchAdapter;
 	operations: AgentOperationsAdapter;
+	treeDx?: AgentTreeDxAdapter | null;
 }
 
 export interface AgentHandler<TInputs = unknown, TResult = unknown> {

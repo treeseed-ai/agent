@@ -126,7 +126,7 @@ describe('runtime readiness inventory', () => {
 				TREESEED_AGENT_REPO_ROOT: repoRoot,
 				TREESEED_RUNNER_VOLUME_ROOT: '.treeseed-runner',
 				TREESEED_WORKER_IDLE_EXIT_MS: '1000',
-				CODEX_API_KEY: 'codex-test-key-1234567890',
+				TREESEED_CODEX_API_KEY: 'codex-test-key-1234567890',
 			},
 		});
 

@@ -5,7 +5,7 @@ import { buildTaskContext, enqueueTaskFromSdk, startAndSeedWorkday } from '../..
 describe('service orchestration helpers', () => {
 	beforeEach(() => {
 		vi.restoreAllMocks();
-		vi.stubEnv('CLOUDFLARE_ACCOUNT_ID', 'account-123');
+		vi.stubEnv('TREESEED_CLOUDFLARE_ACCOUNT_ID', 'account-123');
 		vi.stubEnv('TREESEED_QUEUE_ID', 'queue-123');
 		vi.stubEnv('TREESEED_QUEUE_PUSH_TOKEN', 'queue-push-secret');
 	});

@@ -38,7 +38,7 @@ export class RailwayWorkerPoolScaler implements WorkerPoolScaler {
 	private readonly fetchImpl: typeof fetch;
 
 	constructor(options: RailwayWorkerPoolScalerOptions = {}) {
-		this.apiToken = options.apiToken?.trim() || envValue('RAILWAY_API_TOKEN') || null;
+		this.apiToken = options.apiToken?.trim() || envValue('TREESEED_RAILWAY_API_TOKEN') || null;
 		this.apiUrl = options.apiUrl?.trim() || envValue('TREESEED_RAILWAY_API_URL') || 'https://backboard.railway.com/graphql/v2';
 		this.serviceId = options.serviceId?.trim()
 			|| envValue('TREESEED_RAILWAY_WORKER_SERVICE_ID')
@@ -55,7 +55,7 @@ export class RailwayWorkerPoolScaler implements WorkerPoolScaler {
 
 	private async railwayMutation(query: string, variables: Record<string, unknown>) {
 		if (!this.apiToken) {
-			throw new Error('Configure RAILWAY_API_TOKEN before waking Railway worker runners.');
+			throw new Error('Configure TREESEED_RAILWAY_API_TOKEN before waking Railway worker runners.');
 		}
 		const response = await this.fetchImpl(this.apiUrl, {
 			method: 'POST',
@@ -150,7 +150,7 @@ export function createWorkerPoolScaler(
 ): WorkerPoolScaler {
 	const configuredKind = (envValue('TREESEED_WORKER_POOL_SCALER') as WorkerPoolScalerKind | '') || null;
 	const inferredKind =
-		envValue('RAILWAY_API_TOKEN') && (envValue('TREESEED_RAILWAY_WORKER_SERVICE_ID') || envValue('TREESEED_WORKER_SERVICE_ID')) && envValue('TREESEED_RAILWAY_ENVIRONMENT_ID')
+		envValue('TREESEED_RAILWAY_API_TOKEN') && (envValue('TREESEED_RAILWAY_WORKER_SERVICE_ID') || envValue('TREESEED_WORKER_SERVICE_ID')) && envValue('TREESEED_RAILWAY_ENVIRONMENT_ID')
 			? 'railway'
 			: 'noop';
 	const resolvedKind = kind ?? configuredKind ?? inferredKind;

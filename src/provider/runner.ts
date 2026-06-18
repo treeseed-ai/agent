@@ -1,18 +1,21 @@
-import type { AgentContext, AgentExecutionResult } from '../agents/runtime-types.ts';
+import type { AgentExecutionResult, AgentTreeDxAdapter } from '../agents/runtime-types.ts';
 import { AgentSdk } from '@treeseed/sdk/sdk';
-import type { AgentRuntimeSpec } from '@treeseed/sdk/types/agents';
-import type { MarketProviderClient } from '@treeseed/sdk/capacity-provider';
+import { buildCapacityProviderAuthHeaders, type MarketProviderClient } from '@treeseed/sdk/capacity-provider';
 import type { ProviderAssignment } from '@treeseed/sdk/agent-capacity';
-import { deriveAgentCapacityEnvelopeFromAssignment, deriveDecisionExecutionInputFromAssignment } from '@treeseed/sdk/agent-capacity';
+import {
+	deriveAgentCapacityEnvelopeFromAssignment,
+	deriveDecisionExecutionInputFromAssignment,
+	redactedProviderAssignmentCapabilityHandles,
+	validateProviderAssignmentCapabilityHandles,
+} from '@treeseed/sdk/agent-capacity';
 import { loadAllAgentSpecs } from '../agents/spec-loader.ts';
-import { resolveAgentHandler } from '../agents/registry.ts';
 import { createExecutionAdapter } from '../agents/adapters/execution.ts';
 import { AgentKernel } from '../agents/kernel/agent-kernel.ts';
 import type { ProviderRuntimeConfig } from './config.ts';
+import { discoverProviderCapabilities } from './capabilities.ts';
 import { processProviderPortfolio, readProviderPortfolioIndex } from './portfolio-processing.ts';
 
-type ProviderTaskClient = Pick<MarketProviderClient, 'claimTask' | 'appendTaskEvent' | 'completeTask' | 'failTask' | 'reportUsage'> & Partial<Pick<MarketProviderClient, 'portfolio' | 'createWorkday' | 'writeReport'>>;
-type ProviderAssignmentClient = Pick<MarketProviderClient, 'nextAssignment' | 'createAssignmentModeRun' | 'completeAssignment' | 'failAssignment'> & Partial<Pick<MarketProviderClient, 'portfolio' | 'createWorkday' | 'writeReport' | 'renewAssignment' | 'returnAssignment'>>;
+type ProviderAssignmentClient = Pick<MarketProviderClient, 'nextAssignment' | 'createAssignmentModeRun' | 'completeAssignment' | 'failAssignment'> & Partial<Pick<MarketProviderClient, 'portfolio' | 'createWorkday' | 'writeReport' | 'renewAssignment' | 'returnAssignment' | 'dispatchAssignmentWorkflowOperation'>>;
 
 function record(value: unknown): Record<string, unknown> {
 	return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -25,49 +28,6 @@ function stringValue(...values: unknown[]) {
 	return null;
 }
 
-function taskId(task: Record<string, unknown>) {
-	const id = stringValue(task.id, task.taskId);
-	if (!id) throw new Error('Claimed provider task is missing id.');
-	return id;
-}
-
-function dryRunRequested(task: Record<string, unknown>) {
-	const input = record(task.input);
-	const payload = record(task.payload);
-	return task.dryRun === true || input.dryRun === true || payload.dryRun === true || input.executionMode === 'dry-run';
-}
-
-function taskInput(task: Record<string, unknown>) {
-	const input = record(task.input);
-	const payload = record(task.payload);
-	return Object.keys(input).length ? input : payload;
-}
-
-function makeSdkProxy() {
-	const calls: Array<{ method: string; args: unknown[] }> = [];
-	const proxy = new Proxy({}, {
-		get(_target, property) {
-			return async (...args: unknown[]) => {
-				calls.push({ method: String(property), args });
-				if (property === 'buildContextPack') {
-					return {
-						seedIds: ['provider-dry-run'],
-						totalTokenEstimate: 16,
-						includedNodeIds: ['provider-dry-run'],
-						nodes: [],
-						edges: [],
-					};
-				}
-				if (property === 'recordRun') return { ok: true, payload: null };
-				if (property === 'ackMessage') return { ok: true, payload: null };
-				if (property === 'upsertCursor') return { ok: true, payload: null };
-				return { ok: true, payload: null };
-			};
-		},
-	});
-	return { sdk: proxy as AgentContext['sdk'], calls };
-}
-
 function waitingResult(summary: string): AgentExecutionResult {
 	return {
 		status: 'waiting',
@@ -75,321 +35,164 @@ function waitingResult(summary: string): AgentExecutionResult {
 	};
 }
 
-async function runDryRunHandler(input: {
-	repoRoot: string;
-	agent: AgentRuntimeSpec;
-	task: Record<string, unknown>;
-}) {
-	const handler = await resolveAgentHandler(input.agent.handler, { tenantRoot: input.repoRoot });
-	const sdk = makeSdkProxy();
-	const payload = taskInput(input.task);
-	const context = {
-		runId: `provider-dry-run:${taskId(input.task)}`,
-		repoRoot: input.repoRoot,
-		agent: input.agent,
-		sdk: sdk.sdk,
-		coreObjective: null,
-		trigger: {
-			kind: 'manual',
-			source: 'capacity-provider-dry-run',
-			trigger: { type: 'startup' },
-			message: {
-				id: 1,
-				type: stringValue(payload.messageType, payload.type) ?? 'provider.dry_run',
-				status: 'claimed',
-				payloadJson: JSON.stringify({
-					...payload,
-					taskId: taskId(input.task),
-				}),
-			},
-		},
-		execution: {
-			runTask: async () => waitingResult('Dry-run execution adapter skipped external model execution.'),
-		},
-		mutations: {
-			writeArtifact: async () => ({
-				branchName: null,
-				commitMessage: null,
-				worktreePath: null,
-				commitSha: null,
-				changedPaths: [],
-			}),
-		},
-		repository: {
-			inspectBranch: async () => ({
-				branchName: null,
-				changedPaths: [],
-				commitSha: null,
-				summary: 'Dry-run repository inspection skipped.',
-			}),
-		},
-		verification: {
-			runChecks: async () => waitingResult('Dry-run verification skipped command execution.'),
-		},
-		notifications: {
-			deliver: async () => ({
-				status: 'waiting',
-				summary: 'Dry-run notification delivery skipped.',
-				deliveredCount: 0,
-			}),
-		},
-		research: {
-			research: async () => ({
-				status: 'waiting',
-				summary: 'Dry-run research skipped.',
-				markdown: '',
-			}),
-		},
-		operations: {
-			runOperation: async () => ({
-				ok: true,
-				dryRun: true,
-				summary: 'Dry-run operation skipped.',
-				events: [],
-			}),
-		},
-	} satisfies AgentContext;
-	const resolvedInputs = await handler.resolveInputs(context);
-	const executed = await handler.execute(context, resolvedInputs);
-	const emitted = await handler.emitOutputs(context, executed);
-	return {
-		status: emitted.status,
-		summary: emitted.summary,
-		metadata: emitted.metadata ?? {},
-		sdkCalls: sdk.calls,
-	};
+function normalizeBaseUrl(value: string) {
+	return value.replace(/\/+$/, '');
 }
 
-async function runLiveCodexHandler(input: {
-	config: ProviderRuntimeConfig;
-	repoRoot: string;
-	agent: AgentRuntimeSpec;
-	task: Record<string, unknown>;
-}) {
-	if (!input.config.codexAuthFile && !input.config.codexAuthJsonB64) {
-		throw new Error('Live provider tasks require TREESEED_CODEX_AUTH_FILE or TREESEED_CODEX_AUTH_JSON_B64.');
+function providerRunnerCapabilities(config: ProviderRuntimeConfig) {
+	const discovered = discoverProviderCapabilities(config);
+	return [...new Set(discovered.flatMap((capability) => [
+		capability.id,
+		...(Array.isArray(capability.metadata?.capabilityAliases)
+			? capability.metadata.capabilityAliases.map((entry) => String(entry ?? '').trim()).filter(Boolean)
+			: []),
+	]).filter(Boolean))];
+}
+
+function workspaceAccessMode(assignment: Record<string, unknown>) {
+	const handles = record(assignment.capabilityHandles);
+	const workspaceContext = record(assignment.workspaceContext);
+	const mode = stringValue(handles.workspaceAccessMode, workspaceContext.workspaceAccessMode);
+	return ['context_only', 'brokered_workspace', 'full_workspace_no_credentials', 'trusted_direct'].includes(mode ?? '') ? mode : 'context_only';
+}
+
+function workflowOperationHandles(assignment: Record<string, unknown>) {
+	return Array.isArray(record(assignment.capabilityHandles).workflowOperations)
+		? record(assignment.capabilityHandles).workflowOperations as Record<string, unknown>[]
+		: [];
+}
+
+function treeDxPathMatches(pattern: string, candidate: string) {
+	const normalizedPattern = String(pattern ?? '').replace(/^\/+/, '');
+	const normalizedCandidate = String(candidate ?? '').replace(/^\/+/, '');
+	if (!normalizedPattern || normalizedPattern === '**' || normalizedPattern === '*') return true;
+	if (normalizedPattern.endsWith('/**')) {
+		const prefix = normalizedPattern.slice(0, -3);
+		return normalizedCandidate === prefix || normalizedCandidate.startsWith(`${prefix}/`);
 	}
-	const handler = await resolveAgentHandler(input.agent.handler, { tenantRoot: input.repoRoot });
-	const sdk = makeSdkProxy();
-	const payload = taskInput(input.task);
-	const runId = `provider-live:${taskId(input.task)}`;
-	const context = {
-		runId,
-		repoRoot: input.repoRoot,
-		agent: input.agent,
-		sdk: sdk.sdk,
-		coreObjective: null,
-		trigger: {
-			kind: 'manual',
-			source: 'capacity-provider-live',
-			trigger: { type: 'startup' },
-			message: {
-				id: 1,
-				type: stringValue(payload.messageType, payload.type) ?? 'provider.live_codex',
-				status: 'claimed',
-				payloadJson: JSON.stringify({
-					...payload,
-					taskId: taskId(input.task),
-				}),
-			},
-		},
-		execution: createExecutionAdapter('codex', { repoRoot: input.repoRoot }),
-		mutations: {
-			writeArtifact: async () => ({
-				branchName: null,
-				commitMessage: null,
-				worktreePath: null,
-				commitSha: null,
-				changedPaths: [],
-			}),
-		},
-		repository: {
-			inspectBranch: async () => ({
-				branchName: null,
-				changedPaths: [],
-				commitSha: null,
-				summary: 'Provider live task repository inspection completed.',
-			}),
-		},
-		verification: {
-			runChecks: async () => waitingResult('Provider live task verification is recorded by the task output.'),
-		},
-		notifications: {
-			deliver: async () => ({
-				status: 'waiting',
-				summary: 'Provider live task notification delivery skipped.',
-				deliveredCount: 0,
-			}),
-		},
-		research: {
-			research: async () => ({
-				status: 'waiting',
-				summary: 'Provider live task research skipped.',
-				markdown: '',
-			}),
-		},
-		operations: {
-			runOperation: async () => ({
-				ok: true,
-				dryRun: false,
-				summary: 'Provider live task operation completed.',
-				events: [],
-			}),
-		},
-	} satisfies AgentContext;
-	const resolvedInputs = await handler.resolveInputs(context);
-	const executed = await handler.execute(context, resolvedInputs);
-	const emitted = await handler.emitOutputs(context, executed);
-	return {
-		status: emitted.status,
-		summary: emitted.summary,
-		metadata: {
-			...(emitted.metadata ?? {}),
-			sdkCalls: sdk.calls,
-		},
-	};
+	if (normalizedPattern.endsWith('*')) return normalizedCandidate.startsWith(normalizedPattern.slice(0, -1));
+	return normalizedCandidate === normalizedPattern || normalizedCandidate.startsWith(`${normalizedPattern}/`);
 }
 
-async function failTask(client: ProviderTaskClient, id: string, code: string, message: string) {
-	await client.appendTaskEvent(id, {
-		kind: 'provider_runner_failed',
-		data: { code, message },
-	});
-	return client.failTask(id, {
-		errorCode: code,
-		errorMessage: message,
-		retryable: false,
-	});
+function evaluateTreeDxProxyHandleAccessLocal(handle: Record<string, unknown>, request: { projectId: string; assignmentId?: string | null; repositoryId?: string | null; workspaceId?: string | null; operation?: string | null; path?: string | null }) {
+	if (handle.projectId !== request.projectId) return { ok: false, reason: 'TreeDX proxy handle scope does not match the project.' };
+	if (request.assignmentId && typeof handle.assignmentId === 'string' && handle.assignmentId !== request.assignmentId) return { ok: false, reason: 'TreeDX proxy handle is bound to a different assignment.' };
+	if (request.repositoryId && typeof handle.repositoryId === 'string' && handle.repositoryId !== request.repositoryId) return { ok: false, reason: 'TreeDX proxy handle is bound to a different repository.' };
+	if (request.workspaceId && typeof handle.workspaceId === 'string' && handle.workspaceId !== request.workspaceId) return { ok: false, reason: 'TreeDX proxy handle is bound to a different workspace.' };
+	if (typeof handle.expiresAt === 'string' && Date.parse(handle.expiresAt) <= Date.now()) return { ok: false, reason: 'TreeDX proxy handle has expired.' };
+	const operation = request.operation ? String(request.operation) : null;
+	const allowedOperations = Array.isArray(handle.allowedOperations) ? handle.allowedOperations.map(String) : [];
+	if (operation && allowedOperations.length && !allowedOperations.includes(operation) && !allowedOperations.includes('*')) return { ok: false, reason: 'TreeDX proxy handle does not allow this operation.' };
+	const path = request.path ? String(request.path).replace(/^\/+/, '') : null;
+	const allowedPaths = Array.isArray(handle.allowedPaths) ? handle.allowedPaths.map(String).filter(Boolean) : [];
+	if (path && allowedPaths.length && !allowedPaths.some((pattern) => treeDxPathMatches(pattern, path))) return { ok: false, reason: 'TreeDX proxy handle does not allow this path.' };
+	return { ok: true };
 }
 
-export async function runProviderDryRunTask(input: {
+function createAssignmentTreeDxAdapter(input: {
 	config: ProviderRuntimeConfig;
-	client: ProviderTaskClient;
-	task: Record<string, unknown>;
-}) {
-	const id = taskId(input.task);
-	const payload = taskInput(input.task);
-	const projectId = stringValue(input.task.projectId, payload.projectId);
-	const agentSlug = stringValue(input.task.agentSlug, input.task.agentId, payload.agentSlug, payload.agentId);
-	if (!projectId || !agentSlug) {
-		return failTask(input.client, id, 'provider_task_missing_project_or_agent', 'Dry-run task requires projectId and agentSlug.');
-	}
-	let index = await readProviderPortfolioIndex(input.config);
-	let project = index?.projects.find((entry) => entry.projectId === projectId);
-	if (!project && input.client.portfolio && input.client.createWorkday && input.client.writeReport) {
-		await processProviderPortfolio({
-			config: input.config,
-			client: input.client as Pick<MarketProviderClient, 'portfolio' | 'createWorkday' | 'writeReport'>,
+	projectId: string;
+	assignmentId: string;
+	treedxProxyHandle: Record<string, unknown>;
+}): AgentTreeDxAdapter | null {
+	const handleId = stringValue(input.treedxProxyHandle.id);
+	if (!input.config.marketUrl || !input.config.apiKey || !handleId) return null;
+	const baseUrl = normalizeBaseUrl(input.config.marketUrl);
+	const defaultRepoId = stringValue(input.treedxProxyHandle.repositoryId);
+	const defaultWorkspaceId = stringValue(input.treedxProxyHandle.workspaceId);
+	const checkScope = (request: { repoId?: string | null; workspaceId?: string | null; operation?: string | null; path?: string | null }) => {
+		const result = evaluateTreeDxProxyHandleAccessLocal(input.treedxProxyHandle, {
+			projectId: input.projectId,
+			assignmentId: input.assignmentId,
+			repositoryId: request.repoId ?? defaultRepoId,
+			workspaceId: request.workspaceId ?? defaultWorkspaceId,
+			operation: request.operation ?? null,
+			path: request.path ?? null,
 		});
-		index = await readProviderPortfolioIndex(input.config);
-		project = index?.projects.find((entry) => entry.projectId === projectId);
-	}
-	if (!project?.repository.ok) {
-		return failTask(input.client, id, 'provider_project_not_synced', `Project ${projectId} has not been synced by the provider manager.`);
-	}
-	const localSdk = AgentSdk.createLocal({ repoRoot: project.repository.path });
-	const sdk = {
-		repoRoot: localSdk.repoRoot,
-		listRawAgentSpecs: localSdk.listRawAgentSpecs.bind(localSdk),
-		listAgentSpecs: localSdk.listAgentSpecs.bind(localSdk),
-		scopeForAgent() { return this; },
-		async recordRun() { return { ok: true, payload: null }; },
-		async ackMessage() { return { ok: true, payload: null }; },
-		async upsertCursor() { return { ok: true, payload: null }; },
-		async releaseAllLeases() { return { ok: true, payload: null }; },
-	} as unknown as AgentSdk;
-	const loaded = await loadAllAgentSpecs(sdk);
-	const agent = loaded.specs.find((entry) => entry.slug === agentSlug);
-	if (!agent) {
-		return failTask(input.client, id, 'provider_agent_not_found', `Agent ${agentSlug} is not enabled or was not found in project ${projectId}.`);
-	}
-	await input.client.appendTaskEvent(id, {
-		kind: 'provider_runner_started',
-		data: {
-			projectId,
-			agentSlug,
-			repoRoot: project.repository.path,
-		},
-	});
-	try {
-		const startedAt = Date.now();
-		const dryRun = dryRunRequested(input.task);
-		const output = dryRun
-			? await runDryRunHandler({
-				repoRoot: project.repository.path,
-				agent,
-				task: input.task,
-			})
-			: await runLiveCodexHandler({
-				config: input.config,
-				repoRoot: project.repository.path,
-				agent,
-				task: input.task,
+		if (!result.ok) {
+			throw new Error(result.reason ?? 'TreeDX proxy handle does not allow this request.');
+		}
+	};
+	const headers = {
+		accept: 'application/json',
+		'content-type': 'application/json',
+		'x-treeseed-assignment-id': input.assignmentId,
+		'x-treeseed-treedx-proxy-handle-id': handleId,
+		...buildCapacityProviderAuthHeaders(input.config.apiKey),
+	};
+	const request = async (method: 'GET' | 'POST' | 'PUT', path: string, body?: Record<string, unknown>) => {
+		const response = await fetch(`${baseUrl}${path}`, {
+			method,
+			headers,
+			body: body === undefined ? undefined : JSON.stringify(body),
+		});
+		const payload = await response.json().catch(() => ({}));
+		if (!response.ok) {
+			const error = record(payload).error;
+			const message = typeof error === 'string'
+				? error
+				: record(error).message && typeof record(error).message === 'string'
+					? String(record(error).message)
+					: `TreeDX proxy request failed with ${response.status}.`;
+			throw new Error(message);
+		}
+		return record(payload);
+	};
+	return {
+		buildContext: ({ repoId, query, paths, body }) => {
+			const effectiveRepoId = repoId || defaultRepoId;
+			if (!effectiveRepoId) throw new Error('TreeDX repository id is required for context build.');
+			checkScope({ repoId: effectiveRepoId, operation: 'files:read', path: paths?.[0] ?? null });
+			return request('POST', `/v1/dx/projects/${encodeURIComponent(input.projectId)}/repos/${encodeURIComponent(effectiveRepoId)}/context/build`, {
+			query,
+			paths,
+			...(body ?? {}),
 			});
-		const wallMinutes = Math.max(0, (Date.now() - startedAt) / 60_000);
-		await input.client.appendTaskEvent(id, {
-			kind: dryRun ? 'provider_runner_dry_run_completed' : 'provider_runner_live_codex_completed',
-			data: output,
-		});
-		await input.client.reportUsage({
-			taskId: id,
-			workDayId: stringValue(input.task.workDayId, payload.workDayId),
-			projectId,
-			taskSignature: `${agent.handler}.${agent.slug}.${dryRun ? 'dry_run' : 'live_codex'}`,
-			executionProfileId: dryRun ? 'provider-dry-run' : 'provider-live-codex',
-			nativeUsage: {
-				nativeUnit: 'wall_minute',
-				wallMinutes,
-				source: dryRun ? 'provider_runner_dry_run' : 'provider_runner_live_codex',
-			},
-			metadata: {
-				dryRun,
-				liveCodex: !dryRun,
-				handler: agent.handler,
-				status: output.status,
-			},
-		});
-		return input.client.completeTask(id, {
-			output: {
-				dryRun,
-				liveCodex: !dryRun,
-				projectId,
-				agentSlug,
-				status: output.status,
-				summary: output.summary,
-				metadata: output.metadata,
-				generatedArtifacts: [{
-					id: `provider-artifact:${id}`,
-					title: dryRun ? 'Provider dry-run artifact' : 'Live Codex provider artifact',
-					description: output.summary,
-					type: 'knowledge_artifact',
-					state: output.status === 'completed' ? 'generated' : output.status,
-					artifactKind: 'provider_work_result',
-					projectId,
-					agentSlug,
-					taskId: id,
-					workDayId: stringValue(input.task.workDayId, payload.workDayId),
-					metadata: {
-						liveCodex: !dryRun,
-						providerRuntime: '@treeseed/agent',
-					},
-				}],
-			},
-			summary: {
-				dryRun,
-				liveCodex: !dryRun,
-				summary: output.summary,
-			},
-		});
-	} catch (error) {
-		const dryRun = dryRunRequested(input.task);
-		return failTask(
-			input.client,
-			id,
-			dryRun ? 'provider_dry_run_handler_failed' : 'provider_live_codex_handler_failed',
-			error instanceof Error ? error.message : String(error),
-		);
-	}
+		},
+		readRepositoryFiles: ({ repoId, paths, ref, body }) => {
+			const effectiveRepoId = repoId || defaultRepoId;
+			if (!effectiveRepoId) throw new Error('TreeDX repository id is required for file read.');
+			for (const path of paths) checkScope({ repoId: effectiveRepoId, operation: 'files:read', path });
+			return request('POST', `/v1/dx/projects/${encodeURIComponent(input.projectId)}/repos/${encodeURIComponent(effectiveRepoId)}/files/read`, {
+			paths,
+			ref,
+			...(body ?? {}),
+			});
+		},
+		searchWorkspace: ({ workspaceId, query, body }) => {
+			const effectiveWorkspaceId = workspaceId || defaultWorkspaceId;
+			if (!effectiveWorkspaceId) throw new Error('TreeDX workspace id is required for workspace search.');
+			checkScope({ workspaceId: effectiveWorkspaceId, operation: 'files:search' });
+			return request('POST', `/v1/dx/projects/${encodeURIComponent(input.projectId)}/workspaces/${encodeURIComponent(effectiveWorkspaceId)}/search`, {
+			query,
+			...(body ?? {}),
+			});
+		},
+		readWorkspaceFile: ({ workspaceId, path }) => {
+			const effectiveWorkspaceId = workspaceId || defaultWorkspaceId;
+			if (!effectiveWorkspaceId) throw new Error('TreeDX workspace id is required for workspace file read.');
+			checkScope({ workspaceId: effectiveWorkspaceId, operation: 'files:read', path });
+			return request('GET', `/v1/dx/projects/${encodeURIComponent(input.projectId)}/workspaces/${encodeURIComponent(effectiveWorkspaceId)}/files?path=${encodeURIComponent(path)}`);
+		},
+		writeWorkspaceFile: ({ workspaceId, path, content, body }) => {
+			const effectiveWorkspaceId = workspaceId || defaultWorkspaceId;
+			if (!effectiveWorkspaceId) throw new Error('TreeDX workspace id is required for workspace file write.');
+			checkScope({ workspaceId: effectiveWorkspaceId, operation: 'files:write', path });
+			return request('PUT', `/v1/dx/projects/${encodeURIComponent(input.projectId)}/workspaces/${encodeURIComponent(effectiveWorkspaceId)}/files?path=${encodeURIComponent(path)}`, {
+			content,
+			...(body ?? {}),
+			});
+		},
+		commitWorkspace: ({ workspaceId, message, body }) => {
+			const effectiveWorkspaceId = workspaceId || defaultWorkspaceId;
+			if (!effectiveWorkspaceId) throw new Error('TreeDX workspace id is required for workspace commit.');
+			checkScope({ workspaceId: effectiveWorkspaceId, operation: 'git:commit' });
+			return request('POST', `/v1/dx/projects/${encodeURIComponent(input.projectId)}/workspaces/${encodeURIComponent(effectiveWorkspaceId)}/commit`, {
+			message,
+			...(body ?? {}),
+			});
+		},
+	};
 }
 
 export async function runProviderRunnerOnce(input: {
@@ -400,7 +203,7 @@ export async function runProviderRunnerOnce(input: {
 	const runnerId = input.runnerId ?? `provider-runner-${process.pid}`;
 	const leased = await input.client.nextAssignment({
 		runnerId: input.runnerId ?? `provider-runner-${process.pid}`,
-		capabilities: ['codex-docs-work'],
+		capabilities: providerRunnerCapabilities(input.config),
 	});
 	const assignment = record(leased.payload ?? leased.assignment);
 	if (!Object.keys(assignment).length) {
@@ -413,7 +216,6 @@ export async function runProviderRunnerOnce(input: {
 		};
 	}
 	const leaseToken = stringValue(leased.leaseToken, assignment.leaseToken);
-	const task = assignmentToTask(assignment);
 	if (leaseToken && input.client.renewAssignment) {
 		await input.client.renewAssignment(String(assignment.id), {
 			leaseToken,
@@ -421,20 +223,36 @@ export async function runProviderRunnerOnce(input: {
 			leaseSeconds: Number(leased.leaseSeconds ?? 300),
 		});
 	}
-	const result = await runProviderAssignment({
-		config: input.config,
-		client: input.client,
-		assignment,
-		leaseToken,
-		runnerId,
-	});
+	let renewTimer: ReturnType<typeof setInterval> | null = null;
+	if (leaseToken && input.client.renewAssignment) {
+		const renewEveryMs = Math.max(15_000, Math.min(Number(leased.leaseSeconds ?? 300) * 500, 120_000));
+		renewTimer = setInterval(() => {
+			void input.client.renewAssignment?.(String(assignment.id), {
+				leaseToken,
+				runnerId,
+				leaseSeconds: Number(leased.leaseSeconds ?? 300),
+			}).catch(() => null);
+		}, renewEveryMs);
+	}
+	let result;
+	try {
+		result = await runProviderAssignment({
+			config: input.config,
+			client: input.client,
+			assignment,
+			leaseToken,
+			runnerId,
+		});
+	} finally {
+		if (renewTimer) clearInterval(renewTimer);
+	}
 	return {
 		ok: true,
 		role: 'runner',
 		dryRun: false,
 		assigned: 1,
 		assignmentId: stringValue(assignment.id),
-		taskId: stringValue(assignment.taskId) ?? taskId(task),
+		taskId: stringValue(assignment.taskId, assignment.id),
 		result,
 	};
 }
@@ -492,6 +310,29 @@ async function runProviderAssignment(input: {
 		});
 	}
 	const localSdk = AgentSdk.createLocal({ repoRoot: project.repository.path });
+	const capabilityHandles = redactedProviderAssignmentCapabilityHandles(record(input.assignment.capabilityHandles));
+	const workspaceMode = workspaceAccessMode({ ...input.assignment, capabilityHandles });
+	const handleFallback = validateProviderAssignmentCapabilityHandles({
+		assignment: {
+			...input.assignment,
+			id: assignmentId,
+			teamId: stringValue(input.assignment.teamId, decisionInput.teamId, capacityEnvelope.teamId) ?? '',
+			projectId,
+			mode: stringValue(input.assignment.mode, decisionInput.mode, capacityEnvelope.mode) ?? 'planning',
+			capabilityHandles,
+		} as any,
+		capabilityHandles,
+	});
+	if (handleFallback) {
+		return input.client.failAssignment(assignmentId, {
+			leaseToken: input.leaseToken,
+			runnerId: input.runnerId,
+			code: handleFallback.code,
+			message: handleFallback.reason,
+			retryable: handleFallback.retryable,
+			metadata: handleFallback.metadata,
+		});
+	}
 	const sdk = {
 		repoRoot: localSdk.repoRoot,
 		listRawAgentSpecs: localSdk.listRawAgentSpecs.bind(localSdk),
@@ -504,6 +345,14 @@ async function runProviderAssignment(input: {
 	} as unknown as AgentSdk;
 	const dryRun = decisionPayload.dryRun !== false && !input.config.codexAuthFile && !input.config.codexAuthJsonB64;
 	const kernel = new AgentKernel(sdk, project.repository.path, {
+		treeDx: ['brokered_workspace', 'trusted_direct'].includes(workspaceMode ?? '')
+			? createAssignmentTreeDxAdapter({
+				config: input.config,
+				projectId,
+				assignmentId,
+				treedxProxyHandle: record(input.assignment.treedxProxyHandle),
+			})
+			: null,
 		execution: dryRun
 			? {
 				runTask: async () => waitingResult('Dry-run execution adapter skipped external model execution.'),
@@ -544,12 +393,49 @@ async function runProviderAssignment(input: {
 			}),
 		},
 		operations: {
-			runOperation: async () => ({
-				ok: true,
-				dryRun,
-				summary: 'Provider assignment operation skipped.',
-				events: [],
-			}),
+			runOperation: async ({ request }) => {
+				const operationId = stringValue(record(request.input).workflowOperationId, record(request.input).operationId, request.operation);
+				const handleId = stringValue(record(request.input).workflowOperationHandleId, record(request.input).handleId);
+				const handle = workflowOperationHandles({ ...input.assignment, capabilityHandles })
+					.find((entry) => stringValue(entry.operationId) === operationId && (!handleId || stringValue(entry.id) === handleId));
+				if (!handle || !input.client.dispatchAssignmentWorkflowOperation) {
+					return {
+						operation: request.operation,
+						status: 'waiting',
+						summary: 'Provider assignment operation requires an assignment-scoped workflow operation handle.',
+						changedPaths: [],
+						stagedPaths: [],
+						commandsRun: [],
+						artifacts: [],
+						error: {
+							code: 'assignment_workflow_operation_denied',
+							message: 'No active workflow operation handle is available for this assignment.',
+							retryable: false,
+						},
+						metadata: { operationId, handleId },
+					};
+				}
+				const result = await input.client.dispatchAssignmentWorkflowOperation(assignmentId, operationId ?? '', {
+					leaseToken: input.leaseToken,
+					handleId: stringValue(handle.id),
+					inputs: record(request.input).inputs ?? record(request.input),
+					wait: record(request.input).wait === true,
+				});
+				return {
+					operation: request.operation,
+					status: 'completed',
+					summary: `Dispatched workflow operation ${operationId}.`,
+					changedPaths: [],
+					stagedPaths: [],
+					commandsRun: ['workflow_operation_dispatch'],
+					artifacts: [],
+					metadata: {
+						workflowOperationId: operationId,
+						workflowOperationHandleId: stringValue(handle.id),
+						dispatch: record(result.payload),
+					},
+				};
+			},
 		},
 	});
 	const typedAssignment = {
@@ -586,14 +472,26 @@ async function runProviderAssignment(input: {
 				assignmentId,
 			},
 		},
+		capabilityHandles,
+		workspaceContext: {
+			...record(input.assignment.workspaceContext),
+			workspaceAccessMode: workspaceMode,
+			capabilityHandles,
+		},
 	} as ProviderAssignment;
+	let fallbackOutput: Record<string, unknown> | null = null;
 	const modeResult = await kernel.runAssignment({
 		assignment: typedAssignment,
 		capacityEnvelope: deriveAgentCapacityEnvelopeFromAssignment(typedAssignment),
 		decisionInput: deriveDecisionExecutionInputFromAssignment(typedAssignment),
 		leaseToken: input.leaseToken,
 		runnerId: input.runnerId,
+		readiness: record(input.assignment.readiness ?? record(decisionInput.metadata).readiness) as any,
 		recordModeRun: (body) => input.client.createAssignmentModeRun(assignmentId, body as unknown as Record<string, unknown>),
+		recordFallbackOutput: async (output) => {
+			fallbackOutput = output;
+			return output;
+		},
 	});
 	if (modeResult.status === 'completed') {
 		return input.client.completeAssignment(assignmentId, {
@@ -626,6 +524,7 @@ async function runProviderAssignment(input: {
 			code: modeResult.fallback?.code ?? 'provider_assignment_returned',
 			retryable: modeResult.fallback?.retryable ?? true,
 			output: modeResult.outputs ?? {},
+			fallbackOutput: fallbackOutput ?? undefined,
 		});
 	}
 	return input.client.failAssignment(assignmentId, {
@@ -635,104 +534,6 @@ async function runProviderAssignment(input: {
 		message: modeResult.fallback?.reason ?? modeResult.summary,
 		retryable: modeResult.fallback?.retryable ?? false,
 		output: modeResult.outputs ?? {},
+		fallbackOutput: fallbackOutput ?? undefined,
 	});
-}
-
-function assignmentToTask(assignment: Record<string, unknown>) {
-	const decisionInput = record(assignment.decisionInput);
-	const decisionPayload = record(decisionInput.input);
-	const capacityEnvelope = record(assignment.capacityEnvelope);
-	return {
-		id: stringValue(assignment.id) ?? 'assignment',
-		taskId: stringValue(assignment.taskId) ?? null,
-		projectId: stringValue(assignment.projectId, decisionInput.projectId, capacityEnvelope.projectId),
-		workDayId: stringValue(assignment.workDayId, decisionInput.workDayId, capacityEnvelope.workDayId),
-		agentSlug: stringValue(assignment.agentId, decisionInput.agentId, decisionPayload.agentSlug, decisionPayload.agentId),
-		agentId: stringValue(assignment.agentId, decisionInput.agentId, decisionPayload.agentId),
-		handlerId: stringValue(assignment.handlerId, decisionInput.handlerId),
-		input: {
-			...decisionPayload,
-			...record(assignment.workspaceContext),
-			dryRun: decisionPayload.dryRun ?? true,
-			projectId: stringValue(assignment.projectId, decisionInput.projectId, capacityEnvelope.projectId),
-			agentSlug: stringValue(assignment.agentId, decisionInput.agentId, decisionPayload.agentSlug, decisionPayload.agentId),
-			assignmentId: stringValue(assignment.id),
-			projectAgentClassId: stringValue(assignment.projectAgentClassId, decisionInput.projectAgentClassId),
-			mode: stringValue(assignment.mode, decisionInput.mode),
-			capacityEnvelope,
-		},
-	};
-}
-
-function assignmentClientAdapter(
-	client: ProviderAssignmentClient,
-	assignment: Record<string, unknown>,
-	lease: { leaseToken: string | null; runnerId: string },
-): ProviderTaskClient {
-	const assignmentId = stringValue(assignment.id) ?? '';
-	return {
-		portfolio: client.portfolio?.bind(client),
-		createWorkday: client.createWorkday?.bind(client),
-		writeReport: client.writeReport?.bind(client),
-		async claimTask() {
-			return { ok: true, tasks: [assignmentToTask(assignment)] };
-		},
-		async appendTaskEvent(_taskId: string, body: Record<string, unknown>) {
-			const kind = stringValue(body.kind);
-			const data = record(body.data);
-			const status = kind?.includes('failed')
-				? 'failed'
-				: kind?.includes('completed')
-					? 'succeeded'
-					: 'running';
-			return client.createAssignmentModeRun(assignmentId, {
-				status,
-				selectedInput: assignmentToTask(assignment).input,
-				outputs: data,
-				traceRefs: { eventKind: kind },
-				startedAt: status === 'running' ? new Date().toISOString() : undefined,
-				completedAt: status === 'succeeded' ? new Date().toISOString() : undefined,
-				failedAt: status === 'failed' ? new Date().toISOString() : undefined,
-				metadata: {
-					source: 'provider_runner_assignment_event',
-					runnerId: lease.runnerId,
-				},
-			});
-		},
-		async reportUsage(body: Record<string, unknown>) {
-			return client.createAssignmentModeRun(assignmentId, {
-				status: 'succeeded',
-				selectedInput: assignmentToTask(assignment).input,
-				usageActual: {
-					actualCredits: body.actualCredits ?? null,
-					actualUsd: body.actualUsd ?? null,
-					nativeUsage: record(body.nativeUsage),
-					metadata: record(body.metadata),
-				},
-				completedAt: new Date().toISOString(),
-				metadata: {
-					source: 'provider_runner_assignment_usage',
-					taskSignature: body.taskSignature,
-					executionProfileId: body.executionProfileId,
-				},
-			});
-		},
-		async completeTask(_taskId: string, body: Record<string, unknown>) {
-			return client.completeAssignment(assignmentId, {
-				leaseToken: lease.leaseToken,
-				runnerId: lease.runnerId,
-				output: record(body.output),
-				summary: record(body.summary),
-			});
-		},
-		async failTask(_taskId: string, body: Record<string, unknown>) {
-			return client.failAssignment(assignmentId, {
-				leaseToken: lease.leaseToken,
-				runnerId: lease.runnerId,
-				code: stringValue(body.errorCode, body.code) ?? 'provider_assignment_failed',
-				message: stringValue(body.errorMessage, body.message) ?? 'Provider assignment failed.',
-				retryable: body.retryable === true,
-			});
-		},
-	};
 }

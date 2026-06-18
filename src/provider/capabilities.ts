@@ -19,11 +19,15 @@ export function discoverProviderCapabilities(config: ProviderRuntimeConfig): Cap
 		if (loaded) return loaded;
 	}
 	return [{
-		id: 'codex-docs-work',
-		agents: ['treeseed-docs-planner', 'treeseed-docs-engineer', 'treeseed-docs-reviewer'],
+		id: 'agent_execution',
+		agents: ['*'],
 		operations: ['plan', 'research', 'mutate', 'verify', 'report'],
 		models: ['codex'],
 		repositoryAccess: 'git_worktree',
 		verification: ['local_command'],
+		metadata: {
+			capabilityAliases: ['repository_work'],
+			source: 'provider_default_capability_discovery',
+		},
 	}];
 }

@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { AgentKernel } from '../../src/agents/kernel/agent-kernel.ts';
+import { AgentKernel, ModeScheduler } from '../../src/agents/kernel/agent-kernel.ts';
 
 const tempRoots: string[] = [];
 const originalCwd = process.cwd();
@@ -69,6 +69,17 @@ export const plannerHandler: AgentHandler<Record<string, never>, { repoRoot: str
 }
 
 describe('agent kernel project root support', () => {
+	it('chooses bounded kernel modes from queue observations', () => {
+		const scheduler = new ModeScheduler();
+		expect(scheduler.decide({ planningReady: 1, actingReady: 0, planningBudgetCredits: 2 })).toMatchObject({
+			kind: 'mode',
+			mode: 'planning',
+		});
+		expect(scheduler.decide({ planningReady: 0, actingReady: 0, fallbackReady: 1 })).toMatchObject({
+			kind: 'fallback',
+		});
+	});
+
 	it('runs agent context from projectRoot while the SDK remains tenant-scoped', async () => {
 		const { parentRoot, tenantRoot } = createIntegratedTenant();
 		process.chdir(tenantRoot);

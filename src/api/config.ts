@@ -114,8 +114,8 @@ export function resolveApiConfig(env: NodeJS.ProcessEnv = process.env): ApiConfi
 			.length > 0
 			? parseCsv(env.TREESEED_API_PROJECT_KEY_PERMISSIONS)
 			: ['sdk:execute:global', 'agent:execute:global', 'operations:execute:global'],
-		cloudflareAccountId: env.CLOUDFLARE_ACCOUNT_ID?.trim() || undefined,
-		cloudflareApiToken: env.CLOUDFLARE_API_TOKEN?.trim() || undefined,
+		cloudflareAccountId: env.TREESEED_CLOUDFLARE_ACCOUNT_ID?.trim() || undefined,
+		cloudflareApiToken: env.TREESEED_CLOUDFLARE_API_TOKEN?.trim() || undefined,
 		d1DatabaseId: env.TREESEED_API_D1_DATABASE_ID?.trim() || undefined,
 		d1DatabaseName: env.TREESEED_API_D1_DATABASE_NAME?.trim() || env.SITE_DATA_DB?.trim() || undefined,
 		d1LocalPersistTo: env.TREESEED_API_D1_LOCAL_PERSIST_TO?.trim() || resolve(repoRoot, '.wrangler/state/v3/d1'),

@@ -9,6 +9,10 @@ import { registerAgentRoutes } from './agent-routes.ts';
 import { registerOperationRoutes } from './operations-routes.ts';
 import { registerProjectRoutes } from './project-routes.ts';
 
+export interface TreeseedAgentApiApp {
+	fetch(request: Request, ...args: unknown[]): Response | Promise<Response>;
+}
+
 function createDefaultAgentApiSdk(repoRoot: string | undefined) {
 	return new AgentSdk({
 		repoRoot,
@@ -17,7 +21,7 @@ function createDefaultAgentApiSdk(repoRoot: string | undefined) {
 	});
 }
 
-export function createTreeseedApiRouter(options: ApiServerOptions = {}) {
+export function createTreeseedApiRouter(options: ApiServerOptions = {}): TreeseedAgentApiApp {
 	const surfaces = {
 		auth: true,
 		templates: true,
@@ -75,6 +79,6 @@ export function createTreeseedApiRouter(options: ApiServerOptions = {}) {
 	});
 }
 
-export function createTreeseedApiApp(options: ApiServerOptions = {}) {
+export function createTreeseedApiApp(options: ApiServerOptions = {}): TreeseedAgentApiApp {
 	return createTreeseedApiRouter(options);
 }

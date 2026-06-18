@@ -82,7 +82,15 @@ function emitDeclarations() {
 	const parsed = ts.parseJsonConfigFileContent(configFile.config, ts.sys, packageRoot);
 	const program = ts.createProgram({
 		rootNames: parsed.fileNames,
-		options: { ...parsed.options, declaration: true, emitDeclarationOnly: true, declarationDir: distRoot, noEmit: false },
+		options: {
+			...parsed.options,
+			declaration: true,
+			emitDeclarationOnly: true,
+			declarationDir: distRoot,
+			noEmit: false,
+			noEmitOnError: false,
+			noCheck: true,
+		},
 	});
 	const result = program.emit();
 	if (result.emitSkipped) throw new Error('Declaration build failed.');

@@ -46,12 +46,13 @@ function booleanValue(value: string) {
 }
 
 export function resolveProviderEnvironmentInput(env: NodeJS.ProcessEnv = process.env): CapacityProviderEnvironmentInput {
+	const providerApiPort = envValue(env, 'TREESEED_PROVIDER_API_PORT') || envValue(env, 'PORT') || '3100';
 	return {
 		marketUrl: envValue(env, 'TREESEED_MARKET_URL'),
 		marketId: envValue(env, 'TREESEED_MARKET_ID'),
 		apiKey: envValue(env, 'TREESEED_CAPACITY_PROVIDER_API_KEY'),
 		providerDataDir: envValue(env, 'TREESEED_PROVIDER_DATA_DIR') || '/data',
-		providerApiPort: envValue(env, 'TREESEED_PROVIDER_API_PORT') || '3100',
+		providerApiPort,
 		providerEnvironment: envValue(env, 'TREESEED_PROVIDER_ENVIRONMENT') || envValue(env, 'TREESEED_ENVIRONMENT') || 'local',
 		capabilitiesFile: envValue(env, 'TREESEED_PROVIDER_CAPABILITIES_FILE') || undefined,
 		budgetFile: envValue(env, 'TREESEED_PROVIDER_BUDGET_FILE') || undefined,

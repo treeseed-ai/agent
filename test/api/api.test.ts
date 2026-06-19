@@ -284,7 +284,7 @@ apiRuntimeDescribe('@treeseed/agent api runtime', () => {
 
 	it('rejects loopback approval links for remote APIs', () => {
 		expect(() => resolveApiConfig({
-			TREESEED_API_BASE_URL: 'https://api-treeseed-staging.treeseed.ai',
+			TREESEED_API_BASE_URL: 'https://api-treeseed-market-staging-ca844c56.treeseed.ai',
 			TREESEED_SITE_URL: 'http://127.0.0.1:4321',
 		})).toThrow(/Refusing loopback device approval URL/u);
 	});

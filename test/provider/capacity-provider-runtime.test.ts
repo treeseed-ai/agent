@@ -242,7 +242,7 @@ describe('capacity provider runtime', () => {
 
 		const result = await processProviderPortfolio({ config, client });
 
-		expect(result.ok).toBe(true);
+		expect(result.ok, JSON.stringify(result.projects[0] ?? result, null, 2)).toBe(true);
 		expect(result.projects[0]).toMatchObject({
 			projectId: 'project_123',
 			repository: { ok: true, branch: 'main' },
@@ -338,7 +338,7 @@ describe('capacity provider runtime', () => {
 		const result = await runProviderRunnerOnce({ config, client });
 
 		expect(result).toMatchObject({ ok: true, role: 'runner', claimed: 1, taskId: 'task_1' });
-		expect(events.map((event) => event.method)).toEqual([
+		expect(events.map((event) => event.method), JSON.stringify(events, null, 2)).toEqual([
 			'claimTask',
 			'appendTaskEvent',
 			'appendTaskEvent',
@@ -403,7 +403,7 @@ describe('capacity provider runtime', () => {
 		const result = await runProviderRunnerOnce({ config, client });
 
 		expect(result).toMatchObject({ ok: true, claimed: 1, taskId: 'task_hosted' });
-		expect(events.map((event) => event.method)).toEqual([
+		expect(events.map((event) => event.method), JSON.stringify(events, null, 2)).toEqual([
 			'claimTask',
 			'portfolio',
 			'createWorkday',

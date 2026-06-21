@@ -92,6 +92,9 @@ function discoverRepoRoot(start = process.cwd()) {
 		if (existsSync(resolve(current, 'starters/research/template')) && existsSync(resolve(current, 'packages/agent'))) {
 			return current;
 		}
+		if (existsSync(resolve(current, 'package.json')) && existsSync(resolve(current, 'src/agents/testing/study-knowledge-pack-scenario.ts'))) {
+			return current;
+		}
 		const parent = dirname(current);
 		if (parent === current) break;
 		current = parent;
@@ -635,10 +638,74 @@ function renderPortfolio(result: Omit<StudyKnowledgePackScenarioResult, 'portfol
 	].join('\n');
 }
 
+function writeSyntheticResearchTemplate(projectRoot: string, course: CoursePlan) {
+	for (const collection of [
+		'pages',
+		'notes',
+		'questions',
+		'objectives',
+		'proposals',
+		'decisions',
+		'people',
+		'agents',
+		'books',
+		'knowledge',
+		'knowledge-packs',
+		'workdays',
+		'agent-tests',
+	]) {
+		mkdirSync(resolve(projectRoot, 'src/content', collection), { recursive: true });
+	}
+	writeText(resolve(projectRoot, 'src/manifest.yaml'), [
+		`id: ${course.slug}`,
+		'siteConfigPath: ./src/config.yaml',
+		'content:',
+		'  pages: ./src/content/pages',
+		'  notes: ./src/content/notes',
+		'  questions: ./src/content/questions',
+		'  objectives: ./src/content/objectives',
+		'  proposals: ./src/content/proposals',
+		'  decisions: ./src/content/decisions',
+		'  people: ./src/content/people',
+		'  agents: ./src/content/agents',
+		'  books: ./src/content/books',
+		'  docs: ./src/content/knowledge',
+		'  knowledge_packs: ./src/content/knowledge-packs',
+		'  workdays: ./src/content/workdays',
+		'  agent_tests: ./src/content/agent-tests',
+		'features:',
+		'  docs: true',
+		'  books: true',
+		'  notes: true',
+		'  questions: true',
+		'  objectives: true',
+		'  proposals: true',
+		'  decisions: true',
+		'  agents: true',
+		'  forms: false',
+	].join('\n'));
+	writeText(resolve(projectRoot, 'src/config.yaml'), [
+		'site:',
+		`  name: ${yamlString(course.title)}`,
+		'  statement: Research, synthesize, and publish source-backed knowledge packs.',
+		`  siteUrl: ${yamlString(`https://study.local/${course.slug}`)}`,
+		'  githubRepository: https://example.invalid/treeseed-study-group',
+		'  discordLink: https://example.invalid/study-group',
+		'  summary: Synthetic research template for isolated agent package verification.',
+	].join('\n'));
+	writeText(resolve(projectRoot, 'src/content/pages/welcome.mdx'), [
+		mdFrontmatter({ title: 'Welcome', slug: 'welcome' }),
+		'# Welcome',
+		'',
+		'This synthetic research template is used when package CI does not have the starter repositories checked out.',
+	].join('\n'));
+}
+
 function copyResearchTemplate(repoRoot: string, projectRoot: string, course: CoursePlan) {
 	const templateRoot = resolve(repoRoot, 'starters/research/template');
 	if (!existsSync(templateRoot)) {
-		throw new Error(`Research starter template not found: ${templateRoot}`);
+		writeSyntheticResearchTemplate(projectRoot, course);
+		return;
 	}
 	cpSync(templateRoot, projectRoot, { recursive: true });
 	replaceInFile(resolve(projectRoot, 'src/manifest.yaml'), {

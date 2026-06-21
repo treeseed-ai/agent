@@ -1,4 +1,4 @@
-import { loadTreeseedPluginRuntime } from '@treeseed/sdk/platform/plugins';
+import { loadTreeseedPlugins } from '@treeseed/sdk/platform/plugins';
 import { CopilotExecutionProviderAdapter } from './agents/adapters/execution.ts';
 import { CodexSubscriptionExecutionProviderAdapter } from './agents/adapters/execution-codex.ts';
 import { DiscordExecutionProviderAdapter } from './agents/adapters/execution-discord.ts';
@@ -25,7 +25,7 @@ import type {
 	AgentVerificationAdapter,
 } from './agents/runtime-types.ts';
 
-type RuntimePluginEntry = ReturnType<typeof loadTreeseedPluginRuntime>['plugins'][number];
+type RuntimePluginEntry = ReturnType<typeof loadTreeseedPlugins>[number];
 
 let cachedAgentRuntime: null | {
 	providers: {
@@ -59,7 +59,7 @@ function collectAgentHandlersFromPlugin(pluginEntry: RuntimePluginEntry, registr
 }
 
 function buildAgentRuntime() {
-	const runtime = loadTreeseedPluginRuntime();
+	const plugins = loadTreeseedPlugins();
 	const execution = new Map<string, (repoRoot: string) => ExecutionProviderAdapter>([
 		['copilot', () => new CopilotExecutionProviderAdapter()],
 		['codex', (repoRoot) => new CodexSubscriptionExecutionProviderAdapter({ repoRoot })],
@@ -105,7 +105,7 @@ function buildAgentRuntime() {
 		['report', reportHandler],
 	]);
 
-	for (const pluginEntry of runtime.plugins) {
+	for (const pluginEntry of plugins) {
 		const agentProviders = readPluginRecord<Record<string, unknown>>(pluginEntry, 'agentProviders');
 		for (const [id, factory] of Object.entries((agentProviders.execution ?? {}) as Record<string, (repoRoot: string) => ExecutionProviderAdapter>)) {
 			assertUniqueProvider(execution, id, pluginEntry.package);

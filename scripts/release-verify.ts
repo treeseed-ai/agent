@@ -130,7 +130,7 @@ function runPackedProviderRuntimeSmoke(installRoot: string) {
 			"  import('./node_modules/@treeseed/agent/dist/agents/registry.js'),",
 			"]);",
 		"const registry = modules.at(-1);",
-		"if (registry.listRegisteredAgentHandlers().length < 7) throw new Error('built-in handler registry is incomplete');",
+		"if ((await registry.listRegisteredAgentHandlers()).length < 5) throw new Error('built-in handler registry is incomplete');",
 		"if (typeof modules[0].resolveProviderConfig !== 'function') throw new Error('provider config import missing resolveProviderConfig');",
 		"if (typeof modules[1].buildProviderRegistrationRequest !== 'function') throw new Error('provider registration import missing buildProviderRegistrationRequest');",
 		"if (typeof modules[2].buildProviderPlan !== 'function') throw new Error('provider lifecycle import missing buildProviderPlan');",

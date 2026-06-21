@@ -3,6 +3,8 @@ import type {
 	AgentTreeDxAdapter,
 	ExecutionProviderAdapter,
 	ExecutionProviderInvocation,
+	ExecutionProviderToolDescriptor,
+	TreeDxProxyExecutionToolDescriptor,
 } from '../agents/runtime-types.ts';
 import { AgentSdk } from '@treeseed/sdk/sdk';
 import { buildCapacityProviderAuthHeaders, type MarketProviderClient } from '@treeseed/sdk/capacity-provider';
@@ -126,6 +128,7 @@ interface LifecycleManagedExecutionProviderAdapterOptions {
 	recordModeRun: (body: Record<string, unknown>) => Promise<unknown>;
 	selectedInput: Record<string, unknown>;
 	capacityEnvelope: Record<string, unknown>;
+	tools?: ExecutionProviderToolDescriptor[];
 	pollIntervalMs?: number;
 	maxPolls?: number;
 }
@@ -154,6 +157,10 @@ class LifecycleManagedExecutionProviderAdapter implements ExecutionProviderAdapt
 			...input,
 			leaseToken: input.leaseToken ?? this.options.leaseToken,
 			runnerId: input.runnerId || this.options.runnerId,
+			tools: [
+				...(input.tools ?? []),
+				...(this.options.tools ?? []),
+			],
 		};
 		const preparation = await this.prepare(invocation);
 		if (!preparation.accepted) {
@@ -570,6 +577,67 @@ function createAssignmentTreeDxAdapter(input: {
 	};
 }
 
+function createAssignmentTreeDxToolDescriptor(input: {
+	projectId: string;
+	assignmentId: string;
+	treedxProxyHandle: Record<string, unknown>;
+	workspaceMode?: string | null;
+}): TreeDxProxyExecutionToolDescriptor | null {
+	const handleId = stringValue(input.treedxProxyHandle.id);
+	if (!handleId) return null;
+	const scope = evaluateTreeDxProxyHandleAccessLocal(input.treedxProxyHandle, {
+		projectId: input.projectId,
+		assignmentId: input.assignmentId,
+	});
+	if (!scope.ok) return null;
+	const repositoryId = stringValue(input.treedxProxyHandle.repositoryId);
+	const workspaceId = stringValue(input.treedxProxyHandle.workspaceId);
+	const rawAllowedOperations = Array.isArray(input.treedxProxyHandle.allowedOperations)
+		? input.treedxProxyHandle.allowedOperations.map(String).filter(Boolean)
+		: [];
+	const writable = input.workspaceMode !== 'context_only';
+	const allowedOperations = rawAllowedOperations.length > 0
+		? rawAllowedOperations.filter((operation) => writable || !['files:write', 'git:commit'].includes(operation))
+		: writable
+			? ['files:read', 'files:search', 'files:write', 'git:commit']
+			: ['files:read', 'files:search'];
+	const allowedPaths = Array.isArray(input.treedxProxyHandle.allowedPaths)
+		? input.treedxProxyHandle.allowedPaths.map(String).filter(Boolean)
+		: [];
+	const project = encodeURIComponent(input.projectId);
+	const repo = repositoryId ? encodeURIComponent(repositoryId) : ':repoId';
+	const workspace = workspaceId ? encodeURIComponent(workspaceId) : ':workspaceId';
+	return {
+		kind: 'treedx_proxy',
+		id: `treedx-proxy:${handleId}`,
+		name: 'TreeDX assignment proxy',
+		description: 'Assignment-scoped TreeDX content and workspace operations proxied through the TreeSeed API.',
+		projectId: input.projectId,
+		assignmentId: input.assignmentId,
+		handleId,
+		repositoryId,
+		workspaceId,
+		operations: allowedOperations,
+		allowedOperations,
+		allowedPaths,
+		routes: {
+			buildContext: `POST /v1/dx/projects/${project}/repos/${repo}/context/build`,
+			readRepositoryFiles: `POST /v1/dx/projects/${project}/repos/${repo}/files/read`,
+			searchWorkspace: `POST /v1/dx/projects/${project}/workspaces/${workspace}/search`,
+			readWorkspaceFile: `GET /v1/dx/projects/${project}/workspaces/${workspace}/files?path=:path`,
+			writeWorkspaceFile: `PUT /v1/dx/projects/${project}/workspaces/${workspace}/files?path=:path`,
+			commitWorkspace: `POST /v1/dx/projects/${project}/workspaces/${workspace}/commit`,
+		},
+		metadata: {
+			requiresHeaders: [
+				'Authorization: Bearer <capacity-provider-api-key>',
+				'x-treeseed-assignment-id',
+				'x-treeseed-treedx-proxy-handle-id',
+			],
+		},
+	};
+}
+
 export async function runProviderRunnerOnce(input: {
 	config: ProviderRuntimeConfig;
 	client: ProviderAssignmentClient;
@@ -699,7 +767,10 @@ async function runProviderAssignment(input: {
 			message: body.reason,
 		});
 	}
-	const localSdk = AgentSdk.createLocal({ repoRoot: project.repository.path });
+	const localSdk = AgentSdk.createLocal({
+		repoRoot: project.repository.path,
+		contentRepository: { adapter: 'local' },
+	});
 	const capabilityHandles = redactedProviderAssignmentCapabilityHandles(record(input.assignment.capabilityHandles));
 	const workspaceMode = workspaceAccessMode({ ...input.assignment, capabilityHandles });
 	const handleFallback = validateProviderAssignmentCapabilityHandles({
@@ -734,6 +805,14 @@ async function runProviderAssignment(input: {
 		async releaseAllLeases() { return { ok: true, payload: null }; },
 	} as unknown as AgentSdk;
 	const dryRun = decisionPayload.dryRun !== false && !input.config.codexAuthFile && !input.config.codexAuthJsonB64;
+	const treeDxToolDescriptor = ['brokered_workspace', 'trusted_direct', 'context_only'].includes(workspaceMode ?? '')
+		? createAssignmentTreeDxToolDescriptor({
+			projectId,
+			assignmentId,
+			treedxProxyHandle: record(input.assignment.treedxProxyHandle),
+			workspaceMode,
+		})
+		: null;
 	const baseExecutionAdapter = input.executionAdapter ?? createAssignmentExecutionProviderAdapter({
 		selection: executionProviderSelectionForAssignment(input.assignment, dryRun),
 		repoRoot: project.repository.path,
@@ -757,6 +836,7 @@ async function runProviderAssignment(input: {
 		recordModeRun: (body) => input.client.createAssignmentModeRun(assignmentId, body),
 		selectedInput: decisionPayload,
 		capacityEnvelope,
+		tools: treeDxToolDescriptor ? [treeDxToolDescriptor] : [],
 		pollIntervalMs: input.executionLifecycle?.pollIntervalMs,
 		maxPolls: input.executionLifecycle?.maxPolls,
 	});

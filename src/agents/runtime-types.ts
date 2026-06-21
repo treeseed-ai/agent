@@ -100,7 +100,38 @@ export interface ExecutionProviderInvocation {
 	runnerId: string;
 	projectAgentClass?: ProjectAgentClass | null;
 	workspace?: ExecutionWorkspaceContext | null;
+	tools?: ExecutionProviderToolDescriptor[];
 	metadata?: Record<string, unknown>;
+}
+
+export type ExecutionProviderToolKind = 'treedx_proxy';
+
+export interface ExecutionProviderToolDescriptor {
+	kind: ExecutionProviderToolKind | string;
+	id: string;
+	name: string;
+	description: string;
+	operations: string[];
+	metadata?: Record<string, unknown>;
+}
+
+export interface TreeDxProxyExecutionToolDescriptor extends ExecutionProviderToolDescriptor {
+	kind: 'treedx_proxy';
+	projectId: string;
+	assignmentId: string;
+	handleId: string;
+	repositoryId?: string | null;
+	workspaceId?: string | null;
+	allowedOperations: string[];
+	allowedPaths: string[];
+	routes: {
+		buildContext: string;
+		readRepositoryFiles: string;
+		searchWorkspace: string;
+		readWorkspaceFile: string;
+		writeWorkspaceFile: string;
+		commitWorkspace: string;
+	};
 }
 
 export interface ExecutionProviderAdapter {

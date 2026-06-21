@@ -18,6 +18,11 @@ export {
 	validateCodexExecutionRequest,
 } from './agents/adapters/execution-codex.ts';
 export {
+	createTreeDxProxyMcpServerCommand,
+	startTreeDxProxyMcpServer,
+} from './agents/tools/treedx-proxy-mcp-server.ts';
+export { callTreeDxProxyTool } from './agents/tools/treedx-proxy-client.ts';
+export {
 	JiraExecutionProviderAdapter,
 	resolveJiraExecutionProviderConfig,
 } from './agents/adapters/execution-jira.ts';
@@ -44,6 +49,15 @@ export { runWorkerCycle, startWorkerLoop } from './services/worker.ts';
 export { runWorkdayStart } from './services/workday-start.ts';
 export { runWorkdayReport } from './services/workday-report.ts';
 export { collectRuntimeReadiness, renderRuntimeReadiness } from './services/runtime-readiness.ts';
+export {
+	hostedAgentPlatformProofInputFromEnv,
+	runHostedAgentPlatformProof,
+} from './provider/hosted-proof.ts';
+export {
+	diagnoseAgentAuthoring,
+	summarizeAgentAuthoringDiagnostics,
+} from './agents/testing/agent-authoring-diagnostics.ts';
+export { runAgentPlatformCompletionAudit } from './agents/testing/platform-completion-audit.ts';
 export {
 	RESEARCH_KNOWLEDGE_TASK_KINDS,
 	extractGeneratedArtifactsFromTaskOutputs,
@@ -81,6 +95,10 @@ export type * from './services/agent-worktrees.ts';
 export type * from './agents/adapters/codex-readiness.ts';
 export type * from './agents/adapters/codex-auth.ts';
 export type * from './agents/adapters/execution-codex.ts';
+export type * from './agents/tools/treedx-proxy-mcp-server.ts';
+export type * from './provider/hosted-proof.ts';
+export type * from './agents/testing/agent-authoring-diagnostics.ts';
+export type * from './agents/testing/platform-completion-audit.ts';
 export type * from './agents/adapters/execution-jira.ts';
 export type * from './agents/adapters/execution-workflow.ts';
 export type * from './services/research-knowledge-workday.ts';

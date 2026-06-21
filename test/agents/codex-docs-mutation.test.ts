@@ -4,9 +4,9 @@ import {
 	normalizeCodexDocsMutationInput,
 	runCodexDocsMutationLifecycle,
 } from '../../src/agents/implementation/codex-docs-mutation.ts';
-import { engineerHandler } from '../../src/agents/handlers/engineer.ts';
-import { reviewerHandler } from '../../src/agents/handlers/reviewer.ts';
-import { releaserHandler } from '../../src/agents/handlers/releaser.ts';
+import { actHandler } from '../../src/agents/handlers/act.ts';
+import { reviewHandler } from '../../src/agents/handlers/review.ts';
+import { reportHandler } from '../../src/agents/handlers/report.ts';
 import type { CodexExecutionResult } from '../../src/agents/adapters/execution-codex.ts';
 import type { CodexDocsMutationResult } from '../../src/agents/contracts/implementation.ts';
 import type { AgentContext, AgentVerificationResult } from '../../src/agents/runtime-types.ts';
@@ -37,7 +37,7 @@ function context(payload: Record<string, unknown>, verification?: Partial<AgentV
 		repoRoot: '/repo',
 		agent: {
 			slug: 'engineer-agent',
-			handler: 'engineer',
+			handler: 'act',
 			enabled: true,
 			systemPrompt: 'Implement carefully.',
 			persona: 'Engineer',
@@ -367,7 +367,7 @@ describe('Codex docs mutation lifecycle', () => {
 		}));
 	});
 
-	it('emits engineer and reviewer handler outputs for staged implementation results', async () => {
+	it('emits act and review handler outputs for staged implementation results', async () => {
 		const { ctx, task } = taskFrom();
 		const worktrees = fakeWorktrees();
 		const lifecycleResult = await runCodexDocsMutationLifecycle(ctx, task, {
@@ -375,7 +375,7 @@ describe('Codex docs mutation lifecycle', () => {
 			runCodexTask: vi.fn(async () => codexResult()),
 		});
 
-		const engineerOutput = await engineerHandler.emitOutputs(ctx, lifecycleResult);
+		const engineerOutput = await actHandler.emitOutputs(ctx, lifecycleResult);
 		expect(engineerOutput).toMatchObject({
 			status: 'completed',
 			metadata: {
@@ -388,9 +388,9 @@ describe('Codex docs mutation lifecycle', () => {
 			allowedPaths: ['docs/**', 'src/content/knowledge/**'],
 			forbiddenPaths: ['src/content/knowledge/private/**'],
 		});
-		const reviewInputs = await reviewerHandler.resolveInputs(reviewCtx);
-		const reviewResult = await reviewerHandler.execute(reviewCtx, reviewInputs);
-		const reviewOutput = await reviewerHandler.emitOutputs(reviewCtx, reviewResult);
+		const reviewInputs = await reviewHandler.resolveInputs(reviewCtx);
+		const reviewResult = await reviewHandler.execute(reviewCtx, reviewInputs);
+		const reviewOutput = await reviewHandler.emitOutputs(reviewCtx, reviewResult);
 
 		expect(reviewOutput).toMatchObject({
 			status: 'completed',
@@ -406,9 +406,10 @@ describe('Codex docs mutation lifecycle', () => {
 			taskId: 'task:release',
 			approval: { id: 'approval:release', state: 'approved' },
 		});
-		const inputs = await releaserHandler.resolveInputs(ctx);
-		const result = await releaserHandler.execute(ctx, inputs);
-		const output = await releaserHandler.emitOutputs(ctx, result);
+		ctx.agent.handlerConfig = { domain: 'release_readiness' };
+		const inputs = await reportHandler.resolveInputs(ctx);
+		const result = await reportHandler.execute(ctx, inputs);
+		const output = await reportHandler.emitOutputs(ctx, result);
 
 		expect(result.summary).toContain('human-controlled');
 		expect(output).toMatchObject({

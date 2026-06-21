@@ -113,6 +113,41 @@ describe('codex provider execution', () => {
 		expect(prompt).toContain('"kind": "implementation"');
 	});
 
+	it('includes assignment-scoped TreeDX tool guidance without credentials', () => {
+		const prompt = buildCodexPrompt({
+			...request,
+			tools: [{
+				kind: 'treedx_proxy',
+				id: 'treedx-proxy:handle-1',
+				name: 'TreeDX assignment proxy',
+				description: 'Assignment-scoped TreeDX content proxy.',
+				operations: ['files:read', 'files:write', 'git:commit'],
+				projectId: 'project-1',
+				assignmentId: 'assignment-1',
+				handleId: 'handle-1',
+				repositoryId: 'repo-1',
+				workspaceId: 'workspace-1',
+				allowedOperations: ['files:read', 'files:write', 'git:commit'],
+				allowedPaths: ['src/content/**'],
+				routes: {
+					buildContext: 'POST /v1/dx/projects/project-1/repos/repo-1/context/build',
+					readRepositoryFiles: 'POST /v1/dx/projects/project-1/repos/repo-1/files/read',
+					searchWorkspace: 'POST /v1/dx/projects/project-1/workspaces/workspace-1/search',
+					readWorkspaceFile: 'GET /v1/dx/projects/project-1/workspaces/workspace-1/files?path=:path',
+					writeWorkspaceFile: 'PUT /v1/dx/projects/project-1/workspaces/workspace-1/files?path=:path',
+					commitWorkspace: 'POST /v1/dx/projects/project-1/workspaces/workspace-1/commit',
+				},
+				metadata: { token: 'secret_should_not_leak' },
+			}],
+		});
+
+		expect(prompt).toContain('TreeDX assignment tools:');
+		expect(prompt).toContain('treedx_write_workspace_file');
+		expect(prompt).toContain('Content writes must use treedx_write_workspace_file');
+		expect(prompt).toContain('src/content/**');
+		expect(prompt).not.toContain('secret_should_not_leak');
+	});
+
 	it('places the core objective before the agent task when available', () => {
 		const repoRoot = mkdtempSync(join(tmpdir(), 'treeseed-core-objective-'));
 		try {

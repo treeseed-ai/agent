@@ -25,7 +25,7 @@ export class StubResearchAdapter implements AgentResearchAdapter {
 export class ProjectGraphResearchAdapter implements AgentResearchAdapter {
 	async research(input: { questionId: string; reason: string | null; runId: string }) {
 		const repoRoot = resolveTreeseedTenantRoot();
-		const sdk = AgentSdk.createLocal({ repoRoot });
+		const sdk = AgentSdk.createLocal({ repoRoot, contentRepository: { adapter: 'local' } });
 		const graphResult = await sdk.queryGraph({
 			query: input.questionId,
 			options: {

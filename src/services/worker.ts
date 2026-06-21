@@ -10,7 +10,7 @@ import { createControlPlaneReporter, shouldInterruptForCapacity } from '@treesee
 import type { CapacityTaskExecutionEnvelope, TaskCheckpointArtifact } from '@treeseed/sdk';
 import { isDirectEntrypoint } from '../entrypoint.ts';
 import { buildTaskContext, createServiceSdk, resolveServiceRepoRoot, resolveWorkerConfig } from './common.ts';
-import { researcherHandler } from '../agents/handlers/researcher.ts';
+import { researchHandler } from '../agents/handlers/research.ts';
 import { knowledgeGeneratorHandler } from '../agents/handlers/knowledge-generator.ts';
 import { knowledgeOptimizerHandler } from '../agents/handlers/knowledge-optimizer.ts';
 import { createVerificationAdapter } from '../agents/adapters/verification.ts';
@@ -457,7 +457,7 @@ function scopedSdkForHandler(sdk: ReturnType<typeof createServiceSdk>, agent: Re
 function contextForResearchKnowledgeHandler(input: {
 	sdk: ReturnType<typeof createServiceSdk>;
 	repoRoot: string;
-	kind: 'researcher' | 'knowledge_generator' | 'knowledge_optimizer';
+	kind: 'research' | 'knowledge_draft' | 'knowledge_optimization';
 	payload: Record<string, unknown>;
 }) {
 	const agent = agentSpecForResearchKnowledgeHandler(input.kind);
@@ -468,9 +468,9 @@ function contextForResearchKnowledgeHandler(input: {
 		coreObjective: loadCoreObjectiveContext(input.repoRoot),
 		sdk: scopedSdkForHandler(input.sdk, agent),
 		trigger: invocationForResearchKnowledgeTask(
-			input.kind === 'researcher'
+			input.kind === 'research'
 				? 'research_question'
-				: input.kind === 'knowledge_generator'
+				: input.kind === 'knowledge_draft'
 					? 'generate_knowledge_draft'
 					: 'optimize_knowledge_draft',
 			input.payload,
@@ -493,7 +493,10 @@ function contextForDocsMutationHandler(input: {
 }) {
 	const agent = {
 		slug: 'treeseed-docs-engineer',
-		handler: 'engineer',
+		handler: 'act',
+		projectAgentClassId: 'implementation',
+		projectAgentClassSlug: 'implementation',
+		handlerConfig: { domain: 'documentation_mutation' },
 		enabled: true,
 		systemPrompt: 'Apply approved TreeSeed documentation mutations inside governed worktrees.',
 		persona: 'Careful documentation engineer.',
@@ -511,8 +514,20 @@ function contextForDocsMutationHandler(input: {
 			leaseSeconds: 600,
 			retryLimit: 0,
 			branchPrefix: 'agent/docs-mutation',
+			providerProfile: {
+				requiredCapabilities: ['workspace.write', 'treedx.write', 'docs.mutate'],
+			},
 		},
 		outputs: { messageTypes: [], modelMutations: [] },
+		context: {
+			queries: [{
+				id: 'docs-mutation',
+				purpose: 'documentation mutation',
+				query: 'approved documentation mutation',
+				scope: '/',
+				codeScopes: ['src/content', 'docs'],
+			}],
+		},
 	};
 	return {
 		runId: input.taskId,
@@ -751,14 +766,14 @@ export async function executeResearchKnowledgeTask(input: {
 		const context = contextForResearchKnowledgeHandler({
 			sdk: input.sdk,
 			repoRoot,
-			kind: 'researcher',
+			kind: 'research',
 			payload: {
 				...payload,
 				taskId,
 				...(codebaseInventory ? { codebaseInventory } : {}),
 			},
 		});
-		const { result, output } = await runBuiltInHandler(researcherHandler, context);
+		const { result, output } = await runBuiltInHandler(researchHandler, context);
 		const note = result as ResearchNote | null;
 		const generatedArtifacts = note ? [summarizeResearchNoteArtifact(note, taskId)] : [];
 		const nextTaskId = note && workDayId
@@ -794,7 +809,7 @@ export async function executeResearchKnowledgeTask(input: {
 		const context = contextForResearchKnowledgeHandler({
 			sdk: input.sdk,
 			repoRoot,
-			kind: 'knowledge_generator',
+			kind: 'knowledge_draft',
 			payload: { ...payload, taskId },
 		});
 		const { result, output } = await runBuiltInHandler(knowledgeGeneratorHandler, context);
@@ -834,7 +849,7 @@ export async function executeResearchKnowledgeTask(input: {
 		const context = contextForResearchKnowledgeHandler({
 			sdk: input.sdk,
 			repoRoot,
-			kind: 'knowledge_optimizer',
+			kind: 'knowledge_optimization',
 			payload: { ...payload, taskId },
 		});
 		const { result, output } = await runBuiltInHandler(knowledgeOptimizerHandler, context);
@@ -1442,7 +1457,7 @@ function createLocalTaskQueue(sdk: ReturnType<typeof createServiceSdk>, config: 
 	return {
 		async pull() {
 			const envelope = await sdk.searchTasks({
-				state: ['queued', 'pending'],
+				state: ['waiting', 'queued', 'pending'],
 				limit: config.batchSize,
 			});
 			const tasks = Array.isArray(envelope.payload) ? envelope.payload as Array<Record<string, unknown>> : [];

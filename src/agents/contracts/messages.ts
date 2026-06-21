@@ -144,6 +144,10 @@ export interface AgentMessageContracts {
 	team_inbox_item_created: DocumentationAutomationEventMessage;
 	release_candidate_created: DocumentationAutomationEventMessage;
 	release_waiting_for_approval: DocumentationAutomationEventMessage;
+	knowledge_generated: DocumentationAutomationEventMessage;
+	knowledge_optimized: DocumentationAutomationEventMessage;
+	report_created: DocumentationAutomationEventMessage;
+	distribution_digest_ready: DocumentationAutomationEventMessage;
 }
 
 export type AgentMessageType = keyof AgentMessageContracts;
@@ -192,6 +196,10 @@ export const AGENT_MESSAGE_TYPES = [
 	'team_inbox_item_created',
 	'release_candidate_created',
 	'release_waiting_for_approval',
+	'knowledge_generated',
+	'knowledge_optimized',
+	'report_created',
+	'distribution_digest_ready',
 ] as const satisfies readonly AgentMessageType[];
 
 const DOCUMENTATION_AUTOMATION_MESSAGE_TYPES = new Set<string>([
@@ -221,6 +229,10 @@ const DOCUMENTATION_AUTOMATION_MESSAGE_TYPES = new Set<string>([
 	'team_inbox_item_created',
 	'release_candidate_created',
 	'release_waiting_for_approval',
+	'knowledge_generated',
+	'knowledge_optimized',
+	'report_created',
+	'distribution_digest_ready',
 ]);
 
 function ensureString(value: unknown, label: string) {

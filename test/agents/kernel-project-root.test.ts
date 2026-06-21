@@ -51,10 +51,10 @@ content:
 features:
   agents: true
 `, 'utf8');
-	writeFileSync(resolve(tenantRoot, 'src/agents/planner.ts'), `import type { AgentHandler } from '@treeseed/agent/runtime-types';
+	writeFileSync(resolve(tenantRoot, 'src/agents/plan.ts'), `import type { AgentHandler } from '@treeseed/agent/runtime-types';
 
-export const plannerHandler: AgentHandler<Record<string, never>, { repoRoot: string }> = {
-	kind: 'planner',
+export const planHandler: AgentHandler<Record<string, never>, { repoRoot: string }> = {
+	kind: 'plan',
 	async resolveInputs() {
 		return {};
 	},
@@ -145,7 +145,9 @@ describe('agent kernel project root support', () => {
 					body: '',
 					frontmatter: {
 						slug: 'planner-agent',
-						handler: 'planner',
+						handler: 'plan',
+						projectAgentClassId: 'planning',
+						projectAgentClassSlug: 'planning',
 						enabled: true,
 						systemPrompt: 'Report the runtime root.',
 						persona: 'Test planner',
@@ -185,7 +187,9 @@ describe('agent kernel project root support', () => {
 					body: '',
 					frontmatter: {
 						slug: 'planner-agent',
-						handler: 'planner',
+						handler: 'plan',
+						projectAgentClassId: 'planning',
+						projectAgentClassSlug: 'planning',
 						enabled: true,
 						systemPrompt: 'Report the runtime root.',
 						persona: 'Test planner',
@@ -264,7 +268,9 @@ describe('agent kernel project root support', () => {
 					body: '',
 					frontmatter: {
 						slug: 'planner-agent',
-						handler: 'planner',
+						handler: 'plan',
+						projectAgentClassId: 'planning',
+						projectAgentClassSlug: 'planning',
 						enabled: true,
 						systemPrompt: 'Report the runtime root.',
 						persona: 'Test planner',
@@ -431,6 +437,107 @@ describe('agent kernel project root support', () => {
 		expect(modeRuns[0]).toMatchObject({
 			status: 'failed',
 			fallbackReason: expect.stringContaining('not allowed'),
+		});
+	});
+
+	it('does not run the mutating act handler in planning mode', async () => {
+		const { tenantRoot } = createIntegratedTenant();
+		process.chdir(tenantRoot);
+		writeFileSync(resolve(tenantRoot, 'src/agents/act.ts'), `import type { AgentHandler } from '@treeseed/agent/runtime-types';
+
+export const actHandler: AgentHandler = {
+	kind: 'act',
+	async resolveInputs() {
+		throw new Error('planning assignments must not reach act handler inputs');
+	},
+	async execute() {
+		throw new Error('planning assignments must not reach act handler execution');
+	},
+	async emitOutputs() {
+		throw new Error('planning assignments must not emit act outputs');
+	}
+};
+`, 'utf8');
+		const modeRuns: Array<Record<string, unknown>> = [];
+		const kernel = new AgentKernel({
+			repoRoot: tenantRoot,
+			async listRawAgentSpecs() {
+				return [{
+					id: 'implementer-agent',
+					body: '',
+					frontmatter: {
+						slug: 'implementer-agent',
+						handler: 'act',
+						projectAgentClassId: 'implementation',
+						projectAgentClassSlug: 'implementation',
+						enabled: true,
+						systemPrompt: 'Mutate approved work.',
+						persona: 'Implementer',
+						triggers: [{ type: 'startup', runOnStart: true }],
+						permissions: [{ model: 'message', operations: ['create'] }],
+						execution: {},
+						outputs: {},
+					},
+				}];
+			},
+			scopeForAgent() {
+				return this;
+			},
+			async recordRun() {},
+			async upsertCursor() {},
+		} as any, tenantRoot);
+
+		const result = await kernel.runAssignment({
+			assignment: {
+				id: 'assignment-planning-act',
+				teamId: 'team-1',
+				projectId: 'project-1',
+				capacityProviderId: 'provider-1',
+				projectAgentClassId: 'implementation',
+				mode: 'planning',
+				status: 'leased',
+				leaseState: 'leased',
+				agentId: 'implementer-agent',
+				capacityEnvelope: {
+					teamId: 'team-1',
+					projectId: 'project-1',
+					mode: 'planning',
+					capacityProviderId: 'provider-1',
+				},
+				decisionInput: {
+					teamId: 'team-1',
+					projectId: 'project-1',
+					projectAgentClassId: 'implementation',
+					mode: 'planning',
+					agentId: 'implementer-agent',
+					capacity: {
+						teamId: 'team-1',
+						projectId: 'project-1',
+						mode: 'planning',
+						capacityProviderId: 'provider-1',
+					},
+					input: { estimateRequested: true },
+				},
+			} as any,
+			recordModeRun: async (run) => {
+				modeRuns.push(run as Record<string, unknown>);
+			},
+		});
+
+		expect(result).toMatchObject({
+			status: 'failed',
+			mode: 'planning',
+			fallback: {
+				code: 'assignment_handler_not_allowed_for_mode',
+				retryable: false,
+			},
+		});
+		expect(modeRuns).toHaveLength(1);
+		expect(modeRuns[0]).toMatchObject({
+			status: 'failed',
+			validation: {
+				code: 'assignment_handler_not_allowed_for_mode',
+			},
 		});
 	});
 

@@ -15,7 +15,6 @@ describe('agent test catalog', () => {
 		expect(result.ok).toBe(true);
 		if (existsSync(resolve(repoRoot, 'src/content/agent-tests'))) {
 			expect(result.entries.map((entry) => entry.agent)).toEqual(expect.arrayContaining([
-				'market-curator',
 				'treeseed-docs-planner',
 				'treeseed-codebase-cartographer',
 				'treeseed-knowledge-generator',

@@ -1,6 +1,6 @@
 {
   "name": "@treeseed/agent",
-  "version": "0.11.1-dev.demo.20260621T001910Z",
+  "version": "0.11.1-dev.demo.20260621T191912Z",
   "description": "Treeseed agent service runtime package.",
   "license": "AGPL-3.0-only",
   "repository": {
@@ -134,7 +134,7 @@
     "release:check-tag": "node ./scripts/run-ts.mjs ./scripts/assert-release-tag-version.ts",
     "release:verify": "node ./scripts/run-ts.mjs ./scripts/release-verify.ts",
     "release:publish": "node ./scripts/run-ts.mjs ./scripts/publish-package.ts",
-    "test:agent-contracts": "vitest run --config ./vitest.config.ts test/agents/agent-contracts.test.ts test/agents/agent-test-catalog.test.ts",
+    "test:agent-contracts": "vitest run --config ./vitest.config.ts test/agents/agent-contracts.test.ts test/agents/agent-test-catalog.test.ts test/agents/starter-contracts.test.ts",
     "test:agent-handlers": "vitest run --config ./vitest.config.ts test/agents/handler-fixtures.test.ts test/agents/knowledge-handlers.test.ts",
     "test:agent-message-chains": "vitest run --config ./vitest.config.ts test/agents/message-chain.test.ts test/services/research-knowledge-workday.test.ts",
     "test:manager-worker": "vitest run --config ./vitest.config.ts test/services/manager.test.ts test/services/worker.test.ts test/services/manager-worker-parity-report.test.ts",
@@ -143,7 +143,7 @@
   },
   "dependencies": {
     "@openai/codex-sdk": "^0.130.0",
-    "@treeseed/sdk": "github:treeseed-ai/sdk#0.11.1-dev.demo.20260621T001812Z",
+    "@treeseed/sdk": "github:treeseed-ai/sdk#0.11.1-dev.demo.20260621T191803Z",
     "esbuild": "0.28.0",
     "hono": "^4.8.2",
     "typescript": "^5.9.3",

@@ -85,6 +85,7 @@ export async function runTreeseedAgentCli(argv: string[], context: TreeseedAgent
 		repoRoot,
 		databaseName: env.TREESEED_AGENT_D1_DATABASE ?? 'docs-site-data',
 		persistTo: env.TREESEED_AGENT_D1_PERSIST_TO ?? undefined,
+		contentRepository: { adapter: 'local' },
 	});
 	const kernel = new AgentKernel(sdk, repoRoot);
 

@@ -36,11 +36,11 @@ describe('agent handler registry', () => {
 	it('loads tenant TypeScript handlers without requiring a tenant tsconfig', async () => {
 		const tenantRoot = createTenantRoot();
 		writeFileSync(
-			resolve(tenantRoot, 'src/agents/planner.ts'),
+			resolve(tenantRoot, 'src/agents/plan.ts'),
 			`import type { AgentHandler } from '@treeseed/agent/runtime-types';
 
-export const plannerHandler: AgentHandler = {
-\tkind: 'planner',
+export const planHandler: AgentHandler = {
+\tkind: 'plan',
 \tasync resolveInputs() {
 \t\treturn {};
 \t},
@@ -54,13 +54,50 @@ export const plannerHandler: AgentHandler = {
 
 		const registry = await loadTenantAgentHandlerRegistry(tenantRoot);
 
-		expect(registry.planner?.kind).toBe('planner');
+		expect(registry.plan?.kind).toBe('plan');
+	});
+
+	it('loads project-specific tenant handlers in addition to the generic core collection', async () => {
+		const tenantRoot = createTenantRoot();
+		writeFileSync(
+			resolve(tenantRoot, 'src/agents/security-audit.ts'),
+			`import type { AgentHandler } from '@treeseed/agent/runtime-types';
+
+export const securityAuditHandler: AgentHandler = {
+\tkind: 'security-audit',
+\tasync resolveInputs() {
+\t\treturn {};
+\t},
+\tasync execute() {
+\t\treturn { ok: true };
+\t},
+};
+`,
+			'utf8',
+		);
+
+		const registry = await loadTenantAgentHandlerRegistry(tenantRoot);
+
+		expect(registry['security-audit']?.kind).toBe('security-audit');
+		await expect(resolveAgentHandler('security-audit', { tenantRoot })).resolves.toMatchObject({
+			kind: 'security-audit',
+		});
+		await expect(listRegisteredAgentHandlers({ tenantRoot })).resolves.toEqual(expect.arrayContaining([
+			'plan',
+			'research',
+			'act',
+			'review',
+			'report',
+			'security-audit',
+		]));
 	});
 
 	it('preserves optional declarative context queries on normalized specs', () => {
 		const result = normalizeAgentRuntimeSpec({
 			slug: 'researcher-agent',
-			handler: 'researcher',
+			handler: 'research',
+			projectAgentClassId: 'research',
+			projectAgentClassSlug: 'research',
 			enabled: true,
 			systemPrompt: 'Research carefully.',
 			persona: 'Researcher',
@@ -77,7 +114,7 @@ export const plannerHandler: AgentHandler = {
 				}],
 			},
 		}, {
-			registeredHandlers: ['researcher'],
+			registeredHandlers: ['research'],
 			messageTypes: [],
 		});
 
@@ -102,7 +139,9 @@ export const plannerHandler: AgentHandler = {
 	it('preserves per-agent Codex execution overrides on normalized specs', () => {
 		const result = normalizeAgentRuntimeSpec({
 			slug: 'engineer-agent',
-			handler: 'engineer',
+			handler: 'act',
+			projectAgentClassId: 'implementation',
+			projectAgentClassSlug: 'implementation',
 			enabled: true,
 			systemPrompt: 'Implement carefully.',
 			persona: 'Engineer',
@@ -123,7 +162,7 @@ export const plannerHandler: AgentHandler = {
 			},
 			outputs: {},
 		}, {
-			registeredHandlers: ['engineer'],
+			registeredHandlers: ['act'],
 			messageTypes: [],
 		});
 
@@ -146,7 +185,9 @@ export const plannerHandler: AgentHandler = {
 	it('preserves provider capability profiles on normalized specs', () => {
 		const result = normalizeAgentRuntimeSpec({
 			slug: 'review-agent',
-			handler: 'reviewer',
+			handler: 'review',
+			projectAgentClassId: 'review',
+			projectAgentClassSlug: 'review',
 			enabled: true,
 			systemPrompt: 'Review carefully.',
 			persona: 'Reviewer',
@@ -171,7 +212,7 @@ export const plannerHandler: AgentHandler = {
 			},
 			outputs: {},
 		}, {
-			registeredHandlers: ['reviewer'],
+			registeredHandlers: ['review'],
 			messageTypes: [],
 		});
 
@@ -199,20 +240,29 @@ export const plannerHandler: AgentHandler = {
 		});
 	});
 
-	it('does not fall back to package-owned project handlers', async () => {
+	it('does not resolve removed semantic handler names', async () => {
 		const tenantRoot = createTenantRoot();
 
 		await expect(resolveAgentHandler('planner', { tenantRoot })).rejects.toThrow('No runtime handler is registered');
 		await expect(resolveAgentHandler('researcher', { tenantRoot })).rejects.toThrow('No runtime handler is registered');
 		await expect(resolveAgentHandler('knowledge-generator', { tenantRoot })).rejects.toThrow('No runtime handler is registered');
 
-		await expect(listRegisteredAgentHandlers({ tenantRoot })).resolves.toEqual([]);
+		await expect(resolveAgentHandler('plan', { tenantRoot })).resolves.toMatchObject({ kind: 'plan' });
+		await expect(listRegisteredAgentHandlers({ tenantRoot })).resolves.toEqual(expect.arrayContaining([
+			'plan',
+			'research',
+			'act',
+			'review',
+			'report',
+		]));
 	});
 
-	it('normalizes hyphenated documentation knowledge handler names', () => {
+	it('rejects removed knowledge-specific handler names', () => {
 		const generator = normalizeAgentRuntimeSpec({
 			slug: 'treeseed-knowledge-generator',
 			handler: 'knowledge-generator',
+			projectAgentClassId: 'knowledge',
+			projectAgentClassSlug: 'knowledge',
 			enabled: true,
 			systemPrompt: 'Generate knowledge.',
 			persona: 'Generator',
@@ -221,12 +271,14 @@ export const plannerHandler: AgentHandler = {
 			execution: {},
 			outputs: { messageTypes: ['knowledge_draft_created'], modelMutations: [] },
 		}, {
-			registeredHandlers: ['knowledge_generator'],
+			registeredHandlers: ['report'],
 			messageTypes: ['research_note_created', 'knowledge_draft_created'],
 		});
 		const optimizer = normalizeAgentRuntimeSpec({
 			slug: 'treeseed-knowledge-optimizer',
 			handler: 'knowledge-optimizer',
+			projectAgentClassId: 'knowledge',
+			projectAgentClassSlug: 'knowledge',
 			enabled: true,
 			systemPrompt: 'Optimize knowledge.',
 			persona: 'Optimizer',
@@ -235,14 +287,12 @@ export const plannerHandler: AgentHandler = {
 			execution: {},
 			outputs: { messageTypes: ['promotion_request_created'], modelMutations: [] },
 		}, {
-			registeredHandlers: ['knowledge_optimizer'],
+			registeredHandlers: ['report'],
 			messageTypes: ['knowledge_draft_created', 'promotion_request_created'],
 		});
 
-		expect(generator.diagnostics).toEqual([]);
-		expect(generator.spec?.handler).toBe('knowledge_generator');
-		expect(optimizer.diagnostics).toEqual([]);
-		expect(optimizer.spec?.handler).toBe('knowledge_optimizer');
+		expect(generator.diagnostics.some((entry) => entry.field === 'handler')).toBe(true);
+		expect(optimizer.diagnostics.some((entry) => entry.field === 'handler')).toBe(true);
 	});
 
 	it('accepts documentation automation message contracts as metadata events', () => {
@@ -302,8 +352,8 @@ export const plannerHandler: AgentHandler = {
 			'treeseed-workday-reporter',
 			'treeseed-releaser',
 		]));
-		expect(specs.find((spec) => spec.slug === 'treeseed-knowledge-generator')?.handler).toBe('knowledge_generator');
-		expect(specs.find((spec) => spec.slug === 'treeseed-knowledge-optimizer')?.handler).toBe('knowledge_optimizer');
+		expect(specs.find((spec) => spec.slug === 'treeseed-knowledge-generator')?.handler).toBe('report');
+		expect(specs.find((spec) => spec.slug === 'treeseed-knowledge-optimizer')?.handler).toBe('report');
 	}, 15_000);
 
 	it('filters disabled content-backed agent specs through the SDK', async () => {
@@ -311,7 +361,9 @@ export const plannerHandler: AgentHandler = {
 		mkdirSync(resolve(tenantRoot, 'src/content/agents'), { recursive: true });
 		writeFileSync(resolve(tenantRoot, 'src/content/agents/active.mdx'), `---
 slug: active-docs-agent
-handler: planner
+handler: plan
+projectAgentClassId: planning
+projectAgentClassSlug: planning
 enabled: true
 systemPrompt: Active.
 persona: Active.
@@ -327,7 +379,9 @@ Active.
 `, 'utf8');
 		writeFileSync(resolve(tenantRoot, 'src/content/agents/disabled.mdx'), `---
 slug: disabled-docs-agent
-handler: planner
+handler: plan
+projectAgentClassId: planning
+projectAgentClassSlug: planning
 enabled: false
 systemPrompt: Disabled.
 persona: Disabled.
@@ -352,14 +406,14 @@ Disabled.
 		]);
 	});
 
-	it('resolves tenant project handlers without package-owned fallbacks', async () => {
+	it('resolves tenant project generic handler overrides', async () => {
 		const tenantRoot = createTenantRoot();
 		writeFileSync(
-			resolve(tenantRoot, 'src/agents/researcher.ts'),
+			resolve(tenantRoot, 'src/agents/research.ts'),
 			`import type { AgentHandler } from '@treeseed/agent/runtime-types';
 
-export const researcherHandler: AgentHandler = {
-\tkind: 'researcher',
+export const researchHandler: AgentHandler = {
+\tkind: 'research',
 \tasync resolveInputs() {
 \t\treturn { tenant: true };
 \t},
@@ -374,7 +428,7 @@ export const researcherHandler: AgentHandler = {
 			'utf8',
 		);
 
-		const handler = await resolveAgentHandler('researcher', { tenantRoot });
+		const handler = await resolveAgentHandler('research', { tenantRoot });
 		const output = await handler.emitOutputs({} as any, { tenant: true });
 
 		expect(output).toMatchObject({

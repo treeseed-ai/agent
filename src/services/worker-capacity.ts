@@ -157,7 +157,7 @@ export async function collectTaskMetrics(sdk: AgentSdk, workDayId?: string | nul
 		sdk.searchTasks({
 			workDayId: workDayId ?? undefined,
 			limit: 500,
-			state: ['pending', 'queued'],
+			state: ['waiting', 'pending', 'queued'],
 		}),
 		sdk.searchTasks({
 			workDayId: workDayId ?? undefined,

@@ -67,7 +67,7 @@ export async function runMarketKnowledgeDogfood(
 	const now = options.now ?? new Date();
 	const nowIso = now.toISOString();
 	const today = nowIso.slice(0, 10);
-	const sdk = AgentSdk.createLocal({ repoRoot });
+	const sdk = AgentSdk.createLocal({ repoRoot, contentRepository: { adapter: 'local' } });
 	const mutationAdapter = options.mutationAdapter ?? new LocalBranchMutationAdapter(repoRoot);
 	const generated: MarketKnowledgeDogfoodDraftResult[] = [];
 
@@ -98,7 +98,7 @@ export async function runMarketKnowledgeDogfood(
 
 	return {
 		repoRoot,
-		stages: ['planner', 'researcher', 'knowledge_generator', 'optimizer'],
+		stages: ['plan', 'research', 'report:knowledge_draft', 'report:knowledge_optimization'],
 		generated,
 		releaseAttempted: false,
 		stagingAttempted: false,

@@ -393,6 +393,7 @@ export async function createAgentTestRuntime(options?: {
 				repoRoot,
 				databaseName: 'docs-site-data',
 				persistTo,
+				contentRepository: { adapter: 'local' },
 			}))
 			: new AgentSdk({
 				repoRoot,

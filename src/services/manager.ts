@@ -2414,7 +2414,7 @@ async function buildWorkdaySummary(
 		totalTasks: tasks.length,
 		completedTasks: tasks.filter((task) => task.state === 'completed').length,
 		failedTasks: tasks.filter((task) => task.state === 'failed').length,
-		queuedTasks: tasks.filter((task) => task.state === 'queued' || task.state === 'pending').length,
+		queuedTasks: tasks.filter((task) => task.state === 'waiting' || task.state === 'queued' || task.state === 'pending').length,
 		activeTasks: tasks.filter((task) => task.state === 'claimed' || task.state === 'running').length,
 		dailyTaskCreditBudget: budget,
 		usedTaskCredits: used,

@@ -40,7 +40,7 @@ These commands manage runtime lifecycle and diagnostics through SDK reconciliati
 
 Package-local human-machine provider verification uses `npm run test:human-machine-providers`. This runs the execution-provider contract tests, focused provider tests, provider runner lifecycle tests, the package build, and `capacity-provider:test-local`.
 
-`capacity-provider:test-local` is a strict Docker-backed proof for the provider API role. Docker must be available; the command fails with a clear diagnostic instead of skipping when Docker is unavailable.
+`capacity-provider:test-local` is a strict Docker-backed proof for the provider API role. Docker must be available; the command fails with a clear diagnostic instead of skipping when Docker is unavailable. Before building images, the smoke checks Docker storage headroom and reports an explicit cleanup command such as `docker system prune -a --volumes` when the Docker filesystem is too full; pruning remains an operator action because it can delete shared images and volumes.
 
 ## Secrets And Configuration
 

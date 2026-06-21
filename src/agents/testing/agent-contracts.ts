@@ -1,5 +1,6 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
+import { compileDeclarativeContextQuery } from '@treeseed/sdk/graph/context-query-contracts';
 import { AgentSdk } from '@treeseed/sdk/sdk';
 import { AGENT_MESSAGE_TYPES } from '../contracts/messages.ts';
 import { listRegisteredAgentHandlers, resolveAgentHandler } from '../registry.ts';
@@ -24,6 +25,7 @@ const EXECUTION_PROVIDERS = new Set([
 	'github_actions',
 	'github_actions_workflow',
 ]);
+const GENERIC_HANDLERS = new Set(['plan', 'research', 'act', 'review', 'report']);
 
 export interface AgentContractIssue {
 	severity: 'error' | 'warning';
@@ -39,6 +41,7 @@ export interface AgentContractCheckResult {
 	agents: Array<{
 		slug: string;
 		handler: string;
+		projectAgentClassId: string;
 		enabled: boolean;
 		triggers: string[];
 		outputMessageTypes: string[];
@@ -80,6 +83,15 @@ async function validateAgent(agent: NormalizedAgentRuntimeSpec, knownHandlers: s
 			issues.push(issue(agent, 'handler', error instanceof Error ? error.message : String(error)));
 		});
 	}
+	if (!GENERIC_HANDLERS.has(agent.handler)) {
+		issues.push(issue(agent, 'handler', 'First-party agent specs must use plan, research, act, review, or report.'));
+	}
+	if (!agent.projectAgentClassId?.trim()) {
+		issues.push(issue(agent, 'projectAgentClassId', 'Agents must declare the project agent class used for capacity allocation.'));
+	}
+	if (!agent.projectAgentClassSlug?.trim()) {
+		issues.push(issue(agent, 'projectAgentClassSlug', 'Agents must declare a project agent class slug.'));
+	}
 	const messageTriggers = agent.triggers.filter((trigger) => trigger.type === 'message');
 	if (messageTriggers.length > 0) {
 		for (const operation of ['pick', 'update']) {
@@ -120,6 +132,12 @@ async function validateAgent(agent: NormalizedAgentRuntimeSpec, knownHandlers: s
 	if (agent.execution.provider && !EXECUTION_PROVIDERS.has(agent.execution.provider)) {
 		issues.push(issue(agent, 'execution.provider', `Unsupported execution provider "${agent.execution.provider}".`));
 	}
+	if (!agent.execution.providerProfile?.requiredCapabilities?.length) {
+		issues.push(issue(agent, 'execution.providerProfile.requiredCapabilities', 'Agents must declare required execution-provider capabilities.'));
+	}
+	if (!(agent.context?.queries ?? []).length) {
+		issues.push(issue(agent, 'context.queries', 'Agents must declare at least one TreeDX/API context query.'));
+	}
 	for (const [index, query] of (agent.context?.queries ?? []).entries()) {
 		if (!query.id?.trim()) {
 			issues.push(issue(agent, `context.queries[${index}].id`, 'Context queries must declare an id.'));
@@ -129,6 +147,10 @@ async function validateAgent(agent: NormalizedAgentRuntimeSpec, knownHandlers: s
 		}
 		if (typeof query.budget !== 'number' || query.budget <= 0) {
 			issues.push(issue(agent, `context.queries[${index}].budget`, 'Context queries must declare a positive budget.'));
+		}
+		const compiled = compileDeclarativeContextQuery(query, { defaultLimit: 8, maxDepth: 3 });
+		for (const error of compiled.errors) {
+			issues.push(issue(agent, `context.queries[${index}]`, error));
 		}
 	}
 	const governanceRelevant = (agent.outputs.modelMutations ?? []).some((mutation) => {
@@ -155,6 +177,7 @@ function renderReport(result: Omit<AgentContractCheckResult, 'reportPath' | 'jso
 			`## ${agent.slug}`,
 			'',
 			`Handler: ${agent.handler}`,
+			`Project agent class: ${agent.projectAgentClassId}`,
 			`Enabled: ${agent.enabled}`,
 			`Triggers: ${agent.triggers.length ? agent.triggers.join(', ') : 'none'}`,
 			`Declared outputs: ${agent.outputMessageTypes.length ? agent.outputMessageTypes.join(', ') : 'none'}`,
@@ -181,7 +204,7 @@ export async function runAgentContractChecks(options: {
 } = {}): Promise<AgentContractCheckResult> {
 	const repoRoot = resolve(options.repoRoot ?? process.cwd());
 	const generatedAt = (options.now ?? new Date()).toISOString();
-	const sdk = AgentSdk.createLocal({ repoRoot });
+	const sdk = AgentSdk.createLocal({ repoRoot, contentRepository: { adapter: 'local' } });
 	const loaded = await loadAllAgentSpecs(sdk);
 	const knownHandlers = await listRegisteredAgentHandlers({ tenantRoot: repoRoot });
 	const slugCounts = new Map<string, number>();
@@ -204,6 +227,7 @@ export async function runAgentContractChecks(options: {
 		agents.push({
 			slug: spec.slug,
 			handler: spec.handler,
+			projectAgentClassId: spec.projectAgentClassId,
 			enabled: spec.enabled,
 			triggers: spec.triggers.map((trigger) => trigger.type),
 			outputMessageTypes: spec.outputs.messageTypes ?? [],

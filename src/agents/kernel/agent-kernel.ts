@@ -598,6 +598,13 @@ export class AgentKernel {
 				{ retryable: false },
 			), 'failed');
 		}
+		if (mode === 'planning' && agent.handler === 'act') {
+			return this.boundedAssignmentResult(options, createAgentKernelModeFallback(
+				'assignment_handler_not_allowed_for_mode',
+				`Agent ${agent.slug} uses the mutating act handler and cannot run in planning mode.`,
+				{ retryable: false, metadata: { handler: agent.handler, mode } },
+			), 'failed');
+		}
 
 		const trigger: AgentTriggerInvocation = {
 			kind: 'manual',

@@ -18,7 +18,7 @@ describe('handler context processor', () => {
 			sdk: { buildContextPack },
 			agent: {
 				slug: 'researcher-agent',
-				handler: 'researcher',
+				handler: 'research',
 				enabled: true,
 				systemPrompt: 'Research carefully.',
 				persona: 'Researcher',

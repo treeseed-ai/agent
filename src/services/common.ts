@@ -50,6 +50,7 @@ function createLocalServiceSdk() {
 		repoRoot: resolveServiceRepoRoot(),
 		databaseName: process.env.TREESEED_AGENT_D1_DATABASE ?? 'docs-site-data',
 		persistTo: resolveLocalD1PersistTo(),
+		contentRepository: { adapter: 'local' },
 	});
 }
 

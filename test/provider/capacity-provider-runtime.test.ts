@@ -52,8 +52,8 @@ function createProjectRepository() {
 	mkdirSync(resolve(root, 'src/agents'), { recursive: true });
 	mkdirSync(resolve(root, 'src/content/agents'), { recursive: true });
 	mkdirSync(resolve(root, 'src/content/agent-tests/fixtures'), { recursive: true });
-	writeFileSync(resolve(root, 'src/agents/planner.ts'), `export const plannerHandler = {
-	kind: 'planner',
+	writeFileSync(resolve(root, 'src/agents/plan.ts'), `export const planHandler = {
+	kind: 'plan',
 	async resolveInputs(context) {
 		const decisionInput = context.capacity?.decisionInput?.input ?? {};
 		return {
@@ -144,7 +144,9 @@ function createProjectRepository() {
 	writeFileSync(resolve(root, 'src/content/agent-tests/fixtures/input.json'), '{}\n', 'utf8');
 	writeFileSync(resolve(root, 'src/content/agents/provider-planner.mdx'), `---
 slug: provider-planner
-handler: planner
+handler: plan
+projectAgentClassId: planning
+projectAgentClassSlug: planning
 enabled: true
 systemPrompt: Plan provider dry runs.
 persona: Planner.
@@ -212,6 +214,7 @@ afterEach(() => {
 
 class FakeAsyncExecutionProviderAdapter implements ExecutionProviderAdapter {
 	polls = 0;
+	lastStartInput: Parameters<ExecutionProviderAdapter['start']>[0] | null = null;
 
 	constructor(
 		private readonly terminal: 'completed' | 'blocked' | 'failed' | 'cancelled' | 'poll_failed' | 'never_completed' = 'completed',
@@ -263,7 +266,8 @@ class FakeAsyncExecutionProviderAdapter implements ExecutionProviderAdapter {
 		};
 	}
 
-	async start() {
+	async start(input: Parameters<ExecutionProviderAdapter['start']>[0]) {
+		this.lastStartInput = input;
 		if (this.terminal === 'blocked') {
 			return {
 				status: 'blocked' as const,
@@ -1247,6 +1251,87 @@ describe('capacity provider runtime', () => {
 				},
 			},
 		});
+	});
+
+	it('passes redacted TreeDX proxy tool descriptors to execution providers', async () => {
+		const sourceRepo = createProjectRepository();
+		const config = resolveProviderConfig({ env: env() });
+		await processProviderPortfolio({
+			config,
+			client: {
+				async portfolio() { return portfolio(sourceRepo); },
+				async createWorkday(body: unknown) { return { ok: true, workDay: { id: 'wd_provider_1', ...(body as Record<string, unknown>) } }; },
+				async writeReport() { return { ok: true, report: { id: 'report_1' } }; },
+			},
+		});
+		const events: Array<{ method: string; body?: unknown }> = [];
+		const treedxProxyHandle = {
+			id: 'tdx-handle-1',
+			projectId: 'project_123',
+			assignmentId: 'assignment_treedx_tools',
+			repositoryId: 'repo-1',
+			workspaceId: 'workspace-1',
+			token: 'secret_should_not_leak',
+			allowedOperations: ['files:read', 'files:search', 'files:write', 'git:commit'],
+			allowedPaths: ['src/content/**'],
+			expiresAt: new Date(Date.now() + 60_000).toISOString(),
+		};
+		const client = {
+			async nextAssignment() {
+				return {
+					ok: true,
+					leaseToken: 'lease_treedx',
+					payload: {
+						id: 'assignment_treedx_tools',
+						projectId: 'project_123',
+						agentId: 'provider-planner',
+						mode: 'planning',
+						treedxProxyHandle,
+						capabilityHandles: {
+							workspaceAccessMode: 'brokered_workspace',
+						},
+						decisionInput: {
+							input: {
+								dryRun: true,
+								projectId: 'project_123',
+								agentSlug: 'provider-planner',
+								useExecutionProvider: true,
+							},
+						},
+						capacityEnvelope: { projectId: 'project_123', mode: 'planning' },
+					},
+				};
+			},
+			async createAssignmentModeRun(_assignmentId: string, body: unknown) {
+				events.push({ method: 'createAssignmentModeRun', body });
+				return { ok: true, payload: { id: `mode_run_${events.length}` } };
+			},
+			async completeAssignment(_assignmentId: string, body: unknown) {
+				events.push({ method: 'completeAssignment', body });
+				return { ok: true, payload: { id: 'assignment_treedx_tools', status: 'completed' } };
+			},
+			async failAssignment(_assignmentId: string, body: unknown) {
+				events.push({ method: 'failAssignment', body });
+				return { ok: true, payload: { id: 'assignment_treedx_tools', status: 'failed' } };
+			},
+		};
+		const adapter = new FakeAsyncExecutionProviderAdapter();
+
+		const result = await runProviderRunnerOnce({ config, client, executionAdapter: adapter, runnerId: 'runner_treedx' });
+
+		expect(result).toMatchObject({ ok: true, assigned: 1, assignmentId: 'assignment_treedx_tools' });
+		expect(adapter.lastStartInput?.tools?.[0]).toMatchObject({
+			kind: 'treedx_proxy',
+			projectId: 'project_123',
+			assignmentId: 'assignment_treedx_tools',
+			handleId: 'tdx-handle-1',
+			repositoryId: 'repo-1',
+			workspaceId: 'workspace-1',
+			allowedOperations: ['files:read', 'files:search', 'files:write', 'git:commit'],
+			allowedPaths: ['src/content/**'],
+		});
+		expect(JSON.stringify(adapter.lastStartInput?.tools)).not.toContain('secret_should_not_leak');
+		expect(JSON.stringify(events)).not.toContain('secret_should_not_leak');
 	});
 
 	it('maps retryable blocked async provider snapshots to returned handler output', async () => {

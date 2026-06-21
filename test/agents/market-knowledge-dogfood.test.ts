@@ -116,14 +116,14 @@ describe('market knowledge dogfood harness', () => {
 		}
 	});
 
-	it('runs planner, researcher, knowledge generator, and optimizer into feature worktrees only', async () => {
+	it('runs plan, research, and report stages into feature worktrees only', async () => {
 		const repoRoot = createDogfoodRepo();
 		const result = await runMarketKnowledgeDogfood({
 			repoRoot,
 			now: new Date('2026-05-13T12:00:00.000Z'),
 		});
 
-		expect(result.stages).toEqual(['planner', 'researcher', 'knowledge_generator', 'optimizer']);
+		expect(result.stages).toEqual(['plan', 'research', 'report:knowledge_draft', 'report:knowledge_optimization']);
 		expect(result.generated).toHaveLength(TREESEED_PLATFORM_KNOWLEDGE_QUESTIONS.length);
 		expect(result.generated.map((generated) => generated.questionId)).toEqual(
 			TREESEED_PLATFORM_KNOWLEDGE_QUESTIONS.map((question) => question.id),

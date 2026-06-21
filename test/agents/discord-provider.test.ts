@@ -23,7 +23,7 @@ const config: DiscordExecutionProviderConfig = {
 function agent(): AgentRuntimeSpec {
 	return {
 		slug: 'provider-coordinator',
-		handler: 'planner',
+		handler: 'plan',
 		enabled: true,
 		systemPrompt: 'Coordinate.',
 		persona: 'Coordinator.',

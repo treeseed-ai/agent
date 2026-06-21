@@ -17,13 +17,13 @@ describe('service orchestration helpers', () => {
 		const sdk = {
 			getManagerContext: vi.fn(async () => ({
 				payload: {
-					task: { id: 'task-1', agentId: 'market-curator' },
+					task: { id: 'task-1', agentId: 'treeseed-docs-planner' },
 					workDay: { id: 'workday-1' },
 					graph: { nodes: [] },
 				},
 			})),
 			get: vi.fn(async () => ({
-				payload: { slug: 'market-curator', title: 'Market Curator' },
+				payload: { slug: 'treeseed-docs-planner', title: 'TreeSeed Documentation Planner' },
 			})),
 		} as unknown as AgentSdk;
 
@@ -31,7 +31,7 @@ describe('service orchestration helpers', () => {
 		expect(context).toMatchObject({
 			task: { id: 'task-1' },
 			workDay: { id: 'workday-1' },
-			agent: { slug: 'market-curator' },
+			agent: { slug: 'treeseed-docs-planner' },
 		});
 	});
 
@@ -40,7 +40,7 @@ describe('service orchestration helpers', () => {
 			refreshGraph: vi.fn(async () => ({ snapshotRoot: 'graph-1' })),
 			startWorkDay: vi.fn(async () => ({ payload: { id: 'workday-1' } })),
 			listAgentSpecs: vi.fn(async () => ([
-				{ slug: 'market-curator', handler: 'market-curator', triggers: [{ type: 'startup' }] },
+				{ slug: 'treeseed-docs-planner', handler: 'plan', triggers: [{ type: 'startup' }] },
 				{ slug: 'nightly-only', handler: 'nightly-only', triggers: [{ type: 'schedule' }] },
 				{ slug: 'manual-agent', handler: 'manual-agent', triggers: [{ type: 'manual' }] },
 			])),

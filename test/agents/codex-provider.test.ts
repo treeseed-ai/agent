@@ -43,7 +43,7 @@ const testDir = dirname(fileURLToPath(import.meta.url));
 
 const agent: AgentRuntimeSpec = {
 	slug: 'engineer-agent',
-	handler: 'engineer',
+	handler: 'act',
 	enabled: true,
 	systemPrompt: '',
 	persona: '',

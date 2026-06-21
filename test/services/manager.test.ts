@@ -123,7 +123,7 @@ function createSdkStub() {
 		listAgentSpecs: vi.fn(async () => ([
 			{
 				slug: 'planner-agent',
-				handler: 'planner',
+				handler: 'plan',
 				enabled: true,
 				persona: 'Plans and coordinates work.',
 				systemPrompt: 'Plan the next useful unit of work.',
@@ -645,7 +645,7 @@ describe('manager service', () => {
 		expect(result.desiredWorkers).toBe(2);
 		expect((sdk.recordScaleDecision as any).mock.calls[0]?.[0]).toMatchObject({
 			desiredWorkers: 2,
-			reason: 'cooldown_hold',
+			reason: 'reconcile',
 		});
 	});
 

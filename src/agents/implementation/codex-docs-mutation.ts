@@ -42,6 +42,21 @@ function readStringArray(value: unknown) {
 	return Array.isArray(value) ? value.map(String).filter(Boolean) : [];
 }
 
+function isContentPath(path: string) {
+	const normalized = path.replace(/\\/g, '/').replace(/^\.?\//, '');
+	return normalized === 'src/content'
+		|| normalized.startsWith('src/content/')
+		|| normalized.startsWith('content/')
+		|| normalized.startsWith('knowledge/');
+}
+
+function includesContentScope(paths: string[]) {
+	return paths.some((path) => {
+		const normalized = path.replace(/\\/g, '/').replace(/^\.?\//, '').replace(/\*\*.*$/u, '');
+		return isContentPath(normalized);
+	});
+}
+
 function readOperationGrants(value: unknown) {
 	return Array.isArray(value) ? value as AgentOperationGrant[] : [];
 }
@@ -280,6 +295,16 @@ export async function runCodexDocsMutationLifecycle(
 		});
 	}
 
+	if (includesContentScope(task.allowedPaths) && context.capacity?.assignment && !context.treeDx) {
+		return waitingResult({
+			task,
+			worktreeRoot: plannedWorktreeRoot,
+			operationResults,
+			summary: 'Content mutation assignments require an assignment-scoped TreeDX workspace handle.',
+			code: 'treedx_workspace_required',
+		});
+	}
+
 	const switchResult = await lifecycleOperation({
 		context,
 		task,
@@ -377,6 +402,27 @@ export async function runCodexDocsMutationLifecycle(
 	}
 
 	const changedPaths = await worktrees.inspectChangedPaths(worktreeRoot);
+	const localContentChanges = changedPaths.filter(isContentPath);
+	if (localContentChanges.length > 0 && context.treeDx) {
+		const snapshot = await worktrees.saveSnapshot({
+			taskId: task.taskId,
+			kind: 'failure',
+			summary: `Local content writes are blocked when TreeDX workspace access is available: ${localContentChanges.join(', ')}`,
+			changedPaths,
+			metadata: { codexResult },
+		});
+		snapshots.push(snapshot);
+		return failedResult({
+			task,
+			worktreeRoot,
+			operationResults,
+			codexResult,
+			snapshots,
+			changedPaths,
+			summary: `Local content writes are blocked when TreeDX workspace access is available: ${localContentChanges.join(', ')}`,
+			code: 'local_content_write_blocked',
+		});
+	}
 	const violations = changedPathViolations({
 		changedPaths,
 		allowedPaths: task.allowedPaths,

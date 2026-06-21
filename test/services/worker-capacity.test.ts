@@ -69,6 +69,7 @@ describe('worker capacity helpers', () => {
 
 	it('enqueues interactive tasks and records a cold-start scale decision without failing on scaler errors', async () => {
 		const sdk = {
+			recordTaskProgress: vi.fn(async (request) => ({ payload: { id: request.id, state: request.state } })),
 			searchTasks: vi.fn(async (request) => ({
 				payload: Array.isArray(request.state) && request.state.includes('queued')
 					? [{

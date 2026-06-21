@@ -22,8 +22,18 @@ const WORKDAY_ORCHESTRATION_TEST_TIMEOUT_MS = 30_000;
 
 const sdk = {
 	claimTask: vi.fn(async () => ({ payload: {} })),
-	recordTaskProgress: vi.fn(async () => ({ payload: {} })),
+	recordTaskProgress: vi.fn(async (request) => {
+		const task = tasks.find((candidate) => candidate.id === request.id);
+		if (task && request.state) {
+			task.state = request.state;
+		}
+		return { payload: task ?? {} };
+	}),
 	completeTask: vi.fn(async (request) => {
+		const task = tasks.find((candidate) => candidate.id === request.id);
+		if (task) {
+			task.state = 'completed';
+		}
 		taskOutputs.push(request.output);
 		taskOutputRecords.push({
 			id: `output-${taskOutputRecords.length + 1}`,
@@ -34,7 +44,15 @@ const sdk = {
 		return { payload: { id: request.id, state: 'completed' } };
 	}),
 	failTask: vi.fn(async () => ({ payload: {} })),
-	searchTasks: vi.fn(async () => ({ payload: tasks })),
+	searchTasks: vi.fn(async (request) => {
+		const states = Array.isArray(request.state) ? request.state.map(String) : request.state ? [String(request.state)] : [];
+		return {
+			payload: tasks.filter((task) =>
+				(!request.workDayId || task.workDayId === request.workDayId)
+				&& (!states.length || states.includes(String(task.state))),
+			),
+		};
+	}),
 	search: vi.fn(async (request) => {
 		if (request.model === 'task_output') {
 			const inFilter = request.filters?.find((filter: Record<string, unknown>) => filter.field === 'task_id');
@@ -469,6 +487,7 @@ describe('research and knowledge workday orchestration', () => {
 			payload: {},
 			graphVersion: 'graph-1',
 		});
+		scanTask.payload.state = 'completed';
 		taskOutputRecords.push({
 			id: 'scan-output-1',
 			taskId: scanTask.payload.id,

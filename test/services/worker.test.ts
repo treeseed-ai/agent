@@ -91,6 +91,7 @@ function fakeMutationWorktrees(changedPaths = ['docs/worker.md']) {
 }
 
 const sdk = {
+	searchTasks: vi.fn(),
 	claimTask: vi.fn(),
 	createTask: vi.fn(),
 	recordTaskProgress: vi.fn(),
@@ -156,6 +157,7 @@ describe('worker service', () => {
 		queue.pull.mockResolvedValue({ messages: [] });
 		queue.ack.mockResolvedValue(undefined);
 		queue.retry.mockResolvedValue(undefined);
+		sdk.searchTasks.mockResolvedValue({ payload: [] });
 		sdk.claimTask.mockResolvedValue({ payload: { id: 'task-1' } });
 		sdk.createTask.mockResolvedValue({ payload: { id: 'task-followup' } });
 		sdk.recordTaskProgress.mockResolvedValue({ payload: { id: 'task-1', state: 'running' } });
@@ -200,13 +202,7 @@ describe('worker service', () => {
 			},
 			agent: null,
 		};
-		queue.pull.mockResolvedValue({
-			messages: [{
-				body: { taskId: 'task-1' },
-				attempts: 1,
-				leaseId: 'lease-1',
-			}],
-		});
+		sdk.searchTasks.mockResolvedValueOnce({ payload: [{ id: 'task-1', attemptCount: 0 }] });
 
 		const { runWorkerCycle } = await import('../../src/services/worker.ts');
 		const result = await runWorkerCycle();
@@ -225,7 +221,6 @@ describe('worker service', () => {
 				summary: 'Executed workflow:verify',
 			}),
 		}));
-		expect(queue.ack).toHaveBeenCalledWith(['lease-1']);
 	}, 60_000);
 
 	it('executes codebase documentation scanner tasks and emits capped gap messages', async () => {
@@ -251,13 +246,7 @@ describe('worker service', () => {
 				},
 				agent: { slug: 'treeseed-codebase-cartographer' },
 			};
-			queue.pull.mockResolvedValue({
-				messages: [{
-					body: { taskId: 'scan-1', workDayId: 'workday-1' },
-					attempts: 1,
-					leaseId: 'lease-scan',
-				}],
-			});
+			sdk.searchTasks.mockResolvedValueOnce({ payload: [{ id: 'scan-1', workDayId: 'workday-1', attemptCount: 0 }] });
 
 			const { runWorkerCycle } = await import('../../src/services/worker.ts');
 			const result = await runWorkerCycle();
@@ -288,7 +277,6 @@ describe('worker service', () => {
 					generatedArtifacts: [expect.objectContaining({ artifactKind: 'codebase_inventory' })],
 				}),
 			}));
-			expect(queue.ack).toHaveBeenCalledWith(['lease-scan']);
 		} finally {
 			rmSync(repoRoot, { recursive: true, force: true });
 		}
@@ -318,7 +306,6 @@ describe('worker service', () => {
 	});
 
 	it('records worker runner heartbeat state during idle and active cycles', async () => {
-		queue.pull.mockResolvedValueOnce({ messages: [] });
 		const { runWorkerCycle } = await import('../../src/services/worker.ts');
 
 		await runWorkerCycle();
@@ -349,13 +336,7 @@ describe('worker service', () => {
 			},
 			agent: null,
 		};
-		queue.pull.mockResolvedValueOnce({
-			messages: [{
-				body: { taskId: 'task-heartbeat', workDayId: 'workday-1' },
-				attempts: 1,
-				leaseId: 'lease-heartbeat',
-			}],
-		});
+		sdk.searchTasks.mockResolvedValueOnce({ payload: [{ id: 'task-heartbeat', workDayId: 'workday-1', attemptCount: 0 }] });
 
 		await runWorkerCycle();
 		expect(sdk.recordWorkerRunner).toHaveBeenCalledWith(expect.objectContaining({
@@ -387,13 +368,7 @@ describe('worker service', () => {
 			},
 			agent: { slug: 'planner-agent' },
 		};
-		queue.pull.mockResolvedValue({
-			messages: [{
-				body: { taskId: 'task-2' },
-				attempts: 2,
-				leaseId: 'lease-2',
-			}],
-		});
+		sdk.searchTasks.mockResolvedValueOnce({ payload: [{ id: 'task-2', attemptCount: 1 }] });
 
 		const { runWorkerCycle } = await import('../../src/services/worker.ts');
 		const result = await runWorkerCycle();
@@ -414,7 +389,6 @@ describe('worker service', () => {
 				summary: 'Agent completed.',
 			}),
 		}));
-		expect(queue.ack).toHaveBeenCalledWith(['lease-2']);
 	});
 
 	it('executes planning tasks as non-mutating proposal normalization', async () => {
@@ -439,13 +413,7 @@ describe('worker service', () => {
 			},
 			agent: { slug: 'planner-agent' },
 		};
-		queue.pull.mockResolvedValue({
-			messages: [{
-				body: { taskId: 'planning-1', workDayId: 'workday-1' },
-				attempts: 1,
-				leaseId: 'lease-planning',
-			}],
-		});
+		sdk.searchTasks.mockResolvedValueOnce({ payload: [{ id: 'planning-1', workDayId: 'workday-1', attemptCount: 0 }] });
 
 		const { runWorkerCycle } = await import('../../src/services/worker.ts');
 		const result = await runWorkerCycle();
@@ -465,7 +433,6 @@ describe('worker service', () => {
 				}),
 			}),
 		}));
-		expect(queue.ack).toHaveBeenCalledWith(['lease-planning']);
 	});
 
 	it('creates a visible repair task when approved deterministic docs promotion fails verification', async () => {
@@ -645,13 +612,7 @@ describe('worker service', () => {
 			summary: 'Agent changed files but needs more capacity.',
 			metadata: { changedPaths: ['packages/agent/src/foo.ts'] },
 		});
-		queue.pull.mockResolvedValue({
-			messages: [{
-				body: { taskId: 'task-3', workDayId: 'workday-1' },
-				attempts: 1,
-				leaseId: 'lease-3',
-			}],
-		});
+		sdk.searchTasks.mockResolvedValueOnce({ payload: [{ id: 'task-3', workDayId: 'workday-1', attemptCount: 0 }] });
 
 		const { runWorkerCycle } = await import('../../src/services/worker.ts');
 		const result = await runWorkerCycle();
@@ -674,7 +635,6 @@ describe('worker service', () => {
 				}),
 			}),
 		}));
-		expect(queue.ack).toHaveBeenCalledWith(['lease-3']);
 	});
 
 	it('routes low-confidence hybrid escalations through admission before creating followup work', async () => {
@@ -705,13 +665,7 @@ describe('worker service', () => {
 			confidence: 'low',
 			insufficientConfidence: true,
 		});
-		queue.pull.mockResolvedValue({
-			messages: [{
-				body: { taskId: 'task-4', workDayId: 'workday-1' },
-				attempts: 1,
-				leaseId: 'lease-4',
-			}],
-		});
+		sdk.searchTasks.mockResolvedValueOnce({ payload: [{ id: 'task-4', workDayId: 'workday-1', attemptCount: 0 }] });
 
 		const { runWorkerCycle } = await import('../../src/services/worker.ts');
 		const result = await runWorkerCycle();
@@ -752,6 +706,5 @@ describe('worker service', () => {
 				data: expect.objectContaining({ admissionOutcome: 'admitted' }),
 			}),
 		}));
-		expect(queue.ack).toHaveBeenCalledWith(['lease-4']);
 	});
 });

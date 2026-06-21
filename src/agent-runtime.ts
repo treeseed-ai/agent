@@ -5,6 +5,11 @@ import { DiscordExecutionProviderAdapter } from './agents/adapters/execution-dis
 import { GitHubIssueExecutionProviderAdapter } from './agents/adapters/execution-github-issues.ts';
 import { JiraExecutionProviderAdapter } from './agents/adapters/execution-jira.ts';
 import { WorkflowExecutionProviderAdapter } from './agents/adapters/execution-workflow.ts';
+import { actHandler } from './agents/handlers/act.ts';
+import { planHandler } from './agents/handlers/plan.ts';
+import { reportHandler } from './agents/handlers/report.ts';
+import { researchHandler } from './agents/handlers/research.ts';
+import { reviewHandler } from './agents/handlers/review.ts';
 import { LocalBranchMutationAdapter } from './agents/adapters/mutations.ts';
 import { SdkMessageNotificationAdapter, StubNotificationAdapter } from './agents/adapters/notification.ts';
 import { GitRepositoryInspectionAdapter, StubRepositoryInspectionAdapter } from './agents/adapters/repository.ts';
@@ -92,7 +97,13 @@ function buildAgentRuntime() {
 		['stub', () => new StubResearchAdapter()],
 		['project_graph', () => new ProjectGraphResearchAdapter()],
 	]);
-	const handlers = new Map<string, AgentHandler>();
+	const handlers = new Map<string, AgentHandler>([
+		['plan', planHandler],
+		['research', researchHandler],
+		['act', actHandler],
+		['review', reviewHandler],
+		['report', reportHandler],
+	]);
 
 	for (const pluginEntry of runtime.plugins) {
 		const agentProviders = readPluginRecord<Record<string, unknown>>(pluginEntry, 'agentProviders');

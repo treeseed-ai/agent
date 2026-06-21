@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { researcherHandler } from '../../src/agents/handlers/researcher.ts';
+import { researchHandler } from '../../src/agents/handlers/research.ts';
 import { knowledgeGeneratorHandler } from '../../src/agents/handlers/knowledge-generator.ts';
 import { knowledgeOptimizerHandler } from '../../src/agents/handlers/knowledge-optimizer.ts';
 import type { AgentContext } from '../../src/agents/runtime-types.ts';
@@ -12,8 +12,8 @@ function context(payload: Record<string, unknown>, sdkOverrides: Record<string, 
 		runId: 'run-1',
 		repoRoot: '/repo',
 		agent: {
-			slug: 'researcher-agent',
-			handler: 'researcher',
+			slug: 'research-agent',
+			handler: 'research',
 			enabled: true,
 			systemPrompt: 'Research carefully.',
 			persona: 'Researcher',
@@ -180,9 +180,9 @@ describe('package-owned knowledge handlers', () => {
 			},
 		});
 
-		const inputs = await researcherHandler.resolveInputs(ctx);
-		const result = await researcherHandler.execute(ctx, inputs);
-		const output = await researcherHandler.emitOutputs(ctx, result);
+		const inputs = await researchHandler.resolveInputs(ctx);
+		const result = await researchHandler.execute(ctx, inputs);
+		const output = await researchHandler.emitOutputs(ctx, result);
 
 		expect(output.status).toBe('completed');
 		const note = output.metadata?.researchNote as ResearchNote;
@@ -215,8 +215,8 @@ describe('package-owned knowledge handlers', () => {
 
 	it('knowledge generator creates a draft and handoff message from a research note', async () => {
 		const researchCtx = context({});
-		const researchInputs = await researcherHandler.resolveInputs(researchCtx);
-		const note = await researcherHandler.execute(researchCtx, researchInputs) as ResearchNote;
+		const researchInputs = await researchHandler.resolveInputs(researchCtx);
+		const note = await researchHandler.execute(researchCtx, researchInputs) as ResearchNote;
 		const ctx = context({
 			taskId: 'task-2',
 			researchNote: note,

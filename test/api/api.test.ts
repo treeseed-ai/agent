@@ -1599,7 +1599,7 @@ apiRuntimeDescribe('@treeseed/agent api runtime', () => {
 				},
 			})),
 			recordScaleDecision: vi.fn(async (request) => ({ payload: { id: 'scale-1', ...request, createdAt: '2026-04-15T13:00:00.000Z' } })),
-			recordTaskProgress: vi.fn(async () => ({ payload: { id: 'task-remote-1', state: 'queued' } })),
+			recordTaskProgress: vi.fn(async (request) => ({ payload: { id: request.id, state: request.state } })),
 		};
 		try {
 			const app = createTestApp({
@@ -1667,13 +1667,14 @@ apiRuntimeDescribe('@treeseed/agent api runtime', () => {
 			}));
 			expect(sdk.recordTaskProgress).toHaveBeenCalledWith(expect.objectContaining({
 				id: 'task-remote-1',
-				state: 'queued',
+				state: 'waiting',
+				appendEvent: expect.objectContaining({ kind: 'assignment_ready' }),
 			}));
 			expect(sdk.recordScaleDecision).toHaveBeenCalledWith(expect.objectContaining({
 				desiredWorkers: 1,
 				reason: 'interactive_enqueue',
 			}));
-			expect(fetchMock).toHaveBeenCalledTimes(2);
+			expect(fetchMock).toHaveBeenCalledTimes(1);
 			expect(fetchMock.mock.calls.some(([input]) => String(input).includes('backboard.railway.com/graphql'))).toBe(true);
 		} finally {
 			vi.unstubAllEnvs();
@@ -1751,7 +1752,7 @@ apiRuntimeDescribe('@treeseed/agent api runtime', () => {
 				},
 			})),
 			recordScaleDecision: vi.fn(async (request) => ({ payload: { id: 'scale-2', ...request, createdAt: '2026-04-15T13:00:00.000Z' } })),
-			recordTaskProgress: vi.fn(async () => ({ payload: { id: 'task-remote-cold', state: 'queued' } })),
+			recordTaskProgress: vi.fn(async (request) => ({ payload: { id: request.id, state: request.state } })),
 		};
 		try {
 			const app = createTestApp({
@@ -1853,7 +1854,7 @@ apiRuntimeDescribe('@treeseed/agent api runtime', () => {
 			})),
 			getLatestScaleDecision: vi.fn(async () => ({ payload: null })),
 			recordScaleDecision: vi.fn(async (request) => ({ payload: { id: 'scale-3', ...request, createdAt: '2026-04-15T13:00:00.000Z' } })),
-			recordTaskProgress: vi.fn(async () => ({ payload: { id: 'task-remote-no-scale', state: 'queued' } })),
+			recordTaskProgress: vi.fn(async (request) => ({ payload: { id: request.id, state: request.state } })),
 		};
 		try {
 			const app = createTestApp({
@@ -1908,7 +1909,7 @@ apiRuntimeDescribe('@treeseed/agent api runtime', () => {
 					id: 'task-remote-no-scale',
 				},
 			});
-			expect(fetchMock).toHaveBeenCalledTimes(1);
+			expect(fetchMock).toHaveBeenCalledTimes(0);
 		} finally {
 			vi.unstubAllEnvs();
 			vi.unstubAllGlobals();
@@ -1937,9 +1938,9 @@ apiRuntimeDescribe('@treeseed/agent api runtime', () => {
 			},
 			body: JSON.stringify({
 				workDayId,
-				agentId: 'market-curator',
+				agentId: 'treeseed-docs-planner',
 				type: 'agent_root',
-				idempotencyKey: `${workDayId}:market-curator`,
+				idempotencyKey: `${workDayId}:treeseed-docs-planner`,
 				payload: { hello: 'world' },
 			}),
 		});

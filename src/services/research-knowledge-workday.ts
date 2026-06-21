@@ -198,10 +198,15 @@ export function invocationForResearchKnowledgeTask(
 	};
 }
 
-export function agentSpecForResearchKnowledgeHandler(kind: 'researcher' | 'knowledge_generator' | 'knowledge_optimizer'): AgentRuntimeSpec {
+export function agentSpecForResearchKnowledgeHandler(kind: 'research' | 'knowledge_draft' | 'knowledge_optimization'): AgentRuntimeSpec {
+	const handler = kind === 'research' ? 'research' : 'report';
+	const projectAgentClassId = kind === 'research' ? 'research' : 'knowledge';
 	return {
 		slug: `${kind}-agent`,
-		handler: kind,
+		handler,
+		projectAgentClassId,
+		projectAgentClassSlug: projectAgentClassId,
+		handlerConfig: { domain: kind },
 		enabled: true,
 		systemPrompt: `Deterministic ${kind} handler.`,
 		persona: kind,
@@ -219,8 +224,20 @@ export function agentSpecForResearchKnowledgeHandler(kind: 'researcher' | 'knowl
 			leaseSeconds: 300,
 			retryLimit: 0,
 			branchPrefix: 'agent/research-knowledge',
+			providerProfile: {
+				requiredCapabilities: kind === 'research' ? ['treedx.read', 'research.synthesize'] : ['treedx.read', 'report.render'],
+			},
 		},
 		outputs: { messageTypes: [], modelMutations: [] },
+		context: {
+			queries: [{
+				id: 'research-knowledge-workday',
+				purpose: kind,
+				query: kind,
+				scope: '/',
+				codeScopes: ['packages/agent/src/services', 'packages/agent/src/agents'],
+			}],
+		},
 	};
 }
 

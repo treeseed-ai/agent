@@ -27,6 +27,11 @@ export interface RawAgentRuntimeSpec {
 	body?: unknown;
 	slug?: unknown;
 	handler?: unknown;
+	projectAgentClassId?: unknown;
+	projectAgentClassSlug?: unknown;
+	agentClassId?: unknown;
+	agentClassSlug?: unknown;
+	handlerConfig?: unknown;
 	enabled?: unknown;
 	systemPrompt?: unknown;
 	persona?: unknown;
@@ -59,6 +64,9 @@ export interface NormalizedTriggerPolicy {
 export interface AgentSpecParts {
 	slug: string;
 	handler: AgentHandlerKind;
+	projectAgentClassId: string;
+	projectAgentClassSlug: string;
+	handlerConfig?: Record<string, unknown>;
 	enabled: boolean;
 	systemPrompt: string;
 	persona: string;

@@ -1,5 +1,5 @@
 import { mkdtempSync, rmSync } from 'node:fs';
-import { existsSync, mkdirSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync } from 'node:fs';
 import { dirname, extname, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { build } from 'esbuild';
@@ -10,35 +10,38 @@ import type { AgentHandler } from './runtime-types.ts';
 import { resolveAgentRuntimeProviders } from '../agent-runtime.ts';
 
 const BUILTIN_HANDLER_KINDS = [
-	'planner',
-	'architect',
-	'engineer',
-	'notifier',
-	'researcher',
-	'knowledge_generator',
-	'knowledge_optimizer',
-	'reviewer',
-	'reporter',
-	'releaser',
+	'plan',
+	'research',
+	'act',
+	'review',
+	'report',
 ] as const;
 
 const HANDLER_EXPORT_NAMES: Record<(typeof BUILTIN_HANDLER_KINDS)[number], string> = {
-	planner: 'plannerHandler',
-	architect: 'architectHandler',
-	engineer: 'engineerHandler',
-	notifier: 'notifierHandler',
-	researcher: 'researcherHandler',
-	knowledge_generator: 'knowledgeGeneratorHandler',
-	knowledge_optimizer: 'knowledgeOptimizerHandler',
-	reviewer: 'reviewerHandler',
-	reporter: 'reporterHandler',
-	releaser: 'releaserHandler',
+	plan: 'planHandler',
+	research: 'researchHandler',
+	act: 'actHandler',
+	review: 'reviewHandler',
+	report: 'reportHandler',
 };
 
 function normalizeHandlerKind(kind: AgentHandlerKind): AgentHandlerKind {
-	if (kind === 'knowledge-generator') return 'knowledge_generator';
-	if (kind === 'knowledge-optimizer') return 'knowledge_optimizer';
 	return kind;
+}
+
+function handlerExportName(kind: string) {
+	if ((BUILTIN_HANDLER_KINDS as readonly string[]).includes(kind)) {
+		return HANDLER_EXPORT_NAMES[kind as (typeof BUILTIN_HANDLER_KINDS)[number]];
+	}
+	const identifier = kind
+		.split(/[^a-zA-Z0-9]+/u)
+		.filter(Boolean)
+		.map((part, index) => {
+			const lower = part.charAt(0).toLowerCase() + part.slice(1);
+			return index === 0 ? lower : `${lower.charAt(0).toUpperCase()}${lower.slice(1)}`;
+		})
+		.join('');
+	return `${identifier || 'agent'}Handler`;
 }
 
 export function getTenantAgentHandlerModulePaths(
@@ -49,6 +52,18 @@ export function getTenantAgentHandlerModulePaths(
 		resolve(tenantRoot, 'src/agents', `${kind}.js`),
 		resolve(tenantRoot, 'src/agents', `${kind}.ts`),
 	];
+}
+
+function listTenantAgentHandlerKinds(tenantRoot: string) {
+	const agentsRoot = resolve(tenantRoot, 'src/agents');
+	if (!existsSync(agentsRoot)) {
+		return [...BUILTIN_HANDLER_KINDS];
+	}
+	const localKinds = readdirSync(agentsRoot, { withFileTypes: true })
+		.filter((entry) => entry.isFile())
+		.map((entry) => entry.name.match(/^(.+)\.(?:js|ts)$/u)?.[1] ?? null)
+		.filter((entry): entry is string => Boolean(entry && !entry.startsWith('_') && !entry.endsWith('.d')));
+	return [...new Set([...BUILTIN_HANDLER_KINDS, ...localKinds])];
 }
 
 function findNearestTsconfig(startPath: string) {
@@ -107,7 +122,7 @@ export async function loadTenantAgentHandlerRegistry(
 ): Promise<Record<string, AgentHandler>> {
 	const registry: Record<string, AgentHandler> = {};
 
-	for (const kind of BUILTIN_HANDLER_KINDS) {
+	for (const kind of listTenantAgentHandlerKinds(tenantRoot)) {
 		const modulePath = getTenantAgentHandlerModulePaths(kind, tenantRoot).find((candidate) => existsSync(candidate));
 		if (!modulePath) {
 			continue;
@@ -121,11 +136,11 @@ export async function loadTenantAgentHandlerRegistry(
 			throw new Error(`Failed to import tenant agent handler "${kind}" from ${modulePath}: ${reason}`);
 		}
 
-		const exportName = HANDLER_EXPORT_NAMES[kind];
-		const handler = moduleExports[exportName];
+		const exportName = handlerExportName(kind);
+		const handler = moduleExports[exportName] ?? moduleExports.handler ?? moduleExports.default;
 		if (!handler) {
 			throw new Error(
-				`Tenant agent handler module "${modulePath}" must export "${exportName}" for handler kind "${kind}".`,
+				`Tenant agent handler module "${modulePath}" must export "${exportName}", "handler", or a default handler for handler kind "${kind}".`,
 			);
 		}
 

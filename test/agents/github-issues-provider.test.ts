@@ -25,7 +25,7 @@ const config: GitHubIssuesExecutionProviderConfig = {
 function agent(): AgentRuntimeSpec {
 	return {
 		slug: 'provider-reviewer',
-		handler: 'reviewer',
+		handler: 'review',
 		enabled: true,
 		systemPrompt: 'Review.',
 		persona: 'Reviewer.',
@@ -181,6 +181,48 @@ describe('GitHubIssueExecutionProviderAdapter', () => {
 		});
 		expect(JSON.stringify(requests[1]?.body)).toContain('Review the implementation');
 		assertNoSecretLeak({ snapshot, requests: requests.map(({ headers, ...rest }) => rest) });
+	});
+
+	it('adds credential-free TreeDX assignment tool instructions to issue bodies', async () => {
+		const { fetchImpl, requests } = createMockFetch(({ url, method }) => {
+			if (method === 'GET' && url.pathname === '/repos/treeseed-ai/work/issues') return response([]);
+			if (method === 'POST' && url.pathname === '/repos/treeseed-ai/work/issues') return response(issue(13));
+			return response({ error: 'unexpected' }, { status: 404 });
+		});
+		const input = invocation('assignment-treedx');
+		input.tools = [{
+			kind: 'treedx_proxy',
+			id: 'treedx-proxy:handle-1',
+			name: 'TreeDX assignment proxy',
+			description: 'Assignment-scoped TreeDX content proxy.',
+			operations: ['files:read', 'files:write', 'git:commit'],
+			projectId: 'project-1',
+			assignmentId: 'assignment-treedx',
+			handleId: 'handle-1',
+			repositoryId: 'repo-1',
+			workspaceId: 'workspace-1',
+			allowedOperations: ['files:read', 'files:write', 'git:commit'],
+			allowedPaths: ['src/content/**'],
+			routes: {
+				buildContext: 'POST /v1/dx/projects/project-1/repos/repo-1/context/build',
+				readRepositoryFiles: 'POST /v1/dx/projects/project-1/repos/repo-1/files/read',
+				searchWorkspace: 'POST /v1/dx/projects/project-1/workspaces/workspace-1/search',
+				readWorkspaceFile: 'GET /v1/dx/projects/project-1/workspaces/workspace-1/files?path=:path',
+				writeWorkspaceFile: 'PUT /v1/dx/projects/project-1/workspaces/workspace-1/files?path=:path',
+				commitWorkspace: 'POST /v1/dx/projects/project-1/workspaces/workspace-1/commit',
+			},
+			metadata: { token: 'secret_should_not_leak' },
+		}];
+
+		await new GitHubIssueExecutionProviderAdapter({ config, fetchImpl }).start(input);
+
+		const body = JSON.stringify(requests[1]?.body);
+		expect(body).toContain('## TreeDX assignment tools');
+		expect(body).toContain('Authorization: Bearer <capacity-provider-api-key>');
+		expect(body).toContain('x-treeseed-assignment-id');
+		expect(body).toContain('src/content/**');
+		expect(body).toContain('/v1/dx/projects/project-1/workspaces/workspace-1/commit');
+		assertNoSecretLeak({ requests: requests.map(({ headers, ...rest }) => rest) });
 	});
 
 	it('reuses an existing GitHub issue for duplicate assignment starts', async () => {

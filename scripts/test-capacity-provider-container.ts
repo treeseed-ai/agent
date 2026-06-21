@@ -7,6 +7,7 @@ import { packageRoot } from './package-tools.ts';
 
 const composeFile = resolve(packageRoot, 'compose.capacity-provider.yml');
 const projectName = `treeseed-capacity-provider-test-${process.pid}`;
+const minimumDockerFreeKilobytes = 2 * 1024 * 1024;
 
 function run(command: string, args: string[], options: { cwd?: string; env?: NodeJS.ProcessEnv; allowFailure?: boolean } = {}) {
 	const result = spawnSync(command, args, {
@@ -27,6 +28,30 @@ function capture(command: string, args: string[]) {
 		encoding: 'utf8',
 		env: process.env,
 	});
+}
+
+function dockerStoragePath() {
+	const info = capture('docker', ['info', '--format', '{{.DockerRootDir}}']);
+	if (info.status === 0 && info.stdout.trim().length > 0) {
+		return info.stdout.trim();
+	}
+	return '/var/lib/docker';
+}
+
+function ensureDockerStorageHeadroom() {
+	const root = dockerStoragePath();
+	const result = capture('df', ['-Pk', root]);
+	if (result.status !== 0) return;
+	const line = result.stdout.trim().split(/\r?\n/u).at(-1);
+	const fields = line?.trim().split(/\s+/u) ?? [];
+	const availableKilobytes = Number(fields[3] ?? Number.NaN);
+	if (!Number.isFinite(availableKilobytes) || availableKilobytes >= minimumDockerFreeKilobytes) return;
+	const availableGiB = (availableKilobytes / 1024 / 1024).toFixed(1);
+	const requiredGiB = (minimumDockerFreeKilobytes / 1024 / 1024).toFixed(1);
+	throw new Error([
+		`Docker storage at ${root} has only ${availableGiB} GiB free; capacity-provider:test-local needs at least ${requiredGiB} GiB before building images.`,
+		'Free Docker space explicitly, for example: docker system prune -a --volumes',
+	].join('\n'));
 }
 
 async function findFreePort() {
@@ -115,6 +140,7 @@ const dockerInfo = capture('docker', ['info']);
 if (dockerInfo.status !== 0) {
 	throw new Error('Docker is required for capacity provider container smoke in Phase I verification.');
 }
+ensureDockerStorageHeadroom();
 
 if (!existsSync(composeFile)) {
 	throw new Error(`Missing ${composeFile}.`);

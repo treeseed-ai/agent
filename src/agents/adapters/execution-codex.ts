@@ -1,6 +1,13 @@
 import { Codex } from '@openai/codex-sdk';
 import type { AgentRuntimeSpec } from '@treeseed/sdk/types/agents';
-import type { ExecutionProviderAdapter, ExecutionProviderInvocation } from '../runtime-types.ts';
+import type {
+	ExecutionProviderAdapter,
+	ExecutionProviderInvocation,
+	ExecutionProviderToolDescriptor,
+	TreeDxProxyExecutionToolDescriptor,
+} from '../runtime-types.ts';
+import { TREE_DX_PROXY_TOOL_NAMES } from '../tools/treedx-proxy-tool.ts';
+import { createTreeDxProxyMcpServerCommand } from '../tools/treedx-proxy-mcp-server.ts';
 import { prependCoreObjectiveToPrompt } from '../core-objective.ts';
 import {
 	type CodexApprovalPolicy,
@@ -29,6 +36,7 @@ export interface CodexExecutionRequest {
 	model?: string;
 	reasoningEffort?: CodexReasoningEffort;
 	timeoutMs?: number;
+	tools?: ExecutionProviderToolDescriptor[];
 	metadata?: Record<string, unknown>;
 }
 
@@ -92,7 +100,7 @@ export interface CodexRunResult {
 }
 
 export interface RunCodexSubscriptionTaskOptions {
-	createCodexClient?: () => CodexSubscriptionClient | Promise<CodexSubscriptionClient>;
+	createCodexClient?: (request?: CodexExecutionRequest) => CodexSubscriptionClient | Promise<CodexSubscriptionClient>;
 	now?: () => number;
 }
 
@@ -185,8 +193,52 @@ function safetyResult(request: CodexExecutionRequest, error: CodexRequestSafetyE
 	};
 }
 
-async function createDefaultCodexClient(): Promise<CodexSubscriptionClient> {
-	return new Codex({ env: codexClientEnvironment() } as ConstructorParameters<typeof Codex>[0]);
+function treeDxProxyTools(request: CodexExecutionRequest) {
+	return (request.tools ?? []).filter((tool): tool is TreeDxProxyExecutionToolDescriptor => tool.kind === 'treedx_proxy');
+}
+
+function redactToolForPrompt(tool: TreeDxProxyExecutionToolDescriptor) {
+	return {
+		id: tool.id,
+		projectId: tool.projectId,
+		assignmentId: tool.assignmentId,
+		handleId: tool.handleId,
+		repositoryId: tool.repositoryId ?? null,
+		workspaceId: tool.workspaceId ?? null,
+		allowedOperations: tool.allowedOperations,
+		allowedPaths: tool.allowedPaths,
+		routes: tool.routes,
+		toolNames: TREE_DX_PROXY_TOOL_NAMES,
+	};
+}
+
+function codexTreeDxConfig(request: CodexExecutionRequest) {
+	const tools = treeDxProxyTools(request);
+	if (tools.length === 0) return undefined;
+	const tool = tools[0]!;
+	const server = createTreeDxProxyMcpServerCommand({
+		apiBaseUrl: process.env.TREESEED_API_BASE_URL ?? process.env.TREESEED_MARKET_URL ?? process.env.TREESEED_CAPACITY_ACCEPTANCE_API_URL ?? '',
+		providerApiKey: process.env.TREESEED_CAPACITY_PROVIDER_API_KEY ?? process.env.TREESEED_PROVIDER_API_KEY ?? '',
+		assignmentId: tool.assignmentId,
+		handleId: tool.handleId,
+		descriptor: redactToolForPrompt(tool) as TreeDxProxyExecutionToolDescriptor,
+	});
+	return {
+		mcpServers: {
+			treedx_proxy: {
+				command: server.command,
+				args: server.args,
+				env: server.env,
+			},
+		},
+	};
+}
+
+async function createDefaultCodexClient(request?: CodexExecutionRequest): Promise<CodexSubscriptionClient> {
+	return new Codex({
+		env: codexClientEnvironment(),
+		config: request ? codexTreeDxConfig(request) : undefined,
+	} as ConstructorParameters<typeof Codex>[0]);
 }
 
 export function mapCodexThreadOptions(request: CodexExecutionRequest): CodexThreadOptions {
@@ -232,6 +284,17 @@ export function buildCodexPrompt(request: CodexExecutionRequest) {
 			'- Do not release.',
 		].join('\n')
 		: '- Treat this as read-only/planning unless the handler grants a later mutation stage.';
+	const treeDxTools = treeDxProxyTools(request);
+	const treeDxSection = treeDxTools.length > 0
+		? [
+			'TreeDX assignment tools:',
+			'Use these assignment-scoped TreeDX tools for project content reads, queries, writes, and commits.',
+			'Do not request raw TreeDX URLs, bearer tokens, GitHub tokens, deploy keys, or provider API keys.',
+			'Local file writes are reserved for code, verification artifacts, temporary worktrees, package files, and non-content artifacts.',
+			'Content writes must use treedx_write_workspace_file and content commits must use treedx_commit_workspace.',
+			formatMetadataBlock(treeDxTools.map(redactToolForPrompt)),
+		].join('\n')
+		: 'TreeDX assignment tools:\n<none>';
 	const taskPrompt = [
 		'You are operating as a TreeSeed implementation agent.',
 		'',
@@ -263,6 +326,8 @@ export function buildCodexPrompt(request: CodexExecutionRequest) {
 		'- Report uncertainty.',
 		'- Record commands you ran or believe should be run.',
 		'- If the task requires broader scope, stop and return TASK_WAITING.',
+		'',
+		treeDxSection,
 		'',
 		'Context pack:',
 		formatMetadataBlock(contextPackSummary),
@@ -425,7 +490,7 @@ export async function runCodexSubscriptionTask(
 
 	try {
 		const createCodexClient = options.createCodexClient ?? createDefaultCodexClient;
-		const client = await createCodexClient();
+		const client = await createCodexClient(request);
 		const threadOptions = mapCodexThreadOptions(request);
 		const thread = request.threadId
 			? client.resumeThread(request.threadId, threadOptions)
@@ -460,7 +525,7 @@ export async function runCodexSubscriptionTask(
 
 export interface CodexSubscriptionExecutionProviderAdapterOptions {
 	repoRoot?: string;
-	createCodexClient?: () => CodexSubscriptionClient | Promise<CodexSubscriptionClient>;
+	createCodexClient?: (request?: CodexExecutionRequest) => CodexSubscriptionClient | Promise<CodexSubscriptionClient>;
 	prepareWorktree?: (input: {
 		agent: AgentRuntimeSpec;
 		runId: string;
@@ -557,9 +622,11 @@ export class CodexSubscriptionExecutionProviderAdapter implements ExecutionProvi
 			model: input.agent.execution.model ?? config.defaultModel,
 			reasoningEffort: input.agent.execution.reasoningEffort as CodexReasoningEffort | undefined,
 			timeoutMs: config.timeoutMs,
+			tools: input.tools,
 			metadata: {
 				subscriptionPlan: config.subscriptionPlan,
 				worktreeBranch: worktree?.branchName,
+				workPackage: input.workPackage,
 			},
 		}, {
 			createCodexClient: this.options.createCodexClient,

@@ -17,7 +17,7 @@ export class StubNotificationAdapter implements AgentNotificationAdapter {
 
 export class SdkMessageNotificationAdapter implements AgentNotificationAdapter {
 	async deliver(input: { agent: { slug: string }; runId: string; recipients: string[]; subject: string; body: string }) {
-		const sdk = AgentSdk.createLocal({ repoRoot: resolveTreeseedTenantRoot() });
+		const sdk = AgentSdk.createLocal({ repoRoot: resolveTreeseedTenantRoot(), contentRepository: { adapter: 'local' } });
 		await sdk.createMessage({
 			type: 'agent.notification',
 			payload: {

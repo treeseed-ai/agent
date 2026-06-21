@@ -29,7 +29,7 @@ const config: JiraExecutionProviderConfig = {
 function agent(): AgentRuntimeSpec {
 	return {
 		slug: 'provider-planner',
-		handler: 'planner',
+		handler: 'plan',
 		enabled: true,
 		systemPrompt: 'Plan.',
 		persona: 'Planner.',

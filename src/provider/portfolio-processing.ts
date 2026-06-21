@@ -138,6 +138,7 @@ async function validateProviderProjectAgents(config: ProviderRuntimeConfig, proj
 	const sdk = AgentSdk.createLocal({
 		repoRoot,
 		persistTo: resolve(config.dataDir, 'state', `${safeSegment(project.id)}.sqlite`),
+		contentRepository: { adapter: 'local' },
 	});
 	const loaded = await loadAllAgentSpecs(sdk);
 	const handlers = await listRegisteredAgentHandlers({ tenantRoot: repoRoot });

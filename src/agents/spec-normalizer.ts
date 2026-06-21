@@ -24,6 +24,7 @@ import type {
 
 const TRIGGER_KINDS: readonly AgentTriggerKind[] = ['schedule', 'message', 'follow', 'startup'];
 const PERMISSION_OPERATIONS: readonly AgentPermissionOperation[] = ['get', 'search', 'follow', 'pick', 'create', 'update'];
+const GENERIC_HANDLER_KINDS = new Set(['plan', 'research', 'act', 'review', 'report']);
 const EXECUTION_PROVIDERS = new Set([
 	'codex',
 	'codex_subscription',
@@ -481,6 +482,40 @@ function normalizeOutputs(
 	};
 }
 
+function normalizeHandlerConfig(
+	value: unknown,
+	diagnostics: AgentSpecDiagnostic[],
+	slug: string,
+): Record<string, unknown> | undefined {
+	if (value === undefined) return undefined;
+	if (!isPlainObject(value)) {
+		diagnostics.push({
+			severity: 'error',
+			slug,
+			field: 'handlerConfig',
+			message: 'Expected handlerConfig to be an object.',
+		});
+		return undefined;
+	}
+	if (value.delegation !== undefined && !isPlainObject(value.delegation)) {
+		diagnostics.push({
+			severity: 'error',
+			slug,
+			field: 'handlerConfig.delegation',
+			message: 'Expected handlerConfig.delegation to be an object.',
+		});
+	}
+	if (value.resourceNeeds !== undefined && !Array.isArray(value.resourceNeeds)) {
+		diagnostics.push({
+			severity: 'error',
+			slug,
+			field: 'handlerConfig.resourceNeeds',
+			message: 'Expected handlerConfig.resourceNeeds to be an array.',
+		});
+	}
+	return value;
+}
+
 function normalizeParts(
 	raw: RawAgentRuntimeSpec,
 	slugHint: string,
@@ -488,13 +523,15 @@ function normalizeParts(
 ): AgentSpecParts | null {
 	const slug = ensureString(raw.slug ?? slugHint, 'slug', diagnostics, slugHint) || slugHint;
 	const rawHandler = ensureString(raw.handler, 'handler', diagnostics, slug);
-	const handler = (
-		rawHandler === 'knowledge-generator'
-			? 'knowledge_generator'
-			: rawHandler === 'knowledge-optimizer'
-				? 'knowledge_optimizer'
-				: rawHandler
-	) as AgentHandlerKind;
+	const handler = rawHandler as AgentHandlerKind;
+	if (!GENERIC_HANDLER_KINDS.has(handler)) {
+		diagnostics.push({
+			severity: 'error',
+			slug,
+			field: 'handler',
+			message: `Unsupported first-party handler "${handler}". Use plan, research, act, review, or report.`,
+		});
+	}
 	const triggers = Array.isArray(raw.triggers)
 		? raw.triggers.map((entry, index) => normalizeTrigger(entry, index, diagnostics, slug)).filter((entry): entry is AgentTriggerConfig => Boolean(entry))
 		: [];
@@ -511,6 +548,19 @@ function normalizeParts(
 		const spec: AgentSpecParts = {
 			slug,
 			handler,
+			projectAgentClassId: ensureString(
+				raw.projectAgentClassId ?? raw.agentClassId,
+				'projectAgentClassId',
+				diagnostics,
+				slug,
+			),
+			projectAgentClassSlug: ensureString(
+				raw.projectAgentClassSlug ?? raw.agentClassSlug ?? raw.projectAgentClassId ?? raw.agentClassId,
+				'projectAgentClassSlug',
+				diagnostics,
+				slug,
+			),
+			handlerConfig: normalizeHandlerConfig(raw.handlerConfig, diagnostics, slug),
 			enabled: ensureBoolean(raw.enabled, 'enabled', diagnostics, slug, true),
 			systemPrompt: ensureString(raw.systemPrompt, 'systemPrompt', diagnostics, slug),
 			persona: ensureString(raw.persona, 'persona', diagnostics, slug),

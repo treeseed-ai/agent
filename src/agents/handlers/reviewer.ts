@@ -1,6 +1,6 @@
 import type { AgentOperationResult } from '@treeseed/sdk/operations/agent-tools';
 import type { CodexDocsMutationResult } from '../contracts/implementation.ts';
-import type { AgentExecutionResult, AgentHandler } from '../runtime-types.ts';
+import type { AgentHandlerOutput, AgentHandler } from '../runtime-types.ts';
 import { changedPathViolations } from '../../services/agent-worktrees.ts';
 import {
 	createAgentMessage,
@@ -155,6 +155,6 @@ export const reviewerHandler: AgentHandler<ReviewerInputs, ReviewerResult> = {
 				findings: result.findings,
 				implementationResult: result.implementationResult,
 			},
-		} satisfies AgentExecutionResult;
+		} satisfies AgentHandlerOutput;
 	},
 };

@@ -291,6 +291,7 @@ run('npm', ['run', 'lint']);
 scanDirectory(resolve(packageRoot, 'dist'));
 run('npm', ['run', 'test:unit']);
 run('npm', ['run', 'test:smoke']);
+run('npm', ['run', 'capacity-provider:test-local']);
 
 const stageRoot = mkdtempSync(join(tmpdir(), 'treeseed-agent-release-'));
 const extractRoot = resolve(stageRoot, 'extract');

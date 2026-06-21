@@ -80,3 +80,13 @@ capacityProvider:
   executionProviders: []
   envBindings: []
   resourceLimits: {}
+projectArchitecture:
+  topology: single_repository_site
+  rootPath: .
+  sitePath: docs
+  contentPath: docs
+  contentRuntimeSource: r2_published_manifest
+  localContentMaterialization: existing_path
+  contentPublishTarget:
+    kind: cloudflare_r2
+    prefix: packages/agent

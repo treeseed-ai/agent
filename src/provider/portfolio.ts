@@ -16,6 +16,24 @@ export function summarizeProviderPortfolio(portfolio: CapacityProviderPortfolioM
 			name: project.name,
 			repository: `${project.repository.owner}/${project.repository.name}`,
 			defaultBranch: project.repository.defaultBranch,
+			architecture: project.architecture
+				? {
+					topology: project.architecture.topology,
+					sitePath: project.architecture.sitePath,
+					contentPath: project.architecture.contentPath ?? null,
+					contentRuntimeSource: project.architecture.contentRuntimeSource,
+					localContentMaterialization: project.architecture.localContentMaterialization,
+				}
+				: null,
+			workspaceAccess: project.architecture
+				? {
+					fullWorkspaceFiles: project.architecture.topology === 'single_repository_site',
+					contentSource: project.architecture.contentRuntimeSource,
+					localContentRequired: project.architecture.contentRuntimeSource === 'local_directory'
+						|| project.architecture.localContentMaterialization === 'existing_path',
+					pushCredentials: false,
+				}
+				: null,
 			agentSpecs: project.agentSpecs,
 			workPolicy: project.workPolicy,
 		})),

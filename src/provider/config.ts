@@ -5,8 +5,24 @@ import {
 } from '@treeseed/sdk/capacity-provider';
 import { existsSync } from 'node:fs';
 import { resolveCodexAuthFile } from '../agents/adapters/codex-auth.ts';
+import {
+	resolveJiraExecutionProviderConfig,
+	type JiraExecutionProviderConfig,
+} from '../agents/adapters/execution-jira.ts';
+import {
+	resolveGitHubIssuesExecutionProviderConfig,
+	type GitHubIssuesExecutionProviderConfig,
+} from '../agents/adapters/execution-github-issues.ts';
+import {
+	resolveDiscordExecutionProviderConfig,
+	type DiscordExecutionProviderConfig,
+} from '../agents/adapters/execution-discord.ts';
 
 export type ProviderRole = 'api' | 'manager' | 'runner' | 'doctor' | 'healthcheck' | 'register' | 'plan' | 'version';
+
+export interface JiraProviderRuntimeConfig extends JiraExecutionProviderConfig {}
+export interface GitHubIssuesProviderRuntimeConfig extends GitHubIssuesExecutionProviderConfig {}
+export interface DiscordProviderRuntimeConfig extends DiscordExecutionProviderConfig {}
 
 export interface ProviderRuntimeConfig {
 	marketUrl: string;
@@ -24,6 +40,9 @@ export interface ProviderRuntimeConfig {
 	codexAuthFile: string | null;
 	codexAuthJsonB64: string | null;
 	codexAuthOverwrite: boolean;
+	jira: JiraProviderRuntimeConfig | null;
+	githubIssues: GitHubIssuesProviderRuntimeConfig | null;
+	discord: DiscordProviderRuntimeConfig | null;
 	env: Record<string, string>;
 	redactedEnv: Record<string, string>;
 }
@@ -90,6 +109,9 @@ export function resolveProviderConfig(options: {
 	const env = options.env ?? process.env;
 	const input = resolveProviderEnvironmentInput(env);
 	const codexAuthFile = configuredCodexAuthFile(env);
+	const jira = resolveJiraExecutionProviderConfig(env);
+	const githubIssues = resolveGitHubIssuesExecutionProviderConfig(env);
+	const discord = resolveDiscordExecutionProviderConfig(env);
 	const missing = [
 		!input.apiKey ? 'TREESEED_CAPACITY_PROVIDER_API_KEY' : null,
 	].filter((entry): entry is string => Boolean(entry));
@@ -106,6 +128,35 @@ export function resolveProviderConfig(options: {
 			TREESEED_PROVIDER_API_PORT: String(input.providerApiPort ?? '3100'),
 			TREESEED_PROVIDER_ENVIRONMENT: String(input.providerEnvironment ?? 'local'),
 		};
+	const redactedEnv = {
+		...redactCapacityProviderEnv(resolvedEnv),
+		...(jira ? {
+			TREESEED_JIRA_BASE_URL: jira.baseUrl,
+			TREESEED_JIRA_EMAIL: jira.email,
+			TREESEED_JIRA_API_TOKEN: '<redacted>',
+			TREESEED_JIRA_PROJECT_KEY: jira.projectKey,
+			TREESEED_JIRA_ISSUE_TYPE: jira.issueType,
+			TREESEED_JIRA_DONE_STATUSES: jira.doneStatuses.join(','),
+			TREESEED_JIRA_BLOCKED_STATUSES: jira.blockedStatuses.join(','),
+			TREESEED_JIRA_CANCELLED_STATUSES: jira.cancelledStatuses.join(','),
+			TREESEED_JIRA_IN_PROGRESS_STATUSES: jira.inProgressStatuses.join(','),
+			...(jira.storyPointsField ? { TREESEED_JIRA_STORY_POINTS_FIELD: jira.storyPointsField } : {}),
+		} : {}),
+		...(githubIssues ? {
+			TREESEED_GITHUB_ISSUES_TOKEN: '<redacted>',
+			TREESEED_GITHUB_ISSUES_REPOSITORY: githubIssues.repository,
+			TREESEED_GITHUB_ISSUES_LABELS: githubIssues.labels.join(','),
+			TREESEED_GITHUB_ISSUES_IN_PROGRESS_LABELS: githubIssues.inProgressLabels.join(','),
+			TREESEED_GITHUB_ISSUES_BLOCKED_LABELS: githubIssues.blockedLabels.join(','),
+			TREESEED_GITHUB_ISSUES_CANCELLED_LABELS: githubIssues.cancelledLabels.join(','),
+		} : {}),
+		...(discord ? {
+			TREESEED_DISCORD_BOT_TOKEN: '<redacted>',
+			TREESEED_DISCORD_CHANNEL_ID: discord.channelId,
+			...(discord.guildId ? { TREESEED_DISCORD_GUILD_ID: discord.guildId } : {}),
+			TREESEED_DISCORD_THREAD_PREFIX: discord.threadPrefix,
+		} : {}),
+	};
 	return {
 		marketUrl: resolvedEnv.TREESEED_MARKET_URL ?? '',
 		marketId: resolvedEnv.TREESEED_MARKET_ID ?? '',
@@ -122,8 +173,11 @@ export function resolveProviderConfig(options: {
 		codexAuthFile: codexAuthFile || null,
 		codexAuthJsonB64: envValue(env, 'TREESEED_CODEX_AUTH_JSON_B64') || null,
 		codexAuthOverwrite: booleanValue(envValue(env, 'TREESEED_CODEX_AUTH_OVERWRITE')),
+		jira,
+		githubIssues,
+		discord,
 		env: resolvedEnv,
-		redactedEnv: redactCapacityProviderEnv(resolvedEnv),
+		redactedEnv,
 	};
 }
 

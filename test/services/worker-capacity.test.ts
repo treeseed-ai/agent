@@ -121,10 +121,9 @@ describe('worker capacity helpers', () => {
 				scale: vi.fn(async () => {
 					throw new Error('railway unavailable');
 				}),
-			},
-			now: new Date('2026-04-15T13:00:00.000Z'),
-			enqueueTask: vi.fn(async () => ({ ok: true, taskId: 'task-1', queued: true })),
-		});
+				},
+				now: new Date('2026-04-15T13:00:00.000Z'),
+			});
 
 		expect(result).toMatchObject({
 			taskId: 'task-1',

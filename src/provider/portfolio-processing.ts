@@ -45,6 +45,7 @@ export interface ProviderProjectProcessingResult {
 		count: number;
 		reportPath: string | null;
 	};
+	architecture: Record<string, unknown> | null;
 	workDay: Record<string, unknown> | null;
 	error?: string;
 }
@@ -204,6 +205,25 @@ function projectEnvironment(config: ProviderRuntimeConfig, project: CapacityProv
 	return metadataEnvironment || config.environment || 'local';
 }
 
+function projectArchitectureSummary(project: CapacityProviderPortfolioProject) {
+	if (!project.architecture) return null;
+	return {
+		topology: project.architecture.topology,
+		rootPath: project.architecture.rootPath,
+		sitePath: project.architecture.sitePath,
+		contentPath: project.architecture.contentPath ?? null,
+		contentRuntimeSource: project.architecture.contentRuntimeSource,
+		localContentMaterialization: project.architecture.localContentMaterialization,
+		workspaceAccess: {
+			fullWorkspaceFiles: project.architecture.topology === 'single_repository_site',
+			contentSource: project.architecture.contentRuntimeSource,
+			localContentRequired: project.architecture.contentRuntimeSource === 'local_directory'
+				|| project.architecture.localContentMaterialization === 'existing_path',
+			pushCredentials: false,
+		},
+	};
+}
+
 function todayIso() {
 	return new Date().toISOString().slice(0, 10);
 }
@@ -228,6 +248,7 @@ async function processProviderProject(
 			},
 			agents: { ok: true, count: 0, enabledCount: 0, handlers: [], diagnostics: [], reportPath: null },
 			tests: { ok: true, count: 0, reportPath: null },
+			architecture: projectArchitectureSummary(project),
 			workDay: null,
 		};
 	}
@@ -250,6 +271,7 @@ async function processProviderProject(
 			count: 0,
 			reportPath: null,
 		},
+		architecture: projectArchitectureSummary(project),
 		workDay: null,
 	};
 	if (!repository.ok) {
@@ -273,6 +295,7 @@ async function processProviderProject(
 				branch: repository.branch,
 				commitSha: repository.commitSha,
 			},
+			projectArchitecture: projectArchitectureSummary(project),
 		},
 		metadata: {
 			providerRuntime: '@treeseed/agent',
@@ -310,6 +333,7 @@ export async function processProviderPortfolio(input: {
 				},
 				agents: { ok: false, count: 0, enabledCount: 0, handlers: [], diagnostics: [], reportPath: null },
 				tests: { ok: false, count: 0, reportPath: null },
+				architecture: projectArchitectureSummary(project),
 				workDay: null,
 				error: error instanceof Error ? error.message : String(error),
 			});
@@ -350,6 +374,7 @@ export async function processProviderPortfolio(input: {
 					repositoryOk: project.repository.ok,
 					agentSpecsOk: project.agents.ok,
 					agentTestsOk: project.tests.ok,
+					architecture: project.architecture,
 					workDayId: project.workDay?.id ?? null,
 					error: project.error ?? project.repository.error ?? null,
 				})),

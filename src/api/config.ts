@@ -133,7 +133,7 @@ export function resolveApiConfig(env: NodeJS.ProcessEnv = process.env): ApiConfi
 		providers: {
 			auth: env.TREESEED_API_PROVIDER_AUTH?.trim() || 'd1',
 			agents: {
-				execution: env.TREESEED_API_PROVIDER_AGENT_EXECUTION?.trim() || 'stub',
+				execution: env.TREESEED_API_PROVIDER_AGENT_EXECUTION?.trim() || 'codex',
 				queue: env.TREESEED_API_PROVIDER_AGENT_QUEUE?.trim() || 'memory',
 				notification: env.TREESEED_API_PROVIDER_AGENT_NOTIFICATION?.trim() || 'stub',
 				repository: env.TREESEED_API_PROVIDER_AGENT_REPOSITORY?.trim() || 'stub',

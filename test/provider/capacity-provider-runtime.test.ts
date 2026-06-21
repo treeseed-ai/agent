@@ -11,6 +11,7 @@ import { buildProviderPlan, runManagerSkeleton, runRunnerSkeleton } from '../../
 import { buildProviderRegistrationRequest } from '../../src/provider/registration.ts';
 import { processProviderPortfolio } from '../../src/provider/portfolio-processing.ts';
 import { runProviderRunnerOnce } from '../../src/provider/runner.ts';
+import type { ExecutionProviderAdapter } from '../../src/agents/runtime-types.ts';
 
 const tempRoots: string[] = [];
 
@@ -61,11 +62,38 @@ function createProjectRepository() {
 			workspaceAccessMode: context.capacity?.workspaceAccessMode ?? null,
 			workflowOperationHandleCount: context.capacity?.capabilityHandles?.workflowOperations?.length ?? 0,
 			dispatchWorkflowOperation: decisionInput.dispatchWorkflowOperation ?? false,
+			useExecutionProvider: decisionInput.useExecutionProvider ?? false,
 			workflowOperationId: decisionInput.workflowOperationId ?? null,
 			workflowOperationHandleId: decisionInput.workflowOperationHandleId ?? null,
 		};
 	},
 	async execute(context, inputs) {
+		if (inputs.useExecutionProvider) {
+			const snapshot = await context.execution.start({
+				assignment: context.capacity.assignment,
+				capacityEnvelope: context.capacity.envelope,
+				decisionInput: context.capacity.decisionInput,
+				agent: context.agent,
+				workPackage: {
+					kind: 'planning',
+					title: 'Async provider runtime test',
+					summary: 'Exercise execution provider lifecycle polling.',
+					instructions: 'Run the async provider test work package.',
+					context: {},
+					expectedOutputs: [{ type: 'final_response', required: true }],
+					constraints: {
+						mode: context.capacity.mode,
+						requiredCapabilities: ['planning'],
+					},
+				},
+				leaseToken: null,
+				runnerId: 'test-runner',
+				projectAgentClass: context.capacity.projectAgentClass,
+				workspace: null,
+				metadata: { runId: context.capacity.assignmentId },
+			});
+			return { ...inputs, executionSnapshot: snapshot, summary: snapshot.summary };
+		}
 		let operationResult = null;
 		if (inputs.dispatchWorkflowOperation) {
 			operationResult = await context.operations.runOperation({
@@ -90,6 +118,25 @@ function createProjectRepository() {
 		return { ...inputs, operationResult, summary: \`Project-owned provider planner completed in \${inputs.mode ?? 'unbounded'} mode.\` };
 	},
 	async emitOutputs(_context, result) {
+		if (result.executionSnapshot) {
+			return {
+				status: result.executionSnapshot.status === 'completed'
+					? 'completed'
+					: result.executionSnapshot.status === 'failed' || result.executionSnapshot.status === 'cancelled'
+						? 'failed'
+						: 'waiting',
+				summary: result.executionSnapshot.summary,
+				metadata: {
+					mode: result.mode,
+					executionStatus: result.executionSnapshot.status,
+					externalRef: result.executionSnapshot.externalRef ?? null,
+					externalUrl: result.executionSnapshot.externalUrl ?? null,
+					code: result.executionSnapshot.code ?? null,
+					artifacts: result.executionSnapshot.artifacts ?? [],
+					usage: result.executionSnapshot.usage ?? [],
+				},
+			};
+		}
 		return { status: 'completed', summary: result.summary, metadata: { mode: result.mode, workspaceAccessMode: result.workspaceAccessMode, workflowOperationHandleCount: result.workflowOperationHandleCount, operationStatus: result.operationResult?.status ?? null } };
 	},
 };
@@ -141,6 +188,15 @@ function portfolio(cloneUrl: string): CapacityProviderPortfolioManifest {
 				cloneUrl,
 				checkoutPath: '.',
 			},
+			architecture: {
+				topology: 'single_repository_site',
+				rootPath: '.',
+				sitePath: 'docs',
+				contentPath: 'docs',
+				contentRuntimeSource: 'r2_published_manifest',
+				localContentMaterialization: 'none',
+				contentPublishTarget: { kind: 'cloudflare_r2', prefix: 'packages/market' },
+			},
 			agentSpecs: { root: 'src/content/agents', testsRoot: 'src/content/agent-tests' },
 			workPolicy: { enabled: true, dailyCreditBudget: 10, maxRunners: 1 },
 			metadata: { environment: 'local' },
@@ -153,6 +209,222 @@ afterEach(() => {
 		rmSync(root, { recursive: true, force: true });
 	}
 });
+
+class FakeAsyncExecutionProviderAdapter implements ExecutionProviderAdapter {
+	polls = 0;
+
+	constructor(
+		private readonly terminal: 'completed' | 'blocked' | 'failed' | 'cancelled' | 'poll_failed' | 'never_completed' = 'completed',
+		private readonly options: {
+			prepareRejected?: boolean;
+			prepareRetryable?: boolean;
+		} = {},
+	) {}
+
+	async describe() {
+		return {
+			id: `fake_async_${this.terminal}`,
+			kind: 'human_issue_queue' as const,
+			capabilities: ['planning'],
+			nativeUnit: 'issue',
+			quotaVisibility: 'partial' as const,
+			maxConcurrentAssignments: 1,
+			supportsAsync: true,
+			supportsCancel: true,
+			supportsResume: true,
+			supportsUsage: true,
+			supportsArtifacts: true,
+		};
+	}
+
+	async observe() {
+		return {
+			descriptor: await this.describe(),
+			available: true,
+			pressure: 'normal' as const,
+			activeAssignmentCount: 0,
+		};
+	}
+
+	async prepare() {
+		if (this.options.prepareRejected) {
+			return {
+				accepted: false,
+				summary: this.options.prepareRetryable === false
+					? 'Fake async provider prepare rejected terminally.'
+					: 'Fake async provider prepare rejected retryably.',
+				retryable: this.options.prepareRetryable,
+				code: 'fake_prepare_rejected',
+			};
+		}
+		return {
+			accepted: true,
+			summary: 'Fake async provider accepted preparation.',
+		};
+	}
+
+	async start() {
+		if (this.terminal === 'blocked') {
+			return {
+				status: 'blocked' as const,
+				summary: 'Fake async provider is blocked.',
+				runId: 'fake-run-1',
+				externalRef: 'ISSUE-1',
+				externalUrl: 'https://issues.example.test/ISSUE-1',
+				retryable: true,
+				code: 'human_provider_blocked',
+				metadata: { provider: 'fake_async' },
+			};
+		}
+		if (this.terminal === 'failed') {
+			return {
+				status: 'failed' as const,
+				summary: 'Fake async provider failed terminally.',
+				runId: 'fake-run-1',
+				externalRef: 'ISSUE-1',
+				externalUrl: 'https://issues.example.test/ISSUE-1',
+				retryable: false,
+				code: 'external_issue_deleted',
+				metadata: { provider: 'fake_async' },
+			};
+		}
+		if (this.terminal === 'cancelled') {
+			return {
+				status: 'cancelled' as const,
+				summary: 'Fake async provider was cancelled.',
+				runId: 'fake-run-1',
+				externalRef: 'ISSUE-1',
+				externalUrl: 'https://issues.example.test/ISSUE-1',
+				retryable: false,
+				code: 'human_provider_cancelled',
+				metadata: { provider: 'fake_async' },
+			};
+		}
+		return {
+			status: 'waiting' as const,
+			summary: 'Fake async provider accepted work.',
+			runId: 'fake-run-1',
+			externalRef: 'ISSUE-1',
+			externalUrl: 'https://issues.example.test/ISSUE-1',
+			metadata: { provider: 'fake_async' },
+		};
+	}
+
+	async poll() {
+		if (this.terminal === 'poll_failed') {
+			throw new Error('Fake async provider poll failed.');
+		}
+		this.polls += 1;
+		if (this.terminal === 'never_completed') {
+			return {
+				status: 'running' as const,
+				summary: 'Fake async provider is still running.',
+				runId: 'fake-run-1',
+				externalRef: 'ISSUE-1',
+				externalUrl: 'https://issues.example.test/ISSUE-1',
+			};
+		}
+		if (this.polls < 2) {
+			return {
+				status: 'running' as const,
+				summary: 'Fake async provider is running.',
+				runId: 'fake-run-1',
+				externalRef: 'ISSUE-1',
+				externalUrl: 'https://issues.example.test/ISSUE-1',
+			};
+		}
+		return {
+			status: 'completed' as const,
+			summary: 'Fake async provider completed.',
+			runId: 'fake-run-1',
+			externalRef: 'ISSUE-1',
+			externalUrl: 'https://issues.example.test/ISSUE-1',
+			outputs: { finalResponse: 'done' },
+		};
+	}
+
+	async collectUsage() {
+		return [{ kind: 'issue_time', unit: 'wall_minute', amount: 3, source: 'fake_async' }];
+	}
+
+	async collectArtifacts() {
+		return [{ kind: 'external_issue', name: 'ISSUE-1', externalUrl: 'https://issues.example.test/ISSUE-1' }];
+	}
+}
+
+async function runAsyncExecutionProviderScenario(input: {
+	adapter: ExecutionProviderAdapter;
+	assignmentId: string;
+	runnerId: string;
+	renewFailsAfter?: number;
+	executionLifecycle?: {
+		pollIntervalMs?: number;
+		maxPolls?: number;
+	};
+}) {
+	const sourceRepo = createProjectRepository();
+	const config = resolveProviderConfig({ env: env() });
+	await processProviderPortfolio({
+		config,
+		client: {
+			async portfolio() { return portfolio(sourceRepo); },
+			async createWorkday(body: unknown) { return { ok: true, workDay: { id: 'wd_provider_1', ...(body as Record<string, unknown>) } }; },
+			async writeReport() { return { ok: true, report: { id: 'report_1' } }; },
+		},
+	});
+	const events: Array<{ method: string; body?: unknown }> = [];
+	let renewCount = 0;
+	const client = {
+		async nextAssignment() {
+			events.push({ method: 'nextAssignment' });
+			return {
+				ok: true,
+				leaseToken: `lease_${input.assignmentId}`,
+				leaseSeconds: 1,
+				payload: {
+					id: input.assignmentId,
+					projectId: 'project_123',
+					agentId: 'provider-planner',
+					mode: 'planning',
+					decisionInput: { input: { dryRun: true, projectId: 'project_123', agentSlug: 'provider-planner', useExecutionProvider: true } },
+					capacityEnvelope: { projectId: 'project_123', mode: 'planning' },
+				},
+			};
+		},
+		async renewAssignment(_assignmentId: string, body: unknown) {
+			renewCount += 1;
+			events.push({ method: 'renewAssignment', body });
+			if (input.renewFailsAfter !== undefined && renewCount > input.renewFailsAfter) {
+				throw new Error('fake lease renewal failure');
+			}
+			return { ok: true, payload: null };
+		},
+		async createAssignmentModeRun(_assignmentId: string, body: unknown) {
+			events.push({ method: 'createAssignmentModeRun', body });
+			return { ok: true, payload: { id: `mode_run_${events.length}` } };
+		},
+		async completeAssignment(_assignmentId: string, body: unknown) {
+			events.push({ method: 'completeAssignment', body });
+			return { ok: true, payload: { id: input.assignmentId, status: 'completed' } };
+		},
+		async returnAssignment(_assignmentId: string, body: unknown) {
+			events.push({ method: 'returnAssignment', body });
+			return { ok: true, payload: { id: input.assignmentId, status: 'returned' } };
+		},
+		async failAssignment(_assignmentId: string, body: unknown) {
+			events.push({ method: 'failAssignment', body });
+			return { ok: true, payload: { id: input.assignmentId, status: 'failed' } };
+		},
+	};
+	const result = await runProviderRunnerOnce({
+		config,
+		client,
+		executionAdapter: input.adapter,
+		runnerId: input.runnerId,
+		executionLifecycle: input.executionLifecycle,
+	});
+	return { events, result };
+}
 
 describe('capacity provider runtime', () => {
 	it('resolves dry-run config without provider secrets and redacts secret display values', () => {
@@ -170,6 +442,36 @@ describe('capacity provider runtime', () => {
 		expect(config.apiKey).toBe('tscp_secret_local_provider_key');
 		expect(config.redactedEnv.TREESEED_CAPACITY_PROVIDER_API_KEY).toContain('<redacted>');
 		expect(config.redactedEnv.TREESEED_CAPACITY_PROVIDER_API_KEY).not.toBe(config.apiKey);
+	});
+
+	it('resolves and redacts human issue queue execution provider credentials', () => {
+		const config = resolveProviderConfig({
+			env: env({
+				TREESEED_JIRA_BASE_URL: 'https://treeseed.atlassian.net',
+				TREESEED_JIRA_EMAIL: 'jira@example.test',
+				TREESEED_JIRA_API_TOKEN: 'jira-secret-token',
+				TREESEED_JIRA_PROJECT_KEY: 'TS',
+				TREESEED_GITHUB_ISSUES_TOKEN: 'github-secret-token',
+				TREESEED_GITHUB_ISSUES_REPOSITORY: 'treeseed-ai/work',
+				TREESEED_DISCORD_BOT_TOKEN: 'discord-secret-token',
+				TREESEED_DISCORD_CHANNEL_ID: '123',
+				TREESEED_DISCORD_GUILD_ID: '456',
+			}),
+		});
+
+		expect(config.jira).toMatchObject({ projectKey: 'TS' });
+		expect(config.githubIssues).toMatchObject({ repository: 'treeseed-ai/work' });
+		expect(config.discord).toMatchObject({ channelId: '123', guildId: '456' });
+		expect(config.redactedEnv).toMatchObject({
+			TREESEED_JIRA_API_TOKEN: '<redacted>',
+			TREESEED_GITHUB_ISSUES_TOKEN: '<redacted>',
+			TREESEED_GITHUB_ISSUES_REPOSITORY: 'treeseed-ai/work',
+			TREESEED_DISCORD_BOT_TOKEN: '<redacted>',
+			TREESEED_DISCORD_CHANNEL_ID: '123',
+		});
+		expect(JSON.stringify(config.redactedEnv)).not.toContain('jira-secret-token');
+		expect(JSON.stringify(config.redactedEnv)).not.toContain('github-secret-token');
+		expect(JSON.stringify(config.redactedEnv)).not.toContain('discord-secret-token');
 	});
 
 	it('requires only the provider API key for connected roles', () => {
@@ -314,6 +616,17 @@ describe('capacity provider runtime', () => {
 		expect(result.ok).toBe(true);
 		expect(result.projects[0]).toMatchObject({
 			projectId: 'project_123',
+			architecture: {
+				topology: 'single_repository_site',
+				sitePath: 'docs',
+				contentRuntimeSource: 'r2_published_manifest',
+				workspaceAccess: {
+					fullWorkspaceFiles: true,
+					pushCredentials: false,
+					contentSource: 'r2_published_manifest',
+					localContentRequired: false,
+				},
+			},
 			repository: { ok: true, branch: 'main' },
 			agents: { ok: true, count: 1, enabledCount: 1 },
 			tests: { ok: true, count: 1 },
@@ -327,7 +640,24 @@ describe('capacity provider runtime', () => {
 			projectId: 'project_123',
 			environment: 'local',
 			kind: 'provider_portfolio_workday',
+			summary: {
+				projectArchitecture: {
+					topology: 'single_repository_site',
+					workspaceAccess: { pushCredentials: false },
+				},
+			},
 		});
+		expect(calls.find((call) => call.method === 'writeReport')?.body).toMatchObject({
+			body: {
+				projects: [
+					expect.objectContaining({
+						architecture: expect.objectContaining({ topology: 'single_repository_site' }),
+					}),
+				],
+			},
+		});
+		expect(JSON.stringify(result)).not.toContain('GH_TOKEN');
+		expect(JSON.stringify(result)).not.toContain('TREESEED_GITHUB_TOKEN');
 	});
 
 	it('skips disabled portfolio projects without cloning or creating workdays', async () => {
@@ -355,6 +685,10 @@ describe('capacity provider runtime', () => {
 		expect(result.ok).toBe(true);
 		expect(result.projects[0]).toMatchObject({
 			enabled: false,
+			architecture: {
+				topology: 'single_repository_site',
+				workspaceAccess: { pushCredentials: false },
+			},
 			repository: { ok: true },
 			workDay: null,
 		});
@@ -660,6 +994,575 @@ describe('capacity provider runtime', () => {
 					workspaceAccessMode: 'full_workspace_no_credentials',
 					workflowOperationHandleCount: 1,
 					operationStatus: 'completed',
+				},
+			},
+		});
+	});
+
+	it('selects workflow execution providers from assignment metadata and dispatches through scoped handles', async () => {
+		const sourceRepo = createProjectRepository();
+		const config = resolveProviderConfig({ env: env() });
+		await processProviderPortfolio({
+			config,
+			client: {
+				async portfolio() { return portfolio(sourceRepo); },
+				async createWorkday(body: unknown) { return { ok: true, workDay: { id: 'wd_provider_1', ...(body as Record<string, unknown>) } }; },
+				async writeReport() { return { ok: true, report: { id: 'report_1' } }; },
+			},
+		});
+		const events: Array<{ method: string; assignmentId?: string; operationId?: string; body?: unknown }> = [];
+		const client = {
+			async nextAssignment() {
+				events.push({ method: 'nextAssignment' });
+				return {
+					ok: true,
+					leaseToken: 'lease_workflow_provider',
+					payload: {
+						id: 'assignment_workflow_provider',
+						teamId: 'team_123',
+						projectId: 'project_123',
+						capacityProviderId: 'provider_123',
+						agentId: 'provider-planner',
+						mode: 'acting',
+						executionProviderKind: 'workflow',
+						synthesizedFrom: 'capacity_plan',
+						decisionInput: {
+							input: {
+								dryRun: false,
+								projectId: 'project_123',
+								agentSlug: 'provider-planner',
+								useExecutionProvider: true,
+								workflowOperationId: 'verify-private-repo',
+								workflowOperationHandleId: 'workflow-handle-2',
+								inputs: { planId: 'plan-2', token: 'opaque-input' },
+							},
+							metadata: {
+								capacityPlanId: 'plan_workflow_provider',
+								capacityPlanStatus: 'accepted',
+								readiness: { executionReadiness: 'ready', planningInputsStatus: 'complete' },
+							},
+						},
+						capacityEnvelope: {
+							teamId: 'team_123',
+							projectId: 'project_123',
+							mode: 'acting',
+							capacityProviderId: 'provider_123',
+							reservationId: 'reservation_workflow_provider',
+							reservedCredits: 1,
+							metadata: { capacityPlanId: 'plan_workflow_provider', capacityPlanStatus: 'accepted' },
+						},
+						capabilityHandles: {
+							workspaceAccessMode: 'full_workspace_no_credentials',
+							workflowOperations: [{
+								id: 'workflow-handle-2',
+								kind: 'workflow_operation',
+								teamId: 'team_123',
+								projectId: 'project_123',
+								assignmentId: 'assignment_workflow_provider',
+								status: 'active',
+								workspaceAccessMode: 'full_workspace_no_credentials',
+								operations: ['dispatch_workflow'],
+								operationId: 'verify-private-repo',
+								repository: 'treeseed/project',
+								workflowFile: '.github/workflows/verify.yml',
+								ref: 'refs/heads/main',
+								secretBearing: true,
+							}],
+						},
+					},
+				};
+			},
+			async dispatchAssignmentWorkflowOperation(assignmentId: string, operationId: string, body: unknown) {
+				events.push({ method: 'dispatchAssignmentWorkflowOperation', assignmentId, operationId, body });
+				return {
+					ok: true,
+					payload: {
+						dispatch: {
+							id: 'workflow-run-2',
+							status: 'success',
+							htmlUrl: 'https://github.example.test/runs/workflow-run-2',
+							logsUrl: 'https://github.example.test/runs/workflow-run-2/logs',
+							artifactsUrl: 'https://github.example.test/runs/workflow-run-2/artifacts',
+							runnerMinutes: 4,
+						},
+					},
+				};
+			},
+			async createAssignmentModeRun(_assignmentId: string, body: unknown) {
+				events.push({ method: 'createAssignmentModeRun', body });
+				return { ok: true, payload: { id: `mode_run_${events.length}` } };
+			},
+			async completeAssignment(_assignmentId: string, body: unknown) {
+				events.push({ method: 'completeAssignment', body });
+				return { ok: true, payload: { id: 'assignment_workflow_provider', status: 'completed' } };
+			},
+			async failAssignment(_assignmentId: string, body: unknown) {
+				events.push({ method: 'failAssignment', body });
+				return { ok: true, payload: { id: 'assignment_workflow_provider', status: 'failed' } };
+			},
+		};
+
+		const result = await runProviderRunnerOnce({ config, client });
+
+		expect(result).toMatchObject({ ok: true, assigned: 1, assignmentId: 'assignment_workflow_provider' });
+		expect(events.find((event) => event.method === 'dispatchAssignmentWorkflowOperation')).toMatchObject({
+			assignmentId: 'assignment_workflow_provider',
+			operationId: 'verify-private-repo',
+			body: {
+				leaseToken: 'lease_workflow_provider',
+				handleId: 'workflow-handle-2',
+				inputs: expect.objectContaining({
+					planId: 'plan-2',
+					token: '<redacted>',
+					workflow: {
+						operationId: 'verify-private-repo',
+						handle: expect.objectContaining({
+							id: 'workflow-handle-2',
+							secretBearing: true,
+						}),
+					},
+				}),
+			},
+		});
+		const adapterModeRun = events
+			.filter((event) => event.method === 'createAssignmentModeRun')
+			.map((event) => event.body as Record<string, any>)
+			.find((body) => body.metadata?.source === 'execution_provider_adapter_lifecycle');
+		expect(adapterModeRun).toMatchObject({
+			status: 'succeeded',
+			outputs: {
+				status: 'completed',
+				externalRef: 'workflow-run-2',
+				artifacts: expect.arrayContaining([
+					expect.objectContaining({ kind: 'workflow_logs', externalUrl: 'https://github.example.test/runs/workflow-run-2/logs' }),
+					expect.objectContaining({ kind: 'workflow_artifacts', externalUrl: 'https://github.example.test/runs/workflow-run-2/artifacts' }),
+				]),
+				usage: expect.arrayContaining([
+					expect.objectContaining({ kind: 'workflow_runner_time', amount: 4 }),
+				]),
+			},
+			traceRefs: {
+				externalRef: 'workflow-run-2',
+			},
+		});
+		expect(events.find((event) => event.method === 'completeAssignment')?.body).toMatchObject({
+			output: {
+				metadata: {
+					executionStatus: 'completed',
+					externalRef: 'workflow-run-2',
+					artifacts: expect.arrayContaining([
+						expect.objectContaining({ kind: 'workflow_logs' }),
+					]),
+					usage: expect.arrayContaining([
+						expect.objectContaining({ kind: 'workflow_runner_time' }),
+					]),
+				},
+			},
+		});
+		expect(events.some((event) => event.method === 'failAssignment')).toBe(false);
+		expect(JSON.stringify(events)).not.toContain('ghs_secret');
+	});
+
+	it('polls async execution providers and renews the assignment lease while waiting', async () => {
+		const sourceRepo = createProjectRepository();
+		const config = resolveProviderConfig({ env: env() });
+		await processProviderPortfolio({
+			config,
+			client: {
+				async portfolio() { return portfolio(sourceRepo); },
+				async createWorkday(body: unknown) { return { ok: true, workDay: { id: 'wd_provider_1', ...(body as Record<string, unknown>) } }; },
+				async writeReport() { return { ok: true, report: { id: 'report_1' } }; },
+			},
+		});
+		const events: Array<{ method: string; body?: unknown }> = [];
+		const client = {
+			async nextAssignment() {
+				events.push({ method: 'nextAssignment' });
+				return {
+					ok: true,
+					leaseToken: 'lease_async',
+					leaseSeconds: 1,
+					payload: {
+						id: 'assignment_async',
+						projectId: 'project_123',
+						agentId: 'provider-planner',
+						mode: 'planning',
+						decisionInput: { input: { dryRun: true, projectId: 'project_123', agentSlug: 'provider-planner', useExecutionProvider: true } },
+						capacityEnvelope: { projectId: 'project_123', mode: 'planning' },
+					},
+				};
+			},
+			async renewAssignment(_assignmentId: string, body: unknown) {
+				events.push({ method: 'renewAssignment', body });
+				return { ok: true, payload: null };
+			},
+			async createAssignmentModeRun(_assignmentId: string, body: unknown) {
+				events.push({ method: 'createAssignmentModeRun', body });
+				return { ok: true, payload: { id: `mode_run_${events.length}` } };
+			},
+			async completeAssignment(_assignmentId: string, body: unknown) {
+				events.push({ method: 'completeAssignment', body });
+				return { ok: true, payload: { id: 'assignment_async', status: 'completed' } };
+			},
+			async returnAssignment(_assignmentId: string, body: unknown) {
+				events.push({ method: 'returnAssignment', body });
+				return { ok: true, payload: { id: 'assignment_async', status: 'returned' } };
+			},
+			async failAssignment(_assignmentId: string, body: unknown) {
+				events.push({ method: 'failAssignment', body });
+				return { ok: true, payload: { id: 'assignment_async', status: 'failed' } };
+			},
+		};
+		const adapter = new FakeAsyncExecutionProviderAdapter();
+
+		const result = await runProviderRunnerOnce({ config, client, executionAdapter: adapter, runnerId: 'runner_async' });
+
+		expect(result).toMatchObject({ ok: true, assigned: 1, assignmentId: 'assignment_async' });
+		expect(events.filter((event) => event.method === 'renewAssignment').length).toBeGreaterThanOrEqual(3);
+		const adapterModeRuns = events
+			.filter((event) => event.method === 'createAssignmentModeRun')
+			.map((event) => event.body as Record<string, any>)
+			.filter((body) => body.metadata?.source === 'execution_provider_adapter_lifecycle');
+		expect(adapterModeRuns.map((body) => body.outputs?.status)).toEqual(['waiting', 'running', 'completed']);
+		expect(adapterModeRuns.at(-1)).toMatchObject({
+			status: 'succeeded',
+			outputs: {
+				externalRef: 'ISSUE-1',
+				externalUrl: 'https://issues.example.test/ISSUE-1',
+			},
+			traceRefs: {
+				externalRef: 'ISSUE-1',
+			},
+		});
+		expect(events.some((event) => event.method === 'completeAssignment')).toBe(true);
+		expect(events.some((event) => event.method === 'returnAssignment')).toBe(false);
+		expect(events.some((event) => event.method === 'failAssignment')).toBe(false);
+		expect(events.find((event) => event.method === 'completeAssignment')?.body).toMatchObject({
+			output: {
+				metadata: {
+					executionStatus: 'completed',
+					externalRef: 'ISSUE-1',
+					artifacts: [{ kind: 'external_issue' }],
+					usage: [{ kind: 'issue_time' }],
+				},
+			},
+		});
+	});
+
+	it('maps retryable blocked async provider snapshots to returned handler output', async () => {
+		const sourceRepo = createProjectRepository();
+		const config = resolveProviderConfig({ env: env() });
+		await processProviderPortfolio({
+			config,
+			client: {
+				async portfolio() { return portfolio(sourceRepo); },
+				async createWorkday(body: unknown) { return { ok: true, workDay: { id: 'wd_provider_1', ...(body as Record<string, unknown>) } }; },
+				async writeReport() { return { ok: true, report: { id: 'report_1' } }; },
+			},
+		});
+		const events: Array<{ method: string; body?: unknown }> = [];
+		const client = {
+			async nextAssignment() {
+				return {
+					ok: true,
+					leaseToken: 'lease_blocked',
+					payload: {
+						id: 'assignment_blocked',
+						projectId: 'project_123',
+						agentId: 'provider-planner',
+						mode: 'planning',
+						decisionInput: { input: { dryRun: true, projectId: 'project_123', agentSlug: 'provider-planner', useExecutionProvider: true } },
+						capacityEnvelope: { projectId: 'project_123', mode: 'planning' },
+					},
+				};
+			},
+			async renewAssignment(_assignmentId: string, body: unknown) {
+				events.push({ method: 'renewAssignment', body });
+				return { ok: true, payload: null };
+			},
+			async createAssignmentModeRun(_assignmentId: string, body: unknown) {
+				events.push({ method: 'createAssignmentModeRun', body });
+				return { ok: true, payload: { id: `mode_run_${events.length}` } };
+			},
+			async completeAssignment(_assignmentId: string, body: unknown) {
+				events.push({ method: 'completeAssignment', body });
+				return { ok: true, payload: { id: 'assignment_blocked', status: 'completed' } };
+			},
+			async returnAssignment(_assignmentId: string, body: unknown) {
+				events.push({ method: 'returnAssignment', body });
+				return { ok: true, payload: { id: 'assignment_blocked', status: 'returned' } };
+			},
+			async failAssignment(_assignmentId: string, body: unknown) {
+				events.push({ method: 'failAssignment', body });
+				return { ok: true, payload: { id: 'assignment_blocked', status: 'failed' } };
+			},
+		};
+
+		const result = await runProviderRunnerOnce({
+			config,
+			client,
+			executionAdapter: new FakeAsyncExecutionProviderAdapter('blocked'),
+			runnerId: 'runner_blocked',
+		});
+
+		expect(result).toMatchObject({ ok: true, assigned: 1, assignmentId: 'assignment_blocked' });
+		expect(events.some((event) => event.method === 'returnAssignment')).toBe(true);
+		expect(events.some((event) => event.method === 'failAssignment')).toBe(false);
+		expect(events.find((event) => event.method === 'returnAssignment')?.body).toMatchObject({
+			retryable: true,
+			output: {
+				status: 'waiting',
+				summary: 'Fake async provider is blocked.',
+				metadata: {
+					executionStatus: 'blocked',
+					externalRef: 'ISSUE-1',
+				},
+			},
+		});
+		expect(events.find((event) =>
+			event.method === 'createAssignmentModeRun'
+			&& (event.body as Record<string, any>).metadata?.source === 'execution_provider_adapter_lifecycle',
+		)?.body).toMatchObject({
+			fallbackReason: 'Fake async provider is blocked.',
+			outputs: {
+				externalRef: 'ISSUE-1',
+			},
+			metadata: {
+				source: 'execution_provider_adapter_lifecycle',
+				executionStatus: 'blocked',
+			},
+		});
+	});
+
+	it('maps terminal async provider failure to failed assignment', async () => {
+		const sourceRepo = createProjectRepository();
+		const config = resolveProviderConfig({ env: env() });
+		await processProviderPortfolio({
+			config,
+			client: {
+				async portfolio() { return portfolio(sourceRepo); },
+				async createWorkday(body: unknown) { return { ok: true, workDay: { id: 'wd_provider_1', ...(body as Record<string, unknown>) } }; },
+				async writeReport() { return { ok: true, report: { id: 'report_1' } }; },
+			},
+		});
+		const events: Array<{ method: string; body?: unknown }> = [];
+		const client = {
+			async nextAssignment() {
+				return {
+					ok: true,
+					leaseToken: 'lease_failed',
+					payload: {
+						id: 'assignment_failed',
+						projectId: 'project_123',
+						agentId: 'provider-planner',
+						mode: 'planning',
+						decisionInput: { input: { dryRun: true, projectId: 'project_123', agentSlug: 'provider-planner', useExecutionProvider: true } },
+						capacityEnvelope: { projectId: 'project_123', mode: 'planning' },
+					},
+				};
+			},
+			async renewAssignment(_assignmentId: string, body: unknown) {
+				events.push({ method: 'renewAssignment', body });
+				return { ok: true, payload: null };
+			},
+			async createAssignmentModeRun(_assignmentId: string, body: unknown) {
+				events.push({ method: 'createAssignmentModeRun', body });
+				return { ok: true, payload: { id: `mode_run_${events.length}` } };
+			},
+			async completeAssignment(_assignmentId: string, body: unknown) {
+				events.push({ method: 'completeAssignment', body });
+				return { ok: true, payload: { id: 'assignment_failed', status: 'completed' } };
+			},
+			async failAssignment(_assignmentId: string, body: unknown) {
+				events.push({ method: 'failAssignment', body });
+				return { ok: true, payload: { id: 'assignment_failed', status: 'failed' } };
+			},
+		};
+
+		const result = await runProviderRunnerOnce({
+			config,
+			client,
+			executionAdapter: new FakeAsyncExecutionProviderAdapter('failed'),
+			runnerId: 'runner_failed',
+		});
+
+		expect(result).toMatchObject({ ok: true, assigned: 1, assignmentId: 'assignment_failed' });
+		expect(events.some((event) => event.method === 'completeAssignment')).toBe(false);
+		expect(events.some((event) => event.method === 'failAssignment')).toBe(true);
+		expect(events.find((event) => event.method === 'failAssignment')?.body).toMatchObject({
+			output: {
+				status: 'failed',
+				summary: 'Fake async provider failed terminally.',
+			},
+		});
+		expect(events.find((event) =>
+			event.method === 'createAssignmentModeRun'
+			&& (event.body as Record<string, any>).metadata?.source === 'execution_provider_adapter_lifecycle',
+		)?.body).toMatchObject({
+			status: 'failed',
+			outputs: {
+				externalRef: 'ISSUE-1',
+				code: 'external_issue_deleted',
+			},
+			metadata: {
+				source: 'execution_provider_adapter_lifecycle',
+				executionStatus: 'failed',
+			},
+		});
+	});
+
+	it('maps cancelled async provider snapshots to failed assignment lifecycle without completing work', async () => {
+		const { events, result } = await runAsyncExecutionProviderScenario({
+			adapter: new FakeAsyncExecutionProviderAdapter('cancelled'),
+			assignmentId: 'assignment_cancelled',
+			runnerId: 'runner_cancelled',
+		});
+
+		expect(result).toMatchObject({ ok: true, assigned: 1, assignmentId: 'assignment_cancelled' });
+		expect(events.some((event) => event.method === 'completeAssignment')).toBe(false);
+		expect(events.some((event) => event.method === 'failAssignment')).toBe(true);
+		expect(events.find((event) => event.method === 'failAssignment')?.body).toMatchObject({
+			output: {
+				status: 'failed',
+				metadata: {
+					executionStatus: 'cancelled',
+					externalRef: 'ISSUE-1',
+				},
+			},
+		});
+		expect(events.find((event) =>
+			event.method === 'createAssignmentModeRun'
+			&& (event.body as Record<string, any>).metadata?.source === 'execution_provider_adapter_lifecycle',
+		)?.body).toMatchObject({
+			status: 'cancelled',
+			outputs: {
+				status: 'cancelled',
+				code: 'human_provider_cancelled',
+			},
+		});
+	});
+
+	it('fails assignment when async polling throws', async () => {
+		const { events } = await runAsyncExecutionProviderScenario({
+			adapter: new FakeAsyncExecutionProviderAdapter('poll_failed'),
+			assignmentId: 'assignment_poll_failed',
+			runnerId: 'runner_poll_failed',
+		});
+
+		expect(events.some((event) => event.method === 'completeAssignment')).toBe(false);
+		expect(events.some((event) => event.method === 'failAssignment')).toBe(true);
+		expect(events.find((event) => event.method === 'failAssignment')?.body).toMatchObject({
+			output: {
+				status: 'failed',
+				summary: 'Execution provider polling failed.',
+				metadata: {
+					executionStatus: 'failed',
+					externalRef: 'ISSUE-1',
+				},
+			},
+		});
+		expect(events.find((event) =>
+			event.method === 'createAssignmentModeRun'
+			&& (event.body as Record<string, any>).outputs?.code === 'execution_provider_poll_failed',
+		)?.body).toMatchObject({
+			status: 'failed',
+			outputs: {
+				externalRef: 'ISSUE-1',
+				code: 'execution_provider_poll_failed',
+			},
+		});
+	});
+
+	it('returns assignment when async polling reaches max polls without terminal completion', async () => {
+		const { events } = await runAsyncExecutionProviderScenario({
+			adapter: new FakeAsyncExecutionProviderAdapter('never_completed'),
+			assignmentId: 'assignment_poll_incomplete',
+			runnerId: 'runner_poll_incomplete',
+			executionLifecycle: {
+				pollIntervalMs: 0,
+				maxPolls: 1,
+			},
+		});
+
+		expect(events.some((event) => event.method === 'returnAssignment')).toBe(true);
+		expect(events.some((event) => event.method === 'completeAssignment')).toBe(false);
+		expect(events.find((event) => event.method === 'returnAssignment')?.body).toMatchObject({
+			retryable: true,
+			output: {
+				status: 'waiting',
+				metadata: {
+					executionStatus: 'waiting',
+					externalRef: 'ISSUE-1',
+				},
+			},
+		});
+		expect(events.find((event) =>
+			event.method === 'createAssignmentModeRun'
+			&& (event.body as Record<string, any>).outputs?.code === 'execution_provider_poll_incomplete',
+		)?.body).toMatchObject({
+			outputs: {
+				status: 'waiting',
+				code: 'execution_provider_poll_incomplete',
+			},
+		});
+	});
+
+	it('fails assignment when lease renewal fails during async polling', async () => {
+		const { events } = await runAsyncExecutionProviderScenario({
+			adapter: new FakeAsyncExecutionProviderAdapter('completed'),
+			assignmentId: 'assignment_lease_failed',
+			runnerId: 'runner_lease_failed',
+			renewFailsAfter: 1,
+		});
+
+		expect(events.some((event) => event.method === 'failAssignment')).toBe(true);
+		expect(events.some((event) => event.method === 'completeAssignment')).toBe(false);
+		expect(events.find((event) => event.method === 'failAssignment')?.body).toMatchObject({
+			output: {
+				status: 'failed',
+				summary: 'Assignment lease renewal failed while execution provider work was in progress.',
+			},
+		});
+		expect(events.find((event) =>
+			event.method === 'createAssignmentModeRun'
+			&& (event.body as Record<string, any>).outputs?.code === 'assignment_lease_renewal_failed',
+		)?.body).toMatchObject({
+			outputs: {
+				code: 'assignment_lease_renewal_failed',
+				externalRef: 'ISSUE-1',
+			},
+		});
+	});
+
+	it('maps prepare rejection to returned or failed snapshots', async () => {
+		const retryable = await runAsyncExecutionProviderScenario({
+			adapter: new FakeAsyncExecutionProviderAdapter('completed', { prepareRejected: true, prepareRetryable: true }),
+			assignmentId: 'assignment_prepare_retryable',
+			runnerId: 'runner_prepare_retryable',
+		});
+		expect(retryable.events.some((event) => event.method === 'returnAssignment')).toBe(true);
+		expect(retryable.events.find((event) => event.method === 'returnAssignment')?.body).toMatchObject({
+			retryable: true,
+			code: 'assignment_missing_decision_input',
+			output: {
+				metadata: {
+					code: 'fake_prepare_rejected',
+				},
+			},
+		});
+
+		const terminal = await runAsyncExecutionProviderScenario({
+			adapter: new FakeAsyncExecutionProviderAdapter('completed', { prepareRejected: true, prepareRetryable: false }),
+			assignmentId: 'assignment_prepare_terminal',
+			runnerId: 'runner_prepare_terminal',
+		});
+		expect(terminal.events.some((event) => event.method === 'failAssignment')).toBe(true);
+		expect(terminal.events.find((event) => event.method === 'failAssignment')?.body).toMatchObject({
+			retryable: false,
+			code: 'provider_assignment_failed',
+			output: {
+				metadata: {
+					code: 'fake_prepare_rejected',
 				},
 			},
 		});

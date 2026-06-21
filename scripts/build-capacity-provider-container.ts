@@ -9,12 +9,31 @@ const dockerContextRoot = resolve(packageRoot, '.treeseed', 'docker');
 const sdkTarballPath = resolve(dockerContextRoot, 'treeseed-sdk.tgz');
 const runtimeRoot = resolve(dockerContextRoot, 'runtime');
 const prepareOnly = process.argv.includes('--prepare-only');
+const selectedRoles = parseSelectedRoles();
+const noCache = process.argv.includes('--no-cache') || process.env.TREESEED_AGENT_BUILD_NO_CACHE === '1';
 const imageTag = process.env.TREESEED_AGENT_IMAGE_TAG || 'local';
 const roleImages = {
 	api: process.env.TREESEED_AGENT_API_IMAGE || `treeseed/agent-api:${imageTag}`,
 	manager: process.env.TREESEED_AGENT_MANAGER_IMAGE || `treeseed/agent-manager:${imageTag}`,
 	runner: process.env.TREESEED_AGENT_RUNNER_IMAGE || `treeseed/agent-runner:${imageTag}`,
 } as const;
+type RoleName = keyof typeof roleImages;
+
+function parseSelectedRoles(): Set<RoleName> {
+	const rolesFlagIndex = process.argv.indexOf('--roles');
+	const rawRoles = rolesFlagIndex >= 0 ? process.argv[rolesFlagIndex + 1] : process.env.TREESEED_AGENT_BUILD_ROLES;
+	const allRoles: RoleName[] = ['api', 'manager', 'runner'];
+	if (!rawRoles) return new Set(allRoles);
+	const selected = new Set<RoleName>();
+	for (const rawRole of rawRoles.split(',').map((role) => role.trim()).filter(Boolean)) {
+		if (rawRole !== 'api' && rawRole !== 'manager' && rawRole !== 'runner') {
+			throw new Error(`Unsupported capacity provider image role: ${rawRole}`);
+		}
+		selected.add(rawRole);
+	}
+	if (selected.size === 0) throw new Error('At least one capacity provider image role must be selected.');
+	return selected;
+}
 
 function run(command: string, args: string[], cwd: string) {
 	const result = spawnSync(command, args, {
@@ -110,22 +129,16 @@ function packSdk() {
 
 function prepareRuntimeDependencies(installedSdkRoot: string | null) {
 	const installedNodeModules = resolveInstalledNodeModulesRoot();
-	const runtimePackages = runtimePackageFilter();
+	const runtimePackages = runtimePackageNames(installedNodeModules);
 	rmSync(runtimeRoot, { recursive: true, force: true });
 	mkdirSync(runtimeRoot, { recursive: true });
 	copyFileSync(resolve(packageRoot, 'package.json'), resolve(runtimeRoot, 'package.json'));
 	copyFileSync(resolve(packageRoot, 'package-lock.json'), resolve(runtimeRoot, 'package-lock.json'));
-	cpSync(installedNodeModules, resolve(runtimeRoot, 'node_modules'), {
-		recursive: true,
-		filter(source) {
-			const relativePath = source.slice(installedNodeModules.length).replace(/^[/\\]/u, '');
-			if (!relativePath) return true;
-			if (relativePath === '.bin' || relativePath.startsWith(`.bin${process.platform === 'win32' ? '\\' : '/'}`)) return false;
-			if (relativePath === '.vite' || relativePath.startsWith(`.vite${process.platform === 'win32' ? '\\' : '/'}`)) return false;
-			if (relativePath === '@treeseed' || relativePath.startsWith(`@treeseed${process.platform === 'win32' ? '\\' : '/'}`)) return false;
-			return runtimePackages(relativePath);
-		},
-	});
+	mkdirSync(resolve(runtimeRoot, 'node_modules'), { recursive: true });
+	for (const packageName of runtimePackages) {
+		if (packageName.startsWith('@treeseed/')) continue;
+		copyRuntimePackage(installedNodeModules, packageName);
+	}
 	mkdirSync(resolve(runtimeRoot, 'node_modules', '@treeseed'), { recursive: true });
 	if (installedSdkRoot) {
 		cpSync(installedSdkRoot, resolve(runtimeRoot, 'node_modules', '@treeseed', 'sdk'), {
@@ -143,29 +156,58 @@ function prepareRuntimeDependencies(installedSdkRoot: string | null) {
 		cpSync(resolve(extractRoot, 'package'), resolve(runtimeRoot, 'node_modules', '@treeseed', 'sdk'), { recursive: true });
 		rmSync(extractRoot, { recursive: true, force: true });
 	}
-	pruneExtraneousDependenciesFromRuntimeTree();
-	pruneDevDependenciesFromRuntimeTree();
 }
 
-function runtimePackageFilter() {
+function runtimePackageNames(installedNodeModules: string) {
 	const lockfile = JSON.parse(readFileSync(resolve(packageRoot, 'package-lock.json'), 'utf8')) as {
 		packages?: Record<string, { dev?: boolean }>;
 	};
 	const allowed = new Set<string>();
-	const allowedScopes = new Set<string>();
+	const queue: string[] = [];
 	for (const [packagePath, metadata] of Object.entries(lockfile.packages ?? {})) {
 		if (!packagePath.startsWith('node_modules/') || metadata.dev === true) continue;
 		const packageName = topLevelPackageName(packagePath.slice('node_modules/'.length));
 		if (!packageName) continue;
-		allowed.add(packageName);
-		if (packageName.startsWith('@')) allowedScopes.add(packageName.split('/')[0] ?? '');
+		if (!allowed.has(packageName)) {
+			allowed.add(packageName);
+			queue.push(packageName);
+		}
 	}
-	return (relativePath: string) => {
-		const packageName = topLevelPackageName(relativePath);
-		if (!packageName) return false;
-		if (packageName.startsWith('@') && !packageName.includes('/')) return allowedScopes.has(packageName);
-		return allowed.has(packageName);
-	};
+	for (let index = 0; index < queue.length; index += 1) {
+		const packageName = queue[index];
+		if (!packageName) continue;
+		for (const dependencyName of installedPackageDependencies(installedNodeModules, packageName)) {
+			if (allowed.has(dependencyName)) continue;
+			allowed.add(dependencyName);
+			queue.push(dependencyName);
+		}
+	}
+	return [...allowed].sort();
+}
+
+function installedPackageDependencies(installedNodeModules: string, packageName: string) {
+	const packageJsonPath = resolve(installedNodeModules, packageName, 'package.json');
+	if (!existsSync(packageJsonPath)) return [];
+	try {
+		const pkg = JSON.parse(readFileSync(packageJsonPath, 'utf8')) as {
+			dependencies?: Record<string, string>;
+			optionalDependencies?: Record<string, string>;
+		};
+		return [
+			...Object.keys(pkg.dependencies ?? {}),
+			...Object.keys(pkg.optionalDependencies ?? {}),
+		];
+	} catch {
+		return [];
+	}
+}
+
+function copyRuntimePackage(installedNodeModules: string, packageName: string) {
+	const source = resolve(installedNodeModules, packageName);
+	if (!existsSync(source)) return;
+	const target = resolve(runtimeRoot, 'node_modules', packageName);
+	mkdirSync(target, { recursive: true });
+	run('cp', ['-a', `${source}/.`, target], packageRoot);
 }
 
 function topLevelPackageName(relativePath: string) {
@@ -244,12 +286,22 @@ if (prepareOnly) {
 	console.log(`Prepared capacity provider Docker context at ${dockerContextRoot}.`);
 	process.exit(0);
 }
-run('docker', ['build', '--target', 'agent-api', '-t', roleImages.api, '.'], packageRoot);
-run('docker', ['build', '--target', 'agent-manager', '-t', roleImages.manager, '.'], packageRoot);
-run('docker', ['build', '--target', 'agent-runner', '-t', roleImages.runner, '.'], packageRoot);
-if (!process.env.TREESEED_CAPACITY_PROVIDER_IMAGE) {
+if (selectedRoles.has('api')) {
+	run('docker', ['build', ...dockerBuildCacheArgs(), '--target', 'agent-api', '-t', roleImages.api, '.'], packageRoot);
+}
+if (selectedRoles.has('manager')) {
+	run('docker', ['build', ...dockerBuildCacheArgs(), '--target', 'agent-manager', '-t', roleImages.manager, '.'], packageRoot);
+}
+if (selectedRoles.has('runner')) {
+	run('docker', ['build', ...dockerBuildCacheArgs(), '--target', 'agent-runner', '-t', roleImages.runner, '.'], packageRoot);
+}
+if (selectedRoles.has('api') && !process.env.TREESEED_CAPACITY_PROVIDER_IMAGE) {
 	run('docker', ['tag', roleImages.api, 'capacity-provider:local'], packageRoot);
-} else {
+} else if (selectedRoles.has('api')) {
 	run('docker', ['tag', roleImages.api, process.env.TREESEED_CAPACITY_PROVIDER_IMAGE], packageRoot);
 }
-console.log(`Built ${roleImages.api}, ${roleImages.manager}, and ${roleImages.runner} from ${packageRoot}.`);
+console.log(`Built capacity provider image roles ${[...selectedRoles].join(', ')} from ${packageRoot}.`);
+
+function dockerBuildCacheArgs() {
+	return noCache ? ['--no-cache'] : [];
+}

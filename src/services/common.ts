@@ -1,9 +1,6 @@
-import crypto from 'node:crypto';
 import { existsSync, readdirSync, statSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { AgentSdk } from '@treeseed/sdk';
-import { CloudflareQueuePullClient } from '@treeseed/sdk/remote';
-import type { SdkQueueMessageEnvelope } from '@treeseed/sdk';
 import { CODEBASE_DOCUMENTATION_SCAN_TASK_KIND } from './codebase-documentation-scanner.ts';
 import { HostedControlPlaneAgentSdk, HostedRunnerControlPlaneClient } from './hosted-control-plane-sdk.ts';
 import { resolveProcessingDataDir } from './runtime-paths.ts';
@@ -76,115 +73,6 @@ export function createServiceSdk() {
 		}),
 		localSdk,
 	}) as unknown as AgentSdk;
-}
-
-function createQueueClientConfig(token: string) {
-	const accountId = process.env.TREESEED_CLOUDFLARE_ACCOUNT_ID?.trim();
-	const queueId = process.env.TREESEED_QUEUE_ID?.trim();
-	if (!accountId || !queueId || !token) {
-		return null;
-	}
-	return {
-		accountId,
-		queueId,
-		token,
-		apiBaseUrl: process.env.TREESEED_QUEUE_API_BASE_URL?.trim() || undefined,
-	};
-}
-
-export function createQueueClient() {
-	const config = createQueueClientConfig(process.env.TREESEED_QUEUE_PULL_TOKEN?.trim() || '');
-	if (!config) {
-		return null;
-	}
-	return new CloudflareQueuePullClient(config);
-}
-
-export function createQueuePushClient() {
-	const config = createQueueClientConfig(
-		process.env.TREESEED_QUEUE_PUSH_TOKEN?.trim()
-		|| process.env.TREESEED_CLOUDFLARE_API_TOKEN?.trim()
-		|| '',
-	);
-	if (!config) {
-		return null;
-	}
-	const apiBaseUrl = config.apiBaseUrl ?? 'https://api.cloudflare.com/client/v4/accounts';
-	const baseUrl = `${apiBaseUrl.replace(/\/$/u, '')}/${config.accountId}/queues/${config.queueId}`;
-	return {
-		async enqueue(request: { message: SdkQueueMessageEnvelope; delaySeconds?: number }) {
-			const response = await fetch(`${baseUrl}/messages`, {
-				method: 'POST',
-				headers: {
-					accept: 'application/json',
-					authorization: `Bearer ${config.token}`,
-					'content-type': 'application/json',
-				},
-				body: JSON.stringify({
-					body: request.message,
-					content_type: 'json',
-					delay_seconds: request.delaySeconds ?? 0,
-				}),
-			});
-			const payload = await response.json().catch(() => ({})) as {
-				success?: boolean;
-				errors?: Array<{ message?: string }>;
-			};
-			if (!response.ok || payload.success === false) {
-				throw new Error(payload.errors?.[0]?.message ?? `Queue request failed with ${response.status}.`);
-			}
-		},
-	};
-}
-
-export function queueEnvelopeForTask(task: Record<string, unknown>): SdkQueueMessageEnvelope {
-	return {
-		messageId: crypto.randomUUID(),
-		taskId: String(task.id ?? ''),
-		workDayId: String(task.workDayId ?? task.work_day_id ?? ''),
-		agentId: String(task.agentId ?? task.agent_id ?? ''),
-		taskType: String(task.type ?? ''),
-		idempotencyKey: String(task.idempotencyKey ?? task.idempotency_key ?? ''),
-		attempt: Number(task.attemptCount ?? task.attempt_count ?? 0) + 1,
-		payloadRef: `d1:tasks/${String(task.id ?? '')}`,
-		graphVersion:
-			task.graphVersion !== undefined && task.graphVersion !== null
-				? String(task.graphVersion)
-				: task.graph_version !== undefined && task.graph_version !== null
-					? String(task.graph_version)
-					: null,
-		budgetHint: 1,
-	};
-}
-
-export async function enqueueTaskFromSdk(
-	sdk: AgentSdk,
-	request: {
-		taskId: string;
-		queueName?: string;
-		deliveryDelaySeconds?: number;
-		actor?: string;
-	},
-) {
-	const queue = createQueuePushClient();
-	if (!queue) {
-		throw new Error('Queue push client not configured.');
-	}
-	const task = await sdk.get({ model: 'task', id: request.taskId });
-	if (!task.payload) {
-		throw new Error('Unknown task.');
-	}
-	await queue.enqueue({
-		message: queueEnvelopeForTask(task.payload as Record<string, unknown>),
-		delaySeconds: request.deliveryDelaySeconds ?? 0,
-	});
-	await sdk.recordTaskProgress({
-		id: request.taskId,
-		state: 'queued',
-		appendEvent: { kind: 'queued', data: { queueName: request.queueName ?? null } },
-			actor: request.actor ?? 'manager',
-	});
-	return { ok: true, taskId: request.taskId, queued: true };
 }
 
 export async function buildTaskContext(sdk: AgentSdk, taskId: string) {
@@ -346,14 +234,14 @@ export function resolveManagerConfig() {
 export function resolveWorkerConfig() {
 	return {
 		workerId: process.env.TREESEED_WORKER_ID?.trim() || `worker-${process.pid}`,
-		batchSize: integerFromEnv('TREESEED_QUEUE_BATCH_SIZE', integerFromEnv('TREESEED_RUNNER_MAX_LOCAL_WORKERS', 4)),
+		batchSize: integerFromEnv('TREESEED_WORKER_BATCH_SIZE', integerFromEnv('TREESEED_RUNNER_MAX_LOCAL_WORKERS', 4)),
 		maxLocalWorkers: integerFromEnv('TREESEED_RUNNER_MAX_LOCAL_WORKERS', 4),
 		runnerServiceName: process.env.TREESEED_RUNNER_SERVICE_NAME?.trim() || process.env.RAILWAY_SERVICE_NAME?.trim() || `worker-runner-${process.pid}`,
 		volumeRoot: resolveProcessingDataDir(),
 		volumeIdentity: process.env.TREESEED_RUNNER_VOLUME_ID?.trim() || process.env.RAILWAY_VOLUME_ID?.trim() || process.env.RAILWAY_VOLUME_NAME?.trim() || 'local-runner-volume',
 		projectId: process.env.TREESEED_PROJECT_ID?.trim() || 'treeseed-market',
 		environment: process.env.TREESEED_DEPLOY_ENVIRONMENT?.trim() || (process.env.NODE_ENV === 'production' ? 'prod' : 'local'),
-		visibilityTimeoutMs: integerFromEnv('TREESEED_QUEUE_VISIBILITY_TIMEOUT_MS', 120000),
+		visibilityTimeoutMs: integerFromEnv('TREESEED_WORKER_VISIBILITY_TIMEOUT_MS', 120000),
 		pollIntervalMs: integerFromEnv('TREESEED_WORKER_POLL_INTERVAL_MS', 5000),
 		idleExitMs: integerFromEnv('TREESEED_WORKER_IDLE_EXIT_MS', 0),
 		leaseSeconds: integerFromEnv('TREESEED_TASK_LEASE_SECONDS', 120),

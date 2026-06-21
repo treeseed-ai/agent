@@ -18,7 +18,7 @@ import {
 	type SdkRunEntity,
 } from '@treeseed/sdk/types';
 import { runFromRecord } from '@treeseed/sdk/stores/run-store';
-import type { AgentExecutionAdapter, AgentMutationAdapter } from '../runtime-types.ts';
+import type { ExecutionProviderAdapter, AgentMutationAdapter } from '../runtime-types.ts';
 import type { AgentKernel } from '../kernel/agent-kernel.ts';
 
 const execFileAsync = promisify(execFile);
@@ -338,9 +338,9 @@ export interface AgentTestRuntime {
 }
 
 export async function createAgentTestRuntime(options?: {
-	execution?: AgentExecutionAdapter;
+	execution?: ExecutionProviderAdapter;
 	mutations?: AgentMutationAdapter;
-	executionMode?: 'stub' | 'copilot';
+	executionMode?: 'codex' | 'copilot';
 	databaseMode?: 'memory' | 'local-d1';
 }) : Promise<AgentTestRuntime> {
 	const rootDir = await mkdtemp(path.join(os.tmpdir(), 'agents-e2e-'));
@@ -377,7 +377,7 @@ export async function createAgentTestRuntime(options?: {
 	await patchFixtureAgentSpecs(repoRoot);
 
 	process.env.TREESEED_AGENT_CONTENT_ROOT = path.join(repoRoot, 'src', 'content');
-	process.env.TREESEED_AGENT_EXECUTION_PROVIDER = options?.executionMode ?? 'stub';
+	process.env.TREESEED_AGENT_EXECUTION_PROVIDER = options?.executionMode ?? 'codex';
 	process.env.TREESEED_TENANT_ROOT = repoRoot;
 	process.chdir(repoRoot);
 
@@ -490,37 +490,11 @@ export async function createAgentTestRuntime(options?: {
 				db?: { prepare: (query: string) => { all: <T>() => Promise<{ results: T[] }> } };
 				inspectRuns?: () => Record<string, unknown>[];
 			};
-			if (database.inspectRuns) {
-				return database.inspectRuns().map((row) => runFromRecord(row));
-			}
-			const rows = database.db
-				? await database.db.prepare(`
-					SELECT
-						record_key AS run_id,
-						lookup_key AS agent_slug,
-						status,
-						json_extract(payload_json, '$.triggerSource') AS trigger_source,
-						json_extract(payload_json, '$.handlerKind') AS handler_kind,
-						json_extract(payload_json, '$.triggerKind') AS trigger_kind,
-						json_extract(payload_json, '$.selectedItemKey') AS selected_item_key,
-						json_extract(payload_json, '$.selectedMessageId') AS selected_message_id,
-						json_extract(payload_json, '$.claimedMessageId') AS claimed_message_id,
-						json_extract(payload_json, '$.branchName') AS branch_name,
-						secondary_key AS commit_sha,
-						json_extract(payload_json, '$.prUrl') AS pr_url,
-						json_extract(payload_json, '$.summary') AS summary,
-						json_extract(payload_json, '$.error') AS error,
-						json_extract(payload_json, '$.errorCategory') AS error_category,
-						json_extract(payload_json, '$.changedPaths') AS changed_paths,
-						created_at AS started_at,
-						json_extract(payload_json, '$.finishedAt') AS finished_at
-					FROM runtime_records
-					WHERE record_type = 'agent_run'
-					ORDER BY created_at ASC
-				`).all<Record<string, unknown>>()
-				: { results: [] };
-			return rows.results.map((row) => runFromRecord(row));
-		},
+				if (database.inspectRuns) {
+					return database.inspectRuns().map((row) => runFromRecord(row));
+				}
+				return [];
+			},
 		async readContentLeases() {
 			const database = sdk.database as {
 				db?: { prepare: (query: string) => { all: <T>() => Promise<{ results: T[] }> } };

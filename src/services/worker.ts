@@ -9,7 +9,7 @@ import { AgentKernel } from '../agents/kernel/agent-kernel.ts';
 import { createControlPlaneReporter, shouldInterruptForCapacity } from '@treeseed/sdk';
 import type { CapacityTaskExecutionEnvelope, TaskCheckpointArtifact } from '@treeseed/sdk';
 import { isDirectEntrypoint } from '../entrypoint.ts';
-import { buildTaskContext, createQueueClient, createQueuePushClient, createServiceSdk, queueEnvelopeForTask, resolveServiceRepoRoot, resolveWorkerConfig } from './common.ts';
+import { buildTaskContext, createServiceSdk, resolveServiceRepoRoot, resolveWorkerConfig } from './common.ts';
 import { researcherHandler } from '../agents/handlers/researcher.ts';
 import { knowledgeGeneratorHandler } from '../agents/handlers/knowledge-generator.ts';
 import { knowledgeOptimizerHandler } from '../agents/handlers/knowledge-optimizer.ts';
@@ -73,6 +73,23 @@ function asRecord(value: unknown): Record<string, unknown> {
 
 function readString(value: unknown) {
 	return typeof value === 'string' && value.trim() ? value.trim() : '';
+}
+
+function taskEnvelopeForTask(task: Record<string, unknown>) {
+	return {
+		taskId: String(task.id ?? ''),
+		workDayId: String(task.workDayId ?? task.work_day_id ?? ''),
+		agentId: String(task.agentId ?? task.agent_id ?? ''),
+		taskType: String(task.type ?? ''),
+		idempotencyKey: String(task.idempotencyKey ?? task.idempotency_key ?? ''),
+		attempt: Number(task.attemptCount ?? task.attempt_count ?? 0) + 1,
+		graphVersion:
+			task.graphVersion !== undefined && task.graphVersion !== null
+				? String(task.graphVersion)
+				: task.graph_version !== undefined && task.graph_version !== null
+					? String(task.graph_version)
+					: null,
+	};
 }
 
 function readStringArray(value: unknown) {
@@ -549,22 +566,15 @@ async function createFollowupTask(input: {
 	const createdTask = asRecord(created.payload);
 	const createdTaskId = readString(createdTask.id);
 	if (createdTaskId && input.enqueue) {
-		const queue = createQueuePushClient();
-		if (queue) {
-			await queue.enqueue({
-				message: queueEnvelopeForTask(createdTask),
-				delaySeconds: 0,
-			});
-			await input.sdk.recordTaskProgress({
-				id: createdTaskId,
-				state: 'queued',
-				appendEvent: {
-					kind: 'queued',
-					data: { queueName: process.env.TREESEED_QUEUE_ID ?? null },
-				},
-				actor: 'worker',
-			});
-		}
+		await input.sdk.recordTaskProgress({
+			id: createdTaskId,
+			state: 'waiting',
+			appendEvent: {
+				kind: 'assignment_ready',
+				data: { transport: 'api_assignment' },
+			},
+			actor: 'worker',
+		});
 	}
 	return createdTaskId || null;
 }
@@ -1440,7 +1450,7 @@ function createLocalTaskQueue(sdk: ReturnType<typeof createServiceSdk>, config: 
 				messages: tasks.map((task) => ({
 					leaseId: `local:${String(task.id ?? '')}`,
 					attempts: Number(task.attemptCount ?? task.attempt_count ?? 0) + 1,
-					body: queueEnvelopeForTask(task),
+					body: taskEnvelopeForTask(task),
 				})),
 			};
 		},
@@ -1482,17 +1492,10 @@ async function recordWorkerRunnerHeartbeat(
 
 export async function runWorkerCycle() {
 	const sdk = createServiceSdk();
-	let queue = createQueueClient();
 	const config = resolveWorkerConfig();
 	const kernel = new AgentKernel(sdk, resolveServiceRepoRoot());
 	await recordWorkerRunnerHeartbeat(sdk, config, 'active', 0, { phase: 'polling' });
-	if (!queue) {
-		if (process.env.TREESEED_LOCAL_DEV_MODE?.trim() || process.env.NODE_ENV !== 'production') {
-			queue = createLocalTaskQueue(sdk, config);
-		} else {
-			throw new Error('Worker requires CLOUDFLARE_ACCOUNT_ID, TREESEED_QUEUE_ID, and TREESEED_QUEUE_PULL_TOKEN.');
-		}
-	}
+	const queue = createLocalTaskQueue(sdk, config);
 
 	const pulled = await queue.pull({
 		batchSize: config.batchSize,

@@ -1,7 +1,23 @@
-import type { AgentExecutionResult, AgentTreeDxAdapter } from '../agents/runtime-types.ts';
+import type {
+	AgentHandlerOutput,
+	AgentTreeDxAdapter,
+	ExecutionProviderAdapter,
+	ExecutionProviderInvocation,
+} from '../agents/runtime-types.ts';
 import { AgentSdk } from '@treeseed/sdk/sdk';
 import { buildCapacityProviderAuthHeaders, type MarketProviderClient } from '@treeseed/sdk/capacity-provider';
-import type { ProviderAssignment } from '@treeseed/sdk/agent-capacity';
+import type { AgentModeRunStatus, ProviderAssignment } from '@treeseed/sdk/agent-capacity';
+import type {
+	ExecutionArtifactRef,
+	ExecutionProviderObserveInput,
+	ExecutionRunRef,
+	ExecutionRunSnapshot,
+	ExecutionUsageActual,
+} from '@treeseed/sdk/types/agents';
+import type { JiraExecutionProviderConfig } from '../agents/adapters/execution-jira.ts';
+import type { GitHubIssuesExecutionProviderConfig } from '../agents/adapters/execution-github-issues.ts';
+import type { DiscordExecutionProviderConfig } from '../agents/adapters/execution-discord.ts';
+import type { WorkflowExecutionProviderAdapterOptions } from '../agents/adapters/execution-workflow.ts';
 import {
 	deriveAgentCapacityEnvelopeFromAssignment,
 	deriveDecisionExecutionInputFromAssignment,
@@ -9,13 +25,16 @@ import {
 	validateProviderAssignmentCapabilityHandles,
 } from '@treeseed/sdk/agent-capacity';
 import { loadAllAgentSpecs } from '../agents/spec-loader.ts';
-import { createExecutionAdapter } from '../agents/adapters/execution.ts';
+import { createExecutionProviderAdapter } from '../agents/adapters/execution.ts';
 import { AgentKernel } from '../agents/kernel/agent-kernel.ts';
 import type { ProviderRuntimeConfig } from './config.ts';
 import { discoverProviderCapabilities } from './capabilities.ts';
 import { processProviderPortfolio, readProviderPortfolioIndex } from './portfolio-processing.ts';
 
 type ProviderAssignmentClient = Pick<MarketProviderClient, 'nextAssignment' | 'createAssignmentModeRun' | 'completeAssignment' | 'failAssignment'> & Partial<Pick<MarketProviderClient, 'portfolio' | 'createWorkday' | 'writeReport' | 'renewAssignment' | 'returnAssignment' | 'dispatchAssignmentWorkflowOperation'>>;
+
+const DEFAULT_ASYNC_POLL_INTERVAL_MS = 250;
+const DEFAULT_ASYNC_MAX_POLLS = 20;
 
 function record(value: unknown): Record<string, unknown> {
 	return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -28,11 +47,328 @@ function stringValue(...values: unknown[]) {
 	return null;
 }
 
-function waitingResult(summary: string): AgentExecutionResult {
+function waitingResult(summary: string): AgentHandlerOutput {
 	return {
 		status: 'waiting',
 		summary,
 	};
+}
+
+function sleep(ms: number) {
+	return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isAsyncExecutionStatus(status: string) {
+	return status === 'accepted' || status === 'running' || status === 'waiting' || status === 'blocked';
+}
+
+function isRetryableReturnedSnapshot(snapshot: ExecutionRunSnapshot) {
+	return snapshot.status === 'blocked' && snapshot.retryable !== false;
+}
+
+function modeRunStatusForExecutionSnapshot(snapshot: ExecutionRunSnapshot): AgentModeRunStatus {
+	if (snapshot.status === 'completed') return 'succeeded';
+	if (snapshot.status === 'failed') return 'failed';
+	if (snapshot.status === 'cancelled') return 'cancelled';
+	return 'running';
+}
+
+function assignmentTerminalCodeForExecutionSnapshot(snapshot: ExecutionRunSnapshot) {
+	return snapshot.code ?? `execution_provider_${snapshot.status}`;
+}
+
+class DryRunExecutionProviderAdapter implements ExecutionProviderAdapter {
+	async describe() {
+		return {
+			id: 'dry_run',
+			kind: 'local_process' as const,
+			capabilities: ['planning', 'implementation', 'review', 'test'],
+			nativeUnit: 'assignment',
+			quotaVisibility: 'opaque' as const,
+			maxConcurrentAssignments: 1,
+			supportsAsync: false,
+			supportsCancel: false,
+			supportsResume: false,
+			supportsUsage: false,
+			supportsArtifacts: false,
+		};
+	}
+
+	async observe() {
+		return {
+			descriptor: await this.describe(),
+			available: true,
+			pressure: 'idle' as const,
+			activeAssignmentCount: 0,
+		};
+	}
+
+	async start(input: Parameters<ExecutionProviderAdapter['start']>[0]) {
+		return {
+			status: 'waiting' as const,
+			summary: 'Dry-run execution adapter skipped external model execution.',
+			runId: typeof input.metadata?.runId === 'string' ? input.metadata.runId : input.assignment.id,
+			metadata: {
+				provider: 'dry_run',
+				assignmentId: input.assignment.id,
+			},
+		};
+	}
+}
+
+interface LifecycleManagedExecutionProviderAdapterOptions {
+	adapter: ExecutionProviderAdapter;
+	assignmentId: string;
+	leaseToken: string | null;
+	runnerId: string;
+	leaseSeconds: number;
+	renewLease: () => Promise<void>;
+	recordModeRun: (body: Record<string, unknown>) => Promise<unknown>;
+	selectedInput: Record<string, unknown>;
+	capacityEnvelope: Record<string, unknown>;
+	pollIntervalMs?: number;
+	maxPolls?: number;
+}
+
+class LifecycleManagedExecutionProviderAdapter implements ExecutionProviderAdapter {
+	constructor(private readonly options: LifecycleManagedExecutionProviderAdapterOptions) {}
+
+	describe() {
+		return this.options.adapter.describe();
+	}
+
+	observe(input: ExecutionProviderObserveInput) {
+		return this.options.adapter.observe(input);
+	}
+
+	prepare(input: ExecutionProviderInvocation) {
+		return this.options.adapter.prepare?.(input)
+			?? Promise.resolve({
+				accepted: true,
+				summary: 'Execution provider accepted the invocation.',
+			});
+	}
+
+	async start(input: ExecutionProviderInvocation): Promise<ExecutionRunSnapshot> {
+		const invocation = {
+			...input,
+			leaseToken: input.leaseToken ?? this.options.leaseToken,
+			runnerId: input.runnerId || this.options.runnerId,
+		};
+		const preparation = await this.prepare(invocation);
+		if (!preparation.accepted) {
+			const snapshot: ExecutionRunSnapshot = {
+				status: preparation.retryable === false ? 'failed' : 'returned',
+				summary: preparation.summary,
+				runId: typeof invocation.metadata?.runId === 'string' ? invocation.metadata.runId : invocation.assignment.id,
+				retryable: preparation.retryable,
+				code: preparation.code ?? 'execution_provider_prepare_rejected',
+				metadata: preparation.metadata,
+			};
+			await this.recordSnapshot(snapshot, 'start');
+			return snapshot;
+		}
+
+		let snapshot = await this.options.adapter.start(invocation);
+		await this.recordSnapshot(snapshot, 'start');
+
+		if (isRetryableReturnedSnapshot(snapshot) || !isAsyncExecutionStatus(snapshot.status) || !this.options.adapter.poll) {
+			return this.withCollectedDetails(snapshot);
+		}
+
+		const ref = this.snapshotRef(invocation, snapshot);
+		const maxPolls = this.options.maxPolls ?? DEFAULT_ASYNC_MAX_POLLS;
+		const pollIntervalMs = this.options.pollIntervalMs ?? DEFAULT_ASYNC_POLL_INTERVAL_MS;
+
+		for (let pollIndex = 0; pollIndex < maxPolls && isAsyncExecutionStatus(snapshot.status); pollIndex += 1) {
+			try {
+				await this.options.renewLease();
+			} catch (error) {
+				snapshot = {
+					status: 'failed',
+					summary: 'Assignment lease renewal failed while execution provider work was in progress.',
+					runId: snapshot.runId ?? ref.runId,
+					externalRef: snapshot.externalRef ?? ref.externalRef,
+					externalUrl: snapshot.externalUrl ?? ref.externalUrl,
+					retryable: true,
+					code: 'assignment_lease_renewal_failed',
+					metadata: {
+						...(snapshot.metadata ?? {}),
+						error: error instanceof Error ? error.message : String(error),
+					},
+				};
+				await this.recordSnapshot(snapshot, 'poll');
+				return snapshot;
+			}
+			await sleep(pollIntervalMs);
+			try {
+				snapshot = await this.options.adapter.poll({
+					...ref,
+					runId: snapshot.runId ?? ref.runId,
+					externalRef: snapshot.externalRef ?? ref.externalRef,
+					externalUrl: snapshot.externalUrl ?? ref.externalUrl,
+					metadata: {
+						...(ref.metadata ?? {}),
+						...(snapshot.metadata ?? {}),
+						pollIndex,
+					},
+				});
+			} catch (error) {
+				snapshot = {
+					status: 'failed',
+					summary: 'Execution provider polling failed.',
+					runId: snapshot.runId ?? ref.runId,
+					externalRef: snapshot.externalRef ?? ref.externalRef,
+					externalUrl: snapshot.externalUrl ?? ref.externalUrl,
+					retryable: true,
+					code: 'execution_provider_poll_failed',
+					metadata: {
+						...(snapshot.metadata ?? {}),
+						error: error instanceof Error ? error.message : String(error),
+					},
+				};
+			}
+			await this.recordSnapshot(snapshot, 'poll');
+		}
+
+		if (isAsyncExecutionStatus(snapshot.status)) {
+			snapshot = {
+				...snapshot,
+				status: 'waiting',
+				retryable: true,
+				code: snapshot.code ?? 'execution_provider_poll_incomplete',
+				summary: snapshot.summary || 'Execution provider work is still in progress.',
+			};
+			await this.recordSnapshot(snapshot, 'poll');
+		}
+
+		return this.withCollectedDetails(snapshot);
+	}
+
+	poll(input: ExecutionRunRef) {
+		return this.options.adapter.poll?.(input)
+			?? Promise.resolve({
+				status: 'failed' as const,
+				summary: 'Execution provider does not support polling.',
+				runId: input.runId,
+				externalRef: input.externalRef,
+				externalUrl: input.externalUrl,
+				retryable: false,
+				code: 'execution_provider_poll_unsupported',
+			});
+	}
+
+	resume(input: ExecutionRunRef) {
+		return this.options.adapter.resume?.(input) ?? this.poll(input);
+	}
+
+	cancel(input: ExecutionRunRef & { reason: string }) {
+		return this.options.adapter.cancel?.(input)
+			?? Promise.resolve({
+				status: 'cancelled' as const,
+				summary: input.reason,
+				runId: input.runId,
+				externalRef: input.externalRef,
+				externalUrl: input.externalUrl,
+				retryable: false,
+				code: 'execution_provider_cancelled',
+			});
+	}
+
+	collectUsage(input: ExecutionRunRef) {
+		return this.options.adapter.collectUsage?.(input) ?? Promise.resolve([]);
+	}
+
+	collectArtifacts(input: ExecutionRunRef) {
+		return this.options.adapter.collectArtifacts?.(input) ?? Promise.resolve([]);
+	}
+
+	private snapshotRef(input: ExecutionProviderInvocation, snapshot: ExecutionRunSnapshot): ExecutionRunRef {
+		return {
+			assignmentId: input.assignment.id,
+			executionProviderId: input.assignment.executionProviderId ?? null,
+			runId: snapshot.runId ?? String(input.metadata?.runId ?? input.assignment.id),
+			externalRef: snapshot.externalRef ?? null,
+			externalUrl: snapshot.externalUrl ?? null,
+			leaseToken: input.leaseToken,
+			runnerId: input.runnerId,
+			metadata: {
+				assignmentId: input.assignment.id,
+				provider: snapshot.metadata?.provider ?? null,
+			},
+		};
+	}
+
+	private async recordSnapshot(snapshot: ExecutionRunSnapshot, phase: 'start' | 'poll') {
+		await this.options.recordModeRun({
+			status: modeRunStatusForExecutionSnapshot(snapshot),
+			selectedInput: this.options.selectedInput,
+			capacityEnvelope: this.options.capacityEnvelope,
+			outputs: {
+				status: snapshot.status,
+				summary: snapshot.summary,
+				outputs: snapshot.outputs ?? {},
+				usage: snapshot.usage ?? [],
+				artifacts: snapshot.artifacts ?? [],
+				externalRef: snapshot.externalRef ?? null,
+				externalUrl: snapshot.externalUrl ?? null,
+				code: assignmentTerminalCodeForExecutionSnapshot(snapshot),
+				metadata: snapshot.metadata ?? {},
+			},
+			traceRefs: {
+				executionRunId: snapshot.runId ?? null,
+				externalRef: snapshot.externalRef ?? null,
+				externalUrl: snapshot.externalUrl ?? null,
+			},
+			usageActual: snapshot.usage?.length
+				? { nativeUsage: { executionUsage: snapshot.usage } }
+				: null,
+			fallbackReason: isRetryableReturnedSnapshot(snapshot) ? snapshot.summary : null,
+			startedAt: phase === 'start' ? new Date().toISOString() : null,
+			completedAt: snapshot.status === 'completed' ? new Date().toISOString() : null,
+			failedAt: snapshot.status === 'failed' ? new Date().toISOString() : null,
+			metadata: {
+				source: 'execution_provider_adapter_lifecycle',
+				assignmentId: this.options.assignmentId,
+				runnerId: this.options.runnerId,
+				leaseSeconds: this.options.leaseSeconds,
+				executionStatus: snapshot.status,
+				executionRunId: snapshot.runId ?? null,
+				externalRef: snapshot.externalRef ?? null,
+				externalUrl: snapshot.externalUrl ?? null,
+				phase,
+			},
+		});
+	}
+
+	private async withCollectedDetails(snapshot: ExecutionRunSnapshot): Promise<ExecutionRunSnapshot> {
+		const runId = snapshot.runId ?? this.options.assignmentId;
+		const ref: ExecutionRunRef = {
+			assignmentId: this.options.assignmentId,
+			runId,
+			externalRef: snapshot.externalRef ?? null,
+			externalUrl: snapshot.externalUrl ?? null,
+			leaseToken: this.options.leaseToken,
+			runnerId: this.options.runnerId,
+			metadata: snapshot.metadata,
+		};
+		const [usage, artifacts] = await Promise.all([
+			this.collectUsage(ref).catch((): ExecutionUsageActual[] => []),
+			this.collectArtifacts(ref).catch((): ExecutionArtifactRef[] => []),
+		]);
+		const normalizedUsage = snapshot.usage ?? usage;
+		const normalizedArtifacts = snapshot.artifacts ?? artifacts;
+		return {
+			...snapshot,
+			usage: normalizedUsage,
+			artifacts: normalizedArtifacts,
+			metadata: {
+				...(snapshot.metadata ?? {}),
+				collectedUsageCount: normalizedUsage.length,
+				collectedArtifactCount: normalizedArtifacts.length,
+			},
+		};
+	}
 }
 
 function normalizeBaseUrl(value: string) {
@@ -60,6 +396,45 @@ function workflowOperationHandles(assignment: Record<string, unknown>) {
 	return Array.isArray(record(assignment.capabilityHandles).workflowOperations)
 		? record(assignment.capabilityHandles).workflowOperations as Record<string, unknown>[]
 		: [];
+}
+
+function executionProviderSelectionForAssignment(assignment: Record<string, unknown>, dryRun: boolean) {
+	if (dryRun) return 'dry_run';
+	const capacityEnvelope = record(assignment.capacityEnvelope);
+	const metadata = record(assignment.metadata);
+	const envelopeMetadata = record(capacityEnvelope.metadata);
+	const decisionInput = record(assignment.decisionInput);
+	const decisionMetadata = record(decisionInput.metadata);
+	return stringValue(
+		assignment.executionProviderId,
+		assignment.executionProviderKind,
+		metadata.executionProviderId,
+		metadata.executionProviderKind,
+		envelopeMetadata.executionProviderId,
+		envelopeMetadata.executionProviderKind,
+		decisionMetadata.executionProviderId,
+		decisionMetadata.executionProviderKind,
+		'codex',
+	);
+}
+
+function createAssignmentExecutionProviderAdapter(input: {
+	selection: string | null;
+	repoRoot: string;
+	dryRun: boolean;
+	jira?: JiraExecutionProviderConfig | null;
+	githubIssues?: GitHubIssuesExecutionProviderConfig | null;
+	discord?: DiscordExecutionProviderConfig | null;
+	workflow?: WorkflowExecutionProviderAdapterOptions | null;
+}) {
+	if (input.dryRun) return new DryRunExecutionProviderAdapter();
+	return createExecutionProviderAdapter(input.selection ?? 'codex', {
+		repoRoot: input.repoRoot,
+		jira: input.jira,
+		githubIssues: input.githubIssues,
+		discord: input.discord,
+		workflow: input.workflow,
+	});
 }
 
 function treeDxPathMatches(pattern: string, candidate: string) {
@@ -199,6 +574,11 @@ export async function runProviderRunnerOnce(input: {
 	config: ProviderRuntimeConfig;
 	client: ProviderAssignmentClient;
 	runnerId?: string;
+	executionAdapter?: ExecutionProviderAdapter;
+	executionLifecycle?: {
+		pollIntervalMs?: number;
+		maxPolls?: number;
+	};
 }) {
 	const runnerId = input.runnerId ?? `provider-runner-${process.pid}`;
 	const leased = await input.client.nextAssignment({
@@ -216,22 +596,21 @@ export async function runProviderRunnerOnce(input: {
 		};
 	}
 	const leaseToken = stringValue(leased.leaseToken, assignment.leaseToken);
-	if (leaseToken && input.client.renewAssignment) {
+	const leaseSeconds = Number(leased.leaseSeconds ?? 300);
+	const renewLease = async () => {
+		if (!leaseToken || !input.client.renewAssignment) return;
 		await input.client.renewAssignment(String(assignment.id), {
 			leaseToken,
 			runnerId,
-			leaseSeconds: Number(leased.leaseSeconds ?? 300),
+			leaseSeconds,
 		});
-	}
+	};
+	await renewLease();
 	let renewTimer: ReturnType<typeof setInterval> | null = null;
 	if (leaseToken && input.client.renewAssignment) {
-		const renewEveryMs = Math.max(15_000, Math.min(Number(leased.leaseSeconds ?? 300) * 500, 120_000));
+		const renewEveryMs = Math.max(15_000, Math.min(leaseSeconds * 500, 120_000));
 		renewTimer = setInterval(() => {
-			void input.client.renewAssignment?.(String(assignment.id), {
-				leaseToken,
-				runnerId,
-				leaseSeconds: Number(leased.leaseSeconds ?? 300),
-			}).catch(() => null);
+			void renewLease().catch(() => null);
 		}, renewEveryMs);
 	}
 	let result;
@@ -242,6 +621,10 @@ export async function runProviderRunnerOnce(input: {
 			assignment,
 			leaseToken,
 			runnerId,
+			leaseSeconds,
+			renewLease,
+			executionAdapter: input.executionAdapter,
+			executionLifecycle: input.executionLifecycle,
 		});
 	} finally {
 		if (renewTimer) clearInterval(renewTimer);
@@ -263,6 +646,13 @@ async function runProviderAssignment(input: {
 	assignment: Record<string, unknown>;
 	leaseToken: string | null;
 	runnerId: string;
+	leaseSeconds: number;
+	renewLease: () => Promise<void>;
+	executionAdapter?: ExecutionProviderAdapter;
+	executionLifecycle?: {
+		pollIntervalMs?: number;
+		maxPolls?: number;
+	};
 }) {
 	const assignmentId = stringValue(input.assignment.id) ?? '';
 	const decisionInput = record(input.assignment.decisionInput);
@@ -344,6 +734,32 @@ async function runProviderAssignment(input: {
 		async releaseAllLeases() { return { ok: true, payload: null }; },
 	} as unknown as AgentSdk;
 	const dryRun = decisionPayload.dryRun !== false && !input.config.codexAuthFile && !input.config.codexAuthJsonB64;
+	const baseExecutionAdapter = input.executionAdapter ?? createAssignmentExecutionProviderAdapter({
+		selection: executionProviderSelectionForAssignment(input.assignment, dryRun),
+		repoRoot: project.repository.path,
+		dryRun,
+		jira: input.config.jira,
+		githubIssues: input.config.githubIssues,
+		discord: input.config.discord,
+		workflow: {
+			dispatchWorkflowOperation: input.client.dispatchAssignmentWorkflowOperation
+				? (workflowAssignmentId, operationId, body) => input.client.dispatchAssignmentWorkflowOperation!(workflowAssignmentId, operationId, body)
+				: undefined,
+		},
+	});
+	const execution = new LifecycleManagedExecutionProviderAdapter({
+		adapter: baseExecutionAdapter,
+		assignmentId,
+		leaseToken: input.leaseToken,
+		runnerId: input.runnerId,
+		leaseSeconds: input.leaseSeconds,
+		renewLease: input.renewLease,
+		recordModeRun: (body) => input.client.createAssignmentModeRun(assignmentId, body),
+		selectedInput: decisionPayload,
+		capacityEnvelope,
+		pollIntervalMs: input.executionLifecycle?.pollIntervalMs,
+		maxPolls: input.executionLifecycle?.maxPolls,
+	});
 	const kernel = new AgentKernel(sdk, project.repository.path, {
 		treeDx: ['brokered_workspace', 'trusted_direct'].includes(workspaceMode ?? '')
 			? createAssignmentTreeDxAdapter({
@@ -353,11 +769,7 @@ async function runProviderAssignment(input: {
 				treedxProxyHandle: record(input.assignment.treedxProxyHandle),
 			})
 			: null,
-		execution: dryRun
-			? {
-				runTask: async () => waitingResult('Dry-run execution adapter skipped external model execution.'),
-			}
-			: createExecutionAdapter('codex', { repoRoot: project.repository.path }),
+		execution,
 		mutations: {
 			writeArtifact: async () => ({
 				branchName: null,
@@ -505,7 +917,10 @@ async function runProviderAssignment(input: {
 				mode: modeResult.mode,
 				status: modeResult.status,
 				summary: modeResult.summary,
-				metadata: modeResult.metadata ?? {},
+				metadata: {
+					...(modeResult.metadata ?? {}),
+					...record(modeResult.outputs).metadata,
+				},
 				traceRefs: modeResult.traceRefs ?? {},
 			},
 			summary: {
@@ -533,7 +948,13 @@ async function runProviderAssignment(input: {
 		code: modeResult.fallback?.code ?? 'provider_assignment_failed',
 		message: modeResult.fallback?.reason ?? modeResult.summary,
 		retryable: modeResult.fallback?.retryable ?? false,
-		output: modeResult.outputs ?? {},
+		output: {
+			...(modeResult.outputs ?? {}),
+			metadata: {
+				...record(modeResult.outputs).metadata,
+				...(modeResult.metadata ?? {}),
+			},
+		},
 		fallbackOutput: fallbackOutput ?? undefined,
 	});
 }

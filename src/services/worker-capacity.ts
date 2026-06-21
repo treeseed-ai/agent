@@ -186,27 +186,22 @@ export async function enqueueTaskAndEnsureCapacity(
 	request: {
 		taskId: string;
 		actor?: string;
-		queueName?: string;
-		deliveryDelaySeconds?: number;
 		priorityClass?: 'interactive' | 'background';
 		projectId?: string;
 		identity?: WorkerPoolIdentity;
 		autoscale?: AgentPoolAutoscalePolicy;
 		scaler?: WorkerPoolScaler;
 		now?: Date;
-		enqueueTask: (sdk: AgentSdk, request: {
-			taskId: string;
-			queueName?: string;
-			deliveryDelaySeconds?: number;
-			actor?: string;
-		}) => Promise<{ ok: boolean; taskId: string; queued: boolean }>;
 	},
 ): Promise<CapacityAssuranceResult> {
-	await request.enqueueTask(sdk, {
-		taskId: request.taskId,
-		queueName: request.queueName,
-		deliveryDelaySeconds: request.deliveryDelaySeconds,
-		actor: request.actor,
+	await sdk.recordTaskProgress({
+		id: request.taskId,
+		state: 'waiting',
+		appendEvent: {
+			kind: 'assignment_ready',
+			data: { transport: 'api_assignment' },
+		},
+		actor: request.actor ?? 'worker-capacity',
 	});
 
 	const now = request.now ?? new Date();

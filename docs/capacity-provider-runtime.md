@@ -8,6 +8,7 @@ Canonical architecture:
 - [Agent Capacity Domain Model](../../../docs/agent-capacity-domain-model.md)
 - [Capacity Provider Agent Coordination Architecture](../../../docs/capacity_provider_agent_coordination_architecture.md)
 - [Agent Kernel Mode Runtime](../../../docs/agent-kernel-mode-runtime.md)
+- [Human-Machine Execution Providers](../../../docs/human-machine-providers.md)
 - [Agent Capacity Operator Surfaces](../../../docs/agent-capacity-operator-surfaces.md)
 
 ## Runtime Roles
@@ -37,6 +38,10 @@ trsd capacity test-local
 
 These commands manage runtime lifecycle and diagnostics through SDK reconciliation. They do not own allocation policy, assignment selection, mode-run persistence, or ledger settlement.
 
+Package-local human-machine provider verification uses `npm run test:human-machine-providers`. This runs the execution-provider contract tests, focused provider tests, provider runner lifecycle tests, the package build, and `capacity-provider:test-local`.
+
+`capacity-provider:test-local` is a strict Docker-backed proof for the provider API role. Docker must be available; the command fails with a clear diagnostic instead of skipping when Docker is unavailable.
+
 ## Secrets And Configuration
 
 Configure provider values with encrypted Treeseed machine config or host secret managers.
@@ -63,6 +68,8 @@ The implemented Phase 2 and Phase 3 runtime protocol is provider-initiated and o
 The API does not require inbound network reachability to local or self-hosted providers.
 
 The provider runner polls assignment lifecycle routes and executes assignments through the AgentKernel. The API may synthesize planning assignments from open planning-input requests and acting assignments from accepted capacity-plan work units before next-assignment leasing, but the provider runner does not synthesize project work locally. Raw accepted execution inputs remain planning artifacts until the API aggregates and accepts a durable capacity plan.
+
+Future human-machine provider work keeps this assignment-only protocol and replaces prompt-only execution adapters with work-package and lifecycle-aware execution provider adapters. Jira-like issue queues, deterministic workflows, and AI providers must all run through the same provider check-in, assignment lease, mode-run, complete/return/fail, and usage-report lifecycle.
 
 Provider task claim/update HTTP routes are not part of the provider runtime contract. Package-owned provider execution uses assignment APIs only.
 

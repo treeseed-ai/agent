@@ -1,9 +1,9 @@
-import { createExecutionAdapter } from '../adapters/execution.ts';
+import { createExecutionProviderAdapter } from '../adapters/execution.ts';
 import { createAgentTestRuntime } from './e2e-harness.ts';
 
 async function main() {
 	const target = process.argv[2] ?? 'mvp';
-	const execution = createExecutionAdapter();
+	const execution = createExecutionProviderAdapter();
 	const runtime = await createAgentTestRuntime({
 		execution,
 		executionMode: 'copilot',

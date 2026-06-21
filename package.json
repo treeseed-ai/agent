@@ -1,6 +1,6 @@
 {
   "name": "@treeseed/agent",
-  "version": "0.11.1-dev.demo.20260618T214824Z",
+  "version": "0.11.1-dev.demo.20260621T001910Z",
   "description": "Treeseed agent service runtime package.",
   "license": "AGPL-3.0-only",
   "repository": {
@@ -123,6 +123,7 @@
     "test:study-knowledge-packs": "node ./scripts/run-ts.mjs ./scripts/run-study-knowledge-pack-scenario.ts",
     "test:capacity-scheduling-e2e": "node ./scripts/run-ts.mjs ./scripts/test-capacity-scheduling-e2e.ts",
     "test:local-e2e-verification": "node ./scripts/run-ts.mjs ./scripts/test-local-e2e-verification.ts",
+    "test:human-machine-providers": "npm --workspace @treeseed/sdk run build:dist && vitest run --config ./vitest.config.ts test/agents/execution-provider-contract.test.ts test/agents/codex-provider.test.ts test/agents/jira-provider.test.ts test/agents/github-issues-provider.test.ts test/agents/discord-provider.test.ts test/agents/workflow-provider.test.ts test/agents/kernel-project-root.test.ts test/provider/capacity-provider-runtime.test.ts && npm run build:dist && npm run capacity-provider:test-local",
     "prepack": "npm run build:dist",
     "test:smoke": "node ./scripts/run-ts.mjs ./scripts/test-smoke.ts",
     "verify:direct": "npm run release:verify",
@@ -142,7 +143,7 @@
   },
   "dependencies": {
     "@openai/codex-sdk": "^0.130.0",
-    "@treeseed/sdk": "github:treeseed-ai/sdk#0.11.1-dev.demo.20260618T214811Z",
+    "@treeseed/sdk": "github:treeseed-ai/sdk#0.11.1-dev.demo.20260621T001812Z",
     "esbuild": "0.28.0",
     "hono": "^4.8.2",
     "typescript": "^5.9.3",

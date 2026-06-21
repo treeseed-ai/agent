@@ -3,8 +3,11 @@
 !package-lock.json
 !Dockerfile
 !docker-entrypoint.sh
+!dist/
 !dist/**
+!templates/
 !templates/**
+!docs/
 !docs/**
 !.treeseed/
 !.treeseed/docker/

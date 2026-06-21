@@ -1,5 +1,5 @@
 import type { AgentRuntimeSpec } from '@treeseed/sdk/types/agents';
-import { createExecutionAdapter } from '../adapters/execution.ts';
+import { createExecutionProviderAdapter } from '../adapters/execution.ts';
 import { LocalBranchMutationAdapter } from '../adapters/mutations.ts';
 import { createNotificationAdapter } from '../adapters/notification.ts';
 import { createOperationsAdapter } from '../adapters/operations.ts';
@@ -9,8 +9,8 @@ import { createVerificationAdapter } from '../adapters/verification.ts';
 import { resolveAgentHandler } from '../registry.ts';
 import type {
 	AgentContext,
-	AgentExecutionAdapter,
-	AgentExecutionResult,
+	ExecutionProviderAdapter,
+	AgentHandlerOutput,
 	AgentMutationAdapter,
 	AgentNotificationAdapter,
 	AgentOperationsAdapter,
@@ -220,7 +220,7 @@ export class AgentKernel {
 		repoRoot: string,
 		options?: {
 			executionRoot?: string;
-			execution?: AgentExecutionAdapter;
+			execution?: ExecutionProviderAdapter;
 			mutations?: AgentMutationAdapter;
 			repository?: AgentRepositoryInspectionAdapter;
 			verification?: AgentVerificationAdapter;
@@ -238,7 +238,7 @@ export class AgentKernel {
 		this.providerSelections = getTreeseedAgentProviderSelections();
 		const runtimeProviders = resolveAgentRuntimeProviders(this.executionRoot, this.providerSelections);
 		this.executionOverride = options?.execution;
-		this.execution = options?.execution ?? runtimeProviders.execution ?? createExecutionAdapter(undefined, {
+		this.execution = options?.execution ?? runtimeProviders.execution ?? createExecutionProviderAdapter(undefined, {
 			repoRoot: this.executionRoot,
 		});
 		this.mutations = options?.mutations ?? runtimeProviders.mutations ?? new LocalBranchMutationAdapter(this.executionRoot);
@@ -369,7 +369,7 @@ export class AgentKernel {
 		agent: AgentRuntimeSpec,
 		trigger: AgentTriggerInvocation,
 		options: { capacity?: AgentContext['capacity']; treeDx?: AgentContext['treeDx'] } = {},
-	): Promise<{ runId: string; output: AgentExecutionResult }> {
+	): Promise<{ runId: string; output: AgentHandlerOutput }> {
 		if (this.activeRuns.has(agent.slug)) {
 			return {
 				runId: '',

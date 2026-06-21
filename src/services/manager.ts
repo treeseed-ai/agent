@@ -27,9 +27,7 @@ import { loadActiveAgentSpecs } from '../agents/spec-loader.ts';
 import { followCursorKey, resolveTriggerDecision } from '../agents/kernel/trigger-resolver.ts';
 import type { AgentTriggerInvocation } from '../agents/runtime-types.ts';
 import {
-	createQueuePushClient,
 	createServiceSdk,
-	queueEnvelopeForTask,
 	resolveManagerConfig,
 	seedCodebaseDocumentationScanTask,
 	seedGraphRefreshTask,
@@ -1269,26 +1267,18 @@ function chooseAgentId(agentSpecs: Array<Record<string, unknown>>) {
 }
 
 async function maybeEnqueueTask(sdk: ManagerSdk, task: TaskRecord) {
-	const queue = createQueuePushClient();
-	if (!queue) {
-		return { queued: false, queueName: null };
-	}
-	await queue.enqueue({
-		message: queueEnvelopeForTask(task),
-		delaySeconds: 0,
-	});
 	await sdk.recordTaskProgress({
 		id: String(task.id ?? ''),
-		state: 'queued',
+		state: 'waiting',
 		appendEvent: {
-			kind: 'queued',
+			kind: 'assignment_ready',
 			data: {
-				queueName: envValue('TREESEED_QUEUE_ID') || null,
+				transport: 'api_assignment',
 			},
 		},
 		actor: 'manager',
 	});
-	return { queued: true, queueName: envValue('TREESEED_QUEUE_ID') || null };
+	return { queued: false, transport: 'api_assignment' };
 }
 
 async function recordAdmissionLifecycle(input: {

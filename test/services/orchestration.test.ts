@@ -1,13 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AgentSdk } from '@treeseed/sdk';
-import { buildTaskContext, enqueueTaskFromSdk, startAndSeedWorkday } from '../../src/services/common.ts';
+import { buildTaskContext, startAndSeedWorkday } from '../../src/services/common.ts';
 
 describe('service orchestration helpers', () => {
 	beforeEach(() => {
 		vi.restoreAllMocks();
 		vi.stubEnv('TREESEED_CLOUDFLARE_ACCOUNT_ID', 'account-123');
-		vi.stubEnv('TREESEED_QUEUE_ID', 'queue-123');
-		vi.stubEnv('TREESEED_QUEUE_PUSH_TOKEN', 'queue-push-secret');
 	});
 
 	afterEach(() => {
@@ -72,45 +70,4 @@ describe('service orchestration helpers', () => {
 		});
 	});
 
-	it('enqueues a task directly through the queue client and records queued state', async () => {
-		const fetchMock = vi.fn(async (input: string | URL, init?: RequestInit) => {
-			const url = String(input);
-			if (url.endsWith('/messages')) {
-				return new Response(JSON.stringify({ success: true, result: {} }), {
-					status: 200,
-					headers: { 'content-type': 'application/json' },
-				});
-			}
-			throw new Error(`Unexpected fetch ${url}`);
-		});
-		vi.stubGlobal('fetch', fetchMock);
-
-		const sdk = {
-			get: vi.fn(async () => ({
-				payload: {
-					id: 'task-1',
-					workDayId: 'workday-1',
-					agentId: 'market-curator',
-					type: 'agent_root',
-					idempotencyKey: 'workday-1:market-curator',
-					attemptCount: 0,
-					graphVersion: 'graph-1',
-				},
-			})),
-			recordTaskProgress: vi.fn(async () => ({ payload: { id: 'task-1', state: 'queued' } })),
-		} as unknown as AgentSdk;
-
-		const result = await enqueueTaskFromSdk(sdk, {
-			taskId: 'task-1',
-			queueName: 'agent-work',
-			actor: 'worker',
-		});
-
-		expect(result).toMatchObject({ ok: true, taskId: 'task-1', queued: true });
-		expect(fetchMock).toHaveBeenCalledTimes(1);
-		expect((sdk.recordTaskProgress as any).mock.calls[0]?.[0]).toMatchObject({
-			id: 'task-1',
-			state: 'queued',
-		});
-	});
 });

@@ -1,6 +1,6 @@
 import { Codex } from '@openai/codex-sdk';
 import type { AgentRuntimeSpec } from '@treeseed/sdk/types/agents';
-import type { AgentExecutionAdapter, AgentExecutionResult } from '../runtime-types.ts';
+import type { ExecutionProviderAdapter, ExecutionProviderInvocation } from '../runtime-types.ts';
 import { prependCoreObjectiveToPrompt } from '../core-objective.ts';
 import {
 	type CodexApprovalPolicy,
@@ -458,7 +458,7 @@ export async function runCodexSubscriptionTask(
 	}
 }
 
-export interface CodexSubscriptionExecutionAdapterOptions {
+export interface CodexSubscriptionExecutionProviderAdapterOptions {
 	repoRoot?: string;
 	createCodexClient?: () => CodexSubscriptionClient | Promise<CodexSubscriptionClient>;
 	prepareWorktree?: (input: {
@@ -492,30 +492,60 @@ async function prepareDefaultWorktree(input: {
 	return new AgentWorktreeManager(input.repoRoot).createOrResumeWorktree(featureBranch, input.runId);
 }
 
-export class CodexSubscriptionExecutionAdapter implements AgentExecutionAdapter {
-	constructor(private readonly options: CodexSubscriptionExecutionAdapterOptions = {}) {}
+export class CodexSubscriptionExecutionProviderAdapter implements ExecutionProviderAdapter {
+	constructor(private readonly options: CodexSubscriptionExecutionProviderAdapterOptions = {}) {}
 
-	async runTask(input: {
-		agent: AgentRuntimeSpec;
-		runId: string;
-		prompt: string;
-	}): Promise<AgentExecutionResult> {
+	async describe() {
+		return {
+			id: 'codex',
+			kind: 'ai_model' as const,
+			capabilities: [
+				'planning',
+				'implementation',
+				'review',
+				'repo_read',
+				'repo_write',
+				'verification',
+			],
+			capabilityAliases: ['codex_subscription'],
+			nativeUnit: 'token_or_wall_minute',
+			quotaVisibility: 'partial' as const,
+			maxConcurrentAssignments: 1,
+			supportsAsync: false,
+			supportsCancel: false,
+			supportsResume: false,
+			supportsUsage: false,
+			supportsArtifacts: false,
+		};
+	}
+
+	async observe() {
+		return {
+			descriptor: await this.describe(),
+			available: true,
+			pressure: 'normal' as const,
+			activeAssignmentCount: 0,
+		};
+	}
+
+	async start(input: ExecutionProviderInvocation) {
 		const config = resolveCodexProviderConfig(this.options.env ?? process.env);
 		const repoRoot = this.options.repoRoot ?? process.cwd();
+		const runId = typeof input.metadata?.runId === 'string' ? input.metadata.runId : input.assignment.id;
 		const sandboxMode = (input.agent.execution.sandboxMode ?? config.sandboxMode) as CodexSandboxMode;
 		const worktree = sandboxMode === 'workspace_write'
 			? await (this.options.prepareWorktree ?? prepareDefaultWorktree)({
 				agent: input.agent,
-				runId: input.runId,
+				runId,
 				repoRoot,
 			})
 			: undefined;
 		const result = await runCodexSubscriptionTask({
-			taskId: input.runId,
+			taskId: runId,
 			agentSlug: input.agent.slug,
 			repoRoot,
 			worktreeRoot: worktree?.worktreeRoot,
-			prompt: input.prompt,
+			prompt: input.workPackage.instructions,
 			allowedPaths: input.agent.execution.allowedPaths?.length
 				? input.agent.execution.allowedPaths
 				: DEFAULT_CODEX_ALLOWED_PATHS,
@@ -537,11 +567,28 @@ export class CodexSubscriptionExecutionAdapter implements AgentExecutionAdapter 
 		return {
 			status: result.status,
 			summary: result.summary ?? 'Codex subscription provider returned no summary.',
-			stdout: result.finalResponse ?? '',
-			stderr: result.error?.message ?? '',
+			runId,
+			outputs: {
+				finalResponse: result.finalResponse ?? '',
+				stdout: result.finalResponse ?? '',
+				stderr: result.error?.message ?? '',
+			},
+			usage: [],
+			artifacts: [],
+			retryable: result.error?.retryable,
+			code: result.error?.code ?? null,
 			metadata: {
+				provider: 'codex',
 				codex: result,
 			},
 		};
+	}
+
+	async collectUsage() {
+		return [];
+	}
+
+	async collectArtifacts() {
+		return [];
 	}
 }

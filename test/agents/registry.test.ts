@@ -143,6 +143,62 @@ export const plannerHandler: AgentHandler = {
 		});
 	});
 
+	it('preserves provider capability profiles on normalized specs', () => {
+		const result = normalizeAgentRuntimeSpec({
+			slug: 'review-agent',
+			handler: 'reviewer',
+			enabled: true,
+			systemPrompt: 'Review carefully.',
+			persona: 'Reviewer',
+			triggers: [{ type: 'startup' }],
+			permissions: [{ model: 'knowledge', operations: ['get'] }],
+			execution: {
+				providerProfile: {
+					requiredCapabilities: ['planning', 'repo_read'],
+					preferredLanes: [{
+						provider: 'codex_subscription',
+						laneId: 'large-reasoning-model',
+						model: 'gpt-5.5',
+						weight: 80,
+					}],
+					acceptableFallbacks: [{
+						provider: 'human_issue_queue',
+						model: 'senior-reviewer',
+						maxQualityPenalty: 0.2,
+					}],
+					fallbackPolicy: 'fail_if_unavailable',
+				},
+			},
+			outputs: {},
+		}, {
+			registeredHandlers: ['reviewer'],
+			messageTypes: [],
+		});
+
+		expect(result.diagnostics).toEqual([]);
+		expect(result.spec?.execution).toMatchObject({
+			provider: 'codex',
+			model: 'gpt-5.5',
+			approvalPolicy: 'never',
+			sandboxMode: 'workspace_write',
+			providerProfile: {
+				requiredCapabilities: ['planning', 'repo_read'],
+				preferredLanes: [{
+					provider: 'codex_subscription',
+					laneId: 'large-reasoning-model',
+					model: 'gpt-5.5',
+					weight: 80,
+				}],
+				acceptableFallbacks: [{
+					provider: 'human_issue_queue',
+					model: 'senior-reviewer',
+					maxQualityPenalty: 0.2,
+				}],
+				fallbackPolicy: 'fail_if_unavailable',
+			},
+		});
+	});
+
 	it('does not fall back to package-owned project handlers', async () => {
 		const tenantRoot = createTenantRoot();
 

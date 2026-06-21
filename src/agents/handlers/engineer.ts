@@ -3,7 +3,7 @@ import {
 	normalizeCodexDocsMutationInput,
 	runCodexDocsMutationLifecycle,
 } from '../implementation/codex-docs-mutation.ts';
-import type { AgentExecutionResult, AgentHandler } from '../runtime-types.ts';
+import type { AgentHandlerOutput, AgentHandler } from '../runtime-types.ts';
 import {
 	createAgentMessage,
 	parseTriggerPayload,
@@ -14,7 +14,7 @@ interface EngineerInputs {
 	payload: HandlerPayload;
 }
 
-function resultStatus(result: CodexDocsMutationResult): AgentExecutionResult['status'] {
+function resultStatus(result: CodexDocsMutationResult): AgentHandlerOutput['status'] {
 	if (result.status === 'staged' || result.status === 'completed') return 'completed';
 	if (result.status === 'waiting') return 'waiting';
 	return 'failed';

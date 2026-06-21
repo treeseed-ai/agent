@@ -1,7 +1,18 @@
 import type {
+	AgentExpectedOutput,
 	AgentHandlerKind,
 	AgentRuntimeSpec,
 	AgentRunStatus,
+	AgentWorkPackage,
+	ExecutionArtifactRef,
+	ExecutionPreparationResult,
+	ExecutionProviderDescriptor,
+	ExecutionProviderObservation,
+	ExecutionProviderObserveInput,
+	ExecutionRunRef,
+	ExecutionRunSnapshot,
+	ExecutionUsageActual,
+	ExecutionWorkspaceContext,
 	AgentTriggerConfig,
 } from '@treeseed/sdk/types/agents';
 import type { AgentErrorCategory } from './contracts/run.ts';
@@ -33,7 +44,7 @@ export interface AgentTriggerInvocation {
 	cursorValue?: string | null;
 }
 
-export interface AgentExecutionResult {
+export interface AgentHandlerOutput {
 	status: AgentRunStatus;
 	summary: string;
 	stdout?: string;
@@ -79,12 +90,29 @@ export interface AgentResearchResult {
 	errorCategory?: AgentErrorCategory | null;
 }
 
-export interface AgentExecutionAdapter {
-	runTask(input: {
-		agent: AgentRuntimeSpec;
-		runId: string;
-		prompt: string;
-	}): Promise<AgentExecutionResult>;
+export interface ExecutionProviderInvocation {
+	assignment: ProviderAssignment;
+	capacityEnvelope: AgentCapacityEnvelope;
+	decisionInput: DecisionExecutionInput;
+	agent: AgentRuntimeSpec;
+	workPackage: AgentWorkPackage;
+	leaseToken: string | null;
+	runnerId: string;
+	projectAgentClass?: ProjectAgentClass | null;
+	workspace?: ExecutionWorkspaceContext | null;
+	metadata?: Record<string, unknown>;
+}
+
+export interface ExecutionProviderAdapter {
+	describe(): ExecutionProviderDescriptor | Promise<ExecutionProviderDescriptor>;
+	observe(input: ExecutionProviderObserveInput): Promise<ExecutionProviderObservation>;
+	prepare?(input: ExecutionProviderInvocation): Promise<ExecutionPreparationResult>;
+	start(input: ExecutionProviderInvocation): Promise<ExecutionRunSnapshot>;
+	poll?(input: ExecutionRunRef): Promise<ExecutionRunSnapshot>;
+	resume?(input: ExecutionRunRef): Promise<ExecutionRunSnapshot>;
+	cancel?(input: ExecutionRunRef & { reason: string }): Promise<ExecutionRunSnapshot>;
+	collectUsage?(input: ExecutionRunRef): Promise<ExecutionUsageActual[]>;
+	collectArtifacts?(input: ExecutionRunRef): Promise<ExecutionArtifactRef[]>;
 }
 
 export interface AgentMutationAdapter {
@@ -176,7 +204,7 @@ export interface AgentContext {
 	} | null;
 	sdk: ScopedAgentSdk;
 	trigger: AgentTriggerInvocation;
-	execution: AgentExecutionAdapter;
+	execution: ExecutionProviderAdapter;
 	mutations: AgentMutationAdapter;
 	repository: AgentRepositoryInspectionAdapter;
 	verification: AgentVerificationAdapter;
@@ -190,7 +218,9 @@ export interface AgentHandler<TInputs = unknown, TResult = unknown> {
 	kind: AgentHandlerKind;
 	resolveInputs(context: AgentContext): Promise<TInputs>;
 	execute(context: AgentContext, inputs: TInputs): Promise<TResult>;
-	emitOutputs(context: AgentContext, result: TResult): Promise<AgentExecutionResult>;
+	emitOutputs(context: AgentContext, result: TResult): Promise<AgentHandlerOutput>;
 }
+
+export type { AgentExpectedOutput, AgentWorkPackage };
 
 export {};

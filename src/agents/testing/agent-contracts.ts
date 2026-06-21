@@ -6,7 +6,24 @@ import { listRegisteredAgentHandlers, resolveAgentHandler } from '../registry.ts
 import { loadAllAgentSpecs } from '../spec-loader.ts';
 import type { NormalizedAgentRuntimeSpec } from '../spec-types.ts';
 
-const EXECUTION_PROVIDERS = new Set(['codex', 'codex_subscription', 'stub', 'manual', 'copilot']);
+const EXECUTION_PROVIDERS = new Set([
+	'codex',
+	'codex_subscription',
+	'copilot',
+	'jira',
+	'jira_issue_queue',
+	'human_issue_queue',
+	'github_issues',
+	'github_issue_queue',
+	'issue_queue',
+	'discord',
+	'discord_thread',
+	'workflow',
+	'workflow_operation',
+	'deterministic_workflow',
+	'github_actions',
+	'github_actions_workflow',
+]);
 
 export interface AgentContractIssue {
 	severity: 'error' | 'warning';

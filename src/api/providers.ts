@@ -46,7 +46,24 @@ export function resolveApiRuntimeProviders(config: ApiConfig, overrides: ApiRunt
 	}, 'auth');
 	addProviders(authRegistry, overrides.auth, 'auth');
 
-	addProviders(agentExecution, { stub: { id: 'stub' } }, 'agent execution');
+	addProviders(agentExecution, {
+		codex: { id: 'codex' },
+		codex_subscription: { id: 'codex_subscription' },
+		copilot: { id: 'copilot' },
+		jira: { id: 'jira' },
+		jira_issue_queue: { id: 'jira_issue_queue' },
+		human_issue_queue: { id: 'human_issue_queue' },
+		github_issues: { id: 'github_issues' },
+		github_issue_queue: { id: 'github_issue_queue' },
+		issue_queue: { id: 'issue_queue' },
+		discord: { id: 'discord' },
+		discord_thread: { id: 'discord_thread' },
+		workflow: { id: 'workflow' },
+		workflow_operation: { id: 'workflow_operation' },
+		deterministic_workflow: { id: 'deterministic_workflow' },
+		github_actions: { id: 'github_actions' },
+		github_actions_workflow: { id: 'github_actions_workflow' },
+	}, 'agent execution');
 	addProviders(agentQueue, { memory: { id: 'memory' } }, 'agent queue');
 	addProviders(agentNotification, { stub: { id: 'stub' } }, 'agent notification');
 	addProviders(agentRepository, { stub: { id: 'stub' } }, 'agent repository');

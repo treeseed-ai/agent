@@ -5,7 +5,7 @@ import type {
 	WorkdayPolicy,
 } from '@treeseed/sdk';
 import { listRegisteredAgentHandlers as listCoreRegisteredAgentHandlers } from '../agents/registry.ts';
-import { buildTaskContext, enqueueTaskFromSdk } from '../services/common.ts';
+import { buildTaskContext } from '../services/common.ts';
 import { admissionForTaskProposal } from '../services/task-admission.ts';
 import type { ApiContext } from './http.ts';
 import { jsonError, requireScope } from './http.ts';
@@ -223,17 +223,18 @@ export function registerAgentRoutes(
 		const unauthorized = authorizeRequest(c as ApiContext, options);
 		if (unauthorized) return unauthorized;
 		const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
-		try {
-			return c.json(await enqueueTaskFromSdk(options.sdk, {
-				taskId: c.req.param('id'),
-				queueName: typeof body.queueName === 'string' ? body.queueName : undefined,
-				deliveryDelaySeconds: body.delaySeconds === undefined ? undefined : Number(body.delaySeconds),
-				actor: actor(body, defaultActor),
-			}));
-		} catch (error) {
-			const message = error instanceof Error ? error.message : String(error);
-			return jsonError(c, /Unknown task/.test(message) ? 404 : /Queue producer/.test(message) ? 501 : 500, message);
-		}
+		const result = await options.sdk.recordTaskProgress({
+			id: c.req.param('id'),
+			state: 'waiting',
+			appendEvent: {
+				kind: 'assignment_ready',
+				data: { transport: 'api_assignment' },
+			},
+			actor: actor(body, defaultActor),
+		});
+		return result.payload
+			? c.json({ ok: true, taskId: c.req.param('id'), queued: false, transport: 'api_assignment' })
+			: jsonError(c, 404, 'Unknown task.');
 	});
 
 	app.post(withPrefix(prefix, '/tasks/:id/followups'), async (c) => {
@@ -306,23 +307,6 @@ export function registerAgentRoutes(
 			created.push(result);
 		}
 		return c.json({ ok: true, payload: created.map((entry) => entry.payload) });
-	});
-
-	app.post(withPrefix(prefix, '/queue/enqueue'), async (c) => {
-		const unauthorized = authorizeRequest(c as ApiContext, options);
-		if (unauthorized) return unauthorized;
-		const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
-		try {
-			return c.json(await enqueueTaskFromSdk(options.sdk, {
-				taskId: String(body.taskId ?? ''),
-				queueName: typeof body.queueName === 'string' ? body.queueName : undefined,
-				deliveryDelaySeconds: body.deliveryDelaySeconds === undefined ? undefined : Number(body.deliveryDelaySeconds),
-				actor: actor(body, defaultActor),
-			}));
-		} catch (error) {
-			const message = error instanceof Error ? error.message : String(error);
-			return jsonError(c, /Unknown task/.test(message) ? 404 : /Queue push client/.test(message) ? 501 : 500, message);
-		}
 	});
 
 	app.post(withPrefix(prefix, '/reports'), async (c) => {

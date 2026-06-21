@@ -1,13 +1,21 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { AgentKernel, ModeScheduler } from '../../src/agents/kernel/agent-kernel.ts';
+import type { ExecutionProviderAdapter } from '../../src/agents/runtime-types.ts';
+import type { ExecutionProviderDescriptor } from '@treeseed/sdk/types/agents';
+import { resetTreeseedDeployConfigForTests } from '@treeseed/sdk/platform/deploy-runtime';
 
 const tempRoots: string[] = [];
 const originalCwd = process.cwd();
 
+beforeEach(() => {
+	resetTreeseedDeployConfigForTests();
+});
+
 afterEach(() => {
+	resetTreeseedDeployConfigForTests();
 	process.chdir(originalCwd);
 	for (const root of tempRoots.splice(0)) {
 		rmSync(root, { recursive: true, force: true });
@@ -29,7 +37,7 @@ cloudflare:
   accountId: account-123
 providers:
   agents:
-    execution: stub
+    execution: codex
     mutation: local_branch
     repository: stub
     verification: stub
@@ -66,6 +74,53 @@ export const plannerHandler: AgentHandler<Record<string, never>, { repoRoot: str
 };
 `, 'utf8');
 	return { parentRoot, tenantRoot };
+}
+
+class NamedExecutionProviderAdapter implements ExecutionProviderAdapter {
+	constructor(
+		private readonly id: string,
+		private readonly kind: ExecutionProviderDescriptor['kind'],
+	) {}
+
+	async describe() {
+		return {
+			id: this.id,
+			kind: this.kind,
+			capabilities: ['planning', 'repo_read'],
+			nativeUnit: 'assignment',
+			quotaVisibility: 'opaque' as const,
+			maxConcurrentAssignments: 1,
+			supportsAsync: false,
+			supportsCancel: false,
+			supportsResume: false,
+			supportsUsage: false,
+			supportsArtifacts: false,
+		};
+	}
+
+	async observe() {
+		return {
+			descriptor: await this.describe(),
+			available: true,
+			pressure: 'normal' as const,
+			activeAssignmentCount: 0,
+		};
+	}
+
+	async start(input: Parameters<ExecutionProviderAdapter['start']>[0]) {
+		return {
+			status: 'completed' as const,
+			summary: `${this.id} completed ${input.workPackage.title}.`,
+			runId: input.assignment.id,
+			outputs: {
+				finalResponse: `${this.kind}:${input.workPackage.kind}`,
+			},
+			metadata: {
+				provider: this.id,
+				kind: this.kind,
+			},
+		};
+	}
 }
 
 describe('agent kernel project root support', () => {
@@ -196,6 +251,106 @@ describe('agent kernel project root support', () => {
 		});
 		expect(modeRuns.map((run) => run.status)).toEqual(['running', 'succeeded']);
 		expect(modeRuns[0]?.capacityEnvelope).toMatchObject({ mode: 'planning' });
+	});
+
+	it('runs the same semantic handler across AI, human, and workflow execution providers without handler forks', async () => {
+		const { parentRoot, tenantRoot } = createIntegratedTenant();
+		process.chdir(tenantRoot);
+		const sdk = {
+			repoRoot: tenantRoot,
+			async listRawAgentSpecs() {
+				return [{
+					id: 'planner-agent',
+					body: '',
+					frontmatter: {
+						slug: 'planner-agent',
+						handler: 'planner',
+						enabled: true,
+						systemPrompt: 'Report the runtime root.',
+						persona: 'Test planner',
+						triggers: [{ type: 'startup', runOnStart: true }],
+						permissions: [{ model: 'message', operations: ['create'] }],
+						execution: {},
+						outputs: {},
+					},
+				}];
+			},
+			scopeForAgent() {
+				return this;
+			},
+			async recordRun() {},
+			async upsertCursor() {},
+		};
+		const providerCases = [
+			{ id: 'fake-ai', kind: 'ai_model' as const },
+			{ id: 'fake-human', kind: 'human_issue_queue' as const },
+			{ id: 'fake-workflow', kind: 'deterministic_workflow' as const },
+		];
+		const summaries: string[] = [];
+		for (const provider of providerCases) {
+			const modeRuns: Array<Record<string, unknown>> = [];
+			const kernel = new AgentKernel(sdk as any, tenantRoot, {
+				execution: new NamedExecutionProviderAdapter(provider.id, provider.kind),
+			});
+			const result = await kernel.runAssignment({
+				assignment: {
+					id: `assignment-${provider.id}`,
+					teamId: 'team-1',
+					projectId: 'project-1',
+					capacityProviderId: 'provider-1',
+					executionProviderId: provider.id,
+					projectAgentClassId: 'class-1',
+					mode: 'planning',
+					status: 'leased',
+					leaseState: 'leased',
+					agentId: 'planner-agent',
+					capacityEnvelope: {
+						teamId: 'team-1',
+						projectId: 'project-1',
+						mode: 'planning',
+						capacityProviderId: 'provider-1',
+						executionProviderId: provider.id,
+						metadata: { executionProviderKind: provider.kind },
+					},
+					decisionInput: {
+						teamId: 'team-1',
+						projectId: 'project-1',
+						projectAgentClassId: 'class-1',
+						mode: 'planning',
+						agentId: 'planner-agent',
+						capacity: {
+							teamId: 'team-1',
+							projectId: 'project-1',
+							mode: 'planning',
+							capacityProviderId: 'provider-1',
+						},
+						input: {},
+					},
+				} as any,
+				recordModeRun: async (run) => {
+					modeRuns.push(run as Record<string, unknown>);
+				},
+			});
+
+			expect(result).toMatchObject({
+				status: 'completed',
+				mode: 'planning',
+				summary: `planning:${parentRoot}`,
+				traceRefs: {
+					agentSlug: 'planner-agent',
+				},
+			});
+			expect(modeRuns.map((run) => run.status)).toEqual(['running', 'succeeded']);
+			expect(modeRuns.at(-1)?.outputs).toMatchObject({
+				metadata: {
+					mode: 'planning',
+				},
+			});
+			summaries.push(result.summary);
+		}
+
+		expect(new Set(summaries)).toEqual(new Set([`planning:${parentRoot}`]));
+		expect(providerCases.map((entry) => entry.id)).not.toContain('human_delegation');
 	});
 
 	it('returns a bounded fallback for unsupported assignment modes without executing the handler', async () => {

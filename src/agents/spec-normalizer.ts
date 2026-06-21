@@ -24,7 +24,24 @@ import type {
 
 const TRIGGER_KINDS: readonly AgentTriggerKind[] = ['schedule', 'message', 'follow', 'startup'];
 const PERMISSION_OPERATIONS: readonly AgentPermissionOperation[] = ['get', 'search', 'follow', 'pick', 'create', 'update'];
-const EXECUTION_PROVIDERS = new Set(['codex', 'codex_subscription', 'stub', 'manual', 'copilot']);
+const EXECUTION_PROVIDERS = new Set([
+	'codex',
+	'codex_subscription',
+	'copilot',
+	'jira',
+	'jira_issue_queue',
+	'human_issue_queue',
+	'github_issues',
+	'github_issue_queue',
+	'issue_queue',
+	'discord',
+	'discord_thread',
+	'workflow',
+	'workflow_operation',
+	'deterministic_workflow',
+	'github_actions',
+	'github_actions_workflow',
+]);
 const APPROVAL_POLICIES = new Set(['never', 'on_request', 'always']);
 const SANDBOX_MODES = new Set(['read_only', 'workspace_write']);
 const REASONING_EFFORTS = new Set(['low', 'medium', 'high']);

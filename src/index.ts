@@ -13,10 +13,19 @@ export {
 } from './agents/adapters/codex-auth.ts';
 export {
 	CodexRequestSafetyError,
-	CodexSubscriptionExecutionAdapter,
+	CodexSubscriptionExecutionProviderAdapter,
 	runCodexSubscriptionTask,
 	validateCodexExecutionRequest,
 } from './agents/adapters/execution-codex.ts';
+export {
+	JiraExecutionProviderAdapter,
+	resolveJiraExecutionProviderConfig,
+} from './agents/adapters/execution-jira.ts';
+export {
+	WorkflowExecutionProviderAdapter,
+	type WorkflowExecutionProviderAdapterOptions,
+	type WorkflowOperationDispatchResult,
+} from './agents/adapters/execution-workflow.ts';
 export { createOperationsAdapter, SdkOperationsAdapter } from './agents/adapters/operations.ts';
 export {
 	collectAgentArtifactApiState,
@@ -72,6 +81,8 @@ export type * from './services/agent-worktrees.ts';
 export type * from './agents/adapters/codex-readiness.ts';
 export type * from './agents/adapters/codex-auth.ts';
 export type * from './agents/adapters/execution-codex.ts';
+export type * from './agents/adapters/execution-jira.ts';
+export type * from './agents/adapters/execution-workflow.ts';
 export type * from './services/research-knowledge-workday.ts';
 export type * from './services/codebase-documentation-scanner.ts';
 export type * from './api/types.ts';

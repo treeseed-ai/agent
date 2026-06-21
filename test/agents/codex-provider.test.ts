@@ -14,11 +14,17 @@ import {
 	resolveCodexAuthFile,
 } from '../../src/agents/adapters/codex-auth.ts';
 import {
-	CodexSubscriptionExecutionAdapter,
+	CodexSubscriptionExecutionProviderAdapter,
 	runCodexSubscriptionTask,
 	type CodexExecutionRequest,
 } from '../../src/agents/adapters/execution-codex.ts';
 import type { AgentRuntimeSpec } from '@treeseed/sdk/types/agents';
+import type {
+	AgentCapacityEnvelope,
+	DecisionExecutionInput,
+	ProviderAssignment,
+} from '@treeseed/sdk/agent-capacity';
+import type { ExecutionProviderInvocation } from '../../src/agents/runtime-types.ts';
 
 const baseRequest: CodexExecutionRequest = {
 	taskId: 'task:codex-provider-skeleton',
@@ -66,6 +72,49 @@ const agent: AgentRuntimeSpec = {
 	},
 };
 
+function executionInvocation(input: {
+	agent: AgentRuntimeSpec;
+	runId: string;
+	instructions: string;
+}): ExecutionProviderInvocation {
+	return {
+		assignment: {
+			id: input.runId,
+			teamId: 'team-test',
+			projectId: 'project-test',
+			capacityProviderId: 'capacity-provider-test',
+			projectAgentClassId: 'agent-class-test',
+			mode: 'acting',
+			status: 'leased',
+			leaseState: 'leased',
+			agentId: input.agent.slug,
+			handlerId: input.agent.handler,
+			capacityEnvelope: {} as AgentCapacityEnvelope,
+			decisionInput: {} as DecisionExecutionInput,
+		} as ProviderAssignment,
+		capacityEnvelope: {} as AgentCapacityEnvelope,
+		decisionInput: {} as DecisionExecutionInput,
+		agent: input.agent,
+		workPackage: {
+			kind: 'implementation',
+			title: 'Codex provider test',
+			summary: 'Provider contract test.',
+			instructions: input.instructions,
+			context: {},
+			expectedOutputs: [{ type: 'final_response', required: true }],
+			constraints: {
+				mode: 'acting',
+				requiredCapabilities: ['repo_read'],
+				allowedPaths: input.agent.execution.allowedPaths,
+				forbiddenPaths: input.agent.execution.forbiddenPaths,
+			},
+		},
+		leaseToken: null,
+		runnerId: 'test-runner',
+		metadata: { runId: input.runId },
+	};
+}
+
 describe('codex subscription provider skeleton', () => {
 	it('reports missing SDK as a warning for non-Codex selections and blocker for Codex defaults', () => {
 		const missing = () => {
@@ -74,7 +123,7 @@ describe('codex subscription provider skeleton', () => {
 
 		const optional = checkCodexProviderReadiness({
 			env: {
-				TREESEED_AGENT_EXECUTION_PROVIDER: 'stub',
+				TREESEED_AGENT_EXECUTION_PROVIDER: 'jira',
 			},
 			nodeVersion: 'v24.0.0',
 			resolvePackage: missing,
@@ -228,7 +277,7 @@ describe('codex subscription provider skeleton', () => {
 			research: 'stub',
 		});
 
-		expect(runtime.execution).toBeInstanceOf(CodexSubscriptionExecutionAdapter);
+		expect(runtime.execution).toBeInstanceOf(CodexSubscriptionExecutionProviderAdapter);
 		expect(resolveAgentRuntimeProviders('/repo', {
 			execution: 'codex_subscription',
 			mutation: 'local_branch',
@@ -236,7 +285,7 @@ describe('codex subscription provider skeleton', () => {
 			verification: 'stub',
 			notification: 'stub',
 			research: 'stub',
-		}).execution).toBeInstanceOf(CodexSubscriptionExecutionAdapter);
+		}).execution).toBeInstanceOf(CodexSubscriptionExecutionProviderAdapter);
 	});
 
 	it('returns waiting for workspace-write requests missing worktree or allowed paths', async () => {
@@ -303,7 +352,7 @@ describe('codex subscription provider skeleton', () => {
 			finalResponse: 'Runtime adapter completed.',
 			usage: null,
 		}));
-		const adapter = new CodexSubscriptionExecutionAdapter({
+		const adapter = new CodexSubscriptionExecutionProviderAdapter({
 			repoRoot: '/repo',
 			createCodexClient: () => ({
 				startThread: () => ({ id: 'thread-runtime', run }),
@@ -320,16 +369,20 @@ describe('codex subscription provider skeleton', () => {
 			},
 		});
 
-		const result = await adapter.runTask({
+		const result = await adapter.start(executionInvocation({
 			agent,
 			runId: 'run-1',
-			prompt: 'Plan a docs task.',
-		});
+			instructions: 'Plan a docs task.',
+		}));
 
 		expect(result).toMatchObject({
 			status: 'completed',
-			stdout: 'Runtime adapter completed.',
+			outputs: {
+				finalResponse: 'Runtime adapter completed.',
+				stdout: 'Runtime adapter completed.',
+			},
 			metadata: {
+				provider: 'codex',
 				codex: {
 					provider: 'codex',
 					status: 'completed',

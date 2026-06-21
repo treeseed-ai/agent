@@ -20,16 +20,6 @@ const approvalRequests: Array<Record<string, unknown>> = [];
 const inboxItems: Array<Record<string, unknown>> = [];
 const WORKDAY_ORCHESTRATION_TEST_TIMEOUT_MS = 30_000;
 
-const pullQueue = {
-	pull: vi.fn(),
-	ack: vi.fn(async () => undefined),
-	retry: vi.fn(async () => undefined),
-};
-
-const pushQueue = {
-	enqueue: vi.fn(async () => undefined),
-};
-
 const sdk = {
 	claimTask: vi.fn(async () => ({ payload: {} })),
 	recordTaskProgress: vi.fn(async () => ({ payload: {} })),
@@ -180,21 +170,7 @@ vi.mock('../../src/services/common.ts', () => ({
 		task: tasks.find((task) => task.id === taskId) ?? null,
 		agent: null,
 	})),
-	createQueueClient: vi.fn(() => pullQueue),
-	createQueuePushClient: vi.fn(() => pushQueue),
 	createServiceSdk: vi.fn(() => sdk),
-	queueEnvelopeForTask: vi.fn((task) => ({
-		messageId: `message-${task.id}`,
-		taskId: task.id,
-		workDayId: task.workDayId,
-		agentId: task.agentId,
-		taskType: task.type,
-		idempotencyKey: task.idempotencyKey,
-		attempt: 1,
-		payloadRef: `d1:tasks/${task.id}`,
-		graphVersion: task.graphVersion ?? null,
-		budgetHint: 1,
-	})),
 	resolveServiceRepoRoot: vi.fn(() => '/tmp/treeseed'),
 	resolveWorkerConfig: vi.fn(() => ({
 		workerId: 'worker-test',
@@ -224,9 +200,6 @@ describe('research and knowledge workday orchestration', () => {
 		approvalRequests.splice(0);
 		inboxItems.splice(0);
 		vi.clearAllMocks();
-		pullQueue.ack.mockResolvedValue(undefined);
-		pullQueue.retry.mockResolvedValue(undefined);
-		pushQueue.enqueue.mockResolvedValue(undefined);
 	});
 
 	afterEach(() => {
@@ -271,9 +244,6 @@ describe('research and knowledge workday orchestration', () => {
 		});
 		const { runWorkerCycle } = await import('../../src/services/worker.ts');
 
-		pullQueue.pull.mockResolvedValueOnce({
-			messages: [{ body: { taskId: researchTask.id }, attempts: 1, leaseId: 'lease-1' }],
-		});
 		await expect(runWorkerCycle()).resolves.toMatchObject({ ok: true, processed: 1 });
 		const generateTask = tasks.find((task) => task.type === 'generate_knowledge_draft');
 		expect(generateTask).toBeTruthy();
@@ -287,9 +257,6 @@ describe('research and knowledge workday orchestration', () => {
 			nextTaskId: generateTask?.id,
 		});
 
-		pullQueue.pull.mockResolvedValueOnce({
-			messages: [{ body: { taskId: generateTask?.id }, attempts: 1, leaseId: 'lease-2' }],
-		});
 		await expect(runWorkerCycle()).resolves.toMatchObject({ ok: true, processed: 1 });
 		const optimizeTask = tasks.find((task) => task.type === 'optimize_knowledge_draft');
 		expect(taskOutputs[1]).toMatchObject({
@@ -301,9 +268,6 @@ describe('research and knowledge workday orchestration', () => {
 			nextTaskId: optimizeTask?.id,
 		});
 
-		pullQueue.pull.mockResolvedValueOnce({
-			messages: [{ body: { taskId: optimizeTask?.id }, attempts: 1, leaseId: 'lease-3' }],
-		});
 		await expect(runWorkerCycle()).resolves.toMatchObject({ ok: true, processed: 1 });
 		const promotionTask = tasks.find((task) => task.type === 'promote_knowledge_draft_request');
 		expect(promotionTask).toMatchObject({
@@ -353,11 +317,6 @@ describe('research and knowledge workday orchestration', () => {
 			'optimization_report',
 			'promotion_request',
 		]));
-		expect(pushQueue.enqueue).toHaveBeenCalledTimes(2);
-
-		pullQueue.pull.mockResolvedValueOnce({
-			messages: [{ body: { taskId: promotionTask?.id }, attempts: 1, leaseId: 'lease-4' }],
-		});
 		await expect(runWorkerCycle()).resolves.toMatchObject({ ok: true, processed: 1 });
 		expect(taskOutputs[3]).toMatchObject({
 			artifactKind: 'promotion_request',
@@ -404,9 +363,6 @@ describe('research and knowledge workday orchestration', () => {
 		});
 		const { runWorkerCycle } = await import('../../src/services/worker.ts');
 
-		pullQueue.pull.mockResolvedValueOnce({
-			messages: [{ body: { taskId: task.payload.id }, attempts: 1, leaseId: 'lease-revise' }],
-		});
 		await expect(runWorkerCycle()).resolves.toMatchObject({ ok: true, processed: 1 });
 
 		const revisionTask = tasks.find((candidate) =>
@@ -429,7 +385,6 @@ describe('research and knowledge workday orchestration', () => {
 			optimizationReport: { recommendation: 'revise' },
 			nextTaskId: revisionTask?.id,
 		});
-		expect(pushQueue.enqueue).toHaveBeenCalledTimes(1);
 	}, WORKDAY_ORCHESTRATION_TEST_TIMEOUT_MS);
 
 	it('does not create promotion followups for defer or reject optimization decisions', async () => {
@@ -496,16 +451,12 @@ describe('research and knowledge workday orchestration', () => {
 		});
 		const { runWorkerCycle } = await import('../../src/services/worker.ts');
 
-		pullQueue.pull
-			.mockResolvedValueOnce({ messages: [{ body: { taskId: deferTask.payload.id }, attempts: 1, leaseId: 'lease-defer' }] })
-			.mockResolvedValueOnce({ messages: [{ body: { taskId: rejectTask.payload.id }, attempts: 1, leaseId: 'lease-reject' }] });
 		await expect(runWorkerCycle()).resolves.toMatchObject({ ok: true, processed: 1 });
 		await expect(runWorkerCycle()).resolves.toMatchObject({ ok: true, processed: 1 });
 
 		expect(taskOutputs.map((output) => (output as any).optimizationReport?.recommendation)).toEqual(['defer', 'reject']);
 		expect(tasks.filter((candidate) => candidate.type === 'promote_knowledge_draft_request')).toHaveLength(0);
 		expect(tasks.filter((candidate) => candidate.type === 'generate_knowledge_draft')).toHaveLength(0);
-		expect(pushQueue.enqueue).not.toHaveBeenCalled();
 	}, WORKDAY_ORCHESTRATION_TEST_TIMEOUT_MS);
 
 	it('loads latest codebase inventory into research question context', async () => {
@@ -585,10 +536,6 @@ describe('research and knowledge workday orchestration', () => {
 			questions: [question],
 		});
 		const { runWorkerCycle } = await import('../../src/services/worker.ts');
-		pullQueue.pull.mockResolvedValueOnce({
-			messages: [{ body: { taskId: researchTask.id }, attempts: 1, leaseId: 'lease-code' }],
-		});
-
 		await expect(runWorkerCycle()).resolves.toMatchObject({ ok: true, processed: 1 });
 
 		expect(taskOutputs[0]).toMatchObject({

@@ -1,4 +1,4 @@
-import type { AgentExecutionResult, AgentContext } from '../runtime-types.ts';
+import type { AgentHandlerOutput, AgentContext } from '../runtime-types.ts';
 
 export interface HandlerPayload {
 	[key: string]: unknown;
@@ -81,14 +81,14 @@ export async function createAgentMessage(input: {
 	}
 }
 
-export function waiting(summary: string): AgentExecutionResult {
+export function waiting(summary: string): AgentHandlerOutput {
 	return {
 		status: 'waiting',
 		summary,
 	};
 }
 
-export function completed(summary: string, metadata: Record<string, unknown>): AgentExecutionResult {
+export function completed(summary: string, metadata: Record<string, unknown>): AgentHandlerOutput {
 	return {
 		status: 'completed',
 		summary,

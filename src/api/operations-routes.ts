@@ -3,7 +3,6 @@ import type { Hono } from 'hono';
 import type { AgentSdk } from '@treeseed/sdk';
 import { findDispatchCapability, findTreeseedOperation } from '@treeseed/sdk';
 import { executeHttpWorkflowOperation, isHttpWorkflowOperationAllowed } from './operations.ts';
-import { enqueueTaskFromSdk } from '../services/common.ts';
 import { enqueueTaskAndEnsureCapacity } from '../services/worker-capacity.ts';
 import { jsonError, requireScope } from './http.ts';
 import type { ApiConfig, AppVariables } from './types.ts';
@@ -72,13 +71,12 @@ export function registerOperationRoutes(
 						operation: resolvedOperation.name,
 					});
 				}
-				const capacity = await enqueueTaskAndEnsureCapacity(options.sdk, {
-					taskId: String((created.payload as Record<string, unknown>).id ?? ''),
-					actor: c.get('principal')?.id ?? 'api',
-					priorityClass: 'interactive',
-					projectId: options.config.projectId,
-					enqueueTask: enqueueTaskFromSdk,
-				});
+					const capacity = await enqueueTaskAndEnsureCapacity(options.sdk, {
+						taskId: String((created.payload as Record<string, unknown>).id ?? ''),
+						actor: c.get('principal')?.id ?? 'api',
+						priorityClass: 'interactive',
+						projectId: options.config.projectId,
+					});
 				return c.json({
 					ok: true,
 					mode: 'task',

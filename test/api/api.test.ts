@@ -119,7 +119,7 @@ function createTestApp(options: Parameters<typeof createTreeseedApiApp>[0] = {})
 				...(config.providers ?? {}),
 				auth: selectedAuthProvider,
 				agents: config.providers?.agents ?? {
-					execution: 'stub',
+					execution: 'codex',
 					queue: 'memory',
 					notification: 'stub',
 					repository: 'stub',
@@ -1531,8 +1531,6 @@ apiRuntimeDescribe('@treeseed/agent api runtime', () => {
 
 	it('queues remote-job workflow operations and reports warm worker capacity', async () => {
 		vi.stubEnv('TREESEED_CLOUDFLARE_ACCOUNT_ID', 'cf-test-account');
-		vi.stubEnv('TREESEED_QUEUE_ID', 'queue-123');
-		vi.stubEnv('TREESEED_QUEUE_PUSH_TOKEN', 'queue-secret');
 		vi.stubEnv('TREESEED_WORKER_POOL_SCALER', 'railway');
 		vi.stubEnv('TREESEED_RAILWAY_WORKER_SERVICE_ID', 'svc-worker');
 		vi.stubEnv('TREESEED_RAILWAY_ENVIRONMENT_ID', 'env-test');
@@ -1685,8 +1683,6 @@ apiRuntimeDescribe('@treeseed/agent api runtime', () => {
 
 	it('queues remote-job workflow operations and reports cold-starting worker capacity', async () => {
 		vi.stubEnv('TREESEED_CLOUDFLARE_ACCOUNT_ID', 'cf-test-account');
-		vi.stubEnv('TREESEED_QUEUE_ID', 'queue-123');
-		vi.stubEnv('TREESEED_QUEUE_PUSH_TOKEN', 'queue-secret');
 		vi.stubEnv('TREESEED_WORKER_POOL_SCALER', 'railway');
 		vi.stubEnv('TREESEED_RAILWAY_WORKER_SERVICE_ID', 'svc-worker');
 		vi.stubEnv('TREESEED_RAILWAY_ENVIRONMENT_ID', 'env-test');
@@ -1822,8 +1818,6 @@ apiRuntimeDescribe('@treeseed/agent api runtime', () => {
 
 	it('accepts remote-job workflow operations even when scaling is unapplied', async () => {
 		vi.stubEnv('TREESEED_CLOUDFLARE_ACCOUNT_ID', 'cf-test-account');
-		vi.stubEnv('TREESEED_QUEUE_ID', 'queue-123');
-		vi.stubEnv('TREESEED_QUEUE_PUSH_TOKEN', 'queue-secret');
 		const fetchMock = vi.fn(async () => new Response(JSON.stringify({ success: true, result: {} }), {
 			status: 200,
 			headers: { 'content-type': 'application/json' },
@@ -2100,7 +2094,7 @@ apiRuntimeDescribe('@treeseed/agent api runtime', () => {
 				providers: {
 					auth: 'missing',
 					agents: {
-						execution: 'stub',
+						execution: 'codex',
 						queue: 'memory',
 						notification: 'stub',
 						repository: 'stub',

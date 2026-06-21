@@ -1,17 +1,17 @@
 import { loadTreeseedPluginRuntime } from '@treeseed/sdk/platform/plugins';
-import {
-	CopilotExecutionAdapter,
-	ManualExecutionAdapter,
-	StubExecutionAdapter,
-} from './agents/adapters/execution.ts';
-import { CodexSubscriptionExecutionAdapter } from './agents/adapters/execution-codex.ts';
+import { CopilotExecutionProviderAdapter } from './agents/adapters/execution.ts';
+import { CodexSubscriptionExecutionProviderAdapter } from './agents/adapters/execution-codex.ts';
+import { DiscordExecutionProviderAdapter } from './agents/adapters/execution-discord.ts';
+import { GitHubIssueExecutionProviderAdapter } from './agents/adapters/execution-github-issues.ts';
+import { JiraExecutionProviderAdapter } from './agents/adapters/execution-jira.ts';
+import { WorkflowExecutionProviderAdapter } from './agents/adapters/execution-workflow.ts';
 import { LocalBranchMutationAdapter } from './agents/adapters/mutations.ts';
 import { SdkMessageNotificationAdapter, StubNotificationAdapter } from './agents/adapters/notification.ts';
 import { GitRepositoryInspectionAdapter, StubRepositoryInspectionAdapter } from './agents/adapters/repository.ts';
 import { ProjectGraphResearchAdapter, StubResearchAdapter } from './agents/adapters/research.ts';
 import { LocalVerificationAdapter, StubVerificationAdapter } from './agents/adapters/verification.ts';
 import type {
-	AgentExecutionAdapter,
+	ExecutionProviderAdapter,
 	AgentHandler,
 	AgentMutationAdapter,
 	AgentNotificationAdapter,
@@ -24,7 +24,7 @@ type RuntimePluginEntry = ReturnType<typeof loadTreeseedPluginRuntime>['plugins'
 
 let cachedAgentRuntime: null | {
 	providers: {
-		execution: Map<string, (repoRoot: string) => AgentExecutionAdapter>;
+		execution: Map<string, (repoRoot: string) => ExecutionProviderAdapter>;
 		mutation: Map<string, (repoRoot: string) => AgentMutationAdapter>;
 		repository: Map<string, () => AgentRepositoryInspectionAdapter>;
 		verification: Map<string, () => AgentVerificationAdapter>;
@@ -55,12 +55,23 @@ function collectAgentHandlersFromPlugin(pluginEntry: RuntimePluginEntry, registr
 
 function buildAgentRuntime() {
 	const runtime = loadTreeseedPluginRuntime();
-	const execution = new Map<string, (repoRoot: string) => AgentExecutionAdapter>([
-		['stub', () => new StubExecutionAdapter()],
-		['manual', () => new ManualExecutionAdapter()],
-		['copilot', () => new CopilotExecutionAdapter()],
-		['codex', (repoRoot) => new CodexSubscriptionExecutionAdapter({ repoRoot })],
-		['codex_subscription', (repoRoot) => new CodexSubscriptionExecutionAdapter({ repoRoot })],
+	const execution = new Map<string, (repoRoot: string) => ExecutionProviderAdapter>([
+		['copilot', () => new CopilotExecutionProviderAdapter()],
+		['codex', (repoRoot) => new CodexSubscriptionExecutionProviderAdapter({ repoRoot })],
+		['codex_subscription', (repoRoot) => new CodexSubscriptionExecutionProviderAdapter({ repoRoot })],
+		['jira', () => new JiraExecutionProviderAdapter()],
+		['jira_issue_queue', () => new JiraExecutionProviderAdapter()],
+		['human_issue_queue', () => new JiraExecutionProviderAdapter()],
+		['github_issues', () => new GitHubIssueExecutionProviderAdapter()],
+		['github_issue_queue', () => new GitHubIssueExecutionProviderAdapter()],
+		['issue_queue', () => new GitHubIssueExecutionProviderAdapter()],
+		['discord', () => new DiscordExecutionProviderAdapter()],
+		['discord_thread', () => new DiscordExecutionProviderAdapter()],
+		['workflow', () => new WorkflowExecutionProviderAdapter()],
+		['workflow_operation', () => new WorkflowExecutionProviderAdapter()],
+		['deterministic_workflow', () => new WorkflowExecutionProviderAdapter()],
+		['github_actions', () => new WorkflowExecutionProviderAdapter()],
+		['github_actions_workflow', () => new WorkflowExecutionProviderAdapter()],
 	]);
 	const mutation = new Map<string, (repoRoot: string) => AgentMutationAdapter>([
 		['local_branch', (repoRoot) => new LocalBranchMutationAdapter(repoRoot)],
@@ -85,7 +96,7 @@ function buildAgentRuntime() {
 
 	for (const pluginEntry of runtime.plugins) {
 		const agentProviders = readPluginRecord<Record<string, unknown>>(pluginEntry, 'agentProviders');
-		for (const [id, factory] of Object.entries((agentProviders.execution ?? {}) as Record<string, (repoRoot: string) => AgentExecutionAdapter>)) {
+		for (const [id, factory] of Object.entries((agentProviders.execution ?? {}) as Record<string, (repoRoot: string) => ExecutionProviderAdapter>)) {
 			assertUniqueProvider(execution, id, pluginEntry.package);
 			execution.set(id, factory);
 		}

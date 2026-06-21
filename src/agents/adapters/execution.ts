@@ -1,34 +1,59 @@
 import { normalizeAgentCliOptions } from '../cli-tools.ts';
-import type { AgentExecutionAdapter } from '../runtime-types.ts';
+import type { ExecutionProviderAdapter, ExecutionProviderInvocation } from '../runtime-types.ts';
 import { getTreeseedAgentProviderSelections } from '@treeseed/sdk/platform/deploy-runtime';
 import { runTreeseedCopilotTask } from '@treeseed/sdk/copilot';
-import { CodexSubscriptionExecutionAdapter } from './execution-codex.ts';
+import { CodexSubscriptionExecutionProviderAdapter } from './execution-codex.ts';
+import {
+	JiraExecutionProviderAdapter,
+	type JiraExecutionProviderConfig,
+} from './execution-jira.ts';
+import {
+	GitHubIssueExecutionProviderAdapter,
+	type GitHubIssuesExecutionProviderConfig,
+} from './execution-github-issues.ts';
+import {
+	DiscordExecutionProviderAdapter,
+	type DiscordExecutionProviderConfig,
+} from './execution-discord.ts';
+import {
+	WorkflowExecutionProviderAdapter,
+	type WorkflowExecutionProviderAdapterOptions,
+} from './execution-workflow.ts';
 import { prependCoreObjectiveToPrompt } from '../core-objective.ts';
 
-export class StubExecutionAdapter implements AgentExecutionAdapter {
-	async runTask(input: { prompt: string; runId: string }) {
-		const prompt = prependCoreObjectiveToPrompt({ prompt: input.prompt, repoRoot: process.cwd() });
-		return {
-			status: 'completed' as const,
-			summary: `Stubbed Copilot execution for ${input.runId}.`,
-			stdout: [
-				'# Planned Task',
-				'',
-				'1. Inspect the requested architecture context.',
-				'2. Produce a safe local change artifact.',
-				'3. Summarize the implementation intent.',
-				'',
-				`Prompt digest: ${prompt.slice(0, 240)}`,
-			].join('\n'),
-			stderr: '',
-		};
-	}
+function invocationRunId(input: ExecutionProviderInvocation) {
+	return typeof input.metadata?.runId === 'string' ? input.metadata.runId : input.assignment.id;
 }
 
-export class CopilotExecutionAdapter implements AgentExecutionAdapter {
-	async runTask(input: { agent: { cli?: { model?: string; allowTools?: string[]; additionalArgs?: string[] } }; prompt: string }) {
+export class CopilotExecutionProviderAdapter implements ExecutionProviderAdapter {
+	async describe() {
+		return {
+			id: 'copilot',
+			kind: 'ai_model' as const,
+			capabilities: ['planning', 'implementation', 'repo_read', 'repo_write'],
+			nativeUnit: 'assignment',
+			quotaVisibility: 'opaque' as const,
+			maxConcurrentAssignments: 1,
+			supportsAsync: false,
+			supportsCancel: false,
+			supportsResume: false,
+			supportsUsage: false,
+			supportsArtifacts: false,
+		};
+	}
+
+	async observe() {
+		return {
+			descriptor: await this.describe(),
+			available: true,
+			pressure: 'normal' as const,
+			activeAssignmentCount: 0,
+		};
+	}
+
+	async start(input: ExecutionProviderInvocation) {
 		const cli = normalizeAgentCliOptions(input.agent.cli);
-		const prompt = prependCoreObjectiveToPrompt({ prompt: input.prompt, repoRoot: process.cwd() });
+		const prompt = prependCoreObjectiveToPrompt({ prompt: input.workPackage.instructions, repoRoot: process.cwd() });
 		const result = await runTreeseedCopilotTask({
 			prompt,
 			cwd: process.cwd(),
@@ -40,43 +65,47 @@ export class CopilotExecutionAdapter implements AgentExecutionAdapter {
 			? `Ignored Copilot CLI-only arguments because Treeseed uses @github/copilot-sdk internally: ${cli.additionalArgs.join(' ')}`
 			: '';
 		return {
-			...result,
-			stderr: [result.stderr, ignoredArgs].filter(Boolean).join('\n'),
+			status: result.status,
+			summary: result.summary,
+			runId: invocationRunId(input),
+			outputs: {
+				stdout: result.stdout,
+				stderr: [result.stderr, ignoredArgs].filter(Boolean).join('\n'),
+			},
+			metadata: {
+				provider: 'copilot',
+			},
 		};
 	}
 }
 
-export class ManualExecutionAdapter implements AgentExecutionAdapter {
-	async runTask(input: { prompt: string; runId: string }) {
-		const prompt = prependCoreObjectiveToPrompt({ prompt: input.prompt, repoRoot: process.cwd() });
-		return {
-			status: 'completed' as const,
-			summary: `Manual execution mode is enabled for ${input.runId}.`,
-			stdout: [
-				'# Manual Execution Required',
-				'',
-				'This agent run is configured for manual execution.',
-				'Review the prompt below and complete the work outside the automated adapter.',
-				'',
-				prompt,
-			].join('\n'),
-			stderr: '',
-		};
-	}
-}
-
-export function createExecutionAdapter(configuredModeInput?: string, options: { repoRoot?: string } = {}) {
+export function createExecutionProviderAdapter(configuredModeInput?: string, options: {
+	repoRoot?: string;
+	jira?: JiraExecutionProviderConfig | null;
+	githubIssues?: GitHubIssuesExecutionProviderConfig | null;
+	discord?: DiscordExecutionProviderConfig | null;
+	workflow?: WorkflowExecutionProviderAdapterOptions | null;
+} = {}) {
 	const configuredMode = String(
 		configuredModeInput ?? process.env.TREESEED_AGENT_EXECUTION_PROVIDER ?? getTreeseedAgentProviderSelections().execution,
 	).toLowerCase();
-	if (configuredMode === 'manual') {
-		return new ManualExecutionAdapter();
+	if (configuredMode === 'jira' || configuredMode === 'jira_issue_queue' || configuredMode === 'human_issue_queue') {
+		return new JiraExecutionProviderAdapter({ config: options.jira });
+	}
+	if (configuredMode === 'github_issues' || configuredMode === 'github_issue_queue' || configuredMode === 'issue_queue') {
+		return new GitHubIssueExecutionProviderAdapter({ config: options.githubIssues });
+	}
+	if (configuredMode === 'discord' || configuredMode === 'discord_thread') {
+		return new DiscordExecutionProviderAdapter({ config: options.discord });
+	}
+	if (configuredMode === 'workflow' || configuredMode === 'workflow_operation' || configuredMode === 'deterministic_workflow' || configuredMode === 'github_actions' || configuredMode === 'github_actions_workflow') {
+		return new WorkflowExecutionProviderAdapter(options.workflow ?? {});
 	}
 	if (configuredMode === 'codex' || configuredMode === 'codex_subscription') {
-		return new CodexSubscriptionExecutionAdapter({ repoRoot: options.repoRoot });
+		return new CodexSubscriptionExecutionProviderAdapter({ repoRoot: options.repoRoot });
 	}
-	if (configuredMode !== 'copilot') {
-		return new StubExecutionAdapter();
+	if (configuredMode === 'copilot') {
+		return new CopilotExecutionProviderAdapter();
 	}
-	return new CopilotExecutionAdapter();
+	throw new Error(`Unsupported execution provider "${configuredMode}". Configure codex, copilot, jira, github_issues, discord, or workflow; provider-runner dryRun is the only fallback execution mode.`);
 }

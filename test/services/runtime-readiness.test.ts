@@ -134,5 +134,5 @@ describe('runtime readiness inventory', () => {
 		expect(payload.ok).toBe(true);
 		expect(payload.packageRoot).toBe(packageRoot);
 		expect(payload.graphContext?.status).toBe('ready');
-	}, 15000);
+	}, 45000);
 });

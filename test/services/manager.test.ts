@@ -124,6 +124,8 @@ function createSdkStub() {
 			{
 				slug: 'planner-agent',
 				handler: 'plan',
+				projectAgentClassId: 'planning',
+				projectAgentClassSlug: 'planning',
 				enabled: true,
 				persona: 'Plans and coordinates work.',
 				systemPrompt: 'Plan the next useful unit of work.',

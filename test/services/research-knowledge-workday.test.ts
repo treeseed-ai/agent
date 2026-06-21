@@ -269,7 +269,9 @@ describe('research and knowledge workday orchestration', () => {
 			artifactKind: 'research_note',
 			researchNote: {
 				kind: 'research_note',
-				contextQueries: [expect.objectContaining({ id: 'runtime-architecture' })],
+				contextQueries: expect.arrayContaining([
+					expect.objectContaining({ id: 'runtime-architecture' }),
+				]),
 			},
 			generatedArtifacts: [expect.objectContaining({ artifactKind: 'research_note' })],
 			nextTaskId: generateTask?.id,

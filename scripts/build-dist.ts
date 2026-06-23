@@ -82,7 +82,14 @@ function emitDeclarations() {
 		options: { ...parsed.options, declaration: true, emitDeclarationOnly: true, declarationDir: distRoot, noEmit: false },
 	});
 	const result = program.emit();
-	if (result.emitSkipped) throw new Error('Declaration build failed.');
+	if (result.emitSkipped) {
+		const diagnostics = ts.formatDiagnosticsWithColorAndContext(result.diagnostics, {
+			getCanonicalFileName: (fileName) => fileName,
+			getCurrentDirectory: () => process.cwd(),
+			getNewLine: () => '\n',
+		});
+		throw new Error(`Declaration build failed.\n${diagnostics}`);
+	}
 }
 
 rmSync(distRoot, { recursive: true, force: true });

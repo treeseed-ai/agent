@@ -17,17 +17,17 @@ const forbiddenPatterns = [
 ];
 
 function resolveSdkPackageRoot() {
+	const siblingSdkRoot = resolve(packageRoot, '..', 'sdk');
+	if (existsSync(resolve(siblingSdkRoot, 'package.json'))) {
+		return siblingSdkRoot;
+	}
+
 	try {
 		return resolve(dirname(require.resolve('@treeseed/sdk')), '..');
 	} catch (error) {
 		if (!(error && typeof error === 'object' && 'code' in error && error.code === 'MODULE_NOT_FOUND')) {
 			throw error;
 		}
-	}
-
-	const siblingSdkRoot = resolve(packageRoot, '..', 'sdk');
-	if (existsSync(resolve(siblingSdkRoot, 'package.json'))) {
-		return siblingSdkRoot;
 	}
 
 	throw new Error('@treeseed/sdk must be installed or available as a sibling package checkout for release verification.');

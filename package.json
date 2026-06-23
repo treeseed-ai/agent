@@ -1,6 +1,6 @@
 {
   "name": "@treeseed/agent",
-  "version": "0.11.1-dev.demo.20260623T045245Z",
+  "version": "0.11.1-dev.demo.20260623T053702Z",
   "description": "Treeseed agent service runtime package.",
   "license": "AGPL-3.0-only",
   "repository": {
@@ -131,9 +131,9 @@
     "prepack": "npm run build:dist",
     "test:smoke": "node --import tsx ./scripts/test-smoke.ts",
     "verify:direct": "npm run release:verify",
-    "verify:local": "TREESEED_VERIFY_DRIVER=direct node --import tsx ./scripts/verify-driver.ts",
-    "verify:action": "TREESEED_VERIFY_DRIVER=act node --import tsx ./scripts/verify-driver.ts",
-    "verify": "node --import tsx ./scripts/verify-driver.ts",
+    "verify:local": "TREESEED_VERIFY_DRIVER=direct TMPDIR=/tmp node --import tsx ./scripts/verify-driver.ts",
+    "verify:action": "TREESEED_VERIFY_DRIVER=act TMPDIR=/tmp node --import tsx ./scripts/verify-driver.ts",
+    "verify": "TMPDIR=/tmp node --import tsx ./scripts/verify-driver.ts",
     "release:setup": "npm run setup:ci",
     "release:check-tag": "node --import tsx ./scripts/assert-release-tag-version.ts",
     "release:verify": "node --import tsx ./scripts/release-verify.ts",
@@ -147,7 +147,7 @@
   },
   "dependencies": {
     "@openai/codex-sdk": "^0.130.0",
-    "@treeseed/sdk": "github:treeseed-ai/sdk#0.11.1-dev.demo.20260623T040145Z",
+    "@treeseed/sdk": "github:treeseed-ai/sdk#0.11.1-dev.demo.20260623T053254Z",
     "esbuild": "0.28.0",
     "hono": "^4.8.2",
     "typescript": "^5.9.3",

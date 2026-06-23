@@ -1,11 +1,13 @@
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import { dirname, resolve } from 'node:path';
+import { existsSync } from 'node:fs';
+import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
+import { dirname, join, relative, resolve } from 'node:path';
 import { compileDeclarativeContextQuery } from '@treeseed/sdk/graph/context-query-contracts';
-import { AgentSdk } from '@treeseed/sdk/sdk';
+import { parse as parseYaml } from 'yaml';
 import { AGENT_MESSAGE_TYPES } from '../contracts/messages.ts';
 import { listRegisteredAgentHandlers, resolveAgentHandler } from '../registry.ts';
-import { loadAllAgentSpecs } from '../spec-loader.ts';
+import { normalizeAgentRuntimeSpec } from '../spec-normalizer.ts';
 import type { NormalizedAgentRuntimeSpec } from '../spec-types.ts';
+import type { AgentSpecDiagnostic, RawAgentRuntimeSpec } from '../spec-types.ts';
 
 const EXECUTION_PROVIDERS = new Set([
 	'codex',
@@ -68,10 +70,72 @@ function issue(agent: NormalizedAgentRuntimeSpec, field: string, message: string
 	return { severity, slug: agent.slug, field, message };
 }
 
+function parseAgentSource(source: string) {
+	const match = source.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?/u);
+	if (!match) return { frontmatter: {}, body: source };
+	const frontmatter = parseYaml(match[1] ?? '') as unknown;
+	return {
+		frontmatter: frontmatter && typeof frontmatter === 'object' && !Array.isArray(frontmatter)
+			? frontmatter as Record<string, unknown>
+			: {},
+		body: source.slice(match[0].length),
+	};
+}
+
+async function discoverAgentContentRoots(repoRoot: string) {
+	const candidates = [
+		resolve(repoRoot, 'src/content/agents'),
+		resolve(repoRoot, 'docs/src/content/agents'),
+	];
+	return candidates.filter((candidate) => existsSync(candidate));
+}
+
+async function listAgentSourceFiles(root: string) {
+	const entries = await readdir(root, { withFileTypes: true }).catch(() => []);
+	return entries
+		.filter((entry) => entry.isFile() && /\.mdx?$/iu.test(entry.name))
+		.map((entry) => join(root, entry.name))
+		.sort((left, right) => left.localeCompare(right));
+}
+
+async function loadSourceAgentSpecs(repoRoot: string): Promise<{
+	specs: NormalizedAgentRuntimeSpec[];
+	diagnostics: AgentSpecDiagnostic[];
+}> {
+	const contentRoots = await discoverAgentContentRoots(repoRoot);
+	const registeredHandlers = await listRegisteredAgentHandlers({ tenantRoot: repoRoot });
+	const diagnostics: AgentSpecDiagnostic[] = [];
+	const specs: NormalizedAgentRuntimeSpec[] = [];
+
+	for (const contentRoot of contentRoots) {
+		for (const sourcePath of await listAgentSourceFiles(contentRoot)) {
+			const source = await readFile(sourcePath, 'utf8');
+			const parsed = parseAgentSource(source);
+			const rawSpec: RawAgentRuntimeSpec = {
+				...parsed.frontmatter,
+				body: parsed.body,
+				id: relative(contentRoot, sourcePath).replace(/\\/gu, '/').replace(/\.mdx?$/iu, ''),
+			};
+			const result = normalizeAgentRuntimeSpec(rawSpec, {
+				registeredHandlers: registeredHandlers as NormalizedAgentRuntimeSpec['handler'][],
+				messageTypes: [...AGENT_MESSAGE_TYPES],
+			});
+			diagnostics.push(...result.diagnostics);
+			if (result.spec) specs.push(result.spec);
+		}
+	}
+
+	return { specs, diagnostics };
+}
+
 async function hasGovernanceDeclaration(repoRoot: string, slug: string) {
-	const sourcePath = resolve(repoRoot, 'src/content/agents', `${slug}.mdx`);
-	const source = await readFile(sourcePath, 'utf8').catch(() => '');
-	return /^governance:\s*$/mu.test(source);
+	for (const contentRoot of await discoverAgentContentRoots(repoRoot)) {
+		for (const extension of ['.mdx', '.md']) {
+			const source = await readFile(resolve(contentRoot, `${slug}${extension}`), 'utf8').catch(() => '');
+			if (/^governance:\s*$/mu.test(source)) return true;
+		}
+	}
+	return false;
 }
 
 async function validateAgent(agent: NormalizedAgentRuntimeSpec, knownHandlers: string[], repoRoot: string) {
@@ -204,8 +268,7 @@ export async function runAgentContractChecks(options: {
 } = {}): Promise<AgentContractCheckResult> {
 	const repoRoot = resolve(options.repoRoot ?? process.cwd());
 	const generatedAt = (options.now ?? new Date()).toISOString();
-	const sdk = AgentSdk.createLocal({ repoRoot, contentRepository: { adapter: 'local' } });
-	const loaded = await loadAllAgentSpecs(sdk);
+	const loaded = await loadSourceAgentSpecs(repoRoot);
 	const knownHandlers = await listRegisteredAgentHandlers({ tenantRoot: repoRoot });
 	const slugCounts = new Map<string, number>();
 	for (const spec of loaded.specs) {

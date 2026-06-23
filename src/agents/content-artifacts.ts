@@ -99,7 +99,7 @@ export function buildLinkedNoteArtifact(input: LinkedNoteInput) {
 		title: input.title,
 		description: input.summary,
 		date,
-		status: 'draft',
+		status: 'planned',
 		tags: [...new Set(['agent-feedback', kindSlug, ...(input.tags ?? [])])],
 		author: input.context.agent.slug,
 		summary: input.summary,

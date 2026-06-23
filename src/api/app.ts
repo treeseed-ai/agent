@@ -5,6 +5,7 @@ import {
 } from '@treeseed/sdk/api';
 import { AgentSdk } from '@treeseed/sdk';
 import { MemoryAgentDatabase } from '@treeseed/sdk/d1-store';
+import type { Hono } from 'hono';
 import { registerAgentRoutes } from './agent-routes.ts';
 import { registerOperationRoutes } from './operations-routes.ts';
 import { registerProjectRoutes } from './project-routes.ts';
@@ -16,7 +17,9 @@ function createDefaultAgentApiSdk(repoRoot: string | undefined) {
 	});
 }
 
-export function createTreeseedApiRouter(options: ApiServerOptions = {}) {
+export type TreeseedAgentApiApp = Hono<any>;
+
+export function createTreeseedApiRouter(options: ApiServerOptions = {}): TreeseedAgentApiApp {
 	const surfaces = {
 		auth: true,
 		templates: true,
@@ -71,9 +74,9 @@ export function createTreeseedApiRouter(options: ApiServerOptions = {}) {
 			operations: false,
 		},
 		extensions,
-	});
+	}) as TreeseedAgentApiApp;
 }
 
-export function createTreeseedApiApp(options: ApiServerOptions = {}) {
+export function createTreeseedApiApp(options: ApiServerOptions = {}): TreeseedAgentApiApp {
 	return createTreeseedApiRouter(options);
 }

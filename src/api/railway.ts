@@ -3,6 +3,7 @@ import { Readable } from 'node:stream';
 import type { AddressInfo } from 'node:net';
 import type { Hono } from 'hono';
 import type { ApiServerOptions } from '@treeseed/sdk/api';
+import type { ApiConfig } from './types.ts';
 import { createTreeseedApiApp } from './app.ts';
 import { resolveApiConfig } from './config.ts';
 
@@ -36,7 +37,15 @@ async function honoNodeHandler(app: Hono<any>, request: Parameters<Server['emit'
 	Readable.fromWeb(webResponse.body as never).pipe(res);
 }
 
-export async function createTreeseedNodeServer(options: ApiServerOptions = {}) {
+export interface TreeseedNodeServer {
+	app: Hono<any>;
+	config: ApiConfig;
+	server: Server;
+	url: string;
+	close(): Promise<void>;
+}
+
+export async function createTreeseedNodeServer(options: ApiServerOptions = {}): Promise<TreeseedNodeServer> {
 	const config = {
 		...resolveApiConfig(),
 		...(options.config ?? {}),

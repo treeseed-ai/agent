@@ -14,10 +14,11 @@ function runDirectVerify() {
 const entrypointCheckOnly = process.env.TREESEED_VERIFY_ENTRYPOINT_CHECK === 'true';
 
 try {
-	await import('@treeseed/sdk/scripts/verify-driver');
+	const { runTreeseedVerifyDriver } = await import('@treeseed/sdk/verification');
 	if (entrypointCheckOnly) {
 		process.exit(0);
 	}
+	process.exit(runTreeseedVerifyDriver({ packageRoot: process.cwd() }));
 } catch (error) {
 	if (error && typeof error === 'object' && 'code' in error && error.code === 'ERR_MODULE_NOT_FOUND') {
 		if (entrypointCheckOnly) {

@@ -11,7 +11,7 @@ import {
 	MemoryAgentDatabase,
 } from '@treeseed/sdk/d1-store';
 import { resolveModelDefinition } from '@treeseed/sdk/models';
-import { serializeFrontmatterDocument } from '@treeseed/sdk/frontmatter';
+import { parseFrontmatterDocument, serializeFrontmatterDocument } from '@treeseed/sdk/frontmatter';
 import {
 	type SdkCreateMessageRequest,
 	type SdkMessageEntity,
@@ -183,6 +183,105 @@ async function walkFiles(root: string): Promise<string[]> {
 		}),
 	);
 	return nested.flat();
+}
+
+function jsonResponse(payload: unknown, status = 200) {
+	return new Response(JSON.stringify(payload), {
+		status,
+		headers: { 'content-type': 'application/json' },
+	});
+}
+
+function treeDxPatternMatches(pattern: string, candidate: string) {
+	const normalizedPattern = pattern.replace(/\\/g, '/').replace(/^\/+/u, '');
+	const normalizedCandidate = candidate.replace(/\\/g, '/').replace(/^\/+/u, '');
+	const contentRelativePattern = normalizedPattern.includes('/src/content/')
+		? normalizedPattern.slice(normalizedPattern.lastIndexOf('/src/content/') + '/src/content/'.length)
+		: normalizedPattern;
+	const contentRelativeCandidate = normalizedCandidate.includes('/src/content/')
+		? normalizedCandidate.slice(normalizedCandidate.lastIndexOf('/src/content/') + '/src/content/'.length)
+		: normalizedCandidate;
+	if (contentRelativePattern.endsWith('/**')) {
+		const prefix = contentRelativePattern.slice(0, -3);
+		return contentRelativeCandidate.startsWith(prefix) || normalizedCandidate.includes(`/src/content/${prefix}`);
+	}
+	return contentRelativePattern === contentRelativeCandidate
+		|| contentRelativeCandidate.startsWith(`${contentRelativePattern}/`)
+		|| normalizedCandidate.endsWith(`/src/content/${contentRelativePattern}`);
+}
+
+async function readTreeDxRequest(init?: RequestInit) {
+	if (!init?.body) return {};
+	if (typeof init.body === 'string') return JSON.parse(init.body) as Record<string, unknown>;
+	if (init.body instanceof Uint8Array) return JSON.parse(Buffer.from(init.body).toString('utf8')) as Record<string, unknown>;
+	return {};
+}
+
+async function createFixtureTreeDxFetch(repoRoot: string): Promise<typeof fetch> {
+	return async (input, init) => {
+		const url = new URL(String(input));
+		const body = await readTreeDxRequest(init);
+		const paths = Array.isArray(body.paths)
+			? body.paths.map(String)
+			: typeof body.path === 'string'
+				? [body.path]
+				: ['src/content/**'];
+		const files = (await walkFiles(repoRoot))
+			.map((filePath) => path.relative(repoRoot, filePath).replace(/\\/g, '/'))
+			.filter((filePath) => /\.(md|mdx)$/iu.test(filePath))
+			.filter((filePath) => paths.some((pattern) => treeDxPatternMatches(pattern, filePath)))
+			.sort();
+
+		if (url.pathname.endsWith('/paths/list')) {
+			return jsonResponse({
+				ok: true,
+				entries: files.map((filePath) => ({ path: filePath, kind: 'file' })),
+			});
+		}
+
+		if (url.pathname.endsWith('/files/read')) {
+			const requested = Array.isArray(body.paths)
+				? body.paths.map(String)
+				: typeof body.path === 'string'
+					? [body.path]
+					: [];
+			const readable = requested.length ? requested : files;
+			const result = await Promise.all(readable.map(async (filePath) => {
+				const content = await readFile(path.join(repoRoot, filePath), 'utf8');
+				const parsed = parseFrontmatterDocument(content);
+				return {
+					path: filePath,
+					content,
+					frontmatter: parsed.frontmatter,
+					body: parsed.body,
+				};
+			}));
+			return jsonResponse({ ok: true, file: result[0] ?? null, files: result });
+		}
+
+		if (url.pathname.endsWith('/files/search')) {
+			const limit = typeof body.limit === 'number' ? body.limit : files.length;
+			const result = await Promise.all(files.slice(0, limit).map(async (filePath) => {
+				const content = await readFile(path.join(repoRoot, filePath), 'utf8');
+				const parsed = parseFrontmatterDocument(content);
+				return {
+					path: filePath,
+					content,
+					frontmatter: parsed.frontmatter,
+					body: parsed.body,
+				};
+			}));
+			return jsonResponse({ ok: true, results: result });
+		}
+
+		return jsonResponse({
+			ok: false,
+			error: {
+				code: 'unhandled_fixture_treedx_route',
+				message: `Unhandled fixture TreeDX route ${url.pathname}`,
+			},
+		}, 404);
+	};
 }
 
 async function patchFixtureAgentSpecs(repoRoot: string) {
@@ -383,6 +482,7 @@ export async function createAgentTestRuntime(options?: {
 
 	await mkdir(persistTo, { recursive: true });
 	await initializeSandboxRepo(repoRoot);
+	const treeDxFetch = await createFixtureTreeDxFetch(repoRoot);
 	const [{ AgentKernel }, { AgentSdk }] = await Promise.all([
 		import('../kernel/agent-kernel.ts'),
 		import('@treeseed/sdk/sdk'),
@@ -397,6 +497,13 @@ export async function createAgentTestRuntime(options?: {
 			: new AgentSdk({
 				repoRoot,
 				database: new MemoryAgentDatabase(),
+				treeDx: {
+					baseUrl: 'https://treedx.fixture.test',
+					token: 'fixture-treedx-token',
+					repoId: 'fixture-repo',
+					ref: 'refs/heads/main',
+					fetchImpl: treeDxFetch,
+				},
 			});
 	const kernel = new AgentKernel(sdk, repoRoot, {
 		execution: options?.execution,

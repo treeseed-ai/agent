@@ -58,7 +58,7 @@ describe('agent package shape', () => {
 			expect(existsSync(sourcePathForBinSpecifier(binPath)), `${binName} source file`).toBe(true);
 		}
 
-			expect(packageJson.scripts.verify).toBe('tsx ./scripts/verify-driver.ts');
+			expect(packageJson.scripts.verify).toBe('node --import tsx ./scripts/verify-driver.ts');
 			expect(packageJson.scripts['verify:local']).toContain('./scripts/verify-driver.ts');
 			expect(packageJson.scripts['verify:action']).toContain('./scripts/verify-driver.ts');
 			expect(Object.keys(packageJson.scripts).some((name) => name.includes('processing'))).toBe(false);

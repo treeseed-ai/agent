@@ -46,12 +46,37 @@ import { loadCoreObjectiveContext } from '../core-objective.ts';
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 
+const AGENT_SPEC_LOAD_TIMEOUT_MS = 60_000;
+
 function nowIso() {
 	return new Date().toISOString();
 }
 
 function record(value: unknown): Record<string, unknown> {
 	return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+async function withTimeout<T>(input: {
+	promise: Promise<T>;
+	timeoutMs: number;
+	code: string;
+	message: string;
+}): Promise<T> {
+	let timer: ReturnType<typeof setTimeout> | null = null;
+	try {
+		return await Promise.race([
+			input.promise,
+			new Promise<T>((_, reject) => {
+				timer = setTimeout(() => {
+					const error = new Error(input.message);
+					(error as Error & { code?: string }).code = input.code;
+					reject(error);
+				}, input.timeoutMs);
+			}),
+		]);
+	} finally {
+		if (timer) clearTimeout(timer);
+	}
 }
 
 function validateAssignmentOutputs(input: {
@@ -566,12 +591,12 @@ export class AgentKernel {
 			capacityEnvelope,
 			decisionInput,
 			readiness: options.readiness ?? null,
-			treedxProxyHandle: options.treedxProxyHandle ?? assignment.treedxProxyHandle ?? null,
+			treedxProxyHandle: (options.treedxProxyHandle ?? assignment.treedxProxyHandle ?? null) as Parameters<typeof validateAgentKernelModeExecutionInput>[0]['treedxProxyHandle'],
 		});
 		if (validationFallback) {
 			return this.boundedAssignmentResult(options, validationFallback);
 		}
-		if (mode === 'acting' && options.readiness && !this.isAssignmentReadyForActing(options.readiness as Record<string, unknown>)) {
+		if (mode === 'acting' && options.readiness && !this.isAssignmentReadyForActing(options.readiness as unknown as Record<string, unknown>)) {
 			return this.boundedAssignmentResult(options, createAgentKernelModeFallback(
 				'assignment_decision_not_ready',
 				`Assignment ${assignment.id} is not ready for acting execution.`,
@@ -579,7 +604,22 @@ export class AgentKernel {
 			));
 		}
 
-		const { specs, diagnostics } = await loadActiveAgentSpecs(this.sdk);
+		let loadedAgentSpecs: Awaited<ReturnType<typeof loadActiveAgentSpecs>>;
+		try {
+			loadedAgentSpecs = await withTimeout({
+				promise: loadActiveAgentSpecs(this.sdk),
+				timeoutMs: AGENT_SPEC_LOAD_TIMEOUT_MS,
+				code: 'assignment_agent_spec_load_timeout',
+				message: `Active agent spec loading exceeded ${AGENT_SPEC_LOAD_TIMEOUT_MS}ms.`,
+			});
+		} catch (error) {
+			return this.boundedAssignmentResult(options, createAgentKernelModeFallback(
+				(error as Error & { code?: string }).code ?? 'assignment_agent_spec_load_failed',
+				error instanceof Error ? error.message : String(error),
+				{ retryable: true, metadata: { phase: 'load_active_agent_specs', timeoutMs: AGENT_SPEC_LOAD_TIMEOUT_MS } },
+			));
+		}
+		const { specs, diagnostics } = loadedAgentSpecs;
 		const errors = diagnostics.filter((entry) => entry.severity === 'error');
 		if (errors.length) {
 			return this.boundedAssignmentResult(options, createAgentKernelModeFallback(
@@ -640,10 +680,10 @@ export class AgentKernel {
 					kernelProfile: options.kernelProfile ?? options.projectAgentClass?.kernelProfile ?? null,
 					kernelPolicy: options.kernelPolicy ?? options.projectAgentClass?.kernelPolicy ?? null,
 					assignment,
-					readiness: options.readiness ?? null,
-					treedxProxyHandle: options.treedxProxyHandle ?? assignment.treedxProxyHandle ?? null,
-					capabilityHandles: assignment.capabilityHandles ?? assignment.workspaceContext?.capabilityHandles ?? null,
-					workspaceAccessMode: assignment.capabilityHandles?.workspaceAccessMode ?? assignment.workspaceContext?.workspaceAccessMode ?? null,
+					readiness: (options.readiness ?? null) as unknown as Record<string, unknown> | null,
+					treedxProxyHandle: (options.treedxProxyHandle ?? assignment.treedxProxyHandle ?? null) as unknown as Record<string, unknown> | null,
+					capabilityHandles: (assignment.capabilityHandles ?? assignment.workspaceContext?.capabilityHandles ?? null) as NonNullable<AgentContext['capacity']>['capabilityHandles'],
+					workspaceAccessMode: (assignment.capabilityHandles?.workspaceAccessMode ?? assignment.workspaceContext?.workspaceAccessMode ?? null) as string | null,
 					fallbackReason: null,
 				},
 				treeDx: this.treeDx,

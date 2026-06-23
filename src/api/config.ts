@@ -135,9 +135,9 @@ export function resolveApiConfig(env: NodeJS.ProcessEnv = process.env): ApiConfi
 			agents: {
 				execution: env.TREESEED_API_PROVIDER_AGENT_EXECUTION?.trim() || 'codex',
 				queue: env.TREESEED_API_PROVIDER_AGENT_QUEUE?.trim() || 'memory',
-				notification: env.TREESEED_API_PROVIDER_AGENT_NOTIFICATION?.trim() || 'stub',
-				repository: env.TREESEED_API_PROVIDER_AGENT_REPOSITORY?.trim() || 'stub',
-				verification: env.TREESEED_API_PROVIDER_AGENT_VERIFICATION?.trim() || 'stub',
+				notification: env.TREESEED_API_PROVIDER_AGENT_NOTIFICATION?.trim() || 'sdk_message',
+				repository: env.TREESEED_API_PROVIDER_AGENT_REPOSITORY?.trim() || 'git',
+				verification: env.TREESEED_API_PROVIDER_AGENT_VERIFICATION?.trim() || 'local',
 			},
 		},
 	};

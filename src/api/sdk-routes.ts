@@ -16,6 +16,14 @@ function withPrefix(prefix: string, path: string) {
 	return `${prefix}${path}`.replace(/\/{2,}/g, '/');
 }
 
+function routeParam(c: { req: { param: (name: string) => string | undefined } }, name: string) {
+	const value = c.req.param(name);
+	if (!value) {
+		throw new Error(`Missing route parameter "${name}".`);
+	}
+	return value;
+}
+
 export function registerSdkRoutes(
 	app: Hono<any>,
 	options: RegisterSdkRoutesOptions,
@@ -24,7 +32,7 @@ export function registerSdkRoutes(
 		const unauthorized = requireScope(c, options.scope);
 		if (unauthorized) return unauthorized;
 
-		const operation = c.req.param('operation');
+		const operation = routeParam(c, 'operation');
 		const body = await c.req.json().catch(() => ({})) as RemoteSdkOperationRequest;
 		try {
 			const result = await executeSdkOperation(

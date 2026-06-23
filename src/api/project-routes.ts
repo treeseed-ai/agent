@@ -80,6 +80,14 @@ function readOptionalString(record: Record<string, unknown>, ...keys: string[]) 
 	return value || null;
 }
 
+function routeParam(c: { req: { param: (name: string) => string | undefined } }, name: string) {
+	const value = c.req.param(name);
+	if (!value) {
+		throw new Error(`Missing route parameter "${name}".`);
+	}
+	return value;
+}
+
 function inferMessageKind(type: string, status: string): AgentMessageKind {
 	if (status === 'failed' || type.includes('failed')) return 'warning';
 	if (type.includes('waiting') || type.includes('review') || type.includes('release')) return 'action_requested';
@@ -430,16 +438,18 @@ export function registerProjectRoutes(
 	app.get(withPrefix(prefix, '/v1/workstreams/:id'), async (c) => {
 		const principal = c.get('principal');
 		if (!principal) return jsonError(c, 401, 'Authentication required.');
-		const detail = await options.sharedSdk.getWorkstream(c.req.param('id'));
-		if (!detail.payload) return jsonError(c, 404, `Unknown workstream "${c.req.param('id')}".`);
+		const workstreamId = routeParam(c, 'id');
+		const detail = await options.sharedSdk.getWorkstream(workstreamId);
+		if (!detail.payload) return jsonError(c, 404, `Unknown workstream "${workstreamId}".`);
 		return c.json({ ok: true, payload: detail.payload });
 	});
 
 	app.post(withPrefix(prefix, '/v1/workstreams/:id/save'), async (c) => {
 		const unauthorized = requireTeamCapability(c, 'manage_workstreams');
 		if (unauthorized) return unauthorized;
-		const existing = await options.sharedSdk.getWorkstream(c.req.param('id'));
-		if (!existing.payload) return jsonError(c, 404, `Unknown workstream "${c.req.param('id')}".`);
+		const workstreamId = routeParam(c, 'id');
+		const existing = await options.sharedSdk.getWorkstream(workstreamId);
+		if (!existing.payload) return jsonError(c, 404, `Unknown workstream "${workstreamId}".`);
 		const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
 		const result = await workflow.save({
 			message: typeof body.message === 'string' && body.message.trim() ? body.message.trim() : `Save ${existing.payload.title}`,
@@ -466,8 +476,9 @@ export function registerProjectRoutes(
 	app.post(withPrefix(prefix, '/v1/workstreams/:id/stage'), async (c) => {
 		const unauthorized = requireTeamCapability(c, 'stage_releases');
 		if (unauthorized) return unauthorized;
-		const existing = await options.sharedSdk.getWorkstream(c.req.param('id'));
-		if (!existing.payload) return jsonError(c, 404, `Unknown workstream "${c.req.param('id')}".`);
+		const workstreamId = routeParam(c, 'id');
+		const existing = await options.sharedSdk.getWorkstream(workstreamId);
+		if (!existing.payload) return jsonError(c, 404, `Unknown workstream "${workstreamId}".`);
 		const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
 		const result = await workflow.stage({
 			message: typeof body.message === 'string' && body.message.trim() ? body.message.trim() : `Stage ${existing.payload.title}`,
@@ -492,8 +503,9 @@ export function registerProjectRoutes(
 	app.post(withPrefix(prefix, '/v1/workstreams/:id/archive'), async (c) => {
 		const unauthorized = requireTeamCapability(c, 'manage_workstreams');
 		if (unauthorized) return unauthorized;
-		const existing = await options.sharedSdk.getWorkstream(c.req.param('id'));
-		if (!existing.payload) return jsonError(c, 404, `Unknown workstream "${c.req.param('id')}".`);
+		const workstreamId = routeParam(c, 'id');
+		const existing = await options.sharedSdk.getWorkstream(workstreamId);
+		if (!existing.payload) return jsonError(c, 404, `Unknown workstream "${workstreamId}".`);
 		const updated = await options.sharedSdk.upsertWorkstream({
 			...existing.payload,
 			state: 'archived',
@@ -556,16 +568,18 @@ export function registerProjectRoutes(
 	app.get(withPrefix(prefix, '/v1/releases/:id'), async (c) => {
 		const principal = c.get('principal');
 		if (!principal) return jsonError(c, 401, 'Authentication required.');
-		const release = await options.sharedSdk.getRelease(c.req.param('id'));
-		if (!release.payload) return jsonError(c, 404, `Unknown release "${c.req.param('id')}".`);
+		const releaseId = routeParam(c, 'id');
+		const release = await options.sharedSdk.getRelease(releaseId);
+		if (!release.payload) return jsonError(c, 404, `Unknown release "${releaseId}".`);
 		return c.json({ ok: true, payload: release.payload });
 	});
 
 	app.post(withPrefix(prefix, '/v1/releases/:id/publish'), async (c) => {
 		const unauthorized = requireTeamCapability(c, 'publish_releases');
 		if (unauthorized) return unauthorized;
-		const release = await options.sharedSdk.getRelease(c.req.param('id'));
-		if (!release.payload) return jsonError(c, 404, `Unknown release "${c.req.param('id')}".`);
+		const releaseId = routeParam(c, 'id');
+		const release = await options.sharedSdk.getRelease(releaseId);
+		if (!release.payload) return jsonError(c, 404, `Unknown release "${releaseId}".`);
 		const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
 		const workflowResult = await workflow.release({
 			bump: body.bump === 'major' || body.bump === 'minor' ? body.bump : 'patch',
@@ -582,8 +596,9 @@ export function registerProjectRoutes(
 	app.post(withPrefix(prefix, '/v1/releases/:id/rollback'), async (c) => {
 		const unauthorized = requireTeamCapability(c, 'publish_releases');
 		if (unauthorized) return unauthorized;
-		const release = await options.sharedSdk.getRelease(c.req.param('id'));
-		if (!release.payload) return jsonError(c, 404, `Unknown release "${c.req.param('id')}".`);
+		const releaseId = routeParam(c, 'id');
+		const release = await options.sharedSdk.getRelease(releaseId);
+		if (!release.payload) return jsonError(c, 404, `Unknown release "${releaseId}".`);
 		const updated = await options.sharedSdk.upsertRelease({
 			...release.payload,
 			state: 'rolled_back',
@@ -773,7 +788,7 @@ export function registerProjectRoutes(
 	app.get(withPrefix(prefix, '/v1/approvals/:approvalId'), async (c) => {
 		const principal = c.get('principal');
 		if (!principal) return jsonError(c, 401, 'Authentication required.');
-		const approvalId = c.req.param('approvalId');
+		const approvalId = routeParam(c, 'approvalId');
 		const state = await collectAgentArtifactApiState({
 			sdk: options.sharedSdk,
 			projectId: options.config.projectId,
@@ -820,7 +835,7 @@ export function registerProjectRoutes(
 			const payload = await dryRunAgentOperation({
 				sdk: options.sharedSdk,
 				projectId: options.config.projectId,
-				operation: c.req.param('operation'),
+				operation: routeParam(c, 'operation'),
 				body,
 				repoRoot: options.config.repoRoot,
 				environment: 'local',
@@ -849,7 +864,7 @@ export function registerProjectRoutes(
 			const result = await recordAgentApprovalDecision({
 				sdk: options.sharedSdk,
 				projectId: options.config.projectId,
-				approvalId: c.req.param('approvalId'),
+				approvalId: routeParam(c, 'approvalId'),
 				decision,
 				reason: typeof body.reason === 'string' ? body.reason : null,
 				actor: typeof principal.id === 'string' && principal.id ? principal.id : 'api',

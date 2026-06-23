@@ -65,9 +65,9 @@ export function resolveApiRuntimeProviders(config: ApiConfig, overrides: ApiRunt
 		github_actions_workflow: { id: 'github_actions_workflow' },
 	}, 'agent execution');
 	addProviders(agentQueue, { memory: { id: 'memory' } }, 'agent queue');
-	addProviders(agentNotification, { stub: { id: 'stub' } }, 'agent notification');
-	addProviders(agentRepository, { stub: { id: 'stub' } }, 'agent repository');
-	addProviders(agentVerification, { stub: { id: 'stub' } }, 'agent verification');
+	addProviders(agentNotification, { sdk_message: { id: 'sdk_message' } }, 'agent notification');
+	addProviders(agentRepository, { git: { id: 'git' } }, 'agent repository');
+	addProviders(agentVerification, { local: { id: 'local' } }, 'agent verification');
 
 	addProviders(agentExecution, overrides.agentExecution, 'agent execution');
 	addProviders(agentQueue, overrides.agentQueue, 'agent queue');

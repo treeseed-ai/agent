@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-
 import { isDirectEntrypoint } from '../entrypoint.ts';
 import { createServiceSdk } from './common.ts';
 import {
@@ -86,13 +85,14 @@ async function recordRunnerCloseDecision(
 		}).catch(() => null);
 		return;
 	}
-	for (const runner of runners as Array<Record<string, unknown>>) {
+	for (const runner of runners) {
+		const runnerRecord = runner as unknown as Record<string, unknown>;
 		await sdk.recordRunnerScaleDecision({
 			projectId: config.projectId,
 			environment: config.environment,
 			workDayId,
-			runnerId: typeof runner.runnerId === 'string' ? runner.runnerId : null,
-			runnerServiceName: typeof runner.runnerServiceName === 'string' ? runner.runnerServiceName : null,
+			runnerId: typeof runnerRecord.runnerId === 'string' ? runnerRecord.runnerId : null,
+			runnerServiceName: typeof runnerRecord.runnerServiceName === 'string' ? runnerRecord.runnerServiceName : null,
 			action,
 			reason,
 			metadata: { service: 'workdayManager' },
@@ -138,7 +138,7 @@ export async function runScheduledWorkdayManager(options: {
 	const requests = typeof sdk.listWorkdayRequests === 'function'
 		? (await sdk.listWorkdayRequests(config.projectId, config.environment, 'pending').catch(() => ({ payload: [] }))).payload ?? []
 		: [];
-	const oneOffRunRequested = (requests as Array<Record<string, unknown>>).some((entry) => entry.type === 'one_off_run');
+	const oneOffRunRequested = requests.some((entry) => (entry as unknown as Record<string, unknown>).type === 'one_off_run');
 	const initial = await runManagerCycle({ sdk, config, now });
 	const workDay = (initial as Record<string, unknown>).workDay as Record<string, unknown> | null;
 	if (!workDay && !oneOffRunRequested) {

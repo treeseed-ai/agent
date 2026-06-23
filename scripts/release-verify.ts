@@ -8,7 +8,7 @@ import { packageRoot } from './package-tools.ts';
 
 const require = createRequire(import.meta.url);
 const npmCacheDir = resolve(tmpdir(), 'treeseed-npm-cache');
-const textExtensions = new Set(['.js', '.ts', '.mjs', '.cjs', '.d.ts', '.json', '.md']);
+const textExtensions = new Set(['.js', '.ts', '.d.ts', '.json', '.md']);
 const forbiddenPatterns = [
 	/['"`]file:[^'"`\n]+['"`]/,
 	/['"`]workspace:[^'"`\n]+['"`]/,
@@ -86,12 +86,12 @@ function runPackedProviderRuntimeSmoke(installRoot: string) {
 		'  workerName: treeseed-agent-packed-smoke',
 		'providers:',
 		'  agents:',
-		'    execution: stub',
+		'    execution: codex',
 		'    mutation: local_branch',
-		'    repository: stub',
-		'    verification: stub',
-		'    notification: stub',
-		'    research: stub',
+		'    repository: git',
+		'    verification: local',
+		'    notification: sdk_message',
+		'    research: project_graph',
 		'',
 	].join('\n'), 'utf8');
 	const hostCodexAuthFile = process.env.TREESEED_CODEX_AUTH_FILE

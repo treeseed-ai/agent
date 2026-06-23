@@ -7,8 +7,7 @@ import {
 	type AgentOperationRequest,
 	type AgentOperationResult,
 } from '@treeseed/sdk/operations/agent-tools';
-import type { ScopedAgentSdk } from '@treeseed/sdk/sdk';
-import type { AgentOperationsAdapter } from '../runtime-types.ts';
+import type { AgentOperationsAdapter, AgentTaskEventSdk } from '../runtime-types.ts';
 
 type WorkflowExecutor = Pick<TreeseedOperationsSdk, 'execute'>;
 
@@ -17,6 +16,7 @@ type WorkflowExecutor = Pick<TreeseedOperationsSdk, 'execute'>;
 // assigned worktree, verified changed paths, snapshots, and repair-task output.
 const WORKFLOW_OPERATION_MAP: Record<AgentOperationRequest['operation'], string | null> = {
 	switch: 'switch',
+	update: 'update',
 	dev: 'dev',
 	verify: 'test',
 	save: 'save',
@@ -84,7 +84,7 @@ function completedResult(
 }
 
 async function appendOperationEvent(input: {
-	sdk?: Pick<ScopedAgentSdk, 'appendTaskEvent'>;
+	sdk?: AgentTaskEventSdk;
 	request: AgentOperationRequest;
 	result: AgentOperationResult;
 }) {
@@ -106,7 +106,7 @@ export class SdkOperationsAdapter implements AgentOperationsAdapter {
 	async runOperation(input: {
 		request: AgentOperationRequest;
 		grants: AgentOperationGrant[];
-		sdk?: Pick<ScopedAgentSdk, 'appendTaskEvent'>;
+		sdk?: AgentTaskEventSdk;
 	}) {
 		const decision = decideAgentOperationPermission({
 			request: input.request,

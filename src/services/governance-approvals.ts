@@ -158,6 +158,7 @@ export async function persistPromotionApprovalRequest(input: {
 	});
 	await input.sdk.createMessage({
 		type: 'approval_request_created',
+		actor: 'worker',
 		payload: {
 			approvalId,
 			approvalKind: 'promote_knowledge_draft',
@@ -171,6 +172,7 @@ export async function persistPromotionApprovalRequest(input: {
 	});
 	await input.sdk.createMessage({
 		type: 'team_inbox_item_created',
+		actor: 'worker',
 		payload: {
 			approvalId,
 			inboxItemId: `approval:${approvalId}`,

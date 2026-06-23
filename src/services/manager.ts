@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-
 import type { AgentRuntimeSpec } from '@treeseed/sdk/types/agents';
 import {
 	createControlPlaneReporter,
@@ -994,7 +993,7 @@ async function openWorkday(
 	policy: WorkdayPolicy,
 	now: Date,
 	reporter?: ControlPlaneReporter,
-) {
+): Promise<WorkDayRecord | null> {
 	const capacityPlan = await reporter?.getProjectCapacityPlan(config.environment as ProjectEnvironmentName).catch(() => null) ?? null;
 	const capacitySummary = capacityPlan ? summarizeCapacityPlan(capacityPlan) : null;
 	const providerDailyBudget = capacityPlan
@@ -1160,7 +1159,8 @@ async function openWorkday(
 			}
 		}
 	}
-	return created.payload;
+	const workDay = asRecord(created.payload);
+	return Object.keys(workDay).length > 0 ? workDay : null;
 }
 
 async function reserveWorkdayCapacity(options: {
@@ -2160,7 +2160,7 @@ async function materializeCompletedPlanningTasks(
 				projectId: config.projectId,
 				workDayId,
 				taskId: String((created.payload as TaskRecord).id ?? ''),
-				phase: 'plan_admission',
+					phase: 'reserve',
 				credits: admission.admission.reservedCredits,
 				metadata: {
 					taskSignature: admission.classification.taskSignature,
@@ -2504,36 +2504,38 @@ async function reportWorkdaySummary(
 		releaseResults: Array.isArray(enrichedSummary.releaseResults) ? enrichedSummary.releaseResults as Record<string, unknown>[] : [],
 		codexUsage: Array.isArray(enrichedSummary.codexUsage) ? enrichedSummary.codexUsage as Record<string, unknown>[] : [],
 		generatedAt: String(enrichedSummary.generatedAt ?? new Date().toISOString()),
-	};
-	const docsAutomation = summarizeDocsAutomationWorkday(contentInput);
-	const linkedTasks = (Array.isArray(enrichedSummary.taskItems) ? enrichedSummary.taskItems : []).map((task) => ({
-		id: readString(task as Record<string, unknown>, 'id'),
-		type: readString(task as Record<string, unknown>, 'type') || null,
-		state: readString(task as Record<string, unknown>, 'state') || null,
-	}));
-	const linkedArtifacts = (Array.isArray(enrichedSummary.generatedArtifacts) ? enrichedSummary.generatedArtifacts : []).map((artifact) => ({
-		id: readString(artifact as Record<string, unknown>, 'id'),
-		kind: readString(artifact as Record<string, unknown>, 'artifactKind'),
-		taskId: readString(artifact as Record<string, unknown>, 'taskId') || null,
-		targetPath: readString(artifact as Record<string, unknown>, 'targetPath') || null,
-	}));
-	const linkedApprovals = (Array.isArray(enrichedSummary.generatedArtifacts) ? enrichedSummary.generatedArtifacts : [])
-		.filter((artifact) => ['promotion_request', 'release_request'].includes(readString(artifact as Record<string, unknown>, 'artifactKind')))
-		.map((artifact) => ({
-			id: readString(artifact as Record<string, unknown>, 'id'),
-			kind: readString(artifact as Record<string, unknown>, 'approvalKind', 'artifactKind'),
-			taskId: readString(artifact as Record<string, unknown>, 'taskId') || null,
+		};
+		const docsAutomation = summarizeDocsAutomationWorkday(contentInput);
+		const taskRecords = (Array.isArray(enrichedSummary.taskItems) ? enrichedSummary.taskItems : []).map((task) => ({ ...task }));
+		const artifactRecords = (Array.isArray(enrichedSummary.generatedArtifacts) ? enrichedSummary.generatedArtifacts : []).map((artifact) => ({ ...artifact }));
+		const linkedTasks = taskRecords.map((task) => ({
+			id: readString(task, 'id'),
+			type: readString(task, 'type') || null,
+			state: readString(task, 'state') || null,
 		}));
-	const linkedMutations = (Array.isArray(enrichedSummary.generatedArtifacts) ? enrichedSummary.generatedArtifacts : [])
-		.filter((artifact) => readString(artifact as Record<string, unknown>, 'artifactKind') === 'docs_mutation_result')
-		.map((artifact) => ({
-			id: readString(artifact as Record<string, unknown>, 'id'),
-			taskId: readString(artifact as Record<string, unknown>, 'taskId') || null,
-			targetPath: readString(artifact as Record<string, unknown>, 'targetPath') || null,
-			changedPaths: readStringArray((artifact as Record<string, unknown>).changedPaths),
-			verificationStatus: readString(artifact as Record<string, unknown>, 'verificationStatus') || null,
-			repairTaskId: readString(artifact as Record<string, unknown>, 'repairTaskId') || null,
+		const linkedArtifacts = artifactRecords.map((artifact) => ({
+			id: readString(artifact, 'id'),
+			kind: readString(artifact, 'artifactKind'),
+			taskId: readString(artifact, 'taskId') || null,
+			targetPath: readString(artifact, 'targetPath') || null,
 		}));
+		const linkedApprovals = artifactRecords
+			.filter((artifact) => ['promotion_request', 'release_request'].includes(readString(artifact, 'artifactKind')))
+			.map((artifact) => ({
+				id: readString(artifact, 'id'),
+				kind: readString(artifact, 'approvalKind', 'artifactKind'),
+				taskId: readString(artifact, 'taskId') || null,
+			}));
+		const linkedMutations = artifactRecords
+			.filter((artifact) => readString(artifact, 'artifactKind') === 'docs_mutation_result')
+			.map((artifact) => ({
+				id: readString(artifact, 'id'),
+				taskId: readString(artifact, 'taskId') || null,
+				targetPath: readString(artifact, 'targetPath') || null,
+				changedPaths: readStringArray(artifact.changedPaths),
+				verificationStatus: readString(artifact, 'verificationStatus') || null,
+				repairTaskId: readString(artifact, 'repairTaskId') || null,
+			}));
 	const reportSummary = {
 		...enrichedSummary,
 		docsAutomation,
@@ -2663,7 +2665,7 @@ async function reconcileManager(options: {
 	const earlyCloseRequested = pendingWorkdayRequests.some((entry) => entry.type === 'early_close');
 	const pauseRequested = pendingWorkdayRequests.some((entry) => entry.type === 'pause') && !manualRunRequested;
 	const insideWorkWindow = !pauseRequested && !earlyCloseRequested && (manualRunRequested || isWithinWorkWindow(now, policy.schedule));
-	let activeWorkDay = await getActiveWorkDay(sdk, config.projectId);
+	let activeWorkDay: WorkDayRecord | null = await getActiveWorkDay(sdk, config.projectId);
 	const initialLease = await claimManagerLease({
 		sdk,
 		config,

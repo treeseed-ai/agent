@@ -1,31 +1,7 @@
-import type { AgentHandler } from '../runtime-types.ts';
+import { createExecutionContentHandler } from './execution-content.ts';
 
-interface ReporterResult {
-	status: 'waiting';
-	summary: string;
-}
-
-export const reporterHandler: AgentHandler<Record<string, never>, ReporterResult> = {
+export const reporterHandler = createExecutionContentHandler({
 	kind: 'reporter',
-
-	async resolveInputs() {
-		return {};
-	},
-
-	async execute(context) {
-		return {
-			status: 'waiting',
-			summary: `Reporter ${context.agent.slug} is registered and waiting for later workday reporting phases.`,
-		};
-	},
-
-	async emitOutputs(_context, result) {
-		return {
-			status: result.status,
-			summary: result.summary,
-			metadata: {
-				reportWritten: false,
-			},
-		};
-	},
-};
+	defaultWorkPackageKind: 'report',
+	defaultArtifactKind: 'workday_summary',
+});

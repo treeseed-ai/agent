@@ -1,12 +1,27 @@
 import { access, mkdir } from 'node:fs/promises';
 import { constants } from 'node:fs';
+import type { CapacityGrant } from '@treeseed/sdk';
 import type { ProviderRuntimeConfig } from './config.ts';
 import { discoverProviderBudgets } from './budgets.ts';
 import { discoverProviderCapabilities } from './capabilities.ts';
 import { fetchProviderPortfolio, summarizeProviderPortfolio } from './portfolio.ts';
 import { createProviderMarketClient } from './client.ts';
 import { processProviderPortfolio } from './portfolio-processing.ts';
-import { runProviderRunnerOnce } from './runner.ts';
+
+function isCapacityGrant(value: unknown): value is CapacityGrant {
+	if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+	const grant = value as Partial<CapacityGrant>;
+	return typeof grant.id === 'string'
+		&& typeof grant.capacityProviderId === 'string'
+		&& typeof grant.laneId === 'string'
+		&& typeof grant.grantScope === 'string'
+		&& typeof grant.state === 'string'
+		&& typeof grant.projectId === 'string';
+}
+
+function capacityGrantsFromPortfolio(value: unknown): CapacityGrant[] {
+	return Array.isArray(value) ? value.filter(isCapacityGrant) : [];
+}
 
 export function okPayload(role: string, payload: Record<string, unknown> = {}) {
 	return {
@@ -65,10 +80,18 @@ export async function buildProviderPlan(config: ProviderRuntimeConfig, options: 
 export async function runManagerSkeleton(config: ProviderRuntimeConfig, options: { dryRun?: boolean } = {}) {
 	if (!options.dryRun && config.apiKey && config.marketUrl) {
 		const client = createProviderMarketClient(config);
+		const portfolio = await client.portfolio().catch(() => null);
+		const portfolioGrants = capacityGrantsFromPortfolio(portfolio?.grants);
+		const capabilities = [...new Set(discoverProviderCapabilities(config).flatMap((capability) => [
+			capability.id,
+			...(Array.isArray(capability.metadata?.capabilityAliases)
+				? capability.metadata.capabilityAliases.map((entry) => String(entry ?? '').trim()).filter(Boolean)
+				: []),
+		]).filter(Boolean))];
 		const checkIn = await client.checkIn({
 			environment: config.environment,
 			status: 'open',
-			capabilities: discoverProviderCapabilities(config).map((capability) => capability.id),
+			capabilities,
 			nativeLimits: {
 				budgets: discoverProviderBudgets(config),
 			},
@@ -77,6 +100,7 @@ export async function runManagerSkeleton(config: ProviderRuntimeConfig, options:
 				maxConcurrentRunners: config.maxConcurrentRunners,
 				maxConcurrentWorkdays: config.maxConcurrentWorkdays,
 			},
+			grants: portfolioGrants,
 			constraints: {
 				outboundOnly: true,
 				dataDir: config.dataDir,
@@ -85,7 +109,12 @@ export async function runManagerSkeleton(config: ProviderRuntimeConfig, options:
 				source: '@treeseed/agent/provider-manager',
 			},
 		});
-		const result = await processProviderPortfolio({ config, client });
+		const result = await processProviderPortfolio({
+			config,
+			client,
+			...(portfolio ? { portfolio } : {}),
+			...(config.treeDx ? { treeDx: config.treeDx } : {}),
+		});
 		return okPayload('manager', {
 			action: 'portfolio-processing',
 			dryRun: false,
@@ -117,9 +146,14 @@ export async function runRunnerSkeleton(config: ProviderRuntimeConfig, options: 
 		});
 	}
 	const client = createProviderMarketClient(config);
+	const { runProviderRunnerOnce } = await import('./runner.ts');
 	return okPayload('runner', {
 		dryRun: false,
 		flow,
-		result: await runProviderRunnerOnce({ config, client }),
+		result: await runProviderRunnerOnce({
+			config,
+			client,
+			...(config.treeDx ? { treeDx: config.treeDx } : {}),
+		}),
 	});
 }

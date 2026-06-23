@@ -5,20 +5,30 @@ import { defineConfig } from 'vitest/config';
 const workspaceSdkRoot = resolve(process.cwd(), '../sdk');
 const useWorkspaceSdk = existsSync(resolve(workspaceSdkRoot, 'src/index.ts'));
 
+function resolveWorkspaceSdkSource(source: string) {
+	if (source === '@treeseed/sdk') {
+		return resolve(workspaceSdkRoot, 'src/index.ts');
+	}
+	if (!source.startsWith('@treeseed/sdk/')) {
+		return null;
+	}
+	const subpath = source.slice('@treeseed/sdk/'.length);
+	const candidates = [
+		resolve(workspaceSdkRoot, 'src', `${subpath}.ts`),
+		resolve(workspaceSdkRoot, 'src', subpath, 'index.ts'),
+	];
+	return candidates.find((candidate) => existsSync(candidate)) ?? null;
+}
+
 export default defineConfig({
-	resolve: useWorkspaceSdk
-		? {
-			alias: [
-				{
-					find: /^@treeseed\/sdk$/,
-					replacement: resolve(workspaceSdkRoot, 'src/index.ts'),
-				},
-				{
-					find: /^@treeseed\/sdk\/(.*)$/,
-					replacement: resolve(workspaceSdkRoot, 'src/$1'),
-				},
-			],
-		}
+	plugins: useWorkspaceSdk
+		? [{
+			name: 'treeseed-sdk-typescript-source',
+			enforce: 'pre',
+			resolveId(source) {
+				return resolveWorkspaceSdkSource(source);
+			},
+		}]
 		: undefined,
 	test: {
 		include: ['test/**/*.test.ts'],

@@ -5,17 +5,6 @@ import { getTreeseedAgentProviderSelections } from '@treeseed/sdk/platform/deplo
 
 const execFileAsync = promisify(execFile);
 
-export class StubRepositoryInspectionAdapter implements AgentRepositoryInspectionAdapter {
-	async inspectBranch(input: { branchName: string | null }) {
-		return {
-			branchName: input.branchName,
-			changedPaths: [],
-			commitSha: null,
-			summary: input.branchName ? `Stub repository inspection for ${input.branchName}.` : 'No branch to inspect.',
-		};
-	}
-}
-
 export class GitRepositoryInspectionAdapter implements AgentRepositoryInspectionAdapter {
 	async inspectBranch(input: { repoRoot: string; branchName: string | null }) {
 		if (!input.branchName) {
@@ -59,9 +48,11 @@ export class GitRepositoryInspectionAdapter implements AgentRepositoryInspection
 }
 
 export function createRepositoryInspectionAdapter() {
-	return String(
+	const provider = String(
 		process.env.TREESEED_AGENT_REPOSITORY_PROVIDER ?? getTreeseedAgentProviderSelections().repository,
-	).toLowerCase() !== 'git'
-		? new StubRepositoryInspectionAdapter()
-		: new GitRepositoryInspectionAdapter();
+	).toLowerCase();
+	if (provider !== 'git') {
+		throw new Error(`Unsupported agent repository provider "${provider}". Configure TREESEED_AGENT_REPOSITORY_PROVIDER=git.`);
+	}
+	return new GitRepositoryInspectionAdapter();
 }

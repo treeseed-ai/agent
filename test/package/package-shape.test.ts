@@ -58,9 +58,9 @@ describe('agent package shape', () => {
 			expect(existsSync(sourcePathForBinSpecifier(binPath)), `${binName} source file`).toBe(true);
 		}
 
-			expect(packageJson.scripts.verify).toBe('node ./scripts/verify-driver.mjs');
-			expect(packageJson.scripts['verify:local']).toContain('./scripts/verify-driver.mjs');
-			expect(packageJson.scripts['verify:action']).toContain('./scripts/verify-driver.mjs');
+			expect(packageJson.scripts.verify).toBe('tsx ./scripts/verify-driver.ts');
+			expect(packageJson.scripts['verify:local']).toContain('./scripts/verify-driver.ts');
+			expect(packageJson.scripts['verify:action']).toContain('./scripts/verify-driver.ts');
 			expect(Object.keys(packageJson.scripts).some((name) => name.includes('processing'))).toBe(false);
 			expect(Object.values(packageJson.scripts).some((command) => command.includes('treeseed-processing'))).toBe(false);
 		});
@@ -152,9 +152,10 @@ describe('agent package shape', () => {
 		const compose = readFileSync(resolve(packageRoot, 'compose.capacity-provider.yml'), 'utf8');
 		const docs = readFileSync(resolve(packageRoot, 'docs/capacity-provider-runtime.md'), 'utf8');
 
-		expect(dockerfile).toContain('FROM runtime-base AS agent-api');
-		expect(dockerfile).toContain('FROM runtime-with-git AS agent-manager');
-		expect(dockerfile).toContain('FROM runtime-with-git AS agent-runner');
+		expect(dockerfile).toContain('FROM node-runtime AS agent-api');
+		expect(dockerfile).toContain('FROM node-runtime AS manager-runtime');
+		expect(dockerfile).toContain('FROM manager-runtime AS agent-manager');
+		expect(dockerfile).toContain('FROM manager-runtime AS agent-runner');
 		expect(dockerfile).toContain('ENTRYPOINT ["tini", "--", "/usr/local/bin/treeseed-agent-entrypoint"]');
 		expect(entrypoint).toContain('setpriv');
 		expect(dockerfile).toContain('FROM node:22');
@@ -193,7 +194,7 @@ describe('agent package shape', () => {
 		];
 
 		for (const filePath of walkFiles(resolve(packageRoot, 'src'))) {
-			if (!['.ts', '.mjs', '.js'].includes(extname(filePath))) continue;
+			if (!['.ts', '.js'].includes(extname(filePath))) continue;
 			const source = readFileSync(filePath, 'utf8');
 			for (const match of source.matchAll(importPattern)) {
 				const specifier = match[1];

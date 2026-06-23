@@ -4,6 +4,7 @@ import { resolveTreeseedTenantRoot } from '@treeseed/sdk/platform/tenant-config'
 import { resolveHandlerContextPacks } from '../context/context-processor.ts';
 import { LocalBranchMutationAdapter } from '../adapters/mutations.ts';
 import type { AgentMutationAdapter, AgentMutationResult } from '../runtime-types.ts';
+import type { AgentRuntimeSpec } from '@treeseed/sdk/types/agents';
 import type { ResearchNote } from '../contracts/research.ts';
 import type { KnowledgeDraft, OptimizationReport } from '../contracts/knowledge.ts';
 import {
@@ -43,6 +44,31 @@ export interface RunMarketKnowledgeDogfoodOptions {
 
 export const MARKET_KNOWLEDGE_DOGFOOD_QUESTIONS = TREESEED_PLATFORM_KNOWLEDGE_QUESTIONS;
 
+function dogfoodAgentSpec(): AgentRuntimeSpec {
+	return {
+		slug: 'market-knowledge-dogfood',
+		handler: 'knowledge-generator',
+		enabled: true,
+		systemPrompt: 'Generate market knowledge drafts.',
+		persona: 'Market knowledge generator',
+		cli: {},
+		triggers: [],
+		permissions: [],
+		execution: {
+			maxConcurrency: 1,
+			timeoutSeconds: 120,
+			cooldownSeconds: 0,
+			leaseSeconds: 120,
+			retryLimit: 0,
+			branchPrefix: 'agent/market-knowledge-dogfood',
+		},
+		outputs: {
+			messageTypes: [],
+			modelMutations: [],
+		},
+	};
+}
+
 async function runResearcher(input: {
 	sdk: AgentSdk;
 	question: MarketKnowledgeDogfoodQuestion;
@@ -67,7 +93,7 @@ export async function runMarketKnowledgeDogfood(
 	const now = options.now ?? new Date();
 	const nowIso = now.toISOString();
 	const today = nowIso.slice(0, 10);
-	const sdk = AgentSdk.createLocal({ repoRoot, contentRepository: { adapter: 'local' } });
+	const sdk = AgentSdk.createLocal({ repoRoot });
 	const mutationAdapter = options.mutationAdapter ?? new LocalBranchMutationAdapter(repoRoot);
 	const generated: MarketKnowledgeDogfoodDraftResult[] = [];
 
@@ -77,11 +103,7 @@ export async function runMarketKnowledgeDogfood(
 		const optimizationReport = optimizeKnowledgeDraft({ draft: knowledgeDraft, note: researchNote, nowIso });
 		const mutation = await mutationAdapter.writeArtifact({
 			runId: slugSegment(question.id),
-			agent: {
-				execution: {
-					branchPrefix: 'agent/market-knowledge-dogfood',
-				},
-			},
+				agent: dogfoodAgentSpec(),
 			relativePath: question.targetPath,
 			content: serializeKnowledgeDraft(knowledgeDraft),
 			commitMessage: `docs(agent): generate ${slugSegment(question.id)} knowledge`,

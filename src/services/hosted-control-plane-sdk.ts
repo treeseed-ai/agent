@@ -474,7 +474,7 @@ export class HostedControlPlaneAgentSdk {
 	}
 
 	recordTaskCredits(...args: Parameters<AgentSdk['recordTaskCredits']>) {
-		const request = args[0] as Record<string, unknown>;
+		const request = args[0] as unknown as Record<string, unknown>;
 		const metadata = request.metadata && typeof request.metadata === 'object' ? request.metadata as Record<string, unknown> : {};
 		const capacityProviderId = String(metadata.capacityProviderId ?? process.env.TREESEED_CAPACITY_PROVIDER_ID ?? '').trim();
 		if (!capacityProviderId) {
@@ -506,7 +506,7 @@ export class HostedControlPlaneAgentSdk {
 	}
 
 	async createApprovalRequest(...args: Parameters<AgentSdk['createApprovalRequest']>) {
-		const request = args[0] as Record<string, unknown>;
+		const request = args[0] as unknown as Record<string, unknown>;
 		const payload = await this.client.createRunnerApprovalRequest(this.projectId, {
 			...request,
 			projectId: this.projectId,

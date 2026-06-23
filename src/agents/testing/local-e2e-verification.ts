@@ -21,7 +21,7 @@ export interface RunLocalEndToEndVerificationOptions {
 	now?: Date;
 	projectId?: string;
 	teamId?: string;
-	environment?: string;
+	environment?: 'local' | 'staging' | 'prod';
 }
 
 export interface LocalEndToEndVerificationSummary {
@@ -453,9 +453,11 @@ function artifactCounts(artifacts: GeneratedAgentArtifactSummary[]) {
 		return true;
 	});
 	return {
+		codebase_inventory: uniqueArtifacts.filter((artifact) => artifact.artifactKind === 'codebase_inventory').length,
 		research_note: uniqueArtifacts.filter((artifact) => artifact.artifactKind === 'research_note').length,
 		knowledge_draft: uniqueArtifacts.filter((artifact) => artifact.artifactKind === 'knowledge_draft').length,
 		optimization_report: uniqueArtifacts.filter((artifact) => artifact.artifactKind === 'optimization_report').length,
+		docs_mutation_result: uniqueArtifacts.filter((artifact) => artifact.artifactKind === 'docs_mutation_result').length,
 		promotion_request: uniqueArtifacts.filter((artifact) => artifact.artifactKind === 'promotion_request').length,
 		release_request: uniqueArtifacts.filter((artifact) => artifact.artifactKind === 'release_request').length,
 	};
@@ -643,6 +645,7 @@ export async function runLocalEndToEndVerification(
 		},
 		prioritySnapshot: null,
 		scaleDecision: {
+			id: 'scale-local-e2e',
 			projectId,
 			environment,
 			poolName: 'local-e2e',
@@ -652,6 +655,7 @@ export async function runLocalEndToEndVerification(
 			observedActiveLeases: 0,
 			reason: 'local_e2e_verification',
 			metadata: {},
+			createdAt: nowIso,
 		},
 		scaleResult: {
 			applied: false,
@@ -663,12 +667,12 @@ export async function runLocalEndToEndVerification(
 		changedFiles: [],
 		generatedArtifacts,
 		releases: [],
-		operationEvents: operationState.events,
+			operationEvents: operationState.events.map((entry) => ({ ...entry })),
 		worktreeSnapshots: operationState.lifecycle.worktreeSnapshots,
 		stagingMerges: operationState.lifecycle.stagingMerges,
 		mergeFailures: operationState.lifecycle.mergeFailures,
 		repairTasks: operationState.lifecycle.repairTasks,
-		releaseApprovals: operationState.lifecycle.releaseApprovals,
+			releaseApprovals: operationState.lifecycle.releaseApprovals.map((entry) => ({ ...entry })),
 		releaseResults: operationState.lifecycle.releaseResults,
 		codexUsage: operationState.lifecycle.codexUsage,
 		generatedAt: nowIso,
@@ -676,12 +680,12 @@ export async function runLocalEndToEndVerification(
 	const reportDocument = readFileSync(reportSnapshot.filePath, 'utf8');
 	sdk.createReport({
 		generatedArtifacts,
-		operationEvents: operationState.events,
+		operationEvents: operationState.events.map((entry) => ({ ...entry })),
 		worktreeSnapshots: operationState.lifecycle.worktreeSnapshots,
 		stagingMerges: operationState.lifecycle.stagingMerges,
 		mergeFailures: operationState.lifecycle.mergeFailures,
 		repairTasks: operationState.lifecycle.repairTasks,
-		releaseApprovals: operationState.lifecycle.releaseApprovals,
+		releaseApprovals: operationState.lifecycle.releaseApprovals.map((entry) => ({ ...entry })),
 		releaseResults: operationState.lifecycle.releaseResults,
 		codexUsage: operationState.lifecycle.codexUsage,
 		releaseAttempted: operationState.lifecycle.releaseResults.length > 0,

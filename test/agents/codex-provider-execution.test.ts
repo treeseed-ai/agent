@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import {
 	buildCodexPrompt,
+	codexTreeDxConfig,
 	mapCodexThreadOptions,
 	normalizeCodexRunResult,
 	runCodexSubscriptionTask,
@@ -35,6 +36,30 @@ const request: CodexExecutionRequest = {
 			},
 		},
 	},
+};
+
+const treeDxTool = {
+	kind: 'treedx_proxy' as const,
+	id: 'treedx-proxy:handle-1',
+	name: 'TreeDX assignment proxy',
+	description: 'Assignment-scoped TreeDX content proxy.',
+	operations: ['files:read', 'files:write', 'git:commit'],
+	projectId: 'project-1',
+	assignmentId: 'assignment-1',
+	handleId: 'handle-1',
+	repositoryId: 'repo-1',
+	workspaceId: 'workspace-1',
+	allowedOperations: ['files:read', 'files:write', 'git:commit'],
+	allowedPaths: ['src/content/**'],
+	routes: {
+		buildContext: 'POST /v1/dx/projects/project-1/repos/repo-1/context/build',
+		readRepositoryFiles: 'POST /v1/dx/projects/project-1/repos/repo-1/files/read',
+		searchWorkspace: 'POST /v1/dx/projects/project-1/workspaces/workspace-1/search',
+		readWorkspaceFile: 'GET /v1/dx/projects/project-1/workspaces/workspace-1/files?path=:path',
+		writeWorkspaceFile: 'PUT /v1/dx/projects/project-1/workspaces/workspace-1/files?path=:path',
+		commitWorkspace: 'POST /v1/dx/projects/project-1/workspaces/workspace-1/commit',
+	},
+	metadata: { token: 'secret_should_not_leak' },
 };
 
 function runResult() {
@@ -116,29 +141,7 @@ describe('codex provider execution', () => {
 	it('includes assignment-scoped TreeDX tool guidance without credentials', () => {
 		const prompt = buildCodexPrompt({
 			...request,
-			tools: [{
-				kind: 'treedx_proxy',
-				id: 'treedx-proxy:handle-1',
-				name: 'TreeDX assignment proxy',
-				description: 'Assignment-scoped TreeDX content proxy.',
-				operations: ['files:read', 'files:write', 'git:commit'],
-				projectId: 'project-1',
-				assignmentId: 'assignment-1',
-				handleId: 'handle-1',
-				repositoryId: 'repo-1',
-				workspaceId: 'workspace-1',
-				allowedOperations: ['files:read', 'files:write', 'git:commit'],
-				allowedPaths: ['src/content/**'],
-				routes: {
-					buildContext: 'POST /v1/dx/projects/project-1/repos/repo-1/context/build',
-					readRepositoryFiles: 'POST /v1/dx/projects/project-1/repos/repo-1/files/read',
-					searchWorkspace: 'POST /v1/dx/projects/project-1/workspaces/workspace-1/search',
-					readWorkspaceFile: 'GET /v1/dx/projects/project-1/workspaces/workspace-1/files?path=:path',
-					writeWorkspaceFile: 'PUT /v1/dx/projects/project-1/workspaces/workspace-1/files?path=:path',
-					commitWorkspace: 'POST /v1/dx/projects/project-1/workspaces/workspace-1/commit',
-				},
-				metadata: { token: 'secret_should_not_leak' },
-			}],
+			tools: [treeDxTool],
 		});
 
 		expect(prompt).toContain('TreeDX assignment tools:');
@@ -146,6 +149,27 @@ describe('codex provider execution', () => {
 		expect(prompt).toContain('Content writes must use treedx_write_workspace_file');
 		expect(prompt).toContain('src/content/**');
 		expect(prompt).not.toContain('secret_should_not_leak');
+	});
+
+	it('passes TreeDX MCP servers using Codex CLI config keys', () => {
+		const config = codexTreeDxConfig({
+			...request,
+			tools: [treeDxTool],
+		});
+
+		expect(config).toMatchObject({
+			mcp_servers: {
+				treedx_proxy: {
+					command: expect.any(String),
+					args: expect.any(Array),
+					env: expect.objectContaining({
+						TREESEED_TREEDX_PROXY_ASSIGNMENT_ID: 'assignment-1',
+						TREESEED_TREEDX_PROXY_HANDLE_ID: 'handle-1',
+					}),
+				},
+			},
+		});
+		expect(config).not.toHaveProperty('mcpServers');
 	});
 
 	it('places the core objective before the agent task when available', () => {

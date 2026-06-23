@@ -2,18 +2,27 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 export const CORE_OBJECTIVE_RELATIVE_PATH = 'src/content/objectives/core.md';
+export const PACKAGE_CORE_OBJECTIVE_RELATIVE_PATH = 'docs/src/content/objectives/core.md';
 
 export function loadCoreObjective(repoRoot: string) {
-	const path = join(repoRoot, CORE_OBJECTIVE_RELATIVE_PATH);
+	const relativePath = resolveCoreObjectiveRelativePath(repoRoot);
+	const path = join(repoRoot, relativePath);
 	if (!existsSync(path)) return null;
 	const content = readFileSync(path, 'utf8').trim();
 	return content || null;
 }
 
-export function formatCoreObjectiveMessage(content: string) {
+export function resolveCoreObjectiveRelativePath(repoRoot: string) {
+	if (existsSync(join(repoRoot, PACKAGE_CORE_OBJECTIVE_RELATIVE_PATH))) {
+		return PACKAGE_CORE_OBJECTIVE_RELATIVE_PATH;
+	}
+	return CORE_OBJECTIVE_RELATIVE_PATH;
+}
+
+export function formatCoreObjectiveMessage(content: string, relativePath = CORE_OBJECTIVE_RELATIVE_PATH) {
 	return [
 		'TreeSeed Core Objective',
-		`Source: ${CORE_OBJECTIVE_RELATIVE_PATH}`,
+		`Source: ${relativePath}`,
 		'',
 		content.trim(),
 	].join('\n');
@@ -22,10 +31,11 @@ export function formatCoreObjectiveMessage(content: string) {
 export function loadCoreObjectiveContext(repoRoot: string) {
 	const content = loadCoreObjective(repoRoot);
 	if (!content) return null;
+	const relativePath = resolveCoreObjectiveRelativePath(repoRoot);
 	return {
-		path: CORE_OBJECTIVE_RELATIVE_PATH,
+		path: relativePath,
 		content,
-		message: formatCoreObjectiveMessage(content),
+		message: formatCoreObjectiveMessage(content, relativePath),
 	};
 }
 
@@ -36,8 +46,9 @@ export function prependCoreObjectiveToPrompt(input: {
 }) {
 	const coreObjective = input.coreObjective ?? loadCoreObjective(input.repoRoot);
 	if (!coreObjective) return input.prompt;
+	const relativePath = resolveCoreObjectiveRelativePath(input.repoRoot);
 	return [
-		formatCoreObjectiveMessage(coreObjective),
+		formatCoreObjectiveMessage(coreObjective, relativePath),
 		'',
 		'Agent Task',
 		'',

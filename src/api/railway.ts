@@ -2,9 +2,9 @@ import { createServer, type Server } from 'node:http';
 import { Readable } from 'node:stream';
 import type { AddressInfo } from 'node:net';
 import type { Hono } from 'hono';
+import type { ApiServerOptions } from '@treeseed/sdk/api';
 import { createTreeseedApiApp } from './app.ts';
 import { resolveApiConfig } from './config.ts';
-import type { ApiServerOptions } from './types.ts';
 
 function hasRequestBody(method: string | undefined) {
 	return method !== 'GET' && method !== 'HEAD';

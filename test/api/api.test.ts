@@ -3,7 +3,8 @@ import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { describe, expect, it, vi } from 'vitest';
-import { parseTemplateCatalogResponse } from '@treeseed/sdk';
+import { AgentSdk, parseTemplateCatalogResponse } from '@treeseed/sdk';
+import { MemoryAgentDatabase } from '@treeseed/sdk/d1-store';
 import type { D1DatabaseLike, D1PreparedStatementLike } from '@treeseed/sdk/types/cloudflare';
 import { createTreeseedApiApp } from '../../src/api/app.ts';
 import { D1AuthProvider } from '../../src/api/auth/d1-provider.ts';
@@ -113,6 +114,11 @@ function createTestApp(options: Parameters<typeof createTreeseedApiApp>[0] = {})
 	const selectedAuthProvider = config.providers?.auth ?? 'test-d1';
 	return createTreeseedApiApp({
 		...options,
+		sdk: options.sdk ?? new AgentSdk({
+			repoRoot: config.repoRoot,
+			database: new MemoryAgentDatabase(),
+			contentRepository: { adapter: 'local' },
+		}),
 		config: {
 			...config,
 			providers: {
@@ -121,9 +127,9 @@ function createTestApp(options: Parameters<typeof createTreeseedApiApp>[0] = {})
 				agents: config.providers?.agents ?? {
 					execution: 'codex',
 					queue: 'memory',
-					notification: 'stub',
-					repository: 'stub',
-					verification: 'stub',
+					notification: 'sdk_message',
+					repository: 'git',
+					verification: 'local',
 				},
 			},
 		},
@@ -2097,9 +2103,9 @@ apiRuntimeDescribe('@treeseed/agent api runtime', () => {
 					agents: {
 						execution: 'codex',
 						queue: 'memory',
-						notification: 'stub',
-						repository: 'stub',
-						verification: 'stub',
+						notification: 'sdk_message',
+						repository: 'git',
+						verification: 'local',
 					},
 				},
 			},

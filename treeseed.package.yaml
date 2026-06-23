@@ -84,7 +84,7 @@ projectArchitecture:
   topology: single_repository_site
   rootPath: .
   sitePath: docs
-  contentPath: docs
+  contentPath: docs/src/content
   contentRuntimeSource: r2_published_manifest
   localContentMaterialization: existing_path
   contentPublishTarget:

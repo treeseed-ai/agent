@@ -572,5 +572,5 @@ export function optimizeKnowledgeDraft(input: {
 }
 
 export function serializeKnowledgeDraft(draft: KnowledgeDraft) {
-	return serializeFrontmatterDocument(draft.frontmatter, draft.body);
+	return serializeFrontmatterDocument(draft.frontmatter as unknown as Record<string, unknown>, draft.body);
 }

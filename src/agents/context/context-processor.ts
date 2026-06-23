@@ -1,3 +1,4 @@
+import type { SdkContextPack } from '@treeseed/sdk';
 import type { ScopedAgentSdk } from '@treeseed/sdk/sdk';
 import {
 	compileDeclarativeContextQuery,
@@ -173,7 +174,7 @@ export async function resolveHandlerContextPacks(
 			continue;
 		}
 
-		const pack = await input.sdk.buildContextPack(compiled.compiled.request);
+		const pack = await input.sdk.buildContextPack(compiled.compiled.request) as SdkContextPack;
 		packs.push({
 			id: compiled.compiled.query.id,
 			purpose: compiled.compiled.query.purpose,

@@ -1,6 +1,8 @@
 import type { Hono } from 'hono';
 import type {
 	AgentSdk,
+	SdkContextPack,
+	SdkGraphQueryResult,
 	SdkTaskEntity,
 	WorkdayPolicy,
 } from '@treeseed/sdk';
@@ -43,6 +45,14 @@ function withPrefix(prefix: string, path: string) {
 
 function actor(body: Record<string, unknown>, fallback: string) {
 	return String(body.actor ?? fallback);
+}
+
+function routeParam(c: { req: { param: (name: string) => string | undefined } }, name: string) {
+	const value = c.req.param(name);
+	if (!value) {
+		throw new Error(`Missing route parameter "${name}".`);
+	}
+	return value;
 }
 
 function defaultFollowupPolicy(projectId: string, workDay: Record<string, unknown>): WorkdayPolicy {
@@ -118,7 +128,7 @@ export function registerAgentRoutes(
 		if (unauthorized) return unauthorized;
 		const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
 		const result = await options.sdk.closeWorkDay({
-			id: c.req.param('id'),
+				id: routeParam(c, 'id'),
 			state: body.state as 'completed' | 'cancelled' | 'failed' | undefined,
 			summary: (body.summary as Record<string, unknown> | undefined) ?? null,
 			actor: actor(body, defaultActor),
@@ -167,7 +177,7 @@ export function registerAgentRoutes(
 		if (unauthorized) return unauthorized;
 		const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
 		const result = await options.sdk.claimTask({
-			id: c.req.param('id'),
+				id: routeParam(c, 'id'),
 			workerId: String(body.workerId ?? 'worker'),
 			leaseSeconds: Number(body.leaseSeconds ?? 120),
 			actor: actor(body, defaultActor),
@@ -180,7 +190,7 @@ export function registerAgentRoutes(
 		if (unauthorized) return unauthorized;
 		const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
 		const result = await options.sdk.recordTaskProgress({
-			id: c.req.param('id'),
+				id: routeParam(c, 'id'),
 			workerId: typeof body.workerId === 'string' ? body.workerId : null,
 			state: typeof body.state === 'string' ? body.state : undefined,
 			appendEvent: body.appendEvent as { kind: string; data?: Record<string, unknown> } | undefined,
@@ -195,7 +205,7 @@ export function registerAgentRoutes(
 		if (unauthorized) return unauthorized;
 		const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
 		const result = await options.sdk.completeTask({
-			id: c.req.param('id'),
+				id: routeParam(c, 'id'),
 			output: (body.output as Record<string, unknown> | undefined) ?? null,
 			outputRef: typeof body.outputRef === 'string' ? body.outputRef : null,
 			summary: (body.summary as Record<string, unknown> | undefined) ?? null,
@@ -209,7 +219,7 @@ export function registerAgentRoutes(
 		if (unauthorized) return unauthorized;
 		const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
 		const result = await options.sdk.failTask({
-			id: c.req.param('id'),
+				id: routeParam(c, 'id'),
 			errorCode: typeof body.errorCode === 'string' ? body.errorCode : null,
 			errorMessage: String(body.errorMessage ?? 'Task failed'),
 			retryable: Boolean(body.retryable),
@@ -223,8 +233,9 @@ export function registerAgentRoutes(
 		const unauthorized = authorizeRequest(c as ApiContext, options);
 		if (unauthorized) return unauthorized;
 		const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
+		const taskId = routeParam(c, 'id');
 		const result = await options.sdk.recordTaskProgress({
-			id: c.req.param('id'),
+			id: taskId,
 			state: 'waiting',
 			appendEvent: {
 				kind: 'assignment_ready',
@@ -233,7 +244,7 @@ export function registerAgentRoutes(
 			actor: actor(body, defaultActor),
 		});
 		return result.payload
-			? c.json({ ok: true, taskId: c.req.param('id'), queued: false, transport: 'api_assignment' })
+			? c.json({ ok: true, taskId, queued: false, transport: 'api_assignment' })
 			: jsonError(c, 404, 'Unknown task.');
 	});
 
@@ -241,7 +252,8 @@ export function registerAgentRoutes(
 		const unauthorized = authorizeRequest(c as ApiContext, options);
 		if (unauthorized) return unauthorized;
 		const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
-		const current = await options.sdk.get({ model: 'task', id: c.req.param('id') });
+		const taskId = routeParam(c, 'id');
+		const current = await options.sdk.get({ model: 'task', id: taskId });
 		if (!current.payload) {
 			return jsonError(c, 404, 'Unknown task.');
 		}
@@ -278,10 +290,10 @@ export function registerAgentRoutes(
 				type,
 				state: admission.state,
 				priority: followup.priority === undefined ? undefined : Number(followup.priority),
-				idempotencyKey: String(followup.idempotencyKey ?? `${c.req.param('id')}:${created.length}`),
+				idempotencyKey: String(followup.idempotencyKey ?? `${taskId}:${created.length}`),
 				payload: admission.payload,
 				graphVersion: typeof followup.graphVersion === 'string' ? followup.graphVersion : null,
-				parentTaskId: c.req.param('id'),
+				parentTaskId: taskId,
 				actor: actor(followup, defaultActor),
 			});
 			if (result.payload) {
@@ -365,7 +377,7 @@ export function registerAgentRoutes(
 		const unauthorized = authorizeRequest(c as ApiContext, options);
 		if (unauthorized) return unauthorized;
 		const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
-		const payload = await options.sdk.queryGraph(body as never);
+			const payload = await options.sdk.queryGraph(body as never) as SdkGraphQueryResult;
 		if (typeof body.workDayId === 'string' && body.workDayId) {
 			await options.sdk.create({
 				model: 'graph_run',
@@ -375,7 +387,7 @@ export function registerAgentRoutes(
 					graphVersion: String(body.graphVersion ?? ''),
 					queryJson: JSON.stringify(body),
 					seedIdsJson: JSON.stringify(payload.seedIds),
-					selectedNodeIdsJson: JSON.stringify(payload.nodes.map((entry) => entry.node.id)),
+						selectedNodeIdsJson: JSON.stringify(payload.nodes.map((entry) => entry.node.id)),
 					statsJson: JSON.stringify({ nodeCount: payload.nodes.length, edgeCount: payload.edges.length }),
 				},
 				actor: actor(body, defaultActor),
@@ -388,7 +400,7 @@ export function registerAgentRoutes(
 		const unauthorized = authorizeRequest(c as ApiContext, options);
 		if (unauthorized) return unauthorized;
 		const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
-		const payload = await options.sdk.buildContextPack(body as never);
+			const payload = await options.sdk.buildContextPack(body as never) as SdkContextPack;
 		if (typeof body.workDayId === 'string' && body.workDayId) {
 			await options.sdk.create({
 				model: 'graph_run',
@@ -422,7 +434,7 @@ export function registerAgentRoutes(
 	app.get(withPrefix(prefix, '/graph/node/:id'), async (c) => {
 		const unauthorized = authorizeRequest(c as ApiContext, options);
 		if (unauthorized) return unauthorized;
-		const payload = await options.sdk.getGraphNode(c.req.param('id'));
+			const payload = await options.sdk.getGraphNode(routeParam(c, 'id'));
 		return payload ? c.json({ ok: true, payload }) : jsonError(c, 404, 'Unknown graph node.');
 	});
 }

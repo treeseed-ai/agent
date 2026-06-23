@@ -7,7 +7,6 @@ import { packageRoot } from './package-tools.ts';
 const require = createRequire(import.meta.url);
 const dockerContextRoot = resolve(packageRoot, '.treeseed', 'docker');
 const sdkTarballPath = resolve(dockerContextRoot, 'treeseed-sdk.tgz');
-const runtimeRoot = resolve(dockerContextRoot, 'runtime');
 const prepareOnly = process.argv.includes('--prepare-only');
 const selectedRoles = parseSelectedRoles();
 const noCache = process.argv.includes('--no-cache') || process.env.TREESEED_AGENT_BUILD_NO_CACHE === '1';
@@ -18,6 +17,10 @@ const roleImages = {
 	runner: process.env.TREESEED_AGENT_RUNNER_IMAGE || `treeseed/agent-runner:${imageTag}`,
 } as const;
 type RoleName = keyof typeof roleImages;
+
+function roleRuntimeRoot(role: RoleName) {
+	return resolve(dockerContextRoot, 'runtime', role);
+}
 
 function parseSelectedRoles(): Set<RoleName> {
 	const rolesFlagIndex = process.argv.indexOf('--roles');
@@ -127,9 +130,10 @@ function packSdk() {
 	return null;
 }
 
-function prepareRuntimeDependencies(installedSdkRoot: string | null) {
+function prepareRuntimeDependencies(installedSdkRoot: string | null, role: RoleName) {
 	const installedNodeModules = resolveInstalledNodeModulesRoot();
 	const runtimePackages = runtimePackageNames(installedNodeModules);
+	const runtimeRoot = roleRuntimeRoot(role);
 	rmSync(runtimeRoot, { recursive: true, force: true });
 	mkdirSync(runtimeRoot, { recursive: true });
 	copyFileSync(resolve(packageRoot, 'package.json'), resolve(runtimeRoot, 'package.json'));
@@ -137,7 +141,7 @@ function prepareRuntimeDependencies(installedSdkRoot: string | null) {
 	mkdirSync(resolve(runtimeRoot, 'node_modules'), { recursive: true });
 	for (const packageName of runtimePackages) {
 		if (packageName.startsWith('@treeseed/')) continue;
-		copyRuntimePackage(installedNodeModules, packageName);
+		copyRuntimePackage(installedNodeModules, packageName, runtimeRoot);
 	}
 	mkdirSync(resolve(runtimeRoot, 'node_modules', '@treeseed'), { recursive: true });
 	if (installedSdkRoot) {
@@ -202,7 +206,7 @@ function installedPackageDependencies(installedNodeModules: string, packageName:
 	}
 }
 
-function copyRuntimePackage(installedNodeModules: string, packageName: string) {
+function copyRuntimePackage(installedNodeModules: string, packageName: string, runtimeRoot: string) {
 	const source = resolve(installedNodeModules, packageName);
 	if (!existsSync(source)) return;
 	const target = resolve(runtimeRoot, 'node_modules', packageName);
@@ -220,44 +224,7 @@ function topLevelPackageName(relativePath: string) {
 	return parts[0] ?? null;
 }
 
-function pruneExtraneousDependenciesFromRuntimeTree() {
-	const lockfile = JSON.parse(readFileSync(resolve(packageRoot, 'package-lock.json'), 'utf8')) as {
-		packages?: Record<string, unknown>;
-	};
-	const allowed = new Set<string>();
-	for (const packagePath of Object.keys(lockfile.packages ?? {})) {
-		if (!packagePath.startsWith('node_modules/')) continue;
-		const parts = packagePath.slice('node_modules/'.length).split('/');
-		if (parts[0]?.startsWith('@')) {
-			if (parts.length >= 2) allowed.add(`${parts[0]}/${parts[1]}`);
-		} else if (parts[0]) {
-			allowed.add(parts[0]);
-		}
-	}
-	allowed.add('@treeseed/sdk');
-	const nodeModulesRoot = resolve(runtimeRoot, 'node_modules');
-	for (const entry of readdirSync(nodeModulesRoot)) {
-		const entryPath = resolve(nodeModulesRoot, entry);
-		if (!entry.startsWith('@')) {
-			if (!allowed.has(entry)) rmSync(entryPath, { recursive: true, force: true });
-			continue;
-		}
-		for (const scopedEntry of readdirSync(entryPath)) {
-			const packageName = `${entry}/${scopedEntry}`;
-			if (!allowed.has(packageName)) {
-				rmSync(resolve(entryPath, scopedEntry), { recursive: true, force: true });
-			}
-		}
-		try {
-			if (readdirSync(entryPath).length === 0) {
-				rmSync(entryPath, { recursive: true, force: true });
-			}
-		} catch {
-		}
-	}
-}
-
-function pruneDevDependenciesFromRuntimeTree() {
+function pruneDevDependenciesFromRuntimeTree(runtimeRoot: string) {
 	const lockfile = JSON.parse(readFileSync(resolve(packageRoot, 'package-lock.json'), 'utf8')) as {
 		packages?: Record<string, { dev?: boolean }>;
 	};
@@ -279,9 +246,100 @@ function pruneDevDependenciesFromRuntimeTree() {
 	}
 }
 
+function pruneProviderRuntimeToolingFromRuntimeTree(runtimeRoot: string, role: RoleName) {
+	const nodeModulesRoot = resolve(runtimeRoot, 'node_modules');
+	const packagePaths = role === 'api'
+		? [
+			'@cloudflare',
+			'@github/copilot',
+			'@github/copilot-darwin-arm64',
+			'@github/copilot-darwin-x64',
+			'@github/copilot-language-server',
+			'@github/copilot-language-server-darwin-arm64',
+			'@github/copilot-language-server-darwin-x64',
+			'@github/copilot-language-server-linux-arm64',
+			'@github/copilot-language-server-linux-x64',
+			'@github/copilot-language-server-win32-arm64',
+			'@github/copilot-language-server-win32-x64',
+			'@github/copilot-linux-arm64',
+			'@github/copilot-linux-x64',
+			'@github/copilot-win32-arm64',
+			'@github/copilot-win32-x64',
+			'@img',
+			'@openai',
+			'@railway',
+			'miniflare',
+			'playwright',
+			'playwright-core',
+			'wrangler',
+			'workerd',
+		]
+		: role === 'manager'
+			? [
+				'@cloudflare',
+				'@github/copilot',
+				'@github/copilot-darwin-arm64',
+				'@github/copilot-darwin-x64',
+				'@github/copilot-language-server',
+				'@github/copilot-language-server-darwin-arm64',
+				'@github/copilot-language-server-darwin-x64',
+				'@github/copilot-language-server-linux-arm64',
+				'@github/copilot-language-server-linux-x64',
+				'@github/copilot-language-server-win32-arm64',
+				'@github/copilot-language-server-win32-x64',
+				'@github/copilot-linux-arm64',
+				'@github/copilot-linux-x64',
+				'@github/copilot-win32-arm64',
+				'@github/copilot-win32-x64',
+				'@img',
+				'@railway',
+				'miniflare',
+				'playwright',
+				'playwright-core',
+				'wrangler',
+				'workerd',
+			]
+			: [
+		'@cloudflare',
+		'@github/copilot-darwin-arm64',
+		'@github/copilot-darwin-x64',
+		'@github/copilot-language-server-darwin-arm64',
+		'@github/copilot-language-server-darwin-x64',
+		'@github/copilot-language-server-linux-arm64',
+		'@github/copilot-language-server-win32-arm64',
+		'@github/copilot-language-server-win32-x64',
+		'@github/copilot-linux-arm64',
+		'@github/copilot-win32-arm64',
+		'@github/copilot-win32-x64',
+		'@img',
+		'@railway',
+		'miniflare',
+		'playwright',
+		'playwright-core',
+		'wrangler',
+		'workerd',
+	];
+	for (const packagePath of packagePaths) {
+		rmSync(resolve(nodeModulesRoot, packagePath), { recursive: true, force: true });
+	}
+	for (const scopeName of ['@cloudflare', '@github', '@img', '@openai', '@railway']) {
+		const scopePath = resolve(nodeModulesRoot, scopeName);
+		try {
+			if (readdirSync(scopePath).length === 0) rmSync(scopePath, { recursive: true, force: true });
+		} catch {
+		}
+	}
+}
+
 run('npm', ['run', 'build:dist'], packageRoot);
 const installedSdkRoot = packSdk();
-prepareRuntimeDependencies(installedSdkRoot);
+rmSync(resolve(dockerContextRoot, 'runtime'), { recursive: true, force: true });
+for (const role of selectedRoles) {
+	const runtimeRoot = roleRuntimeRoot(role);
+	prepareRuntimeDependencies(installedSdkRoot, role);
+	pruneDevDependenciesFromRuntimeTree(runtimeRoot);
+	pruneProviderRuntimeToolingFromRuntimeTree(runtimeRoot, role);
+}
 if (prepareOnly) {
 	console.log(`Prepared capacity provider Docker context at ${dockerContextRoot}.`);
 	process.exit(0);

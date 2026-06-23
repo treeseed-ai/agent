@@ -31,13 +31,16 @@ function parseJsonString(value: unknown): Record<string, unknown> {
 	}
 }
 
+function isPlannedTaskNode(value: unknown): value is PlannedTaskNode {
+	return isRecord(value) && typeof value.type === 'string' && value.type.trim().length > 0;
+}
+
 function proposalTasksFromPayload(payload: TaskPayload): PlannedTaskNode[] {
 	const direct = Array.isArray(payload.proposedTasks) ? payload.proposedTasks : [];
 	const planning = isRecord(payload.planning) ? payload.planning : {};
 	const nested = Array.isArray(planning.proposedTasks) ? planning.proposedTasks : [];
 	return [...direct, ...nested]
-		.filter(isRecord)
-		.map((entry) => entry as PlannedTaskNode);
+		.filter(isPlannedTaskNode);
 }
 
 export function planningDepthForPayload(payload: TaskPayload) {

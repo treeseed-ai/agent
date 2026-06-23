@@ -1,9 +1,9 @@
 #!/usr/bin/env node
-
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { AgentTriggerInvocation } from '../agents/runtime-types.ts';
 import type { AgentContext, AgentHandler } from '../agents/runtime-types.ts';
+import type { AgentRuntimeSpec } from '@treeseed/sdk/types/agents';
 import { loadCoreObjectiveContext } from '../agents/core-objective.ts';
 import { AgentKernel } from '../agents/kernel/agent-kernel.ts';
 import { createControlPlaneReporter, shouldInterruptForCapacity } from '@treeseed/sdk';
@@ -14,6 +14,12 @@ import { researchHandler } from '../agents/handlers/research.ts';
 import { knowledgeGeneratorHandler } from '../agents/handlers/knowledge-generator.ts';
 import { knowledgeOptimizerHandler } from '../agents/handlers/knowledge-optimizer.ts';
 import { createVerificationAdapter } from '../agents/adapters/verification.ts';
+import { createExecutionProviderAdapter } from '../agents/adapters/execution.ts';
+import { LocalBranchMutationAdapter } from '../agents/adapters/mutations.ts';
+import { createNotificationAdapter } from '../agents/adapters/notification.ts';
+import { createOperationsAdapter } from '../agents/adapters/operations.ts';
+import { createRepositoryInspectionAdapter } from '../agents/adapters/repository.ts';
+import { createResearchAdapter } from '../agents/adapters/research.ts';
 import {
 	normalizeCodexDocsMutationInput,
 	runCodexDocsMutationLifecycle,
@@ -437,20 +443,27 @@ class WorkerCapacityInterrupted extends Error {
 	}
 }
 
-function scopedSdkForHandler(sdk: ReturnType<typeof createServiceSdk>, agent: ReturnType<typeof agentSpecForResearchKnowledgeHandler>) {
-	const maybeScoped = sdk as unknown as {
-		scopeForAgent?: (agent: ReturnType<typeof agentSpecForResearchKnowledgeHandler>) => unknown;
-		buildContextPack?: unknown;
-		createMessage?: (request: Record<string, unknown>) => Promise<unknown>;
-		appendTaskEvent?: (request: Record<string, unknown>) => Promise<unknown>;
-	};
-	if (typeof maybeScoped.scopeForAgent === 'function') {
-		return maybeScoped.scopeForAgent(agent);
-	}
+function baseAgentContext(input: {
+	runId: string;
+	repoRoot: string;
+	agent: AgentRuntimeSpec;
+	sdk: ReturnType<typeof createServiceSdk>;
+	trigger: AgentTriggerInvocation;
+}): AgentContext {
 	return {
-		buildContextPack: maybeScoped.buildContextPack?.bind(sdk),
-		createMessage: (request: Record<string, unknown>) => maybeScoped.createMessage?.({ ...request, actor: agent.slug }),
-		appendTaskEvent: maybeScoped.appendTaskEvent?.bind(sdk),
+		runId: input.runId,
+		repoRoot: input.repoRoot,
+		agent: input.agent,
+		coreObjective: loadCoreObjectiveContext(input.repoRoot),
+		sdk: input.sdk.scopeForAgent(input.agent),
+		trigger: input.trigger,
+		execution: createExecutionProviderAdapter(undefined, { repoRoot: input.repoRoot }),
+		mutations: new LocalBranchMutationAdapter(input.repoRoot),
+		repository: createRepositoryInspectionAdapter(),
+		verification: createVerificationAdapter(),
+		notifications: createNotificationAdapter(),
+		research: createResearchAdapter(),
+		operations: createOperationsAdapter(),
 	};
 }
 
@@ -461,12 +474,10 @@ function contextForResearchKnowledgeHandler(input: {
 	payload: Record<string, unknown>;
 }) {
 	const agent = agentSpecForResearchKnowledgeHandler(input.kind);
-	return {
+	return baseAgentContext({
 		runId: `${input.kind}-${Date.now()}`,
 		repoRoot: input.repoRoot,
 		agent,
-		coreObjective: loadCoreObjectiveContext(input.repoRoot),
-		sdk: scopedSdkForHandler(input.sdk, agent),
 		trigger: invocationForResearchKnowledgeTask(
 			input.kind === 'research'
 				? 'research_question'
@@ -475,14 +486,8 @@ function contextForResearchKnowledgeHandler(input: {
 					: 'optimize_knowledge_draft',
 			input.payload,
 		),
-		execution: {},
-		mutations: {},
-		repository: {},
-		verification: {},
-		notifications: {},
-		research: {},
-		operations: {},
-	} as AgentContext;
+		sdk: input.sdk,
+	});
 }
 
 function contextForDocsMutationHandler(input: {
@@ -491,7 +496,7 @@ function contextForDocsMutationHandler(input: {
 	payload: Record<string, unknown>;
 	taskId: string;
 }) {
-	const agent = {
+	const agent: AgentRuntimeSpec = {
 		slug: 'treeseed-docs-engineer',
 		handler: 'act',
 		projectAgentClassId: 'implementation',
@@ -516,6 +521,9 @@ function contextForDocsMutationHandler(input: {
 			branchPrefix: 'agent/docs-mutation',
 			providerProfile: {
 				requiredCapabilities: ['workspace.write', 'treedx.write', 'docs.mutate'],
+				preferredLanes: [],
+				acceptableFallbacks: [],
+				fallbackPolicy: 'allow_substitution',
 			},
 		},
 		outputs: { messageTypes: [], modelMutations: [] },
@@ -529,21 +537,13 @@ function contextForDocsMutationHandler(input: {
 			}],
 		},
 	};
-	return {
+	return baseAgentContext({
 		runId: input.taskId,
 		repoRoot: input.repoRoot,
 		agent,
-		coreObjective: loadCoreObjectiveContext(input.repoRoot),
-		sdk: scopedSdkForHandler(input.sdk, agent),
 		trigger: invocationForResearchKnowledgeTask('apply_approved_docs_mutation', input.payload),
-		execution: {},
-		mutations: {},
-		repository: {},
-		verification: createVerificationAdapter(),
-		notifications: {},
-		research: {},
-		operations: {},
-	} as AgentContext;
+		sdk: input.sdk,
+	});
 }
 
 async function runBuiltInHandler<TInputs, TResult>(
@@ -800,7 +800,7 @@ export async function executeResearchKnowledgeTask(input: {
 			researchNote: note ?? undefined,
 			generatedArtifacts,
 			nextTaskId,
-			status: output.status,
+			status: mutationSummaryStatus(output.status),
 			summary: output.summary,
 		});
 	}
@@ -840,7 +840,7 @@ export async function executeResearchKnowledgeTask(input: {
 			knowledgeDraft: draft ?? undefined,
 			generatedArtifacts,
 			nextTaskId,
-			status: output.status,
+			status: mutationSummaryStatus(output.status),
 			summary: output.summary,
 		});
 	}
@@ -883,7 +883,7 @@ export async function executeResearchKnowledgeTask(input: {
 					sourceTaskId: taskId,
 				}
 			: null;
-		const nextTaskId = promotionRequest && workDayId
+		const nextTaskId = promotionRequest && report && workDayId
 			? await createFollowupTask({
 					sdk: input.sdk,
 					workDayId,
@@ -938,7 +938,7 @@ export async function executeResearchKnowledgeTask(input: {
 				...(promotionRequest ? [summarizePromotionRequestArtifact(promotionRequest, nextTaskId ?? undefined)] : []),
 			],
 			nextTaskId,
-			status: output.status,
+			status: mutationSummaryStatus(output.status),
 			summary: output.summary,
 		});
 	}
@@ -975,7 +975,7 @@ export async function executeResearchKnowledgeTask(input: {
 			sdk: input.sdk,
 			dependencies: input.promotionDependencies,
 		});
-		const releaseRequest = promotion.releaseRequest;
+		const releaseRequest = 'releaseRequest' in promotion ? promotion.releaseRequest : undefined;
 		const releaseTaskId = releaseRequest && workDayId
 			? await createFollowupTask({
 					sdk: input.sdk,
@@ -1005,7 +1005,7 @@ export async function executeResearchKnowledgeTask(input: {
 					enqueue: false,
 				})
 			: null;
-		const repairTask = asRecord(promotion.repairTask);
+		const repairTask = asRecord('repairTask' in promotion ? promotion.repairTask : null);
 		const repairTaskId = !releaseRequest && workDayId && Object.keys(repairTask).length > 0
 			? await createRepairFollowupTask({
 					sdk: input.sdk,
@@ -1013,7 +1013,7 @@ export async function executeResearchKnowledgeTask(input: {
 					graphVersion,
 					sourceTaskId: taskId,
 					repairTask,
-					failureKind: promotion.error?.code === 'verification_failed' ? 'verification' : 'merge',
+					failureKind: ('error' in promotion && promotion.error?.code === 'verification_failed') ? 'verification' : 'merge',
 				})
 			: null;
 		const nextTaskId = releaseTaskId ?? repairTaskId;
@@ -1266,8 +1266,8 @@ async function executeQueuedTask(options: {
 		const paths = runnerRepositoryPath(config.volumeRoot, repositoryId, options.taskId);
 		await mkdir(paths.bareGit, { recursive: true });
 		await mkdir(paths.worktree, { recursive: true });
-		const graphRefresh = await options.sdk.refreshGraph();
-		const graphVersion = graphRefresh.snapshotRoot;
+		const graphRefresh = asRecord(await options.sdk.refreshGraph());
+		const graphVersion = readString(graphRefresh.snapshotRoot);
 		await options.sdk.create({
 			model: 'graph_run',
 			data: {
@@ -1455,10 +1455,10 @@ async function executeQueuedTask(options: {
 
 function createLocalTaskQueue(sdk: ReturnType<typeof createServiceSdk>, config: ReturnType<typeof resolveWorkerConfig>) {
 	return {
-		async pull() {
+		async pull(input: { batchSize?: number; visibilityTimeoutMs?: number } = {}) {
 			const envelope = await sdk.searchTasks({
 				state: ['waiting', 'queued', 'pending'],
-				limit: config.batchSize,
+				limit: input.batchSize ?? config.batchSize,
 			});
 			const tasks = Array.isArray(envelope.payload) ? envelope.payload as Array<Record<string, unknown>> : [];
 			return {
@@ -1469,10 +1469,10 @@ function createLocalTaskQueue(sdk: ReturnType<typeof createServiceSdk>, config: 
 				})),
 			};
 		},
-		async ack() {
+		async ack(_leaseIds: string[]) {
 			return undefined;
 		},
-		async retry() {
+		async retry(_messages: Array<{ leaseId: string; delaySeconds: number }>) {
 			return undefined;
 		},
 	};
@@ -1609,7 +1609,7 @@ export async function runWorkerCycle() {
 							workDayId: message.body.workDayId,
 							taskId: message.body.taskId,
 							phase: 'overrun_hold',
-							credits: Number(error.request.interruption?.consumedCredits ?? 0),
+							credits: Number(asRecord(error.request.interruption).consumedCredits ?? 0),
 							source: 'worker',
 							metadata: {
 								interrupted: true,
@@ -1622,7 +1622,7 @@ export async function runWorkerCycle() {
 								usageActual: {
 									taskSignature: typeof payload.taskSignature === 'string' ? payload.taskSignature : String(task?.type ?? 'unknown'),
 									executionProfileId: capacityMetadata.executionProfileId,
-									actualCredits: Number(error.request.interruption?.consumedCredits ?? 0),
+									actualCredits: Number(asRecord(error.request.interruption).consumedCredits ?? 0),
 								metadata: {
 									interrupted: true,
 									partial: true,
@@ -1882,7 +1882,7 @@ export async function runWorkerCycle() {
 		}
 	}));
 
-	const processed = results.reduce((sum, value) => sum + value, 0);
+	const processed = results.reduce<number>((sum, value) => sum + value, 0);
 	await recordWorkerRunnerHeartbeat(sdk, config, processed > 0 ? 'idle' : 'active', 0, { phase: 'cycle_complete', processed });
 	return { ok: true, processed };
 }

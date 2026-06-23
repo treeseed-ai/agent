@@ -393,12 +393,10 @@ export async function createAgentTestRuntime(options?: {
 				repoRoot,
 				databaseName: 'docs-site-data',
 				persistTo,
-				contentRepository: { adapter: 'local' },
 			}))
 			: new AgentSdk({
 				repoRoot,
 				database: new MemoryAgentDatabase(),
-				contentRepository: { adapter: 'local' },
 			});
 	const kernel = new AgentKernel(sdk, repoRoot, {
 		execution: options?.execution,

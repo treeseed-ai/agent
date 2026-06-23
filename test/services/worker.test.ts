@@ -91,6 +91,9 @@ function fakeMutationWorktrees(changedPaths = ['docs/worker.md']) {
 }
 
 const sdk = {
+	scopeForAgent: vi.fn(function scopeForAgent() {
+		return sdk;
+	}),
 	searchTasks: vi.fn(),
 	claimTask: vi.fn(),
 	createTask: vi.fn(),
@@ -557,6 +560,14 @@ describe('worker service', () => {
 					changedPaths: ['docs/worker.md'],
 					usage: {},
 				})),
+				verification: {
+					runChecks: vi.fn(async () => ({
+						status: 'completed',
+						summary: 'Verification passed.',
+						stdout: '',
+						stderr: '',
+					})),
+				},
 			},
 		});
 

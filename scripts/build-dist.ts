@@ -9,15 +9,12 @@ const scriptsRoot = resolve(packageRoot, 'scripts');
 const templatesRoot = resolve(packageRoot, 'templates');
 const distRoot = resolve(packageRoot, 'dist');
 
-const JS_SOURCE_EXTENSIONS = new Set(['.mjs', '.ts']);
+const JS_SOURCE_EXTENSIONS = new Set(['.ts']);
 const COPY_EXTENSIONS = new Set(['.d.ts', '.json', '.jsonc', '.md', '.yaml', '.yml']);
 
 function walkFiles(root) {
 	const files = [];
 	for (const entry of readdirSync(root, { withFileTypes: true })) {
-		if (entry.name.startsWith('.ts-run-')) {
-			continue;
-		}
 		const fullPath = join(root, entry.name);
 		if (entry.isDirectory()) files.push(...walkFiles(fullPath));
 		else files.push(fullPath);
@@ -37,7 +34,7 @@ function rewriteRuntimeSpecifiers(contents) {
 
 async function compileModule(filePath, sourceRoot, outputRoot) {
 	const relativePath = relative(sourceRoot, filePath);
-	const outputFile = resolve(outputRoot, relativePath.replace(/\.(mjs|ts)$/u, '.js'));
+	const outputFile = resolve(outputRoot, relativePath.replace(/\.ts$/u, '.js'));
 	ensureDir(outputFile);
 	await build({
 		entryPoints: [filePath],
@@ -63,7 +60,7 @@ function copyAsset(filePath, sourceRoot, outputRoot) {
 function transpileScript(filePath) {
 	const source = readFileSync(filePath, 'utf8');
 	const relativePath = relative(scriptsRoot, filePath);
-	const outputFile = resolve(distRoot, 'scripts', relativePath.replace(/\.(mjs|ts)$/u, '.js'));
+	const outputFile = resolve(distRoot, 'scripts', relativePath.replace(/\.ts$/u, '.js'));
 	const transformed = extname(filePath) === '.ts'
 		? ts.transpileModule(source, {
 				compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },

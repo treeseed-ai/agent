@@ -61,6 +61,22 @@ function environmentFromEnv(env: Record<string, string | undefined>) {
 	return value === 'staging' ? 'staging' : 'local';
 }
 
+function isHostedAgentPlatformProofInput(value: unknown): value is HostedAgentPlatformProofInput {
+	if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+	const record = value as Record<string, unknown>;
+	return typeof record.teamId === 'string'
+		&& typeof record.projectId === 'string'
+		&& typeof record.capacityProviderId === 'string'
+		&& typeof record.agentClassId === 'string'
+		&& typeof record.apiBaseUrl === 'string'
+		&& typeof record.adminToken === 'string'
+		&& typeof record.providerApiKey === 'string';
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+	return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
 export function hostedAgentPlatformProofInputFromEnv(env: Record<string, string | undefined> = process.env): HostedAgentPlatformProofInput | { missing: string[] } {
 	const environment = environmentFromEnv(env);
 	const localDefaults = environment === 'local'
@@ -140,11 +156,11 @@ async function getJson(fetchImpl: typeof fetch, baseUrl: string, token: string, 
 }
 
 export async function runHostedAgentPlatformProof(inputOrEnv?: HostedAgentPlatformProofInput | Record<string, string | undefined>): Promise<HostedAgentPlatformProofResult> {
-	const resolved = inputOrEnv && 'apiBaseUrl' in inputOrEnv
+	const resolved = isHostedAgentPlatformProofInput(inputOrEnv)
 		? inputOrEnv
 		: hostedAgentPlatformProofInputFromEnv(inputOrEnv as Record<string, string | undefined> | undefined);
 	if ('missing' in resolved) {
-		const env = inputOrEnv && !('apiBaseUrl' in inputOrEnv) ? inputOrEnv as Record<string, string | undefined> : process.env;
+		const env = inputOrEnv && !isHostedAgentPlatformProofInput(inputOrEnv) ? inputOrEnv as Record<string, string | undefined> : process.env;
 		return notConfigured(resolved.missing, environmentFromEnv(env));
 	}
 	const input = resolved;
@@ -156,7 +172,7 @@ export async function runHostedAgentPlatformProof(inputOrEnv?: HostedAgentPlatfo
 		input.apiBaseUrl,
 		input.adminToken,
 		`/v1/projects/${encodeURIComponent(input.projectId)}/capacity-runtime-diagnostics?teamId=${encodeURIComponent(input.teamId)}`,
-	).then((body) => body.payload ?? body);
+		).then((body) => asRecord(asRecord(body).payload ?? body));
 	const assignments = Array.isArray(diagnostics.assignments) ? diagnostics.assignments : [];
 	const modeRuns = Array.isArray(diagnostics.modeRuns) ? diagnostics.modeRuns : [];
 	const treeDxProxyAudit = Array.isArray(diagnostics.treeDxProxyAudit) ? diagnostics.treeDxProxyAudit : [];
@@ -194,7 +210,7 @@ export async function runHostedAgentPlatformProof(inputOrEnv?: HostedAgentPlatfo
 	const ok = checks.every((check) => check.ok);
 	return {
 		ok,
-		environment: input.environment ?? 'staging',
+			environment: input.environment ?? 'staging',
 		runId,
 		teamId: input.teamId,
 		projectId: input.projectId,

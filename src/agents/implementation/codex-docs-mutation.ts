@@ -14,7 +14,7 @@ import type {
 	CodexDocsMutationTaskInput,
 	AgentRepairTaskPayload,
 } from '../contracts/implementation.ts';
-import type { AgentContext, AgentVerificationResult } from '../runtime-types.ts';
+import type { AgentContext, AgentVerificationAdapter, AgentVerificationResult } from '../runtime-types.ts';
 import {
 	AgentWorktreeManager,
 	changedPathViolations,
@@ -24,6 +24,7 @@ import {
 export interface CodexDocsMutationDependencies {
 	worktrees?: AgentWorktreeManager;
 	runCodexTask?: typeof runCodexSubscriptionTask;
+	verification?: AgentVerificationAdapter;
 }
 
 function readRecord(value: unknown): Record<string, unknown> | null {
@@ -38,7 +39,7 @@ function readBoolean(value: unknown, fallback: boolean) {
 	return typeof value === 'boolean' ? value : fallback;
 }
 
-function readStringArray(value: unknown) {
+function readStringArray(value: unknown): string[] {
 	return Array.isArray(value) ? value.map(String).filter(Boolean) : [];
 }
 
@@ -79,7 +80,7 @@ export function normalizeCodexDocsMutationInput(payload: Record<string, unknown>
 		featureBranch,
 		stagingBranch: readString(payload.stagingBranch, 'staging'),
 		approvalId: readString(payload.approvalId) || (typeof approval?.id === 'string' ? approval.id : undefined),
-		approval: approval as CodexDocsMutationTaskInput['approval'],
+		approval: approval as unknown as CodexDocsMutationTaskInput['approval'],
 		permissionGrantId: readString(payload.permissionGrantId) || undefined,
 		operationGrants: readOperationGrants(payload.operationGrants ?? payload.grants),
 		allowedPaths: readStringArray(payload.allowedPaths),
@@ -481,7 +482,7 @@ export async function runCodexDocsMutationLifecycle(
 			code: verifyOperation.error?.code ?? 'operation_permission_required',
 		});
 	}
-	const verification = await context.verification.runChecks({
+	const verification = await (dependencies.verification ?? context.verification).runChecks({
 		agent: context.agent,
 		runId: context.runId,
 		commands: task.verificationCommands,

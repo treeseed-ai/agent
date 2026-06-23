@@ -1,6 +1,7 @@
 import {
 	progressivelyAdmitPlanProposal,
 	type CapacityPlan,
+	type CapacityReservation,
 	type TaskEstimateProfile,
 	type TaskUsageActual,
 } from '@treeseed/sdk';
@@ -117,7 +118,7 @@ function baseWorkPolicy(metadata: JsonRecord = {}): WorkdayPolicy {
 	};
 }
 
-function baseCapacityPlan(profiles: TaskEstimateProfile[] = [], activeReservations: JsonRecord[] = []): CapacityPlan {
+function baseCapacityPlan(profiles: TaskEstimateProfile[] = [], activeReservations: CapacityReservation[] = []): CapacityPlan {
 	return {
 		projectId: 'project-1',
 		teamId: 'team-1',
@@ -200,7 +201,7 @@ function baseCapacityPlan(profiles: TaskEstimateProfile[] = [], activeReservatio
 			createdAt: nowIso(),
 			updatedAt: nowIso(),
 		}],
-		activeReservations: activeReservations as CapacityPlan['activeReservations'],
+			activeReservations,
 		remaining: {
 			dailyCredits: 100,
 			weeklyCredits: null,
@@ -216,7 +217,7 @@ class InMemoryCapacityRuntime {
 	readonly tasks: JsonRecord[] = [];
 	readonly events: JsonRecord[] = [];
 	readonly estimates: JsonRecord[] = [];
-	readonly reservations: JsonRecord[] = [];
+	readonly reservations: CapacityReservation[] = [];
 	readonly routingDecisions: JsonRecord[] = [];
 	readonly usageActuals: TaskUsageActual[] = [];
 	readonly queuedTaskIds: string[] = [];
@@ -321,12 +322,24 @@ class InMemoryCapacityRuntime {
 			reservedCredits: admission.admission.reservedCredits,
 		});
 		if (admission.enqueue && admission.route?.ok) {
-			const reservation = {
+			const reservation: CapacityReservation = {
 				...admission.route.reservation,
 				id: `reservation-${this.reservations.length + 1}`,
 				taskId: task.id,
 				workDayId: 'workday-1',
 				state: 'reserved',
+				reservedProviderUnits: admission.route.reservation.reservedProviderUnits ?? null,
+				reservedNativeAmount: admission.route.reservation.reservedNativeAmount ?? null,
+				reservedUsd: admission.route.reservation.reservedUsd ?? null,
+				nativeUnit: admission.route.reservation.nativeUnit ?? null,
+				expiresAt: admission.route.reservation.expiresAt ?? null,
+				metadata: admission.route.reservation.metadata ?? undefined,
+				consumedCredits: 0,
+				consumedProviderUnits: null,
+				consumedNativeAmount: null,
+				consumedUsd: null,
+				createdAt: nowIso(),
+				updatedAt: nowIso(),
 			};
 			const routingDecision = {
 				...admission.route.routingDecision,
@@ -360,9 +373,34 @@ class InMemoryCapacityRuntime {
 		return { task, admission };
 	}
 
-	recordUsage(actual: TaskUsageActual) {
+	recordUsage(actual: Partial<TaskUsageActual> & Pick<TaskUsageActual, 'projectId' | 'taskSignature' | 'actualCredits'>) {
 		this.usageActuals.push({
 			...actual,
+			id: actual.id ?? `usage-${this.usageActuals.length + 1}`,
+			taskId: actual.taskId ?? null,
+			workDayId: actual.workDayId ?? null,
+			projectId: actual.projectId,
+			taskSignature: actual.taskSignature,
+			capacityProviderId: actual.capacityProviderId ?? null,
+			executionProviderId: actual.executionProviderId ?? null,
+			laneId: actual.laneId ?? null,
+			businessModel: actual.businessModel ?? 'credit',
+			modelName: actual.modelName ?? null,
+			inputTokens: actual.inputTokens ?? null,
+			outputTokens: actual.outputTokens ?? null,
+			cachedInputTokens: actual.cachedInputTokens ?? null,
+			quotaMinutes: actual.quotaMinutes ?? null,
+			wallMinutes: actual.wallMinutes ?? null,
+			filesOpened: actual.filesOpened ?? null,
+			filesChanged: actual.filesChanged ?? null,
+			diffLinesAdded: actual.diffLinesAdded ?? null,
+			diffLinesRemoved: actual.diffLinesRemoved ?? null,
+			testRuns: actual.testRuns ?? null,
+			retryCount: actual.retryCount ?? null,
+			actualCredits: actual.actualCredits,
+			actualUsd: actual.actualUsd ?? null,
+			nativeUsage: actual.nativeUsage ?? null,
+			metadata: actual.metadata ?? {},
 			createdAt: actual.createdAt ?? nowIso(),
 			executionProfileId: actual.executionProfileId ?? 'standard-code-model',
 		});
@@ -384,7 +422,7 @@ export async function runCapacitySchedulingEndToEndVerification(): Promise<Capac
 		filesChanged: 1,
 		metadata: { completed: true },
 		createdAt: nowIso(),
-	} as TaskUsageActual);
+	});
 	const learnedDraft = runtime.admitTask({
 		type: 'generate_knowledge_draft',
 		payload: {
@@ -440,7 +478,7 @@ export async function runCapacitySchedulingEndToEndVerification(): Promise<Capac
 	runtime.appendEvent(String(planningTask.task.id), 'plan_proposed', proposal as unknown as JsonRecord);
 	const planAdmission = progressivelyAdmitPlanProposal({
 		proposal,
-		policy: baseWorkPolicy({ maxAdmittedPlanTasksPerCycle: 2 }),
+		policy: { maxAdmittedPlanTasksPerCycle: 2 },
 		availableCredits: 11,
 		remainingQueuedCredits: 11,
 	});
@@ -493,7 +531,7 @@ export async function runCapacitySchedulingEndToEndVerification(): Promise<Capac
 			utilityEstimate: parsePayload(learnedDraft.task).utilityEstimate,
 		},
 		createdAt: nowIso(),
-	} as TaskUsageActual);
+	});
 
 	const escalation = runtime.admitTask({
 		type: 'hybrid_escalation',

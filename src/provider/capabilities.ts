@@ -26,7 +26,7 @@ export function discoverProviderCapabilities(config: ProviderRuntimeConfig): Cap
 		repositoryAccess: 'git_worktree',
 		verification: ['local_command'],
 		metadata: {
-			capabilityAliases: ['repository_work'],
+			capabilityAliases: ['agent_mode_run', 'repo_read', 'repo_write', 'repository_work'],
 			source: 'provider_default_capability_discovery',
 		},
 	}];

@@ -36,7 +36,7 @@ function createScaler() {
 	};
 }
 
-function createSdkStub() {
+function createTestSdk() {
 	let activeWorkDay: Record<string, unknown> | null = null;
 	let prioritySnapshot: Record<string, unknown> | null = null;
 	let latestScaleDecision: Record<string, unknown> | null = null;
@@ -255,7 +255,7 @@ describe('manager service', () => {
 	});
 
 	it('skips opening a workday outside the active schedule and scales to zero', async () => {
-		const sdk = createSdkStub();
+		const sdk = createTestSdk();
 		const reporter = createReporter();
 		const scaler = createScaler();
 		const config = {
@@ -292,7 +292,7 @@ describe('manager service', () => {
 	});
 
 	it('opens an explicit local workday outside schedule and seeds starter tasks', async () => {
-		const sdk = createSdkStub();
+		const sdk = createTestSdk();
 		const reporter = createReporter();
 		const scaler = createScaler();
 		const config = {
@@ -331,7 +331,7 @@ describe('manager service', () => {
 
 	it('skips reconciliation when another healthy manager holds the lease', async () => {
 		const sdk = {
-			...createSdkStub(),
+			...createTestSdk(),
 			claimWorkdayManagerLease: vi.fn(async () => ({ payload: null })),
 		};
 		const reporter = createReporter();
@@ -371,7 +371,7 @@ describe('manager service', () => {
 	});
 
 	it('opens a workday, seeds budget-limited tasks, and scales workers from queue depth', async () => {
-		const sdk = createSdkStub();
+		const sdk = createTestSdk();
 		const reporter = createReporter();
 		const scaler = createScaler();
 		const config = {
@@ -425,7 +425,7 @@ describe('manager service', () => {
 	});
 
 	it('recovers stale claimed tasks with deterministic retry backoff', async () => {
-		const sdk = createSdkStub();
+		const sdk = createTestSdk();
 		const reporter = createReporter();
 		const scaler = createScaler();
 		(sdk.listAgentSpecs as any).mockResolvedValue([]);
@@ -507,7 +507,7 @@ describe('manager service', () => {
 	});
 
 	it('materializes completed planning proposals progressively and marks them idempotent', async () => {
-		const sdk = createSdkStub();
+		const sdk = createTestSdk();
 		const reporter = createReporter();
 		const scaler = createScaler();
 		(sdk.listAgentSpecs as any).mockResolvedValue([]);
@@ -595,7 +595,7 @@ describe('manager service', () => {
 	});
 
 	it('holds manager scale-down during cooldown', async () => {
-		const sdk = createSdkStub();
+		const sdk = createTestSdk();
 		const reporter = createReporter();
 		const scaler = createScaler();
 		(sdk.listAgentSpecs as any).mockResolvedValue([]);
@@ -655,7 +655,7 @@ describe('manager service', () => {
 		const repoRoot = mkdtempSync(join(tmpdir(), 'treeseed-workday-report-'));
 		try {
 			vi.stubEnv('TREESEED_AGENT_REPO_ROOT', repoRoot);
-			const sdk = createSdkStub();
+			const sdk = createTestSdk();
 			const reporter = createReporter();
 			const scaler = createScaler();
 			const config = {

@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-
 import { AgentSdk, RemoteTreeseedClient, RemoteTreeseedRunnerClient, TreeseedOperationsSdk } from '@treeseed/sdk';
 import { isDirectEntrypoint } from '../entrypoint.ts';
 import { createServiceSdk } from './common.ts';
@@ -209,7 +208,7 @@ export async function runRemoteRunnerCycle(options: {
 					onProgress: async (event) => {
 						if (event.kind !== 'hub_launch_phase') return;
 						await runner.progress(job.id, {
-							summary: typeof event.summary === 'string' ? event.summary : null,
+								summary: typeof event.summary === 'string' ? event.summary : undefined,
 							data: {
 								...event,
 								runnerId: config.runnerId,

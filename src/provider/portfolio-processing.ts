@@ -4,12 +4,12 @@ import { existsSync } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { promisify } from 'node:util';
-import { AgentSdk } from '@treeseed/sdk/sdk';
+import { AgentSdk, type AgentSdkTreeDxOptions } from '@treeseed/sdk/sdk';
 import type {
 	CapacityProviderPortfolioManifest,
 	CapacityProviderPortfolioProject,
-	MarketProviderClient,
 	ProviderReportRequest,
+	ProviderWorkdayRequest,
 	ProviderWorkdayResponse,
 } from '@treeseed/sdk/capacity-provider';
 import { loadAllAgentSpecs } from '../agents/spec-loader.ts';
@@ -19,7 +19,11 @@ import type { ProviderRuntimeConfig } from './config.ts';
 
 const execFileAsync = promisify(execFile);
 
-type ProviderMarketClient = Pick<MarketProviderClient, 'portfolio' | 'createWorkday' | 'writeReport'>;
+interface ProviderMarketClient {
+	portfolio(request?: Record<string, unknown>): Promise<unknown>;
+	createWorkday(request: ProviderWorkdayRequest): Promise<ProviderWorkdayResponse>;
+	writeReport(request: ProviderReportRequest): Promise<unknown>;
+}
 
 export interface ProviderProjectProcessingResult {
 	projectId: string;
@@ -64,6 +68,99 @@ export function providerRepositoryPath(config: ProviderRuntimeConfig, projectId:
 	return resolve(config.dataDir, 'repositories', safeSegment(projectId), 'repo');
 }
 
+function localWorkspaceRoot() {
+	const configured = process.env.TREESEED_PROVIDER_WORKSPACE_ROOT?.trim();
+	if (configured) return configured;
+	return existsSync('/workspace') ? '/workspace' : null;
+}
+
+function projectArchitecture(project: CapacityProviderPortfolioProject) {
+	return (project as { architecture?: unknown }).architecture
+		&& typeof (project as { architecture?: unknown }).architecture === 'object'
+		&& !Array.isArray((project as { architecture?: unknown }).architecture)
+		? (project as { architecture: Record<string, unknown> }).architecture
+		: null;
+}
+
+function architectureString(project: CapacityProviderPortfolioProject, key: string) {
+	const value = projectArchitecture(project)?.[key] ?? null;
+	return typeof value === 'string' && value.trim() ? value.trim() : null;
+}
+
+function normalizedRelativePath(value: string | null) {
+	if (!value || value === '.') return '';
+	return value.replace(/\\/gu, '/').replace(/^\/+/u, '').replace(/\/+$/u, '');
+}
+
+function providerLocalRepositoryPath(project: CapacityProviderPortfolioProject) {
+	const materialization = architectureString(project, 'localContentMaterialization');
+	if (materialization !== 'existing_path') return null;
+	const workspaceRoot = localWorkspaceRoot();
+	if (!workspaceRoot) return null;
+	const rootPath = architectureString(project, 'rootPath');
+	if (!rootPath || rootPath === '.') {
+		const checkoutPath = project.repository.checkoutPath?.trim();
+		if (checkoutPath && checkoutPath !== '.') return resolve(workspaceRoot, checkoutPath);
+		return resolve(workspaceRoot);
+	}
+	return resolve(workspaceRoot, rootPath);
+}
+
+function providerLocalProjectRoot(project: CapacityProviderPortfolioProject) {
+	const workspaceRoot = localWorkspaceRoot();
+	if (!workspaceRoot) return null;
+	const checkoutPath = project.repository.checkoutPath?.trim();
+	if (checkoutPath && checkoutPath !== '.') return resolve(workspaceRoot, checkoutPath);
+	return resolve(workspaceRoot);
+}
+
+export function providerProjectSiteRoot(
+	project: Pick<CapacityProviderPortfolioProject, 'architecture'> | { architecture?: Record<string, unknown> | null },
+	repositoryPath: string,
+) {
+	const architecture = project.architecture && typeof project.architecture === 'object' && !Array.isArray(project.architecture)
+		? project.architecture as Record<string, unknown>
+		: null;
+	const sitePath = typeof architecture?.sitePath === 'string' ? normalizedRelativePath(architecture.sitePath) : '';
+	return sitePath ? resolve(repositoryPath, sitePath) : repositoryPath;
+}
+
+function providerProjectAgentSpecsRoot(project: CapacityProviderPortfolioProject) {
+	const contentPath = normalizedRelativePath(architectureString(project, 'contentPath'));
+	return contentPath ? `${contentPath}/agents` : normalizedRelativePath(project.agentSpecs.root) || 'src/content/agents';
+}
+
+function providerTreeDxRepositoryName(project: CapacityProviderPortfolioProject) {
+	const topology = project.repositoryTopology as { contentRepository?: { treeDx?: { repositoryId?: unknown } } } | undefined;
+	const topologyRepoId = topology?.contentRepository?.treeDx?.repositoryId;
+	if (typeof topologyRepoId === 'string' && topologyRepoId.trim()) return topologyRepoId.trim();
+	return `treeseed-${project.slug.replace(/[^A-Za-z0-9_.-]+/gu, '-').replace(/^-+|-+$/gu, '').toLowerCase()}`;
+}
+
+export function providerProjectTreeDxOptions(project: CapacityProviderPortfolioProject, treeDx?: AgentSdkTreeDxOptions) {
+	if (!treeDx) return undefined;
+	const contentPath = architectureString(project, 'contentPath') ?? 'src/content';
+	return {
+		...treeDx,
+		repoId: undefined,
+		repositoryHints: [
+			{ name: providerTreeDxRepositoryName(project), purpose: 'treeseed_project_content' },
+			{ name: providerTreeDxRepositoryName(project) },
+			...(treeDx.repositoryHints ?? []),
+		],
+		contentPathMap: {
+			...(treeDx.contentPathMap ?? {}),
+			agent: `${contentPath.replace(/\/+$/u, '')}/agents`,
+			objective: `${contentPath.replace(/\/+$/u, '')}/objectives`,
+			note: `${contentPath.replace(/\/+$/u, '')}/notes`,
+			knowledge: `${contentPath.replace(/\/+$/u, '')}/knowledge`,
+			decision: `${contentPath.replace(/\/+$/u, '')}/decisions`,
+			proposal: `${contentPath.replace(/\/+$/u, '')}/proposals`,
+			question: `${contentPath.replace(/\/+$/u, '')}/questions`,
+		},
+	} satisfies AgentSdkTreeDxOptions;
+}
+
 export function providerPortfolioIndexPath(config: ProviderRuntimeConfig) {
 	return resolve(config.dataDir, 'portfolio', 'index.json');
 }
@@ -97,6 +194,16 @@ export async function syncProviderProjectRepository(
 	config: ProviderRuntimeConfig,
 	project: CapacityProviderPortfolioProject,
 ): Promise<ProviderProjectProcessingResult['repository']> {
+	const localPath = config.environment === 'local' ? providerLocalRepositoryPath(project) ?? providerLocalProjectRoot(project) : null;
+	if (localPath) {
+		return {
+			ok: existsSync(resolve(localPath, '.git')) || existsSync(resolve(localPath, 'package.json')) || existsSync(resolve(localPath, 'treeseed.site.yaml')),
+			path: localPath,
+			branch: project.repository.defaultBranch || project.repository.currentBranch || 'local',
+			commitSha: await gitSha(localPath),
+			...(existsSync(localPath) ? {} : { error: `Local workspace path does not exist: ${localPath}` }),
+		};
+	}
 	const repoPath = providerRepositoryPath(config, project.id);
 	const branch = project.repository.defaultBranch || project.repository.currentBranch || 'main';
 	const cloneUrl = project.repository.cloneUrl;
@@ -133,15 +240,21 @@ export async function syncProviderProjectRepository(
 	}
 }
 
-async function validateProviderProjectAgents(config: ProviderRuntimeConfig, project: CapacityProviderPortfolioProject, repoRoot: string) {
+async function validateProviderProjectAgents(
+	config: ProviderRuntimeConfig,
+	project: CapacityProviderPortfolioProject,
+	repoRoot: string,
+	treeDx?: AgentSdkTreeDxOptions,
+) {
 	const reportRoot = resolve(config.dataDir, 'reports', safeSegment(project.id));
+	const siteRoot = providerProjectSiteRoot(project, repoRoot);
 	const sdk = AgentSdk.createLocal({
-		repoRoot,
+		repoRoot: siteRoot,
 		persistTo: resolve(config.dataDir, 'state', `${safeSegment(project.id)}.sqlite`),
-		contentRepository: { adapter: 'local' },
+		treeDx: providerProjectTreeDxOptions(project, treeDx),
 	});
 	const loaded = await loadAllAgentSpecs(sdk);
-	const handlers = await listRegisteredAgentHandlers({ tenantRoot: repoRoot });
+	const handlers = await listRegisteredAgentHandlers({ tenantRoot: siteRoot });
 	const diagnostics = [
 		...loaded.diagnostics.map((entry) => ({ ...entry })),
 		...loaded.specs
@@ -158,7 +271,9 @@ async function validateProviderProjectAgents(config: ProviderRuntimeConfig, proj
 		projectId: project.id,
 		slug: project.slug,
 		repoRoot,
-		agentSpecsRoot: project.agentSpecs.root,
+		siteRoot,
+		treeDxRepositoryName: providerTreeDxRepositoryName(project),
+		agentSpecsRoot: providerProjectAgentSpecsRoot(project),
 		agents: loaded.specs.map((spec) => ({
 			slug: spec.slug,
 			handler: spec.handler,
@@ -207,19 +322,20 @@ function projectEnvironment(config: ProviderRuntimeConfig, project: CapacityProv
 }
 
 function projectArchitectureSummary(project: CapacityProviderPortfolioProject) {
-	if (!project.architecture) return null;
+	const architecture = projectArchitecture(project);
+	if (!architecture) return null;
 	return {
-		topology: project.architecture.topology,
-		rootPath: project.architecture.rootPath,
-		sitePath: project.architecture.sitePath,
-		contentPath: project.architecture.contentPath ?? null,
-		contentRuntimeSource: project.architecture.contentRuntimeSource,
-		localContentMaterialization: project.architecture.localContentMaterialization,
+		topology: architecture.topology,
+		rootPath: architecture.rootPath,
+		sitePath: architecture.sitePath,
+		contentPath: architecture.contentPath ?? null,
+		contentRuntimeSource: architecture.contentRuntimeSource,
+		localContentMaterialization: architecture.localContentMaterialization,
 		workspaceAccess: {
-			fullWorkspaceFiles: project.architecture.topology === 'single_repository_site',
-			contentSource: project.architecture.contentRuntimeSource,
-			localContentRequired: project.architecture.contentRuntimeSource === 'local_directory'
-				|| project.architecture.localContentMaterialization === 'existing_path',
+			fullWorkspaceFiles: architecture.topology === 'single_repository_site',
+			contentSource: architecture.contentRuntimeSource,
+			localContentRequired: architecture.contentRuntimeSource === 'local_directory'
+				|| architecture.localContentMaterialization === 'existing_path',
 			pushCredentials: false,
 		},
 	};
@@ -233,6 +349,7 @@ async function processProviderProject(
 	config: ProviderRuntimeConfig,
 	client: ProviderMarketClient,
 	project: CapacityProviderPortfolioProject,
+	treeDx?: AgentSdkTreeDxOptions,
 ): Promise<ProviderProjectProcessingResult> {
 	const enabled = project.workPolicy.enabled !== false;
 	const repositoryPath = providerRepositoryPath(config, project.id);
@@ -278,7 +395,7 @@ async function processProviderProject(
 	if (!repository.ok) {
 		return { ...base, error: repository.error };
 	}
-	const validation = await validateProviderProjectAgents(config, project, repository.path);
+	const validation = await validateProviderProjectAgents(config, project, repository.path, treeDx);
 	const environment = projectEnvironment(config, project);
 	const workday = await client.createWorkday({
 		projectId: project.id,
@@ -301,7 +418,7 @@ async function processProviderProject(
 		metadata: {
 			providerRuntime: '@treeseed/agent',
 		},
-	}) as ProviderWorkdayResponse;
+	}) as unknown as ProviderWorkdayResponse;
 	return {
 		...base,
 		...validation,
@@ -313,13 +430,15 @@ export async function processProviderPortfolio(input: {
 	config: ProviderRuntimeConfig;
 	client: ProviderMarketClient;
 	portfolio?: CapacityProviderPortfolioManifest;
+	treeDx?: AgentSdkTreeDxOptions;
 }): Promise<ProviderPortfolioProcessingResult> {
 	const generatedAt = new Date().toISOString();
-	const portfolio = input.portfolio ?? await input.client.portfolio();
+	const portfolioRecord = input.portfolio ?? await input.client.portfolio();
+	const portfolio = portfolioRecord as CapacityProviderPortfolioManifest;
 	const projects: ProviderProjectProcessingResult[] = [];
-	for (const project of portfolio.projects) {
+	for (const project of Array.isArray(portfolio.projects) ? portfolio.projects : []) {
 		try {
-			projects.push(await processProviderProject(input.config, input.client, project));
+			projects.push(await processProviderProject(input.config, input.client, project, input.treeDx));
 		} catch (error) {
 			projects.push({
 				projectId: project.id,

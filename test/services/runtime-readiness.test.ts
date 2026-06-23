@@ -116,8 +116,7 @@ describe('runtime readiness inventory', () => {
 
 	it('prints parseable JSON from the script entrypoint', async () => {
 		const repoRoot = await createRepoRoot();
-		const { stdout } = await execFileAsync('node', [
-			'./scripts/run-ts.mjs',
+		const { stdout } = await execFileAsync('tsx', [
 			'./scripts/runtime-readiness.ts',
 		], {
 			cwd: packageRoot,

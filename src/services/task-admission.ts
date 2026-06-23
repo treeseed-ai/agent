@@ -11,9 +11,9 @@ import {
 	predictReserveForCapacityPlan,
 	routeAndReserveCapacity,
 	type CapacityPlan,
-	type CapacityEstimateConfidence,
 	type CapacityTaskExecutionEnvelope,
 	type ExecutionProfile,
+	type AttentionPolicy,
 	type AttentionEstimate,
 	type HybridExecutionPlan,
 	type ReservePrediction,
@@ -26,6 +26,7 @@ import {
 	type UtilityEstimate,
 	type WorkdayPolicy,
 } from '@treeseed/sdk';
+import type { CapacityEstimateConfidence } from '@treeseed/sdk/types';
 
 type TaskPayload = Record<string, unknown>;
 type WorkDayRecord = Record<string, unknown>;
@@ -250,7 +251,7 @@ export function policyMetadataAdmissionPolicy(policy: WorkdayPolicy): TaskAdmiss
 		planningTaskSignature: readString(metadata, 'planningTaskSignature') || DEFAULT_TASK_ADMISSION_POLICY.planningTaskSignature,
 		allowBackfill: typeof metadata.allowBackfill === 'boolean' ? metadata.allowBackfill : DEFAULT_TASK_ADMISSION_POLICY.allowBackfill,
 		maxAttentionLoad: readNumber(metadata, 'maxAttentionLoad') ?? DEFAULT_TASK_ADMISSION_POLICY.maxAttentionLoad,
-		reserveAttentionPercent: readNumber(metadata, 'reserveAttentionPercent') ?? DEFAULT_TASK_ADMISSION_POLICY.reserveAttentionPercent,
+		reserveAttentionPercent: readNumber(metadata, 'reserveAttentionPercent') ?? DEFAULT_TASK_ADMISSION_POLICY.reserveAttentionPercent ?? 0,
 		maxContextTokens: readNumber(metadata, 'maxContextTokens') ?? DEFAULT_TASK_ADMISSION_POLICY.maxContextTokens,
 		maxContextSaturationPercent: readNumber(metadata, 'maxContextSaturationPercent') ?? DEFAULT_TASK_ADMISSION_POLICY.maxContextSaturationPercent,
 		coordinationOverheadFactor: readNumber(metadata, 'coordinationOverheadFactor') ?? DEFAULT_TASK_ADMISSION_POLICY.coordinationOverheadFactor,
@@ -345,6 +346,13 @@ export function admissionForTaskProposal(input: {
 		remainingCredits: Number(input.workDay.capacityBudget ?? input.policy.dailyTaskCreditBudget ?? 0) - Number(input.workDay.capacityUsed ?? 0) - Number(input.queuedCredits ?? 0),
 		metadata: isRecord(input.policy.metadata) ? input.policy.metadata : {},
 	});
+	const attentionPolicy: Partial<AttentionPolicy> = {
+		maxAttentionLoad: policySnapshot.maxAttentionLoad ?? undefined,
+		reserveAttentionPercent: policySnapshot.reserveAttentionPercent ?? undefined,
+		maxContextTokens: policySnapshot.maxContextTokens ?? undefined,
+		maxContextSaturationPercent: policySnapshot.maxContextSaturationPercent ?? undefined,
+		coordinationOverheadFactor: policySnapshot.coordinationOverheadFactor ?? undefined,
+	};
 	const route = input.capacityPlan && input.capacityPlan.grants.length > 0 && input.capacityPlan.lanes.length > 0
 		? routeAndReserveCapacity({
 			plan: input.capacityPlan,
@@ -361,7 +369,7 @@ export function admissionForTaskProposal(input: {
 			attentionWeight: attentionOverrides.attentionWeight,
 			coordinationWeight: attentionOverrides.coordinationWeight,
 			minimumAttentionAvailable: attentionOverrides.minimumAttentionAvailable,
-			attentionPolicy: policySnapshot,
+			attentionPolicy,
 			utilityPolicy: policySnapshot.utilityPolicy,
 			utilityValue: utilityOverrides.utilityValue,
 			maintenanceValue: utilityOverrides.maintenanceValue,
@@ -464,12 +472,12 @@ export function admissionForTaskProposal(input: {
 				utilityEstimate,
 				reservePrediction,
 				hybridExecutionPlan,
-				capacityRoute: route?.ok ? route.capacityMetadata : route ? { code: route.code, reason: route.reason } : null,
+					capacityRoute: route?.ok ? route.capacityMetadata : route?.ok === false ? { code: route.code, reason: route.reason } : null,
 			},
 		}
 		: {
 			maxCredits: admission.reservedCredits,
-			approvalBehavior: 'pause_task',
+				approvalBehavior: 'pause_task' as const,
 			pausePolicy: { onOverrun: 'pause_for_approval' },
 			metadata: {
 				executionProfileId: executionProfile.id,
@@ -478,7 +486,7 @@ export function admissionForTaskProposal(input: {
 				utilityEstimate,
 				reservePrediction,
 				hybridExecutionPlan,
-				capacityRoute: route?.ok ? route.capacityMetadata : route ? { code: route.code, reason: route.reason } : null,
+					capacityRoute: route?.ok ? route.capacityMetadata : route?.ok === false ? { code: route.code, reason: route.reason } : null,
 			},
 		};
 	return {

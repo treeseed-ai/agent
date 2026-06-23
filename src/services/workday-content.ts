@@ -138,7 +138,7 @@ function sourceMapRefCountFromValue(value: unknown): number {
 		record.source_map,
 		record.sourceMap,
 	];
-	return refs.reduce((total, candidate) => total + (Array.isArray(candidate) ? candidate.length : 0), 0);
+	return refs.reduce<number>((total, candidate) => total + (Array.isArray(candidate) ? candidate.length : 0), 0);
 }
 
 export function summarizeDocsAutomationWorkday(input: Pick<WorkdayContentSnapshotInput,

@@ -3,21 +3,9 @@ import { resolveTreeseedTenantRoot } from '@treeseed/sdk/platform/tenant-config'
 import type { AgentNotificationAdapter } from '../runtime-types.ts';
 import { getTreeseedAgentProviderSelections } from '@treeseed/sdk/platform/deploy-runtime';
 
-export class StubNotificationAdapter implements AgentNotificationAdapter {
-	async deliver(input: { recipients: string[] }) {
-		return {
-			status: input.recipients.length ? 'completed' as const : 'waiting' as const,
-			summary: input.recipients.length
-				? `Prepared ${input.recipients.length} notification(s).`
-				: 'No recipients available for notification.',
-			deliveredCount: input.recipients.length,
-		};
-	}
-}
-
 export class SdkMessageNotificationAdapter implements AgentNotificationAdapter {
 	async deliver(input: { agent: { slug: string }; runId: string; recipients: string[]; subject: string; body: string }) {
-		const sdk = AgentSdk.createLocal({ repoRoot: resolveTreeseedTenantRoot(), contentRepository: { adapter: 'local' } });
+		const sdk = AgentSdk.createLocal({ repoRoot: resolveTreeseedTenantRoot() });
 		await sdk.createMessage({
 			type: 'agent.notification',
 			payload: {
@@ -43,9 +31,11 @@ export class SdkMessageNotificationAdapter implements AgentNotificationAdapter {
 }
 
 export function createNotificationAdapter() {
-	return String(
+	const provider = String(
 		process.env.TREESEED_AGENT_NOTIFICATION_PROVIDER ?? getTreeseedAgentProviderSelections().notification,
-	).toLowerCase() === 'sdk_message'
-		? new SdkMessageNotificationAdapter()
-		: new StubNotificationAdapter();
+	).toLowerCase();
+	if (provider !== 'sdk_message') {
+		throw new Error(`Unsupported agent notification provider "${provider}". Configure TREESEED_AGENT_NOTIFICATION_PROVIDER=sdk_message.`);
+	}
+	return new SdkMessageNotificationAdapter();
 }

@@ -3,11 +3,12 @@ import type {
 	AgentTreeDxAdapter,
 	ExecutionProviderAdapter,
 	ExecutionProviderInvocation,
+	ExecutionPreparationResult,
 	ExecutionProviderToolDescriptor,
 	TreeDxProxyExecutionToolDescriptor,
 } from '../agents/runtime-types.ts';
-import { AgentSdk } from '@treeseed/sdk/sdk';
-import { buildCapacityProviderAuthHeaders, type MarketProviderClient } from '@treeseed/sdk/capacity-provider';
+import { AgentSdk, type AgentSdkTreeDxOptions } from '@treeseed/sdk/sdk';
+import { buildCapacityProviderAuthHeaders, type ProviderReportRequest, type ProviderWorkdayRequest } from '@treeseed/sdk/capacity-provider';
 import type { AgentModeRunStatus, ProviderAssignment } from '@treeseed/sdk/agent-capacity';
 import type {
 	ExecutionArtifactRef,
@@ -20,6 +21,8 @@ import type { JiraExecutionProviderConfig } from '../agents/adapters/execution-j
 import type { GitHubIssuesExecutionProviderConfig } from '../agents/adapters/execution-github-issues.ts';
 import type { DiscordExecutionProviderConfig } from '../agents/adapters/execution-discord.ts';
 import type { WorkflowExecutionProviderAdapterOptions } from '../agents/adapters/execution-workflow.ts';
+import type { PreparedCodexWorktree } from '../agents/adapters/execution-codex.ts';
+import { assertRelativeContentPath } from '../agents/content-artifacts.ts';
 import {
 	deriveAgentCapacityEnvelopeFromAssignment,
 	deriveDecisionExecutionInputFromAssignment,
@@ -31,12 +34,28 @@ import { createExecutionProviderAdapter } from '../agents/adapters/execution.ts'
 import { AgentKernel } from '../agents/kernel/agent-kernel.ts';
 import type { ProviderRuntimeConfig } from './config.ts';
 import { discoverProviderCapabilities } from './capabilities.ts';
-import { processProviderPortfolio, readProviderPortfolioIndex } from './portfolio-processing.ts';
+import { processProviderPortfolio, providerProjectSiteRoot, providerProjectTreeDxOptions, readProviderPortfolioIndex } from './portfolio-processing.ts';
+import { mkdir, writeFile } from 'node:fs/promises';
+import { dirname } from 'node:path';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 
-type ProviderAssignmentClient = Pick<MarketProviderClient, 'nextAssignment' | 'createAssignmentModeRun' | 'completeAssignment' | 'failAssignment'> & Partial<Pick<MarketProviderClient, 'portfolio' | 'createWorkday' | 'writeReport' | 'renewAssignment' | 'returnAssignment' | 'dispatchAssignmentWorkflowOperation'>>;
+interface ProviderAssignmentClient {
+	nextAssignment(request?: Record<string, unknown>): Promise<unknown>;
+	createAssignmentModeRun(assignmentId: string, request: Record<string, unknown>): Promise<unknown>;
+	completeAssignment(assignmentId: string, request: Record<string, unknown>): Promise<unknown>;
+	failAssignment(assignmentId: string, request: Record<string, unknown>): Promise<unknown>;
+	portfolio?(request?: Record<string, unknown>): Promise<unknown>;
+	createWorkday?(request: ProviderWorkdayRequest): Promise<unknown>;
+	writeReport?(request: ProviderReportRequest): Promise<unknown>;
+	renewAssignment?(assignmentId: string, request: Record<string, unknown>): Promise<unknown>;
+	returnAssignment?(assignmentId: string, request: Record<string, unknown>): Promise<unknown>;
+	dispatchAssignmentWorkflowOperation?(assignmentId: string, operationId: string, request: Record<string, unknown>): Promise<unknown>;
+}
 
 const DEFAULT_ASYNC_POLL_INTERVAL_MS = 250;
 const DEFAULT_ASYNC_MAX_POLLS = 20;
+const execFileAsync = promisify(execFile);
 
 function record(value: unknown): Record<string, unknown> {
 	return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -49,10 +68,126 @@ function stringValue(...values: unknown[]) {
 	return null;
 }
 
+async function recordEarlyModeRun(input: {
+	client: ProviderAssignmentClient;
+	assignmentId: string;
+	assignment: Record<string, unknown>;
+	selectedInput: Record<string, unknown>;
+	capacityEnvelope: Record<string, unknown>;
+	status: AgentModeRunStatus;
+	fallbackReason: string;
+	metadata?: Record<string, unknown>;
+}) {
+	if (!input.assignmentId) return null;
+	return input.client.createAssignmentModeRun(input.assignmentId, {
+		mode: stringValue(input.assignment.mode, input.capacityEnvelope.mode) ?? 'planning',
+		status: input.status,
+		selectedInput: input.selectedInput,
+		capacityEnvelope: input.capacityEnvelope,
+		fallbackReason: input.fallbackReason,
+		metadata: {
+			source: 'provider_runner_early_exit',
+			...(input.metadata ?? {}),
+		},
+	}).catch(() => null);
+}
+
 function waitingResult(summary: string): AgentHandlerOutput {
 	return {
 		status: 'waiting',
 		summary,
+	};
+}
+
+async function writeProviderContentArtifact(input: {
+	repoRoot: string;
+	relativePath: string;
+	content: string;
+	commitMessage: string;
+}) {
+	const target = assertRelativeContentPath(input.repoRoot, input.relativePath);
+	await mkdir(dirname(target), { recursive: true });
+	await writeFile(target, input.content, 'utf8');
+	return {
+		branchName: null,
+		commitMessage: input.commitMessage,
+		worktreePath: input.repoRoot,
+		commitSha: null,
+		changedPaths: [input.relativePath],
+	};
+}
+
+async function inspectProviderRepository(repoRoot: string) {
+	try {
+		const { stdout: branchStdout } = await execFileAsync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], {
+			cwd: repoRoot,
+			env: process.env,
+		});
+		const { stdout: changedStdout } = await execFileAsync('git', ['status', '--short'], {
+			cwd: repoRoot,
+			env: process.env,
+		});
+		const { stdout: shaStdout } = await execFileAsync('git', ['rev-parse', 'HEAD'], {
+			cwd: repoRoot,
+			env: process.env,
+		});
+		const changedPaths = changedStdout
+			.split('\n')
+			.map((entry) => entry.trim().replace(/^[MADRCU?! ]+\s+/, '').trim())
+			.filter(Boolean);
+		return {
+			branchName: branchStdout.trim() || null,
+			changedPaths,
+			commitSha: shaStdout.trim() || null,
+			summary: `Inspected provider workspace with ${changedPaths.length} changed path(s).`,
+		};
+	} catch (error) {
+		return {
+			branchName: null,
+			changedPaths: [],
+			commitSha: null,
+			summary: `Provider workspace inspection failed: ${error instanceof Error ? error.message : String(error)}`,
+		};
+	}
+}
+
+async function runProviderVerification(input: { repoRoot: string; commands: string[]; cwd?: string }) {
+	if (!input.commands.length) {
+		return {
+			status: 'completed' as const,
+			summary: 'No verification commands were configured for this assignment.',
+			stdout: '',
+			stderr: '',
+		};
+	}
+	const stdout: string[] = [];
+	const stderr: string[] = [];
+	for (const command of input.commands) {
+		try {
+			const result = await execFileAsync('/bin/bash', ['-lc', command], {
+				cwd: input.cwd ?? input.repoRoot,
+				env: process.env,
+				maxBuffer: 10 * 1024 * 1024,
+			});
+			stdout.push(result.stdout);
+			stderr.push(result.stderr);
+		} catch (error) {
+			return {
+				status: 'failed' as const,
+				summary: `Verification command failed: ${command}`,
+				stdout: stdout.join('\n'),
+				stderr: error && typeof error === 'object' && 'stderr' in error
+					? String((error as { stderr?: string }).stderr ?? '')
+					: String(error),
+				errorCategory: 'execution_error' as const,
+			};
+		}
+	}
+	return {
+		status: 'completed' as const,
+		summary: `Verification completed for ${input.commands.length} command(s).`,
+		stdout: stdout.join('\n'),
+		stderr: stderr.join('\n'),
 	};
 }
 
@@ -108,7 +243,7 @@ class DryRunExecutionProviderAdapter implements ExecutionProviderAdapter {
 	async start(input: Parameters<ExecutionProviderAdapter['start']>[0]) {
 		return {
 			status: 'waiting' as const,
-			summary: 'Dry-run execution adapter skipped external model execution.',
+			summary: 'Dry-run execution completed without external model execution because the assignment was explicitly configured as dry-run.',
 			runId: typeof input.metadata?.runId === 'string' ? input.metadata.runId : input.assignment.id,
 			metadata: {
 				provider: 'dry_run',
@@ -164,13 +299,14 @@ class LifecycleManagedExecutionProviderAdapter implements ExecutionProviderAdapt
 		};
 		const preparation = await this.prepare(invocation);
 		if (!preparation.accepted) {
+			const rejected = preparation as Exclude<ExecutionPreparationResult, { accepted: true }>;
 			const snapshot: ExecutionRunSnapshot = {
-				status: preparation.retryable === false ? 'failed' : 'returned',
-				summary: preparation.summary,
+				status: rejected.retryable === false ? 'failed' : 'returned',
+				summary: rejected.summary,
 				runId: typeof invocation.metadata?.runId === 'string' ? invocation.metadata.runId : invocation.assignment.id,
-				retryable: preparation.retryable,
-				code: preparation.code ?? 'execution_provider_prepare_rejected',
-				metadata: preparation.metadata,
+				retryable: rejected.retryable,
+				code: rejected.code ?? 'execution_provider_prepare_rejected',
+				metadata: rejected.metadata,
 			};
 			await this.recordSnapshot(snapshot, 'start');
 			return snapshot;
@@ -441,7 +577,31 @@ function createAssignmentExecutionProviderAdapter(input: {
 		githubIssues: input.githubIssues,
 		discord: input.discord,
 		workflow: input.workflow,
+		codex: providerLocalCodexOptions(input.repoRoot),
 	});
+}
+
+function sanitizeCodexWorktreePart(value: string) {
+	return value.replace(/[^A-Za-z0-9._/-]+/gu, '-').replace(/^\/+|\/+$/gu, '') || 'agent';
+}
+
+function providerLocalCodexOptions(repoRoot: string) {
+	if (!repoRoot.startsWith('/workspace')) return null;
+	return {
+		prepareWorktree: async (input: {
+			agent: { slug: string };
+			runId: string;
+			repoRoot: string;
+		}): Promise<PreparedCodexWorktree> => ({
+			branchName: [
+				'local-mounted-workspace',
+				sanitizeCodexWorktreePart(input.agent.slug),
+				sanitizeCodexWorktreePart(input.runId),
+			].join('/'),
+			worktreeRoot: input.repoRoot,
+			created: false,
+		}),
+	};
 }
 
 function treeDxPathMatches(pattern: string, candidate: string) {
@@ -577,6 +737,17 @@ function createAssignmentTreeDxAdapter(input: {
 	};
 }
 
+function assignmentScopedTreeDxOptions(base: AgentSdkTreeDxOptions | undefined, handle: Record<string, unknown>) {
+	if (!base) return undefined;
+	const repositoryId = stringValue(handle.repositoryId);
+	const workspaceId = stringValue(handle.workspaceId);
+	return {
+		...base,
+		...(repositoryId ? { repoId: repositoryId } : {}),
+		...(workspaceId ? { workspaceId } : {}),
+	} satisfies AgentSdkTreeDxOptions;
+}
+
 function createAssignmentTreeDxToolDescriptor(input: {
 	projectId: string;
 	assignmentId: string;
@@ -643,6 +814,7 @@ export async function runProviderRunnerOnce(input: {
 	client: ProviderAssignmentClient;
 	runnerId?: string;
 	executionAdapter?: ExecutionProviderAdapter;
+	treeDx?: AgentSdkTreeDxOptions;
 	executionLifecycle?: {
 		pollIntervalMs?: number;
 		maxPolls?: number;
@@ -653,18 +825,21 @@ export async function runProviderRunnerOnce(input: {
 		runnerId: input.runnerId ?? `provider-runner-${process.pid}`,
 		capabilities: providerRunnerCapabilities(input.config),
 	});
-	const assignment = record(leased.payload ?? leased.assignment);
+	const leasedRecord = record(leased);
+	const assignment = record(leasedRecord.payload ?? leasedRecord.assignment);
 	if (!Object.keys(assignment).length) {
+		const leaseDiagnostics = record(leasedRecord.leaseDiagnostics ?? leasedRecord.diagnostics);
 		return {
 			ok: true,
 			role: 'runner',
 			dryRun: false,
 			assigned: 0,
 			result: null,
+			...(Object.keys(leaseDiagnostics).length ? { leaseDiagnostics } : {}),
 		};
 	}
-	const leaseToken = stringValue(leased.leaseToken, assignment.leaseToken);
-	const leaseSeconds = Number(leased.leaseSeconds ?? 300);
+	const leaseToken = stringValue(leasedRecord.leaseToken, assignment.leaseToken);
+	const leaseSeconds = Number(leasedRecord.leaseSeconds ?? 300);
 	const renewLease = async () => {
 		if (!leaseToken || !input.client.renewAssignment) return;
 		await input.client.renewAssignment(String(assignment.id), {
@@ -692,6 +867,7 @@ export async function runProviderRunnerOnce(input: {
 			leaseSeconds,
 			renewLease,
 			executionAdapter: input.executionAdapter,
+			treeDx: input.treeDx,
 			executionLifecycle: input.executionLifecycle,
 		});
 	} finally {
@@ -717,6 +893,7 @@ async function runProviderAssignment(input: {
 	leaseSeconds: number;
 	renewLease: () => Promise<void>;
 	executionAdapter?: ExecutionProviderAdapter;
+	treeDx?: AgentSdkTreeDxOptions;
 	executionLifecycle?: {
 		pollIntervalMs?: number;
 		maxPolls?: number;
@@ -729,6 +906,16 @@ async function runProviderAssignment(input: {
 	const projectId = stringValue(input.assignment.projectId, decisionInput.projectId, capacityEnvelope.projectId);
 	const agentSlug = stringValue(input.assignment.agentId, decisionInput.agentId, decisionPayload.agentSlug, decisionPayload.agentId);
 	if (!projectId || !agentSlug) {
+		await recordEarlyModeRun({
+			client: input.client,
+			assignmentId,
+			assignment: input.assignment,
+			selectedInput: decisionPayload,
+			capacityEnvelope,
+			status: 'failed',
+			fallbackReason: 'assignment_missing_project_or_agent',
+			metadata: { projectId, agentSlug },
+		});
 		return input.client.failAssignment(assignmentId, {
 			leaseToken: input.leaseToken,
 			runnerId: input.runnerId,
@@ -739,10 +926,22 @@ async function runProviderAssignment(input: {
 	}
 	let index = await readProviderPortfolioIndex(input.config);
 	let project = index?.projects.find((entry) => entry.projectId === projectId);
-	if (!project && input.client.portfolio && input.client.createWorkday && input.client.writeReport) {
+	if ((!project || (input.config.environment === 'local' && !project.repository.ok)) && input.client.portfolio && input.client.createWorkday && input.client.writeReport) {
+		const portfolioClient = {
+			portfolio: input.client.portfolio.bind(input.client),
+			createWorkday: async (request: ProviderWorkdayRequest) => {
+				const response = record(await input.client.createWorkday!(request));
+				return {
+					ok: true as const,
+					workDay: record(response.workDay ?? response.payload ?? response),
+				};
+			},
+			writeReport: input.client.writeReport.bind(input.client),
+		};
 		await processProviderPortfolio({
 			config: input.config,
-			client: input.client as Pick<MarketProviderClient, 'portfolio' | 'createWorkday' | 'writeReport'>,
+			client: portfolioClient,
+			treeDx: input.treeDx,
 		});
 		index = await readProviderPortfolioIndex(input.config);
 		project = index?.projects.find((entry) => entry.projectId === projectId);
@@ -759,6 +958,20 @@ async function runProviderAssignment(input: {
 				agentSlug,
 			},
 		};
+		await recordEarlyModeRun({
+			client: input.client,
+			assignmentId,
+			assignment: input.assignment,
+			selectedInput: decisionPayload,
+			capacityEnvelope,
+			status: 'failed',
+			fallbackReason: body.code,
+			metadata: {
+				projectId,
+				agentSlug,
+				repository: project?.repository ?? null,
+			},
+		});
 		if (input.client.returnAssignment) {
 			return input.client.returnAssignment(assignmentId, body);
 		}
@@ -767,10 +980,13 @@ async function runProviderAssignment(input: {
 			message: body.reason,
 		});
 	}
-	const localSdk = AgentSdk.createLocal({
-		repoRoot: project.repository.path,
-		contentRepository: { adapter: 'local' },
-	});
+		const projectSiteRoot = providerProjectSiteRoot(project, project.repository.path);
+		const projectTreeDx = providerProjectTreeDxOptions(project, input.treeDx);
+		const scopedTreeDx = assignmentScopedTreeDxOptions(projectTreeDx, record(input.assignment.treedxProxyHandle));
+		const localSdk = AgentSdk.createLocal({
+			repoRoot: projectSiteRoot,
+			treeDx: scopedTreeDx,
+		});
 	const capabilityHandles = redactedProviderAssignmentCapabilityHandles(record(input.assignment.capabilityHandles));
 	const workspaceMode = workspaceAccessMode({ ...input.assignment, capabilityHandles });
 	const handleFallback = validateProviderAssignmentCapabilityHandles({
@@ -785,6 +1001,16 @@ async function runProviderAssignment(input: {
 		capabilityHandles,
 	});
 	if (handleFallback) {
+		await recordEarlyModeRun({
+			client: input.client,
+			assignmentId,
+			assignment: input.assignment,
+			selectedInput: decisionPayload,
+			capacityEnvelope,
+			status: 'failed',
+			fallbackReason: handleFallback.code,
+			metadata: handleFallback.metadata,
+		});
 		return input.client.failAssignment(assignmentId, {
 			leaseToken: input.leaseToken,
 			runnerId: input.runnerId,
@@ -794,15 +1020,69 @@ async function runProviderAssignment(input: {
 			metadata: handleFallback.metadata,
 		});
 	}
+	const providerNoop = async () => ({ ok: true, payload: null });
+	let providerMessageCounter = 0;
+	const providerCreateMessage = async (request: Record<string, unknown>) => {
+		providerMessageCounter += 1;
+		const message = {
+			id: `provider-message-${assignmentId}-${providerMessageCounter}`,
+			...request,
+			actor: request.actor ?? 'agent',
+			createdAt: new Date().toISOString(),
+		};
+		await input.client.createAssignmentModeRun(assignmentId, {
+			mode: stringValue(input.assignment.mode, capacityEnvelope.mode) ?? 'planning',
+			status: 'running',
+			selectedInput: decisionPayload,
+			capacityEnvelope,
+			outputs: {
+				status: 'message_recorded',
+				summary: `Recorded provider assignment message ${message.id}.`,
+				metadata: {
+					source: 'provider_runner_message',
+					message,
+				},
+			},
+			metadata: {
+				source: 'provider_runner_message',
+				assignmentId,
+				runnerId: input.runnerId,
+				messageId: message.id,
+			},
+		}).catch(() => null);
+		return {
+			ok: true,
+			model: 'message',
+			action: 'create',
+			payload: message,
+		};
+	};
 	const sdk = {
 		repoRoot: localSdk.repoRoot,
 		listRawAgentSpecs: localSdk.listRawAgentSpecs.bind(localSdk),
 		listAgentSpecs: localSdk.listAgentSpecs.bind(localSdk),
-		scopeForAgent() { return this; },
-		async recordRun() { return { ok: true, payload: null }; },
-		async ackMessage() { return { ok: true, payload: null }; },
-		async upsertCursor() { return { ok: true, payload: null }; },
-		async releaseAllLeases() { return { ok: true, payload: null }; },
+		scopeForAgent(agent: Parameters<AgentSdk['scopeForAgent']>[0]) {
+			const scoped = localSdk.scopeForAgent(agent) as Record<PropertyKey, unknown>;
+			const overrides: Record<PropertyKey, unknown> = {
+				recordRun: providerNoop,
+				ackMessage: providerNoop,
+				upsertCursor: providerNoop,
+				releaseAllLeases: providerNoop,
+				createMessage: providerCreateMessage,
+			};
+			return new Proxy(scoped, {
+				get(target, property, receiver) {
+					if (property in overrides) return overrides[property];
+					const value = Reflect.get(target, property, receiver);
+					return typeof value === 'function' ? value.bind(target) : value;
+				},
+			});
+		},
+		recordRun: providerNoop,
+		ackMessage: providerNoop,
+		upsertCursor: providerNoop,
+		releaseAllLeases: providerNoop,
+		createMessage: providerCreateMessage,
 	} as unknown as AgentSdk;
 	const dryRun = decisionPayload.dryRun !== false && !input.config.codexAuthFile && !input.config.codexAuthJsonB64;
 	const treeDxToolDescriptor = ['brokered_workspace', 'trusted_direct', 'context_only'].includes(workspaceMode ?? '')
@@ -820,11 +1100,18 @@ async function runProviderAssignment(input: {
 		jira: input.config.jira,
 		githubIssues: input.config.githubIssues,
 		discord: input.config.discord,
-		workflow: {
-			dispatchWorkflowOperation: input.client.dispatchAssignmentWorkflowOperation
-				? (workflowAssignmentId, operationId, body) => input.client.dispatchAssignmentWorkflowOperation!(workflowAssignmentId, operationId, body)
-				: undefined,
-		},
+			workflow: {
+				dispatchWorkflowOperation: input.client.dispatchAssignmentWorkflowOperation
+					? async (workflowAssignmentId, operationId, body) => {
+						const response = await input.client.dispatchAssignmentWorkflowOperation!(workflowAssignmentId, operationId, body);
+						const responseRecord = record(response);
+						return {
+							ok: responseRecord.ok === undefined ? true : responseRecord.ok === true,
+							payload: record(responseRecord.payload ?? responseRecord),
+						};
+					}
+					: undefined,
+			},
 	});
 	const execution = new LifecycleManagedExecutionProviderAdapter({
 		adapter: baseExecutionAdapter,
@@ -841,7 +1128,7 @@ async function runProviderAssignment(input: {
 		maxPolls: input.executionLifecycle?.maxPolls,
 	});
 	const kernel = new AgentKernel(sdk, project.repository.path, {
-		treeDx: ['brokered_workspace', 'trusted_direct'].includes(workspaceMode ?? '')
+		treeDx: ['brokered_workspace', 'trusted_direct', 'context_only'].includes(workspaceMode ?? '')
 			? createAssignmentTreeDxAdapter({
 				config: input.config,
 				projectId,
@@ -851,38 +1138,70 @@ async function runProviderAssignment(input: {
 			: null,
 		execution,
 		mutations: {
-			writeArtifact: async () => ({
-				branchName: null,
-				commitMessage: null,
-				worktreePath: null,
-				commitSha: null,
-				changedPaths: [],
+			writeArtifact: async (artifact) => writeProviderContentArtifact({
+				repoRoot: project.repository.path,
+				relativePath: artifact.relativePath,
+				content: artifact.content,
+				commitMessage: artifact.commitMessage,
 			}),
 		},
 		repository: {
-			inspectBranch: async () => ({
-				branchName: null,
-				changedPaths: [],
-				commitSha: null,
-				summary: dryRun ? 'Dry-run repository inspection skipped.' : 'Provider live assignment repository inspection completed.',
-			}),
+			inspectBranch: async () => inspectProviderRepository(project.repository.path),
 		},
 		verification: {
-			runChecks: async () => waitingResult(dryRun ? 'Dry-run verification skipped command execution.' : 'Provider live assignment verification is recorded by the assignment output.'),
+			runChecks: async ({ commands, cwd }) => runProviderVerification({
+				repoRoot: project.repository.path,
+				commands,
+				cwd,
+			}),
 		},
 		notifications: {
-			deliver: async () => ({
-				status: 'waiting',
-				summary: 'Provider assignment notification delivery skipped.',
-				deliveredCount: 0,
-			}),
+			deliver: async ({ agent, runId, recipients, subject, body }) => {
+				await providerCreateMessage({
+					type: 'agent.notification',
+					payload: {
+						agentSlug: agent.slug,
+						runId,
+						recipients,
+						subject,
+						body,
+					},
+					relatedModel: 'agent',
+					relatedId: agent.slug,
+					actor: 'agent',
+				});
+				return {
+					status: 'completed',
+					summary: recipients.length
+						? `Recorded notification for ${recipients.length} recipient(s).`
+						: 'Recorded notification event without direct recipients.',
+					deliveredCount: recipients.length,
+				};
+			},
 		},
 		research: {
-			research: async () => ({
-				status: 'waiting',
-				summary: 'Provider assignment research skipped.',
-				markdown: '',
-			}),
+				research: async ({ questionId, reason, runId }) => {
+					const graphResult = record(await localSdk.queryGraph({
+						query: questionId,
+						options: { limit: 5 },
+					}).catch(() => null));
+					const items = Array.isArray(graphResult?.items) ? graphResult.items : [];
+				return {
+					status: 'completed',
+					summary: `Prepared graph-backed research for ${questionId}.`,
+					markdown: [
+						'# Research Summary',
+						'',
+						`Question: ${questionId}`,
+						`Reason: ${reason ?? 'not provided'}`,
+						`Run: ${runId}`,
+						'',
+						items.length ? 'Relevant graph context:' : 'No ranked graph context was available. The question is recorded for follow-up.',
+						...items.map((item: any) => `- ${String(item.title ?? item.id ?? 'context')}`),
+					].join('\n'),
+					sources: items.map((item: any) => String(item.id ?? item.title ?? '')).filter(Boolean),
+				};
+			},
 		},
 		operations: {
 			runOperation: async ({ request }) => {
@@ -907,12 +1226,12 @@ async function runProviderAssignment(input: {
 						metadata: { operationId, handleId },
 					};
 				}
-				const result = await input.client.dispatchAssignmentWorkflowOperation(assignmentId, operationId ?? '', {
-					leaseToken: input.leaseToken,
-					handleId: stringValue(handle.id),
-					inputs: record(request.input).inputs ?? record(request.input),
-					wait: record(request.input).wait === true,
-				});
+					const result = record(await input.client.dispatchAssignmentWorkflowOperation(assignmentId, operationId ?? '', {
+						leaseToken: input.leaseToken,
+						handleId: stringValue(handle.id),
+						inputs: record(request.input).inputs ?? record(request.input),
+						wait: record(request.input).wait === true,
+					}));
 				return {
 					operation: request.operation,
 					status: 'completed',
@@ -924,7 +1243,7 @@ async function runProviderAssignment(input: {
 					metadata: {
 						workflowOperationId: operationId,
 						workflowOperationHandleId: stringValue(handle.id),
-						dispatch: record(result.payload),
+							dispatch: record(result.payload ?? result),
 					},
 				};
 			},
@@ -972,6 +1291,26 @@ async function runProviderAssignment(input: {
 		},
 	} as ProviderAssignment;
 	let fallbackOutput: Record<string, unknown> | null = null;
+	await input.client.createAssignmentModeRun(assignmentId, {
+		mode: typedAssignment.mode,
+		status: 'running',
+		selectedInput: record(typedAssignment.decisionInput.input),
+		capacityEnvelope: deriveAgentCapacityEnvelopeFromAssignment(typedAssignment),
+		startedAt: new Date().toISOString(),
+		validation: {
+			mode: typedAssignment.mode,
+			projectAgentClassId: typedAssignment.projectAgentClassId,
+			phase: 'provider_runner_assignment_started',
+		},
+		metadata: {
+			source: 'provider_runner_assignment_started',
+			assignmentId,
+			runnerId: input.runnerId,
+			projectId,
+			agentSlug,
+			repositoryPath: project.repository.path,
+		},
+	}).catch(() => null);
 	const modeResult = await kernel.runAssignment({
 		assignment: typedAssignment,
 		capacityEnvelope: deriveAgentCapacityEnvelopeFromAssignment(typedAssignment),
@@ -997,10 +1336,10 @@ async function runProviderAssignment(input: {
 				mode: modeResult.mode,
 				status: modeResult.status,
 				summary: modeResult.summary,
-				metadata: {
-					...(modeResult.metadata ?? {}),
-					...record(modeResult.outputs).metadata,
-				},
+					metadata: {
+						...(modeResult.metadata ?? {}),
+						...record(record(modeResult.outputs).metadata),
+					},
 				traceRefs: modeResult.traceRefs ?? {},
 			},
 			summary: {
@@ -1029,11 +1368,11 @@ async function runProviderAssignment(input: {
 		message: modeResult.fallback?.reason ?? modeResult.summary,
 		retryable: modeResult.fallback?.retryable ?? false,
 		output: {
-			...(modeResult.outputs ?? {}),
-			metadata: {
-				...record(modeResult.outputs).metadata,
-				...(modeResult.metadata ?? {}),
-			},
+				...(modeResult.outputs ?? {}),
+				metadata: {
+					...record(record(modeResult.outputs).metadata),
+					...(modeResult.metadata ?? {}),
+				},
 		},
 		fallbackOutput: fallbackOutput ?? undefined,
 	});

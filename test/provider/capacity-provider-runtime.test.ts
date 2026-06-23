@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdtempSync, rmSync, writeFileSync, mkdirSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -45,6 +45,99 @@ function git(cwd: string, args: string[]) {
 		},
 		stdio: 'ignore',
 	});
+}
+
+function listMarkdownFiles(root: string, relativeDir: string): Array<{ path: string; content: string }> {
+	const absoluteDir = resolve(root, relativeDir);
+	if (!existsSync(absoluteDir)) return [];
+	return readdirSync(absoluteDir).flatMap((entry) => {
+		const absolutePath = resolve(absoluteDir, entry);
+		const relativePath = `${relativeDir.replace(/\/$/u, '')}/${entry}`.replace(/\\/g, '/');
+		if (statSync(absolutePath).isDirectory()) {
+			return listMarkdownFiles(root, relativePath);
+		}
+		if (!/\.(md|mdx)$/iu.test(entry)) return [];
+		return [{ path: relativePath, content: readFileSync(absolutePath, 'utf8') }];
+	});
+}
+
+function fakeTreeDxFetch(repoRoot: string): typeof fetch {
+	return async (input, init) => {
+		const url = new URL(String(input));
+		if (url.pathname.endsWith('/repos')) {
+			return new Response(JSON.stringify({
+				ok: true,
+				repos: [{
+					repoId: 'repo-project-123',
+					name: 'treeseed-market',
+					repositoryName: 'treeseed-market',
+					defaultRef: 'refs/heads/main',
+					status: 'registered',
+				}],
+			}), {
+				status: 200,
+				headers: { 'content-type': 'application/json' },
+			});
+		}
+		if (url.pathname.endsWith('/paths/list')) {
+			const body = typeof init?.body === 'string' ? JSON.parse(init.body) as Record<string, unknown> : {};
+			const root = typeof body.path === 'string' ? body.path : 'src/content/agents';
+			const paths = listMarkdownFiles(repoRoot, root).map((file) => file.path);
+			return new Response(JSON.stringify({ ok: true, paths }), {
+				status: 200,
+				headers: { 'content-type': 'application/json' },
+			});
+		}
+		if (url.pathname.endsWith('/files/read')) {
+			const body = typeof init?.body === 'string' ? JSON.parse(init.body) as Record<string, unknown> : {};
+			const filePath = typeof body.path === 'string' ? body.path : '';
+			const absolutePath = resolve(repoRoot, filePath);
+			if (!filePath || !existsSync(absolutePath)) {
+				return new Response(JSON.stringify({ ok: false, error: { code: 'not_found', message: `File ${filePath} not found.` } }), {
+					status: 404,
+					headers: { 'content-type': 'application/json' },
+				});
+			}
+			return new Response(JSON.stringify({
+				ok: true,
+				file: {
+					path: filePath,
+					content: readFileSync(absolutePath, 'utf8'),
+					encoding: 'utf8',
+					source: 'base',
+				},
+			}), {
+				status: 200,
+				headers: { 'content-type': 'application/json' },
+			});
+		}
+		if (url.pathname.endsWith('/files/search') || url.pathname.endsWith('/search/files')) {
+			const body = typeof init?.body === 'string' ? JSON.parse(init.body) as Record<string, unknown> : {};
+			const paths = Array.isArray(body.paths) ? body.paths.map(String) : ['src/content/agents/**'];
+			const files = paths.flatMap((pattern) => {
+				const root = pattern.replace(/\/\*\*.*$/u, '').replace(/\/$/u, '');
+				return listMarkdownFiles(repoRoot, root);
+			});
+			return new Response(JSON.stringify({ ok: true, files }), {
+				status: 200,
+				headers: { 'content-type': 'application/json' },
+			});
+		}
+		return new Response(JSON.stringify({ ok: false, error: { message: `Unhandled fake TreeDX route ${url.pathname}` } }), {
+			status: 404,
+			headers: { 'content-type': 'application/json' },
+		});
+	};
+}
+
+function fakeTreeDxOptions(repoRoot: string) {
+	return {
+		baseUrl: 'https://treedx.test',
+		token: 'test-token',
+		repoId: 'repo-project-123',
+		ref: 'main',
+		fetchImpl: fakeTreeDxFetch(repoRoot),
+	};
 }
 
 function createProjectRepository() {
@@ -194,7 +287,7 @@ function portfolio(cloneUrl: string): CapacityProviderPortfolioManifest {
 				topology: 'single_repository_site',
 				rootPath: '.',
 				sitePath: 'docs',
-				contentPath: 'docs',
+				contentPath: 'src/content',
 				contentRuntimeSource: 'r2_published_manifest',
 				localContentMaterialization: 'none',
 				contentPublishTarget: { kind: 'cloudflare_r2', prefix: 'packages/market' },
@@ -368,9 +461,10 @@ async function runAsyncExecutionProviderScenario(input: {
 }) {
 	const sourceRepo = createProjectRepository();
 	const config = resolveProviderConfig({ env: env() });
-	await processProviderPortfolio({
-		config,
-		client: {
+			await processProviderPortfolio({
+				config,
+				treeDx: fakeTreeDxOptions(sourceRepo),
+				client: {
 			async portfolio() { return portfolio(sourceRepo); },
 			async createWorkday(body: unknown) { return { ok: true, workDay: { id: 'wd_provider_1', ...(body as Record<string, unknown>) } }; },
 			async writeReport() { return { ok: true, report: { id: 'report_1' } }; },
@@ -425,6 +519,7 @@ async function runAsyncExecutionProviderScenario(input: {
 		client,
 		executionAdapter: input.adapter,
 		runnerId: input.runnerId,
+		treeDx: fakeTreeDxOptions(sourceRepo),
 		executionLifecycle: input.executionLifecycle,
 	});
 	return { events, result };
@@ -615,7 +710,7 @@ describe('capacity provider runtime', () => {
 			},
 		};
 
-		const result = await processProviderPortfolio({ config, client });
+			const result = await processProviderPortfolio({ config, client, treeDx: fakeTreeDxOptions(sourceRepo) });
 
 		expect(result.ok).toBe(true);
 		expect(result.projects[0]).toMatchObject({
@@ -702,9 +797,10 @@ describe('capacity provider runtime', () => {
 	it('claims and completes only explicit dry-run project tasks through the provider runner', async () => {
 		const sourceRepo = createProjectRepository();
 		const config = resolveProviderConfig({ env: env() });
-		await processProviderPortfolio({
-			config,
-			client: {
+			await processProviderPortfolio({
+				config,
+				treeDx: fakeTreeDxOptions(sourceRepo),
+				client: {
 				async portfolio() { return portfolio(sourceRepo); },
 				async createWorkday(body: unknown) { return { ok: true, workDay: { id: 'wd_provider_1', ...(body as Record<string, unknown>) } }; },
 				async writeReport() { return { ok: true, report: { id: 'report_1' } }; },
@@ -741,16 +837,22 @@ describe('capacity provider runtime', () => {
 			},
 		};
 
-		const result = await runProviderRunnerOnce({ config, client });
+			const result = await runProviderRunnerOnce({ config, client, treeDx: fakeTreeDxOptions(sourceRepo) });
 
 		expect(result).toMatchObject({ ok: true, role: 'runner', assigned: 1, assignmentId: 'task_1' });
 		expect(events.map((event) => event.method)).toEqual([
 			'nextAssignment',
 			'createAssignmentModeRun',
 			'createAssignmentModeRun',
+			'createAssignmentModeRun',
 			'completeAssignment',
 		]);
-		expect(events.filter((event) => event.method === 'createAssignmentModeRun').map((event) => (event.body as Record<string, unknown>).status)).toEqual(['running', 'succeeded']);
+		const modeRunEvents = events.filter((event) => event.method === 'createAssignmentModeRun');
+		expect(modeRunEvents.map((event) => (event.body as Record<string, unknown>).status)).toEqual(['running', 'running', 'succeeded']);
+		expect(modeRunEvents[0]?.body).toMatchObject({
+			validation: { phase: 'provider_runner_assignment_started' },
+			metadata: { source: 'provider_runner_assignment_started' },
+		});
 		expect(events.find((event) => event.method === 'completeAssignment')?.body).toMatchObject({
 			output: {
 				dryRun: true,
@@ -806,7 +908,7 @@ describe('capacity provider runtime', () => {
 			},
 		};
 
-		const result = await runProviderRunnerOnce({ config, client });
+			const result = await runProviderRunnerOnce({ config, client, treeDx: fakeTreeDxOptions(sourceRepo) });
 
 		expect(result).toMatchObject({ ok: true, assigned: 1, assignmentId: 'task_hosted' });
 		expect(events.map((event) => event.method)).toEqual([
@@ -816,6 +918,7 @@ describe('capacity provider runtime', () => {
 			'writeReport',
 			'createAssignmentModeRun',
 			'createAssignmentModeRun',
+			'createAssignmentModeRun',
 			'completeAssignment',
 		]);
 	});
@@ -823,9 +926,10 @@ describe('capacity provider runtime', () => {
 	it('executes acting assignments through the kernel with acting mode telemetry', async () => {
 		const sourceRepo = createProjectRepository();
 		const config = resolveProviderConfig({ env: env() });
-		await processProviderPortfolio({
-			config,
-			client: {
+			await processProviderPortfolio({
+				config,
+				treeDx: fakeTreeDxOptions(sourceRepo),
+				client: {
 				async portfolio() { return portfolio(sourceRepo); },
 				async createWorkday(body: unknown) { return { ok: true, workDay: { id: 'wd_provider_1', ...(body as Record<string, unknown>) } }; },
 				async writeReport() { return { ok: true, report: { id: 'report_1' } }; },
@@ -875,10 +979,11 @@ describe('capacity provider runtime', () => {
 			},
 		};
 
-		const result = await runProviderRunnerOnce({ config, client });
+			const result = await runProviderRunnerOnce({ config, client, treeDx: fakeTreeDxOptions(sourceRepo) });
 
 		expect(result).toMatchObject({ ok: true, assigned: 1, assignmentId: 'assignment_acting' });
 		expect(events.filter((event) => event.method === 'createAssignmentModeRun').map((event) => (event.body as Record<string, unknown>).capacityEnvelope)).toEqual([
+			expect.objectContaining({ mode: 'acting' }),
 			expect.objectContaining({ mode: 'acting' }),
 			expect.objectContaining({ mode: 'acting' }),
 		]);
@@ -893,9 +998,10 @@ describe('capacity provider runtime', () => {
 	it('dispatches workflow operations only through assignment-scoped handles', async () => {
 		const sourceRepo = createProjectRepository();
 		const config = resolveProviderConfig({ env: env() });
-		await processProviderPortfolio({
-			config,
-			client: {
+			await processProviderPortfolio({
+				config,
+				treeDx: fakeTreeDxOptions(sourceRepo),
+				client: {
 				async portfolio() { return portfolio(sourceRepo); },
 				async createWorkday(body: unknown) { return { ok: true, workDay: { id: 'wd_provider_1', ...(body as Record<string, unknown>) } }; },
 				async writeReport() { return { ok: true, report: { id: 'report_1' } }; },
@@ -979,7 +1085,7 @@ describe('capacity provider runtime', () => {
 			},
 		};
 
-		const result = await runProviderRunnerOnce({ config, client });
+			const result = await runProviderRunnerOnce({ config, client, treeDx: fakeTreeDxOptions(sourceRepo) });
 
 		expect(result).toMatchObject({ ok: true, assigned: 1, assignmentId: 'assignment_workflow' });
 		expect(events.find((event) => event.method === 'dispatchAssignmentWorkflowOperation')).toMatchObject({
@@ -1006,9 +1112,10 @@ describe('capacity provider runtime', () => {
 	it('selects workflow execution providers from assignment metadata and dispatches through scoped handles', async () => {
 		const sourceRepo = createProjectRepository();
 		const config = resolveProviderConfig({ env: env() });
-		await processProviderPortfolio({
-			config,
-			client: {
+			await processProviderPortfolio({
+				config,
+				treeDx: fakeTreeDxOptions(sourceRepo),
+				client: {
 				async portfolio() { return portfolio(sourceRepo); },
 				async createWorkday(body: unknown) { return { ok: true, workDay: { id: 'wd_provider_1', ...(body as Record<string, unknown>) } }; },
 				async writeReport() { return { ok: true, report: { id: 'report_1' } }; },
@@ -1106,7 +1213,7 @@ describe('capacity provider runtime', () => {
 			},
 		};
 
-		const result = await runProviderRunnerOnce({ config, client });
+			const result = await runProviderRunnerOnce({ config, client, treeDx: fakeTreeDxOptions(sourceRepo) });
 
 		expect(result).toMatchObject({ ok: true, assigned: 1, assignmentId: 'assignment_workflow_provider' });
 		expect(events.find((event) => event.method === 'dispatchAssignmentWorkflowOperation')).toMatchObject({
@@ -1170,9 +1277,10 @@ describe('capacity provider runtime', () => {
 	it('polls async execution providers and renews the assignment lease while waiting', async () => {
 		const sourceRepo = createProjectRepository();
 		const config = resolveProviderConfig({ env: env() });
-		await processProviderPortfolio({
-			config,
-			client: {
+			await processProviderPortfolio({
+				config,
+				treeDx: fakeTreeDxOptions(sourceRepo),
+				client: {
 				async portfolio() { return portfolio(sourceRepo); },
 				async createWorkday(body: unknown) { return { ok: true, workDay: { id: 'wd_provider_1', ...(body as Record<string, unknown>) } }; },
 				async writeReport() { return { ok: true, report: { id: 'report_1' } }; },
@@ -1219,7 +1327,7 @@ describe('capacity provider runtime', () => {
 		};
 		const adapter = new FakeAsyncExecutionProviderAdapter();
 
-		const result = await runProviderRunnerOnce({ config, client, executionAdapter: adapter, runnerId: 'runner_async' });
+			const result = await runProviderRunnerOnce({ config, client, executionAdapter: adapter, runnerId: 'runner_async', treeDx: fakeTreeDxOptions(sourceRepo) });
 
 		expect(result).toMatchObject({ ok: true, assigned: 1, assignmentId: 'assignment_async' });
 		expect(events.filter((event) => event.method === 'renewAssignment').length).toBeGreaterThanOrEqual(3);
@@ -1256,9 +1364,10 @@ describe('capacity provider runtime', () => {
 	it('passes redacted TreeDX proxy tool descriptors to execution providers', async () => {
 		const sourceRepo = createProjectRepository();
 		const config = resolveProviderConfig({ env: env() });
-		await processProviderPortfolio({
-			config,
-			client: {
+			await processProviderPortfolio({
+				config,
+				treeDx: fakeTreeDxOptions(sourceRepo),
+				client: {
 				async portfolio() { return portfolio(sourceRepo); },
 				async createWorkday(body: unknown) { return { ok: true, workDay: { id: 'wd_provider_1', ...(body as Record<string, unknown>) } }; },
 				async writeReport() { return { ok: true, report: { id: 'report_1' } }; },
@@ -1317,7 +1426,7 @@ describe('capacity provider runtime', () => {
 		};
 		const adapter = new FakeAsyncExecutionProviderAdapter();
 
-		const result = await runProviderRunnerOnce({ config, client, executionAdapter: adapter, runnerId: 'runner_treedx' });
+			const result = await runProviderRunnerOnce({ config, client, executionAdapter: adapter, runnerId: 'runner_treedx', treeDx: fakeTreeDxOptions(sourceRepo) });
 
 		expect(result).toMatchObject({ ok: true, assigned: 1, assignmentId: 'assignment_treedx_tools' });
 		expect(adapter.lastStartInput?.tools?.[0]).toMatchObject({
@@ -1337,9 +1446,10 @@ describe('capacity provider runtime', () => {
 	it('maps retryable blocked async provider snapshots to returned handler output', async () => {
 		const sourceRepo = createProjectRepository();
 		const config = resolveProviderConfig({ env: env() });
-		await processProviderPortfolio({
-			config,
-			client: {
+			await processProviderPortfolio({
+				config,
+				treeDx: fakeTreeDxOptions(sourceRepo),
+				client: {
 				async portfolio() { return portfolio(sourceRepo); },
 				async createWorkday(body: unknown) { return { ok: true, workDay: { id: 'wd_provider_1', ...(body as Record<string, unknown>) } }; },
 				async writeReport() { return { ok: true, report: { id: 'report_1' } }; },
@@ -1383,12 +1493,13 @@ describe('capacity provider runtime', () => {
 			},
 		};
 
-		const result = await runProviderRunnerOnce({
-			config,
-			client,
-			executionAdapter: new FakeAsyncExecutionProviderAdapter('blocked'),
-			runnerId: 'runner_blocked',
-		});
+			const result = await runProviderRunnerOnce({
+				config,
+				client,
+				executionAdapter: new FakeAsyncExecutionProviderAdapter('blocked'),
+				runnerId: 'runner_blocked',
+				treeDx: fakeTreeDxOptions(sourceRepo),
+			});
 
 		expect(result).toMatchObject({ ok: true, assigned: 1, assignmentId: 'assignment_blocked' });
 		expect(events.some((event) => event.method === 'returnAssignment')).toBe(true);
@@ -1424,6 +1535,7 @@ describe('capacity provider runtime', () => {
 		const config = resolveProviderConfig({ env: env() });
 		await processProviderPortfolio({
 			config,
+			treeDx: fakeTreeDxOptions(sourceRepo),
 			client: {
 				async portfolio() { return portfolio(sourceRepo); },
 				async createWorkday(body: unknown) { return { ok: true, workDay: { id: 'wd_provider_1', ...(body as Record<string, unknown>) } }; },
@@ -1464,12 +1576,13 @@ describe('capacity provider runtime', () => {
 			},
 		};
 
-		const result = await runProviderRunnerOnce({
-			config,
-			client,
-			executionAdapter: new FakeAsyncExecutionProviderAdapter('failed'),
-			runnerId: 'runner_failed',
-		});
+			const result = await runProviderRunnerOnce({
+				config,
+				client,
+				executionAdapter: new FakeAsyncExecutionProviderAdapter('failed'),
+				runnerId: 'runner_failed',
+				treeDx: fakeTreeDxOptions(sourceRepo),
+			});
 
 		expect(result).toMatchObject({ ok: true, assigned: 1, assignmentId: 'assignment_failed' });
 		expect(events.some((event) => event.method === 'completeAssignment')).toBe(false);
@@ -1688,7 +1801,17 @@ describe('capacity provider runtime', () => {
 		const result = await runProviderRunnerOnce({ config, client });
 
 		expect(result).toMatchObject({ ok: true, assigned: 1, assignmentId: 'task_2' });
-		expect(events.map((event) => event.method)).toEqual(['failAssignment']);
+		expect(events.map((event) => event.method)).toEqual(['createAssignmentModeRun', 'failAssignment']);
+		expect(events.find((event) => event.method === 'createAssignmentModeRun')?.body).toMatchObject({
+			mode: 'planning',
+			status: 'failed',
+			fallbackReason: 'provider_project_not_synced',
+			metadata: expect.objectContaining({
+				source: 'provider_runner_early_exit',
+				projectId: 'project_123',
+				agentSlug: 'provider-planner',
+			}),
+		});
 		expect(events.find((event) => event.method === 'failAssignment')?.body).toMatchObject({
 			code: 'provider_project_not_synced',
 		});

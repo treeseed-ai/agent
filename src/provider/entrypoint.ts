@@ -1,8 +1,6 @@
 #!/usr/bin/env node
 
-import { materializeCodexAuthFromEnv } from '../agents/adapters/codex-auth.ts';
 import { createCapacityProviderNodeServer } from '../api/provider-app.ts';
-import { checkProviderHealth, buildProviderPlan, okPayload, runManagerSkeleton, runRunnerSkeleton } from './lifecycle.ts';
 import { providerRuntimeVersion, resolveProviderConfig, type ProviderRole } from './config.ts';
 import { buildProviderRegistrationRequest, registerProvider } from './registration.ts';
 import { startProviderHeartbeatLoop } from './heartbeat.ts';
@@ -59,6 +57,14 @@ function emit(payload: unknown) {
 	process.stdout.write(`${payload}\n`);
 }
 
+function okPayload(role: string, payload: Record<string, unknown> = {}) {
+	return {
+		ok: true,
+		role,
+		...payload,
+	};
+}
+
 function pollSeconds(name: string, fallback: number) {
 	const raw = process.env[name]?.trim() ?? '';
 	const parsed = Number.parseInt(raw, 10);
@@ -104,7 +110,8 @@ async function main() {
 	const once = flagEnabled('--once');
 	const diagnostic = diagnosticMode();
 	const config = resolveProviderConfig({ requireConnection: requireConnection(role, dryRun) && !diagnostic });
-	if (requireConnection(role, dryRun) && !diagnostic) {
+	if (role !== 'api' && requireConnection(role, dryRun) && !diagnostic) {
+		const { materializeCodexAuthFromEnv } = await import('../agents/adapters/codex-auth.ts');
 		await materializeCodexAuthFromEnv(process.env);
 	}
 	if (role === 'version') {
@@ -117,6 +124,7 @@ async function main() {
 		return;
 	}
 	if (role === 'healthcheck' || role === 'doctor') {
+		const { checkProviderHealth } = await import('./lifecycle.ts');
 		emit(await checkProviderHealth(config));
 		return;
 	}
@@ -133,10 +141,12 @@ async function main() {
 		return;
 	}
 	if (role === 'plan') {
+		const { buildProviderPlan } = await import('./lifecycle.ts');
 		emit(await buildProviderPlan(config, { dryRun }));
 		return;
 	}
 	if (role === 'manager') {
+		const { runManagerSkeleton } = await import('./lifecycle.ts');
 		if (dryRun || diagnostic) {
 			emit(await runManagerSkeleton(config, { dryRun: true }));
 			return;
@@ -149,6 +159,7 @@ async function main() {
 		return;
 	}
 	if (role === 'runner') {
+		const { runRunnerSkeleton } = await import('./lifecycle.ts');
 		if (dryRun || diagnostic) {
 			emit(await runRunnerSkeleton(config, { dryRun: true }));
 			return;

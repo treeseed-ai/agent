@@ -15,6 +15,7 @@ import type {
 	ExecutionWorkspaceContext,
 	AgentTriggerConfig,
 } from '@treeseed/sdk/types/agents';
+export type { ExecutionPreparationResult } from '@treeseed/sdk/types/agents';
 import type { AgentErrorCategory } from './contracts/run.ts';
 import type { ScopedAgentSdk } from '@treeseed/sdk/sdk';
 import type { SdkMessageEntity } from '@treeseed/sdk/types';
@@ -34,6 +35,15 @@ import type {
 	ProviderAssignment,
 	ProjectAgentClass,
 } from '@treeseed/sdk/agent-capacity';
+
+export interface AgentTaskEventSdk {
+	appendTaskEvent(request: {
+		taskId: string;
+		kind: string;
+		data?: Record<string, unknown>;
+		actor: string;
+	}): Promise<unknown>;
+}
 
 export interface AgentTriggerInvocation {
 	kind: 'startup' | 'schedule' | 'message' | 'manual' | 'follow';
@@ -195,7 +205,7 @@ export interface AgentOperationsAdapter {
 	runOperation(input: {
 		request: AgentOperationRequest;
 		grants: AgentOperationGrant[];
-		sdk?: Pick<ScopedAgentSdk, 'appendTaskEvent'>;
+		sdk?: AgentTaskEventSdk;
 	}): Promise<AgentOperationResult>;
 }
 

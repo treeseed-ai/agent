@@ -946,7 +946,7 @@ function bodyOperationRequest(input: {
 	const operation = input.operation;
 	return {
 		operation,
-		mode: readString(request, 'mode') || readString(input.body, 'mode') || 'dry_run',
+		mode: (readString(request, 'mode') || readString(input.body, 'mode') || 'dry_run') as AgentOperationRequest['mode'],
 		taskId: readString(request, 'taskId') || readString(input.body, 'taskId') || 'operation-dry-run',
 		taskKind: readString(request, 'taskKind') || readString(input.body, 'taskKind') || undefined,
 		workDayId: readString(request, 'workDayId') || readString(input.body, 'workDayId') || undefined,
@@ -959,7 +959,7 @@ function bodyOperationRequest(input: {
 		featureBranch: readString(request, 'featureBranch') || undefined,
 		stagingBranch: readString(request, 'stagingBranch') || undefined,
 		approvalId: readString(request, 'approvalId') || undefined,
-		approval: Object.keys(asRecord(request.approval)).length ? asRecord(request.approval) as AgentOperationRequest['approval'] : undefined,
+		approval: Object.keys(asRecord(request.approval)).length ? asRecord(request.approval) as unknown as AgentOperationRequest['approval'] : undefined,
 		permissionGrantId: readString(request, 'permissionGrantId') || undefined,
 		allowedPaths: readStringArray(request.allowedPaths ?? input.body.allowedPaths),
 		forbiddenPaths: readStringArray(request.forbiddenPaths ?? input.body.forbiddenPaths),

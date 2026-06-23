@@ -271,20 +271,20 @@ describe('codex subscription provider skeleton', () => {
 		const runtime = resolveAgentRuntimeProviders('/repo', {
 			execution: 'codex',
 			mutation: 'local_branch',
-			repository: 'stub',
-			verification: 'stub',
-			notification: 'stub',
-			research: 'stub',
+			repository: 'git',
+			verification: 'local',
+			notification: 'sdk_message',
+			research: 'project_graph',
 		});
 
 		expect(runtime.execution).toBeInstanceOf(CodexSubscriptionExecutionProviderAdapter);
 		expect(resolveAgentRuntimeProviders('/repo', {
 			execution: 'codex_subscription',
 			mutation: 'local_branch',
-			repository: 'stub',
-			verification: 'stub',
-			notification: 'stub',
-			research: 'stub',
+			repository: 'git',
+			verification: 'local',
+			notification: 'sdk_message',
+			research: 'project_graph',
 		}).execution).toBeInstanceOf(CodexSubscriptionExecutionProviderAdapter);
 	});
 

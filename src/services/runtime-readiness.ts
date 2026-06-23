@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-
 import { constants, existsSync, readFileSync } from 'node:fs';
 import { access, realpath, stat } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
@@ -12,7 +11,6 @@ import { checkCodexProviderReadiness } from '../agents/adapters/codex-readiness.
 import { createOperationsAdapter } from '../agents/adapters/operations.ts';
 import { resolveApiConfig } from '../api/config.ts';
 import { resolveManagerConfig, resolveWorkerConfig } from './common.ts';
-import { resolveManagerServiceConfig } from './manager.ts';
 
 export type RuntimeReadinessStatus = 'ready' | 'warning' | 'blocked';
 
@@ -100,6 +98,75 @@ async function withRuntimeEnv<T>(env: NodeJS.ProcessEnv, callback: () => Promise
 
 function readEnvironment(env: NodeJS.ProcessEnv) {
 	return env.TREESEED_DEPLOY_ENVIRONMENT?.trim() || (env.NODE_ENV === 'production' ? 'prod' : 'local');
+}
+
+function envValue(env: NodeJS.ProcessEnv, name: string) {
+	return env[name]?.trim() || '';
+}
+
+function integerFromEnv(env: NodeJS.ProcessEnv, name: string, fallback: number) {
+	const value = envValue(env, name);
+	if (!value) return fallback;
+	const parsed = Number.parseInt(value, 10);
+	return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function readPriorityModels(env: NodeJS.ProcessEnv) {
+	const raw = envValue(env, 'TREESEED_MANAGER_PRIORITY_MODELS');
+	return raw ? raw.split(',').map((entry) => entry.trim()).filter(Boolean) : ['agent_request', 'question', 'knowledge_draft'];
+}
+
+function readDefaultSchedule(env: NodeJS.ProcessEnv) {
+	const raw = envValue(env, 'TREESEED_WORKDAY_DEFAULT_SCHEDULE_JSON');
+	if (!raw) {
+		return {
+			timezone: 'UTC',
+			startHour: 9,
+			durationHours: 8,
+			weekdays: [1, 2, 3, 4, 5],
+		};
+	}
+	try {
+		return JSON.parse(raw) as Record<string, unknown>;
+	} catch {
+		return {
+			timezone: 'UTC',
+			startHour: 9,
+			durationHours: 8,
+			weekdays: [1, 2, 3, 4, 5],
+		};
+	}
+}
+
+function resolveManagerReadinessConfig(env: NodeJS.ProcessEnv) {
+	const shared = resolveManagerConfig();
+	const environment = readEnvironment(env);
+	const projectId = envValue(env, 'TREESEED_PROJECT_ID') || shared.projectId;
+	const dailyTaskCreditBudget = integerFromEnv(env, 'TREESEED_WORKDAY_TASK_CREDIT_BUDGET', shared.defaultCapacityBudget);
+	const maxQueuedTasks = integerFromEnv(env, 'TREESEED_MANAGER_MAX_QUEUED_TASKS', Math.max(1, Math.min(20, dailyTaskCreditBudget)));
+	const maxQueuedCredits = integerFromEnv(env, 'TREESEED_MANAGER_MAX_QUEUED_CREDITS', Math.max(1, Math.min(dailyTaskCreditBudget, maxQueuedTasks * 4)));
+	return {
+		...shared,
+		mode: envValue(env, 'TREESEED_MANAGER_MODE') || (env.CI ? 'reconcile' : 'loop'),
+		managerId: envValue(env, 'TREESEED_MANAGER_ID') || `manager-${process.pid}`,
+		projectId,
+		environment,
+		marketBaseUrl: envValue(env, 'TREESEED_MARKET_API_BASE_URL') || envValue(env, 'TREESEED_API_BASE_URL'),
+		runnerToken: envValue(env, 'TREESEED_PROJECT_RUNNER_TOKEN'),
+		pollIntervalMs: integerFromEnv(env, 'TREESEED_MANAGER_POLL_INTERVAL_MS', 15000),
+		scalerKind: envValue(env, 'TREESEED_WORKER_POOL_SCALER') || null,
+		dailyTaskCreditBudget,
+		maxQueuedTasks,
+		maxQueuedCredits,
+		priorityModels: readPriorityModels(env),
+		defaultSchedule: readDefaultSchedule(env),
+		autoscale: {
+			minWorkers: integerFromEnv(env, 'TREESEED_AGENT_POOL_MIN_WORKERS', 0),
+			maxWorkers: integerFromEnv(env, 'TREESEED_AGENT_POOL_MAX_WORKERS', 1),
+			targetQueueDepth: Math.max(1, integerFromEnv(env, 'TREESEED_AGENT_POOL_TARGET_QUEUE_DEPTH', 1)),
+			cooldownSeconds: Math.max(0, integerFromEnv(env, 'TREESEED_AGENT_POOL_COOLDOWN_SECONDS', 60)),
+		},
+	};
 }
 
 function findAgentPackageRoot(start: string) {
@@ -214,7 +281,7 @@ function collectApiReadiness(repoRoot: string, env: NodeJS.ProcessEnv) {
 }
 
 function collectManagerReadiness(env: NodeJS.ProcessEnv) {
-	const config = resolveManagerServiceConfig();
+	const config = resolveManagerReadinessConfig(env);
 	const warnings = [];
 	if (!config.runnerToken && config.environment !== 'local') {
 		warnings.push('Hosted manager runner token is not configured.');
@@ -269,7 +336,7 @@ function collectWorkerReadiness() {
 
 function collectWorkdayPolicyReadiness() {
 	const shared = resolveManagerConfig();
-	const manager = resolveManagerServiceConfig();
+	const manager = resolveManagerReadinessConfig(process.env);
 	const warnings = [];
 	if (manager.dailyTaskCreditBudget <= 0) {
 		warnings.push('Daily task credit budget is zero; manager will not have capacity to seed work.');
@@ -391,7 +458,7 @@ function collectOperationsReadiness(repoRoot: string) {
 				adapter: adapter.constructor.name,
 				decision,
 			},
-			blockingIssues: decision.allowed ? [] : [decision.reason],
+			blockingIssues: decision.allowed ? [] : [decision.summary],
 		});
 	} catch (error) {
 		return createCheck({

@@ -98,6 +98,8 @@ export interface KnowledgePromotionToStagingResult {
 	};
 }
 
+type KnowledgePromotionVerification = NonNullable<KnowledgePromotionToStagingResult['verification']>;
+
 export interface KnowledgePromotionTaskInput {
 	taskId: string;
 	workDayId?: string;
@@ -132,7 +134,7 @@ export interface KnowledgePromotionDependencies {
 		worktreeRoot: string;
 		commands: string[];
 		draft: KnowledgeDraft;
-	}) => Promise<KnowledgePromotionToStagingResult['verification']>;
+	}) => Promise<KnowledgePromotionVerification>;
 }
 
 function readRecord(value: unknown): Record<string, unknown> {
@@ -143,7 +145,7 @@ function readString(value: unknown, fallback = '') {
 	return typeof value === 'string' && value.trim() ? value.trim() : fallback;
 }
 
-function readStringArray(value: unknown) {
+function readStringArray(value: unknown): string[] {
 	return Array.isArray(value) ? value.map(String).filter(Boolean) : [];
 }
 
@@ -500,7 +502,7 @@ function verificationRepairTaskFor(input: {
 	worktreeRoot: string;
 	snapshotRef?: string | null;
 	changedPaths: string[];
-	verification: NonNullable<KnowledgePromotionToStagingResult['verification']>;
+	verification: KnowledgePromotionVerification;
 }) {
 	return {
 		kind: 'knowledge_promotion_verification_repair',

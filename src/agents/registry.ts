@@ -89,7 +89,7 @@ async function importTenantAgentHandlerModule(modulePath: string) {
 	const outputParent = resolve(process.cwd(), '.treeseed');
 	mkdirSync(outputParent, { recursive: true });
 	const outputRoot = mkdtempSync(resolve(outputParent, 'agent-handler-'));
-	const outputFile = resolve(outputRoot, `${Date.now()}-${Math.random().toString(36).slice(2)}.mjs`);
+	const outputFile = resolve(outputRoot, `${Date.now()}-${Math.random().toString(36).slice(2)}.js`);
 	const tsconfig = findNearestTsconfig(modulePath);
 	try {
 		await build({

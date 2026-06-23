@@ -39,10 +39,10 @@ providers:
   agents:
     execution: codex
     mutation: local_branch
-    repository: stub
-    verification: stub
-    notification: stub
-    research: stub
+    repository: git
+    verification: local
+    notification: sdk_message
+    research: project_graph
 `, 'utf8');
 	writeFileSync(resolve(tenantRoot, 'src/manifest.yaml'), `id: integrated-docs
 siteConfigPath: ./src/config.yaml

@@ -5,19 +5,6 @@ import { getTreeseedAgentProviderSelections } from '@treeseed/sdk/platform/deplo
 
 const execFileAsync = promisify(execFile);
 
-export class StubVerificationAdapter implements AgentVerificationAdapter {
-	async runChecks(input: { commands: string[]; runId: string }) {
-		return {
-			status: 'completed' as const,
-			summary: input.commands.length
-				? `Stub verification completed for ${input.runId}.`
-				: 'No verification commands configured.',
-			stdout: input.commands.join('\n'),
-			stderr: '',
-		};
-	}
-}
-
 export class LocalVerificationAdapter implements AgentVerificationAdapter {
 	async runChecks(input: { commands: string[]; cwd?: string }) {
 		if (!input.commands.length) {
@@ -63,9 +50,11 @@ export class LocalVerificationAdapter implements AgentVerificationAdapter {
 }
 
 export function createVerificationAdapter() {
-	return String(
+	const provider = String(
 		process.env.TREESEED_AGENT_VERIFICATION_PROVIDER ?? getTreeseedAgentProviderSelections().verification,
-	).toLowerCase() !== 'local'
-		? new StubVerificationAdapter()
-		: new LocalVerificationAdapter();
+	).toLowerCase();
+	if (provider !== 'local') {
+		throw new Error(`Unsupported agent verification provider "${provider}". Configure TREESEED_AGENT_VERIFICATION_PROVIDER=local.`);
+	}
+	return new LocalVerificationAdapter();
 }

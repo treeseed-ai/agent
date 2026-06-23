@@ -1,4 +1,5 @@
 import type { AgentRuntimeSpec } from '@treeseed/sdk/types/agents';
+import type { SdkRecordTaskCreditsRequest, SdkSearchRequest } from '@treeseed/sdk/types';
 import type { AgentTriggerInvocation } from '../agents/runtime-types.ts';
 import type { KnowledgeDraft, OptimizationReport } from '../agents/contracts/knowledge.ts';
 import type { ResearchNote } from '../agents/contracts/research.ts';
@@ -87,12 +88,7 @@ interface TaskRecord {
 
 interface ResearchKnowledgeSdk {
 	searchTasks(request: { workDayId?: string; limit?: number; state?: string | string[] }): Promise<{ payload: unknown }>;
-	search?: (request: {
-		model: string;
-		filters?: Array<Record<string, unknown>>;
-		sort?: Array<Record<string, unknown>>;
-		limit?: number;
-	}) => Promise<{ payload: unknown }>;
+	search?: (request: SdkSearchRequest) => Promise<{ payload: unknown }>;
 	createTask(request: {
 		workDayId: string;
 		agentId: string;
@@ -104,14 +100,7 @@ interface ResearchKnowledgeSdk {
 		actor: string;
 		state?: string;
 	}): Promise<{ payload: unknown }>;
-	recordTaskCredits?: (request: {
-		projectId: string;
-		workDayId: string;
-		taskId: string;
-		phase: string;
-		credits: number;
-		metadata: Record<string, unknown>;
-	}) => Promise<unknown>;
+	recordTaskCredits?: (request: SdkRecordTaskCreditsRequest) => Promise<unknown>;
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -224,9 +213,12 @@ export function agentSpecForResearchKnowledgeHandler(kind: 'research' | 'knowled
 			leaseSeconds: 300,
 			retryLimit: 0,
 			branchPrefix: 'agent/research-knowledge',
-			providerProfile: {
-				requiredCapabilities: kind === 'research' ? ['treedx.read', 'research.synthesize'] : ['treedx.read', 'report.render'],
-			},
+				providerProfile: {
+					requiredCapabilities: kind === 'research' ? ['treedx.read', 'research.synthesize'] : ['treedx.read', 'report.render'],
+					preferredLanes: [],
+					acceptableFallbacks: [],
+					fallbackPolicy: 'allow_substitution',
+				},
 		},
 		outputs: { messageTypes: [], modelMutations: [] },
 		context: {

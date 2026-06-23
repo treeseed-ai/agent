@@ -48,6 +48,15 @@ export { runScheduledWorkdayManager } from './services/workday-manager.ts';
 export { runWorkerCycle, startWorkerLoop } from './services/worker.ts';
 export { runWorkdayStart } from './services/workday-start.ts';
 export { runWorkdayReport } from './services/workday-report.ts';
+export {
+	normalizeWorkdayTestParameters,
+	redactWorkdayTestValue,
+	renderWorkdayTestMarkdown,
+	scoreWorkdayTest,
+	writeWorkdayTestReports,
+	TREESEED_WORKDAY_TEST_AGENT_COUNT,
+	TREESEED_WORKDAY_TEST_PROJECT_SLUGS,
+} from './services/workday-test.ts';
 export { collectRuntimeReadiness, renderRuntimeReadiness } from './services/runtime-readiness.ts';
 export {
 	hostedAgentPlatformProofInputFromEnv,

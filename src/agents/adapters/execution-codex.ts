@@ -19,6 +19,7 @@ import { AgentWorktreeManager } from '../../services/agent-worktrees.ts';
 
 export type CodexExecutionStatus = 'completed' | 'waiting' | 'failed';
 export type CodexReasoningEffort = 'low' | 'medium' | 'high';
+export type { CodexSandboxMode } from './codex-readiness.ts';
 
 export interface CodexExecutionRequest {
 	taskId: string;
@@ -199,7 +200,11 @@ function treeDxProxyTools(request: CodexExecutionRequest) {
 
 function redactToolForPrompt(tool: TreeDxProxyExecutionToolDescriptor) {
 	return {
+		kind: tool.kind,
 		id: tool.id,
+		name: tool.name,
+		description: tool.description,
+		operations: tool.operations,
 		projectId: tool.projectId,
 		assignmentId: tool.assignmentId,
 		handleId: tool.handleId,
@@ -212,7 +217,7 @@ function redactToolForPrompt(tool: TreeDxProxyExecutionToolDescriptor) {
 	};
 }
 
-function codexTreeDxConfig(request: CodexExecutionRequest) {
+export function codexTreeDxConfig(request: CodexExecutionRequest) {
 	const tools = treeDxProxyTools(request);
 	if (tools.length === 0) return undefined;
 	const tool = tools[0]!;
@@ -221,10 +226,10 @@ function codexTreeDxConfig(request: CodexExecutionRequest) {
 		providerApiKey: process.env.TREESEED_CAPACITY_PROVIDER_API_KEY ?? process.env.TREESEED_PROVIDER_API_KEY ?? '',
 		assignmentId: tool.assignmentId,
 		handleId: tool.handleId,
-		descriptor: redactToolForPrompt(tool) as TreeDxProxyExecutionToolDescriptor,
+		descriptor: redactToolForPrompt(tool),
 	});
 	return {
-		mcpServers: {
+		mcp_servers: {
 			treedx_proxy: {
 				command: server.command,
 				args: server.args,

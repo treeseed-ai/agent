@@ -13,7 +13,6 @@ function createDefaultAgentApiSdk(repoRoot: string | undefined) {
 	return new AgentSdk({
 		repoRoot,
 		database: new MemoryAgentDatabase(),
-		contentRepository: { adapter: 'local' },
 	});
 }
 

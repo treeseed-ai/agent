@@ -2,7 +2,10 @@ import { normalizeAgentCliOptions } from '../cli-tools.ts';
 import type { ExecutionProviderAdapter, ExecutionProviderInvocation } from '../runtime-types.ts';
 import { getTreeseedAgentProviderSelections } from '@treeseed/sdk/platform/deploy-runtime';
 import { runTreeseedCopilotTask } from '@treeseed/sdk/copilot';
-import { CodexSubscriptionExecutionProviderAdapter } from './execution-codex.ts';
+import {
+	CodexSubscriptionExecutionProviderAdapter,
+	type CodexSubscriptionExecutionProviderAdapterOptions,
+} from './execution-codex.ts';
 import {
 	JiraExecutionProviderAdapter,
 	type JiraExecutionProviderConfig,
@@ -85,6 +88,7 @@ export function createExecutionProviderAdapter(configuredModeInput?: string, opt
 	githubIssues?: GitHubIssuesExecutionProviderConfig | null;
 	discord?: DiscordExecutionProviderConfig | null;
 	workflow?: WorkflowExecutionProviderAdapterOptions | null;
+	codex?: Omit<CodexSubscriptionExecutionProviderAdapterOptions, 'repoRoot'> | null;
 } = {}) {
 	const configuredMode = String(
 		configuredModeInput ?? process.env.TREESEED_AGENT_EXECUTION_PROVIDER ?? getTreeseedAgentProviderSelections().execution,
@@ -102,7 +106,7 @@ export function createExecutionProviderAdapter(configuredModeInput?: string, opt
 		return new WorkflowExecutionProviderAdapter(options.workflow ?? {});
 	}
 	if (configuredMode === 'codex' || configuredMode === 'codex_subscription') {
-		return new CodexSubscriptionExecutionProviderAdapter({ repoRoot: options.repoRoot });
+		return new CodexSubscriptionExecutionProviderAdapter({ ...(options.codex ?? {}), repoRoot: options.repoRoot });
 	}
 	if (configuredMode === 'copilot') {
 		return new CopilotExecutionProviderAdapter();

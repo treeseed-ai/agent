@@ -3,6 +3,8 @@ import {
 	resolveCapacityProviderEnvironment,
 	type CapacityProviderEnvironmentInput,
 } from '@treeseed/sdk/capacity-provider';
+import type { AgentSdkTreeDxOptions } from '@treeseed/sdk/sdk';
+import { createHmac, randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { resolveCodexAuthFile } from '../agents/adapters/codex-auth.ts';
 import {
@@ -43,6 +45,7 @@ export interface ProviderRuntimeConfig {
 	jira: JiraProviderRuntimeConfig | null;
 	githubIssues: GitHubIssuesProviderRuntimeConfig | null;
 	discord: DiscordProviderRuntimeConfig | null;
+	treeDx: AgentSdkTreeDxOptions | null;
 	env: Record<string, string>;
 	redactedEnv: Record<string, string>;
 }
@@ -64,6 +67,57 @@ function optionalIntValue(value: string) {
 
 function booleanValue(value: string) {
 	return ['1', 'true', 'yes', 'on'].includes(value.toLowerCase());
+}
+
+function base64urlJson(value: Record<string, unknown>) {
+	return Buffer.from(JSON.stringify(value)).toString('base64url');
+}
+
+function arrayEnvValue(env: NodeJS.ProcessEnv, name: string, fallback: string[]) {
+	const raw = envValue(env, name);
+	if (!raw) return fallback;
+	return raw.split(',').map((entry) => entry.trim()).filter(Boolean);
+}
+
+function mintLocalTreeDxJwt(env: NodeJS.ProcessEnv) {
+	const secret = envValue(env, 'TREESEED_TREEDX_JWT_HS256_SECRET') || envValue(env, 'TREEDX_JWT_HS256_SECRET');
+	const issuer = envValue(env, 'TREESEED_TREEDX_JWT_ISSUER') || envValue(env, 'TREEDX_JWT_ISSUER');
+	const audience = envValue(env, 'TREESEED_TREEDX_JWT_AUDIENCE') || envValue(env, 'TREEDX_JWT_AUDIENCE');
+	if (!secret || !issuer || !audience) return '';
+	const now = Math.floor(Date.now() / 1000);
+	const actorId = envValue(env, 'TREESEED_TREEDX_PROXY_ACTOR_ID') || envValue(env, 'TREESEED_TREEDX_ACTOR_ID') || 'treeseed-provider';
+	const tenantId = envValue(env, 'TREESEED_TREEDX_PROXY_TENANT_ID') || envValue(env, 'TREESEED_TREEDX_TENANT_ID') || 'treeseed-control-plane';
+	const payload = {
+		iss: issuer,
+		aud: audience,
+		sub: actorId,
+		jti: randomUUID(),
+		iat: now,
+		nbf: now - 5,
+		exp: now + 3600,
+		treedx_actor_id: actorId,
+		treedx_tenant_id: tenantId,
+		treedx_repo_ids: arrayEnvValue(env, 'TREESEED_TREEDX_REPO_IDS', ['*']),
+		treedx_capabilities: arrayEnvValue(env, 'TREESEED_TREEDX_CAPABILITIES', ['*']),
+		treedx_refs: arrayEnvValue(env, 'TREESEED_TREEDX_REFS', ['*']),
+		treedx_paths: arrayEnvValue(env, 'TREESEED_TREEDX_PATHS', ['**']),
+	};
+	const signingInput = `${base64urlJson({ alg: 'HS256', typ: 'JWT' })}.${base64urlJson(payload)}`;
+	const signature = createHmac('sha256', secret).update(signingInput).digest('base64url');
+	return `${signingInput}.${signature}`;
+}
+
+export function resolveProviderTreeDxOptions(env: NodeJS.ProcessEnv = process.env): AgentSdkTreeDxOptions | null {
+	const baseUrl = envValue(env, 'TREESEED_TREEDX_BASE_URL') || envValue(env, 'TREESEED_TREEDX_URL');
+	if (!baseUrl) return null;
+	const token = envValue(env, 'TREESEED_TREEDX_TOKEN') || mintLocalTreeDxJwt(env);
+	return {
+		baseUrl,
+		...(token ? { token } : {}),
+		...(envValue(env, 'TREESEED_TREEDX_REPO_ID') ? { repoId: envValue(env, 'TREESEED_TREEDX_REPO_ID') } : {}),
+		...(envValue(env, 'TREESEED_TREEDX_REF') ? { ref: envValue(env, 'TREESEED_TREEDX_REF') } : {}),
+		...(envValue(env, 'TREESEED_TREEDX_WORKSPACE_ID') ? { workspaceId: envValue(env, 'TREESEED_TREEDX_WORKSPACE_ID') } : {}),
+	};
 }
 
 function managementApiUrl(env: NodeJS.ProcessEnv) {
@@ -112,6 +166,7 @@ export function resolveProviderConfig(options: {
 	const jira = resolveJiraExecutionProviderConfig(env);
 	const githubIssues = resolveGitHubIssuesExecutionProviderConfig(env);
 	const discord = resolveDiscordExecutionProviderConfig(env);
+	const treeDx = resolveProviderTreeDxOptions(env);
 	const missing = [
 		!input.apiKey ? 'TREESEED_CAPACITY_PROVIDER_API_KEY' : null,
 	].filter((entry): entry is string => Boolean(entry));
@@ -176,6 +231,7 @@ export function resolveProviderConfig(options: {
 		jira,
 		githubIssues,
 		discord,
+		treeDx,
 		env: resolvedEnv,
 		redactedEnv,
 	};

@@ -4,7 +4,6 @@ import { Readable } from 'node:stream';
 import { Hono } from 'hono';
 import { TREESEED_REMOTE_CONTRACT_HEADER, TREESEED_REMOTE_CONTRACT_VERSION } from '@treeseed/sdk';
 import type { ProviderRuntimeConfig } from '../provider/config.ts';
-import { checkProviderHealth } from '../provider/lifecycle.ts';
 import { fetchProviderPortfolio, summarizeProviderPortfolio } from '../provider/portfolio.ts';
 import { registerProvider } from '../provider/registration.ts';
 
@@ -45,7 +44,10 @@ export function createCapacityProviderApp(config: ProviderRuntimeConfig) {
 		marketConfigured: Boolean(config.marketUrl),
 		apiKeyConfigured: Boolean(config.apiKey),
 	}));
-	app.get('/provider/health', async (c) => c.json(await checkProviderHealth(config)));
+	app.get('/provider/health', async (c) => {
+		const { checkProviderHealth } = await import('../provider/lifecycle.ts');
+		return c.json(await checkProviderHealth(config));
+	});
 	app.post('/provider/register', async (c) => c.json(await registerProvider(config)));
 	app.get('/provider/portfolio', async (c) => {
 		const portfolio = await fetchProviderPortfolio(config);

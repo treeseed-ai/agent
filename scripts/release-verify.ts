@@ -37,11 +37,26 @@ const sdkPackageRoot = resolveSdkPackageRoot();
 
 function ensureSdkRuntimeLink() {
 	const linkPath = resolve(packageRoot, 'node_modules', '@treeseed', 'sdk');
-	if (existsSync(linkPath)) {
+	if (sdkRuntimeInstallIsUsable(linkPath)) {
 		return;
 	}
+	rmSync(linkPath, { recursive: true, force: true });
 	mkdirSync(dirname(linkPath), { recursive: true });
 	symlinkSync(sdkPackageRoot, linkPath, 'dir');
+}
+
+function sdkRuntimeInstallIsUsable(linkPath: string) {
+	if (!existsSync(linkPath)) {
+		return false;
+	}
+	try {
+		const packageJson = JSON.parse(readFileSync(resolve(linkPath, 'package.json'), 'utf8')) as {
+			exports?: Record<string, unknown>;
+		};
+		return Boolean(packageJson.exports?.['./agent-capacity']);
+	} catch {
+		return false;
+	}
 }
 
 function run(command: string, args: string[], cwd = packageRoot, capture = false, extraEnv: Record<string, string> = {}) {

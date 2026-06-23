@@ -1,6 +1,9 @@
 #!/usr/bin/env node
 
 import { spawnSync } from 'node:child_process';
+import { existsSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 function runDirectVerify() {
 	const result = spawnSync('npm', ['run', 'verify:direct'], {
@@ -13,8 +16,16 @@ function runDirectVerify() {
 
 const entrypointCheckOnly = process.env.TREESEED_VERIFY_ENTRYPOINT_CHECK === 'true';
 
+async function importSdkVerifier() {
+	const siblingSdkVerifier = resolve(process.cwd(), '..', 'sdk', 'src', 'verification.ts');
+	if (existsSync(siblingSdkVerifier)) {
+		return import(pathToFileURL(siblingSdkVerifier).href);
+	}
+	return import('@treeseed/sdk/verification');
+}
+
 try {
-	const { runTreeseedVerifyDriver } = await import('@treeseed/sdk/verification');
+	const { runTreeseedVerifyDriver } = await importSdkVerifier();
 	if (entrypointCheckOnly) {
 		process.exit(0);
 	}

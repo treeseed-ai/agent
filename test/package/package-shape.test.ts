@@ -58,9 +58,13 @@ describe('agent package shape', () => {
 			expect(existsSync(sourcePathForBinSpecifier(binPath)), `${binName} source file`).toBe(true);
 		}
 
-			expect(packageJson.scripts.verify).toBe('node --import tsx ./scripts/verify-driver.ts');
-			expect(packageJson.scripts['verify:local']).toContain('./scripts/verify-driver.ts');
-			expect(packageJson.scripts['verify:action']).toContain('./scripts/verify-driver.ts');
+			expect(packageJson.scripts.verify).toBe('TMPDIR=/tmp node --import tsx ./scripts/verify-driver.ts');
+			expect(packageJson.scripts['verify:local']).toBe(
+				'TREESEED_VERIFY_DRIVER=direct TMPDIR=/tmp node --import tsx ./scripts/verify-driver.ts',
+			);
+			expect(packageJson.scripts['verify:action']).toBe(
+				'TREESEED_VERIFY_DRIVER=act TMPDIR=/tmp node --import tsx ./scripts/verify-driver.ts',
+			);
 			expect(Object.keys(packageJson.scripts).some((name) => name.includes('processing'))).toBe(false);
 			expect(Object.values(packageJson.scripts).some((command) => command.includes('treeseed-processing'))).toBe(false);
 		});

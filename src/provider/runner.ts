@@ -1453,7 +1453,7 @@ export async function runProviderRunnerOnce(input: {
 	};
 }
 
-async function runProviderAssignment(input: {
+export async function runProviderAssignment(input: {
 	config: ProviderRuntimeConfig;
 	client: ProviderAssignmentClient;
 	assignment: Record<string, unknown>;

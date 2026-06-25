@@ -346,6 +346,34 @@ describe('codex subscription provider skeleton', () => {
 		});
 	});
 
+	it('enforces the configured Codex execution timeout', async () => {
+		const run = vi.fn(() => new Promise(() => null));
+		const createCodexClient = vi.fn(() => ({
+			startThread: vi.fn(() => ({ id: 'thread-timeout', run })),
+			resumeThread: vi.fn(),
+		}));
+
+		const result = await runCodexSubscriptionTask({
+			...baseRequest,
+			timeoutMs: 1,
+		}, { createCodexClient });
+
+		expect(run).toHaveBeenCalledTimes(1);
+		expect(result).toMatchObject({
+			provider: 'codex',
+			threadId: '',
+			status: 'failed',
+			error: {
+				code: 'codex_execution_timeout',
+				retryable: true,
+			},
+			metadata: {
+				timeoutMs: 1,
+			},
+		});
+		expect(result.usage?.nativeUnit).toBe('wall_minute');
+	});
+
 	it('exposes a runtime adapter result with the normalized Codex envelope', async () => {
 		const run = vi.fn(async () => ({
 			items: [],

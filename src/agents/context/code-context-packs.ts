@@ -1,8 +1,53 @@
 import type { DeclarativeContextQuery, HandlerContextPackSource, ResolvedHandlerContextPack } from '@treeseed/sdk/graph/context-query-contracts';
 import type { SdkContextPack, SdkGraphNode } from '@treeseed/sdk';
-import type { CodebaseInventoryArtifact, ModuleSurfaceInventory, PackageSurfaceInventory } from '../../services/codebase-documentation-scanner.ts';
 
 export type CodeContextPackKind = 'package_surface' | 'module_surface' | 'flow';
+
+export interface DocsCoverageLink {
+	path: string;
+	kind?: string;
+	evidence?: string;
+	matched?: string[];
+}
+
+export interface ModuleSurfaceInventory {
+	path: string;
+	packageName: string;
+	responsibility: string;
+	fileCount?: number;
+	importantFiles: string[];
+	exportedSymbols: string[];
+	imports: string[];
+	tests: string[];
+	relatedDocs: DocsCoverageLink[];
+	warnings: string[];
+}
+
+export interface PackageSurfaceInventory {
+	name: string;
+	purpose: string;
+	root: string;
+	entrypoints: string[];
+	publicExports: string[];
+	commands?: string[];
+	runtimeServices: string[];
+	moduleCount?: number;
+	fileCount?: number;
+	tests: string[];
+	relatedDocs: DocsCoverageLink[];
+	knownGaps?: string[];
+	modules: ModuleSurfaceInventory[];
+	warnings: string[];
+}
+
+export interface CodebaseInventoryArtifact {
+	id: string;
+	kind: 'codebase_inventory';
+	title?: string;
+	packages: PackageSurfaceInventory[];
+	modules: ModuleSurfaceInventory[];
+	warnings?: string[];
+}
 
 export interface CodeContextPackBuilderInput {
 	query: DeclarativeContextQuery;

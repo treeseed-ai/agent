@@ -5,10 +5,12 @@ export const TREESEED_WORKDAY_TEST_PROJECT_SLUGS = ['market', 'admin', 'agent', 
 export const TREESEED_WORKDAY_TEST_AGENT_COUNT = 9;
 
 const SECRET_KEY = /(?:api[_-]?key|token|secret|password|credential|authorization|cookie)/iu;
+const DEFAULT_WORKDAY_TEST_AGENT_CYCLES = 6;
 
 export interface WorkdayTestScenarioParameters {
 	projects?: string[] | string | null;
 	workdays?: number | string | null;
+	durationSeconds?: number | string | null;
 	maxAssignments?: number | string | null;
 	planningOnly?: boolean;
 	dryRun?: boolean;
@@ -40,12 +42,14 @@ export interface WorkdayTestActual {
 export function normalizeWorkdayTestParameters(input: WorkdayTestScenarioParameters = {}) {
 	const projects = normalizeProjects(input.projects);
 	const workdays = positiveInteger(input.workdays, 1);
-	const maxAssignments = positiveInteger(input.maxAssignments, projects.length * TREESEED_WORKDAY_TEST_AGENT_COUNT);
+	const durationSeconds = positiveInteger(input.durationSeconds, 900);
+	const maxAssignments = positiveInteger(input.maxAssignments, projects.length * TREESEED_WORKDAY_TEST_AGENT_COUNT * DEFAULT_WORKDAY_TEST_AGENT_CYCLES);
 	return {
 		scenarioId: input.scenarioId || 'portfolio-local',
 		providerId: input.providerId || 'local',
 		projects,
 		workdays,
+		durationSeconds,
 		maxAssignments,
 		planningOnly: input.planningOnly === true,
 		dryRun: input.dryRun === true,
@@ -84,7 +88,15 @@ export function scoreWorkdayTest(input: {
 	const expected = input.expectedProjects;
 	const exercised = expected.filter((slug) => bySlug.has(slug));
 	const agentReady = expected.filter((slug) => Number(bySlug.get(slug)?.agentCount ?? 0) >= TREESEED_WORKDAY_TEST_AGENT_COUNT);
-	const planningReady = expected.filter((slug) => Number(bySlug.get(slug)?.planningRuns ?? 0) > 0);
+	const expectedPlanningRunsForProject = (project: WorkdayTestActualProject | undefined) => Math.min(
+		TREESEED_WORKDAY_TEST_AGENT_COUNT,
+		Number(project?.agentCount ?? TREESEED_WORKDAY_TEST_AGENT_COUNT),
+		Math.max(1, Number(project?.assignments ?? TREESEED_WORKDAY_TEST_AGENT_COUNT)),
+	);
+	const planningReady = expected.filter((slug) => {
+		const project = bySlug.get(slug);
+		return Number(project?.planningRuns ?? 0) >= expectedPlanningRunsForProject(project);
+	});
 	const actingReady = input.planningOnly ? expected : expected.filter((slug) => Number(bySlug.get(slug)?.actingRuns ?? 0) > 0 || Number(bySlug.get(slug)?.outputs ?? 0) > 0);
 	const blockers = projects.flatMap((project) => (project.blockers ?? []).map((blocker) => `${project.slug}: ${blocker}`));
 	if (input.actual.providerReady !== true) blockers.push('local provider readiness was not proven');

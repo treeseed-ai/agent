@@ -102,24 +102,16 @@ async function appendOperationEvent(input: {
 	request: AgentOperationRequest;
 	result: AgentOperationResult;
 }) {
-	const sdk = input.context.sdk as unknown as {
-		appendTaskEvent?: (request: {
-			taskId: string;
-			kind: string;
-			data: Record<string, unknown>;
-			actor: string;
-		}) => Promise<unknown>;
-	};
-	if (typeof sdk.appendTaskEvent !== 'function') return;
-	await sdk.appendTaskEvent({
-		taskId: input.request.taskId,
-		kind: 'operation_event',
-		data: createAgentOperationEvent({
+	await input.context.sdk.createMessage({
+		type: 'agent.operation_event',
+		payload: createAgentOperationEvent({
 			request: input.request,
 			result: input.result,
 		}) as unknown as Record<string, unknown>,
-		actor: input.context.agent.slug,
-	});
+		relatedModel: 'provider_assignment',
+		relatedId: input.context.capacity?.assignment?.id ?? null,
+		priority: 100,
+	}).catch(() => null);
 }
 
 async function lifecycleOperation(input: {

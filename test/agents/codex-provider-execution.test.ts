@@ -4,7 +4,6 @@ import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import {
 	buildCodexPrompt,
-	codexTreeDxConfig,
 	mapCodexThreadOptions,
 	normalizeCodexRunResult,
 	runCodexSubscriptionTask,
@@ -138,38 +137,18 @@ describe('codex provider execution', () => {
 		expect(prompt).toContain('"kind": "implementation"');
 	});
 
-	it('includes assignment-scoped TreeDX tool guidance without credentials', () => {
+	it('includes assignment-scoped TreeDX context guidance without direct MCP tool use', () => {
 		const prompt = buildCodexPrompt({
 			...request,
 			tools: [treeDxTool],
 		});
 
 		expect(prompt).toContain('TreeDX assignment tools:');
-		expect(prompt).toContain('treedx_write_workspace_file');
-		expect(prompt).toContain('Content writes must use treedx_write_workspace_file');
+		expect(prompt).toContain('Use the assignment-scoped TreeDX MCP tools');
+		expect(prompt).toContain('If required context is missing, call the available tools');
 		expect(prompt).toContain('src/content/**');
 		expect(prompt).not.toContain('secret_should_not_leak');
-	});
-
-	it('passes TreeDX MCP servers using Codex CLI config keys', () => {
-		const config = codexTreeDxConfig({
-			...request,
-			tools: [treeDxTool],
-		});
-
-		expect(config).toMatchObject({
-			mcp_servers: {
-				treedx_proxy: {
-					command: expect.any(String),
-					args: expect.any(Array),
-					env: expect.objectContaining({
-						TREESEED_TREEDX_PROXY_ASSIGNMENT_ID: 'assignment-1',
-						TREESEED_TREEDX_PROXY_HANDLE_ID: 'handle-1',
-					}),
-				},
-			},
-		});
-		expect(config).not.toHaveProperty('mcpServers');
+		expect(prompt).toContain('treedx_write_workspace_file');
 	});
 
 	it('places the core objective before the agent task when available', () => {

@@ -43,6 +43,7 @@ import { getTreeseedAgentProviderSelections } from '@treeseed/sdk/platform/deplo
 import { loadTreeseedDeployConfigFromPath } from '@treeseed/sdk/platform/deploy-config';
 import { resolveAgentRuntimeProviders } from '../../agent-runtime.ts';
 import { loadCoreObjectiveContext } from '../core-objective.ts';
+import { randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 
@@ -54,6 +55,31 @@ function nowIso() {
 
 function record(value: unknown): Record<string, unknown> {
 	return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function stringValue(...values: unknown[]) {
+	for (const value of values) {
+		if (typeof value === 'string' && value.trim()) return value;
+	}
+	return null;
+}
+
+function waitingOutputIsTerminal(output: AgentHandlerOutput) {
+	if (output.status !== 'waiting') return false;
+	const metadata = record(output.metadata);
+	const executionSnapshot = record(metadata.executionSnapshot);
+	const snapshotOutputs = record(executionSnapshot.outputs);
+	return snapshotOutputs.executionBlocked === true;
+}
+
+function assignmentTreeDxProxyHandle(assignment: ProviderAssignment, explicit?: unknown) {
+	const direct = record(explicit);
+	if (Object.keys(direct).length > 0) return direct;
+	const root = record(assignment.treedxProxyHandle);
+	if (Object.keys(root).length > 0) return root;
+	const workspace = record(assignment.workspaceContext);
+	const workspaceHandle = record(workspace.treedxProxyHandle);
+	return Object.keys(workspaceHandle).length > 0 ? workspaceHandle : null;
 }
 
 async function withTimeout<T>(input: {
@@ -106,6 +132,7 @@ function validateAssignmentOutputs(input: {
 }
 
 export interface AgentKernelModeRunTelemetryInput {
+	id?: string;
 	status: AgentModeRunStatus;
 	selectedInput: Record<string, unknown>;
 	capacityEnvelope: AgentCapacityEnvelope;
@@ -393,7 +420,13 @@ export class AgentKernel {
 	private async executeAgentInternal(
 		agent: AgentRuntimeSpec,
 		trigger: AgentTriggerInvocation,
-		options: { capacity?: AgentContext['capacity']; treeDx?: AgentContext['treeDx'] } = {},
+		options: {
+			capacity?: AgentContext['capacity'];
+			treeDx?: AgentContext['treeDx'];
+			onInputsResolved?: (event: { runId: string; inputs: unknown; context: AgentContext }) => Promise<void> | void;
+			onExecutionReturned?: (event: { runId: string; inputs: unknown; result: unknown; context: AgentContext }) => Promise<void> | void;
+			onOutputsEmitted?: (event: { runId: string; inputs: unknown; result: unknown; output: AgentHandlerOutput; context: AgentContext }) => Promise<void> | void;
+		} = {},
 	): Promise<{ runId: string; output: AgentHandlerOutput }> {
 		if (this.activeRuns.has(agent.slug)) {
 			return {
@@ -406,8 +439,8 @@ export class AgentKernel {
 		}
 		this.activeRuns.add(agent.slug);
 
-		const runId = crypto.randomUUID();
-		const handler = await resolveAgentHandler(agent.handler, { tenantRoot: this.tenantRoot });
+		const runId = randomUUID();
+	const handler = await resolveAgentHandler(agent.handler, { tenantRoot: this.tenantRoot });
 		const scopedSdk = this.sdk.scopeForAgent(agent);
 		const context: AgentContext = {
 			runId,
@@ -431,8 +464,11 @@ export class AgentKernel {
 
 		try {
 			const inputs = await handler.resolveInputs(context);
+			await options.onInputsResolved?.({ runId, inputs, context });
 			const result = await handler.execute(context, inputs);
+			await options.onExecutionReturned?.({ runId, inputs, result, context });
 			const output = await handler.emitOutputs(context, result);
+			await options.onOutputsEmitted?.({ runId, inputs, result, output, context });
 
 			if (trigger.message) {
 				await scopedSdk.ackMessage({
@@ -502,7 +538,19 @@ export class AgentKernel {
 		run: AgentKernelModeRunTelemetryInput,
 	) {
 		if (!options.recordModeRun) return null;
-		return options.recordModeRun(run);
+		const assignment = options.assignment;
+		const decisionInput = options.decisionInput ?? deriveDecisionExecutionInputFromAssignment(assignment);
+		const handlerId = decisionInput.handlerId ?? assignment.handlerId ?? 'handler';
+		const agentId = decisionInput.agentId ?? assignment.agentId ?? 'agent';
+		const mode = run.capacityEnvelope?.mode ?? assignment.mode ?? decisionInput.mode ?? 'planning';
+		const source = typeof run.metadata?.source === 'string' && run.metadata.source.trim()
+			? run.metadata.source.trim()
+			: 'agent_kernel_mode_runtime';
+		const phaseId = `${assignment.id}:${mode}:${agentId}:${handlerId}:${source}:${randomUUID()}`;
+		return options.recordModeRun({
+			id: run.id ?? phaseId,
+			...run,
+		});
 	}
 
 	private async boundedAssignmentResult(
@@ -586,12 +634,13 @@ export class AgentKernel {
 		const mode = normalizeAgentExecutionMode(assignment.mode);
 		const capacityEnvelope = options.capacityEnvelope ?? deriveAgentCapacityEnvelopeFromAssignment(assignment);
 		const decisionInput = options.decisionInput ?? deriveDecisionExecutionInputFromAssignment(assignment);
+		const treedxProxyHandle = assignmentTreeDxProxyHandle(assignment, options.treedxProxyHandle);
 		const validationFallback = validateAgentKernelModeExecutionInput({
 			...options,
 			capacityEnvelope,
 			decisionInput,
 			readiness: options.readiness ?? null,
-			treedxProxyHandle: (options.treedxProxyHandle ?? assignment.treedxProxyHandle ?? null) as Parameters<typeof validateAgentKernelModeExecutionInput>[0]['treedxProxyHandle'],
+			treedxProxyHandle: treedxProxyHandle as Parameters<typeof validateAgentKernelModeExecutionInput>[0]['treedxProxyHandle'],
 		});
 		if (validationFallback) {
 			return this.boundedAssignmentResult(options, validationFallback);
@@ -638,11 +687,14 @@ export class AgentKernel {
 				{ retryable: false },
 			), 'failed');
 		}
-		if (mode === 'planning' && agent.handler === 'act') {
+		const runtimeAgent = decisionInput.handlerId && decisionInput.handlerId !== agent.handler
+			? { ...agent, handler: decisionInput.handlerId }
+			: agent;
+		if (mode === 'planning' && runtimeAgent.handler === 'act') {
 			return this.boundedAssignmentResult(options, createAgentKernelModeFallback(
 				'assignment_handler_not_allowed_for_mode',
 				`Agent ${agent.slug} uses the mutating act handler and cannot run in planning mode.`,
-				{ retryable: false, metadata: { handler: agent.handler, mode } },
+				{ retryable: false, metadata: { handler: runtimeAgent.handler, mode } },
 			), 'failed');
 		}
 
@@ -669,7 +721,7 @@ export class AgentKernel {
 		});
 
 		try {
-			const executed = await this.executeAgentInternal(agent, trigger, {
+			const executed = await this.executeAgentInternal(runtimeAgent, trigger, {
 				capacity: {
 					assignmentId: assignment.id,
 					providerId: assignment.capacityProviderId,
@@ -681,12 +733,108 @@ export class AgentKernel {
 					kernelPolicy: options.kernelPolicy ?? options.projectAgentClass?.kernelPolicy ?? null,
 					assignment,
 					readiness: (options.readiness ?? null) as unknown as Record<string, unknown> | null,
-					treedxProxyHandle: (options.treedxProxyHandle ?? assignment.treedxProxyHandle ?? null) as unknown as Record<string, unknown> | null,
+					treedxProxyHandle,
 					capabilityHandles: (assignment.capabilityHandles ?? assignment.workspaceContext?.capabilityHandles ?? null) as NonNullable<AgentContext['capacity']>['capabilityHandles'],
 					workspaceAccessMode: (assignment.capabilityHandles?.workspaceAccessMode ?? assignment.workspaceContext?.workspaceAccessMode ?? null) as string | null,
 					fallbackReason: null,
 				},
 				treeDx: this.treeDx,
+				onInputsResolved: async ({ runId, inputs }) => {
+					const inputRecord = record(inputs);
+					const workPackage = record(inputRecord.workPackage);
+					const workPackageContext = record(workPackage.context);
+					await this.recordAssignmentModeRun(options, {
+						status: 'running',
+						selectedInput: decisionInput.input,
+						capacityEnvelope,
+						outputs: {
+							status: 'inputs_resolved',
+							summary: `Resolved execution inputs for ${agent.slug}.`,
+							metadata: {
+								source: 'agent_kernel_inputs_resolved',
+								agentRunId: runId,
+								handlerKind: runtimeAgent.handler,
+								resolvedInputs: inputRecord,
+								workPackage,
+								contextDiagnostics: workPackageContext.contextDiagnostics ?? workPackage.metadata?.contextDiagnostics ?? null,
+								coreObjective: workPackageContext.coreObjective ?? null,
+							},
+						},
+						traceRefs: {
+							agentRunId: runId,
+							agentSlug: agent.slug,
+							handlerKind: runtimeAgent.handler,
+						},
+						metadata: {
+							source: 'agent_kernel_inputs_resolved',
+							assignmentId: assignment.id,
+							runnerId: options.runnerId ?? null,
+						},
+					});
+				},
+				onExecutionReturned: async ({ runId, inputs, result }) => {
+					const inputRecord = record(inputs);
+					const resultRecord = record(result);
+					await this.recordAssignmentModeRun(options, {
+						status: 'running',
+						selectedInput: decisionInput.input,
+						capacityEnvelope,
+						outputs: {
+							status: 'handler_returned',
+							summary: `Handler returned execution result for ${agent.slug}.`,
+							metadata: {
+								source: 'agent_kernel_handler_returned',
+								agentRunId: runId,
+								handlerKind: runtimeAgent.handler,
+								artifactKind: inputRecord.artifactKind ?? null,
+								result: resultRecord,
+							},
+						},
+						traceRefs: {
+							agentRunId: runId,
+							agentSlug: agent.slug,
+							handlerKind: runtimeAgent.handler,
+						},
+						metadata: {
+							source: 'agent_kernel_handler_returned',
+							assignmentId: assignment.id,
+							runnerId: options.runnerId ?? null,
+						},
+					});
+				},
+				onOutputsEmitted: async ({ runId, inputs, output }) => {
+					const inputRecord = record(inputs);
+					await this.recordAssignmentModeRun(options, {
+						status: output.status === 'completed' ? 'succeeded' : output.status === 'failed' ? 'failed' : 'running',
+						selectedInput: decisionInput.input,
+						capacityEnvelope,
+						outputs: {
+							status: 'outputs_emitted',
+							summary: output.summary,
+							stdout: output.stdout ?? null,
+							stderr: output.stderr ?? null,
+							metadata: {
+								source: 'agent_kernel_outputs_emitted',
+								agentRunId: runId,
+								handlerKind: runtimeAgent.handler,
+								artifactKind: inputRecord.artifactKind ?? null,
+								outputMetadata: output.metadata ?? {},
+							},
+						},
+						traceRefs: {
+							agentRunId: runId,
+							agentSlug: agent.slug,
+							handlerKind: runtimeAgent.handler,
+						},
+						completedAt: output.status === 'completed' ? nowIso() : null,
+						failedAt: output.status === 'failed' ? nowIso() : null,
+						metadata: {
+							source: 'agent_kernel_outputs_emitted',
+							assignmentId: assignment.id,
+							runnerId: options.runnerId ?? null,
+						},
+					});
+				},
 			});
 			const outputValidation = this.outputValidator.validate({
 				mode,
@@ -710,11 +858,12 @@ export class AgentKernel {
 				: outputStatus === 'failed'
 					? 'failed'
 					: 'cancelled';
+			const terminalWaiting = waitingOutputIsTerminal(executed.output);
 			const fallback = outputStatus === 'waiting'
 				? createAgentKernelModeFallback(
-					'assignment_missing_decision_input',
+					terminalWaiting ? 'assignment_waiting_for_required_context' : 'assignment_waiting_for_external_completion',
 					executed.output.summary,
-					{ retryable: true },
+					{ retryable: !terminalWaiting },
 				)
 				: null;
 			await this.recordAssignmentModeRun(options, {
@@ -745,7 +894,7 @@ export class AgentKernel {
 			return {
 				status: outputStatus === 'completed'
 					? 'completed'
-					: outputStatus === 'failed'
+					: outputStatus === 'failed' || terminalWaiting
 						? 'failed'
 						: 'returned',
 				mode,
@@ -786,6 +935,9 @@ export class AgentKernel {
 	}
 
 	async runAgent(slug: string, mode: 'auto' | 'manual' = 'manual', invocation?: AgentTriggerInvocation | null) {
+		if (process.env.TREESEED_ALLOW_LEGACY_RUN_AGENT !== '1') {
+			throw new Error(`AgentKernel.runAgent(${slug}) is disabled. Production execution must use assignment-scoped AgentKernel.runAssignment(...).`);
+		}
 		const { specs, diagnostics } = await loadActiveAgentSpecs(this.sdk);
 		const errors = diagnostics.filter((entry) => entry.severity === 'error');
 		if (errors.length) {

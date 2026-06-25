@@ -3,12 +3,8 @@ import type {
 	AgentSdk,
 	SdkContextPack,
 	SdkGraphQueryResult,
-	SdkTaskEntity,
-	WorkdayPolicy,
 } from '@treeseed/sdk';
 import { listRegisteredAgentHandlers as listCoreRegisteredAgentHandlers } from '../agents/registry.ts';
-import { buildTaskContext } from '../services/common.ts';
-import { admissionForTaskProposal } from '../services/task-admission.ts';
 import type { ApiContext } from './http.ts';
 import { jsonError, requireScope } from './http.ts';
 
@@ -53,28 +49,6 @@ function routeParam(c: { req: { param: (name: string) => string | undefined } },
 		throw new Error(`Missing route parameter "${name}".`);
 	}
 	return value;
-}
-
-function defaultFollowupPolicy(projectId: string, workDay: Record<string, unknown>): WorkdayPolicy {
-	const budget = Number(workDay.capacityBudget ?? 100);
-	return {
-		projectId,
-		environment: 'local',
-		enabled: true,
-		schedule: { timezone: 'UTC', windows: [] },
-		startCron: '0 9 * * 1-5',
-		durationMinutes: 480,
-		maxRunners: 1,
-		maxWorkersPerRunner: 1,
-		dailyCreditBudget: budget,
-		closeoutGraceMinutes: 10,
-		dailyTaskCreditBudget: budget,
-		maxQueuedTasks: 100,
-		maxQueuedCredits: budget,
-		autoscale: { minWorkers: 0, maxWorkers: 1, targetQueueDepth: 1, cooldownSeconds: 60 },
-		creditWeights: [],
-		metadata: {},
-	};
 }
 
 function authorizeRequest(c: ApiContext, options: RegisterAgentRoutesOptions) {
@@ -139,186 +113,49 @@ export function registerAgentRoutes(
 	app.post(withPrefix(prefix, '/tasks'), async (c) => {
 		const unauthorized = authorizeRequest(c as ApiContext, options);
 		if (unauthorized) return unauthorized;
-		const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
-		const result = await options.sdk.createTask({
-			id: typeof body.id === 'string' ? body.id : undefined,
-			workDayId: String(body.workDayId ?? ''),
-			agentId: String(body.agentId ?? ''),
-			type: String(body.type ?? ''),
-			state: typeof body.state === 'string' ? body.state : 'pending',
-			priority: body.priority === undefined ? undefined : Number(body.priority),
-			idempotencyKey: String(body.idempotencyKey ?? ''),
-			payload: (body.payload as Record<string, unknown> | undefined) ?? {},
-			payloadHash: typeof body.payloadHash === 'string' ? body.payloadHash : null,
-			maxAttempts: body.maxAttempts === undefined ? undefined : Number(body.maxAttempts),
-			availableAt: typeof body.availableAt === 'string' ? body.availableAt : undefined,
-			graphVersion: typeof body.graphVersion === 'string' ? body.graphVersion : null,
-			parentTaskId: typeof body.parentTaskId === 'string' ? body.parentTaskId : null,
-			actor: actor(body, defaultActor),
-		});
-		return c.json(result);
+		return jsonError(c, 410, 'Legacy task queue writes are disabled. Create provider assignments through the TreeSeed assignment API.');
 	});
 
 	app.post(withPrefix(prefix, '/tasks/search'), async (c) => {
 		const unauthorized = authorizeRequest(c as ApiContext, options);
 		if (unauthorized) return unauthorized;
-		const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
-		const result = await options.sdk.searchTasks({
-			workDayId: typeof body.workDayId === 'string' ? body.workDayId : undefined,
-			agentId: typeof body.agentId === 'string' ? body.agentId : undefined,
-			state: Array.isArray(body.state) || typeof body.state === 'string' ? body.state as string | string[] : undefined,
-			limit: body.limit === undefined ? undefined : Number(body.limit),
-		});
-		return c.json(result);
+		return jsonError(c, 410, 'Legacy task queue reads are disabled. Use provider assignments and assignment timelines.');
 	});
 
 	app.post(withPrefix(prefix, '/tasks/:id/claim'), async (c) => {
 		const unauthorized = authorizeRequest(c as ApiContext, options);
 		if (unauthorized) return unauthorized;
-		const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
-		const result = await options.sdk.claimTask({
-				id: routeParam(c, 'id'),
-			workerId: String(body.workerId ?? 'worker'),
-			leaseSeconds: Number(body.leaseSeconds ?? 120),
-			actor: actor(body, defaultActor),
-		});
-		return result.payload ? c.json(result) : jsonError(c, 404, 'Unknown task.');
+		return jsonError(c, 410, 'Legacy task claiming is disabled. Provider runners must lease assignments.');
 	});
 
 	app.post(withPrefix(prefix, '/tasks/:id/progress'), async (c) => {
 		const unauthorized = authorizeRequest(c as ApiContext, options);
 		if (unauthorized) return unauthorized;
-		const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
-		const result = await options.sdk.recordTaskProgress({
-				id: routeParam(c, 'id'),
-			workerId: typeof body.workerId === 'string' ? body.workerId : null,
-			state: typeof body.state === 'string' ? body.state : undefined,
-			appendEvent: body.appendEvent as { kind: string; data?: Record<string, unknown> } | undefined,
-			patch: body.patch as Record<string, unknown> | undefined,
-			actor: actor(body, defaultActor),
-		});
-		return result.payload ? c.json(result) : jsonError(c, 404, 'Unknown task.');
+		return jsonError(c, 410, 'Legacy task progress is disabled. Record assignment lifecycle events instead.');
 	});
 
 	app.post(withPrefix(prefix, '/tasks/:id/complete'), async (c) => {
 		const unauthorized = authorizeRequest(c as ApiContext, options);
 		if (unauthorized) return unauthorized;
-		const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
-		const result = await options.sdk.completeTask({
-				id: routeParam(c, 'id'),
-			output: (body.output as Record<string, unknown> | undefined) ?? null,
-			outputRef: typeof body.outputRef === 'string' ? body.outputRef : null,
-			summary: (body.summary as Record<string, unknown> | undefined) ?? null,
-			actor: actor(body, defaultActor),
-		});
-		return result.payload ? c.json(result) : jsonError(c, 404, 'Unknown task.');
+		return jsonError(c, 410, 'Legacy task completion is disabled. Complete the provider assignment.');
 	});
 
 	app.post(withPrefix(prefix, '/tasks/:id/fail'), async (c) => {
 		const unauthorized = authorizeRequest(c as ApiContext, options);
 		if (unauthorized) return unauthorized;
-		const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
-		const result = await options.sdk.failTask({
-				id: routeParam(c, 'id'),
-			errorCode: typeof body.errorCode === 'string' ? body.errorCode : null,
-			errorMessage: String(body.errorMessage ?? 'Task failed'),
-			retryable: Boolean(body.retryable),
-			nextVisibleAt: typeof body.nextVisibleAt === 'string' ? body.nextVisibleAt : null,
-			actor: actor(body, defaultActor),
-		});
-		return result.payload ? c.json(result) : jsonError(c, 404, 'Unknown task.');
+		return jsonError(c, 410, 'Legacy task failure is disabled. Fail or return the provider assignment.');
 	});
 
 	app.post(withPrefix(prefix, '/tasks/:id/requeue'), async (c) => {
 		const unauthorized = authorizeRequest(c as ApiContext, options);
 		if (unauthorized) return unauthorized;
-		const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
-		const taskId = routeParam(c, 'id');
-		const result = await options.sdk.recordTaskProgress({
-			id: taskId,
-			state: 'waiting',
-			appendEvent: {
-				kind: 'assignment_ready',
-				data: { transport: 'api_assignment' },
-			},
-			actor: actor(body, defaultActor),
-		});
-		return result.payload
-			? c.json({ ok: true, taskId, queued: false, transport: 'api_assignment' })
-			: jsonError(c, 404, 'Unknown task.');
+		return jsonError(c, 410, 'Legacy task requeue is disabled. Return assignments through the provider lifecycle.');
 	});
 
 	app.post(withPrefix(prefix, '/tasks/:id/followups'), async (c) => {
 		const unauthorized = authorizeRequest(c as ApiContext, options);
 		if (unauthorized) return unauthorized;
-		const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
-		const taskId = routeParam(c, 'id');
-		const current = await options.sdk.get({ model: 'task', id: taskId });
-		if (!current.payload) {
-			return jsonError(c, 404, 'Unknown task.');
-		}
-		const currentTask = current.payload as SdkTaskEntity & Record<string, unknown>;
-		const followups = Array.isArray(body.followups) ? body.followups : [];
-		const workDayId = String(currentTask.workDayId ?? '');
-		const workDay = workDayId
-			? ((await options.sdk.get({ model: 'work_day', id: workDayId }).catch(() => ({ payload: null }))).payload as Record<string, unknown> | null)
-			: null;
-		const projectId = options.projectId ?? String(workDay?.projectId ?? '');
-		const policy = projectId
-			? ((await options.sdk.getWorkPolicy(projectId, String(workDay?.environment ?? 'local')).catch(() => ({ payload: null }))).payload as WorkdayPolicy | null)
-			: null;
-		const created = [];
-		for (const followup of followups as Array<Record<string, unknown>>) {
-			const type = String(followup.type ?? 'followup');
-			const payload = (followup.payload as Record<string, unknown> | undefined) ?? {};
-			const admission = admissionForTaskProposal({
-				type,
-				payload,
-				workDay: workDay ?? {
-					id: workDayId,
-					capacityBudget: policy?.dailyTaskCreditBudget ?? 100,
-					capacityUsed: 0,
-				},
-				policy: policy ?? defaultFollowupPolicy(projectId || 'project', workDay ?? {}),
-				capacityPlan: null,
-				queuedCredits: 0,
-				source: 'agent-api.followups',
-			});
-			const result = await options.sdk.createTask({
-				workDayId: String(followup.workDayId ?? currentTask.workDayId ?? ''),
-				agentId: String(followup.agentId ?? currentTask.agentId ?? ''),
-				type,
-				state: admission.state,
-				priority: followup.priority === undefined ? undefined : Number(followup.priority),
-				idempotencyKey: String(followup.idempotencyKey ?? `${taskId}:${created.length}`),
-				payload: admission.payload,
-				graphVersion: typeof followup.graphVersion === 'string' ? followup.graphVersion : null,
-				parentTaskId: taskId,
-				actor: actor(followup, defaultActor),
-			});
-			if (result.payload) {
-				await options.sdk.recordTaskProgress({
-					id: String((result.payload as Record<string, unknown>).id ?? ''),
-					state: admission.state,
-					appendEvent: {
-						kind: 'classified',
-						data: admission.classification as unknown as Record<string, unknown>,
-					},
-					actor: actor(followup, defaultActor),
-				});
-				await options.sdk.recordTaskProgress({
-					id: String((result.payload as Record<string, unknown>).id ?? ''),
-					state: admission.state,
-					appendEvent: {
-						kind: 'admission_decided',
-						data: admission.admission as unknown as Record<string, unknown>,
-					},
-					actor: actor(followup, defaultActor),
-				});
-			}
-			created.push(result);
-		}
-		return c.json({ ok: true, payload: created.map((entry) => entry.payload) });
+		return jsonError(c, 410, 'Legacy task followups are disabled. Agents should create follow-up content and signals through assignment tools.');
 	});
 
 	app.post(withPrefix(prefix, '/reports'), async (c) => {
@@ -340,11 +177,7 @@ export function registerAgentRoutes(
 	app.post(withPrefix(prefix, '/context/resolve-task'), async (c) => {
 		const unauthorized = authorizeRequest(c as ApiContext, options);
 		if (unauthorized) return unauthorized;
-		const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
-		return c.json({
-			ok: true,
-			payload: await buildTaskContext(options.sdk, String(body.taskId ?? '')),
-		});
+		return jsonError(c, 410, 'Legacy task context resolution is disabled. Use assignment-scoped context.');
 	});
 
 	app.post(withPrefix(prefix, '/graph/search'), async (c) => {

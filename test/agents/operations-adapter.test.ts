@@ -33,13 +33,13 @@ const grant: AgentOperationGrant = {
 describe('agent operations adapter', () => {
 	it('returns waiting for unauthorized requests and does not execute workflow operations', async () => {
 		const execute = vi.fn();
-		const appendTaskEvent = vi.fn();
+		const createMessage = vi.fn(async () => ({ payload: {} }));
 		const adapter = new SdkOperationsAdapter({ execute });
 
 		const result = await adapter.runOperation({
 			request: { ...request, permissionGrantId: undefined },
 			grants: [],
-			sdk: { appendTaskEvent },
+			sdk: { createMessage } as never,
 		});
 
 		expect(result).toMatchObject({
@@ -48,10 +48,9 @@ describe('agent operations adapter', () => {
 			error: { code: 'operation_permission_required' },
 		});
 		expect(execute).not.toHaveBeenCalled();
-		expect(appendTaskEvent).toHaveBeenCalledWith(expect.objectContaining({
-			taskId: 'task-1',
-			kind: 'operation_event',
-			actor: 'engineer-agent',
+		expect(createMessage).toHaveBeenCalledWith(expect.objectContaining({
+			type: 'agent.operation_event',
+			payload: expect.objectContaining({ operation: 'dev' }),
 		}));
 	});
 
@@ -63,13 +62,13 @@ describe('agent operations adapter', () => {
 			stdout: ['planned dev'],
 			stderr: [],
 		}));
-		const appendTaskEvent = vi.fn();
+		const createMessage = vi.fn(async () => ({ payload: {} }));
 		const adapter = new SdkOperationsAdapter({ execute });
 
 		const result = await adapter.runOperation({
 			request,
 			grants: [grant],
-			sdk: { appendTaskEvent },
+			sdk: { createMessage } as never,
 		});
 
 		expect(execute).toHaveBeenCalledWith({
@@ -93,9 +92,9 @@ describe('agent operations adapter', () => {
 				},
 			},
 		});
-		expect(appendTaskEvent).toHaveBeenCalledWith(expect.objectContaining({
-			kind: 'operation_event',
-			data: expect.objectContaining({
+		expect(createMessage).toHaveBeenCalledWith(expect.objectContaining({
+			type: 'agent.operation_event',
+			payload: expect.objectContaining({
 				operation: 'dev',
 				result: expect.objectContaining({ status: 'completed' }),
 			}),

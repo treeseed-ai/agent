@@ -126,6 +126,26 @@ function normalizePath(value: string) {
 	return value.replace(/\\/gu, '/').replace(/^\.?\//u, '').replace(/\/+/gu, '/');
 }
 
+class CodexExecutionTimeoutError extends Error {
+	constructor(readonly timeoutMs: number) {
+		super(`Codex execution exceeded the configured timeout of ${timeoutMs}ms.`);
+		this.name = 'CodexExecutionTimeoutError';
+	}
+}
+
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+	if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) return promise;
+	let timer: ReturnType<typeof setTimeout> | null = null;
+	const timeout = new Promise<never>((_, reject) => {
+		timer = setTimeout(() => reject(new CodexExecutionTimeoutError(timeoutMs)), timeoutMs);
+	});
+	try {
+		return await Promise.race([promise, timeout]);
+	} finally {
+		if (timer) clearTimeout(timer);
+	}
+}
+
 function matchesPattern(path: string, pattern: string) {
 	const normalizedPath = normalizePath(path);
 	const normalizedPattern = normalizePath(pattern);
@@ -212,30 +232,44 @@ function redactToolForPrompt(tool: TreeDxProxyExecutionToolDescriptor) {
 		workspaceId: tool.workspaceId ?? null,
 		allowedOperations: tool.allowedOperations,
 		allowedPaths: tool.allowedPaths,
+		allowedReadPaths: tool.allowedReadPaths ?? [],
+		allowedWritePaths: tool.allowedWritePaths ?? [],
 		routes: tool.routes,
 		toolNames: TREE_DX_PROXY_TOOL_NAMES,
 	};
 }
 
 export function codexTreeDxConfig(request: CodexExecutionRequest) {
-	const tools = treeDxProxyTools(request);
-	if (tools.length === 0) return undefined;
-	const tool = tools[0]!;
-	const server = createTreeDxProxyMcpServerCommand({
-		apiBaseUrl: process.env.TREESEED_API_BASE_URL ?? process.env.TREESEED_MARKET_URL ?? process.env.TREESEED_CAPACITY_ACCEPTANCE_API_URL ?? '',
-		providerApiKey: process.env.TREESEED_CAPACITY_PROVIDER_API_KEY ?? process.env.TREESEED_PROVIDER_API_KEY ?? '',
-		assignmentId: tool.assignmentId,
-		handleId: tool.handleId,
-		descriptor: redactToolForPrompt(tool),
-	});
-	return {
-		mcp_servers: {
-			treedx_proxy: {
-				command: server.command,
-				args: server.args,
-				env: server.env,
+	const projectRoot = request.sandboxMode === 'workspace_write'
+		? request.worktreeRoot ?? request.repoRoot
+		: request.repoRoot;
+	const baseConfig = {
+		projects: {
+			[projectRoot]: {
+				trust_level: 'trusted',
 			},
 		},
+	} as Record<string, unknown>;
+	const tools = treeDxProxyTools(request);
+	if (tools.length === 0) return baseConfig;
+	const mcpServers: Record<string, unknown> = {};
+	for (const [index, tool] of tools.entries()) {
+		const server = createTreeDxProxyMcpServerCommand({
+			apiBaseUrl: process.env.TREESEED_API_BASE_URL ?? process.env.TREESEED_MARKET_URL ?? process.env.TREESEED_CAPACITY_ACCEPTANCE_API_URL ?? '',
+			providerApiKey: process.env.TREESEED_CAPACITY_PROVIDER_API_KEY ?? process.env.TREESEED_PROVIDER_API_KEY ?? '',
+			assignmentId: tool.assignmentId,
+			handleId: tool.handleId,
+			descriptor: tool,
+		});
+		mcpServers[index === 0 ? 'treedx_proxy' : `treedx_proxy_${index + 1}`] = {
+			command: server.command,
+			args: server.args,
+			env: server.env,
+		};
+	}
+	return {
+		...baseConfig,
+		mcp_servers: mcpServers,
 	};
 }
 
@@ -293,13 +327,13 @@ export function buildCodexPrompt(request: CodexExecutionRequest) {
 	const treeDxSection = treeDxTools.length > 0
 		? [
 			'TreeDX assignment tools:',
-			'Use these assignment-scoped TreeDX tools for project content reads, queries, writes, and commits.',
-			'Do not request raw TreeDX URLs, bearer tokens, GitHub tokens, deploy keys, or provider API keys.',
-			'Local file writes are reserved for code, verification artifacts, temporary worktrees, package files, and non-content artifacts.',
-			'Content writes must use treedx_write_workspace_file and content commits must use treedx_commit_workspace.',
+			'Use the assignment-scoped TreeDX MCP tools for project content reads, queries, writes, and commits.',
+			'Do not request raw TreeDX URLs, bearer tokens, GitHub tokens, deploy keys, provider API keys, or direct repository credentials.',
+			'Local shell reads are reserved for repository files in the assigned workspace; Knowledge Hub model instances must be accessed through TreeDX tools.',
+			'If required context is missing, call the available tools before reporting that work is blocked.',
 			formatMetadataBlock(treeDxTools.map(redactToolForPrompt)),
 		].join('\n')
-		: 'TreeDX assignment tools:\n<none>';
+		: 'TreeDX assignment tools:\nNo assignment-scoped TreeDX tools were provided; use only repository/work package context and report blocked work with the exact missing tool or permission.';
 	const taskPrompt = [
 		'You are operating as a TreeSeed implementation agent.',
 		'',
@@ -327,10 +361,10 @@ export function buildCodexPrompt(request: CodexExecutionRequest) {
 		operationBoundary,
 		'- Do not approve decisions.',
 		'- Prefer small, reviewable changes.',
-		'- Run or suggest verification that is relevant to the change.',
-		'- Report uncertainty.',
-		'- Record commands you ran or believe should be run.',
-		'- If the task requires broader scope, stop and return TASK_WAITING.',
+			'- Run or suggest verification that is relevant to the change.',
+			'- Report uncertainty.',
+			'- Record commands you ran or believe should be run.',
+			'- If the task requires broader scope or a missing tool, stop with a clear blocked summary that names the missing permission or tool.',
 		'',
 		treeDxSection,
 		'',
@@ -424,6 +458,8 @@ export function normalizeCodexRunResult(input: {
 	wallMs: number;
 }): CodexExecutionResult {
 	const items = input.result.items?.filter(isRecord) ?? [];
+	const prompt = buildCodexPrompt(input.request);
+	const threadOptions = mapCodexThreadOptions(input.request);
 	const rawEventRefs = unique(items.map((item) => stringValue(item.id)).filter((id): id is string => Boolean(id)));
 	const proposedCommands = unique(items.map(extractCommand).filter((command): command is string => Boolean(command)));
 	const changedPaths = unique(items.flatMap(extractFileChangePaths).map(normalizePath));
@@ -475,6 +511,21 @@ export function normalizeCodexRunResult(input: {
 		},
 		metadata: {
 			usage: input.result.usage ?? null,
+			rawItems: items,
+			request: {
+				model: input.request.model ?? null,
+				reasoningEffort: input.request.reasoningEffort ?? null,
+				sandboxMode: input.request.sandboxMode,
+				approvalPolicy: input.request.approvalPolicy,
+				timeoutMs: input.request.timeoutMs ?? null,
+				threadOptions,
+				allowedPaths: input.request.allowedPaths,
+				forbiddenPaths: input.request.forbiddenPaths,
+				toolCount: input.request.tools?.length ?? 0,
+				tools: input.request.tools ?? [],
+				promptCharacters: prompt.length,
+				prompt,
+			},
 		},
 	};
 }
@@ -501,7 +552,9 @@ export async function runCodexSubscriptionTask(
 			? client.resumeThread(request.threadId, threadOptions)
 			: client.startThread(threadOptions);
 		const prompt = buildCodexPrompt(request);
-		const result = await thread.run(prompt);
+		const runPromise = thread.run(prompt);
+		runPromise.catch(() => null);
+		const result = await withTimeout(runPromise, request.timeoutMs ?? 900_000);
 		const wallMs = (options.now?.() ?? Date.now()) - startedAt;
 		return normalizeCodexRunResult({
 			request,
@@ -510,7 +563,53 @@ export async function runCodexSubscriptionTask(
 			wallMs,
 		});
 	} catch (error) {
+		if (error instanceof CodexExecutionTimeoutError) {
+			const wallMs = (options.now?.() ?? Date.now()) - startedAt;
+			const prompt = buildCodexPrompt(request);
+			return {
+				provider: 'codex',
+				threadId: request.threadId ?? '',
+				status: 'failed',
+				summary: error.message,
+				changedPaths: [],
+				proposedCommands: [],
+				verificationHints: [],
+				error: {
+					code: 'codex_execution_timeout',
+					message: error.message,
+					retryable: true,
+				},
+				usage: {
+					subscriptionPlan: String(request.metadata?.subscriptionPlan ?? ''),
+					wallMs,
+					wallMinutes: wallMs / 60_000,
+					nativeUnit: 'wall_minute',
+					inputTokens: null,
+					outputTokens: null,
+					cachedInputTokens: null,
+					filesChanged: 0,
+				},
+				metadata: {
+					timeoutMs: error.timeoutMs,
+					request: {
+						model: request.model ?? null,
+						reasoningEffort: request.reasoningEffort ?? null,
+						sandboxMode: request.sandboxMode,
+						approvalPolicy: request.approvalPolicy,
+						timeoutMs: request.timeoutMs ?? null,
+						threadOptions: mapCodexThreadOptions(request),
+						allowedPaths: request.allowedPaths,
+						forbiddenPaths: request.forbiddenPaths,
+						toolCount: request.tools?.length ?? 0,
+						tools: request.tools ?? [],
+						promptCharacters: prompt.length,
+						prompt,
+					},
+				},
+			};
+		}
 		const message = error instanceof Error ? error.message : String(error);
+		const prompt = buildCodexPrompt(request);
 		return {
 			provider: 'codex',
 			threadId: request.threadId ?? '',
@@ -523,6 +622,22 @@ export async function runCodexSubscriptionTask(
 				code: 'codex_sdk_initialization_failed',
 				message,
 				retryable: true,
+			},
+			metadata: {
+				request: {
+					model: request.model ?? null,
+					reasoningEffort: request.reasoningEffort ?? null,
+					sandboxMode: request.sandboxMode,
+					approvalPolicy: request.approvalPolicy,
+					timeoutMs: request.timeoutMs ?? null,
+					threadOptions: mapCodexThreadOptions(request),
+					allowedPaths: request.allowedPaths,
+					forbiddenPaths: request.forbiddenPaths,
+					toolCount: request.tools?.length ?? 0,
+					tools: request.tools ?? [],
+					promptCharacters: prompt.length,
+					prompt,
+				},
 			},
 		};
 	}
@@ -584,8 +699,8 @@ export class CodexSubscriptionExecutionProviderAdapter implements ExecutionProvi
 			supportsAsync: false,
 			supportsCancel: false,
 			supportsResume: false,
-			supportsUsage: false,
-			supportsArtifacts: false,
+			supportsUsage: true,
+			supportsArtifacts: true,
 		};
 	}
 
@@ -632,6 +747,12 @@ export class CodexSubscriptionExecutionProviderAdapter implements ExecutionProvi
 				subscriptionPlan: config.subscriptionPlan,
 				worktreeBranch: worktree?.branchName,
 				workPackage: input.workPackage,
+				assignment: {
+					id: input.assignment.id,
+					projectId: input.assignment.projectId,
+					workDayId: input.assignment.workDayId,
+					mode: input.capacityEnvelope.mode,
+				},
 			},
 		}, {
 			createCodexClient: this.options.createCodexClient,
@@ -645,8 +766,36 @@ export class CodexSubscriptionExecutionProviderAdapter implements ExecutionProvi
 				stdout: result.finalResponse ?? '',
 				stderr: result.error?.message ?? '',
 			},
-			usage: [],
-			artifacts: [],
+			usage: result.usage
+				? [{
+					kind: 'codex_subscription',
+					unit: result.usage.nativeUnit ?? 'wall_minute',
+					amount: Number(result.usage.wallMinutes ?? 0),
+					source: 'codex',
+					partial: result.status !== 'completed',
+					metadata: result.usage,
+				}]
+				: [],
+			artifacts: [
+				...(result.finalResponse ? [{
+					kind: 'assistant_final_response',
+					name: `${runId}-final-response.md`,
+					mediaType: 'text/markdown',
+					metadata: {
+						threadId: result.threadId,
+						characters: result.finalResponse.length,
+					},
+				}] : []),
+				...result.changedPaths.map((path) => ({
+					kind: 'changed_path',
+					name: path,
+					uri: `repo://${path}`,
+					metadata: {
+						threadId: result.threadId,
+						provider: 'codex',
+					},
+				})),
+			],
 			retryable: result.error?.retryable,
 			code: result.error?.code ?? null,
 			metadata: {
@@ -656,11 +805,41 @@ export class CodexSubscriptionExecutionProviderAdapter implements ExecutionProvi
 		};
 	}
 
-	async collectUsage() {
-		return [];
+	async collectUsage(input) {
+		const usage = input.metadata?.codexUsage;
+		return usage && typeof usage === 'object'
+			? [{
+				kind: 'codex_subscription',
+				unit: String((usage as Record<string, unknown>).nativeUnit ?? 'wall_minute'),
+				amount: Number((usage as Record<string, unknown>).wallMinutes ?? 0),
+				source: 'codex',
+				partial: true,
+				metadata: usage as Record<string, unknown>,
+			}]
+			: [{
+				kind: 'codex_subscription',
+				unit: 'assignment',
+				amount: 1,
+				source: 'codex',
+				partial: true,
+				metadata: {
+					supported: false,
+					reason: 'codex_usage_available_on_start_snapshot',
+					assignmentId: input.assignmentId,
+				},
+			}];
 	}
 
-	async collectArtifacts() {
-		return [];
+	async collectArtifacts(input) {
+		return [{
+			kind: 'execution_trace',
+			name: `${input.runId}.codex-trace`,
+			metadata: {
+				supported: true,
+				assignmentId: input.assignmentId,
+				runId: input.runId,
+				externalRef: input.externalRef ?? null,
+			},
+		}];
 	}
 }

@@ -9,17 +9,24 @@ export function nowIso() {
 }
 
 export function parseTriggerPayload(context: AgentContext): HandlerPayload {
+	const decisionInput = context.capacity?.decisionInput && typeof context.capacity.decisionInput === 'object'
+		? context.capacity.decisionInput as Record<string, unknown>
+		: {};
+	const assignmentInput = decisionInput.input && typeof decisionInput.input === 'object' && !Array.isArray(decisionInput.input)
+		? decisionInput.input as HandlerPayload
+		: {};
 	const raw = context.trigger.message?.payloadJson;
 	if (!raw) {
-		return {};
+		return assignmentInput;
 	}
 	try {
 		const parsed = JSON.parse(raw) as unknown;
-		return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+		const triggerPayload = parsed && typeof parsed === 'object' && !Array.isArray(parsed)
 			? parsed as HandlerPayload
 			: {};
+		return { ...triggerPayload, ...assignmentInput };
 	} catch {
-		return {};
+		return assignmentInput;
 	}
 }
 
@@ -31,33 +38,23 @@ export function readString(value: unknown) {
 	return typeof value === 'string' && value.trim() ? value.trim() : null;
 }
 
-export function readTaskId(payload: HandlerPayload) {
-	return readString(payload.taskId) ?? readString(readRecord(payload.metadata)?.taskId);
-}
-
-export async function appendArtifactTaskEvent(input: {
+export async function recordArtifactMessage(input: {
 	context: AgentContext;
 	payload: HandlerPayload;
 	kind: string;
 	data: Record<string, unknown>;
 }) {
-	const taskId = readTaskId(input.payload);
-	const sdk = input.context.sdk as unknown as {
-		appendTaskEvent?: (request: {
-			taskId: string;
-			kind: string;
-			data: Record<string, unknown>;
-			actor: string;
-		}) => Promise<unknown>;
-	};
-	if (!taskId || typeof sdk.appendTaskEvent !== 'function') {
-		return;
-	}
-	await sdk.appendTaskEvent({
-		taskId,
-		kind: input.kind,
-		data: input.data,
-		actor: input.context.agent.slug,
+	await createAgentMessage({
+		context: input.context,
+		type: `agent.${input.kind}`,
+		payload: {
+			...input.data,
+			assignmentId: input.context.capacity?.assignment?.id ?? null,
+			mode: input.context.mode,
+			agentSlug: input.context.agent.slug,
+		},
+		relatedModel: 'provider_assignment',
+		relatedId: input.context.capacity?.assignment?.id ?? null,
 	});
 }
 

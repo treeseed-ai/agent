@@ -33,6 +33,7 @@ describe('workday test helpers', () => {
 		expect(parameters).toMatchObject({
 			projects: ['market', 'sdk'],
 			workdays: 2,
+			durationSeconds: 900,
 			maxAssignments: 12,
 			providerId: 'local',
 			planningOnly: true,
@@ -55,9 +56,9 @@ describe('workday test helpers', () => {
 				slug: 'market',
 				projectId: 'project-market',
 				agentCount: 9,
-				planningRuns: 1,
+				planningRuns: 9,
 				actingRuns: 0,
-				assignments: 1,
+				assignments: 9,
 				status: 'ready',
 			}],
 		};
@@ -81,5 +82,37 @@ describe('workday test helpers', () => {
 		});
 		expect(readFileSync(refs.jsonPath, 'utf8')).toContain('"runId": "run-test"');
 		expect(readFileSync(refs.markdownPath, 'utf8')).toContain('# Workday Test run-test');
+	});
+
+	it('scores capped one-assignment planning proofs against exercised assignments', () => {
+		const metrics = scoreWorkdayTest({
+			expectedProjects: ['market'],
+			planningOnly: true,
+			actual: {
+				providerReady: true,
+				auditEvents: 2,
+				projects: [{
+					slug: 'market',
+					projectId: 'project-market',
+					agentCount: 9,
+					planningRuns: 1,
+					actingRuns: 0,
+					assignments: 1,
+					contentArtifacts: 1,
+					status: 'ready',
+				}],
+			},
+		});
+
+		expect(metrics.checks.find((check) => check.name === 'planningCoverage')).toMatchObject({
+			actual: 1,
+			expected: 1,
+			score: 100,
+		});
+		expect(metrics).toMatchObject({
+			score: 100,
+			status: 'completed',
+			blockers: [],
+		});
 	});
 });

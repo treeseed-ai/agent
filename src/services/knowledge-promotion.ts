@@ -299,25 +299,26 @@ export function normalizeKnowledgePromotionTaskInput(input: {
 }
 
 async function appendOperationEvent(input: {
-	sdk?: { appendTaskEvent?: (request: { taskId: string; kind: string; data: Record<string, unknown>; actor: string }) => Promise<unknown> };
+	sdk?: { createMessage?: (request: { type: string; payload: Record<string, unknown>; relatedModel?: string | null; relatedId?: string | null; priority?: number }) => Promise<unknown> };
 	task: KnowledgePromotionTaskInput;
 	request: AgentOperationRequest;
 	result: AgentOperationResult;
 }) {
-	if (typeof input.sdk?.appendTaskEvent !== 'function') return;
-	await input.sdk.appendTaskEvent({
-		taskId: input.task.taskId,
-		kind: 'operation_event',
-		data: createAgentOperationEvent({
+	if (typeof input.sdk?.createMessage !== 'function') return;
+	await input.sdk.createMessage({
+		type: 'agent.operation_event',
+		payload: createAgentOperationEvent({
 			request: input.request,
 			result: input.result,
 		}) as unknown as Record<string, unknown>,
-		actor: input.task.agentSlug,
-	});
+		relatedModel: 'knowledge_promotion',
+		relatedId: input.task.taskId,
+		priority: 100,
+	}).catch(() => null);
 }
 
 async function lifecycleOperation(input: {
-	sdk?: { appendTaskEvent?: (request: { taskId: string; kind: string; data: Record<string, unknown>; actor: string }) => Promise<unknown> };
+	sdk?: { createMessage?: (request: { type: string; payload: Record<string, unknown>; relatedModel?: string | null; relatedId?: string | null; priority?: number }) => Promise<unknown> };
 	task: KnowledgePromotionTaskInput;
 	operation: AgentOperationName;
 	mode: AgentOperationRequest['mode'];
@@ -522,7 +523,7 @@ function verificationRepairTaskFor(input: {
 
 export async function runKnowledgePromotionToStaging(input: {
 	task: KnowledgePromotionTaskInput;
-	sdk?: { appendTaskEvent?: (request: { taskId: string; kind: string; data: Record<string, unknown>; actor: string }) => Promise<unknown> };
+	sdk?: { createMessage?: (request: { type: string; payload: Record<string, unknown>; relatedModel?: string | null; relatedId?: string | null; priority?: number }) => Promise<unknown> };
 	dependencies?: KnowledgePromotionDependencies;
 }) {
 	const task = input.task;

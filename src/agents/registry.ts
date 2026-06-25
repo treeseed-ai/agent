@@ -8,6 +8,11 @@ import { getTreeseedAgentProviderSelections } from '@treeseed/sdk/platform/deplo
 import { resolveTreeseedTenantRoot } from '@treeseed/sdk/platform/tenant-config';
 import type { AgentHandler } from './runtime-types.ts';
 import { resolveAgentRuntimeProviders } from '../agent-runtime.ts';
+import { actHandler } from './handlers/act.ts';
+import { planHandler } from './handlers/plan.ts';
+import { reportHandler } from './handlers/report.ts';
+import { researchHandler } from './handlers/research.ts';
+import { reviewHandler } from './handlers/review.ts';
 
 const BUILTIN_HANDLER_KINDS = [
 	'plan',
@@ -23,6 +28,14 @@ const HANDLER_EXPORT_NAMES: Record<(typeof BUILTIN_HANDLER_KINDS)[number], strin
 	act: 'actHandler',
 	review: 'reviewHandler',
 	report: 'reportHandler',
+};
+
+const BUILTIN_HANDLERS: Record<(typeof BUILTIN_HANDLER_KINDS)[number], AgentHandler> = {
+	plan: planHandler,
+	research: researchHandler,
+	act: actHandler,
+	review: reviewHandler,
+	report: reportHandler,
 };
 
 function normalizeHandlerKind(kind: AgentHandlerKind): AgentHandlerKind {
@@ -49,8 +62,8 @@ export function getTenantAgentHandlerModulePaths(
 	tenantRoot = resolveTreeseedTenantRoot(),
 ) {
 	return [
-		resolve(tenantRoot, 'src/agents', `${kind}.js`),
 		resolve(tenantRoot, 'src/agents', `${kind}.ts`),
+		resolve(tenantRoot, 'src/agents', `${kind}.js`),
 	];
 }
 
@@ -125,6 +138,9 @@ export async function loadTenantAgentHandlerRegistry(
 	for (const kind of listTenantAgentHandlerKinds(tenantRoot)) {
 		const modulePath = getTenantAgentHandlerModulePaths(kind, tenantRoot).find((candidate) => existsSync(candidate));
 		if (!modulePath) {
+			if ((BUILTIN_HANDLER_KINDS as readonly string[]).includes(kind)) {
+				registry[kind] = BUILTIN_HANDLERS[kind as (typeof BUILTIN_HANDLER_KINDS)[number]];
+			}
 			continue;
 		}
 

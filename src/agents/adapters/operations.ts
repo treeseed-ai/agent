@@ -7,7 +7,8 @@ import {
 	type AgentOperationRequest,
 	type AgentOperationResult,
 } from '@treeseed/sdk/operations/agent-tools';
-import type { AgentOperationsAdapter, AgentTaskEventSdk } from '../runtime-types.ts';
+import type { AgentOperationsAdapter } from '../runtime-types.ts';
+import type { ScopedAgentSdk } from '@treeseed/sdk/sdk';
 
 type WorkflowExecutor = Pick<TreeseedOperationsSdk, 'execute'>;
 
@@ -84,20 +85,21 @@ function completedResult(
 }
 
 async function appendOperationEvent(input: {
-	sdk?: AgentTaskEventSdk;
+	sdk?: ScopedAgentSdk;
 	request: AgentOperationRequest;
 	result: AgentOperationResult;
 }) {
-	if (!input.sdk) return;
-	await input.sdk.appendTaskEvent({
-		taskId: input.request.taskId,
-		kind: 'operation_event',
-		data: createAgentOperationEvent({
+	if (!input.sdk || typeof input.sdk.createMessage !== 'function') return;
+	await input.sdk.createMessage({
+		type: 'agent.operation_event',
+		payload: createAgentOperationEvent({
 			request: input.request,
 			result: input.result,
 		}) as unknown as Record<string, unknown>,
-		actor: input.request.agentSlug,
-	});
+		relatedModel: 'provider_assignment',
+		relatedId: input.request.assignmentId ?? null,
+		priority: 100,
+	}).catch(() => null);
 }
 
 export class SdkOperationsAdapter implements AgentOperationsAdapter {
@@ -106,7 +108,7 @@ export class SdkOperationsAdapter implements AgentOperationsAdapter {
 	async runOperation(input: {
 		request: AgentOperationRequest;
 		grants: AgentOperationGrant[];
-		sdk?: AgentTaskEventSdk;
+		sdk?: ScopedAgentSdk;
 	}) {
 		const decision = decideAgentOperationPermission({
 			request: input.request,

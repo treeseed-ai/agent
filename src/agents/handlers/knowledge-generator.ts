@@ -3,7 +3,7 @@ import type { KnowledgeDraft } from '../contracts/knowledge.ts';
 import type { AgentHandler } from '../runtime-types.ts';
 import { buildKnowledgeDraft, slugSegment, type KnowledgePipelineQuestion } from '../knowledge/pipeline.ts';
 import {
-	appendArtifactTaskEvent,
+	recordArtifactMessage,
 	completed,
 	createAgentMessage,
 	parseTriggerPayload,
@@ -76,7 +76,7 @@ export const knowledgeGeneratorHandler: AgentHandler<KnowledgeGeneratorInputs, K
 		if (!draft) {
 			return waiting('Knowledge generator is waiting for a researchNote payload.');
 		}
-		await appendArtifactTaskEvent({
+		await recordArtifactMessage({
 			context,
 			payload,
 			kind: 'knowledge_draft_created',

@@ -1,8 +1,13 @@
 import type { AgentHandler } from '../runtime-types.ts';
-import { reviewerHandler } from './reviewer.ts';
+import { createExecutionContentHandler } from './execution-content.ts';
+
+const executionReviewHandler = createExecutionContentHandler({
+	kind: 'review',
+	defaultWorkPackageKind: 'review',
+	defaultArtifactKind: 'agent_feedback',
+});
 
 export const reviewHandler: AgentHandler = {
-	...reviewerHandler,
+	...executionReviewHandler,
 	kind: 'review',
 };
-

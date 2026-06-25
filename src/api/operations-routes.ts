@@ -1,9 +1,7 @@
-import crypto from 'node:crypto';
 import type { Hono } from 'hono';
 import type { AgentSdk } from '@treeseed/sdk';
 import { findDispatchCapability, findTreeseedOperation } from '@treeseed/sdk';
 import { executeHttpWorkflowOperation, isHttpWorkflowOperationAllowed } from './operations.ts';
-import { enqueueTaskAndEnsureCapacity } from '../services/worker-capacity.ts';
 import { jsonError, requireScope } from './http.ts';
 import type { ApiConfig, AppVariables } from './types.ts';
 
@@ -46,49 +44,9 @@ export function registerOperationRoutes(
 		try {
 			const capability = findDispatchCapability('workflow', resolvedOperation.name);
 			if (capability?.executionClass === 'remote_job' && options.sdk) {
-				const input = body && typeof body.input === 'object' ? body.input as Record<string, unknown> : {};
-				const idempotencyKey = typeof body.idempotencyKey === 'string' && body.idempotencyKey.trim()
-					? body.idempotencyKey.trim()
-					: `workflow:${resolvedOperation.name}:${crypto.createHash('sha256').update(JSON.stringify(input)).digest('hex')}`;
-				const created = await options.sdk.createTask({
-					workDayId: typeof body.workDayId === 'string' ? body.workDayId : '',
-					agentId: 'workflow-dispatch',
-					type: 'workflow_dispatch',
-					priority: typeof body.priority === 'number' ? body.priority : 75,
-					idempotencyKey,
-					payload: {
-						executionKind: 'workflow_dispatch',
-						namespace: 'workflow',
-						operation: resolvedOperation.name,
-						input,
-						requestedByType: c.get('actorType'),
-						requestedById: c.get('principal')?.id ?? null,
-					},
-					actor: c.get('principal')?.id ?? 'api',
-				});
-				if (!created.payload) {
-					return jsonError(c, 500, `Failed to create workflow task for "${resolvedOperation.name}".`, {
-						operation: resolvedOperation.name,
-					});
-				}
-					const capacity = await enqueueTaskAndEnsureCapacity(options.sdk, {
-						taskId: String((created.payload as Record<string, unknown>).id ?? ''),
-						actor: c.get('principal')?.id ?? 'api',
-						priorityClass: 'interactive',
-						projectId: options.config.projectId,
-					});
-				return c.json({
-					ok: true,
-					mode: 'task',
+				return jsonError(c, 410, `Remote workflow "${resolvedOperation.name}" used the legacy task queue and is disabled. Use provider assignments for remote execution.`, {
 					operation: resolvedOperation.name,
-					payload: created.payload,
-					workerState: capacity.workerState,
-					capacity: {
-						desiredWorkers: capacity.desiredWorkers,
-						scaleApplied: capacity.scaleApplied,
-						reason: capacity.scaleReason,
-					},
-				}, { status: 202 });
+				});
 			}
 			const result = await executeOperation(resolvedOperation.name, body);
 			return c.json(result, { status: result.ok ? 200 : 400 });

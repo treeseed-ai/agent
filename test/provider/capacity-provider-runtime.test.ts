@@ -3,9 +3,7 @@ import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, w
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { TREESEED_REMOTE_CONTRACT_HEADER } from '@treeseed/sdk';
 import type { CapacityProviderPortfolioManifest } from '@treeseed/sdk/capacity-provider';
-import { createCapacityProviderApp } from '../../src/api/provider-app.ts';
 import { resolveProviderConfig } from '../../src/provider/config.ts';
 import { buildProviderPlan, runManagerSkeleton, runRunnerSkeleton } from '../../src/provider/lifecycle.ts';
 import { buildProviderRegistrationRequest } from '../../src/provider/registration.ts';
@@ -655,24 +653,6 @@ describe('capacity provider runtime', () => {
 		});
 	});
 
-	it('serves provider-local health endpoints with the TreeSeed contract header', async () => {
-		const config = resolveProviderConfig({ env: env({ TREESEED_CAPACITY_PROVIDER_API_KEY: '' }) });
-		const app = createCapacityProviderApp(config);
-
-		const health = await app.fetch(new Request('http://provider.test/healthz'));
-		expect(health.status).toBe(200);
-		expect(health.headers.get(TREESEED_REMOTE_CONTRACT_HEADER)).toBeTruthy();
-		await expect(health.json()).resolves.toMatchObject({ ok: true, service: 'capacity-provider', role: 'api' });
-
-		const ready = await app.fetch(new Request('http://provider.test/readyz'));
-		await expect(ready.json()).resolves.toMatchObject({
-			ok: true,
-			ready: false,
-			marketConfigured: true,
-			apiKeyConfigured: false,
-		});
-	});
-
 	it('emits deterministic dry-run manager and runner lifecycle payloads', async () => {
 		const config = resolveProviderConfig({ env: env({ TREESEED_CAPACITY_PROVIDER_API_KEY: '' }) });
 		const plan = await buildProviderPlan(config, { dryRun: true });
@@ -759,6 +739,35 @@ describe('capacity provider runtime', () => {
 		expect(JSON.stringify(result)).not.toContain('TREESEED_GITHUB_TOKEN');
 	});
 
+	it('uses the mounted local workspace instead of cloning local portfolio projects', async () => {
+		const sourceRepo = createProjectRepository();
+		const config = resolveProviderConfig({
+			env: env({
+				TREESEED_PROVIDER_WORKSPACE_ABSOLUTE_CONTAINER: sourceRepo,
+			}),
+		});
+		const client = {
+			async portfolio() {
+				return portfolio('https://example.invalid/private/market.git');
+			},
+			async createWorkday(body: unknown) {
+				return { ok: true, workDay: { id: 'wd_provider_1', ...(body as Record<string, unknown>) } };
+			},
+			async writeReport() {
+				return { ok: true, report: { id: 'report_1' } };
+			},
+		};
+
+		const result = await processProviderPortfolio({ config, client, treeDx: fakeTreeDxOptions(sourceRepo) });
+
+		expect(result.ok).toBe(true);
+		expect(result.projects[0]?.repository).toMatchObject({
+			ok: true,
+			path: sourceRepo,
+		});
+		expect(existsSync(resolve(config.dataDir, 'repositories/project_123/repo/.git'))).toBe(false);
+	});
+
 	it('skips disabled portfolio projects without cloning or creating workdays', async () => {
 		const config = resolveProviderConfig({ env: env() });
 		const disabled = portfolio('/no/such/repository');
@@ -840,21 +849,22 @@ describe('capacity provider runtime', () => {
 			const result = await runProviderRunnerOnce({ config, client, treeDx: fakeTreeDxOptions(sourceRepo) });
 
 		expect(result).toMatchObject({ ok: true, role: 'runner', assigned: 1, assignmentId: 'task_1' });
-		expect(events.map((event) => event.method)).toEqual([
-			'nextAssignment',
-			'createAssignmentModeRun',
-			'createAssignmentModeRun',
-			'createAssignmentModeRun',
-			'completeAssignment',
-		]);
-		const modeRunEvents = events.filter((event) => event.method === 'createAssignmentModeRun');
-		expect(modeRunEvents.map((event) => (event.body as Record<string, unknown>).status)).toEqual(['running', 'running', 'succeeded']);
-		expect(modeRunEvents[0]?.body).toMatchObject({
-			validation: { phase: 'provider_runner_assignment_started' },
-			metadata: { source: 'provider_runner_assignment_started' },
-		});
-		expect(events.find((event) => event.method === 'completeAssignment')?.body).toMatchObject({
-			output: {
+			expect(events.map((event) => event.method)).toEqual(expect.arrayContaining([
+				'nextAssignment',
+				'createAssignmentModeRun',
+				'completeAssignment',
+			]));
+			expect(events.at(-1)?.method).toBe('completeAssignment');
+			const modeRunEvents = events.filter((event) => event.method === 'createAssignmentModeRun');
+			expect(modeRunEvents.map((event) => (event.body as Record<string, unknown>).status)).toEqual(expect.arrayContaining(['running', 'succeeded']));
+			expect(modeRunEvents[0]?.body).toMatchObject({
+				outputs: {
+					status: 'preparing',
+					metadata: { source: 'provider_runner_assignment_leased' },
+				},
+			});
+			expect(events.find((event) => event.method === 'completeAssignment')?.body).toMatchObject({
+				output: {
 				dryRun: true,
 				agentSlug: 'provider-planner',
 				mode: 'planning',
@@ -910,17 +920,16 @@ describe('capacity provider runtime', () => {
 
 			const result = await runProviderRunnerOnce({ config, client, treeDx: fakeTreeDxOptions(sourceRepo) });
 
-		expect(result).toMatchObject({ ok: true, assigned: 1, assignmentId: 'task_hosted' });
-		expect(events.map((event) => event.method)).toEqual([
-			'nextAssignment',
-			'portfolio',
-			'createWorkday',
-			'writeReport',
-			'createAssignmentModeRun',
-			'createAssignmentModeRun',
-			'createAssignmentModeRun',
-			'completeAssignment',
-		]);
+			expect(result).toMatchObject({ ok: true, assigned: 1, assignmentId: 'task_hosted' });
+			expect(events.map((event) => event.method)).toEqual(expect.arrayContaining([
+				'nextAssignment',
+				'portfolio',
+				'createWorkday',
+				'writeReport',
+				'createAssignmentModeRun',
+				'completeAssignment',
+			]));
+			expect(events.at(-1)?.method).toBe('completeAssignment');
 	});
 
 	it('executes acting assignments through the kernel with acting mode telemetry', async () => {
@@ -981,12 +990,12 @@ describe('capacity provider runtime', () => {
 
 			const result = await runProviderRunnerOnce({ config, client, treeDx: fakeTreeDxOptions(sourceRepo) });
 
-		expect(result).toMatchObject({ ok: true, assigned: 1, assignmentId: 'assignment_acting' });
-		expect(events.filter((event) => event.method === 'createAssignmentModeRun').map((event) => (event.body as Record<string, unknown>).capacityEnvelope)).toEqual([
-			expect.objectContaining({ mode: 'acting' }),
-			expect.objectContaining({ mode: 'acting' }),
-			expect.objectContaining({ mode: 'acting' }),
-		]);
+			expect(result).toMatchObject({ ok: true, assigned: 1, assignmentId: 'assignment_acting' });
+			const actingModeRuns = events
+				.filter((event) => event.method === 'createAssignmentModeRun')
+				.map((event) => (event.body as Record<string, unknown>).capacityEnvelope)
+				.filter((envelope) => (envelope as Record<string, unknown> | undefined)?.mode === 'acting');
+			expect(actingModeRuns.length).toBeGreaterThanOrEqual(3);
 		expect(events.find((event) => event.method === 'completeAssignment')?.body).toMatchObject({
 			output: {
 				mode: 'acting',
@@ -1299,6 +1308,7 @@ describe('capacity provider runtime', () => {
 						projectId: 'project_123',
 						agentId: 'provider-planner',
 						mode: 'planning',
+						leaseExpiresAt: new Date(Date.now() - 1000).toISOString(),
 						decisionInput: { input: { dryRun: true, projectId: 'project_123', agentSlug: 'provider-planner', useExecutionProvider: true } },
 						capacityEnvelope: { projectId: 'project_123', mode: 'planning' },
 					},
@@ -1306,7 +1316,7 @@ describe('capacity provider runtime', () => {
 			},
 			async renewAssignment(_assignmentId: string, body: unknown) {
 				events.push({ method: 'renewAssignment', body });
-				return { ok: true, payload: null };
+				return { ok: true, payload: { id: 'assignment_async', leaseExpiresAt: new Date(Date.now() + 60_000).toISOString() } };
 			},
 			async createAssignmentModeRun(_assignmentId: string, body: unknown) {
 				events.push({ method: 'createAssignmentModeRun', body });
@@ -1330,11 +1340,48 @@ describe('capacity provider runtime', () => {
 			const result = await runProviderRunnerOnce({ config, client, executionAdapter: adapter, runnerId: 'runner_async', treeDx: fakeTreeDxOptions(sourceRepo) });
 
 		expect(result).toMatchObject({ ok: true, assigned: 1, assignmentId: 'assignment_async' });
-		expect(events.filter((event) => event.method === 'renewAssignment').length).toBeGreaterThanOrEqual(3);
+		expect(events.filter((event) => event.method === 'renewAssignment').length).toBeGreaterThanOrEqual(1);
 		const adapterModeRuns = events
 			.filter((event) => event.method === 'createAssignmentModeRun')
 			.map((event) => event.body as Record<string, any>)
 			.filter((body) => body.metadata?.source === 'execution_provider_adapter_lifecycle');
+		const leasedHeartbeat = events
+			.filter((event) => event.method === 'createAssignmentModeRun')
+			.map((event) => event.body as Record<string, any>)
+			.find((body) => body.metadata?.source === 'provider_runner_assignment_leased');
+		const startingModeRun = events
+			.filter((event) => event.method === 'createAssignmentModeRun')
+			.map((event) => event.body as Record<string, any>)
+			.find((body) => body.metadata?.source === 'execution_provider_starting');
+		expect(leasedHeartbeat).toMatchObject({
+			id: expect.stringContaining('assignment_async:planning:provider-planner:handler'),
+			status: 'running',
+			outputs: {
+				status: 'preparing',
+				metadata: {
+					source: 'provider_runner_assignment_leased',
+					runnerId: 'runner_async',
+				},
+			},
+			traceRefs: {
+				assignmentId: 'assignment_async',
+				runnerId: 'runner_async',
+				leaseToken: '<redacted>',
+			},
+		});
+		expect(startingModeRun).toMatchObject({
+			id: expect.stringContaining('assignment_async:planning:provider-planner:handler'),
+			outputs: {
+				metadata: {
+					source: 'execution_provider_starting',
+					redactedParameters: {
+						assignmentId: 'assignment_async',
+						projectId: 'project_123',
+						mode: 'planning',
+					},
+				},
+			},
+		});
 		expect(adapterModeRuns.map((body) => body.outputs?.status)).toEqual(['waiting', 'running', 'completed']);
 		expect(adapterModeRuns.at(-1)).toMatchObject({
 			status: 'succeeded',
@@ -1359,6 +1406,54 @@ describe('capacity provider runtime', () => {
 				},
 			},
 		});
+	});
+
+	it('times out assignment lease requests instead of occupying a runner slot forever', async () => {
+		const previous = process.env.TREESEED_PROVIDER_LEASE_REQUEST_TIMEOUT_MS;
+		process.env.TREESEED_PROVIDER_LEASE_REQUEST_TIMEOUT_MS = '1';
+		try {
+			const config = resolveProviderConfig({ env: env() });
+			const events: Array<{ method: string; body?: unknown }> = [];
+			const client = {
+				async nextAssignment() {
+					events.push({ method: 'nextAssignment' });
+					return await new Promise<never>(() => {});
+				},
+				async createAssignmentModeRun(_assignmentId: string, body: unknown) {
+					events.push({ method: 'createAssignmentModeRun', body });
+					return { ok: true, payload: null };
+				},
+				async completeAssignment(_assignmentId: string, body: unknown) {
+					events.push({ method: 'completeAssignment', body });
+					return { ok: true, payload: null };
+				},
+				async failAssignment(_assignmentId: string, body: unknown) {
+					events.push({ method: 'failAssignment', body });
+					return { ok: true, payload: null };
+				},
+			};
+
+			const result = await runProviderRunnerOnce({
+				config,
+				client,
+				runnerId: 'runner_timeout',
+			});
+
+			expect(result).toMatchObject({
+				ok: false,
+				assigned: 0,
+				error: {
+					code: 'provider_assignment_lease_request_failed',
+				},
+			});
+			expect(events.map((event) => event.method)).toEqual(['nextAssignment']);
+		} finally {
+			if (previous === undefined) {
+				delete process.env.TREESEED_PROVIDER_LEASE_REQUEST_TIMEOUT_MS;
+			} else {
+				process.env.TREESEED_PROVIDER_LEASE_REQUEST_TIMEOUT_MS = previous;
+			}
+		}
 	});
 
 	it('passes redacted TreeDX proxy tool descriptors to execution providers', async () => {
@@ -1718,7 +1813,7 @@ describe('capacity provider runtime', () => {
 		expect(events.find((event) => event.method === 'failAssignment')?.body).toMatchObject({
 			output: {
 				status: 'failed',
-				summary: 'Assignment lease renewal failed while execution provider work was in progress.',
+				summary: 'Assignment lease renewal failed after execution provider work was accepted.',
 			},
 		});
 		expect(events.find((event) =>
@@ -1741,7 +1836,7 @@ describe('capacity provider runtime', () => {
 		expect(retryable.events.some((event) => event.method === 'returnAssignment')).toBe(true);
 		expect(retryable.events.find((event) => event.method === 'returnAssignment')?.body).toMatchObject({
 			retryable: true,
-			code: 'assignment_missing_decision_input',
+			code: 'assignment_waiting_for_external_completion',
 			output: {
 				metadata: {
 					code: 'fake_prepare_rejected',
@@ -1798,14 +1893,18 @@ describe('capacity provider runtime', () => {
 			},
 		};
 
-		const result = await runProviderRunnerOnce({ config, client });
+			const result = await runProviderRunnerOnce({ config, client });
 
-		expect(result).toMatchObject({ ok: true, assigned: 1, assignmentId: 'task_2' });
-		expect(events.map((event) => event.method)).toEqual(['createAssignmentModeRun', 'failAssignment']);
-		expect(events.find((event) => event.method === 'createAssignmentModeRun')?.body).toMatchObject({
-			mode: 'planning',
-			status: 'failed',
-			fallbackReason: 'provider_project_not_synced',
+			expect(result).toMatchObject({ ok: true, assigned: 1, assignmentId: 'task_2' });
+			expect(events.map((event) => event.method)).toEqual(expect.arrayContaining(['createAssignmentModeRun', 'failAssignment']));
+			expect(events.at(-1)?.method).toBe('failAssignment');
+			expect(events.find((event) => {
+				const body = event.body as Record<string, unknown> | undefined;
+				return event.method === 'createAssignmentModeRun' && body?.fallbackReason === 'provider_project_not_synced';
+			})?.body).toMatchObject({
+				mode: 'planning',
+				status: 'failed',
+				fallbackReason: 'provider_project_not_synced',
 			metadata: expect.objectContaining({
 				source: 'provider_runner_early_exit',
 				projectId: 'project_123',

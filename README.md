@@ -1,14 +1,12 @@
 # @treeseed/agent
 
-`@treeseed/agent` runs Treeseed capacity providers. It provides the provider API, provider manager, provider runner, worker runtime, AgentKernel execution, mode scheduling, provider-local capacity enforcement, package-owned Docker/Compose assets, and deployment templates.
+`@treeseed/agent` runs Treeseed capacity providers. It provides the provider manager, provider runner, AgentKernel execution, mode scheduling, provider-local capacity enforcement, package-owned Docker/Compose assets, and deployment templates.
 
 Use this package when your organization needs to run or maintain capacity that executes Treeseed work. Ordinary hosted projects can consume assigned capacity without owning a provider runtime.
 
 ## What You Can Run With Agent
 
-- a capacity-provider API service
 - provider manager and provider runner roles
-- worker execution services
 - AgentKernel planning/acting mode execution
 - local provider diagnostics
 - provider containers and compose workflows
@@ -45,7 +43,6 @@ trsd capacity test-local
 The package-owned role images are:
 
 ```text
-treeseed/agent-api
 treeseed/agent-manager
 treeseed/agent-runner
 ```
@@ -53,17 +50,16 @@ treeseed/agent-runner
 Release and development images are published for `linux/amd64` and `linux/arm64`. The images start:
 
 ```bash
-node ./dist/provider/entrypoint.js api
 node ./dist/provider/entrypoint.js manager
 node ./dist/provider/entrypoint.js runner
 node ./dist/provider/entrypoint.js doctor
 ```
 
-Use the qualified role names provider API, provider manager, and provider runner in architecture and implementation docs. The provider manager supervises one provider's local runtime; API-side assignment selection lives in `@treeseed/api`.
+Use the qualified role names provider manager and provider runner in architecture and implementation docs. The provider manager supervises one provider's local runtime; API-side assignment selection lives in `@treeseed/api`.
 
 Store provider credentials through `trsd config` or host secret managers. Do not create plaintext provider `.env` files.
 
-Advanced launch configuration can be declared in `treeseed.capacity-provider.yaml` and passed to `trsd capacity up --config treeseed.capacity-provider.yaml`. The manifest can select official role images or derived images built from `treeseed/agent-api`, `treeseed/agent-manager`, and `treeseed/agent-runner`. Secrets belong in encrypted Treeseed config or host secret managers, not in the manifest.
+Advanced launch configuration can be declared in `treeseed.capacity-provider.yaml` and passed to `trsd capacity up --config treeseed.capacity-provider.yaml`. The manifest can select official role images or derived images built from `treeseed/agent-manager` and `treeseed/agent-runner`. Secrets belong in encrypted Treeseed config or host secret managers, not in the manifest.
 
 See [Capacity Provider Runtime](./docs/capacity-provider-runtime.md) for the provider check-in, assignment lease, TreeDX proxy, and mode-run protocol.
 
@@ -94,7 +90,6 @@ Built entrypoints:
 
 ```bash
 npm run start:manager
-npm run start:worker
 npm run start:workday-start
 npm run start:workday-report
 ```
@@ -104,7 +99,6 @@ Verification:
 ```bash
 npm run build:dist
 npm run test:unit
-npm run test:capacity-scheduling-e2e
 npm run test:smoke
 npm run release:verify
 npm run verify:local
@@ -114,7 +108,7 @@ CI runs `.github/workflows/verify.yml`. Capacity-provider image publication uses
 
 ## Environment Registry
 
-`src/env.yaml` is the package-owned provider/runtime environment registry. It contains provider API, provider manager, provider runner, workday, queue, capacity-provider, and provider-launch entries.
+`src/env.yaml` is the package-owned provider/runtime environment registry. It contains provider manager, provider runner, workday, capacity-provider, and provider-launch entries.
 
 Workday task budgeting is configured with `TREESEED_WORKDAY_TASK_CREDIT_BUDGET`.
 
@@ -127,7 +121,6 @@ Exports include runtime APIs, service helpers, contracts, and binaries needed by
 Published binaries:
 
 - `treeseed-agents`
-- `treeseed-agent-api`
 - `treeseed-agent-service`
 
 ## What Agent Does Not Own

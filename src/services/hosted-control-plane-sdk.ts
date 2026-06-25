@@ -1,19 +1,11 @@
-import crypto from 'node:crypto';
 import { AgentSdk } from '@treeseed/sdk';
 
-type SdkAppendTaskEventRequest = { taskId: string; kind: string; data?: Record<string, unknown>; actor: string };
-type SdkClaimTaskRequest = { id: string; workerId: string; leaseSeconds: number; actor: string };
 type SdkClaimWorkdayManagerLeaseRequest = { projectId: string; environment: string; workDayId?: string | null; managerId: string; ttlSeconds: number; staleAfterSeconds?: number; now?: string; metadata?: Record<string, unknown> | null };
 type SdkCloseWorkDayRequest = { id: string; state?: string; summary?: Record<string, unknown> | null; actor: string };
-type SdkCompleteTaskRequest = { id: string; output?: Record<string, unknown> | null; outputRef?: string | null; summary?: Record<string, unknown> | null; actor: string };
-type SdkCreateTaskRequest = { id?: string; workDayId: string; agentId: string; type: string; state?: string; priority?: number; idempotencyKey: string; payload: Record<string, unknown>; payloadHash?: string | null; maxAttempts?: number; availableAt?: string; graphVersion?: string | null; parentTaskId?: string | null; actor: string };
-type SdkFailTaskRequest = { id: string; errorCode?: string | null; errorMessage: string; retryable?: boolean; nextVisibleAt?: string | null; actor: string };
 type SdkRecordRepositoryClaimRequest = { projectId: string; repositoryId: string; runnerId: string; runnerServiceName: string; volumeIdentity: string; lastSeenCommit?: string | null; lastTaskAt?: string | null; claimState?: string; metadata?: Record<string, unknown> | null };
 type SdkRecordWorkerRunnerRequest = { projectId: string; environment: string; runnerId: string; runnerServiceName: string; volumeIdentity: string; state?: string; maxLocalWorkers: number; activeLocalWorkers?: number; claimedRepositoryIds?: string[]; metadata?: Record<string, unknown> | null };
 type SdkReleaseWorkdayManagerLeaseRequest = { id: string; managerId: string };
 type SdkStartWorkDayRequest = { id?: string; projectId: string; capacityBudget?: number; graphVersion?: string | null; summary?: Record<string, unknown> | null; actor: string };
-type SdkTaskProgressRequest = { id: string; workerId?: string | null; state?: string; appendEvent?: { kind: string; data?: Record<string, unknown> } | null; patch?: Record<string, unknown>; actor: string };
-type SdkTaskSearchRequest = { workDayId?: string; agentId?: string; state?: string | string[]; limit?: number };
 type SdkUpsertWorkPolicyRequest = { projectId: string; environment: string; schedule: Record<string, unknown>; [key: string]: unknown };
 
 type Envelope<TPayload> = {
@@ -42,19 +34,6 @@ function filterValue(filters: unknown, fieldNames: string[]) {
 		return fieldNames.includes(String(record.field ?? '')) && String(record.op ?? 'eq') === 'eq';
 	}) as Record<string, unknown> | undefined;
 	return match?.value === undefined || match?.value === null ? null : String(match.value);
-}
-
-function filterValues(filters: unknown, fieldNames: string[]) {
-	if (!Array.isArray(filters)) return [];
-	const match = filters.find((entry) => {
-		if (!entry || typeof entry !== 'object') return false;
-		const record = entry as Record<string, unknown>;
-		return fieldNames.includes(String(record.field ?? ''));
-	}) as Record<string, unknown> | undefined;
-	const value = match?.value;
-	if (Array.isArray(value)) return value.map(String).filter(Boolean);
-	if (typeof value === 'string' && value.trim()) return [value.trim()];
-	return [];
 }
 
 type JsonEnvelope<TPayload> = { ok: boolean; payload: TPayload };
@@ -115,57 +94,6 @@ export class HostedRunnerControlPlaneClient {
 		return this.requestJson<Record<string, unknown>[]>('GET', `/v1/projects/${encodeURIComponent(projectId)}/runner/workdays/runtime`, {
 			query: { state: input.state ?? null, limit: input.limit ? String(input.limit) : null },
 		});
-	}
-
-	createRunnerTask(projectId: string, input: Record<string, unknown>) {
-		return this.requestJson<Record<string, unknown>>('POST', `/v1/projects/${encodeURIComponent(projectId)}/runner/tasks`, { body: input });
-	}
-
-	listRunnerTasks(projectId: string, input: SdkTaskSearchRequest = {}) {
-		return this.requestJson<Record<string, unknown>[]>('GET', `/v1/projects/${encodeURIComponent(projectId)}/runner/tasks`, {
-			query: {
-				workDayId: input.workDayId ?? null,
-				agentId: input.agentId ?? null,
-				state: Array.isArray(input.state) ? input.state.join(',') : input.state ?? null,
-				limit: input.limit ? String(input.limit) : null,
-			},
-		});
-	}
-
-	claimRunnerTask(projectId: string, taskId: string, input: Record<string, unknown>) {
-		return this.requestJson<Record<string, unknown> | null>('POST', `/v1/projects/${encodeURIComponent(projectId)}/runner/tasks/${encodeURIComponent(taskId)}/claim`, { body: input });
-	}
-
-	recordRunnerTaskProgress(projectId: string, taskId: string, input: Record<string, unknown>) {
-		return this.requestJson<Record<string, unknown> | null>('POST', `/v1/projects/${encodeURIComponent(projectId)}/runner/tasks/${encodeURIComponent(taskId)}/progress`, { body: input });
-	}
-
-	appendRunnerTaskEvent(projectId: string, taskId: string, input: Record<string, unknown>) {
-		return this.requestJson<Record<string, unknown> | null>('POST', `/v1/projects/${encodeURIComponent(projectId)}/runner/tasks/${encodeURIComponent(taskId)}/events`, { body: input });
-	}
-
-	completeRunnerTask(projectId: string, taskId: string, input: Record<string, unknown>) {
-		return this.requestJson<Record<string, unknown> | null>('POST', `/v1/projects/${encodeURIComponent(projectId)}/runner/tasks/${encodeURIComponent(taskId)}/complete`, { body: input });
-	}
-
-	failRunnerTask(projectId: string, taskId: string, input: Record<string, unknown>) {
-		return this.requestJson<Record<string, unknown> | null>('POST', `/v1/projects/${encodeURIComponent(projectId)}/runner/tasks/${encodeURIComponent(taskId)}/fail`, { body: input });
-	}
-
-	getRunnerTaskContext(projectId: string, taskId: string) {
-		return this.requestJson<Record<string, unknown>>('GET', `/v1/projects/${encodeURIComponent(projectId)}/runner/tasks/${encodeURIComponent(taskId)}/context`);
-	}
-
-	listRunnerTaskEvents(projectId: string, taskId: string) {
-		return this.requestJson<Record<string, unknown>[]>('GET', `/v1/projects/${encodeURIComponent(projectId)}/runner/tasks/${encodeURIComponent(taskId)}/events`);
-	}
-
-	listRunnerTaskOutputs(projectId: string, taskId: string) {
-		return this.requestJson<Record<string, unknown>[]>('GET', `/v1/projects/${encodeURIComponent(projectId)}/runner/tasks/${encodeURIComponent(taskId)}/outputs`);
-	}
-
-	storeRunnerArtifact(projectId: string, input: Record<string, unknown>) {
-		return this.requestJson<Record<string, unknown>>('POST', `/v1/projects/${encodeURIComponent(projectId)}/runner/artifacts`, { body: input });
 	}
 
 	claimRunnerManagerLease(projectId: string, input: Record<string, unknown>) {
@@ -257,16 +185,6 @@ export class HostedControlPlaneAgentSdk {
 			});
 			return envelope('work_day', 'search', payload, { count: payload.length });
 		}
-		if (request.model === 'task_event') {
-			const taskIds = filterValues(request.filters, ['taskId', 'task_id']);
-			const payload = (await Promise.all(taskIds.map((taskId) => this.client.listRunnerTaskEvents(this.projectId, taskId)))).flat();
-			return envelope('task_event', 'search', payload, { count: payload.length });
-		}
-		if (request.model === 'task_output') {
-			const taskIds = filterValues(request.filters, ['taskId', 'task_id']);
-			const payload = (await Promise.all(taskIds.map((taskId) => this.client.listRunnerTaskOutputs(this.projectId, taskId)))).flat();
-			return envelope('task_output', 'search', payload, { count: payload.length });
-		}
 		return this.localSdk.search(request);
 	}
 
@@ -317,74 +235,6 @@ export class HostedControlPlaneAgentSdk {
 			environment: this.environment,
 		});
 		return envelope('work_day', 'update', payload);
-	}
-
-	async createTask(request: SdkCreateTaskRequest) {
-		const payload = await this.client.createRunnerTask(this.projectId, request);
-		return envelope('task', 'create', payload);
-	}
-
-	async claimTask(request: SdkClaimTaskRequest) {
-		const payload = await this.client.claimRunnerTask(this.projectId, request.id, {
-			workerId: request.workerId,
-			leaseSeconds: request.leaseSeconds,
-			actor: request.actor,
-		});
-		return envelope('task', 'update', payload);
-	}
-
-	async recordTaskProgress(request: SdkTaskProgressRequest) {
-		const payload = await this.client.recordRunnerTaskProgress(this.projectId, request.id, {
-			workerId: request.workerId,
-			state: request.state,
-			appendEvent: request.appendEvent,
-			patch: request.patch,
-			actor: request.actor,
-		});
-		return envelope('task', 'update', payload);
-	}
-
-	async completeTask(request: SdkCompleteTaskRequest) {
-		const artifact = request.output
-			? await maybeAttachHostedArtifactRef(this.client, this.projectId, request.output)
-			: { output: request.output, outputRef: request.outputRef ?? null };
-		const payload = await this.client.completeRunnerTask(this.projectId, request.id, {
-			output: artifact.output,
-			outputRef: request.outputRef ?? artifact.outputRef,
-			summary: request.summary,
-			actor: request.actor,
-		});
-		return envelope('task', 'update', payload);
-	}
-
-	async failTask(request: SdkFailTaskRequest) {
-		const payload = await this.client.failRunnerTask(this.projectId, request.id, {
-			errorCode: request.errorCode,
-			errorMessage: request.errorMessage,
-			retryable: request.retryable,
-			nextVisibleAt: request.nextVisibleAt,
-			actor: request.actor,
-		});
-		return envelope('task', 'update', payload);
-	}
-
-	async appendTaskEvent(request: SdkAppendTaskEventRequest) {
-		const payload = await this.client.appendRunnerTaskEvent(this.projectId, request.taskId, {
-			kind: request.kind,
-			data: request.data,
-			actor: request.actor,
-		});
-		return envelope('task_event', 'create', payload);
-	}
-
-	async searchTasks(request: SdkTaskSearchRequest = {}) {
-		const payload = await this.client.listRunnerTasks(this.projectId, request);
-		return envelope('task', 'search', payload, { count: payload.length });
-	}
-
-	async getManagerContext(taskId: string) {
-		const payload = await this.client.getRunnerTaskContext(this.projectId, taskId);
-		return envelope('task', 'get', payload);
 	}
 
 	async claimWorkdayManagerLease(request: SdkClaimWorkdayManagerLeaseRequest) {
@@ -542,34 +392,4 @@ export class HostedControlPlaneAgentSdk {
 			.listRepositoryClaims(projectId, repositoryId)
 			.then((payload) => envelope('repository_claim', 'search', payload, { count: payload.length }));
 	}
-}
-
-async function maybeAttachHostedArtifactRef(client: HostedRunnerControlPlaneClient, projectId: string, output: Record<string, unknown>): Promise<{ output: Record<string, unknown>; outputRef: string | null }> {
-	const threshold = Number(process.env.TREESEED_HOSTED_INLINE_ARTIFACT_MAX_BYTES ?? 256_000);
-	const serialized = JSON.stringify(output);
-	if (!Number.isFinite(threshold) || serialized.length <= threshold) {
-		return { output, outputRef: null };
-	}
-	const objectKey = `agent-artifacts/${new Date().toISOString().slice(0, 10)}/${crypto.randomUUID()}.json`;
-	const sha256 = crypto.createHash('sha256').update(serialized).digest('hex');
-	const stored = await client.storeRunnerArtifact(projectId, {
-		objectKey,
-		content: serialized,
-		contentType: 'application/json',
-		sha256,
-	});
-	const outputRef = typeof stored.outputRef === 'string' ? stored.outputRef : null;
-	return {
-		output: {
-			artifactKind: output.artifactKind,
-			artifactStorage: 'r2',
-			storageMode: stored.storageMode ?? 'hosted',
-			outputRef,
-			objectKey: stored.objectKey ?? objectKey,
-			contentType: 'application/json',
-			sizeBytes: Buffer.byteLength(serialized),
-			sha256,
-		},
-		outputRef,
-	};
 }

@@ -56,7 +56,19 @@ export class CopilotExecutionProviderAdapter implements ExecutionProviderAdapter
 
 	async start(input: ExecutionProviderInvocation) {
 		const cli = normalizeAgentCliOptions(input.agent.cli);
-		const prompt = prependCoreObjectiveToPrompt({ prompt: input.workPackage.instructions, repoRoot: process.cwd() });
+		const prompt = prependCoreObjectiveToPrompt({
+			prompt: [
+				input.workPackage.instructions,
+				'',
+				'Assignment tools and permissions:',
+				JSON.stringify({
+					tools: input.tools ?? [],
+					workspace: input.workspace ?? null,
+					capacity: input.capacityEnvelope,
+				}, null, 2),
+			].join('\n'),
+			repoRoot: process.cwd(),
+		});
 		const result = await runTreeseedCopilotTask({
 			prompt,
 			cwd: process.cwd(),
@@ -77,8 +89,37 @@ export class CopilotExecutionProviderAdapter implements ExecutionProviderAdapter
 			},
 			metadata: {
 				provider: 'copilot',
+				promptCharacters: prompt.length,
+				toolCount: input.tools?.length ?? 0,
 			},
 		};
+	}
+
+	async collectUsage(input) {
+		return [{
+			kind: 'copilot_sdk',
+			unit: 'unsupported',
+			amount: 0,
+			source: 'copilot',
+			partial: true,
+			metadata: {
+				supported: false,
+				reason: 'copilot_sdk_usage_not_exposed',
+				assignmentId: input.assignmentId,
+			},
+		}];
+	}
+
+	async collectArtifacts(input) {
+		return [{
+			kind: 'execution_trace',
+			name: `${input.runId}.copilot-trace`,
+			metadata: {
+				supported: true,
+				assignmentId: input.assignmentId,
+				runId: input.runId,
+			},
+		}];
 	}
 }
 

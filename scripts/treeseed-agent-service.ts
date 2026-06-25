@@ -5,7 +5,6 @@ import { fileURLToPath } from 'node:url';
 
 const services = new Map([
 	['manager', '../services/manager.js'],
-	['worker', '../services/worker.js'],
 	['workday-manager', '../services/workday-manager.js'],
 	['workday-start', '../services/workday-start.js'],
 	['workday-report', '../services/workday-report.js'],

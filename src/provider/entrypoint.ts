@@ -1,11 +1,9 @@
 #!/usr/bin/env node
 
-import { createCapacityProviderNodeServer } from '../api/provider-app.ts';
 import { providerRuntimeVersion, resolveProviderConfig, type ProviderRole } from './config.ts';
 import { buildProviderRegistrationRequest, registerProvider } from './registration.ts';
-import { startProviderHeartbeatLoop } from './heartbeat.ts';
 
-const ROLES = ['api', 'manager', 'runner', 'doctor', 'healthcheck', 'register', 'plan', 'version'] as const satisfies ProviderRole[];
+const ROLES = ['manager', 'runner', 'doctor', 'healthcheck', 'register', 'plan', 'version'] as const satisfies ProviderRole[];
 
 function args() {
 	return process.argv.slice(2);
@@ -97,7 +95,7 @@ async function runLoop(role: 'manager' | 'runner', intervalSeconds: number, runO
 }
 
 function requireConnection(role: ProviderRole, dryRun: boolean) {
-	return !dryRun && ['api', 'manager', 'runner', 'register'].includes(role);
+	return !dryRun && ['manager', 'runner', 'register'].includes(role);
 }
 
 async function main() {
@@ -168,48 +166,7 @@ async function main() {
 			emit(await runRunnerSkeleton(config));
 			return;
 		}
-		await runLoop('runner', pollSeconds('TREESEED_PROVIDER_RUNNER_POLL_SECONDS', 15), () => runRunnerSkeleton(config));
-		return;
-	}
-	if (role === 'api') {
-		if (dryRun || diagnostic) {
-			emit(okPayload('api', {
-				dryRun: true,
-				diagnostic,
-				port: config.apiPort,
-				endpoints: ['/healthz', '/readyz', '/provider/health', '/provider/register', '/provider/portfolio'],
-				redactedEnv: config.redactedEnv,
-			}));
-			if (diagnostic && !dryRun) {
-				const server = await createCapacityProviderNodeServer(config);
-				process.stdout.write(`${JSON.stringify(okPayload('api', {
-					url: server.url,
-					diagnostic: true,
-				}))}\n`);
-			}
-			return;
-		}
-		const server = await createCapacityProviderNodeServer(config);
-		process.stdout.write(`${JSON.stringify(okPayload('api', {
-			url: server.url,
-			status: 'running',
-		}))}\n`);
-		void registerProvider(config)
-			.then((registration) => {
-				startProviderHeartbeatLoop(config, registration.heartbeatIntervalSeconds);
-				process.stdout.write(`${JSON.stringify(okPayload('api', {
-					event: 'capacity-provider.registered',
-					provider: registration.provider,
-					heartbeatIntervalSeconds: registration.heartbeatIntervalSeconds,
-				}))}\n`);
-			})
-			.catch((error) => {
-				process.stderr.write(`${JSON.stringify({
-					ok: false,
-					event: 'capacity-provider.registration_failed',
-					error: error instanceof Error ? error.message : String(error),
-				})}\n`);
-			});
+		await runLoop('runner', pollSeconds('TREESEED_PROVIDER_RUNNER_POLL_SECONDS', 15), () => runRunnerSkeleton(config, { background: true }));
 		return;
 	}
 }

@@ -8,7 +8,6 @@ import {
 	type AgentOperationRequest,
 	type AgentOperationResult,
 } from '@treeseed/sdk/operations/agent-tools';
-import type { KnowledgeDraft, OptimizationReport } from '../agents/contracts/knowledge.ts';
 import type { ResearchNote } from '../agents/contracts/research.ts';
 import { createOperationsAdapter } from '../agents/adapters/operations.ts';
 import {
@@ -17,20 +16,10 @@ import {
 	RELEASE_APPROVAL_DECISIONS,
 	type AgentApprovalKind,
 } from '../services/knowledge-promotion.ts';
-import {
-	RESEARCH_KNOWLEDGE_TASK_KINDS,
-	extractGeneratedArtifactsFromTaskOutputs,
-	followupTaskIdempotencyKey,
-	summarizeKnowledgeDraftArtifact,
-	summarizeOptimizationReportArtifact,
-	summarizePromotionRequestArtifact,
-	summarizeReleaseRequestArtifact,
-	summarizeResearchNoteArtifact,
-	type GeneratedAgentArtifactSummary,
-} from '../services/research-knowledge-workday.ts';
+import type { GeneratedAgentArtifactSummary } from '../services/research-knowledge-workday.ts';
 
-type SdkLike = Pick<AgentSdk, 'searchTasks' | 'search' | 'appendTaskEvent'> & Partial<Pick<AgentSdk,
-	'createTask' | 'listApprovalRequests' | 'decideApprovalRequest' | 'upsertTeamInboxItem' | 'listWorkerRunners' | 'listWorkdayManagerLeases'
+type SdkLike = Pick<AgentSdk, 'search'> & Partial<Pick<AgentSdk,
+	'listApprovalRequests' | 'decideApprovalRequest' | 'upsertTeamInboxItem' | 'listWorkerRunners' | 'listWorkdayManagerLeases'
 >>;
 
 export interface AgentArtifactApiItem extends GeneratedAgentArtifactSummary {
@@ -54,13 +43,13 @@ export interface AgentArtifactApiState {
 		taskId?: string;
 		workDayId?: string;
 		createdAt?: string;
-		knowledgeDraft: KnowledgeDraft;
+		knowledgeDraft: Record<string, unknown>;
 	}>;
 	optimizationReports: Array<{
 		taskId?: string;
 		workDayId?: string;
 		createdAt?: string;
-		optimizationReport: OptimizationReport;
+		optimizationReport: Record<string, unknown>;
 	}>;
 	approvals: AgentApprovalRequestSummary[];
 	currentWorkday: Record<string, unknown> | null;
@@ -96,7 +85,7 @@ export interface AgentOperationGrantSummary {
 	forbiddenPaths?: string[];
 	requiresApproval?: boolean;
 	approvalIds?: string[];
-	source: 'task_payload' | 'task_output';
+	source: 'assignment' | 'mode_run';
 }
 
 export interface AgentOperationEventSummary {
@@ -105,7 +94,7 @@ export interface AgentOperationEventSummary {
 	workDayId?: string;
 	taskType?: string;
 	seq?: number;
-	source: 'task_event' | 'task_output';
+	source: 'assignment' | 'mode_run';
 	operation: string;
 	mode?: string;
 	agentRole?: string;
@@ -418,29 +407,15 @@ async function safeSearch(input: {
 	}
 }
 
-function readTaskLeaseExpiresAt(task: Record<string, unknown>) {
-	const raw = readString(task, 'leaseExpiresAt', 'lease_expires_at');
-	if (!raw) return null;
-	const parsed = Date.parse(raw);
-	return Number.isFinite(parsed) ? parsed : null;
-}
-
-function summarizeTaskHealth(tasks: Record<string, unknown>[], now = new Date()) {
-	const activeTasks = tasks.filter((task) => ['claimed', 'running'].includes(readString(task, 'state')));
-	const staleTasks = activeTasks.filter((task) => {
-		const expiresAt = readTaskLeaseExpiresAt(task);
-		return expiresAt !== null && expiresAt <= now.valueOf();
-	});
-	const recoveredTaskCount = tasks.filter((task) => readString(task, 'lastErrorCode', 'last_error_code') === 'stale_task_recovered').length;
-	const failedStaleTaskCount = tasks.filter((task) => readString(task, 'lastErrorCode', 'last_error_code') === 'stale_task_retry_limit_exceeded').length;
+function emptyTaskHealth() {
 	return {
-		activeTasks,
-		staleTasks,
-		recoveredTaskCount,
-		failedStaleTaskCount,
+		activeTasks: [],
+		staleTasks: [],
+		recoveredTaskCount: 0,
+		failedStaleTaskCount: 0,
 		retryBackoffPolicy: {
-			baseSeconds: 15,
-			maxSeconds: 300,
+			baseSeconds: 0,
+			maxSeconds: 0,
 		},
 	};
 }
@@ -455,112 +430,7 @@ export async function collectAgentArtifactApiState(input: {
 	limit?: number;
 }): Promise<AgentArtifactApiState> {
 	const warnings: string[] = [];
-	const taskLimit = input.limit ?? 1000;
-	const tasks = asRecords((await input.sdk.searchTasks({ limit: taskLimit })).payload);
-	const taskIds = tasks.map(taskId).filter(Boolean);
-	const outputs = taskIds.length
-		? await safeSearch({
-				sdk: input.sdk,
-				model: 'task_output',
-				filters: [{ field: 'task_id', op: 'in', value: taskIds }],
-				sort: [{ field: 'created_at', direction: 'desc' }],
-				limit: taskLimit,
-				warnings,
-			})
-		: [];
-	const outputsByTask = new Map<string, Record<string, unknown>[]>();
-	for (const output of outputs) {
-		const id = readString(output, 'taskId', 'task_id');
-		if (!id) continue;
-		outputsByTask.set(id, [...(outputsByTask.get(id) ?? []), output]);
-	}
-
-	const artifacts: AgentArtifactApiItem[] = [];
-	const researchNotes: AgentArtifactApiState['researchNotes'] = [];
-	const knowledgeDrafts: AgentArtifactApiState['knowledgeDrafts'] = [];
-	const optimizationReports: AgentArtifactApiState['optimizationReports'] = [];
-	const approvals: AgentApprovalRequestSummary[] = [];
-
-	for (const task of tasks) {
-		const type = taskType(task);
-		const payload = parseTaskPayload(task, warnings);
-		const parsedOutputs = (outputsByTask.get(taskId(task)) ?? [])
-			.map((output) => parseTaskOutput(output, warnings))
-			.filter(hasResearchKnowledgeOutput);
-		const records = [
-			...parsedOutputs,
-			...(['promote_knowledge_draft_request', 'release_staged_knowledge_request'].includes(type) ? [payload] : []),
-		];
-
-		for (const record of records) {
-			const generated = extractGeneratedArtifactsFromTaskOutputs([{
-				...record,
-				taskId: taskId(task),
-			}]).map((summary) => attachTask(summary, task));
-			artifacts.push(...generated);
-
-			const note = asRecord(record.researchNote);
-			if (note.kind === 'research_note') {
-				researchNotes.push({
-					taskId: taskId(task) || undefined,
-					workDayId: taskWorkDayId(task),
-					createdAt: taskCreatedAt(task),
-					researchNote: note as unknown as ResearchNote,
-				});
-				artifacts.push(attachTask(summarizeResearchNoteArtifact(note as unknown as ResearchNote, taskId(task) || undefined), task));
-			}
-
-			const draft = asRecord(record.knowledgeDraft);
-			if (draft.kind === 'knowledge_draft') {
-				knowledgeDrafts.push({
-					taskId: taskId(task) || undefined,
-					workDayId: taskWorkDayId(task),
-					createdAt: taskCreatedAt(task),
-					knowledgeDraft: draft as unknown as KnowledgeDraft,
-				});
-				artifacts.push(attachTask(summarizeKnowledgeDraftArtifact(draft as unknown as KnowledgeDraft, taskId(task) || undefined), task));
-			}
-
-			const report = asRecord(record.optimizationReport);
-			if (report.kind === 'knowledge_optimization_report') {
-				optimizationReports.push({
-					taskId: taskId(task) || undefined,
-					workDayId: taskWorkDayId(task),
-					createdAt: taskCreatedAt(task),
-					optimizationReport: report as unknown as OptimizationReport,
-				});
-				artifacts.push(attachTask(summarizeOptimizationReportArtifact(report as unknown as OptimizationReport, taskId(task) || undefined), task));
-			}
-
-			const promotionRequest = asRecord(record.promotionRequest);
-			if (type === 'promote_knowledge_draft_request' || Object.keys(promotionRequest).length > 0) {
-				const request = Object.keys(promotionRequest).length > 0 ? promotionRequest : asRecord(payload.promotionRequest);
-				if (Object.keys(request).length > 0) {
-					approvals.push(promotionRequestFrom(task, request));
-					artifacts.push(attachTask(summarizePromotionRequestArtifact(request, taskId(task) || undefined), task));
-				}
-			}
-
-			const releaseRequest = asRecord(record.releaseRequest);
-			if (type === 'release_staged_knowledge_request' || Object.keys(releaseRequest).length > 0) {
-				const baseRequest = Object.keys(releaseRequest).length > 0 ? releaseRequest : asRecord(payload.releaseRequest);
-				const request = {
-					...baseRequest,
-					operationGrants: record.operationGrants ?? payload.operationGrants,
-					releaseInput: baseRequest.releaseInput ?? record.releaseInput ?? payload.releaseInput,
-				};
-				if (Object.keys(request).length > 0) {
-					approvals.push(releaseRequestFrom(task, request));
-					artifacts.push(attachTask(summarizeReleaseRequestArtifact(request, taskId(task) || undefined), task));
-				}
-			}
-		}
-
-		if (RESEARCH_KNOWLEDGE_TASK_KINDS.includes(type as never) && records.length === 0 && !['promote_knowledge_draft_request', 'release_staged_knowledge_request'].includes(type)) {
-			warnings.push(`Task ${taskId(task) || '<unknown>'} has no generated artifact output yet.`);
-		}
-	}
-
+	const limit = input.limit ?? 1000;
 	const workdays = await safeSearch({
 		sdk: input.sdk,
 		model: 'work_day',
@@ -580,14 +450,13 @@ export async function collectAgentArtifactApiState(input: {
 	const persistedApprovals = typeof input.sdk.listApprovalRequests === 'function'
 		? await input.sdk.listApprovalRequests({
 				projectId: input.projectId,
-				limit: taskLimit,
+				limit,
 			}).then((result) => Array.isArray(result.payload) ? result.payload.map(persistedApprovalFrom) : [])
 			.catch((error) => {
 				warnings.push(`Unable to list persisted approval requests: ${error instanceof Error ? error.message : String(error)}`);
 				return [] as AgentApprovalRequestSummary[];
 			})
 		: [];
-	const taskHealth = summarizeTaskHealth(tasks);
 	const environment = environmentFromState(currentWorkday);
 	const workerRunners = typeof input.sdk.listWorkerRunners === 'function'
 		? await input.sdk.listWorkerRunners(input.projectId, environment).then((result) => asRecords(result.payload)).catch((error) => {
@@ -604,334 +473,20 @@ export async function collectAgentArtifactApiState(input: {
 
 	return {
 		projectId: input.projectId,
-		artifacts: uniqueArtifacts(artifacts),
-		researchNotes,
-		knowledgeDrafts,
-		optimizationReports,
-		approvals: uniqueApprovals([...persistedApprovals, ...approvals]),
+		artifacts: [],
+		researchNotes: [],
+		knowledgeDrafts: [],
+		optimizationReports: [],
+		approvals: uniqueApprovals(persistedApprovals),
 		currentWorkday,
 		reports: reports.map((report) => ({
 			...report,
 			body: parseReportBody(report, warnings),
 		})),
-		taskHealth,
+		taskHealth: emptyTaskHealth(),
 		workerRunners,
 		managerLease: managerLeases[0] ?? null,
 		warnings,
-	};
-}
-
-function grantSummariesFromRecord(input: {
-	record: Record<string, unknown>;
-	task: Record<string, unknown>;
-	source: AgentOperationGrantSummary['source'];
-}) {
-	const candidates = [
-		input.record.operationGrants,
-		input.record.grants,
-		asRecord(input.record.operations).grants,
-		asRecord(input.record.workPackage).operationGrants,
-		asRecord(input.record.workPackage).grants,
-	];
-	const grants = candidates.flatMap((value) => Array.isArray(value) ? value.map(asRecord) : []);
-	return grants
-		.filter((grant) => readString(grant, 'id'))
-		.map((grant) => ({
-			id: readString(grant, 'id'),
-			taskId: taskId(input.task) || undefined,
-			workDayId: taskWorkDayId(input.task),
-			taskType: taskType(input.task) || undefined,
-			state: readString(grant, 'state') || undefined,
-			operations: readStringArray(grant.operations),
-			modes: readStringArray(grant.modes),
-			agentRoles: readStringArray(grant.agentRoles),
-			taskKinds: readStringArray(grant.taskKinds),
-			projectIds: readStringArray(grant.projectIds),
-			environments: readStringArray(grant.environments),
-			allowedPaths: readStringArray(grant.allowedPaths),
-			forbiddenPaths: readStringArray(grant.forbiddenPaths),
-			requiresApproval: typeof grant.requiresApproval === 'boolean' ? grant.requiresApproval : undefined,
-			approvalIds: readStringArray(grant.approvalIds),
-			source: input.source,
-		}) satisfies AgentOperationGrantSummary);
-}
-
-function uniqueGrants(grants: AgentOperationGrantSummary[]) {
-	const seen = new Set<string>();
-	return grants.filter((grant) => {
-		const key = `${grant.id}:${grant.taskId ?? ''}:${grant.source}`;
-		if (seen.has(key)) return false;
-		seen.add(key);
-		return true;
-	});
-}
-
-function operationEventFromResult(input: {
-	result: Record<string, unknown>;
-	task: Record<string, unknown>;
-	index: number;
-	source: AgentOperationEventSummary['source'];
-}) {
-	const error = asRecord(input.result.error);
-	return {
-		id: `${input.source}:${taskId(input.task) || 'task'}:${input.index}`,
-		taskId: taskId(input.task) || undefined,
-		workDayId: taskWorkDayId(input.task),
-		taskType: taskType(input.task) || undefined,
-		source: input.source,
-		operation: readString(input.result, 'operation') || 'operation',
-		status: readString(input.result, 'status') || undefined,
-		summary: readString(input.result, 'summary') || undefined,
-		changedPaths: readStringArray(input.result.changedPaths),
-		stagedPaths: readStringArray(input.result.stagedPaths),
-		mergedToStaging: typeof input.result.mergedToStaging === 'boolean' ? input.result.mergedToStaging : undefined,
-		mergeFailure: Object.keys(asRecord(input.result.mergeFailure)).length ? asRecord(input.result.mergeFailure) : undefined,
-		error: Object.keys(error).length ? error : undefined,
-	} satisfies AgentOperationEventSummary;
-}
-
-function operationEventFromTaskEvent(input: {
-	event: Record<string, unknown>;
-	data: Record<string, unknown>;
-	task: Record<string, unknown> | undefined;
-	warnings: string[];
-}) {
-	const result = asRecord(input.data.result);
-	if (!readString(input.data, 'operation') && !readString(result, 'operation')) {
-		input.warnings.push(`Skipped malformed operation_event ${readString(input.event, 'id') || '<unknown>'}.`);
-		return null;
-	}
-	const task = input.task ?? {};
-	return {
-		id: readString(input.event, 'id') || `${readString(input.event, 'taskId', 'task_id')}:operation:${readString(input.event, 'seq')}`,
-		taskId: readString(input.event, 'taskId', 'task_id') || taskId(task) || undefined,
-		workDayId: taskWorkDayId(task),
-		taskType: taskType(task) || undefined,
-		seq: Number.isFinite(Number(input.event.seq)) ? Number(input.event.seq) : undefined,
-		source: 'task_event',
-		operation: readString(input.data, 'operation') || readString(result, 'operation') || 'operation',
-		mode: readString(input.data, 'mode') || undefined,
-		agentRole: readString(input.data, 'agentRole') || undefined,
-		permissionGrantId: readString(input.data, 'permissionGrantId') || undefined,
-		status: readString(result, 'status') || undefined,
-		summary: readString(result, 'summary') || undefined,
-		changedPaths: readStringArray(result.changedPaths),
-		stagedPaths: readStringArray(result.stagedPaths),
-		mergedToStaging: typeof result.mergedToStaging === 'boolean' ? result.mergedToStaging : undefined,
-		mergeFailure: Object.keys(asRecord(result.mergeFailure)).length ? asRecord(result.mergeFailure) : undefined,
-		error: Object.keys(asRecord(result.error)).length ? asRecord(result.error) : undefined,
-		createdAt: readString(input.data, 'createdAt') || readString(input.event, 'createdAt', 'created_at') || undefined,
-	} satisfies AgentOperationEventSummary;
-}
-
-function outputRecordsForLifecycle(record: Record<string, unknown>) {
-	return [
-		record,
-		asRecord(record.implementationResult),
-		asRecord(record.promotionToStaging),
-		asRecord(record.artifact),
-		asRecord(record.result),
-	].filter((entry) => Object.keys(entry).length > 0);
-}
-
-function collectLifecycleFromRecord(input: {
-	record: Record<string, unknown>;
-	task: Record<string, unknown>;
-	lifecycle: AgentOperationLifecycleSummary;
-}) {
-	for (const record of outputRecordsForLifecycle(input.record)) {
-		for (const snapshot of (Array.isArray(record.snapshots) ? record.snapshots.map(asRecord) : [])) {
-			input.lifecycle.worktreeSnapshots.push({
-				...snapshot,
-				taskId: taskId(input.task) || undefined,
-				workDayId: taskWorkDayId(input.task),
-				taskType: taskType(input.task) || undefined,
-			});
-		}
-		if (record.mergedToStaging !== undefined || record.mergeCommitSha || record.stagedCommitSha) {
-			input.lifecycle.stagingMerges.push({
-				mergedToStaging: Boolean(record.mergedToStaging),
-				featureBranch: readString(record, 'featureBranch') || undefined,
-				stagingBranch: readString(record, 'stagingBranch') || undefined,
-				commitSha: readString(record, 'mergeCommitSha', 'stagedCommitSha') || undefined,
-				changedPaths: readStringArray(record.changedPaths),
-				taskId: taskId(input.task) || undefined,
-				workDayId: taskWorkDayId(input.task),
-				taskType: taskType(input.task) || undefined,
-			});
-		}
-		const mergeFailure = asRecord(record.mergeFailure);
-		if (Object.keys(mergeFailure).length > 0) {
-			input.lifecycle.mergeFailures.push({
-				...mergeFailure,
-				taskId: taskId(input.task) || undefined,
-				workDayId: taskWorkDayId(input.task),
-				taskType: taskType(input.task) || undefined,
-			});
-		}
-		const repairTask = asRecord(record.repairTask);
-		if (Object.keys(repairTask).length > 0) {
-			input.lifecycle.repairTasks.push({
-				...repairTask,
-				taskId: taskId(input.task) || undefined,
-				workDayId: taskWorkDayId(input.task),
-				taskType: taskType(input.task) || undefined,
-			});
-		}
-		const releaseResult = asRecord(record.releaseResult);
-		if (Object.keys(releaseResult).length > 0) {
-			input.lifecycle.releaseResults.push({
-				...releaseResult,
-				taskId: taskId(input.task) || undefined,
-				workDayId: taskWorkDayId(input.task),
-				taskType: taskType(input.task) || undefined,
-			});
-		}
-		const codexResult = asRecord(record.codexResult);
-		const usage = asRecord(codexResult.usage);
-		if (Object.keys(usage).length > 0 || readString(codexResult, 'provider')) {
-			input.lifecycle.codexUsage.push({
-				provider: readString(codexResult, 'provider') || undefined,
-				threadId: readString(codexResult, 'threadId') || undefined,
-				status: readString(codexResult, 'status') || undefined,
-				usage,
-				taskId: taskId(input.task) || undefined,
-				workDayId: taskWorkDayId(input.task),
-				taskType: taskType(input.task) || undefined,
-			});
-		}
-	}
-}
-
-function collectLifecycleFromApprovalDecisionEvent(input: {
-	event: Record<string, unknown>;
-	data: Record<string, unknown>;
-	task: Record<string, unknown> | undefined;
-	lifecycle: AgentOperationLifecycleSummary;
-}) {
-	const task = input.task ?? {};
-	const approvalKind = readString(input.data, 'approvalKind');
-	const approvalRecord = {
-		id: readString(input.data, 'approvalId') || readString(input.event, 'id') || `approval:${readString(input.event, 'taskId', 'task_id')}`,
-		approvalKind: approvalKind || 'approval_decision',
-		taskId: readString(input.event, 'taskId', 'task_id') || taskId(task) || '',
-		workDayId: taskWorkDayId(task),
-		taskState: taskState(task),
-		decision: readString(input.data, 'decision') || undefined,
-		reason: readString(input.data, 'reason') || undefined,
-		actor: readString(input.event, 'actor') || undefined,
-		releaseAttempted: input.data.releaseAttempted === true,
-		stagingAttempted: input.data.stagingAttempted === true,
-		stagingTaskCreated: input.data.stagingTaskCreated === true,
-		createdTaskId: readString(input.data, 'createdTaskId') || undefined,
-		createdAt: readString(input.event, 'createdAt', 'created_at') || undefined,
-		payload: input.data,
-	} as AgentApprovalRequestSummary & Record<string, unknown>;
-	input.lifecycle.releaseApprovals.push(approvalRecord);
-	const releaseResult = asRecord(input.data.releaseResult);
-	if (Object.keys(releaseResult).length > 0) {
-		input.lifecycle.releaseResults.push({
-			...releaseResult,
-			approvalId: approvalRecord.id,
-			decision: approvalRecord.decision,
-			actor: approvalRecord.actor,
-			taskId: approvalRecord.taskId || undefined,
-			workDayId: approvalRecord.workDayId,
-			taskType: taskType(task) || undefined,
-			createdAt: approvalRecord.createdAt,
-		});
-	}
-}
-
-export async function collectAgentOperationApiState(input: {
-	sdk: SdkLike;
-	projectId: string;
-	limit?: number;
-}): Promise<AgentOperationApiState> {
-	const warnings: string[] = [];
-	const taskLimit = input.limit ?? 1000;
-	const tasks = asRecords((await input.sdk.searchTasks({ limit: taskLimit })).payload);
-	const taskIds = tasks.map(taskId).filter(Boolean);
-	const outputs = taskIds.length
-		? await safeSearch({
-				sdk: input.sdk,
-				model: 'task_output',
-				filters: [{ field: 'task_id', op: 'in', value: taskIds }],
-				sort: [{ field: 'created_at', direction: 'desc' }],
-				limit: taskLimit,
-				warnings,
-			})
-		: [];
-	const events = taskIds.length
-		? await safeSearch({
-				sdk: input.sdk,
-				model: 'task_event',
-				filters: [{ field: 'task_id', op: 'in', value: taskIds }],
-				sort: [{ field: 'created_at', direction: 'desc' }],
-				limit: taskLimit,
-				warnings,
-			})
-		: [];
-	const taskMap = taskById(tasks);
-	const outputsByTask = new Map<string, Record<string, unknown>[]>();
-	for (const output of outputs) {
-		const id = readString(output, 'taskId', 'task_id');
-		if (!id) continue;
-		outputsByTask.set(id, [...(outputsByTask.get(id) ?? []), output]);
-	}
-	const grants: AgentOperationGrantSummary[] = [];
-	const operationEvents: AgentOperationEventSummary[] = [];
-	const lifecycle: AgentOperationLifecycleSummary = {
-		worktreeSnapshots: [],
-		stagingMerges: [],
-		mergeFailures: [],
-		repairTasks: [],
-		releaseApprovals: [],
-		releaseResults: [],
-		codexUsage: [],
-	};
-
-	for (const task of tasks) {
-		const payload = parseTaskPayload(task, warnings);
-		grants.push(...grantSummariesFromRecord({ record: payload, task, source: 'task_payload' }));
-		const parsedOutputs = (outputsByTask.get(taskId(task)) ?? []).map((output) => parseTaskOutput(output, warnings));
-		for (const outputRecord of parsedOutputs) {
-			grants.push(...grantSummariesFromRecord({ record: outputRecord, task, source: 'task_output' }));
-			collectLifecycleFromRecord({ record: outputRecord, task, lifecycle });
-			for (const record of outputRecordsForLifecycle(outputRecord)) {
-				for (const [index, result] of (Array.isArray(record.operationResults) ? record.operationResults.map(asRecord).entries() : [])) {
-					operationEvents.push(operationEventFromResult({ result, task, index, source: 'task_output' }));
-				}
-			}
-		}
-	}
-
-	for (const event of events.filter((entry) => readString(entry, 'kind') === 'operation_event')) {
-		const data = parseEventData(event, warnings);
-		const task = taskMap.get(readString(event, 'taskId', 'task_id'));
-		const summary = operationEventFromTaskEvent({ event, data, task, warnings });
-		if (summary) operationEvents.push(summary);
-	}
-
-	for (const event of events.filter((entry) => readString(entry, 'kind') === 'approval_decision_recorded')) {
-		const data = parseEventData(event, warnings);
-		const task = taskMap.get(readString(event, 'taskId', 'task_id'));
-		collectLifecycleFromApprovalDecisionEvent({ event, data, task, lifecycle });
-	}
-
-	const artifactState = await collectAgentArtifactApiState({
-		sdk: input.sdk,
-		projectId: input.projectId,
-		limit: taskLimit,
-	});
-	lifecycle.releaseApprovals.push(...artifactState.approvals.filter((approval) => approval.approvalKind === 'release_staged_knowledge'));
-
-	return {
-		projectId: input.projectId,
-		grants: uniqueGrants(grants),
-		events: operationEvents,
-		lifecycle,
-		warnings: [...warnings, ...artifactState.warnings],
 	};
 }
 
@@ -1062,186 +617,6 @@ function stateForDecision(kind: string, decision: string) {
 	return 'rejected';
 }
 
-const DEFAULT_DOCS_AUTOMATION_FORBIDDEN_PATHS = [
-	'.env*',
-	'**/.env*',
-	'**/.git/**',
-	'**/node_modules/**',
-	'.treeseed/worktrees/**',
-	'.treeseed/exports/**',
-	'packages/*/src/**',
-	'src/lib/**',
-	'src/pages/api/**',
-	'packages/sdk/drizzle/**',
-];
-
-function promotionTaskPayload(input: {
-	approval: AgentApprovalRequestSummary;
-	draft: KnowledgeDraft;
-	decision: string;
-	reason?: string | null;
-	actor: string;
-	projectId: string;
-}) {
-	const verificationPlan = asRecord(input.approval.verificationPlan);
-	const verificationCommands = readStringArray(verificationPlan.commands);
-	const forbiddenPaths = readStringArray(input.approval.payload.forbiddenPaths);
-	const repositoryClaim = asRecord(input.approval.payload.repositoryClaim ?? input.approval.payload.repository_claim);
-	const runtimeMode = readString(input.approval.payload, 'runtimeMode') || readString(input.approval.payload, 'runtime_mode');
-	return {
-		executionKind: 'research_knowledge_pipeline',
-		taskKind: 'promote_knowledge_to_staging',
-		agentRole: 'engineer',
-		agentSlug: 'engineer-agent',
-		projectId: input.projectId,
-		environment: runtimeMode === 'hosted' ? 'staging' : 'local',
-		runtimeMode: runtimeMode || undefined,
-		provider: runtimeMode === 'hosted' ? 'hosted_runner' : 'local_branch',
-		releaseAllowed: false,
-		knowledgeDraft: input.draft,
-		promotionRequest: input.approval.payload,
-		approval: {
-			id: input.approval.id,
-			kind: input.approval.approvalKind,
-			state: 'approved',
-		},
-		approvalDecision: {
-			approvalId: input.approval.id,
-			decision: input.decision,
-			reason: input.reason ?? null,
-			actor: input.actor,
-			decidedAt: new Date().toISOString(),
-		},
-		allowedPaths: [input.draft.targetPath],
-		forbiddenPaths: forbiddenPaths.length ? forbiddenPaths : DEFAULT_DOCS_AUTOMATION_FORBIDDEN_PATHS,
-		verificationCommands,
-		sourceMapRefs: input.approval.sourceMapRefs ?? [],
-		changedPaths: input.approval.changedPaths?.length ? input.approval.changedPaths : [input.draft.targetPath],
-		verificationPlan,
-		policySnapshot: input.approval.policySnapshot ?? {},
-		repositoryClaim: Object.keys(repositoryClaim).length > 0 ? repositoryClaim : undefined,
-		repositoryClaimId: readString(repositoryClaim, 'id') || readString(input.approval.payload, 'repositoryClaimId') || undefined,
-		runnerId: readString(repositoryClaim, 'runnerId', 'runner_id') || readString(input.approval.payload, 'runnerId') || undefined,
-		sourceTaskId: input.approval.taskId,
-	};
-}
-
-async function createPromotionTask(input: {
-	sdk: SdkLike;
-	state: AgentArtifactApiState;
-	approval: AgentApprovalRequestSummary;
-	decision: string;
-	reason?: string | null;
-	actor: string;
-	projectId: string;
-}) {
-	if (typeof input.sdk.createTask !== 'function') {
-		return null;
-	}
-	const draft = input.state.knowledgeDrafts.find((entry) => entry.knowledgeDraft.id === input.approval.draftId)?.knowledgeDraft
-		?? asRecord(input.approval.payload.knowledgeDraft) as unknown as KnowledgeDraft;
-	if (draft.kind !== 'knowledge_draft') {
-		throw new AgentApprovalDecisionError(409, 'Cannot promote knowledge without the source draft artifact.', {
-			approvalId: input.approval.id,
-			draftId: input.approval.draftId ?? null,
-		});
-	}
-	const workDayId = input.approval.workDayId ?? (input.state.currentWorkday ? readString(input.state.currentWorkday, 'id') : '');
-	if (!workDayId) {
-		throw new AgentApprovalDecisionError(409, 'Cannot promote knowledge without a workday id.', {
-			approvalId: input.approval.id,
-		});
-	}
-	const created = await input.sdk.createTask({
-		workDayId,
-		agentId: 'engineer-agent',
-		type: 'promote_knowledge_to_staging',
-		priority: 78,
-		idempotencyKey: followupTaskIdempotencyKey(workDayId, 'promote_knowledge_to_staging', input.approval.id),
-		payload: promotionTaskPayload({
-			approval: input.approval,
-			draft,
-			decision: input.decision,
-			reason: input.reason,
-			actor: input.actor,
-			projectId: input.projectId,
-		}),
-		graphVersion: null,
-		actor: input.actor,
-	});
-	return asRecord(created.payload);
-}
-
-async function createRevisionTask(input: {
-	sdk: SdkLike;
-	state: AgentArtifactApiState;
-	approval: AgentApprovalRequestSummary;
-	reason?: string | null;
-	actor: string;
-}) {
-	if (typeof input.sdk.createTask !== 'function') {
-		return null;
-	}
-	const draft = input.state.knowledgeDrafts.find((entry) => entry.knowledgeDraft.id === input.approval.draftId)?.knowledgeDraft
-		?? asRecord(input.approval.payload.knowledgeDraft) as unknown as KnowledgeDraft;
-	if (draft.kind !== 'knowledge_draft') {
-		throw new AgentApprovalDecisionError(409, 'Cannot request draft changes without the source draft artifact.', {
-			approvalId: input.approval.id,
-			draftId: input.approval.draftId ?? null,
-		});
-	}
-	const note = input.state.researchNotes.find((entry) => entry.researchNote.id === input.approval.sourceResearchNoteId)?.researchNote
-		?? input.state.researchNotes.find((entry) => draft.sourceResearchIds.includes(entry.researchNote.id))?.researchNote
-		?? asRecord(input.approval.payload.researchNote) as unknown as ResearchNote;
-	if (note.kind !== 'research_note') {
-		throw new AgentApprovalDecisionError(409, 'Cannot request draft changes without the source research note artifact.', {
-			approvalId: input.approval.id,
-			draftId: input.approval.draftId ?? null,
-		});
-	}
-	const report = input.state.optimizationReports.find((entry) => entry.optimizationReport.id === input.approval.optimizationReportId)?.optimizationReport
-		?? asRecord(input.approval.payload.optimizationReport) as unknown as OptimizationReport;
-	const workDayId = input.approval.workDayId ?? (input.state.currentWorkday ? readString(input.state.currentWorkday, 'id') : '');
-	if (!workDayId) {
-		throw new AgentApprovalDecisionError(409, 'Cannot request draft changes without a workday id.', {
-			approvalId: input.approval.id,
-		});
-	}
-	const created = await input.sdk.createTask({
-		workDayId,
-		agentId: 'knowledge-generator-agent',
-		type: 'generate_knowledge_draft',
-		priority: 88,
-		idempotencyKey: `${workDayId}:generate_knowledge_draft_revision:${input.approval.id}`,
-		payload: {
-			executionKind: 'research_knowledge_pipeline',
-			researchNote: note,
-			question: {
-				id: draft.sourceQuestionId,
-				title: draft.title,
-				book: draft.book,
-				section: draft.section,
-				targetPath: draft.targetPath,
-			},
-			previousKnowledgeDraft: draft,
-			optimizationReport: report.kind === 'knowledge_optimization_report' ? report : null,
-			approvalDecision: {
-				approvalId: input.approval.id,
-				decision: 'request_more_research',
-				reason: input.reason ?? null,
-				actor: input.actor,
-				decidedAt: new Date().toISOString(),
-			},
-			sourceTaskId: input.approval.taskId,
-			taskKind: 'generate_knowledge_draft',
-			revisionOfDraftId: draft.id,
-		},
-		graphVersion: null,
-		actor: input.actor,
-	});
-	return asRecord(created.payload);
-}
-
 function releaseGrantsFromApproval(input: {
 	approval: AgentApprovalRequestSummary;
 	projectId: string;
@@ -1284,30 +659,8 @@ export async function recordAgentApprovalDecision(input: {
 		});
 	}
 
-	let createdTask: Record<string, unknown> | null = null;
 	let releaseAttempted = false;
 	let releaseResult: AgentOperationResult | null = null;
-	if (approval.approvalKind === 'promote_knowledge_draft' && decision === 'approve_as_book_content') {
-		createdTask = await createPromotionTask({
-			sdk: input.sdk,
-			state,
-			approval,
-			decision,
-			reason: input.reason,
-			actor: input.actor,
-			projectId: input.projectId,
-		});
-	}
-	if (approval.approvalKind === 'promote_knowledge_draft' && decision === 'request_more_research') {
-		createdTask = await createRevisionTask({
-			sdk: input.sdk,
-			state,
-			approval,
-			reason: input.reason,
-			actor: input.actor,
-		});
-	}
-
 	if (approval.approvalKind === 'release_staged_knowledge' && decision === 'approve_release') {
 		if (input.actorType && input.actorType !== 'user') {
 			throw new AgentApprovalDecisionError(403, 'Only a human user may approve a production release.', {
@@ -1363,7 +716,6 @@ export async function recordAgentApprovalDecision(input: {
 					decision,
 					inputDecision: input.decision,
 					reason: input.reason ?? null,
-					createdTaskId: readString(createdTask ?? {}, 'id') || null,
 					releaseAttempted,
 				},
 				decidedByType: input.actorType ?? 'user',
@@ -1391,34 +743,15 @@ export async function recordAgentApprovalDecision(input: {
 				approvalId: approval.id,
 				approvalKind: approval.approvalKind,
 				decision,
-				createdTaskId: readString(createdTask ?? {}, 'id') || null,
 			},
 		}).catch(() => null);
 	}
 
-	await input.sdk.appendTaskEvent({
-		taskId: approval.taskId,
-		kind: 'approval_decision_recorded',
-		data: {
-			approvalId: approval.id,
-			approvalKind: approval.approvalKind,
-			decision,
-			inputDecision: input.decision,
-			reason: input.reason ?? null,
-			releaseAttempted,
-			stagingAttempted: false,
-			stagingTaskCreated: approval.approvalKind === 'promote_knowledge_draft' && decision === 'approve_as_book_content',
-			createdTaskId: readString(createdTask ?? {}, 'id') || null,
-			releaseResult,
-		},
-		actor: input.actor,
-	});
 	return {
 		...approval,
 		state: persistedDecision?.payload?.state ?? stateForDecision(approval.approvalKind, decision),
 		decision,
 		reason: input.reason ?? null,
-		createdTask,
 		releaseAttempted,
 		releaseResult,
 	};

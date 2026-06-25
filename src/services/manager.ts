@@ -1,11 +1,6 @@
 #!/usr/bin/env node
-import type { AgentRuntimeSpec } from '@treeseed/sdk/types/agents';
 import {
 	createControlPlaneReporter,
-	estimateUtilityForTask,
-	normalizeTaskPlanProposal,
-	predictReserveForCapacityPlan,
-	progressivelyAdmitPlanProposal,
 	reserveCreditsForEstimate,
 	routeAndReserveCapacity,
 	summarizeCapacityPlan,
@@ -22,21 +17,10 @@ import {
 } from '@treeseed/sdk';
 import { isDirectEntrypoint } from '../entrypoint.ts';
 import type { CapacityPlan, CapacityTaskExecutionEnvelope } from '@treeseed/sdk';
-import { loadActiveAgentSpecs } from '../agents/spec-loader.ts';
-import { followCursorKey, resolveTriggerDecision } from '../agents/kernel/trigger-resolver.ts';
-import type { AgentTriggerInvocation } from '../agents/runtime-types.ts';
 import {
 	createServiceSdk,
 	resolveManagerConfig,
-	seedCodebaseDocumentationScanTask,
-	seedGraphRefreshTask,
 } from './common.ts';
-import {
-	applyInteractiveWakeUpOverride,
-	applyScaleCooldown,
-	collectTaskMetrics,
-	computeDesiredWorkerCount,
-} from './worker-capacity.ts';
 import {
 	summarizeDocsAutomationWorkday,
 	writeWorkdayContentSnapshot,
@@ -45,31 +29,20 @@ import {
 } from './workday-content.ts';
 import { createWorkerPoolScaler, type WorkerPoolScalerKind } from './worker-pool-scaler.ts';
 import {
-	extractGeneratedArtifactsFromTaskOutputs,
-	seedResearchKnowledgeWorkdayTasks,
 	type GeneratedAgentArtifactSummary,
 } from './research-knowledge-workday.ts';
-import {
-	admissionForTaskProposal,
-	policyMetadataAdmissionPolicy,
-} from './task-admission.ts';
-import {
-	buildPlanningTaskPayload,
-	extractPlanningProposalFromOutput,
-} from './task-planning.ts';
 
 type ManagerSdk = ReturnType<typeof createServiceSdk>;
 type ManagerMode = 'reconcile' | 'open-workday' | 'close-workday' | 'report-workday' | 'loop';
 
 type ManagerConfig = ReturnType<typeof resolveManagerServiceConfig>;
 type WorkDayRecord = Record<string, unknown>;
-type TaskRecord = Record<string, unknown>;
 type PriorityOverrideRecord = Record<string, unknown>;
 type ManagerLeaseRecord = Record<string, unknown>;
 
 export interface StaleTaskRecoveryResult {
-	recoveredTasks: TaskRecord[];
-	failedTasks: TaskRecord[];
+	recoveredTasks: Record<string, unknown>[];
+	failedTasks: Record<string, unknown>[];
 	checkedTaskCount: number;
 }
 
@@ -172,93 +145,6 @@ async function claimManagerLease(input: {
 			...input.metadata,
 		},
 	});
-}
-
-async function appendTaskEventIfSupported(sdk: ManagerSdk, taskId: string, kind: string, data: Record<string, unknown>) {
-	if (typeof sdk.appendTaskEvent !== 'function') return;
-	await sdk.appendTaskEvent({
-		taskId,
-		kind,
-		data,
-		actor: 'manager',
-	}).catch(() => null);
-}
-
-function isExpiredLease(task: TaskRecord, now: Date) {
-	const raw = typeof task.leaseExpiresAt === 'string'
-		? task.leaseExpiresAt
-		: typeof task.lease_expires_at === 'string'
-			? task.lease_expires_at
-			: '';
-	if (!raw) return false;
-	const expiresAt = Date.parse(raw);
-	return Number.isFinite(expiresAt) && expiresAt <= now.valueOf();
-}
-
-async function recoverStaleTasks(
-	sdk: ManagerSdk,
-	workDayId: string | null,
-	now: Date,
-	limit = 100,
-): Promise<StaleTaskRecoveryResult> {
-	const activeEnvelope = await sdk.searchTasks({
-		workDayId: workDayId ?? undefined,
-		limit,
-		state: ['claimed', 'running'],
-	});
-	const activeTasks = Array.isArray(activeEnvelope.payload) ? activeEnvelope.payload as TaskRecord[] : [];
-	const staleTasks = activeTasks.filter((task) => isExpiredLease(task, now));
-	const result: StaleTaskRecoveryResult = {
-		recoveredTasks: [],
-		failedTasks: [],
-		checkedTaskCount: activeTasks.length,
-	};
-	for (const task of staleTasks) {
-		const taskId = String(task.id ?? '');
-		if (!taskId) continue;
-		const attemptCount = Number(task.attemptCount ?? task.attempt_count ?? 0);
-		const maxAttempts = Number(task.maxAttempts ?? task.max_attempts ?? 3);
-		const retryable = attemptCount < maxAttempts;
-		const delaySeconds = taskRetryDelaySeconds(Math.max(1, attemptCount));
-		const nextVisibleAt = new Date(now.valueOf() + (delaySeconds * 1000)).toISOString();
-		if (retryable) {
-			await appendTaskEventIfSupported(sdk, taskId, 'stale_task_recovered', {
-				workDayId: task.workDayId ?? task.work_day_id ?? workDayId,
-				claimedBy: task.claimedBy ?? task.claimed_by ?? null,
-				leaseExpiresAt: task.leaseExpiresAt ?? task.lease_expires_at ?? null,
-				attemptCount,
-				maxAttempts,
-				nextVisibleAt,
-				retryDelaySeconds: delaySeconds,
-			});
-			const updated = await sdk.failTask({
-				id: taskId,
-				errorCode: 'stale_task_recovered',
-				errorMessage: 'Task lease expired before completion; manager returned it to the queue.',
-				retryable: true,
-				nextVisibleAt,
-				actor: 'manager',
-			}).catch(() => ({ payload: null }));
-			result.recoveredTasks.push((updated.payload as TaskRecord | null) ?? task);
-		} else {
-			await appendTaskEventIfSupported(sdk, taskId, 'stale_task_failed', {
-				workDayId: task.workDayId ?? task.work_day_id ?? workDayId,
-				claimedBy: task.claimedBy ?? task.claimed_by ?? null,
-				leaseExpiresAt: task.leaseExpiresAt ?? task.lease_expires_at ?? null,
-				attemptCount,
-				maxAttempts,
-			});
-			const updated = await sdk.failTask({
-				id: taskId,
-				errorCode: 'stale_task_retry_limit_exceeded',
-				errorMessage: 'Task lease expired and retry limit was already reached.',
-				retryable: false,
-				actor: 'manager',
-			}).catch(() => ({ payload: null }));
-			result.failedTasks.push((updated.payload as TaskRecord | null) ?? task);
-		}
-	}
-	return result;
 }
 
 function parseDays(value: string) {
@@ -449,204 +335,6 @@ function parseJsonString(value: unknown, fallback: Record<string, unknown> = {})
 		return JSON.parse(value) as Record<string, unknown>;
 	} catch {
 		return fallback;
-	}
-}
-
-function normalizeChangedFilesFromValue(value: unknown, changedFiles = new Set<string>()) {
-	if (Array.isArray(value)) {
-		for (const entry of value) {
-			if (typeof entry === 'string' && entry.trim()) {
-				changedFiles.add(entry.trim());
-			} else if (entry && typeof entry === 'object') {
-				normalizeChangedFilesFromValue(entry, changedFiles);
-			}
-		}
-		return changedFiles;
-	}
-	if (!value || typeof value !== 'object') {
-		return changedFiles;
-	}
-	for (const [key, nested] of Object.entries(value)) {
-		if (['changedFiles', 'changed_files', 'files', 'paths'].includes(key)) {
-			normalizeChangedFilesFromValue(nested, changedFiles);
-			continue;
-		}
-		if (nested && typeof nested === 'object') {
-			normalizeChangedFilesFromValue(nested, changedFiles);
-		}
-	}
-	return changedFiles;
-}
-
-function operationEventFromTaskEvent(input: {
-	event: Record<string, unknown>;
-	task: Record<string, unknown>;
-	data: Record<string, unknown>;
-}) {
-	const result = asRecord(input.data.result);
-	const operation = readString(input.data, 'operation') || readString(result, 'operation');
-	if (!operation) {
-		return null;
-	}
-	return {
-		id: readString(input.event, 'id') || `${readString(input.event, 'taskId', 'task_id')}:operation:${readString(input.event, 'seq')}`,
-		source: 'task_event',
-		taskId: readString(input.event, 'taskId', 'task_id') || readString(input.task, 'id') || undefined,
-		workDayId: readString(input.task, 'workDayId', 'work_day_id') || undefined,
-		taskType: readString(input.task, 'type') || undefined,
-		seq: readNumber(input.event, 'seq') ?? undefined,
-		operation,
-		mode: readString(input.data, 'mode') || undefined,
-		agentRole: readString(input.data, 'agentRole') || undefined,
-		permissionGrantId: readString(input.data, 'permissionGrantId') || undefined,
-		status: readString(result, 'status') || undefined,
-		summary: readString(result, 'summary') || undefined,
-		changedPaths: readStringArray(result.changedPaths),
-		stagedPaths: readStringArray(result.stagedPaths),
-		mergedToStaging: typeof result.mergedToStaging === 'boolean' ? result.mergedToStaging : undefined,
-		mergeFailure: Object.keys(asRecord(result.mergeFailure)).length ? asRecord(result.mergeFailure) : undefined,
-		error: Object.keys(asRecord(result.error)).length ? asRecord(result.error) : undefined,
-		createdAt: readString(input.data, 'createdAt') || readString(input.event, 'createdAt', 'created_at') || undefined,
-	};
-}
-
-function approvalDecisionLifecycleFromTaskEvent(input: {
-	event: Record<string, unknown>;
-	task: Record<string, unknown>;
-	data: Record<string, unknown>;
-}) {
-	const taskMeta = {
-		taskId: readString(input.event, 'taskId', 'task_id') || readString(input.task, 'id') || undefined,
-		workDayId: readString(input.task, 'workDayId', 'work_day_id') || undefined,
-		taskType: readString(input.task, 'type') || undefined,
-		createdAt: readString(input.event, 'createdAt', 'created_at') || undefined,
-	};
-	const releaseResult = asRecord(input.data.releaseResult);
-	return {
-		approval: {
-			id: readString(input.data, 'approvalId') || readString(input.event, 'id') || undefined,
-			approvalKind: readString(input.data, 'approvalKind') || undefined,
-			decision: readString(input.data, 'decision') || undefined,
-			reason: readString(input.data, 'reason') || undefined,
-			actor: readString(input.event, 'actor') || undefined,
-			releaseAttempted: input.data.releaseAttempted === true,
-			stagingAttempted: input.data.stagingAttempted === true,
-			stagingTaskCreated: input.data.stagingTaskCreated === true,
-			createdTaskId: readString(input.data, 'createdTaskId') || undefined,
-			...taskMeta,
-		},
-		releaseResult: Object.keys(releaseResult).length > 0
-			? {
-					...releaseResult,
-					approvalId: readString(input.data, 'approvalId') || undefined,
-					decision: readString(input.data, 'decision') || undefined,
-					actor: readString(input.event, 'actor') || undefined,
-					...taskMeta,
-				}
-			: null,
-	};
-}
-
-function operationEventFromResult(input: {
-	result: Record<string, unknown>;
-	task: Record<string, unknown>;
-	index: number;
-}) {
-	const result = input.result;
-	return {
-		id: `task_output:${readString(input.task, 'id') || 'task'}:${input.index}`,
-		source: 'task_output',
-		taskId: readString(input.task, 'id') || undefined,
-		workDayId: readString(input.task, 'workDayId', 'work_day_id') || undefined,
-		taskType: readString(input.task, 'type') || undefined,
-		operation: readString(result, 'operation') || 'operation',
-		status: readString(result, 'status') || undefined,
-		summary: readString(result, 'summary') || undefined,
-		changedPaths: readStringArray(result.changedPaths),
-		stagedPaths: readStringArray(result.stagedPaths),
-		mergedToStaging: typeof result.mergedToStaging === 'boolean' ? result.mergedToStaging : undefined,
-		mergeFailure: Object.keys(asRecord(result.mergeFailure)).length ? asRecord(result.mergeFailure) : undefined,
-		error: Object.keys(asRecord(result.error)).length ? asRecord(result.error) : undefined,
-	};
-}
-
-function outputRecordsForLifecycle(record: Record<string, unknown>) {
-	return [
-		record,
-		asRecord(record.implementationResult),
-		asRecord(record.promotionToStaging),
-		asRecord(record.artifact),
-		asRecord(record.result),
-	].filter((entry) => Object.keys(entry).length > 0);
-}
-
-function collectLifecycleFromOutput(input: {
-	output: Record<string, unknown>;
-	task: Record<string, unknown>;
-	lifecycle: {
-		operationEvents: Record<string, unknown>[];
-		worktreeSnapshots: Record<string, unknown>[];
-		stagingMerges: Record<string, unknown>[];
-		mergeFailures: Record<string, unknown>[];
-		repairTasks: Record<string, unknown>[];
-		releaseApprovals: Record<string, unknown>[];
-		releaseResults: Record<string, unknown>[];
-		codexUsage: Record<string, unknown>[];
-	};
-}) {
-	const taskMeta = {
-		taskId: readString(input.task, 'id') || undefined,
-		workDayId: readString(input.task, 'workDayId', 'work_day_id') || undefined,
-		taskType: readString(input.task, 'type') || undefined,
-	};
-	for (const record of outputRecordsForLifecycle(input.output)) {
-		for (const [index, result] of (Array.isArray(record.operationResults) ? record.operationResults.map(asRecord).entries() : [])) {
-			input.lifecycle.operationEvents.push(operationEventFromResult({
-				result,
-				task: input.task,
-				index,
-			}));
-		}
-		for (const snapshot of (Array.isArray(record.snapshots) ? record.snapshots.map(asRecord) : [])) {
-			input.lifecycle.worktreeSnapshots.push({ ...snapshot, ...taskMeta });
-		}
-		if (record.mergedToStaging !== undefined || record.mergeCommitSha || record.stagedCommitSha) {
-			input.lifecycle.stagingMerges.push({
-				mergedToStaging: Boolean(record.mergedToStaging),
-				featureBranch: readString(record, 'featureBranch') || undefined,
-				stagingBranch: readString(record, 'stagingBranch') || undefined,
-				commitSha: readString(record, 'mergeCommitSha', 'stagedCommitSha') || undefined,
-				changedPaths: readStringArray(record.changedPaths),
-				...taskMeta,
-			});
-		}
-		const mergeFailure = asRecord(record.mergeFailure);
-		if (Object.keys(mergeFailure).length > 0) {
-			input.lifecycle.mergeFailures.push({ ...mergeFailure, ...taskMeta });
-		}
-		const repairTask = asRecord(record.repairTask);
-		if (Object.keys(repairTask).length > 0) {
-			input.lifecycle.repairTasks.push({ ...repairTask, ...taskMeta });
-		}
-		const releaseRequest = asRecord(record.releaseRequest);
-		if (Object.keys(releaseRequest).length > 0) {
-			input.lifecycle.releaseApprovals.push({ ...releaseRequest, ...taskMeta });
-		}
-		const releaseResult = asRecord(record.releaseResult);
-		if (Object.keys(releaseResult).length > 0) {
-			input.lifecycle.releaseResults.push({ ...releaseResult, ...taskMeta });
-		}
-		const codexResult = asRecord(record.codexResult);
-		const usage = asRecord(codexResult.usage);
-		if (Object.keys(usage).length > 0 || readString(codexResult, 'provider')) {
-			input.lifecycle.codexUsage.push({
-				provider: readString(codexResult, 'provider') || undefined,
-				threadId: readString(codexResult, 'threadId') || undefined,
-				status: readString(codexResult, 'status') || undefined,
-				usage,
-				...taskMeta,
-			});
-		}
 	}
 }
 
@@ -1037,128 +725,6 @@ async function openWorkday(
 		},
 		actor: 'manager',
 	});
-	if (created.payload && docsAutomationEnabled(config)) {
-		const graphTask = await seedGraphRefreshTask(sdk, {
-			workDayId: String(created.payload.id),
-			projectId: config.projectId,
-			actor: 'manager',
-		});
-		if (graphTask) {
-			const admission = admissionForTaskProposal({
-				type: 'refresh_project_graph',
-				payload: parseJsonString((graphTask as TaskRecord).payloadJson ?? (graphTask as TaskRecord).payload_json),
-				workDay: created.payload as WorkDayRecord,
-				policy,
-				capacityPlan,
-				queuedCredits: 0,
-				source: 'manager.openWorkday',
-			});
-			await sdk.recordTaskProgress({
-				id: String((graphTask as TaskRecord).id ?? ''),
-				state: admission.state,
-				patch: admission.payload,
-				appendEvent: {
-					kind: 'classified',
-					data: admission.classification as unknown as Record<string, unknown>,
-				},
-				actor: 'manager',
-			});
-			await sdk.recordTaskProgress({
-				id: String((graphTask as TaskRecord).id ?? ''),
-				state: admission.state,
-				appendEvent: {
-					kind: 'admission_decided',
-					data: admission.admission as unknown as Record<string, unknown>,
-				},
-				actor: 'manager',
-			});
-			await recordAdmissionEstimate({
-				reporter,
-				projectId: config.projectId,
-				workDayId: String(created.payload.id ?? ''),
-				taskId: String((graphTask as TaskRecord).id ?? ''),
-				admission,
-				estimatePhase: 'intent',
-			});
-			if (admission.enqueue) {
-				const capacityReady = await finalizeAdmittedTaskCapacity({
-					sdk,
-					reporter,
-					task: {
-						...(graphTask as TaskRecord),
-						payloadJson: JSON.stringify(admission.payload),
-					},
-					admission,
-					projectId: config.projectId,
-					workDayId: String(created.payload.id ?? ''),
-					actor: 'manager',
-				});
-				if (capacityReady.enqueue) {
-					await maybeEnqueueTask(sdk, capacityReady.task);
-				}
-			}
-		}
-		const scanTask = await seedCodebaseDocumentationScanTask(sdk, {
-			workDayId: String(created.payload.id),
-			projectId: config.projectId,
-			actor: 'manager',
-		});
-		if (scanTask) {
-			const admission = admissionForTaskProposal({
-				type: 'scan_codebase_documentation_surface',
-				payload: parseJsonString((scanTask as TaskRecord).payloadJson ?? (scanTask as TaskRecord).payload_json),
-				workDay: created.payload as WorkDayRecord,
-				policy,
-				capacityPlan,
-				queuedCredits: 0,
-				source: 'manager.openWorkday',
-			});
-			await sdk.recordTaskProgress({
-				id: String((scanTask as TaskRecord).id ?? ''),
-				state: admission.state,
-				patch: admission.payload,
-				appendEvent: {
-					kind: 'classified',
-					data: admission.classification as unknown as Record<string, unknown>,
-				},
-				actor: 'manager',
-			});
-			await sdk.recordTaskProgress({
-				id: String((scanTask as TaskRecord).id ?? ''),
-				state: admission.state,
-				appendEvent: {
-					kind: 'admission_decided',
-					data: admission.admission as unknown as Record<string, unknown>,
-				},
-				actor: 'manager',
-			});
-			await recordAdmissionEstimate({
-				reporter,
-				projectId: config.projectId,
-				workDayId: String(created.payload.id ?? ''),
-				taskId: String((scanTask as TaskRecord).id ?? ''),
-				admission,
-				estimatePhase: 'intent',
-			});
-			if (admission.enqueue) {
-				const capacityReady = await finalizeAdmittedTaskCapacity({
-					sdk,
-					reporter,
-					task: {
-						...(scanTask as TaskRecord),
-						payloadJson: JSON.stringify(admission.payload),
-					},
-					admission,
-					projectId: config.projectId,
-					workDayId: String(created.payload.id ?? ''),
-					actor: 'manager',
-				});
-				if (capacityReady.enqueue) {
-					await maybeEnqueueTask(sdk, capacityReady.task);
-				}
-			}
-		}
-	}
 	const workDay = asRecord(created.payload);
 	return Object.keys(workDay).length > 0 ? workDay : null;
 }
@@ -1231,1013 +797,6 @@ function remainingCredits(workDay: WorkDayRecord | null, policy: WorkdayPolicy) 
 	return Math.max(0, budget - used);
 }
 
-function capacityEnvelopeFromWorkDay(workDay: WorkDayRecord, maxCredits?: number): CapacityTaskExecutionEnvelope | null {
-	const summary = parseJsonString(workDay.summaryJson ?? workDay.summary_json, {});
-	const envelope = asRecord(summary.capacityEnvelope);
-	if (!Object.keys(envelope).length) {
-		return maxCredits
-			? {
-				maxCredits,
-				approvalBehavior: 'pause_task',
-				pausePolicy: { onOverrun: 'pause_for_approval' },
-			}
-			: null;
-	}
-	return {
-		...envelope,
-		maxCredits: maxCredits ?? readNumber(envelope, 'maxCredits') ?? null,
-		metadata: {
-			...asRecord(envelope.metadata),
-			inheritedFromWorkDay: true,
-		},
-	} as CapacityTaskExecutionEnvelope;
-}
-
-function chooseAgentId(agentSpecs: Array<Record<string, unknown>>) {
-	const preferred = agentSpecs.find((spec) => {
-		const triggers = Array.isArray(spec.triggers) ? spec.triggers : [];
-		return triggers.some((trigger) => {
-			const type = typeof trigger === 'string'
-				? trigger
-				: readString(asRecord(trigger), 'type');
-			return type === 'startup' || type === 'schedule';
-		});
-	});
-	return readString(preferred ?? agentSpecs[0] ?? {}, 'slug');
-}
-
-async function maybeEnqueueTask(sdk: ManagerSdk, task: TaskRecord) {
-	await sdk.recordTaskProgress({
-		id: String(task.id ?? ''),
-		state: 'waiting',
-		appendEvent: {
-			kind: 'assignment_ready',
-			data: {
-				transport: 'api_assignment',
-			},
-		},
-		actor: 'manager',
-	});
-	return { queued: false, transport: 'api_assignment' };
-}
-
-async function recordAdmissionLifecycle(input: {
-	sdk: ManagerSdk;
-	reporter?: ControlPlaneReporter;
-	projectId?: string;
-	workDayId?: string;
-	taskId: string;
-	state: string;
-	classification: Record<string, unknown>;
-	admission: Record<string, unknown>;
-	actor?: string;
-}) {
-	await input.sdk.recordTaskProgress({
-		id: input.taskId,
-		state: input.state,
-		appendEvent: {
-			kind: 'classified',
-			data: input.classification,
-		},
-		actor: input.actor ?? 'manager',
-	});
-	await input.sdk.recordTaskProgress({
-		id: input.taskId,
-		state: input.state,
-		appendEvent: {
-			kind: 'admission_decided',
-			data: input.admission,
-		},
-		actor: input.actor ?? 'manager',
-	});
-	if (input.admission.outcome === 'budget_blocked' || input.admission.outcome === 'deferred') {
-		await input.sdk.recordTaskProgress({
-			id: input.taskId,
-			state: input.state,
-			appendEvent: {
-				kind: 'deferred_for_budget',
-				data: input.admission,
-			},
-			actor: input.actor ?? 'manager',
-		});
-	}
-	if (input.reporter && input.projectId && input.workDayId) {
-		await recordAdmissionEstimate({
-			reporter: input.reporter,
-			projectId: input.projectId,
-			workDayId: input.workDayId,
-			taskId: input.taskId,
-			admission: {
-				classification: input.classification,
-				admission: input.admission,
-				executionProfile: { id: typeof input.admission.executionProfileId === 'string' ? input.admission.executionProfileId : 'standard-code-model' },
-			},
-			estimatePhase: 'intent',
-		});
-	}
-}
-
-async function finalizeAdmittedTaskCapacity(input: {
-	sdk: ManagerSdk;
-	reporter?: ControlPlaneReporter;
-	task: TaskRecord;
-	admission: ReturnType<typeof admissionForTaskProposal>;
-	projectId?: string;
-	workDayId: string;
-	actor?: string;
-}) {
-	if (!input.admission.enqueue || !input.admission.route?.ok || !input.reporter?.enabled) {
-		return {
-			task: input.task,
-			enqueue: input.admission.enqueue,
-		};
-	}
-	const taskId = readString(input.task, 'id');
-	if (!taskId || !input.projectId) {
-		return {
-			task: input.task,
-			enqueue: input.admission.enqueue,
-		};
-	}
-	const route = input.admission.route;
-	const reservation = await input.reporter.createCapacityReservation({
-		...route.reservation,
-		taskId,
-		workDayId: input.workDayId,
-		projectId: input.projectId,
-	}).catch(() => null);
-	if (!reservation) {
-		await input.sdk.recordTaskProgress({
-			id: taskId,
-			state: 'waiting',
-			appendEvent: {
-				kind: 'deferred_for_budget',
-				data: {
-					reason: 'capacity_reservation_failed',
-					route: route.capacityMetadata,
-				},
-			},
-			actor: input.actor ?? 'manager',
-		});
-		return {
-			task: input.task,
-			enqueue: false,
-		};
-	}
-	const routingDecision = await input.reporter.reportCapacityRoutingDecision({
-		...route.routingDecision,
-		taskId,
-		workDayId: input.workDayId,
-		projectId: input.projectId,
-		metadata: {
-			...(route.routingDecision.metadata ?? {}),
-			reservationId: reservation.id,
-		},
-	}).catch(() => null);
-	await input.reporter.reportCapacityUsage({
-		...route.ledgerEntry,
-		taskId,
-		workDayId: input.workDayId,
-		reservationId: reservation.id,
-		metadata: {
-			...(route.ledgerEntry.metadata ?? {}),
-			routingDecisionId: routingDecision?.id ?? null,
-		},
-	}).catch(() => null);
-	const capacityRoute = {
-		...route.capacityMetadata,
-		reservationId: reservation.id,
-		routingDecisionId: routingDecision?.id ?? null,
-	};
-	const payload = {
-		...input.admission.payload,
-		capacityRoute,
-		capacityEnvelope: {
-			...(input.admission.capacityEnvelope ?? {}),
-			providerId: route.provider.id,
-			laneId: route.lane.id,
-			reservationIds: [reservation.id],
-			maxCredits: route.estimate.reservedCredits,
-			metadata: {
-				...asRecord(input.admission.capacityEnvelope?.metadata),
-				grantId: route.grant.id,
-				routingDecisionId: routingDecision?.id ?? null,
-				reservationId: reservation.id,
-				executionProfileId: route.estimate.executionProfileId ?? input.admission.executionProfile.id,
-				attentionEstimate: route.capacityMetadata.attentionEstimate ?? input.admission.payload.attentionEstimate ?? null,
-				routingScore: route.capacityMetadata.score ?? null,
-				routingCandidates: route.capacityMetadata.candidates ?? [],
-			},
-		},
-	};
-	await input.sdk.recordTaskProgress({
-		id: taskId,
-		state: 'pending',
-		patch: payload,
-		appendEvent: {
-			kind: 'capacity_reserved',
-			data: capacityRoute,
-		},
-		actor: input.actor ?? 'manager',
-	});
-	return {
-		task: {
-			...input.task,
-			payloadJson: JSON.stringify(payload),
-			payload_json: JSON.stringify(payload),
-		},
-		enqueue: true,
-	};
-}
-
-async function createPlanningTaskForAdmission(input: {
-	sdk: ManagerSdk;
-	workDay: WorkDayRecord;
-	policy: WorkdayPolicy;
-	capacityPlan: CapacityPlan | null;
-	reporter?: ControlPlaneReporter;
-	projectId?: string;
-	sourceTask: TaskRecord;
-	sourceTaskType: string;
-	sourcePayload: Record<string, unknown>;
-	admission: ReturnType<typeof admissionForTaskProposal>;
-	now: Date;
-	actor?: string;
-}) {
-	if (input.admission.admission.outcome !== 'planning_required') {
-		return null;
-	}
-	const sourceTaskId = readString(input.sourceTask, 'id');
-	if (!sourceTaskId) {
-		return null;
-	}
-	const sourceDepth = readNumber(input.sourcePayload, 'planningDepth') ?? 0;
-	const planningPayload = buildPlanningTaskPayload({
-		sourceTaskId,
-		sourceTaskType: input.sourceTaskType,
-		sourcePayload: input.sourcePayload,
-		classification: input.admission.classification,
-		admission: input.admission.admission,
-		policy: input.policy,
-		planningDepth: sourceDepth,
-		now: input.now,
-	});
-	const planningAdmission = admissionForTaskProposal({
-		type: 'planning_task',
-		payload: planningPayload,
-		workDay: input.workDay,
-		policy: input.policy,
-		capacityPlan: input.capacityPlan,
-		queuedCredits: 0,
-		source: 'manager.createPlanningTaskForAdmission',
-	});
-	const created = await input.sdk.createTask({
-		workDayId: String(input.workDay.id ?? ''),
-		agentId: readString(input.sourceTask, 'agentId', 'agent_id') || 'planner',
-		type: 'planning_task',
-		state: planningAdmission.state,
-		priority: Math.max(1, Math.round(Number(input.sourceTask.priority ?? 0) || 50)),
-		idempotencyKey: `${String(input.workDay.id ?? '')}:planning:${sourceTaskId}`,
-		payload: planningAdmission.payload,
-		graphVersion: typeof input.workDay.graphVersion === 'string' ? input.workDay.graphVersion : null,
-		parentTaskId: sourceTaskId,
-		actor: input.actor ?? 'manager',
-	});
-	if (!created.payload) {
-		return null;
-	}
-	await recordAdmissionLifecycle({
-		sdk: input.sdk,
-		taskId: String((created.payload as TaskRecord).id ?? ''),
-		state: planningAdmission.state,
-		classification: planningAdmission.classification as unknown as Record<string, unknown>,
-		admission: planningAdmission.admission as unknown as Record<string, unknown>,
-		reporter: input.reporter,
-		projectId: input.projectId,
-		workDayId: String(input.workDay.id ?? ''),
-		actor: input.actor ?? 'manager',
-	});
-	await input.sdk.recordTaskProgress({
-		id: sourceTaskId,
-		state: input.admission.state,
-		appendEvent: {
-			kind: 'planning_task_created',
-			data: {
-				planningTaskId: String((created.payload as TaskRecord).id ?? ''),
-				admission: input.admission.admission,
-			},
-		},
-		actor: input.actor ?? 'manager',
-	});
-	if (planningAdmission.enqueue) {
-		const capacityReady = await finalizeAdmittedTaskCapacity({
-			sdk: input.sdk,
-			reporter: input.reporter,
-			task: created.payload as TaskRecord,
-			admission: planningAdmission,
-			projectId: input.projectId,
-			workDayId: String(input.workDay.id ?? ''),
-			actor: input.actor ?? 'manager',
-		});
-		if (capacityReady.enqueue) {
-			await maybeEnqueueTask(input.sdk, capacityReady.task);
-		}
-	}
-	return created.payload as TaskRecord;
-}
-
-async function recordAdmissionEstimate(input: {
-	reporter?: ControlPlaneReporter;
-	projectId: string;
-	workDayId: string;
-	taskId: string;
-	admission: {
-		classification: unknown;
-		admission: unknown;
-		executionProfile: { id: string };
-	};
-	estimatePhase: 'intent' | 'discovery' | 'plan' | 'execution';
-}) {
-	if (!input.reporter?.enabled || typeof input.reporter.reportCapacityEstimate !== 'function') return;
-	const decision = asRecord(input.admission.admission);
-	const classification = asRecord(input.admission.classification);
-	await input.reporter.reportCapacityEstimate({
-		projectId: input.projectId,
-		workDayId: input.workDayId,
-		taskId: input.taskId,
-		estimatePhase: input.estimatePhase,
-		taskSignature: typeof decision.taskSignature === 'string'
-			? decision.taskSignature
-			: typeof classification.taskSignature === 'string'
-				? classification.taskSignature
-				: 'unknown',
-		executionProfileId: input.admission.executionProfile.id,
-		confidence: classification.confidence === 'low' || classification.confidence === 'medium' || classification.confidence === 'high'
-			? classification.confidence
-			: 'medium',
-		estimatedCreditsP50: Number(decision.estimatedCreditsP50 ?? 0),
-		estimatedCreditsP90: Number(decision.estimatedCreditsP90 ?? 0),
-		reservedCredits: Number(decision.reservedCredits ?? 0),
-		features: {
-			outcome: decision.outcome ?? null,
-			risk: classification.risk ?? null,
-			mutationScope: classification.mutationScope ?? null,
-		},
-	}).catch(() => null);
-}
-
-async function topUpQueuedTasks(
-	sdk: ManagerSdk,
-	config: ManagerConfig,
-	policy: WorkdayPolicy,
-	workDay: WorkDayRecord,
-	snapshot: PrioritySnapshot | null,
-	now: Date,
-	capacityPlan: CapacityPlan | null,
-	reporter?: ControlPlaneReporter,
-) {
-	const agentSpecs = await sdk.listAgentSpecs({ enabled: true });
-	const agentId = chooseAgentId(asRecords(agentSpecs));
-	if (!agentId || !snapshot?.items.length) {
-		return {
-			createdTasks: [] as TaskRecord[],
-			remainingCandidates: 0,
-			remainingCredits: remainingCredits(workDay, policy),
-		};
-	}
-
-	const [allTasksEnvelope, queuedMetrics] = await Promise.all([
-		sdk.searchTasks({ workDayId: String(workDay.id ?? ''), limit: 1000 }),
-		collectTaskMetrics(sdk, String(workDay.id ?? '')),
-	]);
-	const existingTasks = asRecords(allTasksEnvelope.payload);
-	const existingKeys = new Set(existingTasks.map((task) => readString(task, 'idempotencyKey', 'idempotency_key')));
-
-	let availableCredits = remainingCredits(workDay, policy);
-	const reservePrediction = predictReserveForCapacityPlan({
-		plan: capacityPlan,
-		policy: asRecord(policy.metadata).predictiveReservePolicy as Record<string, unknown> | null,
-		dailyCreditBudget: Number(policy.dailyTaskCreditBudget ?? workDay.capacityBudget ?? 0),
-		remainingCredits: availableCredits,
-		metadata: asRecord(policy.metadata),
-	});
-	if (reservePrediction.reserveCredits > 0) {
-		availableCredits = Math.min(availableCredits, reservePrediction.activelyAllocatableCredits);
-	}
-	let remainingQueuedSlots = Math.max(0, policy.maxQueuedTasks - queuedMetrics.queuedCount);
-	let remainingQueuedCredits = Math.max(0, policy.maxQueuedCredits - queuedMetrics.queuedCredits);
-	const createdTasks: TaskRecord[] = [];
-	const rankedItems = [...snapshot.items].sort((left, right) => {
-		const leftUtility = estimateUtilityForTask({
-			utilityPolicy: asRecord(policy.metadata).utilityPolicy as Record<string, unknown> | null,
-			utilityValue: left.priority,
-			maintenanceValue: readNumber(asRecord(left.metadata), 'maintenanceValue') ?? 0,
-			priority: left.priority,
-			estimate: { reservedCredits: Math.max(1, Math.ceil(left.estimatedCredits)) },
-			metadata: asRecord(left.metadata),
-			source: 'manager.backfill_rank',
-		});
-		const rightUtility = estimateUtilityForTask({
-			utilityPolicy: asRecord(policy.metadata).utilityPolicy as Record<string, unknown> | null,
-			utilityValue: right.priority,
-			maintenanceValue: readNumber(asRecord(right.metadata), 'maintenanceValue') ?? 0,
-			priority: right.priority,
-			estimate: { reservedCredits: Math.max(1, Math.ceil(right.estimatedCredits)) },
-			metadata: asRecord(right.metadata),
-			source: 'manager.backfill_rank',
-		});
-		return rightUtility.utilityPerCredit - leftUtility.utilityPerCredit
-			|| right.priority - left.priority
-			|| left.model.localeCompare(right.model)
-			|| left.id.localeCompare(right.id);
-	});
-
-	for (const item of rankedItems) {
-		if (remainingQueuedSlots <= 0 || availableCredits <= 0 || remainingQueuedCredits <= 0) {
-			break;
-		}
-		const idempotencyKey = `${String(workDay.id ?? '')}:${item.model}:${item.id}`;
-		if (existingKeys.has(idempotencyKey)) {
-			continue;
-		}
-
-		const estimatedCredits = Math.max(1, Math.ceil(item.estimatedCredits));
-		if (estimatedCredits > availableCredits || estimatedCredits > remainingQueuedCredits) {
-			continue;
-		}
-
-		const admission = admissionForTaskProposal({
-			type: `${item.model}_review`,
-			payload: {
-				subject: {
-					model: item.model,
-					id: item.id,
-					slug: item.slug ?? null,
-					title: item.title ?? null,
-				},
-				estimatedCredits,
-				utilityValue: item.priority,
-				maintenanceValue: readNumber(asRecord(item.metadata), 'maintenanceValue') ?? null,
-				deadlineAt: readString(asRecord(item.metadata), 'deadlineAt') || null,
-				priority: item.priority,
-				reasons: item.reasons,
-				reservePrediction,
-				capacityEnvelope: capacityEnvelopeFromWorkDay(workDay, estimatedCredits),
-				createdAt: now.toISOString(),
-			},
-			workDay,
-			policy,
-			capacityPlan,
-			queuedCredits: queuedMetrics.queuedCredits,
-			source: 'manager.topUpQueuedTasks',
-		});
-		const created = await sdk.createTask({
-			workDayId: String(workDay.id ?? ''),
-			agentId,
-			type: `${item.model}_review`,
-			state: admission.state,
-			priority: Math.max(1, Math.round(item.priority)),
-			idempotencyKey,
-			payload: admission.payload,
-			graphVersion: typeof workDay.graphVersion === 'string' ? workDay.graphVersion : null,
-			actor: 'manager',
-		});
-		if (!created.payload) {
-			continue;
-		}
-		await recordAdmissionLifecycle({
-			sdk,
-			taskId: String((created.payload as TaskRecord).id ?? ''),
-			state: admission.state,
-				classification: admission.classification as unknown as Record<string, unknown>,
-				admission: admission.admission as unknown as Record<string, unknown>,
-				reporter,
-				projectId: config.projectId,
-				workDayId: String(workDay.id ?? ''),
-				actor: 'manager',
-			});
-		if (admission.admission.outcome === 'planning_required') {
-			await createPlanningTaskForAdmission({
-				sdk,
-				workDay,
-				policy,
-				capacityPlan,
-				reporter,
-				projectId: config.projectId,
-				sourceTask: created.payload as TaskRecord,
-				sourceTaskType: `${item.model}_review`,
-				sourcePayload: admission.payload,
-				admission,
-				now,
-				actor: 'manager',
-			});
-		}
-		if (!admission.enqueue) {
-			createdTasks.push(created.payload as TaskRecord);
-			existingKeys.add(idempotencyKey);
-			continue;
-		}
-		await sdk.recordTaskCredits({
-			projectId: config.projectId,
-			workDayId: String(workDay.id ?? ''),
-			taskId: String((created.payload as TaskRecord).id ?? ''),
-			phase: 'seed',
-			credits: admission.admission.reservedCredits,
-			metadata: {
-				model: item.model,
-				subjectId: item.id,
-				taskSignature: admission.classification.taskSignature,
-				executionProfileId: admission.executionProfile.id,
-			},
-		});
-		const capacityReady = await finalizeAdmittedTaskCapacity({
-			sdk,
-			reporter,
-			task: created.payload as TaskRecord,
-			admission,
-			projectId: config.projectId,
-			workDayId: String(workDay.id ?? ''),
-			actor: 'manager',
-		});
-		if (capacityReady.enqueue) {
-			await maybeEnqueueTask(sdk, capacityReady.task);
-			availableCredits -= admission.admission.reservedCredits;
-			remainingQueuedSlots -= 1;
-			remainingQueuedCredits -= admission.admission.reservedCredits;
-		}
-		createdTasks.push(capacityReady.task);
-		existingKeys.add(idempotencyKey);
-	}
-
-	const remainingCandidates = snapshot.items.filter((item) => !existingKeys.has(`${String(workDay.id ?? '')}:${item.model}:${item.id}`)).length;
-	return {
-		createdTasks,
-		remainingCandidates,
-		remainingCredits: availableCredits,
-	};
-}
-
-function parseCursorTimestamp(value: unknown) {
-	if (typeof value !== 'string' || !value.trim()) {
-		return undefined;
-	}
-	const timestamp = new Date(value).valueOf();
-	return Number.isFinite(timestamp) ? timestamp : undefined;
-}
-
-function triggerPriority(invocation: AgentTriggerInvocation) {
-	switch (invocation.kind) {
-		case 'message':
-			return 90;
-		case 'follow':
-			return 80;
-		case 'startup':
-			return 70;
-		case 'schedule':
-		case 'manual':
-		default:
-			return 60;
-	}
-}
-
-function triggerTaskIdempotencyKey(workDayId: string, agent: AgentRuntimeSpec, invocation: AgentTriggerInvocation) {
-	if (invocation.kind === 'message' && invocation.message?.id) {
-		return `${workDayId}:trigger:${agent.slug}:message:${invocation.message.id}`;
-	}
-	if (invocation.kind === 'follow') {
-		return `${workDayId}:trigger:${agent.slug}:follow:${followCursorKey(invocation.followModels)}:${invocation.cursorValue ?? 'none'}`;
-	}
-	const triggerKey = readString(
-		asRecord(invocation.trigger),
-		'name',
-		'type',
-	) || invocation.kind;
-	return `${workDayId}:trigger:${agent.slug}:${invocation.kind}:${triggerKey}`;
-}
-
-async function materializeAgentTriggerTasks(
-	sdk: ManagerSdk,
-	workDay: WorkDayRecord,
-	policy: WorkdayPolicy,
-	now: Date,
-	capacityPlan: CapacityPlan | null,
-	reporter?: ControlPlaneReporter,
-	projectId?: string,
-) {
-	const workDayId = String(workDay.id ?? '');
-	if (!workDayId) {
-		return [] as TaskRecord[];
-	}
-	const [{ specs, diagnostics }, existingTasksEnvelope] = await Promise.all([
-		loadActiveAgentSpecs(sdk),
-		sdk.searchTasks({ workDayId, limit: 1000 }),
-	]);
-	const errors = diagnostics.filter((entry) => entry.severity === 'error');
-	if (errors.length > 0) {
-		throw new Error(
-			`Agent spec validation failed: ${errors.map((entry) => `${entry.slug}:${entry.field}:${entry.message}`).join(' | ')}`,
-		);
-	}
-	const existingKeys = new Set(
-		asRecords(existingTasksEnvelope.payload).map((task) => readString(task, 'idempotencyKey', 'idempotency_key')),
-	);
-	const createdTasks: TaskRecord[] = [];
-
-	for (const agent of [...specs].sort((left, right) => left.slug.localeCompare(right.slug))) {
-		const scopedSdk = sdk.scopeForAgent(agent);
-		const lastRunAt = parseCursorTimestamp((await sdk.getCursor({
-			agentSlug: agent.slug,
-			cursorKey: 'last_run_at',
-		})).payload);
-		const runsThisCycle = agent.triggerPolicy?.maxRunsPerCycle ?? 1;
-
-		for (let index = 0; index < runsThisCycle; index += 1) {
-			const decision = await resolveTriggerDecision({
-				agent,
-				mode: 'auto',
-				isRunning: false,
-				lastRunAt,
-				sdk: scopedSdk,
-			});
-			if (decision.kind !== 'ready' || !decision.invocation) {
-				break;
-			}
-			const invocation = decision.invocation;
-			const idempotencyKey = triggerTaskIdempotencyKey(workDayId, agent, invocation);
-			if (existingKeys.has(idempotencyKey)) {
-				continue;
-			}
-
-			const admission = admissionForTaskProposal({
-				type: 'agent_trigger',
-				payload: {
-					executionKind: 'agent_trigger',
-					agentSlug: agent.slug,
-					invocation,
-					capacityEnvelope: capacityEnvelopeFromWorkDay(workDay),
-					createdAt: now.toISOString(),
-				},
-				workDay,
-				policy,
-				capacityPlan,
-				queuedCredits: 0,
-				source: 'manager.materializeAgentTriggerTasks',
-			});
-			const created = await sdk.createTask({
-				workDayId,
-				agentId: agent.slug,
-				type: 'agent_trigger',
-				state: admission.state,
-				priority: triggerPriority(invocation),
-				idempotencyKey,
-				payload: admission.payload,
-				graphVersion: typeof workDay.graphVersion === 'string' ? workDay.graphVersion : null,
-				actor: 'manager',
-			});
-			if (!created.payload) {
-				continue;
-			}
-			await recordAdmissionLifecycle({
-				sdk,
-				taskId: String((created.payload as TaskRecord).id ?? ''),
-				state: admission.state,
-				classification: admission.classification as unknown as Record<string, unknown>,
-				admission: admission.admission as unknown as Record<string, unknown>,
-				reporter,
-				projectId,
-				workDayId,
-				actor: 'manager',
-			});
-			if (admission.admission.outcome === 'planning_required') {
-				await createPlanningTaskForAdmission({
-					sdk,
-					workDay,
-					policy,
-					capacityPlan,
-					reporter,
-					projectId,
-					sourceTask: created.payload as TaskRecord,
-					sourceTaskType: 'agent_trigger',
-					sourcePayload: admission.payload,
-					admission,
-					now,
-					actor: 'manager',
-				});
-			}
-			if (admission.enqueue) {
-				const capacityReady = await finalizeAdmittedTaskCapacity({
-					sdk,
-					reporter,
-					task: created.payload as TaskRecord,
-					admission,
-					projectId,
-					workDayId,
-					actor: 'manager',
-				});
-				if (capacityReady.enqueue) {
-					await maybeEnqueueTask(sdk, capacityReady.task);
-				}
-			}
-			createdTasks.push(created.payload as TaskRecord);
-			existingKeys.add(idempotencyKey);
-		}
-	}
-
-	return createdTasks;
-}
-
-async function materializeResearchKnowledgeTasks(
-	sdk: ManagerSdk,
-	config: ManagerConfig,
-	workDay: WorkDayRecord,
-	policy: WorkdayPolicy,
-	now: Date,
-	capacityPlan: CapacityPlan | null,
-	reporter?: ControlPlaneReporter,
-) {
-	const tasks = await seedResearchKnowledgeWorkdayTasks({
-		sdk,
-		workDay,
-		projectId: config.projectId,
-		graphVersion: typeof workDay.graphVersion === 'string' ? workDay.graphVersion : null,
-		actor: 'manager',
-	});
-	for (const task of tasks) {
-		const taskId = readString(task, 'id');
-		const type = readString(task, 'type') || 'research_question';
-		const admission = admissionForTaskProposal({
-			type,
-			payload: parseJsonString(task.payloadJson ?? task.payload_json),
-			workDay,
-			policy,
-			capacityPlan,
-			queuedCredits: 0,
-			source: 'manager.materializeResearchKnowledgeTasks',
-		});
-		await sdk.recordTaskProgress({
-			id: taskId,
-			state: admission.state,
-			patch: admission.payload,
-			actor: 'manager',
-		});
-		await recordAdmissionLifecycle({
-			sdk,
-			taskId,
-			state: admission.state,
-			classification: admission.classification as unknown as Record<string, unknown>,
-			admission: admission.admission as unknown as Record<string, unknown>,
-			reporter,
-			projectId: config.projectId,
-			workDayId: String(workDay.id ?? ''),
-			actor: 'manager',
-		});
-		if (admission.admission.outcome === 'planning_required') {
-			await createPlanningTaskForAdmission({
-				sdk,
-				workDay,
-				policy,
-				capacityPlan,
-				reporter,
-				projectId: config.projectId,
-				sourceTask: task,
-				sourceTaskType: type,
-				sourcePayload: admission.payload,
-				admission,
-				now,
-				actor: 'manager',
-			});
-		}
-		if (admission.enqueue) {
-			const capacityReady = await finalizeAdmittedTaskCapacity({
-				sdk,
-				reporter,
-				task: {
-					...task,
-					payloadJson: JSON.stringify(admission.payload),
-				},
-				admission,
-				projectId: config.projectId,
-				workDayId: String(workDay.id ?? ''),
-				actor: 'manager',
-			});
-			if (capacityReady.enqueue) {
-				await maybeEnqueueTask(sdk, {
-				...task,
-					...capacityReady.task,
-				});
-			}
-		}
-	}
-	return tasks;
-}
-
-async function materializeCompletedPlanningTasks(
-	sdk: ManagerSdk,
-	config: ManagerConfig,
-	workDay: WorkDayRecord,
-	policy: WorkdayPolicy,
-	now: Date,
-	capacityPlan: CapacityPlan | null,
-	reporter?: ControlPlaneReporter,
-) {
-	const workDayId = String(workDay.id ?? '');
-	if (!workDayId) {
-		return [] as TaskRecord[];
-	}
-	const [tasksEnvelope, queuedMetrics] = await Promise.all([
-		sdk.searchTasks({ workDayId, limit: 1000 }),
-		collectTaskMetrics(sdk, workDayId),
-	]);
-	const allTasks = asRecords(tasksEnvelope.payload);
-	const planningTasks = allTasks.filter((task) => {
-		const payload = parseJsonString(task.payloadJson ?? task.payload_json);
-		return readString(task, 'type') === 'planning_task'
-			&& readString(task, 'state') === 'completed'
-			&& !readString(payload, 'planningMaterializedAt');
-	});
-	const createdTasks: TaskRecord[] = [];
-	let localQueuedCredits = queuedMetrics.queuedCredits;
-	let localQueuedCount = queuedMetrics.queuedCount;
-
-	for (const planningTask of planningTasks) {
-		const planningTaskId = readString(planningTask, 'id');
-		if (!planningTaskId) {
-			continue;
-		}
-		const outputsEnvelope = await sdk.search({
-			model: 'task_output',
-			filters: [{ field: 'taskId', op: 'eq', value: planningTaskId }],
-			limit: 20,
-		});
-		const outputRecords = asRecords(outputsEnvelope.payload);
-		const proposal = [...outputRecords]
-			.reverse()
-			.map((output) => extractPlanningProposalFromOutput(parseJsonString(output.outputJson ?? output.output_json)))
-			.find((entry) => entry !== null)
-			?? normalizeTaskPlanProposal({
-				planId: `${planningTaskId}:empty`,
-				parentTaskId: planningTaskId,
-				sourceTaskId: readString(planningTask, 'parentTaskId', 'parent_task_id') || planningTaskId,
-				planningDepth: 0,
-				tasks: [],
-				createdAt: now.toISOString(),
-			}, policyMetadataAdmissionPolicy(policy));
-		const admissionResult = progressivelyAdmitPlanProposal({
-			proposal,
-			policy: policyMetadataAdmissionPolicy(policy),
-			availableCredits: remainingCredits(workDay, policy),
-			remainingQueuedCredits: Math.max(0, policy.maxQueuedCredits - localQueuedCredits),
-			remainingQueuedSlots: Math.max(0, policy.maxQueuedTasks - localQueuedCount),
-		});
-		const deferredNodes: Array<Record<string, unknown>> = [];
-		const rejectedNodes: Array<Record<string, unknown>> = admissionResult.rejected.map((entry) => ({
-			node: entry.node as unknown as Record<string, unknown>,
-			reasons: entry.reasons,
-		}));
-		const planCreatedTasks: TaskRecord[] = [];
-
-		for (const node of admissionResult.admitted) {
-			const nodePayload = {
-				...(asRecord(node.payload)),
-				taskSignature: node.taskSignature ?? asRecord(node.payload).taskSignature,
-				estimatedCreditsP50: node.estimatedCreditsP50 ?? asRecord(node.payload).estimatedCreditsP50,
-				estimatedCreditsP90: node.estimatedCreditsP90 ?? asRecord(node.payload).estimatedCreditsP90,
-				risk: node.risk ?? asRecord(node.payload).risk,
-				mutationScope: node.mutationScope ?? asRecord(node.payload).mutationScope,
-				confidence: node.confidence ?? asRecord(node.payload).confidence,
-				expectedFanout: node.expectedFanout ?? asRecord(node.payload).expectedFanout,
-				requiresApproval: node.requiresApproval ?? asRecord(node.payload).requiresApproval,
-				requiresPlanning: node.requiresPlanning ?? asRecord(node.payload).requiresPlanning,
-				planNode: {
-					id: node.id ?? null,
-					planId: admissionResult.proposal.planId,
-					parentPlanningTaskId: planningTaskId,
-				},
-			};
-			const admission = admissionForTaskProposal({
-				type: node.type,
-				payload: nodePayload,
-				workDay,
-				policy,
-				capacityPlan,
-				queuedCredits: localQueuedCredits,
-				source: 'manager.materializeCompletedPlanningTasks',
-			});
-			if (!admission.enqueue) {
-				deferredNodes.push({
-					node: node as unknown as Record<string, unknown>,
-					admission: admission.admission as unknown as Record<string, unknown>,
-				});
-				continue;
-			}
-			const created = await sdk.createTask({
-				workDayId,
-				agentId: node.agentId ?? (readString(planningTask, 'agentId', 'agent_id') || 'planner'),
-				type: node.type,
-				state: admission.state,
-				priority: Math.max(1, Math.round(Number(node.priority ?? planningTask.priority ?? 50) || 50)),
-				idempotencyKey: `${workDayId}:plan:${admissionResult.proposal.planId}:${node.id ?? node.type}`,
-				payload: admission.payload,
-				graphVersion: typeof workDay.graphVersion === 'string' ? workDay.graphVersion : null,
-				parentTaskId: planningTaskId,
-				actor: 'manager',
-			});
-			if (!created.payload) {
-				continue;
-			}
-			await recordAdmissionLifecycle({
-				sdk,
-				taskId: String((created.payload as TaskRecord).id ?? ''),
-				state: admission.state,
-				classification: admission.classification as unknown as Record<string, unknown>,
-				admission: admission.admission as unknown as Record<string, unknown>,
-				reporter,
-				projectId: config.projectId,
-				workDayId,
-				actor: 'manager',
-			});
-			await sdk.recordTaskCredits({
-				projectId: config.projectId,
-				workDayId,
-				taskId: String((created.payload as TaskRecord).id ?? ''),
-					phase: 'reserve',
-				credits: admission.admission.reservedCredits,
-				metadata: {
-					taskSignature: admission.classification.taskSignature,
-					executionProfileId: admission.executionProfile.id,
-					planId: admissionResult.proposal.planId,
-					planningTaskId,
-				},
-			});
-			const capacityReady = await finalizeAdmittedTaskCapacity({
-				sdk,
-				reporter,
-				task: created.payload as TaskRecord,
-				admission,
-				projectId: config.projectId,
-				workDayId,
-				actor: 'manager',
-			});
-			if (capacityReady.enqueue) {
-				await maybeEnqueueTask(sdk, capacityReady.task);
-				createdTasks.push(capacityReady.task);
-				planCreatedTasks.push(capacityReady.task);
-				localQueuedCount += 1;
-				localQueuedCredits += admission.admission.reservedCredits;
-			} else {
-				deferredNodes.push({
-					node: node as unknown as Record<string, unknown>,
-					admission: {
-						...(admission.admission as unknown as Record<string, unknown>),
-						reason: 'capacity_reservation_failed',
-					},
-				});
-			}
-		}
-
-		for (const node of admissionResult.deferred) {
-			deferredNodes.push({
-				node: node as unknown as Record<string, unknown>,
-				reasons: admissionResult.reasons,
-			});
-		}
-
-		const eventKind = rejectedNodes.length > 0 && planCreatedTasks.length === 0
-			? 'plan_rejected'
-			: deferredNodes.length > 0
-				? planCreatedTasks.length > 0
-					? 'plan_partially_admitted'
-					: 'plan_budget_blocked'
-				: 'plan_materialized';
-		await sdk.recordTaskProgress({
-			id: planningTaskId,
-			patch: {
-				planningMaterializedAt: now.toISOString(),
-				planningMaterialization: {
-					planId: admissionResult.proposal.planId,
-					admittedCount: admissionResult.admitted.length,
-					deferredCount: deferredNodes.length,
-					rejectedCount: rejectedNodes.length,
-					admittedCreditsP90: admissionResult.admittedCreditsP90,
-				},
-			},
-			appendEvent: {
-				kind: eventKind,
-				data: {
-					planId: admissionResult.proposal.planId,
-					admittedTaskIds: planCreatedTasks.map((task) => readString(task, 'id')).filter(Boolean),
-					deferredNodes,
-					rejectedNodes,
-					reasons: admissionResult.reasons,
-				},
-			},
-			actor: 'manager',
-		});
-	}
-
-	return createdTasks;
-}
-
 async function registerHeartbeat(
 	reporter: ControlPlaneReporter,
 	config: ManagerConfig,
@@ -2274,125 +833,23 @@ async function buildWorkdaySummary(
 	scaleResult: WorkerPoolScaleResult,
 ) {
 	const generatedAt = new Date().toISOString();
-	const [tasksEnvelope, creditsEnvelope, deployments] = await Promise.all([
-		sdk.searchTasks({ workDayId: String(workDay.id ?? ''), limit: 1000 }),
+	const [creditsEnvelope, deployments] = await Promise.all([
 		sdk.listTaskCredits(String(workDay.id ?? '')),
 		fetchRunnerDeployments(config),
 	]);
-	const tasks = asRecords(tasksEnvelope.payload);
 	const credits = Array.isArray(creditsEnvelope.payload) ? creditsEnvelope.payload : [];
-	const taskDetails = await Promise.all(tasks.map(async (task) => {
-		const taskId = readString(task, 'id');
-		const [eventsEnvelope, outputsEnvelope] = await Promise.all([
-			sdk.search({
-				model: 'task_event',
-				filters: [{ field: 'taskId', op: 'eq', value: taskId }],
-				limit: 200,
-			}),
-			sdk.search({
-				model: 'task_output',
-				filters: [{ field: 'taskId', op: 'eq', value: taskId }],
-				limit: 200,
-			}),
-		]);
-		const taskEvents = asRecords(eventsEnvelope.payload);
-		const taskOutputs = asRecords(outputsEnvelope.payload);
-		const outputValues = taskOutputs.map((output) => parseJsonString(output.outputJson ?? output.output_json));
-		const lifecycle = {
-			operationEvents: [] as Record<string, unknown>[],
-			worktreeSnapshots: [] as Record<string, unknown>[],
-			stagingMerges: [] as Record<string, unknown>[],
-			mergeFailures: [] as Record<string, unknown>[],
-			repairTasks: [] as Record<string, unknown>[],
-			releaseApprovals: [] as Record<string, unknown>[],
-			releaseResults: [] as Record<string, unknown>[],
-			codexUsage: [] as Record<string, unknown>[],
-		};
-		const changedFiles = new Set<string>();
-		for (const outputValue of outputValues) {
-			normalizeChangedFilesFromValue(outputValue, changedFiles);
-			collectLifecycleFromOutput({
-				output: outputValue,
-				task,
-				lifecycle,
-			});
-		}
-		for (const event of taskEvents.filter((entry) => readString(entry, 'kind') === 'operation_event')) {
-			const eventData = parseJsonString(event.dataJson ?? event.data_json ?? event.data);
-			const operationEvent = operationEventFromTaskEvent({
-				event,
-				task,
-				data: eventData,
-			});
-			if (operationEvent) {
-				lifecycle.operationEvents.push(operationEvent);
-			}
-		}
-		for (const event of taskEvents.filter((entry) => readString(entry, 'kind') === 'approval_decision_recorded')) {
-			const eventData = parseJsonString(event.dataJson ?? event.data_json ?? event.data);
-			const approvalDecision = approvalDecisionLifecycleFromTaskEvent({
-				event,
-				task,
-				data: eventData,
-			});
-			lifecycle.releaseApprovals.push(approvalDecision.approval);
-			if (approvalDecision.releaseResult) {
-				lifecycle.releaseResults.push(approvalDecision.releaseResult);
-			}
-		}
-		const generatedArtifacts = extractGeneratedArtifactsFromTaskOutputs(outputValues);
-		const latestEvent = [...taskEvents]
-			.sort((left, right) => Number(readNumber(right, 'seq') ?? 0) - Number(readNumber(left, 'seq') ?? 0))[0];
-		return {
-			task: {
-				id: taskId,
-				agentId: readString(task, 'agentId', 'agent_id') || undefined,
-				type: readString(task, 'type') || undefined,
-				state: readString(task, 'state') || undefined,
-				priority: readNumber(task, 'priority') ?? undefined,
-				idempotencyKey: readString(task, 'idempotencyKey', 'idempotency_key') || undefined,
-				createdAt: isoDateOrNull(readString(task, 'createdAt', 'created_at')),
-				startedAt: isoDateOrNull(readString(task, 'startedAt', 'started_at')),
-				completedAt: isoDateOrNull(readString(task, 'completedAt', 'completed_at')),
-				lastErrorCode: readString(task, 'lastErrorCode', 'last_error_code') || null,
-				lastErrorMessage: readString(task, 'lastErrorMessage', 'last_error_message') || null,
-				lastEventKind: latestEvent ? readString(latestEvent, 'kind') || null : null,
-				outputCount: taskOutputs.length,
-				changedFiles: [...changedFiles],
-				generatedArtifacts,
-			} satisfies WorkdayContentTaskSummary,
-			changedFiles,
-			generatedArtifacts,
-			...lifecycle,
-		};
-	}));
-	const changedFiles = [...taskDetails.reduce((set, detail) => {
-		for (const filePath of detail.changedFiles) {
-			set.add(filePath);
-		}
-		return set;
-	}, new Set<string>())].sort((left, right) => left.localeCompare(right));
-	const generatedArtifacts = taskDetails
-		.flatMap((detail) => detail.generatedArtifacts)
-		.reduce((items, artifact) => {
-			const key = `${artifact.artifactKind}:${artifact.id}:${artifact.taskId ?? ''}`;
-			if (!items.seen.has(key)) {
-				items.seen.add(key);
-				items.artifacts.push(artifact);
-			}
-			return items;
-		}, { seen: new Set<string>(), artifacts: [] as GeneratedAgentArtifactSummary[] })
-		.artifacts;
 	const lifecycle = {
-		operationEvents: taskDetails.flatMap((detail) => detail.operationEvents),
-		worktreeSnapshots: taskDetails.flatMap((detail) => detail.worktreeSnapshots),
-		stagingMerges: taskDetails.flatMap((detail) => detail.stagingMerges),
-		mergeFailures: taskDetails.flatMap((detail) => detail.mergeFailures),
-		repairTasks: taskDetails.flatMap((detail) => detail.repairTasks),
-		releaseApprovals: taskDetails.flatMap((detail) => detail.releaseApprovals),
-		releaseResults: taskDetails.flatMap((detail) => detail.releaseResults),
-		codexUsage: taskDetails.flatMap((detail) => detail.codexUsage),
+		operationEvents: [] as Record<string, unknown>[],
+		worktreeSnapshots: [] as Record<string, unknown>[],
+		stagingMerges: [] as Record<string, unknown>[],
+		mergeFailures: [] as Record<string, unknown>[],
+		repairTasks: [] as Record<string, unknown>[],
+		releaseApprovals: [] as Record<string, unknown>[],
+		releaseResults: [] as Record<string, unknown>[],
+		codexUsage: [] as Record<string, unknown>[],
 	};
+	const changedFiles: string[] = [];
+	const generatedArtifacts: GeneratedAgentArtifactSummary[] = [];
 	const releases = filterDeploymentsForWorkday(deployments, workDay, generatedAt).map((deployment) => ({
 		id: readString(deployment, 'id') || undefined,
 		deploymentKind: readString(deployment, 'deploymentKind', 'deployment_kind') || 'code',
@@ -2411,11 +868,11 @@ async function buildWorkdaySummary(
 		environment: config.environment,
 		workDayId: String(workDay.id ?? ''),
 		state: String(workDay.state ?? 'active'),
-		totalTasks: tasks.length,
-		completedTasks: tasks.filter((task) => task.state === 'completed').length,
-		failedTasks: tasks.filter((task) => task.state === 'failed').length,
-		queuedTasks: tasks.filter((task) => task.state === 'waiting' || task.state === 'queued' || task.state === 'pending').length,
-		activeTasks: tasks.filter((task) => task.state === 'claimed' || task.state === 'running').length,
+		totalTasks: 0,
+		completedTasks: 0,
+		failedTasks: 0,
+		queuedTasks: 0,
+		activeTasks: 0,
 		dailyTaskCreditBudget: budget,
 		usedTaskCredits: used,
 		remainingTaskCredits: Math.max(0, budget - used),
@@ -2423,7 +880,7 @@ async function buildWorkdaySummary(
 		prioritySnapshotId: currentSnapshot?.id ?? null,
 		priorityItemCount: currentSnapshot?.items.length ?? 0,
 		priorityItems: currentSnapshot?.items ?? [],
-		taskItems: taskDetails.map((detail) => detail.task),
+		taskItems: [],
 		changedFiles,
 		generatedArtifacts,
 		...lifecycle,
@@ -2653,7 +1110,7 @@ async function reconcileManager(options: {
 			queuedCount: 0,
 			activeLeases: 0,
 			desiredWorkers: 0,
-			scaleResult: { applied: false, provider: 'noop', desiredWorkers: 0, metadata: { reason: 'workday_policy_disabled' } },
+			scaleResult: { applied: false, provider: 'assignment_scheduler', desiredWorkers: 0, metadata: { reason: 'workday_policy_disabled' } },
 			workdaySummary: null,
 		};
 	}
@@ -2698,7 +1155,7 @@ async function reconcileManager(options: {
 			desiredWorkers: 0,
 			managerLease: null,
 			staleTaskRecovery: { recoveredTasks: [], failedTasks: [], checkedTaskCount: 0 },
-			scaleResult: { applied: false, provider: 'noop', desiredWorkers: 0, metadata: { reason: 'healthy_manager_lease_exists' } },
+			scaleResult: { applied: false, provider: 'assignment_scheduler', desiredWorkers: 0, metadata: { reason: 'healthy_manager_lease_exists' } },
 			workdaySummary: null,
 		};
 	}
@@ -2734,56 +1191,19 @@ async function reconcileManager(options: {
 	const activeCapacityPlan = activeWorkDay
 		? await reporter.getProjectCapacityPlan(config.environment as ProjectEnvironmentName).catch(() => null)
 		: null;
-	const staleTaskRecovery = activeWorkDay
-		? await recoverStaleTasks(sdk, String(activeWorkDay.id ?? ''), now)
-		: { recoveredTasks: [], failedTasks: [], checkedTaskCount: 0 };
+	const staleTaskRecovery = { recoveredTasks: [], failedTasks: [], checkedTaskCount: 0 };
 
 	let seedResult = {
-		createdTasks: [] as TaskRecord[],
+		createdTasks: [] as Record<string, unknown>[],
 		remainingCandidates: currentSnapshot?.items.length ?? 0,
 		remainingCredits: remainingCredits(activeWorkDay, policy),
 	};
 
-	if (activeWorkDay && insideWorkWindow && docsAutomationEnabled(config) && seedResult.remainingCredits > 0) {
-		seedResult = await topUpQueuedTasks(sdk, config, policy, activeWorkDay, currentSnapshot, now, activeCapacityPlan, reporter);
-	}
-	if (activeWorkDay && insideWorkWindow && docsAutomationEnabled(config) && policy.maxQueuedTasks > 0 && policy.maxQueuedCredits > 0 && seedResult.remainingCredits > 0) {
-		const plannedTasks = await materializeCompletedPlanningTasks(sdk, config, activeWorkDay, policy, now, activeCapacityPlan, reporter);
-		if (plannedTasks.length > 0) {
-			seedResult = {
-				...seedResult,
-				createdTasks: [...seedResult.createdTasks, ...plannedTasks],
-			};
-		}
-		const researchKnowledgeTasks = await materializeResearchKnowledgeTasks(sdk, config, activeWorkDay, policy, now, activeCapacityPlan, reporter);
-		if (researchKnowledgeTasks.length > 0) {
-			seedResult = {
-				...seedResult,
-				createdTasks: [...seedResult.createdTasks, ...researchKnowledgeTasks],
-			};
-		}
-		const triggerTasks = await materializeAgentTriggerTasks(sdk, activeWorkDay, policy, now, activeCapacityPlan, reporter, config.projectId);
-		if (triggerTasks.length > 0) {
-			seedResult = {
-				...seedResult,
-				createdTasks: [...seedResult.createdTasks, ...triggerTasks],
-			};
-		}
-	}
+	// Assignment-only orchestration: provider assignments are synthesized and leased
+	// through the TreeSeed API, so the workday manager no longer creates local task rows.
 
-	const metrics = await collectTaskMetrics(sdk, activeWorkDay ? String(activeWorkDay.id ?? '') : null);
-	const rawDesiredWorkers = activeWorkDay
-		? computeDesiredWorkerCount(policy.autoscale, metrics)
-		: 0;
-	const latestScaleDecision = await sdk.getLatestScaleDecision(config.projectId, config.environment, config.poolName);
-	const desiredWorkers = pauseRequested
-		? 0
-		: applyInteractiveWakeUpOverride({
-				priorityClass: 'background',
-				queuedCount: metrics.queuedCount,
-				currentWorkers: Number(latestScaleDecision.payload?.desiredWorkers ?? 0),
-				desiredWorkers: applyScaleCooldown(policy.autoscale, latestScaleDecision.payload, rawDesiredWorkers, now),
-			});
+	const metrics = { queuedCount: 0, activeLeases: 0, queuedCredits: 0 };
+	const desiredWorkers = 0;
 	const scaleDecision = {
 		projectId: config.projectId,
 		environment: config.environment,
@@ -2792,7 +1212,7 @@ async function reconcileManager(options: {
 		desiredWorkers,
 		observedQueueDepth: metrics.queuedCount,
 		observedActiveLeases: metrics.activeLeases,
-		reason: pauseRequested ? 'automation_paused' : desiredWorkers !== rawDesiredWorkers ? 'cooldown_hold' : 'reconcile',
+		reason: 'assignment_only_orchestration',
 		metadata: {
 			insideWorkWindow,
 			pauseRequested,
@@ -2809,7 +1229,15 @@ async function reconcileManager(options: {
 	};
 	const recordedScaleDecision = await sdk.recordScaleDecision(scaleDecision);
 	const appliedScaleDecision = (recordedScaleDecision.payload ?? scaleDecision) as ScaleDecision;
-	const scaleResult = await scaler.scale(appliedScaleDecision);
+	const scaleResult = {
+		applied: false,
+		provider: 'assignment_scheduler',
+		desiredWorkers,
+		metadata: {
+			reason: 'legacy_worker_pool_removed',
+			assignmentOnly: true,
+		},
+	};
 
 	await registerHeartbeat(reporter, config, policy, desiredWorkers, metrics);
 	await reporter.reportScaleDecision({
@@ -3027,7 +1455,7 @@ async function runReportWorkday(options: {
 		}) as ScaleDecision,
 		{
 			applied: false,
-			provider: 'noop',
+			provider: 'assignment_scheduler',
 			desiredWorkers: Number((latestScaleDecision.payload as ScaleDecision | null)?.desiredWorkers ?? 0),
 			metadata: {
 				reason: 'report_only',

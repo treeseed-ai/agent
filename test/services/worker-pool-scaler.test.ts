@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
-import { NoopWorkerPoolScaler, RailwayWorkerPoolScaler } from '../../src/services/worker-pool-scaler.ts';
+import { AssignmentSchedulerScaler, RailwayWorkerPoolScaler } from '../../src/services/worker-pool-scaler.ts';
 
 describe('worker pool scaler', () => {
-	it('returns an unapplied noop result when unconfigured', async () => {
-		const scaler = new NoopWorkerPoolScaler();
+	it('returns an unapplied assignment scheduler result when worker scaling is removed', async () => {
+		const scaler = new AssignmentSchedulerScaler();
 		const result = await scaler.scale({
 			id: 'scale-1',
 			projectId: 'project-1',
@@ -20,7 +20,7 @@ describe('worker pool scaler', () => {
 
 		expect(result).toMatchObject({
 			applied: false,
-			provider: 'noop',
+			provider: 'assignment_scheduler',
 			desiredWorkers: 0,
 		});
 	});

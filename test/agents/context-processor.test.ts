@@ -128,4 +128,38 @@ describe('handler context processor', () => {
 			},
 		})).rejects.toThrow('Required context query "required-bad" failed validation');
 	});
+
+	it('skips optional queries when TreeDX context resolution fails', async () => {
+		const result = await resolveHandlerContextPacks({
+			sdk: { buildContextPack: vi.fn(async () => { throw new Error('Graph is not ready.'); }) },
+			taskPayload: {
+				context: {
+					queries: [{
+						id: 'optional-graph',
+						purpose: 'plan',
+						query: 'package planning',
+					}],
+				},
+			},
+		});
+
+		expect(result.contextPacks.all()).toEqual([]);
+		expect(result.warnings.join('\n')).toContain('Skipped context query "optional-graph" after TreeDX context resolution failed: Graph is not ready.');
+	});
+
+	it('throws when required TreeDX context resolution fails', async () => {
+		await expect(resolveHandlerContextPacks({
+			sdk: { buildContextPack: vi.fn(async () => { throw new Error('Graph is not ready.'); }) },
+			taskPayload: {
+				context: {
+					queries: [{
+						id: 'required-graph',
+						purpose: 'plan',
+						query: 'package planning',
+						required: true,
+					}],
+				},
+			},
+		})).rejects.toThrow('Required context query "required-graph" failed during TreeDX context resolution: Graph is not ready.');
+	});
 });

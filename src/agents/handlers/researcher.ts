@@ -3,7 +3,7 @@ import type { ResearchNote } from '../contracts/research.ts';
 import type { AgentContext, AgentHandler } from '../runtime-types.ts';
 import { buildResearchNote, slugSegment, type KnowledgePipelineQuestion } from '../knowledge/pipeline.ts';
 import {
-	appendArtifactTaskEvent,
+	recordArtifactMessage,
 	completed,
 	parseTriggerPayload,
 	readRecord,
@@ -88,7 +88,7 @@ export const researcherHandler: AgentHandler<ResearcherInputs, ResearchNote | nu
 		if (!note) {
 			return waiting('Researcher could not resolve any context packs for the requested question.');
 		}
-		await appendArtifactTaskEvent({
+		await recordArtifactMessage({
 			context,
 			payload,
 			kind: 'research_note_created',

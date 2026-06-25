@@ -1,14 +1,8 @@
 import type { AgentRuntimeSpec } from '@treeseed/sdk/types/agents';
-import type { SdkRecordTaskCreditsRequest, SdkSearchRequest } from '@treeseed/sdk/types';
 import type { AgentTriggerInvocation } from '../agents/runtime-types.ts';
 import type { KnowledgeDraft, OptimizationReport } from '../agents/contracts/knowledge.ts';
 import type { ResearchNote } from '../agents/contracts/research.ts';
-import type { CodebaseInventoryArtifact } from './codebase-documentation-scanner.ts';
-import { summarizeCodebaseInventoryArtifact } from './codebase-documentation-scanner.ts';
-import {
-	TREESEED_PLATFORM_KNOWLEDGE_QUESTIONS,
-	type KnowledgePipelineQuestion,
-} from '../agents/knowledge/pipeline.ts';
+import type { KnowledgePipelineQuestion } from '../agents/knowledge/pipeline.ts';
 
 export const RESEARCH_KNOWLEDGE_TASK_KINDS = [
 	'research_question',
@@ -74,35 +68,6 @@ export interface ResearchKnowledgeTaskOutputEnvelope {
 	};
 }
 
-interface TaskRecord {
-	[key: string]: unknown;
-	id?: string;
-	workDayId?: string;
-	work_day_id?: string;
-	type?: string;
-	idempotencyKey?: string;
-	idempotency_key?: string;
-	payloadJson?: string;
-	payload_json?: string;
-}
-
-interface ResearchKnowledgeSdk {
-	searchTasks(request: { workDayId?: string; limit?: number; state?: string | string[] }): Promise<{ payload: unknown }>;
-	search?: (request: SdkSearchRequest) => Promise<{ payload: unknown }>;
-	createTask(request: {
-		workDayId: string;
-		agentId: string;
-		type: string;
-		priority: number;
-		idempotencyKey: string;
-		payload: Record<string, unknown>;
-		graphVersion?: string | null;
-		actor: string;
-		state?: string;
-	}): Promise<{ payload: unknown }>;
-	recordTaskCredits?: (request: SdkRecordTaskCreditsRequest) => Promise<unknown>;
-}
-
 function asRecord(value: unknown): Record<string, unknown> {
 	return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
@@ -121,15 +86,6 @@ function readString(record: Record<string, unknown>, ...keys: string[]) {
 	return '';
 }
 
-function parsePayload(task: TaskRecord) {
-	const raw = typeof task.payloadJson === 'string' ? task.payloadJson : typeof task.payload_json === 'string' ? task.payload_json : '{}';
-	try {
-		return asRecord(JSON.parse(raw));
-	} catch {
-		return {};
-	}
-}
-
 function parseOutputRecord(value: unknown) {
 	const record = asRecord(value);
 	const raw = typeof record.outputJson === 'string' ? record.outputJson : typeof record.output_json === 'string' ? record.output_json : record.output;
@@ -142,11 +98,6 @@ function parseOutputRecord(value: unknown) {
 	}
 }
 
-function taskId(task: unknown) {
-	const record = asRecord(task);
-	return readString(record, 'id');
-}
-
 export function isResearchKnowledgeTaskKind(value: unknown): value is ResearchKnowledgeTaskKind {
 	return typeof value === 'string' && (RESEARCH_KNOWLEDGE_TASK_KINDS as readonly string[]).includes(value);
 }
@@ -155,8 +106,21 @@ export function researchQuestionTaskIdempotencyKey(workDayId: string, questionId
 	return `${workDayId}:research_question:${questionId}`;
 }
 
-export function followupTaskIdempotencyKey(workDayId: string, kind: ResearchKnowledgeTaskKind, artifactId: string) {
-	return `${workDayId}:${kind}:${artifactId}`;
+function summarizeCodebaseInventoryArtifact(inventory: Record<string, unknown>, taskIdValue?: string): GeneratedAgentArtifactSummary {
+	const packages = Array.isArray(inventory.packages) ? inventory.packages.length : undefined;
+	const modules = Array.isArray(inventory.modules) ? inventory.modules.length : undefined;
+	const warnings = Array.isArray(inventory.warnings) ? inventory.warnings.length : undefined;
+	return {
+		artifactKind: 'codebase_inventory',
+		id: readString(inventory, 'id') || 'codebase-inventory',
+		taskId: taskIdValue,
+		title: readString(inventory, 'title') || 'Codebase inventory',
+		issueCount: warnings,
+		recommendation: [
+			packages === undefined ? null : `${packages} packages`,
+			modules === undefined ? null : `${modules} modules`,
+		].filter(Boolean).join(', ') || undefined,
+	};
 }
 
 export function invocationForResearchKnowledgeTask(
@@ -231,90 +195,6 @@ export function agentSpecForResearchKnowledgeHandler(kind: 'research' | 'knowled
 			}],
 		},
 	};
-}
-
-export async function seedResearchKnowledgeWorkdayTasks(input: {
-	sdk: ResearchKnowledgeSdk;
-	workDay: Record<string, unknown>;
-	projectId: string;
-	graphVersion?: string | null;
-	actor?: string;
-	questions?: KnowledgePipelineQuestion[];
-}) {
-	const workDayId = readString(input.workDay, 'id');
-	if (!workDayId) {
-		return [] as TaskRecord[];
-	}
-	const existingTasks = asRecords((await input.sdk.searchTasks({ workDayId, limit: 1000 })).payload);
-	const existingKeys = new Set(existingTasks.map((task) => readString(task, 'idempotencyKey', 'idempotency_key')));
-	const created: TaskRecord[] = [];
-
-	for (const question of input.questions ?? TREESEED_PLATFORM_KNOWLEDGE_QUESTIONS) {
-		const idempotencyKey = researchQuestionTaskIdempotencyKey(workDayId, question.id);
-		if (existingKeys.has(idempotencyKey)) {
-			continue;
-		}
-		const envelope = {
-			executionKind: 'research_knowledge_pipeline',
-			question,
-			taskKind: 'research_question',
-			createdAt: new Date().toISOString(),
-		};
-		const result = await input.sdk.createTask({
-			workDayId,
-			agentId: 'researcher-agent',
-			type: 'research_question',
-			priority: 95,
-			idempotencyKey,
-			payload: envelope,
-			graphVersion: input.graphVersion ?? null,
-			actor: input.actor ?? 'manager',
-		});
-		const task = asRecord(result.payload) as TaskRecord;
-		if (task.id) {
-			created.push(task);
-			existingKeys.add(idempotencyKey);
-			await input.sdk.recordTaskCredits?.({
-				projectId: input.projectId,
-				workDayId,
-				taskId: String(task.id),
-				phase: 'seed',
-				credits: 1,
-				metadata: {
-					taskKind: 'research_question',
-					questionId: question.id,
-				},
-			});
-		}
-	}
-	return created;
-}
-
-export async function loadLatestCodebaseInventoryForWorkday(input: {
-	sdk: ResearchKnowledgeSdk;
-	workDayId: string;
-}) {
-	if (typeof input.sdk.search !== 'function') return null;
-	const tasks = asRecords((await input.sdk.searchTasks({ workDayId: input.workDayId, limit: 1000 })).payload);
-	const scanTaskIds = tasks
-		.filter((task) => readString(task, 'type') === 'scan_codebase_documentation_surface')
-		.map((task) => taskId(task))
-		.filter(Boolean);
-	if (!scanTaskIds.length) return null;
-	const outputs = asRecords((await input.sdk.search({
-		model: 'task_output',
-		filters: [{ field: 'task_id', op: 'in', value: scanTaskIds }],
-		sort: [{ field: 'created_at', direction: 'desc' }],
-		limit: 20,
-	})).payload);
-	for (const output of outputs) {
-		const envelope = parseOutputRecord(output);
-		const inventory = asRecord(envelope.codebaseInventory);
-		if (envelope.artifactKind === 'codebase_inventory' && inventory.kind === 'codebase_inventory') {
-			return inventory as unknown as CodebaseInventoryArtifact;
-		}
-	}
-	return null;
 }
 
 export function summarizeResearchNoteArtifact(note: ResearchNote, taskIdValue?: string): GeneratedAgentArtifactSummary {
@@ -419,7 +299,7 @@ export function extractGeneratedArtifactsFromTaskOutputs(outputs: unknown[]): Ge
 			artifacts.push(summarizeResearchNoteArtifact(asRecord(record.researchNote) as unknown as ResearchNote, outputTaskId || undefined));
 		}
 		if (asRecord(record.codebaseInventory).kind === 'codebase_inventory') {
-			artifacts.push(summarizeCodebaseInventoryArtifact(asRecord(record.codebaseInventory) as unknown as CodebaseInventoryArtifact, outputTaskId || undefined));
+			artifacts.push(summarizeCodebaseInventoryArtifact(asRecord(record.codebaseInventory), outputTaskId || undefined));
 		}
 		if (asRecord(record.knowledgeDraft).kind === 'knowledge_draft') {
 			artifacts.push(summarizeKnowledgeDraftArtifact(asRecord(record.knowledgeDraft) as unknown as KnowledgeDraft, outputTaskId || undefined));
@@ -455,25 +335,4 @@ export function extractGeneratedArtifactsFromTaskOutputs(outputs: unknown[]): Ge
 		seen.add(key);
 		return true;
 	});
-}
-
-export function readTaskPayloadQuestion(task: TaskRecord): KnowledgePipelineQuestion | null {
-	const question = asRecord(parsePayload(task).question);
-	return question.id ? question as unknown as KnowledgePipelineQuestion : null;
-}
-
-export function workDayIdForTask(task: TaskRecord) {
-	return readString(task, 'workDayId', 'work_day_id');
-}
-
-export function graphVersionForTask(task: TaskRecord) {
-	return readString(task, 'graphVersion', 'graph_version') || null;
-}
-
-export function taskPayload(task: TaskRecord) {
-	return parsePayload(task);
-}
-
-export function taskRecordId(task: TaskRecord) {
-	return taskId(task);
 }

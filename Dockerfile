@@ -20,12 +20,6 @@ RUN chmod 0755 /usr/local/bin/treeseed-agent-entrypoint \
 EXPOSE 3100
 ENTRYPOINT ["tini", "--", "/usr/local/bin/treeseed-agent-entrypoint"]
 
-FROM node-runtime AS agent-api
-COPY .treeseed/docker/runtime/api/package.json ./
-COPY .treeseed/docker/runtime/api/node_modules ./node_modules
-ENV TREESEED_PROVIDER_ROLE=api
-CMD ["api"]
-
 FROM node-runtime AS manager-runtime
 USER 0:0
 RUN apt-get update \

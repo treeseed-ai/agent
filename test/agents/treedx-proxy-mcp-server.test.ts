@@ -1,6 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { callTreeDxProxyTool } from '../../src/agents/tools/treedx-proxy-client.ts';
-import { createTreeDxProxyMcpServerCommand } from '../../src/agents/tools/treedx-proxy-mcp-server.ts';
+import {
+	createTreeDxProxyMcpServer,
+	createTreeDxProxyMcpServerCommand,
+} from '../../src/agents/tools/treedx-proxy-mcp-server.ts';
 import type { TreeDxProxyExecutionToolDescriptor } from '../../src/agents/runtime-types.ts';
 
 const descriptor: TreeDxProxyExecutionToolDescriptor = {
@@ -79,5 +84,41 @@ describe('TreeDX proxy MCP tooling', () => {
 			fetchImpl: fetchImpl as unknown as typeof fetch,
 		})).rejects.toThrow(/path denied/u);
 		expect(fetchImpl).not.toHaveBeenCalled();
+	});
+
+	it('serves TreeDX tools through a standards-compliant MCP connection', async () => {
+		const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ ok: true, payload: { path: 'src/content/a.mdx' } }), { status: 200 }));
+		const server = createTreeDxProxyMcpServer({
+			apiBaseUrl: 'https://api.example.test',
+			providerApiKey: 'provider-secret',
+			assignmentId: 'assignment-1',
+			handleId: 'handle-1',
+			descriptor,
+			fetchImpl: fetchImpl as unknown as typeof fetch,
+		});
+		const client = new Client({ name: 'treeseed-test-client', version: '1.0.0' });
+		const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+
+		await Promise.all([
+			server.connect(serverTransport),
+			client.connect(clientTransport),
+		]);
+		try {
+			const tools = await client.listTools();
+			expect(tools.tools.map((tool) => tool.name)).toContain('treedx_write_workspace_file');
+
+			const result = await client.callTool({
+				name: 'treedx_write_workspace_file',
+				arguments: { path: 'src/content/a.mdx', content: 'body' },
+			});
+			expect(result.isError).not.toBe(true);
+			expect(result.structuredContent).toEqual({ ok: true, payload: { path: 'src/content/a.mdx' } });
+			expect(fetchImpl).toHaveBeenCalledWith(
+				'https://api.example.test/v1/dx/projects/project-1/workspaces/workspace-1/files?path=src%2Fcontent%2Fa.mdx',
+				expect.objectContaining({ method: 'PUT' }),
+			);
+		} finally {
+			await client.close();
+		}
 	});
 });

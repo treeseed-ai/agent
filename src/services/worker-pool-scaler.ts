@@ -1,6 +1,6 @@
 import type { ScaleDecision, WorkerPoolScaleResult, WorkerPoolScaler } from '@treeseed/sdk';
 
-export type WorkerPoolScalerKind = 'noop' | 'railway';
+export type WorkerPoolScalerKind = 'assignment_scheduler' | 'railway';
 
 export interface RailwayWorkerPoolScalerOptions {
 	apiToken?: string | null;
@@ -16,14 +16,15 @@ function envValue(name: string) {
 	return value ? value : '';
 }
 
-export class NoopWorkerPoolScaler implements WorkerPoolScaler {
+export class AssignmentSchedulerScaler implements WorkerPoolScaler {
 	async scale(decision: ScaleDecision): Promise<WorkerPoolScaleResult> {
 		return {
 			applied: false,
-			provider: 'noop',
+			provider: 'assignment_scheduler',
 			desiredWorkers: decision.desiredWorkers,
 			metadata: {
-				reason: 'scaler_unconfigured',
+				reason: 'legacy_worker_scaling_removed',
+				assignmentOnly: true,
 			},
 		};
 	}
@@ -148,16 +149,19 @@ export function createWorkerPoolScaler(
 	kind?: WorkerPoolScalerKind | null,
 	options: RailwayWorkerPoolScalerOptions = {},
 ): WorkerPoolScaler {
-	const configuredKind = (envValue('TREESEED_WORKER_POOL_SCALER') as WorkerPoolScalerKind | '') || null;
+	const configuredRaw = envValue('TREESEED_WORKER_POOL_SCALER');
+	const configuredKind = configuredRaw === 'noop'
+		? 'assignment_scheduler'
+		: (configuredRaw as WorkerPoolScalerKind | '') || null;
 	const inferredKind =
 		envValue('TREESEED_RAILWAY_API_TOKEN') && (envValue('TREESEED_RAILWAY_WORKER_SERVICE_ID') || envValue('TREESEED_WORKER_SERVICE_ID')) && envValue('TREESEED_RAILWAY_ENVIRONMENT_ID')
 			? 'railway'
-			: 'noop';
+			: 'assignment_scheduler';
 	const resolvedKind = kind ?? configuredKind ?? inferredKind;
 
 	if (resolvedKind === 'railway') {
 		return new RailwayWorkerPoolScaler(options);
 	}
 
-	return new NoopWorkerPoolScaler();
+	return new AssignmentSchedulerScaler();
 }

@@ -1,6 +1,6 @@
 # Capacity Provider Runtime
 
-`@treeseed/agent` owns the package-built capacity provider runtime. It includes provider API, provider manager, provider runner, worker/runtime helpers, AgentKernel execution, mode scheduling, package-owned Docker/Compose assets, runtime images, and provider-local tests.
+`@treeseed/agent` owns the package-built capacity provider runtime. It includes provider manager, provider runner, AgentKernel execution, mode scheduling, package-owned Docker/Compose assets, runtime images, and provider-local tests.
 
 Canonical architecture:
 
@@ -15,12 +15,11 @@ Canonical architecture:
 
 The package-owned provider image starts `node ./dist/provider/entrypoint.js` with explicit roles:
 
-- `api`: provider-local API and health/diagnostic surface
 - `manager`: provider manager that checks in, reports availability, receives assignment leases, renews leases, dispatches runners, and reports provider-local pressure
 - `runner`: provider runner that executes one leased assignment under an agent capacity envelope
 - `doctor`: runtime diagnostics
 
-Use the qualified names provider API, provider manager, and provider runner in docs and code comments. Avoid unqualified "manager" when describing capacity behavior.
+Use the qualified names provider manager and provider runner in docs and code comments. Avoid unqualified "manager" when describing capacity behavior.
 
 ## Lifecycle Commands
 
@@ -40,7 +39,7 @@ These commands manage runtime lifecycle and diagnostics through SDK reconciliati
 
 Package-local human-machine provider verification uses `npm run test:human-machine-providers`. This runs the execution-provider contract tests, focused provider tests, provider runner lifecycle tests, the package build, and `capacity-provider:test-local`.
 
-`capacity-provider:test-local` is a strict Docker-backed proof for the provider API role. Docker must be available; the command fails with a clear diagnostic instead of skipping when Docker is unavailable. Before building images, the smoke checks Docker storage headroom and reports an explicit cleanup command such as `docker system prune -a --volumes` when the Docker filesystem is too full; pruning remains an operator action because it can delete shared images and volumes.
+`capacity-provider:test-local` is a strict Docker-backed proof for the provider manager and runner images plus compose topology. Docker must be available; the command fails with a clear diagnostic instead of skipping when Docker is unavailable. Before building images, the smoke checks Docker storage headroom and reports an explicit cleanup command such as `docker system prune -a --volumes` when the Docker filesystem is too full; pruning remains an operator action because it can delete shared images and volumes.
 
 ## Secrets And Configuration
 
@@ -118,7 +117,6 @@ Handlers should use `AgentContext.treeDx` for context build, repository file rea
 
 Hosted deployments use package-owned role images:
 
-- provider API from `treeseed/agent-api`
 - provider manager from `treeseed/agent-manager`
 - provider runner from `treeseed/agent-runner`
 

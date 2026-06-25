@@ -82,6 +82,38 @@ function relatedFieldFor(model: string | null | undefined) {
 	}
 }
 
+function artifactTarget(artifactKind: string) {
+	const normalized = artifactKind.toLowerCase();
+	if (normalized.includes('question_answer')
+		|| normalized.includes('proposal_feedback')
+		|| normalized.includes('proposal_estimate')
+		|| normalized.includes('decision_feedback')
+		|| normalized.includes('review')
+		|| normalized.includes('planning_note')
+		|| normalized.includes('implementation_note')
+		|| normalized.includes('agent_feedback')
+		|| normalized.includes('readiness_note')
+		|| normalized.endsWith('_note')) {
+		return { collection: 'notes', model: 'note', tag: 'agent-feedback' };
+	}
+	if (normalized === 'proposal' || normalized === 'planning_proposal') {
+		return { collection: 'proposals', model: 'proposal', tag: 'agent-proposal' };
+	}
+	if (normalized === 'question' || normalized === 'planning_question') {
+		return { collection: 'questions', model: 'question', tag: 'agent-question' };
+	}
+	if (normalized === 'knowledge' || normalized.includes('knowledge_page') || normalized.includes('book_page')) {
+		return { collection: 'knowledge', model: 'knowledge', tag: 'agent-knowledge' };
+	}
+	if (normalized === 'book' || normalized.includes('book_outline')) {
+		return { collection: 'books', model: 'book', tag: 'agent-book' };
+	}
+	if (normalized.includes('workday_summary')) {
+		return { collection: 'workdays', model: 'workday', tag: 'agent-workday-summary' };
+	}
+	return { collection: 'notes', model: 'note', tag: 'agent-feedback' };
+}
+
 export function buildLinkedNoteArtifact(input: LinkedNoteInput) {
 	const contentRoot = resolveProjectContentRoot(input.context.repoRoot);
 	const now = new Date().toISOString();
@@ -91,7 +123,8 @@ export function buildLinkedNoteArtifact(input: LinkedNoteInput) {
 	const subjectSlug = slugSegment(String(subjectId ?? input.title));
 	const kindSlug = slugSegment(String(input.artifactKind));
 	const agentSlug = slugSegment(input.context.agent.slug);
-	const relativePath = `${contentRoot}/notes/agent-feedback/${date}/${kindSlug}-${subjectSlug}-${agentSlug}.mdx`;
+	const target = artifactTarget(String(input.artifactKind));
+	const relativePath = `${contentRoot}/${target.collection}/${date}/${kindSlug}-${subjectSlug}-${agentSlug}.mdx`;
 	const link = subjectLink(subject);
 	const relatedField = relatedFieldFor(subject.model);
 	const relatedFields = relatedField && subjectId ? { [relatedField]: [String(subjectId)] } : {};
@@ -100,7 +133,7 @@ export function buildLinkedNoteArtifact(input: LinkedNoteInput) {
 		description: input.summary,
 		date,
 		status: 'planned',
-		tags: [...new Set(['agent-feedback', kindSlug, ...(input.tags ?? [])])],
+		tags: [...new Set([target.tag, kindSlug, ...(input.tags ?? [])])],
 		author: input.context.agent.slug,
 		summary: input.summary,
 		draft: true,
@@ -122,7 +155,7 @@ export function buildLinkedNoteArtifact(input: LinkedNoteInput) {
 		content: serializeFrontmatterDocument(frontmatter, body),
 		ref: {
 			contentPath: relativePath,
-			model: 'note',
+			model: target.model,
 			subjectId: subjectId ? String(subjectId) : null,
 			artifactKind: String(input.artifactKind),
 			sourceAssignmentId: input.context.capacity?.assignmentId ?? null,

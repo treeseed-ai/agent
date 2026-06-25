@@ -8,10 +8,10 @@
     "state": "draft",
     "contextQueries": [],
     "contextPackSummary": "Runtime source context.",
-    "sourceRefs": [{ "ref": "packages/agent/src/services/worker.ts", "kind": "path", "title": "Worker" }],
+    "sourceRefs": [{ "ref": "packages/agent/src/services/manager.ts", "kind": "path", "title": "Worker" }],
     "sourceMap": [{
       "claim": "The worker executes claimed tasks.",
-      "sourceFiles": ["packages/agent/src/services/worker.ts"],
+      "sourceFiles": ["packages/agent/src/services/manager.ts"],
       "sourceSymbolsOrSections": ["runWorkerCycle"],
       "evidenceStrength": "direct",
       "uncertainty": "",

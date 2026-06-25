@@ -20,7 +20,7 @@ import {
 	type DiscordExecutionProviderConfig,
 } from '../agents/adapters/execution-discord.ts';
 
-export type ProviderRole = 'api' | 'manager' | 'runner' | 'doctor' | 'healthcheck' | 'register' | 'plan' | 'version';
+export type ProviderRole = 'manager' | 'runner' | 'doctor' | 'healthcheck' | 'register' | 'plan' | 'version';
 
 export interface JiraProviderRuntimeConfig extends JiraExecutionProviderConfig {}
 export interface GitHubIssuesProviderRuntimeConfig extends GitHubIssuesExecutionProviderConfig {}
@@ -31,7 +31,6 @@ export interface ProviderRuntimeConfig {
 	marketId: string;
 	apiKey: string;
 	dataDir: string;
-	apiPort: number;
 	environment: string;
 	capabilitiesFile: string | null;
 	budgetFile: string | null;
@@ -77,6 +76,14 @@ function arrayEnvValue(env: NodeJS.ProcessEnv, name: string, fallback: string[])
 	const raw = envValue(env, name);
 	if (!raw) return fallback;
 	return raw.split(',').map((entry) => entry.trim()).filter(Boolean);
+}
+
+function optionalEnvEntries(env: NodeJS.ProcessEnv, names: string[]) {
+	return Object.fromEntries(
+		names
+			.map((name) => [name, envValue(env, name)] as const)
+			.filter(([, value]) => value),
+	);
 }
 
 function mintLocalTreeDxJwt(env: NodeJS.ProcessEnv) {
@@ -142,7 +149,6 @@ export function resolveProviderEnvironmentInput(env: NodeJS.ProcessEnv = process
 		providerId: envValue(env, 'TREESEED_CAPACITY_PROVIDER_ID') || undefined,
 		teamId: envValue(env, 'TREESEED_CAPACITY_PROVIDER_TEAM_ID') || undefined,
 		providerDataDir: envValue(env, 'TREESEED_PROVIDER_DATA_DIR') || '/data',
-		providerApiPort: envValue(env, 'TREESEED_PROVIDER_API_PORT') || '3100',
 		providerEnvironment: envValue(env, 'TREESEED_PROVIDER_ENVIRONMENT') || envValue(env, 'TREESEED_ENVIRONMENT') || 'local',
 		capabilitiesFile: envValue(env, 'TREESEED_PROVIDER_CAPABILITIES_FILE') || undefined,
 		budgetFile: envValue(env, 'TREESEED_PROVIDER_BUDGET_FILE') || undefined,
@@ -180,9 +186,15 @@ export function resolveProviderConfig(options: {
 			TREESEED_MARKET_ID: input.marketId || '',
 			TREESEED_CAPACITY_PROVIDER_API_KEY: input.apiKey || '',
 			TREESEED_PROVIDER_DATA_DIR: input.providerDataDir ?? '/data',
-			TREESEED_PROVIDER_API_PORT: String(input.providerApiPort ?? '3100'),
 			TREESEED_PROVIDER_ENVIRONMENT: String(input.providerEnvironment ?? 'local'),
 		};
+	Object.assign(resolvedEnv, optionalEnvEntries(env, [
+		'TREESEED_PROVIDER_WORKSPACE_ROOT',
+		'TREESEED_PROVIDER_WORKSPACE_ABSOLUTE_CONTAINER',
+		'TREESEED_PROVIDER_WORKSPACE_GITDIR_CONTAINER',
+		'TREESEED_MARKET_GIT_COMMON_DIR_ABSOLUTE_CONTAINER',
+		'TREESEED_MARKET_GIT_COMMON_DIR_ROOT_CONTAINER',
+	]));
 	const redactedEnv = {
 		...redactCapacityProviderEnv(resolvedEnv),
 		...(jira ? {
@@ -217,7 +229,6 @@ export function resolveProviderConfig(options: {
 		marketId: resolvedEnv.TREESEED_MARKET_ID ?? '',
 		apiKey: resolvedEnv.TREESEED_CAPACITY_PROVIDER_API_KEY ?? '',
 		dataDir: resolvedEnv.TREESEED_PROVIDER_DATA_DIR ?? '/data',
-		apiPort: intValue(resolvedEnv.TREESEED_PROVIDER_API_PORT ?? '', 3100),
 		environment: resolvedEnv.TREESEED_PROVIDER_ENVIRONMENT ?? 'local',
 		capabilitiesFile: envValue(env, 'TREESEED_PROVIDER_CAPABILITIES_FILE') || null,
 		budgetFile: envValue(env, 'TREESEED_PROVIDER_BUDGET_FILE') || null,

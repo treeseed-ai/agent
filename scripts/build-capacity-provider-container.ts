@@ -12,7 +12,6 @@ const selectedRoles = parseSelectedRoles();
 const noCache = process.argv.includes('--no-cache') || process.env.TREESEED_AGENT_BUILD_NO_CACHE === '1';
 const imageTag = process.env.TREESEED_AGENT_IMAGE_TAG || 'local';
 const roleImages = {
-	api: process.env.TREESEED_AGENT_API_IMAGE || `treeseed/agent-api:${imageTag}`,
 	manager: process.env.TREESEED_AGENT_MANAGER_IMAGE || `treeseed/agent-manager:${imageTag}`,
 	runner: process.env.TREESEED_AGENT_RUNNER_IMAGE || `treeseed/agent-runner:${imageTag}`,
 } as const;
@@ -25,11 +24,11 @@ function roleRuntimeRoot(role: RoleName) {
 function parseSelectedRoles(): Set<RoleName> {
 	const rolesFlagIndex = process.argv.indexOf('--roles');
 	const rawRoles = rolesFlagIndex >= 0 ? process.argv[rolesFlagIndex + 1] : process.env.TREESEED_AGENT_BUILD_ROLES;
-	const allRoles: RoleName[] = ['api', 'manager', 'runner'];
+	const allRoles: RoleName[] = ['manager', 'runner'];
 	if (!rawRoles) return new Set(allRoles);
 	const selected = new Set<RoleName>();
 	for (const rawRole of rawRoles.split(',').map((role) => role.trim()).filter(Boolean)) {
-		if (rawRole !== 'api' && rawRole !== 'manager' && rawRole !== 'runner') {
+		if (rawRole !== 'manager' && rawRole !== 'runner') {
 			throw new Error(`Unsupported capacity provider image role: ${rawRole}`);
 		}
 		selected.add(rawRole);
@@ -344,19 +343,11 @@ if (prepareOnly) {
 	console.log(`Prepared capacity provider Docker context at ${dockerContextRoot}.`);
 	process.exit(0);
 }
-if (selectedRoles.has('api')) {
-	run('docker', ['build', ...dockerBuildCacheArgs(), '--target', 'agent-api', '-t', roleImages.api, '.'], packageRoot);
-}
 if (selectedRoles.has('manager')) {
 	run('docker', ['build', ...dockerBuildCacheArgs(), '--target', 'agent-manager', '-t', roleImages.manager, '.'], packageRoot);
 }
 if (selectedRoles.has('runner')) {
 	run('docker', ['build', ...dockerBuildCacheArgs(), '--target', 'agent-runner', '-t', roleImages.runner, '.'], packageRoot);
-}
-if (selectedRoles.has('api') && !process.env.TREESEED_CAPACITY_PROVIDER_IMAGE) {
-	run('docker', ['tag', roleImages.api, 'capacity-provider:local'], packageRoot);
-} else if (selectedRoles.has('api')) {
-	run('docker', ['tag', roleImages.api, process.env.TREESEED_CAPACITY_PROVIDER_IMAGE], packageRoot);
 }
 console.log(`Built capacity provider image roles ${[...selectedRoles].join(', ')} from ${packageRoot}.`);
 

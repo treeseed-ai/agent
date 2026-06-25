@@ -36,7 +36,7 @@ function draft(): KnowledgeDraft {
 			confidence: 'medium',
 			source_map: [{
 				claim: 'The agent worker executes queued tasks.',
-				sourceFiles: ['packages/agent/src/services/worker.ts'],
+				sourceFiles: ['packages/agent/src/services/manager.ts'],
 				sourceSymbolsOrSections: ['runWorkerCycle'],
 				evidenceStrength: 'direct',
 				uncertainty: '',
@@ -58,10 +58,10 @@ function draft(): KnowledgeDraft {
 			'Queued tasks are claimed, executed, and completed.',
 			'',
 			'## Important files',
-			'- packages/agent/src/services/worker.ts',
+			'- packages/agent/src/services/manager.ts',
 			'',
 			'## Source map',
-			'- packages/agent/src/services/worker.ts',
+			'- packages/agent/src/services/manager.ts',
 			'',
 			'## Governance and safety boundaries',
 			'Promotion remains approval gated.',
@@ -160,7 +160,7 @@ describe('knowledge promotion to staging', () => {
 		const root = mkdtempSync(`${tmpdir()}/treeseed-promotion-`);
 		roots.push(root);
 		const worktrees = fakeWorktrees({ root });
-		const sdk = { appendTaskEvent: vi.fn(async () => ({ payload: {} })) };
+		const sdk = { createMessage: vi.fn(async () => ({ payload: {} })) };
 
 		const result = await runKnowledgePromotionToStaging({
 			task: taskInput(root),
@@ -183,8 +183,8 @@ describe('knowledge promotion to staging', () => {
 		expect(worktrees.stageAndCommit).toHaveBeenCalledWith(expect.objectContaining({
 			changedPaths: [draft().targetPath],
 		}));
-		expect(sdk.appendTaskEvent).toHaveBeenCalledWith(expect.objectContaining({
-			kind: 'operation_event',
+		expect(sdk.createMessage).toHaveBeenCalledWith(expect.objectContaining({
+			type: 'agent.operation_event',
 		}));
 	});
 

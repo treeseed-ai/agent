@@ -7,8 +7,7 @@ import {
 	type ResolvedHandlerContextPack,
 } from '@treeseed/sdk/graph/context-query-contracts';
 import type { AgentRuntimeSpec } from '@treeseed/sdk/types/agents';
-import type { CodebaseInventoryArtifact } from '../../services/codebase-documentation-scanner.ts';
-import { buildCodeContextPacksForQuery } from './code-context-packs.ts';
+import { buildCodeContextPacksForQuery, type CodebaseInventoryArtifact } from './code-context-packs.ts';
 
 interface QueryCandidate {
 	query: DeclarativeContextQuery;
@@ -156,6 +155,10 @@ function createCollection(packs: ResolvedHandlerContextPack[], warnings: string[
 	};
 }
 
+function contextQueryErrorMessage(error: unknown) {
+	return error instanceof Error ? error.message : String(error);
+}
+
 export async function resolveHandlerContextPacks(
 	input: ResolveHandlerContextPacksInput,
 ): Promise<ResolveHandlerContextPacksResult> {
@@ -174,7 +177,17 @@ export async function resolveHandlerContextPacks(
 			continue;
 		}
 
-		const pack = await input.sdk.buildContextPack(compiled.compiled.request) as SdkContextPack;
+		let pack: SdkContextPack;
+		try {
+			pack = await input.sdk.buildContextPack(compiled.compiled.request) as SdkContextPack;
+		} catch (error) {
+			const detail = contextQueryErrorMessage(error);
+			if (candidate.query.required) {
+				throw new Error(`Required context query "${candidate.query.id}" failed during TreeDX context resolution: ${detail}`);
+			}
+			warnings.push(`Skipped context query "${candidate.query.id}" after TreeDX context resolution failed: ${detail}`);
+			continue;
+		}
 		packs.push({
 			id: compiled.compiled.query.id,
 			purpose: compiled.compiled.query.purpose,

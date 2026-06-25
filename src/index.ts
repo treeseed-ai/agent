@@ -45,7 +45,6 @@ export {
 	resolveApiRuntimeProviders,
 } from './api/index.ts';
 export { runScheduledWorkdayManager } from './services/workday-manager.ts';
-export { runWorkerCycle, startWorkerLoop } from './services/worker.ts';
 export { runWorkdayStart } from './services/workday-start.ts';
 export { runWorkdayReport } from './services/workday-report.ts';
 export {
@@ -67,18 +66,6 @@ export {
 	summarizeAgentAuthoringDiagnostics,
 } from './agents/testing/agent-authoring-diagnostics.ts';
 export { runAgentPlatformCompletionAudit } from './agents/testing/platform-completion-audit.ts';
-export {
-	RESEARCH_KNOWLEDGE_TASK_KINDS,
-	extractGeneratedArtifactsFromTaskOutputs,
-	isResearchKnowledgeTaskKind,
-	seedResearchKnowledgeWorkdayTasks,
-} from './services/research-knowledge-workday.ts';
-export {
-	CODEBASE_DOCUMENTATION_SCAN_TASK_KIND,
-	CODEBASE_DOCUMENTATION_SCAN_TARGETS,
-	scanCodebaseDocumentationSurface,
-	summarizeCodebaseInventoryArtifact,
-} from './services/codebase-documentation-scanner.ts';
 export { parseAgentMessagePayload, AGENT_MESSAGE_TYPES } from './agents/contracts/messages.ts';
 export { resolveHandlerContextPacks } from './agents/context/context-processor.ts';
 export {
@@ -110,7 +97,5 @@ export type * from './agents/testing/agent-authoring-diagnostics.ts';
 export type * from './agents/testing/platform-completion-audit.ts';
 export type * from './agents/adapters/execution-jira.ts';
 export type * from './agents/adapters/execution-workflow.ts';
-export type * from './services/research-knowledge-workday.ts';
-export type * from './services/codebase-documentation-scanner.ts';
 export type * from './api/types.ts';
 export type * from './api/agent-artifacts.ts';

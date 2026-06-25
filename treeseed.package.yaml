@@ -16,14 +16,6 @@ verify:
   release: npm run release:verify
 artifacts:
   - provider: docker
-    name: treeseed/agent-api
-    dockerfile: Dockerfile
-    target: agent-api
-    role: api
-    architectures:
-      - amd64
-      - arm64
-  - provider: docker
     name: treeseed/agent-manager
     dockerfile: Dockerfile
     target: agent-manager
@@ -56,9 +48,6 @@ dockerImages:
       - dev-staging
 capacityProvider:
   roles:
-    api:
-      image: treeseed/agent-api
-      target: agent-api
     manager:
       image: treeseed/agent-manager
       target: agent-manager
@@ -70,8 +59,6 @@ capacityProvider:
     projectName: treeseed-capacity-provider
     sharedVolume: true
     dataDir: .treeseed/local-capacity-provider/data
-    health:
-      api: http://127.0.0.1:${TREESEED_PROVIDER_HOST_API_PORT}/health
   railway:
     runnerCount: 1
     runnerVolumePolicy: per-service

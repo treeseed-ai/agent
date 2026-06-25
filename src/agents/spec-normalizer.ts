@@ -7,6 +7,7 @@ import {
 	type AgentProviderProfile,
 	type AgentPermissionConfig,
 	type AgentPermissionOperation,
+	type AgentPermissionPolicy,
 	type AgentTriggerConfig,
 	type AgentTriggerKind,
 } from '@treeseed/sdk/types/agents';
@@ -247,6 +248,24 @@ function normalizePermissions(
 		}
 		return model ? [{ model, operations }] : [];
 	});
+}
+
+function normalizePermissionPolicy(
+	value: unknown,
+	diagnostics: AgentSpecDiagnostic[],
+	slug: string,
+): AgentPermissionPolicy | undefined {
+	if (value === undefined || value === null) return undefined;
+	if (!isPlainObject(value)) {
+		diagnostics.push({
+			severity: 'error',
+			slug,
+			field: 'permissionPolicy',
+			message: 'Expected permissionPolicy to be an object.',
+		});
+		return undefined;
+	}
+	return value as AgentPermissionPolicy;
 }
 
 function normalizeContext(
@@ -575,6 +594,7 @@ function normalizeParts(
 				}
 				: undefined,
 			permissions: normalizePermissions(raw.permissions, diagnostics, slug),
+			permissionPolicy: normalizePermissionPolicy(raw.permissionPolicy, diagnostics, slug),
 			context: normalizeContext(raw.context, diagnostics, slug),
 			execution: normalizeExecution(raw.execution, diagnostics, slug),
 			outputs: normalizeOutputs(raw.outputs, diagnostics, slug),

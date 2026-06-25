@@ -25,59 +25,6 @@ describe('hosted control-plane agent sdk', () => {
 		vi.restoreAllMocks();
 	});
 
-	it('uploads oversized task outputs before completing through runner routes', async () => {
-		vi.stubEnv('TREESEED_HOSTED_INLINE_ARTIFACT_MAX_BYTES', '8');
-		const calls: Array<{ pathname: string; body: Record<string, unknown> }> = [];
-		const fetchMock = vi.fn(async (url: string | URL, init?: RequestInit) => {
-			const pathname = new URL(String(url)).pathname;
-			const body = init?.body ? JSON.parse(String(init.body)) : {};
-			calls.push({ pathname, body });
-			if (pathname.endsWith('/runner/artifacts')) {
-				return new Response(JSON.stringify({
-					ok: true,
-					payload: {
-						artifactStorage: 'r2',
-						storageMode: 'local_r2_emulation',
-						outputRef: 'r2:agent-artifacts/body.json',
-						objectKey: 'agent-artifacts/body.json',
-						contentType: 'application/json',
-						sizeBytes: String(body.content).length,
-						sha256: body.sha256,
-						teamId: 'team-1',
-						projectId: 'project-1',
-						createdAt: '2026-05-14T00:00:00.000Z',
-					},
-				}), { status: 201, headers: { 'content-type': 'application/json' } });
-			}
-			if (pathname.endsWith('/runner/tasks/task-1/complete')) {
-				return new Response(JSON.stringify({
-					ok: true,
-					payload: { id: 'task-1', state: 'completed' },
-				}), { status: 200, headers: { 'content-type': 'application/json' } });
-			}
-			return new Response(JSON.stringify({ ok: false }), { status: 404 });
-		});
-
-		await hostedSdk(fetchMock as typeof fetch).completeTask({
-			id: 'task-1',
-			output: { artifactKind: 'codebase_inventory', body: 'large enough' },
-			actor: 'worker',
-		});
-
-		expect(calls.map((call) => call.pathname)).toEqual([
-			'/v1/projects/project-1/runner/artifacts',
-			'/v1/projects/project-1/runner/tasks/task-1/complete',
-		]);
-		expect(calls[1]?.body).toMatchObject({
-			outputRef: 'r2:agent-artifacts/body.json',
-			output: {
-				artifactKind: 'codebase_inventory',
-				artifactStorage: 'r2',
-				outputRef: 'r2:agent-artifacts/body.json',
-			},
-		});
-	});
-
 	it('routes approval creation and task credits through runner control-plane APIs', async () => {
 		vi.stubEnv('TREESEED_CAPACITY_PROVIDER_ID', 'provider-1');
 		const calls: Array<{ pathname: string; body: Record<string, unknown> }> = [];

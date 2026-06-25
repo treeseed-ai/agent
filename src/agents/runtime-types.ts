@@ -36,15 +36,6 @@ import type {
 	ProjectAgentClass,
 } from '@treeseed/sdk/agent-capacity';
 
-export interface AgentTaskEventSdk {
-	appendTaskEvent(request: {
-		taskId: string;
-		kind: string;
-		data?: Record<string, unknown>;
-		actor: string;
-	}): Promise<unknown>;
-}
-
 export interface AgentTriggerInvocation {
 	kind: 'startup' | 'schedule' | 'message' | 'manual' | 'follow';
 	source: string;
@@ -134,6 +125,8 @@ export interface TreeDxProxyExecutionToolDescriptor extends ExecutionProviderToo
 	workspaceId?: string | null;
 	allowedOperations: string[];
 	allowedPaths: string[];
+	allowedReadPaths?: string[];
+	allowedWritePaths?: string[];
 	routes: {
 		buildContext: string;
 		readRepositoryFiles: string;
@@ -205,12 +198,13 @@ export interface AgentOperationsAdapter {
 	runOperation(input: {
 		request: AgentOperationRequest;
 		grants: AgentOperationGrant[];
-		sdk?: AgentTaskEventSdk;
+		sdk?: ScopedAgentSdk;
 	}): Promise<AgentOperationResult>;
 }
 
 export interface AgentTreeDxAdapter {
 	buildContext(input: { repoId: string; query?: string | null; paths?: string[]; body?: Record<string, unknown> }): Promise<Record<string, unknown>>;
+	listRepositoryPaths(input: { repoId: string; path: string; ref?: string | null; body?: Record<string, unknown> }): Promise<Record<string, unknown>>;
 	readRepositoryFiles(input: { repoId: string; paths: string[]; ref?: string | null; body?: Record<string, unknown> }): Promise<Record<string, unknown>>;
 	searchWorkspace(input: { workspaceId: string; query: string; body?: Record<string, unknown> }): Promise<Record<string, unknown>>;
 	readWorkspaceFile(input: { workspaceId: string; path: string }): Promise<Record<string, unknown>>;

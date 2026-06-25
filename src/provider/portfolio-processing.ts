@@ -68,8 +68,13 @@ export function providerRepositoryPath(config: ProviderRuntimeConfig, projectId:
 	return resolve(config.dataDir, 'repositories', safeSegment(projectId), 'repo');
 }
 
-function localWorkspaceRoot() {
-	const configured = process.env.TREESEED_PROVIDER_WORKSPACE_ROOT?.trim();
+function providerEnvValue(config: ProviderRuntimeConfig, name: string) {
+	return config.env[name]?.trim() || process.env[name]?.trim() || '';
+}
+
+function localWorkspaceRoot(config: ProviderRuntimeConfig) {
+	const configured = providerEnvValue(config, 'TREESEED_PROVIDER_WORKSPACE_ROOT')
+		|| providerEnvValue(config, 'TREESEED_PROVIDER_WORKSPACE_ABSOLUTE_CONTAINER');
 	if (configured) return configured;
 	return existsSync('/workspace') ? '/workspace' : null;
 }
@@ -92,22 +97,24 @@ function normalizedRelativePath(value: string | null) {
 	return value.replace(/\\/gu, '/').replace(/^\/+/u, '').replace(/\/+$/u, '');
 }
 
-function providerLocalRepositoryPath(project: CapacityProviderPortfolioProject) {
+export function providerLocalRepositoryPath(config: ProviderRuntimeConfig, project: CapacityProviderPortfolioProject) {
 	const materialization = architectureString(project, 'localContentMaterialization');
 	if (materialization !== 'existing_path') return null;
-	const workspaceRoot = localWorkspaceRoot();
+	const workspaceRoot = localWorkspaceRoot(config);
 	if (!workspaceRoot) return null;
 	const rootPath = architectureString(project, 'rootPath');
 	if (!rootPath || rootPath === '.') {
 		const checkoutPath = project.repository.checkoutPath?.trim();
 		if (checkoutPath && checkoutPath !== '.') return resolve(workspaceRoot, checkoutPath);
+		const packagePath = resolve(workspaceRoot, 'packages', project.slug);
+		if (project.slug !== 'market' && existsSync(packagePath)) return packagePath;
 		return resolve(workspaceRoot);
 	}
 	return resolve(workspaceRoot, rootPath);
 }
 
-function providerLocalProjectRoot(project: CapacityProviderPortfolioProject) {
-	const workspaceRoot = localWorkspaceRoot();
+function providerLocalProjectRoot(config: ProviderRuntimeConfig, project: CapacityProviderPortfolioProject) {
+	const workspaceRoot = localWorkspaceRoot(config);
 	if (!workspaceRoot) return null;
 	const checkoutPath = project.repository.checkoutPath?.trim();
 	if (checkoutPath && checkoutPath !== '.') return resolve(workspaceRoot, checkoutPath);
@@ -194,7 +201,9 @@ export async function syncProviderProjectRepository(
 	config: ProviderRuntimeConfig,
 	project: CapacityProviderPortfolioProject,
 ): Promise<ProviderProjectProcessingResult['repository']> {
-	const localPath = config.environment === 'local' ? providerLocalRepositoryPath(project) ?? providerLocalProjectRoot(project) : null;
+	const localPath = config.environment === 'local'
+		? providerLocalRepositoryPath(config, project) ?? providerLocalProjectRoot(config, project)
+		: null;
 	if (localPath) {
 		return {
 			ok: existsSync(resolve(localPath, '.git')) || existsSync(resolve(localPath, 'package.json')) || existsSync(resolve(localPath, 'treeseed.site.yaml')),

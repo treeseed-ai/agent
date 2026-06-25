@@ -11,7 +11,6 @@ function baseConfig(patch: Partial<ProviderRuntimeConfig> = {}): ProviderRuntime
 		marketId: 'test',
 		apiKey: 'tsp_test',
 		dataDir: '/tmp/treeseed-provider',
-		apiPort: 3100,
 		environment: 'local',
 		capabilitiesFile: null,
 		budgetFile: null,

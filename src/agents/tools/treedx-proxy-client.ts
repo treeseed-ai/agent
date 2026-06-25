@@ -37,13 +37,18 @@ function assertAllowedOperation(descriptor: TreeDxProxyExecutionToolDescriptor, 
 	}
 }
 
-function assertAllowedPath(descriptor: TreeDxProxyExecutionToolDescriptor, input: Record<string, unknown>) {
+function assertAllowedPath(descriptor: TreeDxProxyExecutionToolDescriptor, toolName: TreeDxProxyToolName, input: Record<string, unknown>) {
 	const path = typeof input.path === 'string' ? input.path : null;
 	const paths = Array.isArray(input.paths) ? input.paths.filter((value): value is string => typeof value === 'string') : [];
 	const candidates = path ? [path] : paths;
-	if (!candidates.length || !descriptor.allowedPaths.length) return;
+	const operations = TREE_DX_PROXY_TOOL_REQUIRED_OPERATIONS[toolName] ?? [];
+	const writeOperation = operations.some((operation) => operation === 'files:write' || operation === 'git:commit');
+	const scopedPaths = writeOperation
+		? (descriptor.allowedWritePaths?.length ? descriptor.allowedWritePaths : descriptor.allowedPaths)
+		: (descriptor.allowedReadPaths?.length ? descriptor.allowedReadPaths : descriptor.allowedPaths);
+	if (!candidates.length || !scopedPaths.length) return;
 	for (const candidate of candidates) {
-		if (!descriptor.allowedPaths.some((pattern) => matchesPath(candidate, pattern))) {
+		if (!scopedPaths.some((pattern) => matchesPath(candidate, pattern))) {
 			throw new Error(`TreeDX proxy path denied: ${candidate}.`);
 		}
 	}
@@ -105,7 +110,7 @@ export async function callTreeDxProxyTool(options: TreeDxProxyToolCallOptions) {
 	if (!options.handleId.trim()) throw new Error('TreeDX proxy handle id is required for TreeDX proxy tools.');
 	const input = options.input ?? {};
 	assertAllowedOperation(options.descriptor, options.toolName);
-	assertAllowedPath(options.descriptor, input);
+	assertAllowedPath(options.descriptor, options.toolName, input);
 	const route = resolveRoute(options.descriptor, options.toolName, input);
 	const body = requestBody(options.toolName, input);
 	const response = await (options.fetchImpl ?? fetch)(`${options.apiBaseUrl.replace(/\/$/u, '')}${route.path}`, {

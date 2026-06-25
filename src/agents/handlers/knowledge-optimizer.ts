@@ -3,7 +3,7 @@ import type { ResearchNote } from '../contracts/research.ts';
 import type { AgentHandler } from '../runtime-types.ts';
 import { optimizeKnowledgeDraft } from '../knowledge/pipeline.ts';
 import {
-	appendArtifactTaskEvent,
+	recordArtifactMessage,
 	completed,
 	createAgentMessage,
 	parseTriggerPayload,
@@ -48,7 +48,7 @@ export const knowledgeOptimizerHandler: AgentHandler<KnowledgeOptimizerInputs, O
 		if (!report) {
 			return waiting('Knowledge optimizer is waiting for knowledgeDraft and researchNote payloads.');
 		}
-		await appendArtifactTaskEvent({
+		await recordArtifactMessage({
 			context,
 			payload,
 			kind: 'knowledge_optimization_completed',

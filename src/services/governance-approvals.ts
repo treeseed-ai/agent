@@ -144,18 +144,6 @@ export async function persistPromotionApprovalRequest(input: {
 			},
 		});
 	}
-	await input.sdk.appendTaskEvent({
-		taskId: input.taskId,
-		kind: 'approval_request_created',
-		data: { approvalId, approvalKind: 'promote_knowledge_draft', state: approvalRecord?.state ?? 'pending' },
-		actor: 'worker',
-	});
-	await input.sdk.appendTaskEvent({
-		taskId: input.taskId,
-		kind: 'team_inbox_item_created',
-		data: { approvalId, inboxItemId: `approval:${approvalId}`, teamId, state: approvalRecord?.state ?? 'pending' },
-		actor: 'worker',
-	});
 	await input.sdk.createMessage({
 		type: 'approval_request_created',
 		actor: 'worker',

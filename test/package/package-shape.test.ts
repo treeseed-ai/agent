@@ -44,7 +44,6 @@ describe('agent package shape', () => {
 
 		expect(packageJson.bin).toEqual({
 			'treeseed-agents': 'dist/scripts/treeseed-agents.js',
-			'treeseed-agent-api': 'dist/scripts/treeseed-agent-api.js',
 			'treeseed-agent-service': 'dist/scripts/treeseed-agent-service.js',
 		});
 
@@ -71,7 +70,6 @@ describe('agent package shape', () => {
 
 	it('ships provider runtime entrypoint and support modules without source-mode temp artifacts', () => {
 		const requiredRuntimeFiles = [
-			'dist/scripts/treeseed-agent-api.js',
 			'dist/scripts/treeseed-agent-service.js',
 			'dist/provider/entrypoint.js',
 			'dist/provider/config.js',
@@ -83,10 +81,8 @@ describe('agent package shape', () => {
 			'dist/provider/lifecycle.js',
 			'dist/scripts/build-capacity-provider-container.js',
 			'dist/scripts/test-capacity-provider-container.js',
-			'dist/api/provider-app.js',
 				'dist/api/server.js',
 				'dist/services/manager.js',
-				'dist/services/worker.js',
 				'dist/services/workday-start.js',
 				'dist/services/workday-report.js',
 				'dist/services/runtime-paths.js',
@@ -136,10 +132,8 @@ describe('agent package shape', () => {
 		expect(paths).toContain('dist/provider/lifecycle.js');
 		expect(paths).toContain('dist/scripts/build-capacity-provider-container.js');
 		expect(paths).toContain('dist/scripts/test-capacity-provider-container.js');
-			expect(paths).toContain('dist/api/provider-app.js');
-			expect(paths).toContain('dist/services/manager.js');
-			expect(paths).toContain('dist/services/worker.js');
-			expect(paths).toContain('dist/services/runtime-paths.js');
+		expect(paths).toContain('dist/services/manager.js');
+		expect(paths).toContain('dist/services/runtime-paths.js');
 		expect(paths).toContain('Dockerfile');
 		expect(paths).toContain('docker-entrypoint.sh');
 		expect(paths).toContain('compose.capacity-provider.yml');
@@ -156,7 +150,7 @@ describe('agent package shape', () => {
 		const compose = readFileSync(resolve(packageRoot, 'compose.capacity-provider.yml'), 'utf8');
 		const docs = readFileSync(resolve(packageRoot, 'docs/capacity-provider-runtime.md'), 'utf8');
 
-		expect(dockerfile).toContain('FROM node-runtime AS agent-api');
+		expect(dockerfile).not.toContain('FROM node-runtime AS agent-api');
 		expect(dockerfile).toContain('FROM node-runtime AS manager-runtime');
 		expect(dockerfile).toContain('FROM manager-runtime AS agent-manager');
 		expect(dockerfile).toContain('FROM manager-runtime AS agent-runner');
@@ -166,10 +160,9 @@ describe('agent package shape', () => {
 		expect(dockerfile).not.toContain('COPY . .');
 		expect(dockerfile).not.toContain('treeseed-processing');
 		expect(dockerfile).not.toContain('packages/core');
-		expect(compose).toContain('target: agent-api');
 		expect(compose).toContain('target: agent-manager');
 		expect(compose).toContain('target: agent-runner');
-		expect(compose).toContain('treeseed/agent-api');
+		expect(compose).not.toContain('treeseed/agent-api');
 		expect(compose).toContain('treeseed/agent-manager');
 		expect(compose).toContain('treeseed/agent-runner');
 		expect(compose).toContain('TREESEED_PROVIDER_STARTUP_MODE');
@@ -180,10 +173,10 @@ describe('agent package shape', () => {
 		expect(docs).toContain('Do not create plaintext `.env` files');
 		const railwayTemplate = readFileSync(resolve(packageRoot, 'templates/railway/capacity-provider.yml'), 'utf8');
 		const deployWorkflow = readFileSync(resolve(packageRoot, 'templates/github/deploy-capacity-provider.workflow.yml'), 'utf8');
-		expect(railwayTemplate).toContain('api:');
+		expect(railwayTemplate).not.toContain('api:');
 		expect(railwayTemplate).toContain('manager:');
 		expect(railwayTemplate).toContain('runner:');
-		expect(railwayTemplate).toContain('node ./dist/provider/entrypoint.js api');
+		expect(railwayTemplate).not.toContain('node ./dist/provider/entrypoint.js api');
 		expect(railwayTemplate).not.toMatch(/tscp_[A-Za-z0-9_]+|tsp_[A-Za-z0-9_]+|sk-[A-Za-z0-9_]+/u);
 		expect(deployWorkflow).toContain('Build package-owned provider role images');
 		expect(deployWorkflow).not.toContain('placeholder');

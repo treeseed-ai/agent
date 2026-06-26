@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync } from 'node:fs';
 import { existsSync, mkdirSync, readdirSync } from 'node:fs';
 import { dirname, extname, resolve } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { build } from 'esbuild';
 import type { AgentHandlerKind } from '@treeseed/sdk/types/agents';
 import { getTreeseedAgentProviderSelections } from '@treeseed/sdk/platform/deploy-runtime';
@@ -36,6 +36,11 @@ const BUILTIN_HANDLERS: Record<(typeof BUILTIN_HANDLER_KINDS)[number], AgentHand
 	act: actHandler,
 	review: reviewHandler,
 	report: reportHandler,
+};
+
+const SELF_CONTRACT_IMPORTS: Record<string, string> = {
+	'@treeseed/agent/contracts/messages': 'contracts/messages',
+	'@treeseed/agent/contracts/run': 'contracts/run',
 };
 
 function normalizeHandlerKind(kind: AgentHandlerKind): AgentHandlerKind {
@@ -94,6 +99,22 @@ function findNearestTsconfig(startPath: string) {
 	}
 }
 
+function resolveSelfContractImport(importPath: string) {
+	const relativeContractPath = SELF_CONTRACT_IMPORTS[importPath];
+	if (!relativeContractPath) {
+		return null;
+	}
+
+	const moduleDir = dirname(fileURLToPath(import.meta.url));
+	const candidates = [
+		resolve(moduleDir, `${relativeContractPath}.ts`),
+		resolve(moduleDir, `${relativeContractPath}.js`),
+		resolve(moduleDir, '..', 'src', 'agents', `${relativeContractPath}.ts`),
+		resolve(moduleDir, '..', 'dist', 'agents', `${relativeContractPath}.js`),
+	];
+	return candidates.find((candidate) => existsSync(candidate)) ?? null;
+}
+
 async function importTenantAgentHandlerModule(modulePath: string) {
 	if (extname(modulePath) !== '.ts') {
 		return await import(/* @vite-ignore */ pathToFileURL(modulePath).href) as Record<string, unknown>;
@@ -114,6 +135,18 @@ async function importTenantAgentHandlerModule(modulePath: string) {
 			packages: 'external',
 			logLevel: 'silent',
 			tsconfig: tsconfig ?? undefined,
+			plugins: [{
+				name: 'treeseed-agent-self-contracts',
+				setup(buildContext) {
+					buildContext.onResolve({ filter: /^@treeseed\/agent\/contracts\/(messages|run)$/ }, (args) => {
+						const path = resolveSelfContractImport(args.path);
+						if (!path) {
+							return null;
+						}
+						return { path };
+					});
+				},
+			}],
 			tsconfigRaw: tsconfig
 				? undefined
 				: {

@@ -31,6 +31,7 @@ export interface ProviderRuntimeConfig {
 	marketId: string;
 	apiKey: string;
 	dataDir: string;
+	apiPort: number;
 	environment: string;
 	capabilitiesFile: string | null;
 	budgetFile: string | null;
@@ -142,6 +143,7 @@ function configuredCodexAuthFile(env: NodeJS.ProcessEnv) {
 
 export function resolveProviderEnvironmentInput(env: NodeJS.ProcessEnv = process.env): CapacityProviderEnvironmentInput {
 	const codexAuthFile = configuredCodexAuthFile(env);
+	const providerApiPort = envValue(env, 'TREESEED_PROVIDER_API_PORT') || envValue(env, 'PORT') || '3100';
 	return {
 		marketUrl: managementApiUrl(env),
 		marketId: envValue(env, 'TREESEED_MARKET_ID') || envValue(env, 'TREESEED_MANAGER_ID') || 'local',
@@ -149,6 +151,7 @@ export function resolveProviderEnvironmentInput(env: NodeJS.ProcessEnv = process
 		providerId: envValue(env, 'TREESEED_CAPACITY_PROVIDER_ID') || undefined,
 		teamId: envValue(env, 'TREESEED_CAPACITY_PROVIDER_TEAM_ID') || undefined,
 		providerDataDir: envValue(env, 'TREESEED_PROVIDER_DATA_DIR') || '/data',
+		providerApiPort,
 		providerEnvironment: envValue(env, 'TREESEED_PROVIDER_ENVIRONMENT') || envValue(env, 'TREESEED_ENVIRONMENT') || 'local',
 		capabilitiesFile: envValue(env, 'TREESEED_PROVIDER_CAPABILITIES_FILE') || undefined,
 		budgetFile: envValue(env, 'TREESEED_PROVIDER_BUDGET_FILE') || undefined,
@@ -186,8 +189,10 @@ export function resolveProviderConfig(options: {
 			TREESEED_MARKET_ID: input.marketId || '',
 			TREESEED_CAPACITY_PROVIDER_API_KEY: input.apiKey || '',
 			TREESEED_PROVIDER_DATA_DIR: input.providerDataDir ?? '/data',
+			TREESEED_PROVIDER_API_PORT: String(input.providerApiPort ?? '3100'),
 			TREESEED_PROVIDER_ENVIRONMENT: String(input.providerEnvironment ?? 'local'),
 		};
+	resolvedEnv.TREESEED_PROVIDER_API_PORT ??= String(input.providerApiPort ?? '3100');
 	Object.assign(resolvedEnv, optionalEnvEntries(env, [
 		'TREESEED_PROVIDER_WORKSPACE_ROOT',
 		'TREESEED_PROVIDER_WORKSPACE_ABSOLUTE_CONTAINER',
@@ -229,6 +234,7 @@ export function resolveProviderConfig(options: {
 		marketId: resolvedEnv.TREESEED_MARKET_ID ?? '',
 		apiKey: resolvedEnv.TREESEED_CAPACITY_PROVIDER_API_KEY ?? '',
 		dataDir: resolvedEnv.TREESEED_PROVIDER_DATA_DIR ?? '/data',
+		apiPort: intValue(resolvedEnv.TREESEED_PROVIDER_API_PORT ?? '', 3100),
 		environment: resolvedEnv.TREESEED_PROVIDER_ENVIRONMENT ?? 'local',
 		capabilitiesFile: envValue(env, 'TREESEED_PROVIDER_CAPABILITIES_FILE') || null,
 		budgetFile: envValue(env, 'TREESEED_PROVIDER_BUDGET_FILE') || null,

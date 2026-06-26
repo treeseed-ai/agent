@@ -626,6 +626,18 @@ describe('capacity provider runtime', () => {
 		expect(request.health.codexReady).toBe(true);
 	});
 
+	it('uses Railway PORT for the hosted provider API listener when provider port is not explicit', () => {
+		const config = resolveProviderConfig({
+			env: env({
+				PORT: '8080',
+				TREESEED_PROVIDER_API_PORT: '',
+			}),
+		});
+
+		expect(config.apiPort).toBe(8080);
+		expect(config.env.TREESEED_PROVIDER_API_PORT).toBe('8080');
+	});
+
 	it('builds the package-owned registration request from SDK capacity provider contracts', () => {
 		const config = resolveProviderConfig({ env: env() });
 		const request = buildProviderRegistrationRequest(config);

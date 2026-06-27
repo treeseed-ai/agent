@@ -285,24 +285,50 @@ async function createFixtureTreeDxFetch(repoRoot: string): Promise<typeof fetch>
 }
 
 async function patchFixtureAgentSpecs(repoRoot: string) {
-	const updates = new Map<string, string>([
-		['architecture-agent.mdx', '    operations: [pick, update, create]'],
-		['engineer-agent.mdx', '    operations: [pick, update, create]'],
-		['releaser-agent.mdx', '    operations: [pick, update, get, create]'],
-		['researcher-agent.mdx', '    operations: [pick, update, create]'],
-		['reviewer-agent.mdx', '    operations: [pick, update, get, create]'],
+	const readTools = [
+		'treedx.build_context',
+		'treedx.read_repository_files',
+		'treedx.search_workspace',
+		'treedx.read_workspace_file',
+		'treeseed.status',
+	];
+	const writeTools = [
+		...readTools,
+		'treedx.write_workspace_file',
+		'treedx.commit_workspace',
+	];
+	const engineeringTools = [
+		...writeTools,
+		'treeseed.dev_plan',
+		'treeseed.changed_paths',
+		'treeseed.verify',
+	];
+	const updates = new Map<string, { permissionLine?: string; tools: string[] }>([
+		['architecture-agent.mdx', { permissionLine: '    operations: [pick, update, create]', tools: engineeringTools }],
+		['engineer-agent.mdx', { permissionLine: '    operations: [pick, update, create]', tools: engineeringTools }],
+		['notifier-agent.mdx', { tools: readTools }],
+		['planner-agent.mdx', { tools: readTools }],
+		['releaser-agent.mdx', { permissionLine: '    operations: [pick, update, get, create]', tools: ['treedx.build_context', 'treedx.search_workspace', 'treedx.read_workspace_file', 'treeseed.status', 'treeseed.changed_paths', 'treeseed.verify'] }],
+		['researcher-agent.mdx', { permissionLine: '    operations: [pick, update, create]', tools: readTools }],
+		['reviewer-agent.mdx', { permissionLine: '    operations: [pick, update, get, create]', tools: ['treedx.build_context', 'treedx.search_workspace', 'treedx.read_workspace_file', 'treeseed.status', 'treeseed.changed_paths', 'treeseed.verify'] }],
 	]);
 
-	for (const [filename, permissionLine] of updates) {
+	for (const [filename, update] of updates) {
 		const filePath = path.join(repoRoot, 'src', 'content', 'agents', filename);
 		const source = await readFile(filePath, 'utf8').catch(() => null);
 		if (!source) {
 			continue;
 		}
-		const next = source.replace(
-			/(\n  - model: message\n)    operations: \[[^\]]+\]/,
-			`$1${permissionLine}`,
-		);
+		let next = update.permissionLine
+			? source.replace(
+				/(\n  - model: message\n)    operations: \[[^\]]+\]/,
+				`$1${update.permissionLine}`,
+			)
+			: source;
+		if (!/^tools:\n\s+allowed:/m.test(next)) {
+			const toolsBlock = `tools:\n  allowed:\n${update.tools.map((tool) => `    - ${tool}`).join('\n')}\n`;
+			next = next.replace(/^outputs:\n/m, `${toolsBlock}outputs:\n`);
+		}
 		if (next !== source) {
 			await writeFile(filePath, next, 'utf8');
 		}

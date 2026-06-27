@@ -48,7 +48,7 @@ describe('agent platform completion audit', () => {
 			'packages/agent/src/agents/handlers/review.ts',
 			'packages/agent/src/agents/handlers/report.ts',
 			'packages/admin/src/view-models/capacity-runtime.vm.ts',
-			'packages/agent/src/agents/tools/treedx-proxy-mcp-server.ts',
+			'packages/agent/src/agents/tools/agent-tool-mcp-server.ts',
 			'packages/agent/src/agents/tools/treedx-proxy-client.ts',
 			'packages/agent/src/agents/testing/agent-authoring-diagnostics.ts',
 			'packages/agent/src/provider/hosted-proof.ts',

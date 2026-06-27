@@ -1,25 +1,25 @@
 export const TREE_DX_PROXY_TOOL_NAMES = [
-	'treedx_build_context',
-	'treedx_read_repository_files',
-	'treedx_search_workspace',
-	'treedx_read_workspace_file',
-	'treedx_write_workspace_file',
-	'treedx_commit_workspace',
+	'treedx.build_context',
+	'treedx.read_repository_files',
+	'treedx.search_workspace',
+	'treedx.read_workspace_file',
+	'treedx.write_workspace_file',
+	'treedx.commit_workspace',
 ] as const;
 
 export type TreeDxProxyToolName = typeof TREE_DX_PROXY_TOOL_NAMES[number];
 
 export const TREE_DX_PROXY_TOOL_REQUIRED_OPERATIONS: Record<TreeDxProxyToolName, string[]> = {
-	treedx_build_context: ['files:read'],
-	treedx_read_repository_files: ['files:read'],
-	treedx_search_workspace: ['files:search'],
-	treedx_read_workspace_file: ['files:read'],
-	treedx_write_workspace_file: ['files:write'],
-	treedx_commit_workspace: ['git:commit'],
+	'treedx.build_context': ['files:read'],
+	'treedx.read_repository_files': ['files:read'],
+	'treedx.search_workspace': ['files:search'],
+	'treedx.read_workspace_file': ['files:read'],
+	'treedx.write_workspace_file': ['files:write'],
+	'treedx.commit_workspace': ['git:commit'],
 };
 
 export const TREE_DX_PROXY_TOOL_INPUT_SCHEMAS: Record<TreeDxProxyToolName, Record<string, unknown>> = {
-	treedx_build_context: {
+	'treedx.build_context': {
 		type: 'object',
 		properties: {
 			repoId: { type: 'string' },
@@ -28,7 +28,7 @@ export const TREE_DX_PROXY_TOOL_INPUT_SCHEMAS: Record<TreeDxProxyToolName, Recor
 		},
 		additionalProperties: false,
 	},
-	treedx_read_repository_files: {
+	'treedx.read_repository_files': {
 		type: 'object',
 		properties: {
 			repoId: { type: 'string' },
@@ -38,7 +38,7 @@ export const TREE_DX_PROXY_TOOL_INPUT_SCHEMAS: Record<TreeDxProxyToolName, Recor
 		required: ['paths'],
 		additionalProperties: false,
 	},
-	treedx_search_workspace: {
+	'treedx.search_workspace': {
 		type: 'object',
 		properties: {
 			workspaceId: { type: 'string' },
@@ -47,7 +47,7 @@ export const TREE_DX_PROXY_TOOL_INPUT_SCHEMAS: Record<TreeDxProxyToolName, Recor
 		required: ['query'],
 		additionalProperties: false,
 	},
-	treedx_read_workspace_file: {
+	'treedx.read_workspace_file': {
 		type: 'object',
 		properties: {
 			workspaceId: { type: 'string' },
@@ -56,7 +56,7 @@ export const TREE_DX_PROXY_TOOL_INPUT_SCHEMAS: Record<TreeDxProxyToolName, Recor
 		required: ['path'],
 		additionalProperties: false,
 	},
-	treedx_write_workspace_file: {
+	'treedx.write_workspace_file': {
 		type: 'object',
 		properties: {
 			workspaceId: { type: 'string' },
@@ -66,7 +66,7 @@ export const TREE_DX_PROXY_TOOL_INPUT_SCHEMAS: Record<TreeDxProxyToolName, Recor
 		required: ['path', 'content'],
 		additionalProperties: false,
 	},
-	treedx_commit_workspace: {
+	'treedx.commit_workspace': {
 		type: 'object',
 		properties: {
 			workspaceId: { type: 'string' },

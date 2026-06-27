@@ -98,6 +98,14 @@ execution:
   worktree:
     enabled: true
     branchPrefix: agent-workday-reporter
+tools:
+  allowed:
+    - treedx.build_context
+    - treedx.search_workspace
+    - treedx.read_workspace_file
+    - treedx.write_workspace_file
+    - treedx.commit_workspace
+    - treeseed.status
 outputs:
   messageTypes:
     - workday_report_created
@@ -108,9 +116,6 @@ outputs:
     - note:create
 governance:
   mutationClass: report_only
-  approvalRequiredForCanonicalContent: true
-  approvalRequiredForCode: true
-  requireHumanApproval: false
   requireSourceMap: false
 ---
 

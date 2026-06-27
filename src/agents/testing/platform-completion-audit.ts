@@ -44,7 +44,7 @@ export async function runAgentPlatformCompletionAudit(input: AgentPlatformComple
 			&& has(root, 'packages/agent/src/agents/handlers/review.ts')
 			&& has(root, 'packages/agent/src/agents/handlers/report.ts'),
 		diagnosticsApi: has(root, 'packages/admin/src/view-models/capacity-runtime.vm.ts'),
-		treedxMcp: has(root, 'packages/agent/src/agents/tools/treedx-proxy-mcp-server.ts')
+		agentToolMcp: has(root, 'packages/agent/src/agents/tools/agent-tool-mcp-server.ts')
 			&& has(root, 'packages/agent/src/agents/tools/treedx-proxy-client.ts'),
 		authoringDiagnostics: has(root, 'packages/agent/src/agents/testing/agent-authoring-diagnostics.ts'),
 		hostedProofHarness: has(root, 'packages/agent/src/provider/hosted-proof.ts'),
@@ -55,7 +55,7 @@ export async function runAgentPlatformCompletionAudit(input: AgentPlatformComple
 	let completeness = 7.2;
 	if (evidence.genericHandlers) completeness += 0.6;
 	if (evidence.diagnosticsApi) completeness += 0.7;
-	if (evidence.treedxMcp) completeness += 0.5;
+	if (evidence.agentToolMcp) completeness += 0.5;
 	if (evidence.authoringDiagnostics) completeness += 0.4;
 	if (evidence.hostedProofHarness) completeness += 0.3;
 	if (evidence.docs) completeness += 0.2;
@@ -82,10 +82,10 @@ export async function runAgentPlatformCompletionAudit(input: AgentPlatformComple
 			gaps: ['Broader allocation supersession fixtures should be expanded as staging data grows.'],
 		},
 		{
-			area: 'TreeDX tooling',
-			rating: evidence.treedxMcp ? 8.7 : 7.2,
-			evidence: evidence.treedxMcp ? ['TreeDX proxy client and MCP server modules are present.'] : [],
-			gaps: evidence.treedxMcp ? ['Needs hosted Codex run proof with MCP tool-call events.'] : ['TreeDX MCP tooling missing.'],
+			area: 'Agent tool MCP',
+			rating: evidence.agentToolMcp ? 8.7 : 7.2,
+			evidence: evidence.agentToolMcp ? ['Assignment-scoped agent tool MCP server module is present.'] : [],
+			gaps: evidence.agentToolMcp ? ['Needs hosted Codex run proof with MCP tool-call events.'] : ['Agent tool MCP server missing.'],
 		},
 		{
 			area: 'Authoring diagnostics',
@@ -105,9 +105,9 @@ export async function runAgentPlatformCompletionAudit(input: AgentPlatformComple
 		architectureQualityRating: 8.9,
 		governanceRating: 9.0,
 		capacityProviderRating: clamp(evidence.diagnosticsApi && evidence.hostedProofHarness ? 8.6 : 8.0),
-		runtimeRating: clamp(evidence.treedxMcp ? 8.6 : 8.0),
+		runtimeRating: clamp(evidence.agentToolMcp ? 8.6 : 8.0),
 		adminUxRating: clamp(evidence.diagnosticsApi ? 8.5 : 7.3),
-		treeDxToolingRating: clamp(evidence.treedxMcp ? 8.7 : 7.2),
+		treeDxToolingRating: clamp(evidence.agentToolMcp ? 8.7 : 7.2),
 		documentationRating: clamp(evidence.docs ? 8.2 : 7.0),
 		completenessByArea: areas.map((area) => ({ ...area, rating: clamp(area.rating) })),
 		recommendation: hostedProof?.ok

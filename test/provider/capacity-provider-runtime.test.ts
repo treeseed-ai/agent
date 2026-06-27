@@ -246,6 +246,15 @@ triggers:
 permissions:
   - model: message
     operations: [create]
+tools:
+  allowed:
+    - treedx.build_context
+    - treedx.read_repository_files
+    - treedx.search_workspace
+    - treedx.read_workspace_file
+    - treedx.write_workspace_file
+    - treedx.commit_workspace
+    - treeseed.status
 execution: {}
 outputs: {}
 ---
@@ -1537,7 +1546,8 @@ describe('capacity provider runtime', () => {
 
 		expect(result).toMatchObject({ ok: true, assigned: 1, assignmentId: 'assignment_treedx_tools' });
 		expect(adapter.lastStartInput?.tools?.[0]).toMatchObject({
-			kind: 'treedx_proxy',
+			kind: 'agent_tool',
+			executionTarget: 'treedx_proxy',
 			projectId: 'project_123',
 			assignmentId: 'assignment_treedx_tools',
 			handleId: 'tdx-handle-1',

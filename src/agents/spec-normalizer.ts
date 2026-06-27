@@ -2,15 +2,19 @@ import {
 	AGENT_CLI_ALLOW_TOOLS,
 	type AgentExecutionConfig,
 	type AgentHandlerKind,
+	type AgentContentAccessPolicy,
 	type AgentOutputContract,
 	type AgentProviderFallbackPolicy,
 	type AgentProviderProfile,
 	type AgentPermissionConfig,
 	type AgentPermissionOperation,
 	type AgentPermissionPolicy,
+	type AgentToolPolicy,
 	type AgentTriggerConfig,
 	type AgentTriggerKind,
 } from '@treeseed/sdk/types/agents';
+import { TREESEED_CONTENT_ACTIONS, type TreeseedContentAction } from '@treeseed/sdk/content-operations';
+import { assertKnownAgentToolIds } from '@treeseed/sdk';
 import type { DeclarativeContextQuery } from '@treeseed/sdk/graph/context-query-contracts';
 import { AGENT_MESSAGE_TYPES } from './contracts/messages.ts';
 import { normalizeAgentCliOptions } from './cli-tools.ts';
@@ -265,7 +269,167 @@ function normalizePermissionPolicy(
 		});
 		return undefined;
 	}
+	for (const mode of ['planning', 'acting'] as const) {
+		const modePolicy = isPlainObject(value.modes) && isPlainObject(value.modes[mode])
+			? value.modes[mode]
+			: null;
+		if (!modePolicy) continue;
+		if (modePolicy.operations !== undefined) {
+			diagnostics.push({
+				severity: 'error',
+				slug,
+				field: `permissionPolicy.modes.${mode}.operations`,
+				message: 'Operation allow lists are not supported. Declare callable agent tools in tools.allowed.',
+			});
+		}
+	}
 	return value as AgentPermissionPolicy;
+}
+
+function normalizeTools(
+	value: unknown,
+	enabled: boolean,
+	diagnostics: AgentSpecDiagnostic[],
+	slug: string,
+): AgentToolPolicy {
+	if (value === undefined || value === null) {
+		if (enabled) {
+			diagnostics.push({
+				severity: 'error',
+				slug,
+				field: 'tools.allowed',
+				message: 'Enabled agents must declare tools.allowed, even when the list is empty.',
+			});
+		}
+		return { allowed: [] };
+	}
+	if (!isPlainObject(value)) {
+		diagnostics.push({
+			severity: 'error',
+			slug,
+			field: 'tools',
+			message: 'Expected tools to be an object.',
+		});
+		return { allowed: [] };
+	}
+	if (!Array.isArray(value.allowed)) {
+		diagnostics.push({
+			severity: 'error',
+			slug,
+			field: 'tools.allowed',
+			message: 'Expected tools.allowed to be an array of tool ids.',
+		});
+		return { allowed: [] };
+	}
+	const ids = value.allowed.filter((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0)
+		.map((entry) => entry.trim());
+	if (ids.length !== value.allowed.length) {
+		diagnostics.push({
+			severity: 'error',
+			slug,
+			field: 'tools.allowed',
+			message: 'Expected tools.allowed to contain only non-empty strings.',
+		});
+	}
+	const result = assertKnownAgentToolIds(ids);
+	for (const duplicate of result.duplicates) {
+		diagnostics.push({
+			severity: 'warning',
+			slug,
+			field: 'tools.allowed',
+			message: `Duplicate tool id "${duplicate}" was ignored.`,
+		});
+	}
+	for (const unknown of result.unknown) {
+		diagnostics.push({
+			severity: 'error',
+			slug,
+			field: 'tools.allowed',
+			message: `Unknown agent tool id "${unknown}".`,
+		});
+	}
+	return { allowed: result.known };
+}
+
+function stringList(value: unknown, field: string, diagnostics: AgentSpecDiagnostic[], slug: string) {
+	if (value === undefined) return undefined;
+	if (!Array.isArray(value) || !value.every((entry) => typeof entry === 'string' && entry.trim())) {
+		diagnostics.push({
+			severity: 'error',
+			slug,
+			field,
+			message: `Expected ${field} to be an array of non-empty strings.`,
+		});
+		return undefined;
+	}
+	return value.map((entry) => entry.trim());
+}
+
+function normalizeContentScope(
+	value: unknown,
+	field: string,
+	diagnostics: AgentSpecDiagnostic[],
+	slug: string,
+) {
+	if (value === undefined || value === null) return undefined;
+	if (!isPlainObject(value)) {
+		diagnostics.push({
+			severity: 'error',
+			slug,
+			field,
+			message: `Expected ${field} to be an object.`,
+		});
+		return undefined;
+	}
+	const models = stringList(value.models, `${field}.models`, diagnostics, slug) ?? [];
+	const actions = stringList(value.actions, `${field}.actions`, diagnostics, slug);
+	const invalidActions = (actions ?? []).filter((action) => !TREESEED_CONTENT_ACTIONS.includes(action as TreeseedContentAction));
+	for (const action of invalidActions) {
+		diagnostics.push({
+			severity: 'error',
+			slug,
+			field: `${field}.actions`,
+			message: `Unknown content action "${action}".`,
+		});
+	}
+	return {
+		models,
+		actions: actions?.filter((action): action is TreeseedContentAction => TREESEED_CONTENT_ACTIONS.includes(action as TreeseedContentAction)),
+		books: stringList(value.books, `${field}.books`, diagnostics, slug),
+		paths: stringList(value.paths, `${field}.paths`, diagnostics, slug),
+		relations: stringList(value.relations, `${field}.relations`, diagnostics, slug),
+	};
+}
+
+function normalizeContentAccess(
+	value: unknown,
+	diagnostics: AgentSpecDiagnostic[],
+	slug: string,
+): AgentContentAccessPolicy | undefined {
+	if (value === undefined || value === null) return undefined;
+	if (!isPlainObject(value)) {
+		diagnostics.push({
+			severity: 'error',
+			slug,
+			field: 'contentAccess',
+			message: 'Expected contentAccess to be an object.',
+		});
+		return undefined;
+	}
+	const commit = value.commit;
+	if (commit !== undefined && (!isPlainObject(commit) || typeof commit.allowed !== 'boolean')) {
+		diagnostics.push({
+			severity: 'error',
+			slug,
+			field: 'contentAccess.commit.allowed',
+			message: 'Expected contentAccess.commit.allowed to be a boolean.',
+		});
+	}
+	return {
+		read: normalizeContentScope(value.read, 'contentAccess.read', diagnostics, slug),
+		write: normalizeContentScope(value.write, 'contentAccess.write', diagnostics, slug),
+		commit: isPlainObject(commit) && typeof commit.allowed === 'boolean' ? { allowed: commit.allowed } : { allowed: false },
+	};
 }
 
 function normalizeContext(
@@ -564,6 +728,7 @@ function normalizeParts(
 	}
 	try {
 		const cli = normalizeAgentCliOptions(raw.cli);
+		const enabled = ensureBoolean(raw.enabled, 'enabled', diagnostics, slug, true);
 		const spec: AgentSpecParts = {
 			slug,
 			handler,
@@ -580,7 +745,7 @@ function normalizeParts(
 				slug,
 			),
 			handlerConfig: normalizeHandlerConfig(raw.handlerConfig, diagnostics, slug),
-			enabled: ensureBoolean(raw.enabled, 'enabled', diagnostics, slug, true),
+			enabled,
 			systemPrompt: ensureString(raw.systemPrompt, 'systemPrompt', diagnostics, slug),
 			persona: ensureString(raw.persona, 'persona', diagnostics, slug),
 			cli,
@@ -595,6 +760,8 @@ function normalizeParts(
 				: undefined,
 			permissions: normalizePermissions(raw.permissions, diagnostics, slug),
 			permissionPolicy: normalizePermissionPolicy(raw.permissionPolicy, diagnostics, slug),
+			tools: normalizeTools(raw.tools, enabled, diagnostics, slug),
+			contentAccess: normalizeContentAccess(raw.contentAccess, diagnostics, slug),
 			context: normalizeContext(raw.context, diagnostics, slug),
 			execution: normalizeExecution(raw.execution, diagnostics, slug),
 			outputs: normalizeOutputs(raw.outputs, diagnostics, slug),

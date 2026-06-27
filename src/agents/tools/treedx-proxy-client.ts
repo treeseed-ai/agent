@@ -60,17 +60,17 @@ function resolveRoute(descriptor: TreeDxProxyExecutionToolDescriptor, toolName: 
 	const path = encodeURIComponent(String(input.path ?? ''));
 	const route = (() => {
 		switch (toolName) {
-			case 'treedx_build_context':
+			case 'treedx.build_context':
 				return descriptor.routes.buildContext;
-			case 'treedx_read_repository_files':
+			case 'treedx.read_repository_files':
 				return descriptor.routes.readRepositoryFiles;
-			case 'treedx_search_workspace':
+			case 'treedx.search_workspace':
 				return descriptor.routes.searchWorkspace;
-			case 'treedx_read_workspace_file':
+			case 'treedx.read_workspace_file':
 				return descriptor.routes.readWorkspaceFile;
-			case 'treedx_write_workspace_file':
+			case 'treedx.write_workspace_file':
 				return descriptor.routes.writeWorkspaceFile;
-			case 'treedx_commit_workspace':
+			case 'treedx.commit_workspace':
 				return descriptor.routes.commitWorkspace;
 			default:
 				throw new Error(`Unsupported TreeDX tool: ${toolName}`);
@@ -86,17 +86,17 @@ function resolveRoute(descriptor: TreeDxProxyExecutionToolDescriptor, toolName: 
 
 function requestBody(toolName: TreeDxProxyToolName, input: Record<string, unknown>) {
 	switch (toolName) {
-		case 'treedx_build_context':
+		case 'treedx.build_context':
 			return { query: input.query, paths: input.paths };
-		case 'treedx_read_repository_files':
+		case 'treedx.read_repository_files':
 			return { paths: input.paths, ref: input.ref };
-		case 'treedx_search_workspace':
+		case 'treedx.search_workspace':
 			return { query: input.query };
-		case 'treedx_write_workspace_file':
+		case 'treedx.write_workspace_file':
 			return { content: input.content };
-		case 'treedx_commit_workspace':
+		case 'treedx.commit_workspace':
 			return { message: input.message };
-		case 'treedx_read_workspace_file':
+		case 'treedx.read_workspace_file':
 			return null;
 		default:
 			return null;

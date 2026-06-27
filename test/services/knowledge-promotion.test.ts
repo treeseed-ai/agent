@@ -344,7 +344,7 @@ describe('knowledge promotion to staging', () => {
 		});
 	});
 
-	it('builds a release grant that requires the matching release approval', () => {
+	it('builds a release grant with approval provenance metadata', () => {
 		expect(defaultReleaseGrant({
 			taskId: 'task-release-1',
 			projectId: 'project-1',
@@ -352,8 +352,9 @@ describe('knowledge promotion to staging', () => {
 			approvalId: 'release:knowledge:runtime',
 		})).toEqual(expect.objectContaining({
 			operations: ['release'],
-			requiresApproval: true,
-			approvalIds: ['release:knowledge:runtime'],
+			metadata: expect.objectContaining({
+				approvalId: 'release:knowledge:runtime',
+			}),
 		}));
 	});
 });

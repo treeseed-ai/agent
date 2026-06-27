@@ -1,13 +1,14 @@
 import { Codex } from '@openai/codex-sdk';
+import { isAbsolute, relative } from 'node:path';
+import { findAgentToolDefinition } from '@treeseed/sdk';
 import type { AgentRuntimeSpec } from '@treeseed/sdk/types/agents';
 import type {
 	ExecutionProviderAdapter,
 	ExecutionProviderInvocation,
 	ExecutionProviderToolDescriptor,
-	TreeDxProxyExecutionToolDescriptor,
 } from '../runtime-types.ts';
-import { TREE_DX_PROXY_TOOL_NAMES } from '../tools/treedx-proxy-tool.ts';
-import { createTreeDxProxyMcpServerCommand } from '../tools/treedx-proxy-mcp-server.ts';
+import { createAgentToolMcpServerCommand } from '../tools/agent-tool-mcp-server.ts';
+import { agentToolMcpName } from '../tools/agent-tool-mcp-server.ts';
 import { prependCoreObjectiveToPrompt } from '../core-objective.ts';
 import {
 	type CodexApprovalPolicy,
@@ -38,6 +39,8 @@ export interface CodexExecutionRequest {
 	reasoningEffort?: CodexReasoningEffort;
 	timeoutMs?: number;
 	tools?: ExecutionProviderToolDescriptor[];
+	leaseToken?: string | null;
+	toolTelemetryPath?: string | null;
 	metadata?: Record<string, unknown>;
 }
 
@@ -124,6 +127,13 @@ export class CodexRequestSafetyError extends Error {
 
 function normalizePath(value: string) {
 	return value.replace(/\\/gu, '/').replace(/^\.?\//u, '').replace(/\/+/gu, '/');
+}
+
+function normalizeChangedPath(value: string, root: string) {
+	if (!isAbsolute(value)) return normalizePath(value);
+	const relativePath = relative(root, value);
+	if (!relativePath || relativePath.startsWith('..') || isAbsolute(relativePath)) return normalizePath(value);
+	return normalizePath(relativePath);
 }
 
 class CodexExecutionTimeoutError extends Error {
@@ -214,32 +224,31 @@ function safetyResult(request: CodexExecutionRequest, error: CodexRequestSafetyE
 	};
 }
 
-function treeDxProxyTools(request: CodexExecutionRequest) {
-	return (request.tools ?? []).filter((tool): tool is TreeDxProxyExecutionToolDescriptor => tool.kind === 'treedx_proxy');
+function agentTools(request: CodexExecutionRequest) {
+	return (request.tools ?? []).filter((tool) => tool.kind === 'agent_tool');
 }
 
-function redactToolForPrompt(tool: TreeDxProxyExecutionToolDescriptor) {
+function redactToolForPrompt(tool: ExecutionProviderToolDescriptor) {
+	const metadata = tool.metadata && typeof tool.metadata === 'object' && !Array.isArray(tool.metadata)
+		? tool.metadata as Record<string, unknown>
+		: {};
 	return {
 		kind: tool.kind,
 		id: tool.id,
 		name: tool.name,
 		description: tool.description,
-		operations: tool.operations,
-		projectId: tool.projectId,
-		assignmentId: tool.assignmentId,
-		handleId: tool.handleId,
-		repositoryId: tool.repositoryId ?? null,
-		workspaceId: tool.workspaceId ?? null,
-		allowedOperations: tool.allowedOperations,
-		allowedPaths: tool.allowedPaths,
-		allowedReadPaths: tool.allowedReadPaths ?? [],
-		allowedWritePaths: tool.allowedWritePaths ?? [],
-		routes: tool.routes,
-		toolNames: TREE_DX_PROXY_TOOL_NAMES,
+		callName: agentToolMcpName(tool.id),
+		executionTarget: tool.executionTarget,
+		mutability: tool.mutability,
+		contentAction: metadata.contentAction ?? undefined,
+		contentModel: metadata.contentModel ?? undefined,
+		contentPreset: metadata.contentPreset ?? undefined,
+		contentAccessSummary: metadata.contentAccessSummary ?? undefined,
+		inputSchema: tool.inputSchema,
 	};
 }
 
-export function codexTreeDxConfig(request: CodexExecutionRequest) {
+export function codexAgentToolConfig(request: CodexExecutionRequest) {
 	const projectRoot = request.sandboxMode === 'workspace_write'
 		? request.worktreeRoot ?? request.repoRoot
 		: request.repoRoot;
@@ -250,33 +259,45 @@ export function codexTreeDxConfig(request: CodexExecutionRequest) {
 			},
 		},
 	} as Record<string, unknown>;
-	const tools = treeDxProxyTools(request);
-	if (tools.length === 0) return baseConfig;
-	const mcpServers: Record<string, unknown> = {};
-	for (const [index, tool] of tools.entries()) {
-		const server = createTreeDxProxyMcpServerCommand({
-			apiBaseUrl: process.env.TREESEED_API_BASE_URL ?? process.env.TREESEED_MARKET_URL ?? process.env.TREESEED_CAPACITY_ACCEPTANCE_API_URL ?? '',
-			providerApiKey: process.env.TREESEED_CAPACITY_PROVIDER_API_KEY ?? process.env.TREESEED_PROVIDER_API_KEY ?? '',
-			assignmentId: tool.assignmentId,
-			handleId: tool.handleId,
-			descriptor: tool,
-		});
-		mcpServers[index === 0 ? 'treedx_proxy' : `treedx_proxy_${index + 1}`] = {
-			command: server.command,
-			args: server.args,
-			env: server.env,
-		};
+	const serviceTier = process.env.TREESEED_CODEX_SERVICE_TIER?.trim();
+	if (serviceTier === 'fast') {
+		baseConfig.service_tier = serviceTier;
 	}
+	const tools = agentTools(request);
+	if (tools.length === 0) return baseConfig;
+	const assignmentId = String(request.metadata?.assignment && typeof request.metadata.assignment === 'object'
+		? (request.metadata.assignment as Record<string, unknown>).id ?? ''
+		: '');
+	const server = createAgentToolMcpServerCommand({
+		apiBaseUrl: process.env.TREESEED_API_BASE_URL ?? process.env.TREESEED_MARKET_URL ?? process.env.TREESEED_CAPACITY_ACCEPTANCE_API_URL ?? '',
+		providerApiKey: process.env.TREESEED_CAPACITY_PROVIDER_API_KEY ?? process.env.TREESEED_PROVIDER_API_KEY ?? '',
+		assignmentId,
+		leaseToken: request.leaseToken ?? null,
+		repoRoot: request.repoRoot,
+		telemetryPath: request.toolTelemetryPath ?? null,
+		descriptors: tools,
+	});
 	return {
 		...baseConfig,
-		mcp_servers: mcpServers,
+		features: {
+			builtin_mcp: true,
+		},
+		mcp_servers: {
+			treeseed_tools: {
+				command: server.command,
+				args: server.args,
+				env: server.env,
+				required: true,
+				default_tools_approval_mode: 'approve',
+			},
+		},
 	};
 }
 
 async function createDefaultCodexClient(request?: CodexExecutionRequest): Promise<CodexSubscriptionClient> {
 	return new Codex({
 		env: codexClientEnvironment(),
-		config: request ? codexTreeDxConfig(request) : undefined,
+		config: request ? codexAgentToolConfig(request) : undefined,
 	} as ConstructorParameters<typeof Codex>[0]);
 }
 
@@ -316,24 +337,26 @@ export function buildCodexPrompt(request: CodexExecutionRequest) {
 	const workPackage = request.metadata?.workPackage ?? request.metadata?.workPackageYaml;
 	const operationBoundary = request.sandboxMode === 'workspace_write'
 		? [
-			'- The handler controls save, stage, merge_to_staging, close, and release.',
-			'- Do not stage shared branches.',
-			'- Do not merge to staging directly.',
-			'- Do not close the task directly.',
-			'- Do not release.',
+			'- Use only the tools listed in the available TreeSeed tool catalog.',
+			'- Do not stage shared branches unless an explicit stage tool is present.',
+			'- Do not close the task directly unless an explicit close tool is present.',
+			'- Do not release unless an explicit release tool is present.',
 		].join('\n')
-		: '- Treat this as read-only/planning unless the handler grants a later mutation stage.';
-	const treeDxTools = treeDxProxyTools(request);
-	const treeDxSection = treeDxTools.length > 0
+	: '- Treat this as read-only/planning unless the handler grants a later mutation stage.';
+	const tools = agentTools(request);
+	const toolSection = tools.length > 0
 		? [
-			'TreeDX assignment tools:',
-			'Use the assignment-scoped TreeDX MCP tools for project content reads, queries, writes, and commits.',
+			'Available TreeSeed tools:',
+			'Use only these assignment-scoped tools when tool use is needed.',
 			'Do not request raw TreeDX URLs, bearer tokens, GitHub tokens, deploy keys, provider API keys, or direct repository credentials.',
+			'Do not use shell as a substitute for missing TreeSeed tools.',
 			'Local shell reads are reserved for repository files in the assigned workspace; Knowledge Hub model instances must be accessed through TreeDX tools.',
-			'If required context is missing, call the available tools before reporting that work is blocked.',
-			formatMetadataBlock(treeDxTools.map(redactToolForPrompt)),
+			'When a model-aware TreeSeed content tool is available, use it instead of hand-writing Knowledge Hub frontmatter or markdown files.',
+			'Content tools return staged TreeDX workspace changes unless a commit-capable content tool is explicitly listed.',
+			'If a needed tool is absent or returns a structured scope error, adapt the work or report the missing capability in the final response.',
+			formatMetadataBlock(tools.map(redactToolForPrompt)),
 		].join('\n')
-		: 'TreeDX assignment tools:\nNo assignment-scoped TreeDX tools were provided; use only repository/work package context and report blocked work with the exact missing tool or permission.';
+		: 'Available TreeSeed tools:\nNo assignment-scoped tools were provided; use only repository/work package context and report blocked work with the exact missing capability.';
 	const taskPrompt = [
 		'You are operating as a TreeSeed implementation agent.',
 		'',
@@ -366,7 +389,7 @@ export function buildCodexPrompt(request: CodexExecutionRequest) {
 			'- Record commands you ran or believe should be run.',
 			'- If the task requires broader scope or a missing tool, stop with a clear blocked summary that names the missing permission or tool.',
 		'',
-		treeDxSection,
+		toolSection,
 		'',
 		'Context pack:',
 		formatMetadataBlock(contextPackSummary),
@@ -462,7 +485,8 @@ export function normalizeCodexRunResult(input: {
 	const threadOptions = mapCodexThreadOptions(input.request);
 	const rawEventRefs = unique(items.map((item) => stringValue(item.id)).filter((id): id is string => Boolean(id)));
 	const proposedCommands = unique(items.map(extractCommand).filter((command): command is string => Boolean(command)));
-	const changedPaths = unique(items.flatMap(extractFileChangePaths).map(normalizePath));
+	const pathRoot = input.request.worktreeRoot ?? input.request.repoRoot;
+	const changedPaths = unique(items.flatMap(extractFileChangePaths).map((path) => normalizeChangedPath(path, pathRoot)));
 	const verificationHints = unique(proposedCommands.filter(commandLooksLikeVerification));
 	const finalResponse = input.result.finalResponse ?? '';
 	const summary = finalResponse.split('\n').find((line) => line.trim())?.trim() || 'Codex SDK task completed.';
@@ -677,6 +701,25 @@ async function prepareDefaultWorktree(input: {
 	return new AgentWorktreeManager(input.repoRoot).createOrResumeWorktree(featureBranch, input.runId);
 }
 
+function toolsWithWorktree(
+	tools: ExecutionProviderToolDescriptor[] | undefined,
+	worktreeRoot: string | undefined,
+) {
+	return (tools ?? [])
+		.map((tool) => ({
+			...tool,
+			metadata: {
+				...(tool.metadata ?? {}),
+				worktreeRoot: worktreeRoot ?? (tool.metadata?.worktreeRoot ?? null),
+			},
+		}))
+		.filter((tool) => {
+			const definition = findAgentToolDefinition(tool.id);
+			if (!definition?.requirements.includes('assignment_worktree')) return true;
+			return typeof tool.metadata?.worktreeRoot === 'string' && tool.metadata.worktreeRoot.trim().length > 0;
+		});
+}
+
 export class CodexSubscriptionExecutionProviderAdapter implements ExecutionProviderAdapter {
 	constructor(private readonly options: CodexSubscriptionExecutionProviderAdapterOptions = {}) {}
 
@@ -725,6 +768,7 @@ export class CodexSubscriptionExecutionProviderAdapter implements ExecutionProvi
 				repoRoot,
 			})
 			: undefined;
+		const tools = toolsWithWorktree(input.tools, worktree?.worktreeRoot);
 		const result = await runCodexSubscriptionTask({
 			taskId: runId,
 			agentSlug: input.agent.slug,
@@ -742,7 +786,9 @@ export class CodexSubscriptionExecutionProviderAdapter implements ExecutionProvi
 			model: input.agent.execution.model ?? config.defaultModel,
 			reasoningEffort: input.agent.execution.reasoningEffort as CodexReasoningEffort | undefined,
 			timeoutMs: config.timeoutMs,
-			tools: input.tools,
+			tools,
+			leaseToken: input.leaseToken,
+			toolTelemetryPath: typeof input.metadata?.toolTelemetryPath === 'string' ? input.metadata.toolTelemetryPath : null,
 			metadata: {
 				subscriptionPlan: config.subscriptionPlan,
 				worktreeBranch: worktree?.branchName,

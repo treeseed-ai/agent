@@ -63,7 +63,6 @@ function readOperationGrants(value: unknown) {
 }
 
 export function normalizeCodexDocsMutationInput(payload: Record<string, unknown>, context: AgentContext): CodexDocsMutationTaskInput {
-	const approval = readRecord(payload.approval);
 	const workPackage = readRecord(payload.workPackage) ?? payload;
 	const taskId = readString(payload.taskId, context.runId);
 	const featureBranch = readString(payload.featureBranch, `${context.agent.execution.branchPrefix}/${taskId}`);
@@ -79,8 +78,7 @@ export function normalizeCodexDocsMutationInput(payload: Record<string, unknown>
 		goal: readString(payload.goal) || readString(payload.prompt, `Run implementation task ${taskId}.`),
 		featureBranch,
 		stagingBranch: readString(payload.stagingBranch, 'staging'),
-		approvalId: readString(payload.approvalId) || (typeof approval?.id === 'string' ? approval.id : undefined),
-		approval: approval as unknown as CodexDocsMutationTaskInput['approval'],
+		approvalId: readString(payload.approvalId) || undefined,
 		permissionGrantId: readString(payload.permissionGrantId) || undefined,
 		operationGrants: readOperationGrants(payload.operationGrants ?? payload.grants),
 		allowedPaths: readStringArray(payload.allowedPaths),
@@ -139,8 +137,6 @@ async function lifecycleOperation(input: {
 		worktreeRoot: input.worktreeRoot,
 		featureBranch: input.task.featureBranch,
 		stagingBranch: input.task.stagingBranch,
-		approvalId: input.task.approvalId,
-		approval: input.task.approval,
 		permissionGrantId: input.task.permissionGrantId,
 		allowedPaths: input.task.allowedPaths,
 		forbiddenPaths: input.task.forbiddenPaths,
@@ -158,7 +154,7 @@ async function lifecycleOperation(input: {
 				summary: input.summary ?? `Completed handler-controlled ${input.operation}.`,
 				changedPaths: input.changedPaths ?? [],
 				stagedPaths: input.operation === 'stage' ? input.changedPaths ?? [] : [],
-				mergedToStaging: input.operation === 'merge_to_staging' ? Boolean(input.metadata?.mergedToStaging) : undefined,
+				mergedToStaging: input.operation === 'stage' && input.metadata?.phase === 'staging_merge' ? Boolean(input.metadata?.mergedToStaging) : undefined,
 				commandsRun: [],
 				artifacts: [],
 				metadata: {
@@ -570,11 +566,12 @@ export async function runCodexDocsMutationLifecycle(
 	const mergeAuthorization = await lifecycleOperation({
 		context,
 		task,
-		operation: 'merge_to_staging',
+		operation: 'stage',
 		mode: 'mutating',
 		worktreeRoot,
 		changedPaths,
 		summary: 'Authorized feature branch merge to staging.',
+		metadata: { phase: 'staging_merge' },
 	});
 	operationResults.push(mergeAuthorization);
 	if (!statusFromOperation(mergeAuthorization)) {
@@ -626,7 +623,7 @@ export async function runCodexDocsMutationLifecycle(
 			snapshots,
 			changedPaths,
 			summary: mergeResult.mergeFailure.message,
-			code: 'merge_to_staging_failed',
+			code: 'staging_merge_failed',
 			status: 'merge_failed',
 			mergeFailure: mergeResult.mergeFailure,
 			repairTask,

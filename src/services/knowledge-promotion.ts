@@ -203,7 +203,7 @@ function defaultPromotionGrant(input: {
 	return {
 		id: `grant:knowledge-promotion:${input.taskId}`,
 		state: 'active',
-		operations: ['switch', 'dev', 'verify', 'save', 'stage', 'merge_to_staging', 'close'] as AgentOperationName[],
+		operations: ['switch', 'dev', 'verify', 'save', 'stage', 'close'] as AgentOperationName[],
 		modes: ['dry_run', 'read_only', 'mutating'],
 		agentRoles: [input.agentRole],
 		taskKinds: [input.taskKind],
@@ -232,10 +232,9 @@ export function defaultReleaseGrant(input: {
 		taskKinds: ['release_staged_knowledge_request'],
 		projectIds: [input.projectId],
 		environments: [input.environment],
-		requiresApproval: true,
-		approvalIds: [input.approvalId],
 		metadata: {
 			source: 'staged_knowledge_release_request',
+			approvalId: input.approvalId,
 		},
 	} satisfies AgentOperationGrant;
 }
@@ -342,12 +341,6 @@ async function lifecycleOperation(input: {
 		worktreeRoot: input.worktreeRoot,
 		featureBranch: input.task.featureBranch,
 		stagingBranch: input.task.stagingBranch,
-		approvalId: input.task.approvalDecision.approvalId,
-		approval: {
-			id: input.task.approvalDecision.approvalId,
-			kind: 'promote_knowledge_draft',
-			state: 'approved',
-		},
 		permissionGrantId: input.task.permissionGrantId,
 		allowedPaths: input.task.allowedPaths,
 		forbiddenPaths: input.task.forbiddenPaths,
@@ -365,7 +358,7 @@ async function lifecycleOperation(input: {
 				summary: input.summary ?? `Completed handler-controlled ${input.operation}.`,
 				changedPaths: input.changedPaths ?? [],
 				stagedPaths: input.operation === 'stage' ? input.changedPaths ?? [] : [],
-				mergedToStaging: input.operation === 'merge_to_staging' ? Boolean(input.metadata?.mergedToStaging) : undefined,
+				mergedToStaging: input.operation === 'stage' && input.metadata?.phase === 'staging_merge' ? Boolean(input.metadata?.mergedToStaging) : undefined,
 				mergeFailure: input.metadata?.mergeFailure as AgentOperationResult['mergeFailure'],
 				commandsRun: [],
 				artifacts: [],
@@ -760,11 +753,12 @@ export async function runKnowledgePromotionToStaging(input: {
 	const mergeResult = await lifecycleOperation({
 		sdk: input.sdk,
 		task,
-		operation: 'merge_to_staging',
+		operation: 'stage',
 		mode: 'mutating',
 		worktreeRoot: worktree.worktreeRoot,
 		changedPaths,
 		summary: 'Merged verified knowledge promotion to staging.',
+		metadata: { phase: 'staging_merge' },
 	});
 	operationResults.push(mergeResult);
 	if (!resultStatusOk(mergeResult)) {
@@ -814,7 +808,7 @@ export async function runKnowledgePromotionToStaging(input: {
 			status: 'merge_failed',
 			worktreeRoot: worktree.worktreeRoot,
 			summary: merge.mergeFailure?.message ?? 'Merge to staging failed.',
-			code: 'merge_to_staging_failed',
+			code: 'staging_merge_failed',
 			changedPaths,
 			operationResults,
 			snapshots,

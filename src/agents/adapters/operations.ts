@@ -12,17 +12,13 @@ import type { ScopedAgentSdk } from '@treeseed/sdk/sdk';
 
 type WorkflowExecutor = Pick<TreeseedOperationsSdk, 'execute'>;
 
-// merge_to_staging is intentionally policy-only in this generic adapter.
-// Concrete feature-to-staging merge execution needs handler lifecycle context:
-// assigned worktree, verified changed paths, snapshots, and repair-task output.
-const WORKFLOW_OPERATION_MAP: Record<AgentOperationRequest['operation'], string | null> = {
+const WORKFLOW_OPERATION_MAP: Record<AgentOperationRequest['operation'], string> = {
 	switch: 'switch',
 	update: 'update',
 	dev: 'dev',
 	verify: 'test',
 	save: 'save',
 	stage: 'stage',
-	merge_to_staging: null,
 	close: 'close',
 	release: 'release',
 };
@@ -121,28 +117,6 @@ export class SdkOperationsAdapter implements AgentOperationsAdapter {
 		}
 
 		const workflowOperation = WORKFLOW_OPERATION_MAP[input.request.operation];
-		if (!workflowOperation) {
-			const waiting: AgentOperationResult = {
-				operation: input.request.operation,
-				status: 'waiting',
-				summary: `${input.request.operation} is policy-authorized and intentionally delegated to a handler lifecycle executor.`,
-				changedPaths: input.request.changedPaths ?? [],
-				stagedPaths: [],
-				commandsRun: [],
-				artifacts: [],
-				error: {
-					code: 'operation_executor_unavailable',
-					message: `${input.request.operation} is policy-only in the generic operations adapter; implementation and knowledge-promotion lifecycles execute concrete staging merges.`,
-					retryable: true,
-				},
-				metadata: {
-					permission: decision,
-				},
-			};
-			await appendOperationEvent({ ...input, result: waiting });
-			return waiting;
-		}
-
 		try {
 			const workflowResult = await this.workflow.execute({
 				operationName: workflowOperation,

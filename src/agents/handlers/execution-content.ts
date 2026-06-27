@@ -456,7 +456,7 @@ function buildInstructions(context: AgentContext, input: {
 		'Resolved context packs:',
 		JSON.stringify(input.contextPackSummaries, null, 2),
 		'',
-			'Use TreeDX assignment tools as the source of truth for Knowledge Hub content evidence, reads, writes, and commits. If the provided context is insufficient, call the available assignment-scoped tools before reporting a blocked result.',
+			'Use available assignment-scoped TreeSeed tools as the source of truth for Knowledge Hub content evidence, reads, writes, and commits. If the provided context is insufficient, call the available tools before reporting a blocked result.',
 			'',
 			'Return a concise final summary of the content changes, tool calls, and verification. Content changes should be made through the assignment-scoped tools, not by relying on deterministic handler post-processing.',
 		].join('\n');

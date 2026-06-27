@@ -21,7 +21,7 @@ const request: AgentOperationRequest = {
 
 const grant: AgentOperationGrant = {
 	id: 'grant-1',
-	operations: ['dev', 'merge_to_staging'],
+	operations: ['dev', 'verify'],
 	modes: ['dry_run', 'read_only', 'mutating'],
 	agentRoles: ['engineer'],
 	taskKinds: ['implementation'],
@@ -99,34 +99,6 @@ describe('agent operations adapter', () => {
 				result: expect.objectContaining({ status: 'completed' }),
 			}),
 		}));
-	});
-
-	it('keeps merge_to_staging policy-only in the generic adapter', async () => {
-		const execute = vi.fn();
-		const adapter = new SdkOperationsAdapter({ execute });
-
-		const result = await adapter.runOperation({
-			request: {
-				...request,
-				operation: 'merge_to_staging',
-				mode: 'mutating',
-				worktreeRoot: '/repo/.agent-worktrees/task-1',
-				allowedPaths: ['src/content/knowledge/**'],
-				changedPaths: ['src/content/knowledge/runtime.mdx'],
-			},
-			grants: [grant],
-		});
-
-		expect(execute).not.toHaveBeenCalled();
-		expect(result).toMatchObject({
-			operation: 'merge_to_staging',
-			status: 'waiting',
-			summary: expect.stringContaining('delegated to a handler lifecycle executor'),
-			error: {
-				code: 'operation_executor_unavailable',
-				message: expect.stringContaining('policy-only in the generic operations adapter'),
-			},
-		});
 	});
 
 	it('maps verify to test unless explicit lifecycle code later replaces it', async () => {

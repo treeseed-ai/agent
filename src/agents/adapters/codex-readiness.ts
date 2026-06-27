@@ -1,6 +1,6 @@
 import { createRequire } from 'node:module';
-import { existsSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { existsSync, readFileSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
 import { resolveCodexAuthFile } from './codex-auth.ts';
 
 export type CodexSubscriptionPlan = 'plus' | 'pro' | 'business' | 'edu' | 'enterprise' | 'unknown';
@@ -46,6 +46,7 @@ export interface CheckCodexProviderReadinessOptions {
 	nodeVersion?: string;
 	resolvePackage?: (specifier: string) => string;
 	fileExists?: (path: string) => boolean;
+	readFile?: (path: string) => string;
 }
 
 const requireFromHere = createRequire(import.meta.url);
@@ -137,6 +138,7 @@ export function checkCodexProviderReadiness(
 	const config = resolveCodexProviderConfig(env);
 	const resolvePackage = options.resolvePackage ?? resolveInstalledPackage;
 	const fileExists = options.fileExists ?? existsSync;
+	const readFile = options.readFile ?? ((path: string) => readFileSync(path, 'utf8'));
 	const providerSelected = [
 		env.TREESEED_EXECUTION_PROVIDER,
 		env.TREESEED_AGENT_EXECUTION_PROVIDER,
@@ -181,6 +183,19 @@ export function checkCodexProviderReadiness(
 			blockingIssues.push(message);
 		} else {
 			warnings.push(message);
+		}
+	}
+	const configPath = join(dirname(authPath), 'config.toml');
+	if (fileExists(configPath)) {
+		const source = (() => {
+			try {
+				return readFile(configPath);
+			} catch {
+				return '';
+			}
+		})();
+		if (/^\s*service_tier\s*=\s*["']default["']/imu.test(source)) {
+			warnings.push('Codex config service_tier=default is not accepted by this SDK; live tests will use an isolated sanitized CODEX_HOME.');
 		}
 	}
 

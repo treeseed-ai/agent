@@ -2,9 +2,11 @@ import type {
 	AgentCliOptions,
 	AgentExecutionConfig,
 	AgentHandlerKind,
+	AgentContentAccessPolicy,
 	AgentOutputContract,
 	AgentPermissionConfig,
 	AgentPermissionPolicy,
+	AgentToolPolicy,
 	AgentTriggerConfig,
 } from '@treeseed/sdk/types/agents';
 import type { DeclarativeContextQuery } from '@treeseed/sdk/graph/context-query-contracts';
@@ -41,6 +43,8 @@ export interface RawAgentRuntimeSpec {
 	triggerPolicy?: unknown;
 	permissions?: unknown;
 	permissionPolicy?: unknown;
+	tools?: unknown;
+	contentAccess?: unknown;
 	context?: unknown;
 	execution?: unknown;
 	outputs?: unknown;
@@ -77,6 +81,8 @@ export interface AgentSpecParts {
 	triggerPolicy?: NormalizedTriggerPolicy;
 	permissions: AgentPermissionConfig[];
 	permissionPolicy?: AgentPermissionPolicy;
+	tools: AgentToolPolicy;
+	contentAccess?: AgentContentAccessPolicy;
 	context?: {
 		queries: DeclarativeContextQuery[];
 	};

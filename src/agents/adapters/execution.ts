@@ -2,6 +2,7 @@ import { normalizeAgentCliOptions } from '../cli-tools.ts';
 import type { ExecutionProviderAdapter, ExecutionProviderInvocation } from '../runtime-types.ts';
 import { getTreeseedAgentProviderSelections } from '@treeseed/sdk/platform/deploy-runtime';
 import { runTreeseedCopilotTask } from '@treeseed/sdk/copilot';
+import type { TreeseedCopilotTaskInput, TreeseedCopilotTaskResult } from '@treeseed/sdk/copilot';
 import {
 	CodexSubscriptionExecutionProviderAdapter,
 	type CodexSubscriptionExecutionProviderAdapterOptions,
@@ -23,12 +24,19 @@ import {
 	type WorkflowExecutionProviderAdapterOptions,
 } from './execution-workflow.ts';
 import { prependCoreObjectiveToPrompt } from '../core-objective.ts';
+import { createCopilotAgentTools } from '../tools/agent-tool-copilot.ts';
 
 function invocationRunId(input: ExecutionProviderInvocation) {
 	return typeof input.metadata?.runId === 'string' ? input.metadata.runId : input.assignment.id;
 }
 
 export class CopilotExecutionProviderAdapter implements ExecutionProviderAdapter {
+	constructor(private readonly options: {
+		runCopilotTask?: (input: TreeseedCopilotTaskInput) => Promise<TreeseedCopilotTaskResult>;
+		env?: NodeJS.ProcessEnv;
+		repoRoot?: string;
+	} = {}) {}
+
 	async describe() {
 		return {
 			id: 'copilot',
@@ -56,6 +64,17 @@ export class CopilotExecutionProviderAdapter implements ExecutionProviderAdapter
 
 	async start(input: ExecutionProviderInvocation) {
 		const cli = normalizeAgentCliOptions(input.agent.cli);
+		const repoRoot = input.workspace?.repoRoot ?? this.options.repoRoot ?? process.cwd();
+		const telemetryPath = typeof input.metadata?.toolTelemetryPath === 'string' ? input.metadata.toolTelemetryPath : null;
+		const copilotTools = createCopilotAgentTools({
+			apiBaseUrl: this.options.env?.TREESEED_API_BASE_URL ?? process.env.TREESEED_API_BASE_URL ?? process.env.TREESEED_MARKET_URL ?? '',
+			providerApiKey: this.options.env?.TREESEED_CAPACITY_PROVIDER_API_KEY ?? process.env.TREESEED_CAPACITY_PROVIDER_API_KEY ?? process.env.TREESEED_PROVIDER_API_KEY ?? '',
+			assignmentId: input.assignment.id,
+			leaseToken: input.leaseToken,
+			descriptors: input.tools ?? [],
+			repoRoot,
+			telemetryPath,
+		});
 		const prompt = prependCoreObjectiveToPrompt({
 			prompt: [
 				input.workPackage.instructions,
@@ -66,15 +85,21 @@ export class CopilotExecutionProviderAdapter implements ExecutionProviderAdapter
 					workspace: input.workspace ?? null,
 					capacity: input.capacityEnvelope,
 				}, null, 2),
+				'',
+				'Available TreeSeed tool call names:',
+				copilotTools.length > 0
+					? copilotTools.map((tool) => `- ${tool.name}`).join('\n')
+					: '- <none>',
 			].join('\n'),
-			repoRoot: process.cwd(),
+			repoRoot,
 		});
-		const result = await runTreeseedCopilotTask({
+		const result = await (this.options.runCopilotTask ?? runTreeseedCopilotTask)({
 			prompt,
-			cwd: process.cwd(),
+			cwd: repoRoot,
 			model: cli.model,
 			allowTools: cli.allowTools,
-			env: process.env,
+			tools: copilotTools,
+			env: this.options.env ?? process.env,
 		});
 		const ignoredArgs = cli.additionalArgs?.length
 			? `Ignored Copilot CLI-only arguments because Treeseed uses @github/copilot-sdk internally: ${cli.additionalArgs.join(' ')}`
@@ -91,6 +116,8 @@ export class CopilotExecutionProviderAdapter implements ExecutionProviderAdapter
 				provider: 'copilot',
 				promptCharacters: prompt.length,
 				toolCount: input.tools?.length ?? 0,
+				copilotToolCount: copilotTools.length,
+				toolTelemetryPath: telemetryPath,
 			},
 		};
 	}
@@ -150,7 +177,7 @@ export function createExecutionProviderAdapter(configuredModeInput?: string, opt
 		return new CodexSubscriptionExecutionProviderAdapter({ ...(options.codex ?? {}), repoRoot: options.repoRoot });
 	}
 	if (configuredMode === 'copilot') {
-		return new CopilotExecutionProviderAdapter();
+		return new CopilotExecutionProviderAdapter({ repoRoot: options.repoRoot });
 	}
 	throw new Error(`Unsupported execution provider "${configuredMode}". Configure codex, copilot, jira, github_issues, discord, or workflow; provider-runner dryRun is the only fallback execution mode.`);
 }

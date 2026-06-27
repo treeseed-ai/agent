@@ -102,8 +102,8 @@ export async function persistPromotionApprovalRequest(input: {
 		verificationPlan,
 		policySnapshot: input.policySnapshot ?? {
 			approvalPolicy: 'manual',
-			requireHumanApprovalForCanonicalKnowledge: true,
-			requireHumanApprovalForRelease: true,
+			decisionRequiredForCanonicalKnowledge: true,
+			decisionRequiredForRelease: true,
 		},
 	};
 	const approval = await input.sdk.createApprovalRequest({

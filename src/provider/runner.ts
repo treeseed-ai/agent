@@ -11,17 +11,25 @@ import { AgentSdk, type AgentSdkTreeDxOptions } from '@treeseed/sdk/sdk';
 import { buildCapacityProviderAuthHeaders, type ProviderReportRequest, type ProviderWorkdayRequest } from '@treeseed/sdk/capacity-provider';
 import type { AgentModeRunStatus, ProviderAssignment } from '@treeseed/sdk/agent-capacity';
 import type {
+	AgentContentAccessPolicy,
 	ExecutionArtifactRef,
 	ExecutionProviderObserveInput,
 	ExecutionRunRef,
 	ExecutionRunSnapshot,
 	ExecutionUsageActual,
 } from '@treeseed/sdk/types/agents';
+import {
+	TREESEED_CONTENT_READ_ACTIONS,
+	TREESEED_CONTENT_WRITE_ACTIONS,
+	type TreeseedContentAction,
+	type TreeseedContentModel,
+} from '@treeseed/sdk/content-operations';
 import type { JiraExecutionProviderConfig } from '../agents/adapters/execution-jira.ts';
 import type { GitHubIssuesExecutionProviderConfig } from '../agents/adapters/execution-github-issues.ts';
 import type { DiscordExecutionProviderConfig } from '../agents/adapters/execution-discord.ts';
 import type { WorkflowExecutionProviderAdapterOptions } from '../agents/adapters/execution-workflow.ts';
 import type { PreparedCodexWorktree } from '../agents/adapters/execution-codex.ts';
+import { findAgentToolDefinition, type AgentToolRequirement } from '@treeseed/sdk';
 import { assertRelativeContentPath } from '../agents/content-artifacts.ts';
 import {
 	deriveAgentCapacityEnvelopeFromAssignment,
@@ -377,6 +385,7 @@ interface LifecycleManagedExecutionProviderAdapterOptions {
 	selectedInput: Record<string, unknown>;
 	capacityEnvelope: Record<string, unknown>;
 	tools?: ExecutionProviderToolDescriptor[];
+	agentToolCatalog?: Omit<AssignmentToolCatalog, 'descriptors'>;
 	pollIntervalMs?: number;
 	maxPolls?: number;
 }
@@ -437,6 +446,7 @@ class LifecycleManagedExecutionProviderAdapter implements ExecutionProviderAdapt
 				provider: invocation.assignment.executionProviderId ?? null,
 				toolCount: invocation.tools?.length ?? 0,
 				tools: invocation.tools ?? [],
+				agentToolCatalog: this.options.agentToolCatalog ?? null,
 				workPackage: invocation.workPackage,
 				agent: {
 					slug: invocation.agent.slug,
@@ -1249,16 +1259,18 @@ function createAssignmentTreeDxToolDescriptor(input: {
 	const repo = repositoryId ? encodeURIComponent(repositoryId) : ':repoId';
 	const workspace = workspaceId ? encodeURIComponent(workspaceId) : ':workspaceId';
 	return {
-		kind: 'treedx_proxy',
-		id: `treedx-proxy:${handleId}`,
+		kind: 'agent_tool',
+		id: 'treedx.proxy',
 		name: 'TreeDX assignment proxy',
 		description: 'Assignment-scoped TreeDX content and workspace operations proxied through the TreeSeed API.',
+		inputSchema: { type: 'object', additionalProperties: true },
+		executionTarget: 'treedx_proxy',
+		mutability: writable ? 'content_write' : 'read',
 		projectId: input.projectId,
 		assignmentId: input.assignmentId,
 		handleId,
 		repositoryId,
 		workspaceId,
-		operations: allowedOperations,
 		allowedOperations,
 		allowedPaths,
 		allowedReadPaths,
@@ -1278,6 +1290,149 @@ function createAssignmentTreeDxToolDescriptor(input: {
 				'x-treeseed-treedx-proxy-handle-id',
 			],
 		},
+	};
+}
+
+interface AssignmentToolCatalog {
+	requested: string[];
+	exposed: string[];
+	omitted: Array<{ id: string; missing: AgentToolRequirement[] }>;
+	descriptors: ExecutionProviderToolDescriptor[];
+}
+
+function listAllows(value: string | undefined, allowed: string[] | undefined) {
+	if (!value) return true;
+	if (!allowed || allowed.length === 0) return false;
+	return allowed.includes('*') || allowed.includes(value);
+}
+
+function contentToolAllowed(
+	policy: AgentContentAccessPolicy | undefined,
+	action: TreeseedContentAction,
+	model: TreeseedContentModel | undefined,
+) {
+	if (!policy) return false;
+	const scope = TREESEED_CONTENT_READ_ACTIONS.has(action)
+		? policy.read
+		: TREESEED_CONTENT_WRITE_ACTIONS.has(action)
+			? policy.write
+			: action === 'commit'
+				? policy.write
+				: undefined;
+	if (action === 'commit') return policy.commit?.allowed === true;
+	if (!scope) return false;
+	if (scope.actions?.length && !scope.actions.includes(action)) return false;
+	return listAllows(model, scope.models);
+}
+
+function summarizeContentAccess(policy: AgentContentAccessPolicy | undefined) {
+	if (!policy) return null;
+	return {
+		readModels: policy.read?.models ?? [],
+		readActions: policy.read?.actions ?? [],
+		writeModels: policy.write?.models ?? [],
+		writeActions: policy.write?.actions ?? [],
+		commitAllowed: policy.commit?.allowed === true,
+	};
+}
+
+export function createAssignmentToolCatalog(input: {
+	agentTools: string[];
+	projectId: string;
+	assignmentId: string;
+	treedxProxyHandle: Record<string, unknown>;
+	workspaceMode?: string | null;
+	treeDxWorkspaceMode?: 'context_only' | 'read_write' | 'commit';
+	contentAccess?: AgentContentAccessPolicy;
+	worktreeRoot?: string | null;
+	allowedPaths?: string[];
+	forbiddenPaths?: string[];
+}): AssignmentToolCatalog {
+	const treeDxBase = createAssignmentTreeDxToolDescriptor({
+		projectId: input.projectId,
+		assignmentId: input.assignmentId,
+		treedxProxyHandle: input.treedxProxyHandle,
+		workspaceMode: input.workspaceMode,
+	});
+	const descriptors: ExecutionProviderToolDescriptor[] = [];
+	const omitted: Array<{ id: string; missing: AgentToolRequirement[] }> = [];
+	const writableWorkspace = Boolean(treeDxBase?.allowedOperations.includes('files:write'));
+	const commitAllowed = input.contentAccess?.commit?.allowed === true;
+	for (const toolId of input.agentTools) {
+		const definition = findAgentToolDefinition(toolId);
+		if (!definition) continue;
+		const missing: AgentToolRequirement[] = [];
+		if (definition.requirements.includes('treedx_proxy_handle') && !treeDxBase) {
+			missing.push('treedx_proxy_handle');
+		}
+		if (definition.requirements.includes('treedx_writable_workspace') && !writableWorkspace) {
+			missing.push('treedx_writable_workspace');
+		}
+		if (definition.requirements.includes('content_access')) {
+			const contentAllowed = definition.content
+				? contentToolAllowed(input.contentAccess, definition.content.action, definition.content.model)
+				: true;
+			if (!contentAllowed) missing.push('content_access');
+		}
+		if (definition.requirements.includes('content_commit') && !commitAllowed) {
+			missing.push('content_commit');
+		}
+		if (missing.length) {
+			omitted.push({ id: definition.id, missing });
+			continue;
+		}
+		const base: ExecutionProviderToolDescriptor = {
+			kind: 'agent_tool',
+			id: definition.id,
+			name: definition.title,
+			description: definition.description,
+			inputSchema: definition.inputSchema,
+			outputSchema: definition.outputSchema,
+			executionTarget: definition.executionTarget,
+			mutability: definition.mutability,
+			metadata: {
+				dispatch: definition.dispatch,
+				dispatchPreferredMode: definition.dispatch?.assignmentPreferredMode,
+				telemetryCategory: definition.telemetryCategory,
+				assignmentId: input.assignmentId,
+				projectId: input.projectId,
+				worktreeRoot: input.worktreeRoot ?? null,
+				allowedPaths: input.allowedPaths ?? [],
+				forbiddenPaths: input.forbiddenPaths ?? [],
+				contentAction: definition.content?.action,
+				contentModel: definition.content?.model,
+				contentPreset: definition.content?.preset,
+				contentAccessSummary: summarizeContentAccess(input.contentAccess),
+			},
+		};
+		if (definition.executionTarget !== 'treedx_proxy' && definition.executionTarget !== 'treeseed_content') {
+			descriptors.push(base);
+			continue;
+		}
+		if (!treeDxBase) {
+			omitted.push({ id: definition.id, missing: ['treedx_proxy_handle'] });
+			continue;
+		}
+		descriptors.push({
+			...treeDxBase,
+			id: definition.id,
+			name: definition.title,
+			description: definition.description,
+			inputSchema: definition.inputSchema,
+			outputSchema: definition.outputSchema,
+			executionTarget: definition.executionTarget,
+			mutability: definition.mutability,
+			metadata: {
+				...(treeDxBase.metadata ?? {}),
+				...(base.metadata ?? {}),
+			},
+		});
+	}
+	return {
+		requested: input.agentTools,
+		exposed: descriptors.map((descriptor) => descriptor.id),
+		omitted,
+		descriptors,
 	};
 }
 
@@ -1869,6 +2024,20 @@ export async function runProviderAssignment(input: {
 			runnerId: input.runnerId,
 		})
 		: null;
+	const agentSpecLoad = await loadAllAgentSpecs(localSdk);
+	const agentSpec = agentSpecLoad.specs.find((spec) => spec.slug === agentSlug);
+	const assignmentToolCatalog = createAssignmentToolCatalog({
+		agentTools: agentSpec?.tools.allowed ?? [],
+		projectId,
+		assignmentId,
+		treedxProxyHandle,
+		workspaceMode,
+		contentAccess: agentSpec?.contentAccess,
+		worktreeRoot: null,
+		allowedPaths: agentSpec?.execution.allowedPaths ?? [],
+		forbiddenPaths: agentSpec?.execution.forbiddenPaths ?? [],
+	});
+	const assignmentToolDescriptors = assignmentToolCatalog.descriptors;
 	const assignmentMetadata = record(input.assignment.metadata);
 	const useAssignmentTreeDxSpecLoader = ['api_live_workday_synthesis', 'api_workday_test_synthesis'].includes(String(assignmentMetadata.assignmentSource ?? ''))
 		|| ['live_workday', 'workday_test'].includes(String(input.assignment.synthesizedFrom ?? ''));
@@ -1954,14 +2123,6 @@ export async function runProviderAssignment(input: {
 		createMessage: providerCreateMessage,
 	} as unknown as AgentSdk;
 	const dryRun = decisionPayload.dryRun !== false && !input.config.codexAuthFile && !input.config.codexAuthJsonB64;
-	const treeDxToolDescriptor = ['workspace_write', 'brokered_workspace', 'trusted_direct', 'context_only'].includes(workspaceMode ?? '')
-		? createAssignmentTreeDxToolDescriptor({
-			projectId,
-			assignmentId,
-			treedxProxyHandle,
-			workspaceMode,
-		})
-		: null;
 	const baseExecutionAdapter = input.executionAdapter ?? createAssignmentExecutionProviderAdapter({
 		selection: executionProviderSelectionForAssignment(input.assignment, dryRun),
 		repoRoot: project.repository.path,
@@ -1999,7 +2160,12 @@ export async function runProviderAssignment(input: {
 		].join(':'),
 		selectedInput: decisionPayload,
 		capacityEnvelope,
-		tools: treeDxToolDescriptor ? [treeDxToolDescriptor] : [],
+		tools: assignmentToolDescriptors,
+		agentToolCatalog: {
+			requested: assignmentToolCatalog.requested,
+			exposed: assignmentToolCatalog.exposed,
+			omitted: assignmentToolCatalog.omitted,
+		},
 		pollIntervalMs: input.executionLifecycle?.pollIntervalMs,
 		maxPolls: input.executionLifecycle?.maxPolls,
 	});

@@ -93,6 +93,13 @@ execution:
   worktree:
     enabled: false
     branchPrefix: agent-codebase-cartographer
+tools:
+  allowed:
+    - treedx.build_context
+    - treedx.search_workspace
+    - treedx.read_repository_files
+    - treedx.read_workspace_file
+    - treeseed.status
 outputs:
   messageTypes:
     - codebase_inventory_completed
@@ -102,9 +109,6 @@ outputs:
     - message:create
 governance:
   mutationClass: research_only
-  approvalRequiredForCanonicalContent: true
-  approvalRequiredForCode: true
-  requireHumanApproval: false
   requireSourceMap: true
 ---
 

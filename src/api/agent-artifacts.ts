@@ -83,8 +83,6 @@ export interface AgentOperationGrantSummary {
 	environments?: string[];
 	allowedPaths?: string[];
 	forbiddenPaths?: string[];
-	requiresApproval?: boolean;
-	approvalIds?: string[];
 	source: 'assignment' | 'mode_run';
 }
 
@@ -513,8 +511,6 @@ function bodyOperationRequest(input: {
 		worktreeRoot: readString(request, 'worktreeRoot') || undefined,
 		featureBranch: readString(request, 'featureBranch') || undefined,
 		stagingBranch: readString(request, 'stagingBranch') || undefined,
-		approvalId: readString(request, 'approvalId') || undefined,
-		approval: Object.keys(asRecord(request.approval)).length ? asRecord(request.approval) as unknown as AgentOperationRequest['approval'] : undefined,
 		permissionGrantId: readString(request, 'permissionGrantId') || undefined,
 		allowedPaths: readStringArray(request.allowedPaths ?? input.body.allowedPaths),
 		forbiddenPaths: readStringArray(request.forbiddenPaths ?? input.body.forbiddenPaths),
@@ -561,8 +557,6 @@ export async function dryRunAgentOperation(input: {
 				environments: grant.environments,
 				allowedPaths: grant.allowedPaths,
 				forbiddenPaths: grant.forbiddenPaths,
-				requiresApproval: grant.requiresApproval,
-				approvalIds: grant.approvalIds,
 			}) satisfies AgentOperationGrant);
 	const decision = decideAgentOperationPermission({ request, grants });
 	const result = decision.allowed
@@ -572,7 +566,6 @@ export async function dryRunAgentOperation(input: {
 				summary: decision.summary,
 				changedPaths: request.changedPaths ?? [],
 				stagedPaths: request.operation === 'stage' ? request.changedPaths ?? [] : [],
-				mergedToStaging: request.operation === 'merge_to_staging' ? false : undefined,
 				commandsRun: [],
 				artifacts: [],
 				metadata: { permission: decision, dryRun: true },

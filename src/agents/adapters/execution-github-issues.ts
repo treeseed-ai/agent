@@ -7,7 +7,7 @@ import type {
 	ExecutionRunSnapshot,
 	ExecutionUsageActual,
 } from '@treeseed/sdk/types/agents';
-import type { ExecutionProviderAdapter, ExecutionProviderInvocation, TreeDxProxyExecutionToolDescriptor } from '../runtime-types.ts';
+import type { ExecutionProviderAdapter, ExecutionProviderInvocation } from '../runtime-types.ts';
 
 export interface GitHubIssuesExecutionProviderConfig {
 	token: string;
@@ -166,26 +166,20 @@ function fieldSummary(value: unknown) {
 	}
 }
 
-function treeDxToolInstructions(input: ExecutionProviderInvocation) {
-	const tools = (input.tools ?? []).filter((tool): tool is TreeDxProxyExecutionToolDescriptor => tool.kind === 'treedx_proxy');
+function agentToolInstructions(input: ExecutionProviderInvocation) {
+	const tools = (input.tools ?? []).filter((tool) => tool.kind === 'agent_tool');
 	if (tools.length === 0) return null;
 	return [
-		'## TreeDX assignment tools',
-		'Use TreeDX workspace operations for content changes. Local repository patches are only for code, verification artifacts, temporary worktrees, package files, and non-content artifacts.',
-		'Do not request or paste raw credentials in GitHub. The API routes require the provider runtime to supply these header values outside GitHub:',
-		'- Authorization: Bearer <capacity-provider-api-key>',
-		'- x-treeseed-assignment-id',
-		'- x-treeseed-treedx-proxy-handle-id',
+		'## Available TreeSeed tools',
+		'Use only these assignment-scoped tools when tool use is needed. Do not request or paste raw credentials in GitHub.',
 		'',
 		'Available tools:',
 		tools.map((tool) => [
 			`### ${tool.name}`,
-			`Handle id: ${tool.handleId}`,
-			`Repository id: ${tool.repositoryId ?? '<assignment default>'}`,
-			`Workspace id: ${tool.workspaceId ?? '<assignment default>'}`,
-			`Allowed operations: ${tool.allowedOperations.join(', ') || '<none>'}`,
-			`Allowed paths:\n${tool.allowedPaths.join('\n') || '<none>'}`,
-			`Routes:\n\`\`\`json\n${fieldSummary(tool.routes)}\n\`\`\``,
+			`Tool id: ${tool.id}`,
+			`Execution target: ${tool.executionTarget}`,
+			`Mutability: ${tool.mutability}`,
+			`Input schema:\n\`\`\`json\n${fieldSummary(tool.inputSchema)}\n\`\`\``,
 		].join('\n\n')).join('\n\n'),
 		'Expected completion artifact format:',
 		'```json',
@@ -223,7 +217,7 @@ function issueBodyFromWorkPackage(input: ExecutionProviderInvocation) {
 		`## Decision input\n\`\`\`json\n${fieldSummary(input.decisionInput.input)}\n\`\`\``,
 		`## Allowed paths\n${(input.workPackage.constraints.allowedPaths ?? input.agent.execution.allowedPaths ?? []).join('\n') || '<none>'}`,
 		`## Forbidden paths\n${(input.workPackage.constraints.forbiddenPaths ?? input.agent.execution.forbiddenPaths ?? []).join('\n') || '<none>'}`,
-		treeDxToolInstructions(input),
+		agentToolInstructions(input),
 		'<!-- treeseed:assignment -->',
 	].filter(Boolean).join('\n\n');
 }

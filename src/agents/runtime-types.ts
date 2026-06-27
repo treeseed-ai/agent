@@ -105,19 +105,23 @@ export interface ExecutionProviderInvocation {
 	metadata?: Record<string, unknown>;
 }
 
-export type ExecutionProviderToolKind = 'treedx_proxy';
+export type ExecutionProviderToolKind = 'agent_tool';
 
 export interface ExecutionProviderToolDescriptor {
-	kind: ExecutionProviderToolKind | string;
+	kind: ExecutionProviderToolKind;
 	id: string;
 	name: string;
 	description: string;
-	operations: string[];
+	inputSchema: Record<string, unknown>;
+	outputSchema?: Record<string, unknown>;
+	executionTarget: 'sdk_dispatch' | 'treedx_proxy' | 'treeseed_content' | 'provider_runner';
+	mutability: 'read' | 'content_write' | 'worktree_write' | 'shared_state_write';
 	metadata?: Record<string, unknown>;
 }
 
 export interface TreeDxProxyExecutionToolDescriptor extends ExecutionProviderToolDescriptor {
-	kind: 'treedx_proxy';
+	kind: 'agent_tool';
+	executionTarget: 'treedx_proxy';
 	projectId: string;
 	assignmentId: string;
 	handleId: string;

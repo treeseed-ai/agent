@@ -103,6 +103,7 @@ export const securityAuditHandler: AgentHandler = {
 			persona: 'Researcher',
 			triggers: [{ type: 'startup' }],
 			permissions: [{ model: 'knowledge', operations: ['search', 'follow'] }],
+			tools: { allowed: ['treedx.build_context', 'treedx.search_workspace', 'treeseed.status'] },
 			execution: {},
 			outputs: {},
 			context: {
@@ -147,6 +148,7 @@ export const securityAuditHandler: AgentHandler = {
 			persona: 'Engineer',
 			triggers: [{ type: 'startup' }],
 			permissions: [{ model: 'knowledge', operations: ['get'] }],
+			tools: { allowed: ['treedx.read_workspace_file', 'treedx.write_workspace_file', 'treeseed.verify'] },
 			execution: {
 				provider: 'codex',
 				model: 'gpt-5.5',
@@ -193,6 +195,7 @@ export const securityAuditHandler: AgentHandler = {
 			persona: 'Reviewer',
 			triggers: [{ type: 'startup' }],
 			permissions: [{ model: 'knowledge', operations: ['get'] }],
+			tools: { allowed: ['treedx.build_context', 'treedx.read_workspace_file', 'treeseed.status'] },
 			execution: {
 				providerProfile: {
 					requiredCapabilities: ['planning', 'repo_read'],

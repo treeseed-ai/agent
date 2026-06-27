@@ -62,7 +62,7 @@ function reviewImplementationResult(
 	if (violations.length > 0) {
 		findings.push(`Changed paths outside reviewer-approved scope: ${violations.join(', ')}.`);
 	}
-	for (const operation of ['switch', 'verify', 'save', 'stage', 'merge_to_staging', 'close'] as const) {
+	for (const operation of ['switch', 'verify', 'save', 'stage', 'close'] as const) {
 		if (!operations.has(operation)) {
 			findings.push(`Missing operation event: ${operation}.`);
 		}

@@ -70,12 +70,14 @@ const agent: AgentRuntimeSpec = {
 		messageTypes: [],
 		modelMutations: [],
 	},
+	tools: { allowed: [] },
 };
 
 function executionInvocation(input: {
 	agent: AgentRuntimeSpec;
 	runId: string;
 	instructions: string;
+	tools?: ExecutionProviderInvocation['tools'];
 }): ExecutionProviderInvocation {
 	return {
 		assignment: {
@@ -111,6 +113,7 @@ function executionInvocation(input: {
 		},
 		leaseToken: null,
 		runnerId: 'test-runner',
+		tools: input.tools,
 		metadata: { runId: input.runId },
 	};
 }
@@ -198,6 +201,24 @@ describe('codex subscription provider skeleton', () => {
 			authMode: 'api_key',
 			authPath: '/home/test/.codex/auth.json',
 		});
+	});
+
+	it('warns when local Codex config uses unsupported default service tier', () => {
+		const readiness = checkCodexProviderReadiness({
+			env: {
+				TREESEED_EXECUTION_PROVIDER: 'codex',
+				HOME: '/home/test',
+			},
+			nodeVersion: 'v24.0.0',
+			resolvePackage: () => '/repo/node_modules/@openai/codex-sdk/dist/index.js',
+			fileExists: (path) => path === '/home/test/.codex/auth.json' || path === '/home/test/.codex/config.toml',
+			readFile: () => 'service_tier = "default"\n',
+		});
+
+		expect(readiness.ok).toBe(true);
+		expect(readiness.warnings).toEqual(expect.arrayContaining([
+			expect.stringContaining('service_tier=default'),
+		]));
 	});
 
 	it('resolves parity auth under /data/codex and materializes auth JSON secrets once', async () => {
@@ -401,6 +422,25 @@ describe('codex subscription provider skeleton', () => {
 			agent,
 			runId: 'run-1',
 			instructions: 'Plan a docs task.',
+			tools: [{
+				kind: 'agent_tool',
+				id: 'treeseed.changed_paths',
+				name: 'Changed paths',
+				description: 'Changed paths',
+				inputSchema: {
+					type: 'object',
+					properties: { includeDiffSummary: { type: 'boolean' } },
+					additionalProperties: false,
+				},
+				outputSchema: { type: 'object', additionalProperties: true },
+				executionTarget: 'provider_runner',
+				mutability: 'read',
+				metadata: {
+					assignmentId: 'run-1',
+					projectId: 'project-test',
+					worktreeRoot: null,
+				},
+			}],
 		}));
 
 		expect(result).toMatchObject({
@@ -418,6 +458,7 @@ describe('codex subscription provider skeleton', () => {
 				},
 			},
 		});
+		expect(run).toHaveBeenCalledWith(expect.stringContaining('treeseed.changed_paths'));
 	});
 
 	it('keeps provider code free of direct command invocation APIs', async () => {

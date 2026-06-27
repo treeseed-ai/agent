@@ -6,6 +6,7 @@ import type {
 	ProviderAssignment,
 } from '@treeseed/sdk/agent-capacity';
 import {
+	CopilotExecutionProviderAdapter,
 	createExecutionProviderAdapter,
 } from '../../src/agents/adapters/execution.ts';
 import { CodexSubscriptionExecutionProviderAdapter } from '../../src/agents/adapters/execution-codex.ts';
@@ -282,6 +283,55 @@ describe('execution provider adapter contract', () => {
 			},
 		});
 		expect(run).toHaveBeenCalledTimes(1);
+	});
+
+	it('passes assignment TreeSeed tools into the Copilot SDK boundary', async () => {
+		const calls: unknown[] = [];
+		const adapter = new CopilotExecutionProviderAdapter({
+			repoRoot: '/repo',
+			runCopilotTask: async (input) => {
+				calls.push(input);
+				return {
+					status: 'completed',
+					summary: 'Copilot completed.',
+					stdout: 'Called treeseed_status.',
+					stderr: '',
+				};
+			},
+			env: {},
+		});
+
+		const snapshot = await adapter.start(invocation('copilot', {
+			tools: [{
+				kind: 'agent_tool',
+				id: 'treeseed.status',
+				name: 'TreeSeed status',
+				description: 'Inspect TreeSeed status.',
+				inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+				executionTarget: 'sdk_dispatch',
+				mutability: 'read',
+				metadata: {
+					assignmentId: 'assignment-contract',
+					projectId: 'project-test',
+					dispatchPreferredMode: 'prefer_local',
+				},
+			}],
+		}));
+
+		expect(snapshot).toMatchObject({
+			status: 'completed',
+			metadata: {
+				provider: 'copilot',
+				toolCount: 1,
+				copilotToolCount: 1,
+			},
+		});
+		expect(calls).toHaveLength(1);
+		expect(calls[0]).toMatchObject({
+			cwd: '/repo',
+			tools: [expect.objectContaining({ name: 'treeseed_status', skipPermission: true })],
+		});
+		expect(JSON.stringify(calls[0])).not.toContain('provider-secret');
 	});
 
 	it('runs Jira async lifecycle through start, poll, resume, cancel, usage, and artifacts with mocked Jira API', async () => {

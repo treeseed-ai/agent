@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import {
 	buildCodexPrompt,
+	codexAgentToolConfig,
 	mapCodexThreadOptions,
 	normalizeCodexRunResult,
 	runCodexSubscriptionTask,
@@ -31,18 +32,20 @@ const request: CodexExecutionRequest = {
 			id: 'task:codex-provider-execution',
 			kind: 'implementation',
 			operations: {
-				handlerControlled: ['save', 'stage', 'merge_to_staging', 'close'],
+				handlerControlled: ['save', 'stage', 'close'],
 			},
 		},
 	},
 };
 
 const treeDxTool = {
-	kind: 'treedx_proxy' as const,
-	id: 'treedx-proxy:handle-1',
-	name: 'TreeDX assignment proxy',
+	kind: 'agent_tool' as const,
+	id: 'treedx.write_workspace_file',
+	name: 'Write TreeDX workspace file',
 	description: 'Assignment-scoped TreeDX content proxy.',
-	operations: ['files:read', 'files:write', 'git:commit'],
+	inputSchema: { type: 'object', additionalProperties: true },
+	executionTarget: 'treedx_proxy' as const,
+	mutability: 'content_write' as const,
 	projectId: 'project-1',
 	assignmentId: 'assignment-1',
 	handleId: 'handle-1',
@@ -94,6 +97,7 @@ function runResult() {
 				changes: [
 					{ path: './docs/provider.md', kind: 'update' },
 					{ path: 'src/content/knowledge/developer/providers/codex.mdx', kind: 'add' },
+					{ path: '/repo/.agent-worktrees/task-codex/docs/absolute.md', kind: 'add' },
 				],
 			},
 		],
@@ -131,24 +135,76 @@ describe('codex provider execution', () => {
 		expect(prompt).toContain('- src/content/knowledge/**');
 		expect(prompt).toContain('- src/content/knowledge/private/**');
 		expect(prompt).toContain('Assigned worktree root: /repo/.agent-worktrees/task-codex');
-		expect(prompt).toContain('The handler controls save, stage, merge_to_staging, close, and release.');
-		expect(prompt).toContain('Do not merge to staging directly.');
+		expect(prompt).toContain('Use only the tools listed in the available TreeSeed tool catalog.');
+		expect(prompt).not.toContain('merge to staging tool');
 		expect(prompt).toContain('Runtime context pack summary.');
 		expect(prompt).toContain('"kind": "implementation"');
 	});
 
-	it('includes assignment-scoped TreeDX context guidance without direct MCP tool use', () => {
+	it('includes assignment-scoped TreeSeed tool guidance without leaking credentials', () => {
 		const prompt = buildCodexPrompt({
 			...request,
 			tools: [treeDxTool],
 		});
 
-		expect(prompt).toContain('TreeDX assignment tools:');
-		expect(prompt).toContain('Use the assignment-scoped TreeDX MCP tools');
-		expect(prompt).toContain('If required context is missing, call the available tools');
-		expect(prompt).toContain('src/content/**');
+		expect(prompt).toContain('Available TreeSeed tools:');
+		expect(prompt).toContain('Use only these assignment-scoped tools');
+		expect(prompt).toContain('If a needed tool is absent or returns a structured scope error');
 		expect(prompt).not.toContain('secret_should_not_leak');
-		expect(prompt).toContain('treedx_write_workspace_file');
+		expect(prompt).toContain('treedx.write_workspace_file');
+	});
+
+	it('builds MCP config only for available tools and passes assignment env', () => {
+		const previousTier = process.env.TREESEED_CODEX_SERVICE_TIER;
+		const previousApi = process.env.TREESEED_API_BASE_URL;
+		const previousKey = process.env.TREESEED_CAPACITY_PROVIDER_API_KEY;
+		process.env.TREESEED_CODEX_SERVICE_TIER = 'fast';
+		process.env.TREESEED_API_BASE_URL = 'https://api.example.test';
+		process.env.TREESEED_CAPACITY_PROVIDER_API_KEY = 'provider-secret';
+		try {
+			const config = codexAgentToolConfig({
+				...request,
+				leaseToken: 'lease-1',
+				toolTelemetryPath: '/tmp/tools.jsonl',
+				tools: [treeDxTool],
+				metadata: {
+					assignment: { id: 'assignment-1', projectId: 'project-1' },
+				},
+			}) as Record<string, unknown>;
+			expect(config.service_tier).toBe('fast');
+			expect(config.features).toEqual({ builtin_mcp: true });
+			expect(config.mcp_servers).toMatchObject({
+				treeseed_tools: {
+					required: true,
+					default_tools_approval_mode: 'approve',
+					env: expect.objectContaining({
+						TREESEED_API_BASE_URL: 'https://api.example.test',
+						TREESEED_CAPACITY_PROVIDER_API_KEY: 'provider-secret',
+						TREESEED_AGENT_TOOL_ASSIGNMENT_ID: 'assignment-1',
+						TREESEED_AGENT_TOOL_LEASE_TOKEN: 'lease-1',
+						TREESEED_AGENT_TOOL_TELEMETRY_PATH: '/tmp/tools.jsonl',
+					}),
+				},
+			});
+		} finally {
+			if (previousTier === undefined) delete process.env.TREESEED_CODEX_SERVICE_TIER;
+			else process.env.TREESEED_CODEX_SERVICE_TIER = previousTier;
+			if (previousApi === undefined) delete process.env.TREESEED_API_BASE_URL;
+			else process.env.TREESEED_API_BASE_URL = previousApi;
+			if (previousKey === undefined) delete process.env.TREESEED_CAPACITY_PROVIDER_API_KEY;
+			else process.env.TREESEED_CAPACITY_PROVIDER_API_KEY = previousKey;
+		}
+	});
+
+	it('does not forward unsupported Codex service tiers', () => {
+		const previousTier = process.env.TREESEED_CODEX_SERVICE_TIER;
+		process.env.TREESEED_CODEX_SERVICE_TIER = 'flex';
+		try {
+			expect(codexAgentToolConfig(request)).not.toHaveProperty('service_tier');
+		} finally {
+			if (previousTier === undefined) delete process.env.TREESEED_CODEX_SERVICE_TIER;
+			else process.env.TREESEED_CODEX_SERVICE_TIER = previousTier;
+		}
 	});
 
 	it('places the core objective before the agent task when available', () => {
@@ -207,6 +263,7 @@ describe('codex provider execution', () => {
 			changedPaths: [
 				'docs/provider.md',
 				'src/content/knowledge/developer/providers/codex.mdx',
+				'docs/absolute.md',
 			],
 			proposedCommands: [
 				'npm run test:unit',
@@ -262,6 +319,7 @@ describe('codex provider execution', () => {
 			changedPaths: [
 				'docs/provider.md',
 				'src/content/knowledge/developer/providers/codex.mdx',
+				'docs/absolute.md',
 			],
 			proposedCommands: ['npm run test:unit', 'git status --short'],
 			verificationHints: ['npm run test:unit'],

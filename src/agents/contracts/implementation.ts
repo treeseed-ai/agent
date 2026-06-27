@@ -1,7 +1,6 @@
 import type {
 	AgentOperationGrant,
 	AgentOperationResult,
-	AgentOperationApprovalRef,
 } from '@treeseed/sdk/operations/agent-tools';
 import type { AgentVerificationResult } from '../runtime-types.ts';
 import type { CodexExecutionResult, CodexSandboxMode } from '../adapters/execution-codex.ts';
@@ -26,7 +25,6 @@ export interface CodexDocsMutationTaskInput {
 	featureBranch: string;
 	stagingBranch: string;
 	approvalId?: string;
-	approval?: AgentOperationApprovalRef;
 	permissionGrantId?: string;
 	operationGrants: AgentOperationGrant[];
 	allowedPaths: string[];

@@ -131,11 +131,11 @@ provider:
   dataDir: .treeseed/local-capacity-provider/data
 runtime:
   images:
-    tag: dev-staging
+    tag: 1.2.3
 extensions:
   runner:
     enabled: true
-    baseImage: treeseed/agent-runner:dev-staging
+    baseImage: treeseed/agent-runner:1.2.3
     dockerfile: ./capacity-provider/runner.Dockerfile
     context: .
     image: example/team-agent-runner

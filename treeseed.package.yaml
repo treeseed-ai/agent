@@ -4,6 +4,9 @@ kind: node-typescript
 type: runtime-provider
 repository: treeseed-ai/agent
 publishTarget: docker
+deploymentSource:
+  staging: git
+  prod: image
 workflowTemplateVersion: "1"
 githubEnvironments:
   - staging
@@ -35,7 +38,6 @@ releaseGate:
   workflow: verify.yml
 dockerImages:
   releaseWorkflow: publish.yml
-  developmentWorkflow: dev-image.yml
   architectures:
     - amd64
     - arm64
@@ -43,9 +45,6 @@ dockerImages:
     release:
       - "<version>"
       - latest
-    staging:
-      - "dev-staging-<short-sha>"
-      - dev-staging
 capacityProvider:
   roles:
     manager:

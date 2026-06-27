@@ -47,7 +47,7 @@ treeseed/agent-manager
 treeseed/agent-runner
 ```
 
-Release and development images are published for `linux/amd64` and `linux/arm64`. The images start:
+Production release images are published for `linux/amd64` and `linux/arm64`. Staging builds the provider services from source at an exact commit. The images start:
 
 ```bash
 node ./dist/provider/entrypoint.js manager
@@ -104,7 +104,7 @@ npm run release:verify
 npm run verify:local
 ```
 
-CI runs `.github/workflows/verify.yml`. Capacity-provider image publication uses `.github/workflows/dev-image.yml` for staging development images and `.github/workflows/publish.yml` for tagged releases.
+CI runs `.github/workflows/verify.yml`. Capacity-provider image publication uses `.github/workflows/publish.yml` for tagged production releases; staging deployments build from source through Railway reconciliation.
 
 ## Environment Registry
 

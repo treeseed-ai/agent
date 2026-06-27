@@ -218,7 +218,6 @@ describe('agent package shape', () => {
 		].join('\n');
 
 		expect(readme).toContain('.github/workflows/verify.yml');
-		expect(readme).toContain('.github/workflows/dev-image.yml');
 		expect(readme).toContain('.github/workflows/publish.yml');
 		expect(readme).toContain('TREESEED_WORKDAY_TASK_CREDIT_BUDGET');
 		expect(readme).not.toContain(staleWorkflowName);

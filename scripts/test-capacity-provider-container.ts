@@ -1,5 +1,6 @@
 import { chmodSync, existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { basename, join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { packageRoot } from './package-tools.ts';
@@ -106,7 +107,7 @@ if (!existsSync(composeFile)) {
 
 run('npm', ['run', 'capacity-provider:build', '--', '--roles', 'manager,runner', '--no-cache']);
 
-const tempParent = resolve(packageRoot, '.treeseed', 'tmp');
+const tempParent = resolve(tmpdir(), 'treeseed-agent-container-smoke');
 mkdirSync(tempParent, { recursive: true });
 const tempRoot = mkdtempSync(join(tempParent, 'treeseed-capacity-provider-container-'));
 const hostDataDir = resolve(tempRoot, 'data');

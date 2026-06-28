@@ -16,6 +16,11 @@ const forbiddenPatterns = [
 	/['"`][^'"`\n]*\/packages\/[^'"`\n]*\/src\/[^'"`\n]*['"`]/,
 ];
 
+function isAllowedIsolatedTarballSpecifier(value: string) {
+	return process.env.TREESEED_VERIFY_PACKAGE_ISOLATED === '1'
+		&& /^file:treeseed-release-tarballs\/[^/]+\.tgz$/u.test(value);
+}
+
 function resolveSdkPackageRoot() {
 	const siblingSdkRoot = resolve(packageRoot, '..', 'sdk');
 	if (existsSync(resolve(siblingSdkRoot, 'package.json'))) {
@@ -183,7 +188,7 @@ function assertNoLocalDependencyLinks() {
 	const packageJson = JSON.parse(readFileSync(resolve(packageRoot, 'package.json'), 'utf8')) as Record<string, Record<string, string> | undefined>;
 	for (const sectionName of ['dependencies', 'devDependencies', 'peerDependencies', 'optionalDependencies']) {
 		for (const [dependencyName, version] of Object.entries(packageJson[sectionName] ?? {})) {
-			if (version.startsWith('workspace:') || version.startsWith('file:')) {
+			if (version.startsWith('workspace:') || (version.startsWith('file:') && !isAllowedIsolatedTarballSpecifier(version))) {
 				throw new Error(`package.json ${sectionName}.${dependencyName} must not use local dependency specifiers: ${version}`);
 			}
 		}
@@ -203,7 +208,7 @@ function assertNoLocalDependencyLinks() {
 		if (
 			resolved.startsWith('../')
 			|| resolved.startsWith('./')
-			|| resolved.startsWith('file:')
+			|| (resolved.startsWith('file:') && !isAllowedIsolatedTarballSpecifier(resolved))
 			|| resolved.startsWith('workspace:')
 		) {
 			throw new Error(`package-lock.json contains forbidden local resolution for ${entryKey}: ${resolved}`);

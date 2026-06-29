@@ -88,7 +88,7 @@ function optionalEnvEntries(env: NodeJS.ProcessEnv, names: string[]) {
 }
 
 function mintLocalTreeDxJwt(env: NodeJS.ProcessEnv) {
-	const secret = envValue(env, 'TREESEED_TREEDX_JWT_HS256_SECRET') || envValue(env, 'TREEDX_JWT_HS256_SECRET');
+	const secret = envValue(env, 'TREESEED_TREEDX_JWT_HS256_SECRET');
 	const issuer = envValue(env, 'TREESEED_TREEDX_JWT_ISSUER') || envValue(env, 'TREEDX_JWT_ISSUER');
 	const audience = envValue(env, 'TREESEED_TREEDX_JWT_AUDIENCE') || envValue(env, 'TREEDX_JWT_AUDIENCE');
 	if (!secret || !issuer || !audience) return '';

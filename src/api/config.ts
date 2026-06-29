@@ -62,7 +62,7 @@ function resolveBaseUrl(env: NodeJS.ProcessEnv, host: string, port: number) {
 function resolveAuthApprovalBaseUrl(env: NodeJS.ProcessEnv, baseUrl: string) {
 	const explicit = env.TREESEED_API_AUTH_APPROVAL_BASE_URL?.trim()
 		|| env.TREESEED_SITE_URL?.trim()
-		|| env.BETTER_AUTH_URL?.trim();
+		|| env.TREESEED_BETTER_AUTH_URL?.trim();
 	const explicitIsLoopback = explicit ? isLoopbackUrl(explicit) : false;
 	try {
 		const url = new URL(baseUrl);

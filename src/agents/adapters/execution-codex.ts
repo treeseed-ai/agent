@@ -1,4 +1,3 @@
-import { Codex } from '@openai/codex-sdk';
 import { isAbsolute, relative } from 'node:path';
 import { findAgentToolDefinition } from '@treeseed/sdk';
 import type { AgentRuntimeSpec } from '@treeseed/sdk/types/agents';
@@ -295,6 +294,7 @@ export function codexAgentToolConfig(request: CodexExecutionRequest) {
 }
 
 async function createDefaultCodexClient(request?: CodexExecutionRequest): Promise<CodexSubscriptionClient> {
+	const { Codex } = await import('@openai/codex-sdk');
 	return new Codex({
 		env: codexClientEnvironment(),
 		config: request ? codexAgentToolConfig(request) : undefined,

@@ -3,6 +3,12 @@
 !package-lock.json
 !Dockerfile
 !docker-entrypoint.sh
+!tsconfig.json
+!tsconfig.dist.json
+!src/
+!src/**
+!scripts/
+!scripts/**
 !dist/
 !dist/**
 !templates/

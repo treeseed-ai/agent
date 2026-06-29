@@ -10,7 +10,7 @@ function args() {
 }
 
 function roleArg(): ProviderRole {
-	const role = args()[0] ?? 'api';
+	const role = args()[0] ?? process.env.TREESEED_PROVIDER_ROLE ?? 'api';
 	if (!ROLES.includes(role as ProviderRole)) {
 		throw new Error(`Unknown capacity provider role "${role}".`);
 	}

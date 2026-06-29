@@ -1,7 +1,6 @@
 import { normalizeAgentCliOptions } from '../cli-tools.ts';
 import type { ExecutionProviderAdapter, ExecutionProviderInvocation } from '../runtime-types.ts';
 import { getTreeseedAgentProviderSelections } from '@treeseed/sdk/platform/deploy-runtime';
-import { runTreeseedCopilotTask } from '@treeseed/sdk/copilot';
 import type { TreeseedCopilotTaskInput, TreeseedCopilotTaskResult } from '@treeseed/sdk/copilot';
 import {
 	CodexSubscriptionExecutionProviderAdapter,
@@ -93,7 +92,9 @@ export class CopilotExecutionProviderAdapter implements ExecutionProviderAdapter
 			].join('\n'),
 			repoRoot,
 		});
-		const result = await (this.options.runCopilotTask ?? runTreeseedCopilotTask)({
+		const runCopilotTask = this.options.runCopilotTask
+			?? (await import('@treeseed/sdk/copilot')).runTreeseedCopilotTask;
+		const result = await runCopilotTask({
 			prompt,
 			cwd: repoRoot,
 			model: cli.model,

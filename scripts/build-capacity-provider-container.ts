@@ -247,12 +247,11 @@ function pruneDevDependenciesFromRuntimeTree(runtimeRoot: string) {
 
 function pruneProviderRuntimeToolingFromRuntimeTree(runtimeRoot: string, role: RoleName) {
 	const nodeModulesRoot = resolve(runtimeRoot, 'node_modules');
-	const packagePaths = role === 'api'
-		? [
-			'@cloudflare',
-			'@github/copilot',
-			'@github/copilot-darwin-arm64',
-			'@github/copilot-darwin-x64',
+	const commonTooling = [
+		'@cloudflare',
+		'@github/copilot',
+		'@github/copilot-darwin-arm64',
+		'@github/copilot-darwin-x64',
 			'@github/copilot-language-server',
 			'@github/copilot-language-server-darwin-arm64',
 			'@github/copilot-language-server-darwin-x64',
@@ -264,52 +263,7 @@ function pruneProviderRuntimeToolingFromRuntimeTree(runtimeRoot: string, role: R
 			'@github/copilot-linux-x64',
 			'@github/copilot-win32-arm64',
 			'@github/copilot-win32-x64',
-			'@img',
-			'@openai',
-			'@railway',
-			'miniflare',
-			'playwright',
-			'playwright-core',
-			'wrangler',
-			'workerd',
-		]
-		: role === 'manager'
-			? [
-				'@cloudflare',
-				'@github/copilot',
-				'@github/copilot-darwin-arm64',
-				'@github/copilot-darwin-x64',
-				'@github/copilot-language-server',
-				'@github/copilot-language-server-darwin-arm64',
-				'@github/copilot-language-server-darwin-x64',
-				'@github/copilot-language-server-linux-arm64',
-				'@github/copilot-language-server-linux-x64',
-				'@github/copilot-language-server-win32-arm64',
-				'@github/copilot-language-server-win32-x64',
-				'@github/copilot-linux-arm64',
-				'@github/copilot-linux-x64',
-				'@github/copilot-win32-arm64',
-				'@github/copilot-win32-x64',
-				'@img',
-				'@railway',
-				'miniflare',
-				'playwright',
-				'playwright-core',
-				'wrangler',
-				'workerd',
-			]
-			: [
-		'@cloudflare',
-		'@github/copilot-darwin-arm64',
-		'@github/copilot-darwin-x64',
-		'@github/copilot-language-server-darwin-arm64',
-		'@github/copilot-language-server-darwin-x64',
-		'@github/copilot-language-server-linux-arm64',
-		'@github/copilot-language-server-win32-arm64',
-		'@github/copilot-language-server-win32-x64',
-		'@github/copilot-linux-arm64',
-		'@github/copilot-win32-arm64',
-		'@github/copilot-win32-x64',
+			'@github/copilot-sdk',
 		'@img',
 		'@railway',
 		'miniflare',
@@ -318,6 +272,14 @@ function pruneProviderRuntimeToolingFromRuntimeTree(runtimeRoot: string, role: R
 		'wrangler',
 		'workerd',
 	];
+	const packagePaths = role === 'manager'
+		? commonTooling
+		: [
+			...commonTooling,
+			'@github/copilot-sdk',
+			'@openai',
+			'gpt-tokenizer',
+		];
 	for (const packagePath of packagePaths) {
 		rmSync(resolve(nodeModulesRoot, packagePath), { recursive: true, force: true });
 	}

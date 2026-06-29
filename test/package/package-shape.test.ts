@@ -151,13 +151,17 @@ describe('agent package shape', () => {
 		const docs = readFileSync(resolve(packageRoot, 'docs/capacity-provider-runtime.md'), 'utf8');
 
 		expect(dockerfile).not.toContain('FROM node-runtime AS agent-api');
-		expect(dockerfile).toContain('FROM node-runtime AS manager-runtime');
-		expect(dockerfile).toContain('FROM manager-runtime AS agent-manager');
-		expect(dockerfile).toContain('FROM manager-runtime AS agent-runner');
-		expect(dockerfile).toContain('ENTRYPOINT ["tini", "--", "/usr/local/bin/treeseed-agent-entrypoint"]');
+		expect(dockerfile).toContain('FROM node:22-bookworm-slim AS builder');
+		expect(dockerfile).toContain('FROM node:22-bookworm-slim AS agent-provider');
+		expect(dockerfile).toContain('FROM agent-provider AS agent-manager');
+		expect(dockerfile).toContain('FROM agent-provider AS agent-runner');
+		expect(dockerfile).toContain('FROM agent-provider AS railway-runtime');
+		expect(dockerfile).toContain('ENTRYPOINT ["tini", "--", "/app/docker-entrypoint.sh"]');
 		expect(entrypoint).toContain('setpriv');
 		expect(dockerfile).toContain('FROM node:22');
-		expect(dockerfile).not.toContain('COPY . .');
+		expect(dockerfile).toContain('COPY . .');
+		expect(dockerfile).toContain('rm -rf src scripts test .git .github');
+		expect(dockerfile).toContain('rm -rf node_modules/@github node_modules/@openai');
 		expect(dockerfile).not.toContain('treeseed-processing');
 		expect(dockerfile).not.toContain('packages/core');
 		expect(compose).toContain('target: agent-manager');

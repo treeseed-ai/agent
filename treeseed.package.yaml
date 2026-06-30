@@ -12,7 +12,7 @@ githubEnvironments:
   - staging
   - production
 requiredSecrets:
-  - DOCKERHUB_TOKEN
+  - TREESEED_DOCKERHUB_TOKEN
 verify:
   fast: npm run verify
   local: npm run verify:local

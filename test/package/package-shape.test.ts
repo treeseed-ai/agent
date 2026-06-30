@@ -151,8 +151,8 @@ describe('agent package shape', () => {
 		const docs = readFileSync(resolve(packageRoot, 'docs/capacity-provider-runtime.md'), 'utf8');
 
 		expect(dockerfile).not.toContain('FROM node-runtime AS agent-api');
-		expect(dockerfile).toContain('FROM node:22-bookworm-slim AS builder');
-		expect(dockerfile).toContain('FROM node:22-bookworm-slim AS agent-provider');
+		expect(dockerfile).toContain('FROM node:22-alpine AS builder');
+		expect(dockerfile).toContain('FROM node:22-alpine AS agent-provider');
 		expect(dockerfile).toContain('FROM agent-provider AS agent-manager');
 		expect(dockerfile).toContain('FROM agent-provider AS agent-runner');
 		expect(dockerfile).toContain('FROM agent-provider AS railway-runtime');

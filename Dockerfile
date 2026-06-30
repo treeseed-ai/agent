@@ -1,27 +1,4 @@
-FROM node:22-alpine AS builder
-
-WORKDIR /app
-
-RUN apk add --no-cache ca-certificates git openssh-client
-
-COPY package.json package-lock.json ./
-RUN npm ci --include=dev --ignore-scripts
-
-COPY . .
-RUN npm run build:dist \
-	&& npm prune --omit=dev --ignore-scripts \
-	&& rm -rf node_modules/@github node_modules/@openai node_modules/@cloudflare node_modules/@railway \
-		node_modules/wrangler node_modules/miniflare node_modules/workerd \
-		node_modules/playwright node_modules/playwright-core node_modules/gpt-tokenizer \
-		node_modules/@remotion node_modules/remotion node_modules/@rspack \
-		node_modules/@repomix node_modules/repomix node_modules/@esbuild node_modules/esbuild \
-		node_modules/webpack node_modules/typescript node_modules/@mediabunny node_modules/mediabunny \
-		node_modules/web-tree-sitter node_modules/caniuse-lite node_modules/@img node_modules/@secretlint \
-		node_modules/lightningcss* node_modules/vite \
-	&& npm cache clean --force \
-	&& rm -rf src scripts test .git .github
-
-FROM node:22-alpine AS agent-provider
+FROM node:22-alpine AS agent-provider-base
 
 WORKDIR /app
 
@@ -31,12 +8,10 @@ ENV NODE_ENV=production \
 RUN apk add --no-cache ca-certificates tini util-linux git openssh-client \
 	&& mkdir -p /data
 
-COPY --from=builder --chown=65532:65532 /app/package.json /app/package-lock.json ./
-COPY --from=builder --chown=65532:65532 /app/node_modules ./node_modules
-COPY --from=builder --chown=65532:65532 /app/dist ./dist
-COPY --from=builder --chown=65532:65532 /app/templates ./templates
-COPY --from=builder --chown=65532:65532 /app/docs ./docs
-COPY --from=builder --chown=65532:65532 /app/docker-entrypoint.sh ./docker-entrypoint.sh
+COPY --chown=65532:65532 dist ./dist
+COPY --chown=65532:65532 templates ./templates
+COPY --chown=65532:65532 docs ./docs
+COPY --chown=65532:65532 docker-entrypoint.sh ./docker-entrypoint.sh
 
 RUN chmod 0755 /app/docker-entrypoint.sh \
 	&& chown -R 65532:65532 /data
@@ -44,12 +19,16 @@ RUN chmod 0755 /app/docker-entrypoint.sh \
 EXPOSE 3100
 ENTRYPOINT ["tini", "--", "/app/docker-entrypoint.sh"]
 
-FROM agent-provider AS agent-manager
+FROM agent-provider-base AS agent-manager
 ENV TREESEED_PROVIDER_ROLE=manager
+COPY --chown=65532:65532 .treeseed/docker/runtime/manager/package.json .treeseed/docker/runtime/manager/package-lock.json ./
+COPY --chown=65532:65532 .treeseed/docker/runtime/manager/node_modules ./node_modules
 CMD ["manager"]
 
-FROM agent-provider AS agent-runner
+FROM agent-provider-base AS agent-runner
 ENV TREESEED_PROVIDER_ROLE=runner
+COPY --chown=65532:65532 .treeseed/docker/runtime/runner/package.json .treeseed/docker/runtime/runner/package-lock.json ./
+COPY --chown=65532:65532 .treeseed/docker/runtime/runner/node_modules ./node_modules
 CMD ["runner"]
 
-FROM agent-provider AS railway-runtime
+FROM agent-runner AS railway-runtime

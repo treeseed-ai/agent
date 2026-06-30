@@ -18,6 +18,8 @@ jobs:
       - uses: actions/checkout@v4
       - name: Build package-owned provider role images
         run: |
+          npm ci --ignore-scripts
+          npm run capacity-provider:build -- --prepare-only
           docker build --target agent-manager -t treeseed/agent-manager:${{ inputs.environment }} .
           docker build --target agent-runner -t treeseed/agent-runner:${{ inputs.environment }} .
       - name: Deployment handoff

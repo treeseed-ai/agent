@@ -151,17 +151,17 @@ describe('agent package shape', () => {
 		const docs = readFileSync(resolve(packageRoot, 'docs/capacity-provider-runtime.md'), 'utf8');
 
 		expect(dockerfile).not.toContain('FROM node-runtime AS agent-api');
-		expect(dockerfile).toContain('FROM node:22-alpine AS builder');
-		expect(dockerfile).toContain('FROM node:22-alpine AS agent-provider');
-		expect(dockerfile).toContain('FROM agent-provider AS agent-manager');
-		expect(dockerfile).toContain('FROM agent-provider AS agent-runner');
-		expect(dockerfile).toContain('FROM agent-provider AS railway-runtime');
+		expect(dockerfile).toContain('FROM node:22-alpine AS agent-provider-base');
+		expect(dockerfile).toContain('FROM agent-provider-base AS agent-manager');
+		expect(dockerfile).toContain('FROM agent-provider-base AS agent-runner');
+		expect(dockerfile).toContain('FROM agent-runner AS railway-runtime');
 		expect(dockerfile).toContain('ENTRYPOINT ["tini", "--", "/app/docker-entrypoint.sh"]');
 		expect(entrypoint).toContain('setpriv');
 		expect(dockerfile).toContain('FROM node:22');
-		expect(dockerfile).toContain('COPY . .');
-		expect(dockerfile).toContain('rm -rf src scripts test .git .github');
-		expect(dockerfile).toContain('rm -rf node_modules/@github node_modules/@openai');
+		expect(dockerfile).toContain('.treeseed/docker/runtime/manager/node_modules');
+		expect(dockerfile).toContain('.treeseed/docker/runtime/runner/node_modules');
+		expect(dockerfile).not.toContain('RUN npm ci');
+		expect(dockerfile).not.toContain('COPY . .');
 		expect(dockerfile).not.toContain('treeseed-processing');
 		expect(dockerfile).not.toContain('packages/core');
 		expect(compose).toContain('target: agent-manager');
@@ -183,6 +183,7 @@ describe('agent package shape', () => {
 		expect(railwayTemplate).not.toContain('node ./dist/provider/entrypoint.js api');
 		expect(railwayTemplate).not.toMatch(/tscp_[A-Za-z0-9_]+|tsp_[A-Za-z0-9_]+|sk-[A-Za-z0-9_]+/u);
 		expect(deployWorkflow).toContain('Build package-owned provider role images');
+		expect(deployWorkflow).toContain('npm run capacity-provider:build -- --prepare-only');
 		expect(deployWorkflow).not.toContain('placeholder');
 	});
 

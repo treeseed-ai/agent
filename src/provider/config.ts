@@ -131,7 +131,7 @@ export function resolveProviderTreeDxOptions(env: NodeJS.ProcessEnv = process.en
 function managementApiUrl(env: NodeJS.ProcessEnv) {
 	return envValue(env, 'TREESEED_MANAGEMENT_API_URL')
 		|| envValue(env, 'TREESEED_MARKET_URL')
-		|| 'https://api.treeseed.ai';
+		|| 'https://api.treeseed.dev';
 }
 
 function configuredCodexAuthFile(env: NodeJS.ProcessEnv) {

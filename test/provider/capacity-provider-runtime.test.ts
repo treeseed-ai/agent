@@ -543,7 +543,7 @@ describe('capacity provider runtime', () => {
 			requireConnection: false,
 		});
 
-		expect(config.marketUrl).toBe('https://api.treeseed.ai');
+		expect(config.marketUrl).toBe('https://api.treeseed.dev');
 		expect(config.marketId).toBe('local');
 		expect(config.apiKey).toBe('tscp_secret_local_provider_key');
 		expect(config.redactedEnv.TREESEED_CAPACITY_PROVIDER_API_KEY).toContain('<redacted>');
@@ -594,7 +594,7 @@ describe('capacity provider runtime', () => {
 			requireConnection: true,
 		});
 		expect(config.apiKey).toBe('tscp_secret_local_provider_key');
-		expect(config.marketUrl).toBe('https://api.treeseed.ai');
+		expect(config.marketUrl).toBe('https://api.treeseed.dev');
 		expect(config.marketId).toBe('local');
 	});
 

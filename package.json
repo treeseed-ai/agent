@@ -145,7 +145,7 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@openai/codex-sdk": "^0.130.0",
-    "@treeseed/sdk": "github:treeseed-ai/sdk#273820182962d9060a3145f1cdab99cf6c4a6c2f",
+    "@treeseed/sdk": "github:treeseed-ai/sdk#a492fbc34366d7e54f3f25d47c59c0f9866169d5",
     "esbuild": "0.28.0",
     "hono": "^4.8.2",
     "typescript": "^5.9.3",

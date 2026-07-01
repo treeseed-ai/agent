@@ -1,0 +1,125 @@
+schemaVersion: treeseed.guarantee-verifiers/v1
+ownerPackage: "@treeseed/agent"
+verifiers:
+  agent.provider.heartbeat.once:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: test/provider/capacity-provider-runtime.test.ts
+    testName: heartbeat
+  agent.provider.register-capabilities:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: test/provider/capacity-provider-runtime.test.ts
+  agent.assignment.poll-next:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: test/provider/capacity-provider-runtime.test.ts
+  agent.assignment.renew-lease:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: test/provider/capacity-provider-runtime.test.ts
+  agent.assignment.return:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: test/provider/capacity-provider-runtime.test.ts
+  agent.assignment.complete:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: test/provider/capacity-provider-runtime.test.ts
+  agent.assignment.fail:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: test/provider/capacity-provider-runtime.test.ts
+  agent.usage.record-execution:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: test/provider/capacity-provider-runtime.test.ts
+  agent.kernel.run-planning:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: test/agents/agent-contracts.test.ts
+  agent.kernel.block-acting-without-approved-decision:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: test/agents/agent-contracts.test.ts
+  agent.kernel.run-acting-with-approved-decision:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: test/agents/agent-contracts.test.ts
+  agent.kernel.release-active-leases:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: test/agents/agent-contracts.test.ts
+  agent.content.treedx-read-context:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: test/provider/agent-tool-provider-runtime.test.ts
+  agent.content.treedx-write-artifact:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: test/provider/agent-tool-provider-runtime.test.ts
+  agent.content.link-generated-note:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: test/agents/content-artifacts.test.ts
+  agent.execution-provider.codex.contract:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: test/agents/codex-provider.test.ts
+  agent.execution-provider.github-issues.contract:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: test/agents/github-issues-provider.test.ts
+  agent.execution-provider.discord.contract:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: test/agents/discord-provider.test.ts
+  agent.execution-provider.jira.contract:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: test/agents/jira-provider.test.ts
+  agent.execution-provider.workflow.contract:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: test/agents/workflow-provider.test.ts
+  agent.runtime.enforce-provider-local-budget:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: test/provider/budgets.test.ts
+  agent.runtime.report-readiness:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: test/services/runtime-readiness.test.ts
+  agent.runtime.recover-runner-crash:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: test/provider/capacity-provider-runtime.test.ts
+  agent.runtime.produce-hosted-proof:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: test/provider/capacity-provider-runtime.test.ts
+  agent.workday.produce-summary:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: test/services/workday-test.test.ts
+  agent.workday.exercise-every-eligible-planning-agent:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: test/services/workday-test.test.ts
+  agent.workday.continue-until-bound:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: test/services/workday-test.test.ts
+  agent.trace.inspect-execution:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: test/provider/capacity-provider-runtime.test.ts
+  agent.trace.redact-provider-secrets:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: test/provider/capacity-provider-runtime.test.ts
+  agent.trace.correlate-assignment-mode-run-artifacts:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: test/provider/capacity-provider-runtime.test.ts
+

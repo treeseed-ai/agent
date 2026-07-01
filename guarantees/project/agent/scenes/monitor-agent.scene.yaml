@@ -1,0 +1,100 @@
+schemaVersion: treeseed.scene/v1
+id: project.agent.monitor-agent.060
+title: Monitor Agent
+description: Scene scaffold for guarantee.project.agent.monitor-agent.060. This scene is intentionally minimal until the workflow-specific acceptance steps are authored.
+audience:
+  - operator
+  - evaluator
+mode:
+  test: true
+  demo: true
+  training: true
+target:
+  app: market
+  environment: local
+  baseUrl: auto
+  browser: chromium
+  viewport:
+    width: 1600
+    height: 900
+devices:
+  defaultProfile: desktop
+  profiles:
+    - id: desktop
+      title: Desktop
+      orientation: landscape
+      viewport:
+        width: 1600
+        height: 900
+      video:
+        width: 1600
+        height: 900
+      output:
+        width: 1920
+        height: 1080
+      deviceScaleFactor: 1
+      isMobile: false
+      hasTouch: false
+setup:
+  dev:
+    required: true
+    command: trsd dev start --web-runtime local --json
+    reuseExisting: true
+artifacts:
+  trace: true
+  video: true
+  screenshots: true
+  console: true
+  network: true
+  timeline: true
+  appLogs: true
+workflow:
+  - id: open-entry-route
+    title: Open Monitor Agent
+    action:
+      goto: /app/projects/:projectId/agent/monitor-agent
+    expect:
+      urlIncludes: /app/projects
+    demoOnly: true
+chapters: []
+overlays: []
+diagrams: []
+render:
+  remotion:
+    composition: treeseed-training-default
+    output:
+      format: mp4
+      fps: 30
+      resolution:
+        width: 1920
+        height: 1080
+    capture:
+      viewport:
+        width: 1600
+        height: 900
+      video:
+        width: 1600
+        height: 900
+      evidenceFit: fixed-browser
+runtime:
+  mode: training
+  timeouts:
+    sceneSeconds: 300
+    chapterSeconds: 120
+    stepSeconds: 60
+  checkpoints:
+    enabled: true
+    defaultResumable: true
+    everyStep: true
+  progress:
+    heartbeatSeconds: 15
+  failure:
+    continueOnFailure: false
+training:
+  formats:
+    - json
+    - markdown
+    - vtt
+    - srt
+visualAudit:
+  enabled: false

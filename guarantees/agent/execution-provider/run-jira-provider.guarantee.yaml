@@ -1,0 +1,61 @@
+schemaVersion: treeseed.guarantee/v1
+id: guarantee.agent.execution-provider.run-jira-provider.159
+journeyIndex: 159
+type: agent
+subtype: execution-provider
+journey: Run Jira Provider
+ownerPackage: "@treeseed/agent"
+surface: agent-runtime
+summary: "Verify agent runtime behavior for Run Jira Provider."
+status: planned
+dependencies:
+  journeys:
+    - 60
+  guarantees:
+    - guarantee.project.agent.monitor-agent.060
+actors:
+  allowed:
+    - project_manager
+    - capacity_operator
+    - team_owner
+  forbidden:
+    - anonymous_user
+    - unauthorized_user
+devices:
+  required:
+    - desktop_chromium
+  optional:
+    - mobile_chromium
+gates:
+  - core
+  - release
+preconditions:
+  fixtures:
+    - integrated_treeseed_project
+  notes:
+    - "Guarantee starts as planned until all verifier refs execute in integrated environments."
+scene:
+  required: false
+api:
+  required: true
+  verifierRefs:
+    - agent.execution-provider.jira.contract
+content:
+  required: false
+  verifierRefs: []
+audit:
+  required: true
+  verifierRefs:
+    - agent.execution-provider.jira.contract
+negativeCases:
+  - id: unauthorized-actor-denied
+    actor: anonymous_user
+    verifierRefs:
+      - agent.execution-provider.jira.contract
+evidence:
+  required:
+    - guarantee_report
+    - verifier_evidence
+notes:
+  - "Agent runtime guarantee for Run Jira Provider."
+

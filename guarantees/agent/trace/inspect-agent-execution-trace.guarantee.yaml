@@ -1,0 +1,61 @@
+schemaVersion: treeseed.guarantee/v1
+id: guarantee.agent.trace.inspect-agent-execution-trace.168
+journeyIndex: 168
+type: agent
+subtype: trace
+journey: Inspect Agent Execution Trace
+ownerPackage: "@treeseed/agent"
+surface: agent-runtime
+summary: "Verify agent runtime behavior for Inspect Agent Execution Trace."
+status: planned
+dependencies:
+  journeys:
+    - 60
+  guarantees:
+    - guarantee.project.agent.monitor-agent.060
+actors:
+  allowed:
+    - project_manager
+    - capacity_operator
+    - team_owner
+  forbidden:
+    - anonymous_user
+    - unauthorized_user
+devices:
+  required:
+    - desktop_chromium
+  optional:
+    - mobile_chromium
+gates:
+  - core
+  - release
+preconditions:
+  fixtures:
+    - integrated_treeseed_project
+  notes:
+    - "Guarantee starts as planned until all verifier refs execute in integrated environments."
+scene:
+  required: false
+api:
+  required: true
+  verifierRefs:
+    - agent.trace.inspect-execution
+content:
+  required: false
+  verifierRefs: []
+audit:
+  required: true
+  verifierRefs:
+    - agent.trace.inspect-execution
+negativeCases:
+  - id: unauthorized-actor-denied
+    actor: anonymous_user
+    verifierRefs:
+      - agent.trace.inspect-execution
+evidence:
+  required:
+    - guarantee_report
+    - verifier_evidence
+notes:
+  - "Agent runtime guarantee for Inspect Agent Execution Trace."
+

@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.12.4] - 2026-07-02
+
+### Fixed
+
+- fix(release): publish plain semver tags (ac3b7d95b133)
+
 ## [0.12.3] - 2026-07-02
 
 ### Changed

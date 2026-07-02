@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.12.5] - 2026-07-02
+
+### Fixed
+
+- fix(release): declare dockerhub username variable (061ffbc3bdf4)
+
 ## [0.12.4] - 2026-07-02
 
 ### Fixed

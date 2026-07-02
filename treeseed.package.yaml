@@ -13,6 +13,7 @@ githubEnvironments:
   - production
 requiredSecrets:
   - TREESEED_DOCKERHUB_TOKEN
+  - NPM_TOKEN
 requiredVariables:
   - TREESEED_DOCKERHUB_USERNAME
 verify:

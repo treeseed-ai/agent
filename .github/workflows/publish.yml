@@ -7,6 +7,26 @@ on:
       - "*.*.*"
 
 jobs:
+  npm:
+    if: startsWith(github.ref, 'refs/tags/') && !contains(github.ref_name, '-')
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+      - run: npm ci --ignore-scripts || (echo "dependency install failed; retrying" && npm ci --ignore-scripts)
+      - run: npm run build
+      - run: npm publish --access public --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
   build:
     if: startsWith(github.ref, 'refs/tags/') && !contains(github.ref_name, '-')
     runs-on: ${{ matrix.runner }}

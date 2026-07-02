@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.12.6] - 2026-07-02
+
+### Fixed
+
+- fix(release): publish agent npm package (1f927c039045)
+
 ## [0.12.5] - 2026-07-02
 
 ### Fixed

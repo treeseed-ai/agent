@@ -13,6 +13,8 @@ githubEnvironments:
   - production
 requiredSecrets:
   - TREESEED_DOCKERHUB_TOKEN
+requiredVariables:
+  - TREESEED_DOCKERHUB_USERNAME
 verify:
   fast: npm run verify
   local: npm run verify:local

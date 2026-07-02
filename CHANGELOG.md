@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.12.7] - 2026-07-02
+
+### Fixed
+
+- fix(release): allow npm provenance publishing (bb6b755fcb4f)
+
 ## [0.12.6] - 2026-07-02
 
 ### Fixed

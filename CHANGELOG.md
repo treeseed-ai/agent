@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.12.18] - 2026-07-03
+
+### Fixed
+
+- fix: adopt acceptance auth users on seed retry (74c18fee10b8)
+
 ## [0.12.17] - 2026-07-03
 
 ### Changed

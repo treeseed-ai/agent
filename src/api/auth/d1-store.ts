@@ -336,6 +336,22 @@ export class D1AuthStore {
 		);
 	}
 
+	private async loadUserByUsername(username: string) {
+		return this.first<UserRow>(
+			`SELECT * FROM users WHERE LOWER(username) = LOWER(?) AND status = 'active' LIMIT 1`,
+			[username],
+		);
+	}
+
+	private canAdoptUsernameMatch(identity: UserIdentityProfileInput, user: UserRow | null) {
+		if (!user?.id || !identity.username) return false;
+		const profile = identity.profile && typeof identity.profile === 'object' ? identity.profile : {};
+		if (identity.provider === 'acceptance' || profile.acceptance === true) return true;
+		const existingEmail = typeof user.email === 'string' ? user.email.trim().toLowerCase() : '';
+		const requestedEmail = typeof identity.email === 'string' ? identity.email.trim().toLowerCase() : '';
+		return Boolean(requestedEmail && existingEmail && requestedEmail === existingEmail && identity.emailVerified);
+	}
+
 	private async rolesForUser(userId: string) {
 		const rows = await this.all<{ key: string }>(
 			`SELECT roles.key AS key
@@ -483,7 +499,9 @@ export class D1AuthStore {
 		const existingIdentity = await this.loadIdentityByProvider(identity.provider, identity.providerSubject);
 		let userId = existingIdentity?.user_id;
 		if (!userId) {
-			const linkedUser = identity.email && identity.emailVerified ? await this.loadUserByVerifiedEmail(identity.email) : null;
+			const emailLinkedUser = identity.email && identity.emailVerified ? await this.loadUserByVerifiedEmail(identity.email) : null;
+			const usernameLinkedUser = !emailLinkedUser && identity.username ? await this.loadUserByUsername(identity.username) : null;
+			const linkedUser = emailLinkedUser ?? (this.canAdoptUsernameMatch(identity, usernameLinkedUser) ? usernameLinkedUser : null);
 			userId = linkedUser?.id ?? randomUUID();
 			if (linkedUser) {
 				await this.run(

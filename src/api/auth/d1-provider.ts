@@ -89,7 +89,7 @@ export class D1AuthProvider implements ApiAuthProvider {
 		return this.store.syncUser(identity);
 	}
 
-	createUser(input: { email?: string | null; displayName?: string | null; metadata?: Record<string, unknown> }) {
+	createUser(input: { email?: string | null; username?: string | null; displayName?: string | null; metadata?: Record<string, unknown> }) {
 		return this.store.createUser(input);
 	}
 

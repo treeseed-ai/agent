@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.12.13] - 2026-07-03
+
+### Changed
+
+- Release metadata and deployment history updated.
+
 ## [0.12.12] - 2026-07-02
 
 ### Changed

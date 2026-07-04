@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.12.24] - 2026-07-04
+
+### Changed
+
+- docs: remove dry-run wording from changelog (52fc4009a609)
+
 ## [0.12.23] - 2026-07-04
 
 ### Changed

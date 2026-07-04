@@ -4,7 +4,6 @@
 
 ### Changed
 
-- docs: remove dry-run wording (9303b90a843a)
 
 ## [0.12.24] - 2026-07-04
 

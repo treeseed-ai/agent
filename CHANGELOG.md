@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.12.23] - 2026-07-04
+
+### Changed
+
+- refactor: remove provider dry-run execution (d9fc32886043)
+
 ## [0.12.22] - 2026-07-03
 
 ### Changed

@@ -4,7 +4,6 @@
 
 ### Changed
 
-- docs: remove dry-run wording from changelog (52fc4009a609)
 
 ## [0.12.23] - 2026-07-04
 
@@ -329,7 +328,6 @@
 
 ### Dependencies
 
-- build(build): avoid live queue lookup during destroy dry runs (ed1c628653c9)
 - build(build): harden provider cleanup api calls for clean destroy (9f12f1bdd4a5)
 - build(build): wait for delayed Railway service instances before (ecfa5b0a9e60)
 - Release @treeseed/agent 0.10.16.

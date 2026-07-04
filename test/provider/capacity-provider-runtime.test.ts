@@ -239,7 +239,7 @@ handler: plan
 projectAgentClassId: planning
 projectAgentClassSlug: planning
 enabled: true
-systemPrompt: Plan provider dry runs.
+systemPrompt: Plan provider work.
 persona: Planner.
 triggers:
   - type: startup

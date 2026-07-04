@@ -39,9 +39,9 @@ function printHelp() {
 		'Examples:',
 		'  node ./dist/provider/entrypoint.js version',
 		'  node ./dist/provider/entrypoint.js healthcheck',
-		'  node ./dist/provider/entrypoint.js register --dry-run',
-		'  node ./dist/provider/entrypoint.js manager --dry-run --json',
-		'  node ./dist/provider/entrypoint.js runner --dry-run --json',
+		'  node ./dist/provider/entrypoint.js register --plan',
+		'  node ./dist/provider/entrypoint.js manager --plan --json',
+		'  node ./dist/provider/entrypoint.js runner --plan --json',
 		'  node ./dist/provider/entrypoint.js runner --once --json',
 		'',
 	].join('\n'));
@@ -94,8 +94,8 @@ async function runLoop(role: 'manager' | 'runner', intervalSeconds: number, runO
 	}
 }
 
-function requireConnection(role: ProviderRole, dryRun: boolean) {
-	return !dryRun && ['manager', 'runner', 'register'].includes(role);
+function requireConnection(role: ProviderRole, planOnly: boolean) {
+	return !planOnly && ['manager', 'runner', 'register'].includes(role);
 }
 
 async function main() {
@@ -104,11 +104,11 @@ async function main() {
 		return;
 	}
 	const role = roleArg();
-	const dryRun = flagEnabled('--dry-run');
+	const planOnly = flagEnabled('--plan');
 	const once = flagEnabled('--once');
 	const diagnostic = diagnosticMode();
-	const config = resolveProviderConfig({ requireConnection: requireConnection(role, dryRun) && !diagnostic });
-	if (role !== 'api' && requireConnection(role, dryRun) && !diagnostic) {
+	const config = resolveProviderConfig({ requireConnection: requireConnection(role, planOnly) && !diagnostic });
+	if (role !== 'api' && requireConnection(role, planOnly) && !diagnostic) {
 		const { materializeCodexAuthFromEnv } = await import('../agents/adapters/codex-auth.ts');
 		await materializeCodexAuthFromEnv(process.env);
 	}
@@ -127,9 +127,9 @@ async function main() {
 		return;
 	}
 	if (role === 'register') {
-		if (dryRun) {
+		if (planOnly) {
 			emit(okPayload('register', {
-				dryRun: true,
+				planOnly: true,
 				request: buildProviderRegistrationRequest(config),
 				redactedEnv: config.redactedEnv,
 			}));
@@ -140,13 +140,13 @@ async function main() {
 	}
 	if (role === 'plan') {
 		const { buildProviderPlan } = await import('./lifecycle.ts');
-		emit(await buildProviderPlan(config, { dryRun }));
+		emit(await buildProviderPlan(config, { planOnly }));
 		return;
 	}
 	if (role === 'manager') {
 		const { runManagerSkeleton } = await import('./lifecycle.ts');
-		if (dryRun || diagnostic) {
-			emit(await runManagerSkeleton(config, { dryRun: true }));
+		if (planOnly || diagnostic) {
+			emit(await runManagerSkeleton(config, { planOnly: true }));
 			return;
 		}
 		if (once) {
@@ -158,8 +158,8 @@ async function main() {
 	}
 	if (role === 'runner') {
 		const { runRunnerSkeleton } = await import('./lifecycle.ts');
-		if (dryRun || diagnostic) {
-			emit(await runRunnerSkeleton(config, { dryRun: true }));
+		if (planOnly || diagnostic) {
+			emit(await runRunnerSkeleton(config, { planOnly: true }));
 			return;
 		}
 		if (once) {

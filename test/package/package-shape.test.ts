@@ -111,7 +111,7 @@ describe('agent package shape', () => {
 	});
 
 	it('packs runtime closure without source-mode temp artifacts', () => {
-		const output = execFileSync('npm', ['pack', '--dry-run', '--json', '--ignore-scripts'], {
+		const output = execFileSync('npm', ['pack', '--plan', '--json', '--ignore-scripts'], {
 			cwd: packageRoot,
 			encoding: 'utf8',
 			env: {

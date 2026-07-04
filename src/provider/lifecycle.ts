@@ -68,7 +68,7 @@ export async function checkProviderHealth(config: ProviderRuntimeConfig) {
 	});
 }
 
-export async function buildProviderPlan(config: ProviderRuntimeConfig, options: { dryRun?: boolean } = {}) {
+export async function buildProviderPlan(config: ProviderRuntimeConfig, options: { planOnly?: boolean } = {}) {
 	const base = {
 		environment: config.environment,
 		marketUrl: config.marketUrl || null,
@@ -78,23 +78,23 @@ export async function buildProviderPlan(config: ProviderRuntimeConfig, options: 
 		budgets: discoverProviderBudgets(config),
 		redactedEnv: config.redactedEnv,
 	};
-	if (options.dryRun || !config.apiKey || !config.marketUrl) {
+	if (options.planOnly || !config.apiKey || !config.marketUrl) {
 		return okPayload('plan', {
 			...base,
 			portfolio: null,
-			dryRun: true,
+			planOnly: true,
 		});
 	}
 	const portfolio = await fetchProviderPortfolio(config);
 	return okPayload('plan', {
 		...base,
 		portfolio: summarizeProviderPortfolio(portfolio),
-		dryRun: false,
+		planOnly: false,
 	});
 }
 
-export async function runManagerSkeleton(config: ProviderRuntimeConfig, options: { dryRun?: boolean } = {}) {
-	if (!options.dryRun && config.apiKey && config.marketUrl) {
+export async function runManagerSkeleton(config: ProviderRuntimeConfig, options: { planOnly?: boolean } = {}) {
+	if (!options.planOnly && config.apiKey && config.marketUrl) {
 		const client = createProviderMarketClient(config);
 		const portfolio = await client.portfolio().catch(() => null);
 		const portfolioGrants = capacityGrantsFromPortfolio(portfolio?.grants);
@@ -133,7 +133,7 @@ export async function runManagerSkeleton(config: ProviderRuntimeConfig, options:
 		});
 		return okPayload('manager', {
 			action: 'portfolio-processing',
-			dryRun: false,
+			planOnly: false,
 			checkIn: checkIn.payload,
 			result,
 		});
@@ -141,7 +141,7 @@ export async function runManagerSkeleton(config: ProviderRuntimeConfig, options:
 	const plan = await buildProviderPlan(config, options);
 	return okPayload('manager', {
 		action: 'portfolio-plan',
-		dryRun: options.dryRun === true,
+		planOnly: options.planOnly === true,
 		plan,
 	});
 }
@@ -163,15 +163,15 @@ function rememberCompletedRunner(result: Record<string, unknown>) {
 	}
 }
 
-export async function runRunnerSkeleton(config: ProviderRuntimeConfig, options: { dryRun?: boolean; background?: boolean } = {}) {
+export async function runRunnerSkeleton(config: ProviderRuntimeConfig, options: { planOnly?: boolean; background?: boolean } = {}) {
 	const flow = [
 		'request next leased assignment from Market provider endpoint',
 		'record provider-local mode-run telemetry',
 		'complete or fail assignment without widening scope',
 	];
-	if (options.dryRun || !config.apiKey || !config.marketUrl) {
+	if (options.planOnly || !config.apiKey || !config.marketUrl) {
 		return okPayload('runner', {
-			dryRun: true,
+			planOnly: true,
 			flow,
 			assignmentRequest: {
 				capabilities: discoverProviderCapabilities(config).map((capability) => capability.id),
@@ -220,7 +220,7 @@ export async function runRunnerSkeleton(config: ProviderRuntimeConfig, options: 
 				});
 		}
 		return okPayload('runner', {
-			dryRun: false,
+			planOnly: false,
 			flow,
 			startedAt,
 			completedAt: new Date().toISOString(),
@@ -246,7 +246,7 @@ export async function runRunnerSkeleton(config: ProviderRuntimeConfig, options: 
 		error: error instanceof Error ? error.message : String(error),
 	}))));
 	return okPayload('runner', {
-		dryRun: false,
+		planOnly: false,
 		flow,
 		startedAt,
 		completedAt: new Date().toISOString(),

@@ -337,7 +337,7 @@ function assignmentTerminalCodeForExecutionSnapshot(snapshot: ExecutionRunSnapsh
 class DryRunExecutionProviderAdapter implements ExecutionProviderAdapter {
 	async describe() {
 		return {
-			id: 'dry_run',
+			id: 'plan',
 			kind: 'local_process' as const,
 			capabilities: ['planning', 'implementation', 'review', 'test'],
 			nativeUnit: 'assignment',
@@ -363,10 +363,10 @@ class DryRunExecutionProviderAdapter implements ExecutionProviderAdapter {
 	async start(input: Parameters<ExecutionProviderAdapter['start']>[0]) {
 		return {
 			status: 'waiting' as const,
-			summary: 'Dry-run execution completed without external model execution because the assignment was explicitly configured as dry-run.',
+			summary: 'Plan execution completed without external model execution because the assignment was explicitly configured as plan.',
 			runId: typeof input.metadata?.runId === 'string' ? input.metadata.runId : input.assignment.id,
 			metadata: {
-				provider: 'dry_run',
+				provider: 'plan',
 				assignmentId: input.assignment.id,
 			},
 		};
@@ -768,8 +768,8 @@ function workflowOperationHandles(assignment: Record<string, unknown>) {
 		: [];
 }
 
-function executionProviderSelectionForAssignment(assignment: Record<string, unknown>, dryRun: boolean) {
-	if (dryRun) return 'dry_run';
+function executionProviderSelectionForAssignment(assignment: Record<string, unknown>, planOnly: boolean) {
+	if (planOnly) return 'plan';
 	const capacityEnvelope = record(assignment.capacityEnvelope);
 	const metadata = record(assignment.metadata);
 	const envelopeMetadata = record(capacityEnvelope.metadata);
@@ -791,13 +791,13 @@ function executionProviderSelectionForAssignment(assignment: Record<string, unkn
 function createAssignmentExecutionProviderAdapter(input: {
 	selection: string | null;
 	repoRoot: string;
-	dryRun: boolean;
+	planOnly: boolean;
 	jira?: JiraExecutionProviderConfig | null;
 	githubIssues?: GitHubIssuesExecutionProviderConfig | null;
 	discord?: DiscordExecutionProviderConfig | null;
 	workflow?: WorkflowExecutionProviderAdapterOptions | null;
 }) {
-	if (input.dryRun) return new DryRunExecutionProviderAdapter();
+	if (input.planOnly) return new DryRunExecutionProviderAdapter();
 	return createExecutionProviderAdapter(input.selection ?? 'codex', {
 		repoRoot: input.repoRoot,
 		jira: input.jira,
@@ -1477,7 +1477,7 @@ export async function runProviderRunnerOnce(input: {
 		return {
 			ok: false,
 			role: 'runner',
-			dryRun: false,
+			planOnly: false,
 			assigned: 0,
 			result: null,
 			error: {
@@ -1493,7 +1493,7 @@ export async function runProviderRunnerOnce(input: {
 		return {
 			ok: true,
 			role: 'runner',
-			dryRun: false,
+			planOnly: false,
 			assigned: 0,
 			result: null,
 			...(Object.keys(leaseDiagnostics).length ? { leaseDiagnostics } : {}),
@@ -1600,7 +1600,7 @@ export async function runProviderRunnerOnce(input: {
 	return {
 		ok: true,
 		role: 'runner',
-		dryRun: false,
+		planOnly: false,
 		assigned: 1,
 		assignmentId: stringValue(assignment.id),
 		taskId: stringValue(assignment.taskId, assignment.id),
@@ -2122,11 +2122,11 @@ export async function runProviderAssignment(input: {
 		releaseAllLeases: providerNoop,
 		createMessage: providerCreateMessage,
 	} as unknown as AgentSdk;
-	const dryRun = decisionPayload.dryRun !== false && !input.config.codexAuthFile && !input.config.codexAuthJsonB64;
+	const planOnly = decisionPayload.planOnly !== false && !input.config.codexAuthFile && !input.config.codexAuthJsonB64;
 	const baseExecutionAdapter = input.executionAdapter ?? createAssignmentExecutionProviderAdapter({
-		selection: executionProviderSelectionForAssignment(input.assignment, dryRun),
+		selection: executionProviderSelectionForAssignment(input.assignment, planOnly),
 		repoRoot: project.repository.path,
-		dryRun,
+		planOnly,
 		jira: input.config.jira,
 		githubIssues: input.config.githubIssues,
 		discord: input.config.discord,
@@ -2376,8 +2376,8 @@ export async function runProviderAssignment(input: {
 			leaseToken: input.leaseToken,
 			runnerId: input.runnerId,
 			output: {
-				dryRun,
-				liveCodex: !dryRun,
+				planOnly,
+				liveCodex: !planOnly,
 				projectId,
 				agentSlug,
 				mode: modeResult.mode,
@@ -2390,8 +2390,8 @@ export async function runProviderAssignment(input: {
 				traceRefs: modeResult.traceRefs ?? {},
 			},
 			summary: {
-				dryRun,
-				liveCodex: !dryRun,
+				planOnly,
+				liveCodex: !planOnly,
 				summary: modeResult.summary,
 				mode: modeResult.mode,
 			},

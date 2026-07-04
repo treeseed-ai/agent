@@ -7,7 +7,7 @@ import type {
 
 const request: AgentOperationRequest = {
 	operation: 'dev',
-	mode: 'dry_run',
+	mode: 'plan',
 	taskId: 'task-1',
 	taskKind: 'implementation',
 	agentSlug: 'engineer-agent',
@@ -22,7 +22,7 @@ const request: AgentOperationRequest = {
 const grant: AgentOperationGrant = {
 	id: 'grant-1',
 	operations: ['dev', 'verify'],
-	modes: ['dry_run', 'read_only', 'mutating'],
+	modes: ['plan', 'read_only', 'mutating'],
 	agentRoles: ['engineer'],
 	taskKinds: ['implementation'],
 	projectIds: ['market'],
@@ -75,7 +75,7 @@ describe('agent operations adapter', () => {
 			operationName: 'dev',
 			input: {
 				plan: true,
-				dryRun: true,
+				planOnly: true,
 			},
 		}, expect.objectContaining({
 			cwd: '/repo',
@@ -129,7 +129,7 @@ describe('agent operations adapter', () => {
 			operationName: 'test',
 			input: {
 				plan: true,
-				dryRun: true,
+				planOnly: true,
 				commands: ['npm test'],
 			},
 		}), expect.any(Object));

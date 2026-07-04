@@ -499,11 +499,11 @@ function bodyOperationRequest(input: {
 	const operation = input.operation;
 	return {
 		operation,
-		mode: (readString(request, 'mode') || readString(input.body, 'mode') || 'dry_run') as AgentOperationRequest['mode'],
-		taskId: readString(request, 'taskId') || readString(input.body, 'taskId') || 'operation-dry-run',
+		mode: (readString(request, 'mode') || readString(input.body, 'mode') || 'plan') as AgentOperationRequest['mode'],
+		taskId: readString(request, 'taskId') || readString(input.body, 'taskId') || 'operation-plan',
 		taskKind: readString(request, 'taskKind') || readString(input.body, 'taskKind') || undefined,
 		workDayId: readString(request, 'workDayId') || readString(input.body, 'workDayId') || undefined,
-		agentSlug: readString(request, 'agentSlug') || readString(input.body, 'agentSlug') || 'api-dry-run',
+		agentSlug: readString(request, 'agentSlug') || readString(input.body, 'agentSlug') || 'api-plan',
 		agentRole: readString(request, 'agentRole') || readString(input.body, 'agentRole') || 'reviewer',
 		projectId: readString(request, 'projectId') || input.projectId,
 		environment: readString(request, 'environment') || input.environment,
@@ -519,7 +519,7 @@ function bodyOperationRequest(input: {
 	} satisfies AgentOperationRequest;
 }
 
-export async function dryRunAgentOperation(input: {
+export async function planOnlyAgentOperation(input: {
 	sdk: SdkLike;
 	projectId: string;
 	operation: string;
@@ -568,12 +568,12 @@ export async function dryRunAgentOperation(input: {
 				stagedPaths: request.operation === 'stage' ? request.changedPaths ?? [] : [],
 				commandsRun: [],
 				artifacts: [],
-				metadata: { permission: decision, dryRun: true },
+				metadata: { permission: decision, planOnly: true },
 			} satisfies AgentOperationResult
 		: deniedAgentOperationResult(request, decision);
 	return {
 		projectId: input.projectId,
-		dryRun: true,
+		planOnly: true,
 		request,
 		decision,
 		result,

@@ -204,7 +204,7 @@ function defaultPromotionGrant(input: {
 		id: `grant:knowledge-promotion:${input.taskId}`,
 		state: 'active',
 		operations: ['switch', 'dev', 'verify', 'save', 'stage', 'close'] as AgentOperationName[],
-		modes: ['dry_run', 'read_only', 'mutating'],
+		modes: ['plan', 'read_only', 'mutating'],
 		agentRoles: [input.agentRole],
 		taskKinds: [input.taskKind],
 		projectIds: [input.projectId],

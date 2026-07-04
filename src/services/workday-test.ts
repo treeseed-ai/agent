@@ -13,7 +13,7 @@ export interface WorkdayTestScenarioParameters {
 	durationSeconds?: number | string | null;
 	maxAssignments?: number | string | null;
 	planningOnly?: boolean;
-	dryRun?: boolean;
+	planOnly?: boolean;
 	scenarioId?: string | null;
 	providerId?: string | null;
 	reportDir?: string | null;
@@ -52,7 +52,7 @@ export function normalizeWorkdayTestParameters(input: WorkdayTestScenarioParamet
 		durationSeconds,
 		maxAssignments,
 		planningOnly: input.planningOnly === true,
-		dryRun: input.dryRun === true,
+		planOnly: input.planOnly === true,
 		reportDir: input.reportDir || '.treeseed/test-reports',
 	};
 }

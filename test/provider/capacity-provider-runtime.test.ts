@@ -263,7 +263,7 @@ Provider planner.
 	writeFileSync(resolve(root, 'src/content/agent-tests/provider-planner-basic.mdx'), `---
 id: provider-planner-basic
 agent: provider-planner
-kind: dry-run
+kind: plan
 fixture: src/content/agent-tests/fixtures
 ---
 Provider planner test.
@@ -491,7 +491,7 @@ async function runAsyncExecutionProviderScenario(input: {
 					projectId: 'project_123',
 					agentId: 'provider-planner',
 					mode: 'planning',
-					decisionInput: { input: { dryRun: true, projectId: 'project_123', agentSlug: 'provider-planner', useExecutionProvider: true } },
+					decisionInput: { input: { planOnly: true, projectId: 'project_123', agentSlug: 'provider-planner', useExecutionProvider: true } },
 					capacityEnvelope: { projectId: 'project_123', mode: 'planning' },
 				},
 			};
@@ -533,7 +533,7 @@ async function runAsyncExecutionProviderScenario(input: {
 }
 
 describe('capacity provider runtime', () => {
-	it('resolves dry-run config without provider secrets and redacts secret display values', () => {
+	it('resolves plan config without provider secrets and redacts secret display values', () => {
 		const config = resolveProviderConfig({
 			env: {
 				TREESEED_PROVIDER_DATA_DIR: tempDir(),
@@ -674,18 +674,18 @@ describe('capacity provider runtime', () => {
 		});
 	});
 
-	it('emits deterministic dry-run manager and runner lifecycle payloads', async () => {
+	it('emits deterministic plan manager and runner lifecycle payloads', async () => {
 		const config = resolveProviderConfig({ env: env({ TREESEED_CAPACITY_PROVIDER_API_KEY: '' }) });
-		const plan = await buildProviderPlan(config, { dryRun: true });
-		const manager = await runManagerSkeleton(config, { dryRun: true });
-		const runner = await runRunnerSkeleton(config, { dryRun: true });
+		const plan = await buildProviderPlan(config, { planOnly: true });
+		const manager = await runManagerSkeleton(config, { planOnly: true });
+		const runner = await runRunnerSkeleton(config, { planOnly: true });
 
-		expect(plan).toMatchObject({ ok: true, role: 'plan', dryRun: true, portfolio: null });
-		expect(manager).toMatchObject({ ok: true, role: 'manager', action: 'portfolio-plan', dryRun: true });
+		expect(plan).toMatchObject({ ok: true, role: 'plan', planOnly: true, portfolio: null });
+		expect(manager).toMatchObject({ ok: true, role: 'manager', action: 'portfolio-plan', planOnly: true });
 		expect(runner).toMatchObject({
 			ok: true,
 			role: 'runner',
-			dryRun: true,
+			planOnly: true,
 			assignmentRequest: {
 				capabilities: ['agent_execution'],
 			},
@@ -824,7 +824,7 @@ describe('capacity provider runtime', () => {
 		expect(calls).toEqual(['portfolio']);
 	});
 
-	it('claims and completes only explicit dry-run project tasks through the provider runner', async () => {
+	it('claims and completes only explicit plan project tasks through the provider runner', async () => {
 		const sourceRepo = createProjectRepository();
 		const config = resolveProviderConfig({ env: env() });
 			await processProviderPortfolio({
@@ -848,7 +848,7 @@ describe('capacity provider runtime', () => {
 						projectId: 'project_123',
 						agentId: 'provider-planner',
 						mode: 'planning',
-						decisionInput: { input: { dryRun: true, projectId: 'project_123', agentSlug: 'provider-planner' } },
+						decisionInput: { input: { planOnly: true, projectId: 'project_123', agentSlug: 'provider-planner' } },
 						capacityEnvelope: { projectId: 'project_123', mode: 'planning' },
 					},
 				};
@@ -886,14 +886,14 @@ describe('capacity provider runtime', () => {
 			});
 			expect(events.find((event) => event.method === 'completeAssignment')?.body).toMatchObject({
 				output: {
-				dryRun: true,
+				planOnly: true,
 				agentSlug: 'provider-planner',
 				mode: 'planning',
 			},
 		});
 	});
 
-	it('refreshes the portfolio index before running dry-run tasks when hosted runners start without shared state', async () => {
+	it('refreshes the portfolio index before running plan tasks when hosted runners start without shared state', async () => {
 		const sourceRepo = createProjectRepository();
 		const config = resolveProviderConfig({ env: env() });
 		const events: Array<{ method: string; body?: unknown }> = [];
@@ -920,7 +920,7 @@ describe('capacity provider runtime', () => {
 						projectId: 'project_123',
 						agentId: 'provider-planner',
 						mode: 'planning',
-						decisionInput: { input: { dryRun: true, projectId: 'project_123', agentSlug: 'provider-planner' } },
+						decisionInput: { input: { planOnly: true, projectId: 'project_123', agentSlug: 'provider-planner' } },
 						capacityEnvelope: { projectId: 'project_123', mode: 'planning' },
 					},
 				};
@@ -978,7 +978,7 @@ describe('capacity provider runtime', () => {
 						agentId: 'provider-planner',
 						mode: 'acting',
 						decisionInput: {
-							input: { dryRun: true, projectId: 'project_123', agentSlug: 'provider-planner' },
+							input: { planOnly: true, projectId: 'project_123', agentSlug: 'provider-planner' },
 							metadata: {
 								capacityPlanId: 'plan_acting',
 								capacityPlanStatus: 'accepted',
@@ -1054,7 +1054,7 @@ describe('capacity provider runtime', () => {
 						synthesizedFrom: 'capacity_plan',
 						decisionInput: {
 							input: {
-								dryRun: true,
+								planOnly: true,
 								projectId: 'project_123',
 								agentSlug: 'provider-planner',
 								dispatchWorkflowOperation: true,
@@ -1169,7 +1169,7 @@ describe('capacity provider runtime', () => {
 						synthesizedFrom: 'capacity_plan',
 						decisionInput: {
 							input: {
-								dryRun: false,
+								planOnly: false,
 								projectId: 'project_123',
 								agentSlug: 'provider-planner',
 								useExecutionProvider: true,
@@ -1330,7 +1330,7 @@ describe('capacity provider runtime', () => {
 						agentId: 'provider-planner',
 						mode: 'planning',
 						leaseExpiresAt: new Date(Date.now() - 1000).toISOString(),
-						decisionInput: { input: { dryRun: true, projectId: 'project_123', agentSlug: 'provider-planner', useExecutionProvider: true } },
+						decisionInput: { input: { planOnly: true, projectId: 'project_123', agentSlug: 'provider-planner', useExecutionProvider: true } },
 						capacityEnvelope: { projectId: 'project_123', mode: 'planning' },
 					},
 				};
@@ -1517,7 +1517,7 @@ describe('capacity provider runtime', () => {
 						},
 						decisionInput: {
 							input: {
-								dryRun: true,
+								planOnly: true,
 								projectId: 'project_123',
 								agentSlug: 'provider-planner',
 								useExecutionProvider: true,
@@ -1583,7 +1583,7 @@ describe('capacity provider runtime', () => {
 						projectId: 'project_123',
 						agentId: 'provider-planner',
 						mode: 'planning',
-						decisionInput: { input: { dryRun: true, projectId: 'project_123', agentSlug: 'provider-planner', useExecutionProvider: true } },
+						decisionInput: { input: { planOnly: true, projectId: 'project_123', agentSlug: 'provider-planner', useExecutionProvider: true } },
 						capacityEnvelope: { projectId: 'project_123', mode: 'planning' },
 					},
 				};
@@ -1670,7 +1670,7 @@ describe('capacity provider runtime', () => {
 						projectId: 'project_123',
 						agentId: 'provider-planner',
 						mode: 'planning',
-						decisionInput: { input: { dryRun: true, projectId: 'project_123', agentSlug: 'provider-planner', useExecutionProvider: true } },
+						decisionInput: { input: { planOnly: true, projectId: 'project_123', agentSlug: 'provider-planner', useExecutionProvider: true } },
 						capacityEnvelope: { projectId: 'project_123', mode: 'planning' },
 					},
 				};
@@ -1907,7 +1907,7 @@ describe('capacity provider runtime', () => {
 			},
 			async completeAssignment() {
 				events.push({ method: 'completeAssignment' });
-				throw new Error('non-dry-run task must not complete');
+				throw new Error('non-plan task must not complete');
 			},
 			async failAssignment(_assignmentId: string, body: unknown) {
 				events.push({ method: 'failAssignment', body });

@@ -320,7 +320,7 @@ export async function runCodexDocsMutationLifecycle(
 		context,
 		task,
 		operation: 'dev',
-		mode: 'dry_run',
+		mode: 'plan',
 		worktreeRoot,
 		summary: 'Completed readiness check before Codex execution.',
 	});

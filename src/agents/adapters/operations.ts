@@ -29,9 +29,9 @@ function commandList(value: unknown) {
 
 function workflowInputFor(request: AgentOperationRequest) {
 	const input = { ...(request.input ?? {}) };
-	if (request.mode === 'dry_run') {
+	if (request.mode === 'plan') {
 		input.plan = input.plan ?? true;
-		input.dryRun = input.dryRun ?? true;
+		input.planOnly = input.planOnly ?? true;
 	}
 	if (request.operation === 'verify') {
 		const commands = commandList(request.input.commands);

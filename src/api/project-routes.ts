@@ -30,7 +30,7 @@ import {
 	AgentApprovalDecisionError,
 	collectAgentArtifactApiState,
 	collectAgentOperationApiState,
-	dryRunAgentOperation,
+	planOnlyAgentOperation,
 	recordAgentApprovalDecision,
 } from './agent-artifacts.ts';
 import { PROMOTION_APPROVAL_DECISIONS, RELEASE_APPROVAL_DECISIONS } from '../services/knowledge-promotion.ts';
@@ -827,12 +827,12 @@ export function registerProjectRoutes(
 		});
 	});
 
-	app.post(withPrefix(prefix, '/v1/operations/:operation/dry-run'), async (c) => {
+	app.post(withPrefix(prefix, '/v1/operations/:operation/plan'), async (c) => {
 		const principal = c.get('principal');
 		if (!principal) return jsonError(c, 401, 'Authentication required.');
 		const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
 		try {
-			const payload = await dryRunAgentOperation({
+			const payload = await planOnlyAgentOperation({
 				sdk: options.sharedSdk,
 				projectId: options.config.projectId,
 				operation: routeParam(c, 'operation'),

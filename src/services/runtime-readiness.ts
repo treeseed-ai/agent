@@ -426,7 +426,7 @@ function collectOperationsReadiness(repoRoot: string) {
 		const decision = decideAgentOperationPermission({
 			request: {
 				operation: 'dev',
-				mode: 'dry_run',
+				mode: 'plan',
 				taskId: 'runtime-readiness',
 				taskKind: 'diagnostic',
 				agentSlug: 'runtime-readiness',
@@ -440,7 +440,7 @@ function collectOperationsReadiness(repoRoot: string) {
 			grants: [{
 				id: 'runtime-readiness-dev-plan',
 				operations: ['dev'],
-				modes: ['dry_run', 'read_only'],
+				modes: ['plan', 'read_only'],
 				agentRoles: ['planner'],
 				taskKinds: ['diagnostic'],
 				projectIds: ['treeseed-market'],

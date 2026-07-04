@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.12.26] - 2026-07-04
+
+### Infrastructure
+
+- docs: clean release changelog (4e960ee8a1f3)
+
 ## [0.12.25] - 2026-07-04
 
 ### Changed

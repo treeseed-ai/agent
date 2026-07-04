@@ -4,7 +4,7 @@
 
 ### Changed
 
-- refactor: remove provider dry-run execution (d9fc32886043)
+- refactor: remove provider preview execution mode (d9fc32886043)
 
 ## [0.12.22] - 2026-07-03
 

@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.12.37] - 2026-07-05
+
+### Fixed
+
+- ci(build): fix Docker Hub attestation verification (da5ac010265a)
+
 ## [0.12.36] - 2026-07-05
 
 ### Infrastructure

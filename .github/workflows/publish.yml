@@ -33,6 +33,7 @@ jobs:
     runs-on: ${{ matrix.runner }}
     permissions:
       contents: write
+      id-token: write
       packages: write
     environment: production
     strategy:
@@ -82,6 +83,8 @@ jobs:
           platforms: ${{ matrix.platform }}
           push: true
           tags: ${{ matrix.image }}:${{ steps.tags.outputs.base }}-${{ matrix.arch }}
+          sbom: true
+          provenance: mode=max
 
   manifest:
     needs: build
@@ -110,10 +113,33 @@ jobs:
           echo "moving=" >> "$GITHUB_OUTPUT"
       - name: Publish multi-architecture manifest
         run: |
+          set -euo pipefail
           docker buildx imagetools create \
             -t "${{ matrix.image }}:${{ steps.tags.outputs.base }}" \
             "${{ matrix.image }}:${{ steps.tags.outputs.base }}-amd64" \
             "${{ matrix.image }}:${{ steps.tags.outputs.base }}-arm64"
+      - name: Verify Docker Hub manifests and attestations
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          verify_attestation() {
+            local image="$1"
+            local raw
+            echo "Verifying Docker Hub attestation for ${image}"
+            raw="$(docker buildx imagetools inspect --raw "${image}")"
+            if ! grep -q 'application/vnd.in-toto+json' <<<"${raw}"; then
+              echo "Missing in-toto attestation manifest for ${image}" >&2
+              exit 1
+            fi
+          }
+
+          base="${{ steps.tags.outputs.base }}"
+          image="${{ matrix.image }}"
+          for ref in "${image}:${base}-amd64" "${image}:${base}-arm64" "${image}:${base}"; do
+            docker buildx imagetools inspect "${ref}" >/dev/null
+            verify_attestation "${ref}"
+          done
   release:
     needs: manifest
     if: startsWith(github.ref, 'refs/tags/') && !contains(github.ref_name, '-')

@@ -6,8 +6,8 @@ subtype: assignment
 journey: Renew Assignment Lease
 ownerPackage: "@treeseed/agent"
 surface: agent-runtime
-summary: "Verify agent runtime behavior for Renew Assignment Lease."
-status: planned
+summary: "Agent runtime keeps the Renew Assignment Lease contract verifiable through active local evidence."
+status: active
 dependencies:
   journeys:
     - 60

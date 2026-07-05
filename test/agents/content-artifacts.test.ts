@@ -12,7 +12,7 @@ function contextFor(root: string): AgentContext {
 	return {
 		runId: 'run-1',
 		repoRoot: root,
-		agent: { slug: 'treeseed-docs-reviewer' } as AgentContext['agent'],
+		agent: { slug: 'reviewer' } as AgentContext['agent'],
 		capacity: {
 			assignmentId: 'assignment-1',
 			providerId: 'provider-1',

@@ -66,6 +66,11 @@ verifiers:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"
     testFile: test/agents/codex-provider.test.ts
+  agent.execution-provider.mock.contract:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: test/agents/execution-provider-contract.test.ts
+    testName: runs deterministic mock provider output through the execution provider contract
   agent.execution-provider.github-issues.contract:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"
@@ -122,4 +127,37 @@ verifiers:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"
     testFile: test/provider/capacity-provider-runtime.test.ts
-
+  agent.architecture.normalize-activity-profile-agent:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: test/agents/registry.test.ts
+    testName: normalizes activity profile specs into runtime specs
+  agent.architecture.reject-legacy-agent-config:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: test/agents/registry.test.ts
+    testName: rejects legacy top-level agent configuration
+  agent.architecture.register-clean-handlers-only:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: test/agents/registry.test.ts
+    testName: does not resolve removed generic handler names
+  agent.architecture.enforce-activity-profile-tool-scope:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: test/agents/registry.test.ts
+    testName: normalizes activity profile specs into runtime specs
+  agent.architecture.capture-question-tool-events:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: test/agents/agent-tool-runtime.test.ts
+  agent.architecture.enforce-assignment-feature-branch-policy:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: test/agents/registry.test.ts
+    testName: normalizes activity profile specs into runtime specs
+  agent.architecture.produce-structured-estimate:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: test/agents/registry.test.ts
+    testName: emits structured estimates from estimate activity output

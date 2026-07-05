@@ -11,6 +11,7 @@ const prepareOnly = process.argv.includes('--prepare-only');
 const selectedRoles = parseSelectedRoles();
 const noCache = process.argv.includes('--no-cache') || process.env.TREESEED_AGENT_BUILD_NO_CACHE === '1';
 const imageTag = process.env.TREESEED_AGENT_IMAGE_TAG || 'local';
+const dockerBuildAttempts = Number(process.env.TREESEED_AGENT_DOCKER_BUILD_ATTEMPTS ?? 3);
 const roleImages = {
 	manager: process.env.TREESEED_AGENT_MANAGER_IMAGE || `treeseed/agent-manager:${imageTag}`,
 	runner: process.env.TREESEED_AGENT_RUNNER_IMAGE || `treeseed/agent-runner:${imageTag}`,
@@ -59,6 +60,44 @@ function runCapture(command: string, args: string[], cwd: string) {
 		throw new Error(result.stderr?.trim() || result.stdout?.trim() || `${command} ${args.join(' ')} failed`);
 	}
 	return (result.stdout ?? '').trim();
+}
+
+function sleepSync(ms: number) {
+	if (ms <= 0) return;
+	Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+function isTransientDockerBuildFailure(output: string) {
+	return /registry-1\.docker\.io|failed to resolve source metadata|failed to do request|lookup .* no such host|i\/o timeout|TLS handshake timeout|network is unreachable|temporary failure|connection reset|connection refused/iu.test(output);
+}
+
+function runDockerBuildWithRetry(args: string[], cwd: string) {
+	const attempts = Number.isFinite(dockerBuildAttempts) && dockerBuildAttempts > 0
+		? Math.floor(dockerBuildAttempts)
+		: 1;
+	let lastOutput = '';
+	for (let attempt = 1; attempt <= attempts; attempt += 1) {
+		const result = spawnSync('docker', args, {
+			cwd,
+			stdio: 'pipe',
+			encoding: 'utf8',
+			env: process.env,
+		});
+		const output = `${result.stdout ?? ''}${result.stderr ?? ''}`;
+		lastOutput = output.trim();
+		if (output) {
+			process.stdout.write(output);
+			if (!output.endsWith('\n')) process.stdout.write('\n');
+		}
+		if (result.status === 0) return;
+		if (attempt >= attempts || !isTransientDockerBuildFailure(output)) {
+			throw new Error(`docker ${args.join(' ')} failed with exit code ${result.status ?? 1}`);
+		}
+		const delayMs = Math.min(30_000, 2_000 * attempt);
+		process.stderr.write(`Docker build failed with a transient registry/network error; retrying attempt ${attempt + 1}/${attempts} in ${delayMs / 1000}s.\n`);
+		sleepSync(delayMs);
+	}
+	throw new Error(lastOutput || `docker ${args.join(' ')} failed`);
 }
 
 function resolveSdkPackageRoot() {
@@ -306,10 +345,10 @@ if (prepareOnly) {
 	process.exit(0);
 }
 if (selectedRoles.has('manager')) {
-	run('docker', ['build', ...dockerBuildCacheArgs(), '--target', 'agent-manager', '-t', roleImages.manager, '.'], packageRoot);
+	runDockerBuildWithRetry(['build', ...dockerBuildCacheArgs(), '--target', 'agent-manager', '-t', roleImages.manager, '.'], packageRoot);
 }
 if (selectedRoles.has('runner')) {
-	run('docker', ['build', ...dockerBuildCacheArgs(), '--target', 'agent-runner', '-t', roleImages.runner, '.'], packageRoot);
+	runDockerBuildWithRetry(['build', ...dockerBuildCacheArgs(), '--target', 'agent-runner', '-t', roleImages.runner, '.'], packageRoot);
 }
 console.log(`Built capacity provider image roles ${[...selectedRoles].join(', ')} from ${packageRoot}.`);
 

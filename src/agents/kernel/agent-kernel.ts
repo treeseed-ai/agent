@@ -690,13 +690,6 @@ export class AgentKernel {
 		const runtimeAgent = decisionInput.handlerId && decisionInput.handlerId !== agent.handler
 			? { ...agent, handler: decisionInput.handlerId }
 			: agent;
-		if (mode === 'planning' && runtimeAgent.handler === 'act') {
-			return this.boundedAssignmentResult(options, createAgentKernelModeFallback(
-				'assignment_handler_not_allowed_for_mode',
-				`Agent ${agent.slug} uses the mutating act handler and cannot run in planning mode.`,
-				{ retryable: false, metadata: { handler: runtimeAgent.handler, mode } },
-			), 'failed');
-		}
 
 		const trigger: AgentTriggerInvocation = {
 			kind: 'manual',

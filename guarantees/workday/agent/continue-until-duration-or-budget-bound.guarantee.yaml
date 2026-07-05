@@ -6,8 +6,8 @@ subtype: agent
 journey: Continue Until Duration Or Budget Bound
 ownerPackage: "@treeseed/agent"
 surface: agent-runtime
-summary: "Verify agent runtime behavior for Continue Until Duration Or Budget Bound."
-status: planned
+summary: "Agent runtime keeps the Continue Until Duration Or Budget Bound contract verifiable through active local evidence."
+status: active
 dependencies:
   journeys:
     - 60

@@ -25,9 +25,10 @@ describe('runtime readiness inventory', () => {
 		vi.restoreAllMocks();
 	});
 
-	it('returns a stable readiness summary with Codex blockers when the default provider is not configured', async () => {
+	it('returns a stable readiness summary with Codex warnings when mock fallback is available', async () => {
 		const repoRoot = await createRepoRoot();
 		vi.stubEnv('TREESEED_AGENT_REPO_ROOT', repoRoot);
+		vi.stubEnv('TREESEED_AGENT_EXECUTION_PROVIDER', 'mock');
 		vi.stubEnv('TREESEED_RUNNER_VOLUME_ROOT', '.treeseed-runner');
 		vi.stubEnv('TREESEED_WORKER_IDLE_EXIT_MS', '1000');
 		vi.stubEnv('HOME', repoRoot);
@@ -42,7 +43,7 @@ describe('runtime readiness inventory', () => {
 		});
 
 		expect(summary).toMatchObject({
-			ok: false,
+			ok: true,
 			checkedAt: '2026-05-13T12:00:00.000Z',
 			environment: 'local',
 			api: { status: 'warning' },
@@ -54,7 +55,7 @@ describe('runtime readiness inventory', () => {
 			operations: { status: 'ready' },
 			artifacts: { status: 'warning' },
 			codex: {
-				status: 'blocked',
+				status: 'warning',
 				details: {
 					sdkInstalled: false,
 					authDetected: false,
@@ -63,11 +64,12 @@ describe('runtime readiness inventory', () => {
 				},
 			},
 		});
-		expect(summary.blockingIssues).toEqual(expect.arrayContaining([
-			expect.stringContaining('@openai/codex-sdk is required'),
+		expect(summary.blockingIssues).toEqual([]);
+		expect(summary.warnings).toEqual(expect.arrayContaining([
+			expect.stringContaining('@openai/codex-sdk is not installed'),
 			expect.stringContaining('Codex authentication was not detected'),
 		]));
-		expect(summary.codex.blockingIssues.some((entry) => entry.includes('auth.json'))).toBe(true);
+		expect(summary.codex.warnings.some((entry) => entry.includes('auth.json'))).toBe(true);
 		expect(summary.graphContext.details?.request).toMatchObject({
 			stage: 'research',
 			view: 'brief',

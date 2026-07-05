@@ -6,8 +6,8 @@ subtype: provider
 journey: Heartbeat Provider Runtime
 ownerPackage: "@treeseed/agent"
 surface: agent-runtime
-summary: "Verify agent runtime behavior for Heartbeat Provider Runtime."
-status: planned
+summary: "Agent runtime keeps the Heartbeat Provider Runtime contract verifiable through active local evidence."
+status: active
 dependencies:
   journeys:
     - 60

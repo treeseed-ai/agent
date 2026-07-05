@@ -152,14 +152,20 @@ export function invocationForResearchKnowledgeTask(
 }
 
 export function agentSpecForResearchKnowledgeHandler(kind: 'research' | 'knowledge_draft' | 'knowledge_optimization'): AgentRuntimeSpec {
-	const handler = kind === 'research' ? 'research' : 'report';
+	const handler = 'writer';
 	const projectAgentClassId = kind === 'research' ? 'research' : 'knowledge';
 	return {
 		slug: `${kind}-agent`,
 		handler,
+		activityType: 'planning',
 		projectAgentClassId,
 		projectAgentClassSlug: projectAgentClassId,
-		handlerConfig: { domain: kind },
+		activityConfig: {
+			kind: 'writer',
+			activityType: 'planning',
+			workPackageKind: kind,
+			artifactKind: kind === 'research' ? 'research_note' : kind,
+		},
 		enabled: true,
 		systemPrompt: `Deterministic ${kind} handler.`,
 		persona: kind,

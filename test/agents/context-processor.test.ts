@@ -17,8 +17,8 @@ describe('handler context processor', () => {
 		const result = await resolveHandlerContextPacks({
 			sdk: { buildContextPack },
 			agent: {
-				slug: 'researcher-agent',
-				handler: 'research',
+				slug: 'researcher',
+				handler: 'writer',
 				enabled: true,
 				systemPrompt: 'Research carefully.',
 				persona: 'Researcher',

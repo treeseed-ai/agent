@@ -28,8 +28,8 @@ const config: JiraExecutionProviderConfig = {
 
 function agent(): AgentRuntimeSpec {
 	return {
-		slug: 'provider-planner',
-		handler: 'plan',
+		slug: 'provider-writer',
+		handler: 'writer',
 		enabled: true,
 		systemPrompt: 'Plan.',
 		persona: 'Planner.',
@@ -79,7 +79,7 @@ function invocation(id = 'assignment-1'): ExecutionProviderInvocation {
 			mode: 'planning',
 			status: 'leased',
 			leaseState: 'leased',
-			agentId: 'provider-planner',
+			agentId: 'provider-writer',
 			capacityEnvelope: {
 				teamId: 'team-1',
 				projectId: 'project-1',
@@ -92,7 +92,7 @@ function invocation(id = 'assignment-1'): ExecutionProviderInvocation {
 				projectId: 'project-1',
 				projectAgentClassId: 'planner',
 				mode: 'planning',
-				agentId: 'provider-planner',
+				agentId: 'provider-writer',
 				input: { objective: 'Plan human review.' },
 			} as DecisionExecutionInput,
 			capabilityHandles: {
@@ -114,7 +114,7 @@ function invocation(id = 'assignment-1'): ExecutionProviderInvocation {
 			projectId: 'project-1',
 			projectAgentClassId: 'planner',
 			mode: 'planning',
-			agentId: 'provider-planner',
+			agentId: 'provider-writer',
 			input: { objective: 'Plan human review.' },
 		} as DecisionExecutionInput,
 		agent: agent(),

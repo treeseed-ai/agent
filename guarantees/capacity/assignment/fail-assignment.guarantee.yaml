@@ -6,8 +6,8 @@ subtype: assignment
 journey: Fail Assignment
 ownerPackage: "@treeseed/agent"
 surface: agent-runtime
-summary: "Verify agent runtime behavior for Fail Assignment."
-status: planned
+summary: "Agent runtime keeps the Fail Assignment contract verifiable through active local evidence."
+status: active
 dependencies:
   journeys:
     - 60

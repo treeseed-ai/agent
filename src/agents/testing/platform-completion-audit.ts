@@ -38,11 +38,11 @@ export async function runAgentPlatformCompletionAudit(input: AgentPlatformComple
 	const root = input.repoRoot;
 	const hostedProof = input.hostedProofResult ?? null;
 	const evidence = {
-		genericHandlers: has(root, 'packages/agent/src/agents/handlers/plan.ts')
-			&& has(root, 'packages/agent/src/agents/handlers/research.ts')
-			&& has(root, 'packages/agent/src/agents/handlers/act.ts')
-			&& has(root, 'packages/agent/src/agents/handlers/review.ts')
-			&& has(root, 'packages/agent/src/agents/handlers/report.ts'),
+		genericHandlers: has(root, 'packages/agent/src/agents/handlers/writer.ts')
+			&& has(root, 'packages/agent/src/agents/handlers/actor.ts')
+			&& has(root, 'packages/agent/src/agents/handlers/estimate.ts')
+			&& has(root, 'packages/agent/src/agents/handlers/releaser.ts')
+			&& has(root, 'packages/agent/src/agents/handlers/reporter.ts'),
 		diagnosticsApi: has(root, 'packages/admin/src/view-models/capacity-runtime.vm.ts'),
 		agentToolMcp: has(root, 'packages/agent/src/agents/tools/agent-tool-mcp-server.ts')
 			&& has(root, 'packages/agent/src/agents/tools/treedx-proxy-client.ts'),

@@ -6,8 +6,8 @@ subtype: runtime
 journey: Produce Hosted Proof
 ownerPackage: "@treeseed/agent"
 surface: agent-runtime
-summary: "Verify agent runtime behavior for Produce Hosted Proof."
-status: planned
+summary: "Agent runtime keeps the Produce Hosted Proof contract verifiable through active local evidence."
+status: active
 dependencies:
   journeys:
     - 60

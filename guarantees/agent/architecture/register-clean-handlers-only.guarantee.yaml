@@ -1,0 +1,31 @@
+schemaVersion: treeseed.guarantee/v1
+id: guarantee.agent.architecture.register-clean-handlers-only.302
+journeyIndex: 302
+type: agent
+subtype: architecture
+journey: Register Clean Handlers Only
+ownerPackage: "@treeseed/agent"
+surface: agent-runtime
+summary: "The built-in runtime registry exposes only writer, actor, estimate, releaser, and reporter."
+status: active
+actors:
+  allowed: [project_manager, capacity_operator, team_owner]
+  forbidden: [anonymous_user, unauthorized_user]
+gates: [core, release]
+preconditions:
+  fixtures: [integrated_treeseed_project]
+api:
+  required: true
+  verifierRefs: [agent.architecture.register-clean-handlers-only]
+content:
+  required: false
+  verifierRefs: []
+audit:
+  required: true
+  verifierRefs: [agent.architecture.register-clean-handlers-only]
+negativeCases:
+  - id: removed-handler-denied
+    actor: project_manager
+    verifierRefs: [agent.architecture.register-clean-handlers-only]
+evidence:
+  required: [guarantee_report, verifier_evidence]

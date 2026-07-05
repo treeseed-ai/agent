@@ -6,8 +6,8 @@ subtype: execution-provider
 journey: Run Codex Provider
 ownerPackage: "@treeseed/agent"
 surface: agent-runtime
-summary: "Verify agent runtime behavior for Run Codex Provider."
-status: planned
+summary: "Agent runtime keeps the Run Codex Provider contract verifiable through active local evidence."
+status: active
 dependencies:
   journeys:
     - 60

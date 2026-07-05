@@ -5,11 +5,11 @@ import { DiscordExecutionProviderAdapter } from './agents/adapters/execution-dis
 import { GitHubIssueExecutionProviderAdapter } from './agents/adapters/execution-github-issues.ts';
 import { JiraExecutionProviderAdapter } from './agents/adapters/execution-jira.ts';
 import { WorkflowExecutionProviderAdapter } from './agents/adapters/execution-workflow.ts';
-import { actHandler } from './agents/handlers/act.ts';
-import { planHandler } from './agents/handlers/plan.ts';
-import { reportHandler } from './agents/handlers/report.ts';
-import { researchHandler } from './agents/handlers/research.ts';
-import { reviewHandler } from './agents/handlers/review.ts';
+import { actorHandler } from './agents/handlers/actor.ts';
+import { estimateHandler } from './agents/handlers/estimate.ts';
+import { releaserHandler } from './agents/handlers/releaser.ts';
+import { reporterHandler } from './agents/handlers/reporter.ts';
+import { writerHandler } from './agents/handlers/writer.ts';
 import { LocalBranchMutationAdapter } from './agents/adapters/mutations.ts';
 import { SdkMessageNotificationAdapter } from './agents/adapters/notification.ts';
 import { GitRepositoryInspectionAdapter } from './agents/adapters/repository.ts';
@@ -94,11 +94,11 @@ function buildAgentRuntime() {
 		['project_graph', () => new ProjectGraphResearchAdapter()],
 	]);
 	const handlers = new Map<string, AgentHandler>([
-		['plan', planHandler],
-		['research', researchHandler],
-		['act', actHandler],
-		['review', reviewHandler],
-		['report', reportHandler],
+		['writer', writerHandler],
+		['actor', actorHandler],
+		['estimate', estimateHandler],
+		['releaser', releaserHandler],
+		['reporter', reporterHandler],
 	]);
 
 	for (const pluginEntry of plugins) {

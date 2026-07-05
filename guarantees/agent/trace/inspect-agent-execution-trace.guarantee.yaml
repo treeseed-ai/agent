@@ -6,8 +6,8 @@ subtype: trace
 journey: Inspect Agent Execution Trace
 ownerPackage: "@treeseed/agent"
 surface: agent-runtime
-summary: "Verify agent runtime behavior for Inspect Agent Execution Trace."
-status: planned
+summary: "Agent runtime keeps the Inspect Agent Execution Trace contract verifiable through active local evidence."
+status: active
 dependencies:
   journeys:
     - 60

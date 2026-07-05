@@ -22,8 +22,8 @@ const config: DiscordExecutionProviderConfig = {
 
 function agent(): AgentRuntimeSpec {
 	return {
-		slug: 'provider-coordinator',
-		handler: 'plan',
+		slug: 'provider-writer',
+		handler: 'writer',
 		enabled: true,
 		systemPrompt: 'Coordinate.',
 		persona: 'Coordinator.',
@@ -70,7 +70,7 @@ function invocation(id = 'assignment-1'): ExecutionProviderInvocation {
 			mode: 'planning',
 			status: 'leased',
 			leaseState: 'leased',
-			agentId: 'provider-coordinator',
+			agentId: 'provider-writer',
 			capacityEnvelope: {} as AgentCapacityEnvelope,
 			decisionInput: { input: { objective: 'Coordinate this.' } } as DecisionExecutionInput,
 			capabilityHandles: { repositoryAccess: [{ token: 'ghs_secret_should_not_leak' }] } as any,

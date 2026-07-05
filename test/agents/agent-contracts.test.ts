@@ -16,13 +16,13 @@ describe('agent contract tests', () => {
 		expect(report).toContain('# Agent Contract Test Report');
 		if (existsSync(resolve(repoRoot, 'src/content/agents'))) {
 			expect(result.agents.map((agent) => agent.slug)).toEqual(expect.arrayContaining([
-				'treeseed-docs-planner',
-				'treeseed-codebase-cartographer',
-				'treeseed-knowledge-generator',
-				'treeseed-knowledge-optimizer',
-				'treeseed-docs-engineer',
+				'architect',
+				'technical-writer',
+				'tester',
+				'engineer',
+				'reporter',
 			]));
-			expect(report).toContain('## treeseed-knowledge-generator');
+			expect(report).toContain('## architect');
 		} else {
 			expect(result.agents).toEqual([]);
 		}

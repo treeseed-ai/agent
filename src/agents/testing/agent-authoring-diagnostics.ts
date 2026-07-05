@@ -1,13 +1,13 @@
 import type { AgentRuntimeSpec } from '@treeseed/sdk/types/agents';
 
 export type AgentAuthoringDiagnosticCode =
-	| 'agent.handler_not_generic'
+	| 'agent.handler_not_profile_handler'
 	| 'agent.missing_project_agent_class'
+	| 'agent.missing_activity_profiles'
 	| 'agent.missing_context_queries'
 	| 'agent.missing_required_capabilities'
-	| 'agent.act_missing_path_constraints'
+	| 'agent.actor_missing_path_constraints'
 	| 'agent.content_write_requires_treedx'
-	| 'agent.governance_frontmatter_missing'
 	| 'agent.output_contract_ambiguous'
 	| 'agent.execution_provider_too_specific'
 	| 'agent.local_filesystem_content_dependency';
@@ -23,7 +23,7 @@ export interface AgentAuthoringDiagnostic {
 	agentSlug?: string | null;
 }
 
-const GENERIC_HANDLERS = new Set(['plan', 'research', 'act', 'review', 'report']);
+const PROFILE_HANDLERS = new Set(['writer', 'actor', 'estimate', 'releaser', 'reporter']);
 
 function record(value: unknown): Record<string, unknown> {
 	return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -35,6 +35,15 @@ function array(value: unknown): unknown[] {
 
 function stringArray(value: unknown) {
 	return array(value).filter((entry): entry is string => typeof entry === 'string');
+}
+
+function profileEntries(agent: Record<string, unknown>) {
+	const profiles = record(agent.activityProfiles);
+	return Object.entries(profiles).filter(([, value]) => record(value).enabled !== false);
+}
+
+function profilePath(activity: string, field: string) {
+	return `activityProfiles.${activity}.${field}`;
 }
 
 export function diagnoseAgentAuthoring(spec: AgentRuntimeSpec | Record<string, unknown>, options: {
@@ -62,56 +71,76 @@ export function diagnoseAgentAuthoring(spec: AgentRuntimeSpec | Record<string, u
 		agentSlug: slug,
 	});
 	const handler = typeof agent.handler === 'string' ? agent.handler : '';
-	if (!GENERIC_HANDLERS.has(handler)) {
+	if (handler && !PROFILE_HANDLERS.has(handler)) {
 		add(
-			'agent.handler_not_generic',
+			'agent.handler_not_profile_handler',
 			'error',
 			'handler',
-			`Agent ${slug ?? '<unknown>'} uses non-generic handler "${handler || '<missing>'}".`,
-			'Use one of plan, research, act, review, or report.',
+			`Agent ${slug ?? '<unknown>'} uses unsupported handler "${handler}".`,
+			'Use one of writer, actor, estimate, releaser, or reporter through an activity profile.',
 		);
 	}
 	if (!agent.projectAgentClassId && !agent.projectAgentClassSlug) {
 		add('agent.missing_project_agent_class', 'error', 'projectAgentClassId', 'Agent has no project agent class mapping.', 'Set projectAgentClassId or projectAgentClassSlug so allocation remains independent from handler choice.');
 	}
-	const context = record(agent.context);
-	if (!array(context.queries).length) {
-		add('agent.missing_context_queries', 'error', 'context.queries', 'Agent has no TreeDX/API context queries.', 'Declare at least one context query so the runtime can build scoped context through TreeDX/API handles.');
+	const profiles = profileEntries(agent);
+	const hasProfiles = profiles.length > 0;
+	if (!hasProfiles) {
+		add('agent.missing_activity_profiles', 'error', 'activityProfiles', 'Agent has no enabled activity profiles.', 'Declare activityProfiles for planning, estimating, acting, reviewing, reporting, or releaser work.');
 	}
-	const handlerConfig = record(agent.handlerConfig);
-	if (!handlerConfig.domain) {
-		add('agent.output_contract_ambiguous', 'warning', 'handlerConfig.domain', 'Agent has no handlerConfig.domain.', 'Declare the domain, such as documentation_mutation, governance_review, or workday_report.');
-	}
-	const execution = record(agent.execution);
-	const providerProfile = record(execution.providerProfile);
-	const requiredCapabilities = stringArray(providerProfile.requiredCapabilities);
-	if (!requiredCapabilities.length) {
-		add('agent.missing_required_capabilities', 'error', 'execution.providerProfile.requiredCapabilities', 'Agent does not declare execution-provider capability requirements.', 'Declare required capabilities used by API/provider assignment.');
-	}
-	const allowedPaths = stringArray(execution.allowedPaths ?? record(handlerConfig.metadata).allowedPaths);
-	const forbiddenPaths = stringArray(execution.forbiddenPaths ?? record(handlerConfig.metadata).forbiddenPaths);
-	if (handler === 'act' && (!allowedPaths.length || !forbiddenPaths.length)) {
-		add('agent.act_missing_path_constraints', 'error', 'execution.allowedPaths', 'Act agent is missing explicit allowed or forbidden path constraints.', 'Set allowedPaths and forbiddenPaths for every mutating act agent.');
-	}
-	const domain = String(handlerConfig.domain ?? '');
-	const contentLike = /content|documentation|knowledge/u.test(domain) || allowedPaths.some((path) => /src\/content|docs|knowledge/u.test(path));
-	if (handler === 'act' && contentLike && !requiredCapabilities.some((capability) => /treedx|workspace|content:write|files:write/u.test(capability))) {
-		add('agent.content_write_requires_treedx', 'error', 'execution.providerProfile.requiredCapabilities', 'Content-writing act agent does not require TreeDX workspace/write capability.', 'Add a TreeDX workspace or files:write capability requirement.');
-	}
-	if ((handler === 'review' || /governance/u.test(domain)) && !record(agent.metadata).governance && !record(handlerConfig.metadata).governance) {
-		add('agent.governance_frontmatter_missing', 'warning', 'metadata.governance', 'Governance or review agent has no governance metadata.', 'Add governance frontmatter or handlerConfig metadata describing policy scope.');
-	}
-	const outputs = record(agent.outputs);
-	if (!Object.keys(outputs).length) {
-		add('agent.output_contract_ambiguous', 'error', 'outputs', 'Agent has no explicit output contract.', 'Declare message/model output contracts so AgentKernel can validate results.');
-	}
-	if (typeof execution.provider === 'string' || typeof execution.providerId === 'string') {
-		add('agent.execution_provider_too_specific', 'warning', 'execution', 'Agent pins a provider directly instead of declaring capability requirements.', 'Prefer providerProfile.requiredCapabilities and let API/provider assignment select the execution provider.');
-	}
-	const localDependency = stringArray(record(handlerConfig.metadata).requiredLocalPaths).length > 0
-		|| stringArray(record(agent.metadata).requiredLocalPaths).length > 0;
-	if (contentLike && localDependency) {
-		add('agent.local_filesystem_content_dependency', 'warning', 'handlerConfig.metadata.requiredLocalPaths', 'Content agent declares local filesystem content dependencies.', 'Move content access to TreeDX context queries or assignment-scoped TreeDX tools.');
+	const fallbackProfile = {
+		handler,
+		context: record(agent.context),
+		execution: record(agent.execution),
+		outputs: record(agent.outputs),
+		contentAccess: record(agent.contentAccess),
+	};
+	const entries = hasProfiles ? profiles : [['runtime', fallbackProfile] as [string, unknown]];
+	for (const [activity, rawProfile] of entries) {
+		const profile = record(rawProfile);
+		const profileHandler = typeof profile.handler === 'string' ? profile.handler : handler;
+		if (profileHandler && !PROFILE_HANDLERS.has(profileHandler)) {
+			add(
+				'agent.handler_not_profile_handler',
+				'error',
+				profilePath(activity, 'handler'),
+				`Agent ${slug ?? '<unknown>'} activity ${activity} uses unsupported handler "${profileHandler}".`,
+				'Use one of writer, actor, estimate, releaser, or reporter.',
+			);
+		}
+		const context = record(profile.context);
+		const contentAccess = record(profile.contentAccess);
+		const readModels = stringArray(contentAccess.readModels);
+		if (!array(context.queries).length && !readModels.length) {
+			add('agent.missing_context_queries', 'error', profilePath(activity, 'context.queries'), 'Activity profile has no TreeDX/API context queries or readable content models.', 'Declare context queries or contentAccess.readModels so runtime context is scoped through TreeDX/API handles.');
+		}
+		const execution = record(profile.execution);
+		const requiredCapabilities = stringArray(execution.requiredCapabilities ?? record(execution.providerProfile).requiredCapabilities);
+		if (!requiredCapabilities.length) {
+			add('agent.missing_required_capabilities', 'error', profilePath(activity, 'execution.requiredCapabilities'), 'Activity profile does not declare execution-provider capability requirements.', 'Declare required capabilities used by API/provider assignment.');
+		}
+		const allowedPaths = stringArray(execution.allowedPaths);
+		const forbiddenPaths = stringArray(execution.forbiddenPaths);
+		if (profileHandler === 'actor' && (!allowedPaths.length || !forbiddenPaths.length)) {
+			add('agent.actor_missing_path_constraints', 'error', profilePath(activity, 'execution.allowedPaths'), 'Actor activity profile is missing explicit allowed or forbidden path constraints.', 'Set allowedPaths and forbiddenPaths for every mutating actor profile.');
+		}
+		const contentLike = readModels.some((model) => /content|documentation|knowledge|note|question|proposal|decision/u.test(model))
+			|| allowedPaths.some((path) => /src\/content|docs\/src\/content|knowledge/u.test(path));
+		if (profileHandler === 'actor' && contentLike && !requiredCapabilities.some((capability) => /treedx|workspace|content:write|files:write/u.test(capability))) {
+			add('agent.content_write_requires_treedx', 'error', profilePath(activity, 'execution.requiredCapabilities'), 'Content-writing actor profile does not require TreeDX workspace/write capability.', 'Add a TreeDX workspace or files:write capability requirement.');
+		}
+		const outputs = record(profile.outputs);
+		if (!Object.keys(outputs).length) {
+			add('agent.output_contract_ambiguous', 'error', profilePath(activity, 'outputs'), 'Activity profile has no explicit output contract.', 'Declare content, tool, signal, or terminal output contracts so AgentKernel can validate results.');
+		}
+		if (typeof execution.provider === 'string' || typeof execution.providerId === 'string') {
+			add('agent.execution_provider_too_specific', 'warning', profilePath(activity, 'execution'), 'Activity profile pins a provider directly instead of declaring capability requirements.', 'Prefer execution.requiredCapabilities and let API/provider assignment select the execution provider.');
+		}
+		const localDependency = stringArray(record(profile.metadata).requiredLocalPaths).length > 0
+			|| stringArray(record(agent.metadata).requiredLocalPaths).length > 0;
+		if (contentLike && localDependency) {
+			add('agent.local_filesystem_content_dependency', 'warning', profilePath(activity, 'metadata.requiredLocalPaths'), 'Content profile declares local filesystem content dependencies.', 'Move content access to TreeDX context queries or assignment-scoped TreeDX tools.');
+		}
 	}
 	return diagnostics;
 }

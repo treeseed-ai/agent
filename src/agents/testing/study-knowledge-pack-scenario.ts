@@ -146,7 +146,7 @@ function courses(): CoursePlan[] {
 			slug: 'psychology-101',
 			title: 'Psychology 101',
 			objective: 'VERY IMPORTANT: build an exam-ready knowledge pack that explains introductory psychology concepts, research methods, major domains of behavior, and practical study prompts with enough clarity for a first-year university student to review and apply them.',
-			agentArchitecture: ['planner-agent', 'researcher-agent', 'knowledge-generator-agent', 'knowledge-optimizer-agent', 'reporter-agent'],
+			agentArchitecture: ['architect', 'researcher', 'technical-writer', 'reviewer', 'reporter'],
 			workdays: [
 				{
 					topic: 'orientation and scientific method',
@@ -224,7 +224,7 @@ function courses(): CoursePlan[] {
 			slug: 'macro-economics-301',
 			title: 'Macro Economics 301',
 			objective: 'VERY IMPORTANT: build a university-level macroeconomics knowledge pack that connects national income accounting, growth, inflation, unemployment, fiscal policy, monetary policy, open-economy dynamics, and policy tradeoffs into a usable study and analysis guide.',
-			agentArchitecture: ['planner-agent', 'researcher-agent', 'knowledge-generator-agent', 'knowledge-optimizer-agent', 'reporter-agent'],
+			agentArchitecture: ['architect', 'researcher', 'technical-writer', 'reviewer', 'reporter'],
 			workdays: [
 				{
 					topic: 'measurement and GDP',
@@ -302,7 +302,7 @@ function courses(): CoursePlan[] {
 			slug: 'art-history',
 			title: 'Art History',
 			objective: 'VERY IMPORTANT: build a readable art history knowledge pack that teaches visual analysis, historical context, major periods and movements, materials, patronage, museums, and comparison strategies for a university study group.',
-			agentArchitecture: ['planner-agent', 'researcher-agent', 'knowledge-generator-agent', 'knowledge-optimizer-agent', 'reporter-agent'],
+			agentArchitecture: ['architect', 'researcher', 'technical-writer', 'reviewer', 'reporter'],
 			workdays: [
 				{
 					topic: 'visual analysis foundations',
@@ -382,11 +382,11 @@ function courses(): CoursePlan[] {
 function renderCommunicationTrail(course: CoursePlan, dayIndex: number) {
 	const day = course.workdays[dayIndex];
 	return [
-		`planner-agent: Proposed "${day.proposal}"`,
-		`researcher-agent: Confirmed the topic should connect primary course vocabulary to student-facing examples.`,
-		`knowledge-generator-agent: Drafted synthesis: ${day.synthesis}`,
-		`knowledge-optimizer-agent: Requested a review prompt that tests transfer rather than memorization.`,
-		`reporter-agent: Recorded student approval and linked the workday to the export checklist.`,
+		`architect: Proposed "${day.proposal}"`,
+		`researcher: Confirmed the topic should connect primary course vocabulary to student-facing examples.`,
+		`technical-writer: Drafted synthesis: ${day.synthesis}`,
+		`reviewer: Requested a review prompt that tests transfer rather than memorization.`,
+		`reporter: Recorded student approval and linked the workday to the export checklist.`,
 	];
 }
 

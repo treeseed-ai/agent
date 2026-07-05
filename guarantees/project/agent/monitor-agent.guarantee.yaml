@@ -7,7 +7,7 @@ journey: Monitor Agent
 ownerPackage: "@treeseed/agent"
 surface: agent-runtime
 summary: "Verify agent runtime executions, modes, handlers, assignments, outputs, diagnostics, token counts, errors, and forensic traceability."
-status: planned
+status: active
 dependencies:
   journeys:
     - 57

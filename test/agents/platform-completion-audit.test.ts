@@ -42,11 +42,11 @@ describe('agent platform completion audit', () => {
 			'docs',
 		]) mkdirSync(join(root, path), { recursive: true });
 		for (const path of [
-			'packages/agent/src/agents/handlers/plan.ts',
-			'packages/agent/src/agents/handlers/research.ts',
-			'packages/agent/src/agents/handlers/act.ts',
-			'packages/agent/src/agents/handlers/review.ts',
-			'packages/agent/src/agents/handlers/report.ts',
+			'packages/agent/src/agents/handlers/writer.ts',
+			'packages/agent/src/agents/handlers/actor.ts',
+			'packages/agent/src/agents/handlers/estimate.ts',
+			'packages/agent/src/agents/handlers/releaser.ts',
+			'packages/agent/src/agents/handlers/reporter.ts',
 			'packages/admin/src/view-models/capacity-runtime.vm.ts',
 			'packages/agent/src/agents/tools/agent-tool-mcp-server.ts',
 			'packages/agent/src/agents/tools/treedx-proxy-client.ts',

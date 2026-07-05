@@ -15,11 +15,11 @@ describe('agent test catalog', () => {
 		expect(result.ok).toBe(true);
 		if (existsSync(resolve(repoRoot, 'src/content/agent-tests'))) {
 			expect(result.entries.map((entry) => entry.agent)).toEqual(expect.arrayContaining([
-				'treeseed-docs-planner',
-				'treeseed-codebase-cartographer',
-				'treeseed-knowledge-generator',
-				'treeseed-docs-engineer',
-				'treeseed-workday-reporter',
+				'architect',
+				'researcher',
+				'technical-writer',
+				'engineer',
+				'reporter',
 			]));
 		} else {
 			expect(result.entries).toEqual([]);
@@ -33,7 +33,6 @@ describe('agent test catalog', () => {
 		const starterRoots = [
 			resolve(repoRoot, 'starters/research/template'),
 			resolve(repoRoot, 'starters/engineering/template'),
-			resolve(repoRoot, 'starters/information-hub/template'),
 		];
 		const availableStarterRoots = starterRoots
 			.filter((starterRoot) => existsSync(resolve(starterRoot, 'src/content/agent-tests')));

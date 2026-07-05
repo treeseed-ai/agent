@@ -6,8 +6,8 @@ subtype: runtime
 journey: Enforce Provider Local Budget
 ownerPackage: "@treeseed/agent"
 surface: agent-runtime
-summary: "Verify agent runtime behavior for Enforce Provider Local Budget."
-status: planned
+summary: "Agent runtime keeps the Enforce Provider Local Budget contract verifiable through active local evidence."
+status: active
 dependencies:
   journeys:
     - 60

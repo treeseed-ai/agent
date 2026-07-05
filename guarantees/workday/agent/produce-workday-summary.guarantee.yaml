@@ -6,8 +6,8 @@ subtype: agent
 journey: Produce Workday Summary
 ownerPackage: "@treeseed/agent"
 surface: agent-runtime
-summary: "Verify agent runtime behavior for Produce Workday Summary."
-status: planned
+summary: "Agent runtime keeps the Produce Workday Summary contract verifiable through active local evidence."
+status: active
 dependencies:
   journeys:
     - 60

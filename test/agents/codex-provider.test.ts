@@ -28,7 +28,7 @@ import type { ExecutionProviderInvocation } from '../../src/agents/runtime-types
 
 const baseRequest: CodexExecutionRequest = {
 	taskId: 'task:codex-provider-skeleton',
-	agentSlug: 'engineer-agent',
+	agentSlug: 'engineer',
 	repoRoot: '/repo',
 	prompt: 'Inspect the provider boundary.',
 	allowedPaths: [],
@@ -42,8 +42,8 @@ const baseRequest: CodexExecutionRequest = {
 const testDir = dirname(fileURLToPath(import.meta.url));
 
 const agent: AgentRuntimeSpec = {
-	slug: 'engineer-agent',
-	handler: 'act',
+	slug: 'engineer',
+	handler: 'actor',
 	enabled: true,
 	systemPrompt: '',
 	persona: '',
@@ -408,8 +408,8 @@ describe('codex subscription provider skeleton', () => {
 				resumeThread: vi.fn(),
 			}),
 			prepareWorktree: async () => ({
-				branchName: 'agent/engineer-agent/run-1',
-				worktreeRoot: '/repo/.agent-worktrees/engineer-agent/run-1',
+				branchName: 'agent/engineer/run-1',
+				worktreeRoot: '/repo/.agent-worktrees/engineer/run-1',
 				created: true,
 			}),
 			env: {

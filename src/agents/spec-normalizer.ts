@@ -1,11 +1,16 @@
 import {
 	AGENT_CLI_ALLOW_TOOLS,
+	type AgentActivityProfile,
+	type AgentActivityType,
+	type AgentBranchPolicy,
 	type AgentExecutionConfig,
 	type AgentHandlerKind,
+	type AgentDefinitionIdentity,
 	type AgentContentAccessPolicy,
 	type AgentOutputContract,
 	type AgentProviderFallbackPolicy,
 	type AgentProviderProfile,
+	type AgentQuestionPolicy,
 	type AgentPermissionConfig,
 	type AgentPermissionOperation,
 	type AgentPermissionPolicy,
@@ -29,7 +34,8 @@ import type {
 
 const TRIGGER_KINDS: readonly AgentTriggerKind[] = ['schedule', 'message', 'follow', 'startup'];
 const PERMISSION_OPERATIONS: readonly AgentPermissionOperation[] = ['get', 'search', 'follow', 'pick', 'create', 'update'];
-const GENERIC_HANDLER_KINDS = new Set(['plan', 'research', 'act', 'review', 'report']);
+const ACTIVITY_TYPES = new Set<string>(['planning', 'estimating', 'acting', 'reviewing', 'reporting']);
+const GENERIC_HANDLER_KINDS = new Set<string>(['writer', 'actor', 'estimate', 'releaser', 'reporter']);
 const EXECUTION_PROVIDERS = new Set([
 	'codex',
 	'codex_subscription',
@@ -53,6 +59,17 @@ const SANDBOX_MODES = new Set(['read_only', 'workspace_write']);
 const REASONING_EFFORTS = new Set(['low', 'medium', 'high']);
 const DEFAULT_CODEX_ALLOWED_PATHS = ['**'];
 const DEFAULT_CODEX_FORBIDDEN_PATHS = ['.git/**', '.agent-worktrees/**', '.treeseed/secrets/**', 'node_modules/**'];
+const LEGACY_AGENT_FIELDS = [
+	'handler',
+	'handlerConfig',
+	'systemPrompt',
+	'permissions',
+	'tools',
+	'contentAccess',
+	'context',
+	'execution',
+	'outputs',
+] as const;
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
 	return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -351,6 +368,23 @@ function normalizeTools(
 	return { allowed: result.known };
 }
 
+function normalizeToolPolicy(
+	value: unknown,
+	field: string,
+	enabled: boolean,
+	diagnostics: AgentSpecDiagnostic[],
+	slug: string,
+): AgentToolPolicy {
+	const result = normalizeTools(value, enabled, diagnostics, slug);
+	if (isPlainObject(value) && Array.isArray(value.denied)) {
+		return {
+			...result,
+			denied: value.denied.filter((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0),
+		};
+	}
+	return result;
+}
+
 function stringList(value: unknown, field: string, diagnostics: AgentSpecDiagnostic[], slug: string) {
 	if (value === undefined) return undefined;
 	if (!Array.isArray(value) || !value.every((entry) => typeof entry === 'string' && entry.trim())) {
@@ -405,14 +439,15 @@ function normalizeContentAccess(
 	value: unknown,
 	diagnostics: AgentSpecDiagnostic[],
 	slug: string,
+	field = 'contentAccess',
 ): AgentContentAccessPolicy | undefined {
 	if (value === undefined || value === null) return undefined;
 	if (!isPlainObject(value)) {
 		diagnostics.push({
 			severity: 'error',
 			slug,
-			field: 'contentAccess',
-			message: 'Expected contentAccess to be an object.',
+			field,
+			message: `Expected ${field} to be an object.`,
 		});
 		return undefined;
 	}
@@ -421,13 +456,13 @@ function normalizeContentAccess(
 		diagnostics.push({
 			severity: 'error',
 			slug,
-			field: 'contentAccess.commit.allowed',
-			message: 'Expected contentAccess.commit.allowed to be a boolean.',
+			field: `${field}.commit.allowed`,
+			message: `Expected ${field}.commit.allowed to be a boolean.`,
 		});
 	}
 	return {
-		read: normalizeContentScope(value.read, 'contentAccess.read', diagnostics, slug),
-		write: normalizeContentScope(value.write, 'contentAccess.write', diagnostics, slug),
+		read: normalizeContentScope(value.read, `${field}.read`, diagnostics, slug),
+		write: normalizeContentScope(value.write, `${field}.write`, diagnostics, slug),
 		commit: isPlainObject(commit) && typeof commit.allowed === 'boolean' ? { allowed: commit.allowed } : { allowed: false },
 	};
 }
@@ -665,38 +700,152 @@ function normalizeOutputs(
 	};
 }
 
-function normalizeHandlerConfig(
-	value: unknown,
-	diagnostics: AgentSpecDiagnostic[],
-	slug: string,
-): Record<string, unknown> | undefined {
-	if (value === undefined) return undefined;
+function normalizeBranchPolicy(value: unknown, field: string, diagnostics: AgentSpecDiagnostic[], slug: string): AgentBranchPolicy {
 	if (!isPlainObject(value)) {
 		diagnostics.push({
 			severity: 'error',
 			slug,
-			field: 'handlerConfig',
-			message: 'Expected handlerConfig to be an object.',
+			field,
+			message: `Expected ${field} to be an object.`,
+		});
+		return { kind: 'read-only', base: 'main' };
+	}
+	const kind = typeof value.kind === 'string' ? value.kind : 'read-only';
+	switch (kind) {
+		case 'read-only':
+			return { kind, base: value.base === 'staging' ? 'staging' : 'main' };
+		case 'main-planning-content':
+			return { kind, base: 'main' };
+		case 'staging-content':
+			return { kind, base: 'staging' };
+		case 'assignment-feature':
+			return {
+				kind,
+				base: 'staging',
+				target: 'staging',
+				prefix: typeof value.prefix === 'string' ? value.prefix : undefined,
+				branchNameTemplate: typeof value.branchNameTemplate === 'string' ? value.branchNameTemplate : 'agent/{agentSlug}/{assignmentId}',
+				worktree: value.worktree === 'reuse' ? 'reuse' : 'new',
+				updateBaseBeforeRun: value.updateBaseBeforeRun !== false,
+				mergeTargetBeforeSave: value.mergeTargetBeforeSave !== false,
+			};
+		case 'staging-release':
+			return { kind, base: 'staging', target: 'main' };
+		default:
+			diagnostics.push({
+				severity: 'error',
+				slug,
+				field: `${field}.kind`,
+				message: `Unsupported branch policy "${kind}".`,
+			});
+			return { kind: 'read-only', base: 'main' };
+	}
+}
+
+function normalizeQuestionPolicy(value: unknown, field: string, diagnostics: AgentSpecDiagnostic[], slug: string): AgentQuestionPolicy | undefined {
+	if (value === undefined || value === null) return undefined;
+	if (!isPlainObject(value)) {
+		diagnostics.push({
+			severity: 'error',
+			slug,
+			field,
+			message: `Expected ${field} to be an object.`,
 		});
 		return undefined;
 	}
-	if (value.delegation !== undefined && !isPlainObject(value.delegation)) {
+	return value as AgentQuestionPolicy;
+}
+
+function normalizeIdentity(value: unknown, diagnostics: AgentSpecDiagnostic[], slug: string): AgentDefinitionIdentity | undefined {
+	if (value === undefined) return undefined;
+	if (!isPlainObject(value)) {
+		diagnostics.push({ severity: 'error', slug, field: 'identity', message: 'Expected identity to be an object.' });
+		return undefined;
+	}
+	return {
+		purpose: typeof value.purpose === 'string' ? value.purpose : '',
+		responsibilities: Array.isArray(value.responsibilities) ? value.responsibilities.filter((entry): entry is string => typeof entry === 'string') : [],
+		durableInstructions: typeof value.durableInstructions === 'string' ? value.durableInstructions : '',
+	};
+}
+
+function normalizeActivityProfile(
+	value: unknown,
+	activityType: AgentActivityType,
+	diagnostics: AgentSpecDiagnostic[],
+	slug: string,
+): AgentActivityProfile | null {
+	const field = `activityProfiles.${activityType}`;
+	if (!isPlainObject(value)) {
+		diagnostics.push({ severity: 'error', slug, field, message: `Expected ${field} to be an object.` });
+		return null;
+	}
+	const enabled = ensureBoolean(value.enabled, `${field}.enabled`, diagnostics, slug, true);
+	const handler = ensureString(value.handler, `${field}.handler`, diagnostics, slug) as AgentHandlerKind;
+	if (!GENERIC_HANDLER_KINDS.has(handler)) {
 		diagnostics.push({
 			severity: 'error',
 			slug,
-			field: 'handlerConfig.delegation',
-			message: 'Expected handlerConfig.delegation to be an object.',
+			field: `${field}.handler`,
+			message: `Unsupported first-party handler "${handler}". Use writer, actor, estimate, releaser, or reporter.`,
 		});
 	}
-	if (value.resourceNeeds !== undefined && !Array.isArray(value.resourceNeeds)) {
+	const prompt = isPlainObject(value.prompt) ? value.prompt : {};
+	if (!isPlainObject(value.prompt)) {
+		diagnostics.push({ severity: 'error', slug, field: `${field}.prompt`, message: `Expected ${field}.prompt to be an object.` });
+	}
+	return {
+		enabled,
+		handler: handler as AgentActivityProfile['handler'],
+		prompt: {
+			system: ensureString(prompt.system, `${field}.prompt.system`, diagnostics, slug),
+			task: typeof prompt.task === 'string' ? prompt.task : undefined,
+			templates: isPlainObject(prompt.templates) ? prompt.templates as Record<string, string> : undefined,
+		},
+		branchPolicy: normalizeBranchPolicy(value.branchPolicy, `${field}.branchPolicy`, diagnostics, slug),
+		contentAccess: normalizeContentAccess(value.contentAccess, diagnostics, slug, `${field}.contentAccess`),
+		tools: normalizeToolPolicy(value.tools, `${field}.tools`, enabled, diagnostics, slug),
+		outputs: normalizeOutputs(value.outputs, diagnostics, slug),
+		questionPolicy: normalizeQuestionPolicy(value.questionPolicy, `${field}.questionPolicy`, diagnostics, slug),
+		execution: isPlainObject(value.execution) ? value.execution as AgentActivityProfile['execution'] : undefined,
+	};
+}
+
+function normalizeActivityProfiles(value: unknown, diagnostics: AgentSpecDiagnostic[], slug: string) {
+	if (!isPlainObject(value)) {
 		diagnostics.push({
 			severity: 'error',
 			slug,
-			field: 'handlerConfig.resourceNeeds',
-			message: 'Expected handlerConfig.resourceNeeds to be an array.',
+			field: 'activityProfiles',
+			message: 'Expected activityProfiles to be an object.',
 		});
+		return {};
 	}
-	return value;
+	const profiles: Partial<Record<AgentActivityType, AgentActivityProfile>> = {};
+	for (const [key, profile] of Object.entries(value)) {
+		if (!ACTIVITY_TYPES.has(key)) {
+			diagnostics.push({
+				severity: 'error',
+				slug,
+				field: `activityProfiles.${key}`,
+				message: `Unsupported activity profile "${key}".`,
+			});
+			continue;
+		}
+		const normalized = normalizeActivityProfile(profile, key as AgentActivityType, diagnostics, slug);
+		if (normalized) profiles[key as AgentActivityType] = normalized;
+	}
+	return profiles;
+}
+
+function selectDefaultActivityProfile(
+	profiles: Partial<Record<AgentActivityType, AgentActivityProfile>>,
+): [AgentActivityType, AgentActivityProfile] | null {
+	for (const activity of ['acting', 'estimating', 'planning', 'reviewing', 'reporting'] as const) {
+		const profile = profiles[activity];
+		if (profile?.enabled) return [activity, profile];
+	}
+	return null;
 }
 
 function normalizeParts(
@@ -705,26 +854,34 @@ function normalizeParts(
 	diagnostics: AgentSpecDiagnostic[],
 ): AgentSpecParts | null {
 	const slug = ensureString(raw.slug ?? slugHint, 'slug', diagnostics, slugHint) || slugHint;
-	const rawHandler = ensureString(raw.handler, 'handler', diagnostics, slug);
-	const handler = rawHandler as AgentHandlerKind;
-	if (!GENERIC_HANDLER_KINDS.has(handler)) {
+	for (const field of LEGACY_AGENT_FIELDS) {
+		if (raw[field] !== undefined) {
+			diagnostics.push({
+				severity: 'error',
+				slug,
+				field,
+				message: `${field} is legacy top-level agent configuration. Move it under activityProfiles.<activity>.`,
+			});
+		}
+	}
+	const activityProfiles = normalizeActivityProfiles(raw.activityProfiles, diagnostics, slug);
+	const selected = selectDefaultActivityProfile(activityProfiles);
+	if (!selected) {
 		diagnostics.push({
 			severity: 'error',
 			slug,
-			field: 'handler',
-			message: `Unsupported first-party handler "${handler}". Use plan, research, act, review, or report.`,
+			field: 'activityProfiles',
+			message: 'Expected at least one enabled activity profile.',
 		});
+		return null;
 	}
+	const [activityType, profile] = selected;
+	const handler = profile.handler as AgentHandlerKind;
 	const triggers = Array.isArray(raw.triggers)
 		? raw.triggers.map((entry, index) => normalizeTrigger(entry, index, diagnostics, slug)).filter((entry): entry is AgentTriggerConfig => Boolean(entry))
 		: [];
 	if (!triggers.length) {
-		diagnostics.push({
-			severity: 'error',
-			slug,
-			field: 'triggers',
-			message: 'Expected at least one trigger.',
-		});
+		triggers.push({ type: 'startup', runOnStart: true });
 	}
 	try {
 		const cli = normalizeAgentCliOptions(raw.cli);
@@ -732,22 +889,33 @@ function normalizeParts(
 		const spec: AgentSpecParts = {
 			slug,
 			handler,
+			activityType,
+			activityProfiles,
+			branchPolicy: profile.branchPolicy,
+			questionPolicy: profile.questionPolicy,
+			identity: normalizeIdentity(raw.identity, diagnostics, slug),
 			projectAgentClassId: ensureString(
-				raw.projectAgentClassId ?? raw.agentClassId,
+				raw.projectAgentClassId ?? raw.agentClassId ?? raw.agentClass,
 				'projectAgentClassId',
 				diagnostics,
 				slug,
 			),
 			projectAgentClassSlug: ensureString(
-				raw.projectAgentClassSlug ?? raw.agentClassSlug ?? raw.projectAgentClassId ?? raw.agentClassId,
+				raw.projectAgentClassSlug ?? raw.agentClassSlug ?? raw.projectAgentClassId ?? raw.agentClassId ?? raw.agentClass,
 				'projectAgentClassSlug',
 				diagnostics,
 				slug,
 			),
-			handlerConfig: normalizeHandlerConfig(raw.handlerConfig, diagnostics, slug),
+			activityConfig: {
+				workPackageKind: profile.handler,
+				domain: activityType,
+				activityType,
+				branchPolicy: profile.branchPolicy,
+				questionPolicy: profile.questionPolicy,
+			},
 			enabled,
-			systemPrompt: ensureString(raw.systemPrompt, 'systemPrompt', diagnostics, slug),
-			persona: ensureString(raw.persona, 'persona', diagnostics, slug),
+			systemPrompt: profile.prompt.system,
+			persona: typeof raw.persona === 'string' ? raw.persona : '',
 			cli,
 			triggers,
 			triggerPolicy: isPlainObject(raw.triggerPolicy)
@@ -758,13 +926,13 @@ function normalizeParts(
 						typeof raw.triggerPolicy.messageBatchSize === 'number' ? raw.triggerPolicy.messageBatchSize : undefined,
 				}
 				: undefined,
-			permissions: normalizePermissions(raw.permissions, diagnostics, slug),
+			permissions: [],
 			permissionPolicy: normalizePermissionPolicy(raw.permissionPolicy, diagnostics, slug),
-			tools: normalizeTools(raw.tools, enabled, diagnostics, slug),
-			contentAccess: normalizeContentAccess(raw.contentAccess, diagnostics, slug),
-			context: normalizeContext(raw.context, diagnostics, slug),
+			tools: profile.tools,
+			contentAccess: profile.contentAccess,
+			context: { queries: [] },
 			execution: normalizeExecution(raw.execution, diagnostics, slug),
-			outputs: normalizeOutputs(raw.outputs, diagnostics, slug),
+			outputs: profile.outputs,
 		};
 		return spec;
 	} catch (error) {
@@ -811,15 +979,6 @@ export function normalizeAgentRuntimeSpec(
 
 	for (const trigger of spec.triggers) {
 		if (trigger.type === 'message') {
-			const messagePermission = spec.permissions.find((permission) => permission.model === 'message');
-			if (!messagePermission || !messagePermission.operations.includes('pick') || !messagePermission.operations.includes('update')) {
-				diagnostics.push({
-					severity: 'error',
-					slug: spec.slug,
-					field: 'permissions',
-					message: 'Message-triggered agents must allow message pick and update operations.',
-				});
-			}
 			for (const messageType of trigger.messageTypes ?? []) {
 				if (
 					!context.messageTypes.includes(messageType)

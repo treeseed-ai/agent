@@ -1,29 +1,73 @@
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { AgentSdk } from '@treeseed/sdk/sdk';
-import { MemoryAgentDatabase } from '@treeseed/sdk/d1-store';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
 	listRegisteredAgentHandlers,
 	loadTenantAgentHandlerRegistry,
 	resolveAgentHandler,
 } from '../../src/agents/registry.ts';
-import { loadActiveAgentSpecs } from '../../src/agents/spec-loader.ts';
+import { estimateHandler } from '../../src/agents/handlers/estimate.ts';
 import { normalizeAgentRuntimeSpec } from '../../src/agents/spec-normalizer.ts';
-import { parseAgentMessagePayload } from '../../src/agents/contracts/messages.ts';
 
 const tempRoots: string[] = [];
 const agentRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const marketRoot = resolve(agentRoot, '..', '..');
-const hasIntegratedMarketAgentContent = existsSync(resolve(marketRoot, 'src/content/agents/treeseed-docs-planner.mdx'));
+const hasIntegratedMarketAgentContent = existsSync(resolve(marketRoot, 'src/content/agents/architect.mdx'));
 
 function createTenantRoot() {
 	const tenantRoot = mkdtempSync(resolve(tmpdir(), 'treeseed-agent-registry-'));
 	tempRoots.push(tenantRoot);
 	mkdirSync(resolve(tenantRoot, 'src/agents'), { recursive: true });
 	return tenantRoot;
+}
+
+function profileAgent(overrides: Record<string, unknown> = {}) {
+	return {
+		slug: 'engineer',
+		agentClass: 'engineering',
+		projectAgentClassId: 'engineering',
+		projectAgentClassSlug: 'engineering',
+		enabled: true,
+		identity: {
+			purpose: 'Implement scoped work.',
+			responsibilities: ['Plan', 'Estimate', 'Act'],
+			durableInstructions: 'Stay scoped.',
+		},
+		activityProfiles: {
+			planning: {
+				enabled: true,
+				handler: 'actor',
+				prompt: { system: 'Plan engineering work.' },
+				branchPolicy: { kind: 'read-only', base: 'main' },
+				tools: { allowed: ['treeseed.content.query', 'treeseed.content.read', 'treeseed.status'] },
+				outputs: { messageTypes: [], modelMutations: ['note:create'] },
+				contentAccess: {
+					read: { models: ['question', 'decision'], actions: ['query', 'read'] },
+					commit: { allowed: false },
+				},
+			},
+			acting: {
+				enabled: true,
+				handler: 'actor',
+				prompt: { system: 'Implement engineering work.' },
+				branchPolicy: {
+					kind: 'assignment-feature',
+					base: 'staging',
+					target: 'staging',
+					branchNameTemplate: 'agent/{agentSlug}/{assignmentId}',
+				},
+				tools: { allowed: ['treeseed.content.query', 'treeseed.content.read', 'treeseed.verify', 'treeseed.changed_paths'] },
+				outputs: { messageTypes: [], modelMutations: ['implementation_report:create'] },
+				contentAccess: {
+					read: { models: ['question', 'decision'], actions: ['query', 'read'] },
+					commit: { allowed: false },
+				},
+			},
+		},
+		...overrides,
+	};
 }
 
 describe('agent handler registry', () => {
@@ -36,41 +80,14 @@ describe('agent handler registry', () => {
 	it('loads tenant TypeScript handlers without requiring a tenant tsconfig', async () => {
 		const tenantRoot = createTenantRoot();
 		writeFileSync(
-			resolve(tenantRoot, 'src/agents/plan.ts'),
-			`import type { AgentHandler } from '@treeseed/agent/runtime-types';
-
-export const planHandler: AgentHandler = {
-\tkind: 'plan',
-\tasync resolveInputs() {
-\t\treturn {};
-\t},
-\tasync execute() {
-\t\treturn { ok: true };
-\t},
-};
-`,
-			'utf8',
-		);
-
-		const registry = await loadTenantAgentHandlerRegistry(tenantRoot);
-
-		expect(registry.plan?.kind).toBe('plan');
-	});
-
-	it('loads project-specific tenant handlers in addition to the generic core collection', async () => {
-		const tenantRoot = createTenantRoot();
-		writeFileSync(
 			resolve(tenantRoot, 'src/agents/security-audit.ts'),
 			`import type { AgentHandler } from '@treeseed/agent/runtime-types';
 
 export const securityAuditHandler: AgentHandler = {
 \tkind: 'security-audit',
-\tasync resolveInputs() {
-\t\treturn {};
-\t},
-\tasync execute() {
-\t\treturn { ok: true };
-\t},
+\tasync resolveInputs() { return {}; },
+\tasync execute() { return { ok: true }; },
+\tasync emitOutputs() { return { status: 'completed', summary: 'ok' }; },
 };
 `,
 			'utf8',
@@ -78,366 +95,157 @@ export const securityAuditHandler: AgentHandler = {
 
 		const registry = await loadTenantAgentHandlerRegistry(tenantRoot);
 
+		expect(registry.writer?.kind).toBe('writer');
+		expect(registry.actor?.kind).toBe('actor');
+		expect(registry.estimate?.kind).toBe('estimate');
+		expect(registry.releaser?.kind).toBe('releaser');
+		expect(registry.reporter?.kind).toBe('reporter');
 		expect(registry['security-audit']?.kind).toBe('security-audit');
-		await expect(resolveAgentHandler('security-audit', { tenantRoot })).resolves.toMatchObject({
-			kind: 'security-audit',
-		});
 		await expect(listRegisteredAgentHandlers({ tenantRoot })).resolves.toEqual(expect.arrayContaining([
-			'plan',
-			'research',
-			'act',
-			'review',
-			'report',
+			'writer',
+			'actor',
+			'estimate',
+			'releaser',
+			'reporter',
 			'security-audit',
 		]));
 	});
 
-	it('preserves optional declarative context queries on normalized specs', () => {
-		const result = normalizeAgentRuntimeSpec({
-			slug: 'researcher-agent',
-			handler: 'research',
-			projectAgentClassId: 'research',
-			projectAgentClassSlug: 'research',
-			enabled: true,
-			systemPrompt: 'Research carefully.',
-			persona: 'Researcher',
-			triggers: [{ type: 'startup' }],
-			permissions: [{ model: 'knowledge', operations: ['search', 'follow'] }],
-			tools: { allowed: ['treedx.build_context', 'treedx.search_workspace', 'treeseed.status'] },
-			execution: {},
-			outputs: {},
-			context: {
-				queries: [{
-					id: 'runtime',
-					purpose: 'research',
-					query: 'agent runtime',
-					scope: '/knowledge',
-				}],
-			},
-		}, {
-			registeredHandlers: ['research'],
+	it('normalizes activity profile specs into runtime specs', () => {
+		const result = normalizeAgentRuntimeSpec(profileAgent(), {
+			registeredHandlers: ['actor'],
 			messageTypes: [],
 		});
 
 		expect(result.diagnostics).toEqual([]);
-		expect(result.spec?.execution).toMatchObject({
-			provider: 'codex',
-			model: 'gpt-5.5',
-			approvalPolicy: 'never',
-			sandboxMode: 'workspace_write',
-			reasoningEffort: 'medium',
-			allowedPaths: ['**'],
-			forbiddenPaths: ['.git/**', '.agent-worktrees/**', '.treeseed/secrets/**', 'node_modules/**'],
-			worktree: { enabled: true },
+		expect(result.spec).toMatchObject({
+			slug: 'engineer',
+			handler: 'actor',
+			activityType: 'acting',
+			projectAgentClassId: 'engineering',
+			tools: { allowed: ['treeseed.content.query', 'treeseed.content.read', 'treeseed.verify', 'treeseed.changed_paths'] },
+			branchPolicy: {
+				kind: 'assignment-feature',
+				base: 'staging',
+				target: 'staging',
+			},
 		});
-		expect(result.spec?.context?.queries).toEqual([expect.objectContaining({
-			id: 'runtime',
-			purpose: 'research',
-			query: 'agent runtime',
-		})]);
 	});
 
-	it('preserves per-agent Codex execution overrides on normalized specs', () => {
+	it('rejects legacy top-level agent configuration', () => {
 		const result = normalizeAgentRuntimeSpec({
-			slug: 'engineer-agent',
+			...profileAgent(),
 			handler: 'act',
-			projectAgentClassId: 'implementation',
-			projectAgentClassSlug: 'implementation',
-			enabled: true,
-			systemPrompt: 'Implement carefully.',
-			persona: 'Engineer',
-			triggers: [{ type: 'startup' }],
-			permissions: [{ model: 'knowledge', operations: ['get'] }],
-			tools: { allowed: ['treedx.read_workspace_file', 'treedx.write_workspace_file', 'treeseed.verify'] },
-			execution: {
-				provider: 'codex',
-				model: 'gpt-5.5',
-				approvalPolicy: 'never',
-				sandboxMode: 'workspace-write',
-				reasoningEffort: 'high',
-				allowedPaths: ['docs/**'],
-				forbiddenPaths: ['docs/private/**'],
-				worktree: {
-					enabled: true,
-					branchPrefix: 'agent-docs',
-				},
-			},
-			outputs: {},
+			handlerConfig: { domain: 'legacy' },
+			systemPrompt: 'Legacy.',
 		}, {
-			registeredHandlers: ['act'],
+			registeredHandlers: ['actor'],
 			messageTypes: [],
 		});
 
-		expect(result.diagnostics).toEqual([]);
-		expect(result.spec?.execution).toMatchObject({
-			provider: 'codex',
-			model: 'gpt-5.5',
-			approvalPolicy: 'never',
-			sandboxMode: 'workspace_write',
-			reasoningEffort: 'high',
-			allowedPaths: ['docs/**'],
-			forbiddenPaths: ['docs/private/**'],
-			worktree: {
-				enabled: true,
-				branchPrefix: 'agent-docs',
-			},
-		});
-	});
-
-	it('preserves provider capability profiles on normalized specs', () => {
-		const result = normalizeAgentRuntimeSpec({
-			slug: 'review-agent',
-			handler: 'review',
-			projectAgentClassId: 'review',
-			projectAgentClassSlug: 'review',
-			enabled: true,
-			systemPrompt: 'Review carefully.',
-			persona: 'Reviewer',
-			triggers: [{ type: 'startup' }],
-			permissions: [{ model: 'knowledge', operations: ['get'] }],
-			tools: { allowed: ['treedx.build_context', 'treedx.read_workspace_file', 'treeseed.status'] },
-			execution: {
-				providerProfile: {
-					requiredCapabilities: ['planning', 'repo_read'],
-					preferredLanes: [{
-						provider: 'codex_subscription',
-						laneId: 'large-reasoning-model',
-						model: 'gpt-5.5',
-						weight: 80,
-					}],
-					acceptableFallbacks: [{
-						provider: 'human_issue_queue',
-						model: 'senior-reviewer',
-						maxQualityPenalty: 0.2,
-					}],
-					fallbackPolicy: 'fail_if_unavailable',
-				},
-			},
-			outputs: {},
-		}, {
-			registeredHandlers: ['review'],
-			messageTypes: [],
-		});
-
-		expect(result.diagnostics).toEqual([]);
-		expect(result.spec?.execution).toMatchObject({
-			provider: 'codex',
-			model: 'gpt-5.5',
-			approvalPolicy: 'never',
-			sandboxMode: 'workspace_write',
-			providerProfile: {
-				requiredCapabilities: ['planning', 'repo_read'],
-				preferredLanes: [{
-					provider: 'codex_subscription',
-					laneId: 'large-reasoning-model',
-					model: 'gpt-5.5',
-					weight: 80,
-				}],
-				acceptableFallbacks: [{
-					provider: 'human_issue_queue',
-					model: 'senior-reviewer',
-					maxQualityPenalty: 0.2,
-				}],
-				fallbackPolicy: 'fail_if_unavailable',
-			},
-		});
-	});
-
-	it('does not resolve removed semantic handler names', async () => {
-		const tenantRoot = createTenantRoot();
-
-		await expect(resolveAgentHandler('planner', { tenantRoot })).rejects.toThrow('No runtime handler is registered');
-		await expect(resolveAgentHandler('researcher', { tenantRoot })).rejects.toThrow('No runtime handler is registered');
-		await expect(resolveAgentHandler('knowledge-generator', { tenantRoot })).rejects.toThrow('No runtime handler is registered');
-
-		await expect(resolveAgentHandler('plan', { tenantRoot })).resolves.toMatchObject({ kind: 'plan' });
-		await expect(listRegisteredAgentHandlers({ tenantRoot })).resolves.toEqual(expect.arrayContaining([
-			'plan',
-			'research',
-			'act',
-			'review',
-			'report',
+		expect(result.spec).toBeNull();
+		expect(result.diagnostics).toEqual(expect.arrayContaining([
+			expect.objectContaining({ field: 'handler', severity: 'error' }),
+			expect.objectContaining({ field: 'handlerConfig', severity: 'error' }),
+			expect.objectContaining({ field: 'systemPrompt', severity: 'error' }),
 		]));
 	});
 
-	it('rejects removed knowledge-specific handler names', () => {
-		const generator = normalizeAgentRuntimeSpec({
-			slug: 'treeseed-knowledge-generator',
-			handler: 'knowledge-generator',
-			projectAgentClassId: 'knowledge',
-			projectAgentClassSlug: 'knowledge',
-			enabled: true,
-			systemPrompt: 'Generate knowledge.',
-			persona: 'Generator',
-			triggers: [{ type: 'message', messageTypes: ['research_note_created'] }],
-			permissions: [{ model: 'message', operations: ['create', 'pick', 'update'] }],
-			execution: {},
-			outputs: { messageTypes: ['knowledge_draft_created'], modelMutations: [] },
-		}, {
-			registeredHandlers: ['report'],
-			messageTypes: ['research_note_created', 'knowledge_draft_created'],
-		});
-		const optimizer = normalizeAgentRuntimeSpec({
-			slug: 'treeseed-knowledge-optimizer',
-			handler: 'knowledge-optimizer',
-			projectAgentClassId: 'knowledge',
-			projectAgentClassSlug: 'knowledge',
-			enabled: true,
-			systemPrompt: 'Optimize knowledge.',
-			persona: 'Optimizer',
-			triggers: [{ type: 'message', messageTypes: ['knowledge_draft_created'] }],
-			permissions: [{ model: 'message', operations: ['create', 'pick', 'update'] }],
-			execution: {},
-			outputs: { messageTypes: ['promotion_request_created'], modelMutations: [] },
-		}, {
-			registeredHandlers: ['report'],
-			messageTypes: ['knowledge_draft_created', 'promotion_request_created'],
-		});
+	it('does not resolve removed generic handler names', async () => {
+		const tenantRoot = createTenantRoot();
 
-		expect(generator.diagnostics.some((entry) => entry.field === 'handler')).toBe(true);
-		expect(optimizer.diagnostics.some((entry) => entry.field === 'handler')).toBe(true);
+		await expect(resolveAgentHandler('plan', { tenantRoot })).rejects.toThrow('No runtime handler is registered');
+		await expect(resolveAgentHandler('research', { tenantRoot })).rejects.toThrow('No runtime handler is registered');
+		await expect(resolveAgentHandler('act', { tenantRoot })).rejects.toThrow('No runtime handler is registered');
+		await expect(resolveAgentHandler('review', { tenantRoot })).rejects.toThrow('No runtime handler is registered');
+		await expect(resolveAgentHandler('report', { tenantRoot })).rejects.toThrow('No runtime handler is registered');
+		await expect(resolveAgentHandler('actor', { tenantRoot })).resolves.toMatchObject({ kind: 'actor' });
 	});
 
-	it('accepts documentation automation message contracts as metadata events', () => {
-		expect(parseAgentMessagePayload('documentation_gap_detected', JSON.stringify({
-			summary: 'Agent runtime docs need source maps.',
-			sourcePaths: ['packages/agent/src/agents/registry.ts'],
-		}))).toMatchObject({
-			summary: 'Agent runtime docs need source maps.',
-			sourcePaths: ['packages/agent/src/agents/registry.ts'],
-		});
-		expect(parseAgentMessagePayload('approval_request_created', JSON.stringify({
-			approvalId: 'approval-1',
-			kind: 'promote_knowledge_draft',
-		}))).toMatchObject({
-			approvalId: 'approval-1',
-			kind: 'promote_knowledge_draft',
-		});
-	});
-
-	it('loads top-level Market documentation agents as active runtime specs', async () => {
+	it('ships top-level Market engineering agent content with unprefixed slugs', async () => {
 		if (!hasIntegratedMarketAgentContent) {
 			expect(existsSync(resolve(agentRoot, 'package.json')), 'package-only verification must still have an agent package root').toBe(true);
 			return;
 		}
-		const sdk = new AgentSdk({
-			repoRoot: marketRoot,
-			database: new MemoryAgentDatabase(),
-			contentRepository: { adapter: 'local' },
-		});
-
-		const rawSpecs = await sdk.listAgentSpecs();
-		const activeSpecs = await sdk.listAgentSpecs({ enabled: true });
-		const { specs, diagnostics } = await loadActiveAgentSpecs(sdk);
-		const slugs = specs.map((spec) => spec.slug);
-
-		expect(rawSpecs.map((spec) => spec.slug)).toEqual(expect.arrayContaining([
-			'treeseed-docs-planner',
-			'treeseed-codebase-cartographer',
-			'treeseed-knowledge-generator',
-			'treeseed-knowledge-optimizer',
-			'treeseed-docs-engineer',
-			'treeseed-docs-reviewer',
-			'treeseed-governance-steward',
-			'treeseed-workday-reporter',
-			'treeseed-releaser',
-		]));
-		expect(activeSpecs.every((spec) => spec.enabled)).toBe(true);
-		expect(diagnostics.filter((entry) => entry.severity === 'error')).toEqual([]);
+		const slugs = readdirSync(resolve(marketRoot, 'src/content/agents'))
+			.filter((entry) => entry.endsWith('.mdx'))
+			.map((entry) => entry.replace(/\.mdx$/u, ''));
 		expect(slugs).toEqual(expect.arrayContaining([
-			'treeseed-docs-planner',
-			'treeseed-codebase-cartographer',
-			'treeseed-knowledge-generator',
-			'treeseed-knowledge-optimizer',
-			'treeseed-docs-engineer',
-			'treeseed-docs-reviewer',
-			'treeseed-governance-steward',
-			'treeseed-workday-reporter',
-			'treeseed-releaser',
+			'architect',
+			'technical-writer',
+			'tester',
+			'engineer',
+			'researcher',
+			'reviewer',
+			'releaser',
+			'reporter',
 		]));
-		expect(specs.find((spec) => spec.slug === 'treeseed-knowledge-generator')?.handler).toBe('report');
-		expect(specs.find((spec) => spec.slug === 'treeseed-knowledge-optimizer')?.handler).toBe('report');
 	}, 15_000);
 
-	it('filters disabled content-backed agent specs through the SDK', async () => {
-		const tenantRoot = createTenantRoot();
-		mkdirSync(resolve(tenantRoot, 'src/content/agents'), { recursive: true });
-		writeFileSync(resolve(tenantRoot, 'src/content/agents/active.mdx'), `---
-slug: active-docs-agent
-handler: plan
-projectAgentClassId: planning
-projectAgentClassSlug: planning
-enabled: true
-systemPrompt: Active.
-persona: Active.
-triggers:
-  - type: startup
-permissions:
-  - model: message
-    operations: [create]
-execution: {}
-outputs: {}
----
-Active.
-`, 'utf8');
-		writeFileSync(resolve(tenantRoot, 'src/content/agents/disabled.mdx'), `---
-slug: disabled-docs-agent
-handler: plan
-projectAgentClassId: planning
-projectAgentClassSlug: planning
-enabled: false
-systemPrompt: Disabled.
-persona: Disabled.
-triggers:
-  - type: startup
-permissions:
-  - model: message
-    operations: [create]
-execution: {}
-outputs: {}
----
-Disabled.
-`, 'utf8');
-		const sdk = new AgentSdk({
-			repoRoot: tenantRoot,
-			database: new MemoryAgentDatabase(),
-			contentRepository: { adapter: 'local' },
+	it('emits structured estimates from estimate activity output', async () => {
+		const output = await estimateHandler.emitOutputs({
+			runId: 'run-1',
+			projectId: 'project-1',
+			mode: 'planning',
+			repoRoot: marketRoot,
+			agent: {
+				slug: 'engineer',
+				agentClass: 'engineer',
+				outputs: { messageTypes: [], modelMutations: [] },
+			},
+			capacity: {
+				assignmentId: 'assignment-1',
+				assignment: {
+					id: 'assignment-1',
+					teamId: 'team-1',
+					projectId: 'project-1',
+					projectAgentClassId: 'engineer',
+				},
+				envelope: {
+					teamId: 'team-1',
+					projectId: 'project-1',
+					mode: 'planning',
+					reservedCredits: 2,
+				},
+				decisionInput: {
+					input: { decisionId: 'decision-1' },
+				},
+			},
+			sdk: { createMessage: async () => ({}) },
+		} as never, {
+			snapshot: {
+				runId: 'provider-run-1',
+				status: 'completed',
+				summary: 'Estimated work.',
+				outputs: {
+					structuredEstimate: {
+						expectedCredits: 3,
+						maxCredits: 5,
+						confidence: 'high',
+						riskLevel: 'medium',
+						dependencies: [{
+							id: 'architecture-spec',
+							type: 'artifact',
+							requiredBefore: 'start',
+							deliverableType: 'architecture_spec',
+							agentClass: 'architect',
+						}],
+						expectedOutputs: [{ outputType: 'implementation_report', required: true }],
+					},
+				},
+			},
+			contentArtifactRefs: [],
 		});
 
-		await expect(sdk.listAgentSpecs({ enabled: true })).resolves.toEqual([
-			expect.objectContaining({ slug: 'active-docs-agent', enabled: true }),
-		]);
-	});
-
-	it('resolves tenant project generic handler overrides', async () => {
-		const tenantRoot = createTenantRoot();
-		writeFileSync(
-			resolve(tenantRoot, 'src/agents/research.ts'),
-			`import type { AgentHandler } from '@treeseed/agent/runtime-types';
-
-export const researchHandler: AgentHandler = {
-\tkind: 'research',
-\tasync resolveInputs() {
-\t\treturn { tenant: true };
-\t},
-\tasync execute(_context, inputs) {
-\t\treturn inputs;
-\t},
-\tasync emitOutputs(_context, result) {
-\t\treturn { status: 'completed', summary: 'tenant researcher', metadata: result as Record<string, unknown> };
-\t},
-};
-`,
-			'utf8',
-		);
-
-		const handler = await resolveAgentHandler('research', { tenantRoot });
-		const output = await handler.emitOutputs({} as any, { tenant: true });
-
-		expect(output).toMatchObject({
-			status: 'completed',
-			summary: 'tenant researcher',
-			metadata: { tenant: true },
+		expect(output.status).toBe('completed');
+		expect(output.metadata?.structuredEstimate).toMatchObject({
+			teamId: 'team-1',
+			projectId: 'project-1',
+			decisionId: 'decision-1',
+			agentClass: 'engineer',
+			expectedCredits: 3,
+			maxCredits: 5,
 		});
+		expect(output.metadata?.estimateValidation).toMatchObject({ ok: true });
 	});
 });

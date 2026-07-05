@@ -1,0 +1,31 @@
+schemaVersion: treeseed.guarantee/v1
+id: guarantee.agent.architecture.capture-question-tool-events.304
+journeyIndex: 304
+type: agent
+subtype: architecture
+journey: Capture Question Tool Events
+ownerPackage: "@treeseed/agent"
+surface: agent-runtime
+summary: "TreeDX question tool calls are captured as question_created and question_updated derived events."
+status: active
+actors:
+  allowed: [project_manager, capacity_operator, team_owner]
+  forbidden: [anonymous_user, unauthorized_user]
+gates: [core, release]
+preconditions:
+  fixtures: [integrated_treeseed_project]
+api:
+  required: true
+  verifierRefs: [agent.architecture.capture-question-tool-events]
+content:
+  required: true
+  verifierRefs: [agent.architecture.capture-question-tool-events]
+audit:
+  required: true
+  verifierRefs: [agent.architecture.capture-question-tool-events]
+negativeCases:
+  - id: unauthorized-actor-denied
+    actor: anonymous_user
+    verifierRefs: [agent.architecture.capture-question-tool-events]
+evidence:
+  required: [guarantee_report, verifier_evidence]

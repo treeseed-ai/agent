@@ -6,8 +6,8 @@ subtype: execution-provider
 journey: Run Jira Provider
 ownerPackage: "@treeseed/agent"
 surface: agent-runtime
-summary: "Verify agent runtime behavior for Run Jira Provider."
-status: planned
+summary: "Agent runtime keeps the Run Jira Provider contract verifiable through active local evidence."
+status: active
 dependencies:
   journeys:
     - 60

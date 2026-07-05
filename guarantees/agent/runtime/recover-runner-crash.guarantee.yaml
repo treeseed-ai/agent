@@ -6,8 +6,8 @@ subtype: runtime
 journey: Recover Runner Crash
 ownerPackage: "@treeseed/agent"
 surface: agent-runtime
-summary: "Verify agent runtime behavior for Recover Runner Crash."
-status: planned
+summary: "Agent runtime keeps the Recover Runner Crash contract verifiable through active local evidence."
+status: active
 dependencies:
   journeys:
     - 60

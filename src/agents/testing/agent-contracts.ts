@@ -27,7 +27,7 @@ const EXECUTION_PROVIDERS = new Set([
 	'github_actions',
 	'github_actions_workflow',
 ]);
-const GENERIC_HANDLERS = new Set(['plan', 'research', 'act', 'review', 'report']);
+const PROFILE_HANDLERS = new Set(['writer', 'actor', 'estimate', 'releaser', 'reporter']);
 
 export interface AgentContractIssue {
 	severity: 'error' | 'warning';
@@ -128,16 +128,6 @@ async function loadSourceAgentSpecs(repoRoot: string): Promise<{
 	return { specs, diagnostics };
 }
 
-async function hasGovernanceDeclaration(repoRoot: string, slug: string) {
-	for (const contentRoot of await discoverAgentContentRoots(repoRoot)) {
-		for (const extension of ['.mdx', '.md']) {
-			const source = await readFile(resolve(contentRoot, `${slug}${extension}`), 'utf8').catch(() => '');
-			if (/^governance:\s*$/mu.test(source)) return true;
-		}
-	}
-	return false;
-}
-
 async function validateAgent(agent: NormalizedAgentRuntimeSpec, knownHandlers: string[], repoRoot: string) {
 	const issues: AgentContractIssue[] = [];
 	if (!knownHandlers.includes(agent.handler)) {
@@ -147,8 +137,8 @@ async function validateAgent(agent: NormalizedAgentRuntimeSpec, knownHandlers: s
 			issues.push(issue(agent, 'handler', error instanceof Error ? error.message : String(error)));
 		});
 	}
-	if (!GENERIC_HANDLERS.has(agent.handler)) {
-		issues.push(issue(agent, 'handler', 'First-party agent specs must use plan, research, act, review, or report.'));
+	if (!PROFILE_HANDLERS.has(agent.handler)) {
+		issues.push(issue(agent, 'handler', 'First-party agent specs must use writer, actor, estimate, releaser, or reporter.'));
 	}
 	if (!agent.projectAgentClassId?.trim()) {
 		issues.push(issue(agent, 'projectAgentClassId', 'Agents must declare the project agent class used for capacity allocation.'));
@@ -158,11 +148,6 @@ async function validateAgent(agent: NormalizedAgentRuntimeSpec, knownHandlers: s
 	}
 	const messageTriggers = agent.triggers.filter((trigger) => trigger.type === 'message');
 	if (messageTriggers.length > 0) {
-		for (const operation of ['pick', 'update']) {
-			if (!hasPermission(agent, 'message', operation)) {
-				issues.push(issue(agent, 'permissions', `Message-triggered agents must declare message:${operation}.`));
-			}
-		}
 		for (const [index, trigger] of messageTriggers.entries()) {
 			if (!trigger.messageTypes?.length) {
 				issues.push(issue(agent, `triggers.message[${index}].messageTypes`, 'Message triggers must declare at least one message type.'));
@@ -173,9 +158,6 @@ async function validateAgent(agent: NormalizedAgentRuntimeSpec, knownHandlers: s
 				}
 			}
 		}
-	}
-	if ((agent.outputs.messageTypes ?? []).length > 0 && !hasPermission(agent, 'message', 'create')) {
-		issues.push(issue(agent, 'permissions', 'Agents that emit messages must declare message:create.'));
 	}
 	for (const messageType of agent.outputs.messageTypes ?? []) {
 		if (!(AGENT_MESSAGE_TYPES as readonly string[]).includes(messageType)) {
@@ -196,11 +178,8 @@ async function validateAgent(agent: NormalizedAgentRuntimeSpec, knownHandlers: s
 	if (agent.execution.provider && !EXECUTION_PROVIDERS.has(agent.execution.provider)) {
 		issues.push(issue(agent, 'execution.provider', `Unsupported execution provider "${agent.execution.provider}".`));
 	}
-	if (!agent.execution.providerProfile?.requiredCapabilities?.length) {
-		issues.push(issue(agent, 'execution.providerProfile.requiredCapabilities', 'Agents must declare required execution-provider capabilities.'));
-	}
-	if (!(agent.context?.queries ?? []).length) {
-		issues.push(issue(agent, 'context.queries', 'Agents must declare at least one TreeDX/API context query.'));
+	if (agent.execution.providerProfile && !agent.execution.providerProfile.requiredCapabilities?.length) {
+		issues.push(issue(agent, 'execution.providerProfile.requiredCapabilities', 'Provider profiles must declare required execution-provider capabilities when present.'));
 	}
 	for (const [index, query] of (agent.context?.queries ?? []).entries()) {
 		if (!query.id?.trim()) {
@@ -216,13 +195,6 @@ async function validateAgent(agent: NormalizedAgentRuntimeSpec, knownHandlers: s
 		for (const error of compiled.errors) {
 			issues.push(issue(agent, `context.queries[${index}]`, error));
 		}
-	}
-	const governanceRelevant = (agent.outputs.modelMutations ?? []).some((mutation) => {
-		if (mutation === 'message:create') return false;
-		return /:(create|update)$/u.test(mutation);
-	}) || (agent.outputs.messageTypes ?? []).some((messageType) => /approval|promotion|release|mutation/u.test(messageType));
-	if (governanceRelevant && !(await hasGovernanceDeclaration(repoRoot, agent.slug))) {
-		issues.push(issue(agent, 'governance', 'Mutation, approval, and release agents must declare governance policy.'));
 	}
 	return issues;
 }

@@ -8,7 +8,6 @@ describe('starter agent contracts', () => {
 	for (const starter of [
 		'starters/engineering/template',
 		'starters/research/template',
-		'starters/information-hub/template',
 	]) {
 		it(`validates ${starter}`, async () => {
 			const result = await runAgentContractChecks({

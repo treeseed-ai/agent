@@ -1,0 +1,33 @@
+schemaVersion: treeseed.guarantee/v1
+id: guarantee.agent.architecture.normalize-activity-profile-agent.300
+journeyIndex: 300
+type: agent
+subtype: architecture
+journey: Normalize Activity Profile Agent
+ownerPackage: "@treeseed/agent"
+surface: agent-runtime
+summary: "Every canonical Astro agent definition normalizes into an activity-profile runtime spec."
+status: active
+actors:
+  allowed: [project_manager, capacity_operator, team_owner]
+  forbidden: [anonymous_user, unauthorized_user]
+gates: [core, release]
+preconditions:
+  fixtures: [integrated_treeseed_project]
+api:
+  required: true
+  verifierRefs: [agent.architecture.normalize-activity-profile-agent]
+content:
+  required: true
+  verifierRefs: [agent.architecture.normalize-activity-profile-agent]
+audit:
+  required: true
+  verifierRefs: [agent.architecture.normalize-activity-profile-agent]
+negativeCases:
+  - id: unauthorized-actor-denied
+    actor: anonymous_user
+    verifierRefs: [agent.architecture.normalize-activity-profile-agent]
+evidence:
+  required: [guarantee_report, verifier_evidence]
+notes:
+  - "Agent definitions remain Astro content models with activityProfiles as the only runtime configuration surface."

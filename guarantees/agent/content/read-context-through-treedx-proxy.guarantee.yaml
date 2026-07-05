@@ -6,8 +6,8 @@ subtype: content
 journey: Read Context Through Treedx Proxy
 ownerPackage: "@treeseed/agent"
 surface: agent-runtime
-summary: "Verify agent runtime behavior for Read Context Through Treedx Proxy."
-status: planned
+summary: "Agent runtime keeps the Read Context Through Treedx Proxy contract verifiable through active local evidence."
+status: active
 dependencies:
   journeys:
     - 60

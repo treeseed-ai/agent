@@ -6,8 +6,8 @@ subtype: usage
 journey: Record Execution Usage
 ownerPackage: "@treeseed/agent"
 surface: agent-runtime
-summary: "Verify agent runtime behavior for Record Execution Usage."
-status: planned
+summary: "Agent runtime keeps the Record Execution Usage contract verifiable through active local evidence."
+status: active
 dependencies:
   journeys:
     - 60

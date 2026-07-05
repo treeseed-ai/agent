@@ -56,33 +56,37 @@ try {
 	]);
 	const result = await runtime.kernel.runAssignment({
 		assignment: {
-			id: 'smoke-assignment-planner',
+			id: 'smoke-assignment-architect',
 			teamId: 'team-smoke',
 			projectId: 'project-smoke',
 			capacityProviderId: 'provider-smoke',
-			projectAgentClassId: 'planner',
+			projectAgentClassId: 'architect',
 			mode: 'planning',
 			status: 'leased',
 			leaseState: 'leased',
-			agentId: 'planner-agent',
+			agentId: 'architect',
 			runnerId: 'runner-smoke',
 			capacityEnvelope: {
 				teamId: 'team-smoke',
 				projectId: 'project-smoke',
 				mode: 'planning',
 				capacityProviderId: 'provider-smoke',
+				reservationId: 'reservation-smoke-planning',
+				reservedCredits: 1,
 			},
 			decisionInput: {
 				teamId: 'team-smoke',
 				projectId: 'project-smoke',
-				projectAgentClassId: 'planner',
+				projectAgentClassId: 'architect',
 				mode: 'planning',
-				agentId: 'planner-agent',
+				agentId: 'architect',
 				capacity: {
 					teamId: 'team-smoke',
 					projectId: 'project-smoke',
 					mode: 'planning',
 					capacityProviderId: 'provider-smoke',
+					reservationId: 'reservation-smoke-planning',
+					reservedCredits: 1,
 				},
 				input: {
 					subject: {

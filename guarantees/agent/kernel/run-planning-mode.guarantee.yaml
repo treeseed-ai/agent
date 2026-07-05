@@ -6,8 +6,8 @@ subtype: kernel
 journey: Run Planning Mode
 ownerPackage: "@treeseed/agent"
 surface: agent-runtime
-summary: "Verify agent runtime behavior for Run Planning Mode."
-status: planned
+summary: "Agent runtime keeps the Run Planning Mode contract verifiable through active local evidence."
+status: active
 dependencies:
   journeys:
     - 60

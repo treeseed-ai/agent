@@ -1,0 +1,31 @@
+schemaVersion: treeseed.guarantee/v1
+id: guarantee.agent.architecture.enforce-activity-profile-tool-scope.303
+journeyIndex: 303
+type: agent
+subtype: architecture
+journey: Enforce Activity Profile Tool Scope
+ownerPackage: "@treeseed/agent"
+surface: agent-runtime
+summary: "Execution providers receive only the tools allowed by the selected activity profile and assignment handles."
+status: active
+actors:
+  allowed: [project_manager, capacity_operator, team_owner]
+  forbidden: [anonymous_user, unauthorized_user]
+gates: [core, release]
+preconditions:
+  fixtures: [integrated_treeseed_project]
+api:
+  required: true
+  verifierRefs: [agent.architecture.enforce-activity-profile-tool-scope]
+content:
+  required: false
+  verifierRefs: []
+audit:
+  required: true
+  verifierRefs: [agent.architecture.enforce-activity-profile-tool-scope]
+negativeCases:
+  - id: unauthorized-actor-denied
+    actor: anonymous_user
+    verifierRefs: [agent.architecture.enforce-activity-profile-tool-scope]
+evidence:
+  required: [guarantee_report, verifier_evidence]

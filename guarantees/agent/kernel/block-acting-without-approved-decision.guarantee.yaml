@@ -6,8 +6,8 @@ subtype: kernel
 journey: Block Acting Without Approved Decision
 ownerPackage: "@treeseed/agent"
 surface: agent-runtime
-summary: "Verify agent runtime behavior for Block Acting Without Approved Decision."
-status: planned
+summary: "Agent runtime keeps the Block Acting Without Approved Decision contract verifiable through active local evidence."
+status: active
 dependencies:
   journeys:
     - 60

@@ -6,8 +6,8 @@ subtype: execution-provider
 journey: Run Github Issues Provider
 ownerPackage: "@treeseed/agent"
 surface: agent-runtime
-summary: "Verify agent runtime behavior for Run Github Issues Provider."
-status: planned
+summary: "Agent runtime keeps the Run Github Issues Provider contract verifiable through active local evidence."
+status: active
 dependencies:
   journeys:
     - 60

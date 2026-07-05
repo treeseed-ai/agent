@@ -304,13 +304,13 @@ async function patchFixtureAgentSpecs(repoRoot: string) {
 		'treeseed.verify',
 	];
 	const updates = new Map<string, { permissionLine?: string; tools: string[] }>([
-		['architecture-agent.mdx', { permissionLine: '    operations: [pick, update, create]', tools: engineeringTools }],
-		['engineer-agent.mdx', { permissionLine: '    operations: [pick, update, create]', tools: engineeringTools }],
-		['notifier-agent.mdx', { tools: readTools }],
-		['planner-agent.mdx', { tools: readTools }],
-		['releaser-agent.mdx', { permissionLine: '    operations: [pick, update, get, create]', tools: ['treedx.build_context', 'treedx.search_workspace', 'treedx.read_workspace_file', 'treeseed.status', 'treeseed.changed_paths', 'treeseed.verify'] }],
-		['researcher-agent.mdx', { permissionLine: '    operations: [pick, update, create]', tools: readTools }],
-		['reviewer-agent.mdx', { permissionLine: '    operations: [pick, update, get, create]', tools: ['treedx.build_context', 'treedx.search_workspace', 'treedx.read_workspace_file', 'treeseed.status', 'treeseed.changed_paths', 'treeseed.verify'] }],
+		['architect.mdx', { permissionLine: '    operations: [pick, update, create]', tools: engineeringTools }],
+		['engineer.mdx', { permissionLine: '    operations: [pick, update, create]', tools: engineeringTools }],
+		['reporter.mdx', { tools: readTools }],
+		['technical-writer.mdx', { tools: readTools }],
+		['releaser.mdx', { permissionLine: '    operations: [pick, update, get, create]', tools: ['treedx.build_context', 'treedx.search_workspace', 'treedx.read_workspace_file', 'treeseed.status', 'treeseed.changed_paths', 'treeseed.verify'] }],
+		['researcher.mdx', { permissionLine: '    operations: [pick, update, create]', tools: readTools }],
+		['reviewer.mdx', { permissionLine: '    operations: [pick, update, get, create]', tools: ['treedx.build_context', 'treedx.search_workspace', 'treedx.read_workspace_file', 'treeseed.status', 'treeseed.changed_paths', 'treeseed.verify'] }],
 	]);
 
 	for (const [filename, update] of updates) {
@@ -400,7 +400,7 @@ function createObjectiveDocument(slug: string, date: string) {
 			draft: false,
 			timeHorizon: 'near-term',
 			motivation: `Motivation for ${slug}`,
-			primaryContributor: 'planner-agent',
+			primaryContributor: 'architect',
 			relatedQuestions: [],
 			relatedBooks: [],
 		},
@@ -420,7 +420,7 @@ function createQuestionDocument(slug: string, date: string, relatedObjectives: s
 			draft: false,
 			questionType: 'implementation',
 			motivation: `Motivation for ${slug}`,
-			primaryContributor: 'planner-agent',
+			primaryContributor: 'architect',
 			relatedObjectives,
 			relatedBooks: [],
 		},

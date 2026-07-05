@@ -6,8 +6,8 @@ subtype: content
 journey: Write Artifact Through Treedx Proxy
 ownerPackage: "@treeseed/agent"
 surface: agent-runtime
-summary: "Verify agent runtime behavior for Write Artifact Through Treedx Proxy."
-status: planned
+summary: "Agent runtime keeps the Write Artifact Through Treedx Proxy contract verifiable through active local evidence."
+status: active
 dependencies:
   journeys:
     - 60

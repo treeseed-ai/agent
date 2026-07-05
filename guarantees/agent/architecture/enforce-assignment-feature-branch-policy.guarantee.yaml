@@ -1,0 +1,31 @@
+schemaVersion: treeseed.guarantee/v1
+id: guarantee.agent.architecture.enforce-assignment-feature-branch-policy.305
+journeyIndex: 305
+type: agent
+subtype: architecture
+journey: Enforce Assignment Feature Branch Policy
+ownerPackage: "@treeseed/agent"
+surface: agent-runtime
+summary: "Engineer and tester acting profiles use assignment-feature branches cut from staging with path restrictions."
+status: active
+actors:
+  allowed: [project_manager, capacity_operator, team_owner]
+  forbidden: [anonymous_user, unauthorized_user]
+gates: [core, release]
+preconditions:
+  fixtures: [integrated_treeseed_project]
+api:
+  required: true
+  verifierRefs: [agent.architecture.enforce-assignment-feature-branch-policy]
+content:
+  required: true
+  verifierRefs: [agent.architecture.enforce-assignment-feature-branch-policy]
+audit:
+  required: true
+  verifierRefs: [agent.architecture.enforce-assignment-feature-branch-policy]
+negativeCases:
+  - id: unauthorized-actor-denied
+    actor: anonymous_user
+    verifierRefs: [agent.architecture.enforce-assignment-feature-branch-policy]
+evidence:
+  required: [guarantee_report, verifier_evidence]

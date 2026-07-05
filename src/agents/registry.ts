@@ -8,34 +8,34 @@ import { getTreeseedAgentProviderSelections } from '@treeseed/sdk/platform/deplo
 import { resolveTreeseedTenantRoot } from '@treeseed/sdk/platform/tenant-config';
 import type { AgentHandler } from './runtime-types.ts';
 import { resolveAgentRuntimeProviders } from '../agent-runtime.ts';
-import { actHandler } from './handlers/act.ts';
-import { planHandler } from './handlers/plan.ts';
-import { reportHandler } from './handlers/report.ts';
-import { researchHandler } from './handlers/research.ts';
-import { reviewHandler } from './handlers/review.ts';
+import { actorHandler } from './handlers/actor.ts';
+import { estimateHandler } from './handlers/estimate.ts';
+import { releaserHandler } from './handlers/releaser.ts';
+import { reporterHandler } from './handlers/reporter.ts';
+import { writerHandler } from './handlers/writer.ts';
 
 const BUILTIN_HANDLER_KINDS = [
-	'plan',
-	'research',
-	'act',
-	'review',
-	'report',
+	'writer',
+	'actor',
+	'estimate',
+	'releaser',
+	'reporter',
 ] as const;
 
 const HANDLER_EXPORT_NAMES: Record<(typeof BUILTIN_HANDLER_KINDS)[number], string> = {
-	plan: 'planHandler',
-	research: 'researchHandler',
-	act: 'actHandler',
-	review: 'reviewHandler',
-	report: 'reportHandler',
+	writer: 'writerHandler',
+	actor: 'actorHandler',
+	estimate: 'estimateHandler',
+	releaser: 'releaserHandler',
+	reporter: 'reporterHandler',
 };
 
 const BUILTIN_HANDLERS: Record<(typeof BUILTIN_HANDLER_KINDS)[number], AgentHandler> = {
-	plan: planHandler,
-	research: researchHandler,
-	act: actHandler,
-	review: reviewHandler,
-	report: reportHandler,
+	writer: writerHandler,
+	actor: actorHandler,
+	estimate: estimateHandler,
+	releaser: releaserHandler,
+	reporter: reporterHandler,
 };
 
 const SELF_CONTRACT_IMPORTS: Record<string, string> = {

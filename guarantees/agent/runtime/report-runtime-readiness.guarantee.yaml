@@ -6,8 +6,8 @@ subtype: runtime
 journey: Report Runtime Readiness
 ownerPackage: "@treeseed/agent"
 surface: agent-runtime
-summary: "Verify agent runtime behavior for Report Runtime Readiness."
-status: planned
+summary: "Agent runtime keeps the Report Runtime Readiness contract verifiable through active local evidence."
+status: active
 dependencies:
   journeys:
     - 60

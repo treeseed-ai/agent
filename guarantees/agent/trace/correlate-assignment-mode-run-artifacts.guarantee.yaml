@@ -6,8 +6,8 @@ subtype: trace
 journey: Correlate Assignment Mode Run Artifacts
 ownerPackage: "@treeseed/agent"
 surface: agent-runtime
-summary: "Verify agent runtime behavior for Correlate Assignment Mode Run Artifacts."
-status: planned
+summary: "Agent runtime keeps the Correlate Assignment Mode Run Artifacts contract verifiable through active local evidence."
+status: active
 dependencies:
   journeys:
     - 60

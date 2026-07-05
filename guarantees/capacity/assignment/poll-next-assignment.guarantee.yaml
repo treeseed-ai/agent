@@ -6,8 +6,8 @@ subtype: assignment
 journey: Poll Next Assignment
 ownerPackage: "@treeseed/agent"
 surface: agent-runtime
-summary: "Verify agent runtime behavior for Poll Next Assignment."
-status: planned
+summary: "Agent runtime keeps the Poll Next Assignment contract verifiable through active local evidence."
+status: active
 dependencies:
   journeys:
     - 60

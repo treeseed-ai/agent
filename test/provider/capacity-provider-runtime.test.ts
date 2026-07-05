@@ -143,8 +143,8 @@ function createProjectRepository() {
 	mkdirSync(resolve(root, 'src/agents'), { recursive: true });
 	mkdirSync(resolve(root, 'src/content/agents'), { recursive: true });
 	mkdirSync(resolve(root, 'src/content/agent-tests/fixtures'), { recursive: true });
-	writeFileSync(resolve(root, 'src/agents/plan.ts'), `export const planHandler = {
-	kind: 'plan',
+	writeFileSync(resolve(root, 'src/agents/writer.ts'), `export const writerHandler = {
+	kind: 'writer',
 	async resolveInputs(context) {
 		const decisionInput = context.capacity?.decisionInput?.input ?? {};
 		return {
@@ -206,7 +206,7 @@ function createProjectRepository() {
 				grants: [],
 			});
 		}
-		return { ...inputs, operationResult, summary: \`Project-owned provider planner completed in \${inputs.mode ?? 'unbounded'} mode.\` };
+		return { ...inputs, operationResult, summary: \`Project-owned provider writer completed in \${inputs.mode ?? 'unbounded'} mode.\` };
 	},
 	async emitOutputs(_context, result) {
 		if (result.executionSnapshot) {
@@ -233,40 +233,47 @@ function createProjectRepository() {
 };
 `, 'utf8');
 	writeFileSync(resolve(root, 'src/content/agent-tests/fixtures/input.json'), '{}\n', 'utf8');
-	writeFileSync(resolve(root, 'src/content/agents/provider-planner.mdx'), `---
-slug: provider-planner
-handler: plan
+	writeFileSync(resolve(root, 'src/content/agents/provider-writer.mdx'), `---
+slug: provider-writer
+agentClass: planning
 projectAgentClassId: planning
 projectAgentClassSlug: planning
 enabled: true
-systemPrompt: Plan provider work.
-persona: Planner.
-triggers:
-  - type: startup
-permissions:
-  - model: message
-    operations: [create]
-tools:
-  allowed:
-    - treedx.build_context
-    - treedx.read_repository_files
-    - treedx.search_workspace
-    - treedx.read_workspace_file
-    - treedx.write_workspace_file
-    - treedx.commit_workspace
-    - treeseed.status
-execution: {}
-outputs: {}
+identity:
+  purpose: Plan provider work.
+  responsibilities: [planning]
+  durableInstructions: Stay scoped.
+activityProfiles:
+  planning:
+    enabled: true
+    handler: writer
+    prompt:
+      system: Plan provider work.
+    branchPolicy:
+      kind: read-only
+      base: main
+    tools:
+      allowed:
+        - treedx.build_context
+        - treedx.read_repository_files
+        - treedx.search_workspace
+        - treedx.read_workspace_file
+        - treedx.write_workspace_file
+        - treedx.commit_workspace
+        - treeseed.status
+    outputs:
+      messageTypes: []
+      modelMutations: []
 ---
-Provider planner.
+Provider writer.
 `, 'utf8');
-	writeFileSync(resolve(root, 'src/content/agent-tests/provider-planner-basic.mdx'), `---
-id: provider-planner-basic
-agent: provider-planner
-kind: plan
+	writeFileSync(resolve(root, 'src/content/agent-tests/provider-writer-basic.mdx'), `---
+id: provider-writer-basic
+agent: provider-writer
+kind: planning
 fixture: src/content/agent-tests/fixtures
 ---
-Provider planner test.
+Provider writer test.
 `, 'utf8');
 	git(root, ['init', '-b', 'main']);
 	git(root, ['add', '.']);
@@ -489,10 +496,10 @@ async function runAsyncExecutionProviderScenario(input: {
 				payload: {
 					id: input.assignmentId,
 					projectId: 'project_123',
-					agentId: 'provider-planner',
+					agentId: 'provider-writer',
 					mode: 'planning',
-					decisionInput: { input: { planOnly: true, projectId: 'project_123', agentSlug: 'provider-planner', useExecutionProvider: true } },
-					capacityEnvelope: { projectId: 'project_123', mode: 'planning' },
+					decisionInput: { input: { planOnly: true, projectId: 'project_123', agentSlug: 'provider-writer', useExecutionProvider: true } },
+					capacityEnvelope: { projectId: 'project_123', mode: 'planning', reservationId: 'reservation_planning', reservedCredits: 1 },
 				},
 			};
 		},
@@ -670,7 +677,7 @@ describe('capacity provider runtime', () => {
 		expect(request.capabilities[0]).toMatchObject({
 			id: 'agent_execution',
 			agents: expect.arrayContaining(['*']),
-			operations: expect.arrayContaining(['plan', 'mutate', 'verify', 'report']),
+			operations: expect.arrayContaining(['planning', 'estimating', 'acting', 'reviewing', 'reporting', 'release']),
 		});
 	});
 
@@ -846,10 +853,10 @@ describe('capacity provider runtime', () => {
 					payload: {
 						id: 'task_1',
 						projectId: 'project_123',
-						agentId: 'provider-planner',
+						agentId: 'provider-writer',
 						mode: 'planning',
-						decisionInput: { input: { planOnly: true, projectId: 'project_123', agentSlug: 'provider-planner' } },
-						capacityEnvelope: { projectId: 'project_123', mode: 'planning' },
+						decisionInput: { input: { planOnly: true, projectId: 'project_123', agentSlug: 'provider-writer' } },
+						capacityEnvelope: { projectId: 'project_123', mode: 'planning', reservationId: 'reservation_planning', reservedCredits: 1 },
 					},
 				};
 			},
@@ -887,7 +894,7 @@ describe('capacity provider runtime', () => {
 			expect(events.find((event) => event.method === 'completeAssignment')?.body).toMatchObject({
 				output: {
 				planOnly: true,
-				agentSlug: 'provider-planner',
+				agentSlug: 'provider-writer',
 				mode: 'planning',
 			},
 		});
@@ -918,10 +925,10 @@ describe('capacity provider runtime', () => {
 					payload: {
 						id: 'task_hosted',
 						projectId: 'project_123',
-						agentId: 'provider-planner',
+						agentId: 'provider-writer',
 						mode: 'planning',
-						decisionInput: { input: { planOnly: true, projectId: 'project_123', agentSlug: 'provider-planner' } },
-						capacityEnvelope: { projectId: 'project_123', mode: 'planning' },
+						decisionInput: { input: { planOnly: true, projectId: 'project_123', agentSlug: 'provider-writer' } },
+						capacityEnvelope: { projectId: 'project_123', mode: 'planning', reservationId: 'reservation_planning', reservedCredits: 1 },
 					},
 				};
 			},
@@ -975,10 +982,10 @@ describe('capacity provider runtime', () => {
 					payload: {
 						id: 'assignment_acting',
 						projectId: 'project_123',
-						agentId: 'provider-planner',
+						agentId: 'provider-writer',
 						mode: 'acting',
 						decisionInput: {
-							input: { planOnly: true, projectId: 'project_123', agentSlug: 'provider-planner' },
+							input: { planOnly: true, projectId: 'project_123', agentSlug: 'provider-writer' },
 							metadata: {
 								capacityPlanId: 'plan_acting',
 								capacityPlanStatus: 'accepted',
@@ -1020,7 +1027,7 @@ describe('capacity provider runtime', () => {
 		expect(events.find((event) => event.method === 'completeAssignment')?.body).toMatchObject({
 			output: {
 				mode: 'acting',
-				summary: 'Project-owned provider planner completed in acting mode.',
+				summary: 'Project-owned provider writer completed in acting mode.',
 			},
 		});
 	});
@@ -1049,14 +1056,14 @@ describe('capacity provider runtime', () => {
 						teamId: 'team_123',
 						projectId: 'project_123',
 						capacityProviderId: 'provider_123',
-						agentId: 'provider-planner',
+						agentId: 'provider-writer',
 						mode: 'acting',
 						synthesizedFrom: 'capacity_plan',
 						decisionInput: {
 							input: {
 								planOnly: true,
 								projectId: 'project_123',
-								agentSlug: 'provider-planner',
+								agentSlug: 'provider-writer',
 								dispatchWorkflowOperation: true,
 								workflowOperationId: 'verify-private-repo',
 								workflowOperationHandleId: 'workflow-handle-1',
@@ -1163,7 +1170,7 @@ describe('capacity provider runtime', () => {
 						teamId: 'team_123',
 						projectId: 'project_123',
 						capacityProviderId: 'provider_123',
-						agentId: 'provider-planner',
+						agentId: 'provider-writer',
 						mode: 'acting',
 						executionProviderKind: 'workflow',
 						synthesizedFrom: 'capacity_plan',
@@ -1171,7 +1178,7 @@ describe('capacity provider runtime', () => {
 							input: {
 								planOnly: false,
 								projectId: 'project_123',
-								agentSlug: 'provider-planner',
+								agentSlug: 'provider-writer',
 								useExecutionProvider: true,
 								workflowOperationId: 'verify-private-repo',
 								workflowOperationHandleId: 'workflow-handle-2',
@@ -1327,11 +1334,11 @@ describe('capacity provider runtime', () => {
 					payload: {
 						id: 'assignment_async',
 						projectId: 'project_123',
-						agentId: 'provider-planner',
+						agentId: 'provider-writer',
 						mode: 'planning',
 						leaseExpiresAt: new Date(Date.now() - 1000).toISOString(),
-						decisionInput: { input: { planOnly: true, projectId: 'project_123', agentSlug: 'provider-planner', useExecutionProvider: true } },
-						capacityEnvelope: { projectId: 'project_123', mode: 'planning' },
+						decisionInput: { input: { planOnly: true, projectId: 'project_123', agentSlug: 'provider-writer', useExecutionProvider: true } },
+						capacityEnvelope: { projectId: 'project_123', mode: 'planning', reservationId: 'reservation_planning', reservedCredits: 1 },
 					},
 				};
 			},
@@ -1375,7 +1382,7 @@ describe('capacity provider runtime', () => {
 			.map((event) => event.body as Record<string, any>)
 			.find((body) => body.metadata?.source === 'execution_provider_starting');
 		expect(leasedHeartbeat).toMatchObject({
-			id: expect.stringContaining('assignment_async:planning:provider-planner:handler'),
+			id: expect.stringContaining('assignment_async:planning:provider-writer:handler'),
 			status: 'running',
 			outputs: {
 				status: 'preparing',
@@ -1391,7 +1398,7 @@ describe('capacity provider runtime', () => {
 			},
 		});
 		expect(startingModeRun).toMatchObject({
-			id: expect.stringContaining('assignment_async:planning:provider-planner:handler'),
+			id: expect.stringContaining('assignment_async:planning:provider-writer:handler'),
 			outputs: {
 				metadata: {
 					source: 'execution_provider_starting',
@@ -1509,7 +1516,7 @@ describe('capacity provider runtime', () => {
 					payload: {
 						id: 'assignment_treedx_tools',
 						projectId: 'project_123',
-						agentId: 'provider-planner',
+						agentId: 'provider-writer',
 						mode: 'planning',
 						treedxProxyHandle,
 						capabilityHandles: {
@@ -1519,11 +1526,11 @@ describe('capacity provider runtime', () => {
 							input: {
 								planOnly: true,
 								projectId: 'project_123',
-								agentSlug: 'provider-planner',
+								agentSlug: 'provider-writer',
 								useExecutionProvider: true,
 							},
 						},
-						capacityEnvelope: { projectId: 'project_123', mode: 'planning' },
+						capacityEnvelope: { projectId: 'project_123', mode: 'planning', reservationId: 'reservation_planning', reservedCredits: 1 },
 					},
 				};
 			},
@@ -1581,10 +1588,10 @@ describe('capacity provider runtime', () => {
 					payload: {
 						id: 'assignment_blocked',
 						projectId: 'project_123',
-						agentId: 'provider-planner',
+						agentId: 'provider-writer',
 						mode: 'planning',
-						decisionInput: { input: { planOnly: true, projectId: 'project_123', agentSlug: 'provider-planner', useExecutionProvider: true } },
-						capacityEnvelope: { projectId: 'project_123', mode: 'planning' },
+						decisionInput: { input: { planOnly: true, projectId: 'project_123', agentSlug: 'provider-writer', useExecutionProvider: true } },
+						capacityEnvelope: { projectId: 'project_123', mode: 'planning', reservationId: 'reservation_planning', reservedCredits: 1 },
 					},
 				};
 			},
@@ -1668,10 +1675,10 @@ describe('capacity provider runtime', () => {
 					payload: {
 						id: 'assignment_failed',
 						projectId: 'project_123',
-						agentId: 'provider-planner',
+						agentId: 'provider-writer',
 						mode: 'planning',
-						decisionInput: { input: { planOnly: true, projectId: 'project_123', agentSlug: 'provider-planner', useExecutionProvider: true } },
-						capacityEnvelope: { projectId: 'project_123', mode: 'planning' },
+						decisionInput: { input: { planOnly: true, projectId: 'project_123', agentSlug: 'provider-writer', useExecutionProvider: true } },
+						capacityEnvelope: { projectId: 'project_123', mode: 'planning', reservationId: 'reservation_planning', reservedCredits: 1 },
 					},
 				};
 			},
@@ -1894,10 +1901,10 @@ describe('capacity provider runtime', () => {
 					payload: {
 						id: 'task_2',
 						projectId: 'project_123',
-						agentId: 'provider-planner',
+						agentId: 'provider-writer',
 						mode: 'planning',
 						decisionInput: { input: {} },
-						capacityEnvelope: { projectId: 'project_123', mode: 'planning' },
+						capacityEnvelope: { projectId: 'project_123', mode: 'planning', reservationId: 'reservation_planning', reservedCredits: 1 },
 					},
 				};
 			},
@@ -1930,7 +1937,7 @@ describe('capacity provider runtime', () => {
 			metadata: expect.objectContaining({
 				source: 'provider_runner_early_exit',
 				projectId: 'project_123',
-				agentSlug: 'provider-planner',
+				agentSlug: 'provider-writer',
 			}),
 		});
 		expect(events.find((event) => event.method === 'failAssignment')?.body).toMatchObject({

@@ -6,8 +6,8 @@ subtype: content
 journey: Link Generated Note To Subject
 ownerPackage: "@treeseed/agent"
 surface: agent-runtime
-summary: "Verify agent runtime behavior for Link Generated Note To Subject."
-status: planned
+summary: "Agent runtime keeps the Link Generated Note To Subject contract verifiable through active local evidence."
+status: active
 dependencies:
   journeys:
     - 60

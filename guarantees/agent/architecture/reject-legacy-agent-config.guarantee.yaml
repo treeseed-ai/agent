@@ -1,0 +1,31 @@
+schemaVersion: treeseed.guarantee/v1
+id: guarantee.agent.architecture.reject-legacy-agent-config.301
+journeyIndex: 301
+type: agent
+subtype: architecture
+journey: Reject Legacy Agent Config
+ownerPackage: "@treeseed/agent"
+surface: agent-runtime
+summary: "Legacy top-level runtime fields and removed handler ids are rejected instead of mapped forward."
+status: active
+actors:
+  allowed: [project_manager, capacity_operator, team_owner]
+  forbidden: [anonymous_user, unauthorized_user]
+gates: [core, release]
+preconditions:
+  fixtures: [integrated_treeseed_project]
+api:
+  required: true
+  verifierRefs: [agent.architecture.reject-legacy-agent-config]
+content:
+  required: false
+  verifierRefs: []
+audit:
+  required: true
+  verifierRefs: [agent.architecture.reject-legacy-agent-config]
+negativeCases:
+  - id: removed-handler-denied
+    actor: project_manager
+    verifierRefs: [agent.architecture.reject-legacy-agent-config]
+evidence:
+  required: [guarantee_report, verifier_evidence]

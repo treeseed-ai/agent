@@ -23,6 +23,7 @@ import {
 	type DiscordExecutionProviderConfig,
 } from '../../src/agents/adapters/execution-discord.ts';
 import { WorkflowExecutionProviderAdapter } from '../../src/agents/adapters/execution-workflow.ts';
+import { MockExecutionProviderAdapter } from '../../src/agents/adapters/execution-mock.ts';
 import type { ExecutionProviderAdapter, ExecutionProviderInvocation } from '../../src/agents/runtime-types.ts';
 
 const forbiddenSecrets = ['ghs_secret', 'jira_secret', 'github_secret', 'discord_secret', 'TREESEED_JIRA_API_TOKEN', 'TREESEED_GITHUB_ISSUES_TOKEN', 'TREESEED_DISCORD_BOT_TOKEN'];
@@ -245,6 +246,28 @@ describe('execution provider adapter contract', () => {
 		await assertDescriptor(new GitHubIssueExecutionProviderAdapter({ config: githubIssuesConfig }), { kind: 'human_issue_queue', supportsAsync: true });
 		await assertDescriptor(new DiscordExecutionProviderAdapter({ config: discordConfig }), { kind: 'human_issue_queue', supportsAsync: true });
 		await assertDescriptor(new WorkflowExecutionProviderAdapter({ dispatchWorkflowOperation: async () => ({ ok: true }) }), { kind: 'deterministic_workflow', supportsAsync: true });
+		await assertDescriptor(new MockExecutionProviderAdapter(), { id: 'mock', kind: 'deterministic_workflow', supportsAsync: false });
+	});
+
+	it('runs deterministic mock provider output through the execution provider contract', async () => {
+		const adapter = new MockExecutionProviderAdapter();
+		const result = await adapter.start(invocation('mock', {
+			agent: { ...agentSpec('mock'), activityType: 'estimating' },
+			metadata: { createQuestion: true },
+		}));
+		expect(result.status).toBe('completed');
+		expect(result.outputs?.structuredEstimate).toMatchObject({
+			expectedCredits: 1,
+			confidence: 'medium',
+			riskLevel: 'low',
+		});
+		expect(result.metadata?.derivedEvents).toEqual(expect.arrayContaining([
+			expect.objectContaining({ type: 'question_created' }),
+			expect.objectContaining({ type: 'estimate_submitted' }),
+		]));
+		expect(result.metadata?.toolTelemetry).toEqual(expect.arrayContaining([
+			expect.objectContaining({ operation: 'question_created' }),
+		]));
 	});
 
 	it('normalizes Codex provider start into an execution snapshot with mocked SDK boundary', async () => {
@@ -417,6 +440,8 @@ describe('execution provider adapter contract', () => {
 		expect(createExecutionProviderAdapter('deterministic_workflow')).toBeInstanceOf(WorkflowExecutionProviderAdapter);
 		expect(createExecutionProviderAdapter('github_actions')).toBeInstanceOf(WorkflowExecutionProviderAdapter);
 		expect(createExecutionProviderAdapter('github_actions_workflow')).toBeInstanceOf(WorkflowExecutionProviderAdapter);
+		expect(createExecutionProviderAdapter('mock')).toBeInstanceOf(MockExecutionProviderAdapter);
+		expect(createExecutionProviderAdapter('ci_mock')).toBeInstanceOf(MockExecutionProviderAdapter);
 	});
 
 	it('rejects removed or unknown execution provider names instead of falling back to stub work', () => {

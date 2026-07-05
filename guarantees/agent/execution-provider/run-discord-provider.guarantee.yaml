@@ -6,8 +6,8 @@ subtype: execution-provider
 journey: Run Discord Provider
 ownerPackage: "@treeseed/agent"
 surface: agent-runtime
-summary: "Verify agent runtime behavior for Run Discord Provider."
-status: planned
+summary: "Agent runtime keeps the Run Discord Provider contract verifiable through active local evidence."
+status: active
 dependencies:
   journeys:
     - 60

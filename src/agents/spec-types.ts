@@ -1,11 +1,16 @@
 import type {
 	AgentCliOptions,
+	AgentActivityProfile,
+	AgentActivityType,
+	AgentBranchPolicy,
 	AgentExecutionConfig,
 	AgentHandlerKind,
+	AgentDefinitionIdentity,
 	AgentContentAccessPolicy,
 	AgentOutputContract,
 	AgentPermissionConfig,
 	AgentPermissionPolicy,
+	AgentQuestionPolicy,
 	AgentToolPolicy,
 	AgentTriggerConfig,
 } from '@treeseed/sdk/types/agents';
@@ -34,6 +39,11 @@ export interface RawAgentRuntimeSpec {
 	projectAgentClassSlug?: unknown;
 	agentClassId?: unknown;
 	agentClassSlug?: unknown;
+	agentClass?: unknown;
+	title?: unknown;
+	identity?: unknown;
+	activityProfiles?: unknown;
+	template?: unknown;
 	handlerConfig?: unknown;
 	enabled?: unknown;
 	systemPrompt?: unknown;
@@ -70,9 +80,14 @@ export interface NormalizedTriggerPolicy {
 export interface AgentSpecParts {
 	slug: string;
 	handler: AgentHandlerKind;
+	activityType: AgentActivityType;
+	activityProfiles?: Partial<Record<AgentActivityType, AgentActivityProfile>>;
+	branchPolicy?: AgentBranchPolicy;
+	questionPolicy?: AgentQuestionPolicy;
+	identity?: AgentDefinitionIdentity;
 	projectAgentClassId: string;
 	projectAgentClassSlug: string;
-	handlerConfig?: Record<string, unknown>;
+	activityConfig?: Record<string, unknown>;
 	enabled: boolean;
 	systemPrompt: string;
 	persona: string;

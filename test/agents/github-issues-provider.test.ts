@@ -24,8 +24,8 @@ const config: GitHubIssuesExecutionProviderConfig = {
 
 function agent(): AgentRuntimeSpec {
 	return {
-		slug: 'provider-reviewer',
-		handler: 'review',
+		slug: 'provider-writer',
+		handler: 'writer',
 		enabled: true,
 		systemPrompt: 'Review.',
 		persona: 'Reviewer.',
@@ -72,7 +72,7 @@ function invocation(id = 'assignment-1'): ExecutionProviderInvocation {
 			mode: 'planning',
 			status: 'leased',
 			leaseState: 'leased',
-			agentId: 'provider-reviewer',
+			agentId: 'provider-writer',
 			capacityEnvelope: {} as AgentCapacityEnvelope,
 			decisionInput: { input: { objective: 'Review this.' } } as DecisionExecutionInput,
 			capabilityHandles: { repositoryAccess: [{ token: 'ghs_secret_should_not_leak' }] } as any,

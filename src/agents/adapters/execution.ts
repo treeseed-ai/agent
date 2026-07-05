@@ -22,6 +22,7 @@ import {
 	WorkflowExecutionProviderAdapter,
 	type WorkflowExecutionProviderAdapterOptions,
 } from './execution-workflow.ts';
+import { MockExecutionProviderAdapter } from './execution-mock.ts';
 import { prependCoreObjectiveToPrompt } from '../core-objective.ts';
 import { createCopilotAgentTools } from '../tools/agent-tool-copilot.ts';
 
@@ -162,6 +163,9 @@ export function createExecutionProviderAdapter(configuredModeInput?: string, opt
 	const configuredMode = String(
 		configuredModeInput ?? process.env.TREESEED_AGENT_EXECUTION_PROVIDER ?? getTreeseedAgentProviderSelections().execution,
 	).toLowerCase();
+	if (configuredMode === 'mock' || configuredMode === 'ci_mock' || configuredMode === 'deterministic_mock') {
+		return new MockExecutionProviderAdapter();
+	}
 	if (configuredMode === 'jira' || configuredMode === 'jira_issue_queue' || configuredMode === 'human_issue_queue') {
 		return new JiraExecutionProviderAdapter({ config: options.jira });
 	}
@@ -180,5 +184,5 @@ export function createExecutionProviderAdapter(configuredModeInput?: string, opt
 	if (configuredMode === 'copilot') {
 		return new CopilotExecutionProviderAdapter({ repoRoot: options.repoRoot });
 	}
-	throw new Error(`Unsupported execution provider "${configuredMode}". Configure codex, copilot, jira, github_issues, discord, or workflow; provider-runner planOnly is the only fallback execution mode.`);
+	throw new Error(`Unsupported execution provider "${configuredMode}". Configure codex, copilot, mock, jira, github_issues, discord, or workflow; provider-runner planOnly is the only fallback execution mode.`);
 }

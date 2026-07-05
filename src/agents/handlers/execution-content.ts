@@ -63,8 +63,8 @@ function modeFor(context: AgentContext): 'planning' | 'acting' {
 	return context.capacity?.mode === 'acting' ? 'acting' : 'planning';
 }
 
-function handlerConfigRecord(context: AgentContext) {
-	return readRecord(context.agent.handlerConfig) ?? {};
+function activityConfigRecord(context: AgentContext) {
+	return readRecord(context.agent.activityConfig) ?? {};
 }
 
 function contentContract(context: AgentContext) {
@@ -411,14 +411,14 @@ function subjectFromPayload(payload: HandlerPayload) {
 }
 
 function artifactKindFor(context: AgentContext, payload: HandlerPayload, fallback: string) {
-	const config = handlerConfigRecord(context);
+	const config = activityConfigRecord(context);
 	const handoff = readRecord(config.handoff);
 	const outputs = readRecord(handoff?.outputs);
 	return firstString(payload.artifactKind, outputs?.artifactKind, handoff?.artifactKind, config.artifactKind) ?? fallback;
 }
 
 function nextMessageTypesFor(context: AgentContext) {
-	const handoff = readRecord(handlerConfigRecord(context).handoff);
+	const handoff = readRecord(activityConfigRecord(context).handoff);
 	const configured = stringArray(handoff?.nextMessageTypes);
 	return configured.length ? configured : context.agent.outputs.messageTypes;
 }
@@ -480,7 +480,7 @@ export function createExecutionContentHandler(input: {
 		kind: input.kind,
 
 		async resolveInputs(context) {
-			const config = handlerConfigRecord(context);
+			const config = activityConfigRecord(context);
 			const handoff = readRecord(config.handoff) ?? {};
 			const decisionInputPayload = readRecord(context.capacity?.decisionInput?.input) ?? {};
 			const payload = {

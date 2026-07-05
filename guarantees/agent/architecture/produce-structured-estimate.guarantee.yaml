@@ -1,0 +1,31 @@
+schemaVersion: treeseed.guarantee/v1
+id: guarantee.agent.architecture.produce-structured-estimate.306
+journeyIndex: 306
+type: agent
+subtype: architecture
+journey: Produce Structured Estimate
+ownerPackage: "@treeseed/agent"
+surface: agent-runtime
+summary: "The estimate handler emits a validated structured estimate suitable for deterministic graph compilation."
+status: active
+actors:
+  allowed: [project_manager, capacity_operator, team_owner]
+  forbidden: [anonymous_user, unauthorized_user]
+gates: [core, release]
+preconditions:
+  fixtures: [integrated_treeseed_project]
+api:
+  required: true
+  verifierRefs: [agent.architecture.produce-structured-estimate]
+content:
+  required: false
+  verifierRefs: []
+audit:
+  required: true
+  verifierRefs: [agent.architecture.produce-structured-estimate]
+negativeCases:
+  - id: unauthorized-actor-denied
+    actor: anonymous_user
+    verifierRefs: [agent.architecture.produce-structured-estimate]
+evidence:
+  required: [guarantee_report, verifier_evidence]

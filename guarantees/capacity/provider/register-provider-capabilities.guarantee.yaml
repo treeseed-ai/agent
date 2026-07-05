@@ -6,8 +6,8 @@ subtype: provider
 journey: Register Provider Capabilities
 ownerPackage: "@treeseed/agent"
 surface: agent-runtime
-summary: "Verify agent runtime behavior for Register Provider Capabilities."
-status: planned
+summary: "Agent runtime keeps the Register Provider Capabilities contract verifiable through active local evidence."
+status: active
 dependencies:
   journeys:
     - 60

@@ -14,7 +14,7 @@ import {
 const request: CodexExecutionRequest = {
 	taskId: 'task:codex-provider-execution',
 	workDayId: 'workday-1',
-	agentSlug: 'engineer-agent',
+	agentSlug: 'engineer',
 	repoRoot: '/repo',
 	worktreeRoot: '/repo/.agent-worktrees/task-codex',
 	prompt: 'Update the TreeSeed provider documentation.',

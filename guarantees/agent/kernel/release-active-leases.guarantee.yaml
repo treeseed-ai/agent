@@ -6,8 +6,8 @@ subtype: kernel
 journey: Release Active Leases
 ownerPackage: "@treeseed/agent"
 surface: agent-runtime
-summary: "Verify agent runtime behavior for Release Active Leases."
-status: planned
+summary: "Agent runtime keeps the Release Active Leases contract verifiable through active local evidence."
+status: active
 dependencies:
   journeys:
     - 60

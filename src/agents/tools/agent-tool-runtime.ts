@@ -37,11 +37,38 @@ export interface AgentToolCallTelemetry {
 	durationMs?: number;
 	inputSummary: Record<string, unknown>;
 	outputSummary?: Record<string, unknown>;
+	operation?: {
+		namespace?: string;
+		name?: string;
+	};
+	capturedInputRef?: string;
+	capturedOutputRef?: string;
+	derivedEvents?: AgentToolDerivedEvent[];
 	error?: {
 		code: string;
 		message: string;
 	};
 }
+
+export type AgentToolDerivedEvent =
+	| {
+		type: 'question_created';
+		questionRef: Record<string, unknown>;
+		answerPolicy?: Record<string, unknown>;
+	}
+	| {
+		type: 'question_updated';
+		questionRef: Record<string, unknown>;
+	}
+	| {
+		type: 'content_created';
+		contentRef: Record<string, unknown>;
+	}
+	| {
+		type: 'branch_staged';
+		branchRef: string;
+		stagedRef?: string;
+	};
 
 function record(value: unknown): Record<string, unknown> {
 	return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -243,6 +270,72 @@ function summarize(value: Record<string, unknown>) {
 	return summary;
 }
 
+function operationForTool(toolId: string, descriptor: ExecutionProviderToolDescriptor | null | undefined) {
+	const definition = findAgentToolDefinition(toolId);
+	if (definition?.dispatch) {
+		return {
+			namespace: definition.dispatch.namespace,
+			name: definition.dispatch.operation,
+		};
+	}
+	const metadata = record(descriptor?.metadata);
+	return {
+		namespace: text(metadata.operationNamespace) || descriptor?.executionTarget,
+		name: text(metadata.operationName) || toolId,
+	};
+}
+
+function contentRefFrom(value: Record<string, unknown>) {
+	const payload = record(value.payload);
+	const content = record(payload.content);
+	const data = record(payload.data);
+	const ref = record(payload.ref);
+	const id = text(value.id) || text(payload.id) || text(content.id) || text(data.id) || text(ref.id);
+	const model = text(value.model) || text(payload.model) || text(content.model) || text(data.model) || text(ref.model);
+	const path = text(value.path) || text(payload.path) || text(content.path) || text(data.path) || text(ref.path);
+	return id || model || path
+		? { id: id || undefined, model: model || undefined, path: path || undefined }
+		: null;
+}
+
+function deriveToolEvents(
+	toolId: string,
+	descriptor: ExecutionProviderToolDescriptor | null | undefined,
+	input: Record<string, unknown>,
+	result: unknown,
+): AgentToolDerivedEvent[] {
+	const output = record(result);
+	if (output.ok === false) return [];
+	const operation = operationForTool(toolId, descriptor);
+	const inputModel = text(input.model) || text(input.contentType) || text(record(input.content).model);
+	const outputModel = text(output.model) || text(record(output.payload).model) || text(record(record(output.payload).content).model);
+	const model = inputModel || outputModel;
+	const action = text(input.action) || operation.name || toolId;
+	const ref = contentRefFrom({ ...output, model: model || undefined });
+	const events: AgentToolDerivedEvent[] = [];
+	if (model === 'question') {
+		const questionRef = ref ?? { model: 'question' };
+		if (/create|add|write/iu.test(action)) {
+			events.push({
+				type: 'question_created',
+				questionRef,
+				answerPolicy: record(input.answerPolicy ?? record(input.frontmatter).answerPolicy ?? record(input.metadata).answerPolicy),
+			});
+		} else {
+			events.push({ type: 'question_updated', questionRef });
+		}
+	}
+	if (ref && /create|add|write/iu.test(action)) {
+		events.push({ type: 'content_created', contentRef: ref });
+	}
+	const payload = record(output.payload);
+	const branchRef = text(payload.branchRef) || text(payload.branchName) || text(output.branchRef);
+	if ((toolId === 'treeseed.stage' || /stage/iu.test(action)) && branchRef) {
+		events.push({ type: 'branch_staged', branchRef, stagedRef: text(payload.stagedRef) || undefined });
+	}
+	return events;
+}
+
 async function emitTelemetry(options: AgentToolRuntimeOptions, entry: AgentToolCallTelemetry) {
 	await options.onTelemetry?.(entry);
 	if (options.telemetryPath) {
@@ -261,6 +354,7 @@ export async function callAgentToolWithTelemetry(
 	const projectId = text(metadata.projectId);
 	const startedAt = new Date();
 	if (descriptor?.kind === 'agent_tool') {
+		const operation = operationForTool(toolId, descriptor);
 		await emitTelemetry(options, {
 			assignmentId,
 			projectId,
@@ -270,6 +364,7 @@ export async function callAgentToolWithTelemetry(
 			status: 'started',
 			startedAt: startedAt.toISOString(),
 			inputSummary: summarize(input),
+			operation,
 		});
 	}
 	const result = await callAgentTool(options, toolId, input);
@@ -277,6 +372,7 @@ export async function callAgentToolWithTelemetry(
 		const completedAt = new Date();
 		const resultRecord = record(result);
 		const failed = resultRecord.ok === false;
+		const operation = operationForTool(toolId, descriptor);
 		await emitTelemetry(options, {
 			assignmentId,
 			projectId,
@@ -289,6 +385,8 @@ export async function callAgentToolWithTelemetry(
 			durationMs: completedAt.getTime() - startedAt.getTime(),
 			inputSummary: summarize(input),
 			outputSummary: failed ? undefined : summarize(resultRecord),
+			operation,
+			derivedEvents: failed ? [] : deriveToolEvents(toolId, descriptor, input, resultRecord),
 			error: failed
 				? {
 					code: text(resultRecord.code) || 'tool_failed',

@@ -280,7 +280,7 @@ export function normalizeKnowledgePromotionTaskInput(input: {
 		workDayId: readString(input.task.workDayId, readString(input.task.work_day_id)) || readString(input.payload.workDayId) || undefined,
 		projectId,
 		environment,
-		agentSlug: readString(input.payload.agentSlug, 'engineer-agent'),
+		agentSlug: readString(input.payload.agentSlug, 'engineer'),
 		agentRole,
 		repoRoot: hostedRuntimeRequiresExplicitGrants ? repoRootFromClaim(repositoryClaim, input.repoRoot) : input.repoRoot,
 		taskKind,

@@ -21,8 +21,8 @@ export function discoverProviderCapabilities(config: ProviderRuntimeConfig): Cap
 	return [{
 		id: 'agent_execution',
 		agents: ['*'],
-		operations: ['plan', 'research', 'mutate', 'verify', 'report'],
-		models: ['codex'],
+		operations: ['planning', 'estimating', 'acting', 'reviewing', 'reporting', 'release'],
+		models: ['codex', 'mock'],
 		repositoryAccess: 'git_worktree',
 		verification: ['local_command'],
 		metadata: {

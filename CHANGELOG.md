@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.12.36] - 2026-07-05
+
+### Infrastructure
+
+- ci(ci): harden container image release security (4ef94c4e3e88)
+
+### Dependencies
+
+- build(build): add final production release guarantee gate (00c9dad878db)
+
 ## [0.12.35] - 2026-07-05
 
 ### Fixed

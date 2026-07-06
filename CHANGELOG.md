@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.12.39] - 2026-07-06
+
+### Dependencies
+
+- build(build): sync starter and fixture submodule promotion with stage (57be774a2269)
+
 ## [0.12.38] - 2026-07-06
 
 ### Added

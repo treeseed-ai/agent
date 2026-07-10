@@ -5,7 +5,7 @@ verifiers:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"
     testFile: test/provider/capacity-provider-runtime.test.ts
-    testName: heartbeat
+    testName: polls async execution providers and renews the assignment lease while waiting
   agent.provider.register-capabilities:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

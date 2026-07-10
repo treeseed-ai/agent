@@ -4,6 +4,7 @@ kind: node-typescript
 type: runtime-provider
 repository: treeseed-ai/agent
 publishTarget: docker
+capabilities: { save: true, verify: true, publish: true, deploy: true, localOnly: false }
 deploymentSource:
   staging: git
   prod: image

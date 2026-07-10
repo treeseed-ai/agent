@@ -14,6 +14,17 @@ jobs:
           submodules: recursive
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
-      - run: npm run release:setup || (echo "dependency install failed; retrying" && npm run release:setup)
+          node-version: 24.12.0
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - name: Install dependencies
+        timeout-minutes: 20
+        run: npm run release:setup
       - run: bash -lc 'npm run verify:local'
+      - name: Pack verified artifact
+        run: mkdir -p artifacts && npm pack --json --ignore-scripts --pack-destination artifacts
+      - uses: actions/upload-artifact@v4
+        with:
+          name: agent-${{ github.sha }}
+          path: artifacts/*.tgz
+          if-no-files-found: error

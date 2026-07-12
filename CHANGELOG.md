@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.12.47] - 2026-07-12
+
+### Dependencies
+
+- chore(deps): update @treeseed/sdk and package version (9dc625531c05)
+
 ## [0.12.46] - 2026-07-12
 
 ### Dependencies

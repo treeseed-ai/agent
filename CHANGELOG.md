@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.12.51] - 2026-07-13
+
+### Dependencies
+
+- build(build): discover Railway sibling identities without production (716d48d9addd)
+- build(build): retain sibling Railway environments during production (9a36ee1ae9f8)
+
 ## [0.12.50] - 2026-07-13
 
 ### Fixed

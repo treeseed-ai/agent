@@ -1,6 +1,6 @@
 {
   "name": "@treeseed/agent",
-  "version": "0.12.50-dev.recovery-staging-git-source-invariant.20260713T024458Z",
+  "version": "0.12.50-dev.recovery-stage-branch-cleanup.20260713T032515Z",
   "description": "Treeseed agent service runtime package.",
   "license": "AGPL-3.0-only",
   "repository": {
@@ -145,7 +145,7 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@openai/codex-sdk": "^0.130.0",
-    "@treeseed/sdk": "github:treeseed-ai/sdk#589c5ef8926858a3f1e2f5f02c7b4995ab68e65d",
+    "@treeseed/sdk": "github:treeseed-ai/sdk#98a9f62804fa5742ce86ce910d1922726a116d14",
     "esbuild": "0.28.0",
     "hono": "^4.8.2",
     "typescript": "^5.9.3",

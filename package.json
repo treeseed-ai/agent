@@ -1,6 +1,6 @@
 {
   "name": "@treeseed/agent",
-  "version": "0.12.57-dev.fix-railway-environment-source-isolation.20260714T113457Z",
+  "version": "0.12.57-dev.staging.20260714T194545Z",
   "description": "Treeseed agent service runtime package.",
   "license": "AGPL-3.0-only",
   "repository": {
@@ -145,7 +145,7 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@openai/codex-sdk": "^0.130.0",
-    "@treeseed/sdk": "github:treeseed-ai/sdk#c3724ad35b400a835485de0f7540f47500ddfe5d",
+    "@treeseed/sdk": "github:treeseed-ai/sdk#e1e29c8e4677cede9bbaaac770c2a25310dd430e",
     "esbuild": "0.28.0",
     "hono": "^4.8.2",
     "typescript": "^5.9.3",

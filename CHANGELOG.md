@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.12.55] - 2026-07-14
+
+### Fixed
+
+- build(build): fix release image state and atomic lockfiles (b8aa4c009e1c)
+
 ## [0.12.54] - 2026-07-13
 
 ### Fixed

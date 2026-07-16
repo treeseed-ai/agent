@@ -9,10 +9,8 @@ surface: agent-runtime
 summary: "Verify agent runtime executions, modes, handlers, assignments, outputs, diagnostics, token counts, errors, and forensic traceability."
 status: active
 dependencies:
-  journeys:
-    - 57
-  guarantees:
-    - guarantee.project.agent.create-agent.057
+  journeys: []
+  guarantees: []
 actors:
   allowed:
     - project_manager
@@ -59,4 +57,3 @@ evidence:
     - verifier_evidence
 notes:
   - "Runtime monitoring belongs to the agent package; Admin UI monitoring is represented by guarantee.project.agent.monitor-agent-admin-ui.140."
-

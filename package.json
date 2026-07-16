@@ -1,6 +1,6 @@
 {
   "name": "@treeseed/agent",
-  "version": "0.12.59-dev.fix-local-dev-unhealthy-restart.20260716T025813Z",
+  "version": "0.12.59-dev.staging.20260716T154316Z",
   "description": "Treeseed agent service runtime package.",
   "license": "AGPL-3.0-only",
   "repository": {

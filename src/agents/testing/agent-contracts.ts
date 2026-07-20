@@ -11,7 +11,6 @@ import type { AgentSpecDiagnostic, RawAgentRuntimeSpec } from '../spec-types.ts'
 
 const EXECUTION_PROVIDERS = new Set([
 	'codex',
-	'codex_subscription',
 	'copilot',
 	'jira',
 	'jira_issue_queue',

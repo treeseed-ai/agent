@@ -233,7 +233,7 @@ describe('assignment-scoped provider runtime', () => {
 			toolEvents: [{ id: 'tool-a', toolId: 'treedx.write', status: 'completed' as const, derivedEventTypes: ['content_created'] }],
 			contentReferences: [{ model: 'note', contentPath: 'notes/research/result.mdx', receiptId: 'receipt-a', toolEventId: 'tool-a', subjectId: 'question-a', subjectField: 'related_questions' }],
 			verification: [], citations: [], usage: [{
-				kind: 'codex_subscription',
+				kind: 'codex',
 				unit: 'wall_minute',
 				amount: 1.5,
 				source: 'codex',
@@ -269,15 +269,15 @@ describe('assignment-scoped provider runtime', () => {
 		expect(calls.findIndex((entry) => entry.method === 'usage')).toBeLessThan(calls.findIndex((entry) => entry.method === 'settle'));
 		expect(calls.findIndex((entry) => entry.method === 'settle')).toBeLessThan(calls.findIndex((entry) => entry.method === 'complete'));
 		expect(calls.find((entry) => entry.method === 'usage')).toMatchObject({
-			key: 'assignment:assignment-a:usage:codex_subscription.0',
-			body: { usageDimension: 'codex_subscription.0', actualCredits: 0, providerUnits: 1.5 },
+			key: 'assignment:assignment-a:usage:codex.0',
+			body: { usageDimension: 'codex.0', actualCredits: 0, providerUnits: 1.5 },
 		});
 		expect(calls.find((entry) => entry.method === 'settle')?.key).toBe('assignment:assignment-a:terminal-settlement');
 		expect(calls.find((entry) => entry.method === 'settle')?.body).toMatchObject({
 			actualCredits: 2,
 			providerUnits: 1.5,
 			usageActual: {
-				nativeUsage: { executionUsage: [{ kind: 'codex_subscription', amount: 1.5 }] },
+				nativeUsage: { executionUsage: [{ kind: 'codex', amount: 1.5 }] },
 				inputTokens: 120,
 				outputTokens: 30,
 				cachedInputTokens: 20,

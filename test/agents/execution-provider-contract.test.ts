@@ -9,7 +9,7 @@ import {
 	CopilotExecutionProviderAdapter,
 	createExecutionProviderAdapter,
 } from '../../src/agents/adapters/execution.ts';
-import { CodexSubscriptionExecutionProviderAdapter } from '../../src/agents/adapters/execution-codex.ts';
+import { CodexExecutionProviderAdapter } from '../../src/agents/adapters/execution-codex.ts';
 import {
 	JiraExecutionProviderAdapter,
 	type JiraExecutionProviderConfig,
@@ -241,7 +241,7 @@ function workflowInvocation() {
 
 describe('execution provider adapter contract', () => {
 	it('describes built-in execution provider descriptors with normalized capabilities', async () => {
-		await assertDescriptor(new CodexSubscriptionExecutionProviderAdapter(), { kind: 'ai_model' });
+		await assertDescriptor(new CodexExecutionProviderAdapter(), { kind: 'ai_model' });
 		await assertDescriptor(new JiraExecutionProviderAdapter({ config: jiraConfig }), { kind: 'human_issue_queue', supportsAsync: true });
 		await assertDescriptor(new GitHubIssueExecutionProviderAdapter({ config: githubIssuesConfig }), { kind: 'human_issue_queue', supportsAsync: true });
 		await assertDescriptor(new DiscordExecutionProviderAdapter({ config: discordConfig }), { kind: 'human_issue_queue', supportsAsync: true });
@@ -276,7 +276,7 @@ describe('execution provider adapter contract', () => {
 			finalResponse: 'Codex contract completed.',
 			usage: null,
 		}));
-		const adapter = new CodexSubscriptionExecutionProviderAdapter({
+		const adapter = new CodexExecutionProviderAdapter({
 			repoRoot: '/repo',
 			createCodexClient: () => ({
 				startThread: () => ({ id: 'thread-contract', run }),
@@ -425,8 +425,8 @@ describe('execution provider adapter contract', () => {
 	});
 
 	it('factory aliases resolve to concrete execution providers', () => {
-		expect(createExecutionProviderAdapter('codex')).toBeInstanceOf(CodexSubscriptionExecutionProviderAdapter);
-		expect(createExecutionProviderAdapter('codex_subscription')).toBeInstanceOf(CodexSubscriptionExecutionProviderAdapter);
+		expect(createExecutionProviderAdapter('codex')).toBeInstanceOf(CodexExecutionProviderAdapter);
+		expect(createExecutionProviderAdapter('codex')).toBeInstanceOf(CodexExecutionProviderAdapter);
 		expect(createExecutionProviderAdapter('jira')).toBeInstanceOf(JiraExecutionProviderAdapter);
 		expect(createExecutionProviderAdapter('jira_issue_queue')).toBeInstanceOf(JiraExecutionProviderAdapter);
 		expect(createExecutionProviderAdapter('human_issue_queue')).toBeInstanceOf(JiraExecutionProviderAdapter);

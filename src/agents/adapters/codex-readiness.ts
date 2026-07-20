@@ -6,11 +6,10 @@ import { resolveCodexAuthFile } from './codex-auth.ts';
 export type CodexSubscriptionPlan = 'plus' | 'pro' | 'business' | 'edu' | 'enterprise' | 'unknown';
 export type CodexApprovalPolicy = 'never' | 'on_request' | 'always';
 export type CodexSandboxMode = 'read_only' | 'workspace_write';
-export type CodexProviderId = 'codex' | 'codex_subscription';
+export type CodexProviderId = 'codex';
 
 export interface CodexProviderConfig {
 	providerId: 'codex';
-	legacyProviderIds: ['codex_subscription'];
 	subscriptionPlan: CodexSubscriptionPlan;
 	defaultModel: string;
 	approvalPolicy: CodexApprovalPolicy;
@@ -117,7 +116,6 @@ function parseNodeMajor(version: string) {
 export function resolveCodexProviderConfig(env: NodeJS.ProcessEnv = process.env): CodexProviderConfig {
 	return {
 		providerId: 'codex',
-		legacyProviderIds: ['codex_subscription'],
 		subscriptionPlan: readChoice(env.TREESEED_CODEX_SUBSCRIPTION_PLAN, SUBSCRIPTION_PLANS, 'unknown'),
 		defaultModel: env.TREESEED_CODEX_DEFAULT_MODEL?.trim() || 'gpt-5.5',
 		approvalPolicy: readChoice(env.TREESEED_CODEX_APPROVAL_POLICY, APPROVAL_POLICIES, 'never'),
@@ -146,10 +144,7 @@ export function checkCodexProviderReadiness(
 		|| [
 			env.TREESEED_EXECUTION_PROVIDER,
 			env.TREESEED_AGENT_EXECUTION_PROVIDER,
-		].some((value) => {
-			const normalized = value?.trim();
-			return normalized === config.providerId || config.legacyProviderIds.includes(normalized as 'codex_subscription');
-		});
+		].some((value) => value?.trim() === config.providerId);
 	const warnings: string[] = [];
 	const blockingIssues: string[] = [];
 	const nodeMajor = parseNodeMajor(options.nodeVersion ?? process.version);

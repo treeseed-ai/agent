@@ -13,14 +13,13 @@ export type {
 	CodexExecutionStatus,
 	CodexReasoningEffort,
 	CodexRunResult,
-	CodexSubscriptionClient,
+	CodexClient,
 	CodexThread,
 	CodexThreadOptions,
 	PreparedCodexWorktree,
-	RunCodexSubscriptionTaskOptions,
+	RunCodexTaskOptions,
 } from './execution-codex-core.ts';
 export type { CodexSandboxMode } from './codex-readiness.ts';
-export { normalizeCodexRunResult, runCodexSubscriptionTask } from './execution-codex-result.ts';
-export { CodexSubscriptionExecutionProviderAdapter } from './execution-codex-adapter.ts';
-export type { CodexSubscriptionExecutionProviderAdapterOptions } from './execution-codex-adapter.ts';
-
+export { normalizeCodexRunResult, runCodexTask } from './execution-codex-result.ts';
+export { CodexExecutionProviderAdapter } from './execution-codex-adapter.ts';
+export type { CodexExecutionProviderAdapterOptions } from './execution-codex-adapter.ts';

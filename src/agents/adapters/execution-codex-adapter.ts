@@ -13,15 +13,15 @@ import {
 	treeDxContentReceipts,
 	type CodexExecutionRequest,
 	type CodexReasoningEffort,
-	type CodexSubscriptionClient,
+	type CodexClient,
 	type PreparedCodexWorktree,
 } from './execution-codex-core.ts';
-import { runCodexSubscriptionTask } from './execution-codex-result.ts';
+import { runCodexTask } from './execution-codex-result.ts';
 import type { ResearchSourcePolicy } from '@treeseed/sdk/agent-capacity';
 
-export interface CodexSubscriptionExecutionProviderAdapterOptions {
+export interface CodexExecutionProviderAdapterOptions {
 	repoRoot?: string;
-	createCodexClient?: (request?: CodexExecutionRequest) => CodexSubscriptionClient | Promise<CodexSubscriptionClient>;
+	createCodexClient?: (request?: CodexExecutionRequest) => CodexClient | Promise<CodexClient>;
 	prepareWorktree?: (input: {
 		agent: AgentRuntimeSpec;
 		runId: string;
@@ -75,9 +75,9 @@ function toolsWithWorktree(
 		});
 }
 
-export class CodexSubscriptionExecutionProviderAdapter implements ExecutionProviderAdapter {
+export class CodexExecutionProviderAdapter implements ExecutionProviderAdapter {
 	private readonly assignmentWorktrees = new Map<string, string>();
-	constructor(private readonly options: CodexSubscriptionExecutionProviderAdapterOptions = {}) {}
+	constructor(private readonly options: CodexExecutionProviderAdapterOptions = {}) {}
 
 	async describe() {
 		return {
@@ -91,7 +91,7 @@ export class CodexSubscriptionExecutionProviderAdapter implements ExecutionProvi
 				'repo_write',
 				'verification',
 			],
-			capabilityAliases: ['codex_subscription'],
+			capabilityAliases: [],
 			nativeUnit: 'token_or_wall_minute',
 			quotaVisibility: 'partial' as const,
 			maxConcurrentAssignments: 1,
@@ -141,7 +141,7 @@ export class CodexSubscriptionExecutionProviderAdapter implements ExecutionProvi
 		const telemetryDirectory = tools.length && !configuredTelemetryPath ? await mkdtemp(join(tmpdir(), 'treeseed-agent-tools-')) : null;
 		const toolTelemetryPath = configuredTelemetryPath ?? (telemetryDirectory ? join(telemetryDirectory, 'events.jsonl') : null);
 		const toolConfigPath = telemetryDirectory ? join(telemetryDirectory, 'mcp-env.json') : null;
-		let result: Awaited<ReturnType<typeof runCodexSubscriptionTask>>;
+		let result: Awaited<ReturnType<typeof runCodexTask>>;
 		let toolTelemetry: Record<string, unknown>[] = [];
 		try {
 			const request: CodexExecutionRequest = {
@@ -184,7 +184,7 @@ export class CodexSubscriptionExecutionProviderAdapter implements ExecutionProvi
 			if (toolConfigPath) {
 				await writeFile(toolConfigPath, JSON.stringify(codexAgentToolServer({ ...request, toolConfigPath: null })?.env ?? {}), { encoding: 'utf8', mode: 0o600 });
 			}
-			result = await runCodexSubscriptionTask(request, {
+			result = await runCodexTask(request, {
 				createCodexClient: this.options.createCodexClient,
 			});
 		} finally {
@@ -205,7 +205,7 @@ export class CodexSubscriptionExecutionProviderAdapter implements ExecutionProvi
 			},
 			usage: result.usage
 				? [{
-					kind: 'codex_subscription',
+					kind: 'codex',
 					unit: result.usage.nativeUnit ?? 'wall_minute',
 					amount: Number(result.usage.wallMinutes ?? 0),
 					source: 'codex',
@@ -250,7 +250,7 @@ export class CodexSubscriptionExecutionProviderAdapter implements ExecutionProvi
 		const usage = input.metadata?.codexUsage;
 		return usage && typeof usage === 'object'
 			? [{
-				kind: 'codex_subscription',
+				kind: 'codex',
 				unit: String((usage as Record<string, unknown>).nativeUnit ?? 'wall_minute'),
 				amount: Number((usage as Record<string, unknown>).wallMinutes ?? 0),
 				source: 'codex',
@@ -258,7 +258,7 @@ export class CodexSubscriptionExecutionProviderAdapter implements ExecutionProvi
 				metadata: usage as Record<string, unknown>,
 			}]
 			: [{
-				kind: 'codex_subscription',
+				kind: 'codex',
 				unit: 'assignment',
 				amount: 1,
 				source: 'codex',

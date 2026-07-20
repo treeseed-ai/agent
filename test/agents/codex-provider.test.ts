@@ -14,8 +14,8 @@ import {
 	resolveCodexAuthFile,
 } from '../../src/agents/adapters/codex-auth.ts';
 import {
-	CodexSubscriptionExecutionProviderAdapter,
-	runCodexSubscriptionTask,
+	CodexExecutionProviderAdapter,
+	runCodexTask,
 	type CodexExecutionRequest,
 } from '../../src/agents/adapters/execution-codex.ts';
 import type { AgentRuntimeSpec } from '@treeseed/sdk/types/agents';
@@ -119,7 +119,7 @@ function executionInvocation(input: {
 	};
 }
 
-describe('codex subscription provider skeleton', () => {
+describe('codex execution provider', () => {
 	it('reports missing SDK as a warning for non-Codex selections and blocker for Codex defaults', () => {
 		const missing = () => {
 			throw new Error('missing');
@@ -253,10 +253,10 @@ describe('codex subscription provider skeleton', () => {
 		}
 	});
 
-	it('keeps the legacy codex_subscription selection working', () => {
+	it('selects the canonical codex provider', () => {
 		const readiness = checkCodexProviderReadiness({
 			env: {
-				TREESEED_EXECUTION_PROVIDER: 'codex_subscription',
+				TREESEED_EXECUTION_PROVIDER: 'codex',
 				HOME: '/home/test',
 			},
 			nodeVersion: 'v24.0.0',
@@ -281,7 +281,6 @@ describe('codex subscription provider skeleton', () => {
 
 		expect(config).toMatchObject({
 			providerId: 'codex',
-			legacyProviderIds: ['codex_subscription'],
 			subscriptionPlan: 'business',
 			approvalPolicy: 'on_request',
 			sandboxMode: 'workspace_write',
@@ -289,7 +288,7 @@ describe('codex subscription provider skeleton', () => {
 		});
 	});
 
-	it('registers codex and the legacy codex_subscription alias as execution providers', () => {
+	it('registers codex as the execution provider', () => {
 		const runtime = resolveAgentRuntimeProviders('/repo', {
 			execution: 'codex',
 			mutation: 'local_branch',
@@ -299,21 +298,13 @@ describe('codex subscription provider skeleton', () => {
 			research: 'project_graph',
 		});
 
-		expect(runtime.execution).toBeInstanceOf(CodexSubscriptionExecutionProviderAdapter);
-		expect(resolveAgentRuntimeProviders('/repo', {
-			execution: 'codex_subscription',
-			mutation: 'local_branch',
-			repository: 'git',
-			verification: 'local',
-			notification: 'sdk_message',
-			research: 'project_graph',
-		}).execution).toBeInstanceOf(CodexSubscriptionExecutionProviderAdapter);
+		expect(runtime.execution).toBeInstanceOf(CodexExecutionProviderAdapter);
 	});
 
 	it('returns waiting for workspace-write requests missing worktree or allowed paths', async () => {
 		const createCodexClient = vi.fn();
 
-		const missingWorktree = await runCodexSubscriptionTask({
+		const missingWorktree = await runCodexTask({
 			...baseRequest,
 			sandboxMode: 'workspace_write',
 			allowedPaths: ['src/content/knowledge/**'],
@@ -325,7 +316,7 @@ describe('codex subscription provider skeleton', () => {
 			},
 		});
 
-		const missingAllowedPaths = await runCodexSubscriptionTask({
+		const missingAllowedPaths = await runCodexTask({
 			...baseRequest,
 			sandboxMode: 'workspace_write',
 			worktreeRoot: '/repo/.agent-worktrees/task',
@@ -352,7 +343,7 @@ describe('codex subscription provider skeleton', () => {
 			resumeThread: vi.fn(),
 		}));
 
-		const result = await runCodexSubscriptionTask(baseRequest, {
+		const result = await runCodexTask(baseRequest, {
 			createCodexClient,
 			now: () => 1000,
 		});
@@ -375,7 +366,7 @@ describe('codex subscription provider skeleton', () => {
 			resumeThread: vi.fn(),
 		}));
 
-		const result = await runCodexSubscriptionTask({
+		const result = await runCodexTask({
 			...baseRequest,
 			timeoutMs: 1,
 		}, { createCodexClient });
@@ -402,7 +393,7 @@ describe('codex subscription provider skeleton', () => {
 			finalResponse: 'Runtime adapter completed.',
 			usage: null,
 		}));
-		const adapter = new CodexSubscriptionExecutionProviderAdapter({
+		const adapter = new CodexExecutionProviderAdapter({
 			repoRoot: '/repo',
 			createCodexClient: () => ({
 				startThread: () => ({ id: 'thread-runtime', run }),
@@ -463,7 +454,7 @@ describe('codex subscription provider skeleton', () => {
 	});
 
 	it('rejects a prepared worktree that cannot prove the governed exact base ref', async () => {
-		const adapter = new CodexSubscriptionExecutionProviderAdapter({
+		const adapter = new CodexExecutionProviderAdapter({
 			repoRoot: '/repo',
 			prepareWorktree: async () => ({
 				branchName: 'agent/engineer/run-ref-mismatch',

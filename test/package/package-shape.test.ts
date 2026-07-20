@@ -361,6 +361,7 @@ describe('agent package shape', () => {
 		expect(readme).not.toContain(staleWorkflowName);
 		expect(readme).not.toContain(staleSmokePhrase);
 		expect(packageSource).not.toContain(staleBudgetName);
+		expect(packageSource).not.toContain('codex_subscription');
 		expect(envRegistry).not.toContain('TREESEED_WORKDAY_TASK_CREDIT_BUDGET');
 	});
 });

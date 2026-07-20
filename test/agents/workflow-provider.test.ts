@@ -6,7 +6,7 @@ import type {
 	ProviderAssignment,
 } from '@treeseed/sdk/agent-capacity';
 import { createExecutionProviderAdapter } from '../../src/agents/adapters/execution.ts';
-import { CodexSubscriptionExecutionProviderAdapter } from '../../src/agents/adapters/execution-codex.ts';
+import { CodexExecutionProviderAdapter } from '../../src/agents/adapters/execution-codex.ts';
 import { JiraExecutionProviderAdapter } from '../../src/agents/adapters/execution-jira.ts';
 import { WorkflowExecutionProviderAdapter } from '../../src/agents/adapters/execution-workflow.ts';
 import type { ExecutionProviderInvocation } from '../../src/agents/runtime-types.ts';
@@ -347,6 +347,6 @@ describe('WorkflowExecutionProviderAdapter', () => {
 		expect(createExecutionProviderAdapter('github_actions_workflow')).toBeInstanceOf(WorkflowExecutionProviderAdapter);
 		expect(() => createExecutionProviderAdapter('manual')).toThrow(/Unsupported execution provider "manual"/);
 		expect(createExecutionProviderAdapter('jira')).toBeInstanceOf(JiraExecutionProviderAdapter);
-		expect(createExecutionProviderAdapter('codex')).toBeInstanceOf(CodexSubscriptionExecutionProviderAdapter);
+		expect(createExecutionProviderAdapter('codex')).toBeInstanceOf(CodexExecutionProviderAdapter);
 	});
 });

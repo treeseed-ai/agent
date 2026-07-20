@@ -121,7 +121,7 @@ export function treeDxContentReceipts(entries: Record<string, unknown>[]) {
 	});
 }
 
-export interface CodexSubscriptionClient {
+export interface CodexClient {
 	startThread(options?: CodexThreadOptions): CodexThread;
 	resumeThread(id: string, options?: CodexThreadOptions): CodexThread;
 }
@@ -151,8 +151,8 @@ export interface CodexRunResult {
 	} | null;
 }
 
-export interface RunCodexSubscriptionTaskOptions {
-	createCodexClient?: (request?: CodexExecutionRequest) => CodexSubscriptionClient | Promise<CodexSubscriptionClient>;
+export interface RunCodexTaskOptions {
+	createCodexClient?: (request?: CodexExecutionRequest) => CodexClient | Promise<CodexClient>;
 	now?: () => number;
 }
 
@@ -357,7 +357,7 @@ export function codexAgentToolConfig(request: CodexExecutionRequest) {
 	};
 }
 
-export async function createDefaultCodexClient(request?: CodexExecutionRequest): Promise<CodexSubscriptionClient> {
+export async function createDefaultCodexClient(request?: CodexExecutionRequest): Promise<CodexClient> {
 	const { Codex } = await import('@openai/codex-sdk');
 	return new Codex({
 		env: codexClientEnvironment(),

@@ -8,7 +8,7 @@ import {
 	codexAgentToolConfig,
 	mapCodexThreadOptions,
 	normalizeCodexRunResult,
-	runCodexSubscriptionTask,
+	runCodexTask,
 	treeDxContentReceipts,
 	type CodexExecutionRequest,
 } from '../../src/agents/adapters/execution-codex.ts';
@@ -263,7 +263,7 @@ describe('codex provider execution', () => {
 		const startThread = vi.fn(() => ({ id: 'thread-new', run }));
 		const resumeThread = vi.fn();
 
-		const result = await runCodexSubscriptionTask(request, {
+		const result = await runCodexTask(request, {
 			createCodexClient: () => ({ startThread, resumeThread }),
 			now: vi.fn()
 				.mockReturnValueOnce(100)
@@ -310,7 +310,7 @@ describe('codex provider execution', () => {
 		const startThread = vi.fn();
 		const resumeThread = vi.fn(() => ({ id: 'thread-existing', run }));
 
-		const result = await runCodexSubscriptionTask({
+		const result = await runCodexTask({
 			...request,
 			threadId: 'thread-existing',
 		}, {
@@ -353,7 +353,7 @@ describe('codex provider execution', () => {
 	it('returns waiting for missing worktree safety inputs before SDK construction', async () => {
 		const createCodexClient = vi.fn();
 
-		const result = await runCodexSubscriptionTask({
+		const result = await runCodexTask({
 			...request,
 			worktreeRoot: undefined,
 		}, { createCodexClient });
@@ -381,7 +381,7 @@ describe('codex provider execution', () => {
 			usage: null,
 		}));
 
-		const result = await runCodexSubscriptionTask(request, {
+		const result = await runCodexTask(request, {
 			createCodexClient: () => ({
 				startThread: () => ({ id: 'thread-scope', run }),
 				resumeThread: vi.fn(),
@@ -405,7 +405,7 @@ describe('codex provider execution', () => {
 			throw new Error('local Codex auth missing');
 		});
 
-		const result = await runCodexSubscriptionTask({
+		const result = await runCodexTask({
 			...request,
 			sandboxMode: 'read_only',
 			worktreeRoot: undefined,

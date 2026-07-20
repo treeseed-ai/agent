@@ -1,6 +1,6 @@
 import { loadTreeseedPlugins } from '@treeseed/sdk/platform/plugins';
 import { CopilotExecutionProviderAdapter } from './agents/adapters/execution.ts';
-import { CodexSubscriptionExecutionProviderAdapter } from './agents/adapters/execution-codex.ts';
+import { CodexExecutionProviderAdapter } from './agents/adapters/execution-codex.ts';
 import { DiscordExecutionProviderAdapter } from './agents/adapters/execution-discord.ts';
 import { GitHubIssueExecutionProviderAdapter } from './agents/adapters/execution-github-issues.ts';
 import { JiraExecutionProviderAdapter } from './agents/adapters/execution-jira.ts';
@@ -62,8 +62,7 @@ function buildAgentRuntime() {
 	const plugins = loadTreeseedPlugins();
 	const execution = new Map<string, (repoRoot: string) => ExecutionProviderAdapter>([
 		['copilot', () => new CopilotExecutionProviderAdapter()],
-		['codex', (repoRoot) => new CodexSubscriptionExecutionProviderAdapter({ repoRoot })],
-		['codex_subscription', (repoRoot) => new CodexSubscriptionExecutionProviderAdapter({ repoRoot })],
+		['codex', (repoRoot) => new CodexExecutionProviderAdapter({ repoRoot })],
 		['jira', () => new JiraExecutionProviderAdapter()],
 		['jira_issue_queue', () => new JiraExecutionProviderAdapter()],
 		['human_issue_queue', () => new JiraExecutionProviderAdapter()],

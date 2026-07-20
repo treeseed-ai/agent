@@ -36,7 +36,7 @@ describe('provider budget discovery', () => {
 			'  executionProviders:',
 			'    - id: codex-seat',
 			'      name: Codex Pro Seat',
-			'      kind: codex_subscription',
+			'      kind: codex',
 			'      nativeUnit: wall_minute',
 			'      quotaVisibility: opaque',
 			'      maxConcurrentWorkers: 1',

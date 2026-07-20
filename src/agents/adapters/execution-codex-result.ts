@@ -12,7 +12,7 @@ import {
 	type CodexExecutionRequest,
 	type CodexExecutionResult,
 	type CodexRunResult,
-	type RunCodexSubscriptionTaskOptions,
+	type RunCodexTaskOptions,
 } from './execution-codex-core.ts';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -163,9 +163,9 @@ export function normalizeCodexRunResult(input: {
 	};
 }
 
-export async function runCodexSubscriptionTask(
+export async function runCodexTask(
 	request: CodexExecutionRequest,
-	options: RunCodexSubscriptionTaskOptions = {},
+	options: RunCodexTaskOptions = {},
 ): Promise<CodexExecutionResult> {
 	const startedAt = options.now?.() ?? Date.now();
 	try {
@@ -275,4 +275,3 @@ export async function runCodexSubscriptionTask(
 		};
 	}
 }
-

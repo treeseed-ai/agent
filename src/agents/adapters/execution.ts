@@ -4,8 +4,8 @@ import { getTreeseedAgentProviderSelections } from '@treeseed/sdk/platform/deplo
 import type { TreeseedCopilotTaskInput, TreeseedCopilotTaskResult } from '@treeseed/sdk/copilot';
 import type { ExecutionRunRef } from '@treeseed/sdk/types/agents';
 import {
-	CodexSubscriptionExecutionProviderAdapter,
-	type CodexSubscriptionExecutionProviderAdapterOptions,
+	CodexExecutionProviderAdapter,
+	type CodexExecutionProviderAdapterOptions,
 } from './execution-codex.ts';
 import {
 	JiraExecutionProviderAdapter,
@@ -163,7 +163,7 @@ export function createExecutionProviderAdapter(configuredModeInput?: string, opt
 	githubIssues?: GitHubIssuesExecutionProviderConfig | null;
 	discord?: DiscordExecutionProviderConfig | null;
 	workflow?: WorkflowExecutionProviderAdapterOptions | null;
-	codex?: Omit<CodexSubscriptionExecutionProviderAdapterOptions, 'repoRoot'> | null;
+	codex?: Omit<CodexExecutionProviderAdapterOptions, 'repoRoot'> | null;
 	env?: NodeJS.ProcessEnv;
 	researchSourcePolicy?: ResearchSourcePolicy;
 } = {}) {
@@ -185,8 +185,8 @@ export function createExecutionProviderAdapter(configuredModeInput?: string, opt
 	if (configuredMode === 'workflow' || configuredMode === 'workflow_operation' || configuredMode === 'deterministic_workflow' || configuredMode === 'github_actions' || configuredMode === 'github_actions_workflow') {
 		return new WorkflowExecutionProviderAdapter(options.workflow ?? {});
 	}
-	if (configuredMode === 'codex' || configuredMode === 'codex_subscription') {
-		return new CodexSubscriptionExecutionProviderAdapter({ ...(options.codex ?? {}), repoRoot: options.repoRoot, researchSourcePolicy: options.researchSourcePolicy ?? options.codex?.researchSourcePolicy });
+	if (configuredMode === 'codex') {
+		return new CodexExecutionProviderAdapter({ ...(options.codex ?? {}), repoRoot: options.repoRoot, researchSourcePolicy: options.researchSourcePolicy ?? options.codex?.researchSourcePolicy });
 	}
 	if (configuredMode === 'copilot') {
 		return new CopilotExecutionProviderAdapter({ repoRoot: options.repoRoot, env: options.env, researchSourcePolicy: options.researchSourcePolicy });

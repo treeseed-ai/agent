@@ -48,7 +48,6 @@ export function resolveApiRuntimeProviders(config: ApiConfig, overrides: ApiRunt
 
 	addProviders(agentExecution, {
 		codex: { id: 'codex' },
-		codex_subscription: { id: 'codex_subscription' },
 		copilot: { id: 'copilot' },
 		jira: { id: 'jira' },
 		jira_issue_queue: { id: 'jira_issue_queue' },

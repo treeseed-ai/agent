@@ -13,8 +13,8 @@ export {
 } from './agents/adapters/codex-auth.ts';
 export {
 	CodexRequestSafetyError,
-	CodexSubscriptionExecutionProviderAdapter,
-	runCodexSubscriptionTask,
+	CodexExecutionProviderAdapter,
+	runCodexTask,
 	validateCodexExecutionRequest,
 } from './agents/adapters/execution-codex.ts';
 export {

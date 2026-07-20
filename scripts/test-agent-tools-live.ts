@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { checkCodexProviderReadiness } from '../src/agents/adapters/codex-readiness.ts';
-import { runCodexSubscriptionTask } from '../src/agents/adapters/execution-codex.ts';
+import { runCodexTask } from '../src/agents/adapters/execution-codex.ts';
 import { createIsolatedLiveCodexHome } from '../src/agents/testing/live-codex-home.ts';
 import type { ExecutionProviderToolDescriptor } from '../src/agents/runtime-types.ts';
 
@@ -118,7 +118,7 @@ try {
 		dispatchPreferredMode: 'prefer_local',
 		telemetryCategory: 'treeseed',
 	});
-	const readOnly = await runCodexSubscriptionTask({
+	const readOnly = await runCodexTask({
 		taskId: 'live-agent-tools-readonly',
 		agentSlug: 'live-agent-tools',
 		repoRoot,
@@ -160,7 +160,7 @@ try {
 		forbiddenPaths: ['.git/**', '.treeseed/secrets/**'],
 		telemetryCategory: 'repository',
 	});
-	const worktree = await runCodexSubscriptionTask({
+	const worktree = await runCodexTask({
 		taskId: 'live-agent-tools-worktree',
 		agentSlug: 'live-agent-tools',
 		repoRoot,

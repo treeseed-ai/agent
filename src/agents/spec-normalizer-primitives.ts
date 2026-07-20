@@ -6,7 +6,6 @@ export const ACTIVITY_TYPES = new Set<string>(['planning', 'estimating', 'acting
 export const GENERIC_HANDLER_KINDS = new Set<string>(['writer', 'actor', 'estimate', 'releaser', 'reporter']);
 export const EXECUTION_PROVIDERS = new Set([
 	'codex',
-	'codex_subscription',
 	'copilot',
 	'jira',
 	'jira_issue_queue',
@@ -160,4 +159,3 @@ export function normalizeStringArray(
 	}
 	return values;
 }
-

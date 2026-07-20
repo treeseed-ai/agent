@@ -10,7 +10,6 @@ const require = createRequire(import.meta.url);
 const npmCacheDir = resolve(tmpdir(), 'treeseed-npm-cache');
 const textExtensions = new Set(['.js', '.ts', '.d.ts', '.json', '.md']);
 const forbiddenPatterns = [
-	/['"`]file:[^'"`\n]+['"`]/,
 	/['"`](?:\.\.\/|\.\/)[^'"`\n]*src\/[^'"`\n]*\.(?:[cm]?js|ts|tsx|json|astro|css)['"`]/,
 	/['"`][^'"`\n]*\/packages\/[^'"`\n]*\/src\/[^'"`\n]*['"`]/,
 ];

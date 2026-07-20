@@ -273,6 +273,7 @@ describe('agent package shape', () => {
 	it('ships secure package-owned container assets', () => {
 		const dockerfile = readFileSync(resolve(packageRoot, 'Dockerfile'), 'utf8');
 		const entrypoint = readFileSync(resolve(packageRoot, 'docker-entrypoint.sh'), 'utf8');
+		const releaseVerify = readFileSync(resolve(packageRoot, 'scripts/release-verify.ts'), 'utf8');
 		const compose = readFileSync(resolve(packageRoot, 'compose.capacity-provider.yml'), 'utf8');
 		const docs = readFileSync(resolve(packageRoot, 'docs/capacity-provider-runtime.md'), 'utf8');
 
@@ -283,6 +284,8 @@ describe('agent package shape', () => {
 		expect(dockerfile).toContain('FROM agent-runner AS railway-runtime');
 		expect(dockerfile).toContain('ENTRYPOINT ["tini", "--", "/app/docker-entrypoint.sh"]');
 		expect(entrypoint).toContain('setpriv');
+		expect(releaseVerify).toContain("[providerEntrypoint, 'plan', '--json']");
+		expect(releaseVerify).not.toContain("[providerEntrypoint, 'register'");
 		expect(dockerfile).toContain('FROM node:22');
 		expect(dockerfile).toContain('.treeseed/docker/runtime/manager/node_modules');
 		expect(dockerfile).toContain('.treeseed/docker/runtime/runner/node_modules');

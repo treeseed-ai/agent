@@ -146,7 +146,7 @@ function runPackedProviderRuntimeSmoke(installRoot: string) {
 	const providerEntrypoint = 'node_modules/@treeseed/agent/dist/provider/entrypoint.js';
 	run(process.execPath, [providerEntrypoint, 'version'], installRoot, false, env);
 	run(process.execPath, [providerEntrypoint, 'healthcheck'], installRoot, false, env);
-	run(process.execPath, [providerEntrypoint, 'register', '--plan'], installRoot, false, env);
+	run(process.execPath, [providerEntrypoint, 'plan', '--json'], installRoot, false, env);
 	run(process.execPath, [providerEntrypoint, 'manager', '--plan', '--json'], installRoot, false, env);
 	run(process.execPath, [providerEntrypoint, 'runner', '--plan', '--json'], installRoot, false, env);
 	run(process.execPath, ['--input-type=module', '-e', [

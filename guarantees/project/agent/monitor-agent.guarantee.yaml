@@ -7,7 +7,7 @@ journey: Monitor Agent
 ownerPackage: "@treeseed/agent"
 surface: agent-runtime
 summary: "Verify agent runtime executions, modes, handlers, assignments, outputs, diagnostics, token counts, errors, and forensic traceability."
-status: active
+status: planned
 dependencies:
   journeys: []
   guarantees: []
@@ -38,6 +38,7 @@ api:
   required: true
   verifierRefs:
     - agent.trace.inspect-execution
+    - agent.trace.deliver-mode-run-telemetry
 content:
   required: true
   verifierRefs:
@@ -46,6 +47,7 @@ audit:
   required: true
   verifierRefs:
     - agent.trace.correlate-assignment-mode-run-artifacts
+    - agent.trace.deliver-mode-run-telemetry
 negativeCases:
   - id: unauthorized-actor-denied
     actor: anonymous_user

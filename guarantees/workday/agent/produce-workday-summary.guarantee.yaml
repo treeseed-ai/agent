@@ -7,7 +7,7 @@ journey: Produce Workday Summary
 ownerPackage: "@treeseed/agent"
 surface: agent-runtime
 summary: "Agent runtime keeps the Produce Workday Summary contract verifiable through active local evidence."
-status: active
+status: planned
 dependencies:
   journeys:
     - 60
@@ -58,4 +58,4 @@ evidence:
     - verifier_evidence
 notes:
   - "Agent runtime guarantee for Produce Workday Summary."
-
+  - "Planned until the summary is produced through the canonical assignment and TreeDX artifact lifecycle."

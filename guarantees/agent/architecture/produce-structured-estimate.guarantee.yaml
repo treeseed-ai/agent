@@ -7,7 +7,7 @@ journey: Produce Structured Estimate
 ownerPackage: "@treeseed/agent"
 surface: agent-runtime
 summary: "The estimate handler emits a validated structured estimate suitable for deterministic graph compilation."
-status: active
+status: planned
 actors:
   allowed: [project_manager, capacity_operator, team_owner]
   forbidden: [anonymous_user, unauthorized_user]

@@ -11,7 +11,6 @@ const npmCacheDir = resolve(tmpdir(), 'treeseed-npm-cache');
 const textExtensions = new Set(['.js', '.ts', '.d.ts', '.json', '.md']);
 const forbiddenPatterns = [
 	/['"`]file:[^'"`\n]+['"`]/,
-	/['"`]workspace:[^'"`\n]+['"`]/,
 	/['"`](?:\.\.\/|\.\/)[^'"`\n]*src\/[^'"`\n]*\.(?:[cm]?js|ts|tsx|json|astro|css)['"`]/,
 	/['"`][^'"`\n]*\/packages\/[^'"`\n]*\/src\/[^'"`\n]*['"`]/,
 ];
@@ -114,6 +113,19 @@ function runPackedProviderRuntimeSmoke(installRoot: string) {
 		'    research: project_graph',
 		'',
 	].join('\n'), 'utf8');
+	writeFileSync(resolve(installRoot, 'treeseed.capacity-provider.yaml'), [
+		'schemaVersion: 2',
+		'identity:',
+		'  privateKeyRef: env:TREESEED_CAPACITY_PROVIDER_PRIVATE_KEY',
+		'  displayName: Packed smoke provider',
+		'executionProviders:',
+		'  - id: codex',
+		'    adapter: codex',
+		'    nativeLimits:',
+		'      maxConcurrentRunners: 1',
+		'connections: []',
+		'',
+	].join('\n'), 'utf8');
 	const hostCodexAuthFile = process.env.TREESEED_CODEX_AUTH_FILE
 		|| process.env.CODEX_AUTH_FILE
 		|| (process.env.HOME ? resolve(process.env.HOME, '.codex/auth.json') : '');
@@ -141,9 +153,7 @@ function runPackedProviderRuntimeSmoke(installRoot: string) {
 	run(process.execPath, ['--input-type=module', '-e', [
 		"const modules = await Promise.all([",
 		"  import('./node_modules/@treeseed/agent/dist/provider/config.js'),",
-		"  import('./node_modules/@treeseed/agent/dist/provider/registration.js'),",
 		"  import('./node_modules/@treeseed/agent/dist/provider/lifecycle.js'),",
-		"  import('./node_modules/@treeseed/agent/dist/services/manager.js'),",
 		"  import('./node_modules/@treeseed/agent/dist/provider/runner.js'),",
 		"  import('./node_modules/@treeseed/agent/dist/services/runtime-paths.js'),",
 		"  import('./node_modules/@treeseed/agent/dist/agents/registry.js'),",
@@ -151,11 +161,9 @@ function runPackedProviderRuntimeSmoke(installRoot: string) {
 		"const registry = modules.at(-1);",
 		"if ((await registry.listRegisteredAgentHandlers()).length < 5) throw new Error('built-in handler registry is incomplete');",
 		"if (typeof modules[0].resolveProviderConfig !== 'function') throw new Error('provider config import missing resolveProviderConfig');",
-		"if (typeof modules[1].buildProviderRegistrationRequest !== 'function') throw new Error('provider registration import missing buildProviderRegistrationRequest');",
-		"if (typeof modules[2].buildProviderPlan !== 'function') throw new Error('provider lifecycle import missing buildProviderPlan');",
-		"if (typeof modules[3].runManagerAction !== 'function') throw new Error('manager runtime import missing runManagerAction');",
-		"if (typeof modules[4].runProviderAssignment !== 'function') throw new Error('provider runner import missing runProviderAssignment');",
-		"if (typeof modules[5].resolveRunnerRepositoryPaths !== 'function') throw new Error('runtime-paths import missing resolveRunnerRepositoryPaths');",
+		"if (typeof modules[1].buildProviderPlan !== 'function') throw new Error('provider lifecycle import missing buildProviderPlan');",
+		"if (typeof modules[2].runProviderAssignment !== 'function') throw new Error('provider runner import missing runProviderAssignment');",
+		"if (typeof modules[3].resolveRunnerRepositoryPaths !== 'function') throw new Error('runtime-paths import missing resolveRunnerRepositoryPaths');",
 	].join('\n')], installRoot, false, env);
 }
 

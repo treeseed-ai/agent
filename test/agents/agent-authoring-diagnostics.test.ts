@@ -41,4 +41,25 @@ describe('agent authoring diagnostics', () => {
 		expect(diagnostics.map((diagnostic) => diagnostic.code)).toContain('agent.missing_required_capabilities');
 		expect(diagnostics.map((diagnostic) => diagnostic.code)).toContain('agent.output_contract_ambiguous');
 	});
+
+	it('rejects mutation output contracts on read-only profiles', () => {
+		const diagnostics = diagnoseAgentAuthoring({
+			slug: 'read-only-writer',
+			projectAgentClassId: 'documentation',
+			activityProfiles: {
+				planning: {
+					handler: 'writer',
+					branchPolicy: { kind: 'read-only', base: 'main' },
+					contentAccess: {
+						readModels: ['objective'],
+						commit: { allowed: false },
+					},
+					tools: { allowed: ['treeseed.content.read'] },
+					execution: { requiredCapabilities: ['treedx_workspace'] },
+					outputs: { modelMutations: ['linked_note:create'] },
+				},
+			},
+		});
+		expect(diagnostics.map((diagnostic) => diagnostic.code)).toContain('agent.mutation_output_requires_content_commit');
+	});
 });

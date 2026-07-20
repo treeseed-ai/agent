@@ -10,6 +10,7 @@ import {
 } from '../../src/agents/registry.ts';
 import { estimateHandler } from '../../src/agents/handlers/estimate.ts';
 import { normalizeAgentRuntimeSpec } from '../../src/agents/spec-normalizer.ts';
+import { selectAgentActivityProfile } from '../../src/agents/kernel/activity-profile-resolver.ts';
 
 const tempRoots: string[] = [];
 const agentRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
@@ -19,7 +20,7 @@ const hasIntegratedMarketAgentContent = existsSync(resolve(marketRoot, 'src/cont
 function createTenantRoot() {
 	const tenantRoot = mkdtempSync(resolve(tmpdir(), 'treeseed-agent-registry-'));
 	tempRoots.push(tenantRoot);
-	mkdirSync(resolve(tenantRoot, 'src/agents'), { recursive: true });
+	mkdirSync(resolve(tenantRoot, 'src/agent-handlers'), { recursive: true });
 	return tenantRoot;
 }
 
@@ -64,6 +65,10 @@ function profileAgent(overrides: Record<string, unknown> = {}) {
 					read: { models: ['question', 'decision'], actions: ['query', 'read'] },
 					commit: { allowed: false },
 				},
+				execution: {
+					allowedPaths: ['src/**'],
+					forbiddenPaths: ['test/**', 'tests/**'],
+				},
 			},
 		},
 		...overrides,
@@ -80,7 +85,7 @@ describe('agent handler registry', () => {
 	it('loads tenant TypeScript handlers without requiring a tenant tsconfig', async () => {
 		const tenantRoot = createTenantRoot();
 		writeFileSync(
-			resolve(tenantRoot, 'src/agents/security-audit.ts'),
+			resolve(tenantRoot, 'src/agent-handlers/security-audit.ts'),
 			`import type { AgentHandler } from '@treeseed/agent/runtime-types';
 
 export const securityAuditHandler: AgentHandler = {
@@ -129,6 +134,45 @@ export const securityAuditHandler: AgentHandler = {
 				base: 'staging',
 				target: 'staging',
 			},
+		});
+	});
+
+	it('selects the complete configured activity profile for assignment mode', () => {
+		const normalized = normalizeAgentRuntimeSpec(profileAgent(), {
+			registeredHandlers: ['actor'],
+			messageTypes: [],
+		});
+		expect(normalized.spec).not.toBeNull();
+		const planning = selectAgentActivityProfile(normalized.spec!, 'planning');
+		expect(planning).toMatchObject({
+			activityType: 'planning',
+			handler: 'actor',
+			systemPrompt: 'Plan engineering work.',
+			tools: { allowed: ['treeseed.content.query', 'treeseed.content.read', 'treeseed.status'] },
+			outputs: { modelMutations: ['note:create'] },
+			branchPolicy: { kind: 'read-only', base: 'main' },
+		});
+		expect(selectAgentActivityProfile(normalized.spec!, 'acting')).toMatchObject({
+			execution: { allowedPaths: ['src/**'], forbiddenPaths: ['test/**', 'tests/**'] },
+		});
+		expect(selectAgentActivityProfile({ ...normalized.spec!, activityProfiles: {} }, 'planning')).toBeNull();
+		expect(selectAgentActivityProfile({
+			...normalized.spec!,
+			activityProfiles: {
+				...normalized.spec!.activityProfiles,
+				reporting: {
+					enabled: true,
+					handler: 'reporter',
+					prompt: { system: 'Report workday evidence.' },
+					branchPolicy: { kind: 'read-only', base: 'main' },
+					tools: { allowed: ['treeseed.content.read'] },
+					outputs: { messageTypes: [], modelMutations: ['workday_report:create'] },
+				},
+			},
+		}, 'planning', 'reporting')).toMatchObject({
+			activityType: 'reporting',
+			handler: 'reporter',
+			systemPrompt: 'Report workday evidence.',
 		});
 	});
 

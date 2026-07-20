@@ -85,18 +85,19 @@ function emitDeclarations() {
 			emitDeclarationOnly: true,
 			declarationDir: distRoot,
 			noEmit: false,
-			noEmitOnError: false,
-			noCheck: true,
+			noEmitOnError: true,
+			noCheck: false,
 		},
 	});
 	const result = program.emit();
-	if (result.emitSkipped) {
-		const diagnostics = ts.formatDiagnosticsWithColorAndContext(result.diagnostics, {
+	const diagnostics = ts.getPreEmitDiagnostics(program).concat(result.diagnostics);
+	if (result.emitSkipped || diagnostics.length > 0) {
+		const rendered = ts.formatDiagnosticsWithColorAndContext(diagnostics, {
 			getCanonicalFileName: (fileName) => fileName,
 			getCurrentDirectory: () => process.cwd(),
 			getNewLine: () => '\n',
 		});
-		throw new Error(`Declaration build failed.\n${diagnostics}`);
+		throw new Error(`Declaration build failed.\n${rendered}`);
 	}
 }
 

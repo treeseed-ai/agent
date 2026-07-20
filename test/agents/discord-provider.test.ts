@@ -47,7 +47,7 @@ function agent(): AgentRuntimeSpec {
 			branchPrefix: 'agent',
 			providerProfile: {
 				requiredCapabilities: ['human_coordination'],
-				preferredLanes: [],
+				preferredExecutionProviders: [],
 				acceptableFallbacks: [],
 				fallbackPolicy: 'fail_if_unavailable',
 			},

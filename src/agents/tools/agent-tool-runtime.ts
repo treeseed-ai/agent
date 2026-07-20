@@ -1,20 +1,23 @@
 import { execFile } from 'node:child_process';
-import { appendFile } from 'node:fs/promises';
+import { readFile, realpath, stat } from 'node:fs/promises';
+import { isAbsolute, relative, resolve } from 'node:path';
 import { promisify } from 'node:util';
-import type { AgentToolExecutionTarget, AgentToolMutability, SdkDispatchConfig, SdkDispatchResult } from '@treeseed/sdk';
+import type { AgentToolExecutionTarget, AgentToolMutability, ResearchSourcePolicy, SdkDispatchConfig, SdkDispatchPolicy, SdkDispatchResult } from '@treeseed/sdk';
 import { findAgentToolDefinition } from '@treeseed/sdk';
+import { checkpointAgentWorktree } from '@treeseed/sdk/operations/agent-tools';
 import { AgentSdk } from '@treeseed/sdk/sdk';
 import type { ExecutionProviderToolDescriptor, TreeDxProxyExecutionToolDescriptor } from '../runtime-types.ts';
 import { callTreeDxProxyTool } from './treedx-proxy-client.ts';
 import type { TreeDxProxyToolName } from './treedx-proxy-tool.ts';
 import { validateAgentToolInput } from './agent-tool-schema.ts';
 import { callTreeseedContentTool } from './content-tool-runtime.ts';
+import { fetchGovernedResearchSource, searchGovernedResearchSources } from './governed-research-tools.ts';
 
 const execFileAsync = promisify(execFile);
 
 export interface AgentToolRuntimeOptions {
 	apiBaseUrl: string;
-	providerApiKey: string;
+	providerAccessToken: string;
 	assignmentId: string;
 	leaseToken?: string | null;
 	descriptors: ExecutionProviderToolDescriptor[];
@@ -23,6 +26,7 @@ export interface AgentToolRuntimeOptions {
 	repoRoot?: string;
 	telemetryPath?: string | null;
 	onTelemetry?: (entry: AgentToolCallTelemetry) => void | Promise<void>;
+	researchSourcePolicy?: ResearchSourcePolicy;
 }
 
 export interface AgentToolCallTelemetry {
@@ -63,11 +67,23 @@ export type AgentToolDerivedEvent =
 	| {
 		type: 'content_created';
 		contentRef: Record<string, unknown>;
+		requiresCommit?: boolean;
 	}
 	| {
 		type: 'branch_staged';
 		branchRef: string;
 		stagedRef?: string;
+	}
+	| {
+		type: 'content_committed';
+		commitSha?: string;
+		branchRef?: string;
+	}
+	| {
+		type: 'source_checkpoint_committed';
+		commitSha: string;
+		branchRef?: string;
+		changedPaths: string[];
 	};
 
 function record(value: unknown): Record<string, unknown> {
@@ -104,12 +120,12 @@ function structuredError(code: string, message: string, metadata: Record<string,
 function defaultSdk(options: AgentToolRuntimeOptions) {
 	if (options.sdk) return options.sdk;
 	const projectId = text(record(options.descriptors[0]?.metadata).projectId);
-	const dispatch = options.apiBaseUrl && options.providerApiKey && projectId
+	const dispatch = options.apiBaseUrl && options.providerAccessToken && projectId
 		? {
 			projectId,
 			marketBaseUrl: options.apiBaseUrl,
 			policy: 'prefer_local',
-			credentialSource: { type: 'bearer', token: options.providerApiKey },
+			credentialSource: { type: 'bearer', token: options.providerAccessToken },
 			fetchImpl: options.fetchImpl,
 		} satisfies SdkDispatchConfig
 		: undefined;
@@ -149,9 +165,9 @@ async function callSdkDispatchTool(options: AgentToolRuntimeOptions, descriptor:
 		namespace: definition.dispatch.namespace,
 		operation: definition.dispatch.operation,
 		input: dispatchInput,
-		preferredMode: typeof descriptor.metadata?.dispatchPreferredMode === 'string'
+		preferredMode: (typeof descriptor.metadata?.dispatchPreferredMode === 'string'
 			? descriptor.metadata.dispatchPreferredMode
-			: definition.dispatch.assignmentPreferredMode ?? definition.dispatch.preferredMode ?? 'auto',
+			: definition.dispatch.assignmentPreferredMode ?? definition.dispatch.preferredMode ?? 'auto') as SdkDispatchPolicy,
 	}) as SdkDispatchResult;
 	return { ok: true, payload: result };
 }
@@ -167,6 +183,94 @@ function assertPathScope(descriptor: ExecutionProviderToolDescriptor, path: stri
 		return structuredError('path_not_allowed', `${path} is outside the assignment path scope.`, { path, allowedPaths });
 	}
 	return null;
+}
+
+async function scopedRepositoryPath(
+	options: AgentToolRuntimeOptions,
+	descriptor: ExecutionProviderToolDescriptor,
+	path: string,
+) {
+	const normalized = normalizePath(path);
+	if (!normalized || isAbsolute(path) || normalized === '..' || normalized.startsWith('../')) {
+		return { error: structuredError('repository_path_invalid', 'Repository paths must be relative and cannot escape the assignment repository.', { path }) };
+	}
+	const scopeError = assertPathScope(descriptor, normalized);
+	if (scopeError) return { error: scopeError };
+	const root = await realpath(options.repoRoot ?? process.cwd());
+	const target = await realpath(resolve(root, normalized)).catch(() => null);
+	if (!target) return { error: structuredError('repository_path_missing', `${normalized} does not exist in the assignment repository.`, { path: normalized }) };
+	const targetRelative = relative(root, target).replace(/\\/gu, '/');
+	if (!targetRelative || targetRelative === '..' || targetRelative.startsWith('../') || isAbsolute(targetRelative)) {
+		return { error: structuredError('repository_path_escape', `${normalized} resolves outside the assignment repository.`, { path: normalized }) };
+	}
+	return { root, target, path: targetRelative };
+}
+
+async function callRepositoryReadFileTool(
+	options: AgentToolRuntimeOptions,
+	descriptor: ExecutionProviderToolDescriptor,
+	input: Record<string, unknown>,
+) {
+	const scoped = await scopedRepositoryPath(options, descriptor, text(input.path));
+	if ('error' in scoped) return scoped.error;
+	const maxBytes = Math.max(1, Math.min(262_144, Number(input.maxBytes) || 131_072));
+	const details = await stat(scoped.target);
+	if (!details.isFile()) return structuredError('repository_path_not_file', `${scoped.path} is not a file.`, { path: scoped.path });
+	if (details.size > maxBytes) {
+		return structuredError('repository_file_too_large', `${scoped.path} exceeds the ${maxBytes}-byte assignment read limit.`, {
+			path: scoped.path,
+			size: details.size,
+			maxBytes,
+		});
+	}
+	return {
+		ok: true,
+		payload: {
+			path: scoped.path,
+			content: await readFile(scoped.target, 'utf8'),
+			size: details.size,
+			truncated: false,
+		},
+	};
+}
+
+async function callRepositorySearchTool(
+	options: AgentToolRuntimeOptions,
+	descriptor: ExecutionProviderToolDescriptor,
+	input: Record<string, unknown>,
+) {
+	const query = text(input.query);
+	const requestedPaths = Array.isArray(input.paths) ? input.paths.map(String) : [];
+	const paths = requestedPaths.length ? requestedPaths : ['.'];
+	for (const path of paths) {
+		if (path === '.') continue;
+		const scopeError = assertPathScope(descriptor, path);
+		if (scopeError) return scopeError;
+	}
+	const root = await realpath(options.repoRoot ?? process.cwd());
+	const maxResults = Math.max(1, Math.min(200, Number(input.maxResults) || 50));
+	try {
+		const { stdout } = await execFileAsync(
+			'git',
+			['grep', '-n', '-I', '-F', '-e', query, '--', ...paths],
+			{ cwd: root, maxBuffer: 1_048_576 },
+		);
+		const matches = stdout.split('\n').filter(Boolean).slice(0, maxResults).map((line) => {
+			const separator = line.indexOf(':');
+			return separator > 0
+				? { path: line.slice(0, separator), match: line.slice(separator + 1) }
+				: { path: '', match: line };
+		});
+		for (const match of matches) {
+			const scopeError = assertPathScope(descriptor, match.path);
+			if (scopeError) return scopeError;
+		}
+		return { ok: true, payload: { query, matches, truncated: stdout.split('\n').filter(Boolean).length > matches.length } };
+	} catch (error) {
+		const exitCode = Number(record(error).code);
+		if (exitCode === 1) return { ok: true, payload: { query, matches: [], truncated: false } };
+		return structuredError('repository_search_failed', error instanceof Error ? error.message : String(error), { query });
+	}
 }
 
 async function callChangedPathsTool(descriptor: ExecutionProviderToolDescriptor, input: Record<string, unknown>) {
@@ -191,6 +295,30 @@ async function callChangedPathsTool(descriptor: ExecutionProviderToolDescriptor,
 		payload.diffSummary = diff.stdout;
 	}
 	return { ok: true, payload };
+}
+
+async function callCheckpointTool(options: AgentToolRuntimeOptions, descriptor: ExecutionProviderToolDescriptor, input: Record<string, unknown>) {
+	const metadata = record(descriptor.metadata);
+	const worktreeRoot = text(metadata.worktreeRoot);
+	const allowedPaths = Array.isArray(metadata.allowedPaths) ? metadata.allowedPaths.map(String).filter(Boolean) : [];
+	const forbiddenPaths = Array.isArray(metadata.forbiddenPaths) ? metadata.forbiddenPaths.map(String).filter(Boolean) : [];
+	const agentSlug = text(metadata.agentSlug) || 'assignment-agent';
+	const result = await checkpointAgentWorktree({
+		request: {
+			taskId: options.assignmentId, agentSlug, agentRole: agentSlug,
+			projectId: text(metadata.projectId), environment: text(metadata.environment) || 'local',
+			repoRoot: options.repoRoot ?? process.cwd(), worktreeRoot,
+			allowedPaths, forbiddenPaths, message: text(input.message), input,
+		},
+		grant: {
+			id: `assignment-checkpoint:${options.assignmentId}`, operations: ['save'], modes: ['mutating'],
+			projectIds: [text(metadata.projectId)], environments: [text(metadata.environment) || 'local'],
+			allowedPaths, forbiddenPaths,
+		},
+	});
+	return result.status === 'completed'
+		? { ok: true, payload: result }
+		: structuredError(result.error?.code ?? 'operation_checkpoint_failed', result.summary, { result });
 }
 
 export async function callAgentTool(
@@ -221,7 +349,7 @@ export async function callAgentTool(
 		try {
 			return await callTreeDxProxyTool({
 				apiBaseUrl: options.apiBaseUrl,
-				providerApiKey: options.providerApiKey,
+				providerAccessToken: options.providerAccessToken,
 				assignmentId: options.assignmentId,
 				handleId: treeDxDescriptor.handleId,
 				descriptor: treeDxDescriptor,
@@ -239,7 +367,7 @@ export async function callAgentTool(
 	if (descriptor.executionTarget === 'treeseed_content') {
 		return await callTreeseedContentTool({
 			apiBaseUrl: options.apiBaseUrl,
-			providerApiKey: options.providerApiKey,
+			providerAccessToken: options.providerAccessToken,
 			assignmentId: options.assignmentId,
 			descriptor,
 			input,
@@ -249,151 +377,26 @@ export async function callAgentTool(
 	if (descriptor.id === 'treeseed.changed_paths') {
 		return await callChangedPathsTool(descriptor, input);
 	}
+	if (descriptor.id === 'treeseed.checkpoint') {
+		return await callCheckpointTool(options, descriptor, input);
+	}
+	if (descriptor.id === 'treeseed.repository.read_file') {
+		return await callRepositoryReadFileTool(options, descriptor, input);
+	}
+	if (descriptor.id === 'treeseed.repository.search') {
+		return await callRepositorySearchTool(options, descriptor, input);
+	}
+	if (descriptor.id === 'research.search_sources' || descriptor.id === 'research.fetch_source') {
+		try {
+			const researchAllowedDomains = Array.isArray(descriptor.metadata?.researchAllowedDomains)
+				? descriptor.metadata.researchAllowedDomains.map(String).filter(Boolean)
+				: undefined;
+			return descriptor.id === 'research.search_sources'
+				? await searchGovernedResearchSources(input, { fetchImpl: options.fetchImpl, policy: options.researchSourcePolicy, allowedDomains: researchAllowedDomains })
+				: await fetchGovernedResearchSource(input, { fetchImpl: options.fetchImpl, policy: options.researchSourcePolicy, allowedDomains: researchAllowedDomains });
+		} catch (error) {
+			return structuredError('research_egress_failed', error instanceof Error ? error.message : String(error), { toolId: descriptor.id });
+		}
+	}
 	return structuredError('tool_not_implemented', `${toolId} is not implemented by the provider runner tool runtime.`);
-}
-
-function summarize(value: Record<string, unknown>) {
-	const summary: Record<string, unknown> = {};
-	for (const [key, raw] of Object.entries(value)) {
-		if (/token|secret|password|api[_-]?key|authorization/iu.test(key)) {
-			summary[key] = '<redacted>';
-		} else if (typeof raw === 'string') {
-			summary[key] = raw.length > 120 ? `${raw.slice(0, 117)}...` : raw;
-		} else if (Array.isArray(raw)) {
-			summary[key] = raw.length > 20 ? [...raw.slice(0, 20), `... ${raw.length - 20} more`] : raw;
-		} else if (raw && typeof raw === 'object') {
-			summary[key] = '<object>';
-		} else {
-			summary[key] = raw;
-		}
-	}
-	return summary;
-}
-
-function operationForTool(toolId: string, descriptor: ExecutionProviderToolDescriptor | null | undefined) {
-	const definition = findAgentToolDefinition(toolId);
-	if (definition?.dispatch) {
-		return {
-			namespace: definition.dispatch.namespace,
-			name: definition.dispatch.operation,
-		};
-	}
-	const metadata = record(descriptor?.metadata);
-	return {
-		namespace: text(metadata.operationNamespace) || descriptor?.executionTarget,
-		name: text(metadata.operationName) || toolId,
-	};
-}
-
-function contentRefFrom(value: Record<string, unknown>) {
-	const payload = record(value.payload);
-	const content = record(payload.content);
-	const data = record(payload.data);
-	const ref = record(payload.ref);
-	const id = text(value.id) || text(payload.id) || text(content.id) || text(data.id) || text(ref.id);
-	const model = text(value.model) || text(payload.model) || text(content.model) || text(data.model) || text(ref.model);
-	const path = text(value.path) || text(payload.path) || text(content.path) || text(data.path) || text(ref.path);
-	return id || model || path
-		? { id: id || undefined, model: model || undefined, path: path || undefined }
-		: null;
-}
-
-function deriveToolEvents(
-	toolId: string,
-	descriptor: ExecutionProviderToolDescriptor | null | undefined,
-	input: Record<string, unknown>,
-	result: unknown,
-): AgentToolDerivedEvent[] {
-	const output = record(result);
-	if (output.ok === false) return [];
-	const operation = operationForTool(toolId, descriptor);
-	const inputModel = text(input.model) || text(input.contentType) || text(record(input.content).model);
-	const outputModel = text(output.model) || text(record(output.payload).model) || text(record(record(output.payload).content).model);
-	const model = inputModel || outputModel;
-	const action = text(input.action) || operation.name || toolId;
-	const ref = contentRefFrom({ ...output, model: model || undefined });
-	const events: AgentToolDerivedEvent[] = [];
-	if (model === 'question') {
-		const questionRef = ref ?? { model: 'question' };
-		if (/create|add|write/iu.test(action)) {
-			events.push({
-				type: 'question_created',
-				questionRef,
-				answerPolicy: record(input.answerPolicy ?? record(input.frontmatter).answerPolicy ?? record(input.metadata).answerPolicy),
-			});
-		} else {
-			events.push({ type: 'question_updated', questionRef });
-		}
-	}
-	if (ref && /create|add|write/iu.test(action)) {
-		events.push({ type: 'content_created', contentRef: ref });
-	}
-	const payload = record(output.payload);
-	const branchRef = text(payload.branchRef) || text(payload.branchName) || text(output.branchRef);
-	if ((toolId === 'treeseed.stage' || /stage/iu.test(action)) && branchRef) {
-		events.push({ type: 'branch_staged', branchRef, stagedRef: text(payload.stagedRef) || undefined });
-	}
-	return events;
-}
-
-async function emitTelemetry(options: AgentToolRuntimeOptions, entry: AgentToolCallTelemetry) {
-	await options.onTelemetry?.(entry);
-	if (options.telemetryPath) {
-		await appendFile(options.telemetryPath, `${JSON.stringify(entry)}\n`, 'utf8');
-	}
-}
-
-export async function callAgentToolWithTelemetry(
-	options: AgentToolRuntimeOptions,
-	toolId: string,
-	input: Record<string, unknown> = {},
-) {
-	const descriptor = descriptorFor(options, toolId);
-	const metadata = record(descriptor?.metadata);
-	const assignmentId = text(metadata.assignmentId) || options.assignmentId;
-	const projectId = text(metadata.projectId);
-	const startedAt = new Date();
-	if (descriptor?.kind === 'agent_tool') {
-		const operation = operationForTool(toolId, descriptor);
-		await emitTelemetry(options, {
-			assignmentId,
-			projectId,
-			toolId,
-			executionTarget: descriptor.executionTarget,
-			mutability: descriptor.mutability,
-			status: 'started',
-			startedAt: startedAt.toISOString(),
-			inputSummary: summarize(input),
-			operation,
-		});
-	}
-	const result = await callAgentTool(options, toolId, input);
-	if (descriptor?.kind === 'agent_tool') {
-		const completedAt = new Date();
-		const resultRecord = record(result);
-		const failed = resultRecord.ok === false;
-		const operation = operationForTool(toolId, descriptor);
-		await emitTelemetry(options, {
-			assignmentId,
-			projectId,
-			toolId,
-			executionTarget: descriptor.executionTarget,
-			mutability: descriptor.mutability,
-			status: failed ? 'failed' : 'completed',
-			startedAt: startedAt.toISOString(),
-			completedAt: completedAt.toISOString(),
-			durationMs: completedAt.getTime() - startedAt.getTime(),
-			inputSummary: summarize(input),
-			outputSummary: failed ? undefined : summarize(resultRecord),
-			operation,
-			derivedEvents: failed ? [] : deriveToolEvents(toolId, descriptor, input, resultRecord),
-			error: failed
-				? {
-					code: text(resultRecord.code) || 'tool_failed',
-					message: text(resultRecord.message) || 'Tool call failed.',
-				}
-				: undefined,
-		});
-	}
-	return result;
 }

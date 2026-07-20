@@ -29,7 +29,7 @@ describe('Copilot agent tools', () => {
 		try {
 			const tools = createCopilotAgentTools({
 				apiBaseUrl: '',
-				providerApiKey: '',
+				providerAccessToken: '',
 				assignmentId: 'assignment-copilot',
 				descriptors: [statusDescriptor()],
 				repoRoot,

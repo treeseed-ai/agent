@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 
 import { providerRuntimeVersion, resolveProviderConfig, type ProviderRole } from './config.ts';
-import { buildProviderRegistrationRequest, registerProvider } from './registration.ts';
+import { writeProviderRuntimeStatus } from './runtime-status.ts';
 
-const ROLES = ['manager', 'runner', 'doctor', 'healthcheck', 'register', 'plan', 'version'] as const satisfies ProviderRole[];
+const ROLES = ['manager', 'runner', 'doctor', 'healthcheck', 'plan', 'version'] as const satisfies ProviderRole[];
 
 function args() {
 	return process.argv.slice(2);
@@ -39,7 +39,6 @@ function printHelp() {
 		'Examples:',
 		'  node ./dist/provider/entrypoint.js version',
 		'  node ./dist/provider/entrypoint.js healthcheck',
-		'  node ./dist/provider/entrypoint.js register --plan',
 		'  node ./dist/provider/entrypoint.js manager --plan --json',
 		'  node ./dist/provider/entrypoint.js runner --plan --json',
 		'  node ./dist/provider/entrypoint.js runner --once --json',
@@ -75,27 +74,31 @@ function sleep(ms: number) {
 	});
 }
 
-async function runLoop(role: 'manager' | 'runner', intervalSeconds: number, runOnce: () => Promise<unknown>) {
+async function runLoop(role: 'manager' | 'runner', dataDirectory: string, intervalSeconds: number, runOnce: () => Promise<unknown>) {
 	emit(okPayload(role, {
 		status: 'running',
 		intervalSeconds,
 	}));
 	for (;;) {
 		try {
-			emit(await runOnce());
+			const result = await runOnce();
+			await writeProviderRuntimeStatus(dataDirectory, { role, ok: true, result });
+			emit(result);
 		} catch (error) {
-			emit({
+			const failure = {
 				ok: false,
 				role,
 				error: error instanceof Error ? error.message : String(error),
-			});
+			};
+			await writeProviderRuntimeStatus(dataDirectory, failure);
+			emit(failure);
 		}
 		await sleep(intervalSeconds * 1000);
 	}
 }
 
-function requireConnection(role: ProviderRole, planOnly: boolean) {
-	return !planOnly && ['manager', 'runner', 'register'].includes(role);
+function requireConnection(role: ProviderRole, mode: 'plan' | 'live') {
+	return mode === 'live' && ['manager', 'runner'].includes(role);
 }
 
 async function main() {
@@ -104,11 +107,14 @@ async function main() {
 		return;
 	}
 	const role = roleArg();
-	const planOnly = flagEnabled('--plan');
+	const mode = flagEnabled('--plan') ? 'plan' : 'live';
 	const once = flagEnabled('--once');
 	const diagnostic = diagnosticMode();
-	const config = resolveProviderConfig({ requireConnection: requireConnection(role, planOnly) && !diagnostic });
-	if (role !== 'api' && requireConnection(role, planOnly) && !diagnostic) {
+	const config = resolveProviderConfig({ requireConnection: requireConnection(role, mode) && !diagnostic });
+	if (['manager', 'runner'].includes(role) && mode === 'live' && !diagnostic && !config.manifestPath) {
+		throw new Error('treeseed.capacity-provider.yaml (or TREESEED_CAPACITY_PROVIDER_MANIFEST) is required; legacy single-team provider credentials are no longer supported.');
+	}
+	if (requireConnection(role, mode) && !diagnostic) {
 		const { materializeCodexAuthFromEnv } = await import('../agents/adapters/codex-auth.ts');
 		await materializeCodexAuthFromEnv(process.env);
 	}
@@ -126,47 +132,24 @@ async function main() {
 		emit(await checkProviderHealth(config));
 		return;
 	}
-	if (role === 'register') {
-		if (planOnly) {
-			emit(okPayload('register', {
-				planOnly: true,
-				request: buildProviderRegistrationRequest(config),
-				redactedEnv: config.redactedEnv,
-			}));
-			return;
-		}
-		emit(await registerProvider(config));
-		return;
-	}
 	if (role === 'plan') {
 		const { buildProviderPlan } = await import('./lifecycle.ts');
-		emit(await buildProviderPlan(config, { planOnly }));
+		emit(await buildProviderPlan(config));
 		return;
 	}
 	if (role === 'manager') {
-		const { runManagerSkeleton } = await import('./lifecycle.ts');
-		if (planOnly || diagnostic) {
-			emit(await runManagerSkeleton(config, { planOnly: true }));
-			return;
-		}
-		if (once) {
-			emit(await runManagerSkeleton(config));
-			return;
-		}
-		await runLoop('manager', pollSeconds('TREESEED_PROVIDER_MANAGER_POLL_SECONDS', 60), () => runManagerSkeleton(config));
+		if (!config.manifestPath) throw new Error('A capacity provider manifest is required to run the provider manager.');
+		const { recoverMultiTeamProviderRunners, runMultiTeamProviderManager } = await import('./multi-team-runtime.ts');
+		if (mode === 'live' && !diagnostic) emit(okPayload('manager', { action: 'restart-recovery', results: await recoverMultiTeamProviderRunners(config) }));
+		if (once || mode === 'plan' || diagnostic) emit(await runMultiTeamProviderManager(config, { mode: mode === 'plan' || diagnostic ? 'plan' : 'live' }));
+		else await runLoop('manager', config.dataDir, pollSeconds('TREESEED_PROVIDER_MANAGER_POLL_SECONDS', 15), () => runMultiTeamProviderManager(config));
 		return;
 	}
 	if (role === 'runner') {
-		const { runRunnerSkeleton } = await import('./lifecycle.ts');
-		if (planOnly || diagnostic) {
-			emit(await runRunnerSkeleton(config, { planOnly: true }));
-			return;
-		}
-		if (once) {
-			emit(await runRunnerSkeleton(config));
-			return;
-		}
-		await runLoop('runner', pollSeconds('TREESEED_PROVIDER_RUNNER_POLL_SECONDS', 15), () => runRunnerSkeleton(config, { background: true }));
+		if (!config.manifestPath) throw new Error('A capacity provider manifest is required to run provider runners.');
+		const { runMultiTeamProviderRunners } = await import('./multi-team-runtime.ts');
+		if (once || mode === 'plan' || diagnostic) emit(await runMultiTeamProviderRunners(config, { mode: mode === 'plan' || diagnostic ? 'plan' : 'live' }));
+		else await runLoop('runner', config.dataDir, pollSeconds('TREESEED_PROVIDER_RUNNER_POLL_SECONDS', 15), () => runMultiTeamProviderRunners(config, { background: true }));
 		return;
 	}
 }

@@ -1,10 +1,9 @@
 import {
 	redactCapacityProviderEnv,
-	resolveCapacityProviderEnvironment,
-	type CapacityProviderEnvironmentInput,
+	type CapacityProviderManifestV2,
 } from '@treeseed/sdk/capacity-provider';
 import type { AgentSdkTreeDxOptions } from '@treeseed/sdk/sdk';
-import { createHmac, randomUUID } from 'node:crypto';
+import { mintTreeDxHs256Token } from '@treeseed/sdk/treedx/auth';
 import { existsSync } from 'node:fs';
 import { resolveCodexAuthFile } from '../agents/adapters/codex-auth.ts';
 import {
@@ -20,16 +19,13 @@ import {
 	type DiscordExecutionProviderConfig,
 } from '../agents/adapters/execution-discord.ts';
 
-export type ProviderRole = 'manager' | 'runner' | 'doctor' | 'healthcheck' | 'register' | 'plan' | 'version';
+export type ProviderRole = 'manager' | 'runner' | 'doctor' | 'healthcheck' | 'plan' | 'version';
 
 export interface JiraProviderRuntimeConfig extends JiraExecutionProviderConfig {}
 export interface GitHubIssuesProviderRuntimeConfig extends GitHubIssuesExecutionProviderConfig {}
 export interface DiscordProviderRuntimeConfig extends DiscordExecutionProviderConfig {}
 
-export interface ProviderRuntimeConfig {
-	marketUrl: string;
-	marketId: string;
-	apiKey: string;
+export interface ProviderHostRuntimeConfig {
 	dataDir: string;
 	apiPort: number;
 	environment: string;
@@ -48,6 +44,18 @@ export interface ProviderRuntimeConfig {
 	treeDx: AgentSdkTreeDxOptions | null;
 	env: Record<string, string>;
 	redactedEnv: Record<string, string>;
+	manifestPath?: string | null;
+}
+
+export interface ProviderConnectionRuntimeContext extends ProviderHostRuntimeConfig {
+	connectionId: string;
+	marketUrl: string;
+	marketAudience: string;
+	teamId: string;
+	providerId: string;
+	membershipId: string;
+	accessToken: string;
+	executionProviders?: CapacityProviderManifestV2['executionProviders'];
 }
 
 function envValue(env: NodeJS.ProcessEnv, name: string) {
@@ -69,10 +77,6 @@ function booleanValue(value: string) {
 	return ['1', 'true', 'yes', 'on'].includes(value.toLowerCase());
 }
 
-function base64urlJson(value: Record<string, unknown>) {
-	return Buffer.from(JSON.stringify(value)).toString('base64url');
-}
-
 function arrayEnvValue(env: NodeJS.ProcessEnv, name: string, fallback: string[]) {
 	const raw = envValue(env, name);
 	if (!raw) return fallback;
@@ -92,27 +96,16 @@ function mintLocalTreeDxJwt(env: NodeJS.ProcessEnv) {
 	const issuer = envValue(env, 'TREESEED_TREEDX_JWT_ISSUER') || envValue(env, 'TREEDX_JWT_ISSUER');
 	const audience = envValue(env, 'TREESEED_TREEDX_JWT_AUDIENCE') || envValue(env, 'TREEDX_JWT_AUDIENCE');
 	if (!secret || !issuer || !audience) return '';
-	const now = Math.floor(Date.now() / 1000);
 	const actorId = envValue(env, 'TREESEED_TREEDX_PROXY_ACTOR_ID') || envValue(env, 'TREESEED_TREEDX_ACTOR_ID') || 'treeseed-provider';
 	const tenantId = envValue(env, 'TREESEED_TREEDX_PROXY_TENANT_ID') || envValue(env, 'TREESEED_TREEDX_TENANT_ID') || 'treeseed-control-plane';
-	const payload = {
-		iss: issuer,
-		aud: audience,
-		sub: actorId,
-		jti: randomUUID(),
-		iat: now,
-		nbf: now - 5,
-		exp: now + 3600,
-		treedx_actor_id: actorId,
-		treedx_tenant_id: tenantId,
-		treedx_repo_ids: arrayEnvValue(env, 'TREESEED_TREEDX_REPO_IDS', ['*']),
-		treedx_capabilities: arrayEnvValue(env, 'TREESEED_TREEDX_CAPABILITIES', ['*']),
-		treedx_refs: arrayEnvValue(env, 'TREESEED_TREEDX_REFS', ['*']),
-		treedx_paths: arrayEnvValue(env, 'TREESEED_TREEDX_PATHS', ['**']),
-	};
-	const signingInput = `${base64urlJson({ alg: 'HS256', typ: 'JWT' })}.${base64urlJson(payload)}`;
-	const signature = createHmac('sha256', secret).update(signingInput).digest('base64url');
-	return `${signingInput}.${signature}`;
+	return mintTreeDxHs256Token({
+		secret, issuer, audience, actorId, tenantId,
+		repoIds: arrayEnvValue(env, 'TREESEED_TREEDX_REPO_IDS', ['*']),
+		capabilities: arrayEnvValue(env, 'TREESEED_TREEDX_CAPABILITIES', ['*']),
+		refs: arrayEnvValue(env, 'TREESEED_TREEDX_REFS', ['*']),
+		paths: arrayEnvValue(env, 'TREESEED_TREEDX_PATHS', ['**']),
+		ttlSeconds: 3600,
+	});
 }
 
 export function resolveProviderTreeDxOptions(env: NodeJS.ProcessEnv = process.env): AgentSdkTreeDxOptions | null {
@@ -128,12 +121,6 @@ export function resolveProviderTreeDxOptions(env: NodeJS.ProcessEnv = process.en
 	};
 }
 
-function managementApiUrl(env: NodeJS.ProcessEnv) {
-	return envValue(env, 'TREESEED_MANAGEMENT_API_URL')
-		|| envValue(env, 'TREESEED_MARKET_URL')
-		|| 'https://api.treeseed.dev';
-}
-
 function configuredCodexAuthFile(env: NodeJS.ProcessEnv) {
 	const explicit = envValue(env, 'TREESEED_CODEX_AUTH_FILE') || envValue(env, 'CODEX_AUTH_FILE');
 	const resolved = resolveCodexAuthFile(env);
@@ -141,15 +128,10 @@ function configuredCodexAuthFile(env: NodeJS.ProcessEnv) {
 	return existsSync(resolved) ? resolved : '';
 }
 
-export function resolveProviderEnvironmentInput(env: NodeJS.ProcessEnv = process.env): CapacityProviderEnvironmentInput {
+export function resolveProviderEnvironmentInput(env: NodeJS.ProcessEnv = process.env) {
 	const codexAuthFile = configuredCodexAuthFile(env);
 	const providerApiPort = envValue(env, 'TREESEED_PROVIDER_API_PORT') || envValue(env, 'PORT') || '3100';
 	return {
-		marketUrl: managementApiUrl(env),
-		marketId: envValue(env, 'TREESEED_MARKET_ID') || envValue(env, 'TREESEED_MANAGER_ID') || 'local',
-		apiKey: envValue(env, 'TREESEED_CAPACITY_PROVIDER_API_KEY'),
-		providerId: envValue(env, 'TREESEED_CAPACITY_PROVIDER_ID') || undefined,
-		teamId: envValue(env, 'TREESEED_CAPACITY_PROVIDER_TEAM_ID') || undefined,
 		providerDataDir: envValue(env, 'TREESEED_PROVIDER_DATA_DIR') || '/data',
 		providerApiPort,
 		providerEnvironment: envValue(env, 'TREESEED_PROVIDER_ENVIRONMENT') || envValue(env, 'TREESEED_ENVIRONMENT') || 'local',
@@ -168,7 +150,7 @@ export function resolveProviderEnvironmentInput(env: NodeJS.ProcessEnv = process
 export function resolveProviderConfig(options: {
 	env?: NodeJS.ProcessEnv;
 	requireConnection?: boolean;
-} = {}): ProviderRuntimeConfig {
+} = {}): ProviderHostRuntimeConfig {
 	const env = options.env ?? process.env;
 	const input = resolveProviderEnvironmentInput(env);
 	const codexAuthFile = configuredCodexAuthFile(env);
@@ -176,19 +158,15 @@ export function resolveProviderConfig(options: {
 	const githubIssues = resolveGitHubIssuesExecutionProviderConfig(env);
 	const discord = resolveDiscordExecutionProviderConfig(env);
 	const treeDx = resolveProviderTreeDxOptions(env);
-	const missing = [
-		!input.apiKey ? 'TREESEED_CAPACITY_PROVIDER_API_KEY' : null,
-	].filter((entry): entry is string => Boolean(entry));
+	const configuredManifestPath = envValue(env, 'TREESEED_CAPACITY_PROVIDER_MANIFEST');
+	const manifestPath = configuredManifestPath || (existsSync('treeseed.capacity-provider.yaml') ? 'treeseed.capacity-provider.yaml' : null);
+	const missing = [!manifestPath ? 'TREESEED_CAPACITY_PROVIDER_MANIFEST' : null]
+		.filter((entry): entry is string => Boolean(entry));
 	if (options.requireConnection && missing.length > 0) {
 		throw new Error(`Capacity provider connection is missing: ${missing.join(', ')}.`);
 	}
-	const resolvedEnv = input.marketUrl && input.apiKey
-		? resolveCapacityProviderEnvironment(input)
-		: {
-			TREESEED_MARKET_URL: input.marketUrl || '',
-			TREESEED_MARKET_ID: input.marketId || '',
-			TREESEED_CAPACITY_PROVIDER_API_KEY: input.apiKey || '',
-			TREESEED_PROVIDER_DATA_DIR: input.providerDataDir ?? '/data',
+	const resolvedEnv = {
+		TREESEED_PROVIDER_DATA_DIR: input.providerDataDir ?? '/data',
 			TREESEED_PROVIDER_API_PORT: String(input.providerApiPort ?? '3100'),
 			TREESEED_PROVIDER_ENVIRONMENT: String(input.providerEnvironment ?? 'local'),
 		};
@@ -230,9 +208,6 @@ export function resolveProviderConfig(options: {
 		} : {}),
 	};
 	return {
-		marketUrl: resolvedEnv.TREESEED_MARKET_URL ?? '',
-		marketId: resolvedEnv.TREESEED_MARKET_ID ?? '',
-		apiKey: resolvedEnv.TREESEED_CAPACITY_PROVIDER_API_KEY ?? '',
 		dataDir: resolvedEnv.TREESEED_PROVIDER_DATA_DIR ?? '/data',
 		apiPort: intValue(resolvedEnv.TREESEED_PROVIDER_API_PORT ?? '', 3100),
 		environment: resolvedEnv.TREESEED_PROVIDER_ENVIRONMENT ?? 'local',
@@ -251,6 +226,7 @@ export function resolveProviderConfig(options: {
 		treeDx,
 		env: resolvedEnv,
 		redactedEnv,
+		manifestPath,
 	};
 }
 

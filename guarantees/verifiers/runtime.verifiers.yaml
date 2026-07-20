@@ -1,39 +1,61 @@
 schemaVersion: treeseed.guarantee-verifiers/v1
 ownerPackage: "@treeseed/agent"
 verifiers:
-  agent.provider.heartbeat.once:
+  agent.workday.continue-until-bound:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"
-    testFile: test/provider/capacity-provider-runtime.test.ts
-    testName: polls async execution providers and renews the assignment lease while waiting
-  agent.provider.register-capabilities:
+    testFile: test/provider/workday-contracts.test.ts
+    testName: continues useful work until duration or budget bound
+  agent.workday.exercise-every-eligible-planning-agent:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"
-    testFile: test/provider/capacity-provider-runtime.test.ts
+    testFile: test/provider/workday-contracts.test.ts
+    testName: exercises every eligible planning agent before repeats
+  agent.workday.produce-summary:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: test/provider/workday-contracts.test.ts
+    testName: builds a linked durable workday summary note
+  agent.provider.coordinate-multi-team-memberships:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: test/provider/multi-team-coordinator.test.ts
+    testName: registers, waits for approval, and establishes independent team tokens
   agent.assignment.poll-next:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"
-    testFile: test/provider/capacity-provider-runtime.test.ts
+    testFile: test/provider/assignment-runtime.test.ts
+    testName: renews, settles exactly once, then completes with the forensic artifact manifest
   agent.assignment.renew-lease:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"
-    testFile: test/provider/capacity-provider-runtime.test.ts
+    testFile: test/provider/assignment-runtime.test.ts
+    testName: renews, settles exactly once, then completes with the forensic artifact manifest
   agent.assignment.return:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"
-    testFile: test/provider/capacity-provider-runtime.test.ts
+    testFile: test/provider/assignment-runtime.test.ts
+    testName: routes a returned kernel result through the canonical return lifecycle
   agent.assignment.complete:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"
-    testFile: test/provider/capacity-provider-runtime.test.ts
+    testFile: test/provider/assignment-runtime.test.ts
+    testName: renews, settles exactly once, then completes with the forensic artifact manifest
   agent.assignment.fail:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"
-    testFile: test/provider/capacity-provider-runtime.test.ts
+    testFile: test/provider/assignment-runtime.test.ts
+    testName: routes a failed kernel result through the canonical fail lifecycle
+  agent.assignment.fallback-evidence-stable:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: test/agents/fallback-controller.test.ts
+    testName: derives a replay-stable fallback evidence id from assignment attempt identity
   agent.usage.record-execution:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"
-    testFile: test/provider/capacity-provider-runtime.test.ts
+    testFile: test/provider/assignment-runtime.test.ts
+    testName: renews, settles exactly once, then completes with the forensic artifact manifest
   agent.kernel.run-planning:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"
@@ -94,39 +116,28 @@ verifiers:
   agent.runtime.report-readiness:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"
-    testFile: test/services/runtime-readiness.test.ts
-  agent.runtime.recover-runner-crash:
-    kind: vitestCase
-    ownerPackage: "@treeseed/agent"
-    testFile: test/provider/capacity-provider-runtime.test.ts
-  agent.runtime.produce-hosted-proof:
-    kind: vitestCase
-    ownerPackage: "@treeseed/agent"
-    testFile: test/provider/capacity-provider-runtime.test.ts
-  agent.workday.produce-summary:
-    kind: vitestCase
-    ownerPackage: "@treeseed/agent"
-    testFile: test/services/workday-test.test.ts
-  agent.workday.exercise-every-eligible-planning-agent:
-    kind: vitestCase
-    ownerPackage: "@treeseed/agent"
-    testFile: test/services/workday-test.test.ts
-  agent.workday.continue-until-bound:
-    kind: vitestCase
-    ownerPackage: "@treeseed/agent"
-    testFile: test/services/workday-test.test.ts
+    testFile: test/provider/assignment-runtime.test.ts
+    testName: renders a provider plan without fetching team-wide portfolio state
   agent.trace.inspect-execution:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"
-    testFile: test/provider/capacity-provider-runtime.test.ts
+    testFile: test/agents/artifact-manifest.test.ts
+    testName: normalizes durable content, code, citations, verification, usage, and tool evidence
+  agent.trace.deliver-mode-run-telemetry:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: test/provider/mode-run-telemetry.test.ts
+    testName: retries one stable event identity without creating a second logical mode run
   agent.trace.redact-provider-secrets:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"
-    testFile: test/provider/capacity-provider-runtime.test.ts
+    testFile: test/agents/artifact-manifest.test.ts
+    testName: normalizes durable content, code, citations, verification, usage, and tool evidence
   agent.trace.correlate-assignment-mode-run-artifacts:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"
-    testFile: test/provider/capacity-provider-runtime.test.ts
+    testFile: test/agents/artifact-manifest.test.ts
+    testName: normalizes durable content, code, citations, verification, usage, and tool evidence
   agent.architecture.normalize-activity-profile-agent:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

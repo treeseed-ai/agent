@@ -1,0 +1,83 @@
+import type { AgentContentAccessPolicy } from '@treeseed/sdk/types/agents';
+import type { ExecutionProviderToolDescriptor, TreeDxProxyExecutionToolDescriptor } from '../agents/runtime-types.ts';
+import { TREESEED_CONTENT_READ_ACTIONS, TREESEED_CONTENT_WRITE_ACTIONS, type TreeseedContentAction, type TreeseedContentModel } from '@treeseed/sdk/content-operations';
+import { findAgentToolDefinition, type AgentToolRequirement } from '@treeseed/sdk/agent-tools';
+import { evaluateTreeDxProxyHandleAccess } from '@treeseed/sdk/agent-capacity';
+import { stringValue } from './value-utils.ts';
+import { normalizeTreeDxProxyHandle } from './treedx-handle.ts';
+
+function createAssignmentTreeDxToolDescriptor(input: { projectId: string; assignmentId: string; treedxProxyHandle: Record<string, unknown>; workspaceMode?: string | null }): TreeDxProxyExecutionToolDescriptor | null {
+	const handleId = stringValue(input.treedxProxyHandle.id);
+	const scopedHandle = normalizeTreeDxProxyHandle(input.treedxProxyHandle);
+	if (!handleId || !scopedHandle || !evaluateTreeDxProxyHandleAccess(scopedHandle, { projectId: input.projectId, assignmentId: input.assignmentId }).ok) return null;
+	const repositoryId = stringValue(input.treedxProxyHandle.repositoryId);
+	const workspaceId = stringValue(input.treedxProxyHandle.workspaceId);
+	const rawAllowedOperations = Array.isArray(input.treedxProxyHandle.allowedOperations) ? input.treedxProxyHandle.allowedOperations.map(String).filter(Boolean) : [];
+	const writable = input.workspaceMode !== 'context_only';
+	const allowedOperations = rawAllowedOperations.length > 0
+		? rawAllowedOperations.filter((operation) => writable || !['files:write', 'git:commit'].includes(operation))
+		: writable ? ['files:read', 'files:search', 'files:write', 'git:commit'] : ['files:read', 'files:search'];
+	const allowedPaths = Array.isArray(input.treedxProxyHandle.allowedPaths) ? input.treedxProxyHandle.allowedPaths.map(String).filter(Boolean) : [];
+	const allowedReadPaths = Array.isArray(input.treedxProxyHandle.allowedReadPaths) ? input.treedxProxyHandle.allowedReadPaths.map(String).filter(Boolean) : allowedPaths;
+	const allowedWritePaths = Array.isArray(input.treedxProxyHandle.allowedWritePaths) ? input.treedxProxyHandle.allowedWritePaths.map(String).filter(Boolean) : allowedPaths;
+	const project = encodeURIComponent(input.projectId);
+	const repo = repositoryId ? encodeURIComponent(repositoryId) : ':repoId';
+	const workspace = workspaceId ? encodeURIComponent(workspaceId) : ':workspaceId';
+	return {
+		kind: 'agent_tool', id: 'treedx.proxy', name: 'TreeDX assignment proxy', description: 'Assignment-scoped TreeDX content and workspace operations proxied through the TreeSeed API.', inputSchema: { type: 'object', additionalProperties: true }, executionTarget: 'treedx_proxy', mutability: writable ? 'content_write' : 'read',
+		projectId: input.projectId, assignmentId: input.assignmentId, handleId, repositoryId, workspaceId, allowedOperations, allowedPaths, allowedReadPaths, allowedWritePaths,
+		routes: { buildContext: `POST /v1/dx/projects/${project}/repos/${repo}/context/build`, readRepositoryFiles: `POST /v1/dx/projects/${project}/repos/${repo}/files/read`, searchWorkspace: `POST /v1/dx/projects/${project}/workspaces/${workspace}/search`, readWorkspaceFile: `GET /v1/dx/projects/${project}/workspaces/${workspace}/files?path=:path`, writeWorkspaceFile: `PUT /v1/dx/projects/${project}/workspaces/${workspace}/files?path=:path`, commitWorkspace: `POST /v1/dx/projects/${project}/workspaces/${workspace}/commit` },
+		metadata: { requiresHeaders: ['Authorization: Bearer <membership-access-token>', 'x-treeseed-assignment-id', 'x-treeseed-treedx-proxy-handle-id'] },
+	};
+}
+
+export interface AssignmentToolCatalog {
+	requested: string[];
+	exposed: string[];
+	omitted: Array<{ id: string; missing: AgentToolRequirement[] }>;
+	descriptors: ExecutionProviderToolDescriptor[];
+}
+
+function listAllows(value: string | undefined, allowed: string[] | undefined) {
+	if (!value) return true;
+	if (!allowed || allowed.length === 0) return false;
+	return allowed.includes('*') || allowed.includes(value);
+}
+
+function contentToolAllowed(policy: AgentContentAccessPolicy | undefined, action: TreeseedContentAction, model: TreeseedContentModel | undefined) {
+	if (!policy) return false;
+	const scope = TREESEED_CONTENT_READ_ACTIONS.has(action) ? policy.read : TREESEED_CONTENT_WRITE_ACTIONS.has(action) ? policy.write : action === 'commit' ? policy.write : undefined;
+	if (action === 'commit') return policy.commit?.allowed === true;
+	if (!scope) return false;
+	if (scope.actions?.length && !scope.actions.includes(action)) return false;
+	return listAllows(model, scope.models);
+}
+
+function summarizeContentAccess(policy: AgentContentAccessPolicy | undefined) {
+	if (!policy) return null;
+	return { readModels: policy.read?.models ?? [], readActions: policy.read?.actions ?? [], writeModels: policy.write?.models ?? [], writeActions: policy.write?.actions ?? [], commitAllowed: policy.commit?.allowed === true };
+}
+
+export function createAssignmentToolCatalog(input: { agentTools: string[]; projectId: string; assignmentId: string; agentSlug?: string; environment?: string; treedxProxyHandle: Record<string, unknown>; workspaceMode?: string | null; treeDxWorkspaceMode?: 'context_only' | 'read_write' | 'commit'; contentAccess?: AgentContentAccessPolicy; researchNetworkPolicy?: { allowWeb?: boolean; allowedDomains?: string[] }; worktreeRoot?: string | null; allowedPaths?: string[]; forbiddenPaths?: string[] }): AssignmentToolCatalog {
+	const treeDxBase = createAssignmentTreeDxToolDescriptor(input);
+	const descriptors: ExecutionProviderToolDescriptor[] = [];
+	const omitted: Array<{ id: string; missing: AgentToolRequirement[] }> = [];
+	const writableWorkspace = Boolean(treeDxBase?.allowedOperations.includes('files:write'));
+	const commitAllowed = input.contentAccess?.commit?.allowed === true;
+	for (const toolId of input.agentTools) {
+		const definition = findAgentToolDefinition(toolId);
+		if (!definition) continue;
+		const missing: AgentToolRequirement[] = [];
+		if (definition.requirements.includes('treedx_proxy_handle') && !treeDxBase) missing.push('treedx_proxy_handle');
+		if (definition.requirements.includes('treedx_writable_workspace') && !writableWorkspace) missing.push('treedx_writable_workspace');
+		if (definition.requirements.includes('content_access') && definition.content && !contentToolAllowed(input.contentAccess, definition.content.action, definition.content.model)) missing.push('content_access');
+		if (definition.requirements.includes('content_commit') && !commitAllowed) missing.push('content_commit');
+		if (definition.requirements.includes('research_source_policy') && (input.researchNetworkPolicy?.allowWeb !== true || !input.researchNetworkPolicy.allowedDomains?.length)) missing.push('research_source_policy');
+		if (missing.length) { omitted.push({ id: definition.id, missing }); continue; }
+		const base: ExecutionProviderToolDescriptor = { kind: 'agent_tool', id: definition.id, name: definition.title, description: definition.description, inputSchema: definition.inputSchema, outputSchema: definition.outputSchema, executionTarget: definition.executionTarget, mutability: definition.mutability, metadata: { dispatch: definition.dispatch, dispatchPreferredMode: definition.dispatch?.assignmentPreferredMode, telemetryCategory: definition.telemetryCategory, assignmentId: input.assignmentId, projectId: input.projectId, agentSlug: input.agentSlug ?? null, environment: input.environment ?? null, worktreeRoot: input.worktreeRoot ?? null, allowedPaths: input.allowedPaths ?? [], forbiddenPaths: input.forbiddenPaths ?? [], researchAllowedDomains: definition.telemetryCategory === 'research' ? input.researchNetworkPolicy?.allowedDomains ?? [] : undefined, contentAction: definition.content?.action, contentModel: definition.content?.model, contentPreset: definition.content?.preset, contentAccessSummary: summarizeContentAccess(input.contentAccess) } };
+		if (definition.executionTarget !== 'treedx_proxy' && definition.executionTarget !== 'treeseed_content') { descriptors.push(base); continue; }
+		if (!treeDxBase) { omitted.push({ id: definition.id, missing: ['treedx_proxy_handle'] }); continue; }
+		descriptors.push({ ...treeDxBase, id: definition.id, name: definition.title, description: definition.description, inputSchema: definition.inputSchema, outputSchema: definition.outputSchema, executionTarget: definition.executionTarget, mutability: definition.mutability, metadata: { ...(treeDxBase.metadata ?? {}), ...(base.metadata ?? {}) } });
+	}
+	return { requested: input.agentTools, exposed: descriptors.map((descriptor) => descriptor.id), omitted, descriptors };
+}

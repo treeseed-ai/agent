@@ -1,60 +1,35 @@
 import { mkdtempSync, rmSync } from 'node:fs';
-import { mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { buildLinkedNoteArtifact } from '../../src/agents/content-artifacts.ts';
-import type { AgentContext } from '../../src/agents/runtime-types.ts';
+import { assertRelativeContentPath } from '../../src/agents/content-artifacts.ts';
+import { LocalBranchMutationAdapter } from '../../src/agents/adapters/mutations.ts';
 
 const tempRoots: string[] = [];
-
-function contextFor(root: string): AgentContext {
-	return {
-		runId: 'run-1',
-		repoRoot: root,
-		agent: { slug: 'reviewer' } as AgentContext['agent'],
-		capacity: {
-			assignmentId: 'assignment-1',
-			providerId: 'provider-1',
-			mode: 'planning',
-			envelope: {},
-			decisionInput: {},
-		},
-		sdk: {},
-		trigger: { kind: 'manual', source: 'test', trigger: { type: 'manual' } },
-		execution: {},
-		mutations: {},
-		repository: {},
-		verification: {},
-		notifications: {},
-		research: {},
-		operations: {},
-	} as AgentContext;
-}
 
 afterEach(() => {
 	for (const root of tempRoots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
 
-describe('content artifacts', () => {
-	it('routes proposal feedback to linked notes without test namespaces', () => {
+describe('content artifact ownership', () => {
+	it('accepts only canonical Knowledge Hub paths for TreeDX-backed artifact references', () => {
 		const root = mkdtempSync(join(tmpdir(), 'treeseed-agent-content-'));
 		tempRoots.push(root);
-		mkdirSync(join(root, 'src/content'), { recursive: true });
+		expect(assertRelativeContentPath(root, 'src/content/notes/review.mdx')).toContain('src/content/notes/review.mdx');
+		expect(() => assertRelativeContentPath(root, 'README.md')).toThrow(/Knowledge Hub content root/u);
+		expect(() => assertRelativeContentPath(root, '../outside.mdx')).toThrow(/escapes the repository/u);
+	});
 
-		const artifact = buildLinkedNoteArtifact({
-			context: contextFor(root),
-			artifactKind: 'proposal_feedback_note',
-			subject: { model: 'proposal', id: 'core-workday-plan' },
-			title: 'Review workday proposal',
-			summary: 'Review feedback on the proposal.',
-			body: 'The proposal needs more evidence before approval.',
-		});
-
-		expect(artifact.ref.model).toBe('note');
-		expect(artifact.relativePath).toMatch(/^src\/content\/notes\//u);
-		expect(artifact.relativePath).not.toContain('/workday-tests/');
-		expect(artifact.content).toContain('relatedProposals:');
-		expect(artifact.content).toContain('proposal:core-workday-plan');
+	it('forbids local worktree adapters from writing Knowledge Hub content', async () => {
+		const root = mkdtempSync(join(tmpdir(), 'treeseed-agent-content-'));
+		tempRoots.push(root);
+		const adapter = new LocalBranchMutationAdapter(root);
+		await expect(adapter.writeArtifact({
+			runId: 'run-1',
+			agent: { slug: 'reviewer', execution: { branchPrefix: 'agent/reviewer' } } as never,
+			relativePath: 'src/content/notes/review.mdx',
+			content: '# forbidden',
+			commitMessage: 'forbidden content write',
+		})).rejects.toThrow(/TreeDX tool receipt/u);
 	});
 });

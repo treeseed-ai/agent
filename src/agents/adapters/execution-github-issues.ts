@@ -50,16 +50,16 @@ export class GitHubIssuesProviderError extends Error {
 	}
 }
 
-const DEFAULT_LABELS = ['treeseed'];
-const DEFAULT_IN_PROGRESS_LABELS = ['treeseed-in-progress'];
-const DEFAULT_BLOCKED_LABELS = ['treeseed-blocked'];
-const DEFAULT_CANCELLED_LABELS = ['treeseed-cancelled'];
+export const DEFAULT_LABELS = ['treeseed'];
+export const DEFAULT_IN_PROGRESS_LABELS = ['treeseed-in-progress'];
+export const DEFAULT_BLOCKED_LABELS = ['treeseed-blocked'];
+export const DEFAULT_CANCELLED_LABELS = ['treeseed-cancelled'];
 
-function envValue(env: NodeJS.ProcessEnv, name: string) {
+export function envValue(env: NodeJS.ProcessEnv, name: string) {
 	return env[name]?.trim() || '';
 }
 
-function parseList(value: string, fallback: string[]) {
+export function parseList(value: string, fallback: string[]) {
 	const values = value.split(',').map((entry) => entry.trim()).filter(Boolean);
 	return values.length ? values : fallback;
 }
@@ -78,7 +78,7 @@ export function resolveGitHubIssuesExecutionProviderConfig(env: NodeJS.ProcessEn
 	};
 }
 
-function descriptor(): ExecutionProviderDescriptor {
+export function descriptor(): ExecutionProviderDescriptor {
 	return {
 		id: 'github_issues',
 		kind: 'human_issue_queue',
@@ -106,15 +106,15 @@ function descriptor(): ExecutionProviderDescriptor {
 	};
 }
 
-function record(value: unknown): Record<string, unknown> {
+export function record(value: unknown): Record<string, unknown> {
 	return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
 
-function arrayOfRecords(value: unknown): Array<Record<string, unknown>> {
+export function arrayOfRecords(value: unknown): Array<Record<string, unknown>> {
 	return Array.isArray(value) ? value.map(record).filter((entry) => Object.keys(entry).length > 0) : [];
 }
 
-function stringValue(...values: unknown[]) {
+export function stringValue(...values: unknown[]) {
 	for (const value of values) {
 		if (typeof value === 'string' && value.trim()) return value.trim();
 		if (typeof value === 'number' && Number.isFinite(value)) return String(value);
@@ -122,15 +122,15 @@ function stringValue(...values: unknown[]) {
 	return null;
 }
 
-function sanitizeLabel(value: string) {
+export function sanitizeLabel(value: string) {
 	return value.toLowerCase().replace(/[^a-z0-9_.-]+/gu, '-').replace(/^-+|-+$/gu, '').slice(0, 120) || 'assignment';
 }
 
-function assignmentLabel(assignmentId: string) {
+export function assignmentLabel(assignmentId: string) {
 	return `treeseed-assignment-${sanitizeLabel(assignmentId)}`;
 }
 
-function repositoryParts(repository: string) {
+export function repositoryParts(repository: string) {
 	const [owner, repo] = repository.split('/');
 	if (!owner || !repo || repository.split('/').length !== 2) {
 		throw new GitHubIssuesProviderError('github_issues_repository_invalid', 'GitHub Issues provider repository must be in owner/repo form.', false);
@@ -138,11 +138,11 @@ function repositoryParts(repository: string) {
 	return { owner, repo };
 }
 
-function issueUrl(config: GitHubIssuesExecutionProviderConfig, issueNumber: number) {
+export function issueUrl(config: GitHubIssuesExecutionProviderConfig, issueNumber: number) {
 	return `https://github.com/${config.repository}/issues/${issueNumber}`;
 }
 
-function redactSensitive(value: unknown, key = ''): unknown {
+export function redactSensitive(value: unknown, key = ''): unknown {
 	if (key && /(?:token|authorization|password|credential|api[_-]?key|private[_-]?key)/iu.test(key)) return '<redacted>';
 	if (typeof value === 'string') {
 		if (/(?:gh[psuor]_[A-Za-z0-9_]+|secret_should_not_leak|github_secret)/u.test(value)) return '<redacted>';
@@ -158,7 +158,7 @@ function redactSensitive(value: unknown, key = ''): unknown {
 	return value;
 }
 
-function fieldSummary(value: unknown) {
+export function fieldSummary(value: unknown) {
 	try {
 		return JSON.stringify(redactSensitive(value), null, 2);
 	} catch {
@@ -166,7 +166,7 @@ function fieldSummary(value: unknown) {
 	}
 }
 
-function agentToolInstructions(input: ExecutionProviderInvocation) {
+export function agentToolInstructions(input: ExecutionProviderInvocation) {
 	const tools = (input.tools ?? []).filter((tool) => tool.kind === 'agent_tool');
 	if (tools.length === 0) return null;
 	return [
@@ -194,7 +194,7 @@ function agentToolInstructions(input: ExecutionProviderInvocation) {
 	].join('\n\n');
 }
 
-function issueBodyFromWorkPackage(input: ExecutionProviderInvocation) {
+export function issueBodyFromWorkPackage(input: ExecutionProviderInvocation) {
 	const handles = record(input.assignment.capabilityHandles);
 	const workspace = record(input.assignment.workspaceContext);
 	const safeAssignment = {
@@ -222,7 +222,7 @@ function issueBodyFromWorkPackage(input: ExecutionProviderInvocation) {
 	].filter(Boolean).join('\n\n');
 }
 
-function authHeaders(config: GitHubIssuesExecutionProviderConfig) {
+export function authHeaders(config: GitHubIssuesExecutionProviderConfig) {
 	return {
 		accept: 'application/vnd.github+json',
 		authorization: `Bearer ${config.token}`,
@@ -232,7 +232,7 @@ function authHeaders(config: GitHubIssuesExecutionProviderConfig) {
 	};
 }
 
-function safeErrorMessage(status: number, code: string) {
+export function safeErrorMessage(status: number, code: string) {
 	if (status === 401 || status === 403) return 'GitHub Issues authentication failed.';
 	if (status === 404) return 'GitHub issue was not found.';
 	if (status === 410) return 'GitHub Issues are disabled for the repository.';
@@ -240,7 +240,7 @@ function safeErrorMessage(status: number, code: string) {
 	return `GitHub Issues request failed with status ${status} (${code}).`;
 }
 
-function mapHttpError(status: number, fallbackCode: string) {
+export function mapHttpError(status: number, fallbackCode: string) {
 	if (status === 401 || status === 403) return new GitHubIssuesProviderError('github_issues_auth_failed', safeErrorMessage(status, fallbackCode), false, status);
 	if (status === 404) return new GitHubIssuesProviderError('github_issue_missing', safeErrorMessage(status, fallbackCode), true, status);
 	if (status === 410) return new GitHubIssuesProviderError('github_issues_disabled', safeErrorMessage(status, fallbackCode), false, status);
@@ -248,13 +248,13 @@ function mapHttpError(status: number, fallbackCode: string) {
 	return new GitHubIssuesProviderError(fallbackCode, safeErrorMessage(status, fallbackCode), false, status);
 }
 
-function normalizeLabels(value: unknown) {
+export function normalizeLabels(value: unknown) {
 	return Array.isArray(value)
 		? value.map((entry) => typeof entry === 'string' ? entry : stringValue(record(entry).name)).filter((entry): entry is string => Boolean(entry))
 		: [];
 }
 
-function normalizeIssue(config: GitHubIssuesExecutionProviderConfig, value: unknown): GitHubIssueSnapshot {
+export function normalizeIssue(config: GitHubIssuesExecutionProviderConfig, value: unknown): GitHubIssueSnapshot {
 	const issue = record(value);
 	const number = typeof issue.number === 'number' ? issue.number : Number.NaN;
 	if (!Number.isFinite(number)) {
@@ -277,12 +277,12 @@ function normalizeIssue(config: GitHubIssuesExecutionProviderConfig, value: unkn
 	};
 }
 
-function hasAnyLabel(issue: GitHubIssueSnapshot, labels: string[]) {
+export function hasAnyLabel(issue: GitHubIssueSnapshot, labels: string[]) {
 	const issueLabels = new Set(issue.labels.map((label) => label.toLowerCase()));
 	return labels.some((label) => issueLabels.has(label.toLowerCase()));
 }
 
-function issueSnapshot(config: GitHubIssuesExecutionProviderConfig, issue: GitHubIssueSnapshot): ExecutionRunSnapshot {
+export function issueSnapshot(config: GitHubIssuesExecutionProviderConfig, issue: GitHubIssueSnapshot): ExecutionRunSnapshot {
 	let status: ExecutionRunSnapshot['status'] = 'waiting';
 	let retryable: boolean | undefined;
 	let code: string | undefined;
@@ -328,7 +328,7 @@ function issueSnapshot(config: GitHubIssuesExecutionProviderConfig, issue: GitHu
 	};
 }
 
-function commentArtifacts(issue: GitHubIssueSnapshot): ExecutionArtifactRef[] {
+export function commentArtifacts(issue: GitHubIssueSnapshot): ExecutionArtifactRef[] {
 	return (issue.comments ?? []).map((comment, index) => ({
 		kind: 'github_issue_comment',
 		name: `Comment ${stringValue(comment.id) ?? index + 1}`,
@@ -344,7 +344,7 @@ function commentArtifacts(issue: GitHubIssueSnapshot): ExecutionArtifactRef[] {
 	}));
 }
 
-function linkedRefsFromText(text: string | null | undefined) {
+export function linkedRefsFromText(text: string | null | undefined) {
 	if (!text) return [];
 	const refs = new Set<string>();
 	const pattern = /(?:^|\s)(?:#\d+|https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/(?:issues|pull)\/\d+)/gu;
@@ -354,277 +354,5 @@ function linkedRefsFromText(text: string | null | undefined) {
 	return [...refs];
 }
 
-export class GitHubIssueExecutionProviderAdapter implements ExecutionProviderAdapter {
-	constructor(private readonly options: GitHubIssuesExecutionProviderAdapterOptions = {}) {}
+export { GitHubIssueExecutionProviderAdapter } from './execution-github-issues-adapter.ts';
 
-	private config() {
-		return this.options.config === undefined ? resolveGitHubIssuesExecutionProviderConfig() : this.options.config;
-	}
-
-	private fetchImpl() {
-		return this.options.fetchImpl ?? fetch;
-	}
-
-	async describe() {
-		return descriptor();
-	}
-
-	async observe(_input: ExecutionProviderObserveInput): Promise<ExecutionProviderObservation> {
-		const config = this.config();
-		const provider = descriptor();
-		if (!config) {
-			return {
-				descriptor: provider,
-				available: false,
-				pressure: 'exhausted',
-				blockedReason: 'GitHub Issues execution provider is not configured.',
-				metadata: { configured: false },
-			};
-		}
-		return {
-			descriptor: provider,
-			available: true,
-			pressure: 'normal',
-			activeAssignmentCount: 0,
-			metadata: {
-				repository: config.repository,
-				configured: true,
-			},
-		};
-	}
-
-	async prepare() {
-		const config = this.config();
-		if (!config) {
-			return {
-				accepted: false,
-				summary: 'GitHub Issues execution provider is not configured.',
-				retryable: false,
-				code: 'github_issues_provider_not_configured',
-			};
-		}
-		return {
-			accepted: true,
-			summary: `GitHub Issues execution provider is configured for ${config.repository}.`,
-			metadata: { repository: config.repository },
-		};
-	}
-
-	async start(input: ExecutionProviderInvocation): Promise<ExecutionRunSnapshot> {
-		const config = this.requireConfig();
-		const label = assignmentLabel(input.assignment.id);
-		const existing = await this.findIssueByAssignmentLabel(config, label);
-		if (existing) {
-			return {
-				...issueSnapshot(config, existing),
-				status: issueSnapshot(config, existing).status === 'completed' ? 'completed' : 'waiting',
-				summary: `GitHub issue #${existing.number} is waiting for human execution.`,
-				metadata: {
-					provider: 'github_issues',
-					repository: config.repository,
-					assignmentId: input.assignment.id,
-					issueNumber: existing.number,
-					reused: true,
-				},
-			};
-		}
-		const created = await this.createIssue(config, input, label);
-		return {
-			status: 'waiting',
-			summary: `GitHub issue #${created.number} is waiting for human execution.`,
-			runId: String(created.number),
-			externalRef: String(created.number),
-			externalUrl: created.htmlUrl,
-			outputs: {
-				issueNumber: created.number,
-				issueUrl: created.htmlUrl,
-				repository: config.repository,
-				labels: created.labels,
-			},
-			metadata: {
-				provider: 'github_issues',
-				repository: config.repository,
-				assignmentId: input.assignment.id,
-				issueNumber: created.number,
-				reused: false,
-			},
-		};
-	}
-
-	async poll(input: ExecutionRunRef): Promise<ExecutionRunSnapshot> {
-		const config = this.requireConfig();
-		try {
-			const issue = await this.fetchIssue(config, input.externalRef ?? input.runId);
-			return issueSnapshot(config, issue);
-		} catch (error) {
-			return this.snapshotFromError(error, input);
-		}
-	}
-
-	resume(input: ExecutionRunRef) {
-		return this.poll(input);
-	}
-
-	async cancel(input: ExecutionRunRef & { reason: string }): Promise<ExecutionRunSnapshot> {
-		const config = this.requireConfig();
-		const issueNumber = input.externalRef ?? input.runId;
-		await this.requestJson(config, `/issues/${encodeURIComponent(issueNumber)}/comments`, {
-			method: 'POST',
-			body: { body: `Treeseed cancelled this assignment: ${input.reason}` },
-			code: 'github_issue_cancel_comment_failed',
-		}).catch(() => null);
-		await this.requestJson(config, `/issues/${encodeURIComponent(issueNumber)}`, {
-			method: 'PATCH',
-			body: { state: 'closed', labels: [...new Set([...config.labels, ...config.cancelledLabels])] },
-			code: 'github_issue_cancel_failed',
-		});
-		return {
-			status: 'cancelled',
-			summary: `GitHub issue #${issueNumber} was cancelled for Treeseed assignment execution.`,
-			runId: input.runId,
-			externalRef: issueNumber,
-			externalUrl: issueUrl(config, Number(issueNumber)),
-			code: 'github_issue_cancelled',
-			retryable: false,
-			metadata: {
-				provider: 'github_issues',
-				repository: config.repository,
-				issueNumber,
-			},
-		};
-	}
-
-	async collectUsage(input: ExecutionRunRef): Promise<ExecutionUsageActual[]> {
-		const config = this.requireConfig();
-		const issue = await this.fetchIssue(config, input.externalRef ?? input.runId);
-		const usage: ExecutionUsageActual[] = [];
-		if (issue.comments && issue.comments.length > 0) {
-			usage.push({ kind: 'github_issue_comments', unit: 'count', amount: issue.comments.length, source: 'github_issues', partial: true });
-		}
-		if (issue.labels.length > 0) {
-			usage.push({ kind: 'github_issue_labels', unit: 'count', amount: issue.labels.length, source: 'github_issues', partial: true });
-		}
-		return usage;
-	}
-
-	async collectArtifacts(input: ExecutionRunRef): Promise<ExecutionArtifactRef[]> {
-		const config = this.requireConfig();
-		const issue = await this.fetchIssue(config, input.externalRef ?? input.runId);
-		const artifacts: ExecutionArtifactRef[] = [{
-			kind: 'external_issue',
-			name: `#${issue.number}`,
-			externalUrl: issue.htmlUrl,
-			metadata: {
-				provider: 'github_issues',
-				repository: config.repository,
-				state: issue.state,
-				labels: issue.labels,
-			},
-		}];
-		artifacts.push(...commentArtifacts(issue));
-		for (const ref of linkedRefsFromText([issue.body, ...(issue.comments ?? []).map((comment) => stringValue(comment.body))].filter(Boolean).join('\n'))) {
-			artifacts.push({
-				kind: 'github_issue_link',
-				name: ref,
-				externalUrl: ref.startsWith('http') ? ref : issue.htmlUrl,
-				metadata: {
-					provider: 'github_issues',
-					repository: config.repository,
-					issueNumber: issue.number,
-				},
-			});
-		}
-		return artifacts;
-	}
-
-	private requireConfig() {
-		const config = this.config();
-		if (!config) throw new GitHubIssuesProviderError('github_issues_provider_not_configured', 'GitHub Issues execution provider is not configured.', false);
-		repositoryParts(config.repository);
-		return config;
-	}
-
-	private async requestJson(config: GitHubIssuesExecutionProviderConfig, path: string, input: {
-		method: string;
-		body?: unknown;
-		code: string;
-	}): Promise<Record<string, unknown>> {
-		const { owner, repo } = repositoryParts(config.repository);
-		const response = await this.fetchImpl()(`https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}${path}`, {
-			method: input.method,
-			headers: authHeaders(config),
-			body: input.body === undefined ? undefined : JSON.stringify(input.body),
-		});
-		if (!response.ok) throw mapHttpError(response.status, input.code);
-		if (response.status === 204) return {};
-		return response.json().catch(() => ({})) as Promise<Record<string, unknown>>;
-	}
-
-	private async findIssueByAssignmentLabel(config: GitHubIssuesExecutionProviderConfig, label: string) {
-		const search = new URLSearchParams({
-			state: 'all',
-			labels: label,
-			per_page: '100',
-		});
-		const payload = await this.requestJson(config, `/issues?${search.toString()}`, {
-			method: 'GET',
-			code: 'github_issues_search_failed',
-		}) as unknown;
-		const issue = Array.isArray(payload) ? payload.map(record).find((candidate) => !candidate.pull_request) : null;
-		return issue ? normalizeIssue(config, issue) : null;
-	}
-
-	private async createIssue(config: GitHubIssuesExecutionProviderConfig, input: ExecutionProviderInvocation, label: string) {
-		const payload = await this.requestJson(config, '/issues', {
-			method: 'POST',
-			body: {
-				title: input.workPackage.title,
-				body: issueBodyFromWorkPackage(input),
-				labels: [...new Set([...config.labels, label, 'treeseed-assignment'])],
-			},
-			code: 'github_issue_create_failed',
-		});
-		return normalizeIssue(config, payload);
-	}
-
-	private async fetchIssue(config: GitHubIssuesExecutionProviderConfig, issueNumber: string | number) {
-		const issue = normalizeIssue(config, await this.requestJson(config, `/issues/${encodeURIComponent(String(issueNumber))}`, {
-			method: 'GET',
-			code: 'github_issue_fetch_failed',
-		}));
-		const commentsPayload = await this.requestJson(config, `/issues/${encodeURIComponent(String(issueNumber))}/comments?per_page=100`, {
-			method: 'GET',
-			code: 'github_issue_comments_fetch_failed',
-		}).catch(() => []);
-		return {
-			...issue,
-			comments: Array.isArray(commentsPayload) ? commentsPayload.map(record) : [],
-		};
-	}
-
-	private snapshotFromError(error: unknown, input: ExecutionRunRef): ExecutionRunSnapshot {
-		if (error instanceof GitHubIssuesProviderError) {
-			const returned = error.code === 'github_issue_missing';
-			return {
-				status: returned ? 'returned' : error.retryable ? 'waiting' : 'failed',
-				summary: error.message,
-				runId: input.runId,
-				externalRef: input.externalRef,
-				externalUrl: input.externalUrl,
-				retryable: error.retryable,
-				code: error.code,
-				metadata: { provider: 'github_issues', status: error.status },
-			};
-		}
-		return {
-			status: 'failed',
-			summary: 'GitHub Issues provider failed with an unexpected error.',
-			runId: input.runId,
-			externalRef: input.externalRef,
-			externalUrl: input.externalUrl,
-			retryable: false,
-			code: 'github_issues_unexpected_error',
-			metadata: { provider: 'github_issues' },
-		};
-	}
-}

@@ -44,7 +44,6 @@ describe('agent package shape', () => {
 
 		expect(packageJson.bin).toEqual({
 			'treeseed-agents': 'dist/scripts/treeseed-agents.js',
-			'treeseed-agent-service': 'dist/scripts/treeseed-agent-service.js',
 		});
 
 		for (const [exportName, exportValue] of Object.entries(packageJson.exports)) {
@@ -66,37 +65,167 @@ describe('agent package shape', () => {
 			);
 			expect(Object.keys(packageJson.scripts).some((name) => name.includes('processing'))).toBe(false);
 			expect(Object.values(packageJson.scripts).some((command) => command.includes('treeseed-processing'))).toBe(false);
+			expect(packageJson.scripts).not.toHaveProperty('test:manager-worker');
+			expect(packageJson.scripts).toHaveProperty('test:provider-runtime');
 		});
+
+	it('enforces the assignment-only kernel module boundary', () => {
+		const kernelRoot = resolve(packageRoot, 'src/agents/kernel');
+		const requiredModules = [
+			'agent-kernel.ts',
+			'assignment-preflight.ts',
+			'activity-profile-resolver.ts',
+			'context-loader.ts',
+			'execution-dispatcher.ts',
+			'output-validator.ts',
+			'artifact-manifest.ts',
+			'telemetry.ts',
+			'failure-classifier.ts',
+			'kernel-runtime.ts',
+		];
+		for (const module of requiredModules) {
+			const source = readFileSync(resolve(kernelRoot, module), 'utf8');
+			expect(source.split(/\r?\n/u).length, `${module} line count`).toBeLessThanOrEqual(500);
+			expect(source).not.toMatch(/@ts-(?:nocheck|ignore|expect-error)|eslint-disable|biome-ignore/gu);
+		}
+		for (const retiredModule of ['trigger-resolver.ts', 'mode-scheduler.ts', 'queue-observer.ts', 'priority-resolver.ts']) {
+			expect(existsSync(resolve(kernelRoot, retiredModule)), retiredModule).toBe(false);
+		}
+		const source = requiredModules.map((module) => readFileSync(resolve(kernelRoot, module), 'utf8')).join('\n');
+		expect(source).not.toMatch(/\b(?:runAgent|runCycle|drainMessages|ModeScheduler|QueueObserver|PriorityResolver)\b/gu);
+		expect(source.match(/\brunAssignment\s*\(/gu)).toHaveLength(1);
+	});
+
+	it('enforces the focused provider runner module boundary', () => {
+		const providerRoot = resolve(packageRoot, 'src/provider');
+		const requiredModules = [
+			'runner.ts',
+			'runner-contracts.ts',
+			'runner-lifecycle.ts',
+			'kernel-bridge.ts',
+			'kernel-assignment.ts',
+			'treedx-context-adapter.ts',
+			'execution-lifecycle.ts',
+			'execution-support.ts',
+			'execution-provider-selection.ts',
+			'assignment-result-reporter.ts',
+			'assignment-tool-policy.ts',
+			'assignment-tool-catalog.ts',
+			'lease-client.ts',
+			'mode-run-reporter.ts',
+			'usage-reporter.ts',
+		];
+		for (const module of requiredModules) {
+			const source = readFileSync(resolve(providerRoot, module), 'utf8');
+			expect(source.split(/\r?\n/u).length, `${module} line count`).toBeLessThanOrEqual(500);
+			expect(source).not.toMatch(/@ts-(?:nocheck|ignore|expect-error)|eslint-disable|biome-ignore/gu);
+			expect(source).not.toMatch(/\bany\b/gu);
+		}
+		const runner = readFileSync(resolve(providerRoot, 'runner.ts'), 'utf8');
+		expect(runner.match(/\brunProviderAssignment\s*\(/gu)).toHaveLength(1);
+		expect(runner).not.toContain('createAssignmentTreeDxAdapter(input:');
+		expect(runner).not.toContain('class LifecycleManagedExecutionProviderAdapter');
+	});
+
+	it('enforces focused TreeDX content, tool receipt, and artifact owners', () => {
+		const requiredModules = [
+			'agents/handlers/execution-content.ts',
+			'agents/handlers/execution-content-artifacts.ts',
+			'agents/handlers/execution-content-context.ts',
+			'agents/handlers/execution-content-prompt.ts',
+			'agents/tools/agent-tool-runtime.ts',
+			'agents/tools/agent-tool-telemetry.ts',
+			'agents/kernel/artifact-manifest.ts',
+			'agents/kernel/artifact-receipts.ts',
+		];
+		for (const module of requiredModules) {
+			const source = readFileSync(resolve(packageRoot, 'src', module), 'utf8');
+			expect(source.split(/\r?\n/u).length, `${module} line count`).toBeLessThanOrEqual(500);
+			expect(source).not.toMatch(/@ts-(?:nocheck|ignore|expect-error)|eslint-disable|biome-ignore/gu);
+		}
+		expect(existsSync(resolve(packageRoot, 'src/agents/knowledge/pipeline.ts'))).toBe(false);
+		const publicIndex = readFileSync(resolve(packageRoot, 'src/index.ts'), 'utf8');
+		expect(publicIndex).not.toMatch(/knowledge\/pipeline|buildKnowledgeDraft|buildResearchNote/gu);
+		const manifest = readFileSync(resolve(packageRoot, 'src/agents/kernel/artifact-manifest.ts'), 'utf8');
+		expect(manifest).not.toMatch(/contentArtifactRefs|\bcontentRefs\b|\bcodeChanges\b|\btoolSummary\b/gu);
+		const mutations = readFileSync(resolve(packageRoot, 'src/agents/adapters/mutations.ts'), 'utf8');
+		expect(mutations).toContain('Knowledge Hub content mutations require an assignment-scoped TreeDX tool receipt');
+		const releaser = readFileSync(resolve(packageRoot, 'src/agents/handlers/releaser.ts'), 'utf8');
+		expect(releaser).toContain('createExecutionContentHandler');
+		expect(releaser).not.toMatch(/status:\s*['"]waiting['"]|releaseAttempted:\s*false/gu);
+	});
+
+	it('enforces focused specification and execution-provider modules', () => {
+		const requiredModules = [
+			'agents/spec-normalizer.ts',
+			'agents/spec-normalizer-activities.ts',
+			'agents/spec-normalizer-execution.ts',
+			'agents/spec-normalizer-policy.ts',
+			'agents/spec-normalizer-primitives.ts',
+			'agents/adapters/execution-codex.ts',
+			'agents/adapters/execution-codex-core.ts',
+			'agents/adapters/execution-codex-result.ts',
+			'agents/adapters/execution-codex-adapter.ts',
+			'agents/adapters/execution-jira.ts',
+			'agents/adapters/execution-jira-adapter.ts',
+			'agents/adapters/execution-github-issues.ts',
+			'agents/adapters/execution-github-issues-adapter.ts',
+			'agents/adapters/execution-discord.ts',
+			'agents/adapters/execution-discord-adapter.ts',
+			'api/project-routes.ts',
+			'api/project-route-helpers.ts',
+			'api/project-summary.ts',
+			'api/auth/d1-store.ts',
+			'api/auth/d1-store-core.ts',
+			'api/auth/d1-user-store.ts',
+		];
+		for (const module of requiredModules) {
+			const source = readFileSync(resolve(packageRoot, 'src', module), 'utf8');
+			expect(source.split(/\r?\n/u).length, `${module} line count`).toBeLessThanOrEqual(500);
+			expect(source).not.toMatch(/@ts-(?:nocheck|ignore|expect-error)|eslint-disable|biome-ignore/gu);
+		}
+	});
 
 	it('ships provider runtime entrypoint and support modules without source-mode temp artifacts', () => {
 		const requiredRuntimeFiles = [
-			'dist/scripts/treeseed-agent-service.js',
 			'dist/provider/entrypoint.js',
 			'dist/provider/config.js',
-			'dist/provider/registration.js',
-			'dist/provider/heartbeat.js',
-			'dist/provider/portfolio.js',
-			'dist/provider/portfolio-processing.js',
+			'dist/provider/coordinator.js',
+			'dist/provider/project-materialization.js',
 			'dist/provider/runner.js',
+			'dist/provider/runner-lifecycle.js',
+			'dist/provider/treedx-context-adapter.js',
+			'dist/provider/execution-lifecycle.js',
+			'dist/provider/execution-provider-selection.js',
+			'dist/provider/kernel-bridge.js',
+			'dist/provider/assignment-result-reporter.js',
+			'dist/provider/usage-reporter.js',
 			'dist/provider/lifecycle.js',
 			'dist/scripts/build-capacity-provider-container.js',
 			'dist/scripts/test-capacity-provider-container.js',
 				'dist/api/server.js',
-				'dist/services/manager.js',
-				'dist/services/workday-start.js',
-				'dist/services/workday-report.js',
 				'dist/services/runtime-paths.js',
-			'dist/services/common.js',
 			'dist/agents/adapters/codex-auth.js',
 			'dist/agents/adapters/codex-readiness.js',
 			'dist/agents/adapters/execution-codex.js',
 			'dist/agents/registry.js',
 			'dist/agents/kernel/agent-kernel.js',
+			'dist/agents/kernel/assignment-preflight.js',
+			'dist/agents/kernel/activity-profile-resolver.js',
+			'dist/agents/kernel/context-loader.js',
+			'dist/agents/kernel/execution-dispatcher.js',
+			'dist/agents/kernel/output-validator.js',
+			'dist/agents/kernel/artifact-manifest.js',
+			'dist/agents/kernel/artifact-receipts.js',
+			'dist/agents/kernel/telemetry.js',
+			'dist/agents/kernel/failure-classifier.js',
 			'dist/agents/handlers/writer.js',
 			'dist/agents/handlers/actor.js',
 			'dist/agents/handlers/estimate.js',
 			'dist/agents/handlers/releaser.js',
 			'dist/agents/handlers/reporter.js',
+			'dist/agents/handlers/execution-content-context.js',
+			'dist/agents/tools/agent-tool-telemetry.js',
 			'dist/templates/github/deploy-capacity-provider.workflow.yml',
 			'dist/templates/railway/capacity-provider.yml',
 		];
@@ -124,15 +253,12 @@ describe('agent package shape', () => {
 
 		expect(paths).toContain('dist/provider/entrypoint.js');
 		expect(paths).toContain('dist/provider/config.js');
-		expect(paths).toContain('dist/provider/registration.js');
-		expect(paths).toContain('dist/provider/heartbeat.js');
-		expect(paths).toContain('dist/provider/portfolio.js');
-		expect(paths).toContain('dist/provider/portfolio-processing.js');
+		expect(paths).toContain('dist/provider/coordinator.js');
+		expect(paths).toContain('dist/provider/project-materialization.js');
 		expect(paths).toContain('dist/provider/runner.js');
 		expect(paths).toContain('dist/provider/lifecycle.js');
 		expect(paths).toContain('dist/scripts/build-capacity-provider-container.js');
 		expect(paths).toContain('dist/scripts/test-capacity-provider-container.js');
-		expect(paths).toContain('dist/services/manager.js');
 		expect(paths).toContain('dist/services/runtime-paths.js');
 		expect(paths).toContain('Dockerfile');
 		expect(paths).toContain('docker-entrypoint.sh');
@@ -170,7 +296,9 @@ describe('agent package shape', () => {
 		expect(compose).toContain('treeseed/agent-manager');
 		expect(compose).toContain('treeseed/agent-runner');
 		expect(compose).toContain('TREESEED_PROVIDER_STARTUP_MODE');
-		expect(compose).toContain('TREESEED_CAPACITY_PROVIDER_API_KEY: ${TREESEED_CAPACITY_PROVIDER_API_KEY:-}');
+		expect(compose).toContain('TREESEED_CAPACITY_PROVIDER_MANIFEST: /config/treeseed.capacity-provider.yaml');
+		expect(compose).toContain(':/config/treeseed.capacity-provider.yaml:ro');
+		expect(compose).not.toContain('TREESEED_CAPACITY_PROVIDER_ACCESS_TOKEN:');
 		expect(compose).not.toContain('env_file');
 		expect(compose).not.toMatch(/tscp_[A-Za-z0-9_]+|tsp_[A-Za-z0-9_]+|sk-[A-Za-z0-9_]+/u);
 		expect(docs).toContain('trsd config');
@@ -224,10 +352,10 @@ describe('agent package shape', () => {
 
 		expect(readme).toContain('.github/workflows/verify.yml');
 		expect(readme).toContain('.github/workflows/publish.yml');
-		expect(readme).toContain('TREESEED_WORKDAY_TASK_CREDIT_BUDGET');
+		expect(readme).toContain('active team allocation sets');
 		expect(readme).not.toContain(staleWorkflowName);
 		expect(readme).not.toContain(staleSmokePhrase);
 		expect(packageSource).not.toContain(staleBudgetName);
-		expect(envRegistry).toContain('TREESEED_WORKDAY_TASK_CREDIT_BUDGET');
+		expect(envRegistry).not.toContain('TREESEED_WORKDAY_TASK_CREDIT_BUDGET');
 	});
 });

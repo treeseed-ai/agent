@@ -2,6 +2,7 @@ import { normalizeAgentCliOptions } from '../cli-tools.ts';
 import type { ExecutionProviderAdapter, ExecutionProviderInvocation } from '../runtime-types.ts';
 import { getTreeseedAgentProviderSelections } from '@treeseed/sdk/platform/deploy-runtime';
 import type { TreeseedCopilotTaskInput, TreeseedCopilotTaskResult } from '@treeseed/sdk/copilot';
+import type { ExecutionRunRef } from '@treeseed/sdk/types/agents';
 import {
 	CodexSubscriptionExecutionProviderAdapter,
 	type CodexSubscriptionExecutionProviderAdapterOptions,
@@ -25,6 +26,7 @@ import {
 import { MockExecutionProviderAdapter } from './execution-mock.ts';
 import { prependCoreObjectiveToPrompt } from '../core-objective.ts';
 import { createCopilotAgentTools } from '../tools/agent-tool-copilot.ts';
+import type { ResearchSourcePolicy } from '@treeseed/sdk/agent-capacity';
 
 function invocationRunId(input: ExecutionProviderInvocation) {
 	return typeof input.metadata?.runId === 'string' ? input.metadata.runId : input.assignment.id;
@@ -35,6 +37,7 @@ export class CopilotExecutionProviderAdapter implements ExecutionProviderAdapter
 		runCopilotTask?: (input: TreeseedCopilotTaskInput) => Promise<TreeseedCopilotTaskResult>;
 		env?: NodeJS.ProcessEnv;
 		repoRoot?: string;
+		researchSourcePolicy?: ResearchSourcePolicy;
 	} = {}) {}
 
 	async describe() {
@@ -68,12 +71,13 @@ export class CopilotExecutionProviderAdapter implements ExecutionProviderAdapter
 		const telemetryPath = typeof input.metadata?.toolTelemetryPath === 'string' ? input.metadata.toolTelemetryPath : null;
 		const copilotTools = createCopilotAgentTools({
 			apiBaseUrl: this.options.env?.TREESEED_API_BASE_URL ?? process.env.TREESEED_API_BASE_URL ?? process.env.TREESEED_MARKET_URL ?? '',
-			providerApiKey: this.options.env?.TREESEED_CAPACITY_PROVIDER_API_KEY ?? process.env.TREESEED_CAPACITY_PROVIDER_API_KEY ?? process.env.TREESEED_PROVIDER_API_KEY ?? '',
+			providerAccessToken: this.options.env?.TREESEED_CAPACITY_PROVIDER_ACCESS_TOKEN ?? process.env.TREESEED_CAPACITY_PROVIDER_ACCESS_TOKEN ?? process.env.TREESEED_PROVIDER_ACCESS_TOKEN ?? '',
 			assignmentId: input.assignment.id,
 			leaseToken: input.leaseToken,
 			descriptors: input.tools ?? [],
 			repoRoot,
 			telemetryPath,
+			researchSourcePolicy: this.options.researchSourcePolicy,
 		});
 		const prompt = prependCoreObjectiveToPrompt({
 			prompt: [
@@ -91,7 +95,8 @@ export class CopilotExecutionProviderAdapter implements ExecutionProviderAdapter
 					? copilotTools.map((tool) => `- ${tool.name}`).join('\n')
 					: '- <none>',
 			].join('\n'),
-			repoRoot,
+			coreObjective: typeof input.metadata?.coreObjective === 'string' ? input.metadata.coreObjective : null,
+			coreObjectiveRef: typeof input.metadata?.coreObjectiveRef === 'string' ? input.metadata.coreObjectiveRef : null,
 		});
 		const runCopilotTask = this.options.runCopilotTask
 			?? (await import('@treeseed/sdk/copilot')).runTreeseedCopilotTask;
@@ -124,7 +129,7 @@ export class CopilotExecutionProviderAdapter implements ExecutionProviderAdapter
 		};
 	}
 
-	async collectUsage(input) {
+	async collectUsage(input: ExecutionRunRef) {
 		return [{
 			kind: 'copilot_sdk',
 			unit: 'unsupported',
@@ -139,7 +144,7 @@ export class CopilotExecutionProviderAdapter implements ExecutionProviderAdapter
 		}];
 	}
 
-	async collectArtifacts(input) {
+	async collectArtifacts(input: ExecutionRunRef) {
 		return [{
 			kind: 'execution_trace',
 			name: `${input.runId}.copilot-trace`,
@@ -159,6 +164,8 @@ export function createExecutionProviderAdapter(configuredModeInput?: string, opt
 	discord?: DiscordExecutionProviderConfig | null;
 	workflow?: WorkflowExecutionProviderAdapterOptions | null;
 	codex?: Omit<CodexSubscriptionExecutionProviderAdapterOptions, 'repoRoot'> | null;
+	env?: NodeJS.ProcessEnv;
+	researchSourcePolicy?: ResearchSourcePolicy;
 } = {}) {
 	const configuredMode = String(
 		configuredModeInput ?? process.env.TREESEED_AGENT_EXECUTION_PROVIDER ?? getTreeseedAgentProviderSelections().execution,
@@ -179,10 +186,10 @@ export function createExecutionProviderAdapter(configuredModeInput?: string, opt
 		return new WorkflowExecutionProviderAdapter(options.workflow ?? {});
 	}
 	if (configuredMode === 'codex' || configuredMode === 'codex_subscription') {
-		return new CodexSubscriptionExecutionProviderAdapter({ ...(options.codex ?? {}), repoRoot: options.repoRoot });
+		return new CodexSubscriptionExecutionProviderAdapter({ ...(options.codex ?? {}), repoRoot: options.repoRoot, researchSourcePolicy: options.researchSourcePolicy ?? options.codex?.researchSourcePolicy });
 	}
 	if (configuredMode === 'copilot') {
-		return new CopilotExecutionProviderAdapter({ repoRoot: options.repoRoot });
+		return new CopilotExecutionProviderAdapter({ repoRoot: options.repoRoot, env: options.env, researchSourcePolicy: options.researchSourcePolicy });
 	}
-	throw new Error(`Unsupported execution provider "${configuredMode}". Configure codex, copilot, mock, jira, github_issues, discord, or workflow; provider-runner planOnly is the only fallback execution mode.`);
+	throw new Error(`Unsupported execution provider "${configuredMode}". Configure codex, copilot, mock, jira, github_issues, discord, or workflow.`);
 }

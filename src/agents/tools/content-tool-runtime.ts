@@ -10,7 +10,7 @@ import { callTreeDxProxyTool } from './treedx-proxy-client.ts';
 
 export interface ContentToolCallOptions {
 	apiBaseUrl: string;
-	providerApiKey: string;
+	providerAccessToken: string;
 	assignmentId: string;
 	descriptor: ExecutionProviderToolDescriptor;
 	input?: Record<string, unknown>;
@@ -55,7 +55,7 @@ function resolveContentCall(descriptor: ExecutionProviderToolDescriptor, input: 
 async function readWorkspaceFile(options: ContentToolCallOptions, descriptor: TreeDxProxyExecutionToolDescriptor, path: string) {
 	return await callTreeDxProxyTool({
 		apiBaseUrl: options.apiBaseUrl,
-		providerApiKey: options.providerApiKey,
+		providerAccessToken: options.providerAccessToken,
 		assignmentId: options.assignmentId,
 		handleId: descriptor.handleId,
 		descriptor,
@@ -65,10 +65,29 @@ async function readWorkspaceFile(options: ContentToolCallOptions, descriptor: Tr
 	});
 }
 
+async function readModelContentFile(
+	options: ContentToolCallOptions,
+	descriptor: TreeDxProxyExecutionToolDescriptor,
+	canonicalPath: string,
+) {
+	const paths = canonicalPath.endsWith('.mdx')
+		? [canonicalPath, canonicalPath.replace(/\.mdx$/u, '.md')]
+		: [canonicalPath];
+	let firstError: unknown;
+	for (const path of paths) {
+		try {
+			return { path, result: await readWorkspaceFile(options, descriptor, path) };
+		} catch (error) {
+			firstError ??= error;
+		}
+	}
+	throw firstError;
+}
+
 async function writeWorkspaceFile(options: ContentToolCallOptions, descriptor: TreeDxProxyExecutionToolDescriptor, path: string, content: string) {
 	return await callTreeDxProxyTool({
 		apiBaseUrl: options.apiBaseUrl,
-		providerApiKey: options.providerApiKey,
+		providerAccessToken: options.providerAccessToken,
 		assignmentId: options.assignmentId,
 		handleId: descriptor.handleId,
 		descriptor,
@@ -86,6 +105,14 @@ function responseContent(value: unknown) {
 	return '';
 }
 
+function descriptorContentRoot(descriptor: TreeDxProxyExecutionToolDescriptor) {
+	for (const allowed of descriptor.allowedWritePaths ?? []) {
+		const candidate = allowed.replace(/\\/gu, '/').replace(/\/\*\*$/u, '').replace(/\/+$/u, '');
+		if (candidate.endsWith('/src/content') || candidate === 'src/content') return candidate;
+	}
+	return 'src/content';
+}
+
 export async function callTreeseedContentTool(options: ContentToolCallOptions) {
 	const descriptor = proxyDescriptor(options.descriptor);
 	if (!descriptor) {
@@ -94,6 +121,7 @@ export async function callTreeseedContentTool(options: ContentToolCallOptions) {
 	const input = options.input ?? {};
 	const { action, model } = resolveContentCall(options.descriptor, input);
 	const contentModel = model ?? text(input.model) as TreeseedContentModel;
+	const contentRoot = descriptorContentRoot(descriptor);
 	try {
 		if (action === 'describe') {
 			return {
@@ -110,7 +138,7 @@ export async function callTreeseedContentTool(options: ContentToolCallOptions) {
 		if (action === 'query') {
 			const result = await callTreeDxProxyTool({
 				apiBaseUrl: options.apiBaseUrl,
-				providerApiKey: options.providerApiKey,
+				providerAccessToken: options.providerAccessToken,
 				assignmentId: options.assignmentId,
 				handleId: descriptor.handleId,
 				descriptor,
@@ -125,7 +153,7 @@ export async function callTreeseedContentTool(options: ContentToolCallOptions) {
 			if (!message) return structuredError('content_validation_failed', 'A commit message is required.', { field: 'message' });
 			const result = await callTreeDxProxyTool({
 				apiBaseUrl: options.apiBaseUrl,
-				providerApiKey: options.providerApiKey,
+				providerAccessToken: options.providerAccessToken,
 				assignmentId: options.assignmentId,
 				handleId: descriptor.handleId,
 				descriptor,
@@ -142,19 +170,29 @@ export async function callTreeseedContentTool(options: ContentToolCallOptions) {
 				slug: text(input.slug) || text(input.id),
 				title: text(input.title) || text(input.slug) || text(input.id),
 				placement: record(input.placement),
+				contentRoot,
 			});
-			const result = await readWorkspaceFile(options, descriptor, text(input.path) || rendered.path);
-			return { ok: true, action, refs: [rendered.ref], diagnostics: [], payload: record(result) };
+			const explicitPath = text(input.path);
+			const { path, result } = explicitPath
+				? { path: explicitPath, result: await readWorkspaceFile(options, descriptor, explicitPath) }
+				: await readModelContentFile(options, descriptor, rendered.path);
+			return {
+				ok: true,
+				action,
+				refs: [{ ...rendered.ref, path }],
+				diagnostics: [],
+				payload: record(result),
+			};
 		}
 		const rendered = renderTreeseedContentRecord({
 			model: contentModel,
-			id: text(input.id) || undefined,
 			slug: text(input.slug) || undefined,
 			title: text(input.title) || undefined,
 			fields: record(input.fields),
 			body: typeof input.body === 'string' ? input.body : undefined,
 			relations: Array.isArray(input.relations) ? input.relations as never : undefined,
 			placement: record(input.placement),
+			contentRoot,
 		});
 		if (action === 'validate') {
 			const validation = validateTreeseedContentRecord(contentModel, rendered.content);

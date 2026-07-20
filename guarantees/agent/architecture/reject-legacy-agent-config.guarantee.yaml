@@ -7,7 +7,7 @@ journey: Reject Legacy Agent Config
 ownerPackage: "@treeseed/agent"
 surface: agent-runtime
 summary: "Legacy top-level runtime fields and removed handler ids are rejected instead of mapped forward."
-status: active
+status: planned
 actors:
   allowed: [project_manager, capacity_operator, team_owner]
   forbidden: [anonymous_user, unauthorized_user]

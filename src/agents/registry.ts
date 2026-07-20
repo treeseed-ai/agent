@@ -67,13 +67,13 @@ export function getTenantAgentHandlerModulePaths(
 	tenantRoot = resolveTreeseedTenantRoot(),
 ) {
 	return [
-		resolve(tenantRoot, 'src/agents', `${kind}.ts`),
-		resolve(tenantRoot, 'src/agents', `${kind}.js`),
+		resolve(tenantRoot, 'src/agent-handlers', `${kind}.ts`),
+		resolve(tenantRoot, 'src/agent-handlers', `${kind}.js`),
 	];
 }
 
 function listTenantAgentHandlerKinds(tenantRoot: string) {
-	const agentsRoot = resolve(tenantRoot, 'src/agents');
+	const agentsRoot = resolve(tenantRoot, 'src/agent-handlers');
 	if (!existsSync(agentsRoot)) {
 		return [...BUILTIN_HANDLER_KINDS];
 	}
@@ -147,15 +147,6 @@ async function importTenantAgentHandlerModule(modulePath: string) {
 					});
 				},
 			}],
-			tsconfigRaw: tsconfig
-				? undefined
-				: {
-					compilerOptions: {
-						allowImportingTsExtensions: true,
-						module: 'ESNext',
-						target: 'ES2022',
-					},
-				},
 		});
 		return await import(/* @vite-ignore */ pathToFileURL(outputFile).href) as Record<string, unknown>;
 	} finally {

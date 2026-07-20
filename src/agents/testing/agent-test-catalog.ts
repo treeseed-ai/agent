@@ -9,6 +9,8 @@ export interface AgentTestCatalogEntry {
 	agent: string;
 	kind: string;
 	fixture: string | null;
+	trigger: Record<string, unknown>;
+	expect: Record<string, unknown>;
 	sourcePath: string;
 	status: 'PASS' | 'FAIL';
 	issues: string[];
@@ -26,6 +28,10 @@ export interface AgentTestCatalogResult {
 function frontmatter(source: string) {
 	const match = source.match(/^---\n([\s\S]*?)\n---/u);
 	return match ? parseYaml(match[1]) as Record<string, unknown> : {};
+}
+
+function record(value: unknown): Record<string, unknown> {
+	return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
 
 function renderCatalog(result: Omit<AgentTestCatalogResult, 'reportPath' | 'jsonPath'>) {
@@ -74,16 +80,22 @@ export async function runAgentTestCatalogChecks(options: {
 		const agent = typeof data.agent === 'string' ? data.agent : '';
 		const kind = typeof data.kind === 'string' ? data.kind : '';
 		const fixture = typeof data.fixture === 'string' ? data.fixture : null;
+		const trigger = record(data.trigger);
+		const expect = record(data.expect);
 		const issues = [
 			!agent ? 'agent is required' : '',
 			!kind ? 'kind is required' : '',
 			fixture && !existsSync(resolve(repoRoot, fixture)) ? `fixture path does not exist: ${fixture}` : '',
+			kind === 'workday' && Object.keys(trigger).length === 0 ? 'workday trigger contract is required' : '',
+			kind === 'workday' && Object.keys(expect).length === 0 ? 'workday expectation contract is required' : '',
 		].filter(Boolean);
 		return {
 			id,
 			agent,
 			kind,
 			fixture,
+			trigger,
+			expect,
 			sourcePath,
 			status: issues.length ? 'FAIL' as const : 'PASS' as const,
 			issues,

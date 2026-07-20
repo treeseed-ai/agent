@@ -1,53 +1,19 @@
 import type { AgentHandler } from '../runtime-types.ts';
-import {
-	parseTriggerPayload,
-	readRecord,
-	readString,
-	type HandlerPayload,
-} from './shared.ts';
+import { createExecutionContentHandler } from './execution-content.ts';
 
-interface ReleaserInputs {
-	payload: HandlerPayload;
-	approvalState: string | null;
-}
-
-interface ReleaserResult {
-	status: 'waiting';
-	summary: string;
-	taskRunId: string | null;
-}
-
-export const releaserHandler: AgentHandler<ReleaserInputs, ReleaserResult> = {
+const executionReleaserHandler = createExecutionContentHandler({
 	kind: 'releaser',
+	defaultWorkPackageKind: 'release-readiness',
+	defaultArtifactKind: 'release_readiness',
+});
 
-	async resolveInputs(context) {
-		const payload = parseTriggerPayload(context);
-		const approval = readRecord(payload.approval);
-		return {
-			payload,
-			approvalState: readString(approval?.state) ?? readString(payload.approvalState),
-		};
-	},
-
-	async execute(_context, inputs) {
-		const taskRunId = readString(inputs.payload.taskId) ?? readString(inputs.payload.taskRunId);
-		return {
-			status: 'waiting',
-			summary: inputs.approvalState === 'approved'
-				? 'Production release remains human-controlled; this slice only reports release readiness.'
-				: 'Explicit human release approval is required before any release operation.',
-			taskRunId,
-		};
-	},
-
-	async emitOutputs(_context, result) {
-		return {
-			status: 'waiting',
-			summary: result.summary,
-			metadata: {
-				releaseAttempted: false,
-				taskRunId: result.taskRunId,
-			},
-		};
-	},
+/**
+ * Produces governed release-readiness evidence through the assignment execution
+ * provider and TreeDX. Release/deployment authority is deliberately absent from
+ * this handler; an assignment-scoped operations handle is required for any
+ * later integration action, and hosted release remains fail-closed.
+ */
+export const releaserHandler: AgentHandler = {
+	...executionReleaserHandler,
+	kind: 'releaser',
 };

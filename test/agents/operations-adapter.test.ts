@@ -75,7 +75,6 @@ describe('agent operations adapter', () => {
 			operationName: 'dev',
 			input: {
 				plan: true,
-				planOnly: true,
 			},
 		}, expect.objectContaining({
 			cwd: '/repo',
@@ -129,7 +128,6 @@ describe('agent operations adapter', () => {
 			operationName: 'test',
 			input: {
 				plan: true,
-				planOnly: true,
 				commands: ['npm test'],
 			},
 		}), expect.any(Object));

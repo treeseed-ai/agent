@@ -114,12 +114,25 @@ const hostDataDir = resolve(tempRoot, 'data');
 mkdirSync(hostDataDir, { recursive: true });
 chmodSync(hostDataDir, 0o777);
 writeFileSync(resolve(hostDataDir, '.writable-probe'), 'ok\n', 'utf8');
+const manifestPath = resolve(tempRoot, 'treeseed.capacity-provider.yaml');
+writeFileSync(manifestPath, [
+	'schemaVersion: 2',
+	'identity:',
+	'  displayName: Container diagnostic provider',
+	'  privateKeyRef: file://secrets/provider-identity.json',
+	'executionProviders:',
+	'  - id: diagnostic',
+	'    adapter: codex',
+	'    nativeLimits:',
+	'      maxConcurrentRunners: 1',
+	'    capabilities: [engineering, research]',
+	'connections: []',
+	'',
+].join('\n'), 'utf8');
 
 const composeEnv = {
 	...process.env,
-	TREESEED_MARKET_URL: 'http://127.0.0.1:3000',
-	TREESEED_MARKET_ID: 'local',
-	TREESEED_CAPACITY_PROVIDER_API_KEY: 'tscp_diagnostic_container_key',
+	TREESEED_CAPACITY_PROVIDER_MANIFEST: manifestPath,
 	TREESEED_PROVIDER_HOST_DATA_DIR: hostDataDir,
 	TREESEED_PROVIDER_CHOWN_DATA: '0',
 	TREESEED_PROVIDER_ENVIRONMENT: 'local',

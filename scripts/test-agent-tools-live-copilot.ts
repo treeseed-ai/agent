@@ -62,7 +62,7 @@ async function runCopilotToolProof(input: {
 	const env = createTreeseedManagedToolEnv(input.env);
 	const tools = createCopilotAgentTools({
 		apiBaseUrl: '',
-		providerApiKey: '',
+		providerAccessToken: '',
 		assignmentId: input.assignmentId,
 		descriptors: [changedPathsDescriptor(input.repoRoot, input.assignmentId)],
 		repoRoot: input.repoRoot,

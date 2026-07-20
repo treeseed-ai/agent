@@ -1,23 +1,4 @@
-import { existsSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
-
 export const CORE_OBJECTIVE_RELATIVE_PATH = 'src/content/objectives/core.md';
-export const PACKAGE_CORE_OBJECTIVE_RELATIVE_PATH = 'docs/src/content/objectives/core.md';
-
-export function loadCoreObjective(repoRoot: string) {
-	const relativePath = resolveCoreObjectiveRelativePath(repoRoot);
-	const path = join(repoRoot, relativePath);
-	if (!existsSync(path)) return null;
-	const content = readFileSync(path, 'utf8').trim();
-	return content || null;
-}
-
-export function resolveCoreObjectiveRelativePath(repoRoot: string) {
-	if (existsSync(join(repoRoot, PACKAGE_CORE_OBJECTIVE_RELATIVE_PATH))) {
-		return PACKAGE_CORE_OBJECTIVE_RELATIVE_PATH;
-	}
-	return CORE_OBJECTIVE_RELATIVE_PATH;
-}
 
 export function formatCoreObjectiveMessage(content: string, relativePath = CORE_OBJECTIVE_RELATIVE_PATH) {
 	return [
@@ -28,27 +9,28 @@ export function formatCoreObjectiveMessage(content: string, relativePath = CORE_
 	].join('\n');
 }
 
-export function loadCoreObjectiveContext(repoRoot: string) {
-	const content = loadCoreObjective(repoRoot);
-	if (!content) return null;
-	const relativePath = resolveCoreObjectiveRelativePath(repoRoot);
-	return {
-		path: relativePath,
-		content,
-		message: formatCoreObjectiveMessage(content, relativePath),
-	};
+export function resolveTreeDxCoreObjectiveContext(value: unknown) {
+	if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+	const candidate = value as Record<string, unknown>;
+	if (candidate.source !== 'treedx_proxy') return null;
+	const path = typeof candidate.path === 'string' ? candidate.path.trim() : '';
+	const content = typeof candidate.content === 'string' ? candidate.content.trim() : '';
+	if (!path || !content) return null;
+	const message = typeof candidate.message === 'string' && candidate.message.trim()
+		? candidate.message.trim()
+		: formatCoreObjectiveMessage(content, path);
+	return { path, content, message };
 }
 
 export function prependCoreObjectiveToPrompt(input: {
 	prompt: string;
-	repoRoot: string;
 	coreObjective?: string | null;
+	coreObjectiveRef?: string | null;
 }) {
-	const coreObjective = input.coreObjective ?? loadCoreObjective(input.repoRoot);
+	const coreObjective = input.coreObjective?.trim();
 	if (!coreObjective) return input.prompt;
-	const relativePath = resolveCoreObjectiveRelativePath(input.repoRoot);
 	return [
-		formatCoreObjectiveMessage(coreObjective, relativePath),
+		formatCoreObjectiveMessage(coreObjective, input.coreObjectiveRef ?? 'treedx://objectives/core'),
 		'',
 		'Agent Task',
 		'',

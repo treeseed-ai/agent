@@ -49,7 +49,7 @@ function agent(): AgentRuntimeSpec {
 			branchPrefix: 'agent',
 			providerProfile: {
 				requiredCapabilities: ['human_review'],
-				preferredLanes: [],
+				preferredExecutionProviders: [],
 				acceptableFallbacks: [],
 				fallbackPolicy: 'fail_if_unavailable',
 			},

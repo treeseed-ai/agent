@@ -15,7 +15,7 @@ const smokeExecutionProvider: ExecutionProviderAdapter = {
 			supportsCancel: false,
 			supportsResume: false,
 			supportsUsage: false,
-			supportsArtifacts: false,
+			supportsArtifacts: true,
 		};
 	},
 	async observe() {
@@ -27,6 +27,11 @@ const smokeExecutionProvider: ExecutionProviderAdapter = {
 		};
 	},
 	async start(input) {
+		const toolTelemetry = [{
+			toolId: 'treedx.content.create',
+			status: 'completed',
+			derivedEvents: [{ type: 'content_created' }],
+		}];
 		return {
 			status: 'completed',
 			summary: `Smoke execution completed for ${input.agent.slug}.`,
@@ -35,7 +40,23 @@ const smokeExecutionProvider: ExecutionProviderAdapter = {
 				finalResponse: input.workPackage.instructions,
 				stdout: input.workPackage.instructions,
 				stderr: '',
+				toolTelemetry,
 			},
+			artifacts: [{
+				kind: 'treedx_content_receipt',
+				uri: 'treedx://notes/release-smoke-planning-note.mdx',
+				metadata: {
+					toolId: 'treedx.content.create',
+					telemetry: toolTelemetry[0],
+					contentRef: {
+						model: 'note',
+						id: 'release-smoke-planning-note',
+						contentPath: 'src/content/notes/planning/release-smoke-planning-note.mdx',
+						subjectId: 'release-smoke-objective',
+						subjectField: 'related_objectives',
+					},
+				},
+			}],
 		};
 	},
 };

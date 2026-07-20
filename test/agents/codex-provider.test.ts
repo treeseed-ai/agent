@@ -78,6 +78,7 @@ function executionInvocation(input: {
 	runId: string;
 	instructions: string;
 	tools?: ExecutionProviderInvocation['tools'];
+	metadata?: Record<string, unknown>;
 }): ExecutionProviderInvocation {
 	return {
 		assignment: {
@@ -114,7 +115,7 @@ function executionInvocation(input: {
 		leaseToken: null,
 		runnerId: 'test-runner',
 		tools: input.tools,
-		metadata: { runId: input.runId },
+		metadata: { runId: input.runId, ...(input.metadata ?? {}) },
 	};
 }
 
@@ -459,6 +460,23 @@ describe('codex subscription provider skeleton', () => {
 			},
 		});
 		expect(run).toHaveBeenCalledWith(expect.stringContaining('treeseed.changed_paths'));
+	});
+
+	it('rejects a prepared worktree that cannot prove the governed exact base ref', async () => {
+		const adapter = new CodexSubscriptionExecutionProviderAdapter({
+			repoRoot: '/repo',
+			prepareWorktree: async () => ({
+				branchName: 'agent/engineer/run-ref-mismatch',
+				worktreeRoot: '/repo/.agent-worktrees/engineer/run-ref-mismatch',
+				exactBaseRef: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+				created: true,
+			}),
+			env: { TREESEED_CODEX_SUBSCRIPTION_PLAN: 'pro', TREESEED_CODEX_API_KEY: 'codex-test-key-1234567890' },
+		});
+		await expect(adapter.start(executionInvocation({
+			agent, runId: 'run-ref-mismatch', instructions: 'Implement only from the governed ref.',
+			metadata: { exactBaseRef: 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb' },
+		}))).rejects.toMatchObject({ code: 'worktree_base_ref_mismatch', retryable: false });
 	});
 
 	it('keeps provider code free of direct command invocation APIs', async () => {

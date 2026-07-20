@@ -1,7 +1,8 @@
 import type { TreeseedCopilotTool } from '@treeseed/sdk/copilot';
 import type { ExecutionProviderToolDescriptor } from '../runtime-types.ts';
 import { agentToolMcpName } from './agent-tool-mcp-server.ts';
-import { callAgentToolWithTelemetry, type AgentToolRuntimeOptions } from './agent-tool-runtime.ts';
+import type { AgentToolRuntimeOptions } from './agent-tool-runtime.ts';
+import { callAgentToolWithTelemetry } from './agent-tool-telemetry.ts';
 
 export function agentToolCopilotName(toolId: string) {
 	return agentToolMcpName(toolId);

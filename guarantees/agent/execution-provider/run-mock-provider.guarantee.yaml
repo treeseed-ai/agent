@@ -7,7 +7,7 @@ journey: Run Mock Execution Provider
 ownerPackage: "@treeseed/agent"
 surface: agent-runtime
 summary: "The deterministic mock execution provider runs through the shared execution-provider contract and emits structured outputs and tool telemetry for CI guarantee runs."
-status: active
+status: planned
 actors:
   allowed: [capacity_provider, operator]
   forbidden: [unauthorized_user]

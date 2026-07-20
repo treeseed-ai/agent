@@ -31,7 +31,6 @@ function workflowInputFor(request: AgentOperationRequest) {
 	const input = { ...(request.input ?? {}) };
 	if (request.mode === 'plan') {
 		input.plan = input.plan ?? true;
-		input.planOnly = input.planOnly ?? true;
 	}
 	if (request.operation === 'verify') {
 		const commands = commandList(request.input.commands);
@@ -93,7 +92,7 @@ async function appendOperationEvent(input: {
 			result: input.result,
 		}) as unknown as Record<string, unknown>,
 		relatedModel: 'provider_assignment',
-		relatedId: input.request.assignmentId ?? null,
+		relatedId: input.request.taskId,
 		priority: 100,
 	}).catch(() => null);
 }

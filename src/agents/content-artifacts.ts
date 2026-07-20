@@ -1,167 +1,22 @@
 import { existsSync } from 'node:fs';
 import { relative, resolve, sep } from 'node:path';
-import { serializeFrontmatterDocument } from '@treeseed/sdk/frontmatter';
-import type { AgentContext } from './runtime-types.ts';
-
-export type ContentArtifactKind =
-	| 'agent_feedback'
-	| 'decision_feedback'
-	| 'proposal_estimate'
-	| 'question_answer'
-	| 'planning_note'
-	| 'workday_summary'
-	| string;
-
-export interface ContentArtifactSubject {
-	model?: string | null;
-	id?: string | null;
-	slug?: string | null;
-	title?: string | null;
-}
 
 export interface ContentArtifactRef {
 	contentPath: string;
 	model: string;
 	subjectId: string | null;
+	subjectField?: string | null;
 	artifactKind: string;
 	sourceAssignmentId: string | null;
 	producedByAgent: string;
-}
-
-export interface LinkedNoteInput {
-	context: AgentContext;
-	artifactKind: ContentArtifactKind;
-	subject?: ContentArtifactSubject | null;
-	title: string;
-	summary: string;
-	body: string;
-	tags?: string[];
-	metadata?: Record<string, unknown>;
-}
-
-function slugSegment(value: string) {
-	return value
-		.toLowerCase()
-		.replace(/^[^:]+:/u, '')
-		.replace(/[^a-z0-9]+/gu, '-')
-		.replace(/^-+|-+$/gu, '') || 'item';
+	commitSha?: string | null;
+	ref?: string | null;
 }
 
 export function resolveProjectContentRoot(repoRoot: string) {
 	const docsContent = resolve(repoRoot, 'docs/src/content');
 	if (existsSync(docsContent)) return 'docs/src/content';
 	return 'src/content';
-}
-
-function subjectLink(subject: ContentArtifactSubject | null | undefined) {
-	if (!subject?.id && !subject?.slug) return null;
-	const model = subject.model ? String(subject.model) : 'content';
-	const id = String(subject.id ?? subject.slug);
-	return `${model}:${id}`;
-}
-
-function relatedFieldFor(model: string | null | undefined) {
-	switch (model) {
-		case 'decision':
-		case 'decisions':
-			return 'relatedDecisions';
-		case 'proposal':
-		case 'proposals':
-			return 'relatedProposals';
-		case 'question':
-		case 'questions':
-			return 'relatedQuestions';
-		case 'objective':
-		case 'objectives':
-			return 'relatedObjectives';
-		case 'book':
-		case 'books':
-			return 'relatedBooks';
-		default:
-			return null;
-	}
-}
-
-function artifactTarget(artifactKind: string) {
-	const normalized = artifactKind.toLowerCase();
-	if (normalized.includes('question_answer')
-		|| normalized.includes('proposal_feedback')
-		|| normalized.includes('proposal_estimate')
-		|| normalized.includes('decision_feedback')
-		|| normalized.includes('review')
-		|| normalized.includes('planning_note')
-		|| normalized.includes('implementation_note')
-		|| normalized.includes('agent_feedback')
-		|| normalized.includes('readiness_note')
-		|| normalized.endsWith('_note')) {
-		return { collection: 'notes', model: 'note', tag: 'agent-feedback' };
-	}
-	if (normalized === 'proposal' || normalized === 'planning_proposal') {
-		return { collection: 'proposals', model: 'proposal', tag: 'agent-proposal' };
-	}
-	if (normalized === 'question' || normalized === 'planning_question') {
-		return { collection: 'questions', model: 'question', tag: 'agent-question' };
-	}
-	if (normalized === 'knowledge' || normalized.includes('knowledge_page') || normalized.includes('book_page')) {
-		return { collection: 'knowledge', model: 'knowledge', tag: 'agent-knowledge' };
-	}
-	if (normalized === 'book' || normalized.includes('book_outline')) {
-		return { collection: 'books', model: 'book', tag: 'agent-book' };
-	}
-	if (normalized.includes('workday_summary')) {
-		return { collection: 'workdays', model: 'workday', tag: 'agent-workday-summary' };
-	}
-	return { collection: 'notes', model: 'note', tag: 'agent-feedback' };
-}
-
-export function buildLinkedNoteArtifact(input: LinkedNoteInput) {
-	const contentRoot = resolveProjectContentRoot(input.context.repoRoot);
-	const now = new Date().toISOString();
-	const date = now.slice(0, 10);
-	const subject = input.subject ?? {};
-	const subjectId = subject.id ?? subject.slug ?? null;
-	const subjectSlug = slugSegment(String(subjectId ?? input.title));
-	const kindSlug = slugSegment(String(input.artifactKind));
-	const agentSlug = slugSegment(input.context.agent.slug);
-	const target = artifactTarget(String(input.artifactKind));
-	const relativePath = `${contentRoot}/${target.collection}/${date}/${kindSlug}-${subjectSlug}-${agentSlug}.mdx`;
-	const link = subjectLink(subject);
-	const relatedField = relatedFieldFor(subject.model);
-	const relatedFields = relatedField && subjectId ? { [relatedField]: [String(subjectId)] } : {};
-	const frontmatter = {
-		title: input.title,
-		description: input.summary,
-		date,
-		status: 'planned',
-		tags: [...new Set([target.tag, kindSlug, ...(input.tags ?? [])])],
-		author: input.context.agent.slug,
-		summary: input.summary,
-		draft: true,
-		about: link ? [link] : [],
-		...relatedFields,
-	};
-	const body = [
-		input.body.trim(),
-		'',
-		'## Artifact Metadata',
-		'',
-		`- Artifact kind: ${input.artifactKind}`,
-		`- Produced by: ${input.context.agent.slug}`,
-		`- Assignment: ${input.context.capacity?.assignmentId ?? 'none'}`,
-		`- Subject: ${link ?? 'none'}`,
-	].join('\n');
-	return {
-		relativePath,
-		content: serializeFrontmatterDocument(frontmatter, body),
-		ref: {
-			contentPath: relativePath,
-			model: target.model,
-			subjectId: subjectId ? String(subjectId) : null,
-			artifactKind: String(input.artifactKind),
-			sourceAssignmentId: input.context.capacity?.assignmentId ?? null,
-			producedByAgent: input.context.agent.slug,
-		} satisfies ContentArtifactRef,
-	};
 }
 
 export function assertRelativeContentPath(repoRoot: string, relativePath: string) {

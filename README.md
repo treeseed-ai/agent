@@ -79,19 +79,17 @@ Agent runtime must stay external to the root web app and API process.
 Source entrypoints:
 
 ```bash
-npm run dev:manager
-npm run dev:worker
-npm run dev:workday-start
-npm run dev:workday-report
-npm run dev:remote-runner
+node --import tsx ./src/provider/entrypoint.ts doctor --json
+node --import tsx ./src/provider/entrypoint.ts manager --once --json
+node --import tsx ./src/provider/entrypoint.ts runner --once --json
 ```
 
 Built entrypoints:
 
 ```bash
-npm run start:manager
-npm run start:workday-start
-npm run start:workday-report
+node ./dist/provider/entrypoint.js doctor --json
+node ./dist/provider/entrypoint.js manager --once --json
+node ./dist/provider/entrypoint.js runner --once --json
 ```
 
 Verification:
@@ -108,9 +106,7 @@ CI runs `.github/workflows/verify.yml`. Capacity-provider image publication uses
 
 ## Environment Registry
 
-`src/env.yaml` is the package-owned provider/runtime environment registry. It contains provider manager, provider runner, workday, capacity-provider, and provider-launch entries.
-
-Workday task budgeting is configured with `TREESEED_WORKDAY_TASK_CREDIT_BUDGET`.
+`src/env.yaml` is the package-owned provider/runtime environment registry. It contains provider manager, provider runner, capacity-provider, and provider-launch entries. Workday budgets and scheduling policy are durable API control-plane records governed by active team allocation sets, not provider-runtime environment variables.
 
 Provider-neutral shared entries belong in `@treeseed/sdk`. Web/forms/Astro entries belong in `@treeseed/core`. Admin UI expectations belong in `@treeseed/admin`. Backend control-plane entries belong in `@treeseed/api`.
 
@@ -121,7 +117,6 @@ Exports include runtime APIs, service helpers, contracts, and binaries needed by
 Published binaries:
 
 - `treeseed-agents`
-- `treeseed-agent-service`
 
 ## What Agent Does Not Own
 

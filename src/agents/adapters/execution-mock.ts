@@ -16,7 +16,7 @@ function descriptor(): ExecutionProviderDescriptor {
 		capabilities: ACTIVITY_CAPABILITIES.map((activity) => `activity:${activity}`),
 		capabilityAliases: ['mock', 'ci_mock', 'deterministic_mock'],
 		nativeUnit: 'mock_credit',
-		quotaVisibility: 'known',
+		quotaVisibility: 'exact',
 		maxConcurrentAssignments: 16,
 		supportsAsync: false,
 		supportsCancel: true,
@@ -32,7 +32,7 @@ function descriptor(): ExecutionProviderDescriptor {
 }
 
 function activityType(input: ExecutionProviderInvocation) {
-	const assignment = input.assignment as Record<string, unknown>;
+	const assignment = input.assignment as unknown as Record<string, unknown>;
 	return String(input.agent.activityType ?? assignment.activityType ?? input.assignment.mode ?? 'planning');
 }
 
@@ -60,7 +60,7 @@ function derivedEvents(input: ExecutionProviderInvocation) {
 }
 
 function structuredEstimate(input: ExecutionProviderInvocation) {
-	const assignment = input.assignment as Record<string, unknown>;
+	const assignment = input.assignment as unknown as Record<string, unknown>;
 	return {
 		id: `${input.assignment.id}:mock-estimate`,
 		teamId: input.assignment.teamId,

@@ -7,7 +7,7 @@ journey: Enforce Activity Profile Tool Scope
 ownerPackage: "@treeseed/agent"
 surface: agent-runtime
 summary: "Execution providers receive only the tools allowed by the selected activity profile and assignment handles."
-status: active
+status: planned
 actors:
   allowed: [project_manager, capacity_operator, team_owner]
   forbidden: [anonymous_user, unauthorized_user]

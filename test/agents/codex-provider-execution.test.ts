@@ -4,10 +4,12 @@ import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import {
 	buildCodexPrompt,
+	codexAgentToolEnvironment,
 	codexAgentToolConfig,
 	mapCodexThreadOptions,
 	normalizeCodexRunResult,
 	runCodexSubscriptionTask,
+	treeDxContentReceipts,
 	type CodexExecutionRequest,
 } from '../../src/agents/adapters/execution-codex.ts';
 
@@ -154,18 +156,17 @@ describe('codex provider execution', () => {
 		expect(prompt).toContain('treedx.write_workspace_file');
 	});
 
-	it('builds MCP config only for available tools and passes assignment env', () => {
+	it('builds MCP config using only an opaque runtime configuration path', () => {
 		const previousTier = process.env.TREESEED_CODEX_SERVICE_TIER;
-		const previousApi = process.env.TREESEED_API_BASE_URL;
-		const previousKey = process.env.TREESEED_CAPACITY_PROVIDER_API_KEY;
 		process.env.TREESEED_CODEX_SERVICE_TIER = 'fast';
-		process.env.TREESEED_API_BASE_URL = 'https://api.example.test';
-		process.env.TREESEED_CAPACITY_PROVIDER_API_KEY = 'provider-secret';
 		try {
 			const config = codexAgentToolConfig({
 				...request,
+				apiBaseUrl: 'https://api.example.test',
+				providerAccessToken: 'provider-secret',
 				leaseToken: 'lease-1',
 				toolTelemetryPath: '/tmp/tools.jsonl',
+				toolConfigPath: '/tmp/assignment-tools/mcp-env.json',
 				tools: [treeDxTool],
 				metadata: {
 					assignment: { id: 'assignment-1', projectId: 'project-1' },
@@ -177,22 +178,29 @@ describe('codex provider execution', () => {
 				treeseed_tools: {
 					required: true,
 					default_tools_approval_mode: 'approve',
-					env: expect.objectContaining({
-						TREESEED_API_BASE_URL: 'https://api.example.test',
-						TREESEED_CAPACITY_PROVIDER_API_KEY: 'provider-secret',
-						TREESEED_AGENT_TOOL_ASSIGNMENT_ID: 'assignment-1',
-						TREESEED_AGENT_TOOL_LEASE_TOKEN: 'lease-1',
-						TREESEED_AGENT_TOOL_TELEMETRY_PATH: '/tmp/tools.jsonl',
-					}),
+					env: { TREESEED_AGENT_TOOL_CONFIG_PATH: '/tmp/assignment-tools/mcp-env.json' },
 				},
 			});
+			const serverEnvironment = codexAgentToolEnvironment({
+				...request,
+				apiBaseUrl: 'https://api.example.test',
+				providerAccessToken: 'provider-secret',
+				leaseToken: 'lease-1',
+				toolTelemetryPath: '/tmp/tools.jsonl',
+				tools: [treeDxTool],
+				metadata: { assignment: { id: 'assignment-1' } },
+			});
+			expect(serverEnvironment).toMatchObject({
+				TREESEED_API_BASE_URL: 'https://api.example.test',
+				TREESEED_CAPACITY_PROVIDER_ACCESS_TOKEN: 'provider-secret',
+				TREESEED_AGENT_TOOL_ASSIGNMENT_ID: 'assignment-1',
+				TREESEED_AGENT_TOOL_LEASE_TOKEN: 'lease-1',
+				TREESEED_AGENT_TOOL_TELEMETRY_PATH: '/tmp/tools.jsonl',
+			});
+			expect(serverEnvironment.TREESEED_AGENT_TOOL_DESCRIPTORS).not.toContain('secret_should_not_leak');
 		} finally {
 			if (previousTier === undefined) delete process.env.TREESEED_CODEX_SERVICE_TIER;
 			else process.env.TREESEED_CODEX_SERVICE_TIER = previousTier;
-			if (previousApi === undefined) delete process.env.TREESEED_API_BASE_URL;
-			else process.env.TREESEED_API_BASE_URL = previousApi;
-			if (previousKey === undefined) delete process.env.TREESEED_CAPACITY_PROVIDER_API_KEY;
-			else process.env.TREESEED_CAPACITY_PROVIDER_API_KEY = previousKey;
 		}
 	});
 
@@ -207,32 +215,47 @@ describe('codex provider execution', () => {
 		}
 	});
 
-	it('places the core objective before the agent task when available', () => {
-		const repoRoot = mkdtempSync(join(tmpdir(), 'treeseed-core-objective-'));
-		try {
-			mkdirSync(join(repoRoot, 'src/content/objectives'), { recursive: true });
-			writeFileSync(
-				join(repoRoot, 'src/content/objectives/core.md'),
-				[
-					'---',
-					'id: objective:core',
-					'title: Core TreeSeed Objective',
-					'---',
-					'',
-					'Coordinate durable organizational work through governed workdays.',
-				].join('\n'),
-				'utf8',
-			);
+	it('accepts direct TreeDX content writes only after a successful workspace commit', () => {
+		const write = {
+			status: 'completed',
+			toolId: 'treedx.write_workspace_file',
+			derivedEvents: [{
+				type: 'content_created',
+				requiresCommit: true,
+				contentRef: {
+					path: 'docs/src/content/notes/proof.mdx',
+					model: 'note',
+					id: 'proof',
+					subjectId: 'objective-1',
+					subjectField: 'relatedObjectives',
+				},
+			}],
+		};
+		expect(treeDxContentReceipts([write])).toEqual([]);
+		expect(treeDxContentReceipts([
+			write,
+			{ status: 'completed', toolId: 'treedx.commit_workspace', derivedEvents: [{ type: 'content_committed', commitSha: 'abc123' }] },
+		])).toMatchObject([{
+			kind: 'treedx_content_receipt',
+			name: 'docs/src/content/notes/proof.mdx',
+			metadata: { contentRef: { commitSha: 'abc123' } },
+		}]);
+	});
 
-			const prompt = buildCodexPrompt({ ...request, repoRoot });
+	it('places the TreeDX-supplied core objective before the agent task', () => {
+		const prompt = buildCodexPrompt({
+			...request,
+			metadata: {
+				...request.metadata,
+				coreObjective: 'Coordinate durable organizational work through governed workdays.',
+				coreObjectiveRef: 'treedx://objectives/core',
+			},
+		});
 
-			expect(prompt.startsWith('TreeSeed Core Objective')).toBe(true);
-			expect(prompt).toContain('Source: src/content/objectives/core.md');
-			expect(prompt.indexOf('Coordinate durable organizational work')).toBeLessThan(prompt.indexOf('Agent Task'));
-			expect(prompt.indexOf('Agent Task')).toBeLessThan(prompt.indexOf('You are operating as a TreeSeed implementation agent.'));
-		} finally {
-			rmSync(repoRoot, { recursive: true, force: true });
-		}
+		expect(prompt.startsWith('TreeSeed Core Objective')).toBe(true);
+		expect(prompt).toContain('Source: treedx://objectives/core');
+		expect(prompt.indexOf('Coordinate durable organizational work')).toBeLessThan(prompt.indexOf('Agent Task'));
+		expect(prompt.indexOf('Agent Task')).toBeLessThan(prompt.indexOf('You are operating as a TreeSeed implementation agent.'));
 	});
 
 	it('starts a new SDK thread and normalizes run output', async () => {

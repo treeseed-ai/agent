@@ -44,6 +44,7 @@ export interface CodebaseInventoryArtifact {
 	id: string;
 	kind: 'codebase_inventory';
 	title?: string;
+	repoRef?: string;
 	packages: PackageSurfaceInventory[];
 	modules: ModuleSurfaceInventory[];
 	warnings?: string[];

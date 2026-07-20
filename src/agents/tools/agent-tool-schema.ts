@@ -13,11 +13,15 @@ function schemaType(schema: Record<string, unknown>) {
 	return typeof schema.type === 'string' ? schema.type : '';
 }
 
-function validatePrimitive(value: unknown, type: string, path: string): AgentToolSchemaValidationResult {
+function validatePrimitive(value: unknown, schema: Record<string, unknown>, path: string): AgentToolSchemaValidationResult {
+	const type = schemaType(schema);
 	if (type === 'string') {
-		return typeof value === 'string'
-			? { ok: true }
-			: { ok: false, code: 'invalid_tool_input', message: `${path} must be a string.`, metadata: { path, expected: type } };
+		if (typeof value !== 'string') return { ok: false, code: 'invalid_tool_input', message: `${path} must be a string.`, metadata: { path, expected: type } };
+		const minimum = Number(schema.minLength);
+		const maximum = Number(schema.maxLength);
+		if (Number.isFinite(minimum) && value.length < minimum) return { ok: false, code: 'invalid_tool_input', message: `${path} must contain at least ${minimum} characters.`, metadata: { path, minLength: minimum } };
+		if (Number.isFinite(maximum) && value.length > maximum) return { ok: false, code: 'invalid_tool_input', message: `${path} must contain at most ${maximum} characters.`, metadata: { path, maxLength: maximum } };
+		return { ok: true };
 	}
 	if (type === 'boolean') {
 		return typeof value === 'boolean'
@@ -28,6 +32,14 @@ function validatePrimitive(value: unknown, type: string, path: string): AgentToo
 		return typeof value === 'number' && Number.isFinite(value)
 			? { ok: true }
 			: { ok: false, code: 'invalid_tool_input', message: `${path} must be a finite number.`, metadata: { path, expected: type } };
+	}
+	if (type === 'integer') {
+		if (typeof value !== 'number' || !Number.isSafeInteger(value)) return { ok: false, code: 'invalid_tool_input', message: `${path} must be a safe integer.`, metadata: { path, expected: type } };
+		const minimum = Number(schema.minimum);
+		const maximum = Number(schema.maximum);
+		if (Number.isFinite(minimum) && value < minimum) return { ok: false, code: 'invalid_tool_input', message: `${path} must be at least ${minimum}.`, metadata: { path, minimum } };
+		if (Number.isFinite(maximum) && value > maximum) return { ok: false, code: 'invalid_tool_input', message: `${path} must be at most ${maximum}.`, metadata: { path, maximum } };
+		return { ok: true };
 	}
 	return {
 		ok: false,
@@ -80,6 +92,10 @@ function validateValue(value: unknown, schema: Record<string, unknown>, path: st
 			return { ok: false, code: 'invalid_tool_input', message: `${path} must be an array.`, metadata: { path, expected: type } };
 		}
 		const items = record(schema.items);
+		const minimum = Number(schema.minItems);
+		const maximum = Number(schema.maxItems);
+		if (Number.isFinite(minimum) && value.length < minimum) return { ok: false, code: 'invalid_tool_input', message: `${path} requires at least ${minimum} items.`, metadata: { path, minItems: minimum } };
+		if (Number.isFinite(maximum) && value.length > maximum) return { ok: false, code: 'invalid_tool_input', message: `${path} permits at most ${maximum} items.`, metadata: { path, maxItems: maximum } };
 		const itemType = schemaType(items);
 		if (!itemType) {
 			return {
@@ -92,12 +108,12 @@ function validateValue(value: unknown, schema: Record<string, unknown>, path: st
 		for (let index = 0; index < value.length; index += 1) {
 			const result = itemType === 'object'
 				? validateValue(value[index], items, `${path}[${index}]`)
-				: validatePrimitive(value[index], itemType, `${path}[${index}]`);
+				: validatePrimitive(value[index], items, `${path}[${index}]`);
 			if (!result.ok) return result;
 		}
 		return { ok: true };
 	}
-	return validatePrimitive(value, type, path);
+	return validatePrimitive(value, schema, path);
 }
 
 export function validateAgentToolInput(

@@ -51,14 +51,14 @@ Do not create plaintext `.env` files for provider keys. Do not render provider A
 
 ## Assignment Protocol
 
-The implemented Phase 2 and Phase 3 runtime protocol is provider-initiated and outbound-friendly:
+The implemented provider runtime protocol is provider-initiated and outbound-friendly. Production-completion phase status remains controlled by `docs/agent-capacity-completion.md`:
 
-1. The provider manager calls `POST /v1/provider/check-in`.
-2. The check-in reports execution providers, native limits, observations, availability window, grants, capabilities, runner concurrency, and provider-local pressure.
+1. The provider manager creates or renews `POST /v1/provider/availability-sessions` for each approved team membership.
+2. The availability snapshot reports execution providers, native limits, observations, availability window, capabilities, runner concurrency, and provider-local pressure.
 3. The API records a `ProviderAvailabilitySession` as generic supply.
-4. The provider runner calls `POST /v1/provider/assignments/next`.
-5. The API leases one existing eligible `ProviderAssignment` for the authenticated provider and returns a lease token.
-6. The provider runner calls `AgentKernel.runAssignment` with the leased assignment, `AgentCapacityEnvelope`, and `DecisionExecutionInput`.
+4. The provider manager selects a team through weighted-deficit scheduling and calls `POST /v1/provider/assignments/next`.
+5. The API leases one existing eligible `ProviderAssignment`; the manager enforces provider-local execution-provider/lane/native limits and persists a mode-0600 durable dispatch containing the lease.
+6. A bounded provider runner atomically claims that dispatch and calls `AgentKernel.runAssignment` with the leased assignment, `AgentCapacityEnvelope`, and `DecisionExecutionInput`. The runner never polls a team for replacement work.
 7. The AgentKernel validates mode/profile/envelope bounds, resolves the project-bundled agent handler, and executes it with optional `AgentContext.capacity` runtime context and optional `AgentContext.treeDx` repository-context adapter.
 8. The provider runner records `AgentModeRun` telemetry through `POST /v1/provider/assignments/:assignmentId/mode-runs`.
 9. The provider runner renews, completes, fails, or returns the assignment through the assignment lifecycle routes.
@@ -66,21 +66,26 @@ The implemented Phase 2 and Phase 3 runtime protocol is provider-initiated and o
 
 The API does not require inbound network reachability to local or self-hosted providers.
 
-The provider runner polls assignment lifecycle routes and executes assignments through the AgentKernel. The API may synthesize planning assignments from open planning-input requests and acting assignments from accepted capacity-plan work units before next-assignment leasing, but the provider runner does not synthesize project work locally. Raw accepted execution inputs remain planning artifacts until the API aggregates and accepts a durable capacity plan.
+Provider-local coordination state is stored atomically under the provider data directory with mode-0600 files and a cross-process lock. It contains short-lived membership token state, availability-session id/sequence, polling claims, ready dispatches, running dispatches, and bounded secret-free lifecycle evidence. Global, connection, execution-provider, lane, reserved-credit, and reservation-native-unit limits are checked through that single state owner. Provider budget reserve buffers reduce the locally usable native allowance. Ready dispatches survive process restart and remain executable. On manager startup, unfinished running dispatches are observed through the provider assignment API and safely returned before their local claim is released; an unavailable control plane retains the claim for retry. A runner releases a claim only after lifecycle confirmation; an unconfirmed failure remains recoverable. Operator output omits dispatch envelopes, redacts lease tokens, and never exposes membership credentials or access tokens.
 
-Future human-machine provider work keeps this assignment-only protocol and replaces prompt-only execution adapters with work-package and lifecycle-aware execution provider adapters. Jira-like issue queues, deterministic workflows, and AI providers must all run through the same provider check-in, assignment lease, mode-run, complete/return/fail, and usage-report lifecycle.
+The provider manager polls the assignment lease route; provider runners execute only manager-created dispatches through the AgentKernel and report assignment lifecycle transitions. The API may synthesize planning assignments from open planning-input requests and acting assignments from accepted capacity-plan work units before next-assignment leasing, but the provider runtime does not synthesize project work locally. Raw accepted execution inputs remain planning artifacts until the API aggregates and accepts a durable capacity plan.
+
+Human-machine providers keep this assignment-only protocol. Jira-like issue queues, deterministic workflows, and AI providers all run through the same availability-session, assignment lease, mode-run, complete/return/fail, and usage-settlement lifecycle.
 
 Provider task claim/update HTTP routes are not part of the provider runtime contract. Package-owned provider execution uses assignment APIs only.
 
 Lifecycle routes:
 
-- `POST /v1/provider/check-in`
+- `POST /v1/provider/availability-sessions`
+- `PUT /v1/provider/availability-sessions/:sessionId`
+- `POST /v1/provider/availability-sessions/:sessionId/close`
 - `POST /v1/provider/assignments/next`
 - `POST /v1/provider/assignments/:assignmentId/renew`
 - `POST /v1/provider/assignments/:assignmentId/return`
 - `POST /v1/provider/assignments/:assignmentId/complete`
 - `POST /v1/provider/assignments/:assignmentId/fail`
 - `POST /v1/provider/assignments/:assignmentId/mode-runs`
+- `POST /v1/provider/assignments/:assignmentId/settle`
 
 ## Provider Versus Project Ownership
 
@@ -109,7 +114,7 @@ Provider runners execute assigned project-bundled agents. They must not invent p
 
 Provider assignments should include a project-scoped TreeDX proxy handle, not raw TreeDX service credentials.
 
-The runner calls the TreeSeed API using `TREESEED_CAPACITY_PROVIDER_API_KEY` and scoped proxy paths such as `/v1/dx/projects/:projectId/...`. Provider calls must include `x-treeseed-assignment-id` and `x-treeseed-treedx-proxy-handle-id`. The API authenticates the provider, verifies the active assignment lease, loads the durable handle record when present, checks issued/revoked/expired state, validates handle token material when configured, enforces project, repository, workspace, allowed operation, and allowed path constraints, resolves the TreeDX node, holds TreeDX node credentials, forwards only allowed operations, and records allowed or denied proxy audit evidence.
+The runner calls the TreeSeed API using its short-lived membership access token and scoped proxy paths such as `/v1/dx/projects/:projectId/...`. Provider calls must include `x-treeseed-assignment-id` and `x-treeseed-treedx-proxy-handle-id`. The API authenticates the membership, verifies the active assignment lease, loads the durable handle record when present, checks issued/revoked/expired state, validates handle token material when configured, enforces project, repository, workspace, allowed operation, and allowed path constraints, resolves the TreeDX node, holds TreeDX node credentials, forwards only allowed operations, and records allowed or denied proxy audit evidence.
 
 Handlers should use `AgentContext.treeDx` for context build, repository file readback, workspace search, workspace file writes, and commits. The adapter is hydrated from the assignment proxy handle, applies handle-bound repository and workspace defaults, rejects out-of-scope path or operation requests before calling the API, and never exposes raw TreeDX node credentials.
 
@@ -122,7 +127,7 @@ Hosted deployments use package-owned role images:
 
 Published images are multi-architecture Docker Hub images for `linux/amd64` and `linux/arm64`, with architecture-specific tags assembled into a manifest, following the TreeDX image release model.
 
-Advanced launches can use a versioned capacity provider manifest:
+The following versioned document is the separate runtime-image extension manifest, not the schema-v2 provider identity/connections manifest used by the provider manager:
 
 ```yaml
 schemaVersion: 1
@@ -163,4 +168,4 @@ trsd reconcile test-live --provider railway --environment staging --mode accepta
 trsd reconcile test-live --provider railway --environment staging --mode cleanup --yes --json
 ```
 
-The capacity runtime proof checks in with the provider API key, creates a tagged diagnostic assignment through the existing team API, leases the assignment through the provider protocol, emits `AgentModeRun` telemetry, completes the assignment, and verifies mode-run visibility. The proof requires `TREESEED_CAPACITY_ACCEPTANCE_API_URL`, `TREESEED_CAPACITY_ACCEPTANCE_ADMIN_TOKEN`, `TREESEED_CAPACITY_ACCEPTANCE_TEAM_ID`, `TREESEED_CAPACITY_ACCEPTANCE_PROJECT_ID`, `TREESEED_CAPACITY_ACCEPTANCE_PROVIDER_ID`, `TREESEED_CAPACITY_ACCEPTANCE_AGENT_CLASS_ID`, and `TREESEED_CAPACITY_PROVIDER_API_KEY`.
+The capacity runtime proof observes a tagged assignment created through canonical admission, verifies its membership-scoped lease and mode-run evidence, and confirms TreeDX and settlement visibility. The observation proof requires `TREESEED_CAPACITY_ACCEPTANCE_API_URL`, `TREESEED_CAPACITY_ACCEPTANCE_ADMIN_TOKEN`, `TREESEED_CAPACITY_ACCEPTANCE_TEAM_ID`, `TREESEED_CAPACITY_ACCEPTANCE_PROJECT_ID`, `TREESEED_CAPACITY_ACCEPTANCE_PROVIDER_ID`, and `TREESEED_CAPACITY_ACCEPTANCE_AGENT_CLASS_ID`. The end-to-end local service guarantee provisions its own provider identity and membership credential and never accepts a static provider API key.

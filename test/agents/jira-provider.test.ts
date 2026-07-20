@@ -53,7 +53,7 @@ function agent(): AgentRuntimeSpec {
 			branchPrefix: 'agent',
 			providerProfile: {
 				requiredCapabilities: ['planning'],
-				preferredLanes: [],
+				preferredExecutionProviders: [],
 				acceptableFallbacks: [],
 				fallbackPolicy: 'fail_if_unavailable',
 			},

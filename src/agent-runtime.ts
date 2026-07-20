@@ -13,7 +13,7 @@ import { writerHandler } from './agents/handlers/writer.ts';
 import { LocalBranchMutationAdapter } from './agents/adapters/mutations.ts';
 import { SdkMessageNotificationAdapter } from './agents/adapters/notification.ts';
 import { GitRepositoryInspectionAdapter } from './agents/adapters/repository.ts';
-import { ProjectGraphResearchAdapter } from './agents/adapters/research.ts';
+import { createResearchAdapter } from './agents/adapters/research.ts';
 import { LocalVerificationAdapter } from './agents/adapters/verification.ts';
 import type {
 	ExecutionProviderAdapter,
@@ -91,7 +91,7 @@ function buildAgentRuntime() {
 		['sdk_message', () => new SdkMessageNotificationAdapter()],
 	]);
 	const research = new Map<string, () => AgentResearchAdapter>([
-		['project_graph', () => new ProjectGraphResearchAdapter()],
+		['project_graph', () => createResearchAdapter(null)],
 	]);
 	const handlers = new Map<string, AgentHandler>([
 		['writer', writerHandler],

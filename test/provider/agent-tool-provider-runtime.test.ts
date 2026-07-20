@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { createAssignmentToolCatalog } from '../../src/provider/runner.ts';
+import { createAssignmentToolCatalog } from '../../src/provider/assignment-tool-catalog.ts';
 
 const writeHandle = {
 	id: 'handle-1',
+	teamId: 'team-1',
 	projectId: 'project-1',
 	assignmentId: 'assignment-1',
 	repositoryId: 'repo-1',
@@ -14,6 +15,30 @@ const writeHandle = {
 };
 
 describe('provider agent tool catalog', () => {
+	it('exposes research tools only with an explicit project network policy', () => {
+		const denied = createAssignmentToolCatalog({
+			agentTools: ['research.search_sources', 'research.fetch_source'],
+			projectId: 'project-1',
+			assignmentId: 'assignment-1',
+			treedxProxyHandle: {},
+		});
+		expect(denied.exposed).toEqual([]);
+		expect(denied.omitted).toEqual([
+			{ id: 'research.search_sources', missing: ['research_source_policy'] },
+			{ id: 'research.fetch_source', missing: ['research_source_policy'] },
+		]);
+
+		const allowed = createAssignmentToolCatalog({
+			agentTools: ['research.search_sources', 'research.fetch_source'],
+			projectId: 'project-1',
+			assignmentId: 'assignment-1',
+			treedxProxyHandle: {},
+			researchNetworkPolicy: { allowWeb: true, allowedDomains: ['sources.example.test'] },
+		});
+		expect(allowed.exposed).toEqual(['research.search_sources', 'research.fetch_source']);
+		expect(allowed.descriptors[0]?.metadata).toMatchObject({ researchAllowedDomains: ['sources.example.test'] });
+	});
+
 	it('omits TreeDX tools when the assignment lacks a valid proxy handle', () => {
 		const catalog = createAssignmentToolCatalog({
 			agentTools: ['treedx.read_workspace_file', 'treeseed.status'],

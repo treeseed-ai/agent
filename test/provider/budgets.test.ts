@@ -3,13 +3,10 @@ import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { discoverProviderBudgets } from '../../src/provider/budgets.ts';
-import type { ProviderRuntimeConfig } from '../../src/provider/config.ts';
+import type { ProviderHostRuntimeConfig } from '../../src/provider/config.ts';
 
-function baseConfig(patch: Partial<ProviderRuntimeConfig> = {}): ProviderRuntimeConfig {
+function baseConfig(patch: Partial<ProviderHostRuntimeConfig> = {}): ProviderHostRuntimeConfig {
 	return {
-		marketUrl: 'https://market.example.com',
-		marketId: 'test',
-		apiKey: 'tsp_test',
 		dataDir: '/tmp/treeseed-provider',
 		environment: 'local',
 		capabilitiesFile: null,

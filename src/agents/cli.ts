@@ -2,13 +2,7 @@ import { realpathSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-export type TreeseedAgentCliCommandName =
-	| 'doctor'
-	| 'run-agent'
-	| 'drain-messages'
-	| 'release-leases'
-	| 'replay-message'
-	| 'start';
+export type TreeseedAgentCliCommandName = 'doctor';
 
 export type TreeseedAgentCliCommandSpec = {
 	name: TreeseedAgentCliCommandName;
@@ -25,11 +19,6 @@ export type TreeseedAgentCliContext = {
 
 const AGENT_COMMAND_SPECS: TreeseedAgentCliCommandSpec[] = [
 	{ name: 'doctor', usage: 'doctor', summary: 'Inspect agent runtime readiness for the current tenant.' },
-	{ name: 'run-agent', usage: 'run-agent <slug>', summary: 'Run one registered agent handler by slug.' },
-	{ name: 'drain-messages', usage: 'drain-messages', summary: 'Drain queued agent messages through the local kernel.' },
-	{ name: 'release-leases', usage: 'release-leases', summary: 'Release active task leases held by the local kernel.' },
-	{ name: 'replay-message', usage: 'replay-message <id>', summary: 'Replay one message by numeric id.' },
-	{ name: 'start', usage: 'start', summary: 'Start the local agent kernel loop.' },
 ] as const;
 
 function parseArgs(argv: string[]) {
@@ -67,7 +56,7 @@ function resolveExecutablePath(path: string) {
 }
 
 export async function runTreeseedAgentCli(argv: string[], context: TreeseedAgentCliContext = {}) {
-	const { command, args } = parseArgs(argv);
+	const { command } = parseArgs(argv);
 	const write = context.write ?? defaultWrite;
 	if (command === '--help' || command === '-h' || command === 'help') {
 		write(renderTreeseedAgentHelp(), 'stdout');
@@ -96,24 +85,6 @@ export async function runTreeseedAgentCli(argv: string[], context: TreeseedAgent
 	if (command === 'doctor') {
 		return emitPayload({ ok: true, command, ...(await kernel.doctor()) });
 	}
-	if (command === 'run-agent') {
-		return emitPayload({ ok: true, command, slug: args[0], result: await kernel.runAgent(args[0]) });
-	}
-	if (command === 'drain-messages') {
-		return emitPayload({ ok: true, command, results: await kernel.drainMessages() });
-	}
-	if (command === 'release-leases') {
-		return emitPayload({ ok: true, command, result: await kernel.releaseLeases() });
-	}
-	if (command === 'replay-message') {
-		return emitPayload({ ok: true, command, result: await kernel.replayMessage(Number(args[0])) });
-	}
-	if (command === 'start') {
-		write(JSON.stringify({ ok: true, command, status: 'starting' }, null, 2), 'stdout');
-		await kernel.start();
-		return 0;
-	}
-
 	throw new Error(`Unknown Treeseed command "${command}".`);
 }
 

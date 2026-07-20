@@ -6,10 +6,10 @@ import { execFileSync } from 'node:child_process';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
 	callAgentTool,
-	callAgentToolWithTelemetry,
 } from '../../src/agents/tools/agent-tool-runtime.ts';
+import { callAgentToolWithTelemetry } from '../../src/agents/tools/agent-tool-telemetry.ts';
 import type { ExecutionProviderToolDescriptor } from '../../src/agents/runtime-types.ts';
-import { createAssignmentToolCatalog } from '../../src/provider/runner.ts';
+import { createAssignmentToolCatalog } from '../../src/provider/assignment-tool-catalog.ts';
 
 const tempRoots: string[] = [];
 
@@ -66,7 +66,7 @@ describe('agent tool runtime', () => {
 	it('rejects tools not listed in the assignment catalog', async () => {
 		await expect(callAgentTool({
 			apiBaseUrl: '',
-			providerApiKey: '',
+			providerAccessToken: '',
 			assignmentId: 'assignment-1',
 			descriptors: [],
 		}, 'treeseed.status')).resolves.toMatchObject({ ok: false, code: 'tool_not_allowed' });
@@ -90,7 +90,7 @@ describe('agent tool runtime', () => {
 		};
 		await expect(callAgentTool({
 			apiBaseUrl: '',
-			providerApiKey: '',
+			providerAccessToken: '',
 			assignmentId: 'assignment-1',
 			descriptors: [descriptor],
 		}, 'treedx.write_workspace_file', { path: 'src/content/a.mdx' })).resolves.toMatchObject({
@@ -100,7 +100,7 @@ describe('agent tool runtime', () => {
 		});
 		await expect(callAgentTool({
 			apiBaseUrl: '',
-			providerApiKey: '',
+			providerAccessToken: '',
 			assignmentId: 'assignment-1',
 			descriptors: [statusDescriptor()],
 		}, 'treeseed.status', { extra: true })).resolves.toMatchObject({
@@ -114,7 +114,7 @@ describe('agent tool runtime', () => {
 		const dispatch = vi.fn(async () => ({ ok: true, mode: 'inline', payload: {} }));
 		await expect(callAgentTool({
 			apiBaseUrl: 'https://api.example.test',
-			providerApiKey: 'provider-key',
+			providerAccessToken: 'provider-key',
 			assignmentId: 'assignment-1',
 			descriptors: [statusDescriptor()],
 			sdk: { dispatch },
@@ -134,6 +134,7 @@ describe('agent tool runtime', () => {
 			workspaceMode: 'workspace_write',
 			treedxProxyHandle: {
 				id: 'handle-1',
+				teamId: 'team-1',
 				projectId: 'project-1',
 				assignmentId: 'assignment-1',
 				repositoryId: 'repo-1',
@@ -157,16 +158,18 @@ describe('agent tool runtime', () => {
 			}
 			return new Response(JSON.stringify({ ok: true }), { status: 200 });
 		}) as unknown as typeof fetch;
+		const telemetry: Array<Record<string, unknown>> = [];
 
-		await expect(callAgentTool({
+		await expect(callAgentToolWithTelemetry({
 			apiBaseUrl: 'https://api.example.test',
-			providerApiKey: 'provider-key',
+			providerAccessToken: 'provider-key',
 			assignmentId: 'assignment-1',
 			descriptors: catalog.descriptors,
 			fetchImpl,
+			onTelemetry: (entry) => telemetry.push(entry as unknown as Record<string, unknown>),
 		}, 'treeseed.questions.create', {
 			title: 'How should content tools work?',
-			fields: { questionType: 'implementation' },
+			fields: { questionType: 'implementation', relatedObjectives: ['objective-1'] },
 			body: 'Create canonical content.',
 		})).resolves.toMatchObject({
 			ok: true,
@@ -177,6 +180,144 @@ describe('agent tool runtime', () => {
 		expect(fetchImpl).toHaveBeenCalled();
 		expect(String(calls[0]?.init.body)).toContain('question_type');
 		expect(String(calls[0]?.init.body)).not.toContain('provider-key');
+		expect(telemetry.at(-1)).toMatchObject({
+			derivedEvents: [{
+				type: 'content_created',
+				contentRef: {
+					model: 'question',
+					path: 'src/content/questions/how-should-content-tools-work.mdx',
+					subjectId: 'objective-1',
+					subjectField: 'related_objectives',
+				},
+			}],
+		});
+	});
+
+	it('places model-aware content beneath the assignment package content root', async () => {
+		const catalog = createAssignmentToolCatalog({
+			agentTools: ['treeseed.questions.create'],
+			projectId: 'project-1',
+			assignmentId: 'assignment-1',
+			workspaceMode: 'workspace_write',
+			treedxProxyHandle: {
+				id: 'handle-1', teamId: 'team-1', projectId: 'project-1', assignmentId: 'assignment-1',
+				repositoryId: 'repo-1', workspaceId: 'workspace-1',
+				allowedOperations: ['files:read', 'files:write'],
+				allowedPaths: ['docs/src/content/**'],
+				allowedWritePaths: ['docs/src/content', 'docs/src/content/**'],
+			},
+			contentAccess: {
+				read: { models: ['question'], actions: ['read'] },
+				write: { models: ['question'], actions: ['create'] },
+				commit: { allowed: false },
+			},
+			allowedPaths: ['docs/src/content/**'],
+			forbiddenPaths: [],
+		});
+		const fetchImpl = vi.fn(async (_url: string | URL | Request, init?: RequestInit) =>
+			new Response(JSON.stringify(init?.method === 'GET' ? { content: '' } : { ok: true }), { status: 200 })) as unknown as typeof fetch;
+		const result = await callAgentTool({
+			apiBaseUrl: 'https://api.example.test', providerAccessToken: 'provider-key',
+			assignmentId: 'assignment-1', descriptors: catalog.descriptors, fetchImpl,
+		}, 'treeseed.questions.create', { title: 'Package scoped question' });
+		expect(result).toMatchObject({
+			ok: true,
+			changedPaths: ['docs/src/content/questions/package-scoped-question.mdx'],
+		});
+	});
+
+	it('reads legacy Markdown content while returning the authoritative TreeDX path', async () => {
+		const catalog = createAssignmentToolCatalog({
+			agentTools: ['treeseed.content.read'],
+			projectId: 'project-1',
+			assignmentId: 'assignment-1',
+			workspaceMode: 'workspace_write',
+			treedxProxyHandle: {
+				id: 'handle-1', teamId: 'team-1', projectId: 'project-1', assignmentId: 'assignment-1',
+				repositoryId: 'repo-1', workspaceId: 'workspace-1',
+				allowedOperations: ['files:read'],
+				allowedPaths: ['docs/src/content/**'],
+				allowedWritePaths: ['docs/src/content', 'docs/src/content/**'],
+			},
+			contentAccess: {
+				read: { models: ['objective'], actions: ['read'] },
+				write: { models: [], actions: [] },
+				commit: { allowed: false },
+			},
+			allowedPaths: ['docs/src/content/**'],
+			forbiddenPaths: [],
+		});
+		const requestedPaths: string[] = [];
+		const fetchImpl = vi.fn(async (url: string | URL | Request) => {
+			const path = new URL(String(url)).searchParams.get('path') ?? '';
+			requestedPaths.push(path);
+			if (path.endsWith('.mdx')) {
+				return new Response(JSON.stringify({ code: 'not_found' }), { status: 404 });
+			}
+			return new Response(JSON.stringify({ content: '---\nid: objective:core\n---\n' }), { status: 200 });
+		}) as unknown as typeof fetch;
+		const result = await callAgentTool({
+			apiBaseUrl: 'https://api.example.test', providerAccessToken: 'provider-key',
+			assignmentId: 'assignment-1', descriptors: catalog.descriptors, fetchImpl,
+		}, 'treeseed.content.read', { model: 'objective', id: 'core' });
+		expect(result).toMatchObject({
+			ok: true,
+			refs: [{ model: 'objective', path: 'docs/src/content/objectives/core.md' }],
+		});
+		expect(requestedPaths).toEqual([
+			'docs/src/content/objectives/core.mdx',
+			'docs/src/content/objectives/core.md',
+		]);
+	});
+
+	it('preserves commit provenance returned through the TreeDX proxy envelope', async () => {
+		const catalog = createAssignmentToolCatalog({
+			agentTools: ['treeseed.content.commit'],
+			projectId: 'project-1',
+			assignmentId: 'assignment-1',
+			workspaceMode: 'workspace_write',
+			treedxProxyHandle: {
+				id: 'handle-1', teamId: 'team-1', projectId: 'project-1', assignmentId: 'assignment-1',
+				repositoryId: 'repo-1', workspaceId: 'workspace-1',
+				status: 'active',
+				allowedOperations: ['files:write', 'git:commit'],
+				allowedPaths: ['docs/src/content/**'],
+				allowedWritePaths: ['docs/src/content', 'docs/src/content/**'],
+			},
+			contentAccess: {
+				read: { models: ['note'], actions: ['read'] },
+				write: { models: ['note'], actions: ['create'] },
+				commit: { allowed: true },
+			},
+			allowedPaths: ['docs/src/content/**'],
+			forbiddenPaths: [],
+		});
+		const fetchImpl = vi.fn(async () => new Response(JSON.stringify({
+			ok: true,
+			payload: {
+				ok: true,
+				status: 'committed',
+				commitSha: 'abc123',
+				branchName: 'refs/heads/agent-work',
+			},
+		}), { status: 200 })) as unknown as typeof fetch;
+		const telemetry: Array<Record<string, unknown>> = [];
+
+		await expect(callAgentToolWithTelemetry({
+			apiBaseUrl: 'https://api.example.test',
+			providerAccessToken: 'provider-key',
+			assignmentId: 'assignment-1',
+			descriptors: catalog.descriptors,
+			fetchImpl,
+			onTelemetry: (entry) => telemetry.push(entry as unknown as Record<string, unknown>),
+		}, 'treeseed.content.commit', { message: 'Persist planning note' })).resolves.toMatchObject({ ok: true });
+		expect(telemetry.at(-1)).toMatchObject({
+			derivedEvents: [{
+				type: 'content_committed',
+				commitSha: 'abc123',
+				branchRef: 'refs/heads/agent-work',
+			}],
+		});
 	});
 
 	it('keeps verify worktree scoped and local-preferred', async () => {
@@ -201,7 +342,7 @@ describe('agent tool runtime', () => {
 		};
 		await expect(callAgentTool({
 			apiBaseUrl: 'https://api.example.test',
-			providerApiKey: 'provider-key',
+			providerAccessToken: 'provider-key',
 			assignmentId: 'assignment-1',
 			descriptors: [descriptor],
 			sdk: { dispatch },
@@ -224,11 +365,58 @@ describe('agent tool runtime', () => {
 		execFileSync('git', ['add', 'src/content/private/secret.mdx'], { cwd: root });
 		const result = await callAgentTool({
 			apiBaseUrl: '',
-			providerApiKey: '',
+			providerAccessToken: '',
 			assignmentId: 'assignment-1',
 			descriptors: [changedPathsDescriptor(root)],
 		}, 'treeseed.changed_paths');
 		expect(result).toMatchObject({ ok: false, code: 'path_forbidden' });
+	});
+
+	it('reads and searches only bounded assignment repository paths', async () => {
+		const root = mkdtempSync(join(tmpdir(), 'treeseed-agent-repository-tools-'));
+		tempRoots.push(root);
+		execFileSync('git', ['init', '-b', 'main'], { cwd: root });
+		execFileSync('git', ['config', 'user.email', 'agent-tool@example.test'], { cwd: root });
+		execFileSync('git', ['config', 'user.name', 'Agent Tool'], { cwd: root });
+		mkdirSync(join(root, 'src/private'), { recursive: true });
+		writeFileSync(join(root, 'src/scheduler.ts'), 'export const scheduler = \"weighted-deficit\";\\n', 'utf8');
+		writeFileSync(join(root, 'src/private/secret.ts'), 'export const secret = true;\\n', 'utf8');
+		execFileSync('git', ['add', '.'], { cwd: root });
+		execFileSync('git', ['commit', '-m', 'fixture'], { cwd: root });
+		const catalog = createAssignmentToolCatalog({
+			agentTools: ['treeseed.repository.read_file', 'treeseed.repository.search'],
+			projectId: 'project-1',
+			assignmentId: 'assignment-1',
+			treedxProxyHandle: {},
+			allowedPaths: ['src/**'],
+			forbiddenPaths: ['src/private/**'],
+		});
+		const options = {
+			apiBaseUrl: '',
+			providerAccessToken: '',
+			assignmentId: 'assignment-1',
+			descriptors: catalog.descriptors,
+			repoRoot: root,
+		};
+		await expect(callAgentTool(options, 'treeseed.repository.read_file', {
+			path: 'src/scheduler.ts',
+		})).resolves.toMatchObject({
+			ok: true,
+			payload: { path: 'src/scheduler.ts', content: expect.stringContaining('weighted-deficit'), truncated: false },
+		});
+		await expect(callAgentTool(options, 'treeseed.repository.search', {
+			query: 'weighted-deficit',
+			paths: ['src'],
+		})).resolves.toMatchObject({
+			ok: true,
+			payload: { matches: [{ path: 'src/scheduler.ts', match: expect.stringContaining('weighted-deficit') }] },
+		});
+		await expect(callAgentTool(options, 'treeseed.repository.read_file', {
+			path: 'src/private/secret.ts',
+		})).resolves.toMatchObject({ ok: false, code: 'path_forbidden' });
+		await expect(callAgentTool(options, 'treeseed.repository.read_file', {
+			path: '../outside',
+		})).resolves.toMatchObject({ ok: false, code: 'repository_path_invalid' });
 	});
 
 	it('emits redacted telemetry for tool calls', async () => {
@@ -236,7 +424,7 @@ describe('agent tool runtime', () => {
 		const dispatch = vi.fn(async () => ({ ok: true, mode: 'inline', payload: { token: 'not-input' } }));
 		await callAgentToolWithTelemetry({
 			apiBaseUrl: '',
-			providerApiKey: '',
+			providerAccessToken: '',
 			assignmentId: 'assignment-1',
 			descriptors: [statusDescriptor()],
 			sdk: { dispatch },

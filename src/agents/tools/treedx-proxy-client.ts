@@ -6,7 +6,7 @@ import {
 
 export interface TreeDxProxyToolCallOptions {
 	apiBaseUrl: string;
-	providerApiKey: string;
+	providerAccessToken: string;
 	assignmentId: string;
 	handleId: string;
 	descriptor: TreeDxProxyExecutionToolDescriptor;
@@ -105,7 +105,7 @@ function requestBody(toolName: TreeDxProxyToolName, input: Record<string, unknow
 
 export async function callTreeDxProxyTool(options: TreeDxProxyToolCallOptions) {
 	if (!options.apiBaseUrl.trim()) throw new Error('TreeSeed API base URL is required for TreeDX proxy tools.');
-	if (!options.providerApiKey.trim()) throw new Error('Capacity provider API key is required for TreeDX proxy tools.');
+	if (!options.providerAccessToken.trim()) throw new Error('Capacity provider access token is required for TreeDX proxy tools.');
 	if (!options.assignmentId.trim()) throw new Error('Assignment id is required for TreeDX proxy tools.');
 	if (!options.handleId.trim()) throw new Error('TreeDX proxy handle id is required for TreeDX proxy tools.');
 	const input = options.input ?? {};
@@ -118,7 +118,7 @@ export async function callTreeDxProxyTool(options: TreeDxProxyToolCallOptions) {
 		headers: {
 			accept: 'application/json',
 			'content-type': 'application/json',
-			authorization: `Bearer ${options.providerApiKey}`,
+			authorization: `Bearer ${options.providerAccessToken}`,
 			'x-treeseed-assignment-id': options.assignmentId,
 			'x-treeseed-treedx-proxy-handle-id': options.handleId,
 		},

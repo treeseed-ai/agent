@@ -35,16 +35,15 @@ export function createTreeseedApiRouter(options: ApiServerOptions = {}): Treesee
 			name: '@treeseed/agent/api',
 			mount(app: Parameters<NonNullable<ApiServerOptions['extendApp']>>[0], runtime: TreeseedApiContext) {
 				if (surfaces.agent) {
-					registerAgentRoutes(app, {
+					registerAgentRoutes(app as unknown as Parameters<typeof registerAgentRoutes>[0], {
 						sdk: runtime.sharedSdk,
 						prefix: `${runtime.internalPrefix}/agent`,
 						scope: 'agent',
 						projectId: runtime.resolved.config.projectId,
-						defaultActor: 'api',
 					});
 				}
 				if (surfaces.operations) {
-					registerOperationRoutes(app, {
+					registerOperationRoutes(app as unknown as Parameters<typeof registerOperationRoutes>[0], {
 						config: runtime.resolved.config,
 						scope: runtime.resolved.scopes.operations,
 						prefix: runtime.internalPrefix,
@@ -53,7 +52,7 @@ export function createTreeseedApiRouter(options: ApiServerOptions = {}): Treesee
 					});
 				}
 				if (surfaces.project) {
-					registerProjectRoutes(app, {
+					registerProjectRoutes(app as unknown as Parameters<typeof registerProjectRoutes>[0], {
 						config: runtime.resolved.config,
 						sharedSdk: runtime.sharedSdk,
 					});
@@ -74,7 +73,7 @@ export function createTreeseedApiRouter(options: ApiServerOptions = {}): Treesee
 			operations: false,
 		},
 		extensions,
-	}) as TreeseedAgentApiApp;
+	}) as unknown as TreeseedAgentApiApp;
 }
 
 export function createTreeseedApiApp(options: ApiServerOptions = {}): TreeseedAgentApiApp {

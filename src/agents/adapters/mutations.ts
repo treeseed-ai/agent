@@ -31,6 +31,10 @@ export class LocalBranchMutationAdapter implements AgentMutationAdapter {
 		content: string;
 		commitMessage: string;
 	}) {
+		const normalizedPath = input.relativePath.replaceAll('\\', '/').replace(/^\.\//u, '');
+		if (normalizedPath.startsWith('src/content/') || normalizedPath.startsWith('docs/src/content/')) {
+			throw new Error('Knowledge Hub content mutations require an assignment-scoped TreeDX tool receipt; local branch writes are forbidden.');
+		}
 		const branchName = `${input.agent.execution.branchPrefix}/${input.runId}`;
 		const worktreePath = await this.git.ensureWorktree(branchName);
 		const filePath = path.join(worktreePath, input.relativePath);

@@ -38,7 +38,7 @@ function agent(): AgentRuntimeSpec {
 			branchPrefix: 'agent',
 			providerProfile: {
 				requiredCapabilities: ['workflow_dispatch'],
-				preferredLanes: [],
+				preferredExecutionProviders: [],
 				acceptableFallbacks: [],
 				fallbackPolicy: 'fail_if_unavailable',
 			},

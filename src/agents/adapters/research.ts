@@ -1,48 +1,53 @@
-import { AgentSdk } from '@treeseed/sdk';
-import { resolveTreeseedTenantRoot } from '@treeseed/sdk/platform/tenant-config';
-import type { AgentResearchAdapter } from '../runtime-types.ts';
-import { getTreeseedAgentProviderSelections } from '@treeseed/sdk/platform/deploy-runtime';
+import type { AgentResearchAdapter, AgentTreeDxAdapter } from '../runtime-types.ts';
 
-export class ProjectGraphResearchAdapter implements AgentResearchAdapter {
+function records(value: unknown) {
+	if (!value || typeof value !== 'object' || Array.isArray(value)) return [];
+	const source = value as Record<string, unknown>;
+	for (const candidate of [source.items, source.results, source.entries, source.matches, source.context]) {
+		if (Array.isArray(candidate)) return candidate.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object' && !Array.isArray(item));
+	}
+	return [];
+}
+
+export class TreeDxProjectGraphResearchAdapter implements AgentResearchAdapter {
+	constructor(private readonly treeDx: AgentTreeDxAdapter) {}
+
 	async research(input: { questionId: string; reason: string | null; runId: string }) {
-		const repoRoot = resolveTreeseedTenantRoot();
-		const sdk = AgentSdk.createLocal({ repoRoot });
-		const graphResult = await sdk.queryGraph({
+		const result = await this.treeDx.buildContext({
+			repoId: '',
 			query: input.questionId,
-			options: {
-				limit: 5,
-			},
-		}).catch(() => null);
-		const graphRecord = graphResult && typeof graphResult === 'object' && !Array.isArray(graphResult)
-			? graphResult as Record<string, unknown>
-			: {};
-		const items = Array.isArray(graphRecord.items) ? graphRecord.items : [];
+			body: { limit: 10, purpose: 'agent_research', reason: input.reason, runId: input.runId },
+		});
+		const items = records(result);
 		return {
 			status: 'completed' as const,
-			summary: `Graph-backed research prepared for ${input.questionId}.`,
+			summary: `TreeDX-backed research context prepared for ${input.questionId}.`,
 			markdown: [
-				'# Research Summary',
+				'# Research Context',
 				'',
 				`Question: ${input.questionId}`,
 				`Reason: ${input.reason ?? 'not provided'}`,
 				`Run: ${input.runId}`,
 				'',
-				items.length
-					? 'Relevant graph context:'
-					: 'No ranked graph context was available. The question is still recorded for follow-up.',
-				...items.map((item: any) => `- ${String(item.title ?? item.id ?? 'context')}`),
+				items.length ? 'Relevant TreeDX context:' : 'No relevant TreeDX context was returned; external evidence is required before synthesis.',
+				...items.map((item) => `- ${String(item.title ?? item.path ?? item.id ?? 'context')}`),
 			].join('\n'),
-			sources: items.map((item: any) => String(item.id ?? item.title ?? '')).filter(Boolean),
+			sources: items.map((item) => String(item.id ?? item.path ?? item.title ?? '')).filter(Boolean),
 		};
 	}
 }
 
-export function createResearchAdapter() {
-	const provider = String(
-		process.env.TREESEED_AGENT_RESEARCH_PROVIDER ?? getTreeseedAgentProviderSelections().research,
-	).toLowerCase();
-	if (provider !== 'project_graph') {
-		throw new Error(`Unsupported agent research provider "${provider}". Configure TREESEED_AGENT_RESEARCH_PROVIDER=project_graph.`);
+class UnavailableResearchAdapter implements AgentResearchAdapter {
+	async research() {
+		return {
+			status: 'waiting' as const,
+			summary: 'Research requires an assignment-scoped TreeDX adapter; direct local content access is disabled.',
+			markdown: '',
+			sources: [],
+		};
 	}
-	return new ProjectGraphResearchAdapter();
+}
+
+export function createResearchAdapter(treeDx?: AgentTreeDxAdapter | null) {
+	return treeDx ? new TreeDxProjectGraphResearchAdapter(treeDx) : new UnavailableResearchAdapter();
 }

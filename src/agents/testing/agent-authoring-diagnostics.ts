@@ -8,6 +8,7 @@ export type AgentAuthoringDiagnosticCode =
 	| 'agent.missing_required_capabilities'
 	| 'agent.actor_missing_path_constraints'
 	| 'agent.content_write_requires_treedx'
+	| 'agent.mutation_output_requires_content_commit'
 	| 'agent.output_contract_ambiguous'
 	| 'agent.execution_provider_too_specific'
 	| 'agent.local_filesystem_content_dependency';
@@ -132,6 +133,26 @@ export function diagnoseAgentAuthoring(spec: AgentRuntimeSpec | Record<string, u
 		const outputs = record(profile.outputs);
 		if (!Object.keys(outputs).length) {
 			add('agent.output_contract_ambiguous', 'error', profilePath(activity, 'outputs'), 'Activity profile has no explicit output contract.', 'Declare content, tool, signal, or terminal output contracts so AgentKernel can validate results.');
+		}
+		const modelMutations = stringArray(outputs.modelMutations);
+		const commitAllowed = record(contentAccess.commit).allowed === true;
+		const branchKind = typeof record(profile.branchPolicy).kind === 'string'
+			? String(record(profile.branchPolicy).kind)
+			: '';
+		const allowedTools = stringArray(record(profile.tools).allowed);
+		if (modelMutations.length > 0 && (
+			!commitAllowed
+			|| branchKind === 'read-only'
+			|| !allowedTools.includes('treeseed.content.create')
+			|| !allowedTools.includes('treeseed.content.commit')
+		)) {
+			add(
+				'agent.mutation_output_requires_content_commit',
+				'error',
+				profilePath(activity, 'outputs.modelMutations'),
+				'Activity profile promises model mutations but cannot create and commit TreeSeed content through TreeDX.',
+				'Use a writable content branch, allow content commits, and grant treeseed.content.create plus treeseed.content.commit.',
+			);
 		}
 		if (typeof execution.provider === 'string' || typeof execution.providerId === 'string') {
 			add('agent.execution_provider_too_specific', 'warning', profilePath(activity, 'execution'), 'Activity profile pins a provider directly instead of declaring capability requirements.', 'Prefer execution.requiredCapabilities and let API/provider assignment select the execution provider.');

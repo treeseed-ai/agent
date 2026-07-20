@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import YAML from 'yaml';
 import type { CapacityProviderBudgetCapacity } from '@treeseed/sdk/capacity-provider';
-import type { ProviderRuntimeConfig } from './config.ts';
+import type { ProviderHostRuntimeConfig } from './config.ts';
 
 function budgetFromFile(path: string): CapacityProviderBudgetCapacity | null {
 	if (!existsSync(path)) return null;
@@ -10,7 +10,7 @@ function budgetFromFile(path: string): CapacityProviderBudgetCapacity | null {
 	return null;
 }
 
-export function discoverProviderBudgets(config: ProviderRuntimeConfig): CapacityProviderBudgetCapacity {
+export function discoverProviderBudgets(config: ProviderHostRuntimeConfig): CapacityProviderBudgetCapacity {
 	if (config.budgetFile) {
 		const loaded = budgetFromFile(config.budgetFile);
 		if (loaded) return loaded;

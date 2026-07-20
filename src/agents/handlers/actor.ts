@@ -5,6 +5,7 @@ const executionActorHandler = createExecutionContentHandler({
 	kind: 'actor',
 	defaultWorkPackageKind: 'actor',
 	defaultArtifactKind: 'implementation_report',
+	executionAccess: 'configured',
 });
 
 export const actorHandler: AgentHandler = {

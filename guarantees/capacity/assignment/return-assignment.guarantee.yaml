@@ -7,7 +7,7 @@ journey: Return Assignment
 ownerPackage: "@treeseed/agent"
 surface: agent-runtime
 summary: "Agent runtime keeps the Return Assignment contract verifiable through active local evidence."
-status: active
+status: planned
 dependencies:
   journeys:
     - 60
@@ -40,6 +40,7 @@ api:
   required: true
   verifierRefs:
     - agent.assignment.return
+    - agent.assignment.fallback-evidence-stable
 content:
   required: false
   verifierRefs: []
@@ -47,6 +48,7 @@ audit:
   required: true
   verifierRefs:
     - agent.assignment.return
+    - agent.assignment.fallback-evidence-stable
 negativeCases:
   - id: unauthorized-actor-denied
     actor: anonymous_user
@@ -58,4 +60,3 @@ evidence:
     - verifier_evidence
 notes:
   - "Agent runtime guarantee for Return Assignment."
-

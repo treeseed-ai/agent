@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import YAML from 'yaml';
 import type { CapacityProviderCapability } from '@treeseed/sdk/capacity-provider';
-import type { ProviderRuntimeConfig } from './config.ts';
+import type { ProviderHostRuntimeConfig } from './config.ts';
 
 function capabilitiesFromFile(path: string): CapacityProviderCapability[] | null {
 	if (!existsSync(path)) return null;
@@ -13,7 +13,7 @@ function capabilitiesFromFile(path: string): CapacityProviderCapability[] | null
 	return null;
 }
 
-export function discoverProviderCapabilities(config: ProviderRuntimeConfig): CapacityProviderCapability[] {
+export function discoverProviderCapabilities(config: ProviderHostRuntimeConfig): CapacityProviderCapability[] {
 	if (config.capabilitiesFile) {
 		const loaded = capabilitiesFromFile(config.capabilitiesFile);
 		if (loaded) return loaded;

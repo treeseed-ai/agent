@@ -1,15 +1,44 @@
+import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import type { ExecutionProviderToolDescriptor } from '../runtime-types.ts';
-import { callAgentToolWithTelemetry, type AgentToolRuntimeOptions } from './agent-tool-runtime.ts';
+import type { AgentToolRuntimeOptions } from './agent-tool-runtime.ts';
+import { callAgentToolWithTelemetry } from './agent-tool-telemetry.ts';
 
 export interface AgentToolMcpServerOptions extends AgentToolRuntimeOptions {}
 
 export function agentToolMcpName(toolId: string) {
 	return toolId.replace(/[^A-Za-z0-9_-]/gu, '_');
+}
+
+const TRANSPORT_METADATA_KEYS = [
+	'dispatch',
+	'dispatchPreferredMode',
+	'telemetryCategory',
+	'assignmentId',
+	'projectId',
+	'worktreeRoot',
+	'allowedPaths',
+	'forbiddenPaths',
+	'researchAllowedDomains',
+	'contentAction',
+	'contentModel',
+	'contentPreset',
+	'contentAccessSummary',
+] as const;
+
+export function sanitizeAgentToolDescriptorForTransport(descriptor: ExecutionProviderToolDescriptor): ExecutionProviderToolDescriptor {
+	const source = descriptor.metadata && typeof descriptor.metadata === 'object' && !Array.isArray(descriptor.metadata)
+		? descriptor.metadata
+		: {};
+	const metadata = Object.fromEntries(TRANSPORT_METADATA_KEYS.flatMap((key) => source[key] === undefined ? [] : [[key, source[key]]]));
+	return {
+		...descriptor,
+		...(Object.keys(metadata).length ? { metadata } : { metadata: undefined }),
+	};
 }
 
 export function createAgentToolMcpServerCommand(options: AgentToolMcpServerOptions): {
@@ -27,12 +56,13 @@ export function createAgentToolMcpServerCommand(options: AgentToolMcpServerOptio
 		args,
 		env: {
 			TREESEED_API_BASE_URL: options.apiBaseUrl,
-			TREESEED_CAPACITY_PROVIDER_API_KEY: options.providerApiKey,
+			TREESEED_CAPACITY_PROVIDER_ACCESS_TOKEN: options.providerAccessToken,
 			TREESEED_AGENT_TOOL_ASSIGNMENT_ID: options.assignmentId,
 			TREESEED_AGENT_TOOL_LEASE_TOKEN: options.leaseToken ?? '',
 			TREESEED_AGENT_TOOL_REPO_ROOT: options.repoRoot ?? '',
 			TREESEED_AGENT_TOOL_TELEMETRY_PATH: options.telemetryPath ?? '',
-			TREESEED_AGENT_TOOL_DESCRIPTORS: JSON.stringify(options.descriptors),
+			TREESEED_AGENT_TOOL_DESCRIPTORS: JSON.stringify(options.descriptors.map(sanitizeAgentToolDescriptorForTransport)),
+			TREESEED_AGENT_TOOL_RESEARCH_SOURCE_POLICY: options.researchSourcePolicy ? JSON.stringify(options.researchSourcePolicy) : '',
 		},
 	};
 }
@@ -46,14 +76,21 @@ function descriptorsFromEnv(): ExecutionProviderToolDescriptor[] {
 	}
 }
 
+function researchSourcePolicyFromEnv() {
+	const value = process.env.TREESEED_AGENT_TOOL_RESEARCH_SOURCE_POLICY?.trim();
+	if (!value) return undefined;
+	return JSON.parse(value) as AgentToolRuntimeOptions['researchSourcePolicy'];
+}
+
 export function createAgentToolMcpServer(options?: Partial<AgentToolMcpServerOptions>) {
 	const descriptors = options?.descriptors ?? descriptorsFromEnv();
 	const apiBaseUrl = options?.apiBaseUrl ?? process.env.TREESEED_API_BASE_URL ?? process.env.TREESEED_MARKET_URL ?? '';
-	const providerApiKey = options?.providerApiKey ?? process.env.TREESEED_CAPACITY_PROVIDER_API_KEY ?? process.env.TREESEED_PROVIDER_API_KEY ?? '';
+	const providerAccessToken = options?.providerAccessToken ?? process.env.TREESEED_CAPACITY_PROVIDER_ACCESS_TOKEN ?? process.env.TREESEED_PROVIDER_ACCESS_TOKEN ?? '';
 	const assignmentId = options?.assignmentId ?? process.env.TREESEED_AGENT_TOOL_ASSIGNMENT_ID ?? '';
 	const leaseToken = options?.leaseToken ?? process.env.TREESEED_AGENT_TOOL_LEASE_TOKEN ?? null;
 	const repoRoot = options?.repoRoot ?? process.env.TREESEED_AGENT_TOOL_REPO_ROOT ?? undefined;
 	const telemetryPath = options?.telemetryPath ?? process.env.TREESEED_AGENT_TOOL_TELEMETRY_PATH ?? null;
+	const researchSourcePolicy = options?.researchSourcePolicy ?? researchSourcePolicyFromEnv();
 
 	const server = new Server(
 		{ name: 'treeseed-tools', version: '1.0.0' },
@@ -83,7 +120,7 @@ export function createAgentToolMcpServer(options?: Partial<AgentToolMcpServerOpt
 		try {
 			const result = await callAgentToolWithTelemetry({
 				apiBaseUrl,
-				providerApiKey,
+				providerAccessToken,
 				assignmentId,
 				leaseToken,
 				descriptors,
@@ -91,6 +128,7 @@ export function createAgentToolMcpServer(options?: Partial<AgentToolMcpServerOpt
 				fetchImpl: options?.fetchImpl,
 				repoRoot,
 				telemetryPath,
+				researchSourcePolicy,
 				onTelemetry: options?.onTelemetry,
 			}, toolId, input);
 			return {
@@ -109,6 +147,13 @@ export function createAgentToolMcpServer(options?: Partial<AgentToolMcpServerOpt
 }
 
 export async function startAgentToolMcpServer(options?: Partial<AgentToolMcpServerOptions>) {
+	const configPath = process.env.TREESEED_AGENT_TOOL_CONFIG_PATH?.trim();
+	if (configPath) {
+		const parsed = JSON.parse(await readFile(configPath, 'utf8')) as Record<string, unknown>;
+		for (const [key, value] of Object.entries(parsed)) {
+			if (typeof value === 'string') process.env[key] = value;
+		}
+	}
 	const server = createAgentToolMcpServer(options);
 	await server.connect(new StdioServerTransport());
 }

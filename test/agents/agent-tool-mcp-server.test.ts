@@ -46,25 +46,37 @@ describe('agent tool MCP tooling', () => {
 	it('creates an assignment-scoped command without embedding credentials in args', () => {
 		const command = createAgentToolMcpServerCommand({
 			apiBaseUrl: 'https://api.example.test',
-			providerApiKey: 'provider-secret',
+			providerAccessToken: 'provider-secret',
 			assignmentId: 'assignment-1',
 			repoRoot: '/repo',
 			telemetryPath: '/tmp/tools.jsonl',
 			descriptors: [descriptor],
+			researchSourcePolicy: {
+				schemaVersion: 1,
+				allowedDomains: ['sources.example.test'],
+				requestTimeoutMs: 10_000,
+				maxResponseBytes: 100_000,
+				maxRedirects: 2,
+				allowedContentTypes: ['text/*'],
+			},
 		});
 		expect(command.command).toBe(process.execPath);
 		expect(command.args.join(' ')).not.toContain('provider-secret');
-		expect(command.env.TREESEED_CAPACITY_PROVIDER_API_KEY).toBe('provider-secret');
+		expect(command.env.TREESEED_CAPACITY_PROVIDER_ACCESS_TOKEN).toBe('provider-secret');
 		expect(command.env.TREESEED_AGENT_TOOL_REPO_ROOT).toBe('/repo');
 		expect(command.env.TREESEED_AGENT_TOOL_TELEMETRY_PATH).toBe('/tmp/tools.jsonl');
 		expect(command.env.TREESEED_AGENT_TOOL_DESCRIPTORS).not.toContain('provider-secret');
+		expect(JSON.parse(command.env.TREESEED_AGENT_TOOL_RESEARCH_SOURCE_POLICY)).toMatchObject({
+			allowedDomains: ['sources.example.test'],
+			maxRedirects: 2,
+		});
 	});
 
 	it('calls workspace write through the API proxy with assignment headers', async () => {
 		const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ ok: true, payload: { path: 'src/content/a.mdx' } }), { status: 200 }));
 		await callTreeDxProxyTool({
 			apiBaseUrl: 'https://api.example.test',
-			providerApiKey: 'provider-secret',
+			providerAccessToken: 'provider-secret',
 			assignmentId: 'assignment-1',
 			handleId: 'handle-1',
 			descriptor,
@@ -90,7 +102,7 @@ describe('agent tool MCP tooling', () => {
 		const telemetry: unknown[] = [];
 		const server = createAgentToolMcpServer({
 			apiBaseUrl: 'https://api.example.test',
-			providerApiKey: 'provider-secret',
+			providerAccessToken: 'provider-secret',
 			assignmentId: 'assignment-1',
 			descriptors: [descriptor],
 			fetchImpl: fetchImpl as unknown as typeof fetch,
@@ -126,7 +138,7 @@ describe('agent tool MCP tooling', () => {
 	it('returns structured validation errors for invalid tool input', async () => {
 		const server = createAgentToolMcpServer({
 			apiBaseUrl: 'https://api.example.test',
-			providerApiKey: 'provider-secret',
+			providerAccessToken: 'provider-secret',
 			assignmentId: 'assignment-1',
 			descriptors: [descriptor],
 		});
@@ -151,7 +163,7 @@ describe('agent tool MCP tooling', () => {
 	it('rejects tools not included in the assignment catalog', async () => {
 		const server = createAgentToolMcpServer({
 			apiBaseUrl: 'https://api.example.test',
-			providerApiKey: 'provider-secret',
+			providerAccessToken: 'provider-secret',
 			assignmentId: 'assignment-1',
 			descriptors: [],
 		});

@@ -451,12 +451,9 @@ export interface AgentTestRuntime {
 	seedKnowledge(entries: Array<{ slug: string; title?: string }>): Promise<void>;
 	seedMessages(entries: Array<Omit<SdkCreateMessageRequest, 'actor'>>): Promise<SdkMessageEntity[]>;
 	clearModelContent(model: 'objective' | 'question' | 'knowledge'): Promise<void>;
-	runAgent(slug: string): Promise<unknown>;
-	runCycle(): Promise<unknown>;
 	readMessages(): Promise<SdkMessageEntity[]>;
 	readRunLogs(): Promise<SdkRunEntity[]>;
 	readContentLeases(): Promise<Record<string, unknown>[]>;
-	readSandboxArtifacts(): Promise<Array<{ path: string; content: string }>>;
 	claimMessage(messageTypes: string[], workerId?: string): Promise<SdkMessageEntity | null>;
 	claimObjectiveLease(itemKey: string, workerId?: string): Promise<string | null>;
 	cleanup(): Promise<void>;
@@ -603,12 +600,6 @@ export async function createAgentTestRuntime(options?: {
 			await runCommand('git', ['add', '-A', relativeContentDir], repoRoot);
 			await runCommand('git', ['commit', '-m', `test(seed): clear ${model}`], repoRoot);
 		},
-		runAgent(slug: string) {
-			return kernel.runAgent(slug);
-		},
-		runCycle() {
-			return kernel.runCycle();
-		},
 		async readMessages() {
 			const response = await sdk.search({
 				model: 'message',
@@ -640,16 +631,6 @@ export async function createAgentTestRuntime(options?: {
 			}
 			const rows = await database.db.prepare('SELECT * FROM lease_state ORDER BY item_key ASC').all<Record<string, unknown>>();
 			return rows.results;
-		},
-		async readSandboxArtifacts() {
-			const worktreeRoot = path.join(repoRoot, '.agent-worktrees');
-			const files = (await walkFiles(worktreeRoot)).filter((entry) => entry.includes(`${path.sep}.agent-artifacts${path.sep}`));
-			return Promise.all(
-				files.map(async (filePath) => ({
-					path: filePath,
-					content: await readFile(filePath, 'utf8'),
-				})),
-			);
 		},
 		async claimMessage(messageTypes, workerId = 'agents-e2e-claimer') {
 			const claimed = await sdk.claimMessage({

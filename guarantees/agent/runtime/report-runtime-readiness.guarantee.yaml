@@ -3,11 +3,11 @@ id: guarantee.agent.runtime.report-runtime-readiness.162
 journeyIndex: 162
 type: agent
 subtype: runtime
-journey: Report Runtime Readiness
+journey: Report Capacity Provider Runtime Readiness
 ownerPackage: "@treeseed/agent"
 surface: agent-runtime
-summary: "Agent runtime keeps the Report Runtime Readiness contract verifiable through active local evidence."
-status: active
+summary: "The canonical provider doctor and lifecycle checks report capacity runtime readiness without a second manager runtime."
+status: planned
 dependencies:
   journeys:
     - 60
@@ -57,5 +57,4 @@ evidence:
     - guarantee_report
     - verifier_evidence
 notes:
-  - "Agent runtime guarantee for Report Runtime Readiness."
-
+  - "Readiness is owned by the provider lifecycle and doctor path; the legacy services runtime-readiness command was removed."

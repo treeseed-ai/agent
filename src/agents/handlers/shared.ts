@@ -10,7 +10,7 @@ export function nowIso() {
 
 export function parseTriggerPayload(context: AgentContext): HandlerPayload {
 	const decisionInput = context.capacity?.decisionInput && typeof context.capacity.decisionInput === 'object'
-		? context.capacity.decisionInput as Record<string, unknown>
+		? context.capacity.decisionInput as unknown as Record<string, unknown>
 		: {};
 	const assignmentInput = decisionInput.input && typeof decisionInput.input === 'object' && !Array.isArray(decisionInput.input)
 		? decisionInput.input as HandlerPayload
@@ -50,7 +50,7 @@ export async function recordArtifactMessage(input: {
 		payload: {
 			...input.data,
 			assignmentId: input.context.capacity?.assignment?.id ?? null,
-			mode: input.context.mode,
+			mode: input.context.capacity?.mode ?? null,
 			agentSlug: input.context.agent.slug,
 		},
 		relatedModel: 'provider_assignment',

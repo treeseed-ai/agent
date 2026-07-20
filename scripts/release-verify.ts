@@ -115,7 +115,7 @@ function runPackedProviderRuntimeSmoke(installRoot: string) {
 	writeFileSync(resolve(installRoot, 'treeseed.capacity-provider.yaml'), [
 		'schemaVersion: 2',
 		'identity:',
-		'  privateKeyRef: env:TREESEED_CAPACITY_PROVIDER_PRIVATE_KEY',
+		'  privateKeyRef: secret://capacity/packed-smoke-provider-identity',
 		'  displayName: Packed smoke provider',
 		'executionProviders:',
 		'  - id: codex',

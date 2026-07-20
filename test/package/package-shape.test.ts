@@ -286,6 +286,8 @@ describe('agent package shape', () => {
 		expect(entrypoint).toContain('setpriv');
 		expect(releaseVerify).toContain("[providerEntrypoint, 'plan', '--json']");
 		expect(releaseVerify).not.toContain("[providerEntrypoint, 'register'");
+		expect(releaseVerify).toContain('privateKeyRef: secret://capacity/packed-smoke-provider-identity');
+		expect(releaseVerify).not.toContain('privateKeyRef: env:');
 		expect(dockerfile).toContain('FROM node:22');
 		expect(dockerfile).toContain('.treeseed/docker/runtime/manager/node_modules');
 		expect(dockerfile).toContain('.treeseed/docker/runtime/runner/node_modules');

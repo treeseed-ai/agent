@@ -20,6 +20,7 @@ const TRANSPORT_METADATA_KEYS = [
 	'telemetryCategory',
 	'assignmentId',
 	'projectId',
+	'contentRoot',
 	'worktreeRoot',
 	'allowedPaths',
 	'forbiddenPaths',
@@ -28,6 +29,8 @@ const TRANSPORT_METADATA_KEYS = [
 	'contentModel',
 	'contentPreset',
 	'contentAccessSummary',
+	'requiredArtifactKind',
+	'requireContentArtifact',
 ] as const;
 
 export function sanitizeAgentToolDescriptorForTransport(descriptor: ExecutionProviderToolDescriptor): ExecutionProviderToolDescriptor {

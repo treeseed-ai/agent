@@ -6,26 +6,10 @@ import { parse as parseYaml } from 'yaml';
 import { AGENT_MESSAGE_TYPES } from '../contracts/messages.ts';
 import { listRegisteredAgentHandlers, resolveAgentHandler } from '../registry.ts';
 import { normalizeAgentRuntimeSpec } from '../spec-normalizer.ts';
+import { EXECUTION_PROVIDERS } from '../spec-normalizer-primitives.ts';
 import type { NormalizedAgentRuntimeSpec } from '../spec-types.ts';
 import type { AgentSpecDiagnostic, RawAgentRuntimeSpec } from '../spec-types.ts';
 
-const EXECUTION_PROVIDERS = new Set([
-	'codex',
-	'copilot',
-	'jira',
-	'jira_issue_queue',
-	'human_issue_queue',
-	'github_issues',
-	'github_issue_queue',
-	'issue_queue',
-	'discord',
-	'discord_thread',
-	'workflow',
-	'workflow_operation',
-	'deterministic_workflow',
-	'github_actions',
-	'github_actions_workflow',
-]);
 const PROFILE_HANDLERS = new Set(['writer', 'actor', 'estimate', 'releaser', 'reporter']);
 
 export interface AgentContractIssue {

@@ -7,6 +7,7 @@ import {
 	type AgentToolDerivedEvent,
 	type AgentToolRuntimeOptions,
 } from './agent-tool-runtime.ts';
+import { missingPrecommitContentReceipts, readAgentToolTelemetry } from './agent-tool-completion.ts';
 
 function record(value: unknown): Record<string, unknown> {
 	return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -96,6 +97,7 @@ function contentEvents(toolId: string, input: Record<string, unknown>, output: R
 			: { type: 'question_updated', questionRef });
 	}
 	if (ref && /create|add|write/iu.test(action)) events.push({ type: 'content_created', contentRef: ref, ...(requiresCommit ? { requiresCommit: true } : {}) });
+	else if (ref && /update|link/iu.test(action)) events.push({ type: 'content_updated', contentRef: ref });
 	return events;
 }
 
@@ -127,12 +129,81 @@ function lifecycleEvents(toolId: string, output: Record<string, unknown>, action
 	return events;
 }
 
+function verificationEvents(toolId: string, output: Record<string, unknown>) {
+	if (toolId !== 'treeseed.verify') return [];
+	const rawResults = record(output.payload).results;
+	const results: Record<string, unknown>[] = Array.isArray(rawResults)
+		? rawResults.map(record)
+		: [];
+	if (!results.length || results.some((result) => result.ok !== true)) return [];
+	const commands = results.map((result) => {
+		const command = text(result.command);
+		const args = Array.isArray(result.args) ? result.args.map(String) : [];
+		const cwd = text(result.cwd) || '.';
+		return `${command}${args.length ? ` ${args.join(' ')}` : ''} (cwd: ${cwd})`;
+	});
+	return [{
+		type: 'verification_completed' as const,
+		status: 'passed' as const,
+		summary: `${results.length} verification command${results.length === 1 ? '' : 's'} met the expected exit code.`,
+		commands,
+	}];
+}
+
+function reviewDecisionEvents(toolId: string, output: Record<string, unknown>) {
+	if (toolId !== 'treeseed.review_decision') return [];
+	const payload = record(output.payload);
+	const disposition = text(payload.disposition);
+	const summary = text(payload.summary);
+	if (!['approved', 'rejected'].includes(disposition) || !summary) return [];
+	return [{
+		type: 'review_decision_recorded' as const,
+		disposition: disposition as 'approved' | 'rejected',
+		summary,
+	}];
+}
+
+function researchEvents(toolId: string, input: Record<string, unknown>, output: Record<string, unknown>): AgentToolDerivedEvent[] {
+	const payload = record(output.payload);
+	if (toolId === 'research.fetch_source') {
+		const sourceUrl = text(payload.url);
+		const contentHash = text(payload.contentSha256);
+		const retrievedAt = text(payload.retrievedAt);
+		if (!sourceUrl || !contentHash || !retrievedAt) return [];
+		let publisher = 'unknown';
+		try { publisher = new URL(sourceUrl).hostname.toLowerCase(); } catch { /* validated fetch output should always contain an absolute URL */ }
+		return [{
+			type: 'research_citation_fetched',
+			citation: {
+				sourceUrl,
+				title: text(input.title) || sourceUrl,
+				publisher,
+				retrievedAt,
+				contentHash,
+				claimIds: Array.isArray(input.claimIds) ? input.claimIds.map(String).filter(Boolean) : ['research-claim'],
+				confidence: ['low', 'medium', 'high'].includes(text(input.confidence)) ? text(input.confidence) : 'medium',
+			},
+		}];
+	}
+	if (toolId === 'treeseed.research_claims') {
+		const claims = Array.isArray(payload.claims) ? payload.claims.map(record).filter((claim) => Object.keys(claim).length) : [];
+		return claims.length ? [{ type: 'research_claims_recorded', claims }] : [];
+	}
+	return [];
+}
+
 function deriveToolEvents(toolId: string, descriptor: ExecutionProviderToolDescriptor, input: Record<string, unknown>, result: unknown) {
 	const output = record(result);
 	if (output.ok === false) return [];
 	const operation = operationForTool(toolId, descriptor);
 	const action = text(input.action) || operation.name || toolId;
-	return [...contentEvents(toolId, input, output, operation.name), ...lifecycleEvents(toolId, output, action)];
+	return [
+		...contentEvents(toolId, input, output, operation.name),
+		...lifecycleEvents(toolId, output, action),
+		...verificationEvents(toolId, output),
+		...reviewDecisionEvents(toolId, output),
+		...researchEvents(toolId, input, output),
+	];
 }
 
 async function emitTelemetry(options: AgentToolRuntimeOptions, entry: AgentToolCallTelemetry) {
@@ -152,7 +223,19 @@ export async function callAgentToolWithTelemetry(options: AgentToolRuntimeOption
 			status: 'started', startedAt: startedAt.toISOString(), inputSummary: summarize(input), operation: operationForTool(toolId, descriptor),
 		});
 	}
-	const result = await callAgentTool(options, toolId, input);
+	const commitTool = toolId === 'treedx.commit_workspace' || toolId === 'treeseed.content.commit';
+	const requiredArtifactKind = text(metadata.requiredArtifactKind);
+	const missingPrecommit = commitTool && metadata.requireContentArtifact === true && requiredArtifactKind
+		? missingPrecommitContentReceipts(await readAgentToolTelemetry(options.telemetryPath), requiredArtifactKind)
+		: [];
+	const result = missingPrecommit.length
+		? {
+			ok: false,
+			code: 'content_completion_required_before_commit',
+			message: `TreeDX commit requires completion of: ${missingPrecommit.join(', ')}. Create or repair the required linked content before retrying commit.`,
+			metadata: { missingReceipts: missingPrecommit },
+		}
+		: await callAgentTool(options, toolId, input);
 	if (descriptor?.kind === 'agent_tool') {
 		const completedAt = new Date();
 		const resultRecord = record(result);

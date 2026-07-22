@@ -15,7 +15,7 @@ const writeHandle = {
 };
 
 describe('provider agent tool catalog', () => {
-	it('exposes research tools only with an explicit project network policy', () => {
+	it('exposes research tools only with a non-empty provider/project policy intersection', () => {
 		const denied = createAssignmentToolCatalog({
 			agentTools: ['research.search_sources', 'research.fetch_source'],
 			projectId: 'project-1',
@@ -34,9 +34,20 @@ describe('provider agent tool catalog', () => {
 			assignmentId: 'assignment-1',
 			treedxProxyHandle: {},
 			researchNetworkPolicy: { allowWeb: true, allowedDomains: ['sources.example.test'] },
+			providerResearchSourcePolicy: { allowedDomains: ['example.test'] },
 		});
 		expect(allowed.exposed).toEqual(['research.search_sources', 'research.fetch_source']);
 		expect(allowed.descriptors[0]?.metadata).toMatchObject({ researchAllowedDomains: ['sources.example.test'] });
+
+		const disjoint = createAssignmentToolCatalog({
+			agentTools: ['research.fetch_source'],
+			projectId: 'project-1',
+			assignmentId: 'assignment-1',
+			treedxProxyHandle: {},
+			researchNetworkPolicy: { allowWeb: true, allowedDomains: ['sources.example.test'] },
+			providerResearchSourcePolicy: { allowedDomains: ['other.test'] },
+		});
+		expect(disjoint.omitted).toEqual([{ id: 'research.fetch_source', missing: ['research_source_policy'] }]);
 	});
 
 	it('omits TreeDX tools when the assignment lacks a valid proxy handle', () => {
@@ -65,16 +76,11 @@ describe('provider agent tool catalog', () => {
 			forbiddenPaths: [],
 		});
 
-		expect(catalog.exposed).toEqual([
-			'treedx.read_workspace_file',
-			'treedx.write_workspace_file',
-			'treedx.commit_workspace',
+		expect(catalog.exposed).toEqual(['treedx.read_workspace_file']);
+		expect(catalog.omitted).toEqual([
+			{ id: 'treedx.write_workspace_file', missing: ['treedx_writable_workspace'] },
+			{ id: 'treedx.commit_workspace', missing: ['treedx_writable_workspace', 'content_commit'] },
 		]);
-		const write = catalog.descriptors.find((descriptor) => descriptor.id === 'treedx.write_workspace_file');
-		expect(write).toMatchObject({
-			executionTarget: 'treedx_proxy',
-			allowedOperations: ['files:read', 'files:search'],
-		});
 	});
 
 	it('exposes writable TreeDX descriptors with handle metadata in workspace-write mode', () => {
@@ -84,6 +90,7 @@ describe('provider agent tool catalog', () => {
 			assignmentId: 'assignment-1',
 			treedxProxyHandle: writeHandle,
 			workspaceMode: 'workspace_write',
+			contentAccess: { write: { models: ['*'], actions: ['commit'] }, commit: { allowed: true } },
 			allowedPaths: ['src/content/**'],
 			forbiddenPaths: ['src/content/private/**'],
 		});
@@ -108,7 +115,7 @@ describe('provider agent tool catalog', () => {
 		expect(JSON.stringify(catalog)).not.toContain('secret_should_not_leak');
 	});
 
-	it('marks dispatch preferred mode for SDK tools', () => {
+	it('marks dispatch preference only for SDK tools and keeps verify provider-owned', () => {
 		const catalog = createAssignmentToolCatalog({
 			agentTools: ['treeseed.status', 'treeseed.verify', 'treeseed.changed_paths'],
 			projectId: 'project-1',
@@ -123,9 +130,35 @@ describe('provider agent tool catalog', () => {
 			dispatchPreferredMode: 'auto',
 		});
 		expect(catalog.descriptors.find((descriptor) => descriptor.id === 'treeseed.verify')?.metadata).toMatchObject({
-			dispatchPreferredMode: 'prefer_local',
 			worktreeRoot: '/repo/.agent-worktrees/task',
 		});
+		expect(catalog.descriptors.find((descriptor) => descriptor.id === 'treeseed.verify')).toMatchObject({
+			executionTarget: 'provider_runner',
+			mutability: 'read',
+		});
+		expect(catalog.descriptors.find((descriptor) => descriptor.id === 'treeseed.verify')?.metadata?.dispatchPreferredMode).toBeUndefined();
+
+		const withoutWorktree = createAssignmentToolCatalog({
+			agentTools: ['treeseed.verify'],
+			projectId: 'project-1',
+			assignmentId: 'assignment-1',
+			treedxProxyHandle: {},
+		});
+		expect(withoutWorktree.exposed).not.toContain('treeseed.verify');
+		expect(withoutWorktree.omitted).toContainEqual({
+			id: 'treeseed.verify',
+			missing: ['assignment_worktree'],
+		});
+		const providerManagedWorktree = createAssignmentToolCatalog({
+			agentTools: ['treeseed.verify', 'treeseed.checkpoint'],
+			projectId: 'project-1',
+			assignmentId: 'assignment-1',
+			treedxProxyHandle: {},
+			worktreeRoot: null,
+			providerManagesWorktree: true,
+		});
+		expect(providerManagedWorktree.exposed).toEqual(['treeseed.verify', 'treeseed.checkpoint']);
+		expect(providerManagedWorktree.descriptors.every((descriptor) => descriptor.metadata?.worktreeRoot === null)).toBe(true);
 	});
 
 	it('filters model-aware content tools through contentAccess', () => {

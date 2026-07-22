@@ -31,6 +31,17 @@ export function providerAssignmentLeaseSeconds(config: ProviderConnectionRuntime
 	return config.environment === 'local' ? 900 : 300;
 }
 
+export async function releaseTerminalAssignmentResources(
+	reported: unknown,
+	release: ((outcome: 'completed' | 'returned' | 'failed' | 'expired') => Promise<void>) | null,
+) {
+	const reportEnvelope = record(reported);
+	const reportedAssignment = record(reportEnvelope.payload ?? reportEnvelope.assignment ?? reportEnvelope);
+	const status = stringValue(reportedAssignment.status);
+	if (!release || !status || !['completed', 'returned', 'failed', 'expired'].includes(status)) return false;
+	await release(status as 'completed' | 'returned' | 'failed' | 'expired');
+	return true;
+}
 
 export async function runProviderAssignment(input: ProviderAssignmentExecutionInput) {
 	const assignmentId = stringValue(input.assignment.id) ?? '';
@@ -103,7 +114,8 @@ export async function runProviderAssignment(input: ProviderAssignmentExecutionIn
 		agentSlug,
 	});
 	if (!prepared.ready) return prepared.terminalResult;
-	const { kernel, typedAssignment, workspaceMode, modeRunId, assignmentTreeDxAdapter } = prepared;
+	const { kernel, typedAssignment, workspaceMode, modeRunId, assignmentTreeDxAdapter, releaseAssignmentResources } = prepared;
+	input.onAssignmentResourcesPrepared?.(releaseAssignmentResources);
 	let fallbackOutput: Record<string, unknown> | null = null;
 	await recordEarlyModeRun({
 		client: input.client,
@@ -147,7 +159,7 @@ export async function runProviderAssignment(input: ProviderAssignmentExecutionIn
 			return output;
 		},
 	});
-	return reportProviderAssignmentResult({
+	const reported = await reportProviderAssignmentResult({
 		client: input.client,
 		assignmentId,
 		assignment: typedAssignment,
@@ -162,4 +174,5 @@ export async function runProviderAssignment(input: ProviderAssignmentExecutionIn
 			? () => assignmentTreeDxAdapter.closeWorkspace({ workspaceId: stringValue(typedAssignment.treedxProxyHandle?.workspaceId) ?? '' })
 			: null,
 	});
+	return reported;
 }

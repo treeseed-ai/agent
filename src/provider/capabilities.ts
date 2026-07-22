@@ -22,7 +22,7 @@ export function discoverProviderCapabilities(config: ProviderHostRuntimeConfig):
 		id: 'agent_execution',
 		agents: ['*'],
 		operations: ['planning', 'estimating', 'acting', 'reviewing', 'reporting', 'release'],
-		models: ['codex', 'mock'],
+		models: ['codex'],
 		repositoryAccess: 'git_worktree',
 		verification: ['local_command'],
 		metadata: {

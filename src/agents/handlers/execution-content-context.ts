@@ -30,6 +30,15 @@ function treeDxHandle(context: AgentContext) {
 	return readRecord(assignment?.treedxProxyHandle) ?? readRecord(readRecord(assignment?.workspaceContext)?.treedxProxyHandle);
 }
 
+export function executionContentRoot(context: AgentContext, payload: HandlerPayload) {
+	const assignment = readRecord(context.capacity?.assignment);
+	const assignmentMetadata = readRecord(assignment?.metadata);
+	const workspaceProject = readRecord(readRecord(assignment?.workspaceContext)?.project);
+	const architecture = readRecord(workspaceProject?.architecture);
+	return text(payload.contentRoot, assignmentMetadata?.contentRoot, architecture?.contentPath)
+		?? resolveProjectContentRoot(context.repoRoot);
+}
+
 function repositoryFiles(response: Record<string, unknown>) {
 	const payload = readRecord(response.payload) ?? response;
 	const candidates = [payload.files, readRecord(payload.data)?.files, readRecord(payload.result)?.files];
@@ -85,24 +94,63 @@ function relatedArtifacts(payload: HandlerPayload) {
 	});
 }
 
+function assignedObjectivePaths(payload: HandlerPayload, subject: ExecutionContentSubject, contentRoot: string) {
+	const objectiveId = text(
+		payload.objectiveId,
+		readRecord(payload.objective)?.id,
+		readRecord(payload.objective)?.slug,
+		subject.model === 'objective' ? subject.id : null,
+	);
+	if (!objectiveId) return [];
+	return [`${contentRoot}/objectives/${objectiveId}.mdx`, `${contentRoot}/objectives/${objectiveId}.md`];
+}
+
 async function collectEvidence(context: AgentContext, subject: ExecutionContentSubject, payload: HandlerPayload) {
 	if (!context.treeDx) return [];
 	const handle = treeDxHandle(context);
 	const repoId = text(handle?.repositoryId, handle?.repoId);
 	const workspaceId = text(handle?.workspaceId);
-	const contentRoot = resolveProjectContentRoot(context.repoRoot);
+	const contentRoot = executionContentRoot(context, payload);
 	const evidence: unknown[] = [];
 	const warnings: string[] = [];
 	const queries = configuredQueries(context);
 	if (repoId) {
-		const paths = [`${contentRoot}/objectives/core.md`, `${contentRoot}/agents/${context.agent.slug}.mdx`];
-		try {
-			const response = await context.treeDx.readRepositoryFiles({ repoId, paths });
-			const files = repositoryFiles(response);
-			evidence.push({ id: 'treedx-repository-files', purpose: 'Assignment core objective and agent configuration.', source: 'treedx_proxy', sourceRef: { repoId, paths }, files, response: files.length ? undefined : response });
-		} catch (error) {
-			warnings.push(`TreeDX repository file evidence failed: ${error instanceof Error ? error.message : String(error)}`);
+		const objectivePaths = assignedObjectivePaths(payload, subject, contentRoot);
+		const groups = [
+			...(objectivePaths.length ? [{ id: 'assigned objective', paths: objectivePaths }] : []),
+			{ id: 'agent configuration', paths: [`${contentRoot}/agents/${context.agent.slug}.mdx`] },
+		];
+		const files: Array<{ path: string | null; text: string | null }> = [];
+		const resolvedPaths: string[] = [];
+		const responses: unknown[] = [];
+		for (const group of groups) {
+			const failures: string[] = [];
+			for (const path of group.paths) {
+				try {
+					const response = await context.treeDx.readRepositoryFiles({ repoId, paths: [path] });
+					const resolved = repositoryFiles(response);
+					if (!resolved.length) {
+						failures.push(`${path}: no file returned`);
+						responses.push({ path, response });
+						continue;
+					}
+					files.push(...resolved);
+					resolvedPaths.push(...unique(resolved.map((file) => file.path ?? path)));
+					break;
+				} catch (error) {
+					failures.push(`${path}: ${error instanceof Error ? error.message : String(error)}`);
+				}
+			}
+			if (failures.length === group.paths.length) warnings.push(`TreeDX repository ${group.id} evidence failed: ${failures.join('; ')}`);
 		}
+		evidence.push({
+			id: 'treedx-repository-files',
+			purpose: 'Assignment core objective and agent configuration.',
+			source: 'treedx_proxy',
+			sourceRef: { repoId, paths: unique(resolvedPaths), requestedPathGroups: groups },
+			files,
+			response: files.length ? undefined : responses,
+		});
 		const reads = new Map<string, { path: string; ref: string | null }>();
 		for (const artifact of [...(subject.path ? [{ contentPath: subject.path, commitSha: subject.ref }] : []), ...relatedArtifacts(payload)]) {
 			const path = text(artifact.contentPath, artifact.path);
@@ -142,15 +190,15 @@ async function collectEvidence(context: AgentContext, subject: ExecutionContentS
 	return evidence;
 }
 
-function coreObjective(evidence: unknown[], contentRoot: string) {
-	const corePath = `${contentRoot}/objectives/core.md`;
+function assignedObjective(evidence: unknown[], objectivePaths: string[]) {
 	for (const item of evidence) {
 		const source = readRecord(item);
 		if (source?.id !== 'treedx-repository-files' || !Array.isArray(source.files)) continue;
 		for (const itemFile of source.files) {
 			const file = readRecord(itemFile);
 			const content = text(file?.text);
-			if (text(file?.path) === corePath && content) return { path: corePath, content, message: `Core objective from ${corePath}:\n${content}`, source: 'treedx_proxy' };
+			const path = text(file?.path);
+			if (path && objectivePaths.includes(path) && content) return { path, content, message: `Assigned objective from ${path}:\n${content}`, source: 'treedx_proxy' };
 		}
 	}
 	return null;
@@ -158,7 +206,8 @@ function coreObjective(evidence: unknown[], contentRoot: string) {
 
 export async function resolveExecutionTreeDxContext(context: AgentContext, subject: ExecutionContentSubject, payload: HandlerPayload) {
 	const evidence = await collectEvidence(context, subject, payload);
-	const objective = coreObjective(evidence, resolveProjectContentRoot(context.repoRoot));
+	const contentRoot = executionContentRoot(context, payload);
+	const objective = assignedObjective(evidence, assignedObjectivePaths(payload, subject, contentRoot));
 	const handle = treeDxHandle(context);
 	const warnings = evidence.flatMap((item) => {
 		const source = readRecord(item);
@@ -166,9 +215,10 @@ export async function resolveExecutionTreeDxContext(context: AgentContext, subje
 	});
 	return {
 		evidence,
-		coreObjective: objective,
+		assignedObjective: objective,
+		contentRoot,
 		diagnostics: {
-			coreObjectiveIncluded: Boolean(objective?.content), coreObjectivePath: objective?.path ?? null, coreObjectiveSource: objective?.source ?? null,
+			assignedObjectiveIncluded: Boolean(objective?.content), assignedObjectivePath: objective?.path ?? null, assignedObjectiveSource: objective?.source ?? null,
 			treeDxAvailable: Boolean(context.treeDx),
 			treeDxProxyHandle: handle ? { id: text(handle.id), repositoryId: text(handle.repositoryId, handle.repoId), workspaceId: text(handle.workspaceId), allowedOperations: strings(handle.allowedOperations), allowedPaths: strings(handle.allowedPaths), allowedReadPaths: strings(handle.allowedReadPaths), allowedWritePaths: strings(handle.allowedWritePaths) } : null,
 			declarativeContextPackCount: 0, treeDxEvidenceCount: evidence.length, warnings,

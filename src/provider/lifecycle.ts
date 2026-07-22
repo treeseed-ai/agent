@@ -60,6 +60,12 @@ interface ProviderManagerAvailability {
 		adapter: string;
 		nativeLimits: Record<string, unknown>;
 		capabilities?: string[];
+		status?: 'available' | 'unavailable';
+		nativeUnit?: string;
+		quotaVisibility?: string;
+		maxConcurrentRunners?: number;
+		activeRunners?: number;
+		observations?: Record<string, unknown>;
 	}>;
 	activeRunners?: number;
 }

@@ -6,8 +6,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { resolveProviderConfig } from '../../src/provider/config.ts';
 import { buildProviderPlan, buildProviderRunnerPlan } from '../../src/provider/lifecycle.ts';
 import { assignmentProjectContext, materializeAssignmentProject } from '../../src/provider/project-materialization.ts';
-import { runProviderAssignment } from '../../src/provider/runner.ts';
-import { runProviderRunnerOnce } from '../../src/provider/runner-lifecycle.ts';
+import { releaseTerminalAssignmentResources, runProviderAssignment } from '../../src/provider/runner.ts';
+import { createSingleFlightLeaseRenewal, isTerminalProviderAssignmentObservation, reportProviderLeaseRenewalFailure, runProviderRunnerOnce } from '../../src/provider/runner-lifecycle.ts';
+import { providerAssignmentClientWithTerminalBoundary } from '../../src/provider/lease-client.ts';
 
 const roots: string[] = [];
 
@@ -117,6 +118,67 @@ afterEach(() => {
 });
 
 describe('assignment-scoped provider runtime', () => {
+	it('releases internal execution-provider resources only after a durable terminal response', async () => {
+		const release = vi.fn(async () => undefined);
+		await expect(releaseTerminalAssignmentResources({ payload: { status: 'leased' } }, release)).resolves.toBe(false);
+		expect(release).not.toHaveBeenCalled();
+		await expect(releaseTerminalAssignmentResources({ payload: { status: 'completed' } }, release)).resolves.toBe(true);
+		expect(release).toHaveBeenCalledWith('completed');
+		await expect(releaseTerminalAssignmentResources({ payload: { status: 'returned' } }, release)).resolves.toBe(true);
+		expect(release).toHaveBeenCalledWith('returned');
+		expect(release).toHaveBeenCalledTimes(2);
+	});
+
+	it('recognizes authoritative terminal observations when a renewal races completion', () => {
+		expect(isTerminalProviderAssignmentObservation({ payload: { status: 'completed', leaseState: 'released' } })).toBe(true);
+		expect(isTerminalProviderAssignmentObservation({ assignment: { status: 'returned', leaseState: 'released' } })).toBe(true);
+		expect(isTerminalProviderAssignmentObservation({ payload: { status: 'leased', leaseState: 'released' } })).toBe(true);
+		expect(isTerminalProviderAssignmentObservation({ payload: { status: 'leased', leaseState: 'leased' } })).toBe(false);
+	});
+
+	it('suppresses a detached renewal rejection after the terminal boundary wins the race', () => {
+		const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+		expect(reportProviderLeaseRenewalFailure({
+			terminalizing: () => true,
+			assignmentId: 'assignment-a',
+			runnerId: 'runner-a',
+			error: new Error('late lease transition rejection'),
+		})).toBe(false);
+		expect(error).not.toHaveBeenCalled();
+	});
+
+	it('serializes timer and execution-lifecycle lease renewals', async () => {
+		let release!: () => void;
+		const attempt = vi.fn(async () => new Promise<void>((resolve) => { release = resolve; }));
+		const renew = createSingleFlightLeaseRenewal(attempt);
+		const first = renew();
+		const second = renew();
+		expect(attempt).toHaveBeenCalledTimes(1);
+		release();
+		await Promise.all([first, second]);
+		const third = renew();
+		expect(attempt).toHaveBeenCalledTimes(2);
+		release();
+		await third;
+	});
+
+	it('closes lease renewal authority before invoking any terminal lifecycle request', async () => {
+		const events: string[] = [];
+		const client = providerAssignmentClientWithTerminalBoundary({
+			async nextAssignment() { return {}; },
+			async createAssignmentModeRun() { return {}; },
+			async settleAssignment() { events.push('settle'); return {}; },
+			async completeAssignment() { events.push('complete'); return {}; },
+			async failAssignment() { events.push('fail'); return {}; },
+			async returnAssignment() { events.push('return'); return {}; },
+		}, () => events.push('terminalizing'));
+		await client.settleAssignment?.('assignment-a', {}, 'settlement-a');
+		await client.completeAssignment('assignment-a', {});
+		await client.returnAssignment?.('assignment-a', {});
+		await client.failAssignment('assignment-a', {});
+		expect(events).toEqual(['terminalizing', 'settle', 'terminalizing', 'complete', 'terminalizing', 'return', 'terminalizing', 'fail']);
+	});
+
 	it('renders a provider plan without fetching team-wide portfolio state', async () => {
 		const hostConfig = config({ TREESEED_MARKET_URL: 'https://legacy-single-team.invalid', TREESEED_MARKET_ID: 'legacy-team' });
 		expect(hostConfig).not.toHaveProperty('marketUrl');
@@ -150,6 +212,34 @@ describe('assignment-scoped provider runtime', () => {
 			commitSha: null,
 		});
 		expect(materialized.repository.path).toContain(resolve(runtimeConfig.dataDir, 'assignment-contexts'));
+	});
+
+	it('materializes the repository checkout, not the logical project root, for exact-ref work', async () => {
+		const workspaceRoot = temporaryDirectory();
+		const repoRoot = resolve(workspaceRoot, 'starters/engineering');
+		mkdirSync(repoRoot, { recursive: true });
+		writeFileSync(resolve(repoRoot, 'package.json'), '{"name":"engineering-starter"}\n');
+		execFileSync('git', ['init', '-b', 'main'], { cwd: repoRoot, stdio: 'ignore' });
+		const runtimeConfig = config({ TREESEED_PROVIDER_WORKSPACE_ROOT: workspaceRoot });
+		const project = projectContext(repoRoot);
+		project.architecture = { rootPath: 'template', sitePath: 'template', contentPath: 'template/src/content', localContentMaterialization: 'existing_path' };
+		project.repository.checkoutPath = 'starters/engineering';
+		const materialized = await materializeAssignmentProject(runtimeConfig, project, { workspaceAccessMode: 'workspace_write', requiresRepository: true });
+		expect(materialized.repository).toMatchObject({ ok: true, path: repoRoot, materialization: 'local' });
+	});
+
+	it('fails local materialization before kernel execution when the governed exact ref is unavailable', async () => {
+		const repoRoot = repository();
+		const runtimeConfig = config({ TREESEED_PROVIDER_WORKSPACE_ROOT: repoRoot });
+		const project = projectContext(repoRoot);
+		const missingRef = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+		const materialized = await materializeAssignmentProject(runtimeConfig, project, {
+			workspaceAccessMode: 'context_only',
+			requiresRepository: true,
+			exactRef: missingRef,
+		});
+		expect(materialized.repository).toMatchObject({ ok: false, path: repoRoot, materialization: 'local' });
+		expect(materialized.repository.error).toContain(`does not contain governed exact ref ${missingRef}`);
 	});
 
 	it('fails closed before kernel execution when assignment governance provenance is missing', async () => {
@@ -286,39 +376,6 @@ describe('assignment-scoped provider runtime', () => {
 			},
 		});
 		expect(calls.find((entry) => entry.method === 'complete')?.body).toMatchObject({ output: { artifactManifest: { assignmentId: 'assignment-a' } } });
-	});
-
-	it('releases adapter-owned assignment resources only after durable completion', async () => {
-		const repoRoot = repository();
-		const releaseAssignmentResources = vi.fn(async () => {});
-		await runProviderRunnerOnce({
-			config: connectionConfig({ TREESEED_PROVIDER_WORKSPACE_ROOT: repoRoot }),
-			leasedAssignment: { ok: true, leaseToken: 'lease-a', payload: leasedAssignment(repoRoot) },
-			client: {
-				async nextAssignment() { throw new Error('runner must not poll'); },
-				async createAssignmentModeRun() { return { ok: true, payload: {} }; },
-				async reportAssignmentUsage() { return { ok: true, payload: {} }; },
-				async settleAssignment() { return { ok: true, payload: {} }; },
-				async completeAssignment() { return { ok: true, payload: { status: 'completed' } }; },
-				async failAssignment() { return { ok: true, payload: { status: 'failed' } }; },
-			},
-			executionAdapter: {
-				describe: async () => ({ id: 'test', kind: 'deterministic_workflow', capabilities: [], nativeUnit: 'assignment', quotaVisibility: 'exact', maxConcurrentAssignments: 1 }),
-				observe: async () => ({ descriptor: { id: 'test', kind: 'deterministic_workflow', capabilities: [], nativeUnit: 'assignment', quotaVisibility: 'exact', maxConcurrentAssignments: 1 }, available: true, activeAssignmentCount: 0 }),
-				start: async () => ({ status: 'completed', runId: 'run-a', summary: 'done', outputs: {}, usage: [], artifacts: [] }),
-				releaseAssignmentResources,
-			},
-			kernel: {
-				async runAssignment() {
-					return {
-						status: 'completed' as const, mode: 'planning' as const, assignmentId: 'assignment-a', projectId: 'project-a', projectAgentClassId: 'researcher',
-						agentId: 'researcher', handlerId: 'execution-content', summary: 'done', outputs: {}, selectedInput: {},
-						capacityEnvelope: leasedAssignment(repoRoot).capacityEnvelope,
-					};
-				},
-			},
-		});
-		expect(releaseAssignmentResources).toHaveBeenCalledWith({ assignmentId: 'assignment-a', outcome: 'completed' });
 	});
 
 	async function runTerminalLifecycle(status: 'returned' | 'failed', expected: 'return' | 'fail', retryable: boolean) {

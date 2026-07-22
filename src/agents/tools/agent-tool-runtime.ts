@@ -70,6 +70,16 @@ export type AgentToolDerivedEvent =
 		requiresCommit?: boolean;
 	}
 	| {
+		type: 'content_updated';
+		contentRef: Record<string, unknown>;
+	}
+	| {
+		type: 'verification_completed';
+		status: 'passed';
+		summary: string;
+		commands: string[];
+	}
+	| {
 		type: 'branch_staged';
 		branchRef: string;
 		stagedRef?: string;
@@ -84,6 +94,19 @@ export type AgentToolDerivedEvent =
 		commitSha: string;
 		branchRef?: string;
 		changedPaths: string[];
+	}
+	| {
+		type: 'review_decision_recorded';
+		disposition: 'approved' | 'rejected';
+		summary: string;
+	}
+	| {
+		type: 'research_citation_fetched';
+		citation: Record<string, unknown>;
+	}
+	| {
+		type: 'research_claims_recorded';
+		claims: Record<string, unknown>[];
 	};
 
 function record(value: unknown): Record<string, unknown> {
@@ -131,6 +154,7 @@ function defaultSdk(options: AgentToolRuntimeOptions) {
 		: undefined;
 	return AgentSdk.createLocal({
 		repoRoot: options.repoRoot ?? process.cwd(),
+		databaseName: ':memory:',
 		dispatch,
 	});
 }
@@ -141,15 +165,6 @@ function dispatchInputFor(toolId: string, input: Record<string, unknown>, descri
 	}
 	if (toolId === 'treeseed.status') {
 		return { ...input, json: true };
-	}
-	if (toolId === 'treeseed.verify') {
-		const metadata = record(descriptor.metadata);
-		const worktreeRoot = text(metadata.worktreeRoot);
-		if (!worktreeRoot) {
-			return structuredError('worktree_required', 'treeseed.verify requires an assigned worktree for this assignment.');
-		}
-		const commands = Array.isArray(input.commands) ? input.commands.map(String).filter(Boolean) : [];
-		return { ...input, commands, cwd: worktreeRoot, json: true };
 	}
 	return input;
 }
@@ -297,6 +312,66 @@ async function callChangedPathsTool(descriptor: ExecutionProviderToolDescriptor,
 	return { ok: true, payload };
 }
 
+async function callVerifyTool(descriptor: ExecutionProviderToolDescriptor, input: Record<string, unknown>) {
+	const worktreeRootValue = text(record(descriptor.metadata).worktreeRoot);
+	if (!worktreeRootValue) {
+		return structuredError('worktree_required', 'treeseed.verify requires an assigned worktree for this assignment.');
+	}
+	const worktreeRoot = await realpath(worktreeRootValue);
+	const commands = Array.isArray(input.commands) ? input.commands.map(record) : [];
+	if (!commands.length || commands.length > 8) {
+		return structuredError('verification_commands_invalid', 'treeseed.verify requires between one and eight bounded commands.');
+	}
+	const results: Record<string, unknown>[] = [];
+	for (const entry of commands) {
+		const command = text(entry.command);
+		const args = Array.isArray(entry.args) ? entry.args.map(String) : [];
+		if (!['node', 'npm'].includes(command) || args.length > 32) {
+			return structuredError('verification_command_not_allowed', 'Verification commands are limited to node or npm with at most 32 arguments.', { command });
+		}
+		const requestedCwd = text(entry.cwd) || '.';
+		if (isAbsolute(requestedCwd) || normalizePath(requestedCwd) === '..' || normalizePath(requestedCwd).startsWith('../')) {
+			return structuredError('verification_cwd_invalid', 'Verification cwd must remain inside the assignment worktree.', { cwd: requestedCwd });
+		}
+		const cwd = await realpath(resolve(worktreeRoot, requestedCwd)).catch(() => null);
+		const cwdRelative = cwd ? relative(worktreeRoot, cwd).replace(/\\/gu, '/') : '..';
+		if (!cwd || cwdRelative === '..' || cwdRelative.startsWith('../') || isAbsolute(cwdRelative)) {
+			return structuredError('verification_cwd_escape', 'Verification cwd resolves outside the assignment worktree.', { cwd: requestedCwd });
+		}
+		const expectedExitCode = Number.isInteger(Number(entry.expectedExitCode)) ? Number(entry.expectedExitCode) : 0;
+		const timeoutMs = Math.max(1_000, Math.min(300_000, Number(entry.timeoutSeconds || 120) * 1_000));
+		const startedAt = Date.now();
+		let exitCode = 0;
+		let stdout = '';
+		let stderr = '';
+		try {
+			const output = await execFileAsync(command, args, { cwd, timeout: timeoutMs, maxBuffer: 1_048_576 });
+			stdout = output.stdout;
+			stderr = output.stderr;
+		} catch (error) {
+			const details = record(error);
+			exitCode = Number.isInteger(Number(details.code)) ? Number(details.code) : 1;
+			stdout = text(details.stdout);
+			stderr = text(details.stderr) || (error instanceof Error ? error.message : String(error));
+		}
+		results.push({
+			command,
+			args,
+			cwd: cwdRelative || '.',
+			exitCode,
+			expectedExitCode,
+			ok: exitCode === expectedExitCode,
+			durationMs: Date.now() - startedAt,
+			stdout: stdout.slice(0, 131_072),
+			stderr: stderr.slice(0, 131_072),
+		});
+		if (exitCode !== expectedExitCode) {
+			return structuredError('verification_exit_code_mismatch', `${command} exited with ${exitCode}; expected ${expectedExitCode}.`, { results });
+		}
+	}
+	return { ok: true, payload: { reason: text(input.reason) || null, results } };
+}
+
 async function callCheckpointTool(options: AgentToolRuntimeOptions, descriptor: ExecutionProviderToolDescriptor, input: Record<string, unknown>) {
 	const metadata = record(descriptor.metadata);
 	const worktreeRoot = text(metadata.worktreeRoot);
@@ -377,8 +452,23 @@ export async function callAgentTool(
 	if (descriptor.id === 'treeseed.changed_paths') {
 		return await callChangedPathsTool(descriptor, input);
 	}
+	if (descriptor.id === 'treeseed.verify') {
+		return await callVerifyTool(descriptor, input);
+	}
 	if (descriptor.id === 'treeseed.checkpoint') {
 		return await callCheckpointTool(options, descriptor, input);
+	}
+	if (descriptor.id === 'treeseed.review_decision') {
+		return {
+			ok: true,
+			payload: {
+				disposition: text(input.disposition),
+				summary: text(input.summary),
+			},
+		};
+	}
+	if (descriptor.id === 'treeseed.research_claims') {
+		return { ok: true, payload: { claims: Array.isArray(input.claims) ? input.claims : [] } };
 	}
 	if (descriptor.id === 'treeseed.repository.read_file') {
 		return await callRepositoryReadFileTool(options, descriptor, input);

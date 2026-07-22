@@ -1,5 +1,4 @@
 import type { ProviderConnectionRuntimeContext, ProviderHostRuntimeConfig } from './config.ts';
-import type { ExecutionProviderAdapter } from '../agents/runtime-types.ts';
 import { CapacityProviderCoordinator, type ProviderConnectionResult } from './coordinator.ts';
 import { ProviderGlobalSlotScheduler, providerManifestConcurrency } from './connection-scheduler.ts';
 import { loadProviderManifest } from './manifest.ts';
@@ -7,6 +6,8 @@ import { ProviderLocalCapacityStore, type ProviderLocalSlotClaim } from './local
 import { recoverProviderLocalLeases } from './lease-recovery.ts';
 import { discoverProviderBudgets } from './budgets.ts';
 import { compileProviderLocalNativeLimit } from './native-capacity-limits.ts';
+import { createAssignmentExecutionProviderAdapter } from './execution-provider-selection.ts';
+import { createProviderMarketClient } from './client.ts';
 
 const managerSchedulers = new Map<string, ProviderGlobalSlotScheduler<NonNullable<ProviderConnectionResult['runtime']>>>();
 
@@ -25,6 +26,64 @@ function numberValue(...values: unknown[]) {
 		if (Number.isFinite(parsed)) return parsed;
 	}
 	return undefined;
+}
+
+async function observeExecutionProviders(
+	config: ProviderConnectionRuntimeContext,
+	executionProviders: NonNullable<ProviderConnectionRuntimeContext['executionProviders']>,
+) {
+	const client = createProviderMarketClient(config);
+	return Promise.all(executionProviders.map(async (provider) => {
+		try {
+			const adapter = createAssignmentExecutionProviderAdapter({
+				selection: provider.adapter,
+				repoRoot: process.cwd(),
+				jira: config.jira,
+				githubIssues: config.githubIssues,
+				discord: config.discord,
+				accessToken: config.accessToken,
+				apiBaseUrl: config.marketUrl,
+				researchSourcePolicy: provider.researchSourcePolicy,
+				workflow: {
+					dispatchWorkflowOperation: async (assignmentId, operationId, body) => {
+						const response = await client.dispatchAssignmentWorkflowOperation(assignmentId, operationId, body);
+						const value = record(response);
+						return { ok: value.ok === undefined ? true : value.ok === true, payload: record(value.payload ?? value) };
+					},
+				},
+			});
+			const observation = await adapter.observe({
+				capacityProviderId: config.providerId,
+				executionProviderId: provider.id,
+				activeAssignmentIds: [],
+			});
+			const descriptor = observation.descriptor ?? await adapter.describe();
+			return {
+				...provider,
+				status: observation.available === true ? 'available' as const : 'unavailable' as const,
+				capabilities: provider.capabilities ?? descriptor.capabilities,
+				nativeUnit: descriptor.nativeUnit,
+				quotaVisibility: descriptor.quotaVisibility,
+				maxConcurrentRunners: Math.min(
+					Number(provider.nativeLimits.maxConcurrentRunners ?? descriptor.maxConcurrentAssignments),
+					descriptor.maxConcurrentAssignments,
+				),
+				activeRunners: observation.activeAssignmentCount ?? 0,
+				observations: {
+					available: observation.available === true,
+					pressure: observation.pressure ?? 'exhausted',
+					activeAssignmentCount: observation.activeAssignmentCount ?? 0,
+				},
+			};
+		} catch {
+			return {
+				...provider,
+				status: 'unavailable' as const,
+				activeRunners: 0,
+				observations: { available: false, pressure: 'exhausted', activeAssignmentCount: 0 },
+			};
+		}
+	}));
 }
 
 export async function createCapacityProviderCoordinator(config: ProviderHostRuntimeConfig) {
@@ -77,10 +136,12 @@ export async function runMultiTeamProviderManager(config: ProviderHostRuntimeCon
 	const results = await Promise.all(connections.map(async (connection) => {
 		if (!connection.runtime) return { ok: connection.status !== 'error', role: 'manager', connectionId: connection.connectionId, status: connection.status, ...(connection.error ? { error: connection.error } : {}) };
 		try {
-			return await runManagerSkeleton(connectionRuntimeContext(config, connection.runtime, loaded.manifest.executionProviders), {
+			const runtimeConfig = connectionRuntimeContext(config, connection.runtime, loaded.manifest.executionProviders);
+			const observedExecutionProviders = await observeExecutionProviders(runtimeConfig, loaded.manifest.executionProviders);
+			return await runManagerSkeleton(runtimeConfig, {
 				availability: {
 					offer: connection.runtime.connection.offer,
-					executionProviders: loaded.manifest.executionProviders,
+					executionProviders: observedExecutionProviders,
 					activeRunners: localCapacity.claims.filter((claim) => claim.connectionId === connection.runtime?.connection.id).length,
 				},
 				localState,
@@ -168,7 +229,6 @@ export async function runMultiTeamProviderManager(config: ProviderHostRuntimeCon
 export async function runMultiTeamProviderRunners(config: ProviderHostRuntimeConfig, options: {
 	mode?: 'plan' | 'live';
 	background?: boolean;
-	executionAdapter?: ExecutionProviderAdapter;
 } = {}) {
 	if (options.mode === 'plan') {
 		const loaded = await loadProviderManifest(config.manifestPath ?? '');
@@ -201,7 +261,6 @@ export async function runMultiTeamProviderRunners(config: ProviderHostRuntimeCon
 				client,
 				runnerId: localClaim.runnerId,
 				leasedAssignment: localClaim.dispatchEnvelope,
-				...(options.executionAdapter ? { executionAdapter: options.executionAdapter } : {}),
 				...(connectionConfig.treeDx ? { treeDx: connectionConfig.treeDx } : {}),
 			});
 			await localCapacity.finalize(localClaim.id, 'assignment-lifecycle-confirmed');

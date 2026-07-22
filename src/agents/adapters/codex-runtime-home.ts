@@ -2,19 +2,19 @@ import { existsSync } from 'node:fs';
 import { copyFile, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { resolveCodexAuthFile } from '../adapters/codex-auth.ts';
+import { resolveCodexAuthFile } from './codex-auth.ts';
 
-export interface LiveCodexHome {
+export interface CodexRuntimeHome {
 	codexHome: string;
 	authFile: string;
 	cleanup(): Promise<void>;
 }
 
-export async function createIsolatedLiveCodexHome(options: {
+export async function createIsolatedCodexRuntimeHome(options: {
 	sourceAuthFile?: string;
-	serviceTier?: 'fast' | 'flex';
+	serviceTier?: 'fast';
 	model?: string;
-} = {}): Promise<LiveCodexHome> {
+} = {}): Promise<CodexRuntimeHome> {
 	const sourceAuthFile = options.sourceAuthFile ?? resolveCodexAuthFile();
 	if (!existsSync(sourceAuthFile)) {
 		throw new Error(`Codex auth file was not found at ${sourceAuthFile}. Run Codex login or set TREESEED_CODEX_AUTH_FILE.`);

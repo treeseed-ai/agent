@@ -1,5 +1,4 @@
 import type { AgentSdkTreeDxOptions } from '@treeseed/sdk/sdk';
-import type { ExecutionProviderAdapter } from '../agents/runtime-types.ts';
 import type { AgentKernel } from '../agents/kernel/agent-kernel.ts';
 import type { ProviderConnectionRuntimeContext } from './config.ts';
 import type { ProviderAssignmentClient } from './lease-client.ts';
@@ -12,11 +11,13 @@ export interface ProviderAssignmentExecutionInput {
 	runnerId: string;
 	leaseSeconds: number;
 	renewLease: () => Promise<void>;
-	executionAdapter?: ExecutionProviderAdapter;
 	kernel?: Pick<AgentKernel, 'runAssignment'>;
 	treeDx?: AgentSdkTreeDxOptions;
 	executionLifecycle?: {
 		pollIntervalMs?: number;
 		maxPolls?: number;
 	};
+	onAssignmentResourcesPrepared?: (
+		release: ((outcome: 'completed' | 'returned' | 'failed' | 'expired') => Promise<void>) | null,
+	) => void;
 }

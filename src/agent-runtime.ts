@@ -1,10 +1,6 @@
 import { loadTreeseedPlugins } from '@treeseed/sdk/platform/plugins';
-import { CopilotExecutionProviderAdapter } from './agents/adapters/execution.ts';
-import { CodexExecutionProviderAdapter } from './agents/adapters/execution-codex.ts';
-import { DiscordExecutionProviderAdapter } from './agents/adapters/execution-discord.ts';
-import { GitHubIssueExecutionProviderAdapter } from './agents/adapters/execution-github-issues.ts';
-import { JiraExecutionProviderAdapter } from './agents/adapters/execution-jira.ts';
-import { WorkflowExecutionProviderAdapter } from './agents/adapters/execution-workflow.ts';
+import { BUILT_IN_AGENT_EXECUTION_PROVIDER_IDS } from '@treeseed/sdk/types/agents';
+import { createExecutionProviderAdapter } from './agents/adapters/execution.ts';
 import { actorHandler } from './agents/handlers/actor.ts';
 import { estimateHandler } from './agents/handlers/estimate.ts';
 import { releaserHandler } from './agents/handlers/releaser.ts';
@@ -60,23 +56,9 @@ function collectAgentHandlersFromPlugin(pluginEntry: RuntimePluginEntry, registr
 
 function buildAgentRuntime() {
 	const plugins = loadTreeseedPlugins();
-	const execution = new Map<string, (repoRoot: string) => ExecutionProviderAdapter>([
-		['copilot', () => new CopilotExecutionProviderAdapter()],
-		['codex', (repoRoot) => new CodexExecutionProviderAdapter({ repoRoot })],
-		['jira', () => new JiraExecutionProviderAdapter()],
-		['jira_issue_queue', () => new JiraExecutionProviderAdapter()],
-		['human_issue_queue', () => new JiraExecutionProviderAdapter()],
-		['github_issues', () => new GitHubIssueExecutionProviderAdapter()],
-		['github_issue_queue', () => new GitHubIssueExecutionProviderAdapter()],
-		['issue_queue', () => new GitHubIssueExecutionProviderAdapter()],
-		['discord', () => new DiscordExecutionProviderAdapter()],
-		['discord_thread', () => new DiscordExecutionProviderAdapter()],
-		['workflow', () => new WorkflowExecutionProviderAdapter()],
-		['workflow_operation', () => new WorkflowExecutionProviderAdapter()],
-		['deterministic_workflow', () => new WorkflowExecutionProviderAdapter()],
-		['github_actions', () => new WorkflowExecutionProviderAdapter()],
-		['github_actions_workflow', () => new WorkflowExecutionProviderAdapter()],
-	]);
+	const execution = new Map<string, (repoRoot: string) => ExecutionProviderAdapter>(
+		BUILT_IN_AGENT_EXECUTION_PROVIDER_IDS.map((id) => [id, (repoRoot: string) => createExecutionProviderAdapter(id, { repoRoot })]),
+	);
 	const mutation = new Map<string, (repoRoot: string) => AgentMutationAdapter>([
 		['local_branch', (repoRoot) => new LocalBranchMutationAdapter(repoRoot)],
 	]);

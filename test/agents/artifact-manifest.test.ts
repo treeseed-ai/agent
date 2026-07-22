@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ProviderAssignment } from '@treeseed/sdk/agent-capacity';
 import { buildAgentArtifactManifest, validateAgentArtifactManifest } from '../../src/agents/kernel/artifact-manifest.ts';
+import { recordAssignmentModeRun } from '../../src/agents/kernel/telemetry.ts';
 
 function assignment(): ProviderAssignment {
 	return {
@@ -27,6 +28,30 @@ function assignment(): ProviderAssignment {
 }
 
 describe('AgentArtifactManifest', () => {
+	it('persists kernel lifecycle telemetry under the artifact manifest mode-run identity', async () => {
+		const writes: Array<Record<string, unknown>> = [];
+		const options = {
+			assignment: assignment(),
+			modeRunId: 'mode-run-authority',
+			recordModeRun: async (run: Record<string, unknown>) => {
+				writes.push(run);
+				return run;
+			},
+		};
+		await recordAssignmentModeRun(options, {
+			status: 'running',
+			selectedInput: {},
+			capacityEnvelope: assignment().capacityEnvelope,
+		});
+		await recordAssignmentModeRun(options, {
+			status: 'succeeded',
+			selectedInput: {},
+			capacityEnvelope: assignment().capacityEnvelope,
+			outputs: { artifactManifest: { modeRunId: 'mode-run-authority' } },
+		});
+		expect(writes.map((entry) => entry.id)).toEqual(['mode-run-authority', 'mode-run-authority']);
+	});
+
 	it('normalizes durable content, code, citations, verification, usage, and tool evidence', () => {
 		const manifest = buildAgentArtifactManifest({
 			assignment: assignment(),
@@ -62,8 +87,6 @@ describe('AgentArtifactManifest', () => {
 								claimIds: ['claim-1'],
 								confidence: 'high',
 							}],
-							verification: { status: 'completed', summary: 'Tests passed.', commands: ['npm test'] },
-							signals: [{ code: 'review_approved', severity: 'info', message: 'Evidence passed review.' }],
 							toolTelemetry: [
 								{
 									toolId: 'treedx.write',
@@ -73,6 +96,23 @@ describe('AgentArtifactManifest', () => {
 								{
 									toolId: 'treeseed.checkpoint', status: 'completed',
 									derivedEvents: [{ type: 'source_checkpoint_committed', commitSha: 'abc123', branchRef: 'agent/tester/assignment-1', changedPaths: ['src/result.ts'] }],
+								},
+								{
+									toolId: 'treeseed.verify', status: 'completed',
+									derivedEvents: [{
+										type: 'verification_completed',
+										status: 'passed',
+										summary: 'Tests passed.',
+										commands: ['npm test'],
+									}],
+								},
+								{
+									toolId: 'treeseed.review_decision', status: 'completed',
+									derivedEvents: [{
+										type: 'review_decision_recorded',
+										disposition: 'approved',
+										summary: 'Evidence passed review.',
+									}],
 								},
 								{ operation: 'test', status: 'failed', error: 'failed' },
 							],
@@ -109,7 +149,7 @@ describe('AgentArtifactManifest', () => {
 			commit: { sha: 'abc123', ref: 'agent/tester/assignment-1' },
 			verification: [{ status: 'passed', summary: 'Tests passed.' }],
 			signals: [{ code: 'review_approved', severity: 'info' }],
-			toolEvents: [{ toolId: 'treedx.write', status: 'completed' }, { toolId: 'treeseed.checkpoint', status: 'completed' }, { status: 'failed' }],
+			toolEvents: [{ toolId: 'treedx.write', status: 'completed' }, { toolId: 'treeseed.checkpoint', status: 'completed' }, { toolId: 'treeseed.verify', status: 'completed' }, { toolId: 'treeseed.review_decision', status: 'completed' }, { status: 'failed' }],
 			usage: [{ kind: 'tokens', unit: 'token', amount: 42 }],
 		});
 		expect(manifest.citations[0]?.sourceUrl).toContain('token=%5Bredacted%5D');
@@ -138,6 +178,78 @@ describe('AgentArtifactManifest', () => {
 		expect(validateAgentArtifactManifest(manifest)).toMatchObject({ ok: false });
 	});
 
+	it('projects governed fetch, claim, and research-review tool receipts into workflow evidence', () => {
+		const researchAssignment = assignment();
+		researchAssignment.decisionInput = { input: { researchStage: 'citation-review-rejection' } };
+		const manifest = buildAgentArtifactManifest({
+			assignment: researchAssignment,
+			modeRunId: 'mode-run-research',
+			agentId: 'reviewer',
+			handlerId: 'writer',
+			activityType: 'planning',
+			status: 'completed',
+			output: {
+				status: 'completed',
+				summary: 'Recorded governed research evidence.',
+				metadata: {
+					executionSnapshot: {
+						status: 'completed',
+						summary: 'done',
+						outputs: {
+							toolTelemetry: [
+								{ status: 'completed', derivedEvents: [{ type: 'research_citation_fetched', citation: {
+									sourceUrl: 'https://example.com/', title: 'Example', publisher: 'example.com',
+									retrievedAt: '2026-07-21T00:00:00.000Z', contentHash: 'sha256:example',
+									claimIds: ['claim-1'], confidence: 'medium',
+								} }] },
+								{ status: 'completed', derivedEvents: [{ type: 'research_claims_recorded', claims: [{
+									id: 'claim-1', text: 'Material claim', material: true, status: 'unsupported', citationIds: [],
+								}] }] },
+								{ toolId: 'treeseed.review_decision', status: 'completed', derivedEvents: [{
+									type: 'review_decision_recorded', disposition: 'rejected', summary: 'Unsupported material claim.',
+								}] },
+							],
+						},
+					},
+				},
+			},
+		});
+		expect(manifest.citations).toEqual([expect.objectContaining({ sourceUrl: 'https://example.com/', claimIds: ['claim-1'] })]);
+		expect(manifest.signals).toEqual(expect.arrayContaining([
+			expect.objectContaining({ code: 'research_claim', metadata: expect.objectContaining({ id: 'claim-1', status: 'unsupported' }) }),
+			expect.objectContaining({ code: 'research_review_rejected' }),
+		]));
+	});
+
+	it('accepts a validated structured estimate as a durable control-plane output', () => {
+		const manifest = buildAgentArtifactManifest({
+			assignment: assignment(),
+			modeRunId: 'mode-run-estimate',
+			agentId: 'engineer',
+			handlerId: 'estimate',
+			activityType: 'estimating',
+			status: 'completed',
+			output: {
+				status: 'completed',
+				summary: 'Estimated the linked proposal.',
+				metadata: {
+					structuredEstimate: {
+						id: 'estimate-assignment-1',
+						decisionId: 'decision-1',
+						proposalId: 'proposal-1',
+						agentId: 'engineer',
+					},
+					estimateValidation: { ok: true },
+					executionSnapshot: { status: 'completed', summary: 'done' },
+				},
+			},
+		});
+		expect(manifest.controlPlaneReferences).toEqual([expect.objectContaining({
+			kind: 'structured_agent_estimate', id: 'estimate-assignment-1', status: 'submitted',
+		})]);
+		expect(validateAgentArtifactManifest(manifest)).toEqual({ ok: true });
+	});
+
 	it('does not project a TreeDX content commit as source-repository authority', () => {
 		const manifest = buildAgentArtifactManifest({
 			assignment: assignment(), modeRunId: 'mode-run-content', agentId: 'researcher',
@@ -152,6 +264,24 @@ describe('AgentArtifactManifest', () => {
 		});
 		expect(manifest.contentReferences[0]).toMatchObject({ commitSha: 'abcdef1234567890' });
 		expect(manifest.commit).toBeUndefined();
+	});
+
+	it('selects the final authenticated source checkpoint as downstream authority', () => {
+		const manifest = buildAgentArtifactManifest({
+			assignment: assignment(), modeRunId: 'mode-run-checkpoints', agentId: 'engineer',
+			handlerId: 'actor', activityType: 'acting', status: 'completed',
+			output: { status: 'completed', summary: 'Implemented and checkpointed the change.', metadata: {
+				executionSnapshot: {
+					status: 'completed', summary: 'done',
+					outputs: { toolTelemetry: [
+						{ toolId: 'treeseed.checkpoint', status: 'completed', derivedEvents: [{ type: 'source_checkpoint_committed', commitSha: '1111111111111111', branchRef: 'agent/engineer/work' }] },
+						{ toolId: 'treeseed.checkpoint', status: 'completed', derivedEvents: [{ type: 'source_checkpoint_committed', commitSha: '2222222222222222', branchRef: 'agent/engineer/work' }] },
+					] },
+					artifacts: [{ kind: 'changed_path', name: 'src/result.ts', uri: 'repo://src/result.ts' }],
+				},
+			} },
+		});
+		expect(manifest.commit).toEqual({ sha: '2222222222222222', ref: 'agent/engineer/work' });
 	});
 
 	it('fails closed instead of dropping a malformed declared citation', () => {

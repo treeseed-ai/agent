@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { appendFile, mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -15,6 +15,9 @@ import {
 } from '../../src/agents/adapters/codex-auth.ts';
 import {
 	CodexExecutionProviderAdapter,
+	buildCodexPrompt,
+	codexExecutionTimeoutMs,
+	missingCodexCompletionReceipts,
 	runCodexTask,
 	type CodexExecutionRequest,
 } from '../../src/agents/adapters/execution-codex.ts';
@@ -79,6 +82,7 @@ function executionInvocation(input: {
 	instructions: string;
 	tools?: ExecutionProviderInvocation['tools'];
 	metadata?: Record<string, unknown>;
+	workPackageMetadata?: Record<string, unknown>;
 }): ExecutionProviderInvocation {
 	return {
 		assignment: {
@@ -111,6 +115,7 @@ function executionInvocation(input: {
 				allowedPaths: input.agent.execution.allowedPaths,
 				forbiddenPaths: input.agent.execution.forbiddenPaths,
 			},
+			metadata: input.workPackageMetadata ?? {},
 		},
 		leaseToken: null,
 		runnerId: 'test-runner',
@@ -120,6 +125,224 @@ function executionInvocation(input: {
 }
 
 describe('codex execution provider', () => {
+	it('makes verify and checkpoint receipts explicit completion gates', () => {
+		const prompt = buildCodexPrompt({
+			...baseRequest,
+			sandboxMode: 'workspace_write',
+			worktreeRoot: '/repo/.agent-worktrees/tester',
+			tools: [
+				{
+					kind: 'agent_tool',
+					id: 'treeseed.verify',
+					name: 'Verify',
+					description: 'Verify',
+					inputSchema: {},
+					outputSchema: {},
+					executionTarget: 'provider_runner',
+					mutability: 'read',
+				},
+				{
+					kind: 'agent_tool',
+					id: 'treeseed.checkpoint',
+					name: 'Checkpoint',
+					description: 'Checkpoint',
+					inputSchema: {},
+					outputSchema: {},
+					executionTarget: 'provider_runner',
+					mutability: 'worktree_write',
+				},
+				{
+					kind: 'agent_tool',
+					id: 'treeseed.review_decision',
+					name: 'Review decision',
+					description: 'Review decision',
+					inputSchema: {},
+					outputSchema: {},
+					executionTarget: 'provider_runner',
+					mutability: 'shared_state_write',
+				},
+			],
+		});
+		expect(prompt).toContain('successful verification_completed receipt');
+		expect(prompt).toContain('successful source_checkpoint_committed receipt containing commitSha');
+		expect(prompt).toContain('successful review_decision_recorded receipt');
+		expect(prompt).toContain('final response is not completion');
+	});
+
+	it('identifies required completion receipts from granted tools and the assigned deliverable', () => {
+		const tools = [
+			{ id: 'treeseed.verify' },
+			{ id: 'treeseed.checkpoint' },
+			{ id: 'treeseed.status' },
+		] as ExecutionProviderInvocation['tools'];
+		expect(missingCodexCompletionReceipts(tools ?? [], [{
+			status: 'completed',
+			derivedEvents: [{ type: 'verification_completed' }],
+		}], 'failing_test_proof')).toEqual(['source_checkpoint_committed']);
+		expect(missingCodexCompletionReceipts(tools ?? [], [{
+			status: 'completed',
+			derivedEvents: [{ type: 'verification_completed' }],
+		}], 'passing_verification')).toEqual([]);
+		const researchTools = [{ id: 'research.fetch_source' }] as ExecutionProviderInvocation['tools'];
+		expect(missingCodexCompletionReceipts([], [], 'planning_note', 'independent-source-fetch', 2)).toEqual(['research_fetch_tool_available']);
+		expect(missingCodexCompletionReceipts(researchTools ?? [], [{
+			status: 'completed',
+			derivedEvents: [{ type: 'research_citation_fetched', citation: { sourceUrl: 'https://one.test/a' } }],
+		}], 'planning_note', 'independent-source-fetch', 2)).toEqual(['research_independent_publishers:2']);
+		expect(missingCodexCompletionReceipts(researchTools ?? [], [{
+			status: 'completed',
+			derivedEvents: [{ type: 'research_citation_fetched', citation: { sourceUrl: 'https://one.test/a' } }],
+		}, {
+			status: 'completed',
+			derivedEvents: [{ type: 'research_citation_fetched', citation: { sourceUrl: 'https://one.test/b' } }],
+		}], 'planning_note', 'independent-source-fetch', 2)).toEqual(['research_independent_publishers:2']);
+		expect(missingCodexCompletionReceipts(researchTools ?? [], [{
+			status: 'completed',
+			derivedEvents: [{ type: 'research_citation_fetched', citation: { sourceUrl: 'https://one.test/a' } }],
+		}, {
+			status: 'completed',
+			derivedEvents: [{ type: 'research_citation_fetched', citation: { sourceUrl: 'https://two.test/b' } }],
+		}], 'planning_note', 'independent-source-fetch', 2)).toEqual([]);
+		expect(missingCodexCompletionReceipts([], [{
+			status: 'completed',
+			derivedEvents: [{ type: 'content_created', contentRef: { model: 'note', path: 'notes/dummy.mdx' } }],
+		}], 'revision_verification')).toEqual(['content_subject_linked:notes/dummy.mdx']);
+		expect(missingCodexCompletionReceipts([], [{
+			status: 'completed',
+			derivedEvents: [{ type: 'content_created', contentRef: { model: 'note', path: 'notes/dummy.mdx' } }],
+		}, {
+			status: 'completed',
+			derivedEvents: [{ type: 'content_updated', contentRef: { model: 'note', path: 'notes/dummy.mdx', subjectId: 'decision-a', subjectField: 'relatedDecisions' } }],
+		}], 'revision_verification')).toEqual([]);
+		expect(missingCodexCompletionReceipts([], [{
+			status: 'completed',
+			derivedEvents: [{ type: 'content_created', contentRef: { model: 'question', path: 'questions/context.mdx', subjectId: 'decision-a', subjectField: 'relatedDecisions' } }],
+		}], 'implementation_change', null, 2, true)).toEqual(['content_artifact_kind:implementation_change']);
+		expect(missingCodexCompletionReceipts([], [{
+			status: 'completed',
+			derivedEvents: [{ type: 'content_created', contentRef: { model: 'note', path: 'notes/implementation.mdx', subjectId: 'decision-a', subjectField: 'relatedDecisions' } }],
+		}], 'implementation_change', null, 2, true)).toEqual([]);
+	});
+
+	it('instructs research assignments with the callable MCP name rather than only the policy id', () => {
+		const prompt = buildCodexPrompt({
+			...baseRequest,
+			metadata: {
+				workPackage: {
+					metadata: { researchStage: 'independent-source-fetch' },
+				},
+			},
+			tools: [{
+				kind: 'agent_tool',
+				id: 'research.fetch_source',
+				name: 'Fetch governed research source',
+				description: 'Fetch a governed source.',
+				inputSchema: {},
+				outputSchema: {},
+				executionTarget: 'provider_runner',
+				mutability: 'read',
+			}],
+		});
+		expect(prompt).toContain('callName research_fetch_source');
+		expect(prompt).toContain('Search for and invoke the callName, not the dotted policy id.');
+	});
+
+	it('resumes the same thread once to obtain missing completion receipts', async () => {
+		const root = await mkdtemp(resolve(tmpdir(), 'treeseed-codex-receipt-'));
+		const telemetryPath = resolve(root, 'events.jsonl');
+		const run = vi.fn()
+			.mockResolvedValueOnce({ finalResponse: 'Finished too early.', items: [], usage: { input_tokens: 4, output_tokens: 2 } })
+			.mockImplementationOnce(async () => {
+				await appendFile(telemetryPath, `${JSON.stringify({
+					status: 'completed',
+					derivedEvents: [
+						{ type: 'verification_completed', status: 'passed' },
+						{ type: 'source_checkpoint_committed', commitSha: 'abc123' },
+						{ type: 'content_created', contentRef: { model: 'note', path: 'notes/implementation.mdx', subjectId: 'decision-a', subjectField: 'relatedDecisions' } },
+					],
+				})}\n`);
+				return { finalResponse: 'Receipts complete.', items: [], usage: { input_tokens: 3, output_tokens: 1 } };
+			});
+		const startThread = vi.fn(() => ({ id: 'thread-receipts', run }));
+		const resumeThread = vi.fn(() => ({ id: 'thread-receipts', run }));
+		const cleanup = vi.fn(async () => undefined);
+		const createCodexClient = vi.fn(async () => ({ startThread, resumeThread, cleanup }));
+		const adapter = new CodexExecutionProviderAdapter({
+			repoRoot: '/repo',
+			prepareWorktree: async () => ({
+				branchName: 'agent/tester/run-receipts',
+				worktreeRoot: '/repo/.agent-worktrees/tester/run-receipts',
+				exactBaseRef: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+				created: true,
+			}),
+			createCodexClient,
+			env: { TREESEED_CODEX_SUBSCRIPTION_PLAN: 'pro', TREESEED_CODEX_API_KEY: 'codex-test-key-1234567890' },
+		});
+		try {
+			const result = await adapter.start(executionInvocation({
+				agent,
+				runId: 'run-receipts',
+				instructions: 'Add the governed test.',
+				workPackageMetadata: { artifactKind: 'implementation_change', requireContentArtifact: true },
+				tools: [
+					{
+						kind: 'agent_tool', id: 'treeseed.verify', name: 'Verify', description: 'Verify',
+						inputSchema: {}, outputSchema: {}, executionTarget: 'provider_runner', mutability: 'read',
+					},
+					{
+						kind: 'agent_tool', id: 'treeseed.checkpoint', name: 'Checkpoint', description: 'Checkpoint',
+						inputSchema: {}, outputSchema: {}, executionTarget: 'provider_runner', mutability: 'worktree_write',
+					},
+				],
+				metadata: {
+					exactBaseRef: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+					toolTelemetryPath: telemetryPath,
+				},
+			}));
+			expect(startThread).toHaveBeenCalledTimes(1);
+			expect(resumeThread).toHaveBeenCalledWith('thread-receipts', expect.any(Object));
+			expect(createCodexClient).toHaveBeenCalledTimes(1);
+			expect(run).toHaveBeenCalledTimes(2);
+			expect(String(run.mock.calls[1]?.[0])).toContain('Missing required tool receipts');
+			expect(String(run.mock.calls[1]?.[0])).toContain('content_artifact_kind:implementation_change');
+			expect(result).toMatchObject({
+				status: 'completed',
+				summary: 'Receipts complete.',
+				metadata: {
+					codex: {
+						usage: { inputTokens: 7, outputTokens: 3 },
+					},
+				},
+			});
+			expect(cleanup).toHaveBeenCalledTimes(1);
+		} finally {
+			await rm(root, { recursive: true, force: true });
+		}
+	});
+
+	it('caps activity runtime at the provider maximum while honoring shorter profiles', () => {
+		expect(codexExecutionTimeoutMs(900_000, 1_800)).toBe(900_000);
+		expect(codexExecutionTimeoutMs(900_000, 60)).toBe(60_000);
+		expect(codexExecutionTimeoutMs(900_000, undefined)).toBe(900_000);
+	});
+
+	it('keeps both capacity-provider services on the canonical Codex timeout default', async () => {
+		const compose = await readFile(resolve(testDir, '../../compose.capacity-provider.yml'), 'utf8');
+		expect(compose.match(/TREESEED_CODEX_TIMEOUT_MS: \$\{TREESEED_CODEX_TIMEOUT_MS:-900000\}/gu)).toHaveLength(2);
+	});
+
+	it('reports unavailable instead of advertising capacity when authentication is absent', async () => {
+		const adapter = new CodexExecutionProviderAdapter({
+			env: { TREESEED_CODEX_AUTH_FILE: '/missing/codex-auth.json' },
+		});
+
+		await expect(adapter.observe({} as never)).resolves.toMatchObject({
+			available: false,
+			pressure: 'exhausted',
+			metadata: { authMode: 'missing' },
+		});
+	});
+
 	it('reports missing SDK as a warning for non-Codex selections and blocker for Codex defaults', () => {
 		const missing = () => {
 			throw new Error('missing');
@@ -332,127 +555,6 @@ describe('codex execution provider', () => {
 		expect(createCodexClient).not.toHaveBeenCalled();
 	});
 
-	it('constructs a mocked SDK client and runs a thread through the boundary', async () => {
-		const run = vi.fn(async () => ({
-			items: [],
-			finalResponse: 'Codex completed the planning task.',
-			usage: null,
-		}));
-		const createCodexClient = vi.fn(() => ({
-			startThread: vi.fn(() => ({ id: 'thread-1', run })),
-			resumeThread: vi.fn(),
-		}));
-
-		const result = await runCodexTask(baseRequest, {
-			createCodexClient,
-			now: () => 1000,
-		});
-
-		expect(createCodexClient).toHaveBeenCalledTimes(1);
-		expect(run).toHaveBeenCalledTimes(1);
-		expect(result).toMatchObject({
-			provider: 'codex',
-			threadId: 'thread-1',
-			status: 'completed',
-			finalResponse: 'Codex completed the planning task.',
-			changedPaths: [],
-		});
-	});
-
-	it('enforces the configured Codex execution timeout', async () => {
-		const run = vi.fn(() => new Promise(() => null));
-		const createCodexClient = vi.fn(() => ({
-			startThread: vi.fn(() => ({ id: 'thread-timeout', run })),
-			resumeThread: vi.fn(),
-		}));
-
-		const result = await runCodexTask({
-			...baseRequest,
-			timeoutMs: 1,
-		}, { createCodexClient });
-
-		expect(run).toHaveBeenCalledTimes(1);
-		expect(result).toMatchObject({
-			provider: 'codex',
-			threadId: '',
-			status: 'failed',
-			error: {
-				code: 'codex_execution_timeout',
-				retryable: true,
-			},
-			metadata: {
-				timeoutMs: 1,
-			},
-		});
-		expect(result.usage?.nativeUnit).toBe('wall_minute');
-	});
-
-	it('exposes a runtime adapter result with the normalized Codex envelope', async () => {
-		const run = vi.fn(async () => ({
-			items: [],
-			finalResponse: 'Runtime adapter completed.',
-			usage: null,
-		}));
-		const adapter = new CodexExecutionProviderAdapter({
-			repoRoot: '/repo',
-			createCodexClient: () => ({
-				startThread: () => ({ id: 'thread-runtime', run }),
-				resumeThread: vi.fn(),
-			}),
-			prepareWorktree: async () => ({
-				branchName: 'agent/engineer/run-1',
-				worktreeRoot: '/repo/.agent-worktrees/engineer/run-1',
-				created: true,
-			}),
-			env: {
-				TREESEED_CODEX_SUBSCRIPTION_PLAN: 'pro',
-				TREESEED_CODEX_API_KEY: 'codex-test-key-1234567890',
-			},
-		});
-
-		const result = await adapter.start(executionInvocation({
-			agent,
-			runId: 'run-1',
-			instructions: 'Plan a docs task.',
-			tools: [{
-				kind: 'agent_tool',
-				id: 'treeseed.changed_paths',
-				name: 'Changed paths',
-				description: 'Changed paths',
-				inputSchema: {
-					type: 'object',
-					properties: { includeDiffSummary: { type: 'boolean' } },
-					additionalProperties: false,
-				},
-				outputSchema: { type: 'object', additionalProperties: true },
-				executionTarget: 'provider_runner',
-				mutability: 'read',
-				metadata: {
-					assignmentId: 'run-1',
-					projectId: 'project-test',
-					worktreeRoot: null,
-				},
-			}],
-		}));
-
-		expect(result).toMatchObject({
-			status: 'completed',
-			outputs: {
-				finalResponse: 'Runtime adapter completed.',
-				stdout: 'Runtime adapter completed.',
-			},
-			metadata: {
-				provider: 'codex',
-				codex: {
-					provider: 'codex',
-					status: 'completed',
-					threadId: 'thread-runtime',
-				},
-			},
-		});
-		expect(run).toHaveBeenCalledWith(expect.stringContaining('treeseed.changed_paths'));
-	});
-
 	it('rejects a prepared worktree that cannot prove the governed exact base ref', async () => {
 		const adapter = new CodexExecutionProviderAdapter({
 			repoRoot: '/repo',
@@ -468,6 +570,34 @@ describe('codex execution provider', () => {
 			agent, runId: 'run-ref-mismatch', instructions: 'Implement only from the governed ref.',
 			metadata: { exactBaseRef: 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb' },
 		}))).rejects.toMatchObject({ code: 'worktree_base_ref_mismatch', retryable: false });
+	});
+
+	it('prepares an exact-ref worktree even when the agent sandbox is read-only', async () => {
+		const readOnlyAgent = {
+			...agent,
+			execution: { ...agent.execution, sandboxMode: 'read_only' as const, allowedPaths: [] },
+		};
+		let prepared = false;
+		const adapter = new CodexExecutionProviderAdapter({
+			repoRoot: '/repo',
+			prepareWorktree: async () => {
+				prepared = true;
+				return {
+					branchName: 'agent/researcher/read-only-ref',
+					worktreeRoot: '/repo/.agent-worktrees/researcher/read-only-ref',
+					exactBaseRef: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+					created: true,
+				};
+			},
+			env: { TREESEED_CODEX_SUBSCRIPTION_PLAN: 'pro', TREESEED_CODEX_API_KEY: 'codex-test-key-1234567890' },
+		});
+		await expect(adapter.start(executionInvocation({
+			agent: readOnlyAgent,
+			runId: 'read-only-ref',
+			instructions: 'Read only from the governed ref.',
+			metadata: { exactBaseRef: 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb' },
+		}))).rejects.toMatchObject({ code: 'worktree_base_ref_mismatch' });
+		expect(prepared).toBe(true);
 	});
 
 	it('keeps provider code free of direct command invocation APIs', async () => {

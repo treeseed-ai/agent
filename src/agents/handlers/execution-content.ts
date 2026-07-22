@@ -2,7 +2,6 @@ import type { ExecutionRunSnapshot } from '@treeseed/sdk/types/agents';
 import type { AgentContext, AgentHandler } from "../runtime-types.ts";
 import {
   type ContentArtifactRef,
-  resolveProjectContentRoot,
 } from "../content-artifacts.ts";
 import {
   completed,
@@ -13,6 +12,7 @@ import {
   type HandlerPayload,
 } from "./shared.ts";
 import {
+	 executionContentRoot,
   resolveExecutionTreeDxContext,
   type ExecutionContentSubject,
 } from "./execution-content-context.ts";
@@ -213,8 +213,8 @@ export function createExecutionContentHandler(input: {
         payload,
       );
       const contextPackSummaries: unknown[] = [...treeDxContext.evidence];
-      const contentRoot = resolveProjectContentRoot(context.repoRoot);
-      const treeDxCoreObjective = treeDxContext.coreObjective;
+      const contentRoot = executionContentRoot(context, payload);
+      const assignedObjective = treeDxContext.assignedObjective;
       const contextDiagnostics = treeDxContext.diagnostics;
       const mode = modeFor(context);
       const allowedPaths = context.agent.execution.allowedPaths?.length
@@ -244,13 +244,15 @@ export function createExecutionContentHandler(input: {
           instructions: buildExecutionContentInstructions(context, {
             payload,
             subject,
+            artifactKind,
             contextPackSummaries,
-            coreObjective: treeDxCoreObjective,
+            assignedObjective,
+            contentRoot,
           }),
           context: {
             subject,
             contextPacks: contextPackSummaries,
-            coreObjective: treeDxCoreObjective,
+            assignedObjective,
             contentRoot,
             handoff,
             contextDiagnostics,
@@ -275,6 +277,10 @@ export function createExecutionContentHandler(input: {
           },
           metadata: {
             artifactKind,
+            requireContentArtifact: input.requireContentArtifact !== false,
+            ...(typeof payload.researchStage === "string" ? { researchStage: payload.researchStage } : {}),
+            ...(typeof payload.minimumIndependentSources === "number" ? { minimumIndependentSources: payload.minimumIndependentSources } : {}),
+            ...(typeof payload.maxRevisionCycles === "number" ? { maxRevisionCycles: payload.maxRevisionCycles } : {}),
             subject,
             handoff,
             contextDiagnostics,

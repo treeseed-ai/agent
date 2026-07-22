@@ -21,5 +21,9 @@ export type {
 } from './execution-codex-core.ts';
 export type { CodexSandboxMode } from './codex-readiness.ts';
 export { normalizeCodexRunResult, runCodexTask } from './execution-codex-result.ts';
-export { CodexExecutionProviderAdapter } from './execution-codex-adapter.ts';
+export {
+	CodexExecutionProviderAdapter,
+	codexExecutionTimeoutMs,
+	missingCodexCompletionReceipts,
+} from './execution-codex-adapter.ts';
 export type { CodexExecutionProviderAdapterOptions } from './execution-codex-adapter.ts';

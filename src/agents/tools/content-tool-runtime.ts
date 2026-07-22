@@ -106,11 +106,24 @@ function responseContent(value: unknown) {
 }
 
 function descriptorContentRoot(descriptor: TreeDxProxyExecutionToolDescriptor) {
-	for (const allowed of descriptor.allowedWritePaths ?? []) {
+	const configured = typeof descriptor.metadata?.contentRoot === 'string' ? descriptor.metadata.contentRoot.trim() : '';
+	if (configured) return configured.replace(/\\/gu, '/').replace(/\/+$/u, '');
+	const scopedPaths = descriptor.allowedWritePaths?.length
+		? descriptor.allowedWritePaths
+		: descriptor.allowedReadPaths?.length
+			? descriptor.allowedReadPaths
+			: descriptor.allowedPaths;
+	for (const allowed of scopedPaths) {
 		const candidate = allowed.replace(/\\/gu, '/').replace(/\/\*\*$/u, '').replace(/\/+$/u, '');
 		if (candidate.endsWith('/src/content') || candidate === 'src/content') return candidate;
 	}
 	return 'src/content';
+}
+
+function contentSlug(input: Record<string, unknown>) {
+	const candidate = text(input.slug) || text(input.id);
+	if (!candidate.includes('/')) return candidate;
+	return candidate.replace(/\\/gu, '/').split('/').filter(Boolean).at(-1)?.replace(/\.mdx?$/iu, '') ?? candidate;
 }
 
 export async function callTreeseedContentTool(options: ContentToolCallOptions) {
@@ -122,6 +135,10 @@ export async function callTreeseedContentTool(options: ContentToolCallOptions) {
 	const { action, model } = resolveContentCall(options.descriptor, input);
 	const contentModel = model ?? text(input.model) as TreeseedContentModel;
 	const contentRoot = descriptorContentRoot(descriptor);
+	const relations = Array.isArray(input.relations) ? input.relations.filter((entry) => {
+		const relation = record(entry);
+		return Boolean(text(relation.field) && text(relation.targetSlug));
+	}) : [];
 	try {
 		if (action === 'describe') {
 			return {
@@ -164,11 +181,12 @@ export async function callTreeseedContentTool(options: ContentToolCallOptions) {
 			return { ok: true, action, refs: [], diagnostics: [], payload: record(result) };
 		}
 		if (!contentModel) return structuredError('content_model_unknown', 'A content model is required.', { toolId: options.descriptor.id });
+		if (action === 'link' && !relations.length) return structuredError('content_relation_required', 'Content link requires at least one relation with field and targetSlug.', { toolId: options.descriptor.id });
 		if (action === 'read') {
 			const rendered = renderTreeseedContentRecord({
 				model: contentModel,
-				slug: text(input.slug) || text(input.id),
-				title: text(input.title) || text(input.slug) || text(input.id),
+				slug: contentSlug(input),
+				title: text(input.title) || contentSlug(input),
 				placement: record(input.placement),
 				contentRoot,
 			});
@@ -184,16 +202,31 @@ export async function callTreeseedContentTool(options: ContentToolCallOptions) {
 				payload: record(result),
 			};
 		}
-		const rendered = renderTreeseedContentRecord({
+		const initial = renderTreeseedContentRecord({
 			model: contentModel,
-			slug: text(input.slug) || undefined,
+			slug: contentSlug(input) || undefined,
 			title: text(input.title) || undefined,
 			fields: record(input.fields),
 			body: typeof input.body === 'string' ? input.body : undefined,
-			relations: Array.isArray(input.relations) ? input.relations as never : undefined,
+			relations: relations as never,
 			placement: record(input.placement),
 			contentRoot,
 		});
+		let rendered = initial;
+		if (action === 'update' || action === 'link') {
+			const existing = await readModelContentFile(options, descriptor, initial.path);
+			rendered = renderTreeseedContentRecord({
+				model: contentModel,
+				slug: contentSlug(input) || undefined,
+				title: text(input.title) || undefined,
+				fields: record(input.fields),
+				body: typeof input.body === 'string' ? input.body : undefined,
+				relations: relations as never,
+				placement: record(input.placement),
+				contentRoot,
+				existingContent: responseContent(existing.result),
+			});
+		}
 		if (action === 'validate') {
 			const validation = validateTreeseedContentRecord(contentModel, rendered.content);
 			if (!validation.ok) {

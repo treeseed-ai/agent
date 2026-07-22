@@ -23,8 +23,6 @@ import {
 	WorkflowExecutionProviderAdapter,
 	type WorkflowExecutionProviderAdapterOptions,
 } from './execution-workflow.ts';
-import { MockExecutionProviderAdapter } from './execution-mock.ts';
-import { prependCoreObjectiveToPrompt } from '../core-objective.ts';
 import { createCopilotAgentTools } from '../tools/agent-tool-copilot.ts';
 import type { ResearchSourcePolicy } from '@treeseed/sdk/agent-capacity';
 
@@ -79,8 +77,7 @@ export class CopilotExecutionProviderAdapter implements ExecutionProviderAdapter
 			telemetryPath,
 			researchSourcePolicy: this.options.researchSourcePolicy,
 		});
-		const prompt = prependCoreObjectiveToPrompt({
-			prompt: [
+		const prompt = [
 				input.workPackage.instructions,
 				'',
 				'Assignment tools and permissions:',
@@ -94,10 +91,7 @@ export class CopilotExecutionProviderAdapter implements ExecutionProviderAdapter
 				copilotTools.length > 0
 					? copilotTools.map((tool) => `- ${tool.name}`).join('\n')
 					: '- <none>',
-			].join('\n'),
-			coreObjective: typeof input.metadata?.coreObjective === 'string' ? input.metadata.coreObjective : null,
-			coreObjectiveRef: typeof input.metadata?.coreObjectiveRef === 'string' ? input.metadata.coreObjectiveRef : null,
-		});
+			].join('\n');
 		const runCopilotTask = this.options.runCopilotTask
 			?? (await import('@treeseed/sdk/copilot')).runTreeseedCopilotTask;
 		const result = await runCopilotTask({
@@ -170,19 +164,16 @@ export function createExecutionProviderAdapter(configuredModeInput?: string, opt
 	const configuredMode = String(
 		configuredModeInput ?? process.env.TREESEED_AGENT_EXECUTION_PROVIDER ?? getTreeseedAgentProviderSelections().execution,
 	).toLowerCase();
-	if (configuredMode === 'mock' || configuredMode === 'ci_mock' || configuredMode === 'deterministic_mock') {
-		return new MockExecutionProviderAdapter();
-	}
-	if (configuredMode === 'jira' || configuredMode === 'jira_issue_queue' || configuredMode === 'human_issue_queue') {
+	if (configuredMode === 'jira') {
 		return new JiraExecutionProviderAdapter({ config: options.jira });
 	}
-	if (configuredMode === 'github_issues' || configuredMode === 'github_issue_queue' || configuredMode === 'issue_queue') {
+	if (configuredMode === 'github_issues') {
 		return new GitHubIssueExecutionProviderAdapter({ config: options.githubIssues });
 	}
-	if (configuredMode === 'discord' || configuredMode === 'discord_thread') {
+	if (configuredMode === 'discord') {
 		return new DiscordExecutionProviderAdapter({ config: options.discord });
 	}
-	if (configuredMode === 'workflow' || configuredMode === 'workflow_operation' || configuredMode === 'deterministic_workflow' || configuredMode === 'github_actions' || configuredMode === 'github_actions_workflow') {
+	if (configuredMode === 'workflow') {
 		return new WorkflowExecutionProviderAdapter(options.workflow ?? {});
 	}
 	if (configuredMode === 'codex') {
@@ -191,5 +182,5 @@ export function createExecutionProviderAdapter(configuredModeInput?: string, opt
 	if (configuredMode === 'copilot') {
 		return new CopilotExecutionProviderAdapter({ repoRoot: options.repoRoot, env: options.env, researchSourcePolicy: options.researchSourcePolicy });
 	}
-	throw new Error(`Unsupported execution provider "${configuredMode}". Configure codex, copilot, mock, jira, github_issues, discord, or workflow.`);
+	throw new Error(`Unsupported execution provider "${configuredMode}". Configure codex, copilot, jira, github_issues, discord, or workflow.`);
 }

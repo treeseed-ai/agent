@@ -1,17 +1,52 @@
 import type { AgentSdkTreeDxOptions } from '@treeseed/sdk/sdk';
-import type { ExecutionProviderAdapter } from '../agents/runtime-types.ts';
 import type { AgentKernel } from '../agents/kernel/agent-kernel.ts';
 import type { ProviderConnectionRuntimeContext } from './config.ts';
-import type { ProviderAssignmentClient } from './lease-client.ts';
+import { providerAssignmentClientWithTerminalBoundary, type ProviderAssignmentClient } from './lease-client.ts';
 import { recordEarlyModeRun } from './mode-run-reporter.ts';
 import { record, stringValue } from './value-utils.ts';
-import { runProviderAssignment } from './runner.ts';
+import { releaseTerminalAssignmentResources, runProviderAssignment } from './runner.ts';
+
+export function isTerminalProviderAssignmentObservation(value: unknown): boolean {
+	const envelope = record(value);
+	const observed = record(envelope.payload ?? envelope.assignment ?? envelope);
+	const leaseState = stringValue(observed.leaseState);
+	return leaseState === 'released'
+		|| ['completed', 'failed', 'cancelled'].includes(stringValue(observed.status) ?? '');
+}
+
+export function reportProviderLeaseRenewalFailure(input: {
+	terminalizing: () => boolean;
+	assignmentId: string;
+	runnerId: string;
+	error: unknown;
+}) {
+	if (input.terminalizing()) return false;
+	console.error(JSON.stringify({
+		level: 'error',
+		event: 'provider.assignment_lease_renew_failed',
+		assignmentId: input.assignmentId,
+		runnerId: input.runnerId,
+		message: input.error instanceof Error ? input.error.message : String(input.error),
+	}));
+	return true;
+}
+
+export function createSingleFlightLeaseRenewal(attempt: () => Promise<void>) {
+	let inFlight: Promise<void> | null = null;
+	return () => {
+		if (inFlight) return inFlight;
+		const current = attempt().finally(() => {
+			if (inFlight === current) inFlight = null;
+		});
+		inFlight = current;
+		return current;
+	};
+}
 
 export async function runProviderRunnerOnce(input: {
 	config: ProviderConnectionRuntimeContext;
 	client: ProviderAssignmentClient;
 	runnerId?: string;
-	executionAdapter?: ExecutionProviderAdapter;
 	kernel?: Pick<AgentKernel, 'runAssignment'>;
 	treeDx?: AgentSdkTreeDxOptions;
 	executionLifecycle?: {
@@ -56,8 +91,15 @@ export async function runProviderRunnerOnce(input: {
 	}));
 	const leaseToken = stringValue(leasedRecord.leaseToken, assignment.leaseToken);
 	const leaseSeconds = Number(leasedRecord.leaseSeconds ?? 300);
-	const renewLease = async () => {
-		if (!leaseToken || !input.client.renewAssignment) return;
+	let renewTimer: ReturnType<typeof setInterval> | null = null;
+	let terminalizing = false;
+	const stopLeaseRenewal = () => {
+		terminalizing = true;
+		if (renewTimer) clearInterval(renewTimer);
+		renewTimer = null;
+	};
+	const renewLeaseAttempt = async () => {
+		if (terminalizing || !leaseToken || !input.client.renewAssignment) return;
 		const assignmentId = String(assignment.id ?? '');
 		try {
 			const renewed = await input.client.renewAssignment(assignmentId, {
@@ -69,28 +111,40 @@ export async function runProviderRunnerOnce(input: {
 			const renewedAssignment = record(renewedRecord.payload ?? renewedRecord.assignment ?? renewedRecord);
 			Object.assign(assignment, renewedAssignment);
 		} catch (error) {
+			if (terminalizing) return;
+			if (input.client.assignment) {
+				try {
+					if (isTerminalProviderAssignmentObservation(await input.client.assignment(assignmentId))) return;
+				} catch {
+					// Preserve the original renewal failure when authoritative observation is unavailable.
+				}
+			}
 			const message = error instanceof Error ? error.message : String(error);
 			throw new Error(`Assignment lease cannot be renewed for ${assignmentId || '<unknown-assignment>'} by ${runnerId}: ${message}`);
 		}
 	};
-	let renewTimer: ReturnType<typeof setInterval> | null = null;
+	const renewLease = createSingleFlightLeaseRenewal(renewLeaseAttempt);
 	if (leaseToken && input.client.renewAssignment) {
 		await renewLease();
 		const renewEveryMs = Math.max(15_000, Math.min(leaseSeconds * 500, 120_000));
 		renewTimer = setInterval(() => {
 			void renewLease().catch((error) => {
-				const message = error instanceof Error ? error.message : String(error);
-				console.error(JSON.stringify({
-					level: 'error',
-					event: 'provider.assignment_lease_renew_failed',
+				// Completion can begin after renewLease's authoritative observation but
+				// before this detached rejection handler runs. Re-check the terminal
+				// boundary here so a successfully terminalized assignment cannot emit a
+				// false active-lease failure.
+				reportProviderLeaseRenewalFailure({
+					terminalizing: () => terminalizing,
 					assignmentId: String(assignment.id ?? ''),
 					runnerId,
-					message,
-				}));
+					error,
+				});
 			});
 		}, renewEveryMs);
 	}
 	let result;
+	const lifecycleClient = providerAssignmentClientWithTerminalBoundary(input.client, stopLeaseRenewal);
+	let releaseAssignmentResources: ((outcome: 'completed' | 'returned' | 'failed' | 'expired') => Promise<void>) | null = null;
 	try {
 		const decisionInput = record(assignment.decisionInput);
 		const selectedInput = record(decisionInput.input);
@@ -128,16 +182,18 @@ export async function runProviderRunnerOnce(input: {
 		});
 		result = await runProviderAssignment({
 			config: input.config,
-			client: input.client,
+			client: lifecycleClient,
 			assignment,
 			leaseToken,
 			runnerId,
 			leaseSeconds,
 			renewLease,
-			executionAdapter: input.executionAdapter,
 			kernel: input.kernel,
 			treeDx: input.treeDx,
 			executionLifecycle: input.executionLifecycle,
+			onAssignmentResourcesPrepared: (release) => {
+				releaseAssignmentResources = release;
+			},
 		});
 	} catch (error) {
 		const assignmentId = stringValue(assignment.id) ?? '';
@@ -188,20 +244,14 @@ export async function runProviderRunnerOnce(input: {
 				telemetryDeliveryError: failureTelemetryError instanceof Error ? failureTelemetryError.message : failureTelemetryError ? String(failureTelemetryError) : null,
 			},
 		};
+		stopLeaseRenewal();
 		result = input.client.returnAssignment
 			? await input.client.returnAssignment(assignmentId, lifecycleRequest)
 			: await input.client.failAssignment(assignmentId, { ...lifecycleRequest, message });
 	} finally {
-		if (renewTimer) clearInterval(renewTimer);
+		stopLeaseRenewal();
 	}
-	const resultRecord = record(result);
-	const resultPayload = record(resultRecord.payload ?? resultRecord.assignment ?? resultRecord);
-	if (resultPayload.status === 'completed') {
-		await input.executionAdapter?.releaseAssignmentResources?.({
-			assignmentId: stringValue(assignment.id) ?? '',
-			outcome: 'completed',
-		});
-	}
+	await releaseTerminalAssignmentResources(result, releaseAssignmentResources);
 	return {
 		ok: true,
 		role: 'runner',

@@ -50,7 +50,10 @@ function safeUri(value: unknown): string | null {
 
 function citationCandidates(snapshot: ExecutionRunSnapshot, outputMetadata: Record<string, unknown>) {
 	const outputs = record(snapshot.outputs);
-	return [...records(outputs.citations), ...records(outputMetadata.citations)];
+	const fetched = records(outputs.toolTelemetry).flatMap((entry) => records(entry.derivedEvents))
+		.filter((event) => event.type === 'research_citation_fetched')
+		.map((event) => record(event.citation));
+	return [...records(outputs.citations), ...records(outputMetadata.citations), ...fetched];
 }
 
 function citations(snapshot: ExecutionRunSnapshot, outputMetadata: Record<string, unknown>): ResearchCitation[] {
@@ -83,6 +86,12 @@ function verification(snapshot: ExecutionRunSnapshot, outputMetadata: Record<str
 	const outputs = record(snapshot.outputs);
 	const candidates = [outputs.verification, record(snapshot.metadata).verification, outputMetadata.verification]
 		.flatMap((value) => Array.isArray(value) ? value : Object.keys(record(value)).length ? [value] : []);
+	for (const toolEvent of records(outputs.toolTelemetry)) {
+		if (toolEvent.status !== 'completed') continue;
+		for (const event of records(toolEvent.derivedEvents)) {
+			if (event.type === 'verification_completed') candidates.push(event);
+		}
+	}
 	return candidates.map((value) => {
 		const entry = record(value);
 		const rawStatus = text(entry.status, entry.result) ?? 'unknown';
@@ -102,14 +111,46 @@ function diagnosticReferences(snapshot: ExecutionRunSnapshot): AgentDiagnosticRe
 	];
 }
 
-function signals(snapshot: ExecutionRunSnapshot, outputMetadata: Record<string, unknown>): AgentSignal[] {
+function signals(snapshot: ExecutionRunSnapshot, outputMetadata: Record<string, unknown>, assignment: ProviderAssignment): AgentSignal[] {
 	const outputs = record(snapshot.outputs);
-	return [...records(outputs.signals), ...records(outputMetadata.signals)].flatMap((entry) => {
+	const events = records(outputs.toolTelemetry).flatMap((entry) => records(entry.derivedEvents));
+	const researchStage = text(record(record(assignment.decisionInput).input).researchStage);
+	const toolSignals = events
+		.filter((entry) => entry.type === 'review_decision_recorded')
+		.map((entry): Record<string, unknown> => ({
+			code: researchStage?.startsWith('citation-review-')
+				? (entry.disposition === 'approved' ? 'research_review_approved' : 'research_review_rejected')
+				: (entry.disposition === 'approved' ? 'review_approved' : 'review_rejected'),
+			severity: entry.disposition === 'approved' ? 'info' : 'warning',
+			message: entry.summary,
+			metadata: { source: 'treeseed.review_decision' },
+		}));
+	const claimSignals = events.filter((entry) => entry.type === 'research_claims_recorded')
+		.flatMap((entry) => records(entry.claims))
+		.map((claim): Record<string, unknown> => ({ code: 'research_claim', severity: 'info', metadata: claim }));
+	return [...records(outputs.signals), ...records(outputMetadata.signals), ...toolSignals, ...claimSignals].flatMap((entry) => {
 		const code = text(entry.code, entry.type);
 		const severity = text(entry.severity) ?? 'info';
 		if (!code || !['info', 'warning', 'error'].includes(severity)) return [];
 		return [{ code, severity: severity as AgentSignal['severity'], message: text(entry.message), metadata: record(entry.metadata) }];
 	});
+}
+
+function controlPlaneReferences(outputMetadata: Record<string, unknown>) {
+	const estimate = record(outputMetadata.structuredEstimate);
+	const estimateValidation = record(outputMetadata.estimateValidation);
+	const estimateId = text(estimate.id);
+	if (estimateId && estimateValidation.ok === true) return [{
+		kind: 'structured_agent_estimate',
+		id: estimateId,
+		status: 'submitted',
+		metadata: {
+			decisionId: text(estimate.decisionId),
+			proposalId: text(estimate.proposalId),
+			agentId: text(estimate.agentId),
+		},
+	}];
+	return [];
 }
 
 function contentReferences(
@@ -152,9 +193,9 @@ function sourceWorktree(snapshot: ExecutionRunSnapshot) {
 
 function sourceCommit(snapshot: ExecutionRunSnapshot) {
 	const outputs = record(snapshot.outputs);
-	for (const entry of records(outputs.toolTelemetry)) {
+	for (const entry of records(outputs.toolTelemetry).reverse()) {
 		if (entry.status !== 'completed') continue;
-		for (const event of records(entry.derivedEvents)) {
+		for (const event of records(entry.derivedEvents).reverse()) {
 			if (event.type !== 'source_checkpoint_committed') continue;
 			const sha = text(event.commitSha);
 			if (sha) return { sha, ref: text(event.branchRef) };
@@ -202,7 +243,8 @@ export function buildAgentArtifactManifest(input: {
 		commit: commitReference,
 		verification: verification(snapshot, outputMetadata),
 		citations: citations(snapshot, outputMetadata),
-		signals: signals(snapshot, outputMetadata),
+		signals: signals(snapshot, outputMetadata, input.assignment),
+		controlPlaneReferences: controlPlaneReferences(outputMetadata),
 		usage: Array.isArray(snapshot.usage) ? snapshot.usage as ExecutionUsageActual[] : [],
 		diagnostics: diagnosticReferences(snapshot),
 		createdAt: input.createdAt ?? new Date().toISOString(),

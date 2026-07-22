@@ -16,7 +16,7 @@ export async function recordAssignmentModeRun(
 		? run.metadata.source.trim()
 		: 'agent_kernel_mode_runtime';
 	return options.recordModeRun({
-		id: run.id ?? `${assignment.id}:${mode}:${agentId}:${handlerId}:${source}:${randomUUID()}`,
+		id: run.id ?? options.modeRunId ?? `${assignment.id}:${mode}:${agentId}:${handlerId}:${source}:${randomUUID()}`,
 		...run,
 	});
 }

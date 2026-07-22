@@ -33,23 +33,27 @@ export function collectExecutionContentArtifactReceipts(
 	snapshot: ExecutionRunSnapshot,
 	artifactKind: string,
 ): ContentArtifactRef[] {
-	return (snapshot.artifacts ?? []).flatMap((artifact): ContentArtifactRef[] => {
-		if (artifact.kind !== 'treedx_content_receipt') return [];
+	const references = new Map<string, ContentArtifactRef>();
+	for (const artifact of snapshot.artifacts ?? []) {
+		if (artifact.kind !== 'treedx_content_receipt') continue;
 		const ref = readRecord((readRecord(artifact.metadata) ?? {}).contentRef);
-		if (!ref) return [];
+		if (!ref) continue;
 		const contentPath = firstString(ref.contentPath, ref.path, artifact.uri?.replace(/^treedx:\/\//u, ''));
 		const model = firstString(ref.model);
-		if (!contentPath || !model) return [];
-		return [{
+		if (!contentPath || !model) continue;
+		const current = references.get(contentPath);
+		const next: ContentArtifactRef = {
 			contentPath,
 			model,
-			subjectId: firstString(ref.subjectId),
-			subjectField: firstString(ref.subjectField),
+			subjectId: firstString(ref.subjectId, current?.subjectId),
+			subjectField: firstString(ref.subjectField, current?.subjectField),
 			artifactKind: contentModelSupportsArtifactKind(model, artifactKind) ? artifactKind : artifactKindFromContentModel(model),
 			sourceAssignmentId: context.capacity?.assignmentId ?? null,
 			producedByAgent: context.agent.slug,
-			commitSha: firstString(ref.commitSha),
-			ref: firstString(ref.ref, ref.branchRef),
-		}];
-	});
+			commitSha: firstString(ref.commitSha, current?.commitSha),
+			ref: firstString(ref.ref, ref.branchRef, current?.ref),
+		};
+		references.set(contentPath, next);
+	}
+	return [...references.values()];
 }

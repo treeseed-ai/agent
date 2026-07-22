@@ -1,4 +1,15 @@
+import type { AgentActivityType, AgentRuntimeSpec } from '@treeseed/sdk/types/agents';
+import { selectAgentActivityProfile } from '../agents/kernel/activity-profile-resolver.ts';
 import { record, stringValue } from './value-utils.ts';
+
+export function resolveAssignmentAgentToolPolicy(
+	agent: AgentRuntimeSpec | undefined,
+	mode: 'planning' | 'acting',
+	activityType?: string | null,
+) {
+	if (!agent) return null;
+	return selectAgentActivityProfile(agent, mode, activityType as AgentActivityType | null | undefined);
+}
 
 export function assignmentWorkspaceAccessMode(assignment: Record<string, unknown>) {
 	const handles = record(assignment.capabilityHandles);

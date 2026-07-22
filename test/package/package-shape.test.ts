@@ -364,4 +364,43 @@ describe('agent package shape', () => {
 		expect(packageSource).not.toContain('codex_subscription');
 		expect(envRegistry).not.toContain('TREESEED_WORKDAY_TASK_CREDIT_BUDGET');
 	});
+
+	it('exposes one canonical selector per execution-provider adapter', () => {
+		const factory = readFileSync(resolve(packageRoot, 'src/agents/adapters/execution.ts'), 'utf8');
+		const registry = readFileSync(resolve(packageRoot, 'src/agent-runtime.ts'), 'utf8');
+		expect(existsSync(resolve(packageRoot, 'src/agents/adapters/execution-deterministic.ts'))).toBe(false);
+		expect(existsSync(resolve(packageRoot, 'src/agents/adapters/execution-mock.ts'))).toBe(false);
+		for (const id of ['codex', 'copilot', 'jira', 'github_issues', 'discord', 'workflow']) {
+			expect(factory).toContain(`'${id}'`);
+		}
+		expect(registry).toContain('BUILT_IN_AGENT_EXECUTION_PROVIDER_IDS.map');
+		expect(registry).toContain('createExecutionProviderAdapter(id, { repoRoot })');
+		for (const removed of ['mock', 'deterministic', 'ci_mock', 'deterministic_mock', 'jira_issue_queue', 'human_issue_queue', 'github_issue_queue', 'issue_queue', 'discord_thread', 'workflow_operation', 'deterministic_workflow', 'github_actions_workflow']) {
+			expect(factory).not.toContain(`configuredMode === '${removed}'`);
+			expect(registry).not.toContain(`['${removed}'`);
+		}
+	});
+
+	it('forbids provider-shaped test doubles across the agent package', () => {
+		const roots = ['src', 'test', '.fixtures', 'guarantees']
+			.map((directory) => resolve(packageRoot, directory))
+			.filter(existsSync);
+		const thisFile = fileURLToPath(import.meta.url);
+		const providerDoubleFile = new RegExp(
+			String.raw`(?:mock|fake|stub|synthetic).*(?:provider|execution)|(?:provider|execution).*(?:mock|fake|stub|synthetic)`,
+			'iu',
+		);
+		const providerDoubleDeclaration = new RegExp(
+			String.raw`\b(?:class|function|const|let|var)\s+(?:Mock|Fake|Stub|Synthetic)\w*(?:Provider|Execution)\w*`,
+			'u',
+		);
+
+		for (const filePath of roots.flatMap(walkFiles)) {
+			if (filePath === thisFile) continue;
+			expect(providerDoubleFile.test(filePath), `provider double filename: ${filePath}`).toBe(false);
+			if (!['.ts', '.tsx', '.js', '.mjs', '.cjs'].includes(extname(filePath))) continue;
+			const source = readFileSync(filePath, 'utf8');
+			expect(providerDoubleDeclaration.test(source), `provider double declaration: ${filePath}`).toBe(false);
+		}
+	});
 });

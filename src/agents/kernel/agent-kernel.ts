@@ -241,7 +241,7 @@ export class AgentKernel {
                   workPackageContext.contextDiagnostics ??
                   record(workPackage.metadata).contextDiagnostics ??
                   null,
-                coreObjective: workPackageContext.coreObjective ?? null,
+                assignedObjective: workPackageContext.assignedObjective ?? null,
               },
             },
             traceRefs: {

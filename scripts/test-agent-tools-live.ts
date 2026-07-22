@@ -5,7 +5,7 @@ import { join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { checkCodexProviderReadiness } from '../src/agents/adapters/codex-readiness.ts';
 import { runCodexTask } from '../src/agents/adapters/execution-codex.ts';
-import { createIsolatedLiveCodexHome } from '../src/agents/testing/live-codex-home.ts';
+import { createIsolatedCodexRuntimeHome } from '../src/agents/adapters/codex-runtime-home.ts';
 import type { ExecutionProviderToolDescriptor } from '../src/agents/runtime-types.ts';
 
 function run(command: string, args: string[], cwd: string) {
@@ -82,7 +82,7 @@ if (!readiness.ok) {
 
 const previousAuthFile = process.env.TREESEED_CODEX_AUTH_FILE;
 const previousCodexHome = process.env.CODEX_HOME;
-const liveHome = await createIsolatedLiveCodexHome({
+const liveHome = await createIsolatedCodexRuntimeHome({
 	serviceTier: process.env.TREESEED_CODEX_SERVICE_TIER === 'fast' ? 'fast' : undefined,
 	model: readiness.defaultModel,
 });

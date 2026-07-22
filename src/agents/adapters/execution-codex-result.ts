@@ -12,6 +12,7 @@ import {
 	type CodexExecutionRequest,
 	type CodexExecutionResult,
 	type CodexRunResult,
+	type CodexClient,
 	type RunCodexTaskOptions,
 } from './execution-codex-core.ts';
 
@@ -168,6 +169,7 @@ export async function runCodexTask(
 	options: RunCodexTaskOptions = {},
 ): Promise<CodexExecutionResult> {
 	const startedAt = options.now?.() ?? Date.now();
+	let ownedClient: CodexClient | null = null;
 	try {
 		validateCodexExecutionRequest(request);
 	} catch (error) {
@@ -179,7 +181,8 @@ export async function runCodexTask(
 
 	try {
 		const createCodexClient = options.createCodexClient ?? createDefaultCodexClient;
-		const client = await createCodexClient(request);
+		const client = await (options.client ?? createCodexClient(request));
+		if (!options.client) ownedClient = client;
 		const threadOptions = mapCodexThreadOptions(request);
 		const thread = request.threadId
 			? client.resumeThread(request.threadId, threadOptions)
@@ -273,5 +276,7 @@ export async function runCodexTask(
 				},
 			},
 		};
+	} finally {
+		await ownedClient?.cleanup?.();
 	}
 }

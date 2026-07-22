@@ -32,6 +32,11 @@ const descriptor: TreeDxProxyExecutionToolDescriptor = {
 	workspaceId: 'workspace-1',
 	allowedOperations: ['files:read', 'files:write', 'git:commit'],
 	allowedPaths: ['src/content/**'],
+	metadata: {
+		contentRoot: 'template/src/content',
+		requiredArtifactKind: 'documentation_update',
+		requireContentArtifact: true,
+	},
 	routes: {
 		buildContext: 'POST /v1/dx/projects/project-1/repos/:repoId/context/build',
 		readRepositoryFiles: 'POST /v1/dx/projects/project-1/repos/:repoId/files/read',
@@ -66,6 +71,12 @@ describe('agent tool MCP tooling', () => {
 		expect(command.env.TREESEED_AGENT_TOOL_REPO_ROOT).toBe('/repo');
 		expect(command.env.TREESEED_AGENT_TOOL_TELEMETRY_PATH).toBe('/tmp/tools.jsonl');
 		expect(command.env.TREESEED_AGENT_TOOL_DESCRIPTORS).not.toContain('provider-secret');
+		const transported = JSON.parse(command.env.TREESEED_AGENT_TOOL_DESCRIPTORS);
+		expect(transported[0].metadata).toMatchObject({
+			contentRoot: 'template/src/content',
+			requiredArtifactKind: 'documentation_update',
+			requireContentArtifact: true,
+		});
 		expect(JSON.parse(command.env.TREESEED_AGENT_TOOL_RESEARCH_SOURCE_POLICY)).toMatchObject({
 			allowedDomains: ['sources.example.test'],
 			maxRedirects: 2,

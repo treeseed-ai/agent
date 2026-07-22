@@ -41,6 +41,8 @@ export interface MaterializedAssignmentProject extends AssignmentProjectContext 
 
 export interface AssignmentProjectMaterializationOptions {
 	workspaceAccessMode?: string | null;
+	requiresRepository?: boolean;
+	exactRef?: string | null;
 }
 
 function architectureString(project: AssignmentProjectContext, key: string) {
@@ -67,15 +69,11 @@ export function providerLocalRepositoryPath(config: ProviderHostRuntimeConfig, p
 	if (architectureString(project, 'localContentMaterialization') !== 'existing_path') return null;
 	const workspaceRoot = localWorkspaceRoot(config);
 	if (!workspaceRoot) return null;
-	const rootPath = architectureString(project, 'rootPath');
-	if (!rootPath || rootPath === '.') {
-		const checkoutPath = project.repository.checkoutPath?.trim();
-		if (checkoutPath && checkoutPath !== '.') return resolve(workspaceRoot, checkoutPath);
-		const packagePath = resolve(workspaceRoot, 'packages', project.slug);
-		if (project.slug !== 'market' && existsSync(packagePath)) return packagePath;
-		return workspaceRoot;
-	}
-	return resolve(workspaceRoot, rootPath);
+	const checkoutPath = project.repository.checkoutPath?.trim();
+	if (checkoutPath && checkoutPath !== '.') return resolve(workspaceRoot, checkoutPath);
+	const packagePath = resolve(workspaceRoot, 'packages', project.slug);
+	if (project.slug !== 'market' && existsSync(packagePath)) return packagePath;
+	return workspaceRoot;
 }
 
 function providerLocalProjectRoot(config: ProviderHostRuntimeConfig, project: AssignmentProjectContext) {
@@ -110,12 +108,32 @@ async function gitSha(repoRoot: string) {
 	try { return (await runGit(['rev-parse', 'HEAD'], repoRoot)).stdout.trim() || null; } catch { return null; }
 }
 
+async function resolveGitRef(repoRoot: string, ref: string) {
+	try {
+		return (await runGit(['rev-parse', '--verify', '--end-of-options', `${ref}^{commit}`], repoRoot)).stdout.trim() || null;
+	} catch {
+		return null;
+	}
+}
+
+async function ensureExactRef(repoRoot: string, exactRef: string | null | undefined, allowFetch: boolean) {
+	const requested = exactRef?.trim();
+	if (!requested) return null;
+	let resolved = await resolveGitRef(repoRoot, requested);
+	if (resolved || !allowFetch) return resolved;
+	try { await runGit(['fetch', 'origin', requested], repoRoot); } catch { /* Fall through to the complete branch-ref fetch. */ }
+	resolved = await resolveGitRef(repoRoot, requested);
+	if (resolved) return resolved;
+	try { await runGit(['fetch', 'origin', '+refs/heads/*:refs/remotes/origin/*', '--prune'], repoRoot); } catch { /* Report the immutable ref failure below. */ }
+	return resolveGitRef(repoRoot, requested);
+}
+
 export async function materializeAssignmentProject(
 	config: ProviderHostRuntimeConfig,
 	project: AssignmentProjectContext,
 	options: AssignmentProjectMaterializationOptions = {},
 ): Promise<MaterializedAssignmentProject> {
-	if (!requiresProviderRepository(options.workspaceAccessMode)) {
+	if (!options.requiresRepository && !requiresProviderRepository(options.workspaceAccessMode)) {
 		const path = contextPath(config, project.id);
 		await mkdir(path, { recursive: true });
 		return {
@@ -134,8 +152,15 @@ export async function materializeAssignmentProject(
 		? providerLocalRepositoryPath(config, project) ?? providerLocalProjectRoot(config, project)
 		: null;
 	if (localPath) {
-		const ok = existsSync(resolve(localPath, '.git')) || existsSync(resolve(localPath, 'package.json')) || existsSync(resolve(localPath, 'treeseed.site.yaml'));
-		return { ...project, repository: { ...project.repository, ok, path: localPath, branch: project.repository.currentBranch || project.repository.defaultBranch || 'local', commitSha: await gitSha(localPath), materialization: 'local', ...(ok ? {} : { error: `Local workspace path is not a Treeseed project: ${localPath}` }) } };
+		const projectExists = existsSync(resolve(localPath, '.git')) || existsSync(resolve(localPath, 'package.json')) || existsSync(resolve(localPath, 'treeseed.site.yaml'));
+		const exactRefSha = projectExists ? await ensureExactRef(localPath, options.exactRef, false) : null;
+		const ok = projectExists && (!options.exactRef?.trim() || Boolean(exactRefSha));
+		const error = !projectExists
+			? `Local workspace path is not a Treeseed project: ${localPath}`
+			: !ok
+				? `Local project ${localPath} does not contain governed exact ref ${options.exactRef}.`
+				: null;
+		return { ...project, repository: { ...project.repository, ok, path: localPath, branch: project.repository.currentBranch || project.repository.defaultBranch || 'local', commitSha: await gitSha(localPath), materialization: 'local', ...(error ? { error } : {}) } };
 	}
 	const path = repositoryPath(config, project.id);
 	const branch = project.repository.currentBranch || project.repository.defaultBranch || 'main';
@@ -149,6 +174,8 @@ export async function materializeAssignmentProject(
 			await runGit(['checkout', branch], path);
 			await runGit(['reset', '--hard', `origin/${branch}`], path);
 		}
+		const exactRefSha = await ensureExactRef(path, options.exactRef, true);
+		if (options.exactRef?.trim() && !exactRefSha) throw new Error(`Cloned project does not contain governed exact ref ${options.exactRef}.`);
 		return { ...project, repository: { ...project.repository, ok: true, path, branch, commitSha: await gitSha(path), materialization: 'clone' } };
 	} catch (error) {
 		return { ...project, repository: { ...project.repository, ok: false, path, branch, commitSha: await gitSha(path), materialization: 'clone', error: error instanceof Error ? error.message : String(error) } };

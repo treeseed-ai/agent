@@ -238,11 +238,6 @@ export interface AgentContext {
 		workspaceAccessMode?: AgentAssignmentWorkspaceAccessMode | string | null;
 		fallbackReason?: string | null;
 	};
-	coreObjective?: {
-		path: string;
-		content: string;
-		message: string;
-	} | null;
 	sdk: ScopedAgentSdk;
 	trigger: AgentTriggerInvocation;
 	execution: ExecutionProviderAdapter;

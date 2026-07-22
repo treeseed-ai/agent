@@ -11,6 +11,7 @@ import {
 import { estimateHandler } from '../../src/agents/handlers/estimate.ts';
 import { normalizeAgentRuntimeSpec } from '../../src/agents/spec-normalizer.ts';
 import { selectAgentActivityProfile } from '../../src/agents/kernel/activity-profile-resolver.ts';
+import { resolveAssignmentAgentToolPolicy } from '../../src/provider/assignment-tool-policy.ts';
 
 const tempRoots: string[] = [];
 const agentRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
@@ -174,6 +175,35 @@ export const securityAuditHandler: AgentHandler = {
 			handler: 'reporter',
 			systemPrompt: 'Report workday evidence.',
 		});
+	});
+
+	it('derives the provider tool policy from the assigned activity rather than the root profile', () => {
+		const normalized = normalizeAgentRuntimeSpec(profileAgent(), {
+			registeredHandlers: ['actor'],
+			messageTypes: [],
+		});
+		const agent = {
+			...normalized.spec!,
+			activityProfiles: {
+				...normalized.spec!.activityProfiles,
+				estimating: {
+					enabled: true,
+					handler: 'estimate',
+					prompt: { system: 'Estimate the proposal.' },
+					branchPolicy: { kind: 'read-only' as const, base: 'main' },
+					tools: { allowed: ['treeseed.content.read'] },
+					outputs: { messageTypes: [], modelMutations: ['estimate:create'] },
+					contentAccess: { read: { models: ['proposal'], actions: ['read'] }, write: { models: [], actions: [] }, commit: { allowed: false } },
+				},
+			},
+		};
+		const policy = resolveAssignmentAgentToolPolicy(agent, 'planning', 'estimating');
+		expect(policy).toMatchObject({
+			activityType: 'estimating',
+			tools: { allowed: ['treeseed.content.read'] },
+			contentAccess: { commit: { allowed: false } },
+		});
+		expect(policy?.tools.allowed).not.toContain('treeseed.content.create');
 	});
 
 	it('rejects legacy top-level agent configuration', () => {

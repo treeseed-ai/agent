@@ -88,11 +88,6 @@ verifiers:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"
     testFile: test/agents/codex-provider.test.ts
-  agent.execution-provider.mock.contract:
-    kind: vitestCase
-    ownerPackage: "@treeseed/agent"
-    testFile: test/agents/execution-provider-contract.test.ts
-    testName: runs deterministic mock provider output through the execution provider contract
   agent.execution-provider.github-issues.contract:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

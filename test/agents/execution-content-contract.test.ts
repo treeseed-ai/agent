@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { contentModelSupportsArtifactKind, executionAgentForAccess } from '../../src/agents/handlers/execution-content.ts';
+import { executionContentRoot, resolveExecutionTreeDxContext } from '../../src/agents/handlers/execution-content-context.ts';
+import { buildExecutionContentInstructions } from '../../src/agents/handlers/execution-content-prompt.ts';
+import { callTreeseedContentTool } from '../../src/agents/tools/content-tool-runtime.ts';
+import { collectExecutionContentArtifactReceipts } from '../../src/agents/handlers/execution-content-artifacts.ts';
 
 describe('execution content artifact contract', () => {
 	it('does not treat a blocking question as the required planning note', () => {
@@ -23,9 +27,202 @@ describe('execution content artifact contract', () => {
 		expect(contentModelSupportsArtifactKind('knowledge', 'knowledge_page')).toBe(true);
 	});
 
+	it('coalesces repeated TreeDX receipts by path and preserves the final subject relation', () => {
+		const result = collectExecutionContentArtifactReceipts({
+			agent: { slug: 'tester' }, capacity: { assignmentId: 'assignment-a' },
+		} as never, {
+			artifacts: [{
+				kind: 'treedx_content_receipt', metadata: { contentRef: { model: 'note', path: 'notes/dummy.mdx' } },
+			}, {
+				kind: 'treedx_content_receipt', metadata: { contentRef: { model: 'note', path: 'notes/dummy.mdx', subjectId: 'decision-a', subjectField: 'relatedDecisions', commitSha: 'abc123', ref: 'refs/heads/assignment-a' } },
+			}],
+		} as never, 'revision_verification');
+		expect(result).toEqual([expect.objectContaining({
+			contentPath: 'notes/dummy.mdx', subjectId: 'decision-a', subjectField: 'relatedDecisions', commitSha: 'abc123',
+		})]);
+	});
+
 	it('preserves configured source-write authority only for acting handlers', () => {
 		const context = { agent: { execution: { sandboxMode: 'workspace_write', allowedPaths: ['src/**'] } } } as never;
 		expect(executionAgentForAccess(context, 'configured').execution).toMatchObject({ sandboxMode: 'workspace_write', allowedPaths: ['src/**'] });
 		expect(executionAgentForAccess(context, 'read_only').execution).toMatchObject({ sandboxMode: 'read_only', allowedPaths: [] });
+	});
+
+	it('uses assignment content architecture instead of inferring from provider-local paths', () => {
+		const context = {
+			repoRoot: '/provider/data/assignment-contexts/project-a',
+			capacity: {
+				assignment: {
+					metadata: { contentRoot: 'template/src/content' },
+					workspaceContext: { project: { architecture: { contentPath: 'template/src/content' } } },
+				},
+			},
+		} as never;
+		expect(executionContentRoot(context, {})).toBe('template/src/content');
+		expect(executionContentRoot(context, { contentRoot: 'configured/content' })).toBe('configured/content');
+	});
+
+	it('resolves content extensions in order without batching a missing alternative', async () => {
+		const reads: string[][] = [];
+		const context = {
+			repoRoot: '/provider/data/assignment-contexts/project-a',
+			agent: { slug: 'architect', context: { queries: [] } },
+			capacity: {
+				assignmentId: 'assignment-a',
+				treedxProxyHandle: { repositoryId: 'repo-a' },
+				assignment: { metadata: { contentRoot: 'template/src/content' } },
+			},
+			treeDx: {
+				async readRepositoryFiles(input: { paths: string[] }) {
+					reads.push(input.paths);
+					const path = input.paths[0]!;
+					return { payload: { files: [{ path, text: `content for ${path}` }] } };
+				},
+			},
+		} as never;
+		const result = await resolveExecutionTreeDxContext(context, { model: 'objective', id: 'objective-a', title: 'Objective A' }, { objectiveId: 'objective-a' });
+		expect(reads).toEqual([
+			['template/src/content/objectives/objective-a.mdx'],
+			['template/src/content/agents/architect.mdx'],
+		]);
+		expect(result.assignedObjective).toMatchObject({ path: 'template/src/content/objectives/objective-a.mdx' });
+		expect(result.diagnostics.warnings).toEqual([]);
+	});
+
+	it('gives the provider the assignment-owned content root and exact subject relation', () => {
+		const instructions = buildExecutionContentInstructions({
+			agent: { systemPrompt: 'Architect prompt.' },
+			capacity: { mode: 'acting', assignmentId: 'assignment-a' },
+		} as never, {
+			payload: { decisionId: 'decision-a' },
+			subject: { model: 'decision', id: 'decision-a', title: 'Decision A' },
+			artifactKind: 'architecture_plan',
+			contextPackSummaries: [],
+			assignedObjective: null,
+			contentRoot: 'template/src/content',
+		});
+		expect(instructions).toContain('Content root: template/src/content');
+		expect(instructions).toContain('"field":"relatedDecisions"');
+		expect(instructions).not.toContain('Content root: src/content');
+	});
+
+	it('distinguishes red-proof work from post-implementation verification', () => {
+		const instructionsFor = (artifactKind: string) => buildExecutionContentInstructions({
+			agent: { systemPrompt: 'Tester prompt.' },
+			capacity: { mode: 'acting', assignmentId: 'assignment-a' },
+		} as never, {
+			payload: {},
+			subject: { model: 'decision', id: 'decision-a', title: 'Decision A' },
+			artifactKind,
+			contextPackSummaries: [],
+			assignedObjective: null,
+			contentRoot: 'template/src/content',
+		});
+		expect(instructionsFor('failing_test_proof')).toContain('nonzero expected exit code');
+		expect(instructionsFor('failing_test_proof')).toContain('Checkpoint the authored test');
+		expect(instructionsFor('passing_verification')).toContain('expected exit code 0');
+		expect(instructionsFor('passing_verification')).toContain('Do not create a new red test');
+		expect(instructionsFor('passing_verification')).toContain('or create a source checkpoint');
+		expect(instructionsFor('review_decision')).toContain('authenticated governedPredecessorEvidence');
+		expect(instructionsFor('review_decision')).toContain('Do not require documentation, release readiness');
+		const requiredRevision = buildExecutionContentInstructions({
+			agent: { systemPrompt: 'Reviewer prompt.' },
+			capacity: { mode: 'acting', assignmentId: 'assignment-a' },
+		} as never, {
+			payload: { governedReviewPolicy: { requireRevisionCycle: true, completedRevisionCycles: 0, requiredDisposition: 'rejected' } },
+			subject: { model: 'decision', id: 'decision-a', title: 'Decision A' },
+			artifactKind: 'review_decision',
+			contextPackSummaries: [],
+			assignedObjective: null,
+			contentRoot: 'template/src/content',
+		});
+		expect(requiredRevision).toContain('requires this initial review to reject once');
+		expect(requiredRevision).toContain('Do not invent a downstream prerequisite');
+	});
+
+	it('gives every governed research stage its authenticated output contract', () => {
+		const instructionsFor = (researchStage: string) => buildExecutionContentInstructions({
+			agent: { systemPrompt: 'Research prompt.' },
+			capacity: { mode: 'planning', assignmentId: 'assignment-research' },
+		} as never, {
+			payload: {
+				researchStage, minimumIndependentSources: 2, maxRevisionCycles: 3,
+				latestReviewAttempt: { reason: 'The prior claim exceeded the cited evidence.' },
+			},
+			subject: { model: 'question', id: 'question-a', title: 'Question A' },
+			artifactKind: researchStage === 'question-decomposition' ? 'planning_question'
+				: researchStage === 'cited-knowledge-publication' ? 'knowledge_page' : 'planning_note',
+			contextPackSummaries: [],
+			assignedObjective: null,
+			contentRoot: 'template/src/content',
+		});
+		expect(instructionsFor('question-decomposition')).toContain('Create a new question model artifact');
+		expect(instructionsFor('question-decomposition')).toContain('A note cannot satisfy the required planning_question artifact');
+		expect(instructionsFor('independent-source-fetch')).toContain('research.fetch_source');
+		expect(instructionsFor('independent-source-fetch')).toContain('claimIds ["claim-1"]');
+		expect(instructionsFor('claim-synthesis')).toContain('treeseed.research_claims');
+		expect(instructionsFor('claim-synthesis')).toContain('status is "unsupported"');
+		expect(instructionsFor('citation-review-rejection')).toContain('disposition "rejected"');
+		expect(instructionsFor('revision')).toContain('at most 3 revision cycles');
+		expect(instructionsFor('revision')).toContain('The prior claim exceeded the cited evidence.');
+		expect(instructionsFor('revision')).toContain('exact text is no broader than facts established');
+		expect(instructionsFor('citation-review-approval')).toContain('disposition "approved"');
+	});
+
+	it('rejects a content link that contains no validated relation', async () => {
+		const result = await callTreeseedContentTool({
+			apiBaseUrl: 'http://127.0.0.1:3000',
+			providerAccessToken: 'redacted',
+			assignmentId: 'assignment-a',
+			descriptor: {
+				id: 'treeseed.content.link', handleId: 'handle-a', routes: {},
+				metadata: { contentAction: 'link', contentRoot: 'template/src/content' },
+			} as never,
+			input: { model: 'note', slug: 'architecture-plan', relations: [] },
+		});
+		expect(result).toMatchObject({ ok: false, code: 'content_relation_required' });
+	});
+
+	it('keeps model-aware writes under the transported assignment root when given a path-shaped slug', async () => {
+		const urls: string[] = [];
+		const result = await callTreeseedContentTool({
+			apiBaseUrl: 'http://127.0.0.1:3000',
+			providerAccessToken: 'redacted',
+			assignmentId: 'assignment-a',
+			descriptor: {
+				id: 'treeseed.content.create',
+				handleId: 'handle-a',
+				projectId: 'project-a',
+				assignmentId: 'assignment-a',
+				workspaceId: 'workspace-a',
+				allowedOperations: ['files:write', 'files:read'],
+				allowedPaths: ['template/src/content/**'],
+				routes: {
+					writeWorkspaceFile: 'PUT /v1/dx/projects/project-a/workspaces/workspace-a/files?path=:path',
+					readWorkspaceFile: 'GET /v1/dx/projects/project-a/workspaces/workspace-a/files?path=:path',
+				},
+				metadata: { contentAction: 'create', contentRoot: 'template/src/content' },
+			} as never,
+			input: {
+				model: 'note',
+				slug: 'template/src/content/notes/release-channel-evidence.mdx',
+				title: 'Release channel evidence',
+				body: 'Evidence body.',
+				relations: [{ field: 'relatedDecisions', targetSlug: 'normalize-release-channel-inputs' }],
+			},
+			fetchImpl: (async (url) => {
+				urls.push(String(url));
+				return new Response(JSON.stringify({ ok: true, payload: {} }), {
+					status: 200,
+					headers: { 'content-type': 'application/json' },
+				});
+			}) as typeof fetch,
+		});
+		expect(result).toMatchObject({
+			ok: true,
+			changedPaths: ['template/src/content/notes/release-channel-evidence.mdx'],
+		});
+		expect(urls).toHaveLength(2);
+		expect(urls.every((url) => url.includes('path=template%2Fsrc%2Fcontent%2Fnotes%2Frelease-channel-evidence.mdx'))).toBe(true);
 	});
 });

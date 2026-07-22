@@ -6,13 +6,13 @@ import {
 } from '@treeseed/sdk/agent-capacity';
 import { loadAllAgentSpecs } from '../agents/spec-loader.ts';
 import { AgentKernel } from '../agents/kernel/agent-kernel.ts';
-import type { AgentTreeDxAdapter } from '../agents/runtime-types.ts';
+import type { AgentTreeDxAdapter, ExecutionProviderAdapter } from '../agents/runtime-types.ts';
 import { assignmentProjectContext, materializeAssignmentProject, providerProjectSiteRoot, providerProjectTreeDxOptions } from './project-materialization.ts';
 import { createAssignmentToolCatalog } from './assignment-tool-catalog.ts';
 import { loadAssignmentRawAgentSpecs } from './assignment-agent-spec-loader.ts';
 import { createProviderMessageRecorder } from './message-recorder.ts';
-import { createAssignmentExecutionProviderAdapter, executionProviderSelectionForAssignment } from './execution-provider-selection.ts';
-import { assignmentWorkflowOperationHandles, assignmentWorkspaceAccessMode } from './assignment-tool-policy.ts';
+import { createAssignmentExecutionProviderAdapter, resolveAssignmentExecutionProvider } from './execution-provider-selection.ts';
+import { assignmentWorkflowOperationHandles, assignmentWorkspaceAccessMode, resolveAssignmentAgentToolPolicy } from './assignment-tool-policy.ts';
 import { assignmentScopedTreeDxOptions, createAssignmentTreeDxAdapter } from './treedx-context-adapter.ts';
 import { LifecycleManagedExecutionProviderAdapter } from './execution-lifecycle.ts';
 import { inspectProviderRepository, runProviderVerification, writeProviderContentArtifact } from './execution-support.ts';
@@ -46,13 +46,23 @@ export async function prepareAssignmentKernelBridge(input: ProviderAssignmentExe
 	agentSlug: string;
 }): Promise<
 	| { ready: false; terminalResult: unknown }
-	| { ready: true; terminalResult: null; kernel: Pick<AgentKernel, 'runAssignment'>; typedAssignment: ProviderAssignment; workspaceMode: string | null; modeRunId: string; assignmentTreeDxAdapter: AgentTreeDxAdapter | null }
+	| {
+		ready: true;
+		terminalResult: null;
+		kernel: Pick<AgentKernel, 'runAssignment'>;
+		typedAssignment: ProviderAssignment;
+		workspaceMode: string | null;
+		modeRunId: string;
+		assignmentTreeDxAdapter: AgentTreeDxAdapter | null;
+		releaseAssignmentResources: ((outcome: 'completed' | 'returned' | 'failed' | 'expired') => Promise<void>) | null;
+	}
 > {
 	const { assignmentId, membershipId, stateVersion, decisionInput, decisionPayload, capacityEnvelope, projectId, agentSlug } = input;
 	const workspaceMode = assignmentWorkspaceAccessMode(input.assignment);
+	const governedExactBaseRef = stringValue(record(decisionPayload.input).exactBaseRef, decisionPayload.exactBaseRef);
 	const assignedProject = assignmentProjectContext(input.assignment);
 	const project = assignedProject
-		? await withTimeout(materializeAssignmentProject(input.config, assignedProject, { workspaceAccessMode: workspaceMode }), 60_000, `Assignment project materialization exceeded 60000ms for ${assignmentId}.`)
+		? await withTimeout(materializeAssignmentProject(input.config, assignedProject, { workspaceAccessMode: workspaceMode, requiresRepository: Boolean(governedExactBaseRef), exactRef: governedExactBaseRef }), 60_000, `Assignment project materialization exceeded 60000ms for ${assignmentId}.`)
 		: null;
 	await recordEarlyModeRun({
 		client: input.client,
@@ -271,31 +281,43 @@ export async function prepareAssignmentKernelBridge(input: ProviderAssignmentExe
 	} as unknown as AgentSdk;
 	const agentSpecLoad = input.kernel ? { specs: [] } : await loadAllAgentSpecs(sdk);
 	const agentSpec = agentSpecLoad.specs.find((spec) => spec.slug === agentSlug);
+	const assignmentMode = stringValue(input.assignment.mode, capacityEnvelope.mode) === 'acting' ? 'acting' : 'planning';
+	const assignmentActivityType = stringValue(assignmentMetadata.activityType, decisionPayload.activityType);
+	const assignmentAgentPolicy = resolveAssignmentAgentToolPolicy(agentSpec, assignmentMode, assignmentActivityType);
+	const executionProvider = input.kernel
+		? (input.config.executionProviders ?? []).find((provider) => provider.id === stringValue(input.assignment.executionProviderId)) ?? null
+		: resolveAssignmentExecutionProvider({
+			assignment: input.assignment,
+			executionProviders: input.config.executionProviders ?? [],
+		});
 	const assignmentToolCatalog = createAssignmentToolCatalog({
-		agentTools: agentSpec?.tools.allowed ?? [],
+		agentTools: assignmentAgentPolicy?.tools.allowed ?? [],
 		projectId,
 		assignmentId,
 		agentSlug,
 		environment: stringValue(input.assignment.environment, input.config.environment) ?? 'local',
 		treedxProxyHandle,
 		workspaceMode,
-		contentAccess: agentSpec?.contentAccess,
-		researchNetworkPolicy: agentSpec?.permissionPolicy?.modes?.[stringValue(input.assignment.mode, capacityEnvelope.mode) === 'acting' ? 'acting' : 'planning']?.network,
+		contentRoot: stringValue(assignmentMetadata.contentRoot, decisionPayload.contentRoot, assignedProject?.architecture?.contentPath),
+		contentAccess: assignmentAgentPolicy?.contentAccess,
+		researchNetworkPolicy: assignmentAgentPolicy?.permissionPolicy?.modes?.[assignmentMode]?.network,
+		providerResearchSourcePolicy: executionProvider?.researchSourcePolicy,
 		worktreeRoot: null,
-		allowedPaths: agentSpec?.execution.allowedPaths ?? [],
-		forbiddenPaths: agentSpec?.execution.forbiddenPaths ?? [],
+		providerManagesWorktree: executionProvider?.adapter === 'codex'
+			&& assignmentAgentPolicy?.execution.sandboxMode === 'workspace_write',
+		allowedPaths: assignmentAgentPolicy?.execution.allowedPaths ?? [],
+		forbiddenPaths: assignmentAgentPolicy?.execution.forbiddenPaths ?? [],
 	});
 	const assignmentToolDescriptors = assignmentToolCatalog.descriptors;
-	const executionProviderSelection = executionProviderSelectionForAssignment(input.assignment);
-	const baseExecutionAdapter = input.executionAdapter ?? createAssignmentExecutionProviderAdapter({
-		selection: executionProviderSelection,
+	const baseExecutionAdapter: ExecutionProviderAdapter | null = input.kernel ? null : createAssignmentExecutionProviderAdapter({
+		selection: executionProvider!.adapter,
 		repoRoot: project.repository.path,
 		jira: input.config.jira,
 		githubIssues: input.config.githubIssues,
 		discord: input.config.discord,
 		accessToken: input.config.accessToken,
 		apiBaseUrl: input.config.marketUrl,
-		researchSourcePolicy: input.config.executionProviders?.find((provider) => provider.id === executionProviderSelection || provider.adapter === executionProviderSelection)?.researchSourcePolicy,
+		researchSourcePolicy: executionProvider?.researchSourcePolicy,
 			workflow: {
 				dispatchWorkflowOperation: input.client.dispatchAssignmentWorkflowOperation
 					? async (workflowAssignmentId, operationId, body) => {
@@ -309,8 +331,8 @@ export async function prepareAssignmentKernelBridge(input: ProviderAssignmentExe
 					: undefined,
 			},
 	});
-	const execution = new LifecycleManagedExecutionProviderAdapter({
-		adapter: baseExecutionAdapter,
+	const execution = input.kernel ? null : new LifecycleManagedExecutionProviderAdapter({
+		adapter: baseExecutionAdapter!,
 		assignmentId,
 		leaseToken: input.leaseToken,
 		runnerId: input.runnerId,
@@ -331,7 +353,7 @@ export async function prepareAssignmentKernelBridge(input: ProviderAssignmentExe
 	});
 	const kernel = input.kernel ?? new AgentKernel(sdk, project.repository.path, {
 		treeDx: assignmentTreeDxAdapter,
-		execution,
+		execution: execution!,
 		mutations: {
 			writeArtifact: async (artifact) => writeProviderContentArtifact({
 				repoRoot: project.repository.path,
@@ -452,5 +474,9 @@ export async function prepareAssignmentKernelBridge(input: ProviderAssignmentExe
 	});
 	const typedAssignment = buildKernelProviderAssignment({ assignment: input.assignment, assignmentId, membershipId, stateVersion, decisionInput, decisionPayload, capacityEnvelope, projectId, agentSlug, workspaceMode, treedxProxyHandle, capabilityHandles });
 	return { ready: true, terminalResult: null, kernel, typedAssignment, workspaceMode, assignmentTreeDxAdapter,
-		modeRunId: modeRunIdForAssignment(input.assignment, decisionPayload, capacityEnvelope) };
+		modeRunId: modeRunIdForAssignment(input.assignment, decisionPayload, capacityEnvelope),
+		releaseAssignmentResources: baseExecutionAdapter?.releaseAssignmentResources
+			? (outcome: 'completed' | 'returned' | 'failed' | 'expired') => baseExecutionAdapter.releaseAssignmentResources!({ assignmentId, outcome })
+			: null,
+	};
 }

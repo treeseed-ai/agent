@@ -1,26 +1,10 @@
-import type { AgentTriggerKind } from '@treeseed/sdk/types/agents';
+import { BUILT_IN_AGENT_EXECUTION_PROVIDER_IDS, type AgentTriggerKind } from '@treeseed/sdk/types/agents';
 import type { AgentSpecDiagnostic } from './spec-types.ts';
 
 export const TRIGGER_KINDS: readonly AgentTriggerKind[] = ['schedule', 'message', 'follow', 'startup'];
 export const ACTIVITY_TYPES = new Set<string>(['planning', 'estimating', 'acting', 'reviewing', 'reporting']);
 export const GENERIC_HANDLER_KINDS = new Set<string>(['writer', 'actor', 'estimate', 'releaser', 'reporter']);
-export const EXECUTION_PROVIDERS = new Set([
-	'codex',
-	'copilot',
-	'jira',
-	'jira_issue_queue',
-	'human_issue_queue',
-	'github_issues',
-	'github_issue_queue',
-	'issue_queue',
-	'discord',
-	'discord_thread',
-	'workflow',
-	'workflow_operation',
-	'deterministic_workflow',
-	'github_actions',
-	'github_actions_workflow',
-]);
+export const EXECUTION_PROVIDERS = new Set<string>(BUILT_IN_AGENT_EXECUTION_PROVIDER_IDS);
 export const APPROVAL_POLICIES = new Set(['never', 'on_request', 'always']);
 export const SANDBOX_MODES = new Set(['read_only', 'workspace_write']);
 export const REASONING_EFFORTS = new Set(['low', 'medium', 'high']);

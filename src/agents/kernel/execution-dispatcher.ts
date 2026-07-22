@@ -1,7 +1,6 @@
 import type { AgentSdk } from '@treeseed/sdk/sdk';
 import type { AgentRuntimeSpec } from '@treeseed/sdk/types/agents';
 import { randomUUID } from 'node:crypto';
-import { resolveTreeDxCoreObjectiveContext } from '../core-objective.ts';
 import { resolveAgentHandler } from '../registry.ts';
 import type {
 	AgentContext,
@@ -86,7 +85,6 @@ export async function dispatchAssignmentExecution(
 		repoRoot: input.executionRoot,
 		agent: input.agent,
 		capacity: input.capacity,
-		coreObjective: null,
 		sdk: scopedSdk,
 		trigger: input.trigger,
 		execution: input.execution,
@@ -102,8 +100,6 @@ export async function dispatchAssignmentExecution(
 	try {
 		const inputs = await handler.resolveInputs(context);
 		const resolvedInputs = record(inputs);
-		const workPackageContext = record(record(resolvedInputs.workPackage).context);
-		context.coreObjective = resolveTreeDxCoreObjectiveContext(workPackageContext.coreObjective);
 		await input.onInputsResolved?.({ runId, inputs, context });
 		const result = await handler.execute(context, inputs);
 		await input.onExecutionReturned?.({ runId, inputs, result, context });

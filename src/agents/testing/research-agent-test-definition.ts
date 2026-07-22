@@ -23,6 +23,7 @@ export interface ResearchAgentTestDefinition {
 	questionId: string;
 	sourcePolicyId: string;
 	minimumIndependentSources: number;
+	maxRevisionCycles: number;
 	requireUnsupportedClaimRevision: boolean;
 	finalArtifactModel: 'knowledge';
 	requiredAgents: string[];
@@ -67,6 +68,8 @@ export function compileResearchAgentTestDefinition(entry: AgentTestCatalogEntry)
 	if (!sourcePolicyId) issues.push('trigger.sourcePolicy is required');
 	const minimumIndependentSources = Number(entry.trigger.minimumIndependentSources);
 	if (!Number.isInteger(minimumIndependentSources) || minimumIndependentSources < 2) issues.push('trigger.minimumIndependentSources must be an integer of at least two');
+	const maxRevisionCycles = Number(entry.trigger.maxRevisionCycles);
+	if (!Number.isInteger(maxRevisionCycles) || maxRevisionCycles < 1 || maxRevisionCycles > 10) issues.push('trigger.maxRevisionCycles must be an integer from 1 through 10');
 	if (entry.trigger.requireUnsupportedClaimRevision !== true) issues.push('trigger.requireUnsupportedClaimRevision must be true');
 	if (entry.trigger.finalArtifactModel !== 'knowledge') issues.push('trigger.finalArtifactModel must be knowledge');
 	const requiredAgents = stringList(entry.expect.requiredAgents, 'expect.requiredAgents', issues);
@@ -88,6 +91,7 @@ export function compileResearchAgentTestDefinition(entry: AgentTestCatalogEntry)
 		questionId: questionId as string,
 		sourcePolicyId: sourcePolicyId as string,
 		minimumIndependentSources,
+		maxRevisionCycles,
 		requireUnsupportedClaimRevision: true,
 		finalArtifactModel: 'knowledge',
 		requiredAgents,

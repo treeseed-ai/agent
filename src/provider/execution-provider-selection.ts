@@ -3,23 +3,46 @@ import type { DiscordExecutionProviderConfig } from '../agents/adapters/executio
 import type { GitHubIssuesExecutionProviderConfig } from '../agents/adapters/execution-github-issues.ts';
 import type { JiraExecutionProviderConfig } from '../agents/adapters/execution-jira.ts';
 import type { WorkflowExecutionProviderAdapterOptions } from '../agents/adapters/execution-workflow.ts';
+import type { CapacityProviderManifestV2 } from '@treeseed/sdk/capacity-provider';
 import { record, stringValue } from './value-utils.ts';
 
-export function executionProviderSelectionForAssignment(assignment: Record<string, unknown>) {
-	const capacityEnvelope = record(assignment.capacityEnvelope);
+type ManifestExecutionProvider = CapacityProviderManifestV2['executionProviders'][number];
+
+export class AssignmentExecutionProviderSelectionError extends Error {
+	constructor(readonly code: 'assignment_execution_provider_id_required' | 'assignment_execution_provider_not_configured', message: string) {
+		super(message);
+		this.name = 'AssignmentExecutionProviderSelectionError';
+	}
+}
+
+function requestedExecutionProviderId(assignment: Record<string, unknown>) {
 	const metadata = record(assignment.metadata);
-	const envelopeMetadata = record(capacityEnvelope.metadata);
-	const decisionMetadata = record(record(assignment.decisionInput).metadata);
 	return stringValue(
 		assignment.executionProviderId,
-		assignment.executionProviderKind,
 		metadata.executionProviderId,
-		metadata.executionProviderKind,
-		envelopeMetadata.executionProviderId,
-		envelopeMetadata.executionProviderKind,
-		decisionMetadata.executionProviderId,
-		decisionMetadata.executionProviderKind,
-		'codex',
+		record(assignment.capacityEnvelope).executionProviderId,
+	);
+}
+
+export function resolveAssignmentExecutionProvider(input: {
+	assignment: Record<string, unknown>;
+	executionProviders: ManifestExecutionProvider[];
+}): ManifestExecutionProvider {
+	const requestedId = requestedExecutionProviderId(input.assignment);
+	if (requestedId) {
+		const selected = input.executionProviders.find((provider) => provider.id === requestedId);
+		if (selected) return selected;
+		throw new AssignmentExecutionProviderSelectionError(
+			'assignment_execution_provider_not_configured',
+			`Assignment execution provider "${requestedId}" is not configured in Provider Manifest V2.`,
+		);
+	}
+	if (input.executionProviders.length === 1) return input.executionProviders[0]!;
+	throw new AssignmentExecutionProviderSelectionError(
+		'assignment_execution_provider_id_required',
+		input.executionProviders.length === 0
+			? 'Assignment execution provider cannot be resolved because Provider Manifest V2 declares no execution providers.'
+			: 'Assignment execution provider id is required when Provider Manifest V2 declares more than one execution provider.',
 	);
 }
 

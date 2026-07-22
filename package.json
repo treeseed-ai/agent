@@ -88,7 +88,7 @@
     "test:agent-tools:live": "node --import tsx ./scripts/test-agent-tools-live.ts",
     "test:agent-tools:live-copilot": "node --import tsx ./scripts/test-agent-tools-live-copilot.ts",
     "test:capacity-provider-live-codex": "TREESEED_AGENT_LIVE_CODEX=1 node --import tsx ./scripts/test-agent-tools-live.ts",
-    "test:human-machine-providers": "npm --workspace @treeseed/sdk run build:dist && vitest run --config ./vitest.config.ts test/agents/execution-provider-contract.test.ts test/agents/codex-provider.test.ts test/agents/jira-provider.test.ts test/agents/github-issues-provider.test.ts test/agents/discord-provider.test.ts test/agents/workflow-provider.test.ts test/provider/assignment-runtime.test.ts && npm run build:dist && npm run capacity-provider:test-local",
+    "test:human-machine-providers": "npm --workspace @treeseed/sdk run build:dist && vitest run --config ./vitest.config.ts test/agents/codex-provider.test.ts test/agents/registry.test.ts test/provider/execution-provider-selection.test.ts test/provider/assignment-runtime.test.ts && npm run build:dist && npm run capacity-provider:test-local",
     "prepack": "npm run build:dist",
     "test:smoke": "node --import tsx ./scripts/test-smoke.ts",
     "verify:direct": "npm run release:verify",
@@ -109,7 +109,7 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@openai/codex-sdk": "^0.130.0",
-    "@treeseed/sdk": "github:treeseed-ai/sdk#e59fbd61debb66b49c18b37ae699c9b572b8bea6",
+    "@treeseed/sdk": "github:treeseed-ai/sdk#5ae96e564f43944615d9a65e15855edbe8e56d4b",
     "esbuild": "0.28.0",
     "hono": "^4.8.2",
     "typescript": "^5.9.3",

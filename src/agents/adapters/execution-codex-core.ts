@@ -1,25 +1,17 @@
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { isAbsolute, join, relative } from 'node:path';
+import { isAbsolute, relative } from 'node:path';
 import { findAgentToolDefinition } from '@treeseed/sdk';
-import type { AgentRuntimeSpec } from '@treeseed/sdk/types/agents';
-import type { ExecutionRunRef } from '@treeseed/sdk/types/agents';
-import type {
-	ExecutionProviderAdapter,
-	ExecutionProviderInvocation,
-	ExecutionProviderToolDescriptor,
-} from '../runtime-types.ts';
+import type { ExecutionProviderToolDescriptor } from '../runtime-types.ts';
 import { createAgentToolMcpServerCommand } from '../tools/agent-tool-mcp-server.ts';
 import { agentToolMcpName } from '../tools/agent-tool-mcp-server.ts';
-import { prependCoreObjectiveToPrompt } from '../core-objective.ts';
 import {
 	type CodexApprovalPolicy,
 	type CodexSandboxMode,
 	resolveCodexProviderConfig,
 } from './codex-readiness.ts';
 import { codexClientEnvironment } from './codex-auth.ts';
-import { AgentWorktreeManager } from '../../services/agent-worktrees.ts';
+import { createIsolatedCodexRuntimeHome } from './codex-runtime-home.ts';
 import type { ResearchSourcePolicy } from '@treeseed/sdk/agent-capacity';
+export { hasCompletedToolEvent, readToolTelemetry, treeDxContentReceipts } from './execution-codex-receipts.ts';
 
 export type CodexExecutionStatus = 'completed' | 'waiting' | 'failed';
 export type CodexReasoningEffort = 'low' | 'medium' | 'high';
@@ -80,50 +72,10 @@ export interface CodexExecutionResult {
 	metadata?: Record<string, unknown>;
 }
 
-function record(value: unknown): Record<string, unknown> {
-	return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
-}
-
-export async function readToolTelemetry(path: string | null) {
-	if (!path) return [];
-	const source = await readFile(path, 'utf8').catch(() => '');
-	return source.split(/\r?\n/u).filter(Boolean).flatMap((line) => {
-		try { return [JSON.parse(line) as Record<string, unknown>]; } catch { return []; }
-	});
-}
-
-export function treeDxContentReceipts(entries: Record<string, unknown>[]) {
-	const commitEvent = entries.flatMap((entry) => entry.status === 'completed' && Array.isArray(entry.derivedEvents)
-		? entry.derivedEvents.map(record)
-		: []).find((event) => event.type === 'content_committed');
-	const committed = Boolean(commitEvent);
-	return entries.flatMap((entry) => {
-		if (entry.status !== 'completed') return [];
-		const derived = Array.isArray(entry.derivedEvents) ? entry.derivedEvents : [];
-		return derived.flatMap((event) => {
-			const item = record(event);
-			const ref = record(item.contentRef);
-			if (item.type !== 'content_created' || !Object.keys(ref).length || (item.requiresCommit === true && !committed)) return [];
-			const contentPath = String(ref.contentPath ?? ref.path ?? ref.uri ?? '');
-			const enrichedRef = {
-				...ref,
-				...(typeof commitEvent?.commitSha === 'string' ? { commitSha: commitEvent.commitSha } : {}),
-				...(typeof commitEvent?.branchRef === 'string' ? { ref: commitEvent.branchRef } : {}),
-			};
-			return [{
-				kind: 'treedx_content_receipt',
-				name: contentPath || String(ref.id ?? ref.slug ?? 'content'),
-				uri: contentPath ? `treedx://${contentPath}` : null,
-				mediaType: 'application/vnd.treeseed.content-ref+json',
-				metadata: { toolId: entry.toolId, contentRef: enrichedRef, telemetry: entry },
-			}];
-		});
-	});
-}
-
 export interface CodexClient {
 	startThread(options?: CodexThreadOptions): CodexThread;
 	resumeThread(id: string, options?: CodexThreadOptions): CodexThread;
+	cleanup?(): Promise<void>;
 }
 
 export interface CodexThread {
@@ -153,6 +105,7 @@ export interface CodexRunResult {
 
 export interface RunCodexTaskOptions {
 	createCodexClient?: (request?: CodexExecutionRequest) => CodexClient | Promise<CodexClient>;
+	client?: CodexClient | Promise<CodexClient>;
 	now?: () => number;
 }
 
@@ -334,10 +287,8 @@ export function codexAgentToolConfig(request: CodexExecutionRequest) {
 			},
 		},
 	} as Record<string, unknown>;
-	const serviceTier = process.env.TREESEED_CODEX_SERVICE_TIER?.trim();
-	if (serviceTier === 'fast') {
-		baseConfig.service_tier = serviceTier;
-	}
+	const configuredServiceTier = process.env.TREESEED_CODEX_SERVICE_TIER?.trim();
+	if (configuredServiceTier === 'fast') baseConfig.service_tier = 'fast';
 	const server = codexAgentToolServer(request);
 	if (!server) return baseConfig;
 	return {
@@ -359,10 +310,32 @@ export function codexAgentToolConfig(request: CodexExecutionRequest) {
 
 export async function createDefaultCodexClient(request?: CodexExecutionRequest): Promise<CodexClient> {
 	const { Codex } = await import('@openai/codex-sdk');
-	return new Codex({
-		env: codexClientEnvironment(),
+	const runtimeHome = await createIsolatedCodexRuntimeHome({
+		serviceTier: process.env.TREESEED_CODEX_SERVICE_TIER?.trim() === 'fast' ? 'fast' : undefined,
+		model: request?.model,
+	});
+	const client = new Codex({
+		env: codexClientEnvironment({
+			...process.env,
+			TREESEED_CODEX_AUTH_FILE: runtimeHome.authFile,
+			CODEX_HOME: runtimeHome.codexHome,
+		}),
 		config: request ? codexAgentToolConfig(request) : undefined,
 	} as ConstructorParameters<typeof Codex>[0]);
+	let cleaned = false;
+	return {
+		startThread(options) {
+			return client.startThread(options);
+		},
+		resumeThread(id, options) {
+			return client.resumeThread(id, options);
+		},
+		async cleanup() {
+			if (cleaned) return;
+			cleaned = true;
+			await runtimeHome.cleanup();
+		},
+	};
 }
 
 export function mapCodexThreadOptions(request: CodexExecutionRequest): CodexThreadOptions {
@@ -408,6 +381,35 @@ export function buildCodexPrompt(request: CodexExecutionRequest) {
 		].join('\n')
 	: '- Treat this as read-only/planning unless the handler grants a later mutation stage.';
 	const tools = agentTools(request);
+	const toolIds = new Set(tools.map((tool) => tool.id));
+	const artifactKind = typeof request.metadata?.workPackage === 'object'
+		&& request.metadata.workPackage
+		&& typeof (request.metadata.workPackage as { metadata?: { artifactKind?: unknown } }).metadata?.artifactKind === 'string'
+		? (request.metadata.workPackage as { metadata: { artifactKind: string } }).metadata.artifactKind
+		: null;
+	const sourceCheckpointRequired = artifactKind === 'failing_test_proof'
+		|| artifactKind === 'implementation_change'
+		|| artifactKind === 'implementation_revision';
+	const completionGates = [
+		...(toolIds.has('treeseed.verify') ? [
+			'- Verification gate: call treeseed.verify with the exact bounded node/npm argv and wait for a successful verification_completed receipt. For a test-first red proof, set expectedExitCode to the behaviorally correct failing exit code.',
+		] : []),
+		...(toolIds.has('treeseed.checkpoint') ? [
+			sourceCheckpointRequired
+				? `- Source checkpoint gate: the ${artifactKind} deliverable requires treeseed.checkpoint after verification and a successful source_checkpoint_committed receipt containing commitSha.`
+				: '- Source checkpoint gate: if you create or change any repository file, call treeseed.checkpoint after verification and wait for a successful source_checkpoint_committed receipt containing commitSha.',
+			'- A final response is not completion while changed repository files lack a successful checkpoint receipt. If checkpoint fails, correct the scoped cause and retry it; otherwise report the exact tool failure as blocked.',
+		] : []),
+		...(toolIds.has('treeseed.review_decision') ? [
+			'- Review disposition gate: after evaluating the governed evidence, call treeseed.review_decision with exactly approved or rejected and wait for a successful review_decision_recorded receipt before final response.',
+		] : []),
+		...(request.metadata?.workPackage
+			&& typeof (request.metadata.workPackage as { metadata?: { researchStage?: unknown } }).metadata?.researchStage === 'string'
+			&& (request.metadata.workPackage as { metadata: { researchStage: string } }).metadata.researchStage === 'independent-source-fetch'
+			&& toolIds.has('research.fetch_source') ? [
+				`- Research fetch gate: call the available TreeSeed tool with callName ${agentToolMcpName('research.fetch_source')} (policy id research.fetch_source) for at least two independent allowed publishers and wait for a successful research_citation_fetched receipt from each before final response. Search for and invoke the callName, not the dotted policy id.`,
+			] : []),
+	];
 	const toolSection = tools.length > 0
 		? [
 			'Available TreeSeed tools:',
@@ -447,11 +449,12 @@ export function buildCodexPrompt(request: CodexExecutionRequest) {
 		'- Do not write outside the assigned git worktree.',
 		operationBoundary,
 		'- Do not approve decisions.',
-		'- Prefer small, reviewable changes.',
+			'- Prefer small, reviewable changes.',
 			'- Run or suggest verification that is relevant to the change.',
 			'- Report uncertainty.',
 			'- Record commands you ran or believe should be run.',
 			'- If the task requires broader scope or a missing tool, stop with a clear blocked summary that names the missing permission or tool.',
+			...completionGates,
 		'',
 		toolSection,
 		'',
@@ -461,13 +464,5 @@ export function buildCodexPrompt(request: CodexExecutionRequest) {
 		'Work package:',
 		formatMetadataBlock(workPackage),
 	].join('\n');
-	return prependCoreObjectiveToPrompt({
-		prompt: taskPrompt,
-		coreObjective: typeof request.metadata?.coreObjective === 'string'
-			? request.metadata.coreObjective
-			: null,
-		coreObjectiveRef: typeof request.metadata?.coreObjectiveRef === 'string'
-			? request.metadata.coreObjectiveRef
-			: null,
-	});
+	return taskPrompt;
 }

@@ -87,6 +87,7 @@ describe('agent test catalog', () => {
 					questionId: 'what-should-this-research-map-first',
 					sourcePolicyId: 'source-quality-criteria',
 					minimumIndependentSources: 2,
+					maxRevisionCycles: 3,
 					requireUnsupportedClaimRevision: true,
 					finalArtifactModel: 'knowledge',
 					requiredAgents: ['researcher', 'reviewer', 'technical-writer', 'reporter'],

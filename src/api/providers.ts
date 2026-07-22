@@ -8,6 +8,7 @@ import type {
 	ApiRuntimeProviders,
 	ResolvedApiRuntimeProviders,
 } from './types.ts';
+import { BUILT_IN_AGENT_EXECUTION_PROVIDER_IDS } from '@treeseed/sdk/types/agents';
 
 function addProviders<T>(target: Map<string, T>, incoming: Record<string, T> | undefined, label: string) {
 	for (const [id, value] of Object.entries(incoming ?? {})) {
@@ -46,23 +47,7 @@ export function resolveApiRuntimeProviders(config: ApiConfig, overrides: ApiRunt
 	}, 'auth');
 	addProviders(authRegistry, overrides.auth, 'auth');
 
-	addProviders(agentExecution, {
-		codex: { id: 'codex' },
-		copilot: { id: 'copilot' },
-		jira: { id: 'jira' },
-		jira_issue_queue: { id: 'jira_issue_queue' },
-		human_issue_queue: { id: 'human_issue_queue' },
-		github_issues: { id: 'github_issues' },
-		github_issue_queue: { id: 'github_issue_queue' },
-		issue_queue: { id: 'issue_queue' },
-		discord: { id: 'discord' },
-		discord_thread: { id: 'discord_thread' },
-		workflow: { id: 'workflow' },
-		workflow_operation: { id: 'workflow_operation' },
-		deterministic_workflow: { id: 'deterministic_workflow' },
-		github_actions: { id: 'github_actions' },
-		github_actions_workflow: { id: 'github_actions_workflow' },
-	}, 'agent execution');
+	addProviders(agentExecution, Object.fromEntries(BUILT_IN_AGENT_EXECUTION_PROVIDER_IDS.map((id) => [id, { id }])), 'agent execution');
 	addProviders(agentQueue, { memory: { id: 'memory' } }, 'agent queue');
 	addProviders(agentNotification, { sdk_message: { id: 'sdk_message' } }, 'agent notification');
 	addProviders(agentRepository, { git: { id: 'git' } }, 'agent repository');

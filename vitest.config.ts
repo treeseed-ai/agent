@@ -31,7 +31,7 @@ export default defineConfig({
 		}]
 		: undefined,
 	test: {
-		include: ['test/**/*.test.ts'],
-		setupFiles: ['test/setup-runtime.ts'],
+		include: ['tests/{unit,integration,contract,acceptance}/**/*.test.ts'],
+		setupFiles: ['tests/support/setup-runtime.ts'],
 	},
 });

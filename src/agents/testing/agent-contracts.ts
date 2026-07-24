@@ -4,11 +4,11 @@ import { dirname, join, relative, resolve } from 'node:path';
 import { compileDeclarativeContextQuery } from '@treeseed/sdk/graph/context-query-contracts';
 import { parse as parseYaml } from 'yaml';
 import { AGENT_MESSAGE_TYPES } from '../contracts/messages.ts';
-import { listRegisteredAgentHandlers, resolveAgentHandler } from '../registry.ts';
-import { normalizeAgentRuntimeSpec } from '../spec-normalizer.ts';
-import { EXECUTION_PROVIDERS } from '../spec-normalizer-primitives.ts';
-import type { NormalizedAgentRuntimeSpec } from '../spec-types.ts';
-import type { AgentSpecDiagnostic, RawAgentRuntimeSpec } from '../spec-types.ts';
+import { listRegisteredAgentHandlers, resolveAgentHandler } from '../support/registry.ts';
+import { normalizeAgentRuntimeSpec } from '../support/spec-normalizer.ts';
+import { EXECUTION_PROVIDERS } from '../support/spec-normalizer-primitives.ts';
+import type { NormalizedAgentRuntimeSpec } from '../support/spec-types.ts';
+import type { AgentSpecDiagnostic, RawAgentRuntimeSpec } from '../support/spec-types.ts';
 
 const PROFILE_HANDLERS = new Set(['writer', 'actor', 'estimate', 'releaser', 'reporter']);
 

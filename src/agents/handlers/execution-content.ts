@@ -1,8 +1,8 @@
 import type { ExecutionRunSnapshot } from '@treeseed/sdk/types/agents';
-import type { AgentContext, AgentHandler } from "../runtime-types.ts";
+import type { AgentContext, AgentHandler } from "../runtime/runtime-types.ts";
 import {
   type ContentArtifactRef,
-} from "../content-artifacts.ts";
+} from "../content/content-artifacts.ts";
 import {
   completed,
   createAgentMessage,

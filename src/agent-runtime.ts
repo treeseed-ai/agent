@@ -1,16 +1,16 @@
-import { loadTreeseedPlugins } from '@treeseed/sdk/platform/plugins';
+import { loadPlugins } from '@treeseed/sdk/platform/plugins';
 import { BUILT_IN_AGENT_EXECUTION_PROVIDER_IDS } from '@treeseed/sdk/types/agents';
-import { createExecutionProviderAdapter } from './agents/adapters/execution.ts';
+import { createExecutionProviderAdapter } from './agents/adapters/execution/execution.ts';
 import { actorHandler } from './agents/handlers/actor.ts';
 import { estimateHandler } from './agents/handlers/estimate.ts';
 import { releaserHandler } from './agents/handlers/releaser.ts';
 import { reporterHandler } from './agents/handlers/reporter.ts';
 import { writerHandler } from './agents/handlers/writer.ts';
-import { LocalBranchMutationAdapter } from './agents/adapters/mutations.ts';
-import { SdkMessageNotificationAdapter } from './agents/adapters/notification.ts';
-import { GitRepositoryInspectionAdapter } from './agents/adapters/repository.ts';
-import { createResearchAdapter } from './agents/adapters/research.ts';
-import { LocalVerificationAdapter } from './agents/adapters/verification.ts';
+import { LocalBranchMutationAdapter } from './agents/adapters/tools/mutations.ts';
+import { SdkMessageNotificationAdapter } from './agents/adapters/accounts/notification.ts';
+import { GitRepositoryInspectionAdapter } from './agents/adapters/repositories/repository.ts';
+import { createResearchAdapter } from './agents/adapters/tools/research.ts';
+import { LocalVerificationAdapter } from './agents/adapters/tools/verification.ts';
 import type {
 	ExecutionProviderAdapter,
 	AgentHandler,
@@ -19,9 +19,9 @@ import type {
 	AgentRepositoryInspectionAdapter,
 	AgentResearchAdapter,
 	AgentVerificationAdapter,
-} from './agents/runtime-types.ts';
+} from './agents/runtime/runtime-types.ts';
 
-type RuntimePluginEntry = ReturnType<typeof loadTreeseedPlugins>[number];
+type RuntimePluginEntry = ReturnType<typeof loadPlugins>[number];
 
 let cachedAgentRuntime: null | {
 	providers: {
@@ -55,7 +55,7 @@ function collectAgentHandlersFromPlugin(pluginEntry: RuntimePluginEntry, registr
 }
 
 function buildAgentRuntime() {
-	const plugins = loadTreeseedPlugins();
+	const plugins = loadPlugins();
 	const execution = new Map<string, (repoRoot: string) => ExecutionProviderAdapter>(
 		BUILT_IN_AGENT_EXECUTION_PROVIDER_IDS.map((id) => [id, (repoRoot: string) => createExecutionProviderAdapter(id, { repoRoot })]),
 	);

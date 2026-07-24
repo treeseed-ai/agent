@@ -5,14 +5,14 @@ services:
   manager:
     name: treeseed-capacity-provider-manager
     image: ghcr.io/treeseed-ai/agent:capacity-provider
-    startCommand: node ./dist/provider/entrypoint.js manager
+    startCommand: node ./dist/provider/lifecycle/entrypoint.js manager
     variables:
       TREESEED_PROVIDER_DATA_DIR: /data
       TREESEED_PROVIDER_STARTUP_MODE: live
   runner:
     name: treeseed-capacity-provider-runner
     image: ghcr.io/treeseed-ai/agent:capacity-provider
-    startCommand: node ./dist/provider/entrypoint.js runner
+    startCommand: node ./dist/provider/lifecycle/entrypoint.js runner
     variables:
       TREESEED_PROVIDER_DATA_DIR: /data
       TREESEED_PROVIDER_STARTUP_MODE: live

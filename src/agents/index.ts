@@ -1,1 +1,1 @@
-export { listRegisteredAgentHandlers, resolveAgentHandler } from './registry.ts';
+export { listRegisteredAgentHandlers, resolveAgentHandler } from './support/registry.ts';

@@ -7,11 +7,11 @@ import {
 	listRegisteredAgentHandlers,
 	loadTenantAgentHandlerRegistry,
 	resolveAgentHandler,
-} from '../../../src/agents/registry.ts';
+} from '../../../src/agents/support/registry.ts';
 import { estimateHandler } from '../../../src/agents/handlers/estimate.ts';
-import { normalizeAgentRuntimeSpec } from '../../../src/agents/spec-normalizer.ts';
-import { selectAgentActivityProfile } from '../../../src/agents/kernel/activity-profile-resolver.ts';
-import { resolveAssignmentAgentToolPolicy } from '../../../src/provider/assignment-tool-policy.ts';
+import { normalizeAgentRuntimeSpec } from '../../../src/agents/support/spec-normalizer.ts';
+import { selectAgentActivityProfile } from '../../../src/agents/kernel/telemetry/activity-profile-resolver.ts';
+import { resolveAssignmentAgentToolPolicy } from '../../../src/provider/capacity/assignments/assignment-tool-policy.ts';
 
 const tempRoots: string[] = [];
 const agentRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');

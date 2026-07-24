@@ -2,8 +2,8 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { assertRelativeContentPath } from '../../../src/agents/content-artifacts.ts';
-import { LocalBranchMutationAdapter } from '../../../src/agents/adapters/mutations.ts';
+import { assertRelativeContentPath } from '../../../src/agents/content/content-artifacts.ts';
+import { LocalBranchMutationAdapter } from '../../../src/agents/adapters/tools/mutations.ts';
 
 const tempRoots: string[] = [];
 

@@ -50,9 +50,9 @@ treeseed/agent-runner
 Production release images are published for `linux/amd64` and `linux/arm64`. Staging builds the provider services from source at an exact commit. The images start:
 
 ```bash
-node ./dist/provider/entrypoint.js manager
-node ./dist/provider/entrypoint.js runner
-node ./dist/provider/entrypoint.js doctor
+node ./dist/provider/lifecycle/entrypoint.js manager
+node ./dist/provider/lifecycle/entrypoint.js runner
+node ./dist/provider/lifecycle/entrypoint.js doctor
 ```
 
 Use the qualified role names provider manager and provider runner in architecture and implementation docs. The provider manager supervises one provider's local runtime; API-side assignment selection lives in `@treeseed/api`.
@@ -79,17 +79,17 @@ Agent runtime must stay external to the root web app and API process.
 Source entrypoints:
 
 ```bash
-node --import tsx ./src/provider/entrypoint.ts doctor --json
-node --import tsx ./src/provider/entrypoint.ts manager --once --json
-node --import tsx ./src/provider/entrypoint.ts runner --once --json
+node --import tsx ./src/provider/lifecycle/entrypoint.ts doctor --json
+node --import tsx ./src/provider/lifecycle/entrypoint.ts manager --once --json
+node --import tsx ./src/provider/lifecycle/entrypoint.ts runner --once --json
 ```
 
 Built entrypoints:
 
 ```bash
-node ./dist/provider/entrypoint.js doctor --json
-node ./dist/provider/entrypoint.js manager --once --json
-node ./dist/provider/entrypoint.js runner --once --json
+node ./dist/provider/lifecycle/entrypoint.js doctor --json
+node ./dist/provider/lifecycle/entrypoint.js manager --once --json
+node ./dist/provider/lifecycle/entrypoint.js runner --once --json
 ```
 
 Verification:

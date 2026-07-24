@@ -1,4 +1,4 @@
-import type { AgentContext } from '../runtime-types.ts';
+import type { AgentContext } from '../runtime/runtime-types.ts';
 import type { HandlerPayload } from './shared.ts';
 import type { ExecutionContentSubject } from './execution-content-context.ts';
 

@@ -3,8 +3,20 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const files = [
-	'availability-projection.ts', 'client.ts', 'config.ts', 'connection-scheduler.ts', 'connection-state.ts', 'coordinator.ts',
-	'entrypoint.ts', 'identity.ts', 'lease-recovery.ts', 'lifecycle.ts', 'local-capacity-store.ts', 'manifest.ts', 'multi-team-runtime.ts', 'native-capacity-limits.ts',
+	'projects/projects-core/availability-projection.ts',
+	'coordination/client.ts',
+	'configuration/config.ts',
+	'coordination/connection-scheduler.ts',
+	'coordination/connection-state.ts',
+	'coordination/coordinator.ts',
+	'lifecycle/entrypoint.ts',
+	'accounts/identity.ts',
+	'coordination/lease-recovery.ts',
+	'lifecycle/lifecycle.ts',
+	'capacity/capacity-core/local-capacity-store.ts',
+	'configuration/manifest.ts',
+	'teams/multi-team-runtime.ts',
+	'capacity/capacity-core/native-capacity-limits.ts',
 ];
 
 describe('provider coordinator architecture', () => {
@@ -22,7 +34,7 @@ describe('provider coordinator architecture', () => {
 	});
 
 	it('keeps team polling in the manager and durable-dispatch consumption in runners', () => {
-		const source = readFileSync(resolve(process.cwd(), 'src/provider/multi-team-runtime.ts'), 'utf8');
+		const source = readFileSync(resolve(process.cwd(), 'src/provider/teams/multi-team-runtime.ts'), 'utf8');
 		const manager = source.slice(source.indexOf('export async function runMultiTeamProviderManager'), source.indexOf('export async function runMultiTeamProviderRunners'));
 		const runner = source.slice(source.indexOf('export async function runMultiTeamProviderRunners'));
 		expect(manager).toContain('.nextAssignment(');

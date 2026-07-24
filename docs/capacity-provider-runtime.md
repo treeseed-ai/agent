@@ -13,7 +13,7 @@ Canonical architecture:
 
 ## Runtime Roles
 
-The package-owned provider image starts `node ./dist/provider/entrypoint.js` with explicit roles:
+The package-owned provider image starts `node ./dist/provider/lifecycle/entrypoint.js` with explicit roles:
 
 - `manager`: provider manager that checks in, reports availability, receives assignment leases, renews leases, dispatches runners, and reports provider-local pressure
 - `runner`: provider runner that executes one leased assignment under an agent capacity envelope

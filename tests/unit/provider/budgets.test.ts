@@ -2,8 +2,8 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { discoverProviderBudgets } from '../../../src/provider/budgets.ts';
-import type { ProviderHostRuntimeConfig } from '../../../src/provider/config.ts';
+import { discoverProviderBudgets } from '../../../src/provider/configuration/budgets.ts';
+import type { ProviderHostRuntimeConfig } from '../../../src/provider/configuration/config.ts';
 
 function baseConfig(patch: Partial<ProviderHostRuntimeConfig> = {}): ProviderHostRuntimeConfig {
 	return {

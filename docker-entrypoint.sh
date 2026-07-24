@@ -12,7 +12,7 @@ if [ "$(id -u)" = "0" ]; then
 	if [ "$CHOWN_DATA" != "0" ]; then
 		chown -R "$APP_UID:$APP_GID" "$DATA_DIR"
 	fi
-	exec setpriv --reuid "$APP_UID" --regid "$APP_GID" --clear-groups node ./dist/provider/entrypoint.js "$@"
+	exec setpriv --reuid "$APP_UID" --regid "$APP_GID" --clear-groups node ./dist/provider/lifecycle/entrypoint.js "$@"
 fi
 
-exec node ./dist/provider/entrypoint.js "$@"
+exec node ./dist/provider/lifecycle/entrypoint.js "$@"

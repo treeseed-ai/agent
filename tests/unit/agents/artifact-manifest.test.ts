@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ProviderAssignment } from '@treeseed/sdk/agent-capacity';
-import { buildAgentArtifactManifest, validateAgentArtifactManifest } from '../../../src/agents/kernel/artifact-manifest.ts';
-import { recordAssignmentModeRun } from '../../../src/agents/kernel/telemetry.ts';
+import { buildAgentArtifactManifest, validateAgentArtifactManifest } from '../../../src/agents/kernel/artifacts/artifact-manifest.ts';
+import { recordAssignmentModeRun } from '../../../src/agents/kernel/telemetry/telemetry.ts';
 
 function assignment(): ProviderAssignment {
 	return {

@@ -220,11 +220,11 @@ export interface ApiAppRuntime {
 	internalPrefix: string;
 }
 
-export type TreeseedApiContext = ApiAppRuntime;
+export type PlatformApiContext = ApiAppRuntime;
 
-export interface TreeseedApiExtension {
+export interface ApiExtension {
 	name: string;
-	mount(app: Hono<any>, context: TreeseedApiContext): void | Promise<void>;
+	mount(app: Hono<any>, context: PlatformApiContext): void | Promise<void>;
 }
 
 export interface ApiServerOptions {
@@ -247,7 +247,7 @@ export interface ApiServerOptions {
 		operations: ApiScope;
 	}>;
 	internalPrefix?: string;
-	extensions?: TreeseedApiExtension[];
+	extensions?: ApiExtension[];
 	extendApp?: (app: Hono<any>, runtime: ApiAppRuntime) => void;
 	log?: (message: string, details?: Record<string, unknown>) => void;
 }

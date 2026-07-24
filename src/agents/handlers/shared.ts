@@ -1,4 +1,4 @@
-import type { AgentHandlerOutput, AgentContext } from '../runtime-types.ts';
+import type { AgentHandlerOutput, AgentContext } from '../runtime/runtime-types.ts';
 
 export interface HandlerPayload {
 	[key: string]: unknown;

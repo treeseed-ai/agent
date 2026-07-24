@@ -1,6 +1,6 @@
 import { appendFile } from 'node:fs/promises';
 import { findAgentToolDefinition } from '@treeseed/sdk';
-import type { ExecutionProviderToolDescriptor } from '../runtime-types.ts';
+import type { ExecutionProviderToolDescriptor } from '../runtime/runtime-types.ts';
 import {
 	callAgentTool,
 	type AgentToolCallTelemetry,

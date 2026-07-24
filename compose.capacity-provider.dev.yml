@@ -4,7 +4,7 @@ services:
     build: !reset null
     user: "${TREESEED_PROVIDER_CONTAINER_UID:-1000}:${TREESEED_PROVIDER_CONTAINER_GID:-1000}"
     working_dir: /workspace/packages/agent
-    entrypoint: ["node", "--import", "tsx", "./src/provider/entrypoint.ts"]
+    entrypoint: ["node", "--import", "tsx", "./src/provider/lifecycle/entrypoint.ts"]
     command: ["manager"]
     environment:
       NODE_ENV: development
@@ -25,7 +25,7 @@ services:
     build: !reset null
     user: "${TREESEED_PROVIDER_CONTAINER_UID:-1000}:${TREESEED_PROVIDER_CONTAINER_GID:-1000}"
     working_dir: /workspace/packages/agent
-    entrypoint: ["node", "--import", "tsx", "./src/provider/entrypoint.ts"]
+    entrypoint: ["node", "--import", "tsx", "./src/provider/lifecycle/entrypoint.ts"]
     command: ["runner"]
     environment:
       NODE_ENV: development

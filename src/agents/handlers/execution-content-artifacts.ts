@@ -1,6 +1,6 @@
 import type { ExecutionRunSnapshot } from '@treeseed/sdk/types/agents';
-import type { AgentContext } from '../runtime-types.ts';
-import type { ContentArtifactRef } from '../content-artifacts.ts';
+import type { AgentContext } from '../runtime/runtime-types.ts';
+import type { ContentArtifactRef } from '../content/content-artifacts.ts';
 import { readRecord } from './shared.ts';
 
 function firstString(...values: unknown[]) {

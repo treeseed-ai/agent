@@ -1,0 +1,158 @@
+import { OperationsSdk } from '@treeseed/sdk';
+import {
+	createAgentOperationEvent,
+	decideAgentOperationPermission,
+	deniedAgentOperationResult,
+	type AgentOperationGrant,
+	type AgentOperationRequest,
+	type AgentOperationResult,
+} from '@treeseed/sdk/operations/agent-tools';
+import type { AgentOperationsAdapter } from '../../runtime/runtime-types.ts';
+import type { ScopedAgentSdk } from '@treeseed/sdk/sdk';
+
+type WorkflowExecutor = Pick<OperationsSdk, 'execute'>;
+
+const WORKFLOW_OPERATION_MAP: Record<AgentOperationRequest['operation'], string> = {
+	switch: 'switch',
+	update: 'update',
+	dev: 'dev',
+	verify: 'test',
+	save: 'save',
+	stage: 'stage',
+	close: 'close',
+	release: 'release',
+};
+
+function commandList(value: unknown) {
+	return Array.isArray(value) ? value.map(String).filter(Boolean) : [];
+}
+
+function workflowInputFor(request: AgentOperationRequest) {
+	const input = { ...(request.input ?? {}) };
+	if (request.mode === 'plan') {
+		input.plan = input.plan ?? true;
+	}
+	if (request.operation === 'verify') {
+		const commands = commandList(request.input.commands);
+		if (commands.length) {
+			input.commands = commands;
+		}
+	}
+	return input;
+}
+
+function completedResult(
+	request: AgentOperationRequest,
+	operationName: string,
+	workflowResult: Awaited<ReturnType<WorkflowExecutor['execute']>>,
+): AgentOperationResult {
+	const stdout = workflowResult.stdout ?? [];
+	const stderr = workflowResult.stderr ?? [];
+	return {
+		operation: request.operation,
+		status: workflowResult.ok ? 'completed' : 'failed',
+		summary: workflowResult.ok
+			? `Executed workflow operation ${operationName}.`
+			: `Workflow operation ${operationName} failed.`,
+		changedPaths: request.changedPaths ?? [],
+		stagedPaths: request.operation === 'stage' ? request.changedPaths ?? [] : [],
+		commandsRun: [operationName],
+		artifacts: [],
+		error: workflowResult.ok
+			? undefined
+			: {
+				code: 'workflow_operation_failed',
+				message: stderr.join('\n') || `Workflow operation ${operationName} failed.`,
+				retryable: true,
+			},
+		metadata: {
+			workflowResult: {
+				operation: workflowResult.operation,
+				ok: workflowResult.ok,
+				payload: workflowResult.payload ?? null,
+				meta: workflowResult.meta ?? null,
+				report: workflowResult.report ?? null,
+				stdout,
+				stderr,
+			},
+		},
+	};
+}
+
+async function appendOperationEvent(input: {
+	sdk?: ScopedAgentSdk;
+	request: AgentOperationRequest;
+	result: AgentOperationResult;
+}) {
+	if (!input.sdk || typeof input.sdk.createMessage !== 'function') return;
+	await input.sdk.createMessage({
+		type: 'agent.operation_event',
+		payload: createAgentOperationEvent({
+			request: input.request,
+			result: input.result,
+		}) as unknown as Record<string, unknown>,
+		relatedModel: 'provider_assignment',
+		relatedId: input.request.taskId,
+		priority: 100,
+	}).catch(() => null);
+}
+
+export class SdkOperationsAdapter implements AgentOperationsAdapter {
+	constructor(private readonly workflow: WorkflowExecutor = new OperationsSdk()) {}
+
+	async runOperation(input: {
+		request: AgentOperationRequest;
+		grants: AgentOperationGrant[];
+		sdk?: ScopedAgentSdk;
+	}) {
+		const decision = decideAgentOperationPermission({
+			request: input.request,
+			grants: input.grants,
+		});
+		if (!decision.allowed) {
+			const denied = deniedAgentOperationResult(input.request, decision);
+			await appendOperationEvent({ ...input, result: denied });
+			return denied;
+		}
+
+		const workflowOperation = WORKFLOW_OPERATION_MAP[input.request.operation];
+		try {
+			const workflowResult = await this.workflow.execute({
+				operationName: workflowOperation,
+				input: workflowInputFor(input.request),
+			}, {
+				cwd: input.request.worktreeRoot ?? input.request.repoRoot,
+				env: process.env,
+				transport: 'sdk',
+			});
+			const result = completedResult(input.request, workflowOperation, workflowResult);
+			result.metadata.permission = decision;
+			await appendOperationEvent({ ...input, result });
+			return result;
+		} catch (error) {
+			const failed: AgentOperationResult = {
+				operation: input.request.operation,
+				status: 'failed',
+				summary: error instanceof Error ? error.message : String(error),
+				changedPaths: input.request.changedPaths ?? [],
+				stagedPaths: [],
+				commandsRun: [workflowOperation],
+				artifacts: [],
+				error: {
+					code: 'operation_execution_failed',
+					message: error instanceof Error ? error.message : String(error),
+					retryable: true,
+				},
+				metadata: {
+					permission: decision,
+				},
+			};
+			await appendOperationEvent({ ...input, result: failed });
+			return failed;
+		}
+	}
+}
+
+export function createOperationsAdapter() {
+	return new SdkOperationsAdapter();
+}

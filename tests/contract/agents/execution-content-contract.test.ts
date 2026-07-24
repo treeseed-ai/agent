@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { contentModelSupportsArtifactKind, executionAgentForAccess } from '../../../src/agents/handlers/execution-content.ts';
 import { executionContentRoot, resolveExecutionTreeDxContext } from '../../../src/agents/handlers/execution-content-context.ts';
 import { buildExecutionContentInstructions } from '../../../src/agents/handlers/execution-content-prompt.ts';
-import { callTreeseedContentTool } from '../../../src/agents/tools/content-tool-runtime.ts';
+import { callContentTool } from '../../../src/agents/tools/content-tool-runtime.ts';
 import { collectExecutionContentArtifactReceipts } from '../../../src/agents/handlers/execution-content-artifacts.ts';
 
 describe('execution content artifact contract', () => {
@@ -170,7 +170,7 @@ describe('execution content artifact contract', () => {
 	});
 
 	it('rejects a content link that contains no validated relation', async () => {
-		const result = await callTreeseedContentTool({
+		const result = await callContentTool({
 			apiBaseUrl: 'http://127.0.0.1:3000',
 			providerAccessToken: 'redacted',
 			assignmentId: 'assignment-a',
@@ -185,7 +185,7 @@ describe('execution content artifact contract', () => {
 
 	it('keeps model-aware writes under the transported assignment root when given a path-shaped slug', async () => {
 		const urls: string[] = [];
-		const result = await callTreeseedContentTool({
+		const result = await callContentTool({
 			apiBaseUrl: 'http://127.0.0.1:3000',
 			providerAccessToken: 'redacted',
 			assignmentId: 'assignment-a',

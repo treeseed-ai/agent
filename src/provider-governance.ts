@@ -2,11 +2,11 @@ export {
 	CapacityProviderCoordinator,
 	type ProviderConnectionResult,
 	type ProviderConnectionRuntime,
-} from './provider/coordinator.ts';
+} from './provider/coordination/coordinator.ts';
 export {
 	initializeCapacityProviderIdentity,
 	loadCapacityProviderIdentity,
-} from './provider/identity.ts';
+} from './provider/accounts/identity.ts';
 export {
 	DEFAULT_PROVIDER_MANIFEST,
 	loadProviderManifest,
@@ -22,10 +22,10 @@ export {
 	writeProviderSecret,
 	type LoadedProviderManifest,
 	type ProviderSecretResolver,
-} from './provider/manifest.ts';
+} from './provider/configuration/manifest.ts';
 export {
 	readProviderConnectionState,
 	removeProviderConnectionState,
 	writeProviderConnectionState,
 	type ProviderConnectionState,
-} from './provider/connection-state.ts';
+} from './provider/coordination/connection-state.ts';

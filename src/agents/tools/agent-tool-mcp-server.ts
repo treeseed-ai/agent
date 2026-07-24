@@ -4,7 +4,7 @@ import { createRequire } from 'node:module';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
-import type { ExecutionProviderToolDescriptor } from '../runtime-types.ts';
+import type { ExecutionProviderToolDescriptor } from '../runtime/runtime-types.ts';
 import type { AgentToolRuntimeOptions } from './agent-tool-runtime.ts';
 import { callAgentToolWithTelemetry } from './agent-tool-telemetry.ts';
 

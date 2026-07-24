@@ -43,7 +43,7 @@ describe('agent package shape', () => {
 		}>(resolve(packageRoot, 'package.json'));
 
 		expect(packageJson.bin).toEqual({
-			'treeseed-agents': 'dist/scripts/treeseed-agents.js',
+			'treeseed-agents': 'dist/scripts/agents/agents.js',
 		});
 
 		for (const [exportName, exportValue] of Object.entries(packageJson.exports)) {
@@ -56,12 +56,12 @@ describe('agent package shape', () => {
 			expect(existsSync(sourcePathForBinSpecifier(binPath)), `${binName} source file`).toBe(true);
 		}
 
-			expect(packageJson.scripts.verify).toBe('TMPDIR=/tmp node --import tsx ./scripts/verify-driver.ts');
+			expect(packageJson.scripts.verify).toBe('TMPDIR=/tmp node --import tsx ./scripts/support/verify-driver.ts');
 			expect(packageJson.scripts['verify:local']).toBe(
-				'TREESEED_VERIFY_DRIVER=direct TMPDIR=/tmp node --import tsx ./scripts/verify-driver.ts',
+				'TREESEED_VERIFY_DRIVER=direct TMPDIR=/tmp node --import tsx ./scripts/support/verify-driver.ts',
 			);
 			expect(packageJson.scripts['verify:action']).toBe(
-				'TREESEED_VERIFY_DRIVER=act TMPDIR=/tmp node --import tsx ./scripts/verify-driver.ts',
+				'TREESEED_VERIFY_DRIVER=act TMPDIR=/tmp node --import tsx ./scripts/support/verify-driver.ts',
 			);
 			expect(Object.keys(packageJson.scripts).some((name) => name.includes('processing'))).toBe(false);
 			expect(Object.values(packageJson.scripts).some((command) => command.includes('treeseed-processing'))).toBe(false);
@@ -72,16 +72,16 @@ describe('agent package shape', () => {
 	it('enforces the assignment-only kernel module boundary', () => {
 		const kernelRoot = resolve(packageRoot, 'src/agents/kernel');
 		const requiredModules = [
-			'agent-kernel.ts',
-			'assignment-preflight.ts',
-			'activity-profile-resolver.ts',
-			'context-loader.ts',
-			'execution-dispatcher.ts',
-			'output-validator.ts',
-			'artifact-manifest.ts',
-			'telemetry.ts',
-			'failure-classifier.ts',
-			'kernel-runtime.ts',
+			'agents/agent-kernel.ts',
+			'capacity/assignments/assignment-preflight.ts',
+			'telemetry/activity-profile-resolver.ts',
+			'execution/context-loader.ts',
+			'execution/execution-dispatcher.ts',
+			'validation/output-validator.ts',
+			'artifacts/artifact-manifest.ts',
+			'telemetry/telemetry.ts',
+			'validation/failure-classifier.ts',
+			'runtime/kernel-runtime.ts',
 		];
 		for (const module of requiredModules) {
 			const source = readFileSync(resolve(kernelRoot, module), 'utf8');
@@ -99,21 +99,21 @@ describe('agent package shape', () => {
 	it('enforces the focused provider runner module boundary', () => {
 		const providerRoot = resolve(packageRoot, 'src/provider');
 		const requiredModules = [
-			'runner.ts',
-			'runner-contracts.ts',
-			'runner-lifecycle.ts',
-			'kernel-bridge.ts',
-			'kernel-assignment.ts',
-			'treedx-context-adapter.ts',
-			'execution-lifecycle.ts',
-			'execution-support.ts',
-			'execution-provider-selection.ts',
-			'assignment-result-reporter.ts',
-			'assignment-tool-policy.ts',
-			'assignment-tool-catalog.ts',
-			'lease-client.ts',
-			'mode-run-reporter.ts',
-			'usage-reporter.ts',
+			'operations/runner.ts',
+			'operations/runner-contracts.ts',
+			'operations/runner-lifecycle.ts',
+			'execution/kernel-bridge.ts',
+			'capacity/assignments/kernel-assignment.ts',
+			'treedx/graph/treedx-context-adapter.ts',
+			'execution/execution-lifecycle.ts',
+			'execution/execution-support.ts',
+			'capacity/providers/execution-provider-selection.ts',
+			'capacity/assignments/assignment-result-reporter.ts',
+			'capacity/assignments/assignment-tool-policy.ts',
+			'commerce/catalog/assignment-tool-catalog.ts',
+			'coordination/lease-client.ts',
+			'reporting/mode-run-reporter.ts',
+			'capacity/accounting/usage-reporter.ts',
 		];
 		for (const module of requiredModules) {
 			const source = readFileSync(resolve(providerRoot, module), 'utf8');
@@ -121,7 +121,7 @@ describe('agent package shape', () => {
 			expect(source).not.toMatch(/@ts-(?:nocheck|ignore|expect-error)|eslint-disable|biome-ignore/gu);
 			expect(source).not.toMatch(/\bany\b/gu);
 		}
-		const runner = readFileSync(resolve(providerRoot, 'runner.ts'), 'utf8');
+		const runner = readFileSync(resolve(providerRoot, 'operations/runner.ts'), 'utf8');
 		expect(runner.match(/\brunProviderAssignment\s*\(/gu)).toHaveLength(1);
 		expect(runner).not.toContain('createAssignmentTreeDxAdapter(input:');
 		expect(runner).not.toContain('class LifecycleManagedExecutionProviderAdapter');
@@ -135,8 +135,8 @@ describe('agent package shape', () => {
 			'agents/handlers/execution-content-prompt.ts',
 			'agents/tools/agent-tool-runtime.ts',
 			'agents/tools/agent-tool-telemetry.ts',
-			'agents/kernel/artifact-manifest.ts',
-			'agents/kernel/artifact-receipts.ts',
+			'agents/kernel/artifacts/artifact-manifest.ts',
+			'agents/kernel/artifacts/artifact-receipts.ts',
 		];
 		for (const module of requiredModules) {
 			const source = readFileSync(resolve(packageRoot, 'src', module), 'utf8');
@@ -146,9 +146,9 @@ describe('agent package shape', () => {
 		expect(existsSync(resolve(packageRoot, 'src/agents/knowledge/pipeline.ts'))).toBe(false);
 		const publicIndex = readFileSync(resolve(packageRoot, 'src/index.ts'), 'utf8');
 		expect(publicIndex).not.toMatch(/knowledge\/pipeline|buildKnowledgeDraft|buildResearchNote/gu);
-		const manifest = readFileSync(resolve(packageRoot, 'src/agents/kernel/artifact-manifest.ts'), 'utf8');
+		const manifest = readFileSync(resolve(packageRoot, 'src/agents/kernel/artifacts/artifact-manifest.ts'), 'utf8');
 		expect(manifest).not.toMatch(/contentArtifactRefs|\bcontentRefs\b|\bcodeChanges\b|\btoolSummary\b/gu);
-		const mutations = readFileSync(resolve(packageRoot, 'src/agents/adapters/mutations.ts'), 'utf8');
+		const mutations = readFileSync(resolve(packageRoot, 'src/agents/adapters/tools/mutations.ts'), 'utf8');
 		expect(mutations).toContain('Knowledge Hub content mutations require an assignment-scoped TreeDX tool receipt');
 		const releaser = readFileSync(resolve(packageRoot, 'src/agents/handlers/releaser.ts'), 'utf8');
 		expect(releaser).toContain('createExecutionContentHandler');
@@ -157,24 +157,24 @@ describe('agent package shape', () => {
 
 	it('enforces focused specification and execution-provider modules', () => {
 		const requiredModules = [
-			'agents/spec-normalizer.ts',
-			'agents/spec-normalizer-activities.ts',
-			'agents/spec-normalizer-execution.ts',
-			'agents/spec-normalizer-policy.ts',
-			'agents/spec-normalizer-primitives.ts',
-			'agents/adapters/execution-codex.ts',
-			'agents/adapters/execution-codex-core.ts',
-			'agents/adapters/execution-codex-result.ts',
-			'agents/adapters/execution-codex-adapter.ts',
-			'agents/adapters/execution-jira.ts',
-			'agents/adapters/execution-jira-adapter.ts',
-			'agents/adapters/execution-github-issues.ts',
-			'agents/adapters/execution-github-issues-adapter.ts',
-			'agents/adapters/execution-discord.ts',
-			'agents/adapters/execution-discord-adapter.ts',
-			'api/project-routes.ts',
-			'api/project-route-helpers.ts',
-			'api/project-summary.ts',
+			'agents/support/spec-normalizer.ts',
+			'agents/support/spec-normalizer-activities.ts',
+			'agents/support/spec-normalizer-execution.ts',
+			'agents/support/spec-normalizer-policy.ts',
+			'agents/support/spec-normalizer-primitives.ts',
+			'agents/adapters/codex/execution-codex.ts',
+			'agents/adapters/codex/execution-codex-core.ts',
+			'agents/adapters/codex/execution-codex-result.ts',
+			'agents/adapters/reconciliation/execution-codex-adapter.ts',
+			'agents/adapters/integrations/execution-jira.ts',
+			'agents/adapters/reconciliation/execution-jira-adapter.ts',
+			'agents/adapters/repositories/execution-github-issues.ts',
+			'agents/adapters/reconciliation/execution-github-issues-adapter.ts',
+			'agents/adapters/integrations/execution-discord.ts',
+			'agents/adapters/reconciliation/execution-discord-adapter.ts',
+			'api/projects/projects-core/project-routes.ts',
+			'api/projects/projects-core/project-route-helpers.ts',
+			'api/projects/projects-core/project-summary.ts',
 			'api/auth/d1-store.ts',
 			'api/auth/d1-store-core.ts',
 			'api/auth/d1-user-store.ts',
@@ -188,37 +188,37 @@ describe('agent package shape', () => {
 
 	it('ships provider runtime entrypoint and support modules without source-mode temp artifacts', () => {
 		const requiredRuntimeFiles = [
-			'dist/provider/entrypoint.js',
-			'dist/provider/config.js',
-			'dist/provider/coordinator.js',
-			'dist/provider/project-materialization.js',
-			'dist/provider/runner.js',
-			'dist/provider/runner-lifecycle.js',
-			'dist/provider/treedx-context-adapter.js',
-			'dist/provider/execution-lifecycle.js',
-			'dist/provider/execution-provider-selection.js',
-			'dist/provider/kernel-bridge.js',
-			'dist/provider/assignment-result-reporter.js',
-			'dist/provider/usage-reporter.js',
-			'dist/provider/lifecycle.js',
-			'dist/scripts/build-capacity-provider-container.js',
-			'dist/scripts/test-capacity-provider-container.js',
-				'dist/api/server.js',
+			'dist/provider/lifecycle/entrypoint.js',
+			'dist/provider/configuration/config.js',
+			'dist/provider/coordination/coordinator.js',
+			'dist/provider/projects/projects-core/project-materialization.js',
+			'dist/provider/operations/runner.js',
+			'dist/provider/operations/runner-lifecycle.js',
+			'dist/provider/treedx/graph/treedx-context-adapter.js',
+			'dist/provider/execution/execution-lifecycle.js',
+			'dist/provider/capacity/providers/execution-provider-selection.js',
+			'dist/provider/execution/kernel-bridge.js',
+			'dist/provider/capacity/assignments/assignment-result-reporter.js',
+			'dist/provider/capacity/accounting/usage-reporter.js',
+			'dist/provider/lifecycle/lifecycle.js',
+			'dist/scripts/capacity/providers/build-capacity-provider-container.js',
+			'dist/scripts/capacity/providers/test-capacity-provider-container.js',
+			'dist/api/support/server.js',
 				'dist/services/runtime-paths.js',
-			'dist/agents/adapters/codex-auth.js',
-			'dist/agents/adapters/codex-readiness.js',
-			'dist/agents/adapters/execution-codex.js',
-			'dist/agents/registry.js',
-			'dist/agents/kernel/agent-kernel.js',
-			'dist/agents/kernel/assignment-preflight.js',
-			'dist/agents/kernel/activity-profile-resolver.js',
-			'dist/agents/kernel/context-loader.js',
-			'dist/agents/kernel/execution-dispatcher.js',
-			'dist/agents/kernel/output-validator.js',
-			'dist/agents/kernel/artifact-manifest.js',
-			'dist/agents/kernel/artifact-receipts.js',
-			'dist/agents/kernel/telemetry.js',
-			'dist/agents/kernel/failure-classifier.js',
+			'dist/agents/adapters/accounts/codex-auth.js',
+			'dist/agents/adapters/codex/codex-readiness.js',
+			'dist/agents/adapters/codex/execution-codex.js',
+			'dist/agents/support/registry.js',
+			'dist/agents/kernel/agents/agent-kernel.js',
+			'dist/agents/kernel/capacity/assignments/assignment-preflight.js',
+			'dist/agents/kernel/telemetry/activity-profile-resolver.js',
+			'dist/agents/kernel/execution/context-loader.js',
+			'dist/agents/kernel/execution/execution-dispatcher.js',
+			'dist/agents/kernel/validation/output-validator.js',
+			'dist/agents/kernel/artifacts/artifact-manifest.js',
+			'dist/agents/kernel/artifacts/artifact-receipts.js',
+			'dist/agents/kernel/telemetry/telemetry.js',
+			'dist/agents/kernel/validation/failure-classifier.js',
 			'dist/agents/handlers/writer.js',
 			'dist/agents/handlers/actor.js',
 			'dist/agents/handlers/estimate.js',
@@ -251,14 +251,14 @@ describe('agent package shape', () => {
 		const [pack] = JSON.parse(output) as Array<{ files: Array<{ path: string }> }>;
 		const paths = pack.files.map((entry) => entry.path);
 
-		expect(paths).toContain('dist/provider/entrypoint.js');
-		expect(paths).toContain('dist/provider/config.js');
-		expect(paths).toContain('dist/provider/coordinator.js');
-		expect(paths).toContain('dist/provider/project-materialization.js');
-		expect(paths).toContain('dist/provider/runner.js');
-		expect(paths).toContain('dist/provider/lifecycle.js');
-		expect(paths).toContain('dist/scripts/build-capacity-provider-container.js');
-		expect(paths).toContain('dist/scripts/test-capacity-provider-container.js');
+		expect(paths).toContain('dist/provider/lifecycle/entrypoint.js');
+		expect(paths).toContain('dist/provider/configuration/config.js');
+		expect(paths).toContain('dist/provider/coordination/coordinator.js');
+		expect(paths).toContain('dist/provider/projects/projects-core/project-materialization.js');
+		expect(paths).toContain('dist/provider/operations/runner.js');
+		expect(paths).toContain('dist/provider/lifecycle/lifecycle.js');
+		expect(paths).toContain('dist/scripts/capacity/providers/build-capacity-provider-container.js');
+		expect(paths).toContain('dist/scripts/capacity/providers/test-capacity-provider-container.js');
 		expect(paths).toContain('dist/services/runtime-paths.js');
 		expect(paths).toContain('Dockerfile');
 		expect(paths).toContain('docker-entrypoint.sh');
@@ -273,7 +273,7 @@ describe('agent package shape', () => {
 	it('ships secure package-owned container assets', () => {
 		const dockerfile = readFileSync(resolve(packageRoot, 'Dockerfile'), 'utf8');
 		const entrypoint = readFileSync(resolve(packageRoot, 'docker-entrypoint.sh'), 'utf8');
-		const releaseVerify = readFileSync(resolve(packageRoot, 'scripts/release-verify.ts'), 'utf8');
+		const releaseVerify = readFileSync(resolve(packageRoot, 'scripts/packages/release-verify.ts'), 'utf8');
 		const compose = readFileSync(resolve(packageRoot, 'compose.capacity-provider.yml'), 'utf8');
 		const docs = readFileSync(resolve(packageRoot, 'docs/capacity-provider-runtime.md'), 'utf8');
 
@@ -366,7 +366,7 @@ describe('agent package shape', () => {
 	});
 
 	it('exposes one canonical selector per execution-provider adapter', () => {
-		const factory = readFileSync(resolve(packageRoot, 'src/agents/adapters/execution.ts'), 'utf8');
+		const factory = readFileSync(resolve(packageRoot, 'src/agents/adapters/execution/execution.ts'), 'utf8');
 		const registry = readFileSync(resolve(packageRoot, 'src/agent-runtime.ts'), 'utf8');
 		expect(existsSync(resolve(packageRoot, 'src/agents/adapters/execution-deterministic.ts'))).toBe(false);
 		expect(existsSync(resolve(packageRoot, 'src/agents/adapters/execution-mock.ts'))).toBe(false);

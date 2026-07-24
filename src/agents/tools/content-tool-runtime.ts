@@ -1,11 +1,11 @@
 import {
-	findTreeseedContentToolPreset,
-	renderTreeseedContentRecord,
-	validateTreeseedContentRecord,
-	type TreeseedContentAction,
-	type TreeseedContentModel,
+	findContentToolPreset,
+	renderContentRecord,
+	validateContentRecord,
+	type ContentAction,
+	type ContentModel,
 } from '@treeseed/sdk/content-operations';
-import type { ExecutionProviderToolDescriptor, TreeDxProxyExecutionToolDescriptor } from '../runtime-types.ts';
+import type { ExecutionProviderToolDescriptor, TreeDxProxyExecutionToolDescriptor } from '../runtime/runtime-types.ts';
 import { callTreeDxProxyTool } from './treedx-proxy-client.ts';
 
 export interface ContentToolCallOptions {
@@ -40,15 +40,15 @@ function proxyDescriptor(descriptor: ExecutionProviderToolDescriptor): TreeDxPro
 
 function resolveContentCall(descriptor: ExecutionProviderToolDescriptor, input: Record<string, unknown>) {
 	const metadata = record(descriptor.metadata);
-	const preset = typeof metadata.contentPreset === 'string' ? findTreeseedContentToolPreset(metadata.contentPreset) : null;
+	const preset = typeof metadata.contentPreset === 'string' ? findContentToolPreset(metadata.contentPreset) : null;
 	const idParts = descriptor.id.split('.');
 	const action = text(metadata.contentAction)
 		|| preset?.action
 		|| (idParts[1] === 'content' ? idParts[2] : idParts[idParts.length - 1]);
 	const model = text(metadata.contentModel) || preset?.model || text(input.model);
 	return {
-		action: action as TreeseedContentAction,
-		model: model as TreeseedContentModel | undefined,
+		action: action as ContentAction,
+		model: model as ContentModel | undefined,
 	};
 }
 
@@ -126,14 +126,14 @@ function contentSlug(input: Record<string, unknown>) {
 	return candidate.replace(/\\/gu, '/').split('/').filter(Boolean).at(-1)?.replace(/\.mdx?$/iu, '') ?? candidate;
 }
 
-export async function callTreeseedContentTool(options: ContentToolCallOptions) {
+export async function callContentTool(options: ContentToolCallOptions) {
 	const descriptor = proxyDescriptor(options.descriptor);
 	if (!descriptor) {
 		return structuredError('invalid_tool_descriptor', `${options.descriptor.id} is missing TreeDX proxy descriptor metadata.`);
 	}
 	const input = options.input ?? {};
 	const { action, model } = resolveContentCall(options.descriptor, input);
-	const contentModel = model ?? text(input.model) as TreeseedContentModel;
+	const contentModel = model ?? text(input.model) as ContentModel;
 	const contentRoot = descriptorContentRoot(descriptor);
 	const relations = Array.isArray(input.relations) ? input.relations.filter((entry) => {
 		const relation = record(entry);
@@ -183,7 +183,7 @@ export async function callTreeseedContentTool(options: ContentToolCallOptions) {
 		if (!contentModel) return structuredError('content_model_unknown', 'A content model is required.', { toolId: options.descriptor.id });
 		if (action === 'link' && !relations.length) return structuredError('content_relation_required', 'Content link requires at least one relation with field and targetSlug.', { toolId: options.descriptor.id });
 		if (action === 'read') {
-			const rendered = renderTreeseedContentRecord({
+			const rendered = renderContentRecord({
 				model: contentModel,
 				slug: contentSlug(input),
 				title: text(input.title) || contentSlug(input),
@@ -202,7 +202,7 @@ export async function callTreeseedContentTool(options: ContentToolCallOptions) {
 				payload: record(result),
 			};
 		}
-		const initial = renderTreeseedContentRecord({
+		const initial = renderContentRecord({
 			model: contentModel,
 			slug: contentSlug(input) || undefined,
 			title: text(input.title) || undefined,
@@ -215,7 +215,7 @@ export async function callTreeseedContentTool(options: ContentToolCallOptions) {
 		let rendered = initial;
 		if (action === 'update' || action === 'link') {
 			const existing = await readModelContentFile(options, descriptor, initial.path);
-			rendered = renderTreeseedContentRecord({
+			rendered = renderContentRecord({
 				model: contentModel,
 				slug: contentSlug(input) || undefined,
 				title: text(input.title) || undefined,
@@ -228,7 +228,7 @@ export async function callTreeseedContentTool(options: ContentToolCallOptions) {
 			});
 		}
 		if (action === 'validate') {
-			const validation = validateTreeseedContentRecord(contentModel, rendered.content);
+			const validation = validateContentRecord(contentModel, rendered.content);
 			if (!validation.ok) {
 				return structuredError('content_validation_failed', 'Content validation failed.', { diagnostics: validation.diagnostics });
 			}
@@ -238,7 +238,7 @@ export async function callTreeseedContentTool(options: ContentToolCallOptions) {
 			await writeWorkspaceFile(options, descriptor, rendered.path, rendered.content);
 			const readback = await readWorkspaceFile(options, descriptor, rendered.path).catch(() => null);
 			if (readback) {
-				const validation = validateTreeseedContentRecord(contentModel, responseContent(readback) || rendered.content);
+				const validation = validateContentRecord(contentModel, responseContent(readback) || rendered.content);
 				if (!validation.ok) {
 					return structuredError('content_readback_failed', 'Content readback validation failed.', { diagnostics: validation.diagnostics });
 				}

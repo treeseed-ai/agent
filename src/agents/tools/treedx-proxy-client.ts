@@ -1,4 +1,4 @@
-import type { TreeDxProxyExecutionToolDescriptor } from '../runtime-types.ts';
+import type { TreeDxProxyExecutionToolDescriptor } from '../runtime/runtime-types.ts';
 import {
 	TREE_DX_PROXY_TOOL_REQUIRED_OPERATIONS,
 	type TreeDxProxyToolName,

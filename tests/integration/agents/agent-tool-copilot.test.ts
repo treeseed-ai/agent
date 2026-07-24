@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { createCopilotAgentTools } from '../../../src/agents/tools/agent-tool-copilot.ts';
-import type { ExecutionProviderToolDescriptor } from '../../../src/agents/runtime-types.ts';
+import type { ExecutionProviderToolDescriptor } from '../../../src/agents/runtime/runtime-types.ts';
 
 function statusDescriptor(): ExecutionProviderToolDescriptor {
 	return {

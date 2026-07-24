@@ -7,7 +7,7 @@ import {
 	createAgentToolMcpServer,
 	createAgentToolMcpServerCommand,
 } from '../../../src/agents/tools/agent-tool-mcp-server.ts';
-import type { TreeDxProxyExecutionToolDescriptor } from '../../../src/agents/runtime-types.ts';
+import type { TreeDxProxyExecutionToolDescriptor } from '../../../src/agents/runtime/runtime-types.ts';
 
 const descriptor: TreeDxProxyExecutionToolDescriptor = {
 	kind: 'agent_tool',

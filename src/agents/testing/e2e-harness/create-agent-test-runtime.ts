@@ -7,8 +7,8 @@ import { MemoryAgentDatabase } from '@treeseed/sdk/d1-store';
 import { resolveModelDefinition } from '@treeseed/sdk/models';
 import { type SdkMessageEntity } from '@treeseed/sdk/types';
 import { runFromRecord } from '@treeseed/sdk/stores/run-store';
-import type { ExecutionProviderAdapter, AgentMutationAdapter } from "../../runtime-types.ts";
-import type { AgentKernel } from "../../kernel/agent-kernel.ts";
+import type { ExecutionProviderAdapter, AgentMutationAdapter } from "../../runtime/runtime-types.ts";
+import type { AgentKernel } from "../../kernel/agents/agent-kernel.ts";
 import { AgentTestRuntime, createKnowledgeDocument, createObjectiveDocument, createQuestionDocument, initializeSandboxRepo, migrateDatabase, patchFixtureAgentSpecs, transpileFixtureAgentHandlers } from './patch-fixture-agent-specs.ts';
 import { createFixtureTreeDxFetch, linkWorkspaceNodeModules, resolveDocsRoot, resolveSharedNodeModules, runCommand } from './exec-file-async.ts';
 
@@ -60,7 +60,7 @@ export async function createAgentTestRuntime(options?: {
 	await initializeSandboxRepo(repoRoot);
 	const treeDxFetch = await createFixtureTreeDxFetch(repoRoot);
 	const [{ AgentKernel }, { AgentSdk }] = await Promise.all([
-		import('../../kernel/agent-kernel.ts'),
+		import('../../kernel/agents/agent-kernel.ts'),
 		import('@treeseed/sdk/sdk'),
 	]);
 	const sdk =

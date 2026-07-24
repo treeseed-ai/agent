@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { AgentKernelFallbackController } from '../../../src/agents/kernel/fallback-controller.ts';
+import { AgentKernelFallbackController } from '../../../src/agents/kernel/validation/fallback-controller.ts';
 
 describe('AgentKernelFallbackController', () => {
 	it('derives a replay-stable fallback evidence id from assignment attempt identity', () => {

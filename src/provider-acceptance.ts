@@ -3,10 +3,10 @@ import { tmpdir } from 'node:os';
 import { isAbsolute, resolve } from 'node:path';
 import { stringify as stringifyYaml } from 'yaml';
 import { ProviderProtocolClient, type CapacityProviderPrivateJwk } from '@treeseed/sdk/capacity-provider';
-import { resolveProviderConfig } from './provider/config.ts';
-import { ProviderLocalCapacityStore } from './provider/local-capacity-store.ts';
-import { DEFAULT_PROVIDER_MANIFEST, loadProviderManifest } from './provider/manifest.ts';
-import { runMultiTeamProviderManager, runMultiTeamProviderRunners } from './provider/multi-team-runtime.ts';
+import { resolveProviderConfig } from './provider/configuration/config.ts';
+import { ProviderLocalCapacityStore } from './provider/capacity/capacity-core/local-capacity-store.ts';
+import { DEFAULT_PROVIDER_MANIFEST, loadProviderManifest } from './provider/configuration/manifest.ts';
+import { runMultiTeamProviderManager, runMultiTeamProviderRunners } from './provider/teams/multi-team-runtime.ts';
 
 export interface LiveCapacityAcceptanceInput {
 	runId: string;

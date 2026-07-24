@@ -1,4 +1,4 @@
-import type { AgentHandler } from "../runtime-types.ts";
+import type { AgentHandler } from "../runtime/runtime-types.ts";
 import type {
   ExecutionContentInputs,
   ExecutionContentResult,

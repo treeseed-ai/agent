@@ -4,7 +4,7 @@ import ts from 'typescript';
 import type { AgentSdk } from '@treeseed/sdk/sdk';
 import { serializeFrontmatterDocument } from '@treeseed/sdk/frontmatter';
 import { type SdkCreateMessageRequest, type SdkMessageEntity, type SdkRunEntity } from '@treeseed/sdk/types';
-import type { AgentKernel } from "../../kernel/agent-kernel.ts";
+import type { AgentKernel } from "../../kernel/agents/agent-kernel.ts";
 import { nowIso, resolveWranglerBin, runCommand } from './exec-file-async.ts';
 
 export async function patchFixtureAgentSpecs(repoRoot: string) {

@@ -1,5 +1,5 @@
-import type { TreeseedCopilotTool } from '@treeseed/sdk/copilot';
-import type { ExecutionProviderToolDescriptor } from '../runtime-types.ts';
+import type { CopilotTool } from '@treeseed/sdk/copilot';
+import type { ExecutionProviderToolDescriptor } from '../runtime/runtime-types.ts';
 import { agentToolMcpName } from './agent-tool-mcp-server.ts';
 import type { AgentToolRuntimeOptions } from './agent-tool-runtime.ts';
 import { callAgentToolWithTelemetry } from './agent-tool-telemetry.ts';
@@ -8,8 +8,8 @@ export function agentToolCopilotName(toolId: string) {
 	return agentToolMcpName(toolId);
 }
 
-export function createCopilotAgentTools(options: AgentToolRuntimeOptions): TreeseedCopilotTool[] {
-	return options.descriptors.map((descriptor): TreeseedCopilotTool => {
+export function createCopilotAgentTools(options: AgentToolRuntimeOptions): CopilotTool[] {
+	return options.descriptors.map((descriptor): CopilotTool => {
 		const metadata = descriptor.metadata && typeof descriptor.metadata === 'object' && !Array.isArray(descriptor.metadata)
 			? descriptor.metadata as Record<string, unknown>
 			: {};

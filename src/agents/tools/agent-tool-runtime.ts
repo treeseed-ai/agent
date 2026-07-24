@@ -6,11 +6,11 @@ import type { AgentToolExecutionTarget, AgentToolMutability, ResearchSourcePolic
 import { findAgentToolDefinition } from '@treeseed/sdk';
 import { checkpointAgentWorktree } from '@treeseed/sdk/operations/agent-tools';
 import { AgentSdk } from '@treeseed/sdk/sdk';
-import type { ExecutionProviderToolDescriptor, TreeDxProxyExecutionToolDescriptor } from '../runtime-types.ts';
+import type { ExecutionProviderToolDescriptor, TreeDxProxyExecutionToolDescriptor } from '../runtime/runtime-types.ts';
 import { callTreeDxProxyTool } from './treedx-proxy-client.ts';
 import type { TreeDxProxyToolName } from './treedx-proxy-tool.ts';
 import { validateAgentToolInput } from './agent-tool-schema.ts';
-import { callTreeseedContentTool } from './content-tool-runtime.ts';
+import { callContentTool } from './content-tool-runtime.ts';
 import { fetchGovernedResearchSource, searchGovernedResearchSources } from './governed-research-tools.ts';
 
 const execFileAsync = promisify(execFile);
@@ -440,7 +440,7 @@ export async function callAgentTool(
 		return await callSdkDispatchTool(options, descriptor, input);
 	}
 	if (descriptor.executionTarget === 'treeseed_content') {
-		return await callTreeseedContentTool({
+		return await callContentTool({
 			apiBaseUrl: options.apiBaseUrl,
 			providerAccessToken: options.providerAccessToken,
 			assignmentId: options.assignmentId,

@@ -8,10 +8,10 @@
     "state": "draft",
     "contextQueries": [],
     "contextPackSummary": "Runtime source context.",
-    "sourceRefs": [{ "ref": "packages/agent/src/provider/runner.ts", "kind": "path", "title": "Worker" }],
+    "sourceRefs": [{ "ref": "packages/agent/src/provider/operations/runner.ts", "kind": "path", "title": "Runner" }],
     "sourceMap": [{
       "claim": "The worker executes claimed tasks.",
-      "sourceFiles": ["packages/agent/src/provider/runner.ts"],
+      "sourceFiles": ["packages/agent/src/provider/operations/runner.ts"],
       "sourceSymbolsOrSections": ["runWorkerCycle"],
       "evidenceStrength": "direct",
       "uncertainty": "",

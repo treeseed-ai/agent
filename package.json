@@ -27,20 +27,20 @@
       "default": "./dist/api/index.js"
     },
     "./api/app": {
-      "types": "./dist/api/app.d.ts",
-      "default": "./dist/api/app.js"
+      "types": "./dist/api/support/app.d.ts",
+      "default": "./dist/api/support/app.js"
     },
     "./api/auth/d1-provider": {
       "types": "./dist/api/auth/d1-provider.d.ts",
       "default": "./dist/api/auth/d1-provider.js"
     },
     "./runtime-types": {
-      "types": "./dist/agents/runtime-types.d.ts",
-      "default": "./dist/agents/runtime-types.js"
+      "types": "./dist/agents/runtime/runtime-types.d.ts",
+      "default": "./dist/agents/runtime/runtime-types.js"
     },
     "./cli": {
-      "types": "./dist/agents/cli.d.ts",
-      "default": "./dist/agents/cli.js"
+      "types": "./dist/agents/support/cli.d.ts",
+      "default": "./dist/agents/support/cli.js"
     },
     "./contracts/messages": {
       "types": "./dist/agents/contracts/messages.d.ts",
@@ -76,31 +76,31 @@
     "setup": "npm install",
     "setup:ci": "npm ci",
     "build": "npm run build:dist",
-    "build:dist": "node --import tsx ./scripts/build-dist.ts",
-    "check:file-lengths": "node --import tsx ./scripts/check-file-lengths.ts && npm run check:file-architecture",
-    "check:file-architecture": "node --import tsx ./scripts/check-file-architecture.ts",
-    "capacity-provider:build": "node --import tsx ./scripts/build-capacity-provider-container.ts",
-    "capacity-provider:test-local": "node ./dist/scripts/test-capacity-provider-container.js",
-    "capacity-provider:test-local-live-tools": "TREESEED_AGENT_LIVE_TOOLS=1 node ./dist/scripts/test-capacity-provider-live-tools.js",
-    "prepare": "node --import tsx ./scripts/prepare.ts",
+    "build:dist": "node --import tsx ./scripts/build/build-dist.ts",
+    "check:file-lengths": "node --import tsx ./scripts/support/check-file-lengths.ts && npm run check:file-architecture",
+    "check:file-architecture": "node --import tsx ./scripts/support/check-file-architecture.ts",
+    "capacity-provider:build": "node --import tsx ./scripts/capacity/providers/build-capacity-provider-container.ts",
+    "capacity-provider:test-local": "node ./dist/scripts/capacity/providers/test-capacity-provider-container.js",
+    "capacity-provider:test-local-live-tools": "TREESEED_AGENT_LIVE_TOOLS=1 node ./dist/scripts/capacity/providers/test-capacity-provider-live-tools.js",
+    "prepare": "node --import tsx ./scripts/support/prepare.ts",
     "lint": "npm run check:file-lengths && npm run build:dist",
     "test": "npm run test:unit && npm run test:smoke",
     "test:unit": "vitest run --config ./vitest.config.ts",
     "test:agent-tools": "vitest run --config ./vitest.config.ts tests/integration/agents/agent-tool-*.test.ts tests/integration/provider/agent-tool-provider-runtime.test.ts",
-    "test:agent-tools:live": "node --import tsx ./scripts/test-agent-tools-live.ts",
-    "test:agent-tools:live-copilot": "node --import tsx ./scripts/test-agent-tools-live-copilot.ts",
-    "test:capacity-provider-live-codex": "TREESEED_AGENT_LIVE_CODEX=1 node --import tsx ./scripts/test-agent-tools-live.ts",
+    "test:agent-tools:live": "node --import tsx ./scripts/agents/test-agent-tools-live.ts",
+    "test:agent-tools:live-copilot": "node --import tsx ./scripts/agents/test-agent-tools-live-copilot.ts",
+    "test:capacity-provider-live-codex": "TREESEED_AGENT_LIVE_CODEX=1 node --import tsx ./scripts/agents/test-agent-tools-live.ts",
     "test:human-machine-providers": "npm --workspace @treeseed/sdk run build:dist && vitest run --config ./vitest.config.ts tests/integration/agents/codex-provider*.test.ts tests/unit/agents/registry.test.ts tests/integration/provider/execution-provider-selection.test.ts tests/integration/provider/assignment-runtime*.test.ts && npm run build:dist && npm run capacity-provider:test-local",
     "prepack": "npm run build:dist",
-    "test:smoke": "node --import tsx ./scripts/test-smoke.ts",
+    "test:smoke": "node --import tsx ./scripts/testing/test-smoke.ts",
     "verify:direct": "npm run release:verify",
-    "verify:local": "TREESEED_VERIFY_DRIVER=direct TMPDIR=/tmp node --import tsx ./scripts/verify-driver.ts",
-    "verify:action": "TREESEED_VERIFY_DRIVER=act TMPDIR=/tmp node --import tsx ./scripts/verify-driver.ts",
-    "verify": "TMPDIR=/tmp node --import tsx ./scripts/verify-driver.ts",
+    "verify:local": "TREESEED_VERIFY_DRIVER=direct TMPDIR=/tmp node --import tsx ./scripts/support/verify-driver.ts",
+    "verify:action": "TREESEED_VERIFY_DRIVER=act TMPDIR=/tmp node --import tsx ./scripts/support/verify-driver.ts",
+    "verify": "TMPDIR=/tmp node --import tsx ./scripts/support/verify-driver.ts",
     "release:setup": "npm run setup:ci",
-    "release:check-tag": "node --import tsx ./scripts/assert-release-tag-version.ts",
-    "release:verify": "npm run check:file-lengths && node --import tsx ./scripts/release-verify.ts",
-    "release:publish": "node --import tsx ./scripts/publish-package.ts",
+    "release:check-tag": "node --import tsx ./scripts/packages/assert-release-tag-version.ts",
+    "release:verify": "npm run check:file-lengths && node --import tsx ./scripts/packages/release-verify.ts",
+    "release:publish": "node --import tsx ./scripts/packages/publish-package.ts",
     "test:agent-contracts": "vitest run --config ./vitest.config.ts tests/contract/agents/agent-contracts.test.ts tests/contract/agents/agent-test-catalog.test.ts tests/contract/agents/starter-contracts.test.ts",
     "test:agent-handlers": "vitest run --config ./vitest.config.ts tests/contract/agents/agent-contracts.test.ts tests/contract/agents/agent-test-catalog.test.ts",
     "test:agent-message-chains": "vitest run --config ./vitest.config.ts tests/integration/agents/message-chain.test.ts",
@@ -111,7 +111,7 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@openai/codex-sdk": "^0.130.0",
-    "@treeseed/sdk": "github:treeseed-ai/sdk#363356034d2717f401f4cdd0c54b22c16dffc60c",
+    "@treeseed/sdk": "github:treeseed-ai/sdk#8f2e04cb4dac647d7aa63179dd67b5027d2e393f",
     "esbuild": "0.28.0",
     "hono": "^4.8.2",
     "typescript": "^5.9.3",
@@ -123,6 +123,6 @@
     "vitest": "^4.1.2"
   },
   "bin": {
-    "treeseed-agents": "dist/scripts/treeseed-agents.js"
+    "treeseed-agents": "dist/scripts/agents/agents.js"
   }
 }

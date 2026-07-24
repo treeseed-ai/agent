@@ -1,5 +1,5 @@
-import type { AgentContext } from '../runtime-types.ts';
-import { resolveProjectContentRoot } from '../content-artifacts.ts';
+import type { AgentContext } from '../runtime/runtime-types.ts';
+import { resolveProjectContentRoot } from '../content/content-artifacts.ts';
 import { readRecord, type HandlerPayload } from './shared.ts';
 
 export interface ExecutionContentSubject {

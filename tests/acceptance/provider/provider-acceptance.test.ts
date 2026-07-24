@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { recoverOrphanedAcceptanceClaims, resolveLiveAcceptanceExecutionProvider, runWithAcceptanceAvailabilityHeartbeat, waitForAcceptanceDispatches } from '../../../src/provider-acceptance.ts';
-import { ProviderLocalCapacityStore } from '../../../src/provider/local-capacity-store.ts';
+import { ProviderLocalCapacityStore } from '../../../src/provider/capacity/capacity-core/local-capacity-store.ts';
 
 describe('live capacity acceptance provider compilation', () => {
 	const roots: string[] = [];

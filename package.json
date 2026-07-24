@@ -90,7 +90,7 @@
     "test:agent-tools:live": "node --import tsx ./scripts/agents/test-agent-tools-live.ts",
     "test:agent-tools:live-copilot": "node --import tsx ./scripts/agents/test-agent-tools-live-copilot.ts",
     "test:capacity-provider-live-codex": "TREESEED_AGENT_LIVE_CODEX=1 node --import tsx ./scripts/agents/test-agent-tools-live.ts",
-    "test:human-machine-providers": "npm --workspace @treeseed/sdk run build:dist && vitest run --config ./vitest.config.ts tests/integration/agents/codex-provider*.test.ts tests/unit/agents/registry.test.ts tests/integration/provider/execution-provider-selection.test.ts tests/integration/provider/assignment-runtime*.test.ts && npm run build:dist && npm run capacity-provider:test-local",
+    "test:human-machine-providers": "npm --workspace @treeseed/sdk run build:dist && vitest run --config ./vitest.config.ts tests/integration/agents/codex-provider*.test.ts tests/unit/agents/registry.test.ts tests/integration/provider/capacity/providers/execution-provider-selection.test.ts tests/integration/provider/capacity/assignments/assignment-runtime*.test.ts && npm run build:dist && npm run capacity-provider:test-local",
     "prepack": "npm run build:dist",
     "test:smoke": "node --import tsx ./scripts/testing/test-smoke.ts",
     "verify:direct": "npm run release:verify",
@@ -104,8 +104,8 @@
     "test:agent-contracts": "vitest run --config ./vitest.config.ts tests/contract/agents/agent-contracts.test.ts tests/contract/agents/agent-test-catalog.test.ts tests/contract/agents/starter-contracts.test.ts",
     "test:agent-handlers": "vitest run --config ./vitest.config.ts tests/contract/agents/agent-contracts.test.ts tests/contract/agents/agent-test-catalog.test.ts",
     "test:agent-message-chains": "vitest run --config ./vitest.config.ts tests/integration/agents/testing/message-chain.test.ts",
-    "test:provider-runtime": "vitest run --config ./vitest.config.ts tests/integration/provider/assignment-runtime*.test.ts tests/integration/provider/multi-team-coordinator.test.ts",
-    "test:capacity-provider-runtime": "vitest run --config ./vitest.config.ts tests/integration/provider/assignment-runtime*.test.ts tests/integration/provider/availability-projection.test.ts tests/integration/provider/connection-scheduler.test.ts tests/integration/provider/lease-recovery.test.ts tests/integration/provider/local-capacity-store.test.ts tests/integration/provider/manager-session-recovery.test.ts tests/integration/provider/multi-team-coordinator.test.ts tests/integration/provider/multi-team-runtime.test.ts tests/integration/provider/multi-team-service.test.ts tests/contract/provider/provider-architecture.test.ts",
+    "test:provider-runtime": "vitest run --config ./vitest.config.ts tests/integration/provider/capacity/assignments/assignment-runtime*.test.ts tests/integration/provider/teams/multi-team-coordinator.test.ts",
+    "test:capacity-provider-runtime": "vitest run --config ./vitest.config.ts tests/integration/provider/capacity/assignments/assignment-runtime*.test.ts tests/integration/provider/projects/projects-core/availability-projection.test.ts tests/integration/provider/testing/connection-scheduler.test.ts tests/integration/provider/testing/lease-recovery.test.ts tests/integration/provider/capacity/capacity-core/local-capacity-store.test.ts tests/integration/provider/accounts/manager-session-recovery.test.ts tests/integration/provider/teams/multi-team-coordinator.test.ts tests/integration/provider/teams/multi-team-runtime.test.ts tests/integration/provider/teams/multi-team-service.test.ts tests/contract/provider/provider-architecture.test.ts",
     "test:market-docs-governed-mutation": "vitest run --config ./vitest.config.ts tests/integration/agents/codex-provider*.test.ts"
   },
   "dependencies": {

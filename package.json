@@ -103,7 +103,7 @@
     "release:publish": "node --import tsx ./scripts/packages/publish-package.ts",
     "test:agent-contracts": "vitest run --config ./vitest.config.ts tests/contract/agents/agent-contracts.test.ts tests/contract/agents/agent-test-catalog.test.ts tests/contract/agents/starter-contracts.test.ts",
     "test:agent-handlers": "vitest run --config ./vitest.config.ts tests/contract/agents/agent-contracts.test.ts tests/contract/agents/agent-test-catalog.test.ts",
-    "test:agent-message-chains": "vitest run --config ./vitest.config.ts tests/integration/agents/message-chain.test.ts",
+    "test:agent-message-chains": "vitest run --config ./vitest.config.ts tests/integration/agents/testing/message-chain.test.ts",
     "test:provider-runtime": "vitest run --config ./vitest.config.ts tests/integration/provider/assignment-runtime*.test.ts tests/integration/provider/multi-team-coordinator.test.ts",
     "test:capacity-provider-runtime": "vitest run --config ./vitest.config.ts tests/integration/provider/assignment-runtime*.test.ts tests/integration/provider/availability-projection.test.ts tests/integration/provider/connection-scheduler.test.ts tests/integration/provider/lease-recovery.test.ts tests/integration/provider/local-capacity-store.test.ts tests/integration/provider/manager-session-recovery.test.ts tests/integration/provider/multi-team-coordinator.test.ts tests/integration/provider/multi-team-runtime.test.ts tests/integration/provider/multi-team-service.test.ts tests/contract/provider/provider-architecture.test.ts",
     "test:market-docs-governed-mutation": "vitest run --config ./vitest.config.ts tests/integration/agents/codex-provider*.test.ts"

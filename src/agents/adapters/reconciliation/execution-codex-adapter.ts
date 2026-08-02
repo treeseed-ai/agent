@@ -34,6 +34,7 @@ export interface CodexExecutionProviderAdapterOptions {
 	}) => Promise<PreparedCodexWorktree>;
 	env?: NodeJS.ProcessEnv;
 	researchSourcePolicy?: ResearchSourcePolicy;
+	onEvent?: (event: Record<string, unknown>) => void | Promise<void>;
 }
 
 const DEFAULT_CODEX_ALLOWED_PATHS = ['**'];
@@ -344,6 +345,7 @@ export class CodexExecutionProviderAdapter implements ExecutionProviderAdapter {
 			codexClient = Promise.resolve((this.options.createCodexClient ?? createDefaultCodexClient)(request));
 			result = await runCodexTask(request, {
 				client: codexClient,
+				onEvent: this.options.onEvent,
 			});
 			toolTelemetry = await readToolTelemetry(toolTelemetryPath);
 			const researchStage = typeof input.workPackage.metadata?.researchStage === 'string' ? input.workPackage.metadata.researchStage : null;
@@ -366,11 +368,12 @@ export class CodexExecutionProviderAdapter implements ExecutionProviderAdapter {
 							'If review_decision_recorded is missing, call treeseed.review_decision with the evidence-based approved or rejected disposition.',
 							'If research_independent_publishers is missing, call the available TreeSeed tool with callName research_fetch_source (policy id research.fetch_source) for sources hosted on additional independent allowed domains until the required distinct-domain count is met. Search for and invoke the callName, not the dotted policy id. Then create, validate, and commit the required linked evidence note.',
 							'If content_artifact_kind is missing, create the assignment-required content model and artifact kind with the required subject relation, validate it, and commit it. Auxiliary questions or notes do not replace the required deliverable.',
-							'If content_subject_linked is missing for a note path, use treeseed.content.link on that exact note with the assignment-required subject relation, validate it, and commit the corrected workspace. Every created note, including an accidental placeholder, must be linked before completion.',
+							'If content_subject_linked is missing for a note path, use treeseed.content.link with placement.path set to that exact repository-relative note path and the assignment-required subject relation; validate the same exact placement, then commit the corrected workspace. Every created note, including an accidental placeholder, must be linked before completion.',
 							'Wait for each successful receipt and do not send a final response until every listed receipt exists.',
 						].join('\n'),
 					}, {
 						client: codexClient,
+						onEvent: this.options.onEvent,
 					});
 					result = mergeCodexResults(result, correction);
 					toolTelemetry = await readToolTelemetry(toolTelemetryPath);

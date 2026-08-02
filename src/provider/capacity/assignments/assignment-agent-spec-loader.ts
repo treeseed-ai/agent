@@ -21,7 +21,7 @@ function fileSlug(filePath: string, agentsRoot: string) {
 	return relative.replace(/\.(mdx|md)$/iu, '').replace(/^\/+|\/+$/gu, '');
 }
 
-export async function loadAssignmentRawAgentSpecs(input: { treeDx: AgentTreeDxAdapter | null; assignmentId: string; agentSlug: string; workspaceId: string | null; contentRoot: string | null; client: AssignmentModeRunRecorder; mode: string; capacityEnvelope: Record<string, unknown>; decisionPayload: Record<string, unknown>; runnerId: string; options?: { enabled?: boolean } }) {
+export async function loadAssignmentRawAgentSpecs(input: { treeDx: AgentTreeDxAdapter | null; assignmentId: string; agentSlug: string; agentContentPath?: string | null; workspaceId: string | null; contentRoot: string | null; client: AssignmentModeRunRecorder; mode: string; capacityEnvelope: Record<string, unknown>; decisionPayload: Record<string, unknown>; runnerId: string; options?: { enabled?: boolean } }) {
 	if (!input.treeDx) return null;
 	const startedAt = Date.now();
 	const agentsRoot = `${(input.contentRoot ?? 'src/content').replace(/\/+$/u, '')}/agents`;
@@ -32,7 +32,10 @@ export async function loadAssignmentRawAgentSpecs(input: { treeDx: AgentTreeDxAd
 		const attemptedPaths: string[] = [];
 		const missingPaths: string[] = [];
 		const readResponses: Record<string, unknown>[] = [];
-		for (const candidatePath of [`${agentsRoot}/${input.agentSlug}.mdx`, `${agentsRoot}/${input.agentSlug}.md`]) {
+		const candidatePaths = input.agentContentPath
+			? [input.agentContentPath]
+			: [`${agentsRoot}/${input.agentSlug}.mdx`, `${agentsRoot}/${input.agentSlug}.md`];
+		for (const candidatePath of candidatePaths) {
 			attemptedPaths.push(candidatePath);
 			try {
 				readResponses.push(record(await input.treeDx.readRepositoryFiles({ repoId: '', paths: [candidatePath], body: { includeBody: true, includeFrontmatter: true } })));

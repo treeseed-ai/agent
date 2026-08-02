@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { renderContentRecord } from '@treeseed/sdk/content-operations';
 import { contentModelSupportsArtifactKind, executionAgentForAccess } from '../../../src/agents/handlers/execution-content.ts';
 import { executionContentRoot, resolveExecutionTreeDxContext } from '../../../src/agents/handlers/execution-content-context.ts';
 import { buildExecutionContentInstructions } from '../../../src/agents/handlers/execution-content-prompt.ts';
@@ -89,6 +90,52 @@ describe('execution content artifact contract', () => {
 		expect(result.diagnostics.warnings).toEqual([]);
 	});
 
+	it('compiles revision-pinned editorial layers through TreeDX for Guide agents', async () => {
+		const context = {
+			repoRoot: '/provider/data/assignment-contexts/market',
+			agent: { slug: 'guide-writer', activityType: 'acting', context: { queries: [] } },
+			capacity: { assignmentId: 'assignment-guide', treedxProxyHandle: { repositoryId: 'repo-market' },
+				assignment: { metadata: { contentRoot: 'src/content' } } },
+			treeDx: {
+				async readRepositoryFiles(input: { paths: string[] }) {
+					const path = input.paths[0]!;
+					return { payload: { files: [{ path, text: `editorial content for ${path}`, sha: path.includes('/core.') ? 'a'.repeat(40) : 'b'.repeat(40) }] } };
+				},
+			},
+		} as never;
+		const result = await resolveExecutionTreeDxContext(context,
+			{ model: 'knowledge', id: 'guide.deployment.knowledge', title: 'Knowledge',
+				path: 'src/content/knowledge/treeseed-guide/deployment/knowledge.md' },
+			{ bookId: 'treeseed-guide' });
+		expect(result.editorialContext?.layers.map((layer) => layer.kind)).toEqual([
+			'core-objective', 'project-core', 'book-core', 'chapter-brief', 'target-page', 'assignment',
+		]);
+		expect(result.editorialContext?.digest).toMatch(/^[a-f0-9]{64}$/u);
+		expect(result.diagnostics).toMatchObject({ editorialContextSchemaVersion: 'treeseed.editorial-context/v1',
+			declarativeContextPackCount: 1 });
+	});
+
+	it('allows Guide planning to orient from the editorial cores before a chapter is selected', async () => {
+		const context = {
+			repoRoot: '/provider/data/assignment-contexts/market',
+			agent: { slug: 'guide-steward', activityType: 'planning', context: { queries: [] } },
+			capacity: { assignmentId: 'assignment-guide-plan', treedxProxyHandle: { repositoryId: 'repo-market' },
+				assignment: { metadata: { contentRoot: 'src/content' } } },
+			treeDx: {
+				async readRepositoryFiles(input: { paths: string[] }) {
+					const path = input.paths[0]!;
+					return { payload: { files: [{ path, text: `editorial content for ${path}`, sha: 'a'.repeat(40) }] } };
+				},
+			},
+		} as never;
+		const result = await resolveExecutionTreeDxContext(context,
+			{ model: 'objective', id: 'core', title: 'Core TreeSeed Objective' },
+			{ objectiveId: 'core' });
+		expect(result.editorialContext?.layers.map((layer) => layer.kind)).toEqual([
+			'core-objective', 'project-core', 'book-core', 'assignment',
+		]);
+	});
+
 	it('gives the provider the assignment-owned content root and exact subject relation', () => {
 		const instructions = buildExecutionContentInstructions({
 			agent: { systemPrompt: 'Architect prompt.' },
@@ -102,6 +149,7 @@ describe('execution content artifact contract', () => {
 			contentRoot: 'template/src/content',
 		});
 		expect(instructions).toContain('Content root: template/src/content');
+		expect(instructions).toContain('exact changedPaths entry back as placement.path');
 		expect(instructions).toContain('"field":"relatedDecisions"');
 		expect(instructions).not.toContain('Content root: src/content');
 	});
@@ -224,5 +272,72 @@ describe('execution content artifact contract', () => {
 		});
 		expect(urls).toHaveLength(2);
 		expect(urls.every((url) => url.includes('path=template%2Fsrc%2Fcontent%2Fnotes%2Frelease-channel-evidence.mdx'))).toBe(true);
+	});
+
+	it('accepts a canonical placement path without duplicating the content root and collection', async () => {
+		const urls: string[] = [];
+		const result = await callContentTool({
+			apiBaseUrl: 'http://127.0.0.1:3000', providerAccessToken: 'redacted', assignmentId: 'assignment-a',
+			descriptor: {
+				id: 'treeseed.content.create', handleId: 'handle-a', projectId: 'project-a',
+				assignmentId: 'assignment-a', workspaceId: 'workspace-a',
+				allowedOperations: ['files:write', 'files:read'], allowedPaths: ['src/content/**'],
+				routes: {
+					writeWorkspaceFile: 'PUT /v1/dx/projects/project-a/workspaces/workspace-a/files?path=:path',
+					readWorkspaceFile: 'GET /v1/dx/projects/project-a/workspaces/workspace-a/files?path=:path',
+				},
+				metadata: { contentAction: 'create', contentRoot: 'src/content' },
+			} as never,
+			input: {
+				model: 'note', slug: 'audience-review-plan', title: 'Audience review plan', body: 'Review body.',
+				placement: { path: 'src/content/notes/editorial/books/treeseed-guide/reviews/audience-review-plan.mdx' },
+				relations: [{ field: 'about', targetSlug: 'objective:core' }],
+			},
+			fetchImpl: (async (url) => {
+				urls.push(String(url));
+				return new Response(JSON.stringify({ ok: true, payload: {} }), {
+					status: 200, headers: { 'content-type': 'application/json' },
+				});
+			}) as typeof fetch,
+		});
+		expect(result).toMatchObject({
+			ok: true,
+			changedPaths: ['src/content/notes/editorial/books/treeseed-guide/reviews/audience-review-plan.mdx'],
+		});
+		expect(urls.every((url) => url.includes('path=src%2Fcontent%2Fnotes%2Feditorial%2Fbooks%2Ftreeseed-guide%2Freviews%2Faudience-review-plan.mdx'))).toBe(true);
+	});
+
+	it('validates the existing record at an exact hierarchical placement', async () => {
+		const urls: string[] = [];
+		const existing = renderContentRecord({
+			model: 'note', title: 'Technical review plan', body: 'Review body.',
+			relations: [{ field: 'relatedObjectives', targetSlug: 'objective:core' }],
+		});
+		const result = await callContentTool({
+			apiBaseUrl: 'http://127.0.0.1:3000', providerAccessToken: 'redacted', assignmentId: 'assignment-a',
+			descriptor: {
+				id: 'treeseed.content.validate', handleId: 'handle-a', projectId: 'project-a',
+				assignmentId: 'assignment-a', workspaceId: 'workspace-a',
+				allowedOperations: ['files:read'], allowedPaths: ['src/content/**'],
+				routes: { readWorkspaceFile: 'GET /v1/dx/projects/project-a/workspaces/workspace-a/files?path=:path' },
+				metadata: { contentAction: 'validate', contentRoot: 'src/content' },
+			} as never,
+			input: {
+				model: 'note', slug: 'technical-review-plan',
+				placement: { path: 'src/content/notes/editorial/books/treeseed-guide/reviews/technical-review-plan.mdx' },
+			},
+			fetchImpl: (async (url) => {
+				urls.push(String(url));
+				return new Response(JSON.stringify({ ok: true, payload: { content: existing.content } }), {
+					status: 200, headers: { 'content-type': 'application/json' },
+				});
+			}) as typeof fetch,
+		});
+
+		expect(result).toMatchObject({
+			ok: true,
+			refs: [{ path: 'src/content/notes/editorial/books/treeseed-guide/reviews/technical-review-plan.mdx' }],
+		});
+		expect(urls).toHaveLength(1);
 	});
 });

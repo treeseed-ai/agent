@@ -39,7 +39,6 @@ export type {
   AgentKernelAssignmentRunOptions,
   AgentKernelModeRunTelemetryInput,
 } from "../execution/run-types.ts";
-
 export class AgentKernel {
   private readonly execution;
   private readonly executionOverride;
@@ -242,12 +241,16 @@ export class AgentKernel {
                   record(workPackage.metadata).contextDiagnostics ??
                   null,
                 assignedObjective: workPackageContext.assignedObjective ?? null,
+				editorialContext: workPackageContext.editorialContext ?? null,
               },
             },
             traceRefs: {
               agentRunId: runId,
               agentSlug: agent.slug,
               handlerKind: runtimeAgent.handler,
+			  editorialContextDigest: record(workPackage.metadata).editorialContextDigest ?? null,
+			  editorialContextSchemaVersion: record(workPackage.metadata).editorialContextSchemaVersion ?? null,
+			  editorialContextLayers: record(workPackage.metadata).editorialContextLayers ?? [],
             },
             metadata: {
               source: "agent_kernel_inputs_resolved",

@@ -11,6 +11,7 @@ import { assignmentProjectContext, materializeAssignmentProject, providerProject
 import { createAssignmentToolCatalog } from '../commerce/catalog/assignment-tool-catalog.ts';
 import { loadAssignmentRawAgentSpecs } from '../capacity/assignments/assignment-agent-spec-loader.ts';
 import { createProviderMessageRecorder } from '../reporting/message-recorder.ts';
+import { codexEventMessage } from '../reporting/codex-event-message.ts';
 import { createAssignmentExecutionProviderAdapter, resolveAssignmentExecutionProvider } from '../capacity/providers/execution-provider-selection.ts';
 import { assignmentWorkflowOperationHandles, assignmentWorkspaceAccessMode, resolveAssignmentAgentToolPolicy } from '../capacity/assignments/assignment-tool-policy.ts';
 import { assignmentScopedTreeDxOptions, createAssignmentTreeDxAdapter } from '../treedx/graph/treedx-context-adapter.ts';
@@ -243,6 +244,7 @@ export async function prepareAssignmentKernelBridge(input: ProviderAssignmentExe
 					treeDx: assignmentTreeDxAdapter,
 					assignmentId,
 					agentSlug,
+					agentContentPath: stringValue(assignmentMetadata.agentContentPath, record(decisionPayload).agentContentPath),
 					workspaceId: stringValue(treedxProxyHandle.workspaceId),
 					contentRoot: stringValue(assignmentMetadata.contentRoot, record(decisionPayload).contentRoot),
 					client: input.client,
@@ -317,6 +319,7 @@ export async function prepareAssignmentKernelBridge(input: ProviderAssignmentExe
 		discord: input.config.discord,
 		accessToken: input.config.accessToken,
 		apiBaseUrl: input.config.marketUrl,
+		onCodexEvent: async (event) => { await providerCreateMessage(codexEventMessage(event)); },
 		researchSourcePolicy: executionProvider?.researchSourcePolicy,
 			workflow: {
 				dispatchWorkflowOperation: input.client.dispatchAssignmentWorkflowOperation
@@ -327,6 +330,14 @@ export async function prepareAssignmentKernelBridge(input: ProviderAssignmentExe
 							ok: responseRecord.ok === undefined ? true : responseRecord.ok === true,
 							payload: record(responseRecord.payload ?? responseRecord),
 						};
+					}
+					: undefined,
+				getWorkflowOperationRun: input.client.getAssignmentWorkflowRun
+					? async (workflowAssignmentId, runId) => {
+						const response = await input.client.getAssignmentWorkflowRun!(workflowAssignmentId, runId);
+						const responseRecord = record(response);
+						return { ok: responseRecord.ok === undefined ? true : responseRecord.ok === true,
+							payload: record(responseRecord.payload ?? responseRecord) };
 					}
 					: undefined,
 			},

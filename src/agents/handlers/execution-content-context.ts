@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+import { compileEditorialContext, type EditorialContextLayer } from '@treeseed/sdk/knowledge';
 import type { AgentContext } from '../runtime/runtime-types.ts';
 import { resolveProjectContentRoot } from '../content/content-artifacts.ts';
 import { readRecord, type HandlerPayload } from './shared.ts';
@@ -21,6 +23,22 @@ function strings(value: unknown) {
 
 function unique(values: Array<string | null | undefined>) {
 	return [...new Set(values.filter((value): value is string => typeof value === 'string' && Boolean(value.trim())))];
+}
+
+function canonicalValue(value: unknown): unknown {
+	if (Array.isArray(value)) return value.map(canonicalValue);
+	const record = readRecord(value);
+	if (!record) return value;
+	return Object.fromEntries(Object.keys(record).sort().map((key) => [key, canonicalValue(record[key])]));
+}
+
+function serialized(value: unknown) {
+	try { return JSON.stringify(canonicalValue(value), null, 2); }
+	catch { return String(value); }
+}
+
+function revisionFor(content: string) {
+	return createHash('sha256').update(content).digest('hex');
 }
 
 function treeDxHandle(context: AgentContext) {
@@ -49,13 +67,15 @@ function repositoryFiles(response: Record<string, unknown>) {
 				if (!file) return [];
 				const path = text(file.path, file.filePath, file.name);
 				const content = text(file.text, file.content, file.body);
-				return path || content ? [{ path, text: content }] : [];
+				const revision = text(file.sha, file.revision, file.contentHash);
+				return path || content ? [{ path, text: content, revision }] : [];
 			});
 		}
 		const files = readRecord(candidate);
 		if (files) return Object.entries(files).flatMap(([path, value]) => {
 			const content = typeof value === 'string' ? value : text(readRecord(value)?.text, readRecord(value)?.content, readRecord(value)?.body);
-			return path || content ? [{ path, text: content }] : [];
+			const revision = text(readRecord(value)?.sha, readRecord(value)?.revision, readRecord(value)?.contentHash);
+			return path || content ? [{ path, text: content, revision }] : [];
 		});
 	}
 	return [];
@@ -105,6 +125,40 @@ function assignedObjectivePaths(payload: HandlerPayload, subject: ExecutionConte
 	return [`${contentRoot}/objectives/${objectiveId}.mdx`, `${contentRoot}/objectives/${objectiveId}.md`];
 }
 
+const editorialAgentSlugs = new Set([
+	'guide-steward', 'knowledge-cartographer', 'evidence-researcher', 'guide-writer',
+	'technical-verifier', 'audience-reviewer', 'publication-steward', 'workday-reporter',
+]);
+
+function guideChapter(payload: HandlerPayload, subject: ExecutionContentSubject) {
+	const explicit = text(payload.chapter, payload.chapterSlug);
+	if (explicit) return explicit;
+	const path = text(subject.path, payload.targetPath, payload.contentPath) ?? '';
+	return path.match(/treeseed-guide\/(foundation|deployment|security|content|work|governance|market)(?:\/|\.|$)/u)?.[1] ?? null;
+}
+
+function editorialPathGroups(context: AgentContext, payload: HandlerPayload, subject: ExecutionContentSubject, contentRoot: string) {
+	const editorial = editorialAgentSlugs.has(context.agent.slug);
+	const chapter = guideChapter(payload, subject);
+	if (!editorial) return [];
+	if (!chapter && ['guide-writer', 'technical-verifier', 'audience-reviewer', 'publication-steward'].includes(context.agent.slug)
+		&& ['acting', 'reviewing'].includes(String(context.agent.activityType))) {
+		throw new Error(`Editorial agent "${context.agent.slug}" requires an explicit TreeSeed Guide chapter scope.`);
+	}
+	return [
+		{ kind: 'core-objective', id: 'objective:core', required: true,
+			paths: [`${contentRoot}/objectives/core.mdx`, `${contentRoot}/objectives/core.md`] },
+		{ kind: 'project-core', id: 'note:market:editorial:core', required: true,
+			paths: [`${contentRoot}/notes/editorial/core.mdx`, `${contentRoot}/notes/editorial/core.md`] },
+		{ kind: 'book-core', id: 'note:market:editorial:treeseed-guide:core', required: true,
+			paths: [`${contentRoot}/notes/editorial/books/treeseed-guide/core.mdx`, `${contentRoot}/notes/editorial/books/treeseed-guide/core.md`] },
+		...(chapter ? [{ kind: 'chapter-brief', id: `note:market:editorial:treeseed-guide:chapter:${chapter}`,
+			required: ['acting', 'reviewing', 'reporting'].includes(String(context.agent.activityType)),
+			paths: [`${contentRoot}/notes/editorial/books/treeseed-guide/chapters/${chapter}/brief.mdx`,
+				`${contentRoot}/notes/editorial/books/treeseed-guide/chapters/${chapter}/brief.md`] }] : []),
+	];
+}
+
 async function collectEvidence(context: AgentContext, subject: ExecutionContentSubject, payload: HandlerPayload) {
 	if (!context.treeDx) return [];
 	const handle = treeDxHandle(context);
@@ -116,11 +170,14 @@ async function collectEvidence(context: AgentContext, subject: ExecutionContentS
 	const queries = configuredQueries(context);
 	if (repoId) {
 		const objectivePaths = assignedObjectivePaths(payload, subject, contentRoot);
+		const editorialGroups = editorialPathGroups(context, payload, subject, contentRoot);
 		const groups = [
+			...editorialGroups,
 			...(objectivePaths.length ? [{ id: 'assigned objective', paths: objectivePaths }] : []),
-			{ id: 'agent configuration', paths: [`${contentRoot}/agents/${context.agent.slug}.mdx`] },
+			{ id: 'agent configuration', paths: [`${contentRoot}/agents/${context.agent.slug}.mdx`,
+				`${contentRoot}/agents/editorial/${context.agent.slug}.mdx`] },
 		];
-		const files: Array<{ path: string | null; text: string | null }> = [];
+		const files: Array<{ path: string | null; text: string | null; revision?: string | null }> = [];
 		const resolvedPaths: string[] = [];
 		const responses: unknown[] = [];
 		for (const group of groups) {
@@ -142,6 +199,9 @@ async function collectEvidence(context: AgentContext, subject: ExecutionContentS
 				}
 			}
 			if (failures.length === group.paths.length) warnings.push(`TreeDX repository ${group.id} evidence failed: ${failures.join('; ')}`);
+			if ('required' in group && group.required && failures.length === group.paths.length) {
+				throw new Error(`Required editorial context "${group.kind}" could not be resolved through TreeDX.`);
+			}
 		}
 		evidence.push({
 			id: 'treedx-repository-files',
@@ -177,6 +237,21 @@ async function collectEvidence(context: AgentContext, subject: ExecutionContentS
 				warnings.push(`TreeDX configured context query ${query.id ?? query.query} failed: ${error instanceof Error ? error.message : String(error)}`);
 			}
 		}
+		if (editorialAgentSlugs.has(context.agent.slug) && (subject.id || subject.title)) {
+			try {
+				const query = unique([subject.id, subject.title, 'parent children related guarantees evidence']).join(' ');
+				const paths = [`${contentRoot}/knowledge/treeseed-guide/**`, `${contentRoot}/notes/editorial/books/treeseed-guide/**`,
+					'guarantees/**', 'packages/*/guarantees/**', 'docs/**', 'packages/*/docs/**'];
+				const pack = await context.treeDx.buildContext({ repoId, query, paths, body: {
+					source: 'guide_editorial_context', assignmentId: context.capacity?.assignmentId,
+					agentId: context.agent.slug, limit: 24, depth: 2, format: 'full',
+				} });
+				evidence.push({ id: 'treedx-guide-editorial-graph', purpose: 'Target page, hierarchy, relationships, and editorial evidence.',
+					source: 'treedx_proxy', sourceRef: { repoId, query, paths, reason: 'Guide assignment graph neighborhood' }, pack });
+			} catch (error) {
+				warnings.push(`TreeDX Guide editorial graph context failed: ${error instanceof Error ? error.message : String(error)}`);
+			}
+		}
 	} else warnings.push('No TreeDX repository id was available on the assignment proxy handle.');
 	if (workspaceId) {
 		try {
@@ -188,6 +263,58 @@ async function collectEvidence(context: AgentContext, subject: ExecutionContentS
 	}
 	if (warnings.length) evidence.push({ id: 'treedx-evidence-warnings', purpose: 'TreeDX evidence collection diagnostics.', source: 'treedx_proxy', warnings });
 	return evidence;
+}
+
+function editorialContext(evidence: unknown[], context: AgentContext, payload: HandlerPayload, subject: ExecutionContentSubject, contentRoot: string) {
+	if (!editorialAgentSlugs.has(context.agent.slug)) return null;
+	const repositoryEvidence = evidence.map(readRecord).find((entry) => entry?.id === 'treedx-repository-files');
+	const files = Array.isArray(repositoryEvidence?.files) ? repositoryEvidence.files.map(readRecord).filter(Boolean) : [];
+	const layers: EditorialContextLayer[] = [];
+	for (const group of editorialPathGroups(context, payload, subject, contentRoot)) {
+		const file = files.find((candidate) => group.paths.includes(text(candidate?.path) ?? ''));
+		const content = text(file?.text);
+		if (!content) continue;
+		layers.push({
+			kind: group.kind as EditorialContextLayer['kind'], id: group.id, path: text(file?.path) ?? undefined,
+			revision: text(file?.revision) ?? revisionFor(content), content,
+			reason: `Required ${group.kind} for ${context.agent.slug}.`,
+		});
+	}
+	const targetEvidence = evidence.map(readRecord).find((entry) => entry?.id === 'treedx-subject-artifact');
+	const targetFile = Array.isArray(targetEvidence?.files) ? targetEvidence.files.map(readRecord).find(Boolean) : null;
+	const targetContent = text(targetFile?.text);
+	if (targetContent) layers.push({ kind: 'target-page', id: subject.id ?? subject.path ?? 'assigned-target',
+		path: text(targetFile?.path, subject.path) ?? undefined,
+		revision: text(targetFile?.revision, subject.ref) ?? revisionFor(targetContent), content: targetContent,
+		reason: 'Exact Guide page assigned for drafting or review.' });
+	const targetRequired = Boolean(subject.path) && ['guide-writer', 'technical-verifier', 'audience-reviewer', 'publication-steward'].includes(context.agent.slug)
+		&& ['acting', 'reviewing'].includes(String(context.agent.activityType));
+	if (targetRequired && !targetContent) throw new Error('The exact Guide target page could not be resolved through TreeDX.');
+	const graphEvidence = evidence.map(readRecord).find((entry) => entry?.id === 'treedx-guide-editorial-graph');
+	if (graphEvidence?.pack) {
+		const content = serialized(graphEvidence.pack);
+		layers.push({ kind: 'evidence', id: `${subject.id ?? 'guide-assignment'}:graph-evidence`, revision: revisionFor(content), content,
+			reason: text(readRecord(graphEvidence.sourceRef)?.reason) ?? 'Guide graph, guarantees, and editorial evidence.' });
+	}
+	for (const source of evidence.map(readRecord).filter((entry) => text(entry?.id)?.startsWith('treedx-context-query:'))) {
+		if (!source?.pack) continue;
+		const content = serialized(source.pack);
+		layers.push({ kind: 'source', id: text(source.id)!, revision: revisionFor(content), content,
+			reason: text(source.purpose) ?? 'Role-specific TreeDX source context.' });
+	}
+	const assignment = JSON.stringify({
+		agent: context.agent.slug, activityType: context.agent.activityType, assignmentId: context.capacity?.assignmentId ?? null,
+		chapter: guideChapter(payload, subject), subject: { model: subject.model, id: subject.id, title: subject.title, path: subject.path, ref: subject.ref },
+		output: text(payload.outputContract, payload.artifactKind, payload.expectedOutput),
+	}, null, 2);
+	layers.push({ kind: 'assignment', id: String(context.capacity?.assignmentId ?? `${context.agent.slug}:assignment`),
+		revision: revisionFor(assignment), content: assignment, reason: 'Exact bounded assignment identity and output scope.' });
+	const optionalUniqueKinds = (['chapter-brief', 'target-page'] as const)
+		.filter((kind) => layers.some((layer) => layer.kind === kind));
+	return compileEditorialContext(layers, {
+		requiredKinds: ['core-objective', 'project-core', 'book-core'],
+		requireUniqueKinds: ['core-objective', 'project-core', 'book-core', ...optionalUniqueKinds, 'assignment'],
+	});
 }
 
 function assignedObjective(evidence: unknown[], objectivePaths: string[]) {
@@ -208,6 +335,7 @@ export async function resolveExecutionTreeDxContext(context: AgentContext, subje
 	const evidence = await collectEvidence(context, subject, payload);
 	const contentRoot = executionContentRoot(context, payload);
 	const objective = assignedObjective(evidence, assignedObjectivePaths(payload, subject, contentRoot));
+	const compiledEditorialContext = editorialContext(evidence, context, payload, subject, contentRoot);
 	const handle = treeDxHandle(context);
 	const warnings = evidence.flatMap((item) => {
 		const source = readRecord(item);
@@ -216,12 +344,16 @@ export async function resolveExecutionTreeDxContext(context: AgentContext, subje
 	return {
 		evidence,
 		assignedObjective: objective,
+		editorialContext: compiledEditorialContext,
 		contentRoot,
 		diagnostics: {
 			assignedObjectiveIncluded: Boolean(objective?.content), assignedObjectivePath: objective?.path ?? null, assignedObjectiveSource: objective?.source ?? null,
 			treeDxAvailable: Boolean(context.treeDx),
 			treeDxProxyHandle: handle ? { id: text(handle.id), repositoryId: text(handle.repositoryId, handle.repoId), workspaceId: text(handle.workspaceId), allowedOperations: strings(handle.allowedOperations), allowedPaths: strings(handle.allowedPaths), allowedReadPaths: strings(handle.allowedReadPaths), allowedWritePaths: strings(handle.allowedWritePaths) } : null,
-			declarativeContextPackCount: 0, treeDxEvidenceCount: evidence.length, warnings,
+			declarativeContextPackCount: compiledEditorialContext ? 1 : 0, treeDxEvidenceCount: evidence.length,
+			editorialContextSchemaVersion: compiledEditorialContext?.schemaVersion ?? null,
+			editorialContextDigest: compiledEditorialContext?.digest ?? null,
+			editorialContextLayers: compiledEditorialContext?.layers.map(({ kind, id, revision, path, reason }) => ({ kind, id, revision, path, reason })) ?? [], warnings,
 		},
 	};
 }

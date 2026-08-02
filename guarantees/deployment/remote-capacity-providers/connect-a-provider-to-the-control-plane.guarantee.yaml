@@ -1,0 +1,21 @@
+schemaVersion: treeseed.guarantee/v1
+id: guarantee.deployment.remote-capacity-providers.connect-a-provider-to-the-control-plane.598
+journeyIndex: 598
+type: deployment
+subtype: remote-capacity-providers
+journey: "Connect a provider to the control plane"
+ownerPackage: "@treeseed/agent"
+surface: agent-runtime
+summary: "Guarantee that TreeSeed can connect a provider to the control plane."
+status: planned
+dependencies: { journeys: [], guarantees: [] }
+actors: { allowed: [authenticated_user, team_owner, platform_admin], forbidden: [unauthorized_user] }
+devices: { required: [desktop_chromium] }
+gates: [future]
+preconditions: { fixtures: [integrated_treeseed_project], notes: [] }
+api: { required: false, verifierRefs: [] }
+content: { required: false, verifierRefs: [] }
+audit: { required: false, verifierRefs: [] }
+negativeCases: []
+evidence: { required: [guarantee_report] }
+notes: ["Planned from the TreeSeed Guide platform coverage audit."]

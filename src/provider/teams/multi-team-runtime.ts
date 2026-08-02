@@ -7,7 +7,7 @@ import { recoverProviderLocalLeases } from '../coordination/lease-recovery.ts';
 import { discoverProviderBudgets } from '../configuration/budgets.ts';
 import { compileProviderLocalNativeLimit } from '../capacity/capacity-core/native-capacity-limits.ts';
 import { createAssignmentExecutionProviderAdapter } from '../capacity/providers/execution-provider-selection.ts';
-import { createProviderMarketClient } from '../coordination/client.ts';
+import { createProviderMarketClient, PROVIDER_ASSIGNMENT_POLLING_TTL_MS } from '../coordination/client.ts';
 
 const managerSchedulers = new Map<string, ProviderGlobalSlotScheduler<NonNullable<ProviderConnectionResult['runtime']>>>();
 
@@ -47,6 +47,11 @@ async function observeExecutionProviders(
 				workflow: {
 					dispatchWorkflowOperation: async (assignmentId, operationId, body) => {
 						const response = await client.dispatchAssignmentWorkflowOperation(assignmentId, operationId, body);
+						const value = record(response);
+						return { ok: value.ok === undefined ? true : value.ok === true, payload: record(value.payload ?? value) };
+					},
+					getWorkflowOperationRun: async (assignmentId, runId) => {
+						const response = await client.getAssignmentWorkflowRun(assignmentId, runId);
 						const value = record(response);
 						return { ok: value.ok === undefined ? true : value.ok === true, payload: record(value.payload ?? value) };
 					},
@@ -173,7 +178,12 @@ export async function runMultiTeamProviderManager(config: ProviderHostRuntimeCon
 		if (!schedulerLease) break;
 		const runtime = schedulerLease.connection;
 		const connectionLimit = runtime.connection.offer.maxConcurrentRunners ?? concurrency;
-		const claim = await localState.claim({ connectionId: runtime.connection.id, globalLimit: concurrency, connectionLimit });
+		const claim = await localState.claim({
+			connectionId: runtime.connection.id,
+			globalLimit: concurrency,
+			connectionLimit,
+			pollingTtlMs: PROVIDER_ASSIGNMENT_POLLING_TTL_MS,
+		});
 		if (!claim) { schedulerLease.release(); break; }
 		const connectionConfig = connectionRuntimeContext(config, runtime, loaded.manifest.executionProviders);
 		const client = (await import('../coordination/client.ts')).createProviderMarketClient(connectionConfig);
@@ -210,9 +220,18 @@ export async function runMultiTeamProviderManager(config: ProviderHostRuntimeCon
 			dispatches.push({ connectionId: runtime.connection.id, assignmentId, status: 'ready' });
 		} catch (error) {
 			if (leasedRecovery) {
-				await localState.retainLease(claim.id, leasedRecovery);
+				let recoveryPersistenceError: unknown = null;
 				try {
-					await client.returnAssignment(leasedRecovery.assignmentId, { leaseToken: leasedRecovery.leaseToken, runnerId: claim.runnerId, reason: error instanceof Error ? error.message : String(error), code: 'provider_local_capacity_exhausted' });
+					await localState.retainLease(claim.id, leasedRecovery);
+				} catch (retainError) {
+					recoveryPersistenceError = retainError;
+				}
+				try {
+					const reason = [error, recoveryPersistenceError]
+						.filter(Boolean)
+						.map((value) => value instanceof Error ? value.message : String(value))
+						.join(' | ');
+					await client.returnAssignment(leasedRecovery.assignmentId, { leaseToken: leasedRecovery.leaseToken, runnerId: claim.runnerId, reason, code: 'provider_local_capacity_exhausted' });
 					await localState.finalize(claim.id, 'capacity-rejected-return-confirmed');
 				} catch (returnError) {
 					await localState.recordFailure(claim.id, returnError instanceof Error ? returnError.message : String(returnError));

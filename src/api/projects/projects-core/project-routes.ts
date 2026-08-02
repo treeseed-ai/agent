@@ -1,6 +1,6 @@
 import type { Hono } from 'hono';
 import type { AgentSdk } from '@treeseed/sdk';
-import { buildKnowledgePackMarketPackage, buildTemplateMarketPackage, WorkflowSdk } from '@treeseed/sdk';
+import { buildTemplateMarketPackage, WorkflowSdk } from '@treeseed/sdk';
 import type { WorkstreamSummary } from '@treeseed/sdk';
 import { checkCodexProviderReadiness } from '../../../agents/adapters/codex/codex-readiness.ts';
 import { requireTeamCapability } from '../../support/capabilities.ts';
@@ -277,7 +277,6 @@ export function registerProjectRoutes(
 	for (const [path, kind] of [
 		['/v1/share/export', 'export'],
 		['/v1/share/package-template', 'template'],
-		['/v1/share/package-knowledge-pack', 'knowledge_pack'],
 	] as const) {
 		app.post(withPrefix(prefix, path), async (c) => {
 			const unauthorized = requireTeamCapability(c, 'manage_products');
@@ -304,24 +303,7 @@ export function registerProjectRoutes(
 						},
 					},
 				})
-				: kind === 'knowledge_pack'
-					? buildKnowledgePackMarketPackage(options.config.repoRoot, {
-						id: typeof body.id === 'string' ? body.id : undefined,
-						title: typeof body.title === 'string' && body.title.trim() ? body.title.trim() : undefined,
-						summary: typeof body.summary === 'string' ? body.summary : null,
-						outputRoot: typeof body.outputRoot === 'string' ? body.outputRoot : null,
-						projectSlug: typeof body.projectSlug === 'string' ? body.projectSlug : options.config.projectId,
-						includePaths: Array.isArray(body.includePaths) ? body.includePaths.map(String) : undefined,
-						market: {
-							publisherId: typeof c.get('principal')?.metadata?.teamId === 'string' ? c.get('principal').metadata.teamId : null,
-							publisherName: typeof c.get('principal')?.displayName === 'string' ? c.get('principal').displayName : null,
-							publishMetadata: {
-								projectId: options.config.projectId,
-								kind,
-							},
-						},
-					})
-					: null;
+				: null;
 			const item = await options.sharedSdk.upsertSharePackage({
 				projectId: options.config.projectId,
 				kind,
@@ -386,4 +368,3 @@ export function registerProjectRoutes(
 		});
 	});
 }
-

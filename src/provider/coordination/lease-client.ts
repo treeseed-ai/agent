@@ -9,6 +9,7 @@ export interface ProviderAssignmentClient {
 	renewAssignment?(assignmentId: string, request: Record<string, unknown>): Promise<unknown>;
 	returnAssignment?(assignmentId: string, request: Record<string, unknown>): Promise<unknown>;
 	dispatchAssignmentWorkflowOperation?(assignmentId: string, operationId: string, request: Record<string, unknown>): Promise<unknown>;
+	getAssignmentWorkflowRun?(assignmentId: string, runId: string): Promise<unknown>;
 }
 
 // Settlement consumes the reservation before completion releases the lease.

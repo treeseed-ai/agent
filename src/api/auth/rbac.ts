@@ -9,7 +9,6 @@ export const CONTENT_RESOURCES = [
 	'agents',
 	'books',
 	'templates',
-	'knowledge_packs',
 	'workdays',
 ] as const;
 

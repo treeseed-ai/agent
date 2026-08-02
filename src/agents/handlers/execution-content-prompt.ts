@@ -20,6 +20,7 @@ function contentContract(contentRoot: string, assignedObjective: Record<string, 
 		`- Knowledge pages and book pages: ${contentRoot}/knowledge/**`,
 		`- Book records: ${contentRoot}/books/*.mdx; book pages are knowledge pages linked from book sidebar metadata.`,
 		'- Prefer durable MDX content over database-only output whenever another agent will need the information.',
+		'- When validating a created or updated artifact, pass its exact changedPaths entry back as placement.path. A slug-only validation checks a newly rendered default-path record and is not evidence for the hierarchical artifact you wrote.',
 	].join('\n');
 }
 
@@ -139,6 +140,7 @@ export function buildExecutionContentInstructions(context: AgentContext, input: 
 	artifactKind: string;
 	contextPackSummaries: unknown[];
 	assignedObjective: Record<string, unknown> | null;
+	editorialInstructions?: string | null;
 	contentRoot: string;
 }) {
 	const relation = subjectRelation(input.subject);
@@ -146,6 +148,7 @@ export function buildExecutionContentInstructions(context: AgentContext, input: 
 		context.agent.systemPrompt,
 		'',
 		firstString(input.assignedObjective?.message) ?? 'No assigned objective was supplied or resolved through TreeDX; report that as a blocker only when the activity contract requires objective provenance.',
+		...(input.editorialInstructions ? ['', input.editorialInstructions] : []),
 		'',
 		contentContract(input.contentRoot, input.assignedObjective),
 		'',

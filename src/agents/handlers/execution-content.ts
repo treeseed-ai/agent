@@ -215,6 +215,7 @@ export function createExecutionContentHandler(input: {
       const contextPackSummaries: unknown[] = [...treeDxContext.evidence];
       const contentRoot = executionContentRoot(context, payload);
       const assignedObjective = treeDxContext.assignedObjective;
+	  const editorialContext = treeDxContext.editorialContext;
       const contextDiagnostics = treeDxContext.diagnostics;
       const mode = modeFor(context);
       const allowedPaths = context.agent.execution.allowedPaths?.length
@@ -247,15 +248,18 @@ export function createExecutionContentHandler(input: {
             artifactKind,
             contextPackSummaries,
             assignedObjective,
+			editorialInstructions: editorialContext?.compiledEditorialInstructions,
             contentRoot,
           }),
           context: {
             subject,
             contextPacks: contextPackSummaries,
             assignedObjective,
+			editorialContext,
             contentRoot,
             handoff,
             contextDiagnostics,
+			editorialContextDigest: editorialContext?.digest ?? null,
           },
           expectedOutputs: [
             {
@@ -284,6 +288,9 @@ export function createExecutionContentHandler(input: {
             subject,
             handoff,
             contextDiagnostics,
+			editorialContextDigest: editorialContext?.digest ?? null,
+			editorialContextSchemaVersion: editorialContext?.schemaVersion ?? null,
+			editorialContextLayers: contextDiagnostics.editorialContextLayers ?? [],
           },
         },
       };

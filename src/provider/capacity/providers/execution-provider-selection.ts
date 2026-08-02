@@ -56,6 +56,7 @@ export function createAssignmentExecutionProviderAdapter(input: {
 	accessToken: string;
 	apiBaseUrl: string;
 	researchSourcePolicy?: import('@treeseed/sdk/agent-capacity').ResearchSourcePolicy;
+	onCodexEvent?: (event: Record<string, unknown>) => void | Promise<void>;
 }) {
 	const env = {
 		...process.env,
@@ -69,7 +70,7 @@ export function createAssignmentExecutionProviderAdapter(input: {
 		githubIssues: input.githubIssues,
 		discord: input.discord,
 		workflow: input.workflow,
-		codex: { env },
+		codex: { env, onEvent: input.onCodexEvent },
 		researchSourcePolicy: input.researchSourcePolicy,
 	});
 }

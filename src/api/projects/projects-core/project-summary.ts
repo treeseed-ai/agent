@@ -1,5 +1,4 @@
 import type { AgentSdk } from '@treeseed/sdk';
-import { getMachineConfigPaths, loadCliDeployConfig, loadMachineConfig, resolveRemoteSession } from '@treeseed/sdk/workflow-support';
 import type { AgentMessageRecord, AgentStatusRecord, DirectBoardItemSummary, ProjectOverviewSummary, ReleaseDetail, ReleaseSummary, SharePackageStatus, WorkstreamDetail, WorkstreamState, WorkstreamSummary } from '@treeseed/sdk';
 import { normalizeProjectJobStatus } from '@treeseed/sdk';
 import { checkCodexProviderReadiness } from '../../../agents/adapters/codex/codex-readiness.ts';
@@ -149,61 +148,6 @@ export async function summarizeProject(sdk: AgentSdk, config: ApiConfig, princip
 	const failedWorkstream = workstreamPayload.find((entry) => entry.verificationStatus === 'failed');
 	const releaseReady = releasePayload.find((entry) => entry.state === 'ready_to_publish');
 	const publishingDraft = packagePayload.find((entry) => entry.state === 'ready_to_publish' || entry.state === 'published');
-	let projectConnection: ProjectOverviewSummary['connection'] = {
-		projectId: config.projectId,
-		connection: null,
-		connected: true,
-		hubMode: null,
-		runtimeMode: null,
-		runtimeRegistration: null,
-		runtimeAttached: false,
-		runtimeReady: true,
-		runnerReady: true,
-		projectApiReady: true,
-		mode: 'disconnected',
-	};
-	try {
-		const deployConfig = loadCliDeployConfig(config.repoRoot);
-		const runtimeMode = deployConfig.runtime?.mode ?? 'none';
-		const runtimeRegistration = deployConfig.runtime?.registration ?? 'none';
-		const registrationEnabled = runtimeRegistration === 'optional' || runtimeRegistration === 'required';
-		const { configPath } = getMachineConfigPaths(config.repoRoot);
-		const machineConfig = configPath ? loadMachineConfig(config.repoRoot) : null;
-		const marketSettings = machineConfig?.settings?.market && typeof machineConfig.settings.market === 'object'
-			? machineConfig.settings.market as Record<string, unknown>
-			: null;
-		const runnerHostId = typeof marketSettings?.runnerHostId === 'string' && marketSettings.runnerHostId.trim()
-			? marketSettings.runnerHostId.trim()
-			: (typeof marketSettings?.projectId === 'string' && marketSettings.projectId.trim()
-				? `operations-runner:${marketSettings.projectId.trim()}`
-				: null);
-		const runnerSession = runnerHostId ? resolveRemoteSession(config.repoRoot, runnerHostId) : null;
-		const runtimeReady = runtimeMode === 'none'
-			|| !registrationEnabled
-			|| Boolean(
-				marketSettings?.runnerReady === true
-				|| (typeof runnerSession?.accessToken === 'string' && runnerSession.accessToken.length > 0),
-			);
-		projectConnection = {
-			projectId: config.projectId,
-			connection: null,
-			connected: true,
-			hubMode: deployConfig.hub?.mode ?? null,
-			runtimeMode,
-			runtimeRegistration,
-			runtimeAttached: runtimeMode !== 'none' && (!registrationEnabled || Boolean(marketSettings?.projectId)),
-			runtimeReady,
-			runnerReady: runtimeReady,
-			projectApiReady: deployConfig.runtime?.mode !== 'none',
-			mode: runtimeMode === 'treeseed_managed'
-				? 'hosted'
-				: runtimeMode === 'byo_attached'
-					? (registrationEnabled ? 'hybrid' : 'self_hosted')
-					: 'disconnected',
-		};
-	} catch {
-		// Keep summary available even when deploy config or machine config is missing.
-	}
 	const health = failedWorkstream
 		? { state: 'verification_failing', label: 'Verification failing', reason: failedWorkstream.verificationSummary ?? 'A workstream verification failed.' }
 		: releaseReady
@@ -255,9 +199,6 @@ export async function summarizeProject(sdk: AgentSdk, config: ApiConfig, princip
 			activeWorkstreams: workstreamPayload.filter((entry) => entry.state !== 'archived').length,
 			agents: agents.agents.length,
 			releases: releasePayload.length,
-		},
-		connection: {
-			...projectConnection,
 		},
 		nextBestAction: releaseReady
 			? 'Review the ready release and decide whether to publish.'

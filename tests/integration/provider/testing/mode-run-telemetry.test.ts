@@ -109,4 +109,31 @@ describe('provider mode-run telemetry delivery', () => {
 			providerModeRunTelemetryId('assignment-spec', 'agent-spec-load:succeeded'),
 		]);
 	});
+
+	it('loads a nested agent definition from its synchronized canonical content path', async () => {
+		const paths: string[][] = [];
+		const treeDx = {
+			async readRepositoryFiles(input: { paths: string[] }) {
+				paths.push(input.paths);
+				return {
+					files: [{ path: input.paths[0], content: '---\nslug: guide-steward\nhandler: writer\nenabled: true\n---\nGuide.' }],
+				};
+			},
+		} as never;
+		const result = await loadAssignmentRawAgentSpecs({
+			treeDx,
+			assignmentId: 'assignment-editorial',
+			agentSlug: 'guide-steward',
+			agentContentPath: 'src/content/agents/editorial/guide-steward.mdx',
+			workspaceId: 'workspace-a',
+			contentRoot: 'src/content',
+			client: { createAssignmentModeRun: vi.fn().mockResolvedValue({ ok: true }) },
+			mode: 'planning',
+			capacityEnvelope: {},
+			decisionPayload: {},
+			runnerId: 'runner-a',
+		});
+		expect(paths).toEqual([['src/content/agents/editorial/guide-steward.mdx']]);
+		expect(result).toMatchObject([{ id: 'editorial/guide-steward', frontmatter: { slug: 'guide-steward' } }]);
+	});
 });

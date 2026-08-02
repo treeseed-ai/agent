@@ -21,6 +21,7 @@ export interface WorkflowExecutionProviderAdapterOptions {
 		operationId: string,
 		body: Record<string, unknown>,
 	) => Promise<WorkflowOperationDispatchResult>;
+	getWorkflowOperationRun?: (assignmentId: string, runId: string) => Promise<WorkflowOperationDispatchResult>;
 	now?: () => Date;
 }
 
@@ -206,14 +207,15 @@ function buildWorkflowInputs(input: ExecutionProviderInvocation, selection: Work
 		},
 	}) as Record<string, unknown>;
 }
-
 function dispatchPayload(result: WorkflowOperationDispatchResult | Record<string, unknown>) {
 	return record((result as WorkflowOperationDispatchResult).payload ?? result);
 }
 
 function dispatchRecord(payload: Record<string, unknown>) {
 	const dispatch = record(payload.dispatch);
-	return Object.keys(dispatch).length ? dispatch : payload;
+	if (Object.keys(dispatch).length) return dispatch;
+	const run = record(payload.run);
+	return Object.keys(run).length ? run : payload;
 }
 
 function workflowStatus(value: unknown) {
@@ -232,7 +234,8 @@ function safeDispatchSummary(payload: Record<string, unknown>) {
 	return redactSensitive({
 		id: stringValue(dispatch.id, dispatch.runId, dispatch.workflowRunId, dispatch.jobId, payload.workflowRunId, payload.runId),
 		status: stringValue(dispatch.status, payload.status),
-		url: stringValue(dispatch.htmlUrl, dispatch.externalUrl, dispatch.url, payload.htmlUrl, payload.externalUrl, payload.url),
+		url: stringValue(dispatch.providerRunUrl, dispatch.htmlUrl, dispatch.externalUrl, dispatch.url,
+			payload.providerRunUrl, payload.htmlUrl, payload.externalUrl, payload.url),
 		logsUrl: stringValue(dispatch.logsUrl, payload.logsUrl),
 		artifactsUrl: stringValue(dispatch.artifactsUrl, payload.artifactsUrl),
 		reportUrl: stringValue(dispatch.reportUrl, payload.reportUrl),
@@ -263,7 +266,7 @@ function mapWorkflowSnapshot(input: {
 		`${input.assignmentId}:${input.operationId}`,
 	) ?? input.fallbackRunId;
 	const externalUrl = stringValue(
-		dispatch.htmlUrl,
+		dispatch.providerRunUrl, dispatch.htmlUrl,
 		dispatch.externalUrl,
 		dispatch.url,
 		input.payload.htmlUrl,
@@ -309,7 +312,6 @@ function mapWorkflowSnapshot(input: {
 		metadata,
 	} satisfies ExecutionRunSnapshot;
 }
-
 function numberValue(...values: unknown[]) {
 	for (const value of values) {
 		if (typeof value === 'number' && Number.isFinite(value)) return value;
@@ -444,6 +446,13 @@ export class WorkflowExecutionProviderAdapter implements ExecutionProviderAdapte
 	}
 
 	async poll(input: ExecutionRunRef): Promise<ExecutionRunSnapshot> {
+		if (this.options.getWorkflowOperationRun) {
+			const response = await this.options.getWorkflowOperationRun(input.assignmentId, input.runId);
+			const payload = dispatchPayload(response);
+			return mapWorkflowSnapshot({ assignmentId: input.assignmentId,
+				operationId: stringValue(record(input.metadata).operationId, 'workflow') ?? 'workflow',
+				handleId: stringValue(record(input.metadata).handleId, '') ?? '', payload, fallbackRunId: input.runId });
+		}
 		const metadata = record(input.metadata);
 		const dispatch = record(metadata.dispatch);
 		const status = workflowStatus(stringValue(dispatch.status, metadata.status, 'waiting'));
@@ -480,7 +489,6 @@ export class WorkflowExecutionProviderAdapter implements ExecutionProviderAdapte
 	resume(input: ExecutionRunRef) {
 		return this.poll(input);
 	}
-
 	async collectUsage(input: ExecutionRunRef) {
 		return usageFromMetadata(record(input.metadata));
 	}

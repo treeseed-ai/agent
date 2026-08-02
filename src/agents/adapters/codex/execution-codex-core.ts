@@ -81,6 +81,7 @@ export interface CodexClient {
 export interface CodexThread {
 	id?: string | null;
 	run(input: string, options?: Record<string, unknown>): Promise<CodexRunResult>;
+	runStreamed?(input: string, options?: Record<string, unknown>): Promise<{ events: AsyncIterable<Record<string, unknown>> }>;
 }
 
 export interface CodexThreadOptions {
@@ -107,6 +108,7 @@ export interface RunCodexTaskOptions {
 	createCodexClient?: (request?: CodexExecutionRequest) => CodexClient | Promise<CodexClient>;
 	client?: CodexClient | Promise<CodexClient>;
 	now?: () => number;
+	onEvent?: (event: Record<string, unknown>) => void | Promise<void>;
 }
 
 export interface PreparedCodexWorktree {

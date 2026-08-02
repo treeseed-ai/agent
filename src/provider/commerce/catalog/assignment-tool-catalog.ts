@@ -70,8 +70,8 @@ function summarizeContentAccess(policy: AgentContentAccessPolicy | undefined, ag
 	const writeActions = (policy.write?.actions ?? []).filter((action) => requestedActions.has(action));
 	const commitAllowed = policy.commit?.allowed === true && requestedActions.has('commit');
 	return {
-		readModels: readActions.length ? policy.read?.models ?? [] : [], readActions,
-		writeModels: writeActions.length ? policy.write?.models ?? [] : [], writeActions, commitAllowed,
+		readModels: readActions.length ? policy.read?.models ?? [] : [], readActions, readPaths: policy.read?.paths ?? [],
+		writeModels: writeActions.length ? policy.write?.models ?? [] : [], writeActions, writePaths: policy.write?.paths ?? [], commitAllowed,
 	};
 }
 

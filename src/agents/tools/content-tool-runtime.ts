@@ -97,11 +97,16 @@ async function writeWorkspaceFile(options: ContentToolCallOptions, descriptor: T
 	});
 }
 
-function responseContent(value: unknown) {
+function responseContent(value: unknown): string {
+	if (!value || typeof value !== 'object' || Array.isArray(value)) return '';
 	const source = record(value);
 	if (typeof source.content === 'string') return source.content;
 	if (typeof source.text === 'string') return source.text;
 	if (typeof source.body === 'string') return source.body;
+	for (const nested of [source.payload, source.data, source.file]) {
+		const content = responseContent(nested);
+		if (content) return content;
+	}
 	return '';
 }
 
@@ -124,6 +129,22 @@ function contentSlug(input: Record<string, unknown>) {
 	const candidate = text(input.slug) || text(input.id);
 	if (!candidate.includes('/')) return candidate;
 	return candidate.replace(/\\/gu, '/').split('/').filter(Boolean).at(-1)?.replace(/\.mdx?$/iu, '') ?? candidate;
+}
+
+function modelRelativePlacement(input: Record<string, unknown>, model: ContentModel, contentRoot: string) {
+	const placement = record(input.placement);
+	const configuredPath = text(placement.path).replace(/\\/gu, '/').replace(/^\.\//u, '').replace(/\.mdx?$/iu, '');
+	if (!configuredPath) return placement;
+	const probe = renderContentRecord({
+		model,
+		slug: contentSlug(input) || 'content-record',
+		title: text(input.title) || 'Content record',
+		contentRoot,
+	});
+	const canonicalPrefix = `${contentRoot}/${probe.collection}/`;
+	return configuredPath.startsWith(canonicalPrefix)
+		? { ...placement, path: configuredPath.slice(canonicalPrefix.length) }
+		: placement;
 }
 
 export async function callContentTool(options: ContentToolCallOptions) {
@@ -187,7 +208,7 @@ export async function callContentTool(options: ContentToolCallOptions) {
 				model: contentModel,
 				slug: contentSlug(input),
 				title: text(input.title) || contentSlug(input),
-				placement: record(input.placement),
+				placement: modelRelativePlacement(input, contentModel, contentRoot),
 				contentRoot,
 			});
 			const explicitPath = text(input.path);
@@ -209,7 +230,7 @@ export async function callContentTool(options: ContentToolCallOptions) {
 			fields: record(input.fields),
 			body: typeof input.body === 'string' ? input.body : undefined,
 			relations: relations as never,
-			placement: record(input.placement),
+			placement: modelRelativePlacement(input, contentModel, contentRoot),
 			contentRoot,
 		});
 		let rendered = initial;
@@ -222,17 +243,21 @@ export async function callContentTool(options: ContentToolCallOptions) {
 				fields: record(input.fields),
 				body: typeof input.body === 'string' ? input.body : undefined,
 				relations: relations as never,
-				placement: record(input.placement),
+				placement: modelRelativePlacement(input, contentModel, contentRoot),
 				contentRoot,
 				existingContent: responseContent(existing.result),
 			});
 		}
 		if (action === 'validate') {
-			const validation = validateContentRecord(contentModel, rendered.content);
+			const placement = record(input.placement);
+			const existing = text(placement.path)
+				? await readModelContentFile(options, descriptor, rendered.path)
+				: null;
+			const validation = validateContentRecord(contentModel, existing ? responseContent(existing.result) : rendered.content);
 			if (!validation.ok) {
 				return structuredError('content_validation_failed', 'Content validation failed.', { diagnostics: validation.diagnostics });
 			}
-			return { ok: true, action, refs: [rendered.ref], diagnostics: validation.diagnostics };
+			return { ok: true, action, refs: [{ ...rendered.ref, ...(existing ? { path: existing.path } : {}) }], diagnostics: validation.diagnostics };
 		}
 		if (action === 'create' || action === 'update' || action === 'link') {
 			await writeWorkspaceFile(options, descriptor, rendered.path, rendered.content);

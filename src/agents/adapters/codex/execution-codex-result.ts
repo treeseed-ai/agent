@@ -15,6 +15,7 @@ import {
 	type CodexClient,
 	type RunCodexTaskOptions,
 } from './execution-codex-core.ts';
+import { runCodexThread } from './execution-codex-stream.ts';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
 	return value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -188,7 +189,7 @@ export async function runCodexTask(
 			? client.resumeThread(request.threadId, threadOptions)
 			: client.startThread(threadOptions);
 		const prompt = buildCodexPrompt(request);
-		const runPromise = thread.run(prompt);
+		const runPromise = runCodexThread(thread, prompt, options.onEvent);
 		runPromise.catch(() => null);
 		const result = await withTimeout(runPromise, request.timeoutMs ?? 900_000);
 		const wallMs = (options.now?.() ?? Date.now()) - startedAt;

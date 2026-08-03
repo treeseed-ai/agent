@@ -63,7 +63,7 @@ export async function prepareAssignmentKernelBridge(input: ProviderAssignmentExe
 	const governedExactBaseRef = stringValue(record(decisionPayload.input).exactBaseRef, decisionPayload.exactBaseRef);
 	const assignedProject = assignmentProjectContext(input.assignment);
 	const project = assignedProject
-		? await withTimeout(materializeAssignmentProject(input.config, assignedProject, { workspaceAccessMode: workspaceMode, requiresRepository: Boolean(governedExactBaseRef), exactRef: governedExactBaseRef }), 60_000, `Assignment project materialization exceeded 60000ms for ${assignmentId}.`)
+		? await withTimeout(materializeAssignmentProject(input.config, assignedProject, { assignmentId, workspaceAccessMode: workspaceMode, requiresRepository: Boolean(governedExactBaseRef), exactRef: governedExactBaseRef }), 60_000, `Assignment project materialization exceeded 60000ms for ${assignmentId}.`)
 		: null;
 	await recordEarlyModeRun({
 		client: input.client,

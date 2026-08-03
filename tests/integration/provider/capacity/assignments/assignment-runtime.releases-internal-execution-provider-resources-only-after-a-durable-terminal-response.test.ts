@@ -33,6 +33,10 @@ function repository() {
 	mkdirSync(resolve(path, 'src/content/agents'), { recursive: true });
 	writeFileSync(resolve(path, 'package.json'), '{"name":"assignment-project"}\n');
 	execFileSync('git', ['init', '-b', 'main'], { cwd: path, stdio: 'ignore' });
+	execFileSync('git', ['config', 'user.name', 'TreeSeed Test'], { cwd: path, stdio: 'ignore' });
+	execFileSync('git', ['config', 'user.email', 'test@treeseed.local'], { cwd: path, stdio: 'ignore' });
+	execFileSync('git', ['add', '-A'], { cwd: path, stdio: 'ignore' });
+	execFileSync('git', ['commit', '-m', 'test fixture'], { cwd: path, stdio: 'ignore' });
 	return path;
 }
 
@@ -232,8 +236,11 @@ it('materializes only the project carried by the assignment envelope', async () 
 		const assignment = { workspaceContext: { project: projectContext(repoRoot) } };
 		const exact = assignmentProjectContext(assignment);
 		expect(exact).toMatchObject({ id: 'project-a', slug: 'project-a' });
-		const materialized = await materializeAssignmentProject(runtimeConfig, exact!);
-		expect(materialized.repository).toMatchObject({ ok: true, path: repoRoot, materialization: 'local' });
+		const materialized = await materializeAssignmentProject(runtimeConfig, exact!, { assignmentId: 'assignment-a' });
+		expect(materialized.repository).toMatchObject({ ok: true, materialization: 'clone' });
+		expect(materialized.repository.path).not.toBe(repoRoot);
+		expect(materialized.repository.path).toContain(resolve(runtimeConfig.dataDir, 'assignments/assignment-a'));
+		expect(materialized.repository.mirrorPath).toContain(resolve(runtimeConfig.dataDir, 'repositories'));
 	});
 
 it('uses an isolated empty execution context instead of cloning for context-only planning', async () => {
@@ -255,12 +262,17 @@ it('materializes the repository checkout, not the logical project root, for exac
 		mkdirSync(repoRoot, { recursive: true });
 		writeFileSync(resolve(repoRoot, 'package.json'), '{"name":"engineering-starter"}\n');
 		execFileSync('git', ['init', '-b', 'main'], { cwd: repoRoot, stdio: 'ignore' });
+		execFileSync('git', ['config', 'user.name', 'TreeSeed Test'], { cwd: repoRoot, stdio: 'ignore' });
+		execFileSync('git', ['config', 'user.email', 'test@treeseed.local'], { cwd: repoRoot, stdio: 'ignore' });
+		execFileSync('git', ['add', '-A'], { cwd: repoRoot, stdio: 'ignore' });
+		execFileSync('git', ['commit', '-m', 'test fixture'], { cwd: repoRoot, stdio: 'ignore' });
 		const runtimeConfig = config({ TREESEED_PROVIDER_WORKSPACE_ROOT: workspaceRoot });
 		const project = projectContext(repoRoot);
 		project.architecture = { rootPath: 'template', sitePath: 'template', contentPath: 'template/src/content', localContentMaterialization: 'existing_path' };
 		project.repository.checkoutPath = 'starters/engineering';
-		const materialized = await materializeAssignmentProject(runtimeConfig, project, { workspaceAccessMode: 'workspace_write', requiresRepository: true });
-		expect(materialized.repository).toMatchObject({ ok: true, path: repoRoot, materialization: 'local' });
+		const materialized = await materializeAssignmentProject(runtimeConfig, project, { assignmentId: 'assignment-exact', workspaceAccessMode: 'workspace_write', requiresRepository: true });
+		expect(materialized.repository).toMatchObject({ ok: true, materialization: 'clone' });
+		expect(materialized.repository.path).not.toBe(repoRoot);
 	});
 
 it('fails local materialization before kernel execution when the governed exact ref is unavailable', async () => {
@@ -269,12 +281,14 @@ it('fails local materialization before kernel execution when the governed exact 
 		const project = projectContext(repoRoot);
 		const missingRef = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
 		const materialized = await materializeAssignmentProject(runtimeConfig, project, {
+			assignmentId: 'assignment-missing',
 			workspaceAccessMode: 'context_only',
 			requiresRepository: true,
 			exactRef: missingRef,
 		});
-		expect(materialized.repository).toMatchObject({ ok: false, path: repoRoot, materialization: 'local' });
-		expect(materialized.repository.error).toContain(`does not contain governed exact ref ${missingRef}`);
+		expect(materialized.repository).toMatchObject({ ok: false, materialization: 'clone' });
+		expect(materialized.repository.path).not.toBe(repoRoot);
+		expect(materialized.repository.error).toContain(`governed exact ref ${missingRef}`);
 	});
 
 it('fails closed before kernel execution when assignment governance provenance is missing', async () => {

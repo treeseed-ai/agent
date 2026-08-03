@@ -4,6 +4,7 @@ import { mkdir } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import type { AgentSdkTreeDxOptions } from '@treeseed/sdk/sdk';
+import { resolveRepositoryIdentity } from '@treeseed/sdk';
 import type { ProviderHostRuntimeConfig } from '../../configuration/config.ts';
 
 const execFileAsync = promisify(execFile);
@@ -34,7 +35,8 @@ export interface MaterializedAssignmentProject extends AssignmentProjectContext 
 		path: string;
 		branch: string;
 		commitSha: string | null;
-		materialization: 'context' | 'local' | 'clone';
+		materialization: 'context' | 'clone';
+		mirrorPath?: string;
 		error?: string;
 	};
 }
@@ -43,6 +45,7 @@ export interface AssignmentProjectMaterializationOptions {
 	workspaceAccessMode?: string | null;
 	requiresRepository?: boolean;
 	exactRef?: string | null;
+	assignmentId?: string | null;
 }
 
 function architectureString(project: AssignmentProjectContext, key: string) {
@@ -55,42 +58,21 @@ function normalizedRelativePath(value: string | null) {
 	return value.replace(/\\/gu, '/').replace(/^\/+|\/+$/gu, '');
 }
 
-function providerEnvValue(config: ProviderHostRuntimeConfig, name: string) {
-	return config.env[name]?.trim() || process.env[name]?.trim() || '';
+function safeSegment(value: string) {
+	return value.replace(/[^A-Za-z0-9_.-]+/gu, '-').replace(/^-+|-+$/gu, '') || 'unknown';
 }
 
-function localWorkspaceRoot(config: ProviderHostRuntimeConfig) {
-	const configured = providerEnvValue(config, 'TREESEED_PROVIDER_WORKSPACE_ROOT')
-		|| providerEnvValue(config, 'TREESEED_PROVIDER_WORKSPACE_ABSOLUTE_CONTAINER');
-	return configured || (existsSync('/workspace') ? '/workspace' : null);
+function repositoryPaths(config: ProviderHostRuntimeConfig, project: AssignmentProjectContext, assignmentId: string) {
+	const identity = resolveRepositoryIdentity(project.repository.cloneUrl);
+	const repositoryKey = safeSegment(identity.canonicalKey);
+	return {
+		mirror: resolve(config.dataDir, 'repositories', repositoryKey, 'mirror.git'),
+		checkout: resolve(config.dataDir, 'assignments', safeSegment(assignmentId), 'checkout'),
+	};
 }
 
-export function providerLocalRepositoryPath(config: ProviderHostRuntimeConfig, project: AssignmentProjectContext) {
-	if (architectureString(project, 'localContentMaterialization') !== 'existing_path') return null;
-	const workspaceRoot = localWorkspaceRoot(config);
-	if (!workspaceRoot) return null;
-	const checkoutPath = project.repository.checkoutPath?.trim();
-	if (checkoutPath && checkoutPath !== '.') return resolve(workspaceRoot, checkoutPath);
-	const packagePath = resolve(workspaceRoot, 'packages', project.slug);
-	if (project.slug !== 'market' && existsSync(packagePath)) return packagePath;
-	return workspaceRoot;
-}
-
-function providerLocalProjectRoot(config: ProviderHostRuntimeConfig, project: AssignmentProjectContext) {
-	const workspaceRoot = localWorkspaceRoot(config);
-	if (!workspaceRoot) return null;
-	const checkoutPath = project.repository.checkoutPath?.trim();
-	return checkoutPath && checkoutPath !== '.' ? resolve(workspaceRoot, checkoutPath) : workspaceRoot;
-}
-
-function repositoryPath(config: ProviderHostRuntimeConfig, projectId: string) {
-	const safe = projectId.replace(/[^A-Za-z0-9_.-]+/gu, '-').replace(/^-+|-+$/gu, '');
-	return resolve(config.dataDir, 'repositories', safe || 'project', 'repo');
-}
-
-function contextPath(config: ProviderHostRuntimeConfig, projectId: string) {
-	const safe = projectId.replace(/[^A-Za-z0-9_.-]+/gu, '-').replace(/^-+|-+$/gu, '');
-	return resolve(config.dataDir, 'assignment-contexts', safe || 'project');
+function contextPath(config: ProviderHostRuntimeConfig, assignmentId: string) {
+	return resolve(config.dataDir, 'assignment-contexts', safeSegment(assignmentId));
 }
 
 function requiresProviderRepository(workspaceAccessMode: string | null | undefined) {
@@ -133,8 +115,9 @@ export async function materializeAssignmentProject(
 	project: AssignmentProjectContext,
 	options: AssignmentProjectMaterializationOptions = {},
 ): Promise<MaterializedAssignmentProject> {
+	const assignmentId = options.assignmentId?.trim() || `manual-${project.id}`;
 	if (!options.requiresRepository && !requiresProviderRepository(options.workspaceAccessMode)) {
-		const path = contextPath(config, project.id);
+		const path = contextPath(config, assignmentId);
 		await mkdir(path, { recursive: true });
 		return {
 			...project,
@@ -148,37 +131,32 @@ export async function materializeAssignmentProject(
 			},
 		};
 	}
-	const localPath = config.environment === 'local'
-		? providerLocalRepositoryPath(config, project) ?? providerLocalProjectRoot(config, project)
-		: null;
-	if (localPath) {
-		const projectExists = existsSync(resolve(localPath, '.git')) || existsSync(resolve(localPath, 'package.json')) || existsSync(resolve(localPath, 'treeseed.site.yaml'));
-		const exactRefSha = projectExists ? await ensureExactRef(localPath, options.exactRef, false) : null;
-		const ok = projectExists && (!options.exactRef?.trim() || Boolean(exactRefSha));
-		const error = !projectExists
-			? `Local workspace path is not a Treeseed project: ${localPath}`
-			: !ok
-				? `Local project ${localPath} does not contain governed exact ref ${options.exactRef}.`
-				: null;
-		return { ...project, repository: { ...project.repository, ok, path: localPath, branch: project.repository.currentBranch || project.repository.defaultBranch || 'local', commitSha: await gitSha(localPath), materialization: 'local', ...(error ? { error } : {}) } };
-	}
-	const path = repositoryPath(config, project.id);
+	const paths = repositoryPaths(config, project, assignmentId);
+	const path = paths.checkout;
 	const branch = project.repository.currentBranch || project.repository.defaultBranch || 'main';
+	await mkdir(dirname(paths.mirror), { recursive: true });
 	await mkdir(dirname(path), { recursive: true });
 	try {
-		if (!existsSync(resolve(path, '.git'))) {
-			try { await runGit(['clone', '--branch', branch, '--single-branch', project.repository.cloneUrl, path]); }
-			catch { await runGit(['clone', project.repository.cloneUrl, path]); await runGit(['checkout', branch], path); }
+		if (!existsSync(paths.mirror)) {
+			await runGit(['clone', '--mirror', project.repository.cloneUrl, paths.mirror]);
 		} else {
-			await runGit(['fetch', 'origin', branch, '--prune'], path);
-			await runGit(['checkout', branch], path);
-			await runGit(['reset', '--hard', `origin/${branch}`], path);
+			await runGit(['remote', 'set-url', 'origin', project.repository.cloneUrl], paths.mirror);
+			await runGit(['fetch', 'origin', '+refs/heads/*:refs/heads/*', '--prune'], paths.mirror);
 		}
-		const exactRefSha = await ensureExactRef(path, options.exactRef, true);
+		if (!existsSync(resolve(path, '.git'))) {
+			await runGit(['clone', '--no-checkout', paths.mirror, path]);
+			await runGit(['remote', 'set-url', 'origin', project.repository.cloneUrl], path);
+		} else {
+			await runGit(['fetch', paths.mirror, '+refs/heads/*:refs/remotes/provider/*', '--prune'], path);
+		}
+		const exactRefSha = await ensureExactRef(paths.mirror, options.exactRef, true);
 		if (options.exactRef?.trim() && !exactRefSha) throw new Error(`Cloned project does not contain governed exact ref ${options.exactRef}.`);
-		return { ...project, repository: { ...project.repository, ok: true, path, branch, commitSha: await gitSha(path), materialization: 'clone' } };
+		const checkoutRef = exactRefSha ?? branch;
+		await runGit(['checkout', '--detach', checkoutRef], path);
+		await runGit(['reset', '--hard', checkoutRef], path);
+		return { ...project, repository: { ...project.repository, ok: true, path, branch, commitSha: await gitSha(path), materialization: 'clone', mirrorPath: paths.mirror } };
 	} catch (error) {
-		return { ...project, repository: { ...project.repository, ok: false, path, branch, commitSha: await gitSha(path), materialization: 'clone', error: error instanceof Error ? error.message : String(error) } };
+		return { ...project, repository: { ...project.repository, ok: false, path, branch, commitSha: await gitSha(path), materialization: 'clone', mirrorPath: paths.mirror, error: error instanceof Error ? error.message : String(error) } };
 	}
 }
 

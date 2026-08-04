@@ -131,10 +131,11 @@ function signals(snapshot: ExecutionRunSnapshot, outputMetadata: Record<string, 
 	const declaredSignals = completed ? strings(record(assignment.allowedOutputs).signalContracts)
 		.map((code) => ({ code, severity: 'info', message: `Produced declared signal ${code}.`, metadata: { source: 'agent_activity_contract' } })) : [];
 	return [...records(outputs.signals), ...records(outputMetadata.signals), ...toolSignals, ...claimSignals, ...declaredSignals].flatMap((entry) => {
-		const code = text(entry.code, entry.type);
-		const severity = text(entry.severity) ?? 'info';
+		const signal = record(entry);
+		const code = text(signal.code, signal.type);
+		const severity = text(signal.severity) ?? 'info';
 		if (!code || !['info', 'warning', 'error'].includes(severity)) return [];
-		return [{ code, severity: severity as AgentSignal['severity'], message: text(entry.message), metadata: record(entry.metadata) }];
+		return [{ code, severity: severity as AgentSignal['severity'], message: text(signal.message), metadata: record(signal.metadata) }];
 	});
 }
 

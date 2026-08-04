@@ -41,6 +41,22 @@ export async function reportProviderAssignmentResult(input: {
 		const settlementUsage = settlementUsageActual(modeResult);
 		const actualCredits = numberValue(usageActual.actualCredits, modeMetadata.actualCredits, outputMetadata.actualCredits, modeResult.status === 'completed' ? capacityEnvelope.reservedCredits : 0) ?? 0;
 		if (modeResult.status === 'completed') {
+			let workspaceCleanup: Record<string, unknown> = { status: closeWorkspace ? 'completed' : 'not_required' };
+			if (closeWorkspace) {
+				try {
+					await closeWorkspace();
+				} catch (error) {
+					const diagnostic = providerErrorDiagnostic(error, 'workspace_cleanup');
+					workspaceCleanup = { status: 'failed', retryable: true, diagnostic };
+					await reportProviderRuntimeEvent({ client, assignmentId, event: {
+						id: `workspace-cleanup-failed:${assignmentId}:${stringValue(modeMetadata.modeRunId, outputMetadata.modeRunId) ?? modeResult.mode}`,
+						eventType: 'provider.workspace.cleanup_failed', status: 'failed', component: 'recovery',
+						message: 'TreeDX workspace cleanup failed after successful execution; assignment completion continued.',
+						createdAt: new Date().toISOString(),
+						context: { runnerId, projectId, agentSlug, diagnostic, recovery: 'cleanup_reconciliation_required' },
+					} });
+				}
+			}
 			if (!client.reportAssignmentUsage) throw new Error('Provider client does not implement dimensional capacity usage reporting.');
 			const executionUsage = Array.isArray(modeResult.artifactManifest?.usage) ? modeResult.artifactManifest.usage : [];
 			for (const [index, entry] of executionUsage.entries()) {
@@ -72,24 +88,6 @@ export async function reportProviderAssignmentResult(input: {
 				},
 				metadata: { runnerId: runnerId, mode: modeResult.mode, source: '@treeseed/agent/provider-runner' },
 			}, `assignment:${assignmentId}:terminal-settlement`);
-			let workspaceCleanup: Record<string, unknown> = { status: closeWorkspace ? 'completed' : 'not_required' };
-			if (closeWorkspace) {
-				try {
-					await closeWorkspace();
-				} catch (error) {
-					const diagnostic = providerErrorDiagnostic(error, 'workspace_cleanup');
-					workspaceCleanup = { status: 'failed', retryable: true, diagnostic };
-					await reportProviderRuntimeEvent({ client, assignmentId, event: {
-						id: `workspace-cleanup-failed:${assignmentId}:${stringValue(modeMetadata.modeRunId, outputMetadata.modeRunId) ?? modeResult.mode}`,
-						eventType: 'provider.workspace.cleanup_failed',
-						status: 'failed',
-						component: 'recovery',
-						message: 'TreeDX workspace cleanup failed after successful execution; assignment completion continued.',
-						createdAt: new Date().toISOString(),
-						context: { runnerId, projectId, agentSlug, diagnostic, recovery: 'cleanup_reconciliation_required' },
-					} });
-				}
-			}
 			return client.completeAssignment(assignmentId, {
 				leaseToken: leaseToken,
 				runnerId: runnerId,

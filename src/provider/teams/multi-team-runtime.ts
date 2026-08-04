@@ -100,6 +100,7 @@ function connectionRuntimeContext(
 	config: ProviderHostRuntimeConfig,
 	connection: NonNullable<ProviderConnectionResult['runtime']>,
 	executionProviders?: ProviderConnectionRuntimeContext['executionProviders'],
+	accessTokenProvider?: () => Promise<string>,
 ): ProviderConnectionRuntimeContext {
 	return {
 		...config,
@@ -110,6 +111,7 @@ function connectionRuntimeContext(
 		providerId: connection.providerId,
 		membershipId: connection.membershipId,
 		accessToken: connection.accessToken.accessToken,
+		...(accessTokenProvider ? { accessTokenProvider } : {}),
 		executionProviders,
 		env: {
 			...config.env,
@@ -254,7 +256,8 @@ export async function runMultiTeamProviderRunners(config: ProviderHostRuntimeCon
 		return { ok: true, role: 'runner', mode: 'plan', connections: loaded.manifest.connections.map((connection) => ({ id: connection.id, teamId: connection.teamId ?? null, enabled: connection.enabled !== false, maxConcurrentRunners: connection.offer.maxConcurrentRunners ?? null, capabilities: connection.offer.capabilities })) };
 	}
 	const loaded = await loadProviderManifest(config.manifestPath ?? '');
-	const connections = await reconcileProviderConnections(config);
+	const coordinator = await createCapacityProviderCoordinator(config);
+	const connections = await coordinator.reconcileAll();
 	const runtimeIds = new Set(connections.flatMap((connection) => connection.runtime ? [connection.runtime.connection.id] : []));
 	const connectedIds = (await new ProviderLocalCapacityStore(config.dataDir).schedulableConnections()).filter((connectionId) => runtimeIds.has(connectionId));
 	const concurrency = providerManifestConcurrency({ executionProviders: loaded.manifest.executionProviders, hostLimit: config.maxConcurrentRunners });
@@ -272,7 +275,12 @@ export async function runMultiTeamProviderRunners(config: ProviderHostRuntimeCon
 			await localCapacity.recordFailure(localClaim.id, 'Manager-created dispatch references an unavailable connection.');
 			return { ok: false, role: 'runner', connectionId: localClaim.connectionId, error: 'Manager-created dispatch references an unavailable connection.' };
 		}
-		const connectionConfig = connectionRuntimeContext(config, runtime, loaded.manifest.executionProviders);
+		const connectionConfig = connectionRuntimeContext(
+			config,
+			runtime,
+			loaded.manifest.executionProviders,
+			async () => (await coordinator.accessTokenForConnection(runtime.connection)).accessToken,
+		);
 		const client = (await import('../coordination/client.ts')).createProviderMarketClient(connectionConfig);
 		try {
 			const result = await runProviderRunnerOnce({

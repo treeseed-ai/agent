@@ -55,6 +55,7 @@ export interface ProviderConnectionRuntimeContext extends ProviderHostRuntimeCon
 	providerId: string;
 	membershipId: string;
 	accessToken: string;
+	accessTokenProvider?: () => Promise<string>;
 	executionProviders?: CapacityProviderManifestV2['executionProviders'];
 }
 

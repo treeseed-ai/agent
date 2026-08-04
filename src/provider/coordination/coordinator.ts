@@ -80,6 +80,7 @@ function nextState(connectionId: string, marketUrl: string, prior: ProviderConne
 export class CapacityProviderCoordinator {
 	private identity: CoordinatorIdentity | null = null;
 	private manifestMutation = Promise.resolve();
+	private readonly tokenRefreshes = new Map<string, Promise<ProviderAccessTokenIssue>>();
 	private readonly localState: ProviderLocalCapacityStore;
 
 	constructor(
@@ -127,6 +128,24 @@ export class CapacityProviderCoordinator {
 		}
 		await this.localState.saveToken(input.connection.id, token);
 		return token;
+	}
+
+	async accessTokenForConnection(connection: ProviderConnectionConfig) {
+		const current = this.tokenRefreshes.get(connection.id);
+		if (current) return current;
+		const refresh = this.connectApproved({
+			connection,
+			marketUrl: providerConnectionMarketUrl(connection, this.options.env),
+			marketAudience: providerConnectionMarketAudience(connection, this.options.env),
+			credentialRef: connection.membershipCredentialRef,
+			credentialId: connection.membershipCredentialId,
+		});
+		this.tokenRefreshes.set(connection.id, refresh);
+		try {
+			return await refresh;
+		} finally {
+			if (this.tokenRefreshes.get(connection.id) === refresh) this.tokenRefreshes.delete(connection.id);
+		}
 	}
 
 	async reconcileConnection(connection: ProviderConnectionConfig): Promise<ProviderConnectionResult> {

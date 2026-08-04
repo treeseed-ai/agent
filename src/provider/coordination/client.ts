@@ -12,6 +12,7 @@ export function createProviderMarketClient(config: ProviderConnectionRuntimeCont
 	return new ProviderProtocolClient({
 		marketUrl: config.marketUrl,
 		accessToken: config.accessToken,
+		accessTokenProvider: config.accessTokenProvider,
 		userAgent: `@treeseed/agent capacity-provider/${process.env.TREESEED_PROVIDER_RUNTIME_VERSION ?? '0.9.0'}`,
 		requestTimeoutMs: PROVIDER_MARKET_REQUEST_TIMEOUT_MS,
 	});

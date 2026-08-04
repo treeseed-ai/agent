@@ -280,7 +280,7 @@ it('routes a failed kernel result through the canonical fail lifecycle', async (
 		await runTerminalLifecycle('failed', 'fail', false);
 	});
 
-it('preserves successful execution when post-settlement workspace cleanup fails', async () => {
+it('preserves successful execution when pre-settlement workspace cleanup fails', async () => {
 	const repoRoot = repository();
 	const calls: Array<{ method: string; body?: Record<string, unknown> }> = [];
 	const assignment = leasedAssignment(repoRoot);
@@ -308,8 +308,8 @@ it('preserves successful execution when post-settlement workspace cleanup fails'
 		async closeWorkspace() { throw Object.assign(new TypeError('fetch failed'), { operation: 'workspace.close', path: '/v1/dx/projects/project-a/workspaces/workspace-a/close' }); },
 	});
 	expect(result).toMatchObject({ ok: true, payload: { status: 'completed' } });
-	expect(calls.map((entry) => entry.method)).toEqual(['settle', 'event', 'complete']);
-	expect(calls[1]?.body).toMatchObject({ eventType: 'provider.workspace.cleanup_failed', context: { diagnostic: { operation: 'workspace.close' } } });
+	expect(calls.map((entry) => entry.method)).toEqual(['event', 'settle', 'complete']);
+	expect(calls[0]?.body).toMatchObject({ eventType: 'provider.workspace.cleanup_failed', context: { diagnostic: { operation: 'workspace.close' } } });
 	expect(calls[2]?.body).toMatchObject({ output: { metadata: { workspaceCleanup: { status: 'failed', retryable: true } } } });
 });
 

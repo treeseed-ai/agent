@@ -26,7 +26,7 @@ export function createAssignmentTreeDxAdapter(input: {
 	runnerId?: string;
 }): AgentTreeDxAdapter | null {
 	const handleId = stringValue(input.treedxProxyHandle.id);
-	if (!input.config.marketUrl || !input.config.accessToken || !handleId) return null;
+	if (!input.config.marketUrl || (!input.config.accessToken && !input.config.accessTokenProvider) || !handleId) return null;
 	const baseUrl = normalizeBaseUrl(input.config.marketUrl);
 	const defaultRepoId = stringValue(input.treedxProxyHandle.repositoryId);
 	const defaultWorkspaceId = stringValue(input.treedxProxyHandle.workspaceId);
@@ -45,12 +45,17 @@ export function createAssignmentTreeDxAdapter(input: {
 			throw new Error(result.reason ?? 'TreeDX proxy handle does not allow this request.');
 		}
 	};
-	const headers = {
-		accept: 'application/json',
-		'content-type': 'application/json',
-		'x-treeseed-assignment-id': input.assignmentId,
-		'x-treeseed-treedx-proxy-handle-id': handleId,
-		...buildCapacityProviderAuthHeaders(input.config.accessToken),
+	const requestHeaders = async () => {
+		const accessToken = input.config.accessTokenProvider
+			? (await input.config.accessTokenProvider()).trim()
+			: input.config.accessToken.trim();
+		return {
+			accept: 'application/json',
+			'content-type': 'application/json',
+			'x-treeseed-assignment-id': input.assignmentId,
+			'x-treeseed-treedx-proxy-handle-id': handleId,
+			...buildCapacityProviderAuthHeaders(accessToken),
+		};
 	};
 	let proxyRequestSequence = 0;
 	const recordTreeDxProxyEvent = async (phase: 'started' | 'completed' | 'failed', event: Record<string, unknown>) => {
@@ -110,7 +115,7 @@ export function createAssignmentTreeDxAdapter(input: {
 		try {
 			const response = await fetch(`${baseUrl}${path}`, {
 				method,
-				headers,
+				headers: await requestHeaders(),
 				body: body === undefined ? undefined : JSON.stringify(body),
 				signal: controller.signal,
 			});

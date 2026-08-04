@@ -58,4 +58,31 @@ describe('assignment TreeDX context adapter', () => {
 		const sent = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
 		expect(sent).toMatchObject({ query: 'guide', limit: 24, format: 'full', budget: { maxNodes: 8, maxTokens: 1800 } });
 	});
+
+	it('resolves a current provider access token for every TreeDX request', async () => {
+		const accessTokenProvider = vi.fn()
+			.mockResolvedValueOnce('token-before-refresh')
+			.mockResolvedValueOnce('token-after-refresh');
+		const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ payload: {} }), {
+			status: 200,
+			headers: { 'content-type': 'application/json' },
+		}));
+		vi.stubGlobal('fetch', fetchMock);
+		const adapter = createAssignmentTreeDxAdapter({
+			config: { marketUrl: 'http://api.test', accessToken: 'expired', accessTokenProvider } as ProviderConnectionRuntimeContext,
+			projectId: 'project-1', assignmentId: 'assignment-1',
+			treedxProxyHandle: {
+				id: 'handle-1', teamId: 'team-1', projectId: 'project-1', assignmentId: 'assignment-1',
+				repositoryId: 'repo-1', workspaceId: 'workspace-1', status: 'issued',
+				allowedOperations: ['files:read', 'workspace:write'], allowedPaths: ['**'],
+			},
+		});
+		await adapter?.readRepositoryFiles({ repoId: 'repo-1', paths: ['src/content/objectives/core.mdx'] });
+		await adapter?.closeWorkspace({ workspaceId: 'workspace-1' });
+		expect(accessTokenProvider).toHaveBeenCalledTimes(2);
+		expect(fetchMock.mock.calls.map((call) => new Headers(call[1]?.headers).get('authorization'))).toEqual([
+			'Bearer token-before-refresh',
+			'Bearer token-after-refresh',
+		]);
+	});
 });

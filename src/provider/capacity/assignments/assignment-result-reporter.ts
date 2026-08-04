@@ -8,6 +8,28 @@ import { positiveNumberValue, record, stringValue } from '../../configuration/va
 import { providerErrorDiagnostic } from '../../reporting/error-diagnostics.ts';
 import { reportProviderRuntimeEvent } from '../../reporting/runtime-event-reporter.ts';
 
+function retryableCompletionError(error: unknown) {
+	const status = Number(record(error).status ?? 0);
+	return status === 0 || status >= 500;
+}
+
+export async function completeProviderAssignmentWithRetry(
+	client: ProviderAssignmentClient,
+	assignmentId: string,
+	request: Record<string, unknown>,
+	wait: (durationMs: number) => Promise<void> = (durationMs) => new Promise((resolve) => setTimeout(resolve, durationMs)),
+) {
+	for (let attempt = 1; attempt <= 3; attempt += 1) {
+		try {
+			return await client.completeAssignment(assignmentId, request);
+		} catch (error) {
+			if (attempt === 3 || !retryableCompletionError(error)) throw error;
+			await wait(250 * attempt);
+		}
+	}
+	throw new Error('Assignment completion retry loop ended unexpectedly.');
+}
+
 export async function reportProviderAssignmentResult(input: {
 	client: ProviderAssignmentClient;
 	assignmentId: string;
@@ -88,7 +110,7 @@ export async function reportProviderAssignmentResult(input: {
 				},
 				metadata: { runnerId: runnerId, mode: modeResult.mode, source: '@treeseed/agent/provider-runner' },
 			}, `assignment:${assignmentId}:terminal-settlement`);
-			return client.completeAssignment(assignmentId, {
+			return completeProviderAssignmentWithRetry(client, assignmentId, {
 				leaseToken: leaseToken,
 				runnerId: runnerId,
 				output: {

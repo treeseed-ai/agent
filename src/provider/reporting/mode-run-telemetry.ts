@@ -88,6 +88,7 @@ export async function deliverProviderModeRunTelemetry(input: ProviderModeRunTele
 			...((input.request.metadata && typeof input.request.metadata === 'object' && !Array.isArray(input.request.metadata))
 				? input.request.metadata as Record<string, unknown>
 				: {}),
+			recordKind: 'telemetry',
 			telemetryEventId: eventId,
 		},
 	};

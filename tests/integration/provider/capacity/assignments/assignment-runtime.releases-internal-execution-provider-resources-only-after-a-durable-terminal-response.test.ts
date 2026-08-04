@@ -251,9 +251,10 @@ it('uses an isolated empty execution context instead of cloning for context-only
 		expect(materialized.repository).toMatchObject({
 			ok: true,
 			materialization: 'context',
-			commitSha: null,
+			commitSha: expect.stringMatching(/^[a-f0-9]{40}$/u),
 		});
 		expect(materialized.repository.path).toContain(resolve(runtimeConfig.dataDir, 'assignment-contexts'));
+		expect(execFileSync('git', ['rev-parse', '--verify', 'HEAD^{commit}'], { cwd: materialized.repository.path, encoding: 'utf8' }).trim()).toBe(materialized.repository.commitSha);
 	});
 
 it('materializes the repository checkout, not the logical project root, for exact-ref work', async () => {

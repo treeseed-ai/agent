@@ -5,7 +5,7 @@ export function waitingOutputIsTerminal(output: AgentHandlerOutput) {
 	if (output.status !== 'waiting') return false;
 	const metadata = record(output.metadata);
 	const executionSnapshot = record(metadata.executionSnapshot);
-	return record(executionSnapshot.outputs).executionBlocked === true;
+	return record(executionSnapshot.outputs).executionBlocked === true && executionSnapshot.retryable !== true;
 }
 
 export class AgentKernelOutputValidator {

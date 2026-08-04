@@ -111,7 +111,7 @@ function diagnosticReferences(snapshot: ExecutionRunSnapshot): AgentDiagnosticRe
 	];
 }
 
-function signals(snapshot: ExecutionRunSnapshot, outputMetadata: Record<string, unknown>, assignment: ProviderAssignment): AgentSignal[] {
+function signals(snapshot: ExecutionRunSnapshot, outputMetadata: Record<string, unknown>, assignment: ProviderAssignment, completed: boolean): AgentSignal[] {
 	const outputs = record(snapshot.outputs);
 	const events = records(outputs.toolTelemetry).flatMap((entry) => records(entry.derivedEvents));
 	const researchStage = text(record(record(assignment.decisionInput).input).researchStage);
@@ -128,7 +128,9 @@ function signals(snapshot: ExecutionRunSnapshot, outputMetadata: Record<string, 
 	const claimSignals = events.filter((entry) => entry.type === 'research_claims_recorded')
 		.flatMap((entry) => records(entry.claims))
 		.map((claim): Record<string, unknown> => ({ code: 'research_claim', severity: 'info', metadata: claim }));
-	return [...records(outputs.signals), ...records(outputMetadata.signals), ...toolSignals, ...claimSignals].flatMap((entry) => {
+	const declaredSignals = completed ? strings(record(assignment.allowedOutputs).signalContracts)
+		.map((code) => ({ code, severity: 'info', message: `Produced declared signal ${code}.`, metadata: { source: 'agent_activity_contract' } })) : [];
+	return [...records(outputs.signals), ...records(outputMetadata.signals), ...toolSignals, ...claimSignals, ...declaredSignals].flatMap((entry) => {
 		const code = text(entry.code, entry.type);
 		const severity = text(entry.severity) ?? 'info';
 		if (!code || !['info', 'warning', 'error'].includes(severity)) return [];
@@ -243,7 +245,7 @@ export function buildAgentArtifactManifest(input: {
 		commit: commitReference,
 		verification: verification(snapshot, outputMetadata),
 		citations: citations(snapshot, outputMetadata),
-		signals: signals(snapshot, outputMetadata, input.assignment),
+		signals: signals(snapshot, outputMetadata, input.assignment,input.status === 'completed'),
 		controlPlaneReferences: controlPlaneReferences(outputMetadata),
 		usage: Array.isArray(snapshot.usage) ? snapshot.usage as ExecutionUsageActual[] : [],
 		diagnostics: diagnosticReferences(snapshot),

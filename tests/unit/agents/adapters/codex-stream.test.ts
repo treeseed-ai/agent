@@ -61,4 +61,12 @@ describe('Codex streamed execution activity', () => {
 		expect(JSON.stringify(codexEventMessage({ type: 'item.completed', item: { id: 'command-a', type: 'command_execution', command: 'npm test', aggregated_output: 'sensitive output' } })))
 			.not.toContain('sensitive output');
 	});
+
+	it('retains sanitized MCP arguments and results for forensic provider messages', () => {
+		const message = codexEventMessage({ type: 'item.completed', item: {
+			id: 'tool-a', type: 'mcp_tool_call', server: 'treeseed_tools', tool: 'treeseed_content_query',
+			arguments: { model: 'note', accessToken: 'tsk_secret_value' }, result: { items: [{ id: 'note:one' }] }, status: 'completed',
+		} });
+		expect(message).toMatchObject({ payload: { item: { arguments: { model: 'note', accessToken: '<redacted>' }, result: { items: [{ id: 'note:one' }] } } } });
+	});
 });

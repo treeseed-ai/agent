@@ -136,6 +136,17 @@ function executionInvocation(input: {
 	};
 }
 describe('codex execution provider', () => {
+it('requires TreeDX path discovery before Knowledge Hub batch reads', () => {
+	const prompt = buildCodexPrompt({ ...baseRequest, tools: [{
+		kind: 'agent_tool', id: 'treedx.read_repository_files', name: 'Read repository files',
+		description: 'Read exact TreeDX paths.', inputSchema: {}, outputSchema: {},
+		executionTarget: 'provider_runner', mutability: 'read',
+	}] });
+	expect(prompt).toContain('Do not infer or guess Knowledge Hub file paths.');
+	expect(prompt).toContain('Batch file reads fail when any requested path is absent');
+	expect(prompt).toContain('Never inspect src/content or docs/src/content with shell commands');
+});
+
 it('prepares an exact-ref worktree even when the agent sandbox is read-only', async () => {
 		const readOnlyAgent = {
 			...agent,
@@ -163,6 +174,17 @@ it('prepares an exact-ref worktree even when the agent sandbox is read-only', as
 		}))).rejects.toMatchObject({ code: 'worktree_base_ref_mismatch' });
 		expect(prepared).toBe(true);
 	});
+
+it('keeps TreeDX source authority separate from the local execution worktree ref', async () => {
+	const prepareWorktree = vi.fn(async (input: { exactBaseRef?: string }) => ({ branchName: 'agent/guide/acting', worktreeRoot: '/repo/.agent-worktrees/guide/acting', exactBaseRef: 'local-commit', created: true }));
+	const run = vi.fn(async () => ({ finalResponse: 'Completed through TreeDX.', items: [], usage: { input_tokens: 2, output_tokens: 1 } }));
+	const adapter = new CodexExecutionProviderAdapter({ repoRoot: '/repo', prepareWorktree: prepareWorktree as never,
+		createCodexClient: async () => ({ startThread: () => ({ id: 'thread', run }), resumeThread: () => ({ id: 'thread', run }) }),
+		env: { TREESEED_CODEX_SUBSCRIPTION_PLAN: 'pro', TREESEED_CODEX_API_KEY: 'codex-test-key-1234567890' } });
+	const result = await adapter.start(executionInvocation({ agent, runId: 'treedx-ref', instructions: 'Use TreeDX.', metadata: { exactBaseRef: 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb', contentAuthority: 'treedx' } }));
+	expect(prepareWorktree).toHaveBeenCalledWith(expect.objectContaining({ exactBaseRef: undefined }));
+	expect(result.metadata).toMatchObject({ baseRef: 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb' });
+});
 
 it('keeps provider code free of direct command invocation APIs', async () => {
 		const files = [

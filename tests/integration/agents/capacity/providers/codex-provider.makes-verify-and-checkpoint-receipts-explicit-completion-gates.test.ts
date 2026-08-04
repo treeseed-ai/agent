@@ -233,6 +233,10 @@ it('identifies required completion receipts from granted tools and the assigned 
 			status: 'completed',
 			derivedEvents: [{ type: 'content_created', contentRef: { model: 'note', path: 'notes/implementation.mdx', subjectId: 'decision-a', subjectField: 'relatedDecisions' } }],
 		}], 'implementation_change', null, 2, true)).toEqual([]);
+		expect(missingCodexCompletionReceipts([], [{
+			status: 'completed',
+			derivedEvents: [{ type: 'content_created', contentRef: { model: 'knowledge', path: 'src/content/knowledge/guide/page.mdx' } }],
+		}], 'knowledge_update', null, 2, true)).toEqual([]);
 	});
 
 it('instructs research assignments with the callable MCP name rather than only the policy id', () => {

@@ -137,20 +137,31 @@ it('uses descriptor dispatch preferred mode for sdk dispatch tools', async () =>
 		}));
 	});
 
-it('keeps provider-runner SDK dispatch ephemeral and out of the assignment worktree', async () => {
-		const dispatch = vi.fn(async () => ({ ok: true, mode: 'inline', payload: {} }));
-		const createLocal = vi.spyOn(AgentSdk, 'createLocal').mockReturnValue({ dispatch } as never);
-		await expect(callAgentTool({
+it('reads assignment status from the provider-authorized API without exposing lease credentials', async () => {
+		const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ ok: true, payload: {
+			id: 'assignment-1', workDayId: 'workday-1', projectId: 'project-1', agentId: 'guide-steward',
+			projectAgentClassId: 'class-1', handlerId: 'writer', mode: 'planning', status: 'leased',
+			leaseState: 'leased', leaseExpiresAt: '2026-08-04T00:00:00.000Z', leaseToken: 'must-not-leak',
+			decisionInput: { input: { activityType: 'planning' } }, capacityEnvelope: { reservedCredits: 1 },
+			metadata: { workdayRunId: 'run-1' }, treedxProxyHandle: { token: 'must-not-leak' },
+		} }), { status: 200, headers: { 'content-type': 'application/json' } }));
+		const result = await callAgentTool({
 			apiBaseUrl: 'https://api.example.test',
 			providerAccessToken: 'provider-key',
 			assignmentId: 'assignment-1',
 			descriptors: [statusDescriptor()],
 			repoRoot: '/repo/.agent-worktrees/assignment-1',
-		}, 'treeseed.status')).resolves.toMatchObject({ ok: true });
-		expect(createLocal).toHaveBeenCalledWith(expect.objectContaining({
-			repoRoot: '/repo/.agent-worktrees/assignment-1',
-			databaseName: ':memory:',
-		}));
+			fetchImpl: fetchImpl as typeof fetch,
+		}, 'treeseed.status');
+		expect(result).toMatchObject({ ok: true, payload: {
+			assignmentId: 'assignment-1', workdayId: 'workday-1', workdayRunId: 'run-1',
+			activityType: 'planning', status: 'leased', credits: { requested: 1 },
+		} });
+		expect(JSON.stringify(result)).not.toContain('must-not-leak');
+		expect(fetchImpl).toHaveBeenCalledWith(
+			'https://api.example.test/v1/provider/assignments/assignment-1',
+			expect.objectContaining({ headers: expect.objectContaining({ authorization: 'Bearer provider-key' }) }),
+		);
 	});
 
 it('creates model-aware content through TreeDX proxy calls', async () => {

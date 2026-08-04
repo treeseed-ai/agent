@@ -182,6 +182,13 @@ function blockedExecutionSummary(snapshot: ExecutionRunSnapshot) {
   return null;
 }
 
+export function executionContentOutputStatus(snapshot: ExecutionRunSnapshot) {
+  if (snapshot.status === "completed") return "completed" as const;
+  if (snapshot.status === "failed" && snapshot.retryable !== true)
+    return "failed" as const;
+  return "waiting" as const;
+}
+
 export function createExecutionContentHandler(input: {
   kind: string;
   defaultWorkPackageKind: string;
@@ -329,6 +336,7 @@ export function createExecutionContentHandler(input: {
             readRecord(inputs.payload.input)?.exactBaseRef,
             inputs.payload.exactBaseRef,
           ),
+		  contentAuthority: Object.keys(readRecord(context.capacity?.treedxProxyHandle) ?? {}).length ? "treedx" : "repository",
           contextDiagnostics: inputs.workPackage.metadata.contextDiagnostics,
         },
       });
@@ -431,12 +439,7 @@ export function createExecutionContentHandler(input: {
     },
 
     async emitOutputs(context, result) {
-      const status =
-        result.snapshot.status === "completed"
-          ? "completed"
-          : result.snapshot.status === "failed"
-            ? "failed"
-            : "waiting";
+      const status = executionContentOutputStatus(result.snapshot);
       for (const messageType of nextMessageTypesFor(context)) {
         await createAgentMessage({
           context,

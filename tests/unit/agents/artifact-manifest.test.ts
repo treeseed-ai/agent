@@ -52,6 +52,25 @@ describe('AgentArtifactManifest', () => {
 		expect(writes.map((entry) => entry.id)).toEqual(['mode-run-authority', 'mode-run-authority']);
 	});
 
+	it('retries the same durable mode-run identity after an interrupted response', async () => {
+		const writes: Array<Record<string, unknown>> = [];
+		await recordAssignmentModeRun({
+			assignment: assignment(),
+			modeRunId: 'mode-run-retry',
+			recordModeRun: async (run: Record<string, unknown>) => {
+				writes.push(run);
+				if (writes.length === 1) throw new TypeError('fetch failed');
+				return run;
+			},
+		}, {
+			status: 'succeeded',
+			selectedInput: {},
+			capacityEnvelope: assignment().capacityEnvelope,
+		});
+		expect(writes).toHaveLength(2);
+		expect(writes.map((entry) => entry.id)).toEqual(['mode-run-retry', 'mode-run-retry']);
+	});
+
 	it('normalizes durable content, code, citations, verification, usage, and tool evidence', () => {
 		const manifest = buildAgentArtifactManifest({
 			assignment: assignment(),

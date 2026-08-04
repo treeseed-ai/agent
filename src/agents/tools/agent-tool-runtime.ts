@@ -10,6 +10,7 @@ import type { ExecutionProviderToolDescriptor, TreeDxProxyExecutionToolDescripto
 import { callTreeDxProxyTool } from './treedx-proxy-client.ts';
 import type { TreeDxProxyToolName } from './treedx-proxy-tool.ts';
 import { validateAgentToolInput } from './agent-tool-schema.ts';
+import { readAssignmentStatus } from './status/assignment-status-tool.ts';
 import { callContentTool } from './content-tool-runtime.ts';
 import { fetchGovernedResearchSource, searchGovernedResearchSources } from './governed-research-tools.ts';
 
@@ -170,6 +171,9 @@ function dispatchInputFor(toolId: string, input: Record<string, unknown>, descri
 }
 
 async function callSdkDispatchTool(options: AgentToolRuntimeOptions, descriptor: ExecutionProviderToolDescriptor, input: Record<string, unknown>) {
+	if (descriptor.id === 'treeseed.status' && !options.sdk && options.apiBaseUrl && options.providerAccessToken && options.assignmentId) {
+		return readAssignmentStatus(options);
+	}
 	const definition = findAgentToolDefinition(descriptor.id);
 	if (!definition?.dispatch) {
 		return structuredError('dispatch_mapping_missing', `${descriptor.id} does not declare an SDK dispatch mapping.`);

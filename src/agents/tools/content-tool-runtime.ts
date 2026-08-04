@@ -2,6 +2,7 @@ import {
 	findContentToolPreset,
 	renderContentRecord,
 	validateContentRecord,
+	validateProposalContentForSubmission,
 	type ContentAction,
 	type ContentModel,
 } from '@treeseed/sdk/content-operations';
@@ -126,7 +127,7 @@ function descriptorContentRoot(descriptor: TreeDxProxyExecutionToolDescriptor) {
 }
 
 function contentSlug(input: Record<string, unknown>) {
-	const candidate = text(input.slug) || text(input.id);
+	const candidate = text(input.slug) || text(input.id) || text(record(input.placement).path) || text(input.path);
 	if (!candidate.includes('/')) return candidate;
 	return candidate.replace(/\\/gu, '/').split('/').filter(Boolean).at(-1)?.replace(/\.mdx?$/iu, '') ?? candidate;
 }
@@ -211,7 +212,12 @@ export async function callContentTool(options: ContentToolCallOptions) {
 				placement: modelRelativePlacement(input, contentModel, contentRoot),
 				contentRoot,
 			});
-			const explicitPath = text(input.path);
+			const descriptorMetadata = record(descriptor.metadata);
+			const assignedAgentPath = contentModel === 'agent'
+				&& contentSlug(input) === text(descriptorMetadata.agentSlug)
+				? text(descriptorMetadata.agentContentPath)
+				: '';
+			const explicitPath = text(input.path) || assignedAgentPath;
 			const { path, result } = explicitPath
 				? { path: explicitPath, result: await readWorkspaceFile(options, descriptor, explicitPath) }
 				: await readModelContentFile(options, descriptor, rendered.path);
@@ -250,12 +256,19 @@ export async function callContentTool(options: ContentToolCallOptions) {
 		}
 		if (action === 'validate') {
 			const placement = record(input.placement);
-			const existing = text(placement.path)
+			const proposedRecord = typeof input.body === 'string'
+				|| Boolean(text(input.title))
+				|| Object.keys(record(input.fields)).length > 0;
+			const existing = text(placement.path) && !proposedRecord
 				? await readModelContentFile(options, descriptor, rendered.path)
 				: null;
 			const validation = validateContentRecord(contentModel, existing ? responseContent(existing.result) : rendered.content);
 			if (!validation.ok) {
 				return structuredError('content_validation_failed', 'Content validation failed.', { diagnostics: validation.diagnostics });
+			}
+			if (contentModel === 'proposal') {
+				const proposal = validateProposalContentForSubmission(existing ? responseContent(existing.result) : rendered.content);
+				if (!proposal.ok) return structuredError('proposal_plan_incomplete', 'Agent proposal is missing required planning evidence.', { diagnostics: proposal.diagnostics });
 			}
 			return { ok: true, action, refs: [{ ...rendered.ref, ...(existing ? { path: existing.path } : {}) }], diagnostics: validation.diagnostics };
 		}
@@ -263,9 +276,14 @@ export async function callContentTool(options: ContentToolCallOptions) {
 			await writeWorkspaceFile(options, descriptor, rendered.path, rendered.content);
 			const readback = await readWorkspaceFile(options, descriptor, rendered.path).catch(() => null);
 			if (readback) {
-				const validation = validateContentRecord(contentModel, responseContent(readback) || rendered.content);
+				const content = responseContent(readback) || rendered.content;
+				const validation = validateContentRecord(contentModel, content);
 				if (!validation.ok) {
 					return structuredError('content_readback_failed', 'Content readback validation failed.', { diagnostics: validation.diagnostics });
+				}
+				if (contentModel === 'proposal') {
+					const proposal = validateProposalContentForSubmission(content);
+					if (!proposal.ok) return structuredError('proposal_plan_incomplete', 'Agent proposal is missing required planning evidence.', { diagnostics: proposal.diagnostics });
 				}
 			}
 			return {

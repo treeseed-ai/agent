@@ -12,6 +12,13 @@ export async function readAgentToolTelemetry(path: string | null | undefined) {
 	});
 }
 
+export function contentModelForArtifactKind(artifactKind: string) {
+	if (artifactKind === 'planning_question') return 'question';
+	if (artifactKind === 'planning_proposal') return 'proposal';
+	if (artifactKind === 'knowledge_page' || artifactKind === 'knowledge_update') return 'knowledge';
+	return 'note';
+}
+
 export function unlinkedNotePaths(telemetry: Record<string, unknown>[]) {
 	const noteRelations = new Map<string, boolean>();
 	for (const entry of telemetry) {
@@ -31,13 +38,7 @@ export function unlinkedNotePaths(telemetry: Record<string, unknown>[]) {
 }
 
 export function hasCompatibleContentArtifact(telemetry: Record<string, unknown>[], artifactKind: string) {
-	const expectedModel = artifactKind === 'planning_question'
-		? 'question'
-		: artifactKind === 'planning_proposal'
-			? 'proposal'
-			: artifactKind === 'knowledge_page'
-				? 'knowledge'
-				: 'note';
+	const expectedModel = contentModelForArtifactKind(artifactKind);
 	return telemetry.some((entry) => entry.status === 'completed' && Array.isArray(entry.derivedEvents)
 		&& entry.derivedEvents.some((rawEvent) => {
 			const event = record(rawEvent);

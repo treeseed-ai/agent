@@ -349,6 +349,7 @@ export class LifecycleManagedExecutionProviderAdapter implements ExecutionProvid
 			completedAt: snapshot.status === 'completed' ? new Date().toISOString() : null,
 			failedAt: snapshot.status === 'failed' ? new Date().toISOString() : null,
 			metadata: {
+				recordKind: 'telemetry',
 				source,
 				assignmentId: this.options.assignmentId,
 				runnerId: this.options.runnerId,

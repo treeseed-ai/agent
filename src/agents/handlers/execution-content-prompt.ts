@@ -20,7 +20,12 @@ function contentContract(contentRoot: string, assignedObjective: Record<string, 
 		`- Knowledge pages and book pages: ${contentRoot}/knowledge/**`,
 		`- Book records: ${contentRoot}/books/*.mdx; book pages are knowledge pages linked from book sidebar metadata.`,
 		'- Prefer durable MDX content over database-only output whenever another agent will need the information.',
+		'- For a new artifact, create it before validation. Never validate or read back a target path that has not yet been created.',
 		'- When validating a created or updated artifact, pass its exact changedPaths entry back as placement.path. A slug-only validation checks a newly rendered default-path record and is not evidence for the hierarchical artifact you wrote.',
+		'- The validate tool does not accept a top-level path field. Supply the exact path only as placement.path.',
+		'- Never batch-read inferred repository paths. Discover each record through TreeSeed content query or TreeDX search/context first, then read only exact paths returned by those operations. If no exact path is returned, report missing evidence instead of probing likely filenames.',
+		'- For content reads, when the assignment or a query result supplies contentPath or path, pass that exact value as the read tool\'s top-level path. Do not replace a supplied path with an ID-derived default path.',
+		'- A content commit makes the assignment workspace immutable. Complete every create, update, link, and validate operation first; commit exactly once as the final mutating action. After commit, perform read-only inspection only.',
 	].join('\n');
 }
 
@@ -43,6 +48,29 @@ export function targetExecutionContentDescription(artifactKind: string) {
 }
 
 function executionDeliverableContract(artifactKind: string, payload: HandlerPayload) {
+	if (artifactKind === 'planning_proposal') {
+		return [
+			'Assigned deliverable contract: planning_proposal.',
+			'- Research the assigned objective and inspect prior questions, notes, proposals, decisions, and relevant Guide content before drafting.',
+			'- Create exactly one proposal linked through relatedObjectives to the durable objective supplied by the assignment.',
+			'- Set primaryContributor to your configured agent identity and choose editorial or structural proposalType according to your responsibility.',
+			'- Supply evidenceRefs that identify the exact research notes, content paths, or authenticated sources supporting the plan.',
+			'- Supply a structured plan object containing desiredOutcome, currentProblem, proposedApproach, scope, nonGoals, deliverables, acceptanceCriteria, risks, dependencies, alternatives, verification, and openQuestions.',
+			'- desiredOutcome, currentProblem, and proposedApproach must be substantive explanations, not labels or authorization boilerplate.',
+			'- The proposal body must explain the recommendation for human review. It must never approve itself, authorize acting, or manufacture a decision.',
+			'- Validate the proposal, repair every proposal_plan_incomplete diagnostic, then commit it through TreeDX.',
+		].join('\n');
+	}
+	if (artifactKind === 'proposal_feedback_note') {
+		return [
+			'Assigned deliverable contract: proposal_feedback_note.',
+			'- Read the exact generated proposal and its cited evidence before reviewing it.',
+			'- Create one note linked to the proposal with feedbackKind set to support or concern; use concern when revision is required.',
+			'- State the reviewed criteria, evidence, consequences, and a concrete requested revision where applicable.',
+			'- Create a linked question instead when evidence is insufficient to reach either review disposition.',
+			'- Validate and commit the feedback through TreeDX. Do not vote, approve, or decide the proposal.',
+		].join('\n');
+	}
 	const researchStage = firstString(payload.researchStage);
 	if (researchStage) {
 		const minimumSources = Number(payload.minimumIndependentSources ?? 2);

@@ -81,6 +81,18 @@ function repositoryFiles(response: Record<string, unknown>) {
 	return [];
 }
 
+function repositoryPaths(response: Record<string, unknown>) {
+	const payload = readRecord(response.payload) ?? response;
+	const candidates = [payload.entries, payload.paths, readRecord(payload.data)?.entries, readRecord(payload.result)?.entries];
+	for (const candidate of candidates) {
+		if (!Array.isArray(candidate)) continue;
+		return unique(candidate.flatMap((entry) => typeof entry === 'string'
+			? [entry]
+			: [text(readRecord(entry)?.path, readRecord(entry)?.filePath)]));
+	}
+	return [];
+}
+
 function configuredQueries(context: AgentContext) {
 	return (context.agent.context?.queries ?? []).map((query) => ({
 		id: text(query.id), purpose: text(query.purpose), query: text(query.query), scope: text(query.scope),
@@ -122,7 +134,22 @@ function assignedObjectivePaths(payload: HandlerPayload, subject: ExecutionConte
 		subject.model === 'objective' ? subject.id : null,
 	);
 	if (!objectiveId) return [];
-	return [`${contentRoot}/objectives/${objectiveId}.mdx`, `${contentRoot}/objectives/${objectiveId}.md`];
+	return unique([
+		subject.model === 'objective' ? subject.path : null,
+		text(payload.subjectPath),
+		`${contentRoot}/objectives/${objectiveId}.mdx`,
+		`${contentRoot}/objectives/${objectiveId}.md`,
+	]);
+}
+
+function assignedAgentPaths(context: AgentContext, contentRoot: string) {
+	const assignment = readRecord(context.capacity?.assignment);
+	const metadata = readRecord(assignment?.metadata);
+	return unique([
+		text(metadata?.agentContentPath),
+		`${contentRoot}/agents/${context.agent.slug}.mdx`,
+		`${contentRoot}/agents/editorial/${context.agent.slug}.mdx`,
+	]);
 }
 
 const editorialAgentSlugs = new Set([
@@ -147,7 +174,8 @@ function editorialPathGroups(context: AgentContext, payload: HandlerPayload, sub
 	}
 	return [
 		{ kind: 'core-objective', id: 'objective:core', required: true,
-			paths: [`${contentRoot}/objectives/core.mdx`, `${contentRoot}/objectives/core.md`] },
+			paths: unique([subject.model === 'objective' && subject.id === 'core' ? text(subject.path, payload.subjectPath) : null,
+				`${contentRoot}/objectives/core.mdx`, `${contentRoot}/objectives/core.md`]) },
 		{ kind: 'project-core', id: 'note:market:editorial:core', required: true,
 			paths: [`${contentRoot}/notes/editorial/core.mdx`, `${contentRoot}/notes/editorial/core.md`] },
 		{ kind: 'book-core', id: 'note:market:editorial:treeseed-guide:core', required: true,
@@ -173,16 +201,29 @@ async function collectEvidence(context: AgentContext, subject: ExecutionContentS
 		const editorialGroups = editorialPathGroups(context, payload, subject, contentRoot);
 		const groups = [
 			...editorialGroups,
-			...(objectivePaths.length ? [{ id: 'assigned objective', paths: objectivePaths }] : []),
-			{ id: 'agent configuration', paths: [`${contentRoot}/agents/${context.agent.slug}.mdx`,
-				`${contentRoot}/agents/editorial/${context.agent.slug}.mdx`] },
+			...(objectivePaths.length && !editorialGroups.some((group) => group.paths.some((path) => objectivePaths.includes(path)))
+				? [{ id: 'assigned objective', paths: objectivePaths }] : []),
+			{ id: 'agent configuration', paths: assignedAgentPaths(context, contentRoot) },
 		];
 		const files: Array<{ path: string | null; text: string | null; revision?: string | null }> = [];
 		const resolvedPaths: string[] = [];
 		const responses: unknown[] = [];
+		let indexedPaths: Set<string> | null = null;
+		if (typeof context.treeDx.listRepositoryPaths === 'function') {
+			try {
+				const listed = await context.treeDx.listRepositoryPaths({ repoId, path: contentRoot, body: {
+					paths: unique(groups.flatMap((group) => group.paths)), extensions: ['.md', '.mdx'], limit: 500,
+					source: 'agent_execution_content_handler', assignmentId: context.capacity?.assignmentId,
+				} });
+				indexedPaths = new Set(repositoryPaths(listed));
+			} catch (error) {
+				warnings.push(`TreeDX repository path discovery failed: ${error instanceof Error ? error.message : String(error)}`);
+			}
+		}
 		for (const group of groups) {
 			const failures: string[] = [];
-			for (const path of group.paths) {
+			const confirmedPaths = indexedPaths ? group.paths.filter((path) => indexedPaths!.has(path)) : group.paths;
+			for (const path of confirmedPaths) {
 				try {
 					const response = await context.treeDx.readRepositoryFiles({ repoId, paths: [path] });
 					const resolved = repositoryFiles(response);
@@ -198,8 +239,9 @@ async function collectEvidence(context: AgentContext, subject: ExecutionContentS
 					failures.push(`${path}: ${error instanceof Error ? error.message : String(error)}`);
 				}
 			}
-			if (failures.length === group.paths.length) warnings.push(`TreeDX repository ${group.id} evidence failed: ${failures.join('; ')}`);
-			if ('required' in group && group.required && failures.length === group.paths.length) {
+			const unresolved = !confirmedPaths.length || failures.length === confirmedPaths.length;
+			if (unresolved) warnings.push(`TreeDX repository ${group.id} evidence failed: ${failures.join('; ') || 'no matching path exists at the immutable repository ref'}`);
+			if ('required' in group && group.required && unresolved) {
 				throw new Error(`Required editorial context "${group.kind}" could not be resolved through TreeDX.`);
 			}
 		}
@@ -244,7 +286,8 @@ async function collectEvidence(context: AgentContext, subject: ExecutionContentS
 					'guarantees/**', 'packages/*/guarantees/**', 'docs/**', 'packages/*/docs/**'];
 				const pack = await context.treeDx.buildContext({ repoId, query, paths, body: {
 					source: 'guide_editorial_context', assignmentId: context.capacity?.assignmentId,
-					agentId: context.agent.slug, limit: 24, depth: 2, format: 'full',
+					agentId: context.agent.slug, limit: 8, depth: 1, format: 'summary',
+					budget: { maxNodes: 8, maxTokens: 1_800 },
 				} });
 				evidence.push({ id: 'treedx-guide-editorial-graph', purpose: 'Target page, hierarchy, relationships, and editorial evidence.',
 					source: 'treedx_proxy', sourceRef: { repoId, query, paths, reason: 'Guide assignment graph neighborhood' }, pack });

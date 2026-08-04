@@ -61,9 +61,10 @@ export async function prepareAssignmentKernelBridge(input: ProviderAssignmentExe
 	const { assignmentId, membershipId, stateVersion, decisionInput, decisionPayload, capacityEnvelope, projectId, agentSlug } = input;
 	const workspaceMode = assignmentWorkspaceAccessMode(input.assignment);
 	const governedExactBaseRef = stringValue(record(decisionPayload.input).exactBaseRef, decisionPayload.exactBaseRef);
+	const treedxProxyHandle = assignmentTreeDxProxyHandle(input.assignment);
 	const assignedProject = assignmentProjectContext(input.assignment);
 	const project = assignedProject
-		? await withTimeout(materializeAssignmentProject(input.config, assignedProject, { assignmentId, workspaceAccessMode: workspaceMode, requiresRepository: Boolean(governedExactBaseRef), exactRef: governedExactBaseRef }), 60_000, `Assignment project materialization exceeded 60000ms for ${assignmentId}.`)
+		? await withTimeout(materializeAssignmentProject(input.config, assignedProject, { assignmentId, workspaceAccessMode: workspaceMode, requiresRepository: Boolean(governedExactBaseRef) && !Object.keys(treedxProxyHandle).length, exactRef: governedExactBaseRef }), 60_000, `Assignment project materialization exceeded 60000ms for ${assignmentId}.`)
 		: null;
 	await recordEarlyModeRun({
 		client: input.client,
@@ -116,7 +117,6 @@ export async function prepareAssignmentKernelBridge(input: ProviderAssignmentExe
 	}
 	const projectSiteRoot = providerProjectSiteRoot(project, project.repository.path);
 	const projectTreeDx = providerProjectTreeDxOptions(project, input.treeDx);
-	const treedxProxyHandle = assignmentTreeDxProxyHandle(input.assignment);
 	const scopedTreeDx = assignmentScopedTreeDxOptions(projectTreeDx, treedxProxyHandle);
 	await recordEarlyModeRun({
 		client: input.client,
@@ -297,6 +297,7 @@ export async function prepareAssignmentKernelBridge(input: ProviderAssignmentExe
 		projectId,
 		assignmentId,
 		agentSlug,
+		agentContentPath: stringValue(assignmentMetadata.agentContentPath, decisionPayload.agentContentPath),
 		environment: stringValue(input.assignment.environment, input.config.environment) ?? 'local',
 		treedxProxyHandle,
 		workspaceMode,

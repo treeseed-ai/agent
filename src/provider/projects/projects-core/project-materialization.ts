@@ -90,6 +90,16 @@ async function gitSha(repoRoot: string) {
 	try { return (await runGit(['rev-parse', 'HEAD'], repoRoot)).stdout.trim() || null; } catch { return null; }
 }
 
+async function ensureContextRepository(path: string) {
+	if (!existsSync(resolve(path, '.git'))) {
+		await runGit(['init', '--initial-branch=context'], path);
+		await runGit(['config', 'user.name', 'Agent Provider'], path);
+		await runGit(['config', 'user.email', 'provider@localhost'], path);
+		await runGit(['commit', '--allow-empty', '-m', 'Initialize isolated assignment context'], path);
+	}
+	return gitSha(path);
+}
+
 async function resolveGitRef(repoRoot: string, ref: string) {
 	try {
 		return (await runGit(['rev-parse', '--verify', '--end-of-options', `${ref}^{commit}`], repoRoot)).stdout.trim() || null;
@@ -119,6 +129,7 @@ export async function materializeAssignmentProject(
 	if (!options.requiresRepository && !requiresProviderRepository(options.workspaceAccessMode)) {
 		const path = contextPath(config, assignmentId);
 		await mkdir(path, { recursive: true });
+		const commitSha = await ensureContextRepository(path);
 		return {
 			...project,
 			repository: {
@@ -126,7 +137,7 @@ export async function materializeAssignmentProject(
 				ok: true,
 				path,
 				branch: project.repository.currentBranch || project.repository.defaultBranch || 'context',
-				commitSha: null,
+				commitSha,
 				materialization: 'context',
 			},
 		};

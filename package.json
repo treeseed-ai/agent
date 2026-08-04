@@ -1,6 +1,6 @@
 {
   "name": "@treeseed/agent",
-  "version": "0.12.59-dev.feature-treeseed-guide-editorial-agents.20260802T160122Z",
+  "version": "0.12.59-dev.staging.20260804T171001Z",
   "description": "Treeseed agent service runtime package.",
   "license": "AGPL-3.0-only",
   "repository": {
@@ -111,7 +111,7 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@openai/codex-sdk": "^0.130.0",
-    "@treeseed/sdk": "github:treeseed-ai/sdk#68a10f87cdade0faca73a22d82d07973c8bc0658",
+    "@treeseed/sdk": "github:treeseed-ai/sdk#33d84a8c44016021b07a1f40958c19ca7e5f6bda",
     "esbuild": "0.28.0",
     "hono": "^4.8.2",
     "typescript": "^5.9.3",

@@ -272,16 +272,17 @@ export class CodexExecutionProviderAdapter implements ExecutionProviderAdapter {
 		const exactBaseRef = typeof input.metadata?.exactBaseRef === 'string' && input.metadata.exactBaseRef.trim()
 			? input.metadata.exactBaseRef.trim()
 			: undefined;
+		const treeDxAuthority = input.metadata?.contentAuthority === 'treedx';
 		const worktree = sandboxMode === 'workspace_write' || Boolean(exactBaseRef)
 			? await (this.options.prepareWorktree ?? prepareDefaultWorktree)({
 				agent: input.agent,
 				runId,
 				repoRoot,
-				exactBaseRef,
+				exactBaseRef: treeDxAuthority ? undefined : exactBaseRef,
 			})
 			: undefined;
 		if (worktree) this.assignmentWorktrees.set(input.assignment.id, worktree.worktreeRoot);
-		if (exactBaseRef && !worktree?.exactBaseRef?.toLowerCase().startsWith(exactBaseRef.toLowerCase())) {
+		if (exactBaseRef && !treeDxAuthority && !worktree?.exactBaseRef?.toLowerCase().startsWith(exactBaseRef.toLowerCase())) {
 			throw new CodexRequestSafetyError(
 				'worktree_base_ref_mismatch',
 				'Prepared assignment worktree does not prove the governed exact base ref.',
@@ -437,7 +438,7 @@ export class CodexExecutionProviderAdapter implements ExecutionProviderAdapter {
 				provider: 'codex',
 				worktreeRoot: worktree?.worktreeRoot ?? null,
 				worktreeBranch: worktree?.branchName ?? null,
-				baseRef: worktree?.exactBaseRef ?? exactBaseRef ?? null,
+				baseRef: treeDxAuthority ? exactBaseRef ?? null : worktree?.exactBaseRef ?? exactBaseRef ?? null,
 				codex: result,
 			},
 		};

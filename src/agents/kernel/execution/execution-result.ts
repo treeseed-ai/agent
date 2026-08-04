@@ -37,8 +37,9 @@ export async function boundedAssignmentResult(
 		fallbackReason: fallback.reason,
 		failedAt: status === 'failed' ? timestamp : null,
 		completedAt: status !== 'failed' ? timestamp : null,
-		metadata: {
-			source: 'agent_kernel_mode_runtime',
+			metadata: {
+				recordKind: 'mode-run',
+				source: 'agent_kernel_mode_runtime',
 			assignmentId: assignment.id,
 			runnerId: options.runnerId ?? null,
 		},
@@ -71,6 +72,6 @@ export async function boundedAssignmentResult(
 		traceRefs: evidence?.traceRefs ?? {},
 		artifactManifest: evidence?.artifactManifest ?? null,
 		fallback,
-		metadata: { source: 'agent_kernel_mode_runtime' },
+		metadata: { recordKind: 'mode-run', source: 'agent_kernel_mode_runtime' },
 	};
 }

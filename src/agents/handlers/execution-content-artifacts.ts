@@ -1,6 +1,7 @@
 import type { ExecutionRunSnapshot } from '@treeseed/sdk/types/agents';
 import type { AgentContext } from '../runtime/runtime-types.ts';
 import type { ContentArtifactRef } from '../content/content-artifacts.ts';
+import { contentModelForArtifactKind } from '../tools/agent-tool-completion.ts';
 import { readRecord } from './shared.ts';
 
 function firstString(...values: unknown[]) {
@@ -13,11 +14,7 @@ export function normalizedContentModel(model: string) {
 }
 
 export function contentModelSupportsArtifactKind(model: string, artifactKind: string) {
-	const normalizedModel = normalizedContentModel(model);
-	if (artifactKind === 'planning_question') return normalizedModel === 'question';
-	if (artifactKind === 'planning_proposal') return normalizedModel === 'proposal';
-	if (artifactKind === 'knowledge_page') return normalizedModel === 'knowledge';
-	return normalizedModel === 'note';
+	return normalizedContentModel(model) === contentModelForArtifactKind(artifactKind);
 }
 
 function artifactKindFromContentModel(model: string) {

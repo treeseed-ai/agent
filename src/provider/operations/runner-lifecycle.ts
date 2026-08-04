@@ -3,8 +3,10 @@ import type { AgentKernel } from '../../agents/kernel/agents/agent-kernel.ts';
 import type { ProviderConnectionRuntimeContext } from '../configuration/config.ts';
 import { providerAssignmentClientWithTerminalBoundary, type ProviderAssignmentClient } from '../coordination/lease-client.ts';
 import { recordEarlyModeRun } from '../reporting/mode-run-reporter.ts';
+import { reportProviderRuntimeEvent } from '../reporting/runtime-event-reporter.ts';
 import { record, stringValue } from '../configuration/value-utils.ts';
 import { releaseTerminalAssignmentResources, runProviderAssignment } from './runner.ts';
+import { providerErrorDiagnostic } from '../reporting/error-diagnostics.ts';
 
 export function isTerminalProviderAssignmentObservation(value: unknown): boolean {
 	const envelope = record(value);
@@ -91,6 +93,10 @@ export async function runProviderRunnerOnce(input: {
 	}));
 	const leaseToken = stringValue(leasedRecord.leaseToken, assignment.leaseToken);
 	const leaseSeconds = Number(leasedRecord.leaseSeconds ?? 300);
+	await reportProviderRuntimeEvent({ client: input.client, assignmentId: String(assignment.id ?? ''), event: {
+		id: `runner-leased-${Date.now()}`, eventType: 'provider.runner.assignment_leased', status: 'active', component: 'provider-runner',
+		message: 'Provider runner leased the assignment.', createdAt: new Date().toISOString(), context: { runnerId, leaseStartedAt, leaseSeconds },
+	} });
 	let renewTimer: ReturnType<typeof setInterval> | null = null;
 	let terminalizing = false;
 	const stopLeaseRenewal = () => {
@@ -102,14 +108,23 @@ export async function runProviderRunnerOnce(input: {
 		if (terminalizing || !leaseToken || !input.client.renewAssignment) return;
 		const assignmentId = String(assignment.id ?? '');
 		try {
-			const renewed = await input.client.renewAssignment(assignmentId, {
-				leaseToken,
-				runnerId,
-				leaseSeconds,
-			});
+			let renewed: unknown;
+			for (let attempt = 1; attempt <= 3; attempt += 1) {
+				try {
+					renewed = await input.client.renewAssignment(assignmentId, { leaseToken, runnerId, leaseSeconds });
+					break;
+				} catch (error) {
+					const message = error instanceof Error ? error.message : String(error);
+					if (attempt === 3 || !/fetch failed|timed out|econnreset|socket|temporarily unavailable/iu.test(message)) throw error;
+				}
+			}
 			const renewedRecord = record(renewed);
 			const renewedAssignment = record(renewedRecord.payload ?? renewedRecord.assignment ?? renewedRecord);
 			Object.assign(assignment, renewedAssignment);
+			await reportProviderRuntimeEvent({ client: input.client, assignmentId, event: {
+				id: `lease-renewed-${Date.now()}`, eventType: 'provider.assignment.lease_renewed', status: 'completed', component: 'lease',
+				message: 'Assignment lease renewed.', createdAt: new Date().toISOString(), context: { runnerId, leaseExpiresAt: assignment.leaseExpiresAt },
+			} });
 		} catch (error) {
 			if (terminalizing) return;
 			if (input.client.assignment) {
@@ -133,12 +148,16 @@ export async function runProviderRunnerOnce(input: {
 				// before this detached rejection handler runs. Re-check the terminal
 				// boundary here so a successfully terminalized assignment cannot emit a
 				// false active-lease failure.
-				reportProviderLeaseRenewalFailure({
+				const reported = reportProviderLeaseRenewalFailure({
 					terminalizing: () => terminalizing,
 					assignmentId: String(assignment.id ?? ''),
 					runnerId,
 					error,
 				});
+				if (reported) void reportProviderRuntimeEvent({ client: input.client, assignmentId: String(assignment.id ?? ''), event: {
+					id: `lease-renew-failed-${Date.now()}`, eventType: 'provider.assignment.lease_renew_failed', status: 'failed', component: 'lease',
+					message: error instanceof Error ? error.message : String(error), createdAt: new Date().toISOString(), context: { runnerId },
+				} });
 			});
 		}, renewEveryMs);
 	}
@@ -180,6 +199,10 @@ export async function runProviderRunnerOnce(input: {
 				leaseStartedAt,
 			},
 		});
+		await reportProviderRuntimeEvent({ client: input.client, assignmentId: String(assignment.id ?? ''), event: {
+			id: `execution-started-${Date.now()}`, eventType: 'provider.execution.started', status: 'active', component: 'execution-provider',
+			message: 'Execution provider invocation started.', createdAt: new Date().toISOString(), context: { runnerId, executionProviderId: assignment.executionProviderId },
+		} });
 		result = await runProviderAssignment({
 			config: input.config,
 			client: lifecycleClient,
@@ -195,16 +218,26 @@ export async function runProviderRunnerOnce(input: {
 				releaseAssignmentResources = release;
 			},
 		});
+		await reportProviderRuntimeEvent({ client: input.client, assignmentId: String(assignment.id ?? ''), event: {
+			id: `execution-completed-${Date.now()}`, eventType: 'provider.execution.completed', status: 'completed', component: 'execution-provider',
+			message: 'Execution provider invocation completed.', createdAt: new Date().toISOString(), context: { runnerId, executionProviderId: assignment.executionProviderId },
+		} });
 	} catch (error) {
 		const assignmentId = stringValue(assignment.id) ?? '';
 		const message = error instanceof Error ? error.message : String(error);
+		const diagnostic = providerErrorDiagnostic(error, 'assignment_processing');
 		console.error(JSON.stringify({
 			level: 'error',
 			event: 'provider.runner.assignment_processing_failed',
 			assignmentId,
 			runnerId,
 			message,
+			diagnostic,
 		}));
+		await reportProviderRuntimeEvent({ client: input.client, assignmentId, event: {
+			id: `execution-failed-${Date.now()}`, eventType: 'provider.execution.failed', status: 'failed', component: 'execution-provider',
+			message, createdAt: new Date().toISOString(), context: { runnerId, executionProviderId: assignment.executionProviderId, diagnostic },
+		} });
 		let failureTelemetryError: unknown = null;
 		try {
 			await recordEarlyModeRun({
@@ -218,9 +251,9 @@ export async function runProviderRunnerOnce(input: {
 				outputs: {
 					status: 'provider_assignment_processing_failed',
 					summary: message,
-					metadata: { source: 'provider_runner_assignment_processing_failed', runnerId },
+					metadata: { source: 'provider_runner_assignment_processing_failed', runnerId, diagnostic },
 				},
-				metadata: { source: 'provider_runner_assignment_processing_failed', runnerId, message },
+				metadata: { source: 'provider_runner_assignment_processing_failed', runnerId, message, diagnostic },
 			});
 		} catch (telemetryError) {
 			failureTelemetryError = telemetryError;
@@ -242,6 +275,7 @@ export async function runProviderRunnerOnce(input: {
 				source: '@treeseed/agent/provider-runner',
 				telemetryDeliveryFailed: Boolean(failureTelemetryError),
 				telemetryDeliveryError: failureTelemetryError instanceof Error ? failureTelemetryError.message : failureTelemetryError ? String(failureTelemetryError) : null,
+				diagnostic,
 			},
 		};
 		stopLeaseRenewal();

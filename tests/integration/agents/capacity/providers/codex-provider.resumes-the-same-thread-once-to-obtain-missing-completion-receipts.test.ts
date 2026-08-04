@@ -194,6 +194,8 @@ it('resumes the same thread once to obtain missing completion receipts', async (
 			expect(run).toHaveBeenCalledTimes(2);
 			expect(String(run.mock.calls[1]?.[0])).toContain('Missing required tool receipts');
 			expect(String(run.mock.calls[1]?.[0])).toContain('content_artifact_kind:implementation_change');
+			expect(String(run.mock.calls[1]?.[0])).not.toContain('Available TreeSeed tools:');
+			expect(String(run.mock.calls[1]?.[0])).not.toContain('Work package:');
 			expect(result).toMatchObject({
 				status: 'completed',
 				summary: 'Receipts complete.',

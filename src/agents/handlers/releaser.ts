@@ -5,6 +5,7 @@ const executionReleaserHandler = createExecutionContentHandler({
 	kind: 'releaser',
 	defaultWorkPackageKind: 'release-readiness',
 	defaultArtifactKind: 'release_readiness',
+	requireContentArtifact: false,
 });
 
 /**

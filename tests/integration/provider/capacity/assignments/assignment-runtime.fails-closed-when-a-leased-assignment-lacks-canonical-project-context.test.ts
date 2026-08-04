@@ -19,6 +19,7 @@ import { releaseTerminalAssignmentResources, runProviderAssignment } from '../..
 import { createSingleFlightLeaseRenewal, isTerminalProviderAssignmentObservation, reportProviderLeaseRenewalFailure, runProviderRunnerOnce } from '../../../../../src/provider/operations/runner-lifecycle.ts';
 
 import { providerAssignmentClientWithTerminalBoundary } from '../../../../../src/provider/coordination/lease-client.ts';
+import { reportProviderAssignmentResult } from '../../../../../src/provider/capacity/assignments/assignment-result-reporter.ts';
 
 const roots: string[] = [];
 
@@ -200,8 +201,9 @@ it('describes the canonical lease lifecycle in plan mode', async () => {
 	});
 
 it('renews, settles exactly once, then completes with the forensic artifact manifest', async () => {
-		const repoRoot = repository();
-		const calls: Array<{ method: string; body?: Record<string, unknown>; key?: string }> = [];
+	const repoRoot = repository();
+	const calls: Array<{ method: string; body?: Record<string, unknown>; key?: string }> = [];
+	let renewAttempts = 0;
 		const artifactManifest = {
 			schemaVersion: 1 as const,
 			assignmentId: 'assignment-a', modeRunId: 'mode-run-a', teamId: 'team-a', projectId: 'project-a', providerId: 'provider-a', mode: 'planning' as const,
@@ -224,7 +226,11 @@ it('renews, settles exactly once, then completes with the forensic artifact mani
 			leasedAssignment: { ok: true, leaseToken: 'lease-a', leaseSeconds: 300, payload: leasedAssignment(repoRoot) },
 			client: {
 				async nextAssignment() { throw new Error('runner must not poll'); },
-				async renewAssignment(_id, body) { calls.push({ method: 'renew', body }); return { ok: true, payload: {} }; },
+				async renewAssignment(_id, body) {
+					renewAttempts += 1; calls.push({ method: 'renew', body });
+					if (renewAttempts === 1) throw new TypeError('fetch failed');
+					return { ok: true, payload: {} };
+				},
 				async createAssignmentModeRun(_id, body) { calls.push({ method: 'mode-run', body }); return { ok: true, payload: {} }; },
 				async reportAssignmentUsage(_id, body, key) { calls.push({ method: 'usage', body, key }); return { ok: true, payload: {} }; },
 				async settleAssignment(_id, body, key) { calls.push({ method: 'settle', body, key }); return { ok: true, payload: {} }; },
@@ -242,6 +248,7 @@ it('renews, settles exactly once, then completes with the forensic artifact mani
 			},
 		});
 		expect(result).toMatchObject({ ok: true, assigned: 1 });
+		expect(renewAttempts).toBe(2);
 		expect(calls.findIndex((entry) => entry.method === 'renew')).toBeGreaterThanOrEqual(0);
 		expect(calls.findIndex((entry) => entry.method === 'usage')).toBeLessThan(calls.findIndex((entry) => entry.method === 'settle'));
 		expect(calls.findIndex((entry) => entry.method === 'settle')).toBeLessThan(calls.findIndex((entry) => entry.method === 'complete'));
@@ -272,6 +279,39 @@ it('routes a returned kernel result through the canonical return lifecycle', asy
 it('routes a failed kernel result through the canonical fail lifecycle', async () => {
 		await runTerminalLifecycle('failed', 'fail', false);
 	});
+
+it('preserves successful execution when post-settlement workspace cleanup fails', async () => {
+	const repoRoot = repository();
+	const calls: Array<{ method: string; body?: Record<string, unknown> }> = [];
+	const assignment = leasedAssignment(repoRoot);
+	const result = await reportProviderAssignmentResult({
+		client: {
+			async nextAssignment() { throw new Error('not used'); },
+			async createAssignmentModeRun() { return { ok: true }; },
+			async createAssignmentEvent(_id, body) { calls.push({ method: 'event', body }); return { ok: true }; },
+			async reportAssignmentUsage() { return { ok: true }; },
+			async settleAssignment() { calls.push({ method: 'settle' }); return { ok: true }; },
+			async completeAssignment(_id, body) { calls.push({ method: 'complete', body }); return { ok: true, payload: { status: 'completed' } }; },
+			async failAssignment() { throw new Error('successful execution must not fail'); },
+		},
+		assignment,
+		assignmentId: assignment.id,
+		modeResult: {
+			status: 'completed', mode: 'reviewing', assignmentId: assignment.id, projectId: assignment.projectId,
+			projectAgentClassId: assignment.projectAgentClassId, agentId: assignment.agentId, handlerId: assignment.handlerId,
+			summary: 'review completed', outputs: { metadata: { modeRunId: 'mode-run-a', usageActual: { actualCredits: 1 } } },
+			selectedInput: {}, capacityEnvelope: assignment.capacityEnvelope, traceRefs: {},
+		},
+		capacityEnvelope: assignment.capacityEnvelope,
+		leaseToken: 'lease-a', runnerId: 'runner-a', projectId: assignment.projectId, agentSlug: assignment.agentId,
+		fallbackOutput: null,
+		async closeWorkspace() { throw Object.assign(new TypeError('fetch failed'), { operation: 'workspace.close', path: '/v1/dx/projects/project-a/workspaces/workspace-a/close' }); },
+	});
+	expect(result).toMatchObject({ ok: true, payload: { status: 'completed' } });
+	expect(calls.map((entry) => entry.method)).toEqual(['settle', 'event', 'complete']);
+	expect(calls[1]?.body).toMatchObject({ eventType: 'provider.workspace.cleanup_failed', context: { diagnostic: { operation: 'workspace.close' } } });
+	expect(calls[2]?.body).toMatchObject({ output: { metadata: { workspaceCleanup: { status: 'failed', retryable: true } } } });
+});
 
 it('bounds assignment-scoped TreeDX response bodies before AgentKernel execution', async () => {
 		const repoRoot = repository();

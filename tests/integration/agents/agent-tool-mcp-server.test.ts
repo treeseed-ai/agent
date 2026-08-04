@@ -108,6 +108,66 @@ describe('agent tool MCP tooling', () => {
 		);
 	});
 
+	it('bounds context packs below the control-plane response ceiling by default', async () => {
+		const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ ok: true, payload: { nodes: [] } }), { status: 200 }));
+		await callTreeDxProxyTool({
+			apiBaseUrl: 'https://api.example.test', providerAccessToken: 'provider-secret', assignmentId: 'assignment-1',
+			handleId: 'handle-1', descriptor, toolName: 'treedx.build_context', input: { query: 'guide architecture' },
+			fetchImpl: fetchImpl as unknown as typeof fetch,
+		});
+		const request = fetchImpl.mock.calls[0]?.[1] as RequestInit;
+		expect(JSON.parse(String(request.body))).toEqual({ query: 'guide architecture', budget: { maxNodes: 16, maxTokens: 4000 } });
+	});
+
+	it('pages repository reads below the control-plane response ceiling', async () => {
+		const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ file: { content: 'bounded' } }), { status: 200 }));
+		await callTreeDxProxyTool({
+			apiBaseUrl: 'https://api.example.test', providerAccessToken: 'provider-secret', assignmentId: 'assignment-1',
+			handleId: 'handle-1', descriptor, toolName: 'treedx.read_repository_files',
+			input: { paths: ['src/content/a.mdx'], offsetBytes: 42 }, fetchImpl: fetchImpl as unknown as typeof fetch,
+		});
+		const request = fetchImpl.mock.calls[0]?.[1] as RequestInit;
+		expect(JSON.parse(String(request.body))).toEqual({
+			paths: ['src/content/a.mdx'], maxBytes: 131_072, offsetBytes: 42,
+		});
+	});
+
+	it('retries transient assignment-scoped TreeDX reads without retrying mutations', async () => {
+		const readFetch = vi.fn()
+			.mockRejectedValueOnce(new TypeError('fetch failed'))
+			.mockResolvedValue(new Response(JSON.stringify({ ok: true, payload: { content: 'recovered' } }), { status: 200 }));
+		await expect(callTreeDxProxyTool({
+			apiBaseUrl: 'https://api.example.test', providerAccessToken: 'provider-secret', assignmentId: 'assignment-1',
+			handleId: 'handle-1', descriptor, toolName: 'treedx.read_workspace_file', input: { path: 'src/content/a.mdx' },
+			fetchImpl: readFetch as unknown as typeof fetch,
+		})).resolves.toMatchObject({ ok: true });
+		expect(readFetch).toHaveBeenCalledTimes(2);
+
+		const writeFetch = vi.fn().mockRejectedValue(new TypeError('fetch failed'));
+		await expect(callTreeDxProxyTool({
+			apiBaseUrl: 'https://api.example.test', providerAccessToken: 'provider-secret', assignmentId: 'assignment-1',
+			handleId: 'handle-1', descriptor, toolName: 'treedx.write_workspace_file', input: { path: 'src/content/a.mdx', content: 'body' },
+			fetchImpl: writeFetch as unknown as typeof fetch,
+		})).rejects.toThrow('fetch failed');
+		expect(writeFetch).toHaveBeenCalledTimes(1);
+	});
+
+	it('fans multi-file repository reads into independently bounded requests', async () => {
+		const fetchImpl = vi.fn(async (_url: string, init?: RequestInit) => {
+			const body = JSON.parse(String(init?.body));
+			return new Response(JSON.stringify({ ok: true, payload: { files: [{ path: body.paths[0] }] } }), { status: 200 });
+		});
+		const response = await callTreeDxProxyTool({
+			apiBaseUrl: 'https://api.example.test', providerAccessToken: 'provider-secret', assignmentId: 'assignment-1',
+			handleId: 'handle-1', descriptor, toolName: 'treedx.read_repository_files',
+			input: { paths: ['src/content/a.mdx', 'src/content/b.mdx'] }, fetchImpl: fetchImpl as unknown as typeof fetch,
+		});
+		expect(fetchImpl).toHaveBeenCalledTimes(2);
+		expect((response as { payload: { files: unknown[] } }).payload.files).toEqual([
+			{ path: 'src/content/a.mdx' }, { path: 'src/content/b.mdx' },
+		]);
+	});
+
 	it('serves allowed tools through a standards-compliant MCP connection', async () => {
 		const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ ok: true, payload: { path: 'src/content/a.mdx' } }), { status: 200 }));
 		const telemetry: unknown[] = [];

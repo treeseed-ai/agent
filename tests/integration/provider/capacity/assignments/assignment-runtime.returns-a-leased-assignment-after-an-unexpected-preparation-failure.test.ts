@@ -168,6 +168,8 @@ it('returns a leased assignment after an unexpected preparation failure', async 
 		const assignment = {
 			...leasedAssignment(repoRoot),
 			metadata: { assignmentSource: 'capacity_workday_demand', contentRoot: 'src/content' },
+			decisionInput: { ...leasedAssignment(repoRoot).decisionInput, input: { exactBaseRef: 'immutable-ref-from-treedx' } },
+			workspaceContext: { project: { ...projectContext(repoRoot), repository: { ...projectContext(repoRoot).repository, cloneUrl: 'https://invalid.example/must-not-clone.git' } } },
 			treedxProxyHandle: {
 				id: 'handle-a', teamId: 'team-a', projectId: 'project-a', assignmentId: 'assignment-a', repositoryId: 'repo-a', workspaceId: 'workspace-a',
 				allowedOperations: ['files:read'], allowedPaths: ['**'], expiresAt: new Date(Date.now() + 60_000).toISOString(),

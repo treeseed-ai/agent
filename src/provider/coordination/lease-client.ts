@@ -1,7 +1,10 @@
+import type { ProviderRuntimeEventInput } from '@treeseed/sdk/agent-capacity';
+
 export interface ProviderAssignmentClient {
 	nextAssignment(request?: Record<string, unknown>): Promise<unknown>;
 	assignment?(assignmentId: string): Promise<unknown>;
 	createAssignmentModeRun(assignmentId: string, request: Record<string, unknown>): Promise<unknown>;
+	createAssignmentEvent?(assignmentId: string, request: ProviderRuntimeEventInput): Promise<unknown>;
 	completeAssignment(assignmentId: string, request: Record<string, unknown>): Promise<unknown>;
 	failAssignment(assignmentId: string, request: Record<string, unknown>): Promise<unknown>;
 	reportAssignmentUsage?(assignmentId: string, request: Record<string, unknown>, idempotencyKey: string): Promise<unknown>;

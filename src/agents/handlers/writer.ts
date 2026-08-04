@@ -5,6 +5,7 @@ const executionWriterHandler = createExecutionContentHandler({
 	kind: 'writer',
 	defaultWorkPackageKind: 'writer',
 	defaultArtifactKind: 'agent_note',
+	executionAccess: 'configured',
 });
 
 export const writerHandler: AgentHandler = {

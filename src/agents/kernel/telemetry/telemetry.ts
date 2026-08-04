@@ -15,8 +15,17 @@ export async function recordAssignmentModeRun(
 	const source = typeof run.metadata?.source === 'string' && run.metadata.source.trim()
 		? run.metadata.source.trim()
 		: 'agent_kernel_mode_runtime';
-	return options.recordModeRun({
+	const request = {
 		id: run.id ?? options.modeRunId ?? `${assignment.id}:${mode}:${agentId}:${handlerId}:${source}:${randomUUID()}`,
 		...run,
-	});
+	};
+	let lastError: unknown = new Error('Mode-run telemetry was not attempted.');
+	for (let attempt = 1; attempt <= 3; attempt += 1) {
+		try {
+			return await options.recordModeRun(request);
+		} catch (error) {
+			lastError = error;
+		}
+	}
+	throw lastError;
 }

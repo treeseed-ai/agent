@@ -304,6 +304,7 @@ export function codexAgentToolConfig(request: CodexExecutionRequest) {
 				args: server.args,
 				env: codexAgentToolEnvironment(request),
 				required: true,
+				startup_timeout_sec: 90,
 				default_tools_approval_mode: 'approve',
 			},
 		},
@@ -369,11 +370,19 @@ function formatMetadataBlock(value: unknown) {
 }
 
 export function buildCodexPrompt(request: CodexExecutionRequest) {
+	// A resumed Codex thread already contains the immutable assignment boundary,
+	// tool catalog, and work package. Repeating them consumes the context window
+	// and can make a bounded completion-correction turn larger than the original.
+	if (request.threadId) return request.prompt.trim();
 	const permissionStage = request.sandboxMode === 'workspace_write'
 		? 'approved_worktree_mutation'
 		: 'read_only_or_planning';
 	const contextPackSummary = request.metadata?.contextPackSummary ?? request.metadata?.contextSummary;
-	const workPackage = request.metadata?.workPackage ?? request.metadata?.workPackageYaml;
+	const rawWorkPackage = request.metadata?.workPackage ?? request.metadata?.workPackageYaml;
+	const workPackage = rawWorkPackage && typeof rawWorkPackage === 'object' && !Array.isArray(rawWorkPackage)
+		? Object.fromEntries(Object.entries(rawWorkPackage as Record<string, unknown>)
+			.filter(([key]) => key !== 'instructions' && key !== 'context'))
+		: rawWorkPackage;
 	const operationBoundary = request.sandboxMode === 'workspace_write'
 		? [
 			'- Use only the tools listed in the available TreeSeed tool catalog.',
@@ -419,7 +428,11 @@ export function buildCodexPrompt(request: CodexExecutionRequest) {
 			'Do not request raw TreeDX URLs, bearer tokens, GitHub tokens, deploy keys, provider API keys, or direct repository credentials.',
 			'Do not use shell as a substitute for missing TreeSeed tools.',
 			'Local shell reads are reserved for repository files in the assigned workspace; Knowledge Hub model instances must be accessed through TreeDX tools.',
+			'Never inspect src/content or docs/src/content with shell commands; those paths are Knowledge Hub content and TreeDX is their only access authority.',
 			'When a model-aware TreeSeed content tool is available, use it instead of hand-writing Knowledge Hub frontmatter or markdown files.',
+			'Do not infer or guess Knowledge Hub file paths. Discover records through TreeSeed content queries or TreeDX graph/search tools, then reuse only exact paths returned by those tools.',
+			'Batch file reads fail when any requested path is absent; include only paths already verified by a query, graph, search, or content receipt.',
+			'For hierarchically placed content, pass the exact repository-relative path from the content receipt when reading, updating, linking, or validating that record.',
 			'Content tools return staged TreeDX workspace changes unless a commit-capable content tool is explicitly listed.',
 			'If a needed tool is absent or returns a structured scope error, adapt the work or report the missing capability in the final response.',
 			formatMetadataBlock(tools.map(redactToolForPrompt)),

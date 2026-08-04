@@ -85,7 +85,7 @@ export function createAssignmentTreeDxAdapter(input: {
 			},
 		});
 	};
-	const request = async (method: 'GET' | 'POST' | 'PUT', path: string, body?: Record<string, unknown>, operation = 'request') => {
+	const requestOnce = async (method: 'GET' | 'POST' | 'PUT', path: string, body?: Record<string, unknown>, operation = 'request') => {
 		proxyRequestSequence += 1;
 		const startedAt = Date.now();
 		const timeoutMs = positiveNumberValue(process.env.TREESEED_PROVIDER_TREEDX_REQUEST_TIMEOUT_MS) ?? DEFAULT_TREEDX_PROXY_REQUEST_TIMEOUT_MS;
@@ -155,7 +155,7 @@ export function createAssignmentTreeDxAdapter(input: {
 			return result;
 		} catch (error) {
 			const requestError = controller.signal.aborted
-				? new Error(`TreeDX proxy request timed out after ${timeoutMs}ms (${operation}).`)
+				? Object.assign(new Error(`TreeDX proxy request timed out after ${timeoutMs}ms (${operation}).`, { cause: error }), { code: 'treedx_proxy_timeout', operation, path, timeoutMs })
 				: error;
 			if (requestError instanceof Error && !requestError.message.includes('TreeDX proxy request failed')) {
 				await recordTreeDxProxyEvent('failed', {
@@ -164,20 +164,42 @@ export function createAssignmentTreeDxAdapter(input: {
 					errorMessage: requestError.message,
 				});
 			}
+			if (requestError instanceof Error && !('operation' in requestError)) {
+				Object.assign(requestError, { operation, path });
+			}
 			throw requestError;
 		} finally {
 			clearTimeout(timeout);
 		}
+	};
+	const request = async (method: 'GET' | 'POST' | 'PUT', path: string, body?: Record<string, unknown>, operation = 'request') => {
+		let lastError: unknown = new Error('TreeDX proxy request was not attempted.');
+		for (let attempt = 1; attempt <= 3; attempt += 1) {
+			try {
+				return await requestOnce(method, path, body, operation);
+			} catch (error) {
+				lastError = error;
+				const message = error instanceof Error ? error.message : String(error);
+				const transient = /fetch failed|timed out|econnreset|econnrefused|socket|temporarily unavailable|\(429\)|\(5\d\d\)/iu.test(message);
+				if (!transient || attempt === 3) throw error;
+			}
+		}
+		throw lastError;
 	};
 	return {
 		buildContext: ({ repoId, query, paths, body }) => {
 			const effectiveRepoId = repoId || defaultRepoId;
 			if (!effectiveRepoId) throw new Error('TreeDX repository id is required for context build.');
 			checkScope({ repoId: effectiveRepoId, operation: 'files:read', path: paths?.[0] ?? null });
+			const contextBody = body ?? {};
+			const requestedLimit = positiveNumberValue(contextBody.limit) || 8;
 			return request('POST', `/v1/dx/projects/${encodeURIComponent(input.projectId)}/repos/${encodeURIComponent(effectiveRepoId)}/context/build`, {
 				query,
 				paths,
-				...(body ?? {}),
+				...contextBody,
+				budget: record(contextBody.budget).maxTokens || record(contextBody.budget).maxNodes
+					? record(contextBody.budget)
+					: { maxNodes: Math.min(8, requestedLimit), maxTokens: 1_800 },
 			}, 'context.build');
 		},
 		listRepositoryPaths: ({ repoId, path, ref, body }) => {
@@ -195,10 +217,13 @@ export function createAssignmentTreeDxAdapter(input: {
 			if (!effectiveRepoId) throw new Error('TreeDX repository id is required for file read.');
 			for (const path of paths) checkScope({ repoId: effectiveRepoId, operation: 'files:read', path });
 			const files = (await Promise.all(paths.map(async (path) => {
+				const requestBody = body ?? {};
 				const response = await request('POST', `/v1/dx/projects/${encodeURIComponent(input.projectId)}/repos/${encodeURIComponent(effectiveRepoId)}/files/read`, {
 					path,
 					ref,
-					...(body ?? {}),
+					...requestBody,
+					maxBytes: Math.max(1, Math.min(196_608, Number(requestBody.maxBytes) || 131_072)),
+					offsetBytes: Math.max(0, Number(requestBody.offsetBytes) || 0),
 				}, 'files.read');
 				const file = record(response).file;
 				return file && typeof file === 'object' && !Array.isArray(file) ? file as Record<string, unknown> : null;

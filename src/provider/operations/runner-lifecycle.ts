@@ -6,7 +6,7 @@ import { recordEarlyModeRun } from '../reporting/mode-run-reporter.ts';
 import { reportProviderRuntimeEvent } from '../reporting/runtime-event-reporter.ts';
 import { record, stringValue } from '../configuration/value-utils.ts';
 import { releaseTerminalAssignmentResources, runProviderAssignment } from './runner.ts';
-import { providerErrorDiagnostic } from '../reporting/error-diagnostics.ts';
+import { providerErrorDiagnostic,providerErrorIsRetryable } from '../reporting/error-diagnostics.ts';
 
 export function isTerminalProviderAssignmentObservation(value: unknown): boolean {
 	const envelope = record(value);
@@ -226,6 +226,8 @@ export async function runProviderRunnerOnce(input: {
 		const assignmentId = stringValue(assignment.id) ?? '';
 		const message = error instanceof Error ? error.message : String(error);
 		const diagnostic = providerErrorDiagnostic(error, 'assignment_processing');
+		const retryable = providerErrorIsRetryable(error);
+		const failureCode = diagnostic.code ?? 'provider_assignment_processing_failed';
 		console.error(JSON.stringify({
 			level: 'error',
 			event: 'provider.runner.assignment_processing_failed',
@@ -269,8 +271,8 @@ export async function runProviderRunnerOnce(input: {
 			leaseToken,
 			runnerId,
 			reason: message,
-			code: 'provider_assignment_processing_failed',
-			retryable: true,
+			code: failureCode,
+			retryable,
 			metadata: {
 				source: '@treeseed/agent/provider-runner',
 				telemetryDeliveryFailed: Boolean(failureTelemetryError),
@@ -279,7 +281,7 @@ export async function runProviderRunnerOnce(input: {
 			},
 		};
 		stopLeaseRenewal();
-		result = input.client.returnAssignment
+		result = retryable && input.client.returnAssignment
 			? await input.client.returnAssignment(assignmentId, lifecycleRequest)
 			: await input.client.failAssignment(assignmentId, { ...lifecycleRequest, message });
 	} finally {

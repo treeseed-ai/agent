@@ -111,7 +111,7 @@ function diagnosticReferences(snapshot: ExecutionRunSnapshot): AgentDiagnosticRe
 	];
 }
 
-function signals(snapshot: ExecutionRunSnapshot, outputMetadata: Record<string, unknown>, assignment: ProviderAssignment, completed: boolean): AgentSignal[] {
+function signals(snapshot: ExecutionRunSnapshot, outputMetadata: Record<string, unknown>, assignment: ProviderAssignment, _completed: boolean): AgentSignal[] {
 	const outputs = record(snapshot.outputs);
 	const events = records(outputs.toolTelemetry).flatMap((entry) => records(entry.derivedEvents));
 	const researchStage = text(record(record(assignment.decisionInput).input).researchStage);
@@ -128,9 +128,11 @@ function signals(snapshot: ExecutionRunSnapshot, outputMetadata: Record<string, 
 	const claimSignals = events.filter((entry) => entry.type === 'research_claims_recorded')
 		.flatMap((entry) => records(entry.claims))
 		.map((claim): Record<string, unknown> => ({ code: 'research_claim', severity: 'info', metadata: claim }));
-	const declaredSignals = completed ? strings(record(assignment.allowedOutputs).signalContracts)
-		.map((code) => ({ code, severity: 'info', message: `Produced declared signal ${code}.`, metadata: { source: 'agent_activity_contract' } })) : [];
-	return [...records(outputs.signals), ...records(outputMetadata.signals), ...toolSignals, ...claimSignals, ...declaredSignals].flatMap((entry) => {
+	const requestedSignals = events.filter((entry) => entry.type === 'signal_requested').map((entry) => {
+		const requested = record(entry.signal);
+		return { code: requested.contractId, severity: 'info', message: requested.message, metadata: { ...requested, payload: record(requested.payload) } };
+	});
+	return [...records(outputs.signals), ...records(outputMetadata.signals), ...requestedSignals, ...toolSignals, ...claimSignals].flatMap((entry) => {
 		const signal = record(entry);
 		const code = text(signal.code, signal.type);
 		const severity = text(signal.severity) ?? 'info';

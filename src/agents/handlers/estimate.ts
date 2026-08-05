@@ -86,17 +86,16 @@ function buildStructuredEstimate(
     readRecord(result.snapshot.outputs?.estimate) ??
     readRecord(result.snapshot.outputs?.metadata) ??
     {};
-  const expectedCredits = Number(
-    metadata.expectedCredits ??
-      metadata.credits ??
-      context.capacity?.envelope?.reservedCredits ??
-      1,
+  const expectedSeconds = Number(
+    metadata.expectedSeconds ??
+      context.capacity?.envelope?.reservedSeconds ??
+      900,
   );
-  const minCredits = Number(
-    metadata.minCredits ?? Math.max(0, expectedCredits),
+  const minSeconds = Number(
+    metadata.minSeconds ?? Math.max(0, expectedSeconds),
   );
-  const maxCredits = Number(
-    metadata.maxCredits ?? Math.max(minCredits, expectedCredits),
+  const maxSeconds = Number(
+    metadata.maxSeconds ?? Math.max(minSeconds, expectedSeconds),
   );
   return {
     id: readString(metadata.id) ?? `estimate-${context.runId}`,
@@ -123,9 +122,9 @@ function buildStructuredEstimate(
         assignment?.projectAgentClassId,
       ) ?? context.agent.slug,
     agentId: context.agent.slug,
-    minCredits,
-    expectedCredits,
-    maxCredits,
+    minSeconds,
+    expectedSeconds,
+    maxSeconds,
     confidence: (readString(metadata.confidence) ??
       "medium") as StructuredAgentEstimate["confidence"],
     riskLevel: (readString(metadata.riskLevel) ??

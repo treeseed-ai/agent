@@ -17,10 +17,11 @@ export async function recoverProviderLocalLeases(input: {
 	connections: ProviderConnectionRuntime[];
 	store?: ProviderLocalCapacityStore;
 	clientFactory?: (config: Parameters<typeof createProviderMarketClient>[0]) => ProviderLeaseRecoveryClient;
+	includeRunning?: boolean;
 }) {
 	const store = input.store ?? new ProviderLocalCapacityStore(input.config.dataDir);
 	const clientFactory = input.clientFactory ?? createProviderMarketClient;
-	const claims = await store.claimsForRecovery();
+	const claims = await store.claimsForRecovery(input.includeRunning !== false);
 	const results: Array<Record<string, unknown>> = [];
 	for (const claim of claims) {
 		const connection = input.connections.find((entry) => entry.connection.id === claim.connectionId);

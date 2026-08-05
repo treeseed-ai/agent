@@ -93,7 +93,7 @@ try {
 				mode: 'planning',
 				capacityProviderId: 'provider-smoke',
 				reservationId: 'reservation-smoke-planning',
-				reservedCredits: 1,
+				reservedSeconds: 300,
 			},
 			decisionInput: {
 				teamId: 'team-smoke',
@@ -107,7 +107,7 @@ try {
 					mode: 'planning',
 					capacityProviderId: 'provider-smoke',
 					reservationId: 'reservation-smoke-planning',
-					reservedCredits: 1,
+					reservedSeconds: 300,
 				},
 				input: {
 					subject: {

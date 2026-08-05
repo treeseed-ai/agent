@@ -45,7 +45,7 @@ describe('durable provider-local capacity claims', () => {
 			await store.attachLease(claim.id, { assignmentId: 'assignment-a', leaseToken: 'secret', leaseExpiresAt: new Date(Date.now() + 60_000).toISOString(), dispatchEnvelope: {} });
 			await store.claimDispatch(['team-a']);
 			await store.recordFailure(claim.id, 'control plane unavailable');
-			expect((await store.snapshot()).claims).toEqual([expect.objectContaining({ id: claim.id, status: 'running' })]);
+		expect((await store.snapshot()).claims).toEqual([expect.objectContaining({ id: claim.id, status: 'recovery' })]);
 			await store.finalize(claim.id, 'assignment-lifecycle-confirmed');
 			const snapshot = await store.snapshot();
 			expect(snapshot.claims).toEqual([]);

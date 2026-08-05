@@ -108,6 +108,10 @@ export type AgentToolDerivedEvent =
 	| {
 		type: 'research_claims_recorded';
 		claims: Record<string, unknown>[];
+	}
+	| {
+		type: 'signal_requested';
+		signal: Record<string, unknown>;
 	};
 
 function record(value: unknown): Record<string, unknown> {
@@ -474,6 +478,7 @@ export async function callAgentTool(
 	if (descriptor.id === 'treeseed.research_claims') {
 		return { ok: true, payload: { claims: Array.isArray(input.claims) ? input.claims : [] } };
 	}
+	if (descriptor.id === 'treeseed.publish_signal') return { ok: true, payload: { ...input, requested: true } };
 	if (descriptor.id === 'treeseed.repository.read_file') {
 		return await callRepositoryReadFileTool(options, descriptor, input);
 	}

@@ -2,7 +2,7 @@ import type { CapacityProviderBudgetCapacity } from '@treeseed/sdk/capacity-prov
 
 export interface ProviderLocalNativeLimit {
 	maxConcurrentRunners?: number;
-	availableCredits?: number;
+	availableAgentSeconds?: number;
 	nativeAllowances?: Record<string, number>;
 }
 
@@ -58,7 +58,7 @@ export function compileProviderLocalNativeLimit(input: {
 	);
 	return {
 		...(positive(limits.maxConcurrentRunners) !== undefined ? { maxConcurrentRunners: positive(limits.maxConcurrentRunners) } : {}),
-		...(positive(limits.availableCredits ?? limits.creditLimit) !== undefined ? { availableCredits: positive(limits.availableCredits ?? limits.creditLimit) } : {}),
+		...(positive(limits.availableAgentSeconds) !== undefined ? { availableAgentSeconds: positive(limits.availableAgentSeconds) } : {}),
 		...(Object.keys(nativeAllowances).length ? { nativeAllowances } : {}),
 	};
 }

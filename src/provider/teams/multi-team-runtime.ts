@@ -138,6 +138,12 @@ export async function runMultiTeamProviderManager(config: ProviderHostRuntimeCon
 	const loaded = await loadProviderManifest(config.manifestPath ?? '');
 	const connections = await reconcileProviderConnections(config);
 	const localState = new ProviderLocalCapacityStore(config.dataDir);
+	await recoverProviderLocalLeases({
+		config,
+		connections: connections.flatMap((connection) => connection.runtime ? [connection.runtime] : []),
+		store: localState,
+		includeRunning: false,
+	});
 	const localCapacity = await localState.snapshot();
 	const { runManagerSkeleton } = await import('../lifecycle/lifecycle.ts');
 	const results = await Promise.all(connections.map(async (connection) => {
@@ -215,7 +221,7 @@ export async function runMultiTeamProviderManager(config: ProviderHostRuntimeCon
 				leaseExpiresAt,
 				...(executionProviderId ? { executionProviderId, executionProviderLimit: providerLimits.get(executionProviderId) } : {}),
 				...(laneId ? { laneId, laneLimit: laneLimits.get(laneId) } : {}),
-				...(numberValue(capacityEnvelope.reservedCredits, assignment.requestedCredits) !== undefined ? { requestedCredits: numberValue(capacityEnvelope.reservedCredits, assignment.requestedCredits) } : {}),
+				...(numberValue(capacityEnvelope.reservedSeconds, assignment.requestedSeconds) !== undefined ? { requestedSeconds: numberValue(capacityEnvelope.reservedSeconds, assignment.requestedSeconds) } : {}),
 				...(nativeUnit ? { nativeUnit } : {}),
 				...(requestedNativeAmount !== undefined ? { requestedNativeAmount } : {}),
 			});

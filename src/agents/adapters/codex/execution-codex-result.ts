@@ -135,7 +135,7 @@ export function normalizeCodexRunResult(input: {
 		rawEventRefs,
 		usage: {
 			subscriptionPlan: String(input.request.metadata?.subscriptionPlan ?? ''),
-			estimatedCredits: undefined,
+			estimatedSeconds: undefined,
 			wallMs: input.wallMs,
 			wallMinutes: input.wallMs / 60_000,
 			nativeUnit: 'wall_minute',

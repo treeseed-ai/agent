@@ -36,6 +36,16 @@ function modeRunIdForAssignment(assignment: Record<string, unknown>, selectedInp
 		stringValue(assignment.handlerId, decisionInput.handlerId, selectedInput.handlerId) ?? 'handler',
 	].join(':');
 }
+
+function assignmentAgentTools(
+	allowed: string[],
+	allowedOutputs: Record<string, unknown>,
+) {
+	const publications = allowedOutputs.publishedSignals;
+	return Array.isArray(publications) && publications.length > 0
+		? [...new Set([...allowed, 'treeseed.publish_signal'])]
+		: allowed;
+}
 export async function prepareAssignmentKernelBridge(input: ProviderAssignmentExecutionInput & {
 	assignmentId: string;
 	membershipId: string;
@@ -284,7 +294,13 @@ export async function prepareAssignmentKernelBridge(input: ProviderAssignmentExe
 	const agentSpecLoad = input.kernel ? { specs: [] } : await loadAllAgentSpecs(sdk);
 	const agentSpec = agentSpecLoad.specs.find((spec) => spec.slug === agentSlug);
 	const assignmentMode = stringValue(input.assignment.mode, capacityEnvelope.mode) === 'acting' ? 'acting' : 'planning';
-	const assignmentActivityType = stringValue(assignmentMetadata.activityType, decisionPayload.activityType);
+	const assignmentDecisionInput = record(input.assignment.decisionInput);
+	const assignmentActivityType = stringValue(
+		assignmentMetadata.activityType,
+		decisionPayload.activityType,
+		record(assignmentDecisionInput.metadata).activityType,
+		record(assignmentDecisionInput.input).activityType,
+	);
 	const assignmentAgentPolicy = resolveAssignmentAgentToolPolicy(agentSpec, assignmentMode, assignmentActivityType);
 	const executionProvider = input.kernel
 		? (input.config.executionProviders ?? []).find((provider) => provider.id === stringValue(input.assignment.executionProviderId)) ?? null
@@ -293,7 +309,10 @@ export async function prepareAssignmentKernelBridge(input: ProviderAssignmentExe
 			executionProviders: input.config.executionProviders ?? [],
 		});
 	const assignmentToolCatalog = createAssignmentToolCatalog({
-		agentTools: assignmentAgentPolicy?.tools.allowed ?? [],
+		agentTools: assignmentAgentTools(
+			assignmentAgentPolicy?.tools.allowed ?? [],
+			record(input.assignment.allowedOutputs),
+		),
 		projectId,
 		assignmentId,
 		agentSlug,

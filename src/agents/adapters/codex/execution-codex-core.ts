@@ -60,7 +60,7 @@ export interface CodexExecutionResult {
 	};
 	usage?: {
 		subscriptionPlan?: string;
-		estimatedCredits?: number;
+		estimatedSeconds?: number;
 		wallMs?: number;
 		wallMinutes?: number;
 		nativeUnit?: 'wall_minute';

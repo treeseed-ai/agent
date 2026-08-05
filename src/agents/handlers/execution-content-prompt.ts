@@ -7,6 +7,10 @@ function firstString(...values: unknown[]) {
 	return null;
 }
 
+function record(value: unknown): Record<string, unknown> {
+	return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
 function contentContract(contentRoot: string, assignedObjective: Record<string, unknown> | null) {
 	return [
 		'Knowledge Hub content contract:',
@@ -38,6 +42,22 @@ function subjectRelation(subject: ExecutionContentSubject) {
 		decision: 'relatedDecisions',
 	} as Record<string, string>)[subject.model.replace(/s$/u, '')];
 	return field ? { field, targetModel: subject.model.replace(/s$/u, ''), targetSlug: subject.id } : { field: 'about', targetModel: subject.model, targetSlug: subject.id };
+}
+
+export function assignmentTimeGuidance(context: AgentContext, nowMs = Date.now()) {
+	const assignment = record(context.capacity?.assignment);
+	const envelope = record(context.capacity?.envelope);
+	const allocatedSeconds = Math.max(0, Math.floor(Number(envelope.reservedSeconds ?? envelope.requestedSeconds ?? 0)));
+	const suppliedStart = firstString(assignment.claimedAt, assignment.assignedAt, envelope.startedAt);
+	const parsedStart = suppliedStart ? Date.parse(suppliedStart) : Number.NaN;
+	const startedAtMs = Number.isFinite(parsedStart) ? parsedStart : nowMs;
+	const deadlineMs = allocatedSeconds > 0 ? startedAtMs + allocatedSeconds * 1_000 : null;
+	return {
+		startedAt: new Date(startedAtMs).toISOString(),
+		allocatedSeconds,
+		deadlineAt: deadlineMs == null ? null : new Date(deadlineMs).toISOString(),
+		remainingSeconds: deadlineMs == null ? null : Math.max(0, Math.floor((deadlineMs - nowMs) / 1_000)),
+	};
 }
 
 export function targetExecutionContentDescription(artifactKind: string) {
@@ -172,11 +192,22 @@ export function buildExecutionContentInstructions(context: AgentContext, input: 
 	contentRoot: string;
 }) {
 	const relation = subjectRelation(input.subject);
+	const timing = assignmentTimeGuidance(context);
 	return [
 		context.agent.systemPrompt,
 		'',
+		'Execution-time contract:',
+		`- Assignment started: ${timing.startedAt}.`,
+		`- Allocated agent time: ${timing.allocatedSeconds > 0 ? `${timing.allocatedSeconds} seconds` : 'no explicit allocation supplied'}.`,
+		`- Hard deadline: ${timing.deadlineAt ?? 'provider-managed'}.`,
+		`- Time remaining when this prompt was assembled: ${timing.remainingSeconds == null ? 'provider-managed' : `${timing.remainingSeconds} seconds`}.`,
+		'- Track elapsed time throughout execution. Prefer a small durable, validated result over unfinished broad work.',
+		'- Save durable content and emit a concise status update before the deadline. As the deadline approaches, stop expanding scope, checkpoint or commit valid work, and report completed work, remaining work, blockers, and evidence.',
+		'- A deadline is enforced by the runtime. Do not rely on this instruction as permission to exceed it.',
+		'',
 		firstString(input.assignedObjective?.message) ?? 'No assigned objective was supplied or resolved through TreeDX; report that as a blocker only when the activity contract requires objective provenance.',
 		...(input.editorialInstructions ? ['', input.editorialInstructions] : []),
+		...(firstString(input.payload.stageInstructions) ? ['', 'Synchronized planning-stage directive:', firstString(input.payload.stageInstructions)!] : []),
 		'',
 		contentContract(input.contentRoot, input.assignedObjective),
 		'',
@@ -185,6 +216,7 @@ export function buildExecutionContentInstructions(context: AgentContext, input: 
 		'',
 		'Assignment input:',
 		JSON.stringify({ mode: context.capacity?.mode ?? 'planning', assignmentId: context.capacity?.assignmentId ?? null, subject: input.subject, payload: input.payload }, null, 2),
+		...(Object.keys(record(input.payload.signalContracts)).length ? ['', 'Signal publication contracts:', JSON.stringify(input.payload.signalContracts, null, 2), 'Every declared publication must use treeseed.publish_signal and satisfy the exact subject, payload, evidence, and idempotency policy above.'] : []),
 		'',
 		'Resolved context packs:',
 		JSON.stringify(input.contextPackSummaries, null, 2),

@@ -191,7 +191,7 @@ it('returns a leased assignment after an unexpected preparation failure', async 
 		});
 		expect(result).toMatchObject({ ok: true, assigned: 1 });
 		expect(calls.find((entry) => entry.method === 'return')?.body).toMatchObject({
-			code: 'provider_assignment_processing_failed', retryable: true, leaseToken: 'lease-a', runnerId: 'runner-a',
+			code: 'treedx_proxy_timeout', retryable: true, leaseToken: 'lease-a', runnerId: 'runner-a',
 		});
 		expect(calls.some((entry) => entry.method === 'fail')).toBe(false);
 	});
@@ -217,7 +217,9 @@ it('returns the lease with explicit diagnostics when required telemetry cannot b
 		expect(calls).toEqual([{
 			method: 'return',
 			body: expect.objectContaining({
-				code: 'provider_assignment_processing_failed',
+				code: 'provider_mode_run_telemetry_delivery_failed',
+				leaseToken: 'lease-a',
+				runnerId: 'runner-a',
 				retryable: true,
 				metadata: expect.objectContaining({ telemetryDeliveryFailed: true }),
 			}),

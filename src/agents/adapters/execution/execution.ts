@@ -7,6 +7,7 @@ import {
 	CodexExecutionProviderAdapter,
 	type CodexExecutionProviderAdapterOptions,
 } from '../codex/execution-codex.ts';
+import { OpenCodeExecutionProviderAdapter, type OpenCodeExecutionProviderOptions } from '../opencode/execution-opencode.ts';
 import {
 	JiraExecutionProviderAdapter,
 	type JiraExecutionProviderConfig,
@@ -158,6 +159,7 @@ export function createExecutionProviderAdapter(configuredModeInput?: string, opt
 	discord?: DiscordExecutionProviderConfig | null;
 	workflow?: WorkflowExecutionProviderAdapterOptions | null;
 	codex?: Omit<CodexExecutionProviderAdapterOptions, 'repoRoot'> | null;
+	opencode?: OpenCodeExecutionProviderOptions | null;
 	env?: NodeJS.ProcessEnv;
 	researchSourcePolicy?: ResearchSourcePolicy;
 } = {}) {
@@ -179,8 +181,9 @@ export function createExecutionProviderAdapter(configuredModeInput?: string, opt
 	if (configuredMode === 'codex') {
 		return new CodexExecutionProviderAdapter({ ...(options.codex ?? {}), repoRoot: options.repoRoot, researchSourcePolicy: options.researchSourcePolicy ?? options.codex?.researchSourcePolicy });
 	}
+	if (configuredMode === 'opencode') return new OpenCodeExecutionProviderAdapter({ ...(options.opencode ?? {}), env: options.env });
 	if (configuredMode === 'copilot') {
 		return new CopilotExecutionProviderAdapter({ repoRoot: options.repoRoot, env: options.env, researchSourcePolicy: options.researchSourcePolicy });
 	}
-	throw new Error(`Unsupported execution provider "${configuredMode}". Configure codex, copilot, jira, github_issues, discord, or workflow.`);
+	throw new Error(`Unsupported execution provider "${configuredMode}". Configure codex, opencode, copilot, jira, github_issues, discord, or workflow.`);
 }

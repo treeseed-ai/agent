@@ -106,6 +106,7 @@ export async function reportProviderAssignmentResult(input: {
 			: null;
 		const activeSeconds = Math.max(0, providerWallSeconds ?? elapsedSeconds);
 		if (modeResult.status === 'completed') {
+			const completion = record(outputMetadata.completion);
 			let workspaceCleanup: Record<string, unknown> = { status: closeWorkspace ? 'completed' : 'not_required' };
 			if (closeWorkspace) {
 				try {
@@ -154,7 +155,7 @@ export async function reportProviderAssignmentResult(input: {
 					taskSignature: `${typedAssignment.projectAgentClassId}:${modeResult.mode}`,
 					executionProviderId: typedAssignment.executionProviderId ?? null,
 				},
-				metadata: { runnerId: runnerId, mode: modeResult.mode, source: '@treeseed/agent/provider-runner' },
+				metadata: { runnerId: runnerId, mode: modeResult.mode, agentSlug, activityType: stringValue(record(typedAssignment.metadata).activityType), completion: Object.keys(completion).length ? completion : { disposition: 'completed' }, capacityBudget: record(capacityEnvelope.budget), source: '@treeseed/agent/provider-runner' },
 			}, `assignment:${assignmentId}:terminal-settlement`);
 			return completeProviderAssignmentWithRetry(client, assignmentId, {
 				leaseToken: leaseToken,
@@ -177,6 +178,7 @@ export async function reportProviderAssignmentResult(input: {
 					summary: modeResult.summary,
 					mode: modeResult.mode,
 				},
+				...(Object.keys(completion).length ? { completion } : {}),
 			});
 		}
 		if (modeResult.status === 'returned' && client.returnAssignment) {

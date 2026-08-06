@@ -1,0 +1,21 @@
+schemaVersion: treeseed.guarantee/v1
+id: guarantee.agent.architecture.resolve-common-chat-profile.746
+journeyIndex: 746
+type: agent
+subtype: architecture
+journey: Resolve a common specialized chat profile
+ownerPackage: "@treeseed/agent"
+surface: agent-runtime
+summary: Derive every project agent chat profile from the versioned foundation while retaining explicit agent specialization.
+status: planned
+dependencies: { journeys: [], guarantees: [] }
+actors: { allowed: [team_owner, project_manager], forbidden: [unauthorized_user] }
+devices: { required: [desktop_chromium], optional: [] }
+gates: [future]
+preconditions: { fixtures: [integrated_treeseed_project], notes: [] }
+api: { required: false, verifierRefs: [] }
+content: { required: true, verifierRefs: [] }
+audit: { required: false, verifierRefs: [] }
+negativeCases: []
+evidence: { required: [guarantee_report] }
+notes: ["All sixteen Market agent definitions declare discussion-v1 specialization."]

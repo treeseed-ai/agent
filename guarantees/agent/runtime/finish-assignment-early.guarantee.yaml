@@ -1,0 +1,21 @@
+schemaVersion: treeseed.guarantee/v1
+id: guarantee.agent.runtime.finish-assignment-early.747
+journeyIndex: 747
+type: agent
+subtype: runtime
+journey: Finish an assignment early
+ownerPackage: "@treeseed/agent"
+surface: agent-runtime
+summary: Finish when acceptance criteria are met, require durable evidence, and distinguish blocked or exhausted work.
+status: planned
+dependencies: { journeys: [], guarantees: [] }
+actors: { allowed: [capacity_operator, project_manager], forbidden: [unauthorized_user] }
+devices: { required: [desktop_chromium], optional: [] }
+gates: [future]
+preconditions: { fixtures: [integrated_treeseed_project], notes: [] }
+api: { required: true, verifierRefs: [] }
+content: { required: false, verifierRefs: [] }
+audit: { required: true, verifierRefs: [] }
+negativeCases: [{ id: false-early-completion-rejected, actor: capacity_operator, verifierRefs: [] }]
+evidence: { required: [guarantee_report, verifier_evidence] }
+notes: ["Early termination alone is not rewarded; downstream validation drives calibration."]

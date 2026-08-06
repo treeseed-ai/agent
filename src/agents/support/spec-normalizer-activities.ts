@@ -1,4 +1,4 @@
-import type { AgentActivityProfile, AgentActivityType, AgentBranchPolicy, AgentDefinitionIdentity, AgentHandlerKind, AgentOutputContract, AgentQuestionPolicy } from '@treeseed/sdk/types/agents';
+import type { AgentActivityProfile, AgentActivityType, AgentBranchPolicy, AgentChatProfileConfiguration, AgentDefinitionIdentity, AgentHandlerKind, AgentOutputContract, AgentQuestionPolicy } from '@treeseed/sdk/types/agents';
 import { validateAgentActivityProfilesConfiguration } from '@treeseed/sdk/agent-capacity';
 import type { AgentSpecDiagnostic } from './spec-types.ts';
 import { normalizeContentAccess, normalizeToolPolicy } from './spec-normalizer-policy.ts';
@@ -110,6 +110,7 @@ function normalizeActivityProfile(
 	if (!isPlainObject(value.prompt)) {
 		diagnostics.push({ severity: 'error', slug, field: `${field}.prompt`, message: `Expected ${field}.prompt to be an object.` });
 	}
+	const execution = isPlainObject(value.execution) ? value.execution : {};
 	return {
 		enabled,
 		handler: handler as AgentActivityProfile['handler'],
@@ -125,11 +126,60 @@ function normalizeActivityProfile(
 		outputs: normalizeOutputs(value.outputs, diagnostics, slug),
 		planningIntent: isPlainObject(value.planningIntent) ? value.planningIntent as AgentActivityProfile['planningIntent'] : undefined,
 		questionPolicy: normalizeQuestionPolicy(value.questionPolicy, `${field}.questionPolicy`, diagnostics, slug),
-		execution: isPlainObject(value.execution) ? value.execution as AgentActivityProfile['execution'] : undefined,
+		execution: {
+			...execution,
+			maxTotalTokens: Number.isInteger(execution.maxTotalTokens) && Number(execution.maxTotalTokens) > 0 ? Number(execution.maxTotalTokens) : 136_000,
+			warningTokens: Number.isInteger(execution.warningTokens) && Number(execution.warningTokens) > 0 ? Number(execution.warningTokens) : 100_000,
+			enforcementConfidence: ['exact', 'bounded', 'estimated', 'opaque'].includes(String(execution.enforcementConfidence)) ? execution.enforcementConfidence : 'bounded',
+		} as AgentActivityProfile['execution'],
 	};
 }
 
-export function normalizeActivityProfiles(value: unknown, diagnostics: AgentSpecDiagnostic[], slug: string) {
+
+function normalizeChatSpecialization(value: unknown, diagnostics: AgentSpecDiagnostic[], slug: string): AgentChatProfileConfiguration {
+	if (!isPlainObject(value)) {
+		return { foundation: 'discussion-v1' };
+	}
+	if (value.foundation !== 'discussion-v1') diagnostics.push({ severity: 'error', slug, field: 'chatProfile.foundation', message: 'chatProfile.foundation must be discussion-v1.' });
+	return {
+		foundation: 'discussion-v1',
+		responseStyle: typeof value.responseStyle === 'string' ? value.responseStyle : undefined,
+		promptTask: typeof value.promptTask === 'string' ? value.promptTask : undefined,
+		providerPreference: Array.isArray(value.providerPreference) ? value.providerPreference.map(String).filter(Boolean) : undefined,
+		maxRuntimeSeconds: typeof value.maxRuntimeSeconds === 'number' ? value.maxRuntimeSeconds : undefined,
+		maxTotalTokens: typeof value.maxTotalTokens === 'number' ? value.maxTotalTokens : undefined,
+		warningTokens: typeof value.warningTokens === 'number' ? value.warningTokens : undefined,
+		maxCostAmount: typeof value.maxCostAmount === 'number' ? value.maxCostAmount : undefined,
+		costCurrency: typeof value.costCurrency === 'string' ? value.costCurrency : undefined,
+		toolAdditions: Array.isArray(value.toolAdditions) ? value.toolAdditions.map(String).filter(Boolean) : undefined,
+		contextModels: Array.isArray(value.contextModels) ? value.contextModels.map(String).filter(Boolean) : undefined,
+	};
+}
+
+function defaultChatProfile(slug: string, specialization: AgentChatProfileConfiguration): AgentActivityProfile {
+	const contextModels = [...new Set(['discussion', 'discussion_message', 'discussion_event', 'agent', 'note', 'question', 'proposal', 'decision', 'objective', 'knowledge', ...(specialization.contextModels ?? [])])];
+	const tools = [...new Set(['treeseed.content.describe', 'treeseed.content.query', 'treeseed.content.read', 'treedx.build_context', 'treedx.read_repository_files', 'treedx.search_workspace', 'treedx.read_workspace_file', 'treeseed.content.create', 'treeseed.content.update', 'treeseed.content.link', 'treeseed.content.validate', 'treeseed.content.commit', 'treeseed.status', ...(specialization.toolAdditions ?? [])])];
+	return {
+		enabled: true,
+		handler: 'writer',
+		prompt: {
+			system: `Participate as ${slug} in a TreeSeed Discussion. Answer from your configured identity and durable instructions, cite exact TreeDX content or repository refs, distinguish evidence from inference, and keep the response scoped to the current turn. You may create or update discussion messages, linked notes, questions, and proposals. Never change knowledge or code without an approved governed acting assignment.${specialization.responseStyle ? ` Response style: ${specialization.responseStyle}` : ''}`,
+			task: specialization.promptTask ?? 'Respond to the committed Discussion turn and produce durable, source-grounded output.',
+		},
+		branchPolicy: { kind: 'staging-content', base: 'staging' },
+		contentAccess: {
+			read: { models: contextModels, actions: ['describe', 'query', 'read'] },
+			write: { models: ['discussion_message', 'note', 'question', 'proposal'], actions: ['create', 'update', 'link', 'validate', 'commit'], paths: ['src/content/discussion-messages/**', 'src/content/notes/**', 'src/content/questions/**', 'src/content/proposals/**'] },
+			commit: { allowed: true },
+		},
+		tools: { allowed: tools },
+		outputs: { messageTypes: ['discussion_response'], modelMutations: ['discussion_message:create', 'linked_note:create', 'question:create', 'proposal:create'] },
+		questionPolicy: { blockExecutionWhenCreated: false, defaultAnswerPolicy: { kind: 'team-human' } },
+		execution: { providerPreference: specialization.providerPreference ?? ['codex'], maxRuntimeSeconds: specialization.maxRuntimeSeconds ?? 900, maxRetries: 1, verificationRequired: false, maxTotalTokens: specialization.maxTotalTokens ?? 136_000, warningTokens: specialization.warningTokens ?? 100_000, maxCostAmount: specialization.maxCostAmount, costCurrency: specialization.costCurrency ?? 'USD', pricingGeneration: 'provider-runtime', enforcementConfidence: 'bounded' },
+	};
+}
+
+export function normalizeActivityProfiles(value: unknown, diagnostics: AgentSpecDiagnostic[], slug: string, chatProfile?: unknown) {
 	if (!isPlainObject(value)) {
 		diagnostics.push({
 			severity: 'error',
@@ -156,13 +206,14 @@ export function normalizeActivityProfiles(value: unknown, diagnostics: AgentSpec
 		const normalized = normalizeActivityProfile(profile, key as AgentActivityType, diagnostics, slug);
 		if (normalized) profiles[key as AgentActivityType] = normalized;
 	}
+	profiles.chat ??= defaultChatProfile(slug, normalizeChatSpecialization(chatProfile, diagnostics, slug));
 	return profiles;
 }
 
 export function selectDefaultActivityProfile(
 	profiles: Partial<Record<AgentActivityType, AgentActivityProfile>>,
 ): [AgentActivityType, AgentActivityProfile] | null {
-	for (const activity of ['acting', 'estimating', 'planning', 'reviewing', 'reporting'] as const) {
+	for (const activity of ['acting', 'estimating', 'planning', 'reviewing', 'reporting', 'chat'] as const) {
 		const profile = profiles[activity];
 		if (profile?.enabled) return [activity, profile];
 	}

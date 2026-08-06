@@ -51,7 +51,10 @@ export function assignmentTimeGuidance(context: AgentContext, nowMs = Date.now()
 	const suppliedStart = firstString(assignment.claimedAt, assignment.assignedAt, envelope.startedAt);
 	const parsedStart = suppliedStart ? Date.parse(suppliedStart) : Number.NaN;
 	const startedAtMs = Number.isFinite(parsedStart) ? parsedStart : nowMs;
-	const deadlineMs = allocatedSeconds > 0 ? startedAtMs + allocatedSeconds * 1_000 : null;
+	const budget = record(envelope.budget);
+	const suppliedDeadline = firstString(budget.deadline, budget.hardDeadlineAt, envelope.deadline, envelope.hardDeadlineAt);
+	const parsedDeadline = suppliedDeadline ? Date.parse(suppliedDeadline) : Number.NaN;
+	const deadlineMs = Number.isFinite(parsedDeadline) ? parsedDeadline : allocatedSeconds > 0 ? startedAtMs + allocatedSeconds * 1_000 : null;
 	return {
 		startedAt: new Date(startedAtMs).toISOString(),
 		allocatedSeconds,
@@ -202,6 +205,10 @@ export function buildExecutionContentInstructions(context: AgentContext, input: 
 		`- Hard deadline: ${timing.deadlineAt ?? 'provider-managed'}.`,
 		`- Time remaining when this prompt was assembled: ${timing.remainingSeconds == null ? 'provider-managed' : `${timing.remainingSeconds} seconds`}.`,
 		'- Track elapsed time throughout execution. Prefer a small durable, validated result over unfinished broad work.',
+		'- The allocation is a maximum, not a target. Finish early when all acceptance criteria are satisfied and no important in-scope work remains.',
+		'- Never invent extra work, broaden scope, prolong discussion, or consume tokens simply because capacity remains.',
+		'- An early completion must verify the result, persist required artifacts, and report acceptance checks, durable artifact references, remaining budget, completion reason, and noUsefulScopedWorkRemaining=true.',
+		'- Missing evidence, authority, credentials, or dependencies is blocked work, not early completion.',
 		'- Save durable content and emit a concise status update before the deadline. As the deadline approaches, stop expanding scope, checkpoint or commit valid work, and report completed work, remaining work, blockers, and evidence.',
 		'- A deadline is enforced by the runtime. Do not rely on this instruction as permission to exceed it.',
 		'',

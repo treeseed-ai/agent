@@ -21,8 +21,8 @@ export function discoverProviderCapabilities(config: ProviderHostRuntimeConfig):
 	return [{
 		id: 'agent_execution',
 		agents: ['*'],
-		operations: ['planning', 'estimating', 'acting', 'reviewing', 'reporting', 'release'],
-		models: ['codex'],
+		operations: ['planning', 'estimating', 'acting', 'reviewing', 'reporting', 'chat', 'release'],
+		models: config.env?.TREESEED_OPENCODE_SERVER_URL ? ['codex', 'opencode'] : ['codex'],
 		repositoryAccess: 'git_worktree',
 		verification: ['local_command'],
 		metadata: {

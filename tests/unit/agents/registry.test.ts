@@ -148,7 +148,7 @@ export const securityAuditHandler: AgentHandler = {
 		expect(planning).toMatchObject({
 			activityType: 'planning',
 			handler: 'actor',
-			systemPrompt: 'Plan engineering work.',
+			systemPrompt: expect.stringContaining('Plan engineering work.'),
 			tools: { allowed: ['treeseed.content.query', 'treeseed.content.read', 'treeseed.status'] },
 			outputs: { modelMutations: ['note:create'] },
 			branchPolicy: { kind: 'read-only', base: 'main' },
@@ -173,8 +173,20 @@ export const securityAuditHandler: AgentHandler = {
 		}, 'planning', 'reporting')).toMatchObject({
 			activityType: 'reporting',
 			handler: 'reporter',
-			systemPrompt: 'Report workday evidence.',
+			systemPrompt: expect.stringContaining('Report workday evidence.'),
 		});
+	});
+
+	it('derives a specialized chat profile from the common discussion foundation', () => {
+		const normalized = normalizeAgentRuntimeSpec(profileAgent({ chatProfile: {
+			foundation: 'discussion-v1', responseStyle: 'implementation-focused', providerPreference: ['opencode'], maxTotalTokens: 24_000, maxCostAmount: 2,
+		} }), { registeredHandlers: ['actor', 'writer'], messageTypes: ['discussion_response'] });
+		const chat = selectAgentActivityProfile(normalized.spec!, 'planning', 'chat');
+		expect(chat).toMatchObject({ activityType: 'chat', handler: 'writer', execution: { providerPreference: ['opencode'], maxTotalTokens: 24_000, maxCostAmount: 2 } });
+		expect(chat?.systemPrompt).toContain('implementation-focused');
+		expect(chat?.systemPrompt).toContain('allocation is a maximum, not a target');
+		expect(chat?.systemPrompt).toContain('completed_early');
+		expect(chat?.contentAccess?.write?.models).toEqual(expect.arrayContaining(['discussion_message', 'proposal', 'question', 'note']));
 	});
 
 	it('derives the provider tool policy from the assigned activity rather than the root profile', () => {

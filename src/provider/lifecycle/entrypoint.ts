@@ -140,7 +140,18 @@ async function main() {
 	if (role === 'manager') {
 		if (!config.manifestPath) throw new Error('A capacity provider manifest is required to run the provider manager.');
 		const { recoverMultiTeamProviderRunners, runMultiTeamProviderManager } = await import('../teams/multi-team-runtime.ts');
-		if (mode === 'live' && !diagnostic) emit(okPayload('manager', { action: 'restart-recovery', results: await recoverMultiTeamProviderRunners(config) }));
+		if (mode === 'live' && !diagnostic) {
+			try {
+				emit(okPayload('manager', { action: 'restart-recovery', results: await recoverMultiTeamProviderRunners(config) }));
+			} catch (error) {
+				emit({
+					ok: false,
+					role: 'manager',
+					action: 'restart-recovery',
+					error: error instanceof Error ? error.message : String(error),
+				});
+			}
+		}
 		if (once || mode === 'plan' || diagnostic) emit(await runMultiTeamProviderManager(config, { mode: mode === 'plan' || diagnostic ? 'plan' : 'live' }));
 		else await runLoop('manager', config.dataDir, pollSeconds('TREESEED_PROVIDER_MANAGER_POLL_SECONDS', 15), () => runMultiTeamProviderManager(config));
 		return;

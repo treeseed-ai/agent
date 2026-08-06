@@ -121,6 +121,7 @@ function normalizeActivityProfile(
 		branchPolicy: normalizeBranchPolicy(value.branchPolicy, `${field}.branchPolicy`, diagnostics, slug),
 		contentAccess: normalizeContentAccess(value.contentAccess, diagnostics, slug, `${field}.contentAccess`),
 		tools: normalizeToolPolicy(value.tools, `${field}.tools`, enabled, diagnostics, slug),
+		signals: isPlainObject(value.signals) ? value.signals as AgentActivityProfile['signals'] : undefined,
 		outputs: normalizeOutputs(value.outputs, diagnostics, slug),
 		planningIntent: isPlainObject(value.planningIntent) ? value.planningIntent as AgentActivityProfile['planningIntent'] : undefined,
 		questionPolicy: normalizeQuestionPolicy(value.questionPolicy, `${field}.questionPolicy`, diagnostics, slug),

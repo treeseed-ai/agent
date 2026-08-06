@@ -13,6 +13,44 @@ function retryableCompletionError(error: unknown) {
 	return status === 0 || status >= 500;
 }
 
+async function publishResultSignals(client: ProviderAssignmentClient, assignmentId: string, result: AgentKernelModeExecutionResult) {
+	const manifest = result.artifactManifest;
+	if (!manifest?.signals.length) return;
+	if (!client.publishAssignmentSignal) throw new Error('Provider client does not implement assignment signal publication.');
+	for (const [index, signal] of manifest.signals.entries()) {
+		const metadata = record(signal.metadata);
+		const requestedSubjectId = stringValue(metadata.subjectId, metadata.proposalId);
+		const content = manifest.contentReferences.find((entry) => requestedSubjectId && entry.subjectId === requestedSubjectId)
+			?? manifest.contentReferences.find((entry) => entry.subjectId || entry.commitSha);
+		const control = manifest.controlPlaneReferences?.find((entry) => requestedSubjectId && (entry.id === requestedSubjectId || stringValue(entry.metadata?.proposalId) === requestedSubjectId))
+			?? manifest.controlPlaneReferences?.[0];
+		const subjectId = stringValue(metadata.subjectId, metadata.proposalId, content?.subjectId, control?.id);
+		const subjectKind = stringValue(metadata.subjectKind, content?.model, control?.kind);
+		if (!subjectId || !subjectKind) throw new Error(`Signal ${signal.code} is missing its durable subject identity.`);
+		const commitSha = stringValue(metadata.commitSha, manifest.commit?.sha, content?.commitSha);
+		const controlPlaneRef = control ? `${control.kind}:${control.id}` : null;
+		if (!commitSha && !controlPlaneRef) throw new Error(`Signal ${signal.code} has no immutable commit or control-plane evidence.`);
+		await client.publishAssignmentSignal(assignmentId, {
+			contractId: signal.code,
+			subjectKind,
+			subjectId,
+			causationId: `${manifest.modeRunId}:${index}`,
+			correlationId: stringValue(metadata.correlationId, subjectId),
+			idempotencyKey: stringValue(metadata.idempotencyKey),
+			changeSummary: signal.message ?? manifest.summary,
+			payload: record(metadata.payload ?? metadata),
+			evidence: {
+				commitSha,
+				immutableRef: stringValue(metadata.immutableRef, manifest.commit?.ref, content?.ref),
+				digest: stringValue(metadata.digest),
+				changedPaths: manifest.sourceWorktree?.changedPaths ?? manifest.contentReferences.map((entry) => entry.contentPath),
+				controlPlaneRef,
+			},
+			metadata: { severity: signal.severity, agentId: manifest.agentId, activityType: manifest.activityType },
+		});
+	}
+}
+
 export async function completeProviderAssignmentWithRetry(
 	client: ProviderAssignmentClient,
 	assignmentId: string,
@@ -61,7 +99,12 @@ export async function reportProviderAssignmentResult(input: {
 		const outputMetadata = record(record(modeResult.outputs).metadata);
 		const usageActual = record(modeMetadata.usageActual ?? outputMetadata.usageActual);
 		const settlementUsage = settlementUsageActual(modeResult);
-		const actualCredits = numberValue(usageActual.actualCredits, modeMetadata.actualCredits, outputMetadata.actualCredits, modeResult.status === 'completed' ? capacityEnvelope.reservedCredits : 0) ?? 0;
+		const startedAt = stringValue(typedAssignment.claimedAt, typedAssignment.assignedAt);
+		const elapsedSeconds = Math.max(0, Math.ceil(startedAt ? (Date.now() - Date.parse(startedAt)) / 1_000 : 0));
+		const providerWallSeconds = numberValue(settlementUsage.usageActual.wallMinutes) != null
+			? Math.ceil(Number(settlementUsage.usageActual.wallMinutes) * 60)
+			: null;
+		const activeSeconds = Math.max(0, providerWallSeconds ?? elapsedSeconds);
 		if (modeResult.status === 'completed') {
 			let workspaceCleanup: Record<string, unknown> = { status: closeWorkspace ? 'completed' : 'not_required' };
 			if (closeWorkspace) {
@@ -79,6 +122,7 @@ export async function reportProviderAssignmentResult(input: {
 					} });
 				}
 			}
+			await publishResultSignals(client, assignmentId, modeResult);
 			if (!client.reportAssignmentUsage) throw new Error('Provider client does not implement dimensional capacity usage reporting.');
 			const executionUsage = Array.isArray(modeResult.artifactManifest?.usage) ? modeResult.artifactManifest.usage : [];
 			for (const [index, entry] of executionUsage.entries()) {
@@ -86,7 +130,8 @@ export async function reportProviderAssignmentResult(input: {
 				await client.reportAssignmentUsage(assignmentId, {
 					usageDimension: dimension,
 					accountingMode: 'informational',
-					actualCredits: 0,
+					activeSeconds: 0,
+					elapsedSeconds: 0,
 					providerUnits: Number.isFinite(Number(entry.amount)) ? Number(entry.amount) : null,
 					modeRunId: stringValue(modeMetadata.modeRunId, outputMetadata.modeRunId),
 					usageActual: {
@@ -99,7 +144,8 @@ export async function reportProviderAssignmentResult(input: {
 			}
 			if (!client.settleAssignment) throw new Error('Provider client does not implement exactly-once capacity settlement.');
 			await client.settleAssignment(assignmentId, {
-				actualCredits,
+				activeSeconds,
+				elapsedSeconds,
 				providerUnits: numberValue(usageActual.providerUnits, settlementUsage.providerUnits),
 				usd: numberValue(usageActual.usd, usageActual.actualUsd),
 				modeRunId: stringValue(modeMetadata.modeRunId, outputMetadata.modeRunId),
@@ -151,7 +197,8 @@ export async function reportProviderAssignmentResult(input: {
 			code: modeResult.fallback?.code ?? 'provider_assignment_failed',
 			message: modeResult.fallback?.reason ?? modeResult.summary,
 			retryable: modeResult.fallback?.retryable ?? false,
-			actualCredits,
+			activeSeconds,
+			elapsedSeconds,
 			providerUnits: numberValue(usageActual.providerUnits),
 			actualUsd: numberValue(usageActual.usd, usageActual.actualUsd),
 			modeRunId: stringValue(modeMetadata.modeRunId, outputMetadata.modeRunId),

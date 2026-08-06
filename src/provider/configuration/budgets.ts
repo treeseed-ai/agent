@@ -16,8 +16,8 @@ export function discoverProviderBudgets(config: ProviderHostRuntimeConfig): Capa
 		if (loaded) return loaded;
 	}
 	return {
-		dailyCreditBudget: config.dailyCreditBudget,
-		monthlyCreditBudget: config.monthlyCreditBudget,
+		dailyAgentSecondsLimit: config.dailyAgentSecondsLimit,
+		monthlyAgentSecondsLimit: config.monthlyAgentSecondsLimit,
 		maxConcurrentWorkdays: config.maxConcurrentWorkdays,
 		maxConcurrentRunners: config.maxConcurrentRunners,
 	};

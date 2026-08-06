@@ -22,6 +22,9 @@ import {
 import { runCodexTask } from '../codex/execution-codex-result.ts';
 import type { ResearchSourcePolicy } from '@treeseed/sdk/agent-capacity';
 import { hasCompatibleContentArtifact, unlinkedNotePaths } from '../../tools/agent-tool-completion.ts';
+import { assignmentDeadlineExpired, codexExecutionTimeoutMs, deadlineBoundExecutionTimeoutMs } from './execution-timeout.ts';
+
+export { assignmentDeadlineExpired, codexExecutionTimeoutMs, deadlineBoundExecutionTimeoutMs } from './execution-timeout.ts';
 
 export interface CodexExecutionProviderAdapterOptions {
 	repoRoot?: string;
@@ -39,13 +42,6 @@ export interface CodexExecutionProviderAdapterOptions {
 
 const DEFAULT_CODEX_ALLOWED_PATHS = ['**'];
 const DEFAULT_CODEX_FORBIDDEN_PATHS = ['.git/**', '.agent-worktrees/**', '.treeseed/secrets/**', 'node_modules/**'];
-
-export function codexExecutionTimeoutMs(providerTimeoutMs: number, activityTimeoutSeconds: number | null | undefined) {
-	const activityTimeoutMs = Number(activityTimeoutSeconds) * 1_000;
-	return Number.isFinite(activityTimeoutMs) && activityTimeoutMs > 0
-		? Math.min(providerTimeoutMs, activityTimeoutMs)
-		: providerTimeoutMs;
-}
 
 function sanitizeBranchPart(value: string) {
 	return value.replace(/[^A-Za-z0-9._/-]+/gu, '-').replace(/^\/+|\/+$/gu, '') || 'agent';
@@ -234,7 +230,7 @@ export class CodexExecutionProviderAdapter implements ExecutionProviderAdapter {
 			capabilityAliases: [],
 			nativeUnit: 'token_or_wall_minute',
 			quotaVisibility: 'partial' as const,
-			maxConcurrentAssignments: 1,
+			maxConcurrentAssignments: Math.max(1, Number(this.options.env?.TREESEED_PROVIDER_MAX_CONCURRENT_RUNNERS ?? process.env.TREESEED_PROVIDER_MAX_CONCURRENT_RUNNERS) || 4),
 			supportsAsync: false,
 			supportsCancel: false,
 			supportsResume: false,
@@ -301,7 +297,10 @@ export class CodexExecutionProviderAdapter implements ExecutionProviderAdapter {
 		let result: Awaited<ReturnType<typeof runCodexTask>>;
 		let toolTelemetry: Record<string, unknown>[] = [];
 		let codexClient: Promise<CodexClient> | null = null;
-		const executionDeadline = Date.now() + codexExecutionTimeoutMs(config.timeoutMs, input.agent.execution.timeoutSeconds);
+		const timing = input.workPackage.context?.executionTiming ?? input.workPackage.metadata?.executionTiming;
+		const configuredTimeoutMs = codexExecutionTimeoutMs(config.timeoutMs, input.agent.execution.timeoutSeconds);
+		const effectiveTimeoutMs = deadlineBoundExecutionTimeoutMs(configuredTimeoutMs, timing);
+		const executionDeadline = Date.now() + effectiveTimeoutMs;
 		try {
 			const request: CodexExecutionRequest = {
 			taskId: runId,
@@ -319,7 +318,7 @@ export class CodexExecutionProviderAdapter implements ExecutionProviderAdapter {
 			approvalPolicy: (input.agent.execution.approvalPolicy ?? config.approvalPolicy) as CodexApprovalPolicy,
 			model: input.agent.execution.model ?? config.defaultModel,
 			reasoningEffort: input.agent.execution.reasoningEffort as CodexReasoningEffort | undefined,
-			timeoutMs: codexExecutionTimeoutMs(config.timeoutMs, input.agent.execution.timeoutSeconds),
+			timeoutMs: effectiveTimeoutMs,
 			tools,
 			leaseToken: input.leaseToken,
 			toolTelemetryPath,
@@ -432,7 +431,7 @@ export class CodexExecutionProviderAdapter implements ExecutionProviderAdapter {
 					},
 				})),
 			],
-			retryable: result.error?.retryable,
+			retryable: assignmentDeadlineExpired(timing) ? false : result.error?.retryable,
 			code: result.error?.code ?? null,
 			metadata: {
 				provider: 'codex',

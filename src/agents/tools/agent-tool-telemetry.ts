@@ -163,6 +163,12 @@ function reviewDecisionEvents(toolId: string, output: Record<string, unknown>) {
 	}];
 }
 
+function signalEvents(toolId: string, output: Record<string, unknown>): AgentToolDerivedEvent[] {
+	if (toolId !== 'treeseed.publish_signal') return [];
+	const payload = record(output.payload);
+	return payload.requested === true ? [{ type: 'signal_requested', signal: payload }] : [];
+}
+
 function researchEvents(toolId: string, input: Record<string, unknown>, output: Record<string, unknown>): AgentToolDerivedEvent[] {
 	const payload = record(output.payload);
 	if (toolId === 'research.fetch_source') {
@@ -202,6 +208,7 @@ function deriveToolEvents(toolId: string, descriptor: ExecutionProviderToolDescr
 		...lifecycleEvents(toolId, output, action),
 		...verificationEvents(toolId, output),
 		...reviewDecisionEvents(toolId, output),
+		...signalEvents(toolId, output),
 		...researchEvents(toolId, input, output),
 	];
 }

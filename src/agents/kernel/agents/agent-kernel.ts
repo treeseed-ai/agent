@@ -134,6 +134,7 @@ export class AgentKernel {
       assignment,
       decisionInput,
       mode,
+      capacityEnvelope,
     });
     if (activityContext.fallback) {
       return boundedAssignmentResult(
@@ -351,6 +352,10 @@ export class AgentKernel {
       const completedAt = nowIso();
       const outputStatus = executed.output.status;
       const terminalWaiting = waitingOutputIsTerminal(executed.output);
+      const executionSnapshot = record(record(executed.output.metadata).executionSnapshot);
+      const executionRetryRequested = outputStatus === "waiting"
+        && executionSnapshot.status === "failed"
+        && executionSnapshot.retryable === true;
       const executionStatus: AgentKernelModeExecutionResult["status"] =
         outputStatus === "completed"
           ? "completed"
@@ -371,7 +376,9 @@ export class AgentKernel {
         createdAt: completedAt,
       });
       const artifactValidation =
-        validateAgentArtifactManifest(artifactManifest);
+        validateAgentArtifactManifest(artifactManifest, {
+          publishedSignals: assignment.allowedOutputs?.publishedSignals,
+        });
       if (!artifactValidation.ok) {
         const failedManifest = {
           ...artifactManifest,
@@ -422,7 +429,9 @@ export class AgentKernel {
           ? createAgentKernelModeFallback(
               terminalWaiting
                 ? "assignment_waiting_for_required_context"
-                : "assignment_waiting_for_external_completion",
+                : executionRetryRequested
+                  ? "assignment_execution_retry_requested"
+                  : "assignment_waiting_for_external_completion",
               executed.output.summary,
               { retryable: !terminalWaiting },
             )

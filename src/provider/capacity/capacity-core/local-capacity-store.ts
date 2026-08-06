@@ -8,13 +8,13 @@ export interface ProviderLocalSlotClaim {
 	id: string;
 	connectionId: string;
 	runnerId: string;
-	status: 'polling' | 'ready' | 'running';
+	status: 'polling' | 'ready' | 'running' | 'recovery';
 	assignmentId?: string;
 	leaseToken?: string;
 	leaseExpiresAt?: string;
 	executionProviderId?: string;
 	laneId?: string;
-	requestedCredits?: number;
+	requestedSeconds?: number;
 	nativeUnit?: string;
 	requestedNativeAmount?: number;
 	dispatchEnvelope?: unknown;
@@ -119,7 +119,7 @@ export class ProviderLocalCapacityStore {
 	}
 
 	async attachLease(claimId: string, input: {
-		assignmentId: string; leaseToken: string; leaseExpiresAt: string; executionProviderId?: string; laneId?: string; requestedCredits?: number; nativeUnit?: string; requestedNativeAmount?: number;
+		assignmentId: string; leaseToken: string; leaseExpiresAt: string; executionProviderId?: string; laneId?: string; requestedSeconds?: number; nativeUnit?: string; requestedNativeAmount?: number;
 		dispatchEnvelope: unknown;
 		executionProviderLimit?: ProviderLocalNativeLimit;
 		laneLimit?: ProviderLocalNativeLimit;
@@ -132,8 +132,8 @@ export class ProviderLocalCapacityStore {
 				if (!selected || !limit) return;
 				const selectedPeers = peers.filter((entry) => entry[field] === selected);
 				if (limit.maxConcurrentRunners !== undefined && selectedPeers.length >= limit.maxConcurrentRunners) throw new Error(`Provider-local ${label} concurrency is exhausted for ${selected}.`);
-				const committed = selectedPeers.reduce((total, entry) => total + (entry.requestedCredits ?? 0), 0);
-				if (limit.availableCredits !== undefined && committed + (input.requestedCredits ?? 0) > limit.availableCredits) throw new Error(`Provider-local ${label} native credit allowance is exhausted for ${selected}.`);
+				const committed = selectedPeers.reduce((total, entry) => total + (entry.requestedSeconds ?? 0), 0);
+				if (limit.availableAgentSeconds !== undefined && committed + (input.requestedSeconds ?? 0) > limit.availableAgentSeconds) throw new Error(`Provider-local ${label} agent-time allowance is exhausted for ${selected}.`);
 				if (input.nativeUnit && input.requestedNativeAmount !== undefined && limit.nativeAllowances?.[input.nativeUnit] !== undefined) {
 					const nativeCommitted = selectedPeers.filter((entry) => entry.nativeUnit === input.nativeUnit).reduce((total, entry) => total + (entry.requestedNativeAmount ?? 0), 0);
 					if (nativeCommitted + input.requestedNativeAmount > limit.nativeAllowances[input.nativeUnit]) throw new Error(`Provider-local ${label} ${input.nativeUnit} allowance is exhausted for ${selected}.`);
@@ -184,6 +184,8 @@ export class ProviderLocalCapacityStore {
 		return this.update((state, now) => {
 			const claim = state.claims.find((entry) => entry.id === claimId);
 			if (!claim) return false;
+			claim.status = 'recovery';
+			claim.updatedAt = now;
 			state.events.push({ id: randomUUID(), claimId, connectionId: claim.connectionId, ...(claim.assignmentId ? { assignmentId: claim.assignmentId } : {}), outcome: 'lifecycle-unconfirmed', message: message.slice(0, 500), recordedAt: now });
 			state.events = state.events.slice(-100);
 			return true;
@@ -202,8 +204,8 @@ export class ProviderLocalCapacityStore {
 		return this.update((state) => ({ revision: state.revision + 1, claims: state.claims.map(({ dispatchEnvelope: _dispatchEnvelope, ...claim }) => ({ ...claim, leaseToken: claim.leaseToken ? '<redacted>' : undefined })), events: state.events.map((event) => ({ ...event })) }));
 	}
 
-	async claimsForRecovery() {
-		return this.update((state) => state.claims.filter((claim) => claim.status === 'running').map((claim) => ({ ...claim })));
+	async claimsForRecovery(includeRunning = true) {
+		return this.update((state) => state.claims.filter((claim) => claim.status === 'recovery' || (includeRunning && claim.status === 'running')).map((claim) => ({ ...claim })));
 	}
 
 	async session(connectionId: string) {

@@ -13,8 +13,8 @@ function baseConfig(patch: Partial<ProviderHostRuntimeConfig> = {}): ProviderHos
 		budgetFile: null,
 		maxConcurrentWorkdays: 1,
 		maxConcurrentRunners: 4,
-		dailyCreditBudget: null,
-		monthlyCreditBudget: null,
+		dailyAgentSecondsLimit: null,
+		monthlyAgentSecondsLimit: null,
 		codexAuthFile: null,
 		codexAuthJsonB64: null,
 		codexAuthOverwrite: false,
@@ -59,6 +59,6 @@ describe('provider budget discovery', () => {
 				})],
 			}],
 		});
-		expect(budgets.dailyCreditBudget).toBeUndefined();
+		expect(budgets.dailyAgentSecondsLimit).toBeUndefined();
 	});
 });

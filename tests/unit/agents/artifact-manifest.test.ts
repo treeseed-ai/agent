@@ -174,6 +174,10 @@ describe('AgentArtifactManifest', () => {
 		expect(manifest.citations[0]?.sourceUrl).toContain('token=%5Bredacted%5D');
 		expect(JSON.stringify(manifest)).not.toContain('must-never-be-copied');
 		expect(validateAgentArtifactManifest(manifest)).toEqual({ ok: true });
+		expect(validateAgentArtifactManifest(manifest, { artifactContracts: ['failing-test-proof'], signalContracts: ['review-approved'] })).toEqual({ ok: true });
+		expect(validateAgentArtifactManifest(manifest, { artifactContracts: ['planning-proposal'] })).toMatchObject({
+			ok: false, reason: expect.stringContaining('artifact:planning-proposal'),
+		});
 	});
 
 	it('rejects a completed execution with no durable evidence', () => {

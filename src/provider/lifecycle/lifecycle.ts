@@ -74,18 +74,9 @@ function positiveFinite(values: Array<number | null | undefined>) {
 	return values.filter((value): value is number => typeof value === 'number' && Number.isFinite(value) && value > 0);
 }
 
-function availableCredits(config: ProviderHostRuntimeConfig, availability?: ProviderManagerAvailability) {
-	const manifestLimits = availability?.executionProviders?.flatMap((provider) => [
-		Number(provider.nativeLimits.availableCredits),
-		Number(provider.nativeLimits.creditLimit),
-	]) ?? [];
-	const budgets = discoverProviderBudgets(config);
-	const limits = positiveFinite([
-		...manifestLimits,
-		budgets.dailyCreditBudget,
-		budgets.monthlyCreditBudget,
-	]);
-	return limits.length > 0 ? Math.min(...limits) : 0;
+function availableAgentSeconds(config: ProviderHostRuntimeConfig, availability?: ProviderManagerAvailability) {
+	const declared = positiveFinite(availability?.executionProviders?.map((provider) => Number(provider.nativeLimits.availableAgentSeconds)) ?? []);
+	return declared.length > 0 ? Math.min(...declared) : Math.max(1, config.maxConcurrentRunners) * 86_400;
 }
 
 function availabilitySessionKey(config: ProviderConnectionRuntimeContext) {
@@ -106,7 +97,7 @@ async function publishAvailabilitySession(
 	const maxConcurrentRunners = projection.maxConcurrentRunners;
 	const nativeLimits = {
 		...budgets,
-		availableCredits: availableCredits(config, availability),
+		availableAgentSeconds: availableAgentSeconds(config, availability),
 		maxConcurrentRunners,
 	};
 	const snapshot = {
@@ -126,7 +117,7 @@ async function publishAvailabilitySession(
 		constraints: {
 			outboundOnly: true,
 			dataDir: config.dataDir,
-			availableCredits: nativeLimits.availableCredits,
+			availableAgentSeconds: nativeLimits.availableAgentSeconds,
 			maxConcurrentRunners,
 		},
 		metadata: { source: '@treeseed/agent/provider-manager' },

@@ -68,7 +68,7 @@ export async function resolveLiveAcceptanceExecutionProvider(input: Pick<LiveCap
 		...source,
 		id: input.executionProviderId,
 		adapter: 'codex' as const,
-		nativeLimits: { maxConcurrentRunners: input.maxConcurrentRunners ?? 1, availableCredits: 10 },
+		nativeLimits: { maxConcurrentRunners: input.maxConcurrentRunners ?? 1, availableAgentSeconds: 3_600 },
 		capabilities,
 	};
 }
@@ -298,7 +298,7 @@ export async function executeLiveCapacityAcceptance(input: LiveCapacityAcceptanc
 						marketUrl: connection.marketUrl, accessToken: token.accessToken,
 					}).refreshAvailabilitySession(session.id, {
 						expectedSequence: session.sequence, ttlSeconds: 90, environment: 'local', status: 'open', capabilities,
-						nativeLimits: { availableCredits: 10, maxConcurrentRunners: connection.maxConcurrentRunners },
+						nativeLimits: { availableAgentSeconds: 3_600, maxConcurrentRunners: connection.maxConcurrentRunners },
 						runnerPressure: {
 							activeRunners: localCapacity.claims.filter((claim) => claim.connectionId === connection.connectionId).length,
 							maxConcurrentRunners: connection.maxConcurrentRunners,

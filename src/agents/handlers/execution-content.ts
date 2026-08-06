@@ -21,7 +21,7 @@ import {
   contentModelSupportsArtifactKind,
   normalizedContentModel,
 } from './execution-content-artifacts.ts';
-import { buildExecutionContentInstructions, targetExecutionContentDescription } from './execution-content-prompt.ts';
+import { assignmentTimeGuidance, buildExecutionContentInstructions, targetExecutionContentDescription } from './execution-content-prompt.ts';
 
 export { contentModelSupportsArtifactKind } from './execution-content-artifacts.ts';
 
@@ -265,7 +265,8 @@ export function createExecutionContentHandler(input: {
 			editorialContext,
             contentRoot,
             handoff,
-            contextDiagnostics,
+			contextDiagnostics,
+			executionTiming: assignmentTimeGuidance(context),
 			editorialContextDigest: editorialContext?.digest ?? null,
           },
           expectedOutputs: [

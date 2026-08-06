@@ -19,7 +19,7 @@ function projection(value: unknown) {
 		activityType: record(decisionInput.input).activityType ?? record(decisionInput.metadata).activityType,
 		handlerId: assignment.handlerId, mode: assignment.mode, status: assignment.status,
 		lease: { state: assignment.leaseState, expiresAt: assignment.leaseExpiresAt, renewedAt: assignment.leaseRenewedAt },
-		credits: { requested: record(assignment.capacityEnvelope).reservedCredits, reservationId: assignment.reservationId },
+		time: { reservedSeconds: record(assignment.capacityEnvelope).reservedSeconds, reservationId: assignment.reservationId },
 		governance: { decisionId: assignment.decisionId, proposalId: assignment.proposalId, allocationSetId: assignment.allocationSetId },
 		allowedOutputs: assignment.allowedOutputs,
 		lifecycle: { code: assignment.lifecycleCode, reason: assignment.lifecycleReason,

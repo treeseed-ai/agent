@@ -33,8 +33,8 @@ export interface ProviderHostRuntimeConfig {
 	budgetFile: string | null;
 	maxConcurrentWorkdays: number;
 	maxConcurrentRunners: number;
-	dailyCreditBudget: number | null;
-	monthlyCreditBudget: number | null;
+	dailyAgentSecondsLimit: number | null;
+	monthlyAgentSecondsLimit: number | null;
 	codexAuthFile: string | null;
 	codexAuthJsonB64: string | null;
 	codexAuthOverwrite: boolean;
@@ -140,8 +140,8 @@ export function resolveProviderEnvironmentInput(env: NodeJS.ProcessEnv = process
 		budgetFile: envValue(env, 'TREESEED_PROVIDER_BUDGET_FILE') || undefined,
 		maxConcurrentWorkdays: envValue(env, 'TREESEED_PROVIDER_MAX_CONCURRENT_WORKDAYS') || undefined,
 		maxConcurrentRunners: envValue(env, 'TREESEED_PROVIDER_MAX_CONCURRENT_RUNNERS') || undefined,
-		dailyCreditBudget: envValue(env, 'TREESEED_PROVIDER_DAILY_CREDIT_BUDGET') || undefined,
-		monthlyCreditBudget: envValue(env, 'TREESEED_PROVIDER_MONTHLY_CREDIT_BUDGET') || undefined,
+		dailyAgentSecondsLimit: envValue(env, 'TREESEED_PROVIDER_DAILY_AGENT_SECONDS_LIMIT') || undefined,
+		monthlyAgentSecondsLimit: envValue(env, 'TREESEED_PROVIDER_MONTHLY_AGENT_SECONDS_LIMIT') || undefined,
 		codexAuthFile: codexAuthFile || undefined,
 		codexAuthJsonB64: envValue(env, 'TREESEED_CODEX_AUTH_JSON_B64') || undefined,
 		codexAuthOverwrite: envValue(env, 'TREESEED_CODEX_AUTH_OVERWRITE') || undefined,
@@ -216,8 +216,8 @@ export function resolveProviderConfig(options: {
 		budgetFile: envValue(env, 'TREESEED_PROVIDER_BUDGET_FILE') || null,
 		maxConcurrentWorkdays: intValue(envValue(env, 'TREESEED_PROVIDER_MAX_CONCURRENT_WORKDAYS'), 1),
 		maxConcurrentRunners: intValue(envValue(env, 'TREESEED_PROVIDER_MAX_CONCURRENT_RUNNERS'), 4),
-		dailyCreditBudget: optionalIntValue(envValue(env, 'TREESEED_PROVIDER_DAILY_CREDIT_BUDGET')),
-		monthlyCreditBudget: optionalIntValue(envValue(env, 'TREESEED_PROVIDER_MONTHLY_CREDIT_BUDGET')),
+		dailyAgentSecondsLimit: optionalIntValue(envValue(env, 'TREESEED_PROVIDER_DAILY_AGENT_SECONDS_LIMIT')),
+		monthlyAgentSecondsLimit: optionalIntValue(envValue(env, 'TREESEED_PROVIDER_MONTHLY_AGENT_SECONDS_LIMIT')),
 		codexAuthFile: codexAuthFile || null,
 		codexAuthJsonB64: envValue(env, 'TREESEED_CODEX_AUTH_JSON_B64') || null,
 		codexAuthOverwrite: booleanValue(envValue(env, 'TREESEED_CODEX_AUTH_OVERWRITE')),

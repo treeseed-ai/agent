@@ -9,6 +9,7 @@ export interface ProviderErrorDiagnostic {
 	operation: string | null;
 	path: string | null;
 	timeoutMs: number | null;
+	missingRequirements: string[];
 	cause: Omit<ProviderErrorDiagnostic, 'phase' | 'cause'> | null;
 }
 
@@ -27,9 +28,17 @@ function diagnosticCore(error: unknown): Omit<ProviderErrorDiagnostic, 'phase' |
 		code: stringValue(value.code, payload.code, details.code),
 		status: finiteNumber(value.status),
 		operation: stringValue(value.operation, payload.operation, details.operation),
-		path: stringValue(payload.path, details.path),
+		path: stringValue(payload.path, details.path, details.contentPath),
 		timeoutMs: finiteNumber(payload.timeoutMs ?? details.timeoutMs),
+		missingRequirements: Array.isArray(details.missingRequirements)
+			? details.missingRequirements.filter((entry): entry is string => typeof entry === 'string')
+			: [],
 	};
+}
+
+export function providerErrorIsRetryable(error: unknown) {
+	const status = finiteNumber(record(error).status);
+	return status == null || status === 0 || status >= 500;
 }
 
 export function providerErrorDiagnostic(error: unknown, phase: string): ProviderErrorDiagnostic {

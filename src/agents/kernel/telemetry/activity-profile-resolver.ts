@@ -14,6 +14,12 @@ function executionForProfile(agent: AgentRuntimeSpec, profile: AgentActivityProf
 	};
 }
 
+function systemPromptForProfile(profile: AgentActivityProfile) {
+	const publications = profile.signals?.publishes ?? [];
+	if (!publications.length) return profile.prompt.system;
+	return `${profile.prompt.system}\n\nSignal handoff: after creating the required durable content or control-plane evidence, call treeseed.publish_signal once for each applicable declared signal (${publications.join(', ')}). Use the durable subject identity, explain the change for the next agent, and include typed routing fields such as objective and proposalTypes. Do not claim completion until the signal request has succeeded.`;
+}
+
 export function agentActivityTypeForAssignmentMode(mode: 'planning' | 'acting'): AgentActivityType {
 	return mode;
 }
@@ -34,8 +40,9 @@ export function selectAgentActivityProfile(
 		activityType,
 		branchPolicy: profile.branchPolicy,
 		questionPolicy: profile.questionPolicy,
-		systemPrompt: profile.prompt.system,
+		systemPrompt: systemPromptForProfile(profile),
 		tools: profile.tools,
+		signalPolicy: profile.signals,
 		outputs: profile.outputs,
 		contentAccess: profile.contentAccess,
 		execution: executionForProfile(agent, profile),

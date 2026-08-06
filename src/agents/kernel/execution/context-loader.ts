@@ -1,6 +1,7 @@
 import {
 	createAgentKernelModeFallback,
 	type AgentKernelModeFallback,
+	type AgentCapacityEnvelope,
 	type DecisionExecutionInput,
 	type ProviderAssignment,
 } from '@treeseed/sdk/agent-capacity';
@@ -29,6 +30,7 @@ export async function loadAssignmentActivityContext(input: {
 	assignment: ProviderAssignment;
 	decisionInput: DecisionExecutionInput;
 	mode: 'planning' | 'acting';
+	capacityEnvelope: AgentCapacityEnvelope;
 }): Promise<AssignmentActivityContext> {
 	let loaded: Awaited<ReturnType<typeof loadActiveAgentSpecs>>;
 	try {
@@ -68,7 +70,7 @@ export async function loadAssignmentActivityContext(input: {
 	const requestedActivityType = AGENT_ACTIVITY_TYPES.includes(requestedActivity as AgentActivityType)
 		? requestedActivity as AgentActivityType
 		: null;
-	const runtimeAgent = selectAgentActivityProfile(agent, input.mode, requestedActivityType);
+	let runtimeAgent = selectAgentActivityProfile(agent, input.mode, requestedActivityType);
 	if (!runtimeAgent) {
 		return failed(
 			'assignment_activity_profile_unavailable',
@@ -87,6 +89,16 @@ export async function loadAssignmentActivityContext(input: {
 				configuredHandler: runtimeAgent.handler,
 			},
 		);
+	}
+	const reservedSeconds = Number(input.capacityEnvelope.reservedSeconds);
+	if (Number.isFinite(reservedSeconds) && reservedSeconds > 0) {
+		runtimeAgent = {
+			...runtimeAgent,
+			execution: {
+				...runtimeAgent.execution,
+				timeoutSeconds: Math.min(runtimeAgent.execution.timeoutSeconds, Math.floor(reservedSeconds)),
+			},
+		};
 	}
 	return { agent, runtimeAgent, fallback: null };
 }

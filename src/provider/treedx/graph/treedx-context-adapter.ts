@@ -250,14 +250,11 @@ export function createAssignmentTreeDxAdapter(input: {
 			checkScope({ workspaceId: effectiveWorkspaceId, operation: 'files:read', path });
 			return request('GET', `/v1/dx/projects/${encodeURIComponent(input.projectId)}/workspaces/${encodeURIComponent(effectiveWorkspaceId)}/files?path=${encodeURIComponent(path)}`, undefined, 'workspace.files.read');
 		},
-		writeWorkspaceFile: ({ workspaceId, path, content, body }) => {
+		applyWorkspaceChangeset: ({ workspaceId, body }) => {
 			const effectiveWorkspaceId = workspaceId || defaultWorkspaceId;
-			if (!effectiveWorkspaceId) throw new Error('TreeDX workspace id is required for workspace file write.');
-			checkScope({ workspaceId: effectiveWorkspaceId, operation: 'files:write', path });
-			return request('PUT', `/v1/dx/projects/${encodeURIComponent(input.projectId)}/workspaces/${encodeURIComponent(effectiveWorkspaceId)}/files?path=${encodeURIComponent(path)}`, {
-				content,
-				...(body ?? {}),
-			}, 'workspace.files.write');
+			if (!effectiveWorkspaceId) throw new Error('TreeDX workspace id is required for a changeset.');
+			checkScope({ workspaceId: effectiveWorkspaceId, operation: 'files:write' });
+			return request('POST', `/v1/dx/projects/${encodeURIComponent(input.projectId)}/workspaces/${encodeURIComponent(effectiveWorkspaceId)}/changesets`, body, 'workspace.changeset');
 		},
 		commitWorkspace: ({ workspaceId, message, body }) => {
 			const effectiveWorkspaceId = workspaceId || defaultWorkspaceId;

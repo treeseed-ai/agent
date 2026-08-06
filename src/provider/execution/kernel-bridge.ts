@@ -1,9 +1,5 @@
 import { AgentSdk } from '@treeseed/sdk/sdk';
-import {
-	redactedProviderAssignmentCapabilityHandles,
-	validateProviderAssignmentCapabilityHandles,
-	type ProviderAssignment,
-} from '@treeseed/sdk/agent-capacity';
+import { redactedProviderAssignmentCapabilityHandles,validateProviderAssignmentCapabilityHandles,type ProviderAssignment } from '@treeseed/sdk/agent-capacity';
 import { loadAllAgentSpecs } from '../../agents/support/spec-loader.ts';
 import { AgentKernel } from '../../agents/kernel/agents/agent-kernel.ts';
 import type { AgentTreeDxAdapter, ExecutionProviderAdapter } from '../../agents/runtime/runtime-types.ts';
@@ -22,30 +18,7 @@ import type { ProviderAssignmentExecutionInput } from '../operations/runner-cont
 import { record, stringValue } from '../configuration/value-utils.ts';
 import { withTimeout } from './promise-timeout.ts';
 import { buildKernelProviderAssignment } from '../capacity/assignments/kernel-assignment.ts';
-function assignmentTreeDxProxyHandle(assignment: Record<string, unknown>) {
-	const direct = record(assignment.treedxProxyHandle);
-	if (Object.keys(direct).length) return direct;
-	return record(record(assignment.workspaceContext).treedxProxyHandle);
-}
-function modeRunIdForAssignment(assignment: Record<string, unknown>, selectedInput: Record<string, unknown>, capacityEnvelope: Record<string, unknown>) {
-	const decisionInput = record(assignment.decisionInput);
-	return [
-		stringValue(assignment.id) ?? 'assignment',
-		stringValue(assignment.mode, decisionInput.mode, capacityEnvelope.mode) ?? 'planning',
-		stringValue(assignment.agentId, decisionInput.agentId, selectedInput.agentSlug, selectedInput.agentId) ?? 'agent',
-		stringValue(assignment.handlerId, decisionInput.handlerId, selectedInput.handlerId) ?? 'handler',
-	].join(':');
-}
-
-function assignmentAgentTools(
-	allowed: string[],
-	allowedOutputs: Record<string, unknown>,
-) {
-	const publications = allowedOutputs.publishedSignals;
-	return Array.isArray(publications) && publications.length > 0
-		? [...new Set([...allowed, 'treeseed.publish_signal'])]
-		: allowed;
-}
+import { assignmentAgentTools,assignmentTreeDxProxyHandle,modeRunIdForAssignment } from './kernel-bridge-assignment.ts';
 export async function prepareAssignmentKernelBridge(input: ProviderAssignmentExecutionInput & {
 	assignmentId: string;
 	membershipId: string;
@@ -393,6 +366,8 @@ export async function prepareAssignmentKernelBridge(input: ProviderAssignmentExe
 				commitMessage: artifact.commitMessage,
 				treeDx: assignmentTreeDxAdapter,
 				workspaceId: stringValue(treedxProxyHandle.workspaceId),
+				baseCommitSha: stringValue(treedxProxyHandle.baseCommitSha),
+				baseRef: stringValue(treedxProxyHandle.baseRef),
 			}),
 		},
 		repository: {

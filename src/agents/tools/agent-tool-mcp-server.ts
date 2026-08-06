@@ -26,6 +26,8 @@ const TRANSPORT_METADATA_KEYS = [
 	'forbiddenPaths',
 	'researchAllowedDomains',
 	'contentAction',
+	'baseCommitSha',
+	'baseRef',
 	'contentModel',
 	'contentPreset',
 	'contentAccessSummary',

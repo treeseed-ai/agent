@@ -1,4 +1,6 @@
 import type { AgentTreeDxAdapter } from '../../agents/runtime/runtime-types.ts';
+import { createHash } from 'node:crypto';
+import { createUnifiedChangeset } from '@treeseed/sdk/treedx';
 import { assertRelativeContentPath } from '../../agents/content/content-artifacts.ts';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
@@ -13,16 +15,22 @@ export async function writeProviderContentArtifact(input: {
 	commitMessage: string;
 	treeDx: AgentTreeDxAdapter | null;
 	workspaceId: string | null;
+	baseCommitSha: string | null;
+	baseRef: string | null;
 }) {
 	assertRelativeContentPath(input.repoRoot, input.relativePath);
-	if (!input.treeDx || !input.workspaceId) {
+	if (!input.treeDx || !input.workspaceId || !input.baseCommitSha || !input.baseRef) {
 		throw new Error('TreeDX writable workspace is required for provider content artifact writes.');
 	}
-	await input.treeDx.writeWorkspaceFile({
+	const existing = await input.treeDx.readWorkspaceFile({ workspaceId: input.workspaceId, path: input.relativePath }).catch(() => null);
+	const before = existing ? stringValue(record(existing).content, record(record(existing).file).content) ?? null : null;
+	const patch = createUnifiedChangeset([{ path: input.relativePath, before, after: input.content }]);
+	const patchSha256 = createHash('sha256').update(patch).digest('hex');
+	const changeset = await input.treeDx.applyWorkspaceChangeset({
 		workspaceId: input.workspaceId,
-		path: input.relativePath,
-		content: input.content,
-		body: { encoding: 'utf8' },
+		body: { contract: 'treedx.changeset/v1', baseCommitSha: input.baseCommitSha, baseRef: input.baseRef,
+			patch, patchSha256, idempotencyKey: createHash('sha256').update(`${input.workspaceId}:${patchSha256}`).digest('hex'),
+			expectedDestinationRefHead: input.baseCommitSha },
 	});
 	const commit = await input.treeDx.commitWorkspace({
 		workspaceId: input.workspaceId,
@@ -35,6 +43,7 @@ export async function writeProviderContentArtifact(input: {
 		worktreePath: input.repoRoot,
 		commitSha: stringValue(record(commit).commitSha, record(record(commit).payload).commitSha),
 		changedPaths: [input.relativePath],
+		changeset,
 	};
 }
 
@@ -111,4 +120,3 @@ export async function runProviderVerification(input: { repoRoot: string; command
 		stderr: stderr.join('\n'),
 	};
 }
-

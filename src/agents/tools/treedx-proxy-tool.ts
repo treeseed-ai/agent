@@ -3,7 +3,7 @@ export const TREE_DX_PROXY_TOOL_NAMES = [
 	'treedx.read_repository_files',
 	'treedx.search_workspace',
 	'treedx.read_workspace_file',
-	'treedx.write_workspace_file',
+	'treedx.apply_workspace_changeset',
 	'treedx.commit_workspace',
 ] as const;
 
@@ -14,7 +14,7 @@ export const TREE_DX_PROXY_TOOL_REQUIRED_OPERATIONS: Record<TreeDxProxyToolName,
 	'treedx.read_repository_files': ['files:read'],
 	'treedx.search_workspace': ['files:search'],
 	'treedx.read_workspace_file': ['files:read'],
-	'treedx.write_workspace_file': ['files:write'],
+	'treedx.apply_workspace_changeset': ['files:write'],
 	'treedx.commit_workspace': ['git:commit'],
 };
 
@@ -60,14 +60,19 @@ export const TREE_DX_PROXY_TOOL_INPUT_SCHEMAS: Record<TreeDxProxyToolName, Recor
 		required: ['path'],
 		additionalProperties: false,
 	},
-	'treedx.write_workspace_file': {
+	'treedx.apply_workspace_changeset': {
 		type: 'object',
 		properties: {
 			workspaceId: { type: 'string' },
-			path: { type: 'string' },
-			content: { type: 'string' },
+			contract: { type: 'string' },
+			baseCommitSha: { type: 'string' },
+			baseRef: { type: 'string' },
+			patch: { type: 'string' },
+			patchSha256: { type: 'string' },
+			idempotencyKey: { type: 'string' },
+			expectedDestinationRefHead: { type: 'string' },
 		},
-		required: ['path', 'content'],
+		required: ['contract', 'baseCommitSha', 'baseRef', 'patch', 'patchSha256', 'idempotencyKey'],
 		additionalProperties: false,
 	},
 	'treedx.commit_workspace': {

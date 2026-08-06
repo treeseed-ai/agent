@@ -5,18 +5,7 @@ import { createOperationsAdapter } from "../../adapters/operations/operations.ts
 import { createRepositoryInspectionAdapter } from "../../adapters/repositories/repository.ts";
 import { createResearchAdapter } from "../../adapters/tools/research.ts";
 import { createVerificationAdapter } from "../../adapters/tools/verification.ts";
-import type {
-  AgentContext,
-  ExecutionProviderAdapter,
-  AgentMutationAdapter,
-  AgentNotificationAdapter,
-  AgentOperationsAdapter,
-  AgentRepositoryInspectionAdapter,
-  AgentResearchAdapter,
-  AgentTreeDxAdapter,
-  AgentTriggerInvocation,
-  AgentVerificationAdapter,
-} from "../../runtime/runtime-types.ts";
+import type { AgentContext,ExecutionProviderAdapter,AgentMutationAdapter,AgentNotificationAdapter,AgentOperationsAdapter,AgentRepositoryInspectionAdapter,AgentResearchAdapter,AgentTreeDxAdapter,AgentTriggerInvocation,AgentVerificationAdapter } from "../../runtime/runtime-types.ts";
 import { createAgentKernelModeFallback, type AgentKernelModeExecutionResult, type AgentModeRunStatus } from "@treeseed/sdk/agent-capacity";
 import { AgentSdk } from "@treeseed/sdk/sdk";
 import { getAgentProviderSelections } from "@treeseed/sdk/platform/deploy-runtime";
@@ -24,10 +13,7 @@ import { resolveAgentRuntimeProviders } from "../../../agent-runtime.ts";
 import { buildAgentArtifactManifest, validateAgentArtifactManifest } from "../artifacts/artifact-manifest.ts";
 import { nowIso, record, resolveExecutionRoot } from "../runtime/runtime-helpers.ts";
 import { AgentKernelOutputValidator, waitingOutputIsTerminal } from "../validation/output-validator.ts";
-import type {
-  AgentKernelAssignmentRunOptions,
-  AgentKernelModeRunTelemetryInput,
-} from "../execution/run-types.ts";
+import type { AgentKernelAssignmentRunOptions,AgentKernelModeRunTelemetryInput } from "../execution/run-types.ts";
 import { preflightAssignment } from "../capacity/assignments/assignment-preflight.ts";
 import { loadAssignmentActivityContext } from "../execution/context-loader.ts";
 import { dispatchAssignmentExecution } from "../execution/execution-dispatcher.ts";
@@ -35,10 +21,7 @@ import { recordAssignmentModeRun } from "../telemetry/telemetry.ts";
 import { boundedAssignmentResult } from "../execution/execution-result.ts";
 import { inspectAgentKernel, resolveKernelAgentExecution } from '../runtime/kernel-runtime.ts';
 
-export type {
-  AgentKernelAssignmentRunOptions,
-  AgentKernelModeRunTelemetryInput,
-} from "../execution/run-types.ts";
+export type { AgentKernelAssignmentRunOptions,AgentKernelModeRunTelemetryInput } from "../execution/run-types.ts";
 export class AgentKernel {
   private readonly execution;
   private readonly executionOverride;

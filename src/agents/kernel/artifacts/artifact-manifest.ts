@@ -7,6 +7,7 @@ import type {
 	ProviderAssignment,
 	ResearchCitation,
 } from '@treeseed/sdk/agent-capacity';
+import type { ArtifactRef } from '@treeseed/sdk/treedx/types';
 import { assertResearchCitations, validateAgentArtifactManifest } from '@treeseed/sdk/agent-capacity';
 import type { ExecutionRunSnapshot, ExecutionUsageActual } from '@treeseed/sdk/types/agents';
 import type { AgentHandlerOutput } from '../../runtime/runtime-types.ts';
@@ -209,6 +210,24 @@ function sourceCommit(snapshot: ExecutionRunSnapshot) {
 	return undefined;
 }
 
+function typedArtifactReferences(snapshot: ExecutionRunSnapshot, outputMetadata: Record<string, unknown>): ArtifactRef[] {
+	const candidates = [
+		...records(outputMetadata.artifactReferences),
+		...(snapshot.artifacts ?? []).flatMap((artifact) => {
+			const metadata = record(artifact.metadata);
+			return [record(metadata.artifactRef), ...records(metadata.artifactReferences), ...records(record(metadata.changeset).artifacts)];
+		}),
+	];
+	return candidates.flatMap((candidate) => {
+		if (candidate.contract !== 'treeseed.artifact-ref/v1') return [];
+		const kind = text(candidate.kind);
+		const visibility = text(candidate.visibility);
+		const sha256 = candidate.sha256 === null ? null : text(candidate.sha256);
+		if (!kind || !visibility || sha256 !== null && !/^[0-9a-f]{64}$/u.test(sha256)) return [];
+		return [{ ...candidate, contract: 'treeseed.artifact-ref/v1', kind, visibility, sha256 } as ArtifactRef];
+	});
+}
+
 export function buildAgentArtifactManifest(input: {
 	assignment: ProviderAssignment;
 	modeRunId: string;
@@ -244,6 +263,7 @@ export function buildAgentArtifactManifest(input: {
 		summary: input.output.summary,
 		toolEvents,
 		contentReferences: artifactReferences,
+		artifactReferences: typedArtifactReferences(snapshot, outputMetadata),
 		sourceWorktree: sourceWorktree(snapshot),
 		commit: commitReference,
 		verification: verification(snapshot, outputMetadata),

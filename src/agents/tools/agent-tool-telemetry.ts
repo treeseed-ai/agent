@@ -80,15 +80,6 @@ function contentEvents(toolId: string, input: Record<string, unknown>, output: R
 	const model = inputModel || outputModel;
 	const action = text(input.action) || operationName || toolId;
 	let ref = contentRefFrom({ ...output, model: model || undefined });
-	let requiresCommit = false;
-	if (!ref && toolId === 'treedx.write_workspace_file' && text(input.path)) {
-		const path = normalizePath(text(input.path));
-		const collection = path.split('/content/')[1]?.split('/')[0] ?? '';
-		const inferredModel = collection === 'knowledge' ? 'knowledge' : collection.endsWith('s') ? collection.slice(0, -1) : collection;
-		const filename = path.split('/').at(-1)?.replace(/\.(md|mdx)$/iu, '') ?? '';
-		ref = { path, model: inferredModel || undefined, id: filename || undefined, collection: collection || undefined, slug: filename || undefined };
-		requiresCommit = true;
-	}
 	const events: AgentToolDerivedEvent[] = [];
 	if (model === 'question') {
 		const questionRef = ref ?? { model: 'question' };
@@ -96,7 +87,7 @@ function contentEvents(toolId: string, input: Record<string, unknown>, output: R
 			? { type: 'question_created', questionRef, answerPolicy: record(input.answerPolicy ?? record(input.frontmatter).answerPolicy ?? record(input.metadata).answerPolicy) }
 			: { type: 'question_updated', questionRef });
 	}
-	if (ref && /create|add|write/iu.test(action)) events.push({ type: 'content_created', contentRef: ref, ...(requiresCommit ? { requiresCommit: true } : {}) });
+	if (ref && /create|add|write/iu.test(action)) events.push({ type: 'content_created', contentRef: ref });
 	else if (ref && /update|link/iu.test(action)) events.push({ type: 'content_updated', contentRef: ref });
 	return events;
 }

@@ -86,7 +86,7 @@ it('rejects tools not listed in the assignment catalog', async () => {
 it('validates required fields and additional properties before execution', async () => {
 		const descriptor: ExecutionProviderToolDescriptor = {
 			...statusDescriptor(),
-			id: 'treedx.write_workspace_file',
+			id: 'treedx.apply_workspace_changeset',
 			executionTarget: 'treedx_proxy',
 			mutability: 'content_write',
 			inputSchema: {
@@ -104,7 +104,7 @@ it('validates required fields and additional properties before execution', async
 			providerAccessToken: '',
 			assignmentId: 'assignment-1',
 			descriptors: [descriptor],
-		}, 'treedx.write_workspace_file', { path: 'src/content/a.mdx' })).resolves.toMatchObject({
+		}, 'treedx.apply_workspace_changeset', { path: 'src/content/a.mdx' })).resolves.toMatchObject({
 			ok: false,
 			code: 'invalid_tool_input',
 			metadata: { field: 'content' },
@@ -155,7 +155,7 @@ it('reads assignment status from the provider-authorized API without exposing le
 		}, 'treeseed.status');
 		expect(result).toMatchObject({ ok: true, payload: {
 			assignmentId: 'assignment-1', workdayId: 'workday-1', workdayRunId: 'run-1',
-			activityType: 'planning', status: 'leased', credits: { requested: 1 },
+			activityType: 'planning', status: 'leased',
 		} });
 		expect(JSON.stringify(result)).not.toContain('must-not-leak');
 		expect(fetchImpl).toHaveBeenCalledWith(
@@ -177,6 +177,7 @@ it('creates model-aware content through TreeDX proxy calls', async () => {
 				assignmentId: 'assignment-1',
 				repositoryId: 'repo-1',
 				workspaceId: 'workspace-1',
+				baseCommitSha: 'abc123', baseRef: 'refs/heads/main',
 				allowedOperations: ['files:read', 'files:search', 'files:write'],
 				allowedPaths: ['src/content/**'],
 			},
@@ -192,7 +193,7 @@ it('creates model-aware content through TreeDX proxy calls', async () => {
 		const fetchImpl = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
 			calls.push({ url: String(url), init: init ?? {} });
 			if (init?.method === 'GET') {
-				return new Response(JSON.stringify({ content: String(calls[0]?.init.body ? JSON.parse(String(calls[0].init.body)).content : '') }), { status: 200 });
+				return new Response(JSON.stringify({ content: '---\nid: question:how-should-content-tools-work\ntitle: How should content tools work?\nquestion_type: implementation\nrelated_objectives: [objective-1]\n---\n\nCreate canonical content.\n' }), { status: 200 });
 			}
 			return new Response(JSON.stringify({ ok: true }), { status: 200 });
 		}) as unknown as typeof fetch;
@@ -240,6 +241,7 @@ it('places model-aware content beneath the assignment package content root', asy
 			treedxProxyHandle: {
 				id: 'handle-1', teamId: 'team-1', projectId: 'project-1', assignmentId: 'assignment-1',
 				repositoryId: 'repo-1', workspaceId: 'workspace-1',
+				baseCommitSha: 'abc123', baseRef: 'refs/heads/main',
 				allowedOperations: ['files:read', 'files:write'],
 				allowedPaths: ['docs/src/content/**'],
 				allowedWritePaths: ['docs/src/content', 'docs/src/content/**'],

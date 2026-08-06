@@ -67,7 +67,7 @@ describe('provider agent tool catalog', () => {
 
 	it('exposes only read-capable TreeDX tools in context-only mode', () => {
 		const catalog = createAssignmentToolCatalog({
-			agentTools: ['treedx.read_workspace_file', 'treedx.write_workspace_file', 'treedx.commit_workspace'],
+			agentTools: ['treedx.read_workspace_file', 'treedx.apply_workspace_changeset', 'treedx.commit_workspace'],
 			projectId: 'project-1',
 			assignmentId: 'assignment-1',
 			treedxProxyHandle: writeHandle,
@@ -78,14 +78,14 @@ describe('provider agent tool catalog', () => {
 
 		expect(catalog.exposed).toEqual(['treedx.read_workspace_file']);
 		expect(catalog.omitted).toEqual([
-			{ id: 'treedx.write_workspace_file', missing: ['treedx_writable_workspace'] },
+			{ id: 'treedx.apply_workspace_changeset', missing: ['treedx_writable_workspace'] },
 			{ id: 'treedx.commit_workspace', missing: ['treedx_writable_workspace', 'content_commit'] },
 		]);
 	});
 
 	it('exposes writable TreeDX descriptors with handle metadata in workspace-write mode', () => {
 		const catalog = createAssignmentToolCatalog({
-			agentTools: ['treedx.read_workspace_file', 'treedx.write_workspace_file', 'treedx.commit_workspace'],
+			agentTools: ['treedx.read_workspace_file', 'treedx.apply_workspace_changeset', 'treedx.commit_workspace'],
 			projectId: 'project-1',
 			assignmentId: 'assignment-1',
 			treedxProxyHandle: writeHandle,

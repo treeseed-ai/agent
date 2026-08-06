@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, realpathSync } from 'node:fs';
 import { mkdir } from 'node:fs/promises';
-import { dirname, resolve } from 'node:path';
+import { dirname, relative, resolve, sep } from 'node:path';
 import { promisify } from 'node:util';
 import type { AgentSdkTreeDxOptions } from '@treeseed/sdk/sdk';
 import { resolveRepositoryIdentity } from '@treeseed/sdk';
@@ -75,6 +75,23 @@ function contextPath(config: ProviderHostRuntimeConfig, assignmentId: string) {
 	return resolve(config.dataDir, 'assignment-contexts', safeSegment(assignmentId));
 }
 
+export function assertProviderOwnedRepositoryPath(dataDir: string, candidate: string) {
+	const root = existsSync(dataDir) ? realpathSync(dataDir) : resolve(dataDir);
+	let ancestor = resolve(candidate);
+	const missing: string[] = [];
+	while (!existsSync(ancestor)) {
+		missing.unshift(ancestor.split(sep).at(-1)!);
+		const parent = dirname(ancestor);
+		if (parent === ancestor) break;
+		ancestor = parent;
+	}
+	const target = resolve(existsSync(ancestor) ? realpathSync(ancestor) : ancestor, ...missing);
+	const child = relative(root, target);
+	if (child === '..' || child.startsWith(`..${sep}`) || child.startsWith(sep)) {
+		throw new Error('Assignment repository path escapes capacity-provider custody.');
+	}
+}
+
 function requiresProviderRepository(workspaceAccessMode: string | null | undefined) {
 	return workspaceAccessMode === undefined
 		|| workspaceAccessMode === null
@@ -126,8 +143,10 @@ export async function materializeAssignmentProject(
 	options: AssignmentProjectMaterializationOptions = {},
 ): Promise<MaterializedAssignmentProject> {
 	const assignmentId = options.assignmentId?.trim() || `manual-${project.id}`;
+	await mkdir(config.dataDir, { recursive: true });
 	if (!options.requiresRepository && !requiresProviderRepository(options.workspaceAccessMode)) {
 		const path = contextPath(config, assignmentId);
+		assertProviderOwnedRepositoryPath(config.dataDir, path);
 		await mkdir(path, { recursive: true });
 		const commitSha = await ensureContextRepository(path);
 		return {
@@ -143,6 +162,8 @@ export async function materializeAssignmentProject(
 		};
 	}
 	const paths = repositoryPaths(config, project, assignmentId);
+	assertProviderOwnedRepositoryPath(config.dataDir, paths.mirror);
+	assertProviderOwnedRepositoryPath(config.dataDir, paths.checkout);
 	const path = paths.checkout;
 	const branch = project.repository.currentBranch || project.repository.defaultBranch || 'main';
 	await mkdir(dirname(paths.mirror), { recursive: true });

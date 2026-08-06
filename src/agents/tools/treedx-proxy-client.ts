@@ -79,8 +79,8 @@ function resolveRoute(descriptor: TreeDxProxyExecutionToolDescriptor, toolName: 
 				return descriptor.routes.searchWorkspace;
 			case 'treedx.read_workspace_file':
 				return descriptor.routes.readWorkspaceFile;
-			case 'treedx.write_workspace_file':
-				return descriptor.routes.writeWorkspaceFile;
+			case 'treedx.apply_workspace_changeset':
+				return descriptor.routes.applyWorkspaceChangeset;
 			case 'treedx.commit_workspace':
 				return descriptor.routes.commitWorkspace;
 			default:
@@ -115,8 +115,8 @@ function requestBody(toolName: TreeDxProxyToolName, input: Record<string, unknow
 			};
 		case 'treedx.search_workspace':
 			return { query: input.query };
-		case 'treedx.write_workspace_file':
-			return { content: input.content };
+		case 'treedx.apply_workspace_changeset':
+			return input;
 		case 'treedx.commit_workspace':
 			return { message: input.message };
 		case 'treedx.read_workspace_file':

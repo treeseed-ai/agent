@@ -11,16 +11,16 @@ import type { TreeDxProxyExecutionToolDescriptor } from '../../../src/agents/run
 
 const descriptor: TreeDxProxyExecutionToolDescriptor = {
 	kind: 'agent_tool',
-	id: 'treedx.write_workspace_file',
-	name: 'Write TreeDX workspace file',
-	description: 'Assignment-scoped TreeDX workspace write.',
+	id: 'treedx.apply_workspace_changeset',
+	name: 'Apply TreeDX workspace changeset',
+	description: 'Assignment-scoped atomic TreeDX workspace changeset.',
 	inputSchema: {
 		type: 'object',
 		properties: {
-			path: { type: 'string' },
-			content: { type: 'string' },
+			contract: { type: 'string' }, baseCommitSha: { type: 'string' }, baseRef: { type: 'string' },
+			patch: { type: 'string' }, patchSha256: { type: 'string' }, idempotencyKey: { type: 'string' },
 		},
-		required: ['path', 'content'],
+		required: ['contract', 'baseCommitSha', 'baseRef', 'patch', 'patchSha256', 'idempotencyKey'],
 		additionalProperties: false,
 	},
 	executionTarget: 'treedx_proxy',
@@ -42,7 +42,7 @@ const descriptor: TreeDxProxyExecutionToolDescriptor = {
 		readRepositoryFiles: 'POST /v1/dx/projects/project-1/repos/:repoId/files/read',
 		searchWorkspace: 'POST /v1/dx/projects/project-1/workspaces/:workspaceId/search',
 		readWorkspaceFile: 'GET /v1/dx/projects/project-1/workspaces/:workspaceId/files?path=:path',
-		writeWorkspaceFile: 'PUT /v1/dx/projects/project-1/workspaces/:workspaceId/files?path=:path',
+		applyWorkspaceChangeset: 'POST /v1/dx/projects/project-1/workspaces/:workspaceId/changesets',
 		commitWorkspace: 'POST /v1/dx/projects/project-1/workspaces/:workspaceId/commit',
 	},
 };
@@ -83,7 +83,7 @@ describe('agent tool MCP tooling', () => {
 		});
 	});
 
-	it('calls workspace write through the API proxy with assignment headers', async () => {
+	it('calls an atomic workspace changeset through the API proxy with assignment headers', async () => {
 		const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ ok: true, payload: { path: 'src/content/a.mdx' } }), { status: 200 }));
 		await callTreeDxProxyTool({
 			apiBaseUrl: 'https://api.example.test',
@@ -91,14 +91,14 @@ describe('agent tool MCP tooling', () => {
 			assignmentId: 'assignment-1',
 			handleId: 'handle-1',
 			descriptor,
-			toolName: 'treedx.write_workspace_file',
-			input: { path: 'src/content/a.mdx', content: 'body' },
+			toolName: 'treedx.apply_workspace_changeset',
+			input: { contract: 'treedx.changeset/v1', baseCommitSha: 'abc123', baseRef: 'refs/heads/main', patch: 'patch', patchSha256: 'digest', idempotencyKey: 'changeset-1' },
 			fetchImpl: fetchImpl as unknown as typeof fetch,
 		});
 		expect(fetchImpl).toHaveBeenCalledWith(
-			'https://api.example.test/v1/dx/projects/project-1/workspaces/workspace-1/files?path=src%2Fcontent%2Fa.mdx',
+			'https://api.example.test/v1/dx/projects/project-1/workspaces/workspace-1/changesets',
 			expect.objectContaining({
-				method: 'PUT',
+				method: 'POST',
 				headers: expect.objectContaining({
 					authorization: 'Bearer provider-secret',
 					'x-treeseed-assignment-id': 'assignment-1',
@@ -146,7 +146,7 @@ describe('agent tool MCP tooling', () => {
 		const writeFetch = vi.fn().mockRejectedValue(new TypeError('fetch failed'));
 		await expect(callTreeDxProxyTool({
 			apiBaseUrl: 'https://api.example.test', providerAccessToken: 'provider-secret', assignmentId: 'assignment-1',
-			handleId: 'handle-1', descriptor, toolName: 'treedx.write_workspace_file', input: { path: 'src/content/a.mdx', content: 'body' },
+			handleId: 'handle-1', descriptor, toolName: 'treedx.apply_workspace_changeset', input: { path: 'src/content/a.mdx', content: 'body' },
 			fetchImpl: writeFetch as unknown as typeof fetch,
 		})).rejects.toThrow('fetch failed');
 		expect(writeFetch).toHaveBeenCalledTimes(1);
@@ -188,18 +188,18 @@ describe('agent tool MCP tooling', () => {
 		]);
 		try {
 			const tools = await client.listTools();
-			expect(tools.tools.map((tool) => tool.name)).toEqual(['treedx_write_workspace_file']);
-			expect(agentToolMcpName('treedx.write_workspace_file')).toBe('treedx_write_workspace_file');
+			expect(tools.tools.map((tool) => tool.name)).toEqual(['treedx_apply_workspace_changeset']);
+			expect(agentToolMcpName('treedx.apply_workspace_changeset')).toBe('treedx_apply_workspace_changeset');
 
 			const result = await client.callTool({
-				name: 'treedx_write_workspace_file',
-				arguments: { path: 'src/content/a.mdx', content: 'body' },
+				name: 'treedx_apply_workspace_changeset',
+				arguments: { contract: 'treedx.changeset/v1', baseCommitSha: 'abc123', baseRef: 'refs/heads/main', patch: 'patch', patchSha256: 'digest', idempotencyKey: 'changeset-1' },
 			});
 			expect(result.isError).not.toBe(true);
 			expect(result.structuredContent).toEqual({ ok: true, payload: { path: 'src/content/a.mdx' } });
 			expect(telemetry).toEqual(expect.arrayContaining([
-				expect.objectContaining({ toolId: 'treedx.write_workspace_file', status: 'started' }),
-				expect.objectContaining({ toolId: 'treedx.write_workspace_file', status: 'completed' }),
+				expect.objectContaining({ toolId: 'treedx.apply_workspace_changeset', status: 'started' }),
+				expect.objectContaining({ toolId: 'treedx.apply_workspace_changeset', status: 'completed' }),
 			]));
 		} finally {
 			await client.close();
@@ -221,7 +221,7 @@ describe('agent tool MCP tooling', () => {
 		]);
 		try {
 			const result = await client.callTool({
-				name: 'treedx.write_workspace_file',
+				name: 'treedx.apply_workspace_changeset',
 				arguments: { path: 'src/content/a.mdx' },
 			});
 			expect(result.isError).toBe(true);
@@ -245,7 +245,7 @@ describe('agent tool MCP tooling', () => {
 			client.connect(clientTransport),
 		]);
 		try {
-			const result = await client.callTool({ name: 'treedx.write_workspace_file', arguments: {} });
+			const result = await client.callTool({ name: 'treedx.apply_workspace_changeset', arguments: {} });
 			expect(result.isError).toBe(true);
 			expect(result.structuredContent).toMatchObject({ ok: false, code: 'tool_not_allowed' });
 		} finally {

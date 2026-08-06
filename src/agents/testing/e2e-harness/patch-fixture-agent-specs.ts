@@ -17,7 +17,7 @@ export async function patchFixtureAgentSpecs(repoRoot: string) {
 	];
 	const writeTools = [
 		...readTools,
-		'treedx.write_workspace_file',
+		'treedx.apply_workspace_changeset',
 		'treedx.commit_workspace',
 	];
 	const engineeringTools = [

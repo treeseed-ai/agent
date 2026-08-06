@@ -11,7 +11,6 @@ describe('execution content artifact contract', () => {
 		expect(contentModelSupportsArtifactKind('question', 'planning_note')).toBe(false);
 		expect(contentModelSupportsArtifactKind('question', 'planning_question')).toBe(true);
 	});
-
 	it('maps semantic note outputs only to note content models', () => {
 		for (const artifactKind of [
 			'planning_note',
@@ -29,7 +28,6 @@ describe('execution content artifact contract', () => {
 		expect(contentModelSupportsArtifactKind('knowledge', 'knowledge_update')).toBe(true);
 		expect(contentModelSupportsArtifactKind('note', 'knowledge_update')).toBe(false);
 	});
-
 	it('coalesces repeated TreeDX receipts by path and preserves the final subject relation', () => {
 		const result = collectExecutionContentArtifactReceipts({
 			agent: { slug: 'tester' }, capacity: { assignmentId: 'assignment-a' },
@@ -44,7 +42,6 @@ describe('execution content artifact contract', () => {
 			contentPath: 'notes/dummy.mdx', subjectId: 'decision-a', subjectField: 'relatedDecisions', commitSha: 'abc123',
 		})]);
 	});
-
 	it('preserves configured source-write authority only for acting handlers', () => {
 		const context = { agent: { execution: { sandboxMode: 'workspace_write', allowedPaths: ['src/**'] } } } as never;
 		expect(executionAgentForAccess(context, 'configured').execution).toMatchObject({ sandboxMode: 'workspace_write', allowedPaths: ['src/**'] });
@@ -309,10 +306,10 @@ describe('execution content artifact contract', () => {
 				allowedOperations: ['files:write', 'files:read'],
 				allowedPaths: ['template/src/content/**'],
 				routes: {
-					writeWorkspaceFile: 'PUT /v1/dx/projects/project-a/workspaces/workspace-a/files?path=:path',
+					applyWorkspaceChangeset: 'POST /v1/dx/projects/project-a/workspaces/workspace-a/changesets',
 					readWorkspaceFile: 'GET /v1/dx/projects/project-a/workspaces/workspace-a/files?path=:path',
 				},
-				metadata: { contentAction: 'create', contentRoot: 'template/src/content' },
+				metadata: { contentAction: 'create', contentRoot: 'template/src/content', baseCommitSha: 'abc123', baseRef: 'refs/heads/main' },
 			} as never,
 			input: {
 				model: 'note',
@@ -334,7 +331,8 @@ describe('execution content artifact contract', () => {
 			changedPaths: ['template/src/content/notes/release-channel-evidence.mdx'],
 		});
 		expect(urls).toHaveLength(2);
-		expect(urls.every((url) => url.includes('path=template%2Fsrc%2Fcontent%2Fnotes%2Frelease-channel-evidence.mdx'))).toBe(true);
+		expect(urls.some((url) => url.includes('path=template%2Fsrc%2Fcontent%2Fnotes%2Frelease-channel-evidence.mdx'))).toBe(true);
+		expect(urls.some((url) => url.includes('/changesets'))).toBe(true);
 	});
 
 	it('accepts a canonical placement path without duplicating the content root and collection', async () => {
@@ -346,10 +344,10 @@ describe('execution content artifact contract', () => {
 				assignmentId: 'assignment-a', workspaceId: 'workspace-a',
 				allowedOperations: ['files:write', 'files:read'], allowedPaths: ['src/content/**'],
 				routes: {
-					writeWorkspaceFile: 'PUT /v1/dx/projects/project-a/workspaces/workspace-a/files?path=:path',
+					applyWorkspaceChangeset: 'POST /v1/dx/projects/project-a/workspaces/workspace-a/changesets',
 					readWorkspaceFile: 'GET /v1/dx/projects/project-a/workspaces/workspace-a/files?path=:path',
 				},
-				metadata: { contentAction: 'create', contentRoot: 'src/content' },
+				metadata: { contentAction: 'create', contentRoot: 'src/content', baseCommitSha: 'abc123', baseRef: 'refs/heads/main' },
 			} as never,
 			input: {
 				model: 'note', slug: 'audience-review-plan', title: 'Audience review plan', body: 'Review body.',
@@ -367,7 +365,8 @@ describe('execution content artifact contract', () => {
 			ok: true,
 			changedPaths: ['src/content/notes/editorial/books/treeseed-guide/reviews/audience-review-plan.mdx'],
 		});
-		expect(urls.every((url) => url.includes('path=src%2Fcontent%2Fnotes%2Feditorial%2Fbooks%2Ftreeseed-guide%2Freviews%2Faudience-review-plan.mdx'))).toBe(true);
+		expect(urls.some((url) => url.includes('path=src%2Fcontent%2Fnotes%2Feditorial%2Fbooks%2Ftreeseed-guide%2Freviews%2Faudience-review-plan.mdx'))).toBe(true);
+		expect(urls.some((url) => url.includes('/changesets'))).toBe(true);
 	});
 
 	it('preserves a canonical Guide knowledge path through model-aware creation', async () => {
@@ -375,12 +374,13 @@ describe('execution content artifact contract', () => {
 		const path = 'src/content/knowledge/treeseed-guide/foundation/agent-lab-guide-writing.mdx';
 		const result = await callContentTool({
 			apiBaseUrl: 'http://127.0.0.1:3000', providerAccessToken: 'redacted', assignmentId: 'assignment-a',
-			descriptor: { id: 'treeseed.content.create', handleId: 'handle-a', projectId: 'project-a', assignmentId: 'assignment-a', workspaceId: 'workspace-a', allowedOperations: ['files:write', 'files:read'], allowedPaths: ['src/content/**'], routes: { writeWorkspaceFile: 'PUT /v1/dx/projects/project-a/workspaces/workspace-a/files?path=:path', readWorkspaceFile: 'GET /v1/dx/projects/project-a/workspaces/workspace-a/files?path=:path' }, metadata: { contentAction: 'create', contentRoot: 'src/content' } } as never,
+			descriptor: { id: 'treeseed.content.create', handleId: 'handle-a', projectId: 'project-a', assignmentId: 'assignment-a', workspaceId: 'workspace-a', allowedOperations: ['files:write', 'files:read'], allowedPaths: ['src/content/**'], routes: { applyWorkspaceChangeset: 'POST /v1/dx/projects/project-a/workspaces/workspace-a/changesets', readWorkspaceFile: 'GET /v1/dx/projects/project-a/workspaces/workspace-a/files?path=:path' }, metadata: { contentAction: 'create', contentRoot: 'src/content', baseCommitSha: 'abc123', baseRef: 'refs/heads/main' } } as never,
 			input: { model: 'knowledge', slug: 'agent-lab-guide-writing', title: 'Agent Lab Guide Writing', placement: { path }, body: 'Guide body.' },
 			fetchImpl: (async (url) => { urls.push(String(url)); return new Response(JSON.stringify({ ok: true, payload: {} }), { status: 200, headers: { 'content-type': 'application/json' } }); }) as typeof fetch,
 		});
 		expect(result).toMatchObject({ ok: true, changedPaths: [path] });
-		expect(urls.every((url) => url.includes(`path=${encodeURIComponent(path)}`))).toBe(true);
+		expect(urls.some((url) => url.includes(`path=${encodeURIComponent(path)}`))).toBe(true);
+		expect(urls.some((url) => url.includes('/changesets'))).toBe(true);
 	});
 
 	it('reads the assigned agent from its authoritative nested content path', async () => {

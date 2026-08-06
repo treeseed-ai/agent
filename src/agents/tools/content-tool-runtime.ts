@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import {
 	findContentToolPreset,
 	renderContentRecord,
@@ -6,6 +7,7 @@ import {
 	type ContentAction,
 	type ContentModel,
 } from '@treeseed/sdk/content-operations';
+import { createUnifiedChangeset } from '@treeseed/sdk/treedx';
 import type { ExecutionProviderToolDescriptor, TreeDxProxyExecutionToolDescriptor } from '../runtime/runtime-types.ts';
 import { callTreeDxProxyTool } from './treedx-proxy-client.ts';
 
@@ -85,15 +87,24 @@ async function readModelContentFile(
 	throw firstError;
 }
 
-async function writeWorkspaceFile(options: ContentToolCallOptions, descriptor: TreeDxProxyExecutionToolDescriptor, path: string, content: string) {
+async function applyWorkspaceFileChange(options: ContentToolCallOptions, descriptor: TreeDxProxyExecutionToolDescriptor, path: string, before: string | null, content: string) {
+	const baseCommitSha = text(descriptor.metadata?.baseCommitSha);
+	const baseRef = text(descriptor.metadata?.baseRef);
+	if (!baseCommitSha || !baseRef) throw new Error('TreeDX changeset requires the assignment workspace base commit and ref.');
+	const patch = createUnifiedChangeset([{ path, before, after: content }]);
+	const patchSha256 = createHash('sha256').update(patch).digest('hex');
 	return await callTreeDxProxyTool({
 		apiBaseUrl: options.apiBaseUrl,
 		providerAccessToken: options.providerAccessToken,
 		assignmentId: options.assignmentId,
 		handleId: descriptor.handleId,
 		descriptor,
-		toolName: 'treedx.write_workspace_file',
-		input: { path, content },
+		toolName: 'treedx.apply_workspace_changeset',
+		input: {
+			contract: 'treedx.changeset/v1', baseCommitSha, baseRef, patch, patchSha256,
+			idempotencyKey: createHash('sha256').update(`${options.assignmentId}:${patchSha256}`).digest('hex'),
+			expectedDestinationRefHead: baseCommitSha,
+		},
 		fetchImpl: options.fetchImpl,
 	});
 }
@@ -240,8 +251,10 @@ export async function callContentTool(options: ContentToolCallOptions) {
 			contentRoot,
 		});
 		let rendered = initial;
+		let originalContent: string | null = null;
 		if (action === 'update' || action === 'link') {
 			const existing = await readModelContentFile(options, descriptor, initial.path);
+			originalContent = responseContent(existing.result);
 			rendered = renderContentRecord({
 				model: contentModel,
 				slug: contentSlug(input) || undefined,
@@ -251,7 +264,7 @@ export async function callContentTool(options: ContentToolCallOptions) {
 				relations: relations as never,
 				placement: modelRelativePlacement(input, contentModel, contentRoot),
 				contentRoot,
-				existingContent: responseContent(existing.result),
+				existingContent: originalContent,
 			});
 		}
 		if (action === 'validate') {
@@ -273,7 +286,7 @@ export async function callContentTool(options: ContentToolCallOptions) {
 			return { ok: true, action, refs: [{ ...rendered.ref, ...(existing ? { path: existing.path } : {}) }], diagnostics: validation.diagnostics };
 		}
 		if (action === 'create' || action === 'update' || action === 'link') {
-			await writeWorkspaceFile(options, descriptor, rendered.path, rendered.content);
+			const changeset = await applyWorkspaceFileChange(options, descriptor, rendered.path, originalContent, rendered.content);
 			const readback = await readWorkspaceFile(options, descriptor, rendered.path).catch(() => null);
 			if (readback) {
 				const content = responseContent(readback) || rendered.content;
@@ -291,6 +304,7 @@ export async function callContentTool(options: ContentToolCallOptions) {
 				action,
 				refs: [rendered.ref],
 				changedPaths: [rendered.path],
+				changeset,
 				diagnostics: rendered.diagnostics,
 			};
 		}

@@ -1,9 +1,5 @@
 import { AgentSdk } from '@treeseed/sdk/sdk';
-import {
-	redactedProviderAssignmentCapabilityHandles,
-	validateProviderAssignmentCapabilityHandles,
-	type ProviderAssignment,
-} from '@treeseed/sdk/agent-capacity';
+import { redactedProviderAssignmentCapabilityHandles,validateProviderAssignmentCapabilityHandles,type ProviderAssignment } from '@treeseed/sdk/agent-capacity';
 import { loadAllAgentSpecs } from '../../agents/support/spec-loader.ts';
 import { AgentKernel } from '../../agents/kernel/agents/agent-kernel.ts';
 import type { AgentTreeDxAdapter, ExecutionProviderAdapter } from '../../agents/runtime/runtime-types.ts';
@@ -371,6 +367,8 @@ export async function prepareAssignmentKernelBridge(input: ProviderAssignmentExe
 				commitMessage: artifact.commitMessage,
 				treeDx: assignmentTreeDxAdapter,
 				workspaceId: stringValue(treedxProxyHandle.workspaceId),
+				baseCommitSha: stringValue(treedxProxyHandle.baseCommitSha),
+				baseRef: stringValue(treedxProxyHandle.baseRef),
 			}),
 		},
 		repository: {

@@ -136,7 +136,7 @@ export interface TreeDxProxyExecutionToolDescriptor extends ExecutionProviderToo
 		readRepositoryFiles: string;
 		searchWorkspace: string;
 		readWorkspaceFile: string;
-		writeWorkspaceFile: string;
+		applyWorkspaceChangeset: string;
 		commitWorkspace: string;
 	};
 }
@@ -213,7 +213,7 @@ export interface AgentTreeDxAdapter {
 	readRepositoryFiles(input: { repoId: string; paths: string[]; ref?: string | null; body?: Record<string, unknown> }): Promise<Record<string, unknown>>;
 	searchWorkspace(input: { workspaceId: string; query: string; body?: Record<string, unknown> }): Promise<Record<string, unknown>>;
 	readWorkspaceFile(input: { workspaceId: string; path: string }): Promise<Record<string, unknown>>;
-	writeWorkspaceFile(input: { workspaceId: string; path: string; content: string; body?: Record<string, unknown> }): Promise<Record<string, unknown>>;
+	applyWorkspaceChangeset(input: { workspaceId: string; body: Record<string, unknown> }): Promise<Record<string, unknown>>;
 	commitWorkspace(input: { workspaceId: string; message: string; body?: Record<string, unknown> }): Promise<Record<string, unknown>>;
 	closeWorkspace(input: { workspaceId: string }): Promise<Record<string, unknown>>;
 }

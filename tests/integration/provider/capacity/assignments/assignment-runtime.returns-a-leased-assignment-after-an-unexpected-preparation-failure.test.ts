@@ -218,6 +218,8 @@ it('returns the lease with explicit diagnostics when required telemetry cannot b
 			method: 'return',
 			body: expect.objectContaining({
 				code: 'provider_mode_run_telemetry_delivery_failed',
+				leaseToken: 'lease-a',
+				runnerId: 'runner-a',
 				retryable: true,
 				metadata: expect.objectContaining({ telemetryDeliveryFailed: true }),
 			}),

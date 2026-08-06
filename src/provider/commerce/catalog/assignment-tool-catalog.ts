@@ -32,8 +32,8 @@ function createAssignmentTreeDxToolDescriptor(input: { projectId: string; assign
 	return {
 		kind: 'agent_tool', id: 'treedx.proxy', name: 'TreeDX assignment proxy', description: 'Assignment-scoped TreeDX content and workspace operations proxied through the TreeSeed API.', inputSchema: { type: 'object', additionalProperties: true }, executionTarget: 'treedx_proxy', mutability: writable || input.allowCommit ? 'content_write' : 'read',
 		projectId: input.projectId, assignmentId: input.assignmentId, handleId, repositoryId, workspaceId, allowedOperations, allowedPaths, allowedReadPaths, allowedWritePaths,
-		routes: { buildContext: `POST /v1/dx/projects/${project}/repos/${repo}/context/build`, readRepositoryFiles: `POST /v1/dx/projects/${project}/repos/${repo}/files/read`, searchWorkspace: `POST /v1/dx/projects/${project}/workspaces/${workspace}/search`, readWorkspaceFile: `GET /v1/dx/projects/${project}/workspaces/${workspace}/files?path=:path`, writeWorkspaceFile: `PUT /v1/dx/projects/${project}/workspaces/${workspace}/files?path=:path`, commitWorkspace: `POST /v1/dx/projects/${project}/workspaces/${workspace}/commit` },
-		metadata: { requiresHeaders: ['Authorization: Bearer <membership-access-token>', 'x-treeseed-assignment-id', 'x-treeseed-treedx-proxy-handle-id'] },
+		routes: { buildContext: `POST /v1/dx/projects/${project}/repos/${repo}/context/build`, readRepositoryFiles: `POST /v1/dx/projects/${project}/repos/${repo}/files/read`, searchWorkspace: `POST /v1/dx/projects/${project}/workspaces/${workspace}/search`, readWorkspaceFile: `GET /v1/dx/projects/${project}/workspaces/${workspace}/files?path=:path`, applyWorkspaceChangeset: `POST /v1/dx/projects/${project}/workspaces/${workspace}/changesets`, commitWorkspace: `POST /v1/dx/projects/${project}/workspaces/${workspace}/commit` },
+		metadata: { baseCommitSha: stringValue(input.treedxProxyHandle.baseCommitSha), baseRef: stringValue(input.treedxProxyHandle.baseRef), requiresHeaders: ['Authorization: Bearer <membership-access-token>', 'x-treeseed-assignment-id', 'x-treeseed-treedx-proxy-handle-id'] },
 	};
 }
 

@@ -5,18 +5,7 @@ import { createOperationsAdapter } from "../../adapters/operations/operations.ts
 import { createRepositoryInspectionAdapter } from "../../adapters/repositories/repository.ts";
 import { createResearchAdapter } from "../../adapters/tools/research.ts";
 import { createVerificationAdapter } from "../../adapters/tools/verification.ts";
-import type {
-  AgentContext,
-  ExecutionProviderAdapter,
-  AgentMutationAdapter,
-  AgentNotificationAdapter,
-  AgentOperationsAdapter,
-  AgentRepositoryInspectionAdapter,
-  AgentResearchAdapter,
-  AgentTreeDxAdapter,
-  AgentTriggerInvocation,
-  AgentVerificationAdapter,
-} from "../../runtime/runtime-types.ts";
+import type { AgentContext,ExecutionProviderAdapter,AgentMutationAdapter,AgentNotificationAdapter,AgentOperationsAdapter,AgentRepositoryInspectionAdapter,AgentResearchAdapter,AgentTreeDxAdapter,AgentTriggerInvocation,AgentVerificationAdapter } from "../../runtime/runtime-types.ts";
 import { createAgentKernelModeFallback, type AgentKernelModeExecutionResult, type AgentModeRunStatus } from "@treeseed/sdk/agent-capacity";
 import { AgentSdk } from "@treeseed/sdk/sdk";
 import { getAgentProviderSelections } from "@treeseed/sdk/platform/deploy-runtime";

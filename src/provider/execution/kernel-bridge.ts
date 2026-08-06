@@ -22,30 +22,8 @@ import type { ProviderAssignmentExecutionInput } from '../operations/runner-cont
 import { record, stringValue } from '../configuration/value-utils.ts';
 import { withTimeout } from './promise-timeout.ts';
 import { buildKernelProviderAssignment } from '../capacity/assignments/kernel-assignment.ts';
-function assignmentTreeDxProxyHandle(assignment: Record<string, unknown>) {
-	const direct = record(assignment.treedxProxyHandle);
-	if (Object.keys(direct).length) return direct;
-	return record(record(assignment.workspaceContext).treedxProxyHandle);
-}
-function modeRunIdForAssignment(assignment: Record<string, unknown>, selectedInput: Record<string, unknown>, capacityEnvelope: Record<string, unknown>) {
-	const decisionInput = record(assignment.decisionInput);
-	return [
-		stringValue(assignment.id) ?? 'assignment',
-		stringValue(assignment.mode, decisionInput.mode, capacityEnvelope.mode) ?? 'planning',
-		stringValue(assignment.agentId, decisionInput.agentId, selectedInput.agentSlug, selectedInput.agentId) ?? 'agent',
-		stringValue(assignment.handlerId, decisionInput.handlerId, selectedInput.handlerId) ?? 'handler',
-	].join(':');
-}
-
-function assignmentAgentTools(
-	allowed: string[],
-	allowedOutputs: Record<string, unknown>,
-) {
-	const publications = allowedOutputs.publishedSignals;
-	return Array.isArray(publications) && publications.length > 0
-		? [...new Set([...allowed, 'treeseed.publish_signal'])]
-		: allowed;
-}
+import { assignmentTreeDxProxyHandle } from '../../agents/kernel/runtime/runtime-helpers.ts';
+import { assignmentAgentTools, assignmentModeRunId } from './kernel-bridge-support.ts';
 export async function prepareAssignmentKernelBridge(input: ProviderAssignmentExecutionInput & {
 	assignmentId: string;
 	membershipId: string;
@@ -71,7 +49,7 @@ export async function prepareAssignmentKernelBridge(input: ProviderAssignmentExe
 	const { assignmentId, membershipId, stateVersion, decisionInput, decisionPayload, capacityEnvelope, projectId, agentSlug } = input;
 	const workspaceMode = assignmentWorkspaceAccessMode(input.assignment);
 	const governedExactBaseRef = stringValue(record(decisionPayload.input).exactBaseRef, decisionPayload.exactBaseRef);
-	const treedxProxyHandle = assignmentTreeDxProxyHandle(input.assignment);
+	const treedxProxyHandle = assignmentTreeDxProxyHandle(input.assignment as unknown as ProviderAssignment) ?? {};
 	const assignedProject = assignmentProjectContext(input.assignment);
 	const project = assignedProject
 		? await withTimeout(materializeAssignmentProject(input.config, assignedProject, { assignmentId, workspaceAccessMode: workspaceMode, requiresRepository: Boolean(governedExactBaseRef) && !Object.keys(treedxProxyHandle).length, exactRef: governedExactBaseRef }), 60_000, `Assignment project materialization exceeded 60000ms for ${assignmentId}.`)
@@ -370,7 +348,7 @@ export async function prepareAssignmentKernelBridge(input: ProviderAssignmentExe
 		leaseSeconds: input.leaseSeconds,
 		renewLease: input.renewLease,
 		recordModeRun: (body) => input.client.createAssignmentModeRun(assignmentId, body),
-		modeRunId: modeRunIdForAssignment(input.assignment, decisionPayload, capacityEnvelope),
+		modeRunId: assignmentModeRunId(input.assignment, decisionPayload, capacityEnvelope),
 		selectedInput: decisionPayload,
 		capacityEnvelope,
 		tools: assignmentToolDescriptors,
@@ -505,7 +483,7 @@ export async function prepareAssignmentKernelBridge(input: ProviderAssignmentExe
 	});
 	const typedAssignment = buildKernelProviderAssignment({ assignment: input.assignment, assignmentId, membershipId, stateVersion, decisionInput, decisionPayload, capacityEnvelope, projectId, agentSlug, workspaceMode, treedxProxyHandle, capabilityHandles });
 	return { ready: true, terminalResult: null, kernel, typedAssignment, workspaceMode, assignmentTreeDxAdapter,
-		modeRunId: modeRunIdForAssignment(input.assignment, decisionPayload, capacityEnvelope),
+		modeRunId: assignmentModeRunId(input.assignment, decisionPayload, capacityEnvelope),
 		releaseAssignmentResources: baseExecutionAdapter?.releaseAssignmentResources
 			? (outcome: 'completed' | 'returned' | 'failed' | 'expired') => baseExecutionAdapter.releaseAssignmentResources!({ assignmentId, outcome })
 			: null,

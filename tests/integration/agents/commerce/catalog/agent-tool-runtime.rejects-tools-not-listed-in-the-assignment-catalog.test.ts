@@ -142,7 +142,7 @@ it('reads assignment status from the provider-authorized API without exposing le
 			id: 'assignment-1', workDayId: 'workday-1', projectId: 'project-1', agentId: 'guide-steward',
 			projectAgentClassId: 'class-1', handlerId: 'writer', mode: 'planning', status: 'leased',
 			leaseState: 'leased', leaseExpiresAt: '2026-08-04T00:00:00.000Z', leaseToken: 'must-not-leak',
-			decisionInput: { input: { activityType: 'planning' } }, capacityEnvelope: { reservedCredits: 1 },
+			decisionInput: { input: { activityType: 'planning' } }, capacityEnvelope: { reservedSeconds: 1 },
 			metadata: { workdayRunId: 'run-1' }, treedxProxyHandle: { token: 'must-not-leak' },
 		} }), { status: 200, headers: { 'content-type': 'application/json' } }));
 		const result = await callAgentTool({
@@ -155,7 +155,7 @@ it('reads assignment status from the provider-authorized API without exposing le
 		}, 'treeseed.status');
 		expect(result).toMatchObject({ ok: true, payload: {
 			assignmentId: 'assignment-1', workdayId: 'workday-1', workdayRunId: 'run-1',
-			activityType: 'planning', status: 'leased', credits: { requested: 1 },
+			activityType: 'planning', status: 'leased', time: { reservedSeconds: 1 },
 		} });
 		expect(JSON.stringify(result)).not.toContain('must-not-leak');
 		expect(fetchImpl).toHaveBeenCalledWith(

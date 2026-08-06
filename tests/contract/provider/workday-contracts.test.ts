@@ -10,8 +10,8 @@ describe('capacity workday contracts', () => {
 			status: 'active',
 			now: '2026-07-16T12:00:00.000Z',
 			deadlineAt: '2026-07-16T13:00:00.000Z',
-			totalCredits: 100,
-			committedCredits: 40,
+			totalSeconds: 100,
+			committedSeconds: 40,
 			usefulEligibleWork: true,
 		};
 
@@ -23,7 +23,7 @@ describe('capacity workday contracts', () => {
 			continue: false,
 			reason: 'duration_bound_reached',
 		});
-		expect(evaluateWorkdayContinuation({ ...active, committedCredits: 100 })).toEqual({
+		expect(evaluateWorkdayContinuation({ ...active, committedSeconds: 100 })).toEqual({
 			continue: false,
 			reason: 'budget_bound_reached',
 		});

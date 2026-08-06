@@ -24,21 +24,14 @@ import { resolveAgentRuntimeProviders } from "../../../agent-runtime.ts";
 import { buildAgentArtifactManifest, validateAgentArtifactManifest } from "../artifacts/artifact-manifest.ts";
 import { nowIso, record, resolveExecutionRoot } from "../runtime/runtime-helpers.ts";
 import { AgentKernelOutputValidator, waitingOutputIsTerminal } from "../validation/output-validator.ts";
-import type {
-  AgentKernelAssignmentRunOptions,
-  AgentKernelModeRunTelemetryInput,
-} from "../execution/run-types.ts";
+import type { AgentKernelAssignmentRunOptions, AgentKernelModeRunTelemetryInput } from "../execution/run-types.ts";
 import { preflightAssignment } from "../capacity/assignments/assignment-preflight.ts";
 import { loadAssignmentActivityContext } from "../execution/context-loader.ts";
 import { dispatchAssignmentExecution } from "../execution/execution-dispatcher.ts";
 import { recordAssignmentModeRun } from "../telemetry/telemetry.ts";
 import { boundedAssignmentResult } from "../execution/execution-result.ts";
 import { inspectAgentKernel, resolveKernelAgentExecution } from '../runtime/kernel-runtime.ts';
-
-export type {
-  AgentKernelAssignmentRunOptions,
-  AgentKernelModeRunTelemetryInput,
-} from "../execution/run-types.ts";
+export type { AgentKernelAssignmentRunOptions, AgentKernelModeRunTelemetryInput } from "../execution/run-types.ts";
 export class AgentKernel {
   private readonly execution;
   private readonly executionOverride;
@@ -54,7 +47,6 @@ export class AgentKernel {
   private readonly activeRuns = new Set<string>();
   private readonly tenantRoot;
   private readonly executionRoot;
-
   constructor(
     private readonly sdk: AgentSdk,
     repoRoot: string,
@@ -110,7 +102,6 @@ export class AgentKernel {
     this.operations = options?.operations ?? createOperationsAdapter();
     this.outputValidator = new AgentKernelOutputValidator();
   }
-
   async doctor() {
     return inspectAgentKernel(this.sdk, this.tenantRoot);
   }

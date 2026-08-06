@@ -13,9 +13,7 @@ import { validateAgentToolInput } from './agent-tool-schema.ts';
 import { readAssignmentStatus } from './status/assignment-status-tool.ts';
 import { callContentTool } from './content-tool-runtime.ts';
 import { fetchGovernedResearchSource, searchGovernedResearchSources } from './governed-research-tools.ts';
-
 const execFileAsync = promisify(execFile);
-
 export interface AgentToolRuntimeOptions {
 	apiBaseUrl: string;
 	providerAccessToken: string;

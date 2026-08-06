@@ -43,6 +43,7 @@ export interface RawAgentRuntimeSpec {
 	title?: unknown;
 	identity?: unknown;
 	activityProfiles?: unknown;
+	chatProfile?: unknown;
 	template?: unknown;
 	handlerConfig?: unknown;
 	enabled?: unknown;

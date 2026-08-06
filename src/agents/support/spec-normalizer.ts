@@ -30,7 +30,7 @@ function normalizeParts(
 			});
 		}
 	}
-	const activityProfiles = normalizeActivityProfiles(raw.activityProfiles, diagnostics, slug);
+	const activityProfiles = normalizeActivityProfiles(raw.activityProfiles, diagnostics, slug, raw.chatProfile);
 	const selected = selectDefaultActivityProfile(activityProfiles);
 	if (!selected) {
 		diagnostics.push({
@@ -197,4 +197,3 @@ export function normalizeAgentRuntimeSpec(
 		diagnostics,
 	};
 }
-

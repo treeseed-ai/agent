@@ -71,6 +71,7 @@ export function createAssignmentExecutionProviderAdapter(input: {
 		discord: input.discord,
 		workflow: input.workflow,
 		codex: { env, onEvent: input.onCodexEvent },
+		opencode: { env },
 		researchSourcePolicy: input.researchSourcePolicy,
 	});
 }

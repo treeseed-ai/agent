@@ -175,7 +175,7 @@ function defaultChatProfile(slug: string, specialization: AgentChatProfileConfig
 		tools: { allowed: tools },
 		outputs: { messageTypes: ['discussion_response'], modelMutations: ['discussion_message:create', 'linked_note:create', 'question:create', 'proposal:create'] },
 		questionPolicy: { blockExecutionWhenCreated: false, defaultAnswerPolicy: { kind: 'team-human' } },
-		execution: { providerPreference: specialization.providerPreference ?? ['codex'], maxRuntimeSeconds: specialization.maxRuntimeSeconds ?? 900, maxRetries: 1, verificationRequired: false, maxTotalTokens: specialization.maxTotalTokens ?? 136_000, warningTokens: specialization.warningTokens ?? 100_000, maxCostAmount: specialization.maxCostAmount, costCurrency: specialization.costCurrency ?? 'USD', pricingGeneration: 'provider-runtime', enforcementConfidence: 'bounded' },
+		execution: { providerPreference: specialization.providerPreference ?? ['codex-treeseed', 'codex-sub', 'codex-key'], maxRuntimeSeconds: specialization.maxRuntimeSeconds ?? 900, maxRetries: 1, verificationRequired: false, maxTotalTokens: specialization.maxTotalTokens ?? 136_000, warningTokens: specialization.warningTokens ?? 100_000, maxCostAmount: specialization.maxCostAmount, costCurrency: specialization.costCurrency ?? 'USD', pricingGeneration: 'provider-runtime', enforcementConfidence: 'bounded' },
 	};
 }
 

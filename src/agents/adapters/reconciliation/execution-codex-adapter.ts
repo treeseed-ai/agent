@@ -342,7 +342,8 @@ export class CodexExecutionProviderAdapter implements ExecutionProviderAdapter {
 			if (toolConfigPath) {
 				await writeFile(toolConfigPath, JSON.stringify(codexAgentToolServer({ ...request, toolConfigPath: null })?.env ?? {}), { encoding: 'utf8', mode: 0o600 });
 			}
-			codexClient = Promise.resolve((this.options.createCodexClient ?? createDefaultCodexClient)(request));
+			const createClient = this.options.createCodexClient ?? ((value?: CodexExecutionRequest) => createDefaultCodexClient(value, this.options.env ?? process.env));
+			codexClient = Promise.resolve(createClient(request));
 			result = await runCodexTask(request, {
 				client: codexClient,
 				onEvent: this.options.onEvent,

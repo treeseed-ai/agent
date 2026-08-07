@@ -306,6 +306,7 @@ export async function prepareAssignmentKernelBridge(input: ProviderAssignmentExe
 	const assignmentToolDescriptors = assignmentToolCatalog.descriptors;
 	const baseExecutionAdapter: ExecutionProviderAdapter | null = input.kernel ? null : createAssignmentExecutionProviderAdapter({
 		selection: executionProvider!.adapter,
+		executionProvider,
 		repoRoot: project.repository.path,
 		jira: input.config.jira,
 		githubIssues: input.config.githubIssues,

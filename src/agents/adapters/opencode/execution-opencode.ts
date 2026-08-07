@@ -2,7 +2,7 @@ import type { ExecutionProviderObservation, ExecutionRunRef, ExecutionRunSnapsho
 import type { ExecutionProviderAdapter, ExecutionProviderInvocation } from '../../runtime/runtime-types.ts';
 
 type Row = Record<string, unknown>;
-export interface OpenCodeExecutionProviderOptions { baseUrl?: string; env?: NodeJS.ProcessEnv; fetchImpl?: typeof fetch; }
+export interface OpenCodeExecutionProviderOptions { baseUrl?: string; env?: NodeJS.ProcessEnv; fetchImpl?: typeof fetch; providerId?: string; model?: string; }
 function record(value: unknown): Row { return value && typeof value === 'object' && !Array.isArray(value) ? value as Row : {}; }
 function array(value: unknown): Row[] { return Array.isArray(value) ? value.map(record) : []; }
 function text(...values: unknown[]) { return String(values.find((value) => typeof value === 'string' && value.trim()) ?? '').trim(); }
@@ -35,8 +35,8 @@ export class OpenCodeExecutionProviderAdapter implements ExecutionProviderAdapte
 		const sessionId = text(session.id, record(session.session).id);
 		if (!sessionId) throw new Error('OpenCode did not return a session id.');
 		const configuredModel = text(input.agent.cli.model, input.agent.execution.model);
-		const providerID = text(record(input.metadata?.executionProvider).providerId, this.env().TREESEED_OPENCODE_PROVIDER_ID, 'openrouter');
-		const modelID = text(record(input.metadata?.executionProvider).model, configuredModel);
+		const providerID = text(this.options.providerId, record(input.metadata?.executionProvider).providerId, this.env().TREESEED_OPENCODE_PROVIDER_ID, 'openrouter');
+		const modelID = text(this.options.model, record(input.metadata?.executionProvider).model, configuredModel);
 		const prompt = [input.agent.systemPrompt, input.workPackage.instructions, 'Assignment envelope:', JSON.stringify({ capacity: input.capacityEnvelope, workspace: input.workspace, tools: input.tools ?? [] }, null, 2)].join('\n\n');
 		const message = await this.request(`/session/${encodeURIComponent(sessionId)}/message`, { method: 'POST', body: JSON.stringify({ model: { providerID, modelID }, parts: [{ type: 'text', text: prompt }] }) });
 		const parts = array(message.parts ?? record(message.message).parts);

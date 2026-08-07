@@ -311,15 +311,16 @@ export function codexAgentToolConfig(request: CodexExecutionRequest) {
 	};
 }
 
-export async function createDefaultCodexClient(request?: CodexExecutionRequest): Promise<CodexClient> {
+export async function createDefaultCodexClient(request?: CodexExecutionRequest, env: NodeJS.ProcessEnv = process.env): Promise<CodexClient> {
 	const { Codex } = await import('@openai/codex-sdk');
 	const runtimeHome = await createIsolatedCodexRuntimeHome({
-		serviceTier: process.env.TREESEED_CODEX_SERVICE_TIER?.trim() === 'fast' ? 'fast' : undefined,
+		serviceTier: env.TREESEED_CODEX_SERVICE_TIER?.trim() === 'fast' ? 'fast' : undefined,
 		model: request?.model,
+		env,
 	});
 	const client = new Codex({
 		env: codexClientEnvironment({
-			...process.env,
+			...env,
 			TREESEED_CODEX_AUTH_FILE: runtimeHome.authFile,
 			CODEX_HOME: runtimeHome.codexHome,
 		}),

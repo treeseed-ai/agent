@@ -254,11 +254,11 @@ it('renews, settles exactly once, then completes with the forensic artifact mani
 		expect(calls.findIndex((entry) => entry.method === 'settle')).toBeLessThan(calls.findIndex((entry) => entry.method === 'complete'));
 		expect(calls.find((entry) => entry.method === 'usage')).toMatchObject({
 			key: 'assignment:assignment-a:usage:codex.0',
-			body: { usageDimension: 'codex.0', actualCredits: 0, providerUnits: 1.5 },
+			body: { usageDimension: 'codex.0', accountingMode: 'informational', providerUnits: 1.5 },
 		});
+		expect(calls.find((entry) => entry.method === 'usage')?.body).not.toHaveProperty('actualCredits');
 		expect(calls.find((entry) => entry.method === 'settle')?.key).toBe('assignment:assignment-a:terminal-settlement');
 		expect(calls.find((entry) => entry.method === 'settle')?.body).toMatchObject({
-			actualCredits: 2,
 			providerUnits: 1.5,
 			usageActual: {
 				nativeUsage: { executionUsage: [{ kind: 'codex', amount: 1.5 }] },
@@ -269,6 +269,7 @@ it('renews, settles exactly once, then completes with the forensic artifact mani
 				taskSignature: 'researcher:planning',
 			},
 		});
+		expect(calls.find((entry) => entry.method === 'settle')?.body).not.toHaveProperty('actualCredits');
 		expect(calls.find((entry) => entry.method === 'complete')?.body).toMatchObject({ output: { artifactManifest: { assignmentId: 'assignment-a' } } });
 	});
 
@@ -308,9 +309,10 @@ it('preserves successful execution when pre-settlement workspace cleanup fails',
 		async closeWorkspace() { throw Object.assign(new TypeError('fetch failed'), { operation: 'workspace.close', path: '/v1/dx/projects/project-a/workspaces/workspace-a/close' }); },
 	});
 	expect(result).toMatchObject({ ok: true, payload: { status: 'completed' } });
-	expect(calls.map((entry) => entry.method)).toEqual(['event', 'settle', 'complete']);
+	expect(calls.map((entry) => entry.method)).toEqual(['event', 'settle', 'event', 'complete']);
 	expect(calls[0]?.body).toMatchObject({ eventType: 'provider.workspace.cleanup_failed', context: { diagnostic: { operation: 'workspace.close' } } });
-	expect(calls[2]?.body).toMatchObject({ output: { metadata: { workspaceCleanup: { status: 'failed', retryable: true } } } });
+	expect(calls[2]?.body).toMatchObject({ eventType: 'provider.assignment.performance.finalized' });
+	expect(calls[3]?.body).toMatchObject({ output: { metadata: { workspaceCleanup: { status: 'failed', retryable: true } } } });
 });
 
 it('bounds assignment-scoped TreeDX response bodies before AgentKernel execution', async () => {

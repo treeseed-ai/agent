@@ -48,6 +48,7 @@ export function resolveAssignmentExecutionProvider(input: {
 
 export function createAssignmentExecutionProviderAdapter(input: {
 	selection: string | null;
+	executionProvider?: ManifestExecutionProvider | null;
 	repoRoot: string;
 	jira?: JiraExecutionProviderConfig | null;
 	githubIssues?: GitHubIssuesExecutionProviderConfig | null;
@@ -58,20 +59,63 @@ export function createAssignmentExecutionProviderAdapter(input: {
 	researchSourcePolicy?: import('@treeseed/sdk/agent-capacity').ResearchSourcePolicy;
 	onCodexEvent?: (event: Record<string, unknown>) => void | Promise<void>;
 }) {
-	const env = {
-		...process.env,
-		TREESEED_CAPACITY_PROVIDER_ACCESS_TOKEN: input.accessToken,
-		TREESEED_API_BASE_URL: input.apiBaseUrl,
-	};
+	const runtime = buildExecutionProviderRuntimeConfiguration({
+		executionProvider: input.executionProvider,
+		accessToken: input.accessToken,
+		apiBaseUrl: input.apiBaseUrl,
+	});
+	const configured = input.executionProvider;
 	return createExecutionProviderAdapter(input.selection ?? 'codex', {
 		repoRoot: input.repoRoot,
-		env,
+		env: runtime.env,
 		jira: input.jira,
 		githubIssues: input.githubIssues,
 		discord: input.discord,
 		workflow: input.workflow,
-		codex: { env, onEvent: input.onCodexEvent },
-		opencode: { env },
+		codex: { env: runtime.env, onEvent: input.onCodexEvent },
+		opencode: { env: runtime.env, providerId: runtime.openCodeProviderId, model: runtime.model },
+		copilot: runtime.copilotProvider,
+		copilotModel: runtime.model,
 		researchSourcePolicy: input.researchSourcePolicy,
 	});
+}
+
+export function buildExecutionProviderRuntimeConfiguration(input: {
+	executionProvider?: ManifestExecutionProvider | null;
+	accessToken: string;
+	apiBaseUrl: string;
+	env?: NodeJS.ProcessEnv;
+}) {
+	const configured = input.executionProvider;
+	const profile = stringValue(configured?.profile) ?? undefined;
+	const baseUrl = stringValue(configured?.model?.baseUrl) ?? undefined;
+	const model = stringValue(configured?.model?.model) ?? undefined;
+	const env: NodeJS.ProcessEnv = {
+		...(input.env ?? process.env),
+		TREESEED_CAPACITY_PROVIDER_ACCESS_TOKEN: input.accessToken,
+		TREESEED_API_BASE_URL: input.apiBaseUrl,
+		TREESEED_EXECUTION_PROVIDER_ID: configured?.id ?? '',
+		TREESEED_EXECUTION_PROVIDER_PROFILE: profile,
+		...(model ? { TREESEED_EXECUTION_MODEL: model } : {}),
+		...(baseUrl ? { TREESEED_EXECUTION_BASE_URL: baseUrl } : {}),
+	};
+	if (configured?.adapter === 'codex' && profile === 'key') {
+		env.TREESEED_CODEX_API_KEY = env.TREESEED_OPENAI_API_KEY ?? env.TREESEED_CODEX_API_KEY;
+		env.OPENAI_API_KEY = env.TREESEED_CODEX_API_KEY;
+	}
+	if (configured?.adapter === 'codex' && profile === 'treeseed') {
+		env.TREESEED_CODEX_API_KEY = env.TREESEED_AI_GATEWAY_TOKEN;
+		env.OPENAI_API_KEY = env.TREESEED_AI_GATEWAY_TOKEN;
+		env.TREESEED_CODEX_MODEL_PROVIDER = 'treeseed';
+		env.TREESEED_CODEX_BASE_URL = baseUrl;
+		env.TREESEED_CODEX_DEFAULT_MODEL = model;
+	}
+	return {
+		env,
+		model,
+		openCodeProviderId: profile === 'treeseed' ? 'treeseed' : undefined,
+		copilotProvider: profile === 'treeseed'
+			? { type: 'openai' as const, baseUrl, apiKey: env.TREESEED_AI_GATEWAY_TOKEN, wireApi: configured?.protocol === 'chat-completions' ? 'completions' as const : 'responses' as const }
+			: undefined,
+	};
 }

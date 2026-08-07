@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
 	AssignmentExecutionProviderSelectionError,
+	buildExecutionProviderRuntimeConfiguration,
 	resolveAssignmentExecutionProvider,
 } from '../../../../../src/provider/capacity/providers/execution-provider-selection.ts';
 
@@ -40,5 +41,33 @@ describe('assignment execution-provider selection', () => {
 		})).toThrowError(expect.objectContaining<Partial<AssignmentExecutionProviderSelectionError>>({
 			code: 'assignment_execution_provider_id_required',
 		}));
+	});
+
+	it('wires the TreeSeed Codex profile to the private appliance gateway', () => {
+		const runtime = buildExecutionProviderRuntimeConfiguration({
+			executionProvider: {
+				id: 'codex-treeseed', adapter: 'codex', profile: 'treeseed', protocol: 'responses',
+				model: { baseUrl: 'http://host.docker.internal:4771/v1', model: 'treeseed-qwen3.5-4b' },
+				nativeLimits: { maxConcurrentRunners: 1 },
+			},
+			accessToken: 'provider-token', apiBaseUrl: 'https://api.treeseed.dev',
+			env: { TREESEED_AI_GATEWAY_TOKEN: 'inference-token' },
+		});
+		expect(runtime.env).toMatchObject({
+			TREESEED_CODEX_MODEL_PROVIDER: 'treeseed',
+			TREESEED_CODEX_BASE_URL: 'http://host.docker.internal:4771/v1',
+			TREESEED_CODEX_DEFAULT_MODEL: 'treeseed-qwen3.5-4b',
+			OPENAI_API_KEY: 'inference-token',
+		});
+	});
+
+	it('builds TreeSeed model configuration for Copilot and OpenCode profiles', () => {
+		const provider = {
+			id: 'ghcopilot-treeseed', adapter: 'copilot', profile: 'treeseed', protocol: 'responses',
+			model: { baseUrl: 'http://gateway/v1', model: 'treeseed-qwen3.5-4b' },
+			nativeLimits: { maxConcurrentRunners: 1 },
+		};
+		const runtime = buildExecutionProviderRuntimeConfiguration({ executionProvider: provider, accessToken: 'provider', apiBaseUrl: 'https://api.treeseed.dev', env: { TREESEED_AI_GATEWAY_TOKEN: 'inference' } });
+		expect(runtime).toMatchObject({ model: 'treeseed-qwen3.5-4b', openCodeProviderId: 'treeseed', copilotProvider: { type: 'openai', baseUrl: 'http://gateway/v1', apiKey: 'inference', wireApi: 'responses' } });
 	});
 });

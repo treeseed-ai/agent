@@ -28,16 +28,29 @@ import { PlatformOperationExecutionProviderAdapter } from '../operations/executi
 import { createCopilotAgentTools } from '../../tools/agent-tool-copilot.ts';
 import type { ResearchSourcePolicy } from '@treeseed/sdk/agent-capacity';
 
+export interface CopilotProviderConfiguration {
+	type: 'openai';
+	baseUrl?: string;
+	apiKey?: string;
+	wireApi?: 'completions' | 'responses';
+}
+
+type ConfiguredCopilotTaskInput = CopilotTaskInput & {
+	provider?: CopilotProviderConfiguration;
+};
+
 function invocationRunId(input: ExecutionProviderInvocation) {
 	return typeof input.metadata?.runId === 'string' ? input.metadata.runId : input.assignment.id;
 }
 
 export class CopilotExecutionProviderAdapter implements ExecutionProviderAdapter {
 	constructor(private readonly options: {
-		runCopilotTask?: (input: CopilotTaskInput) => Promise<CopilotTaskResult>;
+		runCopilotTask?: (input: ConfiguredCopilotTaskInput) => Promise<CopilotTaskResult>;
 		env?: NodeJS.ProcessEnv;
 		repoRoot?: string;
 		researchSourcePolicy?: ResearchSourcePolicy;
+		provider?: CopilotProviderConfiguration;
+		model?: string;
 	} = {}) {}
 
 	async describe() {
@@ -94,15 +107,18 @@ export class CopilotExecutionProviderAdapter implements ExecutionProviderAdapter
 					? copilotTools.map((tool) => `- ${tool.name}`).join('\n')
 					: '- <none>',
 			].join('\n');
-		const runCopilotTask = this.options.runCopilotTask
-			?? (await import('@treeseed/sdk/copilot')).runCopilotTask;
+		const runCopilotTask = (this.options.runCopilotTask
+			?? (await import('@treeseed/sdk/copilot')).runCopilotTask) as (
+			input: ConfiguredCopilotTaskInput,
+		) => Promise<CopilotTaskResult>;
 		const result = await runCopilotTask({
 			prompt,
 			cwd: repoRoot,
-			model: cli.model,
+			model: this.options.model ?? cli.model,
 			allowTools: cli.allowTools,
 			tools: copilotTools,
 			env: this.options.env ?? process.env,
+			provider: this.options.provider,
 		});
 		const ignoredArgs = cli.additionalArgs?.length
 			? `Ignored Copilot CLI-only arguments because Treeseed uses @github/copilot-sdk internally: ${cli.additionalArgs.join(' ')}`
@@ -161,6 +177,8 @@ export function createExecutionProviderAdapter(configuredModeInput?: string, opt
 	workflow?: WorkflowExecutionProviderAdapterOptions | null;
 	codex?: Omit<CodexExecutionProviderAdapterOptions, 'repoRoot'> | null;
 	opencode?: OpenCodeExecutionProviderOptions | null;
+	copilot?: CopilotProviderConfiguration | null;
+	copilotModel?: string;
 	env?: NodeJS.ProcessEnv;
 	researchSourcePolicy?: ResearchSourcePolicy;
 } = {}) {
@@ -185,7 +203,7 @@ export function createExecutionProviderAdapter(configuredModeInput?: string, opt
 	}
 	if (configuredMode === 'opencode') return new OpenCodeExecutionProviderAdapter({ ...(options.opencode ?? {}), env: options.env });
 	if (configuredMode === 'copilot') {
-		return new CopilotExecutionProviderAdapter({ repoRoot: options.repoRoot, env: options.env, researchSourcePolicy: options.researchSourcePolicy });
+		return new CopilotExecutionProviderAdapter({ repoRoot: options.repoRoot, env: options.env, researchSourcePolicy: options.researchSourcePolicy, provider: options.copilot ?? undefined, model: options.copilotModel });
 	}
 	throw new Error(`Unsupported execution provider "${configuredMode}". Configure codex, opencode, copilot, jira, github_issues, discord, workflow, or platform-operation.`);
 }

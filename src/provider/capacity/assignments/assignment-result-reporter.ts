@@ -7,6 +7,7 @@ import { settlementUsageActual, usageDimension } from '../accounting/usage-repor
 import { positiveNumberValue, record, stringValue } from '../../configuration/value-utils.ts';
 import { providerErrorDiagnostic } from '../../reporting/error-diagnostics.ts';
 import { reportProviderRuntimeEvent } from '../../reporting/runtime-event-reporter.ts';
+import { buildAssignmentPerformanceSummary } from './performance-summary.ts';
 
 function retryableCompletionError(error: unknown) {
 	const status = Number(record(error).status ?? 0);
@@ -107,6 +108,13 @@ export async function reportProviderAssignmentResult(input: {
 		const activeSeconds = Math.max(0, providerWallSeconds ?? elapsedSeconds);
 		if (modeResult.status === 'completed') {
 			const completion = record(outputMetadata.completion);
+			const disposition = ['completed', 'completed_early', 'deadline_exhausted', 'budget_exhausted', 'blocked', 'cancelled', 'failed'].includes(String(completion.disposition))
+				? String(completion.disposition) as import('@treeseed/sdk/agent-capacity').AssignmentTerminalDisposition
+				: 'completed';
+			const performance = buildAssignmentPerformanceSummary({ assignment: typedAssignment, disposition,
+				reason: stringValue(completion.completionReason, modeResult.summary) ?? 'Assignment completed.', completion,
+				capacityEnvelope, usage: { ...settlementUsage.usageActual, ...usageActual }, activeSeconds, elapsedSeconds,
+				agentAssessment: record(outputMetadata.performanceAssessment) });
 			let workspaceCleanup: Record<string, unknown> = { status: closeWorkspace ? 'completed' : 'not_required' };
 			if (closeWorkspace) {
 				try {
@@ -157,6 +165,11 @@ export async function reportProviderAssignmentResult(input: {
 				},
 				metadata: { runnerId: runnerId, mode: modeResult.mode, agentSlug, activityType: stringValue(record(typedAssignment.metadata).activityType), completion: Object.keys(completion).length ? completion : { disposition: 'completed' }, capacityBudget: record(capacityEnvelope.budget), source: '@treeseed/agent/provider-runner' },
 			}, `assignment:${assignmentId}:terminal-settlement`);
+			await reportProviderRuntimeEvent({ client, assignmentId, event: {
+				id: `assignment-performance:${assignmentId}`, eventType: 'provider.assignment.performance.finalized', status: 'completed', component: 'provider-runner',
+				message: 'Final assignment performance summary recorded.', createdAt: performance.systemAssessment.measuredAt,
+				context: { performance },
+			} });
 			return completeProviderAssignmentWithRetry(client, assignmentId, {
 				leaseToken: leaseToken,
 				runnerId: runnerId,
@@ -179,6 +192,7 @@ export async function reportProviderAssignmentResult(input: {
 					mode: modeResult.mode,
 				},
 				...(Object.keys(completion).length ? { completion } : {}),
+				performance,
 			});
 		}
 		if (modeResult.status === 'returned' && client.returnAssignment) {
@@ -193,11 +207,24 @@ export async function reportProviderAssignmentResult(input: {
 				fallbackOutput: fallbackOutput ?? undefined,
 			});
 		}
+		const failureReason = modeResult.fallback?.reason ?? modeResult.summary;
+		const failureCode = modeResult.fallback?.code ?? 'provider_assignment_failed';
+		const failureDisposition = /deadline|timeout/iu.test(`${failureCode} ${failureReason}`) ? 'deadline_exhausted'
+			: /budget|quota|token|cost|capacity/iu.test(`${failureCode} ${failureReason}`) ? 'budget_exhausted'
+				: /cancel|abort/iu.test(`${failureCode} ${failureReason}`) ? 'cancelled'
+					: /block|authority|credential|dependency|evidence/iu.test(`${failureCode} ${failureReason}`) ? 'blocked' : 'failed';
+		const performance = buildAssignmentPerformanceSummary({ assignment: typedAssignment, disposition: failureDisposition,
+			reason: failureReason, capacityEnvelope, usage: { ...settlementUsage.usageActual, ...usageActual }, activeSeconds, elapsedSeconds });
+		await reportProviderRuntimeEvent({ client, assignmentId, event: {
+			id: `assignment-performance:${assignmentId}`, eventType: 'provider.assignment.performance.finalized', status: 'failed', component: 'provider-runner',
+			message: 'Final assignment performance summary recorded.', createdAt: performance.systemAssessment.measuredAt,
+			context: { performance },
+		} });
 		return client.failAssignment(assignmentId, {
 			leaseToken: leaseToken,
 			runnerId: runnerId,
-			code: modeResult.fallback?.code ?? 'provider_assignment_failed',
-			message: modeResult.fallback?.reason ?? modeResult.summary,
+			code: failureCode,
+			message: failureReason,
 			retryable: modeResult.fallback?.retryable ?? false,
 			activeSeconds,
 			elapsedSeconds,
@@ -213,5 +240,6 @@ export async function reportProviderAssignmentResult(input: {
 					},
 			},
 			fallbackOutput: fallbackOutput ?? undefined,
+			performance,
 		});
 }

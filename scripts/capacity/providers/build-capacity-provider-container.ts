@@ -288,21 +288,6 @@ function pruneProviderRuntimeToolingFromRuntimeTree(runtimeRoot: string, role: R
 	const nodeModulesRoot = resolve(runtimeRoot, 'node_modules');
 	const commonTooling = [
 		'@cloudflare',
-		'@github/copilot',
-		'@github/copilot-darwin-arm64',
-		'@github/copilot-darwin-x64',
-			'@github/copilot-language-server',
-			'@github/copilot-language-server-darwin-arm64',
-			'@github/copilot-language-server-darwin-x64',
-			'@github/copilot-language-server-linux-arm64',
-			'@github/copilot-language-server-linux-x64',
-			'@github/copilot-language-server-win32-arm64',
-			'@github/copilot-language-server-win32-x64',
-			'@github/copilot-linux-arm64',
-			'@github/copilot-linux-x64',
-			'@github/copilot-win32-arm64',
-			'@github/copilot-win32-x64',
-			'@github/copilot-sdk',
 		'@img',
 		'@railway',
 		'miniflare',
@@ -311,14 +296,7 @@ function pruneProviderRuntimeToolingFromRuntimeTree(runtimeRoot: string, role: R
 		'wrangler',
 		'workerd',
 	];
-	const packagePaths = role === 'manager'
-		? commonTooling
-		: [
-			...commonTooling,
-			'@github/copilot-sdk',
-			'@openai',
-			'gpt-tokenizer',
-		];
+	const packagePaths = commonTooling;
 	for (const packagePath of packagePaths) {
 		rmSync(resolve(nodeModulesRoot, packagePath), { recursive: true, force: true });
 	}

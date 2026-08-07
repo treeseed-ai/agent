@@ -6,7 +6,7 @@ subtype: runtime
 journey: Report Capacity Provider Runtime Readiness
 ownerPackage: "@treeseed/agent"
 surface: agent-runtime
-summary: "The canonical provider doctor and lifecycle checks report capacity runtime readiness without a second manager runtime."
+summary: "The canonical provider lifecycle reports class-specific readiness and permits agent and platform-operation providers to run concurrently without sharing identity, storage, checkouts, or credentials."
 status: planned
 dependencies:
   journeys:

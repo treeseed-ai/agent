@@ -26,7 +26,7 @@ export class OpenCodeExecutionProviderAdapter implements ExecutionProviderAdapte
 	}
 	async describe() { return { id: 'opencode', kind: 'ai_model' as const, capabilities: ['planning', 'implementation', 'repo_read', 'repo_write', 'streaming', 'usage'], nativeUnit: 'token', quotaVisibility: 'exact' as const, maxConcurrentAssignments: 1, supportsAsync: true, supportsCancel: true, supportsResume: true, supportsUsage: true, supportsArtifacts: true, metadata: { serverUrl: this.baseUrl(), credentialMode: 'environment_brokered' } }; }
 	async observe(): Promise<ExecutionProviderObservation> {
-		try { await this.request('/global/health'); return { descriptor: await this.describe(), available: true, pressure: 'normal', activeAssignmentCount: 0, metadata: { configured: true, openRouterCredentialBrokered: Boolean(this.env().OPENROUTER_API_KEY) } }; }
+		try { await this.request('/global/health'); return { descriptor: await this.describe(), available: true, pressure: 'normal', activeAssignmentCount: 0, metadata: { configured: true, openRouterCredentialBrokered: Boolean(this.env().TREESEED_OPENROUTER_API_KEY) } }; }
 		catch (error) { return { descriptor: await this.describe(), available: false, pressure: 'exhausted', blockedReason: error instanceof Error ? error.message : String(error), metadata: { configured: false } }; }
 	}
 	async prepare() { const observed = await this.observe(); return { accepted: observed.available === true, summary: observed.available ? 'OpenCode server is ready.' : observed.blockedReason ?? 'OpenCode is unavailable.', retryable: true, code: observed.available ? null : 'opencode_unavailable' }; }

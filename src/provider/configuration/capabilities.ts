@@ -18,11 +18,16 @@ export function discoverProviderCapabilities(config: ProviderHostRuntimeConfig):
 		const loaded = capabilitiesFromFile(config.capabilitiesFile);
 		if (loaded) return loaded;
 	}
+	const models = [
+		'codex',
+		...(config.env?.TREESEED_OPENCODE_SERVER_URL ? ['opencode'] : []),
+		...(config.env?.TREESEED_GITHUB_COPILOT_TOKEN ? ['copilot'] : []),
+	];
 	return [{
 		id: 'agent_execution',
 		agents: ['*'],
 		operations: ['planning', 'estimating', 'acting', 'reviewing', 'reporting', 'chat', 'release'],
-		models: config.env?.TREESEED_OPENCODE_SERVER_URL ? ['codex', 'opencode'] : ['codex'],
+		models,
 		repositoryAccess: 'git_worktree',
 		verification: ['local_command'],
 		metadata: {

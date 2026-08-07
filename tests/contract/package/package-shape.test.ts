@@ -303,6 +303,11 @@ describe('agent package shape', () => {
 		expect(compose).toContain('TREESEED_PROVIDER_STARTUP_MODE');
 		expect(compose).toContain('TREESEED_CAPACITY_PROVIDER_MANIFEST: /config/treeseed.capacity-provider.yaml');
 		expect(compose).toContain(':/config/treeseed.capacity-provider.yaml:ro');
+		expect(compose).toContain(':/run/treeseed-secrets/codex-auth.json:ro');
+		expect(compose).not.toContain(':/data/codex/auth.json:ro');
+		expect(compose.match(/TREESEED_PROVIDER_UID: \$\{TREESEED_PROVIDER_CONTAINER_UID:-65532\}/gu)).toHaveLength(2);
+		expect(readFileSync(resolve(packageRoot, 'scripts/capacity/providers/build-capacity-provider-container.ts'), 'utf8')).not.toMatch(/rmSync\([^\n]+@github\/copilot/u);
+		expect(compose.match(/TREESEED_PROVIDER_GID: \$\{TREESEED_PROVIDER_CONTAINER_GID:-65532\}/gu)).toHaveLength(2);
 		expect(compose).not.toContain('TREESEED_CAPACITY_PROVIDER_ACCESS_TOKEN:');
 		expect(compose).not.toContain('env_file');
 		expect(compose).not.toMatch(/tscp_[A-Za-z0-9_]+|tsp_[A-Za-z0-9_]+|sk-[A-Za-z0-9_]+/u);

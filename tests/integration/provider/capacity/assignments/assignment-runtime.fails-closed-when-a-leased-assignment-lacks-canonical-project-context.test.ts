@@ -308,9 +308,10 @@ it('preserves successful execution when pre-settlement workspace cleanup fails',
 		async closeWorkspace() { throw Object.assign(new TypeError('fetch failed'), { operation: 'workspace.close', path: '/v1/dx/projects/project-a/workspaces/workspace-a/close' }); },
 	});
 	expect(result).toMatchObject({ ok: true, payload: { status: 'completed' } });
-	expect(calls.map((entry) => entry.method)).toEqual(['event', 'settle', 'complete']);
+	expect(calls.map((entry) => entry.method)).toEqual(['event', 'settle', 'event', 'complete']);
 	expect(calls[0]?.body).toMatchObject({ eventType: 'provider.workspace.cleanup_failed', context: { diagnostic: { operation: 'workspace.close' } } });
-	expect(calls[2]?.body).toMatchObject({ output: { metadata: { workspaceCleanup: { status: 'failed', retryable: true } } } });
+	expect(calls[2]?.body).toMatchObject({ eventType: 'provider.assignment.performance.finalized' });
+	expect(calls[3]?.body).toMatchObject({ output: { metadata: { workspaceCleanup: { status: 'failed', retryable: true } } } });
 });
 
 it('bounds assignment-scoped TreeDX response bodies before AgentKernel execution', async () => {

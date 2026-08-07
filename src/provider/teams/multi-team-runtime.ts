@@ -133,7 +133,7 @@ export async function recoverMultiTeamProviderRunners(config: ProviderHostRuntim
 export async function runMultiTeamProviderManager(config: ProviderHostRuntimeConfig, options: { mode?: 'plan' | 'live' } = {}) {
 	if (options.mode === 'plan') {
 		const loaded = await loadProviderManifest(config.manifestPath ?? '');
-		return { ok: true, role: 'manager', mode: 'plan', connections: loaded.manifest.connections.map((connection) => ({ id: connection.id, teamId: connection.teamId ?? null, marketProfile: connection.marketProfile ?? null, marketUrl: connection.marketUrl ?? null, enabled: connection.enabled !== false, offer: connection.offer })) };
+		return { ok: true, role: 'manager', mode: 'plan', providerClass: loaded.manifest.providerClass, connections: loaded.manifest.connections.map((connection) => ({ id: connection.id, teamId: connection.teamId ?? null, marketProfile: connection.marketProfile ?? null, marketUrl: connection.marketUrl ?? null, enabled: connection.enabled !== false, offer: connection.offer })) };
 	}
 	const loaded = await loadProviderManifest(config.manifestPath ?? '');
 	const connections = await reconcileProviderConnections(config);
@@ -250,7 +250,7 @@ export async function runMultiTeamProviderManager(config: ProviderHostRuntimeCon
 			schedulerLease.release();
 		}
 	}
-	return { ok: true, role: 'manager', mode: 'multi-team', connections: results, scheduler: scheduler.snapshot(), dispatches };
+	return { ok: true, role: 'manager', mode: 'multi-team', providerClass: loaded.manifest.providerClass, connections: results, scheduler: scheduler.snapshot(), dispatches };
 }
 
 export async function runMultiTeamProviderRunners(config: ProviderHostRuntimeConfig, options: {
@@ -259,7 +259,7 @@ export async function runMultiTeamProviderRunners(config: ProviderHostRuntimeCon
 } = {}) {
 	if (options.mode === 'plan') {
 		const loaded = await loadProviderManifest(config.manifestPath ?? '');
-		return { ok: true, role: 'runner', mode: 'plan', connections: loaded.manifest.connections.map((connection) => ({ id: connection.id, teamId: connection.teamId ?? null, enabled: connection.enabled !== false, maxConcurrentRunners: connection.offer.maxConcurrentRunners ?? null, capabilities: connection.offer.capabilities })) };
+		return { ok: true, role: 'runner', mode: 'plan', providerClass: loaded.manifest.providerClass, connections: loaded.manifest.connections.map((connection) => ({ id: connection.id, teamId: connection.teamId ?? null, enabled: connection.enabled !== false, maxConcurrentRunners: connection.offer.maxConcurrentRunners ?? null, capabilities: connection.offer.capabilities })) };
 	}
 	const loaded = await loadProviderManifest(config.manifestPath ?? '');
 	const coordinator = await createCapacityProviderCoordinator(config);
@@ -305,8 +305,8 @@ export async function runMultiTeamProviderRunners(config: ProviderHostRuntimeCon
 	};
 	if (options.background) {
 		for (const lease of leases) void execute(lease);
-		return { ok: true, role: 'runner', mode: 'multi-team', background: true, dispatched: leases.length, pendingConnections: connections.filter((entry) => !entry.runtime) };
+		return { ok: true, role: 'runner', mode: 'multi-team', providerClass: loaded.manifest.providerClass, background: true, dispatched: leases.length, pendingConnections: connections.filter((entry) => !entry.runtime) };
 	}
 	const results = await Promise.all(leases.map(execute));
-	return { ok: true, role: 'runner', mode: 'multi-team', dispatched: leases.length, results, pendingConnections: connections.filter((entry) => !entry.runtime) };
+	return { ok: true, role: 'runner', mode: 'multi-team', providerClass: loaded.manifest.providerClass, dispatched: leases.length, results, pendingConnections: connections.filter((entry) => !entry.runtime) };
 }

@@ -164,7 +164,7 @@ export async function recoverOrphanedAcceptanceClaims(
 
 export async function executeLiveCapacityAcceptance(input: LiveCapacityAcceptanceInput) {
 	const root = await mkdtemp(resolve(tmpdir(), 'treeseed-capacity-acceptance-'));
-	const dataDir = String(input.env.TREESEED_PROVIDER_HOST_DATA_DIR ?? resolve(input.cwd, '.treeseed/local-capacity-provider/data'));
+	const dataDir = String(input.env.TREESEED_PROVIDER_HOST_DATA_DIR ?? resolve(input.cwd, '.treeseed/local-capacity-providers/agent-standalone'));
 	const connectionId = `acceptance-${input.runId}`;
 	const competingConnectionId = `competition-${input.runId}`;
 	const identityPath = resolve(root, 'identity.json');

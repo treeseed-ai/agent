@@ -24,6 +24,7 @@ import {
 	WorkflowExecutionProviderAdapter,
 	type WorkflowExecutionProviderAdapterOptions,
 } from '../operations/execution-workflow.ts';
+import { PlatformOperationExecutionProviderAdapter } from '../operations/execution-platform-operation.ts';
 import { createCopilotAgentTools } from '../../tools/agent-tool-copilot.ts';
 import type { ResearchSourcePolicy } from '@treeseed/sdk/agent-capacity';
 
@@ -178,6 +179,7 @@ export function createExecutionProviderAdapter(configuredModeInput?: string, opt
 	if (configuredMode === 'workflow') {
 		return new WorkflowExecutionProviderAdapter(options.workflow ?? {});
 	}
+	if (configuredMode === 'platform-operation') return new PlatformOperationExecutionProviderAdapter({ env: options.env });
 	if (configuredMode === 'codex') {
 		return new CodexExecutionProviderAdapter({ ...(options.codex ?? {}), repoRoot: options.repoRoot, researchSourcePolicy: options.researchSourcePolicy ?? options.codex?.researchSourcePolicy });
 	}
@@ -185,5 +187,5 @@ export function createExecutionProviderAdapter(configuredModeInput?: string, opt
 	if (configuredMode === 'copilot') {
 		return new CopilotExecutionProviderAdapter({ repoRoot: options.repoRoot, env: options.env, researchSourcePolicy: options.researchSourcePolicy });
 	}
-	throw new Error(`Unsupported execution provider "${configuredMode}". Configure codex, opencode, copilot, jira, github_issues, discord, or workflow.`);
+	throw new Error(`Unsupported execution provider "${configuredMode}". Configure codex, opencode, copilot, jira, github_issues, discord, workflow, or platform-operation.`);
 }

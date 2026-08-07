@@ -12,7 +12,7 @@ services:
       TREESEED_PROVIDER_MANAGER_POLL_SECONDS: "15"
     volumes:
       - ../..:/workspace:ro
-      - "${TREESEED_HOST_CODEX_AUTH_FILE:-/dev/null}:/data/codex/auth.json:ro"
+      - "${TREESEED_HOST_CODEX_AUTH_FILE:-/dev/null}:/run/treeseed-secrets/codex-auth.json:ro"
     tmpfs:
       - /data/codex:uid=${TREESEED_PROVIDER_CONTAINER_UID:-1000},gid=${TREESEED_PROVIDER_CONTAINER_GID:-1000},mode=0700
 
@@ -29,6 +29,6 @@ services:
       TREESEED_PROVIDER_RUNNER_POLL_SECONDS: "5"
     volumes:
       - ../..:/workspace:ro
-      - "${TREESEED_HOST_CODEX_AUTH_FILE:-/dev/null}:/data/codex/auth.json:ro"
+      - "${TREESEED_HOST_CODEX_AUTH_FILE:-/dev/null}:/run/treeseed-secrets/codex-auth.json:ro"
     tmpfs:
       - /data/codex:uid=${TREESEED_PROVIDER_CONTAINER_UID:-1000},gid=${TREESEED_PROVIDER_CONTAINER_GID:-1000},mode=0700

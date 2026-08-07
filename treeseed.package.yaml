@@ -60,7 +60,7 @@ capacityProvider:
     composeFile: compose.capacity-provider.yml
     projectName: treeseed-capacity-provider
     sharedVolume: true
-    dataDir: .treeseed/local-capacity-provider/data
+    dataDir: .treeseed/local-capacity-providers/agent-standalone
   railway:
     runnerCount: 1
     runnerVolumePolicy: per-service

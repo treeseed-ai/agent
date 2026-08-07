@@ -114,7 +114,7 @@ async function main() {
 	if (['manager', 'runner'].includes(role) && mode === 'live' && !diagnostic && !config.manifestPath) {
 		throw new Error('treeseed.capacity-provider.yaml (or TREESEED_CAPACITY_PROVIDER_MANIFEST) is required; legacy single-team provider credentials are no longer supported.');
 	}
-	if (requireConnection(role, mode) && !diagnostic) {
+	if (requireConnection(role, mode) && !diagnostic && process.env.TREESEED_PROVIDER_CLASS !== 'platform-operation') {
 		const { materializeCodexAuthFromEnv } = await import('../../agents/adapters/accounts/codex-auth.ts');
 		await materializeCodexAuthFromEnv(process.env);
 	}

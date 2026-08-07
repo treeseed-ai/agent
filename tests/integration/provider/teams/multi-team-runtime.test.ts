@@ -20,7 +20,9 @@ describe('multi-team provider runner isolation', () => {
 			await writeFile(resolve(dataDirectory, 'secrets/revoked.credential'), 'revoked-secret\n', { mode: 0o600 });
 			const manifestPath = resolve(root, 'treeseed.capacity-provider.yaml');
 			await writeFile(manifestPath, [
-				'schemaVersion: 2', 'identity:', '  privateKeyRef: data://identity.jwk', '  displayName: Shared Provider',
+				'schemaVersion: 2', 'providerClass: agent', 'ownership:', '  type: external',
+				'configuration:', '  generation: multi-team-runtime-test-v1', 'supplyCeilings:', '  maxConcurrentAssignments: 2',
+				'identity:', '  privateKeyRef: data://identity.jwk', '  displayName: Shared Provider',
 				'executionProviders:', '  - id: codex', '    adapter: codex', '    nativeLimits: { maxConcurrentRunners: 2 }',
 				'connections:',
 				'  - id: healthy', '    marketUrl: https://healthy.test', '    teamId: healthy', '    providerId: provider-shared', '    membershipId: membership-healthy', '    membershipCredentialRef: data://secrets/healthy.credential', '    membershipCredentialId: credential-healthy', '    offer: { capabilities: [research], maxConcurrentRunners: 1 }',

@@ -17,6 +17,13 @@ describe('live capacity acceptance provider compilation', () => {
 		roots.push(root);
 		await writeFile(join(root, 'treeseed.capacity-provider.yaml'), [
 			'schemaVersion: 2',
+			'providerClass: agent',
+			'ownership:',
+			'  type: external',
+			'configuration:',
+			'  generation: acceptance-test-v1',
+			'supplyCeilings:',
+			'  maxConcurrentAssignments: 4',
 			'identity:',
 			'  privateKeyRef: data://identity.json',
 			'  displayName: Acceptance test provider',

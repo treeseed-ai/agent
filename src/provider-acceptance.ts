@@ -208,6 +208,10 @@ export async function executeLiveCapacityAcceptance(input: LiveCapacityAcceptanc
 	});
 	await writeFile(manifestPath, stringifyYaml({
 		schemaVersion: 2,
+		providerClass: 'agent',
+		ownership: { type: 'external' },
+		configuration: { generation: `acceptance-${input.runId}` },
+		supplyCeilings: { maxConcurrentAssignments: maxConcurrentRunners },
 		identity: { privateKeyRef: `file://${identityPath}`, displayName: `Treeseed live Codex acceptance ${input.runId}` },
 		executionProviders: [executionProvider],
 		connections,

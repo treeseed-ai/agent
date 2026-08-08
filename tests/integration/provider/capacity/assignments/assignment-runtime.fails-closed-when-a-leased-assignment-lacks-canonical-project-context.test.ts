@@ -96,7 +96,7 @@ function leasedAssignment(repoRoot: string) {
 		leaseRenewedAt: null,
 		runnerId: 'runner-a',
 		decisionInput: { teamId: 'team-a', projectId: 'project-a', projectAgentClassId: 'researcher', agentId: 'researcher', handlerId: 'execution-content', mode: 'planning', input: {} },
-		capacityEnvelope: { teamId: 'team-a', projectId: 'project-a', projectAgentClassId: 'researcher', capacityProviderId: 'provider-a', mode: 'planning' as const, reservedCredits: 3 },
+		capacityEnvelope: { teamId: 'team-a', projectId: 'project-a', projectAgentClassId: 'researcher', capacityProviderId: 'provider-a', mode: 'planning' as const, reservedSeconds: 3 },
 		workspaceContext: { project: projectContext(repoRoot) },
 		allowedOutputs: {},
 		explanation: {},
@@ -241,7 +241,7 @@ it('renews, settles exactly once, then completes with the forensic artifact mani
 				async runAssignment() {
 					return {
 						status: 'completed' as const, mode: 'planning' as const, assignmentId: 'assignment-a', projectId: 'project-a', projectAgentClassId: 'researcher',
-						agentId: 'researcher', handlerId: 'execution-content', summary: 'done', outputs: { metadata: { usageActual: { actualCredits: 2 } } },
+						agentId: 'researcher', handlerId: 'execution-content', summary: 'done', outputs: { metadata: { usageActual: { activeSeconds: 2 } } },
 						selectedInput: {}, capacityEnvelope: leasedAssignment(repoRoot).capacityEnvelope, traceRefs: { agentRunId: 'run-a' }, artifactManifest,
 					};
 				},
@@ -254,11 +254,12 @@ it('renews, settles exactly once, then completes with the forensic artifact mani
 		expect(calls.findIndex((entry) => entry.method === 'settle')).toBeLessThan(calls.findIndex((entry) => entry.method === 'complete'));
 		expect(calls.find((entry) => entry.method === 'usage')).toMatchObject({
 			key: 'assignment:assignment-a:usage:codex.0',
-			body: { usageDimension: 'codex.0', accountingMode: 'informational', providerUnits: 1.5 },
+			body: { usageDimension: 'codex.0', accountingMode: 'informational', activeSeconds: 0, elapsedSeconds: 0, providerUnits: 1.5 },
 		});
 		expect(calls.find((entry) => entry.method === 'usage')?.body).not.toHaveProperty('actualCredits');
 		expect(calls.find((entry) => entry.method === 'settle')?.key).toBe('assignment:assignment-a:terminal-settlement');
 		expect(calls.find((entry) => entry.method === 'settle')?.body).toMatchObject({
+			activeSeconds: 90,
 			providerUnits: 1.5,
 			usageActual: {
 				nativeUsage: { executionUsage: [{ kind: 'codex', amount: 1.5 }] },
@@ -300,7 +301,7 @@ it('preserves successful execution when pre-settlement workspace cleanup fails',
 		modeResult: {
 			status: 'completed', mode: 'reviewing', assignmentId: assignment.id, projectId: assignment.projectId,
 			projectAgentClassId: assignment.projectAgentClassId, agentId: assignment.agentId, handlerId: assignment.handlerId,
-			summary: 'review completed', outputs: { metadata: { modeRunId: 'mode-run-a', usageActual: { actualCredits: 1 } } },
+			summary: 'review completed', outputs: { metadata: { modeRunId: 'mode-run-a', usageActual: { activeSeconds: 1 } } },
 			selectedInput: {}, capacityEnvelope: assignment.capacityEnvelope, traceRefs: {},
 		},
 		capacityEnvelope: assignment.capacityEnvelope,

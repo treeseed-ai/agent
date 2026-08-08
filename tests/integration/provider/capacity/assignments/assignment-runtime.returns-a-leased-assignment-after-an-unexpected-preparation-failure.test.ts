@@ -95,7 +95,7 @@ function leasedAssignment(repoRoot: string) {
 		leaseRenewedAt: null,
 		runnerId: 'runner-a',
 		decisionInput: { teamId: 'team-a', projectId: 'project-a', projectAgentClassId: 'researcher', agentId: 'researcher', handlerId: 'execution-content', mode: 'planning', input: {} },
-		capacityEnvelope: { teamId: 'team-a', projectId: 'project-a', projectAgentClassId: 'researcher', capacityProviderId: 'provider-a', mode: 'planning' as const, reservedCredits: 3 },
+		capacityEnvelope: { teamId: 'team-a', projectId: 'project-a', projectAgentClassId: 'researcher', capacityProviderId: 'provider-a', mode: 'planning' as const, reservedSeconds: 3 },
 		workspaceContext: { project: projectContext(repoRoot) },
 		allowedOutputs: {},
 		explanation: {},

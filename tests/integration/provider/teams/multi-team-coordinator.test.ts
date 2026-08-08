@@ -10,6 +10,11 @@ function json(payload: unknown, status = 200) {
 	return new Response(JSON.stringify({ ok: status < 400, payload }), { status, headers: { 'content-type': 'application/json' } });
 }
 
+const providerContract = [
+	'providerClass: agent', 'ownership:', '  type: external', 'configuration:', '  generation: test-v1',
+	'supplyCeilings:', '  maxConcurrentAssignments: 2',
+];
+
 describe('multi-team capacity provider coordinator', () => {
 	it('fails clearly when prelaunch connection state has no durable offer', async () => {
 		const root = await mkdtemp(resolve(tmpdir(), 'treeseed-provider-stale-state-'));
@@ -18,7 +23,7 @@ describe('multi-team capacity provider coordinator', () => {
 			await initializeCapacityProviderIdentity({ ref: 'data://identity.jwk', baseDirectory: root, dataDirectory });
 			const manifestPath = resolve(root, 'treeseed.capacity-provider.yaml');
 			await writeFile(manifestPath, [
-				'schemaVersion: 2', 'identity:', '  privateKeyRef: data://identity.jwk', '  displayName: Stale Provider',
+				'schemaVersion: 2', ...providerContract, 'identity:', '  privateKeyRef: data://identity.jwk', '  displayName: Stale Provider',
 				'executionProviders:', '  - id: codex', '    adapter: codex', '    nativeLimits: { maxConcurrentRunners: 1 }',
 				'connections: []',
 			].join('\n'));
@@ -52,6 +57,7 @@ describe('multi-team capacity provider coordinator', () => {
 			const manifestPath = resolve(root, 'treeseed.capacity-provider.yaml');
 			await writeFile(manifestPath, [
 				'schemaVersion: 2',
+				...providerContract,
 				'identity:',
 				'  privateKeyRef: data://identity.jwk',
 				'  displayName: Shared Build Provider',
@@ -117,6 +123,7 @@ describe('multi-team capacity provider coordinator', () => {
 			const manifestPath = resolve(root, 'treeseed.capacity-provider.yaml');
 			await writeFile(manifestPath, [
 				'schemaVersion: 2',
+				...providerContract,
 				'identity:',
 				`  privateKeyRef: file://${identityPath}`,
 				'  displayName: Isolated Provider',
@@ -162,7 +169,7 @@ describe('multi-team capacity provider coordinator', () => {
 			await initializeCapacityProviderIdentity({ ref: 'data://identity.jwk', baseDirectory: root, dataDirectory });
 			const manifestPath = resolve(root, 'treeseed.capacity-provider.yaml');
 			await writeFile(manifestPath, [
-				'schemaVersion: 2', 'identity:', '  privateKeyRef: data://identity.jwk', '  displayName: Revoked Provider',
+				'schemaVersion: 2', ...providerContract, 'identity:', '  privateKeyRef: data://identity.jwk', '  displayName: Revoked Provider',
 				'executionProviders:', '  - id: codex', '    adapter: codex', '    nativeLimits: { maxConcurrentRunners: 1 }',
 				'connections:', '  - id: revoked', '    marketUrl: https://revoked.example.test', '    teamId: team-revoked',
 				'    providerId: provider-revoked', '    membershipId: membership-revoked',
@@ -208,7 +215,7 @@ describe('multi-team capacity provider coordinator', () => {
 			await initializeCapacityProviderIdentity({ ref: `file://${identityPath}`, baseDirectory: root });
 			const manifestPath = resolve(root, 'treeseed.capacity-provider.yaml');
 			await writeFile(manifestPath, [
-				'schemaVersion: 2', 'identity:', `  privateKeyRef: file://${identityPath}`, '  displayName: Bound Provider',
+				'schemaVersion: 2', ...providerContract, 'identity:', `  privateKeyRef: file://${identityPath}`, '  displayName: Bound Provider',
 				'executionProviders:', '  - id: codex', '    adapter: codex', '    nativeLimits: { maxConcurrentRunners: 1 }',
 				'connections:', '  - id: team-a', '    marketUrl: https://team-a.example.test', '    teamId: team-a',
 				'    providerId: provider-shared', '    membershipId: membership-team-a', '    membershipCredentialRef: env://TEAM_A_CREDENTIAL',

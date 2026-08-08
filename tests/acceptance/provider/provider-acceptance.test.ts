@@ -17,6 +17,13 @@ describe('live capacity acceptance provider compilation', () => {
 		roots.push(root);
 		await writeFile(join(root, 'treeseed.capacity-provider.yaml'), [
 			'schemaVersion: 2',
+			'providerClass: agent',
+			'ownership:',
+			'  type: external',
+			'configuration:',
+			'  generation: acceptance-test-v1',
+			'supplyCeilings:',
+			'  maxConcurrentAssignments: 4',
 			'identity:',
 			'  privateKeyRef: data://identity.json',
 			'  displayName: Acceptance test provider',
@@ -32,7 +39,7 @@ describe('live capacity acceptance provider compilation', () => {
 				'      maxRedirects: 3',
 				'      allowedContentTypes: [text/html, text/plain]',
 			] : []),
-			'    nativeLimits: { maxConcurrentRunners: 4, availableCredits: 100 }',
+			'    nativeLimits: { maxConcurrentRunners: 4, availableAgentSeconds: 3600 }',
 			'    capabilities: [engineering, research]',
 			'connections: []',
 		].join('\n'));
@@ -52,7 +59,7 @@ describe('live capacity acceptance provider compilation', () => {
 			allowedDomains: ['example.com', 'iana.org'],
 			requestTimeoutMs: 20000,
 		});
-		expect(provider.nativeLimits).toEqual({ maxConcurrentRunners: 1, availableCredits: 10 });
+		expect(provider.nativeLimits).toEqual({ maxConcurrentRunners: 1, availableAgentSeconds: 3_600 });
 		expect(provider.capabilities).toEqual(['planning', 'research']);
 	});
 
@@ -71,7 +78,7 @@ describe('live capacity acceptance provider compilation', () => {
 		const provider = await resolveLiveAcceptanceExecutionProvider({
 			cwd, env: {}, executionProviderId: 'codex', capabilities: ['planning'], maxConcurrentRunners: 2,
 		});
-		expect(provider.nativeLimits).toEqual({ maxConcurrentRunners: 2, availableCredits: 10 });
+		expect(provider.nativeLimits).toEqual({ maxConcurrentRunners: 2, availableAgentSeconds: 3_600 });
 	});
 
 	it('retries the production manager cycle until delayed demand becomes dispatchable', async () => {

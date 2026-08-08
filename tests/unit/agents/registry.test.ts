@@ -291,7 +291,7 @@ export const securityAuditHandler: AgentHandler = {
 					teamId: 'team-1',
 					projectId: 'project-1',
 					mode: 'planning',
-					reservedCredits: 2,
+					reservedSeconds: 2,
 				},
 				decisionInput: {
 					input: { decisionId: 'decision-1' },
@@ -305,8 +305,8 @@ export const securityAuditHandler: AgentHandler = {
 				summary: 'Estimated work.',
 				outputs: {
 					structuredEstimate: {
-						expectedSeconds: 180,
-						maxSeconds: 300,
+						expectedSeconds: 3,
+						maxSeconds: 5,
 						confidence: 'high',
 						riskLevel: 'medium',
 						dependencies: [{
@@ -329,8 +329,8 @@ export const securityAuditHandler: AgentHandler = {
 			projectId: 'project-1',
 			decisionId: 'decision-1',
 			agentClass: 'engineer',
-			expectedSeconds: 180,
-			maxSeconds: 300,
+			expectedSeconds: 3,
+			maxSeconds: 5,
 		});
 		expect(output.metadata?.estimateValidation).toMatchObject({ ok: true });
 	});

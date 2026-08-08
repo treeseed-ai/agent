@@ -114,6 +114,13 @@ function runPackedProviderRuntimeSmoke(installRoot: string) {
 	].join('\n'), 'utf8');
 	writeFileSync(resolve(installRoot, 'treeseed.capacity-provider.yaml'), [
 		'schemaVersion: 2',
+		'providerClass: agent',
+		'ownership:',
+		'  type: external',
+		'configuration:',
+		'  generation: packed-smoke-v1',
+		'supplyCeilings:',
+		'  maxConcurrentAssignments: 1',
 		'identity:',
 		'  privateKeyRef: secret://capacity/packed-smoke-provider-identity',
 		'  displayName: Packed smoke provider',

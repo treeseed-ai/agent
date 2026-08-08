@@ -1,16 +1,6 @@
 import { record, stringValue } from '../configuration/value-utils.ts';
 
-export function assignmentTreeDxProxyHandle(assignment: Record<string, unknown>) {
-	const direct = record(assignment.treedxProxyHandle);
-	if (Object.keys(direct).length) return direct;
-	return record(record(assignment.workspaceContext).treedxProxyHandle);
-}
-
-export function modeRunIdForAssignment(
-	assignment: Record<string, unknown>,
-	selectedInput: Record<string, unknown>,
-	capacityEnvelope: Record<string, unknown>,
-) {
+export function assignmentModeRunId(assignment: Record<string, unknown>, selectedInput: Record<string, unknown>, capacityEnvelope: Record<string, unknown>) {
 	const decisionInput = record(assignment.decisionInput);
 	return [
 		stringValue(assignment.id) ?? 'assignment',

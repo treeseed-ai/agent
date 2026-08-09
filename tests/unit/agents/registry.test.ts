@@ -179,10 +179,10 @@ export const securityAuditHandler: AgentHandler = {
 
 	it('derives a specialized chat profile from the common discussion foundation', () => {
 		const normalized = normalizeAgentRuntimeSpec(profileAgent({ chatProfile: {
-			foundation: 'discussion-v1', responseStyle: 'implementation-focused', providerPreference: ['opencode'], maxTotalTokens: 24_000, maxCostAmount: 2,
+			foundation: 'discussion-v1', responseStyle: 'implementation-focused', requiredCapabilities: ['planning', 'research'], maxTotalTokens: 24_000, maxCostAmount: 2,
 		} }), { registeredHandlers: ['actor', 'writer'], messageTypes: ['discussion_response'] });
 		const chat = selectAgentActivityProfile(normalized.spec!, 'planning', 'chat');
-		expect(chat).toMatchObject({ activityType: 'chat', handler: 'writer', execution: { providerPreference: ['opencode'], maxTotalTokens: 24_000, maxCostAmount: 2 } });
+		expect(chat).toMatchObject({ activityType: 'chat', handler: 'writer', execution: { requiredCapabilities: ['planning', 'research'], maxTotalTokens: 24_000, maxCostAmount: 2 } });
 		expect(chat?.systemPrompt).toContain('implementation-focused');
 		expect(chat?.systemPrompt).toContain('allocation is a maximum, not a target');
 		expect(chat?.systemPrompt).toContain('completed_early');

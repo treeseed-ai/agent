@@ -223,7 +223,7 @@ export function buildExecutionContentInstructions(context: AgentContext, input: 
 		'',
 		'Assignment input:',
 		JSON.stringify({ mode: context.capacity?.mode ?? 'planning', assignmentId: context.capacity?.assignmentId ?? null, subject: input.subject, payload: input.payload }, null, 2),
-		...(Object.keys(record(input.payload.signalContracts)).length ? ['', 'Signal publication contracts:', JSON.stringify(input.payload.signalContracts, null, 2), 'Every declared publication must use treeseed.publish_signal and satisfy the exact subject, payload, evidence, and idempotency policy above.'] : []),
+		...(Object.keys(record(input.payload.signalContracts)).length ? ['', 'Signal publication contracts:', JSON.stringify(input.payload.signalContracts, null, 2), 'Every declared publication must use treeseed.publish_signal and satisfy the exact subject, subjectGroupIds, payload, evidence, and idempotency policy above. Classify the subject content with its project group IDs; provider or agent class names are never group filters.'] : []),
 		'',
 		'Resolved context packs:',
 		JSON.stringify(input.contextPackSummaries, null, 2),

@@ -62,7 +62,9 @@ describe('multi-team provider local service workflow', () => {
 		await writeFile(resolve(dataDirectory, 'secrets/team-b.credential'), 'team-b-secret\n', { mode: 0o600 });
 		const manifestPath = resolve(root, 'treeseed.capacity-provider.yaml');
 		await writeFile(manifestPath, [
-			'schemaVersion: 2', 'identity:', '  privateKeyRef: data://identity.jwk', '  displayName: Service Provider',
+			'schemaVersion: 2', 'providerClass: agent', 'ownership:', '  type: external',
+			'configuration:', '  generation: multi-team-service-test-v1', 'supplyCeilings:', '  maxConcurrentAssignments: 1',
+			'identity:', '  privateKeyRef: data://identity.jwk', '  displayName: Service Provider',
 			'executionProviders:', '  - id: codex', '    adapter: codex', '    nativeLimits: { maxConcurrentRunners: 1 }',
 			'connections:',
 			'  - id: team-a', `    marketUrl: ${teamA.url}`, '    teamId: team-a', '    providerId: provider-shared', '    membershipId: membership-team-a', '    membershipCredentialRef: data://secrets/team-a.credential', '    membershipCredentialId: credential-team-a', '    offer: { weight: 3, maxConcurrentRunners: 1, capabilities: [research] }',

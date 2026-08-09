@@ -18,7 +18,8 @@ import type { ProviderAssignmentExecutionInput } from '../operations/runner-cont
 import { record, stringValue } from '../configuration/value-utils.ts';
 import { withTimeout } from './promise-timeout.ts';
 import { buildKernelProviderAssignment } from '../capacity/assignments/kernel-assignment.ts';
-import { assignmentAgentTools,assignmentTreeDxProxyHandle,modeRunIdForAssignment } from './kernel-bridge-assignment.ts';
+import { assignmentTreeDxProxyHandle } from '../../agents/kernel/runtime/runtime-helpers.ts';
+import { assignmentAgentTools, assignmentModeRunId } from './kernel-bridge-support.ts';
 export async function prepareAssignmentKernelBridge(input: ProviderAssignmentExecutionInput & {
 	assignmentId: string;
 	membershipId: string;
@@ -44,7 +45,7 @@ export async function prepareAssignmentKernelBridge(input: ProviderAssignmentExe
 	const { assignmentId, membershipId, stateVersion, decisionInput, decisionPayload, capacityEnvelope, projectId, agentSlug } = input;
 	const workspaceMode = assignmentWorkspaceAccessMode(input.assignment);
 	const governedExactBaseRef = stringValue(record(decisionPayload.input).exactBaseRef, decisionPayload.exactBaseRef);
-	const treedxProxyHandle = assignmentTreeDxProxyHandle(input.assignment);
+	const treedxProxyHandle = assignmentTreeDxProxyHandle(input.assignment as unknown as ProviderAssignment) ?? {};
 	const assignedProject = assignmentProjectContext(input.assignment);
 	const project = assignedProject
 		? await withTimeout(materializeAssignmentProject(input.config, assignedProject, { assignmentId, workspaceAccessMode: workspaceMode, requiresRepository: Boolean(governedExactBaseRef) && !Object.keys(treedxProxyHandle).length, exactRef: governedExactBaseRef }), 60_000, `Assignment project materialization exceeded 60000ms for ${assignmentId}.`)
@@ -343,7 +344,7 @@ export async function prepareAssignmentKernelBridge(input: ProviderAssignmentExe
 		leaseSeconds: input.leaseSeconds,
 		renewLease: input.renewLease,
 		recordModeRun: (body) => input.client.createAssignmentModeRun(assignmentId, body),
-		modeRunId: modeRunIdForAssignment(input.assignment, decisionPayload, capacityEnvelope),
+		modeRunId: assignmentModeRunId(input.assignment, decisionPayload, capacityEnvelope),
 		selectedInput: decisionPayload,
 		capacityEnvelope,
 		tools: assignmentToolDescriptors,
@@ -480,7 +481,7 @@ export async function prepareAssignmentKernelBridge(input: ProviderAssignmentExe
 	});
 	const typedAssignment = buildKernelProviderAssignment({ assignment: input.assignment, assignmentId, membershipId, stateVersion, decisionInput, decisionPayload, capacityEnvelope, projectId, agentSlug, workspaceMode, treedxProxyHandle, capabilityHandles });
 	return { ready: true, terminalResult: null, kernel, typedAssignment, workspaceMode, assignmentTreeDxAdapter,
-		modeRunId: modeRunIdForAssignment(input.assignment, decisionPayload, capacityEnvelope),
+		modeRunId: assignmentModeRunId(input.assignment, decisionPayload, capacityEnvelope),
 		releaseAssignmentResources: baseExecutionAdapter?.releaseAssignmentResources
 			? (outcome: 'completed' | 'returned' | 'failed' | 'expired') => baseExecutionAdapter.releaseAssignmentResources!({ assignmentId, outcome })
 			: null,

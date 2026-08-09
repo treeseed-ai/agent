@@ -117,6 +117,13 @@ writeFileSync(resolve(hostDataDir, '.writable-probe'), 'ok\n', 'utf8');
 const manifestPath = resolve(tempRoot, 'treeseed.capacity-provider.yaml');
 writeFileSync(manifestPath, [
 	'schemaVersion: 2',
+	'providerClass: agent',
+	'ownership:',
+	'  type: external',
+	'configuration:',
+	'  generation: container-diagnostic-v1',
+	'supplyCeilings:',
+	'  maxConcurrentAssignments: 1',
 	'identity:',
 	'  displayName: Container diagnostic provider',
 	'  privateKeyRef: file://secrets/provider-identity.json',

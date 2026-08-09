@@ -21,7 +21,7 @@ function assignment(): ProviderAssignment {
 			projectAgentClassId: 'researcher',
 			capacityProviderId: 'provider-1',
 			mode: 'planning',
-			reservedCredits: 3,
+			reservedSeconds: 3,
 		},
 		decisionInput: { input: {} },
 	};
@@ -174,9 +174,9 @@ describe('AgentArtifactManifest', () => {
 		expect(manifest.citations[0]?.sourceUrl).toContain('token=%5Bredacted%5D');
 		expect(JSON.stringify(manifest)).not.toContain('must-never-be-copied');
 		expect(validateAgentArtifactManifest(manifest)).toEqual({ ok: true });
-		expect(validateAgentArtifactManifest(manifest, { artifactContracts: ['failing-test-proof'], signalContracts: ['review-approved'] })).toEqual({ ok: true });
-		expect(validateAgentArtifactManifest(manifest, { artifactContracts: ['planning-proposal'] })).toMatchObject({
-			ok: false, reason: expect.stringContaining('artifact:planning-proposal'),
+		expect(validateAgentArtifactManifest(manifest, { publishedSignals: ['review-approved'] })).toEqual({ ok: true });
+		expect(validateAgentArtifactManifest(manifest, { publishedSignals: ['planning-proposal'] })).toMatchObject({
+			ok: false, reason: expect.stringContaining('signal:planning-proposal'),
 		});
 	});
 

@@ -145,7 +145,7 @@ function normalizeChatSpecialization(value: unknown, diagnostics: AgentSpecDiagn
 		foundation: 'discussion-v1',
 		responseStyle: typeof value.responseStyle === 'string' ? value.responseStyle : undefined,
 		promptTask: typeof value.promptTask === 'string' ? value.promptTask : undefined,
-		providerPreference: Array.isArray(value.providerPreference) ? value.providerPreference.map(String).filter(Boolean) : undefined,
+		requiredCapabilities: Array.isArray(value.requiredCapabilities) ? value.requiredCapabilities.map(String).filter(Boolean) : undefined,
 		maxRuntimeSeconds: typeof value.maxRuntimeSeconds === 'number' ? value.maxRuntimeSeconds : undefined,
 		maxTotalTokens: typeof value.maxTotalTokens === 'number' ? value.maxTotalTokens : undefined,
 		warningTokens: typeof value.warningTokens === 'number' ? value.warningTokens : undefined,
@@ -175,7 +175,7 @@ function defaultChatProfile(slug: string, specialization: AgentChatProfileConfig
 		tools: { allowed: tools },
 		outputs: { messageTypes: ['discussion_response'], modelMutations: ['discussion_message:create', 'linked_note:create', 'question:create', 'proposal:create'] },
 		questionPolicy: { blockExecutionWhenCreated: false, defaultAnswerPolicy: { kind: 'team-human' } },
-		execution: { providerPreference: specialization.providerPreference ?? ['codex'], maxRuntimeSeconds: specialization.maxRuntimeSeconds ?? 900, maxRetries: 1, verificationRequired: false, maxTotalTokens: specialization.maxTotalTokens ?? 136_000, warningTokens: specialization.warningTokens ?? 100_000, maxCostAmount: specialization.maxCostAmount, costCurrency: specialization.costCurrency ?? 'USD', pricingGeneration: 'provider-runtime', enforcementConfidence: 'bounded' },
+		execution: { requiredCapabilities: specialization.requiredCapabilities ?? ['agent-execution'], maxRuntimeSeconds: specialization.maxRuntimeSeconds ?? 900, maxRetries: 1, verificationRequired: false, maxTotalTokens: specialization.maxTotalTokens ?? 136_000, warningTokens: specialization.warningTokens ?? 100_000, maxCostAmount: specialization.maxCostAmount, costCurrency: specialization.costCurrency ?? 'USD', pricingGeneration: 'provider-runtime', enforcementConfidence: 'bounded' },
 	};
 }
 

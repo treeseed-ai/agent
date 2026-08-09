@@ -35,6 +35,7 @@ async function publishResultSignals(client: ProviderAssignmentClient, assignment
 			contractId: signal.code,
 			subjectKind,
 			subjectId,
+			subjectGroupIds: Array.isArray(metadata.subjectGroupIds) ? metadata.subjectGroupIds.map(String).filter(Boolean) : content?.groupIds ?? [],
 			causationId: `${manifest.modeRunId}:${index}`,
 			correlationId: stringValue(metadata.correlationId, subjectId),
 			idempotencyKey: stringValue(metadata.idempotencyKey),

@@ -179,6 +179,7 @@ function contentReferences(
 			producedByAgent: text(owned.producedByAgent) ?? receipt.producedByAgent,
 			commitSha: text(owned.commitSha) ?? receipt.commitSha,
 			ref: text(owned.ref) ?? receipt.ref,
+			groupIds: Array.isArray(owned.groupIds) ? [...new Set(owned.groupIds.map(String).filter(Boolean))] : receipt.groupIds,
 		};
 	});
 }

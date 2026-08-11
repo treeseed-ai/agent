@@ -1,6 +1,6 @@
 {
   "name": "@treeseed/agent",
-  "version": "0.12.59-dev.migration-final-platform-market-architec.20260811T023441Z",
+  "version": "0.12.59-dev.migration-market-api-standalone-verifica.20260811T043328Z",
   "description": "Treeseed agent service runtime package.",
   "license": "Apache-2.0",
   "repository": {
@@ -111,7 +111,7 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@openai/codex-sdk": "^0.130.0",
-    "@treeseed/sdk": "github:treeseed-ai/sdk#040a371af731de01b52076124e166b5cf044c0b4",
+    "@treeseed/sdk": "github:treeseed-ai/sdk#c97998ea26359da261c42ae139f804c022279b95",
     "esbuild": "0.28.0",
     "hono": "^4.8.2",
     "typescript": "^5.9.3",

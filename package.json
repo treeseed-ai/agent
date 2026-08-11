@@ -1,6 +1,6 @@
 {
   "name": "@treeseed/agent",
-  "version": "0.12.59-dev.feature-platform-live-workspace.20260811T072116Z",
+  "version": "0.12.59-dev.fix-platform-detached-gitlinks.20260811T081755Z",
   "description": "Treeseed agent service runtime package.",
   "license": "Apache-2.0",
   "repository": {
@@ -111,7 +111,7 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@openai/codex-sdk": "^0.130.0",
-    "@treeseed/sdk": "github:treeseed-ai/sdk#14d5799da365fb230cc6ce8aacca53de8591012c",
+    "@treeseed/sdk": "github:treeseed-ai/sdk#9ab22f8b22e75b27cb74bf375d4dc8c1a2691f3f",
     "esbuild": "0.28.0",
     "hono": "^4.8.2",
     "typescript": "^5.9.3",

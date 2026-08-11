@@ -83,7 +83,7 @@ export class CopilotExecutionProviderAdapter implements ExecutionProviderAdapter
 		const repoRoot = input.workspace?.repoRoot ?? this.options.repoRoot ?? process.cwd();
 		const telemetryPath = typeof input.metadata?.toolTelemetryPath === 'string' ? input.metadata.toolTelemetryPath : null;
 		const copilotTools = createCopilotAgentTools({
-			apiBaseUrl: this.options.env?.TREESEED_API_BASE_URL ?? process.env.TREESEED_API_BASE_URL ?? process.env.TREESEED_MARKET_URL ?? '',
+			apiBaseUrl: this.options.env?.TREESEED_API_BASE_URL ?? process.env.TREESEED_API_BASE_URL ?? '',
 			providerAccessToken: this.options.env?.TREESEED_CAPACITY_PROVIDER_ACCESS_TOKEN ?? process.env.TREESEED_CAPACITY_PROVIDER_ACCESS_TOKEN ?? process.env.TREESEED_PROVIDER_ACCESS_TOKEN ?? '',
 			assignmentId: input.assignment.id,
 			leaseToken: input.leaseToken,

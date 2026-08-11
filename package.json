@@ -1,8 +1,8 @@
 {
   "name": "@treeseed/agent",
-  "version": "0.12.59-dev.fix-stage-fixture-alias-cleanup.20260810T090724Z",
+  "version": "0.12.59-dev.migration-final-platform-market-architec.20260811T023441Z",
   "description": "Treeseed agent service runtime package.",
-  "license": "AGPL-3.0-only",
+  "license": "Apache-2.0",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/treeseed-ai/agent.git",
@@ -111,7 +111,7 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@openai/codex-sdk": "^0.130.0",
-    "@treeseed/sdk": "github:treeseed-ai/sdk#1608089150841c29702b33b37f0fce931577b76d",
+    "@treeseed/sdk": "github:treeseed-ai/sdk#f913d4acd33efb710e7c7077a3fe8e6b90c62836",
     "esbuild": "0.28.0",
     "hono": "^4.8.2",
     "typescript": "^5.9.3",

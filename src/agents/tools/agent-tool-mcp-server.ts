@@ -89,7 +89,7 @@ function researchSourcePolicyFromEnv() {
 
 export function createAgentToolMcpServer(options?: Partial<AgentToolMcpServerOptions>) {
 	const descriptors = options?.descriptors ?? descriptorsFromEnv();
-	const apiBaseUrl = options?.apiBaseUrl ?? process.env.TREESEED_API_BASE_URL ?? process.env.TREESEED_MARKET_URL ?? '';
+	const apiBaseUrl = options?.apiBaseUrl ?? process.env.TREESEED_API_BASE_URL ?? '';
 	const providerAccessToken = options?.providerAccessToken ?? process.env.TREESEED_CAPACITY_PROVIDER_ACCESS_TOKEN ?? process.env.TREESEED_PROVIDER_ACCESS_TOKEN ?? '';
 	const assignmentId = options?.assignmentId ?? process.env.TREESEED_AGENT_TOOL_ASSIGNMENT_ID ?? '';
 	const leaseToken = options?.leaseToken ?? process.env.TREESEED_AGENT_TOOL_LEASE_TOKEN ?? null;

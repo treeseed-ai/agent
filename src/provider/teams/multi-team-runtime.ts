@@ -115,7 +115,7 @@ function connectionRuntimeContext(
 		executionProviders,
 		env: {
 			...config.env,
-			TREESEED_MARKET_URL: connection.marketUrl,
+			TREESEED_API_BASE_URL: connection.marketUrl,
 			TREESEED_MARKET_ID: connection.teamId,
 		},
 	};

@@ -1,6 +1,6 @@
 {
   "name": "@treeseed/agent",
-  "version": "0.12.59-dev.fix-organization-reference-idempotency.20260811T063521Z",
+  "version": "0.12.59-dev.feature-platform-live-workspace.20260811T072116Z",
   "description": "Treeseed agent service runtime package.",
   "license": "Apache-2.0",
   "repository": {
@@ -111,7 +111,7 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@openai/codex-sdk": "^0.130.0",
-    "@treeseed/sdk": "github:treeseed-ai/sdk#1b90e1efe0dec6f599bbae93df409dd695012f76",
+    "@treeseed/sdk": "github:treeseed-ai/sdk#14d5799da365fb230cc6ce8aacca53de8591012c",
     "esbuild": "0.28.0",
     "hono": "^4.8.2",
     "typescript": "^5.9.3",

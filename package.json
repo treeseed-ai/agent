@@ -5,7 +5,7 @@
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/treeseed-ai/agent.git",
+    "url": "https://github.com/treeseed-ai/agent.git",
     "directory": "."
   },
   "homepage": "https://treeseed.ai",

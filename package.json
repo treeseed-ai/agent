@@ -1,6 +1,6 @@
 {
   "name": "@treeseed/agent",
-  "version": "0.12.59-dev.feature-content-repository-authority.20260811T092626Z",
+  "version": "0.12.59-dev.fix-stage-helper-alias-cleanup.20260816T123443Z",
   "description": "Treeseed agent service runtime package.",
   "license": "Apache-2.0",
   "repository": {
@@ -111,7 +111,7 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@openai/codex-sdk": "^0.130.0",
-    "@treeseed/sdk": "github:treeseed-ai/sdk#61782bb6008734860aa523eba19d4d8c013829d4",
+    "@treeseed/sdk": "github:treeseed-ai/sdk#9acb2d510921864b9647b4724cc97047559b757b",
     "esbuild": "0.28.0",
     "hono": "^4.8.2",
     "typescript": "^5.9.3",

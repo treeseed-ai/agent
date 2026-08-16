@@ -24,7 +24,7 @@ export function discoverProviderCapabilities(config: ProviderHostRuntimeConfig):
 		...(config.env?.TREESEED_GITHUB_COPILOT_TOKEN ? ['copilot'] : []),
 	];
 	return [{
-		id: 'agent_execution',
+		id: 'agent-execution',
 		agents: ['*'],
 		operations: ['planning', 'estimating', 'acting', 'reviewing', 'reporting', 'chat', 'release'],
 		models,

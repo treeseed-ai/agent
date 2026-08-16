@@ -22,8 +22,10 @@ import {
   normalizedContentModel,
 } from './execution-content-artifacts.ts';
 import { assignmentTimeGuidance, buildExecutionContentInstructions, targetExecutionContentDescription } from './execution-content-prompt.ts';
+import { executionCompletionEvidence } from './results/execution-content-completion.ts';
 
 export { contentModelSupportsArtifactKind } from './execution-content-artifacts.ts';
+export { executionCompletionEvidence } from './results/execution-content-completion.ts';
 
 export interface ExecutionContentInputs {
   payload: HandlerPayload;
@@ -256,6 +258,7 @@ export function createExecutionContentHandler(input: {
             contextPackSummaries,
             assignedObjective,
 			editorialInstructions: editorialContext?.compiledEditorialInstructions,
+			instructionTemplates:treeDxContext.instructionTemplates,
             contentRoot,
           }),
           context: {
@@ -266,6 +269,7 @@ export function createExecutionContentHandler(input: {
             contentRoot,
             handoff,
 			contextDiagnostics,
+			instructionTemplates:treeDxContext.instructionTemplates,
 			executionTiming: assignmentTimeGuidance(context),
 			editorialContextDigest: editorialContext?.digest ?? null,
           },
@@ -289,7 +293,10 @@ export function createExecutionContentHandler(input: {
           },
           metadata: {
             artifactKind,
-            requireContentArtifact: input.requireContentArtifact !== false,
+            // A Discussion response is committed by its dedicated assignment
+			// tool and verified by authoritative TreeDX read-back, not by the
+			// generic content-artifact completion path.
+            requireContentArtifact: input.requireContentArtifact !== false && artifactKind !== 'discussion_response',
             ...(typeof payload.researchStage === "string" ? { researchStage: payload.researchStage } : {}),
             ...(typeof payload.minimumIndependentSources === "number" ? { minimumIndependentSources: payload.minimumIndependentSources } : {}),
             ...(typeof payload.maxRevisionCycles === "number" ? { maxRevisionCycles: payload.maxRevisionCycles } : {}),
@@ -316,6 +323,7 @@ export function createExecutionContentHandler(input: {
         input.executionAccess,
       );
       const snapshot = await context.execution.start({
+		signal: context.capacity.signal,
         assignment,
         capacityEnvelope: context.capacity.envelope,
         decisionInput: context.capacity.decisionInput,
@@ -441,6 +449,7 @@ export function createExecutionContentHandler(input: {
 
     async emitOutputs(context, result) {
       const status = executionContentOutputStatus(result.snapshot);
+	  const completion=executionCompletionEvidence(result);
       for (const messageType of nextMessageTypesFor(context)) {
         await createAgentMessage({
           context,
@@ -472,6 +481,7 @@ export function createExecutionContentHandler(input: {
           },
           classifiedContentReferences: result.contentArtifactRefs,
           executionSnapshot: result.snapshot,
+		  ...(completion?{completion}:{}),
         },
       };
     },

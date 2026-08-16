@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process';
 
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync,mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 
 import { tmpdir } from 'node:os';
 
@@ -12,11 +12,11 @@ import { resolveProviderConfig } from '../../../../../src/provider/configuration
 
 import { buildProviderPlan, buildProviderRunnerPlan } from '../../../../../src/provider/lifecycle/lifecycle.ts';
 
-import { assignmentProjectContext, materializeAssignmentProject } from '../../../../../src/provider/projects/projects-core/project-materialization.ts';
+import { assignmentProjectContext, materializeAssignmentProject,releaseMaterializedAssignmentProject } from '../../../../../src/provider/projects/projects-core/project-materialization.ts';
 
 import { releaseTerminalAssignmentResources, runProviderAssignment } from '../../../../../src/provider/operations/runner.ts';
 
-import { createSingleFlightLeaseRenewal, isTerminalProviderAssignmentObservation, reportProviderLeaseRenewalFailure, runProviderRunnerOnce } from '../../../../../src/provider/operations/runner-lifecycle.ts';
+import { createSingleFlightLeaseRenewal, isTerminalProviderAssignmentObservation, providerAssignmentCancellationRequest, reportProviderLeaseRenewalFailure, runProviderRunnerOnce } from '../../../../../src/provider/operations/runner-lifecycle.ts';
 
 import { providerAssignmentClientWithTerminalBoundary } from '../../../../../src/provider/coordination/lease-client.ts';
 
@@ -165,7 +165,9 @@ it('releases internal execution-provider resources only after a durable terminal
 		expect(release).toHaveBeenCalledWith('completed');
 		await expect(releaseTerminalAssignmentResources({ payload: { status: 'returned' } }, release)).resolves.toBe(true);
 		expect(release).toHaveBeenCalledWith('returned');
-		expect(release).toHaveBeenCalledTimes(2);
+		await expect(releaseTerminalAssignmentResources({ payload: { status: 'cancelled' } }, release)).resolves.toBe(true);
+		expect(release).toHaveBeenCalledWith('cancelled');
+		expect(release).toHaveBeenCalledTimes(3);
 	});
 
 it('recognizes authoritative terminal observations when a renewal races completion', () => {
@@ -173,6 +175,8 @@ it('recognizes authoritative terminal observations when a renewal races completi
 		expect(isTerminalProviderAssignmentObservation({ assignment: { status: 'returned', leaseState: 'released' } })).toBe(true);
 		expect(isTerminalProviderAssignmentObservation({ payload: { status: 'leased', leaseState: 'released' } })).toBe(true);
 		expect(isTerminalProviderAssignmentObservation({ payload: { status: 'leased', leaseState: 'leased' } })).toBe(false);
+		expect(providerAssignmentCancellationRequest({payload:{status:'leased',leaseState:'leased',executionKind:'conversation',metadata:{cancellationRequested:true,cancellationReason:'discussion_archived'}}})).toEqual({code:'discussion_archived',reason:'The source Discussion was archived.'});
+		expect(providerAssignmentCancellationRequest({payload:{status:'leased',leaseState:'leased',executionKind:'workday',metadata:{cancellationRequested:true,cancellationReason:'discussion_archived'}}})).toBeNull();
 	});
 
 it('suppresses a detached renewal rejection after the terminal boundary wins the race', () => {
@@ -254,8 +258,19 @@ it('uses an isolated empty execution context instead of cloning for context-only
 			commitSha: expect.stringMatching(/^[a-f0-9]{40}$/u),
 		});
 		expect(materialized.repository.path).toContain(resolve(runtimeConfig.dataDir, 'assignment-contexts'));
-		expect(execFileSync('git', ['rev-parse', '--verify', 'HEAD^{commit}'], { cwd: materialized.repository.path, encoding: 'utf8' }).trim()).toBe(materialized.repository.commitSha);
-	});
+	expect(execFileSync('git', ['rev-parse', '--verify', 'HEAD^{commit}'], { cwd: materialized.repository.path, encoding: 'utf8' }).trim()).toBe(materialized.repository.commitSha);
+});
+
+it('releases a terminal assignment materialization while retaining shared repository mirrors', async () => {
+	const repoRoot = repository();
+	const runtimeConfig = config({ TREESEED_PROVIDER_WORKSPACE_ROOT: repoRoot });
+	const materialized = await materializeAssignmentProject(runtimeConfig, projectContext(repoRoot), { assignmentId: 'assignment-release' });
+	const assignmentRoot = resolve(materialized.repository.path, '..');
+	expect(existsSync(materialized.repository.path)).toBe(true);
+	await releaseMaterializedAssignmentProject(runtimeConfig, materialized);
+	expect(existsSync(assignmentRoot)).toBe(false);
+	expect(existsSync(materialized.repository.mirrorPath!)).toBe(true);
+});
 
 it('materializes the repository checkout, not the logical project root, for exact-ref work', async () => {
 		const workspaceRoot = temporaryDirectory();

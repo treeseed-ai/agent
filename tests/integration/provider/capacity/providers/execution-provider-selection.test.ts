@@ -25,6 +25,14 @@ describe('assignment execution-provider selection', () => {
 		})).toEqual(providers[1]);
 	});
 
+	it('uses the manifest default when an assignment does not select a provider', () => {
+		expect(resolveAssignmentExecutionProvider({
+			assignment: {},
+			executionProviders: providers,
+			defaultExecutionProviderId: 'codex-primary',
+		})).toEqual(providers[0]);
+	});
+
 	it('fails closed for an unknown provider id', () => {
 		expect(() => resolveAssignmentExecutionProvider({
 			assignment: { executionProviderId: 'codex-missing' },

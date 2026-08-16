@@ -1,5 +1,5 @@
 import { describe,expect,it,vi } from 'vitest';
-import { completeProviderAssignmentWithRetry } from '../../../src/provider/capacity/assignments/assignment-result-reporter.ts';
+import { closeTerminalWorkspaceWithRetry,completeProviderAssignmentWithRetry } from '../../../src/provider/capacity/assignments/assignment-result-reporter.ts';
 
 describe('provider assignment completion reporting', () => {
 	it('retries transient control-plane failures without returning completed work', async () => {
@@ -30,5 +30,19 @@ describe('provider assignment completion reporting', () => {
 		)).rejects.toBe(conflict);
 		expect(completeAssignment).toHaveBeenCalledOnce();
 		expect(wait).not.toHaveBeenCalled();
+	});
+
+	it('requires terminal TreeDX workspace cleanup and retries transient failures', async () => {
+		const closeWorkspace = vi.fn()
+			.mockRejectedValueOnce(new TypeError('fetch failed'))
+			.mockResolvedValue({ status: 'closed' });
+		const wait = vi.fn(async () => undefined);
+		await expect(closeTerminalWorkspaceWithRetry(closeWorkspace, wait)).resolves.toBe('completed');
+		expect(closeWorkspace).toHaveBeenCalledTimes(2);
+		expect(wait).toHaveBeenCalledWith(250);
+	});
+
+	it('does not report cleanup when no TreeDX workspace was assigned', async () => {
+		await expect(closeTerminalWorkspaceWithRetry(null)).resolves.toBe('not_required');
 	});
 });

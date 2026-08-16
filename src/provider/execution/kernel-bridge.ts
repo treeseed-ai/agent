@@ -3,7 +3,7 @@ import { redactedProviderAssignmentCapabilityHandles,validateProviderAssignmentC
 import { loadAllAgentSpecs } from '../../agents/support/spec-loader.ts';
 import { AgentKernel } from '../../agents/kernel/agents/agent-kernel.ts';
 import type { AgentTreeDxAdapter, ExecutionProviderAdapter } from '../../agents/runtime/runtime-types.ts';
-import { assignmentProjectContext, materializeAssignmentProject, providerProjectSiteRoot, providerProjectTreeDxOptions } from '../projects/projects-core/project-materialization.ts';
+import { assignmentProjectContext, materializeAssignmentProject, providerProjectSiteRoot, providerProjectTreeDxOptions, releaseMaterializedAssignmentProject } from '../projects/projects-core/project-materialization.ts';
 import { createAssignmentToolCatalog } from '../commerce/catalog/assignment-tool-catalog.ts';
 import { loadAssignmentRawAgentSpecs } from '../capacity/assignments/assignment-agent-spec-loader.ts';
 import { createProviderMessageRecorder } from '../reporting/message-recorder.ts';
@@ -39,7 +39,7 @@ export async function prepareAssignmentKernelBridge(input: ProviderAssignmentExe
 		workspaceMode: string | null;
 		modeRunId: string;
 		assignmentTreeDxAdapter: AgentTreeDxAdapter | null;
-		releaseAssignmentResources: ((outcome: 'completed' | 'returned' | 'failed' | 'expired') => Promise<void>) | null;
+		releaseAssignmentResources: ((outcome: 'completed' | 'returned' | 'failed' | 'expired' | 'cancelled') => Promise<void>) | null;
 	}
 > {
 	const { assignmentId, membershipId, stateVersion, decisionInput, decisionPayload, capacityEnvelope, projectId, agentSlug } = input;
@@ -75,8 +75,7 @@ export async function prepareAssignmentKernelBridge(input: ProviderAssignmentExe
 			metadata: {
 				projectId,
 				agentSlug,
-			},
-		};
+			}, };
 		await recordEarlyModeRun({
 			client: input.client,
 			assignmentId,
@@ -91,13 +90,14 @@ export async function prepareAssignmentKernelBridge(input: ProviderAssignmentExe
 				repository: project?.repository ?? null,
 			},
 		});
-		if (input.client.returnAssignment) {
-			return { ready: false, terminalResult: await input.client.returnAssignment(assignmentId, body) };
-		}
-		return { ready: false, terminalResult: await input.client.failAssignment(assignmentId, {
+		const terminalResult = input.client.returnAssignment
+			? await input.client.returnAssignment(assignmentId, body)
+			: await input.client.failAssignment(assignmentId, {
 			...body,
 			message: body.reason,
-		}) };
+		});
+		if (project) await releaseMaterializedAssignmentProject(input.config, project);
+		return { ready: false, terminalResult };
 	}
 	const projectSiteRoot = providerProjectSiteRoot(project, project.repository.path);
 	const projectTreeDx = providerProjectTreeDxOptions(project, input.treeDx);
@@ -161,14 +161,16 @@ export async function prepareAssignmentKernelBridge(input: ProviderAssignmentExe
 			fallbackReason: handleFallback.code,
 			metadata: handleFallback.metadata,
 		});
-		return { ready: false, terminalResult: await input.client.failAssignment(assignmentId, {
+		const terminalResult = await input.client.failAssignment(assignmentId, {
 			leaseToken: input.leaseToken,
 			runnerId: input.runnerId,
 			code: handleFallback.code,
 			message: handleFallback.reason,
 			retryable: handleFallback.retryable,
 			metadata: handleFallback.metadata,
-		}) };
+		});
+		await releaseMaterializedAssignmentProject(input.config, project);
+		return { ready: false, terminalResult };
 	}
 	await recordEarlyModeRun({
 		client: input.client,
@@ -281,6 +283,7 @@ export async function prepareAssignmentKernelBridge(input: ProviderAssignmentExe
 		: resolveAssignmentExecutionProvider({
 			assignment: input.assignment,
 			executionProviders: input.config.executionProviders ?? [],
+			defaultExecutionProviderId: input.config.defaultExecutionProviderId,
 		});
 	const assignmentToolCatalog = createAssignmentToolCatalog({
 		agentTools: assignmentAgentTools(
@@ -295,8 +298,10 @@ export async function prepareAssignmentKernelBridge(input: ProviderAssignmentExe
 		treedxProxyHandle,
 		workspaceMode,
 		contentRoot: stringValue(assignmentMetadata.contentRoot, decisionPayload.contentRoot, assignedProject?.architecture?.contentPath),
-		contentAccess: assignmentAgentPolicy?.contentAccess,
-		researchNetworkPolicy: assignmentAgentPolicy?.permissionPolicy?.modes?.[assignmentMode]?.network,
+		permissionProjection: record(assignmentAgentPolicy).permissionProjection as never,
+		allowedProposalTypes: Array.isArray(record(input.assignment.allowedOutputs).proposalTypes)
+			? record(input.assignment.allowedOutputs).proposalTypes as string[] : [],
+		researchNetworkPolicy: assignmentAgentPolicy?.activityProfiles?.[assignmentAgentPolicy.activityType ?? assignmentMode]?.permissions?.network,
 		providerResearchSourcePolicy: executionProvider?.researchSourcePolicy,
 		worktreeRoot: null,
 		providerManagesWorktree: executionProvider?.adapter === 'codex'
@@ -483,8 +488,12 @@ export async function prepareAssignmentKernelBridge(input: ProviderAssignmentExe
 	const typedAssignment = buildKernelProviderAssignment({ assignment: input.assignment, assignmentId, membershipId, stateVersion, decisionInput, decisionPayload, capacityEnvelope, projectId, agentSlug, workspaceMode, treedxProxyHandle, capabilityHandles });
 	return { ready: true, terminalResult: null, kernel, typedAssignment, workspaceMode, assignmentTreeDxAdapter,
 		modeRunId: assignmentModeRunId(input.assignment, decisionPayload, capacityEnvelope),
-		releaseAssignmentResources: baseExecutionAdapter?.releaseAssignmentResources
-			? (outcome: 'completed' | 'returned' | 'failed' | 'expired') => baseExecutionAdapter.releaseAssignmentResources!({ assignmentId, outcome })
-			: null,
+		releaseAssignmentResources: async (outcome: 'completed' | 'returned' | 'failed' | 'expired' | 'cancelled') => {
+			try {
+				if (baseExecutionAdapter?.releaseAssignmentResources) await baseExecutionAdapter.releaseAssignmentResources({ assignmentId, outcome });
+			} finally {
+				await releaseMaterializedAssignmentProject(input.config, project);
+			}
+		},
 	};
 }

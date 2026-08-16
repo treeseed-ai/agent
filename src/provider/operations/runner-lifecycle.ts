@@ -16,6 +16,16 @@ export function isTerminalProviderAssignmentObservation(value: unknown): boolean
 		|| ['completed', 'failed', 'cancelled'].includes(stringValue(observed.status) ?? '');
 }
 
+export interface ProviderAssignmentCancellationRequest { code:string;reason:string }
+export function providerAssignmentCancellationRequest(value:unknown):ProviderAssignmentCancellationRequest|null {
+	const envelope=record(value);
+	const observed=record(envelope.payload??envelope.assignment??envelope);
+	const metadata=record(observed.metadata);
+	if(observed.executionKind!=='conversation'||metadata.cancellationRequested!==true)return null;
+	const code=stringValue(metadata.cancellationReason)??'communication_cancellation_requested';
+	return {code,reason:code==='discussion_archived'?'The source Discussion was archived.':'Communication assignment cancellation was requested.'};
+}
+
 export function reportProviderLeaseRenewalFailure(input: {
 	terminalizing: () => boolean;
 	assignmentId: string;
@@ -55,6 +65,7 @@ export async function runProviderRunnerOnce(input: {
 		pollIntervalMs?: number;
 		maxPolls?: number;
 	};
+	onLeaseRenewed?: (assignment: Record<string, unknown>) => Promise<void>;
 	leasedAssignment: unknown;
 }) {
 	const runnerId = input.runnerId ?? `provider-runner-${process.pid}`;
@@ -98,11 +109,16 @@ export async function runProviderRunnerOnce(input: {
 		message: 'Provider runner leased the assignment.', createdAt: new Date().toISOString(), context: { runnerId, leaseStartedAt, leaseSeconds },
 	} });
 	let renewTimer: ReturnType<typeof setInterval> | null = null;
+	let authorityTimer: ReturnType<typeof setInterval> | null = null;
 	let terminalizing = false;
+	const executionAuthority = new AbortController();
+	const cancellationState:{current:ProviderAssignmentCancellationRequest|null}={current:null};
 	const stopLeaseRenewal = () => {
 		terminalizing = true;
 		if (renewTimer) clearInterval(renewTimer);
+		if (authorityTimer) clearInterval(authorityTimer);
 		renewTimer = null;
+		authorityTimer = null;
 	};
 	const renewLeaseAttempt = async () => {
 		if (terminalizing || !leaseToken || !input.client.renewAssignment) return;
@@ -121,6 +137,9 @@ export async function runProviderRunnerOnce(input: {
 			const renewedRecord = record(renewed);
 			const renewedAssignment = record(renewedRecord.payload ?? renewedRecord.assignment ?? renewedRecord);
 			Object.assign(assignment, renewedAssignment);
+			cancellationState.current=providerAssignmentCancellationRequest(renewedAssignment)??cancellationState.current;
+			if(cancellationState.current&&!executionAuthority.signal.aborted)executionAuthority.abort(Object.assign(new Error(cancellationState.current.reason),{code:cancellationState.current.code,status:409}));
+			await input.onLeaseRenewed?.(assignment);
 			await reportProviderRuntimeEvent({ client: input.client, assignmentId, event: {
 				id: `lease-renewed-${Date.now()}`, eventType: 'provider.assignment.lease_renewed', status: 'completed', component: 'lease',
 				message: 'Assignment lease renewed.', createdAt: new Date().toISOString(), context: { runnerId, leaseExpiresAt: assignment.leaseExpiresAt },
@@ -161,9 +180,25 @@ export async function runProviderRunnerOnce(input: {
 			});
 		}, renewEveryMs);
 	}
+	if (input.client.assignment) {
+		authorityTimer = setInterval(() => {
+			if (terminalizing) return;
+			void input.client.assignment!(String(assignment.id ?? '')).then((observed) => {
+				cancellationState.current=providerAssignmentCancellationRequest(observed)??cancellationState.current;
+				if(cancellationState.current&&!executionAuthority.signal.aborted){
+					executionAuthority.abort(Object.assign(new Error(cancellationState.current.reason),{code:cancellationState.current.code,status:409}));
+					return;
+				}
+				if (!isTerminalProviderAssignmentObservation(observed) || terminalizing) return;
+				executionAuthority.abort(new Error('Assignment execution authority was revoked by authoritative terminal state.'));
+				stopLeaseRenewal();
+			}).catch(() => undefined);
+		}, 5_000);
+		authorityTimer.unref?.();
+	}
 	let result;
 	const lifecycleClient = providerAssignmentClientWithTerminalBoundary(input.client, stopLeaseRenewal);
-	let releaseAssignmentResources: ((outcome: 'completed' | 'returned' | 'failed' | 'expired') => Promise<void>) | null = null;
+	let releaseAssignmentResources: ((outcome: 'completed' | 'returned' | 'failed' | 'expired' | 'cancelled') => Promise<void>) | null = null;
 	try {
 		const decisionInput = record(assignment.decisionInput);
 		const selectedInput = record(decisionInput.input);
@@ -214,6 +249,7 @@ export async function runProviderRunnerOnce(input: {
 			kernel: input.kernel,
 			treeDx: input.treeDx,
 			executionLifecycle: input.executionLifecycle,
+			signal: executionAuthority.signal,
 			onAssignmentResourcesPrepared: (release) => {
 				releaseAssignmentResources = release;
 			},
@@ -224,10 +260,10 @@ export async function runProviderRunnerOnce(input: {
 		} });
 	} catch (error) {
 		const assignmentId = stringValue(assignment.id) ?? '';
-		const message = error instanceof Error ? error.message : String(error);
+		const message = cancellationState.current?.reason??(error instanceof Error ? error.message : String(error));
 		const diagnostic = providerErrorDiagnostic(error, 'assignment_processing');
-		const retryable = providerErrorIsRetryable(error);
-		const failureCode = diagnostic.code ?? 'provider_assignment_processing_failed';
+		const retryable = cancellationState.current?false:providerErrorIsRetryable(error);
+		const failureCode = cancellationState.current?.code??diagnostic.code??'provider_assignment_processing_failed';
 		console.error(JSON.stringify({
 			level: 'error',
 			event: 'provider.runner.assignment_processing_failed',

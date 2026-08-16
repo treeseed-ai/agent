@@ -2,6 +2,15 @@ import { deriveDecisionExecutionInputFromAssignment } from '@treeseed/sdk/agent-
 import { randomUUID } from 'node:crypto';
 import type { AgentKernelAssignmentRunOptions, AgentKernelModeRunTelemetryInput } from '../execution/run-types.ts';
 
+function transientTelemetryFailure(error: unknown): boolean {
+	const message = error instanceof Error ? error.message : String(error);
+	return /fetch failed|timed out|econnreset|econnrefused|socket|temporarily unavailable|network error/iu.test(message);
+}
+
+async function waitBeforeRetry(attempt: number): Promise<void> {
+	await new Promise((resolve) => setTimeout(resolve, attempt * 250));
+}
+
 export async function recordAssignmentModeRun(
 	options: AgentKernelAssignmentRunOptions,
 	run: AgentKernelModeRunTelemetryInput,
@@ -25,6 +34,8 @@ export async function recordAssignmentModeRun(
 			return await options.recordModeRun(request);
 		} catch (error) {
 			lastError = error;
+			if (!transientTelemetryFailure(error) || attempt === 3) break;
+			await waitBeforeRetry(attempt);
 		}
 	}
 	throw lastError;

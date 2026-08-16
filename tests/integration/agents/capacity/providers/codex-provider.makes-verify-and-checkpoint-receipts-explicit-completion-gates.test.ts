@@ -180,6 +180,24 @@ it('makes verify and checkpoint receipts explicit completion gates', () => {
 		expect(prompt).toContain('final response is not completion');
 	});
 
+it('makes live time checks and resumable closeout mandatory for every Codex assignment', () => {
+	const prompt = buildCodexPrompt({
+		...baseRequest,
+		metadata: { executionTiming: { startedAt: '2026-08-12T14:45:00.000Z', deadlineAt: '2026-08-12T15:00:00.000Z', closeoutWarningSeconds: 120 } },
+		tools: [{
+			kind:'agent_tool',id:'treeseed.status',name:'Assignment status',description:'Read time remaining.',
+			inputSchema:{ type:'object',properties:{},additionalProperties:false },outputSchema:{ type:'object' },
+			executionTarget:'sdk_dispatch',mutability:'read',
+		}],
+	});
+	expect(prompt).toContain('Assignment custody deadline: 2026-08-12T15:00:00.000Z');
+	expect(prompt).toContain('Protected closeout allocation: 120 seconds');
+	expect(prompt).toContain('Call treeseed_status immediately');
+	expect(prompt).toContain('When shouldCloseOut=true');
+	expect(prompt).toContain('Zod-valid project proposal may request more capacity');
+	expect(prompt).toContain('It never changes the current deadline or approves itself');
+});
+
 it('identifies required completion receipts from granted tools and the assigned deliverable', () => {
 		const tools = [
 			{ id: 'treeseed.verify' },
@@ -194,6 +212,12 @@ it('identifies required completion receipts from granted tools and the assigned 
 			status: 'completed',
 			derivedEvents: [{ type: 'verification_completed' }],
 		}], 'passing_verification')).toEqual([]);
+		expect(missingCodexCompletionReceipts([], [], 'discussion_response')).toEqual(['discussion_final_response']);
+		expect(missingCodexCompletionReceipts([], [{
+			toolId: 'treeseed.discussion.respond', status: 'completed', inputSummary: {
+				discussionId: 'discussion-a', sourceMessageRefs: ['src/content/discussion-messages/discussion-a/source.mdx'],
+			}, derivedEvents: [],
+		}], 'discussion_response')).toEqual([]);
 		const researchTools = [{ id: 'research.fetch_source' }] as ExecutionProviderInvocation['tools'];
 		expect(missingCodexCompletionReceipts([], [], 'planning_note', 'independent-source-fetch', 2)).toEqual(['research_fetch_tool_available']);
 		expect(missingCodexCompletionReceipts(researchTools ?? [], [{
@@ -237,6 +261,34 @@ it('identifies required completion receipts from granted tools and the assigned 
 			status: 'completed',
 			derivedEvents: [{ type: 'content_created', contentRef: { model: 'knowledge', path: 'src/content/knowledge/guide/page.mdx' } }],
 		}], 'knowledge_update', null, 2, true)).toEqual([]);
+		const operationalTools = [
+			{ id: 'treeseed.assignment_plan' },
+			{ id: 'treeseed.assignment_status_update' },
+			{ id: 'treeseed.assignment_summary' },
+			{ id: 'treeseed.content.commit' },
+		] as ExecutionProviderInvocation['tools'];
+		expect(missingCodexCompletionReceipts(operationalTools ?? [], [], 'planning_note', null, 2, true)).toEqual([
+			'content_committed', 'assignment_plan', 'assignment_terminal_status', 'assignment_summary', 'content_artifact_kind:planning_note',
+		]);
+		expect(missingCodexCompletionReceipts(operationalTools ?? [], [{
+			toolId: 'treeseed.assignment_plan', status: 'completed', inputSummary: { action: 'write' }, derivedEvents: [],
+		}, {
+			toolId: 'treeseed.assignment_status_update', status: 'completed', inputSummary: { status: 'completed' }, derivedEvents: [],
+		}, {
+			toolId: 'treeseed.assignment_summary', status: 'completed', inputSummary: { action: 'write', status: 'completed' }, derivedEvents: [],
+		}, {
+			toolId: 'treeseed.content.create', status: 'completed', inputSummary: {},
+			derivedEvents: [{ type: 'content_created', contentRef: { model: 'note', path: 'notes/evidence.mdx', subjectId: 'objective-a', subjectField: 'about' } }],
+		}, {
+			toolId: 'treeseed.content.commit', status: 'completed', inputSummary: {}, derivedEvents: [{ type: 'content_committed', commitSha: 'a'.repeat(40) }],
+		}], 'planning_note', null, 2, true)).toEqual([]);
+		expect(missingCodexCompletionReceipts([], [], 'planning_note', null, 2, false, ['evidence-ready'])).toEqual([
+			'signal_publication:evidence-ready',
+		]);
+		expect(missingCodexCompletionReceipts([], [{
+			toolId: 'treeseed.publish_signal', status: 'completed', inputSummary: {},
+			derivedEvents: [{ type: 'signal_requested', signal: { contractId: 'evidence-ready' } }],
+		}], 'planning_note', null, 2, false, ['evidence-ready'])).toEqual([]);
 	});
 
 it('instructs research assignments with the callable MCP name rather than only the policy id', () => {

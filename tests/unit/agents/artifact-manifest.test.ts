@@ -72,8 +72,10 @@ describe('AgentArtifactManifest', () => {
 	});
 
 	it('normalizes durable content, code, citations, verification, usage, and tool evidence', () => {
+		const governedAssignment = assignment();
+		governedAssignment.treedxProxyHandle = { baseCommitSha: 'base-content-ref-123' };
 		const manifest = buildAgentArtifactManifest({
-			assignment: assignment(),
+			assignment: governedAssignment,
 			modeRunId: 'mode-run-1',
 			runnerId: 'runner-1',
 			agentId: 'researcher',
@@ -97,6 +99,7 @@ describe('AgentArtifactManifest', () => {
 					executionSnapshot: {
 						status: 'completed',
 						summary: 'done',
+						metadata: { baseRef: 'base-source-ref-456' },
 						outputs: {
 							citations: [{
 								sourceUrl: 'https://example.test/paper?token=secret',
@@ -172,6 +175,9 @@ describe('AgentArtifactManifest', () => {
 			usage: [{ kind: 'tokens', unit: 'token', amount: 42 }],
 		});
 		expect(manifest.citations[0]?.sourceUrl).toContain('token=%5Bredacted%5D');
+		expect(manifest.mutationReceipts).toEqual(expect.arrayContaining([
+			expect.objectContaining({ kind: 'source-checkpoint', phase: 'provisional', baseRef: 'base-source-ref-456', effectiveRef: 'abc123' }),
+		]));
 		expect(JSON.stringify(manifest)).not.toContain('must-never-be-copied');
 		expect(validateAgentArtifactManifest(manifest)).toEqual({ ok: true });
 		expect(validateAgentArtifactManifest(manifest, { publishedSignals: ['review-approved'] })).toEqual({ ok: true });

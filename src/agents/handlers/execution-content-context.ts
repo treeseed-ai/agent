@@ -1,8 +1,10 @@
 import { createHash } from 'node:crypto';
 import { compileEditorialContext, type EditorialContextLayer } from '@treeseed/sdk/knowledge';
+import { parseFrontmatterDocument } from '@treeseed/sdk/frontmatter';
 import type { AgentContext } from '../runtime/runtime-types.ts';
 import { resolveProjectContentRoot } from '../content/content-artifacts.ts';
 import { readRecord, type HandlerPayload } from './shared.ts';
+import { collectRealtimeSharedContext } from './context/shared-context-queries.ts';
 
 export interface ExecutionContentSubject {
 	model: string | null;
@@ -66,16 +68,17 @@ function repositoryFiles(response: Record<string, unknown>) {
 				const file = readRecord(item);
 				if (!file) return [];
 				const path = text(file.path, file.filePath, file.name);
-				const content = text(file.text, file.content, file.body);
+				const content = [file.text,file.content,file.body].find((entry):entry is string=>typeof entry==='string'&&Boolean(entry));
 				const revision = text(file.sha, file.revision, file.contentHash);
-				return path || content ? [{ path, text: content, revision }] : [];
+				return path || content ? [{ path, text: content ?? null, revision }] : [];
 			});
 		}
 		const files = readRecord(candidate);
 		if (files) return Object.entries(files).flatMap(([path, value]) => {
-			const content = typeof value === 'string' ? value : text(readRecord(value)?.text, readRecord(value)?.content, readRecord(value)?.body);
+			const item=readRecord(value);
+			const content = typeof value === 'string' ? value : [item?.text,item?.content,item?.body].find((entry):entry is string=>typeof entry==='string'&&Boolean(entry));
 			const revision = text(readRecord(value)?.sha, readRecord(value)?.revision, readRecord(value)?.contentHash);
-			return path || content ? [{ path, text: content, revision }] : [];
+			return path || content ? [{ path, text: content ?? null, revision }] : [];
 		});
 	}
 	return [];
@@ -100,6 +103,20 @@ function configuredQueries(context: AgentContext) {
 		depth: typeof query.depth === 'number' ? query.depth : null,
 		budget: typeof query.budget === 'number' ? query.budget : null,
 		format: text(query.format),
+	}));
+}
+
+function exactRevisionRefs(value:unknown) {
+	return Array.isArray(value) ? value.flatMap((entry)=>{
+		const item=readRecord(entry); const id=text(item?.id); const revision=Number(item?.revision);
+		return id&&Number.isInteger(revision)&&revision>0?[{id,revision}]:[];
+	}) : [];
+}
+
+function instructionTemplateGroups(payload:HandlerPayload,contentRoot:string) {
+	return exactRevisionRefs(payload.instructionTemplateRefs).map((reference)=>({
+		id:`instruction template ${reference.id}@${reference.revision}`,kind:'instruction-template',required:true,templateRef:reference,
+		paths:[`${contentRoot}/agent-instruction-templates/${reference.id}.mdx`,`${contentRoot}/agent-instruction-templates/${reference.id}.md`],
 	}));
 }
 
@@ -169,7 +186,8 @@ function editorialPathGroups(context: AgentContext, payload: HandlerPayload, sub
 	const chapter = guideChapter(payload, subject);
 	if (!editorial) return [];
 	if (!chapter && ['guide-writer', 'technical-verifier', 'audience-reviewer', 'publication-steward'].includes(context.agent.slug)
-		&& ['acting', 'reviewing'].includes(String(context.agent.activityType))) {
+		&& ['acting', 'reviewing'].includes(String(context.agent.activityType))
+		&& ['knowledge', 'page'].includes(String(subject.model ?? ''))) {
 		throw new Error(`Editorial agent "${context.agent.slug}" requires an explicit TreeSeed Guide chapter scope.`);
 	}
 	return [
@@ -191,16 +209,17 @@ async function collectEvidence(context: AgentContext, subject: ExecutionContentS
 	if (!context.treeDx) return [];
 	const handle = treeDxHandle(context);
 	const repoId = text(handle?.repositoryId, handle?.repoId);
-	const workspaceId = text(handle?.workspaceId);
 	const contentRoot = executionContentRoot(context, payload);
 	const evidence: unknown[] = [];
 	const warnings: string[] = [];
 	const queries = configuredQueries(context);
 	if (repoId) {
+		evidence.push(...await collectRealtimeSharedContext({context,payload,contentRoot,repoId}));
 		const objectivePaths = assignedObjectivePaths(payload, subject, contentRoot);
 		const editorialGroups = editorialPathGroups(context, payload, subject, contentRoot);
 		const groups = [
 			...editorialGroups,
+			...instructionTemplateGroups(payload,contentRoot),
 			...(objectivePaths.length && !editorialGroups.some((group) => group.paths.some((path) => objectivePaths.includes(path)))
 				? [{ id: 'assigned objective', paths: objectivePaths }] : []),
 			{ id: 'agent configuration', paths: assignedAgentPaths(context, contentRoot) },
@@ -222,7 +241,14 @@ async function collectEvidence(context: AgentContext, subject: ExecutionContentS
 		}
 		for (const group of groups) {
 			const failures: string[] = [];
-			const confirmedPaths = indexedPaths ? group.paths.filter((path) => indexedPaths!.has(path)) : group.paths;
+			const discoveredPaths = indexedPaths ? group.paths.filter((path) => indexedPaths!.has(path)) : group.paths;
+			// Required exact-revision inputs must be resolved by an authoritative file
+			// read. Repository path discovery is an optimization and may lag newly
+			// published portable content models, so an empty discovery result cannot
+			// turn a valid exact reference into a false missing-context failure.
+			const confirmedPaths = discoveredPaths.length || !('required' in group && group.required)
+				? discoveredPaths
+				: group.paths;
 			for (const path of confirmedPaths) {
 				try {
 					const response = await context.treeDx.readRepositoryFiles({ repoId, paths: [path] });
@@ -279,33 +305,24 @@ async function collectEvidence(context: AgentContext, subject: ExecutionContentS
 				warnings.push(`TreeDX configured context query ${query.id ?? query.query} failed: ${error instanceof Error ? error.message : String(error)}`);
 			}
 		}
-		if (editorialAgentSlugs.has(context.agent.slug) && (subject.id || subject.title)) {
-			try {
-				const query = unique([subject.id, subject.title, 'parent children related guarantees evidence']).join(' ');
-				const paths = [`${contentRoot}/knowledge/treeseed-guide/**`, `${contentRoot}/notes/editorial/books/treeseed-guide/**`,
-					'guarantees/**', 'packages/*/guarantees/**', 'docs/**', 'packages/*/docs/**'];
-				const pack = await context.treeDx.buildContext({ repoId, query, paths, body: {
-					source: 'guide_editorial_context', assignmentId: context.capacity?.assignmentId,
-					agentId: context.agent.slug, limit: 8, depth: 1, format: 'summary',
-					budget: { maxNodes: 8, maxTokens: 1_800 },
-				} });
-				evidence.push({ id: 'treedx-guide-editorial-graph', purpose: 'Target page, hierarchy, relationships, and editorial evidence.',
-					source: 'treedx_proxy', sourceRef: { repoId, query, paths, reason: 'Guide assignment graph neighborhood' }, pack });
-			} catch (error) {
-				warnings.push(`TreeDX Guide editorial graph context failed: ${error instanceof Error ? error.message : String(error)}`);
-			}
-		}
 	} else warnings.push('No TreeDX repository id was available on the assignment proxy handle.');
-	if (workspaceId) {
-		try {
-			const results = await context.treeDx.searchWorkspace({ workspaceId, query: unique([subject.title, subject.id, subject.model, context.agent.slug, 'questions proposals notes knowledge']).join(' '), body: { source: 'agent_execution_content_handler', assignmentId: context.capacity?.assignmentId, path: contentRoot, paths: [contentRoot, `${contentRoot}/**`], limit: 12 } });
-			evidence.push({ id: 'treedx-workspace-search', purpose: 'Related assignment content.', source: 'treedx_proxy', sourceRef: { workspaceId }, results });
-		} catch (error) {
-			warnings.push(`TreeDX workspace search evidence failed: ${error instanceof Error ? error.message : String(error)}`);
-		}
-	}
 	if (warnings.length) evidence.push({ id: 'treedx-evidence-warnings', purpose: 'TreeDX evidence collection diagnostics.', source: 'treedx_proxy', warnings });
 	return evidence;
+}
+
+function resolvedInstructionTemplates(evidence:unknown[],payload:HandlerPayload,contentRoot:string) {
+	const refs=exactRevisionRefs(payload.instructionTemplateRefs);
+	if(!refs.length) return [];
+	const repositoryEvidence=evidence.map(readRecord).find((entry)=>entry?.id==='treedx-repository-files');
+	const files=Array.isArray(repositoryEvidence?.files)?repositoryEvidence.files.map(readRecord).filter(Boolean):[];
+	return refs.map((reference)=>{
+		const expectedPath=`${contentRoot}/agent-instruction-templates/${reference.id}`;
+		const file=files.find((candidate)=>[`${expectedPath}.mdx`,`${expectedPath}.md`].includes(text(candidate?.path)??''));
+		const source=typeof file?.text==='string'?file.text:null; if(!source) throw new Error(`Required instruction template ${reference.id}@${reference.revision} was not read through TreeDX.`);
+		const frontmatter=readRecord(parseFrontmatterDocument(source).frontmatter)??{};
+		if(text(frontmatter.id)!==reference.id||Number(frontmatter.revision)!==reference.revision) throw new Error(`Instruction template ${reference.id}@${reference.revision} did not match TreeDX content ${text(frontmatter.id)??'missing'}@${String(frontmatter.revision??'missing')}.`);
+		return { id:reference.id,revision:reference.revision,kind:text(frontmatter.kind),instructions:text(frontmatter.instructions),outputSkeleton:text(frontmatter.outputSkeleton),variables:strings(frontmatter.variables) };
+	});
 }
 
 function editorialContext(evidence: unknown[], context: AgentContext, payload: HandlerPayload, subject: ExecutionContentSubject, contentRoot: string) {
@@ -339,7 +356,7 @@ function editorialContext(evidence: unknown[], context: AgentContext, payload: H
 		layers.push({ kind: 'evidence', id: `${subject.id ?? 'guide-assignment'}:graph-evidence`, revision: revisionFor(content), content,
 			reason: text(readRecord(graphEvidence.sourceRef)?.reason) ?? 'Guide graph, guarantees, and editorial evidence.' });
 	}
-	for (const source of evidence.map(readRecord).filter((entry) => text(entry?.id)?.startsWith('treedx-context-query:'))) {
+	for (const source of evidence.map(readRecord).filter((entry) => /^treedx-(?:realtime-|verified-)?context-query:/u.test(text(entry?.id) ?? ''))) {
 		if (!source?.pack) continue;
 		const content = serialized(source.pack);
 		layers.push({ kind: 'source', id: text(source.id)!, revision: revisionFor(content), content,
@@ -379,6 +396,7 @@ export async function resolveExecutionTreeDxContext(context: AgentContext, subje
 	const contentRoot = executionContentRoot(context, payload);
 	const objective = assignedObjective(evidence, assignedObjectivePaths(payload, subject, contentRoot));
 	const compiledEditorialContext = editorialContext(evidence, context, payload, subject, contentRoot);
+	const instructionTemplates=resolvedInstructionTemplates(evidence,payload,contentRoot);
 	const handle = treeDxHandle(context);
 	const warnings = evidence.flatMap((item) => {
 		const source = readRecord(item);
@@ -388,6 +406,7 @@ export async function resolveExecutionTreeDxContext(context: AgentContext, subje
 		evidence,
 		assignedObjective: objective,
 		editorialContext: compiledEditorialContext,
+		instructionTemplates,
 		contentRoot,
 		diagnostics: {
 			assignedObjectiveIncluded: Boolean(objective?.content), assignedObjectivePath: objective?.path ?? null, assignedObjectiveSource: objective?.source ?? null,

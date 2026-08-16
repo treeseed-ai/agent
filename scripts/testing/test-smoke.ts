@@ -128,7 +128,7 @@ try {
 		},
 	});
 	if (result.status !== 'completed') {
-		throw new Error(`Agent smoke assignment did not complete: ${result.summary}`);
+		throw new Error(`Agent smoke assignment did not complete: ${result.summary}\n${JSON.stringify({ fallback: result.fallback, diagnostics: result.diagnostics, outputs: result.outputs }, null, 2)}`);
 	}
 	if (modeRuns.length === 0) {
 		throw new Error('Agent smoke did not produce any assignment mode-run telemetry.');

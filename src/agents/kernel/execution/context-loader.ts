@@ -17,6 +17,13 @@ interface AssignmentActivityContext {
 	fallback: AgentKernelModeFallback | null;
 }
 
+export function assignmentProcessTimeoutSeconds(productiveTimeoutSeconds:number,envelope:AgentCapacityEnvelope){
+	const reservedSeconds=Number(envelope.reservedSeconds); const budget=record(envelope.budget); const time=record(budget.time);
+	const productive=Number.isFinite(reservedSeconds)&&reservedSeconds>0?Math.min(productiveTimeoutSeconds,Math.floor(reservedSeconds)):productiveTimeoutSeconds;
+	const preparation=Number(time.preparationSeconds); const closeout=Number(time.closeoutSeconds);
+	return productive+(Number.isInteger(preparation)&&preparation>0?preparation:0)+(Number.isInteger(closeout)&&closeout>0?closeout:0);
+}
+
 function failed(code: string, reason: string, metadata?: Record<string, unknown>): AssignmentActivityContext {
 	return {
 		agent: null,
@@ -96,7 +103,7 @@ export async function loadAssignmentActivityContext(input: {
 			...runtimeAgent,
 			execution: {
 				...runtimeAgent.execution,
-				timeoutSeconds: Math.min(runtimeAgent.execution.timeoutSeconds, Math.floor(reservedSeconds)),
+				timeoutSeconds: assignmentProcessTimeoutSeconds(runtimeAgent.execution.timeoutSeconds,input.capacityEnvelope),
 			},
 		};
 	}

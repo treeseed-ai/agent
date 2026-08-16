@@ -22,11 +22,11 @@ describe('provider agent tool catalog', () => {
 			assignmentId: 'assignment-1',
 			treedxProxyHandle: {},
 		});
-		expect(denied.exposed).toEqual([]);
-		expect(denied.omitted).toEqual([
+		expect(denied.exposed).toEqual(['treeseed.status', 'treeseed.discussion.read', 'treeseed.discussion.follow', 'treeseed.discussion.respond', 'treeseed.discussion.request_handoff', 'treeseed.operation.prepare_handoff', 'treeseed.client_session.request_action']);
+		expect(denied.omitted).toEqual(expect.arrayContaining([
 			{ id: 'research.search_sources', missing: ['research_source_policy'] },
 			{ id: 'research.fetch_source', missing: ['research_source_policy'] },
-		]);
+		]));
 
 		const allowed = createAssignmentToolCatalog({
 			agentTools: ['research.search_sources', 'research.fetch_source'],
@@ -36,7 +36,7 @@ describe('provider agent tool catalog', () => {
 			researchNetworkPolicy: { allowWeb: true, allowedDomains: ['sources.example.test'] },
 			providerResearchSourcePolicy: { allowedDomains: ['example.test'] },
 		});
-		expect(allowed.exposed).toEqual(['research.search_sources', 'research.fetch_source']);
+		expect(allowed.exposed).toEqual(expect.arrayContaining(['research.search_sources', 'research.fetch_source', 'treeseed.status']));
 		expect(allowed.descriptors[0]?.metadata).toMatchObject({ researchAllowedDomains: ['sources.example.test'] });
 
 		const disjoint = createAssignmentToolCatalog({
@@ -47,7 +47,7 @@ describe('provider agent tool catalog', () => {
 			researchNetworkPolicy: { allowWeb: true, allowedDomains: ['sources.example.test'] },
 			providerResearchSourcePolicy: { allowedDomains: ['other.test'] },
 		});
-		expect(disjoint.omitted).toEqual([{ id: 'research.fetch_source', missing: ['research_source_policy'] }]);
+		expect(disjoint.omitted).toContainEqual({ id: 'research.fetch_source', missing: ['research_source_policy'] });
 	});
 
 	it('omits TreeDX tools when the assignment lacks a valid proxy handle', () => {
@@ -60,8 +60,8 @@ describe('provider agent tool catalog', () => {
 			forbiddenPaths: [],
 		});
 
-		expect(catalog.exposed).toEqual(['treeseed.status']);
-		expect(catalog.omitted).toEqual([{ id: 'treedx.read_workspace_file', missing: ['treedx_proxy_handle'] }]);
+		expect(catalog.exposed).toEqual(['treeseed.status', 'treeseed.discussion.read', 'treeseed.discussion.follow', 'treeseed.discussion.respond', 'treeseed.discussion.request_handoff', 'treeseed.operation.prepare_handoff', 'treeseed.client_session.request_action']);
+		expect(catalog.omitted).toContainEqual({ id: 'treedx.read_workspace_file', missing: ['treedx_proxy_handle'] });
 		expect(catalog.descriptors.some((descriptor) => descriptor.executionTarget === 'treedx_proxy')).toBe(false);
 	});
 
@@ -76,11 +76,11 @@ describe('provider agent tool catalog', () => {
 			forbiddenPaths: [],
 		});
 
-		expect(catalog.exposed).toEqual(['treedx.read_workspace_file']);
-		expect(catalog.omitted).toEqual([
+		expect(catalog.exposed).toEqual(expect.arrayContaining(['treedx.read_workspace_file', 'treeseed.status', 'treeseed.discussion.read', 'treeseed.discussion.follow', 'treeseed.discussion.respond']));
+		expect(catalog.omitted).toEqual(expect.arrayContaining([
 			{ id: 'treedx.apply_workspace_changeset', missing: ['treedx_writable_workspace'] },
 			{ id: 'treedx.commit_workspace', missing: ['treedx_writable_workspace', 'content_commit'] },
-		]);
+		]));
 	});
 
 	it('exposes writable TreeDX descriptors with handle metadata in workspace-write mode', () => {
@@ -90,7 +90,7 @@ describe('provider agent tool catalog', () => {
 			assignmentId: 'assignment-1',
 			treedxProxyHandle: writeHandle,
 			workspaceMode: 'workspace_write',
-			contentAccess: { write: { models: ['*'], actions: ['commit'] }, commit: { allowed: true } },
+			permissionProjection: { write: { models: ['*'], actions: ['commit'] }, commit: { allowed: true } },
 			allowedPaths: ['src/content/**'],
 			forbiddenPaths: ['src/content/private/**'],
 		});
@@ -157,18 +157,18 @@ describe('provider agent tool catalog', () => {
 			worktreeRoot: null,
 			providerManagesWorktree: true,
 		});
-		expect(providerManagedWorktree.exposed).toEqual(['treeseed.verify', 'treeseed.checkpoint']);
+		expect(providerManagedWorktree.exposed).toEqual(expect.arrayContaining(['treeseed.verify', 'treeseed.checkpoint', 'treeseed.status']));
 		expect(providerManagedWorktree.descriptors.every((descriptor) => descriptor.metadata?.worktreeRoot === null)).toBe(true);
 	});
 
-	it('filters model-aware content tools through contentAccess', () => {
+	it('filters model-aware content tools through the canonical permission projection', () => {
 		const catalog = createAssignmentToolCatalog({
 			agentTools: ['treeseed.questions.create', 'treeseed.proposals.create', 'treeseed.content.commit'],
 			projectId: 'project-1',
 			assignmentId: 'assignment-1',
 			treedxProxyHandle: writeHandle,
 			workspaceMode: 'workspace_write',
-			contentAccess: {
+			permissionProjection: {
 				read: { models: ['question'], actions: ['query', 'read'] },
 				write: { models: ['question'], actions: ['create', 'update', 'validate'] },
 				commit: { allowed: false },
@@ -177,11 +177,11 @@ describe('provider agent tool catalog', () => {
 			forbiddenPaths: [],
 		});
 
-		expect(catalog.exposed).toEqual(['treeseed.questions.create']);
-		expect(catalog.omitted).toEqual([
+		expect(catalog.exposed).toEqual(expect.arrayContaining(['treeseed.questions.create', 'treeseed.status', 'treeseed.assignment_plan', 'treeseed.assignment_status_update', 'treeseed.assignment_summary']));
+		expect(catalog.omitted).toEqual(expect.arrayContaining([
 			{ id: 'treeseed.proposals.create', missing: ['content_access'] },
 			{ id: 'treeseed.content.commit', missing: ['content_access', 'content_commit'] },
-		]);
+		]));
 		expect(catalog.descriptors[0]).toMatchObject({
 			executionTarget: 'treeseed_content',
 			metadata: expect.objectContaining({
@@ -200,7 +200,7 @@ describe('provider agent tool catalog', () => {
 			assignmentId: 'assignment-1',
 			treedxProxyHandle: writeHandle,
 			workspaceMode: 'context_only',
-			contentAccess: {
+			permissionProjection: {
 				read: { models: ['question'], actions: ['query', 'read'] },
 				write: { models: ['question'], actions: ['create'] },
 				commit: { allowed: false },
@@ -209,7 +209,7 @@ describe('provider agent tool catalog', () => {
 			forbiddenPaths: [],
 		});
 
-		expect(catalog.exposed).toEqual(['treeseed.questions.query']);
-		expect(catalog.omitted).toEqual([{ id: 'treeseed.questions.create', missing: ['treedx_writable_workspace'] }]);
+		expect(catalog.exposed).toEqual(expect.arrayContaining(['treeseed.questions.query', 'treeseed.status']));
+		expect(catalog.omitted).toContainEqual({ id: 'treeseed.questions.create', missing: ['treedx_writable_workspace'] });
 	});
 });

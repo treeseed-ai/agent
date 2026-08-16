@@ -279,8 +279,9 @@ describe('agent package shape', () => {
 
 		expect(dockerfile).not.toContain('FROM node-runtime AS agent-api');
 		expect(dockerfile).toContain('FROM node:22-alpine AS agent-provider-base');
-		expect(dockerfile).toContain('FROM agent-provider-base AS agent-manager');
-		expect(dockerfile).toContain('FROM agent-provider-base AS agent-runner');
+		expect(dockerfile).toContain('FROM agent-provider-base AS agent-runtime');
+		expect(dockerfile).toContain('FROM agent-runtime AS agent-manager');
+		expect(dockerfile).toContain('FROM agent-runtime AS agent-runner');
 		expect(dockerfile).toContain('FROM agent-runner AS railway-runtime');
 		expect(dockerfile).toContain('ENTRYPOINT ["tini", "--", "/app/docker-entrypoint.sh"]');
 		expect(entrypoint).toContain('setpriv');
@@ -289,14 +290,17 @@ describe('agent package shape', () => {
 		expect(releaseVerify).toContain('privateKeyRef: secret://capacity/packed-smoke-provider-identity');
 		expect(releaseVerify).not.toContain('privateKeyRef: env:');
 		expect(dockerfile).toContain('FROM node:22');
-		expect(dockerfile).toContain('.treeseed/docker/runtime/manager/node_modules');
-		expect(dockerfile).toContain('.treeseed/docker/runtime/runner/node_modules');
+		expect(dockerfile).toContain('.treeseed/docker/runtime/shared/node_modules');
 		expect(dockerfile).not.toContain('RUN npm ci');
 		expect(dockerfile).not.toContain('COPY . .');
 		expect(dockerfile).not.toContain('treeseed-processing');
 		expect(dockerfile).not.toContain('packages/core');
 		expect(compose).toContain('target: agent-manager');
 		expect(compose).toContain('target: agent-runner');
+		expect(compose.match(/soft: 0/gu)).toHaveLength(2);
+		expect(compose.match(/hard: 0/gu)).toHaveLength(2);
+		expect(compose.match(/^\s+TREESEED_PROVIDER_ASSIGNMENT_DISK_HEADROOM_BYTES:/gmu)).toHaveLength(2);
+		expect(compose.match(/^\s+TREESEED_PROVIDER_SOURCE_CLOSURE_DIGEST:/gmu)).toHaveLength(2);
 		expect(compose).not.toContain('treeseed/agent-api');
 		expect(compose).toContain('treeseed/agent-manager');
 		expect(compose).toContain('treeseed/agent-runner');

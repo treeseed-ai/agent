@@ -7,7 +7,7 @@ import {
 	type AgentToolDerivedEvent,
 	type AgentToolRuntimeOptions,
 } from './agent-tool-runtime.ts';
-import { missingPrecommitContentReceipts, readAgentToolTelemetry } from './agent-tool-completion.ts';
+import { missingOperationalCloseoutReceipts, missingPrecommitContentReceipts, readAgentToolTelemetry } from './agent-tool-completion.ts';
 
 function record(value: unknown): Record<string, unknown> {
 	return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -160,6 +160,37 @@ function signalEvents(toolId: string, output: Record<string, unknown>): AgentToo
 	return payload.requested === true ? [{ type: 'signal_requested', signal: payload }] : [];
 }
 
+function communicationEvents(toolId:string,input:Record<string,unknown>,output:Record<string,unknown>):AgentToolDerivedEvent[]{
+	if(toolId!=='treeseed.discussion.respond')return [];
+	const payload=record(output.payload);const message=record(payload.message);const changeset=record(payload.changeset);
+	const path=text(message.path);const commitSha=text(payload.commitSha)||text(changeset.resultCommitSha);
+	const checkpoint=record(output.suspensionCheckpoint??output.finalResponseCheckpoint);const checkpointSha=text(checkpoint.commitSha);
+	const operational=(Array.isArray(output.suspensionOperationalRefs)?output.suspensionOperationalRefs:[]).map(record).flatMap((ref)=>{
+		const operationalPath=text(ref.path)||text(ref.contentPath);if(!operationalPath||!checkpointSha)return [];
+		return [{type:'content_created' as const,contentRef:{...ref,model:text(ref.model)||'assignment_summary',path:operationalPath,
+			artifactKind:'assignment_summary',commitSha:checkpointSha,ref:text(checkpoint.branchRef)||checkpointSha}}];
+	});
+	return [
+		...operational,
+		...(checkpointSha?[{type:'content_committed' as const,commitSha:checkpointSha,branchRef:text(checkpoint.branchRef)||undefined}]:[]),
+		...(!path||!commitSha?[]:[{type:'content_created' as const,contentRef:{id:text(message.id)||undefined,model:'discussion_message',path,
+		artifactKind:'discussion_response',subjectId:text(input.replyTo)||undefined,subjectField:'replyTo',
+		commitSha,ref:commitSha,baseRef:text(changeset.baseCommitSha)||undefined,
+		changedPaths:Array.isArray(changeset.changedPaths)?changeset.changedPaths.map(String).filter(Boolean):[path]}}]),
+	];
+}
+
+function operationalContentEvents(toolId:string,output:Record<string,unknown>):AgentToolDerivedEvent[]{
+	const models:Record<string,string>={
+		'treeseed.assignment_plan':'assignment_plan','treeseed.assignment_status_update':'assignment_status','treeseed.assignment_summary':'assignment_summary',
+	};
+	const model=models[toolId];if(!model)return [];
+	return (Array.isArray(output.refs)?output.refs:[]).map(record).flatMap((ref)=>{
+		const path=text(ref.path)||text(ref.contentPath);if(!path)return [];
+		return [{type:'content_created' as const,contentRef:{...ref,model:text(ref.model)||model,path,artifactKind:model}}];
+	});
+}
+
 function researchEvents(toolId: string, input: Record<string, unknown>, output: Record<string, unknown>): AgentToolDerivedEvent[] {
 	const payload = record(output.payload);
 	if (toolId === 'research.fetch_source') {
@@ -189,7 +220,7 @@ function researchEvents(toolId: string, input: Record<string, unknown>, output: 
 	return [];
 }
 
-function deriveToolEvents(toolId: string, descriptor: ExecutionProviderToolDescriptor, input: Record<string, unknown>, result: unknown) {
+export function deriveToolEvents(toolId: string, descriptor: ExecutionProviderToolDescriptor, input: Record<string, unknown>, result: unknown) {
 	const output = record(result);
 	if (output.ok === false) return [];
 	const operation = operationForTool(toolId, descriptor);
@@ -200,6 +231,8 @@ function deriveToolEvents(toolId: string, descriptor: ExecutionProviderToolDescr
 		...verificationEvents(toolId, output),
 		...reviewDecisionEvents(toolId, output),
 		...signalEvents(toolId, output),
+		...operationalContentEvents(toolId,output),
+		...communicationEvents(toolId,input,output),
 		...researchEvents(toolId, input, output),
 	];
 }
@@ -223,9 +256,11 @@ export async function callAgentToolWithTelemetry(options: AgentToolRuntimeOption
 	}
 	const commitTool = toolId === 'treedx.commit_workspace' || toolId === 'treeseed.content.commit';
 	const requiredArtifactKind = text(metadata.requiredArtifactKind);
-	const missingPrecommit = commitTool && metadata.requireContentArtifact === true && requiredArtifactKind
-		? missingPrecommitContentReceipts(await readAgentToolTelemetry(options.telemetryPath), requiredArtifactKind)
-		: [];
+	const priorTelemetry = commitTool && options.telemetryPath ? await readAgentToolTelemetry(options.telemetryPath) : [];
+	const missingPrecommit = !commitTool || !options.telemetryPath ? []
+		: metadata.requireContentArtifact === true && requiredArtifactKind
+			? missingPrecommitContentReceipts(priorTelemetry, requiredArtifactKind)
+			: missingOperationalCloseoutReceipts(priorTelemetry);
 	const result = missingPrecommit.length
 		? {
 			ok: false,

@@ -38,7 +38,13 @@ export async function loadAssignmentRawAgentSpecs(input: { treeDx: AgentTreeDxAd
 		for (const candidatePath of candidatePaths) {
 			attemptedPaths.push(candidatePath);
 			try {
-				readResponses.push(record(await input.treeDx.readRepositoryFiles({ repoId: '', paths: [candidatePath], body: { includeBody: true, includeFrontmatter: true } })));
+				if (input.workspaceId) {
+					const response = record(await input.treeDx.readWorkspaceFile({ workspaceId: input.workspaceId, path: candidatePath }));
+					const file = record(response.file ?? record(response.payload).file ?? response);
+					readResponses.push(Object.keys(file).length ? { files: [file] } : response);
+				} else {
+					readResponses.push(record(await input.treeDx.readRepositoryFiles({ repoId: '', paths: [candidatePath], body: { includeBody: true, includeFrontmatter: true } })));
+				}
 				break;
 			} catch (error) {
 				const message = error instanceof Error ? error.message : String(error);

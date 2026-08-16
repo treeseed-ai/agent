@@ -11,3 +11,8 @@ export function classifyAgentExecutionFailure(error: unknown): AgentErrorCategor
 	if (message.includes('Copilot') || message.includes('execution')) return 'execution_error';
 	return 'sdk_error';
 }
+
+export function isRetryableAgentExecutionFailure(error: unknown): boolean {
+	const message = error instanceof Error ? error.message : String(error);
+	return /fetch failed|timed out|econnreset|econnrefused|socket|temporarily unavailable|network error/iu.test(message);
+}

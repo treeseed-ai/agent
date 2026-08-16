@@ -3,7 +3,7 @@ import { AGENT_MESSAGE_TYPES } from '../contracts/messages.ts';
 import { normalizeAgentCliOptions } from '../cli-tools.ts';
 import { normalizeActivityProfiles, normalizeIdentity, selectDefaultActivityProfile } from './spec-normalizer-activities.ts';
 import { normalizeExecution } from './spec-normalizer-execution.ts';
-import { normalizePermissionPolicy, normalizeTrigger } from './spec-normalizer-policy.ts';
+import { permissionProjectionForProfile, normalizeTrigger } from './spec-normalizer-policy.ts';
 import { LEGACY_AGENT_FIELDS, ensureBoolean, ensureString, isPlainObject } from './spec-normalizer-primitives.ts';
 import type {
 	AgentSpecDiagnostic,
@@ -93,9 +93,8 @@ function normalizeParts(
 				}
 				: undefined,
 			permissions: [],
-			permissionPolicy: normalizePermissionPolicy(raw.permissionPolicy, diagnostics, slug),
 			tools: profile.tools,
-			contentAccess: profile.contentAccess,
+			permissionProjection: permissionProjectionForProfile(profile.permissions),
 			context: { queries: [] },
 			execution: normalizeExecution(raw.execution, diagnostics, slug),
 			outputs: profile.outputs,

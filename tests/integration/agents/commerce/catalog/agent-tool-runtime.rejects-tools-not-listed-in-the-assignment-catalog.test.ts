@@ -24,6 +24,15 @@ import { AgentSdk } from '@treeseed/sdk/sdk';
 
 const tempRoots: string[] = [];
 
+function assignmentStatusEnvelope() {
+	return { ok: true, payload: {
+		id: 'assignment-1', teamId: 'team-1', projectId: 'project-1', workDayId: 'workday-1',
+		stateVersion: 2, status: 'leased', leaseState: 'leased', assignedAt: '2026-08-14T00:00:00.000Z',
+		capacityEnvelope: { reservedSeconds: 900, budget: { time: { hardDeadlineAt: '2099-01-01T00:00:00.000Z' } } },
+		decisionInput: { input: { activityType: 'planning' } }, metadata: { workdayRunId: 'run-1' },
+	} };
+}
+
 function statusDescriptor(overrides: Partial<ExecutionProviderToolDescriptor> = {}): ExecutionProviderToolDescriptor {
 	return {
 		kind: 'agent_tool',
@@ -155,7 +164,7 @@ it('reads assignment status from the provider-authorized API without exposing le
 		}, 'treeseed.status');
 		expect(result).toMatchObject({ ok: true, payload: {
 			assignmentId: 'assignment-1', workdayId: 'workday-1', workdayRunId: 'run-1',
-			activityType: 'planning', status: 'leased', time: { reservedSeconds: 1 },
+			activityType: 'planning', status: 'leased', time: { allocatedSeconds: 1, phase: 'working', shouldCloseOut: false },
 		} });
 		expect(JSON.stringify(result)).not.toContain('must-not-leak');
 		expect(fetchImpl).toHaveBeenCalledWith(
@@ -181,7 +190,7 @@ it('creates model-aware content through TreeDX proxy calls', async () => {
 				allowedOperations: ['files:read', 'files:search', 'files:write'],
 				allowedPaths: ['src/content/**'],
 			},
-			contentAccess: {
+			permissionProjection: {
 				read: { models: ['question'], actions: ['query', 'read'] },
 				write: { models: ['question'], actions: ['create', 'validate'] },
 				commit: { allowed: false },
@@ -192,7 +201,11 @@ it('creates model-aware content through TreeDX proxy calls', async () => {
 		const calls: Array<{ url: string; init: RequestInit }> = [];
 		const fetchImpl = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
 			calls.push({ url: String(url), init: init ?? {} });
+			if (String(url).includes('/v1/provider/assignments/')) return new Response(JSON.stringify(assignmentStatusEnvelope()), { status: 200 });
+			if (String(url).includes('/search')) return Response.json({ ok: true, payload: { results: [{ path: 'src/content/objectives/objective-1.mdx' }] } });
 			if (init?.method === 'GET') {
+				if (String(url).includes('src%2Fcontent%2Fquestions%2F')) return new Response(JSON.stringify({ ok:false,code:'not_found' }), { status: 404 });
+				if (String(url).includes('src%2Fcontent%2Fobjectives%2F')) return Response.json({ ok: true, payload: { content: '---\nid: objective-1\ntitle: Objective one\nstatus: live\n---\nObjective.' } });
 				return new Response(JSON.stringify({ content: '---\nid: question:how-should-content-tools-work\ntitle: How should content tools work?\nquestion_type: implementation\nrelated_objectives: [objective-1]\n---\n\nCreate canonical content.\n' }), { status: 200 });
 			}
 			return new Response(JSON.stringify({ ok: true }), { status: 200 });
@@ -217,8 +230,9 @@ it('creates model-aware content through TreeDX proxy calls', async () => {
 			changedPaths: ['src/content/questions/how-should-content-tools-work.mdx'],
 		});
 		expect(fetchImpl).toHaveBeenCalled();
-		expect(String(calls[0]?.init.body)).toContain('question_type');
-		expect(String(calls[0]?.init.body)).not.toContain('provider-key');
+		const contentWrite = calls.find((call) => typeof call.init.body === 'string' && call.init.body.includes('question_type'));
+		expect(String(contentWrite?.init.body)).toContain('question_type');
+		expect(String(contentWrite?.init.body)).not.toContain('provider-key');
 		expect(telemetry.at(-1)).toMatchObject({
 			derivedEvents: [{
 				type: 'content_created',
@@ -246,7 +260,7 @@ it('places model-aware content beneath the assignment package content root', asy
 				allowedPaths: ['docs/src/content/**'],
 				allowedWritePaths: ['docs/src/content', 'docs/src/content/**'],
 			},
-			contentAccess: {
+			permissionProjection: {
 				read: { models: ['question'], actions: ['read'] },
 				write: { models: ['question'], actions: ['create'] },
 				commit: { allowed: false },
@@ -254,8 +268,8 @@ it('places model-aware content beneath the assignment package content root', asy
 			allowedPaths: ['docs/src/content/**'],
 			forbiddenPaths: [],
 		});
-		const fetchImpl = vi.fn(async (_url: string | URL | Request, init?: RequestInit) =>
-			new Response(JSON.stringify(init?.method === 'GET' ? { content: '' } : { ok: true }), { status: 200 })) as unknown as typeof fetch;
+		const fetchImpl = vi.fn(async (url: string | URL | Request, init?: RequestInit) =>
+			new Response(JSON.stringify(String(url).includes('/v1/provider/assignments/') ? assignmentStatusEnvelope() : init?.method === 'GET' ? { content: '' } : { ok: true }), { status: 200 })) as unknown as typeof fetch;
 		const result = await callAgentTool({
 			apiBaseUrl: 'https://api.example.test', providerAccessToken: 'provider-key',
 			assignmentId: 'assignment-1', descriptors: catalog.descriptors, fetchImpl,
@@ -279,7 +293,7 @@ it('reads legacy Markdown content while returning the authoritative TreeDX path'
 				allowedPaths: ['docs/src/content/**'],
 				allowedWritePaths: ['docs/src/content', 'docs/src/content/**'],
 			},
-			contentAccess: {
+			permissionProjection: {
 				read: { models: ['objective'], actions: ['read'] },
 				write: { models: [], actions: [] },
 				commit: { allowed: false },
@@ -289,6 +303,7 @@ it('reads legacy Markdown content while returning the authoritative TreeDX path'
 		});
 		const requestedPaths: string[] = [];
 		const fetchImpl = vi.fn(async (url: string | URL | Request) => {
+			if (String(url).includes('/v1/provider/assignments/')) return new Response(JSON.stringify(assignmentStatusEnvelope()), { status: 200 });
 			const path = new URL(String(url)).searchParams.get('path') ?? '';
 			requestedPaths.push(path);
 			if (path.endsWith('.mdx')) {

@@ -84,9 +84,9 @@ describe('provider mode-run telemetry delivery', () => {
 	it('requires successful spec-load telemetry before returning loaded definitions', async () => {
 		const createAssignmentModeRun = vi.fn().mockRejectedValue(new Error('database unavailable'));
 		const treeDx = {
-			async readRepositoryFiles() {
+			async readWorkspaceFile() {
 				return {
-					files: [{ path: 'src/content/agents/researcher.mdx', content: '---\nname: Researcher\nenabled: true\n---\nResearch.' }],
+					file: { path: 'src/content/agents/researcher.mdx', content: '---\nname: Researcher\nenabled: true\n---\nResearch.' },
 				};
 			},
 		} as never;
@@ -111,12 +111,12 @@ describe('provider mode-run telemetry delivery', () => {
 	});
 
 	it('loads a nested agent definition from its synchronized canonical content path', async () => {
-		const paths: string[][] = [];
+		const paths: string[] = [];
 		const treeDx = {
-			async readRepositoryFiles(input: { paths: string[] }) {
-				paths.push(input.paths);
+			async readWorkspaceFile(input: { path: string }) {
+				paths.push(input.path);
 				return {
-					files: [{ path: input.paths[0], content: '---\nslug: guide-steward\nhandler: writer\nenabled: true\n---\nGuide.' }],
+					file: { path: input.path, content: '---\nslug: guide-steward\nhandler: writer\nenabled: true\n---\nGuide.' },
 				};
 			},
 		} as never;
@@ -133,7 +133,7 @@ describe('provider mode-run telemetry delivery', () => {
 			decisionPayload: {},
 			runnerId: 'runner-a',
 		});
-		expect(paths).toEqual([['src/content/agents/editorial/guide-steward.mdx']]);
+		expect(paths).toEqual(['src/content/agents/editorial/guide-steward.mdx']);
 		expect(result).toMatchObject([{ id: 'editorial/guide-steward', frontmatter: { slug: 'guide-steward' } }]);
 	});
 });

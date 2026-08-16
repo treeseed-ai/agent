@@ -114,24 +114,29 @@ export class CapacityProviderCoordinator {
 		marketAudience: string;
 		credentialRef: string;
 		credentialId: string;
+		minimumValidityMs?: number;
 	}) {
 		const identity = await this.providerIdentity();
 		const credential = await resolveProviderSecret(input.credentialRef, { env: this.options.env, baseDirectory: this.loaded.directory, dataDirectory: this.dataDir, resolver: this.options.secretResolver });
 		const cached = await this.localState.token(input.connection.id);
-		if (cached && Date.parse(cached.expiresAt) - Date.now() > 5 * 60_000) return cached;
+		const minimumValidityMs = Math.max(5 * 60_000, Number(input.minimumValidityMs) || 0);
+		if (cached && Date.parse(cached.expiresAt) - Date.now() > minimumValidityMs) return cached;
 		const idempotencyKey = `access:${input.connection.id}:${randomUUID()}`;
-		const body = { credentialId: input.credentialId, idempotencyKey };
+		const requestedValiditySeconds = Math.ceil((minimumValidityMs + 60_000) / 1000);
+		const body = { credentialId: input.credentialId, idempotencyKey, requestedValiditySeconds };
 		const proof = await this.proof({ audience: input.marketAudience, method: 'POST', path: '/v1/provider/access-tokens', body, identity });
-		const token = await this.client(input.marketUrl).issueAccessToken(credential, input.credentialId, proof, idempotencyKey);
+		const token = await this.client(input.marketUrl).issueAccessToken(credential, input.credentialId, proof, idempotencyKey, requestedValiditySeconds);
 		if (token.teamId !== input.connection.teamId || token.providerId !== input.connection.providerId || token.membershipId !== input.connection.membershipId || token.credentialId !== input.credentialId) {
 			throw new Error(`Provider connection ${input.connection.id} access token does not match its configured team, provider, membership, and credential binding.`);
 		}
+		if (Date.parse(token.expiresAt) - Date.now() <= minimumValidityMs) throw new Error(`Provider connection ${input.connection.id} could not obtain an access token valid through the assignment deadline.`);
 		await this.localState.saveToken(input.connection.id, token);
 		return token;
 	}
 
-	async accessTokenForConnection(connection: ProviderConnectionConfig) {
-		const current = this.tokenRefreshes.get(connection.id);
+	async accessTokenForConnection(connection: ProviderConnectionConfig, minimumValidityMs = 5 * 60_000) {
+		const refreshKey = `${connection.id}:${Math.max(5 * 60_000, minimumValidityMs)}`;
+		const current = this.tokenRefreshes.get(refreshKey);
 		if (current) return current;
 		const refresh = this.connectApproved({
 			connection,
@@ -139,12 +144,13 @@ export class CapacityProviderCoordinator {
 			marketAudience: providerConnectionMarketAudience(connection, this.options.env),
 			credentialRef: connection.membershipCredentialRef,
 			credentialId: connection.membershipCredentialId,
+			minimumValidityMs,
 		});
-		this.tokenRefreshes.set(connection.id, refresh);
+		this.tokenRefreshes.set(refreshKey, refresh);
 		try {
 			return await refresh;
 		} finally {
-			if (this.tokenRefreshes.get(connection.id) === refresh) this.tokenRefreshes.delete(connection.id);
+			if (this.tokenRefreshes.get(refreshKey) === refresh) this.tokenRefreshes.delete(refreshKey);
 		}
 	}
 

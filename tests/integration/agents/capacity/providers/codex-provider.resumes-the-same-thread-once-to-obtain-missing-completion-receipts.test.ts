@@ -211,6 +211,79 @@ it('resumes the same thread once to obtain missing completion receipts', async (
 		}
 	});
 
+it('reserves closeout time and resumes a timed-out main turn on the same thread', async () => {
+	const root = await mkdtemp(resolve(tmpdir(), 'treeseed-codex-closeout-'));
+	const telemetryPath = resolve(root, 'events.jsonl');
+	const run = vi.fn()
+		.mockImplementationOnce((_prompt: string, options?: { signal?: AbortSignal }) => new Promise((_, reject) => {
+			options?.signal?.addEventListener('abort', () => reject(Object.assign(new Error('turn aborted'), { name: 'AbortError' })), { once: true });
+		}))
+		.mockImplementationOnce(async () => {
+			await appendFile(telemetryPath, `${JSON.stringify({ status: 'completed', derivedEvents: [{
+				type: 'content_created', contentRef: { model: 'note', path: 'notes/closeout.mdx', subjectId: 'objective-a', subjectField: 'about' },
+			}] })}\n`);
+			return { finalResponse: 'Closed out.', items: [], usage: { input_tokens: 3, output_tokens: 1 } };
+		});
+	const startThread = vi.fn(() => ({ id: 'thread-closeout', run }));
+	const resumeThread = vi.fn(() => ({ id: 'thread-closeout', run }));
+	const adapter = new CodexExecutionProviderAdapter({
+		repoRoot: '/repo',
+		prepareWorktree: async () => ({
+			branchName: 'agent/tester/run-closeout', worktreeRoot: '/repo/.agent-worktrees/tester/run-closeout',
+			exactBaseRef: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', created: true,
+		}),
+		createCodexClient: async () => ({ startThread, resumeThread }),
+		env: { TREESEED_CODEX_SUBSCRIPTION_PLAN: 'pro', TREESEED_CODEX_API_KEY: 'codex-test-key-1234567890' },
+	});
+	try {
+		const closeoutAgent = { ...agent, execution: { ...agent.execution, timeoutSeconds: 0.2 } };
+		const result = await adapter.start(executionInvocation({
+			agent: closeoutAgent, runId: 'run-closeout', instructions: 'Create the required linked note.',
+			workPackageMetadata: {
+				artifactKind: 'planning_note', requireContentArtifact: true,
+				executionTiming: { deadlineAt: new Date(Date.now() + 31_000).toISOString(), closeoutWarningSeconds: 150 },
+			},
+			metadata: { exactBaseRef: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', toolTelemetryPath: telemetryPath },
+		}));
+		expect(startThread).toHaveBeenCalledOnce();
+		expect(resumeThread).toHaveBeenCalledWith('thread-closeout', expect.any(Object));
+		expect(String(run.mock.calls[1]?.[0])).toContain('assignment is now in closeout');
+		expect(result).toMatchObject({ status: 'completed', summary: 'Closed out.' });
+	} finally {
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
+it('recovers completion when correction times out after every durable receipt exists', async () => {
+	const root = await mkdtemp(resolve(tmpdir(), 'treeseed-codex-durable-closeout-'));
+	const telemetryPath = resolve(root, 'events.jsonl');
+	const run = vi.fn()
+		.mockResolvedValueOnce({ finalResponse: 'Needs closeout.', items: [], usage: { input_tokens: 2, output_tokens: 1 } })
+		.mockImplementationOnce(async (_prompt: string, options?: { signal?: AbortSignal }) => {
+			await appendFile(telemetryPath, `${JSON.stringify({ status: 'completed', derivedEvents: [{
+				type: 'content_created', contentRef: { model: 'note', path: 'notes/durable.mdx', subjectId: 'objective-a', subjectField: 'about' },
+			}] })}\n`);
+			return new Promise((_, reject) => options?.signal?.addEventListener('abort',
+				() => reject(Object.assign(new Error('turn aborted after receipts'), { name: 'AbortError' })), { once: true }));
+		});
+	const adapter = new CodexExecutionProviderAdapter({
+		repoRoot: '/repo', createCodexClient: async () => ({
+			startThread: () => ({ id: 'thread-durable', run }), resumeThread: () => ({ id: 'thread-durable', run }),
+		}), env: { TREESEED_CODEX_SUBSCRIPTION_PLAN: 'pro', TREESEED_CODEX_API_KEY: 'codex-test-key-1234567890' },
+	});
+	try {
+		const result = await adapter.start(executionInvocation({
+			agent: { ...agent, execution: { ...agent.execution, sandboxMode: 'read_only', timeoutSeconds: .05 } },
+			runId: 'run-durable-closeout', instructions: 'Create the required linked note.',
+			workPackageMetadata: { artifactKind: 'planning_note', requireContentArtifact: true },
+			metadata: { toolTelemetryPath: telemetryPath },
+		}));
+		expect(result).toMatchObject({ status: 'completed', metadata: { codex: { metadata: {
+			completionRecovery: { source: 'durable_tool_receipts', providerResultCode: 'codex_execution_timeout' },
+		} } } });
+	} finally { await rm(root, { recursive: true, force: true }); }
+});
+
 it('caps activity runtime at the provider maximum while honoring shorter profiles', () => {
 		expect(codexExecutionTimeoutMs(900_000, 1_800)).toBe(900_000);
 		expect(codexExecutionTimeoutMs(900_000, 60)).toBe(60_000);

@@ -8,6 +8,7 @@ const srcRoot = resolve(packageRoot, 'src');
 const scriptsRoot = resolve(packageRoot, 'scripts');
 const templatesRoot = resolve(packageRoot, 'templates');
 const distRoot = resolve(packageRoot, 'dist');
+const buildLock = resolve(packageRoot, '.treeseed', 'build-dist.lock');
 
 const JS_SOURCE_EXTENSIONS = new Set(['.ts']);
 const COPY_EXTENSIONS = new Set(['.d.ts', '.json', '.jsonc', '.md', '.yaml', '.yml']);
@@ -101,26 +102,52 @@ function emitDeclarations() {
 	}
 }
 
-rmSync(distRoot, { recursive: true, force: true });
-
-for (const filePath of walkFiles(srcRoot)) {
-	const extension = extname(filePath);
-	if (JS_SOURCE_EXTENSIONS.has(extension)) await compileModule(filePath, srcRoot, distRoot);
-	else if (COPY_EXTENSIONS.has(extension)) copyAsset(filePath, srcRoot, distRoot);
+async function acquireBuildLock() {
+	mkdirSync(dirname(buildLock), { recursive: true });
+	while (true) {
+		try {
+			mkdirSync(buildLock);
+			writeFileSync(resolve(buildLock, 'owner'), `${process.pid}\n`, 'utf8');
+			return;
+		} catch (error) {
+			const ownerPath = resolve(buildLock, 'owner');
+			const owner = existsSync(ownerPath) ? Number(readFileSync(ownerPath, 'utf8').trim()) : Number.NaN;
+			let active = false;
+			if (Number.isInteger(owner) && owner > 0) {
+				try { process.kill(owner, 0); active = true; } catch { active = false; }
+			}
+			if (!active) { rmSync(buildLock, { recursive: true, force: true }); continue; }
+			if (!(error instanceof Error) || !('code' in error) || error.code !== 'EEXIST') throw error;
+			await new Promise((resolveWait) => setTimeout(resolveWait, 250));
+		}
+	}
 }
 
-for (const filePath of walkFiles(scriptsRoot)) {
-	const extension = extname(filePath);
-	if (JS_SOURCE_EXTENSIONS.has(extension)) transpileScript(filePath);
-}
+await acquireBuildLock();
+try {
+	rmSync(distRoot, { recursive: true, force: true });
 
-emitDeclarations();
+	for (const filePath of walkFiles(srcRoot)) {
+		const extension = extname(filePath);
+		if (JS_SOURCE_EXTENSIONS.has(extension)) await compileModule(filePath, srcRoot, distRoot);
+		else if (COPY_EXTENSIONS.has(extension)) copyAsset(filePath, srcRoot, distRoot);
+	}
 
-if (existsSync(resolve(distRoot, 'src'))) {
-	cpSync(resolve(distRoot, 'src'), distRoot, { recursive: true });
-	rmSync(resolve(distRoot, 'src'), { recursive: true, force: true });
-}
+	for (const filePath of walkFiles(scriptsRoot)) {
+		const extension = extname(filePath);
+		if (JS_SOURCE_EXTENSIONS.has(extension)) transpileScript(filePath);
+	}
 
-if (existsSync(templatesRoot)) {
-	cpSync(templatesRoot, resolve(distRoot, 'templates'), { recursive: true });
+	emitDeclarations();
+
+	if (existsSync(resolve(distRoot, 'src'))) {
+		cpSync(resolve(distRoot, 'src'), distRoot, { recursive: true });
+		rmSync(resolve(distRoot, 'src'), { recursive: true, force: true });
+	}
+
+	if (existsSync(templatesRoot)) {
+		cpSync(templatesRoot, resolve(distRoot, 'templates'), { recursive: true });
+	}
+} finally {
+	rmSync(buildLock, { recursive: true, force: true });
 }

@@ -94,7 +94,7 @@ export function diagnoseAgentAuthoring(spec: AgentRuntimeSpec | Record<string, u
 		context: record(agent.context),
 		execution: record(agent.execution),
 		outputs: record(agent.outputs),
-		contentAccess: record(agent.contentAccess),
+		permissions: record(agent.permissionProjection),
 	};
 	const entries = hasProfiles ? profiles : [['runtime', fallbackProfile] as [string, unknown]];
 	for (const [activity, rawProfile] of entries) {
@@ -110,10 +110,11 @@ export function diagnoseAgentAuthoring(spec: AgentRuntimeSpec | Record<string, u
 			);
 		}
 		const context = record(profile.context);
-		const contentAccess = record(profile.contentAccess);
-		const readModels = stringArray(contentAccess.readModels);
+		const permissions = record(profile.permissions);
+		const contentPermissions=record(permissions.content);
+		const readModels=Object.entries(contentPermissions).filter(([,grant])=>stringArray(record(grant).operations).some((operation)=>['describe','query','read'].includes(operation))).map(([model])=>model);
 		if (!array(context.queries).length && !readModels.length) {
-			add('agent.missing_context_queries', 'error', profilePath(activity, 'context.queries'), 'Activity profile has no TreeDX/API context queries or readable content models.', 'Declare context queries or contentAccess.readModels so runtime context is scoped through TreeDX/API handles.');
+			add('agent.missing_context_queries', 'error', profilePath(activity, 'context.queries'), 'Activity profile has no TreeDX/API context queries or readable content models.', 'Declare context queries or per-model permissions so runtime context is scoped through TreeDX/API handles.');
 		}
 		const execution = record(profile.execution);
 		const requiredCapabilities = stringArray(execution.requiredCapabilities ?? record(execution.providerProfile).requiredCapabilities);
@@ -135,7 +136,7 @@ export function diagnoseAgentAuthoring(spec: AgentRuntimeSpec | Record<string, u
 			add('agent.output_contract_ambiguous', 'error', profilePath(activity, 'outputs'), 'Activity profile has no explicit output contract.', 'Declare content, tool, signal, or terminal output contracts so AgentKernel can validate results.');
 		}
 		const modelMutations = stringArray(outputs.modelMutations);
-		const commitAllowed = record(contentAccess.commit).allowed === true;
+		const commitAllowed = record(permissions.commit).allowed === true;
 		const branchKind = typeof record(profile.branchPolicy).kind === 'string'
 			? String(record(profile.branchPolicy).kind)
 			: '';

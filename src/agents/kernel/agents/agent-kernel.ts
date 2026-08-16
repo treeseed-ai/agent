@@ -17,6 +17,7 @@ import type { AgentKernelAssignmentRunOptions, AgentKernelModeRunTelemetryInput 
 import { preflightAssignment } from "../capacity/assignments/assignment-preflight.ts";
 import { loadAssignmentActivityContext } from "../execution/context-loader.ts";
 import { dispatchAssignmentExecution } from "../execution/execution-dispatcher.ts";
+import { isRetryableAgentExecutionFailure } from "../validation/failure-classifier.ts";
 import { recordAssignmentModeRun } from "../telemetry/telemetry.ts";
 import { boundedAssignmentResult } from "../execution/execution-result.ts";
 import { inspectAgentKernel, resolveKernelAgentExecution } from '../runtime/kernel-runtime.ts';
@@ -171,6 +172,7 @@ export class AgentKernel {
         treeDx: this.treeDx,
         activeRuns: this.activeRuns,
         capacity: {
+		  signal: options.signal,
           assignmentId: assignment.id,
           providerId: assignment.capacityProviderId,
           mode,
@@ -474,14 +476,17 @@ export class AgentKernel {
         },
       };
     } catch (error) {
+      const retryable = isRetryableAgentExecutionFailure(error);
       return boundedAssignmentResult(
         options,
         createAgentKernelModeFallback(
-          "assignment_handler_failed",
+          retryable
+            ? "assignment_handler_transient_failure"
+            : "assignment_handler_failed",
           error instanceof Error ? error.message : String(error),
-          { retryable: false },
+          { retryable },
         ),
-        "failed",
+        retryable ? "returned" : "failed",
       );
     }
   }

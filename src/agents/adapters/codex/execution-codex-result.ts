@@ -16,6 +16,7 @@ import {
 	type RunCodexTaskOptions,
 } from './execution-codex-core.ts';
 import { runCodexThread } from './execution-codex-stream.ts';
+import { withCodexChildPipeGuard } from './codex-child-pipe-guard.ts';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
 	return value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -171,6 +172,16 @@ export async function runCodexTask(
 ): Promise<CodexExecutionResult> {
 	const startedAt = options.now?.() ?? Date.now();
 	let ownedClient: CodexClient | null = null;
+	let activeRun: Promise<CodexRunResult> | null = null;
+	let activeThreadId = request.threadId ?? '';
+	const joinActiveRun = async () => {
+		const running = activeRun;
+		if (running) await running.catch(() => undefined);
+	};
+	const cancellation = new AbortController();
+	const cancelFromAuthority = () => cancellation.abort(options.signal?.reason);
+	if (options.signal?.aborted) cancelFromAuthority();
+	else options.signal?.addEventListener('abort', cancelFromAuthority, { once: true });
 	try {
 		validateCodexExecutionRequest(request);
 	} catch (error) {
@@ -188,10 +199,17 @@ export async function runCodexTask(
 		const thread = request.threadId
 			? client.resumeThread(request.threadId, threadOptions)
 			: client.startThread(threadOptions);
+		activeThreadId = thread.id ?? request.threadId ?? '';
 		const prompt = buildCodexPrompt(request);
-		const runPromise = runCodexThread(thread, prompt, options.onEvent);
-		runPromise.catch(() => null);
-		const result = await withTimeout(runPromise, request.timeoutMs ?? 900_000);
+		activeRun = withCodexChildPipeGuard(() => runCodexThread(
+			thread,
+			prompt,
+			options.onEvent,
+			cancellation.signal,
+			(threadId) => { activeThreadId = threadId; },
+		));
+		activeRun.catch(() => null);
+		const result = await withTimeout(activeRun, request.timeoutMs ?? 900_000, () => cancellation.abort());
 		const wallMs = (options.now?.() ?? Date.now()) - startedAt;
 		return normalizeCodexRunResult({
 			request,
@@ -200,12 +218,23 @@ export async function runCodexTask(
 			wallMs,
 		});
 	} catch (error) {
+		if (options.signal?.aborted) {
+			await joinActiveRun();
+			const message = options.signal.reason instanceof Error ? options.signal.reason.message : 'Assignment execution authority was revoked.';
+			return {
+				provider: 'codex', threadId: request.threadId ?? '', status: 'failed', summary: message,
+				changedPaths: [], proposedCommands: [], verificationHints: [],
+				error: { code: 'codex_execution_authority_revoked', message, retryable: false },
+			};
+		}
 		if (error instanceof CodexExecutionTimeoutError) {
+			cancellation.abort();
+			await activeRun?.catch(() => undefined);
 			const wallMs = (options.now?.() ?? Date.now()) - startedAt;
 			const prompt = buildCodexPrompt(request);
 			return {
 				provider: 'codex',
-				threadId: request.threadId ?? '',
+				threadId: activeThreadId,
 				status: 'failed',
 				summary: error.message,
 				changedPaths: [],
@@ -278,6 +307,7 @@ export async function runCodexTask(
 			},
 		};
 	} finally {
+		options.signal?.removeEventListener('abort', cancelFromAuthority);
 		await ownedClient?.cleanup?.();
 	}
 }

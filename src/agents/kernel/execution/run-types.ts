@@ -17,6 +17,7 @@ export interface AgentKernelModeRunTelemetryInput {
 }
 
 export interface AgentKernelAssignmentRunOptions extends AgentKernelModeExecutionInput {
+	signal?: AbortSignal;
 	recordModeRun?: (run: AgentKernelModeRunTelemetryInput) => Promise<unknown>;
 	recordFallbackOutput?: (output: Record<string, unknown>) => Promise<unknown>;
 }

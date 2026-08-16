@@ -94,11 +94,15 @@ it('reads and searches only bounded assignment repository paths', async () => {
 			forbiddenPaths: ['src/private/**'],
 		});
 		const options = {
-			apiBaseUrl: '',
+			apiBaseUrl: 'https://api.example.test',
 			providerAccessToken: '',
 			assignmentId: 'assignment-1',
 			descriptors: catalog.descriptors,
 			repoRoot: root,
+			fetchImpl: vi.fn(async () => new Response(JSON.stringify({ ok: true, payload: {
+				id: 'assignment-1', teamId: 'team-1', projectId: 'project-1', stateVersion: 1,
+				status: 'leased', leaseState: 'leased', capacityEnvelope: {}, decisionInput: {}, metadata: {},
+			} }), { status: 200 })) as typeof fetch,
 		};
 		await expect(callAgentTool(options, 'treeseed.repository.read_file', {
 			path: 'src/scheduler.ts',

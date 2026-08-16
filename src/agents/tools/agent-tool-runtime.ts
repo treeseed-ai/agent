@@ -2,115 +2,26 @@ import { execFile } from 'node:child_process';
 import { readFile, realpath, stat } from 'node:fs/promises';
 import { isAbsolute, relative, resolve } from 'node:path';
 import { promisify } from 'node:util';
-import type { AgentToolExecutionTarget, AgentToolMutability, ResearchSourcePolicy, SdkDispatchConfig, SdkDispatchPolicy, SdkDispatchResult } from '@treeseed/sdk';
+import type { SdkDispatchConfig, SdkDispatchPolicy, SdkDispatchResult } from '@treeseed/sdk';
 import { findAgentToolDefinition } from '@treeseed/sdk';
 import { checkpointAgentWorktree } from '@treeseed/sdk/operations/agent-tools';
 import { AgentSdk } from '@treeseed/sdk/sdk';
+import { parseFrontmatterDocument } from '@treeseed/sdk/frontmatter';
 import type { ExecutionProviderToolDescriptor, TreeDxProxyExecutionToolDescriptor } from '../runtime/runtime-types.ts';
 import { callTreeDxProxyTool } from './treedx-proxy-client.ts';
 import type { TreeDxProxyToolName } from './treedx-proxy-tool.ts';
 import { validateAgentToolInput } from './agent-tool-schema.ts';
 import { readAssignmentStatus } from './status/assignment-status-tool.ts';
+import { matchesScopedPath } from './path-scope/path-matcher.ts';
+import { readAssignmentActivity } from './status/assignment-activity-tool.ts';
+import { callAssignmentOperationalContentTool,hasAssignmentPlan } from './assignment/operational-content-tool.ts';
+import { prepareAssignmentOperationHandoff,readAssignmentDiscussion,requestAssignmentClientAction,requestAssignmentDiscussionHandoff } from './assignment/discussion-tool.ts';
+import { runAssignmentDiscussionResponse } from './assignment/communication-response-tool.ts';
 import { callContentTool } from './content-tool-runtime.ts';
 import { fetchGovernedResearchSource, searchGovernedResearchSources } from './governed-research-tools.ts';
+import type { AgentToolRuntimeOptions } from './runtime/agent-tool-runtime-types.ts';
+export type { AgentToolCallTelemetry, AgentToolDerivedEvent, AgentToolRuntimeOptions } from './runtime/agent-tool-runtime-types.ts';
 const execFileAsync = promisify(execFile);
-export interface AgentToolRuntimeOptions {
-	apiBaseUrl: string;
-	providerAccessToken: string;
-	assignmentId: string;
-	leaseToken?: string | null;
-	descriptors: ExecutionProviderToolDescriptor[];
-	sdk?: Pick<AgentSdk, 'dispatch'>;
-	fetchImpl?: typeof fetch;
-	repoRoot?: string;
-	telemetryPath?: string | null;
-	onTelemetry?: (entry: AgentToolCallTelemetry) => void | Promise<void>;
-	researchSourcePolicy?: ResearchSourcePolicy;
-}
-
-export interface AgentToolCallTelemetry {
-	assignmentId: string;
-	projectId: string;
-	toolId: string;
-	executionTarget: AgentToolExecutionTarget;
-	mutability: AgentToolMutability;
-	status: 'started' | 'completed' | 'failed';
-	startedAt: string;
-	completedAt?: string;
-	durationMs?: number;
-	inputSummary: Record<string, unknown>;
-	outputSummary?: Record<string, unknown>;
-	operation?: {
-		namespace?: string;
-		name?: string;
-	};
-	capturedInputRef?: string;
-	capturedOutputRef?: string;
-	derivedEvents?: AgentToolDerivedEvent[];
-	error?: {
-		code: string;
-		message: string;
-	};
-}
-
-export type AgentToolDerivedEvent =
-	| {
-		type: 'question_created';
-		questionRef: Record<string, unknown>;
-		answerPolicy?: Record<string, unknown>;
-	}
-	| {
-		type: 'question_updated';
-		questionRef: Record<string, unknown>;
-	}
-	| {
-		type: 'content_created';
-		contentRef: Record<string, unknown>;
-		requiresCommit?: boolean;
-	}
-	| {
-		type: 'content_updated';
-		contentRef: Record<string, unknown>;
-	}
-	| {
-		type: 'verification_completed';
-		status: 'passed';
-		summary: string;
-		commands: string[];
-	}
-	| {
-		type: 'branch_staged';
-		branchRef: string;
-		stagedRef?: string;
-	}
-	| {
-		type: 'content_committed';
-		commitSha?: string;
-		branchRef?: string;
-	}
-	| {
-		type: 'source_checkpoint_committed';
-		commitSha: string;
-		branchRef?: string;
-		changedPaths: string[];
-	}
-	| {
-		type: 'review_decision_recorded';
-		disposition: 'approved' | 'rejected';
-		summary: string;
-	}
-	| {
-		type: 'research_citation_fetched';
-		citation: Record<string, unknown>;
-	}
-	| {
-		type: 'research_claims_recorded';
-		claims: Record<string, unknown>[];
-	}
-	| {
-		type: 'signal_requested';
-		signal: Record<string, unknown>;
-	};
 
 function record(value: unknown): Record<string, unknown> {
 	return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -122,17 +33,6 @@ function text(value: unknown) {
 
 function normalizePath(value: string) {
 	return value.replace(/\\/gu, '/').replace(/^\.?\//u, '').replace(/\/+/gu, '/');
-}
-
-function matchesPath(path: string, pattern: string) {
-	const normalizedPath = normalizePath(path);
-	const normalizedPattern = normalizePath(pattern);
-	if (!normalizedPattern || normalizedPattern === '**' || normalizedPattern === '*') return true;
-	if (normalizedPattern.endsWith('/**')) {
-		const prefix = normalizedPattern.slice(0, -3);
-		return normalizedPath === prefix || normalizedPath.startsWith(`${prefix}/`);
-	}
-	return normalizedPath === normalizedPattern || normalizedPath.startsWith(`${normalizedPattern}/`);
 }
 
 function descriptorFor(options: AgentToolRuntimeOptions, toolId: string) {
@@ -197,10 +97,10 @@ function assertPathScope(descriptor: ExecutionProviderToolDescriptor, path: stri
 	const metadata = record(descriptor.metadata);
 	const allowedPaths = Array.isArray(metadata.allowedPaths) ? metadata.allowedPaths.map(String) : [];
 	const forbiddenPaths = Array.isArray(metadata.forbiddenPaths) ? metadata.forbiddenPaths.map(String) : [];
-	if (forbiddenPaths.some((pattern) => matchesPath(path, pattern))) {
+	if (forbiddenPaths.some((pattern) => matchesScopedPath(path, pattern))) {
 		return structuredError('path_forbidden', `${path} is forbidden for this assignment.`, { path, forbiddenPaths });
 	}
-	if (allowedPaths.length && !allowedPaths.some((pattern) => matchesPath(path, pattern))) {
+	if (allowedPaths.length && !allowedPaths.some((pattern) => matchesScopedPath(path, pattern))) {
 		return structuredError('path_not_allowed', `${path} is outside the assignment path scope.`, { path, allowedPaths });
 	}
 	return null;
@@ -378,7 +278,7 @@ async function callVerifyTool(descriptor: ExecutionProviderToolDescriptor, input
 	return { ok: true, payload: { reason: text(input.reason) || null, results } };
 }
 
-async function callCheckpointTool(options: AgentToolRuntimeOptions, descriptor: ExecutionProviderToolDescriptor, input: Record<string, unknown>) {
+export async function callCheckpointTool(options: AgentToolRuntimeOptions, descriptor: ExecutionProviderToolDescriptor, input: Record<string, unknown>) {
 	const metadata = record(descriptor.metadata);
 	const worktreeRoot = text(metadata.worktreeRoot);
 	const allowedPaths = Array.isArray(metadata.allowedPaths) ? metadata.allowedPaths.map(String).filter(Boolean) : [];
@@ -425,6 +325,47 @@ export async function callAgentTool(
 			inputValidation.metadata ?? {},
 		);
 	}
+	if (toolId === 'treeseed.assignment_status_update' && Number(input.sequence) > 0 && (!record(input.previousStatusRef).id || !Number.isInteger(Number(record(input.previousStatusRef).revision)))) {
+		return structuredError('invalid_tool_input','Append-only assignment status updates after sequence zero require an exact previousStatusRef.',{ field:'previousStatusRef',sequence:input.sequence });
+	}
+	if (toolId === 'treeseed.assignment_plan' && input.action === 'write' && (!text(input.objective) || !Array.isArray(input.remaining) || !Number.isInteger(Number(input.expectedStateVersion)) || !text(input.idempotencyKey))) {
+		return structuredError('invalid_tool_input','Assignment plan writes require objective, remaining work, exact assignment state, and an idempotency key.');
+	}
+	if (toolId === 'treeseed.assignment_summary' && input.action === 'write' && (!text(input.status) || !text(input.summary) || !text(record(input.performance).outcome) || !Number.isInteger(Number(input.expectedStateVersion)) || !text(input.idempotencyKey))) {
+		return structuredError('invalid_tool_input','Assignment summary writes require outcome status, summary, performance, exact assignment state, and an idempotency key.');
+	}
+	const operationalTool = ['treeseed.assignment_plan','treeseed.assignment_status_update','treeseed.assignment_summary'].includes(toolId);
+	const mutation = descriptor.mutability !== 'read';
+	if (mutation || toolId !== 'treeseed.status') {
+		const status = record((await readAssignmentStatus(options)).payload);
+		const expected = Number(input.expectedStateVersion);
+		if (Number.isInteger(expected) && expected !== Number(status.stateVersion)) return structuredError('assignment_status_stale','Assignment state changed; read treeseed.status before mutation.',{ expectedStateVersion:expected,stateVersion:status.stateVersion });
+		const phase = text(record(status.time).phase);
+		const preparationAllowed=new Set(['treeseed.status','treeseed.assignment_plan','treeseed.discussion.read','treeseed.discussion.follow']);
+		if(phase==='preparation'&&!preparationAllowed.has(toolId)) return structuredError('assignment_preparation_tool_restricted','Preparation is limited to authoritative status, the mandatory initial plan, and bounded discussion reads. Productive tools unlock only after the plan starts the execution window.',{ phase,remainingSeconds:record(status.time).preparationRemainingSeconds });
+		const closeoutAllowed = new Set([
+			'treeseed.assignment_plan','treeseed.assignment_status_update','treeseed.assignment_summary',
+			'treeseed.content.validate','treeseed.content.commit','treeseed.publish_signal',
+			'treeseed.checkpoint','treeseed.discussion.read','treeseed.discussion.follow','treeseed.discussion.respond','treeseed.discussion.request_handoff','treeseed.operation.prepare_handoff','treeseed.verify','treeseed.changed_paths',
+		]);
+		if(phase==='expired'&&mutation) return structuredError('assignment_closeout_deadline_exhausted','The protected closeout deadline expired; no further assignment mutation is authorized.',{phase,remainingSeconds:0});
+		if ((phase === 'closeout' || phase === 'expired') && !closeoutAllowed.has(toolId)) return structuredError('assignment_closeout_tool_restricted','Closeout has begun; only plan/status checkpointing, validation, commit/checkpoint, required publication, summary, and discussion handoff tools remain available.',{ phase,remainingSeconds:record(status.time).remainingSeconds });
+		if (mutation && toolId !== 'treeseed.assignment_plan' && !await hasAssignmentPlan(options)) return structuredError('assignment_initial_plan_required','Create the assignment operational plan before any other mutation.');
+	}
+	if (operationalTool) return callAssignmentOperationalContentTool(options,descriptor,input);
+	if (toolId === 'treeseed.discussion.read' || toolId === 'treeseed.discussion.follow') return readAssignmentDiscussion(options,input);
+	if (toolId === 'treeseed.discussion.respond') return runAssignmentDiscussionResponse(options,descriptor,input);
+	if (toolId === 'treeseed.discussion.request_handoff') return requestAssignmentDiscussionHandoff(options,input);
+	if (toolId === 'treeseed.operation.prepare_handoff') return prepareAssignmentOperationHandoff(options,input);
+	if (toolId === 'treeseed.client_session.request_action') return requestAssignmentClientAction(options,input);
+	if (toolId === 'treeseed.discussion.create_artifact') {
+		const parsed=parseFrontmatterDocument(text(input.content));
+		return callContentTool({
+			apiBaseUrl:options.apiBaseUrl,providerAccessToken:options.providerAccessToken,assignmentId:options.assignmentId,
+			descriptor:{ ...descriptor,executionTarget:'treeseed_content',metadata:{ ...descriptor.metadata,contentAction:'create' } },
+			input:{ model:input.model,path:input.path,placement:{ path:input.path },title:text(parsed.frontmatter.title),body:parsed.body,fields:parsed.frontmatter },fetchImpl:options.fetchImpl,
+		});
+	}
 	if (descriptor.executionTarget === 'treedx_proxy') {
 		const treeDxDescriptor = descriptor as TreeDxProxyExecutionToolDescriptor;
 		try {
@@ -457,6 +398,9 @@ export async function callAgentTool(
 	}
 	if (descriptor.id === 'treeseed.changed_paths') {
 		return await callChangedPathsTool(descriptor, input);
+	}
+	if (descriptor.id === 'treeseed.assignment_activity') {
+		return await readAssignmentActivity(options, input);
 	}
 	if (descriptor.id === 'treeseed.verify') {
 		return await callVerifyTool(descriptor, input);

@@ -30,6 +30,7 @@ export function createAssignmentTreeDxAdapter(input: {
 	const baseUrl = normalizeBaseUrl(input.config.marketUrl);
 	const defaultRepoId = stringValue(input.treedxProxyHandle.repositoryId);
 	const defaultWorkspaceId = stringValue(input.treedxProxyHandle.workspaceId);
+	const defaultRepositoryRef = stringValue(input.treedxProxyHandle.baseCommitSha) || stringValue(input.treedxProxyHandle.baseRef);
 	const scopedHandle = normalizeTreeDxProxyHandle(input.treedxProxyHandle);
 	if (!scopedHandle) return null;
 	const checkScope = (request: { repoId?: string | null; workspaceId?: string | null; operation?: string | null; path?: string | null }) => {
@@ -202,6 +203,7 @@ export function createAssignmentTreeDxAdapter(input: {
 				query,
 				paths,
 				...contextBody,
+				ref: stringValue(contextBody.ref) || defaultRepositoryRef || undefined,
 				budget: record(contextBody.budget).maxTokens || record(contextBody.budget).maxNodes
 					? record(contextBody.budget)
 					: { maxNodes: Math.min(8, requestedLimit), maxTokens: 1_800 },
@@ -213,7 +215,7 @@ export function createAssignmentTreeDxAdapter(input: {
 			checkScope({ repoId: effectiveRepoId, operation: 'files:read', path });
 			return request('POST', `/v1/dx/projects/${encodeURIComponent(input.projectId)}/repos/${encodeURIComponent(effectiveRepoId)}/paths/list`, {
 				path,
-				ref,
+				ref: ref || defaultRepositoryRef || undefined,
 				...(body ?? {}),
 			}, 'paths.list');
 		},
@@ -225,7 +227,7 @@ export function createAssignmentTreeDxAdapter(input: {
 				const requestBody = body ?? {};
 				const response = await request('POST', `/v1/dx/projects/${encodeURIComponent(input.projectId)}/repos/${encodeURIComponent(effectiveRepoId)}/files/read`, {
 					path,
-					ref,
+					ref: ref || defaultRepositoryRef || undefined,
 					...requestBody,
 					maxBytes: Math.max(1, Math.min(196_608, Number(requestBody.maxBytes) || 131_072)),
 					offsetBytes: Math.max(0, Number(requestBody.offsetBytes) || 0),

@@ -1,7 +1,7 @@
 import type { AgentActivityProfile, AgentActivityType, AgentBranchPolicy, AgentChatProfileConfiguration, AgentDefinitionIdentity, AgentHandlerKind, AgentOutputContract, AgentQuestionPolicy } from '@treeseed/sdk/types/agents';
-import { validateAgentActivityProfilesConfiguration } from '@treeseed/sdk/agent-capacity';
+import { compileDefaultChatActivityProfile,validateAgentActivityProfilesConfiguration } from '@treeseed/sdk/agent-capacity';
 import type { AgentSpecDiagnostic } from './spec-types.ts';
-import { normalizeContentAccess, normalizeToolPolicy } from './spec-normalizer-policy.ts';
+import { normalizeActivityPermissions, normalizeToolPolicy } from './spec-normalizer-policy.ts';
 import { ACTIVITY_TYPES, GENERIC_HANDLER_KINDS, ensureBoolean, ensureString, isPlainObject } from './spec-normalizer-primitives.ts';
 
 function normalizeOutputs(
@@ -120,7 +120,8 @@ function normalizeActivityProfile(
 			templates: isPlainObject(prompt.templates) ? prompt.templates as Record<string, string> : undefined,
 		},
 		branchPolicy: normalizeBranchPolicy(value.branchPolicy, `${field}.branchPolicy`, diagnostics, slug),
-		contentAccess: normalizeContentAccess(value.contentAccess, diagnostics, slug, `${field}.contentAccess`),
+		permissions: normalizeActivityPermissions(value.permissions, diagnostics, slug, `${field}.permissions`),
+		authorityPresets: Array.isArray(value.authorityPresets) ? value.authorityPresets.map(String) as AgentActivityProfile['authorityPresets'] : undefined,
 		tools: normalizeToolPolicy(value.tools, `${field}.tools`, enabled, diagnostics, slug),
 		signals: isPlainObject(value.signals) ? value.signals as AgentActivityProfile['signals'] : undefined,
 		outputs: normalizeOutputs(value.outputs, diagnostics, slug),
@@ -128,6 +129,7 @@ function normalizeActivityProfile(
 		questionPolicy: normalizeQuestionPolicy(value.questionPolicy, `${field}.questionPolicy`, diagnostics, slug),
 		execution: {
 			...execution,
+			closeoutWarningSeconds: Number.isInteger(execution.closeoutWarningSeconds) && Number(execution.closeoutWarningSeconds) > 0 ? Number(execution.closeoutWarningSeconds) : 180,
 			maxTotalTokens: Number.isInteger(execution.maxTotalTokens) && Number(execution.maxTotalTokens) > 0 ? Number(execution.maxTotalTokens) : 136_000,
 			warningTokens: Number.isInteger(execution.warningTokens) && Number(execution.warningTokens) > 0 ? Number(execution.warningTokens) : 100_000,
 			enforcementConfidence: ['exact', 'bounded', 'estimated', 'opaque'].includes(String(execution.enforcementConfidence)) ? execution.enforcementConfidence : 'bounded',
@@ -153,29 +155,6 @@ function normalizeChatSpecialization(value: unknown, diagnostics: AgentSpecDiagn
 		costCurrency: typeof value.costCurrency === 'string' ? value.costCurrency : undefined,
 		toolAdditions: Array.isArray(value.toolAdditions) ? value.toolAdditions.map(String).filter(Boolean) : undefined,
 		contextModels: Array.isArray(value.contextModels) ? value.contextModels.map(String).filter(Boolean) : undefined,
-	};
-}
-
-function defaultChatProfile(slug: string, specialization: AgentChatProfileConfiguration): AgentActivityProfile {
-	const contextModels = [...new Set(['discussion', 'discussion_message', 'discussion_event', 'agent', 'note', 'question', 'proposal', 'decision', 'objective', 'knowledge', ...(specialization.contextModels ?? [])])];
-	const tools = [...new Set(['treeseed.content.describe', 'treeseed.content.query', 'treeseed.content.read', 'treedx.build_context', 'treedx.read_repository_files', 'treedx.search_workspace', 'treedx.read_workspace_file', 'treeseed.content.create', 'treeseed.content.update', 'treeseed.content.link', 'treeseed.content.validate', 'treeseed.content.commit', 'treeseed.status', ...(specialization.toolAdditions ?? [])])];
-	return {
-		enabled: true,
-		handler: 'writer',
-		prompt: {
-			system: `Participate as ${slug} in a TreeSeed Discussion. Answer from your configured identity and durable instructions, cite exact TreeDX content or repository refs, distinguish evidence from inference, and keep the response scoped to the current turn. You may create or update discussion messages, linked notes, questions, and proposals. Never change knowledge or code without an approved governed acting assignment.${specialization.responseStyle ? ` Response style: ${specialization.responseStyle}` : ''}`,
-			task: specialization.promptTask ?? 'Respond to the committed Discussion turn and produce durable, source-grounded output.',
-		},
-		branchPolicy: { kind: 'staging-content', base: 'staging' },
-		contentAccess: {
-			read: { models: contextModels, actions: ['describe', 'query', 'read'] },
-			write: { models: ['discussion_message', 'note', 'question', 'proposal'], actions: ['create', 'update', 'link', 'validate', 'commit'], paths: ['src/content/discussion-messages/**', 'src/content/notes/**', 'src/content/questions/**', 'src/content/proposals/**'] },
-			commit: { allowed: true },
-		},
-		tools: { allowed: tools },
-		outputs: { messageTypes: ['discussion_response'], modelMutations: ['discussion_message:create', 'linked_note:create', 'question:create', 'proposal:create'] },
-		questionPolicy: { blockExecutionWhenCreated: false, defaultAnswerPolicy: { kind: 'team-human' } },
-		execution: { requiredCapabilities: specialization.requiredCapabilities ?? ['agent-execution'], maxRuntimeSeconds: specialization.maxRuntimeSeconds ?? 900, maxRetries: 1, verificationRequired: false, maxTotalTokens: specialization.maxTotalTokens ?? 136_000, warningTokens: specialization.warningTokens ?? 100_000, maxCostAmount: specialization.maxCostAmount, costCurrency: specialization.costCurrency ?? 'USD', pricingGeneration: 'provider-runtime', enforcementConfidence: 'bounded' },
 	};
 }
 
@@ -206,7 +185,7 @@ export function normalizeActivityProfiles(value: unknown, diagnostics: AgentSpec
 		const normalized = normalizeActivityProfile(profile, key as AgentActivityType, diagnostics, slug);
 		if (normalized) profiles[key as AgentActivityType] = normalized;
 	}
-	profiles.chat ??= defaultChatProfile(slug, normalizeChatSpecialization(chatProfile, diagnostics, slug));
+	profiles.chat ??= compileDefaultChatActivityProfile(slug, normalizeChatSpecialization(chatProfile, diagnostics, slug));
 	return profiles;
 }
 

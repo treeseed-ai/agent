@@ -1,12 +1,14 @@
 import { access, mkdir } from 'node:fs/promises';
 import { constants } from 'node:fs';
 import type { ProviderSupplyOffer } from '@treeseed/sdk/capacity-provider/contracts';
+import type { MinimumAssignmentDuration } from '@treeseed/sdk/capacity-provider/contracts';
 import type { ProviderConnectionRuntimeContext, ProviderHostRuntimeConfig } from '../configuration/config.ts';
 import { discoverProviderBudgets } from '../configuration/budgets.ts';
 import { discoverProviderCapabilities } from '../configuration/capabilities.ts';
 import { createProviderMarketClient } from '../coordination/client.ts';
 import { compileConnectionAvailability } from '../projects/projects-core/availability-projection.ts';
 import { ProviderLocalCapacityStore } from '../capacity/capacity-core/local-capacity-store.ts';
+import { observeProviderDiskCapacity } from '../runtime/disk-capacity.ts';
 
 function record(value: unknown): Record<string, unknown> {
 	return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -29,11 +31,15 @@ export async function checkProviderHealth(config: ProviderHostRuntimeConfig) {
 	} catch {
 		dataDirWritable = false;
 	}
+	const diskCapacity = dataDirWritable
+		? await observeProviderDiskCapacity({ path: config.dataDir, env: config.env })
+		: null;
 	return okPayload('healthcheck', {
-		status: dataDirWritable ? 'ok' : 'degraded',
+		status: dataDirWritable && diskCapacity?.ok ? 'ok' : 'degraded',
 		environment: config.environment,
 		dataDir: config.dataDir,
 		dataDirWritable,
+		diskCapacity,
 		manifestConfigured: Boolean(config.manifestPath),
 		codexReady: Boolean(config.codexAuthFile || config.codexAuthJsonB64),
 	});
@@ -59,6 +65,7 @@ interface ProviderManagerAvailability {
 		id: string;
 		adapter: string;
 		nativeLimits: Record<string, unknown>;
+		minimumAssignmentDuration?: MinimumAssignmentDuration;
 		capabilities?: string[];
 		status?: 'available' | 'unavailable';
 		nativeUnit?: string;
@@ -68,6 +75,7 @@ interface ProviderManagerAvailability {
 		observations?: Record<string, unknown>;
 	}>;
 	activeRunners?: number;
+	constraints?: Record<string, unknown>;
 }
 
 function positiveFinite(values: Array<number | null | undefined>) {
@@ -91,9 +99,16 @@ async function publishAvailabilitySession(
 	localState: ProviderLocalCapacityStore,
 ) {
 	const budgets = discoverProviderBudgets(config);
-	const projection = availability?.offer
-		? compileConnectionAvailability({ connection: { id: config.connectionId, marketUrl: config.marketUrl, teamId: config.teamId, providerId: config.providerId, membershipId: config.membershipId, membershipCredentialRef: 'runtime://redacted', membershipCredentialId: 'runtime-redacted', offer: availability.offer }, executionProviders: availability.executionProviders ?? [], hostMaxConcurrentRunners: config.maxConcurrentRunners })
+	const scopedProjection = availability?.offer
+		? compileConnectionAvailability({ connection: { id: config.connectionId, marketUrl: config.marketUrl, teamId: config.teamId, providerId: config.providerId, membershipId: config.membershipId, membershipCredentialRef: 'runtime://redacted', membershipCredentialId: 'runtime-redacted', offer: availability.offer }, executionProviders: availability.executionProviders ?? [], hostMaxConcurrentRunners: config.maxConcurrentRunners, defaultExecutionProviderId: config.defaultExecutionProviderId })
 		: { capabilities, executionProviders: availability?.executionProviders ?? [], maxConcurrentRunners: config.maxConcurrentRunners };
+	const projection = {
+		...scopedProjection,
+		executionProviders: scopedProjection.executionProviders.map((provider) => ({
+			...provider,
+			preferred: provider.id === config.defaultExecutionProviderId,
+		})),
+	};
 	const maxConcurrentRunners = projection.maxConcurrentRunners;
 	const nativeLimits = {
 		...budgets,
@@ -119,8 +134,12 @@ async function publishAvailabilitySession(
 			dataDir: config.dataDir,
 			availableAgentSeconds: nativeLimits.availableAgentSeconds,
 			maxConcurrentRunners,
+			...(availability?.constraints ?? {}),
 		},
-		metadata: { source: '@treeseed/agent/provider-manager' },
+		metadata: {
+			source: '@treeseed/agent/provider-manager',
+			sourceClosureDigest: config.env.TREESEED_PROVIDER_SOURCE_CLOSURE_DIGEST ?? null,
+		},
 	};
 	const key = availabilitySessionKey(config);
 	const existing = await localState.session(key);

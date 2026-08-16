@@ -127,6 +127,8 @@ Hosted deployments use package-owned role images:
 
 Published images are multi-architecture Docker Hub images for `linux/amd64` and `linux/arm64`, with architecture-specific tags assembled into a manifest, following the TreeDX image release model.
 
+Local reconciliation builds one source-closure-addressed `agent-runtime` image and applies both local role tags to that exact image. Compose still runs separate provider manager and provider runner services with explicit role commands and isolated lifecycle state. A changed Agent or consumed SDK runtime closure invalidates both tags together; an unchanged closure is a no-op. Hosted publication retains the distinct manager and runner artifacts.
+
 The following versioned document is the separate runtime-image extension manifest, not the schema-v2 provider identity/connections manifest used by the provider manager:
 
 ```yaml

@@ -45,8 +45,12 @@ function profileAgent(overrides: Record<string, unknown> = {}) {
 				branchPolicy: { kind: 'read-only', base: 'main' },
 				tools: { allowed: ['treeseed.content.query', 'treeseed.content.read', 'treeseed.status'] },
 				outputs: { messageTypes: [], modelMutations: ['note:create'] },
-				contentAccess: {
-					read: { models: ['question', 'decision'], actions: ['query', 'read'] },
+				permissions: {
+					content: {
+						question: { operations: ['query', 'read'] },
+						decision: { operations: ['query', 'read'] },
+						note: { operations: ['create'] },
+					},
 					commit: { allowed: false },
 				},
 			},
@@ -62,8 +66,12 @@ function profileAgent(overrides: Record<string, unknown> = {}) {
 				},
 				tools: { allowed: ['treeseed.content.query', 'treeseed.content.read', 'treeseed.verify', 'treeseed.changed_paths'] },
 				outputs: { messageTypes: [], modelMutations: ['implementation_report:create'] },
-				contentAccess: {
-					read: { models: ['question', 'decision'], actions: ['query', 'read'] },
+				permissions: {
+					content: {
+						question: { operations: ['query', 'read'] },
+						decision: { operations: ['query', 'read'] },
+					},
+					repository: { readPaths: ['src/**'], writePaths: ['src/**'], allowCodeMutation: true },
 					commit: { allowed: false },
 				},
 				execution: {
@@ -149,10 +157,10 @@ export const securityAuditHandler: AgentHandler = {
 			activityType: 'planning',
 			handler: 'actor',
 			systemPrompt: expect.stringContaining('Plan engineering work.'),
-			tools: { allowed: ['treeseed.content.query', 'treeseed.content.read', 'treeseed.status'] },
 			outputs: { modelMutations: ['note:create'] },
 			branchPolicy: { kind: 'read-only', base: 'main' },
 		});
+		expect(planning?.tools.allowed).toEqual(expect.arrayContaining(['treeseed.content.query', 'treeseed.content.read', 'treeseed.status']));
 		expect(selectAgentActivityProfile(normalized.spec!, 'acting')).toMatchObject({
 			execution: { allowedPaths: ['src/**'], forbiddenPaths: ['test/**', 'tests/**'] },
 		});
@@ -177,6 +185,38 @@ export const securityAuditHandler: AgentHandler = {
 		});
 	});
 
+	it('selects reviewing in either provenance mode without falling back or gaining checkpoint authority', () => {
+		const normalized = normalizeAgentRuntimeSpec(profileAgent(), {
+			registeredHandlers: ['actor'],
+			messageTypes: [],
+		});
+		expect(normalized.spec).not.toBeNull();
+		const reviewProfile = {
+			...normalized.spec!.activityProfiles.planning!,
+			activityType: 'reviewing' as const,
+			authorityPresets: ['review-authority' as const],
+			prompt: { system: 'Review the exact deliverable.' },
+			tools: { allowed: ['treeseed.changed_paths', 'treeseed.verify'] },
+			outputs: { messageTypes: [], modelMutations: ['review_finding:create'] },
+		};
+		const agent = {
+			...normalized.spec!,
+			activityProfiles: { ...normalized.spec!.activityProfiles, reviewing: reviewProfile },
+		};
+		for (const mode of ['planning', 'acting'] as const) {
+			const selected = selectAgentActivityProfile(agent, mode, 'reviewing');
+			expect(selected).toMatchObject({
+				activityType: 'reviewing',
+				authorityPresetIds: ['review-authority'],
+				authoritySnapshot: { presetIds: ['review-authority'], branchPolicy: { kind: 'read-only' } },
+			});
+			expect(selected?.tools.allowed).toContain('treeseed.changed_paths');
+			expect(selected?.tools.allowed).not.toContain('treeseed.checkpoint');
+		}
+		expect(selectAgentActivityProfile(agent, 'planning', 'acting')).toBeNull();
+		expect(selectAgentActivityProfile(agent, 'acting', 'reporting')).toBeNull();
+	});
+
 	it('derives a specialized chat profile from the common discussion foundation', () => {
 		const normalized = normalizeAgentRuntimeSpec(profileAgent({ chatProfile: {
 			foundation: 'discussion-v1', responseStyle: 'implementation-focused', requiredCapabilities: ['agent-execution', 'repository-write'], maxTotalTokens: 24_000, maxCostAmount: 2,
@@ -186,7 +226,9 @@ export const securityAuditHandler: AgentHandler = {
 		expect(chat?.systemPrompt).toContain('implementation-focused');
 		expect(chat?.systemPrompt).toContain('allocation is a maximum, not a target');
 		expect(chat?.systemPrompt).toContain('completed_early');
-		expect(chat?.contentAccess?.write?.models).toEqual(expect.arrayContaining(['discussion_message', 'proposal', 'question', 'note']));
+		expect(chat?.permissionProjection?.write?.models).toEqual(expect.arrayContaining(['proposal', 'question', 'note']));
+		expect(chat?.permissionProjection?.write?.models).not.toContain('discussion_message');
+		expect(chat?.tools.allowed).toContain('treeseed.discussion.respond');
 	});
 
 	it('derives the provider tool policy from the assigned activity rather than the root profile', () => {
@@ -205,16 +247,16 @@ export const securityAuditHandler: AgentHandler = {
 					branchPolicy: { kind: 'read-only' as const, base: 'main' },
 					tools: { allowed: ['treeseed.content.read'] },
 					outputs: { messageTypes: [], modelMutations: ['estimate:create'] },
-					contentAccess: { read: { models: ['proposal'], actions: ['read'] }, write: { models: [], actions: [] }, commit: { allowed: false } },
+					permissions: { content: { proposal: { operations: ['read'] } }, commit: { allowed: false } },
 				},
 			},
 		};
 		const policy = resolveAssignmentAgentToolPolicy(agent, 'planning', 'estimating');
 		expect(policy).toMatchObject({
 			activityType: 'estimating',
-			tools: { allowed: ['treeseed.content.read'] },
-			contentAccess: { commit: { allowed: false } },
+			permissionProjection: { commit: { allowed: false } },
 		});
+		expect(policy?.tools.allowed).toEqual(expect.arrayContaining(['treeseed.content.read', 'treeseed.status', 'treeseed.discussion.respond']));
 		expect(policy?.tools.allowed).not.toContain('treeseed.content.create');
 	});
 
@@ -325,12 +367,14 @@ export const securityAuditHandler: AgentHandler = {
 
 		expect(output.status).toBe('completed');
 		expect(output.metadata?.structuredEstimate).toMatchObject({
+			schemaVersion: 2,
 			teamId: 'team-1',
 			projectId: 'project-1',
 			decisionId: 'decision-1',
 			agentClass: 'engineer',
 			expectedSeconds: 3,
 			maxSeconds: 5,
+			workBreakdown: { independentReviewSeconds: 1, finalReviewSeconds: 1, reportingSeconds: 1, expectedRevisionCycles: 1 },
 		});
 		expect(output.metadata?.estimateValidation).toMatchObject({ ok: true });
 	});

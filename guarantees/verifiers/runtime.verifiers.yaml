@@ -108,11 +108,51 @@ verifiers:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"
     testFile: tests/unit/provider/budgets.test.ts
+  agent.runtime.protect-provider-host-disk:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/integration/provider/teams/multi-team-service.test.ts
+    testName: weights team polls, survives dispatch restart, and blocks revoked-team work
   agent.runtime.report-readiness:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"
     testFile: tests/integration/provider/assignment-runtime.releases-internal-execution-provider-resources-o-1.test.ts
     testName: renders a provider plan without fetching team-wide portfolio state
+  agent.runtime.assignment-time-status:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/unit/agents/timing/assignment-status-tool.test.ts
+    testName: returns authoritative wall-clock assignment timing while work continues
+  agent.runtime.assignment-closeout-contract:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/integration/agents/capacity/providers/codex-provider.makes-verify-and-checkpoint-receipts-explicit-completion-gates.test.ts
+    testName: makes live time checks and resumable closeout mandatory for every Codex assignment
+  agent.runtime.assignment-operational-content:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/unit/agents/timing/assignment-operational-safety.test.ts
+    testName: requires the initial TreeDX plan before any other mutation
+  agent.runtime.assignment-execution-transition:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/unit/agents/timing/assignment-operational-safety.test.ts
+    testName: starts the full productive window only after initial plan read-back
+  agent.runtime.assignment-process-overhead:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/unit/agents/timing/assignment-process-timeout.test.ts
+    testName: adds bounded preparation and closeout around the full productive allocation
+  agent.runtime.assignment-closeout-transition:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/unit/agents/timing/assignment-operational-safety.test.ts
+    testName: starts protected closeout before writing the terminal summary
+  agent.runtime.assignment-expired-mutation-denial:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/unit/agents/timing/assignment-operational-safety.test.ts
+    testName: rejects every mutation after protected closeout expires
   agent.trace.inspect-execution:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"
@@ -167,3 +207,9 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/unit/agents/registry.test.ts
     testName: emits structured estimates from estimate activity output
+  agent.catalog.profile-live-proof:
+    kind: nodeScript
+    ownerPackage: "@treeseed/agent"
+    command: scripts/guarantees/verify-agent-capability.ts
+    timeoutSeconds: 7200
+    resultSchema: treeseed.guarantee-verifier-result/v1

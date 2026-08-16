@@ -1,21 +1,40 @@
-schemaVersion: treeseed.guarantee/v1
+schemaVersion: treeseed.guarantee/v2
 id: guarantee.work.agents.run-an-agent-in-acting-mode.667
 journeyIndex: 667
 type: work
 subtype: agents
-journey: "Run an agent in acting mode"
+journey: Prove acting repository outcome
 ownerPackage: "@treeseed/agent"
 surface: agent-runtime
-summary: "Guarantee that TreeSeed can run an agent in acting mode."
+summary: Acting uses exact governance authority and an isolated workset to produce the exact verified repository mutation.
 status: planned
-dependencies: { journeys: [], guarantees: [] }
-actors: { allowed: [authenticated_user, team_owner, platform_admin], forbidden: [unauthorized_user] }
-devices: { required: [desktop_chromium] }
-gates: [future]
-preconditions: { fixtures: [integrated_treeseed_project], notes: [] }
-api: { required: false, verifierRefs: [] }
+capabilityId: agent.profile.acting-outcome
+catalog: agent.system
+activation: { minimumConsecutivePasses: 3, requiredVariants: [baseline, clean-repeat, interruption-resume], invalidateOnSourceChange: true }
+proof:
+  requiredCommands: [capacity.assignment, capacity.checkpoint-integrate, capacity.workday-summary, platform.status]
+  minimumRepositoryPostconditions: 1
+  outcomePredicates:
+    acting.exact-repository-mutation: [acting.accepted-decision, acting.accepted-plan, acting.scheduled-plan, acting.exact-base, acting.isolated-workset, acting.changed-paths, acting.verification, acting.checkpoint, acting.receipt, acting.summary, acting.target-read-back]
+    acting.no-unscoped-mutation: [acting.push-denied, acting.merge-denied, acting.deploy-denied, acting.release-denied, acting.path-escape-denied, acting.incorrect-outcome-denied]
+outcomes:
+  - id: acting.exact-repository-mutation
+    kind: required
+    description: Exact base, workset, paths, checkpoint, receipt, verification, summary, and target read-back prove the intended mutation.
+    evidenceKinds: [git_diff, mutation_receipt, verification, repository_read_back]
+    authoritativeSubjects: [decision, capacityPlan, assignment, checkpointRef, targetRef]
+  - id: acting.no-unscoped-mutation
+    kind: forbidden
+    description: Acting cannot push, merge, deploy, release, escape allowed paths, or succeed with an incorrect outcome.
+    evidenceKinds: [authority_denial, changed_path_audit]
+    authoritativeSubjects: [assignment, workset]
+dependencies: { journeys: [], guarantees: [guarantee.agent.architecture.produce-structured-estimate.306] }
+actors: { allowed: [capacity_operator, team_owner], forbidden: [anonymous_user, unauthorized_user] }
+devices: { required: [] }
+gates: [core]
+preconditions: { fixtures: [bounded_source_project] }
+api: { required: true, verifierRefs: [agent.catalog.profile-live-proof] }
 content: { required: false, verifierRefs: [] }
-audit: { required: false, verifierRefs: [] }
+audit: { required: true, verifierRefs: [] }
 negativeCases: []
-evidence: { required: [guarantee_report] }
-notes: ["Planned from the TreeSeed Guide platform coverage audit."]
+evidence: { required: [verifier_evidence] }

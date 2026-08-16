@@ -55,7 +55,8 @@ export interface ProviderConnectionRuntimeContext extends ProviderHostRuntimeCon
 	providerId: string;
 	membershipId: string;
 	accessToken: string;
-	accessTokenProvider?: () => Promise<string>;
+	accessTokenProvider?: (minimumValidityMs?: number) => Promise<string>;
+	defaultExecutionProviderId?: string;
 	executionProviders?: CapacityProviderManifestV2['executionProviders'];
 }
 
@@ -173,6 +174,10 @@ export function resolveProviderConfig(options: {
 		};
 	resolvedEnv.TREESEED_PROVIDER_API_PORT ??= String(input.providerApiPort ?? '3100');
 	Object.assign(resolvedEnv, optionalEnvEntries(env, [
+		'TREESEED_PROVIDER_SOURCE_CLOSURE_DIGEST',
+		'TREESEED_MIN_FREE_DISK_BYTES',
+		'TREESEED_PROVIDER_MIN_FREE_DISK_BYTES',
+		'TREESEED_PROVIDER_ASSIGNMENT_DISK_HEADROOM_BYTES',
 		'TREESEED_PROVIDER_WORKSPACE_ROOT',
 		'TREESEED_PROVIDER_WORKSPACE_ABSOLUTE_CONTAINER',
 		'TREESEED_PROVIDER_WORKSPACE_GITDIR_CONTAINER',

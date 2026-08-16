@@ -1,9 +1,11 @@
 import type { ProviderConnectionConfig } from '@treeseed/sdk/capacity-provider/contracts';
+import type { MinimumAssignmentDuration } from '@treeseed/sdk/capacity-provider/contracts';
 
 interface ExecutionProviderAvailability {
 	id: string;
 	adapter: string;
 	nativeLimits: Record<string, unknown>;
+	minimumAssignmentDuration?: MinimumAssignmentDuration;
 	capabilities?: string[];
 	status?: 'available' | 'unavailable';
 	nativeUnit?: string;
@@ -13,7 +15,9 @@ interface ExecutionProviderAvailability {
 	observations?: Record<string, unknown>;
 	lanes?: Array<{
 		id: string;
+		purpose: 'communication' | 'operation';
 		maxConcurrentRunners: number;
+		minimumAssignmentDuration?: MinimumAssignmentDuration;
 		capabilities?: string[];
 		nativeLimits?: Record<string, unknown>;
 	}>;
@@ -36,6 +40,7 @@ export function compileConnectionAvailability(input: {
 	connection: ProviderConnectionConfig;
 	executionProviders: ExecutionProviderAvailability[];
 	hostMaxConcurrentRunners: number;
+	defaultExecutionProviderId?: string;
 }) {
 	const allowed = new Set(input.connection.offer.capabilities);
 	const maxConcurrentRunners = Math.max(0, Math.min(
@@ -47,6 +52,7 @@ export function compileConnectionAvailability(input: {
 		maxConcurrentRunners,
 		executionProviders: input.executionProviders.map((provider) => ({
 			...provider,
+			preferred: provider.id === input.defaultExecutionProviderId,
 			nativeLimits: narrowedNativeLimits(provider.nativeLimits, maxConcurrentRunners),
 			...(provider.capabilities ? { capabilities: intersection(provider.capabilities, allowed) } : {}),
 			...(provider.lanes ? {

@@ -1,4 +1,5 @@
 import { loadPlugins } from '@treeseed/sdk/platform/plugins';
+import { getDeployConfig } from '@treeseed/sdk/platform/deploy-runtime';
 import { BUILT_IN_AGENT_EXECUTION_PROVIDER_IDS } from '@treeseed/sdk/types/agents';
 import { createExecutionProviderAdapter } from './agents/adapters/execution/execution.ts';
 import { actorHandler } from './agents/handlers/actor.ts';
@@ -23,7 +24,7 @@ import type {
 
 type RuntimePluginEntry = ReturnType<typeof loadPlugins>[number];
 
-let cachedAgentRuntime: null | {
+type AgentRuntimeRegistry = {
 	providers: {
 		execution: Map<string, (repoRoot: string) => ExecutionProviderAdapter>;
 		mutation: Map<string, (repoRoot: string) => AgentMutationAdapter>;
@@ -33,7 +34,9 @@ let cachedAgentRuntime: null | {
 		research: Map<string, () => AgentResearchAdapter>;
 	};
 	handlers: Map<string, AgentHandler>;
-} = null;
+};
+
+const cachedAgentRuntimes = new Map<string, AgentRuntimeRegistry>();
 
 function readPluginRecord<T>(pluginEntry: RuntimePluginEntry, key: string): Record<string, T> {
 	const value = (pluginEntry.plugin as Record<string, unknown>)[key];
@@ -54,8 +57,11 @@ function collectAgentHandlersFromPlugin(pluginEntry: RuntimePluginEntry, registr
 	}
 }
 
-function buildAgentRuntime() {
-	const plugins = loadPlugins();
+function buildAgentRuntime(repoRoot: string) {
+	const plugins = loadPlugins({
+		...getDeployConfig(),
+		__tenantRoot: repoRoot,
+	} as ReturnType<typeof getDeployConfig> & { __tenantRoot: string });
 	const execution = new Map<string, (repoRoot: string) => ExecutionProviderAdapter>(
 		BUILT_IN_AGENT_EXECUTION_PROVIDER_IDS.map((id) => [id, (repoRoot: string) => createExecutionProviderAdapter(id, { repoRoot })]),
 	);
@@ -128,16 +134,18 @@ export function resolveAgentRuntimeProviders(
 		research: string;
 	},
 ) {
-	if (!cachedAgentRuntime) {
-		cachedAgentRuntime = buildAgentRuntime();
+	let runtime = cachedAgentRuntimes.get(repoRoot);
+	if (!runtime) {
+		runtime = buildAgentRuntime(repoRoot);
+		cachedAgentRuntimes.set(repoRoot, runtime);
 	}
 
-	const executionFactory = cachedAgentRuntime.providers.execution.get(selections.execution);
-	const mutationFactory = cachedAgentRuntime.providers.mutation.get(selections.mutation);
-	const repositoryFactory = cachedAgentRuntime.providers.repository.get(selections.repository);
-	const verificationFactory = cachedAgentRuntime.providers.verification.get(selections.verification);
-	const notificationFactory = cachedAgentRuntime.providers.notification.get(selections.notification);
-	const researchFactory = cachedAgentRuntime.providers.research.get(selections.research);
+	const executionFactory = runtime.providers.execution.get(selections.execution);
+	const mutationFactory = runtime.providers.mutation.get(selections.mutation);
+	const repositoryFactory = runtime.providers.repository.get(selections.repository);
+	const verificationFactory = runtime.providers.verification.get(selections.verification);
+	const notificationFactory = runtime.providers.notification.get(selections.notification);
+	const researchFactory = runtime.providers.research.get(selections.research);
 
 	if (!executionFactory) throw new Error(`Treeseed agent execution provider "${selections.execution}" is not registered.`);
 	if (!mutationFactory) throw new Error(`Treeseed agent mutation provider "${selections.mutation}" is not registered.`);
@@ -153,6 +161,6 @@ export function resolveAgentRuntimeProviders(
 		verification: verificationFactory(),
 		notifications: notificationFactory(),
 		research: researchFactory(),
-		handlers: cachedAgentRuntime.handlers,
+		handlers: runtime.handlers,
 	};
 }

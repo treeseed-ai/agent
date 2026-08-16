@@ -1,6 +1,6 @@
 import { assertKnownAgentToolIds } from '@treeseed/sdk';
 import { CONTENT_ACTIONS, type ContentAction } from '@treeseed/sdk/content-operations';
-import type { AgentContentAccessPolicy, AgentPermissionPolicy, AgentToolPolicy, AgentTriggerConfig, AgentTriggerKind } from '@treeseed/sdk/types/agents';
+import type { AgentActivityPermissions, AgentContentAccessPolicy, AgentToolPolicy, AgentTriggerConfig, AgentTriggerKind } from '@treeseed/sdk/types/agents';
 import type { AgentSpecDiagnostic } from './spec-types.ts';
 import { TRIGGER_KINDS, ensureString, isPlainObject } from './spec-normalizer-primitives.ts';
 
@@ -37,38 +37,6 @@ export function normalizeTrigger(
 		sinceField: typeof value.sinceField === 'string' ? value.sinceField : undefined,
 		runOnStart: typeof value.runOnStart === 'boolean' ? value.runOnStart : false,
 	};
-}
-
-export function normalizePermissionPolicy(
-	value: unknown,
-	diagnostics: AgentSpecDiagnostic[],
-	slug: string,
-): AgentPermissionPolicy | undefined {
-	if (value === undefined || value === null) return undefined;
-	if (!isPlainObject(value)) {
-		diagnostics.push({
-			severity: 'error',
-			slug,
-			field: 'permissionPolicy',
-			message: 'Expected permissionPolicy to be an object.',
-		});
-		return undefined;
-	}
-	for (const mode of ['planning', 'acting'] as const) {
-		const modePolicy = isPlainObject(value.modes) && isPlainObject(value.modes[mode])
-			? value.modes[mode]
-			: null;
-		if (!modePolicy) continue;
-		if (modePolicy.operations !== undefined) {
-			diagnostics.push({
-				severity: 'error',
-				slug,
-				field: `permissionPolicy.modes.${mode}.operations`,
-				message: 'Operation allow lists are not supported. Declare callable agent tools in tools.allowed.',
-			});
-		}
-	}
-	return value as AgentPermissionPolicy;
 }
 
 function normalizeTools(
@@ -207,7 +175,7 @@ export function normalizeContentAccess(
 	value: unknown,
 	diagnostics: AgentSpecDiagnostic[],
 	slug: string,
-	field = 'contentAccess',
+	field = 'permissions',
 ): AgentContentAccessPolicy | undefined {
 	if (value === undefined || value === null) return undefined;
 	if (!isPlainObject(value)) {
@@ -233,4 +201,25 @@ export function normalizeContentAccess(
 		write: normalizeContentScope(value.write, `${field}.write`, diagnostics, slug),
 		commit: isPlainObject(commit) && typeof commit.allowed === 'boolean' ? { allowed: commit.allowed } : { allowed: false },
 	};
+}
+
+export function normalizeActivityPermissions(value: unknown, diagnostics: AgentSpecDiagnostic[], slug: string, field: string): AgentActivityPermissions | undefined {
+	if (value === undefined || value === null) return undefined;
+	if (!isPlainObject(value)) {
+		diagnostics.push({ severity:'error',slug,field,message:`Expected ${field} to be an object.` });
+		return undefined;
+	}
+	return value as AgentActivityPermissions;
+}
+
+export function permissionProjectionForProfile(permissions: AgentActivityPermissions | undefined): AgentContentAccessPolicy | undefined {
+	if (!permissions) return undefined;
+	const entries=Object.entries(permissions.content ?? {});
+	const scope=(write:boolean) => {
+		const actions=write?['create','update','link','validate','commit']:['describe','query','read'];
+		const selected=entries.filter(([,grant])=>grant.operations.some((operation)=>actions.includes(operation)));
+		if(!selected.length) return undefined;
+		return { models:selected.map(([model])=>model),actions:[...new Set(selected.flatMap(([,grant])=>grant.operations.filter((operation)=>actions.includes(operation))))],books:[...new Set(selected.flatMap(([,grant])=>Array.isArray(grant.filters?.books)?grant.filters.books.map(String):[]))],paths:[...new Set(selected.flatMap(([,grant])=>Array.isArray(grant.filters?.paths)?grant.filters.paths.map(String):[]))] };
+	};
+	return { read:scope(false),write:scope(true),commit:permissions.commit ?? { allowed:false } };
 }

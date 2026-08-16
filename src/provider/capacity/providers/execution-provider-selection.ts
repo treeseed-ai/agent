@@ -27,6 +27,7 @@ function requestedExecutionProviderId(assignment: Record<string, unknown>) {
 export function resolveAssignmentExecutionProvider(input: {
 	assignment: Record<string, unknown>;
 	executionProviders: ManifestExecutionProvider[];
+	defaultExecutionProviderId?: string;
 }): ManifestExecutionProvider {
 	const requestedId = requestedExecutionProviderId(input.assignment);
 	if (requestedId) {
@@ -35,6 +36,14 @@ export function resolveAssignmentExecutionProvider(input: {
 		throw new AssignmentExecutionProviderSelectionError(
 			'assignment_execution_provider_not_configured',
 			`Assignment execution provider "${requestedId}" is not configured in Provider Manifest V2.`,
+		);
+	}
+	if (input.defaultExecutionProviderId) {
+		const selected = input.executionProviders.find((provider) => provider.id === input.defaultExecutionProviderId);
+		if (selected) return selected;
+		throw new AssignmentExecutionProviderSelectionError(
+			'assignment_execution_provider_not_configured',
+			`Default execution provider "${input.defaultExecutionProviderId}" is not configured in Provider Manifest V2.`,
 		);
 	}
 	if (input.executionProviders.length === 1) return input.executionProviders[0]!;

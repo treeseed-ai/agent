@@ -89,9 +89,18 @@ export class ProviderLocalCapacityStore {
 		try {
 			const state = await this.read();
 			const now = new Date().toISOString();
-			const expired = state.claims.filter((claim) => Date.parse(claim.expiresAt) <= Date.parse(now));
-			state.claims = state.claims.filter((claim) => Date.parse(claim.expiresAt) > Date.parse(now));
-			for (const claim of expired) state.events.push({ id: randomUUID(), claimId: claim.id, connectionId: claim.connectionId, ...(claim.assignmentId ? { assignmentId: claim.assignmentId } : {}), outcome: 'lease-expired', recordedAt: now });
+			const expired = state.claims.filter((claim) => claim.status !== 'recovery' && Date.parse(claim.expiresAt) <= Date.parse(now));
+			const expiredIds = new Set(expired.map((claim) => claim.id));
+			state.claims = state.claims.flatMap((claim) => {
+				if (!expiredIds.has(claim.id)) return [claim];
+				if (claim.status === 'polling') return [];
+				return [{ ...claim, status: 'recovery' as const, updatedAt: now }];
+			});
+			for (const claim of expired) state.events.push({
+				id: randomUUID(), claimId: claim.id, connectionId: claim.connectionId,
+				...(claim.assignmentId ? { assignmentId: claim.assignmentId } : {}),
+				outcome: claim.status === 'polling' ? 'poll-expired' : 'lease-expired-recovery-required', recordedAt: now,
+			});
 			state.events = state.events.slice(-100);
 			const result = await mutation(state, now);
 			state.revision += 1;
@@ -152,6 +161,19 @@ export class ProviderLocalCapacityStore {
 			const claim = state.claims.find((entry) => entry.id === claimId);
 			if (!claim) throw new Error(`Provider-local slot claim ${claimId} expired before rejected lease recovery was persisted.`);
 			Object.assign(claim, { ...input, status: 'running' as const, updatedAt: now, expiresAt: input.leaseExpiresAt });
+			return { ...claim };
+		});
+	}
+
+	async renewLease(claimId: string, input: { assignmentId: string; leaseExpiresAt: string }) {
+		return this.update((state, now) => {
+			const claim = state.claims.find((entry) => entry.id === claimId);
+			if (!claim || claim.assignmentId !== input.assignmentId || !['ready', 'running'].includes(claim.status)) {
+				throw new Error(`Provider-local slot claim ${claimId} cannot renew assignment ${input.assignmentId}.`);
+			}
+			claim.leaseExpiresAt = input.leaseExpiresAt;
+			claim.expiresAt = input.leaseExpiresAt;
+			claim.updatedAt = now;
 			return { ...claim };
 		});
 	}

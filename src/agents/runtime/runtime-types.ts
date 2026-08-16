@@ -92,6 +92,7 @@ export interface AgentResearchResult {
 }
 
 export interface ExecutionProviderInvocation {
+	signal?: AbortSignal;
 	assignment: ProviderAssignment;
 	capacityEnvelope: AgentCapacityEnvelope;
 	decisionInput: DecisionExecutionInput;
@@ -151,7 +152,7 @@ export interface ExecutionProviderAdapter {
 	cancel?(input: ExecutionRunRef & { reason: string }): Promise<ExecutionRunSnapshot>;
 	collectUsage?(input: ExecutionRunRef): Promise<ExecutionUsageActual[]>;
 	collectArtifacts?(input: ExecutionRunRef): Promise<ExecutionArtifactRef[]>;
-	releaseAssignmentResources?(input: { assignmentId: string; outcome: 'completed' | 'returned' | 'failed' | 'expired' }): Promise<void>;
+	releaseAssignmentResources?(input: { assignmentId: string; outcome: 'completed' | 'returned' | 'failed' | 'expired' | 'cancelled' }): Promise<void>;
 }
 
 export interface AgentMutationAdapter {
@@ -237,6 +238,7 @@ export interface AgentContext {
 		capabilityHandles?: ProviderAssignmentCapabilityHandles | Record<string, unknown> | null;
 		workspaceAccessMode?: AgentAssignmentWorkspaceAccessMode | string | null;
 		fallbackReason?: string | null;
+		signal?: AbortSignal;
 	};
 	sdk: ScopedAgentSdk;
 	trigger: AgentTriggerInvocation;

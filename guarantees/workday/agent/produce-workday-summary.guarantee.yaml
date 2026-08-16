@@ -1,61 +1,41 @@
-schemaVersion: treeseed.guarantee/v1
+schemaVersion: treeseed.guarantee/v2
 id: guarantee.workday.agent.produce-workday-summary.165
 journeyIndex: 165
 type: workday
 subtype: agent
-journey: Produce Workday Summary
+journey: Prove truthful reporting outcome
 ownerPackage: "@treeseed/agent"
 surface: agent-runtime
-summary: "Agent runtime keeps the Produce Workday Summary contract verifiable through active local evidence."
+summary: Reporting runs only over a terminal governed graph and cannot turn incomplete or failed repository work into success.
 status: planned
-dependencies:
-  journeys:
-    - 60
-  guarantees:
-    - guarantee.project.agent.monitor-agent.060
-actors:
-  allowed:
-    - project_manager
-    - capacity_operator
-    - team_owner
-  forbidden:
-    - anonymous_user
-    - unauthorized_user
-devices:
-  required:
-    - desktop_chromium
-  optional:
-    - mobile_chromium
-gates:
-  - core
-  - release
-preconditions:
-  fixtures:
-    - integrated_treeseed_project
-  notes:
-    - "Guarantee starts as planned until all verifier refs execute in integrated environments."
-scene:
-  required: false
-api:
-  required: true
-  verifierRefs:
-    - agent.workday.produce-summary
-content:
-  required: false
-  verifierRefs: []
-audit:
-  required: true
-  verifierRefs:
-    - agent.workday.produce-summary
-negativeCases:
-  - id: unauthorized-actor-denied
-    actor: anonymous_user
-    verifierRefs:
-      - agent.workday.produce-summary
-evidence:
-  required:
-    - guarantee_report
-    - verifier_evidence
-notes:
-  - "Agent runtime guarantee for Produce Workday Summary."
-  - "Planned until the summary is produced through the canonical assignment and TreeDX artifact lifecycle."
+capabilityId: agent.profile.reporting-outcome
+catalog: agent.system
+supersedes: [guarantee.work.workdays.publish-a-workday-summary.684]
+activation: { minimumConsecutivePasses: 3, requiredVariants: [baseline, clean-repeat, interruption-resume], invalidateOnSourceChange: true }
+proof:
+  requiredCommands: [capacity.workday, capacity.workday-summary, capacity.assignment]
+  minimumRepositoryPostconditions: 1
+  outcomePredicates:
+    reporting.terminal-evidence-summary: [reporting.terminal-graph, reporting.repository-outcomes, reporting.approvals, reporting.failures, reporting.usage, reporting.settlement, reporting.performance, reporting.remaining-work, reporting.exact-refs]
+    reporting.no-false-success: [reporting.failed-child-visible, reporting.degraded-parent, reporting.incomplete-not-success]
+outcomes:
+  - id: reporting.terminal-evidence-summary
+    kind: required
+    description: The durable summary includes repository outcomes, approvals, failures, usage, settlement, performance, remaining work, and exact refs.
+    evidenceKinds: [summary_read_back, terminal_graph]
+    authoritativeSubjects: [workday, summaryRef, targetRef]
+  - id: reporting.no-false-success
+    kind: forbidden
+    description: Attempted, failed, degraded, or incomplete repository work is never reported as successful.
+    evidenceKinds: [failure_scenario, summary_read_back]
+    authoritativeSubjects: [workday, summaryRef]
+dependencies: { journeys: [], guarantees: [guarantee.agent.handoff.exact-and-independent.916] }
+actors: { allowed: [capacity_operator, team_owner], forbidden: [anonymous_user, unauthorized_user] }
+devices: { required: [] }
+gates: [core]
+preconditions: { fixtures: [integrated_treeseed_project] }
+api: { required: true, verifierRefs: [agent.catalog.profile-live-proof] }
+content: { required: true, verifierRefs: [] }
+audit: { required: true, verifierRefs: [] }
+negativeCases: []
+evidence: { required: [verifier_evidence] }

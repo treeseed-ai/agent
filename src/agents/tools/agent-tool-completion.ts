@@ -15,6 +15,7 @@ export async function readAgentToolTelemetry(path: string | null | undefined) {
 export function contentModelForArtifactKind(artifactKind: string) {
 	if (artifactKind === 'planning_question') return 'question';
 	if (artifactKind === 'planning_proposal') return 'proposal';
+	if (artifactKind === 'discussion_response') return 'discussion_message';
 	if (artifactKind === 'knowledge_page' || artifactKind === 'knowledge_update') return 'knowledge';
 	return 'note';
 }
@@ -52,5 +53,28 @@ export function missingPrecommitContentReceipts(telemetry: Record<string, unknow
 	return [
 		...unlinkedNotePaths(telemetry).map((path) => `content_subject_linked:${path}`),
 		...(hasCompatibleContentArtifact(telemetry, artifactKind) ? [] : [`content_artifact_kind:${artifactKind}`]),
+		...missingOperationalCloseoutReceipts(telemetry),
+	];
+}
+
+export function missingOperationalCloseoutReceipts(telemetry: Record<string, unknown>[]) {
+	const completedInputs = (toolId: string) => telemetry.filter((entry) => entry.status === 'completed' && entry.toolId === toolId)
+		.map((entry) => record(entry.inputSummary));
+	const terminal = new Set(['completed', 'failed', 'cancelled', 'suspended']);
+	const terminalStatus = completedInputs('treeseed.assignment_status_update').some((input) => terminal.has(String(input.status ?? '')));
+	const terminalSummary = completedInputs('treeseed.assignment_summary').some((input) => input.action === 'write' && terminal.has(String(input.status ?? '')));
+	return [
+		...(terminalStatus ? [] : ['assignment_terminal_status']),
+		...(terminalSummary ? [] : ['assignment_summary']),
+	];
+}
+
+export function missingCommunicationReadReceipts(telemetry: Record<string, unknown>[]) {
+	const completed = new Set(telemetry
+		.filter((entry) => entry.status === 'completed')
+		.map((entry) => String(entry.toolId ?? '')));
+	return [
+		...(completed.has('treeseed.discussion.read') ? [] : ['discussion_read']),
+		...(completed.has('treeseed.discussion.follow') ? [] : ['discussion_follow']),
 	];
 }

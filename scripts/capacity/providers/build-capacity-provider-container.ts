@@ -18,8 +18,8 @@ const roleImages = {
 } as const;
 type RoleName = keyof typeof roleImages;
 
-function roleRuntimeRoot(role: RoleName) {
-	return resolve(dockerContextRoot, 'runtime', role);
+function sharedRuntimeRoot() {
+	return resolve(dockerContextRoot, 'runtime', 'shared');
 }
 
 function parseSelectedRoles(): Set<RoleName> {
@@ -168,10 +168,10 @@ function packSdk() {
 	return null;
 }
 
-function prepareRuntimeDependencies(installedSdkRoot: string | null, role: RoleName) {
+function prepareRuntimeDependencies(installedSdkRoot: string | null) {
 	const installedNodeModules = resolveInstalledNodeModulesRoot();
 	const runtimePackages = runtimePackageNames(installedNodeModules);
-	const runtimeRoot = roleRuntimeRoot(role);
+	const runtimeRoot = sharedRuntimeRoot();
 	rmSync(runtimeRoot, { recursive: true, force: true });
 	mkdirSync(runtimeRoot, { recursive: true });
 	copyFileSync(resolve(packageRoot, 'package.json'), resolve(runtimeRoot, 'package.json'));
@@ -284,7 +284,7 @@ function pruneDevDependenciesFromRuntimeTree(runtimeRoot: string) {
 	}
 }
 
-function pruneProviderRuntimeToolingFromRuntimeTree(runtimeRoot: string, role: RoleName) {
+function pruneProviderRuntimeToolingFromRuntimeTree(runtimeRoot: string) {
 	const nodeModulesRoot = resolve(runtimeRoot, 'node_modules');
 	const commonTooling = [
 		'@cloudflare',
@@ -312,12 +312,10 @@ function pruneProviderRuntimeToolingFromRuntimeTree(runtimeRoot: string, role: R
 run('npm', ['run', 'build:dist'], packageRoot);
 const installedSdkRoot = packSdk();
 rmSync(resolve(dockerContextRoot, 'runtime'), { recursive: true, force: true });
-for (const role of selectedRoles) {
-	const runtimeRoot = roleRuntimeRoot(role);
-	prepareRuntimeDependencies(installedSdkRoot, role);
-	pruneDevDependenciesFromRuntimeTree(runtimeRoot);
-	pruneProviderRuntimeToolingFromRuntimeTree(runtimeRoot, role);
-}
+const runtimeRoot = sharedRuntimeRoot();
+prepareRuntimeDependencies(installedSdkRoot);
+pruneDevDependenciesFromRuntimeTree(runtimeRoot);
+pruneProviderRuntimeToolingFromRuntimeTree(runtimeRoot);
 if (prepareOnly) {
 	console.log(`Prepared capacity provider Docker context at ${dockerContextRoot}.`);
 	process.exit(0);

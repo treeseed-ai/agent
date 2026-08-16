@@ -14,7 +14,7 @@ import { buildProviderPlan, buildProviderRunnerPlan } from '../../../../../src/p
 
 import { assignmentProjectContext, materializeAssignmentProject } from '../../../../../src/provider/projects/projects-core/project-materialization.ts';
 
-import { releaseTerminalAssignmentResources, runProviderAssignment } from '../../../../../src/provider/operations/runner.ts';
+import { refreshAssignmentAccessToken, releaseTerminalAssignmentResources, runProviderAssignment } from '../../../../../src/provider/operations/runner.ts';
 
 import { createSingleFlightLeaseRenewal, isTerminalProviderAssignmentObservation, reportProviderLeaseRenewalFailure, runProviderRunnerOnce } from '../../../../../src/provider/operations/runner-lifecycle.ts';
 
@@ -137,6 +137,7 @@ async function runTerminalLifecycle(status: 'returned' | 'failed', expected: 're
 			client: {
 				async nextAssignment() { throw new Error('runner must not poll'); },
 				async createAssignmentModeRun() { return { ok: true, payload: {} }; },
+				async settleAssignment() { calls.push('settle'); return { ok: true }; },
 				async completeAssignment() { calls.push('complete'); return { ok: true }; },
 				async returnAssignment() { calls.push('return'); return { ok: true }; },
 				async failAssignment() { calls.push('fail'); return { ok: true }; },
@@ -151,7 +152,7 @@ async function runTerminalLifecycle(status: 'returned' | 'failed', expected: 're
 				},
 			},
 		});
-		expect(calls).toEqual([expected]);
+		expect(calls).toEqual(status==='returned'?['settle',expected]:[expected]);
 	}
 
 it('fails closed when a leased assignment lacks canonical project context', async () => {
@@ -170,6 +171,19 @@ it('fails closed when a leased assignment lacks canonical project context', asyn
 		expect(result).toMatchObject({ ok: true, role: 'runner' });
 		expect(calls.find((entry) => entry.method === 'fail')?.body).toMatchObject({ code: 'assignment_project_context_missing', retryable: true });
 	});
+
+it('refreshes provider authority before preparing each assignment tool runtime', async () => {
+	const config = connectionConfig();
+	config.accessToken = 'expired-token';
+	config.accessTokenProvider = vi.fn(async () => 'fresh-assignment-token');
+	const hardDeadlineAt = new Date(Date.now() + 3 * 60_000).toISOString();
+	const authorityDeadlineAt = new Date(Date.now() + 8 * 60_000).toISOString();
+	expect(await refreshAssignmentAccessToken(config, { capacityEnvelope:{ budget:{ time:{ hardDeadlineAt,authorityDeadlineAt } } } })).toMatchObject({
+		accessToken: 'fresh-assignment-token',
+	});
+	expect(config.accessTokenProvider).toHaveBeenCalledWith(expect.any(Number));
+	expect(vi.mocked(config.accessTokenProvider).mock.calls[0]?.[0]).toBeGreaterThan(8 * 60_000);
+});
 
 it('executes a manager-created durable dispatch without polling for another assignment', async () => {
 		const nextAssignment = vi.fn(async () => ({ ok: true, payload: null }));
@@ -234,6 +248,7 @@ it('renews, settles exactly once, then completes with the forensic artifact mani
 				async createAssignmentModeRun(_id, body) { calls.push({ method: 'mode-run', body }); return { ok: true, payload: {} }; },
 				async reportAssignmentUsage(_id, body, key) { calls.push({ method: 'usage', body, key }); return { ok: true, payload: {} }; },
 				async settleAssignment(_id, body, key) { calls.push({ method: 'settle', body, key }); return { ok: true, payload: {} }; },
+				async preflightAssignmentCompletion(_id, body) { calls.push({ method: 'preflight', body }); return { ok: true, payload: { required: true,receiptDigest:'a'.repeat(64) } }; },
 				async completeAssignment(_id, body) { calls.push({ method: 'complete', body }); return { ok: true, payload: {} }; },
 				async failAssignment(_id, body) { calls.push({ method: 'fail', body }); return { ok: true, payload: {} }; },
 			},
@@ -250,6 +265,7 @@ it('renews, settles exactly once, then completes with the forensic artifact mani
 		expect(result).toMatchObject({ ok: true, assigned: 1 });
 		expect(renewAttempts).toBe(2);
 		expect(calls.findIndex((entry) => entry.method === 'renew')).toBeGreaterThanOrEqual(0);
+		expect(calls.findIndex((entry) => entry.method === 'preflight')).toBeLessThan(calls.findIndex((entry) => entry.method === 'usage'));
 		expect(calls.findIndex((entry) => entry.method === 'usage')).toBeLessThan(calls.findIndex((entry) => entry.method === 'settle'));
 		expect(calls.findIndex((entry) => entry.method === 'settle')).toBeLessThan(calls.findIndex((entry) => entry.method === 'complete'));
 		expect(calls.find((entry) => entry.method === 'usage')).toMatchObject({
@@ -271,7 +287,7 @@ it('renews, settles exactly once, then completes with the forensic artifact mani
 			},
 		});
 		expect(calls.find((entry) => entry.method === 'settle')?.body).not.toHaveProperty('actualCredits');
-		expect(calls.find((entry) => entry.method === 'complete')?.body).toMatchObject({ output: { artifactManifest: { assignmentId: 'assignment-a' } } });
+		expect(calls.find((entry) => entry.method === 'complete')?.body).toMatchObject({ metadata:{semanticCompletionPreflightReceiptDigest:'a'.repeat(64)},output: { artifactManifest: { assignmentId: 'assignment-a' } } });
 	});
 
 it('routes a returned kernel result through the canonical return lifecycle', async () => {
@@ -282,17 +298,19 @@ it('routes a failed kernel result through the canonical fail lifecycle', async (
 		await runTerminalLifecycle('failed', 'fail', false);
 	});
 
-it('preserves successful execution when pre-settlement workspace cleanup fails', async () => {
+it('refuses successful terminalization when pre-settlement workspace cleanup remains unavailable', async () => {
 	const repoRoot = repository();
 	const calls: Array<{ method: string; body?: Record<string, unknown> }> = [];
 	const assignment = leasedAssignment(repoRoot);
-	const result = await reportProviderAssignmentResult({
+	let cleanupAttempts = 0;
+	await expect(reportProviderAssignmentResult({
 		client: {
 			async nextAssignment() { throw new Error('not used'); },
 			async createAssignmentModeRun() { return { ok: true }; },
 			async createAssignmentEvent(_id, body) { calls.push({ method: 'event', body }); return { ok: true }; },
 			async reportAssignmentUsage() { return { ok: true }; },
 			async settleAssignment() { calls.push({ method: 'settle' }); return { ok: true }; },
+			async preflightAssignmentCompletion() { calls.push({ method: 'preflight' }); return { ok: true, payload: { required: true,receiptDigest:'a'.repeat(64) } }; },
 			async completeAssignment(_id, body) { calls.push({ method: 'complete', body }); return { ok: true, payload: { status: 'completed' } }; },
 			async failAssignment() { throw new Error('successful execution must not fail'); },
 		},
@@ -307,13 +325,10 @@ it('preserves successful execution when pre-settlement workspace cleanup fails',
 		capacityEnvelope: assignment.capacityEnvelope,
 		leaseToken: 'lease-a', runnerId: 'runner-a', projectId: assignment.projectId, agentSlug: assignment.agentId,
 		fallbackOutput: null,
-		async closeWorkspace() { throw Object.assign(new TypeError('fetch failed'), { operation: 'workspace.close', path: '/v1/dx/projects/project-a/workspaces/workspace-a/close' }); },
-	});
-	expect(result).toMatchObject({ ok: true, payload: { status: 'completed' } });
-	expect(calls.map((entry) => entry.method)).toEqual(['event', 'settle', 'event', 'complete']);
-	expect(calls[0]?.body).toMatchObject({ eventType: 'provider.workspace.cleanup_failed', context: { diagnostic: { operation: 'workspace.close' } } });
-	expect(calls[2]?.body).toMatchObject({ eventType: 'provider.assignment.performance.finalized' });
-	expect(calls[3]?.body).toMatchObject({ output: { metadata: { workspaceCleanup: { status: 'failed', retryable: true } } } });
+		async closeWorkspace() { cleanupAttempts += 1; throw Object.assign(new TypeError('fetch failed'), { operation: 'workspace.close', path: '/v1/dx/projects/project-a/workspaces/workspace-a/close' }); },
+	})).rejects.toMatchObject({ message: 'fetch failed' });
+	expect(cleanupAttempts).toBe(3);
+	expect(calls).toEqual([{method:'preflight'}]);
 });
 
 it('bounds assignment-scoped TreeDX response bodies before AgentKernel execution', async () => {

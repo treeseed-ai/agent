@@ -11,6 +11,7 @@ import {
 import { codexClientEnvironment } from '../accounts/codex-auth.ts';
 import { createIsolatedCodexRuntimeHome } from '../runtime/codex-runtime-home.ts';
 import type { ResearchSourcePolicy } from '@treeseed/sdk/agent-capacity';
+import { codexDeadlineContract } from './execution-codex-deadline.ts';
 export { hasCompletedToolEvent, readToolTelemetry, treeDxContentReceipts } from './execution-codex-receipts.ts';
 
 export type CodexExecutionStatus = 'completed' | 'waiting' | 'failed';
@@ -105,6 +106,7 @@ export interface CodexRunResult {
 }
 
 export interface RunCodexTaskOptions {
+	signal?: AbortSignal;
 	createCodexClient?: (request?: CodexExecutionRequest) => CodexClient | Promise<CodexClient>;
 	client?: CodexClient | Promise<CodexClient>;
 	now?: () => number;
@@ -147,11 +149,14 @@ export class CodexExecutionTimeoutError extends Error {
 	}
 }
 
-export async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+export async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, onTimeout?: () => void): Promise<T> {
 	if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) return promise;
 	let timer: ReturnType<typeof setTimeout> | null = null;
 	const timeout = new Promise<never>((_, reject) => {
-		timer = setTimeout(() => reject(new CodexExecutionTimeoutError(timeoutMs)), timeoutMs);
+		timer = setTimeout(() => {
+			onTimeout?.();
+			reject(new CodexExecutionTimeoutError(timeoutMs));
+		}, timeoutMs);
 	});
 	try {
 		return await Promise.race([promise, timeout]);
@@ -273,7 +278,7 @@ function redactToolForPrompt(tool: ExecutionProviderToolDescriptor) {
 		contentAction: metadata.contentAction ?? undefined,
 		contentModel: metadata.contentModel ?? undefined,
 		contentPreset: metadata.contentPreset ?? undefined,
-		contentAccessSummary: metadata.contentAccessSummary ?? undefined,
+		permissionSummary: metadata.permissionSummary ?? undefined,
 		inputSchema: tool.inputSchema,
 	};
 }
@@ -394,6 +399,7 @@ export function buildCodexPrompt(request: CodexExecutionRequest) {
 	: '- Treat this as read-only/planning unless the handler grants a later mutation stage.';
 	const tools = agentTools(request);
 	const toolIds = new Set(tools.map((tool) => tool.id));
+	const deadlineContract = codexDeadlineContract(request.metadata?.executionTiming, toolIds.has('treeseed.status'));
 	const artifactKind = typeof request.metadata?.workPackage === 'object'
 		&& request.metadata.workPackage
 		&& typeof (request.metadata.workPackage as { metadata?: { artifactKind?: unknown } }).metadata?.artifactKind === 'string'
@@ -461,6 +467,7 @@ export function buildCodexPrompt(request: CodexExecutionRequest) {
 		formatList(request.forbiddenPaths),
 		'',
 		'Required behavior:',
+		...deadlineContract,
 		'- Do not modify files outside allowed paths.',
 		'- Do not write outside the assigned git worktree.',
 		operationBoundary,

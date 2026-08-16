@@ -11,6 +11,7 @@ export interface ProviderAssignmentExecutionInput {
 	runnerId: string;
 	leaseSeconds: number;
 	renewLease: () => Promise<void>;
+	signal?: AbortSignal;
 	kernel?: Pick<AgentKernel, 'runAssignment'>;
 	treeDx?: AgentSdkTreeDxOptions;
 	executionLifecycle?: {
@@ -18,6 +19,6 @@ export interface ProviderAssignmentExecutionInput {
 		maxPolls?: number;
 	};
 	onAssignmentResourcesPrepared?: (
-		release: ((outcome: 'completed' | 'returned' | 'failed' | 'expired') => Promise<void>) | null,
+		release: ((outcome: 'completed' | 'returned' | 'failed' | 'expired' | 'cancelled') => Promise<void>) | null,
 	) => void;
 }

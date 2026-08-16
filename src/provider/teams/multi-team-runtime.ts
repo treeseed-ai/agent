@@ -8,6 +8,7 @@ import { discoverProviderBudgets } from '../configuration/budgets.ts';
 import { compileProviderLocalNativeLimit } from '../capacity/capacity-core/native-capacity-limits.ts';
 import { createAssignmentExecutionProviderAdapter } from '../capacity/providers/execution-provider-selection.ts';
 import { createProviderMarketClient, PROVIDER_ASSIGNMENT_POLLING_TTL_MS } from '../coordination/client.ts';
+import { observeProviderDiskCapacity } from '../runtime/disk-capacity.ts';
 
 const managerSchedulers = new Map<string, ProviderGlobalSlotScheduler<NonNullable<ProviderConnectionResult['runtime']>>>();
 
@@ -100,7 +101,8 @@ function connectionRuntimeContext(
 	config: ProviderHostRuntimeConfig,
 	connection: NonNullable<ProviderConnectionResult['runtime']>,
 	executionProviders?: ProviderConnectionRuntimeContext['executionProviders'],
-	accessTokenProvider?: () => Promise<string>,
+	defaultExecutionProviderId?: string,
+	accessTokenProvider?: (minimumValidityMs?: number) => Promise<string>,
 ): ProviderConnectionRuntimeContext {
 	return {
 		...config,
@@ -113,6 +115,7 @@ function connectionRuntimeContext(
 		accessToken: connection.accessToken.accessToken,
 		...(accessTokenProvider ? { accessTokenProvider } : {}),
 		executionProviders,
+		defaultExecutionProviderId,
 		env: {
 			...config.env,
 			TREESEED_API_BASE_URL: connection.marketUrl,
@@ -136,6 +139,7 @@ export async function runMultiTeamProviderManager(config: ProviderHostRuntimeCon
 		return { ok: true, role: 'manager', mode: 'plan', providerClass: loaded.manifest.providerClass, connections: loaded.manifest.connections.map((connection) => ({ id: connection.id, teamId: connection.teamId ?? null, marketProfile: connection.marketProfile ?? null, marketUrl: connection.marketUrl ?? null, enabled: connection.enabled !== false, offer: connection.offer })) };
 	}
 	const loaded = await loadProviderManifest(config.manifestPath ?? '');
+	const diskCapacity = await observeProviderDiskCapacity({ path: config.dataDir, env: config.env });
 	const connections = await reconcileProviderConnections(config);
 	const localState = new ProviderLocalCapacityStore(config.dataDir);
 	await recoverProviderLocalLeases({
@@ -149,13 +153,19 @@ export async function runMultiTeamProviderManager(config: ProviderHostRuntimeCon
 	const results = await Promise.all(connections.map(async (connection) => {
 		if (!connection.runtime) return { ok: connection.status !== 'error', role: 'manager', connectionId: connection.connectionId, status: connection.status, ...(connection.error ? { error: connection.error } : {}) };
 		try {
-			const runtimeConfig = connectionRuntimeContext(config, connection.runtime, loaded.manifest.executionProviders);
+			const runtimeConfig = connectionRuntimeContext(config, connection.runtime, loaded.manifest.executionProviders, loaded.manifest.defaultExecutionProviderId);
 			const observedExecutionProviders = await observeExecutionProviders(runtimeConfig, loaded.manifest.executionProviders);
+			const advertisedExecutionProviders = diskCapacity.ok ? observedExecutionProviders : observedExecutionProviders.map((provider) => ({
+				...provider,
+				status: 'unavailable' as const,
+				observations: { ...provider.observations, available: false, pressure: 'exhausted', diskCapacity: 'insufficient' },
+			}));
 			return await runManagerSkeleton(runtimeConfig, {
 				availability: {
 					offer: connection.runtime.connection.offer,
-					executionProviders: observedExecutionProviders,
+					executionProviders: advertisedExecutionProviders,
 					activeRunners: localCapacity.claims.filter((claim) => claim.connectionId === connection.runtime?.connection.id).length,
+					constraints: { diskCapacity },
 				},
 				localState,
 			});
@@ -169,6 +179,15 @@ export async function runMultiTeamProviderManager(config: ProviderHostRuntimeCon
 		results[index]?.ok ? undefined : String(record(results[index]).error ?? connection.error ?? connection.status),
 	)));
 	const connected = connections.flatMap((connection, index) => connection.runtime && results[index]?.ok ? [connection.runtime] : []);
+	if (!diskCapacity.ok) return {
+		ok: true,
+		role: 'manager',
+		mode: 'multi-team',
+		providerClass: loaded.manifest.providerClass,
+		connections: results,
+		dispatches: [],
+		admission: diskCapacity,
+	};
 	const concurrency = providerManifestConcurrency({ executionProviders: loaded.manifest.executionProviders, hostLimit: config.maxConcurrentRunners });
 	let scheduler = managerSchedulers.get(loaded.path);
 	if (!scheduler || scheduler.maxConcurrentSlots !== concurrency) {
@@ -178,12 +197,26 @@ export async function runMultiTeamProviderManager(config: ProviderHostRuntimeCon
 	scheduler.updateConnections(connected);
 	const budgets = discoverProviderBudgets(config);
 	const providerLimits = new Map(loaded.manifest.executionProviders.map((provider) => [provider.id, compileProviderLocalNativeLimit({ executionProviderId: provider.id, nativeLimits: provider.nativeLimits, budgets })]));
-	const laneLimits = new Map(loaded.manifest.executionProviders.flatMap((provider) => (provider.lanes ?? []).map((lane) => [lane.id, { ...compileProviderLocalNativeLimit({ nativeLimits: lane.nativeLimits }), maxConcurrentRunners: lane.maxConcurrentRunners }] as const)));
+	// Legacy manifests remain operation-capable, but never become communication-ready
+	// by inference. Newly generated manifests declare the reserved 1+1 topology.
+	const providerLanes = loaded.manifest.executionProviders.map((provider) => ({
+		provider,
+		lanes: provider.lanes?.length ? provider.lanes : [{
+			id: `${provider.id}-operation`, purpose: 'operation' as const,
+			maxConcurrentRunners: Math.max(1, numberValue(provider.nativeLimits?.maxConcurrentRunners) ?? 1),
+			capabilities: [] as string[], nativeLimits: {},
+		}],
+	}));
+	const laneLimits = new Map(providerLanes.flatMap(({lanes}) => lanes.map((lane) => [lane.id, { ...compileProviderLocalNativeLimit({ nativeLimits: lane.nativeLimits }), maxConcurrentRunners: lane.maxConcurrentRunners }] as const)));
+	const laneSlots = providerLanes.flatMap(({provider,lanes}) => lanes.flatMap((lane) =>
+		Array.from({ length: Math.max(1, lane.maxConcurrentRunners) }, () => ({ executionProviderId: provider.id, lane }))));
 	const { providerAssignmentLeaseSeconds, providerRunnerCapabilities } = await import('../operations/runner.ts');
 	const dispatches: Array<Record<string, unknown>> = [];
-	for (let index = 0; index < concurrency; index += 1) {
+	await Promise.all(Array.from({length:concurrency},async(_,index)=>{
+		const laneSlot = laneSlots[index];
+		if (!laneSlot) return;
 		const schedulerLease = scheduler.acquire();
-		if (!schedulerLease) break;
+		if (!schedulerLease) return;
 		const runtime = schedulerLease.connection;
 		const connectionLimit = runtime.connection.offer.maxConcurrentRunners ?? concurrency;
 		const claim = await localState.claim({
@@ -192,18 +225,18 @@ export async function runMultiTeamProviderManager(config: ProviderHostRuntimeCon
 			connectionLimit,
 			pollingTtlMs: PROVIDER_ASSIGNMENT_POLLING_TTL_MS,
 		});
-		if (!claim) { schedulerLease.release(); break; }
-		const connectionConfig = connectionRuntimeContext(config, runtime, loaded.manifest.executionProviders);
+		if (!claim) { schedulerLease.release(); return; }
+		const connectionConfig = connectionRuntimeContext(config, runtime, loaded.manifest.executionProviders, loaded.manifest.defaultExecutionProviderId);
 		const client = (await import('../coordination/client.ts')).createProviderMarketClient(connectionConfig);
 		let leasedRecovery: { assignmentId: string; leaseToken: string; leaseExpiresAt: string; dispatchEnvelope: unknown } | null = null;
 		try {
-			const leased = await client.nextAssignment({ runnerId: claim.runnerId, capabilities: providerRunnerCapabilities(connectionConfig), leaseSeconds: providerAssignmentLeaseSeconds(connectionConfig) });
+			const leased = await client.nextAssignment({ runnerId: claim.runnerId, capabilities: [...new Set([...providerRunnerCapabilities(connectionConfig), ...(laneSlot.lane.capabilities ?? [])])], leaseSeconds: providerAssignmentLeaseSeconds(connectionConfig), laneId: laneSlot.lane.id, lanePurpose: laneSlot.lane.purpose,waitSeconds:20 });
 			const leasedRecord = record(leased);
 			const assignment = record(leasedRecord.payload ?? leasedRecord.assignment);
 			if (!Object.keys(assignment).length) {
 				await localState.release(claim.id);
-				dispatches.push({ connectionId: runtime.connection.id, assigned: 0 });
-				continue;
+				dispatches.push({ connectionId: runtime.connection.id, laneId: laneSlot.lane.id, lanePurpose: laneSlot.lane.purpose, assigned: 0 });
+				return;
 			}
 			const leaseToken = stringValue(leasedRecord.leaseToken, assignment.leaseToken);
 			const assignmentId = stringValue(assignment.id);
@@ -225,7 +258,7 @@ export async function runMultiTeamProviderManager(config: ProviderHostRuntimeCon
 				...(nativeUnit ? { nativeUnit } : {}),
 				...(requestedNativeAmount !== undefined ? { requestedNativeAmount } : {}),
 			});
-			dispatches.push({ connectionId: runtime.connection.id, assignmentId, status: 'ready' });
+			dispatches.push({ connectionId: runtime.connection.id, laneId: laneSlot.lane.id, lanePurpose: laneSlot.lane.purpose, assignmentId, status: 'ready' });
 		} catch (error) {
 			if (leasedRecovery) {
 				let recoveryPersistenceError: unknown = null;
@@ -249,7 +282,7 @@ export async function runMultiTeamProviderManager(config: ProviderHostRuntimeCon
 		} finally {
 			schedulerLease.release();
 		}
-	}
+	}));
 	return { ok: true, role: 'manager', mode: 'multi-team', providerClass: loaded.manifest.providerClass, connections: results, scheduler: scheduler.snapshot(), dispatches };
 }
 
@@ -262,6 +295,8 @@ export async function runMultiTeamProviderRunners(config: ProviderHostRuntimeCon
 		return { ok: true, role: 'runner', mode: 'plan', providerClass: loaded.manifest.providerClass, connections: loaded.manifest.connections.map((connection) => ({ id: connection.id, teamId: connection.teamId ?? null, enabled: connection.enabled !== false, maxConcurrentRunners: connection.offer.maxConcurrentRunners ?? null, capabilities: connection.offer.capabilities })) };
 	}
 	const loaded = await loadProviderManifest(config.manifestPath ?? '');
+	const diskCapacity = await observeProviderDiskCapacity({ path: config.dataDir, env: config.env });
+	if (!diskCapacity.ok) return { ok: true, role: 'runner', mode: 'multi-team', providerClass: loaded.manifest.providerClass, dispatched: 0, results: [], admission: diskCapacity };
 	const coordinator = await createCapacityProviderCoordinator(config);
 	const connections = await coordinator.reconcileAll();
 	const runtimeIds = new Set(connections.flatMap((connection) => connection.runtime ? [connection.runtime.connection.id] : []));
@@ -285,7 +320,8 @@ export async function runMultiTeamProviderRunners(config: ProviderHostRuntimeCon
 			config,
 			runtime,
 			loaded.manifest.executionProviders,
-			async () => (await coordinator.accessTokenForConnection(runtime.connection)).accessToken,
+			loaded.manifest.defaultExecutionProviderId,
+			async (minimumValidityMs) => (await coordinator.accessTokenForConnection(runtime.connection, minimumValidityMs)).accessToken,
 		);
 		const client = (await import('../coordination/client.ts')).createProviderMarketClient(connectionConfig);
 		try {
@@ -294,6 +330,12 @@ export async function runMultiTeamProviderRunners(config: ProviderHostRuntimeCon
 				client,
 				runnerId: localClaim.runnerId,
 				leasedAssignment: localClaim.dispatchEnvelope,
+				onLeaseRenewed: async (assignment) => {
+					const assignmentId = stringValue(assignment.id, localClaim.assignmentId);
+					const leaseExpiresAt = stringValue(assignment.leaseExpiresAt, localClaim.leaseExpiresAt);
+					if (!assignmentId || !leaseExpiresAt) throw new Error('Renewed assignment omitted its durable identity or lease expiry.');
+					await localCapacity.renewLease(localClaim.id, { assignmentId, leaseExpiresAt });
+				},
 				...(connectionConfig.treeDx ? { treeDx: connectionConfig.treeDx } : {}),
 			});
 			await localCapacity.finalize(localClaim.id, 'assignment-lifecycle-confirmed');

@@ -10,6 +10,16 @@ import {
 } from "@treeseed/sdk/agent-capacity";
 import { readRecord, readString } from "./shared.ts";
 
+function exactRevision(value:unknown):StructuredAgentEstimate['proposalRevision']{
+	const item=readRecord(value);const id=readString(item?.id);const version=Number(item?.version);const digest=readString(item?.digest);return id&&Number.isInteger(version)&&version>0&&digest?{id,version,digest}:undefined;
+}
+function definitionRevision(value:unknown):StructuredAgentEstimate['agentDefinitionRevision']{
+	const item=readRecord(value);const id=readString(item?.id);const revision=Number(item?.revision);const digest=readString(item?.digest);return id&&Number.isInteger(revision)&&revision>0&&digest?{id,revision,digest}:undefined;
+}
+function membershipSnapshot(value:unknown):StructuredAgentEstimate['groupSnapshot']{
+	const item=readRecord(value);const projectId=readString(item?.projectId);const graphRevision=readString(item?.graphRevision);const immutableRef=readString(item?.immutableRef);const digest=readString(item?.digest);const capturedAt=readString(item?.capturedAt);if(!projectId||!graphRevision||!immutableRef||!digest||!capturedAt)return undefined;return {projectId,graphRevision,immutableRef,digest,capturedAt,directGroupIds:stringArray(item?.directGroupIds),effectiveGroupIds:stringArray(item?.effectiveGroupIds),provenance:Array.isArray(item?.provenance)?item.provenance as NonNullable<StructuredAgentEstimate['groupSnapshot']>['provenance']:[]};
+}
+
 const executionEstimateHandler = createExecutionContentHandler({
   kind: "estimate",
   defaultWorkPackageKind: "estimate",
@@ -97,7 +107,29 @@ function buildStructuredEstimate(
   const maxSeconds = Number(
     metadata.maxSeconds ?? Math.max(minSeconds, expectedSeconds),
   );
+	const breakdownInput=readRecord(metadata.workBreakdown)??{};
+	const weighted=[10,35,15,10,10,5,5,5];
+	const allocated=weighted.map((weight)=>Math.floor(expectedSeconds*weight/100));
+	for(const index of [3,6,7]) allocated[index]=Math.max(1,allocated[index]??0);
+	for(const index of [1,2,0,4,5]) {
+		const excess=Math.max(0,allocated.reduce((sum,value)=>sum+value,0)-expectedSeconds);
+		allocated[index]=Math.max(0,(allocated[index]??0)-excess);
+	}
+	const reserveSeconds=Math.max(0,expectedSeconds-allocated.reduce((sum,value)=>sum+value,0));
+	const workBreakdown={
+		preparationSeconds:Number(breakdownInput.preparationSeconds??allocated[0]),implementationSeconds:Number(breakdownInput.implementationSeconds??allocated[1]),
+		verificationSeconds:Number(breakdownInput.verificationSeconds??allocated[2]),independentReviewSeconds:Number(breakdownInput.independentReviewSeconds??allocated[3]),
+		revisionSeconds:Number(breakdownInput.revisionSeconds??allocated[4]),revisionVerificationSeconds:Number(breakdownInput.revisionVerificationSeconds??allocated[5]),
+		finalReviewSeconds:Number(breakdownInput.finalReviewSeconds??allocated[6]),reportingSeconds:Number(breakdownInput.reportingSeconds??allocated[7]),
+		reserveSeconds:Number(breakdownInput.reserveSeconds??reserveSeconds),expectedRevisionCycles:Number(breakdownInput.expectedRevisionCycles??1),
+	};
+	const proposalRevision=exactRevision(metadata.proposalRevision)??exactRevision(input.proposalRevision);
+	const decisionRevision=exactRevision(metadata.decisionRevision)??exactRevision(input.decisionRevision);
+	const agentDefinitionRevision=definitionRevision(metadata.agentDefinitionRevision)??definitionRevision(readRecord(assignment?.metadata)?.agentDefinitionRevision);
+	const groupSnapshot=membershipSnapshot(metadata.groupSnapshot)??membershipSnapshot(input.groupSnapshot);
+	const v3=Boolean(proposalRevision&&decisionRevision&&agentDefinitionRevision&&groupSnapshot);
   return {
+		schemaVersion:v3 ? 3 : 2,
     id: readString(metadata.id) ?? `estimate-${context.runId}`,
     teamId:
       firstString(assignment?.teamId, context.capacity?.envelope?.teamId) ??
@@ -135,6 +167,19 @@ function buildStructuredEstimate(
     expectedOutputs: outputRequirements(metadata.expectedOutputs),
     acceptanceCriteria: stringArray(metadata.acceptanceCriteria),
     completionEvidence: stringArray(metadata.completionEvidence),
+		workBreakdown,
+		...(v3 ? {
+			proposalRevision: proposalRevision!,
+			decisionRevision: decisionRevision!,
+			groupSnapshot: groupSnapshot!,
+			agentDefinitionRevision: agentDefinitionRevision!,
+			requiredProviderCapabilities: stringArray(metadata.requiredProviderCapabilities).length
+				? stringArray(metadata.requiredProviderCapabilities) : stringArray(readRecord(context.agent.execution)?.requiredCapabilities),
+			acceptableProviderClasses: stringArray(metadata.acceptableProviderClasses).length
+				? stringArray(metadata.acceptableProviderClasses) : ['ai_model'],
+			providerNativeRanges: Array.isArray(metadata.providerNativeRanges)
+				? metadata.providerNativeRanges as StructuredAgentEstimate['providerNativeRanges'] : [],
+		} : {}),
     createdAt: new Date().toISOString(),
     metadata: {
       source: "estimate_handler",

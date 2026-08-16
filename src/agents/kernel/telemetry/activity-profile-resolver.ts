@@ -3,6 +3,8 @@ import type {
 	AgentActivityType,
 	AgentRuntimeSpec,
 } from '@treeseed/sdk/types/agents';
+import { allowedSafetyModesForActivity,compileAgentAuthoritySnapshot } from '@treeseed/sdk/agent-capacity';
+import { permissionProjectionForProfile } from '../../support/spec-normalizer-policy.ts';
 
 function executionForProfile(agent: AgentRuntimeSpec, profile: AgentActivityProfile) {
 	return {
@@ -42,10 +44,11 @@ export function selectAgentActivityProfile(
 	requestedActivityType?: AgentActivityType | null,
 ): AgentRuntimeSpec | null {
 	const activityType = requestedActivityType ?? agentActivityTypeForAssignmentMode(mode);
-	if (mode === 'acting' && activityType !== 'acting') return null;
-	if (mode === 'planning' && activityType === 'acting') return null;
+	if (!allowedSafetyModesForActivity(activityType).includes(mode)) return null;
 	const profile = agent.activityProfiles?.[activityType];
 	if (!profile?.enabled) return null;
+	const authority = compileAgentAuthoritySnapshot(activityType, profile);
+	if (authority.diagnostics.length > 0) return null;
 	return {
 		...agent,
 		handler: profile.handler,
@@ -53,10 +56,17 @@ export function selectAgentActivityProfile(
 		branchPolicy: profile.branchPolicy,
 		questionPolicy: profile.questionPolicy,
 		systemPrompt: systemPromptForProfile(profile),
-		tools: profile.tools,
+		tools: authority.tools,
+		authorityPresetIds: authority.presetIds,
+		authoritySnapshot: {
+			presetIds: authority.presetIds,
+			permissions: authority.permissions,
+			tools: authority.tools,
+			branchPolicy: profile.branchPolicy,
+		},
 		signalPolicy: profile.signals,
 		outputs: profile.outputs,
-		contentAccess: profile.contentAccess,
+		permissionProjection: permissionProjectionForProfile(authority.permissions),
 		execution: executionForProfile(agent, profile),
 		activityConfig: {
 			...agent.activityConfig,

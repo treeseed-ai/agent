@@ -1,21 +1,40 @@
-schemaVersion: treeseed.guarantee/v1
+schemaVersion: treeseed.guarantee/v2
 id: guarantee.work.agents.run-an-agent-in-planning-mode.666
 journeyIndex: 666
 type: work
 subtype: agents
-journey: "Run an agent in planning mode"
+journey: Prove planning repository outcome
 ownerPackage: "@treeseed/agent"
 surface: agent-runtime
-summary: "Guarantee that TreeSeed can run an agent in planning mode."
+summary: Planning reads an exact subject and produces the required governed proposal, question, or linked note.
 status: planned
-dependencies: { journeys: [], guarantees: [] }
-actors: { allowed: [authenticated_user, team_owner, platform_admin], forbidden: [unauthorized_user] }
-devices: { required: [desktop_chromium] }
-gates: [future]
-preconditions: { fixtures: [integrated_treeseed_project], notes: [] }
-api: { required: false, verifierRefs: [] }
-content: { required: false, verifierRefs: [] }
-audit: { required: false, verifierRefs: [] }
+capabilityId: agent.profile.planning-outcome
+catalog: agent.system
+activation: { minimumConsecutivePasses: 3, requiredVariants: [baseline, clean-repeat, interruption-resume], invalidateOnSourceChange: true }
+proof:
+  requiredCommands: [capacity.assignment, capacity.treedx-proxy-audit, capacity.workday-summary]
+  minimumRepositoryPostconditions: 1
+  outcomePredicates:
+    planning.semantic-artifact: [planning.model, planning.path, planning.subject, planning.contributor, planning.receipt, planning.signal, planning.read-back]
+    planning.clean-closeout: [planning.settlement, planning.terminal-assignment, planning.zero-residue]
+outcomes:
+  - id: planning.semantic-artifact
+    kind: required
+    description: Exact model, path, subject relation, contributor, receipt, signal, and authoritative content read-back are correct.
+    evidenceKinds: [treedx_read_back, artifact_receipt, signal]
+    authoritativeSubjects: [assignment, artifactRef, targetRef]
+  - id: planning.clean-closeout
+    kind: required
+    description: Usage settles and no assignment residue remains.
+    evidenceKinds: [settlement, cleanup]
+    authoritativeSubjects: [workday, assignment]
+dependencies: { journeys: [], guarantees: [guarantee.agent.architecture.enforce-activity-profile-tool-scope.303] }
+actors: { allowed: [capacity_operator, team_owner], forbidden: [anonymous_user, unauthorized_user] }
+devices: { required: [] }
+gates: [core]
+preconditions: { fixtures: [integrated_treeseed_project] }
+api: { required: true, verifierRefs: [agent.catalog.profile-live-proof] }
+content: { required: true, verifierRefs: [] }
+audit: { required: true, verifierRefs: [] }
 negativeCases: []
-evidence: { required: [guarantee_report] }
-notes: ["Planned from the TreeSeed Guide platform coverage audit."]
+evidence: { required: [verifier_evidence] }

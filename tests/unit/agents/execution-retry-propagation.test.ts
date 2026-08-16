@@ -1,6 +1,6 @@
 import { describe,expect,it } from 'vitest';
 import { codexAgentToolConfig } from '../../../src/agents/adapters/codex/execution-codex-core.ts';
-import { executionContentOutputStatus } from '../../../src/agents/handlers/execution-content.ts';
+import { executionCompletionEvidence,executionContentOutputStatus } from '../../../src/agents/handlers/execution-content.ts';
 import { waitingOutputIsTerminal } from '../../../src/agents/kernel/validation/output-validator.ts';
 
 describe('execution-provider retry propagation', () => {
@@ -27,5 +27,13 @@ describe('execution-provider retry propagation', () => {
 		expect(waitingOutputIsTerminal({
 			status: 'waiting', summary: 'Stop.', metadata: { executionSnapshot: { ...snapshot, outputs: { executionBlocked: true } } },
 		})).toBe(true);
+	});
+
+	it('derives exact communication completion evidence from the durable response receipt',()=>{
+		const completion=executionCompletionEvidence({snapshot:{status:'completed',summary:'Answered the exact committed message.'},contentArtifactRefs:[{
+			model:'discussion_message',artifactKind:'discussion_response',contentPath:'src/content/discussion-messages/topic/response.mdx',subjectId:'source-message',sourceAssignmentId:'assignment-a',producedByAgent:'guide-steward',
+		}]} as never);
+		expect(completion).toMatchObject({disposition:'completed',noUsefulScopedWorkRemaining:true,durableArtifactRefs:['src/content/discussion-messages/topic/response.mdx'],remainingScope:[]});
+		expect(completion?.acceptanceChecks).toEqual(expect.arrayContaining([expect.objectContaining({id:'artifact:discussion_message:discussion_response',passed:true})]));
 	});
 });

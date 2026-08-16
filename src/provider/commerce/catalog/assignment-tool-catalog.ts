@@ -75,18 +75,23 @@ function summarizeContentAccess(policy: AgentContentAccessPolicy | undefined, ag
 	};
 }
 
-export function createAssignmentToolCatalog(input: { agentTools: string[]; projectId: string; assignmentId: string; agentSlug?: string; agentContentPath?: string | null; environment?: string; treedxProxyHandle: Record<string, unknown>; workspaceMode?: string | null; treeDxWorkspaceMode?: 'context_only' | 'read_write' | 'commit'; contentRoot?: string | null; contentAccess?: AgentContentAccessPolicy; researchNetworkPolicy?: { allowWeb?: boolean; allowedDomains?: string[] }; providerResearchSourcePolicy?: { allowedDomains?: string[] }; worktreeRoot?: string | null; providerManagesWorktree?: boolean; allowedPaths?: string[]; forbiddenPaths?: string[] }): AssignmentToolCatalog {
-	const requestedDefinitions = input.agentTools.map(findAgentToolDefinition).filter((definition) => Boolean(definition));
+export function createAssignmentToolCatalog(input: { agentTools: string[]; projectId: string; assignmentId: string; agentSlug?: string; agentContentPath?: string | null; environment?: string; treedxProxyHandle: Record<string, unknown>; workspaceMode?: string | null; treeDxWorkspaceMode?: 'context_only' | 'read_write' | 'commit'; contentRoot?: string | null; permissionProjection?: AgentContentAccessPolicy; allowedProposalTypes?: string[]; researchNetworkPolicy?: { allowWeb?: boolean; allowedDomains?: string[] }; providerResearchSourcePolicy?: { allowedDomains?: string[] }; worktreeRoot?: string | null; providerManagesWorktree?: boolean; allowedPaths?: string[]; forbiddenPaths?: string[] }): AssignmentToolCatalog {
+	const agentTools = [...new Set([
+		...input.agentTools, 'treeseed.status', 'treeseed.assignment_plan', 'treeseed.assignment_status_update',
+		'treeseed.assignment_summary', 'treeseed.discussion.read', 'treeseed.discussion.follow', 'treeseed.discussion.respond',
+		'treeseed.discussion.request_handoff', 'treeseed.discussion.create_artifact', 'treeseed.operation.prepare_handoff', 'treeseed.client_session.request_action',
+	])];
+	const requestedDefinitions = agentTools.map(findAgentToolDefinition).filter((definition) => Boolean(definition));
 	const allowWrite = requestedDefinitions.some((definition) => definition?.mutability === 'content_write'
-		&& (!definition.content || contentToolAllowed(input.contentAccess, definition.content.action, definition.content.model)));
-	const allowCommit = input.agentTools.some((toolId) => toolId === 'treedx.commit_workspace'
+		&& (!definition.content || contentToolAllowed(input.permissionProjection, definition.content.action, definition.content.model)));
+	const allowCommit = agentTools.some((toolId) => toolId === 'treedx.commit_workspace'
 		|| findAgentToolDefinition(toolId)?.content?.action === 'commit')
-		&& input.contentAccess?.commit?.allowed === true;
+		&& input.permissionProjection?.commit?.allowed === true;
 	const treeDxBase = createAssignmentTreeDxToolDescriptor({ ...input, allowWrite, allowCommit });
 	const descriptors: ExecutionProviderToolDescriptor[] = [];
 	const omitted: Array<{ id: string; missing: AgentToolRequirement[] }> = [];
 	const writableWorkspace = Boolean(treeDxBase?.allowedOperations.includes('files:write'));
-	const commitAllowed = input.contentAccess?.commit?.allowed === true;
+	const commitAllowed = input.permissionProjection?.commit?.allowed === true;
 	const projectResearchDomains = input.researchNetworkPolicy?.allowedDomains ?? [];
 	const providerResearchDomains = input.providerResearchSourcePolicy?.allowedDomains ?? [];
 	const effectiveResearchDomains = projectResearchDomains.filter((projectDomain) => providerResearchDomains.some(
@@ -94,19 +99,21 @@ export function createAssignmentToolCatalog(input: { agentTools: string[]; proje
 			|| projectDomain.endsWith(`.${providerDomain}`)
 			|| providerDomain.endsWith(`.${projectDomain}`),
 	));
-	for (const toolId of input.agentTools) {
+	for (const toolId of agentTools) {
 		const definition = findAgentToolDefinition(toolId);
 		if (!definition) continue;
 		const missing: AgentToolRequirement[] = [];
 		if (definition.requirements.includes('treedx_proxy_handle') && !treeDxBase) missing.push('treedx_proxy_handle');
 		if (definition.requirements.includes('assignment_worktree') && !input.worktreeRoot && input.providerManagesWorktree !== true) missing.push('assignment_worktree');
 		if (definition.requirements.includes('treedx_writable_workspace') && !writableWorkspace) missing.push('treedx_writable_workspace');
-		if (definition.requirements.includes('content_access') && definition.content && !contentToolAllowed(input.contentAccess, definition.content.action, definition.content.model)) missing.push('content_access');
+		if (definition.requirements.includes('content_access') && definition.content && !contentToolAllowed(input.permissionProjection, definition.content.action, definition.content.model)) missing.push('content_access');
 		if (definition.requirements.includes('content_commit') && !commitAllowed) missing.push('content_commit');
 		if (definition.requirements.includes('research_source_policy') && (input.researchNetworkPolicy?.allowWeb !== true || !effectiveResearchDomains.length)) missing.push('research_source_policy');
 		if (missing.length) { omitted.push({ id: definition.id, missing }); continue; }
-		const base: ExecutionProviderToolDescriptor = { kind: 'agent_tool', id: definition.id, name: definition.title, description: definition.description, inputSchema: definition.inputSchema, outputSchema: definition.outputSchema, executionTarget: definition.executionTarget, mutability: definition.mutability, metadata: { dispatch: definition.dispatch, dispatchPreferredMode: definition.dispatch?.assignmentPreferredMode, telemetryCategory: definition.telemetryCategory, assignmentId: input.assignmentId, projectId: input.projectId, agentSlug: input.agentSlug ?? null, agentContentPath: input.agentContentPath ?? null, environment: input.environment ?? null, contentRoot: input.contentRoot ?? null, worktreeRoot: input.worktreeRoot ?? null, allowedPaths: input.allowedPaths ?? [], forbiddenPaths: input.forbiddenPaths ?? [], researchAllowedDomains: definition.telemetryCategory === 'research' ? effectiveResearchDomains : undefined, contentAction: definition.content?.action, contentModel: definition.content?.model, contentPreset: definition.content?.preset, contentAccessSummary: summarizeContentAccess(input.contentAccess, input.agentTools) } };
-		if (definition.executionTarget !== 'treedx_proxy' && definition.executionTarget !== 'treeseed_content') { descriptors.push(base); continue; }
+		const base: ExecutionProviderToolDescriptor = { kind: 'agent_tool', id: definition.id, name: definition.title, description: definition.description, inputSchema: definition.inputSchema, outputSchema: definition.outputSchema, executionTarget: definition.executionTarget, mutability: definition.mutability, metadata: { dispatch: definition.dispatch, dispatchPreferredMode: definition.dispatch?.assignmentPreferredMode, telemetryCategory: definition.telemetryCategory, assignmentId: input.assignmentId, projectId: input.projectId, agentSlug: input.agentSlug ?? null, agentContentPath: input.agentContentPath ?? null, environment: input.environment ?? null, contentRoot: input.contentRoot ?? null, worktreeRoot: input.worktreeRoot ?? null, allowedPaths: input.allowedPaths ?? [], forbiddenPaths: input.forbiddenPaths ?? [], allowedProposalTypes: input.allowedProposalTypes ?? [], researchAllowedDomains: definition.telemetryCategory === 'research' ? effectiveResearchDomains : undefined, contentAction: definition.content?.action, contentModel: definition.content?.model, contentPreset: definition.content?.preset, permissionSummary: summarizeContentAccess(input.permissionProjection, agentTools) } };
+		const requiresTreeDxProxy = definition.requirements.includes('treedx_proxy_handle')
+			|| definition.executionTarget === 'treedx_proxy' || definition.executionTarget === 'treeseed_content';
+		if (!requiresTreeDxProxy) { descriptors.push(base); continue; }
 		if (!treeDxBase) { omitted.push({ id: definition.id, missing: ['treedx_proxy_handle'] }); continue; }
 		descriptors.push({ ...treeDxBase, id: definition.id, name: definition.title, description: definition.description, inputSchema: definition.inputSchema, outputSchema: definition.outputSchema, executionTarget: definition.executionTarget, mutability: definition.mutability, metadata: { ...(treeDxBase.metadata ?? {}), ...(base.metadata ?? {}) } });
 	}

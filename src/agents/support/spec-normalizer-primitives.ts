@@ -16,7 +16,6 @@ export const LEGACY_AGENT_FIELDS = [
 	'systemPrompt',
 	'permissions',
 	'tools',
-	'contentAccess',
 	'context',
 	'execution',
 	'outputs',

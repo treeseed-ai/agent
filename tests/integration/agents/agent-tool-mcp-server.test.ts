@@ -47,6 +47,21 @@ const descriptor: TreeDxProxyExecutionToolDescriptor = {
 	},
 };
 
+const assignmentPlanDescriptor: TreeDxProxyExecutionToolDescriptor = {
+	...descriptor,
+	id: 'treeseed.assignment_plan',
+	name: 'Assignment plan',
+	description: 'Read the durable assignment operational plan.',
+	executionTarget: 'treeseed_content',
+	mutability: 'content_write',
+	metadata: {
+		...descriptor.metadata,
+		contentRoot: 'src/content',
+		contentAction: 'read',
+		contentModel: 'assignment_plan',
+	},
+};
+
 describe('agent tool MCP tooling', () => {
 	it('creates an assignment-scoped command without embedding credentials in args', () => {
 		const command = createAgentToolMcpServerCommand({
@@ -169,13 +184,21 @@ describe('agent tool MCP tooling', () => {
 	});
 
 	it('serves allowed tools through a standards-compliant MCP connection', async () => {
-		const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ ok: true, payload: { path: 'src/content/a.mdx' } }), { status: 200 }));
+		const fetchImpl = vi.fn(async (url: string | URL | Request) => {
+			if (String(url).includes('/v1/provider/assignments/')) return new Response(JSON.stringify({ ok: true, payload: {
+				id: 'assignment-1', projectId: 'project-1', stateVersion: 1, status: 'leased', leaseState: 'leased',
+				assignedAt: '2026-08-14T00:00:00.000Z', capacityEnvelope: { reservedSeconds: 900,
+					budget: { time: { hardDeadlineAt: '2099-01-01T00:00:00.000Z' } } },
+			} }), { status: 200 });
+			if (String(url).includes('/files?path=')) return new Response(JSON.stringify({ content: '---\nschemaVersion: treeseed.assignment-plan/v1\nassignmentId: assignment-1\n---\n' }), { status: 200 });
+			return new Response(JSON.stringify({ ok: true, payload: { path: 'src/content/a.mdx' } }), { status: 200 });
+		});
 		const telemetry: unknown[] = [];
 		const server = createAgentToolMcpServer({
 			apiBaseUrl: 'https://api.example.test',
 			providerAccessToken: 'provider-secret',
 			assignmentId: 'assignment-1',
-			descriptors: [descriptor],
+			descriptors: [descriptor, assignmentPlanDescriptor],
 			fetchImpl: fetchImpl as unknown as typeof fetch,
 			onTelemetry: (entry) => telemetry.push(entry),
 		});
@@ -188,7 +211,9 @@ describe('agent tool MCP tooling', () => {
 		]);
 		try {
 			const tools = await client.listTools();
-			expect(tools.tools.map((tool) => tool.name)).toEqual(['treedx_apply_workspace_changeset']);
+			expect(tools.tools.map((tool) => tool.name)).toEqual([
+				'treedx_apply_workspace_changeset', 'treeseed_assignment_plan',
+			]);
 			expect(agentToolMcpName('treedx.apply_workspace_changeset')).toBe('treedx_apply_workspace_changeset');
 
 			const result = await client.callTool({

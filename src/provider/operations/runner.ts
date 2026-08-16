@@ -33,17 +33,32 @@ export function providerAssignmentLeaseSeconds(config: ProviderConnectionRuntime
 
 export async function releaseTerminalAssignmentResources(
 	reported: unknown,
-	release: ((outcome: 'completed' | 'returned' | 'failed' | 'expired') => Promise<void>) | null,
+	release: ((outcome: 'completed' | 'returned' | 'failed' | 'expired' | 'cancelled') => Promise<void>) | null,
 ) {
 	const reportEnvelope = record(reported);
 	const reportedAssignment = record(reportEnvelope.payload ?? reportEnvelope.assignment ?? reportEnvelope);
 	const status = stringValue(reportedAssignment.status);
-	if (!release || !status || !['completed', 'returned', 'failed', 'expired'].includes(status)) return false;
-	await release(status as 'completed' | 'returned' | 'failed' | 'expired');
+	if (!release || !status || !['completed', 'returned', 'failed', 'expired','cancelled'].includes(status)) return false;
+	await release(status as 'completed' | 'returned' | 'failed' | 'expired' | 'cancelled');
 	return true;
 }
 
+export async function refreshAssignmentAccessToken(config: ProviderConnectionRuntimeContext, assignment?: Record<string, unknown>) {
+	if (!config.accessTokenProvider) return config;
+	const envelope = record(assignment?.capacityEnvelope);
+	const budget = record(envelope.budget);
+	const budgetTime = record(budget.time);
+	const deadlineAt = Date.parse(stringValue(budgetTime.authorityDeadlineAt, budgetTime.hardDeadlineAt, budget.deadline) ?? '');
+	const minimumValidityMs = Number.isFinite(deadlineAt)
+		? Math.max(5 * 60_000, deadlineAt - Date.now() + 30_000)
+		: Math.max(5 * 60_000, providerAssignmentLeaseSeconds(config) * 1_000);
+	const accessToken = (await config.accessTokenProvider(minimumValidityMs)).trim();
+	if (!accessToken) throw new Error('Capacity provider access-token refresh returned an empty token.');
+	return { ...config, accessToken };
+}
+
 export async function runProviderAssignment(input: ProviderAssignmentExecutionInput) {
+	input = { ...input, config: await refreshAssignmentAccessToken(input.config, input.assignment) };
 	const assignmentId = stringValue(input.assignment.id) ?? '';
 	const membershipId = stringValue(input.assignment.membershipId);
 	const stateVersion = Number(input.assignment.stateVersion);
@@ -145,6 +160,7 @@ export async function runProviderAssignment(input: ProviderAssignmentExecutionIn
 		},
 	});
 	const modeResult = await kernel.runAssignment({
+		signal: input.signal,
 		assignment: typedAssignment,
 		modeRunId,
 		capacityEnvelope: deriveAgentCapacityEnvelopeFromAssignment(typedAssignment),

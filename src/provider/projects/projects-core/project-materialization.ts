@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process';
 import { existsSync, realpathSync } from 'node:fs';
-import { mkdir } from 'node:fs/promises';
+import { mkdir,readdir,rm } from 'node:fs/promises';
 import { dirname, relative, resolve, sep } from 'node:path';
 import { promisify } from 'node:util';
 import type { AgentSdkTreeDxOptions } from '@treeseed/sdk/sdk';
@@ -190,6 +190,51 @@ export async function materializeAssignmentProject(
 	} catch (error) {
 		return { ...project, repository: { ...project.repository, ok: false, path, branch, commitSha: await gitSha(path), materialization: 'clone', mirrorPath: paths.mirror, error: error instanceof Error ? error.message : String(error) } };
 	}
+}
+
+export async function releaseMaterializedAssignmentProject(
+	config: ProviderHostRuntimeConfig,
+	project: MaterializedAssignmentProject,
+) {
+	const repositoryPath = resolve(project.repository.path);
+	assertProviderOwnedRepositoryPath(config.dataDir, repositoryPath);
+	const ownedRoot = project.repository.materialization === 'clone' && repositoryPath.endsWith(`${sep}checkout`)
+		? dirname(repositoryPath)
+		: repositoryPath;
+	assertProviderOwnedRepositoryPath(config.dataDir, ownedRoot);
+	await rm(ownedRoot, { recursive: true, force: true });
+}
+
+export async function listMaterializedAssignmentIds(config: ProviderHostRuntimeConfig) {
+	const roots = [resolve(config.dataDir, 'assignment-contexts'), resolve(config.dataDir, 'assignments')];
+	const ids = new Set<string>();
+	for (const root of roots) {
+		assertProviderOwnedRepositoryPath(config.dataDir, root);
+		for (const entry of await readdir(root, { withFileTypes: true }).catch(() => [])) {
+			if (entry.isDirectory()) ids.add(entry.name);
+		}
+	}
+	return [...ids].sort();
+}
+
+export async function releaseRecoveredAssignmentMaterialization(
+	config: ProviderHostRuntimeConfig,
+	assignmentId: string,
+) {
+	const safeId = safeSegment(assignmentId);
+	const contextRoot = contextPath(config, safeId);
+	const checkoutRoot = resolve(config.dataDir, 'assignments', safeId, 'checkout');
+	if (existsSync(contextRoot)) {
+		assertProviderOwnedRepositoryPath(config.dataDir, contextRoot);
+		await rm(contextRoot, { recursive: true, force: true });
+		return { status: 'released' as const, kind: 'context' as const };
+	}
+	if (!existsSync(checkoutRoot)) return { status: 'absent' as const };
+	assertProviderOwnedRepositoryPath(config.dataDir, checkoutRoot);
+	const changed = (await runGit(['status', '--porcelain=v1'], checkoutRoot)).stdout.trim();
+	if (changed) return { status: 'blocked' as const, kind: 'clone' as const, reason: 'repository_changes_present' as const };
+	await rm(dirname(checkoutRoot), { recursive: true, force: true });
+	return { status: 'released' as const, kind: 'clone' as const };
 }
 
 export function providerProjectSiteRoot(project: AssignmentProjectContext, repositoryPath: string) {

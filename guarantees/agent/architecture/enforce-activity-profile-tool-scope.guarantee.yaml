@@ -1,31 +1,40 @@
-schemaVersion: treeseed.guarantee/v1
+schemaVersion: treeseed.guarantee/v2
 id: guarantee.agent.architecture.enforce-activity-profile-tool-scope.303
 journeyIndex: 303
 type: agent
 subtype: architecture
-journey: Enforce Activity Profile Tool Scope
+journey: Prove profile selection and authority
 ownerPackage: "@treeseed/agent"
 surface: agent-runtime
-summary: "Execution providers receive only the tools allowed by the selected activity profile and assignment handles."
+summary: The exact requested profile and immutable explicit authority snapshot are selected without fallback.
 status: planned
-actors:
-  allowed: [project_manager, capacity_operator, team_owner]
-  forbidden: [anonymous_user, unauthorized_user]
-gates: [core, release]
-preconditions:
-  fixtures: [integrated_treeseed_project]
-api:
-  required: true
-  verifierRefs: [agent.architecture.enforce-activity-profile-tool-scope]
-content:
-  required: false
-  verifierRefs: []
-audit:
-  required: true
-  verifierRefs: [agent.architecture.enforce-activity-profile-tool-scope]
-negativeCases:
-  - id: unauthorized-actor-denied
-    actor: anonymous_user
-    verifierRefs: [agent.architecture.enforce-activity-profile-tool-scope]
-evidence:
-  required: [guarantee_report, verifier_evidence]
+capabilityId: agent.profile.selection-and-authority
+catalog: agent.system
+activation: { minimumConsecutivePasses: 3, requiredVariants: [baseline, clean-repeat, interruption-resume], invalidateOnSourceChange: true }
+proof:
+  requiredCommands: [capacity.workday-summary, capacity.assignment, capacity.assignment-authority-probe, capacity.mode-runs, capacity.audit-events]
+  minimumRepositoryPostconditions: 0
+  outcomePredicates:
+    profile.exact-selection: [profile.requested-type, profile.definition-revision, profile.query-revisions, profile.template-revisions, profile.tools, profile.signals, profile.permissions, profile.output-contract]
+    profile.forbidden-authority: [profile.denied-model, profile.denied-tool, profile.denied-path, profile.denied-branch, profile.denied-governance]
+outcomes:
+  - id: profile.exact-selection
+    kind: required
+    description: The requested enabled profile freezes exact definition, query, template, tool, signal, permission, and output revisions.
+    evidenceKinds: [assignment_snapshot, execution_trace]
+    authoritativeSubjects: [assignment, definitionRevision]
+  - id: profile.forbidden-authority
+    kind: forbidden
+    description: Each profile is denied one forbidden model mutation, tool, path, branch operation, and governance transition.
+    evidenceKinds: [denial_trace]
+    authoritativeSubjects: [assignment]
+dependencies: { journeys: [], guarantees: [guarantee.agent.control-plane.gate-assignment-on-tested-context.914] }
+actors: { allowed: [project_manager, capacity_operator, team_owner], forbidden: [anonymous_user, unauthorized_user] }
+devices: { required: [] }
+gates: [core]
+preconditions: { fixtures: [integrated_treeseed_project] }
+api: { required: true, verifierRefs: [agent.catalog.profile-live-proof] }
+content: { required: false, verifierRefs: [] }
+audit: { required: true, verifierRefs: [] }
+negativeCases: []
+evidence: { required: [verifier_evidence] }

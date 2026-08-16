@@ -6,6 +6,7 @@ export interface ProviderAssignmentClient {
 	createAssignmentModeRun(assignmentId: string, request: Record<string, unknown>): Promise<unknown>;
 	createAssignmentEvent?(assignmentId: string, request: ProviderRuntimeEventInput): Promise<unknown>;
 	publishAssignmentSignal?(assignmentId: string, request: Record<string, unknown>): Promise<unknown>;
+	preflightAssignmentCompletion?(assignmentId: string, request: Record<string, unknown>): Promise<unknown>;
 	completeAssignment(assignmentId: string, request: Record<string, unknown>): Promise<unknown>;
 	failAssignment(assignmentId: string, request: Record<string, unknown>): Promise<unknown>;
 	reportAssignmentUsage?(assignmentId: string, request: Record<string, unknown>, idempotencyKey: string): Promise<unknown>;

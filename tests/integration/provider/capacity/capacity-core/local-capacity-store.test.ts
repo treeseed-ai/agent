@@ -18,7 +18,10 @@ describe('durable provider-local capacity claims', () => {
 			expect(claims.filter(Boolean)).toHaveLength(1);
 			const winner = claims.find((claim) => claim !== null)!;
 			await firstProcess.attachLease(winner.id, { assignmentId: 'assignment-a', leaseToken: 'lease-secret', leaseExpiresAt: new Date(Date.now() + 60_000).toISOString(), dispatchEnvelope: { ok: true, payload: { id: 'assignment-a' }, leaseToken: 'lease-secret' } });
+			const renewedExpiry = new Date(Date.now() + 120_000).toISOString();
+			await secondProcess.renewLease(winner.id, { assignmentId: 'assignment-a', leaseExpiresAt: renewedExpiry });
 			expect((await new ProviderLocalCapacityStore(root).snapshot()).claims).toEqual([expect.objectContaining({ id: winner.id, status: 'ready', leaseToken: '<redacted>' })]);
+			expect((await new ProviderLocalCapacityStore(root).snapshot()).claims).toEqual([expect.objectContaining({ leaseExpiresAt: renewedExpiry, expiresAt: renewedExpiry })]);
 			expect(await new ProviderLocalCapacityStore(root).claimsForRecovery()).toEqual([]);
 			expect(await secondProcess.claimDispatch()).toEqual(expect.objectContaining({ id: winner.id, status: 'running', dispatchEnvelope: expect.any(Object) }));
 			const recovered = await new ProviderLocalCapacityStore(root).claimsForRecovery();
@@ -53,6 +56,29 @@ describe('durable provider-local capacity claims', () => {
 				expect.objectContaining({ claimId: claim.id, outcome: 'lifecycle-unconfirmed', message: 'control plane unavailable' }),
 				expect.objectContaining({ claimId: claim.id, outcome: 'assignment-lifecycle-confirmed' }),
 			]));
+		} finally {
+			await rm(root, { recursive: true, force: true });
+		}
+	});
+
+	it('moves an expired leased claim into recovery instead of discarding its cleanup identity', async () => {
+		const root = await mkdtemp(resolve(tmpdir(), 'treeseed-provider-expired-claim-'));
+		try {
+			const store = new ProviderLocalCapacityStore(root);
+			const claim = await store.claim({ connectionId: 'team-a', globalLimit: 1, connectionLimit: 1 });
+			if (!claim) throw new Error('Expected a local claim.');
+			await store.attachLease(claim.id, {
+				assignmentId: 'assignment-expired', leaseToken: 'lease-expired',
+				leaseExpiresAt: new Date(Date.now() - 1_000).toISOString(), dispatchEnvelope: {},
+			});
+			const recovered = await store.claimsForRecovery();
+			expect(recovered).toEqual([expect.objectContaining({
+				id: claim.id, assignmentId: 'assignment-expired', status: 'recovery', leaseToken: 'lease-expired',
+			})]);
+			expect((await store.snapshot()).events).toEqual(expect.arrayContaining([
+				expect.objectContaining({ claimId: claim.id, outcome: 'lease-expired-recovery-required' }),
+			]));
+			expect(await store.claim({ connectionId: 'team-b', globalLimit: 1, connectionLimit: 1 })).toBeNull();
 		} finally {
 			await rm(root, { recursive: true, force: true });
 		}

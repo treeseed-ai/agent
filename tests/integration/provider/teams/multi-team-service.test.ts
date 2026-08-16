@@ -112,5 +112,14 @@ describe('multi-team provider local service workflow', () => {
 		await localState.attachLease(revokedClaim.id, { assignmentId: 'assignment-b', leaseToken: 'lease-b', leaseExpiresAt: new Date(Date.now() + 60_000).toISOString(), dispatchEnvelope: { ok: true, payload: { id: 'assignment-b' }, leaseToken: 'lease-b' } });
 		expect(await runMultiTeamProviderRunners(config)).toMatchObject({ dispatched: 0 });
 		expect((await localState.snapshot()).claims).toEqual([expect.objectContaining({ connectionId: 'team-b', status: 'ready' })]);
+
+		const pollsBeforeDiskFence = teamA.state.polls + teamB.state.polls;
+		const diskConstrainedConfig = {
+			...config,
+			env: { ...config.env, TREESEED_PROVIDER_ASSIGNMENT_DISK_HEADROOM_BYTES: String(Number.MAX_SAFE_INTEGER) },
+		};
+		const diskConstrained = await runMultiTeamProviderManager(diskConstrainedConfig);
+		expect(diskConstrained).toMatchObject({ admission: { ok: false }, dispatches: [] });
+		expect(teamA.state.polls + teamB.state.polls).toBe(pollsBeforeDiskFence);
 	}, 30_000);
 });

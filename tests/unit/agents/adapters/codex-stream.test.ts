@@ -28,6 +28,25 @@ describe('Codex streamed execution activity', () => {
 		});
 	});
 
+	it('treats turn.completed as terminal without waiting for stream teardown', async () => {
+		let released = false;
+		const result = await Promise.race([
+			runCodexThread({
+				async run() { throw new Error('buffered execution should not be used'); },
+				async runStreamed() { return { events: (async function* () {
+					try {
+						yield { type: 'item.completed', item: { id: 'message-a', type: 'agent_message', text: 'Durable work completed.' } };
+						yield { type: 'turn.completed', usage: { output_tokens: 8 } };
+						await new Promise(() => undefined);
+					} finally { released = true; }
+				})() }; },
+			}, 'Complete the bounded assignment.', vi.fn()),
+			new Promise<never>((_, reject) => setTimeout(() => reject(new Error('completed turn did not return')), 100)),
+		]);
+		expect(result).toMatchObject({ finalResponse: 'Durable work completed.', usage: { output_tokens: 8 } });
+		expect(released).toBe(true);
+	});
+
 	it('fails closed when durable event recording fails', async () => {
 		await expect(runCodexThread({
 			async run() { return {}; },

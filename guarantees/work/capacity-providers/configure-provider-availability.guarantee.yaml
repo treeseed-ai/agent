@@ -6,7 +6,7 @@ subtype: capacity-providers
 journey: "Configure provider availability"
 ownerPackage: "@treeseed/agent"
 surface: agent-runtime
-summary: "Guarantee that TreeSeed can configure provider availability."
+summary: "Guarantee that an execution provider advertises validated availability, capabilities, native limits, and its minimum viable assignment duration without gaining scheduling authority."
 status: planned
 dependencies: { journeys: [], guarantees: [] }
 actors: { allowed: [authenticated_user, team_owner, platform_admin], forbidden: [unauthorized_user] }
@@ -18,4 +18,5 @@ content: { required: false, verifierRefs: [] }
 audit: { required: false, verifierRefs: [] }
 negativeCases: []
 evidence: { required: [guarantee_report] }
-notes: ["Planned from the TreeSeed Guide platform coverage audit."]
+notes:
+  - "Planned until live evidence proves elapsed and business-day minimums survive provider publication, API read-back, undersized-demand rejection, accepted assignment freezing, and cleanup."

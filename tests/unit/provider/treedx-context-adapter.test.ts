@@ -52,11 +52,23 @@ describe('assignment TreeDX context adapter', () => {
 		const adapter = createAssignmentTreeDxAdapter({
 			config: { marketUrl: 'http://api.test', accessToken: 'secret' } as ProviderConnectionRuntimeContext,
 			projectId: 'project-1', assignmentId: 'assignment-1',
-			treedxProxyHandle: { id: 'handle-1', teamId: 'team-1', projectId: 'project-1', assignmentId: 'assignment-1', repositoryId: 'repo-1', status: 'issued', allowedOperations: ['files:read'], allowedPaths: ['**'] },
+			treedxProxyHandle: { id: 'handle-1', teamId: 'team-1', projectId: 'project-1', assignmentId: 'assignment-1', repositoryId: 'repo-1', baseCommitSha: 'a'.repeat(40), status: 'issued', allowedOperations: ['files:read'], allowedPaths: ['**'] },
 		});
 		await adapter?.buildContext({ repoId: 'repo-1', query: 'guide', body: { limit: 24, format: 'full' } });
 		const sent = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
-		expect(sent).toMatchObject({ query: 'guide', limit: 24, format: 'full', budget: { maxNodes: 8, maxTokens: 1800 } });
+		expect(sent).toMatchObject({ query: 'guide', ref:'a'.repeat(40), limit: 24, format: 'full', budget: { maxNodes: 8, maxTokens: 1800 } });
+	});
+
+	it('defaults repository reads and listings to immutable assignment custody while preserving an explicit ref', async () => {
+		const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ payload: { files: [] } }), { status: 200, headers: { 'content-type': 'application/json' } }));
+		vi.stubGlobal('fetch', fetchMock);
+		const adapter = createAssignmentTreeDxAdapter({
+			config:{marketUrl:'http://api.test',accessToken:'secret'} as ProviderConnectionRuntimeContext,projectId:'project-1',assignmentId:'assignment-1',
+			treedxProxyHandle:{id:'handle-1',teamId:'team-1',projectId:'project-1',assignmentId:'assignment-1',repositoryId:'repo-1',baseCommitSha:'b'.repeat(40),status:'issued',allowedOperations:['files:read'],allowedPaths:['**']},
+		});
+		await adapter?.readRepositoryFiles({repoId:'repo-1',paths:['template.mdx']});
+		await adapter?.listRepositoryPaths?.({repoId:'repo-1',path:'src/content',ref:'c'.repeat(40)});
+		expect(fetchMock.mock.calls.map((call)=>JSON.parse(String(call[1]?.body)).ref)).toEqual(['b'.repeat(40),'c'.repeat(40)]);
 	});
 
 	it('resolves a current provider access token for every TreeDX request', async () => {

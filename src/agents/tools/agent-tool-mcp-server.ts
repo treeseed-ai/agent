@@ -30,7 +30,7 @@ const TRANSPORT_METADATA_KEYS = [
 	'baseRef',
 	'contentModel',
 	'contentPreset',
-	'contentAccessSummary',
+	'permissionSummary',
 	'requiredArtifactKind',
 	'requireContentArtifact',
 ] as const;

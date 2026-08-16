@@ -2,7 +2,7 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { findAgentToolDefinition } from '@treeseed/sdk';
-import type { AgentRuntimeSpec, ExecutionRunRef } from '@treeseed/sdk/types/agents';
+import type { AgentRuntimeSpec, ExecutionRunRef, ExecutionRunSnapshot } from '@treeseed/sdk/types/agents';
 import type { ExecutionProviderAdapter, ExecutionProviderInvocation, ExecutionProviderToolDescriptor } from '../../runtime/runtime-types.ts';
 import { AgentWorktreeManager } from '../../../services/agent-worktrees.ts';
 import { checkCodexProviderReadiness, type CodexApprovalPolicy, type CodexSandboxMode, resolveCodexProviderConfig } from '../codex/codex-readiness.ts';
@@ -10,7 +10,6 @@ import {
 	CodexRequestSafetyError,
 	codexAgentToolServer,
 	createDefaultCodexClient,
-	hasCompletedToolEvent,
 	readToolTelemetry,
 	treeDxContentReceipts,
 	type CodexExecutionRequest,
@@ -21,10 +20,11 @@ import {
 } from '../codex/execution-codex-core.ts';
 import { runCodexTask } from '../codex/execution-codex-result.ts';
 import type { ResearchSourcePolicy } from '@treeseed/sdk/agent-capacity';
-import { hasCompatibleContentArtifact, unlinkedNotePaths } from '../../tools/agent-tool-completion.ts';
-import { assignmentDeadlineExpired, codexExecutionTimeoutMs, deadlineBoundExecutionTimeoutMs } from './execution-timeout.ts';
+import { assignmentDeadlineExpired, assignmentExecutionTiming, capacityExecutionTiming, codexExecutionTimeoutMs, completionCorrectionBoundaryInstruction, deadlineBoundExecutionTimeoutMs, executionCompletionDeadlineMs } from './execution-timeout.ts';
+import { missingCodexCompletionReceipts } from './execution-completion-receipts.ts';
 
 export { assignmentDeadlineExpired, codexExecutionTimeoutMs, deadlineBoundExecutionTimeoutMs } from './execution-timeout.ts';
+export { missingCodexCompletionReceipts } from './execution-completion-receipts.ts';
 
 export interface CodexExecutionProviderAdapterOptions {
 	repoRoot?: string;
@@ -86,71 +86,13 @@ function toolsWithWorktree(
 		});
 }
 
-const TOOL_COMPLETION_RECEIPTS = new Map([
-	['treeseed.verify', 'verification_completed'],
-	['treeseed.review_decision', 'review_decision_recorded'],
-]);
-
-const SOURCE_CHECKPOINT_ARTIFACT_KINDS = new Set([
-	'failing_test_proof',
-	'implementation_change',
-	'implementation_revision',
-]);
-
 function record(value: unknown): Record<string, unknown> {
 	return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
 
-function fetchedResearchPublishers(telemetry: Record<string, unknown>[]) {
-	const publishers = new Set<string>();
-	for (const entry of telemetry) {
-		if (entry.status !== 'completed' || !Array.isArray(entry.derivedEvents)) continue;
-		for (const event of entry.derivedEvents) {
-			const derived = record(event);
-			if (derived.type !== 'research_citation_fetched') continue;
-			const citation = record(derived.citation);
-			try {
-				publishers.add(new URL(String(citation.sourceUrl ?? '')).hostname.toLowerCase());
-			} catch {
-				// A malformed citation cannot satisfy the independent-publisher gate.
-			}
-		}
-	}
-	return publishers;
-}
-
-export function missingCodexCompletionReceipts(
-	tools: ExecutionProviderToolDescriptor[],
-	telemetry: Record<string, unknown>[],
-	artifactKind?: string | null,
-	researchStage?: string | null,
-	minimumIndependentSources = 2,
-	requireContentArtifact = false,
-) {
-	const missing = tools.flatMap((tool) => {
-		const eventType = TOOL_COMPLETION_RECEIPTS.get(tool.id);
-		return eventType && !hasCompletedToolEvent(telemetry, eventType) ? [eventType] : [];
-	});
-	if (
-		artifactKind
-		&& SOURCE_CHECKPOINT_ARTIFACT_KINDS.has(artifactKind)
-		&& tools.some((tool) => tool.id === 'treeseed.checkpoint')
-		&& !hasCompletedToolEvent(telemetry, 'source_checkpoint_committed')
-	) {
-		missing.push('source_checkpoint_committed');
-	}
-	if (researchStage === 'independent-source-fetch' && !tools.some((tool) => tool.id === 'research.fetch_source')) {
-		missing.push('research_fetch_tool_available');
-	} else if (researchStage === 'independent-source-fetch') {
-		if (fetchedResearchPublishers(telemetry).size < minimumIndependentSources) {
-			missing.push(`research_independent_publishers:${minimumIndependentSources}`);
-		}
-	}
-	for (const path of unlinkedNotePaths(telemetry)) missing.push(`content_subject_linked:${path}`);
-	if (requireContentArtifact && artifactKind && !hasCompatibleContentArtifact(telemetry, artifactKind)) {
-		missing.push(`content_artifact_kind:${artifactKind}`);
-	}
-	return missing;
+export function hasRequiredResponseSuspensionReceipt(telemetry: Record<string, unknown>[]) {
+	return telemetry.some((entry) => entry.status === 'completed' && entry.toolId === 'treeseed.discussion.respond'
+		&& record(entry.inputSummary).requiredResponse === true && record(entry.outputSummary).suspended === true);
 }
 
 function mergeCodexResults(initial: CodexExecutionResult, correction: CodexExecutionResult): CodexExecutionResult {
@@ -211,6 +153,22 @@ function missingReceiptResult(
 	};
 }
 
+function durableReceiptCompletionResult(result: CodexExecutionResult): CodexExecutionResult {
+	return {
+		...result,
+		status: 'completed',
+		summary: 'Assignment completion recovered from its complete durable tool receipts before provider terminalization.',
+		error: undefined,
+		metadata: {
+			...result.metadata,
+			completionRecovery: {
+				source: 'durable_tool_receipts',
+				providerResultCode: result.error?.code ?? null,
+			},
+		},
+	};
+}
+
 export class CodexExecutionProviderAdapter implements ExecutionProviderAdapter {
 	private readonly assignmentWorktrees = new Map<string, string>();
 	constructor(private readonly options: CodexExecutionProviderAdapterOptions = {}) {}
@@ -260,7 +218,7 @@ export class CodexExecutionProviderAdapter implements ExecutionProviderAdapter {
 		};
 	}
 
-	async start(input: ExecutionProviderInvocation) {
+	async start(input: ExecutionProviderInvocation): Promise<ExecutionRunSnapshot> {
 		const config = resolveCodexProviderConfig(this.options.env ?? process.env);
 		const repoRoot = this.options.repoRoot ?? process.cwd();
 		const runId = typeof input.metadata?.runId === 'string' ? input.metadata.runId : input.assignment.id;
@@ -289,18 +247,26 @@ export class CodexExecutionProviderAdapter implements ExecutionProviderAdapter {
 			? input.workPackage.metadata.artifactKind
 			: null;
 		const requireContentArtifact = input.workPackage.metadata?.requireContentArtifact === true;
+		const requiredPublishedSignals = Array.isArray(input.assignment.allowedOutputs?.publishedSignals)
+			? input.assignment.allowedOutputs.publishedSignals.map(String).filter(Boolean)
+			: [];
 		const tools = toolsWithWorktree(input.tools, worktree?.worktreeRoot, { artifactKind, requireContentArtifact });
 		const configuredTelemetryPath = typeof input.metadata?.toolTelemetryPath === 'string' ? input.metadata.toolTelemetryPath : null;
 		const telemetryDirectory = tools.length && !configuredTelemetryPath ? await mkdtemp(join(tmpdir(), 'treeseed-agent-tools-')) : null;
 		const toolTelemetryPath = configuredTelemetryPath ?? (telemetryDirectory ? join(telemetryDirectory, 'events.jsonl') : null);
+		if (toolTelemetryPath) await writeFile(toolTelemetryPath, '', { encoding: 'utf8', flag: 'a', mode: 0o600 });
 		const toolConfigPath = telemetryDirectory ? join(telemetryDirectory, 'mcp-env.json') : null;
 		let result: Awaited<ReturnType<typeof runCodexTask>>;
 		let toolTelemetry: Record<string, unknown>[] = [];
 		let codexClient: Promise<CodexClient> | null = null;
-		const timing = input.workPackage.context?.executionTiming ?? input.workPackage.metadata?.executionTiming;
+		const timing = assignmentExecutionTiming(
+			capacityExecutionTiming(input.capacityEnvelope) ?? input.workPackage.context?.executionTiming
+				?? input.workPackage.metadata?.executionTiming,
+			input.assignment,
+		);
 		const configuredTimeoutMs = codexExecutionTimeoutMs(config.timeoutMs, input.agent.execution.timeoutSeconds);
 		const effectiveTimeoutMs = deadlineBoundExecutionTimeoutMs(configuredTimeoutMs, timing);
-		const executionDeadline = Date.now() + effectiveTimeoutMs;
+		const executionDeadline = executionCompletionDeadlineMs(configuredTimeoutMs, timing);
 		try {
 			const request: CodexExecutionRequest = {
 			taskId: runId,
@@ -328,6 +294,7 @@ export class CodexExecutionProviderAdapter implements ExecutionProviderAdapter {
 			researchSourcePolicy: this.options.researchSourcePolicy,
 			metadata: {
 				subscriptionPlan: config.subscriptionPlan,
+				executionTiming: timing ?? null,
 				worktreeBranch: worktree?.branchName,
 				exactBaseRef: worktree?.exactBaseRef ?? exactBaseRef ?? null,
 				workPackage: input.workPackage,
@@ -347,12 +314,14 @@ export class CodexExecutionProviderAdapter implements ExecutionProviderAdapter {
 			result = await runCodexTask(request, {
 				client: codexClient,
 				onEvent: this.options.onEvent,
+				signal: input.signal,
 			});
 			toolTelemetry = await readToolTelemetry(toolTelemetryPath);
+			const requiredResponseSuspended = hasRequiredResponseSuspensionReceipt(toolTelemetry);
 			const researchStage = typeof input.workPackage.metadata?.researchStage === 'string' ? input.workPackage.metadata.researchStage : null;
 			const minimumIndependentSources = Number(input.workPackage.metadata?.minimumIndependentSources ?? 2);
-			const initialMissingReceipts = result.status === 'completed' || researchStage === 'independent-source-fetch'
-				? missingCodexCompletionReceipts(tools, toolTelemetry, artifactKind, researchStage, minimumIndependentSources, requireContentArtifact)
+			const initialMissingReceipts = !requiredResponseSuspended&&(result.status === 'completed' || result.error?.code === 'codex_execution_timeout' || researchStage === 'independent-source-fetch')
+				? missingCodexCompletionReceipts(tools, toolTelemetry, artifactKind, researchStage, minimumIndependentSources, requireContentArtifact, requiredPublishedSignals)
 				: [];
 			if (initialMissingReceipts.length) {
 				const remainingTimeoutMs = executionDeadline - Date.now();
@@ -365,22 +334,31 @@ export class CodexExecutionProviderAdapter implements ExecutionProviderAdapter {
 							'The assignment completion contract is not yet satisfied.',
 							`Missing required tool receipts: ${initialMissingReceipts.join(', ')}.`,
 							'Do not redo completed work. Use the granted TreeSeed tools to satisfy only the missing gates.',
+							completionCorrectionBoundaryInstruction(timing),
 							'Run treeseed.changed_paths if needed, call treeseed.verify with bounded argv if its receipt is missing, then call treeseed.checkpoint if its receipt is missing.',
+							'If assignment_plan is missing, write the required operational plan. If assignment_terminal_status or assignment_summary is missing, write the terminal status and summary using the latest authoritative state version before committing.',
+							'If content_committed is missing, commit the already-validated TreeDX workspace only after every required artifact, relation, terminal status, and summary receipt exists.',
 							'If review_decision_recorded is missing, call treeseed.review_decision with the evidence-based approved or rejected disposition.',
+							'If discussion_read or discussion_follow is missing, call treeseed.discussion.read and then treeseed.discussion.follow for the exact assignment discussion before responding.',
+							'If discussion_final_response is missing, call treeseed.discussion.respond exactly once after both Discussion read receipts exist, using the assignment discussionId, exact replyTo and sourceMessageRefs, intended recipients, current state version, and a stable idempotency key. Do not use generic content creation for the response.',
 							'If research_independent_publishers is missing, call the available TreeSeed tool with callName research_fetch_source (policy id research.fetch_source) for sources hosted on additional independent allowed domains until the required distinct-domain count is met. Search for and invoke the callName, not the dotted policy id. Then create, validate, and commit the required linked evidence note.',
 							'If content_artifact_kind is missing, create the assignment-required content model and artifact kind with the required subject relation, validate it, and commit it. Auxiliary questions or notes do not replace the required deliverable.',
+							'For every signal_publication:<contract-id> receipt that is missing, call treeseed.publish_signal with that exact declared contractId, the assignment subject identity, and a concise evidence-grounded message. Do not invent or omit a declared publication.',
 							'If content_subject_linked is missing for a note path, use treeseed.content.link with placement.path set to that exact repository-relative note path and the assignment-required subject relation; validate the same exact placement, then commit the corrected workspace. Every created note, including an accidental placeholder, must be linked before completion.',
 							'Wait for each successful receipt and do not send a final response until every listed receipt exists.',
 						].join('\n'),
 					}, {
 						client: codexClient,
 						onEvent: this.options.onEvent,
+						signal: input.signal,
 					});
 					result = mergeCodexResults(result, correction);
 					toolTelemetry = await readToolTelemetry(toolTelemetryPath);
 				}
-				const remainingReceipts = missingCodexCompletionReceipts(tools, toolTelemetry, artifactKind, researchStage, minimumIndependentSources, requireContentArtifact);
-				if (result.status !== 'failed' && remainingReceipts.length) {
+				const remainingReceipts = missingCodexCompletionReceipts(tools, toolTelemetry, artifactKind, researchStage, minimumIndependentSources, requireContentArtifact, requiredPublishedSignals);
+				if (result.error?.code === 'codex_execution_timeout' && !remainingReceipts.length) {
+					result = durableReceiptCompletionResult(result);
+				} else if (result.status !== 'failed' && remainingReceipts.length) {
 					result = missingReceiptResult(result, remainingReceipts, true);
 				}
 			}
@@ -390,9 +368,10 @@ export class CodexExecutionProviderAdapter implements ExecutionProviderAdapter {
 			if (telemetryDirectory) await rm(telemetryDirectory, { recursive: true, force: true });
 		}
 		const contentReceipts = treeDxContentReceipts(toolTelemetry);
+		const requiredResponseSuspended = hasRequiredResponseSuspensionReceipt(toolTelemetry);
 		return {
-			status: result.status,
-			summary: result.summary ?? 'Codex subscription provider returned no summary.',
+			status: requiredResponseSuspended ? 'returned' : result.status,
+			summary: requiredResponseSuspended ? 'Assignment suspended after a durable required-response checkpoint and Discussion message.' : result.summary ?? 'Codex subscription provider returned no summary.',
 			runId,
 			outputs: {
 				finalResponse: result.finalResponse ?? '',
@@ -407,7 +386,7 @@ export class CodexExecutionProviderAdapter implements ExecutionProviderAdapter {
 					unit: result.usage.nativeUnit ?? 'wall_minute',
 					amount: Number(result.usage.wallMinutes ?? 0),
 					source: 'codex',
-					partial: result.status !== 'completed',
+					partial: requiredResponseSuspended || result.status !== 'completed',
 					metadata: result.usage,
 				}]
 				: [],
@@ -440,10 +419,10 @@ export class CodexExecutionProviderAdapter implements ExecutionProviderAdapter {
 				worktreeBranch: worktree?.branchName ?? null,
 				baseRef: treeDxAuthority ? exactBaseRef ?? null : worktree?.exactBaseRef ?? exactBaseRef ?? null,
 				codex: result,
+				...(requiredResponseSuspended ? { completion: { disposition: 'suspended', source: 'required_response_receipt' } } : {}),
 			},
 		};
 	}
-
 	async collectUsage(input: ExecutionRunRef) {
 		const usage = input.metadata?.codexUsage;
 		return usage && typeof usage === 'object'
@@ -482,7 +461,7 @@ export class CodexExecutionProviderAdapter implements ExecutionProviderAdapter {
 		}];
 	}
 
-	async releaseAssignmentResources(input: { assignmentId: string; outcome: 'completed' | 'returned' | 'failed' | 'expired' }) {
+	async releaseAssignmentResources(input: { assignmentId: string; outcome: 'completed' | 'returned' | 'failed' | 'expired' | 'cancelled' }) {
 		const worktreeRoot = this.assignmentWorktrees.get(input.assignmentId);
 		if (!worktreeRoot || !['completed', 'returned', 'failed', 'expired'].includes(input.outcome)) return;
 		await new AgentWorktreeManager(this.options.repoRoot ?? process.cwd()).releaseWorktree(worktreeRoot);

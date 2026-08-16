@@ -1,6 +1,7 @@
 import type {
 	AgentCliOptions,
 	AgentActivityProfile,
+	AgentActivityPermissions,
 	AgentActivityType,
 	AgentBranchPolicy,
 	AgentExecutionConfig,
@@ -9,7 +10,6 @@ import type {
 	AgentContentAccessPolicy,
 	AgentOutputContract,
 	AgentPermissionConfig,
-	AgentPermissionPolicy,
 	AgentQuestionPolicy,
 	AgentToolPolicy,
 	AgentTriggerConfig,
@@ -53,9 +53,7 @@ export interface RawAgentRuntimeSpec {
 	triggers?: unknown;
 	triggerPolicy?: unknown;
 	permissions?: unknown;
-	permissionPolicy?: unknown;
 	tools?: unknown;
-	contentAccess?: unknown;
 	context?: unknown;
 	execution?: unknown;
 	outputs?: unknown;
@@ -83,6 +81,8 @@ export interface AgentSpecParts {
 	handler: AgentHandlerKind;
 	activityType: AgentActivityType;
 	activityProfiles?: Partial<Record<AgentActivityType, AgentActivityProfile>>;
+	authorityPresetIds?: import('@treeseed/sdk/agent-capacity').AgentAuthorityPresetId[];
+	authoritySnapshot?: { presetIds: import('@treeseed/sdk/agent-capacity').AgentAuthorityPresetId[]; permissions?: AgentActivityPermissions; tools: AgentToolPolicy; branchPolicy: AgentBranchPolicy };
 	branchPolicy?: AgentBranchPolicy;
 	questionPolicy?: AgentQuestionPolicy;
 	identity?: AgentDefinitionIdentity;
@@ -96,9 +96,8 @@ export interface AgentSpecParts {
 	triggers: AgentTriggerConfig[];
 	triggerPolicy?: NormalizedTriggerPolicy;
 	permissions: AgentPermissionConfig[];
-	permissionPolicy?: AgentPermissionPolicy;
 	tools: AgentToolPolicy;
-	contentAccess?: AgentContentAccessPolicy;
+	permissionProjection?: AgentContentAccessPolicy;
 	context?: {
 		queries: DeclarativeContextQuery[];
 	};

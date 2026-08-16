@@ -3,6 +3,7 @@ import {
 	TREE_DX_PROXY_TOOL_REQUIRED_OPERATIONS,
 	type TreeDxProxyToolName,
 } from './treedx-proxy-tool.ts';
+import { matchesScopedPath } from './path-scope/path-matcher.ts';
 
 export interface TreeDxProxyToolCallOptions {
 	apiBaseUrl: string;
@@ -26,21 +27,6 @@ function transientProxyFailure(error: unknown) {
 	return /fetch failed|timed out|econnreset|econnrefused|socket|temporarily unavailable/iu.test(error instanceof Error ? error.message : String(error));
 }
 
-function normalizePath(value: string) {
-	return value.replace(/\\/gu, '/').replace(/^\.?\//u, '').replace(/\/+/gu, '/');
-}
-
-function matchesPath(path: string, pattern: string) {
-	const normalizedPath = normalizePath(path);
-	const normalizedPattern = normalizePath(pattern);
-	if (!normalizedPattern || normalizedPattern === '**' || normalizedPattern === '*') return true;
-	if (normalizedPattern.endsWith('/**')) {
-		const prefix = normalizedPattern.slice(0, -3);
-		return normalizedPath === prefix || normalizedPath.startsWith(`${prefix}/`);
-	}
-	return normalizedPath === normalizedPattern || normalizedPath.startsWith(`${normalizedPattern}/`);
-}
-
 function assertAllowedOperation(descriptor: TreeDxProxyExecutionToolDescriptor, toolName: TreeDxProxyToolName) {
 	const missing = TREE_DX_PROXY_TOOL_REQUIRED_OPERATIONS[toolName].filter((operation) => !descriptor.allowedOperations.includes(operation));
 	if (missing.length) {
@@ -59,7 +45,7 @@ function assertAllowedPath(descriptor: TreeDxProxyExecutionToolDescriptor, toolN
 		: (descriptor.allowedReadPaths?.length ? descriptor.allowedReadPaths : descriptor.allowedPaths);
 	if (!candidates.length || !scopedPaths.length) return;
 	for (const candidate of candidates) {
-		if (!scopedPaths.some((pattern) => matchesPath(candidate, pattern))) {
+		if (!scopedPaths.some((pattern) => matchesScopedPath(candidate, pattern))) {
 			throw new Error(`TreeDX proxy path denied: ${candidate}.`);
 		}
 	}

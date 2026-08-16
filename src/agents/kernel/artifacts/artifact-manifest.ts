@@ -1,5 +1,6 @@
 import type {
 	AgentArtifactManifest,
+	ArtifactMutationReceipt,
 	AgentDiagnosticReference,
 	AgentSignal,
 	AgentToolEventReference,
@@ -211,6 +212,50 @@ function sourceCommit(snapshot: ExecutionRunSnapshot) {
 	return undefined;
 }
 
+function mutationReceipts(input: {
+	assignment: ProviderAssignment;
+	modeRunId: string;
+	createdAt: string;
+	content: ReturnType<typeof contentReferences>;
+	source: ReturnType<typeof sourceWorktree>;
+	commit: ReturnType<typeof sourceCommit>;
+}): ArtifactMutationReceipt[] {
+	const receipts: ArtifactMutationReceipt[] = [];
+	const executionMode = input.assignment.executionMode === 'production' || input.assignment.metadata?.executionMode === 'production'
+		? 'production' as const : 'simulation' as const;
+	const upstreamMutationPolicy = executionMode === 'production' ? 'checkpoint-only' as const : 'denied' as const;
+	const treeDx = record(input.assignment.treedxProxyHandle);
+	const treeDxBase = text(treeDx.baseCommitSha, treeDx.immutableRef, treeDx.baseRef);
+	const contentByRef = new Map<string, typeof input.content>();
+	for (const reference of input.content) {
+		const effectiveRef = text(reference.commitSha, reference.ref);
+		if (!effectiveRef) continue;
+		contentByRef.set(effectiveRef, [...(contentByRef.get(effectiveRef) ?? []), reference]);
+	}
+	if (treeDxBase) for (const [effectiveRef, references] of contentByRef) {
+		if (effectiveRef === treeDxBase) continue;
+		receipts.push({
+			schemaVersion: 'treeseed.artifact-mutation-receipt/v1', id: `${input.assignment.id}:mutation:treedx:${effectiveRef}`,
+			kind: 'treedx-content', phase: 'provisional', executionMode, upstreamMutationPolicy,
+			assignmentId: input.assignment.id, modeRunId: input.modeRunId,
+			teamId: input.assignment.teamId, projectId: input.assignment.projectId, baseRef: treeDxBase, effectiveRef,
+			changedPaths: [...new Set(references.map((reference) => reference.contentPath))].sort(),
+			before: { ref: treeDxBase, artifactRefs: [] },
+			after: { ref: effectiveRef, artifactRefs: references.map((reference) => reference.receiptId).sort() }, createdAt: input.createdAt,
+		});
+	}
+	const sourceBase = text(input.source?.baseRef);
+	if (sourceBase && input.commit?.sha && sourceBase !== input.commit.sha && input.source?.changedPaths.length) receipts.push({
+		schemaVersion: 'treeseed.artifact-mutation-receipt/v1', id: `${input.assignment.id}:mutation:source:${input.commit.sha}`,
+		kind: 'source-checkpoint', phase: 'provisional', executionMode, upstreamMutationPolicy,
+		assignmentId: input.assignment.id, modeRunId: input.modeRunId,
+		teamId: input.assignment.teamId, projectId: input.assignment.projectId, baseRef: sourceBase, effectiveRef: input.commit.sha,
+		changedPaths: input.source.changedPaths, before: { ref: sourceBase, artifactRefs: [] },
+		after: { ref: input.commit.sha, artifactRefs: input.source.changedPaths.map((path) => `repo://${path}`) }, createdAt: input.createdAt,
+	});
+	return receipts;
+}
+
 function typedArtifactReferences(snapshot: ExecutionRunSnapshot, outputMetadata: Record<string, unknown>): ArtifactRef[] {
 	const candidates = [
 		...records(outputMetadata.artifactReferences),
@@ -245,6 +290,8 @@ export function buildAgentArtifactManifest(input: {
 	const toolEvents = artifactToolEvents(input.assignment.id, snapshot);
 	const artifactReferences = contentReferences(input.assignment.id, snapshot, toolEvents, outputMetadata);
 	const commitReference = sourceCommit(snapshot);
+	const sourceReference = sourceWorktree(snapshot);
+	const createdAt = input.createdAt ?? new Date().toISOString();
 	return {
 		schemaVersion: 1,
 		assignmentId: input.assignment.id,
@@ -264,8 +311,10 @@ export function buildAgentArtifactManifest(input: {
 		summary: input.output.summary,
 		toolEvents,
 		contentReferences: artifactReferences,
+		mutationReceipts: mutationReceipts({ assignment: input.assignment, modeRunId: input.modeRunId, createdAt,
+			content: artifactReferences, source: sourceReference, commit: commitReference }),
 		artifactReferences: typedArtifactReferences(snapshot, outputMetadata),
-		sourceWorktree: sourceWorktree(snapshot),
+		sourceWorktree: sourceReference,
 		commit: commitReference,
 		verification: verification(snapshot, outputMetadata),
 		citations: citations(snapshot, outputMetadata),
@@ -273,7 +322,7 @@ export function buildAgentArtifactManifest(input: {
 		controlPlaneReferences: controlPlaneReferences(outputMetadata),
 		usage: Array.isArray(snapshot.usage) ? snapshot.usage as ExecutionUsageActual[] : [],
 		diagnostics: diagnosticReferences(snapshot),
-		createdAt: input.createdAt ?? new Date().toISOString(),
+		createdAt,
 	};
 }
 

@@ -275,6 +275,7 @@ describe('agent package shape', () => {
 		const entrypoint = readFileSync(resolve(packageRoot, 'docker-entrypoint.sh'), 'utf8');
 		const releaseVerify = readFileSync(resolve(packageRoot, 'scripts/packages/release-verify.ts'), 'utf8');
 		const compose = readFileSync(resolve(packageRoot, 'compose.capacity-provider.yml'), 'utf8');
+		const containerSmoke = readFileSync(resolve(packageRoot, 'scripts/capacity/providers/test-capacity-provider-container.ts'), 'utf8');
 		const docs = readFileSync(resolve(packageRoot, 'docs/capacity-provider-runtime.md'), 'utf8');
 
 		expect(dockerfile).not.toContain('FROM node-runtime AS agent-api');
@@ -315,6 +316,8 @@ describe('agent package shape', () => {
 		expect(compose).not.toContain('TREESEED_CAPACITY_PROVIDER_ACCESS_TOKEN:');
 		expect(compose).not.toContain('env_file');
 		expect(compose).not.toMatch(/tscp_[A-Za-z0-9_]+|tsp_[A-Za-z0-9_]+|sk-[A-Za-z0-9_]+/u);
+		expect(containerSmoke).toContain("'config', '--quiet'");
+		expect(containerSmoke).not.toContain("projectName, 'config'],");
 		expect(docs).toContain('trsd config');
 		expect(docs).toContain('Do not create plaintext `.env` files');
 		const railwayTemplate = readFileSync(resolve(packageRoot, 'templates/railway/capacity-provider.yml'), 'utf8');

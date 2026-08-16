@@ -149,7 +149,10 @@ let smokePassed = false;
 
 try {
 	run('docker', ['compose', '-f', composeFile, '-p', projectName, 'down', '-v', '--remove-orphans'], { env: composeEnv, allowFailure: true });
-	run('docker', ['compose', '-f', composeFile, '-p', projectName, 'config'], { env: composeEnv });
+	// Compose's rendered configuration contains resolved environment values. The
+	// quiet validator preserves the syntax/configuration gate without copying
+	// credentials into CI, save-journal, or guarantee transcript output.
+	run('docker', ['compose', '-f', composeFile, '-p', projectName, 'config', '--quiet'], { env: composeEnv });
 	writeFileSync(resolve(hostDataDir, '.writable-probe-after-up'), 'ok\n', 'utf8');
 	smokePassed = true;
 	console.log('Capacity provider manager/runner image and compose smoke passed.');

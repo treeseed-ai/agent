@@ -1,6 +1,6 @@
 {
   "name": "@treeseed/agent",
-  "version": "0.12.59-dev.fix-platform-runtime-bootstrap.20260818T112041Z",
+  "version": "0.12.59-dev.fix-sdk-package-lock-integrity.20260818T133929Z",
   "description": "Treeseed agent service runtime package.",
   "license": "Apache-2.0",
   "repository": {
@@ -111,7 +111,7 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@openai/codex-sdk": "^0.130.0",
-    "@treeseed/sdk": "github:treeseed-ai/sdk#5ab3e372d66ca82c6bcde1d3636bfb4ae7c26151",
+    "@treeseed/sdk": "github:treeseed-ai/sdk#835f4a8972f0b63d6ac8a5c6f7ec878178cba1f3",
     "esbuild": "0.28.0",
     "hono": "^4.8.2",
     "typescript": "^5.9.3",

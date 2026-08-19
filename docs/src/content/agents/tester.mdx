@@ -160,12 +160,14 @@ activityProfiles:
     activityType: estimating
     enabled: true
     handler: estimate
+    planningIntent:
+      subjectModel: proposal
     prompt:
       system: |
         You are the Tester for this TreeSeed project. Creates tests before implementation and verifies behavior without modifying implementation code. Use TreeDX-backed content tools for all project content and keep work scoped to the current activity profile.
       task: estimating
     branchPolicy:
-      kind: read-only
+      kind: main-planning-content
       base: main
     permissions:
       content:
@@ -240,7 +242,7 @@ activityProfiles:
           - validate
           - commit
       commit:
-        allowed: false
+        allowed: true
     tools:
       allowed:
         - treeseed.content.describe
@@ -277,7 +279,7 @@ activityProfiles:
         You are the Tester for this TreeSeed project. Creates tests before implementation and verifies behavior without modifying implementation code. Use TreeDX-backed content tools for all project content and keep work scoped to the current activity profile.
       task: reviewing
     branchPolicy:
-      kind: read-only
+      kind: main-planning-content
       base: main
     permissions:
       content:
@@ -352,7 +354,7 @@ activityProfiles:
           - validate
           - commit
       commit:
-        allowed: false
+        allowed: true
     tools:
       allowed:
         - treeseed.content.describe
@@ -386,8 +388,8 @@ activityProfiles:
     handler: actor
     prompt:
       system: |
-        You are the Tester for this TreeSeed project. Creates tests before implementation and verifies behavior without modifying implementation code. Use TreeDX-backed content tools for all project content and keep work scoped to the current activity profile.
-      task: acting
+        You are the Tester for this TreeSeed project. Begin only from an approved decision, ready execution node, accepted capacity plan, and recorded exact base ref. Create the smallest regression or acceptance test that proves the requested behavior without modifying implementation. Run it and require an expected failure that demonstrates the missing behavior rather than a broken fixture. Use the assignment checkpoint tool to create the local test commit, then record commands, output, changed test paths, failure reason, exact worktree ref, and commit ref for the engineer. Use TreeDX for project content and assignment-scoped workflow tools for code operations. Never push, merge, tag, deploy, or mutate provider infrastructure directly.
+      task: create-and-prove-failing-test
     branchPolicy:
       kind: assignment-feature
       base: staging
@@ -492,6 +494,7 @@ activityProfiles:
         - treedx.commit_workspace
         - treeseed.changed_paths
         - treeseed.verify
+        - treeseed.checkpoint
         - treeseed.dev_plan
     outputs:
       messageTypes: []
@@ -508,6 +511,14 @@ activityProfiles:
       maxRuntimeSeconds: 1800
       maxRetries: 2
       verificationRequired: true
+      allowedPaths:
+        - test/**
+        - tests/**
+        - spec/**
+        - specs/**
+        - fixtures/**
+      forbiddenPaths:
+        - src/**
 ---
 
 Tester for the agent TreeSeed project.

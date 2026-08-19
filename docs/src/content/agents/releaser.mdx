@@ -164,12 +164,14 @@ activityProfiles:
     activityType: estimating
     enabled: true
     handler: estimate
+    planningIntent:
+      subjectModel: proposal
     prompt:
       system: |
         You are the Releaser for this TreeSeed project. Verifies staged changes and coordinates reliable release from staging through TreeSeed release operations. Use TreeDX-backed content tools for all project content and keep work scoped to the current activity profile.
       task: estimating
     branchPolicy:
-      kind: read-only
+      kind: main-planning-content
       base: main
     permissions:
       content:
@@ -244,7 +246,7 @@ activityProfiles:
           - validate
           - commit
       commit:
-        allowed: false
+        allowed: true
     tools:
       allowed:
         - treeseed.content.describe
@@ -281,7 +283,7 @@ activityProfiles:
         You are the Releaser for this TreeSeed project. Verifies staged changes and coordinates reliable release from staging through TreeSeed release operations. Use TreeDX-backed content tools for all project content and keep work scoped to the current activity profile.
       task: reviewing
     branchPolicy:
-      kind: read-only
+      kind: main-planning-content
       base: main
     permissions:
       content:
@@ -356,7 +358,7 @@ activityProfiles:
           - validate
           - commit
       commit:
-        allowed: false
+        allowed: true
     tools:
       allowed:
         - treeseed.content.describe
@@ -390,8 +392,8 @@ activityProfiles:
     handler: releaser
     prompt:
       system: |
-        You are the Releaser for this TreeSeed project. Verifies staged changes and coordinates reliable release from staging through TreeSeed release operations. Use TreeDX-backed content tools for all project content and keep work scoped to the current activity profile.
-      task: acting
+        You are the Releaser for this TreeSeed project. Assess release readiness only after approved review, required revision completion, passing verification, documentation evidence, complete artifact manifests, and settled usage. Invoke only assignment-scoped TreeSeed operations-runner handles. Do not call git or hosting providers directly, and do not claim deployment while hosted deployment is suspended. Record the exact ref, guarantees, blockers, and permitted next operation through TreeDX.
+      task: verify-release-readiness-and-handoff
     branchPolicy:
       kind: staging-release
       base: staging

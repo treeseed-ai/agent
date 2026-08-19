@@ -160,12 +160,14 @@ activityProfiles:
     activityType: estimating
     enabled: true
     handler: estimate
+    planningIntent:
+      subjectModel: proposal
     prompt:
       system: |
         You are the Technical Writer for this TreeSeed project. Maintains user, developer, and operator documentation for released and staged project capabilities. Use TreeDX-backed content tools for all project content and keep work scoped to the current activity profile.
       task: estimating
     branchPolicy:
-      kind: read-only
+      kind: main-planning-content
       base: main
     permissions:
       content:
@@ -240,7 +242,7 @@ activityProfiles:
           - validate
           - commit
       commit:
-        allowed: false
+        allowed: true
     tools:
       allowed:
         - treeseed.content.describe
@@ -277,7 +279,7 @@ activityProfiles:
         You are the Technical Writer for this TreeSeed project. Maintains user, developer, and operator documentation for released and staged project capabilities. Use TreeDX-backed content tools for all project content and keep work scoped to the current activity profile.
       task: reviewing
     branchPolicy:
-      kind: read-only
+      kind: main-planning-content
       base: main
     permissions:
       content:
@@ -352,7 +354,7 @@ activityProfiles:
           - validate
           - commit
       commit:
-        allowed: false
+        allowed: true
     tools:
       allowed:
         - treeseed.content.describe
@@ -383,14 +385,20 @@ activityProfiles:
   acting:
     activityType: acting
     enabled: true
-    handler: writer
+    handler: actor
     prompt:
       system: |
-        You are the Technical Writer for this TreeSeed project. Maintains user, developer, and operator documentation for released and staged project capabilities. Use TreeDX-backed content tools for all project content and keep work scoped to the current activity profile.
-      task: acting
+        You are the Technical Writer for this TreeSeed project. Begin only from an approved decision, ready execution node, accepted capacity plan, and recorded exact base ref. Update only documentation that is supported by verified implementation and test evidence. Use the assignment checkpoint tool to create the local documentation commit, record changed paths and verification receipts, and return that exact commit ref for review. Use TreeDX for project content and assignment-scoped workflow tools for repository operations. Never modify implementation or test code, push, merge, tag, deploy, or mutate provider infrastructure directly.
+      task: document-verified-project-behavior
     branchPolicy:
-      kind: staging-content
+      kind: assignment-feature
       base: staging
+      target: staging
+      branchNameTemplate: agent/{agentSlug}/{assignmentId}
+      worktree: new
+      updateBaseBeforeRun: true
+      mergeTargetBeforeSave: true
+      prefix: technical-writer
     permissions:
       content:
         question:
@@ -484,6 +492,9 @@ activityProfiles:
         - treeseed.content.commit
         - treedx.apply_workspace_changeset
         - treedx.commit_workspace
+        - treeseed.changed_paths
+        - treeseed.verify
+        - treeseed.checkpoint
     outputs:
       messageTypes: []
       modelMutations:
@@ -498,7 +509,17 @@ activityProfiles:
         - agent-execution
       maxRuntimeSeconds: 1800
       maxRetries: 2
-      verificationRequired: false
+      verificationRequired: true
+      allowedPaths:
+        - docs/**
+        - README.md
+        - CHANGELOG.md
+      forbiddenPaths:
+        - src/**
+        - test/**
+        - tests/**
+        - spec/**
+        - specs/**
 ---
 
 Technical Writer for the agent TreeSeed project.

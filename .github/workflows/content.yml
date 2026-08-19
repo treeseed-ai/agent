@@ -4,9 +4,11 @@ on:
   push:
     paths:
       - 'docs/src/content/**'
+      - '.github/workflows/content.yml'
   pull_request:
     paths:
       - 'docs/src/content/**'
+      - '.github/workflows/content.yml'
   workflow_dispatch:
 
 permissions:

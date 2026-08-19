@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Validate durable PR record
-        uses: actions/github-script@v7
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
         with:
           script: |
             const pullRequest = context.payload.pull_request;
@@ -43,10 +43,12 @@ jobs:
               'Exact base ref',
               'Exact head ref',
             ];
-            const missingFields = requiredFields.filter((field) => {
+            const fieldValues = new Map(requiredFields.map((field) => {
               const escaped = field.replace(/[.*+?^$()|[\]\\]/gu, '\\$&');
-              return !new RegExp(`^- ${escaped}:\\s*\\S.+$`, 'mu').test(body);
-            });
+              const match = body.match(new RegExp(`^- ${escaped}:\\s*(\\S.+)$`, 'mu'));
+              return [field, match?.[1]?.trim() ?? ''];
+            }));
+            const missingFields = requiredFields.filter((field) => !fieldValues.get(field));
 
             const contributorModes = body.match(
               /^- \[[xX]\] (?:Human-authored|Agent-assisted under human authority|Agent-authored under human authority)$/gmu,
@@ -61,6 +63,18 @@ jobs:
             }
             if (contributorModes.length !== 1) {
               errors.push('select exactly one contributor mode');
+            }
+
+            for (const [field, expectedSha] of [
+              ['Exact base ref', pullRequest?.base?.sha],
+              ['Exact head ref', pullRequest?.head?.sha],
+            ]) {
+              const recordedSha = fieldValues.get(field)?.match(/(?:^|[^0-9a-f])([0-9a-f]{40})(?:$|[^0-9a-f])/u)?.[1];
+              if (!recordedSha) {
+                errors.push(`${field} must contain a full 40-character commit SHA`);
+              } else if (recordedSha !== expectedSha) {
+                errors.push(`${field} is stale: expected ${expectedSha}`);
+              }
             }
 
             if (!pullRequest?.draft) {

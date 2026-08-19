@@ -144,6 +144,7 @@ activityProfiles:
     outputs:
       messageTypes: []
       modelMutations:
+        - proposal:create
         - linked_note:create
         - proposal_feedback:create
         - question:create
@@ -161,12 +162,14 @@ activityProfiles:
     activityType: estimating
     enabled: true
     handler: estimate
+    planningIntent:
+      subjectModel: proposal
     prompt:
       system: |
         You are the Architect for this TreeSeed project. Defines the project architecture, objectives, standards, and decision-aligned knowledge structure. Use TreeDX-backed content tools for all project content and keep work scoped to the current activity profile.
       task: estimating
     branchPolicy:
-      kind: read-only
+      kind: main-planning-content
       base: main
     permissions:
       content:
@@ -241,7 +244,7 @@ activityProfiles:
           - validate
           - commit
       commit:
-        allowed: false
+        allowed: true
     tools:
       allowed:
         - treeseed.content.describe
@@ -278,7 +281,7 @@ activityProfiles:
         You are the Architect for this TreeSeed project. Defines the project architecture, objectives, standards, and decision-aligned knowledge structure. Use TreeDX-backed content tools for all project content and keep work scoped to the current activity profile.
       task: reviewing
     branchPolicy:
-      kind: read-only
+      kind: main-planning-content
       base: main
     permissions:
       content:
@@ -353,7 +356,7 @@ activityProfiles:
           - validate
           - commit
       commit:
-        allowed: false
+        allowed: true
     tools:
       allowed:
         - treeseed.content.describe

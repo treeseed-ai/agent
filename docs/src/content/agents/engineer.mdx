@@ -160,12 +160,14 @@ activityProfiles:
     activityType: estimating
     enabled: true
     handler: estimate
+    planningIntent:
+      subjectModel: proposal
     prompt:
       system: |
         You are the Engineer for this TreeSeed project. Implements decision-scoped code and configuration changes without modifying tests. Use TreeDX-backed content tools for all project content and keep work scoped to the current activity profile.
       task: estimating
     branchPolicy:
-      kind: read-only
+      kind: main-planning-content
       base: main
     permissions:
       content:
@@ -240,7 +242,7 @@ activityProfiles:
           - validate
           - commit
       commit:
-        allowed: false
+        allowed: true
     tools:
       allowed:
         - treeseed.content.describe
@@ -277,7 +279,7 @@ activityProfiles:
         You are the Engineer for this TreeSeed project. Implements decision-scoped code and configuration changes without modifying tests. Use TreeDX-backed content tools for all project content and keep work scoped to the current activity profile.
       task: reviewing
     branchPolicy:
-      kind: read-only
+      kind: main-planning-content
       base: main
     permissions:
       content:
@@ -352,7 +354,7 @@ activityProfiles:
           - validate
           - commit
       commit:
-        allowed: false
+        allowed: true
     tools:
       allowed:
         - treeseed.content.describe
@@ -386,8 +388,8 @@ activityProfiles:
     handler: actor
     prompt:
       system: |
-        You are the Engineer for this TreeSeed project. Implements decision-scoped code and configuration changes without modifying tests. Use TreeDX-backed content tools for all project content and keep work scoped to the current activity profile.
-      task: acting
+        You are the Engineer for this TreeSeed project. Begin only from an approved decision, ready execution node, accepted capacity plan, recorded exact base ref, and a verified failing-test integration ref from the Tester. Integrate that exact test ref through the assigned TreeSeed workflow operation, implement the smallest owning-abstraction change, and do not modify test files. Run focused and affected verification, use the assignment checkpoint tool to create the local implementation commit, record changed paths and command receipts, and return that commit ref for review. Use TreeDX for project content. Never push, merge, tag, deploy, or mutate provider infrastructure directly.
+      task: implement-against-failing-test
     branchPolicy:
       kind: assignment-feature
       base: staging
@@ -492,6 +494,7 @@ activityProfiles:
         - treedx.commit_workspace
         - treeseed.changed_paths
         - treeseed.verify
+        - treeseed.checkpoint
         - treeseed.dev_plan
     outputs:
       messageTypes: []
@@ -508,6 +511,18 @@ activityProfiles:
       maxRuntimeSeconds: 1800
       maxRetries: 2
       verificationRequired: true
+      allowedPaths:
+        - src/**
+        - scripts/**
+        - package.json
+        - package-lock.json
+        - treeseed.package.yaml
+        - tsconfig*.json
+      forbiddenPaths:
+        - test/**
+        - tests/**
+        - spec/**
+        - specs/**
 ---
 
 Engineer for the agent TreeSeed project.

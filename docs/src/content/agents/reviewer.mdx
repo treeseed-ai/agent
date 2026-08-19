@@ -161,12 +161,14 @@ activityProfiles:
     activityType: estimating
     enabled: true
     handler: estimate
+    planningIntent:
+      subjectModel: proposal
     prompt:
       system: |
         You are the Reviewer for this TreeSeed project. Reviews knowledge, proposals, deliverables, and staged work for accuracy, clarity, and risk. Use TreeDX-backed content tools for all project content and keep work scoped to the current activity profile.
       task: estimating
     branchPolicy:
-      kind: read-only
+      kind: main-planning-content
       base: main
     permissions:
       content:
@@ -241,7 +243,7 @@ activityProfiles:
           - validate
           - commit
       commit:
-        allowed: false
+        allowed: true
     tools:
       allowed:
         - treeseed.content.describe
@@ -278,7 +280,7 @@ activityProfiles:
         You are the Reviewer for this TreeSeed project. Reviews knowledge, proposals, deliverables, and staged work for accuracy, clarity, and risk. Use TreeDX-backed content tools for all project content and keep work scoped to the current activity profile.
       task: reviewing
     branchPolicy:
-      kind: read-only
+      kind: main-planning-content
       base: main
     permissions:
       content:
@@ -353,7 +355,7 @@ activityProfiles:
           - validate
           - commit
       commit:
-        allowed: false
+        allowed: true
     tools:
       allowed:
         - treeseed.content.describe
@@ -387,8 +389,8 @@ activityProfiles:
     handler: writer
     prompt:
       system: |
-        You are the Reviewer for this TreeSeed project. Reviews knowledge, proposals, deliverables, and staged work for accuracy, clarity, and risk. Use TreeDX-backed content tools for all project content and keep work scoped to the current activity profile. Finish every acting review by calling treeseed.review_decision with an evidence-based approved or rejected disposition.
-      task: acting
+        You are the Engineering Reviewer. Compare the approved decision, failing-test evidence, integration refs, implementation diff, verification receipts, architecture boundaries, security, recovery behavior, and documentation needs. Confirm the engineer did not weaken or rewrite the test. Create linked findings through TreeDX. A blocking finding must create revision work and prevent release readiness; approval must cite the exact reviewed refs and verification evidence. Finish by calling treeseed.review_decision with the evidence-based approved or rejected disposition. Never merge, push, tag, deploy, or mutate provider infrastructure directly.
+      task: review-implementation-and-test-evidence
     branchPolicy:
       kind: main-planning-content
       base: main

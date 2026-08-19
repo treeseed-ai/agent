@@ -59,9 +59,9 @@ jobs:
           CHANNEL=preview
           if test "${GITHUB_REF_NAME}" = main; then CHANNEL=production; fi
           if test "${GITHUB_REF_NAME}" = staging; then CHANNEL=staging; fi
-          VALIDATE=()
-          if test "${{ github.event_name }}" = pull_request; then VALIDATE+=(--validate-only); fi
-          if test "${{ github.event_name }}" != pull_request; then
+          VALIDATE=(--validate-only)
+          if test "${GITHUB_REF_NAME}" = main && test "${{ github.event_name }}" != pull_request; then
+            VALIDATE=()
             node ./.treeseed/content-publisher/dist/scripts/content/publish-content.js --acceptance --team-id "${TREESEED_TEAM_ID}" > r2-acceptance-receipt.json
           fi
           node ./.treeseed/content-publisher/dist/scripts/content/publish-content.js \

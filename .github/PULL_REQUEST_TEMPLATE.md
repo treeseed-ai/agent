@@ -39,6 +39,8 @@ Contributor mode (select one):
 
 <!-- Record exact commands, checks, contract/compatibility evidence, and results. -->
 
+- [ ] I ran the narrowest relevant package verification and documented any checks that could not be run.
+
 ## Risk and rollback
 
 <!-- Identify risks, migration effects, and an exact rollback/recovery path. -->
@@ -46,6 +48,25 @@ Contributor mode (select one):
 ## Completion summary
 
 <!-- Summarize the journey, final status, unresolved blockers, and next action. -->
+
+## Contribution grant (human action required)
+
+The accountable human must review [CONTRIBUTING.md](https://github.com/treeseed-ai/agent/blob/main/CONTRIBUTING.md) and check the affirmation below. Agents must leave it unchecked for the human.
+
+<!--
+An agent must not check this box. The human contributor or accountable human must
+read CONTRIBUTING.md and affirm the grant by checking it in the PR description.
+-->
+
+- [ ] I have read `CONTRIBUTING.md`, have the right to submit this contribution, and intentionally submit it for inclusion under the Apache License, Version 2.0, without additional terms or conditions, as described by Section 5.
+
+## Agent contribution attestation
+
+Governed agents must leave the human affirmation unchecked. TreeSeed populates the managed block below only when an active project authorization, assignment, agent, capacity provider, repository, base SHA, and head SHA all match. Agents cannot create or broaden that authorization.
+
+<!-- treeseed:contribution-attestation:start -->
+Pending — TreeSeed will replace this text for an authorized agent contribution.
+<!-- treeseed:contribution-attestation:end -->
 
 ## Submission checklist
 

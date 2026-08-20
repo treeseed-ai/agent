@@ -87,7 +87,8 @@ describe('multi-team capacity provider coordinator', () => {
 				}
 				return json({ error: 'unexpected request' }, 500);
 			};
-			const coordinator = new CapacityProviderCoordinator(await loadProviderManifest(manifestPath), dataDirectory, { env: { TEAM_A_REGISTRATION_KEY: 'tsreg_a_secret', TEAM_B_REGISTRATION_KEY: 'tsreg_b_secret' }, fetch: fetchMock });
+			const loaded = await loadProviderManifest(manifestPath);
+			const coordinator = new CapacityProviderCoordinator(loaded, dataDirectory, { env: { TEAM_A_REGISTRATION_KEY: 'tsreg_a_secret', TEAM_B_REGISTRATION_KEY: 'tsreg_b_secret' }, fetch: fetchMock });
 			const pending = await Promise.all([
 				coordinator.beginJoin({ id: 'team-a', marketUrl: 'https://team-a.example.test', registrationKeyRef: 'env://TEAM_A_REGISTRATION_KEY', offer: { sharePercent: 50, maxConcurrentRunners: 1, capabilities: ['engineering'] } }),
 				coordinator.beginJoin({ id: 'team-b', marketUrl: 'https://team-b.example.test', registrationKeyRef: 'env://TEAM_B_REGISTRATION_KEY', offer: { sharePercent: 50, maxConcurrentRunners: 1, capabilities: ['research'] } }),
@@ -102,9 +103,14 @@ describe('multi-team capacity provider coordinator', () => {
 			expect(durable.manifest.connections).toHaveLength(2);
 			expect(JSON.stringify(durable.manifest)).not.toContain('registrationKeyRef');
 			expect(durable.manifest.connections.map((entry) => entry.membershipCredentialRef)).toEqual(['data://secrets/team-a.credential', 'data://secrets/team-b.credential']);
+			const teamA = loaded.manifest.connections.find((entry) => entry.id === 'team-a');
+			if (!teamA) throw new Error('Expected the approved team-a connection.');
+			teamA.offer = { ...teamA.offer, capabilities: [...teamA.offer.capabilities, 'agent-execution'] };
 			const rotated = await coordinator.rotateConnectionCredential('team-a');
 			expect(rotated.runtime?.credentialId).toBe('credential-team-a-2');
-			expect((await loadProviderManifest(manifestPath)).manifest.connections.find((entry) => entry.id === 'team-b')?.membershipCredentialId).toBe('credential-team-b-1');
+			const rotatedManifest = await loadProviderManifest(manifestPath);
+			expect(rotatedManifest.manifest.connections.find((entry) => entry.id === 'team-a')?.offer.capabilities).toContain('agent-execution');
+			expect(rotatedManifest.manifest.connections.find((entry) => entry.id === 'team-b')?.membershipCredentialId).toBe('credential-team-b-1');
 			const reloaded = await new CapacityProviderCoordinator(await loadProviderManifest(manifestPath), dataDirectory, { fetch: fetchMock }).reconcileAll();
 			expect(reloaded.map((entry) => entry.status)).toEqual(['connected', 'connected']);
 			expect(calls.filter((entry) => entry.url.endsWith('/v1/provider/access-tokens'))).toHaveLength(3);

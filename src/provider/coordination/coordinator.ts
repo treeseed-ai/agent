@@ -318,7 +318,10 @@ export class CapacityProviderCoordinator {
 		const connected = await this.reconcileConnection(connection);
 		if (!connected.runtime) throw new Error(`Provider connection ${connectionId} is not connected and cannot authorize credential rotation.`);
 		const rotationIdempotencyKey = state.credentialRotationIdempotencyKey ?? `credential-rotation:${connectionId}:${randomUUID()}`;
-		state = nextState(connectionId, state.marketUrl, state, { credentialRotationIdempotencyKey: rotationIdempotencyKey });
+		state = nextState(connectionId, state.marketUrl, state, {
+			offer: connection.offer,
+			credentialRotationIdempotencyKey: rotationIdempotencyKey,
+		});
 		await writeProviderConnectionState(this.dataDir, state);
 		const authorization = await this.client(connected.runtime.marketUrl).authorizeCredentialRotation(connected.runtime.accessToken.accessToken, rotationIdempotencyKey);
 		const exchangeIdempotencyKey = state.credentialExchangeIdempotencyKey ?? `credential:${registrationRequestId}:generation:${authorization.generation}`;

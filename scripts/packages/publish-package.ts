@@ -1,17 +1,26 @@
 import { spawnSync } from 'node:child_process';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { readFileSync } from 'node:fs';
+import { parseAgentReleaseVersion } from './release-version.ts';
 
 const packageRoot = resolve(fileURLToPath(new URL('../..', import.meta.url)));
 const extraArgs = process.argv.slice(2);
 const tagName = process.env.GITHUB_REF_NAME;
+const packageVersion = String(JSON.parse(readFileSync(resolve(packageRoot, 'package.json'), 'utf8')).version);
 
-if (tagName && !/^\d+\.\d+\.\d+$/.test(tagName)) {
-	console.error(`Refusing to publish @treeseed/agent from non-stable tag "${tagName}".`);
-	process.exit(1);
+let distTag = 'latest';
+if (tagName) {
+	try {
+		distTag = parseAgentReleaseVersion(tagName, packageVersion).distTag;
+	} catch (error) {
+		console.error(error instanceof Error ? error.message : String(error));
+		process.exit(1);
+	}
 }
 
-const npmArgs = ['publish', '.', '--access', 'public'];
+const publishTarget = extraArgs[0]?.endsWith('.tgz') ? resolve(packageRoot, extraArgs.shift()!) : '.';
+const npmArgs = ['publish', publishTarget, '--access', 'public', '--tag', distTag];
 if (process.env.GITHUB_ACTIONS === 'true') npmArgs.push('--provenance');
 npmArgs.push(...extraArgs);
 

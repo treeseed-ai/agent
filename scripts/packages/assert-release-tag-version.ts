@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { parseAgentReleaseVersion } from './release-version.ts';
 
 const packageRoot = resolve(fileURLToPath(new URL('../..', import.meta.url)));
 const packageJson = JSON.parse(readFileSync(resolve(packageRoot, 'package.json'), 'utf8'));
@@ -12,13 +13,10 @@ if (!tagName) {
 	process.exit(1);
 }
 
-if (!/^\d+\.\d+\.\d+$/.test(tagName)) {
-	console.error(`Release tag "${tagName}" must be a plain semver tag like "${packageVersion}".`);
-	process.exit(1);
-}
-
-if (tagName !== packageVersion) {
-	console.error(`Release tag "${tagName}" does not match @treeseed/agent version "${packageVersion}".`);
+try {
+	parseAgentReleaseVersion(tagName, packageVersion);
+} catch (error) {
+	console.error(error instanceof Error ? error.message : String(error));
 	process.exit(1);
 }
 

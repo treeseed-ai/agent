@@ -4,7 +4,7 @@ import {
 } from '@treeseed/sdk/capacity-provider';
 import type { AgentSdkTreeDxOptions } from '@treeseed/sdk/sdk';
 import { mintTreeDxHs256Token } from '@treeseed/sdk/treedx/auth';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { resolveCodexAuthFile } from '../../agents/adapters/accounts/codex-auth.ts';
 import {
 	resolveJiraExecutionProviderConfig,
@@ -20,6 +20,8 @@ import {
 } from '../../agents/adapters/integrations/execution-discord.ts';
 
 export type ProviderRole = 'manager' | 'runner' | 'doctor' | 'healthcheck' | 'plan' | 'version';
+
+const packageVersion = String(JSON.parse(readFileSync(new URL('../../../package.json', import.meta.url), 'utf8')).version);
 
 export interface JiraProviderRuntimeConfig extends JiraExecutionProviderConfig {}
 export interface GitHubIssuesProviderRuntimeConfig extends GitHubIssuesExecutionProviderConfig {}
@@ -237,5 +239,5 @@ export function resolveProviderConfig(options: {
 }
 
 export function providerRuntimeVersion(env: NodeJS.ProcessEnv = process.env) {
-	return envValue(env, 'TREESEED_PROVIDER_RUNTIME_VERSION') || '0.9.0';
+	return envValue(env, 'TREESEED_PROVIDER_RUNTIME_VERSION') || packageVersion;
 }

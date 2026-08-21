@@ -81,7 +81,7 @@ function leasedAssignment(repoRoot: string) {
 		providerSessionId: 'session-a',
 		executionProviderId: null,
 		laneId: null,
-		allocationSetId: null,
+		allocationSetId: 'allocation-set-a',
 		projectAgentClassId: 'researcher',
 		reservationId: 'reservation-a',
 		workDayId: 'workday-a',
@@ -95,8 +95,8 @@ function leasedAssignment(repoRoot: string) {
 		leaseToken: 'lease-a',
 		leaseRenewedAt: null,
 		runnerId: 'runner-a',
-		decisionInput: { teamId: 'team-a', projectId: 'project-a', projectAgentClassId: 'researcher', agentId: 'researcher', handlerId: 'execution-content', mode: 'planning', input: {} },
-		capacityEnvelope: { teamId: 'team-a', projectId: 'project-a', projectAgentClassId: 'researcher', capacityProviderId: 'provider-a', mode: 'planning' as const, reservedSeconds: 3 },
+		decisionInput: { teamId: 'team-a', projectId: 'project-a', projectAgentClassId: 'researcher', agentId: 'researcher', handlerId: 'execution-content', mode: 'planning', input: {}, metadata: { demandId: 'demand-a' } },
+		capacityEnvelope: { teamId: 'team-a', projectId: 'project-a', projectAgentClassId: 'researcher', capacityProviderId: 'provider-a', workDayId: 'workday-a', mode: 'planning' as const, reservedSeconds: 3, metadata: { demandId: 'demand-a' } },
 		workspaceContext: { project: projectContext(repoRoot) },
 		allowedOutputs: {},
 		explanation: {},
@@ -116,7 +116,7 @@ function leasedAssignment(repoRoot: string) {
 		fallbackOutputId: null,
 		treedxProxyHandle: null,
 		capabilityHandles: null,
-		metadata: {},
+		metadata: { demandId: 'demand-a', workdayRunId: 'workday-run-a' },
 		createdAt: new Date().toISOString(),
 		updatedAt: new Date().toISOString(),
 	};
@@ -344,7 +344,7 @@ it('bounds assignment-scoped TreeDX response bodies before AgentKernel execution
 		}));
 		const assignment = {
 			...leasedAssignment(repoRoot),
-			metadata: { assignmentSource: 'capacity_workday_demand', contentRoot: 'src/content' },
+			metadata: { ...leasedAssignment(repoRoot).metadata, assignmentSource: 'capacity_workday_demand', contentRoot: 'src/content' },
 			treedxProxyHandle: {
 				id: 'handle-a', teamId: 'team-a', projectId: 'project-a', assignmentId: 'assignment-a', repositoryId: 'repo-a', workspaceId: 'workspace-a',
 				allowedOperations: ['files:read'], allowedPaths: ['**'], expiresAt: new Date(Date.now() + 60_000).toISOString(),

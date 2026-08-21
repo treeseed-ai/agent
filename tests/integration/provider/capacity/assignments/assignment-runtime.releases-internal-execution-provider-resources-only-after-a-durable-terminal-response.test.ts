@@ -84,7 +84,7 @@ function leasedAssignment(repoRoot: string) {
 		providerSessionId: 'session-a',
 		executionProviderId: null,
 		laneId: null,
-		allocationSetId: null,
+		allocationSetId: 'allocation-set-a',
 		projectAgentClassId: 'researcher',
 		reservationId: 'reservation-a',
 		workDayId: 'workday-a',
@@ -98,8 +98,8 @@ function leasedAssignment(repoRoot: string) {
 		leaseToken: 'lease-a',
 		leaseRenewedAt: null,
 		runnerId: 'runner-a',
-		decisionInput: { teamId: 'team-a', projectId: 'project-a', projectAgentClassId: 'researcher', agentId: 'researcher', handlerId: 'execution-content', mode: 'planning', input: {} },
-		capacityEnvelope: { teamId: 'team-a', projectId: 'project-a', projectAgentClassId: 'researcher', capacityProviderId: 'provider-a', mode: 'planning' as const, reservedCredits: 3 },
+		decisionInput: { teamId: 'team-a', projectId: 'project-a', projectAgentClassId: 'researcher', agentId: 'researcher', handlerId: 'execution-content', mode: 'planning', input: {}, metadata: { demandId: 'demand-a' } },
+		capacityEnvelope: { teamId: 'team-a', projectId: 'project-a', projectAgentClassId: 'researcher', capacityProviderId: 'provider-a', workDayId: 'workday-a', mode: 'planning' as const, reservedCredits: 3, metadata: { demandId: 'demand-a' } },
 		workspaceContext: { project: projectContext(repoRoot) },
 		allowedOutputs: {},
 		explanation: {},
@@ -119,7 +119,7 @@ function leasedAssignment(repoRoot: string) {
 		fallbackOutputId: null,
 		treedxProxyHandle: null,
 		capabilityHandles: null,
-		metadata: {},
+		metadata: { demandId: 'demand-a', workdayRunId: 'workday-run-a' },
 		createdAt: new Date().toISOString(),
 		updatedAt: new Date().toISOString(),
 	};
@@ -307,7 +307,7 @@ it('fails local materialization before kernel execution when the governed exact 
 		expect(materialized.repository.error).toContain(`governed exact ref ${missingRef}`);
 	});
 
-it('fails closed before kernel execution when assignment governance provenance is missing', async () => {
+it('fails closed before kernel execution when API-issued workday authority is incomplete', async () => {
 		const repoRoot = repository();
 		const assignment = leasedAssignment(repoRoot);
 		delete (assignment as Partial<typeof assignment>).membershipId;
@@ -328,6 +328,6 @@ it('fails closed before kernel execution when assignment governance provenance i
 			kernel: { async runAssignment() { throw new Error('kernel must not execute'); } },
 		});
 		expect(result).toMatchObject({ ok: true, payload: { status: 'failed' } });
-		expect(failures).toEqual([expect.objectContaining({ code: 'assignment_governance_provenance_missing', retryable: false })]);
+		expect(failures).toEqual([expect.objectContaining({ code: 'workday_assignment_authority_invalid', retryable: false })]);
 	});
 });

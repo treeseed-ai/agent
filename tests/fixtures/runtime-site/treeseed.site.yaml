@@ -1,0 +1,29 @@
+name: TreeSeed Agent Runtime Test
+slug: treeseed-agent-runtime-test
+siteUrl: https://agent-runtime.test
+contactEmail: test@agent-runtime.invalid
+hosting:
+  kind: hosted_project
+  registration: optional
+  marketBaseUrl: https://api.treeseed.invalid
+  teamId: treeseed-agent-runtime-test
+  projectId: treeseed-agent-runtime-test
+cloudflare:
+  accountId: fixture-account
+  workerName: treeseed-agent-runtime-test
+  pages:
+    projectName: treeseed-agent-runtime-test
+    previewProjectName: treeseed-agent-runtime-test-staging
+    productionBranch: main
+    stagingBranch: staging
+    buildOutputDir: dist
+providers:
+  agents:
+    execution: codex
+    mutation: local_branch
+    repository: git
+    verification: local
+    notification: sdk_message
+    research: project_graph
+  deploy: cloudflare
+  site: default

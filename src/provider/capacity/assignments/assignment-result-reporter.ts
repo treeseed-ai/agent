@@ -7,6 +7,7 @@ import { settlementUsageActual, usageDimension } from '../accounting/usage-repor
 import { positiveNumberValue, record, stringValue } from '../../configuration/value-utils.ts';
 import { reportProviderRuntimeEvent } from '../../reporting/runtime-event-reporter.ts';
 import { buildAssignmentPerformanceSummary } from './performance-summary.ts';
+import { workdayAssignmentAuthorityProjection } from './workday-assignment-authority.ts';
 
 function retryableCompletionError(error: unknown) {
 	const status = Number(record(error).status ?? 0);
@@ -124,6 +125,7 @@ export async function reportProviderAssignmentResult(input: {
 		const observed=record(await client.assignment(assignmentId)); const latest=record(observed.payload);
 		if(stringValue(latest.id)===assignmentId){ typedAssignment={ ...typedAssignment,...latest } as typeof typedAssignment; capacityEnvelope=record(latest.capacityEnvelope); }
 	}
+	const workdayAuthority = workdayAssignmentAuthorityProjection(typedAssignment as unknown as Record<string, unknown>);
 	const numberValue = positiveNumberValue;
 		const modeMetadata = record(modeResult.metadata);
 		const outputMetadata = record(record(modeResult.outputs).metadata);
@@ -193,7 +195,7 @@ export async function reportProviderAssignmentResult(input: {
 					taskSignature: `${typedAssignment.projectAgentClassId}:${modeResult.mode}`,
 					executionProviderId: typedAssignment.executionProviderId ?? null,
 				},
-				metadata: { runnerId: runnerId, mode: modeResult.mode, agentSlug, activityType: stringValue(record(typedAssignment.metadata).activityType), completion: Object.keys(completion).length ? completion : { disposition: 'completed' }, capacityBudget: record(capacityEnvelope.budget), phaseDurations:{preparationSeconds,executionSeconds,closeoutSeconds,custodySeconds:elapsedSeconds}, source: '@treeseed/agent/provider-runner' },
+				metadata: { runnerId: runnerId, mode: modeResult.mode, agentSlug, activityType: stringValue(record(typedAssignment.metadata).activityType), completion: Object.keys(completion).length ? completion : { disposition: 'completed' }, capacityBudget: record(capacityEnvelope.budget), phaseDurations:{preparationSeconds,executionSeconds,closeoutSeconds,custodySeconds:elapsedSeconds}, workdayAuthority, source: '@treeseed/agent/provider-runner' },
 			}, `assignment:${assignmentId}:terminal-settlement`);
 			await reportProviderRuntimeEvent({ client, assignmentId, event: {
 				id: `assignment-performance:${assignmentId.toLowerCase()}`, eventType: 'provider.assignment.performance.finalized', status: 'completed', component: 'provider-runner',
@@ -213,6 +215,7 @@ export async function reportProviderAssignmentResult(input: {
 							...(modeResult.metadata ?? {}),
 							...record(record(modeResult.outputs).metadata),
 							workspaceCleanup,
+							workdayAuthority,
 						},
 					traceRefs: modeResult.traceRefs ?? {},
 					artifactManifest: modeResult.artifactManifest ?? null,
@@ -239,7 +242,7 @@ export async function reportProviderAssignmentResult(input: {
 					taskSignature: `${typedAssignment.projectAgentClassId}:${modeResult.mode}`,
 					executionProviderId: typedAssignment.executionProviderId ?? null,
 				},
-				metadata: { runnerId, mode: modeResult.mode, agentSlug, activityType: stringValue(record(typedAssignment.metadata).activityType), completion: { disposition: 'suspended' }, capacityBudget: record(capacityEnvelope.budget), phaseDurations:{preparationSeconds,executionSeconds,closeoutSeconds,custodySeconds:elapsedSeconds}, source: '@treeseed/agent/provider-runner' },
+				metadata: { runnerId, mode: modeResult.mode, agentSlug, activityType: stringValue(record(typedAssignment.metadata).activityType), completion: { disposition: 'suspended' }, capacityBudget: record(capacityEnvelope.budget), phaseDurations:{preparationSeconds,executionSeconds,closeoutSeconds,custodySeconds:elapsedSeconds}, workdayAuthority, source: '@treeseed/agent/provider-runner' },
 			}, `assignment:${assignmentId}:terminal-settlement`);
 			return client.returnAssignment(assignmentId, {
 				leaseToken: leaseToken,
@@ -287,6 +290,7 @@ export async function reportProviderAssignmentResult(input: {
 					metadata: {
 						...record(record(modeResult.outputs).metadata),
 						...(modeResult.metadata ?? {}),
+						workdayAuthority,
 					},
 			},
 			fallbackOutput: fallbackOutput ?? undefined,

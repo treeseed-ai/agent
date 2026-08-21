@@ -116,5 +116,5 @@ describe('agent test catalog', () => {
 });
 
 function resolveRepoRoot() {
-	return new URL('../../../../..', import.meta.url).pathname;
+	return new URL('../../..', import.meta.url).pathname;
 }

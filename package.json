@@ -1,6 +1,6 @@
 {
   "name": "@treeseed/agent",
-  "version": "0.12.59-dev.fix-sdk-package-lock-integrity.20260818T133929Z",
+  "version": "0.13.0-rc.1",
   "description": "Treeseed agent service runtime package.",
   "license": "Apache-2.0",
   "repository": {
@@ -111,7 +111,7 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@openai/codex-sdk": "^0.130.0",
-    "@treeseed/sdk": "github:treeseed-ai/sdk#92a66135fbda5575bee058b0ab25339c6c7d6398",
+    "@treeseed/sdk": "0.13.0-rc.5",
     "esbuild": "0.28.0",
     "hono": "^4.8.2",
     "typescript": "^5.9.3",
@@ -121,8 +121,5 @@
     "@types/node": "^24.6.0",
     "tsx": "^4.21.0",
     "vitest": "^4.1.2"
-  },
-  "bin": {
-    "treeseed-agents": "dist/scripts/agents/agents.js"
   }
 }

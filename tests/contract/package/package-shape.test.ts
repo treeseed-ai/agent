@@ -29,31 +29,20 @@ function sourcePathForDistSpecifier(specifier: string) {
 	return resolve(packageRoot, 'src', withoutPrefix);
 }
 
-function sourcePathForBinSpecifier(specifier: string) {
-	const withoutPrefix = specifier.replace(/^dist\/scripts\//u, '').replace(/\.js$/u, '.ts');
-	return resolve(packageRoot, 'scripts', withoutPrefix);
-}
-
 describe('agent package shape', () => {
 	it('keeps public exports and bins mapped to owned source files', () => {
 		const packageJson = readJson<{
-			bin: Record<string, string>;
+			bin?: Record<string, string>;
 			exports: Record<string, { default: string; types: string }>;
 			scripts: Record<string, string>;
 		}>(resolve(packageRoot, 'package.json'));
 
-		expect(packageJson.bin).toEqual({
-			'treeseed-agents': 'dist/scripts/agents/agents.js',
-		});
+		expect(packageJson.bin).toBeUndefined();
 
 		for (const [exportName, exportValue] of Object.entries(packageJson.exports)) {
 			expect(exportValue.default, `${exportName} default export`).toMatch(/^\.\/dist\/.+\.js$/u);
 			expect(exportValue.types, `${exportName} type export`).toMatch(/^\.\/dist\/.+\.d\.ts$/u);
 			expect(existsSync(sourcePathForDistSpecifier(exportValue.default)), `${exportName} source file`).toBe(true);
-		}
-
-		for (const [binName, binPath] of Object.entries(packageJson.bin)) {
-			expect(existsSync(sourcePathForBinSpecifier(binPath)), `${binName} source file`).toBe(true);
 		}
 
 			expect(packageJson.scripts.verify).toBe('TMPDIR=/tmp node --import tsx ./scripts/support/verify-driver.ts');

@@ -11,6 +11,7 @@ import { recordEarlyModeRun } from '../reporting/mode-run-reporter.ts';
 import { reportProviderAssignmentResult } from '../capacity/assignments/assignment-result-reporter.ts';
 import type { ProviderAssignmentExecutionInput } from './runner-contracts.ts';
 import { prepareAssignmentKernelBridge } from '../execution/kernel-bridge.ts';
+import { validateWorkdayAssignmentAuthority, workdayAssignmentAuthorityProjection } from '../capacity/assignments/workday-assignment-authority.ts';
 
 
 
@@ -60,6 +61,18 @@ export async function refreshAssignmentAccessToken(config: ProviderConnectionRun
 export async function runProviderAssignment(input: ProviderAssignmentExecutionInput) {
 	input = { ...input, config: await refreshAssignmentAccessToken(input.config, input.assignment) };
 	const assignmentId = stringValue(input.assignment.id) ?? '';
+	const workdayAuthorityDiagnostics = validateWorkdayAssignmentAuthority(input.assignment);
+	if (workdayAuthorityDiagnostics.length > 0) {
+		return input.client.failAssignment(assignmentId, {
+			leaseToken: input.leaseToken,
+			runnerId: input.runnerId,
+			code: 'workday_assignment_authority_invalid',
+			message: 'Provider rejected incomplete or conflicting API-issued workday authority before execution.',
+			retryable: false,
+			metadata: { diagnostics: workdayAuthorityDiagnostics },
+		});
+	}
+	const workdayAuthority = workdayAssignmentAuthorityProjection(input.assignment);
 	const membershipId = stringValue(input.assignment.membershipId);
 	const stateVersion = Number(input.assignment.stateVersion);
 	const decisionInput = record(input.assignment.decisionInput);
@@ -115,6 +128,7 @@ export async function runProviderAssignment(input: ProviderAssignmentExecutionIn
 			projectId,
 			agentSlug,
 			runnerId: input.runnerId,
+			workdayAuthority,
 		},
 	});
 	const prepared = await prepareAssignmentKernelBridge({

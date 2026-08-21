@@ -1,5 +1,6 @@
 import { assertProviderAssignment, type ProviderAssignment, type ProviderAssignmentCapabilityHandles } from '@treeseed/sdk/agent-capacity';
 import { record, stringValue } from '../../configuration/value-utils.ts';
+import { isApiIssuedWorkdayAssignment } from './workday-assignment-authority.ts';
 
 export function buildKernelProviderAssignment(input: {
 	assignment: Record<string, unknown>;
@@ -16,6 +17,19 @@ export function buildKernelProviderAssignment(input: {
 	capabilityHandles: ProviderAssignmentCapabilityHandles;
 }): ProviderAssignment {
 	const { assignment, assignmentId, membershipId, stateVersion, decisionInput, decisionPayload, capacityEnvelope, projectId, agentSlug, workspaceMode, treedxProxyHandle, capabilityHandles } = input;
+	if (isApiIssuedWorkdayAssignment(assignment)) {
+		return assertProviderAssignment({
+			...assignment,
+			treedxProxyHandle,
+			capabilityHandles,
+			workspaceContext: {
+				...record(assignment.workspaceContext),
+				workspaceAccessMode: workspaceMode,
+				treedxProxyHandle,
+				capabilityHandles,
+			},
+		});
+	}
 	return assertProviderAssignment({
 		...assignment,
 		id: assignmentId,

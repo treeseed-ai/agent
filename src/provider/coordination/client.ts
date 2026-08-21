@@ -1,5 +1,5 @@
 import { ProviderProtocolClient } from '@treeseed/sdk/capacity-provider';
-import type { ProviderConnectionRuntimeContext } from '../configuration/config.ts';
+import { providerRuntimeVersion, type ProviderConnectionRuntimeContext } from '../configuration/config.ts';
 
 // Assignment acquisition performs API-owned synthesis before a lease can be
 // returned. Keep the provider transport deadline comfortably beyond the
@@ -13,7 +13,7 @@ export function createProviderMarketClient(config: ProviderConnectionRuntimeCont
 		marketUrl: config.marketUrl,
 		accessToken: config.accessToken,
 		accessTokenProvider: config.accessTokenProvider,
-		userAgent: `@treeseed/agent capacity-provider/${process.env.TREESEED_PROVIDER_RUNTIME_VERSION ?? '0.9.0'}`,
+		userAgent: `@treeseed/agent capacity-provider/${providerRuntimeVersion()}`,
 		requestTimeoutMs: PROVIDER_MARKET_REQUEST_TIMEOUT_MS,
 	});
 }

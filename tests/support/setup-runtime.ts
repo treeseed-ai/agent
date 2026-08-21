@@ -1,14 +1,8 @@
-import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { loadManifest } from '@treeseed/sdk/platform/tenant-config';
 import { loadDeployConfig } from '@treeseed/sdk/platform/deploy-config';
 
-const fixtureRoot = [
-	resolve(process.cwd(), '.fixtures/treeseed-fixtures/sites/working-site'),
-	resolve(process.cwd(), '../core/.fixtures/treeseed-fixtures/sites/working-site'),
-	resolve(process.cwd(), '../../.fixtures/treeseed-fixtures/sites/working-site'),
-].find((candidate) => existsSync(resolve(candidate, 'src/manifest.yaml')))
-	?? resolve(process.cwd(), '.fixtures/treeseed-fixtures/sites/working-site');
+const fixtureRoot = resolve(process.cwd(), 'tests/fixtures/runtime-site');
 const tenantConfig = loadManifest(resolve(fixtureRoot, 'src/manifest.yaml'));
 const deployConfig = loadDeployConfig(resolve(fixtureRoot, 'treeseed.site.yaml'));
 

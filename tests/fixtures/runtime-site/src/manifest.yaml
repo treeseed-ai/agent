@@ -1,0 +1,7 @@
+id: treeseed-agent-runtime-test
+siteConfigPath: ./src/config.yaml
+content:
+  pages: ./src/content/pages
+  agents: ./src/content/agents
+features:
+  agents: true

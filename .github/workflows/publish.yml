@@ -8,25 +8,70 @@ on:
 
 jobs:
   npm:
-    if: startsWith(github.ref, 'refs/tags/') && !contains(github.ref_name, '-')
+    if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-24.04
     permissions:
       contents: read
       id-token: write
     environment: production
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           submodules: recursive
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: 24
           registry-url: https://registry.npmjs.org
-      - run: npm ci --ignore-scripts
-      - run: npm run build
-      - run: npm publish --access public --provenance
+      - run: npm run release:setup
+      - run: npm run release:check-tag
+      - run: bash -lc 'npm run verify:local'
+      - name: Pack the exact verified package
+        id: pack
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          npm pack --json --ignore-scripts --pack-destination artifacts > artifacts/pack.json
+          filename="$(node -e "const value=require('./artifacts/pack.json'); process.stdout.write(value[0].filename)")"
+          sha256="$(sha256sum "artifacts/${filename}" | awk '{print $1}')"
+          echo "filename=${filename}" >> "$GITHUB_OUTPUT"
+          echo "sha256=${sha256}" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: agent-release-${{ github.sha }}
+          path: artifacts/
+          if-no-files-found: error
+      - name: Capture stable tag before publication
+        id: before
+        run: echo "latest=$(npm view @treeseed/agent dist-tags.latest)" >> "$GITHUB_OUTPUT"
+      - run: npm run release:publish -- "artifacts/${{ steps.pack.outputs.filename }}"
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - name: Verify immutable npm read-back
+        env:
+          EXPECTED_LATEST: ${{ steps.before.outputs.latest }}
+          EXPECTED_SHA256: ${{ steps.pack.outputs.sha256 }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          deadline=$((SECONDS + 180))
+          while true; do
+            published="$(npm view "@treeseed/agent@${GITHUB_REF_NAME}" version 2>/dev/null || true)"
+            channel="latest"
+            if [[ "${GITHUB_REF_NAME}" == *-rc.* ]]; then channel="rc"; fi
+            tagged="$(npm view "@treeseed/agent" "dist-tags.${channel}" 2>/dev/null || true)"
+            if [[ "${published}" == "${GITHUB_REF_NAME}" && "${tagged}" == "${GITHUB_REF_NAME}" ]]; then break; fi
+            if (( SECONDS >= deadline )); then echo "npm read-back did not converge" >&2; exit 1; fi
+            sleep 3
+          done
+          if [[ "${GITHUB_REF_NAME}" == *-rc.* ]]; then
+            latest="$(npm view @treeseed/agent dist-tags.latest)"
+            [[ "${latest}" == "${EXPECTED_LATEST}" ]] || { echo "prerelease changed npm latest" >&2; exit 1; }
+          fi
+          temp="$(mktemp -d)"
+          npm pack "@treeseed/agent@${GITHUB_REF_NAME}" --ignore-scripts --pack-destination "${temp}" >/dev/null
+          actual="$(sha256sum "${temp}"/*.tgz | awk '{print $1}')"
+          [[ "${actual}" == "${EXPECTED_SHA256}" ]] || { echo "published tarball digest mismatch" >&2; exit 1; }
 
   build:
     if: startsWith(github.ref, 'refs/tags/') && !contains(github.ref_name, '-')
@@ -60,7 +105,7 @@ jobs:
             platform: linux/arm64
             runner: ubuntu-24.04-arm
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           submodules: recursive
       - run: npm ci --ignore-scripts
@@ -71,12 +116,12 @@ jobs:
           version="${GITHUB_REF_NAME#v}"
           echo "base=${version}" >> "$GITHUB_OUTPUT"
           echo "moving=" >> "$GITHUB_OUTPUT"
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/login-action@v3
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9
         with:
           username: ${{ vars.TREESEED_DOCKERHUB_USERNAME }}
           password: ${{ secrets.TREESEED_DOCKERHUB_TOKEN }}
-      - uses: docker/build-push-action@v6
+      - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8
         with:
           context: .
           target: ${{ matrix.target }}
@@ -100,8 +145,8 @@ jobs:
           - image: treeseed/agent-manager
           - image: treeseed/agent-runner
     steps:
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/login-action@v3
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9
         with:
           username: ${{ vars.TREESEED_DOCKERHUB_USERNAME }}
           password: ${{ secrets.TREESEED_DOCKERHUB_TOKEN }}
@@ -151,8 +196,21 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - name: Create GitHub release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh release create "${GITHUB_REF_NAME}" --generate-notes --verify-tag
+
+  prerelease:
+    needs: npm
+    if: startsWith(github.ref, 'refs/tags/') && contains(github.ref_name, '-rc.')
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Create GitHub prerelease
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release create "${GITHUB_REF_NAME}" --generate-notes --verify-tag --prerelease

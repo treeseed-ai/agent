@@ -1,6 +1,6 @@
 {
   "name": "@treeseed/agent",
-  "version": "0.13.0-rc.1",
+  "version": "0.13.0-rc.2",
   "description": "Treeseed agent service runtime package.",
   "license": "Apache-2.0",
   "repository": {
@@ -22,41 +22,9 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
-    "./api": {
-      "types": "./dist/api/index.d.ts",
-      "default": "./dist/api/index.js"
-    },
-    "./api/app": {
-      "types": "./dist/api/support/app.d.ts",
-      "default": "./dist/api/support/app.js"
-    },
-    "./api/auth/d1-provider": {
-      "types": "./dist/api/auth/d1-provider.d.ts",
-      "default": "./dist/api/auth/d1-provider.js"
-    },
-    "./runtime-types": {
-      "types": "./dist/agents/runtime/runtime-types.d.ts",
-      "default": "./dist/agents/runtime/runtime-types.js"
-    },
-    "./cli": {
-      "types": "./dist/agents/support/cli.d.ts",
-      "default": "./dist/agents/support/cli.js"
-    },
-    "./contracts/messages": {
-      "types": "./dist/agents/contracts/messages.d.ts",
-      "default": "./dist/agents/contracts/messages.js"
-    },
-    "./contracts/run": {
-      "types": "./dist/agents/contracts/run.d.ts",
-      "default": "./dist/agents/contracts/run.js"
-    },
     "./provider-governance": {
       "types": "./dist/provider-governance.d.ts",
       "default": "./dist/provider-governance.js"
-    },
-    "./provider-acceptance": {
-      "types": "./dist/provider-acceptance.d.ts",
-      "default": "./dist/provider-acceptance.js"
     }
   },
   "files": [
@@ -65,9 +33,7 @@
     "Dockerfile",
     "docker-entrypoint.sh",
     "compose.capacity-provider.yml",
-    "treeseed.package.yaml",
-    "docs",
-    "templates"
+    "treeseed.package.yaml"
   ],
   "publishConfig": {
     "access": "public"
@@ -80,19 +46,11 @@
     "check:file-lengths": "node --import tsx ./scripts/support/check-file-lengths.ts && npm run check:file-architecture",
     "check:file-architecture": "node --import tsx ./scripts/support/check-file-architecture.ts",
     "capacity-provider:build": "node --import tsx ./scripts/capacity/providers/build-capacity-provider-container.ts",
-    "capacity-provider:test-local": "node ./dist/scripts/capacity/providers/test-capacity-provider-container.js",
-    "capacity-provider:test-local-live-tools": "TREESEED_AGENT_LIVE_TOOLS=1 node ./dist/scripts/capacity/providers/test-capacity-provider-live-tools.js",
     "prepare": "node --import tsx ./scripts/support/prepare.ts",
     "lint": "npm run check:file-lengths && npm run build:dist",
-    "test": "npm run test:unit && npm run test:smoke",
-    "test:unit": "vitest run --config ./vitest.config.ts",
-    "test:agent-tools": "vitest run --config ./vitest.config.ts tests/integration/agents/agent-tool-*.test.ts tests/integration/provider/agent-tool-provider-runtime.test.ts",
-    "test:agent-tools:live": "node --import tsx ./scripts/agents/test-agent-tools-live.ts",
-    "test:agent-tools:live-copilot": "node --import tsx ./scripts/agents/test-agent-tools-live-copilot.ts",
-    "test:capacity-provider-live-codex": "TREESEED_AGENT_LIVE_CODEX=1 node --import tsx ./scripts/agents/test-agent-tools-live.ts",
-    "test:human-machine-providers": "npm --workspace @treeseed/sdk run build:dist && vitest run --config ./vitest.config.ts tests/integration/agents/codex-provider*.test.ts tests/unit/agents/registry.test.ts tests/integration/provider/capacity/providers/execution-provider-selection.test.ts tests/integration/provider/capacity/assignments/assignment-runtime*.test.ts && npm run build:dist && npm run capacity-provider:test-local",
+    "test": "npm run test:modern",
+    "test:modern": "vitest run --config ./vitest.config.ts",
     "prepack": "npm run build:dist",
-    "test:smoke": "node --import tsx ./scripts/testing/test-smoke.ts",
     "verify:direct": "npm run release:verify",
     "verify:local": "TREESEED_VERIFY_DRIVER=direct TMPDIR=/tmp node --import tsx ./scripts/support/verify-driver.ts",
     "verify:action": "TREESEED_VERIFY_DRIVER=act TMPDIR=/tmp node --import tsx ./scripts/support/verify-driver.ts",
@@ -101,19 +59,11 @@
     "release:check-tag": "node --import tsx ./scripts/packages/assert-release-tag-version.ts",
     "release:verify": "npm run check:file-lengths && node --import tsx ./scripts/packages/release-verify.ts",
     "release:publish": "node --import tsx ./scripts/packages/publish-package.ts",
-    "test:agent-contracts": "vitest run --config ./vitest.config.ts tests/contract/agents/agent-contracts.test.ts tests/contract/agents/agent-test-catalog.test.ts tests/contract/agents/starter-contracts.test.ts",
-    "test:agent-handlers": "vitest run --config ./vitest.config.ts tests/contract/agents/agent-contracts.test.ts tests/contract/agents/agent-test-catalog.test.ts",
-    "test:agent-message-chains": "vitest run --config ./vitest.config.ts tests/integration/agents/testing/message-chain.test.ts",
-    "test:provider-runtime": "vitest run --config ./vitest.config.ts tests/integration/provider/capacity/assignments/assignment-runtime*.test.ts tests/integration/provider/teams/multi-team-coordinator.test.ts",
-    "test:capacity-provider-runtime": "vitest run --config ./vitest.config.ts tests/integration/provider/capacity/assignments/assignment-runtime*.test.ts tests/integration/provider/projects/projects-core/availability-projection.test.ts tests/integration/provider/testing/connection-scheduler.test.ts tests/integration/provider/testing/lease-recovery.test.ts tests/integration/provider/capacity/capacity-core/local-capacity-store.test.ts tests/integration/provider/accounts/manager-session-recovery.test.ts tests/integration/provider/teams/multi-team-coordinator.test.ts tests/integration/provider/teams/multi-team-runtime.test.ts tests/integration/provider/teams/multi-team-service.test.ts tests/contract/provider/provider-architecture.test.ts",
-    "test:market-docs-governed-mutation": "vitest run --config ./vitest.config.ts tests/integration/agents/codex-provider*.test.ts"
+    "test:provider-runtime": "npm run test:modern"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.29.0",
-    "@openai/codex-sdk": "^0.130.0",
-    "@treeseed/sdk": "0.13.0-rc.5",
+    "@treeseed/sdk": "0.13.0-rc.18",
     "esbuild": "0.28.0",
-    "hono": "^4.8.2",
     "typescript": "^5.9.3",
     "yaml": "^2.8.1"
   },

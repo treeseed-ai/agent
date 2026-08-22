@@ -9,8 +9,6 @@ RUN apk add --no-cache ca-certificates tini util-linux git openssh-client \
 	&& mkdir -p /data
 
 COPY --chown=65532:65532 dist ./dist
-COPY --chown=65532:65532 templates ./templates
-COPY --chown=65532:65532 docs ./docs
 COPY --chown=65532:65532 docker-entrypoint.sh ./docker-entrypoint.sh
 
 RUN chmod 0755 /app/docker-entrypoint.sh \
@@ -30,5 +28,3 @@ CMD ["manager"]
 FROM agent-runtime AS agent-runner
 ENV TREESEED_PROVIDER_ROLE=runner
 CMD ["runner"]
-
-FROM agent-runner AS railway-runtime

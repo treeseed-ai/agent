@@ -119,32 +119,32 @@ export async function stageProviderSecret(ref: string, value: string, baseDirect
 	};
 }
 
-export function providerMarketProfileEnvironmentName(profile: string) {
-	return `TREESEED_MARKET_PROFILE_${profile.replace(/[^a-z0-9]/giu, '_').toUpperCase()}_URL`;
+export function providerServerProfileEnvironmentName(profile: string) {
+	return `TREESEED_SERVER_PROFILE_${profile.replace(/[^a-z0-9]/giu, '_').toUpperCase()}_URL`;
 }
 
-export function providerMarketProfileAudienceEnvironmentName(profile: string) {
-	return `TREESEED_MARKET_PROFILE_${profile.replace(/[^a-z0-9]/giu, '_').toUpperCase()}_AUDIENCE`;
+export function providerServerProfileAudienceEnvironmentName(profile: string) {
+	return `TREESEED_SERVER_PROFILE_${profile.replace(/[^a-z0-9]/giu, '_').toUpperCase()}_AUDIENCE`;
 }
 
-type ProviderMarketTarget = Pick<ProviderConnectionConfig, 'id' | 'marketUrl' | 'marketProfile' | 'marketAudience'> | Pick<CapacityProviderJoinInput, 'id' | 'marketUrl' | 'marketProfile' | 'marketAudience'>;
+type ProviderControlPlaneTarget = Pick<ProviderConnectionConfig, 'id' | 'controlPlaneUrl' | 'serverProfile' | 'controlPlaneAudience'> | Pick<CapacityProviderJoinInput, 'id' | 'controlPlaneUrl' | 'serverProfile' | 'controlPlaneAudience'>;
 
-export function providerConnectionMarketUrl(connection: ProviderMarketTarget, env: NodeJS.ProcessEnv = process.env) {
-	if (connection.marketUrl?.trim()) return connection.marketUrl.replace(/\/$/u, '');
-	const profile = connection.marketProfile?.trim();
-	if (!profile) throw new Error(`Provider connection ${connection.id} does not declare marketUrl or marketProfile.`);
-	const name = providerMarketProfileEnvironmentName(profile);
+export function providerConnectionControlPlaneUrl(connection: ProviderControlPlaneTarget, env: NodeJS.ProcessEnv = process.env) {
+	if (connection.controlPlaneUrl?.trim()) return connection.controlPlaneUrl.replace(/\/$/u, '');
+	const profile = connection.serverProfile?.trim();
+	if (!profile) throw new Error(`Provider connection ${connection.id} does not declare controlPlaneUrl or serverProfile.`);
+	const name = providerServerProfileEnvironmentName(profile);
 	const url = env[name]?.trim();
-	if (!url) throw new Error(`Provider market profile ${profile} requires ${name}.`);
+	if (!url) throw new Error(`Provider server profile ${profile} requires ${name}.`);
 	return url.replace(/\/$/u, '');
 }
 
-export function providerConnectionMarketAudience(connection: ProviderMarketTarget, env: NodeJS.ProcessEnv = process.env) {
-	if (connection.marketAudience?.trim()) return connection.marketAudience.replace(/\/$/u, '');
-	const profile = connection.marketProfile?.trim();
+export function providerConnectionControlPlaneAudience(connection: ProviderControlPlaneTarget, env: NodeJS.ProcessEnv = process.env) {
+	if (connection.controlPlaneAudience?.trim()) return connection.controlPlaneAudience.replace(/\/$/u, '');
+	const profile = connection.serverProfile?.trim();
 	if (profile) {
-		const configured = env[providerMarketProfileAudienceEnvironmentName(profile)]?.trim();
+		const configured = env[providerServerProfileAudienceEnvironmentName(profile)]?.trim();
 		if (configured) return configured.replace(/\/$/u, '');
 	}
-	return providerConnectionMarketUrl(connection, env);
+	return providerConnectionControlPlaneUrl(connection, env);
 }

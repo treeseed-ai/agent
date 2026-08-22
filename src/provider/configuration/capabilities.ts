@@ -18,11 +18,7 @@ export function discoverProviderCapabilities(config: ProviderHostRuntimeConfig):
 		const loaded = capabilitiesFromFile(config.capabilitiesFile);
 		if (loaded) return loaded;
 	}
-	const models = [
-		'codex',
-		...(config.env?.TREESEED_OPENCODE_SERVER_URL ? ['opencode'] : []),
-		...(config.env?.TREESEED_GITHUB_COPILOT_TOKEN ? ['copilot'] : []),
-	];
+	const models = config.executorModule ? ['external-executor'] : [];
 	return [{
 		id: 'agent-execution',
 		agents: ['*'],

@@ -1,5 +1,0 @@
-{
-  "id": "governed-mutation-approval",
-  "requiresHumanApproval": true,
-  "allowedPaths": ["docs/**"]
-}

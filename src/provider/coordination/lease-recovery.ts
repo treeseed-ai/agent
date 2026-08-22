@@ -1,85 +1,41 @@
 import type { ProviderConnectionRuntime } from './coordinator.ts';
-import { createProviderMarketClient } from './client.ts';
+import { createProviderControlPlaneClient } from './client.ts';
 import type { ProviderHostRuntimeConfig } from '../configuration/config.ts';
 import { ProviderLocalCapacityStore } from '../capacity/capacity-core/local-capacity-store.ts';
-import { listMaterializedAssignmentIds,releaseRecoveredAssignmentMaterialization } from '../projects/projects-core/project-materialization.ts';
-
-interface ProviderLeaseRecoveryClient {
-	assignment(assignmentId: string): Promise<unknown>;
-	returnAssignment(assignmentId: string, request: Record<string, unknown>): Promise<unknown>;
-}
 
 function record(value: unknown): Record<string, unknown> {
-	return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
 
-export async function recoverProviderLocalLeases(input: {
-	config: ProviderHostRuntimeConfig;
-	connections: ProviderConnectionRuntime[];
-	store?: ProviderLocalCapacityStore;
-	clientFactory?: (config: Parameters<typeof createProviderMarketClient>[0]) => ProviderLeaseRecoveryClient;
-	includeRunning?: boolean;
-}) {
-	const store = input.store ?? new ProviderLocalCapacityStore(input.config.dataDir);
-	const clientFactory = input.clientFactory ?? createProviderMarketClient;
-	const claims = await store.claimsForRecovery(input.includeRunning !== false);
-	const results: Array<Record<string, unknown>> = [];
-	const observedAssignmentIds = new Set<string>();
-	for (const claim of claims) {
-		if (claim.assignmentId) observedAssignmentIds.add(claim.assignmentId);
-		const connection = input.connections.find((entry) => entry.connection.id === claim.connectionId);
-		if (!connection || !claim.assignmentId || !claim.leaseToken) {
-			await store.recordFailure(claim.id, 'Connection or lease identity is unavailable during recovery.');
-			results.push({ claimId: claim.id, status: 'retained', reason: 'connection_or_lease_identity_unavailable' });
-			continue;
-		}
-		const runtimeConfig = {
-			...input.config, connectionId: connection.connection.id, marketUrl: connection.marketUrl, marketAudience: connection.marketAudience,
-			teamId: connection.teamId, providerId: connection.providerId, membershipId: connection.membershipId, accessToken: connection.accessToken.accessToken,
-		};
-		try {
-			const client = clientFactory(runtimeConfig);
-			const observed = record(await client.assignment(claim.assignmentId));
-			const assignment = record(observed.payload ?? observed.assignment ?? observed);
-			const status = String(assignment.status ?? '');
-			if (status === 'leased') {
-				await client.returnAssignment(claim.assignmentId, {
-					leaseToken: claim.leaseToken, runnerId: claim.runnerId,
-					reason: 'Provider runner restarted before the prior lease completed.', code: 'provider_restart_recovery',
-				});
-			}
-			const materialization = await releaseRecoveredAssignmentMaterialization(input.config, claim.assignmentId);
-			await store.finalize(claim.id, status === 'leased' ? 'restart-return-confirmed' : `authoritative-${status || 'unknown'}`);
-			results.push({ claimId: claim.id, assignmentId: claim.assignmentId, status: status === 'leased' ? 'returned' : 'released', observedStatus: status, materialization });
-		} catch (error) {
-			await store.recordFailure(claim.id, error instanceof Error ? error.message : String(error));
-			results.push({ claimId: claim.id, assignmentId: claim.assignmentId, status: 'retained', reason: 'control_plane_unavailable', error: error instanceof Error ? error.message : String(error) });
-		}
-	}
-	const terminal = new Set(['completed', 'failed', 'cancelled', 'returned', 'expired']);
-	for (const assignmentId of await listMaterializedAssignmentIds(input.config)) {
-		if (observedAssignmentIds.has(assignmentId)) continue;
-		let observedStatus = '';
-		for (const connection of input.connections) {
-			const runtimeConfig = {
-				...input.config, connectionId: connection.connection.id, marketUrl: connection.marketUrl, marketAudience: connection.marketAudience,
-				teamId: connection.teamId, providerId: connection.providerId, membershipId: connection.membershipId, accessToken: connection.accessToken.accessToken,
-			};
-			try {
-				const observed = record(await clientFactory(runtimeConfig).assignment(assignmentId));
-				const assignment = record(observed.payload ?? observed.assignment ?? observed);
-				observedStatus = String(assignment.status ?? '');
-				if (observedStatus) break;
-			} catch {
-				// The assignment may belong to another configured team connection.
-			}
-		}
-		if (!terminal.has(observedStatus)) {
-			results.push({ assignmentId, status: 'retained', observedStatus: observedStatus || 'unresolved', reason: 'orphan_authority_not_terminal' });
-			continue;
-		}
-		const materialization = await releaseRecoveredAssignmentMaterialization(input.config, assignmentId);
-		results.push({ assignmentId, status: materialization.status === 'released' || materialization.status === 'absent' ? 'released' : 'retained', observedStatus, materialization });
-	}
-	return results;
+export async function recoverProviderLocalLeases(input: { config: ProviderHostRuntimeConfig; connections: ProviderConnectionRuntime[]; store?: ProviderLocalCapacityStore; includeRunning?: boolean }) {
+  const store = input.store ?? new ProviderLocalCapacityStore(input.config.dataDir);
+  const results: Record<string, unknown>[] = [];
+  for (const claim of await store.claimsForRecovery(input.includeRunning !== false)) {
+    const connection = input.connections.find((entry) => entry.connection.id === claim.connectionId);
+    if (!connection || !claim.assignmentId || !claim.leaseToken) {
+      await store.recordFailure(claim.id, 'Connection or lease identity is unavailable during recovery.');
+      results.push({ claimId: claim.id, status: 'retained', reason: 'lease_authority_unavailable' });
+      continue;
+    }
+    try {
+      const client = createProviderControlPlaneClient({
+        controlPlaneUrl: connection.controlPlaneUrl,
+        accessToken: connection.accessToken.accessToken,
+      });
+      const observed = record(await client.assignment(claim.assignmentId));
+      const assignment = record(observed.data ?? observed.assignment ?? observed);
+      const status = textStatus(assignment.status);
+      if (status === 'leased' || status === 'running') await client.returnAssignment(claim.assignmentId, { leaseToken: claim.leaseToken, runnerId: claim.runnerId, code: 'provider_restart_recovery', reason: 'Provider restarted before durable completion.' });
+      await store.finalize(claim.id, status === 'leased' || status === 'running' ? 'restart-return-confirmed' : `authoritative-${status || 'unknown'}`);
+      results.push({ claimId: claim.id, assignmentId: claim.assignmentId, status: 'released', observedStatus: status });
+    } catch (error) {
+      await store.recordFailure(claim.id, error instanceof Error ? error.message : String(error));
+      results.push({ claimId: claim.id, assignmentId: claim.assignmentId, status: 'retained', reason: 'control_plane_unavailable' });
+    }
+  }
+  return results;
+}
+
+function textStatus(value: unknown) {
+  return typeof value === 'string' ? value : '';
 }

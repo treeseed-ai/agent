@@ -159,6 +159,11 @@ export async function runMultiTeamProviderRunners(
 				assignment,
 				leaseToken,
 				runnerId: claim.runnerId,
+				leaseSeconds: 300,
+				onLeaseRenewed: (renewedLeaseExpiresAt) => localState.renewLease(claim.id, {
+					assignmentId,
+					leaseExpiresAt: renewedLeaseExpiresAt,
+				}).then(() => undefined),
 			});
 			await localState.finalize(claim.id, 'terminal-receipt-confirmed');
 			results.push({ connectionId: connection.connection.id, assignmentId, status: 'settled', terminal });

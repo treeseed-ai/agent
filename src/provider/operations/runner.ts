@@ -10,11 +10,14 @@ function text(...values: unknown[]) {
 }
 
 export interface ProviderAssignmentRunInput {
-  client: Pick<ProviderProtocolClient, 'startAssignmentExecution' | 'startAssignmentCloseout' | 'preflightAssignmentCompletion' | 'completeAssignment' | 'returnAssignment' | 'failAssignment' | 'reportAssignmentUsage'>;
+  client: Pick<ProviderProtocolClient, 'renewAssignment' | 'startAssignmentExecution' | 'startAssignmentCloseout' | 'preflightAssignmentCompletion' | 'completeAssignment' | 'returnAssignment' | 'failAssignment' | 'reportAssignmentUsage'>;
   executor: AgentExecutor;
   assignment: Record<string, unknown>;
   leaseToken: string;
   runnerId: string;
+  leaseSeconds?: number;
+  renewalIntervalMs?: number;
+  onLeaseRenewed?: (leaseExpiresAt: string) => Promise<void>;
   signal?: AbortSignal;
 }
 
@@ -29,10 +32,49 @@ export async function runProviderAssignment(input: ProviderAssignmentRunInput) {
   if (!assignmentId) throw new Error('Catalogued assignment lease omitted its stable id.');
   await input.client.startAssignmentExecution(assignmentId, { leaseToken: input.leaseToken, runnerId: input.runnerId, executorId: input.executor.id });
   let result: AgentExecutionResult;
+  let stopped = false;
+  let renewalFailure: unknown = null;
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  let renewalInFlight: Promise<void> | null = null;
+  const scheduleRenewal = () => {
+    timer = setTimeout(() => {
+      renewalInFlight = renew();
+    }, input.renewalIntervalMs ?? Math.max(30_000, (input.leaseSeconds ?? 300) * 500));
+  };
+  const renew = async (): Promise<void> => {
+    if (stopped) return;
+    try {
+      const renewed = await input.client.renewAssignment(assignmentId, {
+        leaseToken: input.leaseToken,
+        runnerId: input.runnerId,
+        leaseSeconds: input.leaseSeconds ?? 300,
+      });
+      const assignment = record(renewed.assignment ?? renewed.payload);
+      const leaseExpiresAt = text(assignment.leaseExpiresAt);
+      if (leaseExpiresAt) await input.onLeaseRenewed?.(leaseExpiresAt);
+    } catch (error) {
+      renewalFailure = error;
+      return;
+    }
+    scheduleRenewal();
+  };
+  scheduleRenewal();
   try {
     result = await input.executor.execute({ assignment: input.assignment, assignmentId, leaseToken: input.leaseToken, runnerId: input.runnerId, signal: input.signal });
   } catch (error) {
     result = { status: 'failed', code: 'agent_executor_failed', summary: error instanceof Error ? error.message : String(error), retryable: true };
+  } finally {
+    stopped = true;
+    if (timer) clearTimeout(timer);
+    await renewalInFlight;
+  }
+  if (renewalFailure) {
+    result = {
+      status: 'returned',
+      code: 'assignment_lease_renewal_failed',
+      summary: renewalFailure instanceof Error ? renewalFailure.message : String(renewalFailure),
+      retryable: true,
+    };
   }
   await reportUsage(input, assignmentId, result);
   if (result.status === 'returned') {

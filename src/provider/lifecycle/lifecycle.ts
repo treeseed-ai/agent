@@ -30,7 +30,7 @@ export async function buildProviderPlan(config: ProviderHostRuntimeConfig) {
 	return okPayload('plan', {
 		mode: 'plan',
 		dataDir: config.dataDir,
-		capabilities: discoverProviderCapabilities(config),
+		capabilities: discoverProviderCapabilities(config).map((capability) => capability.id),
 		budgets: discoverProviderBudgets(config),
 		executorConfigured: Boolean(config.executorModule),
 		redactedEnv: config.redactedEnv,

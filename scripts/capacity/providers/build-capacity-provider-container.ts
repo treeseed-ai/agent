@@ -289,7 +289,6 @@ function pruneProviderRuntimeToolingFromRuntimeTree(runtimeRoot: string) {
 	const commonTooling = [
 		'@cloudflare',
 		'@img',
-		'@railway',
 		'miniflare',
 		'playwright',
 		'playwright-core',
@@ -300,7 +299,7 @@ function pruneProviderRuntimeToolingFromRuntimeTree(runtimeRoot: string) {
 	for (const packagePath of packagePaths) {
 		rmSync(resolve(nodeModulesRoot, packagePath), { recursive: true, force: true });
 	}
-	for (const scopeName of ['@cloudflare', '@github', '@img', '@openai', '@railway']) {
+	for (const scopeName of ['@cloudflare', '@github', '@img', '@openai']) {
 		const scopePath = resolve(nodeModulesRoot, scopeName);
 		try {
 			if (readdirSync(scopePath).length === 0) rmSync(scopePath, { recursive: true, force: true });

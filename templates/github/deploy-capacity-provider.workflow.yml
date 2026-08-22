@@ -24,4 +24,4 @@ jobs:
           docker build --target agent-runner -t treeseed/agent-runner:${{ inputs.environment }} .
       - name: Deployment handoff
         run: |
-          echo "Deploy manager and runner role images with Market-managed host secrets."
+          echo "Deploy manager and runner images with trusted provider-host secrets."

@@ -5,9 +5,9 @@ import type { ProviderSupplyOffer } from '@treeseed/sdk/capacity-provider/contra
 export interface ProviderConnectionState {
 	schemaVersion: 1;
 	connectionId: string;
-	marketUrl: string;
-	marketProfile?: string | null;
-	marketAudience?: string | null;
+	controlPlaneUrl: string;
+	serverProfile?: string | null;
+	controlPlaneAudience?: string | null;
 	offer: ProviderSupplyOffer;
 	teamId?: string | null;
 	providerId?: string | null;

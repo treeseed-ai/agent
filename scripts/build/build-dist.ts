@@ -1,12 +1,10 @@
-import { chmodSync, copyFileSync, cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, extname, join, relative, resolve } from 'node:path';
 import { build } from 'esbuild';
 import ts from 'typescript';
 import { packageRoot } from '../packages/package-tools.ts';
 
 const srcRoot = resolve(packageRoot, 'src');
-const scriptsRoot = resolve(packageRoot, 'scripts');
-const templatesRoot = resolve(packageRoot, 'templates');
 const distRoot = resolve(packageRoot, 'dist');
 const buildLock = resolve(packageRoot, '.treeseed', 'build-dist.lock');
 
@@ -56,20 +54,6 @@ function copyAsset(filePath, sourceRoot, outputRoot) {
 	if (outputFile.endsWith('.d.ts')) {
 		writeFileSync(outputFile, rewriteRuntimeSpecifiers(readFileSync(outputFile, 'utf8')), 'utf8');
 	}
-}
-
-function transpileScript(filePath) {
-	const source = readFileSync(filePath, 'utf8');
-	const relativePath = relative(scriptsRoot, filePath);
-	const outputFile = resolve(distRoot, 'scripts', relativePath.replace(/\.ts$/u, '.js'));
-	const transformed = extname(filePath) === '.ts'
-		? ts.transpileModule(source, {
-				compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
-			}).outputText
-		: source;
-	ensureDir(outputFile);
-	writeFileSync(outputFile, rewriteRuntimeSpecifiers(transformed), 'utf8');
-	chmodSync(outputFile, 0o755);
 }
 
 function emitDeclarations() {
@@ -133,11 +117,6 @@ try {
 		else if (COPY_EXTENSIONS.has(extension)) copyAsset(filePath, srcRoot, distRoot);
 	}
 
-	for (const filePath of walkFiles(scriptsRoot)) {
-		const extension = extname(filePath);
-		if (JS_SOURCE_EXTENSIONS.has(extension)) transpileScript(filePath);
-	}
-
 	emitDeclarations();
 
 	if (existsSync(resolve(distRoot, 'src'))) {
@@ -145,9 +124,6 @@ try {
 		rmSync(resolve(distRoot, 'src'), { recursive: true, force: true });
 	}
 
-	if (existsSync(templatesRoot)) {
-		cpSync(templatesRoot, resolve(distRoot, 'templates'), { recursive: true });
-	}
 } finally {
 	rmSync(buildLock, { recursive: true, force: true });
 }

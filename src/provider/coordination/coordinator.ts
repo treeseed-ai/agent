@@ -7,6 +7,8 @@ import type {
 	ProviderRegistrationSubmission,
 } from '@treeseed/sdk/capacity-provider/contracts';
 import { ProviderProtocolClient } from '@treeseed/sdk/capacity-provider';
+import { CONTROL_PLANE_OPERATIONS } from '@treeseed/sdk/operator-contracts';
+import { providerOperationPath } from './client.ts';
 import {
 	generatedMembershipCredentialRef,
 	removeProviderConnectionState,
@@ -14,15 +16,11 @@ import {
 	writeProviderConnectionState,
 	type ProviderConnectionState,
 } from './connection-state.ts';
+import { generateCapacityProviderIdentity, loadCapacityProviderIdentity, signCapacityProviderProof,
+	type CapacityProviderPrivateJwk } from '../accounts/identity.ts';
 import {
-	generateCapacityProviderIdentity,
-	signCapacityProviderProof,
-	type CapacityProviderPrivateJwk,
-} from '@treeseed/sdk/capacity-provider';
-import { loadCapacityProviderIdentity } from '../accounts/identity.ts';
-import {
-	providerConnectionMarketUrl,
-	providerConnectionMarketAudience,
+	providerConnectionControlPlaneUrl,
+	providerConnectionControlPlaneAudience,
 	removeProviderSecret,
 	resolveProviderSecret,
 	stageProviderSecret,
@@ -35,8 +33,8 @@ import { ProviderLocalCapacityStore } from '../capacity/capacity-core/local-capa
 
 export interface ProviderConnectionRuntime {
 	connection: ProviderConnectionConfig;
-	marketUrl: string;
-	marketAudience: string;
+	controlPlaneUrl: string;
+	controlPlaneAudience: string;
 	teamId: string;
 	providerId: string;
 	membershipId: string;
@@ -71,8 +69,8 @@ function unsignedRegistration(manifest: CapacityProviderManifestV2, connection: 
 	};
 }
 
-function nextState(connectionId: string, marketUrl: string, prior: ProviderConnectionState | null, patch: Partial<ProviderConnectionState>): ProviderConnectionState {
-	const next = { schemaVersion: 1 as const, connectionId, marketUrl, ...(prior ?? {}), ...patch, updatedAt: new Date().toISOString() };
+function nextState(connectionId: string, controlPlaneUrl: string, prior: ProviderConnectionState | null, patch: Partial<ProviderConnectionState>): ProviderConnectionState {
+	const next = { schemaVersion: 1 as const, connectionId, controlPlaneUrl, ...(prior ?? {}), ...patch, updatedAt: new Date().toISOString() };
 	if (!next.offer) throw new Error(`Provider connection ${connectionId} is missing its durable supply offer.`);
 	return next as ProviderConnectionState;
 }
@@ -100,8 +98,8 @@ export class CapacityProviderCoordinator {
 		return this.identity;
 	}
 
-	private client(marketUrl: string) {
-		return new ProviderProtocolClient({ marketUrl, fetchImpl: this.options.fetch });
+	private client(controlPlaneUrl: string) {
+		return new ProviderProtocolClient({ controlPlaneUrl, fetchImpl: this.options.fetch });
 	}
 
 	private async proof(input: { audience: string; method: string; path: string; body: unknown; identity: CoordinatorIdentity }) {
@@ -110,8 +108,8 @@ export class CapacityProviderCoordinator {
 
 	private async connectApproved(input: {
 		connection: ProviderConnectionConfig;
-		marketUrl: string;
-		marketAudience: string;
+		controlPlaneUrl: string;
+		controlPlaneAudience: string;
 		credentialRef: string;
 		credentialId: string;
 		minimumValidityMs?: number;
@@ -124,8 +122,8 @@ export class CapacityProviderCoordinator {
 		const idempotencyKey = `access:${input.connection.id}:${randomUUID()}`;
 		const requestedValiditySeconds = Math.ceil((minimumValidityMs + 60_000) / 1000);
 		const body = { credentialId: input.credentialId, idempotencyKey, requestedValiditySeconds };
-		const proof = await this.proof({ audience: input.marketAudience, method: 'POST', path: '/v1/provider/access-tokens', body, identity });
-		const token = await this.client(input.marketUrl).issueAccessToken(credential, input.credentialId, proof, idempotencyKey, requestedValiditySeconds);
+		const proof = await this.proof({ audience: input.controlPlaneAudience, method: 'POST', path: providerOperationPath(CONTROL_PLANE_OPERATIONS.providers.issueAccessToken), body, identity });
+		const token = await this.client(input.controlPlaneUrl).issueAccessToken(credential, input.credentialId, proof, idempotencyKey, requestedValiditySeconds);
 		if (token.teamId !== input.connection.teamId || token.providerId !== input.connection.providerId || token.membershipId !== input.connection.membershipId || token.credentialId !== input.credentialId) {
 			throw new Error(`Provider connection ${input.connection.id} access token does not match its configured team, provider, membership, and credential binding.`);
 		}
@@ -140,8 +138,8 @@ export class CapacityProviderCoordinator {
 		if (current) return current;
 		const refresh = this.connectApproved({
 			connection,
-			marketUrl: providerConnectionMarketUrl(connection, this.options.env),
-			marketAudience: providerConnectionMarketAudience(connection, this.options.env),
+			controlPlaneUrl: providerConnectionControlPlaneUrl(connection, this.options.env),
+			controlPlaneAudience: providerConnectionControlPlaneAudience(connection, this.options.env),
 			credentialRef: connection.membershipCredentialRef,
 			credentialId: connection.membershipCredentialId,
 			minimumValidityMs,
@@ -156,26 +154,26 @@ export class CapacityProviderCoordinator {
 
 	async reconcileConnection(connection: ProviderConnectionConfig): Promise<ProviderConnectionResult> {
 		if (connection.enabled === false) return { connectionId: connection.id, status: 'disabled' };
-		const marketUrl = providerConnectionMarketUrl(connection, this.options.env);
-		const marketAudience = providerConnectionMarketAudience(connection, this.options.env);
-		const accessToken = await this.connectApproved({ connection, marketUrl, marketAudience, credentialRef: connection.membershipCredentialRef, credentialId: connection.membershipCredentialId });
-		return { connectionId: connection.id, status: 'connected', teamId: connection.teamId, providerId: connection.providerId, membershipId: connection.membershipId, runtime: { connection, marketUrl, marketAudience, teamId: connection.teamId, providerId: connection.providerId, membershipId: connection.membershipId, credentialId: connection.membershipCredentialId, accessToken } };
+		const controlPlaneUrl = providerConnectionControlPlaneUrl(connection, this.options.env);
+		const controlPlaneAudience = providerConnectionControlPlaneAudience(connection, this.options.env);
+		const accessToken = await this.connectApproved({ connection, controlPlaneUrl, controlPlaneAudience, credentialRef: connection.membershipCredentialRef, credentialId: connection.membershipCredentialId });
+		return { connectionId: connection.id, status: 'connected', teamId: connection.teamId, providerId: connection.providerId, membershipId: connection.membershipId, runtime: { connection, controlPlaneUrl, controlPlaneAudience, teamId: connection.teamId, providerId: connection.providerId, membershipId: connection.membershipId, credentialId: connection.membershipCredentialId, accessToken } };
 	}
 
 	async beginJoin(join: CapacityProviderJoinInput): Promise<ProviderConnectionResult> {
 		if (this.loaded.manifest.connections.some((connection) => connection.id === join.id)) throw new Error(`Provider connection ${join.id} is already approved and configured.`);
 		const existing = await readProviderConnectionState(this.dataDir, join.id);
 		if (existing?.registrationRequestId) return this.pollRegistrationStatus(join.id);
-		const marketUrl = providerConnectionMarketUrl(join, this.options.env);
-		const marketAudience = providerConnectionMarketAudience(join, this.options.env);
+		const controlPlaneUrl = providerConnectionControlPlaneUrl(join, this.options.env);
+		const controlPlaneAudience = providerConnectionControlPlaneAudience(join, this.options.env);
 		const identity = await this.providerIdentity();
-		const client = this.client(marketUrl);
+		const client = this.client(controlPlaneUrl);
 		const unsigned = unsignedRegistration(this.loaded.manifest, join, identity);
-		const proof = await this.proof({ audience: marketAudience, method: 'POST', path: '/v1/provider-registrations', body: unsigned, identity });
+		const proof = await this.proof({ audience: controlPlaneAudience, method: 'POST', path: providerOperationPath(CONTROL_PLANE_OPERATIONS.providers.register), body: unsigned, identity });
 		const submission: ProviderRegistrationSubmission = { ...unsigned, proof };
 		const registrationKey = await resolveProviderSecret(join.registrationKeyRef, { env: this.options.env, baseDirectory: this.loaded.directory, dataDirectory: this.dataDir, resolver: this.options.secretResolver });
 		const request = await client.register(registrationKey, submission, `register:${join.id}`);
-		const state = nextState(join.id, marketUrl, null, { marketProfile: join.marketProfile ?? null, marketAudience, offer: join.offer, teamId: request.teamId, providerId: request.providerId, registrationRequestId: request.id, registrationStatus: request.status });
+		const state = nextState(join.id, controlPlaneUrl, null, { serverProfile: join.serverProfile ?? null, controlPlaneAudience, offer: join.offer, teamId: request.teamId, providerId: request.providerId, registrationRequestId: request.id, registrationStatus: request.status });
 		await writeProviderConnectionState(this.dataDir, state);
 		return { connectionId: join.id, status: 'pending-approval', teamId: request.teamId, providerId: request.providerId, requestId: request.id };
 	}
@@ -184,8 +182,8 @@ export class CapacityProviderCoordinator {
 		if (!state.teamId || !state.providerId || !state.membershipId || !state.credentialId || !state.generatedCredentialRef) throw new Error(`Provider join ${state.connectionId} is not ready to materialize.`);
 		const connection: ProviderConnectionConfig = {
 			id: state.connectionId,
-			...(state.marketProfile ? { marketProfile: state.marketProfile } : { marketUrl: state.marketUrl }),
-			...(state.marketAudience ? { marketAudience: state.marketAudience } : {}),
+			...(state.serverProfile ? { serverProfile: state.serverProfile } : { controlPlaneUrl: state.controlPlaneUrl }),
+			...(state.controlPlaneAudience ? { controlPlaneAudience: state.controlPlaneAudience } : {}),
 			teamId: state.teamId,
 			providerId: state.providerId,
 			membershipId: state.membershipId,
@@ -207,16 +205,16 @@ export class CapacityProviderCoordinator {
 		let state = await readProviderConnectionState(this.dataDir, connectionId);
 		if (!state?.registrationRequestId) throw new Error(`Provider join ${connectionId} has not been started.`);
 		if (!state.offer) throw new Error(`Provider join ${connectionId} is missing its durable supply offer and cannot be recovered. Start a new signed join with an explicit offer.`);
-		const marketUrl = state.marketUrl;
-		const marketAudience = state.marketAudience ?? marketUrl;
+		const controlPlaneUrl = state.controlPlaneUrl;
+		const controlPlaneAudience = state.controlPlaneAudience ?? controlPlaneUrl;
 		const identity = await this.providerIdentity();
-		const client = this.client(marketUrl);
-		const statusPath = `/v1/provider-registrations/${encodeURIComponent(state.registrationRequestId)}`;
-		const statusProof = await this.proof({ audience: marketAudience, method: 'GET', path: statusPath, body: { requestId: state.registrationRequestId }, identity });
+		const client = this.client(controlPlaneUrl);
+		const statusPath = providerOperationPath(CONTROL_PLANE_OPERATIONS.providers.registration, { requestId: state.registrationRequestId });
+		const statusProof = await this.proof({ audience: controlPlaneAudience, method: 'GET', path: statusPath, body: { requestId: state.registrationRequestId }, identity });
 		const request = await client.registrationStatus(state.registrationRequestId, statusProof);
-		state = nextState(connectionId, marketUrl, state, { teamId: request.teamId, providerId: request.providerId, membershipId: request.membershipId, registrationStatus: request.status });
+		state = nextState(connectionId, controlPlaneUrl, state, { teamId: request.teamId, providerId: request.providerId, membershipId: request.membershipId, registrationStatus: request.status });
 		await writeProviderConnectionState(this.dataDir, state);
-		return { state, request, marketUrl, marketAudience, identity, client };
+		return { state, request, controlPlaneUrl, controlPlaneAudience, identity, client };
 	}
 
 	async pollRegistrationStatus(connectionId: string): Promise<ProviderConnectionResult> {
@@ -247,17 +245,17 @@ export class CapacityProviderCoordinator {
 		if (existing?.generatedCredentialRef && existing.credentialId && existing.membershipId) {
 			return this.reconcileConnection(await this.materializeApprovedConnection(existing));
 		}
-		const { state: polledState, request, marketUrl, marketAudience, identity, client } = await this.pollRegistrationRequest(connectionId);
+		const { state: polledState, request, controlPlaneUrl, controlPlaneAudience, identity, client } = await this.pollRegistrationRequest(connectionId);
 		let state = polledState;
 		if (request.status !== 'approved' || !request.membershipId) return { connectionId, status: request.status === 'pending' ? 'pending-approval' : request.status, teamId: request.teamId, providerId: request.providerId, requestId: request.id };
 
-		const exchangePath = `/v1/provider-registrations/${encodeURIComponent(request.id)}/credential`;
+		const exchangePath = providerOperationPath(CONTROL_PLANE_OPERATIONS.providers.exchangeCredential, { requestId: request.id });
 		const exchangeIdempotencyKey = `credential:${request.id}`;
-		const exchangeProof = await this.proof({ audience: marketAudience, method: 'POST', path: exchangePath, body: { requestId: request.id, idempotencyKey: exchangeIdempotencyKey }, identity });
+		const exchangeProof = await this.proof({ audience: controlPlaneAudience, method: 'POST', path: exchangePath, body: { requestId: request.id, idempotencyKey: exchangeIdempotencyKey }, identity });
 		const issued = await client.exchangeCredential(request.id, exchangeProof, exchangeIdempotencyKey);
 		const generatedRef = generatedMembershipCredentialRef(connectionId);
 		await writeProviderSecret(generatedRef, issued.credential, this.loaded.directory, this.dataDir);
-		state = nextState(connectionId, marketUrl, state, { teamId: issued.teamId, providerId: issued.providerId, membershipId: issued.membershipId, credentialId: issued.id, generatedCredentialRef: generatedRef, registrationStatus: 'approved' });
+		state = nextState(connectionId, controlPlaneUrl, state, { teamId: issued.teamId, providerId: issued.providerId, membershipId: issued.membershipId, credentialId: issued.id, generatedCredentialRef: generatedRef, registrationStatus: 'approved' });
 		await writeProviderConnectionState(this.dataDir, state);
 		const connected = await this.reconcileConnection(await this.materializeApprovedConnection(state));
 		return { ...connected, requestId: request.id };
@@ -291,7 +289,7 @@ export class CapacityProviderCoordinator {
 			const result = await this.reconcileConnection(connection);
 			if (!result.runtime) throw new Error(`Provider connection ${connectionId} is not connected.`);
 			const idempotencyKey = `leave:${connectionId}:${result.runtime.membershipId}`;
-			membership = await this.client(result.runtime.marketUrl).leaveMembership(result.runtime.accessToken.accessToken, idempotencyKey);
+			membership = await this.client(result.runtime.controlPlaneUrl).leaveMembership(result.runtime.accessToken.accessToken, idempotencyKey);
 			remoteRevocationConfirmed = true;
 		} catch (error) {
 			remoteError = error instanceof Error ? error.message : String(error);
@@ -318,22 +316,22 @@ export class CapacityProviderCoordinator {
 		const connected = await this.reconcileConnection(connection);
 		if (!connected.runtime) throw new Error(`Provider connection ${connectionId} is not connected and cannot authorize credential rotation.`);
 		const rotationIdempotencyKey = state.credentialRotationIdempotencyKey ?? `credential-rotation:${connectionId}:${randomUUID()}`;
-		state = nextState(connectionId, state.marketUrl, state, {
+		state = nextState(connectionId, state.controlPlaneUrl, state, {
 			offer: connection.offer,
 			credentialRotationIdempotencyKey: rotationIdempotencyKey,
 		});
 		await writeProviderConnectionState(this.dataDir, state);
-		const authorization = await this.client(connected.runtime.marketUrl).authorizeCredentialRotation(connected.runtime.accessToken.accessToken, rotationIdempotencyKey);
+		const authorization = await this.client(connected.runtime.controlPlaneUrl).authorizeCredentialRotation(connected.runtime.accessToken.accessToken, rotationIdempotencyKey);
 		const exchangeIdempotencyKey = state.credentialExchangeIdempotencyKey ?? `credential:${registrationRequestId}:generation:${authorization.generation}`;
-		state = nextState(connectionId, state.marketUrl, state, { credentialExchangeIdempotencyKey: exchangeIdempotencyKey });
+		state = nextState(connectionId, state.controlPlaneUrl, state, { credentialExchangeIdempotencyKey: exchangeIdempotencyKey });
 		await writeProviderConnectionState(this.dataDir, state);
 		const identity = await this.providerIdentity();
-		const exchangePath = `/v1/provider-registrations/${encodeURIComponent(registrationRequestId)}/credential`;
-		const exchangeProof = await this.proof({ audience: connected.runtime.marketAudience, method: 'POST', path: exchangePath, body: { requestId: registrationRequestId, idempotencyKey: exchangeIdempotencyKey }, identity });
-		const issued = await this.client(connected.runtime.marketUrl).exchangeCredential(registrationRequestId, exchangeProof, exchangeIdempotencyKey);
+		const exchangePath = providerOperationPath(CONTROL_PLANE_OPERATIONS.providers.exchangeCredential, { requestId: registrationRequestId });
+		const exchangeProof = await this.proof({ audience: connected.runtime.controlPlaneAudience, method: 'POST', path: exchangePath, body: { requestId: registrationRequestId, idempotencyKey: exchangeIdempotencyKey }, identity });
+		const issued = await this.client(connected.runtime.controlPlaneUrl).exchangeCredential(registrationRequestId, exchangeProof, exchangeIdempotencyKey);
 		const credentialRef = state.generatedCredentialRef ?? connection.membershipCredentialRef;
 		await writeProviderSecret(credentialRef, issued.credential, this.loaded.directory, this.dataDir);
-		state = nextState(connectionId, state.marketUrl, state, { credentialId: issued.id, generatedCredentialRef: credentialRef, credentialRotationIdempotencyKey: null, credentialExchangeIdempotencyKey: null });
+		state = nextState(connectionId, state.controlPlaneUrl, state, { credentialId: issued.id, generatedCredentialRef: credentialRef, credentialRotationIdempotencyKey: null, credentialExchangeIdempotencyKey: null });
 		await writeProviderConnectionState(this.dataDir, state);
 		await this.localState.removeToken(connectionId);
 		return this.reconcileConnection(await this.materializeApprovedConnection(state));
@@ -349,11 +347,12 @@ export class CapacityProviderCoordinator {
 		const currentIdentity = await this.providerIdentity();
 		const expectedIdentityVersion = connected.runtime.accessToken.identityVersion;
 		const signedBody = { expectedIdentityVersion, newPublicJwk: nextPublicJwk };
-		const oldProof = await signCapacityProviderProof({ privateJwk: currentIdentity.privateJwk, publicJwk: currentIdentity.publicJwk, identityVersion: expectedIdentityVersion, method: 'POST', path: '/v1/provider/identity/rotate', audience: connected.runtime.marketAudience, body: signedBody });
-		const newProof = await signCapacityProviderProof({ privateJwk: nextPrivateJwk, publicJwk: nextPublicJwk, identityVersion: expectedIdentityVersion + 1, method: 'POST', path: '/v1/provider/identity/rotate', audience: connected.runtime.marketAudience, body: signedBody });
+		const rotationPath = providerOperationPath(CONTROL_PLANE_OPERATIONS.providers.rotateIdentity);
+		const oldProof = await signCapacityProviderProof({ privateJwk: currentIdentity.privateJwk, publicJwk: currentIdentity.publicJwk, identityVersion: expectedIdentityVersion, method: 'POST', path: rotationPath, audience: connected.runtime.controlPlaneAudience, body: signedBody });
+		const newProof = await signCapacityProviderProof({ privateJwk: nextPrivateJwk, publicJwk: nextPublicJwk, identityVersion: expectedIdentityVersion + 1, method: 'POST', path: rotationPath, audience: connected.runtime.controlPlaneAudience, body: signedBody });
 		const staged = await stageProviderSecret(this.loaded.manifest.identity.privateKeyRef, JSON.stringify(nextPrivateJwk), this.loaded.directory, this.dataDir);
 		try {
-			const identity = await this.client(connected.runtime.marketUrl).rotateIdentity(connected.runtime.accessToken.accessToken, { ...signedBody, oldProof, newProof }, `identity-rotate:${expectedIdentityVersion + 1}`);
+			const identity = await this.client(connected.runtime.controlPlaneUrl).rotateIdentity(connected.runtime.accessToken.accessToken, { ...signedBody, oldProof, newProof }, `identity-rotate:${expectedIdentityVersion + 1}`);
 			await staged.commit();
 			this.identity = null;
 			await this.localState.clearTokens();

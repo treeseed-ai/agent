@@ -157,7 +157,7 @@ async function main() {
 		}
 		const enrollmentToken = String(input.enrollmentToken ?? '');
 		const teamId = String(input.teamId ?? '');
-		const loaded = await import('../configuration/manifest.ts').then(({ loadProviderManifest }) => loadProviderManifest(config.manifestPath!));
+		const loaded = await import('../configuration/manifest.ts').then(({ loadProviderManifest }) => loadProviderManifest(config.manifestPath!, config.dataDir));
 		if (!enrollmentToken || !teamId) throw new Error('Provider enrollment requires a team and one-time token.');
 		await import('../accounts/identity.ts').then(({ ensureCapacityProviderIdentity }) => ensureCapacityProviderIdentity({
 			ref: loaded.manifest.identity.privateKeyRef,

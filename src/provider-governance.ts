@@ -5,12 +5,13 @@ export {
 } from './provider/coordination/coordinator.ts';
 export {
 	initializeCapacityProviderIdentity,
+	ensureCapacityProviderIdentity,
 	loadCapacityProviderIdentity,
 } from './provider/accounts/identity.ts';
 export {
 	DEFAULT_PROVIDER_MANIFEST,
 	loadProviderManifest,
-	writeProviderManifest,
+	writeProviderConnections,
 	providerSecretPath,
 	providerConnectionControlPlaneUrl,
 	providerConnectionControlPlaneAudience,

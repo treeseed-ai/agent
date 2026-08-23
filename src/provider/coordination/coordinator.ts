@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type {
-	CapacityProviderManifestV2,
+	CapacityProviderManifestV3,
 	CapacityProviderJoinInput,
 	ProviderAccessTokenIssue,
 	ProviderConnectionConfig,
@@ -58,7 +58,7 @@ interface CoordinatorIdentity {
 	publicJwk: Awaited<ReturnType<typeof loadCapacityProviderIdentity>>['publicJwk'];
 }
 
-function unsignedRegistration(manifest: CapacityProviderManifestV2, connection: CapacityProviderJoinInput, identity: CoordinatorIdentity) {
+function unsignedRegistration(manifest: CapacityProviderManifestV3, connection: CapacityProviderJoinInput, identity: CoordinatorIdentity) {
 	return {
 		schemaVersion: 1 as const,
 		displayName: manifest.identity.displayName,
@@ -160,7 +160,7 @@ export class CapacityProviderCoordinator {
 		return { connectionId: connection.id, status: 'connected', teamId: connection.teamId, providerId: connection.providerId, membershipId: connection.membershipId, runtime: { connection, controlPlaneUrl, controlPlaneAudience, teamId: connection.teamId, providerId: connection.providerId, membershipId: connection.membershipId, credentialId: connection.membershipCredentialId, accessToken } };
 	}
 
-	async beginJoin(join: CapacityProviderJoinInput): Promise<ProviderConnectionResult> {
+	async beginJoin(join: CapacityProviderJoinInput, oneTimeRegistrationKey?: string): Promise<ProviderConnectionResult> {
 		if (this.loaded.manifest.connections.some((connection) => connection.id === join.id)) throw new Error(`Provider connection ${join.id} is already approved and configured.`);
 		const existing = await readProviderConnectionState(this.dataDir, join.id);
 		if (existing?.registrationRequestId) return this.pollRegistrationStatus(join.id);
@@ -171,7 +171,7 @@ export class CapacityProviderCoordinator {
 		const unsigned = unsignedRegistration(this.loaded.manifest, join, identity);
 		const proof = await this.proof({ audience: controlPlaneAudience, method: 'POST', path: providerOperationPath(CONTROL_PLANE_OPERATIONS.providers.register), body: unsigned, identity });
 		const submission: ProviderRegistrationSubmission = { ...unsigned, proof };
-		const registrationKey = await resolveProviderSecret(join.registrationKeyRef, { env: this.options.env, baseDirectory: this.loaded.directory, dataDirectory: this.dataDir, resolver: this.options.secretResolver });
+		const registrationKey = oneTimeRegistrationKey ?? await resolveProviderSecret(join.registrationKeyRef, { env: this.options.env, baseDirectory: this.loaded.directory, dataDirectory: this.dataDir, resolver: this.options.secretResolver });
 		const request = await client.register(registrationKey, submission, `register:${join.id}`);
 		const state = nextState(join.id, controlPlaneUrl, null, { serverProfile: join.serverProfile ?? null, controlPlaneAudience, offer: join.offer, teamId: request.teamId, providerId: request.providerId, registrationRequestId: request.id, registrationStatus: request.status });
 		await writeProviderConnectionState(this.dataDir, state);

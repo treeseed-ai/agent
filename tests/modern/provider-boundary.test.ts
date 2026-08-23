@@ -24,7 +24,7 @@ describe('Agent package ownership boundary', () => {
 	it('fails closed when no trusted executor module is configured', async () => {
 		const config = resolveProviderConfig({ env: { TREESEED_PROVIDER_DATA_DIR: '/tmp/provider' } });
 		expect(config.executorModule).toBeNull();
-		await expect(resolveAgentExecutor(config, 'codex')).resolves.toBeNull();
+		await expect(resolveAgentExecutor(config, { id: 'codex', adapter: 'codex', isolation: 'worker', laneIds: ['workday'], maxConcurrentWorkers: 1, nativeLimits: {} })).resolves.toBeNull();
 	});
 
 	it('contains no raw control-plane paths or removed Market/API runtime terms', () => {

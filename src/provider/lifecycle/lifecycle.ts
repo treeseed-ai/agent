@@ -39,8 +39,10 @@ export async function buildProviderPlan(config: ProviderHostRuntimeConfig) {
 
 export interface ProviderAvailabilityProjection {
 	offer?: ProviderSupplyOffer;
-	executionProviders: Array<Record<string, unknown>>;
-	activeRunners?: number;
+	adapters: Array<Record<string, unknown>>;
+	lanes: Array<Record<string, unknown>>;
+	capacity: Record<string, unknown>;
+	activeWorkers?: number;
 	constraints?: Record<string, unknown>;
 }
 
@@ -55,10 +57,13 @@ export async function publishProviderAvailability(
 		ttlSeconds: 90,
 		environment: config.environment,
 		status: 'open',
-		executionProviders: availability.executionProviders,
+		adapters: availability.adapters,
+		lanes: availability.lanes,
+		capacity: availability.capacity,
 		capabilities: discoverProviderCapabilities(config),
-		nativeLimits: discoverProviderBudgets(config),
-		runnerPressure: { activeRunners: availability.activeRunners ?? 0, maxConcurrentRunners: config.maxConcurrentRunners },
+		runnerPressure: { activeWorkers: availability.activeWorkers ?? 0,
+			maxConcurrentWorkers: Number(availability.capacity.maxConcurrentWorkers ?? config.maxConcurrentRunners),
+			activeAssignmentIds: [] },
 		constraints: { outboundOnly: true, ...availability.constraints },
 		metadata: {
 			source: '@treeseed/agent/provider-manager',

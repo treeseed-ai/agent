@@ -2,9 +2,9 @@ import { chmod, mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promi
 import { dirname, isAbsolute, resolve } from 'node:path';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 import {
-	validateCapacityProviderManifestV2,
+	validateCapacityProviderManifestV3,
 	type CapacityProviderJoinInput,
-	type CapacityProviderManifestV2,
+	type CapacityProviderManifestV3,
 	type ProviderConnectionConfig,
 } from '@treeseed/sdk/capacity-provider';
 
@@ -13,7 +13,7 @@ export const DEFAULT_PROVIDER_MANIFEST = 'treeseed.capacity-provider.yaml';
 export interface LoadedProviderManifest {
 	path: string;
 	directory: string;
-	manifest: CapacityProviderManifestV2;
+	manifest: CapacityProviderManifestV3;
 }
 
 export interface ProviderSecretResolver {
@@ -26,14 +26,14 @@ function diagnosticMessage(diagnostics: Array<{ path: string; message: string }>
 
 export async function loadProviderManifest(path = process.env.TREESEED_CAPACITY_PROVIDER_MANIFEST || DEFAULT_PROVIDER_MANIFEST): Promise<LoadedProviderManifest> {
 	const absolute = resolve(path);
-	const parsed = parseYaml(await readFile(absolute, 'utf8')) as CapacityProviderManifestV2;
-	const validation = validateCapacityProviderManifestV2(parsed);
+	const parsed = parseYaml(await readFile(absolute, 'utf8')) as CapacityProviderManifestV3;
+	const validation = validateCapacityProviderManifestV3(parsed);
 	if (!validation.ok) throw new Error(`Invalid capacity provider manifest: ${diagnosticMessage(validation.diagnostics)}`);
 	return { path: absolute, directory: dirname(absolute), manifest: parsed };
 }
 
-export async function writeProviderManifest(loaded: LoadedProviderManifest, manifest: CapacityProviderManifestV2) {
-	const validation = validateCapacityProviderManifestV2(manifest);
+export async function writeProviderManifest(loaded: LoadedProviderManifest, manifest: CapacityProviderManifestV3) {
+	const validation = validateCapacityProviderManifestV3(manifest);
 	if (!validation.ok) throw new Error(`Invalid capacity provider manifest: ${diagnosticMessage(validation.diagnostics)}`);
 	const temporary = `${loaded.path}.${process.pid}.${Date.now()}.tmp`;
 	await writeFile(temporary, stringifyYaml(manifest), { encoding: 'utf8', mode: 0o600, flag: 'wx' });

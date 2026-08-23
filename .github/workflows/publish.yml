@@ -55,12 +55,19 @@ jobs:
         run: |
           set -euo pipefail
           deadline=$((SECONDS + 180))
+          temp="$(mktemp -d)"
           while true; do
             published="$(npm view "@treeseed/agent@${GITHUB_REF_NAME}" version 2>/dev/null || true)"
             channel="latest"
             if [[ "${GITHUB_REF_NAME}" == *-rc.* ]]; then channel="rc"; fi
             tagged="$(npm view "@treeseed/agent" "dist-tags.${channel}" 2>/dev/null || true)"
-            if [[ "${published}" == "${GITHUB_REF_NAME}" && "${tagged}" == "${GITHUB_REF_NAME}" ]]; then break; fi
+            rm -f "${temp}"/*.tgz
+            if [[ "${published}" == "${GITHUB_REF_NAME}" && "${tagged}" == "${GITHUB_REF_NAME}" ]] \
+              && npm pack "@treeseed/agent@${GITHUB_REF_NAME}" --ignore-scripts --pack-destination "${temp}" >/dev/null 2>&1; then
+              actual="$(sha256sum "${temp}"/*.tgz | awk '{print $1}')"
+              [[ "${actual}" == "${EXPECTED_SHA256}" ]] || { echo "published tarball digest mismatch" >&2; exit 1; }
+              break
+            fi
             if (( SECONDS >= deadline )); then echo "npm read-back did not converge" >&2; exit 1; fi
             sleep 3
           done
@@ -68,10 +75,6 @@ jobs:
             latest="$(npm view @treeseed/agent dist-tags.latest)"
             [[ "${latest}" == "${EXPECTED_LATEST}" ]] || { echo "prerelease changed npm latest" >&2; exit 1; }
           fi
-          temp="$(mktemp -d)"
-          npm pack "@treeseed/agent@${GITHUB_REF_NAME}" --ignore-scripts --pack-destination "${temp}" >/dev/null
-          actual="$(sha256sum "${temp}"/*.tgz | awk '{print $1}')"
-          [[ "${actual}" == "${EXPECTED_SHA256}" ]] || { echo "published tarball digest mismatch" >&2; exit 1; }
 
   build:
     if: startsWith(github.ref, 'refs/tags/') && !contains(github.ref_name, '-')

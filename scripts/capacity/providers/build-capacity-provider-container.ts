@@ -105,7 +105,7 @@ function resolveSdkPackageRoot() {
 	if (existsSync(resolve(siblingRoot, 'package.json'))) {
 		return siblingRoot;
 	}
-	let current = dirname(require.resolve('@treeseed/sdk', { paths: [packageRoot] }));
+	let current = dirname(require.resolve('@treeseed/sdk/standards', { paths: [packageRoot] }));
 	while (true) {
 		const candidate = resolve(current, 'package.json');
 		if (existsSync(candidate)) {

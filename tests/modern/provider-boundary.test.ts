@@ -8,6 +8,7 @@ import { resolveAgentExecutor } from '../../src/provider/execution/executor-load
 import { resolveProviderConfig } from '../../src/provider/configuration/config.ts';
 import { ensureCapacityProviderIdentity } from '../../src/provider/accounts/identity.ts';
 import { loadProviderManifest, writeProviderConnections } from '../../src/provider/configuration/manifest.ts';
+import { buildProviderPlan } from '../../src/provider/lifecycle/lifecycle.ts';
 import { stringify as stringifyYaml } from 'yaml';
 
 function sourceFiles(root: string): string[] {
@@ -67,6 +68,14 @@ describe('Agent package ownership boundary', () => {
 		const canonical = readFileSync(manifestPath, 'utf8');
 		try {
 			const loaded = await loadProviderManifest(manifestPath, dataDirectory);
+			const plan = await buildProviderPlan(resolveProviderConfig({ env: {
+				TREESEED_CAPACITY_PROVIDER_MANIFEST: manifestPath,
+				TREESEED_PROVIDER_DATA_DIR: dataDirectory,
+			} })) as { lanes: Array<{ purpose: string }>; adapters: Array<{ id: string }>; capacity: { maxConcurrentWorkers: number }; capabilities: string[] };
+			expect(plan.lanes.map((lane) => lane.purpose)).toEqual(['communication', 'platform', 'workday']);
+			expect(plan.adapters.map((adapter) => adapter.id)).toEqual(['test']);
+			expect(plan.capacity.maxConcurrentWorkers).toBe(1);
+			expect(plan.capabilities).toEqual(['communication']);
 			await writeProviderConnections(loaded, [{ id: 'local', controlPlaneUrl: 'http://127.0.0.1:3002', controlPlaneAudience: 'http://127.0.0.1:3002',
 				teamId: 'team-1', providerId: 'provider-1', membershipId: 'membership-1', membershipCredentialRef: 'data://credential',
 				membershipCredentialId: 'credential-1', offer: { maxConcurrentRunners: 1, capabilities: ['communication'] } }]);

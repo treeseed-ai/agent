@@ -4,6 +4,7 @@ import type { ProviderSupplyOffer } from '@treeseed/sdk/capacity-provider/contra
 import type { ProviderConnectionRuntimeContext, ProviderHostRuntimeConfig } from '../configuration/config.ts';
 import { discoverProviderBudgets } from '../configuration/budgets.ts';
 import { discoverProviderCapabilities } from '../configuration/capabilities.ts';
+import { loadProviderManifest } from '../configuration/manifest.ts';
 import { createProviderControlPlaneClient } from '../coordination/client.ts';
 import { ProviderLocalCapacityStore } from '../capacity/capacity-core/local-capacity-store.ts';
 import { observeProviderDiskCapacity } from '../runtime/disk-capacity.ts';
@@ -27,11 +28,22 @@ export async function checkProviderHealth(config: ProviderHostRuntimeConfig) {
 }
 
 export async function buildProviderPlan(config: ProviderHostRuntimeConfig) {
+	const manifest = config.manifestPath
+		? (await loadProviderManifest(config.manifestPath, config.dataDir)).manifest
+		: null;
+	const capabilities = manifest
+		? [...new Set([
+			...manifest.adapters.flatMap((adapter) => adapter.capabilities ?? []),
+			...manifest.lanes.flatMap((lane) => lane.capabilities ?? []),
+		])].sort()
+		: discoverProviderCapabilities(config).map((capability) => capability.id);
 	return okPayload('plan', {
 		mode: 'plan',
 		dataDir: config.dataDir,
-		capabilities: discoverProviderCapabilities(config).map((capability) => capability.id),
-		budgets: discoverProviderBudgets(config),
+		capabilities,
+		capacity: manifest?.capacity ?? discoverProviderBudgets(config),
+		lanes: manifest?.lanes ?? [],
+		adapters: manifest?.adapters ?? [],
 		executorConfigured: Boolean(config.executorModule),
 		redactedEnv: config.redactedEnv,
 	});

@@ -8,6 +8,10 @@ CHOWN_DATA="${TREESEED_PROVIDER_CHOWN_DATA:-1}"
 CODEX_AUTH_SOURCE="${TREESEED_CODEX_AUTH_SOURCE:-}"
 CODEX_AUTH_FILE="${TREESEED_CODEX_AUTH_FILE:-$DATA_DIR/credentials/codex-auth.json}"
 
+if [ "$(id -u)" = "0" ] && [ "${1:-}" = "healthcheck" ]; then
+	exec setpriv --reuid "$APP_UID" --regid "$APP_GID" --clear-groups node ./dist/provider/lifecycle/entrypoint.js "$@"
+fi
+
 mkdir -p "$DATA_DIR"
 
 if [ "$(id -u)" = "0" ]; then

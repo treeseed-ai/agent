@@ -21,7 +21,7 @@ function text(...values: unknown[]) {
 }
 
 export interface ProviderAssignmentRunInput {
-  client: Pick<ProviderProtocolClient, 'renewAssignment' | 'startAssignmentExecution' | 'startAssignmentCloseout' | 'preflightAssignmentCompletion' | 'completeAssignment' | 'returnAssignment' | 'failAssignment' | 'reportAssignmentUsage'>;
+  client: Pick<ProviderProtocolClient, 'renewAssignment' | 'startAssignmentExecution' | 'startAssignmentCloseout' | 'preflightAssignmentCompletion' | 'completeAssignment' | 'returnAssignment' | 'failAssignment' | 'reportAssignmentUsage' | 'respondToAssignmentDiscussion' | 'settleAssignment'>;
   executor: AgentExecutor;
   assignment: Record<string, unknown>;
   leaseToken: string;
@@ -102,6 +102,15 @@ export async function runProviderAssignment(input: ProviderAssignmentRunInput) {
     };
   }
   await reportUsage(input, assignmentId, result);
+	if (result.status === 'responded') {
+		if (!result.responseMarkdown) throw new Error('Communication executor omitted its durable Markdown response.');
+		await input.client.respondToAssignmentDiscussion(assignmentId, { leaseToken: input.leaseToken, runnerId: input.runnerId,
+			markdown: result.responseMarkdown, summary: result.summary }, `discussion-response:${assignmentId}:${input.runnerId}`);
+		const usage = record(result.usage?.[0]);
+		await input.client.settleAssignment(assignmentId, { activeSeconds: Number(usage.activeSeconds ?? 0), elapsedSeconds: Number(usage.elapsedSeconds ?? 0),
+			usageDimension: 'aggregate', usageActual: {} }, `discussion-settlement:${assignmentId}:${input.runnerId}`);
+		return input.client.returnAssignment(assignmentId, { runnerId: input.runnerId, summary: { text: result.summary } });
+	}
   if (result.status === 'returned') {
     return input.client.returnAssignment(assignmentId, { leaseToken: input.leaseToken, runnerId: input.runnerId, code: result.code ?? 'agent_executor_returned', reason: result.summary, retryable: result.retryable ?? true });
   }

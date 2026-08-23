@@ -12,6 +12,8 @@ function client() {
 		returnAssignment: vi.fn().mockResolvedValue({ ok: true, payload: { status: 'returned' } }),
 		failAssignment: vi.fn().mockResolvedValue({ ok: true, payload: { status: 'failed' } }),
 		reportAssignmentUsage: vi.fn().mockResolvedValue({ ok: true }),
+		respondToAssignmentDiscussion: vi.fn().mockResolvedValue({ status: 'responded' }),
+		settleAssignment: vi.fn().mockResolvedValue({ replayed: false }),
 	};
 }
 
@@ -72,6 +74,15 @@ describe('catalog-driven provider assignment runner', () => {
 		expect(api.renewAssignment).toHaveBeenCalled();
 		expect(renewed.length).toBeGreaterThan(0);
 		expect(api.returnAssignment).toHaveBeenCalledOnce();
+	});
+
+	it('commits, settles, and closes a communication response without the completion path', async () => {
+		const api = client();
+		await runProviderAssignment({ client: api, treeDx, leaseToken: 'lease', runnerId: 'runner', assignment: { id: 'assignment-chat', executionKind: 'conversation' },
+			executor: { id: 'chat', observe: async () => ({ available: true }), execute: async () => ({ status: 'responded', summary: 'Answered.', responseMarkdown: '## Answer\n\nReady.', usage: [{ activeSeconds: 3, elapsedSeconds: 4 }] }) } });
+		expect(api.respondToAssignmentDiscussion).toHaveBeenCalledWith('assignment-chat', expect.objectContaining({ leaseToken: 'lease', markdown: '## Answer\n\nReady.' }), expect.any(String));
+		expect(api.settleAssignment).toHaveBeenCalledBefore(api.returnAssignment);
+		expect(api.completeAssignment).not.toHaveBeenCalled();
 	});
 
 	it('turns executor exceptions into an exact retryable failure receipt', async () => {

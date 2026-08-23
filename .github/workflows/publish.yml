@@ -137,6 +137,15 @@ jobs:
           tags: ${{ matrix.image }}:${{ steps.tags.outputs.base }}-${{ matrix.arch }}
           sbom: true
           provenance: mode=max
+      - name: Verify the published runner contains Codex
+        if: matrix.target == 'agent-runner'
+        shell: bash
+        run: |
+          set -euo pipefail
+          image="${{ matrix.image }}:${{ steps.tags.outputs.base }}-${{ matrix.arch }}"
+          docker pull "${image}"
+          version="$(docker run --rm --entrypoint /usr/local/bin/codex "${image}" --version)"
+          [[ "${version}" == "codex-cli 0.149.0" ]]
 
   manifest:
     needs: build

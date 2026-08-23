@@ -77,7 +77,8 @@ jobs:
           fi
 
   build:
-    if: startsWith(github.ref, 'refs/tags/') && !contains(github.ref_name, '-')
+    needs: npm
+    if: startsWith(github.ref, 'refs/tags/')
     runs-on: ${{ matrix.runner }}
     permissions:
       contents: write
@@ -136,7 +137,7 @@ jobs:
 
   manifest:
     needs: build
-    if: startsWith(github.ref, 'refs/tags/') && !contains(github.ref_name, '-')
+    if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -192,28 +193,82 @@ jobs:
             docker buildx imagetools inspect "${ref}" >/dev/null
             verify_attestation "${ref}"
           done
-  release:
+
+  component-release:
     needs: manifest
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: read
+    environment: production
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          submodules: recursive
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24
+      - run: npm ci --ignore-scripts
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9
+        with:
+          username: ${{ vars.TREESEED_DOCKERHUB_USERNAME }}
+          password: ${{ secrets.TREESEED_DOCKERHUB_TOKEN }}
+      - name: Read exact multi-architecture digests from Docker Hub
+        id: images
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          manager="$(docker buildx imagetools inspect "treeseed/agent-manager:${version}" --format '{{json .Manifest}}' | jq -r '.digest')"
+          runner="$(docker buildx imagetools inspect "treeseed/agent-runner:${version}" --format '{{json .Manifest}}' | jq -r '.digest')"
+          [[ "${manager}" =~ ^sha256:[a-f0-9]{64}$ && "${runner}" =~ ^sha256:[a-f0-9]{64}$ ]]
+          echo "manager=${manager}" >> "$GITHUB_OUTPUT"
+          echo "runner=${runner}" >> "$GITHUB_OUTPUT"
+      - name: Build exact component release and production Compose bundle
+        env:
+          TREESEED_RELEASE: ${{ github.ref_name }}
+          TREESEED_SOURCE_COMMIT: ${{ github.sha }}
+          TREESEED_MANAGER_DIGEST: ${{ steps.images.outputs.manager }}
+          TREESEED_RUNNER_DIGEST: ${{ steps.images.outputs.runner }}
+        run: node --import tsx scripts/release/create-component-release.ts
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: agent-component-release-${{ github.sha }}
+          path: release-assets/
+          if-no-files-found: error
+
+  release:
+    needs: [npm, manifest, component-release]
     if: startsWith(github.ref, 'refs/tags/') && !contains(github.ref_name, '-')
     runs-on: ubuntu-24.04
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: agent-component-release-${{ github.sha }}
+          path: release-assets
       - name: Create GitHub release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release create "${GITHUB_REF_NAME}" --generate-notes --verify-tag
+        run: gh release create "${GITHUB_REF_NAME}" release-assets/* --generate-notes --verify-tag
 
   prerelease:
-    needs: npm
+    needs: [npm, manifest, component-release]
     if: startsWith(github.ref, 'refs/tags/') && contains(github.ref_name, '-rc.')
     runs-on: ubuntu-24.04
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: agent-component-release-${{ github.sha }}
+          path: release-assets
       - name: Create GitHub prerelease
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release create "${GITHUB_REF_NAME}" --generate-notes --verify-tag --prerelease
+        run: gh release create "${GITHUB_REF_NAME}" release-assets/* --generate-notes --verify-tag --prerelease

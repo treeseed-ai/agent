@@ -127,20 +127,14 @@ function resolveSdkPackageRoot() {
 
 function resolveInstalledNodeModulesRoot() {
 	let current = packageRoot;
-	let lastCandidate: string | null = null;
 	while (true) {
 		const candidate = resolve(current, 'node_modules');
-		if (existsSync(candidate)) {
-			lastCandidate = candidate;
-		}
+		if (existsSync(candidate)) return candidate;
 		const parent = dirname(current);
 		if (parent === current) break;
 		current = parent;
 	}
-	if (!lastCandidate) {
-		throw new Error('Missing node_modules. Run npm install before building the capacity provider image.');
-	}
-	return lastCandidate;
+	throw new Error('Missing node_modules. Run npm install before building the capacity provider image.');
 }
 
 function packSdk() {
@@ -178,7 +172,7 @@ function prepareRuntimeDependencies(installedSdkRoot: string | null) {
 	copyFileSync(resolve(packageRoot, 'package-lock.json'), resolve(runtimeRoot, 'package-lock.json'));
 	mkdirSync(resolve(runtimeRoot, 'node_modules'), { recursive: true });
 	for (const packageName of runtimePackages) {
-		if (packageName.startsWith('@treeseed/')) continue;
+		if (packageName === '@treeseed/sdk') continue;
 		copyRuntimePackage(installedNodeModules, packageName, runtimeRoot);
 	}
 	mkdirSync(resolve(runtimeRoot, 'node_modules', '@treeseed'), { recursive: true });
@@ -208,7 +202,7 @@ function runtimePackageNames(installedNodeModules: string) {
 	const queue: string[] = [];
 	for (const [packagePath, metadata] of Object.entries(lockfile.packages ?? {})) {
 		if (!packagePath.startsWith('node_modules/') || metadata.dev === true) continue;
-		const packageName = topLevelPackageName(packagePath.slice('node_modules/'.length));
+		const packageName = topLevelPackageName(packagePath.split('node_modules/').at(-1) ?? '');
 		if (!packageName) continue;
 		if (!allowed.has(packageName)) {
 			allowed.add(packageName);
@@ -245,7 +239,12 @@ function installedPackageDependencies(installedNodeModules: string, packageName:
 }
 
 function copyRuntimePackage(installedNodeModules: string, packageName: string, runtimeRoot: string) {
-	const source = resolve(installedNodeModules, packageName);
+	let source = resolve(installedNodeModules, packageName);
+	if (!existsSync(source)) {
+		const lockfile = JSON.parse(readFileSync(resolve(packageRoot, 'package-lock.json'), 'utf8')) as { packages?: Record<string, unknown> };
+		const packagePath = Object.keys(lockfile.packages ?? {}).filter((candidate) => candidate.endsWith(`node_modules/${packageName}`)).sort((left, right) => left.length - right.length).find((candidate) => existsSync(resolve(packageRoot, candidate)));
+		if (packagePath) source = resolve(packageRoot, packagePath);
+	}
 	if (!existsSync(source)) return;
 	const target = resolve(runtimeRoot, 'node_modules', packageName);
 	mkdirSync(target, { recursive: true });

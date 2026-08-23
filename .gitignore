@@ -12,6 +12,7 @@ dist/
 .local/
 .treeseed/
 coverage/
+release-assets/
 playwright-report/
 test-results/
 tmp/

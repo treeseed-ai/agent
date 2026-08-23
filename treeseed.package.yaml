@@ -75,3 +75,17 @@ projectArchitecture:
   contentPublishTarget:
     kind: cloudflare_r2
     prefix: packages/agent
+packageRuntime:
+  schemaVersion: treeseed.package-runtime/v1
+  componentId: agent
+  services:
+    - id: manager
+      composeService: manager
+      healthGate:
+        kind: compose-healthcheck
+        timeoutSeconds: 60
+      endpoints: []
+    - id: runner
+      composeService: runner
+      endpoints: []
+  defaultAliases: []

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { resolve } from 'node:path';
-import test from 'node:test';
+import { test } from 'vitest';
 import type { CapacityProviderManifestV3 } from '@treeseed/sdk/capacity-provider';
 import { createProcessIsolatedExecutor } from '../../src/provider/execution/process-executor.ts';
 

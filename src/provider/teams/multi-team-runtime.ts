@@ -78,7 +78,7 @@ export async function runMultiTeamProviderManager(
 		}
 		const runtime = context(config, connection.runtime, loaded.manifest);
 		const adapters = await Promise.all(loaded.manifest.adapters.map(async (adapter) => {
-			const executor = await resolveAgentExecutor(config, adapter).catch(() => null);
+			const executor = await resolveAgentExecutor(config, adapter, loaded.manifest).catch(() => null);
 			const observation = executor
 				? await executor.observe().catch((error) => ({ available: false, reason: error instanceof Error ? error.message : String(error) }))
 				: { available: false, reason: 'executor_not_configured' };
@@ -144,7 +144,7 @@ export async function runMultiTeamProviderRunners(
 			const laneId = text(assignment.laneId, record(assignment.capacityEnvelope).laneId);
 			const adapter = loaded.manifest.adapters.find((candidate) => candidate.id === executionProviderId && (!laneId || candidate.laneIds.includes(laneId)));
 			if (!adapter) { await localState.release(claim.id); results.push({ connectionId: connection.connection.id, status: 'idle', reason: 'assignment_adapter_unavailable' }); continue; }
-			const executor = await resolveAgentExecutor(config, adapter);
+			const executor = await resolveAgentExecutor(config, adapter, loaded.manifest);
 			if (!executor || !(await executor.observe()).available) { await localState.release(claim.id); results.push({ connectionId: connection.connection.id, status: 'idle', reason: 'executor_unavailable' }); continue; }
 			const leaseExpiresAt = text(assignment.leaseExpiresAt) ?? new Date(Date.now() + 300_000).toISOString();
 			await localState.attachLease(claim.id, {

@@ -3,6 +3,7 @@ import { isAbsolute, resolve } from 'node:path';
 import type { CapacityProviderManifestV3 } from '@treeseed/sdk/capacity-provider';
 import type { ProviderHostRuntimeConfig } from '../configuration/config.ts';
 import type { AgentExecutor, AgentExecutorModule } from './contracts.ts';
+import { createProcessIsolatedExecutor } from './process-executor.ts';
 
 const cache = new Map<string, Promise<AgentExecutorModule>>();
 
@@ -18,9 +19,11 @@ async function loadModule(specifier: string) {
   return module;
 }
 
-export async function resolveAgentExecutor(config: ProviderHostRuntimeConfig, adapter: CapacityProviderManifestV3['adapters'][number]): Promise<AgentExecutor | null> {
+export async function resolveAgentExecutor(config: ProviderHostRuntimeConfig, adapter: CapacityProviderManifestV3['adapters'][number], manifest: CapacityProviderManifestV3): Promise<AgentExecutor | null> {
   const module = adapter.module ?? config.executorModule;
   if (!module) return null;
+  if (adapter.isolation === 'process') return createProcessIsolatedExecutor(config, manifest, adapter, module);
+  if ((adapter.credentialProfiles?.length ?? 0) > 0) throw new Error(`Worker-isolated adapter ${adapter.id} may not receive credential profiles.`);
   const executor = await (await loadModule(module)).createAgentExecutor({ executionProviderId: adapter.id, environment: config.environment });
   if (!executor || typeof executor.execute !== 'function' || typeof executor.observe !== 'function') {
     throw new Error('Agent executor module returned an invalid executor.');

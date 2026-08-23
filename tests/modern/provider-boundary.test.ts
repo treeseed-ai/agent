@@ -8,7 +8,7 @@ import { resolveAgentExecutor } from '../../src/provider/execution/executor-load
 import { resolveProviderConfig } from '../../src/provider/configuration/config.ts';
 import { ensureCapacityProviderIdentity } from '../../src/provider/accounts/identity.ts';
 import { loadProviderManifest, writeProviderConnections } from '../../src/provider/configuration/manifest.ts';
-import { buildProviderPlan } from '../../src/provider/lifecycle/lifecycle.ts';
+import { buildProviderPlan, providerAvailabilityCapabilities } from '../../src/provider/lifecycle/lifecycle.ts';
 import { stringify as stringifyYaml } from 'yaml';
 
 function sourceFiles(root: string): string[] {
@@ -92,5 +92,13 @@ describe('Agent package ownership boundary', () => {
 		expect(source).not.toMatch(/\/v1\//u);
 		expect(source).not.toMatch(/MarketClient|marketId|marketUrl|marketAudience|TREESEED_MARKET/u);
 		expect(source).not.toMatch(/@treeseed\/sdk\/(?:sdk|platform|operations|copilot|git-runtime|frontmatter|content-operations|agent-tools)(?:['"]|\/)/u);
+	});
+
+	it('publishes capability identifiers rather than local capability objects', () => {
+		expect(providerAvailabilityCapabilities({
+			adapters: [{ capabilities: ['communication', 'acting'] }],
+			lanes: [{ capabilities: ['communication', 'planning'] }],
+			capacity: {},
+		})).toEqual(['acting', 'communication', 'planning']);
 	});
 });

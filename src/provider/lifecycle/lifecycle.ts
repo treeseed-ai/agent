@@ -58,6 +58,13 @@ export interface ProviderAvailabilityProjection {
 	constraints?: Record<string, unknown>;
 }
 
+export function providerAvailabilityCapabilities(availability: ProviderAvailabilityProjection) {
+	return [...new Set([
+		...availability.adapters.flatMap((adapter) => Array.isArray(adapter.capabilities) ? adapter.capabilities.filter((value): value is string => typeof value === 'string') : []),
+		...availability.lanes.flatMap((lane) => Array.isArray(lane.capabilities) ? lane.capabilities.filter((value): value is string => typeof value === 'string') : []),
+	])].sort();
+}
+
 export async function publishProviderAvailability(
 	config: ProviderConnectionRuntimeContext,
 	availability: ProviderAvailabilityProjection,
@@ -72,7 +79,7 @@ export async function publishProviderAvailability(
 		adapters: availability.adapters,
 		lanes: availability.lanes,
 		capacity: availability.capacity,
-		capabilities: discoverProviderCapabilities(config),
+		capabilities: providerAvailabilityCapabilities(availability),
 		runnerPressure: { activeWorkers: availability.activeWorkers ?? 0,
 			maxConcurrentWorkers: Number(availability.capacity.maxConcurrentWorkers ?? config.maxConcurrentRunners),
 			activeAssignmentIds: [] },

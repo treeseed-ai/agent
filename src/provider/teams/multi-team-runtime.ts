@@ -20,8 +20,7 @@ function text(...values: unknown[]) {
 function context(
 	config: ProviderHostRuntimeConfig,
 	runtime: ProviderConnectionRuntime,
-	executionProviders: ProviderConnectionRuntimeContext['executionProviders'],
-	defaultExecutionProviderId?: string,
+	manifest: Pick<Awaited<ReturnType<typeof loadProviderManifest>>['manifest'], 'adapters' | 'lanes' | 'capacity'>,
 ): ProviderConnectionRuntimeContext {
 	return {
 		...config,
@@ -32,8 +31,9 @@ function context(
 		providerId: runtime.providerId,
 		membershipId: runtime.membershipId,
 		accessToken: runtime.accessToken.accessToken,
-		executionProviders,
-		defaultExecutionProviderId,
+		adapters: manifest.adapters,
+		lanes: manifest.lanes,
+		providerCapacity: manifest.capacity,
 		env: { ...config.env, TREESEED_API_BASE_URL: runtime.controlPlaneUrl },
 	};
 }
@@ -76,25 +76,30 @@ export async function runMultiTeamProviderManager(
 		if (!connection.runtime) {
 			return { ok: connection.status !== 'error', connectionId: connection.connectionId, status: connection.status };
 		}
-		const runtime = context(config, connection.runtime, loaded.manifest.executionProviders, loaded.manifest.defaultExecutionProviderId);
-		const providers = await Promise.all(loaded.manifest.executionProviders.map(async (provider) => {
-			const executor = await resolveAgentExecutor(config, provider.id).catch(() => null);
+		const runtime = context(config, connection.runtime, loaded.manifest);
+		const adapters = await Promise.all(loaded.manifest.adapters.map(async (adapter) => {
+			const executor = await resolveAgentExecutor(config, adapter).catch(() => null);
 			const observation = executor
 				? await executor.observe().catch((error) => ({ available: false, reason: error instanceof Error ? error.message : String(error) }))
 				: { available: false, reason: 'executor_not_configured' };
 			return {
-				id: provider.id,
-				adapter: provider.adapter,
-				nativeLimits: provider.nativeLimits,
-				capabilities: provider.capabilities ?? [],
+				id: adapter.id,
+				adapter: adapter.adapter,
+				isolation: adapter.isolation,
+				laneIds: adapter.laneIds,
+				maxConcurrentWorkers: adapter.maxConcurrentWorkers,
+				nativeLimits: adapter.nativeLimits,
+				capabilities: adapter.capabilities ?? [],
 				status: observation.available ? 'available' : 'unavailable',
 				observations: observation,
 			};
 		}));
 		return publishProviderAvailability(runtime, {
 			offer: connection.runtime.connection.offer,
-			executionProviders: providers,
-			activeRunners: (await localState.snapshot()).claims.length,
+			adapters,
+			lanes: loaded.manifest.lanes,
+			capacity: loaded.manifest.capacity,
+			activeWorkers: (await localState.snapshot()).claims.length,
 		}, localState);
 	}));
 	return { ok: results.every((entry) => entry.ok !== false), role: 'manager', connections: results };
@@ -110,20 +115,10 @@ export async function runMultiTeamProviderRunners(
 	const localState = new ProviderLocalCapacityStore(config.dataDir);
 	const results: Record<string, unknown>[] = [];
 	for (const connection of connections) {
-		const runtime = context(config, connection, loaded.manifest.executionProviders, loaded.manifest.defaultExecutionProviderId);
-		const executionProviderId = loaded.manifest.defaultExecutionProviderId ?? loaded.manifest.executionProviders[0]?.id;
-		if (!executionProviderId) {
-			results.push({ connectionId: connection.connection.id, status: 'idle', reason: 'no_execution_provider' });
-			continue;
-		}
-		const executor = await resolveAgentExecutor(config, executionProviderId);
-		if (!executor || !(await executor.observe()).available) {
-			results.push({ connectionId: connection.connection.id, status: 'idle', reason: 'executor_unavailable' });
-			continue;
-		}
+		const runtime = context(config, connection, loaded.manifest);
 		const claim = await localState.claim({
 			connectionId: connection.connection.id,
-			globalLimit: config.maxConcurrentRunners,
+			globalLimit: loaded.manifest.capacity.maxConcurrentWorkers,
 			connectionLimit: connection.connection.offer.maxConcurrentRunners ?? config.maxConcurrentRunners,
 		});
 		if (!claim) {
@@ -145,6 +140,12 @@ export async function runMultiTeamProviderRunners(
 				results.push({ connectionId: connection.connection.id, status: 'idle', reason: 'no_assignment' });
 				continue;
 			}
+			const executionProviderId = text(assignment.executionProviderId, record(assignment.capacityEnvelope).executionProviderId);
+			const laneId = text(assignment.laneId, record(assignment.capacityEnvelope).laneId);
+			const adapter = loaded.manifest.adapters.find((candidate) => candidate.id === executionProviderId && (!laneId || candidate.laneIds.includes(laneId)));
+			if (!adapter) { await localState.release(claim.id); results.push({ connectionId: connection.connection.id, status: 'idle', reason: 'assignment_adapter_unavailable' }); continue; }
+			const executor = await resolveAgentExecutor(config, adapter);
+			if (!executor || !(await executor.observe()).available) { await localState.release(claim.id); results.push({ connectionId: connection.connection.id, status: 'idle', reason: 'executor_unavailable' }); continue; }
 			const leaseExpiresAt = text(assignment.leaseExpiresAt) ?? new Date(Date.now() + 300_000).toISOString();
 			await localState.attachLease(claim.id, {
 				assignmentId,

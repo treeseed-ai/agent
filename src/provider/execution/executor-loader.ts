@@ -1,5 +1,6 @@
 import { pathToFileURL } from 'node:url';
 import { isAbsolute, resolve } from 'node:path';
+import type { CapacityProviderManifestV3 } from '@treeseed/sdk/capacity-provider';
 import type { ProviderHostRuntimeConfig } from '../configuration/config.ts';
 import type { AgentExecutor, AgentExecutorModule } from './contracts.ts';
 
@@ -17,9 +18,10 @@ async function loadModule(specifier: string) {
   return module;
 }
 
-export async function resolveAgentExecutor(config: ProviderHostRuntimeConfig, executionProviderId: string): Promise<AgentExecutor | null> {
-  if (!config.executorModule) return null;
-  const executor = await (await loadModule(config.executorModule)).createAgentExecutor({ executionProviderId, environment: config.environment });
+export async function resolveAgentExecutor(config: ProviderHostRuntimeConfig, adapter: CapacityProviderManifestV3['adapters'][number]): Promise<AgentExecutor | null> {
+  const module = adapter.module ?? config.executorModule;
+  if (!module) return null;
+  const executor = await (await loadModule(module)).createAgentExecutor({ executionProviderId: adapter.id, environment: config.environment });
   if (!executor || typeof executor.execute !== 'function' || typeof executor.observe !== 'function') {
     throw new Error('Agent executor module returned an invalid executor.');
   }

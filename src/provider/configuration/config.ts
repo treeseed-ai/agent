@@ -1,5 +1,5 @@
 import { existsSync, readFileSync } from 'node:fs';
-import type { CapacityProviderManifestV2 } from '@treeseed/sdk/capacity-provider';
+import type { CapacityProviderManifestV3 } from '@treeseed/sdk/capacity-provider';
 
 export type ProviderRole = 'manager' | 'runner' | 'doctor' | 'healthcheck' | 'plan' | 'version';
 
@@ -29,8 +29,9 @@ export interface ProviderConnectionRuntimeContext extends ProviderHostRuntimeCon
   membershipId: string;
   accessToken: string;
   accessTokenProvider?: (minimumValidityMs?: number) => Promise<string>;
-  defaultExecutionProviderId?: string;
-  executionProviders?: CapacityProviderManifestV2['executionProviders'];
+  adapters: CapacityProviderManifestV3['adapters'];
+  lanes: CapacityProviderManifestV3['lanes'];
+  providerCapacity: CapacityProviderManifestV3['capacity'];
 }
 
 function value(env: NodeJS.ProcessEnv, name: string) {

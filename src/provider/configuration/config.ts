@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import type { CapacityProviderManifestV3 } from '@treeseed/sdk/capacity-provider';
 
-export type ProviderRole = 'manager' | 'runner' | 'doctor' | 'healthcheck' | 'plan' | 'version';
+export type ProviderRole = 'manager' | 'runner' | 'enroll' | 'doctor' | 'healthcheck' | 'plan' | 'version';
 
 const packageVersion = String(JSON.parse(readFileSync(new URL('../../../package.json', import.meta.url), 'utf8')).version);
 

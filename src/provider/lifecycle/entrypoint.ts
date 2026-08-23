@@ -3,7 +3,7 @@
 import { providerRuntimeVersion, resolveProviderConfig, type ProviderRole } from '../configuration/config.ts';
 import { writeProviderRuntimeStatus } from '../runtime/runtime-status.ts';
 
-const ROLES = ['manager', 'runner', 'doctor', 'healthcheck', 'plan', 'version'] as const satisfies ProviderRole[];
+const ROLES = ['manager', 'runner', 'enroll', 'doctor', 'healthcheck', 'plan', 'version'] as const satisfies ProviderRole[];
 
 function args() {
 	return process.argv.slice(2);
@@ -74,6 +74,17 @@ function sleep(ms: number) {
 	});
 }
 
+async function stdinJson() {
+	let value = '';
+	for await (const chunk of process.stdin) {
+		value += String(chunk);
+		if (value.length > 64 * 1024) throw new Error('Provider enrollment input is too large.');
+	}
+	const parsed = JSON.parse(value);
+	if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('Provider enrollment input must be a JSON object.');
+	return parsed as Record<string, unknown>;
+}
+
 async function runLoop(role: 'manager' | 'runner', dataDirectory: string, intervalSeconds: number, runOnce: () => Promise<unknown>) {
 	emit(okPayload(role, {
 		status: 'running',
@@ -131,6 +142,30 @@ async function main() {
 	if (role === 'plan') {
 		const { buildProviderPlan } = await import('./lifecycle.ts');
 		emit(await buildProviderPlan(config));
+		return;
+	}
+	if (role === 'enroll') {
+		if (!config.manifestPath) throw new Error('A capacity provider manifest is required for enrollment.');
+		const input = await stdinJson();
+		const { createCapacityProviderCoordinator } = await import('../teams/multi-team-runtime.ts');
+		const coordinator = await createCapacityProviderCoordinator(config);
+		const connectionId = String(input.connectionId ?? `local-${String(input.teamId ?? '')}`);
+		if (input.action === 'complete') {
+			const receipt = await coordinator.exchangeRegistrationCredential(connectionId);
+			emit({ ok: true, connectionId, status: receipt.status, teamId: receipt.teamId, providerId: receipt.providerId, membershipId: receipt.membershipId });
+			return;
+		}
+		const enrollmentToken = String(input.enrollmentToken ?? '');
+		const teamId = String(input.teamId ?? '');
+		const loaded = await import('../configuration/manifest.ts').then(({ loadProviderManifest }) => loadProviderManifest(config.manifestPath!));
+		if (!enrollmentToken || !teamId) throw new Error('Provider enrollment requires a team and one-time token.');
+		const receipt = await coordinator.beginJoin({ id: connectionId,
+			...(input.serverProfile ? { serverProfile: String(input.serverProfile) } : { controlPlaneUrl: String(input.controlPlaneUrl ?? '') }),
+			controlPlaneAudience: String(input.controlPlaneAudience ?? input.controlPlaneUrl ?? ''), registrationKeyRef: 'memory://one-time',
+			offer: { maxConcurrentRunners: loaded.manifest.capacity.maxConcurrentWorkers,
+				capabilities: [...new Set(loaded.manifest.adapters.flatMap((adapter) => adapter.capabilities ?? []))],
+				metadata: { manifestGeneration: loaded.manifest.configuration.generation } } }, enrollmentToken);
+		emit({ ok: true, connectionId, status: receipt.status, teamId: receipt.teamId, providerId: receipt.providerId, requestId: receipt.requestId });
 		return;
 	}
 	if (role === 'manager') {

@@ -4,7 +4,7 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { CONTROL_PLANE_OPERATIONS } from '@treeseed/sdk/operator-contracts';
 import { providerOperationPath } from '../../src/provider/coordination/client.ts';
-import { resolveAgentExecutor } from '../../src/provider/execution/executor-loader.ts';
+import { executorModuleSpecifier, resolveAgentExecutor } from '../../src/provider/execution/executor-loader.ts';
 import { resolveProviderConfig } from '../../src/provider/configuration/config.ts';
 import { ensureCapacityProviderIdentity } from '../../src/provider/accounts/identity.ts';
 import { loadProviderManifest, writeProviderConnections } from '../../src/provider/configuration/manifest.ts';
@@ -30,6 +30,11 @@ describe('Agent package ownership boundary', () => {
 		const config = resolveProviderConfig({ env: { TREESEED_PROVIDER_DATA_DIR: '/tmp/provider' } });
 		expect(config.executorModule).toBeNull();
 		await expect(resolveAgentExecutor(config, { id: 'codex', adapter: 'codex', isolation: 'worker', laneIds: ['workday'], maxConcurrentWorkers: 1, nativeLimits: {} })).resolves.toBeNull();
+	});
+
+	it('resolves only reviewed portable executor module identifiers', () => {
+		expect(executorModuleSpecifier('module:codex-chat')).toBe('@treeseed/agent/executors/codex-chat');
+		expect(() => executorModuleSpecifier('module:unknown')).toThrow(/Unknown capacity provider executor module/u);
 	});
 
 	it('creates one fresh private identity in local enrollment custody and reuses it on retry', async () => {

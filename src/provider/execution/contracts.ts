@@ -37,6 +37,7 @@ export interface AgentExecutor {
   observe(): Promise<AgentExecutorObservation>;
   execute(request: AgentExecutionRequest): Promise<AgentExecutionResult>;
   recover?(request: Pick<AgentExecutionRequest, 'assignment' | 'assignmentId' | 'runnerId'>): Promise<AgentExecutionResult | null>;
+  shutdown?(): void | Promise<void>;
 }
 
 export interface AgentExecutorModule {

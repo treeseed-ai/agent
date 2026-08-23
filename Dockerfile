@@ -21,6 +21,9 @@ FROM agent-provider-base AS agent-runtime
 COPY --chown=65532:65532 .treeseed/docker/runtime/shared/package.json .treeseed/docker/runtime/shared/package-lock.json ./
 COPY --chown=65532:65532 .treeseed/docker/runtime/shared/node_modules ./node_modules
 
+RUN test -x /app/node_modules/@openai/codex/bin/codex.js \
+	&& ln -s /app/node_modules/@openai/codex/bin/codex.js /usr/local/bin/codex
+
 FROM agent-runtime AS agent-manager
 ENV TREESEED_PROVIDER_ROLE=manager
 CMD ["manager"]

@@ -34,4 +34,18 @@ describe('Agent RC publication', () => {
 		expect(builder).not.toContain("packageName.startsWith('@treeseed/')");
 		expect(readFileSync('Dockerfile', 'utf8')).toContain('FROM node:24-alpine');
 	});
+
+	it('ships an exact Codex runtime with manager-controlled credential custody', () => {
+		const packageJson = JSON.parse(readFileSync('package.json', 'utf8')) as { dependencies: Record<string, string> };
+		const dockerfile = readFileSync('Dockerfile', 'utf8');
+		const entrypoint = readFileSync('docker-entrypoint.sh', 'utf8');
+		const compose = readFileSync('deploy/compose.template.yml', 'utf8');
+		const workflow = readFileSync('.github/workflows/publish.yml', 'utf8');
+		expect(packageJson.dependencies['@openai/codex']).toBe('0.149.0');
+		expect(dockerfile).toContain('/app/node_modules/@openai/codex/bin/codex.js');
+		expect(entrypoint).toContain('Codex authentication source must be a regular, non-symlink file.');
+		expect(compose).toContain('/etc/treeseed/credentials/agent-codex-auth');
+		expect(compose).toContain('TREESEED_CODEX_AUTH_FILE: /data/credentials/codex-auth.json');
+		expect(workflow).toContain('codex-cli 0.149.0');
+	});
 });

@@ -10,7 +10,10 @@ services:
       TREESEED_PROVIDER_ENVIRONMENT: managed
       TREESEED_SERVER_PROFILE_LOCAL_URL: ${TREESEED_API_INTERNAL_URL:-http://api:3002}
       TREESEED_SERVER_PROFILE_LOCAL_AUDIENCE: ${TREESEED_API_AUDIENCE:-https://api.treeseed.localhost}
-      TREESEED_AGENT_EXECUTOR_MODULE: ${TREESEED_AGENT_EXECUTOR_MODULE:-}
+      TREESEED_AGENT_EXECUTOR_MODULE: ${TREESEED_AGENT_EXECUTOR_MODULE:-module:codex-chat}
+      TREESEED_CODEX_EXECUTABLE: /usr/local/bin/codex
+      TREESEED_CODEX_AUTH_SOURCE: /run/treeseed-secrets/codex-auth.json
+      TREESEED_CODEX_AUTH_FILE: /data/credentials/codex-auth.json
       TREESEED_PROVIDER_MAX_CONCURRENT_WORKDAYS: ${TREESEED_PROVIDER_MAX_CONCURRENT_WORKDAYS:-1}
       TREESEED_PROVIDER_MAX_CONCURRENT_RUNNERS: ${TREESEED_PROVIDER_MAX_CONCURRENT_RUNNERS:-1}
     volumes: &provider-volumes
@@ -20,6 +23,10 @@ services:
       - type: bind
         source: /etc/treeseed/components/agent/treeseed.capacity-provider.yaml
         target: /config/treeseed.capacity-provider.yaml
+        read_only: true
+      - type: bind
+        source: /etc/treeseed/credentials/agent-codex-auth
+        target: /run/treeseed-secrets/codex-auth.json
         read_only: true
     networks: [private, platform]
     healthcheck:

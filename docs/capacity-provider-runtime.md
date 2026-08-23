@@ -13,6 +13,8 @@ The package does not host an API, persist control-plane records, synthesize work
 
 Model/runtime implementation is injected through `TREESEED_AGENT_EXECUTOR_MODULE`. The module must export `createAgentExecutor()` and implement the package's `AgentExecutor` contract. Without a configured and healthy executor, the manager advertises no executable capacity and the runner does not request work.
 
+The published manager and runner images include the exact Codex CLI version declared by the package lock. The managed production bundle defaults to the built-in `module:codex-chat` executor and accepts the Codex login cache only from the root-owned `/etc/treeseed/credentials/agent-codex-auth` host file. The root entrypoint validates that mount, copies it with mode `0600` into manager-owned provider state, and drops privileges before starting Node. Each assignment then uses an isolated temporary `CODEX_HOME` and deletes it after execution. Credentials must never be baked into an image, supplied through an environment variable, or committed to a repository.
+
 The executor receives only an API-issued assignment, lease identity, runner identity, and cancellation signal. Repository, TreeDX, model, and provider credentials must arrive through trusted provider receipts or host custody; they do not belong in agent definitions or source worktrees.
 
 ## Local profile

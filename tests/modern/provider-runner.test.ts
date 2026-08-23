@@ -15,6 +15,8 @@ function client() {
 	};
 }
 
+const treeDx = { projectId: 'project-1', repositoryId: null, workspaceId: null, invoke: vi.fn() };
+
 describe('catalog-driven provider assignment runner', () => {
 	it('records start, usage, closeout, preflight, and completion in order', async () => {
 		const api = client();
@@ -32,6 +34,7 @@ describe('catalog-driven provider assignment runner', () => {
 			client: api,
 			executor,
 			assignment: { id: 'assignment-1' },
+			treeDx,
 			leaseToken: 'lease',
 			runnerId: 'runner',
 		});
@@ -60,6 +63,7 @@ describe('catalog-driven provider assignment runner', () => {
 			client: api,
 			executor,
 			assignment: { id: 'assignment-renew' },
+			treeDx,
 			leaseToken: 'lease',
 			runnerId: 'runner',
 			renewalIntervalMs: 5,
@@ -81,6 +85,7 @@ describe('catalog-driven provider assignment runner', () => {
 			client: api,
 			executor,
 			assignment: { id: 'assignment-2' },
+			treeDx,
 			leaseToken: 'lease',
 			runnerId: 'runner',
 		});
@@ -89,5 +94,44 @@ describe('catalog-driven provider assignment runner', () => {
 			retryable: true,
 		}));
 		expect(api.completeAssignment).not.toHaveBeenCalled();
+	});
+
+	it('cancels executor and TreeDX proxy work when lease renewal fails', async () => {
+		const api = client();
+		api.renewAssignment.mockRejectedValueOnce(new Error('lease expired'));
+		let executorSignal: AbortSignal | undefined;
+		let proxySignal: AbortSignal | undefined;
+		const scopedTreeDx = { ...treeDx, invoke: vi.fn(async (_operationId, _input, options) => { proxySignal = options?.signal; return {}; }) };
+		const executor: AgentExecutor = {
+			id: 'fake', observe: async () => ({ available: true }),
+			execute: async (request) => {
+				executorSignal = request.signal;
+				await request.treeDx.invoke('treedx.health.show', {});
+				await new Promise<void>((resolve) => request.signal?.addEventListener('abort', () => resolve(), { once: true }));
+				return { status: 'returned', summary: 'cancelled' };
+			},
+		};
+		await runProviderAssignment({ client: api, executor, treeDx: scopedTreeDx, assignment: { id: 'assignment-expired' },
+			leaseToken: 'lease', runnerId: 'runner', renewalIntervalMs: 1 });
+		expect(executorSignal?.aborted).toBe(true);
+		expect(proxySignal).toBe(executorSignal);
+		expect(api.returnAssignment).toHaveBeenCalledWith('assignment-expired', expect.objectContaining({ code: 'assignment_lease_renewal_failed' }));
+	});
+
+	it('keeps proxy-handle credentials out of executor-visible assignment data', async () => {
+		const api = client();
+		let visibleAssignment: Record<string, unknown> | undefined;
+		const executor: AgentExecutor = {
+			id: 'fake', observe: async () => ({ available: true }),
+			execute: async (request) => {
+				visibleAssignment = request.assignment;
+				return { status: 'completed', summary: 'done' };
+			},
+		};
+		await runProviderAssignment({ client: api, executor, treeDx, leaseToken: 'lease', runnerId: 'runner', assignment: {
+			id: 'assignment-private-handle', treedxProxyHandle: { id: 'handle-1', token: 'secret' },
+			workspaceContext: { label: 'workspace', treedxProxyHandle: { id: 'handle-2', token: 'nested-secret' } },
+		} });
+		expect(visibleAssignment).toEqual({ id: 'assignment-private-handle', workspaceContext: { label: 'workspace' } });
 	});
 });

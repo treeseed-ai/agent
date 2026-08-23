@@ -4,6 +4,7 @@ export type {
 	AgentExecutor,
 	AgentExecutorModule,
 	AgentExecutorObservation,
+	AssignmentTreeDxFacade,
 } from './provider/execution/contracts.ts';
 export { resolveAgentExecutor } from './provider/execution/executor-loader.ts';
 export { runProviderAssignment, type ProviderAssignmentRunInput } from './provider/operations/runner.ts';

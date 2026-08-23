@@ -15,8 +15,9 @@ export interface AgentExecutionRequest {
 }
 
 export interface AgentExecutionResult {
-  status: 'completed' | 'failed' | 'returned';
+  status: 'completed' | 'failed' | 'returned' | 'responded';
   summary: string;
+	responseMarkdown?: string;
   retryable?: boolean;
   code?: string;
   outputs?: Record<string, unknown>;

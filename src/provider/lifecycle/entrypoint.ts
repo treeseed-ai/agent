@@ -159,6 +159,11 @@ async function main() {
 		const teamId = String(input.teamId ?? '');
 		const loaded = await import('../configuration/manifest.ts').then(({ loadProviderManifest }) => loadProviderManifest(config.manifestPath!));
 		if (!enrollmentToken || !teamId) throw new Error('Provider enrollment requires a team and one-time token.');
+		await import('../accounts/identity.ts').then(({ ensureCapacityProviderIdentity }) => ensureCapacityProviderIdentity({
+			ref: loaded.manifest.identity.privateKeyRef,
+			baseDirectory: loaded.directory,
+			dataDirectory: config.dataDir,
+		}));
 		const receipt = await coordinator.beginJoin({ id: connectionId,
 			...(input.serverProfile ? { serverProfile: String(input.serverProfile) } : { controlPlaneUrl: String(input.controlPlaneUrl ?? '') }),
 			controlPlaneAudience: String(input.controlPlaneAudience ?? input.controlPlaneUrl ?? ''), registrationKeyRef: 'memory://one-time',

@@ -46,6 +46,22 @@ export async function initializeCapacityProviderIdentity(input: { ref: string; b
 	return privateJwk;
 }
 
+export async function ensureCapacityProviderIdentity(input: {
+	ref: string;
+	baseDirectory: string;
+	dataDirectory?: string;
+	env?: NodeJS.ProcessEnv;
+	resolver?: ProviderSecretResolver;
+}) {
+	try {
+		return await loadCapacityProviderIdentity(input);
+	} catch (error) {
+		if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+		await initializeCapacityProviderIdentity(input);
+		return loadCapacityProviderIdentity(input);
+	}
+}
+
 export async function loadCapacityProviderIdentity(input: {
 	ref: string;
 	baseDirectory: string;

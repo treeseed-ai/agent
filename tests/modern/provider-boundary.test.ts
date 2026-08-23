@@ -1,10 +1,12 @@
-import { readFileSync, readdirSync } from 'node:fs';
+import { mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { CONTROL_PLANE_OPERATIONS } from '@treeseed/sdk/operator-contracts';
 import { providerOperationPath } from '../../src/provider/coordination/client.ts';
 import { resolveAgentExecutor } from '../../src/provider/execution/executor-loader.ts';
 import { resolveProviderConfig } from '../../src/provider/configuration/config.ts';
+import { ensureCapacityProviderIdentity } from '../../src/provider/accounts/identity.ts';
 
 function sourceFiles(root: string): string[] {
 	return readdirSync(root, { withFileTypes: true }).flatMap((entry) => {
@@ -25,6 +27,22 @@ describe('Agent package ownership boundary', () => {
 		const config = resolveProviderConfig({ env: { TREESEED_PROVIDER_DATA_DIR: '/tmp/provider' } });
 		expect(config.executorModule).toBeNull();
 		await expect(resolveAgentExecutor(config, { id: 'codex', adapter: 'codex', isolation: 'worker', laneIds: ['workday'], maxConcurrentWorkers: 1, nativeLimits: {} })).resolves.toBeNull();
+	});
+
+	it('creates one fresh private identity in local enrollment custody and reuses it on retry', async () => {
+		const dataDirectory = mkdtempSync(resolve(tmpdir(), 'treeseed-provider-identity-'));
+		try {
+			const input = { ref: 'data://identity-v3.json', baseDirectory: dataDirectory, dataDirectory };
+			const first = await ensureCapacityProviderIdentity(input);
+			const second = await ensureCapacityProviderIdentity(input);
+			expect(second.publicJwk).toEqual(first.publicJwk);
+			expect(statSync(resolve(dataDirectory, 'identity-v3.json')).mode & 0o777).toBe(0o600);
+			const stored = JSON.parse(readFileSync(resolve(dataDirectory, 'identity-v3.json'), 'utf8')) as { d?: string; x?: string };
+			expect(stored.x).toBe(first.publicJwk.x);
+			expect(typeof stored.d).toBe('string');
+		} finally {
+			rmSync(dataDirectory, { recursive: true, force: true });
+		}
 	});
 
 	it('contains no raw control-plane paths or removed Market/API runtime terms', () => {

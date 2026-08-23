@@ -1,8 +1,16 @@
+export interface AssignmentTreeDxFacade {
+  readonly projectId: string;
+  readonly repositoryId: string | null;
+  readonly workspaceId: string | null;
+  invoke(operationId: string, input: Record<string, unknown>, options?: { signal?: AbortSignal; idempotencyKey?: string }): Promise<unknown>;
+}
+
 export interface AgentExecutionRequest {
   assignment: Record<string, unknown>;
   assignmentId: string;
   leaseToken: string;
   runnerId: string;
+  treeDx: AssignmentTreeDxFacade;
   signal?: AbortSignal;
 }
 

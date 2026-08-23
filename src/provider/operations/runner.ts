@@ -1,8 +1,19 @@
 import type { ProviderProtocolClient } from '@treeseed/sdk/capacity-provider';
-import type { AgentExecutor, AgentExecutionResult } from '../execution/contracts.ts';
+import type { AgentExecutor, AgentExecutionResult, AssignmentTreeDxFacade } from '../execution/contracts.ts';
 
 function record(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function executorAssignment(assignment: Record<string, unknown>) {
+	const visible = { ...assignment };
+	delete visible.treedxProxyHandle;
+	if (visible.workspaceContext && typeof visible.workspaceContext === 'object' && !Array.isArray(visible.workspaceContext)) {
+		const workspaceContext = { ...visible.workspaceContext as Record<string, unknown> };
+		delete workspaceContext.treedxProxyHandle;
+		visible.workspaceContext = workspaceContext;
+	}
+	return visible;
 }
 
 function text(...values: unknown[]) {
@@ -15,6 +26,7 @@ export interface ProviderAssignmentRunInput {
   assignment: Record<string, unknown>;
   leaseToken: string;
   runnerId: string;
+  treeDx: AssignmentTreeDxFacade;
   leaseSeconds?: number;
   renewalIntervalMs?: number;
   onLeaseRenewed?: (leaseExpiresAt: string) => Promise<void>;
@@ -34,6 +46,17 @@ export async function runProviderAssignment(input: ProviderAssignmentRunInput) {
   let result: AgentExecutionResult;
   let stopped = false;
   let renewalFailure: unknown = null;
+	const executionAbort = new AbortController();
+	const abortFromCaller = () => executionAbort.abort(input.signal?.reason);
+	if (input.signal?.aborted) abortFromCaller();
+	else input.signal?.addEventListener('abort', abortFromCaller, { once: true });
+	const treeDx: AssignmentTreeDxFacade = {
+		...input.treeDx,
+		invoke: (operationId, invocation, options = {}) => input.treeDx.invoke(operationId, invocation, {
+			...options,
+			signal: options.signal ? AbortSignal.any([executionAbort.signal, options.signal]) : executionAbort.signal,
+		}),
+	};
   let timer: ReturnType<typeof setTimeout> | null = null;
   let renewalInFlight: Promise<void> | null = null;
   const scheduleRenewal = () => {
@@ -54,19 +77,21 @@ export async function runProviderAssignment(input: ProviderAssignmentRunInput) {
       if (leaseExpiresAt) await input.onLeaseRenewed?.(leaseExpiresAt);
     } catch (error) {
       renewalFailure = error;
+		executionAbort.abort(error);
       return;
     }
     scheduleRenewal();
   };
   scheduleRenewal();
   try {
-    result = await input.executor.execute({ assignment: input.assignment, assignmentId, leaseToken: input.leaseToken, runnerId: input.runnerId, signal: input.signal });
+    result = await input.executor.execute({ assignment: executorAssignment(input.assignment), assignmentId, leaseToken: input.leaseToken, runnerId: input.runnerId, treeDx, signal: executionAbort.signal });
   } catch (error) {
     result = { status: 'failed', code: 'agent_executor_failed', summary: error instanceof Error ? error.message : String(error), retryable: true };
   } finally {
     stopped = true;
     if (timer) clearTimeout(timer);
     await renewalInFlight;
+		input.signal?.removeEventListener('abort', abortFromCaller);
   }
   if (renewalFailure) {
     result = {

@@ -1,6 +1,6 @@
 {
   "name": "@treeseed/agent",
-  "version": "0.13.0-rc.2",
+  "version": "0.13.0-rc.3",
   "description": "Treeseed agent service runtime package.",
   "license": "Apache-2.0",
   "repository": {
@@ -62,8 +62,8 @@
     "test:provider-runtime": "npm run test:modern"
   },
   "dependencies": {
-    "@treeseed/sdk": "0.13.0-rc.18",
-    "esbuild": "0.28.0",
+    "@treeseed/sdk": "0.13.0-rc.19",
+    "esbuild": "0.28.2",
     "typescript": "^5.9.3",
     "yaml": "^2.8.1"
   },

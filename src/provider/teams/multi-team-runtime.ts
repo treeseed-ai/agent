@@ -7,6 +7,7 @@ import { ProviderLocalCapacityStore } from '../capacity/capacity-core/local-capa
 import { publishProviderAvailability, buildProviderRunnerPlan } from '../lifecycle/lifecycle.ts';
 import { resolveAgentExecutor } from '../execution/executor-loader.ts';
 import { runProviderAssignment } from '../operations/runner.ts';
+import { createAssignmentTreeDxFacade } from '../coordination/assignment-treedx.ts';
 
 function record(value: unknown): Record<string, unknown> {
 	return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -153,10 +154,12 @@ export async function runMultiTeamProviderRunners(
 				dispatchEnvelope: leased,
 			});
 			await localState.claimDispatch([connection.connection.id]);
+			const treeDx = await createAssignmentTreeDxFacade(runtime, assignment);
 			const terminal = await runProviderAssignment({
 				client,
 				executor,
 				assignment,
+				treeDx,
 				leaseToken,
 				runnerId: claim.runnerId,
 				leaseSeconds: 300,

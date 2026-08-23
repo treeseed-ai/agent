@@ -40,7 +40,7 @@ function context(
 
 export async function createCapacityProviderCoordinator(config: ProviderHostRuntimeConfig) {
 	if (!config.manifestPath) throw new Error('A capacity provider manifest is required.');
-	return new CapacityProviderCoordinator(await loadProviderManifest(config.manifestPath), config.dataDir);
+	return new CapacityProviderCoordinator(await loadProviderManifest(config.manifestPath, config.dataDir), config.dataDir);
 }
 
 export async function reconcileProviderConnections(config: ProviderHostRuntimeConfig) {
@@ -56,7 +56,7 @@ export async function runMultiTeamProviderManager(
 	config: ProviderHostRuntimeConfig,
 	options: { mode?: 'plan' | 'live' } = {},
 ) {
-	const loaded = await loadProviderManifest(config.manifestPath ?? '');
+	const loaded = await loadProviderManifest(config.manifestPath ?? '', config.dataDir);
 	if (options.mode === 'plan') {
 		return {
 			ok: true,
@@ -110,7 +110,7 @@ export async function runMultiTeamProviderRunners(
 	options: { mode?: 'plan' | 'live'; background?: boolean } = {},
 ) {
 	if (options.mode === 'plan') return buildProviderRunnerPlan(config);
-	const loaded = await loadProviderManifest(config.manifestPath ?? '');
+	const loaded = await loadProviderManifest(config.manifestPath ?? '', config.dataDir);
 	const connections = (await reconcileProviderConnections(config)).flatMap((entry) => entry.runtime ? [entry.runtime] : []);
 	const localState = new ProviderLocalCapacityStore(config.dataDir);
 	const results: Record<string, unknown>[] = [];

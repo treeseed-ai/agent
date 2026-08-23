@@ -24,7 +24,7 @@ import {
 	removeProviderSecret,
 	resolveProviderSecret,
 	stageProviderSecret,
-	writeProviderManifest,
+	writeProviderConnections,
 	writeProviderSecret,
 	type LoadedProviderManifest,
 	type ProviderSecretResolver,
@@ -194,7 +194,7 @@ export class CapacityProviderCoordinator {
 		const mutation = this.manifestMutation.then(async () => {
 			const connections = [...this.loaded.manifest.connections.filter((entry) => entry.id !== connection.id), connection]
 				.sort((left, right) => left.id.localeCompare(right.id));
-			await writeProviderManifest(this.loaded, { ...this.loaded.manifest, connections });
+			await writeProviderConnections(this.loaded, connections);
 		});
 		this.manifestMutation = mutation.catch(() => undefined);
 		await mutation;
@@ -295,7 +295,7 @@ export class CapacityProviderCoordinator {
 			remoteError = error instanceof Error ? error.message : String(error);
 		}
 		const connections = this.loaded.manifest.connections.filter((entry) => entry.id !== connectionId);
-		await writeProviderManifest(this.loaded, { ...this.loaded.manifest, connections });
+		await writeProviderConnections(this.loaded, connections);
 		await removeProviderConnectionState(this.dataDir, connectionId);
 		if (state?.generatedCredentialRef) await removeProviderSecret(state.generatedCredentialRef, this.loaded.directory, this.dataDir);
 		await this.localState.removeToken(connectionId);

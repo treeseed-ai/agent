@@ -13,6 +13,7 @@ export const DEFAULT_PROVIDER_MANIFEST = 'treeseed.capacity-provider.yaml';
 export interface LoadedProviderManifest {
 	path: string;
 	directory: string;
+	dataDirectory?: string;
 	manifest: CapacityProviderManifestV3;
 }
 
@@ -24,22 +25,42 @@ function diagnosticMessage(diagnostics: Array<{ path: string; message: string }>
 	return diagnostics.map((entry) => `${entry.path}: ${entry.message}`).join('; ');
 }
 
-export async function loadProviderManifest(path = process.env.TREESEED_CAPACITY_PROVIDER_MANIFEST || DEFAULT_PROVIDER_MANIFEST): Promise<LoadedProviderManifest> {
-	const absolute = resolve(path);
-	const parsed = parseYaml(await readFile(absolute, 'utf8')) as CapacityProviderManifestV3;
-	const validation = validateCapacityProviderManifestV3(parsed);
-	if (!validation.ok) throw new Error(`Invalid capacity provider manifest: ${diagnosticMessage(validation.diagnostics)}`);
-	return { path: absolute, directory: dirname(absolute), manifest: parsed };
+const connectionOverlayPath = (dataDirectory: string) => resolve(dataDirectory, 'connections.yaml');
+
+async function localConnections(dataDirectory: string | undefined) {
+	if (!dataDirectory) return null;
+	try {
+		const value = parseYaml(await readFile(connectionOverlayPath(dataDirectory), 'utf8'));
+		if (!Array.isArray(value)) throw new Error('Provider connection overlay must contain an array.');
+		return value as ProviderConnectionConfig[];
+	} catch (error) {
+		if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null;
+		throw error;
+	}
 }
 
-export async function writeProviderManifest(loaded: LoadedProviderManifest, manifest: CapacityProviderManifestV3) {
+export async function loadProviderManifest(path = process.env.TREESEED_CAPACITY_PROVIDER_MANIFEST || DEFAULT_PROVIDER_MANIFEST, dataDirectory?: string): Promise<LoadedProviderManifest> {
+	const absolute = resolve(path);
+	const parsed = parseYaml(await readFile(absolute, 'utf8')) as CapacityProviderManifestV3;
+	const overlay = await localConnections(dataDirectory);
+	const manifest = overlay ? { ...parsed, connections: overlay } : parsed;
 	const validation = validateCapacityProviderManifestV3(manifest);
 	if (!validation.ok) throw new Error(`Invalid capacity provider manifest: ${diagnosticMessage(validation.diagnostics)}`);
-	const temporary = `${loaded.path}.${process.pid}.${Date.now()}.tmp`;
-	await writeFile(temporary, stringifyYaml(manifest), { encoding: 'utf8', mode: 0o600, flag: 'wx' });
+	return { path: absolute, directory: dirname(absolute), ...(dataDirectory ? { dataDirectory } : {}), manifest };
+}
+
+export async function writeProviderConnections(loaded: LoadedProviderManifest, connections: ProviderConnectionConfig[]) {
+	if (!loaded.dataDirectory) throw new Error('Provider connection updates require a local data directory.');
+	const manifest = { ...loaded.manifest, connections };
+	const validation = validateCapacityProviderManifestV3(manifest);
+	if (!validation.ok) throw new Error(`Invalid capacity provider manifest: ${diagnosticMessage(validation.diagnostics)}`);
+	const path = connectionOverlayPath(loaded.dataDirectory);
+	await mkdir(dirname(path), { recursive: true, mode: 0o700 });
+	const temporary = `${path}.${process.pid}.${Date.now()}.tmp`;
+	await writeFile(temporary, stringifyYaml(connections), { encoding: 'utf8', mode: 0o600, flag: 'wx' });
 	await chmod(temporary, 0o600);
-	await rename(temporary, loaded.path);
-	await chmod(loaded.path, 0o600);
+	await rename(temporary, path);
+	await chmod(path, 0o600);
 	loaded.manifest = manifest;
 	return loaded;
 }

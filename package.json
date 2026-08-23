@@ -62,7 +62,7 @@
     "test:provider-runtime": "npm run test:modern"
   },
   "dependencies": {
-    "@treeseed/sdk": "0.13.0-rc.23",
+    "@treeseed/sdk": "0.13.0-rc.24",
     "esbuild": "0.28.2",
     "typescript": "^5.9.3",
     "yaml": "^2.8.1"

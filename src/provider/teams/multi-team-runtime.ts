@@ -80,7 +80,9 @@ export async function runMultiTeamProviderManager(
 		const adapters = await Promise.all(loaded.manifest.adapters.map(async (adapter) => {
 			const executor = await resolveAgentExecutor(config, adapter, loaded.manifest).catch(() => null);
 			const observation = executor
-				? await executor.observe().catch((error) => ({ available: false, reason: error instanceof Error ? error.message : String(error) }))
+				? await executor.observe()
+					.catch((error) => ({ available: false, reason: error instanceof Error ? error.message : String(error) }))
+					.finally(() => executor.shutdown?.())
 				: { available: false, reason: 'executor_not_configured' };
 			return {
 				id: adapter.id,

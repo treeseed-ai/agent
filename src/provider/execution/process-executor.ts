@@ -63,7 +63,7 @@ export function createProcessIsolatedExecutor(config: ProviderHostRuntimeConfig,
 		id: adapter.id,
 		observe: () => invoke<AgentExecutorObservation>('observe'),
 		execute: (request: AgentExecutionRequest) => invoke<AgentExecutionResult>('execute', request),
-		shutdown: () => child.kill('SIGTERM'),
+		shutdown: () => { child.kill('SIGTERM'); },
 	};
 	return proxy;
 }

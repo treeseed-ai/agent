@@ -50,8 +50,12 @@ describe('Agent RC publication', () => {
 		expect(packageJson.dependencies['@openai/codex']).toBe('0.149.0');
 		expect(dockerfile).toContain('/app/node_modules/@openai/codex/bin/codex.js');
 		expect(entrypoint).toContain('Codex authentication source must be a regular, non-symlink file.');
+		expect(entrypoint).toContain('Capacity-provider manifest source must be a regular, non-symlink file.');
+		expect(entrypoint).toContain('export TREESEED_CAPACITY_PROVIDER_MANIFEST="$MANIFEST_FILE"');
 		expect(entrypoint).toContain('[ "${1:-}" = "healthcheck" ]');
 		expect(compose).toContain('/etc/treeseed/credentials/agent-codex-auth');
+		expect(compose).toContain('TREESEED_CAPACITY_PROVIDER_SOURCE: /config/treeseed.capacity-provider.yaml');
+		expect(compose).toContain('TREESEED_CAPACITY_PROVIDER_MANIFEST: /data/config/treeseed.capacity-provider.yaml');
 		expect(compose).toContain('TREESEED_CODEX_AUTH_FILE: /data/credentials/codex-auth.json');
 		expect(workflow).toContain('codex-cli 0.149.0');
 	});

@@ -1,4 +1,4 @@
-import { mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, rename, unlink, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import type { ProviderSupplyOffer } from '@treeseed/sdk/capacity-provider/contracts';
 
@@ -42,6 +42,18 @@ export async function writeProviderConnectionState(dataDir: string, state: Provi
 	await writeFile(temporary, `${JSON.stringify(state, null, 2)}\n`, { encoding: 'utf8', mode: 0o600, flag: 'wx' });
 	await rename(temporary, path);
 	return state;
+}
+
+export async function listProviderConnectionStates(dataDir: string) {
+	const directory = resolve(dataDir, 'connections');
+	let names: string[];
+	try { names = await readdir(directory); }
+	catch (error) {
+		if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
+		throw error;
+	}
+	const states = await Promise.all(names.filter((name) => /^[a-z0-9_.-]+\.json$/iu.test(name)).sort().map(async (name) => JSON.parse(await readFile(resolve(directory, name), 'utf8')) as ProviderConnectionState));
+	return states.filter((state) => state.schemaVersion === 1 && typeof state.connectionId === 'string' && typeof state.registrationRequestId === 'string');
 }
 
 export async function removeProviderConnectionState(dataDir: string, connectionId: string) {

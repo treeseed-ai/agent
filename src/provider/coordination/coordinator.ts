@@ -11,6 +11,7 @@ import { CONTROL_PLANE_OPERATIONS } from '@treeseed/sdk/operator-contracts';
 import { providerOperationPath } from './client.ts';
 import {
 	generatedMembershipCredentialRef,
+	listProviderConnectionStates,
 	removeProviderConnectionState,
 	readProviderConnectionState,
 	writeProviderConnectionState,
@@ -262,7 +263,15 @@ export class CapacityProviderCoordinator {
 	}
 
 	async reconcileAll() {
-		return Promise.all(this.loaded.manifest.connections.map(async (connection) => {
+		const configured = new Set(this.loaded.manifest.connections.map((connection) => connection.id));
+		const pending = (await listProviderConnectionStates(this.dataDir)).filter((state) => !configured.has(state.connectionId));
+		const pendingResults = await Promise.all(pending.map(async (state) => {
+			try { return await this.exchangeRegistrationCredential(state.connectionId); }
+			catch (error) {
+				return { connectionId: state.connectionId, status: 'error' as const, teamId: state.teamId ?? null, providerId: state.providerId ?? null, membershipId: state.membershipId ?? null, requestId: state.registrationRequestId ?? null, error: error instanceof Error ? error.message : String(error) };
+			}
+		}));
+		const configuredResults = await Promise.all(this.loaded.manifest.connections.map(async (connection) => {
 			try {
 				return await this.reconcileConnection(connection);
 			} catch (error) {
@@ -276,6 +285,7 @@ export class CapacityProviderCoordinator {
 				};
 			}
 		}));
+		return [...pendingResults, ...configuredResults].sort((left, right) => left.connectionId.localeCompare(right.connectionId));
 	}
 
 	async leaveConnection(connectionId: string) {

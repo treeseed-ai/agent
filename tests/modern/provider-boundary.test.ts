@@ -7,6 +7,7 @@ import { providerOperationPath } from '../../src/provider/coordination/client.ts
 import { executorModuleSpecifier, resolveAgentExecutor } from '../../src/provider/execution/executor-loader.ts';
 import { resolveProviderConfig } from '../../src/provider/configuration/config.ts';
 import { ensureCapacityProviderIdentity } from '../../src/provider/accounts/identity.ts';
+import { listProviderConnectionStates, writeProviderConnectionState } from '../../src/provider/coordination/connection-state.ts';
 import { loadProviderManifest, writeProviderConnections } from '../../src/provider/configuration/manifest.ts';
 import { buildProviderPlan, providerAvailabilityCapabilities } from '../../src/provider/lifecycle/lifecycle.ts';
 import { stringify as stringifyYaml } from 'yaml';
@@ -90,6 +91,14 @@ describe('Agent package ownership boundary', () => {
 		} finally {
 			rmSync(root, { recursive: true, force: true });
 		}
+	});
+
+	it('discovers durable pending registrations for automatic approval polling', async () => {
+		const root = mkdtempSync(resolve(tmpdir(), 'treeseed-provider-pending-'));
+		try {
+			await writeProviderConnectionState(root, { schemaVersion: 1, connectionId: 'primary', controlPlaneUrl: 'https://api.example.test', controlPlaneAudience: 'https://api.example.test', offer: { maxConcurrentRunners: 1, capabilities: ['communication'] }, registrationRequestId: 'request-1', registrationStatus: 'pending', updatedAt: new Date().toISOString() });
+			expect((await listProviderConnectionStates(root)).map((state) => state.connectionId)).toEqual(['primary']);
+		} finally { rmSync(root, { recursive: true, force: true }); }
 	});
 
 	it('contains no raw control-plane paths or removed Market/API runtime terms', () => {

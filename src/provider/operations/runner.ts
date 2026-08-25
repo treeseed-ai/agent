@@ -102,10 +102,10 @@ export async function runProviderAssignment(input: ProviderAssignmentRunInput) {
     };
   }
   await reportUsage(input, assignmentId, result);
-	if (result.status === 'responded') {
-		if (!result.responseMarkdown) throw new Error('Communication executor omitted its durable Markdown response.');
+	if (result.status === 'responded' || result.status === 'abstained') {
+		if (result.status === 'responded' && !result.responseMarkdown) throw new Error('Communication executor omitted its durable Markdown response.');
 		await input.client.respondToAssignmentDiscussion(assignmentId, { leaseToken: input.leaseToken, runnerId: input.runnerId,
-			markdown: result.responseMarkdown, summary: result.summary }, `discussion-response:${assignmentId}:${input.runnerId}`);
+			outcome: result.status, ...(result.responseMarkdown ? { markdown: result.responseMarkdown } : {}), summary: result.summary }, `discussion-response:${assignmentId}:${input.runnerId}`);
 		const usage = record(result.usage?.[0]);
 		await input.client.settleAssignment(assignmentId, { activeSeconds: Number(usage.activeSeconds ?? 0), elapsedSeconds: Number(usage.elapsedSeconds ?? 0),
 			usageDimension: 'aggregate', usageActual: {} }, `discussion-settlement:${assignmentId}:${input.runnerId}`);

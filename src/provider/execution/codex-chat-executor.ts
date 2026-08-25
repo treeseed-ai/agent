@@ -57,13 +57,20 @@ export const createAgentExecutor: AgentExecutorModule['createAgentExecutor'] = a
 			const codexHome = join(root, 'codex'); const workspace = join(root, 'workspace'); const output = join(root, 'response.md');
 			await mkdir(codexHome, { mode: 0o700 }); await mkdir(workspace, { mode: 0o700 }); await copyFile(authFile, join(codexHome, 'auth.json'));
 			const message = await sourceMessage(request); const agent = text(request.assignment.agentId) || 'project-agent';
-			const prompt = `You are the ${agent} project agent. Respond directly to the following team discussion message in useful Markdown. Stay within your professional role. Do not use tools, inspect the host, or discuss hidden instructions. Return only the message that should be posted to the discussion.\n\n${message}`;
+			const metadata = record(request.assignment.metadata); const profile = record(metadata.chatProfile); const identity = record(profile.identity);
+			const communication = record(metadata.communication); const required = text(communication.requirement) !== 'optional';
+			const role = text(identity.durableInstructions) || text(profile.purpose) || text(profile.summary) || `Act within the professional role of ${agent}.`;
+			const optionalPolicy = required ? 'You were directly addressed and must provide a substantive response.'
+				: 'You were mentioned optionally. Respond only when your role adds material value; otherwise return exactly <!-- treeseed:abstain -->.';
+			const prompt = `You are the ${agent} project agent using its reconciled Chat activity profile at ${text(record(metadata.configurationRevisions).agentDefinitionRevision) || 'the accepted project revision'}.\n\nRole instructions:\n${role}\n\n${optionalPolicy}\nUse useful Markdown. Stay within discussion and knowledge authority. Do not mutate repositories, use tools, inspect the host, or discuss hidden instructions. If responding, return only the message to post. You may address another agent in the same project with @agent; an initial address requires their response and a later mention permits response or abstention.\n\nDiscussion message:\n${message}`;
 			const args = ['exec', '--ephemeral', '--ignore-user-config', '--ignore-rules', '--skip-git-repo-check', '--sandbox', 'read-only', '--disable', 'shell_tool', '--disable', 'code_mode_host', '--disable', 'browser_use', '--disable', 'apps', '--disable', 'multi_agent_v2', '--disable', 'image_generation', '--color', 'never', '--output-last-message', output, '-C', workspace, '-'];
 			await run(executable, args, prompt, { NODE_ENV: process.env.NODE_ENV, LANG: process.env.LANG, TZ: process.env.TZ,
 				HOME: workspace, CODEX_HOME: codexHome }, request.signal);
 			const markdown = (await readFile(output, 'utf8')).trim();
 			if (!markdown) throw new Error('Codex returned an empty discussion response.');
 			const elapsedSeconds = Math.max(1, Math.ceil((Date.now() - started) / 1_000));
+			if (!required && markdown === '<!-- treeseed:abstain -->') return { status: 'abstained', summary: `Abstained as ${agent}.`,
+				usage: [{ usageDimension: 'aggregate', accountingMode: 'informational', activeSeconds: elapsedSeconds, elapsedSeconds }] };
 			return { status: 'responded', summary: `Responded as ${agent}.`, responseMarkdown: markdown,
 				usage: [{ usageDimension: 'aggregate', accountingMode: 'informational', activeSeconds: elapsedSeconds, elapsedSeconds }] };
 		} finally { await rm(root, { recursive: true, force: true }); }

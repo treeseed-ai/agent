@@ -9,7 +9,8 @@ services:
     restart: unless-stopped
     extra_hosts: ["host.docker.internal:host-gateway"]
     environment: &provider-environment
-      TREESEED_CAPACITY_PROVIDER_MANIFEST: /config/treeseed.capacity-provider.yaml
+      TREESEED_CAPACITY_PROVIDER_SOURCE: /config/treeseed.capacity-provider.yaml
+      TREESEED_CAPACITY_PROVIDER_MANIFEST: /data/config/treeseed.capacity-provider.yaml
       TREESEED_PROVIDER_DATA_DIR: /data
       TREESEED_PROVIDER_ENVIRONMENT: ${TREESEED_PROVIDER_ENVIRONMENT:-local}
       TREESEED_PROVIDER_SOURCE_CLOSURE_DIGEST: ${TREESEED_PROVIDER_SOURCE_CLOSURE_DIGEST:-}

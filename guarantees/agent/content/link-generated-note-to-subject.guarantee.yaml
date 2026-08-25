@@ -7,7 +7,7 @@ journey: Link Generated Note To Subject
 ownerPackage: "@treeseed/agent"
 surface: agent-runtime
 summary: "Agent runtime keeps the Link Generated Note To Subject contract verifiable through active local evidence."
-status: active
+status: planned
 dependencies:
   journeys:
     - 60
@@ -58,4 +58,3 @@ evidence:
     - verifier_evidence
 notes:
   - "Agent runtime guarantee for Link Generated Note To Subject."
-

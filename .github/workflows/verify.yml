@@ -2,7 +2,9 @@ name: Verify TreeSeed Agent
 
 on:
   push:
+    paths-ignore: ["docs/src/content/**"]
   pull_request:
+    paths-ignore: ["docs/src/content/**"]
   workflow_dispatch:
 
 jobs:

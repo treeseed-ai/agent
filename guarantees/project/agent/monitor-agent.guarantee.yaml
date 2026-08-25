@@ -7,12 +7,10 @@ journey: Monitor Agent
 ownerPackage: "@treeseed/agent"
 surface: agent-runtime
 summary: "Verify agent runtime executions, modes, handlers, assignments, outputs, diagnostics, token counts, errors, and forensic traceability."
-status: active
+status: planned
 dependencies:
-  journeys:
-    - 57
-  guarantees:
-    - guarantee.project.agent.create-agent.057
+  journeys: []
+  guarantees: []
 actors:
   allowed:
     - project_manager
@@ -40,6 +38,7 @@ api:
   required: true
   verifierRefs:
     - agent.trace.inspect-execution
+    - agent.trace.deliver-mode-run-telemetry
 content:
   required: true
   verifierRefs:
@@ -48,6 +47,7 @@ audit:
   required: true
   verifierRefs:
     - agent.trace.correlate-assignment-mode-run-artifacts
+    - agent.trace.deliver-mode-run-telemetry
 negativeCases:
   - id: unauthorized-actor-denied
     actor: anonymous_user
@@ -59,4 +59,3 @@ evidence:
     - verifier_evidence
 notes:
   - "Runtime monitoring belongs to the agent package; Admin UI monitoring is represented by guarantee.project.agent.monitor-agent-admin-ui.140."
-

@@ -1,0 +1,34 @@
+schemaVersion: treeseed.guarantee/v2
+id: guarantee.work.workdays.publish-a-workday-summary.684
+journeyIndex: 684
+type: work
+subtype: workdays
+journey: Publish a workday summary
+ownerPackage: "@treeseed/agent"
+surface: agent-runtime
+summary: Deprecated placeholder replaced by the canonical truthful reporting outcome guarantee.
+status: deprecated
+capabilityId: legacy.agent.publish-workday-summary
+catalog: agent.legacy
+activation: { minimumConsecutivePasses: 3, requiredVariants: [baseline, clean-repeat, interruption-resume], invalidateOnSourceChange: true }
+proof:
+  requiredCommands: [capacity.workday-summary]
+  minimumRepositoryPostconditions: 0
+  outcomePredicates:
+    legacy.replaced: [legacy.canonical-replacement]
+outcomes:
+  - id: legacy.replaced
+    kind: required
+    description: Consumers use the canonical reporting outcome guarantee instead.
+    evidenceKinds: [catalog_migration]
+supersededBy: guarantee.workday.agent.produce-workday-summary.165
+dependencies: { journeys: [], guarantees: [] }
+actors: { allowed: [capacity_operator], forbidden: [unauthorized_user] }
+devices: { required: [] }
+gates: [backlog]
+preconditions: { fixtures: [] }
+api: { required: false, verifierRefs: [] }
+content: { required: false, verifierRefs: [] }
+audit: { required: false, verifierRefs: [] }
+negativeCases: []
+evidence: { required: [] }

@@ -1,0 +1,56 @@
+schemaVersion: treeseed.guarantee/v1
+id: guarantee.agent.runtime.protect-provider-host-disk.815
+journeyIndex: 815
+type: agent
+subtype: runtime
+journey: Protect Provider Host Disk
+ownerPackage: "@treeseed/agent"
+surface: agent-runtime
+summary: "Provider manager and runner admission preserve a host-disk reserve and expose exact capacity diagnostics instead of leasing work that could exhaust the filesystem."
+status: planned
+dependencies:
+  journeys:
+    - 162
+  guarantees:
+    - guarantee.agent.runtime.report-runtime-readiness.162
+actors:
+  allowed:
+    - capacity_operator
+    - team_owner
+  forbidden:
+    - anonymous_user
+devices:
+  required:
+    - desktop_chromium
+gates:
+  - core
+  - release
+preconditions:
+  fixtures:
+    - integrated_treeseed_project
+  notes:
+    - "Planned until a real bounded workday proves low-disk admission, recovery, evidence preservation, and resumed scheduling."
+scene:
+  required: false
+api:
+  required: true
+  verifierRefs:
+    - agent.runtime.protect-provider-host-disk
+content:
+  required: false
+  verifierRefs: []
+audit:
+  required: true
+  verifierRefs:
+    - agent.runtime.protect-provider-host-disk
+negativeCases:
+  - id: insufficient-disk-denies-new-lease
+    actor: capacity_operator
+    verifierRefs:
+      - agent.runtime.protect-provider-host-disk
+evidence:
+  required:
+    - guarantee_report
+    - verifier_evidence
+notes:
+  - "Cleanup may remove generated Docker closures and bounded cache, but never durable workday, workflow, database, or TreeDX evidence."

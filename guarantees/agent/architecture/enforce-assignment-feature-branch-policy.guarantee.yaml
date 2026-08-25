@@ -7,7 +7,7 @@ journey: Enforce Assignment Feature Branch Policy
 ownerPackage: "@treeseed/agent"
 surface: agent-runtime
 summary: "Engineer and tester acting profiles use assignment-feature branches cut from staging with path restrictions."
-status: active
+status: planned
 actors:
   allowed: [project_manager, capacity_operator, team_owner]
   forbidden: [anonymous_user, unauthorized_user]

@@ -1,6 +1,6 @@
 {
   "name": "@treeseed/agent",
-  "version": "0.12.58",
+  "version": "0.13.0-rc.16",
   "description": "Treeseed agent service runtime package.",
   "license": "Apache-2.0",
   "repository": {
@@ -22,65 +22,13 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
-    "./api": {
-      "types": "./dist/api/index.d.ts",
-      "default": "./dist/api/index.js"
+    "./provider-governance": {
+      "types": "./dist/provider-governance.d.ts",
+      "default": "./dist/provider-governance.js"
     },
-    "./api/app": {
-      "types": "./dist/api/app.d.ts",
-      "default": "./dist/api/app.js"
-    },
-    "./api/auth/d1-provider": {
-      "types": "./dist/api/auth/d1-provider.d.ts",
-      "default": "./dist/api/auth/d1-provider.js"
-    },
-    "./services/manager": {
-      "types": "./dist/services/manager.d.ts",
-      "default": "./dist/services/manager.js"
-    },
-    "./services/agents": {
-      "types": "./dist/services/agents.d.ts",
-      "default": "./dist/services/agents.js"
-    },
-    "./services/remote-runner": {
-      "types": "./dist/services/remote-runner.d.ts",
-      "default": "./dist/services/remote-runner.js"
-    },
-    "./services/workday-manager": {
-      "types": "./dist/services/workday-manager.d.ts",
-      "default": "./dist/services/workday-manager.js"
-    },
-    "./services/workday-start": {
-      "types": "./dist/services/workday-start.d.ts",
-      "default": "./dist/services/workday-start.js"
-    },
-    "./services/workday-report": {
-      "types": "./dist/services/workday-report.d.ts",
-      "default": "./dist/services/workday-report.js"
-    },
-    "./services/workday-test": {
-      "types": "./dist/services/workday-test.d.ts",
-      "default": "./dist/services/workday-test.js"
-    },
-    "./services/runtime-readiness": {
-      "types": "./dist/services/runtime-readiness.d.ts",
-      "default": "./dist/services/runtime-readiness.js"
-    },
-    "./runtime-types": {
-      "types": "./dist/agents/runtime-types.d.ts",
-      "default": "./dist/agents/runtime-types.js"
-    },
-    "./cli": {
-      "types": "./dist/agents/cli.d.ts",
-      "default": "./dist/agents/cli.js"
-    },
-    "./contracts/messages": {
-      "types": "./dist/agents/contracts/messages.d.ts",
-      "default": "./dist/agents/contracts/messages.js"
-    },
-    "./contracts/run": {
-      "types": "./dist/agents/contracts/run.d.ts",
-      "default": "./dist/agents/contracts/run.js"
+    "./executors/codex-chat": {
+      "types": "./dist/provider/execution/codex-chat-executor.d.ts",
+      "default": "./dist/provider/execution/codex-chat-executor.js"
     }
   },
   "files": [
@@ -89,9 +37,7 @@
     "Dockerfile",
     "docker-entrypoint.sh",
     "compose.capacity-provider.yml",
-    "treeseed.package.yaml",
-    "docs",
-    "templates"
+    "treeseed.package.yaml"
   ],
   "publishConfig": {
     "access": "public"
@@ -100,54 +46,29 @@
     "setup": "npm install",
     "setup:ci": "npm ci",
     "build": "npm run build:dist",
-    "build:dist": "node --import tsx ./scripts/build-dist.ts",
-    "capacity-provider:build": "node --import tsx ./scripts/build-capacity-provider-container.ts",
-    "capacity-provider:test-local": "node ./dist/scripts/test-capacity-provider-container.js",
-    "capacity-provider:test-local-live-tools": "TREESEED_AGENT_LIVE_TOOLS=1 node ./dist/scripts/test-capacity-provider-live-tools.js",
-    "prepare": "node --import tsx ./scripts/prepare.ts",
-    "dev:manager": "node --import tsx ./src/services/manager.ts",
-    "dev:workday-start": "node --import tsx ./src/services/workday-start.ts",
-    "dev:workday-report": "node --import tsx ./src/services/workday-report.ts",
-    "runtime:readiness": "node --import tsx ./scripts/runtime-readiness.ts",
-    "dev:remote-runner": "node --import tsx ./src/services/remote-runner.ts",
-    "start:manager": "node ./dist/services/manager.js",
-    "start:workday-start": "node ./dist/services/workday-start.js",
-    "start:workday-report": "node ./dist/services/workday-report.js",
-    "start:runtime-readiness": "node ./dist/scripts/runtime-readiness.js",
-    "start:local-manager-cloudflare": "bash ./scripts/run-local-manager-cloudflare.sh",
-    "lint": "npm run build:dist",
-    "test": "npm run test:unit && npm run test:smoke",
-    "test:unit": "vitest run --config ./vitest.config.ts",
-    "test:agent-tools": "vitest run --config ./vitest.config.ts test/agents/agent-tool-*.test.ts test/provider/agent-tool-provider-runtime.test.ts",
-    "test:agent-tools:live": "node --import tsx ./scripts/test-agent-tools-live.ts",
-    "test:agent-tools:live-copilot": "node --import tsx ./scripts/test-agent-tools-live-copilot.ts",
-    "test:capacity-provider-live-codex": "TREESEED_AGENT_LIVE_CODEX=1 node --import tsx ./scripts/test-agent-tools-live.ts",
-    "test:market-knowledge-dogfood": "node --import tsx ./scripts/test-market-knowledge-dogfood.ts",
-    "test:study-knowledge-packs": "node --import tsx ./scripts/run-study-knowledge-pack-scenario.ts",
-    "test:human-machine-providers": "npm --workspace @treeseed/sdk run build:dist && vitest run --config ./vitest.config.ts test/agents/execution-provider-contract.test.ts test/agents/codex-provider.test.ts test/agents/jira-provider.test.ts test/agents/github-issues-provider.test.ts test/agents/discord-provider.test.ts test/agents/workflow-provider.test.ts test/provider/capacity-provider-runtime.test.ts && npm run build:dist && npm run capacity-provider:test-local",
+    "build:dist": "node --import tsx ./scripts/build/build-dist.ts",
+    "check:file-lengths": "node --import tsx ./scripts/support/check-file-lengths.ts && npm run check:file-architecture",
+    "check:file-architecture": "node --import tsx ./scripts/support/check-file-architecture.ts",
+    "capacity-provider:build": "node --import tsx ./scripts/capacity/providers/build-capacity-provider-container.ts",
+    "prepare": "node --import tsx ./scripts/support/prepare.ts",
+    "lint": "npm run check:file-lengths && npm run build:dist",
+    "test": "npm run test:modern",
+    "test:modern": "vitest run --config ./vitest.config.ts",
     "prepack": "npm run build:dist",
-    "test:smoke": "node --import tsx ./scripts/test-smoke.ts",
     "verify:direct": "npm run release:verify",
-    "verify:local": "TREESEED_VERIFY_DRIVER=direct TMPDIR=/tmp node --import tsx ./scripts/verify-driver.ts",
-    "verify:action": "TREESEED_VERIFY_DRIVER=act TMPDIR=/tmp node --import tsx ./scripts/verify-driver.ts",
-    "verify": "TMPDIR=/tmp node --import tsx ./scripts/verify-driver.ts",
+    "verify:local": "TREESEED_VERIFY_DRIVER=direct TMPDIR=/tmp node --import tsx ./scripts/support/verify-driver.ts",
+    "verify:action": "TREESEED_VERIFY_DRIVER=act TMPDIR=/tmp node --import tsx ./scripts/support/verify-driver.ts",
+    "verify": "TMPDIR=/tmp node --import tsx ./scripts/support/verify-driver.ts",
     "release:setup": "npm run setup:ci",
-    "release:check-tag": "node --import tsx ./scripts/assert-release-tag-version.ts",
-    "release:verify": "node --import tsx ./scripts/release-verify.ts",
-    "release:publish": "node --import tsx ./scripts/publish-package.ts",
-    "test:agent-contracts": "vitest run --config ./vitest.config.ts test/agents/agent-contracts.test.ts test/agents/agent-test-catalog.test.ts test/agents/starter-contracts.test.ts",
-    "test:agent-handlers": "vitest run --config ./vitest.config.ts test/agents/agent-contracts.test.ts test/agents/agent-test-catalog.test.ts",
-    "test:agent-message-chains": "vitest run --config ./vitest.config.ts test/agents/message-chain.test.ts",
-    "test:manager-worker": "vitest run --config ./vitest.config.ts test/provider/capacity-provider-runtime.test.ts",
-    "test:capacity-provider-runtime": "vitest run --config ./vitest.config.ts test/provider/capacity-provider-runtime.test.ts",
-    "test:market-docs-governed-mutation": "vitest run --config ./vitest.config.ts test/agents/codex-provider.test.ts"
+    "release:check-tag": "node --import tsx ./scripts/packages/assert-release-tag-version.ts",
+    "release:verify": "npm run check:file-lengths && node --import tsx ./scripts/packages/release-verify.ts",
+    "release:publish": "node --import tsx ./scripts/packages/publish-package.ts",
+    "test:provider-runtime": "npm run test:modern"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.29.0",
-    "@openai/codex-sdk": "^0.130.0",
-    "@treeseed/sdk": "0.12.62",
-    "esbuild": "0.28.0",
-    "hono": "^4.8.2",
+    "@openai/codex": "0.149.0",
+    "@treeseed/sdk": "0.13.0-rc.29",
+    "esbuild": "0.28.2",
     "typescript": "^5.9.3",
     "yaml": "^2.8.1"
   },
@@ -155,9 +76,5 @@
     "@types/node": "^24.6.0",
     "tsx": "^4.21.0",
     "vitest": "^4.1.2"
-  },
-  "bin": {
-    "treeseed-agents": "dist/scripts/treeseed-agents.js",
-    "treeseed-agent-service": "dist/scripts/treeseed-agent-service.js"
   }
 }

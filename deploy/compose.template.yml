@@ -1,0 +1,59 @@
+name: treeseed-agent
+services:
+  manager:
+    image: "@MANAGER_IMAGE@"
+    command: ["manager"]
+    restart: unless-stopped
+    environment: &provider-environment
+      TREESEED_CAPACITY_PROVIDER_SOURCE: /config/treeseed.capacity-provider.yaml
+      TREESEED_CAPACITY_PROVIDER_MANIFEST: /data/config/treeseed.capacity-provider.yaml
+      TREESEED_PROVIDER_DATA_DIR: /data
+      TREESEED_PROVIDER_ENVIRONMENT: managed
+      TREESEED_SERVER_PROFILE_LOCAL_URL: ${TREESEED_CONTROL_PLANE_URL:?TREESEED_CONTROL_PLANE_URL is required}
+      TREESEED_SERVER_PROFILE_LOCAL_AUDIENCE: ${TREESEED_CONTROL_PLANE_AUDIENCE:?TREESEED_CONTROL_PLANE_AUDIENCE is required}
+      TREESEED_AGENT_EXECUTOR_MODULE: ${TREESEED_AGENT_EXECUTOR_MODULE:-module:codex-chat}
+      TREESEED_CODEX_EXECUTABLE: /usr/local/bin/codex
+      TREESEED_CODEX_AUTH_SOURCE: /run/treeseed-secrets/codex-auth.json
+      TREESEED_CODEX_AUTH_FILE: /data/credentials/codex-auth.json
+      TREESEED_PROVIDER_MAX_CONCURRENT_WORKDAYS: ${TREESEED_PROVIDER_MAX_CONCURRENT_WORKDAYS:-1}
+      TREESEED_PROVIDER_MAX_CONCURRENT_RUNNERS: ${TREESEED_PROVIDER_MAX_CONCURRENT_RUNNERS:-1}
+    volumes: &provider-volumes
+      - type: bind
+        source: /var/lib/treeseed/components/agent
+        target: /data
+      - type: bind
+        source: /etc/treeseed/components/agent/treeseed.capacity-provider.yaml
+        target: /config/treeseed.capacity-provider.yaml
+        read_only: true
+      - type: bind
+        source: /etc/treeseed/credentials/agent-codex-auth
+        target: /run/treeseed-secrets/codex-auth.json
+        read_only: true
+    networks: [private, platform]
+    healthcheck:
+      test: ["CMD", "/app/docker-entrypoint.sh", "healthcheck", "--json"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+    security_opt: ["no-new-privileges:true"]
+  runner:
+    image: "@RUNNER_IMAGE@"
+    command: ["runner"]
+    restart: unless-stopped
+    environment: *provider-environment
+    volumes: *provider-volumes
+    networks: [private, platform]
+    healthcheck:
+      test: ["CMD", "/app/docker-entrypoint.sh", "healthcheck", "--json"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+    security_opt: ["no-new-privileges:true"]
+networks:
+  private:
+    internal: true
+  platform:
+    name: treeseed-platform
+    external: true

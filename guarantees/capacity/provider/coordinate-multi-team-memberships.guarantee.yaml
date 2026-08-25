@@ -1,0 +1,56 @@
+schemaVersion: treeseed.guarantee/v1
+id: guarantee.capacity.provider.coordinate-multi-team-memberships.142
+journeyIndex: 142
+type: capacity
+subtype: provider
+journey: Coordinate Multi-Team Provider Memberships
+ownerPackage: "@treeseed/agent"
+surface: agent-runtime
+summary: "One provider identity independently registers with multiple teams, waits for approval, exchanges membership credentials, and isolates a failing team connection from healthy connections."
+status: planned
+dependencies:
+  journeys: []
+  guarantees:
+    - guarantee.capacity.provider.run-membership-admission-workflow.501
+actors:
+  allowed:
+    - capacity_provider
+    - capacity_operator
+    - team_owner
+  forbidden:
+    - anonymous_user
+    - unauthorized_user
+devices:
+  required: []
+gates:
+  - core
+  - release
+preconditions:
+  fixtures:
+    - integrated_treeseed_project
+  notes:
+    - "Uses the manifest-v2 connections array and independent membership credentials."
+scene:
+  required: false
+api:
+  required: true
+  verifierRefs:
+    - agent.provider.coordinate-multi-team-memberships
+content:
+  required: false
+  verifierRefs: []
+audit:
+  required: true
+  verifierRefs:
+    - agent.provider.coordinate-multi-team-memberships
+negativeCases:
+  - id: one-team-failure-is-isolated
+    actor: capacity_provider
+    verifierRefs:
+      - agent.provider.coordinate-multi-team-memberships
+evidence:
+  required:
+    - guarantee_report
+    - verifier_evidence
+notes:
+  - "Registration governance remains API-owned; this guarantee proves provider-local multi-team coordination."

@@ -1,0 +1,46 @@
+schemaVersion: treeseed.guarantee/v2
+id: guarantee.work.agents.recover-a-failed-agent-execution.669
+journeyIndex: 669
+type: work
+subtype: agents
+journey: Prove replay recovery and truthful terminalization
+ownerPackage: "@treeseed/agent"
+surface: agent-runtime
+summary: Every interruption boundary replays to one logical outcome, complete settlement, zero residue, and truthful parent state.
+status: planned
+capabilityId: agent.lifecycle.replay-recovery-and-truthfulness
+catalog: agent.system
+activation: { minimumConsecutivePasses: 3, requiredVariants: [baseline, clean-repeat, interruption-resume], invalidateOnSourceChange: true }
+proof:
+  requiredCommands: [capacity.workday, capacity.workday-summary, capacity.assignment, capacity.audit-events, platform.status]
+  minimumRepositoryPostconditions: 1
+  outcomePredicates:
+    recovery.exactly-once-outcomes: [recovery.claim-once, recovery.lease-once, recovery.mode-run-once, recovery.commit-once, recovery.submission-once, recovery.review-once, recovery.usage-once, recovery.settlement-once, recovery.closure-once]
+    recovery.zero-residue: [recovery.no-lease, recovery.no-reservation, recovery.no-demand, recovery.no-workspace, recovery.no-worktree, recovery.no-unpublished-branch, recovery.no-stale-authority]
+    recovery.truthful-parent: [recovery.failed-child, recovery.failed-or-degraded-parent]
+outcomes:
+  - id: recovery.exactly-once-outcomes
+    kind: required
+    description: Claim, lease, mode-run, commit, submission, review, usage, settlement, and closure interruption produce one logical outcome each.
+    evidenceKinds: [replay_trace, durable_read_back]
+    authoritativeSubjects: [workday, assignment, artifactRef, settlement]
+  - id: recovery.zero-residue
+    kind: required
+    description: No active lease, reservation, demand, workspace, worktree, unpublished branch, or stale authority remains.
+    evidenceKinds: [cleanup]
+    authoritativeSubjects: [workday]
+  - id: recovery.truthful-parent
+    kind: required
+    description: Any failed required child keeps its parent failed or degraded.
+    evidenceKinds: [failure_scenario, workday_read_back]
+    authoritativeSubjects: [workday, failedAssignment]
+dependencies: { journeys: [], guarantees: [guarantee.workday.agent.produce-workday-summary.165] }
+actors: { allowed: [capacity_operator, team_owner], forbidden: [anonymous_user, unauthorized_user] }
+devices: { required: [] }
+gates: [core]
+preconditions: { fixtures: [integrated_treeseed_project] }
+api: { required: true, verifierRefs: [agent.catalog.profile-live-proof] }
+content: { required: true, verifierRefs: [] }
+audit: { required: true, verifierRefs: [] }
+negativeCases: []
+evidence: { required: [verifier_evidence] }

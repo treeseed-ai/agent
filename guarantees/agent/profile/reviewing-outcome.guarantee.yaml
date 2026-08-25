@@ -1,0 +1,46 @@
+schemaVersion: treeseed.guarantee/v2
+id: guarantee.agent.profile.reviewing-outcome.915
+journeyIndex: 915
+type: agent
+subtype: profile
+journey: Prove independent reviewing outcome
+ownerPackage: "@treeseed/agent"
+surface: agent-runtime
+summary: Reviewing consumes the exact plan and checkpoint, produces immutable findings, and cannot mutate the implementation.
+status: planned
+capabilityId: agent.profile.reviewing-outcome
+catalog: agent.system
+activation: { minimumConsecutivePasses: 3, requiredVariants: [baseline, clean-repeat, interruption-resume], invalidateOnSourceChange: true }
+proof:
+  requiredCommands: [capacity.assignment, capacity.assignment-explanation, capacity.workday-summary, platform.status]
+  minimumRepositoryPostconditions: 1
+  outcomePredicates:
+    reviewing.exact-disposition: [reviewing.accepted-plan, reviewing.exact-checkpoint, reviewing.exact-diff, reviewing.verification, reviewing.receipts, reviewing.prior-findings, reviewing.single-disposition]
+    reviewing.independent-read-only: [reviewing.distinct-actor, reviewing.implementation-write-denied]
+    reviewing.approval-stales: [reviewing.later-checkpoint, reviewing.prior-approval-stale]
+outcomes:
+  - id: reviewing.exact-disposition
+    kind: required
+    description: Exact diff, verification, receipts, and prior findings produce immutable findings and exactly one approval or rejection.
+    evidenceKinds: [review_read_back, git_diff, mutation_receipt]
+    authoritativeSubjects: [acceptedPlan, checkpointRef, reviewRef]
+  - id: reviewing.independent-read-only
+    kind: forbidden
+    description: The actor cannot count as reviewer and the reviewer cannot edit the implementation.
+    evidenceKinds: [identity_audit, authority_denial]
+    authoritativeSubjects: [actorAssignment, reviewAssignment]
+  - id: reviewing.approval-stales
+    kind: required
+    description: A later checkpoint automatically stales the prior approval.
+    evidenceKinds: [checkpoint_transition, approval_read_back]
+    authoritativeSubjects: [reviewRef, revisedCheckpointRef]
+dependencies: { journeys: [], guarantees: [guarantee.work.agents.run-an-agent-in-acting-mode.667] }
+actors: { allowed: [capacity_operator, team_owner], forbidden: [anonymous_user, unauthorized_user] }
+devices: { required: [] }
+gates: [core]
+preconditions: { fixtures: [bounded_source_project] }
+api: { required: true, verifierRefs: [agent.catalog.profile-live-proof] }
+content: { required: true, verifierRefs: [] }
+audit: { required: true, verifierRefs: [] }
+negativeCases: []
+evidence: { required: [verifier_evidence] }

@@ -1,0 +1,22 @@
+schemaVersion: treeseed.guarantee/v1
+id: guarantee.work.agents.provide-agent-knowledge-context.665
+journeyIndex: 665
+type: work
+subtype: agents
+journey: "Provide agent knowledge context"
+ownerPackage: "@treeseed/agent"
+surface: agent-runtime
+summary: "Guarantee that TreeSeed can provide agent knowledge context."
+status: planned
+dependencies: { journeys: [], guarantees: [] }
+actors: { allowed: [authenticated_user, team_owner, platform_admin], forbidden: [unauthorized_user] }
+devices: { required: [desktop_chromium] }
+gates: [future]
+preconditions: { fixtures: [integrated_treeseed_project], notes: [] }
+api: { required: false, verifierRefs: [] }
+content: { required: false, verifierRefs: [] }
+audit: { required: false, verifierRefs: [] }
+negativeCases: []
+evidence: { required: [guarantee_report] }
+notes:
+  - "Planned from the TreeSeed Guide platform coverage audit. SDK context compilation, TreeDX-backed Agent resolution, and execution-trace provenance now provide implementation evidence. Keep this guarantee planned until integrated verifier references prove required-layer failure, deterministic provenance, stale-context rejection, and publication binding."

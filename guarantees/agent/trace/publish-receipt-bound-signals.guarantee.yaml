@@ -1,0 +1,21 @@
+schemaVersion: treeseed.guarantee/v1
+id: guarantee.agent.trace.publish-receipt-bound-signals.911
+journeyIndex: 911
+type: agent
+subtype: trace
+journey: Publish artifact signals from mutation receipts
+ownerPackage: "@treeseed/agent"
+surface: agent-runtime
+summary: Artifact-trigger signals resolve only from assignment-scoped mutation receipts; assignment-created changes remain provisional until governed integration emits an integrated receipt.
+status: planned
+dependencies: { journeys: [], guarantees: [guarantee.agent.evidence.version-artifact-mutations.910] }
+actors: { allowed: [capacity_provider], forbidden: [unauthorized_user] }
+devices: { required: [], optional: [] }
+gates: [future]
+preconditions: { fixtures: [integrated_treeseed_project], notes: ["A kernel run produced a versioned mutation receipt."] }
+api: { required: true, verifierRefs: [] }
+content: { required: false, verifierRefs: [] }
+audit: { required: true, verifierRefs: [] }
+negativeCases: ["An unrelated manifest commit cannot satisfy an artifact signal.", "A requested integrated phase cannot use a provisional receipt."]
+evidence: { required: [guarantee_report, verifier_evidence] }
+notes: ["Keep planned until interrupted publication and idempotent replay are proven live."]

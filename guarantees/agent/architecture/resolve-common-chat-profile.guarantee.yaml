@@ -1,0 +1,40 @@
+schemaVersion: treeseed.guarantee/v2
+id: guarantee.agent.architecture.resolve-common-chat-profile.746
+journeyIndex: 746
+type: agent
+subtype: architecture
+journey: Prove chat outcome and continuation
+ownerPackage: "@treeseed/agent"
+surface: agent-runtime
+summary: Chat receives and answers an addressed durable message on communication capacity, suspends safely for required responses, and continues through a new exact invocation and assignment.
+status: planned
+capabilityId: agent.profile.chat-outcome
+catalog: agent.system
+activation: { minimumConsecutivePasses: 3, requiredVariants: [baseline, clean-repeat, interruption-resume], invalidateOnSourceChange: true }
+proof:
+  requiredCommands: [capacity.assignment, capacity.workday-log, capacity.audit-events]
+  minimumRepositoryPostconditions: 0
+  outcomePredicates:
+    chat.addressed-response: [chat.follow, chat.read, chat.context-injection, chat.respond, chat.topic, chat.thread, chat.recipients, chat.communication-lane]
+    chat.suspend-resume: [chat.checkpoint, chat.suspended-summary, chat.lease-released, chat.prior-demand-terminal, chat.human-reply-relation, chat.continuation-invocation, chat.continuation-assignment]
+outcomes:
+  - id: chat.addressed-response
+    kind: required
+    description: Follow, read, context injection, and response preserve exact topic, thread, recipients, source-message references, assignment, artifact, and context refs on communication capacity.
+    evidenceKinds: [discussion_read_back, execution_trace]
+    authoritativeSubjects: [assignment, requestMessage, responseMessage]
+  - id: chat.suspend-resume
+    kind: required
+    description: A required response checkpoints, writes a suspended summary, releases the lease, closes the prior demand, binds the human TreeDX reply to the exact clarification, and creates a provenance-linked continuation invocation and new assignment.
+    evidenceKinds: [checkpoint, lease_read_back, continuation]
+    authoritativeSubjects: [assignment, continuationAssignment]
+dependencies: { journeys: [], guarantees: [guarantee.work.agents.run-an-agent-in-planning-mode.666, guarantee.agent.discussion.isolate-communication-lanes.930, guarantee.agent.discussion.persist-discussion-only-in-treedx.744, guarantee.agent.discussion.admit-after-treedx-readback.931, guarantee.agent.discussion.contain-hidden-conversations.932, guarantee.agent.discussion.bound-agent-handoffs.933, guarantee.agent.discussion.stream-durable-boundaries.934, guarantee.agent.discussion.archive-cancels-communication.935, guarantee.agent.discussion.execute-semantic-client-actions.936, guarantee.agent.discussion.approve-operation-handoffs.937, guarantee.agent.discussion.complete-after-integrated-readback.939, guarantee.agent.discussion.project-assignment-events.745] }
+actors: { allowed: [capacity_operator, team_owner], forbidden: [anonymous_user, unauthorized_user] }
+devices: { required: [] }
+gates: [core]
+preconditions: { fixtures: [integrated_treeseed_project] }
+api: { required: true, verifierRefs: [agent.catalog.profile-live-proof] }
+content: { required: true, verifierRefs: [] }
+audit: { required: true, verifierRefs: [] }
+negativeCases: []
+evidence: { required: [verifier_evidence] }

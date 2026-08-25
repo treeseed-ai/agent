@@ -11,10 +11,10 @@ enabled: true
 description: Defines the project architecture, objectives, standards, and decision-aligned knowledge structure.
 summary: Defines the project architecture, objectives, standards, and decision-aligned knowledge structure.
 runtimeStatus: active
-tags:
+groupIds:
   - agent
-  - engineering-team
   - architecture
+  - engineering-team
 identity:
   purpose: Defines the project architecture, objectives, standards, and decision-aligned knowledge structure.
   responsibilities:
@@ -48,30 +48,73 @@ activityProfiles:
     branchPolicy:
       kind: staging-content
       base: staging
-    contentAccess:
-      read:
-        models:
-          - question
-          - objective
-          - note
-          - proposal
-          - decision
-          - knowledge
-          - agent
-        actions:
+    permissions:
+      content:
+        question:
+          operations:
           - describe
           - query
           - read
-      write:
-        models:
-          - question
-          - objective
-          - note
-          - proposal
-          - decision
-          - knowledge
-          - agent
-        actions:
+          - create
+          - update
+          - link
+          - validate
+          - commit
+        objective:
+          operations:
+          - describe
+          - query
+          - read
+          - create
+          - update
+          - link
+          - validate
+          - commit
+        note:
+          operations:
+          - describe
+          - query
+          - read
+          - create
+          - update
+          - link
+          - validate
+          - commit
+        proposal:
+          operations:
+          - describe
+          - query
+          - read
+          - create
+          - update
+          - link
+          - validate
+          - commit
+        decision:
+          operations:
+          - describe
+          - query
+          - read
+          - create
+          - update
+          - link
+          - validate
+          - commit
+        knowledge:
+          operations:
+          - describe
+          - query
+          - read
+          - create
+          - update
+          - link
+          - validate
+          - commit
+        agent:
+          operations:
+          - describe
+          - query
+          - read
           - create
           - update
           - link
@@ -86,6 +129,8 @@ activityProfiles:
         - treeseed.content.read
         - treedx.build_context
         - treedx.read_repository_files
+        - treeseed.repository.read_file
+        - treeseed.repository.search
         - treedx.search_workspace
         - treedx.read_workspace_file
         - treeseed.status
@@ -94,11 +139,12 @@ activityProfiles:
         - treeseed.content.link
         - treeseed.content.validate
         - treeseed.content.commit
-        - treedx.write_workspace_file
+        - treedx.apply_workspace_changeset
         - treedx.commit_workspace
     outputs:
       messageTypes: []
       modelMutations:
+        - proposal:create
         - linked_note:create
         - proposal_feedback:create
         - question:create
@@ -107,8 +153,8 @@ activityProfiles:
       defaultAnswerPolicy:
         kind: team-human
     execution:
-      providerPreference:
-        - codex
+      requiredCapabilities:
+        - agent-execution
       maxRuntimeSeconds: 1800
       maxRetries: 2
       verificationRequired: false
@@ -116,44 +162,89 @@ activityProfiles:
     activityType: estimating
     enabled: true
     handler: estimate
+    planningIntent:
+      subjectModel: proposal
     prompt:
       system: |
         You are the Architect for this TreeSeed project. Defines the project architecture, objectives, standards, and decision-aligned knowledge structure. Use TreeDX-backed content tools for all project content and keep work scoped to the current activity profile.
       task: estimating
     branchPolicy:
-      kind: read-only
+      kind: main-planning-content
       base: main
-    contentAccess:
-      read:
-        models:
-          - question
-          - objective
-          - note
-          - proposal
-          - decision
-          - knowledge
-          - agent
-        actions:
+    permissions:
+      content:
+        question:
+          operations:
           - describe
           - query
           - read
-      write:
-        models:
-          - question
-          - objective
-          - note
-          - proposal
-          - decision
-          - knowledge
-          - agent
-        actions:
+          - create
+          - update
+          - link
+          - validate
+          - commit
+        objective:
+          operations:
+          - describe
+          - query
+          - read
+          - create
+          - update
+          - link
+          - validate
+          - commit
+        note:
+          operations:
+          - describe
+          - query
+          - read
+          - create
+          - update
+          - link
+          - validate
+          - commit
+        proposal:
+          operations:
+          - describe
+          - query
+          - read
+          - create
+          - update
+          - link
+          - validate
+          - commit
+        decision:
+          operations:
+          - describe
+          - query
+          - read
+          - create
+          - update
+          - link
+          - validate
+          - commit
+        knowledge:
+          operations:
+          - describe
+          - query
+          - read
+          - create
+          - update
+          - link
+          - validate
+          - commit
+        agent:
+          operations:
+          - describe
+          - query
+          - read
           - create
           - update
           - link
           - validate
           - commit
       commit:
-        allowed: false
+        allowed: true
     tools:
       allowed:
         - treeseed.content.describe
@@ -161,6 +252,8 @@ activityProfiles:
         - treeseed.content.read
         - treedx.build_context
         - treedx.read_repository_files
+        - treeseed.repository.read_file
+        - treeseed.repository.search
         - treedx.search_workspace
         - treedx.read_workspace_file
         - treeseed.status
@@ -174,8 +267,8 @@ activityProfiles:
       defaultAnswerPolicy:
         kind: team-human
     execution:
-      providerPreference:
-        - codex
+      requiredCapabilities:
+        - agent-execution
       maxRuntimeSeconds: 1800
       maxRetries: 2
       verificationRequired: false
@@ -188,39 +281,82 @@ activityProfiles:
         You are the Architect for this TreeSeed project. Defines the project architecture, objectives, standards, and decision-aligned knowledge structure. Use TreeDX-backed content tools for all project content and keep work scoped to the current activity profile.
       task: reviewing
     branchPolicy:
-      kind: read-only
+      kind: main-planning-content
       base: main
-    contentAccess:
-      read:
-        models:
-          - question
-          - objective
-          - note
-          - proposal
-          - decision
-          - knowledge
-          - agent
-        actions:
+    permissions:
+      content:
+        question:
+          operations:
           - describe
           - query
           - read
-      write:
-        models:
-          - question
-          - objective
-          - note
-          - proposal
-          - decision
-          - knowledge
-          - agent
-        actions:
+          - create
+          - update
+          - link
+          - validate
+          - commit
+        objective:
+          operations:
+          - describe
+          - query
+          - read
+          - create
+          - update
+          - link
+          - validate
+          - commit
+        note:
+          operations:
+          - describe
+          - query
+          - read
+          - create
+          - update
+          - link
+          - validate
+          - commit
+        proposal:
+          operations:
+          - describe
+          - query
+          - read
+          - create
+          - update
+          - link
+          - validate
+          - commit
+        decision:
+          operations:
+          - describe
+          - query
+          - read
+          - create
+          - update
+          - link
+          - validate
+          - commit
+        knowledge:
+          operations:
+          - describe
+          - query
+          - read
+          - create
+          - update
+          - link
+          - validate
+          - commit
+        agent:
+          operations:
+          - describe
+          - query
+          - read
           - create
           - update
           - link
           - validate
           - commit
       commit:
-        allowed: false
+        allowed: true
     tools:
       allowed:
         - treeseed.content.describe
@@ -228,6 +364,8 @@ activityProfiles:
         - treeseed.content.read
         - treedx.build_context
         - treedx.read_repository_files
+        - treeseed.repository.read_file
+        - treeseed.repository.search
         - treedx.search_workspace
         - treedx.read_workspace_file
         - treeseed.status
@@ -241,8 +379,8 @@ activityProfiles:
       defaultAnswerPolicy:
         kind: team-human
     execution:
-      providerPreference:
-        - codex
+      requiredCapabilities:
+        - agent-execution
       maxRuntimeSeconds: 1800
       maxRetries: 2
       verificationRequired: false
@@ -257,30 +395,73 @@ activityProfiles:
     branchPolicy:
       kind: staging-content
       base: staging
-    contentAccess:
-      read:
-        models:
-          - question
-          - objective
-          - note
-          - proposal
-          - decision
-          - knowledge
-          - agent
-        actions:
+    permissions:
+      content:
+        question:
+          operations:
           - describe
           - query
           - read
-      write:
-        models:
-          - question
-          - objective
-          - note
-          - proposal
-          - decision
-          - knowledge
-          - agent
-        actions:
+          - create
+          - update
+          - link
+          - validate
+          - commit
+        objective:
+          operations:
+          - describe
+          - query
+          - read
+          - create
+          - update
+          - link
+          - validate
+          - commit
+        note:
+          operations:
+          - describe
+          - query
+          - read
+          - create
+          - update
+          - link
+          - validate
+          - commit
+        proposal:
+          operations:
+          - describe
+          - query
+          - read
+          - create
+          - update
+          - link
+          - validate
+          - commit
+        decision:
+          operations:
+          - describe
+          - query
+          - read
+          - create
+          - update
+          - link
+          - validate
+          - commit
+        knowledge:
+          operations:
+          - describe
+          - query
+          - read
+          - create
+          - update
+          - link
+          - validate
+          - commit
+        agent:
+          operations:
+          - describe
+          - query
+          - read
           - create
           - update
           - link
@@ -295,6 +476,8 @@ activityProfiles:
         - treeseed.content.read
         - treedx.build_context
         - treedx.read_repository_files
+        - treeseed.repository.read_file
+        - treeseed.repository.search
         - treedx.search_workspace
         - treedx.read_workspace_file
         - treeseed.status
@@ -303,7 +486,7 @@ activityProfiles:
         - treeseed.content.link
         - treeseed.content.validate
         - treeseed.content.commit
-        - treedx.write_workspace_file
+        - treedx.apply_workspace_changeset
         - treedx.commit_workspace
     outputs:
       messageTypes: []
@@ -316,8 +499,8 @@ activityProfiles:
       defaultAnswerPolicy:
         kind: team-human
     execution:
-      providerPreference:
-        - codex
+      requiredCapabilities:
+        - agent-execution
       maxRuntimeSeconds: 1800
       maxRetries: 2
       verificationRequired: false

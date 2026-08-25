@@ -60,22 +60,32 @@ capacityProvider:
     composeFile: compose.capacity-provider.yml
     projectName: treeseed-capacity-provider
     sharedVolume: true
-    dataDir: .treeseed/local-capacity-provider/data
-  railway:
-    runnerCount: 1
-    runnerVolumePolicy: per-service
-    volumeMountPath: /data
+    dataDir: .treeseed/local-capacity-providers/agent-standalone
   capabilities: []
   executionProviders: []
   envBindings: []
   resourceLimits: {}
 projectArchitecture:
-  topology: single_repository_site
+  topology: split_site_content
   rootPath: .
   sitePath: docs
-  contentPath: docs/src/content
-  contentRuntimeSource: r2_published_manifest
-  localContentMaterialization: existing_path
+  contentPath: src/content
+  contentRuntimeSource: r2_preview_overlay
+  localContentMaterialization: none
   contentPublishTarget:
     kind: cloudflare_r2
     prefix: packages/agent
+packageRuntime:
+  schemaVersion: treeseed.package-runtime/v1
+  componentId: agent
+  services:
+    - id: manager
+      composeService: manager
+      healthGate:
+        kind: compose-healthcheck
+        timeoutSeconds: 60
+      endpoints: []
+    - id: runner
+      composeService: runner
+      endpoints: []
+  defaultAliases: []

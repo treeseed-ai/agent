@@ -1,31 +1,40 @@
-schemaVersion: treeseed.guarantee/v1
+schemaVersion: treeseed.guarantee/v2
 id: guarantee.agent.architecture.produce-structured-estimate.306
 journeyIndex: 306
 type: agent
 subtype: architecture
-journey: Produce Structured Estimate
+journey: Prove structured estimating outcome
 ownerPackage: "@treeseed/agent"
 surface: agent-runtime
-summary: "The estimate handler emits a validated structured estimate suitable for deterministic graph compilation."
-status: active
-actors:
-  allowed: [project_manager, capacity_operator, team_owner]
-  forbidden: [anonymous_user, unauthorized_user]
-gates: [core, release]
-preconditions:
-  fixtures: [integrated_treeseed_project]
-api:
-  required: true
-  verifierRefs: [agent.architecture.produce-structured-estimate]
-content:
-  required: false
-  verifierRefs: []
-audit:
-  required: true
-  verifierRefs: [agent.architecture.produce-structured-estimate]
-negativeCases:
-  - id: unauthorized-actor-denied
-    actor: anonymous_user
-    verifierRefs: [agent.architecture.produce-structured-estimate]
-evidence:
-  required: [guarantee_report, verifier_evidence]
+summary: Estimating produces an exact-revision work breakdown without accepting itself or creating acting authority.
+status: planned
+capabilityId: agent.profile.estimating-outcome
+catalog: agent.system
+activation: { minimumConsecutivePasses: 3, requiredVariants: [baseline, clean-repeat, interruption-resume], invalidateOnSourceChange: true }
+proof:
+  requiredCommands: [capacity.decision-planning, capacity.execution-inputs, capacity.capacity-plan, capacity.audit-events]
+  minimumRepositoryPostconditions: 0
+  outcomePredicates:
+    estimate.complete-allocation: [estimate.exact-proposal-revision, estimate.preparation, estimate.implementation, estimate.verification, estimate.independent-review, estimate.revision, estimate.revision-verification, estimate.final-review, estimate.reporting, estimate.reserve, estimate.assumptions, estimate.evidence]
+    estimate.no-self-authority: [estimate.acceptance-denied, estimate.acting-authority-denied]
+outcomes:
+  - id: estimate.complete-allocation
+    kind: required
+    description: The estimate allocates preparation, implementation, verification, independent review, revisions, final review, reporting, and reserve with assumptions and evidence.
+    evidenceKinds: [estimate_read_back, proposal_revision]
+    authoritativeSubjects: [proposalRevision, estimateRef]
+  - id: estimate.no-self-authority
+    kind: forbidden
+    description: The estimator cannot accept its estimate or create acting authority.
+    evidenceKinds: [governance_denial]
+    authoritativeSubjects: [estimateRef]
+dependencies: { journeys: [], guarantees: [guarantee.agent.architecture.resolve-common-chat-profile.746] }
+actors: { allowed: [capacity_operator, team_owner], forbidden: [anonymous_user, unauthorized_user] }
+devices: { required: [] }
+gates: [core]
+preconditions: { fixtures: [integrated_treeseed_project] }
+api: { required: true, verifierRefs: [agent.catalog.profile-live-proof] }
+content: { required: true, verifierRefs: [] }
+audit: { required: true, verifierRefs: [] }
+negativeCases: []
+evidence: { required: [verifier_evidence] }

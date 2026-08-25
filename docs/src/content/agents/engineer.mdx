@@ -11,10 +11,10 @@ enabled: true
 description: Implements decision-scoped code and configuration changes without modifying tests.
 summary: Implements decision-scoped code and configuration changes without modifying tests.
 runtimeStatus: active
-tags:
+groupIds:
   - agent
-  - engineering-team
   - engineering
+  - engineering-team
 identity:
   purpose: Implements decision-scoped code and configuration changes without modifying tests.
   responsibilities:
@@ -39,246 +39,81 @@ activityProfiles:
   planning:
     activityType: planning
     enabled: true
-    handler: actor
+    handler: writer
     prompt:
       system: |
         You are the Engineer for this TreeSeed project. Implements decision-scoped code and configuration changes without modifying tests. Use TreeDX-backed content tools for all project content and keep work scoped to the current activity profile.
       task: planning
     branchPolicy:
-      kind: read-only
-      base: main
-    contentAccess:
-      read:
-        models:
-          - question
-          - objective
-          - note
-          - proposal
-          - decision
-          - knowledge
-          - agent
-        actions:
-          - describe
-          - query
-          - read
-      write:
-        models:
-          - question
-          - objective
-          - note
-          - proposal
-          - decision
-          - knowledge
-          - agent
-        actions:
-          - create
-          - update
-          - link
-          - validate
-          - commit
-      commit:
-        allowed: false
-    tools:
-      allowed:
-        - treeseed.content.describe
-        - treeseed.content.query
-        - treeseed.content.read
-        - treedx.build_context
-        - treedx.read_repository_files
-        - treedx.search_workspace
-        - treedx.read_workspace_file
-        - treeseed.status
-    outputs:
-      messageTypes: []
-      modelMutations:
-        - linked_note:create
-        - proposal_feedback:create
-        - question:create
-    questionPolicy:
-      blockExecutionWhenCreated: true
-      defaultAnswerPolicy:
-        kind: human-or-agent
-    execution:
-      providerPreference:
-        - codex
-      maxRuntimeSeconds: 1800
-      maxRetries: 2
-      verificationRequired: true
-  estimating:
-    activityType: estimating
-    enabled: true
-    handler: estimate
-    prompt:
-      system: |
-        You are the Engineer for this TreeSeed project. Implements decision-scoped code and configuration changes without modifying tests. Use TreeDX-backed content tools for all project content and keep work scoped to the current activity profile.
-      task: estimating
-    branchPolicy:
-      kind: read-only
-      base: main
-    contentAccess:
-      read:
-        models:
-          - question
-          - objective
-          - note
-          - proposal
-          - decision
-          - knowledge
-          - agent
-        actions:
-          - describe
-          - query
-          - read
-      write:
-        models:
-          - question
-          - objective
-          - note
-          - proposal
-          - decision
-          - knowledge
-          - agent
-        actions:
-          - create
-          - update
-          - link
-          - validate
-          - commit
-      commit:
-        allowed: false
-    tools:
-      allowed:
-        - treeseed.content.describe
-        - treeseed.content.query
-        - treeseed.content.read
-        - treedx.build_context
-        - treedx.read_repository_files
-        - treedx.search_workspace
-        - treedx.read_workspace_file
-        - treeseed.status
-    outputs:
-      messageTypes: []
-      modelMutations:
-        - estimate:create
-        - dependency_declaration:create
-    questionPolicy:
-      blockExecutionWhenCreated: true
-      defaultAnswerPolicy:
-        kind: human-or-agent
-    execution:
-      providerPreference:
-        - codex
-      maxRuntimeSeconds: 1800
-      maxRetries: 2
-      verificationRequired: false
-  reviewing:
-    activityType: reviewing
-    enabled: true
-    handler: writer
-    prompt:
-      system: |
-        You are the Engineer for this TreeSeed project. Implements decision-scoped code and configuration changes without modifying tests. Use TreeDX-backed content tools for all project content and keep work scoped to the current activity profile.
-      task: reviewing
-    branchPolicy:
-      kind: read-only
-      base: main
-    contentAccess:
-      read:
-        models:
-          - question
-          - objective
-          - note
-          - proposal
-          - decision
-          - knowledge
-          - agent
-        actions:
-          - describe
-          - query
-          - read
-      write:
-        models:
-          - question
-          - objective
-          - note
-          - proposal
-          - decision
-          - knowledge
-          - agent
-        actions:
-          - create
-          - update
-          - link
-          - validate
-          - commit
-      commit:
-        allowed: false
-    tools:
-      allowed:
-        - treeseed.content.describe
-        - treeseed.content.query
-        - treeseed.content.read
-        - treedx.build_context
-        - treedx.read_repository_files
-        - treedx.search_workspace
-        - treedx.read_workspace_file
-        - treeseed.status
-    outputs:
-      messageTypes: []
-      modelMutations:
-        - review_note:create
-        - risk_note:create
-    questionPolicy:
-      blockExecutionWhenCreated: true
-      defaultAnswerPolicy:
-        kind: human-or-agent
-    execution:
-      providerPreference:
-        - codex
-      maxRuntimeSeconds: 1800
-      maxRetries: 2
-      verificationRequired: false
-  acting:
-    activityType: acting
-    enabled: true
-    handler: actor
-    prompt:
-      system: |
-        You are the Engineer for this TreeSeed project. Implements decision-scoped code and configuration changes without modifying tests. Use TreeDX-backed content tools for all project content and keep work scoped to the current activity profile.
-      task: acting
-    branchPolicy:
-      kind: assignment-feature
+      kind: staging-content
       base: staging
-      target: staging
-      branchNameTemplate: agent/{agentSlug}/{assignmentId}
-      worktree: new
-      updateBaseBeforeRun: true
-      mergeTargetBeforeSave: true
-      prefix: engineer
-    contentAccess:
-      read:
-        models:
-          - question
-          - objective
-          - note
-          - proposal
-          - decision
-          - knowledge
-          - agent
-        actions:
+    permissions:
+      content:
+        question:
+          operations:
           - describe
           - query
           - read
-      write:
-        models:
-          - question
-          - objective
-          - note
-          - proposal
-          - decision
-          - knowledge
-          - agent
-        actions:
+          - create
+          - update
+          - link
+          - validate
+          - commit
+        objective:
+          operations:
+          - describe
+          - query
+          - read
+          - create
+          - update
+          - link
+          - validate
+          - commit
+        note:
+          operations:
+          - describe
+          - query
+          - read
+          - create
+          - update
+          - link
+          - validate
+          - commit
+        proposal:
+          operations:
+          - describe
+          - query
+          - read
+          - create
+          - update
+          - link
+          - validate
+          - commit
+        decision:
+          operations:
+          - describe
+          - query
+          - read
+          - create
+          - update
+          - link
+          - validate
+          - commit
+        knowledge:
+          operations:
+          - describe
+          - query
+          - read
+          - create
+          - update
+          - link
+          - validate
+          - commit
+        agent:
+          operations:
+          - describe
+          - query
+          - read
           - create
           - update
           - link
@@ -293,6 +128,8 @@ activityProfiles:
         - treeseed.content.read
         - treedx.build_context
         - treedx.read_repository_files
+        - treeseed.repository.read_file
+        - treeseed.repository.search
         - treedx.search_workspace
         - treedx.read_workspace_file
         - treeseed.status
@@ -301,10 +138,363 @@ activityProfiles:
         - treeseed.content.link
         - treeseed.content.validate
         - treeseed.content.commit
-        - treedx.write_workspace_file
+        - treedx.apply_workspace_changeset
+        - treedx.commit_workspace
+    outputs:
+      messageTypes: []
+      modelMutations:
+        - linked_note:create
+        - proposal_feedback:create
+        - question:create
+    questionPolicy:
+      blockExecutionWhenCreated: true
+      defaultAnswerPolicy:
+        kind: human-or-agent
+    execution:
+      requiredCapabilities:
+        - agent-execution
+      maxRuntimeSeconds: 1800
+      maxRetries: 2
+      verificationRequired: true
+  estimating:
+    activityType: estimating
+    enabled: true
+    handler: estimate
+    planningIntent:
+      subjectModel: proposal
+    prompt:
+      system: |
+        You are the Engineer for this TreeSeed project. Implements decision-scoped code and configuration changes without modifying tests. Use TreeDX-backed content tools for all project content and keep work scoped to the current activity profile.
+      task: estimating
+    branchPolicy:
+      kind: main-planning-content
+      base: main
+    permissions:
+      content:
+        question:
+          operations:
+          - describe
+          - query
+          - read
+          - create
+          - update
+          - link
+          - validate
+          - commit
+        objective:
+          operations:
+          - describe
+          - query
+          - read
+          - create
+          - update
+          - link
+          - validate
+          - commit
+        note:
+          operations:
+          - describe
+          - query
+          - read
+          - create
+          - update
+          - link
+          - validate
+          - commit
+        proposal:
+          operations:
+          - describe
+          - query
+          - read
+          - create
+          - update
+          - link
+          - validate
+          - commit
+        decision:
+          operations:
+          - describe
+          - query
+          - read
+          - create
+          - update
+          - link
+          - validate
+          - commit
+        knowledge:
+          operations:
+          - describe
+          - query
+          - read
+          - create
+          - update
+          - link
+          - validate
+          - commit
+        agent:
+          operations:
+          - describe
+          - query
+          - read
+          - create
+          - update
+          - link
+          - validate
+          - commit
+      commit:
+        allowed: true
+    tools:
+      allowed:
+        - treeseed.content.describe
+        - treeseed.content.query
+        - treeseed.content.read
+        - treedx.build_context
+        - treedx.read_repository_files
+        - treeseed.repository.read_file
+        - treeseed.repository.search
+        - treedx.search_workspace
+        - treedx.read_workspace_file
+        - treeseed.status
+    outputs:
+      messageTypes: []
+      modelMutations:
+        - estimate:create
+        - dependency_declaration:create
+    questionPolicy:
+      blockExecutionWhenCreated: true
+      defaultAnswerPolicy:
+        kind: human-or-agent
+    execution:
+      requiredCapabilities:
+        - agent-execution
+      maxRuntimeSeconds: 1800
+      maxRetries: 2
+      verificationRequired: false
+  reviewing:
+    activityType: reviewing
+    enabled: true
+    handler: writer
+    prompt:
+      system: |
+        You are the Engineer for this TreeSeed project. Implements decision-scoped code and configuration changes without modifying tests. Use TreeDX-backed content tools for all project content and keep work scoped to the current activity profile.
+      task: reviewing
+    branchPolicy:
+      kind: main-planning-content
+      base: main
+    permissions:
+      content:
+        question:
+          operations:
+          - describe
+          - query
+          - read
+          - create
+          - update
+          - link
+          - validate
+          - commit
+        objective:
+          operations:
+          - describe
+          - query
+          - read
+          - create
+          - update
+          - link
+          - validate
+          - commit
+        note:
+          operations:
+          - describe
+          - query
+          - read
+          - create
+          - update
+          - link
+          - validate
+          - commit
+        proposal:
+          operations:
+          - describe
+          - query
+          - read
+          - create
+          - update
+          - link
+          - validate
+          - commit
+        decision:
+          operations:
+          - describe
+          - query
+          - read
+          - create
+          - update
+          - link
+          - validate
+          - commit
+        knowledge:
+          operations:
+          - describe
+          - query
+          - read
+          - create
+          - update
+          - link
+          - validate
+          - commit
+        agent:
+          operations:
+          - describe
+          - query
+          - read
+          - create
+          - update
+          - link
+          - validate
+          - commit
+      commit:
+        allowed: true
+    tools:
+      allowed:
+        - treeseed.content.describe
+        - treeseed.content.query
+        - treeseed.content.read
+        - treedx.build_context
+        - treedx.read_repository_files
+        - treeseed.repository.read_file
+        - treeseed.repository.search
+        - treedx.search_workspace
+        - treedx.read_workspace_file
+        - treeseed.status
+    outputs:
+      messageTypes: []
+      modelMutations:
+        - review_note:create
+        - risk_note:create
+    questionPolicy:
+      blockExecutionWhenCreated: true
+      defaultAnswerPolicy:
+        kind: human-or-agent
+    execution:
+      requiredCapabilities:
+        - agent-execution
+      maxRuntimeSeconds: 1800
+      maxRetries: 2
+      verificationRequired: false
+  acting:
+    activityType: acting
+    enabled: true
+    handler: actor
+    prompt:
+      system: |
+        You are the Engineer for this TreeSeed project. Begin only from an approved decision, ready execution node, accepted capacity plan, recorded exact base ref, and a verified failing-test integration ref from the Tester. Integrate that exact test ref through the assigned TreeSeed workflow operation, implement the smallest owning-abstraction change, and do not modify test files. Run focused and affected verification, use the assignment checkpoint tool to create the local implementation commit, record changed paths and command receipts, and return that commit ref for review. Use TreeDX for project content. Never push, merge, tag, deploy, or mutate provider infrastructure directly.
+      task: implement-against-failing-test
+    branchPolicy:
+      kind: assignment-feature
+      base: staging
+      target: staging
+      branchNameTemplate: agent/{agentSlug}/{assignmentId}
+      worktree: new
+      updateBaseBeforeRun: true
+      mergeTargetBeforeSave: true
+      prefix: engineer
+    permissions:
+      content:
+        question:
+          operations:
+          - describe
+          - query
+          - read
+          - create
+          - update
+          - link
+          - validate
+          - commit
+        objective:
+          operations:
+          - describe
+          - query
+          - read
+          - create
+          - update
+          - link
+          - validate
+          - commit
+        note:
+          operations:
+          - describe
+          - query
+          - read
+          - create
+          - update
+          - link
+          - validate
+          - commit
+        proposal:
+          operations:
+          - describe
+          - query
+          - read
+          - create
+          - update
+          - link
+          - validate
+          - commit
+        decision:
+          operations:
+          - describe
+          - query
+          - read
+          - create
+          - update
+          - link
+          - validate
+          - commit
+        knowledge:
+          operations:
+          - describe
+          - query
+          - read
+          - create
+          - update
+          - link
+          - validate
+          - commit
+        agent:
+          operations:
+          - describe
+          - query
+          - read
+          - create
+          - update
+          - link
+          - validate
+          - commit
+      commit:
+        allowed: true
+    tools:
+      allowed:
+        - treeseed.content.describe
+        - treeseed.content.query
+        - treeseed.content.read
+        - treedx.build_context
+        - treedx.read_repository_files
+        - treeseed.repository.read_file
+        - treeseed.repository.search
+        - treedx.search_workspace
+        - treedx.read_workspace_file
+        - treeseed.status
+        - treeseed.content.create
+        - treeseed.content.update
+        - treeseed.content.link
+        - treeseed.content.validate
+        - treeseed.content.commit
+        - treedx.apply_workspace_changeset
         - treedx.commit_workspace
         - treeseed.changed_paths
         - treeseed.verify
+        - treeseed.checkpoint
         - treeseed.dev_plan
     outputs:
       messageTypes: []
@@ -316,11 +506,23 @@ activityProfiles:
       defaultAnswerPolicy:
         kind: human-or-agent
     execution:
-      providerPreference:
-        - codex
+      requiredCapabilities:
+        - agent-execution
       maxRuntimeSeconds: 1800
       maxRetries: 2
       verificationRequired: true
+      allowedPaths:
+        - src/**
+        - scripts/**
+        - package.json
+        - package-lock.json
+        - treeseed.package.yaml
+        - tsconfig*.json
+      forbiddenPaths:
+        - test/**
+        - tests/**
+        - spec/**
+        - specs/**
 ---
 
 Engineer for the agent TreeSeed project.

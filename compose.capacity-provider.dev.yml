@@ -4,19 +4,15 @@ services:
     build: !reset null
     user: "${TREESEED_PROVIDER_CONTAINER_UID:-1000}:${TREESEED_PROVIDER_CONTAINER_GID:-1000}"
     working_dir: /workspace/packages/agent
-    entrypoint: ["node", "--import", "tsx", "./src/provider/entrypoint.ts"]
+    entrypoint: ["node", "--import", "tsx", "./src/provider/lifecycle/entrypoint.ts"]
     command: ["manager"]
     environment:
       NODE_ENV: development
       TREESEED_PROVIDER_CHOWN_DATA: "0"
       TREESEED_PROVIDER_MANAGER_POLL_SECONDS: "15"
     volumes:
-      - ../..:/workspace
-      - ../..:${TREESEED_PROVIDER_WORKSPACE_ABSOLUTE_CONTAINER:-/host-workspace}
-      - ../..:${TREESEED_PROVIDER_WORKSPACE_GITDIR_CONTAINER:-/host-worktree}
-      - "${TREESEED_MARKET_GIT_COMMON_DIR_HOST:-/dev/null}:${TREESEED_MARKET_GIT_COMMON_DIR_ABSOLUTE_CONTAINER:-/host-market-git}:ro"
-      - "${TREESEED_MARKET_GIT_COMMON_DIR_HOST:-/dev/null}:${TREESEED_MARKET_GIT_COMMON_DIR_ROOT_CONTAINER:-/host-market-git-root}:ro"
-      - "${TREESEED_HOST_CODEX_AUTH_FILE:-/dev/null}:/data/codex/auth.json:ro"
+      - ../..:/workspace:ro
+      - "${TREESEED_HOST_CODEX_AUTH_FILE:-/dev/null}:/run/treeseed-secrets/codex-auth.json:ro"
     tmpfs:
       - /data/codex:uid=${TREESEED_PROVIDER_CONTAINER_UID:-1000},gid=${TREESEED_PROVIDER_CONTAINER_GID:-1000},mode=0700
 
@@ -25,18 +21,14 @@ services:
     build: !reset null
     user: "${TREESEED_PROVIDER_CONTAINER_UID:-1000}:${TREESEED_PROVIDER_CONTAINER_GID:-1000}"
     working_dir: /workspace/packages/agent
-    entrypoint: ["node", "--import", "tsx", "./src/provider/entrypoint.ts"]
+    entrypoint: ["node", "--import", "tsx", "./src/provider/lifecycle/entrypoint.ts"]
     command: ["runner"]
     environment:
       NODE_ENV: development
       TREESEED_PROVIDER_CHOWN_DATA: "0"
       TREESEED_PROVIDER_RUNNER_POLL_SECONDS: "5"
     volumes:
-      - ../..:/workspace
-      - ../..:${TREESEED_PROVIDER_WORKSPACE_ABSOLUTE_CONTAINER:-/host-workspace}
-      - ../..:${TREESEED_PROVIDER_WORKSPACE_GITDIR_CONTAINER:-/host-worktree}
-      - "${TREESEED_MARKET_GIT_COMMON_DIR_HOST:-/dev/null}:${TREESEED_MARKET_GIT_COMMON_DIR_ABSOLUTE_CONTAINER:-/host-market-git}:ro"
-      - "${TREESEED_MARKET_GIT_COMMON_DIR_HOST:-/dev/null}:${TREESEED_MARKET_GIT_COMMON_DIR_ROOT_CONTAINER:-/host-market-git-root}:ro"
-      - "${TREESEED_HOST_CODEX_AUTH_FILE:-/dev/null}:/data/codex/auth.json:ro"
+      - ../..:/workspace:ro
+      - "${TREESEED_HOST_CODEX_AUTH_FILE:-/dev/null}:/run/treeseed-secrets/codex-auth.json:ro"
     tmpfs:
       - /data/codex:uid=${TREESEED_PROVIDER_CONTAINER_UID:-1000},gid=${TREESEED_PROVIDER_CONTAINER_GID:-1000},mode=0700

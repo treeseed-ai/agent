@@ -20,7 +20,8 @@ export async function readDiscussionSourceMessage(request: AgentExecutionRequest
 		path: { repoId }, body: { ...(request.treeDx.baseRef ? { ref: request.treeDx.baseRef } : {}),
 			paths: [paths[0]], encoding: 'utf8', parseFrontmatter: true, allowProtected: true },
 	}));
-	const data = record(envelope.data); const files = Array.isArray(data.files) ? data.files.map(record) : [];
+	const data = record(envelope.data ?? envelope); const result = record(data.result ?? data);
+	const payload = record(result.data ?? result); const files = Array.isArray(payload.files) ? payload.files.map(record) : [];
 	const content = text(files[0]?.content) || text(files[0]?.body);
 	if (!content) throw new Error('TreeDX did not return the assignment source message.');
 	return content;

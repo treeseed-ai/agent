@@ -21,7 +21,9 @@ describe('Codex chat executor', () => {
 			assignment: { sourceMessageRefs: ['discussion-messages/topic/message.mdx'] },
 			assignmentId: 'assignment-1', leaseToken: 'lease', runnerId: 'runner',
 			treeDx: { projectId: 'project-1', repositoryId: 'repo-1', workspaceId: 'workspace-1', baseRef: 'commit-1',
-				invoke: async (_operationId, value) => { input = value; return { data: { files: [{ content: 'Exact message' }] } }; } },
+				invoke: async (_operationId, value) => { input = value; return {
+					data: { result: { files: [{ content: 'Exact message' }] }, receipt: { requestId: 'request-1' } },
+				}; } },
 		});
 		expect(content).toBe('Exact message');
 		expect(input).toEqual({ path: { repoId: 'repo-1' }, body: {

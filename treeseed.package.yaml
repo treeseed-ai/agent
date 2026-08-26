@@ -39,6 +39,39 @@ artifacts:
       - arm64
 releaseGate:
   workflow: verify.yml
+development:
+  schemaVersion: treeseed.development-runtime/v1
+  project: { id: agent, repository: treeseed-ai/agent }
+  defaults: { leaseSeconds: 14400, restoreOnFailure: true }
+  targets:
+    - id: provider
+      kind: rebuild-restart
+      platforms: [linux-amd64, linux-arm64]
+      runtimeRequirements: [node>=22, docker]
+      sourceRoots: [src, Dockerfile, compose.capacity-provider.yml]
+      ignoredPaths: [dist, node_modules, .treeseed/local-capacity-providers]
+      operations:
+        build: { command: npm, args: [run, capacity-provider:build], environment: {}, timeoutSeconds: 3600 }
+        verify: { command: npm, args: [run, test:provider-runtime], environment: {}, timeoutSeconds: 1800 }
+      ready: { kind: process, graceSeconds: 5 }
+      outputs: [{ path: dist, mediaType: application/vnd.treeseed.agent-runtime, digestAlgorithm: sha256 }]
+      endpoints: []
+      dependencies:
+        - { id: sdk, target: package, locality: local, reaction: rebuild }
+        - { id: api, target: service, capability: control-plane-api, locality: either, reaction: manual }
+      statePolicy: shared-compatible
+      migrationPolicy: explicit-review
+      secretRefs: {}
+      shutdown: { graceSeconds: 120, activeWorkPolicy: drain }
+      resources: {}
+      logs: [.treeseed/development/provider.log]
+      forbiddenOperations: [hot-reload, force-kill-active-assignment, automatic-assignment-cancel]
+      freeze:
+        kind: archive
+        operation: { command: npm, args: [pack, --json], environment: {}, timeoutSeconds: 1800 }
+        artifacts: [treeseed-agent-*.tgz]
+        contractOperations: []
+      promotion: { liveAdmissible: false, candidateRequiresVerification: true }
 dockerImages:
   releaseWorkflow: publish.yml
   architectures:

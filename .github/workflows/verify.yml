@@ -2,6 +2,7 @@ name: Verify TreeSeed Agent
 
 on:
   push:
+    branches: [staging, main]
     paths-ignore: ["docs/src/content/**"]
   pull_request:
     paths-ignore: ["docs/src/content/**"]

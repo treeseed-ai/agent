@@ -85,6 +85,10 @@ describe('catalog-driven provider assignment runner', () => {
 		await runProviderAssignment({ client: api, treeDx, leaseToken: 'lease', runnerId: 'runner', assignment: { id: 'assignment-chat', executionKind: 'conversation' },
 			executor: { id: 'chat', observe: async () => ({ available: true }), execute: async () => ({ status: 'responded', summary: 'Answered.', responseMarkdown: '## Answer\n\nReady.', usage: [{ activeSeconds: 3, elapsedSeconds: 4 }] }) } });
 		expect(api.respondToAssignmentDiscussion).toHaveBeenCalledWith('assignment-chat', expect.objectContaining({ leaseToken: 'lease', markdown: '## Answer\n\nReady.' }), expect.any(String));
+		expect(api.reportAssignmentUsage).not.toHaveBeenCalled();
+		expect(api.settleAssignment).toHaveBeenCalledWith('assignment-chat', expect.objectContaining({
+			activeSeconds: 3, elapsedSeconds: 4, usageDimension: 'aggregate',
+		}), expect.any(String));
 		expect(api.settleAssignment).toHaveBeenCalledBefore(api.returnAssignment);
 		expect(api.completeAssignment).not.toHaveBeenCalled();
 	});

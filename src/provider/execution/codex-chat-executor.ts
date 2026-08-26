@@ -13,11 +13,12 @@ export function discussionMessageSourcePaths(assignment: Record<string, unknown>
 			.filter((value) => value.startsWith('discussion-messages/') || value.includes('/discussion-messages/')) : [];
 }
 
-async function sourceMessage(request: AgentExecutionRequest) {
+export async function readDiscussionSourceMessage(request: AgentExecutionRequest) {
 	const repoId = request.treeDx.repositoryId; const paths = discussionMessageSourcePaths(request.assignment);
 	if (!repoId || !paths.length) throw new Error('Communication assignment omitted its TreeDX source message reference.');
 	const envelope = record(await request.treeDx.invoke('treedx.repositories.files.read', {
-		path: { repoId }, body: { paths: [paths[0]], encoding: 'utf8', parseFrontmatter: true, allowProtected: true },
+		path: { repoId }, body: { ...(request.treeDx.baseRef ? { ref: request.treeDx.baseRef } : {}),
+			paths: [paths[0]], encoding: 'utf8', parseFrontmatter: true, allowProtected: true },
 	}));
 	const data = record(envelope.data); const files = Array.isArray(data.files) ? data.files.map(record) : [];
 	const content = text(files[0]?.content) || text(files[0]?.body);
@@ -57,7 +58,7 @@ export const createAgentExecutor: AgentExecutorModule['createAgentExecutor'] = a
 		try {
 			const codexHome = join(root, 'codex'); const workspace = join(root, 'workspace'); const output = join(root, 'response.md');
 			await mkdir(codexHome, { mode: 0o700 }); await mkdir(workspace, { mode: 0o700 }); await copyFile(authFile, join(codexHome, 'auth.json'));
-			const message = await sourceMessage(request); const agent = text(request.assignment.agentId) || 'project-agent';
+			const message = await readDiscussionSourceMessage(request); const agent = text(request.assignment.agentId) || 'project-agent';
 			const metadata = record(request.assignment.metadata); const profile = record(metadata.chatProfile); const identity = record(profile.identity);
 			const communication = record(metadata.communication); const required = text(communication.requirement) !== 'optional';
 			const role = text(identity.durableInstructions) || text(profile.purpose) || text(profile.summary) || `Act within the professional role of ${agent}.`;

@@ -18,7 +18,8 @@ async function initialize(message: any) {
 
 function treeDx(requestId: string, snapshot: any): AssignmentTreeDxFacade {
 	return {
-		projectId: String(snapshot.projectId), repositoryId: snapshot.repositoryId ?? null, workspaceId: snapshot.workspaceId ?? null,
+		projectId: String(snapshot.projectId), repositoryId: snapshot.repositoryId ?? null,
+		workspaceId: snapshot.workspaceId ?? null, baseRef: snapshot.baseRef ?? null,
 		invoke(operationId, input, options) {
 			return new Promise((resolve, reject) => {
 				const callId = `${requestId}:${++callSequence}`;

@@ -55,7 +55,8 @@ export function createProcessIsolatedExecutor(config: ProviderHostRuntimeConfig,
 		const id = `${adapter.id}:${++sequence}`;
 		pending.set(id, { resolve: resolve as (value: unknown) => void, reject, request: value });
 		child.send({ type, id, request: value ? { assignment: value.assignment, assignmentId: value.assignmentId, leaseToken: value.leaseToken, runnerId: value.runnerId,
-			treeDx: { projectId: value.treeDx.projectId, repositoryId: value.treeDx.repositoryId, workspaceId: value.treeDx.workspaceId } } : undefined });
+			treeDx: { projectId: value.treeDx.projectId, repositoryId: value.treeDx.repositoryId,
+				workspaceId: value.treeDx.workspaceId, baseRef: value.treeDx.baseRef } } : undefined });
 		if (value?.signal) value.signal.addEventListener('abort', () => child.send({ type: 'cancel', id }), { once: true });
 	});
 	child.send({ type: 'initialize', module, executionProviderId: adapter.id, environment: config.environment });

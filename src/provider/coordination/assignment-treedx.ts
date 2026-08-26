@@ -31,6 +31,7 @@ export async function createAssignmentTreeDxFacade(connection: ProviderControlPl
 	}));
 	return {
 		projectId, repositoryId: text(handle.repositoryId) || null, workspaceId: text(handle.workspaceId) || null,
+		baseRef: text(handle.baseRef, handle.baseCommitSha) || null,
 		async invoke(operationId, input, options = {}) {
 			const operation = operations.get(operationId);
 			if (!operation) throw new Error(`TreeDX proxy operation ${operationId} is not part of the accepted SDK catalog.`);

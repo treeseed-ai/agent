@@ -42,7 +42,16 @@ async function reportUsage(input: ProviderAssignmentRunInput, assignmentId: stri
 export async function runProviderAssignment(input: ProviderAssignmentRunInput) {
   const assignmentId = text(input.assignment.id);
   if (!assignmentId) throw new Error('Catalogued assignment lease omitted its stable id.');
-  await input.client.startAssignmentExecution(assignmentId, { leaseToken: input.leaseToken, runnerId: input.runnerId, executorId: input.executor.id });
+  const metadata = record(input.assignment.metadata);
+  const contentRoot = text(metadata.contentRoot) || '.';
+  await input.client.startAssignmentExecution(assignmentId, {
+    leaseToken: input.leaseToken,
+    runnerId: input.runnerId,
+    executorId: input.executor.id,
+    idempotencyKey: `execution-start:${assignmentId}:${input.runnerId}`,
+    expectedStateVersion: Number(input.assignment.stateVersion),
+    planRef: { id: `assignment-plan:${assignmentId}`, path: `${contentRoot}/assignment-plans/${assignmentId}.mdx` },
+  });
   let result: AgentExecutionResult;
   let stopped = false;
   let renewalFailure: unknown = null;

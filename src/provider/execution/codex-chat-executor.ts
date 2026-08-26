@@ -7,13 +7,14 @@ import type { AgentExecutionRequest, AgentExecutorModule } from './contracts.ts'
 const record = (value: unknown): Record<string, unknown> => value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
 const text = (value: unknown) => typeof value === 'string' ? value.trim() : '';
 
-function sourcePaths(assignment: Record<string, unknown>) {
+export function discussionMessageSourcePaths(assignment: Record<string, unknown>) {
 	return Array.isArray(assignment.sourceMessageRefs)
-		? assignment.sourceMessageRefs.map(String).filter((value) => value.includes('/discussion-messages/')) : [];
+		? assignment.sourceMessageRefs.map(String).map((value) => value.replaceAll('\\', '/').replace(/^\.\//, ''))
+			.filter((value) => value.startsWith('discussion-messages/') || value.includes('/discussion-messages/')) : [];
 }
 
 async function sourceMessage(request: AgentExecutionRequest) {
-	const repoId = request.treeDx.repositoryId; const paths = sourcePaths(request.assignment);
+	const repoId = request.treeDx.repositoryId; const paths = discussionMessageSourcePaths(request.assignment);
 	if (!repoId || !paths.length) throw new Error('Communication assignment omitted its TreeDX source message reference.');
 	const envelope = record(await request.treeDx.invoke('treedx.repositories.files.read', {
 		path: { repoId }, body: { paths: [paths[0]], encoding: 'utf8', parseFrontmatter: true, allowProtected: true },

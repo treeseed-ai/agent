@@ -35,12 +35,16 @@ describe('catalog-driven provider assignment runner', () => {
 		await runProviderAssignment({
 			client: api,
 			executor,
-			assignment: { id: 'assignment-1' },
+			assignment: { id: 'assignment-1', stateVersion: 2, metadata: { contentRoot: '.' } },
 			treeDx,
 			leaseToken: 'lease',
 			runnerId: 'runner',
 		});
-		expect(api.startAssignmentExecution).toHaveBeenCalledWith('assignment-1', expect.objectContaining({ executorId: 'fake' }));
+		expect(api.startAssignmentExecution).toHaveBeenCalledWith('assignment-1', expect.objectContaining({
+			executorId: 'fake', expectedStateVersion: 2,
+			idempotencyKey: 'execution-start:assignment-1:runner',
+			planRef: { id: 'assignment-plan:assignment-1', path: './assignment-plans/assignment-1.mdx' },
+		}));
 		expect(api.reportAssignmentUsage).toHaveBeenCalledOnce();
 		expect(api.startAssignmentCloseout).toHaveBeenCalledOnce();
 		expect(api.preflightAssignmentCompletion).toHaveBeenCalledOnce();

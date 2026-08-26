@@ -56,6 +56,7 @@ describe('Agent RC publication', () => {
 		expect(compose).toContain('/etc/treeseed/credentials/agent-codex-auth');
 		expect(compose).toContain('TREESEED_CAPACITY_PROVIDER_SOURCE: /config/treeseed.capacity-provider.yaml');
 		expect(compose).toContain('TREESEED_CAPACITY_PROVIDER_MANIFEST: /data/config/treeseed.capacity-provider.yaml');
+		expect(compose).toContain('TREESEED_PROVIDER_ENVIRONMENT: ${TREESEED_PROVIDER_ENVIRONMENT:-managed}');
 		expect(compose).toContain('TREESEED_CODEX_AUTH_FILE: /data/credentials/codex-auth.json');
 		expect(workflow).toContain('codex-cli 0.149.0');
 	});

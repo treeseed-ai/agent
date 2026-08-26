@@ -11,6 +11,11 @@ export async function recoverProviderLocalLeases(input: { config: ProviderHostRu
   const store = input.store ?? new ProviderLocalCapacityStore(input.config.dataDir);
   const results: Record<string, unknown>[] = [];
   for (const claim of await store.claimsForRecovery(input.includeRunning !== false)) {
+    if (!claim.assignmentId && !claim.leaseToken) {
+      await store.finalize(claim.id, 'unleased-claim-released');
+      results.push({ claimId: claim.id, status: 'released', reason: 'no_lease_acquired' });
+      continue;
+    }
     const connection = input.connections.find((entry) => entry.connection.id === claim.connectionId);
     if (!connection || !claim.assignmentId || !claim.leaseToken) {
       await store.recordFailure(claim.id, 'Connection or lease identity is unavailable during recovery.');

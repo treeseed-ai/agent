@@ -110,7 +110,6 @@ export async function runProviderAssignment(input: ProviderAssignmentRunInput) {
       retryable: true,
     };
   }
-  await reportUsage(input, assignmentId, result);
 	if (result.status === 'responded' || result.status === 'abstained') {
 		if (result.status === 'responded' && !result.responseMarkdown) throw new Error('Communication executor omitted its durable Markdown response.');
 		await input.client.respondToAssignmentDiscussion(assignmentId, { leaseToken: input.leaseToken, runnerId: input.runnerId,
@@ -120,6 +119,7 @@ export async function runProviderAssignment(input: ProviderAssignmentRunInput) {
 			usageDimension: 'aggregate', usageActual: {} }, `discussion-settlement:${assignmentId}:${input.runnerId}`);
 		return input.client.returnAssignment(assignmentId, { runnerId: input.runnerId, summary: { text: result.summary } });
 	}
+	await reportUsage(input, assignmentId, result);
   if (result.status === 'returned') {
     return input.client.returnAssignment(assignmentId, { leaseToken: input.leaseToken, runnerId: input.runnerId, code: result.code ?? 'agent_executor_returned', reason: result.summary, retryable: result.retryable ?? true });
   }

@@ -51,18 +51,20 @@ development:
       sourceRoots: [src, Dockerfile, compose.capacity-provider.yml]
       ignoredPaths: [dist, node_modules, .treeseed/local-capacity-providers]
       operations:
-        build: { command: npm, args: [run, capacity-provider:build], environment: {}, timeoutSeconds: 3600 }
-        verify: { command: npm, args: [run, test:provider-runtime], environment: {}, timeoutSeconds: 1800 }
+        build: { command: bash, args: [scripts/development/runtime.sh, rebuild], environment: {}, timeoutSeconds: 86400 }
+        stop: { command: bash, args: [scripts/development/runtime.sh, drain], environment: {}, timeoutSeconds: 300 }
+        verify: { command: bash, args: [scripts/development/runtime.sh, verify], environment: {}, timeoutSeconds: 1800 }
+        cleanup: { command: bash, args: [scripts/development/runtime.sh, cleanup], environment: {}, timeoutSeconds: 300 }
       ready: { kind: process, graceSeconds: 5 }
       outputs: [{ path: dist, mediaType: application/vnd.treeseed.agent-runtime, digestAlgorithm: sha256 }]
       endpoints: []
       dependencies:
         - { id: sdk, target: package, locality: local, reaction: rebuild }
         - { id: api, target: service, capability: control-plane-api, locality: either, reaction: manual }
-      statePolicy: shared-compatible
-      migrationPolicy: explicit-review
+      statePolicy: clone
+      migrationPolicy: disposable-only
       secretRefs: {}
-      shutdown: { graceSeconds: 120, activeWorkPolicy: drain }
+      shutdown: { drainOperation: { command: bash, args: [scripts/development/runtime.sh, drain], environment: {}, timeoutSeconds: 300 }, graceSeconds: 120, activeWorkPolicy: drain }
       resources: {}
       logs: [.treeseed/development/provider.log]
       forbiddenOperations: [hot-reload, force-kill-active-assignment, automatic-assignment-cancel]

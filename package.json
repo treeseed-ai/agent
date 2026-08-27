@@ -61,13 +61,14 @@
     "verify": "TMPDIR=/tmp node --import tsx ./scripts/support/verify-driver.ts",
     "release:setup": "npm run setup:ci",
     "release:check-tag": "node --import tsx ./scripts/packages/assert-release-tag-version.ts",
-    "release:verify": "npm run check:file-lengths && node --import tsx ./scripts/packages/release-verify.ts",
-    "release:publish": "node --import tsx ./scripts/packages/publish-package.ts",
+		"release:verify": "npm run check:file-lengths && node --import tsx ./scripts/packages/release-verify.ts",
+		"release:custody": "node --import tsx ./scripts/release/release-custody.ts",
+		"release:publish": "node --import tsx ./scripts/packages/publish-package.ts",
     "test:provider-runtime": "npm run test:modern"
   },
   "dependencies": {
     "@openai/codex": "0.149.0",
-    "@treeseed/sdk": "0.13.0-rc.38",
+    "@treeseed/sdk": "0.13.0-rc.47",
     "esbuild": "0.28.2",
     "typescript": "^5.9.3",
     "yaml": "^2.8.1"

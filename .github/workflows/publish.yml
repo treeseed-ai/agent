@@ -1,286 +1,112 @@
-name: Publish Image TreeSeed Agent
-
+name: Build or Promote TreeSeed Agent Candidate
 on:
-  workflow_dispatch:
   push:
-    tags:
-      - "*.*.*"
-
+    branches: [staging]
+    tags: ["*.*.*"]
 jobs:
-  npm:
-    if: startsWith(github.ref, 'refs/tags/')
+  candidate-package:
+    if: github.ref == 'refs/heads/staging'
     runs-on: ubuntu-24.04
-    permissions:
-      contents: read
-      id-token: write
-    environment: production
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-        with:
-          submodules: recursive
+        with: { submodules: recursive }
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
-        with:
-          node-version: 24
-          registry-url: https://registry.npmjs.org
-      - run: npm run release:setup
-      - run: npm run release:check-tag
-      - run: bash -lc 'npm run verify:local'
-      - name: Pack the exact verified package
-        id: pack
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p artifacts
-          npm pack --json --ignore-scripts --pack-destination artifacts > artifacts/pack.json
-          filename="$(node -e "const value=require('./artifacts/pack.json'); process.stdout.write(value[0].filename)")"
-          sha256="$(sha256sum "artifacts/${filename}" | awk '{print $1}')"
-          echo "filename=${filename}" >> "$GITHUB_OUTPUT"
-          echo "sha256=${sha256}" >> "$GITHUB_OUTPUT"
+        with: { node-version: 24 }
+      - run: npm ci --no-audit --no-fund
+      - run: npm run verify:local
+      - run: mkdir -p source-assets && npm pack --json --ignore-scripts --pack-destination source-assets && npm sbom --sbom-format cyclonedx > source-assets/sbom.cdx.json
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: agent-release-${{ github.sha }}
-          path: artifacts/
-          if-no-files-found: error
-      - name: Capture stable tag before publication
-        id: before
-        run: echo "latest=$(npm view @treeseed/agent dist-tags.latest)" >> "$GITHUB_OUTPUT"
-      - run: npm run release:publish -- "artifacts/${{ steps.pack.outputs.filename }}"
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-      - name: Verify immutable npm read-back
-        env:
-          EXPECTED_LATEST: ${{ steps.before.outputs.latest }}
-          EXPECTED_SHA256: ${{ steps.pack.outputs.sha256 }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          deadline=$((SECONDS + 180))
-          temp="$(mktemp -d)"
-          while true; do
-            published="$(npm view "@treeseed/agent@${GITHUB_REF_NAME}" version 2>/dev/null || true)"
-            channel="latest"
-            if [[ "${GITHUB_REF_NAME}" == *-rc.* ]]; then channel="rc"; fi
-            tagged="$(npm view "@treeseed/agent" "dist-tags.${channel}" 2>/dev/null || true)"
-            rm -f "${temp}"/*.tgz
-            if [[ "${published}" == "${GITHUB_REF_NAME}" && "${tagged}" == "${GITHUB_REF_NAME}" ]] \
-              && npm pack "@treeseed/agent@${GITHUB_REF_NAME}" --ignore-scripts --pack-destination "${temp}" >/dev/null 2>&1; then
-              actual="$(sha256sum "${temp}"/*.tgz | awk '{print $1}')"
-              [[ "${actual}" == "${EXPECTED_SHA256}" ]] || { echo "published tarball digest mismatch" >&2; exit 1; }
-              break
-            fi
-            if (( SECONDS >= deadline )); then echo "npm read-back did not converge" >&2; exit 1; fi
-            sleep 3
-          done
-          if [[ "${GITHUB_REF_NAME}" == *-rc.* ]]; then
-            latest="$(npm view @treeseed/agent dist-tags.latest)"
-            [[ "${latest}" == "${EXPECTED_LATEST}" ]] || { echo "prerelease changed npm latest" >&2; exit 1; }
-          fi
-
-  build:
-    needs: npm
-    if: startsWith(github.ref, 'refs/tags/')
+        with: { name: "agent-source-${{ github.sha }}", path: source-assets/, if-no-files-found: error }
+  candidate-build:
+    if: github.ref == 'refs/heads/staging'
+    needs: candidate-package
     runs-on: ${{ matrix.runner }}
-    permissions:
-      contents: write
-      id-token: write
-      packages: write
     environment: production
     strategy:
       matrix:
         include:
-          - image: treeseed/agent-manager
-            target: agent-manager
-            arch: amd64
-            platform: linux/amd64
-            runner: ubuntu-24.04
-          - image: treeseed/agent-manager
-            target: agent-manager
-            arch: arm64
-            platform: linux/arm64
-            runner: ubuntu-24.04-arm
-          - image: treeseed/agent-runner
-            target: agent-runner
-            arch: amd64
-            platform: linux/amd64
-            runner: ubuntu-24.04
-          - image: treeseed/agent-runner
-            target: agent-runner
-            arch: arm64
-            platform: linux/arm64
-            runner: ubuntu-24.04-arm
+          - { image: treeseed/agent-manager, target: agent-manager, arch: amd64, platform: linux/amd64, runner: ubuntu-24.04 }
+          - { image: treeseed/agent-manager, target: agent-manager, arch: arm64, platform: linux/arm64, runner: ubuntu-24.04-arm }
+          - { image: treeseed/agent-runner, target: agent-runner, arch: amd64, platform: linux/amd64, runner: ubuntu-24.04 }
+          - { image: treeseed/agent-runner, target: agent-runner, arch: arm64, platform: linux/arm64, runner: ubuntu-24.04-arm }
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-        with:
-          submodules: recursive
+        with: { submodules: recursive }
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
-        with:
-          node-version: 24
-      - run: npm ci --ignore-scripts
-      - run: npm run capacity-provider:build -- --prepare-only
-      - name: Compute image tags
-        id: tags
-        run: |
-          version="${GITHUB_REF_NAME#v}"
-          echo "base=${version}" >> "$GITHUB_OUTPUT"
-          echo "moving=" >> "$GITHUB_OUTPUT"
+        with: { node-version: 24 }
+      - run: npm ci --ignore-scripts && npm run capacity-provider:build -- --prepare-only
       - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f
       - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9
-        with:
-          username: ${{ vars.TREESEED_DOCKERHUB_USERNAME }}
-          password: ${{ secrets.TREESEED_DOCKERHUB_TOKEN }}
+        with: { username: "${{ vars.DOCKERHUB_USERNAME }}", password: "${{ secrets.DOCKERHUB_TOKEN }}" }
       - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8
-        with:
-          context: .
-          target: ${{ matrix.target }}
-          platforms: ${{ matrix.platform }}
-          push: true
-          tags: ${{ matrix.image }}:${{ steps.tags.outputs.base }}-${{ matrix.arch }}
-          sbom: true
-          provenance: mode=max
-      - name: Verify the published runner contains Codex
+        with: { context: ., target: "${{ matrix.target }}", platforms: "${{ matrix.platform }}", push: true, tags: "${{ matrix.image }}:candidate-${{ github.sha }}-${{ matrix.arch }}", sbom: true, provenance: mode=max }
+      - name: Verify candidate runner contains Codex
         if: matrix.target == 'agent-runner'
-        shell: bash
-        run: |
-          set -euo pipefail
-          image="${{ matrix.image }}:${{ steps.tags.outputs.base }}-${{ matrix.arch }}"
-          docker pull "${image}"
-          version="$(docker run --rm --entrypoint /usr/local/bin/codex "${image}" --version)"
-          [[ "${version}" == "codex-cli 0.149.0" ]]
-
-  manifest:
-    needs: build
-    if: startsWith(github.ref, 'refs/tags/')
+        run: docker run --rm --entrypoint /usr/local/bin/codex "${{ matrix.image }}:candidate-${{ github.sha }}-${{ matrix.arch }}" --version | grep -Fx 'codex-cli 0.149.0'
+  candidate-seal:
+    if: github.ref == 'refs/heads/staging'
+    needs: candidate-build
     runs-on: ubuntu-24.04
-    permissions:
-      contents: read
-      packages: write
-    environment: production
-    strategy:
-      matrix:
-        include:
-          - image: treeseed/agent-manager
-          - image: treeseed/agent-runner
-    steps:
-      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f
-      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9
-        with:
-          username: ${{ vars.TREESEED_DOCKERHUB_USERNAME }}
-          password: ${{ secrets.TREESEED_DOCKERHUB_TOKEN }}
-      - name: Compute image tags
-        id: tags
-        run: |
-          version="${GITHUB_REF_NAME#v}"
-          echo "base=${version}" >> "$GITHUB_OUTPUT"
-          echo "moving=" >> "$GITHUB_OUTPUT"
-      - name: Publish multi-architecture manifest
-        run: |
-          set -euo pipefail
-          docker buildx imagetools create \
-            -t "${{ matrix.image }}:${{ steps.tags.outputs.base }}" \
-            "${{ matrix.image }}:${{ steps.tags.outputs.base }}-amd64" \
-            "${{ matrix.image }}:${{ steps.tags.outputs.base }}-arm64"
-      - name: Verify Docker Hub manifests and attestations
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          verify_attestation() {
-            local image="$1"
-            local raw
-            echo "Verifying Docker Hub attestation for ${image}"
-            raw="$(docker buildx imagetools inspect --raw "${image}")"
-            if ! grep -q '"vnd.docker.reference.type"[[:space:]]*:[[:space:]]*"attestation-manifest"' <<<"${raw}"; then
-              echo "Missing Docker attestation manifest for ${image}" >&2
-              exit 1
-            fi
-            if ! grep -q '"vnd.docker.reference.digest"[[:space:]]*:[[:space:]]*"sha256:' <<<"${raw}"; then
-              echo "Docker attestation manifest for ${image} does not reference an image digest" >&2
-              exit 1
-            fi
-          }
-
-          base="${{ steps.tags.outputs.base }}"
-          image="${{ matrix.image }}"
-          for ref in "${image}:${base}-amd64" "${image}:${base}-arm64" "${image}:${base}"; do
-            docker buildx imagetools inspect "${ref}" >/dev/null
-            verify_attestation "${ref}"
-          done
-
-  component-release:
-    needs: manifest
-    if: startsWith(github.ref, 'refs/tags/')
-    runs-on: ubuntu-24.04
-    permissions:
-      contents: read
-      packages: read
     environment: production
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-        with:
-          submodules: recursive
+        with: { submodules: recursive }
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
-        with:
-          node-version: 24
-      - run: npm ci --ignore-scripts
+        with: { node-version: 24 }
+      - run: npm ci --ignore-scripts --no-audit --no-fund
       - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f
       - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9
-        with:
-          username: ${{ vars.TREESEED_DOCKERHUB_USERNAME }}
-          password: ${{ secrets.TREESEED_DOCKERHUB_TOKEN }}
-      - name: Read exact multi-architecture digests from Docker Hub
-        id: images
-        shell: bash
+        with: { username: "${{ vars.DOCKERHUB_USERNAME }}", password: "${{ secrets.DOCKERHUB_TOKEN }}" }
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with: { name: "agent-source-${{ github.sha }}", path: release-assets }
+      - name: Seal manifests and component assets
         run: |
-          set -euo pipefail
-          version="${GITHUB_REF_NAME#v}"
-          manager="$(docker buildx imagetools inspect "treeseed/agent-manager:${version}" --format '{{json .Manifest}}' | jq -r '.digest')"
-          runner="$(docker buildx imagetools inspect "treeseed/agent-runner:${version}" --format '{{json .Manifest}}' | jq -r '.digest')"
-          [[ "${manager}" =~ ^sha256:[a-f0-9]{64}$ && "${runner}" =~ ^sha256:[a-f0-9]{64}$ ]]
-          echo "manager=${manager}" >> "$GITHUB_OUTPUT"
-          echo "runner=${runner}" >> "$GITHUB_OUTPUT"
-      - name: Build exact component release and production Compose bundle
-        env:
-          TREESEED_RELEASE: ${{ github.ref_name }}
-          TREESEED_SOURCE_COMMIT: ${{ github.sha }}
-          TREESEED_MANAGER_DIGEST: ${{ steps.images.outputs.manager }}
-          TREESEED_RUNNER_DIGEST: ${{ steps.images.outputs.runner }}
-        run: node --import tsx scripts/release/create-component-release.ts
+          for pair in MANAGER=treeseed/agent-manager RUNNER=treeseed/agent-runner; do
+            key="${pair%%=*}"; image="${pair#*=}"; candidate="candidate-${GITHUB_SHA}"
+            docker buildx imagetools create -t "${image}:${candidate}" "${image}:${candidate}-amd64" "${image}:${candidate}-arm64"
+            digest="$(docker buildx imagetools inspect "${image}:${candidate}" --format '{{json .Manifest}}' | jq -r '.digest')"; [[ "$digest" =~ ^sha256:[a-f0-9]{64}$ ]]; export "TREESEED_${key}_DIGEST=$digest"
+          done
+          export TREESEED_RELEASE="$(node -p "require('./package.json').version")" TREESEED_SOURCE_COMMIT="$GITHUB_SHA" TREESEED_MANAGER_DIGEST TREESEED_RUNNER_DIGEST
+          node --import tsx scripts/release/create-component-release.ts
+          npm run release:custody -- seal release-assets/release-evidence-v1.json release-assets
+          npm run release:custody -- verify release-assets/release-evidence-v1.json
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: agent-component-release-${{ github.sha }}
-          path: release-assets/
-          if-no-files-found: error
-
-  release:
-    needs: [npm, manifest, component-release]
-    if: startsWith(github.ref, 'refs/tags/') && !contains(github.ref_name, '-')
+        with: { name: "agent-candidate-${{ github.sha }}", path: release-assets/, if-no-files-found: error, retention-days: 30 }
+  promote:
+    if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-24.04
-    permissions:
-      contents: write
+    permissions: { actions: read, contents: write, id-token: write }
+    environment: production
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
-        with:
-          name: agent-component-release-${{ github.sha }}
-          path: release-assets
-      - name: Create GitHub release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release create "${GITHUB_REF_NAME}" release-assets/* --generate-notes --verify-tag
-
-  prerelease:
-    needs: [npm, manifest, component-release]
-    if: startsWith(github.ref, 'refs/tags/') && contains(github.ref_name, '-rc.')
-    runs-on: ubuntu-24.04
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
-        with:
-          name: agent-component-release-${{ github.sha }}
-          path: release-assets
-      - name: Create GitHub prerelease
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release create "${GITHUB_REF_NAME}" release-assets/* --generate-notes --verify-tag --prerelease
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with: { node-version: 24, registry-url: https://registry.npmjs.org }
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9
+        with: { username: "${{ vars.DOCKERHUB_USERNAME }}", password: "${{ secrets.DOCKERHUB_TOKEN }}" }
+      - name: Download exact accepted candidate
+        env: { GH_TOKEN: "${{ secrets.GITHUB_TOKEN }}" }
+        run: |
+          test "$(git rev-parse HEAD)" = "$(git rev-parse origin/staging)"
+          run_id="$(gh run list --workflow publish.yml --branch staging --commit "$GITHUB_SHA" --status success --limit 1 --json databaseId --jq '.[0].databaseId')"; test -n "$run_id"
+          gh run download "$run_id" --name "agent-candidate-${GITHUB_SHA}" --dir candidate
+          npm run release:check-tag; npm run release:custody -- verify candidate/release-evidence-v1.json
+      - id: before
+        run: echo "latest=$(npm view @treeseed/agent dist-tags.latest)" >> "$GITHUB_OUTPUT"
+      - name: Publish exact npm package
+        run: npm run release:publish -- "$(find candidate -maxdepth 1 -name '*.tgz' -print -quit)"
+        env: { NODE_AUTH_TOKEN: "${{ secrets.NPM_TOKEN }}" }
+      - name: Promote exact image manifests
+        run: |
+          node -e "const e=require('./candidate/release-evidence-v1.json'); for(const a of e.artifacts.filter(x=>x.kind==='oci-image')) console.log(a.identity)" | while read -r identity; do
+            image="${identity%@*}"; digest="${identity#*@}"; docker buildx imagetools create -t "${image}:${GITHUB_REF_NAME}" "$identity"
+            test "$(docker buildx imagetools inspect "${image}:${GITHUB_REF_NAME}" --format '{{json .Manifest}}' | jq -r '.digest')" = "$digest"
+          done
+      - name: Publish unchanged assets
+        env: { GH_TOKEN: "${{ secrets.GITHUB_TOKEN }}", EXPECTED_LATEST: "${{ steps.before.outputs.latest }}" }
+        run: |
+          if [[ "$GITHUB_REF_NAME" == *-rc.* ]]; then test "$(npm view @treeseed/agent dist-tags.latest)" = "$EXPECTED_LATEST"; fi
+          flags=(); if [[ "$GITHUB_REF_NAME" == *-rc.* ]]; then flags+=(--prerelease); fi
+          gh release create "$GITHUB_REF_NAME" candidate/* --generate-notes --verify-tag "${flags[@]}"

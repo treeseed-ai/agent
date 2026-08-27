@@ -7,13 +7,15 @@ const hash = (marker: string) => `sha256:${marker.repeat(64)}`;
 afterEach(() => rmSync('release-assets', { recursive: true, force: true }));
 
 describe('Agent RC publication', () => {
-	it('runs RC tags through architecture builds, manifests, read-back, and component release', () => {
-		const workflow = parse(readFileSync('.github/workflows/publish.yml', 'utf8')) as { jobs: Record<string, { if?: string; needs?: string | string[] }> };
-		expect(workflow.jobs.build?.if).toBe("startsWith(github.ref, 'refs/tags/')");
-		expect(workflow.jobs.build?.needs).toBe('npm');
-		expect(workflow.jobs.manifest?.if).toBe("startsWith(github.ref, 'refs/tags/')");
-		expect(workflow.jobs['component-release']?.needs).toBe('manifest');
-		expect(workflow.jobs.prerelease?.needs).toEqual(['npm', 'manifest', 'component-release']);
+	it('builds a protected staging candidate and promotes exact custody without rebuilding', () => {
+		const source = readFileSync('.github/workflows/publish.yml', 'utf8');
+		const workflow = parse(source) as { jobs: Record<string, { if?: string; needs?: string | string[]; steps?: Array<{ uses?: string }> }> };
+		expect(workflow.jobs['candidate-build']?.if).toBe("github.ref == 'refs/heads/staging'");
+		expect(workflow.jobs['candidate-build']?.needs).toBe('candidate-package');
+		expect(workflow.jobs['candidate-seal']?.needs).toBe('candidate-build');
+		expect(workflow.jobs.promote?.if).toBe("startsWith(github.ref, 'refs/tags/')");
+		expect(workflow.jobs.promote?.steps?.some(({ uses }) => uses?.includes('docker/build-push-action'))).toBe(false);
+		expect(source).toContain('release-evidence-v1.json');
 	});
 
 	it('materializes an exact no-build production bundle', () => {

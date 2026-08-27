@@ -20,6 +20,7 @@ jobs:
   candidate-build:
     if: github.ref == 'refs/heads/staging'
     needs: candidate-package
+    environment: development
     runs-on: ${{ matrix.runner }}
     strategy:
       matrix:
@@ -45,6 +46,7 @@ jobs:
   candidate-seal:
     if: github.ref == 'refs/heads/staging'
     needs: candidate-build
+    environment: development
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262

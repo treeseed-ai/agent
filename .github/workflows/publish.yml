@@ -21,7 +21,7 @@ jobs:
     if: github.ref == 'refs/heads/staging'
     needs: candidate-package
     runs-on: ${{ matrix.runner }}
-    environment: production
+    environment: development
     strategy:
       matrix:
         include:
@@ -47,7 +47,7 @@ jobs:
     if: github.ref == 'refs/heads/staging'
     needs: candidate-build
     runs-on: ubuntu-24.04
-    environment: production
+    environment: development
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with: { submodules: recursive }

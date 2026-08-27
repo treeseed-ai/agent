@@ -1,6 +1,6 @@
 {
   "name": "@treeseed/agent",
-  "version": "0.13.0-rc.24",
+  "version": "0.13.0-rc.25",
   "description": "Treeseed agent service runtime package.",
   "license": "Apache-2.0",
   "repository": {
@@ -61,9 +61,9 @@
     "verify": "TMPDIR=/tmp node --import tsx ./scripts/support/verify-driver.ts",
     "release:setup": "npm run setup:ci",
     "release:check-tag": "node --import tsx ./scripts/packages/assert-release-tag-version.ts",
-		"release:verify": "npm run check:file-lengths && node --import tsx ./scripts/packages/release-verify.ts",
-		"release:custody": "node --import tsx ./scripts/release/release-custody.ts",
-		"release:publish": "node --import tsx ./scripts/packages/publish-package.ts",
+    "release:verify": "npm run check:file-lengths && node --import tsx ./scripts/packages/release-verify.ts",
+    "release:custody": "node --import tsx ./scripts/release/release-custody.ts",
+    "release:publish": "node --import tsx ./scripts/packages/publish-package.ts",
     "test:provider-runtime": "npm run test:modern"
   },
   "dependencies": {

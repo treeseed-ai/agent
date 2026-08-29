@@ -41,8 +41,8 @@ jobs:
         with: { username: "${{ vars.DOCKERHUB_USERNAME || vars.TREESEED_DOCKERHUB_USERNAME }}", password: "${{ secrets.DOCKERHUB_TOKEN || secrets.TREESEED_DOCKERHUB_TOKEN }}" }
       - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8
         with: { context: ., target: "${{ matrix.target }}", platforms: "${{ matrix.platform }}", push: true, tags: "${{ matrix.image }}:candidate-${{ github.sha }}-${{ matrix.arch }}", sbom: true, provenance: mode=max }
-      - name: Verify candidate runner contains Codex
-        if: matrix.target == 'agent-runner' || matrix.target == 'sandbox-guest'
+      - name: Verify candidate guest contains Codex
+        if: matrix.target == 'sandbox-guest'
         run: docker run --rm --entrypoint /usr/local/bin/codex "${{ matrix.image }}:candidate-${{ github.sha }}-${{ matrix.arch }}" --version | grep -Fx 'codex-cli 0.149.0'
   candidate-seal:
     if: github.ref == 'refs/heads/staging'

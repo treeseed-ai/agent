@@ -159,18 +159,20 @@ async function main() {
 		const teamId = String(input.teamId ?? '');
 		const loaded = await import('../configuration/manifest.ts').then(({ loadProviderManifest }) => loadProviderManifest(config.manifestPath!, config.dataDir));
 		if (!enrollmentToken || !teamId) throw new Error('Provider enrollment requires a team and one-time token.');
-		await import('../accounts/identity.ts').then(({ ensureCapacityProviderIdentity }) => ensureCapacityProviderIdentity({
+		const privateIdentity = await import('../accounts/identity.ts').then(({ ensureCapacityProviderIdentity }) => ensureCapacityProviderIdentity({
 			ref: loaded.manifest.identity.privateKeyRef,
 			baseDirectory: loaded.directory,
 			dataDirectory: config.dataDir,
 		}));
+		const publicJwk = privateIdentity.publicJwk;
+		const signingKeyId = `provider-${await import('node:crypto').then(({ createHash }) => createHash('sha256').update(publicJwk.x).digest('hex').slice(0, 16))}`;
 		const receipt = await coordinator.beginJoin({ id: connectionId,
 			...(input.serverProfile ? { serverProfile: String(input.serverProfile) } : { controlPlaneUrl: String(input.controlPlaneUrl ?? '') }),
 			controlPlaneAudience: String(input.controlPlaneAudience ?? input.controlPlaneUrl ?? ''), registrationKeyRef: 'memory://one-time',
 			offer: { maxConcurrentRunners: loaded.manifest.capacity.maxConcurrentWorkers,
 				capabilities: [...new Set(loaded.manifest.adapters.flatMap((adapter) => adapter.capabilities ?? []))],
 				metadata: { manifestGeneration: loaded.manifest.configuration.generation } } }, enrollmentToken);
-		emit({ ok: true, connectionId, status: receipt.status, teamId: receipt.teamId, providerId: receipt.providerId, requestId: receipt.requestId });
+		emit({ ok: true, connectionId, status: receipt.status, teamId: receipt.teamId, providerId: receipt.providerId, requestId: receipt.requestId, sandboxIdentity: { signingKeyId, publicJwk } });
 		return;
 	}
 	if (role === 'manager') {

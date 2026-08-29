@@ -12,6 +12,7 @@ export interface AgentExecutionRequest {
   leaseToken: string;
   runnerId: string;
   treeDx: AssignmentTreeDxFacade;
+	emit?: (event: { type: string; occurredAt: string; summary: string; payload: Record<string, unknown>; protectedPayload?: Record<string, unknown> }) => Promise<void>;
   signal?: AbortSignal;
 }
 
@@ -37,6 +38,7 @@ export interface AgentExecutor {
   readonly id: string;
   observe(): Promise<AgentExecutorObservation>;
   execute(request: AgentExecutionRequest): Promise<AgentExecutionResult>;
+  renewLease?(assignmentId: string, leaseExpiresAt: string): Promise<void>;
   recover?(request: Pick<AgentExecutionRequest, 'assignment' | 'assignmentId' | 'runnerId'>): Promise<AgentExecutionResult | null>;
   shutdown?(): void | Promise<void>;
 }

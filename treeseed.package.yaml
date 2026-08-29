@@ -37,6 +37,13 @@ artifacts:
     architectures:
       - amd64
       - arm64
+  - provider: docker
+    name: treeseed/agent-sandbox-guest
+    dockerfile: Dockerfile
+    target: sandbox-guest
+    role: sandbox-guest
+    architectures:
+      - amd64
 releaseGate:
   workflow: verify.yml
 development:
@@ -91,6 +98,9 @@ capacityProvider:
     runner:
       image: treeseed/agent-runner
       target: agent-runner
+    sandboxGuest:
+      image: treeseed/agent-sandbox-guest
+      target: sandbox-guest
   local:
     composeFile: compose.capacity-provider.yml
     projectName: treeseed-capacity-provider

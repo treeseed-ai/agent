@@ -21,7 +21,7 @@ function text(...values: unknown[]) {
 }
 
 export interface ProviderAssignmentRunInput {
-  client: Pick<ProviderProtocolClient, 'renewAssignment' | 'startAssignmentExecution' | 'startAssignmentCloseout' | 'preflightAssignmentCompletion' | 'completeAssignment' | 'returnAssignment' | 'failAssignment' | 'reportAssignmentUsage' | 'respondToAssignmentDiscussion' | 'settleAssignment'>;
+  client: Pick<ProviderProtocolClient, 'renewAssignment' | 'startAssignmentExecution' | 'startAssignmentCloseout' | 'preflightAssignmentCompletion' | 'completeAssignment' | 'returnAssignment' | 'failAssignment' | 'reportAssignmentUsage' | 'respondToAssignmentDiscussion' | 'settleAssignment' | 'createCommunicationTraceEvent'>;
   executor: AgentExecutor;
   assignment: Record<string, unknown>;
   leaseToken: string;
@@ -92,10 +92,18 @@ export async function runProviderAssignment(input: ProviderAssignmentRunInput) {
     scheduleRenewal();
   };
   scheduleRenewal();
+	let traceSequence = 0;
   try {
-    result = await input.executor.execute({ assignment: executorAssignment(input.assignment), assignmentId, leaseToken: input.leaseToken, runnerId: input.runnerId, treeDx, signal: executionAbort.signal });
+    result = await input.executor.execute({ assignment: executorAssignment(input.assignment), assignmentId, leaseToken: input.leaseToken, runnerId: input.runnerId, treeDx,
+		emit: (event) => input.client.createCommunicationTraceEvent(assignmentId, { leaseToken: input.leaseToken, runnerId: input.runnerId, sequence: traceSequence++, ...event }).then(() => undefined),
+		signal: executionAbort.signal });
   } catch (error) {
-    result = { status: 'failed', code: 'agent_executor_failed', summary: error instanceof Error ? error.message : String(error), retryable: true };
+		const summary = error instanceof Error ? error.message : String(error);
+		if (text(input.assignment.executionKind, input.assignment.execution_kind) === 'conversation') {
+			await input.client.createCommunicationTraceEvent(assignmentId, { leaseToken: input.leaseToken, runnerId: input.runnerId, sequence: traceSequence++,
+				type: 'execution.failed', occurredAt: new Date().toISOString(), summary, payload: { code: 'agent_executor_failed', retryable: true } }).catch(() => undefined);
+		}
+    result = { status: 'failed', code: 'agent_executor_failed', summary, retryable: true };
   } finally {
     stopped = true;
     if (timer) clearTimeout(timer);

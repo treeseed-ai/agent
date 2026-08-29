@@ -11,11 +11,13 @@ The package does not host an API, persist control-plane records, synthesize work
 
 ## Trusted executor boundary
 
-Model/runtime implementation is injected through `TREESEED_AGENT_EXECUTOR_MODULE`. The module must export `createAgentExecutor()` and implement the package's `AgentExecutor` contract. Without a configured and healthy executor, the manager advertises no executable capacity and the runner does not request work.
+Production manifests use schema v4 and `microvm` adapters. Manager and runner images are unprivileged and contain neither Codex nor its authentication. They receive only `/data`, component configuration, a runtime application-key file, and the root broker's Unix socket. Without a healthy KVM/Kata broker and an authorized immutable guest image, the manager advertises the adapter as unavailable and a runner returns any raced lease immediately.
 
-The published manager and runner images include the exact Codex CLI version declared by the package lock. The managed production bundle defaults to the built-in `module:codex-chat` executor and accepts the Codex login cache only from the root-owned `/etc/treeseed/credentials/agent-codex-auth` host file. The root entrypoint validates that mount, copies it with mode `0600` into manager-owned provider state, and drops privileges before starting Node. Each assignment then uses an isolated temporary `CODEX_HOME` and deletes it after execution. Credentials must never be baked into an image, supplied through an environment variable, or committed to a repository.
+For every attempt the executor materializes exact Git and TreeDX snapshots, verifies identity/profile/objective/template sources, signs their digests and limits, and uploads them to the broker. The broker launches a unique Kata QEMU/KVM guest. Read assignments receive immutable inputs; acting assignments receive a private copy-on-write workspace and can return only declared, digest-verified artifacts. Lease renewal is separately provider-signed, and lease loss, cancellation, timeout, or settlement destroys the VM.
 
-The executor receives only an API-issued assignment, lease identity, runner identity, and cancellation signal. Repository, TreeDX, model, and provider credentials must arrive through trusted provider receipts or host custody; they do not belong in agent definitions or source worktrees.
+Codex exists only in the pinned guest image. It calls a loopback relay with a one-use assignment token; the host model gateway injects the real service credential after enforcing the signed provider, model, capability, output-token, cost, and expiry policy. Real Codex/provider authentication is never mounted in the guest or provider containers. Long-lived credentials must never be baked into an image, supplied through a manifest/environment variable, or committed to a repository.
+
+Conversation executors participate in team-wide discussion topics. Responses use `@project/agent` for an exact handoff and `@agent` to address every matching chat-enabled agent across the team. The API routes each handoff into the target project's isolated TreeDX discussion stream; the provider never broadens project authority itself.
 
 ## Local profile
 
@@ -31,7 +33,7 @@ Secrets are referenced from the manifest and resolved only on the trusted provid
 
 ## Recovery and completion
 
-Provider-local state exists only to prevent double-spending and recover leases across process restarts. On restart the runtime re-reads authoritative assignment state. A leased or running assignment is returned before local state is released. Successful execution follows:
+Provider-local state exists only to prevent double-spending and recover leases across process restarts. It resides on the LUKS2 provider volume, and reversible `data://` credentials are application-encrypted envelopes. On restart the runtime re-reads authoritative assignment state; the host broker destroys untrusted residual containerd sandboxes rather than reattaching them. A leased or running assignment is returned before local state is released. Successful execution follows:
 
 1. start execution;
 2. execute through the trusted executor;
@@ -41,3 +43,6 @@ Provider-local state exists only to prevent double-spending and recover leases a
 6. submit the terminal completion receipt.
 
 Errors produce typed failure or return receipts. Local cleanup never substitutes for an authoritative API terminal response.
+# Governance inbox artifacts
+
+Conversation and planning assignments may create TreeDX-backed questions and proposals when their scoped activity profile permits it. Questions must identify an owning project, requested audience, related objectives, and answer policy. Proposals must include their governed proposal type, evidence, objective links, and complete plan. The provider must return exact content paths and immutable commit evidence; it must never report a proposal as approved without a correlated exact-version governance decision.

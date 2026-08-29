@@ -3,10 +3,12 @@ import { dirname, isAbsolute, resolve } from 'node:path';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 import {
 	validateCapacityProviderManifestV3,
+	validateCapacityProviderManifestV4,
 	type CapacityProviderJoinInput,
-	type CapacityProviderManifestV3,
+	type CapacityProviderManifest,
 	type ProviderConnectionConfig,
 } from '@treeseed/sdk/capacity-provider';
+import { decryptProviderCredential, encryptProviderCredential, isProviderCredentialEnvelope } from '../security/credential-vault.ts';
 
 export const DEFAULT_PROVIDER_MANIFEST = 'treeseed.capacity-provider.yaml';
 
@@ -14,7 +16,7 @@ export interface LoadedProviderManifest {
 	path: string;
 	directory: string;
 	dataDirectory?: string;
-	manifest: CapacityProviderManifestV3;
+	manifest: CapacityProviderManifest;
 }
 
 export interface ProviderSecretResolver {
@@ -41,10 +43,11 @@ async function localConnections(dataDirectory: string | undefined) {
 
 export async function loadProviderManifest(path = process.env.TREESEED_CAPACITY_PROVIDER_MANIFEST || DEFAULT_PROVIDER_MANIFEST, dataDirectory?: string): Promise<LoadedProviderManifest> {
 	const absolute = resolve(path);
-	const parsed = parseYaml(await readFile(absolute, 'utf8')) as CapacityProviderManifestV3;
+	const parsed = parseYaml(await readFile(absolute, 'utf8')) as CapacityProviderManifest;
 	const overlay = await localConnections(dataDirectory);
 	const manifest = overlay ? { ...parsed, connections: overlay } : parsed;
-	const validation = validateCapacityProviderManifestV3(manifest);
+	if (process.env.TREESEED_REQUIRE_MICROVM === 'true' && manifest.schemaVersion !== 4) throw new Error('This provider requires a v4 microVM-only manifest; process-isolated migration manifests are rejected.');
+	const validation = manifest.schemaVersion === 4 ? validateCapacityProviderManifestV4(manifest) : validateCapacityProviderManifestV3(manifest);
 	if (!validation.ok) throw new Error(`Invalid capacity provider manifest: ${diagnosticMessage(validation.diagnostics)}`);
 	return { path: absolute, directory: dirname(absolute), ...(dataDirectory ? { dataDirectory } : {}), manifest };
 }
@@ -52,7 +55,7 @@ export async function loadProviderManifest(path = process.env.TREESEED_CAPACITY_
 export async function writeProviderConnections(loaded: LoadedProviderManifest, connections: ProviderConnectionConfig[]) {
 	if (!loaded.dataDirectory) throw new Error('Provider connection updates require a local data directory.');
 	const manifest = { ...loaded.manifest, connections };
-	const validation = validateCapacityProviderManifestV3(manifest);
+	const validation = manifest.schemaVersion === 4 ? validateCapacityProviderManifestV4(manifest) : validateCapacityProviderManifestV3(manifest);
 	if (!validation.ok) throw new Error(`Invalid capacity provider manifest: ${diagnosticMessage(validation.diagnostics)}`);
 	const path = connectionOverlayPath(loaded.dataDirectory);
 	await mkdir(dirname(path), { recursive: true, mode: 0o700 });
@@ -95,8 +98,15 @@ export async function resolveProviderSecret(ref: string, input: {
 	}
 	if (ref.startsWith('file://') || ref.startsWith('data://')) {
 		const path = secretReferencePath(ref, input.baseDirectory, input.dataDirectory);
-		const value = (await readFile(path, 'utf8')).trim();
+		const serialized = (await readFile(path, 'utf8')).trim();
+		const encrypted = ref.startsWith('data://') && isProviderCredentialEnvelope(serialized);
+		const value = encrypted ? await decryptProviderCredential(ref, serialized) : serialized;
 		if (!value) throw new Error(`Provider secret file ${path} is empty.`);
+		if (ref.startsWith('data://') && !encrypted) {
+			const temporary = `${path}.${process.pid}.${Date.now()}.migration`;
+			await writeFile(temporary, await encryptProviderCredential(ref, value), { encoding: 'utf8', mode: 0o600, flag: 'wx' });
+			await rename(temporary, path); await chmod(path, 0o600);
+		}
 		return value;
 	}
 	const resolved = await input.resolver?.(ref);
@@ -123,7 +133,8 @@ export async function stageProviderSecret(ref: string, value: string, baseDirect
 	const path = secretReferencePath(ref, baseDirectory, dataDirectory);
 	await mkdir(dirname(path), { recursive: true, mode: 0o700 });
 	const temporary = `${path}.${process.pid}.${Date.now()}.pending`;
-	await writeFile(temporary, `${value.trim()}\n`, { encoding: 'utf8', mode: 0o600, flag: 'wx' });
+	const serialized = ref.startsWith('data://') ? await encryptProviderCredential(ref, value.trim()) : `${value.trim()}\n`;
+	await writeFile(temporary, serialized, { encoding: 'utf8', mode: 0o600, flag: 'wx' });
 	await chmod(temporary, 0o600);
 	return {
 		path,

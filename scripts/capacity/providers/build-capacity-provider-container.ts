@@ -15,6 +15,7 @@ const dockerBuildAttempts = Number(process.env.TREESEED_AGENT_DOCKER_BUILD_ATTEM
 const roleImages = {
 	manager: process.env.TREESEED_AGENT_MANAGER_IMAGE || `treeseed/agent-manager:${imageTag}`,
 	runner: process.env.TREESEED_AGENT_RUNNER_IMAGE || `treeseed/agent-runner:${imageTag}`,
+	guest: process.env.TREESEED_AGENT_SANDBOX_GUEST_IMAGE || `treeseed/agent-sandbox-guest:${imageTag}`,
 } as const;
 type RoleName = keyof typeof roleImages;
 
@@ -25,11 +26,11 @@ function sharedRuntimeRoot() {
 function parseSelectedRoles(): Set<RoleName> {
 	const rolesFlagIndex = process.argv.indexOf('--roles');
 	const rawRoles = rolesFlagIndex >= 0 ? process.argv[rolesFlagIndex + 1] : process.env.TREESEED_AGENT_BUILD_ROLES;
-	const allRoles: RoleName[] = ['manager', 'runner'];
+	const allRoles: RoleName[] = ['manager', 'runner', 'guest'];
 	if (!rawRoles) return new Set(allRoles);
 	const selected = new Set<RoleName>();
 	for (const rawRole of rawRoles.split(',').map((role) => role.trim()).filter(Boolean)) {
-		if (rawRole !== 'manager' && rawRole !== 'runner') {
+		if (rawRole !== 'manager' && rawRole !== 'runner' && rawRole !== 'guest') {
 			throw new Error(`Unsupported capacity provider image role: ${rawRole}`);
 		}
 		selected.add(rawRole);
@@ -323,6 +324,9 @@ if (selectedRoles.has('manager')) {
 }
 if (selectedRoles.has('runner')) {
 	runDockerBuildWithRetry(['build', ...dockerBuildCacheArgs(), '--target', 'agent-runner', '-t', roleImages.runner, '.'], packageRoot);
+}
+if (selectedRoles.has('guest')) {
+	runDockerBuildWithRetry(['build', ...dockerBuildCacheArgs(), '--target', 'sandbox-guest', '-t', roleImages.guest, '.'], packageRoot);
 }
 console.log(`Built capacity provider image roles ${[...selectedRoles].join(', ')} from ${packageRoot}.`);
 

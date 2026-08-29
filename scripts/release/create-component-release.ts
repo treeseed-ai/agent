@@ -4,10 +4,10 @@ import { resolve } from 'node:path';
 import { componentReleaseSchema, deploymentDigest } from '@treeseed/sdk/deployment';
 
 const release = process.env.TREESEED_RELEASE, sourceCommit = process.env.TREESEED_SOURCE_COMMIT;
-const managerDigest = process.env.TREESEED_MANAGER_DIGEST, runnerDigest = process.env.TREESEED_RUNNER_DIGEST;
-if (!release || !sourceCommit || !managerDigest || !runnerDigest) throw new Error('Release, exact source commit, and both multi-architecture image digests are required.');
+const managerDigest = process.env.TREESEED_MANAGER_DIGEST, runnerDigest = process.env.TREESEED_RUNNER_DIGEST, guestDigest = process.env.TREESEED_GUEST_DIGEST;
+if (!release || !sourceCommit || !managerDigest || !runnerDigest || !guestDigest) throw new Error('Release, exact source commit, manager, runner, and sandbox guest image digests are required.');
 const digest = /^sha256:[a-f0-9]{64}$/u;
-if (!/^[a-f0-9]{40}$/u.test(sourceCommit) || !digest.test(managerDigest) || !digest.test(runnerDigest)) throw new Error('Source or image digest is malformed.');
+if (!/^[a-f0-9]{40}$/u.test(sourceCommit) || !digest.test(managerDigest) || !digest.test(runnerDigest) || !digest.test(guestDigest)) throw new Error('Source or image digest is malformed.');
 const track = release.includes('-rc.') ? 'development' : 'stable';
 const revision = Number(process.env.TREESEED_COMPONENT_REVISION ?? '1');
 if (!Number.isInteger(revision) || revision < 1) throw new Error('Component revision must be a positive integer.');
@@ -33,9 +33,10 @@ const bundle = componentReleaseSchema.parse({
 	images: [
 		{ role: 'agent-manager', repository: 'treeseed/agent-manager', digest: managerDigest, platforms: ['linux/amd64', 'linux/arm64'], consumers: ['agent'] },
 		{ role: 'agent-runner', repository: 'treeseed/agent-runner', digest: runnerDigest, platforms: ['linux/amd64', 'linux/arm64'], consumers: ['agent'] },
+		{ role: 'sandbox-guest', repository: 'treeseed/agent-sandbox-guest', digest: guestDigest, platforms: ['linux/amd64'], consumers: ['agent'] },
 	],
 	runtime, runtimeDigest: deploymentDigest(runtime), rollback: { compatible: true, requiresBackup: true },
-	evidence: { provenance: [tagUrl('treeseed/agent-manager'), tagUrl('treeseed/agent-runner')], sboms: [tagUrl('treeseed/agent-manager'), tagUrl('treeseed/agent-runner')], vulnerabilities: [] },
+	evidence: { provenance: [tagUrl('treeseed/agent-manager'), tagUrl('treeseed/agent-runner'), tagUrl('treeseed/agent-sandbox-guest')], sboms: [tagUrl('treeseed/agent-manager'), tagUrl('treeseed/agent-runner'), tagUrl('treeseed/agent-sandbox-guest')], vulnerabilities: [] },
 });
 const output = resolve('release-assets'); mkdirSync(output, { recursive: true });
 writeFileSync(resolve(output, 'compose.yml'), compose);

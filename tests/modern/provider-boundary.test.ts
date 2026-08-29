@@ -47,9 +47,9 @@ describe('Agent package ownership boundary', () => {
 			const second = await ensureCapacityProviderIdentity(input);
 			expect(second.publicJwk).toEqual(first.publicJwk);
 			expect(statSync(resolve(dataDirectory, 'identity-v3.json')).mode & 0o777).toBe(0o600);
-			const stored = JSON.parse(readFileSync(resolve(dataDirectory, 'identity-v3.json'), 'utf8')) as { d?: string; x?: string };
-			expect(stored.x).toBe(first.publicJwk.x);
-			expect(typeof stored.d).toBe('string');
+			const stored = readFileSync(resolve(dataDirectory, 'identity-v3.json'), 'utf8');
+			expect(stored).toContain('treeseed.encrypted-envelope/v1');
+			expect(stored).not.toContain(first.publicJwk.x);
 		} finally {
 			rmSync(dataDirectory, { recursive: true, force: true });
 		}

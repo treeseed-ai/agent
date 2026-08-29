@@ -29,6 +29,7 @@ jobs:
           - { image: treeseed/agent-manager, target: agent-manager, arch: arm64, platform: linux/arm64, runner: ubuntu-24.04-arm }
           - { image: treeseed/agent-runner, target: agent-runner, arch: amd64, platform: linux/amd64, runner: ubuntu-24.04 }
           - { image: treeseed/agent-runner, target: agent-runner, arch: arm64, platform: linux/arm64, runner: ubuntu-24.04-arm }
+          - { image: treeseed/agent-sandbox-guest, target: sandbox-guest, arch: amd64, platform: linux/amd64, runner: ubuntu-24.04 }
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with: { submodules: recursive }
@@ -41,7 +42,7 @@ jobs:
       - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8
         with: { context: ., target: "${{ matrix.target }}", platforms: "${{ matrix.platform }}", push: true, tags: "${{ matrix.image }}:candidate-${{ github.sha }}-${{ matrix.arch }}", sbom: true, provenance: mode=max }
       - name: Verify candidate runner contains Codex
-        if: matrix.target == 'agent-runner'
+        if: matrix.target == 'agent-runner' || matrix.target == 'sandbox-guest'
         run: docker run --rm --entrypoint /usr/local/bin/codex "${{ matrix.image }}:candidate-${{ github.sha }}-${{ matrix.arch }}" --version | grep -Fx 'codex-cli 0.149.0'
   candidate-seal:
     if: github.ref == 'refs/heads/staging'
@@ -66,7 +67,9 @@ jobs:
             docker buildx imagetools create -t "${image}:${candidate}" "${image}:${candidate}-amd64" "${image}:${candidate}-arm64"
             digest="$(docker buildx imagetools inspect "${image}:${candidate}" --format '{{json .Manifest}}' | jq -r '.digest')"; [[ "$digest" =~ ^sha256:[a-f0-9]{64}$ ]]; export "TREESEED_${key}_DIGEST=$digest"
           done
-          export TREESEED_RELEASE="$(node -p "require('./package.json').version")" TREESEED_SOURCE_COMMIT="$GITHUB_SHA" TREESEED_MANAGER_DIGEST TREESEED_RUNNER_DIGEST
+          docker buildx imagetools create -t "treeseed/agent-sandbox-guest:candidate-${GITHUB_SHA}" "treeseed/agent-sandbox-guest:candidate-${GITHUB_SHA}-amd64"
+          TREESEED_GUEST_DIGEST="$(docker buildx imagetools inspect "treeseed/agent-sandbox-guest:candidate-${GITHUB_SHA}" --format '{{json .Manifest}}' | jq -r '.digest')"; [[ "$TREESEED_GUEST_DIGEST" =~ ^sha256:[a-f0-9]{64}$ ]]; export TREESEED_GUEST_DIGEST
+          export TREESEED_RELEASE="$(node -p "require('./package.json').version")" TREESEED_SOURCE_COMMIT="$GITHUB_SHA" TREESEED_MANAGER_DIGEST TREESEED_RUNNER_DIGEST TREESEED_GUEST_DIGEST
           node --import tsx scripts/release/create-component-release.ts
           npm run release:custody -- seal release-assets/release-evidence-v1.json release-assets
           npm run release:custody -- verify release-assets/release-evidence-v1.json

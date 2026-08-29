@@ -142,12 +142,21 @@ export async function runMultiTeamProviderRunners(
 				results.push({ connectionId: connection.connection.id, status: 'idle', reason: 'no_assignment' });
 				continue;
 			}
+			if (text(assignment.executionKind) === 'conversation') await client.acknowledgeCommunicationNotification(assignmentId, {
+				providerId: connection.providerId, runnerId: claim.runnerId, observedAt: new Date().toISOString(),
+			});
 			const executionProviderId = text(assignment.executionProviderId, record(assignment.capacityEnvelope).executionProviderId);
 			const laneId = text(assignment.laneId, record(assignment.capacityEnvelope).laneId);
 			const adapter = loaded.manifest.adapters.find((candidate) => candidate.id === executionProviderId && (!laneId || candidate.laneIds.includes(laneId)));
-			if (!adapter) { await localState.release(claim.id); results.push({ connectionId: connection.connection.id, status: 'idle', reason: 'assignment_adapter_unavailable' }); continue; }
+			if (!adapter) {
+				await client.returnAssignment(assignmentId, { leaseToken, runnerId: claim.runnerId, code: 'assignment_adapter_unavailable', reason: 'The assigned execution adapter is not installed on this provider.', retryable: true });
+				await localState.release(claim.id); results.push({ connectionId: connection.connection.id, status: 'idle', reason: 'assignment_adapter_unavailable' }); continue;
+			}
 			const executor = await resolveAgentExecutor(config, adapter, loaded.manifest);
-			if (!executor || !(await executor.observe()).available) { await localState.release(claim.id); results.push({ connectionId: connection.connection.id, status: 'idle', reason: 'executor_unavailable' }); continue; }
+			if (!executor || !(await executor.observe()).available) {
+				await client.returnAssignment(assignmentId, { leaseToken, runnerId: claim.runnerId, code: 'executor_unavailable', reason: 'The Kata sandbox host is not ready for this assignment.', retryable: true });
+				await localState.release(claim.id); results.push({ connectionId: connection.connection.id, status: 'idle', reason: 'executor_unavailable' }); continue;
+			}
 			const leaseExpiresAt = text(assignment.leaseExpiresAt) ?? new Date(Date.now() + 300_000).toISOString();
 			await localState.attachLease(claim.id, {
 				assignmentId,
@@ -166,10 +175,10 @@ export async function runMultiTeamProviderRunners(
 				leaseToken,
 				runnerId: claim.runnerId,
 				leaseSeconds: 300,
-				onLeaseRenewed: (renewedLeaseExpiresAt) => localState.renewLease(claim.id, {
-					assignmentId,
-					leaseExpiresAt: renewedLeaseExpiresAt,
-				}).then(() => undefined),
+				onLeaseRenewed: async (renewedLeaseExpiresAt) => {
+					await executor.renewLease?.(assignmentId, renewedLeaseExpiresAt);
+					await localState.renewLease(claim.id, { assignmentId, leaseExpiresAt: renewedLeaseExpiresAt });
+				},
 			});
 			await localState.finalize(claim.id, 'terminal-receipt-confirmed');
 			results.push({ connectionId: connection.connection.id, assignmentId, status: 'settled', terminal });

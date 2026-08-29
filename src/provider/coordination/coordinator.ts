@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import type {
-	CapacityProviderManifestV3,
+	CapacityProviderManifest,
 	CapacityProviderJoinInput,
 	ProviderAccessTokenIssue,
 	ProviderConnectionConfig,
@@ -59,7 +59,7 @@ interface CoordinatorIdentity {
 	publicJwk: Awaited<ReturnType<typeof loadCapacityProviderIdentity>>['publicJwk'];
 }
 
-function unsignedRegistration(manifest: CapacityProviderManifestV3, connection: CapacityProviderJoinInput, identity: CoordinatorIdentity) {
+function unsignedRegistration(manifest: CapacityProviderManifest, connection: CapacityProviderJoinInput, identity: CoordinatorIdentity) {
 	return {
 		schemaVersion: 1 as const,
 		displayName: manifest.identity.displayName,

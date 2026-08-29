@@ -38,6 +38,10 @@ process.on('message', async (message: any) => {
 		if (message.ok) call.resolve(message.value); else call.reject(new Error(String(message.error)));
 		return;
 	}
+	if (message?.type === 'trace-result') {
+		const call = calls.get(String(message.callId)); if (!call) return;
+		calls.delete(String(message.callId)); if (message.ok) call.resolve(undefined); else call.reject(new Error(String(message.error))); return;
+	}
 	if (message?.type === 'cancel') return controllers.get(String(message.id))?.abort();
 	const id = String(message?.id ?? '');
 	try {
@@ -48,7 +52,10 @@ process.on('message', async (message: any) => {
 		if (message.type === 'execute') {
 			const controller = new AbortController(); controllers.set(id, controller);
 			const request = message.request;
-			const value = await executor.execute({ ...request, treeDx: treeDx(id, request.treeDx), signal: controller.signal });
+			const emit = (event: Record<string, unknown>) => new Promise<void>((resolve, reject) => {
+				const callId = `${id}:trace:${++callSequence}`; calls.set(callId, { resolve, reject }); process.send?.({ type: 'trace', requestId: id, callId, event });
+			});
+			const value = await executor.execute({ ...request, treeDx: treeDx(id, request.treeDx), emit, signal: controller.signal });
 			controllers.delete(id);
 			return process.send?.({ id, ok: true, value });
 		}

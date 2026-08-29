@@ -5,16 +5,13 @@ services:
     command: ["manager"]
     restart: unless-stopped
     environment: &provider-environment
-      TREESEED_CAPACITY_PROVIDER_SOURCE: /config/treeseed.capacity-provider.yaml
-      TREESEED_CAPACITY_PROVIDER_MANIFEST: /data/config/treeseed.capacity-provider.yaml
+      TREESEED_CAPACITY_PROVIDER_MANIFEST: /config/treeseed.capacity-provider.yaml
       TREESEED_PROVIDER_DATA_DIR: /data
       TREESEED_PROVIDER_ENVIRONMENT: ${TREESEED_PROVIDER_ENVIRONMENT:-managed}
+      TREESEED_REQUIRE_MICROVM: "true"
+      TREESEED_PROVIDER_CREDENTIAL_KEK_FILE: /run/credentials/credentials
       TREESEED_SERVER_PROFILE_LOCAL_URL: ${TREESEED_CONTROL_PLANE_URL:?TREESEED_CONTROL_PLANE_URL is required}
       TREESEED_SERVER_PROFILE_LOCAL_AUDIENCE: ${TREESEED_CONTROL_PLANE_AUDIENCE:?TREESEED_CONTROL_PLANE_AUDIENCE is required}
-      TREESEED_AGENT_EXECUTOR_MODULE: ${TREESEED_AGENT_EXECUTOR_MODULE:-module:codex-chat}
-      TREESEED_CODEX_EXECUTABLE: /usr/local/bin/codex
-      TREESEED_CODEX_AUTH_SOURCE: /run/treeseed-secrets/codex-auth.json
-      TREESEED_CODEX_AUTH_FILE: /data/credentials/codex-auth.json
       TREESEED_PROVIDER_MAX_CONCURRENT_WORKDAYS: ${TREESEED_PROVIDER_MAX_CONCURRENT_WORKDAYS:-1}
       TREESEED_PROVIDER_MAX_CONCURRENT_RUNNERS: ${TREESEED_PROVIDER_MAX_CONCURRENT_RUNNERS:-1}
     volumes: &provider-volumes
@@ -26,9 +23,18 @@ services:
         target: /config/treeseed.capacity-provider.yaml
         read_only: true
       - type: bind
-        source: /etc/treeseed/credentials/agent-codex-auth
-        target: /run/treeseed-secrets/codex-auth.json
+        source: /run/treeseed/sandbox/broker.sock
+        target: /run/treeseed/sandbox/broker.sock
+      - type: bind
+        source: /etc/treeseed/sandbox/relay-ca.crt
+        target: /etc/treeseed/sandbox/relay-ca.crt
         read_only: true
+      - type: bind
+        source: /run/treeseed/component-credentials/agent
+        target: /run/credentials
+        read_only: true
+    group_add: &broker-groups
+      - "${TREESEED_SANDBOX_BROKER_GID:?TREESEED_SANDBOX_BROKER_GID is required}"
     networks: [private, platform]
     healthcheck:
       test: ["CMD", "/app/docker-entrypoint.sh", "healthcheck", "--json"]
@@ -43,6 +49,7 @@ services:
     restart: unless-stopped
     environment: *provider-environment
     volumes: *provider-volumes
+    group_add: *broker-groups
     networks: [private, platform]
     healthcheck:
       test: ["CMD", "/app/docker-entrypoint.sh", "healthcheck", "--json"]

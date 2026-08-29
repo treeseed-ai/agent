@@ -45,6 +45,13 @@ export function createProcessIsolatedExecutor(config: ProviderHostRuntimeConfig,
 			} catch (error) { child.send({ type: 'treedx-result', callId: message.callId, ok: false, error: error instanceof Error ? error.message : String(error) }); }
 			return;
 		}
+		if (message?.type === 'trace') {
+			const request = pending.get(String(message.requestId))?.request;
+			if (!request?.emit) return child.send({ type: 'trace-result', callId: message.callId, ok: true });
+			try { await request.emit(message.event); child.send({ type: 'trace-result', callId: message.callId, ok: true }); }
+			catch (error) { child.send({ type: 'trace-result', callId: message.callId, ok: false, error: error instanceof Error ? error.message : String(error) }); }
+			return;
+		}
 		const id = String(message?.id ?? '');
 		const request = pending.get(id);
 		if (!request) return;

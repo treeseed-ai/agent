@@ -4,6 +4,7 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { CONTROL_PLANE_OPERATIONS } from '@treeseed/sdk/operator-contracts';
 import { providerOperationPath } from '../../src/provider/coordination/client.ts';
+import { providerRegistrationIdempotencyKey } from '../../src/provider/coordination/coordinator.ts';
 import { executorModuleSpecifier, resolveAgentExecutor } from '../../src/provider/execution/executor-loader.ts';
 import { resolveProviderConfig } from '../../src/provider/configuration/config.ts';
 import { ensureCapacityProviderIdentity } from '../../src/provider/accounts/identity.ts';
@@ -52,6 +53,13 @@ describe('Agent package ownership boundary', () => {
 		} finally {
 			rmSync(dataDirectory, { recursive: true, force: true });
 		}
+	});
+
+	it('binds registration idempotency to the enrollment generation', () => {
+		expect(providerRegistrationIdempotencyKey('primary', 'token-one'))
+			.toBe(providerRegistrationIdempotencyKey('primary', 'token-one'));
+		expect(providerRegistrationIdempotencyKey('primary', 'token-one'))
+			.not.toBe(providerRegistrationIdempotencyKey('primary', 'token-two'));
 	});
 
 	it('stores mutable connections in local custody without rewriting the canonical manifest', async () => {

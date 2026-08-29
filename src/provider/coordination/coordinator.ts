@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import type {
 	CapacityProviderManifestV3,
 	CapacityProviderJoinInput,
@@ -74,6 +74,11 @@ function nextState(connectionId: string, controlPlaneUrl: string, prior: Provide
 	const next = { schemaVersion: 1 as const, connectionId, controlPlaneUrl, ...(prior ?? {}), ...patch, updatedAt: new Date().toISOString() };
 	if (!next.offer) throw new Error(`Provider connection ${connectionId} is missing its durable supply offer.`);
 	return next as ProviderConnectionState;
+}
+
+export function providerRegistrationIdempotencyKey(connectionId: string, registrationKey: string) {
+	const enrollmentGeneration = createHash('sha256').update(registrationKey).digest('hex').slice(0, 16);
+	return `register:${connectionId}:${enrollmentGeneration}`;
 }
 
 export class CapacityProviderCoordinator {
@@ -173,7 +178,7 @@ export class CapacityProviderCoordinator {
 		const proof = await this.proof({ audience: controlPlaneAudience, method: 'POST', path: providerOperationPath(CONTROL_PLANE_OPERATIONS.providers.register), body: unsigned, identity });
 		const submission: ProviderRegistrationSubmission = { ...unsigned, proof };
 		const registrationKey = oneTimeRegistrationKey ?? await resolveProviderSecret(join.registrationKeyRef, { env: this.options.env, baseDirectory: this.loaded.directory, dataDirectory: this.dataDir, resolver: this.options.secretResolver });
-		const request = await client.register(registrationKey, submission, `register:${join.id}`);
+		const request = await client.register(registrationKey, submission, providerRegistrationIdempotencyKey(join.id, registrationKey));
 		const state = nextState(join.id, controlPlaneUrl, null, { serverProfile: join.serverProfile ?? null, controlPlaneAudience, offer: join.offer, teamId: request.teamId, providerId: request.providerId, registrationRequestId: request.id, registrationStatus: request.status });
 		await writeProviderConnectionState(this.dataDir, state);
 		return { connectionId: join.id, status: 'pending-approval', teamId: request.teamId, providerId: request.providerId, requestId: request.id };

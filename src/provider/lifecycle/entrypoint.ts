@@ -136,7 +136,9 @@ async function main() {
 	}
 	if (role === 'healthcheck' || role === 'doctor') {
 		const { checkProviderHealth } = await import('./lifecycle.ts');
-		emit(await checkProviderHealth(config));
+		const health = await checkProviderHealth(config);
+		emit(health);
+		if (role === 'healthcheck' && health.status !== 'ok') process.exitCode = 1;
 		return;
 	}
 	if (role === 'plan') {

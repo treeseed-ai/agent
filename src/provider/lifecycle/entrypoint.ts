@@ -152,15 +152,7 @@ async function main() {
 		const { createCapacityProviderCoordinator } = await import('../teams/multi-team-runtime.ts');
 		const coordinator = await createCapacityProviderCoordinator(config);
 		const connectionId = String(input.connectionId ?? `local-${String(input.teamId ?? '')}`);
-		if (input.action === 'complete') {
-			const receipt = await coordinator.exchangeRegistrationCredential(connectionId);
-			emit({ ok: true, connectionId, status: receipt.status, teamId: receipt.teamId, providerId: receipt.providerId, membershipId: receipt.membershipId });
-			return;
-		}
-		const enrollmentToken = String(input.enrollmentToken ?? '');
-		const teamId = String(input.teamId ?? '');
 		const loaded = await import('../configuration/manifest.ts').then(({ loadProviderManifest }) => loadProviderManifest(config.manifestPath!, config.dataDir));
-		if (!enrollmentToken || !teamId) throw new Error('Provider enrollment requires a team and one-time token.');
 		const privateIdentity = await import('../accounts/identity.ts').then(({ ensureCapacityProviderIdentity }) => ensureCapacityProviderIdentity({
 			ref: loaded.manifest.identity.privateKeyRef,
 			baseDirectory: loaded.directory,
@@ -168,6 +160,21 @@ async function main() {
 		}));
 		const publicJwk = privateIdentity.publicJwk;
 		const signingKeyId = `provider-${await import('node:crypto').then(({ createHash }) => createHash('sha256').update(publicJwk.x).digest('hex').slice(0, 16))}`;
+		if (input.action === 'identity') {
+			const connection = loaded.manifest.connections.find((candidate) => candidate.id === connectionId);
+			if (!connection) throw new Error(`Provider connection ${connectionId} is not configured.`);
+			emit({ ok: true, connectionId, status: 'configured', teamId: connection.teamId, providerId: connection.providerId,
+				sandboxIdentity: { signingKeyId, publicJwk } });
+			return;
+		}
+		if (input.action === 'complete') {
+			const receipt = await coordinator.exchangeRegistrationCredential(connectionId);
+			emit({ ok: true, connectionId, status: receipt.status, teamId: receipt.teamId, providerId: receipt.providerId, membershipId: receipt.membershipId });
+			return;
+		}
+		const enrollmentToken = String(input.enrollmentToken ?? '');
+		const teamId = String(input.teamId ?? '');
+		if (!enrollmentToken || !teamId) throw new Error('Provider enrollment requires a team and one-time token.');
 		const receipt = await coordinator.beginJoin({ id: connectionId,
 			...(input.serverProfile ? { serverProfile: String(input.serverProfile) } : { controlPlaneUrl: String(input.controlPlaneUrl ?? '') }),
 			controlPlaneAudience: String(input.controlPlaneAudience ?? input.controlPlaneUrl ?? ''), registrationKeyRef: 'memory://one-time',

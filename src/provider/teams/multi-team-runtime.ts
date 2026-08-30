@@ -128,6 +128,7 @@ export async function runMultiTeamProviderRunners(
 	const loaded = await loadProviderManifest(config.manifestPath ?? '', config.dataDir);
 	const connections = (await reconcileProviderConnections(config)).flatMap((entry) => entry.runtime ? [entry.runtime] : []);
 	const localState = new ProviderLocalCapacityStore(config.dataDir);
+	await recoverProviderLocalLeases({ config, connections, store: localState, includeRunning: false });
 	const results: Record<string, unknown>[] = [];
 	for (const connection of connections) {
 		const runtime = context(config, connection, loaded.manifest);
@@ -141,6 +142,8 @@ export async function runMultiTeamProviderRunners(
 			continue;
 		}
 		const client = createProviderControlPlaneClient(runtime);
+		let leasedAssignmentId: string | undefined;
+		let leasedToken: string | undefined;
 		try {
 			const leased = record(await client.nextAssignment({
 				runnerId: claim.runnerId,
@@ -150,6 +153,8 @@ export async function runMultiTeamProviderRunners(
 			const assignment = record(leased.assignment ?? leased.data ?? leased.payload);
 			const assignmentId = text(assignment.id);
 			const leaseToken = text(leased.leaseToken, assignment.leaseToken);
+			leasedAssignmentId = assignmentId;
+			leasedToken = leaseToken;
 			if (!assignmentId || !leaseToken) {
 				await localState.release(claim.id);
 				results.push({ connectionId: connection.connection.id, status: 'idle', reason: 'no_assignment' });
@@ -199,11 +204,14 @@ export async function runMultiTeamProviderRunners(
 			await localState.finalize(claim.id, 'terminal-receipt-confirmed');
 			results.push({ connectionId: connection.connection.id, assignmentId, status: 'settled', terminal });
 		} catch (error) {
-			await localState.recordFailure(claim.id, error instanceof Error ? error.message : String(error));
+			const message = error instanceof Error ? error.message : String(error);
+			if (leasedAssignmentId || leasedToken) await localState.recordFailure(claim.id, message);
+			else await localState.finalize(claim.id, 'unleased-runner-failure-released');
 			results.push({
 				connectionId: connection.connection.id,
-				status: 'recovery',
-				error: error instanceof Error ? error.message : String(error),
+				status: leasedAssignmentId || leasedToken ? 'recovery' : 'idle',
+				reason: leasedAssignmentId || leasedToken ? 'lease_recovery_required' : 'unleased_runner_failure',
+				error: message,
 			});
 		}
 	}

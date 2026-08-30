@@ -4,6 +4,7 @@ import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 import {
 	validateCapacityProviderManifestV3,
 	validateCapacityProviderManifestV4,
+	validateCapacityProviderManifestV5,
 	type CapacityProviderJoinInput,
 	type CapacityProviderManifest,
 	type ProviderConnectionConfig,
@@ -46,8 +47,8 @@ export async function loadProviderManifest(path = process.env.TREESEED_CAPACITY_
 	const parsed = parseYaml(await readFile(absolute, 'utf8')) as CapacityProviderManifest;
 	const overlay = await localConnections(dataDirectory);
 	const manifest = overlay ? { ...parsed, connections: overlay } : parsed;
-	if (process.env.TREESEED_REQUIRE_MICROVM === 'true' && manifest.schemaVersion !== 4) throw new Error('This provider requires a v4 microVM-only manifest; process-isolated migration manifests are rejected.');
-	const validation = manifest.schemaVersion === 4 ? validateCapacityProviderManifestV4(manifest) : validateCapacityProviderManifestV3(manifest);
+	if (process.env.TREESEED_REQUIRE_MICROVM === 'true' && manifest.schemaVersion < 4) throw new Error('This provider requires a microVM-only manifest; process-isolated migration manifests are rejected.');
+	const validation = manifest.schemaVersion === 5 ? validateCapacityProviderManifestV5(manifest) : manifest.schemaVersion === 4 ? validateCapacityProviderManifestV4(manifest) : validateCapacityProviderManifestV3(manifest);
 	if (!validation.ok) throw new Error(`Invalid capacity provider manifest: ${diagnosticMessage(validation.diagnostics)}`);
 	return { path: absolute, directory: dirname(absolute), ...(dataDirectory ? { dataDirectory } : {}), manifest };
 }
@@ -55,7 +56,7 @@ export async function loadProviderManifest(path = process.env.TREESEED_CAPACITY_
 export async function writeProviderConnections(loaded: LoadedProviderManifest, connections: ProviderConnectionConfig[]) {
 	if (!loaded.dataDirectory) throw new Error('Provider connection updates require a local data directory.');
 	const manifest = { ...loaded.manifest, connections };
-	const validation = manifest.schemaVersion === 4 ? validateCapacityProviderManifestV4(manifest) : validateCapacityProviderManifestV3(manifest);
+	const validation = manifest.schemaVersion === 5 ? validateCapacityProviderManifestV5(manifest) : manifest.schemaVersion === 4 ? validateCapacityProviderManifestV4(manifest) : validateCapacityProviderManifestV3(manifest);
 	if (!validation.ok) throw new Error(`Invalid capacity provider manifest: ${diagnosticMessage(validation.diagnostics)}`);
 	const path = connectionOverlayPath(loaded.dataDirectory);
 	await mkdir(dirname(path), { recursive: true, mode: 0o700 });

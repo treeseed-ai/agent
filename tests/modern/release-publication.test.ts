@@ -11,15 +11,16 @@ describe('Agent RC publication', () => {
 		const source = readFileSync('.github/workflows/publish.yml', 'utf8');
 		const workflow = parse(source) as { jobs: Record<string, { if?: string; needs?: string | string[]; steps?: Array<{ uses?: string }> }> };
 		expect(workflow.jobs['candidate-build']?.if).toBe("github.ref == 'refs/heads/staging'");
-		expect(workflow.jobs['candidate-build']?.needs).toBe('candidate-package');
-		expect(workflow.jobs['candidate-seal']?.needs).toBe('candidate-build');
+		expect(workflow.jobs['candidate-base-build']?.needs).toBe('candidate-package');
+		expect(workflow.jobs['candidate-build']?.needs).toEqual(['candidate-package', 'candidate-base-build']);
+		expect(workflow.jobs['candidate-seal']?.needs).toEqual(['candidate-build', 'candidate-base-build']);
 		expect(workflow.jobs.promote?.if).toBe("startsWith(github.ref, 'refs/tags/')");
 		expect(workflow.jobs.promote?.steps?.some(({ uses }) => uses?.includes('docker/build-push-action'))).toBe(false);
 		expect(source).toContain('release-evidence-v1.json');
 	});
 
 	it('materializes an exact no-build production bundle', () => {
-		execFileSync(process.execPath, ['--import', 'tsx', 'scripts/release/create-component-release.ts'], { env: { ...process.env, TREESEED_RELEASE: '0.13.0-rc.10', TREESEED_SOURCE_COMMIT: 'a'.repeat(40), TREESEED_MANAGER_DIGEST: hash('b'), TREESEED_RUNNER_DIGEST: hash('c'), TREESEED_GUEST_DIGEST: hash('d') } });
+		execFileSync(process.execPath, ['--import', 'tsx', 'scripts/release/create-component-release.ts'], { env: { ...process.env, TREESEED_RELEASE: '0.13.0-rc.10', TREESEED_SOURCE_COMMIT: 'a'.repeat(40), TREESEED_MANAGER_DIGEST: hash('b'), TREESEED_RUNNER_DIGEST: hash('c'), TREESEED_SANDBOX_BASE_DIGEST: hash('e'), TREESEED_GUEST_DIGEST: hash('d') } });
 		const compose = readFileSync('release-assets/compose.yml', 'utf8');
 		const release = JSON.parse(readFileSync('release-assets/component-release.json', 'utf8')) as { release: string; revision: number; runtime: { compose: { files: Array<{ path: string; digest: string }> }; dependencies: Array<{ id: string; locality: string }> }; track: string; source: { commit: string }; stableBase: { catalogDigest: unknown }; images: Array<{ digest: string }> };
 		expect(compose).not.toMatch(/\bbuild\s*:/u);
@@ -27,7 +28,7 @@ describe('Agent RC publication', () => {
 		expect(release.track).toBe('development');
 		expect(release.source.commit).toBe('a'.repeat(40));
 		expect(release.stableBase.catalogDigest).toBeNull();
-		expect(release.images.map((image) => image.digest)).toEqual([hash('b'), hash('c'), hash('d')]);
+		expect(release.images.map((image) => image.digest)).toEqual([hash('b'), hash('c'), hash('e'), hash('d')]);
 		expect(release.release).toBe('0.13.0~rc10-1');
 		expect(release.revision).toBe(1);
 		expect(release.runtime.compose.files).toEqual([{ path: 'compose.yml', digest: expect.stringMatching(/^sha256:[a-f0-9]{64}$/u) }]);
@@ -40,17 +41,21 @@ describe('Agent RC publication', () => {
 		const builder = readFileSync('scripts/capacity/providers/build-capacity-provider-container.ts', 'utf8');
 		expect(builder).toContain("if (packageName === '@treeseed/sdk') continue;");
 		expect(builder).not.toContain("packageName.startsWith('@treeseed/')");
-		expect(readFileSync('Dockerfile', 'utf8')).toContain('FROM node:24-alpine');
+		expect(readFileSync('Dockerfile', 'utf8')).toContain('FROM ${UBUNTU_BASE} AS agent-provider-base');
+		expect(readFileSync('Dockerfile', 'utf8')).toContain('FROM ${UBUNTU_BASE} AS sandbox-base');
+		expect(readFileSync('Dockerfile.sandbox-codex', 'utf8')).toContain('FROM ${SANDBOX_BASE}');
 	});
 
 	it('ships Codex only in the brokered sandbox guest and gives providers only the broker socket', () => {
 		const packageJson = JSON.parse(readFileSync('package.json', 'utf8')) as { dependencies: Record<string, string> };
 		const dockerfile = readFileSync('Dockerfile', 'utf8');
+		const codexDockerfile = readFileSync('Dockerfile.sandbox-codex', 'utf8');
 		const entrypoint = readFileSync('docker-entrypoint.sh', 'utf8');
 		const compose = readFileSync('deploy/compose.template.yml', 'utf8');
 		const workflow = readFileSync('.github/workflows/publish.yml', 'utf8');
 		expect(packageJson.dependencies['@openai/codex']).toBe('0.149.0');
-		expect(dockerfile).toContain('/app/node_modules/@openai/codex/bin/codex.js');
+		expect(dockerfile).not.toContain('/app/node_modules/@openai/codex/bin/codex.js');
+		expect(codexDockerfile).toContain('/app/node_modules/@openai/codex/bin/codex.js');
 		expect(entrypoint).toContain('provider manager and runner containers must run unprivileged');
 		expect(entrypoint).toContain('rewrap-vault.js');
 		expect(entrypoint).not.toContain('CODEX_AUTH');
@@ -61,5 +66,9 @@ describe('Agent RC publication', () => {
 		expect(compose).toContain('TREESEED_REQUIRE_MICROVM: "true"');
 		expect(compose).not.toContain('TREESEED_CODEX_AUTH_FILE');
 		expect(workflow).toContain('codex-cli 0.149.0');
+		const guest = readFileSync('src/sandbox/guest.ts', 'utf8');
+		expect(guest).toContain("'--sandbox', 'workspace-write', '--approve-for-me'");
+		expect(guest).not.toContain("'--dangerously-bypass-approvals-and-sandbox'");
+		expect(guest).toContain("resolve(inputRoot, 'codex-auth.json')");
 	});
 });

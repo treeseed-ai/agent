@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { createReadStream } from 'node:fs';
 import { createServer } from 'node:http';
 import { request as httpsRequest } from 'node:https';
-import { chmod, mkdir, readFile, stat, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { sandboxAssignmentSchema, sandboxResultSchema, type SandboxAssignment } from '@treeseed/sdk/capacity-provider';
 
@@ -86,14 +86,17 @@ export async function runSandboxGuest() {
 		await run('/usr/bin/git', ['add', '--all'], { cwd: '/workspace/project' });
 		await run('/usr/bin/git', ['commit', '--quiet', '--allow-empty', '-m', 'Immutable assignment baseline'], { cwd: '/workspace/project' });
 	}
-	const relay = await startModelRelay(assignment, sandboxId, operationToken);
 	const codexHome = '/workspace/.treeseed/codex', responsePath = '/workspace/.treeseed/response.md'; await mkdir(codexHome, { recursive: true, mode: 0o700 });
+	const subscriptionAuth = await readFile(resolve(inputRoot, 'codex-auth.json')).catch(() => null);
+	if (subscriptionAuth) await writeFile(resolve(codexHome, 'auth.json'), subscriptionAuth, { mode: 0o600 });
+	const relay = subscriptionAuth ? null : await startModelRelay(assignment, sandboxId, operationToken);
 	const events: Record<string, unknown>[] = [], composedPrompt = promptFromContext(context);
-	const providerArguments = ['exec', '--json', '--ephemeral', '--ignore-user-config', '--dangerously-bypass-approvals-and-sandbox', ...(writableProject ? [] : ['--skip-git-repo-check']), '--model', assignment.modelPolicy.model,
+	const providerArguments = ['exec', '--json', '--ephemeral', '--ignore-user-config', '--sandbox', 'workspace-write', '--approve-for-me', ...(writableProject ? [] : ['--skip-git-repo-check']), '--model', assignment.modelPolicy.model,
 		'--enable', 'code_mode_host', '--disable', 'browser_use', '--disable', 'apps', '--disable', 'multi_agent_v2', '--disable', 'image_generation', '--color', 'never', '--output-last-message', responsePath, '-C', '/workspace/project', '-'];
 	try {
 		await run('/usr/local/bin/codex', providerArguments, {
-			cwd: '/workspace/project', input: composedPrompt, env: { PATH: '/usr/local/bin:/usr/bin:/bin', HOME: codexHome, CODEX_HOME: codexHome, OPENAI_BASE_URL: relay.baseUrl, OPENAI_API_KEY: 'treeseed-assignment-relay', LANG: 'C.UTF-8' },
+			cwd: '/workspace/project', input: composedPrompt, env: { PATH: '/usr/local/bin:/usr/bin:/bin', HOME: codexHome, CODEX_HOME: codexHome,
+				...(relay ? { OPENAI_BASE_URL: relay.baseUrl, OPENAI_API_KEY: 'treeseed-assignment-relay' } : {}), LANG: 'C.UTF-8' },
 			onLine(line) { try { events.push(record(JSON.parse(line))); } catch { events.push({ type: 'provider.event.invalid', digest: createHash('sha256').update(line).digest('hex') }); } },
 		});
 		const responseMarkdown = (await readFile(responsePath, 'utf8')).trim(); if (!responseMarkdown) throw new Error('Execution provider returned an empty response.');
@@ -113,7 +116,7 @@ export async function runSandboxGuest() {
 			diagnostics: { systemPrompt: composedPrompt, providerEvents: events, providerArguments, model: assignment.modelPolicy.model, provider: assignment.modelPolicy.provider, contextManifest: context,
 				guestKernel: (await readFile('/proc/version', 'utf8')).trim(), guestUid: process.getuid?.() ?? null, sandboxProfile: assignment.profile }, teardown: { verified: false, completedAt: null } });
 		await writeFile(resolve(outputRoot, 'result.json'), `${JSON.stringify(result)}\n`, { mode: 0o600 });
-	} finally { await relay.close(); }
+	} finally { await rm(resolve(codexHome, 'auth.json'), { force: true }); await relay?.close(); }
 }
 
 if (process.argv[1]?.endsWith('/sandbox/guest.js')) runSandboxGuest().catch(async (error) => {

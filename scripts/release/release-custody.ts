@@ -11,8 +11,8 @@ if (process.argv[2] === 'seal') {
 	const output = resolve(root, process.argv[4] ?? 'release-assets');
 	const pkg = JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf8')) as { name: string; version: string };
 	const sourceCommit = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim();
-	const images = [['manager', 'treeseed/agent-manager', process.env.TREESEED_MANAGER_DIGEST], ['runner', 'treeseed/agent-runner', process.env.TREESEED_RUNNER_DIGEST], ['guest', 'treeseed/agent-sandbox-guest', process.env.TREESEED_GUEST_DIGEST]] as const;
-	if (images.some(([, , digest]) => !/^sha256:[a-f0-9]{64}$/u.test(digest ?? ''))) throw new Error('Manager, runner, and sandbox guest exact OCI manifest digests are required.');
+	const images = [['manager', 'treeseed/agent-manager', process.env.TREESEED_MANAGER_DIGEST], ['runner', 'treeseed/agent-runner', process.env.TREESEED_RUNNER_DIGEST], ['sandbox-base', 'treeseed/sandbox-base', process.env.TREESEED_SANDBOX_BASE_DIGEST], ['guest', 'treeseed/sandbox-codex', process.env.TREESEED_GUEST_DIGEST]] as const;
+	if (images.some(([, , digest]) => !/^sha256:[a-f0-9]{64}$/u.test(digest ?? ''))) throw new Error('Manager, runner, sandbox base, and Codex exact OCI manifest digests are required.');
 	const artifacts: Array<{ id: string; kind: 'oci-image' | 'npm-package' | 'archive' | 'sbom' | 'component-manifest' | 'compose'; identity: string; digest: `sha256:${string}`; mediaType: string; size?: number }> = images.map(([id, image, digest]) => ({ id: `${id}-image`, kind: 'oci-image', identity: `${image}@${digest}`, digest: digest! as `sha256:${string}`, mediaType: 'application/vnd.oci.image.index.v1+json' }));
 	for (const name of readdirSync(output).filter((name) => name !== basename(evidencePath)).sort()) {
 		const path = resolve(output, name); if (!statSync(path).isFile()) continue;

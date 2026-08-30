@@ -44,6 +44,7 @@ describe('Agent RC publication', () => {
 		expect(readFileSync('Dockerfile', 'utf8')).toContain('FROM ${UBUNTU_BASE} AS agent-provider-base');
 		expect(readFileSync('Dockerfile', 'utf8')).toContain('.treeseed/docker/runtime/shared/package.json ./package.json');
 		expect(readFileSync('Dockerfile', 'utf8')).toContain('.treeseed/docker/runtime/shared/node_modules ./node_modules');
+		expect(readFileSync('Dockerfile', 'utf8')).toContain('rm -rf /app/node_modules/@openai');
 		expect(readFileSync('.github/workflows/publish.yml', 'utf8')).toContain('Verify candidate provider runtime starts');
 		expect(readFileSync('Dockerfile', 'utf8')).toContain('FROM ${UBUNTU_BASE} AS sandbox-base');
 		expect(readFileSync('Dockerfile.sandbox-codex', 'utf8')).toContain('FROM ${SANDBOX_BASE}');

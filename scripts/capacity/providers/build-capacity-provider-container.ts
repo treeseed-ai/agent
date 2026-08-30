@@ -290,7 +290,6 @@ function pruneProviderRuntimeToolingFromRuntimeTree(runtimeRoot: string) {
 	const commonTooling = [
 		'@cloudflare',
 		'@img',
-		'@openai',
 		'miniflare',
 		'playwright',
 		'playwright-core',

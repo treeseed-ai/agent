@@ -91,7 +91,7 @@ export async function runSandboxGuest() {
 	if (subscriptionAuth) await writeFile(resolve(codexHome, 'auth.json'), subscriptionAuth, { mode: 0o600 });
 	const relay = subscriptionAuth ? null : await startModelRelay(assignment, sandboxId, operationToken);
 	const events: Record<string, unknown>[] = [], composedPrompt = promptFromContext(context);
-	const providerArguments = ['exec', '--json', '--ephemeral', '--ignore-user-config', '--sandbox', 'workspace-write', '--approve-for-me', ...(writableProject ? [] : ['--skip-git-repo-check']), '--model', assignment.modelPolicy.model,
+	const providerArguments = ['exec', '--json', '--ephemeral', '--ignore-user-config', '--approve-for-me', ...(writableProject ? [] : ['--skip-git-repo-check']), '--model', assignment.modelPolicy.model,
 		'--enable', 'code_mode_host', '--disable', 'browser_use', '--disable', 'apps', '--disable', 'multi_agent_v2', '--disable', 'image_generation', '--color', 'never', '--output-last-message', responsePath, '-C', '/workspace/project', '-'];
 	try {
 		await run('/usr/local/bin/codex', providerArguments, {

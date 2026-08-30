@@ -160,6 +160,15 @@ async function main() {
 		}));
 		const publicJwk = privateIdentity.publicJwk;
 		const signingKeyId = `provider-${await import('node:crypto').then(({ createHash }) => createHash('sha256').update(publicJwk.x).digest('hex').slice(0, 16))}`;
+		if (input.action === 'identities') {
+			emit({ ok: true, identities: loaded.manifest.connections.map((connection) => ({
+				connectionId: connection.id,
+				teamId: connection.teamId,
+				providerId: connection.providerId,
+				sandboxIdentity: { signingKeyId, publicJwk },
+			})) });
+			return;
+		}
 		if (input.action === 'identity') {
 			const connection = loaded.manifest.connections.find((candidate) => candidate.id === connectionId);
 			if (!connection) throw new Error(`Provider connection ${connectionId} is not configured.`);

@@ -23,8 +23,9 @@ services:
         target: /config/treeseed.capacity-provider.yaml
         read_only: true
       - type: bind
-        source: /run/treeseed/sandbox/broker.sock
-        target: /run/treeseed/sandbox/broker.sock
+        source: /run/treeseed/sandbox
+        target: /run/treeseed/sandbox
+        read_only: true
       - type: bind
         source: /etc/treeseed/sandbox/relay-ca.crt
         target: /etc/treeseed/sandbox/relay-ca.crt

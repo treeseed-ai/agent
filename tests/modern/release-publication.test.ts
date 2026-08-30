@@ -66,7 +66,9 @@ describe('Agent RC publication', () => {
 		expect(entrypoint).toContain('rewrap-vault.js');
 		expect(entrypoint).not.toContain('CODEX_AUTH');
 		expect(compose).not.toContain('/etc/treeseed/credentials/agent-codex-auth');
-		expect(compose).toContain('/run/treeseed/sandbox/broker.sock');
+		expect(compose).toContain('source: /run/treeseed/sandbox');
+		expect(compose).toContain('target: /run/treeseed/sandbox');
+		expect(compose).not.toContain('source: /run/treeseed/sandbox/broker.sock');
 		expect(compose).toContain('TREESEED_CAPACITY_PROVIDER_MANIFEST: /config/treeseed.capacity-provider.yaml');
 		expect(compose).toContain('TREESEED_PROVIDER_ENVIRONMENT: ${TREESEED_PROVIDER_ENVIRONMENT:-managed}');
 		expect(compose).toContain('TREESEED_REQUIRE_MICROVM: "true"');

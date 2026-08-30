@@ -25,7 +25,7 @@ services:
     volumes: &provider-volumes
       - "${TREESEED_PROVIDER_HOST_DATA_DIR:-.treeseed/local-capacity-providers/agent-standalone}:/data"
       - "${TREESEED_CAPACITY_PROVIDER_MANIFEST:-./treeseed.capacity-provider.yaml}:/config/treeseed.capacity-provider.yaml:ro"
-      - "/run/treeseed/sandbox/broker.sock:/run/treeseed/sandbox/broker.sock"
+      - "/run/treeseed/sandbox:/run/treeseed/sandbox:ro"
       - "/etc/treeseed/sandbox/relay-ca.crt:/etc/treeseed/sandbox/relay-ca.crt:ro"
       - "/run/treeseed/component-credentials/agent:/run/credentials:ro"
     group_add: &broker-groups

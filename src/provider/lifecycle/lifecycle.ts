@@ -31,9 +31,12 @@ export async function buildProviderPlan(config: ProviderHostRuntimeConfig) {
 	const manifest = config.manifestPath
 		? (await loadProviderManifest(config.manifestPath, config.dataDir)).manifest
 		: null;
+	const adapterCapabilities = manifest?.schemaVersion === 5
+		? manifest.adapters.flatMap((adapter) => adapter.offers.flatMap(({ offer }) => offer.capabilities.map(({ id }) => id)))
+		: manifest?.adapters.flatMap((adapter) => adapter.capabilities ?? []) ?? [];
 	const capabilities = manifest
 		? [...new Set([
-			...manifest.adapters.flatMap((adapter) => adapter.capabilities ?? []),
+			...adapterCapabilities,
 			...manifest.lanes.flatMap((lane) => lane.capabilities ?? []),
 		])].sort()
 		: discoverProviderCapabilities(config).map((capability) => capability.id);
@@ -50,6 +53,7 @@ export async function buildProviderPlan(config: ProviderHostRuntimeConfig) {
 }
 
 export interface ProviderAvailabilityProjection {
+	manifestVersion?: number;
 	offer?: ProviderSupplyOffer;
 	adapters: Array<Record<string, unknown>>;
 	lanes: Array<Record<string, unknown>>;
@@ -76,7 +80,7 @@ export async function publishProviderAvailability(
 		ttlSeconds: 90,
 		environment: config.environment,
 		status: 'open',
-		adapters: availability.adapters,
+		...(availability.manifestVersion === 5 ? { offers: availability.adapters.flatMap((route) => Array.isArray(route.offers) ? route.offers.map((offer) => ({ offer, laneIds: route.laneIds, maxConcurrentWorkers: route.maxConcurrentWorkers, status: route.status, observations: route.observations })) : []) } : { adapters: availability.adapters }),
 		lanes: availability.lanes,
 		capacity: availability.capacity,
 		capabilities: providerAvailabilityCapabilities(availability),

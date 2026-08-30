@@ -1,6 +1,6 @@
 import { pathToFileURL } from 'node:url';
 import { isAbsolute, resolve } from 'node:path';
-import type { CapacityProviderManifest, CapacityProviderManifestV3, CapacityProviderManifestV4 } from '@treeseed/sdk/capacity-provider';
+import type { CapacityProviderManifest, CapacityProviderManifestV3, CapacityProviderManifestV4, CapacityProviderManifestV5 } from '@treeseed/sdk/capacity-provider';
 import type { ProviderHostRuntimeConfig } from '../configuration/config.ts';
 import type { AgentExecutor, AgentExecutorModule } from './contracts.ts';
 import { createProcessIsolatedExecutor } from './process-executor.ts';
@@ -35,7 +35,7 @@ export async function resolveAgentExecutor(config: ProviderHostRuntimeConfig, ad
   const module = adapter.module ?? config.executorModule;
   if (!module) return null;
   const specifier = executorModuleSpecifier(module);
-  if (adapter.isolation === 'microvm') return createMicrovmExecutor(config, manifest as CapacityProviderManifestV4, adapter as CapacityProviderManifestV4['adapters'][number]);
+  if (adapter.isolation === 'microvm') return createMicrovmExecutor(config, manifest as CapacityProviderManifestV4 | CapacityProviderManifestV5, adapter as CapacityProviderManifestV4['adapters'][number] | CapacityProviderManifestV5['adapters'][number]);
   if (adapter.isolation === 'process') return createProcessIsolatedExecutor(config, manifest as CapacityProviderManifestV3, adapter as CapacityProviderManifestV3['adapters'][number], specifier);
   if ((adapter.credentialProfiles?.length ?? 0) > 0) throw new Error(`Worker-isolated adapter ${adapter.id} may not receive credential profiles.`);
   const executor = await (await loadModule(specifier)).createAgentExecutor({ executionProviderId: adapter.id, environment: config.environment });

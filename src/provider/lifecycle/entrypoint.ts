@@ -170,7 +170,9 @@ async function main() {
 			...(input.serverProfile ? { serverProfile: String(input.serverProfile) } : { controlPlaneUrl: String(input.controlPlaneUrl ?? '') }),
 			controlPlaneAudience: String(input.controlPlaneAudience ?? input.controlPlaneUrl ?? ''), registrationKeyRef: 'memory://one-time',
 			offer: { maxConcurrentRunners: loaded.manifest.capacity.maxConcurrentWorkers,
-				capabilities: [...new Set(loaded.manifest.adapters.flatMap((adapter) => adapter.capabilities ?? []))],
+				capabilities: [...new Set(loaded.manifest.schemaVersion === 5
+					? loaded.manifest.adapters.flatMap((adapter) => adapter.offers.flatMap(({ offer }) => offer.capabilities.map(({ id }) => id)))
+					: loaded.manifest.adapters.flatMap((adapter) => adapter.capabilities ?? []))],
 				metadata: { manifestGeneration: loaded.manifest.configuration.generation } } }, enrollmentToken);
 		emit({ ok: true, connectionId, status: receipt.status, teamId: receipt.teamId, providerId: receipt.providerId, requestId: receipt.requestId, sandboxIdentity: { signingKeyId, publicJwk } });
 		return;

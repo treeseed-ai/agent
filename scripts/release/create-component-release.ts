@@ -4,10 +4,10 @@ import { resolve } from 'node:path';
 import { componentReleaseSchema, deploymentDigest } from '@treeseed/sdk/deployment';
 
 const release = process.env.TREESEED_RELEASE, sourceCommit = process.env.TREESEED_SOURCE_COMMIT;
-const managerDigest = process.env.TREESEED_MANAGER_DIGEST, runnerDigest = process.env.TREESEED_RUNNER_DIGEST, guestDigest = process.env.TREESEED_GUEST_DIGEST;
-if (!release || !sourceCommit || !managerDigest || !runnerDigest || !guestDigest) throw new Error('Release, exact source commit, manager, runner, and sandbox guest image digests are required.');
+const managerDigest = process.env.TREESEED_MANAGER_DIGEST, runnerDigest = process.env.TREESEED_RUNNER_DIGEST, baseDigest = process.env.TREESEED_SANDBOX_BASE_DIGEST, guestDigest = process.env.TREESEED_GUEST_DIGEST;
+if (!release || !sourceCommit || !managerDigest || !runnerDigest || !baseDigest || !guestDigest) throw new Error('Release, exact source commit, manager, runner, sandbox base, and Codex image digests are required.');
 const digest = /^sha256:[a-f0-9]{64}$/u;
-if (!/^[a-f0-9]{40}$/u.test(sourceCommit) || !digest.test(managerDigest) || !digest.test(runnerDigest) || !digest.test(guestDigest)) throw new Error('Source or image digest is malformed.');
+if (!/^[a-f0-9]{40}$/u.test(sourceCommit) || !digest.test(managerDigest) || !digest.test(runnerDigest) || !digest.test(baseDigest) || !digest.test(guestDigest)) throw new Error('Source or image digest is malformed.');
 const track = release.includes('-rc.') ? 'development' : 'stable';
 const revision = Number(process.env.TREESEED_COMPONENT_REVISION ?? '1');
 if (!Number.isInteger(revision) || revision < 1) throw new Error('Component revision must be a positive integer.');
@@ -33,12 +33,13 @@ const bundle = componentReleaseSchema.parse({
 	images: [
 		{ role: 'agent-manager', repository: 'treeseed/agent-manager', digest: managerDigest, platforms: ['linux/amd64', 'linux/arm64'], consumers: ['agent'] },
 		{ role: 'agent-runner', repository: 'treeseed/agent-runner', digest: runnerDigest, platforms: ['linux/amd64', 'linux/arm64'], consumers: ['agent'] },
-		{ role: 'sandbox-guest', repository: 'treeseed/agent-sandbox-guest', digest: guestDigest, platforms: ['linux/amd64'], consumers: ['agent'] },
+		{ role: 'sandbox-base', repository: 'treeseed/sandbox-base', digest: baseDigest, platforms: ['linux/amd64', 'linux/arm64'], consumers: ['agent', 'capacity-provider-builders'] },
+		{ role: 'sandbox-guest', repository: 'treeseed/sandbox-codex', digest: guestDigest, platforms: ['linux/amd64', 'linux/arm64'], consumers: ['agent'] },
 	],
 	runtime, runtimeDigest: deploymentDigest(runtime), rollback: { compatible: true, requiresBackup: true },
-	evidence: { provenance: [tagUrl('treeseed/agent-manager'), tagUrl('treeseed/agent-runner'), tagUrl('treeseed/agent-sandbox-guest')], sboms: [tagUrl('treeseed/agent-manager'), tagUrl('treeseed/agent-runner'), tagUrl('treeseed/agent-sandbox-guest')], vulnerabilities: [] },
+	evidence: { provenance: [tagUrl('treeseed/agent-manager'), tagUrl('treeseed/agent-runner'), tagUrl('treeseed/sandbox-base'), tagUrl('treeseed/sandbox-codex')], sboms: [tagUrl('treeseed/agent-manager'), tagUrl('treeseed/agent-runner'), tagUrl('treeseed/sandbox-base'), tagUrl('treeseed/sandbox-codex')], vulnerabilities: [] },
 });
 const output = resolve('release-assets'); mkdirSync(output, { recursive: true });
 writeFileSync(resolve(output, 'compose.yml'), compose);
 writeFileSync(resolve(output, 'component-release.json'), `${JSON.stringify(bundle, null, 2)}\n`);
-console.log(JSON.stringify({ ok: true, release, sourceCommit, managerDigest, runnerDigest, runtimeDigest: bundle.runtimeDigest }));
+console.log(JSON.stringify({ ok: true, release, sourceCommit, managerDigest, runnerDigest, baseDigest, guestDigest, runtimeDigest: bundle.runtimeDigest }));

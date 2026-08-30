@@ -16,6 +16,8 @@ RUN DEBIAN_FRONTEND=noninteractive apt-get update \
 	&& mkdir -p /data
 
 COPY --chown=65532:65532 dist ./dist
+COPY --chown=65532:65532 .treeseed/docker/runtime/shared/package.json ./package.json
+COPY --chown=65532:65532 .treeseed/docker/runtime/shared/node_modules ./node_modules
 COPY --chown=65532:65532 docker-entrypoint.sh ./docker-entrypoint.sh
 
 RUN chmod 0755 /app/docker-entrypoint.sh \

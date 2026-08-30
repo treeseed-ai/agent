@@ -47,6 +47,9 @@ jobs:
       - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8
         if: matrix.target != 'sandbox-codex'
         with: { context: ., target: "${{ matrix.target }}", platforms: "${{ matrix.platform }}", build-args: "UBUNTU_BASE=ubuntu@${{ matrix.ubuntu }}", push: true, tags: "${{ matrix.image }}:candidate-${{ github.sha }}-${{ matrix.arch }}", sbom: true, provenance: mode=max }
+      - name: Verify candidate provider runtime starts
+        if: matrix.target != 'sandbox-codex'
+        run: docker run --rm "${{ matrix.image }}:candidate-${{ github.sha }}-${{ matrix.arch }}" version --json | jq -e '.ok == true'
       - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8
         if: matrix.target == 'sandbox-codex'
         with: { context: ., file: Dockerfile.sandbox-codex, platforms: "${{ matrix.platform }}", build-args: "SANDBOX_BASE=treeseed/sandbox-base@${{ steps.base-lineage.outputs.digest }}", push: true, tags: "${{ matrix.image }}:candidate-${{ github.sha }}-${{ matrix.arch }}", sbom: true, provenance: mode=max }

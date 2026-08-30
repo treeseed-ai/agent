@@ -8,6 +8,7 @@ import { loadProviderManifest } from '../configuration/manifest.ts';
 import { createProviderControlPlaneClient } from '../coordination/client.ts';
 import { ProviderLocalCapacityStore } from '../capacity/capacity-core/local-capacity-store.ts';
 import { observeProviderDiskCapacity } from '../runtime/disk-capacity.ts';
+import { SandboxBrokerClient } from '../execution/sandbox-broker-client.ts';
 
 export function okPayload<T extends Record<string, unknown>>(role: string, payload: T) {
 	return { ok: true as const, role, ...payload };
@@ -18,14 +19,21 @@ export async function checkProviderHealth(config: ProviderHostRuntimeConfig) {
 	const writable = await access(config.dataDir, constants.W_OK).then(() => true, () => false);
 	const disk = writable ? await observeProviderDiskCapacity({ path: config.dataDir, env: config.env }) : null;
 	const manifest = config.manifestPath ? (await loadProviderManifest(config.manifestPath, config.dataDir)).manifest : null;
+	const brokerSocket = manifest && manifest.schemaVersion !== 3 && manifest.sandbox.required ? manifest.sandbox.brokerSocket : null;
+	const broker = brokerSocket
+		? await new SandboxBrokerClient(brokerSocket).status(AbortSignal.timeout(3_000))
+			.then(() => ({ required: true, ready: true, socket: brokerSocket, reason: null }))
+			.catch((error: unknown) => ({ required: true, ready: false, socket: brokerSocket, reason: error instanceof Error ? error.message : String(error) }))
+		: { required: false, ready: true, socket: null, reason: null };
 	return okPayload('healthcheck', {
-		status: writable && disk?.ok ? 'ok' : 'degraded',
+		status: writable && disk?.ok && broker.ready ? 'ok' : 'degraded',
 		environment: config.environment,
 		dataDirWritable: writable,
 		disk,
 		manifestConfigured: Boolean(config.manifestPath),
 		manifestVersion: manifest?.schemaVersion ?? null,
 		executorConfigured: Boolean(config.executorModule),
+		broker,
 	});
 }
 

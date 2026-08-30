@@ -22,7 +22,7 @@ function call<T>(socketPath: string, method: string, path: string, body?: unknow
 export class SandboxBrokerClient {
 	constructor(readonly socketPath: string) {}
 	private path(suffix: string) { return `/v${1}${suffix}`; }
-	status() { return call<Record<string, unknown>>(this.socketPath, 'GET', this.path('/status')); }
+	status(signal?: AbortSignal) { return call<Record<string, unknown>>(this.socketPath, 'GET', this.path('/status'), undefined, signal); }
 	prepare(assignment: SandboxAssignment, signal?: AbortSignal) { return call<{ sandboxId: string; operationToken: string }>(this.socketPath, 'POST', this.path('/sandboxes'), { assignment }, signal); }
 	upload(sandboxId: string, token: string, inputId: string, sourcePath: string, bytes: number, signal?: AbortSignal) {
 		return new Promise<void>((resolve, reject) => {

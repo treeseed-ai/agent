@@ -9,20 +9,22 @@ import { createProviderControlPlaneClient } from '../coordination/client.ts';
 import { ProviderLocalCapacityStore } from '../capacity/capacity-core/local-capacity-store.ts';
 import { observeProviderDiskCapacity } from '../runtime/disk-capacity.ts';
 
-export function okPayload(role: string, payload: Record<string, unknown> = {}) {
-	return { ok: true, role, ...payload };
+export function okPayload<T extends Record<string, unknown>>(role: string, payload: T) {
+	return { ok: true as const, role, ...payload };
 }
 
 export async function checkProviderHealth(config: ProviderHostRuntimeConfig) {
 	await mkdir(config.dataDir, { recursive: true });
 	const writable = await access(config.dataDir, constants.W_OK).then(() => true, () => false);
 	const disk = writable ? await observeProviderDiskCapacity({ path: config.dataDir, env: config.env }) : null;
+	const manifest = config.manifestPath ? (await loadProviderManifest(config.manifestPath, config.dataDir)).manifest : null;
 	return okPayload('healthcheck', {
 		status: writable && disk?.ok ? 'ok' : 'degraded',
 		environment: config.environment,
 		dataDirWritable: writable,
 		disk,
 		manifestConfigured: Boolean(config.manifestPath),
+		manifestVersion: manifest?.schemaVersion ?? null,
 		executorConfigured: Boolean(config.executorModule),
 	});
 }

@@ -42,6 +42,9 @@ describe('Agent RC publication', () => {
 		expect(builder).toContain("if (packageName === '@treeseed/sdk') continue;");
 		expect(builder).not.toContain("packageName.startsWith('@treeseed/')");
 		expect(readFileSync('Dockerfile', 'utf8')).toContain('FROM ${UBUNTU_BASE} AS agent-provider-base');
+		expect(readFileSync('Dockerfile', 'utf8')).toContain('.treeseed/docker/runtime/shared/package.json ./package.json');
+		expect(readFileSync('Dockerfile', 'utf8')).toContain('.treeseed/docker/runtime/shared/node_modules ./node_modules');
+		expect(readFileSync('.github/workflows/publish.yml', 'utf8')).toContain('Verify candidate provider runtime starts');
 		expect(readFileSync('Dockerfile', 'utf8')).toContain('FROM ${UBUNTU_BASE} AS sandbox-base');
 		expect(readFileSync('Dockerfile.sandbox-codex', 'utf8')).toContain('FROM ${SANDBOX_BASE}');
 	});

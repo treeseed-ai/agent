@@ -75,7 +75,8 @@ describe('Agent RC publication', () => {
 		expect(compose).not.toContain('TREESEED_CODEX_AUTH_FILE');
 		expect(workflow).toContain('codex-cli 0.149.0');
 		const guest = readFileSync('src/sandbox/guest.ts', 'utf8');
-		expect(guest).toContain("'--sandbox', 'workspace-write', '--approve-for-me'");
+		expect(guest).toContain("'--approve-for-me'");
+		expect(guest).not.toContain("'--sandbox', 'workspace-write'");
 		expect(guest).not.toContain("'--dangerously-bypass-approvals-and-sandbox'");
 		expect(guest).toContain("resolve(inputRoot, 'codex-auth.json')");
 	});

@@ -20,7 +20,8 @@ COPY --chown=65532:65532 .treeseed/docker/runtime/shared/package.json ./package.
 COPY --chown=65532:65532 .treeseed/docker/runtime/shared/node_modules ./node_modules
 COPY --chown=65532:65532 docker-entrypoint.sh ./docker-entrypoint.sh
 
-RUN chmod 0755 /app/docker-entrypoint.sh \
+RUN rm -rf /app/node_modules/@openai \
+	&& chmod 0755 /app/docker-entrypoint.sh \
 	&& chown -R 65532:65532 /data
 
 EXPOSE 3100

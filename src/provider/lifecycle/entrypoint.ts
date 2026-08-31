@@ -181,15 +181,15 @@ async function main() {
 			emit({ ok: true, connectionId, status: receipt.status, teamId: receipt.teamId, providerId: receipt.providerId, membershipId: receipt.membershipId });
 			return;
 		}
-		const enrollmentToken = String(input.enrollmentToken ?? '');
+		const registrationCode = String(input.registrationCode ?? '');
 		const teamId = String(input.teamId ?? '');
-		if (!enrollmentToken || !teamId) throw new Error('Provider enrollment requires a team and one-time token.');
+		if (!registrationCode || !teamId) throw new Error('Provider enrollment requires a team and registration code.');
 		const receipt = await coordinator.beginJoin({ id: connectionId,
 			...(input.serverProfile ? { serverProfile: String(input.serverProfile) } : { controlPlaneUrl: String(input.controlPlaneUrl ?? '') }),
-			controlPlaneAudience: String(input.controlPlaneAudience ?? input.controlPlaneUrl ?? ''), registrationKeyRef: 'memory://one-time',
+			controlPlaneAudience: String(input.controlPlaneAudience ?? input.controlPlaneUrl ?? ''), registrationKeyRef: 'memory://registration-code',
 			offer: { maxConcurrentRunners: loaded.manifest.capacity.maxConcurrentWorkers,
 				capabilities: [...new Set(loaded.manifest.adapters.flatMap((adapter) => adapter.offers.flatMap(({ offer }) => offer.capabilities.map(({ id }) => id))))],
-				metadata: { manifestGeneration: loaded.manifest.configuration.generation } } }, enrollmentToken);
+				metadata: { manifestGeneration: loaded.manifest.configuration.generation } } }, registrationCode);
 		emit({ ok: true, connectionId, status: receipt.status, teamId: receipt.teamId, providerId: receipt.providerId, requestId: receipt.requestId, sandboxIdentity: { signingKeyId, publicJwk } });
 		return;
 	}

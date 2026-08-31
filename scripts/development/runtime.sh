@@ -20,7 +20,7 @@ stage_development_manifest() {
   if test -r "$workspace_manifest"; then source_manifest="$workspace_manifest"
   elif ! test -r "$source_manifest"; then source_manifest="$session_root/config/released.capacity-provider.yaml"; fi
   test -r "$source_manifest" || { printf 'Released provider manifest is unavailable through host or released-container custody.\n' >&2; return 1; }
-  test -r "$guest_receipt" || { printf 'Import the local guest first with `trsd dev host guest-image import treeseed/sandbox-codex:local`.\n' >&2; return 1; }
+  test -r "$guest_receipt" || { printf 'Import the local guest first with `trsd dev host guest image import treeseed/sandbox-codex:local`.\n' >&2; return 1; }
   mkdir -p "$(dirname "$target_manifest")"
   node --input-type=module - "$source_manifest" "$guest_receipt" "$target_manifest" <<'NODE'
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -93,7 +93,7 @@ drain() {
 case "${1:-}" in
   build)
     npm run capacity-provider:build -- --roles base,guest
-    trsd dev host guest-image import treeseed/sandbox-codex:local
+    trsd dev host guest image import treeseed/sandbox-codex:local
     compose build
     ;;
   start)

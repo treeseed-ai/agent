@@ -10,7 +10,35 @@ import { ensureCapacityProviderIdentity } from '../../src/provider/accounts/iden
 import { listProviderConnectionStates, writeProviderConnectionState } from '../../src/provider/coordination/connection-state.ts';
 import { loadProviderManifest, writeProviderConnections } from '../../src/provider/configuration/manifest.ts';
 import { buildProviderPlan, providerAvailabilityCapabilities } from '../../src/provider/lifecycle/lifecycle.ts';
-import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
+import { stringify as stringifyYaml } from 'yaml';
+
+const digest = (value: string) => `sha256:${value.repeat(64)}`;
+function providerManifestFixture() {
+	const lane = (id: 'communication' | 'platform' | 'workday', priority: number, reservedConcurrentWorkers: number) => ({
+		id, purpose: id, priority, reservedConcurrentWorkers, maxConcurrentWorkers: 4, borrowWhenIdle: true, lendWhenIdle: true,
+		reclaimPolicy: 'admission', queueLimit: 10, timeoutSeconds: 120, capabilities: ['treeseed.coordination.conversation'],
+	});
+	const capability = { id: 'treeseed.coordination.conversation', version: '1.0.0', digest: digest('1') };
+	const offer = { schemaVersion: 'treeseed.capability-offer/v1', offerId: 'conversation', capabilities: [capability], features: [], configurationSupport: {},
+		permissionClasses: [], contextModes: ['manifest'], inputContracts: [], outputContracts: [], interactionModes: ['interactive'],
+		conformance: [{ schemaVersion: 'treeseed.capability-conformance/v1', providerId: 'runtime-provider', capability, tier: 'signed-attestation', status: 'passed',
+			evidenceDigest: digest('2'), suite: null, issuedAt: '2026-08-30T00:00:00.000Z', expiresAt: null, signature: { keyId: 'provider', algorithm: 'Ed25519', value: 'fixture' } }],
+		limits: {}, commercial: { currency: null, estimatedCost: null }, region: null, trust: ['provider-signed'], offerDigest: digest('3') };
+	return {
+		schemaVersion: 5, ownership: { type: 'team', teamId: 'team:fixture' }, configuration: { generation: 'fixture-v5' },
+		identity: { privateKeyRef: 'data://identity-v3.json', displayName: 'Fixture provider' }, ontology: { generation: 1, digest: digest('4') },
+		capacity: { maxConcurrentWorkers: 4 }, credentialProfiles: [],
+		sandbox: { required: true, brokerSocket: '/run/treeseed/sandbox/broker.sock', runtime: 'kata-runtime-rs-qemu', profiles: [{
+			id: 'read', guestImage: 'treeseed/sandbox-codex', guestImageDigest: digest('5'), defaultDenyNetwork: true,
+			resources: { cpuCores: 2, memoryBytes: 4096, diskBytes: 4096, processLimit: 64, outputBytes: 4096 },
+			lineage: { baseImageDigest: digest('6'), provenanceDigest: digest('7'), architectures: ['amd64'], signature: { keyId: 'provider', algorithm: 'Ed25519', value: 'fixture' } },
+		}] },
+		lanes: [lane('communication', 100, 1), lane('platform', 70, 0), lane('workday', 50, 0)],
+		adapters: [{ id: 'codex-local', adapter: 'codex', isolation: 'microvm', module: 'module:codex-chat', profile: 'api', protocol: 'responses',
+			model: { model: 'gpt-5.4' }, credentialProfiles: [], laneIds: ['communication', 'platform', 'workday'], maxConcurrentWorkers: 4, nativeLimits: {}, offers: [{ offer, sandboxProfileId: 'read' }] }],
+		connections: [], metadata: { custody: 'test-only' },
+	};
+}
 
 function sourceFiles(root: string): string[] {
 	return readdirSync(root, { withFileTypes: true }).flatMap((entry) => {
@@ -54,7 +82,7 @@ describe('Agent package ownership boundary', () => {
 		const root = mkdtempSync(resolve(tmpdir(), 'treeseed-provider-connections-'));
 		const dataDirectory = resolve(root, 'data');
 		const manifestPath = resolve(root, 'treeseed.capacity-provider.yaml');
-		const manifest = { ...parseYaml(readFileSync(resolve(process.cwd(), '../../treeseed.capacity-provider.yaml'), 'utf8')), connections: [] };
+		const manifest = providerManifestFixture();
 		writeFileSync(manifestPath, stringifyYaml(manifest));
 		const canonical = readFileSync(manifestPath, 'utf8');
 		try {

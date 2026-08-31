@@ -13,7 +13,7 @@ describe('Codex chat executor', () => {
 		expect(codexReasoningArguments(undefined)).toEqual([]);
 	});
 	it('keeps interactive execution inside the one-minute chat budget', () => {
-		expect(codexInteractiveTimeoutMs(900)).toBe(50_000);
+		expect(codexInteractiveTimeoutMs(900)).toBe(38_000);
 		expect(codexInteractiveTimeoutMs(20)).toBe(15_000);
 	});
 	it('uses a non-interactive readable URL for public GitHub project workspaces', () => {

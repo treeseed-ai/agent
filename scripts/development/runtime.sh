@@ -38,6 +38,9 @@ NODE
 }
 
 clone_released_connection_custody() {
+  if test -f "$session_root/connections.yaml" && test -f "$session_root/identity-v3.json" && test -d "$session_root/connections"; then
+    return 0
+  fi
   local released_container="${TREESEED_RELEASED_PROVIDER_MANAGER_CONTAINER:-treeseed-agent-manager-1}"
   docker inspect "$released_container" >/dev/null 2>&1 || {
     printf 'Released provider connection custody is unavailable for the required development clone.\n' >&2
@@ -64,7 +67,7 @@ connect_control_plane_network() {
 
 pause_released_provider() {
   docker stop "${TREESEED_RELEASED_PROVIDER_MANAGER_CONTAINER:-treeseed-agent-manager-1}" \
-    "${TREESEED_RELEASED_PROVIDER_RUNNER_CONTAINER:-treeseed-agent-runner-1}" >/dev/null
+    "${TREESEED_RELEASED_PROVIDER_RUNNER_CONTAINER:-treeseed-agent-runner-1}" >/dev/null 2>&1 || true
 }
 
 restore_released_provider() {
@@ -75,7 +78,12 @@ restore_released_provider() {
 remove_candidate_data() {
   local released_container="${TREESEED_RELEASED_PROVIDER_MANAGER_CONTAINER:-treeseed-agent-manager-1}"
   local released_image
-  released_image="$(docker inspect --format '{{.Config.Image}}' "$released_container")"
+  if docker inspect "$released_container" >/dev/null 2>&1; then
+    released_image="$(docker inspect --format '{{.Config.Image}}' "$released_container")"
+  else
+    released_image="${TREESEED_DEVELOPMENT_PROVIDER_RUNNER_IMAGE:-treeseed/agent-runner:local}"
+    docker image inspect "$released_image" >/dev/null
+  fi
   docker run --rm --user 0 --volume "$session_root:/candidate" --entrypoint sh "$released_image" -c \
     'find /candidate -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +'
   rmdir "$session_root" 2>/dev/null || true
@@ -123,10 +131,12 @@ case "${1:-}" in
     drain
     compose down --remove-orphans
     restore_released_provider
-    case "$session_root" in
-      "$worktree/.treeseed/cache/development-sessions/$session_id/provider") remove_candidate_data ;;
-      *) printf 'Refusing unsafe provider cleanup path\n' >&2; exit 1 ;;
-    esac
+    if test "${TREESEED_DEVELOPMENT_CLEANUP_SCOPE:-runtime}" = session; then
+      case "$session_root" in
+        "$worktree/.treeseed/cache/development-sessions/$session_id/provider") remove_candidate_data ;;
+        *) printf 'Refusing unsafe provider cleanup path\n' >&2; exit 1 ;;
+      esac
+    fi
     ;;
   *)
     printf 'usage: %s build|start|drain|verify|cleanup\n' "$0" >&2

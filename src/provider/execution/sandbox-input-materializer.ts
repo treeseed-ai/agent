@@ -27,6 +27,10 @@ async function descriptor(id: string, sourcePath: string, targetPath: string, di
 	return { id, sourcePath, targetPath, disposition, mediaType, bytes: (await stat(sourcePath)).size, digest: await digest(sourcePath) };
 }
 
+async function removeMaterializedRoot(root: string) {
+	await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
+}
+
 export async function materializeSandboxInputs(request: AgentExecutionRequest, writableProject = false) {
 	const root = await mkdtemp(join(tmpdir(), 'treeseed-sandbox-inputs-')), project = join(root, 'project'), library = join(root, 'library');
 	try {
@@ -51,6 +55,9 @@ export async function materializeSandboxInputs(request: AgentExecutionRequest, w
 			descriptor('execution-context', contextPath, '/workspace/.treeseed/context.json', 'read-only', 'application/json'),
 			descriptor('relay-ca', '/etc/treeseed/sandbox/relay-ca.crt', '/workspace/.treeseed/relay-ca.crt', 'read-only', 'application/x-pem-file'),
 		]);
-		return { inputs, identityManifest: identity.manifest, context, contextManifestDigest: inputs.find((input) => input.id === 'execution-context')!.digest, async cleanup() { await rm(root, { recursive: true, force: true }); } };
-	} catch (error) { await rm(root, { recursive: true, force: true }); throw error; }
+		return { inputs, identityManifest: identity.manifest, context, contextManifestDigest: inputs.find((input) => input.id === 'execution-context')!.digest, async cleanup() { await removeMaterializedRoot(root); } };
+	} catch (error) {
+		await removeMaterializedRoot(root).catch(() => undefined);
+		throw error;
+	}
 }

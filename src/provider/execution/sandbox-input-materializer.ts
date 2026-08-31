@@ -30,17 +30,21 @@ async function descriptor(id: string, sourcePath: string, targetPath: string, di
 export async function materializeSandboxInputs(request: AgentExecutionRequest, writableProject = false) {
 	const root = await mkdtemp(join(tmpdir(), 'treeseed-sandbox-inputs-')), project = join(root, 'project'), library = join(root, 'library');
 	try {
-		const projectManifest = await prepareProjectWorkspace(request.assignment, project);
-		const treeDxManifest = await materializeTreeDxSnapshot(request, library);
-		const identity = await readIdentityContext(request, new Set(treeDxManifest.files.map((file) => file.path)));
-		const message = await readDiscussionSourceContext(request);
+		const [projectManifest, treeDxManifest] = await Promise.all([
+			prepareProjectWorkspace(request.assignment, project),
+			materializeTreeDxSnapshot(request, library),
+		]);
+		const [identity, message] = await Promise.all([
+			readIdentityContext(request, new Set(treeDxManifest.files.map((file) => file.path))),
+			readDiscussionSourceContext(request),
+		]);
 		const metadata = request.assignment.metadata && typeof request.assignment.metadata === 'object' && !Array.isArray(request.assignment.metadata) ? request.assignment.metadata as Record<string, unknown> : {};
 		const safeAssignment = { id: request.assignment.id ?? request.assignmentId, agentId: request.assignment.agentId ?? request.assignment.agent_id, executionKind: request.assignment.executionKind ?? request.assignment.execution_kind,
 			sourceMessageRefs: request.assignment.sourceMessageRefs, metadata: { identityManifest: metadata.identityManifest, chatProfile: metadata.chatProfile, communication: metadata.communication } };
 		const context = { schemaVersion: 1, assignment: safeAssignment, projectManifest: { ...projectManifest, root: '/workspace/project' }, treeDxManifest: { ...treeDxManifest, root: '/workspace/.treedx/library' }, identity, message };
 		const contextPath = join(root, 'context.json'); await writeFile(contextPath, `${JSON.stringify(context)}\n`, { mode: 0o400 });
 		const projectArchive = join(root, 'project.tar'), libraryArchive = join(root, 'library.tar');
-		await archive(project, projectArchive, ['.git']); await archive(library, libraryArchive);
+		await Promise.all([archive(project, projectArchive, ['.git']), archive(library, libraryArchive)]);
 		const inputs = await Promise.all([
 			descriptor('project-repository', projectArchive, '/workspace/project', writableProject ? 'copy-on-write' : 'read-only', 'application/vnd.treeseed.directory+tar'),
 			descriptor('treedx-library', libraryArchive, '/workspace/.treedx/library', 'read-only', 'application/vnd.treeseed.directory+tar'),

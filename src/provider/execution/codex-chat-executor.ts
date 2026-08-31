@@ -81,8 +81,8 @@ export async function materializeTreeDxSnapshot(request: AgentExecutionRequest, 
 	const paths = validatedSnapshotPaths(entries);
 	await mkdir(destination, { recursive: true, mode: 0o755 });
 	const files: Array<{ path: string; bytes: number; digest: string }> = [];
-	for (let index = 0; index < paths.length; index += 10) {
-		const selected = paths.slice(index, index + 10); const payload = resultPayload(await retryTreeDx(() => request.treeDx.invoke('treedx.repositories.files.read', {
+	for (let index = 0; index < paths.length; index += 100) {
+		const selected = paths.slice(index, index + 100); const payload = resultPayload(await retryTreeDx(() => request.treeDx.invoke('treedx.repositories.files.read', {
 			path: { repoId: request.treeDx.repositoryId }, body: { ref: request.treeDx.baseRef, paths: selected, encoding: 'utf8', parseFrontmatter: true, allowProtected: true },
 		})));
 		const returned = Array.isArray(payload.files) ? payload.files.map(record) : [];

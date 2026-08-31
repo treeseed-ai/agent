@@ -75,12 +75,16 @@ function promptFromContext(context: Record<string, unknown>) {
 	const assignment = record(context.assignment), metadata = record(assignment.metadata), chatProfile = record(metadata.chatProfile), prompt = record(chatProfile.prompt), communication = record(metadata.communication);
 	const sourceText = sources.map((source) => `## ${text(source.kind)}: ${text(source.path)}\nImmutable ref: ${text(source.immutableRef)}\nDigest: ${text(source.digest)}\n\n${text(source.content)}`).join('\n\n');
 	const required = text(communication.requirement) !== 'optional';
-	return `You are exactly ${text(manifest.agentHandle)}. Your verified immutable TreeDX identity sources follow.\n\n${sourceText}\n\nActivity instructions:\n${text(prompt.system)}\n\nActivity task:\n${text(prompt.task) || 'Respond to the committed Discussion message.'}\n\n${required ? 'You were directly addressed and must provide a substantive response.' : 'Respond only if your role adds material value; otherwise return exactly <!-- treeseed:abstain -->.'}\nThe working directory is the exact project repository snapshot. The read-only TreeDX library is at /workspace/.treedx/library. Inspect AGENTS.md and use no more than eight focused repository reads or searches before answering. This is latency-sensitive interactive chat: prioritize decisive evidence, complete within 40 seconds, and do not run broad test suites or exhaustive scans. Do not inspect outside /workspace or disclose credentials. Return only the message to post.\n\nDiscussion message:\n${text(record(context.message).content)}`;
+	return `You are exactly ${text(manifest.agentHandle)}. Your verified immutable TreeDX identity sources follow.\n\n${sourceText}\n\nActivity instructions:\n${text(prompt.system)}\n\nActivity task:\n${text(prompt.task) || 'Respond to the committed Discussion message.'}\n\n${required ? 'You were directly addressed and must provide a substantive response.' : 'Respond only if your role adds material value; otherwise return exactly <!-- treeseed:abstain -->.'}\nThe working directory is the exact project repository snapshot. The complete, verified, read-only TreeDX library snapshot is at /workspace/.treedx/library. It was materialized through the assignment-scoped TreeDX authority at the immutable ref in your identity manifest. The trsd executable is intentionally absent from the isolated guest; when repository instructions name trsd library read commands, inspect this mounted snapshot directly instead. Inspect both AGENTS.md and the relevant TreeDX files, then batch repository searches and file reads into at most four focused tool calls before answering. This is latency-sensitive interactive chat: prioritize decisive evidence, complete within 45 seconds, and do not run broad test suites or exhaustive scans. Do not inspect outside /workspace or disclose credentials. Return only the message to post.\n\nDiscussion message:\n${text(record(context.message).content)}`;
 }
 
 export function codexReasoningArguments(reasoningEffort: string | undefined) {
 	return reasoningEffort && ['minimal', 'low', 'medium', 'high', 'xhigh'].includes(reasoningEffort)
 		? ['-c', `model_reasoning_effort=${reasoningEffort}`] : [];
+}
+
+export function codexInteractiveTimeoutMs(durationSeconds: number) {
+	return Math.min(50_000, Math.max(1_000, durationSeconds * 1_000 - 5_000));
 }
 
 export async function runSandboxGuest() {
@@ -116,7 +120,7 @@ export async function runSandboxGuest() {
 			cwd: '/workspace/project', input: composedPrompt, env: { PATH: '/usr/local/bin:/usr/bin:/bin', HOME: codexHome, CODEX_HOME: codexHome,
 				...(relay ? { OPENAI_BASE_URL: relay.baseUrl, OPENAI_API_KEY: 'treeseed-assignment-relay' } : {}),
 				...(subscriptionProxy ? { HTTPS_PROXY: subscriptionProxy, https_proxy: subscriptionProxy } : {}), LANG: 'C.UTF-8' },
-			timeoutMs: Math.min(45_000, Math.max(1_000, assignment.resources.durationSeconds * 1_000 - 5_000)),
+			timeoutMs: codexInteractiveTimeoutMs(assignment.resources.durationSeconds),
 			onLine(line) { try { events.push(record(JSON.parse(line))); } catch { events.push({ type: 'provider.event.invalid', digest: createHash('sha256').update(line).digest('hex') }); } },
 		});
 		await progress('provider.completed');

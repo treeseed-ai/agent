@@ -150,9 +150,13 @@ activityProfiles:
       blockExecutionWhenCreated: true
       defaultAnswerPolicy:
         kind: human-or-agent
+    capabilityRequirements:
+      - capabilityId: treeseed.coordination.planning
+        versionRange: ^1.0.0
+        requirement: required
+        requiredFeatures: []
+        configuration: {}
     execution:
-      requiredCapabilities:
-        - agent-execution
       maxRuntimeSeconds: 1800
       maxRetries: 2
       verificationRequired: true
@@ -264,9 +268,13 @@ activityProfiles:
       blockExecutionWhenCreated: true
       defaultAnswerPolicy:
         kind: human-or-agent
+    capabilityRequirements:
+      - capabilityId: treeseed.coordination.estimation
+        versionRange: ^1.0.0
+        requirement: required
+        requiredFeatures: []
+        configuration: {}
     execution:
-      requiredCapabilities:
-        - agent-execution
       maxRuntimeSeconds: 1800
       maxRetries: 2
       verificationRequired: false
@@ -376,9 +384,13 @@ activityProfiles:
       blockExecutionWhenCreated: true
       defaultAnswerPolicy:
         kind: human-or-agent
+    capabilityRequirements:
+      - capabilityId: treeseed.engineering.review
+        versionRange: ^1.0.0
+        requirement: required
+        requiredFeatures: []
+        configuration: {}
     execution:
-      requiredCapabilities:
-        - agent-execution
       maxRuntimeSeconds: 1800
       maxRetries: 2
       verificationRequired: false
@@ -505,9 +517,13 @@ activityProfiles:
       blockExecutionWhenCreated: true
       defaultAnswerPolicy:
         kind: human-or-agent
+    capabilityRequirements:
+      - capabilityId: treeseed.engineering.integration-testing
+        versionRange: ^1.0.0
+        requirement: required
+        requiredFeatures: []
+        configuration: {}
     execution:
-      requiredCapabilities:
-        - agent-execution
       maxRuntimeSeconds: 1800
       maxRetries: 2
       verificationRequired: true

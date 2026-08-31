@@ -11,6 +11,32 @@ session_root="$worktree/.treeseed/cache/development-sessions/$session_id/provide
 state_file="$session_root/runtime/capacity-state.json"
 export TREESEED_PROVIDER_HOST_DATA_DIR="$session_root"
 
+stage_development_manifest() {
+  local workspace_manifest="$worktree/../../treeseed.capacity-provider.yaml"
+  local source_manifest="$TREESEED_CAPACITY_PROVIDER_MANIFEST"
+  local state_base="${XDG_STATE_HOME:-${HOME:?HOME is required}/.local/state}"
+  local guest_receipt="$state_base/treeseed/development/sandbox-guest.json"
+  local target_manifest="$session_root/config/treeseed.capacity-provider.yaml"
+  if test -r "$workspace_manifest"; then source_manifest="$workspace_manifest"
+  elif ! test -r "$source_manifest"; then source_manifest="$session_root/config/released.capacity-provider.yaml"; fi
+  test -r "$source_manifest" || { printf 'Released provider manifest is unavailable through host or released-container custody.\n' >&2; return 1; }
+  test -r "$guest_receipt" || { printf 'Import the local guest first with `trsd dev host guest-image import treeseed/sandbox-codex:local`.\n' >&2; return 1; }
+  mkdir -p "$(dirname "$target_manifest")"
+  node --input-type=module - "$source_manifest" "$guest_receipt" "$target_manifest" <<'NODE'
+import { readFileSync, writeFileSync } from 'node:fs';
+const [, , source, receiptPath, target] = process.argv;
+const receipt = JSON.parse(readFileSync(receiptPath, 'utf8'));
+if (receipt.schemaVersion !== 'treeseed.development-sandbox-guest/v1' || !/^sha256:[a-f0-9]{64}$/.test(String(receipt.digest))) throw new Error('Development sandbox guest receipt is invalid.');
+const manifest = readFileSync(source, 'utf8');
+const matches = manifest.match(/guestImageDigest:\s*sha256:[a-f0-9]{64}/g) ?? [];
+if (!matches.length) throw new Error('Provider manifest declares no guest image digest.');
+writeFileSync(target, manifest.replace(/guestImageDigest:\s*sha256:[a-f0-9]{64}/g, `guestImageDigest: ${receipt.digest}`), { mode: 0o644 });
+NODE
+  chmod 0644 "$target_manifest"
+  TREESEED_CAPACITY_PROVIDER_MANIFEST="$target_manifest"
+  export TREESEED_CAPACITY_PROVIDER_MANIFEST
+}
+
 clone_released_connection_custody() {
   local released_container="${TREESEED_RELEASED_PROVIDER_MANAGER_CONTAINER:-treeseed-agent-manager-1}"
   docker inspect "$released_container" >/dev/null 2>&1 || {
@@ -19,8 +45,8 @@ clone_released_connection_custody() {
   }
   local released_image
   released_image="$(docker inspect --format '{{.Config.Image}}' "$released_container")"
-  docker run --rm --user 0 --volumes-from "$released_container:ro" --volume "$session_root:/candidate" --entrypoint sh "$released_image" -c \
-    'cp -a /data/connections.yaml /data/identity-v3.json /data/connections /data/secrets /candidate/'
+  docker run --rm --user 0 --env HOST_UID="$(id -u)" --env HOST_GID="$(id -g)" --volumes-from "$released_container:ro" --volume "$session_root:/candidate" --entrypoint sh "$released_image" -c \
+    'mkdir -p /candidate/config && cp -a /data/connections.yaml /data/identity-v3.json /data/connections /data/secrets /candidate/ && cp /config/treeseed.capacity-provider.yaml /candidate/config/released.capacity-provider.yaml && chown -R 65532:65532 /candidate && chown "$HOST_UID:$HOST_GID" /candidate/config && chmod 0755 /candidate/config && chmod 0644 /candidate/config/released.capacity-provider.yaml'
   docker run --rm --user 0 --env TARGET_URL --volume "$session_root:/candidate" --entrypoint node "$released_image" -e \
     'const fs=require("fs"),root="/candidate/connections"; for(const name of fs.readdirSync(root)){if(!name.endsWith(".json"))continue;const path=`${root}/${name}`,value=JSON.parse(fs.readFileSync(path,"utf8"));value.controlPlaneUrl=process.env.TARGET_URL;fs.writeFileSync(path,`${JSON.stringify(value,null,2)}\n`,{mode:0o600});} const custody="/candidate/connections.yaml";fs.writeFileSync(custody,fs.readFileSync(custody,"utf8").replace(/(^\s*controlPlaneUrl:\s*).+$/gmu,`$1${process.env.TARGET_URL}`),{mode:0o600});' \
     --
@@ -65,13 +91,19 @@ drain() {
 }
 
 case "${1:-}" in
-  rebuild)
+  build)
+    npm run capacity-provider:build -- --roles base,guest
+    trsd dev host guest-image import treeseed/sandbox-codex:local
+    compose build
+    ;;
+  start)
     mkdir -p "$session_root"
     drain
+    TREESEED_SANDBOX_BROKER_GID="$(stat -c '%g' /run/treeseed/sandbox)"
+    export TREESEED_SANDBOX_BROKER_GID
     export TARGET_URL="${TREESEED_DEVELOPMENT_CONTROL_PLANE_URL:-http://api-live:3000}"
     clone_released_connection_custody
-    npm run capacity-provider:build
-    compose build
+    stage_development_manifest
     trap restore_released_provider ERR
     pause_released_provider
     compose up --remove-orphans --detach
@@ -97,7 +129,7 @@ case "${1:-}" in
     esac
     ;;
   *)
-    printf 'usage: %s rebuild|drain|verify|cleanup\n' "$0" >&2
+    printf 'usage: %s build|start|drain|verify|cleanup\n' "$0" >&2
     exit 2
     ;;
 esac

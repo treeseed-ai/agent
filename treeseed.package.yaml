@@ -63,10 +63,11 @@ development:
       kind: rebuild-restart
       platforms: [linux-amd64, linux-arm64]
       runtimeRequirements: [node>=22, docker]
-      sourceRoots: [src, Dockerfile, compose.capacity-provider.yml]
+      sourceRoots: [src, scripts/development, scripts/capacity/providers, Dockerfile, Dockerfile.sandbox-codex, compose.capacity-provider.yml]
       ignoredPaths: [dist, node_modules, .treeseed/local-capacity-providers]
       operations:
-        build: { command: bash, args: [scripts/development/runtime.sh, rebuild], environment: {}, timeoutSeconds: 86400 }
+        build: { command: bash, args: [scripts/development/runtime.sh, build], environment: {}, timeoutSeconds: 86400 }
+        start: { command: bash, args: [scripts/development/runtime.sh, start], environment: {}, timeoutSeconds: 86400 }
         stop: { command: bash, args: [scripts/development/runtime.sh, drain], environment: {}, timeoutSeconds: 300 }
         verify: { command: bash, args: [scripts/development/runtime.sh, verify], environment: {}, timeoutSeconds: 1800 }
         cleanup: { command: bash, args: [scripts/development/runtime.sh, cleanup], environment: {}, timeoutSeconds: 300 }

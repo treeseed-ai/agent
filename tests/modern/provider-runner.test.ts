@@ -93,6 +93,13 @@ describe('catalog-driven provider assignment runner', () => {
 		expect(api.completeAssignment).not.toHaveBeenCalled();
 	});
 
+	it('rounds precise provider timing up to whole accounting seconds', async () => {
+		const api = client();
+		await runProviderAssignment({ client: api, treeDx, leaseToken: 'lease', runnerId: 'runner', assignment: { id: 'assignment-precise', executionKind: 'conversation' },
+			executor: { id: 'chat', observe: async () => ({ available: true }), execute: async () => ({ status: 'responded', summary: 'Answered.', responseMarkdown: 'Ready.', usage: [{ activeSeconds: 3.01, elapsedSeconds: 4.99 }] }) } });
+		expect(api.settleAssignment).toHaveBeenCalledWith('assignment-precise', expect.objectContaining({ activeSeconds: 4, elapsedSeconds: 5 }), expect.any(String));
+	});
+
 	it('turns executor exceptions into an exact retryable failure receipt', async () => {
 		const api = client();
 		const executor: AgentExecutor = {

@@ -2,11 +2,9 @@ import { chmod, mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promi
 import { dirname, isAbsolute, resolve } from 'node:path';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 import {
-	validateCapacityProviderManifestV3,
-	validateCapacityProviderManifestV4,
 	validateCapacityProviderManifestV5,
 	type CapacityProviderJoinInput,
-	type CapacityProviderManifest,
+	type CapacityProviderManifestV5,
 	type ProviderConnectionConfig,
 } from '@treeseed/sdk/capacity-provider';
 import { decryptProviderCredential, encryptProviderCredential, isProviderCredentialEnvelope } from '../security/credential-vault.ts';
@@ -17,7 +15,7 @@ export interface LoadedProviderManifest {
 	path: string;
 	directory: string;
 	dataDirectory?: string;
-	manifest: CapacityProviderManifest;
+	manifest: CapacityProviderManifestV5;
 }
 
 export interface ProviderSecretResolver {
@@ -44,11 +42,11 @@ async function localConnections(dataDirectory: string | undefined) {
 
 export async function loadProviderManifest(path = process.env.TREESEED_CAPACITY_PROVIDER_MANIFEST || DEFAULT_PROVIDER_MANIFEST, dataDirectory?: string): Promise<LoadedProviderManifest> {
 	const absolute = resolve(path);
-	const parsed = parseYaml(await readFile(absolute, 'utf8')) as CapacityProviderManifest;
+	const parsed = parseYaml(await readFile(absolute, 'utf8')) as CapacityProviderManifestV5;
 	const overlay = await localConnections(dataDirectory);
 	const manifest = overlay ? { ...parsed, connections: overlay } : parsed;
-	if (process.env.TREESEED_REQUIRE_MICROVM === 'true' && manifest.schemaVersion < 4) throw new Error('This provider requires a microVM-only manifest; process-isolated migration manifests are rejected.');
-	const validation = manifest.schemaVersion === 5 ? validateCapacityProviderManifestV5(manifest) : manifest.schemaVersion === 4 ? validateCapacityProviderManifestV4(manifest) : validateCapacityProviderManifestV3(manifest);
+	if (manifest.schemaVersion !== 5) throw new Error('Capacity providers require a v5 capability-offer manifest.');
+	const validation = validateCapacityProviderManifestV5(manifest);
 	if (!validation.ok) throw new Error(`Invalid capacity provider manifest: ${diagnosticMessage(validation.diagnostics)}`);
 	return { path: absolute, directory: dirname(absolute), ...(dataDirectory ? { dataDirectory } : {}), manifest };
 }
@@ -56,7 +54,7 @@ export async function loadProviderManifest(path = process.env.TREESEED_CAPACITY_
 export async function writeProviderConnections(loaded: LoadedProviderManifest, connections: ProviderConnectionConfig[]) {
 	if (!loaded.dataDirectory) throw new Error('Provider connection updates require a local data directory.');
 	const manifest = { ...loaded.manifest, connections };
-	const validation = manifest.schemaVersion === 5 ? validateCapacityProviderManifestV5(manifest) : manifest.schemaVersion === 4 ? validateCapacityProviderManifestV4(manifest) : validateCapacityProviderManifestV3(manifest);
+	const validation = validateCapacityProviderManifestV5(manifest);
 	if (!validation.ok) throw new Error(`Invalid capacity provider manifest: ${diagnosticMessage(validation.diagnostics)}`);
 	const path = connectionOverlayPath(loaded.dataDirectory);
 	await mkdir(dirname(path), { recursive: true, mode: 0o700 });

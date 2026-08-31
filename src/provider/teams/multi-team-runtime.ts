@@ -8,7 +8,8 @@ import { publishProviderAvailability, buildProviderRunnerPlan } from '../lifecyc
 import { resolveAgentExecutor } from '../execution/executor-loader.ts';
 import { runProviderAssignment } from '../operations/runner.ts';
 import { createAssignmentTreeDxFacade } from '../coordination/assignment-treedx.ts';
-import type { CapacityProviderManifestV4, CapacityProviderManifestV5 } from '@treeseed/sdk/capacity-provider';
+import type { CapacityProviderManifestV5 } from '@treeseed/sdk/capacity-provider';
+import { materializeCapabilityOffers } from '../capabilities/materialize-offers.ts';
 
 function record(value: unknown): Record<string, unknown> {
 	return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -78,31 +79,20 @@ export async function runMultiTeamProviderManager(
 			return { ok: connection.status !== 'error', connectionId: connection.connectionId, status: connection.status };
 		}
 		const runtime = context(config, connection.runtime, loaded.manifest);
-		const adapters = await Promise.all(loaded.manifest.adapters.map(async (adapter) => {
+		const configuredAdapters = await materializeCapabilityOffers({ config, loaded: loaded as typeof loaded & { manifest: CapacityProviderManifestV5 }, providerId: connection.runtime.providerId });
+		const adapters = await Promise.all(configuredAdapters.map(async (adapter) => {
 			const executor = await resolveAgentExecutor(config, adapter, loaded.manifest).catch(() => null);
 			const observation = executor
 				? await executor.observe()
 					.catch((error) => ({ available: false, reason: error instanceof Error ? error.message : String(error) }))
 					.finally(() => executor.shutdown?.())
 				: { available: false, reason: 'executor_not_configured' };
-			const capabilities = loaded.manifest.schemaVersion === 5
-				? [...new Set((adapter as CapacityProviderManifestV5['adapters'][number]).offers.flatMap(({ offer }) => offer.capabilities.map(({ id }) => id)))]
-				: (adapter as CapacityProviderManifestV4['adapters'][number]).capabilities ?? [];
-			return loaded.manifest.schemaVersion === 5 ? {
+			const capabilities = [...new Set(adapter.offers.flatMap(({ offer }) => offer.capabilities.map(({ id }) => id)))];
+			return {
 				id: adapter.id,
-				offers: (adapter as CapacityProviderManifestV5['adapters'][number]).offers.map(({ offer }) => offer),
+				offers: adapter.offers.map(({ offer }) => offer),
 				laneIds: adapter.laneIds,
 				maxConcurrentWorkers: adapter.maxConcurrentWorkers,
-				capabilities,
-				status: observation.available ? 'available' : 'unavailable',
-				observations: observation,
-			} : {
-				id: adapter.id,
-				adapter: adapter.adapter,
-				isolation: adapter.isolation,
-				laneIds: adapter.laneIds,
-				maxConcurrentWorkers: adapter.maxConcurrentWorkers,
-				nativeLimits: adapter.nativeLimits,
 				capabilities,
 				status: observation.available ? 'available' : 'unavailable',
 				observations: observation,
@@ -145,9 +135,10 @@ export async function runMultiTeamProviderRunners(
 		let leasedAssignmentId: string | undefined;
 		let leasedToken: string | undefined;
 		try {
+			const advertisedCapabilities = [...new Set(loaded.manifest.adapters.flatMap((adapter) => adapter.offers.flatMap(({ offer }) => offer.capabilities.map(({ id }) => id))))];
 			const leased = record(await client.nextAssignment({
 				runnerId: claim.runnerId,
-				capabilities: connection.connection.offer.capabilities,
+				capabilities: advertisedCapabilities,
 				leaseSeconds: 300,
 			}));
 			const assignment = record(leased.assignment ?? leased.data ?? leased.payload);
@@ -166,9 +157,11 @@ export async function runMultiTeamProviderRunners(
 			const executionProviderId = text(assignment.executionProviderId, record(assignment.capacityEnvelope).executionProviderId);
 			const offerId = text(assignment.offerId, record(assignment.metadata).offerId);
 			const laneId = text(assignment.laneId, record(assignment.capacityEnvelope).laneId);
-			const adapter = loaded.manifest.schemaVersion === 5
-				? loaded.manifest.adapters.find((candidate) => candidate.offers.some(({ offer }) => offer.offerId === offerId) && (!laneId || candidate.laneIds.includes(laneId)))
-				: loaded.manifest.adapters.find((candidate) => candidate.id === executionProviderId && (!laneId || candidate.laneIds.includes(laneId)));
+			const providerLaneId = executionProviderId && laneId?.startsWith(`${executionProviderId}:`)
+				? laneId.slice(executionProviderId.length + 1)
+				: laneId;
+			const adapter = loaded.manifest.adapters.find((candidate) => candidate.offers.some(({ offer }) => offer.offerId === offerId)
+				&& (!providerLaneId || candidate.laneIds.includes(providerLaneId)));
 			if (!adapter) {
 				await client.returnAssignment(assignmentId, { leaseToken, runnerId: claim.runnerId, code: 'assignment_adapter_unavailable', reason: 'The assigned execution adapter is not installed on this provider.', retryable: true });
 				await localState.release(claim.id); results.push({ connectionId: connection.connection.id, status: 'idle', reason: 'assignment_adapter_unavailable' }); continue;
@@ -196,6 +189,7 @@ export async function runMultiTeamProviderRunners(
 				leaseToken,
 				runnerId: claim.runnerId,
 				leaseSeconds: 300,
+				renewalIntervalMs: text(assignment.executionKind) === 'conversation' ? 5_000 : undefined,
 				onLeaseRenewed: async (renewedLeaseExpiresAt) => {
 					await executor.renewLease?.(assignmentId, renewedLeaseExpiresAt);
 					await localState.renewLease(claim.id, { assignmentId, leaseExpiresAt: renewedLeaseExpiresAt });

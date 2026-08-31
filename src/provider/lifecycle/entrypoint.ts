@@ -188,9 +188,7 @@ async function main() {
 			...(input.serverProfile ? { serverProfile: String(input.serverProfile) } : { controlPlaneUrl: String(input.controlPlaneUrl ?? '') }),
 			controlPlaneAudience: String(input.controlPlaneAudience ?? input.controlPlaneUrl ?? ''), registrationKeyRef: 'memory://one-time',
 			offer: { maxConcurrentRunners: loaded.manifest.capacity.maxConcurrentWorkers,
-				capabilities: [...new Set(loaded.manifest.schemaVersion === 5
-					? loaded.manifest.adapters.flatMap((adapter) => adapter.offers.flatMap(({ offer }) => offer.capabilities.map(({ id }) => id)))
-					: loaded.manifest.adapters.flatMap((adapter) => adapter.capabilities ?? []))],
+				capabilities: [...new Set(loaded.manifest.adapters.flatMap((adapter) => adapter.offers.flatMap(({ offer }) => offer.capabilities.map(({ id }) => id))))],
 				metadata: { manifestGeneration: loaded.manifest.configuration.generation } } }, enrollmentToken);
 		emit({ ok: true, connectionId, status: receipt.status, teamId: receipt.teamId, providerId: receipt.providerId, requestId: receipt.requestId, sandboxIdentity: { signingKeyId, publicJwk } });
 		return;
@@ -218,7 +216,7 @@ async function main() {
 		if (!config.manifestPath) throw new Error('A capacity provider manifest is required to run provider runners.');
 		const { runMultiTeamProviderRunners } = await import('../teams/multi-team-runtime.ts');
 		if (once || mode === 'plan' || diagnostic) emit(await runMultiTeamProviderRunners(config, { mode: mode === 'plan' || diagnostic ? 'plan' : 'live' }));
-		else await runLoop('runner', config.dataDir, pollSeconds('TREESEED_PROVIDER_RUNNER_POLL_SECONDS', 15), () => runMultiTeamProviderRunners(config, { background: true }));
+		else await runLoop('runner', config.dataDir, pollSeconds('TREESEED_PROVIDER_RUNNER_POLL_SECONDS', 2), () => runMultiTeamProviderRunners(config, { background: true }));
 		return;
 	}
 }

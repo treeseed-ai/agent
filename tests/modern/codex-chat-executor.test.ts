@@ -1,8 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import { createHash } from 'node:crypto';
 import { assertObjectiveContentModel, discussionMessageSourcePaths, readDiscussionSourceMessage, readIdentityContext, readableCloneUrl, validatedSnapshotPaths } from '../../src/provider/execution/codex-chat-executor.ts';
+import { reasoningEffortFromAssignmentMetadata } from '../../src/provider/execution/microvm-executor.ts';
+import { codexReasoningArguments } from '../../src/sandbox/guest.ts';
 
 describe('Codex chat executor', () => {
+	it('carries the agent-selected reasoning effort into Codex without a provider hardcode', () => {
+		expect(reasoningEffortFromAssignmentMetadata({ chatProfile: { execution: { reasoningEffort: 'high' } } })).toBe('high');
+		expect(reasoningEffortFromAssignmentMetadata({ executionPolicy: { reasoningEffort: 'xhigh' } })).toBe('xhigh');
+		expect(codexReasoningArguments('high')).toEqual(['-c', 'model_reasoning_effort=high']);
+		expect(reasoningEffortFromAssignmentMetadata({ chatProfile: { execution: { reasoningEffort: 'fast' } } })).toBeUndefined();
+		expect(codexReasoningArguments(undefined)).toEqual([]);
+	});
 	it('uses a non-interactive readable URL for public GitHub project workspaces', () => {
 		expect(readableCloneUrl('git@github.com:treeseed-ai/sdk.git')).toBe('https://github.com/treeseed-ai/sdk.git');
 		expect(readableCloneUrl('https://example.test/project.git')).toBe('https://example.test/project.git');

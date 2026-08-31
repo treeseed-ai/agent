@@ -20,6 +20,12 @@ function text(...values: unknown[]) {
   return values.find((value) => typeof value === 'string' && value.trim()) as string | undefined;
 }
 
+function settlementSeconds(value: unknown) {
+	const seconds = Number(value ?? 0);
+	if (!Number.isFinite(seconds) || seconds < 0) throw new Error('Execution provider reported invalid assignment timing.');
+	return Math.ceil(seconds);
+}
+
 export interface ProviderAssignmentRunInput {
   client: Pick<ProviderProtocolClient, 'renewAssignment' | 'startAssignmentExecution' | 'startAssignmentCloseout' | 'preflightAssignmentCompletion' | 'completeAssignment' | 'returnAssignment' | 'failAssignment' | 'reportAssignmentUsage' | 'respondToAssignmentDiscussion' | 'settleAssignment' | 'createCommunicationTraceEvent'>;
   executor: AgentExecutor;
@@ -123,7 +129,7 @@ export async function runProviderAssignment(input: ProviderAssignmentRunInput) {
 		await input.client.respondToAssignmentDiscussion(assignmentId, { leaseToken: input.leaseToken, runnerId: input.runnerId,
 			outcome: result.status, ...(result.responseMarkdown ? { markdown: result.responseMarkdown } : {}), summary: result.summary }, `discussion-response:${assignmentId}:${input.runnerId}`);
 		const usage = record(result.usage?.[0]);
-		await input.client.settleAssignment(assignmentId, { activeSeconds: Number(usage.activeSeconds ?? 0), elapsedSeconds: Number(usage.elapsedSeconds ?? 0),
+		await input.client.settleAssignment(assignmentId, { activeSeconds: settlementSeconds(usage.activeSeconds), elapsedSeconds: settlementSeconds(usage.elapsedSeconds),
 			usageDimension: 'aggregate', usageActual: {} }, `discussion-settlement:${assignmentId}:${input.runnerId}`);
 		return input.client.returnAssignment(assignmentId, { runnerId: input.runnerId, summary: { text: result.summary } });
 	}

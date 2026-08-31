@@ -1,24 +1,14 @@
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { chmod, chown, copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, writeFile } from 'node:fs/promises';
 import { join, posix } from 'node:path';
-import { tmpdir } from 'node:os';
 import { validateContentFrontmatter } from '@treeseed/sdk/content-validation';
-import type { AgentExecutionRequest, AgentExecutorModule } from './contracts.ts';
+import type { AgentExecutionRequest } from './contracts.ts';
 
 const record = (value: unknown): Record<string, unknown> => value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
 const text = (value: unknown) => typeof value === 'string' ? value.trim() : '';
 const contentText = (value: unknown) => typeof value === 'string' ? value : '';
 const contentMetadata = (path: string, content: string) => ({ path, bytes: Buffer.byteLength(content), digest: `sha256:${createHash('sha256').update(content).digest('hex')}` });
-function secretValues(value: unknown): string[] {
-	if (typeof value === 'string') return value.length >= 16 ? [value] : [];
-	if (Array.isArray(value)) return value.flatMap(secretValues);
-	return value && typeof value === 'object' ? Object.values(value as Record<string, unknown>).flatMap(secretValues) : [];
-}
-function assertNoKnownSecret(value: unknown, secrets: string[]) {
-	const serialized = typeof value === 'string' ? value : JSON.stringify(value);
-	if (secrets.some((secret) => serialized.includes(secret))) throw new Error('Execution output contained a known credential fingerprint and was quarantined.');
-}
 
 export function assertObjectiveContentModel(path: string, file: Record<string, unknown>) {
 	if (!/(?:^|\/)objectives\/[^/]+\.(?:md|mdx)$/u.test(path)) return;
@@ -132,28 +122,6 @@ export async function readDiscussionSourceContext(request: AgentExecutionRequest
 	return { kind: 'discussion-message', source: 'treedx', disposition: 'prompt-injected', immutableRef: request.treeDx.baseRef, ...contentMetadata(paths[0], content), content };
 }
 
-function run(executable: string, args: string[], input: string, environment: NodeJS.ProcessEnv, onEvent: (event: Record<string, unknown>) => Promise<void>, signal?: AbortSignal, identity?: { uid: number; gid: number }) {
-	return new Promise<void>((resolve, reject) => {
-		const child = spawn(executable, args, { env: environment, stdio: ['pipe', 'pipe', 'pipe'], ...identity });
-		let error = '', output = '', events = Promise.resolve();
-		child.stdout.setEncoding('utf8'); child.stdout.on('data', (chunk) => {
-			output += String(chunk); const lines = output.split('\n'); output = lines.pop() ?? '';
-			for (const line of lines) if (line.trim()) events = events.then(async () => { try { await onEvent(record(JSON.parse(line))); } catch { await onEvent({ type: 'provider.event.invalid', rawDigest: createHash('sha256').update(line).digest('hex') }); } });
-		});
-		child.stderr.setEncoding('utf8'); child.stderr.on('data', (chunk) => { error = `${error}${chunk}`.slice(-16_000); });
-		const abort = () => child.kill('SIGTERM');
-		if (signal?.aborted) abort(); else signal?.addEventListener('abort', abort, { once: true });
-		child.once('error', reject);
-		child.once('exit', async (code, exitSignal) => {
-			signal?.removeEventListener('abort', abort);
-			if (output.trim()) try { await onEvent(record(JSON.parse(output))); } catch { /* terminal partial output is represented by the exit status */ }
-			await events;
-			if (code === 0) resolve(); else reject(new Error(`Codex chat executor exited (${code ?? exitSignal ?? 'unknown'}): ${error.trim()}`));
-		});
-		child.stdin.end(input);
-	});
-}
-
 export async function readIdentityContext(request: AgentExecutionRequest, availablePaths?: ReadonlySet<string>) {
 	const metadata = record(request.assignment.metadata); const manifest = record(metadata.identityManifest);
 	const profile = record(manifest.agentProfile); const objective = record(manifest.coreObjective); const readme = record(manifest.projectReadme);
@@ -189,65 +157,3 @@ export async function readIdentityContext(request: AgentExecutionRequest, availa
 	const verifiedManifest: Record<string, unknown> = { ...manifest, sources: sources.map(({ content: _content, ...source }) => source) };
 	return { manifest: verifiedManifest, sources };
 }
-
-function publicProviderEvent(event: Record<string, unknown>) {
-	const item = record(event.item); const usage = record(event.usage);
-	return { providerEventType: text(event.type) || 'unknown', itemType: text(item.type) || null, itemId: text(item.id) || null,
-		...(Object.keys(usage).length ? { usage, usageProvenance: 'execution-provider' } : {}),
-		...(typeof event.model === 'string' ? { model: event.model } : {}) };
-}
-
-export const createAgentExecutor: AgentExecutorModule['createAgentExecutor'] = async ({ executionProviderId }) => ({
-	id: executionProviderId,
-	async observe() {
-		const executable = text(process.env.TREESEED_CODEX_EXECUTABLE);
-		const authFile = text(process.env.TREESEED_CODEX_AUTH_FILE);
-		return { available: Boolean(executable && authFile), activeAssignments: 0, capabilities: ['communication', 'agent-execution'],
-			...(!executable ? { reason: 'codex_executable_unavailable' } : !authFile ? { reason: 'codex_auth_unavailable' } : {}) };
-	},
-	async execute(request) {
-		if (text(request.assignment.executionKind) !== 'conversation') return { status: 'returned', code: 'codex_chat_only', summary: 'Codex chat executor accepts communication assignments only.', retryable: false };
-		const executable = text(process.env.TREESEED_CODEX_EXECUTABLE); const authFile = text(process.env.TREESEED_CODEX_AUTH_FILE);
-		if (!executable || !authFile) return { status: 'returned', code: 'codex_runtime_unavailable', summary: 'Trusted Codex executable or authentication custody is unavailable.', retryable: true };
-		const started = Date.now(); const root = await mkdtemp(join(tmpdir(), 'treeseed-codex-chat-'));
-		try {
-			const codexUid = 65_534, codexGid = 65_534; const codexHome = join(root, 'codex'); const workspace = join(root, 'workspace'); const output = join(codexHome, 'response.md');
-			await chmod(root, 0o755); await mkdir(codexHome, { mode: 0o700 }); await chown(codexHome, codexUid, codexGid);
-			const authSecrets = secretValues(JSON.parse(await readFile(authFile, 'utf8')));
-			const isolatedAuth = join(codexHome, 'auth.json'); await copyFile(authFile, isolatedAuth); await chmod(isolatedAuth, 0o600); await chown(isolatedAuth, codexUid, codexGid);
-			const sourceWorkspace = await prepareProjectWorkspace(request.assignment, workspace);
-			const treeDxSnapshot = await materializeTreeDxSnapshot(request, join(workspace, '.treedx', 'library'));
-			const messageContext = await readDiscussionSourceContext(request); const message = messageContext.content;
-			const identityContext = await readIdentityContext(request, new Set(treeDxSnapshot.files.map((file) => file.path))); const agent = text(request.assignment.agentId) || 'project-agent';
-			const metadata = record(request.assignment.metadata); const profile = record(metadata.chatProfile); const identity = record(profile.identity); const profilePrompt = record(profile.prompt);
-			const communication = record(metadata.communication); const required = text(communication.requirement) !== 'optional';
-			const role = [text(identity.durableInstructions), text(profilePrompt.system), text(profile.purpose) || text(profile.summary)].filter(Boolean).join('\n\n') || `Act within the professional role of ${agent}.`;
-			const optionalPolicy = required ? 'You were directly addressed and must provide a substantive response.'
-				: 'You were mentioned optionally. Respond only when your role adds material value; otherwise return exactly <!-- treeseed:abstain -->.';
-			const identitySources = identityContext.sources.map((source) => `## ${source.kind}: ${source.path}\nImmutable ref: ${source.immutableRef}\nDigest: ${source.digest}\n\n${source.content}`).join('\n\n');
-			const prompt = `You are exactly ${text(identityContext.manifest.agentHandle)}. Your immutable TreeDX identity sources are reproduced below.\n\n${identitySources}\n\nRole instructions:\n${role}\n\nActivity task:\n${text(profilePrompt.task) || 'Respond to the committed Discussion message.'}\n\n${optionalPolicy}\nThe current working directory is the read-only ${sourceWorkspace.projectSlug || sourceWorkspace.projectId} project repository at exact revision ${sourceWorkspace.revision}. Its AGENTS.md instructions apply. The assignment's default TreeDX project library is materialized read-only at .treedx/library from repository ${treeDxSnapshot.repositoryId} ref ${treeDxSnapshot.immutableRef}; inspect it whenever project knowledge is relevant. The operator CLI is intentionally absent from this isolated runner, so use the local .treedx/library snapshot for TreeDX reads and do not treat the absence of trsd as missing context. Use read-only repository tools to gather evidence before answering. Do not mutate repositories or inspect outside the assignment workspace. If responding, return only the message to post. Team discussion topics coordinate every project: use @project/agent for one exact agent, or @agent to address every chat-enabled agent with that handle across the team. An address in the initial address block requires a response; a later mention permits a response or abstention.\n\nDiscussion message:\n${message}`;
-			const execution = record(profile.execution); const model = text(execution.model); const capabilities = ['communication', 'repository-read', 'treedx-read', 'read-only-shell'];
-			const args = ['exec', '--json', '--ephemeral', '--ignore-user-config', '--dangerously-bypass-approvals-and-sandbox', ...(model ? ['--model', model] : []), '--enable', 'code_mode_host', '--disable', 'browser_use', '--disable', 'apps', '--disable', 'multi_agent_v2', '--disable', 'image_generation', '--color', 'never', '--output-last-message', output, '-C', workspace, '-'];
-			await request.emit?.({ type: 'execution.started', occurredAt: new Date().toISOString(), summary: `Execution started as ${text(identityContext.manifest.agentHandle)}.`,
-				payload: { model: model || null, capabilities, parameters: { sandbox: 'external-read-only-filesystem', tools: 'read-only', uid: codexUid }, identityManifest: identityContext.manifest,
-					contextManifest: [...identityContext.sources.map(({ content: _content, ...source }) => source), (({ content: _content, ...source }) => source)(messageContext),
-						{ kind: 'project-repository', source: 'git', disposition: 'tool-available', promptInjected: false, ...sourceWorkspace },
-						{ kind: 'treedx-library', source: 'treedx', disposition: 'tool-available', promptInjected: false, ...treeDxSnapshot }] }, protectedPayload: { prompt } });
-			const providerEvents: Record<string, unknown>[] = [];
-			await run(executable, args, prompt, { NODE_ENV: process.env.NODE_ENV, LANG: process.env.LANG, TZ: process.env.TZ,
-				HOME: codexHome, CODEX_HOME: codexHome }, async (event) => { providerEvents.push(event); await request.emit?.({ type: `provider.${text(event.type) || 'event'}`, occurredAt: new Date().toISOString(),
-					summary: `Provider event: ${text(event.type) || 'event'}.`, payload: publicProviderEvent(event), protectedPayload: { providerEvent: event } }); }, request.signal, { uid: codexUid, gid: codexGid });
-			const markdown = (await readFile(output, 'utf8')).trim();
-			assertNoKnownSecret(markdown, authSecrets); assertNoKnownSecret(providerEvents, authSecrets);
-			if (!markdown) throw new Error('Codex returned an empty discussion response.');
-			const elapsedSeconds = Math.max(1, Math.ceil((Date.now() - started) / 1_000)); const completed = [...providerEvents].reverse().find((event) => text(event.type).includes('completed')) ?? {};
-			const usage = record(completed.usage); await request.emit?.({ type: 'execution.completed', occurredAt: new Date().toISOString(), summary: `Execution completed as ${text(identityContext.manifest.agentHandle)}.`,
-				payload: { model: model || text(completed.model) || null, capabilities, usage: Object.keys(usage).length ? [{ ...usage, provenance: 'execution-provider' }] : [],
-					timing: { elapsedSeconds }, resources: { availability: 'partial', reason: 'child_cpu_and_peak_rss_unavailable' }, runtimeVersion: text(process.env.TREESEED_CODEX_VERSION) || null, parameters: { arguments: args.filter((value) => value !== workspace && value !== output) } } });
-			if (!required && markdown === '<!-- treeseed:abstain -->') return { status: 'abstained', summary: `Abstained as ${agent}.`,
-				usage: [{ usageDimension: 'aggregate', accountingMode: 'informational', activeSeconds: elapsedSeconds, elapsedSeconds }] };
-			return { status: 'responded', summary: `Responded as ${agent}.`, responseMarkdown: markdown,
-				usage: [{ usageDimension: 'aggregate', accountingMode: 'informational', activeSeconds: elapsedSeconds, elapsedSeconds }] };
-		} finally { await rm(root, { recursive: true, force: true }); }
-	},
-});

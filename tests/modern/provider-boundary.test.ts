@@ -5,13 +5,12 @@ import { describe, expect, it } from 'vitest';
 import { CONTROL_PLANE_OPERATIONS } from '@treeseed/sdk/operator-contracts';
 import { providerOperationPath } from '../../src/provider/coordination/client.ts';
 import { providerRegistrationIdempotencyKey } from '../../src/provider/coordination/coordinator.ts';
-import { executorModuleSpecifier, resolveAgentExecutor } from '../../src/provider/execution/executor-loader.ts';
 import { resolveProviderConfig } from '../../src/provider/configuration/config.ts';
 import { ensureCapacityProviderIdentity } from '../../src/provider/accounts/identity.ts';
 import { listProviderConnectionStates, writeProviderConnectionState } from '../../src/provider/coordination/connection-state.ts';
 import { loadProviderManifest, writeProviderConnections } from '../../src/provider/configuration/manifest.ts';
 import { buildProviderPlan, providerAvailabilityCapabilities } from '../../src/provider/lifecycle/lifecycle.ts';
-import { stringify as stringifyYaml } from 'yaml';
+import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 
 function sourceFiles(root: string): string[] {
 	return readdirSync(root, { withFileTypes: true }).flatMap((entry) => {
@@ -26,17 +25,6 @@ describe('Agent package ownership boundary', () => {
 			.toContain('a%2Fb');
 		expect(() => providerOperationPath(CONTROL_PLANE_OPERATIONS.providers.registration))
 			.toThrow(/requires path parameter requestId/u);
-	});
-
-	it('fails closed when no trusted executor module is configured', async () => {
-		const config = resolveProviderConfig({ env: { TREESEED_PROVIDER_DATA_DIR: '/tmp/provider' } });
-		expect(config.executorModule).toBeNull();
-		await expect(resolveAgentExecutor(config, { id: 'codex', adapter: 'codex', isolation: 'worker', laneIds: ['workday'], maxConcurrentWorkers: 1, nativeLimits: {} })).resolves.toBeNull();
-	});
-
-	it('resolves only reviewed portable executor module identifiers', () => {
-		expect(executorModuleSpecifier('module:codex-chat')).toBe('@treeseed/agent/executors/codex-chat');
-		expect(() => executorModuleSpecifier('module:unknown')).toThrow(/Unknown capacity provider executor module/u);
 	});
 
 	it('creates one fresh private identity in local enrollment custody and reuses it on retry', async () => {
@@ -66,18 +54,7 @@ describe('Agent package ownership boundary', () => {
 		const root = mkdtempSync(resolve(tmpdir(), 'treeseed-provider-connections-'));
 		const dataDirectory = resolve(root, 'data');
 		const manifestPath = resolve(root, 'treeseed.capacity-provider.yaml');
-		const manifest = {
-			schemaVersion: 3, ownership: { type: 'team', teamId: 'team-1' }, configuration: { generation: 'test' },
-			identity: { privateKeyRef: 'data://identity-v3.json', displayName: 'Test' },
-			capacity: { maxConcurrentWorkers: 1 }, credentialProfiles: [],
-			lanes: [
-				{ id: 'communication', purpose: 'communication', priority: 100, reservedConcurrentWorkers: 1, maxConcurrentWorkers: 1, borrowWhenIdle: true, lendWhenIdle: true, reclaimPolicy: 'admission', queueLimit: 1, timeoutSeconds: 30 },
-				{ id: 'platform', purpose: 'platform', priority: 70, reservedConcurrentWorkers: 0, maxConcurrentWorkers: 1, borrowWhenIdle: true, lendWhenIdle: true, reclaimPolicy: 'admission', queueLimit: 1, timeoutSeconds: 30 },
-				{ id: 'workday', purpose: 'workday', priority: 50, reservedConcurrentWorkers: 0, maxConcurrentWorkers: 1, borrowWhenIdle: true, lendWhenIdle: true, reclaimPolicy: 'admission', queueLimit: 1, timeoutSeconds: 30 },
-			],
-			adapters: [{ id: 'test', adapter: 'codex', isolation: 'process', laneIds: ['communication', 'workday'], maxConcurrentWorkers: 1, nativeLimits: {}, capabilities: ['communication'] }],
-			connections: [],
-		};
+		const manifest = { ...parseYaml(readFileSync(resolve(process.cwd(), '../../treeseed.capacity-provider.yaml'), 'utf8')), connections: [] };
 		writeFileSync(manifestPath, stringifyYaml(manifest));
 		const canonical = readFileSync(manifestPath, 'utf8');
 		try {
@@ -87,12 +64,12 @@ describe('Agent package ownership boundary', () => {
 				TREESEED_PROVIDER_DATA_DIR: dataDirectory,
 			} })) as { lanes: Array<{ purpose: string }>; adapters: Array<{ id: string }>; capacity: { maxConcurrentWorkers: number }; capabilities: string[] };
 			expect(plan.lanes.map((lane) => lane.purpose)).toEqual(['communication', 'platform', 'workday']);
-			expect(plan.adapters.map((adapter) => adapter.id)).toEqual(['test']);
-			expect(plan.capacity.maxConcurrentWorkers).toBe(1);
-			expect(plan.capabilities).toEqual(['communication']);
+			expect(plan.adapters.map((adapter) => adapter.id)).toContain('codex-local');
+			expect(plan.capacity.maxConcurrentWorkers).toBeGreaterThan(0);
+			expect(plan.capabilities).toContain('treeseed.coordination.conversation');
 			await writeProviderConnections(loaded, [{ id: 'local', controlPlaneUrl: 'http://127.0.0.1:3002', controlPlaneAudience: 'http://127.0.0.1:3002',
 				teamId: 'team-1', providerId: 'provider-1', membershipId: 'membership-1', membershipCredentialRef: 'data://credential',
-				membershipCredentialId: 'credential-1', offer: { maxConcurrentRunners: 1, capabilities: ['communication'] } }]);
+				membershipCredentialId: 'credential-1', offer: { maxConcurrentRunners: 1, capabilities: ['treeseed.coordination.conversation'] } }]);
 			expect(readFileSync(manifestPath, 'utf8')).toBe(canonical);
 			expect(statSync(resolve(dataDirectory, 'connections.yaml')).mode & 0o777).toBe(0o600);
 			expect((await loadProviderManifest(manifestPath, dataDirectory)).manifest.connections).toHaveLength(1);
@@ -118,9 +95,9 @@ describe('Agent package ownership boundary', () => {
 
 	it('publishes capability identifiers rather than local capability objects', () => {
 		expect(providerAvailabilityCapabilities({
-			adapters: [{ capabilities: ['communication', 'acting'] }],
-			lanes: [{ capabilities: ['communication', 'planning'] }],
+			adapters: [{ capabilities: ['treeseed.coordination.conversation', 'treeseed.engineering.code-change'] }],
+			lanes: [{ capabilities: ['treeseed.coordination.conversation', 'treeseed.coordination.planning'] }],
 			capacity: {},
-		})).toEqual(['acting', 'communication', 'planning']);
+		})).toEqual(['treeseed.coordination.conversation', 'treeseed.coordination.planning', 'treeseed.engineering.code-change']);
 	});
 });

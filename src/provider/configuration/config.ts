@@ -1,5 +1,5 @@
 import { existsSync, readFileSync } from 'node:fs';
-import type { CapacityProviderManifest } from '@treeseed/sdk/capacity-provider';
+import type { CapacityProviderManifestV5 } from '@treeseed/sdk/capacity-provider';
 
 export type ProviderRole = 'manager' | 'runner' | 'enroll' | 'doctor' | 'healthcheck' | 'plan' | 'version';
 
@@ -10,11 +10,9 @@ export interface ProviderHostRuntimeConfig {
   environment: string;
   maxConcurrentRunners: number;
   maxConcurrentWorkdays: number;
-  capabilitiesFile: string | null;
   budgetFile: string | null;
   dailyAgentSecondsLimit: number | null;
   monthlyAgentSecondsLimit: number | null;
-  executorModule: string | null;
   env: Record<string, string>;
   redactedEnv: Record<string, string>;
   manifestPath: string | null;
@@ -29,9 +27,9 @@ export interface ProviderConnectionRuntimeContext extends ProviderHostRuntimeCon
   membershipId: string;
   accessToken: string;
   accessTokenProvider?: (minimumValidityMs?: number) => Promise<string>;
-  adapters: CapacityProviderManifest['adapters'];
-  lanes: CapacityProviderManifest['lanes'];
-  providerCapacity: CapacityProviderManifest['capacity'];
+  adapters: CapacityProviderManifestV5['adapters'];
+  lanes: CapacityProviderManifestV5['lanes'];
+  providerCapacity: CapacityProviderManifestV5['capacity'];
 }
 
 function value(env: NodeJS.ProcessEnv, name: string) {
@@ -67,13 +65,11 @@ export function resolveProviderConfig(options: { env?: NodeJS.ProcessEnv; requir
     environment: env.TREESEED_PROVIDER_ENVIRONMENT,
     maxConcurrentRunners: positiveInteger(value(source, 'TREESEED_PROVIDER_MAX_CONCURRENT_RUNNERS'), 1),
     maxConcurrentWorkdays: positiveInteger(value(source, 'TREESEED_PROVIDER_MAX_CONCURRENT_WORKDAYS'), 1),
-    capabilitiesFile: value(source, 'TREESEED_PROVIDER_CAPABILITIES_FILE') || null,
-    budgetFile: value(source, 'TREESEED_PROVIDER_BUDGET_FILE') || null,
+	budgetFile: value(source, 'TREESEED_PROVIDER_BUDGET_FILE') || null,
     dailyAgentSecondsLimit: optionalInteger(value(source, 'TREESEED_PROVIDER_DAILY_AGENT_SECONDS_LIMIT')),
     monthlyAgentSecondsLimit: optionalInteger(value(source, 'TREESEED_PROVIDER_MONTHLY_AGENT_SECONDS_LIMIT')),
-    executorModule: value(source, 'TREESEED_AGENT_EXECUTOR_MODULE') || null,
-    env,
-    redactedEnv: { ...env, ...(value(source, 'TREESEED_AGENT_EXECUTOR_MODULE') ? { TREESEED_AGENT_EXECUTOR_MODULE: '<configured>' } : {}) },
+	env,
+	redactedEnv: env,
     manifestPath,
   };
 }

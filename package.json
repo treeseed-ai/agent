@@ -25,10 +25,6 @@
     "./provider-governance": {
       "types": "./dist/provider-governance.d.ts",
       "default": "./dist/provider-governance.js"
-    },
-    "./executors/codex-chat": {
-      "types": "./dist/provider/execution/codex-chat-executor.d.ts",
-      "default": "./dist/provider/execution/codex-chat-executor.js"
     }
   },
   "files": [

@@ -3,7 +3,6 @@ import { constants } from 'node:fs';
 import type { ProviderSupplyOffer } from '@treeseed/sdk/capacity-provider/contracts';
 import type { ProviderConnectionRuntimeContext, ProviderHostRuntimeConfig } from '../configuration/config.ts';
 import { discoverProviderBudgets } from '../configuration/budgets.ts';
-import { discoverProviderCapabilities } from '../configuration/capabilities.ts';
 import { loadProviderManifest } from '../configuration/manifest.ts';
 import { createProviderControlPlaneClient } from '../coordination/client.ts';
 import { ProviderLocalCapacityStore } from '../capacity/capacity-core/local-capacity-store.ts';
@@ -19,7 +18,7 @@ export async function checkProviderHealth(config: ProviderHostRuntimeConfig) {
 	const writable = await access(config.dataDir, constants.W_OK).then(() => true, () => false);
 	const disk = writable ? await observeProviderDiskCapacity({ path: config.dataDir, env: config.env }) : null;
 	const manifest = config.manifestPath ? (await loadProviderManifest(config.manifestPath, config.dataDir)).manifest : null;
-	const brokerSocket = manifest && manifest.schemaVersion !== 3 && manifest.sandbox.required ? manifest.sandbox.brokerSocket : null;
+	const brokerSocket = manifest?.sandbox.required ? manifest.sandbox.brokerSocket : null;
 	const broker = brokerSocket
 		? await new SandboxBrokerClient(brokerSocket).status(AbortSignal.timeout(3_000))
 			.then(() => ({ required: true, ready: true, socket: brokerSocket, reason: null }))
@@ -32,7 +31,7 @@ export async function checkProviderHealth(config: ProviderHostRuntimeConfig) {
 		disk,
 		manifestConfigured: Boolean(config.manifestPath),
 		manifestVersion: manifest?.schemaVersion ?? null,
-		executorConfigured: Boolean(config.executorModule),
+		executorConfigured: Boolean(manifest?.adapters.length),
 		broker,
 	});
 }
@@ -41,15 +40,13 @@ export async function buildProviderPlan(config: ProviderHostRuntimeConfig) {
 	const manifest = config.manifestPath
 		? (await loadProviderManifest(config.manifestPath, config.dataDir)).manifest
 		: null;
-	const adapterCapabilities = manifest?.schemaVersion === 5
-		? manifest.adapters.flatMap((adapter) => adapter.offers.flatMap(({ offer }) => offer.capabilities.map(({ id }) => id)))
-		: manifest?.adapters.flatMap((adapter) => adapter.capabilities ?? []) ?? [];
+	const adapterCapabilities = manifest?.adapters.flatMap((adapter) => adapter.offers.flatMap(({ offer }) => offer.capabilities.map(({ id }) => id))) ?? [];
 	const capabilities = manifest
 		? [...new Set([
 			...adapterCapabilities,
 			...manifest.lanes.flatMap((lane) => lane.capabilities ?? []),
 		])].sort()
-		: discoverProviderCapabilities(config).map((capability) => capability.id);
+		: [];
 	return okPayload('plan', {
 		mode: 'plan',
 		dataDir: config.dataDir,
@@ -57,7 +54,7 @@ export async function buildProviderPlan(config: ProviderHostRuntimeConfig) {
 		capacity: manifest?.capacity ?? discoverProviderBudgets(config),
 		lanes: manifest?.lanes ?? [],
 		adapters: manifest?.adapters ?? [],
-		executorConfigured: Boolean(config.executorModule),
+		executorConfigured: Boolean(manifest?.adapters.length),
 		redactedEnv: config.redactedEnv,
 	});
 }
@@ -90,7 +87,7 @@ export async function publishProviderAvailability(
 		ttlSeconds: 90,
 		environment: config.environment,
 		status: 'open',
-		...(availability.manifestVersion === 5 ? { offers: availability.adapters.flatMap((route) => Array.isArray(route.offers) ? route.offers.map((offer) => ({ offer, laneIds: route.laneIds, maxConcurrentWorkers: route.maxConcurrentWorkers, status: route.status, observations: route.observations })) : []) } : { adapters: availability.adapters }),
+		offers: availability.adapters.flatMap((route) => Array.isArray(route.offers) ? route.offers.map((offer) => ({ offer, laneIds: route.laneIds, maxConcurrentWorkers: route.maxConcurrentWorkers, status: route.status, observations: route.observations })) : []),
 		lanes: availability.lanes,
 		capacity: availability.capacity,
 		capabilities: providerAvailabilityCapabilities(availability),
@@ -120,7 +117,7 @@ export async function publishProviderAvailability(
 export function buildProviderRunnerPlan(config: ProviderHostRuntimeConfig) {
 	return okPayload('runner', {
 		mode: 'plan',
-		executorConfigured: Boolean(config.executorModule),
+		executorConfigured: true,
 		flow: [
 			'read API-issued assignment lease',
 			'execute through trusted Agent executor',

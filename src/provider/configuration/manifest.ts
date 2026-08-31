@@ -8,6 +8,7 @@ import {
 	type ProviderConnectionConfig,
 } from '@treeseed/sdk/capacity-provider';
 import { decryptProviderCredential, encryptProviderCredential, isProviderCredentialEnvelope } from '../security/credential-vault.ts';
+import { migrateManagedProviderManifestV4 } from './legacy-manifest.ts';
 
 export const DEFAULT_PROVIDER_MANIFEST = 'treeseed.capacity-provider.yaml';
 
@@ -40,9 +41,10 @@ async function localConnections(dataDirectory: string | undefined) {
 	}
 }
 
-export async function loadProviderManifest(path = process.env.TREESEED_CAPACITY_PROVIDER_MANIFEST || DEFAULT_PROVIDER_MANIFEST, dataDirectory?: string): Promise<LoadedProviderManifest> {
+export async function loadProviderManifest(path = process.env.TREESEED_CAPACITY_PROVIDER_MANIFEST || DEFAULT_PROVIDER_MANIFEST, dataDirectory?: string, env: NodeJS.ProcessEnv = process.env): Promise<LoadedProviderManifest> {
 	const absolute = resolve(path);
-	const parsed = parseYaml(await readFile(absolute, 'utf8')) as CapacityProviderManifestV5;
+	const source = parseYaml(await readFile(absolute, 'utf8')) as CapacityProviderManifestV5 | { schemaVersion?: unknown };
+	const parsed = source.schemaVersion === 4 ? migrateManagedProviderManifestV4(source, env) : source as CapacityProviderManifestV5;
 	const overlay = await localConnections(dataDirectory);
 	const manifest = overlay ? { ...parsed, connections: overlay } : parsed;
 	if (manifest.schemaVersion !== 5) throw new Error('Capacity providers require a v5 capability-offer manifest.');

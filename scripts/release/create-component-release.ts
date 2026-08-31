@@ -13,8 +13,10 @@ const revision = Number(process.env.TREESEED_COMPONENT_REVISION ?? '1');
 if (!Number.isInteger(revision) || revision < 1) throw new Error('Component revision must be a positive integer.');
 const debianRelease = `${release.replace(/-rc\.(\d+)$/u, '~rc$1')}-${revision}`;
 const template = readFileSync(resolve('deploy/compose.template.yml'), 'utf8');
-const compose = template.replace('@MANAGER_IMAGE@', `treeseed/agent-manager@${managerDigest}`).replace('@RUNNER_IMAGE@', `treeseed/agent-runner@${runnerDigest}`);
-if (/\bbuild\s*:/u.test(compose) || /@(?:MANAGER|RUNNER)_IMAGE@/u.test(compose)) throw new Error('Production Compose bundle is not fully materialized.');
+const provenanceDigest = deploymentDigest({ release, sourceCommit, sandboxBaseDigest: baseDigest, sandboxGuestDigest: guestDigest });
+const compose = template.replace('@MANAGER_IMAGE@', `treeseed/agent-manager@${managerDigest}`).replace('@RUNNER_IMAGE@', `treeseed/agent-runner@${runnerDigest}`)
+	.replaceAll('@SANDBOX_BASE_DIGEST@', baseDigest).replaceAll('@SANDBOX_PROVENANCE_DIGEST@', provenanceDigest);
+if (/\bbuild\s*:/u.test(compose) || /@[A-Z_]+@/u.test(compose)) throw new Error('Production Compose bundle is not fully materialized.');
 const composeDigest = `sha256:${createHash('sha256').update(compose).digest('hex')}`;
 const runtime = {
 	schemaVersion: 'treeseed.package-runtime/v1' as const, componentId: 'agent', version: debianRelease,

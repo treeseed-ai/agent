@@ -106,6 +106,28 @@ describe('Agent package ownership boundary', () => {
 		}
 	});
 
+	it('migrates manager-custodied v4 manifests in memory with exact release lineage', async () => {
+		const root = mkdtempSync(resolve(tmpdir(), 'treeseed-provider-v4-'));
+		const manifestPath = resolve(root, 'treeseed.capacity-provider.yaml');
+		const current = providerManifestFixture();
+		current.sandbox.profiles.push({ ...current.sandbox.profiles[0]!, id: 'unit' });
+		const legacy = { ...current, schemaVersion: 4, ontology: undefined,
+			sandbox: { ...current.sandbox, profiles: current.sandbox.profiles.map(({ lineage: _lineage, ...profile }) => profile) },
+			lanes: current.lanes.map((lane) => ({ ...lane, capabilities: ['communication', 'agent-execution'] })),
+			adapters: current.adapters.map(({ offers: _offers, ...adapter }) => ({ ...adapter, capabilities: ['communication'], sandboxProfileIds: ['read'] })) };
+		writeFileSync(manifestPath, stringifyYaml(legacy));
+		const canonical = readFileSync(manifestPath, 'utf8');
+		try {
+			await expect(loadProviderManifest(manifestPath, root)).rejects.toThrow(/release-bound sandbox base and provenance/u);
+			const loaded = await loadProviderManifest(manifestPath, root, { TREESEED_SANDBOX_BASE_DIGEST: digest('8'), TREESEED_SANDBOX_PROVENANCE_DIGEST: digest('9') });
+			expect(loaded.manifest).toMatchObject({ schemaVersion: 5, ownership: current.ownership, capacity: current.capacity,
+				configuration: { generation: 'fixture-v5-compat-v5' }, ontology: { generation: 3 }, metadata: { compatibilityMigration: 'agent-managed-v4-to-v5' } });
+			expect(loaded.manifest.adapters[0]?.offers.map(({ offer }) => offer.offerId)).toEqual(['codex-conversation', 'codex-engineering', 'codex-data', 'codex-publishing']);
+			expect(loaded.manifest.sandbox.profiles[0]?.lineage).toMatchObject({ baseImageDigest: digest('8'), provenanceDigest: digest('9') });
+			expect(readFileSync(manifestPath, 'utf8')).toBe(canonical);
+		} finally { rmSync(root, { recursive: true, force: true }); }
+	});
+
 	it('discovers durable pending registrations for automatic approval polling', async () => {
 		const root = mkdtempSync(resolve(tmpdir(), 'treeseed-provider-pending-'));
 		try {

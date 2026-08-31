@@ -25,6 +25,8 @@ describe('Agent RC publication', () => {
 		const release = JSON.parse(readFileSync('release-assets/component-release.json', 'utf8')) as { release: string; revision: number; runtime: { compose: { files: Array<{ path: string; digest: string }> }; dependencies: Array<{ id: string; locality: string }> }; track: string; source: { commit: string }; stableBase: { catalogDigest: unknown }; images: Array<{ digest: string }> };
 		expect(compose).not.toMatch(/\bbuild\s*:/u);
 		expect(compose).toContain(`treeseed/agent-manager@${hash('b')}`);
+		expect(compose).toContain(`TREESEED_SANDBOX_BASE_DIGEST: "${hash('e')}"`);
+		expect(compose).toMatch(/TREESEED_SANDBOX_PROVENANCE_DIGEST: "sha256:[a-f0-9]{64}"/u);
 		expect(release.track).toBe('development');
 		expect(release.source.commit).toBe('a'.repeat(40));
 		expect(release.stableBase.catalogDigest).toBeNull();

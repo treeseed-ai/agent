@@ -12,8 +12,8 @@ describe('Codex chat executor', () => {
 		expect(reasoningEffortFromAssignmentMetadata({ chatProfile: { execution: { reasoningEffort: 'fast' } } })).toBeUndefined();
 		expect(codexReasoningArguments(undefined)).toEqual([]);
 	});
-	it('keeps interactive execution inside the one-minute chat budget', () => {
-		expect(codexInteractiveTimeoutMs(900)).toBe(38_000);
+	it('respects the configured activity runtime for deeper chat reasoning', () => {
+		expect(codexInteractiveTimeoutMs(900)).toBe(895_000);
 		expect(codexInteractiveTimeoutMs(20)).toBe(15_000);
 	});
 	it('uses a non-interactive readable URL for public GitHub project workspaces', () => {

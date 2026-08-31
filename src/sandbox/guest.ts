@@ -70,12 +70,12 @@ async function startModelRelay(assignment: SandboxAssignment, sandboxId: string,
 	return { baseUrl: `http://127.0.0.1:${address.port}/${'v1'}`, close: () => new Promise<void>((accept, reject) => server.close((error) => error ? reject(error) : accept())) };
 }
 
-function promptFromContext(context: Record<string, unknown>) {
+function promptFromContext(context: Record<string, unknown>, reasoningEffort?: string) {
 	const identity = record(context.identity), manifest = record(identity.manifest), sources = Array.isArray(identity.sources) ? identity.sources.map(record) : [];
 	const assignment = record(context.assignment), metadata = record(assignment.metadata), chatProfile = record(metadata.chatProfile), prompt = record(chatProfile.prompt), communication = record(metadata.communication);
 	const sourceText = sources.map((source) => `## ${text(source.kind)}: ${text(source.path)}\nImmutable ref: ${text(source.immutableRef)}\nDigest: ${text(source.digest)}\n\n${text(source.content)}`).join('\n\n');
 	const required = text(communication.requirement) !== 'optional';
-	return `You are exactly ${text(manifest.agentHandle)}. Your verified immutable TreeDX identity sources follow.\n\n${sourceText}\n\nActivity instructions:\n${text(prompt.system)}\n\nActivity task:\n${text(prompt.task) || 'Respond to the committed Discussion message.'}\n\n${required ? 'You were directly addressed and must provide a substantive response.' : 'Respond only if your role adds material value; otherwise return exactly <!-- treeseed:abstain -->.'}\nThe working directory is the exact project repository snapshot. The complete, verified, read-only TreeDX library snapshot is at /workspace/.treedx/library. It was materialized through the assignment-scoped TreeDX authority at the immutable ref in your identity manifest. The trsd executable is intentionally absent from the isolated guest; when repository instructions name trsd library read commands, inspect this mounted snapshot directly instead. This is latency-sensitive interactive chat. Use one batched shell inspection that reads AGENTS.md plus the most relevant project and TreeDX files; use a second tool call only when the first cannot answer the question. Do not run broad test suites or exhaustive scans. Prioritize decisive evidence, answer in at most 350 words, and complete within 30 seconds. Do not inspect outside /workspace or disclose credentials. Return only the message to post.\n\nDiscussion message:\n${text(record(context.message).content)}`;
+	return `You are exactly ${text(manifest.agentHandle)}. Your verified immutable TreeDX identity sources follow.\n\n${sourceText}\n\nActivity instructions:\n${text(prompt.system)}\n\nActivity task:\n${text(prompt.task) || 'Respond to the committed Discussion message.'}\n\n${required ? 'You were directly addressed and must provide a substantive response.' : 'Respond only if your role adds material value; otherwise return exactly <!-- treeseed:abstain -->.'}\nThe working directory is the exact project repository snapshot. The complete, verified, read-only TreeDX library snapshot is at /workspace/.treedx/library. It was materialized through the assignment-scoped TreeDX authority at the immutable ref in your identity manifest. The trsd executable is intentionally absent from the isolated guest; when repository instructions name trsd library read commands, inspect this mounted snapshot directly instead. The assigned reasoning effort is ${reasoningEffort || 'provider-default'}. Scale inspection and research depth to that setting and the question: for minimal or low reasoning, prefer one batched shell inspection of AGENTS.md and the most relevant project and TreeDX files; for deeper reasoning, use additional focused tools when they materially improve the answer. Do not run unrelated broad test suites or exhaustive scans. Do not inspect outside /workspace or disclose credentials. Return only the message to post.\n\nDiscussion message:\n${text(record(context.message).content)}`;
 }
 
 export function codexReasoningArguments(reasoningEffort: string | undefined) {
@@ -84,7 +84,7 @@ export function codexReasoningArguments(reasoningEffort: string | undefined) {
 }
 
 export function codexInteractiveTimeoutMs(durationSeconds: number) {
-	return Math.min(38_000, Math.max(1_000, durationSeconds * 1_000 - 5_000));
+	return Math.max(1_000, durationSeconds * 1_000 - 5_000);
 }
 
 export async function runSandboxGuest() {
@@ -110,7 +110,7 @@ export async function runSandboxGuest() {
 	if (subscriptionAuth) await writeFile(resolve(codexHome, 'auth.json'), subscriptionAuth, { mode: 0o600 });
 	const relay = subscriptionAuth ? null : await startModelRelay(assignment, sandboxId, operationToken);
 	const subscriptionProxy = subscriptionAuth ? `http://${encodeURIComponent(sandboxId)}:${encodeURIComponent(operationToken)}@10.89.0.1:7444` : null;
-	const events: Record<string, unknown>[] = [], composedPrompt = promptFromContext(context);
+	const events: Record<string, unknown>[] = [], composedPrompt = promptFromContext(context, assignment.modelPolicy.reasoningEffort);
 	const providerArguments = ['exec', '--json', '--ephemeral', '--ignore-user-config', '--dangerously-bypass-approvals-and-sandbox', ...(writableProject ? [] : ['--skip-git-repo-check']), '--model', assignment.modelPolicy.model,
 		...codexReasoningArguments(assignment.modelPolicy.reasoningEffort),
 		'--enable', 'code_mode_host', '--disable', 'browser_use', '--disable', 'apps', '--disable', 'multi_agent_v2', '--disable', 'image_generation', '--color', 'never', '--output-last-message', responsePath, '-C', '/workspace/project', '-'];

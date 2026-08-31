@@ -37,11 +37,23 @@ export async function readProviderConnectionState(dataDir: string, connectionId:
 
 export async function writeProviderConnectionState(dataDir: string, state: ProviderConnectionState) {
 	const path = statePath(dataDir, state.connectionId);
+	const persisted: ProviderConnectionState = {
+		schemaVersion: 1, connectionId: state.connectionId, controlPlaneUrl: state.controlPlaneUrl, offer: state.offer,
+		...(state.serverProfile !== undefined ? { serverProfile: state.serverProfile } : {}),
+		...(state.controlPlaneAudience !== undefined ? { controlPlaneAudience: state.controlPlaneAudience } : {}),
+		...(state.teamId !== undefined ? { teamId: state.teamId } : {}), ...(state.providerId !== undefined ? { providerId: state.providerId } : {}),
+		...(state.registrationRequestId !== undefined ? { registrationRequestId: state.registrationRequestId } : {}),
+		...(state.registrationStatus !== undefined ? { registrationStatus: state.registrationStatus } : {}),
+		...(state.membershipId !== undefined ? { membershipId: state.membershipId } : {}), ...(state.credentialId !== undefined ? { credentialId: state.credentialId } : {}),
+		...(state.credentialRotationIdempotencyKey !== undefined ? { credentialRotationIdempotencyKey: state.credentialRotationIdempotencyKey } : {}),
+		...(state.credentialExchangeIdempotencyKey !== undefined ? { credentialExchangeIdempotencyKey: state.credentialExchangeIdempotencyKey } : {}),
+		...(state.generatedCredentialRef !== undefined ? { generatedCredentialRef: state.generatedCredentialRef } : {}), updatedAt: state.updatedAt,
+	};
 	await mkdir(dirname(path), { recursive: true, mode: 0o700 });
 	const temporary = `${path}.${process.pid}.tmp`;
-	await writeFile(temporary, `${JSON.stringify(state, null, 2)}\n`, { encoding: 'utf8', mode: 0o600, flag: 'wx' });
+	await writeFile(temporary, `${JSON.stringify(persisted, null, 2)}\n`, { encoding: 'utf8', mode: 0o600, flag: 'wx' });
 	await rename(temporary, path);
-	return state;
+	return persisted;
 }
 
 export async function listProviderConnectionStates(dataDir: string) {

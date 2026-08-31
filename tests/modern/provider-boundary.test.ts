@@ -71,11 +71,11 @@ describe('Agent package ownership boundary', () => {
 		}
 	});
 
-	it('binds registration idempotency to the enrollment generation', () => {
-		expect(providerRegistrationIdempotencyKey('primary', 'token-one'))
-			.toBe(providerRegistrationIdempotencyKey('primary', 'token-one'));
-		expect(providerRegistrationIdempotencyKey('primary', 'token-one'))
-			.not.toBe(providerRegistrationIdempotencyKey('primary', 'token-two'));
+	it('binds registration idempotency to the reusable code generation', () => {
+		expect(providerRegistrationIdempotencyKey('primary', 'code-one'))
+			.toBe(providerRegistrationIdempotencyKey('primary', 'code-one'));
+		expect(providerRegistrationIdempotencyKey('primary', 'code-one'))
+			.not.toBe(providerRegistrationIdempotencyKey('primary', 'code-two'));
 	});
 
 	it('stores mutable connections in local custody without rewriting the canonical manifest', async () => {
@@ -114,9 +114,22 @@ describe('Agent package ownership boundary', () => {
 		} finally { rmSync(root, { recursive: true, force: true }); }
 	});
 
+	it('persists only the connection-state allowlist and drops registration-code values', async () => {
+		const root = mkdtempSync(resolve(tmpdir(), 'treeseed-provider-state-redaction-'));
+		try {
+			await writeProviderConnectionState(root, { schemaVersion: 1, connectionId: 'primary', controlPlaneUrl: 'https://api.example.test',
+				offer: { maxConcurrentRunners: 1, capabilities: ['communication'] }, registrationRequestId: 'request-1', registrationStatus: 'pending',
+				updatedAt: new Date().toISOString(), registrationCode: 'must-not-persist' } as any);
+			const stored = readFileSync(resolve(root, 'connections/primary.json'), 'utf8');
+			expect(stored).not.toContain('registrationCode');
+			expect(stored).not.toContain('must-not-persist');
+		} finally { rmSync(root, { recursive: true, force: true }); }
+	});
+
 	it('contains no raw control-plane paths or removed Market/API runtime terms', () => {
 		const source = sourceFiles(resolve(process.cwd(), 'src')).map((path) => readFileSync(path, 'utf8')).join('\n');
 		expect(source).not.toMatch(/\/v1\//u);
+		expect(source).not.toMatch(/enrollmentToken|one-time token/u);
 		expect(source).not.toMatch(/MarketClient|marketId|marketUrl|marketAudience|TREESEED_MARKET/u);
 		expect(source).not.toMatch(/@treeseed\/sdk\/(?:sdk|platform|operations|copilot|git-runtime|frontmatter|content-operations|agent-tools)(?:['"]|\/)/u);
 	});

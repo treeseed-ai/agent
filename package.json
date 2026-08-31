@@ -1,6 +1,6 @@
 {
   "name": "@treeseed/agent",
-  "version": "0.13.0-rc.34",
+  "version": "0.13.0-rc.35",
   "description": "Treeseed agent service runtime package.",
   "license": "Apache-2.0",
   "repository": {

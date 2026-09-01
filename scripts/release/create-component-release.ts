@@ -2,6 +2,8 @@ import { createHash } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { componentReleaseSchema, deploymentDigest } from '@treeseed/sdk/deployment';
+import { stringify as stringifyYaml } from 'yaml';
+import { createManagedProviderManifestV5 } from '../../src/provider/configuration/managed-manifest.ts';
 
 const release = process.env.TREESEED_RELEASE, sourceCommit = process.env.TREESEED_SOURCE_COMMIT;
 const managerDigest = process.env.TREESEED_MANAGER_DIGEST, runnerDigest = process.env.TREESEED_RUNNER_DIGEST, baseDigest = process.env.TREESEED_SANDBOX_BASE_DIGEST, guestDigest = process.env.TREESEED_GUEST_DIGEST;
@@ -18,9 +20,20 @@ const compose = template.replace('@MANAGER_IMAGE@', `treeseed/agent-manager@${ma
 	.replaceAll('@SANDBOX_BASE_DIGEST@', baseDigest).replaceAll('@SANDBOX_PROVENANCE_DIGEST@', provenanceDigest);
 if (/\bbuild\s*:/u.test(compose) || /@[A-Z_]+@/u.test(compose)) throw new Error('Production Compose bundle is not fully materialized.');
 const composeDigest = `sha256:${createHash('sha256').update(compose).digest('hex')}`;
+const providerManifest = stringifyYaml(createManagedProviderManifestV5({
+	release,
+	guestImage: 'treeseed/sandbox-codex',
+	guestImageDigest: guestDigest,
+	baseImageDigest: baseDigest,
+	provenanceDigest,
+}), { lineWidth: 0 });
 const runtime = {
 	schemaVersion: 'treeseed.package-runtime/v1' as const, componentId: 'agent', version: debianRelease,
 	compose: { projectName: 'treeseed-agent', files: [{ path: 'compose.yml', digest: composeDigest }] },
+	configuration: { files: [{
+		id: 'treeseed.capacity-provider.yaml', path: '/etc/treeseed/components/agent/treeseed.capacity-provider.yaml',
+		required: true, sensitive: false, default: providerManifest,
+	}] },
 	services: [{ id: 'manager', composeService: 'manager', endpoints: [] }, { id: 'runner', composeService: 'runner', endpoints: [] }],
 	stateVolumes: [{ id: 'provider-data', volume: '/var/lib/treeseed/agent', backup: 'required' as const }],
 	migrations: [{ id: 'provider-identity', order: 0, backupRequired: true }], requiredCapabilities: ['docker-compose'],

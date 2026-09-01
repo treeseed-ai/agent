@@ -11,6 +11,8 @@ import { listProviderConnectionStates, writeProviderConnectionState } from '../.
 import { loadProviderManifest, writeProviderConnections } from '../../src/provider/configuration/manifest.ts';
 import { buildProviderPlan, providerAvailabilityCapabilities } from '../../src/provider/lifecycle/lifecycle.ts';
 import { stringify as stringifyYaml } from 'yaml';
+import { createManagedProviderManifestV5 } from '../../src/provider/configuration/managed-manifest.ts';
+import { validateCapacityProviderManifestV5 } from '@treeseed/sdk/capacity-provider';
 
 const digest = (value: string) => `sha256:${value.repeat(64)}`;
 function providerManifestFixture() {
@@ -49,6 +51,18 @@ function sourceFiles(root: string): string[] {
 }
 
 describe('Agent package ownership boundary', () => {
+	it('publishes a portable release-bound managed provider default', () => {
+		const manifest = createManagedProviderManifestV5({ release: '0.13.0-rc.41', guestImage: 'treeseed/sandbox-codex',
+			guestImageDigest: digest('5'), baseImageDigest: digest('6'), provenanceDigest: digest('7') });
+		expect(validateCapacityProviderManifestV5(manifest)).toEqual({ ok: true, diagnostics: [] });
+		expect(manifest).toMatchObject({ schemaVersion: 5, ownership: { type: 'external' }, capacity: { maxConcurrentWorkers: 1 }, connections: [],
+			configuration: { generation: 'agent-release-0.13.0-rc.41' }, metadata: { custody: 'agent-release-default' } });
+		expect(manifest.sandbox.profiles.map(({ id }) => id)).toEqual(['read', 'unit', 'integration', 'platform', 'connected']);
+		expect(manifest.sandbox.profiles.every((profile) => profile.guestImageDigest === digest('5')
+			&& profile.lineage.baseImageDigest === digest('6') && profile.lineage.provenanceDigest === digest('7'))).toBe(true);
+		expect(manifest.capacity).toEqual({ maxConcurrentWorkers: 1 });
+		expect(JSON.stringify(manifest)).not.toMatch(/teamId|registration|\/home\/|hostname/u);
+	});
 	it('derives provider proof paths from the SDK operation catalog', () => {
 		expect(providerOperationPath(CONTROL_PLANE_OPERATIONS.providers.registration, { requestId: 'a/b' }))
 			.toContain('a%2Fb');

@@ -34,6 +34,8 @@ export class SandboxBrokerClient {
 		});
 	}
 	execute(sandboxId: string, token: string, execution: Record<string, unknown>, signal?: AbortSignal) { return call<SandboxResult>(this.socketPath, 'POST', this.path(`/sandboxes/${encodeURIComponent(sandboxId)}/execute`), { execution }, signal, { authorization: `Bearer ${token}` }); }
+	nextToolRequest(sandboxId:string,token:string,signal?:AbortSignal){return call<{request:{id:string;tool:string;arguments:Record<string,unknown>}|null}>(this.socketPath,'GET',this.path(`/sandboxes/${encodeURIComponent(sandboxId)}/tool-requests/next`),undefined,signal,{authorization:`Bearer ${token}`});}
+	completeToolRequest(sandboxId:string,token:string,requestId:string,result:unknown,signal?:AbortSignal){return call<Record<string,unknown>>(this.socketPath,'POST',this.path(`/sandboxes/${encodeURIComponent(sandboxId)}/tool-requests/${encodeURIComponent(requestId)}`),result,signal,{authorization:`Bearer ${token}`});}
 	renew(sandboxId: string, token: string, renewal: SandboxLeaseRenewal) { return call<Record<string, unknown>>(this.socketPath, 'POST', this.path(`/sandboxes/${encodeURIComponent(sandboxId)}/renew`), { renewal }, undefined, { authorization: `Bearer ${token}` }); }
 	downloadArtifact(sandboxId: string, token: string, artifactId: string, expectedBytes: number, signal?: AbortSignal) {
 		return new Promise<Buffer>((resolve, reject) => {

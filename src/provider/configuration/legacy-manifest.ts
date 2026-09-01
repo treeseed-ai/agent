@@ -45,8 +45,11 @@ function offer(id: string, capabilityIds: string[]) {
 		signature: { keyId: 'runtime-provider', algorithm: 'Ed25519' as const, value: 'materialize-at-runtime' },
 	}));
 	const material = {
-		schemaVersion: 'treeseed.capability-offer/v1' as const, offerId: `codex-${id}`, capabilities, features: [], configurationSupport,
+		schemaVersion: 'treeseed.capability-offer/v2' as const, offerId: `codex-${id}`, capabilities, features: [], configurationSupport,
 		permissionClasses: ['content-policy', 'repository-policy', 'network-policy', 'shell-policy', 'tool-policy'], contextModes: ['inline', 'manifest'],
+		contextCapacity: { mode: 'bounded' as const, measurement: 'tokens' as const, defaultInitial: 32_000, maximum: 128_000,
+			reservedOutput: 8_000, transportPayloadBytes: 4_194_304,
+			measurementProvenance: { provider: 'openai', implementation: 'provider-reported-tokenizer', version: null } },
 		inputContracts: [], outputContracts: [], interactionModes: ['asynchronous', 'interactive'], conformance, limits: {},
 		commercial: { currency: null, estimatedCost: null }, region: null, trust: ['provider-signed'],
 	};

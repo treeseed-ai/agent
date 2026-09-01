@@ -32,11 +32,22 @@ export async function createAssignmentTreeDxFacade(connection: ProviderControlPl
 	return {
 		projectId, repositoryId: text(handle.repositoryId) || null, workspaceId: text(handle.workspaceId) || null,
 		baseRef: text(handle.baseRef, handle.baseCommitSha) || null,
+		readRepositories:Array.isArray(handle.readRepositories)?handle.readRepositories as never:Array.isArray(record(handle.metadata).readRepositories)?record(handle.metadata).readRepositories as never:[],
 		async invoke(operationId, input, options = {}) {
 			const operation = operations.get(operationId);
 			if (!operation) throw new Error(`TreeDX proxy operation ${operationId} is not part of the accepted SDK catalog.`);
 			const invocation = record(input);
-			return client.invoke(operation, { path: { ...record(invocation.path), projectId }, query: record(invocation.query), body: invocation.body }, {
+			const requestedProjectId=text(record(invocation.path).projectId)||projectId;
+			const readRepositories = Array.isArray(handle.readRepositories)
+				? handle.readRepositories.map(record)
+				: Array.isArray(record(handle.metadata).readRepositories)
+					? (record(handle.metadata).readRepositories as unknown[]).map(record)
+					: [];
+			const authorizedProjectId = requestedProjectId === projectId
+				|| readRepositories.some((candidate) => text(candidate.projectId) === requestedProjectId)
+				? requestedProjectId
+				: projectId;
+			return client.invoke(operation, { path: { ...record(invocation.path), projectId:authorizedProjectId }, query: record(invocation.query), body: invocation.body }, {
 				authorization: `Bearer ${await accessToken()}`,
 				headers: { 'x-treeseed-assignment-id': assignmentId, 'x-treeseed-treedx-proxy-handle-id': handleId,
 					...(handleToken ? { 'x-treeseed-treedx-proxy-handle': handleToken } : {}) },

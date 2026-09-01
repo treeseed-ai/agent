@@ -42,13 +42,18 @@ clone_released_connection_custody() {
     return 0
   fi
   local released_container="${TREESEED_RELEASED_PROVIDER_MANAGER_CONTAINER:-treeseed-agent-manager-1}"
-  docker inspect "$released_container" >/dev/null 2>&1 || {
-    printf 'Released provider connection custody is unavailable for the required development clone.\n' >&2
+  local source_container="$released_container"
+  if ! docker inspect "$source_container" >/dev/null 2>&1; then
+    source_container="$(docker ps --filter 'name=treeseed-agent-dev-' --filter status=running --format '{{.Names}}' \
+      | grep -- '-manager-1$' | grep -v -- "^${project}-manager-1$" | sort | tail -n 1)"
+  fi
+  test -n "$source_container" && docker inspect "$source_container" >/dev/null 2>&1 || {
+    printf 'Provider connection custody is unavailable for the required development clone.\n' >&2
     return 1
   }
   local released_image
-  released_image="$(docker inspect --format '{{.Config.Image}}' "$released_container")"
-  docker run --rm --user 0 --env HOST_UID="$(id -u)" --env HOST_GID="$(id -g)" --volumes-from "$released_container:ro" --volume "$session_root:/candidate" --entrypoint sh "$released_image" -c \
+  released_image="$(docker inspect --format '{{.Config.Image}}' "$source_container")"
+  docker run --rm --user 0 --env HOST_UID="$(id -u)" --env HOST_GID="$(id -g)" --volumes-from "$source_container:ro" --volume "$session_root:/candidate" --entrypoint sh "$released_image" -c \
     'mkdir -p /candidate/config && cp -a /data/connections.yaml /data/identity-v3.json /data/connections /data/secrets /candidate/ && cp /config/treeseed.capacity-provider.yaml /candidate/config/released.capacity-provider.yaml && chown -R 65532:65532 /candidate && chown "$HOST_UID:$HOST_GID" /candidate/config && chmod 0755 /candidate/config && chmod 0644 /candidate/config/released.capacity-provider.yaml'
   docker run --rm --user 0 --env TARGET_URL --volume "$session_root:/candidate" --entrypoint node "$released_image" -e \
     'const fs=require("fs"),root="/candidate/connections"; for(const name of fs.readdirSync(root)){if(!name.endsWith(".json"))continue;const path=`${root}/${name}`,value=JSON.parse(fs.readFileSync(path,"utf8"));value.controlPlaneUrl=process.env.TARGET_URL;fs.writeFileSync(path,`${JSON.stringify(value,null,2)}\n`,{mode:0o600});} const custody="/candidate/connections.yaml";fs.writeFileSync(custody,fs.readFileSync(custody,"utf8").replace(/(^\s*controlPlaneUrl:\s*).+$/gmu,`$1${process.env.TARGET_URL}`),{mode:0o600});' \
@@ -68,6 +73,10 @@ connect_control_plane_network() {
 pause_released_provider() {
   docker stop "${TREESEED_RELEASED_PROVIDER_MANAGER_CONTAINER:-treeseed-agent-manager-1}" \
     "${TREESEED_RELEASED_PROVIDER_RUNNER_CONTAINER:-treeseed-agent-runner-1}" >/dev/null 2>&1 || true
+  while read -r container; do
+    case "$container" in "${project}-manager-1"|"${project}-runner-1"|'') continue ;; esac
+    docker stop "$container" >/dev/null 2>&1 || true
+  done < <(docker ps --filter 'name=treeseed-agent-dev-' --format '{{.Names}}' | grep -E -- '-(manager|runner)-1$' || true)
 }
 
 restore_released_provider() {

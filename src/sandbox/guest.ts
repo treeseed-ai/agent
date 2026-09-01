@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { createReadStream } from 'node:fs';
 import { createServer } from 'node:http';
 import { request as httpsRequest } from 'node:https';
+import { createInterface } from 'node:readline';
 import { chmod, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { sandboxAssignmentSchema, sandboxResultSchema, type SandboxAssignment } from '@treeseed/sdk/capacity-provider';
@@ -70,12 +71,47 @@ async function startModelRelay(assignment: SandboxAssignment, sandboxId: string,
 	return { baseUrl: `http://127.0.0.1:${address.port}/${'v1'}`, close: () => new Promise<void>((accept, reject) => server.close((error) => error ? reject(error) : accept())) };
 }
 
+function treeDxToolDefinitions(){return [
+	{name:'treedx_build_context',description:'Build focused knowledge context. Omit project for the owning project; select team library or another authorized same-team project by slug or ID.',inputSchema:{type:'object',properties:{project:{type:'string'},request:{type:'object',properties:{query:{type:'string'},topics:{type:'array',items:{type:'string'},maxItems:20},paths:{type:'array',items:{type:'string'},maxItems:20},mode:{type:'string',enum:['brief','detailed','citations','mixed']},maxItems:{type:'integer',minimum:1,maximum:50},maxTokens:{type:'integer',minimum:1}},anyOf:[{required:['query']},{required:['topics']}],additionalProperties:false}},required:['request'],additionalProperties:false}},
+	{name:'treedx_read_files',description:'Read authorized TreeDX logical content identifiers. Omit project for the owning project; otherwise provide an authorized project slug or ID.',inputSchema:{type:'object',properties:{project:{type:'string'},paths:{type:'array',items:{type:'string'},maxItems:20}},required:['paths'],additionalProperties:false}},
+	{name:'treedx_search_files',description:'Search authorized TreeDX content. Omit project for the owning project; otherwise provide an authorized project slug or ID.',inputSchema:{type:'object',properties:{project:{type:'string'},query:{type:'string'},paths:{type:'array',items:{type:'string'},maxItems:20},limit:{type:'integer'},includeBody:{type:'boolean'}},required:['query'],additionalProperties:false}},
+	{name:'treedx_list_paths',description:'List authorized TreeDX logical paths. Omit project for the owning project; otherwise provide an authorized project slug or ID.',inputSchema:{type:'object',properties:{project:{type:'string'},paths:{type:'array',items:{type:'string'},maxItems:20},limit:{type:'integer'}},required:['paths'],additionalProperties:false}},
+];}
+
+export function codexTreeDxMcpConfig(sandboxId:string,operationToken:string,assignment:SandboxAssignment){
+	const values={TREESEED_RELAY_URL:assignment.network.relayUrl,TREESEED_SANDBOX_ID:sandboxId,TREESEED_GUEST_TOKEN:operationToken,TREESEED_RELAY_CA:'/workspace/.treeseed/relay-ca.crt'};
+	return `[mcp_servers.treedx]\ncommand = ${JSON.stringify(process.execPath)}\nargs = ${JSON.stringify([process.argv[1],'--treedx-mcp'])}\nrequired = true\nstartup_timeout_sec = 10\ntool_timeout_sec = 30\n\n[mcp_servers.treedx.env]\n${Object.entries(values).map(([key,value])=>`${key} = ${JSON.stringify(value)}`).join('\n')}\n`;
+}
+
+async function invokeTreeDxRelay(tool:string,arguments_:Record<string,unknown>){
+	const relayUrl=text(process.env.TREESEED_RELAY_URL),sandboxId=text(process.env.TREESEED_SANDBOX_ID),operationToken=text(process.env.TREESEED_GUEST_TOKEN),caPath=text(process.env.TREESEED_RELAY_CA);
+	if(!relayUrl||!sandboxId||!operationToken||!caPath) throw new Error('TreeDX MCP relay environment is incomplete.');
+	const encoded=Buffer.from(JSON.stringify({tool,arguments:arguments_})),url=new URL(relayUrl),ca=await readFile(caPath);
+	return new Promise<unknown>((resolve,reject)=>{const request=httpsRequest({hostname:url.hostname,port:Number(url.port),ca,servername:'treeseed-sandbox-relay',method:'POST',path:`/${'v1'}/sandboxes/${encodeURIComponent(sandboxId)}/tools/treedx`,headers:{authorization:`Bearer ${operationToken}`,'content-type':'application/json','content-length':String(encoded.byteLength)}},(response)=>{let body='';response.setEncoding('utf8');response.on('data',(chunk)=>{body+=chunk;});response.on('end',()=>{try{const value=body?JSON.parse(body):{};(response.statusCode??500)<400?resolve(value):reject(new Error(String(value.error??`TreeDX relay returned ${response.statusCode}.`)));}catch(error){reject(error);}});});request.once('error',reject);request.end(encoded);});
+}
+
+export async function runTreeDxMcpServer(){
+	const lines=createInterface({input:process.stdin,crlfDelay:Infinity});
+	for await(const line of lines){if(!line.trim())continue;let message:Record<string,unknown>;try{message=record(JSON.parse(line));}catch{continue;}const id=message.id,method=text(message.method);let result:unknown;
+		try{if(method==='initialize')result={protocolVersion:'2025-06-18',capabilities:{tools:{}},serverInfo:{name:'treeseed-assignment-treedx',version:'1'}};
+			else if(method==='tools/list')result={tools:treeDxToolDefinitions()};
+			else if(method==='tools/call'){const parameters=record(message.params),name=text(parameters.name),arguments_=record(parameters.arguments);const value=await invokeTreeDxRelay(name,arguments_);result={content:[{type:'text',text:JSON.stringify(value)}],structuredContent:record(value)};}
+			else if(method.startsWith('notifications/'))continue;else throw new Error(`Unsupported MCP method ${method}.`);
+			process.stdout.write(`${JSON.stringify({jsonrpc:'2.0',id,result})}\n`);
+		}catch(error){process.stdout.write(`${JSON.stringify({jsonrpc:'2.0',id,error:{code:-32000,message:error instanceof Error?error.message:String(error)}})}\n`);}
+	}
+}
+
 function promptFromContext(context: Record<string, unknown>, reasoningEffort?: string) {
-	const identity = record(context.identity), manifest = record(identity.manifest), sources = Array.isArray(identity.sources) ? identity.sources.map(record) : [];
+	const identity = record(context.identity), manifest = record(identity.manifest), coreContext=record(context.coreContext),sources=Array.isArray(coreContext.sources)?coreContext.sources.map(record):[];
 	const assignment = record(context.assignment), metadata = record(assignment.metadata), chatProfile = record(metadata.chatProfile), prompt = record(chatProfile.prompt), communication = record(metadata.communication);
-	const sourceText = sources.map((source) => `## ${text(source.kind)}: ${text(source.path)}\nImmutable ref: ${text(source.immutableRef)}\nDigest: ${text(source.digest)}\n\n${text(source.content)}`).join('\n\n');
+	const sourceText = sources.map((source) => `## ${text(source.layer)} / ${text(source.kind)}: ${text(source.path)||text(source.id)}\nProject: ${text(source.projectId)}\nDigest: ${text(source.digest)}\nDisposition: ${text(source.disposition)}\n\n${text(source.content)}`).join('\n\n');
 	const required = text(communication.requirement) !== 'optional';
-	return `You are exactly ${text(manifest.agentHandle)}. Your verified immutable TreeDX identity sources follow.\n\n${sourceText}\n\nActivity instructions:\n${text(prompt.system)}\n\nActivity task:\n${text(prompt.task) || 'Respond to the committed Discussion message.'}\n\n${required ? 'You were directly addressed and must provide a substantive response.' : 'Respond only if your role adds material value; otherwise return exactly <!-- treeseed:abstain -->.'}\nThe working directory is the exact project repository snapshot. The complete, verified, read-only TreeDX library snapshot is at /workspace/.treedx/library. It was materialized through the assignment-scoped TreeDX authority at the immutable ref in your identity manifest. The trsd executable is intentionally absent from the isolated guest; when repository instructions name trsd library read commands, inspect this mounted snapshot directly instead. The assigned reasoning effort is ${reasoningEffort || 'provider-default'}. Scale inspection and research depth to that setting and the question: for minimal or low reasoning, prefer one batched shell inspection of AGENTS.md and the most relevant project and TreeDX files; for deeper reasoning, use additional focused tools when they materially improve the answer. Do not run unrelated broad test suites or exhaustive scans. Do not inspect outside /workspace or disclose credentials. Return only the message to post.\n\nDiscussion message:\n${text(record(context.message).content)}`;
+	const projectInjected=text(record(context.projectManifest).materialization)==='private-copy';
+	const projectAccess=projectInjected
+		?'The working directory is a private project repository copy authorized for this assignment.'
+		:'No code repository snapshot was injected. Use the verified context pack first and assignment-scoped TreeDX tools for focused follow-up knowledge; do not claim code inspection that you did not perform.';
+	return `You are exactly ${text(manifest.agentHandle)}. The verified TreeDX context below is ordered by mandatory core, agent-general, activity-specific, and live discussion layers.\n\n${sourceText}\n\nActivity instructions:\n${text(prompt.system)}\n\nActivity task:\n${text(prompt.task) || 'Respond to the committed Discussion message.'}\n\n${required ? 'You were directly addressed and must provide a substantive response.' : 'Respond only if your role adds material value; otherwise return exactly <!-- treeseed:abstain -->.'}\n${projectAccess} Prefer extensionless identifiers such as objectives/core. Do not supply or reason about Git commits for normal TreeDX access; the assignment relay privately enforces consistent views. Do not invoke trsd: the CLI is intentionally absent from assignment guests. Tool and content permissions come from this activity profile. The assigned reasoning effort is ${reasoningEffort || 'provider-default'}. Scale inspection and research depth to that setting and the question. Do not run unrelated broad test suites or exhaustive scans. Do not inspect outside /workspace or disclose credentials. Return only the message to post.\n\nDiscussion message:\n${text(record(context.message).content)}`;
 }
 
 export function codexReasoningArguments(reasoningEffort: string | undefined) {
@@ -94,6 +130,7 @@ export async function runSandboxGuest() {
 	await progress('assignment.verified');
 	const sandboxId = (await readFile(resolve(inputRoot, 'sandbox-id'), 'utf8')).trim(), operationToken = (await readFile(resolve(inputRoot, 'operation-token'), 'utf8')).trim();
 	await materialize(assignment); const context = record(JSON.parse(await readFile('/workspace/.treeseed/context.json', 'utf8')));
+	await mkdir('/workspace/project', { recursive: true, mode: 0o700 });
 	await progress('inputs.ready');
 	if (assignment.contextManifestDigest !== assignment.inputs.find((input) => input.id === 'execution-context')?.digest || assignment.identityManifestDigest !== objectDigest(record(record(context.identity).manifest))) throw new Error('Guest context or identity manifest does not match the signed assignment.');
 	const writableProject = assignment.inputs.some((input) => input.id === 'project-repository' && input.disposition === 'copy-on-write');
@@ -106,18 +143,20 @@ export async function runSandboxGuest() {
 		await run('/usr/bin/git', ['commit', '--quiet', '--allow-empty', '-m', 'Immutable assignment baseline'], { cwd: '/workspace/project' });
 	}
 	const codexHome = '/workspace/.treeseed/codex', responsePath = '/workspace/.treeseed/response.md'; await mkdir(codexHome, { recursive: true, mode: 0o700 });
+	await writeFile(resolve(codexHome,'config.toml'),codexTreeDxMcpConfig(sandboxId,operationToken,assignment),{mode:0o600});
 	const subscriptionAuth = await readFile(resolve(inputRoot, 'codex-auth.json')).catch(() => null);
 	if (subscriptionAuth) await writeFile(resolve(codexHome, 'auth.json'), subscriptionAuth, { mode: 0o600 });
 	const relay = subscriptionAuth ? null : await startModelRelay(assignment, sandboxId, operationToken);
 	const subscriptionProxy = subscriptionAuth ? `http://${encodeURIComponent(sandboxId)}:${encodeURIComponent(operationToken)}@10.89.0.1:7444` : null;
 	const events: Record<string, unknown>[] = [], composedPrompt = promptFromContext(context, assignment.modelPolicy.reasoningEffort);
-	const providerArguments = ['exec', '--json', '--ephemeral', '--ignore-user-config', '--dangerously-bypass-approvals-and-sandbox', ...(writableProject ? [] : ['--skip-git-repo-check']), '--model', assignment.modelPolicy.model,
+	const providerArguments = ['exec', '--json', '--ephemeral', '--dangerously-bypass-approvals-and-sandbox', ...(writableProject ? [] : ['--skip-git-repo-check']), '--model', assignment.modelPolicy.model,
 		...codexReasoningArguments(assignment.modelPolicy.reasoningEffort),
 		'--enable', 'code_mode_host', '--disable', 'browser_use', '--disable', 'apps', '--disable', 'multi_agent_v2', '--disable', 'image_generation', '--color', 'never', '--output-last-message', responsePath, '-C', '/workspace/project', '-'];
 	try {
 		await progress('provider.starting');
 		await run('/usr/local/bin/codex', providerArguments, {
 			cwd: '/workspace/project', input: composedPrompt, env: { PATH: '/usr/local/bin:/usr/bin:/bin', HOME: codexHome, CODEX_HOME: codexHome,
+				TREESEED_RELAY_URL:assignment.network.relayUrl,TREESEED_SANDBOX_ID:sandboxId,TREESEED_GUEST_TOKEN:operationToken,TREESEED_RELAY_CA:'/workspace/.treeseed/relay-ca.crt',
 				...(relay ? { OPENAI_BASE_URL: relay.baseUrl, OPENAI_API_KEY: 'treeseed-assignment-relay' } : {}),
 				...(subscriptionProxy ? { HTTPS_PROXY: subscriptionProxy, https_proxy: subscriptionProxy } : {}), LANG: 'C.UTF-8' },
 			timeoutMs: codexInteractiveTimeoutMs(assignment.resources.durationSeconds),
@@ -141,10 +180,11 @@ export async function runSandboxGuest() {
 			diagnostics: { systemPrompt: composedPrompt, providerEvents: events, providerArguments, model: assignment.modelPolicy.model, provider: assignment.modelPolicy.provider, contextManifest: context,
 				guestKernel: (await readFile('/proc/version', 'utf8')).trim(), guestUid: process.getuid?.() ?? null, sandboxProfile: assignment.profile }, teardown: { verified: false, completedAt: null } });
 		await writeFile(resolve(outputRoot, 'result.json'), `${JSON.stringify(result)}\n`, { mode: 0o600 });
-	} finally { await rm(resolve(codexHome, 'auth.json'), { force: true }); await relay?.close(); }
+	} finally { await rm(resolve(codexHome, 'auth.json'), { force: true }); await rm(resolve(codexHome,'config.toml'),{force:true}); await relay?.close(); }
 }
 
-if (process.argv[1]?.endsWith('/sandbox/guest.js')) runSandboxGuest().catch(async (error) => {
+if(process.argv.includes('--treedx-mcp')) runTreeDxMcpServer().catch((error)=>{process.stderr.write(`${error instanceof Error?error.stack??error.message:String(error)}\n`);process.exitCode=1;});
+else if (process.argv[1]?.endsWith('/sandbox/guest.js')) runSandboxGuest().catch(async (error) => {
 	await mkdir(outputRoot, { recursive: true });
 	await writeFile(resolve(outputRoot, 'failure.json'), `${JSON.stringify({ error: error instanceof Error ? error.message : String(error) })}\n`).catch(() => undefined);
 	process.stderr.write(`${error instanceof Error ? error.stack ?? error.message : String(error)}\n`); process.exitCode = 1;

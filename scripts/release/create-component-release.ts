@@ -22,7 +22,7 @@ const runtime = {
 	schemaVersion: 'treeseed.package-runtime/v1' as const, componentId: 'agent', version: debianRelease,
 	compose: { projectName: 'treeseed-agent', files: [{ path: 'compose.yml', digest: composeDigest }] },
 	services: [{ id: 'manager', composeService: 'manager', endpoints: [] }, { id: 'runner', composeService: 'runner', endpoints: [] }],
-	stateVolumes: [{ id: 'provider-data', volume: '/var/lib/treeseed/components/agent', backup: 'required' as const }],
+	stateVolumes: [{ id: 'provider-data', volume: '/var/lib/treeseed/agent', backup: 'required' as const }],
 	migrations: [{ id: 'provider-identity', order: 0, backupRequired: true }], requiredCapabilities: ['docker-compose'],
 	dependencies: [{ id: 'control-plane', capability: 'control-plane-api', locality: 'either' as const, optional: false }],
 };

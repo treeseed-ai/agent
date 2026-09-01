@@ -18,7 +18,7 @@ services:
       TREESEED_PROVIDER_MAX_CONCURRENT_RUNNERS: ${TREESEED_PROVIDER_MAX_CONCURRENT_RUNNERS:-1}
     volumes: &provider-volumes
       - type: bind
-        source: /var/lib/treeseed/components/agent
+        source: ${TREESEED_COMPONENT_DATA_ROOT:?TREESEED_COMPONENT_DATA_ROOT is required}
         target: /data
       - type: bind
         source: /etc/treeseed/components/agent/treeseed.capacity-provider.yaml

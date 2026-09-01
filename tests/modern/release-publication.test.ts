@@ -22,7 +22,7 @@ describe('Agent RC publication', () => {
 	it('materializes an exact no-build production bundle', () => {
 		execFileSync(process.execPath, ['--import', 'tsx', 'scripts/release/create-component-release.ts'], { env: { ...process.env, TREESEED_RELEASE: '0.13.0-rc.10', TREESEED_SOURCE_COMMIT: 'a'.repeat(40), TREESEED_MANAGER_DIGEST: hash('b'), TREESEED_RUNNER_DIGEST: hash('c'), TREESEED_SANDBOX_BASE_DIGEST: hash('e'), TREESEED_GUEST_DIGEST: hash('d') } });
 		const compose = readFileSync('release-assets/compose.yml', 'utf8');
-		const release = JSON.parse(readFileSync('release-assets/component-release.json', 'utf8')) as { release: string; revision: number; runtime: { compose: { files: Array<{ path: string; digest: string }> }; dependencies: Array<{ id: string; locality: string }> }; track: string; source: { commit: string }; stableBase: { catalogDigest: unknown }; images: Array<{ digest: string }> };
+		const release = JSON.parse(readFileSync('release-assets/component-release.json', 'utf8')) as { release: string; revision: number; runtime: { compose: { files: Array<{ path: string; digest: string }> }; dependencies: Array<{ id: string; locality: string }>; stateVolumes: Array<{ id: string; volume: string }> }; track: string; source: { commit: string }; stableBase: { catalogDigest: unknown }; images: Array<{ digest: string }> };
 		expect(compose).not.toMatch(/\bbuild\s*:/u);
 		expect(compose).toContain(`treeseed/agent-manager@${hash('b')}`);
 		expect(compose).toContain(`TREESEED_SANDBOX_BASE_DIGEST: "${hash('e')}"`);
@@ -36,6 +36,9 @@ describe('Agent RC publication', () => {
 		expect(release.runtime.compose.files).toEqual([{ path: 'compose.yml', digest: expect.stringMatching(/^sha256:[a-f0-9]{64}$/u) }]);
 		expect(release.runtime.dependencies).toEqual([{ id: 'control-plane', capability: 'control-plane-api', locality: 'either', optional: false }]);
 		expect(compose).toContain('TREESEED_CONTROL_PLANE_URL:?');
+		expect(compose).toContain('source: ${TREESEED_COMPONENT_DATA_ROOT:?TREESEED_COMPONENT_DATA_ROOT is required}');
+		expect(compose).not.toContain('/var/lib/treeseed/components/agent');
+		expect(release.runtime.stateVolumes).toEqual([{ id: 'provider-data', volume: '/var/lib/treeseed/agent', backup: 'required' }]);
 		expect(compose).not.toContain('http://api:');
 	});
 

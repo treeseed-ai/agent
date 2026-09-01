@@ -6,7 +6,8 @@ import { join } from 'node:path';
 import { spawn } from 'node:child_process';
 import type { SandboxAssignment } from '@treeseed/sdk/capacity-provider';
 import type { AgentExecutionRequest } from './contracts.ts';
-import { materializeTreeDxSnapshot, prepareProjectWorkspace, readDiscussionSourceContext, readIdentityContext } from './codex-chat-executor.ts';
+import { prepareProjectWorkspace, readDiscussionSourceContext, readFocusedTreeDxContext, readIdentityContext } from './codex-chat-executor.ts';
+import { readCoreContextPack } from './core-context-pack.ts';
 
 type Input = SandboxAssignment['inputs'][number] & { sourcePath: string };
 
@@ -32,26 +33,33 @@ async function removeMaterializedRoot(root: string) {
 }
 
 export async function materializeSandboxInputs(request: AgentExecutionRequest, writableProject = false) {
-	const root = await mkdtemp(join(tmpdir(), 'treeseed-sandbox-inputs-')), project = join(root, 'project'), library = join(root, 'library');
+	const root = await mkdtemp(join(tmpdir(), 'treeseed-sandbox-inputs-')), project = join(root, 'project');
 	try {
-		const [projectManifest, treeDxManifest] = await Promise.all([
-			prepareProjectWorkspace(request.assignment, project),
-			materializeTreeDxSnapshot(request, library),
+		const executionKind = String(request.assignment.executionKind ?? request.assignment.execution_kind ?? '');
+		const injectProjectRepository = executionKind !== 'conversation';
+		const [projectManifest, focusedContext] = await Promise.all([
+			injectProjectRepository ? prepareProjectWorkspace(request.assignment, project) : Promise.resolve(null),
+			readFocusedTreeDxContext(request),
 		]);
 		const [identity, message] = await Promise.all([
-			readIdentityContext(request, new Set(treeDxManifest.files.map((file) => file.path))),
-			readDiscussionSourceContext(request),
+			readIdentityContext(request),
+			executionKind === 'conversation' ? readDiscussionSourceContext(request) : Promise.resolve({ kind: 'assignment-message', path: null, content: '' }),
 		]);
+		const coreContext=await readCoreContextPack(request,{identity,focused:focusedContext,message});
 		const metadata = request.assignment.metadata && typeof request.assignment.metadata === 'object' && !Array.isArray(request.assignment.metadata) ? request.assignment.metadata as Record<string, unknown> : {};
 		const safeAssignment = { id: request.assignment.id ?? request.assignmentId, agentId: request.assignment.agentId ?? request.assignment.agent_id, executionKind: request.assignment.executionKind ?? request.assignment.execution_kind,
-			sourceMessageRefs: request.assignment.sourceMessageRefs, metadata: { identityManifest: metadata.identityManifest, chatProfile: metadata.chatProfile, communication: metadata.communication } };
-		const context = { schemaVersion: 1, assignment: safeAssignment, projectManifest: { ...projectManifest, root: '/workspace/project' }, treeDxManifest: { ...treeDxManifest, root: '/workspace/.treedx/library' }, identity, message };
+			sourceMessageRefs: request.assignment.sourceMessageRefs, metadata: { identityManifest: metadata.identityManifest, chatProfile: metadata.chatProfile, communication: metadata.communication,contextCapacity:metadata.contextCapacity } };
+		const context = { schemaVersion: 3, assignment: safeAssignment,
+			projectManifest: projectManifest ? { ...projectManifest, root: '/workspace/project', materialization: 'private-copy' }
+				: { projectId: request.treeDx.projectId, materialization: 'not-injected', access: 'assignment-scoped-treedx-tools' },
+			coreContext, treeDxTools: { transport: 'assignment-relay', immutableRef: request.treeDx.baseRef,readRepositories:request.treeDx.readRepositories??[] }, identity, message };
 		const contextPath = join(root, 'context.json'); await writeFile(contextPath, `${JSON.stringify(context)}\n`, { mode: 0o400 });
-		const projectArchive = join(root, 'project.tar'), libraryArchive = join(root, 'library.tar');
-		await Promise.all([archive(project, projectArchive, ['.git']), archive(library, libraryArchive)]);
+		const projectInput = injectProjectRepository ? await (async () => {
+			const projectArchive = join(root, 'project.tar'); await archive(project, projectArchive, ['.git']);
+			return descriptor('project-repository', projectArchive, '/workspace/project', writableProject ? 'copy-on-write' : 'read-only', 'application/vnd.treeseed.directory+tar');
+		})() : null;
 		const inputs = await Promise.all([
-			descriptor('project-repository', projectArchive, '/workspace/project', writableProject ? 'copy-on-write' : 'read-only', 'application/vnd.treeseed.directory+tar'),
-			descriptor('treedx-library', libraryArchive, '/workspace/.treedx/library', 'read-only', 'application/vnd.treeseed.directory+tar'),
+			...(projectInput ? [Promise.resolve(projectInput)] : []),
 			descriptor('execution-context', contextPath, '/workspace/.treeseed/context.json', 'read-only', 'application/json'),
 			descriptor('relay-ca', '/etc/treeseed/sandbox/relay-ca.crt', '/workspace/.treeseed/relay-ca.crt', 'read-only', 'application/x-pem-file'),
 		]);

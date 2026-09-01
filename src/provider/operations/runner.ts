@@ -105,11 +105,12 @@ export async function runProviderAssignment(input: ProviderAssignmentRunInput) {
 		signal: executionAbort.signal });
   } catch (error) {
 		const summary = error instanceof Error ? error.message : String(error);
+		const failureCode=typeof (error as {code?:unknown})?.code==='string'?String((error as {code:string}).code):'agent_executor_failed';
 		if (text(input.assignment.executionKind, input.assignment.execution_kind) === 'conversation') {
 			await input.client.createCommunicationTraceEvent(assignmentId, { leaseToken: input.leaseToken, runnerId: input.runnerId, sequence: traceSequence++,
-				type: 'execution.failed', occurredAt: new Date().toISOString(), summary, payload: { code: 'agent_executor_failed', retryable: true } }).catch(() => undefined);
+				type: 'execution.failed', occurredAt: new Date().toISOString(), summary, payload: { code: failureCode, retryable: true } }).catch(() => undefined);
 		}
-    result = { status: 'failed', code: 'agent_executor_failed', summary, retryable: true };
+    result = { status: 'failed', code: failureCode, summary, retryable: true };
   } finally {
     stopped = true;
     if (timer) clearTimeout(timer);

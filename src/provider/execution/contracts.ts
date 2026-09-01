@@ -3,6 +3,7 @@ export interface AssignmentTreeDxFacade {
   readonly repositoryId: string | null;
   readonly workspaceId: string | null;
   readonly baseRef?: string | null;
+	readonly readRepositories?: Array<{projectId:string;projectSlug:string;repositoryId:string;baseRef:string;allowedPaths:string[];allowedModels:string[];source:string}>;
   invoke(operationId: string, input: Record<string, unknown>, options?: { signal?: AbortSignal; idempotencyKey?: string }): Promise<unknown>;
 }
 

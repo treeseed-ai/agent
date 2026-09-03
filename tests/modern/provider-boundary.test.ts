@@ -10,6 +10,7 @@ import { ensureCapacityProviderIdentity } from '../../src/provider/accounts/iden
 import { listProviderConnectionStates, writeProviderConnectionState } from '../../src/provider/coordination/connection-state.ts';
 import { loadProviderManifest, writeProviderConnections } from '../../src/provider/configuration/manifest.ts';
 import { buildProviderPlan, providerAvailabilityCapabilities } from '../../src/provider/lifecycle/lifecycle.ts';
+import { providerEnrollmentInput } from '../../src/provider/lifecycle/enrollment-input.ts';
 import { stringify as stringifyYaml } from 'yaml';
 import { createManagedProviderManifestV5 } from '../../src/provider/configuration/managed-manifest.ts';
 import { validateCapacityProviderManifestV5 } from '@treeseed/sdk/capacity-provider';
@@ -91,6 +92,18 @@ describe('Agent package ownership boundary', () => {
 			.toBe(providerRegistrationIdempotencyKey('primary', 'code-one'));
 		expect(providerRegistrationIdempotencyKey('primary', 'code-one'))
 			.not.toBe(providerRegistrationIdempotencyKey('primary', 'code-two'));
+	});
+
+	it('lets the registration code resolve team authority without a separate team input', () => {
+		const enrollment = providerEnrollmentInput({ connectionId: 'primary', controlPlaneUrl: 'https://api.example.test',
+			registrationCode: 'team-prefixed-registration-code' }, { maxConcurrentRunners: 2,
+			capabilities: ['communication', 'communication'], manifestGeneration: 'release-1' });
+		expect(enrollment.join).toMatchObject({ id: 'primary', controlPlaneUrl: 'https://api.example.test',
+			controlPlaneAudience: 'https://api.example.test', registrationKeyRef: 'memory://registration-code',
+			offer: { maxConcurrentRunners: 2, capabilities: ['communication'], metadata: { manifestGeneration: 'release-1' } } });
+		expect(enrollment.join).not.toHaveProperty('teamId');
+		expect(() => providerEnrollmentInput({ controlPlaneUrl: 'https://api.example.test' }, { maxConcurrentRunners: 1,
+			capabilities: [], manifestGeneration: 'release-1' })).toThrow(/registration code/u);
 	});
 
 	it('stores mutable connections in local custody without rewriting the canonical manifest', async () => {

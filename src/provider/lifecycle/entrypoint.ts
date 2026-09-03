@@ -151,7 +151,7 @@ async function main() {
 		const input = await stdinJson();
 		const { createCapacityProviderCoordinator } = await import('../teams/multi-team-runtime.ts');
 		const coordinator = await createCapacityProviderCoordinator(config);
-		const connectionId = String(input.connectionId ?? `local-${String(input.teamId ?? '')}`);
+		const connectionId = String(input.connectionId ?? 'primary');
 		const loaded = await import('../configuration/manifest.ts').then(({ loadProviderManifest }) => loadProviderManifest(config.manifestPath!, config.dataDir));
 		const privateIdentity = await import('../accounts/identity.ts').then(({ ensureCapacityProviderIdentity }) => ensureCapacityProviderIdentity({
 			ref: loaded.manifest.identity.privateKeyRef,
@@ -181,15 +181,13 @@ async function main() {
 			emit({ ok: true, connectionId, status: receipt.status, teamId: receipt.teamId, providerId: receipt.providerId, membershipId: receipt.membershipId });
 			return;
 		}
-		const registrationCode = String(input.registrationCode ?? '');
-		const teamId = String(input.teamId ?? '');
-		if (!registrationCode || !teamId) throw new Error('Provider enrollment requires a team and registration code.');
-		const receipt = await coordinator.beginJoin({ id: connectionId,
-			...(input.serverProfile ? { serverProfile: String(input.serverProfile) } : { controlPlaneUrl: String(input.controlPlaneUrl ?? '') }),
-			controlPlaneAudience: String(input.controlPlaneAudience ?? input.controlPlaneUrl ?? ''), registrationKeyRef: 'memory://registration-code',
-			offer: { maxConcurrentRunners: loaded.manifest.capacity.maxConcurrentWorkers,
-				capabilities: [...new Set(loaded.manifest.adapters.flatMap((adapter) => adapter.offers.flatMap(({ offer }) => offer.capabilities.map(({ id }) => id))))],
-				metadata: { manifestGeneration: loaded.manifest.configuration.generation } } }, registrationCode);
+		const { providerEnrollmentInput } = await import('./enrollment-input.ts');
+		const enrollment = providerEnrollmentInput(input, {
+			maxConcurrentRunners: loaded.manifest.capacity.maxConcurrentWorkers,
+			capabilities: loaded.manifest.adapters.flatMap((adapter) => adapter.offers.flatMap(({ offer }) => offer.capabilities.map(({ id }) => id))),
+			manifestGeneration: loaded.manifest.configuration.generation,
+		});
+		const receipt = await coordinator.beginJoin(enrollment.join, enrollment.registrationCode);
 		emit({ ok: true, connectionId, status: receipt.status, teamId: receipt.teamId, providerId: receipt.providerId, requestId: receipt.requestId, sandboxIdentity: { signingKeyId, publicJwk } });
 		return;
 	}

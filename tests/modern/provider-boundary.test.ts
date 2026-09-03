@@ -53,11 +53,11 @@ function sourceFiles(root: string): string[] {
 
 describe('Agent package ownership boundary', () => {
 	it('publishes a portable release-bound managed provider default', () => {
-		const manifest = createManagedProviderManifestV5({ release: '0.13.0-rc.41', guestImage: 'treeseed/sandbox-codex',
+		const manifest = createManagedProviderManifestV5({ release: '0.13.0-rc.42', guestImage: 'treeseed/sandbox-codex',
 			guestImageDigest: digest('5'), baseImageDigest: digest('6'), provenanceDigest: digest('7') });
 		expect(validateCapacityProviderManifestV5(manifest)).toEqual({ ok: true, diagnostics: [] });
 		expect(manifest).toMatchObject({ schemaVersion: 5, ownership: { type: 'external' }, capacity: { maxConcurrentWorkers: 1 }, connections: [],
-			configuration: { generation: 'agent-release-0.13.0-rc.41' }, metadata: { custody: 'agent-release-default' } });
+			configuration: { generation: 'agent-release-0.13.0-rc.42' }, metadata: { custody: 'agent-release-default' } });
 		expect(manifest.sandbox.profiles.map(({ id }) => id)).toEqual(['read', 'unit', 'integration', 'platform', 'connected']);
 		expect(manifest.sandbox.profiles.every((profile) => profile.guestImageDigest === digest('5')
 			&& profile.lineage.baseImageDigest === digest('6') && profile.lineage.provenanceDigest === digest('7'))).toBe(true);

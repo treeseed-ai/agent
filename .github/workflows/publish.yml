@@ -1,11 +1,12 @@
 name: Build or Promote TreeSeed Agent Candidate
 on:
   push:
-    branches: [staging]
+    branches: [staging, main]
     tags: ["*.*.*"]
+    paths-ignore: ['.github/workflows/publish.yml']
 jobs:
   candidate-package:
-    if: github.ref == 'refs/heads/staging'
+    if: github.ref == 'refs/heads/staging' || github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
@@ -18,9 +19,9 @@ jobs:
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with: { name: "agent-source-${{ github.sha }}", path: source-assets/, if-no-files-found: error }
   candidate-build:
-    if: github.ref == 'refs/heads/staging'
+    if: github.ref == 'refs/heads/staging' || github.ref == 'refs/heads/main'
     needs: [candidate-package, candidate-base-build]
-    environment: staging
+    environment: ${{ github.ref_name == 'main' && 'production' || 'staging' }}
     runs-on: ${{ matrix.runner }}
     strategy:
       matrix:
@@ -57,9 +58,9 @@ jobs:
         if: matrix.target == 'sandbox-codex'
         run: docker run --rm --entrypoint /usr/local/bin/codex "${{ matrix.image }}:candidate-${{ github.sha }}-${{ matrix.arch }}" --version | grep -Fx 'codex-cli 0.149.0'
   candidate-base-build:
-    if: github.ref == 'refs/heads/staging'
+    if: github.ref == 'refs/heads/staging' || github.ref == 'refs/heads/main'
     needs: candidate-package
-    environment: staging
+    environment: ${{ github.ref_name == 'main' && 'production' || 'staging' }}
     runs-on: ${{ matrix.runner }}
     strategy:
       matrix:
@@ -81,9 +82,9 @@ jobs:
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with: { name: "sandbox-base-digest-${{ github.sha }}-${{ matrix.arch }}", path: digest.txt, if-no-files-found: error }
   candidate-seal:
-    if: github.ref == 'refs/heads/staging'
+    if: github.ref == 'refs/heads/staging' || github.ref == 'refs/heads/main'
     needs: [candidate-build, candidate-base-build]
-    environment: staging
+    environment: ${{ github.ref_name == 'main' && 'production' || 'staging' }}
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
@@ -117,7 +118,7 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-24.04
     permissions: { actions: read, contents: write, id-token: write }
-    environment: production
+    environment: ${{ contains(github.ref_name, '-') && 'staging' || 'production' }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with: { fetch-depth: 0 }
@@ -130,8 +131,9 @@ jobs:
       - name: Download exact accepted candidate
         env: { GH_TOKEN: "${{ secrets.GITHUB_TOKEN }}" }
         run: |
-          test "$(git rev-parse HEAD)" = "$(git rev-parse origin/staging)"
-          run_id="$(gh run list --workflow publish.yml --branch staging --commit "$GITHUB_SHA" --status success --limit 1 --json databaseId --jq '.[0].databaseId')"; test -n "$run_id"
+          if [[ "$GITHUB_REF_NAME" == *-* ]]; then candidate_branch=staging; else candidate_branch=main; fi
+          test "$(git rev-parse HEAD)" = "$(git rev-parse "origin/${candidate_branch}")"
+          run_id="$(gh run list --workflow publish.yml --branch "$candidate_branch" --commit "$GITHUB_SHA" --status success --limit 1 --json databaseId --jq '.[0].databaseId')"; test -n "$run_id"
           gh run download "$run_id" --name "agent-candidate-${GITHUB_SHA}" --dir candidate
           npm run release:check-tag; npm run release:custody -- verify candidate/release-evidence-v1.json
       - id: before

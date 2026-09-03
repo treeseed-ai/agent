@@ -10,13 +10,16 @@ describe('Agent RC publication', () => {
 	it('builds a protected staging candidate and promotes exact custody without rebuilding', () => {
 		const source = readFileSync('.github/workflows/publish.yml', 'utf8');
 		const workflow = parse(source) as { jobs: Record<string, { if?: string; needs?: string | string[]; steps?: Array<{ uses?: string }> }> };
-		expect(workflow.jobs['candidate-build']?.if).toBe("github.ref == 'refs/heads/staging'");
+		expect(workflow.jobs['candidate-build']?.if).toBe("github.ref == 'refs/heads/staging' || github.ref == 'refs/heads/main'");
 		expect(workflow.jobs['candidate-base-build']?.needs).toBe('candidate-package');
 		expect(workflow.jobs['candidate-build']?.needs).toEqual(['candidate-package', 'candidate-base-build']);
 		expect(workflow.jobs['candidate-seal']?.needs).toEqual(['candidate-build', 'candidate-base-build']);
 		expect(workflow.jobs.promote?.if).toBe("startsWith(github.ref, 'refs/tags/')");
 		expect(workflow.jobs.promote?.steps?.some(({ uses }) => uses?.includes('docker/build-push-action'))).toBe(false);
 		expect(source).toContain('release-evidence-v1.json');
+		expect(source).toContain("environment: ${{ contains(github.ref_name, '-') && 'staging' || 'production' }}");
+		expect(source).toContain('candidate_branch=staging; else candidate_branch=main');
+		expect(source).toContain("paths-ignore: ['.github/workflows/publish.yml']");
 	});
 
 	it('materializes an exact no-build production bundle', () => {

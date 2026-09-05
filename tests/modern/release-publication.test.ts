@@ -71,7 +71,7 @@ describe('Agent RC publication', () => {
 		expect(dockerfile).not.toContain('/app/node_modules/@openai/codex/bin/codex.js');
 		expect(codexDockerfile).toContain('/app/node_modules/@openai/codex/bin/codex.js');
 		expect(entrypoint).toContain('provider manager and runner containers must run unprivileged');
-		expect(entrypoint).toContain('rewrap-vault.js');
+		expect(entrypoint).not.toContain('rewrap-vault.js');
 		expect(entrypoint).not.toContain('CODEX_AUTH');
 		expect(compose).not.toContain('/etc/treeseed/credentials/agent-codex-auth');
 		expect(compose).toContain('source: /run/treeseed/sandbox');

@@ -28,7 +28,6 @@ import {
 	writeProviderConnections,
 	writeProviderSecret,
 	type LoadedProviderManifest,
-	type ProviderSecretResolver,
 } from '../configuration/manifest.ts';
 import { ProviderLocalCapacityStore } from '../capacity/capacity-core/local-capacity-store.ts';
 
@@ -90,7 +89,7 @@ export class CapacityProviderCoordinator {
 	constructor(
 		private readonly loaded: LoadedProviderManifest,
 		private readonly dataDir: string,
-		private readonly options: { env?: NodeJS.ProcessEnv; secretResolver?: ProviderSecretResolver; fetch?: typeof fetch } = {},
+		private readonly options: { env?: NodeJS.ProcessEnv;  fetch?: typeof fetch } = {},
 	) { this.localState = new ProviderLocalCapacityStore(dataDir); }
 
 	private async providerIdentity() {
@@ -99,7 +98,6 @@ export class CapacityProviderCoordinator {
 			baseDirectory: this.loaded.directory,
 			dataDirectory: this.dataDir,
 			env: this.options.env,
-			resolver: this.options.secretResolver,
 		});
 		return this.identity;
 	}
@@ -121,7 +119,7 @@ export class CapacityProviderCoordinator {
 		minimumValidityMs?: number;
 	}) {
 		const identity = await this.providerIdentity();
-		const credential = await resolveProviderSecret(input.credentialRef, { env: this.options.env, baseDirectory: this.loaded.directory, dataDirectory: this.dataDir, resolver: this.options.secretResolver });
+		const credential = await resolveProviderSecret(input.credentialRef, { env: this.options.env, baseDirectory: this.loaded.directory, dataDirectory: this.dataDir });
 		const cached = await this.localState.token(input.connection.id);
 		const minimumValidityMs = Math.max(5 * 60_000, Number(input.minimumValidityMs) || 0);
 		if (cached && Date.parse(cached.expiresAt) - Date.now() > minimumValidityMs) return cached;
@@ -177,7 +175,7 @@ export class CapacityProviderCoordinator {
 		const unsigned = unsignedRegistration(this.loaded.manifest, join, identity);
 		const proof = await this.proof({ audience: controlPlaneAudience, method: 'POST', path: providerOperationPath(CONTROL_PLANE_OPERATIONS.providers.register), body: unsigned, identity });
 		const submission: ProviderRegistrationSubmission = { ...unsigned, proof };
-		const registrationCode = suppliedRegistrationCode ?? await resolveProviderSecret(join.registrationKeyRef, { env: this.options.env, baseDirectory: this.loaded.directory, dataDirectory: this.dataDir, resolver: this.options.secretResolver });
+		const registrationCode = suppliedRegistrationCode ?? await resolveProviderSecret(join.registrationKeyRef, { env: this.options.env, baseDirectory: this.loaded.directory, dataDirectory: this.dataDir });
 		const request = await client.register(registrationCode, submission, providerRegistrationIdempotencyKey(join.id, registrationCode));
 		const state = nextState(join.id, controlPlaneUrl, null, { serverProfile: join.serverProfile ?? null, controlPlaneAudience, offer: join.offer, teamId: request.teamId, providerId: request.providerId, registrationRequestId: request.id, registrationStatus: request.status });
 		await writeProviderConnectionState(this.dataDir, state);
@@ -372,9 +370,10 @@ export class CapacityProviderCoordinator {
 			this.identity = null;
 			await this.localState.clearTokens();
 			return identity;
-		} catch (error) {
-			await staged.rollback();
-			throw error;
+		} catch {
+			// The API may have accepted rotation before a transport or local commit failure.
+			// Retain the encrypted pending identity for explicit recovery; never destroy it.
+			throw new Error(`Provider identity rotation is uncertain; retain custody transaction ${staged.temporaryPath} for recovery.`);
 		}
 	}
 }

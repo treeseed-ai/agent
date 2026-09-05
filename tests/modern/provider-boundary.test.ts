@@ -1,7 +1,7 @@
 import { mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { CONTROL_PLANE_OPERATIONS } from '@treeseed/sdk/operator-contracts';
 import { providerOperationPath } from '../../src/provider/coordination/client.ts';
 import { providerRegistrationIdempotencyKey } from '../../src/provider/coordination/coordinator.ts';
@@ -74,15 +74,18 @@ describe('Agent package ownership boundary', () => {
 	it('creates one fresh private identity in local enrollment custody and reuses it on retry', async () => {
 		const dataDirectory = mkdtempSync(resolve(tmpdir(), 'treeseed-provider-identity-'));
 		try {
+			const key=resolve(dataDirectory,'os-key');writeFileSync(key,'synthetic-provider-test-key-material',{mode:0o600});
+			vi.stubEnv('TREESEED_PROVIDER_CREDENTIAL_KEK_FILE',key);
 			const input = { ref: 'data://identity-v3.json', baseDirectory: dataDirectory, dataDirectory };
 			const first = await ensureCapacityProviderIdentity(input);
 			const second = await ensureCapacityProviderIdentity(input);
 			expect(second.publicJwk).toEqual(first.publicJwk);
-			expect(statSync(resolve(dataDirectory, 'identity-v3.json')).mode & 0o777).toBe(0o600);
-			const stored = readFileSync(resolve(dataDirectory, 'identity-v3.json'), 'utf8');
-			expect(stored).toContain('treeseed.encrypted-envelope/v1');
+			const files=readdirSync(resolve(dataDirectory,'custody')).filter(name=>name.endsWith('.enc'));
+			expect(files.length).toBeGreaterThan(0);
+			const stored=files.map(name=>{const file=resolve(dataDirectory,'custody',name);expect(statSync(file).mode&0o777).toBe(0o600);return readFileSync(file,'utf8');}).join('');
 			expect(stored).not.toContain(first.publicJwk.x);
 		} finally {
+			vi.unstubAllEnvs();
 			rmSync(dataDirectory, { recursive: true, force: true });
 		}
 	});

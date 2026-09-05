@@ -1,6 +1,6 @@
 {
   "name": "@treeseed/agent",
-  "version": "0.13.0-rc.42",
+  "version": "0.13.0-rc.43",
   "description": "Treeseed agent service runtime package.",
   "license": "Apache-2.0",
   "repository": {
@@ -64,7 +64,8 @@
   },
   "dependencies": {
     "@openai/codex": "0.149.0",
-    "@treeseed/sdk": "0.13.0-rc.67",
+    "@treeseed/deployment": "https://github.com/treeseed-ai/deployment/releases/download/0.1.0-rc.243/treeseed-deployment-runtime-0.1.0-rc.243.tgz",
+    "@treeseed/sdk": "0.13.0-rc.88",
     "esbuild": "0.28.2",
     "typescript": "^5.9.3",
     "yaml": "^2.8.1"

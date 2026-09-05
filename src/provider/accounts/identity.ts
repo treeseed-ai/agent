@@ -1,6 +1,6 @@
 import { createHash, createPrivateKey, generateKeyPairSync, randomUUID, sign } from 'node:crypto';
 import type { CapacityProviderProofPayload, CapacityProviderPublicJwk, CapacityProviderSignedProof } from '@treeseed/sdk/capacity-provider/contracts';
-import { resolveProviderSecret, writeProviderSecret, type ProviderSecretResolver } from '../configuration/manifest.ts';
+import { resolveProviderSecret, writeProviderSecret } from '../configuration/manifest.ts';
 
 export interface CapacityProviderPrivateJwk extends CapacityProviderPublicJwk { d: string }
 
@@ -51,7 +51,7 @@ export async function ensureCapacityProviderIdentity(input: {
 	baseDirectory: string;
 	dataDirectory?: string;
 	env?: NodeJS.ProcessEnv;
-	resolver?: ProviderSecretResolver;
+
 }) {
 	try {
 		return await loadCapacityProviderIdentity(input);
@@ -67,7 +67,7 @@ export async function loadCapacityProviderIdentity(input: {
 	baseDirectory: string;
 	dataDirectory?: string;
 	env?: NodeJS.ProcessEnv;
-	resolver?: ProviderSecretResolver;
+
 }) {
 	const raw = await resolveProviderSecret(input.ref, input);
 	let privateJwk: CapacityProviderPrivateJwk;

@@ -76,7 +76,8 @@ export async function runMultiTeamProviderManager(
 	const connections = await reconcileProviderConnections(config);
 	const results = await Promise.all(connections.map(async (connection) => {
 		if (!connection.runtime) {
-			return { ok: connection.status !== 'error', connectionId: connection.connectionId, status: connection.status };
+			return { ok: connection.status !== 'error', connectionId: connection.connectionId, status: connection.status,
+				...('error' in connection ? { error: connection.error } : {}) };
 		}
 		const runtime = context(config, connection.runtime, loaded.manifest);
 		const configuredAdapters = await materializeCapabilityOffers({ config, loaded: loaded as typeof loaded & { manifest: CapacityProviderManifestV5 }, providerId: connection.runtime.providerId });

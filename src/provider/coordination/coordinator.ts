@@ -30,6 +30,7 @@ import {
 	type LoadedProviderManifest,
 } from '../configuration/manifest.ts';
 import { ProviderLocalCapacityStore } from '../capacity/capacity-core/local-capacity-store.ts';
+import { isRecoverableCredentialRejection, recoverAuthorizedCredential } from './credential-recovery.ts';
 
 export interface ProviderConnectionRuntime {
 	connection: ProviderConnectionConfig;
@@ -84,6 +85,7 @@ export class CapacityProviderCoordinator {
 	private identity: CoordinatorIdentity | null = null;
 	private manifestMutation = Promise.resolve();
 	private readonly tokenRefreshes = new Map<string, Promise<ProviderAccessTokenIssue>>();
+	private readonly credentialRecoveries = new Map<string, Promise<ProviderConnectionConfig>>();
 	private readonly localState: ProviderLocalCapacityStore;
 
 	constructor(
@@ -160,8 +162,36 @@ export class CapacityProviderCoordinator {
 		if (connection.enabled === false) return { connectionId: connection.id, status: 'disabled' };
 		const controlPlaneUrl = providerConnectionControlPlaneUrl(connection, this.options.env);
 		const controlPlaneAudience = providerConnectionControlPlaneAudience(connection, this.options.env);
-		const accessToken = await this.connectApproved({ connection, controlPlaneUrl, controlPlaneAudience, credentialRef: connection.membershipCredentialRef, credentialId: connection.membershipCredentialId });
+		const connect = () => this.connectApproved({ connection, controlPlaneUrl, controlPlaneAudience, credentialRef: connection.membershipCredentialRef, credentialId: connection.membershipCredentialId });
+		let accessToken: ProviderAccessTokenIssue;
+		try { accessToken = await connect(); }
+		catch (error) {
+			if (!isRecoverableCredentialRejection(error)) throw error;
+			connection = await this.recoverConnectionCredential(connection, controlPlaneUrl, controlPlaneAudience);
+			accessToken = await connect();
+		}
 		return { connectionId: connection.id, status: 'connected', teamId: connection.teamId, providerId: connection.providerId, membershipId: connection.membershipId, runtime: { connection, controlPlaneUrl, controlPlaneAudience, teamId: connection.teamId, providerId: connection.providerId, membershipId: connection.membershipId, credentialId: connection.membershipCredentialId, accessToken } };
+	}
+
+	private async recoverConnectionCredential(connection: ProviderConnectionConfig, controlPlaneUrl: string, controlPlaneAudience: string) {
+		const existing = this.credentialRecoveries.get(connection.id);
+		if (existing) return existing;
+		const recovery = recoverAuthorizedCredential(connection, {
+			read: () => readProviderConnectionState(this.dataDir, connection.id),
+			exchange: async (requestId, idempotencyKey) => {
+				const identity = await this.providerIdentity();
+				const path = providerOperationPath(CONTROL_PLANE_OPERATIONS.providers.exchangeCredential, { requestId });
+				const proof = await this.proof({ audience: controlPlaneAudience, method: 'POST', path, body: { requestId, idempotencyKey }, identity });
+				return this.client(controlPlaneUrl).exchangeCredential(requestId, proof, idempotencyKey);
+			},
+			writeSecret: (ref, value) => writeProviderSecret(ref, value, this.loaded.directory, this.dataDir),
+			writeState: state => writeProviderConnectionState(this.dataDir, state),
+			clearToken: () => this.localState.removeToken(connection.id),
+			materialize: state => this.materializeApprovedConnection(state),
+		});
+		this.credentialRecoveries.set(connection.id, recovery);
+		try { return await recovery; }
+		finally { if (this.credentialRecoveries.get(connection.id) === recovery) this.credentialRecoveries.delete(connection.id); }
 	}
 
 	async beginJoin(join: CapacityProviderJoinInput, suppliedRegistrationCode?: string): Promise<ProviderConnectionResult> {

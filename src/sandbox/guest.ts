@@ -7,6 +7,7 @@ import { createInterface } from 'node:readline';
 import { chmod, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { sandboxAssignmentSchema, sandboxResultSchema, type SandboxAssignment } from '@treeseed/sdk/capacity-provider';
+import { providerCredentialValues, providerFailureSummary } from './provider-failure.ts';
 
 const inputRoot = '/run/treeseed-assignment';
 const outputRoot = '/run/treeseed-output';
@@ -160,7 +161,13 @@ export async function runSandboxGuest() {
 				...(relay ? { OPENAI_BASE_URL: relay.baseUrl, OPENAI_API_KEY: 'treeseed-assignment-relay' } : {}),
 				...(subscriptionProxy ? { HTTPS_PROXY: subscriptionProxy, https_proxy: subscriptionProxy } : {}), LANG: 'C.UTF-8' },
 			timeoutMs: codexInteractiveTimeoutMs(assignment.resources.durationSeconds),
-			onLine(line) { try { events.push(record(JSON.parse(line))); } catch { events.push({ type: 'provider.event.invalid', digest: createHash('sha256').update(line).digest('hex') }); } },
+			onLine(line) { try { events.push(record(JSON.parse(line))); } catch { events.push({ type: 'provider.event.invalid', digest: createHash('sha256').update(line).digest('hex') }); } if (events.length > 256) events.shift(); },
+		}).catch(error => {
+			const secrets = [operationToken, ...(subscriptionAuth ? providerCredentialValues(JSON.parse(subscriptionAuth.toString('utf8'))) : [])];
+			const detail = providerFailureSummary(events, secrets);
+			// Avoid leaking credentials through the subprocess stderr fallback too.
+			const fallback = providerFailureSummary([{ type: 'error', message: error instanceof Error ? error.message : String(error) }], secrets);
+			throw new Error(`Codex execution failed: ${detail || fallback || 'no structured error was supplied'}`);
 		});
 		await progress('provider.completed');
 		const responseMarkdown = (await readFile(responsePath, 'utf8')).trim(); if (!responseMarkdown) throw new Error('Execution provider returned an empty response.');

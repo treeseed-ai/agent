@@ -154,6 +154,7 @@ describe('Agent package ownership boundary', () => {
 			expect(loaded.manifest).toMatchObject({ schemaVersion: 5, ownership: current.ownership, capacity: current.capacity,
 				configuration: { generation: 'fixture-v5-compat-v5' }, ontology: { generation: 3 }, metadata: { compatibilityMigration: 'agent-managed-v4-to-v5' } });
 			expect(loaded.manifest.adapters[0]?.offers.map(({ offer }) => offer.offerId)).toEqual(['codex-conversation', 'codex-engineering', 'codex-data', 'codex-publishing']);
+			for (const { offer } of loaded.manifest.adapters[0]!.offers) expect(offer.contextCapacity).toMatchObject({measurement:'bytes',measurementProvenance:{implementation:'utf8-byte-length'}});
 			expect(loaded.manifest.sandbox.profiles[0]?.lineage).toMatchObject({ baseImageDigest: digest('8'), provenanceDigest: digest('9') });
 			expect(readFileSync(manifestPath, 'utf8')).toBe(canonical);
 		} finally { rmSync(root, { recursive: true, force: true }); }

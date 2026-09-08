@@ -20,6 +20,13 @@ function client() {
 const treeDx = { projectId: 'project-1', repositoryId: null, workspaceId: null, invoke: vi.fn() };
 
 describe('catalog-driven provider assignment runner', () => {
+	it.each(['provider_context_measurement_mismatch','provider_context_capacity_overflow'])('does not retry unchanged invalid context: %s', async code => {
+		const api=client();
+		const executor:AgentExecutor={id:'fake',observe:async()=>({available:true}),execute:async()=>{throw Object.assign(new Error('Invalid context contract'),{code});}};
+		await runProviderAssignment({client:api,executor,assignment:{id:'assignment-1',stateVersion:2},treeDx,leaseToken:'lease',runnerId:'runner'});
+		expect(api.failAssignment).toHaveBeenCalledWith('assignment-1',expect.objectContaining({code,retryable:false}));
+		expect(api.returnAssignment).not.toHaveBeenCalled();
+	});
 	it('records start, usage, closeout, preflight, and completion in order', async () => {
 		const api = client();
 		const executor: AgentExecutor = {

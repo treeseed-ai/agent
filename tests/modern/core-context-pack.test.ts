@@ -1,5 +1,6 @@
 import { describe,expect,it,vi } from 'vitest';
 import { readCoreContextPack } from '../../src/provider/execution/core-context-pack.ts';
+import { MANAGED_CONTEXT_CAPACITY } from '../../src/provider/configuration/legacy-manifest.ts';
 
 const file=(path:string,content:string,frontmatter:Record<string,unknown>={})=>({path,logicalPath:path.replace(/\.(?:md|mdx|ya?ml)$/u,''),content,frontmatter});
 const response=(items:unknown[])=>({data:{result:{data:{items}}}});
@@ -22,7 +23,7 @@ function request(overrides:Record<string,unknown>={}) {
 		const source=team?teamFiles:projectFiles;
 		return response(paths.flatMap((path:string)=>source.filter((entry)=>entry.path===path||entry.logicalPath===path)));
 	});
-	return {assignmentId:'assignment-1',assignment:{metadata:{communication:{discussionId:'discussion-1',topicId:'topic-1',recipients:['@sdk/architect']},contextCapacity:{mode:'bounded',measurement:'bytes',defaultInitial:100_000,maximum:200_000,reservedOutput:10_000,transportPayloadBytes:250_000,measurementProvenance:{provider:'test',implementation:'utf8',version:null}}}},treeDx:{projectId:'sdk-project',repositoryId:'sdk-repo',baseRef:'sdk-ref',readRepositories:[],invoke},...overrides} as any;
+	return {assignmentId:'assignment-1',assignment:{metadata:{communication:{discussionId:'discussion-1',topicId:'topic-1',recipients:['@sdk/architect']},contextCapacity:structuredClone(MANAGED_CONTEXT_CAPACITY)}},treeDx:{projectId:'sdk-project',repositoryId:'sdk-repo',baseRef:'sdk-ref',readRepositories:[],invoke},...overrides} as any;
 }
 
 describe('mandatory assignment context pack',()=>{
@@ -51,5 +52,15 @@ describe('mandatory assignment context pack',()=>{
 			return response([]);
 		});
 		await expect(readCoreContextPack(broken,{identity:{manifest:{teamId:'team-1',projectId:'sdk-project',projectSlug:'sdk',agentProfile:{path:'agents/architect.mdx'},teamLibrary:{projectId:'team-project',repositoryId:'team-repo',immutableRef:'team-ref'}},sources:[]},focused:{},message:{}})).rejects.toThrow(/README\.md and objectives\/core are mandatory/u);
+	});
+
+	it('measures Unicode using the actual managed offer and distinguishes incompatible units from overflow',async()=>{
+		const input={identity:{manifest:{teamId:'team-1',projectId:'sdk-project',projectSlug:'sdk',agentProfile:{path:'agents/architect.mdx'},teamLibrary:{projectId:'team-project',repositoryId:'team-repo',immutableRef:'team-ref'}},sources:[]},focused:{},message:{path:'message.mdx',content:'你好 🌱'}};
+		const pack=await readCoreContextPack(request(),input);
+		expect(pack.manifest.capacity.measurement).toBe('bytes');
+		expect(pack.manifest.sources.find(source=>source.kind==='discussion-message')?.measurement).toEqual({unit:'bytes',amount:Buffer.byteLength(input.message.content),provenance:'utf8-byte-length'});
+		const incompatible=request();incompatible.assignment.metadata.contextCapacity.measurement='tokens';
+		await expect(readCoreContextPack(incompatible,input)).rejects.toMatchObject({code:'provider_context_measurement_mismatch'});
+		await expect(readCoreContextPack(request(),{...input,message:{...input.message,content:'x'.repeat(128_001)}})).rejects.toMatchObject({code:'provider_context_capacity_overflow'});
 	});
 });

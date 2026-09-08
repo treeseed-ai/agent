@@ -51,7 +51,7 @@ export async function readCoreContextPack(request:AgentExecutionRequest,input:{i
 	add(current,'live','discussion-state',null,JSON.stringify(communication,null,2),true,100,undefined,{mandatory:true});
 	const capacity=providerContextCapacitySchema.parse(metadata.contextCapacity??request.assignment.contextCapacity);let pack;
 	try{pack=compileAssignmentContextPack({assignmentId:request.assignmentId,capacity,candidates});}
-	catch(error){const wrapped=new Error(`The selected capability offer contradicted its advertised context capacity: ${error instanceof Error?error.message:String(error)}`) as Error&{code:string};wrapped.code='provider_context_capacity_overflow';throw wrapped;}
+	catch(error){const detail=error instanceof Error?error.message:String(error);const wrapped=new Error(`The selected capability offer contradicted its advertised context capacity: ${detail}`) as Error&{code:string};wrapped.code=/uses .*but the offer budgets/u.test(detail)?'provider_context_measurement_mismatch':'provider_context_capacity_overflow';throw wrapped;}
 	const sources=pack.sources.flatMap((source)=>{const material=materials.get(source.id);if(!material||source.disposition==='omitted'||source.disposition==='failed')return[];return [{...source,content:source.disposition==='summarized'?material.summary:material.content}];});
 	return {manifest:pack,sources,roster:JSON.parse(roster),queryLayers:record(input.focused.queryLayers)};
 }

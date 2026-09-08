@@ -34,6 +34,13 @@ function record(value: unknown, name: string): RecordValue {
 	return value as RecordValue;
 }
 
+// This is the measured TreeSeed context envelope, not a model tokenizer claim.
+export const MANAGED_CONTEXT_CAPACITY = {
+	mode: 'bounded' as const, measurement: 'bytes' as const, defaultInitial: 32_000, maximum: 128_000,
+	reservedOutput: 8_000, transportPayloadBytes: 4_194_304,
+	measurementProvenance: { provider: 'treeseed', implementation: 'utf8-byte-length', version: '1' },
+};
+
 function offer(id: string, capabilityIds: string[]) {
 	const capabilities = capabilityIds.map(reference);
 	const configurationSupport = Object.fromEntries(['instructions.system', 'instructions.task', 'instructions.templates', 'context.queries', 'tools.policy', 'intelligence.reasoning-effort'].map((key) => [key, { required: true, preferred: true }]));
@@ -47,9 +54,7 @@ function offer(id: string, capabilityIds: string[]) {
 	const material = {
 		schemaVersion: 'treeseed.capability-offer/v2' as const, offerId: `codex-${id}`, capabilities, features: [], configurationSupport,
 		permissionClasses: ['content-policy', 'repository-policy', 'network-policy', 'shell-policy', 'tool-policy'], contextModes: ['inline', 'manifest'],
-		contextCapacity: { mode: 'bounded' as const, measurement: 'tokens' as const, defaultInitial: 32_000, maximum: 128_000,
-			reservedOutput: 8_000, transportPayloadBytes: 4_194_304,
-			measurementProvenance: { provider: 'openai', implementation: 'provider-reported-tokenizer', version: null } },
+		contextCapacity: MANAGED_CONTEXT_CAPACITY,
 		inputContracts: [], outputContracts: [], interactionModes: ['asynchronous', 'interactive'], conformance, limits: {},
 		commercial: { currency: null, estimatedCost: null }, region: null, trust: ['provider-signed'],
 	};

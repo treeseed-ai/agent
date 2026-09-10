@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { componentReleaseSchema, deploymentDigest } from '@treeseed/sdk/deployment';
+import { componentReleaseSchema, deploymentDigest, packageRuntimeSchema } from '@treeseed/sdk/deployment';
 import { stringify as stringifyYaml } from 'yaml';
 import { createManagedProviderManifestV5 } from '../../src/provider/configuration/managed-manifest.ts';
 
@@ -27,7 +27,7 @@ const providerManifest = stringifyYaml(createManagedProviderManifestV5({
 	baseImageDigest: baseDigest,
 	provenanceDigest,
 }), { lineWidth: 0 });
-const runtime = {
+const runtime = packageRuntimeSchema.parse({
 	schemaVersion: 'treeseed.package-runtime/v1' as const, componentId: 'agent', version: debianRelease,
 	compose: { projectName: 'treeseed-agent', files: [{ path: 'compose.yml', digest: composeDigest }] },
 	configuration: { files: [{
@@ -38,7 +38,7 @@ const runtime = {
 	stateVolumes: [{ id: 'provider-data', volume: '/var/lib/treeseed/agent', backup: 'required' as const }],
 	migrations: [{ id: 'provider-identity', order: 0, backupRequired: true }], requiredCapabilities: ['docker-compose'],
 	dependencies: [{ id: 'control-plane', capability: 'control-plane-api', locality: 'either' as const, optional: false }],
-};
+});
 const tagUrl = (repository: string) => `https://hub.docker.com/r/${repository}/tags?name=${encodeURIComponent(release)}`;
 const bundle = componentReleaseSchema.parse({
 	schemaVersion: 'treeseed.component-release/v1', componentId: 'agent', release: debianRelease, applicationVersion: release, revision, track,

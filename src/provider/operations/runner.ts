@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { ProviderProtocolClient } from '@treeseed/sdk/capacity-provider';
+import type { AgentModeRunStatus } from '@treeseed/sdk/agent-capacity';
 import type { AgentExecutor, AgentExecutionResult, AssignmentTreeDxFacade } from '../execution/contracts.ts';
 
 function record(value: unknown): Record<string, unknown> {
@@ -177,7 +178,7 @@ export async function runProviderAssignment(input: ProviderAssignmentRunInput) {
       idempotencyKey: `assignment:${assignmentId}:semantic-completion-preflight`, artifactManifest: manifest });
     if (typeof preflight.receiptDigest !== 'string' || !/^[a-f0-9]{64}$/u.test(preflight.receiptDigest)) throw new Error('Completion preflight did not return its durable receipt.');
     completion.metadata.semanticCompletionPreflightReceiptDigest = preflight.receiptDigest;
-    await input.client.createAssignmentModeRun(assignmentId, { id: manifest.modeRunId, status: 'completed', mode: activeAssignment.mode,
+    await input.client.createAssignmentModeRun(assignmentId, { id: manifest.modeRunId, status: 'succeeded' satisfies AgentModeRunStatus, mode: activeAssignment.mode,
       outputs: completion.output, usageActual: usage, validation: preflight, completedAt: new Date().toISOString() });
   }
   await input.client.settleAssignment(assignmentId, { activeSeconds: settlementSeconds(usage.activeSeconds), elapsedSeconds: settlementSeconds(usage.elapsedSeconds),

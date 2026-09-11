@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { compileAssignmentContextPack } from '@treeseed/sdk/agent-capacity';
 import { providerContextCapacitySchema } from '@treeseed/sdk/capacity-provider';
 import type { AgentExecutionRequest } from './contracts.ts';
+import { assignmentActivityContext } from './activity/context.ts';
 
 type Row=Record<string,unknown>;
 const record=(value:unknown):Row=>value&&typeof value==='object'&&!Array.isArray(value)?value as Row:{};
@@ -45,10 +46,16 @@ export async function readCoreContextPack(request:AgentExecutionRequest,input:{i
 	add(team,'core','team-readme','README.md',fileContent(teamReadme),true,100,undefined,{mandatory:true});add(team,'core','team-core-objective',filePath(teamCore),fileContent(teamCore),true,100,undefined,{mandatory:true});add(current,'core','agent-roster',null,roster,true,95,undefined,{mandatory:true});
 	for(const entry of applicable)add(entry.source,'core','applicable-objective',filePath(entry.file),fileContent(entry.file),true,80,objectiveSummary(entry.file));
 	for(const source of (Array.isArray(input.focused.sources)?input.focused.sources.map(record):[]))add(current,text(source.layer)==='activity'?'activity':'agent','context-query-result',text(source.path),text(source.content),text(source.requirement)==='required',Number(source.priority??(text(source.layer)==='agent'?70:60)),text(source.summary),{minimumBudget:source.minimumBudget,maximumBudget:source.maximumBudget});
-	add(current,'live','discussion-message',text(input.message.path),text(input.message.content),true,100,undefined,{mandatory:true});
-	for(const history of (Array.isArray(input.message.history)?input.message.history.map(record):[]))add(current,'live','discussion-history',text(history.path),text(history.content),false,90);
-	const communication=record(metadata.communication);if(!Object.keys(communication).length)throw new Error('Communication assignment omitted current discussion and recipient state.');
-	add(current,'live','discussion-state',null,JSON.stringify(communication,null,2),true,100,undefined,{mandatory:true});
+	if (request.assignment.executionKind === 'workday') {
+		const activity = assignmentActivityContext(request.assignment);
+		if (!Object.keys(activity.task).length) throw new Error('Workday assignment omitted its assigned activity task.');
+		add(current,'live','assignment-task',null,JSON.stringify(activity,null,2),true,100,undefined,{mandatory:true});
+	} else {
+		add(current,'live','discussion-message',text(input.message.path),text(input.message.content),true,100,undefined,{mandatory:true});
+		for(const history of (Array.isArray(input.message.history)?input.message.history.map(record):[]))add(current,'live','discussion-history',text(history.path),text(history.content),false,90);
+		const communication=record(metadata.communication);if(!Object.keys(communication).length)throw new Error('Communication assignment omitted current discussion and recipient state.');
+		add(current,'live','discussion-state',null,JSON.stringify(communication,null,2),true,100,undefined,{mandatory:true});
+	}
 	const capacity=providerContextCapacitySchema.parse(metadata.contextCapacity??request.assignment.contextCapacity);let pack;
 	try{pack=compileAssignmentContextPack({assignmentId:request.assignmentId,capacity,candidates});}
 	catch(error){const detail=error instanceof Error?error.message:String(error);const wrapped=new Error(`The selected capability offer contradicted its advertised context capacity: ${detail}`) as Error&{code:string};wrapped.code=/uses .*but the offer budgets/u.test(detail)?'provider_context_measurement_mismatch':'provider_context_capacity_overflow';throw wrapped;}

@@ -18,6 +18,8 @@ export interface ProviderLocalSlotClaim {
 	nativeUnit?: string;
 	requestedNativeAmount?: number;
 	dispatchEnvelope?: unknown;
+	/** First runtime failure, retained across recovery attempts without replacing its cause. */
+	failureMessage?: string;
 	acquiredAt: string;
 	updatedAt: string;
 	expiresAt: string;
@@ -207,6 +209,7 @@ export class ProviderLocalCapacityStore {
 			const claim = state.claims.find((entry) => entry.id === claimId);
 			if (!claim) return false;
 			claim.status = 'recovery';
+			claim.failureMessage ??= message.slice(0, 500);
 			claim.updatedAt = now;
 			state.events.push({ id: randomUUID(), claimId, connectionId: claim.connectionId, ...(claim.assignmentId ? { assignmentId: claim.assignmentId } : {}), outcome: 'lifecycle-unconfirmed', message: message.slice(0, 500), recordedAt: now });
 			state.events = state.events.slice(-100);

@@ -42,7 +42,7 @@ export function createManagedProviderManifestV5(input: ManagedProviderManifestRe
 		lanes: [lane('communication', 100, 1), lane('platform', 70, 0), lane('workday', 50, 0)],
 		adapters: [{
 			id: 'codex-managed', adapter: 'codex', isolation: 'microvm', module: 'module:codex-chat', profile: 'api', protocol: 'responses',
-			model: { model: 'gpt-5.4' }, credentialProfiles: [], laneIds: ['communication', 'platform', 'workday'],
+			model: { model: 'gpt-5.6-terra' }, credentialProfiles: [], laneIds: ['communication', 'platform', 'workday'],
 			maxConcurrentWorkers: 1, nativeLimits: {}, sandboxProfileIds: [...profileIds], capabilities: [],
 		}],
 		connections: [],

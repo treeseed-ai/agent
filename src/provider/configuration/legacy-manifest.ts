@@ -26,7 +26,7 @@ const offerCapabilities = {
 const laneCapabilities: Record<string, string[]> = {
 	communication: ['treeseed.coordination.conversation', 'treeseed.engineering.repository-analysis', 'treeseed.research.synthesis'],
 	platform: ['treeseed.engineering.architecture', 'treeseed.engineering.code-change', 'treeseed.engineering.review'],
-	workday: ['treeseed.coordination.planning', 'treeseed.engineering.code-change', 'treeseed.research.synthesis', 'treeseed.publishing.documentation'],
+	workday: [...new Set(Object.values(offerCapabilities).flat())].filter(id => id !== 'treeseed.coordination.conversation').sort(),
 };
 
 function record(value: unknown, name: string): RecordValue {

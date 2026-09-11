@@ -4,10 +4,13 @@ import type { AgentExecutor } from '../../src/provider/execution/contracts.ts';
 
 function client() {
 	return {
+		assignment: vi.fn().mockResolvedValue({ id: 'assignment-1', stateVersion: 7 }),
+		createAssignmentEvent: vi.fn().mockResolvedValue({ ok: true }),
+		createAssignmentModeRun: vi.fn().mockResolvedValue({ id: 'mode-run' }),
 		authorizeAssignmentSource: vi.fn(),
 		readAssignmentSourceChunk: vi.fn(), publishAssignmentSourceCandidate: vi.fn(),
 		createCommunicationTraceEvent: vi.fn().mockResolvedValue({ ok: true }),
-		startAssignmentExecution: vi.fn().mockResolvedValue({ ok: true }),
+		startAssignmentExecution: vi.fn().mockResolvedValue({}),
 		renewAssignment: vi.fn().mockResolvedValue({ ok: true, payload: { leaseExpiresAt: new Date(Date.now() + 60_000).toISOString() } }),
 		startAssignmentCloseout: vi.fn().mockResolvedValue({ ok: true }),
 		preflightAssignmentCompletion: vi.fn().mockResolvedValue({ ok: true }),
@@ -23,6 +26,33 @@ function client() {
 const treeDx = { projectId: 'project-1', repositoryId: null, workspaceId: null, invoke: vi.fn() };
 
 describe('catalog-driven provider assignment runner', () => {
+	it.each(['workday', 'conversation'])('routes %s traces and executes the authoritative started window', async executionKind => {
+		const api = client();
+		api.startAssignmentExecution.mockResolvedValue({ id: 'assignment-1', stateVersion: 3,
+			capacityEnvelope: { budget: { time: { executionStartedAt: '2026-09-11T12:00:00Z' } } } });
+		let received: Record<string, unknown> | undefined;
+		const event = { type: 'execution.started', occurredAt: '2026-09-11T12:00:00Z', summary: 'Started',
+			payload: { model: 'test' }, protectedPayload: { transcript: 'private trace' } };
+		await runProviderAssignment({ client: api, treeDx, leaseToken: 'lease', runnerId: 'runner',
+			assignment: { id: 'assignment-1', executionKind, stateVersion: 2 }, executor: {
+				id: 'fake', observe: async () => ({ available: true }), execute: async request => {
+					received = request.assignment; await request.emit?.(event);
+					return { status: 'completed', summary: 'done' };
+				},
+			} });
+		expect(received).toMatchObject({ stateVersion: 3, executionKind,
+			capacityEnvelope: { budget: { time: { executionStartedAt: event.occurredAt } } } });
+		if (executionKind === 'conversation') {
+			expect(api.createCommunicationTraceEvent).toHaveBeenCalledWith('assignment-1', expect.objectContaining(event));
+			expect(api.createAssignmentEvent).not.toHaveBeenCalled();
+		} else {
+			expect(api.createCommunicationTraceEvent).not.toHaveBeenCalled();
+			expect(api.createAssignmentEvent).toHaveBeenCalledWith('assignment-1', expect.objectContaining({
+				eventType: 'provider.execution.started', context: { model: 'test' }, message: 'Started',
+			}));
+			expect(JSON.stringify(api.createAssignmentEvent.mock.calls)).not.toContain('private trace');
+		}
+	});
 	it.each(['provider_context_measurement_mismatch','provider_context_capacity_overflow'])('does not retry unchanged invalid context: %s', async code => {
 		const api=client();
 		const executor:AgentExecutor={id:'fake',observe:async()=>({available:true}),execute:async()=>{throw Object.assign(new Error('Invalid context contract'),{code});}};
@@ -52,18 +82,42 @@ describe('catalog-driven provider assignment runner', () => {
 		});
 		expect(api.startAssignmentExecution).toHaveBeenCalledWith('assignment-1', expect.objectContaining({
 			executorId: 'fake', expectedStateVersion: 2,
-			idempotencyKey: 'execution-start:assignment-1:runner',
+			idempotencyKey: 'execution-start:assignment-1',
 			planRef: { id: 'assignment-plan:assignment-1', path: './assignment-plans/assignment-1.mdx' },
 		}));
-		expect(api.reportAssignmentUsage).toHaveBeenCalledOnce();
-		expect(api.startAssignmentCloseout).toHaveBeenCalledOnce();
-		expect(api.preflightAssignmentCompletion).toHaveBeenCalledOnce();
+		expect(api.reportAssignmentUsage).not.toHaveBeenCalled();
+		expect(api.startAssignmentCloseout).toHaveBeenCalledWith('assignment-1', {
+			leaseToken: 'lease', runnerId: 'runner', expectedStateVersion: 7,
+			idempotencyKey: 'closeout-start:assignment-1:runner',
+		});
+		expect(api.preflightAssignmentCompletion).not.toHaveBeenCalled();
+		expect(api.settleAssignment).toHaveBeenCalledBefore(api.completeAssignment);
 		expect(api.completeAssignment).toHaveBeenCalledWith('assignment-1', expect.objectContaining({
 			summary: { text: 'done' },
 			output: { commit: 'abc', artifacts: [] },
 		}));
 	});
 
+	it('preflights real artifacts, records the mode run, settles once, and attaches the receipt to completion', async () => {
+		const api = client(), receiptDigest = 'a'.repeat(64), artifactManifest = { schemaVersion: 1, modeRunId: 'mode-run', assignmentId: 'assignment-1' };
+		api.preflightAssignmentCompletion.mockResolvedValue({ receiptDigest });
+		await runProviderAssignment({ client: api, treeDx, leaseToken: 'lease', runnerId: 'runner', assignment: { id: 'assignment-1', mode: 'planning' },
+			executor: { id: 'fake', observe: async () => ({ available: true }), execute: async () => ({ status: 'completed', summary: 'Reviewed',
+				outputs: { artifactManifest }, usage: [{ activeSeconds: 4.1, elapsedSeconds: 5.2 }] }) } });
+		expect(api.preflightAssignmentCompletion).toHaveBeenCalledWith('assignment-1', { leaseToken: 'lease', runnerId: 'runner',
+			idempotencyKey: 'assignment:assignment-1:semantic-completion-preflight', artifactManifest });
+		expect(api.preflightAssignmentCompletion).toHaveBeenCalledBefore(api.createAssignmentModeRun);
+		expect(api.createAssignmentModeRun).toHaveBeenCalledBefore(api.settleAssignment);
+		expect(api.settleAssignment).toHaveBeenCalledWith('assignment-1', expect.objectContaining({ activeSeconds: 5, elapsedSeconds: 6, modeRunId: 'mode-run' }), expect.any(String));
+		expect(api.settleAssignment).toHaveBeenCalledBefore(api.completeAssignment);
+		expect(api.completeAssignment).toHaveBeenCalledWith('assignment-1', expect.objectContaining({ metadata: { semanticCompletionPreflightReceiptDigest: receiptDigest } }));
+	});
+	it('does not settle or complete when semantic preflight fails', async () => {
+		const api = client(); api.preflightAssignmentCompletion.mockRejectedValue(new Error('Invalid artifact'));
+		await expect(runProviderAssignment({ client: api, treeDx, leaseToken: 'lease', runnerId: 'runner', assignment: { id: 'assignment-1' },
+			executor: { id: 'fake', observe: async () => ({ available: true }), execute: async () => ({ status: 'completed', summary: 'Review', outputs: { artifactManifest: { schemaVersion: 1 } } }) } })).rejects.toThrow('Invalid artifact');
+		expect(api.settleAssignment).not.toHaveBeenCalled(); expect(api.completeAssignment).not.toHaveBeenCalled();
+	});
 	it('renews long-running assignment leases and persists the new expiry', async () => {
 		const api = client();
 		const renewed: string[] = [];

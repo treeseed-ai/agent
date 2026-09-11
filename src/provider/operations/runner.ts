@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type { ProviderProtocolClient } from '@treeseed/sdk/capacity-provider';
 import type { AgentExecutor, AgentExecutionResult, AssignmentTreeDxFacade } from '../execution/contracts.ts';
 
@@ -27,7 +28,7 @@ function settlementSeconds(value: unknown) {
 }
 
 export interface ProviderAssignmentRunInput {
-  client: Pick<ProviderProtocolClient, 'renewAssignment' | 'startAssignmentExecution' | 'startAssignmentCloseout' | 'preflightAssignmentCompletion' | 'completeAssignment' | 'returnAssignment' | 'failAssignment' | 'reportAssignmentUsage' | 'respondToAssignmentDiscussion' | 'settleAssignment' | 'createCommunicationTraceEvent' | 'authorizeAssignmentSource' | 'readAssignmentSourceChunk' | 'publishAssignmentSourceCandidate'>;
+  client: Pick<ProviderProtocolClient, 'assignment' | 'createAssignmentEvent' | 'createAssignmentModeRun' | 'renewAssignment' | 'startAssignmentExecution' | 'startAssignmentCloseout' | 'preflightAssignmentCompletion' | 'completeAssignment' | 'returnAssignment' | 'failAssignment' | 'reportAssignmentUsage' | 'respondToAssignmentDiscussion' | 'settleAssignment' | 'createCommunicationTraceEvent' | 'authorizeAssignmentSource' | 'readAssignmentSourceChunk' | 'publishAssignmentSourceCandidate'>;
   executor: AgentExecutor;
   assignment: Record<string, unknown>;
   leaseToken: string;
@@ -41,7 +42,8 @@ export interface ProviderAssignmentRunInput {
 
 async function reportUsage(input: ProviderAssignmentRunInput, assignmentId: string, result: AgentExecutionResult) {
   for (const [index, usage] of (result.usage ?? []).entries()) {
-    await input.client.reportAssignmentUsage(assignmentId, { leaseToken: input.leaseToken, runnerId: input.runnerId, ...usage }, `usage:${assignmentId}:${input.runnerId}:${index}`);
+    await input.client.reportAssignmentUsage(assignmentId, { leaseToken: input.leaseToken, runnerId: input.runnerId,
+      usageDimension: `diagnostic-${index}`, activeSeconds: settlementSeconds(usage.activeSeconds), elapsedSeconds: settlementSeconds(usage.elapsedSeconds), usageActual: usage }, `usage:${assignmentId}:${input.runnerId}:${index}`);
   }
 }
 
@@ -50,14 +52,16 @@ export async function runProviderAssignment(input: ProviderAssignmentRunInput) {
   if (!assignmentId) throw new Error('Catalogued assignment lease omitted its stable id.');
   const metadata = record(input.assignment.metadata);
   const contentRoot = text(metadata.contentRoot) || '.';
-  await input.client.startAssignmentExecution(assignmentId, {
+  const started = await input.client.startAssignmentExecution(assignmentId, {
     leaseToken: input.leaseToken,
     runnerId: input.runnerId,
     executorId: input.executor.id,
-    idempotencyKey: `execution-start:${assignmentId}:${input.runnerId}`,
+    idempotencyKey: `execution-start:${assignmentId}`,
     expectedStateVersion: Number(input.assignment.stateVersion),
     planRef: { id: `assignment-plan:${assignmentId}`, path: `${contentRoot}/assignment-plans/${assignmentId}.mdx` },
   });
+  const activeAssignment = { ...input.assignment, ...record(started) };
+  const conversation = text(activeAssignment.executionKind, activeAssignment.execution_kind) === 'conversation';
   let result: AgentExecutionResult;
   let stopped = false;
   let renewalFailure: unknown = null;
@@ -99,22 +103,33 @@ export async function runProviderAssignment(input: ProviderAssignmentRunInput) {
   };
   scheduleRenewal();
 	let traceSequence = 0;
+  const traceRunner = createHash('sha256').update(input.runnerId).digest('hex').slice(0, 24);
+  const emit: NonNullable<Parameters<AgentExecutor['execute']>[0]['emit']> = async event => {
+    const sequence = traceSequence++;
+    if (conversation) {
+      await input.client.createCommunicationTraceEvent(assignmentId, { leaseToken: input.leaseToken, runnerId: input.runnerId, sequence, ...event });
+    } else {
+      // Protected transcript payloads must not enter recipient-visible workday events.
+      await input.client.createAssignmentEvent(assignmentId, { id: `trace:${traceRunner}:${sequence}`,
+        eventType: `provider.${event.type}`, component: 'execution-provider',
+        status: event.type === 'execution.failed' ? 'failed' : event.type === 'execution.completed' ? 'completed' : 'recorded',
+        message: event.summary, createdAt: event.occurredAt, context: event.payload });
+    }
+  };
   try {
-    result = await input.executor.execute({ assignment: executorAssignment(input.assignment), assignmentId, leaseToken: input.leaseToken, runnerId: input.runnerId, treeDx,
+    result = await input.executor.execute({ assignment: executorAssignment(activeAssignment), assignmentId, leaseToken: input.leaseToken, runnerId: input.runnerId, treeDx,
       authorizeSource: recipientPublicKey => input.client.authorizeAssignmentSource(assignmentId, { runnerId: input.runnerId, leaseToken: input.leaseToken, recipientPublicKey }),
       readSourceChunk: (artifactId, index) => input.client.readAssignmentSourceChunk(assignmentId, { runnerId: input.runnerId, leaseToken: input.leaseToken, artifactId, index }),
       publishSourceCandidate: (candidate, chunk) => input.client.publishAssignmentSourceCandidate(assignmentId, { runnerId: input.runnerId, leaseToken: input.leaseToken, candidate,
         ...(chunk ? { action: 'chunk' as const, index: chunk.index, content: chunk.content } : { action: 'commit' as const }) }),
-		emit: (event) => input.client.createCommunicationTraceEvent(assignmentId, { leaseToken: input.leaseToken, runnerId: input.runnerId, sequence: traceSequence++, ...event }).then(() => undefined),
+		emit,
 		signal: executionAbort.signal });
   } catch (error) {
 		const summary = error instanceof Error ? error.message : String(error);
 		const failureCode=typeof (error as {code?:unknown})?.code==='string'?String((error as {code:string}).code):'agent_executor_failed';
-		const retryable=!['provider_context_measurement_mismatch','provider_context_capacity_overflow'].includes(failureCode);
-		if (text(input.assignment.executionKind, input.assignment.execution_kind) === 'conversation') {
-			await input.client.createCommunicationTraceEvent(assignmentId, { leaseToken: input.leaseToken, runnerId: input.runnerId, sequence: traceSequence++,
+		const retryable=!['provider_context_measurement_mismatch','provider_context_capacity_overflow','assignment_execution_window_exhausted'].includes(failureCode);
+			await emit({
 				type: 'execution.failed', occurredAt: new Date().toISOString(), summary, payload: { code: failureCode, retryable } }).catch(() => undefined);
-		}
     result = { status: 'failed', code: failureCode, summary, retryable };
   } finally {
     stopped = true;
@@ -139,20 +154,33 @@ export async function runProviderAssignment(input: ProviderAssignmentRunInput) {
 			usageDimension: 'aggregate', usageActual: {} }, `discussion-settlement:${assignmentId}:${input.runnerId}`);
 		return input.client.returnAssignment(assignmentId, { runnerId: input.runnerId, summary: { text: result.summary } });
 	}
-	await reportUsage(input, assignmentId, result);
+	if (result.status !== 'completed') await reportUsage(input, assignmentId, result);
   if (result.status === 'returned') {
     return input.client.returnAssignment(assignmentId, { leaseToken: input.leaseToken, runnerId: input.runnerId, code: result.code ?? 'agent_executor_returned', reason: result.summary, retryable: result.retryable ?? true });
   }
   if (result.status === 'failed') {
     return input.client.failAssignment(assignmentId, { leaseToken: input.leaseToken, runnerId: input.runnerId, code: result.code ?? 'agent_executor_failed', message: result.summary, retryable: result.retryable ?? false });
   }
-  await input.client.startAssignmentCloseout(assignmentId, { leaseToken: input.leaseToken, runnerId: input.runnerId });
+  const current = await input.client.assignment(assignmentId);
+  await input.client.startAssignmentCloseout(assignmentId, { leaseToken: input.leaseToken, runnerId: input.runnerId,
+    idempotencyKey: `closeout-start:${assignmentId}:${input.runnerId}`, expectedStateVersion: Number(current.stateVersion) });
   const completion = {
     leaseToken: input.leaseToken,
     runnerId: input.runnerId,
     summary: { text: result.summary },
     output: { ...record(result.outputs), artifacts: result.artifacts ?? [] },
+    metadata: {} as Record<string, unknown>,
   };
-  await input.client.preflightAssignmentCompletion(assignmentId, completion);
+  const manifest = record(record(completion.output).artifactManifest), usage = record(result.usage?.[0]);
+  if (manifest.schemaVersion === 1) {
+    const preflight = await input.client.preflightAssignmentCompletion(assignmentId, { leaseToken: input.leaseToken, runnerId: input.runnerId,
+      idempotencyKey: `assignment:${assignmentId}:semantic-completion-preflight`, artifactManifest: manifest });
+    if (typeof preflight.receiptDigest !== 'string' || !/^[a-f0-9]{64}$/u.test(preflight.receiptDigest)) throw new Error('Completion preflight did not return its durable receipt.');
+    completion.metadata.semanticCompletionPreflightReceiptDigest = preflight.receiptDigest;
+    await input.client.createAssignmentModeRun(assignmentId, { id: manifest.modeRunId, status: 'completed', mode: activeAssignment.mode,
+      outputs: completion.output, usageActual: usage, validation: preflight, completedAt: new Date().toISOString() });
+  }
+  await input.client.settleAssignment(assignmentId, { activeSeconds: settlementSeconds(usage.activeSeconds), elapsedSeconds: settlementSeconds(usage.elapsedSeconds),
+    usageDimension: 'aggregate', usageActual: usage, ...(manifest.modeRunId ? { modeRunId: manifest.modeRunId } : {}) }, `assignment-settlement:${assignmentId}:${input.runnerId}`);
   return input.client.completeAssignment(assignmentId, completion);
 }

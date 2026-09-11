@@ -2,9 +2,17 @@ import { describe, expect, it } from 'vitest';
 import { createHash } from 'node:crypto';
 import { assertObjectiveContentModel, discussionMessageSourcePaths, readDiscussionSourceMessage, readFocusedTreeDxContext, readIdentityContext } from '../../src/provider/execution/codex-chat-executor.ts';
 import { executeAssignmentTreeDxTool, reasoningEffortFromAssignmentMetadata } from '../../src/provider/execution/microvm-executor.ts';
-import { codexInteractiveTimeoutMs, codexReasoningArguments, codexTreeDxMcpConfig } from '../../src/sandbox/guest.ts';
+import { codexInteractiveTimeoutMs, codexReasoningArguments, codexTreeDxMcpConfig, promptFromContext, treeDxToolDefinitions } from '../../src/sandbox/guest.ts';
 
 describe('Codex chat executor', () => {
+	it('does not render a workday as a chat message and hides publication tools from chat', () => {
+		const prompt = promptFromContext({ assignment: { executionKind: 'workday' }, activity: { task: { objective: 'Review selected proposal' } } });
+		expect(prompt).toContain('Execute the assigned activity, not a chat response');
+		expect(prompt).toContain('treeseed_publish_review');
+		expect(prompt).not.toContain('Respond to the committed Discussion message');
+		expect(treeDxToolDefinitions().map(tool => tool.name)).not.toContain('treeseed_publish_review');
+		expect(treeDxToolDefinitions(true).map(tool => tool.name)).toContain('treeseed_publish_review');
+	});
 	it('carries the agent-selected reasoning effort into Codex without a provider hardcode', () => {
 		expect(reasoningEffortFromAssignmentMetadata({ chatProfile: { execution: { reasoningEffort: 'high' } } })).toBe('high');
 		expect(reasoningEffortFromAssignmentMetadata({ executionPolicy: { reasoningEffort: 'xhigh' } })).toBe('xhigh');

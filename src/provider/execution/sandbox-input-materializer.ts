@@ -7,6 +7,7 @@ import type { SandboxAssignment } from '@treeseed/sdk/capacity-provider';
 import type { AgentExecutionRequest } from './contracts.ts';
 import { readDiscussionSourceContext, readFocusedTreeDxContext, readIdentityContext } from './codex-chat-executor.ts';
 import { readCoreContextPack } from './core-context-pack.ts';
+import { assignmentActivityContext } from './activity/context.ts';
 
 type Input = SandboxAssignment['inputs'][number] & { sourcePath: string };
 
@@ -23,7 +24,7 @@ async function removeMaterializedRoot(root: string) {
 	await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
 }
 
-export async function materializeSandboxInputs(request: AgentExecutionRequest) {
+export async function materializeSandboxInputs(request: AgentExecutionRequest, reviewPublication = false) {
 	const root = await mkdtemp(join(tmpdir(), 'treeseed-sandbox-inputs-'));
 	try {
 		const executionKind = String(request.assignment.executionKind ?? request.assignment.execution_kind ?? '');
@@ -36,7 +37,8 @@ export async function materializeSandboxInputs(request: AgentExecutionRequest) {
 		const metadata = request.assignment.metadata && typeof request.assignment.metadata === 'object' && !Array.isArray(request.assignment.metadata) ? request.assignment.metadata as Record<string, unknown> : {};
 		const safeAssignment = { id: request.assignment.id ?? request.assignmentId, agentId: request.assignment.agentId ?? request.assignment.agent_id, executionKind: request.assignment.executionKind ?? request.assignment.execution_kind,
 			sourceMessageRefs: request.assignment.sourceMessageRefs, metadata: { identityManifest: metadata.identityManifest, chatProfile: metadata.chatProfile, communication: metadata.communication,contextCapacity:metadata.contextCapacity } };
-		const context = { schemaVersion: 3, assignment: safeAssignment,
+		const context = { schemaVersion: 3, assignment: safeAssignment, reviewPublication,
+			...(executionKind === 'workday' ? { activity: assignmentActivityContext(request.assignment) } : {}),
 			projectManifest: { projectId: request.treeDx.projectId, root: '/workspace/project', materialization: 'source-overlay' },
 			coreContext, treeDxTools: { transport: 'assignment-relay', immutableRef: request.treeDx.baseRef,readRepositories:request.treeDx.readRepositories??[] }, identity, message };
 		const contextPath = join(root, 'context.json'); await writeFile(contextPath, `${JSON.stringify(context)}\n`, { mode: 0o400 });

@@ -27,6 +27,17 @@ function request(overrides:Record<string,unknown>={}) {
 }
 
 describe('mandatory assignment context pack',()=>{
+	it('uses the bounded workday task instead of requiring a discussion, without transport credentials', async () => {
+		const work = request(); work.assignment.executionKind = 'workday'; delete work.assignment.metadata.communication;
+		work.assignment.decisionInput = { input: { objective: 'Review the assigned proposal', body: 'Exact proposal content', leaseToken: 'do-not-send' } };
+		const pack = await readCoreContextPack(work, {
+			identity: { manifest: { teamId:'team-1', projectId:'sdk-project', projectSlug:'sdk', agentProfile:{path:'agents/architect.mdx'},
+				teamLibrary:{projectId:'team-project',repositoryId:'team-repo',immutableRef:'team-ref'} }, sources: [] }, focused: {}, message: {},
+		});
+		expect(pack.sources.find(source => source.kind === 'assignment-task')?.content).toContain('Exact proposal content');
+		expect(pack.sources.some(source => source.kind.startsWith('discussion-'))).toBe(false);
+		expect(JSON.stringify(pack.sources)).not.toContain('do-not-send');
+	});
 	it('compiles team anchors, the complete roster, group objectives, configured layers, and the live message',async()=>{
 		const pack=await readCoreContextPack(request(),{
 			identity:{manifest:{teamId:'team-1',projectId:'sdk-project',projectSlug:'sdk',agentProfile:{path:'agents/architect.mdx'},teamLibrary:{projectId:'team-project',repositoryId:'team-repo',immutableRef:'team-ref'}},sources:[

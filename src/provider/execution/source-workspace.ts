@@ -11,6 +11,14 @@ export interface ActiveSource {
   leaseId: string;
 }
 
+/** API counts ended attempts from zero; signed sandbox attempts are one-based. */
+export function activeSandboxAttempt(attemptCount: unknown): number {
+  if (!Number.isSafeInteger(attemptCount) || Number(attemptCount) < 0 || Number(attemptCount) >= Number.MAX_SAFE_INTEGER) {
+    throw new Error('Assignment has an invalid lifecycle attempt counter.');
+  }
+  return Number(attemptCount) + 1;
+}
+
 /** Trusted provider process only. The guest receives source metadata, never this callback or sealed credentials. */
 export async function prepareAssignmentSource(client: Pick<SandboxBrokerClient, 'sourceStatus' | 'source'> & Partial<Pick<SandboxBrokerClient, 'sourceChunk'>>,
   sandbox: { sandboxId: string; operationToken: string }, request: AgentExecutionRequest): Promise<ActiveSource> {

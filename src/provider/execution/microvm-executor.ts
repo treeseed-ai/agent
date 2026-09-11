@@ -7,7 +7,7 @@ import { loadCapacityProviderIdentity } from '../accounts/identity.ts';
 import type { AgentExecutor } from './contracts.ts';
 import { SandboxBrokerClient } from './sandbox-broker-client.ts';
 import { materializeSandboxInputs } from './sandbox-input-materializer.ts';
-import { prepareAssignmentSource, renewAssignmentSource, type ActiveSource } from './source-workspace.ts';
+import { activeSandboxAttempt, prepareAssignmentSource, renewAssignmentSource, type ActiveSource } from './source-workspace.ts';
 import { publishSourceCandidate } from './source-candidate.ts';
 
 const canonical = (value: unknown): string => Array.isArray(value) ? `[${value.map(canonical).join(',')}]` : value && typeof value === 'object'
@@ -82,7 +82,7 @@ export async function createMicrovmExecutor(config: ProviderHostRuntimeConfig, m
 			// the resulting patch may leave the VM; filesystem permissions never fight Codex.
 			const materialized = await materializeSandboxInputs(request);
 			try {
-				const unsigned = { schemaVersion: 'treeseed.sandbox-assignment/v1', assignmentId: request.assignmentId, attempt: Math.max(1, Number(request.assignment.attemptCount ?? 1)), runnerId: request.runnerId,
+				const unsigned = { schemaVersion: 'treeseed.sandbox-assignment/v1', assignmentId: request.assignmentId, attempt: activeSandboxAttempt(request.assignment.attemptCount), runnerId: request.runnerId,
 				providerId: String(request.assignment.capacityProviderId ?? request.assignment.capacity_provider_id ?? ''), teamId: String(request.assignment.teamId ?? request.assignment.team_id ?? ''), projectId: String(request.assignment.projectId ?? request.assignment.project_id ?? ''),
 				profile: profile.id, ...(profile.contract ? { environmentContract: profile.contract } : {}), guestImage: profile.guestImage, guestImageDigest: profile.guestImageDigest,
 				identityManifestDigest: digest(materialized.identityManifest), contextManifestDigest: materialized.contextManifestDigest, resources: { ...profile.resources, durationSeconds: Math.max(60, Number(request.assignment.leaseSeconds ?? 300)) },

@@ -27,7 +27,7 @@ function settlementSeconds(value: unknown) {
 }
 
 export interface ProviderAssignmentRunInput {
-  client: Pick<ProviderProtocolClient, 'renewAssignment' | 'startAssignmentExecution' | 'startAssignmentCloseout' | 'preflightAssignmentCompletion' | 'completeAssignment' | 'returnAssignment' | 'failAssignment' | 'reportAssignmentUsage' | 'respondToAssignmentDiscussion' | 'settleAssignment' | 'createCommunicationTraceEvent'>;
+  client: Pick<ProviderProtocolClient, 'renewAssignment' | 'startAssignmentExecution' | 'startAssignmentCloseout' | 'preflightAssignmentCompletion' | 'completeAssignment' | 'returnAssignment' | 'failAssignment' | 'reportAssignmentUsage' | 'respondToAssignmentDiscussion' | 'settleAssignment' | 'createCommunicationTraceEvent' | 'authorizeAssignmentSource'>;
   executor: AgentExecutor;
   assignment: Record<string, unknown>;
   leaseToken: string;
@@ -101,6 +101,7 @@ export async function runProviderAssignment(input: ProviderAssignmentRunInput) {
 	let traceSequence = 0;
   try {
     result = await input.executor.execute({ assignment: executorAssignment(input.assignment), assignmentId, leaseToken: input.leaseToken, runnerId: input.runnerId, treeDx,
+      authorizeSource: recipientPublicKey => input.client.authorizeAssignmentSource(assignmentId, { runnerId: input.runnerId, leaseToken: input.leaseToken, recipientPublicKey }),
 		emit: (event) => input.client.createCommunicationTraceEvent(assignmentId, { leaseToken: input.leaseToken, runnerId: input.runnerId, sequence: traceSequence++, ...event }).then(() => undefined),
 		signal: executionAbort.signal });
   } catch (error) {

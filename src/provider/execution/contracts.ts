@@ -1,3 +1,5 @@
+import type { SourceWorkspaceResponse } from '@treeseed/sdk/capacity-provider/sandbox';
+
 export interface AssignmentTreeDxFacade {
   readonly projectId: string;
   readonly repositoryId: string | null;
@@ -13,6 +15,8 @@ export interface AgentExecutionRequest {
   leaseToken: string;
   runnerId: string;
   treeDx: AssignmentTreeDxFacade;
+  /** Trusted host callback; never serialized into context, tools or the execution guest. */
+  authorizeSource?: (recipientPublicKey: string) => Promise<SourceWorkspaceResponse>;
 	emit?: (event: { type: string; occurredAt: string; summary: string; payload: Record<string, unknown>; protectedPayload?: Record<string, unknown> }) => Promise<void>;
   signal?: AbortSignal;
 }

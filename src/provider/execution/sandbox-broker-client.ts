@@ -1,6 +1,14 @@
 import { request } from 'node:http';
 import { createReadStream } from 'node:fs';
-import type { SandboxAssignment, SandboxLeaseRenewal, SandboxResult } from '@treeseed/sdk/capacity-provider';
+import type { SandboxAssignment, SandboxLeaseRenewal, SandboxResult, SourceWorkspaceResponse } from '@treeseed/sdk/capacity-provider/sandbox';
+
+export interface SourceJobStatus {
+	state: 'awaiting-authority' | 'building' | 'ready' | 'attaching' | 'attached' | 'failed' | 'stopped';
+	recipientPublicKey: string;
+	expiresAt?: string;
+	leaseId?: string;
+	error?: string;
+}
 
 function call<T>(socketPath: string, method: string, path: string, body?: unknown, signal?: AbortSignal, headers: Record<string, string> = {}) {
 	return new Promise<T>((resolve, reject) => {
@@ -24,6 +32,12 @@ export class SandboxBrokerClient {
 	private path(suffix: string) { return `/v${1}${suffix}`; }
 	status(signal?: AbortSignal) { return call<Record<string, unknown>>(this.socketPath, 'GET', this.path('/status'), undefined, signal); }
 	prepare(assignment: SandboxAssignment, signal?: AbortSignal) { return call<{ sandboxId: string; operationToken: string }>(this.socketPath, 'POST', this.path('/sandboxes'), { assignment }, signal); }
+	sourceStatus(sandboxId: string, token: string, signal?: AbortSignal) {
+		return call<SourceJobStatus>(this.socketPath, 'GET', this.path(`/sandboxes/${encodeURIComponent(sandboxId)}/source/status`), undefined, signal, { authorization: `Bearer ${token}` });
+	}
+	source(sandboxId: string, token: string, operation: 'prepare' | 'attach' | 'renew', response: SourceWorkspaceResponse, signal?: AbortSignal) {
+		return call<SourceJobStatus>(this.socketPath, 'POST', this.path(`/sandboxes/${encodeURIComponent(sandboxId)}/source/${operation}`), response, signal, { authorization: `Bearer ${token}` });
+	}
 	upload(sandboxId: string, token: string, inputId: string, sourcePath: string, bytes: number, signal?: AbortSignal) {
 		return new Promise<void>((resolve, reject) => {
 			const operation = request({ socketPath: this.socketPath, method: 'PUT', path: this.path(`/sandboxes/${encodeURIComponent(sandboxId)}/inputs/${encodeURIComponent(inputId)}`), headers: { authorization: `Bearer ${token}`, 'content-length': String(bytes), 'content-type': 'application/octet-stream' } }, (response) => {

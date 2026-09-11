@@ -1,4 +1,3 @@
-import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { validateContentFrontmatter } from '@treeseed/sdk/content-validation';
 import type { AgentExecutionRequest } from './contracts.ts';
@@ -13,34 +12,6 @@ export function assertObjectiveContentModel(path: string, file: Record<string, u
 	if (file.frontmatterError) throw new Error(`TreeDX objective is not valid Astro content: ${path}: ${String(file.frontmatterError)}`);
 	const validation = validateContentFrontmatter('objective', record(file.frontmatter));
 	if (!validation.ok) throw new Error(`TreeDX objective does not satisfy the SDK objective content model: ${path}: ${validation.diagnostics.map((item) => `${item.field}: ${item.message}`).join('; ')}`);
-}
-
-function command(executable: string, args: string[], cwd?: string) {
-	return new Promise<string>((resolve, reject) => {
-		const child = spawn(executable, args, { cwd, env: { ...process.env, GIT_TERMINAL_PROMPT: '0' }, stdio: ['ignore', 'pipe', 'pipe'] });
-		let stdout = '', stderr = '';
-		child.stdout.setEncoding('utf8'); child.stdout.on('data', (chunk) => { stdout += String(chunk); });
-		child.stderr.setEncoding('utf8'); child.stderr.on('data', (chunk) => { stderr = `${stderr}${chunk}`.slice(-16_000); });
-		child.once('error', reject); child.once('exit', (code) => code === 0 ? resolve(stdout.trim()) : reject(new Error(`${executable} exited ${code}: ${stderr.trim()}`)));
-	});
-}
-
-export function readableCloneUrl(value: string) {
-	const github = /^git@github\.com:([^/]+\/.+?)(?:\.git)?$/u.exec(value);
-	return github ? `https://github.com/${github[1]}.git` : value;
-}
-
-export async function prepareProjectWorkspace(assignment: Record<string, unknown>, workspace: string) {
-	const project = record(record(assignment.workspaceContext).project), repository = record(project.repository);
-	const cloneUrl = readableCloneUrl(text(repository.cloneUrl)); const branch = text(repository.currentBranch) || text(repository.defaultBranch) || 'staging';
-	if (!cloneUrl) throw new Error('Conversation assignment omitted its project source repository checkout authority.');
-	await command('git', ['clone', '--depth', '1', '--single-branch', '--branch', branch, cloneUrl, workspace]);
-	const revision = await command('git', ['rev-parse', 'HEAD'], workspace);
-	const tree = await command('git', ['ls-tree', '-rl', revision], workspace);
-	const entries = tree.split('\n').filter(Boolean).map((line) => /^(\d+)\s+(blob|commit)\s+([0-9a-f]+)(?:\s+(\d+))?\t(.+)$/u.exec(line));
-	if (entries.some((entry) => !entry || entry[2] !== 'blob' || !['100644', '100755'].includes(entry[1]!))) throw new Error('Project snapshot contains a symbolic link, submodule, or unsupported Git object mode.');
-	const files = entries.map((match) => ({ path: match![5]!, bytes: Number(match![4]), gitBlob: match![3]!, mode: match![1]! }));
-	return { projectId: text(project.id), projectSlug: text(project.slug), cloneUrl, branch, revision, root: workspace, fileCount: files.length, files };
 }
 
 function resultPayload(value: unknown) {

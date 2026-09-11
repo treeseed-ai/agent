@@ -6,7 +6,7 @@ import { request as httpsRequest } from 'node:https';
 import { createInterface } from 'node:readline';
 import { chmod, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
-import { sandboxAssignmentSchema, sandboxResultSchema, type SandboxAssignment } from '@treeseed/sdk/capacity-provider';
+import { sandboxAssignmentSchema, sandboxResultSchema, sourceWorkspaceKeySchema, type SandboxAssignment } from '@treeseed/sdk/capacity-provider/sandbox';
 import { providerCredentialValues, providerFailureSummary } from './provider-failure.ts';
 
 const inputRoot = '/run/treeseed-assignment';
@@ -108,10 +108,7 @@ function promptFromContext(context: Record<string, unknown>, reasoningEffort?: s
 	const assignment = record(context.assignment), metadata = record(assignment.metadata), chatProfile = record(metadata.chatProfile), prompt = record(chatProfile.prompt), communication = record(metadata.communication);
 	const sourceText = sources.map((source) => `## ${text(source.layer)} / ${text(source.kind)}: ${text(source.path)||text(source.id)}\nProject: ${text(source.projectId)}\nDigest: ${text(source.digest)}\nDisposition: ${text(source.disposition)}\n\n${text(source.content)}`).join('\n\n');
 	const required = text(communication.requirement) !== 'optional';
-	const projectInjected=text(record(context.projectManifest).materialization)==='private-copy';
-	const projectAccess=projectInjected
-		?'The working directory is a private project repository copy authorized for this assignment.'
-		:'No code repository snapshot was injected. Use the verified context pack first and assignment-scoped TreeDX tools for focused follow-up knowledge; do not claim code inspection that you did not perform.';
+	const projectAccess = `The working directory is the complete project source repository at ${text(record(context.projectManifest).revision)}, with Git history and private writable scratch storage. Use local source and commands when the question requires code inspection. Builds and tests may modify this disposable workspace. Filesystem write access does not grant publication authority. Use TreeDX tools for governed knowledge. Do not claim code inspection you did not perform.`;
 	return `You are exactly ${text(manifest.agentHandle)}. The verified TreeDX context below is ordered by mandatory core, agent-general, activity-specific, and live discussion layers.\n\n${sourceText}\n\nActivity instructions:\n${text(prompt.system)}\n\nActivity task:\n${text(prompt.task) || 'Respond to the committed Discussion message.'}\n\n${required ? 'You were directly addressed and must provide a substantive response.' : 'Respond only if your role adds material value; otherwise return exactly <!-- treeseed:abstain -->.'}\n${projectAccess} Prefer extensionless identifiers such as objectives/core. Do not supply or reason about Git commits for normal TreeDX access; the assignment relay privately enforces consistent views. Do not invoke trsd: the CLI is intentionally absent from assignment guests. Tool and content permissions come from this activity profile. The assigned reasoning effort is ${reasoningEffort || 'provider-default'}. Scale inspection and research depth to that setting and the question. Do not run unrelated broad test suites or exhaustive scans. Do not inspect outside /workspace or disclose credentials. Return only the message to post.\n\nDiscussion message:\n${text(record(context.message).content)}`;
 }
 
@@ -134,15 +131,12 @@ export async function runSandboxGuest() {
 	await mkdir('/workspace/project', { recursive: true, mode: 0o700 });
 	await progress('inputs.ready');
 	if (assignment.contextManifestDigest !== assignment.inputs.find((input) => input.id === 'execution-context')?.digest || assignment.identityManifestDigest !== objectDigest(record(record(context.identity).manifest))) throw new Error('Guest context or identity manifest does not match the signed assignment.');
-	const writableProject = assignment.inputs.some((input) => input.id === 'project-repository' && input.disposition === 'copy-on-write');
-	const patchAuthorized = assignment.outputs.some((output) => output.id === 'project-patch');
-	if (writableProject && patchAuthorized) {
-		await run('/usr/bin/git', ['init', '--quiet'], { cwd: '/workspace/project' });
-		await run('/usr/bin/git', ['config', 'user.name', 'TreeSeed Assignment Baseline'], { cwd: '/workspace/project' });
-		await run('/usr/bin/git', ['config', 'user.email', 'assignment-baseline@treeseed.invalid'], { cwd: '/workspace/project' });
-		await run('/usr/bin/git', ['add', '--all'], { cwd: '/workspace/project' });
-		await run('/usr/bin/git', ['commit', '--quiet', '--allow-empty', '-m', 'Immutable assignment baseline'], { cwd: '/workspace/project' });
-	}
+	const sourceMetadata = record(JSON.parse(await readFile(resolve(inputRoot, 'source.json'), 'utf8')));
+	const source = sourceWorkspaceKeySchema.parse(sourceMetadata.source);
+	if (source.teamId !== assignment.teamId || source.projectId !== assignment.projectId) throw new Error('Attached source does not match assignment scope.');
+	const head = (await run('/usr/bin/git', ['rev-parse', '--verify', 'HEAD^{commit}'], { cwd: '/workspace/project', captureStdout: true, maxStdoutBytes: 128, timeoutMs: 10_000 })).stdout.trim();
+	if (head !== source.commit) throw new Error('Attached source differs from its exact authorized commit.');
+	context.projectManifest = { ...record(context.projectManifest), source, revision: head, mode: sourceMetadata.mode, publication: sourceMetadata.publication };
 	const codexHome = '/workspace/.treeseed/codex', responsePath = '/workspace/.treeseed/response.md'; await mkdir(codexHome, { recursive: true, mode: 0o700 });
 	await writeFile(resolve(codexHome,'config.toml'),codexTreeDxMcpConfig(sandboxId,operationToken,assignment),{mode:0o600});
 	const subscriptionAuth = await readFile(resolve(inputRoot, 'codex-auth.json')).catch(() => null);
@@ -150,7 +144,7 @@ export async function runSandboxGuest() {
 	const relay = subscriptionAuth ? null : await startModelRelay(assignment, sandboxId, operationToken);
 	const subscriptionProxy = subscriptionAuth ? `http://${encodeURIComponent(sandboxId)}:${encodeURIComponent(operationToken)}@10.89.0.1:7444` : null;
 	const events: Record<string, unknown>[] = [], composedPrompt = promptFromContext(context, assignment.modelPolicy.reasoningEffort);
-	const providerArguments = ['exec', '--json', '--ephemeral', '--dangerously-bypass-approvals-and-sandbox', ...(writableProject ? [] : ['--skip-git-repo-check']), '--model', assignment.modelPolicy.model,
+	const providerArguments = ['exec', '--json', '--ephemeral', '--dangerously-bypass-approvals-and-sandbox', '--model', assignment.modelPolicy.model,
 		...codexReasoningArguments(assignment.modelPolicy.reasoningEffort),
 		'--enable', 'code_mode_host', '--disable', 'browser_use', '--disable', 'apps', '--disable', 'multi_agent_v2', '--disable', 'image_generation', '--color', 'never', '--output-last-message', responsePath, '-C', '/workspace/project', '-'];
 	try {
@@ -172,13 +166,6 @@ export async function runSandboxGuest() {
 		await progress('provider.completed');
 		const responseMarkdown = (await readFile(responsePath, 'utf8')).trim(); if (!responseMarkdown) throw new Error('Execution provider returned an empty response.');
 		const artifacts: Array<{ id: string; path: string; digest: string; mediaType: string; bytes: number }> = [];
-		if (writableProject && patchAuthorized) {
-			const patch = (await run('/usr/bin/git', ['diff', '--binary', '--full-index', 'HEAD'], { cwd: '/workspace/project', captureStdout: true, maxStdoutBytes: assignment.outputs.find((output) => output.id === 'project-patch')?.maxBytes })).stdout;
-			if (patch) {
-				const patchPath = resolve(outputRoot, 'project.patch'); await writeFile(patchPath, patch, { mode: 0o600 });
-				artifacts.push({ id: 'project-patch', path: '/run/treeseed-output/project.patch', digest: await fileDigest(patchPath), mediaType: 'application/vnd.treeseed.git-patch', bytes: Buffer.byteLength(patch) });
-			}
-		}
 		const completed = [...events].reverse().find((event) => text(event.type).includes('completed')) ?? {}, elapsedSeconds = Number(process.hrtime.bigint() - started) / 1e9, usageAfter = process.resourceUsage();
 		const result = sandboxResultSchema.parse({ schemaVersion: 'treeseed.sandbox-result/v1', sandboxId, assignmentId: assignment.assignmentId,
 			status: responseMarkdown === '<!-- treeseed:abstain -->' ? 'completed' : 'completed', summary: 'Kata assignment completed.', responseMarkdown,

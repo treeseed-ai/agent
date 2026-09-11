@@ -5,6 +5,7 @@ import type { AgentExecutor } from '../../src/provider/execution/contracts.ts';
 function client() {
 	return {
 		authorizeAssignmentSource: vi.fn(),
+		readAssignmentSourceChunk: vi.fn(), publishAssignmentSourceCandidate: vi.fn(),
 		createCommunicationTraceEvent: vi.fn().mockResolvedValue({ ok: true }),
 		startAssignmentExecution: vi.fn().mockResolvedValue({ ok: true }),
 		renewAssignment: vi.fn().mockResolvedValue({ ok: true, payload: { leaseExpiresAt: new Date(Date.now() + 60_000).toISOString() } }),

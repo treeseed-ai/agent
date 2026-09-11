@@ -8,6 +8,7 @@ import type { AgentExecutor } from './contracts.ts';
 import { SandboxBrokerClient } from './sandbox-broker-client.ts';
 import { materializeSandboxInputs } from './sandbox-input-materializer.ts';
 import { prepareAssignmentSource, renewAssignmentSource, type ActiveSource } from './source-workspace.ts';
+import { publishSourceCandidate } from './source-candidate.ts';
 
 const canonical = (value: unknown): string => Array.isArray(value) ? `[${value.map(canonical).join(',')}]` : value && typeof value === 'object'
 	? `{${Object.entries(value as Record<string, unknown>).filter(([, item]) => item !== undefined).sort(([a], [b]) => a.localeCompare(b)).map(([key, item]) => `${JSON.stringify(key)}:${canonical(item)}`).join(',')}}` : JSON.stringify(value);
@@ -103,13 +104,15 @@ export async function createMicrovmExecutor(config: ProviderHostRuntimeConfig, m
 				try {
 					const current = active.get(request.assignmentId)!;
 					current.source = await prepareAssignmentSource(client, prepared, request);
-					if (current.source.authorization.mode === 'work') throw new Error('Work source remains retained until durable candidate publication is available.');
+					if (current.source.authorization.mode === 'work' && current.source.authorization.publication !== 'candidate-only') throw new Error('Work execution requires explicit durable source-candidate publication authority.');
 					for (const input of materialized.inputs) await client.upload(prepared.sandboxId, prepared.operationToken, input.id, input.sourcePath, input.bytes, request.signal);
 					await request.emit?.({ type: 'execution.started', occurredAt: new Date().toISOString(), summary: `Kata execution started in ${prepared.sandboxId}.`, payload: { sandboxId: prepared.sandboxId, model: assignment.modelPolicy.model, isolation: 'microvm' } });
 					const toolsAbort=new AbortController();
 					const toolPump=(async()=>{while(!toolsAbort.signal.aborted){const pending=await client.nextToolRequest(prepared.sandboxId,prepared.operationToken,toolsAbort.signal).catch((error)=>{if(toolsAbort.signal.aborted)return {request:null};throw error;});if(pending.request){try{const value=await executeAssignmentTreeDxTool(request,pending.request.tool,pending.request.arguments);await client.completeToolRequest(prepared.sandboxId,prepared.operationToken,pending.request.id,{result:value},request.signal);}catch(error){await client.completeToolRequest(prepared.sandboxId,prepared.operationToken,pending.request.id,{error:error instanceof Error?error.message:String(error)},request.signal);}}else await new Promise((resolve)=>setTimeout(resolve,50));}})();
 					try{result = sandboxResultSchema.parse(await client.execute(prepared.sandboxId, prepared.operationToken, {}, request.signal));}finally{toolsAbort.abort();await toolPump.catch(()=>undefined);}
 					artifacts = await Promise.all(result.artifacts.map(async (artifact) => ({ ...artifact, content: (await client.downloadArtifact(prepared.sandboxId, prepared.operationToken, artifact.id, artifact.bytes, request.signal)).toString('utf8') })));
+					if (result.status === 'completed' && current.source.authorization.mode === 'work') await publishSourceCandidate(client, prepared, current.source, assignment, result, request,
+						candidate => ({ keyId, algorithm: 'Ed25519', value: sign(null, Buffer.from(canonical(candidate)), signingKey).toString('base64url') }));
 				} finally {
 					request.signal?.removeEventListener('abort', cancelSandbox);
 					const receipt = await client.destroy(prepared.sandboxId, prepared.operationToken).catch(() => null); teardown = receipt && typeof receipt.teardown === 'object' ? receipt.teardown as Record<string, unknown> : teardown;

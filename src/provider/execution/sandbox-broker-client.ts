@@ -1,6 +1,8 @@
 import { request } from 'node:http';
 import { createReadStream } from 'node:fs';
-import type { SandboxAssignment, SandboxLeaseRenewal, SandboxResult, SourceWorkspaceResponse } from '@treeseed/sdk/capacity-provider/sandbox';
+import type { SandboxAssignment, SandboxLeaseRenewal, SandboxResult, SourceWorkspaceResponse, SourceCandidateAttestation, SourceCandidateReceipt } from '@treeseed/sdk/capacity-provider/sandbox';
+
+export interface CandidateStatus { state: 'verifying' | 'ready' | 'accepted' | 'retained'; candidate?: SourceCandidateAttestation; receipt?: SourceCandidateReceipt }
 
 export interface SourceJobStatus {
 	state: 'awaiting-authority' | 'building' | 'ready' | 'attaching' | 'attached' | 'failed' | 'stopped';
@@ -14,7 +16,7 @@ function call<T>(socketPath: string, method: string, path: string, body?: unknow
 	return new Promise<T>((resolve, reject) => {
 		const encoded = body === undefined ? undefined : Buffer.from(JSON.stringify(body));
 		const operation = request({ socketPath, method, path, headers: { ...headers, ...(encoded ? { 'content-type': 'application/json', 'content-length': String(encoded.byteLength) } : {}) } }, (response) => {
-			let value = ''; response.setEncoding('utf8'); response.on('data', (chunk) => { value += chunk; });
+			let value = '', bytes = 0; response.setEncoding('utf8'); response.on('data', (chunk: string) => { bytes += Buffer.byteLength(chunk); if (bytes > 16_777_216) operation.destroy(new Error('Sandbox broker response exceeds its bounded limit.')); else value += chunk; });
 			response.on('end', () => {
 				let parsed: unknown; try { parsed = value ? JSON.parse(value) : {}; } catch { return reject(new Error('Sandbox broker returned invalid JSON.')); }
 				if ((response.statusCode ?? 500) >= 400) return reject(new Error(String((parsed as Record<string, unknown>).error ?? `Sandbox broker returned ${response.statusCode}.`)));
@@ -37,6 +39,21 @@ export class SandboxBrokerClient {
 	}
 	source(sandboxId: string, token: string, operation: 'prepare' | 'attach' | 'renew', response: SourceWorkspaceResponse, signal?: AbortSignal) {
 		return call<SourceJobStatus>(this.socketPath, 'POST', this.path(`/sandboxes/${encodeURIComponent(sandboxId)}/source/${operation}`), response, signal, { authorization: `Bearer ${token}` });
+	}
+	sourceChunk(sandboxId: string, token: string, authority: SourceWorkspaceResponse, chunk: unknown, signal?: AbortSignal) {
+		return call<{ ready: boolean; received: number; chunks: number }>(this.socketPath, 'POST', this.path(`/sandboxes/${encodeURIComponent(sandboxId)}/source/chunk`), { authority, chunk }, signal, { authorization: `Bearer ${token}` });
+	}
+	candidateStatus(sandboxId: string, token: string, signal?: AbortSignal) {
+		return call<CandidateStatus>(this.socketPath, 'GET', this.path(`/sandboxes/${encodeURIComponent(sandboxId)}/candidate/status`), undefined, signal, { authorization: `Bearer ${token}` });
+	}
+	candidateStart(sandboxId: string, token: string, authority: SourceWorkspaceResponse, commit: string, signal?: AbortSignal) {
+		return call<CandidateStatus>(this.socketPath, 'POST', this.path(`/sandboxes/${encodeURIComponent(sandboxId)}/candidate/start`), { authority, commit }, signal, { authorization: `Bearer ${token}` });
+	}
+	candidateChunk(sandboxId: string, token: string, index: number, signal?: AbortSignal) {
+		return call<{ index: number; digest: string; content: string }>(this.socketPath, 'POST', this.path(`/sandboxes/${encodeURIComponent(sandboxId)}/candidate/chunk`), { index }, signal, { authorization: `Bearer ${token}` });
+	}
+	candidateAccept(sandboxId: string, token: string, authority: SourceWorkspaceResponse, receipt: SourceCandidateReceipt, signal?: AbortSignal) {
+		return call<{ accepted: boolean; receipt: SourceCandidateReceipt }>(this.socketPath, 'POST', this.path(`/sandboxes/${encodeURIComponent(sandboxId)}/candidate/accept`), { authority, receipt }, signal, { authorization: `Bearer ${token}` });
 	}
 	upload(sandboxId: string, token: string, inputId: string, sourcePath: string, bytes: number, signal?: AbortSignal) {
 		return new Promise<void>((resolve, reject) => {

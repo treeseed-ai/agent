@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { assertAgentModeRun } from '@treeseed/sdk/agent-capacity';
 import { runProviderAssignment } from '../../src/provider/operations/runner.ts';
 import type { AgentExecutor } from '../../src/provider/execution/contracts.ts';
 
@@ -101,6 +102,13 @@ describe('catalog-driven provider assignment runner', () => {
 	it('preflights real artifacts, records the mode run, settles once, and attaches the receipt to completion', async () => {
 		const api = client(), receiptDigest = 'a'.repeat(64), artifactManifest = { schemaVersion: 1, modeRunId: 'mode-run', assignmentId: 'assignment-1' };
 		api.preflightAssignmentCompletion.mockResolvedValue({ receiptDigest });
+		api.createAssignmentModeRun.mockImplementation(async (_id, body) => {
+			const now = new Date().toISOString();
+			return assertAgentModeRun({ teamId: 'team', projectId: 'project', providerAssignmentId: 'assignment-1',
+				capacityProviderId: 'provider', projectAgentClassId: 'reviewer', selectedInput: {},
+				capacityEnvelope: { teamId: 'team', projectId: 'project', mode: 'planning' }, traceRefs: {}, metadata: {},
+				createdAt: now, updatedAt: now, ...body });
+		});
 		await runProviderAssignment({ client: api, treeDx, leaseToken: 'lease', runnerId: 'runner', assignment: { id: 'assignment-1', mode: 'planning' },
 			executor: { id: 'fake', observe: async () => ({ available: true }), execute: async () => ({ status: 'completed', summary: 'Reviewed',
 				outputs: { artifactManifest }, usage: [{ activeSeconds: 4.1, elapsedSeconds: 5.2 }] }) } });

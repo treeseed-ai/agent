@@ -10,6 +10,7 @@ import { materializeSandboxInputs } from './sandbox-input-materializer.ts';
 import { activeSandboxAttempt, prepareAssignmentSource, renewAssignmentSource, type ActiveSource } from './source-workspace.ts';
 import { publishSourceCandidate } from './source-candidate.ts';
 import { createReviewOutput } from './activity/review-output.ts';
+import { missingReviewResult, reviewToolOutcome, type ReviewToolOutcome } from './activity/review-diagnostics.ts';
 import { assignmentRuntimeSeconds } from './activity/context.ts';
 
 const canonical = (value: unknown): string => Array.isArray(value) ? `[${value.map(canonical).join(',')}]` : value && typeof value === 'object'
@@ -72,6 +73,7 @@ export async function createMicrovmExecutor(config: ProviderHostRuntimeConfig, m
 		},
 		async execute(request) {
 			const review = createReviewOutput(request);
+			const toolOutcomes: ReviewToolOutcome[] = [];
 			const brokerStatus = await client.status().catch(() => ({} as Record<string, unknown>));
 			const metadata = request.assignment.metadata && typeof request.assignment.metadata === 'object' ? request.assignment.metadata as Record<string, unknown> : {};
 			const reasoningEffort = reasoningEffortFromAssignmentMetadata(metadata);
@@ -111,7 +113,7 @@ export async function createMicrovmExecutor(config: ProviderHostRuntimeConfig, m
 					for (const input of materialized.inputs) await client.upload(prepared.sandboxId, prepared.operationToken, input.id, input.sourcePath, input.bytes, request.signal);
 					await request.emit?.({ type: 'execution.started', occurredAt: new Date().toISOString(), summary: `Kata execution started in ${prepared.sandboxId}.`, payload: { sandboxId: prepared.sandboxId, model: assignment.modelPolicy.model, isolation: 'microvm' } });
 					const toolsAbort=new AbortController();
-					const toolPump=(async()=>{while(!toolsAbort.signal.aborted){const pending=await client.nextToolRequest(prepared.sandboxId,prepared.operationToken,toolsAbort.signal).catch((error)=>{if(toolsAbort.signal.aborted)return {request:null};throw error;});if(pending.request){try{const value=pending.request.tool==='treeseed_publish_review'?await review.publish(pending.request.arguments):await executeAssignmentTreeDxTool(request,pending.request.tool,pending.request.arguments);await client.completeToolRequest(prepared.sandboxId,prepared.operationToken,pending.request.id,{result:value},request.signal);}catch(error){await client.completeToolRequest(prepared.sandboxId,prepared.operationToken,pending.request.id,{error:error instanceof Error?error.message:String(error)},request.signal);}}else await new Promise((resolve)=>setTimeout(resolve,50));}})();
+					const toolPump=(async()=>{while(!toolsAbort.signal.aborted){const pending=await client.nextToolRequest(prepared.sandboxId,prepared.operationToken,toolsAbort.signal).catch((error)=>{if(toolsAbort.signal.aborted)return {request:null};throw error;});if(pending.request){try{const value=pending.request.tool==='treeseed_publish_review'?await review.publish(pending.request.arguments):await executeAssignmentTreeDxTool(request,pending.request.tool,pending.request.arguments);toolOutcomes.push(reviewToolOutcome(pending.request.tool));await client.completeToolRequest(prepared.sandboxId,prepared.operationToken,pending.request.id,{result:value},request.signal);}catch(error){toolOutcomes.push(reviewToolOutcome(pending.request.tool,error,[request.leaseToken,prepared.operationToken]));await client.completeToolRequest(prepared.sandboxId,prepared.operationToken,pending.request.id,{error:error instanceof Error?error.message:String(error)},request.signal);}if(toolOutcomes.length>32)toolOutcomes.shift();}else await new Promise((resolve)=>setTimeout(resolve,50));}})();
 					try{result = sandboxResultSchema.parse(await client.execute(prepared.sandboxId, prepared.operationToken, {}, request.signal));}finally{toolsAbort.abort();await toolPump.catch(()=>undefined);}
 					artifacts = await Promise.all(result.artifacts.map(async (artifact) => ({ ...artifact, content: (await client.downloadArtifact(prepared.sandboxId, prepared.operationToken, artifact.id, artifact.bytes, request.signal)).toString('utf8') })));
 					if (result.status === 'completed' && current.source.authorization.mode === 'work') await publishSourceCandidate(client, prepared, current.source, assignment, result, request,
@@ -133,7 +135,9 @@ export async function createMicrovmExecutor(config: ProviderHostRuntimeConfig, m
 				if (environmentReceipt) await request.emit?.({ type: 'sandbox.environment.attested', occurredAt: environmentReceipt.createdAt, summary: 'Provider environment attestation recorded.', payload: { environmentReceipt } });
 				if (result.status === 'completed') {
 					if (request.assignment.executionKind === 'workday') {
-						if (!review.manifest) throw new Error('Workday execution produced no authorized, verified artifact manifest.');
+						await request.emit?.({ type: review.manifest ? 'execution.completed' : 'execution.failed', occurredAt: new Date().toISOString(), summary: review.manifest ? 'Review artifact verified.' : 'Review artifact missing.',
+							payload: { sandboxId: result.sandboxId, model: assignment.modelPolicy.model, usage: [result.usage], toolOutcomes, artifactVerified: Boolean(review.manifest), teardown } });
+						if (!review.manifest) return missingReviewResult(result.usage, toolOutcomes, { sandboxId: result.sandboxId, teardown, environmentReceipt });
 						return { status: 'completed', summary: result.responseMarkdown || result.summary,
 							outputs: { sandboxId: result.sandboxId, teardown, environmentReceipt, artifactManifest: review.manifest }, artifacts, usage: [result.usage] };
 					}

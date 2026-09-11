@@ -12,6 +12,7 @@ import { publishSourceCandidate } from './source-candidate.ts';
 import { createReviewOutput } from './activity/review-output.ts';
 import { missingReviewResult, reviewToolOutcome, type ReviewToolOutcome } from './activity/review-diagnostics.ts';
 import { assignmentRuntimeSeconds } from './activity/context.ts';
+import { RenewalDrain } from './activity/renewal-drain.ts';
 
 const canonical = (value: unknown): string => Array.isArray(value) ? `[${value.map(canonical).join(',')}]` : value && typeof value === 'object'
 	? `{${Object.entries(value as Record<string, unknown>).filter(([, item]) => item !== undefined).sort(([a], [b]) => a.localeCompare(b)).map(([key, item]) => `${JSON.stringify(key)}:${canonical(item)}`).join(',')}}` : JSON.stringify(value);
@@ -56,15 +57,17 @@ export async function createMicrovmExecutor(config: ProviderHostRuntimeConfig, m
 	const client = new SandboxBrokerClient(manifest.sandbox.brokerSocket);
 	const identity = await loadCapacityProviderIdentity({ ref: manifest.identity.privateKeyRef, baseDirectory: config.manifestPath ? dirname(resolve(config.manifestPath)) : process.cwd(), dataDirectory: config.dataDir, env: process.env });
 	const signingKey = createPrivateKey({ key: identity.privateJwk as never, format: 'jwk' }), keyId = `provider-${createHash('sha256').update(identity.publicJwk.x).digest('hex').slice(0, 16)}`;
-	const active = new Map<string, { sandboxId: string; operationToken: string; providerId: string; teamId: string; source?: ActiveSource }>();
+	const active = new Map<string, { sandboxId: string; operationToken: string; providerId: string; teamId: string; source?: ActiveSource; renewals: RenewalDrain }>();
 	return {
 		id: adapter.id,
 		async renewLease(assignmentId, leaseExpiresAt) {
 			const current = active.get(assignmentId); if (!current) return;
 			const unsigned = { schemaVersion: 'treeseed.sandbox-lease-renewal/v1' as const, sandboxId: current.sandboxId, assignmentId, providerId: current.providerId, teamId: current.teamId, leaseExpiresAt, issuedAt: new Date().toISOString() };
 			const renewal = sandboxLeaseRenewalSchema.parse({ ...unsigned, signature: { keyId, algorithm: 'Ed25519', value: sign(null, Buffer.from(canonical(unsigned)), signingKey).toString('base64url') } });
-			await client.renew(current.sandboxId, current.operationToken, renewal);
-			await renewAssignmentSource(client, current);
+			await current.renewals.run(async () => {
+				await client.renew(current.sandboxId, current.operationToken, renewal);
+				await renewAssignmentSource(client, current);
+			});
 		},
 		async observe() {
 			const capabilities = [...new Set(adapter.offers.flatMap(({ offer }) => offer.capabilities.map(({ id }) => id)))];
@@ -100,7 +103,7 @@ export async function createMicrovmExecutor(config: ProviderHostRuntimeConfig, m
 				leaseExpiresAt: String(request.assignment.leaseExpiresAt ?? new Date(Date.now() + 300_000).toISOString()) };
 				const value = sign(null, Buffer.from(canonical(unsigned)), signingKey).toString('base64url');
 				const assignment = sandboxAssignmentSchema.parse({ ...unsigned, signature: { keyId, algorithm: 'Ed25519', value } }) as SandboxAssignment;
-				const prepared = await client.prepare(assignment, request.signal); active.set(request.assignmentId, { sandboxId: prepared.sandboxId, operationToken: prepared.operationToken, providerId: assignment.providerId, teamId: assignment.teamId }); let result; let artifacts: Record<string, unknown>[] = []; let teardown: Record<string, unknown> = { verified: false, completedAt: null };
+				const prepared = await client.prepare(assignment, request.signal); active.set(request.assignmentId, { sandboxId: prepared.sandboxId, operationToken: prepared.operationToken, providerId: assignment.providerId, teamId: assignment.teamId, renewals: new RenewalDrain() }); let result; let artifacts: Record<string, unknown>[] = []; let teardown: Record<string, unknown> = { verified: false, completedAt: null };
 				const cancelSandbox = () => { void client.cancel(prepared.sandboxId, prepared.operationToken).catch(() => undefined); };
 				if (request.signal?.aborted) cancelSandbox(); else request.signal?.addEventListener('abort', cancelSandbox, { once: true });
 				try {
@@ -120,8 +123,10 @@ export async function createMicrovmExecutor(config: ProviderHostRuntimeConfig, m
 						candidate => ({ keyId, algorithm: 'Ed25519', value: sign(null, Buffer.from(canonical(candidate)), signingKey).toString('base64url') }));
 				} finally {
 					request.signal?.removeEventListener('abort', cancelSandbox);
-					const receipt = await client.destroy(prepared.sandboxId, prepared.operationToken).catch(() => null); teardown = receipt && typeof receipt.teardown === 'object' ? receipt.teardown as Record<string, unknown> : teardown;
+					const renewals = active.get(request.assignmentId)?.renewals;
 					active.delete(request.assignmentId);
+					await renewals?.close();
+					const receipt = await client.destroy(prepared.sandboxId, prepared.operationToken).catch(() => null); teardown = receipt && typeof receipt.teardown === 'object' ? receipt.teardown as Record<string, unknown> : teardown;
 					await request.emit?.({ type: 'sandbox.destroyed', occurredAt: new Date().toISOString(), summary: `Kata sandbox ${prepared.sandboxId} teardown ${teardown.verified === true ? 'verified' : 'could not be verified'}.`, payload: { sandboxId: prepared.sandboxId, teardown } });
 				}
 				if (!result) throw new Error('Sandbox broker returned no assignment result.');

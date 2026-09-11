@@ -47,7 +47,7 @@ export function createReviewOutput(request: AgentExecutionRequest): ReviewOutput
       const contentPath = `${root === '.' ? '' : `${root}/`}notes/review-${key}.mdx`, content = `---\n${stringify(frontmatter)}---\n\n${body}\n`;
       if (!Array.isArray(outputs.paths) || !outputs.paths.some(pattern => typeof pattern === 'string' && matchesGlob(contentPath, pattern))) throw new Error('Review path is outside the assigned output boundary.');
       const path = { projectId: request.treeDx.projectId, workspaceId: request.treeDx.workspaceId };
-      await request.treeDx.invoke('treedx.workspaces.files.write', { path, query: { path: contentPath }, body: { content } }, { idempotencyKey: `review-write:${key}` });
+      await request.treeDx.invoke('treedx.workspaces.files.batch', { path, body: { files: [{ path: contentPath, content }] } }, { idempotencyKey: `review-write:${key}` });
       const committed = payload(await request.treeDx.invoke('treedx.workspaces.commit', { path, body: { message: title,
         author: { name: String(request.assignment.agentId), email: 'agent@treeseed.invalid' } } }, { idempotencyKey: `review-commit:${key}` }));
       const commitSha = String(committed.commitSha ?? '');

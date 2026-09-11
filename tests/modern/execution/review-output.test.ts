@@ -2,11 +2,14 @@ import { describe, expect, it, vi } from 'vitest';
 import { createReviewOutput } from '../../../src/provider/execution/activity/review-output.ts';
 import type { AgentExecutionRequest } from '../../../src/provider/execution/contracts.ts';
 import { assignmentRuntimeSeconds } from '../../../src/provider/execution/activity/context.ts';
+import { controlPlaneOperation } from '@treeseed/sdk/operator-contracts';
 
 function fixture() {
   let bytes = '';
   const invoke = vi.fn(async (operation: string, value: Record<string, any>): Promise<Record<string, unknown>> => {
-    if (operation === 'treedx.workspaces.files.write') { bytes = value.body.content; return { path: value.query.path }; }
+    const schema = controlPlaneOperation(operation).schema;
+    schema.path.parse(value.path); schema.query.parse(value.query ?? {}); schema.body.parse(value.body);
+    if (operation === 'treedx.workspaces.files.batch') { bytes = value.body.files[0].content; return { files: [{ path: value.body.files[0].path }] }; }
     if (operation === 'treedx.workspaces.commit') return { commitSha: 'a'.repeat(40) };
     if (operation === 'treedx.repositories.files.read') return { files: [{ content: bytes }] };
     throw new Error('Unexpected operation');
@@ -34,10 +37,10 @@ describe('assignment-scoped review publication', () => {
     const receipt = await output.publish({ kind: 'concern', title: 'Missing recovery evidence', body: 'Inspected the implementation: recovery acceptance is not yet demonstrated.' });
     expect(receipt.kind).toBe('concern');
     expect(output.manifest?.contentReferences[0]).toMatchObject({ subjectId: 'proposal-subject', artifactKind: 'proposal_feedback_note', commitSha: 'a'.repeat(40) });
-    expect(invoke.mock.calls[0][1].body.content).toContain('feedback_kind: concern');
-    expect(invoke.mock.calls[0][1].body.content).not.toContain('private');
+    expect(invoke.mock.calls[0][1].body.files[0].content).toContain('feedback_kind: concern');
+    expect(invoke.mock.calls[0][1].body.files[0].content).not.toContain('private');
     expect(output.manifest?.toolEvents[0].status).toBe('completed');
-    expect(invoke.mock.calls.map(call => call[0])).toEqual(['treedx.workspaces.files.write', 'treedx.workspaces.commit', 'treedx.repositories.files.read']);
+    expect(invoke.mock.calls.map(call => call[0])).toEqual(['treedx.workspaces.files.batch', 'treedx.workspaces.commit', 'treedx.repositories.files.read']);
   });
   it.each(['conversation', 'missing-permission', 'wrong-subject'])('rejects %s without issuing a mutation', async boundary => {
     const { request, invoke } = fixture();

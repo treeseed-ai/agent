@@ -7,6 +7,8 @@ import { loadCapacityProviderIdentity } from '../accounts/identity.ts';
 import type { AgentExecutor } from './contracts.ts';
 import { SandboxBrokerClient } from './sandbox-broker-client.ts';
 import { materializeSandboxInputs } from './sandbox-input-materializer.ts';
+import { prepareAssignmentSource, renewAssignmentSource, type ActiveSource } from './source-workspace.ts';
+import { publishSourceCandidate } from './source-candidate.ts';
 
 const canonical = (value: unknown): string => Array.isArray(value) ? `[${value.map(canonical).join(',')}]` : value && typeof value === 'object'
 	? `{${Object.entries(value as Record<string, unknown>).filter(([, item]) => item !== undefined).sort(([a], [b]) => a.localeCompare(b)).map(([key, item]) => `${JSON.stringify(key)}:${canonical(item)}`).join(',')}}` : JSON.stringify(value);
@@ -51,7 +53,7 @@ export async function createMicrovmExecutor(config: ProviderHostRuntimeConfig, m
 	const client = new SandboxBrokerClient(manifest.sandbox.brokerSocket);
 	const identity = await loadCapacityProviderIdentity({ ref: manifest.identity.privateKeyRef, baseDirectory: config.manifestPath ? dirname(resolve(config.manifestPath)) : process.cwd(), dataDirectory: config.dataDir, env: process.env });
 	const signingKey = createPrivateKey({ key: identity.privateJwk as never, format: 'jwk' }), keyId = `provider-${createHash('sha256').update(identity.publicJwk.x).digest('hex').slice(0, 16)}`;
-	const active = new Map<string, { sandboxId: string; operationToken: string; providerId: string; teamId: string }>();
+	const active = new Map<string, { sandboxId: string; operationToken: string; providerId: string; teamId: string; source?: ActiveSource }>();
 	return {
 		id: adapter.id,
 		async renewLease(assignmentId, leaseExpiresAt) {
@@ -59,6 +61,7 @@ export async function createMicrovmExecutor(config: ProviderHostRuntimeConfig, m
 			const unsigned = { schemaVersion: 'treeseed.sandbox-lease-renewal/v1' as const, sandboxId: current.sandboxId, assignmentId, providerId: current.providerId, teamId: current.teamId, leaseExpiresAt, issuedAt: new Date().toISOString() };
 			const renewal = sandboxLeaseRenewalSchema.parse({ ...unsigned, signature: { keyId, algorithm: 'Ed25519', value: sign(null, Buffer.from(canonical(unsigned)), signingKey).toString('base64url') } });
 			await client.renew(current.sandboxId, current.operationToken, renewal);
+			await renewAssignmentSource(client, current);
 		},
 		async observe() {
 			const capabilities = [...new Set(adapter.offers.flatMap(({ offer }) => offer.capabilities.map(({ id }) => id)))];
@@ -77,7 +80,7 @@ export async function createMicrovmExecutor(config: ProviderHostRuntimeConfig, m
 			const advertisedCapabilities = v5Binding.offer.capabilities.map(({ id }) => id);
 			// Every guest receives a private writable project copy. Activity policy controls whether
 			// the resulting patch may leave the VM; filesystem permissions never fight Codex.
-			const materialized = await materializeSandboxInputs(request, true);
+			const materialized = await materializeSandboxInputs(request);
 			try {
 				const unsigned = { schemaVersion: 'treeseed.sandbox-assignment/v1', assignmentId: request.assignmentId, attempt: Math.max(1, Number(request.assignment.attemptCount ?? 1)), runnerId: request.runnerId,
 				providerId: String(request.assignment.capacityProviderId ?? request.assignment.capacity_provider_id ?? ''), teamId: String(request.assignment.teamId ?? request.assignment.team_id ?? ''), projectId: String(request.assignment.projectId ?? request.assignment.project_id ?? ''),
@@ -85,10 +88,9 @@ export async function createMicrovmExecutor(config: ProviderHostRuntimeConfig, m
 				identityManifestDigest: digest(materialized.identityManifest), contextManifestDigest: materialized.contextManifestDigest, resources: { ...profile.resources, durationSeconds: Math.max(60, Number(request.assignment.leaseSeconds ?? 300)) },
 				inputs: materialized.inputs.map(({ sourcePath: _sourcePath, ...input }) => input), outputs: [
 					{ id: 'result', path: '/run/treeseed-output/result.json', mediaType: 'application/json', maxBytes: profile.resources.outputBytes },
-					...(profile.id === 'read' ? [] : [{ id: 'project-patch', path: '/run/treeseed-output/project.patch', mediaType: 'application/vnd.treeseed.git-patch', maxBytes: profile.resources.outputBytes }]),
 				],
 				network: { defaultDeny: true as const, relayUrl: 'https://10.89.0.1:7443', allowedServices: ['model-gateway', 'codex-subscription', ...(request.treeDx.workspaceId ? ['treedx-relay'] : [])], ...(profile.id === 'connected' && typeof metadata.developmentSessionId === 'string' ? { connectedDevelopmentSessionId: metadata.developmentSessionId } : {}) },
-				modelPolicy: { provider: 'openai', model: adapter.model?.model ?? 'gpt-5.4', ...(reasoningEffort ? { reasoningEffort } : {}), capabilities: advertisedCapabilities, ...(manifest.capacity.maxInputTokens ? { maxInputTokens: manifest.capacity.maxInputTokens } : {}), ...(manifest.capacity.maxOutputTokens ? { maxOutputTokens: manifest.capacity.maxOutputTokens } : {}), ...(manifest.capacity.maxCost ? { maxCost: manifest.capacity.maxCost } : {}) },
+					modelPolicy: { provider: 'openai', model: adapter.model?.model ?? 'gpt-5.6-terra', ...(reasoningEffort ? { reasoningEffort } : {}), capabilities: advertisedCapabilities, ...(manifest.capacity.maxInputTokens ? { maxInputTokens: manifest.capacity.maxInputTokens } : {}), ...(manifest.capacity.maxOutputTokens ? { maxOutputTokens: manifest.capacity.maxOutputTokens } : {}), ...(manifest.capacity.maxCost ? { maxCost: manifest.capacity.maxCost } : {}) },
 				credentialHandles: (adapter.credentialProfiles ?? []).map((id) => ({ id, profileId: id, revealAllowed: false as const })), treeDxHandleIds: request.treeDx.workspaceId ? [request.treeDx.workspaceId] : [],
 				leaseExpiresAt: String(request.assignment.leaseExpiresAt ?? new Date(Date.now() + 300_000).toISOString()) };
 				const value = sign(null, Buffer.from(canonical(unsigned)), signingKey).toString('base64url');
@@ -100,12 +102,17 @@ export async function createMicrovmExecutor(config: ProviderHostRuntimeConfig, m
 					identityManifestDigest: assignment.identityManifestDigest, contextManifestDigest: assignment.contextManifestDigest, inputs: assignment.inputs.map(({ id, digest: inputDigest, bytes, disposition, mediaType, targetPath }) => ({ id, digest: inputDigest, bytes, disposition, mediaType, targetPath })) },
 					protectedPayload: { identityManifest: materialized.identityManifest, contextManifest: materialized.context } });
 				try {
+					const current = active.get(request.assignmentId)!;
+					current.source = await prepareAssignmentSource(client, prepared, request);
+					if (current.source.authorization.mode === 'work' && current.source.authorization.publication !== 'candidate-only') throw new Error('Work execution requires explicit durable source-candidate publication authority.');
 					for (const input of materialized.inputs) await client.upload(prepared.sandboxId, prepared.operationToken, input.id, input.sourcePath, input.bytes, request.signal);
 					await request.emit?.({ type: 'execution.started', occurredAt: new Date().toISOString(), summary: `Kata execution started in ${prepared.sandboxId}.`, payload: { sandboxId: prepared.sandboxId, model: assignment.modelPolicy.model, isolation: 'microvm' } });
 					const toolsAbort=new AbortController();
 					const toolPump=(async()=>{while(!toolsAbort.signal.aborted){const pending=await client.nextToolRequest(prepared.sandboxId,prepared.operationToken,toolsAbort.signal).catch((error)=>{if(toolsAbort.signal.aborted)return {request:null};throw error;});if(pending.request){try{const value=await executeAssignmentTreeDxTool(request,pending.request.tool,pending.request.arguments);await client.completeToolRequest(prepared.sandboxId,prepared.operationToken,pending.request.id,{result:value},request.signal);}catch(error){await client.completeToolRequest(prepared.sandboxId,prepared.operationToken,pending.request.id,{error:error instanceof Error?error.message:String(error)},request.signal);}}else await new Promise((resolve)=>setTimeout(resolve,50));}})();
 					try{result = sandboxResultSchema.parse(await client.execute(prepared.sandboxId, prepared.operationToken, {}, request.signal));}finally{toolsAbort.abort();await toolPump.catch(()=>undefined);}
 					artifacts = await Promise.all(result.artifacts.map(async (artifact) => ({ ...artifact, content: (await client.downloadArtifact(prepared.sandboxId, prepared.operationToken, artifact.id, artifact.bytes, request.signal)).toString('utf8') })));
+					if (result.status === 'completed' && current.source.authorization.mode === 'work') await publishSourceCandidate(client, prepared, current.source, assignment, result, request,
+						candidate => ({ keyId, algorithm: 'Ed25519', value: sign(null, Buffer.from(canonical(candidate)), signingKey).toString('base64url') }));
 				} finally {
 					request.signal?.removeEventListener('abort', cancelSandbox);
 					const receipt = await client.destroy(prepared.sandboxId, prepared.operationToken).catch(() => null); teardown = receipt && typeof receipt.teardown === 'object' ? receipt.teardown as Record<string, unknown> : teardown;

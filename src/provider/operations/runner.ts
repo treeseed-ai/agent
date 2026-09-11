@@ -27,7 +27,7 @@ function settlementSeconds(value: unknown) {
 }
 
 export interface ProviderAssignmentRunInput {
-  client: Pick<ProviderProtocolClient, 'renewAssignment' | 'startAssignmentExecution' | 'startAssignmentCloseout' | 'preflightAssignmentCompletion' | 'completeAssignment' | 'returnAssignment' | 'failAssignment' | 'reportAssignmentUsage' | 'respondToAssignmentDiscussion' | 'settleAssignment' | 'createCommunicationTraceEvent'>;
+  client: Pick<ProviderProtocolClient, 'renewAssignment' | 'startAssignmentExecution' | 'startAssignmentCloseout' | 'preflightAssignmentCompletion' | 'completeAssignment' | 'returnAssignment' | 'failAssignment' | 'reportAssignmentUsage' | 'respondToAssignmentDiscussion' | 'settleAssignment' | 'createCommunicationTraceEvent' | 'authorizeAssignmentSource' | 'readAssignmentSourceChunk' | 'publishAssignmentSourceCandidate'>;
   executor: AgentExecutor;
   assignment: Record<string, unknown>;
   leaseToken: string;
@@ -77,7 +77,7 @@ export async function runProviderAssignment(input: ProviderAssignmentRunInput) {
   const scheduleRenewal = () => {
     timer = setTimeout(() => {
       renewalInFlight = renew();
-    }, input.renewalIntervalMs ?? Math.max(30_000, (input.leaseSeconds ?? 300) * 500));
+    }, Math.min(input.renewalIntervalMs ?? Math.max(30_000, (input.leaseSeconds ?? 300) * 500), 10_000));
   };
   const renew = async (): Promise<void> => {
     if (stopped) return;
@@ -101,6 +101,10 @@ export async function runProviderAssignment(input: ProviderAssignmentRunInput) {
 	let traceSequence = 0;
   try {
     result = await input.executor.execute({ assignment: executorAssignment(input.assignment), assignmentId, leaseToken: input.leaseToken, runnerId: input.runnerId, treeDx,
+      authorizeSource: recipientPublicKey => input.client.authorizeAssignmentSource(assignmentId, { runnerId: input.runnerId, leaseToken: input.leaseToken, recipientPublicKey }),
+      readSourceChunk: (artifactId, index) => input.client.readAssignmentSourceChunk(assignmentId, { runnerId: input.runnerId, leaseToken: input.leaseToken, artifactId, index }),
+      publishSourceCandidate: (candidate, chunk) => input.client.publishAssignmentSourceCandidate(assignmentId, { runnerId: input.runnerId, leaseToken: input.leaseToken, candidate,
+        ...(chunk ? { action: 'chunk' as const, index: chunk.index, content: chunk.content } : { action: 'commit' as const }) }),
 		emit: (event) => input.client.createCommunicationTraceEvent(assignmentId, { leaseToken: input.leaseToken, runnerId: input.runnerId, sequence: traceSequence++, ...event }).then(() => undefined),
 		signal: executionAbort.signal });
   } catch (error) {

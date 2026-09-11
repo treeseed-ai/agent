@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createHash } from 'node:crypto';
-import { assertObjectiveContentModel, discussionMessageSourcePaths, readDiscussionSourceMessage, readFocusedTreeDxContext, readIdentityContext, readableCloneUrl } from '../../src/provider/execution/codex-chat-executor.ts';
+import { assertObjectiveContentModel, discussionMessageSourcePaths, readDiscussionSourceMessage, readFocusedTreeDxContext, readIdentityContext } from '../../src/provider/execution/codex-chat-executor.ts';
 import { executeAssignmentTreeDxTool, reasoningEffortFromAssignmentMetadata } from '../../src/provider/execution/microvm-executor.ts';
 import { codexInteractiveTimeoutMs, codexReasoningArguments, codexTreeDxMcpConfig } from '../../src/sandbox/guest.ts';
 
@@ -22,10 +22,6 @@ describe('Codex chat executor', () => {
 		expect(config).toContain('startup_timeout_sec = 10');
 		expect(config).toContain('TREESEED_GUEST_TOKEN = "one-use-token"');
 		expect(config).toContain('TREESEED_RELAY_URL = "https://relay.invalid"');
-	});
-	it('uses a non-interactive readable URL for public GitHub project workspaces', () => {
-		expect(readableCloneUrl('git@github.com:treeseed-ai/sdk.git')).toBe('https://github.com/treeseed-ai/sdk.git');
-		expect(readableCloneUrl('https://example.test/project.git')).toBe('https://example.test/project.git');
 	});
 	it('accepts root and nested TreeDX discussion-message references', () => {
 		expect(discussionMessageSourcePaths({ sourceMessageRefs: [

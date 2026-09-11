@@ -1,3 +1,5 @@
+import type { SourceWorkspaceResponse, SignedSourceCandidate } from '@treeseed/sdk/capacity-provider/sandbox';
+
 export interface AssignmentTreeDxFacade {
   readonly projectId: string;
   readonly repositoryId: string | null;
@@ -13,6 +15,10 @@ export interface AgentExecutionRequest {
   leaseToken: string;
   runnerId: string;
   treeDx: AssignmentTreeDxFacade;
+  /** Trusted host callback; never serialized into context, tools or the execution guest. */
+  authorizeSource?: (recipientPublicKey: string) => Promise<SourceWorkspaceResponse>;
+  readSourceChunk?: (artifactId: string, index: number) => Promise<{ artifactId: string; index: number; digest: string; content: string }>;
+  publishSourceCandidate?: (candidate: SignedSourceCandidate, chunk?: { index: number; content: string }) => Promise<unknown>;
 	emit?: (event: { type: string; occurredAt: string; summary: string; payload: Record<string, unknown>; protectedPayload?: Record<string, unknown> }) => Promise<void>;
   signal?: AbortSignal;
 }

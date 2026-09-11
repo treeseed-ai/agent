@@ -5,7 +5,7 @@ afterEach(() => vi.unstubAllGlobals());
 
 describe('assignment-scoped TreeDX facade', () => {
 	it('fixes project and proxy-handle authority while invoking only SDK catalog operations', async () => {
-		const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ data: { id: 'workspace-1' } }), {
+		const fetchImpl = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => new Response(JSON.stringify({ data: { id: 'workspace-1' } }), {
 			status: 200, headers: { 'content-type': 'application/json' },
 		}));
 		vi.stubGlobal('fetch', fetchImpl);

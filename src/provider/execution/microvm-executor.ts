@@ -9,7 +9,7 @@ import { SandboxBrokerClient } from './sandbox-broker-client.ts';
 import { materializeSandboxInputs } from './sandbox-input-materializer.ts';
 import { activeSandboxAttempt, prepareAssignmentSource, renewAssignmentSource, type ActiveSource } from './source-workspace.ts';
 import { publishSourceCandidate } from './source-candidate.ts';
-import { createReviewOutput } from './activity/review-output.ts';
+import { createReviewOutput, reviewArtifactStatus } from './activity/review-output.ts';
 import { missingReviewResult, reviewToolOutcome, type ReviewToolOutcome } from './activity/review-diagnostics.ts';
 import { assignmentRuntimeSeconds } from './activity/context.ts';
 import { RenewalDrain } from './activity/renewal-drain.ts';
@@ -139,9 +139,10 @@ export async function createMicrovmExecutor(config: ProviderHostRuntimeConfig, m
 				})() : null;
 				if (environmentReceipt) await request.emit?.({ type: 'sandbox.environment.attested', occurredAt: environmentReceipt.createdAt, summary: 'Provider environment attestation recorded.', payload: { environmentReceipt } });
 				if (result.status === 'completed') {
-					if (request.assignment.executionKind === 'workday') {
+					const reviewArtifact = reviewArtifactStatus(review);
+					if (reviewArtifact.required) {
 						await request.emit?.({ type: review.manifest ? 'execution.completed' : 'execution.failed', occurredAt: new Date().toISOString(), summary: review.manifest ? 'Review artifact verified.' : 'Review artifact missing.',
-							payload: { sandboxId: result.sandboxId, model: assignment.modelPolicy.model, usage: [result.usage], toolOutcomes, artifactVerified: Boolean(review.manifest), teardown } });
+							payload: { sandboxId: result.sandboxId, model: assignment.modelPolicy.model, usage: [result.usage], toolOutcomes, artifactVerified: reviewArtifact.verified, teardown } });
 						if (!review.manifest) return missingReviewResult(result.usage, toolOutcomes, { sandboxId: result.sandboxId, teardown, environmentReceipt });
 						return { status: 'completed', summary: result.responseMarkdown || result.summary,
 							outputs: { sandboxId: result.sandboxId, teardown, environmentReceipt, artifactManifest: review.manifest }, artifacts, usage: [result.usage] };

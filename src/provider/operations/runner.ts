@@ -138,7 +138,7 @@ export async function runProviderAssignment(input: ProviderAssignmentRunInput) {
     await renewalInFlight;
 		input.signal?.removeEventListener('abort', abortFromCaller);
   }
-  if (renewalFailure) {
+	if (renewalFailure) {
     result = {
       status: 'returned',
       code: 'assignment_lease_renewal_failed',
@@ -146,6 +146,13 @@ export async function runProviderAssignment(input: ProviderAssignmentRunInput) {
       retryable: true,
     };
   }
+	// Sandbox harnesses return their final Markdown in responseMarkdown for every
+	// activity. Only conversation assignments may publish that value to a
+	// Discussion; workday activities persist it as their completion summary.
+	if (!conversation && (result.status === 'responded' || result.status === 'abstained')) {
+		const response = result.responseMarkdown?.trim();
+		result = { ...result, status: 'completed', summary: response || result.summary, responseMarkdown: undefined };
+	}
 	if (result.status === 'responded' || result.status === 'abstained') {
 		if (result.status === 'responded' && !result.responseMarkdown) throw new Error('Communication executor omitted its durable Markdown response.');
 		await input.client.respondToAssignmentDiscussion(assignmentId, { leaseToken: input.leaseToken, runnerId: input.runnerId,

@@ -165,6 +165,18 @@ describe('catalog-driven provider assignment runner', () => {
 		expect(api.completeAssignment).not.toHaveBeenCalled();
 	});
 
+	it.each(['responded', 'abstained'] as const)('completes a workday %s result without publishing a Discussion response', async status => {
+		const api = client();
+		await runProviderAssignment({ client: api, treeDx, leaseToken: 'lease', runnerId: 'runner', assignment: { id: 'assignment-workday', executionKind: 'workday' },
+			executor: { id: 'workday', observe: async () => ({ available: true }), execute: async () => ({ status, summary: 'Harness completed.',
+				responseMarkdown: status === 'responded' ? 'Evidence-backed workday result.' : '<!-- treeseed:abstain -->', usage: [{ activeSeconds: 3, elapsedSeconds: 4 }] }) } });
+		expect(api.respondToAssignmentDiscussion).not.toHaveBeenCalled();
+		expect(api.completeAssignment).toHaveBeenCalledWith('assignment-workday', expect.objectContaining({
+			summary: { text: status === 'responded' ? 'Evidence-backed workday result.' : '<!-- treeseed:abstain -->' },
+		}));
+		expect(api.settleAssignment).toHaveBeenCalledBefore(api.completeAssignment);
+	});
+
 	it('rounds precise provider timing up to whole accounting seconds', async () => {
 		const api = client();
 		await runProviderAssignment({ client: api, treeDx, leaseToken: 'lease', runnerId: 'runner', assignment: { id: 'assignment-precise', executionKind: 'conversation' },

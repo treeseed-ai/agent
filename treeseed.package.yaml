@@ -62,15 +62,15 @@ development:
     - id: provider
       kind: rebuild-restart
       platforms: [linux-amd64, linux-arm64]
-      runtimeRequirements: [node>=22, docker]
-      sourceRoots: [src, scripts/development, scripts/capacity/providers, Dockerfile, Dockerfile.sandbox-codex, compose.capacity-provider.yml]
+      runtimeRequirements: [node>=22]
+      sourceRoots: [src, scripts/capacity/providers, package.json, package-lock.json]
       ignoredPaths: [dist, node_modules, .treeseed/local-capacity-providers]
       operations:
-        build: { command: bash, args: [scripts/development/runtime.sh, build], environment: {}, timeoutSeconds: 86400 }
-        start: { command: bash, args: [scripts/development/runtime.sh, start], environment: {}, timeoutSeconds: 86400 }
-        stop: { command: bash, args: [scripts/development/runtime.sh, drain], environment: {}, timeoutSeconds: 300 }
-        verify: { command: bash, args: [scripts/development/runtime.sh, verify], environment: {}, timeoutSeconds: 1800 }
-        cleanup: { command: bash, args: [scripts/development/runtime.sh, cleanup], environment: {}, timeoutSeconds: 300 }
+        build: { command: npm, args: [run, capacity-provider:build, --, --prepare-only, --roles, manager,runner], environment: {}, timeoutSeconds: 1800 }
+        start: { command: docker, args: [managed-agent-provider], environment: {}, timeoutSeconds: 300 }
+        stop: { command: docker, args: [managed-agent-provider], environment: {}, timeoutSeconds: 300 }
+        verify: { command: npm, args: [run, test:provider-runtime], environment: {}, timeoutSeconds: 1800 }
+        cleanup: { command: docker, args: [managed-agent-provider], environment: {}, timeoutSeconds: 300 }
       ready: { kind: process, graceSeconds: 5 }
       outputs: [{ path: dist, mediaType: application/vnd.treeseed.agent-runtime, digestAlgorithm: sha256 }]
       endpoints: []
@@ -80,7 +80,7 @@ development:
       statePolicy: clone
       migrationPolicy: disposable-only
       secretRefs: {}
-      shutdown: { drainOperation: { command: bash, args: [scripts/development/runtime.sh, drain], environment: {}, timeoutSeconds: 300 }, graceSeconds: 120, activeWorkPolicy: drain }
+      shutdown: { drainOperation: { command: docker, args: [managed-agent-provider], environment: {}, timeoutSeconds: 300 }, graceSeconds: 120, activeWorkPolicy: drain }
       resources: {}
       logs: [.treeseed/development/provider.log]
       forbiddenOperations: [hot-reload, force-kill-active-assignment, automatic-assignment-cancel]

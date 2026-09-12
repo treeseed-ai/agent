@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createReviewOutput } from '../../../src/provider/execution/activity/review-output.ts';
+import { createReviewOutput, reviewArtifactStatus } from '../../../src/provider/execution/activity/review-output.ts';
 import type { AgentExecutionRequest } from '../../../src/provider/execution/contracts.ts';
 import { assignmentRuntimeSeconds } from '../../../src/provider/execution/activity/context.ts';
 import { controlPlaneOperation } from '@treeseed/sdk/operator-contracts';
@@ -49,6 +49,18 @@ describe('assignment-scoped review publication', () => {
     if (boundary === 'wrong-subject') request.assignment.decisionInput.input.intent.subjectModel = 'objective';
     await expect(createReviewOutput(request).publish({ kind: 'support', title: 'Title', body: 'Body' })).rejects.toThrow('does not authorize');
     expect(invoke).not.toHaveBeenCalled();
+  });
+  it.each(['planning', 'estimating', 'reviewing', 'reporting', 'acting'])('does not require a proposal artifact for an ordinary %s workday', activityType => {
+    const { request } = fixture();
+    request.assignment.metadata.activityType = activityType;
+    request.assignment.decisionInput.input.intent = { artifactKind: 'objective_note', subjectModel: 'objective', subjectId: 'objective' };
+    expect(reviewArtifactStatus(createReviewOutput(request))).toEqual({ required: false, verified: false });
+  });
+  it('requires and verifies an artifact only for the specialized proposal review', async () => {
+    const { request } = fixture(), output = createReviewOutput(request);
+    expect(reviewArtifactStatus(output)).toEqual({ required: true, verified: false });
+    await output.publish({ kind: 'support', title: 'Verified review', body: 'The assigned proposal evidence was reviewed.' });
+    expect(reviewArtifactStatus(output)).toEqual({ required: true, verified: true });
   });
   it('does not report a manifest when committed read-back differs', async () => {
     const { request, invoke } = fixture(); invoke.mockImplementation(async operation => operation === 'treedx.workspaces.commit'

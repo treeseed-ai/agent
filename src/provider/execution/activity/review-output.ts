@@ -9,10 +9,14 @@ const record = (value: unknown): Record<string, unknown> => value && typeof valu
 const payload = (value: unknown) => { const e = record(value), d = record(e.data ?? e), r = record(d.result ?? d); return record(r.data ?? r); };
 type AgentArtifactManifest = NonNullable<AgentKernelModeExecutionResult['artifactManifest']>;
 interface ReviewReceipt { receiptId: string; contentPath: string; commitSha: string; kind: string; sha256: string; }
-interface ReviewOutput {
+export interface ReviewOutput {
   readonly enabled: boolean;
   readonly manifest: AgentArtifactManifest | undefined;
   publish(arguments_: Record<string, unknown>): Promise<ReviewReceipt>;
+}
+
+export function reviewArtifactStatus(output: Pick<ReviewOutput, 'enabled' | 'manifest'>) {
+  return { required: output.enabled, verified: output.enabled && Boolean(output.manifest) };
 }
 
 /** The reviewer chooses its assessment; the host supplies and verifies immutable assignment provenance. */

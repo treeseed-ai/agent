@@ -87,7 +87,7 @@ export async function publishProviderAvailability(
 		ttlSeconds: 90,
 		environment: config.environment,
 		status: 'open',
-		offers: availability.adapters.flatMap((route) => Array.isArray(route.offers) ? route.offers.map((offer) => ({ offer, laneIds: route.laneIds, maxConcurrentWorkers: route.maxConcurrentWorkers, status: route.status, observations: route.observations })) : []),
+		adapters: availability.adapters,
 		lanes: availability.lanes,
 		capacity: availability.capacity,
 		capabilities: providerAvailabilityCapabilities(availability),

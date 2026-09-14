@@ -20,15 +20,6 @@ function fixture() {
   return { client, request, authorizeSource };
 }
 describe('provider source orchestration', () => {
-  it('imports every API-assigned candidate chunk before building or attaching', async () => {
-    const f = fixture(), bundle = { artifactId: 'candidate', digest: `sha256:${'b'.repeat(64)}`, bytes: 1, chunks: [`sha256:${'b'.repeat(64)}`] };
-    f.authorizeSource.mockImplementation(async () => ({ ...envelope('candidate-grant'), sourceBundle: bundle }));
-    f.request.readSourceChunk = vi.fn(async () => ({ artifactId: 'candidate', index: 0, digest: bundle.digest, content: 'YQ==' }));
-    const client = { ...f.client, sourceChunk: vi.fn(async () => ({ ready: true, received: 1, chunks: 1 })) };
-    expect((await prepareAssignmentSource(client, sandbox, f.request)).parentCandidateId).toBe('candidate');
-    expect(f.request.readSourceChunk).toHaveBeenCalledWith('candidate', 0);
-    expect(client.sourceChunk.mock.invocationCallOrder[0]).toBeLessThan(client.source.mock.invocationCallOrder[0]!);
-  });
   it('authorizes chat source before prepare and reauthorizes after readiness before attachment', async () => {
     const { client, request, authorizeSource } = fixture();
     const active = await prepareAssignmentSource(client, sandbox, request);

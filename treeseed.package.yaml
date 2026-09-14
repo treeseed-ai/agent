@@ -59,6 +59,37 @@ development:
   project: { id: agent, repository: treeseed-ai/agent }
   defaults: { leaseSeconds: 14400, restoreOnFailure: true }
   targets:
+    - id: sandbox
+      kind: rebuild-restart
+      executionCustody: caller
+      platforms: [linux-amd64, linux-arm64]
+      runtimeRequirements: [node>=22, docker]
+      sourceRoots: [src/sandbox, Dockerfile, Dockerfile.sandbox-codex, scripts/capacity/providers, package.json, package-lock.json]
+      ignoredPaths: [dist, node_modules, .treeseed/local-capacity-providers]
+      operations:
+        build: { command: npm, args: [run, capacity-provider:build, --, --prepare-only, --roles, base,guest], environment: {}, timeoutSeconds: 1800 }
+        start: { command: docker, args: [managed-agent-sandbox], environment: {}, timeoutSeconds: 7200 }
+        stop: { command: docker, args: [managed-agent-sandbox], environment: {}, timeoutSeconds: 300 }
+        verify: { command: npm, args: [run, test:provider-runtime], environment: {}, timeoutSeconds: 1800 }
+        cleanup: { command: docker, args: [managed-agent-sandbox], environment: {}, timeoutSeconds: 300 }
+      ready: { kind: process, graceSeconds: 5 }
+      outputs: [{ path: dist/sandbox, mediaType: application/vnd.treeseed.sandbox-guest, digestAlgorithm: sha256 }]
+      endpoints: []
+      dependencies:
+        - { id: sdk, target: package, locality: local, reaction: rebuild }
+      statePolicy: clone
+      migrationPolicy: disposable-only
+      secretRefs: {}
+      shutdown: { drainOperation: { command: docker, args: [managed-agent-sandbox], environment: {}, timeoutSeconds: 300 }, graceSeconds: 120, activeWorkPolicy: drain }
+      resources: {}
+      logs: []
+      forbiddenOperations: [hot-reload, force-kill-active-assignment, automatic-assignment-cancel]
+      freeze:
+        kind: archive
+        operation: { command: npm, args: [pack, --json], environment: {}, timeoutSeconds: 1800 }
+        artifacts: [treeseed-agent-*.tgz]
+        contractOperations: []
+      promotion: { liveAdmissible: false, candidateRequiresVerification: true }
     - id: provider
       kind: rebuild-restart
       platforms: [linux-amd64, linux-arm64]

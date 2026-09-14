@@ -2,16 +2,73 @@ import { describe, expect, it } from 'vitest';
 import { createHash } from 'node:crypto';
 import { assertObjectiveContentModel, discussionMessageSourcePaths, readDiscussionSourceMessage, readFocusedTreeDxContext, readIdentityContext } from '../../src/provider/execution/codex-chat-executor.ts';
 import { executeAssignmentTreeDxTool, reasoningEffortFromAssignmentMetadata } from '../../src/provider/execution/microvm-executor.ts';
-import { codexInteractiveTimeoutMs, codexReasoningArguments, codexTreeDxMcpConfig, promptFromContext, treeDxToolDefinitions } from '../../src/sandbox/guest.ts';
+import { assertReplayableVerificationCommand, codexInteractiveTimeoutMs, codexProjectInstructionArguments, codexReasoningArguments, codexTreeDxMcpConfig, promptFromContext, requiresActivityCompletion, treeDxToolDefinitions, verifyReportedActivityCommands } from '../../src/sandbox/guest.ts';
 
 describe('Codex chat executor', () => {
-	it('does not render a workday as a chat message and hides publication tools from chat', () => {
-		const prompt = promptFromContext({ assignment: { executionKind: 'workday' }, activity: { task: { objective: 'Review selected proposal' } } });
-		expect(prompt).toContain('Execute the assigned activity, not a chat response');
-		expect(prompt).toContain('treeseed_publish_review');
-		expect(prompt).not.toContain('Respond to the committed Discussion message');
+	it('requires structured completion only for a mutable legacy source workspace', () => {
+		expect(requiresActivityCompletion('work')).toBe(true);
+		expect(requiresActivityCompletion('read')).toBe(false);
+	});
+	it('rejects retired workday context and exposes no semantic publication tools', () => {
+		expect(() => promptFromContext({ assignment: { executionKind: 'workday' } })).toThrow('legacy_workday_assignment_not_supported');
 		expect(treeDxToolDefinitions().map(tool => tool.name)).not.toContain('treeseed_publish_review');
-		expect(treeDxToolDefinitions(true).map(tool => tool.name)).toContain('treeseed_publish_review');
+	});
+	it('directs source-backed chat to the mounted repository and TreeDX MCP rather than the host CLI', () => {
+		const prompt = promptFromContext({
+			identity: { manifest: { agentHandle: '@sdk/architect' } },
+			assignment: { executionKind: 'communication', metadata: { communication: { requirement: 'required' }, chatProfile: {
+				prompt: { system: 'Answer with evidence.', task: 'Research the current project.' },
+			} } },
+			projectManifest: { revision: 'exact-commit' }, coreContext: { sources: [] },
+			message: { content: 'Describe the state of the project.' },
+		});
+		expect(prompt).toContain('attached at /workspace/project at immutable revision exact-commit');
+		expect(prompt).toContain('inspect that repository with ordinary shell and Git commands');
+		expect(prompt).toContain('treedx_* MCP tools');
+		expect(prompt).toContain('Do not invoke trsd');
+		expect(codexProjectInstructionArguments()).toEqual(['-c', 'project_doc_max_bytes=0']);
+	});
+	it('requires structured activities to report replayable checks as separate commands', () => {
+		const prompt = promptFromContext({ canonicalAssignmentContext: { assignment: {
+			id: 'assignment-1', sourceRef: { model: 'proposal', id: 'proposal-1' }, workspace: { mode: 'treedx' },
+			effectiveProfile: { activity: 'estimating', handler: 'estimate', prompt: { system: 'Estimate the work.' } },
+		}, context: [], predecessorResults: [] } });
+		expect(prompt).toContain('Put each command in its own JSON array item');
+		expect(prompt).toContain('never join commands with &&, ||, ;');
+		expect(prompt).toContain('never rewrite it into a cleaner command');
+		expect(prompt).toContain('directly observed exit zero');
+		expect(prompt).toContain('A search that finds no matches exits nonzero');
+		expect(prompt).not.toContain('This is pre-decision proposal review');
+		expect(prompt).toContain('never include exploratory search or inspection commands');
+		expect(prompt).toContain('rg, grep, find, ls, cat, sed, or git status');
+		expect(prompt).toContain('use only field names shown by this contract');
+		expect(prompt).toContain('Copy exact authorized references rather than manufacturing them');
+		expect(prompt).toContain('exactly one contextRefs entry whose store matches that workspace');
+	});
+	it('distinguishes a TreeDX proposal revision from the attached Git source during proposal review', () => {
+		const prompt = promptFromContext({ canonicalAssignmentContext: { assignment: {
+			id: 'assignment-review', sourceRef: { model: 'proposal', id: 'proposal-1', commit: 'proposal-commit' },
+			workspace: { mode: 'treedx' }, effectiveProfile: { activity: 'reviewing', handler: 'writer',
+				prompt: { system: 'Review the proposal.' } },
+		}, context: [], predecessorResults: [] } });
+		expect(prompt).toContain('This is pre-decision proposal review');
+		expect(prompt).toContain('must never be resolved as an SDK Git commit');
+		expect(prompt).toContain('Approve a sound plan');
+		expect(prompt).toContain('no predecessor result or runtime acceptance evidence is expected');
+	});
+	it('reviews the paired Actor result when exact decision authority exists', () => {
+		const prompt = promptFromContext({ canonicalAssignmentContext: { assignment: {
+			id: 'assignment-work-review', sourceRef: { model: 'proposal', id: 'proposal-1' },
+			authorityRefs: [{ store: 'postgresql', model: 'decision', id: 'decision-1', revision: 1, digest: `sha256:${'a'.repeat(64)}` }],
+			acceptanceCriteria: ['The Actor identifies the exact source commit.'],
+			workspace: { mode: 'treedx' }, effectiveProfile: { activity: 'reviewing', handler: 'writer',
+				prompt: { system: 'Review the Actor result.' } },
+		}, context: [], predecessorResults: [{ id: 'result-1' }] } });
+		expect(prompt).not.toContain('This is pre-decision proposal review');
+		expect(prompt).toContain('This is post-decision paired work review');
+		expect(prompt).toContain('Review only the exact predecessor Actor result');
+		expect(prompt).toContain('The Actor identifies the exact source commit.');
+		expect(prompt).toContain('Predecessor results');
 	});
 	it('carries the agent-selected reasoning effort into Codex without a provider hardcode', () => {
 		expect(reasoningEffortFromAssignmentMetadata({ chatProfile: { execution: { reasoningEffort: 'high' } } })).toBe('high');
@@ -23,6 +80,30 @@ describe('Codex chat executor', () => {
 	it('respects the configured activity runtime for deeper chat reasoning', () => {
 		expect(codexInteractiveTimeoutMs(900)).toBe(895_000);
 		expect(codexInteractiveTimeoutMs(20)).toBe(15_000);
+	});
+	it('accepts passing verification only after the guest runner observes every command', async () => {
+		const observed: string[] = [];
+		await verifyReportedActivityCommands({ schemaVersion: 'treeseed.activity-completion/v1', summary: 'done', reviewDisposition: null,
+			verification: [{ status: 'passed', summary: 'focused tests passed', commands: ['npm test -- focused'] }] }, async (command) => { observed.push(command); });
+		expect(observed).toEqual(['npm test -- focused']);
+	});
+	it('rejects a claimed pass when runner observation fails', async () => {
+		await expect(verifyReportedActivityCommands({ schemaVersion: 'treeseed.activity-completion/v1', summary: 'done', reviewDisposition: null,
+			verification: [{ status: 'passed', summary: 'claimed pass', commands: ['false'] }] }, async () => { throw new Error('exit 1'); })).rejects.toThrow(/Runner-observed verification failed/u);
+	});
+	it('rejects compound, setup, and source-mutating commands as verification evidence', async () => {
+		expect(() => assertReplayableVerificationCommand('npm test && git add . && git commit -m test')).toThrow(/one standalone command/u);
+		expect(() => assertReplayableVerificationCommand('git commit -am test')).toThrow(/may not mutate/u);
+		expect(() => assertReplayableVerificationCommand('npm ci')).toThrow(/may not mutate/u);
+		expect(assertReplayableVerificationCommand('git diff --check')).toBe('git diff --check');
+		expect(assertReplayableVerificationCommand('npm test -- focused')).toBe('npm test -- focused');
+		expect(assertReplayableVerificationCommand("find /workspace/project -maxdepth 2 -mindepth 1 -printf '%y %p\\n' | head -100"))
+			.toContain('| head -100');
+		expect(() => assertReplayableVerificationCommand('npm test || true')).toThrow(/one standalone command/u);
+		expect(assertReplayableVerificationCommand('node -e "const result = values.map(value => value > 0); if (!result[0]) process.exit(1)"'))
+			.toContain('value => value > 0');
+		expect(() => assertReplayableVerificationCommand('node test.js > result.txt')).toThrow(/one standalone command/u);
+		expect(() => assertReplayableVerificationCommand('node -e "console.log($(whoami))"')).toThrow(/one standalone command/u);
 	});
 	it('requires the assignment TreeDX MCP server and gives it only ephemeral relay authority', () => {
 		const config = codexTreeDxMcpConfig('sandbox-1', 'one-use-token', { network: { relayUrl: 'https://relay.invalid' } } as never);
@@ -106,14 +187,23 @@ describe('Codex chat executor', () => {
 	});
 
 	it('binds live TreeDX tools to profile policy, repository, and exact ref', async()=>{
-		let operation='';let input:any;const request:any={assignment:{metadata:{toolPolicy:{allowed:['treedx.read_repository_files']}}},treeDx:{repositoryId:'repo-1',baseRef:'commit-1',invoke:async(op:string,value:any)=>{operation=op;input=value;return {ok:true};}}};
+		let operation='';let input:any;const request:any={assignment:{assignmentAttempt:{grant:{tools:['source.read']}}},treeDx:{repositoryId:'repo-1',baseRef:'commit-1',invoke:async(op:string,value:any)=>{operation=op;input=value;return {ok:true};}}};
 		await executeAssignmentTreeDxTool(request,'treedx_read_files',{paths:['objectives/core']});
 		expect(operation).toBe('treedx.repositories.files.read');expect(input).toMatchObject({path:{repoId:'repo-1'},body:{paths:['objectives/core']}});expect(input.body).not.toHaveProperty('ref');
+		request.assignment.assignmentAttempt.grant.tools=['discussion'];
 		await expect(executeAssignmentTreeDxTool(request,'treedx_search_files',{query:'secret'})).rejects.toThrow(/does not authorize/u);
 	});
 
+	it('uses the project that owns the current repository when the assignment workspace is a team library',async()=>{
+		let input:any;const request:any={assignment:{assignmentAttempt:{grant:{tools:['source.read']}}},treeDx:{projectId:'sdk-project',repositoryId:'team-repo',baseRef:'commit-1',
+			readRepositories:[{projectId:'team-project',projectSlug:'team',repositoryId:'team-repo',baseRef:'commit-1',allowedPaths:['**'],allowedModels:['knowledge'],source:'team-library'}],
+			invoke:async(_operation:string,value:any)=>{input=value;return {ok:true};}}};
+		await executeAssignmentTreeDxTool(request,'treedx_build_context',{request:{query:'team objective'}});
+		expect(input.path).toEqual({projectId:'team-project',repoId:'team-repo'});
+	});
+
 	it('translates the assignment context helper into the canonical TreeDX context contract',async()=>{
-		let input:any;const request:any={assignment:{metadata:{toolPolicy:{allowed:['treedx.build_context']}}},treeDx:{repositoryId:'repo-1',baseRef:'commit-1',invoke:async(_operation:string,value:any)=>{input=value;return {ok:true};}}};
+		let input:any;const request:any={assignment:{assignmentAttempt:{grant:{tools:['source.read']}}},treeDx:{repositoryId:'repo-1',baseRef:'commit-1',invoke:async(_operation:string,value:any)=>{input=value;return {ok:true};}}};
 		await executeAssignmentTreeDxTool(request,'treedx_build_context',{request:{topics:['SDK architecture','dependency boundaries'],paths:['objectives/core'],maxItems:8,maxTokens:2400}});
 		expect(input.body).toEqual({query:'SDK architecture dependency boundaries',paths:['objectives/core'],budget:{maxNodes:8,maxTokens:2400},topics:undefined,maxItems:undefined,maxTokens:undefined});
 	});

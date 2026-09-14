@@ -13,3 +13,8 @@ export {
 	type ProviderConnectionResult,
 	type ProviderConnectionRuntime,
 } from './provider/coordination/coordinator.ts';
+export { AgentKernel } from './kernel/agent-kernel.ts';
+export { ActorHandler, EstimateHandler, ReleaserHandler, ReviewerHandler, WriterHandler } from './kernel/handlers/model-handler.ts';
+export { ReporterHandler } from './kernel/handlers/reporter.ts';
+export { HandlerRegistry } from './kernel/handler-registry.ts';
+export type { AgentRuntime, Handler, KernelAssignmentRequest } from './kernel/contracts.ts';

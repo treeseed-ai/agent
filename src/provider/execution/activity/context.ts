@@ -4,8 +4,9 @@ const record = (value: unknown): Record<string, unknown> => value && typeof valu
 export function assignmentActivityContext(assignment: Record<string, unknown>) {
   const metadata = record(assignment.metadata), input = record(record(assignment.decisionInput).input);
   const task: Record<string, unknown> = {};
-  for (const key of ['objective', 'stageInstructions', 'intent', 'model', 'title', 'body', 'frontmatter',
-    'subjectId', 'subjectModel', 'subjectPath', 'contentPath', 'digest', 'artifactKind', 'planningGraph']) {
+  for (const key of ['objective', 'stage', 'stageInstructions', 'intent', 'model', 'title', 'body', 'frontmatter',
+	'subjectId', 'subjectModel', 'subjectPath', 'contentPath', 'digest', 'artifactKind', 'planningGraph',
+	'expectedOutputs', 'requiredInputs', 'sourceRef', 'proposalRef', 'decisionRef', 'revisionContext', 'resolves', 'feedbackRef']) {
     if (input[key] !== undefined) task[key] = input[key];
   }
   return { mode: assignment.mode, activityType: metadata.activityType ?? input.activityType,

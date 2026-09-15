@@ -3,6 +3,7 @@ import {
 	assignmentContextSchema,
 	assignmentReferenceSchema,
 	assignmentResultSchema,
+	assignmentTimingAwarenessReceiptSchema,
 	type AssignmentReference,
 	type AssignmentResult,
 } from '@treeseed/sdk/agent-capacity';
@@ -84,8 +85,12 @@ export async function executeKernelAssignment(input: {
 			const verification = Array.isArray(record(transport.result.outputs).verificationRecords)
 				? record(transport.result.outputs).verificationRecords as never[] : [];
 			const activityCompletion = record(record(transport.result.outputs).activityCompletion);
+			const timing = assignmentTimingAwarenessReceiptSchema.safeParse(record(transport.result.outputs).timingAwareness);
+			if (!timing.success) throw new Error(`model_timing_result_invalid: ${timing.error.message}`);
+			const timingAwareness = timing.data;
 			return {
 				text: transport.result.responseMarkdown ?? transport.result.summary,
+				timingAwareness,
 				references,
 				verification,
 				...(typeof activityCompletion.summary === 'string' ? { activityCompletion: {
@@ -115,9 +120,12 @@ export async function executeKernelAssignment(input: {
 	try {
 		// Reporter is deterministic and has no model transport preparation phase.
 		if (attempt.data.effectiveProfile.handler === 'reporter') await transportRequest.beginExecution();
-		result = assignmentResultSchema.parse(await kernel.runAssignment({
+		const handled = await kernel.runAssignment({
 			context, runtimeBuild: input.runtimeBuild, runtime, signal: input.request.signal, executionStarted,
-		}));
+		});
+		const parsedResult = assignmentResultSchema.safeParse(handled);
+		if (!parsedResult.success) throw new Error(`assignment_result_invalid: ${parsedResult.error.message}`);
+		result = parsedResult.data;
 	} catch (error) {
 		const summary = error instanceof Error ? error.message : String(error);
 		if (summary.includes('Agent timing-awareness contract requires')) {

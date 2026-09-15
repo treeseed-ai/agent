@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { createHash } from 'node:crypto';
 import { assertObjectiveContentModel, discussionMessageSourcePaths, readDiscussionSourceMessage, readFocusedTreeDxContext, readIdentityContext } from '../../../src/provider/execution/codex-chat-executor.ts';
 import { executeAssignmentTreeDxTool, reasoningEffortFromAssignmentMetadata } from '../../../src/provider/execution/microvm-executor.ts';
-import { assertReplayableVerificationCommand, codexInteractiveTimeoutMs, codexProjectInstructionArguments, codexReasoningArguments, codexTreeDxMcpConfig, completedTimeStatusChecks, promptFromContext, providerEventShapeSummary, requiresActivityCompletion, timingAwarenessContract, treeDxToolDefinitions, verifyReportedActivityCommands } from '../../../src/sandbox/guest.ts';
+import { assertReplayableVerificationCommand, codexInteractiveTimeoutMs, codexProjectInstructionArguments, codexReasoningArguments, codexTreeDxMcpConfig, completedTimeStatusChecks, promptFromContext, providerEventShapeSummary, providerResponsePreview, requiresActivityCompletion, timingAwarenessContract, treeDxToolDefinitions, verifyReportedActivityCommands } from '../../../src/sandbox/guest.ts';
 
 describe('Codex chat executor', () => {
 	it('requires structured completion only for a mutable legacy source workspace', () => {
@@ -29,10 +29,12 @@ describe('Codex chat executor', () => {
 		expect(prompt).toContain('Do not invoke trsd');
 		expect(prompt).toMatch(/^MANDATORY ASSIGNMENT CLOCK:/u);
 		expect(prompt).toContain('You have 180 productive seconds');
-		expect(prompt).toContain('Your FIRST tool action must invoke the exact MCP tool named treeseed_time_status from the treedx server');
-		expect(prompt).toContain('invoke that same exact tool again as your FINAL tool action');
+		expect(prompt).toContain('Your FIRST tool action must call mcp__treedx__treeseed_time_status');
+		expect(prompt).toContain("independently of the activity profile's grant.tools list");
+		expect(prompt).toContain('call mcp__treedx__treeseed_time_status again as your FINAL tool action');
 		expect(prompt).toContain('including a failed attempt');
 		expect(prompt).toContain('fewer than two successful clock checks is rejected');
+		expect(prompt).toMatch(/DO NOT ANSWER OR REASON ABOUT THE TASK YET[\s\S]*fully qualified tool once more immediately before your response\.$/u);
 		expect(prompt).toContain('stop broadening scope and finish the highest-value verified result');
 		expect(codexProjectInstructionArguments()).toEqual(['-c', 'project_doc_max_bytes=0']);
 	});
@@ -63,7 +65,11 @@ describe('Codex chat executor', () => {
 		expect(providerEventShapeSummary([{ type: 'item.completed', item: {
 			type: 'mcp_tool_call', server: 'treedx', tool: 'treeseed_time_status', status: 'completed',
 			arguments: { secret: 'never retain' }, result: { remainingSeconds: 42 },
-		} }])).toEqual([{ type: 'item.completed', itemType: 'mcp_tool_call', server: 'treedx', tool: 'treeseed_time_status', status: 'completed', error: null }]);
+	} }])).toEqual([{ type: 'item.completed', itemType: 'mcp_tool_call', server: 'treedx', tool: 'treeseed_time_status', status: 'completed', error: null }]);
+	});
+	it('redacts the last provider response used to diagnose a missing clock boundary', () => {
+		expect(providerResponsePreview([{ type: 'item.completed', item: { type: 'agent_message', text: 'Cannot call sk-secret.' } }], ['sk-secret']))
+			.toBe('Cannot call [redacted].');
 	});
 	it('reports remaining time from the API-started productive window without a content grant', async () => {
 		const deadlineAt = new Date(Date.now() + 60_000).toISOString();

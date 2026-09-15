@@ -54,7 +54,7 @@ function sourceFiles(root: string): string[] {
 
 describe('Agent package ownership boundary', () => {
 	it('publishes only valid completed timing-awareness evidence', () => {
-		const evidence = { requiredChecks: 2, completedChecks: 2, firstTool: 'treedx:treeseed_time_status',
+		const evidence = { schemaVersion: 'treeseed.assignment-timing-awareness/v1', requiredChecks: 2, completedChecks: 2, firstTool: 'treedx:treeseed_time_status',
 			firstToolSucceeded: true, lastTool: 'treedx:treeseed_time_status', lastToolSucceeded: true,
 			firstToolCompliant: true, finalToolCompliant: true };
 		expect(timingAwarenessEvidence(evidence)).toEqual(evidence);

@@ -44,7 +44,9 @@ export class AgentKernel {
 			request.signal,
 			request.executionStarted,
 		);
-		const validated = assignmentResultSchema.parse(result);
+		const parsedResult = assignmentResultSchema.safeParse(result);
+		if (!parsedResult.success) throw new Error(`agent_kernel_result_invalid: ${parsedResult.error.message}`);
+		const validated = parsedResult.data;
 		if (validated.assignmentId !== assignment.id) throw new Error('assignment_result_identity_mismatch');
 		for (const reference of validated.references) {
 			if (reference.kind === 'git' && (assignment.workspace.mode !== 'git'

@@ -1,7 +1,7 @@
 import { createHash, createPrivateKey, sign } from 'node:crypto';
 import { dirname, resolve } from 'node:path';
 import type { CapacityProviderManifestV5, SandboxAssignment } from '@treeseed/sdk/capacity-provider';
-import { providerEnvironmentReceiptSchema, sandboxAssignmentSchema, sandboxLeaseRenewalSchema, sandboxResultSchema } from '@treeseed/sdk/capacity-provider';
+import { assignmentTimingAwarenessReceiptSchema, providerEnvironmentReceiptSchema, sandboxAssignmentSchema, sandboxLeaseRenewalSchema, sandboxResultSchema } from '@treeseed/sdk/capacity-provider';
 import { assignmentAttemptSchema, type AssignmentReference } from '@treeseed/sdk/agent-capacity';
 import type { ProviderHostRuntimeConfig } from '../configuration/config.ts';
 import { loadCapacityProviderIdentity } from '../accounts/identity.ts';
@@ -22,23 +22,9 @@ type V5Adapter = CapacityProviderManifestV5['adapters'][number];
 const TOOL_PERMISSION:Record<string,string>={treedx_build_context:'source.read',treedx_read_files:'source.read',treedx_search_files:'source.read',treedx_list_paths:'source.read'};
 function object(value:unknown):Record<string,unknown>{return value&&typeof value==='object'&&!Array.isArray(value)?value as Record<string,unknown>:{};}
 export function timingAwarenessEvidence(value: unknown) {
-	const timing = object(value);
-	const requiredChecks = Number(timing.requiredChecks);
-	const completedChecks = Number(timing.completedChecks);
-	const firstTool = typeof timing.firstTool === 'string' ? timing.firstTool : null;
-	const lastTool = typeof timing.lastTool === 'string' ? timing.lastTool : null;
-	const firstToolSucceeded = timing.firstToolSucceeded === true;
-	const lastToolSucceeded = timing.lastToolSucceeded === true;
-	const firstToolCompliant = timing.firstToolCompliant === true;
-	const finalToolCompliant = timing.finalToolCompliant === true;
-	if (!Number.isInteger(requiredChecks) || requiredChecks < 2
-		|| !Number.isInteger(completedChecks) || completedChecks < requiredChecks
-		|| firstTool !== 'treedx:treeseed_time_status' || lastTool !== 'treedx:treeseed_time_status'
-		|| !firstToolSucceeded || !lastToolSucceeded || !firstToolCompliant || !finalToolCompliant) {
-		throw new Error('Completed sandbox result lacks valid timing-awareness evidence.');
-	}
-	return { requiredChecks, completedChecks, firstTool, firstToolSucceeded, lastTool, lastToolSucceeded,
-		firstToolCompliant, finalToolCompliant };
+	const parsed = assignmentTimingAwarenessReceiptSchema.safeParse(value);
+	if (!parsed.success) throw new Error('Completed sandbox result lacks valid timing-awareness evidence.');
+	return parsed.data;
 }
 function contextBuildBody(value:Record<string,unknown>) {
 	const topics=Array.isArray(value.topics)?value.topics.map(String).map((item)=>item.trim()).filter(Boolean).slice(0,20):[];
@@ -183,7 +169,7 @@ export async function createMicrovmExecutor(config: ProviderHostRuntimeConfig, m
 				if (result.status === 'completed') {
 					const abstained = result.responseMarkdown?.trim() === '<!-- treeseed:abstain -->';
 					const diagnostics = object(result.diagnostics);
-					const timingAwareness = timingAwarenessEvidence(diagnostics.timingAwareness);
+					const timingAwareness = timingAwarenessEvidence(result.timingAwareness);
 					await request.emit?.({ type: 'execution.completed', occurredAt: new Date().toISOString(), summary: result.summary, payload: { sandboxId: result.sandboxId, model: assignment.modelPolicy.model, provider: assignment.modelPolicy.provider, capabilities: assignment.modelPolicy.capabilities,
 						usage: [result.usage], timing: { elapsedSeconds: result.usage.elapsedSeconds }, resources: { cpuUserMicros: result.usage.cpuUserMicros, cpuSystemMicros: result.usage.cpuSystemMicros, peakRssBytes: result.usage.peakRssBytes }, artifacts: result.artifacts,
 						activityCompletion: diagnostics.activityCompletion ?? null, timingAwareness, changedPaths: diagnostics.changedPaths ?? [], teardown }, protectedPayload: result.diagnostics });
@@ -191,6 +177,7 @@ export async function createMicrovmExecutor(config: ProviderHostRuntimeConfig, m
 						verificationRecords: object(result.diagnostics).verificationRecords ?? [],
 						activityCompletion: object(result.diagnostics).activityCompletion ?? null,
 						timingAwareness,
+						providerEventShapes: Array.isArray(diagnostics.providerEventShapes) ? diagnostics.providerEventShapes : [],
 						...(sourceReference ? { sourceReference } : {}) }, artifacts, usage: [result.usage] };
 				}
 				await request.emit?.({ type: 'execution.failed', occurredAt: new Date().toISOString(), summary: result.summary, payload: { sandboxId: result.sandboxId, status: result.status, teardown }, protectedPayload: result.diagnostics });

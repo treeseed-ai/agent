@@ -48,12 +48,13 @@ export class WriterHandler extends ModelHandler {
 
 	async run(context: AssignmentContext, runtime: AgentRuntime): Promise<AssignmentResult> {
 		const model = await this.invoke(context, runtime);
-		const references: AssignmentReference[] = [...(model.references ?? [])];
+		const governedTreeDxWrite = context.assignment.workspace.mode === 'treedx'
+			&& context.assignment.effectiveProfile.activity !== 'chat';
+		const references: AssignmentReference[] = governedTreeDxWrite ? [] : [...(model.references ?? [])];
 		// Conversation text is committed by the provider discussion operation under
 		// the exact active lease and TreeDX workspace. Committing it here as a Note
 		// would create a second write path and the wrong content model.
-		if (context.assignment.workspace.mode === 'treedx' && references.length === 0
-			&& context.assignment.effectiveProfile.activity !== 'chat') {
+		if (governedTreeDxWrite) {
 			const reviewing = context.assignment.effectiveProfile.activity === 'reviewing';
 			const target = context.assignment.grant.contentWrite.find((candidate) => candidate.model === (reviewing ? 'decision' : 'note'));
 			if (!target) throw new Error('writer_content_commit_grant_required');

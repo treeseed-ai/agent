@@ -7,7 +7,7 @@ import { createInterface } from 'node:readline';
 import { chmod, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { sandboxAssignmentSchema, sandboxResultSchema, sourceWorkspaceKeySchema, type SandboxAssignment } from '@treeseed/sdk/capacity-provider/sandbox';
-import { providerCredentialValues, providerFailureSummary } from './provider-failure.ts';
+import { providerCredentialValues, providerFailureSummary, redactProviderDiagnostic } from './provider-failure.ts';
 import { activityCompletionOutputSchema, validateActivityCompletion, type ActivityCompletionReport } from '../activity-completion.ts';
 import { describeContentFrontmatterContract, describeContentFrontmatterJsonSchema } from '@treeseed/sdk/content-validation';
 
@@ -97,6 +97,20 @@ export function completedTimeStatusChecks(events: Record<string, unknown>[]) {
 	}).length;
 }
 
+export function providerEventShapeSummary(events: Record<string, unknown>[], secrets: string[] = []) {
+	return events.slice(-32).map(event => {
+		const item = record(event.item);
+		return {
+			type: text(event.type) || null,
+			itemType: text(item.type) || null,
+			server: text(item.server) || null,
+			tool: text(item.tool) || null,
+			status: text(item.status) || null,
+			error: redactProviderDiagnostic(item.error, secrets) || null,
+		};
+	});
+}
+
 export function codexTreeDxMcpConfig(sandboxId:string,operationToken:string,assignment:SandboxAssignment){
 	const values={TREESEED_RELAY_URL:assignment.network.relayUrl,TREESEED_SANDBOX_ID:sandboxId,TREESEED_GUEST_TOKEN:operationToken,TREESEED_RELAY_CA:'/workspace/.treeseed/relay-ca.crt'};
 	return `[mcp_servers.treedx]\ncommand = ${JSON.stringify(process.execPath)}\nargs = ${JSON.stringify([process.argv[1],'--treedx-mcp'])}\nrequired = true\nstartup_timeout_sec = 10\ntool_timeout_sec = 30\n\n[mcp_servers.treedx.env]\n${Object.entries(values).map(([key,value])=>`${key} = ${JSON.stringify(value)}`).join('\n')}\n`;
@@ -123,6 +137,7 @@ export async function runTreeDxMcpServer(){
 }
 
 export function promptFromContext(context: Record<string, unknown>, reasoningEffort?: string, executionSeconds?: number) {
+	const timingInstruction = `MANDATORY ASSIGNMENT CLOCK: You have ${executionSeconds ?? 'an API-defined number of'} productive seconds. Your FIRST tool call must be treeseed_time_status, before inspection or analysis. Call treeseed_time_status a second time after finishing the work and immediately before composing the final response. A response with fewer than two successful clock checks is rejected, even if the work is otherwise correct. Use each returned remainingSeconds value to bound scope and reserve time for verification and closeout.`;
 	const canonicalContext = record(context.canonicalAssignmentContext);
 	if (Object.keys(canonicalContext).length) {
 		const assignment = record(canonicalContext.assignment);
@@ -139,6 +154,7 @@ export function promptFromContext(context: Record<string, unknown>, reasoningEff
 			: 'Return contentOutput as null unless this handler explicitly requires governed content output.';
 		const authorized = items.map((item) => `Reference: ${JSON.stringify(item.ref)}\nDigest: ${text(item.digest)}\n\n${JSON.stringify(item.value)}`).join('\n\n');
 		return [
+			timingInstruction,
 			text(profilePrompt.system),
 			...(Array.isArray(profilePrompt.instructions) ? profilePrompt.instructions.map(text).filter(Boolean) : []),
 			`Execute canonical assignment ${text(assignment.id)}${text(assignment.workItemId) ? ` for work item ${text(assignment.workItemId)}` : ''} from ${text(record(assignment.sourceRef).model)}/${text(record(assignment.sourceRef).id)}.`,
@@ -154,9 +170,9 @@ export function promptFromContext(context: Record<string, unknown>, reasoningEff
 			authorized ? `Authorized context:\n${authorized}` : 'No additional context references were authorized.',
 			predecessors.length ? `Predecessor results:\n${JSON.stringify(predecessors)}` : 'There are no predecessor results.',
 			proposalOutput,
-			'For Git work, commit every intended change and leave the worktree clean. The verification field is only for deliberate acceptance checks with a defined pass condition; never include exploratory search or inspection commands such as rg, grep, find, ls, cat, sed, or git status there. Report only the exact standalone acceptance commands you actually ran and directly observed exit zero. A search that finds no matches exits nonzero: treat that as a finding, never as passing verification. If a command returned nonzero or was originally executed with chaining, redirection, substitution, or a script, omit it completely; never rewrite it into a cleaner command for the report. Put each command in its own JSON array item; never join commands with &&, ||, ;, redirection, command substitution, or a shell script. Tool authority is enforced by the assignment grant.',
+			'For Git work, commit every intended change and leave the worktree clean. The verification field is only for deliberate acceptance checks with a defined pass condition; never include exploratory search or inspection commands such as rg, grep, find, ls, cat, sed, or git status there. Report only the exact standalone acceptance commands you actually ran and directly observed exit zero. Every reported command must be syntactically complete with balanced quotes; prefer a short standard project check over a complex inline program. A search that finds no matches exits nonzero: treat that as a finding, never as passing verification. If a command returned nonzero or was originally executed with chaining, redirection, substitution, or a script, omit it completely; never rewrite it into a cleaner command for the report. Put each command in its own JSON array item; never join commands with &&, ||, ;, redirection, command substitution, or a shell script. Tool authority is enforced by the assignment grant.',
 			`Assigned reasoning effort: ${reasoningEffort || 'provider-default'}.`,
-			`Productive execution budget: ${(executionSeconds ?? text(record(assignment.limits).maximumSeconds)) || 'unknown'} seconds. Timing awareness is required: call treeseed_time_status near the beginning and again immediately before finalizing. Use the returned remaining time to bound research; when time is short, stop broadening scope and finish the highest-value verified result.`,
+			`Productive execution budget: ${(executionSeconds ?? text(record(assignment.limits).maximumSeconds)) || 'unknown'} seconds. When time is short, stop broadening scope and finish the highest-value verified result.`,
 		].join('\n\n');
 	}
 	const identity = record(context.identity), manifest = record(identity.manifest), coreContext=record(context.coreContext),sources=Array.isArray(coreContext.sources)?coreContext.sources.map(record):[];
@@ -165,7 +181,7 @@ export function promptFromContext(context: Record<string, unknown>, reasoningEff
 	const required = text(communication.requirement) !== 'optional';
 	const projectAccess = `The complete project source repository is attached at /workspace/project at immutable revision ${text(record(context.projectManifest).revision)}, with Git history and private writable scratch storage. Before answering, inspect that repository with ordinary shell and Git commands; do not answer from supplied summaries alone. Use the treedx_* MCP tools for governed knowledge. Builds and tests may modify this disposable workspace. Filesystem write access does not grant publication authority. Do not claim code inspection you did not perform.`;
 	if (assignment.executionKind === 'workday') throw new Error('legacy_workday_assignment_not_supported');
-	return `You are exactly ${text(manifest.agentHandle)}. The verified TreeDX context below is ordered by mandatory core, agent-general, activity-specific, and live discussion layers.\n\n${sourceText}\n\nActivity instructions:\n${text(prompt.system)}\n\nActivity task:\n${text(prompt.task) || 'Respond to the committed Discussion message.'}\n\n${required ? 'You were directly addressed and must provide a substantive response.' : 'Respond only if your role adds material value; otherwise return exactly <!-- treeseed:abstain -->.'}\n${projectAccess} Prefer extensionless identifiers such as objectives/core. Do not supply or reason about Git commits for normal TreeDX access; the assignment relay privately enforces consistent views. Do not invoke trsd: the CLI is intentionally absent from assignment guests. Tool and content permissions come from this activity profile. The productive execution budget is ${executionSeconds ?? 'unknown'} seconds. Timing awareness is required: call treeseed_time_status near the beginning and again immediately before finalizing. Use the returned remaining time to bound research; when time is short, stop broadening scope and finish the highest-value verified result. The assigned reasoning effort is ${reasoningEffort || 'provider-default'}. Scale inspection and research depth to that setting and the question. Do not run unrelated broad test suites or exhaustive scans. Do not inspect outside /workspace or disclose credentials. Return only the message to post.\n\nDiscussion message:\n${text(record(context.message).content)}`;
+	return `${timingInstruction}\n\nYou are exactly ${text(manifest.agentHandle)}. The verified TreeDX context below is ordered by mandatory core, agent-general, activity-specific, and live discussion layers.\n\n${sourceText}\n\nActivity instructions:\n${text(prompt.system)}\n\nActivity task:\n${text(prompt.task) || 'Respond to the committed Discussion message.'}\n\n${required ? 'You were directly addressed and must provide a substantive response.' : 'Respond only if your role adds material value; otherwise return exactly <!-- treeseed:abstain -->.'}\n${projectAccess} Prefer extensionless identifiers such as objectives/core. Do not supply or reason about Git commits for normal TreeDX access; the assignment relay privately enforces consistent views. Do not invoke trsd: the CLI is intentionally absent from assignment guests. Tool and content permissions come from this activity profile. When time is short, stop broadening scope and finish the highest-value verified result. The assigned reasoning effort is ${reasoningEffort || 'provider-default'}. Scale inspection and research depth to that setting and the question. Do not run unrelated broad test suites or exhaustive scans. Do not inspect outside /workspace or disclose credentials. Return only the message to post.\n\nDiscussion message:\n${text(record(context.message).content)}`;
 }
 
 export function codexReasoningArguments(reasoningEffort: string | undefined) {
@@ -228,7 +244,7 @@ export function assertReplayableVerificationCommand(command: string) {
 		throw new Error(`Activity completion verification must be one standalone command: ${command}`);
 	}
 	if (/\b(?:sudo|su|doas|rm|mv|cp|install|chmod|chown|truncate|tee)\b/u.test(normalized)
-		|| /\bgit\s+(?:add|commit|push|reset|checkout|switch|clean|merge|rebase|tag|branch|restore)\b/u.test(normalized)
+		|| /\bgit\s+(?:add|commit|push|reset|checkout|switch|clean|merge|rebase|tag|branch|restore)(?=\s|$)/u.test(normalized)
 		|| /\b(?:npm|pnpm|yarn|bun)\s+(?:i|install|ci|add|remove|uninstall|update|upgrade)\b/u.test(normalized)
 		|| /\b(?:sh|bash|zsh|dash)\s+-c\b/u.test(normalized)) {
 		throw new Error(`Activity completion verification may not mutate or prepare the workspace: ${command}`);
@@ -314,7 +330,10 @@ export async function runSandboxGuest() {
 		if (providerError) throw providerError;
 		await progress('provider.completed');
 		const timingChecks = completedTimeStatusChecks(events);
-		if (timingChecks < 2) throw new Error(`Agent timing-awareness contract requires two completed treeseed_time_status checks; observed ${timingChecks}.`);
+		if (timingChecks < 2) {
+			const secrets = [operationToken, ...(subscriptionAuth ? providerCredentialValues(JSON.parse(subscriptionAuth.toString('utf8'))) : [])];
+			throw new Error(`Agent timing-awareness contract requires two completed treeseed_time_status checks; observed ${timingChecks}. Provider event shapes: ${JSON.stringify(providerEventShapeSummary(events, secrets))}`);
+		}
 		const rawResponse = (await readFile(responsePath, 'utf8')).trim(); if (!rawResponse) throw new Error('Execution provider returned an empty response.');
 		const observedCompletion = structuredCompletion ? await observeReportedActivityCommands(validateActivityCompletion(JSON.parse(rawResponse))) : null;
 		const activityCompletion = observedCompletion?.report ?? null;

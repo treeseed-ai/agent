@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { createHash } from 'node:crypto';
 import { assertObjectiveContentModel, discussionMessageSourcePaths, readDiscussionSourceMessage, readFocusedTreeDxContext, readIdentityContext } from '../../../src/provider/execution/codex-chat-executor.ts';
 import { executeAssignmentTreeDxTool, reasoningEffortFromAssignmentMetadata } from '../../../src/provider/execution/microvm-executor.ts';
-import { assertReplayableVerificationCommand, codexInteractiveTimeoutMs, codexProjectInstructionArguments, codexReasoningArguments, codexTreeDxMcpConfig, completedTimeStatusChecks, promptFromContext, requiresActivityCompletion, treeDxToolDefinitions, verifyReportedActivityCommands } from '../../../src/sandbox/guest.ts';
+import { assertReplayableVerificationCommand, codexInteractiveTimeoutMs, codexProjectInstructionArguments, codexReasoningArguments, codexTreeDxMcpConfig, completedTimeStatusChecks, promptFromContext, providerEventShapeSummary, requiresActivityCompletion, treeDxToolDefinitions, verifyReportedActivityCommands } from '../../../src/sandbox/guest.ts';
 
 describe('Codex chat executor', () => {
 	it('requires structured completion only for a mutable legacy source workspace', () => {
@@ -27,8 +27,11 @@ describe('Codex chat executor', () => {
 		expect(prompt).toContain('inspect that repository with ordinary shell and Git commands');
 		expect(prompt).toContain('treedx_* MCP tools');
 		expect(prompt).toContain('Do not invoke trsd');
-		expect(prompt).toContain('productive execution budget is 180 seconds');
-		expect(prompt).toContain('call treeseed_time_status near the beginning and again immediately before finalizing');
+		expect(prompt).toMatch(/^MANDATORY ASSIGNMENT CLOCK:/u);
+		expect(prompt).toContain('You have 180 productive seconds');
+		expect(prompt).toContain('Your FIRST tool call must be treeseed_time_status');
+		expect(prompt).toContain('Call treeseed_time_status a second time');
+		expect(prompt).toContain('fewer than two successful clock checks is rejected');
 		expect(prompt).toContain('stop broadening scope and finish the highest-value verified result');
 		expect(codexProjectInstructionArguments()).toEqual(['-c', 'project_doc_max_bytes=0']);
 	});
@@ -41,6 +44,12 @@ describe('Codex chat executor', () => {
 		expect(completedTimeStatusChecks([
 			{ type: 'item.completed', item: { type: 'mcp_tool_call', server: 'treedx', tool: 'treeseed_time_status', status: 'failed', error: 'unavailable' } },
 		])).toBe(0);
+	});
+	it('summarizes provider event shapes without retaining arguments or output', () => {
+		expect(providerEventShapeSummary([{ type: 'item.completed', item: {
+			type: 'mcp_tool_call', server: 'treedx', tool: 'treeseed_time_status', status: 'completed',
+			arguments: { secret: 'never retain' }, result: { remainingSeconds: 42 },
+		} }])).toEqual([{ type: 'item.completed', itemType: 'mcp_tool_call', server: 'treedx', tool: 'treeseed_time_status', status: 'completed', error: null }]);
 	});
 	it('reports remaining time from the API-started productive window without a content grant', async () => {
 		const deadlineAt = new Date(Date.now() + 60_000).toISOString();
@@ -55,6 +64,7 @@ describe('Codex chat executor', () => {
 			id: 'assignment-1', sourceRef: { model: 'proposal', id: 'proposal-1' }, workspace: { mode: 'treedx' },
 			effectiveProfile: { activity: 'estimating', handler: 'estimate', prompt: { system: 'Estimate the work.' } },
 		}, context: [], predecessorResults: [] } });
+		expect(prompt).toMatch(/^MANDATORY ASSIGNMENT CLOCK:/u);
 		expect(prompt).toContain('Put each command in its own JSON array item');
 		expect(prompt).toContain('never join commands with &&, ||, ;');
 		expect(prompt).toContain('never rewrite it into a cleaner command');
@@ -118,6 +128,7 @@ describe('Codex chat executor', () => {
 		expect(() => assertReplayableVerificationCommand('git commit -am test')).toThrow(/may not mutate/u);
 		expect(() => assertReplayableVerificationCommand('npm ci')).toThrow(/may not mutate/u);
 		expect(assertReplayableVerificationCommand('git diff --check')).toBe('git diff --check');
+		expect(assertReplayableVerificationCommand('git merge-base --is-ancestor HEAD~1 HEAD')).toBe('git merge-base --is-ancestor HEAD~1 HEAD');
 		expect(assertReplayableVerificationCommand('npm test -- focused')).toBe('npm test -- focused');
 		expect(assertReplayableVerificationCommand("find /workspace/project -maxdepth 2 -mindepth 1 -printf '%y %p\\n' | head -100"))
 			.toContain('| head -100');
@@ -126,6 +137,15 @@ describe('Codex chat executor', () => {
 			.toContain('value => value > 0');
 		expect(() => assertReplayableVerificationCommand('node test.js > result.txt')).toThrow(/one standalone command/u);
 		expect(() => assertReplayableVerificationCommand('node -e "console.log($(whoami))"')).toThrow(/one standalone command/u);
+	});
+	it('requires canonical assignment prompts to explain complete verification commands', () => {
+		const rendered = promptFromContext({ canonicalAssignmentContext: {
+			assignment: { id: 'assignment', workItemId: 'work', sourceRef: { model: 'proposal', id: 'proposal' },
+				authorityRefs: [], effectiveProfile: { activity: 'acting', handler: 'actor', prompt: { system: 'Work.' } },
+				workspace: { mode: 'git' }, acceptanceCriteria: [], limits: { maximumSeconds: 30 } },
+			context: [], predecessorResults: [],
+		} }, 'high', 30);
+		expect(rendered).toContain('syntactically complete with balanced quotes');
 	});
 	it('requires the assignment TreeDX MCP server and gives it only ephemeral relay authority', () => {
 		const config = codexTreeDxMcpConfig('sandbox-1', 'one-use-token', { network: { relayUrl: 'https://relay.invalid' } } as never);

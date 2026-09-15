@@ -2,6 +2,7 @@ import type { SourceWorkspaceResponse } from '@treeseed/sdk/capacity-provider/sa
 
 export interface AssignmentTreeDxFacade {
   readonly projectId: string;
+	readonly handleId: string;
   readonly repositoryId: string | null;
   readonly workspaceId: string | null;
   readonly baseRef?: string | null;

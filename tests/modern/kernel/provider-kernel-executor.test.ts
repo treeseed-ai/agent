@@ -68,6 +68,15 @@ describe('provider AgentKernel execution', () => {
 		expect(executor.execute).not.toHaveBeenCalled();
 	});
 
+	it('returns timing noncompliance for a bounded retry instead of terminalizing the graph node', async () => {
+		const executor: AgentExecutor = { id: 'codex', observe: async () => ({ available: true }), execute: vi.fn(async (request) => {
+			await request.beginExecution?.();
+			throw new Error('Kata guest exited 1: Agent timing-awareness contract requires two completed treeseed_time_status checks; observed 0.');
+		}) };
+		const result = await executeKernelAssignment({ executor, request: request(), runtimeBuild });
+		expect(result).toMatchObject({ status: 'returned', code: 'assignment_timing_awareness_missing', retryable: true });
+	});
+
 	it('runs an Actor verification in a read-only source workspace without publishing a candidate', async () => {
 		const input = request();
 		const attempt = input.assignment.assignmentAttempt as Record<string, any>;
@@ -149,6 +158,46 @@ describe('provider AgentKernel execution', () => {
 		expect(written).toContain('decisionClass: proposal');
 		expect(written).toContain('disposition: approved');
 		expect(written.split('\n')).toContain(`rationale: ${review}`);
+	});
+
+	it('commits the governed Reviewer decision when the model also cites the candidate', async () => {
+		const input = request();
+		const attempt = input.assignment.assignmentAttempt as Record<string, any>;
+		attempt.effectiveProfile = { ...attempt.effectiveProfile, activity: 'reviewing', handler: 'writer',
+			permissionCeiling: { content: { read: ['proposal'], write: ['decision'] }, tools: ['verification'] } };
+		const target = { store: 'treedx', model: 'decision', id: 'review-decision', repository: 'treeseed-ai/sdk-library',
+			commit, path: 'decisions/review-decision.mdx' };
+		attempt.grant = { contentRead: [], contentWrite: [target], sourceRead: ['treeseed-ai/sdk'], sourceWrite: [], tools: ['verification'] };
+		attempt.workspace = { mode: 'treedx', workspaceId: 'workspace-1', repository: target.repository,
+			baseCommit: commit, writablePaths: [target.path] };
+		(input.assignment.workspaceContext as Record<string, any>).predecessorResults = [{
+			schemaVersion: 'treeseed.assignment-result/v1', id: 'actor-result', assignmentId: 'actor-assignment',
+			status: 'completed', summary: 'Created the candidate.', references: [{ kind: 'git', repository: 'treeseed-ai/sdk', commit }],
+			verification: [], usage: { elapsedSeconds: 2 }, diagnostics: [], completedAt: '2026-09-14T12:00:00.000Z',
+		}];
+		let written = '';
+		input.treeDx = { projectId: 'project-1', repositoryId: target.repository, workspaceId: 'workspace-1',
+			invoke: vi.fn(async (operation, value: any) => {
+				if (operation === 'treedx.workspaces.files.batch') written = value.body.files[0].content;
+				if (operation === 'treedx.workspaces.commit') return { commitSha: candidateCommit };
+				if (operation === 'treedx.repositories.files.read') return { files: [{ path: target.path, content: written }] };
+				return {};
+			}) };
+		const citedCandidate = { kind: 'git' as const, repository: 'treeseed-ai/sdk', commit, branch: 'treeseed/assignments/candidate' };
+		const executor: AgentExecutor = { id: 'codex', observe: async () => ({ available: true }), execute: vi.fn(async (request): Promise<AgentExecutionResult> => { await request.beginExecution?.(); return {
+			status: 'completed', summary: 'The exact candidate requires the requested revision.',
+			responseMarkdown: 'The exact candidate requires the requested revision.', references: [citedCandidate],
+			outputs: { contentReferences: [citedCandidate], activityCompletion: { schemaVersion: 'treeseed.activity-completion/v1',
+				summary: 'The exact candidate requires the requested revision.', verification: [], reviewDisposition: 'revision-required' } },
+			usage: [{ elapsedSeconds: 2 }],
+		}; }) };
+		const result = await executeKernelAssignment({ executor, request: input, runtimeBuild });
+		expect(result.status).toBe('completed');
+		expect(result.outputs?.assignmentResult?.references).toEqual([
+			expect.objectContaining({ kind: 'treedx', commit: candidateCommit, path: target.path }),
+		]);
+		expect(written).toContain('decisionClass: work-review');
+		expect(written).toContain('disposition: request-changes');
 	});
 
 	it('binds a read-only work review to the exact source when its predecessor produced no candidate', async () => {

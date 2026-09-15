@@ -119,9 +119,12 @@ export async function executeKernelAssignment(input: {
 			context, runtimeBuild: input.runtimeBuild, runtime, signal: input.request.signal, executionStarted,
 		}));
 	} catch (error) {
+		const summary = error instanceof Error ? error.message : String(error);
+		if (summary.includes('Agent timing-awareness contract requires two completed treeseed_time_status checks')) {
+			return { status: 'returned', code: 'assignment_timing_awareness_missing', summary, retryable: true };
+		}
 		return { status: 'failed', code: typeof (error as { code?: unknown })?.code === 'string'
-			? String((error as { code: string }).code) : 'agent_kernel_failed',
-			summary: error instanceof Error ? error.message : String(error), retryable: false };
+			? String((error as { code: string }).code) : 'agent_kernel_failed', summary, retryable: false };
 	}
 	const communication = attempt.data.effectiveProfile.activity === 'chat';
 	return {

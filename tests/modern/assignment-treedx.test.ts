@@ -15,6 +15,7 @@ describe('assignment-scoped TreeDX facade', () => {
 			id: 'assignment-1', projectId: 'project-1',
 			treedxProxyHandle: { id: 'handle-1', token: 'handle-token', repositoryId: 'repo-1', workspaceId: 'workspace-1', baseRef: 'commit-1' },
 		});
+		expect(facade.handleId).toBe('handle-1');
 		expect(facade.baseRef).toBe('commit-1');
 		await facade.invoke('treedx.workspaces.show', { path: { projectId: 'other-project', workspaceId: 'workspace-1' }, query: {}, body: undefined });
 		const [request, init] = fetchImpl.mock.calls[0]!;

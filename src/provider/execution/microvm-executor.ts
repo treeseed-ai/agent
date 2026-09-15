@@ -122,9 +122,9 @@ export async function createMicrovmExecutor(config: ProviderHostRuntimeConfig, m
 				inputs: materialized.inputs.map(({ sourcePath: _sourcePath, ...input }) => input), outputs: [
 					{ id: 'result', path: '/run/treeseed-output/result.json', mediaType: 'application/json', maxBytes: profile.resources.outputBytes },
 				],
-				network: { defaultDeny: true as const, relayUrl: 'https://10.89.0.1:7443', allowedServices: assignmentAllowedServices(request.assignment.executionKind, Boolean(request.treeDx.workspaceId)), ...(profile.id === 'connected' && typeof metadata.developmentSessionId === 'string' ? { connectedDevelopmentSessionId: metadata.developmentSessionId } : {}) },
+				network: { defaultDeny: true as const, relayUrl: 'https://10.89.0.1:7443', allowedServices: assignmentAllowedServices(request.assignment.executionKind, Boolean(request.treeDx.handleId)), ...(profile.id === 'connected' && typeof metadata.developmentSessionId === 'string' ? { connectedDevelopmentSessionId: metadata.developmentSessionId } : {}) },
 					modelPolicy: { provider: 'openai', model: adapter.model?.model ?? 'gpt-5.6-terra', ...(reasoningEffort ? { reasoningEffort } : {}), capabilities: advertisedCapabilities, ...(manifest.capacity.maxInputTokens ? { maxInputTokens: manifest.capacity.maxInputTokens } : {}), ...(manifest.capacity.maxOutputTokens ? { maxOutputTokens: manifest.capacity.maxOutputTokens } : {}), ...(manifest.capacity.maxCost ? { maxCost: manifest.capacity.maxCost } : {}) },
-				credentialHandles: (adapter.credentialProfiles ?? []).map((id) => ({ id, profileId: id, revealAllowed: false as const })), treeDxHandleIds: request.treeDx.workspaceId ? [request.treeDx.workspaceId] : [],
+				credentialHandles: (adapter.credentialProfiles ?? []).map((id) => ({ id, profileId: id, revealAllowed: false as const })), treeDxHandleIds: [request.treeDx.handleId],
 				leaseExpiresAt: String(request.assignment.leaseExpiresAt ?? new Date(Date.now() + 300_000).toISOString()) };
 				const value = sign(null, Buffer.from(canonical(unsigned)), signingKey).toString('base64url');
 				const assignment = sandboxAssignmentSchema.parse({ ...unsigned, signature: { keyId, algorithm: 'Ed25519', value } }) as SandboxAssignment;

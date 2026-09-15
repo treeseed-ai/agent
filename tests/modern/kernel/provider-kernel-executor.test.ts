@@ -7,6 +7,12 @@ const commit = 'a'.repeat(40);
 const candidateCommit = 'b'.repeat(40);
 const digest = `sha256:${'c'.repeat(64)}`;
 const runtimeBuild = `sha256:${'d'.repeat(64)}`;
+const timingAwareness = {
+	schemaVersion: 'treeseed.assignment-timing-awareness/v1', requiredChecks: 2, completedChecks: 2,
+	firstTool: 'treedx:treeseed_time_status', firstToolSucceeded: true,
+	lastTool: 'treedx:treeseed_time_status', lastToolSucceeded: true,
+	firstToolCompliant: true, finalToolCompliant: true,
+};
 
 function request(): AgentExecutionRequest {
 	const assignmentAttempt = {
@@ -44,7 +50,7 @@ describe('provider AgentKernel execution', () => {
 			id: 'codex', observe: async () => ({ available: true }),
 			execute: vi.fn(async (request): Promise<AgentExecutionResult> => { await request.beginExecution?.(); return {
 				status: 'completed', summary: 'Implemented and verified.',
-				outputs: { sourceReference: { kind: 'git', repository: 'treeseed-ai/sdk', commit: candidateCommit,
+				outputs: { timingAwareness, sourceReference: { kind: 'git', repository: 'treeseed-ai/sdk', commit: candidateCommit,
 					branch: 'treeseed/assignments/assignment-1' } },
 				usage: [{ elapsedSeconds: 4, inputTokens: 20, outputTokens: 10 }],
 			}; }),
@@ -84,7 +90,7 @@ describe('provider AgentKernel execution', () => {
 		attempt.grant = { ...attempt.grant, sourceWrite: [], tools: ['source.read', 'verification'] };
 		const executor: AgentExecutor = { id: 'codex', observe: async () => ({ available: true }), execute: vi.fn(async (request): Promise<AgentExecutionResult> => { await request.beginExecution?.(); return {
 			status: 'completed', summary: 'Verified exact source without publication.',
-			outputs: { verificationRecords: [{ command: 'git rev-parse HEAD', status: 'passed', exitCode: 0,
+			outputs: { timingAwareness, verificationRecords: [{ command: 'git rev-parse HEAD', status: 'passed', exitCode: 0,
 				outputDigest: digest, durationSeconds: 1 }],
 				activityCompletion: { schemaVersion: 'treeseed.activity-completion/v1',
 				summary: 'Verified exact source without publication.', verification: [{ command: 'git rev-parse HEAD',
@@ -149,7 +155,7 @@ describe('provider AgentKernel execution', () => {
 		const review = 'Candidate satisfies the exact acceptance criteria after reviewing the complete immutable proposal source and every cited requirement without relying on an inferred or mutable planning authority.';
 		const executor: AgentExecutor = { id: 'codex', observe: async () => ({ available: true }), execute: vi.fn(async (request): Promise<AgentExecutionResult> => { await request.beginExecution?.(); return {
 			status: 'completed', summary: review, responseMarkdown: review,
-			outputs: { activityCompletion: { schemaVersion: 'treeseed.activity-completion/v1', summary: review, verification: [], reviewDisposition: 'approved' } },
+			outputs: { timingAwareness, activityCompletion: { schemaVersion: 'treeseed.activity-completion/v1', summary: review, verification: [], reviewDisposition: 'approved' } },
 			usage: [{ elapsedSeconds: 3 }],
 		}; }) };
 		const result = await executeKernelAssignment({ executor, request: input, runtimeBuild });
@@ -187,7 +193,7 @@ describe('provider AgentKernel execution', () => {
 		const executor: AgentExecutor = { id: 'codex', observe: async () => ({ available: true }), execute: vi.fn(async (request): Promise<AgentExecutionResult> => { await request.beginExecution?.(); return {
 			status: 'completed', summary: 'The exact candidate requires the requested revision.',
 			responseMarkdown: 'The exact candidate requires the requested revision.',
-			outputs: { contentReferences: [citedCandidate], activityCompletion: { schemaVersion: 'treeseed.activity-completion/v1',
+			outputs: { timingAwareness, contentReferences: [citedCandidate], activityCompletion: { schemaVersion: 'treeseed.activity-completion/v1',
 				summary: 'The exact candidate requires the requested revision.', verification: [], reviewDisposition: 'revision-required' } },
 			usage: [{ elapsedSeconds: 2 }],
 		}; }) };
@@ -228,7 +234,7 @@ describe('provider AgentKernel execution', () => {
 		const executor: AgentExecutor = { id: 'codex', observe: async () => ({ available: true }), execute: vi.fn(async (request): Promise<AgentExecutionResult> => { await request.beginExecution?.(); return {
 			status: 'completed', summary: 'The exact source satisfies the read-only acceptance criteria.',
 			responseMarkdown: 'The exact source satisfies the read-only acceptance criteria.',
-			outputs: { activityCompletion: { schemaVersion: 'treeseed.activity-completion/v1',
+			outputs: { timingAwareness, activityCompletion: { schemaVersion: 'treeseed.activity-completion/v1',
 				summary: 'The exact source satisfies the read-only acceptance criteria.', verification: [], reviewDisposition: 'approved' } },
 			usage: [{ elapsedSeconds: 2 }],
 		}; }) };
@@ -267,7 +273,7 @@ describe('provider AgentKernel execution', () => {
 		};
 		const executor: AgentExecutor = { id: 'codex', observe: async () => ({ available: true }), execute: vi.fn(async (request): Promise<AgentExecutionResult> => { await request.beginExecution?.(); return {
 			status: 'completed', summary: 'Estimated one bounded work item.', responseMarkdown: 'Estimated one bounded work item.',
-			outputs: { activityCompletion: { schemaVersion: 'treeseed.activity-completion/v1', summary: 'Estimated one bounded work item.',
+			outputs: { timingAwareness, activityCompletion: { schemaVersion: 'treeseed.activity-completion/v1', summary: 'Estimated one bounded work item.',
 				verification: [], reviewDisposition: null, contentOutput: { model: 'proposal', body: 'This proposal has one bounded work item.', frontmatter: proposal } } },
 			usage: [{ elapsedSeconds: 3 }],
 		}; }) };
@@ -313,7 +319,7 @@ describe('provider AgentKernel execution', () => {
 			resolvedRef: commit, files: [{ path: target.path, requestedPath: target.path, content: 'Question', frontmatter: {} }],
 		})) };
 		const executor: AgentExecutor = { id: 'codex', observe: async () => ({ available: true }), execute: vi.fn(async (request): Promise<AgentExecutionResult> => { await request.beginExecution?.(); return {
-			status: 'completed', summary: 'Source-grounded response.', responseMarkdown: 'Source-grounded response.', usage: [{ elapsedSeconds: 2 }],
+			status: 'completed', summary: 'Source-grounded response.', responseMarkdown: 'Source-grounded response.', outputs: { timingAwareness }, usage: [{ elapsedSeconds: 2 }],
 		}; }) };
 		const result = await executeKernelAssignment({ executor, request: input, runtimeBuild });
 		expect(result.status, JSON.stringify(result)).toBe('responded');

@@ -87,5 +87,7 @@ describe('Agent RC publication', () => {
 		expect(guest).not.toContain("'--approve-for-me'");
 		expect(guest).not.toContain("'--sandbox', 'workspace-write'");
 		expect(guest).toContain("resolve(inputRoot, 'codex-auth.json')");
+		expect(guest.indexOf("resolve(outputRoot, 'codex-auth.json'), subscriptionAuth"))
+			.toBeLessThan(guest.indexOf("await progress('provider.starting')"));
 	});
 });

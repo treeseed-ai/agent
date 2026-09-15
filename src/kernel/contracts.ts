@@ -2,6 +2,7 @@ import type {
 	AssignmentContext,
 	AssignmentReference,
 	AssignmentResult,
+	AssignmentTimingAwarenessReceipt,
 	ExactEntityReference,
 } from '@treeseed/sdk/agent-capacity';
 
@@ -13,6 +14,7 @@ export interface ModelInvocationRequest {
 
 export interface ModelInvocationResult {
 	text: string;
+	timingAwareness: AssignmentTimingAwarenessReceipt;
 	activityCompletion?: {
 		summary: string;
 		reviewDisposition: 'approved' | 'rejected' | 'revision-required' | null;

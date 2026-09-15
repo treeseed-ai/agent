@@ -30,7 +30,7 @@ abstract class ModelHandler implements Handler {
 	}
 
 	protected result(context: AssignmentContext, runtime: AgentRuntime, summary: string,
-		references: AssignmentReference[], inputTokens?: number, outputTokens?: number): AssignmentResult {
+		references: AssignmentReference[], timingAwareness: AssignmentResult['timingAwareness'], inputTokens?: number, outputTokens?: number): AssignmentResult {
 		return {
 			schemaVersion: 'treeseed.assignment-result/v1',
 			id: resultId(context.assignment.id, summary),
@@ -38,7 +38,7 @@ abstract class ModelHandler implements Handler {
 			status: 'completed', summary, references, verification: [],
 			usage: { elapsedSeconds: 0, ...(inputTokens == null ? {} : { modelInputTokens: inputTokens }),
 				...(outputTokens == null ? {} : { modelOutputTokens: outputTokens }) },
-			diagnostics: [], completedAt: runtime.now(),
+			diagnostics: [], timingAwareness, completedAt: runtime.now(),
 		};
 	}
 }
@@ -84,7 +84,7 @@ export class WriterHandler extends ModelHandler {
 				} } }));
 			}
 		}
-		const result = this.result(context, runtime, model.text, references, model.inputTokens, model.outputTokens);
+		const result = this.result(context, runtime, model.text, references, model.timingAwareness, model.inputTokens, model.outputTokens);
 		return { ...result, verification: model.verification ?? [] };
 	}
 }
@@ -100,7 +100,7 @@ export class EstimateHandler extends ModelHandler {
 		const output = model.activityCompletion?.contentOutput;
 		if (!output || output.model !== 'proposal') throw new Error('estimate_proposal_output_required');
 		const reference = await runtime.commitTreeDx({ target, value: { body: output.body, frontmatter: output.frontmatter } });
-		const result = this.result(context, runtime, model.text, [reference], model.inputTokens, model.outputTokens);
+		const result = this.result(context, runtime, model.text, [reference], model.timingAwareness, model.inputTokens, model.outputTokens);
 		return { ...result, verification: model.verification ?? [] };
 	}
 }
@@ -117,7 +117,7 @@ export class ActorHandler extends ModelHandler {
 			message: `Complete ${context.assignment.sourceRef.model}/${context.assignment.sourceRef.id}`,
 			paths: context.assignment.workspace.writablePaths,
 		}));
-		const result = this.result(context, runtime, model.text, references, model.inputTokens, model.outputTokens);
+		const result = this.result(context, runtime, model.text, references, model.timingAwareness, model.inputTokens, model.outputTokens);
 		return { ...result, verification: model.verification ?? [] };
 	}
 }

@@ -338,7 +338,12 @@ export async function runSandboxGuest() {
 	const codexHome = '/workspace/.treeseed/codex', responsePath = '/workspace/.treeseed/response.md'; await mkdir(codexHome, { recursive: true, mode: 0o700 });
 	await writeFile(resolve(codexHome,'config.toml'),codexTreeDxMcpConfig(sandboxId,operationToken,assignment),{mode:0o600});
 	const subscriptionAuth = await readFile(resolve(inputRoot, 'codex-auth.json')).catch(() => null);
-	if (subscriptionAuth) await writeFile(resolve(codexHome, 'auth.json'), subscriptionAuth, { mode: 0o600 });
+	if (subscriptionAuth) {
+		await writeFile(resolve(codexHome, 'auth.json'), subscriptionAuth, { mode: 0o600 });
+		// Seed the protected return channel before model execution so a killed or
+		// non-refreshing Codex process cannot strand the host credential updater.
+		await writeFile(resolve(outputRoot, 'codex-auth.json'), subscriptionAuth, { mode: 0o600, flag: 'wx' });
+	}
 	const relay = subscriptionAuth ? null : await startModelRelay(assignment, sandboxId, operationToken);
 	const subscriptionProxy = subscriptionAuth ? `http://${encodeURIComponent(sandboxId)}:${encodeURIComponent(operationToken)}@10.89.0.1:7444` : null;
 	const events: Record<string, unknown>[] = [], timingTracker: TimingAwarenessTracker = { completedChecks: 0, firstTool: null, firstToolSucceeded: false, lastTool: null, lastToolSucceeded: false },
@@ -373,7 +378,7 @@ export async function runSandboxGuest() {
 		});
 		if (subscriptionAuth) {
 			const refreshed = await readFile(resolve(codexHome, 'auth.json'));
-			await writeFile(resolve(outputRoot, 'codex-auth.json'), refreshed, { mode: 0o600, flag: 'wx' });
+			await writeFile(resolve(outputRoot, 'codex-auth.json'), refreshed, { mode: 0o600 });
 		}
 		if (providerError) throw providerError;
 		await progress('provider.completed');

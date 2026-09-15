@@ -3,6 +3,7 @@ import {
 	assignmentContextSchema,
 	assignmentReferenceSchema,
 	assignmentResultSchema,
+	assignmentTimingAwarenessReceiptSchema,
 	type AssignmentReference,
 	type AssignmentResult,
 } from '@treeseed/sdk/agent-capacity';
@@ -84,8 +85,10 @@ export async function executeKernelAssignment(input: {
 			const verification = Array.isArray(record(transport.result.outputs).verificationRecords)
 				? record(transport.result.outputs).verificationRecords as never[] : [];
 			const activityCompletion = record(record(transport.result.outputs).activityCompletion);
+			const timingAwareness = assignmentTimingAwarenessReceiptSchema.parse(record(transport.result.outputs).timingAwareness);
 			return {
 				text: transport.result.responseMarkdown ?? transport.result.summary,
+				timingAwareness,
 				references,
 				verification,
 				...(typeof activityCompletion.summary === 'string' ? { activityCompletion: {

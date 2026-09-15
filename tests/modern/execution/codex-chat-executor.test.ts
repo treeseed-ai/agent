@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { createHash } from 'node:crypto';
 import { assertObjectiveContentModel, discussionMessageSourcePaths, readDiscussionSourceMessage, readFocusedTreeDxContext, readIdentityContext } from '../../../src/provider/execution/codex-chat-executor.ts';
 import { executeAssignmentTreeDxTool, reasoningEffortFromAssignmentMetadata } from '../../../src/provider/execution/microvm-executor.ts';
-import { assertReplayableVerificationCommand, codexInteractiveTimeoutMs, codexProjectInstructionArguments, codexReasoningArguments, codexTreeDxMcpConfig, completedTimeStatusChecks, promptFromContext, providerEventShapeSummary, requiresActivityCompletion, treeDxToolDefinitions, verifyReportedActivityCommands } from '../../../src/sandbox/guest.ts';
+import { assertReplayableVerificationCommand, codexInteractiveTimeoutMs, codexProjectInstructionArguments, codexReasoningArguments, codexTreeDxMcpConfig, completedTimeStatusChecks, promptFromContext, providerEventShapeSummary, requiresActivityCompletion, timingAwarenessContract, treeDxToolDefinitions, verifyReportedActivityCommands } from '../../../src/sandbox/guest.ts';
 
 describe('Codex chat executor', () => {
 	it('requires structured completion only for a mutable legacy source workspace', () => {
@@ -44,6 +44,15 @@ describe('Codex chat executor', () => {
 		expect(completedTimeStatusChecks([
 			{ type: 'item.completed', item: { type: 'mcp_tool_call', server: 'treedx', tool: 'treeseed_time_status', status: 'failed', error: 'unavailable' } },
 		])).toBe(0);
+	});
+	it('requires clock checks to bracket every other provider tool action', () => {
+		const clock = { type: 'item.completed', item: { type: 'mcp_tool_call', server: 'treedx', tool: 'treeseed_time_status', status: 'completed', error: null } };
+		const command = { type: 'item.completed', item: { type: 'command_execution', status: 'completed', error: null } };
+		expect(timingAwarenessContract([clock, command, clock])).toMatchObject({
+			completedChecks: 2, firstToolCompliant: true, finalToolCompliant: true,
+		});
+		expect(timingAwarenessContract([command, clock, clock])).toMatchObject({ firstToolCompliant: false });
+		expect(timingAwarenessContract([clock, clock, command])).toMatchObject({ finalToolCompliant: false });
 	});
 	it('summarizes provider event shapes without retaining arguments or output', () => {
 		expect(providerEventShapeSummary([{ type: 'item.completed', item: {

@@ -71,7 +71,7 @@ describe('provider AgentKernel execution', () => {
 	it('returns timing noncompliance for a bounded retry instead of terminalizing the graph node', async () => {
 		const executor: AgentExecutor = { id: 'codex', observe: async () => ({ available: true }), execute: vi.fn(async (request) => {
 			await request.beginExecution?.();
-			throw new Error('Kata guest exited 1: Agent timing-awareness contract requires two completed treeseed_time_status checks; observed 0.');
+			throw new Error('Kata guest exited 1: Agent timing-awareness contract requires treeseed_time_status as the first and final tool actions with two completed checks; observed 0.');
 		}) };
 		const result = await executeKernelAssignment({ executor, request: request(), runtimeBuild });
 		expect(result).toMatchObject({ status: 'returned', code: 'assignment_timing_awareness_missing', retryable: true });

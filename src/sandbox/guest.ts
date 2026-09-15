@@ -97,6 +97,41 @@ export function completedTimeStatusChecks(events: Record<string, unknown>[]) {
 	}).length;
 }
 
+type TimingAwarenessTracker = {
+	completedChecks: number;
+	firstTool: string | null;
+	firstToolSucceeded: boolean;
+	lastTool: string | null;
+	lastToolSucceeded: boolean;
+};
+
+function providerToolName(event: Record<string, unknown>) {
+	if (event.type !== 'item.completed') return null;
+	const item = record(event.item);
+	if (item.type === 'mcp_tool_call') return `${text(item.server)}:${text(item.tool)}`;
+	if (['command_execution', 'file_change', 'web_search'].includes(text(item.type))) return text(item.type);
+	return null;
+}
+
+export function observeTimingAwarenessEvent(tracker: TimingAwarenessTracker, event: Record<string, unknown>) {
+	const tool = providerToolName(event);
+	if (!tool) return tracker;
+	const item = record(event.item);
+	const succeeded = item.status === 'completed' && !item.error;
+	if (!tracker.firstTool) { tracker.firstTool = tool; tracker.firstToolSucceeded = succeeded; }
+	tracker.lastTool = tool;
+	tracker.lastToolSucceeded = succeeded;
+	if (tool === 'treedx:treeseed_time_status' && succeeded) tracker.completedChecks += 1;
+	return tracker;
+}
+
+export function timingAwarenessContract(events: Record<string, unknown>[]) {
+	const tracker = events.reduce(observeTimingAwarenessEvent, { completedChecks: 0, firstTool: null, firstToolSucceeded: false, lastTool: null, lastToolSucceeded: false } as TimingAwarenessTracker);
+	return { requiredChecks: 2, ...tracker,
+		firstToolCompliant: tracker.firstTool === 'treedx:treeseed_time_status' && tracker.firstToolSucceeded,
+		finalToolCompliant: tracker.lastTool === 'treedx:treeseed_time_status' && tracker.lastToolSucceeded };
+}
+
 export function providerEventShapeSummary(events: Record<string, unknown>[], secrets: string[] = []) {
 	return events.slice(-32).map(event => {
 		const item = record(event.item);
@@ -295,7 +330,8 @@ export async function runSandboxGuest() {
 	if (subscriptionAuth) await writeFile(resolve(codexHome, 'auth.json'), subscriptionAuth, { mode: 0o600 });
 	const relay = subscriptionAuth ? null : await startModelRelay(assignment, sandboxId, operationToken);
 	const subscriptionProxy = subscriptionAuth ? `http://${encodeURIComponent(sandboxId)}:${encodeURIComponent(operationToken)}@10.89.0.1:7444` : null;
-	const events: Record<string, unknown>[] = [], composedPrompt = promptFromContext(context, assignment.modelPolicy.reasoningEffort, assignment.resources.durationSeconds);
+	const events: Record<string, unknown>[] = [], timingTracker: TimingAwarenessTracker = { completedChecks: 0, firstTool: null, firstToolSucceeded: false, lastTool: null, lastToolSucceeded: false },
+		composedPrompt = promptFromContext(context, assignment.modelPolicy.reasoningEffort, assignment.resources.durationSeconds);
 	const canonicalActivity = text(record(record(record(context.canonicalAssignmentContext).assignment).effectiveProfile).activity);
 	const structuredCompletion = (Boolean(canonicalActivity) && canonicalActivity !== 'chat')
 		|| (sourceMetadata ? requiresActivityCompletion(sourceMetadata.mode) : false);
@@ -315,7 +351,8 @@ export async function runSandboxGuest() {
 				...(relay ? { OPENAI_BASE_URL: relay.baseUrl, OPENAI_API_KEY: 'treeseed-assignment-relay' } : {}),
 				...(subscriptionProxy ? { HTTPS_PROXY: subscriptionProxy, https_proxy: subscriptionProxy } : {}), LANG: 'C.UTF-8' },
 			timeoutMs: codexInteractiveTimeoutMs(assignment.resources.durationSeconds),
-			onLine(line) { try { events.push(record(JSON.parse(line))); } catch { events.push({ type: 'provider.event.invalid', digest: createHash('sha256').update(line).digest('hex') }); } if (events.length > 256) events.shift(); },
+			onLine(line) { let event: Record<string, unknown>; try { event = record(JSON.parse(line)); } catch { event = { type: 'provider.event.invalid', digest: createHash('sha256').update(line).digest('hex') }; }
+				observeTimingAwarenessEvent(timingTracker, event); events.push(event); if (events.length > 256) events.shift(); },
 		}).catch(error => {
 			const secrets = [operationToken, ...(subscriptionAuth ? providerCredentialValues(JSON.parse(subscriptionAuth.toString('utf8'))) : [])];
 			const detail = providerFailureSummary(events, secrets);
@@ -329,10 +366,12 @@ export async function runSandboxGuest() {
 		}
 		if (providerError) throw providerError;
 		await progress('provider.completed');
-		const timingChecks = completedTimeStatusChecks(events);
-		if (timingChecks < 2) {
+		const timingAwareness = { requiredChecks: 2, ...timingTracker,
+			firstToolCompliant: timingTracker.firstTool === 'treedx:treeseed_time_status' && timingTracker.firstToolSucceeded,
+			finalToolCompliant: timingTracker.lastTool === 'treedx:treeseed_time_status' && timingTracker.lastToolSucceeded };
+		if (timingAwareness.completedChecks < 2 || !timingAwareness.firstToolCompliant || !timingAwareness.finalToolCompliant) {
 			const secrets = [operationToken, ...(subscriptionAuth ? providerCredentialValues(JSON.parse(subscriptionAuth.toString('utf8'))) : [])];
-			throw new Error(`Agent timing-awareness contract requires two completed treeseed_time_status checks; observed ${timingChecks}. Provider event shapes: ${JSON.stringify(providerEventShapeSummary(events, secrets))}`);
+			throw new Error(`Agent timing-awareness contract requires treeseed_time_status as the first and final tool actions with two completed checks; observed ${JSON.stringify(timingAwareness)}. Provider event shapes: ${JSON.stringify(providerEventShapeSummary(events, secrets))}`);
 		}
 		const rawResponse = (await readFile(responsePath, 'utf8')).trim(); if (!rawResponse) throw new Error('Execution provider returned an empty response.');
 		const observedCompletion = structuredCompletion ? await observeReportedActivityCommands(validateActivityCompletion(JSON.parse(rawResponse))) : null;
@@ -368,7 +407,7 @@ export async function runSandboxGuest() {
 			status: responseMarkdown === '<!-- treeseed:abstain -->' ? 'completed' : 'completed', summary: 'Kata assignment completed.', responseMarkdown,
 			artifacts, usage: { ...record(completed.usage), provenance: Object.keys(record(completed.usage)).length ? 'execution-provider' : 'unavailable', activeSeconds: elapsedSeconds, elapsedSeconds,
 				cpuUserMicros: usageAfter.userCPUTime - usageBefore.userCPUTime, cpuSystemMicros: usageAfter.systemCPUTime - usageBefore.systemCPUTime, peakRssBytes: usageAfter.maxRSS * 1024 },
-			diagnostics: { systemPrompt: composedPrompt, providerEvents: events, providerArguments, model: assignment.modelPolicy.model, provider: assignment.modelPolicy.provider, contextManifest: context, activityCompletion, timingAwareness: { requiredChecks: 2, completedChecks: timingChecks },
+			diagnostics: { systemPrompt: composedPrompt, providerEvents: events, providerArguments, model: assignment.modelPolicy.model, provider: assignment.modelPolicy.provider, contextManifest: context, activityCompletion, timingAwareness,
 				verificationRecords: observedCompletion?.verification ?? [], changedPaths,
 				sourceCommit: sourceMetadata?.mode === 'work' ? (await run('/usr/bin/git', ['rev-parse', '--verify', 'HEAD^{commit}'], { cwd: '/workspace/project', captureStdout: true, maxStdoutBytes: 128, timeoutMs: 10_000 })).stdout.trim() : source?.commit ?? null,
 				guestKernel: (await readFile('/proc/version', 'utf8')).trim(), guestUid: process.getuid?.() ?? null, sandboxProfile: assignment.profile }, teardown: { verified: false, completedAt: null } });

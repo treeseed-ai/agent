@@ -120,7 +120,7 @@ export async function executeKernelAssignment(input: {
 		}));
 	} catch (error) {
 		const summary = error instanceof Error ? error.message : String(error);
-		if (summary.includes('Agent timing-awareness contract requires two completed treeseed_time_status checks')) {
+		if (summary.includes('Agent timing-awareness contract requires')) {
 			return { status: 'returned', code: 'assignment_timing_awareness_missing', summary, retryable: true };
 		}
 		return { status: 'failed', code: typeof (error as { code?: unknown })?.code === 'string'

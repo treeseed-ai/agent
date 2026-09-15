@@ -10,6 +10,9 @@ it('routes every advertised non-conversation capability through a managed workda
 		if (capability.id !== 'treeseed.coordination.conversation') expect(workday.capabilities).toContain(capability.id);
 	}
 	expect(workday.capabilities).toContain('treeseed.engineering.review');
+	expect(workday.capabilities).toContain('treeseed.engineering.release');
+	expect(manifest.lanes.find(lane => lane.purpose === 'platform')!.capabilities).toContain('treeseed.engineering.release');
+	expect(manifest.adapters[0]!.offers.flatMap(({ offer }) => offer.capabilities.map(({ id }) => id))).toContain('treeseed.engineering.release');
 	expect(workday.capabilities).not.toContain('treeseed.coordination.conversation');
 	expect(communication.priority).toBeGreaterThan(workday.priority);
 	expect(communication.reservedConcurrentWorkers).toBe(1);

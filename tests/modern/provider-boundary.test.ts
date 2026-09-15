@@ -13,6 +13,7 @@ import { buildProviderPlan, providerAvailabilityCapabilities } from '../../src/p
 import { providerEnrollmentInput } from '../../src/provider/lifecycle/enrollment-input.ts';
 import { stringify as stringifyYaml } from 'yaml';
 import { createManagedProviderManifestV5 } from '../../src/provider/configuration/managed-manifest.ts';
+import { assignmentAllowedServices, timingAwarenessEvidence } from '../../src/provider/execution/microvm-executor.ts';
 import { validateCapacityProviderManifestV5 } from '@treeseed/sdk/capacity-provider';
 
 const digest = (value: string) => `sha256:${value.repeat(64)}`;
@@ -52,6 +53,17 @@ function sourceFiles(root: string): string[] {
 }
 
 describe('Agent package ownership boundary', () => {
+	it('publishes only valid completed timing-awareness evidence', () => {
+		expect(timingAwarenessEvidence({ requiredChecks: 2, completedChecks: 2 }))
+			.toEqual({ requiredChecks: 2, completedChecks: 2 });
+		expect(() => timingAwarenessEvidence({ requiredChecks: 2, completedChecks: 1 }))
+			.toThrow(/timing-awareness evidence/u);
+	});
+	it('grants package restoration only to workday sandboxes', () => {
+		expect(assignmentAllowedServices('workday', true)).toEqual(['model-gateway', 'codex-subscription', 'package-registry', 'treedx-relay']);
+		expect(assignmentAllowedServices('conversation', true)).toEqual(['model-gateway', 'codex-subscription', 'treedx-relay']);
+		expect(assignmentAllowedServices('workday', false)).toEqual(['model-gateway', 'codex-subscription', 'package-registry']);
+	});
 	it('publishes a portable release-bound managed provider default', () => {
 		const manifest = createManagedProviderManifestV5({ release: '0.13.0-rc.42', guestImage: 'treeseed/sandbox-codex',
 			guestImageDigest: digest('5'), baseImageDigest: digest('6'), provenanceDigest: digest('7') });
@@ -135,6 +147,18 @@ describe('Agent package ownership boundary', () => {
 		} finally {
 			rmSync(root, { recursive: true, force: true });
 		}
+	});
+
+	it('binds a manager-selected guest digest only in explicit development mode', async () => {
+		const root = mkdtempSync(resolve(tmpdir(), 'treeseed-provider-development-'));
+		const manifestPath = resolve(root, 'treeseed.capacity-provider.yaml');
+		writeFileSync(manifestPath, stringifyYaml(providerManifestFixture()));
+		try {
+			const selected = digest('a');
+			const loaded = await loadProviderManifest(manifestPath, undefined, { TREESEED_DEVELOPMENT_MODE: 'candidate', TREESEED_DEVELOPMENT_SANDBOX_GUEST_DIGEST: selected });
+			expect(loaded.manifest.sandbox.profiles.every((profile) => profile.guestImageDigest === selected)).toBe(true);
+			await expect(loadProviderManifest(manifestPath, undefined, { TREESEED_DEVELOPMENT_SANDBOX_GUEST_DIGEST: selected })).rejects.toThrow(/restricted to valid managed development/u);
+		} finally { rmSync(root, { recursive: true, force: true }); }
 	});
 
 	it('migrates manager-custodied v4 manifests in memory with exact release lineage', async () => {

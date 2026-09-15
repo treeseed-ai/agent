@@ -1,0 +1,125 @@
+import { createHash } from 'node:crypto';
+import type { AssignmentContext, AssignmentReference, AssignmentResult } from '@treeseed/sdk/agent-capacity';
+import type { AgentRuntime, Handler } from '../contracts.ts';
+
+function resultId(assignmentId: string, summary: string): string {
+	return `result-${createHash('sha256').update(`${assignmentId}\n${summary}`).digest('hex').slice(0, 24)}`;
+}
+
+function prompt(context: AssignmentContext): string {
+	const assignment = context.assignment;
+	return [
+		assignment.effectiveProfile.prompt.system,
+		...(assignment.effectiveProfile.prompt.instructions ?? []),
+		`Assignment: ${assignment.sourceRef.model}/${assignment.sourceRef.id}`,
+		`Workspace: ${assignment.workspace.mode}`,
+		`Acceptance criteria and exact source context are in the authorized assignment context.`,
+	].filter(Boolean).join('\n\n');
+}
+
+abstract class ModelHandler implements Handler {
+	abstract readonly id: string;
+	abstract run(context: AssignmentContext, runtime: AgentRuntime): Promise<AssignmentResult>;
+
+	protected async invoke(context: AssignmentContext, runtime: AgentRuntime) {
+		return runtime.invokeModel({
+			prompt: prompt(context),
+			context: context.context.map((item) => item.value),
+			parameters: context.assignment.effectiveProfile.parameters,
+		});
+	}
+
+	protected result(context: AssignmentContext, runtime: AgentRuntime, summary: string,
+		references: AssignmentReference[], inputTokens?: number, outputTokens?: number): AssignmentResult {
+		return {
+			schemaVersion: 'treeseed.assignment-result/v1',
+			id: resultId(context.assignment.id, summary),
+			assignmentId: context.assignment.id,
+			status: 'completed', summary, references, verification: [],
+			usage: { elapsedSeconds: 0, ...(inputTokens == null ? {} : { modelInputTokens: inputTokens }),
+				...(outputTokens == null ? {} : { modelOutputTokens: outputTokens }) },
+			diagnostics: [], completedAt: runtime.now(),
+		};
+	}
+}
+
+export class WriterHandler extends ModelHandler {
+	readonly id: string = 'writer';
+
+	async run(context: AssignmentContext, runtime: AgentRuntime): Promise<AssignmentResult> {
+		const model = await this.invoke(context, runtime);
+		const governedTreeDxWrite = context.assignment.workspace.mode === 'treedx'
+			&& context.assignment.effectiveProfile.activity !== 'chat';
+		const references: AssignmentReference[] = governedTreeDxWrite ? [] : [...(model.references ?? [])];
+		// Conversation text is committed by the provider discussion operation under
+		// the exact active lease and TreeDX workspace. Committing it here as a Note
+		// would create a second write path and the wrong content model.
+		if (governedTreeDxWrite) {
+			const reviewing = context.assignment.effectiveProfile.activity === 'reviewing';
+			const target = context.assignment.grant.contentWrite.find((candidate) => candidate.model === (reviewing ? 'decision' : 'note'));
+			if (!target) throw new Error('writer_content_commit_grant_required');
+			if (reviewing) {
+				const disposition = model.activityCompletion?.reviewDisposition;
+				if (!disposition) throw new Error('review_disposition_required');
+				const proposalReview = context.assignment.sourceRef.model === 'proposal' && context.predecessorResults.length === 0;
+				const candidate = context.predecessorResults.flatMap((result) => result.references)
+					.find((reference) => reference.kind === 'git');
+				const subjectRef = proposalReview ? context.assignment.sourceRef
+					: candidate ? { store: 'git' as const, model: 'repository', id: candidate.repository,
+						repository: candidate.repository, commit: candidate.commit, ...(candidate.path ? { path: candidate.path } : {}) }
+						: context.assignment.sourceRef;
+				if (!subjectRef) throw new Error('review_subject_reference_required');
+				references.push(await runtime.commitTreeDx({ target, value: { body: model.text, frontmatter: {
+					schemaVersion: 'treeseed.decision/v1', id: target.id, projectId: context.assignment.projectId,
+					decisionClass: proposalReview ? 'proposal' : 'work-review', decisionMethod: 'authority', subjectRef,
+					disposition: disposition === 'approved' ? 'approved' : proposalReview
+						? (disposition === 'rejected' ? 'rejected' : 'deferred') : 'request-changes', rationale: model.text,
+					authorityRefs: context.assignment.authorityRefs, decidedByRefs: [context.assignment.effectiveProfile.profileRef],
+					decidedAt: runtime.now(),
+				} } }));
+			} else {
+				references.push(await runtime.commitTreeDx({ target, value: { body: model.text, frontmatter: {
+					schemaVersion: 'treeseed.note/v1', id: target.id, projectId: context.assignment.projectId,
+					classification: 'general', subjectRefs: [context.assignment.sourceRef], createdAt: runtime.now(),
+				} } }));
+			}
+		}
+		const result = this.result(context, runtime, model.text, references, model.inputTokens, model.outputTokens);
+		return { ...result, verification: model.verification ?? [] };
+	}
+}
+
+export class EstimateHandler extends ModelHandler {
+	readonly id = 'estimate';
+
+	async run(context: AssignmentContext, runtime: AgentRuntime): Promise<AssignmentResult> {
+		if (context.assignment.workspace.mode !== 'treedx') throw new Error('estimate_treedx_workspace_required');
+		const target = context.assignment.grant.contentWrite.find((candidate) => candidate.model === 'proposal');
+		if (!target) throw new Error('estimate_proposal_commit_grant_required');
+		const model = await this.invoke(context, runtime);
+		const output = model.activityCompletion?.contentOutput;
+		if (!output || output.model !== 'proposal') throw new Error('estimate_proposal_output_required');
+		const reference = await runtime.commitTreeDx({ target, value: { body: output.body, frontmatter: output.frontmatter } });
+		const result = this.result(context, runtime, model.text, [reference], model.inputTokens, model.outputTokens);
+		return { ...result, verification: model.verification ?? [] };
+	}
+}
+export class ReviewerHandler extends WriterHandler { readonly id = 'reviewer'; }
+
+export class ActorHandler extends ModelHandler {
+	readonly id: string = 'actor';
+
+	async run(context: AssignmentContext, runtime: AgentRuntime): Promise<AssignmentResult> {
+		if (context.assignment.workspace.mode === 'treedx') throw new Error('actor_source_workspace_required');
+		const model = await this.invoke(context, runtime);
+		const references: AssignmentReference[] = [...(model.references ?? [])];
+		if (context.assignment.workspace.mode === 'git') references.push(await runtime.commitSource({
+			message: `Complete ${context.assignment.sourceRef.model}/${context.assignment.sourceRef.id}`,
+			paths: context.assignment.workspace.writablePaths,
+		}));
+		const result = this.result(context, runtime, model.text, references, model.inputTokens, model.outputTokens);
+		return { ...result, verification: model.verification ?? [] };
+	}
+}
+
+export class ReleaserHandler extends ActorHandler { readonly id = 'releaser'; }

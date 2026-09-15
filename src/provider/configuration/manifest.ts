@@ -42,7 +42,12 @@ export async function loadProviderManifest(path = process.env.TREESEED_CAPACITY_
 	const source = parseYaml(await readFile(absolute, 'utf8')) as CapacityProviderManifestV5 | { schemaVersion?: unknown };
 	const parsed = source.schemaVersion === 4 ? migrateManagedProviderManifestV4(source, env) : source as CapacityProviderManifestV5;
 	const overlay = await localConnections(dataDirectory);
-	const manifest = overlay ? { ...parsed, connections: overlay } : parsed;
+	let manifest = overlay ? { ...parsed, connections: overlay } : parsed;
+	const developmentGuestDigest = env.TREESEED_DEVELOPMENT_SANDBOX_GUEST_DIGEST?.trim();
+	if (developmentGuestDigest) {
+		if (!env.TREESEED_DEVELOPMENT_MODE || !/^sha256:[a-f0-9]{64}$/u.test(developmentGuestDigest)) throw new Error('Sandbox guest digest overrides are restricted to valid managed development selections.');
+		manifest = { ...manifest, sandbox: { ...manifest.sandbox, profiles: manifest.sandbox.profiles.map((profile) => ({ ...profile, guestImageDigest: developmentGuestDigest })) } };
+	}
 	if (manifest.schemaVersion !== 5) throw new Error('Capacity providers require a v5 capability-offer manifest.');
 	const validation = validateCapacityProviderManifestV5(manifest);
 	if (!validation.ok) throw new Error(`Invalid capacity provider manifest: ${diagnosticMessage(validation.diagnostics)}`);
@@ -91,6 +96,8 @@ export function providerServerProfileAudienceEnvironmentName(profile: string) {
 type ProviderControlPlaneTarget = Pick<ProviderConnectionConfig, 'id' | 'controlPlaneUrl' | 'serverProfile' | 'controlPlaneAudience'> | Pick<CapacityProviderJoinInput, 'id' | 'controlPlaneUrl' | 'serverProfile' | 'controlPlaneAudience'>;
 
 export function providerConnectionControlPlaneUrl(connection: ProviderControlPlaneTarget, env: NodeJS.ProcessEnv = process.env) {
+	const developmentUrl = env.TREESEED_DEVELOPMENT_MODE && env.TREESEED_CONTROL_PLANE_URL?.trim();
+	if (developmentUrl) return developmentUrl.replace(/\/$/u, '');
 	if (connection.controlPlaneUrl?.trim()) return connection.controlPlaneUrl.replace(/\/$/u, '');
 	const profile = connection.serverProfile?.trim();
 	if (!profile) throw new Error(`Provider connection ${connection.id} does not declare controlPlaneUrl or serverProfile.`);

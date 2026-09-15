@@ -7,7 +7,6 @@ export interface ActiveSource {
   recipientPublicKey: string;
   authorization: SourceWorkspaceAuthorization;
   authorize: NonNullable<AgentExecutionRequest['authorizeSource']>;
-  parentCandidateId: string | null;
   leaseId: string;
 }
 
@@ -20,7 +19,7 @@ export function activeSandboxAttempt(attemptCount: unknown): number {
 }
 
 /** Trusted provider process only. The guest receives source metadata, never this callback or sealed credentials. */
-export async function prepareAssignmentSource(client: Pick<SandboxBrokerClient, 'sourceStatus' | 'source'> & Partial<Pick<SandboxBrokerClient, 'sourceChunk'>>,
+export async function prepareAssignmentSource(client: Pick<SandboxBrokerClient, 'sourceStatus' | 'source'>,
   sandbox: { sandboxId: string; operationToken: string }, request: AgentExecutionRequest): Promise<ActiveSource> {
   if (!request.authorizeSource) throw new Error('Provider source authorization transport is unavailable.');
   const signal = AbortSignal.any([AbortSignal.timeout(240_000), ...(request.signal ? [request.signal] : [])]);
@@ -28,17 +27,6 @@ export async function prepareAssignmentSource(client: Pick<SandboxBrokerClient, 
   if (!/^[A-Za-z0-9+/]{43}=$/u.test(initial.recipientPublicKey)) throw new Error('Source broker omitted its host recipient key.');
   let response = await request.authorizeSource(initial.recipientPublicKey);
   signal.throwIfAborted();
-  if (response.sourceBundle) {
-    if (!request.readSourceChunk || !client.sourceChunk) throw new Error('Source candidate handoff transport is unavailable.');
-    const bundle = response.sourceBundle;
-    for (let index = 0; index < bundle.chunks.length; index++) {
-      if (Date.parse(response.authorization.expiresAt) <= Date.now() + 30_000) response = await request.authorizeSource(initial.recipientPublicKey);
-      if (JSON.stringify(response.sourceBundle) !== JSON.stringify(bundle)) throw new Error('Assignment candidate changed during source transfer.');
-      const chunk = await request.readSourceChunk(bundle.artifactId, index);
-      const receipt = await client.sourceChunk(sandbox.sandboxId, sandbox.operationToken, response, chunk, signal);
-      if (index === bundle.chunks.length - 1 && !receipt.ready) throw new Error('Broker did not verify the complete source candidate.');
-    }
-  }
   let status = await client.source(sandbox.sandboxId, sandbox.operationToken, 'prepare', response, signal);
   await request.emit?.({ type: 'execution.progress', occurredAt: new Date().toISOString(), summary: 'Preparing isolated project source.',
     payload: { stage: 'source.preparing', source: response.authorization.source, mode: response.authorization.mode } });
@@ -55,7 +43,7 @@ export async function prepareAssignmentSource(client: Pick<SandboxBrokerClient, 
   await request.emit?.({ type: 'execution.progress', occurredAt: new Date().toISOString(), summary: 'Exact project source attached with private writable storage.',
     payload: { stage: 'source.ready', source: current.authorization.source, mode: current.authorization.mode,
       publication: current.authorization.publication, leaseId: attached.leaseId } });
-  return { recipientPublicKey: initial.recipientPublicKey, authorization: current.authorization, authorize: request.authorizeSource, parentCandidateId: current.sourceBundle?.artifactId ?? null, leaseId: attached.leaseId };
+  return { recipientPublicKey: initial.recipientPublicKey, authorization: current.authorization, authorize: request.authorizeSource, leaseId: attached.leaseId };
 }
 
 export async function renewAssignmentSource(client: Pick<SandboxBrokerClient, 'source'>,

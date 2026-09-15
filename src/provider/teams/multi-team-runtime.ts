@@ -10,6 +10,7 @@ import { runProviderAssignment } from '../operations/runner.ts';
 import { createAssignmentTreeDxFacade } from '../coordination/assignment-treedx.ts';
 import type { CapacityProviderManifestV5 } from '@treeseed/sdk/capacity-provider';
 import { materializeCapabilityOffers } from '../capabilities/materialize-offers.ts';
+import { assignmentOfferId } from '../execution/assignment-selection.ts';
 
 function record(value: unknown): Record<string, unknown> {
 	return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -91,6 +92,7 @@ export async function runMultiTeamProviderManager(
 			const capabilities = [...new Set(adapter.offers.flatMap(({ offer }) => offer.capabilities.map(({ id }) => id)))];
 			return {
 				id: adapter.id,
+				runtimeBuild: config.env.TREESEED_PROVIDER_SOURCE_CLOSURE_DIGEST,
 				offers: adapter.offers.map(({ offer }) => offer),
 				laneIds: adapter.laneIds,
 				maxConcurrentWorkers: adapter.maxConcurrentWorkers,
@@ -148,15 +150,21 @@ export async function runMultiTeamProviderRunners(
 			leasedAssignmentId = assignmentId;
 			leasedToken = leaseToken;
 			if (!assignmentId || !leaseToken) {
+				const diagnostics = record(leased.diagnostics ?? leased.leaseDiagnostics);
+				const synthesis = record(diagnostics.synthesis);
+				if (text(synthesis.status) === 'failed') {
+					const details = record(synthesis.details);
+					throw new Error(`Assignment synthesis failed (${text(synthesis.code) ?? 'unknown'}): ${text(synthesis.message) ?? 'No diagnostic message was returned.'}${Object.keys(details).length ? ` ${JSON.stringify(details)}` : ''}`);
+				}
 				await localState.release(claim.id);
-				results.push({ connectionId: connection.connection.id, status: 'idle', reason: 'no_assignment' });
+				results.push({ connectionId: connection.connection.id, status: 'idle', reason: 'no_assignment', diagnostics: Object.keys(diagnostics).length ? diagnostics : null });
 				continue;
 			}
 			if (text(assignment.executionKind) === 'conversation') await client.acknowledgeCommunicationNotification(assignmentId, {
 				providerId: connection.providerId, runnerId: claim.runnerId, observedAt: new Date().toISOString(),
 			});
 			const executionProviderId = text(assignment.executionProviderId, record(assignment.capacityEnvelope).executionProviderId);
-			const offerId = text(assignment.offerId, record(assignment.metadata).offerId);
+			const offerId = assignmentOfferId(assignment);
 			const laneId = text(assignment.laneId, record(assignment.capacityEnvelope).laneId);
 			const providerLaneId = executionProviderId && laneId?.startsWith(`${executionProviderId}:`)
 				? laneId.slice(executionProviderId.length + 1)
@@ -187,6 +195,7 @@ export async function runMultiTeamProviderRunners(
 				executor,
 				assignment,
 				treeDx,
+				runtimeBuild: config.env.TREESEED_PROVIDER_SOURCE_CLOSURE_DIGEST,
 				leaseToken,
 				runnerId: claim.runnerId,
 				leaseSeconds: 300,

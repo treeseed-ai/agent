@@ -7,8 +7,8 @@ const response=(items:unknown[])=>({data:{result:{data:{items}}}});
 
 function request(overrides:Record<string,unknown>={}) {
 	const projectFiles=[
-		file('agents/architect.mdx','# Architect',{slug:'architect',summary:'Owns architecture',groupIds:['architecture'],activityProfiles:{chat:{enabled:true,permissions:{content:{read:['**']}},outputContract:{response:{}}}},systemPrompt:'must not enter peer roster'}),
-		file('agents/engineer.mdx','# Engineer',{slug:'engineer',summary:'Builds software',activityProfiles:{acting:{enabled:true,permissions:{content:{read:['**']}},outputContract:{patch:{}}}},systemPrompt:'must not enter peer roster'}),
+		file('agents/architect.mdx','# Architect',{id:'agent:architect',purpose:'Owns architecture',responsibilities:['Maintain architecture'],capabilities:['architecture'],activityProfiles:{chat:{handler:'writer',permissions:{content:{read:['book'],write:['discussion']},tools:['discussion']},prompt:{system:'Answer architecture questions from exact evidence.'}}},systemPrompt:'must not enter peer roster'}),
+		file('agents/engineer.mdx','# Engineer',{id:'agent:engineer',purpose:'Builds software',responsibilities:['Implement changes'],capabilities:['code-change'],activityProfiles:{acting:{handler:'actor',permissions:{content:{read:['book'],write:[]},tools:['source.read','source.write']},prompt:{system:'Implement accepted changes from exact evidence.'}}},systemPrompt:'must not enter peer roster'}),
 		file('objectives/architecture.mdx','# Architecture objective',{title:'Architecture',status:'active',group_ids:['architecture']}),
 		file('objectives/release.mdx','# Release objective',{title:'Release',status:'active',group_ids:['release']}),
 	];
@@ -38,6 +38,16 @@ describe('mandatory assignment context pack',()=>{
 		expect(pack.sources.some(source => source.kind.startsWith('discussion-'))).toBe(false);
 		expect(JSON.stringify(pack.sources)).not.toContain('do-not-send');
 	});
+	it('reads project identity from its bounded secondary repository when the writable workspace is Team Library', async () => {
+		const work = request(); work.assignment.executionKind = 'workday'; delete work.assignment.metadata.communication;
+		work.assignment.decisionInput = { input: { objective: 'Summarize the completed workday' } };
+		work.treeDx.repositoryId = 'team-repo'; work.treeDx.baseRef = 'team-ref';
+		work.treeDx.readRepositories = [{ projectId:'sdk-project', projectSlug:'sdk', repositoryId:'sdk-repo', baseRef:'sdk-ref', allowedPaths:['README.md','agents/**','objectives/**'], allowedModels:['knowledge','agent','objective'], source:'same-team' }];
+		await readCoreContextPack(work, { identity: { manifest: { teamId:'team-1', projectId:'sdk-project', projectSlug:'sdk', agentProfile:{path:'agents/architect.mdx'}, teamLibrary:{projectId:'team-project',repositoryId:'team-repo',immutableRef:'team-ref'} }, sources: [] }, focused: {}, message: {} });
+		const projectCalls = work.treeDx.invoke.mock.calls.filter(([,input]:any[])=>input.path.projectId==='sdk-project');
+		expect(projectCalls.length).toBeGreaterThan(0);
+		expect(projectCalls.every(([,input]:any[])=>input.path.repoId==='sdk-repo')).toBe(true);
+	});
 	it('compiles team anchors, the complete roster, group objectives, configured layers, and the live message',async()=>{
 		const pack=await readCoreContextPack(request(),{
 			identity:{manifest:{teamId:'team-1',projectId:'sdk-project',projectSlug:'sdk',agentProfile:{path:'agents/architect.mdx'},teamLibrary:{projectId:'team-project',repositoryId:'team-repo',immutableRef:'team-ref'}},sources:[
@@ -49,7 +59,7 @@ describe('mandatory assignment context pack',()=>{
 		expect(pack.manifest.schemaVersion).toBe('treeseed.assignment-context-pack/v1');
 		expect(pack.sources.map((source:any)=>source.kind)).toEqual(expect.arrayContaining(['project-readme','core-objective','agent-profile','team-readme','team-core-objective','agent-roster','discussion-message','discussion-history','discussion-state']));
 		expect(pack.sources.some((source:any)=>source.path==='objectives/architecture.mdx')).toBe(true);
-		expect(pack.sources.some((source:any)=>source.path==='objectives/release.mdx')).toBe(false);
+		expect(pack.sources.some((source:any)=>source.path==='objectives/release.mdx')).toBe(true);
 		expect(pack.roster).toHaveLength(2);
 		expect(JSON.stringify(pack.roster)).not.toContain('must not enter peer roster');
 		expect(pack.manifest.sources).toContainEqual(expect.objectContaining({layer:'activity',path:'architecture/principles.mdx',disposition:'omitted',reason:expect.stringMatching(/^duplicate_of:/u)}));

@@ -6,7 +6,12 @@ export function providerFailureSummary(events: Record<string, unknown>[], secret
 		const value = typeof error.message === 'string' ? error.message : typeof event.message === 'string' ? event.message : '';
 		return value ? [value] : [];
 	});
-	let summary = messages.join('; ');
+	return redactProviderDiagnostic(messages.join('; '), secrets);
+}
+
+export function redactProviderDiagnostic(value: unknown, secrets: string[] = []) {
+	let summary = typeof value === 'string' ? value : value && typeof value === 'object'
+		? String((value as Record<string, unknown>).message ?? '') : '';
 	for (const secret of secrets.filter(value => value.length > 0).sort((a, b) => b.length - a.length)) summary = summary.replaceAll(secret, '[redacted]');
 	return summary.replace(/https?:\/\/[^\s"<>]+/gu, '[provider URL]')
 		.replace(/\b(?:Bearer|Basic)\s+[^\s,;]+/giu, '[redacted authorization]')

@@ -30,7 +30,7 @@ export async function createAssignmentTreeDxFacade(connection: ProviderControlPl
 		userAgent: '@treeseed/agent assignment-treedx',
 	}));
 	return {
-		projectId, repositoryId: text(handle.repositoryId) || null, workspaceId: text(handle.workspaceId) || null,
+		projectId, handleId, repositoryId: text(handle.repositoryId) || null, workspaceId: text(handle.workspaceId) || null,
 		baseRef: text(handle.baseRef, handle.baseCommitSha) || null,
 		readRepositories:Array.isArray(handle.readRepositories)?handle.readRepositories as never:Array.isArray(record(handle.metadata).readRepositories)?record(handle.metadata).readRepositories as never:[],
 		async invoke(operationId, input, options = {}) {

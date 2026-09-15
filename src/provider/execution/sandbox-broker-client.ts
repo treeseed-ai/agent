@@ -1,8 +1,8 @@
 import { request } from 'node:http';
 import { createReadStream } from 'node:fs';
-import type { SandboxAssignment, SandboxLeaseRenewal, SandboxResult, SourceWorkspaceResponse, SourceCandidateAttestation, SourceCandidateReceipt } from '@treeseed/sdk/capacity-provider/sandbox';
+import type { SandboxAssignment, SandboxLeaseRenewal, SandboxResult, SourceWorkspaceResponse } from '@treeseed/sdk/capacity-provider/sandbox';
 
-export interface CandidateStatus { state: 'verifying' | 'ready' | 'accepted' | 'retained'; candidate?: SourceCandidateAttestation; receipt?: SourceCandidateReceipt }
+export interface SourcePublicationStatus { state: 'verifying' | 'published' | 'retained'; reference?: { kind: 'git'; repository: string; commit: string; branch: string }; failure?: string }
 
 export interface SourceJobStatus {
 	state: 'awaiting-authority' | 'building' | 'ready' | 'attaching' | 'attached' | 'failed' | 'stopped';
@@ -12,7 +12,7 @@ export interface SourceJobStatus {
 	error?: string;
 }
 
-function call<T>(socketPath: string, method: string, path: string, body?: unknown, signal?: AbortSignal, headers: Record<string, string> = {}) {
+function call<T>(socketPath: string, method: string, path: string, body?: unknown, signal?: AbortSignal, headers: Record<string, string> = {}, timeoutMs?: number) {
 	return new Promise<T>((resolve, reject) => {
 		const encoded = body === undefined ? undefined : Buffer.from(JSON.stringify(body));
 		const operation = request({ socketPath, method, path, headers: { ...headers, ...(encoded ? { 'content-type': 'application/json', 'content-length': String(encoded.byteLength) } : {}) } }, (response) => {
@@ -23,6 +23,7 @@ function call<T>(socketPath: string, method: string, path: string, body?: unknow
 				resolve(parsed as T);
 			});
 		});
+		if (timeoutMs) operation.setTimeout(timeoutMs, () => operation.destroy(new Error(`Sandbox broker ${method} ${path} timed out after ${timeoutMs}ms.`)));
 		operation.once('error', reject); const abort = () => operation.destroy(new Error('Sandbox broker request aborted.'));
 		if (signal?.aborted) abort(); else signal?.addEventListener('abort', abort, { once: true });
 		operation.once('close', () => signal?.removeEventListener('abort', abort)); if (encoded) operation.write(encoded); operation.end();
@@ -32,28 +33,19 @@ function call<T>(socketPath: string, method: string, path: string, body?: unknow
 export class SandboxBrokerClient {
 	constructor(readonly socketPath: string) {}
 	private path(suffix: string) { return `/v${1}${suffix}`; }
-	status(signal?: AbortSignal) { return call<Record<string, unknown>>(this.socketPath, 'GET', this.path('/status'), undefined, signal); }
-	prepare(assignment: SandboxAssignment, signal?: AbortSignal) { return call<{ sandboxId: string; operationToken: string }>(this.socketPath, 'POST', this.path('/sandboxes'), { assignment }, signal); }
+	status(signal?: AbortSignal) { return call<Record<string, unknown>>(this.socketPath, 'GET', this.path('/status'), undefined, signal, {}, 5_000); }
+	prepare(assignment: SandboxAssignment, signal?: AbortSignal) { return call<{ sandboxId: string; operationToken: string }>(this.socketPath, 'POST', this.path('/sandboxes'), { assignment }, signal, {}, 15_000); }
 	sourceStatus(sandboxId: string, token: string, signal?: AbortSignal) {
 		return call<SourceJobStatus>(this.socketPath, 'GET', this.path(`/sandboxes/${encodeURIComponent(sandboxId)}/source/status`), undefined, signal, { authorization: `Bearer ${token}` });
 	}
 	source(sandboxId: string, token: string, operation: 'prepare' | 'attach' | 'renew', response: SourceWorkspaceResponse, signal?: AbortSignal) {
 		return call<SourceJobStatus>(this.socketPath, 'POST', this.path(`/sandboxes/${encodeURIComponent(sandboxId)}/source/${operation}`), response, signal, { authorization: `Bearer ${token}` });
 	}
-	sourceChunk(sandboxId: string, token: string, authority: SourceWorkspaceResponse, chunk: unknown, signal?: AbortSignal) {
-		return call<{ ready: boolean; received: number; chunks: number }>(this.socketPath, 'POST', this.path(`/sandboxes/${encodeURIComponent(sandboxId)}/source/chunk`), { authority, chunk }, signal, { authorization: `Bearer ${token}` });
+	sourcePublicationStatus(sandboxId: string, token: string, signal?: AbortSignal) {
+		return call<SourcePublicationStatus>(this.socketPath, 'GET', this.path(`/sandboxes/${encodeURIComponent(sandboxId)}/source-publication/status`), undefined, signal, { authorization: `Bearer ${token}` });
 	}
-	candidateStatus(sandboxId: string, token: string, signal?: AbortSignal) {
-		return call<CandidateStatus>(this.socketPath, 'GET', this.path(`/sandboxes/${encodeURIComponent(sandboxId)}/candidate/status`), undefined, signal, { authorization: `Bearer ${token}` });
-	}
-	candidateStart(sandboxId: string, token: string, authority: SourceWorkspaceResponse, commit: string, signal?: AbortSignal) {
-		return call<CandidateStatus>(this.socketPath, 'POST', this.path(`/sandboxes/${encodeURIComponent(sandboxId)}/candidate/start`), { authority, commit }, signal, { authorization: `Bearer ${token}` });
-	}
-	candidateChunk(sandboxId: string, token: string, index: number, signal?: AbortSignal) {
-		return call<{ index: number; digest: string; content: string }>(this.socketPath, 'POST', this.path(`/sandboxes/${encodeURIComponent(sandboxId)}/candidate/chunk`), { index }, signal, { authorization: `Bearer ${token}` });
-	}
-	candidateAccept(sandboxId: string, token: string, authority: SourceWorkspaceResponse, receipt: SourceCandidateReceipt, signal?: AbortSignal) {
-		return call<{ accepted: boolean; receipt: SourceCandidateReceipt }>(this.socketPath, 'POST', this.path(`/sandboxes/${encodeURIComponent(sandboxId)}/candidate/accept`), { authority, receipt }, signal, { authorization: `Bearer ${token}` });
+	sourcePublicationStart(sandboxId: string, token: string, authority: SourceWorkspaceResponse, commit: string, signal?: AbortSignal) {
+		return call<SourcePublicationStatus>(this.socketPath, 'POST', this.path(`/sandboxes/${encodeURIComponent(sandboxId)}/source-publication/start`), { authority, commit }, signal, { authorization: `Bearer ${token}` });
 	}
 	upload(sandboxId: string, token: string, inputId: string, sourcePath: string, bytes: number, signal?: AbortSignal) {
 		return new Promise<void>((resolve, reject) => {

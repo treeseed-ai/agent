@@ -33,6 +33,7 @@ describe('Codex chat executor', () => {
 		expect(prompt).toContain('invoke that same exact tool again as your FINAL tool action');
 		expect(prompt).toContain('including a failed attempt');
 		expect(prompt).toContain('fewer than two successful clock checks is rejected');
+		expect(prompt).toMatch(/DO NOT ANSWER OR REASON ABOUT THE TASK YET[\s\S]*call treeseed_time_status once more immediately before your response\.$/u);
 		expect(prompt).toContain('stop broadening scope and finish the highest-value verified result');
 		expect(codexProjectInstructionArguments()).toEqual(['-c', 'project_doc_max_bytes=0']);
 	});

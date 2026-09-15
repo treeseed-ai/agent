@@ -25,11 +25,20 @@ export function timingAwarenessEvidence(value: unknown) {
 	const timing = object(value);
 	const requiredChecks = Number(timing.requiredChecks);
 	const completedChecks = Number(timing.completedChecks);
+	const firstTool = typeof timing.firstTool === 'string' ? timing.firstTool : null;
+	const lastTool = typeof timing.lastTool === 'string' ? timing.lastTool : null;
+	const firstToolSucceeded = timing.firstToolSucceeded === true;
+	const lastToolSucceeded = timing.lastToolSucceeded === true;
+	const firstToolCompliant = timing.firstToolCompliant === true;
+	const finalToolCompliant = timing.finalToolCompliant === true;
 	if (!Number.isInteger(requiredChecks) || requiredChecks < 2
-		|| !Number.isInteger(completedChecks) || completedChecks < requiredChecks) {
+		|| !Number.isInteger(completedChecks) || completedChecks < requiredChecks
+		|| firstTool !== 'treedx:treeseed_time_status' || lastTool !== 'treedx:treeseed_time_status'
+		|| !firstToolSucceeded || !lastToolSucceeded || !firstToolCompliant || !finalToolCompliant) {
 		throw new Error('Completed sandbox result lacks valid timing-awareness evidence.');
 	}
-	return { requiredChecks, completedChecks };
+	return { requiredChecks, completedChecks, firstTool, firstToolSucceeded, lastTool, lastToolSucceeded,
+		firstToolCompliant, finalToolCompliant };
 }
 function contextBuildBody(value:Record<string,unknown>) {
 	const topics=Array.isArray(value.topics)?value.topics.map(String).map((item)=>item.trim()).filter(Boolean).slice(0,20):[];

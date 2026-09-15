@@ -20,12 +20,12 @@ const reference = (id: string): CapabilityReference => {
 const family = (name: string) => CORE_CAPABILITY_DEFINITIONS.filter((definition) => definition.family === name).map(({ id }) => id);
 const offerCapabilities = {
 	conversation: [...family('coordination'), ...family('research'), 'treeseed.engineering.architecture', 'treeseed.engineering.repository-analysis', 'treeseed.engineering.review'],
-	engineering: family('engineering').filter((id) => !['treeseed.engineering.security-analysis', 'treeseed.engineering.deployment', 'treeseed.engineering.release', 'treeseed.engineering.operations'].includes(id)),
+	engineering: family('engineering').filter((id) => !['treeseed.engineering.security-analysis', 'treeseed.engineering.deployment', 'treeseed.engineering.operations'].includes(id)),
 	data: family('data'), publishing: family('publishing'),
 };
 const laneCapabilities: Record<string, string[]> = {
 	communication: ['treeseed.coordination.conversation', 'treeseed.engineering.repository-analysis', 'treeseed.research.synthesis'],
-	platform: ['treeseed.engineering.architecture', 'treeseed.engineering.code-change', 'treeseed.engineering.review'],
+	platform: ['treeseed.engineering.architecture', 'treeseed.engineering.code-change', 'treeseed.engineering.review', 'treeseed.engineering.release'],
 	workday: [...new Set(Object.values(offerCapabilities).flat())].filter(id => id !== 'treeseed.coordination.conversation').sort(),
 };
 

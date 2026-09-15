@@ -21,6 +21,16 @@ const digest = (value: unknown) => `sha256:${createHash('sha256').update(canonic
 type V5Adapter = CapacityProviderManifestV5['adapters'][number];
 const TOOL_PERMISSION:Record<string,string>={treedx_build_context:'source.read',treedx_read_files:'source.read',treedx_search_files:'source.read',treedx_list_paths:'source.read'};
 function object(value:unknown):Record<string,unknown>{return value&&typeof value==='object'&&!Array.isArray(value)?value as Record<string,unknown>:{};}
+export function timingAwarenessEvidence(value: unknown) {
+	const timing = object(value);
+	const requiredChecks = Number(timing.requiredChecks);
+	const completedChecks = Number(timing.completedChecks);
+	if (!Number.isInteger(requiredChecks) || requiredChecks < 2
+		|| !Number.isInteger(completedChecks) || completedChecks < requiredChecks) {
+		throw new Error('Completed sandbox result lacks valid timing-awareness evidence.');
+	}
+	return { requiredChecks, completedChecks };
+}
 function contextBuildBody(value:Record<string,unknown>) {
 	const topics=Array.isArray(value.topics)?value.topics.map(String).map((item)=>item.trim()).filter(Boolean).slice(0,20):[];
 	const query=String(value.query??topics.join(' ')).trim().slice(0,2_000);
@@ -164,12 +174,14 @@ export async function createMicrovmExecutor(config: ProviderHostRuntimeConfig, m
 				if (result.status === 'completed') {
 					const abstained = result.responseMarkdown?.trim() === '<!-- treeseed:abstain -->';
 					const diagnostics = object(result.diagnostics);
+					const timingAwareness = timingAwarenessEvidence(diagnostics.timingAwareness);
 					await request.emit?.({ type: 'execution.completed', occurredAt: new Date().toISOString(), summary: result.summary, payload: { sandboxId: result.sandboxId, model: assignment.modelPolicy.model, provider: assignment.modelPolicy.provider, capabilities: assignment.modelPolicy.capabilities,
 						usage: [result.usage], timing: { elapsedSeconds: result.usage.elapsedSeconds }, resources: { cpuUserMicros: result.usage.cpuUserMicros, cpuSystemMicros: result.usage.cpuSystemMicros, peakRssBytes: result.usage.peakRssBytes }, artifacts: result.artifacts,
-						activityCompletion: diagnostics.activityCompletion ?? null, changedPaths: diagnostics.changedPaths ?? [], teardown }, protectedPayload: result.diagnostics });
+						activityCompletion: diagnostics.activityCompletion ?? null, timingAwareness, changedPaths: diagnostics.changedPaths ?? [], teardown }, protectedPayload: result.diagnostics });
 					return { status: abstained ? 'abstained' : result.responseMarkdown ? 'responded' : 'completed', summary: result.summary, ...(!abstained && result.responseMarkdown ? { responseMarkdown: result.responseMarkdown } : {}), outputs: { sandboxId: result.sandboxId, teardown, environmentReceipt,
 						verificationRecords: object(result.diagnostics).verificationRecords ?? [],
 						activityCompletion: object(result.diagnostics).activityCompletion ?? null,
+						timingAwareness,
 						...(sourceReference ? { sourceReference } : {}) }, artifacts, usage: [result.usage] };
 				}
 				await request.emit?.({ type: 'execution.failed', occurredAt: new Date().toISOString(), summary: result.summary, payload: { sandboxId: result.sandboxId, status: result.status, teardown }, protectedPayload: result.diagnostics });

@@ -13,7 +13,7 @@ import { buildProviderPlan, providerAvailabilityCapabilities } from '../../src/p
 import { providerEnrollmentInput } from '../../src/provider/lifecycle/enrollment-input.ts';
 import { stringify as stringifyYaml } from 'yaml';
 import { createManagedProviderManifestV5 } from '../../src/provider/configuration/managed-manifest.ts';
-import { assignmentAllowedServices } from '../../src/provider/execution/microvm-executor.ts';
+import { assignmentAllowedServices, timingAwarenessEvidence } from '../../src/provider/execution/microvm-executor.ts';
 import { validateCapacityProviderManifestV5 } from '@treeseed/sdk/capacity-provider';
 
 const digest = (value: string) => `sha256:${value.repeat(64)}`;
@@ -53,6 +53,12 @@ function sourceFiles(root: string): string[] {
 }
 
 describe('Agent package ownership boundary', () => {
+	it('publishes only valid completed timing-awareness evidence', () => {
+		expect(timingAwarenessEvidence({ requiredChecks: 2, completedChecks: 2 }))
+			.toEqual({ requiredChecks: 2, completedChecks: 2 });
+		expect(() => timingAwarenessEvidence({ requiredChecks: 2, completedChecks: 1 }))
+			.toThrow(/timing-awareness evidence/u);
+	});
 	it('grants package restoration only to workday sandboxes', () => {
 		expect(assignmentAllowedServices('workday', true)).toEqual(['model-gateway', 'codex-subscription', 'package-registry', 'treedx-relay']);
 		expect(assignmentAllowedServices('conversation', true)).toEqual(['model-gateway', 'codex-subscription', 'treedx-relay']);

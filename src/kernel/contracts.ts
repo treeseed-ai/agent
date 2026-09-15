@@ -65,4 +65,6 @@ export interface KernelAssignmentRequest {
 	runtimeBuild: string;
 	runtime: AgentRuntime;
 	signal?: AbortSignal;
+	/** Resolves only when productive execution begins; preparation is outside the activity limit. */
+	executionStarted?: Promise<void>;
 }

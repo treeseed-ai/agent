@@ -1,7 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { AssignmentContext, AssignmentReference } from '@treeseed/sdk/agent-capacity';
 import { AgentKernel } from '../../../src/kernel/agent-kernel.ts';
-import type { AgentRuntime } from '../../../src/kernel/contracts.ts';
+import type { AgentRuntime, Handler } from '../../../src/kernel/contracts.ts';
 import { HandlerRegistry } from '../../../src/kernel/handler-registry.ts';
 import { ReporterHandler } from '../../../src/kernel/handlers/reporter.ts';
 
@@ -47,6 +47,29 @@ function runtime(commits: unknown[]): AgentRuntime {
 }
 
 describe('AgentKernel', () => {
+	afterEach(() => vi.useRealTimers());
+
+	it('does not charge preparation time against the productive execution limit', async () => {
+		vi.useFakeTimers();
+		const context = assignmentContext();
+		context.assignment.effectiveProfile.handler = 'timed';
+		context.assignment.limits.maximumSeconds = 1;
+		let startExecution!: () => void;
+		const executionStarted = new Promise<void>((resolve) => { startExecution = resolve; });
+		const never = new Promise<never>(() => undefined);
+		const handler: Handler = { id: 'timed', run: async () => never };
+		const running = new AgentKernel(new HandlerRegistry([handler])).runAssignment({
+			context, runtimeBuild, runtime: runtime([]), executionStarted,
+		});
+		let settled = false;
+		void running.then(() => { settled = true; }, () => { settled = true; });
+		await vi.advanceTimersByTimeAsync(30_000);
+		expect(settled).toBe(false);
+		startExecution();
+		await vi.advanceTimersByTimeAsync(1_001);
+		await expect(running).rejects.toThrow('assignment_timeout');
+	});
+
 	it('runs Reporter deterministically through the one assignment entry point', async () => {
 		const kernel = new AgentKernel(new HandlerRegistry([new ReporterHandler()]));
 		const firstCommits: unknown[] = [];

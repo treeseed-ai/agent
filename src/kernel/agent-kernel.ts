@@ -42,6 +42,7 @@ export class AgentKernel {
 			handler.run(context, runtime),
 			assignment.limits.maximumSeconds,
 			request.signal,
+			request.executionStarted,
 		);
 		const validated = assignmentResultSchema.parse(result);
 		if (validated.assignmentId !== assignment.id) throw new Error('assignment_result_identity_mismatch');
@@ -63,13 +64,16 @@ export class AgentKernel {
 		return validated;
 	}
 
-	private async runBounded<T>(work: Promise<T>, maximumSeconds: number, signal?: AbortSignal): Promise<T> {
+	private async runBounded<T>(work: Promise<T>, maximumSeconds: number, signal?: AbortSignal, executionStarted?: Promise<void>): Promise<T> {
 		return new Promise<T>((resolve, reject) => {
-			const timeout = setTimeout(() => reject(new Error('assignment_timeout')), maximumSeconds * 1_000);
+			let timeout: ReturnType<typeof setTimeout> | null = null;
+			const startTimeout = () => { timeout ??= setTimeout(() => reject(new Error('assignment_timeout')), maximumSeconds * 1_000); };
+			if (executionStarted) executionStarted.then(startTimeout, reject);
+			else startTimeout();
 			const cancel = () => reject(new Error('assignment_cancelled'));
 			signal?.addEventListener('abort', cancel, { once: true });
 			work.then(resolve, reject).finally(() => {
-				clearTimeout(timeout);
+				if (timeout) clearTimeout(timeout);
 				signal?.removeEventListener('abort', cancel);
 			});
 		});

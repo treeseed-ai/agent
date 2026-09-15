@@ -17,6 +17,8 @@ export interface AgentExecutionRequest {
   treeDx: AssignmentTreeDxFacade;
   /** Trusted host callback; never serialized into context, tools or the execution guest. */
   authorizeSource?: (recipientPublicKey: string) => Promise<SourceWorkspaceResponse>;
+	/** Start the API-owned productive window after sandbox/source preparation. */
+	beginExecution?: () => Promise<Record<string, unknown>>;
 	emit?: (event: { type: string; occurredAt: string; summary: string; payload: Record<string, unknown>; protectedPayload?: Record<string, unknown> }) => Promise<void>;
   signal?: AbortSignal;
 }

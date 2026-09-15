@@ -55,14 +55,21 @@ async function reportUsage(input: ProviderAssignmentRunInput, assignmentId: stri
 export async function runProviderAssignment(input: ProviderAssignmentRunInput) {
   const assignmentId = text(input.assignment.id);
   if (!assignmentId) throw new Error('Catalogued assignment lease omitted its stable id.');
-  const started = await input.client.startAssignmentExecution(assignmentId, {
-    leaseToken: input.leaseToken,
-    runnerId: input.runnerId,
-    executorId: input.executor.id,
-		idempotencyKey: `execution-start:${assignmentId}`,
-		expectedStateVersion: Number(input.assignment.stateVersion),
-  });
-  const activeAssignment = { ...input.assignment, ...record(started) };
+	const activeAssignment = { ...input.assignment };
+	let executionStart: Promise<Record<string, unknown>> | null = null;
+	const beginExecution = () => {
+		executionStart ??= (async () => {
+			const current = await input.client.assignment(assignmentId);
+			return record(await input.client.startAssignmentExecution(assignmentId, {
+				leaseToken: input.leaseToken,
+				runnerId: input.runnerId,
+				executorId: input.executor.id,
+				idempotencyKey: `execution-start:${assignmentId}`,
+				expectedStateVersion: Number(current.stateVersion),
+			}));
+		})();
+		return executionStart;
+	};
   const conversation = text(activeAssignment.executionKind, activeAssignment.execution_kind) === 'conversation';
   let result: AgentExecutionResult;
   let stopped = false;
@@ -121,6 +128,7 @@ export async function runProviderAssignment(input: ProviderAssignmentRunInput) {
   try {
     const executionRequest: AgentExecutionRequest = { assignment: executorAssignment(activeAssignment), assignmentId, leaseToken: input.leaseToken, runnerId: input.runnerId, treeDx,
       authorizeSource: recipientPublicKey => input.client.authorizeAssignmentSource(assignmentId, { runnerId: input.runnerId, leaseToken: input.leaseToken, recipientPublicKey }),
+		beginExecution,
 		emit,
 		signal: executionAbort.signal };
 	result = await executeKernelAssignment({ executor: input.executor, request: executionRequest,

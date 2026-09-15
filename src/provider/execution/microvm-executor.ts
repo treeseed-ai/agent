@@ -34,7 +34,12 @@ function contextBuildBody(value:Record<string,unknown>) {
 		topics:undefined,maxItems:undefined,maxTokens:undefined,
 	};
 }
-export async function executeAssignmentTreeDxTool(request:Parameters<AgentExecutor['execute']>[0],tool:string,arguments_:Record<string,unknown>) {
+export async function executeAssignmentTreeDxTool(request:Parameters<AgentExecutor['execute']>[0],tool:string,arguments_:Record<string,unknown>, executionTime?: { startedAt: string; deadlineAt: string }) {
+	if (tool === 'treeseed_time_status') {
+		if (!executionTime) throw new Error('Productive execution has not started.');
+		return { startedAt: executionTime.startedAt, deadlineAt: executionTime.deadlineAt,
+			remainingSeconds: Math.max(0, Math.ceil((Date.parse(executionTime.deadlineAt) - Date.now()) / 1_000)) };
+	}
 	const attempt=object(request.assignment.assignmentAttempt??object(request.assignment.workspaceContext).assignmentAttempt);
 	const assignmentGrant=object(attempt.grant);
 	const allowed=Array.isArray(assignmentGrant.tools)?assignmentGrant.tools.map(String):[];
@@ -127,9 +132,15 @@ export async function createMicrovmExecutor(config: ProviderHostRuntimeConfig, m
 						if (current.source.authorization.mode === 'work' && current.source.authorization.publication !== 'assignment-branch') throw new Error('Git work requires assignment-branch publication authority.');
 					}
 					for (const input of materialized.inputs) await client.upload(prepared.sandboxId, prepared.operationToken, input.id, input.sourcePath, input.bytes, request.signal);
+					if (!request.beginExecution) throw new Error('Productive execution start authority is unavailable.');
+					const startedAssignment = await request.beginExecution();
+					const executionTime = object(object(object(startedAssignment.capacityEnvelope).budget).time);
+					const executionStartedAt = String(executionTime.executionStartedAt ?? '');
+					const executionDeadlineAt = String(executionTime.executionDeadlineAt ?? '');
+					if (!Number.isFinite(Date.parse(executionStartedAt)) || !Number.isFinite(Date.parse(executionDeadlineAt))) throw new Error('API execution start omitted its authoritative productive window.');
 					await request.emit?.({ type: 'execution.started', occurredAt: new Date().toISOString(), summary: `Kata execution started in ${prepared.sandboxId}.`, payload: { sandboxId: prepared.sandboxId, model: assignment.modelPolicy.model, isolation: 'microvm' } });
 					const toolsAbort=new AbortController();
-					const toolPump=(async()=>{while(!toolsAbort.signal.aborted){const pending=await client.nextToolRequest(prepared.sandboxId,prepared.operationToken,toolsAbort.signal).catch((error)=>{if(toolsAbort.signal.aborted)return {request:null};throw error;});if(pending.request){try{const value=await executeAssignmentTreeDxTool(request,pending.request.tool,pending.request.arguments);await client.completeToolRequest(prepared.sandboxId,prepared.operationToken,pending.request.id,{result:value},request.signal);}catch(error){await client.completeToolRequest(prepared.sandboxId,prepared.operationToken,pending.request.id,{error:error instanceof Error?error.message:String(error)},request.signal);}}else await new Promise((resolve)=>setTimeout(resolve,50));}})();
+					const toolPump=(async()=>{while(!toolsAbort.signal.aborted){const pending=await client.nextToolRequest(prepared.sandboxId,prepared.operationToken,toolsAbort.signal).catch((error)=>{if(toolsAbort.signal.aborted)return {request:null};throw error;});if(pending.request){try{const value=await executeAssignmentTreeDxTool(request,pending.request.tool,pending.request.arguments,{startedAt:executionStartedAt,deadlineAt:executionDeadlineAt});await client.completeToolRequest(prepared.sandboxId,prepared.operationToken,pending.request.id,{result:value},request.signal);}catch(error){await client.completeToolRequest(prepared.sandboxId,prepared.operationToken,pending.request.id,{error:error instanceof Error?error.message:String(error)},request.signal);}}else await new Promise((resolve)=>setTimeout(resolve,50));}})();
 					try{result = sandboxResultSchema.parse(await client.execute(prepared.sandboxId, prepared.operationToken, {}, request.signal));}finally{toolsAbort.abort();await toolPump.catch(()=>undefined);}
 					artifacts = await Promise.all(result.artifacts.map(async (artifact) => ({ ...artifact, content: (await client.downloadArtifact(prepared.sandboxId, prepared.operationToken, artifact.id, artifact.bytes, request.signal)).toString('utf8') })));
 					if (result.status === 'completed' && current.source?.authorization.mode === 'work') sourceReference = await publishSourceBranch(client, prepared, current.source, assignment, result, request);

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { AgentExecutionRequest, AgentExecutor } from '../../../src/provider/execution/contracts.ts';
+import type { AgentExecutionRequest, AgentExecutionResult, AgentExecutor } from '../../../src/provider/execution/contracts.ts';
 import { executeKernelAssignment } from '../../../src/kernel/provider-kernel-executor.ts';
 import type { Handler } from '../../../src/kernel/contracts.ts';
 
@@ -42,12 +42,12 @@ describe('provider AgentKernel execution', () => {
 	it('routes a canonical acting assignment through AgentKernel and preserves the verified Git reference', async () => {
 		const executor: AgentExecutor = {
 			id: 'codex', observe: async () => ({ available: true }),
-			execute: vi.fn(async () => ({
+			execute: vi.fn(async (request): Promise<AgentExecutionResult> => { await request.beginExecution?.(); return {
 				status: 'completed', summary: 'Implemented and verified.',
 				outputs: { sourceReference: { kind: 'git', repository: 'treeseed-ai/sdk', commit: candidateCommit,
 					branch: 'treeseed/assignments/assignment-1' } },
 				usage: [{ elapsedSeconds: 4, inputTokens: 20, outputTokens: 10 }],
-			})),
+			}; }),
 		};
 		const result = await executeKernelAssignment({ executor, request: request(), runtimeBuild });
 		expect(executor.execute).toHaveBeenCalledTimes(1);
@@ -73,7 +73,7 @@ describe('provider AgentKernel execution', () => {
 		const attempt = input.assignment.assignmentAttempt as Record<string, any>;
 		attempt.workspace = { mode: 'read-only' };
 		attempt.grant = { ...attempt.grant, sourceWrite: [], tools: ['source.read', 'verification'] };
-		const executor: AgentExecutor = { id: 'codex', observe: async () => ({ available: true }), execute: vi.fn(async () => ({
+		const executor: AgentExecutor = { id: 'codex', observe: async () => ({ available: true }), execute: vi.fn(async (request): Promise<AgentExecutionResult> => { await request.beginExecution?.(); return {
 			status: 'completed', summary: 'Verified exact source without publication.',
 			outputs: { verificationRecords: [{ command: 'git rev-parse HEAD', status: 'passed', exitCode: 0,
 				outputDigest: digest, durationSeconds: 1 }],
@@ -81,7 +81,7 @@ describe('provider AgentKernel execution', () => {
 				summary: 'Verified exact source without publication.', verification: [{ command: 'git rev-parse HEAD',
 					status: 'passed', exitCode: 0, outputDigest: digest, durationSeconds: 1 }], reviewDisposition: null } },
 			usage: [{ elapsedSeconds: 2 }],
-		})) };
+		}; }) };
 		const result = await executeKernelAssignment({ executor, request: input, runtimeBuild });
 		expect(result.status).toBe('completed');
 		expect(result.outputs?.assignmentResult).toMatchObject({ references: [],
@@ -138,11 +138,11 @@ describe('provider AgentKernel execution', () => {
 				return {};
 			}) };
 		const review = 'Candidate satisfies the exact acceptance criteria after reviewing the complete immutable proposal source and every cited requirement without relying on an inferred or mutable planning authority.';
-		const executor: AgentExecutor = { id: 'codex', observe: async () => ({ available: true }), execute: vi.fn(async () => ({
+		const executor: AgentExecutor = { id: 'codex', observe: async () => ({ available: true }), execute: vi.fn(async (request): Promise<AgentExecutionResult> => { await request.beginExecution?.(); return {
 			status: 'completed', summary: review, responseMarkdown: review,
 			outputs: { activityCompletion: { schemaVersion: 'treeseed.activity-completion/v1', summary: review, verification: [], reviewDisposition: 'approved' } },
 			usage: [{ elapsedSeconds: 3 }],
-		})) };
+		}; }) };
 		const result = await executeKernelAssignment({ executor, request: input, runtimeBuild });
 		expect(result.status).toBe('completed');
 		expect(result.outputs?.assignmentResult).toMatchObject({ references: [{ kind: 'treedx', commit: candidateCommit, path: target.path }] });
@@ -162,7 +162,7 @@ describe('provider AgentKernel execution', () => {
 		attempt.contextRefs = [{ store: 'git', model: 'repository', id: 'sdk-source', repository: 'treeseed-ai/sdk', commit }];
 		attempt.workspace = { mode: 'treedx', workspaceId: 'workspace-1', repository: target.repository,
 			baseCommit: commit, writablePaths: [target.path] };
-		input.assignment.workspaceContext.predecessorResults = [{
+		(input.assignment.workspaceContext as Record<string, any>).predecessorResults = [{
 			schemaVersion: 'treeseed.assignment-result/v1', id: 'architect-result', assignmentId: 'architect-assignment',
 			status: 'completed', summary: 'Inspected exact source.', references: [], verification: [],
 			usage: { elapsedSeconds: 2 }, diagnostics: [], completedAt: '2026-09-14T12:00:00.000Z',
@@ -175,13 +175,13 @@ describe('provider AgentKernel execution', () => {
 				if (operation === 'treedx.repositories.files.read') return { files: [{ path: target.path, content: written }] };
 				return {};
 			}) };
-		const executor: AgentExecutor = { id: 'codex', observe: async () => ({ available: true }), execute: vi.fn(async () => ({
+		const executor: AgentExecutor = { id: 'codex', observe: async () => ({ available: true }), execute: vi.fn(async (request): Promise<AgentExecutionResult> => { await request.beginExecution?.(); return {
 			status: 'completed', summary: 'The exact source satisfies the read-only acceptance criteria.',
 			responseMarkdown: 'The exact source satisfies the read-only acceptance criteria.',
 			outputs: { activityCompletion: { schemaVersion: 'treeseed.activity-completion/v1',
 				summary: 'The exact source satisfies the read-only acceptance criteria.', verification: [], reviewDisposition: 'approved' } },
 			usage: [{ elapsedSeconds: 2 }],
-		})) };
+		}; }) };
 		const result = await executeKernelAssignment({ executor, request: input, runtimeBuild });
 		expect(result.status).toBe('completed');
 		expect(written).toContain(`store: ${attempt.sourceRef.store}`);
@@ -215,12 +215,12 @@ describe('provider AgentKernel execution', () => {
 				dependsOn: [], requestedPermissions: { content: { read: ['proposal'], write: [] }, tools: ['source.read'] },
 				acceptanceCriteria: ['The implementation is described from exact source evidence.'] }] },
 		};
-		const executor: AgentExecutor = { id: 'codex', observe: async () => ({ available: true }), execute: vi.fn(async () => ({
+		const executor: AgentExecutor = { id: 'codex', observe: async () => ({ available: true }), execute: vi.fn(async (request): Promise<AgentExecutionResult> => { await request.beginExecution?.(); return {
 			status: 'completed', summary: 'Estimated one bounded work item.', responseMarkdown: 'Estimated one bounded work item.',
 			outputs: { activityCompletion: { schemaVersion: 'treeseed.activity-completion/v1', summary: 'Estimated one bounded work item.',
 				verification: [], reviewDisposition: null, contentOutput: { model: 'proposal', body: 'This proposal has one bounded work item.', frontmatter: proposal } } },
 			usage: [{ elapsedSeconds: 3 }],
-		})) };
+		}; }) };
 		const result = await executeKernelAssignment({ executor, request: input, runtimeBuild });
 		expect(result.status, JSON.stringify(result)).toBe('completed');
 		expect(result.outputs?.assignmentResult).toMatchObject({ references: [{ kind: 'treedx', commit: candidateCommit, path: target.path }] });
@@ -262,9 +262,9 @@ describe('provider AgentKernel execution', () => {
 		input.treeDx = { projectId: 'project-1', repositoryId: target.repository, workspaceId: 'workspace-1', invoke: vi.fn(async () => ({
 			resolvedRef: commit, files: [{ path: target.path, requestedPath: target.path, content: 'Question', frontmatter: {} }],
 		})) };
-		const executor: AgentExecutor = { id: 'codex', observe: async () => ({ available: true }), execute: vi.fn(async () => ({
+		const executor: AgentExecutor = { id: 'codex', observe: async () => ({ available: true }), execute: vi.fn(async (request): Promise<AgentExecutionResult> => { await request.beginExecution?.(); return {
 			status: 'completed', summary: 'Source-grounded response.', responseMarkdown: 'Source-grounded response.', usage: [{ elapsedSeconds: 2 }],
-		})) };
+		}; }) };
 		const result = await executeKernelAssignment({ executor, request: input, runtimeBuild });
 		expect(result.status, JSON.stringify(result)).toBe('responded');
 		expect(result.responseMarkdown).toBe('Source-grounded response.');

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { runProviderAssignment } from '../../src/provider/operations/runner.ts';
-import type { AgentExecutor } from '../../src/provider/execution/contracts.ts';
+import { runProviderAssignment } from '../../../src/provider/operations/runner.ts';
+import type { AgentExecutionResult, AgentExecutor } from '../../../src/provider/execution/contracts.ts';
 
 const digest = `sha256:${'a'.repeat(64)}`;
 const runtimeBuild = `sha256:${'b'.repeat(64)}`;
@@ -48,9 +48,28 @@ function client() {
 const treeDx = { projectId: 'project', repositoryId: null, workspaceId: null, invoke: vi.fn() };
 
 describe('canonical provider assignment runner', () => {
+	it('starts productive execution only after the executor finishes preparation', async () => {
+		const api = client();
+		let finishPreparation!: () => void;
+		const preparation = new Promise<void>((resolve) => { finishPreparation = resolve; });
+		const running = runProviderAssignment({ client: api, assignment: assignment('conversation'), treeDx,
+			leaseToken: 'lease', runnerId: 'runner', runtimeBuild,
+			executor: { id: 'codex', observe: async () => ({ available: true }), execute: async request => {
+				await preparation;
+				await request.beginExecution?.();
+				return { status: 'responded', summary: 'Answered.', responseMarkdown: 'Prepared response.', usage: [{ activeSeconds: 1, elapsedSeconds: 1 }] };
+			} } });
+		await Promise.resolve();
+		expect(api.startAssignmentExecution).not.toHaveBeenCalled();
+		finishPreparation();
+		await running;
+		expect(api.startAssignmentExecution).toHaveBeenCalledOnce();
+	});
+
 	it('runs workday execution through AgentKernel and settles the one general result', async () => {
 		const api = client();
-		const executor: AgentExecutor = { id: 'codex', observe: async () => ({ available: true }), execute: vi.fn(async request => {
+		const executor: AgentExecutor = { id: 'codex', observe: async () => ({ available: true }), execute: vi.fn(async (request): Promise<AgentExecutionResult> => {
+			await request.beginExecution?.();
 			await request.emit?.({ type: 'execution.started', occurredAt: '2026-09-13T12:00:00.000Z', summary: 'Started.' });
 			return { status: 'completed', summary: 'Evidence-backed answer.', usage: [{ activeSeconds: 3, elapsedSeconds: 4 }] };
 		}) };
@@ -59,6 +78,7 @@ describe('canonical provider assignment runner', () => {
 		expect(executor.execute).toHaveBeenCalledOnce();
 		expect(api.createAssignmentEvent).toHaveBeenCalledWith('assignment-1', expect.objectContaining({ eventType: 'provider.execution.started' }));
 		expect(api.startAssignmentExecution).toHaveBeenCalledWith('assignment-1', expect.not.objectContaining({ planRef: expect.anything() }));
+		expect(api.startAssignmentExecution).toHaveBeenCalledWith('assignment-1', expect.objectContaining({ expectedStateVersion: 7 }));
 		expect(api.settleAssignment).toHaveBeenCalledBefore(api.completeAssignment);
 		expect(api.completeAssignment).toHaveBeenCalledWith('assignment-1', expect.objectContaining({
 			output: expect.objectContaining({ assignmentResult: expect.objectContaining({ assignmentId: 'assignment-1' }) }),
@@ -69,9 +89,10 @@ describe('canonical provider assignment runner', () => {
 		const api = client();
 		await runProviderAssignment({ client: api, assignment: assignment('conversation'), treeDx,
 			leaseToken: 'lease', runnerId: 'runner', runtimeBuild,
-			executor: { id: 'codex', observe: async () => ({ available: true }), execute: async () => ({
+			executor: { id: 'codex', observe: async () => ({ available: true }), execute: async request => {
+				await request.beginExecution?.(); return {
 				status: 'responded', summary: 'Answered.', responseMarkdown: 'Researched response.', usage: [{ activeSeconds: 2, elapsedSeconds: 3 }],
-			}) } });
+			}; } } });
 		expect(api.respondToAssignmentDiscussion).toHaveBeenCalledWith('assignment-1', expect.objectContaining({ markdown: 'Researched response.' }), expect.any(String));
 		expect(api.settleAssignment).toHaveBeenCalledOnce();
 		expect(api.startAssignmentCloseout).not.toHaveBeenCalled();
@@ -90,6 +111,7 @@ describe('canonical provider assignment runner', () => {
 		const api = client(); api.renewAssignment.mockRejectedValueOnce(new Error('lease expired'));
 		let signal: AbortSignal | undefined;
 		const executor: AgentExecutor = { id: 'codex', observe: async () => ({ available: true }), execute: async request => {
+			await request.beginExecution?.();
 			signal = request.signal;
 			await new Promise<void>(resolve => request.signal?.addEventListener('abort', () => resolve(), { once: true }));
 			return { status: 'returned', summary: 'aborted' };
@@ -106,6 +128,7 @@ describe('canonical provider assignment runner', () => {
 		Object.assign(value.workspaceContext, { treedxProxyHandle: { token: 'nested-secret' } });
 		await runProviderAssignment({ client: api, assignment: value, treeDx, leaseToken: 'lease', runnerId: 'runner', runtimeBuild,
 			executor: { id: 'codex', observe: async () => ({ available: true }), execute: async request => {
+				await request.beginExecution?.();
 				visible = request.assignment; return { status: 'completed', summary: 'done' };
 			} } });
 		expect(JSON.stringify(visible)).not.toContain('secret');

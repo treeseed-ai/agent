@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { createHash } from 'node:crypto';
-import { assertObjectiveContentModel, discussionMessageSourcePaths, readDiscussionSourceMessage, readFocusedTreeDxContext, readIdentityContext } from '../../src/provider/execution/codex-chat-executor.ts';
-import { executeAssignmentTreeDxTool, reasoningEffortFromAssignmentMetadata } from '../../src/provider/execution/microvm-executor.ts';
-import { assertReplayableVerificationCommand, codexInteractiveTimeoutMs, codexProjectInstructionArguments, codexReasoningArguments, codexTreeDxMcpConfig, promptFromContext, requiresActivityCompletion, treeDxToolDefinitions, verifyReportedActivityCommands } from '../../src/sandbox/guest.ts';
+import { assertObjectiveContentModel, discussionMessageSourcePaths, readDiscussionSourceMessage, readFocusedTreeDxContext, readIdentityContext } from '../../../src/provider/execution/codex-chat-executor.ts';
+import { executeAssignmentTreeDxTool, reasoningEffortFromAssignmentMetadata } from '../../../src/provider/execution/microvm-executor.ts';
+import { assertReplayableVerificationCommand, codexInteractiveTimeoutMs, codexProjectInstructionArguments, codexReasoningArguments, codexTreeDxMcpConfig, completedTimeStatusChecks, promptFromContext, requiresActivityCompletion, treeDxToolDefinitions, verifyReportedActivityCommands } from '../../../src/sandbox/guest.ts';
 
 describe('Codex chat executor', () => {
 	it('requires structured completion only for a mutable legacy source workspace', () => {
@@ -12,6 +12,7 @@ describe('Codex chat executor', () => {
 	it('rejects retired workday context and exposes no semantic publication tools', () => {
 		expect(() => promptFromContext({ assignment: { executionKind: 'workday' } })).toThrow('legacy_workday_assignment_not_supported');
 		expect(treeDxToolDefinitions().map(tool => tool.name)).not.toContain('treeseed_publish_review');
+		expect(treeDxToolDefinitions().map(tool => tool.name)).toContain('treeseed_time_status');
 	});
 	it('directs source-backed chat to the mounted repository and TreeDX MCP rather than the host CLI', () => {
 		const prompt = promptFromContext({
@@ -21,12 +22,33 @@ describe('Codex chat executor', () => {
 			} } },
 			projectManifest: { revision: 'exact-commit' }, coreContext: { sources: [] },
 			message: { content: 'Describe the state of the project.' },
-		});
+		}, undefined, 180);
 		expect(prompt).toContain('attached at /workspace/project at immutable revision exact-commit');
 		expect(prompt).toContain('inspect that repository with ordinary shell and Git commands');
 		expect(prompt).toContain('treedx_* MCP tools');
 		expect(prompt).toContain('Do not invoke trsd');
+		expect(prompt).toContain('productive execution budget is 180 seconds');
+		expect(prompt).toContain('call treeseed_time_status near the beginning and again immediately before finalizing');
+		expect(prompt).toContain('stop broadening scope and finish the highest-value verified result');
 		expect(codexProjectInstructionArguments()).toEqual(['-c', 'project_doc_max_bytes=0']);
+	});
+	it('accepts timing awareness only from completed model-initiated clock checks', () => {
+		expect(completedTimeStatusChecks([
+			{ type: 'item.started', item: { type: 'mcp_tool_call', server: 'treedx', tool: 'treeseed_time_status', status: 'in_progress' } },
+			{ type: 'item.completed', item: { type: 'mcp_tool_call', server: 'treedx', tool: 'treeseed_time_status', status: 'completed', error: null } },
+			{ type: 'item.completed', item: { type: 'mcp_tool_call', server: 'treedx', tool: 'treeseed_time_status', status: 'completed', error: null } },
+		])).toBe(2);
+		expect(completedTimeStatusChecks([
+			{ type: 'item.completed', item: { type: 'mcp_tool_call', server: 'treedx', tool: 'treeseed_time_status', status: 'failed', error: 'unavailable' } },
+		])).toBe(0);
+	});
+	it('reports remaining time from the API-started productive window without a content grant', async () => {
+		const deadlineAt = new Date(Date.now() + 60_000).toISOString();
+		const result = await executeAssignmentTreeDxTool({} as never, 'treeseed_time_status', {}, {
+			startedAt: new Date().toISOString(), deadlineAt,
+		});
+		expect(result).toMatchObject({ deadlineAt });
+		expect(Number((result as Record<string, unknown>).remainingSeconds)).toBeGreaterThan(55);
 	});
 	it('requires structured activities to report replayable checks as separate commands', () => {
 		const prompt = promptFromContext({ canonicalAssignmentContext: { assignment: {
@@ -83,12 +105,12 @@ describe('Codex chat executor', () => {
 	});
 	it('accepts passing verification only after the guest runner observes every command', async () => {
 		const observed: string[] = [];
-		await verifyReportedActivityCommands({ schemaVersion: 'treeseed.activity-completion/v1', summary: 'done', reviewDisposition: null,
+		await verifyReportedActivityCommands({ schemaVersion: 'treeseed.activity-completion/v1', summary: 'done', reviewDisposition: null, contentOutput: null,
 			verification: [{ status: 'passed', summary: 'focused tests passed', commands: ['npm test -- focused'] }] }, async (command) => { observed.push(command); });
 		expect(observed).toEqual(['npm test -- focused']);
 	});
 	it('rejects a claimed pass when runner observation fails', async () => {
-		await expect(verifyReportedActivityCommands({ schemaVersion: 'treeseed.activity-completion/v1', summary: 'done', reviewDisposition: null,
+		await expect(verifyReportedActivityCommands({ schemaVersion: 'treeseed.activity-completion/v1', summary: 'done', reviewDisposition: null, contentOutput: null,
 			verification: [{ status: 'passed', summary: 'claimed pass', commands: ['false'] }] }, async () => { throw new Error('exit 1'); })).rejects.toThrow(/Runner-observed verification failed/u);
 	});
 	it('rejects compound, setup, and source-mutating commands as verification evidence', async () => {

@@ -55,7 +55,18 @@ export async function executeKernelAssignment(input: {
 	}));
 	const workspaceContext = { ...record(visible.workspaceContext), assignmentAttempt: attempt.data,
 		predecessorResults, authorizedContext: context.context };
-	const transportRequest = { ...input.request, assignment: { ...visible, workspaceContext } };
+	let signalExecutionStarted!: () => void;
+	const executionStarted = new Promise<void>((resolve) => { signalExecutionStarted = resolve; });
+	let executionStart: Promise<Record<string, unknown>> | null = null;
+	const transportRequest = { ...input.request, assignment: { ...visible, workspaceContext },
+		beginExecution: () => {
+			executionStart ??= (async () => {
+				const started = await input.request.beginExecution?.() ?? {};
+				signalExecutionStarted();
+				return started;
+			})();
+			return executionStart;
+		} };
 	const transport = { result: null as AgentExecutionResult | null };
 	const runtime: AgentRuntime = {
 		now: () => new Date().toISOString(),
@@ -63,6 +74,7 @@ export async function executeKernelAssignment(input: {
 		invokeModel: async () => {
 			if (transport.result) throw new Error('model_already_invoked');
 			transport.result = await input.executor.execute(transportRequest);
+			if (!executionStart) throw Object.assign(new Error('execution_start_not_observed'), { code: 'execution_start_not_observed' });
 			if (!['completed', 'responded', 'abstained'].includes(transport.result.status)) {
 				throw Object.assign(new Error(transport.result.summary), { code: transport.result.code });
 			}
@@ -101,8 +113,10 @@ export async function executeKernelAssignment(input: {
 	]));
 	let result: AssignmentResult;
 	try {
+		// Reporter is deterministic and has no model transport preparation phase.
+		if (attempt.data.effectiveProfile.handler === 'reporter') await transportRequest.beginExecution();
 		result = assignmentResultSchema.parse(await kernel.runAssignment({
-			context, runtimeBuild: input.runtimeBuild, runtime, signal: input.request.signal,
+			context, runtimeBuild: input.runtimeBuild, runtime, signal: input.request.signal, executionStarted,
 		}));
 	} catch (error) {
 		return { status: 'failed', code: typeof (error as { code?: unknown })?.code === 'string'

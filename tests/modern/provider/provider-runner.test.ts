@@ -45,7 +45,7 @@ function client() {
 	};
 }
 
-const treeDx = { projectId: 'project', repositoryId: null, workspaceId: null, invoke: vi.fn() };
+const treeDx = { projectId: 'project', handleId: 'handle-1', repositoryId: null, workspaceId: null, invoke: vi.fn() };
 
 describe('canonical provider assignment runner', () => {
 	it('starts productive execution only after the executor finishes preparation', async () => {

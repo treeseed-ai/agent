@@ -16,7 +16,7 @@ function fixture() {
   let generation = 0;
   const authorizeSource = vi.fn(async () => envelope(`authority-${++generation}`));
   const request: AgentExecutionRequest = { assignment: { executionKind: 'conversation' }, assignmentId: 'assignment', leaseToken: 'lease-secret', runnerId: 'runner', authorizeSource,
-    treeDx: { projectId: 'project', repositoryId: 'library', workspaceId: 'workspace', invoke: vi.fn() }, emit: vi.fn(async () => undefined) };
+    treeDx: { projectId: 'project', handleId: 'handle-1', repositoryId: 'library', workspaceId: 'workspace', invoke: vi.fn() }, emit: vi.fn(async () => undefined) };
   return { client, request, authorizeSource };
 }
 describe('provider source orchestration', () => {

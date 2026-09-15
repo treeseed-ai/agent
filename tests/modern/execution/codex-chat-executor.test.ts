@@ -172,7 +172,7 @@ describe('Codex chat executor', () => {
 		],contextQueryChecks:[
 			{definition:{kind:'query',id:'architecture',revision:1},stats:{paths:['knowledge/sdk.mdx']}},
 			{definition:{kind:'query',id:'chat',revision:1},stats:{paths:['notes/chat.mdx']}},
-		]}},assignmentId:'a',leaseToken:'l',runnerId:'r',treeDx:{projectId:'p',repositoryId:'repo',workspaceId:'w',baseRef:'commit',invoke:async(operation,input:any)=>{operations.push(operation);return {data:{result:{files:input.body.paths.map((path:string)=>({path,content:`content:${path}`}))}}};}}});
+		]}},assignmentId:'a',leaseToken:'l',runnerId:'r',treeDx:{projectId:'p',handleId:'handle-1',repositoryId:'repo',workspaceId:'w',baseRef:'commit',invoke:async(operation,input:any)=>{operations.push(operation);return {data:{result:{files:input.body.paths.map((path:string)=>({path,content:`content:${path}`}))}}};}}});
 		expect(operations).toEqual(['treedx.repositories.files.read']);
 		expect(context.sources.map((source)=>[source.layer,source.path])).toEqual([['agent','knowledge/sdk.mdx'],['activity','notes/chat.mdx']]);
 	});
@@ -180,7 +180,7 @@ describe('Codex chat executor', () => {
 	it('reads attributed query results from their authorized same-team repositories',async()=>{
 		const calls:any[]=[];const context=await readFocusedTreeDxContext({assignment:{metadata:{contextQueryRefs:[{kind:'query',id:'team-guidance',revision:1,layer:'agent'}],contextQueryChecks:[
 			{definition:{kind:'query',id:'team-guidance',revision:1},stats:{sources:[{projectId:'team-project',source:'team-library',ref:'team-ref',paths:['knowledge/governance.mdx']}]}}
-		]}},assignmentId:'a',leaseToken:'l',runnerId:'r',treeDx:{projectId:'sdk-project',repositoryId:'sdk-repo',workspaceId:'w',baseRef:'sdk-ref',readRepositories:[
+		]}},assignmentId:'a',leaseToken:'l',runnerId:'r',treeDx:{projectId:'sdk-project',handleId:'handle-1',repositoryId:'sdk-repo',workspaceId:'w',baseRef:'sdk-ref',readRepositories:[
 			{projectId:'team-project',projectSlug:'team',repositoryId:'team-repo',baseRef:'team-ref',allowedPaths:['**'],allowedModels:['knowledge'],source:'team-library'}],
 			invoke:async(_operation:string,input:any)=>{calls.push(input);return {data:{result:{files:input.body.paths.map((path:string)=>({path,content:'# Governance'}))}}};}}});
 		expect(calls[0].path).toEqual({projectId:'team-project',repoId:'team-repo'});
@@ -201,7 +201,7 @@ describe('Codex chat executor', () => {
 			coreObjective: { path: 'objectives/core', expectedRevision: 'commit-1' },
 			projectReadme: { path: 'README.md', expectedRevision: 'commit-1' }, instructionTemplates: [],
 		} } }, assignmentId: 'assignment-1', leaseToken: 'lease', runnerId: 'runner', treeDx: {
-			projectId: 'project-1', repositoryId: 'repo-1', workspaceId: 'workspace-1', baseRef: 'commit-1', invoke: async (_operationId, value: any) => {
+			projectId: 'project-1', handleId: 'handle-1', repositoryId: 'repo-1', workspaceId: 'workspace-1', baseRef: 'commit-1', invoke: async (_operationId, value: any) => {
 				requested = value.body.paths; return { data: { result: { files: [
 					{ path: 'agents/architect.yaml', content: 'profile' }, { path: 'objectives/core.md', content: 'objective', frontmatter: { title: 'Core objective' } }, { path: 'README.md', content: 'readme' },
 				] } } };
@@ -217,7 +217,7 @@ describe('Codex chat executor', () => {
 		const content = await readDiscussionSourceMessage({
 			assignment: { sourceMessageRefs: ['discussion-messages/topic/message.mdx'] },
 			assignmentId: 'assignment-1', leaseToken: 'lease', runnerId: 'runner',
-			treeDx: { projectId: 'project-1', repositoryId: 'repo-1', workspaceId: 'workspace-1', baseRef: 'commit-1',
+			treeDx: { projectId: 'project-1', handleId: 'handle-1', repositoryId: 'repo-1', workspaceId: 'workspace-1', baseRef: 'commit-1',
 				invoke: async (_operationId, value) => { input = value; return {
 					data: { result: { files: [{ content: 'Exact message' }] }, receipt: { requestId: 'request-1' } },
 				}; } },
@@ -264,7 +264,7 @@ describe('Codex chat executor', () => {
 			projectReadme: { path: 'README.md', expectedRevision: 'commit-1' },
 			instructionTemplates: [{ path: 'instructions/chat.md', expectedRevision: 'commit-1' }],
 		} } }, assignmentId: 'assignment-1', leaseToken: 'lease', runnerId: 'runner',
-			treeDx: { projectId: 'project-1', repositoryId: 'repo-1', workspaceId: 'workspace-1', baseRef: 'commit-1', invoke: async (_operationId, value) => { input = value; return { data: { result: { files: [
+			treeDx: { projectId: 'project-1', handleId: 'handle-1', repositoryId: 'repo-1', workspaceId: 'workspace-1', baseRef: 'commit-1', invoke: async (_operationId, value) => { input = value; return { data: { result: { files: [
 				{ path: 'agents/architect.yaml', content: profile }, { path: 'objectives/core.mdx', sourcePath: 'objectives/core.mdx', logicalPath: 'objectives/core', requestedPath: 'objectives/core', content: '# Objective', frontmatter: { title: 'Core objective' } }, { path: 'README.md', content: '# SDK' }, { path: 'instructions/chat.md', content: 'Be concise.' },
 			] } } }; } } });
 		expect(input.body).not.toHaveProperty('ref');

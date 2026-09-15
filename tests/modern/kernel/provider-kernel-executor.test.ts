@@ -34,7 +34,7 @@ function request(): AgentExecutionRequest {
 	return {
 		assignment: { id: 'assignment-1', assignmentAttempt, workspaceContext: { assignmentAttempt, predecessorResults: [] } },
 		assignmentId: 'assignment-1', leaseToken: 'lease-token', runnerId: 'runner-1',
-		treeDx: { projectId: 'project-1', repositoryId: null, workspaceId: null, invoke: vi.fn() },
+		treeDx: { projectId: 'project-1', handleId: 'handle-1', repositoryId: null, workspaceId: null, invoke: vi.fn() },
 	};
 }
 
@@ -110,7 +110,7 @@ describe('provider AgentKernel execution', () => {
 		attempt.workspace = { mode: 'treedx', workspaceId: 'workspace-1', repository: target.repository,
 			baseCommit: commit, writablePaths: ['notes'] };
 		let written = '';
-		input.treeDx = { projectId: 'project-1', repositoryId: target.repository, workspaceId: 'workspace-1',
+		input.treeDx = { projectId: 'project-1', handleId: 'handle-1', repositoryId: target.repository, workspaceId: 'workspace-1',
 			readRepositories: [{ projectId:'team-project', projectSlug:'team', repositoryId:target.repository, baseRef:commit, allowedPaths:['notes/workday-report.mdx'], allowedModels:['note'], source:'team-library' }],
 			invoke: vi.fn(async (operation, value: any) => {
 				expect(value.path.projectId).toBe('team-project');
@@ -139,7 +139,7 @@ describe('provider AgentKernel execution', () => {
 		attempt.workspace = { mode: 'treedx', workspaceId: 'workspace-1', repository: target.repository,
 			baseCommit: commit, writablePaths: [target.path] };
 		let written = '';
-		input.treeDx = { projectId: 'project-1', repositoryId: target.repository, workspaceId: 'workspace-1',
+		input.treeDx = { projectId: 'project-1', handleId: 'handle-1', repositoryId: target.repository, workspaceId: 'workspace-1',
 			invoke: vi.fn(async (operation, value: any) => {
 				if (operation === 'treedx.workspaces.files.batch') written = value.body.files[0].content;
 				if (operation === 'treedx.workspaces.commit') return { commitSha: candidateCommit };
@@ -176,7 +176,7 @@ describe('provider AgentKernel execution', () => {
 			verification: [], usage: { elapsedSeconds: 2 }, diagnostics: [], completedAt: '2026-09-14T12:00:00.000Z',
 		}];
 		let written = '';
-		input.treeDx = { projectId: 'project-1', repositoryId: target.repository, workspaceId: 'workspace-1',
+		input.treeDx = { projectId: 'project-1', handleId: 'handle-1', repositoryId: target.repository, workspaceId: 'workspace-1',
 			invoke: vi.fn(async (operation, value: any) => {
 				if (operation === 'treedx.workspaces.files.batch') written = value.body.files[0].content;
 				if (operation === 'treedx.workspaces.commit') return { commitSha: candidateCommit };
@@ -186,14 +186,15 @@ describe('provider AgentKernel execution', () => {
 		const citedCandidate = { kind: 'git' as const, repository: 'treeseed-ai/sdk', commit, branch: 'treeseed/assignments/candidate' };
 		const executor: AgentExecutor = { id: 'codex', observe: async () => ({ available: true }), execute: vi.fn(async (request): Promise<AgentExecutionResult> => { await request.beginExecution?.(); return {
 			status: 'completed', summary: 'The exact candidate requires the requested revision.',
-			responseMarkdown: 'The exact candidate requires the requested revision.', references: [citedCandidate],
+			responseMarkdown: 'The exact candidate requires the requested revision.',
 			outputs: { contentReferences: [citedCandidate], activityCompletion: { schemaVersion: 'treeseed.activity-completion/v1',
 				summary: 'The exact candidate requires the requested revision.', verification: [], reviewDisposition: 'revision-required' } },
 			usage: [{ elapsedSeconds: 2 }],
 		}; }) };
 		const result = await executeKernelAssignment({ executor, request: input, runtimeBuild });
 		expect(result.status).toBe('completed');
-		expect(result.outputs?.assignmentResult?.references).toEqual([
+		const assignmentResult = result.outputs?.assignmentResult as { references?: unknown[] } | undefined;
+		expect(assignmentResult?.references).toEqual([
 			expect.objectContaining({ kind: 'treedx', commit: candidateCommit, path: target.path }),
 		]);
 		expect(written).toContain('decisionClass: work-review');
@@ -217,7 +218,7 @@ describe('provider AgentKernel execution', () => {
 			usage: { elapsedSeconds: 2 }, diagnostics: [], completedAt: '2026-09-14T12:00:00.000Z',
 		}];
 		let written = '';
-		input.treeDx = { projectId: 'project-1', repositoryId: target.repository, workspaceId: 'workspace-1',
+		input.treeDx = { projectId: 'project-1', handleId: 'handle-1', repositoryId: target.repository, workspaceId: 'workspace-1',
 			invoke: vi.fn(async (operation, value: any) => {
 				if (operation === 'treedx.workspaces.files.batch') written = value.body.files[0].content;
 				if (operation === 'treedx.workspaces.commit') return { commitSha: candidateCommit };
@@ -248,7 +249,7 @@ describe('provider AgentKernel execution', () => {
 		attempt.workspace = { mode: 'treedx', workspaceId: 'workspace-1', repository: target.repository,
 			baseCommit: commit, writablePaths: [target.path] };
 		let written = '';
-		input.treeDx = { projectId: 'project-1', repositoryId: target.repository, workspaceId: 'workspace-1',
+		input.treeDx = { projectId: 'project-1', handleId: 'handle-1', repositoryId: target.repository, workspaceId: 'workspace-1',
 			invoke: vi.fn(async (operation, value: any) => {
 				if (operation === 'treedx.workspaces.files.batch') written = value.body.files[0].content;
 				if (operation === 'treedx.workspaces.commit') return { commitSha: candidateCommit };
@@ -308,7 +309,7 @@ describe('provider AgentKernel execution', () => {
 		attempt.contextRefs = [target];
 		attempt.workspace = { mode: 'treedx', workspaceId: 'workspace-1', repository: target.repository,
 			baseCommit: commit, writablePaths: [target.path] };
-		input.treeDx = { projectId: 'project-1', repositoryId: target.repository, workspaceId: 'workspace-1', invoke: vi.fn(async () => ({
+		input.treeDx = { projectId: 'project-1', handleId: 'handle-1', repositoryId: target.repository, workspaceId: 'workspace-1', invoke: vi.fn(async () => ({
 			resolvedRef: commit, files: [{ path: target.path, requestedPath: target.path, content: 'Question', frontmatter: {} }],
 		})) };
 		const executor: AgentExecutor = { id: 'codex', observe: async () => ({ available: true }), execute: vi.fn(async (request): Promise<AgentExecutionResult> => { await request.beginExecution?.(); return {

@@ -106,7 +106,7 @@ type TimingAwarenessTracker = {
 };
 
 function providerToolName(event: Record<string, unknown>) {
-	if (event.type !== 'item.completed') return null;
+	if (event.type !== 'item.started' && event.type !== 'item.completed') return null;
 	const item = record(event.item);
 	if (item.type === 'mcp_tool_call') return `${text(item.server)}:${text(item.tool)}`;
 	if (['command_execution', 'file_change', 'web_search'].includes(text(item.type))) return text(item.type);
@@ -117,11 +117,13 @@ export function observeTimingAwarenessEvent(tracker: TimingAwarenessTracker, eve
 	const tool = providerToolName(event);
 	if (!tool) return tracker;
 	const item = record(event.item);
-	const succeeded = item.status === 'completed' && !item.error;
+	const completed = event.type === 'item.completed';
+	const succeeded = completed && item.status === 'completed' && !item.error;
 	if (!tracker.firstTool) { tracker.firstTool = tool; tracker.firstToolSucceeded = succeeded; }
+	else if (completed && tracker.firstTool === tool && tracker.lastTool === tool) tracker.firstToolSucceeded ||= succeeded;
 	tracker.lastTool = tool;
 	tracker.lastToolSucceeded = succeeded;
-	if (tool === 'treedx:treeseed_time_status' && succeeded) tracker.completedChecks += 1;
+	if (completed && tool === 'treedx:treeseed_time_status' && succeeded) tracker.completedChecks += 1;
 	return tracker;
 }
 
@@ -172,7 +174,7 @@ export async function runTreeDxMcpServer(){
 }
 
 export function promptFromContext(context: Record<string, unknown>, reasoningEffort?: string, executionSeconds?: number) {
-	const timingInstruction = `MANDATORY ASSIGNMENT CLOCK: You have ${executionSeconds ?? 'an API-defined number of'} productive seconds. Your FIRST tool call must be treeseed_time_status, before inspection or analysis. Call treeseed_time_status a second time after finishing the work and immediately before composing the final response. A response with fewer than two successful clock checks is rejected, even if the work is otherwise correct. Use each returned remainingSeconds value to bound scope and reserve time for verification and closeout.`;
+	const timingInstruction = `MANDATORY ASSIGNMENT CLOCK: You have ${executionSeconds ?? 'an API-defined number of'} productive seconds. Your FIRST tool action must invoke the exact MCP tool named treeseed_time_status from the treedx server, before inspection or analysis. Do not guess or call an alias; if that exact tool is unavailable, stop without attempting another tool. After finishing all work, invoke that same exact tool again as your FINAL tool action, then immediately compose the final response without another tool call. Any attempted tool action before the initial clock check or after the final clock check invalidates the assignment, including a failed attempt. A response with fewer than two successful clock checks is rejected, even if the work is otherwise correct. Use each returned remainingSeconds value to bound scope and reserve time for verification and closeout.`;
 	const canonicalContext = record(context.canonicalAssignmentContext);
 	if (Object.keys(canonicalContext).length) {
 		const assignment = record(canonicalContext.assignment);

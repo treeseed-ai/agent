@@ -29,8 +29,9 @@ describe('Codex chat executor', () => {
 		expect(prompt).toContain('Do not invoke trsd');
 		expect(prompt).toMatch(/^MANDATORY ASSIGNMENT CLOCK:/u);
 		expect(prompt).toContain('You have 180 productive seconds');
-		expect(prompt).toContain('Your FIRST tool call must be treeseed_time_status');
-		expect(prompt).toContain('Call treeseed_time_status a second time');
+		expect(prompt).toContain('Your FIRST tool action must invoke the exact MCP tool named treeseed_time_status from the treedx server');
+		expect(prompt).toContain('invoke that same exact tool again as your FINAL tool action');
+		expect(prompt).toContain('including a failed attempt');
 		expect(prompt).toContain('fewer than two successful clock checks is rejected');
 		expect(prompt).toContain('stop broadening scope and finish the highest-value verified result');
 		expect(codexProjectInstructionArguments()).toEqual(['-c', 'project_doc_max_bytes=0']);
@@ -53,6 +54,10 @@ describe('Codex chat executor', () => {
 		});
 		expect(timingAwarenessContract([command, clock, clock])).toMatchObject({ firstToolCompliant: false });
 		expect(timingAwarenessContract([clock, clock, command])).toMatchObject({ finalToolCompliant: false });
+		expect(timingAwarenessContract([
+			{ type: 'item.started', item: { type: 'mcp_tool_call', server: 'treedx', tool: 'wrong_clock_alias', status: 'in_progress' } },
+			clock, clock,
+		])).toMatchObject({ firstTool: 'treedx:wrong_clock_alias', firstToolCompliant: false });
 	});
 	it('summarizes provider event shapes without retaining arguments or output', () => {
 		expect(providerEventShapeSummary([{ type: 'item.completed', item: {

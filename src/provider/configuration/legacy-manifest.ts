@@ -45,9 +45,13 @@ function offer(id: string, capabilityIds: string[]) {
 	const capabilities = capabilityIds.map(reference);
 	const configurationSupport = Object.fromEntries(['instructions.system', 'instructions.task', 'instructions.templates', 'context.queries', 'tools.policy', 'intelligence.reasoning-effort'].map((key) => [key, { required: true, preferred: true }]));
 	const conformance = capabilities.map((capability) => ({
+		...(() => {
+			const tier = definitions.get(capability.id)!.qualificationTier;
+			const suite = tier === 'signed-attestation' ? null : { id: 'agent-managed-capability', version: '1.0.0' };
+			return { tier, suite, evidenceDigest: capabilityContractDigest({ capability, tier, suite }) };
+		})(),
 		schemaVersion: 'treeseed.capability-conformance/v1' as const, providerId: 'runtime-provider', capability,
-		tier: 'signed-attestation' as const, status: 'passed' as const,
-		evidenceDigest: capabilityContractDigest({ capability, tier: 'signed-attestation', suite: null }), suite: null,
+		status: 'passed' as const,
 		issuedAt: CORE_CAPABILITY_ONTOLOGY_CREATED_AT, expiresAt: null,
 		signature: { keyId: 'runtime-provider', algorithm: 'Ed25519' as const, value: 'materialize-at-runtime' },
 	}));

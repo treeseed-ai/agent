@@ -149,6 +149,12 @@ export function providerEventShapeSummary(events: Record<string, unknown>[], sec
 	});
 }
 
+export function providerResponsePreview(events: Record<string, unknown>[], secrets: string[] = []) {
+	const message = [...events].reverse().map(event => record(event.item))
+		.find(item => item.type === 'agent_message');
+	return redactProviderDiagnostic(message?.text ?? message?.message ?? '', secrets);
+}
+
 export function codexTreeDxMcpConfig(sandboxId:string,operationToken:string,assignment:SandboxAssignment){
 	const values={TREESEED_RELAY_URL:assignment.network.relayUrl,TREESEED_SANDBOX_ID:sandboxId,TREESEED_GUEST_TOKEN:operationToken,TREESEED_RELAY_CA:'/workspace/.treeseed/relay-ca.crt'};
 	return `[mcp_servers.treedx]\ncommand = ${JSON.stringify(process.execPath)}\nargs = ${JSON.stringify([process.argv[1],'--treedx-mcp'])}\nrequired = true\nstartup_timeout_sec = 10\ntool_timeout_sec = 30\n\n[mcp_servers.treedx.env]\n${Object.entries(values).map(([key,value])=>`${key} = ${JSON.stringify(value)}`).join('\n')}\n`;
@@ -376,7 +382,7 @@ export async function runSandboxGuest() {
 			finalToolCompliant: timingTracker.lastTool === 'treedx:treeseed_time_status' && timingTracker.lastToolSucceeded };
 		if (timingAwareness.completedChecks < 2 || !timingAwareness.firstToolCompliant || !timingAwareness.finalToolCompliant) {
 			const secrets = [operationToken, ...(subscriptionAuth ? providerCredentialValues(JSON.parse(subscriptionAuth.toString('utf8'))) : [])];
-			throw new Error(`Agent timing-awareness contract requires treeseed_time_status as the first and final tool actions with two completed checks; observed ${JSON.stringify(timingAwareness)}. Provider event shapes: ${JSON.stringify(providerEventShapeSummary(events, secrets))}`);
+			throw new Error(`Agent timing-awareness contract requires treeseed_time_status as the first and final tool actions with two completed checks; observed ${JSON.stringify(timingAwareness)}. Provider event shapes: ${JSON.stringify(providerEventShapeSummary(events, secrets))}. Response preview: ${providerResponsePreview(events, secrets) || '(empty)'}`);
 		}
 		const rawResponse = (await readFile(responsePath, 'utf8')).trim(); if (!rawResponse) throw new Error('Execution provider returned an empty response.');
 		const observedCompletion = structuredCompletion ? await observeReportedActivityCommands(validateActivityCompletion(JSON.parse(rawResponse))) : null;

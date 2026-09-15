@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { createHash } from 'node:crypto';
 import { assertObjectiveContentModel, discussionMessageSourcePaths, readDiscussionSourceMessage, readFocusedTreeDxContext, readIdentityContext } from '../../../src/provider/execution/codex-chat-executor.ts';
 import { executeAssignmentTreeDxTool, reasoningEffortFromAssignmentMetadata } from '../../../src/provider/execution/microvm-executor.ts';
-import { assertReplayableVerificationCommand, codexInteractiveTimeoutMs, codexProjectInstructionArguments, codexReasoningArguments, codexTreeDxMcpConfig, completedTimeStatusChecks, promptFromContext, providerEventShapeSummary, requiresActivityCompletion, timingAwarenessContract, treeDxToolDefinitions, verifyReportedActivityCommands } from '../../../src/sandbox/guest.ts';
+import { assertReplayableVerificationCommand, codexInteractiveTimeoutMs, codexProjectInstructionArguments, codexReasoningArguments, codexTreeDxMcpConfig, completedTimeStatusChecks, promptFromContext, providerEventShapeSummary, providerResponsePreview, requiresActivityCompletion, timingAwarenessContract, treeDxToolDefinitions, verifyReportedActivityCommands } from '../../../src/sandbox/guest.ts';
 
 describe('Codex chat executor', () => {
 	it('requires structured completion only for a mutable legacy source workspace', () => {
@@ -64,7 +64,11 @@ describe('Codex chat executor', () => {
 		expect(providerEventShapeSummary([{ type: 'item.completed', item: {
 			type: 'mcp_tool_call', server: 'treedx', tool: 'treeseed_time_status', status: 'completed',
 			arguments: { secret: 'never retain' }, result: { remainingSeconds: 42 },
-		} }])).toEqual([{ type: 'item.completed', itemType: 'mcp_tool_call', server: 'treedx', tool: 'treeseed_time_status', status: 'completed', error: null }]);
+	} }])).toEqual([{ type: 'item.completed', itemType: 'mcp_tool_call', server: 'treedx', tool: 'treeseed_time_status', status: 'completed', error: null }]);
+	});
+	it('redacts the last provider response used to diagnose a missing clock boundary', () => {
+		expect(providerResponsePreview([{ type: 'item.completed', item: { type: 'agent_message', text: 'Cannot call sk-secret.' } }], ['sk-secret']))
+			.toBe('Cannot call [redacted].');
 	});
 	it('reports remaining time from the API-started productive window without a content grant', async () => {
 		const deadlineAt = new Date(Date.now() + 60_000).toISOString();

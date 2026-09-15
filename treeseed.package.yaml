@@ -153,16 +153,6 @@ capacityProvider:
   executionProviders: []
   envBindings: []
   resourceLimits: {}
-projectArchitecture:
-  topology: split_site_content
-  rootPath: .
-  sitePath: docs
-  contentPath: src/content
-  contentRuntimeSource: r2_preview_overlay
-  localContentMaterialization: none
-  contentPublishTarget:
-    kind: cloudflare_r2
-    prefix: packages/agent
 packageRuntime:
   schemaVersion: treeseed.package-runtime/v1
   componentId: agent

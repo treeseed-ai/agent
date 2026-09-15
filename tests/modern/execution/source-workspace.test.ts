@@ -7,7 +7,7 @@ import type { SourceJobStatus } from '../../../src/provider/execution/sandbox-br
 const key = Buffer.alloc(32, 1).toString('base64');
 const sandbox = { sandboxId: 'sandbox', operationToken: 'host-only-token' };
 const envelope = (id: string): SourceWorkspaceResponse => ({ authorization: { schemaVersion: 'treeseed.source-workspace-authorization/v1', id, providerId: 'provider', assignmentId: 'assignment', attempt: 1,
-  source: { controlPlaneId: 'control', teamId: 'team', projectId: 'project', repositoryId: 'repo', commit: 'a'.repeat(40), formatVersion: 1, profile: 'source-only' }, mode: 'analysis', publication: 'denied', credentialBindingId: 'binding', issuedAt: new Date().toISOString(), expiresAt: new Date(Date.now() + 60_000).toISOString() },
+  source: { controlPlaneId: 'control', teamId: 'team', projectId: 'project', repositoryId: 'repo', commit: 'a'.repeat(40), formatVersion: 1, profile: 'source-only' }, mode: 'analysis', publication: 'denied', acquisition: 'upstream-authorized', credentialBindingId: 'binding', issuedAt: new Date().toISOString(), expiresAt: new Date(Date.now() + 60_000).toISOString() },
   repository: { provider: 'github', owner: 'treeseed-ai', name: 'sdk', cloneUrl: 'https://github.com/treeseed-ai/sdk.git', ref: 'staging' },
   credential: { schemaVersion: 'treeseed.source-credential-delivery/v1', id: 'delivery', authorizationId: id, algorithm: 'x25519-hkdf-sha256-chacha20-poly1305', ephemeralPublicKey: key, nonce: 'nonce', ciphertext: 'sealed-secret', tag: 'tag', expiresAt: new Date(Date.now() + 60_000).toISOString() } });
 function fixture() {

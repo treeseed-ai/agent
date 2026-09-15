@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
+import { cpSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -30,6 +30,9 @@ try {
 	if (!tarball) throw new Error('npm pack did not produce an Agent tarball.');
 	run('npm', ['init', '-y'], stage);
 	run('npm', ['install', '--ignore-scripts', resolve(stage, tarball)], stage);
+	const installedSdk = resolve(stage, 'node_modules/@treeseed/sdk');
+	rmSync(installedSdk, { recursive: true, force: true });
+	cpSync(resolve(packageRoot, 'node_modules/@treeseed/sdk'), installedSdk, { recursive: true });
 	run(process.execPath, ['--input-type=module', '-e', [
 		"const agent = await import('@treeseed/agent');",
 		"const governance = await import('@treeseed/agent/provider-governance');",

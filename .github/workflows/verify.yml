@@ -10,6 +10,9 @@ on:
 
 jobs:
   verify:
+    permissions:
+      contents: read
+      actions: read
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -22,7 +25,10 @@ jobs:
           cache-dependency-path: package-lock.json
       - name: Install dependencies
         timeout-minutes: 20
-        run: npm run release:setup
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - uses: treeseed-ai/sdk/.github/actions/install-exact-sdk@b466f942eba5bc9008d0f1085cce3a76ef0d42cd
+        with:
+          github-token: ${{ github.token }}
       - run: bash -lc 'npm run verify:local'
       - name: Pack verified artifact
         run: mkdir -p artifacts && npm pack --json --ignore-scripts --pack-destination artifacts

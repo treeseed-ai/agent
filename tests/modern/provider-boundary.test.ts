@@ -54,9 +54,15 @@ function sourceFiles(root: string): string[] {
 
 describe('Agent package ownership boundary', () => {
 	it('publishes only valid completed timing-awareness evidence', () => {
-		expect(timingAwarenessEvidence({ requiredChecks: 2, completedChecks: 2 }))
-			.toEqual({ requiredChecks: 2, completedChecks: 2 });
+		const evidence = { requiredChecks: 2, completedChecks: 2, firstTool: 'treedx:treeseed_time_status',
+			firstToolSucceeded: true, lastTool: 'treedx:treeseed_time_status', lastToolSucceeded: true,
+			firstToolCompliant: true, finalToolCompliant: true };
+		expect(timingAwarenessEvidence(evidence)).toEqual(evidence);
 		expect(() => timingAwarenessEvidence({ requiredChecks: 2, completedChecks: 1 }))
+			.toThrow(/timing-awareness evidence/u);
+		expect(() => timingAwarenessEvidence({ requiredChecks: 2, completedChecks: 2 }))
+			.toThrow(/timing-awareness evidence/u);
+		expect(() => timingAwarenessEvidence({ ...evidence, firstTool: 'treedx:treedx_search_files', firstToolCompliant: false }))
 			.toThrow(/timing-awareness evidence/u);
 	});
 	it('grants package restoration only to workday sandboxes', () => {

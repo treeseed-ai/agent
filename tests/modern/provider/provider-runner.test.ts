@@ -4,6 +4,17 @@ import type { AgentExecutionResult, AgentExecutor } from '../../../src/provider/
 
 const digest = `sha256:${'a'.repeat(64)}`;
 const runtimeBuild = `sha256:${'b'.repeat(64)}`;
+const timingAwareness = {
+	schemaVersion: 'treeseed.assignment-timing-awareness/v1' as const,
+	requiredChecks: 2 as const,
+	completedChecks: 2,
+	firstTool: 'treedx:treeseed_time_status' as const,
+	firstToolSucceeded: true as const,
+	lastTool: 'treedx:treeseed_time_status' as const,
+	lastToolSucceeded: true as const,
+	firstToolCompliant: true as const,
+	finalToolCompliant: true as const,
+};
 
 function assignment(executionKind: 'workday' | 'conversation' = 'workday') {
 	const attempt = {
@@ -57,7 +68,7 @@ describe('canonical provider assignment runner', () => {
 			executor: { id: 'codex', observe: async () => ({ available: true }), execute: async request => {
 				await preparation;
 				await request.beginExecution?.();
-				return { status: 'responded', summary: 'Answered.', responseMarkdown: 'Prepared response.', usage: [{ activeSeconds: 1, elapsedSeconds: 1 }] };
+				return { status: 'responded', summary: 'Answered.', responseMarkdown: 'Prepared response.', outputs: { timingAwareness }, usage: [{ activeSeconds: 1, elapsedSeconds: 1 }] };
 			} } });
 		await Promise.resolve();
 		expect(api.startAssignmentExecution).not.toHaveBeenCalled();
@@ -71,7 +82,7 @@ describe('canonical provider assignment runner', () => {
 		const executor: AgentExecutor = { id: 'codex', observe: async () => ({ available: true }), execute: vi.fn(async (request): Promise<AgentExecutionResult> => {
 			await request.beginExecution?.();
 			await request.emit?.({ type: 'execution.started', occurredAt: '2026-09-13T12:00:00.000Z', summary: 'Started.' });
-			return { status: 'completed', summary: 'Evidence-backed answer.', usage: [{ activeSeconds: 3, elapsedSeconds: 4 }] };
+			return { status: 'completed', summary: 'Evidence-backed answer.', outputs: { timingAwareness }, usage: [{ activeSeconds: 3, elapsedSeconds: 4 }] };
 		}) };
 		await runProviderAssignment({ client: api, executor, assignment: assignment(), treeDx,
 			leaseToken: 'lease', runnerId: 'runner', runtimeBuild });
@@ -91,7 +102,7 @@ describe('canonical provider assignment runner', () => {
 			leaseToken: 'lease', runnerId: 'runner', runtimeBuild,
 			executor: { id: 'codex', observe: async () => ({ available: true }), execute: async request => {
 				await request.beginExecution?.(); return {
-				status: 'responded', summary: 'Answered.', responseMarkdown: 'Researched response.', usage: [{ activeSeconds: 2, elapsedSeconds: 3 }],
+				status: 'responded', summary: 'Answered.', responseMarkdown: 'Researched response.', outputs: { timingAwareness }, usage: [{ activeSeconds: 2, elapsedSeconds: 3 }],
 			}; } } });
 		expect(api.respondToAssignmentDiscussion).toHaveBeenCalledWith('assignment-1', expect.objectContaining({ markdown: 'Researched response.' }), expect.any(String));
 		expect(api.settleAssignment).toHaveBeenCalledOnce();
@@ -129,7 +140,7 @@ describe('canonical provider assignment runner', () => {
 		await runProviderAssignment({ client: api, assignment: value, treeDx, leaseToken: 'lease', runnerId: 'runner', runtimeBuild,
 			executor: { id: 'codex', observe: async () => ({ available: true }), execute: async request => {
 				await request.beginExecution?.();
-				visible = request.assignment; return { status: 'completed', summary: 'done' };
+				visible = request.assignment; return { status: 'completed', summary: 'done', outputs: { timingAwareness } };
 			} } });
 		expect(JSON.stringify(visible)).not.toContain('secret');
 	});

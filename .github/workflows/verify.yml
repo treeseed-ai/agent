@@ -25,7 +25,7 @@ jobs:
           cache-dependency-path: package-lock.json
       - name: Install dependencies
         timeout-minutes: 20
-        run: npm run release:setup
+        run: npm ci --ignore-scripts --no-audit --no-fund
       - uses: treeseed-ai/sdk/.github/actions/install-exact-sdk@fb23a3b7ea1d0defbbb4530b618b06c88af36d06
         with:
           github-token: ${{ github.token }}

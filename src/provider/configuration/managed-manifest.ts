@@ -58,3 +58,28 @@ export function createManagedProviderManifestV5(input: ManagedProviderManifestRe
 	if (!validation.ok) throw new Error(`Generated managed provider manifest is invalid: ${validation.diagnostics.map(({ code, path }) => `${code}:${path}`).join(', ')}`);
 	return manifest;
 }
+
+export function applyManagedDevelopmentPolicy(
+	manifest: CapacityProviderManifestV5,
+	release: string,
+): CapacityProviderManifestV5 {
+	if (manifest.metadata?.custody !== 'agent-release-default') return manifest;
+	const profile = manifest.sandbox.profiles[0];
+	if (!profile) throw new Error('Managed provider development requires a sandbox profile.');
+	const managed = createManagedProviderManifestV5({
+		release,
+		guestImage: profile.guestImage,
+		guestImageDigest: profile.guestImageDigest,
+		baseImageDigest: profile.lineage.baseImageDigest,
+		provenanceDigest: profile.lineage.provenanceDigest,
+	});
+	const capabilitiesByPurpose = new Map(managed.lanes.map((lane) => [lane.purpose, lane.capabilities]));
+	const offersByAdapter = new Map(managed.adapters.map((adapter) => [adapter.id, adapter.offers]));
+	return {
+		...manifest,
+		configuration: { ...manifest.configuration, generation: `${manifest.configuration.generation}-development-${release}` },
+		ontology: managed.ontology,
+		lanes: manifest.lanes.map((lane) => ({ ...lane, capabilities: capabilitiesByPurpose.get(lane.purpose) ?? lane.capabilities })),
+		adapters: manifest.adapters.map((adapter) => ({ ...adapter, offers: offersByAdapter.get(adapter.id) ?? adapter.offers })),
+	};
+}

@@ -9,6 +9,8 @@ import {
 } from '@treeseed/sdk/capacity-provider';
 import { readProviderSecret, deleteProviderSecret, stageOsProviderSecret } from '../security/os-custody.ts';
 import { migrateManagedProviderManifestV4 } from './legacy-manifest.ts';
+import { applyManagedDevelopmentPolicy } from './managed-manifest.ts';
+import { providerRuntimeVersion } from './config.ts';
 
 export const DEFAULT_PROVIDER_MANIFEST = 'treeseed.capacity-provider.yaml';
 
@@ -40,7 +42,10 @@ async function localConnections(dataDirectory: string | undefined) {
 export async function loadProviderManifest(path = process.env.TREESEED_CAPACITY_PROVIDER_MANIFEST || DEFAULT_PROVIDER_MANIFEST, dataDirectory?: string, env: NodeJS.ProcessEnv = process.env): Promise<LoadedProviderManifest> {
 	const absolute = resolve(path);
 	const source = parseYaml(await readFile(absolute, 'utf8')) as CapacityProviderManifestV5 | { schemaVersion?: unknown };
-	const parsed = source.schemaVersion === 4 ? migrateManagedProviderManifestV4(source, env) : source as CapacityProviderManifestV5;
+	const parsedSource = source.schemaVersion === 4 ? migrateManagedProviderManifestV4(source, env) : source as CapacityProviderManifestV5;
+	const parsed = env.TREESEED_DEVELOPMENT_MODE
+		? applyManagedDevelopmentPolicy(parsedSource, providerRuntimeVersion())
+		: parsedSource;
 	const overlay = await localConnections(dataDirectory);
 	let manifest = overlay ? { ...parsed, connections: overlay } : parsed;
 	const developmentGuestDigest = env.TREESEED_DEVELOPMENT_SANDBOX_GUEST_DIGEST?.trim();

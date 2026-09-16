@@ -59,6 +59,28 @@ function client() {
 const treeDx = { projectId: 'project', handleId: 'handle-1', repositoryId: null, workspaceId: null, invoke: vi.fn() };
 
 describe('canonical provider assignment runner', () => {
+	it('stops productive accounting exactly once before teardown, including failure fallback', async () => {
+		const api = client(), finished = vi.fn(async () => undefined);
+		let now = 0;
+		const clock = vi.spyOn(performance, 'now').mockImplementation(() => now);
+		try {
+			await runProviderAssignment({ client: api, assignment: assignment(), treeDx,
+				leaseToken: 'lease', runnerId: 'runner', runtimeBuild, onActiveExecutionFinished: finished,
+				executor: { id: 'codex', observe: async () => ({ available: true }), execute: async request => {
+					await request.beginExecution?.();
+					now = 2000;
+					await request.finishExecution?.();
+					await request.finishExecution?.();
+					expect(finished).toHaveBeenCalledTimes(1);
+					now = 100000; // Infrastructure teardown is elapsed time, not productive usage.
+					throw new Error('Teardown failed after harness exit.');
+				} } });
+			expect(finished).toHaveBeenCalledTimes(1);
+			expect(api.failAssignment).toHaveBeenCalledWith('assignment-1', expect.objectContaining({
+				usage: expect.objectContaining({ activeSeconds: 2, elapsedSeconds: 100 }),
+			}));
+		} finally { clock.mockRestore(); }
+	});
 	it('reports a productive timeout as terminal with measured active time', async () => {
 		const api = client();
 		await runProviderAssignment({ client: api, assignment: assignment(), treeDx,

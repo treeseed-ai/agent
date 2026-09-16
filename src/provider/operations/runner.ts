@@ -61,6 +61,16 @@ export async function runProviderAssignment(input: ProviderAssignmentRunInput) {
 	let executionStart: Promise<Record<string, unknown>> | null = null;
 	const elapsedStartedAt = performance.now();
 	let activeStartedAt: number | null = null;
+	let activeFinishedAt: number | null = null;
+	let executionFinish: Promise<void> | null = null;
+	const finishExecution = () => {
+		executionFinish ??= (async () => {
+			if (activeStartedAt === null) return;
+			activeFinishedAt = performance.now();
+			await input.onActiveExecutionFinished?.();
+		})();
+		return executionFinish;
+	};
 	const beginExecution = () => {
 		executionStart ??= (async () => {
 			const current = await input.client.assignment(assignmentId);
@@ -136,6 +146,7 @@ export async function runProviderAssignment(input: ProviderAssignmentRunInput) {
     const executionRequest: AgentExecutionRequest = { assignment: executorAssignment(activeAssignment), assignmentId, leaseToken: input.leaseToken, runnerId: input.runnerId, treeDx,
       authorizeSource: recipientPublicKey => input.client.authorizeAssignmentSource(assignmentId, { runnerId: input.runnerId, leaseToken: input.leaseToken, recipientPublicKey }),
 		beginExecution,
+		finishExecution,
 		emit,
 		signal: executionAbort.signal };
 	result = await executeKernelAssignment({ executor: input.executor, request: executionRequest,
@@ -147,13 +158,13 @@ export async function runProviderAssignment(input: ProviderAssignmentRunInput) {
 			await emit({
 				type: 'execution.failed', occurredAt: new Date().toISOString(), summary, payload: { code: failureCode, retryable } }).catch(() => undefined);
     result = { status: 'failed', code: failureCode, summary, retryable,
-			usage: [{ activeSeconds: activeStartedAt === null ? 0 : (performance.now() - activeStartedAt) / 1000,
+			usage: [{ activeSeconds: activeStartedAt === null ? 0 : ((activeFinishedAt ?? performance.now()) - activeStartedAt) / 1000,
 				elapsedSeconds: (performance.now() - elapsedStartedAt) / 1000 }] };
   } finally {
 		try {
-			if (executionStart) await input.onActiveExecutionFinished?.();
+			if (executionStart) await finishExecution();
 			if (activeStartedAt !== null && !result!.usage?.length) {
-				result!.usage = [{ activeSeconds: (performance.now() - activeStartedAt) / 1000,
+				result!.usage = [{ activeSeconds: ((activeFinishedAt ?? performance.now()) - activeStartedAt) / 1000,
 					elapsedSeconds: (performance.now() - elapsedStartedAt) / 1000 }];
 			}
 		} finally {

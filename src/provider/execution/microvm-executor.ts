@@ -151,7 +151,10 @@ export async function createMicrovmExecutor(config: ProviderHostRuntimeConfig, m
 					await request.emit?.({ type: 'execution.started', occurredAt: new Date().toISOString(), summary: `Kata execution started in ${prepared.sandboxId}.`, payload: { sandboxId: prepared.sandboxId, model: assignment.modelPolicy.model, isolation: 'microvm' } });
 					const toolsAbort=new AbortController();
 					const toolPump=(async()=>{while(!toolsAbort.signal.aborted){const pending=await client.nextToolRequest(prepared.sandboxId,prepared.operationToken,toolsAbort.signal).catch((error)=>{if(toolsAbort.signal.aborted)return {request:null};throw error;});if(pending.request){try{const value=await executeAssignmentTreeDxTool(request,pending.request.tool,pending.request.arguments,{startedAt:executionStartedAt,deadlineAt:executionDeadlineAt});await client.completeToolRequest(prepared.sandboxId,prepared.operationToken,pending.request.id,{result:value},request.signal);}catch(error){await client.completeToolRequest(prepared.sandboxId,prepared.operationToken,pending.request.id,{error:error instanceof Error?error.message:String(error)},request.signal);}}else await new Promise((resolve)=>setTimeout(resolve,50));}})();
-					try{result = sandboxResultSchema.parse(await client.execute(prepared.sandboxId, prepared.operationToken, {}, request.signal));}finally{toolsAbort.abort();await toolPump.catch(()=>undefined);}
+					try{result = sandboxResultSchema.parse(await client.execute(prepared.sandboxId, prepared.operationToken, {}, request.signal));}finally{
+						try { await request.finishExecution?.(); }
+						finally { toolsAbort.abort(); await toolPump.catch(()=>undefined); }
+					}
 					artifacts = await Promise.all(result.artifacts.map(async (artifact) => ({ ...artifact, content: (await client.downloadArtifact(prepared.sandboxId, prepared.operationToken, artifact.id, artifact.bytes, request.signal)).toString('utf8') })));
 					if (result.status === 'completed' && current.source?.authorization.mode === 'work') sourceReference = await publishSourceBranch(client, prepared, current.source, assignment, result, request);
 				} finally {

@@ -20,6 +20,8 @@ export interface AgentExecutionRequest {
   authorizeSource?: (recipientPublicKey: string) => Promise<SourceWorkspaceResponse>;
 	/** Start the API-owned productive window after sandbox/source preparation. */
 	beginExecution?: () => Promise<Record<string, unknown>>;
+	/** Stop productive accounting when the harness exits, before infrastructure teardown. */
+	finishExecution?: () => Promise<void>;
 	emit?: (event: { type: string; occurredAt: string; summary: string; payload: Record<string, unknown>; protectedPayload?: Record<string, unknown> }) => Promise<void>;
   signal?: AbortSignal;
 }

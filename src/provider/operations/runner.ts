@@ -39,6 +39,8 @@ export interface ProviderAssignmentRunInput {
   leaseSeconds?: number;
   renewalIntervalMs?: number;
   onLeaseRenewed?: (leaseExpiresAt: string) => Promise<void>;
+	onActiveExecutionStarted?: () => Promise<void>;
+	onActiveExecutionFinished?: () => Promise<void>;
   signal?: AbortSignal;
 }
 
@@ -60,13 +62,15 @@ export async function runProviderAssignment(input: ProviderAssignmentRunInput) {
 	const beginExecution = () => {
 		executionStart ??= (async () => {
 			const current = await input.client.assignment(assignmentId);
-			return record(await input.client.startAssignmentExecution(assignmentId, {
+			const window = record(await input.client.startAssignmentExecution(assignmentId, {
 				leaseToken: input.leaseToken,
 				runnerId: input.runnerId,
 				executorId: input.executor.id,
 				idempotencyKey: `execution-start:${assignmentId}`,
 				expectedStateVersion: Number(current.stateVersion),
 			}));
+			await input.onActiveExecutionStarted?.();
+			return window;
 		})();
 		return executionStart;
 	};
@@ -141,10 +145,14 @@ export async function runProviderAssignment(input: ProviderAssignmentRunInput) {
 				type: 'execution.failed', occurredAt: new Date().toISOString(), summary, payload: { code: failureCode, retryable } }).catch(() => undefined);
     result = { status: 'failed', code: failureCode, summary, retryable };
   } finally {
-    stopped = true;
-    if (timer) clearTimeout(timer);
-    await renewalInFlight;
-		input.signal?.removeEventListener('abort', abortFromCaller);
+		try {
+			if (executionStart) await input.onActiveExecutionFinished?.();
+		} finally {
+			stopped = true;
+			if (timer) clearTimeout(timer);
+			await renewalInFlight;
+			input.signal?.removeEventListener('abort', abortFromCaller);
+		}
   }
 	if (renewalFailure) {
     result = {

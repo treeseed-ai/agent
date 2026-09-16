@@ -11,6 +11,7 @@ import { createAssignmentTreeDxFacade } from '../coordination/assignment-treedx.
 import type { CapacityProviderManifestV5 } from '@treeseed/sdk/capacity-provider';
 import { materializeCapabilityOffers } from '../capabilities/materialize-offers.ts';
 import { assignmentOfferId } from '../execution/assignment-selection.ts';
+import { assignmentAttemptSchema } from '@treeseed/sdk/agent-capacity';
 
 function record(value: unknown): Record<string, unknown> {
 	return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -181,11 +182,14 @@ export async function runMultiTeamProviderRunners(
 				await localState.release(claim.id); results.push({ connectionId: connection.connection.id, status: 'idle', reason: 'executor_unavailable' }); continue;
 			}
 			const leaseExpiresAt = text(assignment.leaseExpiresAt) ?? new Date(Date.now() + 300_000).toISOString();
+			const attempt = assignmentAttemptSchema.parse(assignment.assignmentAttempt ?? record(assignment.workspaceContext).assignmentAttempt);
 			await localState.attachLease(claim.id, {
 				assignmentId,
 				leaseToken,
 				leaseExpiresAt,
 				executionProviderId,
+				laneId,
+				requestedSeconds: attempt.limits.maximumSeconds,
 				dispatchEnvelope: leased,
 			});
 			await localState.claimDispatch([connection.connection.id]);
@@ -199,6 +203,8 @@ export async function runMultiTeamProviderRunners(
 				leaseToken,
 				runnerId: claim.runnerId,
 				leaseSeconds: 300,
+				onActiveExecutionStarted: () => localState.beginActiveExecution(claim.id),
+				onActiveExecutionFinished: () => localState.finishActiveExecution(claim.id),
 				renewalIntervalMs: text(assignment.executionKind) === 'conversation' ? 5_000 : undefined,
 				onLeaseRenewed: async (renewedLeaseExpiresAt) => {
 					await executor.renewLease?.(assignmentId, renewedLeaseExpiresAt);

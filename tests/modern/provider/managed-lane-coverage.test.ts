@@ -19,7 +19,11 @@ it('routes every advertised non-conversation capability through a managed workda
 	expect(workday.capabilities).not.toContain('treeseed.coordination.conversation');
 	expect(communication.priority).toBeGreaterThan(workday.priority);
 	expect(communication.reservedConcurrentWorkers).toBe(1);
-	expect(manifest.adapters[0]!.model).toEqual({ model: 'gpt-5.6-terra' });
+	expect(manifest.adapters[0]!.model).toEqual({ model: 'gpt-5.6-terra', reasoningEffort: 'medium' });
+	expect(manifest.adapters.map(({ id }) => id)).toEqual(['codex-implementation', 'codex-research']);
+	expect(manifest.adapters[1]!.model).toEqual({ model: 'gpt-5.6-sol', reasoningEffort: 'medium' });
+	expect(manifest.adapters[1]!.offers.flatMap(({ offer }) => offer.capabilities.map(({ id }) => id))).not.toContain('treeseed.engineering.code-change');
+	expect(manifest.adapters[0]!.offers.flatMap(({ offer }) => offer.capabilities.map(({ id }) => id))).not.toContain('treeseed.research.web');
 });
 
 it('refreshes only managed provider policy for development source', () => {

@@ -21,6 +21,18 @@ const digest = (value: unknown) => `sha256:${createHash('sha256').update(canonic
 type V5Adapter = CapacityProviderManifestV5['adapters'][number];
 const TOOL_PERMISSION:Record<string,string>={treedx_build_context:'source.read',treedx_read_files:'source.read',treedx_search_files:'source.read',treedx_list_paths:'source.read'};
 function object(value:unknown):Record<string,unknown>{return value&&typeof value==='object'&&!Array.isArray(value)?value as Record<string,unknown>:{};}
+/** Translate harness-native counters once at the sandbox transport boundary. */
+export function sandboxAccountingUsage(usage: Record<string, unknown>): Record<string, unknown> {
+	const fields = { input_tokens: 'inputTokens', cached_input_tokens: 'cachedInputTokens',
+		output_tokens: 'outputTokens', reasoning_output_tokens: 'reasoningTokens' };
+	const normalized: Record<string, unknown> = { ...usage, nativeUsage: { ...usage } };
+	for (const [native, canonical] of Object.entries(fields)) {
+		const value = usage[native];
+		if (typeof value === 'number' && Number.isFinite(value) && value >= 0) normalized[canonical] = value;
+		delete normalized[native];
+	}
+	return normalized;
+}
 export function timingAwarenessEvidence(value: unknown) {
 	const parsed = assignmentTimingAwarenessReceiptSchema.safeParse(value);
 	if (!parsed.success) throw new Error('Completed sandbox result lacks valid timing-awareness evidence.');
@@ -60,13 +72,6 @@ export async function executeAssignmentTreeDxTool(request:Parameters<AgentExecut
 	if(tool==='treedx_list_paths') return request.treeDx.invoke('treedx.repositories.paths.list',{path,body:{paths:Array.isArray(arguments_.paths)?arguments_.paths.slice(0,20).map(String):[],kinds:['blob'],limit:Math.min(200,Math.max(1,Number(arguments_.limit??100)))}});
 	const body=contextBuildBody(object(arguments_.request)); return request.treeDx.invoke('treedx.repositories.context.build',{path,body});
 }
-export function reasoningEffortFromAssignmentMetadata(metadata: Record<string, unknown>) {
-	const chatProfile = metadata.chatProfile && typeof metadata.chatProfile === 'object' ? metadata.chatProfile as Record<string, unknown> : {};
-	const execution = metadata.executionPolicy && typeof metadata.executionPolicy === 'object' ? metadata.executionPolicy as Record<string, unknown>
-		: chatProfile.execution && typeof chatProfile.execution === 'object' ? chatProfile.execution as Record<string, unknown> : {};
-	return ['minimal', 'low', 'medium', 'high', 'xhigh'].includes(String(execution.reasoningEffort))
-		? String(execution.reasoningEffort) as 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' : undefined;
-}
 export function assignmentAllowedServices(executionKind: unknown, treeDxEnabled: boolean) {
 	return ['model-gateway', 'codex-subscription', ...(executionKind === 'workday' ? ['package-registry'] : []), ...(treeDxEnabled ? ['treedx-relay'] : [])];
 }
@@ -99,7 +104,7 @@ export async function createMicrovmExecutor(config: ProviderHostRuntimeConfig, m
 			const attempt = assignmentAttemptSchema.safeParse(request.assignment.assignmentAttempt ?? object(request.assignment.workspaceContext).assignmentAttempt);
 			const brokerStatus = await client.status().catch(() => ({} as Record<string, unknown>));
 			const metadata = request.assignment.metadata && typeof request.assignment.metadata === 'object' ? request.assignment.metadata as Record<string, unknown> : {};
-			const reasoningEffort = reasoningEffortFromAssignmentMetadata(metadata);
+			const reasoningEffort = adapter.model?.reasoningEffort;
 			const offerId = assignmentOfferId(request.assignment);
 			const v5Binding = adapter.offers.find(({ offer }) => offer.offerId === offerId) ?? null;
 			const profileId = v5Binding?.sandboxProfileId;
@@ -166,22 +171,23 @@ export async function createMicrovmExecutor(config: ProviderHostRuntimeConfig, m
 					return providerEnvironmentReceiptSchema.parse({ ...unsigned, signature: { keyId, algorithm: 'Ed25519', value: sign(null, Buffer.from(canonical(unsigned)), signingKey).toString('base64url') } });
 				})() : null;
 				if (environmentReceipt) await request.emit?.({ type: 'sandbox.environment.attested', occurredAt: environmentReceipt.createdAt, summary: 'Provider environment attestation recorded.', payload: { environmentReceipt } });
+				const usage = sandboxAccountingUsage(result.usage);
 				if (result.status === 'completed') {
 					const abstained = result.responseMarkdown?.trim() === '<!-- treeseed:abstain -->';
 					const diagnostics = object(result.diagnostics);
 					const timingAwareness = timingAwarenessEvidence(result.timingAwareness);
 					await request.emit?.({ type: 'execution.completed', occurredAt: new Date().toISOString(), summary: result.summary, payload: { sandboxId: result.sandboxId, model: assignment.modelPolicy.model, provider: assignment.modelPolicy.provider, capabilities: assignment.modelPolicy.capabilities,
-						usage: [result.usage], timing: { elapsedSeconds: result.usage.elapsedSeconds }, resources: { cpuUserMicros: result.usage.cpuUserMicros, cpuSystemMicros: result.usage.cpuSystemMicros, peakRssBytes: result.usage.peakRssBytes }, artifacts: result.artifacts,
+						usage: [usage], timing: { elapsedSeconds: result.usage.elapsedSeconds }, resources: { cpuUserMicros: result.usage.cpuUserMicros, cpuSystemMicros: result.usage.cpuSystemMicros, peakRssBytes: result.usage.peakRssBytes }, artifacts: result.artifacts,
 						activityCompletion: diagnostics.activityCompletion ?? null, timingAwareness, changedPaths: diagnostics.changedPaths ?? [], teardown }, protectedPayload: result.diagnostics });
 					return { status: abstained ? 'abstained' : result.responseMarkdown ? 'responded' : 'completed', summary: result.summary, ...(!abstained && result.responseMarkdown ? { responseMarkdown: result.responseMarkdown } : {}), outputs: { sandboxId: result.sandboxId, teardown, environmentReceipt,
 						verificationRecords: object(result.diagnostics).verificationRecords ?? [],
 						activityCompletion: object(result.diagnostics).activityCompletion ?? null,
 						timingAwareness,
 						providerEventShapes: Array.isArray(diagnostics.providerEventShapes) ? diagnostics.providerEventShapes : [],
-						...(sourceReference ? { sourceReference } : {}) }, artifacts, usage: [result.usage] };
+						...(sourceReference ? { sourceReference } : {}) }, artifacts, usage: [usage] };
 				}
 				await request.emit?.({ type: 'execution.failed', occurredAt: new Date().toISOString(), summary: result.summary, payload: { sandboxId: result.sandboxId, status: result.status, teardown }, protectedPayload: result.diagnostics });
-				return { status: result.status === 'failed' ? 'failed' : 'returned', code: `sandbox_${result.status}`, summary: result.summary, retryable: result.status !== 'failed', outputs: { sandboxId: result.sandboxId, teardown } };
+				return { status: result.status === 'failed' ? 'failed' : 'returned', code: `sandbox_${result.status}`, summary: result.summary, retryable: result.status !== 'failed', outputs: { sandboxId: result.sandboxId, teardown }, usage: [usage] };
 			} finally { await materialized.cleanup(); }
 		},
 	};

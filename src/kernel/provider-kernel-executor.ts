@@ -80,6 +80,13 @@ export async function executeKernelAssignment(input: {
 				throw Object.assign(new Error(transport.result.summary), { code: transport.result.code });
 			}
 			const usage = record(transport.result.usage?.[0]);
+			const elapsedSeconds = Math.max(1, Math.ceil(Number(usage.elapsedSeconds)));
+			if (!Number.isFinite(elapsedSeconds)) throw new Error('model_elapsed_usage_missing');
+			const nativeUsage: Record<string, number> = {};
+			for (const [key, value] of Object.entries(usage)) {
+				if (!['elapsedSeconds', 'inputTokens', 'outputTokens', 'provenance'].includes(key)
+					&& typeof value === 'number' && Number.isFinite(value) && value >= 0) nativeUsage[key] = value;
+			}
 			const references = Array.isArray(record(transport.result.outputs).contentReferences)
 				? record(transport.result.outputs).contentReferences as AssignmentReference[] : [];
 			const verification = Array.isArray(record(transport.result.outputs).verificationRecords)
@@ -91,6 +98,12 @@ export async function executeKernelAssignment(input: {
 			return {
 				text: transport.result.responseMarkdown ?? transport.result.summary,
 				timingAwareness,
+				usage: {
+					elapsedSeconds,
+					...(Number.isFinite(Number(usage.inputTokens)) ? { modelInputTokens: Math.floor(Number(usage.inputTokens)) } : {}),
+					...(Number.isFinite(Number(usage.outputTokens)) ? { modelOutputTokens: Math.floor(Number(usage.outputTokens)) } : {}),
+					...(Object.keys(nativeUsage).length ? { native: nativeUsage } : {}),
+				},
 				references,
 				verification,
 				...(typeof activityCompletion.summary === 'string' ? { activityCompletion: {
@@ -100,8 +113,6 @@ export async function executeKernelAssignment(input: {
 					contentOutput: activityCompletion.contentOutput && typeof activityCompletion.contentOutput === 'object'
 						? activityCompletion.contentOutput as { model: string; body: string; frontmatter: Record<string, unknown> } : null,
 				} } : {}),
-				...(Number.isFinite(Number(usage.inputTokens)) ? { inputTokens: Number(usage.inputTokens) } : {}),
-				...(Number.isFinite(Number(usage.outputTokens)) ? { outputTokens: Number(usage.outputTokens) } : {}),
 			};
 		},
 		runVerification: async () => { throw new Error('verification_runtime_not_bound'); },
@@ -129,10 +140,14 @@ export async function executeKernelAssignment(input: {
 	} catch (error) {
 		const summary = error instanceof Error ? error.message : String(error);
 		if (summary.includes('Agent timing-awareness contract requires')) {
-			return { status: 'returned', code: 'assignment_timing_awareness_missing', summary, retryable: true };
+			return { status: 'returned', code: 'assignment_timing_awareness_missing', summary, retryable: true,
+				...(transport.result ? { usage: transport.result.usage } : {}) };
 		}
 		return { status: 'failed', code: typeof (error as { code?: unknown })?.code === 'string'
-			? String((error as { code: string }).code) : 'agent_kernel_failed', summary, retryable: false };
+			? String((error as { code: string }).code) : 'agent_kernel_failed', summary, retryable: false,
+			...(transport.result ? { outputs: transport.result.outputs, usage: transport.result.usage,
+				artifacts: transport.result.artifacts } : {}),
+		};
 	}
 	const communication = attempt.data.effectiveProfile.activity === 'chat';
 	return {

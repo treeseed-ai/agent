@@ -28,7 +28,7 @@ function request(): AgentExecutionRequest {
 		},
 		requiredCapabilities: [],
 		grant: { contentRead: [], contentWrite: [], sourceRead: ['treeseed-ai/sdk'], sourceWrite: ['treeseed-ai/sdk'], tools: ['source.read', 'source.write'] },
-		provider: { providerId: 'provider-1', offerId: 'codex', offerRevision: 1, runtimeBuild },
+		provider: { providerId: 'provider-1', offerId: 'codex', executionProviderId: 'codex', modelConfigurationId: 'terra-medium', executionCapabilityId: 'code-change', offerRevision: 1, runtimeBuild },
 		contextRefs: [{ store: 'git', model: 'repository', id: 'sdk-source', repository: 'treeseed-ai/sdk', commit }], predecessorResultIds: [],
 		acceptanceCriteria: ['Commit the exact source change.'],
 		workspace: { mode: 'git', repository: 'treeseed-ai/sdk', baseCommit: commit, branch: 'treeseed/assignments/assignment-1', writablePaths: ['src'] },
@@ -64,6 +64,7 @@ describe('provider AgentKernel execution', () => {
 		expect(result.outputs?.assignmentResult).toMatchObject({
 			assignmentId: 'assignment-1', status: 'completed',
 			references: [{ kind: 'git', repository: 'treeseed-ai/sdk', commit: candidateCommit }],
+			usage: { elapsedSeconds: 4, modelInputTokens: 20, modelOutputTokens: 10 },
 		});
 	});
 
@@ -160,7 +161,8 @@ describe('provider AgentKernel execution', () => {
 		}; }) };
 		const result = await executeKernelAssignment({ executor, request: input, runtimeBuild });
 		expect(result.status).toBe('completed');
-		expect(result.outputs?.assignmentResult).toMatchObject({ references: [{ kind: 'treedx', commit: candidateCommit, path: target.path }] });
+		expect(result.outputs?.assignmentResult).toMatchObject({ references: [{ kind: 'treedx', commit: candidateCommit, path: target.path }],
+			usage: { elapsedSeconds: 3 } });
 		expect(written).toContain('decisionClass: proposal');
 		expect(written).toContain('disposition: approved');
 		expect(written.split('\n')).toContain(`rationale: ${review}`);
@@ -251,6 +253,9 @@ describe('provider AgentKernel execution', () => {
 			permissionCeiling: { content: { read: ['objective'], write: ['proposal'] }, tools: ['source.read'] } };
 		const target = { store: 'treedx', model: 'proposal', id: 'estimated-proposal', repository: 'treeseed-ai/sdk-library',
 			commit, path: 'proposals/estimated-proposal.mdx' };
+		attempt.sourceRef = target;
+		attempt.contextRefs = [target];
+		attempt.limits = { ...attempt.limits, maximumContextBytes: 10000, maximumContextTokens: 5000 };
 		attempt.grant = { contentRead: [], contentWrite: [target], sourceRead: ['treeseed-ai/sdk'], sourceWrite: [], tools: ['source.read'] };
 		attempt.workspace = { mode: 'treedx', workspaceId: 'workspace-1', repository: target.repository,
 			baseCommit: commit, writablePaths: [target.path] };
@@ -259,7 +264,7 @@ describe('provider AgentKernel execution', () => {
 			invoke: vi.fn(async (operation, value: any) => {
 				if (operation === 'treedx.workspaces.files.batch') written = value.body.files[0].content;
 				if (operation === 'treedx.workspaces.commit') return { commitSha: candidateCommit };
-				if (operation === 'treedx.repositories.files.read') return { files: [{ path: target.path, content: written }] };
+				if (operation === 'treedx.repositories.files.read') return { files: [{ path: target.path, content: written || 'Exact proposal source', frontmatter: proposal }] };
 				return {};
 			}) };
 		const proposal = {
@@ -282,6 +287,19 @@ describe('provider AgentKernel execution', () => {
 		expect(result.outputs?.assignmentResult).toMatchObject({ references: [{ kind: 'treedx', commit: candidateCommit, path: target.path }] });
 		expect(written).toContain('executionPlan:');
 		expect(written).toContain('expectedSeconds: 60');
+		const incomplete = { ...proposal, executionPlan: { workItems: [] } };
+		const invalidExecutor: AgentExecutor = { ...executor, execute: vi.fn(async (request): Promise<AgentExecutionResult> => {
+			const response = await executor.execute(request);
+			return { ...response, outputs: { ...response.outputs, activityCompletion: {
+				schemaVersion: 'treeseed.activity-completion/v1', summary: 'Dropped other work items.', verification: [],
+				reviewDisposition: null, contentOutput: { model: 'proposal', body: 'Incomplete plan.', frontmatter: incomplete },
+			} } };
+		}) };
+		const denied = await executeKernelAssignment({ executor: invalidExecutor, request: input, runtimeBuild });
+		expect(denied.status).toBe('failed');
+		expect(denied.summary).toBe('estimate_proposal_scope_changed:executionPlan');
+		expect(denied.outputs?.activityCompletion).toMatchObject({ contentOutput: { frontmatter: incomplete } });
+		expect(denied.usage).toEqual([{ elapsedSeconds: 3 }]);
 	});
 
 	it('selects a project-owned handler compiled into the exact runtime build', async () => {

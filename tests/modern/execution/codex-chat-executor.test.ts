@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { createHash } from 'node:crypto';
 import { assertObjectiveContentModel, discussionMessageSourcePaths, readDiscussionSourceMessage, readFocusedTreeDxContext, readIdentityContext } from '../../../src/provider/execution/codex-chat-executor.ts';
-import { executeAssignmentTreeDxTool, reasoningEffortFromAssignmentMetadata } from '../../../src/provider/execution/microvm-executor.ts';
-import { assertReplayableVerificationCommand, codexInteractiveTimeoutMs, codexProjectInstructionArguments, codexReasoningArguments, codexTreeDxMcpConfig, completedTimeStatusChecks, promptFromContext, providerEventShapeSummary, providerResponsePreview, requiresActivityCompletion, timingAwarenessContract, treeDxToolDefinitions, verifyReportedActivityCommands } from '../../../src/sandbox/guest.ts';
+import { executeAssignmentTreeDxTool } from '../../../src/provider/execution/microvm-executor.ts';
+import { assertPredecessorSynthesis, assertReplayableVerificationCommand, codexInteractiveTimeoutMs, codexProjectInstructionArguments, codexReasoningArguments, codexTreeDxMcpConfig, completedTimeStatusChecks, promptFromContext, providerEventShapeSummary, providerResponsePreview, requiresActivityCompletion, timingAwarenessContract, treeDxToolDefinitions, verifyReportedActivityCommands } from '../../../src/sandbox/guest.ts';
 
 describe('Codex chat executor', () => {
 	it('requires structured completion only for a mutable legacy source workspace', () => {
@@ -96,6 +96,24 @@ describe('Codex chat executor', () => {
 		expect(prompt).toContain('use only field names shown by this contract');
 		expect(prompt).toContain('Copy exact authorized references rather than manufacturing them');
 		expect(prompt).toContain('exactly one contextRefs entry whose store matches that workspace');
+		expect(prompt).toContain('Preserve proposal-level evidenceRefs, objectiveRefs, status');
+		expect(prompt).toContain('never attribute source paths to the TreeDX library commit');
+		expect(prompt).not.toContain('Put other evidence in the proposal-level evidenceRefs');
+	});
+	it('keeps the entire proposal while limiting estimating edits to the assigned role', () => {
+		const context = (workItemId?: string) => ({ canonicalAssignmentContext: { assignment: {
+			id: 'estimate-1', workItemId, sourceRef: { model: 'proposal', id: 'proposal-1' },
+			workspace: { mode: 'treedx' }, effectiveProfile: { activity: 'estimating', handler: 'estimate', prompt: {} },
+		}, context: [], predecessorResults: [] } });
+		const owner = promptFromContext(context('implement-change'));
+		expect(owner).toContain('Return the entire exact assigned proposal');
+		expect(owner).toContain('Never return only your own work item');
+		expect(owner).toContain('Change only the estimate and rationale for work item implement-change');
+		expect(owner).toContain('Do not execute the proposed work or mark the proposal ready');
+		expect(owner).toContain('return verification: [] unless you actually ran a standalone acceptance test');
+		const reviewer = promptFromContext(context());
+		expect(reviewer).toContain('assess the reviewEstimate for every review-required work item');
+		expect(reviewer).toContain('preserve owner estimates and the complete product chain');
 	});
 	it('distinguishes a TreeDX proposal revision from the attached Git source during proposal review', () => {
 		const prompt = promptFromContext({ canonicalAssignmentContext: { assignment: {
@@ -122,11 +140,23 @@ describe('Codex chat executor', () => {
 		expect(prompt).toContain('The Actor identifies the exact source commit.');
 		expect(prompt).toContain('Predecessor results');
 	});
-	it('carries the agent-selected reasoning effort into Codex without a provider hardcode', () => {
-		expect(reasoningEffortFromAssignmentMetadata({ chatProfile: { execution: { reasoningEffort: 'high' } } })).toBe('high');
-		expect(reasoningEffortFromAssignmentMetadata({ executionPolicy: { reasoningEffort: 'xhigh' } })).toBe('xhigh');
+	it('requires round-two estimating output to materially cite every predecessor result', () => {
+		const context = { canonicalAssignmentContext: { assignment: { effectiveProfile: { activity: 'estimating' } },
+			predecessorResults: [{ id: 'result-a' }, { id: 'result-b' }] } };
+		const prompt = promptFromContext(context);
+		expect(prompt).toContain('cite every predecessor result by its exact ID');
+		expect(prompt).toContain('result-a, result-b');
+		expect(() => assertPredecessorSynthesis(context, { schemaVersion: 'treeseed.activity-completion/v1',
+			summary: 'Synthesized.', verification: [], reviewDisposition: null,
+			contentOutput: { model: 'proposal', body: 'Used result-a only.', frontmatter: {} } }))
+			.toThrow('predecessor_result_citation_missing:result-b');
+		expect(() => assertPredecessorSynthesis(context, { schemaVersion: 'treeseed.activity-completion/v1',
+			summary: 'Synthesized.', verification: [], reviewDisposition: null,
+			contentOutput: { model: 'proposal', body: 'result-a supplied scope; result-b supplied risks.', frontmatter: {} } }))
+			.not.toThrow();
+	});
+	it('passes the configured reasoning effort to Codex', () => {
 		expect(codexReasoningArguments('high')).toEqual(['-c', 'model_reasoning_effort=high']);
-		expect(reasoningEffortFromAssignmentMetadata({ chatProfile: { execution: { reasoningEffort: 'fast' } } })).toBeUndefined();
 		expect(codexReasoningArguments(undefined)).toEqual([]);
 	});
 	it('respects the configured activity runtime for deeper chat reasoning', () => {

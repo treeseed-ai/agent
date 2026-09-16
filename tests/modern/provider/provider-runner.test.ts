@@ -28,7 +28,7 @@ function assignment(executionKind: 'workday' | 'conversation' = 'workday') {
 			prompt: { system: 'Research the authorized context and answer.' },
 			permissionCeiling: { content: { read: [], write: [] }, tools: [] } },
 		requiredCapabilities: [], grant: { contentRead: [], contentWrite: [], sourceRead: [], sourceWrite: [], tools: [] },
-		provider: { providerId: 'provider', offerId: 'offer', offerRevision: 1, runtimeBuild },
+		provider: { providerId: 'provider', offerId: 'offer', executionProviderId: 'codex', modelConfigurationId: 'terra-medium', executionCapabilityId: 'code-change', offerRevision: 1, runtimeBuild },
 		contextRefs: [], predecessorResultIds: [], acceptanceCriteria: ['Return the exact result.'], workspace: { mode: 'read-only' },
 		estimate: { minimumSeconds: 1, expectedSeconds: 10, maximumSeconds: 30 },
 		limits: { maximumSeconds: 30, maximumContextBytes: 1024, maximumContextItems: 10 },
@@ -59,6 +59,34 @@ function client() {
 const treeDx = { projectId: 'project', handleId: 'handle-1', repositoryId: null, workspaceId: null, invoke: vi.fn() };
 
 describe('canonical provider assignment runner', () => {
+	it('reports a productive timeout as terminal with measured active time', async () => {
+		const api = client();
+		await runProviderAssignment({ client: api, assignment: assignment(), treeDx,
+			leaseToken: 'lease', runnerId: 'runner', runtimeBuild,
+			executor: { id: 'codex', observe: async () => ({ available: true }), execute: async request => {
+				await request.beginExecution?.();
+				throw Object.assign(new Error('assignment_timeout'), { code: 'assignment_timeout' });
+			} } });
+		expect(api.returnAssignment).not.toHaveBeenCalled();
+		expect(api.failAssignment).toHaveBeenCalledWith('assignment-1', expect.objectContaining({
+			code: 'assignment_timeout', retryable: false, activeSeconds: 1,
+			usage: expect.objectContaining({ activeSeconds: expect.any(Number), elapsedSeconds: expect.any(Number) }),
+		}));
+	});
+
+	it('preserves provider-native failure usage in terminal settlement', async () => {
+		const api = client();
+		await runProviderAssignment({ client: api, assignment: assignment(), treeDx,
+			leaseToken: 'lease', runnerId: 'runner', runtimeBuild,
+			executor: { id: 'codex', observe: async () => ({ available: true }), execute: async request => {
+				await request.beginExecution?.();
+				return { status: 'failed', code: 'assignment_timeout', summary: 'Expired.', retryable: false,
+					usage: [{ activeSeconds: 12, elapsedSeconds: 15, inputTokens: 200 }] };
+			} } });
+		expect(api.failAssignment).toHaveBeenCalledWith('assignment-1', expect.objectContaining({
+			activeSeconds: 12, elapsedSeconds: 15, usage: expect.objectContaining({ inputTokens: 200 }),
+		}));
+	});
 	it('starts productive execution only after the executor finishes preparation', async () => {
 		const api = client();
 		let finishPreparation!: () => void;
@@ -102,10 +130,13 @@ describe('canonical provider assignment runner', () => {
 			leaseToken: 'lease', runnerId: 'runner', runtimeBuild,
 			executor: { id: 'codex', observe: async () => ({ available: true }), execute: async request => {
 				await request.beginExecution?.(); return {
-				status: 'responded', summary: 'Answered.', responseMarkdown: 'Researched response.', outputs: { timingAwareness }, usage: [{ activeSeconds: 2, elapsedSeconds: 3 }],
+				status: 'responded', summary: 'Answered.', responseMarkdown: 'Researched response.', outputs: { timingAwareness }, usage: [{ activeSeconds: 2, elapsedSeconds: 3, inputTokens: 42, nativeUsage: { input_tokens: 42 } }],
 			}; } } });
 		expect(api.respondToAssignmentDiscussion).toHaveBeenCalledWith('assignment-1', expect.objectContaining({ markdown: 'Researched response.' }), expect.any(String));
 		expect(api.settleAssignment).toHaveBeenCalledOnce();
+		expect(api.settleAssignment).toHaveBeenCalledWith('assignment-1', expect.objectContaining({
+			usageActual: expect.objectContaining({ inputTokens: 42, nativeUsage: { input_tokens: 42 } }),
+		}), expect.any(String));
 		expect(api.startAssignmentCloseout).not.toHaveBeenCalled();
 		expect(api.completeAssignment).not.toHaveBeenCalled();
 	});
@@ -130,6 +161,8 @@ describe('canonical provider assignment runner', () => {
 		await runProviderAssignment({ client: api, assignment: assignment(), treeDx, leaseToken: 'lease', runnerId: 'runner',
 			runtimeBuild, executor, renewalIntervalMs: 1 });
 		expect(signal?.aborted).toBe(true);
+		expect(api.settleAssignment).toHaveBeenCalledBefore(api.returnAssignment);
+		expect(api.settleAssignment).toHaveBeenCalledWith('assignment-1', expect.objectContaining({ activeSeconds: 1 }), expect.any(String));
 		expect(api.returnAssignment).toHaveBeenCalledWith('assignment-1', expect.objectContaining({ code: 'assignment_lease_renewal_failed' }));
 	});
 

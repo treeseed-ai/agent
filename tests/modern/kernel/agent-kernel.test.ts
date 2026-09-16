@@ -22,7 +22,7 @@ function assignmentContext(): AssignmentContext {
 				permissionCeiling: { content: { read: ['note'], write: ['note'] }, tools: [] },
 			},
 			requiredCapabilities: [], grant: { contentRead: [], contentWrite: [reportTarget], sourceRead: [], sourceWrite: [], tools: [] },
-			provider: { providerId: 'provider-1', offerId: 'offer-1', offerRevision: 1, runtimeBuild }, contextRefs: [], predecessorResultIds: [],
+			provider: { providerId: 'provider-1', offerId: 'offer-1', executionProviderId: 'codex', modelConfigurationId: 'terra-medium', executionCapabilityId: 'code-change', offerRevision: 1, runtimeBuild }, contextRefs: [], predecessorResultIds: [],
 			acceptanceCriteria: ['Commit one exact report.'],
 			workspace: { mode: 'treedx', workspaceId: 'workspace-1', repository: 'treeseed-ai/team-library', baseCommit: commit, writablePaths: ['notes'] },
 			estimate: { minimumSeconds: 1, expectedSeconds: 10, maximumSeconds: 30 }, limits: { maximumSeconds: 30, maximumContextBytes: 1024, maximumContextItems: 10 },
@@ -67,7 +67,7 @@ describe('AgentKernel', () => {
 		expect(settled).toBe(false);
 		startExecution();
 		await vi.advanceTimersByTimeAsync(1_001);
-		await expect(running).rejects.toThrow('assignment_timeout');
+		await expect(running).rejects.toMatchObject({ message: 'assignment_timeout', code: 'assignment_timeout' });
 	});
 
 	it('runs Reporter deterministically through the one assignment entry point', async () => {

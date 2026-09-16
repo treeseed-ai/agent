@@ -1,5 +1,6 @@
 import {
 	validateCapacityProviderManifestV5,
+	capabilityOfferDigest,
 	type CapacityProviderManifestV5,
 } from '@treeseed/sdk/capacity-provider';
 import { migrateManagedProviderManifestV4 } from './legacy-manifest.ts';
@@ -53,6 +54,23 @@ export function createManagedProviderManifestV5(input: ManagedProviderManifestRe
 		TREESEED_SANDBOX_PROVENANCE_DIGEST: input.provenanceDigest,
 	});
 	manifest.configuration = { generation: `agent-release-${input.release}` };
+	const baseAdapter = manifest.adapters[0]!;
+	manifest.adapters = [
+		{ id: 'codex-implementation', model: 'gpt-5.6-terra', accepts: (id: string) => !id.startsWith('treeseed.research.') },
+		{ id: 'codex-research', model: 'gpt-5.6-sol', accepts: (id: string) => id.startsWith('treeseed.research.')
+			|| id.startsWith('treeseed.coordination.') || id === 'treeseed.engineering.repository-analysis' },
+	].map(policy => {
+		const offers = baseAdapter.offers.flatMap(binding => {
+			const capabilities = binding.offer.capabilities.filter(({ id }) => policy.accepts(id));
+			if (!capabilities.length) return [];
+			const material = { ...binding.offer, offerId: `${policy.id}-${binding.offer.offerId}`,
+				capabilities, conformance: binding.offer.conformance.filter(({ capability }) => policy.accepts(capability.id)) };
+			return [{ ...binding, offer: { ...material, offerDigest: capabilityOfferDigest(material) } }];
+		});
+		return { ...baseAdapter, id: policy.id, model: { model: policy.model, reasoningEffort: 'medium' as const }, offers,
+			nativeLimits: { modelConfigurationId: `codex:${policy.model}:medium`, dailyActiveSecondsLimit: 0,
+				capabilityLimits: Object.fromEntries(offers.flatMap(binding => binding.offer.capabilities.map(({ id }) => [id, { dailyActiveSecondsLimit: 0 }]))) } };
+	});
 	manifest.metadata = { custody: 'agent-release-default' };
 	const validation = validateCapacityProviderManifestV5(manifest);
 	if (!validation.ok) throw new Error(`Generated managed provider manifest is invalid: ${validation.diagnostics.map(({ code, path }) => `${code}:${path}`).join(', ')}`);

@@ -11,7 +11,7 @@ import { createAssignmentTreeDxFacade } from '../coordination/assignment-treedx.
 import type { CapacityProviderManifestV5 } from '@treeseed/sdk/capacity-provider';
 import { materializeCapabilityOffers } from '../capabilities/materialize-offers.ts';
 import { assignmentOfferId } from '../execution/assignment-selection.ts';
-import { assignmentAttemptSchema } from '@treeseed/sdk/agent-capacity';
+import { assignmentAttemptSchema, capabilityAccountingLimitsSchema } from '@treeseed/sdk/agent-capacity';
 
 function record(value: unknown): Record<string, unknown> {
 	return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -91,6 +91,10 @@ export async function runMultiTeamProviderManager(
 					.finally(() => executor.shutdown?.())
 				: { available: false, reason: 'executor_not_configured' };
 			const capabilities = [...new Set(adapter.offers.flatMap(({ offer }) => offer.capabilities.map(({ id }) => id)))];
+			const limits = capabilityAccountingLimitsSchema.safeParse(adapter.nativeLimits);
+			const accounting = limits.success ? await localState.activeTimeObservation(limits.data.modelConfigurationId, capabilities) : null;
+			const scopedObservation = (value: { day: string; activeSeconds: number; reservedSeconds: number }) => ({ ...value,
+				observedAt: accounting!.observedAt, healthy: observation.available });
 			return {
 				id: adapter.id,
 				runtimeBuild: config.env.TREESEED_PROVIDER_SOURCE_CLOSURE_DIGEST,
@@ -98,7 +102,10 @@ export async function runMultiTeamProviderManager(
 				laneIds: adapter.laneIds,
 				maxConcurrentWorkers: adapter.maxConcurrentWorkers,
 				capabilities,
-				status: observation.available ? 'available' : 'unavailable',
+				nativeLimits: adapter.nativeLimits,
+				...(accounting ? { accountingObservation: { modelUsage: scopedObservation(accounting.modelUsage),
+					capabilityUsage: Object.fromEntries(Object.entries(accounting.capabilityUsage).map(([id, value]) => [id, scopedObservation(value)])) } } : {}),
+				status: observation.available && limits.success ? 'available' : 'unavailable',
 				observations: observation,
 			};
 		}));
@@ -170,7 +177,9 @@ export async function runMultiTeamProviderRunners(
 			const providerLaneId = executionProviderId && laneId?.startsWith(`${executionProviderId}:`)
 				? laneId.slice(executionProviderId.length + 1)
 				: laneId;
-			const adapter = loaded.manifest.adapters.find((candidate) => candidate.offers.some(({ offer }) => offer.offerId === offerId)
+			const canonicalAttempt = assignmentAttemptSchema.parse(assignment.assignmentAttempt ?? record(assignment.workspaceContext).assignmentAttempt);
+			const adapter = loaded.manifest.adapters.find((candidate) => candidate.id === canonicalAttempt.provider.executionProviderId
+				&& candidate.offers.some(({ offer }) => offer.offerId === offerId)
 				&& (!providerLaneId || candidate.laneIds.includes(providerLaneId)));
 			if (!adapter) {
 				await client.returnAssignment(assignmentId, { leaseToken, runnerId: claim.runnerId, code: 'assignment_adapter_unavailable', reason: 'The assigned execution adapter is not installed on this provider.', retryable: true });
@@ -183,6 +192,9 @@ export async function runMultiTeamProviderRunners(
 			}
 			const leaseExpiresAt = text(assignment.leaseExpiresAt) ?? new Date(Date.now() + 300_000).toISOString();
 			const attempt = assignmentAttemptSchema.parse(assignment.assignmentAttempt ?? record(assignment.workspaceContext).assignmentAttempt);
+			const limits = capabilityAccountingLimitsSchema.parse(adapter.nativeLimits);
+			const capabilityLimit = limits.capabilityLimits[attempt.provider.executionCapabilityId];
+			if (attempt.provider.modelConfigurationId !== limits.modelConfigurationId || !capabilityLimit) throw new Error('Assignment execution accounting scope does not match the installed adapter.');
 			await localState.attachLease(claim.id, {
 				assignmentId,
 				leaseToken,
@@ -190,6 +202,9 @@ export async function runMultiTeamProviderRunners(
 				executionProviderId,
 				laneId,
 				requestedSeconds: attempt.limits.maximumSeconds,
+				accounting: { modelConfigurationId: limits.modelConfigurationId, capabilityId: attempt.provider.executionCapabilityId,
+					dailyActiveSecondsLimit: limits.dailyActiveSecondsLimit, capabilityDailyActiveSecondsLimit: capabilityLimit.dailyActiveSecondsLimit,
+					minimumAssignmentSeconds: capabilityLimit.minimumAssignmentSeconds, maximumAssignmentSeconds: capabilityLimit.maximumAssignmentSeconds },
 				dispatchEnvelope: leased,
 			});
 			await localState.claimDispatch([connection.connection.id]);

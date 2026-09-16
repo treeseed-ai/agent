@@ -28,7 +28,7 @@ function request(): AgentExecutionRequest {
 		},
 		requiredCapabilities: [],
 		grant: { contentRead: [], contentWrite: [], sourceRead: ['treeseed-ai/sdk'], sourceWrite: ['treeseed-ai/sdk'], tools: ['source.read', 'source.write'] },
-		provider: { providerId: 'provider-1', offerId: 'codex', offerRevision: 1, runtimeBuild },
+		provider: { providerId: 'provider-1', offerId: 'codex', executionProviderId: 'codex', modelConfigurationId: 'terra-medium', executionCapabilityId: 'code-change', offerRevision: 1, runtimeBuild },
 		contextRefs: [{ store: 'git', model: 'repository', id: 'sdk-source', repository: 'treeseed-ai/sdk', commit }], predecessorResultIds: [],
 		acceptanceCriteria: ['Commit the exact source change.'],
 		workspace: { mode: 'git', repository: 'treeseed-ai/sdk', baseCommit: commit, branch: 'treeseed/assignments/assignment-1', writablePaths: ['src'] },

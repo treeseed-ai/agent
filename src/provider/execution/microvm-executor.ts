@@ -60,13 +60,6 @@ export async function executeAssignmentTreeDxTool(request:Parameters<AgentExecut
 	if(tool==='treedx_list_paths') return request.treeDx.invoke('treedx.repositories.paths.list',{path,body:{paths:Array.isArray(arguments_.paths)?arguments_.paths.slice(0,20).map(String):[],kinds:['blob'],limit:Math.min(200,Math.max(1,Number(arguments_.limit??100)))}});
 	const body=contextBuildBody(object(arguments_.request)); return request.treeDx.invoke('treedx.repositories.context.build',{path,body});
 }
-export function reasoningEffortFromAssignmentMetadata(metadata: Record<string, unknown>) {
-	const chatProfile = metadata.chatProfile && typeof metadata.chatProfile === 'object' ? metadata.chatProfile as Record<string, unknown> : {};
-	const execution = metadata.executionPolicy && typeof metadata.executionPolicy === 'object' ? metadata.executionPolicy as Record<string, unknown>
-		: chatProfile.execution && typeof chatProfile.execution === 'object' ? chatProfile.execution as Record<string, unknown> : {};
-	return ['minimal', 'low', 'medium', 'high', 'xhigh'].includes(String(execution.reasoningEffort))
-		? String(execution.reasoningEffort) as 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' : undefined;
-}
 export function assignmentAllowedServices(executionKind: unknown, treeDxEnabled: boolean) {
 	return ['model-gateway', 'codex-subscription', ...(executionKind === 'workday' ? ['package-registry'] : []), ...(treeDxEnabled ? ['treedx-relay'] : [])];
 }
@@ -99,7 +92,7 @@ export async function createMicrovmExecutor(config: ProviderHostRuntimeConfig, m
 			const attempt = assignmentAttemptSchema.safeParse(request.assignment.assignmentAttempt ?? object(request.assignment.workspaceContext).assignmentAttempt);
 			const brokerStatus = await client.status().catch(() => ({} as Record<string, unknown>));
 			const metadata = request.assignment.metadata && typeof request.assignment.metadata === 'object' ? request.assignment.metadata as Record<string, unknown> : {};
-			const reasoningEffort = reasoningEffortFromAssignmentMetadata(metadata);
+			const reasoningEffort = adapter.model?.reasoningEffort;
 			const offerId = assignmentOfferId(request.assignment);
 			const v5Binding = adapter.offers.find(({ offer }) => offer.offerId === offerId) ?? null;
 			const profileId = v5Binding?.sandboxProfileId;

@@ -28,7 +28,7 @@ function assignment(executionKind: 'workday' | 'conversation' = 'workday') {
 			prompt: { system: 'Research the authorized context and answer.' },
 			permissionCeiling: { content: { read: [], write: [] }, tools: [] } },
 		requiredCapabilities: [], grant: { contentRead: [], contentWrite: [], sourceRead: [], sourceWrite: [], tools: [] },
-		provider: { providerId: 'provider', offerId: 'offer', offerRevision: 1, runtimeBuild },
+		provider: { providerId: 'provider', offerId: 'offer', executionProviderId: 'codex', modelConfigurationId: 'terra-medium', executionCapabilityId: 'code-change', offerRevision: 1, runtimeBuild },
 		contextRefs: [], predecessorResultIds: [], acceptanceCriteria: ['Return the exact result.'], workspace: { mode: 'read-only' },
 		estimate: { minimumSeconds: 1, expectedSeconds: 10, maximumSeconds: 30 },
 		limits: { maximumSeconds: 30, maximumContextBytes: 1024, maximumContextItems: 10 },

@@ -13,7 +13,7 @@ describe('canonical assignment offer selection', () => {
 				activity: 'reviewing', handler: 'writer', handlerOrigin: 'agent-package', prompt: { system: 'Review the exact authorized candidate.' },
 				permissionCeiling: { content: { read: [], write: [] }, tools: [] } },
 			requiredCapabilities: [], grant: { contentRead: [], contentWrite: [], sourceRead: [], sourceWrite: [], tools: [] },
-			provider: { providerId: 'provider', offerId: 'codex-engineering', offerRevision: 1, runtimeBuild: `sha256:${'d'.repeat(64)}` },
+			provider: { providerId: 'provider', offerId: 'codex-engineering', executionProviderId: 'codex', modelConfigurationId: 'terra-medium', executionCapabilityId: 'code-change', offerRevision: 1, runtimeBuild: `sha256:${'d'.repeat(64)}` },
 			contextRefs: [], predecessorResultIds: [], acceptanceCriteria: ['Review the exact result.'], workspace: { mode: 'read-only' },
 			estimate: { minimumSeconds: 1, expectedSeconds: 2, maximumSeconds: 3 },
 			limits: { maximumSeconds: 3, maximumContextBytes: 1, maximumContextItems: 1 },

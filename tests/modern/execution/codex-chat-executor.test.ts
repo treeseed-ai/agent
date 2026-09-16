@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createHash } from 'node:crypto';
 import { assertObjectiveContentModel, discussionMessageSourcePaths, readDiscussionSourceMessage, readFocusedTreeDxContext, readIdentityContext } from '../../../src/provider/execution/codex-chat-executor.ts';
-import { executeAssignmentTreeDxTool, reasoningEffortFromAssignmentMetadata } from '../../../src/provider/execution/microvm-executor.ts';
+import { executeAssignmentTreeDxTool } from '../../../src/provider/execution/microvm-executor.ts';
 import { assertPredecessorSynthesis, assertReplayableVerificationCommand, codexInteractiveTimeoutMs, codexProjectInstructionArguments, codexReasoningArguments, codexTreeDxMcpConfig, completedTimeStatusChecks, promptFromContext, providerEventShapeSummary, providerResponsePreview, requiresActivityCompletion, timingAwarenessContract, treeDxToolDefinitions, verifyReportedActivityCommands } from '../../../src/sandbox/guest.ts';
 
 describe('Codex chat executor', () => {
@@ -154,11 +154,8 @@ describe('Codex chat executor', () => {
 			contentOutput: { model: 'proposal', body: 'result-a supplied scope; result-b supplied risks.', frontmatter: {} } }))
 			.not.toThrow();
 	});
-	it('carries the agent-selected reasoning effort into Codex without a provider hardcode', () => {
-		expect(reasoningEffortFromAssignmentMetadata({ chatProfile: { execution: { reasoningEffort: 'high' } } })).toBe('high');
-		expect(reasoningEffortFromAssignmentMetadata({ executionPolicy: { reasoningEffort: 'xhigh' } })).toBe('xhigh');
+	it('passes the configured reasoning effort to Codex', () => {
 		expect(codexReasoningArguments('high')).toEqual(['-c', 'model_reasoning_effort=high']);
-		expect(reasoningEffortFromAssignmentMetadata({ chatProfile: { execution: { reasoningEffort: 'fast' } } })).toBeUndefined();
 		expect(codexReasoningArguments(undefined)).toEqual([]);
 	});
 	it('respects the configured activity runtime for deeper chat reasoning', () => {

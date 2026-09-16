@@ -130,10 +130,13 @@ describe('canonical provider assignment runner', () => {
 			leaseToken: 'lease', runnerId: 'runner', runtimeBuild,
 			executor: { id: 'codex', observe: async () => ({ available: true }), execute: async request => {
 				await request.beginExecution?.(); return {
-				status: 'responded', summary: 'Answered.', responseMarkdown: 'Researched response.', outputs: { timingAwareness }, usage: [{ activeSeconds: 2, elapsedSeconds: 3 }],
+				status: 'responded', summary: 'Answered.', responseMarkdown: 'Researched response.', outputs: { timingAwareness }, usage: [{ activeSeconds: 2, elapsedSeconds: 3, inputTokens: 42, nativeUsage: { input_tokens: 42 } }],
 			}; } } });
 		expect(api.respondToAssignmentDiscussion).toHaveBeenCalledWith('assignment-1', expect.objectContaining({ markdown: 'Researched response.' }), expect.any(String));
 		expect(api.settleAssignment).toHaveBeenCalledOnce();
+		expect(api.settleAssignment).toHaveBeenCalledWith('assignment-1', expect.objectContaining({
+			usageActual: expect.objectContaining({ inputTokens: 42, nativeUsage: { input_tokens: 42 } }),
+		}), expect.any(String));
 		expect(api.startAssignmentCloseout).not.toHaveBeenCalled();
 		expect(api.completeAssignment).not.toHaveBeenCalled();
 	});

@@ -185,7 +185,7 @@ export async function runProviderAssignment(input: ProviderAssignmentRunInput) {
 			outcome: result.status, ...(result.responseMarkdown ? { markdown: result.responseMarkdown } : {}), summary: result.summary }, `discussion-response:${assignmentId}:${input.runnerId}`);
 		const usage = record(result.usage?.[0]);
 		await input.client.settleAssignment(assignmentId, { activeSeconds: settlementSeconds(usage.activeSeconds), elapsedSeconds: settlementSeconds(usage.elapsedSeconds),
-			usageDimension: 'aggregate', usageActual: {} }, `discussion-settlement:${assignmentId}:${input.runnerId}`);
+			usageDimension: 'aggregate', usageActual: usage }, `discussion-settlement:${assignmentId}:${input.runnerId}`);
 		// Publishing the response intentionally suspends and revokes the assignment
 		// workspace. The API closes that checkpoint after observing this settlement;
 		// attempting the ordinary leased completion path here would use stale authority.

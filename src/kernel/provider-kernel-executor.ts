@@ -140,7 +140,8 @@ export async function executeKernelAssignment(input: {
 	} catch (error) {
 		const summary = error instanceof Error ? error.message : String(error);
 		if (summary.includes('Agent timing-awareness contract requires')) {
-			return { status: 'returned', code: 'assignment_timing_awareness_missing', summary, retryable: true };
+			return { status: 'returned', code: 'assignment_timing_awareness_missing', summary, retryable: true,
+				...(transport.result ? { usage: transport.result.usage } : {}) };
 		}
 		return { status: 'failed', code: typeof (error as { code?: unknown })?.code === 'string'
 			? String((error as { code: string }).code) : 'agent_kernel_failed', summary, retryable: false,

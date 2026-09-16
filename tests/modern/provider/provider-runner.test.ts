@@ -59,6 +59,34 @@ function client() {
 const treeDx = { projectId: 'project', handleId: 'handle-1', repositoryId: null, workspaceId: null, invoke: vi.fn() };
 
 describe('canonical provider assignment runner', () => {
+	it('reports a productive timeout as terminal with measured active time', async () => {
+		const api = client();
+		await runProviderAssignment({ client: api, assignment: assignment(), treeDx,
+			leaseToken: 'lease', runnerId: 'runner', runtimeBuild,
+			executor: { id: 'codex', observe: async () => ({ available: true }), execute: async request => {
+				await request.beginExecution?.();
+				throw Object.assign(new Error('assignment_timeout'), { code: 'assignment_timeout' });
+			} } });
+		expect(api.returnAssignment).not.toHaveBeenCalled();
+		expect(api.failAssignment).toHaveBeenCalledWith('assignment-1', expect.objectContaining({
+			code: 'assignment_timeout', retryable: false, activeSeconds: 1,
+			usage: expect.objectContaining({ activeSeconds: expect.any(Number), elapsedSeconds: expect.any(Number) }),
+		}));
+	});
+
+	it('preserves provider-native failure usage in terminal settlement', async () => {
+		const api = client();
+		await runProviderAssignment({ client: api, assignment: assignment(), treeDx,
+			leaseToken: 'lease', runnerId: 'runner', runtimeBuild,
+			executor: { id: 'codex', observe: async () => ({ available: true }), execute: async request => {
+				await request.beginExecution?.();
+				return { status: 'failed', code: 'assignment_timeout', summary: 'Expired.', retryable: false,
+					usage: [{ activeSeconds: 12, elapsedSeconds: 15, inputTokens: 200 }] };
+			} } });
+		expect(api.failAssignment).toHaveBeenCalledWith('assignment-1', expect.objectContaining({
+			activeSeconds: 12, elapsedSeconds: 15, usage: expect.objectContaining({ inputTokens: 200 }),
+		}));
+	});
 	it('starts productive execution only after the executor finishes preparation', async () => {
 		const api = client();
 		let finishPreparation!: () => void;
@@ -130,6 +158,8 @@ describe('canonical provider assignment runner', () => {
 		await runProviderAssignment({ client: api, assignment: assignment(), treeDx, leaseToken: 'lease', runnerId: 'runner',
 			runtimeBuild, executor, renewalIntervalMs: 1 });
 		expect(signal?.aborted).toBe(true);
+		expect(api.settleAssignment).toHaveBeenCalledBefore(api.returnAssignment);
+		expect(api.settleAssignment).toHaveBeenCalledWith('assignment-1', expect.objectContaining({ activeSeconds: 1 }), expect.any(String));
 		expect(api.returnAssignment).toHaveBeenCalledWith('assignment-1', expect.objectContaining({ code: 'assignment_lease_renewal_failed' }));
 	});
 

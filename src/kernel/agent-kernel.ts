@@ -69,7 +69,8 @@ export class AgentKernel {
 	private async runBounded<T>(work: Promise<T>, maximumSeconds: number, signal?: AbortSignal, executionStarted?: Promise<void>): Promise<T> {
 		return new Promise<T>((resolve, reject) => {
 			let timeout: ReturnType<typeof setTimeout> | null = null;
-			const startTimeout = () => { timeout ??= setTimeout(() => reject(new Error('assignment_timeout')), maximumSeconds * 1_000); };
+			const startTimeout = () => { timeout ??= setTimeout(() => reject(Object.assign(new Error('assignment_timeout'),
+				{ code: 'assignment_timeout' })), maximumSeconds * 1_000); };
 			if (executionStarted) executionStarted.then(startTimeout, reject);
 			else startTimeout();
 			const cancel = () => reject(new Error('assignment_cancelled'));

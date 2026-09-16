@@ -67,7 +67,7 @@ describe('AgentKernel', () => {
 		expect(settled).toBe(false);
 		startExecution();
 		await vi.advanceTimersByTimeAsync(1_001);
-		await expect(running).rejects.toThrow('assignment_timeout');
+		await expect(running).rejects.toMatchObject({ message: 'assignment_timeout', code: 'assignment_timeout' });
 	});
 
 	it('runs Reporter deterministically through the one assignment entry point', async () => {

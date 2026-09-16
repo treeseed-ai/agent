@@ -181,7 +181,7 @@ export async function runTreeDxMcpServer(){
 }
 
 export function promptFromContext(context: Record<string, unknown>, reasoningEffort?: string, executionSeconds?: number) {
-	const timingInstruction = `MANDATORY ASSIGNMENT CLOCK: You have ${executionSeconds ?? 'an API-defined number of'} productive seconds. The clock is provisioned for every assignment independently of the activity profile's grant.tools list. Codex exposes it as mcp__treedx__treeseed_time_status: MCP server treedx, tool treeseed_time_status. Your FIRST tool action must call mcp__treedx__treeseed_time_status before inspection, analysis, or any other tool. Do not guess or call an alias; if that fully qualified callable is absent from the actual tool surface, stop without attempting another tool. After finishing all work, call mcp__treedx__treeseed_time_status again as your FINAL tool action, then immediately compose the final response without another tool call. Any attempted tool action before the initial clock check or after the final clock check invalidates the assignment, including a failed attempt. A response with fewer than two successful clock checks is rejected, even if the work is otherwise correct. Use each returned remainingSeconds value to bound scope and reserve time for verification and closeout.`;
+	const timingInstruction = `MANDATORY ASSIGNMENT CLOCK: You have ${executionSeconds ?? 'an API-defined number of'} productive seconds. The clock is provisioned for every assignment independently of the activity profile's grant.tools list. Codex exposes it as mcp__treedx__treeseed_time_status: MCP server treedx, tool treeseed_time_status. Your FIRST tool action must call mcp__treedx__treeseed_time_status before inspection, analysis, or any other tool. This required MCP server is already provisioned; invoke the exact callable immediately rather than inspecting the tool surface, guessing an alias, or replying that it is unavailable. After finishing all work, call mcp__treedx__treeseed_time_status again as your FINAL tool action, then immediately compose the final response without another tool call. Any attempted tool action before the initial clock check or after the final clock check invalidates the assignment, including a failed attempt. A response with fewer than two successful clock checks is rejected, even if the work is otherwise correct. Use each returned remainingSeconds value to bound scope and reserve time for verification and closeout.`;
 	const timingStartReminder = 'DO NOT ANSWER OR REASON ABOUT THE TASK YET. Your next action must call mcp__treedx__treeseed_time_status (server treedx, tool treeseed_time_status). After completing the task, call that same fully qualified tool once more immediately before your response.';
 	const canonicalContext = record(context.canonicalAssignmentContext);
 	if (Object.keys(canonicalContext).length) {
@@ -192,6 +192,7 @@ export function promptFromContext(context: Record<string, unknown>, reasoningEff
 		const profilePrompt = record(profile.prompt);
 		const items = Array.isArray(canonicalContext.context) ? canonicalContext.context.map(record) : [];
 		const predecessors = Array.isArray(canonicalContext.predecessorResults) ? canonicalContext.predecessorResults : [];
+		const predecessorIds = predecessors.map((value) => text(record(value).id)).filter(Boolean);
 		const acceptanceCriteria = Array.isArray(assignment.acceptanceCriteria) ? assignment.acceptanceCriteria.map(text).filter(Boolean) : [];
 		const estimating = text(profile.handler) === 'estimate';
 		const proposalOutput = estimating
@@ -214,7 +215,13 @@ export function promptFromContext(context: Record<string, unknown>, reasoningEff
 			acceptanceCriteria.length ? `Work-item acceptance criteria:\n${JSON.stringify(acceptanceCriteria)}` : 'No additional work-item acceptance criteria were supplied.',
 			authorized ? `Authorized context:\n${authorized}` : 'No additional context references were authorized.',
 			predecessors.length ? `Predecessor results:\n${JSON.stringify(predecessors)}` : 'There are no predecessor results.',
+			predecessorIds.length > 1
+				? `Collaborative synthesis is mandatory. In contentOutput.body, cite every predecessor result by its exact ID and state the material contribution incorporated from each: ${predecessorIds.join(', ')}.`
+				: '',
 			proposalOutput,
+			estimating
+				? `Estimate scope is not proposal scope. Return the entire exact assigned proposal, retaining every work item, dependency target, objective, acceptance criterion, permission, and source reference. Never return only your own work item: that would delete other roles and leave dangling dependencies. ${text(assignment.workItemId) ? `Change only the estimate and rationale for work item ${text(assignment.workItemId)}; preserve the other items unchanged.` : 'As independent Reviewer, assess the reviewEstimate for every review-required work item; preserve owner estimates and the complete product chain.'} Do not execute the proposed work or mark the proposal ready on behalf of the other participants.`
+				: '',
 			'For Git work, commit every intended change and leave the worktree clean. The verification field is only for deliberate acceptance checks with a defined pass condition; never include exploratory search or inspection commands such as rg, grep, find, ls, cat, sed, or git status there. Report only the exact standalone acceptance commands you actually ran and directly observed exit zero. Every reported command must be syntactically complete with balanced quotes; prefer a short standard project check over a complex inline program. A search that finds no matches exits nonzero: treat that as a finding, never as passing verification. If a command returned nonzero or was originally executed with chaining, redirection, substitution, or a script, omit it completely; never rewrite it into a cleaner command for the report. Put each command in its own JSON array item; never join commands with &&, ||, ;, redirection, command substitution, or a shell script. Tool authority is enforced by the assignment grant.',
 			`Assigned reasoning effort: ${reasoningEffort || 'provider-default'}.`,
 			`Productive execution budget: ${(executionSeconds ?? text(record(assignment.limits).maximumSeconds)) || 'unknown'} seconds. When time is short, stop broadening scope and finish the highest-value verified result.`,
@@ -228,6 +235,18 @@ export function promptFromContext(context: Record<string, unknown>, reasoningEff
 	const projectAccess = `The complete project source repository is attached at /workspace/project at immutable revision ${text(record(context.projectManifest).revision)}, with Git history and private writable scratch storage. Before answering, inspect that repository with ordinary shell and Git commands; do not answer from supplied summaries alone. Use the treedx_* MCP tools for governed knowledge. Builds and tests may modify this disposable workspace. Filesystem write access does not grant publication authority. Do not claim code inspection you did not perform.`;
 	if (assignment.executionKind === 'workday') throw new Error('legacy_workday_assignment_not_supported');
 	return `${timingInstruction}\n\nYou are exactly ${text(manifest.agentHandle)}. The verified TreeDX context below is ordered by mandatory core, agent-general, activity-specific, and live discussion layers.\n\n${sourceText}\n\nActivity instructions:\n${text(prompt.system)}\n\nActivity task:\n${text(prompt.task) || 'Respond to the committed Discussion message.'}\n\n${required ? 'You were directly addressed and must provide a substantive response.' : 'Respond only if your role adds material value; otherwise return exactly <!-- treeseed:abstain -->.'}\n${projectAccess} Prefer extensionless identifiers such as objectives/core. Do not supply or reason about Git commits for normal TreeDX access; the assignment relay privately enforces consistent views. Do not invoke trsd: the CLI is intentionally absent from assignment guests. Tool and content permissions come from this activity profile. When time is short, stop broadening scope and finish the highest-value verified result. The assigned reasoning effort is ${reasoningEffort || 'provider-default'}. Scale inspection and research depth to that setting and the question. Do not run unrelated broad test suites or exhaustive scans. Do not inspect outside /workspace or disclose credentials. Return only the message to post.\n\nDiscussion message:\n${text(record(context.message).content)}\n\n${timingStartReminder}`;
+}
+
+export function assertPredecessorSynthesis(context: Record<string, unknown>, completion: ActivityCompletionReport | null) {
+	const canonical = record(context.canonicalAssignmentContext);
+	const assignment = record(canonical.assignment);
+	if (text(record(assignment.effectiveProfile).activity) !== 'estimating') return;
+	const ids = (Array.isArray(canonical.predecessorResults) ? canonical.predecessorResults : [])
+		.map((value) => text(record(value).id)).filter(Boolean);
+	if (ids.length < 2) return;
+	const body = completion?.contentOutput?.body ?? '';
+	const missing = ids.filter((id) => !body.includes(id));
+	if (missing.length) throw new Error(`predecessor_result_citation_missing:${missing.join(',')}`);
 }
 
 export function codexReasoningArguments(reasoningEffort: string | undefined) {
@@ -392,6 +411,7 @@ export async function runSandboxGuest() {
 		const rawResponse = (await readFile(responsePath, 'utf8')).trim(); if (!rawResponse) throw new Error('Execution provider returned an empty response.');
 		const observedCompletion = structuredCompletion ? await observeReportedActivityCommands(validateActivityCompletion(JSON.parse(rawResponse))) : null;
 		const activityCompletion = observedCompletion?.report ?? null;
+		assertPredecessorSynthesis(context, activityCompletion);
 		const responseMarkdown = activityCompletion?.summary ?? rawResponse;
 		if (sourceMetadata?.mode === 'work') {
 			// Do not trust the execution repository's index flags or stat cache when

@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { isDeepStrictEqual } from 'node:util';
 import type { AssignmentContext, AssignmentReference, AssignmentResult } from '@treeseed/sdk/agent-capacity';
 import type { AgentRuntime, Handler } from '../contracts.ts';
 
@@ -30,14 +31,13 @@ abstract class ModelHandler implements Handler {
 	}
 
 	protected result(context: AssignmentContext, runtime: AgentRuntime, summary: string,
-		references: AssignmentReference[], timingAwareness: AssignmentResult['timingAwareness'], inputTokens?: number, outputTokens?: number): AssignmentResult {
+		references: AssignmentReference[], timingAwareness: AssignmentResult['timingAwareness'], usage: AssignmentResult['usage']): AssignmentResult {
 		return {
 			schemaVersion: 'treeseed.assignment-result/v1',
 			id: resultId(context.assignment.id, summary),
 			assignmentId: context.assignment.id,
 			status: 'completed', summary, references, verification: [],
-			usage: { elapsedSeconds: 0, ...(inputTokens == null ? {} : { modelInputTokens: inputTokens }),
-				...(outputTokens == null ? {} : { modelOutputTokens: outputTokens }) },
+			usage,
 			diagnostics: [], timingAwareness, completedAt: runtime.now(),
 		};
 	}
@@ -84,7 +84,7 @@ export class WriterHandler extends ModelHandler {
 				} } }));
 			}
 		}
-		const result = this.result(context, runtime, model.text, references, model.timingAwareness, model.inputTokens, model.outputTokens);
+		const result = this.result(context, runtime, model.text, references, model.timingAwareness, model.usage);
 		return { ...result, verification: model.verification ?? [] };
 	}
 }
@@ -99,8 +99,24 @@ export class EstimateHandler extends ModelHandler {
 		const model = await this.invoke(context, runtime);
 		const output = model.activityCompletion?.contentOutput;
 		if (!output || output.model !== 'proposal') throw new Error('estimate_proposal_output_required');
+		const source = context.context.find((item) => item.ref.model === 'proposal'
+			&& item.ref.id === context.assignment.sourceRef.id && item.ref.commit === context.assignment.sourceRef.commit);
+		const base = (source?.value as { frontmatter?: Record<string, unknown> } | undefined)?.frontmatter;
+		if (!base) throw new Error('estimate_exact_proposal_context_required');
+		const immutable = (proposal: Record<string, unknown>) => {
+			const plan = proposal.executionPlan as { workItems?: Record<string, unknown>[] } | undefined;
+			return { ...proposal, executionPlan: { ...plan, workItems: plan?.workItems?.map((item) => {
+				const copy = { ...item };
+				if (context.assignment.workItemId === item.id) delete copy.estimate;
+				if (!context.assignment.workItemId && item.review === 'required') delete copy.reviewEstimate;
+				return copy;
+			}) } };
+		};
+		if (!isDeepStrictEqual(immutable(base), immutable(output.frontmatter))) {
+			throw new Error('estimate_proposal_scope_changed');
+		}
 		const reference = await runtime.commitTreeDx({ target, value: { body: output.body, frontmatter: output.frontmatter } });
-		const result = this.result(context, runtime, model.text, [reference], model.timingAwareness, model.inputTokens, model.outputTokens);
+		const result = this.result(context, runtime, model.text, [reference], model.timingAwareness, model.usage);
 		return { ...result, verification: model.verification ?? [] };
 	}
 }
@@ -117,7 +133,7 @@ export class ActorHandler extends ModelHandler {
 			message: `Complete ${context.assignment.sourceRef.model}/${context.assignment.sourceRef.id}`,
 			paths: context.assignment.workspace.writablePaths,
 		}));
-		const result = this.result(context, runtime, model.text, references, model.timingAwareness, model.inputTokens, model.outputTokens);
+		const result = this.result(context, runtime, model.text, references, model.timingAwareness, model.usage);
 		return { ...result, verification: model.verification ?? [] };
 	}
 }

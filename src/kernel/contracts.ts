@@ -15,6 +15,7 @@ export interface ModelInvocationRequest {
 export interface ModelInvocationResult {
 	text: string;
 	timingAwareness: AssignmentTimingAwarenessReceipt;
+	usage: AssignmentResult['usage'];
 	activityCompletion?: {
 		summary: string;
 		reviewDisposition: 'approved' | 'rejected' | 'revision-required' | null;
@@ -22,8 +23,6 @@ export interface ModelInvocationResult {
 	};
 	references?: AssignmentReference[];
 	verification?: VerificationResult[];
-	inputTokens?: number;
-	outputTokens?: number;
 }
 
 export interface VerificationRequest {

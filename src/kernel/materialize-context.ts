@@ -42,10 +42,17 @@ async function readReference(reference: ExactEntityReference, treeDx: Assignment
 	if (!['git', 'treedx'].includes(reference.store) || !reference.repository || !reference.commit || !reference.path) {
 		throw new Error(`assignment_context_reference_not_materializable:${reference.store}:${reference.id}`);
 	}
-	const result = payload(await treeDx.invoke('treedx.repositories.files.read', {
-		path: { projectId: projectFor(reference, treeDx), repoId: reference.repository },
-		body: { ref: reference.commit, paths: [reference.path], encoding: 'utf8', parseFrontmatter: true, allowProtected: true },
-	}));
+	let response: unknown;
+	try {
+		response = await treeDx.invoke('treedx.repositories.files.read', {
+			path: { projectId: projectFor(reference, treeDx), repoId: reference.repository },
+			body: { ref: reference.commit, paths: [reference.path], encoding: 'utf8', parseFrontmatter: true, allowProtected: true },
+		});
+	} catch (error) {
+		const message = error instanceof Error ? error.message : String(error);
+		throw new Error(`assignment_context_read_failed:${reference.id}:${reference.commit}:${reference.path}:${message}`, { cause: error });
+	}
+	const result = payload(response);
 	const resolvedRef = String(result.resolvedRef ?? reference.commit);
 	if (resolvedRef !== reference.commit) throw new Error(`assignment_context_reference_moved:${reference.id}`);
 	const file = record(Array.isArray(result.files) ? result.files[0] : result.file);

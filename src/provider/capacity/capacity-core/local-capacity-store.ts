@@ -230,7 +230,9 @@ export class ProviderLocalCapacityStore {
 	}
 
 	async claimsForRecovery(includeRunning = true) {
-		return this.update((state) => state.claims.filter((claim) => claim.status === 'recovery' || (includeRunning && claim.status === 'running')).map((claim) => ({ ...claim })));
+		return this.update((state) => state.claims.filter((claim) => claim.status === 'recovery'
+			|| claim.status === 'ready'
+			|| (includeRunning && claim.status === 'running')).map((claim) => ({ ...claim })));
 	}
 
 	async session(connectionId: string) {

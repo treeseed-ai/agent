@@ -110,6 +110,7 @@ describe('Codex chat executor', () => {
 		expect(owner).toContain('Never return only your own work item');
 		expect(owner).toContain('Change only the estimate and rationale for work item implement-change');
 		expect(owner).toContain('Do not execute the proposed work or mark the proposal ready');
+		expect(owner).toContain('return verification: [] unless you actually ran a standalone acceptance test');
 		const reviewer = promptFromContext(context());
 		expect(reviewer).toContain('assess the reviewEstimate for every review-required work item');
 		expect(reviewer).toContain('preserve owner estimates and the complete product chain');

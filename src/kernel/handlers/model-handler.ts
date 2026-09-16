@@ -113,7 +113,10 @@ export class EstimateHandler extends ModelHandler {
 			}) } };
 		};
 		if (!isDeepStrictEqual(immutable(base), immutable(output.frontmatter))) {
-			throw new Error('estimate_proposal_scope_changed');
+			const expected = immutable(base), actual = immutable(output.frontmatter);
+			const fields = [...new Set([...Object.keys(expected), ...Object.keys(actual)])]
+				.filter((key) => !isDeepStrictEqual(expected[key as keyof typeof expected], actual[key as keyof typeof actual]));
+			throw new Error(`estimate_proposal_scope_changed:${fields.join(',')}`);
 		}
 		const reference = await runtime.commitTreeDx({ target, value: { body: output.body, frontmatter: output.frontmatter } });
 		const result = this.result(context, runtime, model.text, [reference], model.timingAwareness, model.usage);

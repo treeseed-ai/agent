@@ -297,7 +297,9 @@ describe('provider AgentKernel execution', () => {
 		}) };
 		const denied = await executeKernelAssignment({ executor: invalidExecutor, request: input, runtimeBuild });
 		expect(denied.status).toBe('failed');
-		expect(denied.summary).toBe('estimate_proposal_scope_changed');
+		expect(denied.summary).toBe('estimate_proposal_scope_changed:executionPlan');
+		expect(denied.outputs?.activityCompletion).toMatchObject({ contentOutput: { frontmatter: incomplete } });
+		expect(denied.usage).toEqual([{ elapsedSeconds: 3 }]);
 	});
 
 	it('selects a project-owned handler compiled into the exact runtime build', async () => {

@@ -143,7 +143,10 @@ export async function executeKernelAssignment(input: {
 			return { status: 'returned', code: 'assignment_timing_awareness_missing', summary, retryable: true };
 		}
 		return { status: 'failed', code: typeof (error as { code?: unknown })?.code === 'string'
-			? String((error as { code: string }).code) : 'agent_kernel_failed', summary, retryable: false };
+			? String((error as { code: string }).code) : 'agent_kernel_failed', summary, retryable: false,
+			...(transport.result ? { outputs: transport.result.outputs, usage: transport.result.usage,
+				artifacts: transport.result.artifacts } : {}),
+		};
 	}
 	const communication = attempt.data.effectiveProfile.activity === 'chat';
 	return {

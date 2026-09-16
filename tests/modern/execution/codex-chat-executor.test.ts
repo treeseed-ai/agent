@@ -93,11 +93,12 @@ describe('Codex chat executor', () => {
 		expect(prompt).not.toContain('This is pre-decision proposal review');
 		expect(prompt).toContain('never include exploratory search or inspection commands');
 		expect(prompt).toContain('rg, grep, find, ls, cat, sed, or git status');
-		expect(prompt).toContain('use only field names shown by this contract');
-		expect(prompt).toContain('Copy exact authorized references rather than manufacturing them');
-		expect(prompt).toContain('exactly one contextRefs entry whose store matches that workspace');
-		expect(prompt).toContain('Preserve proposal-level evidenceRefs, objectiveRefs, status');
-		expect(prompt).toContain('never attribute source paths to the TreeDX library commit');
+		expect(prompt).toContain('Copy the exact assigned proposal frontmatter, not a predecessor proposal');
+		expect(prompt).toContain('does not authorize rewriting existing values');
+		expect(prompt).toContain('Preserve dependencies, source references, evidenceRefs, objectiveRefs, and status exactly');
+		expect(prompt).toContain('Never attribute source paths to the TreeDX library commit');
+		expect(prompt).toContain('never copy their estimates into other work items');
+		expect(prompt).not.toContain('place every accepted estimate and dependency');
 		expect(prompt).not.toContain('Put other evidence in the proposal-level evidenceRefs');
 	});
 	it('keeps the entire proposal while limiting estimating edits to the assigned role', () => {

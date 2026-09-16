@@ -181,6 +181,7 @@ export class ProviderLocalCapacityStore {
 				const bounds = input.accounting;
 				if (!bounds.capabilityId || !bounds.modelConfigurationId || !Number.isFinite(seconds) || seconds! <= 0
 					|| [bounds.dailyActiveSecondsLimit, bounds.capabilityDailyActiveSecondsLimit].some(value => !Number.isFinite(value) || value < 0)
+					|| [bounds.minimumAssignmentSeconds, bounds.maximumAssignmentSeconds].some(value => value !== undefined && (!Number.isFinite(value) || value <= 0))
 					|| seconds! < (bounds.minimumAssignmentSeconds ?? 1) || seconds! > (bounds.maximumAssignmentSeconds ?? Infinity)) throw new Error('Provider-local assignment accounting bounds are invalid.');
 				const dayUsage = state.usage[now.slice(0, 10)] ?? {};
 				for (const [key, cap, capability] of [[JSON.stringify([bounds.modelConfigurationId]), bounds.dailyActiveSecondsLimit, undefined],
@@ -261,6 +262,7 @@ export class ProviderLocalCapacityStore {
 		return this.update((state, now) => {
 			const claim = state.claims.find(entry => entry.id === claimId);
 			if (!claim || claim.status !== 'running') throw new Error('Provider-local active execution requires a running lease.');
+			if (claim.activeFinishedAt) throw new Error('Provider-local completed execution cannot restart.');
 			claim.activeStartedAt ??= now;
 			claim.accountedThrough ??= claim.activeStartedAt;
 		});

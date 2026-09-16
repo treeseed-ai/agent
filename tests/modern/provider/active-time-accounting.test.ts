@@ -26,6 +26,7 @@ describe('provider active-time accounting', () => {
 			await store.beginActiveExecution(first.id);
 			vi.setSystemTime(new Date('2026-09-16T12:00:20Z'));
 			await store.finishActiveExecution(first.id);
+			await expect(store.beginActiveExecution(first.id)).rejects.toThrow('cannot restart');
 			await store.finalize(first.id, 'completed');
 			const restarted = new ProviderLocalCapacityStore(root);
 			const observation = await restarted.activeTimeObservation('terra', ['implementation']);
@@ -55,6 +56,18 @@ describe('provider active-time accounting', () => {
 			expect((await store.activeTimeObservation('terra', ['implementation'])).modelUsage.activeSeconds).toBe(10);
 			await store.finalize(claim!.id, 'completed');
 			expect((await store.activeTimeObservation('terra', ['implementation'])).modelUsage.reservedSeconds).toBe(0);
+		} finally { await rm(root, { recursive: true, force: true }); }
+	});
+	it('rejects nonfinite provider assignment bounds before persisting a reservation', async () => {
+		const root = await mkdtemp(join(tmpdir(), 'treeseed-invalid-accounting-'));
+		try {
+			const store = new ProviderLocalCapacityStore(root);
+			const claim = await store.claim({ connectionId: 'team', globalLimit: 1, connectionLimit: 1 });
+			await expect(store.attachLease(claim!.id, { assignmentId: 'assignment', leaseToken: 'test-only',
+				leaseExpiresAt: new Date(Date.now() + 300_000).toISOString(), requestedSeconds: 60, dispatchEnvelope: {},
+				accounting: { capabilityId: 'implementation', modelConfigurationId: 'terra', dailyActiveSecondsLimit: 100,
+					capabilityDailyActiveSecondsLimit: 100, maximumAssignmentSeconds: NaN } })).rejects.toThrow('bounds are invalid');
+			expect((await store.snapshot()).claims[0]?.status).toBe('polling');
 		} finally { await rm(root, { recursive: true, force: true }); }
 	});
 });

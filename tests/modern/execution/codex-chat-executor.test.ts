@@ -96,6 +96,9 @@ describe('Codex chat executor', () => {
 		expect(prompt).toContain('use only field names shown by this contract');
 		expect(prompt).toContain('Copy exact authorized references rather than manufacturing them');
 		expect(prompt).toContain('exactly one contextRefs entry whose store matches that workspace');
+		expect(prompt).toContain('Preserve proposal-level evidenceRefs, objectiveRefs, status');
+		expect(prompt).toContain('never attribute source paths to the TreeDX library commit');
+		expect(prompt).not.toContain('Put other evidence in the proposal-level evidenceRefs');
 	});
 	it('keeps the entire proposal while limiting estimating edits to the assigned role', () => {
 		const context = (workItemId?: string) => ({ canonicalAssignmentContext: { assignment: {

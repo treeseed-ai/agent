@@ -9,7 +9,7 @@ import { dirname, resolve } from 'node:path';
 import { sandboxAssignmentSchema, sandboxResultSchema, sourceWorkspaceKeySchema, type SandboxAssignment } from '@treeseed/sdk/capacity-provider/sandbox';
 import { providerCredentialValues, providerFailureSummary, redactProviderDiagnostic } from './provider-failure.ts';
 import { activityCompletionOutputSchema, validateActivityCompletion, type ActivityCompletionReport } from '../activity-completion.ts';
-import { describeContentFrontmatterContract, describeContentFrontmatterJsonSchema } from '@treeseed/sdk/content-validation';
+import { describeContentFrontmatterContract, describeContentFrontmatterJsonSchema, isPortableContentModel } from '@treeseed/sdk/content-validation';
 
 const inputRoot = '/run/treeseed-assignment';
 const outputRoot = '/run/treeseed-output';
@@ -180,6 +180,18 @@ export async function runTreeDxMcpServer(){
 	}
 }
 
+export function completionFrontmatterSchema(context: Record<string, unknown>) {
+	const assignment = record(record(context.canonicalAssignmentContext).assignment), profile = record(assignment.effectiveProfile);
+	if (text(profile.activity) === 'estimating') return describeContentFrontmatterJsonSchema('proposal');
+	if (text(profile.activity) !== 'acting' || text(record(assignment.workspace).mode) !== 'treedx' || text(profile.handler) !== 'writer') return undefined;
+	const grants = record(assignment.grant).contentWrite;
+	const models = [...new Set((Array.isArray(grants) ? grants : []).map(reference => text(record(reference).model)))];
+	return models.length ? { anyOf: models.map(model => {
+		if (!isPortableContentModel(model)) throw new Error('writer_content_model_invalid');
+		return describeContentFrontmatterJsonSchema(model);
+	}) } : undefined;
+}
+
 export function promptFromContext(context: Record<string, unknown>, reasoningEffort?: string, executionSeconds?: number) {
 	const timingInstruction = `MANDATORY ASSIGNMENT CLOCK: You have ${executionSeconds ?? 'an API-defined number of'} productive seconds. The clock is provisioned for every assignment independently of the activity profile's grant.tools list. Codex exposes it as mcp__treedx__treeseed_time_status: MCP server treedx, tool treeseed_time_status. Your FIRST tool action must call mcp__treedx__treeseed_time_status before inspection, analysis, or any other tool. This required MCP server is already provisioned; invoke the exact callable immediately rather than inspecting the tool surface, guessing an alias, or replying that it is unavailable. After finishing all work, call mcp__treedx__treeseed_time_status again as your FINAL tool action, then immediately compose the final response without another tool call. Any attempted tool action before the initial clock check or after the final clock check invalidates the assignment, including a failed attempt. A response with fewer than two successful clock checks is rejected, even if the work is otherwise correct. Use each returned remainingSeconds value to bound scope and reserve time for verification and closeout.`;
 	const timingStartReminder = 'DO NOT ANSWER OR REASON ABOUT THE TASK YET. Your next action must call mcp__treedx__treeseed_time_status (server treedx, tool treeseed_time_status). Codex code mode exposes this MCP operation through functions.exec, not as a directly callable outer tool. Invoke functions.exec with JavaScript: text(await tools.mcp__treedx__treeseed_time_status({}));. The MCP operation must be the first nested tool call; do not inspect the tool catalog or run a shell command first. An absent outer MCP tool does not mean the nested operation is unavailable. After completing the task, call that same fully qualified tool once more immediately before your response.';
@@ -197,7 +209,9 @@ export function promptFromContext(context: Record<string, unknown>, reasoningEff
 		const estimating = text(profile.handler) === 'estimate';
 		const proposalOutput = estimating
 			? `This estimating assignment must return contentOutput with model \"proposal\", a substantive Markdown body, and frontmatter containing one JSON object satisfying this canonical SDK proposal contract: ${JSON.stringify(describeContentFrontmatterContract('proposal'))}. Copy the exact assigned proposal frontmatter, not a predecessor proposal. The contract describes valid fields; it does not authorize rewriting existing values. Preserve every field except the assigned estimate or Reviewer reviewEstimate. Put new rationale inside that estimate's rationale field and source evidence in contentOutput.body, citing the attached Git repository and its exact source commit. Never attribute source paths to the TreeDX library commit. Cite predecessor contributions in contentOutput.body only: never copy their estimates into other work items, even when they are accepted. Preserve dependencies, source references, evidenceRefs, objectiveRefs, and status exactly. Use the exact proposal write target and source authority in the assignment. Do not create a Note or a separate estimate artifact.`
-			: 'Return contentOutput as null unless this handler explicitly requires governed content output.';
+			: text(profile.activity) === 'acting' && text(record(assignment.workspace).mode) === 'treedx' && text(profile.handler) === 'writer'
+				? 'Return one substantive contentOutput satisfying the assigned acceptance criteria, with the exact model and identity of an authorized contentWrite target. AgentKernel validates and commits this output in your one TreeDX workspace; you do not need a separate write tool. Do not substitute a Note for required Book or Knowledge output.'
+				: 'Return contentOutput as null unless this handler explicitly requires governed content output.';
 		const authorized = items.map((item) => `Reference: ${JSON.stringify(item.ref)}\nDigest: ${text(item.digest)}\n\n${JSON.stringify(item.value)}`).join('\n\n');
 		return [
 			timingInstruction,
@@ -371,7 +385,7 @@ export async function runSandboxGuest() {
 	const structuredCompletion = (Boolean(canonicalActivity) && canonicalActivity !== 'chat')
 		|| (sourceMetadata ? requiresActivityCompletion(sourceMetadata.mode) : false);
 	const completionSchemaPath = resolve(codexHome, 'activity-completion.schema.json');
-	if (structuredCompletion) await writeFile(completionSchemaPath, `${JSON.stringify(activityCompletionOutputSchema(canonicalActivity === 'estimating' ? describeContentFrontmatterJsonSchema('proposal') : undefined))}\n`, { mode: 0o600 });
+	if (structuredCompletion) await writeFile(completionSchemaPath, `${JSON.stringify(activityCompletionOutputSchema(completionFrontmatterSchema(context)))}\n`, { mode: 0o600 });
 	const providerArguments = ['exec', '--json', '--ephemeral', '--dangerously-bypass-approvals-and-sandbox', '--model', assignment.modelPolicy.model,
 		...codexReasoningArguments(assignment.modelPolicy.reasoningEffort),
 		...codexProjectInstructionArguments(),

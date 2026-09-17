@@ -51,14 +51,20 @@ export class WriterHandler extends ModelHandler {
 		const governedTreeDxWrite = context.assignment.workspace.mode === 'treedx'
 			&& context.assignment.effectiveProfile.activity !== 'chat';
 		const references: AssignmentReference[] = governedTreeDxWrite ? [] : [...(model.references ?? [])];
+		const actingContent = governedTreeDxWrite && context.assignment.effectiveProfile.activity === 'acting';
 		// Conversation text is committed by the provider discussion operation under
 		// the exact active lease and TreeDX workspace. Committing it here as a Note
 		// would create a second write path and the wrong content model.
 		if (governedTreeDxWrite) {
 			const reviewing = context.assignment.effectiveProfile.activity === 'reviewing';
-			const target = context.assignment.grant.contentWrite.find((candidate) => candidate.model === (reviewing ? 'decision' : 'note'));
+			const output = actingContent ? model.activityCompletion?.contentOutput : null;
+			if (actingContent && !output) throw new Error('writer_content_output_required');
+			const target = context.assignment.grant.contentWrite.find((candidate) => candidate.model === (output?.model ?? (reviewing ? 'decision' : 'note'))
+				&& (!output || candidate.id === output.frontmatter.id));
 			if (!target) throw new Error('writer_content_commit_grant_required');
-			if (reviewing) {
+			if (output) {
+				references.push(await runtime.commitTreeDx({ target, value: { body: output.body, frontmatter: output.frontmatter } }));
+			} else if (reviewing) {
 				const disposition = model.activityCompletion?.reviewDisposition;
 				if (!disposition) throw new Error('review_disposition_required');
 				const proposalReview = context.assignment.sourceRef.model === 'proposal' && context.predecessorResults.length === 0;

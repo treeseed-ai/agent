@@ -8,7 +8,7 @@ import { chmod, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { sandboxAssignmentSchema, sandboxResultSchema, sourceWorkspaceKeySchema, type SandboxAssignment } from '@treeseed/sdk/capacity-provider/sandbox';
 import { providerCredentialValues, providerFailureSummary, redactProviderDiagnostic } from './provider-failure.ts';
-import { activityCompletionOutputSchema, validateActivityCompletion, type ActivityCompletionReport } from '../activity-completion.ts';
+import { activityCompletionOutputSchema, estimateProposalOutputSchema, estimateProposalSource, validateActivityCompletion, type ActivityCompletionReport } from '../activity-completion.ts';
 import { describeContentFrontmatterContract, describeContentFrontmatterJsonSchema, isPortableContentModel } from '@treeseed/sdk/content-validation';
 
 const inputRoot = '/run/treeseed-assignment';
@@ -182,7 +182,10 @@ export async function runTreeDxMcpServer(){
 
 export function completionFrontmatterSchema(context: Record<string, unknown>) {
 	const assignment = record(record(context.canonicalAssignmentContext).assignment), profile = record(assignment.effectiveProfile);
-	if (text(profile.activity) === 'estimating') return describeContentFrontmatterJsonSchema('proposal');
+	if (text(profile.activity) === 'estimating') {
+		const proposal = estimateProposalSource(record(context.canonicalAssignmentContext));
+		return estimateProposalOutputSchema(proposal, text(assignment.workItemId) || undefined);
+	}
 	if (text(profile.activity) !== 'acting' || text(record(assignment.workspace).mode) !== 'treedx' || text(profile.handler) !== 'writer') return undefined;
 	const grants = record(assignment.grant).contentWrite;
 	const models = [...new Set((Array.isArray(grants) ? grants : []).map(reference => text(record(reference).model)))];

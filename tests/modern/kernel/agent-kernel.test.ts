@@ -4,6 +4,7 @@ import { AgentKernel } from '../../../src/kernel/agent-kernel.ts';
 import type { AgentRuntime, Handler } from '../../../src/kernel/contracts.ts';
 import { HandlerRegistry } from '../../../src/kernel/handler-registry.ts';
 import { ReporterHandler } from '../../../src/kernel/handlers/reporter.ts';
+import { WriterHandler } from '../../../src/kernel/handlers/model-handler.ts';
 
 const commit = 'a'.repeat(40);
 const digest = `sha256:${'b'.repeat(64)}`;
@@ -94,5 +95,32 @@ describe('AgentKernel', () => {
 		const denied = assignmentContext();
 		denied.assignment.grant.contentWrite = [];
 		await expect(kernel.runAssignment({ context: denied, runtimeBuild, runtime: runtime([]) })).rejects.toThrow('reporter_note_grant_required');
+	});
+
+	it.each(['book', 'knowledge'])('commits acting Writer %s output instead of a Note', async (model) => {
+		const context = assignmentContext();
+		context.assignment.effectiveProfile.activity = 'acting';
+		context.assignment.effectiveProfile.handler = 'writer';
+		context.assignment.grant.contentWrite = [{ ...reportTarget, model }];
+		const commits: unknown[] = [];
+		const boundary = runtime(commits);
+		boundary.invokeModel = async () => ({ text: 'Published exact source findings.',
+			timingAwareness: { schemaVersion: 'treeseed.assignment-timing-awareness/v1', requiredChecks: 2, completedChecks: 2,
+				firstTool: 'treedx:treeseed_time_status', firstToolSucceeded: true, lastTool: 'treedx:treeseed_time_status',
+				lastToolSucceeded: true, firstToolCompliant: true, finalToolCompliant: true }, usage: { elapsedSeconds: 1 },
+			activityCompletion: { summary: 'Published exact source findings.', reviewDisposition: null,
+				contentOutput: { model, body: 'Substantive governed findings.', frontmatter: { id: reportTarget.id } } } });
+		const result = await new WriterHandler().run(context, boundary);
+		expect(commits).toEqual([{ body: 'Substantive governed findings.', frontmatter: { id: reportTarget.id } }]);
+		expect(result.references).toHaveLength(1);
+		context.assignment.grant.contentWrite = [reportTarget];
+		await expect(new WriterHandler().run(context, boundary)).rejects.toThrow('writer_content_commit_grant_required');
+		expect(commits).toHaveLength(1);
+		const invoke = boundary.invokeModel;
+		boundary.invokeModel = async (request) => ({ ...await invoke(request), activityCompletion: undefined });
+		await expect(new WriterHandler().run(context, boundary)).rejects.toThrow('writer_content_output_required');
+		expect(commits).toHaveLength(1);
+		boundary.invokeModel = async () => { throw new Error('model_failed'); };
+		await expect(new WriterHandler().run(context, boundary)).rejects.toThrow('model_failed');
 	});
 });

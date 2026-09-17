@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import type { AssignmentContext, AssignmentReference, AssignmentResult } from '@treeseed/sdk/agent-capacity';
 import type { AgentRuntime, Handler } from '../contracts.ts';
+import { estimateMutableField, estimateProposalSource } from '../../activity-completion.ts';
 
 function resultId(assignmentId: string, summary: string): string {
 	return `result-${createHash('sha256').update(`${assignmentId}\n${summary}`).digest('hex').slice(0, 24)}`;
@@ -107,16 +108,13 @@ export class EstimateHandler extends ModelHandler {
 		const model = await this.invoke(context, runtime);
 		const output = model.activityCompletion?.contentOutput;
 		if (!output || output.model !== 'proposal') throw new Error('estimate_proposal_output_required');
-		const source = context.context.find((item) => item.ref.model === 'proposal'
-			&& item.ref.id === context.assignment.sourceRef.id && item.ref.commit === context.assignment.sourceRef.commit);
-		const base = (source?.value as { frontmatter?: Record<string, unknown> } | undefined)?.frontmatter;
-		if (!base) throw new Error('estimate_exact_proposal_context_required');
+		const base = estimateProposalSource({ assignment: context.assignment, context: context.context });
 		const immutable = (proposal: Record<string, unknown>) => {
 			const plan = proposal.executionPlan as { workItems?: Record<string, unknown>[] } | undefined;
 			return { ...proposal, executionPlan: { ...plan, workItems: plan?.workItems?.map((item) => {
 				const copy = { ...item };
-				if (context.assignment.workItemId === item.id) delete copy.estimate;
-				if (!context.assignment.workItemId && item.review === 'required') delete copy.reviewEstimate;
+				const field = estimateMutableField(item, context.assignment.workItemId);
+				if (field) delete copy[field];
 				return copy;
 			}) } };
 		};

@@ -1,6 +1,43 @@
+import { describeContentFrontmatterJsonSchema } from '@treeseed/sdk/content-validation';
+
 type JsonRecord = Record<string, unknown>;
 const record = (value: unknown): JsonRecord => value && typeof value === 'object' && !Array.isArray(value) ? value as JsonRecord : {};
 const text = (value: unknown) => typeof value === 'string' ? value.trim() : '';
+
+/** One estimate-write scope, shared by generation constraints and kernel validation. */
+export function estimateMutableField(item: JsonRecord, workItemId?: string) {
+	return workItemId ? item.id === workItemId ? 'estimate' : undefined
+		: item.review === 'required' ? 'reviewEstimate' : undefined;
+}
+
+export function estimateProposalSource(context: JsonRecord): JsonRecord {
+	const source = record(record(context.assignment).sourceRef);
+	const items = Array.isArray(context.context) ? context.context.map(record) : [];
+	const item = items.find(item => ['store', 'model', 'id', 'repository', 'commit', 'path']
+		.every(key => record(item.ref)[key] === source[key]));
+	const proposal = record(record(item?.value).frontmatter);
+	if (source.model !== 'proposal' || !Object.keys(proposal).length) throw new Error('estimate_exact_proposal_context_required');
+	return proposal;
+}
+
+export function estimateProposalOutputSchema(proposal: JsonRecord, workItemId?: string): JsonRecord {
+	const schema = describeContentFrontmatterJsonSchema('proposal');
+	const plan = record(proposal.executionPlan), items = plan.workItems;
+	if (!Array.isArray(items) || !items.length || (workItemId && !items.some(item => record(item).id === workItemId))) {
+		throw new Error('estimate_work_item_scope_missing');
+	}
+	const planSchema = record((record(record(schema.properties).executionPlan).anyOf as unknown[])[0]);
+	const itemsSchema = record(record(planSchema.properties).workItems), itemSchema = record(itemsSchema.items);
+	const lock = (shape: JsonRecord, base: JsonRecord, mutable: JsonRecord): JsonRecord => ({ ...shape,
+		properties: Object.fromEntries(Object.keys(record(shape.properties)).map(key =>
+			[key, mutable[key] ?? { const: base[key] ?? null }])) });
+	return lock(schema, proposal, { executionPlan: lock(planSchema, plan, { workItems: { ...itemsSchema,
+		minItems: items.length, maxItems: items.length, items: { anyOf: items.map(value => {
+			const item = record(value), field = estimateMutableField(item, workItemId);
+			const editable = field ? record(record(itemSchema.properties)[field]) : {};
+			return lock(itemSchema, item, field ? { [field]: (editable.anyOf as unknown[])[0] } : {});
+		}) } } }) });
+}
 const omitTransportNulls = (value: unknown): unknown => Array.isArray(value) ? value.map(omitTransportNulls)
 	: value && typeof value === 'object' ? Object.fromEntries(Object.entries(value as JsonRecord)
 		.filter(([, item]) => item !== null).map(([key, item]) => [key, omitTransportNulls(item)])) : value;

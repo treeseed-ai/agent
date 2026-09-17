@@ -17,16 +17,17 @@ describe('activity completion structured-output schema', () => {
 		expect(schema.properties.objectiveRefs.items.anyOf[0].properties.commit).toEqual({ type: 'string', const: 'b'.repeat(40) });
 		const items = schema.properties.executionPlan.properties.workItems;
 		expect(items).toMatchObject({ minItems: 2, maxItems: 2 });
-		expect(items.items.anyOf[0].properties.estimate).toEqual({ type: 'null', const: null });
+		expect(items.items.anyOf[0].properties.estimate).toEqual({ type: 'null' });
 		expect(items.items.anyOf[0].properties.reviewEstimate.type).toBe('object');
-		expect(items.items.anyOf[1].properties.dependsOn).toMatchObject({ type: 'array', const: ['architecture'], items: { anyOf: [{ type: 'string', const: 'architecture' }] } });
+		expect(items.items.anyOf[1].properties.dependsOn).toMatchObject({ type: 'array', minItems: 1, maxItems: 1, items: { anyOf: [{ type: 'string', const: 'architecture' }] } });
 		Object.assign(assignment, { workItemId: 'architecture' });
 		const owner = completionFrontmatterSchema(context) as any;
 		expect(owner.properties.executionPlan.properties.workItems.items.anyOf[0].properties.estimate.type).toBe('object');
-		expect(owner.properties.executionPlan.properties.workItems.items.anyOf[1].properties.estimate).toEqual({ type: 'null', const: null });
-		expect(owner.properties.executionPlan.properties.workItems.items.anyOf[0].properties.reviewEstimate).toEqual({ type: 'null', const: null });
+		expect(owner.properties.executionPlan.properties.workItems.items.anyOf[1].properties.estimate).toEqual({ type: 'null' });
+		expect(owner.properties.executionPlan.properties.workItems.items.anyOf[0].properties.reviewEstimate).toEqual({ type: 'null' });
 		const checkShape = (node: any) => {
 			expect(Boolean(node.type || node.anyOf)).toBe(true);
+			if ('const' in node) expect(['string', 'number', 'boolean'].includes(typeof node.const)).toBe(true);
 			if (node.type === 'object') {
 				expect(node.additionalProperties).toBe(false);
 				expect([...node.required].sort()).toEqual(Object.keys(node.properties).sort());

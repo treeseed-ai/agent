@@ -19,7 +19,7 @@ describe('activity completion structured-output schema', () => {
 		expect(items).toMatchObject({ minItems: 2, maxItems: 2 });
 		expect(items.items.anyOf[0].properties.estimate).toEqual({ type: 'null', const: null });
 		expect(items.items.anyOf[0].properties.reviewEstimate.type).toBe('object');
-		expect(items.items.anyOf[1].properties.dependsOn).toMatchObject({ type: 'array', const: ['architecture'], items: { anyOf: [{ type: 'string', const: 'architecture' }] } });
+		expect(items.items.anyOf[1].properties.dependsOn).toMatchObject({ type: 'array', minItems: 1, maxItems: 1, items: { anyOf: [{ type: 'string', const: 'architecture' }] } });
 		Object.assign(assignment, { workItemId: 'architecture' });
 		const owner = completionFrontmatterSchema(context) as any;
 		expect(owner.properties.executionPlan.properties.workItems.items.anyOf[0].properties.estimate.type).toBe('object');
@@ -27,6 +27,7 @@ describe('activity completion structured-output schema', () => {
 		expect(owner.properties.executionPlan.properties.workItems.items.anyOf[0].properties.reviewEstimate).toEqual({ type: 'null', const: null });
 		const checkShape = (node: any) => {
 			expect(Boolean(node.type || node.anyOf)).toBe(true);
+			if ('const' in node) expect(node.const === null || ['string', 'number', 'boolean'].includes(typeof node.const)).toBe(true);
 			if (node.type === 'object') {
 				expect(node.additionalProperties).toBe(false);
 				expect([...node.required].sort()).toEqual(Object.keys(node.properties).sort());

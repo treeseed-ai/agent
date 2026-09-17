@@ -6,7 +6,7 @@ const text = (value: unknown) => typeof value === 'string' ? value.trim() : '';
 
 const fixedSchema = (value: unknown): JsonRecord => {
 	if (value === undefined || value === null) return { type: 'null', const: null };
-	if (Array.isArray(value)) return { type: 'array', const: value, minItems: value.length, maxItems: value.length,
+	if (Array.isArray(value)) return { type: 'array', minItems: value.length, maxItems: value.length,
 		items: value.length ? { anyOf: value.map(fixedSchema) } : { type: 'null' } };
 	if (typeof value === 'object') {
 		const entries = Object.entries(value as JsonRecord);

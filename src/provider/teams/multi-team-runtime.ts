@@ -182,7 +182,11 @@ export async function runMultiTeamProviderRunners(
 				&& candidate.offers.some(({ offer }) => offer.offerId === offerId)
 				&& (!providerLaneId || candidate.laneIds.includes(providerLaneId)));
 			if (!adapter) {
-				await client.returnAssignment(assignmentId, { leaseToken, runnerId: claim.runnerId, code: 'assignment_adapter_unavailable', reason: 'The assigned execution adapter is not installed on this provider.', retryable: true });
+				const installed = loaded.manifest.adapters.map(candidate => ({ id: candidate.id,
+					offerIds: candidate.offers.map(({ offer }) => offer.offerId), laneIds: candidate.laneIds }));
+				await client.returnAssignment(assignmentId, { leaseToken, runnerId: claim.runnerId, code: 'assignment_adapter_unavailable',
+					reason: `Assignment adapter binding is unavailable: ${JSON.stringify({ executionProviderId: canonicalAttempt.provider.executionProviderId, offerId, laneId: providerLaneId, installed })}`,
+					retryable: true });
 				await localState.release(claim.id); results.push({ connectionId: connection.connection.id, status: 'idle', reason: 'assignment_adapter_unavailable' }); continue;
 			}
 			const executor = await resolveAgentExecutor(config, adapter, loaded.manifest);

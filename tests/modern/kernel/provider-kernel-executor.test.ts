@@ -84,6 +84,27 @@ describe('provider AgentKernel execution', () => {
 		expect(result).toMatchObject({ status: 'returned', code: 'assignment_timing_awareness_missing', retryable: true });
 	});
 
+	it.each(['throw', 'result'])('preserves transient model saturation for the existing bounded retry path (%s)', async mode => {
+		const summary = 'Kata guest exited 1: Codex execution failed: Selected model is at capacity. Please try a different model.';
+		const executor: AgentExecutor = { id: 'codex', observe: async () => ({ available: true }), execute: vi.fn(async (request): Promise<AgentExecutionResult> => {
+			await request.beginExecution?.();
+			if (mode === 'throw') throw new Error(summary);
+			return { status: 'failed', code: 'sandbox_failed', summary, retryable: false, usage: [{ activeSeconds: 2, elapsedSeconds: 3 }] };
+		}) };
+		const result = await executeKernelAssignment({ executor, request: request(), runtimeBuild });
+		expect(result).toMatchObject({ status: 'returned', code: 'execution_provider_unavailable', retryable: true });
+		if (mode === 'result') expect(result.usage).toEqual([{ activeSeconds: 2, elapsedSeconds: 3 }]);
+		expect(executor.execute).toHaveBeenCalledOnce();
+	});
+
+	it.each(['Codex execution failed: invalid_json_schema',
+		'assignment_result_invalid: Selected model is at capacity. Please try a different model.'])('does not retry a semantic defect as upstream saturation (%s)', async summary => {
+		const executor: AgentExecutor = { id: 'codex', observe: async () => ({ available: true }), execute: vi.fn(async request => {
+			await request.beginExecution?.(); throw new Error(summary);
+		}) };
+		expect(await executeKernelAssignment({ executor, request: request(), runtimeBuild })).toMatchObject({ status: 'failed', retryable: false });
+	});
+
 	it('runs an Actor verification in a read-only source workspace without publishing a candidate', async () => {
 		const input = request();
 		const attempt = input.assignment.assignmentAttempt as Record<string, any>;

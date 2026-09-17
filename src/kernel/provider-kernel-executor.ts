@@ -139,6 +139,12 @@ export async function executeKernelAssignment(input: {
 		result = parsedResult.data;
 	} catch (error) {
 		const summary = error instanceof Error ? error.message : String(error);
+		// Upstream saturation is not an invalid agent result. Preserve the existing
+		// provider return/retry path; it retains normal admission and deadline limits.
+		if (summary.startsWith('Kata guest exited 1: Codex execution failed: Selected model is at capacity. Please try a different model.')) {
+			return { status: 'returned', code: 'execution_provider_unavailable', summary, retryable: true,
+				...(transport.result ? { usage: transport.result.usage } : {}) };
+		}
 		if (summary.includes('Agent timing-awareness contract requires')) {
 			return { status: 'returned', code: 'assignment_timing_awareness_missing', summary, retryable: true,
 				...(transport.result ? { usage: transport.result.usage } : {}) };

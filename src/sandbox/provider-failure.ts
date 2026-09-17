@@ -1,6 +1,10 @@
 /** Include only failure events, never ordinary prompt, tool or response events. */
 export function providerFailureSummary(events: Record<string, unknown>[], secrets: string[] = []) {
-	const failures = events.filter(event => event.type === 'error' || event.type === 'turn.failed').slice(-3);
+	const failures = events.flatMap(event => {
+		const item = event.item && typeof event.item === 'object' ? event.item as Record<string, unknown> : {};
+		if (event.type === 'item.completed' && item.type === 'error') return [item];
+		return event.type === 'error' || event.type === 'turn.failed' ? [event] : [];
+	}).slice(-3);
 	const messages = failures.flatMap(event => {
 		const error = event.error && typeof event.error === 'object' ? event.error as Record<string, unknown> : {};
 		const value = typeof error.message === 'string' ? error.message : typeof event.message === 'string' ? event.message : '';

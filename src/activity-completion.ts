@@ -4,6 +4,18 @@ type JsonRecord = Record<string, unknown>;
 const record = (value: unknown): JsonRecord => value && typeof value === 'object' && !Array.isArray(value) ? value as JsonRecord : {};
 const text = (value: unknown) => typeof value === 'string' ? value.trim() : '';
 
+const fixedSchema = (value: unknown): JsonRecord => {
+	if (value === undefined || value === null) return { type: 'null', const: null };
+	if (Array.isArray(value)) return { type: 'array', const: value, minItems: value.length, maxItems: value.length,
+		items: value.length ? { anyOf: value.map(fixedSchema) } : { type: 'null' } };
+	if (typeof value === 'object') {
+		const entries = Object.entries(value as JsonRecord);
+		return { type: 'object', additionalProperties: false, required: entries.map(([key]) => key),
+			properties: Object.fromEntries(entries.map(([key, item]) => [key, fixedSchema(item)])) };
+	}
+	return { type: typeof value, const: value };
+};
+
 /** One estimate-write scope, shared by generation constraints and kernel validation. */
 export function estimateMutableField(item: JsonRecord, workItemId?: string) {
 	return workItemId ? item.id === workItemId ? 'estimate' : undefined
@@ -30,7 +42,7 @@ export function estimateProposalOutputSchema(proposal: JsonRecord, workItemId?: 
 	const itemsSchema = record(record(planSchema.properties).workItems), itemSchema = record(itemsSchema.items);
 	const lock = (shape: JsonRecord, base: JsonRecord, mutable: JsonRecord): JsonRecord => ({ ...shape,
 		properties: Object.fromEntries(Object.keys(record(shape.properties)).map(key =>
-			[key, mutable[key] ?? { const: base[key] ?? null }])) });
+			[key, mutable[key] ?? fixedSchema(base[key])])) });
 	return lock(schema, proposal, { executionPlan: lock(planSchema, plan, { workItems: { ...itemsSchema,
 		minItems: items.length, maxItems: items.length, items: { anyOf: items.map(value => {
 			const item = record(value), field = estimateMutableField(item, workItemId);
@@ -70,7 +82,7 @@ export function activityCompletionOutputSchema(frontmatterSchema?: Record<string
 				},
 			},
 		},
-		reviewDisposition: { enum: ['approved', 'rejected', 'revision-required', null] },
+		reviewDisposition: { type: ['string', 'null'], enum: ['approved', 'rejected', 'revision-required', null] },
 		contentOutput: frontmatterSchema ? {
 			anyOf: [{ type: 'null' }, {
 					type: 'object', additionalProperties: false,

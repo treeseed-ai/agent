@@ -59,7 +59,8 @@ export class WriterHandler extends ModelHandler {
 			const reviewing = context.assignment.effectiveProfile.activity === 'reviewing';
 			const output = actingContent ? model.activityCompletion?.contentOutput : null;
 			if (actingContent && !output) throw new Error('writer_content_output_required');
-			const target = context.assignment.grant.contentWrite.find((candidate) => candidate.model === (output?.model ?? (reviewing ? 'decision' : 'note')));
+			const target = context.assignment.grant.contentWrite.find((candidate) => candidate.model === (output?.model ?? (reviewing ? 'decision' : 'note'))
+				&& (!output || candidate.id === output.frontmatter.id));
 			if (!target) throw new Error('writer_content_commit_grant_required');
 			if (output) {
 				references.push(await runtime.commitTreeDx({ target, value: { body: output.body, frontmatter: output.frontmatter } }));

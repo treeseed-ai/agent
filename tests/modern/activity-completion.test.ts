@@ -5,7 +5,8 @@ import { completionFrontmatterSchema, promptFromContext } from '../../src/sandbo
 describe('activity completion structured-output schema', () => {
 	it('locks Reviewer output to the assigned proposal instead of predecessor owner estimates', () => {
 		const sourceRef = { model: 'proposal', id: 'proposal', commit: 'a'.repeat(40) };
-		const proposal = { id: 'proposal', status: 'discussing', executionPlan: { workItems: [
+		const proposal = { id: 'proposal', status: 'discussing', objectiveRefs: [{ store: 'treedx', model: 'objective', id: 'core',
+			repository: 'library', commit: 'b'.repeat(40), path: 'objectives/core.mdx' }], executionPlan: { workItems: [
 			{ id: 'architecture', review: 'required', dependsOn: [] },
 			{ id: 'tests', review: 'required', dependsOn: ['architecture'] },
 		] } };
@@ -13,6 +14,7 @@ describe('activity completion structured-output schema', () => {
 		const context = { canonicalAssignmentContext: { assignment, context: [{ ref: sourceRef, value: { frontmatter: proposal } }] } };
 		const schema = completionFrontmatterSchema(context) as any;
 		expect(schema.properties.status).toEqual({ type: 'string', const: 'discussing' });
+		expect(schema.properties.objectiveRefs.items.anyOf[0].properties.commit).toEqual({ type: 'string', const: 'b'.repeat(40) });
 		const items = schema.properties.executionPlan.properties.workItems;
 		expect(items).toMatchObject({ minItems: 2, maxItems: 2 });
 		expect(items.items.anyOf[0].properties.estimate).toEqual({ type: 'null', const: null });

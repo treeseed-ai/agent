@@ -33,6 +33,8 @@ describe('Codex chat executor', () => {
 		expect(prompt).toContain("independently of the activity profile's grant.tools list");
 		expect(prompt).toContain('call mcp__treedx__treeseed_time_status again as your FINAL tool action');
 		expect(prompt).toContain('including a failed attempt');
+		expect(prompt).toContain('text(await tools.mcp__treedx__treeseed_time_status({}));');
+		expect(prompt).toContain('not as a directly callable outer tool');
 		expect(prompt).toContain('fewer than two successful clock checks is rejected');
 		expect(prompt).toMatch(/DO NOT ANSWER OR REASON ABOUT THE TASK YET[\s\S]*fully qualified tool once more immediately before your response\.$/u);
 		expect(prompt).toContain('stop broadening scope and finish the highest-value verified result');
@@ -201,8 +203,8 @@ describe('Codex chat executor', () => {
 	it('requires the assignment TreeDX MCP server and gives it only ephemeral relay authority', () => {
 		const config = codexTreeDxMcpConfig('sandbox-1', 'one-use-token', { network: { relayUrl: 'https://relay.invalid' } } as never);
 		expect(config).toContain('required = true');
-		// The prompt and timing contract use direct MCP calls, not a code-mode wrapper.
-		expect(config).toContain('[features]\ncode_mode_host = false');
+		// This Codex runtime fails closed without its code-mode host.
+		expect(config).toContain('[features]\ncode_mode_host = true');
 		expect(config).toContain('startup_timeout_sec = 10');
 		expect(config).toContain('TREESEED_GUEST_TOKEN = "one-use-token"');
 		expect(config).toContain('TREESEED_RELAY_URL = "https://relay.invalid"');

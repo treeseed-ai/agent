@@ -75,6 +75,32 @@ export async function executeAssignmentTreeDxTool(request:Parameters<AgentExecut
 export function assignmentAllowedServices(executionKind: unknown, treeDxEnabled: boolean) {
 	return ['model-gateway', 'codex-subscription', ...(executionKind === 'workday' ? ['package-registry'] : []), ...(treeDxEnabled ? ['treedx-relay'] : [])];
 }
+
+/** Observe proxy failures immediately; never retry a failed delivery as a second response. */
+export function startSandboxToolPump(client: Pick<SandboxBrokerClient, 'nextToolRequest' | 'completeToolRequest'>,
+	prepared: { sandboxId: string; operationToken: string }, request: Parameters<AgentExecutor['execute']>[0],
+	executionTime: { startedAt: string; deadlineAt: string }, onFailure: () => void) {
+	const controller = new AbortController();
+	let failure: Error | undefined;
+	const completion = (async () => {
+		while (!controller.signal.aborted) {
+			const pending = await client.nextToolRequest(prepared.sandboxId, prepared.operationToken, controller.signal);
+			if (!pending.request) { await new Promise(resolve => setTimeout(resolve, 50)); continue; }
+			let payload: { result: unknown } | { error: string };
+			try {
+				payload = { result: await executeAssignmentTreeDxTool(request, pending.request.tool, pending.request.arguments, executionTime) };
+			} catch (error) { payload = { error: error instanceof Error ? error.message : String(error) }; }
+			if (!controller.signal.aborted) await client.completeToolRequest(prepared.sandboxId, prepared.operationToken,
+				pending.request.id, payload, controller.signal);
+		}
+	})().catch(error => {
+		if (!controller.signal.aborted) {
+			failure = error instanceof Error ? error : new Error(String(error));
+			onFailure();
+		}
+	});
+	return async () => { controller.abort(); await completion; return failure; };
+}
 export function assignmentNeedsSourceWorkspace(attempt: ReturnType<typeof assignmentAttemptSchema.safeParse>) {
 	if (!attempt.success) return true;
 	return attempt.data.workspace.mode === 'git' || attempt.data.grant.sourceRead.length > 0;
@@ -129,7 +155,7 @@ export async function createMicrovmExecutor(config: ProviderHostRuntimeConfig, m
 				const value = sign(null, Buffer.from(canonical(unsigned)), signingKey).toString('base64url');
 				const assignment = sandboxAssignmentSchema.parse({ ...unsigned, signature: { keyId, algorithm: 'Ed25519', value } }) as SandboxAssignment;
 				await request.emit?.({ type: 'execution.preparing', occurredAt: new Date().toISOString(), summary: 'Requesting a bounded Kata sandbox from the host broker.', payload: { profile: assignment.profile, guestImageDigest: assignment.guestImageDigest } });
-				const prepared = await client.prepare(assignment, request.signal); active.set(request.assignmentId, { sandboxId: prepared.sandboxId, operationToken: prepared.operationToken, providerId: assignment.providerId, teamId: assignment.teamId, renewals: new RenewalDrain() }); let result; let sourceReference: AssignmentReference | undefined; let artifacts: Record<string, unknown>[] = []; let teardown: Record<string, unknown> = { verified: false, completedAt: null };
+				const prepared = await client.prepare(assignment, request.signal); active.set(request.assignmentId, { sandboxId: prepared.sandboxId, operationToken: prepared.operationToken, providerId: assignment.providerId, teamId: assignment.teamId, renewals: new RenewalDrain() }); let result: ReturnType<typeof sandboxResultSchema.parse> | undefined; let sourceReference: AssignmentReference | undefined; let artifacts: Record<string, unknown>[] = []; let teardown: Record<string, unknown> = { verified: false, completedAt: null };
 				const cancelSandbox = () => { void client.cancel(prepared.sandboxId, prepared.operationToken).catch(() => undefined); };
 					if (request.signal?.aborted) cancelSandbox(); else request.signal?.addEventListener('abort', cancelSandbox, { once: true });
 				try {
@@ -149,12 +175,16 @@ export async function createMicrovmExecutor(config: ProviderHostRuntimeConfig, m
 					const executionDeadlineAt = String(executionTime.executionDeadlineAt ?? '');
 					if (!Number.isFinite(Date.parse(executionStartedAt)) || !Number.isFinite(Date.parse(executionDeadlineAt))) throw new Error('API execution start omitted its authoritative productive window.');
 					await request.emit?.({ type: 'execution.started', occurredAt: new Date().toISOString(), summary: `Kata execution started in ${prepared.sandboxId}.`, payload: { sandboxId: prepared.sandboxId, model: assignment.modelPolicy.model, isolation: 'microvm' } });
-					const toolsAbort=new AbortController();
-					const toolPump=(async()=>{while(!toolsAbort.signal.aborted){const pending=await client.nextToolRequest(prepared.sandboxId,prepared.operationToken,toolsAbort.signal).catch((error)=>{if(toolsAbort.signal.aborted)return {request:null};throw error;});if(pending.request){try{const value=await executeAssignmentTreeDxTool(request,pending.request.tool,pending.request.arguments,{startedAt:executionStartedAt,deadlineAt:executionDeadlineAt});await client.completeToolRequest(prepared.sandboxId,prepared.operationToken,pending.request.id,{result:value},request.signal);}catch(error){await client.completeToolRequest(prepared.sandboxId,prepared.operationToken,pending.request.id,{error:error instanceof Error?error.message:String(error)},request.signal);}}else await new Promise((resolve)=>setTimeout(resolve,50));}})();
-					try{result = sandboxResultSchema.parse(await client.execute(prepared.sandboxId, prepared.operationToken, {}, request.signal));}finally{
+					let toolFailure: Error | undefined;
+					const stopToolPump = startSandboxToolPump(client, prepared, request,
+						{ startedAt: executionStartedAt, deadlineAt: executionDeadlineAt }, cancelSandbox);
+					try { result = sandboxResultSchema.parse(await client.execute(prepared.sandboxId, prepared.operationToken, {}, request.signal)); } finally {
 						try { await request.finishExecution?.(); }
-						finally { toolsAbort.abort(); await toolPump.catch(()=>undefined); }
+						finally { toolFailure = await stopToolPump(); }
 					}
+					if (toolFailure && result.status !== 'expired') result = { ...result, status: 'failed',
+						summary: `Assignment tool proxy failed: ${toolFailure.message}`,
+						diagnostics: { ...result.diagnostics, toolProxyFailure: toolFailure.message } };
 					artifacts = await Promise.all(result.artifacts.map(async (artifact) => ({ ...artifact, content: (await client.downloadArtifact(prepared.sandboxId, prepared.operationToken, artifact.id, artifact.bytes, request.signal)).toString('utf8') })));
 					if (result.status === 'completed' && current.source?.authorization.mode === 'work') sourceReference = await publishSourceBranch(client, prepared, current.source, assignment, result, request);
 				} finally {

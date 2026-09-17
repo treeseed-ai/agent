@@ -201,6 +201,8 @@ describe('Codex chat executor', () => {
 	it('requires the assignment TreeDX MCP server and gives it only ephemeral relay authority', () => {
 		const config = codexTreeDxMcpConfig('sandbox-1', 'one-use-token', { network: { relayUrl: 'https://relay.invalid' } } as never);
 		expect(config).toContain('required = true');
+		// The prompt and timing contract use direct MCP calls, not a code-mode wrapper.
+		expect(config).toContain('[features]\ncode_mode_host = false');
 		expect(config).toContain('startup_timeout_sec = 10');
 		expect(config).toContain('TREESEED_GUEST_TOKEN = "one-use-token"');
 		expect(config).toContain('TREESEED_RELAY_URL = "https://relay.invalid"');

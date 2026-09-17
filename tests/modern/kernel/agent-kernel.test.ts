@@ -4,7 +4,7 @@ import { AgentKernel } from '../../../src/kernel/agent-kernel.ts';
 import type { AgentRuntime, Handler } from '../../../src/kernel/contracts.ts';
 import { HandlerRegistry } from '../../../src/kernel/handler-registry.ts';
 import { ReporterHandler } from '../../../src/kernel/handlers/reporter.ts';
-import { WriterHandler } from '../../../src/kernel/handlers/model-handler.ts';
+import { ReviewerHandler, WriterHandler } from '../../../src/kernel/handlers/model-handler.ts';
 
 const commit = 'a'.repeat(40);
 const digest = `sha256:${'b'.repeat(64)}`;
@@ -95,6 +95,33 @@ describe('AgentKernel', () => {
 		const denied = assignmentContext();
 		denied.assignment.grant.contentWrite = [];
 		await expect(kernel.runAssignment({ context: denied, runtimeBuild, runtime: runtime([]) })).rejects.toThrow('reporter_note_grant_required');
+	});
+
+	it.each(['book', 'knowledge'])('binds a TreeDX review to the exact %s candidate, not its proposal', async (model) => {
+		const context = assignmentContext();
+		context.assignment.effectiveProfile.activity = 'reviewing';
+		context.assignment.effectiveProfile.handler = 'reviewer';
+		context.assignment.grant.contentWrite = [{ ...reportTarget, model: 'decision' }];
+		const candidate = { store: 'treedx' as const, model, id: 'actor-output', repository: 'library',
+			commit: 'd'.repeat(40), path: `${model}s/actor-output.mdx` };
+		context.context = [{ ref: candidate, mediaType: 'text/markdown', digest, value: { frontmatter: { id: candidate.id } } }];
+		context.predecessorResults = [{ schemaVersion: 'treeseed.assignment-result/v1', id: 'actor-result',
+			assignmentId: 'actor-assignment', status: 'completed', summary: 'Exact source findings.',
+			references: [{ kind: 'treedx', projectId: 'project-1', repository: candidate.repository,
+				commit: candidate.commit, path: candidate.path }], verification: [], usage: { elapsedSeconds: 1 },
+			diagnostics: [], completedAt: '2026-09-13T12:00:00.000Z' }];
+		const commits: unknown[] = [];
+		const boundary = runtime(commits);
+		boundary.invokeModel = async () => ({ text: 'Verified exact candidate.', usage: { elapsedSeconds: 1 },
+			timingAwareness: { schemaVersion: 'treeseed.assignment-timing-awareness/v1', requiredChecks: 2, completedChecks: 2,
+				firstTool: 'treedx:treeseed_time_status', firstToolSucceeded: true, lastTool: 'treedx:treeseed_time_status',
+				lastToolSucceeded: true, firstToolCompliant: true, finalToolCompliant: true },
+			activityCompletion: { summary: 'Verified exact candidate.', reviewDisposition: 'approved', contentOutput: null } });
+		await new ReviewerHandler().run(context, boundary);
+		expect(commits[0]).toMatchObject({ frontmatter: { decisionClass: 'work-review', subjectRef: candidate } });
+		context.context[0]!.ref = { ...candidate, commit: 'e'.repeat(40) };
+		await expect(new ReviewerHandler().run(context, boundary)).rejects.toThrow('review_candidate_reference_missing');
+		expect(commits).toHaveLength(1);
 	});
 
 	it.each(['book', 'knowledge'])('commits acting Writer %s output instead of a Note', async (model) => {

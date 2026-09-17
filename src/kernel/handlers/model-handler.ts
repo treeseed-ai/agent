@@ -69,12 +69,14 @@ export class WriterHandler extends ModelHandler {
 				if (!disposition) throw new Error('review_disposition_required');
 				const proposalReview = context.assignment.sourceRef.model === 'proposal' && context.predecessorResults.length === 0;
 				const candidate = context.predecessorResults.flatMap((result) => result.references)
-					.find((reference) => reference.kind === 'git');
+					.find((reference) => reference.kind === 'git' || reference.kind === 'treedx');
 				const subjectRef = proposalReview ? context.assignment.sourceRef
-					: candidate ? { store: 'git' as const, model: 'repository', id: candidate.repository,
+					: candidate?.kind === 'git' ? { store: 'git' as const, model: 'repository', id: candidate.repository,
 						repository: candidate.repository, commit: candidate.commit, ...(candidate.path ? { path: candidate.path } : {}) }
-						: context.assignment.sourceRef;
-				if (!subjectRef) throw new Error('review_subject_reference_required');
+						: candidate?.kind === 'treedx' ? context.context.find(({ ref }) => ref.store === 'treedx'
+							&& ref.repository === candidate.repository && ref.commit === candidate.commit && ref.path === candidate.path)?.ref
+							: context.assignment.sourceRef;
+				if (!subjectRef) throw new Error('review_candidate_reference_missing');
 				references.push(await runtime.commitTreeDx({ target, value: { body: model.text, frontmatter: {
 					schemaVersion: 'treeseed.decision/v1', id: target.id, projectId: context.assignment.projectId,
 					decisionClass: proposalReview ? 'proposal' : 'work-review', decisionMethod: 'authority', subjectRef,

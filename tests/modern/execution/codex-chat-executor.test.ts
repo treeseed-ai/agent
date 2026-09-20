@@ -113,10 +113,17 @@ describe('Codex chat executor', () => {
 		expect(owner).toContain('Never return only your own work item');
 		expect(owner).toContain('Change only the estimate and rationale for work item implement-change');
 		expect(owner).toContain('Do not execute the proposed work or mark the proposal ready');
-		expect(owner).toContain('return verification: [] unless you actually ran a standalone acceptance test');
+		expect(owner).toContain('Set verification to [] exactly');
 		const reviewer = promptFromContext(context());
 		expect(reviewer).toContain('assess the reviewEstimate for every review-required work item');
 		expect(reviewer).toContain('preserve owner estimates and the complete product chain');
+	});
+	it('does not let planning source inspection masquerade as passing verification', () => {
+		const prompt = promptFromContext({ canonicalAssignmentContext: { assignment: {
+			id: 'planning-1', workspace: { mode: 'git' }, effectiveProfile: { activity: 'planning', handler: 'writer', prompt: {} },
+		}, context: [], predecessorResults: [] } });
+		expect(prompt).toContain('Set verification to [] exactly');
+		expect(prompt).toContain('Source searches, git status, and exploratory commands are inspection');
 	});
 	it('distinguishes a TreeDX proposal revision from the attached Git source during proposal review', () => {
 		const prompt = promptFromContext({ canonicalAssignmentContext: { assignment: {

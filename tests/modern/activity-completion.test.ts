@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { activityCompletionOutputSchema } from '../../src/activity-completion.ts';
+import { activityCompletionOutputSchema, validateActivityCompletion } from '../../src/activity-completion.ts';
 import { completionFrontmatterSchema, promptFromContext } from '../../src/sandbox/guest.ts';
 
 describe('activity completion structured-output schema', () => {
@@ -62,6 +62,17 @@ describe('activity completion structured-output schema', () => {
 	it('requires null content output when the activity does not author governed content', () => {
 		const schema = activityCompletionOutputSchema();
 		expect(schema.properties.contentOutput).toEqual({ type: 'null' });
+	});
+
+	it('requires empty verification for planning and estimating but retains acting checks', () => {
+		const planningSchema = activityCompletionOutputSchema(undefined, false);
+		expect(planningSchema.properties.verification).toMatchObject({ type: 'array', maxItems: 0 });
+		expect(activityCompletionOutputSchema().properties.verification).not.toHaveProperty('maxItems');
+		const completion = { schemaVersion: 'treeseed.activity-completion/v1', summary: 'Inspected source.',
+			verification: [{ status: 'passed', summary: 'Inspected files.', commands: ['git status --short && rg -n intent src'] }],
+			reviewDisposition: null, contentOutput: null };
+		expect(() => validateActivityCompletion(completion, false)).toThrow('Planning and estimating cannot claim acceptance verification');
+		expect(validateActivityCompletion({ ...completion, verification: [] }, false).verification).toEqual([]);
 	});
 
 	it('allows governed content only with its exact frontmatter schema', () => {

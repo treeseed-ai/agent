@@ -237,7 +237,10 @@ export function promptFromContext(context: Record<string, unknown>, reasoningEff
 				: '',
 			proposalOutput,
 			estimating
-				? `Estimate scope is not proposal scope. Return the entire exact assigned proposal, retaining every work item, dependency target, objective, acceptance criterion, permission, and source reference. Never return only your own work item: that would delete other roles and leave dangling dependencies. ${text(assignment.workItemId) ? `Change only the estimate and rationale for work item ${text(assignment.workItemId)}; preserve the other items unchanged.` : 'As independent Reviewer, assess the reviewEstimate for every review-required work item; preserve owner estimates and the complete product chain.'} Do not execute the proposed work or mark the proposal ready on behalf of the other participants. Source inspection establishes your rationale, not a passing implementation test: return verification: [] unless you actually ran a standalone acceptance test. Never list source-inspection commands as verification. The AgentKernel validates the estimate contract and publication.`
+				? `Estimate scope is not proposal scope. Return the entire exact assigned proposal, retaining every work item, dependency target, objective, acceptance criterion, permission, and source reference. Never return only your own work item: that would delete other roles and leave dangling dependencies. ${text(assignment.workItemId) ? `Change only the estimate and rationale for work item ${text(assignment.workItemId)}; preserve the other items unchanged.` : 'As independent Reviewer, assess the reviewEstimate for every review-required work item; preserve owner estimates and the complete product chain.'} Do not execute the proposed work or mark the proposal ready on behalf of the other participants. Source inspection establishes your rationale, not a passing implementation test. The AgentKernel validates the estimate contract and publication.`
+				: '',
+			['planning', 'estimating'].includes(text(profile.activity))
+				? 'This is a non-acting activity. Set verification to [] exactly. Source searches, git status, and exploratory commands are inspection, not acceptance verification. Put findings in the summary or governed content output instead.'
 				: '',
 			'For Git work, commit every intended change and leave the worktree clean. The verification field is only for deliberate acceptance checks with a defined pass condition; never include exploratory search or inspection commands such as rg, grep, find, ls, cat, sed, or git status there. Report only the exact standalone acceptance commands you actually ran and directly observed exit zero. Every reported command must be syntactically complete with balanced quotes; prefer a short standard project check over a complex inline program. A search that finds no matches exits nonzero: treat that as a finding, never as passing verification. If a command returned nonzero or was originally executed with chaining, redirection, substitution, or a script, omit it completely; never rewrite it into a cleaner command for the report. Put each command in its own JSON array item; never join commands with &&, ||, ;, redirection, command substitution, or a shell script. Tool authority is enforced by the assignment grant.',
 			`Assigned reasoning effort: ${reasoningEffort || 'provider-default'}.`,
@@ -385,10 +388,11 @@ export async function runSandboxGuest() {
 	const events: Record<string, unknown>[] = [], timingTracker: TimingAwarenessTracker = { completedChecks: 0, firstTool: null, firstToolSucceeded: false, lastTool: null, lastToolSucceeded: false },
 		composedPrompt = promptFromContext(context, assignment.modelPolicy.reasoningEffort, assignment.resources.durationSeconds);
 	const canonicalActivity = text(record(record(record(context.canonicalAssignmentContext).assignment).effectiveProfile).activity);
+	const allowVerification = !['planning', 'estimating'].includes(canonicalActivity);
 	const structuredCompletion = (Boolean(canonicalActivity) && canonicalActivity !== 'chat')
 		|| (sourceMetadata ? requiresActivityCompletion(sourceMetadata.mode) : false);
 	const completionSchemaPath = resolve(codexHome, 'activity-completion.schema.json');
-	if (structuredCompletion) await writeFile(completionSchemaPath, `${JSON.stringify(activityCompletionOutputSchema(completionFrontmatterSchema(context)))}\n`, { mode: 0o600 });
+	if (structuredCompletion) await writeFile(completionSchemaPath, `${JSON.stringify(activityCompletionOutputSchema(completionFrontmatterSchema(context), allowVerification))}\n`, { mode: 0o600 });
 	const providerArguments = ['exec', '--json', '--ephemeral', '--dangerously-bypass-approvals-and-sandbox', '--model', assignment.modelPolicy.model,
 		...codexReasoningArguments(assignment.modelPolicy.reasoningEffort),
 		...codexProjectInstructionArguments(),
@@ -426,7 +430,7 @@ export async function runSandboxGuest() {
 			throw new Error(`Agent timing-awareness contract requires treeseed_time_status as the first and final tool actions with two completed checks. Provider errors: ${providerFailureSummary(events, secrets) || '(none)'}. Observed ${JSON.stringify(timingAwareness)}. Provider event shapes: ${JSON.stringify(providerEventShapeSummary(events, secrets))}. Response preview: ${providerResponsePreview(events, secrets) || '(empty)'}`);
 		}
 		const rawResponse = (await readFile(responsePath, 'utf8')).trim(); if (!rawResponse) throw new Error('Execution provider returned an empty response.');
-		const observedCompletion = structuredCompletion ? await observeReportedActivityCommands(validateActivityCompletion(JSON.parse(rawResponse))) : null;
+		const observedCompletion = structuredCompletion ? await observeReportedActivityCommands(validateActivityCompletion(JSON.parse(rawResponse), allowVerification)) : null;
 		const activityCompletion = observedCompletion?.report ?? null;
 		assertPredecessorSynthesis(context, activityCompletion);
 		const responseMarkdown = activityCompletion?.summary ?? rawResponse;

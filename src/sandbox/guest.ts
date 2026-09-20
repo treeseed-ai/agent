@@ -233,7 +233,7 @@ export function promptFromContext(context: Record<string, unknown>, reasoningEff
 			authorized ? `Authorized context:\n${authorized}` : 'No additional context references were authorized.',
 			predecessors.length ? `Predecessor results:\n${JSON.stringify(predecessors)}` : 'There are no predecessor results.',
 			predecessorIds.length > 1
-				? `Collaborative synthesis is mandatory. In contentOutput.body, cite every predecessor result by its exact ID and state the material contribution incorporated from each: ${predecessorIds.join(', ')}.`
+				? `Collaborative synthesis is mandatory. In contentOutput.body, cite every predecessor result by its exact ID and state the material contribution incorporated from each: ${predecessorIds.join(', ')}. Before your final clock check, compare the completed body against this entire ID list and revise it if even one ID or its contribution is missing. The guest rejects an incomplete body; citations in the summary or proposal frontmatter do not substitute for this synthesis.`
 				: '',
 			proposalOutput,
 			estimating

@@ -62,7 +62,7 @@ export interface ActivityCompletionReport {
 	contentOutput: { model: string; body: string; frontmatter: JsonRecord } | null;
 }
 
-export function activityCompletionOutputSchema(frontmatterSchema?: Record<string, unknown>) { return {
+export function activityCompletionOutputSchema(frontmatterSchema?: Record<string, unknown>, allowVerification = true) { return {
 	type: 'object',
 	additionalProperties: false,
 	required: ['schemaVersion', 'summary', 'verification', 'reviewDisposition', 'contentOutput'],
@@ -71,6 +71,7 @@ export function activityCompletionOutputSchema(frontmatterSchema?: Record<string
 		summary: { type: 'string', minLength: 1 },
 		verification: {
 			type: 'array',
+			...(allowVerification ? {} : { maxItems: 0 }),
 			items: {
 				type: 'object',
 				additionalProperties: false,
@@ -97,10 +98,11 @@ export function activityCompletionOutputSchema(frontmatterSchema?: Record<string
 	},
 } as const; }
 
-export function validateActivityCompletion(value: unknown): ActivityCompletionReport {
+export function validateActivityCompletion(value: unknown, allowVerification = true): ActivityCompletionReport {
 	const candidate = record(value), summary = text(candidate.summary);
 	const verification = Array.isArray(candidate.verification) ? candidate.verification.map(record) : [];
 	if (candidate.schemaVersion !== 'treeseed.activity-completion/v1' || !summary) throw new Error('Work execution omitted its structured activity completion report.');
+	if (!allowVerification && verification.length) throw new Error('Planning and estimating cannot claim acceptance verification.');
 	const normalized = verification.map((entry) => {
 		const status = text(entry.status), entrySummary = text(entry.summary);
 		if (!['passed', 'failed', 'not-run', 'unknown'].includes(status) || !entrySummary || !Array.isArray(entry.commands) || entry.commands.some((command) => !text(command))) {

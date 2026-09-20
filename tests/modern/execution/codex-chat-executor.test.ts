@@ -156,6 +156,8 @@ describe('Codex chat executor', () => {
 		const prompt = promptFromContext(context);
 		expect(prompt).toContain('cite every predecessor result by its exact ID');
 		expect(prompt).toContain('result-a, result-b');
+		expect(prompt).toContain('Before your final clock check, compare the completed body against this entire ID list');
+		expect(prompt).toContain('citations in the summary or proposal frontmatter do not substitute');
 		expect(() => assertPredecessorSynthesis(context, { schemaVersion: 'treeseed.activity-completion/v1',
 			summary: 'Synthesized.', verification: [], reviewDisposition: null,
 			contentOutput: { model: 'proposal', body: 'Used result-a only.', frontmatter: {} } }))

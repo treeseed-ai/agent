@@ -38,5 +38,17 @@ it('refreshes only managed provider policy for development source', () => {
 	expect(refreshed.adapters[0]!.offers.flatMap(({ offer }) => offer.capabilities.map(({ id }) => id))).toContain('treeseed.engineering.release');
 	expect(refreshed.connections).toEqual(current.connections);
 	expect(refreshed.sandbox).toEqual(current.sandbox);
+	expect(refreshed.sandbox.profiles.every((profile) => profile.resources.memoryBytes === 4_294_967_296)).toBe(true);
 	expect(refreshed.configuration.generation).toContain('development-source');
+});
+
+it('raises only undersized managed development guests and preserves explicit larger limits', () => {
+	const digest = `sha256:${'a'.repeat(64)}`;
+	const current = createManagedProviderManifestV5({ release: 'old', guestImage: 'sandbox', guestImageDigest: digest, baseImageDigest: digest, provenanceDigest: digest });
+	current.sandbox.profiles[0]!.resources.memoryBytes = 1_073_741_824;
+	current.sandbox.profiles[1]!.resources.memoryBytes = 8_589_934_592;
+	const refreshed = applyManagedDevelopmentPolicy(current, 'source');
+	expect(refreshed.sandbox.profiles[0]!.resources.memoryBytes).toBe(4_294_967_296);
+	expect(refreshed.sandbox.profiles[1]!.resources.memoryBytes).toBe(8_589_934_592);
+	expect(current.sandbox.profiles[0]!.resources.memoryBytes).toBe(1_073_741_824);
 });

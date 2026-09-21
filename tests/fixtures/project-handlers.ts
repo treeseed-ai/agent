@@ -1,4 +1,4 @@
-import type { Handler } from '@treeseed/agent';
+import type { Handler } from '../../src/kernel/contracts.ts';
 
 export const projectHandlers: readonly Handler[] = [{
 	id: 'sdk/fixture',

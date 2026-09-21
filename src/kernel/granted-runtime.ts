@@ -28,7 +28,10 @@ export function enforceAssignmentGrant(runtime: AgentRuntime, input: {
 	return {
 		now: () => runtime.now(),
 		readContext: (ref) => {
-			if (!readable.has(referenceKey(ref))) throw new Error('assignment_grant_denied:content.read');
+			const allowed = ref.store === 'git'
+				? tools.has('source.read') && typeof ref.repository === 'string' && input.sourceRead.includes(ref.repository)
+				: readable.has(referenceKey(ref));
+			if (!allowed) throw new Error('assignment_grant_denied:content.read');
 			return runtime.readContext(ref);
 		},
 		invokeModel: (request: ModelInvocationRequest) => runtime.invokeModel(request),

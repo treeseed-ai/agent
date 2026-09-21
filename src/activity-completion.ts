@@ -16,10 +16,11 @@ const fixedSchema = (value: unknown): JsonRecord => {
 	return { type: typeof value, const: value };
 };
 
-/** One estimate-write scope, shared by generation constraints and kernel validation. */
-export function estimateMutableField(item: JsonRecord, workItemId?: string) {
-	return workItemId ? item.id === workItemId ? 'estimate' : undefined
-		: item.review === 'required' ? 'reviewEstimate' : undefined;
+/** One class-owned estimate scope, shared by generation constraints and kernel validation. */
+export function estimateMutableField(item: JsonRecord, agentClass: string) {
+	return agentClass === 'reviewer'
+		? item.review === 'required' ? 'reviewEstimate' : undefined
+		: item.agentClass === agentClass ? 'estimate' : undefined;
 }
 
 export function estimateProposalSource(context: JsonRecord): JsonRecord {
@@ -32,10 +33,10 @@ export function estimateProposalSource(context: JsonRecord): JsonRecord {
 	return proposal;
 }
 
-export function estimateProposalOutputSchema(proposal: JsonRecord, workItemId?: string): JsonRecord {
+export function estimateProposalOutputSchema(proposal: JsonRecord, agentClass: string): JsonRecord {
 	const schema = describeContentFrontmatterJsonSchema('proposal');
 	const plan = record(proposal.executionPlan), items = plan.workItems;
-	if (!Array.isArray(items) || !items.length || (workItemId && !items.some(item => record(item).id === workItemId))) {
+	if (!Array.isArray(items) || !items.some(item => estimateMutableField(record(item), agentClass))) {
 		throw new Error('estimate_work_item_scope_missing');
 	}
 	const planSchema = record((record(record(schema.properties).executionPlan).anyOf as unknown[])[0]);
@@ -45,7 +46,7 @@ export function estimateProposalOutputSchema(proposal: JsonRecord, workItemId?: 
 			[key, mutable[key] ?? fixedSchema(base[key])])) });
 	return lock(schema, proposal, { executionPlan: lock(planSchema, plan, { workItems: { ...itemsSchema,
 		minItems: items.length, maxItems: items.length, items: { anyOf: items.map(value => {
-			const item = record(value), field = estimateMutableField(item, workItemId);
+			const item = record(value), field = estimateMutableField(item, agentClass);
 			const editable = field ? record(record(itemSchema.properties)[field]) : {};
 			return lock(itemSchema, item, field ? { [field]: (editable.anyOf as unknown[])[0] } : {});
 		}) } } }) });

@@ -53,7 +53,8 @@ function accountActiveTime(state: ProviderLocalCapacityState, claim: ProviderLoc
 		const day = new Date(cursor).toISOString().slice(0, 10);
 		const next = Math.min(end, Date.parse(`${day}T00:00:00.000Z`) + 86_400_000);
 		const usage = state.usage[day] ??= {};
-		for (const key of [JSON.stringify([claim.modelConfigurationId]), JSON.stringify([claim.modelConfigurationId, claim.capabilityId])]) {
+		for (const key of [JSON.stringify([claim.modelConfigurationId]), JSON.stringify([claim.modelConfigurationId, claim.capabilityId]),
+			JSON.stringify(['connection', claim.connectionId])]) {
 			usage[key] = (usage[key] ?? 0) + (next - cursor) / 1000;
 		}
 		cursor = next;
@@ -208,6 +209,9 @@ export class ProviderLocalCapacityStore {
 			assertLimit('lane', input.laneId, input.laneLimit, 'laneId');
 			const { executionProviderLimit: _executionProviderLimit, laneLimit: _laneLimit, accounting: _accounting, ...lease } = input;
 			Object.assign(claim, { status: 'ready' as const, ...lease, updatedAt: now, expiresAt: input.leaseExpiresAt });
+			state.events.push({ id: randomUUID(), claimId, connectionId: claim.connectionId,
+				assignmentId: input.assignmentId, outcome: 'leased', recordedAt: now });
+			state.events = state.events.slice(-100);
 			return { ...claim };
 		});
 	}
@@ -298,7 +302,15 @@ export class ProviderLocalCapacityStore {
 	}
 
 	async snapshot() {
-		return this.update((state) => ({ revision: state.revision + 1, claims: state.claims.map(({ dispatchEnvelope: _dispatchEnvelope, ...claim }) => ({ ...claim, leaseToken: claim.leaseToken ? '<redacted>' : undefined })), events: state.events.map((event) => ({ ...event })) }));
+		return this.update((state, now) => ({ revision: state.revision + 1,
+			claims: state.claims.map(({ dispatchEnvelope: _dispatchEnvelope, ...claim }) => ({ ...claim, leaseToken: claim.leaseToken ? '<redacted>' : undefined })),
+			events: state.events.map((event) => ({ ...event })),
+			activeSecondsByConnection: Object.fromEntries(Object.entries(state.usage[now.slice(0, 10)] ?? {}).flatMap(([key, seconds]) => {
+				const scope: unknown = JSON.parse(key);
+				return Array.isArray(scope) && scope[0] === 'connection' && typeof scope[1] === 'string'
+					? [[scope[1], seconds]] : [];
+			})),
+		}));
 	}
 
 	async activeTimeObservation(modelConfigurationId: string, capabilityIds: string[]) {

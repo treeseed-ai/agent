@@ -13,10 +13,26 @@ function prompt(context: AssignmentContext): string {
 	return [
 		assignment.effectiveProfile.prompt.system,
 		...(assignment.effectiveProfile.prompt.instructions ?? []),
+		...(assignment.agentClass === 'architect' && assignment.effectiveProfile.activity === 'acting'
+			? ['Maintain the project Architecture book by writing one validated knowledge page bound to the exact authorized Book reference.'] : []),
 		`Assignment: ${assignment.sourceRef.model}/${assignment.sourceRef.id}`,
 		`Workspace: ${assignment.workspace.mode}`,
 		`Acceptance criteria and exact source context are in the authorized assignment context.`,
 	].filter(Boolean).join('\n\n');
+}
+
+function assertArchitectKnowledgeOutput(context: AssignmentContext, output: { model: string; frontmatter: Record<string, unknown> }) {
+	if (context.assignment.agentClass !== 'architect' || context.assignment.effectiveProfile.activity !== 'acting') return;
+	if (output.model !== 'knowledge') throw new Error('architect_knowledge_output_required');
+	const book = context.context.find((item) => item.ref.store === 'treedx' && item.ref.model === 'book'
+		&& typeof item.value === 'object' && item.value !== null
+		&& (item.value as { frontmatter?: { projectId?: unknown; title?: unknown } }).frontmatter?.projectId === context.assignment.projectId
+		&& typeof (item.value as { frontmatter?: { title?: unknown } }).frontmatter?.title === 'string'
+		&& String((item.value as { frontmatter?: { title?: unknown } }).frontmatter?.title).endsWith(' Architecture'));
+	if (!book) throw new Error('architect_architecture_book_context_required');
+	const frontmatter = output.frontmatter as { schemaVersion?: unknown; projectId?: unknown; bookRef?: unknown };
+	if (frontmatter.schemaVersion !== 'treeseed.knowledge-page/v2' || frontmatter.projectId !== context.assignment.projectId
+		|| !isDeepStrictEqual(frontmatter.bookRef, book.ref)) throw new Error('architect_architecture_book_reference_invalid');
 }
 
 abstract class ModelHandler implements Handler {
@@ -60,6 +76,7 @@ export class WriterHandler extends ModelHandler {
 			const reviewing = context.assignment.effectiveProfile.activity === 'reviewing';
 			const output = actingContent ? model.activityCompletion?.contentOutput : null;
 			if (actingContent && !output) throw new Error('writer_content_output_required');
+			if (actingContent && output) assertArchitectKnowledgeOutput(context, output);
 			const target = context.assignment.grant.contentWrite.find((candidate) => candidate.model === (output?.model ?? (reviewing ? 'decision' : 'note'))
 				&& (!output || candidate.id === output.frontmatter.id));
 			if (!target) throw new Error('writer_content_commit_grant_required');
@@ -113,7 +130,7 @@ export class EstimateHandler extends ModelHandler {
 			const plan = proposal.executionPlan as { workItems?: Record<string, unknown>[] } | undefined;
 			return { ...proposal, executionPlan: { ...plan, workItems: plan?.workItems?.map((item) => {
 				const copy = { ...item };
-				const field = estimateMutableField(item, context.assignment.workItemId);
+				const field = estimateMutableField(item, context.assignment.agentClass);
 				if (field) delete copy[field];
 				return copy;
 			}) } };

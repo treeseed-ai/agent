@@ -57,7 +57,7 @@ export function resolveProviderConfig(options: { env?: NodeJS.ProcessEnv; requir
   const env = {
     TREESEED_PROVIDER_DATA_DIR: value(source, 'TREESEED_PROVIDER_DATA_DIR') || '/data',
     TREESEED_PROVIDER_ENVIRONMENT: value(source, 'TREESEED_PROVIDER_ENVIRONMENT') || value(source, 'TREESEED_ENVIRONMENT') || 'local',
-    ...(value(source, 'TREESEED_PROVIDER_SOURCE_CLOSURE_DIGEST') ? { TREESEED_PROVIDER_SOURCE_CLOSURE_DIGEST: value(source, 'TREESEED_PROVIDER_SOURCE_CLOSURE_DIGEST') } : {}),
+    ...(value(source, 'TREESEED_PROVIDER_RUNTIME_BUILD') ? { TREESEED_PROVIDER_RUNTIME_BUILD: value(source, 'TREESEED_PROVIDER_RUNTIME_BUILD') } : {}),
     ...(value(source, 'TREESEED_MIN_FREE_DISK_BYTES') ? { TREESEED_MIN_FREE_DISK_BYTES: value(source, 'TREESEED_MIN_FREE_DISK_BYTES') } : {}),
   };
   return {

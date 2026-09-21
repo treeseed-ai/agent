@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import type { ProviderProtocolClient } from '@treeseed/sdk/capacity-provider';
 import type { AgentExecutionRequest, AgentExecutor, AgentExecutionResult, AssignmentTreeDxFacade } from '../execution/contracts.ts';
 import { executeKernelAssignment } from '../../kernel/provider-kernel-executor.ts';
+import type { Handler } from '../../kernel/contracts.ts';
 
 function record(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -36,6 +37,8 @@ export interface ProviderAssignmentRunInput {
   runnerId: string;
   treeDx: AssignmentTreeDxFacade;
   runtimeBuild?: string;
+	/** Handlers statically compiled into this provider runtime build. */
+	handlers?: Handler[];
   leaseSeconds?: number;
   renewalIntervalMs?: number;
   onLeaseRenewed?: (leaseExpiresAt: string) => Promise<void>;
@@ -150,7 +153,8 @@ export async function runProviderAssignment(input: ProviderAssignmentRunInput) {
 		emit,
 		signal: executionAbort.signal };
 	result = await executeKernelAssignment({ executor: input.executor, request: executionRequest,
-		runtimeBuild: input.runtimeBuild ?? String(record(record(activeAssignment.assignmentAttempt).provider).runtimeBuild ?? '') });
+		runtimeBuild: input.runtimeBuild ?? String(record(record(activeAssignment.assignmentAttempt).provider).runtimeBuild ?? ''),
+		handlers: input.handlers });
   } catch (error) {
 		const summary = error instanceof Error ? error.message : String(error);
 		const failureCode=typeof (error as {code?:unknown})?.code==='string'?String((error as {code:string}).code):'agent_executor_failed';
@@ -162,6 +166,12 @@ export async function runProviderAssignment(input: ProviderAssignmentRunInput) {
 				elapsedSeconds: (performance.now() - elapsedStartedAt) / 1000 }] };
   } finally {
 		try {
+			// A timed-out or failed Kernel may have returned before its transport
+			// promise settled. Revoke the guest signal before closing accounting so
+			// no sandbox work continues after the assignment is terminalized.
+			if (result!.status !== 'completed' && result!.status !== 'responded' && result!.status !== 'abstained') {
+				executionAbort.abort(result!.code ?? result!.status);
+			}
 			if (executionStart) await finishExecution();
 			if (activeStartedAt !== null && !result!.usage?.length) {
 				result!.usage = [{ activeSeconds: ((activeFinishedAt ?? performance.now()) - activeStartedAt) / 1000,
@@ -186,10 +196,12 @@ export async function runProviderAssignment(input: ProviderAssignmentRunInput) {
 	// Sandbox harnesses return their final Markdown in responseMarkdown for every
 	// activity. Only conversation assignments may publish that value to a
 	// Discussion; workday activities persist it as their completion summary.
-	if (!conversation && (result.status === 'responded' || result.status === 'abstained')) {
+	if (!conversation && result.status === 'responded') {
 		const response = result.responseMarkdown?.trim();
 		result = { ...result, status: 'completed', summary: response || result.summary, responseMarkdown: undefined };
 	}
+	if (!conversation && result.status === 'abstained') result = { ...result, status: 'failed',
+		code: 'agent_abstained', responseMarkdown: undefined, retryable: false };
 	if (result.status === 'responded' || result.status === 'abstained') {
 		if (result.status === 'responded' && !result.responseMarkdown) throw new Error('Communication executor omitted its durable Markdown response.');
 		const response = await input.client.respondToAssignmentDiscussion(assignmentId, { leaseToken: input.leaseToken, runnerId: input.runnerId,

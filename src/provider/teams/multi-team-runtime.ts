@@ -12,6 +12,7 @@ import type { CapacityProviderManifestV5 } from '@treeseed/sdk/capacity-provider
 import { materializeCapabilityOffers } from '../capabilities/materialize-offers.ts';
 import { assignmentOfferId } from '../execution/assignment-selection.ts';
 import { assignmentAttemptSchema, capabilityAccountingLimitsSchema } from '@treeseed/sdk/agent-capacity';
+import { projectHandlers } from '../../kernel/project-handlers.ts';
 
 function record(value: unknown): Record<string, unknown> {
 	return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -19,6 +20,41 @@ function record(value: unknown): Record<string, unknown> {
 
 function text(...values: unknown[]) {
 	return values.find((value) => typeof value === 'string' && value.trim()) as string | undefined;
+}
+
+export function orderConnectionsForFairPolling<T extends { connection: { id: string }; teamId: string }>(
+	connections: T[], snapshot: { claims: Array<{ connectionId: string }>;
+		events: Array<{ connectionId: string; outcome: string }>;
+		activeSecondsByConnection?: Record<string, number> },
+): T[] {
+	const active = new Map<string, number>();
+	for (const claim of snapshot.claims) active.set(claim.connectionId, (active.get(claim.connectionId) ?? 0) + 1);
+	const lastLease = new Map<string, number>();
+	snapshot.events.forEach((event, index) => {
+		if (event.outcome === 'leased') lastLease.set(event.connectionId, index);
+	});
+	const teamForConnection = new Map(connections.map((entry) => [entry.connection.id, entry.teamId]));
+	const teamActive = new Map<string, number>();
+	for (const [connectionId, count] of active) {
+		const teamId = teamForConnection.get(connectionId);
+		if (teamId) teamActive.set(teamId, (teamActive.get(teamId) ?? 0) + count);
+	}
+	const teamLastLease = new Map<string, number>();
+	for (const [connectionId, index] of lastLease) {
+		const teamId = teamForConnection.get(connectionId);
+		if (teamId) teamLastLease.set(teamId, Math.max(teamLastLease.get(teamId) ?? -1, index));
+	}
+	const teamUsage = new Map<string, number>();
+	for (const [connectionId, seconds] of Object.entries(snapshot.activeSecondsByConnection ?? {})) {
+		const teamId = teamForConnection.get(connectionId);
+		if (teamId) teamUsage.set(teamId, (teamUsage.get(teamId) ?? 0) + seconds);
+	}
+	return [...connections].sort((left, right) => (teamUsage.get(left.teamId) ?? 0) - (teamUsage.get(right.teamId) ?? 0)
+		|| (teamActive.get(left.teamId) ?? 0) - (teamActive.get(right.teamId) ?? 0)
+		|| (teamLastLease.get(left.teamId) ?? -1) - (teamLastLease.get(right.teamId) ?? -1)
+		|| (active.get(left.connection.id) ?? 0) - (active.get(right.connection.id) ?? 0)
+		|| (lastLease.get(left.connection.id) ?? -1) - (lastLease.get(right.connection.id) ?? -1)
+		|| left.connection.id.localeCompare(right.connection.id));
 }
 
 function context(
@@ -74,6 +110,8 @@ export async function runMultiTeamProviderManager(
 			})),
 		};
 	}
+	if (!/^sha256:[a-f0-9]{64}$/u.test(config.env.TREESEED_PROVIDER_RUNTIME_BUILD ?? ''))
+		throw new Error('provider_runtime_build_unpinned');
 	const localState = new ProviderLocalCapacityStore(config.dataDir);
 	const connections = await reconcileProviderConnections(config);
 	const results = await Promise.all(connections.map(async (connection) => {
@@ -97,7 +135,7 @@ export async function runMultiTeamProviderManager(
 				observedAt: accounting!.observedAt, healthy: observation.available });
 			return {
 				id: adapter.id,
-				runtimeBuild: config.env.TREESEED_PROVIDER_SOURCE_CLOSURE_DIGEST,
+				runtimeBuild: config.env.TREESEED_PROVIDER_RUNTIME_BUILD,
 				offers: adapter.offers.map(({ offer }) => offer),
 				laneIds: adapter.laneIds,
 				maxConcurrentWorkers: adapter.maxConcurrentWorkers,
@@ -126,12 +164,14 @@ export async function runMultiTeamProviderRunners(
 	options: { mode?: 'plan' | 'live'; background?: boolean } = {},
 ) {
 	if (options.mode === 'plan') return buildProviderRunnerPlan(config);
+	if (!/^sha256:[a-f0-9]{64}$/u.test(config.env.TREESEED_PROVIDER_RUNTIME_BUILD ?? ''))
+		throw new Error('provider_runtime_build_unpinned');
 	const loaded = await loadProviderManifest(config.manifestPath ?? '', config.dataDir);
 	const connections = (await reconcileProviderConnections(config)).flatMap((entry) => entry.runtime ? [entry.runtime] : []);
 	const localState = new ProviderLocalCapacityStore(config.dataDir);
 	await recoverProviderLocalLeases({ config, connections, store: localState, includeRunning: false });
 	const results: Record<string, unknown>[] = [];
-	for (const connection of connections) {
+	for (const connection of orderConnectionsForFairPolling(connections, await localState.snapshot())) {
 		const runtime = context(config, connection, loaded.manifest);
 		const claim = await localState.claim({
 			connectionId: connection.connection.id,
@@ -216,9 +256,10 @@ export async function runMultiTeamProviderRunners(
 			const terminal = await runProviderAssignment({
 				client,
 				executor,
+				handlers: [...projectHandlers],
 				assignment,
 				treeDx,
-				runtimeBuild: config.env.TREESEED_PROVIDER_SOURCE_CLOSURE_DIGEST,
+				runtimeBuild: config.env.TREESEED_PROVIDER_RUNTIME_BUILD,
 				leaseToken,
 				runnerId: claim.runnerId,
 				leaseSeconds: 300,

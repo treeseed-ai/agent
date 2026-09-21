@@ -32,6 +32,7 @@ describe('provider active-time accounting', () => {
 			const observation = await restarted.activeTimeObservation('terra', ['implementation']);
 			expect(observation.modelUsage).toEqual({ day: '2026-09-16', activeSeconds: 20, reservedSeconds: 0 });
 			expect(observation.capabilityUsage.implementation?.activeSeconds).toBe(20);
+			expect((await restarted.snapshot()).activeSecondsByConnection['team-a']).toBe(20);
 			await reserve('team-c', 'implementation', 40);
 			await expect(reserve('team-d', 'implementation', 1)).rejects.toThrow('exhausted');
 		} finally { await rm(root, { recursive: true, force: true }); }

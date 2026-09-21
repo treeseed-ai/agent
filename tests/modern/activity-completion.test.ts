@@ -7,10 +7,10 @@ describe('activity completion structured-output schema', () => {
 		const sourceRef = { model: 'proposal', id: 'proposal', commit: 'a'.repeat(40) };
 		const proposal = { id: 'proposal', status: 'discussing', objectiveRefs: [{ store: 'treedx', model: 'objective', id: 'core',
 			repository: 'library', commit: 'b'.repeat(40), path: 'objectives/core.mdx' }], executionPlan: { workItems: [
-			{ id: 'architecture', review: 'required', dependsOn: [] },
-			{ id: 'tests', review: 'required', dependsOn: ['architecture'] },
+			{ id: 'architecture', agentClass: 'architect', review: 'required', dependsOn: [] },
+			{ id: 'tests', agentClass: 'tester', review: 'required', dependsOn: ['architecture'] },
 		] } };
-		const assignment = { sourceRef, effectiveProfile: { activity: 'estimating', handler: 'estimate' } };
+		const assignment = { sourceRef, agentClass: 'reviewer', effectiveProfile: { activity: 'estimating', handler: 'estimate' } };
 		const context = { canonicalAssignmentContext: { assignment, context: [{ ref: sourceRef, value: { frontmatter: proposal } }] } };
 		const schema = completionFrontmatterSchema(context) as any;
 		expect(schema.properties.status).toEqual({ type: 'string', const: 'discussing' });
@@ -20,7 +20,7 @@ describe('activity completion structured-output schema', () => {
 		expect(items.items.anyOf[0].properties.estimate).toEqual({ type: 'null' });
 		expect(items.items.anyOf[0].properties.reviewEstimate.type).toBe('object');
 		expect(items.items.anyOf[1].properties.dependsOn).toMatchObject({ type: 'array', minItems: 1, maxItems: 1, items: { anyOf: [{ type: 'string', const: 'architecture' }] } });
-		Object.assign(assignment, { workItemId: 'architecture' });
+		Object.assign(assignment, { agentClass: 'architect' });
 		const owner = completionFrontmatterSchema(context) as any;
 		expect(owner.properties.executionPlan.properties.workItems.items.anyOf[0].properties.estimate.type).toBe('object');
 		expect(owner.properties.executionPlan.properties.workItems.items.anyOf[1].properties.estimate).toEqual({ type: 'null' });
@@ -38,7 +38,7 @@ describe('activity completion structured-output schema', () => {
 		};
 		checkShape(activityCompletionOutputSchema(schema));
 		checkShape(activityCompletionOutputSchema(owner));
-		Object.assign(assignment, { workItemId: 'missing' });
+		Object.assign(assignment, { agentClass: 'missing' });
 		expect(() => completionFrontmatterSchema(context)).toThrow('estimate_work_item_scope_missing');
 		context.canonicalAssignmentContext.context[0]!.ref = Object.assign({}, sourceRef, { path: 'different-proposal.mdx' });
 		expect(() => completionFrontmatterSchema(context)).toThrow('estimate_exact_proposal_context_required');

@@ -97,7 +97,7 @@ export async function publishProviderAvailability(
 		constraints: { outboundOnly: true, ...availability.constraints },
 		metadata: {
 			source: '@treeseed/agent/provider-manager',
-			sourceClosureDigest: config.env.TREESEED_PROVIDER_SOURCE_CLOSURE_DIGEST ?? null,
+			runtimeBuild: config.env.TREESEED_PROVIDER_RUNTIME_BUILD ?? null,
 		},
 	};
 	const prior = await localState.session(key);

@@ -41,6 +41,8 @@ node ./dist/provider/lifecycle/entrypoint.js runner --plan --json
 
 See [Capacity Provider Runtime](./docs/capacity-provider-runtime.md) for the lifecycle and recovery contract.
 
+Project-owned handlers are compiled into the provider image, never loaded from an assignment. A project TypeScript entry exports `projectHandlers: readonly Handler[]` (import `Handler` from `@treeseed/agent`). Set `TREESEED_AGENT_PROJECT_HANDLERS_ENTRY` to that entry only while building the provider image; the build replaces the empty registry module in `dist`. The runner statically imports it, and assignment dispatch requires the exact pinned runtime build and a matching handler origin. A normal build without this input includes only Agent-package handlers.
+
 ## Public package surface
 
 - `@treeseed/agent`: executor contracts and the catalog-driven assignment runner;

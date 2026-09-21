@@ -6,7 +6,7 @@ describe('canonical assignment offer selection', () => {
 		expect(assignmentOfferId({ assignmentAttempt: { provider: { offerId: 'codex-engineering' } } })).toBe('');
 		const attempt = {
 			schemaVersion: 'treeseed.assignment-attempt/v1', id: 'assignment', idempotencyKey: 'assignment',
-			teamId: 'team', projectId: 'project', workdayId: 'workday', nodeId: 'node', workItemId: 'work-item', nodeRevision: 1, graphRevision: 1,
+			teamId: 'team', projectId: 'project', workdayId: 'workday', nodeId: 'node', agentClass: 'reviewer', workItemId: 'work-item', nodeRevision: 1, graphRevision: 1,
 			sourceRef: { store: 'postgresql', model: 'decision', id: 'source', revision: 1, digest: `sha256:${'a'.repeat(64)}` },
 			authorityRefs: [{ store: 'postgresql', model: 'decision', id: 'authority', revision: 1, digest: `sha256:${'b'.repeat(64)}` }],
 			effectiveProfile: { profileRef: { store: 'treedx', model: 'agent', id: 'sdk/reviewer', revision: 1, digest: `sha256:${'c'.repeat(64)}` },

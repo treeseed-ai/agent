@@ -6,6 +6,7 @@ import { CONTROL_PLANE_OPERATIONS } from '@treeseed/sdk/operator-contracts';
 import { providerOperationPath } from '../../src/provider/coordination/client.ts';
 import { providerRegistrationIdempotencyKey } from '../../src/provider/coordination/coordinator.ts';
 import { resolveProviderConfig } from '../../src/provider/configuration/config.ts';
+import { runMultiTeamProviderRunners } from '../../src/provider/teams/multi-team-runtime.ts';
 import { ensureCapacityProviderIdentity } from '../../src/provider/accounts/identity.ts';
 import { listProviderConnectionStates, writeProviderConnectionState } from '../../src/provider/coordination/connection-state.ts';
 import { loadProviderManifest, writeProviderConnections } from '../../src/provider/configuration/manifest.ts';
@@ -53,6 +54,10 @@ function sourceFiles(root: string): string[] {
 }
 
 describe('Agent package ownership boundary', () => {
+	it('rejects a live provider without a pinned runtime build before polling', async () => {
+		await expect(runMultiTeamProviderRunners(resolveProviderConfig({ env: {} })))
+			.rejects.toThrow('provider_runtime_build_unpinned');
+	});
 	it('publishes only valid completed timing-awareness evidence', () => {
 		const evidence = { schemaVersion: 'treeseed.assignment-timing-awareness/v1', requiredChecks: 2, completedChecks: 2, firstTool: 'treedx:treeseed_time_status',
 			firstToolSucceeded: true, lastTool: 'treedx:treeseed_time_status', lastToolSucceeded: true,

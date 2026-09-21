@@ -63,6 +63,17 @@ describe('Codex chat executor', () => {
 			clock, clock,
 		])).toMatchObject({ firstTool: 'treedx:wrong_clock_alias', firstToolCompliant: false });
 	});
+	it.each(['planning', 'estimating', 'acting', 'reviewing', 'chat'] as const)(
+		'applies the same first/final clock boundary to %s', (activity) => {
+			const prompt = promptFromContext({ canonicalAssignmentContext: { assignment: {
+				id: `assignment-${activity}`, workspace: { mode: 'read-only' },
+				effectiveProfile: { activity, handler: 'writer', prompt: { system: 'Complete the assigned work.' } },
+			}, context: [], predecessorResults: [] } });
+			expect(prompt).toMatch(/^MANDATORY ASSIGNMENT CLOCK:/u);
+			expect(prompt).toContain('Your FIRST tool action must call mcp__treedx__treeseed_time_status');
+			expect(prompt).toContain('call mcp__treedx__treeseed_time_status again as your FINAL tool action');
+		},
+	);
 	it('summarizes provider event shapes without retaining arguments or output', () => {
 		expect(providerEventShapeSummary([{ type: 'item.completed', item: {
 			type: 'mcp_tool_call', server: 'treedx', tool: 'treeseed_time_status', status: 'completed',

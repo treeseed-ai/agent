@@ -20,7 +20,7 @@ function assignment(executionKind: 'workday' | 'conversation' = 'workday') {
 	const attempt = {
 		schemaVersion: 'treeseed.assignment-attempt/v1', id: 'assignment-1', idempotencyKey: 'assignment-1',
 		teamId: 'team', projectId: 'project', workdayId: executionKind === 'conversation' ? 'conversation-1' : 'workday-1',
-		nodeId: 'node-1', workItemId: 'work-item', nodeRevision: 1, graphRevision: 1,
+		nodeId: 'node-1', agentClass: 'architect', workItemId: 'work-item', nodeRevision: 1, graphRevision: 1,
 		sourceRef: { store: 'treedx', model: 'discussion', id: 'message-1', revision: 1, digest },
 		authorityRefs: [{ store: 'treedx', model: 'discussion', id: 'message-1', revision: 1, digest }],
 		effectiveProfile: { profileRef: { store: 'treedx', model: 'agent', id: 'sdk/architect', revision: 1, digest },
@@ -83,12 +83,15 @@ describe('canonical provider assignment runner', () => {
 	});
 	it('reports a productive timeout as terminal with measured active time', async () => {
 		const api = client();
+		let executionSignal: AbortSignal | undefined;
 		await runProviderAssignment({ client: api, assignment: assignment(), treeDx,
 			leaseToken: 'lease', runnerId: 'runner', runtimeBuild,
 			executor: { id: 'codex', observe: async () => ({ available: true }), execute: async request => {
 				await request.beginExecution?.();
+				executionSignal = request.signal;
 				throw Object.assign(new Error('assignment_timeout'), { code: 'assignment_timeout' });
 			} } });
+		expect(executionSignal?.aborted).toBe(true);
 		expect(api.returnAssignment).not.toHaveBeenCalled();
 		expect(api.failAssignment).toHaveBeenCalledWith('assignment-1', expect.objectContaining({
 			code: 'assignment_timeout', retryable: false, activeSeconds: 1,

@@ -17,7 +17,7 @@ const timingAwareness = {
 function request(): AgentExecutionRequest {
 	const assignmentAttempt = {
 		schemaVersion: 'treeseed.assignment-attempt/v1', id: 'assignment-1', idempotencyKey: 'assignment-1',
-		teamId: 'team-1', projectId: 'project-1', workdayId: 'workday-1', nodeId: 'node-1', workItemId: 'implement-change', nodeRevision: 1, graphRevision: 1,
+		teamId: 'team-1', projectId: 'project-1', workdayId: 'workday-1', nodeId: 'node-1', agentClass: 'engineer', workItemId: 'implement-change', nodeRevision: 1, graphRevision: 1,
 		sourceRef: { store: 'treedx', model: 'proposal', id: 'proposal-1', revision: 1, digest },
 		authorityRefs: [{ store: 'treedx', model: 'decision', id: 'decision-1', revision: 1, digest }],
 		effectiveProfile: {
@@ -71,8 +71,73 @@ describe('provider AgentKernel execution', () => {
 	it('fails closed before transport when the provider runtime build differs', async () => {
 		const executor: AgentExecutor = { id: 'codex', observe: async () => ({ available: true }), execute: vi.fn() };
 		const result = await executeKernelAssignment({ executor, request: request(), runtimeBuild: digest });
-		expect(result).toMatchObject({ status: 'failed', code: 'agent_kernel_failed', summary: 'runtime_build_mismatch' });
+		expect(result).toMatchObject({ status: 'failed', code: 'runtime_build_mismatch', summary: 'runtime_build_mismatch' });
 		expect(executor.execute).not.toHaveBeenCalled();
+	});
+	it('does not report a model abstention as completed implementation work', async () => {
+		const executor: AgentExecutor = { id: 'codex', observe: async () => ({ available: true }), execute: vi.fn(async (input) => {
+			await input.beginExecution?.();
+			return { status: 'abstained' as const, summary: 'Insufficient authorized context.', usage: [{ elapsedSeconds: 1 }] };
+		}) };
+		const result = await executeKernelAssignment({ executor, request: request(), runtimeBuild });
+		expect(result).toMatchObject({ status: 'failed', code: 'agent_abstained' });
+		expect(result.outputs?.assignmentResult).toBeUndefined();
+	});
+	it('preserves an explicit chat abstention without fabricating a completed result', async () => {
+		const input = request();
+		const attempt = input.assignment.assignmentAttempt as Record<string, any>;
+		attempt.effectiveProfile = { ...attempt.effectiveProfile, activity: 'chat' };
+		attempt.workspace = { mode: 'read-only' };
+		attempt.grant = { contentRead: [], contentWrite: [], sourceRead: [], sourceWrite: [], tools: [] };
+		attempt.contextRefs = [];
+		const executor: AgentExecutor = { id: 'codex', observe: async () => ({ available: true }), execute: vi.fn(async (execution) => {
+			await execution.beginExecution?.();
+			return { status: 'abstained' as const, summary: 'No answer can be established.', usage: [{ elapsedSeconds: 1 }] };
+		}) };
+		const result = await executeKernelAssignment({ executor, request: input, runtimeBuild });
+		expect(result).toMatchObject({ status: 'abstained', code: 'agent_abstained' });
+		expect(result.outputs?.assignmentResult).toBeUndefined();
+	});
+
+	it('rejects an unavailable project handler before reading TreeDX', async () => {
+		const input = request();
+		const attempt = input.assignment.assignmentAttempt as Record<string, any>;
+		attempt.effectiveProfile = { ...attempt.effectiveProfile, handler: 'sdk/missing', handlerOrigin: 'project-runtime' };
+		attempt.contextRefs = [{ store: 'treedx', model: 'proposal', id: 'proposal-1', repository: 'sdk-library',
+			commit, path: 'proposals/change.mdx', digest }];
+		const executor: AgentExecutor = { id: 'codex', observe: async () => ({ available: true }), execute: vi.fn() };
+		const result = await executeKernelAssignment({ executor, request: input, runtimeBuild });
+		expect(result).toMatchObject({ status: 'failed', code: 'handler_unavailable', summary: 'unknown_handler:sdk/missing' });
+		expect(input.treeDx.invoke).not.toHaveBeenCalled();
+		expect(executor.execute).not.toHaveBeenCalled();
+	});
+
+	it.each([
+		['project handler with agent-package origin', 'sdk/project-answer', 'agent-package'],
+		['default handler with project-runtime origin', 'actor', 'project-runtime'],
+	])('rejects a %s before transport', async (_label, handler, handlerOrigin) => {
+		const input = request();
+		const attempt = input.assignment.assignmentAttempt as Record<string, any>;
+		attempt.effectiveProfile = { ...attempt.effectiveProfile, handler, handlerOrigin };
+		const executor: AgentExecutor = { id: 'codex', observe: async () => ({ available: true }), execute: vi.fn() };
+		const result = await executeKernelAssignment({ executor, request: input, runtimeBuild });
+		expect(result).toMatchObject({ status: 'failed', code: 'handler_unavailable', summary: 'handler_origin_mismatch' });
+		expect(executor.execute).not.toHaveBeenCalled();
+	});
+
+	it('aborts the isolated executor when the kernel deadline expires', async () => {
+		const input = request();
+		const attempt = input.assignment.assignmentAttempt as Record<string, any>;
+		attempt.deadline = new Date(Date.now() + 250).toISOString();
+		let observedSignal: AbortSignal | undefined;
+		const executor: AgentExecutor = { id: 'codex', observe: async () => ({ available: true }), execute: vi.fn(async (execution) => {
+			observedSignal = execution.signal;
+			await execution.beginExecution?.();
+			return new Promise<AgentExecutionResult>(() => {});
+		}) };
+		const result = await executeKernelAssignment({ executor, request: input, runtimeBuild });
+		expect(result).toMatchObject({ status: 'failed', summary: 'assignment_timeout' });
+		expect(observedSignal?.aborted).toBe(true);
 	});
 
 	it('returns timing noncompliance for a bounded retry instead of terminalizing the graph node', async () => {
@@ -340,6 +405,54 @@ describe('provider AgentKernel execution', () => {
 		const result = await executeKernelAssignment({ executor, request: input, runtimeBuild, handlers: [handler] });
 		expect(result.outputs?.assignmentResult).toMatchObject({ id: 'project-result', summary: 'Project behavior ran.' });
 		expect(executor.execute).not.toHaveBeenCalled();
+	});
+
+	it('gives a project handler only verification actually observed inside its Kata guest', async () => {
+		const input = request();
+		const attempt = input.assignment.assignmentAttempt as Record<string, any>;
+		attempt.effectiveProfile = { ...attempt.effectiveProfile, activity: 'chat', handler: 'sdk/verified-answer',
+			handlerOrigin: 'project-runtime', permissionCeiling: { content: { read: [], write: [] }, tools: ['verification'] } };
+		attempt.grant = { contentRead: [], contentWrite: [], sourceRead: [], sourceWrite: [], tools: ['verification'] };
+		attempt.contextRefs = [];
+		attempt.workspace = { mode: 'read-only' };
+		const handler: Handler = { id: 'sdk/verified-answer', run: async (context, runtime) => {
+			const model = await runtime.invokeModel({ prompt: 'Verify the source.', context: [] });
+			await expect(runtime.runVerification({ command: 'git status --short' })).rejects.toThrow('verification_command_not_observed_in_guest');
+			const verified = await runtime.runVerification({ command: 'git rev-parse HEAD' });
+			return { schemaVersion: 'treeseed.assignment-result/v1', id: 'verified-result', assignmentId: context.assignment.id,
+				status: 'completed', summary: model.text, references: [], verification: [verified],
+				usage: model.usage, diagnostics: [], timingAwareness: model.timingAwareness, completedAt: runtime.now() };
+		} };
+		const executor: AgentExecutor = { id: 'codex', observe: async () => ({ available: true }), execute: vi.fn(async (execution) => {
+			await execution.beginExecution?.();
+			return { status: 'responded' as const, summary: 'Verified.', outputs: { timingAwareness,
+				verificationRecords: [{ command: 'git rev-parse HEAD', status: 'passed', exitCode: 0,
+					outputDigest: digest, durationSeconds: 1 }] }, usage: [{ elapsedSeconds: 2 }] };
+		}) };
+		const result = await executeKernelAssignment({ executor, request: input, runtimeBuild, handlers: [handler] });
+		expect(result.status).toBe('responded');
+		expect(result.outputs?.assignmentResult).toMatchObject({ verification: [{ command: 'git rev-parse HEAD', outputDigest: digest }] });
+	});
+
+	it('serves only an exact granted and materialized context reference to a project handler', async () => {
+		const input = request();
+		const attempt = input.assignment.assignmentAttempt as Record<string, any>;
+		const source = attempt.contextRefs[0];
+		attempt.effectiveProfile = { ...attempt.effectiveProfile, activity: 'chat', handler: 'sdk/source-reader',
+			handlerOrigin: 'project-runtime', permissionCeiling: { content: { read: [], write: [] }, tools: ['source.read'] } };
+		attempt.grant = { contentRead: [], contentWrite: [], sourceRead: ['treeseed-ai/sdk'], sourceWrite: [], tools: ['source.read'] };
+		attempt.workspace = { mode: 'read-only' };
+		const handler: Handler = { id: 'sdk/source-reader', run: async (context, runtime) => {
+			const value = await runtime.readContext(source);
+			await expect(runtime.readContext({ ...source, commit: candidateCommit })).rejects.toThrow(/denied/u);
+			return { schemaVersion: 'treeseed.assignment-result/v1', id: 'read-result', assignmentId: context.assignment.id,
+				status: 'completed', summary: JSON.stringify(value), references: [], verification: [],
+				usage: { elapsedSeconds: 0 }, diagnostics: [], completedAt: runtime.now() };
+		} };
+		const executor: AgentExecutor = { id: 'codex', observe: async () => ({ available: true }), execute: vi.fn() };
+		const result = await executeKernelAssignment({ executor, request: input, runtimeBuild, handlers: [handler] });
+		expect(result.status, JSON.stringify(result)).toBe('responded');
+		expect(result.summary).toContain('treeseed-ai/sdk');
 	});
 
 	it('returns chat text for the provider-owned discussion commit without creating a generic note', async () => {

@@ -47,6 +47,24 @@ async function compileModule(filePath: string, sourceRoot: string, outputRoot: s
 	writeFileSync(outputFile, rewriteRuntimeSpecifiers(builtSource), 'utf8');
 }
 
+async function compileProjectHandlers() {
+	const entry = process.env.TREESEED_AGENT_PROJECT_HANDLERS_ENTRY;
+	if (!entry) return;
+	const filePath = resolve(entry);
+	if (!existsSync(filePath) || extname(filePath) !== '.ts') {
+		throw new Error('Project handler entry must be an existing TypeScript file.');
+	}
+	await build({
+		entryPoints: [filePath],
+		outfile: resolve(distRoot, 'kernel', 'project-handlers.js'),
+		platform: 'node',
+		format: 'esm',
+		bundle: true,
+		packages: 'external',
+		logLevel: 'silent',
+	});
+}
+
 function copyAsset(filePath: string, sourceRoot: string, outputRoot: string) {
 	const outputFile = resolve(outputRoot, relative(sourceRoot, filePath));
 	ensureDir(outputFile);
@@ -118,6 +136,7 @@ try {
 	}
 
 	emitDeclarations();
+	await compileProjectHandlers();
 
 	if (existsSync(resolve(distRoot, 'src'))) {
 		cpSync(resolve(distRoot, 'src'), distRoot, { recursive: true });

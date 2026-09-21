@@ -184,7 +184,7 @@ export function completionFrontmatterSchema(context: Record<string, unknown>) {
 	const assignment = record(record(context.canonicalAssignmentContext).assignment), profile = record(assignment.effectiveProfile);
 	if (text(profile.activity) === 'estimating') {
 		const proposal = estimateProposalSource(record(context.canonicalAssignmentContext));
-		return estimateProposalOutputSchema(proposal, text(assignment.workItemId) || undefined);
+		return estimateProposalOutputSchema(proposal, text(assignment.agentClass));
 	}
 	if (text(profile.activity) !== 'acting' || text(record(assignment.workspace).mode) !== 'treedx' || text(profile.handler) !== 'writer') return undefined;
 	const grants = record(assignment.grant).contentWrite;

@@ -4,6 +4,7 @@ import {
 	assignmentReferenceSchema,
 	assignmentResultSchema,
 	assignmentTimingAwarenessReceiptSchema,
+	verificationRecordSchema,
 	type AssignmentReference,
 	type AssignmentResult,
 } from '@treeseed/sdk/agent-capacity';
@@ -46,6 +47,27 @@ export async function executeKernelAssignment(input: {
 		status: 'failed', code: 'assignment_attempt_invalid',
 		summary: attempt.error.issues.map((issue) => `${issue.path.join('.')}: ${issue.message}`).join('; '), retryable: false,
 	};
+	if (attempt.data.provider.runtimeBuild !== input.runtimeBuild) return {
+		status: 'failed', code: 'runtime_build_mismatch', summary: 'runtime_build_mismatch', retryable: false,
+	};
+	let registry: HandlerRegistry;
+	try {
+		const defaultHandlers = [new WriterHandler(), new ActorHandler(), new EstimateHandler(),
+			new ReviewerHandler(), new ReleaserHandler(), new ReporterHandler()];
+		const defaultIds = new Set(defaultHandlers.map((handler) => handler.id));
+		const selected = attempt.data.effectiveProfile;
+		if ((selected.handlerOrigin === 'agent-package') !== defaultIds.has(selected.handler)) {
+			throw new Error('handler_origin_mismatch');
+		}
+		registry = new HandlerRegistry([
+			...defaultHandlers,
+			...(input.handlers ?? []),
+		]);
+		registry.resolve(attempt.data.effectiveProfile.handler);
+	} catch (error) {
+		return { status: 'failed', code: 'handler_unavailable',
+			summary: error instanceof Error ? error.message : String(error), retryable: false };
+	}
 	const predecessorValues = Array.isArray(record(visible.workspaceContext).predecessorResults)
 		? record(visible.workspaceContext).predecessorResults as unknown[] : [];
 	const predecessorResults = predecessorValues.map((value) => assignmentResultSchema.parse(value));
@@ -54,12 +76,14 @@ export async function executeKernelAssignment(input: {
 		predecessorResults,
 		treeDx: input.request.treeDx,
 	}));
+	const localAbort = new AbortController();
+	const signal = input.request.signal ? AbortSignal.any([input.request.signal, localAbort.signal]) : localAbort.signal;
 	const workspaceContext = { ...record(visible.workspaceContext), assignmentAttempt: attempt.data,
 		predecessorResults, authorizedContext: context.context };
 	let signalExecutionStarted!: () => void;
 	const executionStarted = new Promise<void>((resolve) => { signalExecutionStarted = resolve; });
 	let executionStart: Promise<Record<string, unknown>> | null = null;
-	const transportRequest = { ...input.request, assignment: { ...visible, workspaceContext },
+	const transportRequest = { ...input.request, signal, assignment: { ...visible, workspaceContext },
 		beginExecution: () => {
 			executionStart ??= (async () => {
 				const started = await input.request.beginExecution?.() ?? {};
@@ -71,12 +95,18 @@ export async function executeKernelAssignment(input: {
 	const transport = { result: null as AgentExecutionResult | null };
 	const runtime: AgentRuntime = {
 		now: () => new Date().toISOString(),
-		readContext: async () => { throw new Error('context_not_materialized'); },
+		readContext: async (ref) => {
+			const item = context.context.find((entry) => JSON.stringify(entry.ref, Object.keys(entry.ref).sort())
+				=== JSON.stringify(ref, Object.keys(ref).sort()));
+			if (!item) throw new Error('assignment_context_reference_denied');
+			return item.value;
+		},
 		invokeModel: async () => {
 			if (transport.result) throw new Error('model_already_invoked');
 			transport.result = await input.executor.execute(transportRequest);
 			if (!executionStart) throw Object.assign(new Error('execution_start_not_observed'), { code: 'execution_start_not_observed' });
-			if (!['completed', 'responded', 'abstained'].includes(transport.result.status)) {
+			if (transport.result.status === 'abstained') throw Object.assign(new Error(transport.result.summary), { code: 'agent_abstained' });
+			if (!['completed', 'responded'].includes(transport.result.status)) {
 				throw Object.assign(new Error(transport.result.summary), { code: transport.result.code });
 			}
 			const usage = record(transport.result.usage?.[0]);
@@ -115,7 +145,19 @@ export async function executeKernelAssignment(input: {
 				} } : {}),
 			};
 		},
-		runVerification: async () => { throw new Error('verification_runtime_not_bound'); },
+		runVerification: async ({ command }) => {
+			// The Kata guest executes and observes reported commands before the
+			// transport returns. Never run a second command on the provider host or
+			// invent a record after the guest workspace has been torn down.
+			if (!transport.result) throw new Error('verification_guest_result_unavailable');
+			const records = record(transport.result.outputs).verificationRecords;
+			const observed = Array.isArray(records) ? records
+				.map((value) => verificationRecordSchema.safeParse(value))
+				.filter((value) => value.success).map((value) => value.data) : [];
+			const match = observed.find((value) => value.command === command);
+			if (!match) throw new Error('verification_command_not_observed_in_guest');
+			return match;
+		},
 		commitTreeDx: ({ target, value }) => commitTreeDxContent({ attempt: attempt.data,
 			treeDx: input.request.treeDx, target, value }),
 		commitSource: async () => {
@@ -123,22 +165,25 @@ export async function executeKernelAssignment(input: {
 			return gitReference(transport.result, attempt.data.workspace.repository);
 		},
 	};
-	const kernel = new AgentKernel(new HandlerRegistry([
-		new WriterHandler(), new ActorHandler(), new EstimateHandler(), new ReviewerHandler(), new ReleaserHandler(), new ReporterHandler(),
-		...(input.handlers ?? []),
-	]));
+	const kernel = new AgentKernel(registry);
 	let result: AssignmentResult;
 	try {
 		// Reporter is deterministic and has no model transport preparation phase.
 		if (attempt.data.effectiveProfile.handler === 'reporter') await transportRequest.beginExecution();
 		const handled = await kernel.runAssignment({
-			context, runtimeBuild: input.runtimeBuild, runtime, signal: input.request.signal, executionStarted,
+			context, runtimeBuild: input.runtimeBuild, runtime, signal, executionStarted,
 		});
 		const parsedResult = assignmentResultSchema.safeParse(handled);
 		if (!parsedResult.success) throw new Error(`assignment_result_invalid: ${parsedResult.error.message}`);
 		result = parsedResult.data;
 	} catch (error) {
+		localAbort.abort(error);
 		const summary = error instanceof Error ? error.message : String(error);
+		if ((error as { code?: unknown })?.code === 'agent_abstained'
+			&& attempt.data.effectiveProfile.activity === 'chat') return {
+			status: 'abstained', code: 'agent_abstained', summary, retryable: false,
+			...(transport.result ? { usage: transport.result.usage } : {}),
+		};
 		// Upstream saturation is not an invalid agent result. Preserve the existing
 		// provider return/retry path; it retains normal admission and deadline limits.
 		if (summary.startsWith('Kata guest exited 1: Codex execution failed: Selected model is at capacity. Please try a different model.')) {

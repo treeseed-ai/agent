@@ -9,13 +9,14 @@ import { ReviewerHandler, WriterHandler } from '../../../src/kernel/handlers/mod
 const commit = 'a'.repeat(40);
 const digest = `sha256:${'b'.repeat(64)}`;
 const runtimeBuild = `sha256:${'c'.repeat(64)}`;
-const reportTarget = { store: 'treedx' as const, model: 'note', id: 'workday-report', revision: 1, digest };
+const reportTarget = { store: 'treedx' as const, model: 'note', id: 'workday-report', revision: 1,
+	digest, repository: 'treeseed-ai/team-library' };
 
 function assignmentContext(): AssignmentContext {
 	return {
 		assignment: {
 			schemaVersion: 'treeseed.assignment-attempt/v1', id: 'assignment-1', idempotencyKey: 'assignment-1-attempt-1',
-			teamId: 'team-1', projectId: 'project-1', workdayId: 'workday-1', nodeId: 'node-1', workItemId: 'report-workday', nodeRevision: 1, graphRevision: 1,
+			teamId: 'team-1', projectId: 'project-1', workdayId: 'workday-1', nodeId: 'node-1', agentClass: 'reporter', workItemId: 'report-workday', nodeRevision: 1, graphRevision: 1,
 			sourceRef: { store: 'treedx', model: 'proposal', id: 'proposal-1', revision: 1, digest }, authorityRefs: [{ store: 'treedx', model: 'decision', id: 'decision-1', revision: 1, digest }],
 			effectiveProfile: {
 				profileRef: { store: 'treedx', model: 'agent', id: 'reporter-1', revision: 1, digest }, activity: 'reporting', handler: 'reporter',
@@ -71,6 +72,40 @@ describe('AgentKernel', () => {
 		await expect(running).rejects.toMatchObject({ message: 'assignment_timeout', code: 'assignment_timeout' });
 	});
 
+	it('enforces the absolute assignment deadline even before productive execution begins', async () => {
+		vi.useFakeTimers();
+		vi.setSystemTime(new Date('2026-09-13T12:00:00.000Z'));
+		const context = assignmentContext();
+		context.assignment.effectiveProfile.handler = 'waiting';
+		context.assignment.deadline = '2026-09-13T12:00:02.000Z';
+		const handler: Handler = { id: 'waiting', run: async () => new Promise<never>(() => undefined) };
+		const executionStarted = new Promise<void>(() => undefined);
+		const running = new AgentKernel(new HandlerRegistry([handler])).runAssignment({
+			context, runtimeBuild, runtime: runtime([]), executionStarted,
+		});
+		const failure = expect(running).rejects.toMatchObject({ message: 'assignment_timeout', code: 'assignment_timeout' });
+		await vi.advanceTimersByTimeAsync(2_001);
+		await failure;
+	});
+
+	it('refuses a completed handler result at the exact deadline', async () => {
+		vi.useFakeTimers();
+		vi.setSystemTime(new Date('2026-09-13T12:00:00.000Z'));
+		const context = assignmentContext();
+		context.assignment.deadline = '2026-09-13T12:00:01.000Z';
+		const boundary = runtime([]);
+		const commitTreeDx = boundary.commitTreeDx;
+		boundary.commitTreeDx = async (request) => {
+			await new Promise<void>((resolve) => setTimeout(resolve, 1_000));
+			return commitTreeDx(request);
+		};
+		const running = new AgentKernel(new HandlerRegistry([new ReporterHandler()]))
+			.runAssignment({ context, runtimeBuild, runtime: boundary });
+		const failure = expect(running).rejects.toMatchObject({ message: 'assignment_timeout', code: 'assignment_timeout' });
+		await vi.advanceTimersByTimeAsync(1_000);
+		await failure;
+	});
+
 	it('runs Reporter deterministically through the one assignment entry point', async () => {
 		const kernel = new AgentKernel(new HandlerRegistry([new ReporterHandler()]));
 		const firstCommits: unknown[] = [];
@@ -88,6 +123,22 @@ describe('AgentKernel', () => {
 		unknown.assignment.effectiveProfile.handler = 'missing';
 		await expect(kernel.runAssignment({ context: unknown, runtimeBuild, runtime: runtime([]) })).rejects.toThrow('unknown_handler:missing');
 		await expect(kernel.runAssignment({ context: assignmentContext(), runtimeBuild: digest, runtime: runtime([]) })).rejects.toThrow('runtime_build_mismatch');
+	});
+	it('rejects expired authority, cancellation, and invalid handler results before publication', async () => {
+		const context = assignmentContext();
+		context.assignment.effectiveProfile.handler = 'invalid';
+		const handler: Handler = { id: 'invalid', run: vi.fn(async () => ({ status: 'completed' }) as never) };
+		const kernel = new AgentKernel(new HandlerRegistry([handler]));
+		const expired = structuredClone(context);
+		expired.assignment.deadline = '2000-01-01T00:00:00.000Z';
+		await expect(kernel.runAssignment({ context: expired, runtimeBuild, runtime: runtime([]) })).rejects.toThrow('assignment_expired');
+		expect(handler.run).not.toHaveBeenCalled();
+		const cancelled = new AbortController(); cancelled.abort();
+		await expect(kernel.runAssignment({ context, runtimeBuild, runtime: runtime([]), signal: cancelled.signal }))
+			.rejects.toThrow('assignment_cancelled');
+		expect(handler.run).not.toHaveBeenCalled();
+		await expect(kernel.runAssignment({ context, runtimeBuild, runtime: runtime([]) })).rejects.toThrow('agent_kernel_result_invalid');
+		expect(handler.run).toHaveBeenCalledOnce();
 	});
 
 	it('enforces the exact TreeDX write grant at the runtime boundary', async () => {

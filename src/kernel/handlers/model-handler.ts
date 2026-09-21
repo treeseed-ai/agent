@@ -113,7 +113,7 @@ export class EstimateHandler extends ModelHandler {
 			const plan = proposal.executionPlan as { workItems?: Record<string, unknown>[] } | undefined;
 			return { ...proposal, executionPlan: { ...plan, workItems: plan?.workItems?.map((item) => {
 				const copy = { ...item };
-				const field = estimateMutableField(item, context.assignment.workItemId);
+				const field = estimateMutableField(item, context.assignment.agentClass);
 				if (field) delete copy[field];
 				return copy;
 			}) } };

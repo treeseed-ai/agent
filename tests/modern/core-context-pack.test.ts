@@ -4,6 +4,11 @@ import { MANAGED_CONTEXT_CAPACITY } from '../../src/provider/configuration/legac
 
 const file=(path:string,content:string,frontmatter:Record<string,unknown>={})=>({path,logicalPath:path.replace(/\.(?:md|mdx|ya?ml)$/u,''),content,frontmatter});
 const response=(items:unknown[])=>({data:{result:{data:{items}}}});
+const workdayAttempt = (activity: string) => ({ id: 'assignment-1',
+	sourceRef: { store: 'treedx', model: 'proposal', id: 'proposal-1', path: 'proposals/accepted.mdx', commit: 'a'.repeat(40) },
+	effectiveProfile: { activity, prompt: { system: 'Use the exact assigned proposal.' } },
+	workItemId: 'work-item-1', acceptanceCriteria: ['Review the exact assigned proposal.'],
+	predecessorResultIds: [], authorityRefs: [], grant: {}, deadline: '2099-01-01T00:00:00.000Z', limits: { maximumSeconds: 180 } });
 
 function request(overrides:Record<string,unknown>={}) {
 	const projectFiles=[
@@ -29,18 +34,19 @@ function request(overrides:Record<string,unknown>={}) {
 describe('mandatory assignment context pack',()=>{
 	it('uses the bounded workday task instead of requiring a discussion, without transport credentials', async () => {
 		const work = request(); work.assignment.executionKind = 'workday'; delete work.assignment.metadata.communication;
-		work.assignment.decisionInput = { input: { objective: 'Review the assigned proposal', body: 'Exact proposal content', leaseToken: 'do-not-send' } };
+		work.assignment.assignmentAttempt = workdayAttempt('reviewing');
+		work.assignment.leaseToken = 'do-not-send';
 		const pack = await readCoreContextPack(work, {
 			identity: { manifest: { teamId:'team-1', projectId:'sdk-project', projectSlug:'sdk', agentProfile:{path:'agents/architect.mdx'},
 				teamLibrary:{projectId:'team-project',repositoryId:'team-repo',immutableRef:'team-ref'} }, sources: [] }, focused: {}, message: {},
 		});
-		expect(pack.sources.find(source => source.kind === 'assignment-task')?.content).toContain('Exact proposal content');
+		expect(pack.sources.find(source => source.kind === 'assignment-task')?.content).toContain('proposals/accepted.mdx');
 		expect(pack.sources.some(source => source.kind.startsWith('discussion-'))).toBe(false);
 		expect(JSON.stringify(pack.sources)).not.toContain('do-not-send');
 	});
 	it('reads project identity from its bounded secondary repository when the writable workspace is Team Library', async () => {
 		const work = request(); work.assignment.executionKind = 'workday'; delete work.assignment.metadata.communication;
-		work.assignment.decisionInput = { input: { objective: 'Summarize the completed workday' } };
+		work.assignment.assignmentAttempt = workdayAttempt('reporting');
 		work.treeDx.repositoryId = 'team-repo'; work.treeDx.baseRef = 'team-ref';
 		work.treeDx.readRepositories = [{ projectId:'sdk-project', projectSlug:'sdk', repositoryId:'sdk-repo', baseRef:'sdk-ref', allowedPaths:['README.md','agents/**','objectives/**'], allowedModels:['knowledge','agent','objective'], source:'same-team' }];
 		await readCoreContextPack(work, { identity: { manifest: { teamId:'team-1', projectId:'sdk-project', projectSlug:'sdk', agentProfile:{path:'agents/architect.mdx'}, teamLibrary:{projectId:'team-project',repositoryId:'team-repo',immutableRef:'team-ref'} }, sources: [] }, focused: {}, message: {} });

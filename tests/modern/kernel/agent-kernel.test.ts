@@ -201,4 +201,29 @@ describe('AgentKernel', () => {
 		boundary.invokeModel = async () => { throw new Error('model_failed'); };
 		await expect(new WriterHandler().run(context, boundary)).rejects.toThrow('model_failed');
 	});
+
+	it('requires Architect acting output to extend the exact conventional Architecture book', async () => {
+		const context = assignmentContext();
+		context.assignment.agentClass = 'architect';
+		context.assignment.effectiveProfile.activity = 'acting';
+		context.assignment.effectiveProfile.handler = 'writer';
+		const bookRef = { store: 'treedx' as const, model: 'book', id: 'sdk-architecture', revision: 3, digest,
+			repository: 'treeseed-ai/sdk-library', commit, path: 'books/architecture.mdx' };
+		context.context = [{ ref: bookRef, mediaType: 'text/markdown', digest,
+			value: { frontmatter: { schemaVersion: 'treeseed.book/v3', id: bookRef.id, projectId: 'project-1', title: 'SDK Architecture' } } }];
+		context.assignment.grant.contentWrite = [{ ...reportTarget, model: 'knowledge', id: 'sdk.architecture.authority' }];
+		const commits: unknown[] = [], boundary = runtime(commits);
+		let prompt = '';
+		boundary.invokeModel = async (request) => { prompt = request.prompt; return ({ text: 'Extended the governed architecture.', usage: { elapsedSeconds: 1 },
+			activityCompletion: { summary: 'Extended architecture.', reviewDisposition: null, contentOutput: {
+				model: 'knowledge', body: 'The SDK has one contract authority.', frontmatter: {
+					schemaVersion: 'treeseed.knowledge-page/v2', id: 'sdk.architecture.authority', projectId: 'project-1',
+					bookRef, slug: 'authority', title: 'Authority', status: 'published', visibility: 'team', order: 1,
+				} } } }); };
+		await new WriterHandler().run(context, boundary);
+		expect(commits).toHaveLength(1);
+		expect(prompt).toContain('exact authorized Book reference');
+		context.context = [];
+		await expect(new WriterHandler().run(context, boundary)).rejects.toThrow('architect_architecture_book_context_required');
+	});
 });

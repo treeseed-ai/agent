@@ -4,6 +4,9 @@ import { assertObjectiveContentModel, discussionMessageSourcePaths, readDiscussi
 import { executeAssignmentTreeDxTool } from '../../../src/provider/execution/microvm-executor.ts';
 import { assertPredecessorSynthesis, assertReplayableVerificationCommand, codexInteractiveTimeoutMs, codexProjectInstructionArguments, codexReasoningArguments, codexTreeDxMcpConfig, completedTimeStatusChecks, promptFromContext, providerEventShapeSummary, providerResponsePreview, requiresActivityCompletion, timingAwarenessContract, treeDxToolDefinitions, verifyReportedActivityCommands } from '../../../src/sandbox/guest.ts';
 
+const coreObjective = { schemaVersion: 'treeseed.objective/v1', id: 'sdk-core', projectId: 'project-1',
+	title: 'Core objective', outcome: 'Maintain the SDK contract.', status: 'active' };
+
 describe('Codex chat executor', () => {
 	it('requires structured completion only for a mutable legacy source workspace', () => {
 		expect(requiresActivityCompletion('work')).toBe(true);
@@ -263,7 +266,7 @@ describe('Codex chat executor', () => {
 	});
 
 	it('requires objective-directory Markdown to satisfy the SDK objective content model', () => {
-		expect(() => assertObjectiveContentModel('objectives/core.mdx', { frontmatter: { title: 'Core objective' } })).not.toThrow();
+		expect(() => assertObjectiveContentModel('objectives/core.mdx', { frontmatter: coreObjective })).not.toThrow();
 		expect(() => assertObjectiveContentModel('objectives/core.md', { frontmatter: {} })).toThrow(/SDK objective content model/u);
 		expect(() => assertObjectiveContentModel('knowledge/core.md', { frontmatter: {} })).not.toThrow();
 	});
@@ -278,7 +281,7 @@ describe('Codex chat executor', () => {
 		} } }, assignmentId: 'assignment-1', leaseToken: 'lease', runnerId: 'runner', treeDx: {
 			projectId: 'project-1', handleId: 'handle-1', repositoryId: 'repo-1', workspaceId: 'workspace-1', baseRef: 'commit-1', invoke: async (_operationId, value: any) => {
 				requested = value.body.paths; return { data: { result: { files: [
-					{ path: 'agents/architect.yaml', content: 'profile' }, { path: 'objectives/core.md', content: 'objective', frontmatter: { title: 'Core objective' } }, { path: 'README.md', content: 'readme' },
+					{ path: 'agents/architect.yaml', content: 'profile' }, { path: 'objectives/core.md', content: 'objective', frontmatter: coreObjective }, { path: 'README.md', content: 'readme' },
 				] } } };
 			},
 		} }, new Set(['agents/architect.yaml', 'objectives/core.md', 'README.md']));
@@ -340,7 +343,7 @@ describe('Codex chat executor', () => {
 			instructionTemplates: [{ path: 'instructions/chat.md', expectedRevision: 'commit-1' }],
 		} } }, assignmentId: 'assignment-1', leaseToken: 'lease', runnerId: 'runner',
 			treeDx: { projectId: 'project-1', handleId: 'handle-1', repositoryId: 'repo-1', workspaceId: 'workspace-1', baseRef: 'commit-1', invoke: async (_operationId, value) => { input = value; return { data: { result: { files: [
-				{ path: 'agents/architect.yaml', content: profile }, { path: 'objectives/core.mdx', sourcePath: 'objectives/core.mdx', logicalPath: 'objectives/core', requestedPath: 'objectives/core', content: '# Objective', frontmatter: { title: 'Core objective' } }, { path: 'README.md', content: '# SDK' }, { path: 'instructions/chat.md', content: 'Be concise.' },
+				{ path: 'agents/architect.yaml', content: profile }, { path: 'objectives/core.mdx', sourcePath: 'objectives/core.mdx', logicalPath: 'objectives/core', requestedPath: 'objectives/core', content: '# Objective', frontmatter: coreObjective }, { path: 'README.md', content: '# SDK' }, { path: 'instructions/chat.md', content: 'Be concise.' },
 			] } } }; } } });
 		expect(input.body).not.toHaveProperty('ref');
 		expect(input.body.paths).toContain('objectives/core');
@@ -355,7 +358,7 @@ describe('Codex chat executor', () => {
 		const request: any = { assignment: { metadata: { identityManifest: { agentHandle: '@sdk/architect', repositoryId: 'repo-1', immutableRef: 'commit-1',
 			agentProfile: { path: 'agents/architect.yaml', expectedRevision: 'commit-1', digest: 'sha256:wrong' }, coreObjective: { path: 'objectives/core', expectedRevision: 'commit-1' }, instructionTemplates: [] } } },
 			assignmentId: 'assignment-1', leaseToken: 'lease', runnerId: 'runner', treeDx: { projectId: 'project-1', repositoryId: 'repo-1', workspaceId: 'workspace-1', baseRef: 'commit-1',
-				invoke: async () => ({ data: { result: { files: [{ path: 'agents/architect.yaml', content: 'profile' }, { path: 'objectives/core.mdx', sourcePath: 'objectives/core.mdx', logicalPath: 'objectives/core', requestedPath: 'objectives/core', content: 'objective', frontmatter: { title: 'Core objective' } }] } } }) } };
+				invoke: async () => ({ data: { result: { files: [{ path: 'agents/architect.yaml', content: 'profile' }, { path: 'objectives/core.mdx', sourcePath: 'objectives/core.mdx', logicalPath: 'objectives/core', requestedPath: 'objectives/core', content: 'objective', frontmatter: coreObjective }] } } }) } };
 		await expect(readIdentityContext(request)).rejects.toThrow(/digest mismatch/u);
 		request.treeDx.baseRef = 'commit-2';
 		await expect(readIdentityContext(request)).rejects.toThrow(/does not match/u);

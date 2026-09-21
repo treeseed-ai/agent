@@ -215,6 +215,9 @@ describe('AgentKernel', () => {
 		const commits: unknown[] = [], boundary = runtime(commits);
 		let prompt = '';
 		boundary.invokeModel = async (request) => { prompt = request.prompt; return ({ text: 'Extended the governed architecture.', usage: { elapsedSeconds: 1 },
+			timingAwareness: { schemaVersion: 'treeseed.assignment-timing-awareness/v1', requiredChecks: 2, completedChecks: 2,
+				firstTool: 'treedx:treeseed_time_status', firstToolSucceeded: true, lastTool: 'treedx:treeseed_time_status',
+				lastToolSucceeded: true, firstToolCompliant: true, finalToolCompliant: true },
 			activityCompletion: { summary: 'Extended architecture.', reviewDisposition: null, contentOutput: {
 				model: 'knowledge', body: 'The SDK has one contract authority.', frontmatter: {
 					schemaVersion: 'treeseed.knowledge-page/v2', id: 'sdk.architecture.authority', projectId: 'project-1',

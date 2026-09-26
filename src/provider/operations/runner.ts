@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { ProviderProtocolClient } from '@treeseed/sdk/capacity-provider';
+import { assignmentReferenceSchema, assignmentResultSchema } from '@treeseed/sdk/agent-capacity';
 import type { AgentExecutionRequest, AgentExecutor, AgentExecutionResult, AssignmentTreeDxFacade } from '../execution/contracts.ts';
 import { executeKernelAssignment } from '../../kernel/provider-kernel-executor.ts';
 import type { Handler } from '../../kernel/contracts.ts';
@@ -206,13 +207,11 @@ export async function runProviderAssignment(input: ProviderAssignmentRunInput) {
 		if (result.status === 'responded' && !result.responseMarkdown) throw new Error('Communication executor omitted its durable Markdown response.');
 		const response = await input.client.respondToAssignmentDiscussion(assignmentId, { leaseToken: input.leaseToken, runnerId: input.runnerId,
 			outcome: result.status, ...(result.responseMarkdown ? { markdown: result.responseMarkdown } : {}), summary: result.summary }, `discussion-response:${assignmentId}:${input.runnerId}`);
-		const usage = record(result.usage?.[0]);
-		await input.client.settleAssignment(assignmentId, { activeSeconds: settlementSeconds(usage.activeSeconds), elapsedSeconds: settlementSeconds(usage.elapsedSeconds),
-			usageDimension: 'aggregate', usageActual: usage }, `discussion-settlement:${assignmentId}:${input.runnerId}`);
-		// Publishing the response intentionally suspends and revokes the assignment
-		// workspace. The API closes that checkpoint after observing this settlement;
-		// attempting the ordinary leased completion path here would use stale authority.
-		return response;
+		const reference = assignmentReferenceSchema.parse(record(response).reference);
+		const outputs = record(result.outputs);
+		const canonical = assignmentResultSchema.parse(outputs.assignmentResult);
+		result = { ...result, status: 'completed', responseMarkdown: undefined,
+			outputs: { ...outputs, assignmentResult: assignmentResultSchema.parse({ ...canonical, references: [...canonical.references, reference] }) } };
 	}
 	if (result.status !== 'completed') await reportUsage(input, assignmentId, result);
   if (result.status === 'returned') {

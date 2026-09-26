@@ -46,7 +46,7 @@ describe('provider AgentKernel execution', () => {
 		expect(result).toMatchObject({ status: 'failed', code: 'agent_abstained' });
 		expect(result.outputs?.assignmentResult).toBeUndefined();
 	});
-	it('preserves an explicit chat abstention without fabricating a completed result', async () => {
+	it('preserves an explicit chat abstention in the canonical result with verified clock checks', async () => {
 		const input = request();
 		const attempt = input.assignment.assignmentAttempt as Record<string, any>;
 		attempt.effectiveProfile = { ...attempt.effectiveProfile, activity: 'chat' };
@@ -55,11 +55,11 @@ describe('provider AgentKernel execution', () => {
 		attempt.contextRefs = [];
 		const executor: AgentExecutor = { id: 'codex', observe: async () => ({ available: true }), execute: vi.fn(async (execution) => {
 			await execution.beginExecution?.();
-			return { status: 'abstained' as const, summary: 'No answer can be established.', usage: [{ elapsedSeconds: 1 }] };
+			return { status: 'abstained' as const, summary: 'No answer can be established.', outputs: { timingAwareness }, usage: [{ elapsedSeconds: 1 }] };
 		}) };
 		const result = await executeKernelAssignment({ executor, request: input, runtimeBuild });
-		expect(result).toMatchObject({ status: 'abstained', code: 'agent_abstained' });
-		expect(result.outputs?.assignmentResult).toBeUndefined();
+		expect(result).toMatchObject({ status: 'abstained' });
+		expect(result.outputs?.assignmentResult).toMatchObject({ status: 'completed', summary: 'No answer can be established.', timingAwareness });
 	});
 
 	it('rejects an unavailable project handler before reading TreeDX', async () => {

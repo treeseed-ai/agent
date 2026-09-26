@@ -4,6 +4,7 @@ import type { AgentExecutionResult, AgentExecutor } from '../../../src/provider/
 
 const digest = `sha256:${'a'.repeat(64)}`;
 const runtimeBuild = `sha256:${'b'.repeat(64)}`;
+const responseReference = { kind: 'treedx', projectId: 'project', repository: 'repo_project', commit: 'a'.repeat(40), path: 'discussion-messages/response.mdx', workspaceId: 'workspace' };
 const timingAwareness = {
 	schemaVersion: 'treeseed.assignment-timing-awareness/v1' as const,
 	requiredChecks: 2 as const,
@@ -51,14 +52,14 @@ function client() {
 		returnAssignment: vi.fn().mockResolvedValue({ status: 'returned' }),
 		failAssignment: vi.fn().mockResolvedValue({ status: 'failed' }),
 		reportAssignmentUsage: vi.fn().mockResolvedValue({ ok: true }),
-		respondToAssignmentDiscussion: vi.fn().mockResolvedValue({ status: 'responded' }),
+		respondToAssignmentDiscussion: vi.fn().mockResolvedValue({ status: 'responded', reference: responseReference }),
 		settleAssignment: vi.fn().mockResolvedValue({ replayed: false }),
 	};
 }
 
 const treeDx = { projectId: 'project', handleId: 'handle-1', repositoryId: null, workspaceId: null, invoke: vi.fn() };
 
-describe('canonical provider assignment runner', () => {
+	describe('canonical provider assignment runner', () => {
 	it('stops productive accounting exactly once before teardown, including failure fallback', async () => {
 		const api = client(), finished = vi.fn(async () => undefined);
 		let now = 0;
@@ -164,8 +165,13 @@ describe('canonical provider assignment runner', () => {
 		expect(api.settleAssignment).toHaveBeenCalledWith('assignment-1', expect.objectContaining({
 			usageActual: expect.objectContaining({ inputTokens: 42, nativeUsage: { input_tokens: 42 } }),
 		}), expect.any(String));
-		expect(api.startAssignmentCloseout).not.toHaveBeenCalled();
-		expect(api.completeAssignment).not.toHaveBeenCalled();
+		expect(api.startAssignmentCloseout).toHaveBeenCalledOnce();
+		expect(api.startAssignmentCloseout).toHaveBeenCalledBefore(api.settleAssignment);
+		expect(api.completeAssignment).toHaveBeenCalledWith('assignment-1', expect.objectContaining({
+			output: expect.objectContaining({ assignmentResult: expect.objectContaining({ references: [responseReference] }) }),
+		}));
+		expect(api.settleAssignment).toHaveBeenCalledBefore(api.completeAssignment);
+		expect(api.returnAssignment).not.toHaveBeenCalled();
 	});
 	it('does not settle or complete a conversation when durable response publication fails', async () => {
 		const api = client();
@@ -180,7 +186,32 @@ describe('canonical provider assignment runner', () => {
 		expect(api.completeAssignment).not.toHaveBeenCalled();
 		expect(api.returnAssignment).not.toHaveBeenCalled();
 	});
-	it('does not use revoked leased authority after a published response settlement fails', async () => {
+	it('completes an optional abstention through the same general result and exact response reference', async () => {
+		const api = client();
+		await runProviderAssignment({ client: api, assignment: assignment('conversation'), treeDx,
+			leaseToken: 'lease', runnerId: 'runner', runtimeBuild,
+			executor: { id: 'codex', observe: async () => ({ available: true }), execute: async request => {
+				await request.beginExecution?.();
+				return { status: 'abstained', summary: 'No relevant contribution.', outputs: { timingAwareness }, usage: [{ activeSeconds: 2, elapsedSeconds: 3 }] };
+			} } });
+		expect(api.respondToAssignmentDiscussion).toHaveBeenCalledWith('assignment-1', expect.objectContaining({ outcome: 'abstained' }), expect.any(String));
+		expect(api.completeAssignment).toHaveBeenCalledWith('assignment-1', expect.objectContaining({ output: expect.objectContaining({ assignmentResult: expect.objectContaining({ status: 'completed', references: [responseReference] }) }) }));
+		expect(api.returnAssignment).not.toHaveBeenCalled();
+	});
+	it('rejects a path-only response receipt before closeout or settlement', async () => {
+		const api = client();
+		api.respondToAssignmentDiscussion.mockResolvedValueOnce({ status: 'responded' });
+		await expect(runProviderAssignment({ client: api, assignment: assignment('conversation'), treeDx,
+			leaseToken: 'lease', runnerId: 'runner', runtimeBuild,
+			executor: { id: 'codex', observe: async () => ({ available: true }), execute: async request => {
+				await request.beginExecution?.();
+				return { status: 'responded', summary: 'Answer.', responseMarkdown: 'Answer.', outputs: { timingAwareness }, usage: [{ activeSeconds: 2, elapsedSeconds: 3 }] };
+			} } })).rejects.toThrow();
+		expect(api.startAssignmentCloseout).not.toHaveBeenCalled();
+		expect(api.settleAssignment).not.toHaveBeenCalled();
+		expect(api.completeAssignment).not.toHaveBeenCalled();
+	});
+	it('does not complete or return a published response when its normal settlement fails', async () => {
 		const api = client();
 		api.settleAssignment.mockRejectedValueOnce(new Error('settlement unavailable'));
 		await expect(runProviderAssignment({ client: api, assignment: assignment('conversation'), treeDx,
@@ -190,9 +221,9 @@ describe('canonical provider assignment runner', () => {
 				return { status: 'responded', summary: 'Answered.', responseMarkdown: 'Exact reply.', outputs: { timingAwareness }, usage: [{ activeSeconds: 2, elapsedSeconds: 3 }] };
 			} } })).rejects.toThrow('settlement unavailable');
 		expect(api.respondToAssignmentDiscussion).toHaveBeenCalledOnce();
-		expect(api.settleAssignment).toHaveBeenCalledWith('assignment-1', expect.any(Object), 'discussion-settlement:assignment-1:runner');
+		expect(api.settleAssignment).toHaveBeenCalledWith('assignment-1', expect.any(Object), 'assignment-settlement:assignment-1:runner');
 		expect(api.completeAssignment).not.toHaveBeenCalled();
-		expect(api.startAssignmentCloseout).not.toHaveBeenCalled();
+		expect(api.startAssignmentCloseout).toHaveBeenCalledOnce();
 		expect(api.failAssignment).not.toHaveBeenCalled();
 	});
 

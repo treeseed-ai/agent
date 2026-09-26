@@ -20,7 +20,7 @@ verifiers:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/provider/provider-runner.test.ts
-    testName: does not use revoked leased authority after a published response settlement fails
+    testName: does not complete or return a published response when its normal settlement fails
   agent.golden.team-enrollment:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"
@@ -141,3 +141,13 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/kernel/agent-kernel.test.ts
     testName: "denies a runtime mutation at the deadline before invoking TreeDX"
+  agent.golden.chat-receipt-denied:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/provider/provider-runner.test.ts
+    testName: "rejects a path-only response receipt before closeout or settlement"
+  agent.golden.chat-abstention:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/provider/provider-runner.test.ts
+    testName: "completes an optional abstention through the same general result and exact response reference"

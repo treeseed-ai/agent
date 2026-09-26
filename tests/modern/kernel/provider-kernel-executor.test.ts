@@ -8,6 +8,27 @@ import type { Handler } from '../../../src/kernel/contracts.ts';
 import { commit, candidateCommit, digest, runtimeBuild, timingAwareness, request } from './provider-kernel-fixture.ts';
 
 describe('provider AgentKernel execution', () => {
+	it('uses concrete guest changes for Actor and Releaser publication under a recursive grant', async () => {
+		for (const handler of ['actor', 'releaser']) {
+		const input = request();
+		const attempt = input.assignment.assignmentAttempt as Record<string, any>;
+		attempt.effectiveProfile.handler = handler;
+		attempt.workspace.writablePaths = ['**'];
+		const executor: AgentExecutor = { id: 'codex', observe: async () => ({ available: true }),
+			execute: async (execution) => { await execution.beginExecution?.(); return {
+				status: 'completed', summary: 'Verified concrete changes.',
+				usage: [{ elapsedSeconds: 4, inputTokens: 20, outputTokens: 10 }],
+				outputs: { timingAwareness, changedPaths: ['tests/workday.test.ts'], sourceReference: {
+					kind: 'git', repository: 'treeseed-ai/sdk', commit: candidateCommit,
+					branch: 'treeseed/assignments/assignment-1' } },
+			}; } };
+		expect(await executeKernelAssignment({ executor, request: input, runtimeBuild })).toMatchObject({ status: 'completed' });
+		attempt.workspace.writablePaths = ['src/**'];
+		expect(await executeKernelAssignment({ executor, request: input, runtimeBuild })).toMatchObject({
+			status: 'failed', summary: 'assignment_grant_denied:source.path',
+		});
+		}
+	});
 	it('routes a canonical acting assignment through AgentKernel and preserves the verified Git reference', async () => {
 		const executor: AgentExecutor = {
 			id: 'codex', observe: async () => ({ available: true }),

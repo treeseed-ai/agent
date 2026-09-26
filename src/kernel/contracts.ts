@@ -23,6 +23,8 @@ export interface ModelInvocationResult {
 	};
 	references?: AssignmentReference[];
 	verification?: VerificationResult[];
+	/** Concrete paths observed by the guest, never workspace grant patterns. */
+	changedPaths?: string[];
 }
 
 export interface VerificationRequest {

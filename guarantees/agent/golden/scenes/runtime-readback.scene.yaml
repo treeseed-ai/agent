@@ -1,0 +1,8 @@
+schemaVersion: treeseed.scene/v1
+id: agent.golden.runtime-readback
+title: SDK golden runtime read-back
+scope: local-integrated-runtime
+workflow:
+  - id: real-workday-completion
+    action: { verifier: agent.golden.runtime-readback }
+    expect: { status: passed }

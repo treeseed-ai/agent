@@ -1,0 +1,102 @@
+import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
+import test from 'node:test';
+
+type Row = Record<string, unknown>;
+const row = (value: unknown): Row => value && typeof value === 'object' && !Array.isArray(value) ? value as Row : {};
+const rows = (value: unknown): Row[] => Array.isArray(value) ? value.map(row) : [];
+const text = (value: unknown): string => typeof value === 'string' ? value : '';
+
+function read(args: string[], team: string, library = false): Row {
+	const output = execFileSync('trsd', [...args, ...(library ? [] : ['--server', 'local', '--team', team]), '--json'], {
+		encoding: 'utf8', timeout: 30_000, maxBuffer: 32 * 1024 * 1024,
+	});
+	const start = output.search(/^\{/mu);
+	assert.ok(start >= 0, 'CLI omitted its JSON result envelope');
+	const envelope = row(JSON.parse(output.slice(start)));
+	assert.equal(envelope.ok, true, `CLI read failed: ${text(row(envelope.error).code)}`);
+	return row(envelope.result);
+}
+
+test('SDK runtime golden has reviewed useful outputs, a real revision, settlement and teardown', { timeout: 120_000 }, () => {
+	const workdayId = process.env.TREESEED_ACCEPTANCE_WORKDAY_ID ?? '';
+	assert.ok(workdayId.startsWith('workday-'), 'Explicit real workday ID is required; no fixture or skipped pass is allowed');
+	const team = process.env.TREESEED_ACCEPTANCE_TEAM ?? 'treeseed';
+	const workday = read(['workdays', 'show', workdayId], team);
+	const run = row(workday.run), parameters = row(run.parameters);
+	assert.equal(run.status, 'completed', 'An active, cancelled or failed workday is not accepted');
+	assert.equal(run.executionMode, 'simulation');
+	assert.equal(parameters.planningPercent, 20);
+	assert.equal(parameters.allocationWeight, 1);
+	assert.equal(parameters.planningTurnMaximumSeconds, 180);
+	assert.ok(text(run.startedAt) && text(run.completedAt), 'Terminal timestamps are required');
+	const assignments: Row[] = [];
+	let cursor: string | undefined;
+	for (let pageNumber = 0; pageNumber < 40; pageNumber += 1) {
+		const page = read(['assignments', 'list', '--limit', '50', ...(cursor ? ['--cursor', cursor] : [])], team);
+		const items = rows(page.items);
+		assignments.push(...items.filter(item => item.workDayId === workdayId));
+		const pageInfo = row(page.page);
+		if (!pageInfo.hasMore || items.every(item => text(item.createdAt) < text(run.startedAt))) break;
+		cursor = text(pageInfo.nextCursor);
+		assert.ok(cursor, 'Assignment pagination omitted its cursor');
+		assert.ok(pageNumber < 39, 'Complete assignment evidence was not reached');
+	}
+	assert.ok(assignments.length > 0, 'No real assignment evidence');
+	assert.equal(new Set(assignments.map(item => item.id)).size, assignments.length);
+	for (const item of assignments) {
+		assert.ok(['completed', 'failed', 'expired', 'returned', 'cancelled'].includes(text(item.status)), `Unsettled assignment ${text(item.id)}`);
+		assert.equal(item.leaseToken, null, `Live lease remains for ${text(item.id)}`);
+	}
+	const completed = assignments.filter(item => item.status === 'completed');
+	const activity = (item: Row) => text(row(row(item.assignmentAttempt).effectiveProfile).activity);
+	assert.ok(completed.filter(item => activity(item) === 'planning').length >= 16, 'Two complete eight-role planning cycles are required');
+	assert.equal(new Set(completed.filter(item => activity(item) === 'estimating').map(item => row(item.assignmentAttempt).agentClass)).size, 7);
+	const actors = completed.filter(item => activity(item) === 'acting');
+	const reviews = completed.filter(item => activity(item) === 'reviewing' && text(row(item.assignmentAttempt).workItemId));
+	assert.equal(new Set(actors.map(item => row(item.assignmentAttempt).workItemId)).size, 6, 'All six useful work items must complete');
+	const decisionIds = new Set(actors.map(item => item.decisionId));
+	assert.equal(decisionIds.size, 1, 'Actors must retain one exact decision authority');
+	const decisionId = text([...decisionIds][0]);
+	assert.ok(decisionId);
+	const graph = read(['execution', 'graph', 'show', '--decision', decisionId], team);
+	const nodes = rows(graph.nodes).filter(node => node.workdayId === workdayId && node.pairRole);
+	assert.equal(nodes.filter(node => node.pairRole === 'actor').length, 6);
+	assert.equal(nodes.filter(node => node.pairRole === 'reviewer').length, 6);
+	assert.ok(nodes.every(node => node.status === 'completed'), 'A graph with incomplete or failed pairs cannot pass');
+	const disposition = (item: Row) => text(row(row(item.lifecycleOutput).activityCompletion).reviewDisposition);
+	assert.ok(reviews.some(item => disposition(item) === 'request_changes'), 'A genuine request-changes cycle is required');
+	for (const workItemId of new Set(actors.map(item => row(item.assignmentAttempt).workItemId))) {
+		const itemReviews = reviews.filter(item => row(item.assignmentAttempt).workItemId === workItemId)
+			.sort((a, b) => text(a.completedAt).localeCompare(text(b.completedAt)));
+		assert.equal(disposition(itemReviews.at(-1) ?? {}), 'approved', `Final review did not approve ${text(workItemId)}`);
+	}
+	for (const item of completed.filter(item => ['acting', 'reviewing', 'planning', 'estimating'].includes(activity(item)))) {
+		const result = row(item.assignmentResult), timing = row(result.timingAwareness);
+		assert.equal(result.status, 'completed', `Missing canonical result for ${text(item.id)}`);
+		assert.equal(timing.completedChecks, 2);
+		assert.equal(timing.firstToolCompliant, true);
+		assert.equal(timing.finalToolCompliant, true);
+		assert.equal(row(row(item.lifecycleOutput).teardown).verified, true);
+		assert.ok(Number(row(row(result.usage).native).activeSeconds) > 0, 'Measured active usage must be positive');
+		assert.ok(rows(result.references).length > 0, 'A claimed completion without exact output references cannot pass');
+	}
+	const usage = read(['capacity', 'usage', '--project', text(actors[0]?.projectId), '--workday', workdayId], team);
+	assert.equal(row(usage.page).hasMore, false, 'Settlement evidence is truncated; do not claim a pass');
+	const aggregate = rows(usage.items).filter(item => text(item.id).endsWith(':aggregate'));
+	for (const item of completed) {
+		const settlements = aggregate.filter(measurement => measurement.assignmentId === item.id);
+		assert.equal(settlements.length, 1, `Exactly one actual settlement required for ${text(item.id)}`);
+		assert.ok(text(row(settlements[0]?.metadata).settlementKey));
+	}
+	const reports = Object.values(row(run.reportRefs)).map(row);
+	assert.equal(reports.length, 1, 'Native Reporter must store one exact report reference');
+	const report = reports[0]!;
+	assert.ok(text(report.projectId) && text(report.path) && /^[a-f0-9]{40}$/u.test(text(report.commit)));
+	const readBack = read(['library', 'read', text(report.projectId), text(report.path), '--ref', text(report.commit)], team, true);
+	const files = rows(row(readBack.result).files);
+	assert.equal(files.length, 1);
+	const body = text(files[0]?.body);
+	assert.ok(body.includes(workdayId), 'Reporter must describe this exact workday');
+	assert.ok(body.includes(text(actors[0]?.id)), 'Reporter must include actual predecessor evidence, not an empty summary');
+});

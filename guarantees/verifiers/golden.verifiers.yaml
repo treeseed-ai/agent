@@ -156,3 +156,8 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/provider/provider-runner.test.ts
     testName: "completes an optional abstention through the same general result and exact response reference"
+  agent.golden.chat-summary-boundary:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/provider/provider-runner.test.ts
+    testName: "preserves a long discussion reply without overflowing the canonical summary"

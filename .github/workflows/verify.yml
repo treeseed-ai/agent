@@ -26,7 +26,7 @@ jobs:
       - name: Install dependencies
         timeout-minutes: 20
         run: npm ci --ignore-scripts --no-audit --no-fund
-      - uses: treeseed-ai/sdk/.github/actions/install-exact-sdk@f7951717fcb6bf27ce6c9f1547b675cf8d52ef1e
+      - uses: treeseed-ai/sdk/.github/actions/install-exact-sdk@daebc1b180a6a7d1d24d39b3db55f4064f12a8c7
         with:
           github-token: ${{ github.token }}
       - run: bash -lc 'npm run verify:local'

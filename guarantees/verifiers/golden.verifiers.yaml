@@ -4,7 +4,7 @@ verifiers:
   agent.golden.planning-completion:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"
-    testFile: tests/modern/execution/codex-chat-executor.test.ts
+    testFile: tests/modern/execution/codex-context.test.ts
     testName: gives all eight planning roles one kernel-owned Note completion contract
   agent.golden.discussion-publication:
     kind: vitestCase

@@ -2,11 +2,24 @@ import { describe, expect, it, vi } from 'vitest';
 import { createHash } from 'node:crypto';
 import { assertObjectiveContentModel, discussionMessageSourcePaths, readDiscussionSourceMessage, readFocusedTreeDxContext, readIdentityContext } from '../../../src/provider/execution/codex-chat-executor.ts';
 import { executeAssignmentTreeDxTool } from '../../../src/provider/execution/microvm-executor.ts';
+import { promptFromContext } from '../../../src/sandbox/guest-contract.ts';
 
 const coreObjective = { schemaVersion: 'treeseed.objective/v1', id: 'sdk-core', projectId: 'project-1',
 	title: 'Core objective', outcome: 'Maintain the SDK contract.', status: 'active' };
 
 describe('Codex governed context', () => {
+	it('gives all eight planning roles one kernel-owned Note completion contract', () => {
+		for (const agentClass of ['architect', 'researcher', 'tester', 'engineer', 'technical-writer', 'releaser', 'reviewer', 'reporter']) {
+			const prompt = promptFromContext({ canonicalAssignmentContext: { assignment: {
+				id: `planning-${agentClass}`, agentClass, workspace: { mode: 'treedx' },
+				effectiveProfile: { activity: 'planning', handler: 'writer', prompt: {} },
+			}, context: [], predecessorResults: [] } });
+			expect(prompt).toContain('completion.summary and contentOutput: null');
+			expect(prompt).toContain('AgentKernel commits that summary as the granted TreeDX Note');
+			expect(prompt).toContain('Do not create or commit a planning file in the project checkout');
+			expect(prompt).toContain('must not implement, deploy, or release');
+		}
+	});
 	it('accepts root and nested TreeDX discussion-message references', () => {
 		expect(discussionMessageSourcePaths({ sourceMessageRefs: [
 			'discussion-messages/topic/message.mdx',

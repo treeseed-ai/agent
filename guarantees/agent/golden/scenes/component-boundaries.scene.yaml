@@ -3,6 +3,9 @@ id: agent.golden.component-boundaries
 title: Golden execution component boundaries
 scope: local-component-tests
 workflow:
+  - id: planning-completion
+    action: { verifier: agent.golden.planning-completion }
+    expect: { status: passed }
   - id: team-enrollment
     action: { verifier: agent.golden.team-enrollment }
     expect: { status: passed }

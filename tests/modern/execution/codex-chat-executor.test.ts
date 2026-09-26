@@ -106,6 +106,18 @@ describe('Codex chat executor', () => {
 		expect(prompt).toContain('If it says not to claim test verification, verification must be []');
 		expect(prompt).toContain('relatedRefs, include a Git reference only when it has both the exact authorized repository ID and its 40-character source commit');
 	});
+	it('gives all eight planning roles one kernel-owned Note completion contract', () => {
+		for (const agentClass of ['architect', 'researcher', 'tester', 'engineer', 'technical-writer', 'releaser', 'reviewer', 'reporter']) {
+			const prompt = promptFromContext({ canonicalAssignmentContext: { assignment: {
+				id: `planning-${agentClass}`, agentClass, workspace: { mode: 'treedx' },
+				effectiveProfile: { activity: 'planning', handler: 'writer', prompt: {} },
+			}, context: [], predecessorResults: [] } });
+			expect(prompt).toContain('completion.summary and contentOutput: null');
+			expect(prompt).toContain('AgentKernel commits that summary as the granted TreeDX Note');
+			expect(prompt).toContain('Do not create or commit a planning file in the project checkout');
+			expect(prompt).toContain('must not implement, deploy, or release');
+		}
+	});
 	it('requires structured completion only for a mutable legacy source workspace', () => {
 		expect(requiresActivityCompletion('work')).toBe(true);
 		expect(requiresActivityCompletion('read')).toBe(false);

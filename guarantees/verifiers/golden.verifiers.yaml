@@ -1,6 +1,11 @@
 schemaVersion: treeseed.guarantee-verifiers/v1
 ownerPackage: "@treeseed/agent"
 verifiers:
+  agent.golden.recursive-workspace-grant:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/granted-runtime.test.ts
+    testName: "uses the SDK recursive workspace grant before source publication"
   agent.golden.planning-completion:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

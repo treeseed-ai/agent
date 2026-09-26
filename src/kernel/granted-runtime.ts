@@ -1,4 +1,4 @@
-import type { ExactEntityReference } from '@treeseed/sdk/agent-capacity';
+import { assignmentPathAllowed, type ExactEntityReference } from '@treeseed/sdk/agent-capacity';
 import type {
 	AgentRuntime,
 	ModelInvocationRequest,
@@ -9,16 +9,6 @@ import type {
 
 function referenceKey(reference: ExactEntityReference): string {
 	return JSON.stringify(reference, Object.keys(reference).sort());
-}
-
-export function assignmentPathAllowed(path: string, allowed: string[]): boolean {
-	const safe = (value: string) => value.length > 0 && !value.includes('\\') && !value.includes('\0')
-		&& value.split('/').every(segment => segment.length > 0 && segment !== '.' && segment !== '..');
-	if (!safe(path)) return false;
-	return allowed.some(value => {
-		const prefix = value.replace(/\/$/u, '');
-		return prefix === '.' || prefix === '**' || safe(prefix) && (path === prefix || path.startsWith(`${prefix}/`));
-	});
 }
 
 export function enforceAssignmentGrant(runtime: AgentRuntime, input: {

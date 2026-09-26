@@ -29,6 +29,8 @@ export function evaluateProviderDiskCapacity(input: {
 	minimumReserveBytes?: number;
 	assignmentHeadroomBytes?: number;
 }): ProviderDiskCapacity {
+	if ([input.totalBytes, input.availableBytes, input.minimumReserveBytes ?? 0, input.assignmentHeadroomBytes ?? DEFAULT_ASSIGNMENT_HEADROOM_BYTES]
+		.some(value => !Number.isSafeInteger(value) || value < 0)) throw new Error('provider_disk_capacity_invalid');
 	const proportionalReserve = Math.ceil(input.totalBytes * DEFAULT_RESERVE_RATIO);
 	const reserveBytes = Math.max(MINIMUM_RESERVE_BYTES, proportionalReserve, input.minimumReserveBytes ?? 0);
 	const assignmentHeadroomBytes = Math.max(0, input.assignmentHeadroomBytes ?? DEFAULT_ASSIGNMENT_HEADROOM_BYTES);

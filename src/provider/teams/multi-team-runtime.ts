@@ -13,6 +13,7 @@ import { materializeCapabilityOffers } from '../capabilities/materialize-offers.
 import { assignmentOfferId } from '../execution/assignment-selection.ts';
 import { assignmentAttemptSchema, capabilityAccountingLimitsSchema } from '@treeseed/sdk/agent-capacity';
 import { projectHandlers } from '../../kernel/project-handlers.ts';
+import { observeProviderDiskCapacity } from '../runtime/disk-capacity.ts';
 
 function record(value: unknown): Record<string, unknown> {
 	return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -71,6 +72,7 @@ function context(
 		providerId: runtime.providerId,
 		membershipId: runtime.membershipId,
 		accessToken: runtime.accessToken.accessToken,
+		accessTokenProvider: runtime.accessTokenProvider,
 		adapters: manifest.adapters,
 		lanes: manifest.lanes,
 		providerCapacity: manifest.capacity,
@@ -114,6 +116,8 @@ export async function runMultiTeamProviderManager(
 		throw new Error('provider_runtime_build_unpinned');
 	const localState = new ProviderLocalCapacityStore(config.dataDir);
 	const connections = await reconcileProviderConnections(config);
+	await localState.snapshot();
+	const disk = await observeProviderDiskCapacity({ path: config.dataDir, env: config.env });
 	const results = await Promise.all(connections.map(async (connection) => {
 		if (!connection.runtime) {
 			return { ok: connection.status !== 'error', connectionId: connection.connectionId, status: connection.status,
@@ -121,13 +125,15 @@ export async function runMultiTeamProviderManager(
 		}
 		const runtime = context(config, connection.runtime, loaded.manifest);
 		const configuredAdapters = await materializeCapabilityOffers({ config, loaded: loaded as typeof loaded & { manifest: CapacityProviderManifestV5 }, providerId: connection.runtime.providerId });
+		const capacitySnapshot = await localState.snapshot();
 		const adapters = await Promise.all(configuredAdapters.map(async (adapter) => {
 			const executor = await resolveAgentExecutor(config, adapter, loaded.manifest).catch(() => null);
-			const observation = executor
+			const executorObservation = executor
 				? await executor.observe()
 					.catch((error) => ({ available: false, reason: error instanceof Error ? error.message : String(error) }))
 					.finally(() => executor.shutdown?.())
 				: { available: false, reason: 'executor_not_configured' };
+			const observation = { ...executorObservation, available: executorObservation.available && disk.ok, diskCapacity: disk };
 			const capabilities = [...new Set(adapter.offers.flatMap(({ offer }) => offer.capabilities.map(({ id }) => id)))];
 			const limits = capabilityAccountingLimitsSchema.safeParse(adapter.nativeLimits);
 			const accounting = limits.success ? await localState.activeTimeObservation(limits.data.modelConfigurationId, capabilities) : null;
@@ -135,10 +141,13 @@ export async function runMultiTeamProviderManager(
 				observedAt: accounting!.observedAt, healthy: observation.available });
 			return {
 				id: adapter.id,
+				adapter: adapter.adapter,
+				isolation: adapter.isolation,
 				runtimeBuild: config.env.TREESEED_PROVIDER_RUNTIME_BUILD,
 				offers: adapter.offers.map(({ offer }) => offer),
 				laneIds: adapter.laneIds,
 				maxConcurrentWorkers: adapter.maxConcurrentWorkers,
+				activeWorkers: capacitySnapshot.claims.filter((claim) => claim.executionProviderId === adapter.id).length,
 				capabilities,
 				nativeLimits: adapter.nativeLimits,
 				...(accounting ? { accountingObservation: { modelUsage: scopedObservation(accounting.modelUsage),
@@ -172,6 +181,11 @@ export async function runMultiTeamProviderRunners(
 	await recoverProviderLocalLeases({ config, connections, store: localState, includeRunning: false });
 	const results: Record<string, unknown>[] = [];
 	for (const connection of orderConnectionsForFairPolling(connections, await localState.snapshot())) {
+		const disk = await observeProviderDiskCapacity({ path: config.dataDir, env: config.env });
+		if (!disk.ok) {
+			results.push({ connectionId: connection.connection.id, status: 'idle', reason: 'provider_disk_capacity_insufficient', diagnostics: disk });
+			continue;
+		}
 		const runtime = context(config, connection, loaded.manifest);
 		const claim = await localState.claim({
 			connectionId: connection.connection.id,

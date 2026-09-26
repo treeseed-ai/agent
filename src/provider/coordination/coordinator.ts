@@ -41,6 +41,7 @@ export interface ProviderConnectionRuntime {
 	membershipId: string;
 	credentialId: string;
 	accessToken: ProviderAccessTokenIssue;
+	accessTokenProvider: (minimumValidityMs?: number) => Promise<string>;
 }
 
 export interface ProviderConnectionResult {
@@ -124,7 +125,9 @@ export class CapacityProviderCoordinator {
 		const credential = await resolveProviderSecret(input.credentialRef, { env: this.options.env, baseDirectory: this.loaded.directory, dataDirectory: this.dataDir });
 		const cached = await this.localState.token(input.connection.id);
 		const minimumValidityMs = Math.max(5 * 60_000, Number(input.minimumValidityMs) || 0);
-		if (cached && Date.parse(cached.expiresAt) - Date.now() > minimumValidityMs) return cached;
+		if (cached && cached.status === 'active' && !cached.revokedAt && cached.teamId === input.connection.teamId
+			&& cached.providerId === input.connection.providerId && cached.membershipId === input.connection.membershipId
+			&& cached.credentialId === input.credentialId && Date.parse(cached.expiresAt) - Date.now() > minimumValidityMs) return cached;
 		const idempotencyKey = `access:${input.connection.id}:${randomUUID()}`;
 		const requestedValiditySeconds = Math.ceil((minimumValidityMs + 60_000) / 1000);
 		const body = { credentialId: input.credentialId, idempotencyKey, requestedValiditySeconds };
@@ -170,7 +173,8 @@ export class CapacityProviderCoordinator {
 			connection = await this.recoverConnectionCredential(connection, controlPlaneUrl, controlPlaneAudience);
 			accessToken = await connect();
 		}
-		return { connectionId: connection.id, status: 'connected', teamId: connection.teamId, providerId: connection.providerId, membershipId: connection.membershipId, runtime: { connection, controlPlaneUrl, controlPlaneAudience, teamId: connection.teamId, providerId: connection.providerId, membershipId: connection.membershipId, credentialId: connection.membershipCredentialId, accessToken } };
+		return { connectionId: connection.id, status: 'connected', teamId: connection.teamId, providerId: connection.providerId, membershipId: connection.membershipId, runtime: { connection, controlPlaneUrl, controlPlaneAudience, teamId: connection.teamId, providerId: connection.providerId, membershipId: connection.membershipId, credentialId: connection.membershipCredentialId, accessToken,
+			accessTokenProvider: async (minimumValidityMs?: number) => (await this.accessTokenForConnection(connection, minimumValidityMs)).accessToken } };
 	}
 
 	private async recoverConnectionCredential(connection: ProviderConnectionConfig, controlPlaneUrl: string, controlPlaneAudience: string) {

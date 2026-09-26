@@ -9,6 +9,16 @@ import { CapacityProviderCoordinator } from '../../../src/provider/coordination/
 const connection: any = { id: 'connection', controlPlaneUrl: 'https://api.example.test', controlPlaneAudience: 'https://api.example.test', teamId: 'team', providerId: 'provider', membershipId: 'membership', membershipCredentialId: 'old', membershipCredentialRef: 'data://membership' };
 
 describe('provider recovery orchestration', () => {
+	it('resolves a fresh provider token after reconciliation for long-running assignments', async () => {
+		const coordinator: any = new CapacityProviderCoordinator({ manifest: { connections: [connection] } } as any, '/tmp/unused-provider-recovery');
+		coordinator.connectApproved = vi.fn()
+			.mockResolvedValueOnce({ accessToken: 'initial-token' })
+			.mockResolvedValueOnce({ accessToken: 'renewed-token' });
+		const result = await coordinator.reconcileConnection(connection);
+		expect(result.runtime.accessToken.accessToken).toBe('initial-token');
+		expect(await result.runtime.accessTokenProvider()).toBe('renewed-token');
+		expect(coordinator.connectApproved).toHaveBeenCalledTimes(2);
+	});
 	it('coalesces concurrent rejected connections into one authorized exchange', async () => {
 		let finish!: (value: any) => void;
 		recover.mockReset().mockImplementation(() => new Promise(resolve => { finish = resolve; }));

@@ -1,0 +1,86 @@
+schemaVersion: treeseed.scene/v1
+id: agent.golden.component-boundaries
+title: Golden execution component boundaries
+scope: local-component-tests
+workflow:
+  - id: team-enrollment
+    action: { verifier: agent.golden.team-enrollment }
+    expect: { status: passed }
+  - id: token-binding
+    action: { verifier: agent.golden.token-binding }
+    expect: { status: passed }
+  - id: disk-admission
+    action: { verifier: agent.golden.disk-admission }
+    expect: { status: passed }
+  - id: disk-supply
+    action: { verifier: agent.golden.disk-supply }
+    expect: { status: passed }
+  - id: kernel-authority
+    action: { verifier: agent.golden.kernel-authority }
+    expect: { status: passed }
+  - id: context-grant
+    action: { verifier: agent.golden.context-grant }
+    expect: { status: passed }
+  - id: estimate-publication
+    action: { verifier: agent.golden.estimate-publication }
+    expect: { status: passed }
+  - id: actor
+    action: { verifier: agent.golden.actor }
+    expect: { status: passed }
+  - id: reviewer
+    action: { verifier: agent.golden.reviewer }
+    expect: { status: passed }
+  - id: clock
+    action: { verifier: agent.golden.clock }
+    expect: { status: passed }
+  - id: revision
+    action: { verifier: agent.golden.revision }
+    expect: { status: passed }
+  - id: reporter
+    action: { verifier: agent.golden.reporter }
+    expect: { status: passed }
+  - id: caps
+    action: { verifier: agent.golden.caps }
+    expect: { status: passed }
+  - id: rollover
+    action: { verifier: agent.golden.rollover }
+    expect: { status: passed }
+  - id: settlement
+    action: { verifier: agent.golden.settlement }
+    expect: { status: passed }
+  - id: lease-denial
+    action: { verifier: agent.golden.lease-denial }
+    expect: { status: passed }
+  - id: credential-isolation
+    action: { verifier: agent.golden.credential-isolation }
+    expect: { status: passed }
+  - id: measurement
+    action: { verifier: agent.golden.measurement }
+    expect: { status: passed }
+  - id: workspace-paths
+    action: { verifier: agent.golden.workspace-paths }
+    expect: { status: passed }
+  - id: workspace-denials
+    action: { verifier: agent.golden.workspace-denials }
+    expect: { status: passed }
+  - id: runtime-close
+    action: { verifier: agent.golden.runtime-close }
+    expect: { status: passed }
+  - id: runtime-crash
+    action: { verifier: agent.golden.runtime-crash }
+    expect: { status: passed }
+  - id: productive-overrun
+    action: { verifier: agent.golden.productive-overrun }
+    expect: { status: passed }
+  - id: deadline-mutation
+    action: { verifier: agent.golden.deadline-mutation }
+    expect: { status: passed }
+  - id: discussion-publication
+    action: { verifier: agent.golden.discussion-publication }
+    expect: { status: passed }
+  - id: discussion-publication-failure
+    action: { verifier: agent.golden.discussion-publication-failure }
+    expect: { status: passed }
+  - id: discussion-settlement-failure
+    action: { verifier: agent.golden.discussion-settlement-failure }
+    expect: { status: passed }

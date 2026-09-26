@@ -1,215 +1,143 @@
 schemaVersion: treeseed.guarantee-verifiers/v1
 ownerPackage: "@treeseed/agent"
 verifiers:
-  agent.workday.continue-until-bound:
-    kind: vitestCase
-    ownerPackage: "@treeseed/agent"
-    testFile: tests/contract/provider/workday-contracts.test.ts
-    testName: continues useful work until duration or budget bound
-  agent.workday.exercise-every-eligible-planning-agent:
-    kind: vitestCase
-    ownerPackage: "@treeseed/agent"
-    testFile: tests/contract/provider/workday-contracts.test.ts
-    testName: exercises every eligible planning agent before repeats
   agent.workday.produce-summary:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"
-    testFile: tests/contract/provider/workday-contracts.test.ts
-    testName: builds a linked durable workday summary note
+    testFile: tests/modern/kernel/provider-kernel-executor.test.ts
+    testName: runs the deterministic Reporter through the scoped TreeDX runtime without invoking a model
   agent.provider.coordinate-multi-team-memberships:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"
-    testFile: tests/integration/provider/multi-team-coordinator.test.ts
+    testFile: tests/modern/provider/coordinator-token-isolation.test.ts
     testName: registers, waits for approval, and establishes independent team tokens
   agent.assignment.poll-next:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"
-    testFile: tests/integration/provider/assignment-runtime.fails-closed-when-a-leased-assignment-lacks-cano-2.test.ts
-    testName: renews, settles exactly once, then completes with the forensic artifact manifest
+    testFile: tests/modern/provider/runner-admission.test.ts
+    testName: polls only with a pinned runtime and releases an empty local claim
   agent.assignment.renew-lease:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"
-    testFile: tests/integration/provider/assignment-runtime.fails-closed-when-a-leased-assignment-lacks-cano-2.test.ts
-    testName: renews, settles exactly once, then completes with the forensic artifact manifest
+    testFile: tests/modern/provider/provider-runner.test.ts
+    testName: aborts isolated execution and returns the assignment when lease renewal fails
   agent.assignment.return:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"
-    testFile: tests/integration/provider/assignment-runtime.fails-closed-when-a-leased-assignment-lacks-cano-2.test.ts
-    testName: routes a returned kernel result through the canonical return lifecycle
+    testFile: tests/modern/provider/provider-runner.test.ts
+    testName: aborts isolated execution and returns the assignment when lease renewal fails
   agent.assignment.complete:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"
-    testFile: tests/integration/provider/assignment-runtime.fails-closed-when-a-leased-assignment-lacks-cano-2.test.ts
-    testName: renews, settles exactly once, then completes with the forensic artifact manifest
+    testFile: tests/modern/provider/provider-runner.test.ts
+    testName: runs workday execution through AgentKernel and settles the one general result
   agent.assignment.fail:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"
-    testFile: tests/integration/provider/assignment-runtime.fails-closed-when-a-leased-assignment-lacks-cano-2.test.ts
-    testName: routes a failed kernel result through the canonical fail lifecycle
-  agent.assignment.fallback-evidence-stable:
-    kind: vitestCase
-    ownerPackage: "@treeseed/agent"
-    testFile: tests/unit/agents/fallback-controller.test.ts
-    testName: derives a replay-stable fallback evidence id from assignment attempt identity
+    testFile: tests/modern/provider/provider-runner.test.ts
+    testName: reports a productive timeout as terminal with measured active time
   agent.usage.record-execution:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"
-    testFile: tests/integration/provider/assignment-runtime.fails-closed-when-a-leased-assignment-lacks-cano-2.test.ts
-    testName: renews, settles exactly once, then completes with the forensic artifact manifest
+    testFile: tests/modern/provider/provider-runner.test.ts
+    testName: preserves provider-native failure usage in terminal settlement
   agent.kernel.run-planning:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"
-    testFile: tests/contract/agents/agent-contracts.test.ts
-  agent.kernel.block-acting-without-approved-decision:
-    kind: vitestCase
-    ownerPackage: "@treeseed/agent"
-    testFile: tests/contract/agents/agent-contracts.test.ts
+    testFile: tests/modern/kernel/agent-kernel.test.ts
+    testName: commits a planning synthesis from the completion summary as one governed Note
   agent.kernel.run-acting-with-approved-decision:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"
-    testFile: tests/contract/agents/agent-contracts.test.ts
+    testFile: tests/modern/kernel/provider-kernel-executor.test.ts
+    testName: routes a canonical acting assignment through AgentKernel and preserves the verified Git reference
   agent.kernel.release-active-leases:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"
-    testFile: tests/contract/agents/agent-contracts.test.ts
+    testFile: tests/modern/lease-recovery.test.ts
+    testName: releases a recovery claim that never acquired lease authority
   agent.content.treedx-read-context:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"
-    testFile: tests/integration/provider/agent-tool-provider-runtime.test.ts
+    testFile: tests/modern/kernel/provider-kernel-review.test.ts
+    testName: serves only an exact granted and materialized context reference to a project handler
   agent.content.treedx-write-artifact:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"
-    testFile: tests/integration/provider/agent-tool-provider-runtime.test.ts
+    testFile: tests/modern/kernel/provider-kernel-review.test.ts
+    testName: commits a structured Reviewer disposition through the kernel-owned TreeDX path
   agent.content.link-generated-note:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"
-    testFile: tests/unit/agents/content-artifacts.test.ts
+    testFile: tests/modern/kernel/agent-kernel.test.ts
+    testName: commits a planning synthesis from the completion summary as one governed Note
   agent.execution-provider.codex.contract:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"
-    testFile: tests/integration/agents/codex-provider.makes-verify-and-checkpoint-receipts-explicit-co-1.test.ts
-  agent.execution-provider.github-issues.contract:
-    kind: vitestCase
-    ownerPackage: "@treeseed/agent"
-    testFile: tests/integration/agents/github-issues-provider.test.ts
-  agent.execution-provider.discord.contract:
-    kind: vitestCase
-    ownerPackage: "@treeseed/agent"
-    testFile: tests/integration/agents/discord-provider.test.ts
-  agent.execution-provider.jira.contract:
-    kind: vitestCase
-    ownerPackage: "@treeseed/agent"
-    testFile: tests/integration/agents/jira-provider.test.ts
-  agent.execution-provider.workflow.contract:
-    kind: vitestCase
-    ownerPackage: "@treeseed/agent"
-    testFile: tests/integration/agents/workflow-provider.test.ts
+    testFile: tests/modern/execution/codex-chat-executor.test.ts
+    testName: requires clock checks to bracket every other provider tool action
   agent.runtime.enforce-provider-local-budget:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"
-    testFile: tests/unit/provider/budgets.test.ts
+    testFile: tests/modern/provider/active-time-accounting.test.ts
+    testName: enforces capability and shared model caps atomically across teams and persists actual consumption
   agent.runtime.protect-provider-host-disk:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"
-    testFile: tests/integration/provider/teams/multi-team-service.test.ts
-    testName: weights team polls, survives dispatch restart, and blocks revoked-team work
+    testFile: tests/modern/provider/runner-admission.test.ts
+    testName: does not lease work below the host disk reserve and resumes only after recovery
   agent.runtime.report-readiness:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"
-    testFile: tests/integration/provider/assignment-runtime.releases-internal-execution-provider-resources-o-1.test.ts
-    testName: renders a provider plan without fetching team-wide portfolio state
+    testFile: tests/modern/provider-runtime-status.test.ts
+    testName: never marks a failed aggregate operation as a healthy loop
   agent.runtime.assignment-time-status:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"
-    testFile: tests/unit/agents/timing/assignment-status-tool.test.ts
-    testName: returns authoritative wall-clock assignment timing while work continues
-  agent.runtime.assignment-closeout-contract:
-    kind: vitestCase
-    ownerPackage: "@treeseed/agent"
-    testFile: tests/integration/agents/capacity/providers/codex-provider.makes-verify-and-checkpoint-receipts-explicit-completion-gates.test.ts
-    testName: makes live time checks and resumable closeout mandatory for every Codex assignment
-  agent.runtime.assignment-operational-content:
-    kind: vitestCase
-    ownerPackage: "@treeseed/agent"
-    testFile: tests/unit/agents/timing/assignment-operational-safety.test.ts
-    testName: requires the initial TreeDX plan before any other mutation
-  agent.runtime.assignment-execution-transition:
-    kind: vitestCase
-    ownerPackage: "@treeseed/agent"
-    testFile: tests/unit/agents/timing/assignment-operational-safety.test.ts
-    testName: starts the full productive window only after initial plan read-back
-  agent.runtime.assignment-process-overhead:
-    kind: vitestCase
-    ownerPackage: "@treeseed/agent"
-    testFile: tests/unit/agents/timing/assignment-process-timeout.test.ts
-    testName: adds bounded preparation and closeout around the full productive allocation
-  agent.runtime.assignment-closeout-transition:
-    kind: vitestCase
-    ownerPackage: "@treeseed/agent"
-    testFile: tests/unit/agents/timing/assignment-operational-safety.test.ts
-    testName: starts protected closeout before writing the terminal summary
-  agent.runtime.assignment-expired-mutation-denial:
-    kind: vitestCase
-    ownerPackage: "@treeseed/agent"
-    testFile: tests/unit/agents/timing/assignment-operational-safety.test.ts
-    testName: rejects every mutation after protected closeout expires
+    testFile: tests/modern/execution/codex-chat-executor.test.ts
+    testName: reports remaining time from the API-started productive window without a content grant
   agent.trace.inspect-execution:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"
-    testFile: tests/unit/agents/artifact-manifest.test.ts
-    testName: normalizes durable content, code, citations, verification, usage, and tool evidence
-  agent.trace.deliver-mode-run-telemetry:
+    testFile: tests/modern/kernel/provider-kernel-executor.test.ts
+    testName: routes a canonical acting assignment through AgentKernel and preserves the verified Git reference
+  agent.trace.assignment-events:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"
-    testFile: tests/integration/provider/mode-run-telemetry.test.ts
-    testName: retries one stable event identity without creating a second logical mode run
+    testFile: tests/modern/provider/provider-runner.test.ts
+    testName: runs workday execution through AgentKernel and settles the one general result
   agent.trace.redact-provider-secrets:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"
-    testFile: tests/unit/agents/artifact-manifest.test.ts
-    testName: normalizes durable content, code, citations, verification, usage, and tool evidence
-  agent.trace.correlate-assignment-mode-run-artifacts:
-    kind: vitestCase
-    ownerPackage: "@treeseed/agent"
-    testFile: tests/unit/agents/artifact-manifest.test.ts
-    testName: normalizes durable content, code, citations, verification, usage, and tool evidence
+    testFile: tests/modern/execution/codex-chat-executor.test.ts
+    testName: preserves tool and model progress categories without secret-bearing payloads
   agent.architecture.normalize-activity-profile-agent:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"
-    testFile: tests/unit/agents/registry.test.ts
-    testName: normalizes activity profile specs into runtime specs
+    testFile: tests/modern/kernel/handler-registry.test.ts
+    testName: preserves the exact effective activity profile without synthesizing another agent
   agent.architecture.reject-legacy-agent-config:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"
-    testFile: tests/unit/agents/registry.test.ts
-    testName: rejects legacy top-level agent configuration
+    testFile: tests/modern/kernel/handler-registry.test.ts
+    testName: rejects legacy top-level configuration and duplicate profile permission fields
   agent.architecture.register-clean-handlers-only:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"
-    testFile: tests/unit/agents/registry.test.ts
-    testName: does not resolve removed generic handler names
+    testFile: tests/modern/kernel/handler-registry.test.ts
+    testName: resolves only registered handlers and rejects retired generic aliases
   agent.architecture.enforce-activity-profile-tool-scope:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"
-    testFile: tests/unit/agents/registry.test.ts
-    testName: normalizes activity profile specs into runtime specs
-  agent.architecture.capture-question-tool-events:
-    kind: vitestCase
-    ownerPackage: "@treeseed/agent"
-    testFile: tests/integration/agents/agent-tool-runtime.rejects-tools-not-listed-in-the-assignment-catal-1.test.ts
+    testFile: tests/modern/execution/codex-context.test.ts
+    testName: binds live TreeDX tools to profile policy, repository, and exact ref
   agent.architecture.enforce-assignment-feature-branch-policy:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"
-    testFile: tests/unit/agents/registry.test.ts
-    testName: normalizes activity profile specs into runtime specs
+    testFile: tests/modern/kernel/agent-kernel.test.ts
+    testName: rejects a result claiming a different assignment branch
   agent.architecture.produce-structured-estimate:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"
-    testFile: tests/unit/agents/registry.test.ts
-    testName: emits structured estimates from estimate activity output
-  agent.catalog.profile-live-proof:
-    kind: nodeScript
-    ownerPackage: "@treeseed/agent"
-    command: scripts/guarantees/verify-agent-capability.ts
-    timeoutSeconds: 7200
-    resultSchema: treeseed.guarantee-verifier-result/v1
+    testFile: tests/modern/kernel/provider-kernel-review.test.ts
+    testName: commits EstimateHandler output as the one proposal-owned execution plan

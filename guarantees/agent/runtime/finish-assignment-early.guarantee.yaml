@@ -6,7 +6,7 @@ subtype: runtime
 journey: Finish an assignment early
 ownerPackage: "@treeseed/agent"
 surface: agent-runtime
-summary: Finish when acceptance criteria are met or the closeout threshold is reached, leaving durable evidence and a resumable checkpoint.
+summary: Finish when acceptance criteria are met, settle actual usage, and deny further runtime mutations through the one completion path.
 status: planned
 dependencies: { journeys: [], guarantees: [] }
 actors: { allowed: [capacity_operator, project_manager], forbidden: [unauthorized_user] }
@@ -15,13 +15,12 @@ gates: [future]
 preconditions: { fixtures: [integrated_treeseed_project], notes: [] }
 api: { required: true, verifierRefs: [] }
 content: { required: false, verifierRefs: [] }
-audit: { required: true, verifierRefs: [agent.runtime.assignment-time-status, agent.runtime.assignment-closeout-contract, agent.runtime.assignment-operational-content, agent.runtime.assignment-execution-transition, agent.runtime.assignment-process-overhead, agent.runtime.assignment-closeout-transition, agent.runtime.assignment-expired-mutation-denial] }
+audit: { required: true, verifierRefs: [agent.golden.clock, agent.golden.runtime-close, agent.golden.runtime-crash, agent.golden.deadline-mutation, agent.golden.productive-overrun, agent.golden.settlement] }
 negativeCases: [{ id: false-early-completion-rejected, actor: capacity_operator, verifierRefs: [] }]
 evidence: { required: [guarantee_report, verifier_evidence] }
 notes:
   - Early termination alone is not rewarded; downstream validation drives calibration.
   - Every assignment receives start and deadline timestamps plus an authoritative live status tool.
-  - Preparation and protected closeout are separately bounded custody phases and never reduce or inflate the provider-compatible productive execution allocation.
-  - Exact initial-plan read-back starts productive execution; terminal summary begins closeout and releases unused productive seconds.
-  - Closeout stops scope expansion, preserves valid work, records exact resume instructions, and may propose—not self-authorize—additional capacity.
-  - Every mutation requires an initial TreeDX-backed plan; status updates use exact assignment state and append-only lineage; terminal and suspended outcomes require a summary.
+  - Model and tool work must fit within the single allocated active duration and absolute deadline; infrastructure teardown is measured separately.
+  - The runtime rejects new mutations after completion, handler failure, cancellation, or deadline expiry.
+  - Native settlement records actual usage once and releases unused capacity; a stopped assignment is not evidence that its work passed review.

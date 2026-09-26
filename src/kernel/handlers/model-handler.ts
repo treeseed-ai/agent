@@ -2,10 +2,17 @@ import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import type { AssignmentContext, AssignmentReference, AssignmentResult } from '@treeseed/sdk/agent-capacity';
 import type { AgentRuntime, Handler } from '../contracts.ts';
+import { prepareTreeDxContent } from '../treedx-content-commit.ts';
 import { estimateMutableField, estimateProposalSource } from '../../activity-completion.ts';
 
 function resultId(assignmentId: string, summary: string): string {
 	return `result-${createHash('sha256').update(`${assignmentId}\n${summary}`).digest('hex').slice(0, 24)}`;
+}
+
+async function commitOne(runtime: AgentRuntime, target: Parameters<AgentRuntime['commitTreeDx']>[0]['writes'][number]['target'], value: unknown) {
+	const [reference] = await runtime.commitTreeDx({ writes: [{ target, value }] });
+	if (!reference) throw new Error('treedx_commit_reference_missing');
+	return reference;
 }
 
 function prompt(context: AssignmentContext): string {
@@ -81,10 +88,12 @@ export class WriterHandler extends ModelHandler {
 				&& (!output || candidate.id === output.frontmatter.id));
 			if (!target) throw new Error('writer_content_commit_grant_required');
 			if (output) {
-				references.push(await runtime.commitTreeDx({ target, value: { body: output.body, frontmatter: output.frontmatter } }));
+				references.push(await commitOne(runtime, target, { body: output.body, frontmatter: output.frontmatter }));
 			} else if (reviewing) {
 				const disposition = model.activityCompletion?.reviewDisposition;
 				if (!disposition) throw new Error('review_disposition_required');
+				const findingTarget = context.assignment.grant.contentWrite.find((candidate) => candidate.model === 'note');
+				if (!findingTarget) throw new Error('review_finding_commit_grant_required');
 				const proposalReview = context.assignment.sourceRef.model === 'proposal' && context.predecessorResults.length === 0;
 				const candidate = context.predecessorResults.flatMap((result) => result.references)
 					.find((reference) => reference.kind === 'git' || reference.kind === 'treedx');
@@ -95,22 +104,38 @@ export class WriterHandler extends ModelHandler {
 							&& ref.repository === candidate.repository && ref.commit === candidate.commit && ref.path === candidate.path)?.ref
 							: context.assignment.sourceRef;
 				if (!subjectRef) throw new Error('review_candidate_reference_missing');
-				references.push(await runtime.commitTreeDx({ target, value: { body: model.text, frontmatter: {
+				const findingValue = { body: model.text, frontmatter: {
+					schemaVersion: 'treeseed.note/v1', id: findingTarget.id, projectId: context.assignment.projectId,
+					classification: 'feedback', subjectRefs: [subjectRef], createdAt: runtime.now(),
+				} };
+				const { commit: _baseCommit, ...findingIdentity } = findingTarget;
+				const findingDigest = prepareTreeDxContent(findingTarget, findingValue).digest;
+				const findingRef = { ...findingIdentity, revision: findingTarget.revision ?? 1,
+					digest: findingDigest };
+				const decisionValue = { body: model.text, frontmatter: {
 					schemaVersion: 'treeseed.decision/v1', id: target.id, projectId: context.assignment.projectId,
 					decisionClass: proposalReview ? 'proposal' : 'work-review', decisionMethod: 'authority', subjectRef,
 					disposition: disposition === 'approved' ? 'approved' : proposalReview
 						? (disposition === 'rejected' ? 'rejected' : 'deferred') : 'request-changes', rationale: model.text,
+					findingRefs: [findingRef],
 					authorityRefs: context.assignment.authorityRefs, decidedByRefs: [context.assignment.effectiveProfile.profileRef],
 					decidedAt: runtime.now(),
-				} } }));
+				} };
+				references.push(...await runtime.commitTreeDx({ writes: [
+					{ target: findingTarget, value: findingValue }, { target, value: decisionValue },
+				] }));
 			} else {
-				references.push(await runtime.commitTreeDx({ target, value: { body: model.text, frontmatter: {
+				references.push(await commitOne(runtime, target, { body: model.text, frontmatter: {
 					schemaVersion: 'treeseed.note/v1', id: target.id, projectId: context.assignment.projectId,
 					classification: 'general', subjectRefs: [context.assignment.sourceRef], createdAt: runtime.now(),
-				} } }));
+				} }));
 			}
 		}
-		const result = this.result(context, runtime, model.text, references, model.timingAwareness, model.usage);
+		const committedContent = actingContent ? references.find((reference) => reference.kind === 'treedx') : null;
+		const summary = committedContent
+			? `AgentKernel committed governed TreeDX content at ${committedContent.path} in ${committedContent.commit}.`
+			: model.text;
+		const result = this.result(context, runtime, summary, references, model.timingAwareness, model.usage);
 		return { ...result, verification: model.verification ?? [] };
 	}
 }
@@ -126,22 +151,25 @@ export class EstimateHandler extends ModelHandler {
 		const output = model.activityCompletion?.contentOutput;
 		if (!output || output.model !== 'proposal') throw new Error('estimate_proposal_output_required');
 		const base = estimateProposalSource({ assignment: context.assignment, context: context.context });
-		const immutable = (proposal: Record<string, unknown>) => {
-			const plan = proposal.executionPlan as { workItems?: Record<string, unknown>[] } | undefined;
-			return { ...proposal, executionPlan: { ...plan, workItems: plan?.workItems?.map((item) => {
-				const copy = { ...item };
-				const field = estimateMutableField(item, context.assignment.agentClass);
-				if (field) delete copy[field];
-				return copy;
-			}) } };
-		};
-		if (!isDeepStrictEqual(immutable(base), immutable(output.frontmatter))) {
-			const expected = immutable(base), actual = immutable(output.frontmatter);
-			const fields = [...new Set([...Object.keys(expected), ...Object.keys(actual)])]
-				.filter((key) => !isDeepStrictEqual(expected[key as keyof typeof expected], actual[key as keyof typeof actual]));
-			throw new Error(`estimate_proposal_scope_changed:${fields.join(',')}`);
+		const plan = base.executionPlan as { workItems?: Record<string, unknown>[] } | undefined;
+		const patches = (output.frontmatter.executionPlan as { workItems?: Record<string, unknown>[] } | undefined)?.workItems;
+		if (!Array.isArray(plan?.workItems) || !Array.isArray(patches)) throw new Error('estimate_proposal_patch_invalid');
+		const workItemId = context.assignment.workItemId;
+		const expected = plan.workItems.flatMap((item) => estimateMutableField(item, context.assignment.agentClass)
+			&& (!workItemId || item.id === workItemId) ? [String(item.id)] : []);
+		const byId = new Map(workItemId && patches.length === 1 ? [[workItemId, patches[0]!]]
+			: patches.map((item) => [String(item.id), item]));
+		if (byId.size !== patches.length || expected.length !== patches.length || expected.some((id) => !byId.has(id))) {
+			throw new Error(`estimate_proposal_patch_scope_invalid:expected=${expected.join(',')}:actual=${[...byId.keys()].join(',')}`);
 		}
-		const reference = await runtime.commitTreeDx({ target, value: { body: output.body, frontmatter: output.frontmatter } });
+		const merged = { ...base, executionPlan: { ...plan, workItems: plan.workItems.map((item) => {
+			const field = estimateMutableField(item, context.assignment.agentClass);
+			if (!field) return item;
+			const patch = byId.get(String(item.id));
+			if (!patch || !Object.hasOwn(patch, field)) throw new Error('estimate_proposal_patch_field_missing');
+			return { ...item, [field]: patch[field] };
+		}) } };
+		const reference = await commitOne(runtime, target, { body: output.body, frontmatter: merged });
 		const result = this.result(context, runtime, model.text, [reference], model.timingAwareness, model.usage);
 		return { ...result, verification: model.verification ?? [] };
 	}

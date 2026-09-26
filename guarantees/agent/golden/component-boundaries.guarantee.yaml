@@ -1,0 +1,29 @@
+schemaVersion: treeseed.guarantee/v1
+id: guarantee.agent.golden.component-boundaries
+journey: Verify golden execution component boundaries
+ownerPackage: "@treeseed/agent"
+type: agent
+subtype: execution
+status: planned
+gates: [core]
+summary: "Coded component scenarios; not proof that the live SDK golden workday passes."
+scene:
+  required: true
+  manifest: guarantees/agent/golden/scenes/component-boundaries.scene.yaml
+api:
+  required: true
+  verifierRefs:
+    - agent.golden.kernel-authority
+    - agent.golden.context-grant
+    - agent.golden.estimate-publication
+    - agent.golden.actor
+    - agent.golden.reviewer
+    - agent.golden.clock
+    - agent.golden.revision
+    - agent.golden.reporter
+    - agent.golden.caps
+    - agent.golden.rollover
+    - agent.golden.settlement
+    - agent.golden.lease-denial
+    - agent.golden.credential-isolation
+    - agent.golden.measurement

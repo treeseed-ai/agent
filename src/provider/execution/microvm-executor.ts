@@ -64,10 +64,14 @@ export async function executeAssignmentTreeDxTool(request:Parameters<AgentExecut
 	if(!request.treeDx.repositoryId||!request.treeDx.baseRef) throw new Error('Assignment TreeDX current-view authority is unavailable.');
 	const selected=String(arguments_.project??arguments_.projectId??'').trim();
 	const currentGrant=request.treeDx.readRepositories?.find((candidate)=>candidate.repositoryId===request.treeDx.repositoryId);
-	const grant=selected?request.treeDx.readRepositories?.find((candidate)=>candidate.projectId===selected||candidate.projectSlug===selected):currentGrant;
+	const grant=selected?request.treeDx.readRepositories?.find((candidate)=>candidate.projectId===selected||candidate.projectSlug===selected||candidate.repositoryId===selected):currentGrant;
 	if(selected&&!grant&&selected!==request.treeDx.projectId)throw new Error(`Assignment has no TreeDX read grant for project ${selected}.`);
 	const path={projectId:grant?.projectId??request.treeDx.projectId,repoId:grant?.repositoryId??request.treeDx.repositoryId};
-	if(tool==='treedx_read_files') return request.treeDx.invoke('treedx.repositories.files.read',{path,body:{paths:Array.isArray(arguments_.paths)?arguments_.paths.slice(0,20).map(String):[],encoding:'utf8',parseFrontmatter:true,allowProtected:true}});
+	if(tool==='treedx_read_files') {
+		const ref=String(arguments_.ref??'').trim();
+		if(ref&&!/^[a-f0-9]{40}$/u.test(ref)) throw new Error('TreeDX read ref must be an exact commit.');
+		return request.treeDx.invoke('treedx.repositories.files.read',{path,body:{...(ref?{ref}:{}),paths:Array.isArray(arguments_.paths)?arguments_.paths.slice(0,20).map(String):[],encoding:'utf8',parseFrontmatter:true,allowProtected:true}});
+	}
 	if(tool==='treedx_search_files') return request.treeDx.invoke('treedx.repositories.files.search',{path,body:{paths:Array.isArray(arguments_.paths)?arguments_.paths.slice(0,20).map(String):undefined,query:String(arguments_.query??'').slice(0,2_000),limit:Math.min(100,Math.max(1,Number(arguments_.limit??30))),includeBody:arguments_.includeBody===true,includeFrontmatter:true}});
 	if(tool==='treedx_list_paths') return request.treeDx.invoke('treedx.repositories.paths.list',{path,body:{paths:Array.isArray(arguments_.paths)?arguments_.paths.slice(0,20).map(String):[],kinds:['blob'],limit:Math.min(200,Math.max(1,Number(arguments_.limit??100)))}});
 	const body=contextBuildBody(object(arguments_.request)); return request.treeDx.invoke('treedx.repositories.context.build',{path,body});
@@ -104,6 +108,11 @@ export function startSandboxToolPump(client: Pick<SandboxBrokerClient, 'nextTool
 export function assignmentNeedsSourceWorkspace(attempt: ReturnType<typeof assignmentAttemptSchema.safeParse>) {
 	if (!attempt.success) return true;
 	return attempt.data.workspace.mode === 'git' || attempt.data.grant.sourceRead.length > 0;
+}
+export function assertGitWorkPublication(authority: { mode: string; publication: string }) {
+	if (authority.mode === 'work' && authority.publication !== 'assignment-branch' && authority.publication !== 'simulation-branch') {
+		throw new Error('Git work requires assignment-branch or simulation-branch publication authority.');
+	}
 }
 export async function createMicrovmExecutor(config: ProviderHostRuntimeConfig, manifest: CapacityProviderManifestV5, adapter: V5Adapter): Promise<AgentExecutor> {
 	const client = new SandboxBrokerClient(manifest.sandbox.brokerSocket);
@@ -165,7 +174,7 @@ export async function createMicrovmExecutor(config: ProviderHostRuntimeConfig, m
 					const current = active.get(request.assignmentId)!;
 					if (assignmentNeedsSourceWorkspace(attempt)) {
 						current.source = await prepareAssignmentSource(client, prepared, request);
-						if (current.source.authorization.mode === 'work' && current.source.authorization.publication !== 'assignment-branch') throw new Error('Git work requires assignment-branch publication authority.');
+						assertGitWorkPublication(current.source.authorization);
 					}
 					for (const input of materialized.inputs) await client.upload(prepared.sandboxId, prepared.operationToken, input.id, input.sourcePath, input.bytes, request.signal);
 					if (!request.beginExecution) throw new Error('Productive execution start authority is unavailable.');
@@ -176,15 +185,20 @@ export async function createMicrovmExecutor(config: ProviderHostRuntimeConfig, m
 					if (!Number.isFinite(Date.parse(executionStartedAt)) || !Number.isFinite(Date.parse(executionDeadlineAt))) throw new Error('API execution start omitted its authoritative productive window.');
 					await request.emit?.({ type: 'execution.started', occurredAt: new Date().toISOString(), summary: `Kata execution started in ${prepared.sandboxId}.`, payload: { sandboxId: prepared.sandboxId, model: assignment.modelPolicy.model, isolation: 'microvm' } });
 					let toolFailure: Error | undefined;
+					let executionFailure: unknown;
 					const stopToolPump = startSandboxToolPump(client, prepared, request,
 						{ startedAt: executionStartedAt, deadlineAt: executionDeadlineAt }, cancelSandbox);
-					try { result = sandboxResultSchema.parse(await client.execute(prepared.sandboxId, prepared.operationToken, {}, request.signal)); } finally {
+					try { result = sandboxResultSchema.parse(await client.execute(prepared.sandboxId, prepared.operationToken, {}, request.signal)); }
+					catch (error) { executionFailure = error; }
+					finally {
 						try { await request.finishExecution?.(); }
 						finally { toolFailure = await stopToolPump(); }
 					}
-					if (toolFailure && result.status !== 'expired') result = { ...result, status: 'failed',
-						summary: `Assignment tool proxy failed: ${toolFailure.message}`,
-						diagnostics: { ...result.diagnostics, toolProxyFailure: toolFailure.message } };
+					if (toolFailure) throw Object.assign(new Error(`Assignment tool proxy failed: ${toolFailure.message}`), {
+						code: 'assignment_tool_proxy_failed', cause: executionFailure,
+					});
+					if (executionFailure) throw executionFailure;
+					if (!result) throw new Error('Sandbox broker returned no assignment result.');
 					artifacts = await Promise.all(result.artifacts.map(async (artifact) => ({ ...artifact, content: (await client.downloadArtifact(prepared.sandboxId, prepared.operationToken, artifact.id, artifact.bytes, request.signal)).toString('utf8') })));
 					if (result.status === 'completed' && current.source?.authorization.mode === 'work') sourceReference = await publishSourceBranch(client, prepared, current.source, assignment, result, request);
 				} finally {
@@ -220,7 +234,11 @@ export async function createMicrovmExecutor(config: ProviderHostRuntimeConfig, m
 						...(sourceReference ? { sourceReference } : {}) }, artifacts, usage: [usage] };
 				}
 				await request.emit?.({ type: 'execution.failed', occurredAt: new Date().toISOString(), summary: result.summary, payload: { sandboxId: result.sandboxId, status: result.status, teardown }, protectedPayload: result.diagnostics });
-				return { status: result.status === 'failed' ? 'failed' : 'returned', code: `sandbox_${result.status}`, summary: result.summary, retryable: result.status !== 'failed', outputs: { sandboxId: result.sandboxId, teardown }, usage: [usage] };
+				const resourceExhausted = result.summary.includes('sandbox_resource_exhausted:');
+				return { status: result.status === 'failed' && !resourceExhausted ? 'failed' : 'returned',
+					code: resourceExhausted ? 'sandbox_resource_exhausted' : `sandbox_${result.status}`,
+					summary: result.summary, retryable: resourceExhausted || result.status !== 'failed',
+					outputs: { sandboxId: result.sandboxId, teardown }, usage: [usage] };
 			} finally { await materialized.cleanup(); }
 		},
 	};

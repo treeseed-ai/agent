@@ -1,0 +1,138 @@
+schemaVersion: treeseed.guarantee-verifiers/v1
+ownerPackage: "@treeseed/agent"
+verifiers:
+  agent.golden.discussion-publication:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/provider/provider-runner.test.ts
+    testName: uses the same canonical path for communication and publishes one durable response
+  agent.golden.discussion-publication-failure:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/provider/provider-runner.test.ts
+    testName: does not settle or complete a conversation when durable response publication fails
+  agent.golden.discussion-settlement-failure:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/provider/provider-runner.test.ts
+    testName: does not use revoked leased authority after a published response settlement fails
+  agent.golden.team-enrollment:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/provider/coordinator-token-isolation.test.ts
+    testName: registers, waits for approval, and establishes independent team tokens
+  agent.golden.token-binding:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/provider/coordinator-token-isolation.test.ts
+    testName: never returns a cached token with another team or stale credential binding
+  agent.golden.disk-admission:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/provider/runner-admission.test.ts
+    testName: does not lease work below the host disk reserve and resumes only after recovery
+  agent.golden.disk-supply:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/provider/runner-admission.test.ts
+    testName: reports unavailable supply when disk is insufficient even if the executor is ready
+  agent.golden.kernel-authority:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/agent-kernel.test.ts
+    testName: "rejects expired authority, cancellation, and invalid handler results before publication"
+  agent.golden.context-grant:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/provider-kernel-review.test.ts
+    testName: "serves only an exact granted and materialized context reference to a project handler"
+  agent.golden.estimate-publication:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/provider-kernel-review.test.ts
+    testName: "commits EstimateHandler output as the one proposal-owned execution plan"
+  agent.golden.actor:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/provider-kernel-executor.test.ts
+    testName: "routes a canonical acting assignment through AgentKernel and preserves the verified Git reference"
+  agent.golden.reviewer:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/provider-kernel-review.test.ts
+    testName: "commits a structured Reviewer disposition through the kernel-owned TreeDX path"
+  agent.golden.clock:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/codex-chat-executor.test.ts
+    testName: "requires clock checks to bracket every other provider tool action"
+  agent.golden.revision:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/codex-chat-executor.test.ts
+    testName: "keeps Git work descended from the exact assigned candidate across review revisions"
+  agent.golden.reporter:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/provider-kernel-executor.test.ts
+    testName: "runs the deterministic Reporter through the scoped TreeDX runtime without invoking a model"
+  agent.golden.caps:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/provider/active-time-accounting.test.ts
+    testName: "enforces capability and shared model caps atomically across teams and persists actual consumption"
+  agent.golden.rollover:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/provider/active-time-accounting.test.ts
+    testName: "splits running consumption across UTC midnight without duplicate charges on restart or repeated observations"
+  agent.golden.settlement:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/provider/provider-runner.test.ts
+    testName: "stops productive accounting exactly once before teardown, including failure fallback"
+  agent.golden.lease-denial:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/provider/provider-runner.test.ts
+    testName: "aborts isolated execution and returns the assignment when lease renewal fails"
+  agent.golden.credential-isolation:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/provider/provider-runner.test.ts
+    testName: "keeps provider proxy credentials outside AgentKernel-visible assignment data"
+  agent.golden.measurement:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/provider/sandbox-accounting-usage.test.ts
+    testName: "does not invent missing or invalid measurements"
+  agent.golden.workspace-paths:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/granted-runtime.test.ts
+    testName: "supports an explicitly granted repository root but still rejects traversal"
+  agent.golden.workspace-denials:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/granted-runtime.test.ts
+    testName: "denies traversal and sibling-prefix escapes before publication"
+  agent.golden.runtime-close:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/agent-kernel.test.ts
+    testName: "revokes captured runtime operations after the one completion path closes"
+  agent.golden.runtime-crash:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/agent-kernel.test.ts
+    testName: "revokes captured runtime even when a project handler throws synchronously"
+  agent.golden.productive-overrun:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/agent-kernel.test.ts
+    testName: "denies productive-budget overrun even before a starved timeout callback can run"
+  agent.golden.deadline-mutation:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/agent-kernel.test.ts
+    testName: "denies a runtime mutation at the deadline before invoking TreeDX"

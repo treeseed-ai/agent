@@ -8,14 +8,13 @@ import { chmod, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { sandboxAssignmentSchema, sandboxResultSchema, sourceWorkspaceKeySchema, type SandboxAssignment } from '@treeseed/sdk/capacity-provider/sandbox';
 import { providerCredentialValues, providerFailureSummary, redactProviderDiagnostic } from './provider-failure.ts';
-import { activityCompletionOutputSchema, estimateProposalOutputSchema, estimateProposalSource, validateActivityCompletion, type ActivityCompletionReport } from '../activity-completion.ts';
-import { describeContentFrontmatterContract, describeContentFrontmatterJsonSchema, isPortableContentModel } from '@treeseed/sdk/content-validation';
+import { activityAllowsVerification } from './guest-contract.ts';
+import { activityCompletionOutputSchema, validateActivityCompletion, type ActivityCompletionReport } from '../activity-completion.ts';
+import { completionFrontmatterSchema, completionOutputTargetVariants, promptFromContext, assertPredecessorSynthesis, assertArchitectSourceCitation, assertTesterFailureEvidence, attachObservedTesterFailures, correctObservedTesterRedVerification, omitUnreplayableVerification, codexReasoningArguments, codexProjectInstructionArguments, codexInteractiveTimeoutMs, requiresActivityCompletion, reportedVerificationCommands, record, text } from './guest-contract.ts';
 
 const inputRoot = '/run/treeseed-assignment';
 const outputRoot = '/run/treeseed-output';
 const workspaceRoot = '/workspace';
-const record = (value: unknown): Record<string, unknown> => value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
-const text = (value: unknown) => typeof value === 'string' ? value.trim() : '';
 const canonical = (value: unknown): string => Array.isArray(value) ? `[${value.map(canonical).join(',')}]` : value && typeof value === 'object'
 	? `{${Object.entries(value as Record<string, unknown>).filter(([, item]) => item !== undefined).sort(([a], [b]) => a.localeCompare(b)).map(([key, item]) => `${JSON.stringify(key)}:${canonical(item)}`).join(',')}}` : JSON.stringify(value);
 const objectDigest = (value: unknown) => `sha256:${createHash('sha256').update(canonical(value)).digest('hex')}`;
@@ -48,10 +47,13 @@ function run(executable: string, args: string[], options: { cwd?: string; input?
 async function materialize(assignment: SandboxAssignment) {
 	for (const descriptor of assignment.inputs) {
 		try {
-			await progress(`input.${descriptor.id}.verifying`);
+			await progress(`input.${descriptor.id}.stat`);
 			const source = resolve(inputRoot, `input-${descriptor.id}`), information = await stat(source);
-			if (information.size !== descriptor.bytes || await fileDigest(source) !== descriptor.digest) throw new Error('signed digest or size mismatch');
+			if (information.size !== descriptor.bytes) throw new Error('signed size mismatch');
+			await progress(`input.${descriptor.id}.hash`);
+			if (await fileDigest(source) !== descriptor.digest) throw new Error('signed digest mismatch');
 			const target = resolve(descriptor.targetPath); if (!target.startsWith(`${workspaceRoot}/`)) throw new Error('target escaped the guest workspace');
+			await progress(`input.${descriptor.id}.copy`);
 			await mkdir(descriptor.mediaType.endsWith('+tar') ? target : dirname(target), { recursive: true, mode: 0o700 });
 			if (descriptor.mediaType === 'application/vnd.treeseed.directory+tar') await run('/bin/tar', ['--extract', '--file', source, '--directory', target, '--no-same-owner', '--no-same-permissions'], { timeoutMs: 10_000 });
 			else if (descriptor.mediaType === 'application/json' || descriptor.mediaType === 'application/x-pem-file') await writeFile(target, await readFile(source), { mode: descriptor.disposition === 'read-only' ? 0o400 : 0o600 });
@@ -80,7 +82,7 @@ async function startModelRelay(assignment: SandboxAssignment, sandboxId: string,
 export function treeDxToolDefinitions(){return [
 	{name:'treeseed_time_status',description:'Return the authoritative productive execution start, deadline, and current remaining seconds for this assignment.',inputSchema:{type:'object',properties:{},additionalProperties:false}},
 	{name:'treedx_build_context',description:'Build focused knowledge context. Omit project for the owning project; select team library or another authorized same-team project by slug or ID.',inputSchema:{type:'object',properties:{project:{type:'string'},request:{type:'object',properties:{query:{type:'string'},topics:{type:'array',items:{type:'string'},maxItems:20},paths:{type:'array',items:{type:'string'},maxItems:20},mode:{type:'string',enum:['brief','detailed','citations','mixed']},maxItems:{type:'integer',minimum:1,maximum:50},maxTokens:{type:'integer',minimum:1}},anyOf:[{required:['query']},{required:['topics']}],additionalProperties:false}},required:['request'],additionalProperties:false}},
-	{name:'treedx_read_files',description:'Read authorized TreeDX logical content identifiers. Omit project for the owning project; otherwise provide an authorized project slug or ID.',inputSchema:{type:'object',properties:{project:{type:'string'},paths:{type:'array',items:{type:'string'},maxItems:20}},required:['paths'],additionalProperties:false}},
+	{name:'treedx_read_files',description:'Read authorized TreeDX logical content identifiers. Supply the exact 40-character commit from an authorized predecessor reference when reviewing its output; omit ref for the pinned current view.',inputSchema:{type:'object',properties:{project:{type:'string'},ref:{type:'string',pattern:'^[a-f0-9]{40}$'},paths:{type:'array',items:{type:'string'},maxItems:20}},required:['paths'],additionalProperties:false}},
 	{name:'treedx_search_files',description:'Search authorized TreeDX content. Omit project for the owning project; otherwise provide an authorized project slug or ID.',inputSchema:{type:'object',properties:{project:{type:'string'},query:{type:'string'},paths:{type:'array',items:{type:'string'},maxItems:20},limit:{type:'integer'},includeBody:{type:'boolean'}},required:['query'],additionalProperties:false}},
 	{name:'treedx_list_paths',description:'List authorized TreeDX logical paths. Omit project for the owning project; otherwise provide an authorized project slug or ID.',inputSchema:{type:'object',properties:{project:{type:'string'},paths:{type:'array',items:{type:'string'},maxItems:20},limit:{type:'integer'}},required:['paths'],additionalProperties:false}},
 	];}
@@ -135,6 +137,15 @@ export function timingAwarenessContract(events: Record<string, unknown>[]) {
 		finalToolCompliant: tracker.lastTool === 'treedx:treeseed_time_status' && tracker.lastToolSucceeded };
 }
 
+export function timingRecoveryEligible(contract: ReturnType<typeof timingAwarenessContract>, remainingMs: number) {
+	return contract.firstToolCompliant && !contract.finalToolCompliant && contract.completedChecks >= 1 && remainingMs >= 15_000;
+}
+
+export function codexThreadId(events: Record<string, unknown>[]) {
+	const id = events.find(event => event.type === 'thread.started')?.thread_id;
+	return typeof id === 'string' && /^[a-f0-9-]{36}$/u.test(id) ? id : null;
+}
+
 export function providerEventShapeSummary(events: Record<string, unknown>[], secrets: string[] = []) {
 	return events.slice(-32).map(event => {
 		const item = record(event.item);
@@ -180,123 +191,12 @@ export async function runTreeDxMcpServer(){
 	}
 }
 
-export function completionFrontmatterSchema(context: Record<string, unknown>) {
-	const assignment = record(record(context.canonicalAssignmentContext).assignment), profile = record(assignment.effectiveProfile);
-	if (text(profile.activity) === 'estimating') {
-		const proposal = estimateProposalSource(record(context.canonicalAssignmentContext));
-		return estimateProposalOutputSchema(proposal, text(assignment.agentClass));
-	}
-	if (text(profile.activity) !== 'acting' || text(record(assignment.workspace).mode) !== 'treedx' || text(profile.handler) !== 'writer') return undefined;
-	const grants = record(assignment.grant).contentWrite;
-	const models = [...new Set((Array.isArray(grants) ? grants : []).map(reference => text(record(reference).model)))];
-	return models.length ? { anyOf: models.map(model => {
-		if (!isPortableContentModel(model)) throw new Error('writer_content_model_invalid');
-		return describeContentFrontmatterJsonSchema(model);
-	}) } : undefined;
-}
-
-export function promptFromContext(context: Record<string, unknown>, reasoningEffort?: string, executionSeconds?: number) {
-	const timingInstruction = `MANDATORY ASSIGNMENT CLOCK: You have ${executionSeconds ?? 'an API-defined number of'} productive seconds. The clock is provisioned for every assignment independently of the activity profile's grant.tools list. Codex exposes it as mcp__treedx__treeseed_time_status: MCP server treedx, tool treeseed_time_status. Your FIRST tool action must call mcp__treedx__treeseed_time_status before inspection, analysis, or any other tool. This required MCP server is already provisioned; invoke the exact callable immediately rather than inspecting the tool surface, guessing an alias, or replying that it is unavailable. After finishing all work, call mcp__treedx__treeseed_time_status again as your FINAL tool action, then immediately compose the final response without another tool call. Any attempted tool action before the initial clock check or after the final clock check invalidates the assignment, including a failed attempt. A response with fewer than two successful clock checks is rejected, even if the work is otherwise correct. Use each returned remainingSeconds value to bound scope and reserve time for verification and closeout.`;
-	const timingStartReminder = 'DO NOT ANSWER OR REASON ABOUT THE TASK YET. Your next action must call mcp__treedx__treeseed_time_status (server treedx, tool treeseed_time_status). Codex code mode exposes this MCP operation through functions.exec, not as a directly callable outer tool. Invoke functions.exec with JavaScript: text(await tools.mcp__treedx__treeseed_time_status({}));. The MCP operation must be the first nested tool call; do not inspect the tool catalog or run a shell command first. An absent outer MCP tool does not mean the nested operation is unavailable. After completing the task, call that same fully qualified tool once more immediately before your response.';
-	const canonicalContext = record(context.canonicalAssignmentContext);
-	if (Object.keys(canonicalContext).length) {
-		const assignment = record(canonicalContext.assignment);
-		const authorityRefs = Array.isArray(assignment.authorityRefs) ? assignment.authorityRefs.map(record) : [];
-		const acceptedDecision = authorityRefs.some((reference) => text(reference.model) === 'decision');
-		const profile = record(assignment.effectiveProfile);
-		const profilePrompt = record(profile.prompt);
-		const items = Array.isArray(canonicalContext.context) ? canonicalContext.context.map(record) : [];
-		const predecessors = Array.isArray(canonicalContext.predecessorResults) ? canonicalContext.predecessorResults : [];
-		const predecessorIds = predecessors.map((value) => text(record(value).id)).filter(Boolean);
-		const acceptanceCriteria = Array.isArray(assignment.acceptanceCriteria) ? assignment.acceptanceCriteria.map(text).filter(Boolean) : [];
-		const estimating = text(profile.handler) === 'estimate';
-		const proposalOutput = estimating
-			? `This estimating assignment must return contentOutput with model \"proposal\", a substantive Markdown body, and frontmatter containing one JSON object satisfying this canonical SDK proposal contract: ${JSON.stringify(describeContentFrontmatterContract('proposal'))}. Copy the exact assigned proposal frontmatter, not a predecessor proposal. The contract describes valid fields; it does not authorize rewriting existing values. Preserve every field except the assigned estimate or Reviewer reviewEstimate. Put new rationale inside that estimate's rationale field and source evidence in contentOutput.body, citing the attached Git repository and its exact source commit. Never attribute source paths to the TreeDX library commit. Cite predecessor contributions in contentOutput.body only: never copy their estimates into other work items, even when they are accepted. Preserve dependencies, source references, evidenceRefs, objectiveRefs, and status exactly. Use the exact proposal write target and source authority in the assignment. Do not create a Note or a separate estimate artifact.`
-			: text(profile.activity) === 'acting' && text(record(assignment.workspace).mode) === 'treedx' && text(profile.handler) === 'writer'
-				? 'Return one substantive contentOutput satisfying the assigned acceptance criteria, with the exact model and identity of an authorized contentWrite target. AgentKernel validates and commits this output in your one TreeDX workspace; you do not need a separate write tool. Do not substitute a Note for required Book or Knowledge output.'
-				: 'Return contentOutput as null unless this handler explicitly requires governed content output.';
-		const authorized = items.map((item) => `Reference: ${JSON.stringify(item.ref)}\nDigest: ${text(item.digest)}\n\n${JSON.stringify(item.value)}`).join('\n\n');
-		return [
-			timingInstruction,
-			text(profilePrompt.system),
-			...(Array.isArray(profilePrompt.instructions) ? profilePrompt.instructions.map(text).filter(Boolean) : []),
-			`Execute canonical assignment ${text(assignment.id)}${text(assignment.workItemId) ? ` for work item ${text(assignment.workItemId)}` : ''} from ${text(record(assignment.sourceRef).model)}/${text(record(assignment.sourceRef).id)}.`,
-			`Activity: ${text(profile.activity)}. Handler: ${text(profile.handler)}. Workspace: ${text(record(assignment.workspace).mode)}.`,
-			'Use only the exact authorized context and predecessor results below. The attached repository root is /workspace/project. Inspect it with ordinary shell and Git commands whenever source is attached; do not answer from supplied summaries alone. Use the treedx_* MCP tools for governed knowledge. The trsd CLI is intentionally absent from assignment guests. Do not claim an inspection or verification you did not perform.',
-			text(profile.activity) === 'reviewing' && text(record(assignment.sourceRef).model) === 'proposal' && !acceptedDecision
-				? 'This is pre-decision proposal review. Judge whether the proposed plan is decision-ready and testable; its Actor has not executed, so no predecessor result or runtime acceptance evidence is expected. The proposal sourceRef commit is only the exact revision of the proposal in its TreeDX content repository. It is not, does not claim to be, and must never be resolved as an SDK Git commit. The independently attached project source commit is the only SDK source revision available for feasibility inspection. Approve a sound plan even when its stated post-decision acceptance evidence has not yet been produced.'
-				: '',
-			text(profile.activity) === 'reviewing' && acceptedDecision
-				? 'This is post-decision paired work review. Review only the exact predecessor Actor result against this work item\'s acceptance criteria. Do not re-review the already accepted proposal, demand implementation outside this work item, or replace its acceptance boundary with broader proposal outcomes. Approve when the predecessor result satisfies this work item; otherwise request precise changes to that result.'
-				: '',
-			acceptanceCriteria.length ? `Work-item acceptance criteria:\n${JSON.stringify(acceptanceCriteria)}` : 'No additional work-item acceptance criteria were supplied.',
-			authorized ? `Authorized context:\n${authorized}` : 'No additional context references were authorized.',
-			predecessors.length ? `Predecessor results:\n${JSON.stringify(predecessors)}` : 'There are no predecessor results.',
-			predecessorIds.length > 1
-				? `Collaborative synthesis is mandatory. In contentOutput.body, cite every predecessor result by its exact ID and state the material contribution incorporated from each: ${predecessorIds.join(', ')}. Before your final clock check, compare the completed body against this entire ID list and revise it if even one ID or its contribution is missing. The guest rejects an incomplete body; citations in the summary or proposal frontmatter do not substitute for this synthesis.`
-				: '',
-			proposalOutput,
-			estimating
-				? `Estimate scope is not proposal scope. Return the entire exact assigned proposal, retaining every work item, dependency target, objective, acceptance criterion, permission, and source reference. Never return only your own work item: that would delete other roles and leave dangling dependencies. ${text(assignment.workItemId) ? `Change only the estimate and rationale for work item ${text(assignment.workItemId)}; preserve the other items unchanged.` : 'As independent Reviewer, assess the reviewEstimate for every review-required work item; preserve owner estimates and the complete product chain.'} Do not execute the proposed work or mark the proposal ready on behalf of the other participants. Source inspection establishes your rationale, not a passing implementation test. The AgentKernel validates the estimate contract and publication.`
-				: '',
-			['planning', 'estimating'].includes(text(profile.activity))
-				? 'This is a non-acting activity. Set verification to [] exactly. Source searches, git status, and exploratory commands are inspection, not acceptance verification. Put findings in the summary or governed content output instead.'
-				: '',
-			'For Git work, commit every intended change and leave the worktree clean. The verification field is only for deliberate acceptance checks with a defined pass condition; never include exploratory search or inspection commands such as rg, grep, find, ls, cat, sed, or git status there. Report only the exact standalone acceptance commands you actually ran and directly observed exit zero. Every reported command must be syntactically complete with balanced quotes; prefer a short standard project check over a complex inline program. A search that finds no matches exits nonzero: treat that as a finding, never as passing verification. If a command returned nonzero or was originally executed with chaining, redirection, substitution, or a script, omit it completely; never rewrite it into a cleaner command for the report. Put each command in its own JSON array item; never join commands with &&, ||, ;, redirection, command substitution, or a shell script. Tool authority is enforced by the assignment grant.',
-			`Assigned reasoning effort: ${reasoningEffort || 'provider-default'}.`,
-			`Productive execution budget: ${(executionSeconds ?? text(record(assignment.limits).maximumSeconds)) || 'unknown'} seconds. When time is short, stop broadening scope and finish the highest-value verified result.`,
-			timingStartReminder,
-		].join('\n\n');
-	}
-	const identity = record(context.identity), manifest = record(identity.manifest), coreContext=record(context.coreContext),sources=Array.isArray(coreContext.sources)?coreContext.sources.map(record):[];
-	const assignment = record(context.assignment), metadata = record(assignment.metadata), chatProfile = record(metadata.chatProfile), prompt = record(chatProfile.prompt), communication = record(metadata.communication);
-	const sourceText = sources.map((source) => `## ${text(source.layer)} / ${text(source.kind)}: ${text(source.path)||text(source.id)}\nProject: ${text(source.projectId)}\nDigest: ${text(source.digest)}\nDisposition: ${text(source.disposition)}\n\n${text(source.content)}`).join('\n\n');
-	const required = text(communication.requirement) !== 'optional';
-	const projectAccess = `The complete project source repository is attached at /workspace/project at immutable revision ${text(record(context.projectManifest).revision)}, with Git history and private writable scratch storage. Before answering, inspect that repository with ordinary shell and Git commands; do not answer from supplied summaries alone. Use the treedx_* MCP tools for governed knowledge. Builds and tests may modify this disposable workspace. Filesystem write access does not grant publication authority. Do not claim code inspection you did not perform.`;
-	if (assignment.executionKind === 'workday') throw new Error('legacy_workday_assignment_not_supported');
-	return `${timingInstruction}\n\nYou are exactly ${text(manifest.agentHandle)}. The verified TreeDX context below is ordered by mandatory core, agent-general, activity-specific, and live discussion layers.\n\n${sourceText}\n\nActivity instructions:\n${text(prompt.system)}\n\nActivity task:\n${text(prompt.task) || 'Respond to the committed Discussion message.'}\n\n${required ? 'You were directly addressed and must provide a substantive response.' : 'Respond only if your role adds material value; otherwise return exactly <!-- treeseed:abstain -->.'}\n${projectAccess} Prefer extensionless identifiers such as objectives/core. Do not supply or reason about Git commits for normal TreeDX access; the assignment relay privately enforces consistent views. Do not invoke trsd: the CLI is intentionally absent from assignment guests. Tool and content permissions come from this activity profile. When time is short, stop broadening scope and finish the highest-value verified result. The assigned reasoning effort is ${reasoningEffort || 'provider-default'}. Scale inspection and research depth to that setting and the question. Do not run unrelated broad test suites or exhaustive scans. Do not inspect outside /workspace or disclose credentials. Return only the message to post.\n\nDiscussion message:\n${text(record(context.message).content)}\n\n${timingStartReminder}`;
-}
-
-export function assertPredecessorSynthesis(context: Record<string, unknown>, completion: ActivityCompletionReport | null) {
-	const canonical = record(context.canonicalAssignmentContext);
-	const assignment = record(canonical.assignment);
-	if (text(record(assignment.effectiveProfile).activity) !== 'estimating') return;
-	const ids = (Array.isArray(canonical.predecessorResults) ? canonical.predecessorResults : [])
-		.map((value) => text(record(value).id)).filter(Boolean);
-	if (ids.length < 2) return;
-	const body = completion?.contentOutput?.body ?? '';
-	const missing = ids.filter((id) => !body.includes(id));
-	if (missing.length) throw new Error(`predecessor_result_citation_missing:${missing.join(',')}`);
-}
-
-export function codexReasoningArguments(reasoningEffort: string | undefined) {
-	return reasoningEffort && ['minimal', 'low', 'medium', 'high', 'xhigh'].includes(reasoningEffort)
-		? ['-c', `model_reasoning_effort=${reasoningEffort}`] : [];
-}
-
-export function codexProjectInstructionArguments() {
-	// Repository AGENTS.md files describe trusted host workspaces and may require
-	// tools such as trsd that intentionally do not exist inside an assignment VM.
-	// The canonical assignment prompt is the only guest execution instruction.
-	return ['-c', 'project_doc_max_bytes=0'];
-}
-
-export function codexInteractiveTimeoutMs(durationSeconds: number) {
-	return Math.max(1_000, durationSeconds * 1_000 - 5_000);
-}
-
-export function requiresActivityCompletion(sourceMode: unknown) {
-	return sourceMode === 'work';
-}
-
 /** Convert model-reported passing checks into runner-observed evidence. */
 export async function verifyReportedActivityCommands(report: ActivityCompletionReport,
 	execute: (command: string) => Promise<void> = async (command) => {
 		await run('/bin/sh', ['-lc', command], { cwd: '/workspace/project', timeoutMs: 120_000 });
 	}) {
-	const commands = [...new Set(report.verification.filter((entry) => entry.status === 'passed').flatMap((entry) => entry.commands))];
-	if (commands.length > 8 || commands.some((command) => command.length > 4096 || command.includes('\0'))) throw new Error('Activity completion verification command set exceeds its bounded policy.');
-	for (const command of commands) assertReplayableVerificationCommand(command);
+	const commands = reportedVerificationCommands(report);
 	for (const command of commands) {
 		try { await execute(command); }
 		catch { throw new Error(`Runner-observed verification failed: ${command}`); }
@@ -305,11 +205,19 @@ export async function verifyReportedActivityCommands(report: ActivityCompletionR
 }
 
 async function observeReportedActivityCommands(report: ActivityCompletionReport) {
-	const commands = [...new Set(report.verification.filter((entry) => entry.status === 'passed').flatMap((entry) => entry.commands))];
-	if (commands.length > 8 || commands.some((command) => command.length > 4096 || command.includes('\0'))) throw new Error('Activity completion verification command set exceeds its bounded policy.');
+	const commands = reportedVerificationCommands(report);
+	if (commands.some(requiresNodeDependencyRestore)
+		&& await stat('/workspace/project/package-lock.json').then(() => true, () => false)
+		&& !await stat('/workspace/project/node_modules/.bin/vitest').then(() => true, () => false)) {
+		try { await run('npm', ['ci', '--prefer-offline', '--no-audit', '--no-fund'],
+			{ cwd: '/workspace/project', timeoutMs: 120_000 }); }
+		catch (error) {
+			const exit = /exited (\d+)/u.exec(error instanceof Error ? error.message : String(error))?.[1] ?? 'unknown';
+			throw new Error(`Runner verification dependency restore failed (exit ${exit}).`);
+		}
+	}
 	const verification = [];
 	for (const command of commands) {
-		assertReplayableVerificationCommand(command);
 		const started = process.hrtime.bigint();
 		try {
 			const output = await run('/bin/sh', ['-lc', command], { cwd: '/workspace/project', captureStdout: true,
@@ -317,50 +225,76 @@ async function observeReportedActivityCommands(report: ActivityCompletionReport)
 			verification.push({ command, status: 'passed' as const, exitCode: 0,
 				outputDigest: objectDigest({ stdout: output.stdout, stderr: output.stderr }),
 				durationSeconds: Math.ceil(Number(process.hrtime.bigint() - started) / 1e9) });
-		} catch { throw new Error(`Runner-observed verification failed: ${command}`); }
+		} catch (error) {
+			const exit = /exited (\d+)/u.exec(error instanceof Error ? error.message : String(error))?.[1] ?? 'unknown';
+			throw new Error(`Runner-observed verification failed (exit ${exit}): ${command}`);
+		}
 	}
 	return { report, verification };
 }
 
-/** Keep completion evidence replayable: one validation command or pipeline, never a shell workflow or source mutation. */
-export function assertReplayableVerificationCommand(command: string) {
-	const normalized = command.trim();
-	if (!normalized || hasUnsafeShellControl(normalized)) {
-		throw new Error(`Activity completion verification must be one standalone command: ${command}`);
-	}
-	if (/\b(?:sudo|su|doas|rm|mv|cp|install|chmod|chown|truncate|tee)\b/u.test(normalized)
-		|| /\bgit\s+(?:add|commit|push|reset|checkout|switch|clean|merge|rebase|tag|branch|restore)(?=\s|$)/u.test(normalized)
-		|| /\b(?:npm|pnpm|yarn|bun)\s+(?:i|install|ci|add|remove|uninstall|update|upgrade)\b/u.test(normalized)
-		|| /\b(?:sh|bash|zsh|dash)\s+-c\b/u.test(normalized)) {
-		throw new Error(`Activity completion verification may not mutate or prepare the workspace: ${command}`);
-	}
-	return normalized;
+export function requiresNodeDependencyRestore(command: string) {
+	return /^(?:npm\s+(?:run|exec|test)(?:\s|$)|npx(?:\s|$))/u.test(command.trim());
 }
 
-function hasUnsafeShellControl(command: string) {
-	let quote: "'" | '"' | null = null, escaped = false;
-	for (let index = 0; index < command.length; index += 1) {
-		const character = command[index]!;
-		if (escaped) { escaped = false; continue; }
-		if (character === '\\' && quote !== "'") { escaped = true; continue; }
-		if (quote) {
-			if (character === quote) quote = null;
-			else if (quote === '"' && (character === '`' || (character === '$' && command[index + 1] === '('))) return true;
-			continue;
+export function providerResourceAbort(events: Record<string, unknown>[]) {
+	for (const event of events) {
+		const item = record(event.item);
+		if (text(event.type) !== 'item.completed' || text(item.type) !== 'command_execution') continue;
+		const exitCode = Number(item.exit_code), output = text(item.aggregated_output);
+		const killed = exitCode === 137 && /(?:^|\n)Killed(?:\n|$)/u.test(output);
+		const heapExhausted = exitCode === 134 && /(?:heap out of memory|allocation failed|reached heap limit)/iu.test(output);
+		if (killed || heapExhausted) {
+			return { exitCode, command: text(item.command) };
 		}
-		if (character === "'" || character === '"') { quote = character; continue; }
-		if ('\r\n;&<>`'.includes(character) || (character === '|' && command[index + 1] === '|')
-			|| (character === '$' && command[index + 1] === '(')) return true;
 	}
-	return quote !== null || escaped;
+	return null;
 }
 
+/** Report fixed execution categories only; never tool arguments, reasoning, or output. */
+export function providerExecutionProgress(event: Record<string, unknown>) {
+	const item = record(event.item);
+	if (['item.started', 'item.completed'].includes(text(event.type)) && item.type === 'mcp_tool_call') {
+		return `provider.tool.${event.type === 'item.started' ? 'started' : 'completed'}`;
+	}
+	if (event.type === 'item.completed' && item.type === 'reasoning') return 'provider.reasoning.completed';
+	if (event.type === 'turn.started') return 'provider.turn.started';
+	if (event.type === 'turn.completed') return 'provider.turn.completed';
+	if (item.type !== 'command_execution' || !['item.started', 'item.completed'].includes(text(event.type))) return null;
+	const command = text(item.command);
+	const category = /\bnpm\s+run\s+release:verify\b/u.test(command) ? 'release-checks'
+		: /\bnpm\s+(?:run\s+)?build(?::dist)?\b/u.test(command) ? 'build'
+			: /\bnpm\s+pack\b/u.test(command) ? 'pack'
+				: /\b(?:vitest|npm\s+(?:run\s+)?test(?::[a-z-]+)?)\b/u.test(command) ? 'tests'
+					: /\bgit\s+(?:status|diff|log|show|rev-parse)\b/u.test(command) ? 'git-inspection' : 'other';
+	return `provider.command.${event.type === 'item.started' ? 'started' : 'completed'}.${category}${typeof item.exit_code === 'number' ? `.exit-${item.exit_code}` : ''}`;
+}
+
+export async function prepareNodeWorkspace(
+	root = '/workspace/project',
+	proxyUrl?: string,
+	execute: (executable: string, args: string[], options: { cwd: string; timeoutMs: number; env?: NodeJS.ProcessEnv }) => Promise<unknown>
+		= (executable, args, options) => run(executable, args, options),
+) {
+	const hasLock = await stat(resolve(root, 'package-lock.json')).then(() => true, () => false);
+	const hasManifest = await stat(resolve(root, 'package.json')).then(() => true, () => false);
+	const hasModules = await stat(resolve(root, 'node_modules')).then(() => true, () => false);
+	if (!hasLock || !hasManifest || hasModules) return false;
+	await execute('npm', ['ci', '--prefer-offline', '--no-audit', '--no-fund'], {
+		cwd: root, timeoutMs: 120_000,
+		...(proxyUrl ? { env: { ...process.env, HTTPS_PROXY: proxyUrl, https_proxy: proxyUrl } } : {}),
+	});
+	return true;
+}
+
+/** Keep completion evidence replayable: one validation command or pipeline, never a shell workflow or source mutation. */
 export async function runSandboxGuest() {
 	const started = process.hrtime.bigint(), usageBefore = process.resourceUsage();
 	await progress('guest.started');
 	const assignment = sandboxAssignmentSchema.parse(JSON.parse(await readFile(resolve(inputRoot, 'assignment.json'), 'utf8')));
 	await progress('assignment.verified');
 	const sandboxId = (await readFile(resolve(inputRoot, 'sandbox-id'), 'utf8')).trim(), operationToken = (await readFile(resolve(inputRoot, 'operation-token'), 'utf8')).trim();
+	const assignmentProxy = `http://${encodeURIComponent(sandboxId)}:${encodeURIComponent(operationToken)}@10.89.0.1:7444`;
 	await materialize(assignment); const context = record(JSON.parse(await readFile('/workspace/.treeseed/context.json', 'utf8')));
 	await mkdir('/workspace/project', { recursive: true, mode: 0o700 });
 	await progress('inputs.ready');
@@ -368,15 +302,25 @@ export async function runSandboxGuest() {
 	const sourceText = await readFile(resolve(inputRoot, 'source.json'), 'utf8').catch(() => null);
 	const sourceMetadata = sourceText ? record(JSON.parse(sourceText)) : null;
 	const source = sourceMetadata ? sourceWorkspaceKeySchema.parse(sourceMetadata.source) : null;
+	const canonicalActivity = text(record(record(record(context.canonicalAssignmentContext).assignment).effectiveProfile).activity);
+	const canonicalAssignment = record(record(context.canonicalAssignmentContext).assignment);
+	const allowVerification = activityAllowsVerification(canonicalActivity, text(canonicalAssignment.agentClass),
+		text(record(canonicalAssignment.workspace).mode));
 	if (source) {
 		if (source.teamId !== assignment.teamId || source.projectId !== assignment.projectId) throw new Error('Attached source does not match assignment scope.');
 		const head = (await run('/usr/bin/git', ['rev-parse', '--verify', 'HEAD^{commit}'], { cwd: '/workspace/project', captureStdout: true, maxStdoutBytes: 128, timeoutMs: 10_000 })).stdout.trim();
 		if (head !== source.commit) throw new Error('Attached source differs from its exact authorized commit.');
 		context.projectManifest = { ...record(context.projectManifest), source, revision: head, mode: sourceMetadata?.mode, publication: sourceMetadata?.publication };
+		if (allowVerification) {
+			await progress('workspace.dependencies.starting');
+			await prepareNodeWorkspace('/workspace/project', assignmentProxy);
+			await progress('workspace.dependencies.ready');
+		}
 	}
 	const codexHome = '/workspace/.treeseed/codex', responsePath = '/workspace/.treeseed/response.md'; await mkdir(codexHome, { recursive: true, mode: 0o700 });
 	await writeFile(resolve(codexHome,'config.toml'),codexTreeDxMcpConfig(sandboxId,operationToken,assignment),{mode:0o600});
 	const subscriptionAuth = await readFile(resolve(inputRoot, 'codex-auth.json')).catch(() => null);
+	if (assignment.network.allowedServices.includes('codex-subscription') && !subscriptionAuth) throw new Error('Authorized Codex subscription credential is missing from the guest input.');
 	if (subscriptionAuth) {
 		await writeFile(resolve(codexHome, 'auth.json'), subscriptionAuth, { mode: 0o600 });
 		// Seed the protected return channel before model execution so a killed or
@@ -384,30 +328,35 @@ export async function runSandboxGuest() {
 		await writeFile(resolve(outputRoot, 'codex-auth.json'), subscriptionAuth, { mode: 0o600, flag: 'wx' });
 	}
 	const relay = subscriptionAuth ? null : await startModelRelay(assignment, sandboxId, operationToken);
-	const subscriptionProxy = subscriptionAuth ? `http://${encodeURIComponent(sandboxId)}:${encodeURIComponent(operationToken)}@10.89.0.1:7444` : null;
+	const subscriptionProxy = subscriptionAuth ? assignmentProxy : null;
 	const events: Record<string, unknown>[] = [], timingTracker: TimingAwarenessTracker = { completedChecks: 0, firstTool: null, firstToolSucceeded: false, lastTool: null, lastToolSucceeded: false },
 		composedPrompt = promptFromContext(context, assignment.modelPolicy.reasoningEffort, assignment.resources.durationSeconds);
-	const canonicalActivity = text(record(record(record(context.canonicalAssignmentContext).assignment).effectiveProfile).activity);
-	const allowVerification = !['planning', 'estimating'].includes(canonicalActivity);
 	const structuredCompletion = (Boolean(canonicalActivity) && canonicalActivity !== 'chat')
 		|| (sourceMetadata ? requiresActivityCompletion(sourceMetadata.mode) : false);
 	const completionSchemaPath = resolve(codexHome, 'activity-completion.schema.json');
-	if (structuredCompletion) await writeFile(completionSchemaPath, `${JSON.stringify(activityCompletionOutputSchema(completionFrontmatterSchema(context), allowVerification))}\n`, { mode: 0o600 });
-	const providerArguments = ['exec', '--json', '--ephemeral', '--dangerously-bypass-approvals-and-sandbox', '--model', assignment.modelPolicy.model,
+	if (structuredCompletion) {
+		await writeFile(completionSchemaPath, `${JSON.stringify(activityCompletionOutputSchema(completionFrontmatterSchema(context), allowVerification, completionOutputTargetVariants(context)))}\n`, { mode: 0o600 });
+	}
+	// Session state stays inside this assignment's disposable Kata guest so a
+	// missing final clock check can be corrected in the same Codex conversation.
+	const providerArguments = ['exec', '--json', '--dangerously-bypass-approvals-and-sandbox', '--model', assignment.modelPolicy.model,
 		...codexReasoningArguments(assignment.modelPolicy.reasoningEffort),
 		...codexProjectInstructionArguments(),
 		...(structuredCompletion ? ['--output-schema', completionSchemaPath] : []),
 		'--disable', 'browser_use', '--disable', 'apps', '--disable', 'multi_agent_v2', '--disable', 'image_generation', '--color', 'never', '--output-last-message', responsePath, '-C', '/workspace/project', '-'];
-	let providerError: Error | null = null;
+	let providerError: Error | null = null, providerThreadId: string | null = null;
+	const providerEnvironment = { PATH: '/usr/local/bin:/usr/bin:/bin', HOME: codexHome, CODEX_HOME: codexHome,
+		TREESEED_RELAY_URL:assignment.network.relayUrl,TREESEED_SANDBOX_ID:sandboxId,TREESEED_GUEST_TOKEN:operationToken,TREESEED_RELAY_CA:'/workspace/.treeseed/relay-ca.crt',
+		...(relay ? { OPENAI_BASE_URL: relay.baseUrl, OPENAI_API_KEY: 'treeseed-assignment-relay' } : {}),
+		...(subscriptionProxy ? { HTTPS_PROXY: subscriptionProxy, https_proxy: subscriptionProxy } : {}), LANG: 'C.UTF-8' };
 	try {
 		await progress('provider.starting');
 		await run('/usr/local/bin/codex', providerArguments, {
-			cwd: '/workspace/project', input: composedPrompt, env: { PATH: '/usr/local/bin:/usr/bin:/bin', HOME: codexHome, CODEX_HOME: codexHome,
-				TREESEED_RELAY_URL:assignment.network.relayUrl,TREESEED_SANDBOX_ID:sandboxId,TREESEED_GUEST_TOKEN:operationToken,TREESEED_RELAY_CA:'/workspace/.treeseed/relay-ca.crt',
-				...(relay ? { OPENAI_BASE_URL: relay.baseUrl, OPENAI_API_KEY: 'treeseed-assignment-relay' } : {}),
-				...(subscriptionProxy ? { HTTPS_PROXY: subscriptionProxy, https_proxy: subscriptionProxy } : {}), LANG: 'C.UTF-8' },
+			cwd: '/workspace/project', input: composedPrompt, env: providerEnvironment,
 			timeoutMs: codexInteractiveTimeoutMs(assignment.resources.durationSeconds),
 			onLine(line) { let event: Record<string, unknown>; try { event = record(JSON.parse(line)); } catch { event = { type: 'provider.event.invalid', digest: createHash('sha256').update(line).digest('hex') }; }
+				providerThreadId ??= codexThreadId([event]);
+				const executionProgress = providerExecutionProgress(event); if (executionProgress) void progress(executionProgress).catch(() => undefined);
 				observeTimingAwarenessEvent(timingTracker, event); events.push(event); if (events.length > 256) events.shift(); },
 		}).catch(error => {
 			const secrets = [operationToken, ...(subscriptionAuth ? providerCredentialValues(JSON.parse(subscriptionAuth.toString('utf8'))) : [])];
@@ -422,6 +371,35 @@ export async function runSandboxGuest() {
 		}
 		if (providerError) throw providerError;
 		await progress('provider.completed');
+		const initialTiming = timingAwarenessContract(events);
+		const remainingMs = assignment.resources.durationSeconds * 1_000 - Number(process.hrtime.bigint() - started) / 1e6 - 5_000;
+		const threadId = providerThreadId;
+		if (threadId && timingRecoveryEligible(initialTiming, remainingMs) && (await readFile(responsePath, 'utf8').catch(() => '')).trim()) {
+			await progress('provider.final-clock-recovery.starting');
+			const recoveryEvents: Record<string, unknown>[] = [];
+			const recoverySchemaPath = resolve(codexHome, 'final-clock.schema.json');
+			await writeFile(recoverySchemaPath, JSON.stringify({ type: 'object', properties: { ack: { type: 'string', const: 'done' } }, required: ['ack'], additionalProperties: false }), { mode: 0o600 });
+			const recoveryArguments = ['exec', 'resume', threadId, '--json', '--dangerously-bypass-approvals-and-sandbox', '--model', assignment.modelPolicy.model,
+				...codexReasoningArguments(assignment.modelPolicy.reasoningEffort), ...codexProjectInstructionArguments(),
+				'--output-schema', recoverySchemaPath, '--output-last-message', resolve(codexHome, 'final-clock-response.txt'), '-'];
+			await run('/usr/local/bin/codex', recoveryArguments, {
+				cwd: '/workspace/project', env: providerEnvironment,
+				input: 'The substantive response was already captured. Do not inspect or change files and do not repeat the task. Your NEXT and ONLY tool action must call mcp__treedx__treeseed_time_status using functions.exec with: text(await tools.mcp__treedx__treeseed_time_status({}));. After the successful clock result, return {"ack":"done"} without any other tool action.',
+				timeoutMs: Math.floor(remainingMs),
+				onLine(line) { let event: Record<string, unknown>; try { event = record(JSON.parse(line)); } catch { event = { type: 'provider.event.invalid', digest: createHash('sha256').update(line).digest('hex') }; }
+					observeTimingAwarenessEvent(timingTracker, event); events.push(event); recoveryEvents.push(event); if (events.length > 256) events.shift(); },
+			});
+			const recoveryTiming = timingAwarenessContract(recoveryEvents);
+			if (!recoveryTiming.firstToolCompliant || !recoveryTiming.finalToolCompliant
+				|| recoveryEvents.some(event => providerToolName(event) && providerToolName(event) !== 'treedx:treeseed_time_status')) {
+				throw new Error('Final clock recovery performed an unauthorized tool action or failed to check remaining time.');
+			}
+			if (subscriptionAuth) {
+				const refreshed = await readFile(resolve(codexHome, 'auth.json'));
+				await writeFile(resolve(outputRoot, 'codex-auth.json'), refreshed, { mode: 0o600 });
+			}
+			await progress('provider.final-clock-recovery.completed');
+		}
 		const timingAwareness = { schemaVersion: 'treeseed.assignment-timing-awareness/v1' as const, requiredChecks: 2 as const, ...timingTracker,
 			firstToolCompliant: timingTracker.firstTool === 'treedx:treeseed_time_status' && timingTracker.firstToolSucceeded,
 			finalToolCompliant: timingTracker.lastTool === 'treedx:treeseed_time_status' && timingTracker.lastToolSucceeded };
@@ -430,8 +408,17 @@ export async function runSandboxGuest() {
 			throw new Error(`Agent timing-awareness contract requires treeseed_time_status as the first and final tool actions with two completed checks. Provider errors: ${providerFailureSummary(events, secrets) || '(none)'}. Observed ${JSON.stringify(timingAwareness)}. Provider event shapes: ${JSON.stringify(providerEventShapeSummary(events, secrets))}. Response preview: ${providerResponsePreview(events, secrets) || '(empty)'}`);
 		}
 		const rawResponse = (await readFile(responsePath, 'utf8')).trim(); if (!rawResponse) throw new Error('Execution provider returned an empty response.');
-		const observedCompletion = structuredCompletion ? await observeReportedActivityCommands(validateActivityCompletion(JSON.parse(rawResponse), allowVerification)) : null;
-		const activityCompletion = observedCompletion?.report ?? null;
+		const resourceAbort = providerResourceAbort(events);
+		if (resourceAbort) throw new Error(`sandbox_resource_exhausted: command exited ${resourceAbort.exitCode}: ${resourceAbort.command}`);
+		const validatedCompletion = structuredCompletion ? validateActivityCompletion(JSON.parse(rawResponse), allowVerification) : null;
+		const correctedCompletion = validatedCompletion ? correctObservedTesterRedVerification(validatedCompletion, events,
+			text(canonicalAssignment.agentClass), canonicalActivity, canonicalAssignment.acceptanceCriteria) : null;
+		const replayableCompletion = correctedCompletion ? omitUnreplayableVerification(correctedCompletion) : null;
+		const observedCompletion = replayableCompletion ? await observeReportedActivityCommands(replayableCompletion) : null;
+		const activityCompletion = attachObservedTesterFailures(observedCompletion?.report ?? null, events,
+			text(canonicalAssignment.agentClass), canonicalActivity, canonicalAssignment.acceptanceCriteria);
+		assertArchitectSourceCitation(activityCompletion, source?.commit ?? null, text(canonicalAssignment.agentClass), canonicalActivity);
+		assertTesterFailureEvidence(activityCompletion, text(canonicalAssignment.agentClass), canonicalActivity, canonicalAssignment.acceptanceCriteria);
 		assertPredecessorSynthesis(context, activityCompletion);
 		const responseMarkdown = activityCompletion?.summary ?? rawResponse;
 		if (sourceMetadata?.mode === 'work') {

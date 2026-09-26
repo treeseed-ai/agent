@@ -14,7 +14,7 @@ import { buildProviderPlan, providerAvailabilityCapabilities } from '../../src/p
 import { providerEnrollmentInput } from '../../src/provider/lifecycle/enrollment-input.ts';
 import { stringify as stringifyYaml } from 'yaml';
 import { createManagedProviderManifestV5 } from '../../src/provider/configuration/managed-manifest.ts';
-import { assignmentAllowedServices, timingAwarenessEvidence } from '../../src/provider/execution/microvm-executor.ts';
+import { assertGitWorkPublication, assignmentAllowedServices, timingAwarenessEvidence } from '../../src/provider/execution/microvm-executor.ts';
 import { validateCapacityProviderManifestV5 } from '@treeseed/sdk/capacity-provider';
 
 const digest = (value: string) => `sha256:${value.repeat(64)}`;
@@ -74,6 +74,11 @@ describe('Agent package ownership boundary', () => {
 		expect(assignmentAllowedServices('workday', true)).toEqual(['model-gateway', 'codex-subscription', 'package-registry', 'treedx-relay']);
 		expect(assignmentAllowedServices('conversation', true)).toEqual(['model-gateway', 'codex-subscription', 'treedx-relay']);
 		expect(assignmentAllowedServices('workday', false)).toEqual(['model-gateway', 'codex-subscription', 'package-registry']);
+	});
+	it('accepts local simulation publication without authorizing upstream Git publication', () => {
+		expect(() => assertGitWorkPublication({ mode: 'work', publication: 'simulation-branch' })).not.toThrow();
+		expect(() => assertGitWorkPublication({ mode: 'work', publication: 'assignment-branch' })).not.toThrow();
+		expect(() => assertGitWorkPublication({ mode: 'work', publication: 'denied' })).toThrow(/publication authority/u);
 	});
 	it('publishes a portable release-bound managed provider default', () => {
 		const manifest = createManagedProviderManifestV5({ release: '0.13.0-rc.42', guestImage: 'treeseed/sandbox-codex',

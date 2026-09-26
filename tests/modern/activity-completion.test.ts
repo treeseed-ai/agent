@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { activityCompletionOutputSchema, validateActivityCompletion } from '../../src/activity-completion.ts';
-import { completionFrontmatterSchema, promptFromContext } from '../../src/sandbox/guest.ts';
+import { completionFrontmatterSchema, completionOutputTargetVariants, promptFromContext } from '../../src/sandbox/guest-contract.ts';
 
 describe('activity completion structured-output schema', () => {
 	it('locks Reviewer output to the assigned proposal instead of predecessor owner estimates', () => {
@@ -13,18 +13,22 @@ describe('activity completion structured-output schema', () => {
 		const assignment = { sourceRef, agentClass: 'reviewer', effectiveProfile: { activity: 'estimating', handler: 'estimate' } };
 		const context = { canonicalAssignmentContext: { assignment, context: [{ ref: sourceRef, value: { frontmatter: proposal } }] } };
 		const schema = completionFrontmatterSchema(context) as any;
-		expect(schema.properties.status).toEqual({ type: 'string', const: 'discussing' });
-		expect(schema.properties.objectiveRefs.items.anyOf[0].properties.commit).toEqual({ type: 'string', const: 'b'.repeat(40) });
+		expect(Object.keys(schema.properties)).toEqual(['executionPlan']);
 		const items = schema.properties.executionPlan.properties.workItems;
 		expect(items).toMatchObject({ minItems: 2, maxItems: 2 });
-		expect(items.items.anyOf[0].properties.estimate).toEqual({ type: 'null' });
+		expect(items.items.anyOf[0].properties.id).toEqual({ type: 'string', const: 'architecture' });
+		expect(Object.keys(items.items.anyOf[0].properties).sort()).toEqual(['id', 'reviewEstimate']);
 		expect(items.items.anyOf[0].properties.reviewEstimate.type).toBe('object');
-		expect(items.items.anyOf[1].properties.dependsOn).toMatchObject({ type: 'array', minItems: 1, maxItems: 1, items: { anyOf: [{ type: 'string', const: 'architecture' }] } });
+		expect(items.items.anyOf[1].properties.id).toEqual({ type: 'string', const: 'tests' });
 		Object.assign(assignment, { agentClass: 'architect' });
 		const owner = completionFrontmatterSchema(context) as any;
-		expect(owner.properties.executionPlan.properties.workItems.items.anyOf[0].properties.estimate.type).toBe('object');
-		expect(owner.properties.executionPlan.properties.workItems.items.anyOf[1].properties.estimate).toEqual({ type: 'null' });
-		expect(owner.properties.executionPlan.properties.workItems.items.anyOf[0].properties.reviewEstimate).toEqual({ type: 'null' });
+		const ownerItems = owner.properties.executionPlan.properties.workItems;
+		expect(ownerItems).toMatchObject({ minItems: 1, maxItems: 1 });
+		expect(ownerItems.items.anyOf[0].properties).toMatchObject({ id: { type: 'string', const: 'architecture' }, estimate: { type: 'object' } });
+		expect(Object.keys(ownerItems.items.anyOf[0].properties).sort()).toEqual(['estimate', 'id']);
+		Object.assign(assignment, { workItemId: 'architecture' });
+		const scoped = completionFrontmatterSchema(context) as any;
+		expect(Object.keys(scoped.properties.executionPlan.properties.workItems.items.anyOf[0].properties)).toEqual(['estimate']);
 		const checkShape = (node: any) => {
 			expect(Boolean(node.type || node.anyOf)).toBe(true);
 			if ('const' in node) expect(['string', 'number', 'boolean'].includes(typeof node.const)).toBe(true);
@@ -59,6 +63,23 @@ describe('activity completion structured-output schema', () => {
 		assignment.grant.contentWrite = [{ model: 'invalid' }];
 		expect(() => completionFrontmatterSchema(context)).toThrow('writer_content_model_invalid');
 	});
+	it('binds each governed Writer output model to its exact granted content ID', () => {
+		const bookRef = { store: 'treedx', model: 'book', id: 'sdk-architecture', repository: 'library',
+			commit: '9'.repeat(40), path: 'books/architecture.md', revision: 1, digest: `sha256:${'b'.repeat(64)}` };
+		const context = { canonicalAssignmentContext: { assignment: { agentClass: 'researcher',
+			effectiveProfile: { activity: 'acting', handler: 'writer' }, workspace: { mode: 'treedx' },
+			contextRefs: [bookRef], grant: { contentWrite: [{ model: 'knowledge', id: 'research-knowledge',
+				repository: 'library', path: 'knowledge/sdk-architecture/research-knowledge.md' },
+				{ model: 'note', id: 'research-note' }] } } } };
+		const variants = completionOutputTargetVariants(context);
+		const schema = activityCompletionOutputSchema(completionFrontmatterSchema(context), true, variants);
+		const alternatives = (schema.properties.contentOutput as { anyOf: Array<{ properties?: { model?: unknown; frontmatter?: { properties?: { id?: unknown } } } }> }).anyOf;
+		expect(alternatives.map((variant) => [variant.properties?.model, variant.properties?.frontmatter?.properties?.id])).toEqual([
+			[{ type: 'string', const: 'knowledge' }, { type: 'string', const: 'research-knowledge' }],
+			[{ type: 'string', const: 'note' }, { type: 'string', const: 'research-note' }],
+		]);
+		expect(promptFromContext(context)).toContain('knowledge/research-knowledge, note/research-note');
+	});
 	it('requires null content output when the activity does not author governed content', () => {
 		const schema = activityCompletionOutputSchema();
 		expect(schema.properties.contentOutput).toEqual({ type: 'null' });
@@ -67,7 +88,10 @@ describe('activity completion structured-output schema', () => {
 	it('requires empty verification for planning and estimating but retains acting checks', () => {
 		const planningSchema = activityCompletionOutputSchema(undefined, false);
 		expect(planningSchema.properties.verification).toMatchObject({ type: 'array', maxItems: 0 });
-		expect(activityCompletionOutputSchema().properties.verification).not.toHaveProperty('maxItems');
+		expect(activityCompletionOutputSchema().properties.verification).toMatchObject({ maxItems: 8 });
+		expect(activityCompletionOutputSchema().properties.verification.items.properties.commands).toMatchObject({ maxItems: 1 });
+		expect(activityCompletionOutputSchema().properties.verification.items.properties.commands.items)
+			.toEqual({ type: 'string', minLength: 1, maxLength: 4096 });
 		const completion = { schemaVersion: 'treeseed.activity-completion/v1', summary: 'Inspected source.',
 			verification: [{ status: 'passed', summary: 'Inspected files.', commands: ['git status --short && rg -n intent src'] }],
 			reviewDisposition: null, contentOutput: null };

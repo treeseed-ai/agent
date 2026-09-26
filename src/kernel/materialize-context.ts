@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { canonicalStandardsJson } from '@treeseed/sdk/standards';
 import {
 	authorizedContextItemSchema,
 	type AssignmentAttempt,
@@ -21,7 +22,7 @@ function payload(value: unknown): Record<string, unknown> {
 }
 
 function digest(value: unknown): string {
-	return `sha256:${createHash('sha256').update(JSON.stringify(value)).digest('hex')}`;
+	return `sha256:${createHash('sha256').update(canonicalStandardsJson(value)).digest('hex')}`;
 }
 
 function projectFor(reference: ExactEntityReference, treeDx: AssignmentTreeDxFacade): string {
@@ -68,8 +69,24 @@ async function readReference(reference: ExactEntityReference, treeDx: Assignment
 export async function materializeAssignmentContext(input: {
 	attempt: AssignmentAttempt;
 	predecessorResults: AssignmentContext['predecessorResults'];
+	authorizedContext?: unknown[];
 	treeDx: AssignmentTreeDxFacade;
 }): Promise<AssignmentContext> {
-	const context = await Promise.all(input.attempt.contextRefs.map((reference) => readReference(reference, input.treeDx)));
+	const inline = (input.authorizedContext ?? []).map(value => authorizedContextItemSchema.parse(value));
+	const reporting = input.attempt.effectiveProfile.activity === 'reporting';
+	if ((reporting && inline.length !== 1) || (!reporting && inline.length)) throw new Error('assignment_inline_context_denied');
+	for (const item of inline) {
+		const value = record(item.value);
+		if (canonicalStandardsJson(item.ref) !== canonicalStandardsJson(input.attempt.sourceRef)
+			|| item.ref.store !== 'postgresql' || item.ref.model !== 'workday'
+			|| item.ref.id !== input.attempt.workdayId || value.workdayId !== input.attempt.workdayId
+			|| value.teamId !== input.attempt.teamId || item.digest !== digest(item.value)) {
+			throw new Error('assignment_inline_context_authority_mismatch');
+		}
+	}
+	const context = await Promise.all(input.attempt.contextRefs.map(reference => {
+		const supplied = inline.find(item => canonicalStandardsJson(item.ref) === canonicalStandardsJson(reference));
+		return supplied ?? readReference(reference, input.treeDx);
+	}));
 	return { assignment: { ...input.attempt, status: 'running' }, context, predecessorResults: input.predecessorResults };
 }

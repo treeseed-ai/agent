@@ -33,7 +33,8 @@ actors: { allowed: [capacity_operator, team_owner], forbidden: [anonymous_user, 
 devices: { required: [] }
 gates: [core]
 preconditions: { fixtures: [integrated_treeseed_project] }
-api: { required: true, verifierRefs: [agent.catalog.profile-live-proof] }
+# Component coverage only; the addressed live communication lifecycle is required.
+api: { required: true, verifierRefs: [agent.architecture.enforce-activity-profile-tool-scope, agent.golden.clock] }
 content: { required: true, verifierRefs: [] }
 audit: { required: true, verifierRefs: [] }
 negativeCases: []

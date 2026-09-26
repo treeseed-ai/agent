@@ -74,6 +74,8 @@ export async function executeKernelAssignment(input: {
 	const context = assignmentContextSchema.parse(await materializeAssignmentContext({
 		attempt: attempt.data,
 		predecessorResults,
+		authorizedContext: Array.isArray(record(visible.workspaceContext).authorizedContext)
+			? record(visible.workspaceContext).authorizedContext as unknown[] : [],
 		treeDx: input.request.treeDx,
 	}));
 	const localAbort = new AbortController();
@@ -158,8 +160,8 @@ export async function executeKernelAssignment(input: {
 			if (!match) throw new Error('verification_command_not_observed_in_guest');
 			return match;
 		},
-		commitTreeDx: ({ target, value }) => commitTreeDxContent({ attempt: attempt.data,
-			treeDx: input.request.treeDx, target, value }),
+		commitTreeDx: ({ writes }) => commitTreeDxContent({ attempt: attempt.data,
+			treeDx: input.request.treeDx, writes }),
 		commitSource: async () => {
 			if (!transport.result || attempt.data.workspace.mode !== 'git') throw new Error('source_transport_result_missing');
 			return gitReference(transport.result, attempt.data.workspace.repository);
@@ -179,6 +181,10 @@ export async function executeKernelAssignment(input: {
 	} catch (error) {
 		localAbort.abort(error);
 		const summary = error instanceof Error ? error.message : String(error);
+		// The isolation transport has already classified bounded infrastructure
+		// failures. Preserve that authority through AgentKernel instead of
+		// converting a retryable return into a terminal semantic failure.
+		if (transport.result?.status === 'returned') return transport.result;
 		if ((error as { code?: unknown })?.code === 'agent_abstained'
 			&& attempt.data.effectiveProfile.activity === 'chat') return {
 			status: 'abstained', code: 'agent_abstained', summary, retryable: false,
@@ -192,6 +198,10 @@ export async function executeKernelAssignment(input: {
 		}
 		if (summary.includes('Agent timing-awareness contract requires')) {
 			return { status: 'returned', code: 'assignment_timing_awareness_missing', summary, retryable: true,
+				...(transport.result ? { usage: transport.result.usage } : {}) };
+		}
+		if (['ECONNRESET', 'ETIMEDOUT', 'EPIPE'].includes(String((error as { code?: unknown })?.code ?? ''))) {
+			return { status: 'returned', code: 'execution_transport_interrupted', summary, retryable: true,
 				...(transport.result ? { usage: transport.result.usage } : {}) };
 		}
 		return { status: 'failed', code: typeof (error as { code?: unknown })?.code === 'string'

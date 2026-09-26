@@ -186,6 +186,24 @@ const treeDx = { projectId: 'project', handleId: 'handle-1', repositoryId: null,
 		expect(api.completeAssignment).not.toHaveBeenCalled();
 		expect(api.returnAssignment).not.toHaveBeenCalled();
 	});
+	it('preserves a long discussion reply without overflowing the canonical summary', async () => {
+		const api = client();
+		const markdown = 'Useful source findings. '.repeat(300);
+		await runProviderAssignment({ client: api, assignment: assignment('conversation'), treeDx,
+			leaseToken: 'lease', runnerId: 'runner', runtimeBuild,
+			executor: { id: 'codex', observe: async () => ({ available: true }), execute: async request => {
+				await request.beginExecution?.();
+				return { status: 'responded', summary: markdown, responseMarkdown: markdown,
+					outputs: { timingAwareness }, usage: [{ activeSeconds: 2, elapsedSeconds: 3 }] };
+			} } });
+		expect(api.respondToAssignmentDiscussion).toHaveBeenCalledWith('assignment-1',
+			expect.objectContaining({ markdown }), expect.any(String));
+		const completion = api.completeAssignment.mock.calls[0]?.[1];
+		expect(completion.output.assignmentResult.summary.length).toBeLessThanOrEqual(4000);
+		expect(completion.output.assignmentResult.references).toContainEqual(responseReference);
+		expect(api.completeAssignment).toHaveBeenCalledOnce();
+		expect(api.settleAssignment).toHaveBeenCalledOnce();
+	});
 	it('completes an optional abstention through the same general result and exact response reference', async () => {
 		const api = client();
 		await runProviderAssignment({ client: api, assignment: assignment('conversation'), treeDx,

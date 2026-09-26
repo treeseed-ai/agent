@@ -96,3 +96,6 @@ workflow:
   - id: discussion-settlement-failure
     action: { verifier: agent.golden.discussion-settlement-failure }
     expect: { status: passed }
+  - id: discussion-summary-boundary
+    action: { verifier: agent.golden.chat-summary-boundary }
+    expect: { status: passed }

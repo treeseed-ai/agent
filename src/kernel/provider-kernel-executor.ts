@@ -209,7 +209,8 @@ export async function executeKernelAssignment(input: {
 	const communication = attempt.data.effectiveProfile.activity === 'chat';
 	return {
 		status: communication ? transport.result?.status === 'abstained' ? 'abstained' : 'responded' : 'completed', summary: result.summary,
-		...(communication && transport.result?.status !== 'abstained' ? { responseMarkdown: result.summary } : {}),
+		...(communication && transport.result?.status !== 'abstained'
+			? { responseMarkdown: transport.result?.responseMarkdown ?? result.summary } : {}),
 		outputs: { ...record(transport.result?.outputs), assignmentResult: result },
 		usage: transport.result?.usage ?? [{ elapsedSeconds: result.usage.elapsedSeconds }],
 		artifacts: transport.result?.artifacts ?? [],

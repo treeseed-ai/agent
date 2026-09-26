@@ -134,7 +134,8 @@ export class WriterHandler extends ModelHandler {
 		const committedContent = actingContent ? references.find((reference) => reference.kind === 'treedx') : null;
 		const summary = committedContent
 			? `AgentKernel committed governed TreeDX content at ${committedContent.path} in ${committedContent.commit}.`
-			: model.text;
+			: context.assignment.effectiveProfile.activity === 'chat' && model.text.length > 4000
+				? 'Produced a discussion response; full text is retained in the discussion message.' : model.text;
 		const result = this.result(context, runtime, summary, references, model.timingAwareness, model.usage);
 		return { ...result, verification: model.verification ?? [] };
 	}

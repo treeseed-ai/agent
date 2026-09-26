@@ -158,12 +158,42 @@ describe('canonical provider assignment runner', () => {
 				status: 'responded', summary: 'Answered.', responseMarkdown: 'Researched response.', outputs: { timingAwareness }, usage: [{ activeSeconds: 2, elapsedSeconds: 3, inputTokens: 42, nativeUsage: { input_tokens: 42 } }],
 			}; } } });
 		expect(api.respondToAssignmentDiscussion).toHaveBeenCalledWith('assignment-1', expect.objectContaining({ markdown: 'Researched response.' }), expect.any(String));
+		expect(api.respondToAssignmentDiscussion).toHaveBeenCalledOnce();
+		expect(api.respondToAssignmentDiscussion).toHaveBeenCalledBefore(api.settleAssignment);
 		expect(api.settleAssignment).toHaveBeenCalledOnce();
 		expect(api.settleAssignment).toHaveBeenCalledWith('assignment-1', expect.objectContaining({
 			usageActual: expect.objectContaining({ inputTokens: 42, nativeUsage: { input_tokens: 42 } }),
 		}), expect.any(String));
 		expect(api.startAssignmentCloseout).not.toHaveBeenCalled();
 		expect(api.completeAssignment).not.toHaveBeenCalled();
+	});
+	it('does not settle or complete a conversation when durable response publication fails', async () => {
+		const api = client();
+		api.respondToAssignmentDiscussion.mockRejectedValueOnce(new Error('publication unavailable'));
+		await expect(runProviderAssignment({ client: api, assignment: assignment('conversation'), treeDx,
+			leaseToken: 'lease', runnerId: 'runner', runtimeBuild,
+			executor: { id: 'codex', observe: async () => ({ available: true }), execute: async request => {
+				await request.beginExecution?.();
+				return { status: 'responded', summary: 'Answered.', responseMarkdown: 'Exact reply.', outputs: { timingAwareness }, usage: [{ activeSeconds: 2, elapsedSeconds: 3 }] };
+			} } })).rejects.toThrow('publication unavailable');
+		expect(api.settleAssignment).not.toHaveBeenCalled();
+		expect(api.completeAssignment).not.toHaveBeenCalled();
+		expect(api.returnAssignment).not.toHaveBeenCalled();
+	});
+	it('does not use revoked leased authority after a published response settlement fails', async () => {
+		const api = client();
+		api.settleAssignment.mockRejectedValueOnce(new Error('settlement unavailable'));
+		await expect(runProviderAssignment({ client: api, assignment: assignment('conversation'), treeDx,
+			leaseToken: 'lease', runnerId: 'runner', runtimeBuild,
+			executor: { id: 'codex', observe: async () => ({ available: true }), execute: async request => {
+				await request.beginExecution?.();
+				return { status: 'responded', summary: 'Answered.', responseMarkdown: 'Exact reply.', outputs: { timingAwareness }, usage: [{ activeSeconds: 2, elapsedSeconds: 3 }] };
+			} } })).rejects.toThrow('settlement unavailable');
+		expect(api.respondToAssignmentDiscussion).toHaveBeenCalledOnce();
+		expect(api.settleAssignment).toHaveBeenCalledWith('assignment-1', expect.any(Object), 'discussion-settlement:assignment-1:runner');
+		expect(api.completeAssignment).not.toHaveBeenCalled();
+		expect(api.startAssignmentCloseout).not.toHaveBeenCalled();
+		expect(api.failAssignment).not.toHaveBeenCalled();
 	});
 
 	it('fails closed before provider execution when the canonical attempt is absent', async () => {

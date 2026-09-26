@@ -1,4 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
+import { createHash } from 'node:crypto';
+import { canonicalStandardsJson } from '@treeseed/sdk/standards';
 import { materializeAssignmentContext } from '../../../src/kernel/materialize-context.ts';
 
 describe('canonical assignment context materialization', () => {
@@ -8,7 +10,7 @@ describe('canonical assignment context materialization', () => {
 			commit, path: 'tests/fixtures/agent-execution/review-cycle.json' };
 		const invoke = vi.fn();
 		const context = await materializeAssignmentContext({
-			attempt: { contextRefs: [reference] } as never,
+			attempt: { contextRefs: [reference], effectiveProfile: { activity: 'acting' } } as never,
 			predecessorResults: [],
 			treeDx: { projectId: 'sdk-project', repositoryId: 'sdk-library', workspaceId: null, invoke } as never,
 		});
@@ -25,7 +27,7 @@ describe('canonical assignment context materialization', () => {
 			path: 'objectives/core.mdx', requestedPath: 'objectives/core', content: '# Core', frontmatter: { id: 'core' },
 		}] } } }));
 		const context = await materializeAssignmentContext({
-			attempt: { contextRefs: [reference] } as never,
+			attempt: { contextRefs: [reference], effectiveProfile: { activity: 'acting' } } as never,
 			predecessorResults: [],
 			treeDx: { projectId: 'team-project', repositoryId: 'team-repository', workspaceId: null, invoke } as never,
 		});
@@ -35,5 +37,26 @@ describe('canonical assignment context materialization', () => {
 		expect(context.context[0]).toMatchObject({ ref: reference, value: {
 			path: 'objectives/core.mdx', requestedPath: 'objectives/core', content: '# Core',
 		} });
+	});
+	it.each(['team', 'workday', 'digest', 'activity'])('rejects inline Reporter context with incorrect %s authority', async failure => {
+		const ref = { store: 'postgresql', model: 'workday', id: 'workday', revision: 1, digest: `sha256:${'a'.repeat(64)}` };
+		const value = { teamId: failure === 'team' ? 'another' : 'team', workdayId: failure === 'workday' ? 'another' : 'workday' };
+		await expect(materializeAssignmentContext({ attempt: { contextRefs: [], sourceRef: ref, teamId: 'team', workdayId: 'workday',
+			effectiveProfile: { activity: failure === 'activity' ? 'acting' : 'reporting' } } as never,
+			predecessorResults: [], treeDx: {} as never, authorizedContext: [{ ref, mediaType: 'application/json', value,
+				digest: failure === 'digest' ? ref.digest : `sha256:${createHash('sha256').update(canonicalStandardsJson(value)).digest('hex')}` }] }))
+			.rejects.toThrow(/assignment_inline_context/u);
+	});
+	it('accepts PostgreSQL JSONB key reordering without weakening exact authority', async () => {
+		const ref = { store: 'postgresql', model: 'workday', id: 'workday', revision: 1, digest: `sha256:${'a'.repeat(64)}` };
+		const value = { teamId: 'team', workdayId: 'workday', nodes: [{ id: 'actor', status: 'completed' }] };
+		const reordered = { nodes: [{ status: 'completed', id: 'actor' }], workdayId: 'workday', teamId: 'team' };
+		const context = await materializeAssignmentContext({ attempt: { contextRefs: [ref], sourceRef: ref,
+			teamId: 'team', workdayId: 'workday', effectiveProfile: { activity: 'reporting' } } as never,
+			predecessorResults: [], treeDx: { invoke: vi.fn() } as never,
+			authorizedContext: [{ ref: { digest: ref.digest, revision: 1, id: 'workday', model: 'workday', store: 'postgresql' },
+				mediaType: 'application/json', value: reordered,
+				digest: `sha256:${createHash('sha256').update(canonicalStandardsJson(value)).digest('hex')}` }] });
+		expect(context.context[0].value).toEqual(value);
 	});
 });

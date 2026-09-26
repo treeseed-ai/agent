@@ -33,7 +33,7 @@ export function estimateProposalSource(context: JsonRecord): JsonRecord {
 	return proposal;
 }
 
-export function estimateProposalOutputSchema(proposal: JsonRecord, agentClass: string): JsonRecord {
+export function estimateProposalOutputSchema(proposal: JsonRecord, agentClass: string, workItemId?: string): JsonRecord {
 	const schema = describeContentFrontmatterJsonSchema('proposal');
 	const plan = record(proposal.executionPlan), items = plan.workItems;
 	if (!Array.isArray(items) || !items.some(item => estimateMutableField(record(item), agentClass))) {
@@ -41,15 +41,24 @@ export function estimateProposalOutputSchema(proposal: JsonRecord, agentClass: s
 	}
 	const planSchema = record((record(record(schema.properties).executionPlan).anyOf as unknown[])[0]);
 	const itemsSchema = record(record(planSchema.properties).workItems), itemSchema = record(itemsSchema.items);
-	const lock = (shape: JsonRecord, base: JsonRecord, mutable: JsonRecord): JsonRecord => ({ ...shape,
-		properties: Object.fromEntries(Object.keys(record(shape.properties)).map(key =>
-			[key, mutable[key] ?? fixedSchema(base[key])])) });
-	return lock(schema, proposal, { executionPlan: lock(planSchema, plan, { workItems: { ...itemsSchema,
-		minItems: items.length, maxItems: items.length, items: { anyOf: items.map(value => {
-			const item = record(value), field = estimateMutableField(item, agentClass);
-			const editable = field ? record(record(itemSchema.properties)[field]) : {};
-			return lock(itemSchema, item, field ? { [field]: (editable.anyOf as unknown[])[0] } : {});
-		}) } } }) });
+	const owned = items.map(record).flatMap(item => {
+		const field = estimateMutableField(item, agentClass);
+		if (!field || (workItemId && item.id !== workItemId)) return [];
+		const editable = record(record(itemSchema.properties)[field]);
+		return [{ type: 'object', additionalProperties: false, required: [...(workItemId ? [] : ['id']), field], properties: {
+			...(workItemId ? {} : { id: fixedSchema(item.id) }), [field]: (editable.anyOf as unknown[])[0],
+		} }];
+	});
+	if (!owned.length) throw new Error('estimate_work_item_scope_missing');
+	// The model returns only the estimate fields it owns. AgentKernel merges this
+	// compact patch into the exact proposal before committing canonical content.
+	// Requiring the model to reproduce every immutable proposal byte made a
+	// bounded estimating turn spend most of its budget serializing duplicated data.
+	return { type: 'object', additionalProperties: false, required: ['executionPlan'], properties: {
+		executionPlan: { type: 'object', additionalProperties: false, required: ['workItems'], properties: {
+			workItems: { type: 'array', minItems: owned.length, maxItems: owned.length, items: { anyOf: owned } },
+		} },
+	} };
 }
 const omitTransportNulls = (value: unknown): unknown => Array.isArray(value) ? value.map(omitTransportNulls)
 	: value && typeof value === 'object' ? Object.fromEntries(Object.entries(value as JsonRecord)
@@ -63,7 +72,11 @@ export interface ActivityCompletionReport {
 	contentOutput: { model: string; body: string; frontmatter: JsonRecord } | null;
 }
 
-export function activityCompletionOutputSchema(frontmatterSchema?: Record<string, unknown>, allowVerification = true) { return {
+export const maximumVerificationCommands = 8;
+export const maximumVerificationCommandLength = 4096;
+
+export function activityCompletionOutputSchema(frontmatterSchema?: Record<string, unknown>, allowVerification = true,
+	outputVariants?: Array<{ model: string; frontmatter: Record<string, unknown> }>) { return {
 	type: 'object',
 	additionalProperties: false,
 	required: ['schemaVersion', 'summary', 'verification', 'reviewDisposition', 'contentOutput'],
@@ -72,7 +85,7 @@ export function activityCompletionOutputSchema(frontmatterSchema?: Record<string
 		summary: { type: 'string', minLength: 1 },
 		verification: {
 			type: 'array',
-			...(allowVerification ? {} : { maxItems: 0 }),
+			maxItems: allowVerification ? maximumVerificationCommands : 0,
 			items: {
 				type: 'object',
 				additionalProperties: false,
@@ -80,12 +93,20 @@ export function activityCompletionOutputSchema(frontmatterSchema?: Record<string
 				properties: {
 					status: { type: 'string', enum: ['passed', 'failed', 'not-run', 'unknown'] },
 					summary: { type: 'string', minLength: 1 },
-					commands: { type: 'array', items: { type: 'string', minLength: 1 } },
+					// The model API does not accept lookaround patterns. The guest
+					// validates each command before runner-observed replay instead.
+					commands: { type: 'array', maxItems: 1, items: { type: 'string', minLength: 1, maxLength: maximumVerificationCommandLength } },
 				},
 			},
 		},
 		reviewDisposition: { type: ['string', 'null'], enum: ['approved', 'rejected', 'revision-required', null] },
-		contentOutput: frontmatterSchema ? {
+		// Exact output variants are supplied only for acting TreeDX Writer assignments.
+		// Requiring one here prevents the provider from satisfying the transport schema
+		// with null and failing later at the AgentKernel commit boundary.
+		contentOutput: outputVariants?.length ? { anyOf: outputVariants.map(({ model, frontmatter }) => ({
+			type: 'object', additionalProperties: false, required: ['model', 'body', 'frontmatter'],
+			properties: { model: { type: 'string', const: model }, body: { type: 'string', minLength: 1 }, frontmatter },
+		})) } : frontmatterSchema ? {
 			anyOf: [{ type: 'null' }, {
 					type: 'object', additionalProperties: false,
 					required: ['model', 'body', 'frontmatter'],

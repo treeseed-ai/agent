@@ -33,7 +33,8 @@ actors: { allowed: [project_manager, capacity_operator, team_owner], forbidden: 
 devices: { required: [] }
 gates: [core]
 preconditions: { fixtures: [integrated_treeseed_project] }
-api: { required: true, verifierRefs: [agent.catalog.profile-live-proof] }
+# Component coverage only; live immutable-authority outcomes remain required.
+api: { required: true, verifierRefs: [agent.architecture.normalize-activity-profile-agent, agent.architecture.enforce-activity-profile-tool-scope, agent.golden.context-grant] }
 content: { required: false, verifierRefs: [] }
 audit: { required: true, verifierRefs: [] }
 negativeCases: []

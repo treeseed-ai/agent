@@ -38,8 +38,7 @@ export interface VerificationResult {
 }
 
 export interface TreeDxCommitRequest {
-	target: ExactEntityReference;
-	value: unknown;
+	writes: Array<{ target: ExactEntityReference; value: unknown }>;
 }
 
 export interface SourceCommitRequest {
@@ -51,7 +50,7 @@ export interface AgentRuntime {
 	readContext(ref: ExactEntityReference): Promise<unknown>;
 	invokeModel(request: ModelInvocationRequest): Promise<ModelInvocationResult>;
 	runVerification(request: VerificationRequest): Promise<VerificationResult>;
-	commitTreeDx(request: TreeDxCommitRequest): Promise<AssignmentReference>;
+	commitTreeDx(request: TreeDxCommitRequest): Promise<AssignmentReference[]>;
 	commitSource(request: SourceCommitRequest): Promise<AssignmentReference>;
 	now(): string;
 }

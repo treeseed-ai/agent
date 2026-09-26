@@ -34,7 +34,8 @@ actors: { allowed: [capacity_operator, team_owner], forbidden: [anonymous_user, 
 devices: { required: [] }
 gates: [core]
 preconditions: { fixtures: [integrated_treeseed_project] }
-api: { required: true, verifierRefs: [agent.catalog.profile-live-proof] }
+# Component coverage only; the live outcomes below remain unproven.
+api: { required: true, verifierRefs: [agent.golden.reporter, agent.golden.settlement] }
 content: { required: true, verifierRefs: [] }
 audit: { required: true, verifierRefs: [] }
 negativeCases: []

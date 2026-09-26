@@ -15,8 +15,13 @@ describe('class-owned proposal estimating', () => {
 			workItems: { items: { anyOf: Array<{ properties: Record<string, unknown> }> } }
 		} } }).executionPlan;
 		const items = plan.properties.workItems.items.anyOf;
-		expect(items.map((item) => Object.hasOwn(item.properties, 'estimate'))).toEqual([true, true, true]);
-		expect(items[0]?.properties.estimate).not.toEqual(items[2]?.properties.estimate);
+		expect(items).toHaveLength(2);
+		expect(items.map((item) => Object.hasOwn(item.properties, 'estimate'))).toEqual([true, true]);
+		expect(items.map((item) => (item.properties.id as { const: string }).const)).toEqual(['implementation', 'integration']);
+		const assigned = estimateProposalOutputSchema({ executionPlan: { workItems: [engineer, integration, tester] } }, 'engineer', 'integration');
+		const assignedItems = ((assigned.properties as any).executionPlan.properties.workItems.items.anyOf);
+		expect(assignedItems).toHaveLength(1);
+		expect(assignedItems[0].properties).not.toHaveProperty('id');
 		expect(() => estimateProposalOutputSchema({ executionPlan: { workItems: [tester] } }, 'engineer'))
 			.toThrow('estimate_work_item_scope_missing');
 	});

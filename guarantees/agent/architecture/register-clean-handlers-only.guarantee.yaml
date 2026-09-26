@@ -6,7 +6,7 @@ subtype: architecture
 journey: Register Clean Handlers Only
 ownerPackage: "@treeseed/agent"
 surface: agent-runtime
-summary: "The built-in runtime registry exposes only writer, actor, estimate, releaser, and reporter."
+summary: "The pinned runtime resolves its exact registered handler, rejects generic aliases and duplicate implementations, and keeps project handlers build-owned."
 status: planned
 actors:
   allowed: [project_manager, capacity_operator, team_owner]

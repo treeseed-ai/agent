@@ -39,7 +39,8 @@ actors: { allowed: [capacity_operator, team_owner], forbidden: [anonymous_user, 
 devices: { required: [] }
 gates: [core]
 preconditions: { fixtures: [bounded_source_project] }
-api: { required: true, verifierRefs: [agent.catalog.profile-live-proof] }
+# Component coverage only; full independent live review remains unproven.
+api: { required: true, verifierRefs: [agent.golden.reviewer, agent.golden.revision, agent.golden.workspace-denials] }
 content: { required: true, verifierRefs: [] }
 audit: { required: true, verifierRefs: [] }
 negativeCases: []

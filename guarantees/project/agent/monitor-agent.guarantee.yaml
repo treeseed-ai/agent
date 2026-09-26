@@ -38,7 +38,7 @@ api:
   required: true
   verifierRefs:
     - agent.trace.inspect-execution
-    - agent.trace.deliver-mode-run-telemetry
+    - agent.trace.assignment-events
 content:
   required: true
   verifierRefs:
@@ -46,8 +46,8 @@ content:
 audit:
   required: true
   verifierRefs:
-    - agent.trace.correlate-assignment-mode-run-artifacts
-    - agent.trace.deliver-mode-run-telemetry
+    - agent.golden.actor
+    - agent.trace.assignment-events
 negativeCases:
   - id: unauthorized-actor-denied
     actor: anonymous_user

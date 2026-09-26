@@ -7,7 +7,7 @@ import { migrateManagedProviderManifestV4 } from './legacy-manifest.ts';
 
 const digest = /^sha256:[a-f0-9]{64}$/u;
 const profileIds = ['read', 'unit', 'integration', 'platform', 'connected'] as const;
-const codexGuestMemoryBytes = 4_294_967_296;
+const codexGuestMemoryBytes = 8_589_934_592;
 
 export interface ManagedProviderManifestRelease {
 	release: string;
@@ -27,7 +27,7 @@ export function createManagedProviderManifestV5(input: ManagedProviderManifestRe
 	for (const value of [input.guestImageDigest, input.baseImageDigest, input.provenanceDigest]) if (!digest.test(value)) throw new Error('Managed provider defaults require exact image and provenance digests.');
 	const sandboxProfile = (id: typeof profileIds[number]) => ({
 		id, guestImage: input.guestImage, guestImageDigest: input.guestImageDigest, defaultDenyNetwork: true,
-		resources: { cpuCores: 1, memoryBytes: codexGuestMemoryBytes, diskBytes: 4_294_967_296, processLimit: 128, outputBytes: 67_108_864 },
+		resources: { cpuCores: 1, memoryBytes: codexGuestMemoryBytes, diskBytes: 4_294_967_296, processLimit: 512, outputBytes: 67_108_864 },
 	});
 	const lane = (id: 'communication' | 'platform' | 'workday', priority: number, reservedConcurrentWorkers: number) => ({
 		id, purpose: id, priority, reservedConcurrentWorkers, maxConcurrentWorkers: 1,
@@ -98,9 +98,21 @@ export function applyManagedDevelopmentPolicy(
 		...manifest,
 		configuration: { ...manifest.configuration, generation: `${manifest.configuration.generation}-development-${release}` },
 		sandbox: { ...manifest.sandbox, profiles: manifest.sandbox.profiles.map((profile) => ({ ...profile,
-			resources: { ...profile.resources, memoryBytes: Math.max(profile.resources.memoryBytes, codexGuestMemoryBytes) } })) },
+			resources: { ...profile.resources, memoryBytes: Math.max(profile.resources.memoryBytes, codexGuestMemoryBytes),
+				processLimit: Math.max(profile.resources.processLimit, 512) } })) },
 		ontology: managed.ontology,
 		lanes: manifest.lanes.map((lane) => ({ ...lane, capabilities: capabilitiesByPurpose.get(lane.purpose) ?? lane.capabilities })),
-		adapters: manifest.adapters.map((adapter) => ({ ...adapter, offers: offersByAdapter.get(adapter.id) ?? adapter.offers })),
+		adapters: manifest.adapters.map((adapter) => ({ ...adapter,
+			offers: offersByAdapter.get(adapter.id) ?? adapter.offers,
+			nativeLimits: { ...adapter.nativeLimits,
+				// Capability-oriented execution providers have independent configured
+				// budgets even when they share the Codex harness and test model.
+				modelConfigurationId: `${adapter.id}:${adapter.model?.model ?? 'provider-default'}:${adapter.model?.reasoningEffort ?? 'provider-default'}`,
+				capabilityLimits: Object.fromEntries(Object.entries(adapter.nativeLimits.capabilityLimits ?? {}).map(([id, limit]) => [id,
+					['treeseed.engineering.architecture', 'treeseed.engineering.review'].includes(id) && adapter.id === 'codex-implementation'
+						? { ...limit, minimumAssignmentSeconds: Math.max(limit.minimumAssignmentSeconds ?? 0, 360) }
+						: limit])),
+			},
+		})),
 	};
 }

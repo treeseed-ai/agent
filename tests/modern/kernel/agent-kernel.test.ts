@@ -17,20 +17,23 @@ function assignmentContext(): AssignmentContext {
 		assignment: {
 			schemaVersion: 'treeseed.assignment-attempt/v1', id: 'assignment-1', idempotencyKey: 'assignment-1-attempt-1',
 			teamId: 'team-1', projectId: 'project-1', workdayId: 'workday-1', nodeId: 'node-1', agentClass: 'reporter', workItemId: 'report-workday', nodeRevision: 1, graphRevision: 1,
-			sourceRef: { store: 'treedx', model: 'proposal', id: 'proposal-1', revision: 1, digest }, authorityRefs: [{ store: 'treedx', model: 'decision', id: 'decision-1', revision: 1, digest }],
+			sourceRef: { store: 'postgresql', model: 'workday', id: 'workday-1', revision: 1, digest }, authorityRefs: [{ store: 'treedx', model: 'decision', id: 'decision-1', revision: 1, digest }],
 			effectiveProfile: {
 				profileRef: { store: 'treedx', model: 'agent', id: 'reporter-1', revision: 1, digest }, activity: 'reporting', handler: 'reporter',
 				handlerOrigin: 'agent-package', prompt: { system: 'Record an exact deterministic report for the closing workday.' },
 				permissionCeiling: { content: { read: ['note'], write: ['note'] }, tools: [] },
 			},
 			requiredCapabilities: [], grant: { contentRead: [], contentWrite: [reportTarget], sourceRead: [], sourceWrite: [], tools: [] },
-			provider: { providerId: 'provider-1', offerId: 'offer-1', executionProviderId: 'codex', modelConfigurationId: 'terra-medium', executionCapabilityId: 'code-change', offerRevision: 1, runtimeBuild }, contextRefs: [], predecessorResultIds: [],
+			provider: { providerId: 'provider-1', offerId: 'offer-1', executionProviderId: 'codex', modelConfigurationId: 'terra-medium', executionCapabilityId: 'code-change', offerRevision: 1, runtimeBuild },
+			contextRefs: [{ store: 'postgresql', model: 'workday', id: 'workday-1', revision: 1, digest }], predecessorResultIds: [],
 			acceptanceCriteria: ['Commit one exact report.'],
 			workspace: { mode: 'treedx', workspaceId: 'workspace-1', repository: 'treeseed-ai/team-library', baseCommit: commit, writablePaths: ['notes'] },
 			estimate: { minimumSeconds: 1, expectedSeconds: 10, maximumSeconds: 30 }, limits: { maximumSeconds: 30, maximumContextBytes: 1024, maximumContextItems: 10 },
 			deadline: '2099-09-13T12:00:00.000Z', leaseId: 'lease-1', reservationId: 'reservation-1', attempt: 1, status: 'running', createdAt: '2026-09-13T12:00:00.000Z',
 		},
-		context: [], predecessorResults: [],
+		context: [{ ref: { store: 'postgresql', model: 'workday', id: 'workday-1', revision: 1, digest },
+			mediaType: 'application/json', digest, value: { teamId: 'team-1', workdayId: 'workday-1',
+				nodes: [], edges: [], attempts: [], reservations: [], usage: [] } }], predecessorResults: [],
 	};
 }
 
@@ -41,9 +44,10 @@ function runtime(commits: unknown[]): AgentRuntime {
 		invokeModel: async () => { throw new Error('reporter_must_not_invoke_model'); },
 		runVerification: async () => { throw new Error('unexpected_verification'); },
 		commitSource: async () => { throw new Error('unexpected_source_commit'); },
-		commitTreeDx: async (request): Promise<AssignmentReference> => {
-			commits.push(request.value);
-			return { kind: 'treedx', projectId: 'project-1', repository: 'treeseed-ai/team-library', commit, path: 'notes/workday-report.yml', workspaceId: 'workspace-1' };
+		commitTreeDx: async (request): Promise<AssignmentReference[]> => {
+			commits.push(...request.writes.map(({ value }) => value));
+			return request.writes.map(({ target }) => ({ kind: 'treedx' as const, projectId: 'project-1',
+				repository: 'treeseed-ai/team-library', commit, path: target.path ?? 'notes/workday-report.yml', workspaceId: 'workspace-1' }));
 		},
 	};
 }
@@ -117,6 +121,15 @@ describe('AgentKernel', () => {
 		expect(first.references[0]).toMatchObject({ kind: 'treedx', path: 'notes/workday-report.yml' });
 	});
 
+	it('measures native Reporter publication time without invoking a model', async () => {
+		const boundary = runtime([]);
+		boundary.now = vi.fn().mockReturnValueOnce('2026-09-13T12:00:01.000Z')
+			.mockReturnValue('2026-09-13T12:00:02.250Z');
+		const result = await new ReporterHandler().run(assignmentContext(), boundary);
+		expect(result.usage.elapsedSeconds).toBe(2);
+		expect(result.completedAt).toBe('2026-09-13T12:00:02.250Z');
+	});
+
 	it('fails closed on unknown handlers and wrong runtime builds', async () => {
 		const kernel = new AgentKernel(new HandlerRegistry([new ReporterHandler()]));
 		const unknown = assignmentContext();
@@ -141,18 +154,92 @@ describe('AgentKernel', () => {
 		expect(handler.run).toHaveBeenCalledOnce();
 	});
 
+	it('rejects a result claiming a different assignment branch', async () => {
+		const context = assignmentContext();
+		context.assignment.workspace = { mode: 'git', repository: 'treeseed-ai/sdk', baseCommit: commit,
+			branch: 'treeseed/assignments/assignment-1', writablePaths: ['src'] };
+		context.assignment.grant.contentWrite = [];
+		context.assignment.grant.sourceWrite = ['treeseed-ai/sdk'];
+		context.assignment.effectiveProfile.handler = 'branch-result';
+		const handler: Handler = { id: 'branch-result', run: async () => ({
+			schemaVersion: 'treeseed.assignment-result/v1', id: 'result-1', assignmentId: context.assignment.id,
+			status: 'completed', summary: 'Candidate.', references: [{ kind: 'git', repository: 'treeseed-ai/sdk',
+				branch: 'staging', commit }], verification: [], usage: { elapsedSeconds: 1 }, diagnostics: [],
+			completedAt: '2026-09-13T12:00:01.000Z',
+		}) };
+		await expect(new AgentKernel(new HandlerRegistry([handler])).runAssignment({ context, runtimeBuild, runtime: runtime([]) }))
+			.rejects.toThrow('assignment_result_reference_denied');
+	});
 	it('enforces the exact TreeDX write grant at the runtime boundary', async () => {
 		const kernel = new AgentKernel(new HandlerRegistry([new ReporterHandler()]));
 		const denied = assignmentContext();
 		denied.assignment.grant.contentWrite = [];
 		await expect(kernel.runAssignment({ context: denied, runtimeBuild, runtime: runtime([]) })).rejects.toThrow('reporter_note_grant_required');
 	});
+	it('revokes captured runtime operations after the one completion path closes', async () => {
+		const context = assignmentContext(); context.assignment.effectiveProfile.handler = 'capture';
+		let captured: AgentRuntime | undefined;
+		const handler: Handler = { id: 'capture', run: async (value, scoped) => {
+			captured = scoped;
+			return new ReporterHandler().run(value, scoped);
+		} };
+		const commits: unknown[] = [];
+		await new AgentKernel(new HandlerRegistry([handler])).runAssignment({ context, runtimeBuild, runtime: runtime(commits) });
+		expect(commits).toHaveLength(1);
+		expect(() => captured!.commitTreeDx({ writes: [{ target: reportTarget, value: {} }] }))
+			.toThrow('assignment_execution_closed');
+		expect(commits).toHaveLength(1);
+	});
+	it('revokes captured runtime even when a project handler throws synchronously', async () => {
+		const context = assignmentContext(); context.assignment.effectiveProfile.handler = 'capture';
+		let captured: AgentRuntime | undefined;
+		const handler: Handler = { id: 'capture', run: (_context, scoped) => { captured = scoped; throw new Error('handler_crash'); } };
+		const commits: unknown[] = [];
+		await expect(new AgentKernel(new HandlerRegistry([handler])).runAssignment({ context, runtimeBuild, runtime: runtime(commits) }))
+			.rejects.toThrow('handler_crash');
+		expect(() => captured!.commitTreeDx({ writes: [{ target: reportTarget, value: {} }] }))
+			.toThrow('assignment_execution_closed');
+		expect(commits).toHaveLength(0);
+	});
+	it('denies a runtime mutation at the deadline before invoking TreeDX', async () => {
+		vi.useFakeTimers();
+		const context = assignmentContext(); context.assignment.effectiveProfile.handler = 'capture';
+		const handler: Handler = { id: 'capture', run: async (_context, scoped) => {
+			vi.setSystemTime(new Date(context.assignment.deadline));
+			await scoped.commitTreeDx({ writes: [{ target: reportTarget, value: {} }] });
+			throw new Error('expired_publication_was_not_rejected');
+		} };
+		const commits: unknown[] = [];
+		await expect(new AgentKernel(new HandlerRegistry([handler])).runAssignment({ context, runtimeBuild, runtime: runtime(commits) }))
+			.rejects.toThrow('assignment_timeout');
+		expect(commits).toHaveLength(0);
+	});
+	it('denies productive-budget overrun even before a starved timeout callback can run', async () => {
+		let measured = 0;
+		const clock = vi.spyOn(performance, 'now').mockImplementation(() => measured);
+		try {
+			const context = assignmentContext(); context.assignment.effectiveProfile.handler = 'capture';
+			context.assignment.limits.maximumSeconds = 1;
+			const handler: Handler = { id: 'capture', run: async (_context, scoped) => {
+				measured = 1001;
+				await scoped.commitTreeDx({ writes: [{ target: reportTarget, value: {} }] });
+				throw new Error('overrun_publication_was_not_rejected');
+			} };
+			const commits: unknown[] = [];
+			await expect(new AgentKernel(new HandlerRegistry([handler])).runAssignment({ context, runtimeBuild, runtime: runtime(commits) }))
+				.rejects.toThrow('assignment_timeout');
+			expect(commits).toHaveLength(0);
+		} finally { clock.mockRestore(); }
+	});
 
 	it.each(['book', 'knowledge'])('binds a TreeDX review to the exact %s candidate, not its proposal', async (model) => {
 		const context = assignmentContext();
 		context.assignment.effectiveProfile.activity = 'reviewing';
 		context.assignment.effectiveProfile.handler = 'reviewer';
-		context.assignment.grant.contentWrite = [{ ...reportTarget, model: 'decision' }];
+		context.assignment.grant.contentWrite = [
+			{ ...reportTarget, id: 'review-finding', model: 'note', path: 'notes/review-finding.mdx' },
+			{ ...reportTarget, model: 'decision', path: 'decisions/review-decision.mdx' },
+		];
 		const candidate = { store: 'treedx' as const, model, id: 'actor-output', repository: 'library',
 			commit: 'd'.repeat(40), path: `${model}s/actor-output.mdx` };
 		context.context = [{ ref: candidate, mediaType: 'text/markdown', digest, value: { frontmatter: { id: candidate.id } } }];
@@ -169,10 +256,10 @@ describe('AgentKernel', () => {
 				lastToolSucceeded: true, firstToolCompliant: true, finalToolCompliant: true },
 			activityCompletion: { summary: 'Verified exact candidate.', reviewDisposition: 'approved', contentOutput: null } });
 		await new ReviewerHandler().run(context, boundary);
-		expect(commits[0]).toMatchObject({ frontmatter: { decisionClass: 'work-review', subjectRef: candidate } });
+		expect(commits[1]).toMatchObject({ frontmatter: { decisionClass: 'work-review', subjectRef: candidate } });
 		context.context[0]!.ref = { ...candidate, commit: 'e'.repeat(40) };
 		await expect(new ReviewerHandler().run(context, boundary)).rejects.toThrow('review_candidate_reference_missing');
-		expect(commits).toHaveLength(1);
+		expect(commits).toHaveLength(2);
 	});
 
 	it.each(['book', 'knowledge'])('commits acting Writer %s output instead of a Note', async (model) => {
@@ -191,6 +278,7 @@ describe('AgentKernel', () => {
 		const result = await new WriterHandler().run(context, boundary);
 		expect(commits).toEqual([{ body: 'Substantive governed findings.', frontmatter: { id: reportTarget.id } }]);
 		expect(result.references).toHaveLength(1);
+		expect(result.summary).toContain('AgentKernel committed governed TreeDX content');
 		context.assignment.grant.contentWrite = [reportTarget];
 		await expect(new WriterHandler().run(context, boundary)).rejects.toThrow('writer_content_commit_grant_required');
 		expect(commits).toHaveLength(1);
@@ -200,6 +288,22 @@ describe('AgentKernel', () => {
 		expect(commits).toHaveLength(1);
 		boundary.invokeModel = async () => { throw new Error('model_failed'); };
 		await expect(new WriterHandler().run(context, boundary)).rejects.toThrow('model_failed');
+	});
+
+	it('commits a planning synthesis from the completion summary as one governed Note', async () => {
+		const context = assignmentContext();
+		context.assignment.effectiveProfile.activity = 'planning';
+		context.assignment.effectiveProfile.handler = 'writer';
+		const commits: unknown[] = [];
+		const boundary = runtime(commits);
+		boundary.invokeModel = async () => ({ text: 'result-a supplied scope; result-b supplied risks.',
+			timingAwareness: { schemaVersion: 'treeseed.assignment-timing-awareness/v1', requiredChecks: 2, completedChecks: 2,
+				firstTool: 'treedx:treeseed_time_status', firstToolSucceeded: true, lastTool: 'treedx:treeseed_time_status',
+				lastToolSucceeded: true, firstToolCompliant: true, finalToolCompliant: true }, usage: { elapsedSeconds: 1 },
+			activityCompletion: { summary: 'result-a supplied scope; result-b supplied risks.', reviewDisposition: null, contentOutput: null } });
+		const result = await new WriterHandler().run(context, boundary);
+		expect(result.summary).toBe('result-a supplied scope; result-b supplied risks.');
+		expect(commits).toMatchObject([{ body: result.summary }]);
 	});
 
 	it('requires Architect acting output to extend the exact conventional Architecture book', async () => {

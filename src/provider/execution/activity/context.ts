@@ -20,5 +20,7 @@ export function assignmentRuntimeSeconds(assignment: Record<string, unknown>, no
   const deadline = Date.parse(String(attempt.deadline ?? ''));
   if (!Number.isFinite(deadline)) throw Object.assign(new Error('Assignment productive execution deadline is absent.'), { code: 'assignment_execution_window_exhausted' });
   if (deadline <= now) throw Object.assign(new Error('Assignment productive execution window is exhausted.'), { code: 'assignment_execution_window_exhausted' });
-  return Math.max(1, Math.floor((deadline - now) / 1_000));
+  const maximumSeconds = Number(record(attempt.limits).maximumSeconds);
+  if (!Number.isInteger(maximumSeconds) || maximumSeconds <= 0) throw new Error('assignment_active_duration_invalid');
+  return Math.max(1, Math.min(maximumSeconds, Math.floor((deadline - now) / 1_000)));
 }

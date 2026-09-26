@@ -34,11 +34,26 @@ it('refreshes only managed provider policy for development source', () => {
 		? { ...entry, offer: { ...entry.offer, capabilities: entry.offer.capabilities.filter(({ id }) => id !== 'treeseed.engineering.release') } }
 		: entry);
 	current.connections = [{ id: 'preserved' } as typeof current.connections[number]];
+	current.adapters[0]!.model = { model: 'gpt-6-luna', reasoningEffort: 'low' };
+	current.adapters[1]!.model = { model: 'gpt-5.6-sol', reasoningEffort: 'medium' };
 	const refreshed = applyManagedDevelopmentPolicy(current, 'source');
 	expect(refreshed.adapters[0]!.offers.flatMap(({ offer }) => offer.capabilities.map(({ id }) => id))).toContain('treeseed.engineering.release');
 	expect(refreshed.connections).toEqual(current.connections);
 	expect(refreshed.sandbox).toEqual(current.sandbox);
-	expect(refreshed.sandbox.profiles.every((profile) => profile.resources.memoryBytes === 4_294_967_296)).toBe(true);
+	expect(refreshed.sandbox.profiles.every((profile) => profile.resources.memoryBytes === 8_589_934_592)).toBe(true);
+	expect(refreshed.sandbox.profiles.every((profile) => profile.resources.processLimit === 512)).toBe(true);
+	expect(refreshed.adapters.map(({ model }) => model)).toEqual([
+		{ model: 'gpt-6-luna', reasoningEffort: 'low' },
+		{ model: 'gpt-5.6-sol', reasoningEffort: 'medium' },
+	]);
+	expect(refreshed.adapters.map(({ id, nativeLimits }) => [id, nativeLimits.modelConfigurationId])).toEqual([
+		['codex-implementation', 'codex-implementation:gpt-6-luna:low'],
+		['codex-research', 'codex-research:gpt-5.6-sol:medium'],
+	]);
+	expect(refreshed.adapters[0]!.nativeLimits.capabilityLimits).toMatchObject({
+		'treeseed.engineering.architecture': { minimumAssignmentSeconds: 360 },
+		'treeseed.engineering.review': { minimumAssignmentSeconds: 360 },
+	});
 	expect(refreshed.configuration.generation).toContain('development-source');
 });
 
@@ -48,7 +63,8 @@ it('raises only undersized managed development guests and preserves explicit lar
 	current.sandbox.profiles[0]!.resources.memoryBytes = 1_073_741_824;
 	current.sandbox.profiles[1]!.resources.memoryBytes = 8_589_934_592;
 	const refreshed = applyManagedDevelopmentPolicy(current, 'source');
-	expect(refreshed.sandbox.profiles[0]!.resources.memoryBytes).toBe(4_294_967_296);
+	expect(refreshed.sandbox.profiles[0]!.resources.memoryBytes).toBe(8_589_934_592);
 	expect(refreshed.sandbox.profiles[1]!.resources.memoryBytes).toBe(8_589_934_592);
+	expect(refreshed.sandbox.profiles.every((profile) => profile.resources.processLimit >= 512)).toBe(true);
 	expect(current.sandbox.profiles[0]!.resources.memoryBytes).toBe(1_073_741_824);
 });

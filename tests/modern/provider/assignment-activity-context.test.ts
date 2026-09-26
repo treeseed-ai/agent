@@ -13,6 +13,7 @@ describe('guest assignment task authority', () => {
 			executionWindow: { deadline: '2026-09-20T12:02:00.000Z' } });
 		expect(JSON.stringify(assignmentActivityContext(assignment))).not.toContain('Wrong legacy task');
 		expect(assignmentRuntimeSeconds(assignment, Date.parse('2026-09-20T12:00:00.000Z'))).toBe(120);
+		expect(assignmentRuntimeSeconds({ assignmentAttempt: { ...assignment.assignmentAttempt, deadline: '2026-09-20T23:00:00.000Z' } }, Date.parse('2026-09-20T12:00:00.000Z'))).toBe(120);
 		expect(() => assignmentRuntimeSeconds(assignment, Date.parse('2026-09-20T12:02:00.000Z'))).toThrow(/exhausted/u);
 	});
 

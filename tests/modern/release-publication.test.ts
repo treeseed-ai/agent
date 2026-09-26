@@ -67,7 +67,7 @@ describe('Agent RC publication', () => {
 		const entrypoint = readFileSync('docker-entrypoint.sh', 'utf8');
 		const compose = readFileSync('deploy/compose.template.yml', 'utf8');
 		const workflow = readFileSync('.github/workflows/publish.yml', 'utf8');
-		expect(packageJson.dependencies['@openai/codex']).toBe('0.149.0');
+		expect(packageJson.dependencies['@openai/codex']).toBe('0.156.1');
 		expect(dockerfile).not.toContain('/app/node_modules/@openai/codex/bin/codex.js');
 		expect(codexDockerfile).toContain('/app/node_modules/@openai/codex/bin/codex.js');
 		expect(entrypoint).toContain('provider manager and runner containers must run unprivileged');
@@ -81,7 +81,7 @@ describe('Agent RC publication', () => {
 		expect(compose).toContain('TREESEED_PROVIDER_ENVIRONMENT: ${TREESEED_PROVIDER_ENVIRONMENT:-managed}');
 		expect(compose).toContain('TREESEED_REQUIRE_MICROVM: "true"');
 		expect(compose).not.toContain('TREESEED_CODEX_AUTH_FILE');
-		expect(workflow).toContain('codex-cli 0.149.0');
+		expect(workflow).toContain('codex-cli 0.156.1');
 		const guest = readFileSync('src/sandbox/guest.ts', 'utf8');
 		expect(guest).toContain("'--dangerously-bypass-approvals-and-sandbox'");
 		expect(guest).not.toContain("'--approve-for-me'");

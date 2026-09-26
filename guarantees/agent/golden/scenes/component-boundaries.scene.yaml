@@ -6,6 +6,12 @@ workflow:
   - id: planning-completion
     action: { verifier: agent.golden.planning-completion }
     expect: { status: passed }
+  - id: chat-receipt-denied
+    action: { verifier: agent.golden.chat-receipt-denied }
+    expect: { status: passed }
+  - id: chat-abstention
+    action: { verifier: agent.golden.chat-abstention }
+    expect: { status: passed }
   - id: team-enrollment
     action: { verifier: agent.golden.team-enrollment }
     expect: { status: passed }

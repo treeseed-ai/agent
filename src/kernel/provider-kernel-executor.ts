@@ -107,8 +107,9 @@ export async function executeKernelAssignment(input: {
 			if (transport.result) throw new Error('model_already_invoked');
 			transport.result = await input.executor.execute(transportRequest);
 			if (!executionStart) throw Object.assign(new Error('execution_start_not_observed'), { code: 'execution_start_not_observed' });
-			if (transport.result.status === 'abstained') throw Object.assign(new Error(transport.result.summary), { code: 'agent_abstained' });
-			if (!['completed', 'responded'].includes(transport.result.status)) {
+			if (transport.result.status === 'abstained' && attempt.data.effectiveProfile.activity !== 'chat')
+				throw Object.assign(new Error(transport.result.summary), { code: 'agent_abstained' });
+			if (!['completed', 'responded', 'abstained'].includes(transport.result.status)) {
 				throw Object.assign(new Error(transport.result.summary), { code: transport.result.code });
 			}
 			const usage = record(transport.result.usage?.[0]);
@@ -185,11 +186,6 @@ export async function executeKernelAssignment(input: {
 		// failures. Preserve that authority through AgentKernel instead of
 		// converting a retryable return into a terminal semantic failure.
 		if (transport.result?.status === 'returned') return transport.result;
-		if ((error as { code?: unknown })?.code === 'agent_abstained'
-			&& attempt.data.effectiveProfile.activity === 'chat') return {
-			status: 'abstained', code: 'agent_abstained', summary, retryable: false,
-			...(transport.result ? { usage: transport.result.usage } : {}),
-		};
 		// Upstream saturation is not an invalid agent result. Preserve the existing
 		// provider return/retry path; it retains normal admission and deadline limits.
 		if (summary.startsWith('Kata guest exited 1: Codex execution failed: Selected model is at capacity. Please try a different model.')) {
@@ -212,8 +208,8 @@ export async function executeKernelAssignment(input: {
 	}
 	const communication = attempt.data.effectiveProfile.activity === 'chat';
 	return {
-		status: communication ? 'responded' : 'completed', summary: result.summary,
-		...(communication ? { responseMarkdown: result.summary } : {}),
+		status: communication ? transport.result?.status === 'abstained' ? 'abstained' : 'responded' : 'completed', summary: result.summary,
+		...(communication && transport.result?.status !== 'abstained' ? { responseMarkdown: result.summary } : {}),
 		outputs: { ...record(transport.result?.outputs), assignmentResult: result },
 		usage: transport.result?.usage ?? [{ elapsedSeconds: result.usage.elapsedSeconds }],
 		artifacts: transport.result?.artifacts ?? [],

@@ -45,11 +45,12 @@ test('SDK runtime golden has reviewed useful outputs, a real revision, settlemen
 	assert.ok(assignments.length > 0, 'No real assignment evidence');
 	assert.equal(new Set(assignments.map(item => item.id)).size, assignments.length);
 	for (const item of assignments) {
-		assert.ok(['completed', 'failed', 'expired', 'returned', 'cancelled'].includes(text(item.status)), `Unsettled assignment ${text(item.id)}`);
+		assert.equal(item.status, 'completed', `Normal golden cannot contain a failed, returned, expired or cancelled assignment: ${text(item.id)}`);
 		assert.equal(item.leaseToken, null, `Live lease remains for ${text(item.id)}`);
 	}
 	const completed = assignments.filter(item => item.status === 'completed');
 	const activity = (item: Row) => text(row(row(item.assignmentAttempt).effectiveProfile).activity);
+	assert.equal(new Set(completed.filter(item => activity(item) === 'chat').map(item => row(item.assignmentAttempt).agentClass)).size, 8, 'All eight addressed chat assignments must complete canonically');
 	assert.ok(completed.filter(item => activity(item) === 'planning').length >= 16, 'Two complete eight-role planning cycles are required');
 	assert.equal(new Set(completed.filter(item => activity(item) === 'estimating').map(item => row(item.assignmentAttempt).agentClass)).size, 7);
 	const actors = completed.filter(item => activity(item) === 'acting');
@@ -66,6 +67,14 @@ test('SDK runtime golden has reviewed useful outputs, a real revision, settlemen
 	assert.ok(nodes.every(node => node.status === 'completed'), 'A graph with incomplete or failed pairs cannot pass');
 	const disposition = (item: Row) => text(row(row(item.lifecycleOutput).activityCompletion).reviewDisposition);
 	assert.ok(reviews.some(item => disposition(item) === 'request_changes'), 'A genuine request-changes cycle is required');
+	for (const requested of reviews.filter(item => disposition(item) === 'request_changes')) {
+		const workItemId = row(requested.assignmentAttempt).workItemId;
+		const revision = actors.find(item => row(item.assignmentAttempt).workItemId === workItemId
+			&& text(item.createdAt) > text(requested.completedAt));
+		assert.ok(revision, `Request changes requires a later real Actor revision for ${text(workItemId)}`);
+		assert.ok(reviews.some(item => row(item.assignmentAttempt).workItemId === workItemId
+			&& disposition(item) === 'approved' && text(item.createdAt) > text(revision.completedAt)), 'Revision must receive its own later approval');
+	}
 	for (const workItemId of new Set(actors.map(item => row(item.assignmentAttempt).workItemId))) {
 		const itemReviews = reviews.filter(item => row(item.assignmentAttempt).workItemId === workItemId)
 			.sort((a, b) => text(a.completedAt).localeCompare(text(b.completedAt)));

@@ -139,6 +139,8 @@ export async function executeKernelAssignment(input: {
 				},
 				references,
 				verification,
+				changedPaths: Array.isArray(record(transport.result.outputs).changedPaths)
+					? record(transport.result.outputs).changedPaths as string[] : [],
 				...(typeof activityCompletion.summary === 'string' ? { activityCompletion: {
 					summary: activityCompletion.summary,
 					reviewDisposition: ['approved', 'rejected', 'revision-required'].includes(String(activityCompletion.reviewDisposition))

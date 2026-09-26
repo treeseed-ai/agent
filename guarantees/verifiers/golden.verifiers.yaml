@@ -161,3 +161,8 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/provider/provider-runner.test.ts
     testName: "preserves a long discussion reply without overflowing the canonical summary"
+  agent.golden.concrete-source-paths:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/provider-kernel-executor.test.ts
+    testName: "uses concrete guest changes for Actor and Releaser publication under a recursive grant"

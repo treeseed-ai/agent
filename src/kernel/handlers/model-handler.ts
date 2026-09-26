@@ -186,7 +186,7 @@ export class ActorHandler extends ModelHandler {
 		const references: AssignmentReference[] = [...(model.references ?? [])];
 		if (context.assignment.workspace.mode === 'git') references.push(await runtime.commitSource({
 			message: `Complete ${context.assignment.sourceRef.model}/${context.assignment.sourceRef.id}`,
-			paths: context.assignment.workspace.writablePaths,
+			paths: model.changedPaths ?? [],
 		}));
 		const result = this.result(context, runtime, model.text, references, model.timingAwareness, model.usage);
 		return { ...result, verification: model.verification ?? [] };

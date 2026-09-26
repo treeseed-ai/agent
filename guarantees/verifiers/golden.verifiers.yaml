@@ -1,6 +1,11 @@
 schemaVersion: treeseed.guarantee-verifiers/v1
 ownerPackage: "@treeseed/agent"
 verifiers:
+  agent.golden.canonical-release-revision:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/codex-chat-executor.test.ts
+    testName: "directs a releaser revision actor to apply exact reviewer corrections before gating"
   agent.golden.recursive-workspace-grant:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

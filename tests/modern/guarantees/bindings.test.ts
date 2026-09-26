@@ -19,13 +19,14 @@ describe('capacity-provider guarantee execution bindings', () => {
 	it('binds every registered verifier to an executable current implementation', () => {
 		const failures: string[] = [];
 		for (const [id, verifier] of Object.entries(registry.verifiers)) {
-			const path = verifier.kind === 'vitestCase' ? verifier.testFile : verifier.command;
+			const path = ['vitestCase', 'nodeTestCase'].includes(verifier.kind) ? verifier.testFile : verifier.command;
 			if (!path || !existsSync(resolve(root, path))) {
 				failures.push(`${id}: missing ${path ?? 'implementation'}`);
 				continue;
 			}
-			if (verifier.kind === 'vitestCase') {
-				if (!path.startsWith('tests/modern/')) failures.push(`${id}: excluded from the active Vitest suite`);
+			if (['vitestCase', 'nodeTestCase'].includes(verifier.kind)) {
+				if (verifier.kind === 'vitestCase' && !path.startsWith('tests/modern/')) failures.push(`${id}: excluded from the active Vitest suite`);
+				if (verifier.kind === 'nodeTestCase' && !path.startsWith('tests/acceptance/')) failures.push(`${id}: not an explicit runtime acceptance test`);
 				const source = ts.createSourceFile(path, readFileSync(resolve(root, path), 'utf8'), ts.ScriptTarget.Latest, true);
 				const names: string[] = [];
 				function inspect(node: ts.Node): void {

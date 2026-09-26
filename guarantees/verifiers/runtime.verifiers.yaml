@@ -141,3 +141,8 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/kernel/provider-kernel-review.test.ts
     testName: commits EstimateHandler output as the one proposal-owned execution plan
+  agent.golden.runtime-readback:
+    kind: nodeTestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/acceptance/sdk-runtime-golden.test.ts
+    testName: SDK runtime golden has reviewed useful outputs, a real revision, settlement and teardown

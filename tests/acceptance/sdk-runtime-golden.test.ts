@@ -90,9 +90,21 @@ test('SDK runtime golden has reviewed useful outputs, a real revision, settlemen
 		assert.ok(Number(row(row(result.usage).native).activeSeconds) > 0, 'Measured active usage must be positive');
 		assert.ok(rows(result.references).length > 0, 'A claimed completion without exact output references cannot pass');
 	}
-	const usage = read(['capacity', 'usage', '--project', text(actors[0]?.projectId), '--workday', workdayId], team);
-	assert.equal(row(usage.page).hasMore, false, 'Settlement evidence is truncated; do not claim a pass');
-	const aggregate = rows(usage.items).filter(item => text(item.id).endsWith(':aggregate'));
+	const usageItems: Row[] = [];
+	cursor = undefined;
+	for (let pageNumber = 0; pageNumber < 40; pageNumber += 1) {
+		const usage = read(['capacity', 'usage', '--project', text(actors[0]?.projectId), '--workday', workdayId,
+			'--limit', '100', ...(cursor ? ['--cursor', cursor] : [])], team);
+		usageItems.push(...rows(usage.items));
+		const pageInfo = row(usage.page);
+		if (!pageInfo.hasMore) break;
+		const next = text(pageInfo.nextCursor);
+		assert.ok(next && next !== cursor, 'Settlement pagination omitted its next cursor or repeated it');
+		cursor = next;
+		assert.ok(pageNumber < 39, 'Complete settlement evidence was not reached; do not claim a pass');
+	}
+	assert.equal(new Set(usageItems.map(item => item.id)).size, usageItems.length, 'Settlement pages repeated usage records');
+	const aggregate = usageItems.filter(item => text(item.id).endsWith(':aggregate'));
 	for (const item of completed) {
 		const settlements = aggregate.filter(measurement => measurement.assignmentId === item.id);
 		assert.equal(settlements.length, 1, `Exactly one actual settlement required for ${text(item.id)}`);

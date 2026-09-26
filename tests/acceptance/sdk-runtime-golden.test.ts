@@ -66,8 +66,8 @@ test('SDK runtime golden has reviewed useful outputs, a real revision, settlemen
 	assert.equal(nodes.filter(node => node.pairRole === 'reviewer').length, 6);
 	assert.ok(nodes.every(node => node.status === 'completed'), 'A graph with incomplete or failed pairs cannot pass');
 	const disposition = (item: Row) => text(row(row(item.lifecycleOutput).activityCompletion).reviewDisposition);
-	assert.ok(reviews.some(item => disposition(item) === 'request_changes'), 'A genuine request-changes cycle is required');
-	for (const requested of reviews.filter(item => disposition(item) === 'request_changes')) {
+	assert.ok(reviews.some(item => disposition(item) === 'request-changes'), 'A genuine request-changes cycle is required');
+	for (const requested of reviews.filter(item => disposition(item) === 'request-changes')) {
 		const workItemId = row(requested.assignmentAttempt).workItemId;
 		const revision = actors.find(item => row(item.assignmentAttempt).workItemId === workItemId
 			&& text(item.createdAt) > text(requested.completedAt));

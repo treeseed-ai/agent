@@ -1,5 +1,6 @@
 import { assignmentContextSchema, assignmentResultSchema } from '@treeseed/sdk/agent-capacity';
-import { assignmentPathAllowed, enforceAssignmentGrant } from './granted-runtime.ts';
+import { assignmentPathAllowed } from '@treeseed/sdk/agent-capacity';
+import { enforceAssignmentGrant } from './granted-runtime.ts';
 import { HandlerRegistry } from './handler-registry.ts';
 import type { KernelAssignmentRequest } from './contracts.ts';
 

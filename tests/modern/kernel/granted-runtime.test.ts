@@ -14,6 +14,12 @@ function fixture(paths = ['src']) {
 	return { scoped, commitSource };
 }
 describe('canonical workspace path enforcement', () => {
+	it('uses the SDK recursive workspace grant before source publication', async () => {
+		const { scoped, commitSource } = fixture(['src/**']);
+		await scoped.commitSource({ message: 'Work', paths: ['src/kernel/handler.ts'] });
+		expect(() => scoped.commitSource({ message: 'Work', paths: ['src-other/handler.ts'] })).toThrow('assignment_grant_denied:source.path');
+		expect(commitSource).toHaveBeenCalledOnce();
+	});
 	it('denies traversal and sibling-prefix escapes before publication', () => {
 		for (const path of ['src/../../outside', 'src/../secret', '/etc/passwd', '../src/file.ts', 'src/./file.ts',
 			'src//file.ts', 'src\\..\\secret', 'src/file\0.ts', '', 'src-other/file.ts']) {

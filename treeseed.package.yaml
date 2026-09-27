@@ -107,6 +107,7 @@ development:
       endpoints: []
       dependencies:
         - { id: sdk, target: package, locality: local, reaction: rebuild }
+        - { id: agent, target: sandbox, locality: local, reaction: rebuild }
         - { id: api, target: service, capability: control-plane-api, locality: either, reaction: manual }
       statePolicy: clone
       migrationPolicy: disposable-only

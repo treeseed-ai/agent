@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 
+export const sdkCampaignWindow = Object.freeze({ durationSeconds: 3600, planningPercent: 100 / 3, planningTurnMaximumSeconds: 180 });
+
 export function sdkProposalText(spec: string): { title: string; request: string; summary: string } {
   const section = spec.split('### 1. SDK — decision-governed workday intent\n')[1]?.split('\n### 2. API')[0];
   assert.ok(section, 'ACCEPTANCE_CAMPAIGN_SPEC: Canonical SDK section required');
@@ -29,16 +31,16 @@ export function freshSdkDraft(template: Record<string, any>, id: string, canonic
 	return draft;
 }
 
-/** Conservative serial cold-start demand, including addressed communication on the shared harness. */
+/** Validate the debug window; the real allocator admits work, not a sum of turn ceilings. */
 export function requirePlanningWindow(durationSeconds: number, planningPercent: number,
-	turnMaximumSeconds: number, participants: number, estimators: number): void {
-	for (const value of [durationSeconds, planningPercent, turnMaximumSeconds, participants, estimators])
+	turnMaximumSeconds: number): void {
+	for (const value of [durationSeconds, planningPercent, turnMaximumSeconds])
 		assert.ok(Number.isFinite(value) && value > 0, 'ACCEPTANCE_CAMPAIGN_INPUT: Positive allocation inputs required');
-	assert.ok(planningPercent <= 100 && Number.isInteger(participants) && Number.isInteger(estimators),
+	assert.ok(durationSeconds <= 3600 && planningPercent < 100 && Number.isInteger(durationSeconds) && Number.isInteger(turnMaximumSeconds),
 		'ACCEPTANCE_CAMPAIGN_INPUT: Invalid planning allocation');
-	const required = (participants * 3 + estimators) * turnMaximumSeconds; // two planning turns plus chat
-	assert.ok(durationSeconds * planningPercent / 100 >= required,
-		'ACCEPTANCE_CAMPAIGN_WINDOW: Planning window cannot fit the conservative shared-harness turn demand');
+	const planningSeconds = durationSeconds * planningPercent / 100;
+	assert.ok(Math.abs(planningSeconds - 1200) < 0.000001 && turnMaximumSeconds <= planningSeconds,
+		'ACCEPTANCE_CAMPAIGN_WINDOW: Initial debugging requires twenty minutes planning within at most one hour');
 }
 
 export async function monitorCampaign(input: {

@@ -5,7 +5,7 @@ import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join, resolve } from 'node:path';
 import { read } from './sdk-runtime-golden.test.ts';
-import { freshSdkDraft, requirePlanningWindow, sdkProposalText } from './campaign.ts';
+import { freshSdkDraft, requirePlanningWindow, sdkProposalText, sdkCampaignWindow } from './campaign.ts';
 import { verifyRuntimeClosure } from './freeze-integrity.ts';
 
 type Row = Record<string, any>;
@@ -15,7 +15,8 @@ export function prepareSdkCampaign(draftPath: string, freezePath: string, team: 
 	const platform = process.env.TREESEED_ACCEPTANCE_PLATFORM_PATH;
 	assert.ok(platform && existsSync(join(platform, 'docs/agent-acceptance.md')),
 		'ACCEPTANCE_CAMPAIGN_WORKSPACE: Explicit Platform workspace required');
-	requirePlanningWindow(28800, 20, 180, 8, 7);
+	const { durationSeconds, planningPercent, planningTurnMaximumSeconds } = sdkCampaignWindow;
+	requirePlanningWindow(durationSeconds, planningPercent, planningTurnMaximumSeconds);
 	const host = read(['dev', 'host', 'status'], team, true);
 	assert.equal(host.status, 'active', 'ACCEPTANCE_CAMPAIGN_HOST: Active development runtime required');
 	verifyRuntimeClosure(host, { digest: host.guestImageDigest });
@@ -34,8 +35,8 @@ export function prepareSdkCampaign(draftPath: string, freezePath: string, team: 
 		'--if-match', String(proposal.activeVersion), '--idempotency-key', `golden-open:${id}`], team, true);
 	const classes = Object.fromEntries(['architect', 'researcher', 'tester', 'engineer', 'technical-writer', 'releaser', 'reviewer', 'reporter'].map(role => [role, 12.5]));
 	const args = ['workdays', 'plan', '--profile', 'default', '--projects', project, '--proposal', id,
-		'--duration', '28800', '--execution-mode', 'simulation', '--planning-percent', '20', '--allocation-weight', '1',
-		'--planning-turn-maximum-seconds', '180', '--project-percentages', JSON.stringify({ [project]: 100 }),
+		'--duration', String(durationSeconds), '--execution-mode', 'simulation', '--planning-percent', String(planningPercent), '--allocation-weight', '1',
+		'--planning-turn-maximum-seconds', String(planningTurnMaximumSeconds), '--project-percentages', JSON.stringify({ [project]: 100 }),
 		'--agent-class-percentages', JSON.stringify({ [project]: classes })];
 	const request = read([...args, '--plan'], team).input;
 	const receipts: Record<string, string> = {};

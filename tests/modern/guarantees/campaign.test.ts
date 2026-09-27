@@ -1,13 +1,16 @@
 import { describe, expect, it, vi } from 'vitest';
-import { monitorCampaign, requirePlanningWindow } from '../../acceptance/campaign.ts';
+import { monitorCampaign, requirePlanningWindow, sdkCampaignWindow } from '../../acceptance/campaign.ts';
 
 describe('automated campaign control (fixtures are not golden acceptance)', () => {
-	it('rejects the failed two-hour window before any admission and accepts eight hours', () => {
-		expect(() => requirePlanningWindow(7200, 20, 180, 8, 7)).toThrow('ACCEPTANCE_CAMPAIGN_WINDOW');
-		expect(() => requirePlanningWindow(28800, 20, 180, 8, 7)).not.toThrow();
+	it('enforces one hour with twenty minutes planning without inventing per-assignment demand', () => {
+		expect(sdkCampaignWindow.durationSeconds).toBe(3600);
+		expect(sdkCampaignWindow.durationSeconds * sdkCampaignWindow.planningPercent / 100).toBeCloseTo(1200);
+		expect(() => requirePlanningWindow(3600, 100 / 3, 180)).not.toThrow();
+		expect(() => requirePlanningWindow(28800, 20, 180)).toThrow('ACCEPTANCE_CAMPAIGN_INPUT');
+		expect(() => requirePlanningWindow(3600, 20, 180)).toThrow('ACCEPTANCE_CAMPAIGN_WINDOW');
 	});
 	it('rejects malformed allocation input', () => {
-		for (const duration of [0, Number.NaN, -1]) expect(() => requirePlanningWindow(duration, 20, 180, 8, 7)).toThrow();
+		for (const duration of [0, Number.NaN, -1]) expect(() => requirePlanningWindow(duration, 100 / 3, 180)).toThrow();
 	});
 	it('waits through planning and acting and verifies the real terminal boundary', async () => {
 		let tick = 0;

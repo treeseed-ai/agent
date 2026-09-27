@@ -39,9 +39,13 @@ test('Frozen SDK campaign drives planning acting review and terminal golden gate
 	read(['send', `sdk-golden-${workdayId}`, `${mentions} Discuss the exact frozen proposal, identify your role and dependencies, and publish useful planning contributions. Do not implement during planning.`,
 		'--proposal', freeze.proposal.id, '--workday', workdayId, '--no-wait', '--idempotency-key', `golden-discussion:${workdayId}`], team);
 	await monitorCampaign({ read: () => {
-		const current = read(['workdays', 'show', workdayId], team).run as Row;
+		const observed = read(['workdays', 'show', workdayId], team);
+		const current = observed.run as Row;
 		assert.equal(current.id, workdayId, 'ACCEPTANCE_CAMPAIGN_ID: Read-back changed identity');
-		return { status: current.status, mode: current.executionMode,
+		const scheduling = observed.scheduling as Row;
+		const failedBoundary = [...(scheduling?.assignments ?? []), ...(scheduling?.nodes ?? [])]
+			.some((item: Row) => ['failed', 'returned', 'expired'].includes(item.status) && item.count > 0);
+		return { status: current.status, mode: current.executionMode, failedBoundary,
 			planningEndsAt: Date.parse(current.startedAt) + current.parameters.durationSeconds * current.parameters.planningPercent * 10,
 			endsAt: Date.parse(current.parameters.appliedPlan.endsAt) };
 	}, now: Date.now, wait: () => new Promise(resolve => setTimeout(resolve, 30_000)), stop,

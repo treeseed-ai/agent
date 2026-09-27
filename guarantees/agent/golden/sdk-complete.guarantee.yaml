@@ -1,0 +1,12 @@
+schemaVersion: treeseed.guarantee/v1
+id: guarantee.agent.golden.sdk-complete
+journey: Run SDK lifecycle and owned product acceptance
+ownerPackage: "@treeseed/agent"
+type: agent
+subtype: execution
+status: planned
+gates: [core]
+summary: Compose the same real lifecycle campaign and SDK-owned product verifier through the unified cross-package Reviewer catalog.
+scene:
+  required: true
+  manifest: guarantees/agent/golden/scenes/sdk-complete.scene.yaml

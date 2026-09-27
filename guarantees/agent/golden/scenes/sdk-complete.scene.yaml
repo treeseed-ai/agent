@@ -1,0 +1,11 @@
+schemaVersion: treeseed.scene/v1
+id: agent.golden.sdk-complete
+title: SDK lifecycle and owned product acceptance
+scope: local-integrated-runtime
+workflow:
+  - id: lifecycle-campaign
+    action: { verifier: agent.golden.live.campaign }
+    expect: { status: passed }
+  - id: sdk-product
+    action: { verifier: sdk.golden.live.product }
+    expect: { status: passed }

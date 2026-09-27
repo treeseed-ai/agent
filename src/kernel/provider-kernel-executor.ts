@@ -94,7 +94,7 @@ export async function executeKernelAssignment(input: {
 			})();
 			return executionStart;
 		} };
-	const transport = { result: null as AgentExecutionResult | null };
+	const transport = { result: null as AgentExecutionResult | null, pending: null as Promise<AgentExecutionResult> | null };
 	const runtime: AgentRuntime = {
 		now: () => new Date().toISOString(),
 		readContext: async (ref) => {
@@ -105,7 +105,8 @@ export async function executeKernelAssignment(input: {
 		},
 		invokeModel: async () => {
 			if (transport.result) throw new Error('model_already_invoked');
-			transport.result = await input.executor.execute(transportRequest);
+			transport.pending = input.executor.execute(transportRequest);
+			transport.result = await transport.pending;
 			if (!executionStart) throw Object.assign(new Error('execution_start_not_observed'), { code: 'execution_start_not_observed' });
 			if (transport.result.status === 'abstained' && attempt.data.effectiveProfile.activity !== 'chat')
 				throw Object.assign(new Error(transport.result.summary), { code: 'agent_abstained' });
@@ -183,11 +184,26 @@ export async function executeKernelAssignment(input: {
 		result = parsedResult.data;
 	} catch (error) {
 		localAbort.abort(error);
+		// The productive deadline is closed. Drain only cancellation/teardown,
+		// not another model turn, before publishing the terminal result.
+		if (transport.pending && !transport.result) {
+			let timer: ReturnType<typeof setTimeout> | undefined;
+			try {
+				await Promise.race([
+					transport.pending.then(value => { transport.result = value; }, failure => {
+						const details = record(failure);
+						transport.result = { status: 'failed', summary: 'Isolated execution failed.',
+							outputs: record(details.outputs), ...(Array.isArray(details.usage) ? { usage: details.usage } : {}) };
+					}),
+					new Promise<void>(resolve => { timer = setTimeout(resolve, 30_000); }),
+				]);
+			} finally { if (timer) clearTimeout(timer); }
+		}
 		const summary = error instanceof Error ? error.message : String(error);
 		// The isolation transport has already classified bounded infrastructure
 		// failures. Preserve that authority through AgentKernel instead of
 		// converting a retryable return into a terminal semantic failure.
-		if (transport.result?.status === 'returned') return transport.result;
+		if (transport.result?.status === 'returned' && (error as { code?: unknown })?.code !== 'assignment_timeout') return transport.result;
 		// Upstream saturation is not an invalid agent result. Preserve the existing
 		// provider return/retry path; it retains normal admission and deadline limits.
 		if (summary.startsWith('Kata guest exited 1: Codex execution failed: Selected model is at capacity. Please try a different model.')) {

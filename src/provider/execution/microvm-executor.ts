@@ -165,6 +165,7 @@ export async function createMicrovmExecutor(config: ProviderHostRuntimeConfig, m
 				const assignment = sandboxAssignmentSchema.parse({ ...unsigned, signature: { keyId, algorithm: 'Ed25519', value } }) as SandboxAssignment;
 				await request.emit?.({ type: 'execution.preparing', occurredAt: new Date().toISOString(), summary: 'Requesting a bounded Kata sandbox from the host broker.', payload: { profile: assignment.profile, guestImageDigest: assignment.guestImageDigest } });
 				const prepared = await client.prepare(assignment, request.signal); active.set(request.assignmentId, { sandboxId: prepared.sandboxId, operationToken: prepared.operationToken, providerId: assignment.providerId, teamId: assignment.teamId, renewals: new RenewalDrain() }); let result: ReturnType<typeof sandboxResultSchema.parse> | undefined; let sourceReference: AssignmentReference | undefined; let artifacts: Record<string, unknown>[] = []; let teardown: Record<string, unknown> = { verified: false, completedAt: null };
+				let transportFailure: unknown;
 				const cancelSandbox = () => { void client.cancel(prepared.sandboxId, prepared.operationToken).catch(() => undefined); };
 					if (request.signal?.aborted) cancelSandbox(); else request.signal?.addEventListener('abort', cancelSandbox, { once: true });
 				try {
@@ -201,14 +202,19 @@ export async function createMicrovmExecutor(config: ProviderHostRuntimeConfig, m
 					if (!result) throw new Error('Sandbox broker returned no assignment result.');
 					artifacts = await Promise.all(result.artifacts.map(async (artifact) => ({ ...artifact, content: (await client.downloadArtifact(prepared.sandboxId, prepared.operationToken, artifact.id, artifact.bytes, request.signal)).toString('utf8') })));
 					if (result.status === 'completed' && current.source?.authorization.mode === 'work') sourceReference = await publishSourceBranch(client, prepared, current.source, assignment, result, request);
-				} finally {
+				} catch (error) { transportFailure = error; } finally {
 					request.signal?.removeEventListener('abort', cancelSandbox);
 					const renewals = active.get(request.assignmentId)?.renewals;
 					active.delete(request.assignmentId);
 					await renewals?.close();
 					const receipt = await client.destroy(prepared.sandboxId, prepared.operationToken).catch(() => null); teardown = receipt && typeof receipt.teardown === 'object' ? receipt.teardown as Record<string, unknown> : teardown;
-					await request.emit?.({ type: 'sandbox.destroyed', occurredAt: new Date().toISOString(), summary: `Kata sandbox ${prepared.sandboxId} teardown ${teardown.verified === true ? 'verified' : 'could not be verified'}.`, payload: { sandboxId: prepared.sandboxId, teardown } });
+					try {
+						await request.emit?.({ type: 'sandbox.destroyed', occurredAt: new Date().toISOString(), summary: `Kata sandbox ${prepared.sandboxId} teardown ${teardown.verified === true ? 'verified' : 'could not be verified'}.`, payload: { sandboxId: prepared.sandboxId, teardown } });
+					} catch (error) { if (!request.signal?.aborted) throw error; }
 				}
+				if (transportFailure) throw Object.assign(transportFailure instanceof Error ? transportFailure : new Error(String(transportFailure)), {
+					outputs: { sandboxId: prepared.sandboxId, teardown }, ...(result ? { usage: [sandboxAccountingUsage(result.usage)] } : {}),
+				});
 				if (!result) throw new Error('Sandbox broker returned no assignment result.');
 				const environmentReceipt = profile.lineage ? (() => {
 					const unsigned = { schemaVersion: 'treeseed.provider-environment-receipt/v1' as const, assignmentId: request.assignmentId, offerId,

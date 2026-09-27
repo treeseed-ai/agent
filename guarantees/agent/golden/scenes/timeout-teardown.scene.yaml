@@ -1,0 +1,11 @@
+schemaVersion: treeseed.scene/v1
+id: agent.golden.timeout-teardown
+title: Bounded timeout teardown
+scope: local-component-tests
+workflow:
+  - id: bounded-drain
+    action: { verifier: agent.golden.timeout-drain }
+    expect: { status: passed }
+  - id: late-result
+    action: { verifier: agent.golden.timeout-late-result }
+    expect: { status: passed }

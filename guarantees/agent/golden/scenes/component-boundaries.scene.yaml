@@ -3,6 +3,9 @@ id: agent.golden.component-boundaries
 title: Golden execution component boundaries
 scope: local-component-tests
 workflow:
+  - id: debug-window
+    action: { verifier: agent.golden.debug-window }
+    expect: { status: passed }
   - id: terminal-teardown-output
     action: { verifier: agent.golden.timeout-terminal-output }
     expect: { status: passed }

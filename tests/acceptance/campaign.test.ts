@@ -27,16 +27,17 @@ test('Frozen SDK campaign drives planning acting review and terminal golden gate
 		'--yes', '--idempotency-key', `golden-start:${freeze.preflight.id}`], team);
 	const run = { id: started.workdayId };
 	assert.ok(typeof run.id === 'string' && /^workday-[a-f0-9-]+$/u.test(run.id), 'ACCEPTANCE_CAMPAIGN_ID: Supported start omitted exact run');
-	process.env.TREESEED_ACCEPTANCE_WORKDAY_ID = run.id;
-	const stop = () => { read(['workdays', 'stop', run.id, '--yes', '--reason', 'Automated golden boundary failed',
-		'--idempotency-key', `golden-stop:${run.id}`], team); };
+	const workdayId = run.id;
+	process.env.TREESEED_ACCEPTANCE_WORKDAY_ID = workdayId;
+	const stop = () => { read(['workdays', 'stop', workdayId, '--yes', '--reason', 'Automated golden boundary failed',
+		'--idempotency-key', `golden-stop:${workdayId}`], team); };
 	const mentions = ['architect', 'researcher', 'tester', 'engineer', 'technical-writer', 'releaser', 'reviewer', 'reporter']
 		.map(role => `@sdk/${role}`).join(' ');
-	read(['send', `sdk-golden-${run.id}`, `${mentions} Discuss the exact frozen proposal, identify your role and dependencies, and publish useful planning contributions. Do not implement during planning.`,
-		'--proposal', freeze.proposal.id, '--workday', run.id, '--no-wait', '--idempotency-key', `golden-discussion:${run.id}`], team);
+	read(['send', `sdk-golden-${workdayId}`, `${mentions} Discuss the exact frozen proposal, identify your role and dependencies, and publish useful planning contributions. Do not implement during planning.`,
+		'--proposal', freeze.proposal.id, '--workday', workdayId, '--no-wait', '--idempotency-key', `golden-discussion:${workdayId}`], team);
 	await monitorCampaign({ read: () => {
-		const current = read(['workdays', 'show', run.id], team).run as Row;
-		assert.equal(current.id, run.id, 'ACCEPTANCE_CAMPAIGN_ID: Read-back changed identity');
+		const current = read(['workdays', 'show', workdayId], team).run as Row;
+		assert.equal(current.id, workdayId, 'ACCEPTANCE_CAMPAIGN_ID: Read-back changed identity');
 		return { status: current.status, mode: current.executionMode,
 			planningEndsAt: Date.parse(current.startedAt) + current.parameters.durationSeconds * current.parameters.planningPercent * 10,
 			endsAt: Date.parse(current.parameters.appliedPlan.endsAt) };

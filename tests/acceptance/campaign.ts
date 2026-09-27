@@ -1,5 +1,23 @@
 import assert from 'node:assert/strict';
 
+export function freshSdkDraft(template: Record<string, any>, id: string): Record<string, any> {
+	const draft = structuredClone(template);
+	assert.equal(draft.status, 'draft', 'ACCEPTANCE_CAMPAIGN_FRESH: Estimate-free draft template required');
+	assert.equal(draft.executionPlan?.workItems?.length, 6, 'ACCEPTANCE_CAMPAIGN_OBJECTIVES: Six unchanged SDK work items required');
+	const gitRefs = draft.executionPlan.workItems.flatMap((item: Record<string, any>) => item.contextRefs ?? [])
+		.filter((ref: Record<string, any>) => ref.store === 'git');
+	assert.ok(gitRefs.length && new Set(gitRefs.map((ref: Record<string, any>) => ref.commit)).size === 1,
+		'ACCEPTANCE_CAMPAIGN_SOURCE: One exact frozen project source is required');
+	for (const item of draft.executionPlan.workItems) {
+		assert.ok(!item.ownerEstimate && !item.reviewerEstimate, 'ACCEPTANCE_CAMPAIGN_FRESH: Reused estimates prohibited');
+		if (!item.contextRefs.some((ref: Record<string, any>) => ref.store === 'git')) item.contextRefs.push(structuredClone(gitRefs[0]));
+	}
+	draft.id = id;
+	draft.title = 'Select accepted decisions in portable workday intent — SDK golden';
+	draft.contentProvenance.contentPath = `proposals/governance/${id}.mdx`;
+	return draft;
+}
+
 /** Conservative serial cold-start demand, including addressed communication on the shared harness. */
 export function requirePlanningWindow(durationSeconds: number, planningPercent: number,
 	turnMaximumSeconds: number, participants: number, estimators: number): void {

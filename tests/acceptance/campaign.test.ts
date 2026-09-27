@@ -1,14 +1,18 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import test from 'node:test';
 import { monitorCampaign, requirePlanningWindow } from './campaign.ts';
 import { verifyFreezeIntegrity } from './freeze-integrity.ts';
 import { read, verifyGolden } from './sdk-runtime-golden.test.ts';
+import { prepareSdkCampaign } from './prepare-campaign.ts';
 
 type Row = Record<string, any>;
 test('Frozen SDK campaign drives planning acting review and terminal golden gates', { timeout: 36_000_000 }, async () => {
 	const path = process.env.TREESEED_ACCEPTANCE_FREEZE_PATH;
 	assert.ok(path, 'ACCEPTANCE_FREEZE_REQUIRED: Explicit immutable campaign freeze required');
+	const team = process.env.TREESEED_ACCEPTANCE_TEAM ?? 'treeseed';
+	if (!existsSync(path) && process.env.TREESEED_ACCEPTANCE_DRAFT_PATH)
+		prepareSdkCampaign(process.env.TREESEED_ACCEPTANCE_DRAFT_PATH, path, team);
 	const freeze = JSON.parse(readFileSync(path, 'utf8')) as Row;
 	verifyFreezeIntegrity(freeze, readFileSync);
 	const body = freeze.request?.body as Row, allocation = body?.allocation as Row;
@@ -22,7 +26,6 @@ test('Frozen SDK campaign drives planning acting review and terminal golden gate
 	assert.equal(allocation?.planningTurnMaximumSeconds, 180);
 	requirePlanningWindow(body.durationSeconds, allocation.planningPercent, allocation.planningTurnMaximumSeconds, 8, 7);
 	assert.ok(Date.parse(freeze.preflight?.expiresAt) > Date.now(), 'ACCEPTANCE_PREFLIGHT_EXPIRED: Refreeze before admission');
-	const team = process.env.TREESEED_ACCEPTANCE_TEAM ?? 'treeseed';
 	const started = read(['workdays', 'start', '--preflight', freeze.preflight.id, '--digest', freeze.preflight.preflightDigest,
 		'--yes', '--idempotency-key', `golden-start:${freeze.preflight.id}`], team);
 	const run = { id: started.workdayId };

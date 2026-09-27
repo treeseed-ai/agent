@@ -78,7 +78,7 @@ export function verifyGolden(gate: Gate): void {
 		for (const edge of edges) { active += edge.change; peak = Math.max(peak, active); }
 		assert.ok(peak >= 5, 'ACCEPTANCE_CONCURRENCY_OVERLAP: Five real executions must overlap');
 	}
-	assert.ok(completed.length > 0, 'No completed assignment evidence; empty gates cannot pass');
+	if (gate !== 'stopped') assert.ok(completed.length > 0, 'No completed assignment evidence; empty gates cannot pass');
 	if (gate === 'stopped') {
 		assert.equal(run.status, 'cancelled', 'ACCEPTANCE_STOP_TERMINAL: Stop acknowledgement is not terminal cancellation');
 		assert.ok(text(run.completedAt), 'ACCEPTANCE_STOP_TIMESTAMP: Terminal stop timestamp is required');

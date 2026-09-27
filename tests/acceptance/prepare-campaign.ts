@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { basename, join, resolve } from 'node:path';
 import { read } from './sdk-runtime-golden.test.ts';
 import { freshSdkDraft, requirePlanningWindow } from './campaign.ts';
+import { verifyRuntimeClosure } from './freeze-integrity.ts';
 
 type Row = Record<string, any>;
 /** Preparation is part of the same native test, never a separate execution authority. */
@@ -15,6 +16,9 @@ export function prepareSdkCampaign(draftPath: string, freezePath: string, team: 
 	assert.ok(platform && existsSync(join(platform, 'docs/agent-acceptance.md')),
 		'ACCEPTANCE_CAMPAIGN_WORKSPACE: Explicit Platform workspace required');
 	requirePlanningWindow(28800, 20, 180, 8, 7);
+	const host = read(['dev', 'host', 'status'], team, true);
+	assert.equal(host.status, 'active', 'ACCEPTANCE_CAMPAIGN_HOST: Active development runtime required');
+	verifyRuntimeClosure(host, { digest: host.guestImageDigest });
 	const id = `golden-sdk-decision-governed-workday-intent-v4-${randomUUID()}`;
 	const draft = freshSdkDraft(JSON.parse(readFileSync(draftPath, 'utf8')), id);
 	const artifacts = mkdtempSync(join(tmpdir(), 'treeseed-golden-'));
@@ -38,8 +42,6 @@ export function prepareSdkCampaign(draftPath: string, freezePath: string, team: 
 		const path = join(artifacts, name); writeFileSync(path, bytes);
 		receipts[path] = `sha256:${createHash('sha256').update(bytes).digest('hex')}`;
 	};
-	const host = read(['dev', 'host', 'status'], team, true);
-	assert.equal(host.status, 'active', 'ACCEPTANCE_CAMPAIGN_HOST: Active development runtime required');
 	const runtime = read(['dev', 'status'], team, true);
 	const providers = (read(['providers', 'list'], team).items as Row[]).filter(item => item.status === 'approved');
 	assert.equal(providers.length, 1, 'ACCEPTANCE_CAMPAIGN_SUPPLY: Individual host campaign requires unambiguous provider');

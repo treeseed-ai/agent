@@ -1,0 +1,8 @@
+schemaVersion: treeseed.scene/v1
+id: agent.golden.campaign
+title: Automated frozen SDK campaign
+scope: local-integrated-runtime
+workflow:
+  - id: campaign
+    action: { verifier: agent.golden.live.campaign }
+    expect: { status: passed }

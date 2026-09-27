@@ -83,8 +83,15 @@ settlement per attempt. It reuses normal settlement pagination and checks every
 participating project. Passing stopped-run evidence cannot count as a golden
 pass or prove host filesystem cleanup/retention.
 
-Campaign orchestration, complete specification bindings, project-specific
-products, external-state comparison and controlled failures are still required
+`guarantee.agent.golden.campaign` consumes an unexpired existing freeze through
+`TREESEED_ACCEPTANCE_FREEZE_PATH`, starts its exact preflight, admits all eight
+discussion roles, monitors planning and acting, and runs the existing terminal
+gates. It rejects a planning window that cannot fit conservative serial turns
+before starting, stops known failed planning boundaries, and bounds closeout.
+It never substitutes fixtures for live results or renews an expired preflight.
+
+Complete specification bindings, project-specific products,
+external-state comparison and controlled failures are still required
 before this suite can represent all of Platform's acceptance specification.
 
 ## Public package surface

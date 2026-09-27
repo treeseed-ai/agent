@@ -1,6 +1,12 @@
 schemaVersion: treeseed.guarantee-verifiers/v1
 ownerPackage: "@treeseed/agent"
 verifiers:
+  agent.golden.live.campaign:
+    kind: nodeTestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/acceptance/campaign.test.ts
+    testName: Frozen SDK campaign drives planning acting review and terminal golden gates
+    timeoutMs: 36600000
   agent.golden.live.stopped:
     kind: nodeTestCase
     ownerPackage: "@treeseed/agent"

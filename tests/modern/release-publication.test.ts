@@ -62,12 +62,14 @@ describe('Agent RC publication', () => {
 
 	it('ships Codex only in the brokered sandbox guest and gives providers only the broker socket', () => {
 		const packageJson = JSON.parse(readFileSync('package.json', 'utf8')) as { dependencies: Record<string, string> };
+		const packageLock = JSON.parse(readFileSync('package-lock.json', 'utf8')) as { packages: Record<string, { version?: string }> };
 		const dockerfile = readFileSync('Dockerfile', 'utf8');
 		const codexDockerfile = readFileSync('Dockerfile.sandbox-codex', 'utf8');
 		const entrypoint = readFileSync('docker-entrypoint.sh', 'utf8');
 		const compose = readFileSync('deploy/compose.template.yml', 'utf8');
 		const workflow = readFileSync('.github/workflows/publish.yml', 'utf8');
-		expect(packageJson.dependencies['@openai/codex']).toBe('0.156.1');
+		expect(packageJson.dependencies['@openai/codex']).toMatch(/^\d+\.\d+\.\d+$/u);
+		expect(packageLock.packages['node_modules/@openai/codex'].version).toBe(packageJson.dependencies['@openai/codex']);
 		expect(dockerfile).not.toContain('/app/node_modules/@openai/codex/bin/codex.js');
 		expect(codexDockerfile).toContain('/app/node_modules/@openai/codex/bin/codex.js');
 		expect(entrypoint).toContain('provider manager and runner containers must run unprivileged');
@@ -81,7 +83,8 @@ describe('Agent RC publication', () => {
 		expect(compose).toContain('TREESEED_PROVIDER_ENVIRONMENT: ${TREESEED_PROVIDER_ENVIRONMENT:-managed}');
 		expect(compose).toContain('TREESEED_REQUIRE_MICROVM: "true"');
 		expect(compose).not.toContain('TREESEED_CODEX_AUTH_FILE');
-		expect(workflow).toContain('codex-cli 0.156.1');
+		expect(workflow).toContain("require('./package.json').dependencies['@openai/codex']");
+		expect(workflow).toContain('grep -Fx "codex-cli $expected"');
 		const guest = readFileSync('src/sandbox/guest.ts', 'utf8');
 		expect(guest).toContain("'--dangerously-bypass-approvals-and-sandbox'");
 		expect(guest).not.toContain("'--approve-for-me'");

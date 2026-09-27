@@ -1,6 +1,11 @@
 schemaVersion: treeseed.guarantee-verifiers/v1
 ownerPackage: "@treeseed/agent"
 verifiers:
+  agent.golden.live.freeze-integrity:
+    kind: nodeTestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/acceptance/freeze-integrity.test.ts
+    testName: Golden freeze evidence retains exact receipt and runtime integrity
   agent.golden.canonical-release-revision:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

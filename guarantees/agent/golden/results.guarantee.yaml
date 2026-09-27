@@ -1,0 +1,12 @@
+schemaVersion: treeseed.guarantee/v1
+id: guarantee.agent.golden.results
+journey: Verify golden results evidence
+ownerPackage: "@treeseed/agent"
+type: agent
+subtype: execution
+status: planned
+gates: [core]
+summary: Selectable live read-back boundary; not full campaign acceptance.
+scene:
+  required: true
+  manifest: guarantees/agent/golden/scenes/results.scene.yaml

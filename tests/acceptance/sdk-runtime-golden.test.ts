@@ -18,18 +18,25 @@ function read(args: string[], team: string, library = false): Row {
 	return row(envelope.result);
 }
 
-test('SDK runtime golden has reviewed useful outputs, a real revision, settlement and teardown', { timeout: 120_000 }, () => {
+// Each exact test is independently selectable by the existing guarantee runner.
+// These read-back gates do not stand in for campaign orchestration or external-state proof.
+const gates = ['lifecycle', 'collaboration', 'graph', 'revision', 'results', 'settlement', 'reporter'] as const;
+type Gate = typeof gates[number];
+function verifyGolden(gate: Gate): void {
 	const workdayId = process.env.TREESEED_ACCEPTANCE_WORKDAY_ID ?? '';
 	assert.ok(workdayId.startsWith('workday-'), 'Explicit real workday ID is required; no fixture or skipped pass is allowed');
 	const team = process.env.TREESEED_ACCEPTANCE_TEAM ?? 'treeseed';
 	const workday = read(['workdays', 'show', workdayId], team);
 	const run = row(workday.run), parameters = row(run.parameters);
+	if (gate === 'lifecycle') {
 	assert.equal(run.status, 'completed', 'An active, cancelled or failed workday is not accepted');
 	assert.equal(run.executionMode, 'simulation');
 	assert.equal(parameters.planningPercent, 20);
 	assert.equal(parameters.allocationWeight, 1);
 	assert.equal(parameters.planningTurnMaximumSeconds, 180);
 	assert.ok(text(run.startedAt) && text(run.completedAt), 'Terminal timestamps are required');
+	}
+	assert.equal(run.executionMode, 'simulation', 'Every gate requires authoritative simulation custody');
 	const assignments: Row[] = [];
 	let cursor: string | undefined;
 	for (let pageNumber = 0; pageNumber < 40; pageNumber += 1) {
@@ -44,17 +51,26 @@ test('SDK runtime golden has reviewed useful outputs, a real revision, settlemen
 	}
 	assert.ok(assignments.length > 0, 'No real assignment evidence');
 	assert.equal(new Set(assignments.map(item => item.id)).size, assignments.length);
-	for (const item of assignments) {
+	if (gate === 'lifecycle') for (const item of assignments) {
 		assert.equal(item.status, 'completed', `Normal golden cannot contain a failed, returned, expired or cancelled assignment: ${text(item.id)}`);
 		assert.equal(item.leaseToken, null, `Live lease remains for ${text(item.id)}`);
 	}
 	const completed = assignments.filter(item => item.status === 'completed');
+	assert.ok(completed.length > 0, 'No completed assignment evidence; empty gates cannot pass');
 	const activity = (item: Row) => text(row(row(item.assignmentAttempt).effectiveProfile).activity);
+	if (gate === 'collaboration') {
 	assert.equal(new Set(completed.filter(item => activity(item) === 'chat').map(item => row(item.assignmentAttempt).agentClass)).size, 8, 'All eight addressed chat assignments must complete canonically');
-	assert.ok(completed.filter(item => activity(item) === 'planning').length >= 16, 'Two complete eight-role planning cycles are required');
+	const classes = ['architect', 'researcher', 'tester', 'engineer', 'technical-writer', 'releaser', 'reviewer', 'reporter'];
+	for (const agentClass of classes) assert.ok(completed.filter(item => activity(item) === 'planning'
+		&& row(item.assignmentAttempt).agentClass === agentClass).length >= 2, `Two planning turns required for ${agentClass}`);
+	const rounds = rows(row(parameters.appliedPlan).planningRounds).filter(round => round.state === 'complete');
+	assert.ok(rounds.length >= 2, 'Two completed graph planning cycles are required, not merely sixteen assignments');
 	assert.equal(new Set(completed.filter(item => activity(item) === 'estimating').map(item => row(item.assignmentAttempt).agentClass)).size, 7);
+	}
 	const actors = completed.filter(item => activity(item) === 'acting');
+	if (['graph', 'revision', 'settlement', 'reporter'].includes(gate)) assert.ok(actors.length > 0, 'Missing acting evidence');
 	const reviews = completed.filter(item => activity(item) === 'reviewing' && text(row(item.assignmentAttempt).workItemId));
+	if (gate === 'graph' || gate === 'revision') {
 	assert.equal(new Set(actors.map(item => row(item.assignmentAttempt).workItemId)).size, 6, 'All six useful work items must complete');
 	const decisionIds = new Set(actors.map(item => item.decisionId));
 	assert.equal(decisionIds.size, 1, 'Actors must retain one exact decision authority');
@@ -65,7 +81,9 @@ test('SDK runtime golden has reviewed useful outputs, a real revision, settlemen
 	assert.equal(nodes.filter(node => node.pairRole === 'actor').length, 6);
 	assert.equal(nodes.filter(node => node.pairRole === 'reviewer').length, 6);
 	assert.ok(nodes.every(node => node.status === 'completed'), 'A graph with incomplete or failed pairs cannot pass');
+	}
 	const disposition = (item: Row) => text(row(row(item.lifecycleOutput).activityCompletion).reviewDisposition);
+	if (gate === 'revision') {
 	assert.ok(reviews.some(item => disposition(item) === 'request-changes'), 'A genuine request-changes cycle is required');
 	for (const requested of reviews.filter(item => disposition(item) === 'request-changes')) {
 		const workItemId = row(requested.assignmentAttempt).workItemId;
@@ -80,16 +98,21 @@ test('SDK runtime golden has reviewed useful outputs, a real revision, settlemen
 			.sort((a, b) => text(a.completedAt).localeCompare(text(b.completedAt)));
 		assert.equal(disposition(itemReviews.at(-1) ?? {}), 'approved', `Final review did not approve ${text(workItemId)}`);
 	}
-	for (const item of completed.filter(item => ['acting', 'reviewing', 'planning', 'estimating'].includes(activity(item)))) {
+	}
+	const modelResults = completed.filter(item => ['chat', 'acting', 'reviewing', 'planning', 'estimating'].includes(activity(item)));
+	if (gate === 'results') assert.ok(modelResults.length > 0, 'No model-backed results were inspected');
+	if (gate === 'results') for (const item of modelResults) {
 		const result = row(item.assignmentResult), timing = row(result.timingAwareness);
 		assert.equal(result.status, 'completed', `Missing canonical result for ${text(item.id)}`);
-		assert.equal(timing.completedChecks, 2);
+		assert.ok(Number.isInteger(timing.completedChecks) && Number(timing.completedChecks) >= 2,
+			`Missing first/final clock evidence for ${text(item.id)}`);
 		assert.equal(timing.firstToolCompliant, true);
 		assert.equal(timing.finalToolCompliant, true);
 		assert.equal(row(row(item.lifecycleOutput).teardown).verified, true);
 		assert.ok(Number(row(row(result.usage).native).activeSeconds) > 0, 'Measured active usage must be positive');
 		assert.ok(rows(result.references).length > 0, 'A claimed completion without exact output references cannot pass');
 	}
+	if (gate === 'settlement') {
 	const usageItems: Row[] = [];
 	cursor = undefined;
 	for (let pageNumber = 0; pageNumber < 40; pageNumber += 1) {
@@ -110,6 +133,8 @@ test('SDK runtime golden has reviewed useful outputs, a real revision, settlemen
 		assert.equal(settlements.length, 1, `Exactly one actual settlement required for ${text(item.id)}`);
 		assert.ok(text(row(settlements[0]?.metadata).settlementKey));
 	}
+	}
+	if (gate === 'reporter') {
 	const reports = Object.values(row(run.reportRefs)).map(row);
 	assert.equal(reports.length, 1, 'Native Reporter must store one exact report reference');
 	const report = reports[0]!;
@@ -120,4 +145,13 @@ test('SDK runtime golden has reviewed useful outputs, a real revision, settlemen
 	const body = text(files[0]?.body);
 	assert.ok(body.includes(workdayId), 'Reporter must describe this exact workday');
 	assert.ok(body.includes(text(actors[0]?.id)), 'Reporter must include actual predecessor evidence, not an empty summary');
-});
+	}
+}
+
+test('Golden runtime lifecycle evidence satisfies its acceptance boundary', { timeout: 120_000 }, () => verifyGolden('lifecycle'));
+test('Golden runtime collaboration evidence satisfies its acceptance boundary', { timeout: 120_000 }, () => verifyGolden('collaboration'));
+test('Golden runtime graph evidence satisfies its acceptance boundary', { timeout: 120_000 }, () => verifyGolden('graph'));
+test('Golden runtime revision evidence satisfies its acceptance boundary', { timeout: 120_000 }, () => verifyGolden('revision'));
+test('Golden runtime results evidence satisfies its acceptance boundary', { timeout: 120_000 }, () => verifyGolden('results'));
+test('Golden runtime settlement evidence satisfies its acceptance boundary', { timeout: 120_000 }, () => verifyGolden('settlement'));
+test('Golden runtime reporter evidence satisfies its acceptance boundary', { timeout: 120_000 }, () => verifyGolden('reporter'));

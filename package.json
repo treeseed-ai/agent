@@ -29,6 +29,8 @@
   },
   "files": [
     "README.md",
+    "guarantees",
+    "tests/acceptance",
     "dist",
     "Dockerfile",
     "docker-entrypoint.sh",

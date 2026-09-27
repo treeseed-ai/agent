@@ -1,0 +1,8 @@
+schemaVersion: treeseed.scene/v1
+id: agent.golden.lifecycle
+title: Golden lifecycle read-back
+scope: local-integrated-runtime
+workflow:
+  - id: lifecycle-evidence
+    action: { verifier: agent.golden.live.lifecycle }
+    expect: { status: passed }

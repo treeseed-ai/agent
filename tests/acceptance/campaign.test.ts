@@ -25,7 +25,7 @@ test('Frozen SDK campaign drives planning acting review and terminal golden gate
 	const team = process.env.TREESEED_ACCEPTANCE_TEAM ?? 'treeseed';
 	const started = read(['workdays', 'start', '--preflight', freeze.preflight.id, '--digest', freeze.preflight.preflightDigest,
 		'--yes', '--idempotency-key', `golden-start:${freeze.preflight.id}`], team);
-	const run = (started.run ?? started) as Row;
+	const run = { id: started.workdayId };
 	assert.ok(typeof run.id === 'string' && /^workday-[a-f0-9-]+$/u.test(run.id), 'ACCEPTANCE_CAMPAIGN_ID: Supported start omitted exact run');
 	process.env.TREESEED_ACCEPTANCE_WORKDAY_ID = run.id;
 	const stop = () => { read(['workdays', 'stop', run.id, '--yes', '--reason', 'Automated golden boundary failed',

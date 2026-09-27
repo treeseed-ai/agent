@@ -3,6 +3,18 @@ id: agent.golden.component-boundaries
 title: Golden execution component boundaries
 scope: local-component-tests
 workflow:
+  - id: concurrent-refill
+    action: { verifier: agent.golden.concurrent-refill }
+    expect: { status: passed }
+  - id: connection-ceiling
+    action: { verifier: agent.golden.connection-ceiling }
+    expect: { status: passed }
+  - id: adapter-ceiling
+    action: { verifier: agent.golden.adapter-ceiling }
+    expect: { status: passed }
+  - id: overlap-evidence
+    action: { verifier: agent.golden.overlap-evidence }
+    expect: { status: passed }
   - id: cli-supervision
     action: { verifier: agent.golden.cli-supervision }
     expect: { status: passed }

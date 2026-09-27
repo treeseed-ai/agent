@@ -177,7 +177,8 @@ async function main() {
 			return;
 		}
 		if (input.action === 'complete') {
-			const receipt = await coordinator.exchangeRegistrationCredential(connectionId);
+			if (input.maxConcurrentRunners !== undefined && typeof input.maxConcurrentRunners !== 'number') throw new Error('Connection concurrency must be a number.');
+			const receipt = await coordinator.exchangeRegistrationCredential(connectionId, input.maxConcurrentRunners as number | undefined);
 			emit({ ok: true, connectionId, status: receipt.status, teamId: receipt.teamId, providerId: receipt.providerId, membershipId: receipt.membershipId });
 			return;
 		}

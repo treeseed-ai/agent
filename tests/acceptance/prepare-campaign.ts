@@ -17,6 +17,9 @@ export function prepareSdkCampaign(draftPath: string, freezePath: string, team: 
 		'ACCEPTANCE_CAMPAIGN_WORKSPACE: Explicit Platform workspace required');
 	const { durationSeconds, planningPercent, planningTurnMaximumSeconds } = sdkCampaignWindow;
 	requirePlanningWindow(durationSeconds, planningPercent, planningTurnMaximumSeconds);
+	const policy = read(['workdays', 'profiles', 'show', 'default'], team).policy as Row;
+	assert.ok(Number(policy?.maximumConcurrency) >= 5 && Number(policy?.communicationConcurrency) >= 5,
+		'ACCEPTANCE_CONCURRENCY_POLICY: Configure at least five workday and communication slots before admission');
 	const host = read(['dev', 'host', 'status'], team, true);
 	assert.equal(host.status, 'active', 'ACCEPTANCE_CAMPAIGN_HOST: Active development runtime required');
 	verifyRuntimeClosure(host, { digest: host.guestImageDigest });

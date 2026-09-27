@@ -39,6 +39,8 @@ export function verifyGolden(gate: Gate): void {
 	assert.equal(run.executionMode, 'simulation');
 	assert.equal(parameters.durationSeconds, 3600);
 	assert.equal(parameters.planningPercent, 100 / 3);
+	assert.ok(Number(parameters.maximumConcurrency) >= 5 && Number(parameters.communicationConcurrency) >= 5,
+		'ACCEPTANCE_CONCURRENCY_POLICY: Golden requires at least five configured slots');
 	assert.equal(parameters.allocationWeight, 1);
 	assert.equal(parameters.planningTurnMaximumSeconds, 180);
 	assert.ok(text(run.startedAt) && text(run.completedAt), 'Terminal timestamps are required');
@@ -63,6 +65,19 @@ export function verifyGolden(gate: Gate): void {
 		assert.equal(item.leaseToken, null, `Live lease remains for ${text(item.id)}`);
 	}
 	const completed = assignments.filter(item => item.status === 'completed');
+	if (gate === 'lifecycle') {
+		const edges = completed.flatMap(item => {
+			const time = row(row(row(item.capacityEnvelope).budget).time);
+			const start = Date.parse(text(time.executionStartedAt)), completedAt = Date.parse(text(item.completedAt));
+			const closeout = Date.parse(text(time.closeoutStartedAt));
+			const end = Number.isFinite(closeout) ? Math.min(closeout, completedAt) : completedAt;
+			assert.ok(Number.isFinite(start) && Number.isFinite(end) && end >= start, 'ACCEPTANCE_CONCURRENCY_EVIDENCE: Exact execution interval required');
+			return [{ time: start, change: 1 }, { time: end, change: -1 }];
+		}).sort((a, b) => a.time - b.time || a.change - b.change);
+		let active = 0, peak = 0;
+		for (const edge of edges) { active += edge.change; peak = Math.max(peak, active); }
+		assert.ok(peak >= 5, 'ACCEPTANCE_CONCURRENCY_OVERLAP: Five real executions must overlap');
+	}
 	assert.ok(completed.length > 0, 'No completed assignment evidence; empty gates cannot pass');
 	if (gate === 'stopped') {
 		assert.equal(run.status, 'cancelled', 'ACCEPTANCE_STOP_TERMINAL: Stop acknowledgement is not terminal cancellation');

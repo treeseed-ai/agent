@@ -49,9 +49,24 @@ beforeEach(() => {
 });
 
 describe('golden read-back assertion regressions (fixtures are not live acceptance)', () => {
-	it('exposes seven independently selectable coded gates', () => {
-		expect(state.cases.size).toBe(7);
+	it('keeps seven normal read-back gates separate from stopped-run evidence', () => {
+		expect(state.cases.size).toBe(8);
 		for (const name of ['lifecycle', 'collaboration', 'graph', 'revision', 'results', 'settlement', 'reporter']) expect(() => gate(name)).not.toThrow();
+	});
+	it('does not accept a stop acknowledgement without terminal leases teardown and settlement', () => {
+		const stopped = state.cases.get('Stopped simulation retains terminal leases teardown and exactly-once settlement')!;
+		expect(stopped).toThrow('ACCEPTANCE_STOP_TERMINAL');
+		state.replies.get('workdays show')!.run.status = 'cancelled';
+		expect(stopped).not.toThrow();
+		const item = state.replies.get('assignments list')!.items[0];
+		item.leaseToken = 'synthetic-live-lease';
+		expect(stopped).toThrow('ACCEPTANCE_STOP_LEASE');
+		item.leaseToken = null;
+		item.lifecycleOutput.teardown.verified = false;
+		expect(stopped).toThrow('ACCEPTANCE_STOP_TEARDOWN');
+		item.lifecycleOutput.teardown.verified = true;
+		state.replies.get('capacity usage')!.items.shift();
+		expect(stopped).toThrow('Exactly one actual settlement');
 	});
 	it('rejects missing workday identity and contradictory mode in every gate', () => {
 		vi.stubEnv('TREESEED_ACCEPTANCE_WORKDAY_ID', '');

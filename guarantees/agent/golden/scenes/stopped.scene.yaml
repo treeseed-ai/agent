@@ -1,0 +1,8 @@
+schemaVersion: treeseed.scene/v1
+id: agent.golden.stopped
+title: Stopped simulation evidence
+scope: local-integrated-runtime
+workflow:
+  - id: stopped-evidence
+    action: { verifier: agent.golden.live.stopped }
+    expect: { status: passed }

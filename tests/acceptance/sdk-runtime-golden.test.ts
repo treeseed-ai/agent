@@ -59,13 +59,14 @@ function verifyGolden(gate: Gate): void {
 	assert.ok(completed.length > 0, 'No completed assignment evidence; empty gates cannot pass');
 	const activity = (item: Row) => text(row(row(item.assignmentAttempt).effectiveProfile).activity);
 	if (gate === 'collaboration') {
-	assert.equal(new Set(completed.filter(item => activity(item) === 'chat').map(item => row(item.assignmentAttempt).agentClass)).size, 8, 'All eight addressed chat assignments must complete canonically');
+	assert.equal(new Set(completed.filter(item => activity(item) === 'chat').map(item => row(item.assignmentAttempt).agentClass)).size, 8, 'ACCEPTANCE_CHAT_ROLES: All eight addressed chat assignments must complete canonically');
 	const classes = ['architect', 'researcher', 'tester', 'engineer', 'technical-writer', 'releaser', 'reviewer', 'reporter'];
 	for (const agentClass of classes) assert.ok(completed.filter(item => activity(item) === 'planning'
-		&& row(item.assignmentAttempt).agentClass === agentClass).length >= 2, `Two planning turns required for ${agentClass}`);
+		&& row(item.assignmentAttempt).agentClass === agentClass).length >= 2, `ACCEPTANCE_PLANNING_ROLE_TURNS: Two planning turns required for ${agentClass}`);
 	const rounds = rows(row(parameters.appliedPlan).planningRounds).filter(round => round.state === 'complete');
-	assert.ok(rounds.length >= 2, 'Two completed graph planning cycles are required, not merely sixteen assignments');
-	assert.equal(new Set(completed.filter(item => activity(item) === 'estimating').map(item => row(item.assignmentAttempt).agentClass)).size, 7);
+	assert.ok(rounds.length >= 2, 'ACCEPTANCE_PLANNING_CYCLES: Two completed graph planning cycles are required, not merely sixteen assignments');
+	assert.equal(new Set(completed.filter(item => activity(item) === 'estimating').map(item => row(item.assignmentAttempt).agentClass)).size, 7,
+		'ACCEPTANCE_ESTIMATE_ROLES: Seven estimating classes must complete');
 	}
 	const actors = completed.filter(item => activity(item) === 'acting');
 	if (['graph', 'revision', 'settlement', 'reporter'].includes(gate)) assert.ok(actors.length > 0, 'Missing acting evidence');
@@ -105,7 +106,7 @@ function verifyGolden(gate: Gate): void {
 		const result = row(item.assignmentResult), timing = row(result.timingAwareness);
 		assert.equal(result.status, 'completed', `Missing canonical result for ${text(item.id)}`);
 		assert.ok(Number.isInteger(timing.completedChecks) && Number(timing.completedChecks) >= 2,
-			`Missing first/final clock evidence for ${text(item.id)}`);
+			`ACCEPTANCE_CLOCK_BOUNDARIES: Missing first/final clock evidence for ${text(item.id)}`);
 		assert.equal(timing.firstToolCompliant, true);
 		assert.equal(timing.finalToolCompliant, true);
 		assert.equal(row(row(item.lifecycleOutput).teardown).verified, true);

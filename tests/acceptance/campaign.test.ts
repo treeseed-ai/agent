@@ -4,7 +4,7 @@ import test from 'node:test';
 import { monitorCampaign, requirePlanningWindow } from './campaign.ts';
 import { verifyFreezeIntegrity } from './freeze-integrity.ts';
 import { read, verifyGolden } from './sdk-runtime-golden.test.ts';
-import { prepareSdkCampaign } from './prepare-campaign.ts';
+import { prepareSdkCampaign, verifySdkExternalState } from './prepare-campaign.ts';
 
 type Row = Record<string, any>;
 test('Frozen SDK campaign drives planning acting review and terminal golden gates', { timeout: 36_000_000 }, async () => {
@@ -46,5 +46,6 @@ test('Frozen SDK campaign drives planning acting review and terminal golden gate
 			endsAt: Date.parse(current.parameters.appliedPlan.endsAt) };
 	}, now: Date.now, wait: () => new Promise(resolve => setTimeout(resolve, 30_000)), stop,
 		collaboration: () => verifyGolden('collaboration'),
-		verify: () => { for (const gate of ['lifecycle', 'graph', 'revision', 'results', 'settlement', 'reporter'] as const) verifyGolden(gate); } });
+		verify: () => { for (const gate of ['lifecycle', 'graph', 'revision', 'results', 'settlement', 'reporter'] as const) verifyGolden(gate);
+			verifySdkExternalState(freeze); } });
 });

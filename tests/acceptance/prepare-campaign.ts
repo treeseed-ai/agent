@@ -3,7 +3,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { basename, join, resolve } from 'node:path';
 import { read } from './sdk-runtime-golden.test.ts';
 import { freshSdkDraft, requirePlanningWindow } from './campaign.ts';
 
@@ -50,9 +50,27 @@ export function prepareSdkCampaign(draftPath: string, freezePath: string, team: 
 		execFileSync('git', ['-C', resolve(platform, 'packages', name), 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim()]));
 	capture('sdk-remote-refs.txt', execFileSync('git', ['-C', resolve(platform, 'packages/sdk'), 'ls-remote', 'origin'], { encoding: 'utf8', timeout: 30000 }));
 	capture('sdk-dist-tags.json', execFileSync('npm', ['view', '@treeseed/sdk', 'dist-tags', '--json'], { encoding: 'utf8', timeout: 30000 }));
+	capture('sdk-releases.json', execFileSync('gh', ['api', 'repos/treeseed-ai/sdk/releases', '--paginate'], { encoding: 'utf8', timeout: 30000 }));
 	const preflight = read([...args, '--idempotency-key', `golden-plan:${id}`], team);
 	const current = read(['proposals', 'show', id, '--server', 'local', '--project', project], team, true);
 	writeFileSync(freezePath, JSON.stringify({ createdAt: new Date().toISOString(),
 		proposal: { id, revision: current.activeVersion, digest: current.activeContentHash, estimates: 0 }, request, preflight, sourceHeads,
 		runtimeTargets: runtime, host, guest: { digest: host.guestImageDigest }, providerSupply: supply, receipts }, null, 2), { flag: 'wx' });
+}
+
+export function verifySdkExternalState(freeze: Row): void {
+	const platform = process.env.TREESEED_ACCEPTANCE_PLATFORM_PATH;
+	assert.ok(platform, 'ACCEPTANCE_CAMPAIGN_WORKSPACE: Explicit Platform workspace required');
+	const commands = {
+		'sdk-remote-refs.txt': ['git', ['-C', resolve(platform, 'packages/sdk'), 'ls-remote', 'origin']],
+		'sdk-dist-tags.json': ['npm', ['view', '@treeseed/sdk', 'dist-tags', '--json']],
+		'sdk-releases.json': ['gh', ['api', 'repos/treeseed-ai/sdk/releases', '--paginate']],
+	} as const;
+	for (const [name, [command, args]] of Object.entries(commands)) {
+		const paths = Object.keys(freeze.receipts ?? {}).filter(path => basename(path) === name);
+		assert.equal(paths.length, 1, 'ACCEPTANCE_EXTERNAL_INVENTORY: Complete frozen SDK inventory required');
+		const before = readFileSync(paths[0]!, 'utf8');
+		const after = execFileSync(command, [...args], { encoding: 'utf8', timeout: 30000 });
+		assert.equal(after, before, 'ACCEPTANCE_EXTERNAL_CHANGED: Simulation changed upstream SDK refs registry or releases');
+	}
 }

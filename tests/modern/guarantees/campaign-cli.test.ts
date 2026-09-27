@@ -6,6 +6,7 @@ vi.mock('node:test', () => ({ default: (_name: string, _options: unknown, run: (
 vi.mock('node:fs', () => ({ existsSync: () => true, readFileSync: (path: string) => path === '/freeze'
 	? JSON.stringify(state.freeze) : Buffer.alloc(0) }));
 vi.mock('../../acceptance/sdk-runtime-golden.test.ts', () => ({ read: state.read, verifyGolden: state.verify }));
+vi.mock('../../acceptance/prepare-campaign.ts', () => ({ prepareSdkCampaign: vi.fn(), verifySdkExternalState: vi.fn() }));
 await import('../../acceptance/campaign.test.ts');
 beforeEach(() => {
 	vi.stubEnv('TREESEED_ACCEPTANCE_FREEZE_PATH', '/freeze');

@@ -8,6 +8,7 @@ export function freshSdkDraft(template: Record<string, any>, id: string): Record
 		.filter((ref: Record<string, any>) => ref.store === 'git');
 	assert.ok(gitRefs.length && new Set(gitRefs.map((ref: Record<string, any>) => ref.commit)).size === 1,
 		'ACCEPTANCE_CAMPAIGN_SOURCE: One exact frozen project source is required');
+	assert.ok(/^[a-f0-9]{40}$/u.test(gitRefs[0].commit), 'ACCEPTANCE_CAMPAIGN_SOURCE: Moving source refs prohibited');
 	for (const item of draft.executionPlan.workItems) {
 		assert.ok(!item.ownerEstimate && !item.reviewerEstimate, 'ACCEPTANCE_CAMPAIGN_FRESH: Reused estimates prohibited');
 		if (!item.contextRefs.some((ref: Record<string, any>) => ref.store === 'git')) item.contextRefs.push(structuredClone(gitRefs[0]));

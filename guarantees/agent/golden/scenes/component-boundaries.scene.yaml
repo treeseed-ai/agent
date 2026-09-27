@@ -3,6 +3,9 @@ id: agent.golden.component-boundaries
 title: Golden execution component boundaries
 scope: local-component-tests
 workflow:
+  - id: failed-only-stop
+    action: { verifier: agent.golden.failed-only-stop }
+    expect: { status: passed }
   - id: concurrent-refill
     action: { verifier: agent.golden.concurrent-refill }
     expect: { status: passed }

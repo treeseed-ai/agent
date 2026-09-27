@@ -1,5 +1,11 @@
 import { expect, it } from 'vitest';
-import { applyManagedDevelopmentPolicy, createManagedProviderManifestV5 } from '../../../src/provider/configuration/managed-manifest.ts';
+import { mkdtemp, writeFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { stringify } from 'yaml';
+import { calculateAssignmentAllocation, capabilityAccountingLimitsSchema } from '@treeseed/sdk/agent-capacity';
+import { createManagedProviderManifestV5 } from '../../../src/provider/configuration/managed-manifest.ts';
+import { loadProviderManifest } from '../../../src/provider/configuration/manifest.ts';
 
 it('routes every advertised non-conversation capability through a managed workday lane', () => {
 	const digest = `sha256:${'a'.repeat(64)}`;
@@ -26,7 +32,7 @@ it('routes every advertised non-conversation capability through a managed workda
 	expect(manifest.adapters[0]!.offers.flatMap(({ offer }) => offer.capabilities.map(({ id }) => id))).not.toContain('treeseed.research.web');
 });
 
-it('refreshes only managed provider policy for development source', () => {
+it('loads identical provider policy in development and released execution', async () => {
 	const digest = `sha256:${'a'.repeat(64)}`;
 	const current = createManagedProviderManifestV5({ release: 'old', guestImage: 'sandbox', guestImageDigest: digest, baseImageDigest: digest, provenanceDigest: digest });
 	const release = current.adapters[0]!.offers.find(({ offer }) => offer.capabilities.some(({ id }) => id === 'treeseed.engineering.release'))!;
@@ -36,35 +42,52 @@ it('refreshes only managed provider policy for development source', () => {
 	current.connections = [{ id: 'preserved' } as typeof current.connections[number]];
 	current.adapters[0]!.model = { model: 'gpt-6-luna', reasoningEffort: 'low' };
 	current.adapters[1]!.model = { model: 'gpt-5.6-sol', reasoningEffort: 'medium' };
-	const refreshed = applyManagedDevelopmentPolicy(current, 'source');
-	expect(refreshed.adapters[0]!.offers.flatMap(({ offer }) => offer.capabilities.map(({ id }) => id))).toContain('treeseed.engineering.release');
-	expect(refreshed.connections).toEqual(current.connections);
-	expect(refreshed.sandbox).toEqual(current.sandbox);
-	expect(refreshed.sandbox.profiles.every((profile) => profile.resources.memoryBytes === 8_589_934_592)).toBe(true);
-	expect(refreshed.sandbox.profiles.every((profile) => profile.resources.processLimit === 512)).toBe(true);
-	expect(refreshed.adapters.map(({ model }) => model)).toEqual([
-		{ model: 'gpt-6-luna', reasoningEffort: 'low' },
-		{ model: 'gpt-5.6-sol', reasoningEffort: 'medium' },
-	]);
-	expect(refreshed.adapters.map(({ id, nativeLimits }) => [id, nativeLimits.modelConfigurationId])).toEqual([
-		['codex-implementation', 'codex-implementation:gpt-6-luna:low'],
-		['codex-research', 'codex-research:gpt-5.6-sol:medium'],
-	]);
-	expect(refreshed.adapters[0]!.nativeLimits.capabilityLimits).toMatchObject({
-		'treeseed.engineering.architecture': { minimumAssignmentSeconds: 360 },
-		'treeseed.engineering.review': { minimumAssignmentSeconds: 360 },
-	});
-	expect(refreshed.configuration.generation).toContain('development-source');
+	current.connections = [];
+	current.sandbox.profiles[0]!.resources.memoryBytes = 1_073_741_824;
+	current.sandbox.profiles[0]!.resources.processLimit = 128;
+	current.capacity.maxConcurrentWorkers = 5;
+	current.adapters[0]!.nativeLimits.dailyActiveSecondsLimit = 43200;
+	current.adapters[1]!.nativeLimits.dailyActiveSecondsLimit = 7200;
+	const directory = await mkdtemp(join(tmpdir(), 'provider-policy-parity-'));
+	try {
+		const path = join(directory, 'manifest.yaml');
+		await writeFile(path, stringify(current));
+		const released = await loadProviderManifest(path, undefined, {});
+		const development = await loadProviderManifest(path, undefined, { TREESEED_DEVELOPMENT_MODE: '1' });
+		expect(development.manifest).toEqual(released.manifest);
+		expect(development.manifest).toEqual(current);
+	} finally { await rm(directory, { recursive: true, force: true }); }
 });
 
-it('raises only undersized managed development guests and preserves explicit larger limits', () => {
+it('uses only explicit host duration bounds in both development and released admission', async () => {
 	const digest = `sha256:${'a'.repeat(64)}`;
 	const current = createManagedProviderManifestV5({ release: 'old', guestImage: 'sandbox', guestImageDigest: digest, baseImageDigest: digest, provenanceDigest: digest });
-	current.sandbox.profiles[0]!.resources.memoryBytes = 1_073_741_824;
-	current.sandbox.profiles[1]!.resources.memoryBytes = 8_589_934_592;
-	const refreshed = applyManagedDevelopmentPolicy(current, 'source');
-	expect(refreshed.sandbox.profiles[0]!.resources.memoryBytes).toBe(8_589_934_592);
-	expect(refreshed.sandbox.profiles[1]!.resources.memoryBytes).toBe(8_589_934_592);
-	expect(refreshed.sandbox.profiles.every((profile) => profile.resources.processLimit >= 512)).toBe(true);
-	expect(current.sandbox.profiles[0]!.resources.memoryBytes).toBe(1_073_741_824);
+	const capability = 'treeseed.engineering.review';
+	const directory = await mkdtemp(join(tmpdir(), 'provider-duration-parity-'));
+	try {
+		const path = join(directory, 'manifest.yaml');
+		for (const explicitMinimum of [undefined, 360]) {
+			const limits = capabilityAccountingLimitsSchema.parse(current.adapters[0]!.nativeLimits);
+			limits.capabilityLimits[capability] = {
+				dailyActiveSecondsLimit: 43200,
+				...(explicitMinimum === undefined ? {} : { minimumAssignmentSeconds: explicitMinimum, maximumAssignmentSeconds: 600 }),
+			};
+			current.adapters[0]!.nativeLimits = limits;
+			await writeFile(path, stringify(current));
+			for (const env of [{}, { TREESEED_DEVELOPMENT_MODE: '1' }]) {
+				const loaded = await loadProviderManifest(path, undefined, env);
+				const bounds = capabilityAccountingLimitsSchema.parse(loaded.manifest.adapters[0]!.nativeLimits).capabilityLimits[capability]!;
+				expect(bounds).toEqual(limits.capabilityLimits[capability]);
+				const allocation = calculateAssignmentAllocation({
+					estimate: { minimumSeconds: 35, expectedSeconds: 55, maximumSeconds: 90 }, measurements: [],
+					providerMinimumSeconds: bounds.minimumAssignmentSeconds,
+					providerMaximumSeconds: bounds.maximumAssignmentSeconds,
+					constraints: [{ id: 'execution-window', remainingSeconds: 346 - 60 }],
+				});
+				expect(allocation).toMatchObject(explicitMinimum === undefined
+					? { admitted: true, allocatedSeconds: 90 }
+					: { admitted: false, allocatedSeconds: 0 });
+			}
+		}
+	} finally { await rm(directory, { recursive: true, force: true }); }
 });

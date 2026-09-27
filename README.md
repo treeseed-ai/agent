@@ -62,6 +62,13 @@ scope. Missing workday identity, incomplete evidence, skipped tests and missing
 verifier assets fail closed. Installed native tests use Reviewer's loader, not
 Agent's development dependencies.
 
+Run `guarantee.agent.golden.freeze-integrity` with
+`TREESEED_ACCEPTANCE_FREEZE_PATH=/absolute/path/to/existing.freeze.json` to check
+the existing snapshot's receipt bytes and host/guest digest agreement. Missing,
+replaced or malformed receipts fail with stable `ACCEPTANCE_FREEZE_*` codes.
+This narrow gate does not prove capture-before-activation, complete external
+inventory, live-runtime correspondence or unchanged proposal objectives.
+
 Campaign orchestration, complete specification bindings, project-specific
 products, external-state comparison and controlled failures are still required
 before this suite can represent all of Platform's acceptance specification.

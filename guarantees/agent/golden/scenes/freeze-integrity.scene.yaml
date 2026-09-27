@@ -1,0 +1,8 @@
+schemaVersion: treeseed.scene/v1
+id: agent.golden.freeze-integrity
+title: Frozen receipt integrity
+scope: local-integrated-runtime
+workflow:
+  - id: frozen-evidence
+    action: { verifier: agent.golden.live.freeze-integrity }
+    expect: { status: passed }

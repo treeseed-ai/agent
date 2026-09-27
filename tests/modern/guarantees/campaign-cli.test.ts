@@ -15,14 +15,14 @@ beforeEach(() => {
 		guest: { digest: `sha256:${'b'.repeat(64)}` }, receipts: { '/receipt': 'sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855' },
 		proposal: { id: 'fresh', estimates: 0 }, preflight: { id: 'preflight', preflightDigest: 'exact', expiresAt: new Date(Date.now() + 600000).toISOString() },
 		request: { body: { executionMode: 'simulation', projects: ['8cbfb810-6da5-4da2-9ae9-cad53101253f'], proposalIds: ['fresh'],
-			durationSeconds: 28800, allocation: { planningPercent: 20, allocationWeight: 1, planningTurnMaximumSeconds: 180 } } } };
+			durationSeconds: 3600, allocation: { planningPercent: 100 / 3, allocationWeight: 1, planningTurnMaximumSeconds: 180 } } } };
 });
 describe('native campaign CLI composition (fixtures are not live acceptance)', () => {
 	it('uses the canonical workdayId receipt and every existing terminal gate', async () => {
 		const id = 'workday-aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
 		state.read.mockImplementation((args: string[]) => args[1] === 'start' ? { workdayId: id }
 			: args[0] === 'send' ? { receiptId: 'send' } : { run: { id, status: 'completed', executionMode: 'simulation', startedAt: new Date().toISOString(),
-				parameters: { durationSeconds: 28800, planningPercent: 20, appliedPlan: { endsAt: new Date().toISOString() } } } });
+				parameters: { durationSeconds: 3600, planningPercent: 100 / 3, appliedPlan: { endsAt: new Date().toISOString() } } } });
 		await state.run!();
 		expect(state.read.mock.calls[0]![0]).toContain('exact');
 		expect(state.verify.mock.calls.map(call => call[0])).toEqual(['collaboration', 'lifecycle', 'graph', 'revision', 'results', 'settlement', 'reporter']);
@@ -33,8 +33,8 @@ describe('native campaign CLI composition (fixtures are not live acceptance)', (
 		await expect(state.run!()).rejects.toThrow('ACCEPTANCE_PREFLIGHT_EXPIRED'); expect(state.read).not.toHaveBeenCalled();
 		state.freeze.preflight.expiresAt = new Date(Date.now() + 600000).toISOString();
 		state.freeze.request.body.durationSeconds = 7200;
-		await expect(state.run!()).rejects.toThrow('ACCEPTANCE_CAMPAIGN_WINDOW'); expect(state.read).not.toHaveBeenCalled();
-		state.freeze.request.body.durationSeconds = 28800; state.read.mockReturnValue({ id: 'invented-shape' });
+		await expect(state.run!()).rejects.toThrow('3600'); expect(state.read).not.toHaveBeenCalled();
+		state.freeze.request.body.durationSeconds = 3600; state.read.mockReturnValue({ id: 'invented-shape' });
 		await expect(state.run!()).rejects.toThrow('ACCEPTANCE_CAMPAIGN_ID'); expect(state.read).toHaveBeenCalledOnce();
 	});
 });

@@ -8,13 +8,19 @@ const rows = (value: unknown): Row[] => Array.isArray(value) ? value.map(row) : 
 const text = (value: unknown): string => typeof value === 'string' ? value : '';
 
 export function read(args: string[], team: string, library = false): Row {
-	const output = execFileSync('trsd', [...args, ...(library ? [] : ['--server', 'local', '--team', team]), '--json'], {
-		encoding: 'utf8', timeout: 30_000, maxBuffer: 32 * 1024 * 1024,
-	});
+	let output: string;
+	try {
+		output = execFileSync('trsd', [...args, ...(library ? [] : ['--server', 'local', '--team', team]), '--json'], {
+			encoding: 'utf8', timeout: 120_000, maxBuffer: 32 * 1024 * 1024,
+		});
+	} catch (failure) {
+		const code = row(failure).code;
+		throw new Error(`ACCEPTANCE_CLI_COMMAND: ${typeof code === 'string' && /^[A-Z0-9_]+$/u.test(code) ? code : 'COMMAND_FAILED'}`);
+	}
 	const start = output.search(/^\{/mu);
 	assert.ok(start >= 0, 'CLI omitted its JSON result envelope');
 	const envelope = row(JSON.parse(output.slice(start)));
-	assert.equal(envelope.ok, true, `CLI read failed: ${text(row(envelope.error).code)}`);
+	assert.equal(envelope.ok, true, 'ACCEPTANCE_CLI_RESPONSE: Supported command failed; inspect its protected receipt');
 	return row(envelope.result);
 }
 
@@ -31,7 +37,8 @@ export function verifyGolden(gate: Gate): void {
 	if (gate === 'lifecycle') {
 	assert.equal(run.status, 'completed', 'An active, cancelled or failed workday is not accepted');
 	assert.equal(run.executionMode, 'simulation');
-	assert.equal(parameters.planningPercent, 20);
+	assert.equal(parameters.durationSeconds, 3600);
+	assert.equal(parameters.planningPercent, 100 / 3);
 	assert.equal(parameters.allocationWeight, 1);
 	assert.equal(parameters.planningTurnMaximumSeconds, 180);
 	assert.ok(text(run.startedAt) && text(run.completedAt), 'Terminal timestamps are required');

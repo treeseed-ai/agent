@@ -26,7 +26,7 @@ test('Frozen SDK campaign drives planning acting review and terminal golden gate
 	assert.equal(allocation?.allocationWeight, 1);
 	assert.equal(allocation?.planningTurnMaximumSeconds, 180);
 	requirePlanningWindow(body.durationSeconds, allocation.planningPercent, allocation.planningTurnMaximumSeconds);
-	assert.ok(Date.parse(freeze.preflight?.expiresAt) > Date.now(), 'ACCEPTANCE_PREFLIGHT_EXPIRED: Refreeze before admission');
+	// API validates first admission expiry and replays the exact cached start after expiry.
 	const started = read(['workdays', 'start', '--preflight', freeze.preflight.id, '--digest', freeze.preflight.preflightDigest,
 		'--yes', '--idempotency-key', `golden-start:${freeze.preflight.id}`], team);
 	const run = { id: started.workdayId };

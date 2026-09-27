@@ -19,6 +19,8 @@ beforeEach(() => {
 });
 describe('native campaign CLI composition (fixtures are not live acceptance)', () => {
 	it('uses the canonical workdayId receipt and every existing terminal gate', async () => {
+		// A cached admission remains replayable after the preflight expires.
+		state.freeze.preflight.expiresAt = '2000-01-01T00:00:00Z';
 		const id = 'workday-aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
 		state.read.mockImplementation((args: string[]) => args[1] === 'start' ? { workdayId: id }
 			: args[0] === 'send' ? { receiptId: 'send' } : { run: { id, status: 'completed', executionMode: 'simulation', startedAt: new Date().toISOString(),
@@ -28,9 +30,12 @@ describe('native campaign CLI composition (fixtures are not live acceptance)', (
 		expect(state.verify.mock.calls.map(call => call[0])).toEqual(['collaboration', 'lifecycle', 'graph', 'revision', 'results', 'settlement', 'reporter']);
 		expect(process.env.TREESEED_ACCEPTANCE_WORKDAY_ID).toBe(id);
 	});
-	it('rejects stale or infeasible freeze before mutation and rejects a malformed start receipt before chat', async () => {
+	it('delegates stale admission to the API and rejects infeasible input or malformed receipts before chat', async () => {
 		state.freeze.preflight.expiresAt = '2000-01-01T00:00:00Z';
-		await expect(state.run!()).rejects.toThrow('ACCEPTANCE_PREFLIGHT_EXPIRED'); expect(state.read).not.toHaveBeenCalled();
+		state.read.mockImplementation(() => { throw new Error('API_PREFLIGHT_EXPIRED'); });
+		await expect(state.run!()).rejects.toThrow('API_PREFLIGHT_EXPIRED');
+		expect(state.read).toHaveBeenCalledTimes(1);
+		state.read.mockReset();
 		state.freeze.preflight.expiresAt = new Date(Date.now() + 600000).toISOString();
 		state.freeze.request.body.durationSeconds = 7200;
 		await expect(state.run!()).rejects.toThrow('3600'); expect(state.read).not.toHaveBeenCalled();

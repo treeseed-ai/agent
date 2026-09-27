@@ -1,6 +1,16 @@
 schemaVersion: treeseed.guarantee-verifiers/v1
 ownerPackage: "@treeseed/agent"
 verifiers:
+  agent.golden.cli-supervision:
+    kind: vitestCase
+    ownerPackage: '@treeseed/agent'
+    testFile: tests/modern/kernel/golden-readback.test.ts
+    testName: bounds CLI infrastructure waits and retains only safe failure classifications
+  agent.golden.admission-replay:
+    kind: vitestCase
+    ownerPackage: '@treeseed/agent'
+    testFile: tests/modern/guarantees/campaign-cli.test.ts
+    testName: uses the canonical workdayId receipt and every existing terminal gate
   agent.golden.debug-window:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

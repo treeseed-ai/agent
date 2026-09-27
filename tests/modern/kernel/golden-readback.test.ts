@@ -1,15 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 type Row = Record<string, any>;
-const state = vi.hoisted(() => ({ cases: new Map<string, () => void>(), replies: new Map<string, Row>() }));
+const state = vi.hoisted(() => ({ cases: new Map<string, () => void>(), replies: new Map<string, Row>(), failure: undefined as Error | undefined, timeout: 0 }));
 vi.mock('node:test', () => ({ default: (name: string, _options: unknown, run: () => void) => state.cases.set(name, run) }));
-vi.mock('node:child_process', () => ({ execFileSync: (_command: string, args: string[]) => {
+vi.mock('node:child_process', () => ({ execFileSync: (_command: string, args: string[], options: { timeout: number }) => {
+	state.timeout = options.timeout;
+	if (state.failure) throw state.failure;
 	const key = args.slice(0, 2).join(' ');
 	const result = state.replies.get(key);
 	if (!result) throw new Error(`Unexpected acceptance read: ${key}`);
 	return JSON.stringify({ ok: true, result });
 } }));
-await import('../../acceptance/sdk-runtime-golden.test.ts');
+const { read } = await import('../../acceptance/sdk-runtime-golden.test.ts');
 
 const classes = ['architect', 'researcher', 'tester', 'engineer', 'technical-writer', 'releaser', 'reviewer', 'reporter'];
 const workdayId = 'workday-test';
@@ -25,6 +27,7 @@ function assignment(id: string, activity: string, agentClass: string, workItemId
 beforeEach(() => {
 	vi.stubEnv('TREESEED_ACCEPTANCE_WORKDAY_ID', workdayId);
 	state.replies.clear();
+	state.failure = undefined;
 	const items: Row[] = classes.flatMap(agentClass => [assignment(`chat-${agentClass}`, 'chat', agentClass),
 		assignment(`planning-1-${agentClass}`, 'planning', agentClass), assignment(`planning-2-${agentClass}`, 'planning', agentClass)]);
 	items.push(...classes.slice(0, 7).map(agentClass => assignment(`estimate-${agentClass}`, 'estimating', agentClass)));
@@ -37,7 +40,7 @@ beforeEach(() => {
 	items.push(requested, assignment('revision', 'acting', 'architect', 'work-0', '2026-09-27T00:00:05Z', '2026-09-27T00:00:06Z'),
 		assignment('approved-revision', 'reviewing', 'reviewer', 'work-0', '2026-09-27T00:00:07Z', '2026-09-27T00:00:08Z'));
 	state.replies.set('workdays show', { run: { status: 'completed', executionMode: 'simulation', startedAt: '2026-09-27T00:00:00Z',
-		completedAt: '2026-09-27T00:01:00Z', parameters: { planningPercent: 20, allocationWeight: 1, planningTurnMaximumSeconds: 180,
+		completedAt: '2026-09-27T00:01:00Z', parameters: { durationSeconds: 3600, planningPercent: 100 / 3, allocationWeight: 1, planningTurnMaximumSeconds: 180,
 			appliedPlan: { planningRounds: [{ state: 'complete' }, { state: 'complete' }] } },
 		reportRefs: { sdk: { projectId: 'sdk', path: 'notes/report.mdx', commit } } } });
 	state.replies.set('assignments list', { items, page: { hasMore: false } });
@@ -49,6 +52,13 @@ beforeEach(() => {
 });
 
 describe('golden read-back assertion regressions (fixtures are not live acceptance)', () => {
+	it('bounds CLI infrastructure waits and retains only safe failure classifications', () => {
+		state.failure = Object.assign(new Error('secret-must-not-leak'), { code: 'ETIMEDOUT' });
+		expect(() => read(['workdays', 'show'], 'treeseed')).toThrow('ACCEPTANCE_CLI_COMMAND: ETIMEDOUT');
+		expect(state.timeout).toBe(120000);
+		state.failure = new Error('secret-must-not-leak');
+		expect(() => read(['workdays', 'show'], 'treeseed')).toThrow('ACCEPTANCE_CLI_COMMAND: COMMAND_FAILED');
+	});
 	it('keeps seven normal read-back gates separate from stopped-run evidence', () => {
 		expect(state.cases.size).toBe(8);
 		for (const name of ['lifecycle', 'collaboration', 'graph', 'revision', 'results', 'settlement', 'reporter']) expect(() => gate(name)).not.toThrow();

@@ -1,6 +1,16 @@
 import assert from 'node:assert/strict';
 
-export function freshSdkDraft(template: Record<string, any>, id: string): Record<string, any> {
+export function sdkProposalText(spec: string): { title: string; request: string; summary: string } {
+  const section = spec.split('### 1. SDK — decision-governed workday intent\n')[1]?.split('\n### 2. API')[0];
+  assert.ok(section, 'ACCEPTANCE_CAMPAIGN_SPEC: Canonical SDK section required');
+  const field = (name: string) => {
+    const value = section.split('\n').find(line => line.startsWith(`- ${name}: `))?.slice(name.length + 4).replace(/\*\*/gu, '').trim();
+    assert.ok(value, `ACCEPTANCE_CAMPAIGN_SPEC: Canonical ${name} required`); return value;
+  };
+  return { title: field('Title'), request: field('Request'), summary: field('Summary') };
+}
+
+export function freshSdkDraft(template: Record<string, any>, id: string, canonical: { title: string; request: string; summary: string }): Record<string, any> {
 	const draft = structuredClone(template);
 	assert.equal(draft.status, 'draft', 'ACCEPTANCE_CAMPAIGN_FRESH: Estimate-free draft template required');
 	assert.equal(draft.executionPlan?.workItems?.length, 6, 'ACCEPTANCE_CAMPAIGN_OBJECTIVES: Six unchanged SDK work items required');
@@ -14,7 +24,7 @@ export function freshSdkDraft(template: Record<string, any>, id: string): Record
 		if (!item.contextRefs.some((ref: Record<string, any>) => ref.store === 'git')) item.contextRefs.push(structuredClone(gitRefs[0]));
 	}
 	draft.id = id;
-	draft.title = 'Select accepted decisions in portable workday intent — SDK golden';
+	Object.assign(draft, canonical);
 	draft.contentProvenance.contentPath = `proposals/governance/${id}.mdx`;
 	return draft;
 }

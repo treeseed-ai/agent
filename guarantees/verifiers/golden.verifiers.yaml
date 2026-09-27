@@ -1,6 +1,11 @@
 schemaVersion: treeseed.guarantee-verifiers/v1
 ownerPackage: "@treeseed/agent"
 verifiers:
+  agent.golden.live.planning-boundary:
+    kind: nodeTestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/acceptance/planning-boundary.test.ts
+    testName: Golden planning boundary stops only the invalid simulation and retains failure
   agent.golden.live.freeze-integrity:
     kind: nodeTestCase
     ownerPackage: "@treeseed/agent"

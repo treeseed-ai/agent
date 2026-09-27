@@ -69,6 +69,14 @@ replaced or malformed receipts fail with stable `ACCEPTANCE_FREEZE_*` codes.
 This narrow gate does not prove capture-before-activation, complete external
 inventory, live-runtime correspondence or unchanged proposal objectives.
 
+After the planning window ends, `guarantee.agent.golden.planning-boundary`
+checks the same collaboration assertions. A known missing-role/cycle/estimate
+criterion stops only the selected active simulation through `trsd workdays stop`
+with a stable idempotency key, then retains the failed verdict. It refuses
+production, early, terminal or malformed-window runs; arbitrary transport/auth
+errors do not authorize mutation. This is one boundary guard, not full lifecycle
+monitoring or proof of successful settlement and teardown.
+
 Campaign orchestration, complete specification bindings, project-specific
 products, external-state comparison and controlled failures are still required
 before this suite can represent all of Platform's acceptance specification.

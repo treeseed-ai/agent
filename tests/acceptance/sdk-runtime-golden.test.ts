@@ -7,7 +7,7 @@ const row = (value: unknown): Row => value && typeof value === 'object' && !Arra
 const rows = (value: unknown): Row[] => Array.isArray(value) ? value.map(row) : [];
 const text = (value: unknown): string => typeof value === 'string' ? value : '';
 
-function read(args: string[], team: string, library = false): Row {
+export function read(args: string[], team: string, library = false): Row {
 	const output = execFileSync('trsd', [...args, ...(library ? [] : ['--server', 'local', '--team', team]), '--json'], {
 		encoding: 'utf8', timeout: 30_000, maxBuffer: 32 * 1024 * 1024,
 	});
@@ -22,7 +22,7 @@ function read(args: string[], team: string, library = false): Row {
 // These read-back gates do not stand in for campaign orchestration or external-state proof.
 const gates = ['lifecycle', 'collaboration', 'graph', 'revision', 'results', 'settlement', 'reporter'] as const;
 type Gate = typeof gates[number];
-function verifyGolden(gate: Gate): void {
+export function verifyGolden(gate: Gate): void {
 	const workdayId = process.env.TREESEED_ACCEPTANCE_WORKDAY_ID ?? '';
 	assert.ok(workdayId.startsWith('workday-'), 'Explicit real workday ID is required; no fixture or skipped pass is allowed');
 	const team = process.env.TREESEED_ACCEPTANCE_TEAM ?? 'treeseed';

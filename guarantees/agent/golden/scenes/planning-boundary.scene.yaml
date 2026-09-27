@@ -1,0 +1,8 @@
+schemaVersion: treeseed.scene/v1
+id: agent.golden.planning-boundary
+title: Automated planning boundary
+scope: local-integrated-runtime
+workflow:
+  - id: planning-boundary
+    action: { verifier: agent.golden.live.planning-boundary }
+    expect: { status: passed }

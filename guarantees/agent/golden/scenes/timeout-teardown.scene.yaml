@@ -3,6 +3,9 @@ id: agent.golden.timeout-teardown
 title: Bounded timeout teardown
 scope: local-component-tests
 workflow:
+  - id: terminal-output
+    action: { verifier: agent.golden.timeout-terminal-output }
+    expect: { status: passed }
   - id: bounded-drain
     action: { verifier: agent.golden.timeout-drain }
     expect: { status: passed }

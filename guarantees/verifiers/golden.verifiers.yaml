@@ -1,6 +1,11 @@
 schemaVersion: treeseed.guarantee-verifiers/v1
 ownerPackage: "@treeseed/agent"
 verifiers:
+  agent.golden.timeout-terminal-output:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/provider/provider-runner.test.ts
+    testName: retains verified teardown outputs for failed and returned assignments
   agent.golden.timeout-drain:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

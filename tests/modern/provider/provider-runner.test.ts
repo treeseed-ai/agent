@@ -60,6 +60,23 @@ function client() {
 const treeDx = { projectId: 'project', handleId: 'handle-1', repositoryId: null, workspaceId: null, invoke: vi.fn() };
 
 	describe('canonical provider assignment runner', () => {
+	it('retains verified teardown outputs for failed and returned assignments', async () => {
+		for (const status of ['failed', 'returned'] as const) {
+			const api = client();
+			await runProviderAssignment({ client: api, assignment: assignment(), treeDx,
+				leaseToken: 'lease', runnerId: 'runner', runtimeBuild,
+				executor: { id: 'codex', observe: async () => ({ available: true }), execute: async request => {
+					await request.beginExecution?.();
+					return { status, code: status === 'failed' ? 'assignment_timeout' : 'sandbox_returned', summary: 'Stopped.', retryable: false,
+						outputs: { sandboxId: 'sandbox-1', teardown: { verified: true, completedAt: '2026-09-27T08:25:11Z' } },
+						usage: [{ activeSeconds: 12, elapsedSeconds: 15 }] };
+				} } });
+			const terminal = status === 'failed' ? api.failAssignment : api.returnAssignment;
+			expect(terminal).toHaveBeenCalledWith('assignment-1', expect.objectContaining({
+				output: expect.objectContaining({ sandboxId: 'sandbox-1', teardown: { verified: true, completedAt: '2026-09-27T08:25:11Z' } }),
+			}));
+		}
+	});
 	it('stops productive accounting exactly once before teardown, including failure fallback', async () => {
 		const api = client(), finished = vi.fn(async () => undefined);
 		let now = 0;

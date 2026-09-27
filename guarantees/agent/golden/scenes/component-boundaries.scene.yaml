@@ -3,6 +3,12 @@ id: agent.golden.component-boundaries
 title: Golden execution component boundaries
 scope: local-component-tests
 workflow:
+  - id: provider-policy-parity
+    action: { verifier: agent.golden.provider-policy-parity }
+    expect: { status: passed }
+  - id: host-duration-bounds
+    action: { verifier: agent.golden.host-duration-bounds }
+    expect: { status: passed }
   - id: failed-only-stop
     action: { verifier: agent.golden.failed-only-stop }
     expect: { status: passed }

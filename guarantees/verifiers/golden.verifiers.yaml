@@ -1,6 +1,11 @@
 schemaVersion: treeseed.guarantee-verifiers/v1
 ownerPackage: "@treeseed/agent"
 verifiers:
+  agent.golden.debug-window:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/campaign.test.ts
+    testName: enforces one hour with twenty minutes planning without inventing per-assignment demand
   agent.golden.timeout-terminal-output:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

@@ -21,10 +21,11 @@ test('Frozen SDK campaign drives planning acting review and terminal golden gate
 	assert.equal(body?.projects[0], '8cbfb810-6da5-4da2-9ae9-cad53101253f', 'ACCEPTANCE_CAMPAIGN_PROJECT: Exact seeded SDK identity required');
 	assert.deepEqual(body.proposalIds, [freeze.proposal?.id], 'ACCEPTANCE_CAMPAIGN_PROPOSAL: Exact frozen proposal required');
 	assert.equal(freeze.proposal.estimates, 0, 'ACCEPTANCE_CAMPAIGN_FRESH: No reused estimates');
-	assert.equal(allocation?.planningPercent, 20);
+	assert.equal(body.durationSeconds, 3600);
+	assert.equal(allocation?.planningPercent, 100 / 3);
 	assert.equal(allocation?.allocationWeight, 1);
 	assert.equal(allocation?.planningTurnMaximumSeconds, 180);
-	requirePlanningWindow(body.durationSeconds, allocation.planningPercent, allocation.planningTurnMaximumSeconds, 8, 7);
+	requirePlanningWindow(body.durationSeconds, allocation.planningPercent, allocation.planningTurnMaximumSeconds);
 	assert.ok(Date.parse(freeze.preflight?.expiresAt) > Date.now(), 'ACCEPTANCE_PREFLIGHT_EXPIRED: Refreeze before admission');
 	const started = read(['workdays', 'start', '--preflight', freeze.preflight.id, '--digest', freeze.preflight.preflightDigest,
 		'--yes', '--idempotency-key', `golden-start:${freeze.preflight.id}`], team);

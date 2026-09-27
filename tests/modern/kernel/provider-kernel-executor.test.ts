@@ -110,6 +110,8 @@ describe('provider AgentKernel execution', () => {
 	});
 
 	it('aborts the isolated executor when the kernel deadline expires', async () => {
+		vi.useFakeTimers();
+		try {
 		const input = request();
 		const attempt = input.assignment.assignmentAttempt as Record<string, any>;
 		attempt.deadline = new Date(Date.now() + 250).toISOString();
@@ -119,9 +121,37 @@ describe('provider AgentKernel execution', () => {
 			await execution.beginExecution?.();
 			return new Promise<AgentExecutionResult>(() => {});
 		}) };
-		const result = await executeKernelAssignment({ executor, request: input, runtimeBuild });
+		const running = executeKernelAssignment({ executor, request: input, runtimeBuild });
+		await vi.advanceTimersByTimeAsync(30_251);
+		const result = await running;
 		expect(result).toMatchObject({ status: 'failed', summary: 'assignment_timeout' });
 		expect(observedSignal?.aborted).toBe(true);
+		} finally { vi.useRealTimers(); }
+	});
+	it('drains teardown after timeout without accepting late completion or return', async () => {
+		for (const status of ['completed', 'returned', 'throw'] as const) {
+		vi.useFakeTimers();
+		try {
+			const input = request();
+			(input.assignment.assignmentAttempt as Record<string, any>).deadline = new Date(Date.now() + 250).toISOString();
+			let cleaned = false;
+			const executor: AgentExecutor = { id: 'codex', observe: async () => ({ available: true }), execute: async execution => {
+				await execution.beginExecution?.();
+				await new Promise<void>(resolve => execution.signal!.addEventListener('abort', () => setTimeout(resolve, 50), { once: true }));
+				cleaned = true;
+				if (status === 'throw') throw Object.assign(new Error('Transport aborted after cleanup.'), {
+					outputs: { teardown: { verified: true } }, usage: [{ activeSeconds: 1, inputTokens: 20 }],
+				});
+				return { status, summary: 'Late transport result.', outputs: { teardown: { verified: true } }, usage: [{ activeSeconds: 1, inputTokens: 20 }] };
+			} };
+			const running = executeKernelAssignment({ executor, request: input, runtimeBuild });
+			await vi.advanceTimersByTimeAsync(251);
+			expect(cleaned).toBe(false);
+			await vi.advanceTimersByTimeAsync(50);
+			expect(await running).toMatchObject({ status: 'failed', code: 'assignment_timeout', outputs: { teardown: { verified: true } }, usage: [{ inputTokens: 20 }] });
+			expect(cleaned).toBe(true);
+		} finally { vi.useRealTimers(); }
+		}
 	});
 
 	it('returns timing noncompliance for a bounded retry instead of terminalizing the graph node', async () => {

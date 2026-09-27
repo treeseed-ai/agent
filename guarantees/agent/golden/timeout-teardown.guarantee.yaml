@@ -1,0 +1,12 @@
+schemaVersion: treeseed.guarantee/v1
+id: guarantee.agent.golden.timeout-teardown
+journey: Retain bounded timeout teardown evidence
+ownerPackage: "@treeseed/agent"
+type: agent
+subtype: execution
+status: planned
+gates: [core]
+summary: Abort productive work, bound cancellation drain, retain actual cleanup and usage, and reject late completion or return.
+scene:
+  required: true
+  manifest: guarantees/agent/golden/scenes/timeout-teardown.scene.yaml

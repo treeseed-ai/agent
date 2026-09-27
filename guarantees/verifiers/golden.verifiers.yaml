@@ -1,6 +1,21 @@
 schemaVersion: treeseed.guarantee-verifiers/v1
 ownerPackage: "@treeseed/agent"
 verifiers:
+  agent.golden.timeout-terminal-output:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/provider/provider-runner.test.ts
+    testName: retains verified teardown outputs for failed and returned assignments
+  agent.golden.timeout-drain:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/provider-kernel-executor.test.ts
+    testName: aborts the isolated executor when the kernel deadline expires
+  agent.golden.timeout-late-result:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/provider-kernel-executor.test.ts
+    testName: drains teardown after timeout without accepting late completion or return
   agent.golden.live.campaign:
     kind: nodeTestCase
     ownerPackage: "@treeseed/agent"

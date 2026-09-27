@@ -3,6 +3,15 @@ id: agent.golden.component-boundaries
 title: Golden execution component boundaries
 scope: local-component-tests
 workflow:
+  - id: terminal-teardown-output
+    action: { verifier: agent.golden.timeout-terminal-output }
+    expect: { status: passed }
+  - id: bounded-timeout-drain
+    action: { verifier: agent.golden.timeout-drain }
+    expect: { status: passed }
+  - id: late-timeout-result
+    action: { verifier: agent.golden.timeout-late-result }
+    expect: { status: passed }
   - id: canonical-release-revision
     action: { verifier: agent.golden.canonical-release-revision }
     expect: { status: passed }

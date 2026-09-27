@@ -192,6 +192,7 @@ export async function runProviderAssignment(input: ProviderAssignmentRunInput) {
       summary: renewalFailure instanceof Error ? renewalFailure.message : String(renewalFailure),
       retryable: true,
 			usage: result.usage,
+			outputs: result.outputs,
     };
   }
 	// Sandbox harnesses return their final Markdown in responseMarkdown for every
@@ -218,12 +219,12 @@ export async function runProviderAssignment(input: ProviderAssignmentRunInput) {
 		const usage = record(result.usage?.[0]);
 		await input.client.settleAssignment(assignmentId, { activeSeconds: settlementSeconds(usage.activeSeconds), elapsedSeconds: settlementSeconds(usage.elapsedSeconds),
 			usageDimension: 'aggregate', usageActual: usage }, `assignment-settlement:${assignmentId}:${input.runnerId}`);
-    return input.client.returnAssignment(assignmentId, { leaseToken: input.leaseToken, runnerId: input.runnerId, code: result.code ?? 'agent_executor_returned', reason: result.summary, retryable: result.retryable ?? true });
+    return input.client.returnAssignment(assignmentId, { leaseToken: input.leaseToken, runnerId: input.runnerId, code: result.code ?? 'agent_executor_returned', reason: result.summary, retryable: result.retryable ?? true, output: record(result.outputs) });
   }
   if (result.status === 'failed') {
 		const usage = record(result.usage?.[0]);
     return input.client.failAssignment(assignmentId, { leaseToken: input.leaseToken, runnerId: input.runnerId, code: result.code ?? 'agent_executor_failed', message: result.summary, retryable: result.retryable ?? false,
-			activeSeconds: settlementSeconds(usage.activeSeconds), elapsedSeconds: settlementSeconds(usage.elapsedSeconds), usage });
+			activeSeconds: settlementSeconds(usage.activeSeconds), elapsedSeconds: settlementSeconds(usage.elapsedSeconds), usage, output: record(result.outputs) });
   }
   const current = await input.client.assignment(assignmentId);
   await input.client.startAssignmentCloseout(assignmentId, { leaseToken: input.leaseToken, runnerId: input.runnerId,

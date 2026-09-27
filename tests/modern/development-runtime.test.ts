@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 describe('capacity provider development runtime', () => {
 	it('declares cloned state and drain-gated cleanup', () => {
 		const manifest = parseYaml(readFileSync('treeseed.package.yaml', 'utf8')) as { development: unknown };
-		const runtime = manifest.development as { schemaVersion: string; targets: Array<{ id: string; statePolicy: string; operations: { build: { command: string; args: string[] }; start: { command: string; args: string[] }; cleanup: { command: string; args: string[] } }; shutdown: { activeWorkPolicy: string; drainOperation?: { command: string; args: string[] } }; forbiddenOperations: string[] }> };
+		const runtime = manifest.development as { schemaVersion: string; targets: Array<{ id: string; statePolicy: string; dependencies: Array<{ id: string; target: string; reaction: string }>; operations: { build: { command: string; args: string[] }; start: { command: string; args: string[] }; cleanup: { command: string; args: string[] } }; shutdown: { activeWorkPolicy: string; drainOperation?: { command: string; args: string[] } }; forbiddenOperations: string[] }> };
 		expect(runtime.schemaVersion).toBe('treeseed.development-runtime/v1');
 		const provider = runtime.targets.find((target) => target.id === 'provider')!;
 		expect(provider.statePolicy).toBe('clone');
@@ -15,6 +15,7 @@ describe('capacity provider development runtime', () => {
 		expect(provider.operations.cleanup.command).toBe('docker');
 		expect(provider.shutdown.drainOperation?.command).toBe('docker');
 		expect(provider.forbiddenOperations).toContain('force-kill-active-assignment');
+		expect(provider.dependencies).toContainEqual({ id: 'agent', target: 'sandbox', locality: 'local', reaction: 'rebuild' });
 		const sandbox = runtime.targets.find((target) => target.id === 'sandbox')!;
 		expect(sandbox.operations.build.args).toEqual(expect.arrayContaining(['--prepare-only', '--roles', 'base', 'guest']));
 		expect(sandbox.operations.start).toEqual({ command: 'docker', args: ['managed-agent-sandbox'], environment: {}, timeoutSeconds: 7200 });

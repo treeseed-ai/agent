@@ -1,0 +1,12 @@
+schemaVersion: treeseed.guarantee/v1
+id: guarantee.agent.golden.planning-boundary
+journey: Enforce completed planning collaboration
+ownerPackage: "@treeseed/agent"
+type: agent
+subtype: execution
+status: planned
+gates: [core]
+summary: After planning, stop this simulation on known collaboration failure and retain failed evidence; not full lifecycle monitoring.
+scene:
+  required: true
+  manifest: guarantees/agent/golden/scenes/planning-boundary.scene.yaml

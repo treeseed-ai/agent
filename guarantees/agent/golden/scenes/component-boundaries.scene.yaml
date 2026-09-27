@@ -3,6 +3,9 @@ id: agent.golden.component-boundaries
 title: Golden execution component boundaries
 scope: local-component-tests
 workflow:
+  - id: canonical-release-revision
+    action: { verifier: agent.golden.canonical-release-revision }
+    expect: { status: passed }
   - id: recursive-workspace-grant
     action: { verifier: agent.golden.recursive-workspace-grant }
     expect: { status: passed }

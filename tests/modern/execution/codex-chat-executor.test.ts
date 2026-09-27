@@ -279,11 +279,11 @@ describe('Codex chat executor', () => {
 	it('directs a releaser revision actor to apply exact reviewer corrections before gating', () => {
 		const prompt = promptFromContext({ canonicalAssignmentContext: { assignment: {
 			id: 'release-revision-1', workspace: { mode: 'git' }, effectiveProfile: { activity: 'acting', handler: 'releaser', prompt: {} },
-		}, context: [], predecessorResults: [{ id: 'review-1', outputs: { activityCompletion: {
-			reviewDisposition: 'revision-required', summary: 'Restore the generated contract bundle.',
-		} } }] } }, 'low', 600);
-		expect(prompt).toContain('This is a bounded revision assignment');
-		expect(prompt).toContain('Apply only the exact corrections required by the predecessor Reviewer finding');
+		}, context: [], predecessorResults: [{ id: 'review-1', assignmentId: 'review-assignment', status: 'completed',
+			summary: 'Request changes. Restore the missing time_range_ambiguous validation.', references: [],
+		}] } }, 'low', 600);
+		expect(prompt).toContain('this is a bounded revision assignment');
+		expect(prompt).toContain('apply only the exact corrections required by the predecessor Reviewer finding');
 		expect(prompt).toContain('commit them, and then run the required release gates');
 		expect(prompt).not.toContain('do not debug, modify source');
 	});

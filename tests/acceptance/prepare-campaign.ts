@@ -9,12 +9,23 @@ import { freshSdkDraft, requirePlanningWindow, sdkProposalText, sdkCampaignWindo
 import { verifyRuntimeClosure } from './freeze-integrity.ts';
 
 type Row = Record<string, any>;
+export function requireCurrentCodex(pinned: string, installed: string, latest: string): void {
+	assert.match(pinned, /^\d+\.\d+\.\d+$/u, 'ACCEPTANCE_CODEX_VERSION: Exact stable Codex pin required');
+	assert.equal(installed, `codex-cli ${pinned}`, 'ACCEPTANCE_CODEX_VERSION: Installed Codex differs from package pin');
+	assert.equal(pinned, latest, 'ACCEPTANCE_CODEX_STALE: Update the sandbox Codex pin before metered acceptance');
+}
+
 /** Preparation is part of the same native test, never a separate execution authority. */
 export function prepareSdkCampaign(draftPath: string, freezePath: string, team: string): void {
 	assert.ok(!existsSync(freezePath), 'ACCEPTANCE_FREEZE_EXISTS: Never overwrite a campaign freeze');
 	const platform = process.env.TREESEED_ACCEPTANCE_PLATFORM_PATH;
 	assert.ok(platform && existsSync(join(platform, 'docs/agent-acceptance.md')),
 		'ACCEPTANCE_CAMPAIGN_WORKSPACE: Explicit Platform workspace required');
+	const agentPath = resolve(platform, 'packages/agent');
+	const pinnedCodex = (JSON.parse(readFileSync(join(agentPath, 'package.json'), 'utf8')) as Row).dependencies['@openai/codex'] as string;
+	const installedCodex = execFileSync(join(agentPath, 'node_modules/.bin/codex'), ['--version'], { encoding: 'utf8', timeout: 30_000 }).trim();
+	const latestCodex = execFileSync('npm', ['view', '@openai/codex', 'dist-tags.latest'], { encoding: 'utf8', timeout: 30_000 }).trim();
+	requireCurrentCodex(pinnedCodex, installedCodex, latestCodex);
 	const { durationSeconds, planningPercent, planningTurnMaximumSeconds } = sdkCampaignWindow;
 	requirePlanningWindow(durationSeconds, planningPercent, planningTurnMaximumSeconds);
 	const policy = read(['workdays', 'profiles', 'show', 'default'], team).policy as Row;
@@ -48,6 +59,7 @@ export function prepareSdkCampaign(draftPath: string, freezePath: string, team: 
 		receipts[path] = `sha256:${createHash('sha256').update(bytes).digest('hex')}`;
 	};
 	capture('proposal-input.json', readFileSync(inputPath, 'utf8'));
+	capture('codex-version.json', JSON.stringify({ pinned: pinnedCodex, installed: installedCodex, latest: latestCodex }));
 	const runtime = read(['dev', 'status'], team, true);
 	const providers = (read(['providers', 'list'], team).items as Row[]).filter(item => item.status === 'approved');
 	assert.equal(providers.length, 1, 'ACCEPTANCE_CAMPAIGN_SUPPLY: Individual host campaign requires unambiguous provider');

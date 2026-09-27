@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { freshSdkDraft, sdkProposalText } from '../../acceptance/campaign.ts';
 import { verifyRuntimeClosure } from '../../acceptance/freeze-integrity.ts';
+import { requireCurrentCodex } from '../../acceptance/prepare-campaign.ts';
 
 const git = { store: 'git', commit: 'a'.repeat(40), repository: 'sdk' };
 const canonical = { title: 'Canonical title', request: 'Canonical request', summary: 'Canonical summary' };
@@ -8,6 +9,12 @@ const template = { status: 'draft', id: 'old', title: 'old', contentProvenance: 
 	executionPlan: { workItems: Array.from({ length: 6 }, (_, id) => ({ id, objective: `fixed ${id}`, acceptanceCriteria: ['fixed'],
 		contextRefs: id > 1 ? [git] : [], dependsOn: id ? [id - 1] : [], maximumReviewCycles: 2 })) } };
 describe('fresh automated SDK campaign preparation (fixtures are not acceptance)', () => {
+	it('rejects stale or mismatched Codex before a metered campaign', () => {
+		expect(() => requireCurrentCodex('0.157.1', 'codex-cli 0.157.1', '0.157.1')).not.toThrow();
+		expect(() => requireCurrentCodex('0.157.1', 'codex-cli 0.156.1', '0.157.1')).toThrow('ACCEPTANCE_CODEX_VERSION');
+		expect(() => requireCurrentCodex('0.156.1', 'codex-cli 0.156.1', '0.157.1')).toThrow('ACCEPTANCE_CODEX_STALE');
+		expect(() => requireCurrentCodex('latest', 'codex-cli 0.157.1', '0.157.1')).toThrow('ACCEPTANCE_CODEX_VERSION');
+	});
   it('requires explicit exact host and guest closure before proposal preparation', () => {
     const digest = `sha256:${'a'.repeat(64)}`;
     expect(() => verifyRuntimeClosure({ manifestDigest: digest, guestImageDigest: null }, { digest: null })).toThrow('ACCEPTANCE_FREEZE_RUNTIME_DIGEST');

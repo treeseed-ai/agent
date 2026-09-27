@@ -72,6 +72,7 @@ describe('Agent RC publication', () => {
 		expect(packageLock.packages['node_modules/@openai/codex'].version).toBe(packageJson.dependencies['@openai/codex']);
 		expect(dockerfile).not.toContain('/app/node_modules/@openai/codex/bin/codex.js');
 		expect(codexDockerfile).toContain('/app/node_modules/@openai/codex/bin/codex.js');
+		expect(codexDockerfile).toContain('test "$(codex --version)" = "codex-cli ${CODEX_EXPECTED}"');
 		expect(entrypoint).toContain('provider manager and runner containers must run unprivileged');
 		expect(entrypoint).not.toContain('rewrap-vault.js');
 		expect(entrypoint).not.toContain('CODEX_AUTH');

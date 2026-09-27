@@ -60,6 +60,18 @@ describe('durable provider token isolation', () => {
 		const restarted = new CapacityProviderCoordinator(loaded, root);
 		for (const connection of loaded.manifest.connections) expect((await restarted.accessTokenForConnection(connection)).accessToken).toBe(`synthetic-token-${connection.id}`);
 		expect(exchange).toHaveBeenCalledTimes(2); expect(issue).toHaveBeenCalledTimes(2);
+		loaded.manifest.capacity.maxConcurrentWorkers = 5;
+		const before = structuredClone(loaded.manifest.connections.find(connection => connection.id === 'a')!);
+		await restarted.exchangeRegistrationCredential('a', 5);
+		const after = loaded.manifest.connections.find(connection => connection.id === 'a')!;
+		expect(after).toEqual({ ...before, offer: { ...before.offer, maxConcurrentRunners: 5 } });
+		await expect(restarted.exchangeRegistrationCredential('a', 6)).rejects.toThrow('configured host capacity');
+		await expect(restarted.exchangeRegistrationCredential('a', 0)).rejects.toThrow('configured host capacity');
+		await expect(restarted.exchangeRegistrationCredential('unknown', 5)).rejects.toThrow('already enrolled');
+		const restored = new CapacityProviderCoordinator(loaded, root);
+		await restored.exchangeRegistrationCredential('a');
+		expect(loaded.manifest.connections.find(connection => connection.id === 'a')!.offer.maxConcurrentRunners).toBe(5);
+		expect(exchange).toHaveBeenCalledTimes(2); expect(issue).toHaveBeenCalledTimes(2);
 	});
 	it('keeps independent team tokens through coordinator restart without network access', async () => {
 		const { connections, store, coordinator, fetch } = await fixture();

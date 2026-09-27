@@ -278,8 +278,14 @@ export class CapacityProviderCoordinator {
 		};
 	}
 
-	async exchangeRegistrationCredential(connectionId: string): Promise<ProviderConnectionResult> {
+	async exchangeRegistrationCredential(connectionId: string, maxConcurrentRunners?: number): Promise<ProviderConnectionResult> {
 		let existing = await readProviderConnectionState(this.dataDir, connectionId);
+		if (maxConcurrentRunners !== undefined) {
+			if (!Number.isInteger(maxConcurrentRunners) || maxConcurrentRunners < 1 || maxConcurrentRunners > this.loaded.manifest.capacity.maxConcurrentWorkers) throw new Error('Connection concurrency must fit the configured host capacity.');
+			if (!existing?.generatedCredentialRef || !existing.credentialId || !existing.membershipId) throw new Error('Concurrency updates require an already enrolled connection.');
+			existing = nextState(connectionId, existing.controlPlaneUrl, existing, { offer: { ...existing.offer, maxConcurrentRunners } });
+			await writeProviderConnectionState(this.dataDir, existing);
+		}
 		if (existing?.generatedCredentialRef && existing.credentialId && existing.membershipId) {
 			return this.reconcileConnection(await this.materializeApprovedConnection(existing));
 		}

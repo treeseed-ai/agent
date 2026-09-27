@@ -238,12 +238,9 @@ export class ProviderLocalCapacityStore {
 		});
 	}
 
-	async claimDispatch(connectionIds?: string[]) {
+	async claimDispatch(claimId: string) {
 		return this.update((state, now) => {
-			const eligible = connectionIds ? new Set(connectionIds) : null;
-			const claim = state.claims
-				.filter((entry) => entry.status === 'ready' && (!eligible || eligible.has(entry.connectionId)))
-				.sort((left, right) => left.acquiredAt.localeCompare(right.acquiredAt) || left.id.localeCompare(right.id))[0];
+			const claim = state.claims.find(entry => entry.id === claimId && entry.status === 'ready');
 			if (!claim) return null;
 			claim.status = 'running';
 			claim.updatedAt = now;

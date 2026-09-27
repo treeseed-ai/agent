@@ -20,6 +20,7 @@ const gate = (name: string) => state.cases.get(`Golden runtime ${name} evidence 
 function assignment(id: string, activity: string, agentClass: string, workItemId = '', createdAt = '2026-09-27T00:00:01Z', completedAt = '2026-09-27T00:00:02Z'): Row {
 	return { id, workDayId: workdayId, projectId: 'sdk', decisionId: 'decision-test', status: 'completed', leaseToken: null,
 		createdAt, completedAt, assignmentAttempt: { agentClass, workItemId, effectiveProfile: { activity } },
+		capacityEnvelope: { budget: { time: { executionStartedAt: createdAt, closeoutStartedAt: completedAt } } },
 		assignmentResult: { status: 'completed', timingAwareness: { completedChecks: 2, firstToolCompliant: true, finalToolCompliant: true },
 			usage: { native: { activeSeconds: 1 } }, references: [{ kind: 'git', commit }] },
 		lifecycleOutput: { teardown: { verified: true }, activityCompletion: { reviewDisposition: 'approved' } } };
@@ -40,7 +41,7 @@ beforeEach(() => {
 	items.push(requested, assignment('revision', 'acting', 'architect', 'work-0', '2026-09-27T00:00:05Z', '2026-09-27T00:00:06Z'),
 		assignment('approved-revision', 'reviewing', 'reviewer', 'work-0', '2026-09-27T00:00:07Z', '2026-09-27T00:00:08Z'));
 	state.replies.set('workdays show', { run: { status: 'completed', executionMode: 'simulation', startedAt: '2026-09-27T00:00:00Z',
-		completedAt: '2026-09-27T00:01:00Z', parameters: { durationSeconds: 3600, planningPercent: 100 / 3, allocationWeight: 1, planningTurnMaximumSeconds: 180,
+		completedAt: '2026-09-27T00:01:00Z', parameters: { durationSeconds: 3600, planningPercent: 100 / 3, allocationWeight: 1, planningTurnMaximumSeconds: 180, maximumConcurrency: 5, communicationConcurrency: 5,
 			appliedPlan: { planningRounds: [{ state: 'complete' }, { state: 'complete' }] } },
 		reportRefs: { sdk: { projectId: 'sdk', path: 'notes/report.mdx', commit } } } });
 	state.replies.set('assignments list', { items, page: { hasMore: false } });
@@ -52,6 +53,14 @@ beforeEach(() => {
 });
 
 describe('golden read-back assertion regressions (fixtures are not live acceptance)', () => {
+	it('rejects serial execution even when five slots were configured', () => {
+		for (const [index, item] of state.replies.get('assignments list')!.items.entries()) {
+			item.capacityEnvelope.budget.time.executionStartedAt = new Date(index * 1000).toISOString();
+			item.capacityEnvelope.budget.time.closeoutStartedAt = new Date((index + 1) * 1000).toISOString();
+			item.completedAt = new Date((index + 1) * 1000).toISOString();
+		}
+		expect(() => gate('lifecycle')).toThrow('ACCEPTANCE_CONCURRENCY_OVERLAP');
+	});
 	it('bounds CLI infrastructure waits and retains only safe failure classifications', () => {
 		state.failure = Object.assign(new Error('secret-must-not-leak'), { code: 'ETIMEDOUT' });
 		expect(() => read(['workdays', 'show'], 'treeseed')).toThrow('ACCEPTANCE_CLI_COMMAND: ETIMEDOUT');

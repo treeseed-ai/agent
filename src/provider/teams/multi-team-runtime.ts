@@ -15,6 +15,9 @@ import { assignmentAttemptSchema, capabilityAccountingLimitsSchema } from '@tree
 import { projectHandlers } from '../../kernel/project-handlers.ts';
 import { observeProviderDiskCapacity } from '../runtime/disk-capacity.ts';
 
+// In-process task ownership only; durable capacity/lease authority stays in localState.
+const pendingRunners = new Map<string, Set<Promise<void>>>();
+
 function record(value: unknown): Record<string, unknown> {
 	return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
@@ -180,11 +183,12 @@ export async function runMultiTeamProviderRunners(
 	const localState = new ProviderLocalCapacityStore(config.dataDir);
 	await recoverProviderLocalLeases({ config, connections, store: localState, includeRunning: false });
 	const results: Record<string, unknown>[] = [];
-	for (const connection of orderConnectionsForFairPolling(connections, await localState.snapshot())) {
+	const ordered = orderConnectionsForFairPolling(connections, await localState.snapshot());
+	const runConnection = async (connection: ProviderConnectionRuntime) => {
 		const disk = await observeProviderDiskCapacity({ path: config.dataDir, env: config.env });
 		if (!disk.ok) {
 			results.push({ connectionId: connection.connection.id, status: 'idle', reason: 'provider_disk_capacity_insufficient', diagnostics: disk });
-			continue;
+			return;
 		}
 		const runtime = context(config, connection, loaded.manifest);
 		const claim = await localState.claim({
@@ -194,11 +198,12 @@ export async function runMultiTeamProviderRunners(
 		});
 		if (!claim) {
 			results.push({ connectionId: connection.connection.id, status: 'idle', reason: 'local_capacity_exhausted' });
-			continue;
+			return;
 		}
 		const client = createProviderControlPlaneClient(runtime);
 		let leasedAssignmentId: string | undefined;
 		let leasedToken: string | undefined;
+		let leasedEnvelope: Record<string, unknown> | undefined;
 		try {
 			const advertisedCapabilities = [...new Set(loaded.manifest.adapters.flatMap((adapter) => adapter.offers.flatMap(({ offer }) => offer.capabilities.map(({ id }) => id))))];
 			const leased = record(await client.nextAssignment({
@@ -211,6 +216,7 @@ export async function runMultiTeamProviderRunners(
 			const leaseToken = text(leased.leaseToken, assignment.leaseToken);
 			leasedAssignmentId = assignmentId;
 			leasedToken = leaseToken;
+			leasedEnvelope = leased;
 			if (!assignmentId || !leaseToken) {
 				const diagnostics = record(leased.diagnostics ?? leased.leaseDiagnostics);
 				const synthesis = record(diagnostics.synthesis);
@@ -220,18 +226,18 @@ export async function runMultiTeamProviderRunners(
 				}
 				await localState.release(claim.id);
 				results.push({ connectionId: connection.connection.id, status: 'idle', reason: 'no_assignment', diagnostics: Object.keys(diagnostics).length ? diagnostics : null });
-				continue;
+				return;
 			}
 			if (text(assignment.executionKind) === 'conversation') await client.acknowledgeCommunicationNotification(assignmentId, {
 				providerId: connection.providerId, runnerId: claim.runnerId, observedAt: new Date().toISOString(),
 			});
-			const executionProviderId = text(assignment.executionProviderId, record(assignment.capacityEnvelope).executionProviderId);
+			const canonicalAttempt = assignmentAttemptSchema.parse(assignment.assignmentAttempt ?? record(assignment.workspaceContext).assignmentAttempt);
+			const executionProviderId = canonicalAttempt.provider.executionProviderId;
 			const offerId = assignmentOfferId(assignment);
 			const laneId = text(assignment.laneId, record(assignment.capacityEnvelope).laneId);
 			const providerLaneId = executionProviderId && laneId?.startsWith(`${executionProviderId}:`)
 				? laneId.slice(executionProviderId.length + 1)
 				: laneId;
-			const canonicalAttempt = assignmentAttemptSchema.parse(assignment.assignmentAttempt ?? record(assignment.workspaceContext).assignmentAttempt);
 			const adapter = loaded.manifest.adapters.find((candidate) => candidate.id === canonicalAttempt.provider.executionProviderId
 				&& candidate.offers.some(({ offer }) => offer.offerId === offerId)
 				&& (!providerLaneId || candidate.laneIds.includes(providerLaneId)));
@@ -241,15 +247,15 @@ export async function runMultiTeamProviderRunners(
 				await client.returnAssignment(assignmentId, { leaseToken, runnerId: claim.runnerId, code: 'assignment_adapter_unavailable',
 					reason: `Assignment adapter binding is unavailable: ${JSON.stringify({ executionProviderId: canonicalAttempt.provider.executionProviderId, offerId, laneId: providerLaneId, installed })}`,
 					retryable: true });
-				await localState.release(claim.id); results.push({ connectionId: connection.connection.id, status: 'idle', reason: 'assignment_adapter_unavailable' }); continue;
+				await localState.release(claim.id); results.push({ connectionId: connection.connection.id, status: 'idle', reason: 'assignment_adapter_unavailable' }); return;
 			}
 			const executor = await resolveAgentExecutor(config, adapter, loaded.manifest);
 			if (!executor || !(await executor.observe()).available) {
 				await client.returnAssignment(assignmentId, { leaseToken, runnerId: claim.runnerId, code: 'executor_unavailable', reason: 'The Kata sandbox host is not ready for this assignment.', retryable: true });
-				await localState.release(claim.id); results.push({ connectionId: connection.connection.id, status: 'idle', reason: 'executor_unavailable' }); continue;
+				await localState.release(claim.id); results.push({ connectionId: connection.connection.id, status: 'idle', reason: 'executor_unavailable' }); return;
 			}
 			const leaseExpiresAt = text(assignment.leaseExpiresAt) ?? new Date(Date.now() + 300_000).toISOString();
-			const attempt = assignmentAttemptSchema.parse(assignment.assignmentAttempt ?? record(assignment.workspaceContext).assignmentAttempt);
+			const attempt = canonicalAttempt;
 			const limits = capabilityAccountingLimitsSchema.parse(adapter.nativeLimits);
 			const capabilityLimit = limits.capabilityLimits[attempt.provider.executionCapabilityId];
 			if (attempt.provider.modelConfigurationId !== limits.modelConfigurationId || !capabilityLimit) throw new Error('Assignment execution accounting scope does not match the installed adapter.');
@@ -264,8 +270,10 @@ export async function runMultiTeamProviderRunners(
 					dailyActiveSecondsLimit: limits.dailyActiveSecondsLimit, capabilityDailyActiveSecondsLimit: capabilityLimit.dailyActiveSecondsLimit,
 					minimumAssignmentSeconds: capabilityLimit.minimumAssignmentSeconds, maximumAssignmentSeconds: capabilityLimit.maximumAssignmentSeconds },
 				dispatchEnvelope: leased,
+				executionProviderLimit: { maxConcurrentRunners: adapter.maxConcurrentWorkers },
+				laneLimit: { maxConcurrentRunners: loaded.manifest.lanes.find(lane => lane.id === providerLaneId)?.maxConcurrentWorkers },
 			});
-			await localState.claimDispatch([connection.connection.id]);
+			if (!await localState.claimDispatch(claim.id)) throw new Error('Exact provider-local dispatch claim is unavailable.');
 			const treeDx = await createAssignmentTreeDxFacade(runtime, assignment);
 			const terminal = await runProviderAssignment({
 				client,
@@ -289,7 +297,12 @@ export async function runMultiTeamProviderRunners(
 			results.push({ connectionId: connection.connection.id, assignmentId, status: 'settled', terminal });
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error);
-			if (leasedAssignmentId || leasedToken) await localState.recordFailure(claim.id, message);
+			if (leasedAssignmentId && leasedToken) {
+				await localState.retainLease(claim.id, { assignmentId: leasedAssignmentId, leaseToken: leasedToken,
+					leaseExpiresAt: text(record(leasedEnvelope?.assignment).leaseExpiresAt) ?? new Date(Date.now() + 300_000).toISOString(),
+					dispatchEnvelope: leasedEnvelope });
+				await localState.recordFailure(claim.id, message);
+			}
 			else await localState.finalize(claim.id, 'unleased-runner-failure-released');
 			results.push({
 				connectionId: connection.connection.id,
@@ -298,7 +311,26 @@ export async function runMultiTeamProviderRunners(
 				error: message,
 			});
 		}
-	}
+	};
+	// Each worker claims its own durable slot. The same connection may fill all
+	// permitted slots; connection/model/lane limits remain enforced by the store.
+	const pending = pendingRunners.get(config.dataDir) ?? new Set<Promise<void>>();
+	if (options.background) pendingRunners.set(config.dataDir, pending);
+	const occupied = Math.max(pending.size, (await localState.snapshot()).claims.length);
+	const slots = Math.max(0, loaded.manifest.capacity.maxConcurrentWorkers - occupied);
+	const tasks = ordered.length ? Array.from({ length: slots }, (_, index) => {
+		const connection = ordered[index % ordered.length]!;
+		const task = runConnection(connection);
+		if (!options.background) return task;
+		let owned: Promise<void>;
+		owned = task.catch(error => { results.push({ connectionId: connection.connection.id, status: 'error',
+			 reason: 'unleased_runner_failure', error: error instanceof Error ? error.message : String(error) }); })
+			.finally(() => { pending.delete(owned); if (!pending.size) pendingRunners.delete(config.dataDir); });
+		pending.add(owned);
+		results.push({ connectionId: connection.connection.id, status: 'running' });
+		return owned;
+	}) : [];
+	if (!options.background) await Promise.all(tasks);
 	return {
 		ok: results.every((entry) => entry.status !== 'recovery'),
 		role: 'runner',

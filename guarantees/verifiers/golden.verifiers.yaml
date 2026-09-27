@@ -1,6 +1,26 @@
 schemaVersion: treeseed.guarantee-verifiers/v1
 ownerPackage: "@treeseed/agent"
 verifiers:
+  agent.golden.concurrent-refill:
+    kind: vitestCase
+    ownerPackage: '@treeseed/agent'
+    testFile: tests/modern/provider/runner-admission.test.ts
+    testName: runs five overlapping assignments and refills a freed slot without waiting for the slowest
+  agent.golden.connection-ceiling:
+    kind: vitestCase
+    ownerPackage: '@treeseed/agent'
+    testFile: tests/modern/provider/runner-admission.test.ts
+    testName: bounds concurrent polling by the connection limit within five host slots
+  agent.golden.adapter-ceiling:
+    kind: vitestCase
+    ownerPackage: '@treeseed/agent'
+    testFile: tests/modern/provider/runner-admission.test.ts
+    testName: enforces adapter concurrency and retains every rejected lease for recovery
+  agent.golden.overlap-evidence:
+    kind: vitestCase
+    ownerPackage: '@treeseed/agent'
+    testFile: tests/modern/kernel/golden-readback.test.ts
+    testName: rejects serial execution even when five slots were configured
   agent.golden.cli-supervision:
     kind: vitestCase
     ownerPackage: '@treeseed/agent'

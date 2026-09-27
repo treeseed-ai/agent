@@ -22,7 +22,7 @@ describe('provider active-time accounting', () => {
 			const first = await reserve('team-a', 'implementation', 60);
 			await expect(reserve('team-b', 'implementation', 1)).rejects.toThrow('exhausted');
 			await expect(reserve('team-b', 'research', 41)).rejects.toThrow('exhausted');
-			await store.claimDispatch(['team-a']);
+			await store.claimDispatch(first.id);
 			await store.beginActiveExecution(first.id);
 			vi.setSystemTime(new Date('2026-09-16T12:00:20Z'));
 			await store.finishActiveExecution(first.id);
@@ -47,7 +47,7 @@ describe('provider active-time accounting', () => {
 			await store.attachLease(claim!.id, { assignmentId: 'assignment', leaseToken: 'test-only', leaseExpiresAt: '2026-09-17T01:00:00Z',
 				requestedSeconds: 60, dispatchEnvelope: {}, accounting: { capabilityId: 'implementation', modelConfigurationId: 'terra',
 					dailyActiveSecondsLimit: 100, capabilityDailyActiveSecondsLimit: 100 } });
-			await store.claimDispatch(); await store.beginActiveExecution(claim!.id);
+			await store.claimDispatch(claim!.id); await store.beginActiveExecution(claim!.id);
 			vi.setSystemTime(new Date('2026-09-17T00:00:10Z'));
 			store = new ProviderLocalCapacityStore(root);
 			for (let attempt = 0; attempt < 2; attempt++) expect((await store.activeTimeObservation('terra', ['implementation'])).modelUsage)

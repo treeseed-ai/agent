@@ -20,7 +20,7 @@ export function read(args: string[], team: string, library = false): Row {
 
 // Each exact test is independently selectable by the existing guarantee runner.
 // These read-back gates do not stand in for campaign orchestration or external-state proof.
-const gates = ['lifecycle', 'collaboration', 'graph', 'revision', 'results', 'settlement', 'reporter'] as const;
+const gates = ['lifecycle', 'collaboration', 'graph', 'revision', 'results', 'settlement', 'reporter', 'stopped'] as const;
 type Gate = typeof gates[number];
 export function verifyGolden(gate: Gate): void {
 	const workdayId = process.env.TREESEED_ACCEPTANCE_WORKDAY_ID ?? '';
@@ -57,6 +57,17 @@ export function verifyGolden(gate: Gate): void {
 	}
 	const completed = assignments.filter(item => item.status === 'completed');
 	assert.ok(completed.length > 0, 'No completed assignment evidence; empty gates cannot pass');
+	if (gate === 'stopped') {
+		assert.equal(run.status, 'cancelled', 'ACCEPTANCE_STOP_TERMINAL: Stop acknowledgement is not terminal cancellation');
+		assert.ok(text(run.completedAt), 'ACCEPTANCE_STOP_TIMESTAMP: Terminal stop timestamp is required');
+		for (const item of assignments) {
+			assert.ok(['completed', 'failed', 'returned', 'cancelled', 'expired'].includes(text(item.status)),
+				'ACCEPTANCE_STOP_ASSIGNMENT: An unfinished assignment remains after stop');
+			assert.equal(item.leaseToken, null, 'ACCEPTANCE_STOP_LEASE: A live lease remains after stop');
+			assert.equal(row(row(item.lifecycleOutput).teardown).verified, true,
+				'ACCEPTANCE_STOP_TEARDOWN: Durable per-attempt teardown evidence is required');
+		}
+	}
 	const activity = (item: Row) => text(row(row(item.assignmentAttempt).effectiveProfile).activity);
 	if (gate === 'collaboration') {
 	assert.equal(new Set(completed.filter(item => activity(item) === 'chat').map(item => row(item.assignmentAttempt).agentClass)).size, 8, 'ACCEPTANCE_CHAT_ROLES: All eight addressed chat assignments must complete canonically');
@@ -113,11 +124,14 @@ export function verifyGolden(gate: Gate): void {
 		assert.ok(Number(row(row(result.usage).native).activeSeconds) > 0, 'Measured active usage must be positive');
 		assert.ok(rows(result.references).length > 0, 'A claimed completion without exact output references cannot pass');
 	}
-	if (gate === 'settlement') {
+	if (gate === 'settlement' || gate === 'stopped') {
 	const usageItems: Row[] = [];
 	cursor = undefined;
+	for (const projectId of new Set(assignments.map(item => text(item.projectId)))) {
+	assert.ok(projectId, 'Settlement evidence requires exact project attribution');
+	cursor = undefined;
 	for (let pageNumber = 0; pageNumber < 40; pageNumber += 1) {
-		const usage = read(['capacity', 'usage', '--project', text(actors[0]?.projectId), '--workday', workdayId,
+		const usage = read(['capacity', 'usage', '--project', projectId, '--workday', workdayId,
 			'--limit', '100', ...(cursor ? ['--cursor', cursor] : [])], team);
 		usageItems.push(...rows(usage.items));
 		const pageInfo = row(usage.page);
@@ -127,9 +141,10 @@ export function verifyGolden(gate: Gate): void {
 		cursor = next;
 		assert.ok(pageNumber < 39, 'Complete settlement evidence was not reached; do not claim a pass');
 	}
+	}
 	assert.equal(new Set(usageItems.map(item => item.id)).size, usageItems.length, 'Settlement pages repeated usage records');
 	const aggregate = usageItems.filter(item => text(item.id).endsWith(':aggregate'));
-	for (const item of completed) {
+	for (const item of gate === 'stopped' ? assignments : completed) {
 		const settlements = aggregate.filter(measurement => measurement.assignmentId === item.id);
 		assert.equal(settlements.length, 1, `Exactly one actual settlement required for ${text(item.id)}`);
 		assert.ok(text(row(settlements[0]?.metadata).settlementKey));
@@ -156,3 +171,4 @@ test('Golden runtime revision evidence satisfies its acceptance boundary', { tim
 test('Golden runtime results evidence satisfies its acceptance boundary', { timeout: 120_000 }, () => verifyGolden('results'));
 test('Golden runtime settlement evidence satisfies its acceptance boundary', { timeout: 120_000 }, () => verifyGolden('settlement'));
 test('Golden runtime reporter evidence satisfies its acceptance boundary', { timeout: 120_000 }, () => verifyGolden('reporter'));
+test('Stopped simulation retains terminal leases teardown and exactly-once settlement', { timeout: 120_000 }, () => verifyGolden('stopped'));

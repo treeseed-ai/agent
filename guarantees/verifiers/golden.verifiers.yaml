@@ -1,6 +1,11 @@
 schemaVersion: treeseed.guarantee-verifiers/v1
 ownerPackage: "@treeseed/agent"
 verifiers:
+  agent.golden.live.stopped:
+    kind: nodeTestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/acceptance/sdk-runtime-golden.test.ts
+    testName: Stopped simulation retains terminal leases teardown and exactly-once settlement
   agent.golden.live.planning-boundary:
     kind: nodeTestCase
     ownerPackage: "@treeseed/agent"

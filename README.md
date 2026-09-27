@@ -77,6 +77,12 @@ production, early, terminal or malformed-window runs; arbitrary transport/auth
 errors do not authorize mutation. This is one boundary guard, not full lifecycle
 monitoring or proof of successful settlement and teardown.
 
+`guarantee.agent.golden.stopped` separately verifies terminal cancellation,
+released assignment leases, durable per-attempt teardown and exactly one usage
+settlement per attempt. It reuses normal settlement pagination and checks every
+participating project. Passing stopped-run evidence cannot count as a golden
+pass or prove host filesystem cleanup/retention.
+
 Campaign orchestration, complete specification bindings, project-specific
 products, external-state comparison and controlled failures are still required
 before this suite can represent all of Platform's acceptance specification.

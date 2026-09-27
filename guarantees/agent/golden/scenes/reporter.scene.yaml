@@ -1,0 +1,8 @@
+schemaVersion: treeseed.scene/v1
+id: agent.golden.reporter
+title: Golden reporter read-back
+scope: local-integrated-runtime
+workflow:
+  - id: reporter-evidence
+    action: { verifier: agent.golden.live.reporter }
+    expect: { status: passed }

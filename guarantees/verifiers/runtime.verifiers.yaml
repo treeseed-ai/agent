@@ -141,8 +141,38 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/kernel/provider-kernel-review.test.ts
     testName: commits EstimateHandler output as the one proposal-owned execution plan
-  agent.golden.runtime-readback:
+  agent.golden.live.lifecycle:
     kind: nodeTestCase
     ownerPackage: "@treeseed/agent"
     testFile: tests/acceptance/sdk-runtime-golden.test.ts
-    testName: SDK runtime golden has reviewed useful outputs, a real revision, settlement and teardown
+    testName: Golden runtime lifecycle evidence satisfies its acceptance boundary
+  agent.golden.live.collaboration:
+    kind: nodeTestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/acceptance/sdk-runtime-golden.test.ts
+    testName: Golden runtime collaboration evidence satisfies its acceptance boundary
+  agent.golden.live.graph:
+    kind: nodeTestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/acceptance/sdk-runtime-golden.test.ts
+    testName: Golden runtime graph evidence satisfies its acceptance boundary
+  agent.golden.live.revision:
+    kind: nodeTestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/acceptance/sdk-runtime-golden.test.ts
+    testName: Golden runtime revision evidence satisfies its acceptance boundary
+  agent.golden.live.results:
+    kind: nodeTestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/acceptance/sdk-runtime-golden.test.ts
+    testName: Golden runtime results evidence satisfies its acceptance boundary
+  agent.golden.live.settlement:
+    kind: nodeTestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/acceptance/sdk-runtime-golden.test.ts
+    testName: Golden runtime settlement evidence satisfies its acceptance boundary
+  agent.golden.live.reporter:
+    kind: nodeTestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/acceptance/sdk-runtime-golden.test.ts
+    testName: Golden runtime reporter evidence satisfies its acceptance boundary

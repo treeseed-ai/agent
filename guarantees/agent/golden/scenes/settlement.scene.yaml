@@ -1,0 +1,8 @@
+schemaVersion: treeseed.scene/v1
+id: agent.golden.settlement
+title: Golden settlement read-back
+scope: local-integrated-runtime
+workflow:
+  - id: settlement-evidence
+    action: { verifier: agent.golden.live.settlement }
+    expect: { status: passed }

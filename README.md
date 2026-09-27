@@ -43,6 +43,29 @@ See [Capacity Provider Runtime](./docs/capacity-provider-runtime.md) for the lif
 
 Project-owned handlers are compiled into the provider image, never loaded from an assignment. A project TypeScript entry exports `projectHandlers: readonly Handler[]` (import `Handler` from `@treeseed/agent`). Set `TREESEED_AGENT_PROJECT_HANDLERS_ENTRY` to that entry only while building the provider image; the build replaces the empty registry module in `dist`. The runner statically imports it, and assignment dispatch requires the exact pinned runtime build and a matching handler origin. A normal build without this input includes only Agent-package handlers.
 
+## Automated golden evidence
+
+Guarantees and native acceptance verifiers ship with this package. Use the
+unified Reviewer runner against a checkout or installed package root:
+
+```bash
+TREESEED_ACCEPTANCE_WORKDAY_ID=workday-... treeseed-reviewer-guarantees \
+  --workspace /path/to/agent --environment local \
+  --ids guarantee.agent.golden.runtime-readback --run-id unique-evidence-id
+```
+
+Select `guarantee.agent.golden.lifecycle`, `collaboration`, `graph`, `revision`,
+`results`, `settlement`, or `reporter` for one boundary, or comma-separated IDs
+for several. The full `runtime-readback` guarantee composes those same checks;
+it is not a full campaign pass. Component scenes remain a separate evidence
+scope. Missing workday identity, incomplete evidence, skipped tests and missing
+verifier assets fail closed. Installed native tests use Reviewer's loader, not
+Agent's development dependencies.
+
+Campaign orchestration, complete specification bindings, project-specific
+products, external-state comparison and controlled failures are still required
+before this suite can represent all of Platform's acceptance specification.
+
 ## Public package surface
 
 - `@treeseed/agent`: executor contracts and the catalog-driven assignment runner;

@@ -56,7 +56,9 @@ jobs:
         with: { context: ., file: Dockerfile.sandbox-codex, platforms: "${{ matrix.platform }}", build-args: "SANDBOX_BASE=treeseed/sandbox-base@${{ steps.base-lineage.outputs.digest }}", push: true, tags: "${{ matrix.image }}:candidate-${{ github.sha }}-${{ matrix.arch }}", sbom: true, provenance: mode=max }
       - name: Verify candidate guest contains Codex
         if: matrix.target == 'sandbox-codex'
-        run: docker run --rm --entrypoint /usr/local/bin/codex "${{ matrix.image }}:candidate-${{ github.sha }}-${{ matrix.arch }}" --version | grep -Fx 'codex-cli 0.156.1'
+        run: |
+          expected="$(node -p "require('./package.json').dependencies['@openai/codex']")"
+          docker run --rm --entrypoint /usr/local/bin/codex "${{ matrix.image }}:candidate-${{ github.sha }}-${{ matrix.arch }}" --version | grep -Fx "codex-cli $expected"
   candidate-base-build:
     if: github.ref == 'refs/heads/staging' || github.ref == 'refs/heads/main'
     needs: candidate-package

@@ -32,7 +32,7 @@ export function requirePlanningWindow(durationSeconds: number, planningPercent: 
 }
 
 export async function monitorCampaign(input: {
-	read: () => { status: string; mode: string; planningEndsAt: number; endsAt: number };
+	read: () => { status: string; mode: string; planningEndsAt: number; endsAt: number; failedBoundary?: boolean };
 	now: () => number; wait: () => Promise<void>; collaboration: () => void;
 	verify: () => void; stop: () => void;
 }): Promise<void> {
@@ -44,6 +44,9 @@ export async function monitorCampaign(input: {
 			input.collaboration(); input.verify(); return;
 		}
 		assert.equal(run.status, 'running', 'ACCEPTANCE_CAMPAIGN_TERMINAL: Unsuccessful terminal campaign');
+		if (run.failedBoundary) {
+			input.stop(); assert.fail('ACCEPTANCE_CAMPAIGN_EXECUTION: Failed attempt or graph boundary; no further metered retries');
+		}
 		assert.ok(Number.isFinite(run.planningEndsAt) && Number.isFinite(run.endsAt),
 			'ACCEPTANCE_CAMPAIGN_TIME: Authoritative deadlines required');
 		if (!planningVerified && input.now() >= run.planningEndsAt) {

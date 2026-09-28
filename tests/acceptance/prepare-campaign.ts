@@ -14,6 +14,14 @@ export function requirePinnedCodex(pinned: string, installed: string): void {
 	assert.equal(installed, `codex-cli ${pinned}`, 'ACCEPTANCE_CODEX_VERSION: Installed Codex differs from package pin');
 }
 
+export function verifySdkArchitectureBook(readback: Row, reference: Row): void {
+	assert.equal(readback.repoId, reference.repository, 'ACCEPTANCE_CAMPAIGN_BOOK: Resolved TreeDX repository mismatch');
+	assert.equal(readback.resolvedRef, reference.commit, 'ACCEPTANCE_CAMPAIGN_BOOK: Resolved TreeDX commit mismatch');
+	const bookFile = (readback.files as Row[] | undefined)?.find(file => file.path === reference.path);
+	assert.equal(bookFile?.frontmatter?.id, reference.id, 'ACCEPTANCE_CAMPAIGN_BOOK: Pinned TreeDX Book identity mismatch');
+	assert.equal(bookFile?.frontmatter?.status, 'published', 'ACCEPTANCE_CAMPAIGN_BOOK: Pinned TreeDX Book is not published');
+}
+
 /** Preparation is part of the same native test, never a separate execution authority. */
 export function prepareSdkCampaign(draftPath: string, freezePath: string, team: string): void {
 	assert.ok(!existsSync(freezePath), 'ACCEPTANCE_FREEZE_EXISTS: Never overwrite a campaign freeze');
@@ -33,8 +41,19 @@ export function prepareSdkCampaign(draftPath: string, freezePath: string, team: 
 	assert.equal(host.status, 'active', 'ACCEPTANCE_CAMPAIGN_HOST: Active development runtime required');
 	verifyRuntimeClosure(host, { digest: host.guestImageDigest });
 	const id = `golden-sdk-decision-governed-workday-intent-v4-${randomUUID()}`;
-	const draft = freshSdkDraft(JSON.parse(readFileSync(draftPath, 'utf8')), id,
-		sdkProposalText(readFileSync(join(platform, 'docs/agent-acceptance.md'), 'utf8')));
+	const template = JSON.parse(readFileSync(draftPath, 'utf8')) as Row;
+	const canonical = sdkProposalText(readFileSync(join(platform, 'docs/agent-acceptance.md'), 'utf8'));
+	const libraryRef = (template.executionPlan?.workItems as Row[] | undefined)
+		?.find(item => item.id === 'architecture-contract')?.contextRefs?.find((ref: Row) => ref.store === 'treedx' && ref.model === 'repository') as Row | undefined;
+	assert.equal(libraryRef?.repository, 'treeseed-ai/sdk-library', 'ACCEPTANCE_CAMPAIGN_BOOK: SDK library binding required');
+	assert.match(String(libraryRef?.commit ?? ''), /^[a-f0-9]{40}$/u, 'ACCEPTANCE_CAMPAIGN_BOOK: Exact SDK library commit required');
+	const bookReadback = read(['library', 'read', 'sdk', canonical.architectureBook.path,
+		'--ref', String(libraryRef.commit)], team, true).result as Row;
+	const draft = freshSdkDraft(template, id, canonical, String(bookReadback.repoId ?? ''));
+	const bookRef = (draft.executionPlan.workItems as Row[])
+		.find(item => item.id === 'architecture-contract')?.contextRefs?.find((ref: Row) => ref.model === 'book') as Row | undefined;
+	assert.ok(bookRef?.id && bookRef.path && bookRef.commit, 'ACCEPTANCE_CAMPAIGN_BOOK: Exact Architect Book reference required');
+	verifySdkArchitectureBook(bookReadback, bookRef);
 	const artifacts = mkdtempSync(join(tmpdir(), 'treeseed-golden-'));
 	const inputPath = join(artifacts, 'proposal.json');
 	writeFileSync(inputPath, JSON.stringify(draft));
@@ -57,6 +76,7 @@ export function prepareSdkCampaign(draftPath: string, freezePath: string, team: 
 		receipts[path] = `sha256:${createHash('sha256').update(bytes).digest('hex')}`;
 	};
 	capture('proposal-input.json', readFileSync(inputPath, 'utf8'));
+	capture('architecture-book.json', JSON.stringify(bookReadback));
 	capture('codex-version.json', JSON.stringify({ pinned: pinnedCodex, installed: installedCodex }));
 	const runtime = read(['dev', 'status'], team, true);
 	const providers = (read(['providers', 'list'], team).items as Row[]).filter(item => item.status === 'approved');

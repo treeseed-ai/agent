@@ -13,7 +13,7 @@ const sdkWorkItems = [
 
 type SdkProposalContract = { title: string; request: string; summary: string; workItems: Array<{
   id: string; agentClass: string; workspace: string; objective: string; acceptanceCriteria: string;
-}> };
+}>; architectureBook: { id: string; path: string } };
 
 export function sdkProposalText(spec: string): SdkProposalContract {
   const section = spec.split('### 1. SDK — decision-governed workday intent\n')[1]?.split('\n### 2. API')[0];
@@ -22,6 +22,8 @@ export function sdkProposalText(spec: string): SdkProposalContract {
     const value = section.split('\n').find(line => line.startsWith(`- ${name}: `))?.slice(name.length + 4).replace(/\*\*/gu, '').trim();
     assert.ok(value, `ACCEPTANCE_CAMPAIGN_SPEC: Canonical ${name} required`); return value;
   };
+  const book = /^`([a-z0-9-]+)` at `(books\/[a-z0-9/-]+\.md)` in the pinned SDK library commit\./u.exec(field('Architecture Book'));
+  assert.ok(book, 'ACCEPTANCE_CAMPAIGN_SPEC: Exact pinned SDK Architecture Book required');
   const deliverables = section.split('Each Actor is reviewed against its own deliverable: ')[1]?.split(' The proposal-wide contract gates')[0];
   assert.ok(deliverables, 'ACCEPTANCE_CAMPAIGN_SPEC: Actor-specific review boundary required');
   const fixedGraph = spec.split('### Fixed work-item graph\n')[1]?.split('\n### ')[0];
@@ -36,10 +38,14 @@ export function sdkProposalText(spec: string): SdkProposalContract {
       `ACCEPTANCE_CAMPAIGN_SPEC: ${role} fixed graph row required`);
     return { id, agentClass, workspace, objective, acceptanceCriteria: criterion };
   });
-  return { title: field('Title'), request: field('Request'), summary: field('Summary'), workItems };
+  return { title: field('Title'), request: field('Request'), summary: field('Summary'),
+    architectureBook: { id: book[1]!, path: book[2]! }, workItems };
 }
 
-export function freshSdkDraft(template: Record<string, any>, id: string, canonical: SdkProposalContract): Record<string, any> {
+export function freshSdkDraft(template: Record<string, any>, id: string, canonical: SdkProposalContract,
+	bookRepositoryId: string): Record<string, any> {
+	assert.match(bookRepositoryId, /^repo_[a-zA-Z0-9_-]+$/u,
+		'ACCEPTANCE_CAMPAIGN_BOOK: Resolved TreeDX repository identity required');
 	const draft = structuredClone(template);
 	assert.equal(draft.status, 'draft', 'ACCEPTANCE_CAMPAIGN_FRESH: Estimate-free draft template required');
 	assert.equal(draft.executionPlan?.workItems?.length, 6, 'ACCEPTANCE_CAMPAIGN_OBJECTIVES: Six unchanged SDK work items required');
@@ -57,6 +63,14 @@ export function freshSdkDraft(template: Record<string, any>, id: string, canonic
 		item.objective = required.objective;
 		item.acceptanceCriteria = [required.acceptanceCriteria];
 		item.dependsOn = [];
+		if (item.id === 'architecture-contract') {
+			const library = item.contextRefs.find((reference: Record<string, any>) => reference.store === 'treedx'
+				&& reference.model === 'repository' && reference.repository && /^[a-f0-9]{40}$/u.test(reference.commit));
+			assert.ok(library && !item.contextRefs.some((reference: Record<string, any>) => reference.model === 'book'),
+				'ACCEPTANCE_CAMPAIGN_BOOK: One pinned library repository and no stale Book authority required');
+			item.contextRefs.push({ store: 'treedx', model: 'book', id: canonical.architectureBook.id,
+				path: canonical.architectureBook.path, repository: bookRepositoryId, commit: library.commit });
+		}
 		if (!item.contextRefs.some((ref: Record<string, any>) => ref.store === 'git')) item.contextRefs.push(structuredClone(gitRefs[0]));
 	}
 	draft.id = id;

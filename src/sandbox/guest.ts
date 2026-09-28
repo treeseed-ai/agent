@@ -114,6 +114,12 @@ export function codexIdleTimeoutMs(durationSeconds: number) {
 	return durationSeconds >= 120 ? Math.min(90_000, Math.floor(durationSeconds * 500)) : undefined;
 }
 
+export function codexCloseoutTimeoutMs(durationSeconds: number) {
+	// The same allocator-issued window must still contain the final clock check,
+	// response and custody closeout. This is an execution guard, not a new budget.
+	return durationSeconds >= 90 ? durationSeconds * 1_000 - 45_000 : undefined;
+}
+
 export function observeTimingAwarenessEvent(tracker: TimingAwarenessTracker, event: Record<string, unknown>) {
 	const tool = providerToolName(event);
 	if (!tool) return tracker;
@@ -343,7 +349,7 @@ export async function runSandboxGuest() {
 		...codexProjectInstructionArguments(),
 		...(structuredCompletion ? ['--output-schema', completionSchemaPath] : []),
 		'--disable', 'browser_use', '--disable', 'apps', '--disable', 'multi_agent_v2', '--disable', 'image_generation', '--color', 'never', '--output-last-message', responsePath, '-C', '/workspace/project', '-'];
-	let providerError: Error | null = null, providerThreadId: string | null = null, idleInterrupted = false;
+	let providerError: Error | null = null, providerThreadId: string | null = null, closeoutInterrupted = false;
 	const providerEnvironment = { PATH: '/usr/local/bin:/usr/bin:/bin', HOME: codexHome, CODEX_HOME: codexHome,
 		TREESEED_RELAY_URL:assignment.network.relayUrl,TREESEED_SANDBOX_ID:sandboxId,TREESEED_GUEST_TOKEN:operationToken,TREESEED_RELAY_CA:'/workspace/.treeseed/relay-ca.crt',
 		...(relay ? { OPENAI_BASE_URL: relay.baseUrl, OPENAI_API_KEY: 'treeseed-assignment-relay' } : {}),
@@ -354,36 +360,37 @@ export async function runSandboxGuest() {
 			cwd: '/workspace/project', input: composedPrompt, env: providerEnvironment,
 			timeoutMs: codexInteractiveTimeoutMs(assignment.resources.durationSeconds),
 			idleTimeoutMs: canonicalActivity === 'estimating' ? codexIdleTimeoutMs(assignment.resources.durationSeconds) : undefined,
-			canInterruptIdle: () => Boolean(providerThreadId && timingTracker.firstToolSucceeded && !codexToolInFlight(events)),
+			closeoutTimeoutMs: ['chat', 'estimating'].includes(canonicalActivity) ? codexCloseoutTimeoutMs(assignment.resources.durationSeconds) : undefined,
+			canInterrupt: () => Boolean(providerThreadId && timingTracker.firstToolSucceeded && !codexToolInFlight(events)),
 			onLine(line) { let event: Record<string, unknown>; try { event = record(JSON.parse(line)); } catch { event = { type: 'provider.event.invalid', digest: createHash('sha256').update(line).digest('hex') }; }
 				providerThreadId ??= codexThreadId([event]);
 				const executionProgress = providerExecutionProgress(event); if (executionProgress) void progress(executionProgress).catch(() => undefined);
 				observeTimingAwarenessEvent(timingTracker, event); events.push(event); if (events.length > 256) events.shift(); },
 		}).catch(error => {
-			if (error instanceof Error && error.message === 'codex_idle_interrupted') { idleInterrupted = true; return; }
+			if (error instanceof Error && error.message === 'codex_closeout_interrupted') { closeoutInterrupted = true; return; }
 			const secrets = [operationToken, ...(subscriptionAuth ? providerCredentialValues(JSON.parse(subscriptionAuth.toString('utf8'))) : [])];
 			const detail = providerFailureSummary(events, secrets);
 			// Avoid leaking credentials through the subprocess stderr fallback too.
 			const fallback = providerFailureSummary([{ type: 'error', message: error instanceof Error ? error.message : String(error) }], secrets);
 			providerError = new Error(`Codex execution failed: ${detail || fallback || 'no structured error was supplied'}`);
 		});
-		if (idleInterrupted) {
+		if (closeoutInterrupted) {
 			const remainingMs = assignment.resources.durationSeconds * 1_000 - Number(process.hrtime.bigint() - started) / 1e6 - 5_000;
-			if (!providerThreadId || remainingMs < 30_000 || codexToolInFlight(events)) throw new Error('Codex stalled without a safe bounded session continuation.');
-			await progress('provider.idle-recovery.starting');
+			if (!providerThreadId || remainingMs < 20_000 || codexToolInFlight(events)) throw new Error('Codex turn ended without a safe bounded session continuation.');
+			await progress('provider.closeout-recovery.starting');
 			const resumeArguments = ['exec', 'resume', providerThreadId, '--json', '--dangerously-bypass-approvals-and-sandbox', '--model', assignment.modelPolicy.model,
 				...codexReasoningArguments(assignment.modelPolicy.reasoningEffort), ...codexProjectInstructionArguments(),
 				...(structuredCompletion ? ['--output-schema', completionSchemaPath] : []),
 				'--output-last-message', responsePath, '-'];
 			await run('/usr/local/bin/codex', resumeArguments, {
 				cwd: '/workspace/project', env: providerEnvironment,
-				input: `The prior turn stalled after its completed tools. Continue this SAME assignment and use only the evidence already inspected. Do not repeat inspection or start new work. You have at most ${Math.floor(remainingMs / 1_000)} seconds including closeout; the original deadline has not moved. Your NEXT tool action must call mcp__treedx__treeseed_time_status through functions.exec with: text(await tools.mcp__treedx__treeseed_time_status({}));. Then produce the required structured result promptly. Call that same time-status tool as your FINAL tool action before the response. If evidence is insufficient, report that honestly in the result instead of waiting for the deadline.`,
+				input: `The prior turn was interrupted to preserve closeout time after its completed tools. Continue this SAME assignment using only evidence already inspected. Do not repeat inspection or start new work. You have at most ${Math.floor(remainingMs / 1_000)} seconds including closeout; the original deadline has not moved. Your NEXT and FINAL tool action must call mcp__treedx__treeseed_time_status through functions.exec with: text(await tools.mcp__treedx__treeseed_time_status({}));. Then immediately produce ${structuredCompletion ? 'the required structured result' : 'the substantive discussion reply'}. If evidence is insufficient, say so honestly rather than waiting for the deadline.`,
 				timeoutMs: Math.floor(remainingMs),
 				onLine(line) { let event: Record<string, unknown>; try { event = record(JSON.parse(line)); } catch { event = { type: 'provider.event.invalid', digest: createHash('sha256').update(line).digest('hex') }; }
 					const executionProgress = providerExecutionProgress(event); if (executionProgress) void progress(executionProgress).catch(() => undefined);
 					observeTimingAwarenessEvent(timingTracker, event); events.push(event); if (events.length > 256) events.shift(); },
 			});
-			await progress('provider.idle-recovery.completed');
+			await progress('provider.closeout-recovery.completed');
 		}
 		if (subscriptionAuth) {
 			const refreshed = await readFile(resolve(codexHome, 'auth.json'));

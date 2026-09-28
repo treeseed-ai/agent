@@ -70,6 +70,16 @@ describe('automated campaign control (fixtures are not golden acceptance)', () =
 			now: () => 1, wait, collaboration: vi.fn(), governanceBlockers: () => 1, verify, stop })).rejects.toThrow('PLAN_REVIEW_REQUIRED');
 		expect(stop).toHaveBeenCalledOnce(); expect(wait).not.toHaveBeenCalled(); expect(verify).not.toHaveBeenCalled();
 	});
+	it('stops when an independent review concern appears after the planning boundary', async () => {
+		const stop = vi.fn(), verify = vi.fn(), collaboration = vi.fn(), wait = vi.fn(async () => {});
+		let reads = 0;
+		await expect(monitorCampaign({ read: () => ({ status: 'running', mode: 'simulation', planningEndsAt: 0, endsAt: 10 }),
+			now: () => 1, wait, collaboration, governanceBlockers: () => ++reads === 1 ? 0 : 1, verify, stop }))
+			.rejects.toThrow('ACCEPTANCE_PLAN_REVIEW_REQUIRED');
+		expect(collaboration).toHaveBeenCalledOnce();
+		expect(wait).toHaveBeenCalledOnce();
+		expect(stop).toHaveBeenCalledOnce(); expect(verify).not.toHaveBeenCalled();
+	});
 	it('stops an observed live simulation when governance read-back fails or is malformed', async () => {
 		for (const governanceBlockers of [() => { throw new Error('transport'); }, () => Number.NaN]) {
 			const stop = vi.fn();

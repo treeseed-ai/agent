@@ -137,6 +137,11 @@ export async function monitorCampaign(input: {
 			'ACCEPTANCE_CAMPAIGN_TIME: Authoritative deadlines required');
 		if (!planningVerified && input.now() >= run.planningEndsAt) {
 			input.collaboration(); planningVerified = true;
+		}
+		// The independent proposal Reviewer can finish after planning opens acting.
+		// Re-read its governed concerns on every active tick, not only at the phase
+		// boundary before the review has had a chance to publish its disposition.
+		if (planningVerified) {
 			const blockers = input.governanceBlockers();
 			assert.ok(Number.isInteger(blockers) && blockers >= 0,
 				'ACCEPTANCE_CAMPAIGN_GOVERNANCE: Authoritative blocker count required');

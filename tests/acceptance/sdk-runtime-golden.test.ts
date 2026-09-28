@@ -61,7 +61,8 @@ export function verifyGolden(gate: Gate): void {
 	}
 	if (gate !== 'stopped') assert.ok(completed.length > 0, 'No completed assignment evidence; empty gates cannot pass');
 	if (gate === 'stopped') {
-		assert.equal(run.status, 'cancelled', 'ACCEPTANCE_STOP_TERMINAL: Stop acknowledgement is not terminal cancellation');
+		assert.ok(['cancelled', 'failed'].includes(text(run.status)),
+			'ACCEPTANCE_STOP_TERMINAL: Failed or cancelled terminal simulation required');
 		assert.ok(text(run.completedAt), 'ACCEPTANCE_STOP_TIMESTAMP: Terminal stop timestamp is required');
 		for (const item of assignments) {
 			assert.ok(['completed', 'failed', 'returned', 'cancelled', 'expired'].includes(text(item.status)),

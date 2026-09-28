@@ -33,6 +33,9 @@ workflow:
   - id: debug-window
     action: { verifier: agent.golden.debug-window }
     expect: { status: passed }
+  - id: late-review-blocker
+    action: { verifier: agent.golden.late-review-blocker }
+    expect: { status: passed }
   - id: terminal-teardown-output
     action: { verifier: agent.golden.timeout-terminal-output }
     expect: { status: passed }

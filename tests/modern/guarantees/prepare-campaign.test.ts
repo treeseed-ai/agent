@@ -31,7 +31,7 @@ The proposal does not duplicate generic role ordering. \`dependsOn\` is reserved
 |---|---|
 ${roles.map(([, role]) => `| ${role} | ${role} canonical objective${role === 'Architect' ? ' in books/sdk-core.md' : ''}. |`).join('\n')}
 
-Each Actor is reviewed against its own deliverable: ${roles.map(([, role]) => `${role} verifies its own output${role === 'Architect' ? ' in books/sdk-core.md' : ''}`).join('; ')}. The proposal-wide contract gates apply to the final integrated candidate.
+Each Actor is reviewed against its own deliverable: ${roles.map(([, role]) => `${role} verifies its own output${role === 'Architect' ? ' in books/sdk-core.md' : ''}; retains a second required assertion`).join('; ')}. The proposal-wide contract gates apply to the final integrated candidate.
 
 ### 2. API
 - Request: Unrelated request`;
@@ -96,7 +96,12 @@ describe('fresh automated SDK campaign preparation (fixtures are not acceptance)
 	});
   it('reads all six role objectives and review boundaries from the acceptance authority', () => {
     expect(sdkProposalText(spec)).toEqual(canonical);
+    expect(canonical.workItems).toHaveLength(6);
+    expect(canonical.workItems.every(item => item.acceptanceCriteria.includes('retains a second required assertion'))).toBe(true);
+    expect(freshSdkDraft(template, 'fresh', canonical, bookRepositoryId, bookExact).executionPlan.workItems
+      .every((item: { acceptanceCriteria: string[] }) => item.acceptanceCriteria[0]?.includes('retains a second required assertion'))).toBe(true);
     expect(() => sdkProposalText(spec.replace('- Request: Canonical request\n', ''))).toThrow('ACCEPTANCE_CAMPAIGN_SPEC');
+    expect(() => sdkProposalText(spec.replace('The proposal-wide contract gates', 'Unrelated trailing text'))).toThrow('ACCEPTANCE_CAMPAIGN_SPEC');
     expect(() => sdkProposalText(spec.replace('- Architecture Book: \`sdk-core\` at \`books/sdk-core.md\` in the pinned SDK library commit. Its published title is **SDK Core**.\n', ''))).toThrow('ACCEPTANCE_CAMPAIGN_SPEC');
     expect(() => sdkProposalText(spec.replace('| Tester | Tester canonical objective. |', ''))).toThrow('ACCEPTANCE_CAMPAIGN_SPEC');
 		expect(() => sdkProposalText(spec.replace('Architect canonical objective in books/sdk-core.md', 'Architect canonical objective'))).toThrow('ACCEPTANCE_CAMPAIGN_BOOK');

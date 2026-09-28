@@ -27,15 +27,21 @@ export function sdkProposalText(spec: string): SdkProposalContract {
   assert.ok(book, 'ACCEPTANCE_CAMPAIGN_SPEC: Exact pinned SDK Architecture Book required');
   const bookTitle = /Its published title is ([^.]+)\./u.exec(bookField)?.[1];
   assert.ok(bookTitle, 'ACCEPTANCE_CAMPAIGN_SPEC: Published Book title required');
-  const deliverables = section.split('Each Actor is reviewed against its own deliverable: ')[1]?.split(' The proposal-wide contract gates')[0];
+  const deliverables = section.split('Each Actor is reviewed against its own deliverable: ')[1]
+    ?.split(/\. The (?:proposal-wide contract|integrated-candidate) gates/u)[0];
   assert.ok(deliverables, 'ACCEPTANCE_CAMPAIGN_SPEC: Actor-specific review boundary required');
   const fixedGraph = spec.split('### Fixed work-item graph\n')[1]?.split('\n### ')[0];
   assert.ok(fixedGraph?.includes('`dependsOn` is reserved for proposal-specific domain dependencies'),
     'ACCEPTANCE_CAMPAIGN_SPEC: Standing workflow dependencies must stay outside the proposal');
-  const workItems = sdkWorkItems.map(([id, role, agentClass, workspace]) => {
+  const workItems = sdkWorkItems.map(([id, role, agentClass, workspace], index) => {
     const row = section.split('\n').find(line => line.startsWith(`| ${role} |`));
     const objective = row?.split('|')[2]?.trim();
-    const criterion = deliverables.split(';').map(value => value.trim()).find(value => value.startsWith(`${role} `));
+    const marker = index === 0 ? `${role} ` : `; ${role} `;
+    const start = deliverables.indexOf(marker);
+    const nextRole = sdkWorkItems[index + 1]?.[1];
+    const next = nextRole ? deliverables.indexOf(`; ${nextRole} `, start + marker.length) : -1;
+    const criterion = start < 0 || (nextRole && next < 0) ? ''
+      : deliverables.slice(start + (index === 0 ? 0 : 2), next < 0 ? undefined : next).trim();
     assert.ok(objective && criterion, `ACCEPTANCE_CAMPAIGN_SPEC: ${role} objective and review criterion required`);
 		if (role === 'Architect') assert.ok(objective.includes(book[2]!) && criterion.includes(book[2]!),
 			'ACCEPTANCE_CAMPAIGN_BOOK: Architect objective and review must name the pinned Book path');

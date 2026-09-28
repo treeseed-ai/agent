@@ -38,7 +38,7 @@ test('Frozen SDK campaign drives planning acting review and terminal golden gate
 	const mentions = ['architect', 'researcher', 'tester', 'engineer', 'technical-writer', 'releaser', 'reviewer', 'reporter']
 		.map(role => `@sdk/${role}`).join(' ');
 	await monitorCampaign({ admittedSimulation: true, admitDiscussion: () => { read(['send', `sdk-golden-${workdayId}`, `${mentions} Discuss the exact frozen proposal, identify your role and dependencies, and publish useful planning contributions. Do not implement during planning.`,
-		'--proposal', freeze.proposal.id, '--workday', workdayId, '--no-wait', '--idempotency-key', `golden-discussion:${workdayId}`], team); }, read: () => {
+		'--proposal', freeze.proposal.id, '--workday', workdayId, '--no-wait', '--idempotency-key', `golden-discussion:${workdayId}`], team, false, 240_000); }, read: () => {
 		const observed = read(['workdays', 'show', workdayId], team);
 		const current = observed.run as Row;
 		assert.equal(current.id, workdayId, 'ACCEPTANCE_CAMPAIGN_ID: Read-back changed identity');

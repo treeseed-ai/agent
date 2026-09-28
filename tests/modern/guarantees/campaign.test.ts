@@ -84,4 +84,12 @@ describe('automated campaign control (fixtures are not golden acceptance)', () =
 			governanceBlockers: () => 0, verify: vi.fn(), stop: () => { throw new Error('stop failed'); },
 		})).rejects.toThrow('ACCEPTANCE_CAMPAIGN_STOP_FAILED');
 	});
+	it('preserves the original boundary failure when the control plane terminalizes before stop', async () => {
+		let status = 'running';
+		const stop = vi.fn(() => { status = 'failed'; throw new Error('already terminal'); });
+		await expect(monitorCampaign({ read: () => ({ status, mode: 'simulation', planningEndsAt: 0, endsAt: 10 }),
+			now: () => 1, wait: vi.fn(), collaboration: vi.fn(), governanceBlockers: () => 1,
+			verify: vi.fn(), stop })).rejects.toThrow('ACCEPTANCE_PLAN_REVIEW_REQUIRED');
+		expect(stop).toHaveBeenCalledOnce();
+	});
 });

@@ -139,7 +139,14 @@ export async function monitorCampaign(input: {
 		// whose mode was not proven or whose status is already terminal.
 		if (observedStatus === 'running' && observedMode === 'simulation') {
 			try { input.stop(); }
-			catch (stopFailure) { throw new AggregateError([failure, stopFailure], 'ACCEPTANCE_CAMPAIGN_STOP_FAILED: Failed boundary and supported stop both failed'); }
+			catch (stopFailure) {
+				// The control plane may terminalize the same run while the stop request
+				// is in flight. Preserve the original acceptance failure in that case.
+				let current: ReturnType<typeof input.read> | undefined;
+				try { current = input.read(); } catch { /* Retain both failures below. */ }
+				if (current?.mode === 'simulation' && current.status !== 'running') throw failure;
+				throw new AggregateError([failure, stopFailure], 'ACCEPTANCE_CAMPAIGN_STOP_FAILED: Failed boundary and supported stop both failed');
+			}
 		}
 		throw failure;
 	}

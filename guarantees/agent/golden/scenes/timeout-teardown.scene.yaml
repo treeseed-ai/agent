@@ -21,3 +21,12 @@ workflow:
   - id: idle-no-session-denial
     action: { verifier: agent.golden.codex-idle-no-session-denial }
     expect: { status: passed }
+  - id: closeout-interruption
+    action: { verifier: agent.golden.codex-closeout-interruption }
+    expect: { status: passed }
+  - id: closeout-inflight
+    action: { verifier: agent.golden.codex-closeout-inflight }
+    expect: { status: passed }
+  - id: closeout-hard-limit
+    action: { verifier: agent.golden.codex-closeout-hard-limit }
+    expect: { status: passed }

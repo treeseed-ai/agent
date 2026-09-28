@@ -81,6 +81,21 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/sandbox/codex-idle-recovery.test.ts
     testName: cannot interrupt a silent turn without a resumable session
+  agent.golden.codex-closeout-interruption:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/sandbox/codex-idle-recovery.test.ts
+    testName: interrupts a still-active read-only turn at its closeout boundary even while events continue
+  agent.golden.codex-closeout-inflight:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/sandbox/codex-idle-recovery.test.ts
+    testName: waits for an in-flight tool to finish before closeout interruption
+  agent.golden.codex-closeout-hard-limit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/sandbox/codex-idle-recovery.test.ts
+    testName: never extends the hard deadline when no safe closeout exists
   agent.golden.live.campaign:
     kind: nodeTestCase
     ownerPackage: "@treeseed/agent"

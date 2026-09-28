@@ -51,7 +51,7 @@ describe('fresh automated SDK campaign preparation (fixtures are not acceptance)
 				capabilityLimits: { 'treeseed.coordination.planning': { dailyActiveSecondsLimit: cap } } },
 			accountingObservation: { modelUsage: usage(active),
 				capabilityUsage: { 'treeseed.coordination.planning': usage(0) } } });
-		const supply = { healthy: true, availability: [{ executionProviders: [
+		const supply = { healthy: true, availability: [{ refreshed_at: '2026-09-28T20:50:46.000Z', executionProviders: [
 			provider('codex-implementation', 43_200, 40_981), provider('codex-research', 7_200, 5_956),
 		] }] };
 		expect(() => requireSdkCampaignSupply(supply, 3_600, 100 / 3, now))
@@ -60,6 +60,9 @@ describe('fresh automated SDK campaign preparation (fixtures are not acceptance)
 		expect(() => requireSdkCampaignSupply(supply, 3_600, 100 / 3, now))
 			.toThrow('codex-research/shared-model has 1244 active seconds, requires 3600');
 		supply.availability[0]!.executionProviders[1] = provider('codex-research', 7_200, 0);
+		expect(() => requireSdkCampaignSupply(supply, 3_600, 100 / 3, now)).not.toThrow();
+		supply.availability.push({ executionProviders: [provider('codex-implementation', 43_200, 40_981)],
+			refreshed_at: '2026-09-28T19:58:56.000Z' });
 		expect(() => requireSdkCampaignSupply(supply, 3_600, 100 / 3, now)).not.toThrow();
 		supply.availability[0]!.executionProviders[1]!.accountingObservation.modelUsage.observedAt = '2026-09-28T20:48:00.000Z';
 		expect(() => requireSdkCampaignSupply(supply, 3_600, 100 / 3, now)).toThrow('observation missing, stale or unhealthy');

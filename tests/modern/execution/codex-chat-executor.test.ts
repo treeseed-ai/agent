@@ -125,7 +125,11 @@ describe('Codex chat executor', () => {
 			message: { content: 'Describe the state of the project.' },
 		}, undefined, 180);
 		expect(prompt).toContain('attached at /workspace/project at immutable revision exact-commit');
-		expect(prompt).toContain('inspect that repository with ordinary shell and Git commands');
+		expect(prompt).toContain('For questions about current code or implementation state, inspect the relevant repository files');
+		expect(prompt).toContain('For coordination or role/dependency discussion already grounded in the exact proposal and TreeDX context, do not scan the repository without a concrete source question');
+		expect(prompt).toContain('If the first clock reports at most 120 seconds, make no more than one targeted source search and two exact file reads');
+		expect(prompt).toContain('with 45 seconds or less, make the required final clock check and answer immediately');
+		expect(prompt).toContain('the deadline is a ceiling, not a target');
 		expect(prompt).toContain('treedx_* MCP tools');
 		expect(prompt).toContain('Do not invoke trsd');
 		expect(prompt).toMatch(/^MANDATORY ASSIGNMENT CLOCK:/u);
@@ -139,7 +143,6 @@ describe('Codex chat executor', () => {
 		expect(prompt).toContain('fewer than two successful clock checks is rejected');
 		expect(prompt).toContain('Complete every shell command, verification, inspection, and other tool action before the final clock check');
 		expect(prompt).toMatch(/DO NOT ANSWER OR REASON ABOUT THE TASK YET[\s\S]*call time status again so it is truly your final tool action\.$/u);
-		expect(prompt).toContain('stop broadening scope and finish the highest-value verified result');
 		expect(prompt).toContain('The provider publishes your final plain Markdown reply to the Discussion');
 		expect(prompt).toContain('you do not need or have a discussion-write tool');
 		expect(prompt).toContain('Do not report a missing discussion-write tool as a blocker');

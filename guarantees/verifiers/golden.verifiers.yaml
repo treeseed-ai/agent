@@ -51,6 +51,11 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/guarantees/campaign.test.ts
     testName: enforces one hour with twenty minutes planning without inventing per-assignment demand
+  agent.golden.late-review-blocker:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/campaign.test.ts
+    testName: stops when an independent review concern appears after the planning boundary
   agent.golden.timeout-terminal-output:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

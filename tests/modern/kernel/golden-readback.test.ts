@@ -101,7 +101,7 @@ describe('golden read-back assertion regressions (fixtures are not live acceptan
 	});
 	it('verifies failed-only stopped runs without accepting empty or unsettled attempts', () => {
 		const stopped = state.cases.get('Stopped simulation retains terminal leases teardown and exactly-once settlement')!;
-		state.replies.get('workdays show')!.run.status = 'cancelled';
+		state.replies.get('workdays show')!.run.status = 'failed';
 		const items = state.replies.get('assignments list')!.items;
 		for (const item of items) item.status = 'failed';
 		expect(stopped).not.toThrow();

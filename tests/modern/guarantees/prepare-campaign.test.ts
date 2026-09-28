@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { freshSdkDraft, sdkProposalText } from '../../acceptance/campaign.ts';
 import { verifyRuntimeClosure } from '../../acceptance/freeze-integrity.ts';
-import { requirePinnedCodex } from '../../acceptance/prepare-campaign.ts';
+import { requirePinnedCodex, verifySdkArchitectureBook } from '../../acceptance/prepare-campaign.ts';
 
 const git = { store: 'git', commit: 'a'.repeat(40), repository: 'sdk' };
+const library = { store: 'treedx', model: 'repository', id: 'sdk-library', path: '.',
+  repository: 'treeseed-ai/sdk-library', commit: 'b'.repeat(40) };
+const bookRepositoryId = 'repo_sdk_library';
 const roles = [
 	['research-context', 'Researcher', 'researcher', 'treedx'], ['architecture-contract', 'Architect', 'architect', 'treedx'],
 	['tests-first', 'Tester', 'tester', 'git'], ['implement-change', 'Engineer', 'engineer', 'git'],
@@ -17,6 +20,7 @@ ${roles.map(([id, role, , workspace]) => `| \`${id}\` | ${role} | \`${workspace}
 The proposal does not duplicate generic role ordering. \`dependsOn\` is reserved for proposal-specific domain dependencies.
 
 ### 1. SDK — decision-governed workday intent
+- Architecture Book: \`sdk-core\` at \`books/sdk-core.md\` in the pinned SDK library commit.
 - Title: **Canonical title**
 - Request: Canonical request
 - Summary: Canonical summary
@@ -32,9 +36,20 @@ const canonical = sdkProposalText(spec);
 const template = { status: 'draft', id: 'old', title: 'old', contentProvenance: { contentPath: 'old.mdx' },
 	executionPlan: { workItems: roles.map(([id, , agentClass, workspace], index) => ({ id, agentClass, workspace,
 		activity: 'acting', review: 'required', objective: index === 2 ? 'stale SDK digest test' : 'stale objective',
-		acceptanceCriteria: ['stale proposal-wide criterion'], contextRefs: index > 1 ? [git] : [],
+		acceptanceCriteria: ['stale proposal-wide criterion'], contextRefs: index > 1 ? [git] : [library],
 		dependsOn: index === 2 ? ['research-context', 'architecture-contract'] : [], maximumReviewCycles: 2 })) } };
 describe('fresh automated SDK campaign preparation (fixtures are not acceptance)', () => {
+	it('fails preflight when the exact SDK Book is absent, changed, or unpublished', () => {
+		const reference = { id: 'sdk-core', path: 'books/sdk-core.md', repository: bookRepositoryId, commit: library.commit };
+		const readback = { repoId: bookRepositoryId, resolvedRef: library.commit,
+			files: [{ path: reference.path, frontmatter: { id: reference.id, status: 'published' } }] };
+		expect(() => verifySdkArchitectureBook(readback, reference)).not.toThrow();
+		expect(() => verifySdkArchitectureBook({ ...readback, files: [] }, reference)).toThrow('ACCEPTANCE_CAMPAIGN_BOOK');
+		expect(() => verifySdkArchitectureBook({ ...readback, repoId: 'repo_other' }, reference)).toThrow('ACCEPTANCE_CAMPAIGN_BOOK');
+		expect(() => verifySdkArchitectureBook({ ...readback, resolvedRef: 'c'.repeat(40) }, reference)).toThrow('ACCEPTANCE_CAMPAIGN_BOOK');
+		expect(() => verifySdkArchitectureBook({ ...readback, files: [{ path: reference.path, frontmatter: { id: 'other', status: 'published' } }] }, reference)).toThrow('ACCEPTANCE_CAMPAIGN_BOOK');
+		expect(() => verifySdkArchitectureBook({ ...readback, files: [{ path: reference.path, frontmatter: { id: reference.id, status: 'draft' } }] }, reference)).toThrow('ACCEPTANCE_CAMPAIGN_BOOK');
+	});
 	it('requires exact package and installed Codex parity without a moving registry dependency', () => {
 		expect(() => requirePinnedCodex('0.158.0', 'codex-cli 0.158.0')).not.toThrow();
 		expect(() => requirePinnedCodex('0.158.0', 'codex-cli 0.157.1')).toThrow('ACCEPTANCE_CODEX_VERSION');
@@ -47,8 +62,8 @@ describe('fresh automated SDK campaign preparation (fixtures are not acceptance)
     expect(() => verifyRuntimeClosure({ manifestDigest: digest, guestImageDigest: digest }, { digest })).not.toThrow();
   });
 	it('derives all objectives and review gates from the acceptance authority, removing stale template dependencies', () => {
-		const draft = freshSdkDraft(template, 'fresh', canonical);
-		expect(template.id).toBe('old'); expect(template.executionPlan.workItems[0]?.contextRefs).toEqual([]);
+		const draft = freshSdkDraft(template, 'fresh', canonical, bookRepositoryId);
+		expect(template.id).toBe('old'); expect(template.executionPlan.workItems[0]?.contextRefs).toEqual([library]);
 		expect(draft.id).toBe('fresh');
 		expect(draft).toMatchObject({ title: canonical.title, request: canonical.request, summary: canonical.summary });
 		for (const [index, item] of draft.executionPlan.workItems.entries()) {
@@ -57,17 +72,23 @@ describe('fresh automated SDK campaign preparation (fixtures are not acceptance)
 			expect(item.dependsOn).toEqual([]);
 			expect(item.contextRefs).toContainEqual(git);
 		}
+		expect(draft.executionPlan.workItems[1].contextRefs).toContainEqual({ store: 'treedx', model: 'book',
+			id: 'sdk-core', path: 'books/sdk-core.md', repository: bookRepositoryId, commit: library.commit });
 		expect(draft.executionPlan.workItems[2].objective).not.toContain('digest');
 		expect(template.executionPlan.workItems[2].dependsOn).toContain('research-context');
 	});
 	it('rejects reused estimates and inconsistent source pins before mutation', () => {
-		expect(() => freshSdkDraft({ ...template, executionPlan: { workItems: template.executionPlan.workItems.map(item => ({ ...item, ownerEstimate: {} })) } }, 'new', canonical)).toThrow('ACCEPTANCE_CAMPAIGN_FRESH');
+		expect(() => freshSdkDraft({ ...template, executionPlan: { workItems: template.executionPlan.workItems.map(item => ({ ...item, ownerEstimate: {} })) } }, 'new', canonical, bookRepositoryId)).toThrow('ACCEPTANCE_CAMPAIGN_FRESH');
 		const moved = structuredClone(template); moved.executionPlan.workItems[2]!.contextRefs.push({ ...git, commit: 'b'.repeat(40) });
-		expect(() => freshSdkDraft(moved, 'new', canonical)).toThrow('ACCEPTANCE_CAMPAIGN_SOURCE');
+		expect(() => freshSdkDraft(moved, 'new', canonical, bookRepositoryId)).toThrow('ACCEPTANCE_CAMPAIGN_SOURCE');
+		const missingLibrary = structuredClone(template);
+		missingLibrary.executionPlan.workItems[1]!.contextRefs = [];
+		expect(() => freshSdkDraft(missingLibrary, 'new', canonical, bookRepositoryId)).toThrow('ACCEPTANCE_CAMPAIGN_BOOK');
 	});
   it('reads all six role objectives and review boundaries from the acceptance authority', () => {
     expect(sdkProposalText(spec)).toEqual(canonical);
     expect(() => sdkProposalText(spec.replace('- Request: Canonical request\n', ''))).toThrow('ACCEPTANCE_CAMPAIGN_SPEC');
+    expect(() => sdkProposalText(spec.replace('- Architecture Book: \`sdk-core\` at \`books/sdk-core.md\` in the pinned SDK library commit.\n', ''))).toThrow('ACCEPTANCE_CAMPAIGN_SPEC');
     expect(() => sdkProposalText(spec.replace('| Tester | Tester canonical objective. |', ''))).toThrow('ACCEPTANCE_CAMPAIGN_SPEC');
     expect(() => sdkProposalText(spec.replace('`tests-first` | Tester | `git` | none', '`tests-first` | Tester | `git` | `research-context`'))).toThrow('ACCEPTANCE_CAMPAIGN_SPEC');
     expect(() => sdkProposalText('')).toThrow('ACCEPTANCE_CAMPAIGN_SPEC');

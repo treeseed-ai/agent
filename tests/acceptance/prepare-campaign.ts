@@ -19,6 +19,7 @@ export function verifySdkArchitectureBook(readback: Row, reference: Row): void {
 	assert.equal(readback.resolvedRef, reference.commit, 'ACCEPTANCE_CAMPAIGN_BOOK: Resolved TreeDX commit mismatch');
 	const bookFile = (readback.files as Row[] | undefined)?.find(file => file.path === reference.path);
 	assert.equal(bookFile?.frontmatter?.id, reference.id, 'ACCEPTANCE_CAMPAIGN_BOOK: Pinned TreeDX Book identity mismatch');
+	assert.equal(bookFile?.frontmatter?.title, reference.title, 'ACCEPTANCE_CAMPAIGN_BOOK: Pinned TreeDX Book title mismatch');
 	assert.equal(bookFile?.frontmatter?.status, 'published', 'ACCEPTANCE_CAMPAIGN_BOOK: Pinned TreeDX Book is not published');
 }
 
@@ -53,7 +54,7 @@ export function prepareSdkCampaign(draftPath: string, freezePath: string, team: 
 	const bookRef = (draft.executionPlan.workItems as Row[])
 		.find(item => item.id === 'architecture-contract')?.contextRefs?.find((ref: Row) => ref.model === 'book') as Row | undefined;
 	assert.ok(bookRef?.id && bookRef.path && bookRef.commit, 'ACCEPTANCE_CAMPAIGN_BOOK: Exact Architect Book reference required');
-	verifySdkArchitectureBook(bookReadback, bookRef);
+	verifySdkArchitectureBook(bookReadback, { ...bookRef, title: canonical.architectureBook.title });
 	const artifacts = mkdtempSync(join(tmpdir(), 'treeseed-golden-'));
 	const inputPath = join(artifacts, 'proposal.json');
 	writeFileSync(inputPath, JSON.stringify(draft));

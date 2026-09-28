@@ -20,15 +20,15 @@ ${roles.map(([id, role, , workspace]) => `| \`${id}\` | ${role} | \`${workspace}
 The proposal does not duplicate generic role ordering. \`dependsOn\` is reserved for proposal-specific domain dependencies.
 
 ### 1. SDK — decision-governed workday intent
-- Architecture Book: \`sdk-core\` at \`books/sdk-core.md\` in the pinned SDK library commit.
+- Architecture Book: \`sdk-core\` at \`books/sdk-core.md\` in the pinned SDK library commit. Its published title is **SDK Core**.
 - Title: **Canonical title**
 - Request: Canonical request
 - Summary: Canonical summary
 | Work item | Project-specific objective and expected output |
 |---|---|
-${roles.map(([, role]) => `| ${role} | ${role} canonical objective. |`).join('\n')}
+${roles.map(([, role]) => `| ${role} | ${role} canonical objective${role === 'Architect' ? ' in books/sdk-core.md' : ''}. |`).join('\n')}
 
-Each Actor is reviewed against its own deliverable: ${roles.map(([, role]) => `${role} verifies its own output`).join('; ')}. The proposal-wide contract gates apply to the final integrated candidate.
+Each Actor is reviewed against its own deliverable: ${roles.map(([, role]) => `${role} verifies its own output${role === 'Architect' ? ' in books/sdk-core.md' : ''}`).join('; ')}. The proposal-wide contract gates apply to the final integrated candidate.
 
 ### 2. API
 - Request: Unrelated request`;
@@ -40,13 +40,14 @@ const template = { status: 'draft', id: 'old', title: 'old', contentProvenance: 
 		dependsOn: index === 2 ? ['research-context', 'architecture-contract'] : [], maximumReviewCycles: 2 })) } };
 describe('fresh automated SDK campaign preparation (fixtures are not acceptance)', () => {
 	it('fails preflight when the exact SDK Book is absent, changed, or unpublished', () => {
-		const reference = { id: 'sdk-core', path: 'books/sdk-core.md', repository: bookRepositoryId, commit: library.commit };
+		const reference = { id: 'sdk-core', path: 'books/sdk-core.md', title: 'SDK Core', repository: bookRepositoryId, commit: library.commit };
 		const readback = { repoId: bookRepositoryId, resolvedRef: library.commit,
-			files: [{ path: reference.path, frontmatter: { id: reference.id, status: 'published' } }] };
+			files: [{ path: reference.path, frontmatter: { id: reference.id, title: 'SDK Core', status: 'published' } }] };
 		expect(() => verifySdkArchitectureBook(readback, reference)).not.toThrow();
 		expect(() => verifySdkArchitectureBook({ ...readback, files: [] }, reference)).toThrow('ACCEPTANCE_CAMPAIGN_BOOK');
 		expect(() => verifySdkArchitectureBook({ ...readback, repoId: 'repo_other' }, reference)).toThrow('ACCEPTANCE_CAMPAIGN_BOOK');
 		expect(() => verifySdkArchitectureBook({ ...readback, resolvedRef: 'c'.repeat(40) }, reference)).toThrow('ACCEPTANCE_CAMPAIGN_BOOK');
+		expect(() => verifySdkArchitectureBook({ ...readback, files: [{ path: reference.path, frontmatter: { id: reference.id, title: 'SDK Architecture', status: 'published' } }] }, reference)).toThrow('ACCEPTANCE_CAMPAIGN_BOOK');
 		expect(() => verifySdkArchitectureBook({ ...readback, files: [{ path: reference.path, frontmatter: { id: 'other', status: 'published' } }] }, reference)).toThrow('ACCEPTANCE_CAMPAIGN_BOOK');
 		expect(() => verifySdkArchitectureBook({ ...readback, files: [{ path: reference.path, frontmatter: { id: reference.id, status: 'draft' } }] }, reference)).toThrow('ACCEPTANCE_CAMPAIGN_BOOK');
 	});
@@ -88,8 +89,9 @@ describe('fresh automated SDK campaign preparation (fixtures are not acceptance)
   it('reads all six role objectives and review boundaries from the acceptance authority', () => {
     expect(sdkProposalText(spec)).toEqual(canonical);
     expect(() => sdkProposalText(spec.replace('- Request: Canonical request\n', ''))).toThrow('ACCEPTANCE_CAMPAIGN_SPEC');
-    expect(() => sdkProposalText(spec.replace('- Architecture Book: \`sdk-core\` at \`books/sdk-core.md\` in the pinned SDK library commit.\n', ''))).toThrow('ACCEPTANCE_CAMPAIGN_SPEC');
+    expect(() => sdkProposalText(spec.replace('- Architecture Book: \`sdk-core\` at \`books/sdk-core.md\` in the pinned SDK library commit. Its published title is **SDK Core**.\n', ''))).toThrow('ACCEPTANCE_CAMPAIGN_SPEC');
     expect(() => sdkProposalText(spec.replace('| Tester | Tester canonical objective. |', ''))).toThrow('ACCEPTANCE_CAMPAIGN_SPEC');
+		expect(() => sdkProposalText(spec.replace('Architect canonical objective in books/sdk-core.md', 'Architect canonical objective'))).toThrow('ACCEPTANCE_CAMPAIGN_BOOK');
     expect(() => sdkProposalText(spec.replace('`tests-first` | Tester | `git` | none', '`tests-first` | Tester | `git` | `research-context`'))).toThrow('ACCEPTANCE_CAMPAIGN_SPEC');
     expect(() => sdkProposalText('')).toThrow('ACCEPTANCE_CAMPAIGN_SPEC');
   });

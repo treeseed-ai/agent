@@ -41,9 +41,18 @@ describe('automated campaign control (fixtures are not golden acceptance)', () =
 	});
 	it('stops a failed acting boundary immediately without consuming more attempts', async () => {
 		const stop = vi.fn(), wait = vi.fn();
-		await expect(monitorCampaign({ read: () => ({ status: 'running', mode: 'simulation', failedBoundary: true, planningEndsAt: 0, endsAt: 10 }),
-			now: () => 1, wait, collaboration: vi.fn(), governanceBlockers: () => 0, verify: vi.fn(), stop })).rejects.toThrow('ACCEPTANCE_CAMPAIGN_EXECUTION');
+		await expect(monitorCampaign({ read: () => ({ status: 'running', mode: 'simulation', failedBoundary: 'assignment_failed', planningEndsAt: 0, endsAt: 10 }),
+			now: () => 1, wait, collaboration: vi.fn(), governanceBlockers: () => 0, verify: vi.fn(), stop })).rejects.toThrow('ACCEPTANCE_CAMPAIGN_ASSIGNMENT_FAILED');
 		expect(stop).toHaveBeenCalledOnce(); expect(wait).not.toHaveBeenCalled();
+	});
+	it('classifies graph and assignment terminal boundaries without storing unsafe details', async () => {
+		for (const boundary of ['assignment_returned', 'assignment_expired', 'graph_failed', 'graph_returned', 'graph_expired'] as const) {
+			const stop = vi.fn();
+			await expect(monitorCampaign({ read: () => ({ status: 'running', mode: 'simulation', failedBoundary: boundary, planningEndsAt: 0, endsAt: 10 }),
+				now: () => 1, wait: vi.fn(), collaboration: vi.fn(), governanceBlockers: () => 0, verify: vi.fn(), stop }))
+				.rejects.toThrow(`ACCEPTANCE_CAMPAIGN_${boundary.toUpperCase()}`);
+			expect(stop).toHaveBeenCalledOnce();
+		}
 	});
 	it('stops once at the planning boundary for an exact unresolved proposal concern', async () => {
 		const stop = vi.fn(), wait = vi.fn(), verify = vi.fn();

@@ -16,33 +16,47 @@ describe('automated campaign control (fixtures are not golden acceptance)', () =
 		let tick = 0;
 		const collaboration = vi.fn(), verify = vi.fn(), stop = vi.fn();
 		await monitorCampaign({ read: () => ({ status: tick < 3 ? 'running' : 'completed', mode: 'simulation', planningEndsAt: 1, endsAt: 10 }),
-			now: () => tick, wait: async () => { tick += 1; }, collaboration, verify, stop });
+			now: () => tick, wait: async () => { tick += 1; }, collaboration, governanceBlockers: () => 0, verify, stop });
 		expect(collaboration).toHaveBeenCalledTimes(2); expect(verify).toHaveBeenCalledOnce(); expect(stop).not.toHaveBeenCalled();
 	});
 	it('stops only a known failed planning boundary, never passing it', async () => {
 		const stop = vi.fn();
 		await expect(monitorCampaign({ read: () => ({ status: 'running', mode: 'simulation', planningEndsAt: 0, endsAt: 10 }),
-			now: () => 1, wait: vi.fn(), collaboration: () => { throw new Error('ACCEPTANCE_ESTIMATE_ROLES: missing'); }, verify: vi.fn(), stop })).rejects.toThrow('ACCEPTANCE_ESTIMATE_ROLES');
+			now: () => 1, wait: vi.fn(), collaboration: () => { throw new Error('ACCEPTANCE_ESTIMATE_ROLES: missing'); }, governanceBlockers: () => 0, verify: vi.fn(), stop })).rejects.toThrow('ACCEPTANCE_ESTIMATE_ROLES');
 		expect(stop).toHaveBeenCalledOnce();
 	});
 	it('does not mutate on transport failures, wrong mode, or unsuccessful terminal status', async () => {
 		for (const mode of ['simulation', 'production']) {
 			const stop = vi.fn();
 			await expect(monitorCampaign({ read: () => ({ status: 'running', mode, planningEndsAt: 0, endsAt: 10 }),
-				now: () => 1, wait: vi.fn(), collaboration: () => { throw new Error('transport'); }, verify: vi.fn(), stop })).rejects.toThrow();
+				now: () => 1, wait: vi.fn(), collaboration: () => { throw new Error('transport'); }, governanceBlockers: () => 0, verify: vi.fn(), stop })).rejects.toThrow();
 			expect(stop).not.toHaveBeenCalled();
 		}
 	});
 	it('stops an overdue running simulation instead of waiting forever', async () => {
 		const stop = vi.fn();
 		await expect(monitorCampaign({ read: () => ({ status: 'running', mode: 'simulation', planningEndsAt: 0, endsAt: 10 }),
-			now: () => 600011, wait: vi.fn(), collaboration: vi.fn(), verify: vi.fn(), stop })).rejects.toThrow('ACCEPTANCE_CAMPAIGN_TIMEOUT');
+			now: () => 600011, wait: vi.fn(), collaboration: vi.fn(), governanceBlockers: () => 0, verify: vi.fn(), stop })).rejects.toThrow('ACCEPTANCE_CAMPAIGN_TIMEOUT');
 		expect(stop).toHaveBeenCalledOnce();
 	});
 	it('stops a failed acting boundary immediately without consuming more attempts', async () => {
 		const stop = vi.fn(), wait = vi.fn();
 		await expect(monitorCampaign({ read: () => ({ status: 'running', mode: 'simulation', failedBoundary: true, planningEndsAt: 0, endsAt: 10 }),
-			now: () => 1, wait, collaboration: vi.fn(), verify: vi.fn(), stop })).rejects.toThrow('ACCEPTANCE_CAMPAIGN_EXECUTION');
+			now: () => 1, wait, collaboration: vi.fn(), governanceBlockers: () => 0, verify: vi.fn(), stop })).rejects.toThrow('ACCEPTANCE_CAMPAIGN_EXECUTION');
 		expect(stop).toHaveBeenCalledOnce(); expect(wait).not.toHaveBeenCalled();
+	});
+	it('stops once at the planning boundary for an exact unresolved proposal concern', async () => {
+		const stop = vi.fn(), wait = vi.fn(), verify = vi.fn();
+		await expect(monitorCampaign({ read: () => ({ status: 'running', mode: 'simulation', planningEndsAt: 0, endsAt: 10 }),
+			now: () => 1, wait, collaboration: vi.fn(), governanceBlockers: () => 1, verify, stop })).rejects.toThrow('PLAN_REVIEW_REQUIRED');
+		expect(stop).toHaveBeenCalledOnce(); expect(wait).not.toHaveBeenCalled(); expect(verify).not.toHaveBeenCalled();
+	});
+	it('never stops on a governance read failure or malformed blocker count', async () => {
+		for (const governanceBlockers of [() => { throw new Error('transport'); }, () => Number.NaN]) {
+			const stop = vi.fn();
+			await expect(monitorCampaign({ read: () => ({ status: 'running', mode: 'simulation', planningEndsAt: 0, endsAt: 10 }),
+				now: () => 1, wait: vi.fn(), collaboration: vi.fn(), governanceBlockers, verify: vi.fn(), stop })).rejects.toThrow();
+			expect(stop).not.toHaveBeenCalled();
+		}
 	});
 });

@@ -13,7 +13,7 @@ const sdkWorkItems = [
 
 type SdkProposalContract = { title: string; request: string; summary: string; workItems: Array<{
   id: string; agentClass: string; workspace: string; objective: string; acceptanceCriteria: string;
-}>; architectureBook: { id: string; path: string } };
+}>; architectureBook: { id: string; path: string; title: string } };
 
 export function sdkProposalText(spec: string): SdkProposalContract {
   const section = spec.split('### 1. SDK — decision-governed workday intent\n')[1]?.split('\n### 2. API')[0];
@@ -22,8 +22,11 @@ export function sdkProposalText(spec: string): SdkProposalContract {
     const value = section.split('\n').find(line => line.startsWith(`- ${name}: `))?.slice(name.length + 4).replace(/\*\*/gu, '').trim();
     assert.ok(value, `ACCEPTANCE_CAMPAIGN_SPEC: Canonical ${name} required`); return value;
   };
-  const book = /^`([a-z0-9-]+)` at `(books\/[a-z0-9/-]+\.md)` in the pinned SDK library commit\./u.exec(field('Architecture Book'));
+  const bookField = field('Architecture Book');
+  const book = /^`([a-z0-9-]+)` at `(books\/[a-z0-9/-]+\.md)` in the pinned SDK library commit\./u.exec(bookField);
   assert.ok(book, 'ACCEPTANCE_CAMPAIGN_SPEC: Exact pinned SDK Architecture Book required');
+  const bookTitle = /Its published title is ([^.]+)\./u.exec(bookField)?.[1];
+  assert.ok(bookTitle, 'ACCEPTANCE_CAMPAIGN_SPEC: Published Book title required');
   const deliverables = section.split('Each Actor is reviewed against its own deliverable: ')[1]?.split(' The proposal-wide contract gates')[0];
   assert.ok(deliverables, 'ACCEPTANCE_CAMPAIGN_SPEC: Actor-specific review boundary required');
   const fixedGraph = spec.split('### Fixed work-item graph\n')[1]?.split('\n### ')[0];
@@ -34,12 +37,14 @@ export function sdkProposalText(spec: string): SdkProposalContract {
     const objective = row?.split('|')[2]?.trim();
     const criterion = deliverables.split(';').map(value => value.trim()).find(value => value.startsWith(`${role} `));
     assert.ok(objective && criterion, `ACCEPTANCE_CAMPAIGN_SPEC: ${role} objective and review criterion required`);
+		if (role === 'Architect') assert.ok(objective.includes(book[2]!) && criterion.includes(book[2]!),
+			'ACCEPTANCE_CAMPAIGN_BOOK: Architect objective and review must name the pinned Book path');
     assert.ok(fixedGraph.includes(`| \`${id}\` | ${role} | \`${workspace}\` | none | 2 |`),
       `ACCEPTANCE_CAMPAIGN_SPEC: ${role} fixed graph row required`);
     return { id, agentClass, workspace, objective, acceptanceCriteria: criterion };
   });
   return { title: field('Title'), request: field('Request'), summary: field('Summary'),
-    architectureBook: { id: book[1]!, path: book[2]! }, workItems };
+    architectureBook: { id: book[1]!, path: book[2]!, title: bookTitle }, workItems };
 }
 
 export function freshSdkDraft(template: Record<string, any>, id: string, canonical: SdkProposalContract,

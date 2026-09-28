@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { freshSdkDraft, sdkProposalText } from '../../acceptance/campaign.ts';
 import { verifyRuntimeClosure } from '../../acceptance/freeze-integrity.ts';
-import { requirePinnedCodex, verifySdkArchitectureBook, verifySdkPublishedChatProfiles } from '../../acceptance/prepare-campaign.ts';
+import { requirePinnedCodex, requireSdkCampaignSupply, verifySdkArchitectureBook, verifySdkPublishedChatProfiles } from '../../acceptance/prepare-campaign.ts';
 
 const git = { store: 'git', commit: 'a'.repeat(40), repository: 'sdk' };
 const library = { store: 'treedx', model: 'repository', id: 'sdk-library', path: '.',
@@ -42,6 +42,28 @@ const template = { status: 'draft', id: 'old', title: 'old', contentProvenance: 
 		acceptanceCriteria: ['stale proposal-wide criterion'], contextRefs: index > 1 ? [git] : [library],
 		dependsOn: index === 2 ? ['research-context', 'architecture-contract'] : [], maximumReviewCycles: 2 })) } };
 describe('fresh automated SDK campaign preparation (fixtures are not acceptance)', () => {
+	it('refuses depleted or stale model supply before a metered campaign', () => {
+		const now = '2026-09-28T20:50:50.000Z';
+		const usage = (activeSeconds: number) => ({ day: '2026-09-28', observedAt: '2026-09-28T20:50:45.000Z',
+			healthy: true, activeSeconds, reservedSeconds: 0 });
+		const provider = (id: string, cap: number, active: number) => ({ id, status: 'active',
+			nativeLimits: { dailyActiveSecondsLimit: cap,
+				capabilityLimits: { 'treeseed.coordination.planning': { dailyActiveSecondsLimit: cap } } },
+			accountingObservation: { modelUsage: usage(active),
+				capabilityUsage: { 'treeseed.coordination.planning': usage(0) } } });
+		const supply = { healthy: true, availability: [{ executionProviders: [
+			provider('codex-implementation', 43_200, 40_981), provider('codex-research', 7_200, 5_956),
+		] }] };
+		expect(() => requireSdkCampaignSupply(supply, 3_600, 100 / 3, now))
+			.toThrow('codex-implementation/shared-model has 2219 active seconds, requires 3600');
+		supply.availability[0]!.executionProviders[0] = provider('codex-implementation', 43_200, 0);
+		expect(() => requireSdkCampaignSupply(supply, 3_600, 100 / 3, now))
+			.toThrow('codex-research/shared-model has 1244 active seconds, requires 3600');
+		supply.availability[0]!.executionProviders[1] = provider('codex-research', 7_200, 0);
+		expect(() => requireSdkCampaignSupply(supply, 3_600, 100 / 3, now)).not.toThrow();
+		supply.availability[0]!.executionProviders[1]!.accountingObservation.modelUsage.observedAt = '2026-09-28T20:48:00.000Z';
+		expect(() => requireSdkCampaignSupply(supply, 3_600, 100 / 3, now)).toThrow('observation missing, stale or unhealthy');
+	});
 	it('fails preflight when the exact SDK Book is absent, changed, or unpublished', () => {
 		const reference = { id: 'sdk-core', path: 'books/sdk-core.md', title: 'SDK Core', projectId: 'sdk',
 			repository: bookRepositoryId, commit: library.commit, ...bookExact };

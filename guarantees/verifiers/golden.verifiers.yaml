@@ -51,6 +51,11 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/guarantees/campaign.test.ts
     testName: enforces one hour with twenty minutes planning without inventing per-assignment demand
+  agent.golden.campaign-supply:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/prepare-campaign.test.ts
+    testName: refuses depleted or stale model supply before a metered campaign
   agent.golden.late-review-blocker:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

@@ -43,6 +43,38 @@ export function verifySdkPublishedChatProfiles(agents: Row[], publishedHead: str
 	}
 }
 
+/** Campaign admission only; production assignment allocation remains authoritative. */
+export function requireSdkCampaignSupply(supply: Row, durationSeconds: number,
+	planningPercent: number, now: string): void {
+	assert.equal(supply.healthy, true, 'ACCEPTANCE_CAMPAIGN_SUPPLY: Provider must be healthy');
+	const day = now.slice(0, 10);
+	const planningSeconds = durationSeconds * planningPercent / 100;
+	const providers = new Map<string, Row>();
+	for (const offer of supply.availability ?? []) for (const provider of offer.executionProviders ?? []) {
+		if (provider.status === 'active') providers.set(String(provider.id), provider);
+	}
+	assert.ok(providers.size > 0, 'ACCEPTANCE_CAMPAIGN_SUPPLY: No active execution provider');
+	for (const [id, provider] of providers) {
+		const limits = provider.nativeLimits;
+		const observation = provider.accountingObservation;
+		for (const [capability, required, cap, usage] of [
+			['shared-model', durationSeconds, limits?.dailyActiveSecondsLimit, observation?.modelUsage],
+			['treeseed.coordination.planning', planningSeconds,
+				limits?.capabilityLimits?.['treeseed.coordination.planning']?.dailyActiveSecondsLimit,
+				observation?.capabilityUsage?.['treeseed.coordination.planning']],
+		] as const) {
+			assert.ok(Number.isFinite(cap) && cap > 0 && usage?.healthy === true
+				&& usage.day === day && Number.isFinite(Date.parse(usage.observedAt))
+				&& Date.parse(now) - Date.parse(usage.observedAt) >= 0
+				&& Date.parse(now) - Date.parse(usage.observedAt) <= 90_000,
+				`ACCEPTANCE_CAMPAIGN_SUPPLY: ${id}/${capability} observation missing, stale or unhealthy`);
+			const remaining = cap - Number(usage.activeSeconds) - Number(usage.reservedSeconds);
+			assert.ok(Number.isFinite(remaining) && remaining >= required,
+				`ACCEPTANCE_CAMPAIGN_SUPPLY: ${id}/${capability} has ${Math.floor(remaining)} active seconds, requires ${Math.ceil(required)}`);
+		}
+	}
+}
+
 /** Preparation is part of the same native test, never a separate execution authority. */
 export function prepareSdkCampaign(draftPath: string, freezePath: string, team: string): void {
 	assert.ok(!existsSync(freezePath), 'ACCEPTANCE_FREEZE_EXISTS: Never overwrite a campaign freeze');
@@ -83,6 +115,10 @@ export function prepareSdkCampaign(draftPath: string, freezePath: string, team: 
 		{ encoding: 'utf8', timeout: 30_000 }).trim();
 	const agentProfiles = read(['agents', 'list', '--project', 'sdk', '--server', 'local'], team, true);
 	verifySdkPublishedChatProfiles(agentProfiles.agents as Row[], publishedLibraryHead);
+	const providers = (read(['providers', 'list'], team).items as Row[]).filter(item => item.status === 'approved');
+	assert.equal(providers.length, 1, 'ACCEPTANCE_CAMPAIGN_SUPPLY: Individual host campaign requires unambiguous provider');
+	const supply = read(['providers', 'status', providers[0]!.providerId], team);
+	requireSdkCampaignSupply(supply, durationSeconds, planningPercent, new Date().toISOString());
 	const artifacts = mkdtempSync(join(tmpdir(), 'treeseed-golden-'));
 	const inputPath = join(artifacts, 'proposal.json');
 	writeFileSync(inputPath, JSON.stringify(draft));
@@ -109,10 +145,6 @@ export function prepareSdkCampaign(draftPath: string, freezePath: string, team: 
 	capture('sdk-agent-profiles.json', JSON.stringify({ publishedLibraryHead, agents: agentProfiles.agents }));
 	capture('codex-version.json', JSON.stringify({ pinned: pinnedCodex, installed: installedCodex }));
 	const runtime = read(['dev', 'status'], team, true);
-	const providers = (read(['providers', 'list'], team).items as Row[]).filter(item => item.status === 'approved');
-	assert.equal(providers.length, 1, 'ACCEPTANCE_CAMPAIGN_SUPPLY: Individual host campaign requires unambiguous provider');
-	const supply = read(['providers', 'status', providers[0]!.providerId], team);
-	assert.equal(supply.healthy, true, 'ACCEPTANCE_CAMPAIGN_SUPPLY: Healthy provider required');
 	capture('runtime.json', JSON.stringify(runtime)); capture('supply.json', JSON.stringify(supply));
 	const sourceHeads = Object.fromEntries(['sdk', 'api', 'agent', 'deployment', 'cli', 'reviewer'].map(name => [name,
 		execFileSync('git', ['-C', resolve(platform, 'packages', name), 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim()]));

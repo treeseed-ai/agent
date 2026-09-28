@@ -7,11 +7,11 @@ const row = (value: unknown): Row => value && typeof value === 'object' && !Arra
 const rows = (value: unknown): Row[] => Array.isArray(value) ? value.map(row) : [];
 const text = (value: unknown): string => typeof value === 'string' ? value : '';
 
-export function read(args: string[], team: string, library = false): Row {
+export function read(args: string[], team: string, library = false, timeoutMs = 120_000): Row {
 	let output: string;
 	try {
 		output = execFileSync('trsd', [...args, ...(library ? [] : ['--server', 'local', '--team', team]), '--json'], {
-			encoding: 'utf8', timeout: 120_000, maxBuffer: 32 * 1024 * 1024,
+			encoding: 'utf8', timeout: timeoutMs, maxBuffer: 32 * 1024 * 1024,
 		});
 	} catch (failure) {
 		const failed = row(failure);

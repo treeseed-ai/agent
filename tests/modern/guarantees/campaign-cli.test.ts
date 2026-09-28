@@ -27,6 +27,10 @@ describe('native campaign CLI composition (fixtures are not live acceptance)', (
 				parameters: { durationSeconds: 3600, planningPercent: 100 / 3, appliedPlan: { endsAt: new Date().toISOString() } } } });
 		await state.run!();
 		expect(state.read.mock.calls[0]![0]).toContain('exact');
+		const send = state.read.mock.calls.find(call => call[0][0] === 'send');
+		expect(send?.[3]).toBe(240_000);
+		expect(send?.[0]).toContain('--no-wait');
+		expect(send?.[0]).toContain(`golden-discussion:${id}`);
 		expect(state.verify.mock.calls.map(call => call[0])).toEqual(['collaboration', 'lifecycle', 'graph', 'revision', 'results', 'settlement', 'reporter']);
 		expect(process.env.TREESEED_ACCEPTANCE_WORKDAY_ID).toBe(id);
 	});

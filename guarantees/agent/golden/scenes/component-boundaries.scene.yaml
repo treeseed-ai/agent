@@ -75,6 +75,15 @@ workflow:
   - id: context-grant
     action: { verifier: agent.golden.context-grant }
     expect: { status: passed }
+  - id: architect-book-preflight
+    action: { verifier: agent.golden.architect-book-preflight }
+    expect: { status: passed }
+  - id: architect-book-context
+    action: { verifier: agent.golden.architect-book-context }
+    expect: { status: passed }
+  - id: architect-book-output
+    action: { verifier: agent.golden.architect-book-output }
+    expect: { status: passed }
   - id: estimate-publication
     action: { verifier: agent.golden.estimate-publication }
     expect: { status: passed }

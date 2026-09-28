@@ -48,9 +48,11 @@ export function sdkProposalText(spec: string): SdkProposalContract {
 }
 
 export function freshSdkDraft(template: Record<string, any>, id: string, canonical: SdkProposalContract,
-	bookRepositoryId: string): Record<string, any> {
+	bookRepositoryId: string, bookExact: { revision: number; digest: string }): Record<string, any> {
 	assert.match(bookRepositoryId, /^repo_[a-zA-Z0-9_-]+$/u,
 		'ACCEPTANCE_CAMPAIGN_BOOK: Resolved TreeDX repository identity required');
+	assert.ok(Number.isInteger(bookExact.revision) && bookExact.revision > 0
+		&& /^sha256:[a-f0-9]{64}$/u.test(bookExact.digest), 'ACCEPTANCE_CAMPAIGN_BOOK: Exact Book revision and digest required');
 	const draft = structuredClone(template);
 	assert.equal(draft.status, 'draft', 'ACCEPTANCE_CAMPAIGN_FRESH: Estimate-free draft template required');
 	assert.equal(draft.executionPlan?.workItems?.length, 6, 'ACCEPTANCE_CAMPAIGN_OBJECTIVES: Six unchanged SDK work items required');
@@ -74,7 +76,8 @@ export function freshSdkDraft(template: Record<string, any>, id: string, canonic
 			assert.ok(library && !item.contextRefs.some((reference: Record<string, any>) => reference.model === 'book'),
 				'ACCEPTANCE_CAMPAIGN_BOOK: One pinned library repository and no stale Book authority required');
 			item.contextRefs.push({ store: 'treedx', model: 'book', id: canonical.architectureBook.id,
-				path: canonical.architectureBook.path, repository: bookRepositoryId, commit: library.commit });
+				path: canonical.architectureBook.path, repository: bookRepositoryId, commit: library.commit,
+				revision: bookExact.revision, digest: bookExact.digest });
 		}
 		if (!item.contextRefs.some((ref: Record<string, any>) => ref.store === 'git')) item.contextRefs.push(structuredClone(gitRefs[0]));
 	}

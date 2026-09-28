@@ -4,7 +4,7 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join, resolve } from 'node:path';
-import { read } from './sdk-runtime-golden.test.ts';
+import { read } from './acceptance-cli.ts';
 import { freshSdkDraft, requirePlanningWindow, sdkProposalText, sdkCampaignWindow } from './campaign.ts';
 import { verifyRuntimeClosure } from './freeze-integrity.ts';
 
@@ -21,6 +21,11 @@ export function verifySdkArchitectureBook(readback: Row, reference: Row): void {
 	assert.equal(bookFile?.frontmatter?.id, reference.id, 'ACCEPTANCE_CAMPAIGN_BOOK: Pinned TreeDX Book identity mismatch');
 	assert.equal(bookFile?.frontmatter?.title, reference.title, 'ACCEPTANCE_CAMPAIGN_BOOK: Pinned TreeDX Book title mismatch');
 	assert.equal(bookFile?.frontmatter?.status, 'published', 'ACCEPTANCE_CAMPAIGN_BOOK: Pinned TreeDX Book is not published');
+	assert.equal(bookFile?.frontmatter?.schemaVersion, 'treeseed.book/v3', 'ACCEPTANCE_CAMPAIGN_BOOK: Published Book must use the canonical schema');
+	assert.equal(bookFile?.frontmatter?.projectId, reference.projectId, 'ACCEPTANCE_CAMPAIGN_BOOK: Book project authority mismatch');
+	assert.equal(bookFile?.frontmatter?.revision, reference.revision, 'ACCEPTANCE_CAMPAIGN_BOOK: Book revision mismatch');
+	assert.equal(reference.digest, `sha256:${createHash('sha256').update(String(bookFile?.content ?? '')).digest('hex')}`,
+		'ACCEPTANCE_CAMPAIGN_BOOK: Book content digest mismatch');
 }
 
 /** Preparation is part of the same native test, never a separate execution authority. */
@@ -50,11 +55,15 @@ export function prepareSdkCampaign(draftPath: string, freezePath: string, team: 
 	assert.match(String(libraryRef?.commit ?? ''), /^[a-f0-9]{40}$/u, 'ACCEPTANCE_CAMPAIGN_BOOK: Exact SDK library commit required');
 	const bookReadback = read(['library', 'read', 'sdk', canonical.architectureBook.path,
 		'--ref', String(libraryRef.commit)], team, true).result as Row;
-	const draft = freshSdkDraft(template, id, canonical, String(bookReadback.repoId ?? ''));
+	const bookFile = (bookReadback.files as Row[] | undefined)?.find(file => file.path === canonical.architectureBook.path);
+	assert.ok(bookFile && typeof bookFile.content === 'string', 'ACCEPTANCE_CAMPAIGN_BOOK: Pinned Book content required');
+	const bookExact = { revision: Number(bookFile.frontmatter?.revision),
+		digest: `sha256:${createHash('sha256').update(bookFile.content).digest('hex')}` };
+	const draft = freshSdkDraft(template, id, canonical, String(bookReadback.repoId ?? ''), bookExact);
 	const bookRef = (draft.executionPlan.workItems as Row[])
 		.find(item => item.id === 'architecture-contract')?.contextRefs?.find((ref: Row) => ref.model === 'book') as Row | undefined;
 	assert.ok(bookRef?.id && bookRef.path && bookRef.commit, 'ACCEPTANCE_CAMPAIGN_BOOK: Exact Architect Book reference required');
-	verifySdkArchitectureBook(bookReadback, { ...bookRef, title: canonical.architectureBook.title });
+	verifySdkArchitectureBook(bookReadback, { ...bookRef, projectId: draft.projectId, title: canonical.architectureBook.title });
 	const artifacts = mkdtempSync(join(tmpdir(), 'treeseed-golden-'));
 	const inputPath = join(artifacts, 'proposal.json');
 	writeFileSync(inputPath, JSON.stringify(draft));

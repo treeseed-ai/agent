@@ -61,6 +61,16 @@ async function readReference(reference: ExactEntityReference, treeDx: Assignment
 	if (requestedPath !== reference.path || typeof file.content !== 'string') {
 		throw new Error(`assignment_context_reference_missing:${reference.id}`);
 	}
+	if (reference.model === 'book') {
+		const frontmatter = record(file.frontmatter);
+		const contentDigest = `sha256:${createHash('sha256').update(file.content).digest('hex')}`;
+		if (frontmatter.schemaVersion !== 'treeseed.book/v3' || frontmatter.id !== reference.id
+			|| frontmatter.projectId !== projectFor(reference, treeDx)
+			|| !Number.isInteger(reference.revision) || frontmatter.revision !== reference.revision
+			|| reference.digest !== contentDigest) {
+			throw new Error(`assignment_context_book_reference_invalid:${reference.id}`);
+		}
+	}
 	const value = { path: String(file.path ?? reference.path), requestedPath: reference.path,
 		content: file.content, frontmatter: record(file.frontmatter) };
 	return authorizedContextItemSchema.parse({ ref: reference, mediaType: 'text/mdx', digest: digest(value), value });

@@ -182,6 +182,21 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/kernel/provider-kernel-review.test.ts
     testName: "serves only an exact granted and materialized context reference to a project handler"
+  agent.golden.architect-book-preflight:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/prepare-campaign.test.ts
+    testName: "fails preflight when the exact SDK Book is absent, changed, or unpublished"
+  agent.golden.architect-book-context:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/materialize-context.test.ts
+    testName: "materializes the published SDK Book from exact granted TreeDX custody"
+  agent.golden.architect-book-output:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/agent-kernel.test.ts
+    testName: "requires Architect acting output to extend the exact authorized published Book"
   agent.golden.estimate-publication:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

@@ -3,7 +3,8 @@ import { existsSync, readFileSync } from 'node:fs';
 import test from 'node:test';
 import { monitorCampaign, requirePlanningWindow } from './campaign.ts';
 import { verifyFreezeIntegrity } from './freeze-integrity.ts';
-import { read, verifyGolden } from './sdk-runtime-golden.test.ts';
+import { read } from './acceptance-cli.ts';
+import { verifyGolden } from './sdk-runtime-golden.test.ts';
 import { prepareSdkCampaign, verifySdkExternalState } from './prepare-campaign.ts';
 
 type Row = Record<string, any>;

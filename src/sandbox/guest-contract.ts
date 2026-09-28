@@ -72,7 +72,8 @@ export function completionOutputTargetVariants(context: Record<string, unknown>)
 			if (model === 'knowledge') {
 				const path = text(target.path), book = (Array.isArray(assignment.contextRefs) ? assignment.contextRefs : [])
 					.map(record).find((reference) => text(reference.store) === 'treedx' && text(reference.model) === 'book'
-						&& text(reference.repository) === text(target.repository) && text(reference.commit) && text(reference.path));
+						&& text(reference.repository) === text(target.repository) && text(reference.commit) && text(reference.path)
+						&& Number.isInteger(reference.revision) && /^sha256:[a-f0-9]{64}$/u.test(text(reference.digest)));
 				if (!book || !path.endsWith(`/${id}.md`)) throw new Error('writer_knowledge_target_invalid');
 				properties.slug = { type: 'string', const: id };
 				properties.bookRef = { type: 'object', additionalProperties: false,

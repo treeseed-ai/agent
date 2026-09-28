@@ -4,6 +4,44 @@ import { describeContentFrontmatterJsonSchema, isPortableContentModel } from '@t
 export const record = (value: unknown): Record<string, unknown> => value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
 export const text = (value: unknown) => typeof value === 'string' ? value.trim() : '';
 
+export function providerToolName(event: Record<string, unknown>) {
+	if (event.type !== 'item.started' && event.type !== 'item.completed') return null;
+	const item = record(event.item);
+	if (item.type === 'mcp_tool_call') return `${text(item.server)}:${text(item.tool)}`;
+	if (['command_execution', 'file_change', 'web_search'].includes(text(item.type))) return text(item.type);
+	return null;
+}
+
+export function codexToolInFlight(events: Record<string, unknown>[]) {
+	const active = new Set<string>();
+	for (const event of events) {
+		const tool = providerToolName(event);
+		if (!tool) continue;
+		const key = text(record(event.item).id) || tool;
+		if (event.type === 'item.started') active.add(key);
+		else active.delete(key);
+	}
+	return active.size > 0;
+}
+
+export function codexIdleTimeoutMs(durationSeconds: number) {
+	// A short assignment must not spend half its active window silent before its
+	// one safe continuation. Longer assignments retain the existing 90s ceiling.
+	return durationSeconds >= 120 ? Math.min(90_000, Math.floor(durationSeconds * 250)) : undefined;
+}
+
+export function codexCloseoutTimeoutMs(durationSeconds: number) {
+	// The same allocator-issued window must still contain the final clock check,
+	// response and custody closeout. This is an execution guard, not a new budget.
+	return durationSeconds >= 90 ? durationSeconds * 1_000 - 45_000 : undefined;
+}
+
+export function codexResumeIdleTimeoutMs(remainingMs: number) {
+	// A silent first continuation can consume the whole assignment. Leave at
+	// least 30s for one final response without extending the original deadline.
+	return remainingMs >= 70_000 ? Math.min(40_000, remainingMs - 30_000) : undefined;
+}
+
 export function completionFrontmatterSchema(context: Record<string, unknown>) {
 	const assignment = record(record(context.canonicalAssignmentContext).assignment), profile = record(assignment.effectiveProfile);
 	if (text(profile.activity) === 'estimating') {

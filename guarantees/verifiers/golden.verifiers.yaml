@@ -96,6 +96,11 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/sandbox/codex-idle-recovery.test.ts
     testName: never extends the hard deadline when no safe closeout exists
+  agent.golden.codex-final-estimate-closeout:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/sandbox/codex-idle-recovery.test.ts
+    testName: recovers two silent turns and completes within one original deadline
   agent.golden.live.campaign:
     kind: nodeTestCase
     ownerPackage: "@treeseed/agent"

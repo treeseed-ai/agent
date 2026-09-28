@@ -121,6 +121,12 @@ export function codexCloseoutTimeoutMs(durationSeconds: number) {
 	return durationSeconds >= 90 ? durationSeconds * 1_000 - 45_000 : undefined;
 }
 
+export function codexResumeIdleTimeoutMs(remainingMs: number) {
+	// A silent first continuation can consume the whole assignment. Leave at
+	// least 30s for one final response without extending the original deadline.
+	return remainingMs >= 70_000 ? Math.min(40_000, remainingMs - 30_000) : undefined;
+}
+
 export function observeTimingAwarenessEvent(tracker: TimingAwarenessTracker, event: Record<string, unknown>) {
 	const tool = providerToolName(event);
 	if (!tool) return tracker;
@@ -384,14 +390,34 @@ export async function runSandboxGuest() {
 				...codexReasoningArguments(assignment.modelPolicy.reasoningEffort), ...codexProjectInstructionArguments(),
 				...(structuredCompletion ? ['--output-schema', completionSchemaPath] : []),
 				'--output-last-message', responsePath, '-'];
+			let finalCloseoutInterrupted = false;
 			await run('/usr/local/bin/codex', resumeArguments, {
 				cwd: '/workspace/project', env: providerEnvironment,
 				input: `The prior turn was interrupted to preserve closeout time after its completed tools. Continue this SAME assignment using only evidence already inspected. Do not repeat inspection or start new work. You have at most ${Math.floor(remainingMs / 1_000)} seconds including closeout; the original deadline has not moved. Your NEXT and FINAL tool action must call mcp__treedx__treeseed_time_status through functions.exec with: text(await tools.mcp__treedx__treeseed_time_status({}));. Then immediately produce ${structuredCompletion ? 'the required structured result' : 'the substantive discussion reply'}. If evidence is insufficient, say so honestly rather than waiting for the deadline.`,
 				timeoutMs: Math.floor(remainingMs),
+				...(canonicalActivity === 'estimating' ? { idleTimeoutMs: codexResumeIdleTimeoutMs(remainingMs),
+					canInterrupt: () => timingTracker.firstToolSucceeded && !codexToolInFlight(events) } : {}),
 				onLine(line) { let event: Record<string, unknown>; try { event = record(JSON.parse(line)); } catch { event = { type: 'provider.event.invalid', digest: createHash('sha256').update(line).digest('hex') }; }
 					const executionProgress = providerExecutionProgress(event); if (executionProgress) void progress(executionProgress).catch(() => undefined);
 					observeTimingAwarenessEvent(timingTracker, event); events.push(event); if (events.length > 256) events.shift(); },
+			}).catch(error => {
+				if (error instanceof Error && error.message === 'codex_closeout_interrupted') { finalCloseoutInterrupted = true; return; }
+				throw error;
 			});
+			if (finalCloseoutInterrupted) {
+				const finalRemainingMs = assignment.resources.durationSeconds * 1_000 - Number(process.hrtime.bigint() - started) / 1e6 - 5_000;
+				if (!providerThreadId || finalRemainingMs < 25_000 || codexToolInFlight(events)) throw new Error('Codex estimate closeout has no safe remaining continuation.');
+				await progress('provider.final-closeout-recovery.starting');
+				await run('/usr/local/bin/codex', resumeArguments, {
+					cwd: '/workspace/project', env: providerEnvironment,
+					input: `This is the FINAL continuation of the same estimating assignment. The original deadline has not moved. Use only evidence already inspected; do not inspect or run another command. You have at most ${Math.floor(finalRemainingMs / 1_000)} seconds. Call mcp__treedx__treeseed_time_status once through functions.exec with: text(await tools.mcp__treedx__treeseed_time_status({}));. Then immediately return the required compact estimate JSON. If evidence is incomplete, state the uncertainty in the rationale and finish now.`,
+					timeoutMs: Math.floor(finalRemainingMs),
+					onLine(line) { let event: Record<string, unknown>; try { event = record(JSON.parse(line)); } catch { event = { type: 'provider.event.invalid', digest: createHash('sha256').update(line).digest('hex') }; }
+					const executionProgress = providerExecutionProgress(event); if (executionProgress) void progress(executionProgress).catch(() => undefined);
+					observeTimingAwarenessEvent(timingTracker, event); events.push(event); if (events.length > 256) events.shift(); },
+				});
+				await progress('provider.final-closeout-recovery.completed');
+			}
 			await progress('provider.closeout-recovery.completed');
 		}
 		if (subscriptionAuth) {

@@ -30,3 +30,6 @@ workflow:
   - id: closeout-hard-limit
     action: { verifier: agent.golden.codex-closeout-hard-limit }
     expect: { status: passed }
+  - id: final-estimate-closeout
+    action: { verifier: agent.golden.codex-final-estimate-closeout }
+    expect: { status: passed }

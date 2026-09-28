@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { codexCloseoutTimeoutMs, codexIdleTimeoutMs, codexToolInFlight } from '../../../src/sandbox/guest.ts';
+import { codexCloseoutTimeoutMs, codexIdleTimeoutMs, codexResumeIdleTimeoutMs, codexToolInFlight } from '../../../src/sandbox/guest.ts';
 import { run } from '../../../src/sandbox/process-runner.ts';
 
 describe('bounded Codex idle recovery', () => {
@@ -33,6 +33,24 @@ describe('bounded Codex idle recovery', () => {
 		expect(codexCloseoutTimeoutMs(107)).toBe(62_000);
 		expect(codexCloseoutTimeoutMs(180)).toBe(135_000);
 		expect(codexCloseoutTimeoutMs(60)).toBeUndefined();
+	});
+	it('bounds one final estimating continuation inside the unchanged deadline', () => {
+		expect(codexResumeIdleTimeoutMs(130_000)).toBe(40_000);
+		expect(codexResumeIdleTimeoutMs(75_000)).toBe(40_000);
+		expect(codexResumeIdleTimeoutMs(69_999)).toBeUndefined();
+	});
+	it('recovers two silent turns and completes within one original deadline', async () => {
+		const deadline = Date.now() + 2_000;
+		for (let turn = 0; turn < 2; turn++) {
+			await expect(run(process.execPath, ['-e', 'process.stdout.write("clock\\n"); setInterval(() => {}, 1000)'], {
+				timeoutMs: deadline - Date.now(), idleTimeoutMs: 90, canInterrupt: () => true,
+			})).rejects.toThrow('codex_closeout_interrupted');
+		}
+		const response = await run(process.execPath, ['-e', 'process.stdout.write("estimate\\n")'], {
+			timeoutMs: deadline - Date.now(), captureStdout: true,
+		});
+		expect(response.stdout).toContain('estimate');
+		expect(Date.now()).toBeLessThan(deadline);
 	});
 	it('interrupts a still-active read-only turn at its closeout boundary even while events continue', async () => {
 		await expect(run(process.execPath, ['-e', 'setInterval(() => process.stdout.write("event\\n"), 20)'], {

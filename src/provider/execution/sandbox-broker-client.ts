@@ -12,6 +12,12 @@ export interface SourceJobStatus {
 	error?: string;
 }
 
+export function remainingPreparationMs(deadlineAt: string, now: number = Date.now()): number {
+	const remaining = Date.parse(deadlineAt) - now;
+	if (!Number.isSafeInteger(remaining) || remaining <= 0) throw new Error('Authoritative sandbox preparation window is missing or expired.');
+	return remaining;
+}
+
 function call<T>(socketPath: string, method: string, path: string, body?: unknown, signal?: AbortSignal, headers: Record<string, string> = {}, timeoutMs?: number) {
 	return new Promise<T>((resolve, reject) => {
 		const encoded = body === undefined ? undefined : Buffer.from(JSON.stringify(body));
@@ -34,7 +40,7 @@ export class SandboxBrokerClient {
 	constructor(readonly socketPath: string) {}
 	private path(suffix: string) { return `/v${1}${suffix}`; }
 	status(signal?: AbortSignal) { return call<Record<string, unknown>>(this.socketPath, 'GET', this.path('/status'), undefined, signal, {}, 5_000); }
-	prepare(assignment: SandboxAssignment, signal?: AbortSignal) { return call<{ sandboxId: string; operationToken: string }>(this.socketPath, 'POST', this.path('/sandboxes'), { assignment }, signal, {}, 15_000); }
+	prepare(assignment: SandboxAssignment, preparationDeadlineAt: string, signal?: AbortSignal) { return call<{ sandboxId: string; operationToken: string }>(this.socketPath, 'POST', this.path('/sandboxes'), { assignment }, signal, {}, remainingPreparationMs(preparationDeadlineAt)); }
 	sourceStatus(sandboxId: string, token: string, signal?: AbortSignal) {
 		return call<SourceJobStatus>(this.socketPath, 'GET', this.path(`/sandboxes/${encodeURIComponent(sandboxId)}/source/status`), undefined, signal, { authorization: `Bearer ${token}` });
 	}

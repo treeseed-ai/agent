@@ -137,7 +137,6 @@ export async function createMicrovmExecutor(config: ProviderHostRuntimeConfig, m
 		},
 		async execute(request) {
 			const attempt = assignmentAttemptSchema.safeParse(request.assignment.assignmentAttempt ?? object(request.assignment.workspaceContext).assignmentAttempt);
-			const brokerStatus = await client.status().catch(() => ({} as Record<string, unknown>));
 			const metadata = request.assignment.metadata && typeof request.assignment.metadata === 'object' ? request.assignment.metadata as Record<string, unknown> : {};
 			const reasoningEffort = adapter.model?.reasoningEffort;
 			const offerId = assignmentOfferId(request.assignment);
@@ -164,7 +163,8 @@ export async function createMicrovmExecutor(config: ProviderHostRuntimeConfig, m
 				const value = sign(null, Buffer.from(canonical(unsigned)), signingKey).toString('base64url');
 				const assignment = sandboxAssignmentSchema.parse({ ...unsigned, signature: { keyId, algorithm: 'Ed25519', value } }) as SandboxAssignment;
 				await request.emit?.({ type: 'execution.preparing', occurredAt: new Date().toISOString(), summary: 'Requesting a bounded Kata sandbox from the host broker.', payload: { profile: assignment.profile, guestImageDigest: assignment.guestImageDigest } });
-				const prepared = await client.prepare(assignment, request.signal); active.set(request.assignmentId, { sandboxId: prepared.sandboxId, operationToken: prepared.operationToken, providerId: assignment.providerId, teamId: assignment.teamId, renewals: new RenewalDrain() }); let result: ReturnType<typeof sandboxResultSchema.parse> | undefined; let sourceReference: AssignmentReference | undefined; let artifacts: Record<string, unknown>[] = []; let teardown: Record<string, unknown> = { verified: false, completedAt: null };
+				const preparationDeadlineAt = String(object(object(object(request.assignment.capacityEnvelope).budget).time).preparationDeadlineAt ?? '');
+				const prepared = await client.prepare(assignment, preparationDeadlineAt, request.signal); active.set(request.assignmentId, { sandboxId: prepared.sandboxId, operationToken: prepared.operationToken, providerId: assignment.providerId, teamId: assignment.teamId, renewals: new RenewalDrain() }); let result: ReturnType<typeof sandboxResultSchema.parse> | undefined; let sourceReference: AssignmentReference | undefined; let artifacts: Record<string, unknown>[] = []; let teardown: Record<string, unknown> = { verified: false, completedAt: null };
 				let transportFailure: unknown;
 				const cancelSandbox = () => { void client.cancel(prepared.sandboxId, prepared.operationToken).catch(() => undefined); };
 					if (request.signal?.aborted) cancelSandbox(); else request.signal?.addEventListener('abort', cancelSandbox, { once: true });
@@ -220,7 +220,7 @@ export async function createMicrovmExecutor(config: ProviderHostRuntimeConfig, m
 					const unsigned = { schemaVersion: 'treeseed.provider-environment-receipt/v1' as const, assignmentId: request.assignmentId, offerId,
 						providerId: assignment.providerId, imageDigest: assignment.guestImageDigest,
 						baseLineage: { baseImageDigest: profile.lineage.baseImageDigest, provenanceDigest: profile.lineage.provenanceDigest, architectures: profile.lineage.architectures },
-						securityAttestationDigest: digest({ sandboxId: result.sandboxId, assignment: assignment.signature, teardown }), brokerVersion: String(brokerStatus.version ?? brokerStatus.brokerVersion ?? 'unknown'), teardown: { verified: teardown.verified === true, completedAt: typeof teardown.completedAt === 'string' ? teardown.completedAt : null }, createdAt: new Date().toISOString() };
+						securityAttestationDigest: digest({ sandboxId: result.sandboxId, assignment: assignment.signature, teardown }), brokerVersion: 'unknown', teardown: { verified: teardown.verified === true, completedAt: typeof teardown.completedAt === 'string' ? teardown.completedAt : null }, createdAt: new Date().toISOString() };
 					return providerEnvironmentReceiptSchema.parse({ ...unsigned, signature: { keyId, algorithm: 'Ed25519', value: sign(null, Buffer.from(canonical(unsigned)), signingKey).toString('base64url') } });
 				})() : null;
 				if (environmentReceipt) await request.emit?.({ type: 'sandbox.environment.attested', occurredAt: environmentReceipt.createdAt, summary: 'Provider environment attestation recorded.', payload: { environmentReceipt } });

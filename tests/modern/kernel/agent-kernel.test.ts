@@ -316,7 +316,8 @@ describe('AgentKernel', () => {
 		context.assignment.contextRefs.push(bookRef);
 		context.assignment.grant.contentRead.push(bookRef);
 		context.context = [{ ref: bookRef, mediaType: 'text/markdown', digest,
-			value: { frontmatter: { schemaVersion: 'treeseed.book/v2', id: bookRef.id, status: 'published', title: 'SDK Core' } } }];
+			value: { frontmatter: { schemaVersion: 'treeseed.book/v3', id: bookRef.id, projectId: 'project-1',
+				revision: 3, status: 'published', title: 'SDK Core' } } }];
 		context.assignment.grant.contentWrite = [{ ...reportTarget, model: 'knowledge', id: 'sdk.architecture.authority' }];
 		const commits: unknown[] = [], boundary = runtime(commits);
 		let prompt = '', calls = 0;
@@ -336,7 +337,8 @@ describe('AgentKernel', () => {
 		await expect(new WriterHandler().run(context, boundary)).rejects.toThrow('architect_architecture_book_context_required');
 		expect(calls).toBe(1);
 		context.context = [{ ref: bookRef, mediaType: 'text/markdown', digest,
-			value: { frontmatter: { schemaVersion: 'treeseed.book/v2', id: bookRef.id, status: 'draft', title: 'SDK Core' } } }];
+			value: { frontmatter: { schemaVersion: 'treeseed.book/v3', id: bookRef.id, projectId: 'project-1',
+				revision: 3, status: 'draft', title: 'SDK Core' } } }];
 		await expect(new WriterHandler().run(context, boundary)).rejects.toThrow('architect_architecture_book_context_required');
 		expect(calls).toBe(1);
 	});

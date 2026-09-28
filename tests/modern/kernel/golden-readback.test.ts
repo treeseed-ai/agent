@@ -12,7 +12,8 @@ vi.mock('node:child_process', () => ({ execFileSync: (_command: string, args: st
 	if (!result) throw new Error(`Unexpected acceptance read: ${key}`);
 	return JSON.stringify({ ok: true, result });
 } }));
-const { read } = await import('../../acceptance/sdk-runtime-golden.test.ts');
+await import('../../acceptance/sdk-runtime-golden.test.ts');
+const { read } = await import('../../acceptance/acceptance-cli.ts');
 
 const classes = ['architect', 'researcher', 'tester', 'engineer', 'technical-writer', 'releaser', 'reviewer', 'reporter'];
 const workdayId = 'workday-test';

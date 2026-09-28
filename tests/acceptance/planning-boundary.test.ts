@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { read, verifyGolden } from './sdk-runtime-golden.test.ts';
+import { read } from './acceptance-cli.ts';
+import { verifyGolden } from './sdk-runtime-golden.test.ts';
 import { enforcePlanningBoundary } from './planning-boundary.ts';
 
 test('Golden planning boundary stops only the invalid simulation and retains failure', () => {

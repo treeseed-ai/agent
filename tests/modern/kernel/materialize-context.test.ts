@@ -40,10 +40,13 @@ describe('canonical assignment context materialization', () => {
 	});
 	it('materializes the published SDK Book from exact granted TreeDX custody', async () => {
 		const commit = 'e'.repeat(40);
-		const reference = { store: 'treedx', model: 'book', id: 'sdk-core', repository: 'sdk-library', commit, path: 'books/sdk-core.md' };
-		const frontmatter = { schemaVersion: 'treeseed.book/v2', id: 'sdk-core', title: 'SDK Core', status: 'published' };
+		const content = '# SDK Core';
+		const reference = { store: 'treedx', model: 'book', id: 'sdk-core', repository: 'sdk-library', commit,
+			path: 'books/sdk-core.md', revision: 1, digest: `sha256:${createHash('sha256').update(content).digest('hex')}` };
+		const frontmatter = { schemaVersion: 'treeseed.book/v3', id: 'sdk-core', projectId: 'sdk-project',
+			revision: 1, title: 'SDK Core', status: 'published' };
 		const invoke = vi.fn(async () => ({ result: { result: { resolvedRef: commit, files: [{
-			path: reference.path, requestedPath: reference.path, content: '# SDK Core', frontmatter,
+			path: reference.path, requestedPath: reference.path, content, frontmatter,
 		}] } } }));
 		const context = await materializeAssignmentContext({ attempt: {
 			contextRefs: [reference], grant: { contentRead: [reference] }, effectiveProfile: { activity: 'acting' },
@@ -52,6 +55,13 @@ describe('canonical assignment context materialization', () => {
 		expect(invoke).toHaveBeenCalledWith('treedx.repositories.files.read', expect.objectContaining({
 			body: expect.objectContaining({ ref: commit, paths: ['books/sdk-core.md'] }),
 		}));
+		for (const invalid of [{ ...reference, digest: `sha256:${'0'.repeat(64)}` },
+			{ ...reference, revision: 2 }, { ...reference, digest: undefined }]) {
+			await expect(materializeAssignmentContext({ attempt: { contextRefs: [invalid], grant: { contentRead: [invalid] },
+				effectiveProfile: { activity: 'acting' } } as never, predecessorResults: [],
+				treeDx: { projectId: 'sdk-project', repositoryId: 'sdk-library', workspaceId: null, invoke } as never }))
+				.rejects.toThrow('assignment_context_book_reference_invalid');
+		}
 	});
 	it.each(['team', 'workday', 'digest', 'activity'])('rejects inline Reporter context with incorrect %s authority', async failure => {
 		const ref = { store: 'postgresql', model: 'workday', id: 'workday', revision: 1, digest: `sha256:${'a'.repeat(64)}` };

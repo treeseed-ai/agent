@@ -34,8 +34,11 @@ function authorizedArchitectBook(context: AssignmentContext): AssignmentContext[
   && context.assignment.contextRefs.some((ref) => isDeepStrictEqual(ref, item.ref))
   && context.assignment.grant.contentRead.some((ref) => isDeepStrictEqual(ref, item.ref))
   && typeof item.value === 'object' && item.value !== null
-  && (item.value as { frontmatter?: { schemaVersion?: unknown; id?: unknown; status?: unknown; title?: unknown } }).frontmatter?.schemaVersion === 'treeseed.book/v2'
+  && (item.value as { frontmatter?: { schemaVersion?: unknown; id?: unknown; status?: unknown; title?: unknown } }).frontmatter?.schemaVersion === 'treeseed.book/v3'
   && (item.value as { frontmatter?: { id?: unknown } }).frontmatter?.id === item.ref.id
+  && (item.value as { frontmatter?: { projectId?: unknown } }).frontmatter?.projectId === context.assignment.projectId
+  && (item.value as { frontmatter?: { revision?: unknown } }).frontmatter?.revision === item.ref.revision
+  && typeof item.ref.digest === 'string' && /^sha256:[a-f0-9]{64}$/u.test(item.ref.digest)
   && (item.value as { frontmatter?: { status?: unknown } }).frontmatter?.status === 'published'
   && typeof (item.value as { frontmatter?: { title?: unknown } }).frontmatter?.title === 'string');
  if (!book) throw new Error('architect_architecture_book_context_required');

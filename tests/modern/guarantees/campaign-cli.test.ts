@@ -5,7 +5,8 @@ const state = vi.hoisted(() => ({ run: undefined as (() => Promise<void>) | unde
 vi.mock('node:test', () => ({ default: (_name: string, _options: unknown, run: () => Promise<void>) => { state.run = run; } }));
 vi.mock('node:fs', () => ({ existsSync: () => true, readFileSync: (path: string) => path === '/freeze'
 	? JSON.stringify(state.freeze) : Buffer.alloc(0) }));
-vi.mock('../../acceptance/sdk-runtime-golden.test.ts', () => ({ read: state.read, verifyGolden: state.verify }));
+vi.mock('../../acceptance/acceptance-cli.ts', () => ({ read: state.read }));
+vi.mock('../../acceptance/sdk-runtime-golden.test.ts', () => ({ verifyGolden: state.verify }));
 vi.mock('../../acceptance/prepare-campaign.ts', () => ({ prepareSdkCampaign: vi.fn(), verifySdkExternalState: vi.fn() }));
 await import('../../acceptance/campaign.test.ts');
 beforeEach(() => {

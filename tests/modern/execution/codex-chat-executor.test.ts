@@ -83,6 +83,9 @@ describe('Codex chat executor', () => {
 				properties: { store: { type: 'string', const: 'treedx' }, model: { type: 'string', const: 'book' },
 					revision: { type: 'number', const: 1 } }, required: Object.keys(bookRef) },
 		});
+		expect(() => completionOutputTargetVariants({ ...context, canonicalAssignmentContext: {
+			...context.canonicalAssignmentContext, assignment: { ...context.canonicalAssignmentContext.assignment,
+				contextRefs: [{ ...bookRef, digest: undefined }] } } })).toThrow('writer_knowledge_target_invalid');
 		const checkSchema = (node: unknown, path = '$'): void => {
 			const value = node as Record<string, unknown>;
 			expect(typeof value.type === 'string' || Array.isArray(value.type) || Array.isArray(value.anyOf), path).toBe(true);

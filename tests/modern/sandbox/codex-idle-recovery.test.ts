@@ -6,7 +6,7 @@ describe('bounded Codex idle recovery', () => {
 	it('leaves time in the same assignment for a single continuation', () => {
 		expect(codexIdleTimeoutMs(120)).toBe(30_000);
 		expect(codexIdleTimeoutMs(180)).toBe(45_000);
-		expect(codexIdleTimeoutMs(180)!).toBeLessThan(codexCloseoutTimeoutMs(180)!);
+		expect(codexIdleTimeoutMs(180)!).toBeLessThan(codexCloseoutTimeoutMs(180, 'estimating')!);
 		expect(codexIdleTimeoutMs(900)).toBe(90_000);
 		expect(codexIdleTimeoutMs(60)).toBeUndefined();
 	});
@@ -30,9 +30,11 @@ describe('bounded Codex idle recovery', () => {
 		})).rejects.toThrow('exceeded its interactive execution deadline');
 	});
 	it('reserves closeout inside the original active-time budget for chat and estimating', () => {
-		expect(codexCloseoutTimeoutMs(107)).toBe(62_000);
-		expect(codexCloseoutTimeoutMs(180)).toBe(135_000);
-		expect(codexCloseoutTimeoutMs(60)).toBeUndefined();
+		expect(codexCloseoutTimeoutMs(107, 'estimating')).toBe(62_000);
+		expect(codexCloseoutTimeoutMs(180, 'estimating')).toBe(90_000);
+		expect(codexCloseoutTimeoutMs(150, 'estimating')).toBe(90_000);
+		expect(codexCloseoutTimeoutMs(180, 'chat')).toBe(135_000);
+		expect(codexCloseoutTimeoutMs(60, 'estimating')).toBeUndefined();
 	});
 	it('bounds one final estimating continuation inside the unchanged deadline', () => {
 		expect(codexResumeIdleTimeoutMs(130_000)).toBe(40_000);

@@ -86,6 +86,11 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/sandbox/codex-idle-recovery.test.ts
     testName: interrupts a still-active read-only turn at its closeout boundary even while events continue
+  agent.golden.codex-estimate-closeout-reserve:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/sandbox/codex-idle-recovery.test.ts
+    testName: reserves closeout inside the original active-time budget for chat and estimating
   agent.golden.codex-closeout-inflight:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

@@ -330,7 +330,8 @@ export async function runSandboxGuest() {
 			cwd: '/workspace/project', input: composedPrompt, env: providerEnvironment,
 			timeoutMs: codexInteractiveTimeoutMs(assignment.resources.durationSeconds),
 			idleTimeoutMs: canonicalActivity === 'estimating' ? codexIdleTimeoutMs(assignment.resources.durationSeconds) : undefined,
-			closeoutTimeoutMs: ['chat', 'estimating'].includes(canonicalActivity) ? codexCloseoutTimeoutMs(assignment.resources.durationSeconds) : undefined,
+			closeoutTimeoutMs: canonicalActivity === 'chat' || canonicalActivity === 'estimating'
+				? codexCloseoutTimeoutMs(assignment.resources.durationSeconds, canonicalActivity) : undefined,
 			canInterrupt: () => Boolean(providerThreadId && timingTracker.firstToolSucceeded && !codexToolInFlight(events)),
 			onLine(line) { let event: Record<string, unknown>; try { event = record(JSON.parse(line)); } catch { event = { type: 'provider.event.invalid', digest: createHash('sha256').update(line).digest('hex') }; }
 				providerThreadId ??= codexThreadId([event]);

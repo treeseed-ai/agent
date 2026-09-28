@@ -78,6 +78,14 @@ export function promptFromContext(context: Record<string, unknown>, reasoningEff
 				: ''}`
 			: '';
 		const estimating = text(profile.handler) === 'estimate';
+		// Estimates use predecessor contributions as orientation, not as a second
+		// copy of their full result/usage records. Exact references remain available
+		// for targeted TreeDX reads when a contribution matters to this work item.
+		const predecessorPrompt = estimating ? predecessors.map((value) => {
+			const result = record(value), summary = text(result.summary);
+			return { id: result.id, status: result.status, summaryExcerpt: summary.slice(0, 600),
+				truncated: summary.length > 600, references: result.references };
+		}) : predecessors;
 		const releasing = text(profile.handler) === 'releaser';
 		const reviewingRelease = text(profile.activity) === 'reviewing'
 			&& acceptanceCriteria.some((criterion) => /\b(?:pack|release)\b/iu.test(text(criterion)));
@@ -126,7 +134,7 @@ export function promptFromContext(context: Record<string, unknown>, reasoningEff
 				? 'For test-first work, map every work-item acceptance criterion to an independently runnable assertion before committing. Assert exact observable values, paths, ordering, and serialized bytes wherever the criterion requires them; substring matches do not prove an exact contract. For a portable request contract, assert the complete expected serialized object and exact JSON bytes, including absent fields and digests; a partial expected object or subset check is insufficient. Test optional-field omission and presence in separate fixtures; never replace an omission test with a presence test during revision. Prove an excluded input is absent from serialized bytes separately from proving its validation diagnostic. When criteria require rejection before normalization, never expect a rejected input to normalize successfully; assert rejection and valid-input serialization separately. When an exact field allowlist is required, compare the runtime allowlist with the entire expected list and prove arbitrary unknown input keys are rejected through the actual runtime key-validation path. When a command binding has both catalog and canonical-tree declarations, assert both rather than inspecting only one. Cover both sides of each stated boundary and every named forbidden field. Keep expected frozen-base failures separate so an earlier failure cannot hide evidence for another criterion. An already-correct behavior may pass on the frozen base; record that passing boundary instead of forcing it red. Include policy-vs-intent exclusions explicitly when the criterion names them. Before completing, audit each acceptance sentence against a specific test assertion, including boundary and absence cases; if any sentence lacks an assertion, add it before committing. On revision, preserve every previously covered criterion while correcting the Reviewer findings. Run the focused suite. In completion.summary, include a section headed "Frozen-base failing tests:" with the exact test file path and verbatim name of EACH failing test observed, plus the focused command and exit code. A generic statement that tests were added or failed does not satisfy this result contract. Intentional red tests are not passing verification; never report them as passed.'
 				: '',
 			authorized ? `Authorized context:\n${authorized}` : 'No additional context references were authorized.',
-			predecessors.length ? `Predecessor results:\n${JSON.stringify(predecessors)}` : 'There are no predecessor results.',
+			predecessors.length ? `Predecessor results${estimating ? ' (bounded excerpts; use exact references for full content)' : ''}:\n${JSON.stringify(predecessorPrompt)}` : 'There are no predecessor results.',
 			text(profile.activity) === 'planning' && predecessorIds.length > 1
 				? `Collaborative synthesis is mandatory. In your completion summary, which AgentKernel commits as this planning Note's body, cite every predecessor result by its exact ID and state the material contribution incorporated from each: ${predecessorIds.join(', ')}. Before your final clock check, compare the summary against this entire ID list and revise it if even one ID or its contribution is missing. Return contentOutput: null; citations in proposal frontmatter do not substitute for this synthesis.`
 				: '',

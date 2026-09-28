@@ -4,7 +4,9 @@ import { run } from '../../../src/sandbox/process-runner.ts';
 
 describe('bounded Codex idle recovery', () => {
 	it('leaves time in the same assignment for a single continuation', () => {
-		expect(codexIdleTimeoutMs(180)).toBe(90_000);
+		expect(codexIdleTimeoutMs(120)).toBe(30_000);
+		expect(codexIdleTimeoutMs(180)).toBe(45_000);
+		expect(codexIdleTimeoutMs(180)!).toBeLessThan(codexCloseoutTimeoutMs(180)!);
 		expect(codexIdleTimeoutMs(900)).toBe(90_000);
 		expect(codexIdleTimeoutMs(60)).toBeUndefined();
 	});

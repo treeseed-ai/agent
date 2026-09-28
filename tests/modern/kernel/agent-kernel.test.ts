@@ -306,19 +306,21 @@ describe('AgentKernel', () => {
 		expect(commits).toMatchObject([{ body: result.summary }]);
 	});
 
-	it('requires Architect acting output to extend the exact conventional Architecture book', async () => {
+	it('requires Architect acting output to extend the exact authorized published Book', async () => {
 		const context = assignmentContext();
 		context.assignment.agentClass = 'architect';
 		context.assignment.effectiveProfile.activity = 'acting';
 		context.assignment.effectiveProfile.handler = 'writer';
-		const bookRef = { store: 'treedx' as const, model: 'book', id: 'sdk-architecture', revision: 3, digest,
-			repository: 'treeseed-ai/sdk-library', commit, path: 'books/architecture.mdx' };
+		const bookRef = { store: 'treedx' as const, model: 'book', id: 'sdk-core', revision: 3, digest,
+			repository: 'treeseed-ai/sdk-library', commit, path: 'books/sdk-core.md' };
+		context.assignment.contextRefs.push(bookRef);
+		context.assignment.grant.contentRead.push(bookRef);
 		context.context = [{ ref: bookRef, mediaType: 'text/markdown', digest,
-			value: { frontmatter: { schemaVersion: 'treeseed.book/v3', id: bookRef.id, projectId: 'project-1', title: 'SDK Architecture' } } }];
+			value: { frontmatter: { schemaVersion: 'treeseed.book/v2', id: bookRef.id, status: 'published', title: 'SDK Core' } } }];
 		context.assignment.grant.contentWrite = [{ ...reportTarget, model: 'knowledge', id: 'sdk.architecture.authority' }];
 		const commits: unknown[] = [], boundary = runtime(commits);
-		let prompt = '';
-		boundary.invokeModel = async (request) => { prompt = request.prompt; return ({ text: 'Extended the governed architecture.', usage: { elapsedSeconds: 1 },
+		let prompt = '', calls = 0;
+		boundary.invokeModel = async (request) => { calls += 1; prompt = request.prompt; return ({ text: 'Extended the governed architecture.', usage: { elapsedSeconds: 1 },
 			timingAwareness: { schemaVersion: 'treeseed.assignment-timing-awareness/v1', requiredChecks: 2, completedChecks: 2,
 				firstTool: 'treedx:treeseed_time_status', firstToolSucceeded: true, lastTool: 'treedx:treeseed_time_status',
 				lastToolSucceeded: true, firstToolCompliant: true, finalToolCompliant: true },
@@ -332,5 +334,10 @@ describe('AgentKernel', () => {
 		expect(prompt).toContain('exact authorized Book reference');
 		context.context = [];
 		await expect(new WriterHandler().run(context, boundary)).rejects.toThrow('architect_architecture_book_context_required');
+		expect(calls).toBe(1);
+		context.context = [{ ref: bookRef, mediaType: 'text/markdown', digest,
+			value: { frontmatter: { schemaVersion: 'treeseed.book/v2', id: bookRef.id, status: 'draft', title: 'SDK Core' } } }];
+		await expect(new WriterHandler().run(context, boundary)).rejects.toThrow('architect_architecture_book_context_required');
+		expect(calls).toBe(1);
 	});
 });

@@ -38,6 +38,21 @@ describe('canonical assignment context materialization', () => {
 			path: 'objectives/core.mdx', requestedPath: 'objectives/core', content: '# Core',
 		} });
 	});
+	it('materializes the published SDK Book from exact granted TreeDX custody', async () => {
+		const commit = 'e'.repeat(40);
+		const reference = { store: 'treedx', model: 'book', id: 'sdk-core', repository: 'sdk-library', commit, path: 'books/sdk-core.md' };
+		const frontmatter = { schemaVersion: 'treeseed.book/v2', id: 'sdk-core', title: 'SDK Core', status: 'published' };
+		const invoke = vi.fn(async () => ({ result: { result: { resolvedRef: commit, files: [{
+			path: reference.path, requestedPath: reference.path, content: '# SDK Core', frontmatter,
+		}] } } }));
+		const context = await materializeAssignmentContext({ attempt: {
+			contextRefs: [reference], grant: { contentRead: [reference] }, effectiveProfile: { activity: 'acting' },
+		} as never, predecessorResults: [], treeDx: { projectId: 'sdk-project', repositoryId: 'sdk-library', workspaceId: null, invoke } as never });
+		expect(context.context[0]).toMatchObject({ ref: reference, value: { frontmatter, content: '# SDK Core' } });
+		expect(invoke).toHaveBeenCalledWith('treedx.repositories.files.read', expect.objectContaining({
+			body: expect.objectContaining({ ref: commit, paths: ['books/sdk-core.md'] }),
+		}));
+	});
 	it.each(['team', 'workday', 'digest', 'activity'])('rejects inline Reporter context with incorrect %s authority', async failure => {
 		const ref = { store: 'postgresql', model: 'workday', id: 'workday', revision: 1, digest: `sha256:${'a'.repeat(64)}` };
 		const value = { teamId: failure === 'team' ? 'another' : 'team', workdayId: failure === 'workday' ? 'another' : 'workday' };

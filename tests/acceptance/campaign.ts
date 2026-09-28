@@ -27,9 +27,11 @@ export function sdkProposalText(spec: string): SdkProposalContract {
   assert.ok(book, 'ACCEPTANCE_CAMPAIGN_SPEC: Exact pinned SDK Architecture Book required');
   const bookTitle = /Its published title is ([^.]+)\./u.exec(bookField)?.[1];
   assert.ok(bookTitle, 'ACCEPTANCE_CAMPAIGN_SPEC: Published Book title required');
-  const deliverables = section.split('Each Actor is reviewed against its own deliverable: ')[1]
-    ?.split(/\. The (?:proposal-wide contract|integrated-candidate) gates/u)[0];
-  assert.ok(deliverables, 'ACCEPTANCE_CAMPAIGN_SPEC: Actor-specific review boundary required');
+  const deliverableSection = section.split('Each Actor is reviewed against its own deliverable: ')[1]
+    ?.split(/\. The (?:proposal-wide contract|integrated-candidate) gates/u);
+  assert.ok(deliverableSection?.length === 2 && deliverableSection[0],
+    'ACCEPTANCE_CAMPAIGN_SPEC: Complete Actor-specific review boundary required');
+  const deliverables = deliverableSection[0];
   const fixedGraph = spec.split('### Fixed work-item graph\n')[1]?.split('\n### ')[0];
   assert.ok(fixedGraph?.includes('`dependsOn` is reserved for proposal-specific domain dependencies'),
     'ACCEPTANCE_CAMPAIGN_SPEC: Standing workflow dependencies must stay outside the proposal');

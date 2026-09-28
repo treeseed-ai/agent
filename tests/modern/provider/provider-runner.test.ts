@@ -107,13 +107,15 @@ const treeDx = { projectId: 'project', handleId: 'handle-1', repositoryId: null,
 			executor: { id: 'codex', observe: async () => ({ available: true }), execute: async request => {
 				await request.beginExecution?.();
 				executionSignal = request.signal;
-				throw Object.assign(new Error('assignment_timeout'), { code: 'assignment_timeout' });
+				throw Object.assign(new Error('assignment_timeout'), { code: 'assignment_timeout',
+					outputs: { teardown: { verified: true, completedAt: '2026-09-13T12:03:00.000Z' } } });
 			} } });
 		expect(executionSignal?.aborted).toBe(true);
 		expect(api.returnAssignment).not.toHaveBeenCalled();
 		expect(api.failAssignment).toHaveBeenCalledWith('assignment-1', expect.objectContaining({
 			code: 'assignment_timeout', retryable: false, activeSeconds: 1,
 			usage: expect.objectContaining({ activeSeconds: expect.any(Number), elapsedSeconds: expect.any(Number) }),
+			output: { teardown: { verified: true, completedAt: '2026-09-13T12:03:00.000Z' } },
 		}));
 	});
 

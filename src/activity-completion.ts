@@ -76,7 +76,7 @@ export const maximumVerificationCommands = 8;
 export const maximumVerificationCommandLength = 4096;
 
 export function activityCompletionOutputSchema(frontmatterSchema?: Record<string, unknown>, allowVerification = true,
-	outputVariants?: Array<{ model: string; frontmatter: Record<string, unknown> }>) { return {
+	outputVariants?: Array<{ model: string; frontmatter: Record<string, unknown> }>, reviewing = false) { return {
 	type: 'object',
 	additionalProperties: false,
 	required: ['schemaVersion', 'summary', 'verification', 'reviewDisposition', 'contentOutput'],
@@ -99,7 +99,9 @@ export function activityCompletionOutputSchema(frontmatterSchema?: Record<string
 				},
 			},
 		},
-		reviewDisposition: { type: ['string', 'null'], enum: ['approved', 'rejected', 'revision-required', null] },
+		reviewDisposition: reviewing
+			? { type: 'string', enum: ['approved', 'rejected', 'revision-required'] }
+			: { type: 'null' },
 		// Exact output variants are supplied only for acting TreeDX Writer assignments.
 		// Requiring one here prevents the provider from satisfying the transport schema
 		// with null and failing later at the AgentKernel commit boundary.

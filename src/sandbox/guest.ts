@@ -340,7 +340,8 @@ export async function runSandboxGuest() {
 		|| (sourceMetadata ? requiresActivityCompletion(sourceMetadata.mode) : false);
 	const completionSchemaPath = resolve(codexHome, 'activity-completion.schema.json');
 	if (structuredCompletion) {
-		await writeFile(completionSchemaPath, `${JSON.stringify(activityCompletionOutputSchema(completionFrontmatterSchema(context), allowVerification, completionOutputTargetVariants(context)))}\n`, { mode: 0o600 });
+		await writeFile(completionSchemaPath, `${JSON.stringify(activityCompletionOutputSchema(completionFrontmatterSchema(context), allowVerification,
+			completionOutputTargetVariants(context), canonicalActivity === 'reviewing'))}\n`, { mode: 0o600 });
 	}
 	// Session state stays inside this assignment's disposable Kata guest so a
 	// missing final clock check can be corrected in the same Codex conversation.

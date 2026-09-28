@@ -14,8 +14,15 @@ export function read(args: string[], team: string, library = false): Row {
 			encoding: 'utf8', timeout: 120_000, maxBuffer: 32 * 1024 * 1024,
 		});
 	} catch (failure) {
-		const code = row(failure).code;
-		throw new Error(`ACCEPTANCE_CLI_COMMAND: ${typeof code === 'string' && /^[A-Z0-9_]+$/u.test(code) ? code : 'COMMAND_FAILED'}`);
+		const failed = row(failure);
+		let code = failed.code;
+		const output = typeof failed.stdout === 'string' ? failed.stdout : Buffer.isBuffer(failed.stdout) ? failed.stdout.toString('utf8') : '';
+		try {
+			const start = output.search(/^\{/mu);
+			if (start >= 0) code = row(row(JSON.parse(output.slice(start))).error).code ?? code;
+		} catch { /* Preserve only the safe error class; never surface command output. */ }
+		const safeCode = typeof code === 'string' && /^[a-zA-Z][a-zA-Z0-9_-]{0,79}$/u.test(code) ? code : 'COMMAND_FAILED';
+		throw new Error(`ACCEPTANCE_CLI_COMMAND: ${args.slice(0, 2).join('.')} ${safeCode}`);
 	}
 	const start = output.search(/^\{/mu);
 	assert.ok(start >= 0, 'CLI omitted its JSON result envelope');

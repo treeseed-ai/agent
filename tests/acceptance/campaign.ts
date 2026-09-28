@@ -94,6 +94,8 @@ export function requirePlanningWindow(durationSeconds: number, planningPercent: 
 }
 
 export async function monitorCampaign(input: {
+	admitDiscussion?: () => void;
+	admittedSimulation?: boolean;
 	read: () => { status: string; mode: string; planningEndsAt: number; endsAt: number;
 		failedBoundary?: 'assignment_failed' | 'assignment_returned' | 'assignment_expired' |
 			'graph_failed' | 'graph_returned' | 'graph_expired' };
@@ -101,8 +103,9 @@ export async function monitorCampaign(input: {
 	verify: () => void; stop: () => void;
 }): Promise<void> {
 	let planningVerified = false;
-	let observedStatus = '', observedMode = '';
+	let observedStatus = input.admittedSimulation ? 'running' : '', observedMode = input.admittedSimulation ? 'simulation' : '';
 	try {
+	input.admitDiscussion?.();
 	for (;;) {
 		const run = input.read();
 		observedStatus = run.status; observedMode = run.mode;

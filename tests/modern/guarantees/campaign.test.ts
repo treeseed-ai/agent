@@ -33,6 +33,16 @@ describe('automated campaign control (fixtures are not golden acceptance)', () =
 			expect(stop).toHaveBeenCalledTimes(mode === 'simulation' ? 1 : 0);
 		}
 	});
+	it('stops the admitted simulation if discussion admission or the first read fails', async () => {
+		for (const failureAt of ['discussion', 'read']) {
+			const stop = vi.fn();
+			await expect(monitorCampaign({ admittedSimulation: true,
+				admitDiscussion: () => { if (failureAt === 'discussion') throw new Error('transport'); },
+				read: () => { throw new Error('transport'); }, now: () => 1, wait: vi.fn(),
+				collaboration: vi.fn(), governanceBlockers: () => 0, verify: vi.fn(), stop })).rejects.toThrow('transport');
+			expect(stop).toHaveBeenCalledOnce();
+		}
+	});
 	it('stops an overdue running simulation instead of waiting forever', async () => {
 		const stop = vi.fn();
 		await expect(monitorCampaign({ read: () => ({ status: 'running', mode: 'simulation', planningEndsAt: 0, endsAt: 10 }),

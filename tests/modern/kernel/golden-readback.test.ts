@@ -64,10 +64,14 @@ describe('golden read-back assertion regressions (fixtures are not live acceptan
 	});
 	it('bounds CLI infrastructure waits and retains only safe failure classifications', () => {
 		state.failure = Object.assign(new Error('secret-must-not-leak'), { code: 'ETIMEDOUT' });
-		expect(() => read(['workdays', 'show'], 'treeseed')).toThrow('ACCEPTANCE_CLI_COMMAND: ETIMEDOUT');
+		expect(() => read(['workdays', 'show'], 'treeseed')).toThrow('ACCEPTANCE_CLI_COMMAND: workdays.show ETIMEDOUT');
 		expect(state.timeout).toBe(120000);
 		state.failure = new Error('secret-must-not-leak');
-		expect(() => read(['workdays', 'show'], 'treeseed')).toThrow('ACCEPTANCE_CLI_COMMAND: COMMAND_FAILED');
+		expect(() => read(['workdays', 'show'], 'treeseed')).toThrow('ACCEPTANCE_CLI_COMMAND: workdays.show COMMAND_FAILED');
+		state.failure = Object.assign(new Error('secret-must-not-leak'), {
+			stdout: JSON.stringify({ ok: false, error: { code: 'identity_authentication_failed', message: 'secret-must-not-leak' } }),
+		});
+		expect(() => read(['workdays', 'show'], 'treeseed')).toThrow('ACCEPTANCE_CLI_COMMAND: workdays.show identity_authentication_failed');
 	});
 	it('uses the proposal command contract without a team option', () => {
 		state.replies.set('proposals show', { readiness: { unresolvedBlockerCount: 0 } });

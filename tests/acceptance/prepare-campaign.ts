@@ -28,6 +28,21 @@ export function verifySdkArchitectureBook(readback: Row, reference: Row): void {
 		'ACCEPTANCE_CAMPAIGN_BOOK: Book content digest mismatch');
 }
 
+export function verifySdkPublishedChatProfiles(agents: Row[], publishedHead: string): void {
+	assert.match(publishedHead, /^[a-f0-9]{40}$/u, 'ACCEPTANCE_CHAT_PROFILE_PUBLISHED: Exact SDK library head required');
+	assert.ok(Array.isArray(agents), 'ACCEPTANCE_CHAT_PROFILE_PUBLISHED: SDK agent inventory required');
+	const roles = ['architect', 'researcher', 'tester', 'engineer', 'technical-writer', 'releaser', 'reviewer', 'reporter'];
+	for (const role of roles) {
+		const agent = agents.find(item => item.agentSlug === role);
+		assert.equal(agent?.definitionRevision, publishedHead,
+			`ACCEPTANCE_CHAT_PROFILE_PUBLISHED: ${role} definition is not the published SDK library head`);
+		const definition = agent?.definition as { activityProfiles?: { chat?: { prompt?: { system?: string } } } } | undefined;
+		const prompt = String(definition?.activityProfiles?.chat?.prompt?.system ?? '');
+		assert.ok(prompt.includes('For coordination-only messages') && prompt.includes('Inspect project files only when'),
+			`ACCEPTANCE_CHAT_PROFILE_TASK_BOUNDARY: ${role} chat must distinguish coordination from source questions`);
+	}
+}
+
 /** Preparation is part of the same native test, never a separate execution authority. */
 export function prepareSdkCampaign(draftPath: string, freezePath: string, team: string): void {
 	assert.ok(!existsSync(freezePath), 'ACCEPTANCE_FREEZE_EXISTS: Never overwrite a campaign freeze');
@@ -64,6 +79,10 @@ export function prepareSdkCampaign(draftPath: string, freezePath: string, team: 
 		.find(item => item.id === 'architecture-contract')?.contextRefs?.find((ref: Row) => ref.model === 'book') as Row | undefined;
 	assert.ok(bookRef?.id && bookRef.path && bookRef.commit, 'ACCEPTANCE_CAMPAIGN_BOOK: Exact Architect Book reference required');
 	verifySdkArchitectureBook(bookReadback, { ...bookRef, projectId: draft.projectId, title: canonical.architectureBook.title });
+	const publishedLibraryHead = execFileSync('gh', ['api', 'repos/treeseed-ai/sdk-library/branches/staging', '--jq', '.commit.sha'],
+		{ encoding: 'utf8', timeout: 30_000 }).trim();
+	const agentProfiles = read(['agents', 'list', '--project', 'sdk', '--server', 'local'], team, true);
+	verifySdkPublishedChatProfiles(agentProfiles.agents as Row[], publishedLibraryHead);
 	const artifacts = mkdtempSync(join(tmpdir(), 'treeseed-golden-'));
 	const inputPath = join(artifacts, 'proposal.json');
 	writeFileSync(inputPath, JSON.stringify(draft));
@@ -87,6 +106,7 @@ export function prepareSdkCampaign(draftPath: string, freezePath: string, team: 
 	};
 	capture('proposal-input.json', readFileSync(inputPath, 'utf8'));
 	capture('architecture-book.json', JSON.stringify(bookReadback));
+	capture('sdk-agent-profiles.json', JSON.stringify({ publishedLibraryHead, agents: agentProfiles.agents }));
 	capture('codex-version.json', JSON.stringify({ pinned: pinnedCodex, installed: installedCodex }));
 	const runtime = read(['dev', 'status'], team, true);
 	const providers = (read(['providers', 'list'], team).items as Row[]).filter(item => item.status === 'approved');

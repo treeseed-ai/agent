@@ -51,6 +51,7 @@ test('Frozen SDK campaign drives planning acting review and terminal golden gate
 			endsAt: Date.parse(current.parameters.appliedPlan.endsAt) };
 	}, now: Date.now, wait: () => new Promise(resolve => setTimeout(resolve, 30_000)), stop,
 		collaboration: () => verifyGolden('collaboration'),
+		governanceBlockers: () => Number((read(['proposals', 'show', freeze.proposal.id, '--project', body.projects[0]], team).readiness as Row).unresolvedBlockerCount),
 		verify: () => { for (const gate of ['lifecycle', 'graph', 'revision', 'results', 'settlement', 'reporter'] as const) verifyGolden(gate);
 			verifySdkExternalState(freeze); } });
 });

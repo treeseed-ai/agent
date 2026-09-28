@@ -45,7 +45,7 @@ export function requirePlanningWindow(durationSeconds: number, planningPercent: 
 
 export async function monitorCampaign(input: {
 	read: () => { status: string; mode: string; planningEndsAt: number; endsAt: number; failedBoundary?: boolean };
-	now: () => number; wait: () => Promise<void>; collaboration: () => void;
+	now: () => number; wait: () => Promise<void>; collaboration: () => void; governanceBlockers: () => number;
 	verify: () => void; stop: () => void;
 }): Promise<void> {
 	let planningVerified = false;
@@ -66,6 +66,12 @@ export async function monitorCampaign(input: {
 			catch (failure) {
 				if (failure instanceof Error && /^ACCEPTANCE_(CHAT_ROLES|PLANNING_ROLE_TURNS|PLANNING_CYCLES|ESTIMATE_ROLES):/u.test(failure.message)) input.stop();
 				throw failure;
+			}
+			const blockers = input.governanceBlockers();
+			assert.ok(Number.isInteger(blockers) && blockers >= 0,
+				'ACCEPTANCE_CAMPAIGN_GOVERNANCE: Authoritative blocker count required');
+			if (blockers > 0) {
+				input.stop(); assert.fail('ACCEPTANCE_PLAN_REVIEW_REQUIRED: Exact proposal has unresolved review blockers');
 			}
 		}
 		if (input.now() > run.endsAt + 600_000) {

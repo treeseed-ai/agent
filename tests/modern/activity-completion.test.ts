@@ -3,6 +3,11 @@ import { activityCompletionOutputSchema, validateActivityCompletion } from '../.
 import { completionFrontmatterSchema, completionOutputTargetVariants, promptFromContext } from '../../src/sandbox/guest-contract.ts';
 
 describe('activity completion structured-output schema', () => {
+	it('requires a real Reviewer disposition in structured output and null for non-review work', () => {
+		expect(activityCompletionOutputSchema(undefined, true, undefined, true).properties.reviewDisposition)
+			.toEqual({ type: 'string', enum: ['approved', 'rejected', 'revision-required'] });
+		expect(activityCompletionOutputSchema().properties.reviewDisposition).toEqual({ type: 'null' });
+	});
 	it('locks Reviewer output to the assigned proposal instead of predecessor owner estimates', () => {
 		const sourceRef = { model: 'proposal', id: 'proposal', commit: 'a'.repeat(40) };
 		const proposal = { id: 'proposal', status: 'discussing', objectiveRefs: [{ store: 'treedx', model: 'objective', id: 'core',

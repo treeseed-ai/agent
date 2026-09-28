@@ -84,6 +84,12 @@ workflow:
   - id: reviewer
     action: { verifier: agent.golden.reviewer }
     expect: { status: passed }
+  - id: reviewer-disposition-schema
+    action: { verifier: agent.golden.reviewer-disposition-schema }
+    expect: { status: passed }
+  - id: reviewer-disposition-prompt
+    action: { verifier: agent.golden.reviewer-disposition-prompt }
+    expect: { status: passed }
   - id: clock
     action: { verifier: agent.golden.clock }
     expect: { status: passed }

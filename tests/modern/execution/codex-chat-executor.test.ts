@@ -297,6 +297,7 @@ describe('Codex chat executor', () => {
 				prompt: { system: 'Review the proposal.' } },
 		}, context: [], predecessorResults: [] } });
 		expect(prompt).toContain('This is pre-decision proposal review');
+		expect(prompt).toContain('reviewDisposition to exactly approved, revision-required, or rejected; never null');
 		expect(prompt).toContain('Generic role ordering is owned by the pinned agent profiles and generated execution graph');
 		expect(prompt).toContain('Researcher -> its generated Reviewer is an independent question/research branch');
 		expect(prompt).toContain('Never require Researcher output as a prerequisite for Architect, Tester, or the execution branch');

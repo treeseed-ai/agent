@@ -192,6 +192,16 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/kernel/provider-kernel-review.test.ts
     testName: "commits a structured Reviewer disposition through the kernel-owned TreeDX path"
+  agent.golden.reviewer-disposition-schema:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/activity-completion.test.ts
+    testName: "requires a real Reviewer disposition in structured output and null for non-review work"
+  agent.golden.reviewer-disposition-prompt:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/codex-chat-executor.test.ts
+    testName: "distinguishes a TreeDX proposal revision from the attached Git source during proposal review"
   agent.golden.clock:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

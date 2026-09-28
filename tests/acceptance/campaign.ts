@@ -85,34 +85,43 @@ export async function monitorCampaign(input: {
 	verify: () => void; stop: () => void;
 }): Promise<void> {
 	let planningVerified = false;
+	let observedStatus = '', observedMode = '';
+	try {
 	for (;;) {
 		const run = input.read();
+		observedStatus = run.status; observedMode = run.mode;
 		assert.equal(run.mode, 'simulation', 'ACCEPTANCE_CAMPAIGN_MODE: No production campaign mutation');
 		if (run.status === 'completed') {
 			input.collaboration(); input.verify(); return;
 		}
 		assert.equal(run.status, 'running', 'ACCEPTANCE_CAMPAIGN_TERMINAL: Unsuccessful terminal campaign');
 		if (run.failedBoundary) {
-			input.stop(); assert.fail('ACCEPTANCE_CAMPAIGN_EXECUTION: Failed attempt or graph boundary; no further metered retries');
+			assert.fail('ACCEPTANCE_CAMPAIGN_EXECUTION: Failed attempt or graph boundary; no further metered retries');
 		}
 		assert.ok(Number.isFinite(run.planningEndsAt) && Number.isFinite(run.endsAt),
 			'ACCEPTANCE_CAMPAIGN_TIME: Authoritative deadlines required');
 		if (!planningVerified && input.now() >= run.planningEndsAt) {
-			try { input.collaboration(); planningVerified = true; }
-			catch (failure) {
-				if (failure instanceof Error && /^ACCEPTANCE_(CHAT_ROLES|PLANNING_ROLE_TURNS|PLANNING_CYCLES|ESTIMATE_ROLES):/u.test(failure.message)) input.stop();
-				throw failure;
-			}
+			input.collaboration(); planningVerified = true;
 			const blockers = input.governanceBlockers();
 			assert.ok(Number.isInteger(blockers) && blockers >= 0,
 				'ACCEPTANCE_CAMPAIGN_GOVERNANCE: Authoritative blocker count required');
 			if (blockers > 0) {
-				input.stop(); assert.fail('ACCEPTANCE_PLAN_REVIEW_REQUIRED: Exact proposal has unresolved review blockers');
+				assert.fail('ACCEPTANCE_PLAN_REVIEW_REQUIRED: Exact proposal has unresolved review blockers');
 			}
 		}
 		if (input.now() > run.endsAt + 600_000) {
-			input.stop(); assert.fail('ACCEPTANCE_CAMPAIGN_TIMEOUT: Settlement did not complete within bounded closeout');
+			assert.fail('ACCEPTANCE_CAMPAIGN_TIMEOUT: Settlement did not complete within bounded closeout');
 		}
 		await input.wait();
+	}
+	} catch (failure) {
+		// A failed verifier must not strand an otherwise live simulation. Only the
+		// already-observed simulation workday may be stopped; never mutate a run
+		// whose mode was not proven or whose status is already terminal.
+		if (observedStatus === 'running' && observedMode === 'simulation') {
+			try { input.stop(); }
+			catch (stopFailure) { throw new AggregateError([failure, stopFailure], 'ACCEPTANCE_CAMPAIGN_STOP_FAILED: Failed boundary and supported stop both failed'); }
+		}
+		throw failure;
 	}
 }

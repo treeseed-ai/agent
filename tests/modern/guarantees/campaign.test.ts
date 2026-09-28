@@ -25,12 +25,12 @@ describe('automated campaign control (fixtures are not golden acceptance)', () =
 			now: () => 1, wait: vi.fn(), collaboration: () => { throw new Error('ACCEPTANCE_ESTIMATE_ROLES: missing'); }, governanceBlockers: () => 0, verify: vi.fn(), stop })).rejects.toThrow('ACCEPTANCE_ESTIMATE_ROLES');
 		expect(stop).toHaveBeenCalledOnce();
 	});
-	it('does not mutate on transport failures, wrong mode, or unsuccessful terminal status', async () => {
+	it('stops a live simulation on transport failure but never mutates an unverified production run', async () => {
 		for (const mode of ['simulation', 'production']) {
 			const stop = vi.fn();
 			await expect(monitorCampaign({ read: () => ({ status: 'running', mode, planningEndsAt: 0, endsAt: 10 }),
 				now: () => 1, wait: vi.fn(), collaboration: () => { throw new Error('transport'); }, governanceBlockers: () => 0, verify: vi.fn(), stop })).rejects.toThrow();
-			expect(stop).not.toHaveBeenCalled();
+			expect(stop).toHaveBeenCalledTimes(mode === 'simulation' ? 1 : 0);
 		}
 	});
 	it('stops an overdue running simulation instead of waiting forever', async () => {
@@ -51,12 +51,18 @@ describe('automated campaign control (fixtures are not golden acceptance)', () =
 			now: () => 1, wait, collaboration: vi.fn(), governanceBlockers: () => 1, verify, stop })).rejects.toThrow('PLAN_REVIEW_REQUIRED');
 		expect(stop).toHaveBeenCalledOnce(); expect(wait).not.toHaveBeenCalled(); expect(verify).not.toHaveBeenCalled();
 	});
-	it('never stops on a governance read failure or malformed blocker count', async () => {
+	it('stops an observed live simulation when governance read-back fails or is malformed', async () => {
 		for (const governanceBlockers of [() => { throw new Error('transport'); }, () => Number.NaN]) {
 			const stop = vi.fn();
 			await expect(monitorCampaign({ read: () => ({ status: 'running', mode: 'simulation', planningEndsAt: 0, endsAt: 10 }),
 				now: () => 1, wait: vi.fn(), collaboration: vi.fn(), governanceBlockers, verify: vi.fn(), stop })).rejects.toThrow();
-			expect(stop).not.toHaveBeenCalled();
+			expect(stop).toHaveBeenCalledOnce();
 		}
+	});
+	it('retains both errors if the supported stop fails after a boundary failure', async () => {
+		await expect(monitorCampaign({ read: () => ({ status: 'running', mode: 'simulation', planningEndsAt: 0, endsAt: 10 }),
+			now: () => 1, wait: vi.fn(), collaboration: () => { throw new Error('read-back failed'); },
+			governanceBlockers: () => 0, verify: vi.fn(), stop: () => { throw new Error('stop failed'); },
+		})).rejects.toThrow('ACCEPTANCE_CAMPAIGN_STOP_FAILED');
 	});
 });

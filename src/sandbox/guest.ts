@@ -110,8 +110,9 @@ export function codexToolInFlight(events: Record<string, unknown>[]) {
 }
 
 export function codexIdleTimeoutMs(durationSeconds: number) {
-	// Leave enough of the same productive window for a single resumed turn.
-	return durationSeconds >= 120 ? Math.min(90_000, Math.floor(durationSeconds * 500)) : undefined;
+	// A short assignment must not spend half its active window silent before its
+	// one safe continuation. Longer assignments retain the existing 90s ceiling.
+	return durationSeconds >= 120 ? Math.min(90_000, Math.floor(durationSeconds * 250)) : undefined;
 }
 
 export function codexCloseoutTimeoutMs(durationSeconds: number) {

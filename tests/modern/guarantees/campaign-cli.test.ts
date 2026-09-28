@@ -42,4 +42,20 @@ describe('native campaign CLI composition (fixtures are not live acceptance)', (
 		state.freeze.request.body.durationSeconds = 3600; state.read.mockReturnValue({ id: 'invented-shape' });
 		await expect(state.run!()).rejects.toThrow('ACCEPTANCE_CAMPAIGN_ID'); expect(state.read).toHaveBeenCalledOnce();
 	});
+	it('reads proposal governance with project and server, never a team option', async () => {
+		const id = 'workday-aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
+		state.read.mockImplementation((args: string[]) => {
+			if (args[0] === 'workdays' && args[1] === 'start') return { workdayId: id };
+			if (args[0] === 'workdays' && args[1] === 'show') return { run: { id, status: 'running', executionMode: 'simulation',
+				startedAt: new Date(Date.now() - 21 * 60_000).toISOString(),
+				parameters: { durationSeconds: 3600, planningPercent: 100 / 3, appliedPlan: { endsAt: new Date(Date.now() + 60_000).toISOString() } } },
+				scheduling: { assignments: [], nodes: [] } };
+			if (args[0] === 'proposals' && args[1] === 'show') throw new Error('GOVERNANCE_READ_REACHED');
+			return {};
+		});
+		await expect(state.run!()).rejects.toThrow('GOVERNANCE_READ_REACHED');
+		expect(state.read).toHaveBeenCalledWith(
+			['proposals', 'show', 'fresh', '--server', 'local', '--project', '8cbfb810-6da5-4da2-9ae9-cad53101253f'],
+			'treeseed', true);
+	});
 });

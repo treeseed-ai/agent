@@ -1,10 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 type Row = Record<string, any>;
-const state = vi.hoisted(() => ({ cases: new Map<string, () => void>(), replies: new Map<string, Row>(), failure: undefined as Error | undefined, timeout: 0 }));
+const state = vi.hoisted(() => ({ cases: new Map<string, () => void>(), replies: new Map<string, Row>(), failure: undefined as Error | undefined, timeout: 0, args: [] as string[] }));
 vi.mock('node:test', () => ({ default: (name: string, _options: unknown, run: () => void) => state.cases.set(name, run) }));
 vi.mock('node:child_process', () => ({ execFileSync: (_command: string, args: string[], options: { timeout: number }) => {
 	state.timeout = options.timeout;
+	state.args = args;
 	if (state.failure) throw state.failure;
 	const key = args.slice(0, 2).join(' ');
 	const result = state.replies.get(key);
@@ -67,6 +68,12 @@ describe('golden read-back assertion regressions (fixtures are not live acceptan
 		expect(state.timeout).toBe(120000);
 		state.failure = new Error('secret-must-not-leak');
 		expect(() => read(['workdays', 'show'], 'treeseed')).toThrow('ACCEPTANCE_CLI_COMMAND: COMMAND_FAILED');
+	});
+	it('uses the proposal command contract without a team option', () => {
+		state.replies.set('proposals show', { readiness: { unresolvedBlockerCount: 0 } });
+		const result = read(['proposals', 'show', 'proposal-1', '--server', 'local', '--project', 'sdk'], 'treeseed', true);
+		expect(result.readiness).toEqual({ unresolvedBlockerCount: 0 });
+		expect(state.args).toEqual(['proposals', 'show', 'proposal-1', '--server', 'local', '--project', 'sdk', '--json']);
 	});
 	it('keeps seven normal read-back gates separate from stopped-run evidence', () => {
 		expect(state.cases.size).toBe(8);

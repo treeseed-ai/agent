@@ -66,6 +66,21 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/kernel/provider-kernel-executor.test.ts
     testName: drains teardown after timeout without accepting late completion or return
+  agent.golden.codex-idle-interruption:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/sandbox/codex-idle-recovery.test.ts
+    testName: interrupts a silent completed-tool turn before the hard deadline
+  agent.golden.codex-idle-inflight-denial:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/sandbox/codex-idle-recovery.test.ts
+    testName: never interrupts a tool still in flight, and retains the hard deadline
+  agent.golden.codex-idle-no-session-denial:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/sandbox/codex-idle-recovery.test.ts
+    testName: cannot interrupt a silent turn without a resumable session
   agent.golden.live.campaign:
     kind: nodeTestCase
     ownerPackage: "@treeseed/agent"

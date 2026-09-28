@@ -49,10 +49,13 @@ export function requireSdkCampaignSupply(supply: Row, durationSeconds: number,
 	assert.equal(supply.healthy, true, 'ACCEPTANCE_CAMPAIGN_SUPPLY: Provider must be healthy');
 	const day = now.slice(0, 10);
 	const planningSeconds = durationSeconds * planningPercent / 100;
-	const providers = new Map<string, Row>();
-	for (const offer of supply.availability ?? []) for (const provider of offer.executionProviders ?? []) {
-		if (provider.status === 'active') providers.set(String(provider.id), provider);
-	}
+	const latest = (supply.availability ?? []).reduce((current: Row | undefined, offer: Row) =>
+		!current || Date.parse(offer.refreshed_at) > Date.parse(current.refreshed_at) ? offer : current, undefined);
+	assert.ok(latest && Number.isFinite(Date.parse(latest.refreshed_at)),
+		'ACCEPTANCE_CAMPAIGN_SUPPLY: No observed availability snapshot');
+	const providers = new Map<string, Row>((latest.executionProviders ?? [])
+		.filter((provider: Row) => provider.status === 'active')
+		.map((provider: Row) => [String(provider.id), provider]));
 	assert.ok(providers.size > 0, 'ACCEPTANCE_CAMPAIGN_SUPPLY: No active execution provider');
 	for (const [id, provider] of providers) {
 		const limits = provider.nativeLimits;

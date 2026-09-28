@@ -24,6 +24,9 @@ workflow:
   - id: closeout-interruption
     action: { verifier: agent.golden.codex-closeout-interruption }
     expect: { status: passed }
+  - id: estimate-closeout-reserve
+    action: { verifier: agent.golden.codex-estimate-closeout-reserve }
+    expect: { status: passed }
   - id: closeout-inflight
     action: { verifier: agent.golden.codex-closeout-inflight }
     expect: { status: passed }

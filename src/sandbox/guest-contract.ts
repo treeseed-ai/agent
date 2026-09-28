@@ -30,10 +30,15 @@ export function codexIdleTimeoutMs(durationSeconds: number) {
 	return durationSeconds >= 120 ? Math.min(90_000, Math.floor(durationSeconds * 250)) : undefined;
 }
 
-export function codexCloseoutTimeoutMs(durationSeconds: number) {
+export function codexCloseoutTimeoutMs(durationSeconds: number, activity: 'chat' | 'estimating') {
 	// The same allocator-issued window must still contain the final clock check,
-	// response and custody closeout. This is an execution guard, not a new budget.
-	return durationSeconds >= 90 ? durationSeconds * 1_000 - 45_000 : undefined;
+	// response and custody closeout. An estimate has a structured proposal patch
+	// to return, so reserve up to 90s after bounded inspection. This guard does
+	// not extend the allocator-issued duration or change provider accounting.
+	if (durationSeconds < 90) return undefined;
+	const reserveSeconds = activity === 'estimating'
+		? Math.min(90, Math.max(45, durationSeconds - 90)) : 45;
+	return (durationSeconds - reserveSeconds) * 1_000;
 }
 
 export function codexResumeIdleTimeoutMs(remainingMs: number) {

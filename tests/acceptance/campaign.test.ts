@@ -44,8 +44,13 @@ test('Frozen SDK campaign drives planning acting review and terminal golden gate
 		const current = observed.run as Row;
 		assert.equal(current.id, workdayId, 'ACCEPTANCE_CAMPAIGN_ID: Read-back changed identity');
 		const scheduling = observed.scheduling as Row;
-		const failedBoundary = [...(scheduling?.assignments ?? []), ...(scheduling?.nodes ?? [])]
-			.some((item: Row) => ['failed', 'returned', 'expired'].includes(item.status) && item.count > 0);
+		const failed = (items: Row[], kind: 'assignment' | 'graph') => {
+			for (const status of ['failed', 'returned', 'expired'] as const) {
+				if (items.some((item: Row) => item.status === status && item.count > 0)) return `${kind}_${status}` as const;
+			}
+			return undefined;
+		};
+		const failedBoundary = failed(scheduling?.assignments ?? [], 'assignment') ?? failed(scheduling?.nodes ?? [], 'graph');
 		return { status: current.status, mode: current.executionMode, failedBoundary,
 			planningEndsAt: Date.parse(current.startedAt) + current.parameters.durationSeconds * current.parameters.planningPercent * 10,
 			endsAt: Date.parse(current.parameters.appliedPlan.endsAt) };

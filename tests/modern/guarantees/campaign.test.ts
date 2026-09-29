@@ -28,6 +28,13 @@ describe('automated campaign control (fixtures are not golden acceptance)', () =
 			now: () => tick, wait: async () => { tick += 1; }, collaboration, verify, stop });
 		expect(collaboration).toHaveBeenCalledTimes(3); expect(verify).toHaveBeenCalledOnce(); expect(stop).not.toHaveBeenCalled();
 	});
+	it('checks ready collaboration during the initial planning window', async () => {
+		let tick = 1;
+		const collaboration = vi.fn(), verify = vi.fn(), stop = vi.fn();
+		await monitorCampaign({ read: () => ({ status: tick < 3 ? 'running' : 'completed', mode: 'simulation', planningEndsAt: 1200, endsAt: 3600 }),
+			now: () => tick, wait: async () => { tick += 1; }, collaboration, verify, stop });
+		expect(collaboration).toHaveBeenCalledOnce(); expect(verify).toHaveBeenCalledOnce(); expect(stop).not.toHaveBeenCalled();
+	});
 	it('rejects incomplete collaboration at terminal closeout', async () => {
 		const stop = vi.fn();
 		await expect(monitorCampaign({ read: () => ({ status: 'completed', mode: 'simulation', planningEndsAt: 0, endsAt: 10 }),

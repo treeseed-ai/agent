@@ -138,7 +138,7 @@ export async function monitorCampaign(input: {
 		}
 		assert.ok(Number.isFinite(run.planningEndsAt) && Number.isFinite(run.endsAt),
 			'ACCEPTANCE_CAMPAIGN_TIME: Authoritative deadlines required');
-		if (!planningVerified && input.now() >= run.planningEndsAt) {
+		if (!planningVerified) {
 			try { input.collaboration(); planningVerified = true; }
 			catch (failure) {
 				// The initial planning percentage is a minimum, not a deadline

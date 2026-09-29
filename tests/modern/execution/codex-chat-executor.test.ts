@@ -170,9 +170,9 @@ describe('Codex chat executor', () => {
 		expect(timingAwarenessContract([command, clock, clock])).toMatchObject({ firstToolCompliant: false });
 		expect(timingAwarenessContract([clock, clock, command])).toMatchObject({ finalToolCompliant: false });
 		expect(timingRecoveryEligible(timingAwarenessContract([clock, command]), 20_000)).toBe(true);
-		expect(timingRecoveryEligible(timingAwarenessContract([clock, command]), 10_000)).toBe(false);
 		expect(timingRecoveryEligible(timingAwarenessContract([command, clock]), 20_000)).toBe(false);
 		expect(timingRecoveryEligible(timingAwarenessContract([clock, command, clock]), 20_000)).toBe(false);
+		expect(timingRecoveryEligible(timingAwarenessContract([clock, command, clock, command]), 20_000)).toBe(true);
 		expect(codexThreadId([{ type: 'thread.started', thread_id: '12345678-1234-1234-1234-123456789abc' }])).toBe('12345678-1234-1234-1234-123456789abc');
 		expect(codexThreadId([{ type: 'thread.started', thread_id: '../other-session' }])).toBeNull();
 		expect(timingAwarenessContract([

@@ -270,7 +270,7 @@ export async function runMultiTeamProviderRunners(
 				requestedSeconds: attempt.limits.maximumSeconds,
 				accounting: { modelConfigurationId: limits.modelConfigurationId, capabilityId: attempt.provider.executionCapabilityId,
 					dailyActiveSecondsLimit: limits.dailyActiveSecondsLimit, capabilityDailyActiveSecondsLimit: capabilityLimit.dailyActiveSecondsLimit,
-					minimumAssignmentSeconds: capabilityLimit.minimumAssignmentSeconds, maximumAssignmentSeconds: capabilityLimit.maximumAssignmentSeconds },
+					maximumAssignmentSeconds: capabilityLimit.maximumAssignmentSeconds },
 				dispatchEnvelope: leased,
 				executionProviderLimit: { maxConcurrentRunners: adapter.maxConcurrentWorkers },
 				laneLimit: { maxConcurrentRunners: loaded.manifest.lanes.find(lane => lane.id === providerLaneId)?.maxConcurrentWorkers },

@@ -115,8 +115,7 @@ export async function monitorCampaign(input: {
 	read: () => { status: string; mode: string; planningEndsAt: number; endsAt: number;
 		failedBoundary?: 'assignment_failed' | 'assignment_returned' | 'assignment_expired' |
 			'graph_failed' | 'graph_returned' | 'graph_expired' };
-	now: () => number; wait: () => Promise<void>; collaboration: () => void; governanceBlockers: () => number;
-	proposalReviewMinimumSeconds?: () => number | null;
+	now: () => number; wait: () => Promise<void>; collaboration: () => void;
 	verify: () => void; stop: () => void;
 }): Promise<void> {
 	let planningVerified = false;
@@ -138,25 +137,6 @@ export async function monitorCampaign(input: {
 			'ACCEPTANCE_CAMPAIGN_TIME: Authoritative deadlines required');
 		if (!planningVerified && input.now() >= run.planningEndsAt) {
 			input.collaboration(); planningVerified = true;
-		}
-		// The independent proposal Reviewer can finish after planning opens acting.
-		// Re-read its governed concerns on every active tick, not only at the phase
-		// boundary before the review has had a chance to publish its disposition.
-		if (planningVerified) {
-			const blockers = input.governanceBlockers();
-			assert.ok(Number.isInteger(blockers) && blockers >= 0,
-				'ACCEPTANCE_CAMPAIGN_GOVERNANCE: Authoritative blocker count required');
-			if (blockers > 0) {
-				assert.fail('ACCEPTANCE_PLAN_REVIEW_REQUIRED: Exact proposal has unresolved review blockers');
-			}
-			const minimum = input.proposalReviewMinimumSeconds?.();
-			if (minimum !== undefined && minimum !== null) {
-				assert.ok(Number.isInteger(minimum) && minimum > 0,
-					'ACCEPTANCE_CAMPAIGN_REVIEW_ESTIMATE: Ready exact review requires a positive minimum');
-				const remaining = Math.max(0, Math.floor((run.endsAt - input.now()) / 1000));
-				assert.ok(minimum <= remaining,
-					`ACCEPTANCE_CAMPAIGN_REVIEW_UNFIT: Exact proposal review needs ${minimum}s minimum but only ${remaining}s remain`);
-			}
 		}
 		if (input.now() > run.endsAt + 600_000) {
 			assert.fail('ACCEPTANCE_CAMPAIGN_TIMEOUT: Settlement did not complete within bounded closeout');

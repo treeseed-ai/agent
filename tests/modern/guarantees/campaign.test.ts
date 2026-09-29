@@ -16,20 +16,20 @@ describe('automated campaign control (fixtures are not golden acceptance)', () =
 		let tick = 0;
 		const collaboration = vi.fn(), verify = vi.fn(), stop = vi.fn();
 		await monitorCampaign({ read: () => ({ status: tick < 3 ? 'running' : 'completed', mode: 'simulation', planningEndsAt: 1, endsAt: 10 }),
-			now: () => tick, wait: async () => { tick += 1; }, collaboration, governanceBlockers: () => 0, verify, stop });
+			now: () => tick, wait: async () => { tick += 1; }, collaboration, verify, stop });
 		expect(collaboration).toHaveBeenCalledTimes(2); expect(verify).toHaveBeenCalledOnce(); expect(stop).not.toHaveBeenCalled();
 	});
 	it('stops only a known failed planning boundary, never passing it', async () => {
 		const stop = vi.fn();
 		await expect(monitorCampaign({ read: () => ({ status: 'running', mode: 'simulation', planningEndsAt: 0, endsAt: 10 }),
-			now: () => 1, wait: vi.fn(), collaboration: () => { throw new Error('ACCEPTANCE_ESTIMATE_ROLES: missing'); }, governanceBlockers: () => 0, verify: vi.fn(), stop })).rejects.toThrow('ACCEPTANCE_ESTIMATE_ROLES');
+			now: () => 1, wait: vi.fn(), collaboration: () => { throw new Error('ACCEPTANCE_ESTIMATE_ROLES: missing'); }, verify: vi.fn(), stop })).rejects.toThrow('ACCEPTANCE_ESTIMATE_ROLES');
 		expect(stop).toHaveBeenCalledOnce();
 	});
 	it('stops a live simulation on transport failure but never mutates an unverified production run', async () => {
 		for (const mode of ['simulation', 'production']) {
 			const stop = vi.fn();
 			await expect(monitorCampaign({ read: () => ({ status: 'running', mode, planningEndsAt: 0, endsAt: 10 }),
-				now: () => 1, wait: vi.fn(), collaboration: () => { throw new Error('transport'); }, governanceBlockers: () => 0, verify: vi.fn(), stop })).rejects.toThrow();
+				now: () => 1, wait: vi.fn(), collaboration: () => { throw new Error('transport'); }, verify: vi.fn(), stop })).rejects.toThrow();
 			expect(stop).toHaveBeenCalledTimes(mode === 'simulation' ? 1 : 0);
 		}
 	});
@@ -39,85 +39,42 @@ describe('automated campaign control (fixtures are not golden acceptance)', () =
 			await expect(monitorCampaign({ admittedSimulation: true,
 				admitDiscussion: () => { if (failureAt === 'discussion') throw new Error('transport'); },
 				read: () => { throw new Error('transport'); }, now: () => 1, wait: vi.fn(),
-				collaboration: vi.fn(), governanceBlockers: () => 0, verify: vi.fn(), stop })).rejects.toThrow('transport');
+				collaboration: vi.fn(), verify: vi.fn(), stop })).rejects.toThrow('transport');
 			expect(stop).toHaveBeenCalledOnce();
 		}
 	});
 	it('stops an overdue running simulation instead of waiting forever', async () => {
 		const stop = vi.fn();
 		await expect(monitorCampaign({ read: () => ({ status: 'running', mode: 'simulation', planningEndsAt: 0, endsAt: 10 }),
-			now: () => 600011, wait: vi.fn(), collaboration: vi.fn(), governanceBlockers: () => 0, verify: vi.fn(), stop })).rejects.toThrow('ACCEPTANCE_CAMPAIGN_TIMEOUT');
+			now: () => 600011, wait: vi.fn(), collaboration: vi.fn(), verify: vi.fn(), stop })).rejects.toThrow('ACCEPTANCE_CAMPAIGN_TIMEOUT');
 		expect(stop).toHaveBeenCalledOnce();
 	});
 	it('stops a failed acting boundary immediately without consuming more attempts', async () => {
 		const stop = vi.fn(), wait = vi.fn();
 		await expect(monitorCampaign({ read: () => ({ status: 'running', mode: 'simulation', failedBoundary: 'assignment_failed', planningEndsAt: 0, endsAt: 10 }),
-			now: () => 1, wait, collaboration: vi.fn(), governanceBlockers: () => 0, verify: vi.fn(), stop })).rejects.toThrow('ACCEPTANCE_CAMPAIGN_ASSIGNMENT_FAILED');
+			now: () => 1, wait, collaboration: vi.fn(), verify: vi.fn(), stop })).rejects.toThrow('ACCEPTANCE_CAMPAIGN_ASSIGNMENT_FAILED');
 		expect(stop).toHaveBeenCalledOnce(); expect(wait).not.toHaveBeenCalled();
 	});
 	it('classifies graph and assignment terminal boundaries without storing unsafe details', async () => {
 		for (const boundary of ['assignment_returned', 'assignment_expired', 'graph_failed', 'graph_returned', 'graph_expired'] as const) {
 			const stop = vi.fn();
 			await expect(monitorCampaign({ read: () => ({ status: 'running', mode: 'simulation', failedBoundary: boundary, planningEndsAt: 0, endsAt: 10 }),
-				now: () => 1, wait: vi.fn(), collaboration: vi.fn(), governanceBlockers: () => 0, verify: vi.fn(), stop }))
+				now: () => 1, wait: vi.fn(), collaboration: vi.fn(), verify: vi.fn(), stop }))
 				.rejects.toThrow(`ACCEPTANCE_CAMPAIGN_${boundary.toUpperCase()}`);
-			expect(stop).toHaveBeenCalledOnce();
-		}
-	});
-	it('stops once at the planning boundary for an exact unresolved proposal concern', async () => {
-		const stop = vi.fn(), wait = vi.fn(), verify = vi.fn();
-		await expect(monitorCampaign({ read: () => ({ status: 'running', mode: 'simulation', planningEndsAt: 0, endsAt: 10 }),
-			now: () => 1, wait, collaboration: vi.fn(), governanceBlockers: () => 1, verify, stop })).rejects.toThrow('PLAN_REVIEW_REQUIRED');
-		expect(stop).toHaveBeenCalledOnce(); expect(wait).not.toHaveBeenCalled(); expect(verify).not.toHaveBeenCalled();
-	});
-	it('stops an exact ready proposal review that cannot fit the remaining acting window', async () => {
-		const stop = vi.fn(), wait = vi.fn(), verify = vi.fn();
-		await expect(monitorCampaign({ admittedSimulation: true,
-			read: () => ({ status: 'running', mode: 'simulation', planningEndsAt: 1_200_000, endsAt: 3_600_000 }),
-			now: () => 1_200_001, wait, collaboration: vi.fn(), governanceBlockers: () => 0,
-			proposalReviewMinimumSeconds: () => 2_700, verify, stop,
-		})).rejects.toThrow('ACCEPTANCE_CAMPAIGN_REVIEW_UNFIT: Exact proposal review needs 2700s minimum but only 2399s remain');
-		expect(stop).toHaveBeenCalledOnce(); expect(wait).not.toHaveBeenCalled(); expect(verify).not.toHaveBeenCalled();
-	});
-	it('does not replace genuine review estimates when the minimum fits', async () => {
-		let tick = 1_200_001;
-		const stop = vi.fn(), verify = vi.fn();
-		await monitorCampaign({ read: () => ({ status: tick === 1_200_001 ? 'running' : 'completed',
-			mode: 'simulation', planningEndsAt: 1_200_000, endsAt: 3_600_000 }),
-			now: () => tick, wait: async () => { tick += 1; }, collaboration: vi.fn(),
-			governanceBlockers: () => 0, proposalReviewMinimumSeconds: () => 2_399, verify, stop });
-		expect(verify).toHaveBeenCalledOnce(); expect(stop).not.toHaveBeenCalled();
-	});
-	it('stops when an independent review concern appears after the planning boundary', async () => {
-		const stop = vi.fn(), verify = vi.fn(), collaboration = vi.fn(), wait = vi.fn(async () => {});
-		let reads = 0;
-		await expect(monitorCampaign({ read: () => ({ status: 'running', mode: 'simulation', planningEndsAt: 0, endsAt: 10 }),
-			now: () => 1, wait, collaboration, governanceBlockers: () => ++reads === 1 ? 0 : 1, verify, stop }))
-			.rejects.toThrow('ACCEPTANCE_PLAN_REVIEW_REQUIRED');
-		expect(collaboration).toHaveBeenCalledOnce();
-		expect(wait).toHaveBeenCalledOnce();
-		expect(stop).toHaveBeenCalledOnce(); expect(verify).not.toHaveBeenCalled();
-	});
-	it('stops an observed live simulation when governance read-back fails or is malformed', async () => {
-		for (const governanceBlockers of [() => { throw new Error('transport'); }, () => Number.NaN]) {
-			const stop = vi.fn();
-			await expect(monitorCampaign({ read: () => ({ status: 'running', mode: 'simulation', planningEndsAt: 0, endsAt: 10 }),
-				now: () => 1, wait: vi.fn(), collaboration: vi.fn(), governanceBlockers, verify: vi.fn(), stop })).rejects.toThrow();
 			expect(stop).toHaveBeenCalledOnce();
 		}
 	});
 	it('retains both errors if the supported stop fails after a boundary failure', async () => {
 		await expect(monitorCampaign({ read: () => ({ status: 'running', mode: 'simulation', planningEndsAt: 0, endsAt: 10 }),
-			now: () => 1, wait: vi.fn(), collaboration: () => { throw new Error('read-back failed'); },
-			governanceBlockers: () => 0, verify: vi.fn(), stop: () => { throw new Error('stop failed'); },
+			now: () => 1, wait: vi.fn(), collaboration: () => { throw new Error('read-back failed'); }, verify: vi.fn(), stop: () => { throw new Error('stop failed'); },
 		})).rejects.toThrow('ACCEPTANCE_CAMPAIGN_STOP_FAILED');
 	});
 	it('preserves the original boundary failure when the control plane terminalizes before stop', async () => {
 		let status = 'running';
 		const stop = vi.fn(() => { status = 'failed'; throw new Error('already terminal'); });
 		await expect(monitorCampaign({ read: () => ({ status, mode: 'simulation', planningEndsAt: 0, endsAt: 10 }),
-			now: () => 1, wait: vi.fn(), collaboration: vi.fn(), governanceBlockers: () => 1,
-			verify: vi.fn(), stop })).rejects.toThrow('ACCEPTANCE_PLAN_REVIEW_REQUIRED');
+			now: () => 1, wait: vi.fn(), collaboration: () => { throw new Error('ACCEPTANCE_ESTIMATE_ROLES'); },
+			verify: vi.fn(), stop })).rejects.toThrow('ACCEPTANCE_ESTIMATE_ROLES');
 		expect(stop).toHaveBeenCalledOnce();
 	});
 });

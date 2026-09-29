@@ -28,7 +28,7 @@ function assignmentContext(): AssignmentContext {
 			contextRefs: [{ store: 'postgresql', model: 'workday', id: 'workday-1', revision: 1, digest }], predecessorResultIds: [],
 			acceptanceCriteria: ['Commit one exact report.'],
 			workspace: { mode: 'treedx', workspaceId: 'workspace-1', repository: 'treeseed-ai/team-library', baseCommit: commit, writablePaths: ['notes'] },
-			estimate: { minimumSeconds: 1, expectedSeconds: 10, maximumSeconds: 30 }, limits: { maximumSeconds: 30, maximumContextBytes: 1024, maximumContextItems: 10 },
+			estimate: { expectedSeconds: 10, maximumSeconds: 30 }, limits: { maximumSeconds: 30, maximumContextBytes: 1024, maximumContextItems: 10 },
 			deadline: '2099-09-13T12:00:00.000Z', leaseId: 'lease-1', reservationId: 'reservation-1', attempt: 1, status: 'running', createdAt: '2026-09-13T12:00:00.000Z',
 		},
 		context: [{ ref: { store: 'postgresql', model: 'workday', id: 'workday-1', revision: 1, digest },

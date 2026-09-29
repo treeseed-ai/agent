@@ -155,7 +155,7 @@ describe('provider AgentKernel governed output', () => {
 			schemaVersion: 'treeseed.proposal/v1', id: 'estimated-proposal', projectId: 'project-1', title: 'Implement the accepted change',
 			request: 'Implement the accepted change.', summary: 'One bounded implementation unit.', status: 'ready',
 			executionPlan: { workItems: [{ id: 'implement-change', activity: 'acting', agentClass: 'engineer', workspace: 'read-only',
-				review: 'none', objective: 'Describe the implementation.', estimate: { minimumSeconds: 30, expectedSeconds: 60, maximumSeconds: 120 },
+				review: 'none', objective: 'Describe the implementation.', estimate: { expectedSeconds: 60, maximumSeconds: 120 },
 				requiredCapabilities: ['treeseed.engineering.architecture'],
 				dependsOn: [], requestedPermissions: { content: { read: ['proposal'], write: [] }, tools: ['source.read'] },
 				acceptanceCriteria: ['The implementation is described from exact source evidence.'] }] },

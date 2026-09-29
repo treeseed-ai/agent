@@ -6,6 +6,24 @@ import { ProviderLocalCapacityStore } from '../../../src/provider/capacity/capac
 
 afterEach(() => vi.useRealTimers());
 describe('provider active-time accounting', () => {
+	it('admits a positive short assignment without a provider minimum and releases unused time on early finish', async () => {
+		const root = await mkdtemp(join(tmpdir(), 'treeseed-short-assignment-'));
+		vi.useFakeTimers({ toFake: ['Date'] });
+		vi.setSystemTime(new Date('2026-09-16T12:00:00Z'));
+		try {
+			const store = new ProviderLocalCapacityStore(root);
+			const claim = await store.claim({ connectionId: 'team', globalLimit: 1, connectionLimit: 1 });
+			await store.attachLease(claim!.id, { assignmentId: 'short', leaseToken: 'test-only',
+				leaseExpiresAt: '2026-09-16T12:05:00Z', requestedSeconds: 30, dispatchEnvelope: {},
+				accounting: { capabilityId: 'implementation', modelConfigurationId: 'luna',
+					dailyActiveSecondsLimit: 100, capabilityDailyActiveSecondsLimit: 100, maximumAssignmentSeconds: 60 } });
+			await store.claimDispatch(claim!.id); await store.beginActiveExecution(claim!.id);
+			vi.setSystemTime(new Date('2026-09-16T12:00:02Z'));
+			await store.finishActiveExecution(claim!.id); await store.finalize(claim!.id, 'completed');
+			expect((await store.activeTimeObservation('luna', ['implementation'])).modelUsage)
+				.toEqual({ day: '2026-09-16', activeSeconds: 2, reservedSeconds: 0 });
+		} finally { await rm(root, { recursive: true, force: true }); }
+	});
 	it('enforces capability and shared model caps atomically across teams and persists actual consumption', async () => {
 		const root = await mkdtemp(join(tmpdir(), 'treeseed-accounting-'));
 		vi.useFakeTimers({ toFake: ['Date'] });

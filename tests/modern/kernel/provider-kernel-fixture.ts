@@ -30,7 +30,7 @@ export function request(): AgentExecutionRequest {
 		contextRefs: [{ store: 'git', model: 'repository', id: 'sdk-source', repository: 'treeseed-ai/sdk', commit }], predecessorResultIds: [],
 		acceptanceCriteria: ['Commit the exact source change.'],
 		workspace: { mode: 'git', repository: 'treeseed-ai/sdk', baseCommit: commit, branch: 'treeseed/assignments/assignment-1', writablePaths: ['src'] },
-		estimate: { minimumSeconds: 1, expectedSeconds: 10, maximumSeconds: 30 },
+		estimate: { expectedSeconds: 10, maximumSeconds: 30 },
 		limits: { maximumSeconds: 30, maximumContextBytes: 1024, maximumContextItems: 10 },
 		deadline: '2099-09-13T12:00:00.000Z', leaseId: 'lease-1', reservationId: 'reservation-1', attempt: 1,
 		status: 'leased', createdAt: '2026-09-13T12:00:00.000Z',

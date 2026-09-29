@@ -3,6 +3,17 @@ import { execFileSync } from 'node:child_process';
 
 export type Row = Record<string, unknown>;
 export const row = (value: unknown): Row => value && typeof value === 'object' && !Array.isArray(value) ? value as Row : {};
+export function safeCliFailureCode(stdout: string, stderr: string, nativeCode: unknown): string {
+	for (const output of [stdout, stderr]) {
+		try {
+			const start = output.search(/^\{/mu);
+			if (start < 0) continue;
+			const code = row(row(JSON.parse(output.slice(start))).error).code;
+			if (typeof code === 'string' && /^[a-zA-Z][a-zA-Z0-9_-]{0,79}$/u.test(code)) return code;
+		} catch { /* Never surface raw CLI output, which may contain credentials. */ }
+	}
+	return typeof nativeCode === 'string' && /^[a-zA-Z][a-zA-Z0-9_-]{0,79}$/u.test(nativeCode) ? nativeCode : 'COMMAND_FAILED';
+}
 
 export function read(args: string[], team: string, library = false, timeoutMs = 120_000): Row {
 	let output: string;
@@ -12,13 +23,9 @@ export function read(args: string[], team: string, library = false, timeoutMs = 
 		});
 	} catch (failure) {
 		const failed = row(failure);
-		let code = failed.code;
 		const output = typeof failed.stdout === 'string' ? failed.stdout : Buffer.isBuffer(failed.stdout) ? failed.stdout.toString('utf8') : '';
-		try {
-			const start = output.search(/^\{/mu);
-			if (start >= 0) code = row(row(JSON.parse(output.slice(start))).error).code ?? code;
-		} catch { /* Preserve only the safe error class; never surface command output. */ }
-		const safeCode = typeof code === 'string' && /^[a-zA-Z][a-zA-Z0-9_-]{0,79}$/u.test(code) ? code : 'COMMAND_FAILED';
+		const errorOutput = typeof failed.stderr === 'string' ? failed.stderr : Buffer.isBuffer(failed.stderr) ? failed.stderr.toString('utf8') : '';
+		const safeCode = safeCliFailureCode(output, errorOutput, failed.code);
 		throw new Error(`ACCEPTANCE_CLI_COMMAND: ${args.slice(0, 2).join('.')} ${safeCode}`);
 	}
 	const start = output.search(/^\{/mu);

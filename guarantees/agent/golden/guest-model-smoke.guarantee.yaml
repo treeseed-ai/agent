@@ -1,0 +1,12 @@
+schemaVersion: treeseed.guarantee/v1
+id: guarantee.agent.golden.guest-model-smoke
+journey: Prove current guest subscription model access
+ownerPackage: "@treeseed/agent"
+type: agent
+subtype: execution
+status: planned
+gates: [core]
+summary: One measured SDK Architect response through the approved provider and current Kata guest.
+scene:
+  required: true
+  manifest: guarantees/agent/golden/scenes/guest-model-smoke.scene.yaml

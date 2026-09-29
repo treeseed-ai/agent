@@ -116,6 +116,7 @@ export async function monitorCampaign(input: {
 		failedBoundary?: 'assignment_failed' | 'assignment_returned' | 'assignment_expired' |
 			'graph_failed' | 'graph_returned' | 'graph_expired' };
 	now: () => number; wait: () => Promise<void>; collaboration: () => void; governanceBlockers: () => number;
+	proposalReviewMinimumSeconds?: () => number | null;
 	verify: () => void; stop: () => void;
 }): Promise<void> {
 	let planningVerified = false;
@@ -147,6 +148,14 @@ export async function monitorCampaign(input: {
 				'ACCEPTANCE_CAMPAIGN_GOVERNANCE: Authoritative blocker count required');
 			if (blockers > 0) {
 				assert.fail('ACCEPTANCE_PLAN_REVIEW_REQUIRED: Exact proposal has unresolved review blockers');
+			}
+			const minimum = input.proposalReviewMinimumSeconds?.();
+			if (minimum !== undefined && minimum !== null) {
+				assert.ok(Number.isInteger(minimum) && minimum > 0,
+					'ACCEPTANCE_CAMPAIGN_REVIEW_ESTIMATE: Ready exact review requires a positive minimum');
+				const remaining = Math.max(0, Math.floor((run.endsAt - input.now()) / 1000));
+				assert.ok(minimum <= remaining,
+					`ACCEPTANCE_CAMPAIGN_REVIEW_UNFIT: Exact proposal review needs ${minimum}s minimum but only ${remaining}s remain`);
 			}
 		}
 		if (input.now() > run.endsAt + 600_000) {

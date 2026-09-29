@@ -78,7 +78,7 @@ export function freshSdkDraft(template: Record<string, any>, id: string, canonic
 		item.objective = required.objective;
 		item.acceptanceCriteria = [required.acceptanceCriteria];
 		item.dependsOn = [];
-		if (item.id === 'architecture-contract') {
+		if (item.workspace === 'treedx' && item.requestedPermissions?.content?.write?.includes('knowledge')) {
 			const library = item.contextRefs.find((reference: Record<string, any>) => reference.store === 'treedx'
 				&& reference.model === 'repository' && reference.repository && /^[a-f0-9]{40}$/u.test(reference.commit));
 			assert.ok(library && !item.contextRefs.some((reference: Record<string, any>) => reference.model === 'book'),

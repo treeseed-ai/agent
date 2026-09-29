@@ -40,6 +40,7 @@ const template = { status: 'draft', id: 'old', title: 'old', contentProvenance: 
 	executionPlan: { workItems: roles.map(([id, , agentClass, workspace], index) => ({ id, agentClass, workspace,
 		activity: 'acting', review: 'required', objective: index === 2 ? 'stale SDK digest test' : 'stale objective',
 		acceptanceCriteria: ['stale proposal-wide criterion'], contextRefs: index > 1 ? [git] : [library],
+		requestedPermissions: { content: { write: workspace === 'treedx' ? ['knowledge'] : [] } },
 		dependsOn: index === 2 ? ['research-context', 'architecture-contract'] : [], maximumReviewCycles: 2 })) } };
 describe('fresh automated SDK campaign preparation (fixtures are not acceptance)', () => {
 	it('refuses depleted or stale model supply before a metered campaign', () => {
@@ -115,6 +116,13 @@ describe('fresh automated SDK campaign preparation (fixtures are not acceptance)
 		expect(template.id).toBe('old'); expect(template.executionPlan.workItems[0]?.contextRefs).toEqual([library]);
 		expect(draft.id).toBe('fresh');
 		expect(draft).toMatchObject({ title: canonical.title, request: canonical.request, summary: canonical.summary });
+		for (const item of draft.executionPlan.workItems.filter((candidate: { workspace: string; requestedPermissions?: { content?: { write?: string[] } } }) =>
+			candidate.workspace === 'treedx' && candidate.requestedPermissions?.content?.write?.includes('knowledge'))) {
+			expect(item.contextRefs.filter((ref: { model: string }) => ref.model === 'book')).toEqual([{
+				store: 'treedx', model: 'book', id: 'sdk-core', path: 'books/sdk-core.md',
+				repository: bookRepositoryId, commit: library.commit, ...bookExact,
+			}]);
+		}
 		for (const [index, item] of draft.executionPlan.workItems.entries()) {
 			expect(item.objective).toBe(canonical.workItems[index]!.objective);
 			expect(item.acceptanceCriteria).toEqual([canonical.workItems[index]!.acceptanceCriteria]);

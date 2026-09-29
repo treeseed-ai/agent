@@ -106,11 +106,9 @@ export class WriterHandler extends ModelHandler {
 				if (!disposition) throw new Error('review_disposition_required');
 				const findingTarget = context.assignment.grant.contentWrite.find((candidate) => candidate.model === 'note');
 				if (!findingTarget) throw new Error('review_finding_commit_grant_required');
-				const proposalReview = context.assignment.sourceRef.model === 'proposal' && context.predecessorResults.length === 0;
 				const candidate = context.predecessorResults.flatMap((result) => result.references)
 					.find((reference) => reference.kind === 'git' || reference.kind === 'treedx');
-				const subjectRef = proposalReview ? context.assignment.sourceRef
-					: candidate?.kind === 'git' ? { store: 'git' as const, model: 'repository', id: candidate.repository,
+				const subjectRef = candidate?.kind === 'git' ? { store: 'git' as const, model: 'repository', id: candidate.repository,
 						repository: candidate.repository, commit: candidate.commit, ...(candidate.path ? { path: candidate.path } : {}) }
 						: candidate?.kind === 'treedx' ? context.context.find(({ ref }) => ref.store === 'treedx'
 							&& ref.repository === candidate.repository && ref.commit === candidate.commit && ref.path === candidate.path)?.ref
@@ -126,9 +124,8 @@ export class WriterHandler extends ModelHandler {
 					digest: findingDigest };
 				const decisionValue = { body: model.text, frontmatter: {
 					schemaVersion: 'treeseed.decision/v1', id: target.id, projectId: context.assignment.projectId,
-					decisionClass: proposalReview ? 'proposal' : 'work-review', decisionMethod: 'authority', subjectRef,
-					disposition: disposition === 'approved' ? 'approved' : proposalReview
-						? (disposition === 'rejected' ? 'rejected' : 'deferred') : 'request-changes', rationale: model.text,
+					decisionClass: 'work-review', decisionMethod: 'authority', subjectRef,
+					disposition: disposition === 'approved' ? 'approved' : 'request-changes', rationale: model.text,
 					findingRefs: [findingRef],
 					authorityRefs: context.assignment.authorityRefs, decidedByRefs: [context.assignment.effectiveProfile.profileRef],
 					decidedAt: runtime.now(),

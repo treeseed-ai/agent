@@ -242,7 +242,7 @@ verifiers:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/execution/codex-chat-executor.test.ts
-    testName: "distinguishes a TreeDX proposal revision from the attached Git source during proposal review"
+    testName: "rejects a Reviewer assignment without an accepted decision"
   agent.golden.clock:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

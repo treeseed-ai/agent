@@ -36,7 +36,7 @@ export function verifySdkPublishedProfiles(agents: Row[], publishedHead: string)
 		const agent = agents.find(item => item.agentSlug === role);
 		assert.equal(agent?.definitionRevision, publishedHead,
 			`ACCEPTANCE_CHAT_PROFILE_PUBLISHED: ${role} definition is not the published SDK library head`);
-		const definition = agent?.definition as { activityProfiles?: { chat?: { prompt?: { system?: string } } } } | undefined;
+		const definition = agent?.definition as { capabilities?: string[]; activityProfiles?: { chat?: { prompt?: { system?: string } } } } | undefined;
 		const prompt = String(definition?.activityProfiles?.chat?.prompt?.system ?? '');
 		assert.ok(prompt.includes('For coordination-only messages') && prompt.includes('Inspect project files only when'),
 			`ACCEPTANCE_CHAT_PROFILE_TASK_BOUNDARY: ${role} chat must distinguish coordination from source questions`);
@@ -44,9 +44,11 @@ export function verifySdkPublishedProfiles(agents: Row[], publishedHead: string)
 			const activities = definition?.activityProfiles as Row | undefined;
 			const reviewProfile = activities?.reviewing as Row | undefined;
 			const review = String((reviewProfile?.prompt as Row | undefined)?.system ?? '');
-			assert.ok(review.includes('undecided proposal') && review.includes('Requested code and tests may be absent')
-				&& review.includes('completed Actor candidate') && review.includes('approve only proven work'),
-				'ACCEPTANCE_REVIEW_STAGE_BOUNDARY: Proposal feasibility and completed Actor proof must remain distinct');
+			assert.ok(review.includes('Review only a completed Actor candidate bound to an accepted decision')
+				&& review.includes('approve only proven work')
+				&& review.includes('Proposal feedback and estimates belong to planning')
+				&& !definition?.capabilities?.includes('proposal-review'),
+				'ACCEPTANCE_REVIEW_STAGE_BOUNDARY: Paired Actor review only; proposal feedback and approval stay in planning');
 		}
 	}
 }

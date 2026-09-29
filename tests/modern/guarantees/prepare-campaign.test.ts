@@ -92,17 +92,20 @@ describe('fresh automated SDK campaign preparation (fixtures are not acceptance)
 	it('rejects unpublished or unbounded SDK chat profiles before any model-backed campaign work', () => {
 		const head = 'c'.repeat(40);
 		const profiles = ['architect', 'researcher', 'tester', 'engineer', 'technical-writer', 'releaser', 'reviewer', 'reporter']
-			.map(agentSlug => ({ agentSlug, definitionRevision: head, definition: { activityProfiles: { chat: { prompt: {
+			.map(agentSlug => ({ agentSlug, definitionRevision: head, definition: { capabilities: ['candidate-review'], activityProfiles: { chat: { prompt: {
 				system: 'For coordination-only messages, answer promptly. Inspect project files only when asked about source.' } },
-				reviewing: { prompt: { system: 'For an undecided proposal Requested code and tests may be absent; for a completed Actor candidate approve only proven work.' } } } } }));
+				reviewing: { prompt: { system: 'Review only a completed Actor candidate bound to an accepted decision; approve only proven work. Proposal feedback and estimates belong to planning.' } } } } }));
 		expect(() => verifySdkPublishedProfiles(profiles, head)).not.toThrow();
 		expect(() => verifySdkPublishedProfiles(profiles, 'd'.repeat(40))).toThrow('ACCEPTANCE_CHAT_PROFILE_PUBLISHED');
 		const stale = structuredClone(profiles);
 		stale[5]!.definition.activityProfiles.chat.prompt.system = 'Research project sources before answering every message.';
 		expect(() => verifySdkPublishedProfiles(stale, head)).toThrow('ACCEPTANCE_CHAT_PROFILE_TASK_BOUNDARY');
 		const staleReviewer = structuredClone(profiles);
-		staleReviewer[6]!.definition.activityProfiles.reviewing.prompt.system = 'Approve only when every criterion is proven.';
+		staleReviewer[6]!.definition.activityProfiles.reviewing.prompt.system = 'Review an undecided proposal for feasibility before acting.';
 		expect(() => verifySdkPublishedProfiles(staleReviewer, head)).toThrow('ACCEPTANCE_REVIEW_STAGE_BOUNDARY');
+		const retiredCapability = structuredClone(profiles);
+		retiredCapability[6]!.definition.capabilities.push('proposal-review');
+		expect(() => verifySdkPublishedProfiles(retiredCapability, head)).toThrow('ACCEPTANCE_REVIEW_STAGE_BOUNDARY');
 		expect(() => verifySdkPublishedProfiles(profiles.slice(1), head)).toThrow('ACCEPTANCE_CHAT_PROFILE_PUBLISHED');
 	});
   it('requires explicit exact host and guest closure before proposal preparation', () => {

@@ -3,6 +3,9 @@ id: agent.golden.sdk-complete
 title: SDK lifecycle and owned product acceptance
 scope: local-integrated-runtime
 workflow:
+  - id: guest-model-smoke
+    action: { verifier: agent.golden.live.guest-model-smoke }
+    expect: { status: passed }
   - id: lifecycle-campaign
     action: { verifier: agent.golden.live.campaign }
     expect: { status: passed }

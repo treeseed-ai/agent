@@ -1,6 +1,12 @@
 schemaVersion: treeseed.guarantee-verifiers/v1
 ownerPackage: "@treeseed/agent"
 verifiers:
+  agent.golden.live.guest-model-smoke:
+    kind: nodeTestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/acceptance/guest-model-smoke.test.ts
+    testName: Current Codex subscription completes one measured Kata-backed response
+    timeoutMs: 240000
   agent.golden.provider-policy-parity:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

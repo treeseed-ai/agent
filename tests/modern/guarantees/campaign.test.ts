@@ -70,6 +70,24 @@ describe('automated campaign control (fixtures are not golden acceptance)', () =
 			now: () => 1, wait, collaboration: vi.fn(), governanceBlockers: () => 1, verify, stop })).rejects.toThrow('PLAN_REVIEW_REQUIRED');
 		expect(stop).toHaveBeenCalledOnce(); expect(wait).not.toHaveBeenCalled(); expect(verify).not.toHaveBeenCalled();
 	});
+	it('stops an exact ready proposal review that cannot fit the remaining acting window', async () => {
+		const stop = vi.fn(), wait = vi.fn(), verify = vi.fn();
+		await expect(monitorCampaign({ admittedSimulation: true,
+			read: () => ({ status: 'running', mode: 'simulation', planningEndsAt: 1_200_000, endsAt: 3_600_000 }),
+			now: () => 1_200_001, wait, collaboration: vi.fn(), governanceBlockers: () => 0,
+			proposalReviewMinimumSeconds: () => 2_700, verify, stop,
+		})).rejects.toThrow('ACCEPTANCE_CAMPAIGN_REVIEW_UNFIT: Exact proposal review needs 2700s minimum but only 2399s remain');
+		expect(stop).toHaveBeenCalledOnce(); expect(wait).not.toHaveBeenCalled(); expect(verify).not.toHaveBeenCalled();
+	});
+	it('does not replace genuine review estimates when the minimum fits', async () => {
+		let tick = 1_200_001;
+		const stop = vi.fn(), verify = vi.fn();
+		await monitorCampaign({ read: () => ({ status: tick === 1_200_001 ? 'running' : 'completed',
+			mode: 'simulation', planningEndsAt: 1_200_000, endsAt: 3_600_000 }),
+			now: () => tick, wait: async () => { tick += 1; }, collaboration: vi.fn(),
+			governanceBlockers: () => 0, proposalReviewMinimumSeconds: () => 2_399, verify, stop });
+		expect(verify).toHaveBeenCalledOnce(); expect(stop).not.toHaveBeenCalled();
+	});
 	it('stops when an independent review concern appears after the planning boundary', async () => {
 		const stop = vi.fn(), verify = vi.fn(), collaboration = vi.fn(), wait = vi.fn(async () => {});
 		let reads = 0;

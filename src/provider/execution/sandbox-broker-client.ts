@@ -39,7 +39,7 @@ function call<T>(socketPath: string, method: string, path: string, body?: unknow
 export class SandboxBrokerClient {
 	constructor(readonly socketPath: string) {}
 	private path(suffix: string) { return `/v${1}${suffix}`; }
-	status(signal?: AbortSignal) { return call<Record<string, unknown>>(this.socketPath, 'GET', this.path('/status'), undefined, signal, {}, 5_000); }
+	status(signal?: AbortSignal) { return call<Record<string, unknown>>(this.socketPath, 'GET', this.path('/status'), undefined, signal, {}, 20_000); }
 	prepare(assignment: SandboxAssignment, preparationDeadlineAt: string, signal?: AbortSignal) { return call<{ sandboxId: string; operationToken: string }>(this.socketPath, 'POST', this.path('/sandboxes'), { assignment }, signal, {}, remainingPreparationMs(preparationDeadlineAt)); }
 	sourceStatus(sandboxId: string, token: string, signal?: AbortSignal) {
 		return call<SourceJobStatus>(this.socketPath, 'GET', this.path(`/sandboxes/${encodeURIComponent(sandboxId)}/source/status`), undefined, signal, { authorization: `Bearer ${token}` });

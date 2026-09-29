@@ -250,8 +250,10 @@ export async function runMultiTeamProviderRunners(
 				await localState.release(claim.id); results.push({ connectionId: connection.connection.id, status: 'idle', reason: 'assignment_adapter_unavailable' }); return;
 			}
 			const executor = await resolveAgentExecutor(config, adapter, loaded.manifest);
-			if (!executor || !(await executor.observe()).available) {
-				await client.returnAssignment(assignmentId, { leaseToken, runnerId: claim.runnerId, code: 'executor_unavailable', reason: 'The Kata sandbox host is not ready for this assignment.', retryable: true });
+			let executorObservation = executor ? await executor.observe() : null;
+			if (executor && executorObservation?.available === false) executorObservation = await executor.observe();
+			if (!executorObservation?.available) {
+				await client.returnAssignment(assignmentId, { leaseToken, runnerId: claim.runnerId, code: 'executor_unavailable', reason: `The Kata sandbox host is not ready for this assignment: ${executorObservation?.reason ?? 'executor_not_configured'}.`, retryable: true });
 				await localState.release(claim.id); results.push({ connectionId: connection.connection.id, status: 'idle', reason: 'executor_unavailable' }); return;
 			}
 			const leaseExpiresAt = text(assignment.leaseExpiresAt) ?? new Date(Date.now() + 300_000).toISOString();

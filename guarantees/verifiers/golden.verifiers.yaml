@@ -72,6 +72,11 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/guarantees/prepare-campaign.test.ts
     testName: refuses depleted or stale model supply before a metered campaign
+  agent.golden.paired-review-profile:
+    kind: vitestCase
+    ownerPackage: '@treeseed/agent'
+    testFile: tests/modern/guarantees/prepare-campaign.test.ts
+    testName: rejects unpublished or unbounded SDK chat profiles before any model-backed campaign work
   agent.golden.review-requires-decision:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

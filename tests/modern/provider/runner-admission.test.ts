@@ -39,13 +39,39 @@ async function fixture(workers = 1, connectionLimit = workers) {
 		connection: { id: 'team-a', offer: { maxConcurrentRunners: connectionLimit } }, teamId: 'team-a', providerId: 'provider-a', membershipId: 'membership-a',
 		controlPlaneUrl: 'https://api.example.test', controlPlaneAudience: 'https://api.example.test', accessToken: { accessToken: 'fixture-token' },
 	} }] as never);
-	const client = { nextAssignment: vi.fn().mockResolvedValue({ assignment: null }) };
+	const client = { nextAssignment: vi.fn().mockResolvedValue({ assignment: null }), returnAssignment: vi.fn().mockResolvedValue({}) };
 	vi.mocked(createProviderControlPlaneClient).mockReturnValue(client as never);
 	vi.mocked(observeProviderDiskCapacity).mockResolvedValue(evaluateProviderDiskCapacity({ path: dataDir, totalBytes: 100 * 1024 ** 3, availableBytes: 50 * 1024 ** 3 }));
 	return { config, client };
 }
 
 describe('real provider polling admission', () => {
+	it('rechecks a transient broker status failure before returning a leased assignment', async () => {
+		const { config, client } = await fixture();
+		const source = request().assignment;
+		client.nextAssignment.mockResolvedValue({ assignment: source, leaseToken: 'test-only' } as never);
+		const observe = vi.fn().mockResolvedValueOnce({ available: false, reason: 'broker status timed out' }).mockResolvedValue({ available: true });
+		vi.mocked(resolveAgentExecutor).mockResolvedValue({ id: 'codex', observe, execute: vi.fn() });
+		vi.mocked(createAssignmentTreeDxFacade).mockResolvedValue(request().treeDx!);
+		vi.mocked(runProviderAssignment).mockResolvedValue({ status: 'completed' } as never);
+		await runMultiTeamProviderRunners(config);
+		expect(observe).toHaveBeenCalledTimes(2);
+		expect(runProviderAssignment).toHaveBeenCalledOnce();
+	});
+	it('returns a persistently unavailable executor with its observed cause', async () => {
+		vi.mocked(runProviderAssignment).mockClear();
+		const { config, client } = await fixture();
+		client.nextAssignment.mockResolvedValue({ assignment: request().assignment, leaseToken: 'test-only' } as never);
+		client.returnAssignment = vi.fn().mockResolvedValue({});
+		const observe = vi.fn().mockResolvedValue({ available: false, reason: 'containerd_unavailable' });
+		vi.mocked(resolveAgentExecutor).mockResolvedValue({ id: 'codex', observe, execute: vi.fn() });
+		await runMultiTeamProviderRunners(config);
+		expect(observe).toHaveBeenCalledTimes(2);
+		expect(client.returnAssignment).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({
+			code: 'executor_unavailable', retryable: true, reason: expect.stringContaining('containerd_unavailable'),
+		}));
+		expect(runProviderAssignment).not.toHaveBeenCalled();
+	});
 	it('runs five overlapping assignments and refills a freed slot without waiting for the slowest', async () => {
 		const { config, client } = await fixture(5);
 		let sequence = 0;

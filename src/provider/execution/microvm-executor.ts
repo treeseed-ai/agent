@@ -132,7 +132,11 @@ export async function createMicrovmExecutor(config: ProviderHostRuntimeConfig, m
 		},
 		async observe() {
 			const capabilities = [...new Set(adapter.offers.flatMap(({ offer }) => offer.capabilities.map(({ id }) => id)))];
-			try { const status = await client.status(); return { available: status.ready === true, capabilities, reason: status.ready === true ? undefined : String(status.reason ?? 'sandbox_broker_unavailable') }; }
+			try {
+				const status = await client.status();
+				const checks = status.checks && typeof status.checks === 'object' ? Object.entries(status.checks).filter(([, ready]) => ready !== true).map(([name]) => name) : [];
+				return { available: status.ready === true, capabilities, reason: status.ready === true ? undefined : `${String(status.reason ?? 'sandbox_broker_unavailable')}${checks.length ? `: ${checks.join(',')}` : ''}` };
+			}
 			catch (error) { return { available: false, capabilities, reason: error instanceof Error ? error.message : String(error) }; }
 		},
 		async execute(request) {

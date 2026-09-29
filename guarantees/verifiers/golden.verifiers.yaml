@@ -62,11 +62,11 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/guarantees/prepare-campaign.test.ts
     testName: refuses depleted or stale model supply before a metered campaign
-  agent.golden.late-review-blocker:
+  agent.golden.review-requires-decision:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"
-    testFile: tests/modern/guarantees/campaign.test.ts
-    testName: stops when an independent review concern appears after the planning boundary
+    testFile: tests/modern/execution/codex-chat-executor.test.ts
+    testName: rejects a Reviewer assignment without an accepted decision
   agent.golden.timeout-terminal-output:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"
@@ -242,7 +242,7 @@ verifiers:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/execution/codex-chat-executor.test.ts
-    testName: "distinguishes a TreeDX proposal revision from the attached Git source during proposal review"
+    testName: "rejects a Reviewer assignment without an accepted decision"
   agent.golden.clock:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

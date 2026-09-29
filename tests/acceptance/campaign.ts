@@ -115,11 +115,12 @@ export async function monitorCampaign(input: {
 	read: () => { status: string; mode: string; planningEndsAt: number; endsAt: number;
 		failedBoundary?: 'assignment_failed' | 'assignment_returned' | 'assignment_expired' |
 			'graph_failed' | 'graph_returned' | 'graph_expired' };
-	now: () => number; wait: () => Promise<void>; collaboration: () => void; governanceBlockers: () => number;
-	proposalReviewMinimumSeconds?: () => number | null;
+	now: () => number; wait: () => Promise<void>; collaboration: () => void;
 	verify: () => void; stop: () => void;
 }): Promise<void> {
 	let planningVerified = false;
+	const incompleteCollaboration = (failure: unknown) => failure instanceof Error
+		&& /^ACCEPTANCE_(CHAT_ROLES|PLANNING_ROLE_TURNS|PLANNING_CYCLES|ESTIMATE_ROLES):/u.test(failure.message);
 	let observedStatus = input.admittedSimulation ? 'running' : '', observedMode = input.admittedSimulation ? 'simulation' : '';
 	try {
 	input.admitDiscussion?.();
@@ -128,7 +129,8 @@ export async function monitorCampaign(input: {
 		observedStatus = run.status; observedMode = run.mode;
 		assert.equal(run.mode, 'simulation', 'ACCEPTANCE_CAMPAIGN_MODE: No production campaign mutation');
 		if (run.status === 'completed') {
-			input.collaboration(); input.verify(); return;
+			if (!planningVerified) input.collaboration();
+			input.verify(); return;
 		}
 		assert.equal(run.status, 'running', 'ACCEPTANCE_CAMPAIGN_TERMINAL: Unsuccessful terminal campaign');
 		if (run.failedBoundary) {
@@ -137,25 +139,11 @@ export async function monitorCampaign(input: {
 		assert.ok(Number.isFinite(run.planningEndsAt) && Number.isFinite(run.endsAt),
 			'ACCEPTANCE_CAMPAIGN_TIME: Authoritative deadlines required');
 		if (!planningVerified && input.now() >= run.planningEndsAt) {
-			input.collaboration(); planningVerified = true;
-		}
-		// The independent proposal Reviewer can finish after planning opens acting.
-		// Re-read its governed concerns on every active tick, not only at the phase
-		// boundary before the review has had a chance to publish its disposition.
-		if (planningVerified) {
-			const blockers = input.governanceBlockers();
-			assert.ok(Number.isInteger(blockers) && blockers >= 0,
-				'ACCEPTANCE_CAMPAIGN_GOVERNANCE: Authoritative blocker count required');
-			if (blockers > 0) {
-				assert.fail('ACCEPTANCE_PLAN_REVIEW_REQUIRED: Exact proposal has unresolved review blockers');
-			}
-			const minimum = input.proposalReviewMinimumSeconds?.();
-			if (minimum !== undefined && minimum !== null) {
-				assert.ok(Number.isInteger(minimum) && minimum > 0,
-					'ACCEPTANCE_CAMPAIGN_REVIEW_ESTIMATE: Ready exact review requires a positive minimum');
-				const remaining = Math.max(0, Math.floor((run.endsAt - input.now()) / 1000));
-				assert.ok(minimum <= remaining,
-					`ACCEPTANCE_CAMPAIGN_REVIEW_UNFIT: Exact proposal review needs ${minimum}s minimum but only ${remaining}s remain`);
+			try { input.collaboration(); planningVerified = true; }
+			catch (failure) {
+				// The initial planning percentage is a minimum, not a deadline
+				// for estimates or discussion. Other errors remain fail-closed.
+				if (!incompleteCollaboration(failure)) throw failure;
 			}
 		}
 		if (input.now() > run.endsAt + 600_000) {

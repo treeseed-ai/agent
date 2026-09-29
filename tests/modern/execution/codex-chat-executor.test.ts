@@ -184,6 +184,7 @@ describe('Codex chat executor', () => {
 		'applies the same first/final clock boundary to %s', (activity) => {
 			const prompt = promptFromContext({ canonicalAssignmentContext: { assignment: {
 				id: `assignment-${activity}`, workspace: { mode: 'read-only' },
+				...(activity === 'reviewing' ? { authorityRefs: [{ model: 'decision', id: 'accepted-decision' }] } : {}),
 				effectiveProfile: { activity, handler: 'writer', prompt: { system: 'Complete the assigned work.' } },
 			}, context: [], predecessorResults: [] } });
 			expect(prompt).toMatch(/^MANDATORY ASSIGNMENT CLOCK:/u);
@@ -293,23 +294,12 @@ describe('Codex chat executor', () => {
 		expect(prompt).toContain('commit them, and then run the required release gates');
 		expect(prompt).not.toContain('do not debug, modify source');
 	});
-	it('distinguishes a TreeDX proposal revision from the attached Git source during proposal review', () => {
-		const prompt = promptFromContext({ canonicalAssignmentContext: { assignment: {
+	it('rejects a Reviewer assignment without an accepted decision', () => {
+		expect(() => promptFromContext({ canonicalAssignmentContext: { assignment: {
 			id: 'assignment-review', sourceRef: { model: 'proposal', id: 'proposal-1', commit: 'proposal-commit' },
 			workspace: { mode: 'treedx' }, effectiveProfile: { activity: 'reviewing', handler: 'writer',
 				prompt: { system: 'Review the proposal.' } },
-		}, context: [], predecessorResults: [] } });
-		expect(prompt).toContain('This is pre-decision proposal review');
-		expect(prompt).toContain('reviewDisposition to exactly approved, revision-required, or rejected; never null');
-		expect(prompt).toContain('Generic role ordering is owned by the pinned agent profiles and generated execution graph');
-		expect(prompt).toContain('Researcher -> its generated Reviewer is an independent question/research branch');
-		expect(prompt).toContain('Never require Researcher output as a prerequisite for Architect, Tester, or the execution branch');
-		expect(prompt).toContain('Do not request duplicated generic edges or future result identifiers in the proposal');
-		expect(prompt).toContain('must never be resolved as an SDK Git commit');
-		expect(prompt).toContain('Approve a sound plan');
-		expect(prompt).toContain('no predecessor result or runtime acceptance evidence is expected');
-		expect(prompt).toContain('return verification: [] for this pre-decision review');
-		expect(prompt).toContain('Source inspection (including git show) is not acceptance verification');
+		}, context: [], predecessorResults: [] } })).toThrow('work_review_requires_accepted_decision');
 	});
 	it('reviews the paired Actor result when exact decision authority exists', () => {
 		const prompt = promptFromContext({ canonicalAssignmentContext: { assignment: {

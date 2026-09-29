@@ -162,7 +162,7 @@ export class ProviderLocalCapacityStore {
 		assignmentId: string; leaseToken: string; leaseExpiresAt: string; executionProviderId?: string; laneId?: string; requestedSeconds?: number; nativeUnit?: string; requestedNativeAmount?: number;
 		dispatchEnvelope: unknown;
 		accounting?: { capabilityId: string; modelConfigurationId: string; dailyActiveSecondsLimit: number;
-			capabilityDailyActiveSecondsLimit: number; minimumAssignmentSeconds?: number; maximumAssignmentSeconds?: number };
+			capabilityDailyActiveSecondsLimit: number; maximumAssignmentSeconds?: number };
 		executionProviderLimit?: ProviderLocalNativeLimit;
 		laneLimit?: ProviderLocalNativeLimit;
 	}) {
@@ -182,8 +182,8 @@ export class ProviderLocalCapacityStore {
 				const bounds = input.accounting;
 				if (!bounds.capabilityId || !bounds.modelConfigurationId || !Number.isFinite(seconds) || seconds! <= 0
 					|| [bounds.dailyActiveSecondsLimit, bounds.capabilityDailyActiveSecondsLimit].some(value => !Number.isFinite(value) || value < 0)
-					|| [bounds.minimumAssignmentSeconds, bounds.maximumAssignmentSeconds].some(value => value !== undefined && (!Number.isFinite(value) || value <= 0))
-					|| seconds! < (bounds.minimumAssignmentSeconds ?? 1) || seconds! > (bounds.maximumAssignmentSeconds ?? Infinity)) throw new Error('Provider-local assignment accounting bounds are invalid.');
+					|| (bounds.maximumAssignmentSeconds !== undefined && (!Number.isFinite(bounds.maximumAssignmentSeconds) || bounds.maximumAssignmentSeconds <= 0))
+					|| seconds! > (bounds.maximumAssignmentSeconds ?? Infinity)) throw new Error('Provider-local assignment accounting bounds are invalid.');
 				const dayUsage = state.usage[now.slice(0, 10)] ?? {};
 				for (const [key, cap, capability] of [[JSON.stringify([bounds.modelConfigurationId]), bounds.dailyActiveSecondsLimit, undefined],
 					[JSON.stringify([bounds.modelConfigurationId, bounds.capabilityId]), bounds.capabilityDailyActiveSecondsLimit, bounds.capabilityId]] as const) {

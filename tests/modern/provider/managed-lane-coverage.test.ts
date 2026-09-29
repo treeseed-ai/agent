@@ -66,11 +66,11 @@ it('uses only explicit host duration bounds in both development and released adm
 	const directory = await mkdtemp(join(tmpdir(), 'provider-duration-parity-'));
 	try {
 		const path = join(directory, 'manifest.yaml');
-		for (const explicitMinimum of [undefined, 360]) {
+		for (const explicitMaximum of [undefined, 60]) {
 			const limits = capabilityAccountingLimitsSchema.parse(current.adapters[0]!.nativeLimits);
 			limits.capabilityLimits[capability] = {
 				dailyActiveSecondsLimit: 43200,
-				...(explicitMinimum === undefined ? {} : { minimumAssignmentSeconds: explicitMinimum, maximumAssignmentSeconds: 600 }),
+				...(explicitMaximum === undefined ? {} : { maximumAssignmentSeconds: explicitMaximum }),
 			};
 			current.adapters[0]!.nativeLimits = limits;
 			await writeFile(path, stringify(current));
@@ -79,14 +79,13 @@ it('uses only explicit host duration bounds in both development and released adm
 				const bounds = capabilityAccountingLimitsSchema.parse(loaded.manifest.adapters[0]!.nativeLimits).capabilityLimits[capability]!;
 				expect(bounds).toEqual(limits.capabilityLimits[capability]);
 				const allocation = calculateAssignmentAllocation({
-					estimate: { minimumSeconds: 35, expectedSeconds: 55, maximumSeconds: 90 }, measurements: [],
-					providerMinimumSeconds: bounds.minimumAssignmentSeconds,
+					estimate: { expectedSeconds: 55, maximumSeconds: 90 }, measurements: [],
 					providerMaximumSeconds: bounds.maximumAssignmentSeconds,
 					constraints: [{ id: 'execution-window', remainingSeconds: 346 - 60 }],
 				});
-				expect(allocation).toMatchObject(explicitMinimum === undefined
+				expect(allocation).toMatchObject(explicitMaximum === undefined
 					? { admitted: true, allocatedSeconds: 90 }
-					: { admitted: false, allocatedSeconds: 0 });
+					: { admitted: true, allocatedSeconds: 60 });
 			}
 		}
 	} finally { await rm(directory, { recursive: true, force: true }); }

@@ -36,8 +36,8 @@ workflow:
   - id: campaign-supply
     action: { verifier: agent.golden.campaign-supply }
     expect: { status: passed }
-  - id: late-review-blocker
-    action: { verifier: agent.golden.late-review-blocker }
+  - id: review-requires-decision
+    action: { verifier: agent.golden.review-requires-decision }
     expect: { status: passed }
   - id: terminal-teardown-output
     action: { verifier: agent.golden.timeout-terminal-output }

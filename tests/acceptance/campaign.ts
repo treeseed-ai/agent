@@ -119,6 +119,8 @@ export async function monitorCampaign(input: {
 	verify: () => void; stop: () => void;
 }): Promise<void> {
 	let planningVerified = false;
+	const incompleteCollaboration = (failure: unknown) => failure instanceof Error
+		&& /^ACCEPTANCE_(CHAT_ROLES|PLANNING_ROLE_TURNS|PLANNING_CYCLES|ESTIMATE_ROLES):/u.test(failure.message);
 	let observedStatus = input.admittedSimulation ? 'running' : '', observedMode = input.admittedSimulation ? 'simulation' : '';
 	try {
 	input.admitDiscussion?.();
@@ -127,7 +129,8 @@ export async function monitorCampaign(input: {
 		observedStatus = run.status; observedMode = run.mode;
 		assert.equal(run.mode, 'simulation', 'ACCEPTANCE_CAMPAIGN_MODE: No production campaign mutation');
 		if (run.status === 'completed') {
-			input.collaboration(); input.verify(); return;
+			if (!planningVerified) input.collaboration();
+			input.verify(); return;
 		}
 		assert.equal(run.status, 'running', 'ACCEPTANCE_CAMPAIGN_TERMINAL: Unsuccessful terminal campaign');
 		if (run.failedBoundary) {
@@ -136,7 +139,12 @@ export async function monitorCampaign(input: {
 		assert.ok(Number.isFinite(run.planningEndsAt) && Number.isFinite(run.endsAt),
 			'ACCEPTANCE_CAMPAIGN_TIME: Authoritative deadlines required');
 		if (!planningVerified && input.now() >= run.planningEndsAt) {
-			input.collaboration(); planningVerified = true;
+			try { input.collaboration(); planningVerified = true; }
+			catch (failure) {
+				// The initial planning percentage is a minimum, not a deadline
+				// for estimates or discussion. Other errors remain fail-closed.
+				if (!incompleteCollaboration(failure)) throw failure;
+			}
 		}
 		if (input.now() > run.endsAt + 600_000) {
 			assert.fail('ACCEPTANCE_CAMPAIGN_TIMEOUT: Settlement did not complete within bounded closeout');

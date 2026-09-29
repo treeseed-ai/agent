@@ -15,9 +15,15 @@ describe('provider AgentKernel governed output', () => {
 			commit, path: 'notes/review-finding.mdx' };
 		const target = { store: 'treedx', model: 'decision', id: 'review-decision', repository: 'treeseed-ai/sdk-library',
 			commit, path: 'decisions/review-decision.mdx' };
-		attempt.grant = { contentRead: [], contentWrite: [findingTarget, target], sourceRead: [], sourceWrite: [], tools: ['verification'] };
+		attempt.grant = { contentRead: [], contentWrite: [findingTarget, target], sourceRead: ['treeseed-ai/sdk'], sourceWrite: [], tools: ['verification'] };
 		attempt.workspace = { mode: 'treedx', workspaceId: 'workspace-1', repository: target.repository,
 			baseCommit: commit, writablePaths: [findingTarget.path, target.path] };
+		(input.assignment.workspaceContext as Record<string, any>).predecessorResults = [{
+			schemaVersion: 'treeseed.assignment-result/v1', id: 'actor-result', assignmentId: 'actor-assignment',
+			status: 'completed', summary: 'Created the reviewed candidate.',
+			references: [{ kind: 'git', repository: 'treeseed-ai/sdk', commit }],
+			verification: [], usage: { elapsedSeconds: 2 }, diagnostics: [], completedAt: '2026-09-14T12:00:00.000Z',
+		}];
 		const written: Record<string, string> = {};
 		input.treeDx = { projectId: 'project-1', handleId: 'handle-1', repositoryId: target.repository, workspaceId: 'workspace-1',
 			invoke: vi.fn(async (operation, value: any) => {
@@ -40,7 +46,7 @@ describe('provider AgentKernel governed output', () => {
 		],
 			usage: { elapsedSeconds: 3 } });
 		expect(written[findingTarget.path]).toContain('classification: feedback');
-		expect(written[target.path]).toContain('decisionClass: proposal');
+		expect(written[target.path]).toContain('decisionClass: work-review');
 		expect(written[target.path]).toContain('disposition: approved');
 		expect(written[target.path].split('\n')).toContain(`rationale: ${review}`);
 		expect(written[target.path]).toContain('findingRefs:');

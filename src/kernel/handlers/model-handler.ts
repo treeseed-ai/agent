@@ -108,11 +108,12 @@ export class WriterHandler extends ModelHandler {
 				if (!findingTarget) throw new Error('review_finding_commit_grant_required');
 				const candidate = context.predecessorResults.flatMap((result) => result.references)
 					.find((reference) => reference.kind === 'git' || reference.kind === 'treedx');
+				if (!candidate && context.predecessorResults.length === 0) throw new Error('review_candidate_reference_missing');
 				const subjectRef = candidate?.kind === 'git' ? { store: 'git' as const, model: 'repository', id: candidate.repository,
 						repository: candidate.repository, commit: candidate.commit, ...(candidate.path ? { path: candidate.path } : {}) }
 						: candidate?.kind === 'treedx' ? context.context.find(({ ref }) => ref.store === 'treedx'
 							&& ref.repository === candidate.repository && ref.commit === candidate.commit && ref.path === candidate.path)?.ref
-							: context.assignment.sourceRef;
+						: context.assignment.sourceRef;
 				if (!subjectRef) throw new Error('review_candidate_reference_missing');
 				const findingValue = { body: model.text, frontmatter: {
 					schemaVersion: 'treeseed.note/v1', id: findingTarget.id, projectId: context.assignment.projectId,

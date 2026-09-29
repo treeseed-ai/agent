@@ -24,7 +24,10 @@ describe('native campaign CLI composition (fixtures are not live acceptance)', (
 		state.freeze.preflight.expiresAt = '2000-01-01T00:00:00Z';
 		const id = 'workday-aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
 		state.read.mockImplementation((args: string[]) => args[1] === 'start' ? { workdayId: id }
-			: args[0] === 'send' ? { receiptId: 'send' } : { run: { id, status: 'completed', executionMode: 'simulation', startedAt: new Date().toISOString(),
+			: args[0] === 'send' ? { receiptId: 'send' }
+				: args[0] === 'proposals' && args[1] === 'show' ? { activeVersion: 8 }
+					: args[0] === 'proposals' && args[1] === 'evaluate' ? { status: 'accepted', decisionId: 'decision-1' }
+						: { run: { id, status: 'completed', executionMode: 'simulation', startedAt: new Date().toISOString(),
 				parameters: { durationSeconds: 3600, planningPercent: 100 / 3, appliedPlan: { endsAt: new Date().toISOString() } } } });
 		await state.run!();
 		expect(state.read.mock.calls[0]![0]).toContain('exact');
@@ -55,12 +58,16 @@ describe('native campaign CLI composition (fixtures are not live acceptance)', (
 				startedAt: new Date(Date.now() - 21 * 60_000).toISOString(),
 				parameters: { durationSeconds: 3600, planningPercent: 100 / 3, appliedPlan: { endsAt: new Date(Date.now() + 60_000).toISOString() } } },
 				scheduling: { assignments: [], nodes: [] } };
-			if (args[0] === 'proposals' && args[1] === 'show') throw new Error('GOVERNANCE_READ_REACHED');
+			if (args[0] === 'proposals' && args[1] === 'show') return { activeVersion: 8 };
+			if (args[0] === 'proposals' && args[1] === 'evaluate') throw new Error('GOVERNANCE_APPROVAL_REACHED');
 			return {};
 		});
-		await expect(state.run!()).rejects.toThrow('GOVERNANCE_READ_REACHED');
+		await expect(state.run!()).rejects.toThrow('GOVERNANCE_APPROVAL_REACHED');
 		expect(state.read).toHaveBeenCalledWith(
 			['proposals', 'show', 'fresh', '--server', 'local', '--project', '8cbfb810-6da5-4da2-9ae9-cad53101253f'],
+			'treeseed', true);
+		expect(state.read).toHaveBeenCalledWith(
+			expect.arrayContaining(['proposals', 'evaluate', 'fresh', '--if-match', '8', '--input']),
 			'treeseed', true);
 	});
 });

@@ -17,13 +17,22 @@ describe('automated campaign control (fixtures are not golden acceptance)', () =
 		const collaboration = vi.fn(), verify = vi.fn(), stop = vi.fn();
 		await monitorCampaign({ read: () => ({ status: tick < 3 ? 'running' : 'completed', mode: 'simulation', planningEndsAt: 1, endsAt: 10 }),
 			now: () => tick, wait: async () => { tick += 1; }, collaboration, verify, stop });
-		expect(collaboration).toHaveBeenCalledTimes(2); expect(verify).toHaveBeenCalledOnce(); expect(stop).not.toHaveBeenCalled();
+		expect(collaboration).toHaveBeenCalledOnce(); expect(verify).toHaveBeenCalledOnce(); expect(stop).not.toHaveBeenCalled();
 	});
-	it('stops only a known failed planning boundary, never passing it', async () => {
+	it('keeps planning after the initial window until collaboration and estimates complete', async () => {
+		let tick = 1;
+		const stop = vi.fn(), verify = vi.fn(), collaboration = vi.fn(() => {
+			if (tick < 3) throw new Error('ACCEPTANCE_ESTIMATE_ROLES: still pending');
+		});
+		await monitorCampaign({ read: () => ({ status: tick < 4 ? 'running' : 'completed', mode: 'simulation', planningEndsAt: 1, endsAt: 10 }),
+			now: () => tick, wait: async () => { tick += 1; }, collaboration, verify, stop });
+		expect(collaboration).toHaveBeenCalledTimes(3); expect(verify).toHaveBeenCalledOnce(); expect(stop).not.toHaveBeenCalled();
+	});
+	it('rejects incomplete collaboration at terminal closeout', async () => {
 		const stop = vi.fn();
-		await expect(monitorCampaign({ read: () => ({ status: 'running', mode: 'simulation', planningEndsAt: 0, endsAt: 10 }),
+		await expect(monitorCampaign({ read: () => ({ status: 'completed', mode: 'simulation', planningEndsAt: 0, endsAt: 10 }),
 			now: () => 1, wait: vi.fn(), collaboration: () => { throw new Error('ACCEPTANCE_ESTIMATE_ROLES: missing'); }, verify: vi.fn(), stop })).rejects.toThrow('ACCEPTANCE_ESTIMATE_ROLES');
-		expect(stop).toHaveBeenCalledOnce();
+		expect(stop).not.toHaveBeenCalled();
 	});
 	it('stops a live simulation on transport failure but never mutates an unverified production run', async () => {
 		for (const mode of ['simulation', 'production']) {
@@ -73,8 +82,8 @@ describe('automated campaign control (fixtures are not golden acceptance)', () =
 		let status = 'running';
 		const stop = vi.fn(() => { status = 'failed'; throw new Error('already terminal'); });
 		await expect(monitorCampaign({ read: () => ({ status, mode: 'simulation', planningEndsAt: 0, endsAt: 10 }),
-			now: () => 1, wait: vi.fn(), collaboration: () => { throw new Error('ACCEPTANCE_ESTIMATE_ROLES'); },
-			verify: vi.fn(), stop })).rejects.toThrow('ACCEPTANCE_ESTIMATE_ROLES');
+			now: () => 1, wait: vi.fn(), collaboration: () => { throw new Error('read-back failed'); },
+			verify: vi.fn(), stop })).rejects.toThrow('read-back failed');
 		expect(stop).toHaveBeenCalledOnce();
 	});
 });

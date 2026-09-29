@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
 import { monitorCampaign, requirePlanningWindow } from './campaign.ts';
 import { verifyFreezeIntegrity } from './freeze-integrity.ts';
 import { read } from './acceptance-cli.ts';
@@ -55,7 +56,20 @@ test('Frozen SDK campaign drives planning acting review and terminal golden gate
 			planningEndsAt: Date.parse(current.startedAt) + current.parameters.durationSeconds * current.parameters.planningPercent * 10,
 			endsAt: Date.parse(current.parameters.appliedPlan.endsAt) };
 	}, now: Date.now, wait: () => new Promise(resolve => setTimeout(resolve, 30_000)), stop,
-		collaboration: () => verifyGolden('collaboration'),
+		collaboration: () => {
+			verifyGolden('collaboration');
+			const project = body.projects[0] as string;
+			const proposal = read(['proposals', 'show', freeze.proposal.id, '--server', 'local', '--project', project], team, true);
+			const version = Number(proposal.activeVersion);
+			assert.ok(Number.isInteger(version) && version > 0,
+				'ACCEPTANCE_PROPOSAL_VERSION: External approval requires exact current version');
+			const approval = read(['proposals', 'evaluate', freeze.proposal.id, '--server', 'local', '--project', project,
+				'--if-match', String(version), '--input', fileURLToPath(new URL('./proposal-approval.json', import.meta.url)),
+				'--idempotency-key', `golden-approval:${workdayId}`], team, true);
+			assert.equal(approval.status, 'accepted', 'ACCEPTANCE_EXTERNAL_APPROVAL: Proposal was not accepted');
+			assert.ok(typeof approval.decisionId === 'string' && approval.decisionId,
+				'ACCEPTANCE_EXACT_DECISION: External approval did not create an exact decision');
+		},
 		verify: () => { for (const gate of ['lifecycle', 'graph', 'revision', 'results', 'settlement', 'reporter'] as const) verifyGolden(gate);
 			verifySdkExternalState(freeze); } });
 });

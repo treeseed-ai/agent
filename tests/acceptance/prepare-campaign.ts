@@ -28,7 +28,7 @@ export function verifySdkArchitectureBook(readback: Row, reference: Row): void {
 		'ACCEPTANCE_CAMPAIGN_BOOK: Book content digest mismatch');
 }
 
-export function verifySdkPublishedChatProfiles(agents: Row[], publishedHead: string): void {
+export function verifySdkPublishedProfiles(agents: Row[], publishedHead: string): void {
 	assert.match(publishedHead, /^[a-f0-9]{40}$/u, 'ACCEPTANCE_CHAT_PROFILE_PUBLISHED: Exact SDK library head required');
 	assert.ok(Array.isArray(agents), 'ACCEPTANCE_CHAT_PROFILE_PUBLISHED: SDK agent inventory required');
 	const roles = ['architect', 'researcher', 'tester', 'engineer', 'technical-writer', 'releaser', 'reviewer', 'reporter'];
@@ -40,6 +40,14 @@ export function verifySdkPublishedChatProfiles(agents: Row[], publishedHead: str
 		const prompt = String(definition?.activityProfiles?.chat?.prompt?.system ?? '');
 		assert.ok(prompt.includes('For coordination-only messages') && prompt.includes('Inspect project files only when'),
 			`ACCEPTANCE_CHAT_PROFILE_TASK_BOUNDARY: ${role} chat must distinguish coordination from source questions`);
+		if (role === 'reviewer') {
+			const activities = definition?.activityProfiles as Row | undefined;
+			const reviewProfile = activities?.reviewing as Row | undefined;
+			const review = String((reviewProfile?.prompt as Row | undefined)?.system ?? '');
+			assert.ok(review.includes('undecided proposal') && review.includes('Requested code and tests may be absent')
+				&& review.includes('completed Actor candidate') && review.includes('approve only proven work'),
+				'ACCEPTANCE_REVIEW_STAGE_BOUNDARY: Proposal feasibility and completed Actor proof must remain distinct');
+		}
 	}
 }
 
@@ -117,7 +125,7 @@ export function prepareSdkCampaign(draftPath: string, freezePath: string, team: 
 	const publishedLibraryHead = execFileSync('gh', ['api', 'repos/treeseed-ai/sdk-library/branches/staging', '--jq', '.commit.sha'],
 		{ encoding: 'utf8', timeout: 30_000 }).trim();
 	const agentProfiles = read(['agents', 'list', '--project', 'sdk', '--server', 'local'], team, true);
-	verifySdkPublishedChatProfiles(agentProfiles.agents as Row[], publishedLibraryHead);
+	verifySdkPublishedProfiles(agentProfiles.agents as Row[], publishedLibraryHead);
 	const providers = (read(['providers', 'list'], team).items as Row[]).filter(item => item.status === 'approved');
 	assert.equal(providers.length, 1, 'ACCEPTANCE_CAMPAIGN_SUPPLY: Individual host campaign requires unambiguous provider');
 	const supply = read(['providers', 'status', providers[0]!.providerId], team);

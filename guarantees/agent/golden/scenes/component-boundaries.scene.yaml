@@ -33,6 +33,12 @@ workflow:
   - id: debug-window
     action: { verifier: agent.golden.debug-window }
     expect: { status: passed }
+  - id: fluid-planning
+    action: { verifier: agent.golden.fluid-planning }
+    expect: { status: passed }
+  - id: early-collaboration
+    action: { verifier: agent.golden.early-collaboration }
+    expect: { status: passed }
   - id: campaign-supply
     action: { verifier: agent.golden.campaign-supply }
     expect: { status: passed }

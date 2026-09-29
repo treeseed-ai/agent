@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { freshSdkDraft, sdkProposalText } from '../../acceptance/campaign.ts';
 import { verifyRuntimeClosure } from '../../acceptance/freeze-integrity.ts';
-import { requirePinnedCodex, requireSdkCampaignSupply, verifySdkArchitectureBook, verifySdkPublishedChatProfiles } from '../../acceptance/prepare-campaign.ts';
+import { requirePinnedCodex, requireSdkCampaignSupply, verifySdkArchitectureBook, verifySdkPublishedProfiles } from '../../acceptance/prepare-campaign.ts';
 
 const git = { store: 'git', commit: 'a'.repeat(40), repository: 'sdk' };
 const library = { store: 'treedx', model: 'repository', id: 'sdk-library', path: '.',
@@ -92,13 +92,17 @@ describe('fresh automated SDK campaign preparation (fixtures are not acceptance)
 		const head = 'c'.repeat(40);
 		const profiles = ['architect', 'researcher', 'tester', 'engineer', 'technical-writer', 'releaser', 'reviewer', 'reporter']
 			.map(agentSlug => ({ agentSlug, definitionRevision: head, definition: { activityProfiles: { chat: { prompt: {
-				system: 'For coordination-only messages, answer promptly. Inspect project files only when asked about source.' } } } } }));
-		expect(() => verifySdkPublishedChatProfiles(profiles, head)).not.toThrow();
-		expect(() => verifySdkPublishedChatProfiles(profiles, 'd'.repeat(40))).toThrow('ACCEPTANCE_CHAT_PROFILE_PUBLISHED');
+				system: 'For coordination-only messages, answer promptly. Inspect project files only when asked about source.' } },
+				reviewing: { prompt: { system: 'For an undecided proposal Requested code and tests may be absent; for a completed Actor candidate approve only proven work.' } } } } }));
+		expect(() => verifySdkPublishedProfiles(profiles, head)).not.toThrow();
+		expect(() => verifySdkPublishedProfiles(profiles, 'd'.repeat(40))).toThrow('ACCEPTANCE_CHAT_PROFILE_PUBLISHED');
 		const stale = structuredClone(profiles);
 		stale[5]!.definition.activityProfiles.chat.prompt.system = 'Research project sources before answering every message.';
-		expect(() => verifySdkPublishedChatProfiles(stale, head)).toThrow('ACCEPTANCE_CHAT_PROFILE_TASK_BOUNDARY');
-		expect(() => verifySdkPublishedChatProfiles(profiles.slice(1), head)).toThrow('ACCEPTANCE_CHAT_PROFILE_PUBLISHED');
+		expect(() => verifySdkPublishedProfiles(stale, head)).toThrow('ACCEPTANCE_CHAT_PROFILE_TASK_BOUNDARY');
+		const staleReviewer = structuredClone(profiles);
+		staleReviewer[6]!.definition.activityProfiles.reviewing.prompt.system = 'Approve only when every criterion is proven.';
+		expect(() => verifySdkPublishedProfiles(staleReviewer, head)).toThrow('ACCEPTANCE_REVIEW_STAGE_BOUNDARY');
+		expect(() => verifySdkPublishedProfiles(profiles.slice(1), head)).toThrow('ACCEPTANCE_CHAT_PROFILE_PUBLISHED');
 	});
   it('requires explicit exact host and guest closure before proposal preparation', () => {
     const digest = `sha256:${'a'.repeat(64)}`;

@@ -112,7 +112,9 @@ export function timingAwarenessContract(events: Record<string, unknown>[]) {
 }
 
 export function timingRecoveryEligible(contract: ReturnType<typeof timingAwarenessContract>, remainingMs: number) {
-	return contract.firstToolCompliant && !contract.finalToolCompliant && contract.completedChecks >= 1 && remainingMs >= 15_000;
+	// With only one clock call, that call is both the first and last tool, but it
+	// is not the required separate final check. Recover that exact case too.
+	return contract.firstToolCompliant && contract.completedChecks === 1 && remainingMs >= 15_000;
 }
 
 export function codexThreadId(events: Record<string, unknown>[]) {

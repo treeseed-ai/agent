@@ -57,6 +57,16 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/guarantees/campaign.test.ts
     testName: enforces one hour with twenty minutes planning without inventing per-assignment demand
+  agent.golden.fluid-planning:
+    kind: vitestCase
+    ownerPackage: '@treeseed/agent'
+    testFile: tests/modern/guarantees/campaign.test.ts
+    testName: keeps planning after the initial window until collaboration and estimates complete
+  agent.golden.early-collaboration:
+    kind: vitestCase
+    ownerPackage: '@treeseed/agent'
+    testFile: tests/modern/guarantees/campaign.test.ts
+    testName: checks ready collaboration during the initial planning window
   agent.golden.campaign-supply:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

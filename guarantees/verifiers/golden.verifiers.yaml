@@ -21,6 +21,16 @@ verifiers:
     ownerPackage: '@treeseed/agent'
     testFile: tests/modern/guarantees/continuation.test.ts
     testName: rejects changed source, decision, candidate custody and absent genuine release review
+  agent.golden.continuation-release-revision:
+    kind: vitestCase
+    ownerPackage: '@treeseed/agent'
+    testFile: tests/modern/guarantees/continuation.test.ts
+    testName: accepts a genuine release revision with exact preceding candidate and latest approval
+  agent.golden.continuation-revision-denial:
+    kind: vitestCase
+    ownerPackage: '@treeseed/agent'
+    testFile: tests/modern/guarantees/continuation.test.ts
+    testName: rejects revision authority drift, wrong candidate and unfinished or missing release output
   agent.golden.live.continuation:
     kind: nodeTestCase
     ownerPackage: '@treeseed/agent'

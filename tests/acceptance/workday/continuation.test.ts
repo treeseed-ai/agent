@@ -107,17 +107,33 @@ export function continuationAuthority(assignments: Row[]): { decisionId: string;
 }
 
 export function verifyContinuationResults(assignments: Row[], authority: ReturnType<typeof continuationAuthority>): void {
-	const actors = assignments.filter(item => activity(item) === 'acting');
-	assert.equal(actors.length, 1, 'ACCEPTANCE_CONTINUATION_REPLAY: Completed Actors must not be executed again');
-	const actor = actors[0]!;
-	assert.equal(itemId(actor), 'simulate-release');
-	assert.equal(actor.status, 'completed');
-	assert.equal(actor.decisionId, authority.decisionId);
-	const attempt = row(actor.assignmentAttempt);
-	assert.deepEqual(attempt.sourceRef, authority.sourceRef, 'ACCEPTANCE_CONTINUATION_SOURCE: Proposal revision changed');
-	assert.deepEqual(attempt.authorityRefs, authority.authorityRefs, 'ACCEPTANCE_CONTINUATION_DECISION: Decision authority changed');
-	assert.equal(row(attempt.workspace).baseCommit, authority.candidate, 'ACCEPTANCE_CONTINUATION_CANDIDATE: Approved predecessor lost');
-	assert.ok(assignments.some(item => item.status === 'completed' && activity(item) === 'reviewing' && itemId(item) === 'simulate-release'
-		&& item.decisionId === authority.decisionId && row(row(item.lifecycleOutput).activityCompletion).reviewDisposition === 'approved'),
+	const actors = assignments.filter(item => activity(item) === 'acting').sort((a,b) => String(a.createdAt).localeCompare(String(b.createdAt)));
+	assert.ok(actors.length > 0 && actors.every(item => itemId(item) === 'simulate-release'),
+		'ACCEPTANCE_CONTINUATION_REPLAY: Completed predecessor Actors must not be executed again');
+	const reviews = assignments.filter(item => item.status === 'completed' && activity(item) === 'reviewing' && itemId(item) === 'simulate-release');
+	let candidate = authority.candidate;
+	for (const [index, actor] of actors.entries()) {
+		assert.equal(actor.status, 'completed');
+		assert.equal(actor.decisionId, authority.decisionId);
+		const attempt = row(actor.assignmentAttempt);
+		assert.deepEqual(attempt.sourceRef, authority.sourceRef, 'ACCEPTANCE_CONTINUATION_SOURCE: Proposal revision changed');
+		assert.deepEqual(attempt.authorityRefs, authority.authorityRefs, 'ACCEPTANCE_CONTINUATION_DECISION: Decision authority changed');
+		assert.equal(row(attempt.workspace).baseCommit, candidate, 'ACCEPTANCE_CONTINUATION_CANDIDATE: Exact preceding candidate lost');
+		if (index > 0) {
+			const previous = actors[index - 1]!;
+			assert.ok(reviews.some(review => review.decisionId === authority.decisionId
+				&& String(review.createdAt) > String(previous.completedAt) && String(review.completedAt) < String(actor.createdAt)
+				&& row(row(review.lifecycleOutput).activityCompletion).reviewDisposition === 'request-changes'),
+				'ACCEPTANCE_CONTINUATION_REVISION: Revision requires a completed request-changes review of its predecessor');
+		}
+		const refs = row(actor.assignmentResult).references as Row[];
+		candidate = String(refs?.find(ref => ref.kind === 'git' && ref.repository === 'treeseed-ai/sdk')?.commit ?? '');
+		assert.match(candidate, /^[a-f0-9]{40}$/u, 'ACCEPTANCE_CONTINUATION_CANDIDATE: Exact release candidate required');
+	}
+	// The API graph owns the review-cycle allowance. This gate checks custody of
+	// every admitted attempt without imposing a second, conflicting attempt cap.
+	assert.ok(reviews.some(item => item.decisionId === authority.decisionId
+		&& String(item.createdAt) > String(actors.at(-1)!.completedAt)
+		&& row(row(item.lifecycleOutput).activityCompletion).reviewDisposition === 'approved'),
 		'ACCEPTANCE_CONTINUATION_RELEASE_REVIEW: Releaser requires a genuine paired approval');
 }

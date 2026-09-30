@@ -15,6 +15,12 @@ workflow:
   - id: continuation-denial
     action: { verifier: agent.golden.continuation-denial }
     expect: { status: passed }
+  - id: continuation-release-revision
+    action: { verifier: agent.golden.continuation-release-revision }
+    expect: { status: passed }
+  - id: continuation-revision-denial
+    action: { verifier: agent.golden.continuation-revision-denial }
+    expect: { status: passed }
   - id: provider-policy-parity
     action: { verifier: agent.golden.provider-policy-parity }
     expect: { status: passed }

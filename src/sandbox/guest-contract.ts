@@ -220,18 +220,27 @@ export function promptFromContext(context: Record<string, unknown>, reasoningEff
 	return `${timingInstruction}\n\nYou are exactly ${text(manifest.agentHandle)}. The verified TreeDX context below is ordered by mandatory core, agent-general, activity-specific, and live discussion layers.\n\n${sourceText}\n\nActivity instructions:\n${text(prompt.system)}\n\nActivity task:\n${text(prompt.task) || 'Respond to the committed Discussion message.'}\n\n${required ? 'You were directly addressed and must provide a substantive response.' : 'Respond only if your role adds material value; otherwise return exactly <!-- treeseed:abstain -->.'}\n${projectAccess} Prefer extensionless identifiers such as objectives/core. Do not supply or reason about Git commits for normal TreeDX access; the assignment relay privately enforces consistent views. Do not invoke trsd: the CLI is intentionally absent from assignment guests. Tool and content permissions come from this activity profile. If the first clock reports at most 120 seconds, make no more than one targeted source search and two exact file reads, and do not perform exploratory Git loops. After that focused inspection, check remaining time; with 45 seconds or less, make the required final clock check and answer immediately. Finish sooner when the evidence is sufficient; the deadline is a ceiling, not a target. The assigned reasoning effort is ${reasoningEffort || 'provider-default'}. Scale inspection and research depth to that setting and the question. Do not run unrelated broad test suites or exhaustive scans. Do not inspect outside /workspace or disclose credentials. Return only the message to post.\n\nDiscussion message:\n${text(record(context.message).content)}\n\n${timingStartReminder}`;
 }
 
-export function assertPredecessorSynthesis(context: Record<string, unknown>, completion: ActivityCompletionReport | null) {
+export function missingPredecessorCitations(context: Record<string, unknown>, completion: ActivityCompletionReport | null): string[] {
 	const canonical = record(context.canonicalAssignmentContext);
 	const assignment = record(canonical.assignment);
-	if (text(record(assignment.effectiveProfile).activity) !== 'planning') return;
+	if (text(record(assignment.effectiveProfile).activity) !== 'planning') return [];
 	const ids = (Array.isArray(canonical.predecessorResults) ? canonical.predecessorResults : [])
 		.map((value) => text(record(value).id)).filter(Boolean);
-	if (ids.length < 2) return;
+	if (ids.length < 2) return [];
 	// Planning's WriterHandler commits the completion summary as the Note body.
 	// Requiring contentOutput here would contradict that single governed write path.
 	const body = completion?.summary ?? '';
-	const missing = ids.filter((id) => !body.includes(id));
+	return ids.filter((id) => !body.includes(id));
+}
+
+export function assertPredecessorSynthesis(context: Record<string, unknown>, completion: ActivityCompletionReport | null) {
+	const missing = missingPredecessorCitations(context, completion);
 	if (missing.length) throw new Error(`predecessor_result_citation_missing:${missing.join(',')}`);
+}
+
+export function planningSynthesisCorrectionPrompt(missing: string[]): string {
+	if (!missing.length) throw new Error('planning_synthesis_correction_requires_missing_citation');
+	return `The structured planning completion omitted predecessor result ID(s): ${missing.join(', ')}. Correct only the completion summary within this SAME assignment; do not inspect or change files, publish content, or repeat planning. Preserve the substantive contribution already written. For each omitted result, state its actual material contribution based on the predecessor context; do not invent one. Your FIRST tool action must call mcp__treedx__treeseed_time_status using functions.exec with: text(await tools.mcp__treedx__treeseed_time_status({}));. Before responding, call that same clock tool as your FINAL tool action. Return the full corrected structured completion within the original deadline; the deadline has not moved.`;
 }
 
 export function assertArchitectSourceCitation(completion: ActivityCompletionReport | null, exactSourceCommit: string | null, agentClass: string, activity: string) {

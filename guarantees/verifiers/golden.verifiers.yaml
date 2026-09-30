@@ -263,6 +263,11 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/execution/codex-chat-executor.test.ts
     testName: "requires clock checks to bracket every other provider tool action"
+  agent.golden.planning-synthesis-eight-predecessors:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/sandbox/planning-synthesis-recovery.test.ts
+    testName: "identifies only missing citations among eight planning predecessors without inventing contributions"
   agent.golden.revision:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

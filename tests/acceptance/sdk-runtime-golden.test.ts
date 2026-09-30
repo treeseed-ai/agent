@@ -168,12 +168,12 @@ export function verifyGolden(gate: Gate): void {
 	for (const item of assignments) {
 		if (gate === 'settlement') {
 			assert.ok(item.status === 'completed' || phaseBoundaryCancelled(item,run), 'Normal settlement requires completed or authoritative phase-cancelled attempts');
-			assert.equal(item.leaseToken, null, 'Settlement cannot retain a live lease');
-			assert.equal(row(row(item.lifecycleOutput).teardown).verified, true, 'Settlement requires durable teardown');
+			assert.equal(item.leaseToken, null, 'ACCEPTANCE_SETTLEMENT_LEASE: Settlement cannot retain a live lease');
+			assert.equal(row(row(item.lifecycleOutput).teardown).verified, true, 'ACCEPTANCE_SETTLEMENT_TEARDOWN: Settlement requires durable teardown');
 		}
 		const settlements = aggregate.filter(measurement => measurement.assignmentId === item.id);
-		assert.equal(settlements.length, 1, `Exactly one actual settlement required for ${text(item.id)}`);
-		assert.ok(text(row(settlements[0]?.metadata).settlementKey));
+		assert.equal(settlements.length, 1, `ACCEPTANCE_SETTLEMENT_COUNT: Exactly one actual settlement required for ${text(item.id)}`);
+		assert.ok(text(row(settlements[0]?.metadata).settlementKey), 'ACCEPTANCE_SETTLEMENT_KEY: Stable settlement key required');
 	}
 	}
 	if (gate === 'reporter') {

@@ -34,7 +34,7 @@ describe('provider AgentKernel execution', () => {
 			id: 'codex', observe: async () => ({ available: true }),
 			execute: vi.fn(async (request): Promise<AgentExecutionResult> => { await request.beginExecution?.(); return {
 				status: 'completed', summary: 'Implemented and verified.',
-				outputs: { timingAwareness, sourceReference: { kind: 'git', repository: 'treeseed-ai/sdk', commit: candidateCommit,
+				outputs: { timingAwareness, teardown: { verified: false, completedAt: null }, sourceReference: { kind: 'git', repository: 'treeseed-ai/sdk', commit: candidateCommit,
 					branch: 'treeseed/assignments/assignment-1' } },
 				usage: [{ elapsedSeconds: 4, inputTokens: 20, outputTokens: 10 }],
 			}; }),
@@ -45,6 +45,7 @@ describe('provider AgentKernel execution', () => {
 			authorizedContext: [{ ref: { id: 'sdk-source', commit }, value: { repository: 'treeseed-ai/sdk', commit } }],
 		});
 		expect(result.status).toBe('completed');
+		expect(result.outputs?.teardown).toEqual({ verified: false, completedAt: null });
 		expect(result.outputs?.assignmentResult).toMatchObject({
 			assignmentId: 'assignment-1', status: 'completed',
 			references: [{ kind: 'git', repository: 'treeseed-ai/sdk', commit: candidateCommit }],
@@ -256,12 +257,26 @@ describe('provider AgentKernel execution', () => {
 		const executor: AgentExecutor = { id: 'codex', observe: async () => ({ available: true }), execute: vi.fn() };
 		const result = await executeKernelAssignment({ executor, request: input, runtimeBuild });
 		expect(executor.execute).not.toHaveBeenCalled();
+		expect(result.outputs?.teardown).toMatchObject({ verified: true, completedAt: expect.stringMatching(/^\d{4}-/u) });
 		expect(result.outputs?.assignmentResult).toMatchObject({
 			status: 'completed', references: [{ kind: 'treedx', projectId:'team-project', commit: candidateCommit, path: target.path }],
 		});
 		expect(written).toContain('classification');
 		expect(written).toContain('expired-actor');
 		expect(written).toContain('reservation-actor');
+		// A rejected read-back cannot acquire a successful closure receipt or
+		// leak a model call; historical missing receipts are never backfilled.
+		vi.mocked(input.treeDx.invoke).mockImplementation(async operation =>
+			operation === 'treedx.workspaces.commit' ? { commitSha: candidateCommit } : {});
+		const failed = await executeKernelAssignment({ executor, request: input, runtimeBuild });
+		expect(failed).toMatchObject({ status: 'failed', code: 'agent_kernel_failed', summary: 'treedx_commit_readback_mismatch' });
+		expect(failed.outputs?.teardown).toBeUndefined();
+		expect(executor.execute).not.toHaveBeenCalled();
+		attempt.deadline = new Date(Date.now() - 1).toISOString();
+		const expired = await executeKernelAssignment({ executor, request: input, runtimeBuild });
+		expect(expired).toMatchObject({ status: 'failed', summary: 'assignment_expired' });
+		expect(expired.outputs?.teardown).toBeUndefined();
+		expect(executor.execute).not.toHaveBeenCalled();
 	});
 
 });

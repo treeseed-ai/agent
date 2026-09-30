@@ -294,6 +294,26 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/sandbox/planning-synthesis-recovery.test.ts
     testName: "identifies only missing citations among eight planning predecessors without inventing contributions"
+  agent.golden.planning-synthesis-correction:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/sandbox/planning-synthesis-recovery.test.ts
+    testName: "corrects nine-predecessor synthesis using the captured completion and exact missing evidence within one original-budget continuation"
+  agent.golden.planning-synthesis-fail-closed:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/sandbox/planning-synthesis-recovery.test.ts
+    testName: "fails closed when the bounded citation correction still omits a predecessor"
+  agent.golden.planning-synthesis-correction-clock:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/sandbox/planning-synthesis-recovery.test.ts
+    testName: "does not accept a corrected response when its clock-only boundary fails"
+  agent.golden.planning-synthesis-correction-budget:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/sandbox/planning-synthesis-recovery.test.ts
+    testName: "does not start citation recovery without an original session or enough remaining active time"
   agent.golden.revision:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

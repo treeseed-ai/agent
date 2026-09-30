@@ -9,3 +9,15 @@ workflow:
   - id: clock-boundary
     action: { verifier: agent.golden.clock }
     expect: { status: passed }
+  - id: captured-response-correction
+    action: { verifier: agent.golden.planning-synthesis-correction }
+    expect: { status: passed }
+  - id: uncorrected-fail-closed
+    action: { verifier: agent.golden.planning-synthesis-fail-closed }
+    expect: { status: passed }
+  - id: correction-clock-boundary
+    action: { verifier: agent.golden.planning-synthesis-correction-clock }
+    expect: { status: passed }
+  - id: original-budget-only
+    action: { verifier: agent.golden.planning-synthesis-correction-budget }
+    expect: { status: passed }

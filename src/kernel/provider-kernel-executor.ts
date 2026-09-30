@@ -229,7 +229,13 @@ export async function executeKernelAssignment(input: {
 		status: communication ? transport.result?.status === 'abstained' ? 'abstained' : 'responded' : 'completed', summary: result.summary,
 		...(communication && transport.result?.status !== 'abstained'
 			? { responseMarkdown: transport.result?.responseMarkdown ?? result.summary } : {}),
-		outputs: { ...record(transport.result?.outputs), assignmentResult: result },
+		outputs: { ...record(transport.result?.outputs), assignmentResult: result,
+			// Native Reporter never acquires a sandbox. A successful bounded Kernel
+			// completion has closed its granted runtime; acknowledge that no-op
+			// resource closure without claiming a broker sandbox was destroyed.
+			...(attempt.data.effectiveProfile.handler === 'reporter' && !transport.pending
+				? { teardown: { verified: true, completedAt: new Date().toISOString() } } : {}),
+		},
 		usage: transport.result?.usage ?? [{ elapsedSeconds: result.usage.elapsedSeconds }],
 		artifacts: transport.result?.artifacts ?? [],
 	};

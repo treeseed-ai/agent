@@ -84,6 +84,18 @@ describe('golden read-back assertion regressions (fixtures are not live acceptan
 		expect(state.cases.size).toBe(8);
 		for (const name of ['lifecycle', 'collaboration', 'graph', 'revision', 'results', 'settlement', 'reporter']) expect(() => gate(name)).not.toThrow();
 	});
+	it('requires native Reporter closure without relaxing accounting or exposing raw assertion payloads', () => {
+		const reporter = assignment('native-reporter', 'reporting', 'reporter');
+		state.replies.get('assignments list')!.items.push(reporter);
+		state.replies.get('capacity usage')!.items.push({ id: `${reporter.id}:aggregate`, assignmentId: reporter.id,
+			metadata: { settlementKey: reporter.id } });
+		delete reporter.lifecycleOutput.teardown;
+		expect(() => gate('settlement')).toThrow('ACCEPTANCE_SETTLEMENT_TEARDOWN:');
+		reporter.lifecycleOutput.teardown = { verified: true };
+		expect(() => gate('settlement')).not.toThrow();
+		state.replies.get('capacity usage')!.items.pop();
+		expect(() => gate('settlement')).toThrow('ACCEPTANCE_SETTLEMENT_COUNT:');
+	});
 	it('does not accept a stop acknowledgement without terminal leases teardown and settlement', () => {
 		const stopped = state.cases.get('Stopped simulation retains terminal leases teardown and exactly-once settlement')!;
 		expect(stopped).toThrow('ACCEPTANCE_STOP_TERMINAL');

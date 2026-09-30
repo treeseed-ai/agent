@@ -3,6 +3,12 @@ id: agent.golden.component-boundaries
 title: Golden execution component boundaries
 scope: local-component-tests
 workflow:
+  - id: native-reporter-closure
+    action: { verifier: agent.golden.native-reporter-closure }
+    expect: { status: passed }
+  - id: native-reporter-settlement
+    action: { verifier: agent.golden.native-reporter-settlement }
+    expect: { status: passed }
   - id: persistent-freeze-receipts
     action: { verifier: agent.golden.persistent-freeze-receipts }
     expect: { status: passed }

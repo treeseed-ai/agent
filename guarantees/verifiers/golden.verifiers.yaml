@@ -1,6 +1,16 @@
 schemaVersion: treeseed.guarantee-verifiers/v1
 ownerPackage: "@treeseed/agent"
 verifiers:
+  agent.golden.native-reporter-closure:
+    kind: vitestCase
+    ownerPackage: '@treeseed/agent'
+    testFile: tests/modern/kernel/provider-kernel-executor.test.ts
+    testName: runs the deterministic Reporter through the scoped TreeDX runtime without invoking a model
+  agent.golden.native-reporter-settlement:
+    kind: vitestCase
+    ownerPackage: '@treeseed/agent'
+    testFile: tests/modern/kernel/golden-readback.test.ts
+    testName: requires native Reporter closure without relaxing accounting or exposing raw assertion payloads
   agent.golden.persistent-freeze-receipts:
     kind: vitestCase
     ownerPackage: '@treeseed/agent'

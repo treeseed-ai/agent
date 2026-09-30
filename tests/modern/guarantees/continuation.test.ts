@@ -29,9 +29,50 @@ describe('real continuation boundary regressions (fixtures are not live acceptan
 		const authority = continuationAuthority(assignments);
 		expect(authority).toEqual({ decisionId: 'decision', sourceRef, authorityRefs, candidate });
 		const current = [assignment('release','simulate-release','acting'), assignment('release-review','simulate-release','reviewing')];
+		current[1]!.createdAt = '2026-09-30T00:00:03Z';
 		expect(() => verifyContinuationResults(current, authority)).not.toThrow();
 		current.push(assignment('duplicate','implement-change','acting'));
 		expect(() => verifyContinuationResults(current, authority)).toThrow('ACCEPTANCE_CONTINUATION_REPLAY');
+	});
+	it('accepts a genuine release revision with exact preceding candidate and latest approval', () => {
+		const authority = continuationAuthority(assignments), revisedCandidate = 'd'.repeat(40);
+		const release = assignment('release','simulate-release','acting');
+		release.assignmentResult.references[0].commit = revisedCandidate;
+		const changes = assignment('changes','simulate-release','reviewing');
+		changes.createdAt = '2026-09-30T00:00:03Z'; changes.completedAt = '2026-09-30T00:00:04Z';
+		changes.lifecycleOutput.activityCompletion.reviewDisposition = 'request-changes';
+		const revision = assignment('revision','simulate-release','acting');
+		revision.createdAt = '2026-09-30T00:00:05Z'; revision.completedAt = '2026-09-30T00:00:06Z';
+		revision.assignmentAttempt.workspace.baseCommit = revisedCandidate;
+		const approval = assignment('approval','simulate-release','reviewing');
+		approval.createdAt = '2026-09-30T00:00:07Z'; approval.completedAt = '2026-09-30T00:00:08Z';
+		const current = [approval, revision, changes, release];
+		expect(() => verifyContinuationResults(current,authority)).not.toThrow();
+		expect(() => verifyContinuationResults(current.filter(item => item.id !== 'changes'),authority)).toThrow('ACCEPTANCE_CONTINUATION_REVISION');
+		changes.lifecycleOutput.activityCompletion.reviewDisposition = 'approved';
+		expect(() => verifyContinuationResults(current,authority)).toThrow('ACCEPTANCE_CONTINUATION_REVISION');
+		changes.lifecycleOutput.activityCompletion.reviewDisposition = 'request-changes';
+		expect(() => verifyContinuationResults(current.filter(item => item.id !== 'approval'),authority)).toThrow('ACCEPTANCE_CONTINUATION_RELEASE_REVIEW');
+		approval.createdAt = '2026-09-30T00:00:03Z';
+		expect(() => verifyContinuationResults(current,authority)).toThrow('ACCEPTANCE_CONTINUATION_RELEASE_REVIEW');
+	});
+	it('rejects revision authority drift, wrong candidate and unfinished or missing release output', () => {
+		const authority = continuationAuthority(assignments);
+		const release = assignment('release','simulate-release','acting');
+		const changes = assignment('changes','simulate-release','reviewing');
+		changes.createdAt = '2026-09-30T00:00:03Z'; changes.completedAt = '2026-09-30T00:00:04Z';
+		changes.lifecycleOutput.activityCompletion.reviewDisposition = 'request-changes';
+		const revision = assignment('revision','simulate-release','acting');
+		revision.createdAt = '2026-09-30T00:00:05Z'; revision.completedAt = '2026-09-30T00:00:06Z';
+		for (const [field,value,code] of [['sourceRef',{},'SOURCE'],['authorityRefs',[],'DECISION'],['workspace',{baseCommit:'e'.repeat(40)},'CANDIDATE']] as const) {
+			const mutated = structuredClone(revision); mutated.assignmentAttempt[field] = value;
+			expect(() => verifyContinuationResults([release,changes,mutated],authority)).toThrow(`ACCEPTANCE_CONTINUATION_${code}`);
+		}
+		release.assignmentResult.references = [];
+		expect(() => verifyContinuationResults([release],authority)).toThrow('ACCEPTANCE_CONTINUATION_CANDIDATE');
+		release.status = 'leased';
+		expect(() => verifyContinuationResults([release],authority)).toThrow();
+		expect(() => verifyContinuationResults([],authority)).toThrow('ACCEPTANCE_CONTINUATION_REPLAY');
 	});
 	it('rejects a missing frontier, mixed decisions, unreviewed revision and missing exact Git candidate', () => {
 		const incomplete = structuredClone(assignments); incomplete.shift();

@@ -27,6 +27,12 @@ workflow:
   - id: phase-cancelled-settlement
     action: { verifier: agent.golden.phase-cancelled-settlement }
     expect: { status: passed }
+  - id: portable-release-pack
+    action: { verifier: agent.golden.portable-release-pack }
+    expect: { status: passed }
+  - id: portable-release-guidance
+    action: { verifier: agent.golden.portable-release-guidance }
+    expect: { status: passed }
   - id: provider-policy-parity
     action: { verifier: agent.golden.provider-policy-parity }
     expect: { status: passed }

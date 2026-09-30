@@ -36,6 +36,16 @@ verifiers:
     ownerPackage: '@treeseed/agent'
     testFile: tests/modern/kernel/golden-readback.test.ts
     testName: settles cancelled planning attempts exactly once without accepting missing or duplicate consumption
+  agent.golden.portable-release-pack:
+    kind: vitestCase
+    ownerPackage: '@treeseed/agent'
+    testFile: tests/modern/execution/verification/portable-release-pack.test.ts
+    testName: reproduces missing scratch destination and replays default npm pack in a fresh Reviewer workspace
+  agent.golden.portable-release-guidance:
+    kind: vitestCase
+    ownerPackage: '@treeseed/agent'
+    testFile: tests/modern/execution/verification/portable-release-pack.test.ts
+    testName: guides both release Actor and Reviewer to independently verify ordinary current-directory packaging
   agent.golden.continuation-revision-denial:
     kind: vitestCase
     ownerPackage: '@treeseed/agent'

@@ -339,8 +339,9 @@ describe('Codex chat executor', () => {
 			workspace: { mode: 'git' }, effectiveProfile: { activity: 'reviewing', handler: 'writer', prompt: {} },
 		}, context: [], predecessorResults: [{ id: 'release-result' }] } });
 		expect(prompt).toContain('Release review runs in a fresh VM');
-		expect(prompt).toContain('first create that destination directory in this VM');
-		expect(prompt).toContain('the guest runner replays every reported passing verification command');
+		expect(prompt).toContain('standalone command npm pack in /workspace/project');
+		expect(prompt).toContain('default current-directory output');
+		expect(prompt).toContain('the guest runner independently replays every reported passing verification command');
 	});
 	it('requires test-first actors to report each acceptance boundary independently', () => {
 		const prompt = promptFromContext({ canonicalAssignmentContext: { assignment: {

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('node:test', () => ({ default: vi.fn() }));
-const { continuationAuthority, verifyContinuationResults } = await import('../../acceptance/workday/continuation.test.ts');
+const { continuationAuthority, verifyContinuationResults, continuationPlanKey } = await import('../../acceptance/workday/continuation.test.ts');
 type Row = Record<string, any>;
 let assignments: Row[];
 const sourceRef = { id: 'proposal', revision: 8, digest: `sha256:${'a'.repeat(64)}` };
@@ -19,6 +19,12 @@ beforeEach(() => {
 	review.createdAt = '2026-09-30T00:00:03Z'; assignments.push(review);
 });
 describe('real continuation boundary regressions (fixtures are not live acceptance)', () => {
+	it('allocates a new supported request identity for each verification without reusing cancelled admission', () => {
+		const first = continuationPlanKey('workday-parent'), second = continuationPlanKey('workday-parent');
+		expect(first).toMatch(/^continuation-plan:workday-parent:[a-f0-9-]{36}$/u);
+		expect(second).not.toBe(first);
+		expect(continuationPlanKey('workday-other')).toMatch(/^continuation-plan:workday-other:/u);
+	});
 	it('requires the latest approved candidate and exact accepted authority without copying results', () => {
 		const authority = continuationAuthority(assignments);
 		expect(authority).toEqual({ decisionId: 'decision', sourceRef, authorityRefs, candidate });

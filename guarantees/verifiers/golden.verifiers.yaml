@@ -11,6 +11,11 @@ verifiers:
     ownerPackage: '@treeseed/agent'
     testFile: tests/modern/guarantees/continuation.test.ts
     testName: requires the latest approved candidate and exact accepted authority without copying results
+  agent.golden.continuation-request-identity:
+    kind: vitestCase
+    ownerPackage: '@treeseed/agent'
+    testFile: tests/modern/guarantees/continuation.test.ts
+    testName: allocates a new supported request identity for each verification without reusing cancelled admission
   agent.golden.continuation-denial:
     kind: vitestCase
     ownerPackage: '@treeseed/agent'

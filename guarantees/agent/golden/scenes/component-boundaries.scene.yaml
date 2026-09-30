@@ -9,6 +9,9 @@ workflow:
   - id: continuation-authority
     action: { verifier: agent.golden.continuation-authority }
     expect: { status: passed }
+  - id: continuation-request-identity
+    action: { verifier: agent.golden.continuation-request-identity }
+    expect: { status: passed }
   - id: continuation-denial
     action: { verifier: agent.golden.continuation-denial }
     expect: { status: passed }

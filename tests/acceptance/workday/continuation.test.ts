@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -11,6 +11,8 @@ import { acceptanceReceiptDirectory, captureSdkExternalState, requireSdkCampaign
 
 const activity = (item: Row) => row(row(item.assignmentAttempt).effectiveProfile).activity;
 const itemId = (item: Row) => row(item.assignmentAttempt).workItemId;
+
+export const continuationPlanKey = (parentId: string) => `continuation-plan:${parentId}:${randomUUID()}`;
 
 /** A focused real continuation gate, not a fresh or complete SDK golden pass. */
 test('Settled SDK work continues the exact approved candidate through release review and Reporter', { timeout: 4_200_000 }, async () => {
@@ -46,8 +48,10 @@ test('Settled SDK work continues the exact approved candidate through release re
 		'--allocation-weight', String(parameters.allocationWeight), '--planning-turn-maximum-seconds', String(parameters.planningTurnMaximumSeconds),
 		'--project-percentages', JSON.stringify(parameters.projectPercentages), '--agent-class-percentages', JSON.stringify(parameters.agentClassPercentages)];
 	const request = read([...args, '--plan'], team);
-	const preflight = read([...args, '--idempotency-key', `continuation-plan:${parentId}`], team);
-	const childFreeze = `${freezePath}.continuation.json`;
+	// A new verification invocation is a new workday segment, not a replay of
+	// a cancelled preflight. CLI retries inside this invocation retain one key.
+	const preflight = read([...args, '--idempotency-key', continuationPlanKey(parentId)], team);
+	const childFreeze = `${freezePath}.continuation-${String(preflight.id)}.json`;
 	const artifacts = acceptanceReceiptDirectory(childFreeze);
 	const receipts: Record<string, string> = { [freezePath]: `sha256:${createHash('sha256').update(originalBytes).digest('hex')}` };
 	const platform = process.env.TREESEED_ACCEPTANCE_PLATFORM_PATH;

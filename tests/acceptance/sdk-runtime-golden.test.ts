@@ -9,6 +9,23 @@ const text = (value: unknown): string => typeof value === 'string' ? value : '';
 // These read-back gates do not stand in for campaign orchestration or external-state proof.
 const gates = ['lifecycle', 'collaboration', 'graph', 'revision', 'results', 'settlement', 'reporter', 'stopped'] as const;
 type Gate = typeof gates[number];
+export function readWorkdayAssignments(workdayId: string, startedAt: string, team: string): Row[] {
+	const assignments: Row[] = [];
+	let cursor: string | undefined;
+	for (let pageNumber = 0; pageNumber < 40; pageNumber += 1) {
+		const page = read(['assignments', 'list', '--limit', '50', ...(cursor ? ['--cursor', cursor] : [])], team);
+		const items = rows(page.items);
+		assignments.push(...items.filter(item => item.workDayId === workdayId));
+		const pageInfo = row(page.page);
+		if (!pageInfo.hasMore || items.every(item => text(item.createdAt) < startedAt)) break;
+		cursor = text(pageInfo.nextCursor);
+		assert.ok(cursor, 'Assignment pagination omitted its cursor');
+		assert.ok(pageNumber < 39, 'Complete assignment evidence was not reached');
+	}
+	assert.ok(assignments.length > 0, 'No real assignment evidence');
+	assert.equal(new Set(assignments.map(item => item.id)).size, assignments.length);
+	return assignments;
+}
 export function verifyGolden(gate: Gate): void {
 	const workdayId = process.env.TREESEED_ACCEPTANCE_WORKDAY_ID ?? '';
 	assert.ok(workdayId.startsWith('workday-'), 'Explicit real workday ID is required; no fixture or skipped pass is allowed');
@@ -27,20 +44,8 @@ export function verifyGolden(gate: Gate): void {
 	assert.ok(text(run.startedAt) && text(run.completedAt), 'Terminal timestamps are required');
 	}
 	assert.equal(run.executionMode, 'simulation', 'Every gate requires authoritative simulation custody');
-	const assignments: Row[] = [];
+	const assignments = readWorkdayAssignments(workdayId, text(run.startedAt), team);
 	let cursor: string | undefined;
-	for (let pageNumber = 0; pageNumber < 40; pageNumber += 1) {
-		const page = read(['assignments', 'list', '--limit', '50', ...(cursor ? ['--cursor', cursor] : [])], team);
-		const items = rows(page.items);
-		assignments.push(...items.filter(item => item.workDayId === workdayId));
-		const pageInfo = row(page.page);
-		if (!pageInfo.hasMore || items.every(item => text(item.createdAt) < text(run.startedAt))) break;
-		cursor = text(pageInfo.nextCursor);
-		assert.ok(cursor, 'Assignment pagination omitted its cursor');
-		assert.ok(pageNumber < 39, 'Complete assignment evidence was not reached');
-	}
-	assert.ok(assignments.length > 0, 'No real assignment evidence');
-	assert.equal(new Set(assignments.map(item => item.id)).size, assignments.length);
 	if (gate === 'lifecycle') for (const item of assignments) {
 		assert.equal(item.status, 'completed', `Normal golden cannot contain a failed, returned, expired or cancelled assignment: ${text(item.id)}`);
 		assert.equal(item.leaseToken, null, `Live lease remains for ${text(item.id)}`);

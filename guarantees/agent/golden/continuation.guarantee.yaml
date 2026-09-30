@@ -1,0 +1,12 @@
+schemaVersion: treeseed.guarantee/v1
+id: guarantee.agent.golden.continuation
+journey: Continue exact settled SDK work through release and closeout
+ownerPackage: '@treeseed/agent'
+type: agent
+subtype: execution
+status: planned
+gates: [core]
+summary: Focused real continuation, not a fresh or complete SDK golden pass; retains the failed prior segment.
+scene:
+  required: true
+  manifest: guarantees/agent/golden/scenes/continuation.scene.yaml

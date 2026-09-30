@@ -122,6 +122,46 @@ describe('golden read-back assertion regressions (fixtures are not live acceptan
 		state.replies.get('assignments list')!.items[0].status = 'failed';
 		expect(() => gate('lifecycle')).toThrow('Normal golden');
 	});
+	it('accepts only authoritative planning phase cancellation with terminal custody', () => {
+		const item = state.replies.get('assignments list')!.items[0];
+		item.status = 'cancelled'; item.lifecycleCode = 'planning_boundary_cancelled';
+		item.assignmentAttempt.effectiveProfile.activity = 'planning'; item.failedAt = '2026-09-27T00:20:02Z';
+		item.capacityEnvelope.budget.time.authorityDeadlineAt = '2026-09-27T00:20:00Z';
+		item.capacityEnvelope.budget.time.executionDeadlineAt = '2026-09-27T00:20:00Z';
+		item.lifecycleOutput.performance = { disposition: 'cancelled' };
+		expect(() => gate('lifecycle')).not.toThrow();
+		expect(() => gate('settlement')).not.toThrow();
+		const mutations = [
+			(value: Row) => { value.assignmentAttempt.effectiveProfile.activity = 'acting'; },
+			(value: Row) => { value.lifecycleCode = 'assignment_cancelled'; },
+			(value: Row) => { value.capacityEnvelope.budget.time.executionDeadlineAt = '2026-09-27T00:19:59Z'; },
+			(value: Row) => { value.failedAt = '2026-09-27T00:19:59Z'; },
+			(value: Row) => { value.capacityEnvelope.budget.time.authorityDeadlineAt = 'invalid'; },
+			(value: Row) => { value.lifecycleOutput.performance.disposition = 'deadline_exhausted'; },
+			(value: Row) => { value.lifecycleOutput.teardown.verified = false; },
+			(value: Row) => { value.leaseToken = 'live'; },
+		];
+		for (const mutate of mutations) {
+			const invalid = structuredClone(item); mutate(invalid);
+			state.replies.get('assignments list')!.items[0] = invalid;
+			expect(() => gate('lifecycle')).toThrow();
+			expect(() => gate('settlement')).toThrow();
+		}
+	});
+	it('settles cancelled planning attempts exactly once without accepting missing or duplicate consumption', () => {
+		const item = state.replies.get('assignments list')!.items[0];
+		item.status = 'cancelled'; item.lifecycleCode = 'planning_boundary_cancelled';
+		item.assignmentAttempt.effectiveProfile.activity = 'estimating'; item.failedAt = '2026-09-27T00:20:00Z';
+		item.capacityEnvelope.budget.time.authorityDeadlineAt = '2026-09-27T00:20:00Z';
+		item.capacityEnvelope.budget.time.preparationDeadlineAt = '2026-09-27T00:20:00Z';
+		item.lifecycleOutput.performance = { disposition: 'cancelled' };
+		expect(() => gate('settlement')).not.toThrow();
+		const usage = state.replies.get('capacity usage')!.items;
+		const cancelled = usage.shift();
+		expect(() => gate('settlement')).toThrow('Exactly one actual settlement');
+		usage.push(cancelled, { ...cancelled, id: 'duplicate-cancelled:aggregate' });
+		expect(() => gate('settlement')).toThrow('Exactly one actual settlement');
+	});
 	it('does not confuse repeated single-role planning with collaborative cycles', () => {
 		for (const item of state.replies.get('assignments list')!.items) if (item.assignmentAttempt.effectiveProfile.activity === 'planning') item.assignmentAttempt.agentClass = 'architect';
 		expect(() => gate('collaboration')).toThrow('Two planning turns required for researcher');

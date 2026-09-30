@@ -9,6 +9,16 @@ const text = (value: unknown): string => typeof value === 'string' ? value : '';
 // These read-back gates do not stand in for campaign orchestration or external-state proof.
 const gates = ['lifecycle', 'collaboration', 'graph', 'revision', 'results', 'settlement', 'reporter', 'stopped'] as const;
 type Gate = typeof gates[number];
+function phaseBoundaryCancelled(item: Row, run: Row): boolean {
+	const parameters = row(run.parameters), time = row(row(row(item.capacityEnvelope).budget).time);
+	const boundary = Date.parse(text(run.startedAt)) + Number(parameters.durationSeconds) * Number(parameters.planningPercent) * 10;
+	return Number.isFinite(boundary) && item.status === 'cancelled' && item.lifecycleCode === 'planning_boundary_cancelled'
+		&& ['planning','estimating'].includes(text(row(row(item.assignmentAttempt).effectiveProfile).activity))
+		&& Date.parse(text(time.authorityDeadlineAt)) === boundary
+		&& Date.parse(text(time.executionDeadlineAt ?? time.preparationDeadlineAt)) === boundary
+		&& Date.parse(text(item.failedAt)) >= boundary
+		&& row(row(item.lifecycleOutput).performance).disposition === 'cancelled';
+}
 export function readWorkdayAssignments(workdayId: string, startedAt: string, team: string): Row[] {
 	const assignments: Row[] = [];
 	let cursor: string | undefined;
@@ -47,8 +57,10 @@ export function verifyGolden(gate: Gate): void {
 	const assignments = readWorkdayAssignments(workdayId, text(run.startedAt), team);
 	let cursor: string | undefined;
 	if (gate === 'lifecycle') for (const item of assignments) {
-		assert.equal(item.status, 'completed', `Normal golden cannot contain a failed, returned, expired or cancelled assignment: ${text(item.id)}`);
+		assert.ok(item.status === 'completed' || phaseBoundaryCancelled(item,run),
+			`Normal golden cannot contain a failed, returned, expired or non-phase cancelled assignment: ${text(item.id)}`);
 		assert.equal(item.leaseToken, null, `Live lease remains for ${text(item.id)}`);
+		assert.equal(row(row(item.lifecycleOutput).teardown).verified, true, `Durable teardown missing for ${text(item.id)}`);
 	}
 	const completed = assignments.filter(item => item.status === 'completed');
 	if (gate === 'lifecycle') {
@@ -153,7 +165,12 @@ export function verifyGolden(gate: Gate): void {
 	}
 	assert.equal(new Set(usageItems.map(item => item.id)).size, usageItems.length, 'Settlement pages repeated usage records');
 	const aggregate = usageItems.filter(item => text(item.id).endsWith(':aggregate'));
-	for (const item of gate === 'stopped' ? assignments : completed) {
+	for (const item of assignments) {
+		if (gate === 'settlement') {
+			assert.ok(item.status === 'completed' || phaseBoundaryCancelled(item,run), 'Normal settlement requires completed or authoritative phase-cancelled attempts');
+			assert.equal(item.leaseToken, null, 'Settlement cannot retain a live lease');
+			assert.equal(row(row(item.lifecycleOutput).teardown).verified, true, 'Settlement requires durable teardown');
+		}
 		const settlements = aggregate.filter(measurement => measurement.assignmentId === item.id);
 		assert.equal(settlements.length, 1, `Exactly one actual settlement required for ${text(item.id)}`);
 		assert.ok(text(row(settlements[0]?.metadata).settlementKey));

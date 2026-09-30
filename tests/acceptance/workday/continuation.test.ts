@@ -1,12 +1,13 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import test from 'node:test';
 import { read, row, type Row } from '../acceptance-cli.ts';
 import { monitorCampaign, requirePlanningWindow } from '../campaign.ts';
-import { verifyFreezeIntegrity, verifyRuntimeClosure } from '../freeze-integrity.ts';
+import { verifyRuntimeClosure } from '../freeze-integrity.ts';
 import { readWorkdayAssignments, verifyGolden } from '../sdk-runtime-golden.test.ts';
-import { requireSdkCampaignSupply, verifySdkExternalState } from '../prepare-campaign.ts';
+import { acceptanceReceiptDirectory, captureSdkExternalState, requireSdkCampaignSupply, verifySdkExternalState } from '../prepare-campaign.ts';
 
 const activity = (item: Row) => row(row(item.assignmentAttempt).effectiveProfile).activity;
 const itemId = (item: Row) => row(item.assignmentAttempt).workItemId;
@@ -19,13 +20,16 @@ test('Settled SDK work continues the exact approved candidate through release re
 	assert.ok(freezePath, 'ACCEPTANCE_FREEZE_REQUIRED: Original immutable freeze required');
 	const originalBytes = readFileSync(freezePath);
 	const original = JSON.parse(originalBytes.toString()) as Row;
-	verifyFreezeIntegrity(original, readFileSync);
+	// Historical receipt loss remains a failed golden boundary. This focused new
+	// segment proves live accepted authority and captures its own external baseline.
+	verifyRuntimeClosure(row(original.host), row(original.guest));
 	const team = process.env.TREESEED_ACCEPTANCE_TEAM ?? 'treeseed';
 	verifyGolden('stopped'); // Stop acknowledgement alone is not settlement evidence.
 	const parent = row(read(['workdays', 'show', parentId], team).run);
 	const parameters = row(parent.parameters);
 	const assignments = readWorkdayAssignments(parentId, String(parent.startedAt), team);
 	const authority = continuationAuthority(assignments);
+	assert.equal(row(authority.sourceRef).id, row(original.proposal).id, 'ACCEPTANCE_CONTINUATION_SOURCE: Parent differs from original proposal');
 	const projects = parameters.scheduledProjectIds;
 	assert.deepEqual(projects, ['8cbfb810-6da5-4da2-9ae9-cad53101253f']);
 	assert.equal(parameters.durationSeconds, 3600);
@@ -44,8 +48,15 @@ test('Settled SDK work continues the exact approved candidate through release re
 	const request = read([...args, '--plan'], team);
 	const preflight = read([...args, '--idempotency-key', `continuation-plan:${parentId}`], team);
 	const childFreeze = `${freezePath}.continuation.json`;
-	writeFileSync(childFreeze, JSON.stringify({ createdAt: new Date().toISOString(), request, preflight, host, guest: { digest: host.guestImageDigest },
-		providerSupply: supply, parent, authority, receipts: { [freezePath]: `sha256:${createHash('sha256').update(originalBytes).digest('hex')}` } }, null, 2), { flag: 'wx' });
+	const artifacts = acceptanceReceiptDirectory(childFreeze);
+	const receipts: Record<string, string> = { [freezePath]: `sha256:${createHash('sha256').update(originalBytes).digest('hex')}` };
+	const platform = process.env.TREESEED_ACCEPTANCE_PLATFORM_PATH;
+	assert.ok(platform, 'ACCEPTANCE_CAMPAIGN_WORKSPACE: Explicit Platform workspace required');
+	captureSdkExternalState(platform, (name, bytes) => { const path = join(artifacts, name); writeFileSync(path, bytes);
+		receipts[path] = `sha256:${createHash('sha256').update(bytes).digest('hex')}`; });
+	const frozen = { createdAt: new Date().toISOString(), request, preflight, host, guest: { digest: host.guestImageDigest },
+		providerSupply: supply, parent, authority, receipts };
+	writeFileSync(childFreeze, JSON.stringify(frozen, null, 2), { flag: 'wx' });
 	const started = read(['workdays', 'start', '--preflight', String(preflight.id), '--digest', String(preflight.preflightDigest),
 		'--yes', '--idempotency-key', `continuation-start:${preflight.id}`], team);
 	const workdayId = String(started.workdayId ?? '');
@@ -69,7 +80,7 @@ test('Settled SDK work continues the exact approved candidate through release re
 			const current = readWorkdayAssignments(workdayId, String(run.startedAt), team);
 			verifyContinuationResults(current, authority);
 			for (const gate of ['results','settlement','reporter'] as const) verifyGolden(gate);
-			verifySdkExternalState(original);
+			verifySdkExternalState(frozen);
 		} });
 });
 

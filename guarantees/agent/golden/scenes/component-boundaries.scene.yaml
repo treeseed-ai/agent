@@ -3,6 +3,15 @@ id: agent.golden.component-boundaries
 title: Golden execution component boundaries
 scope: local-component-tests
 workflow:
+  - id: persistent-freeze-receipts
+    action: { verifier: agent.golden.persistent-freeze-receipts }
+    expect: { status: passed }
+  - id: continuation-authority
+    action: { verifier: agent.golden.continuation-authority }
+    expect: { status: passed }
+  - id: continuation-denial
+    action: { verifier: agent.golden.continuation-denial }
+    expect: { status: passed }
   - id: provider-policy-parity
     action: { verifier: agent.golden.provider-policy-parity }
     expect: { status: passed }

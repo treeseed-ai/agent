@@ -1,6 +1,11 @@
 schemaVersion: treeseed.guarantee-verifiers/v1
 ownerPackage: "@treeseed/agent"
 verifiers:
+  agent.golden.persistent-freeze-receipts:
+    kind: vitestCase
+    ownerPackage: '@treeseed/agent'
+    testFile: tests/modern/guarantees/campaign-external-state.test.ts
+    testName: retains receipt storage beside the immutable freeze and captures each external inventory once
   agent.golden.continuation-authority:
     kind: vitestCase
     ownerPackage: '@treeseed/agent'

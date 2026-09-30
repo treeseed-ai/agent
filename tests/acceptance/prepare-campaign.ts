@@ -2,7 +2,6 @@ import assert from 'node:assert/strict';
 import { createHash, randomUUID } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
 import { basename, join, resolve } from 'node:path';
 import { read } from './acceptance-cli.ts';
 import { freshSdkDraft, requirePlanningWindow, sdkProposalText, sdkCampaignWindow } from './campaign.ts';
@@ -132,7 +131,7 @@ export function prepareSdkCampaign(draftPath: string, freezePath: string, team: 
 	assert.equal(providers.length, 1, 'ACCEPTANCE_CAMPAIGN_SUPPLY: Individual host campaign requires unambiguous provider');
 	const supply = read(['providers', 'status', providers[0]!.providerId], team);
 	requireSdkCampaignSupply(supply, durationSeconds, planningPercent, new Date().toISOString());
-	const artifacts = mkdtempSync(join(tmpdir(), 'treeseed-golden-'));
+	const artifacts = acceptanceReceiptDirectory(freezePath);
 	const inputPath = join(artifacts, 'proposal.json');
 	writeFileSync(inputPath, JSON.stringify(draft));
 	const project = draft.projectId as string;
@@ -161,9 +160,7 @@ export function prepareSdkCampaign(draftPath: string, freezePath: string, team: 
 	capture('runtime.json', JSON.stringify(runtime)); capture('supply.json', JSON.stringify(supply));
 	const sourceHeads = Object.fromEntries(['sdk', 'api', 'agent', 'deployment', 'cli', 'reviewer'].map(name => [name,
 		execFileSync('git', ['-C', resolve(platform, 'packages', name), 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim()]));
-	capture('sdk-remote-refs.txt', execFileSync('git', ['-C', resolve(platform, 'packages/sdk'), 'ls-remote', 'origin'], { encoding: 'utf8', timeout: 30000 }));
-	capture('sdk-dist-tags.json', execFileSync('npm', ['view', '@treeseed/sdk', 'dist-tags', '--json'], { encoding: 'utf8', timeout: 30000 }));
-	capture('sdk-releases.json', execFileSync('gh', ['api', 'repos/treeseed-ai/sdk/releases', '--paginate'], { encoding: 'utf8', timeout: 30000 }));
+	captureSdkExternalState(platform, capture);
 	const preflight = read([...args, '--idempotency-key', `golden-plan:${id}`], team);
 	const current = read(['proposals', 'show', id, '--server', 'local', '--project', project], team, true);
 	writeFileSync(freezePath, JSON.stringify({ createdAt: new Date().toISOString(),
@@ -171,14 +168,27 @@ export function prepareSdkCampaign(draftPath: string, freezePath: string, team: 
 		runtimeTargets: runtime, host, guest: { digest: host.guestImageDigest }, providerSupply: supply, receipts }, null, 2), { flag: 'wx' });
 }
 
-export function verifySdkExternalState(freeze: Row): void {
-	const platform = process.env.TREESEED_ACCEPTANCE_PLATFORM_PATH;
-	assert.ok(platform, 'ACCEPTANCE_CAMPAIGN_WORKSPACE: Explicit Platform workspace required');
-	const commands = {
+export function captureSdkExternalState(platform: string, capture: (name: string, bytes: string) => void): void {
+	for (const [name, [command, args]] of Object.entries(sdkExternalCommands(platform)))
+		capture(name, execFileSync(command, [...args], { encoding: 'utf8', timeout: 30000 }));
+}
+
+export function acceptanceReceiptDirectory(freezePath: string): string {
+	return mkdtempSync(`${freezePath}.receipts-`);
+}
+
+function sdkExternalCommands(platform: string) {
+	return {
 		'sdk-remote-refs.txt': ['git', ['-C', resolve(platform, 'packages/sdk'), 'ls-remote', 'origin']],
 		'sdk-dist-tags.json': ['npm', ['view', '@treeseed/sdk', 'dist-tags', '--json']],
 		'sdk-releases.json': ['gh', ['api', 'repos/treeseed-ai/sdk/releases', '--paginate']],
 	} as const;
+}
+
+export function verifySdkExternalState(freeze: Row): void {
+	const platform = process.env.TREESEED_ACCEPTANCE_PLATFORM_PATH;
+	assert.ok(platform, 'ACCEPTANCE_CAMPAIGN_WORKSPACE: Explicit Platform workspace required');
+	const commands = sdkExternalCommands(platform);
 	for (const [name, [command, args]] of Object.entries(commands)) {
 		const paths = Object.keys(freeze.receipts ?? {}).filter(path => basename(path) === name);
 		assert.equal(paths.length, 1, 'ACCEPTANCE_EXTERNAL_INVENTORY: Complete frozen SDK inventory required');

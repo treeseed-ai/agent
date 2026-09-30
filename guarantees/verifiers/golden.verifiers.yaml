@@ -1,6 +1,22 @@
 schemaVersion: treeseed.guarantee-verifiers/v1
 ownerPackage: "@treeseed/agent"
 verifiers:
+  agent.golden.continuation-authority:
+    kind: vitestCase
+    ownerPackage: '@treeseed/agent'
+    testFile: tests/modern/guarantees/continuation.test.ts
+    testName: requires the latest approved candidate and exact accepted authority without copying results
+  agent.golden.continuation-denial:
+    kind: vitestCase
+    ownerPackage: '@treeseed/agent'
+    testFile: tests/modern/guarantees/continuation.test.ts
+    testName: rejects changed source, decision, candidate custody and absent genuine release review
+  agent.golden.live.continuation:
+    kind: nodeTestCase
+    ownerPackage: '@treeseed/agent'
+    testFile: tests/acceptance/workday/continuation.test.ts
+    testName: Settled SDK work continues the exact approved candidate through release review and Reporter
+    timeoutMs: 4200000
   agent.golden.live.guest-model-smoke:
     kind: nodeTestCase
     ownerPackage: "@treeseed/agent"

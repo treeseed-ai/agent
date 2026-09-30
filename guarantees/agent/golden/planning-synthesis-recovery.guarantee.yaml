@@ -1,0 +1,12 @@
+schemaVersion: treeseed.guarantee/v1
+id: guarantee.agent.golden.planning-synthesis-recovery
+journey: Keep second-cycle synthesis truthful within the original assignment deadline
+ownerPackage: "@treeseed/agent"
+type: agent
+subtype: planning
+status: planned
+gates: [core]
+summary: Missing citations trigger only a bounded same-session correction; incomplete synthesis remains a failure.
+scene:
+  required: true
+  manifest: guarantees/agent/golden/scenes/planning-synthesis-recovery.scene.yaml

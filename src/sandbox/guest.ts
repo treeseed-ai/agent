@@ -11,6 +11,7 @@ import { providerCredentialValues, providerFailureSummary, redactProviderDiagnos
 import { activityAllowsVerification } from './guest-contract.ts';
 import { activityCompletionOutputSchema, validateActivityCompletion, type ActivityCompletionReport } from '../activity-completion.ts';
 import { completionFrontmatterSchema, completionOutputTargetVariants, promptFromContext, assertPredecessorSynthesis, assertArchitectSourceCitation, assertTesterFailureEvidence, attachObservedTesterFailures, correctObservedTesterRedVerification, omitUnreplayableVerification, codexReasoningArguments, codexProjectInstructionArguments, codexInteractiveTimeoutMs, requiresActivityCompletion, reportedVerificationCommands, record, text, providerToolName, codexToolInFlight, codexIdleTimeoutMs, codexCloseoutTimeoutMs, codexResumeIdleTimeoutMs } from './guest-contract.ts';
+import { recoverPlanningSynthesis } from './planning-synthesis-recovery.ts';
 
 const inputRoot = '/run/treeseed-assignment';
 const outputRoot = '/run/treeseed-output';
@@ -19,12 +20,10 @@ const canonical = (value: unknown): string => Array.isArray(value) ? `[${value.m
 	? `{${Object.entries(value as Record<string, unknown>).filter(([, item]) => item !== undefined).sort(([a], [b]) => a.localeCompare(b)).map(([key, item]) => `${JSON.stringify(key)}:${canonical(item)}`).join(',')}}` : JSON.stringify(value);
 const objectDigest = (value: unknown) => `sha256:${createHash('sha256').update(canonical(value)).digest('hex')}`;
 const progress = (stage: string) => writeFile(resolve(outputRoot, 'progress.json'), `${JSON.stringify({ stage, occurredAt: new Date().toISOString() })}\n`, { mode: 0o600 });
-
 async function fileDigest(path: string) {
 	const hash = createHash('sha256'); for await (const chunk of createReadStream(path)) hash.update(chunk as Buffer);
 	return `sha256:${hash.digest('hex')}`;
 }
-
 
 async function materialize(assignment: SandboxAssignment) {
 	for (const descriptor of assignment.inputs) {
@@ -422,6 +421,15 @@ export async function runSandboxGuest() {
 			}
 			await progress('provider.final-clock-recovery.completed');
 		}
+		if (structuredCompletion && await recoverPlanningSynthesis({ context, activity: canonicalActivity, threadId,
+			responsePath, schemaPath: completionSchemaPath, allowVerification, durationSeconds: assignment.resources.durationSeconds,
+			started, model: assignment.modelPolicy.model, reasoningEffort: assignment.modelPolicy.reasoningEffort,
+			providerEnvironment, progress,
+			onEvent(event) { observeTimingAwarenessEvent(timingTracker, event); events.push(event); if (events.length > 256) events.shift(); },
+			verifyClock(correctionEvents) { const correction = timingAwarenessContract(correctionEvents);
+				if (!correction.firstToolCompliant || !correction.finalToolCompliant || correctionEvents.some((event) => providerToolName(event) && providerToolName(event) !== 'treedx:treeseed_time_status')) throw new Error('Planning synthesis correction failed its clock-only tool boundary.'); },
+		}) && subscriptionAuth) {
+			await writeFile(resolve(outputRoot, 'codex-auth.json'), await readFile(resolve(codexHome, 'auth.json')), { mode: 0o600 }); }
 		const timingAwareness = { schemaVersion: 'treeseed.assignment-timing-awareness/v1' as const, requiredChecks: 2 as const, ...timingTracker,
 			firstToolCompliant: timingTracker.firstTool === 'treedx:treeseed_time_status' && timingTracker.firstToolSucceeded,
 			finalToolCompliant: timingTracker.lastTool === 'treedx:treeseed_time_status' && timingTracker.lastToolSucceeded };

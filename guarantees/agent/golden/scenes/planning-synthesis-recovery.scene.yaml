@@ -1,0 +1,11 @@
+schemaVersion: treeseed.scene/v1
+id: agent.golden.planning-synthesis-recovery
+title: Bounded predecessor synthesis correction
+scope: local-component-tests
+workflow:
+  - id: eight-predecessors
+    action: { verifier: agent.golden.planning-synthesis-eight-predecessors }
+    expect: { status: passed }
+  - id: clock-boundary
+    action: { verifier: agent.golden.clock }
+    expect: { status: passed }

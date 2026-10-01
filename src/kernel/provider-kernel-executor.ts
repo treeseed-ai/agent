@@ -7,6 +7,7 @@ import {
 	verificationRecordSchema,
 	type AssignmentReference,
 	type AssignmentResult,
+	type AssignmentContext,
 } from '@treeseed/sdk/agent-capacity';
 import type { AgentExecutionRequest, AgentExecutionResult, AgentExecutor } from '../provider/execution/contracts.ts';
 import { AgentKernel } from './agent-kernel.ts';
@@ -71,13 +72,23 @@ export async function executeKernelAssignment(input: {
 	const predecessorValues = Array.isArray(record(visible.workspaceContext).predecessorResults)
 		? record(visible.workspaceContext).predecessorResults as unknown[] : [];
 	const predecessorResults = predecessorValues.map((value) => assignmentResultSchema.parse(value));
-	const context = assignmentContextSchema.parse(await materializeAssignmentContext({
+	const preparationStarted = performance.now();
+	let context: AssignmentContext;
+	try { context = assignmentContextSchema.parse(await materializeAssignmentContext({
 		attempt: attempt.data,
 		predecessorResults,
 		authorizedContext: Array.isArray(record(visible.workspaceContext).authorizedContext)
 			? record(visible.workspaceContext).authorizedContext as unknown[] : [],
 		treeDx: input.request.treeDx,
-	}));
+	})); } catch (error) {
+		// Isolation has not been invoked: this closes an empty resource scope,
+		// not a claim that a Kata allocation was destroyed. After invocation only
+		// the executor's actual teardown receipt can attest resource closure.
+		return { status: 'failed', code: 'agent_executor_failed', retryable: true,
+			summary: error instanceof Error ? error.message : String(error),
+			usage: [{ activeSeconds: 0, elapsedSeconds: (performance.now() - preparationStarted) / 1000 }],
+			outputs: { teardown: { verified: true, completedAt: new Date().toISOString() } } };
+	}
 	const localAbort = new AbortController();
 	const signal = input.request.signal ? AbortSignal.any([input.request.signal, localAbort.signal]) : localAbort.signal;
 	const workspaceContext = { ...record(visible.workspaceContext), assignmentAttempt: attempt.data,

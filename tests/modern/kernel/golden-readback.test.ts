@@ -36,7 +36,7 @@ beforeEach(() => {
 	items.push(...classes.slice(0, 7).map(agentClass => assignment(`estimate-${agentClass}`, 'estimating', agentClass)));
 	for (let index = 0; index < 6; index++) {
 		items.push(assignment(`actor-${index}`, 'acting', classes[index]!, `work-${index}`));
-		items.push(assignment(`review-${index}`, 'reviewing', 'reviewer', `work-${index}`));
+		items.push(assignment(`review-${index}`, 'reviewing', 'reviewer', `work-${index}`, '2026-09-27T00:00:03Z', '2026-09-27T00:00:04Z'));
 	}
 	const requested = assignment('requested', 'reviewing', 'reviewer', 'work-0', '2026-09-27T00:00:03Z', '2026-09-27T00:00:04Z');
 	requested.lifecycleOutput.activityCompletion.reviewDisposition = 'request-changes';
@@ -188,6 +188,48 @@ describe('golden read-back assertion regressions (fixtures are not live acceptan
 		state.replies.get('execution graph')!.nodes.push({ workdayId, pairRole: 'reviewer', status: 'completed' });
 		state.replies.get('assignments list')!.items = state.replies.get('assignments list')!.items.filter((item: Row) => item.id !== 'revision');
 		expect(() => gate('revision')).toThrow('later real Actor revision');
+	});
+	it('proves retired terminal pairs from exact immutable completion custody, not stale status alone', () => {
+		const items = state.replies.get('assignments list')!.items;
+		const nodes = state.replies.get('execution graph')!.nodes;
+		for (const [index, node] of nodes.entries()) {
+			const workItemId = `work-${Math.floor(index / 2)}`;
+			const activity = node.pairRole === 'actor' ? 'acting' : 'reviewing';
+			for (const item of items.filter((item: Row) => item.assignmentAttempt.workItemId === workItemId
+				&& item.assignmentAttempt.effectiveProfile.activity === activity)) {
+				item.executionNodeId = node.id; item.executionNodeRevision = 2;
+				Object.assign(item.assignmentAttempt, { nodeId: node.id, nodeRevision: 2, workdayId, sourceRef: { id: 'proposal', revision: 8 },
+					authorityRefs: [{ model: 'decision', id: 'decision-1' }] });
+				item.assignmentResult.assignmentId = item.id;
+			}
+			Object.assign(node, { status: 'stale', nodeRevision: 3, workItemId, sourceRef: { id: 'proposal', revision: 8 },
+				authorityRefs: [{ model: 'decision', id: 'decision-1' }] });
+		}
+		expect(() => gate('graph')).not.toThrow();
+		expect(() => gate('revision')).not.toThrow();
+		const retained = structuredClone(nodes[0]);
+		for (const mutation of [
+			(value: Row) => { value.nodeRevision = 2; },
+			(value: Row) => { value.sourceRef.revision = 9; },
+			(value: Row) => { value.authorityRefs[0].id = 'other-decision'; },
+			(value: Row) => { value.status = 'blocked'; },
+		]) {
+			nodes[0] = structuredClone(retained); mutation(nodes[0]);
+			expect(() => gate('graph')).toThrow();
+		}
+		nodes[0] = retained;
+		const revision = items.find((item: Row) => item.id === 'revision');
+		for (const mutation of [
+			(value: Row) => { value.status = 'failed'; },
+			(value: Row) => { value.assignmentResult.assignmentId = 'other-assignment'; },
+			(value: Row) => { value.assignmentAttempt.nodeId = 'other-node'; },
+			(value: Row) => { value.assignmentAttempt.workdayId = 'other-workday'; },
+		]) {
+			const saved = structuredClone(revision); mutation(revision);
+			expect(() => gate('graph')).toThrow(); Object.assign(revision, saved);
+		}
+		items.find((item: Row) => item.id === 'approved-revision').lifecycleOutput.activityCompletion.reviewDisposition = 'request-changes';
+		expect(() => gate('graph')).toThrow();
 	});
 	it('rejects zero usage, missing clocks and unverified teardown', () => {
 		const item = state.replies.get('assignments list')!.items[0];

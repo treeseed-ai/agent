@@ -3,6 +3,15 @@ id: agent.golden.component-boundaries
 title: Golden execution component boundaries
 scope: local-component-tests
 workflow:
+  - id: retired-pair-custody
+    action: { verifier: agent.golden.retired-pair-custody }
+    expect: { status: passed }
+  - id: pretransport-closure
+    action: { verifier: agent.golden.pretransport-closure }
+    expect: { status: passed }
+  - id: pretransport-closure-denial
+    action: { verifier: agent.golden.pretransport-closure-denial }
+    expect: { status: passed }
   - id: paired-test-first-red-evidence
     action: { verifier: agent.golden.paired-test-first-red-evidence }
     expect: { status: passed }

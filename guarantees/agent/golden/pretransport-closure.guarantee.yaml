@@ -1,0 +1,12 @@
+schemaVersion: treeseed.guarantee/v1
+id: guarantee.agent.golden.pretransport-closure
+journey: Close an empty isolation resource scope after context preparation failure
+ownerPackage: '@treeseed/agent'
+type: agent
+subtype: execution
+status: planned
+gates: [core]
+summary: Actual context failure before executor invocation records no-resource closure and zero active usage; post-invocation missing teardown remains unverified.
+scene:
+  required: true
+  manifest: guarantees/agent/golden/scenes/pretransport-closure.scene.yaml

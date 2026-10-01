@@ -1,6 +1,21 @@
 schemaVersion: treeseed.guarantee-verifiers/v1
 ownerPackage: "@treeseed/agent"
 verifiers:
+  agent.golden.retired-pair-custody:
+    kind: vitestCase
+    ownerPackage: '@treeseed/agent'
+    testFile: tests/modern/kernel/golden-readback.test.ts
+    testName: proves retired terminal pairs from exact immutable completion custody, not stale status alone
+  agent.golden.pretransport-closure:
+    kind: vitestCase
+    ownerPackage: '@treeseed/agent'
+    testFile: tests/modern/kernel/closure/pretransport.test.ts
+    testName: records no-resource closure on context failure without invoking isolation or claiming useful work
+  agent.golden.pretransport-closure-denial:
+    kind: vitestCase
+    ownerPackage: '@treeseed/agent'
+    testFile: tests/modern/kernel/closure/pretransport.test.ts
+    testName: does not infer isolation teardown after executor invocation without a real receipt
   agent.golden.paired-test-first-red-evidence:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

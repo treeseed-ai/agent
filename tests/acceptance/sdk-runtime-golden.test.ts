@@ -113,7 +113,28 @@ export function verifyGolden(gate: Gate): void {
 	const nodes = rows(graph.nodes).filter(node => node.workdayId === workdayId && node.pairRole);
 	assert.equal(nodes.filter(node => node.pairRole === 'actor').length, 6);
 	assert.equal(nodes.filter(node => node.pairRole === 'reviewer').length, 6);
-	assert.ok(nodes.every(node => node.status === 'completed'), 'A graph with incomplete or failed pairs cannot pass');
+	for (const node of nodes) {
+		if (node.status === 'completed') continue;
+		// Terminal simulations retire their live projection; immutable attempts,
+		// not arbitrary stale state, prove the exact pair's historical completion.
+		assert.ok(run.status === 'completed' && node.status === 'stale', 'ACCEPTANCE_PAIR_TERMINAL: Incomplete pairs cannot pass');
+		const attempts = assignments.filter(item => item.executionNodeId === node.id)
+			.sort((a, b) => Number(b.executionNodeRevision) - Number(a.executionNodeRevision)
+				|| text(b.createdAt).localeCompare(text(a.createdAt)));
+		const latest = row(attempts[0]), attempt = row(latest.assignmentAttempt);
+		assert.ok(latest.status === 'completed' && row(latest.assignmentResult).assignmentId === latest.id
+			&& attempt.nodeId === node.id && attempt.workdayId === workdayId && attempt.workItemId === node.workItemId
+			&& attempt.nodeRevision === latest.executionNodeRevision && Number(node.nodeRevision) > Number(attempt.nodeRevision),
+			'ACCEPTANCE_PAIR_CUSTODY: Retired node requires its latest exact completed attempt');
+		assert.deepEqual(attempt.sourceRef, node.sourceRef, 'ACCEPTANCE_PAIR_SOURCE: Retired source authority drifted');
+		assert.deepEqual(attempt.authorityRefs, node.authorityRefs, 'ACCEPTANCE_PAIR_DECISION: Retired decision authority drifted');
+		if (node.pairRole === 'reviewer') {
+			assert.equal(row(row(latest.lifecycleOutput).activityCompletion).reviewDisposition, 'approved', 'ACCEPTANCE_PAIR_APPROVAL: Final review must approve');
+			const actor = actors.filter(item => row(item.assignmentAttempt).workItemId === node.workItemId)
+				.sort((a, b) => text(b.completedAt).localeCompare(text(a.completedAt)))[0];
+			assert.ok(actor && text(latest.createdAt) > text(actor.completedAt), 'ACCEPTANCE_PAIR_CHRONOLOGY: Approval must follow the latest Actor candidate');
+		}
+	}
 	}
 	const disposition = (item: Row) => text(row(row(item.lifecycleOutput).activityCompletion).reviewDisposition);
 	if (gate === 'revision') {

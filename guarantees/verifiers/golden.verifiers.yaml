@@ -1,6 +1,26 @@
 schemaVersion: treeseed.guarantee-verifiers/v1
 ownerPackage: "@treeseed/agent"
 verifiers:
+  agent.golden.canonical-safe-closeout:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/sandbox/codex-idle-recovery.test.ts
+    testName: "reserves safe closeout for planning acting reviewing and reporting without extending their budgets"
+  agent.golden.ongoing-time-discipline:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/timing/time-budget-discipline.test.ts
+    testName: "retains ongoing time discipline for independently verified Git work"
+  agent.golden.measured-time-discipline:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/timing/time-budget-discipline.test.ts
+    testName: "measures decreasing real authority without resetting time on repeated checks"
+  agent.golden.unfinished-work-authority:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/timing/time-budget-discipline.test.ts
+    testName: "does not invent proposal publication authority when time runs short"
   agent.golden.broker-connection-isolation:
     kind: vitestCase
     ownerPackage: '@treeseed/agent'

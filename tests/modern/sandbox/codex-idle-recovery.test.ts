@@ -3,6 +3,14 @@ import { codexCloseoutTimeoutMs, codexIdleTimeoutMs, codexResumeIdleTimeoutMs, c
 import { run } from '../../../src/sandbox/process-runner.ts';
 
 describe('bounded Codex idle recovery', () => {
+	it('reserves safe closeout for planning acting reviewing and reporting without extending their budgets', () => {
+		for (const activity of ['planning', 'acting', 'reviewing', 'reporting']) {
+			expect(codexCloseoutTimeoutMs(180, activity)).toBe(135_000);
+			expect(codexCloseoutTimeoutMs(90, activity)).toBe(45_000);
+			expect(codexCloseoutTimeoutMs(60, activity)).toBeUndefined();
+		}
+		expect(codexCloseoutTimeoutMs(180, 'unsupported')).toBeUndefined();
+	});
 	it('leaves time in the same assignment for a single continuation', () => {
 		expect(codexIdleTimeoutMs(120)).toBe(30_000);
 		expect(codexIdleTimeoutMs(180)).toBe(45_000);

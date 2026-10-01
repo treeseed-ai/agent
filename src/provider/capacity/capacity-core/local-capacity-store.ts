@@ -25,6 +25,8 @@ export interface ProviderLocalSlotClaim {
 	dispatchEnvelope?: unknown;
 	/** First runtime failure, retained across recovery attempts without replacing its cause. */
 	failureMessage?: string;
+	/** Exact executor output retained until the API acknowledges terminal custody. */
+	closeoutOutput?: Record<string, unknown>;
 	acquiredAt: string;
 	updatedAt: string;
 	expiresAt: string;
@@ -277,6 +279,15 @@ export class ProviderLocalCapacityStore {
 		});
 	}
 
+	async recordCloseoutOutput(claimId: string, output: Record<string, unknown>) {
+		return this.update((state, now) => {
+			const claim = state.claims.find(entry => entry.id === claimId);
+			if (!claim?.assignmentId || !claim.leaseToken) throw new Error('Provider closeout output requires its existing lease claim.');
+			claim.closeoutOutput = output;
+			claim.updatedAt = now;
+		});
+	}
+
 	async recordFailure(claimId: string, message: string) {
 		return this.update((state, now) => {
 			const claim = state.claims.find((entry) => entry.id === claimId);
@@ -300,7 +311,7 @@ export class ProviderLocalCapacityStore {
 
 	async snapshot() {
 		return this.update((state, now) => ({ revision: state.revision + 1,
-			claims: state.claims.map(({ dispatchEnvelope: _dispatchEnvelope, ...claim }) => ({ ...claim, leaseToken: claim.leaseToken ? '<redacted>' : undefined })),
+			claims: state.claims.map(({ dispatchEnvelope: _dispatchEnvelope, closeoutOutput: _closeoutOutput, ...claim }) => ({ ...claim, leaseToken: claim.leaseToken ? '<redacted>' : undefined })),
 			events: state.events.map((event) => ({ ...event })),
 			activeSecondsByConnection: Object.fromEntries(Object.entries(state.usage[now.slice(0, 10)] ?? {}).flatMap(([key, seconds]) => {
 				const scope: unknown = JSON.parse(key);

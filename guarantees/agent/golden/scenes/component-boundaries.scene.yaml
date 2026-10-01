@@ -3,6 +3,15 @@ id: agent.golden.component-boundaries
 title: Golden execution component boundaries
 scope: local-component-tests
 workflow:
+  - id: revision-original-source
+    action: { verifier: agent.golden.revision-original-source }
+    expect: { status: passed }
+  - id: selected-objective
+    action: { verifier: agent.golden.selected-objective }
+    expect: { status: passed }
+  - id: work-item-source-denial
+    action: { verifier: agent.golden.work-item-source-denial }
+    expect: { status: passed }
   - id: broker-connection-isolation
     action: { verifier: agent.golden.broker-connection-isolation }
     expect: { status: passed }

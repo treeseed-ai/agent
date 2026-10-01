@@ -50,7 +50,7 @@ describe('activity completion structured-output schema', () => {
 		Object.assign(assignment, { agentClass: 'missing' });
 		expect(() => completionFrontmatterSchema(context)).toThrow('estimate_work_item_scope_missing');
 		context.canonicalAssignmentContext.context[0]!.ref = Object.assign({}, sourceRef, { path: 'different-proposal.mdx' });
-		expect(() => completionFrontmatterSchema(context)).toThrow('estimate_exact_proposal_context_required');
+		expect(() => completionFrontmatterSchema(context)).toThrow('assignment_exact_proposal_context_required');
 	});
 
 	it('uses only authorized acting Writer content contracts and retains the one kernel commit path', () => {

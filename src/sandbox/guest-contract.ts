@@ -1,4 +1,4 @@
-import { estimateProposalOutputSchema, estimateProposalSource, maximumVerificationCommands, maximumVerificationCommandLength, type ActivityCompletionReport } from '../activity-completion.ts';
+import { estimateProposalOutputSchema, assignmentProposalSource, maximumVerificationCommands, maximumVerificationCommandLength, type ActivityCompletionReport } from '../activity-completion.ts';
 import { describeContentFrontmatterJsonSchema, isPortableContentModel } from '@treeseed/sdk/content-validation';
 
 export const record = (value: unknown): Record<string, unknown> => value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -50,7 +50,7 @@ export function codexResumeIdleTimeoutMs(remainingMs: number) {
 export function completionFrontmatterSchema(context: Record<string, unknown>) {
 	const assignment = record(record(context.canonicalAssignmentContext).assignment), profile = record(assignment.effectiveProfile);
 	if (text(profile.activity) === 'estimating') {
-		const proposal = estimateProposalSource(record(context.canonicalAssignmentContext));
+		const proposal = assignmentProposalSource(record(context.canonicalAssignmentContext));
 		return estimateProposalOutputSchema(proposal, text(assignment.agentClass), text(assignment.workItemId) || undefined);
 	}
 	if (text(profile.activity) !== 'acting' || text(record(assignment.workspace).mode) !== 'treedx' || text(profile.handler) !== 'writer') return undefined;
@@ -101,6 +101,13 @@ export function promptFromContext(context: Record<string, unknown>, reasoningEff
 		const acceptedDecision = authorityRefs.some((reference) => text(reference.model) === 'decision');
 		const profile = record(assignment.effectiveProfile);
 		if (text(profile.activity) === 'reviewing' && !acceptedDecision) throw new Error('work_review_requires_accepted_decision');
+		const workItemId = text(assignment.workItemId);
+		const workItems = text(record(assignment.sourceRef).model) === 'proposal' && workItemId
+			? record(assignmentProposalSource(canonicalContext).executionPlan).workItems : undefined;
+		const workItem = Array.isArray(workItems) ? workItems.map(record).find(item => item.id === workItemId) : undefined;
+		if (text(record(assignment.sourceRef).model) === 'proposal' && workItemId && !workItem) throw new Error('assignment_work_item_context_required');
+		const originalGitSources = Array.isArray(workItem?.contextRefs)
+			? workItem.contextRefs.map(record).filter(reference => reference.store === 'git') : [];
 		const profilePrompt = record(profile.prompt);
 		const items = Array.isArray(canonicalContext.context) ? canonicalContext.context.map(record) : [];
 		const predecessors = Array.isArray(canonicalContext.predecessorResults) ? canonicalContext.predecessorResults : [];
@@ -153,6 +160,10 @@ export function promptFromContext(context: Record<string, unknown>, reasoningEff
 			...(Array.isArray(profilePrompt.instructions) ? profilePrompt.instructions.map(text).filter(Boolean) : []),
 			`Execute canonical assignment ${text(assignment.id)}${text(assignment.workItemId) ? ` for work item ${text(assignment.workItemId)}` : ''} from ${text(record(assignment.sourceRef).model)}/${text(record(assignment.sourceRef).id)}.`,
 			`Activity: ${text(profile.activity)}. Handler: ${text(profile.handler)}. Workspace: ${text(record(assignment.workspace).mode)}.`,
+			workItem ? `Selected work-item objective:\n${text(workItem.objective)}\nThe objective defines this turn's assigned scope; acceptance criteria remain the complete review boundary. Report any pending criterion honestly rather than claiming full completion or silently replacing a staged objective with broader work.` : '',
+			originalGitSources.length ? `Original work-item project Git sources:\n${JSON.stringify(originalGitSources)}\nThese exact proposal-bound Git refs define the original comparison baseline, not a TreeDX commit or a later revision checkout base.` : '',
+			originalGitSources.length && text(profile.activity) === 'reviewing'
+				? 'Compare the entire candidate tree against the original work-item project Git source, not HEAD^ or the previous Actor commit. Keep earlier candidate commits in the coverage audit while checking the requested correction and regressions. A last-commit diff shows only the correction, not all delivered work. For failing-on-base tests, the original source is the frozen implementation baseline; the attached candidate includes all test revisions. Inspect both exact refs independently before choosing a disposition.' : '',
 			gitWorkspaceAuthority,
 			attachedSourceCommit ? `The exact attached project Git source commit is ${attachedSourceCommit}. Use this commit for citations to project source files. TreeDX library and proposal commits are different repositories and must never be cited as project Git source commits.` : '',
 			'Use only the exact authorized context and predecessor results below. The attached repository root is /workspace/project. Inspect it with ordinary shell and Git commands whenever source is attached; do not answer from supplied summaries alone. Use the treedx_* MCP tools for governed knowledge. The trsd CLI is intentionally absent from assignment guests. Do not claim an inspection or verification you did not perform.',

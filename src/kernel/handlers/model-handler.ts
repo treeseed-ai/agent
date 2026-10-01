@@ -3,7 +3,7 @@ import { isDeepStrictEqual } from 'node:util';
 import type { AssignmentContext, AssignmentReference, AssignmentResult } from '@treeseed/sdk/agent-capacity';
 import type { AgentRuntime, Handler } from '../contracts.ts';
 import { prepareTreeDxContent } from '../treedx-content-commit.ts';
-import { estimateMutableField, estimateProposalSource } from '../../activity-completion.ts';
+import { estimateMutableField, assignmentProposalSource } from '../../activity-completion.ts';
 
 function resultId(assignmentId: string, summary: string): string {
 	return `result-${createHash('sha256').update(`${assignmentId}\n${summary}`).digest('hex').slice(0, 24)}`;
@@ -161,7 +161,7 @@ export class EstimateHandler extends ModelHandler {
 		const model = await this.invoke(context, runtime);
 		const output = model.activityCompletion?.contentOutput;
 		if (!output || output.model !== 'proposal') throw new Error('estimate_proposal_output_required');
-		const base = estimateProposalSource({ assignment: context.assignment, context: context.context });
+		const base = assignmentProposalSource({ assignment: context.assignment, context: context.context });
 		const plan = base.executionPlan as { workItems?: Record<string, unknown>[] } | undefined;
 		const patches = (output.frontmatter.executionPlan as { workItems?: Record<string, unknown>[] } | undefined)?.workItems;
 		if (!Array.isArray(plan?.workItems) || !Array.isArray(patches)) throw new Error('estimate_proposal_patch_invalid');

@@ -236,7 +236,9 @@ describe('Codex chat executor', () => {
 		const context = (workItemId?: string) => ({ canonicalAssignmentContext: { assignment: {
 			id: 'estimate-1', workItemId, sourceRef: { model: 'proposal', id: 'proposal-1' },
 			workspace: { mode: 'treedx' }, effectiveProfile: { activity: 'estimating', handler: 'estimate', prompt: {} },
-		}, context: [], predecessorResults: [] } });
+		}, context: [{ ref: { model: 'proposal', id: 'proposal-1' }, value: { frontmatter: { executionPlan: {
+			workItems: [{ id: 'implement-change', objective: 'Implement the change.', contextRefs: [] }],
+		} } } }], predecessorResults: [] } });
 		const owner = promptFromContext(context('implement-change'));
 		expect(owner).toContain('Return only the estimate and rationale patch for work item implement-change');
 		expect(owner).toContain('Do not copy immutable proposal fields');
@@ -337,7 +339,9 @@ describe('Codex chat executor', () => {
 			authorityRefs: [{ store: 'postgresql', model: 'decision', id: 'decision-1', revision: 1, digest: `sha256:${'a'.repeat(64)}` }],
 			acceptanceCriteria: ['Pack and inspect the local SDK release candidate.'],
 			workspace: { mode: 'git' }, effectiveProfile: { activity: 'reviewing', handler: 'writer', prompt: {} },
-		}, context: [], predecessorResults: [{ id: 'release-result' }] } });
+		}, context: [{ ref: { model: 'proposal', id: 'proposal-1' }, value: { frontmatter: { executionPlan: {
+			workItems: [{ id: 'simulate-release', objective: 'Verify the package.', contextRefs: [] }],
+		} } } }], predecessorResults: [{ id: 'release-result' }] } });
 		expect(prompt).toContain('Release review runs in a fresh VM');
 		expect(prompt).toContain('standalone command npm pack in /workspace/project');
 		expect(prompt).toContain('default current-directory output');
@@ -474,7 +478,9 @@ describe('Codex chat executor', () => {
 			assignment: { id: 'assignment', workItemId: 'work', sourceRef: { model: 'proposal', id: 'proposal' },
 				authorityRefs: [], effectiveProfile: { activity: 'acting', handler: 'actor', prompt: { system: 'Work.' } },
 				workspace: { mode: 'git' }, acceptanceCriteria: [], limits: { maximumSeconds: 30 } },
-			context: [], predecessorResults: [],
+			context: [{ ref: { model: 'proposal', id: 'proposal' }, value: { frontmatter: { executionPlan: {
+				workItems: [{ id: 'work', objective: 'Work.', contextRefs: [] }],
+			} } } }], predecessorResults: [],
 		} }, 'high', 30);
 		expect(rendered).toContain('syntactically complete with balanced quotes');
 	});

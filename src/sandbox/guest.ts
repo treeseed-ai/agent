@@ -12,7 +12,7 @@ import { activityAllowsVerification } from './guest-contract.ts';
 import { activityCompletionOutputSchema, validateActivityCompletion } from '../activity-completion.ts';
 import { completionFrontmatterSchema, completionOutputTargetVariants, promptFromContext, assertPredecessorSynthesis, assertArchitectSourceCitation, assertTesterFailureEvidence, attachObservedTesterFailures, correctObservedTestFirstRedVerification, omitUnreplayableVerification, codexReasoningArguments, codexProjectInstructionArguments, codexInteractiveTimeoutMs, requiresActivityCompletion, record, text, providerToolName, codexToolInFlight, codexIdleTimeoutMs, codexCloseoutTimeoutMs, codexResumeIdleTimeoutMs } from './guest-contract.ts';
 import { recoverPlanningSynthesis } from './planning-synthesis-recovery.ts';
-import { objectDigest, observeReportedActivityCommands } from './verification.ts';
+import { objectDigest, observeReportedActivityCommands, prepareReleaseReview } from './verification.ts';
 export { observeReportedActivityCommands, verifyReportedActivityCommands, requiresNodeDependencyRestore } from './verification.ts';
 
 const inputRoot = '/run/treeseed-assignment';
@@ -268,8 +268,12 @@ export async function runSandboxGuest() {
 	}
 	const relay = subscriptionAuth ? null : await startModelRelay(assignment, sandboxId, operationToken);
 	const subscriptionProxy = subscriptionAuth ? assignmentProxy : null;
+	const reviewSecrets = [operationToken, ...(subscriptionAuth ? providerCredentialValues(JSON.parse(subscriptionAuth.toString('utf8'))) : [])];
+	await progress('workspace.release-review-verification.starting');
+	const releaseReview = await prepareReleaseReview(context, reviewSecrets, execute);
+	await progress('workspace.release-review-verification.completed');
 	const events: Record<string, unknown>[] = [], timingTracker: TimingAwarenessTracker = { completedChecks: 0, firstTool: null, firstToolSucceeded: false, lastTool: null, lastToolSucceeded: false },
-		composedPrompt = promptFromContext(context, assignment.modelPolicy.reasoningEffort, assignment.resources.durationSeconds);
+		composedPrompt = promptFromContext(context, assignment.modelPolicy.reasoningEffort, assignment.resources.durationSeconds, releaseReview?.verification);
 	const structuredCompletion = (Boolean(canonicalActivity) && canonicalActivity !== 'chat')
 		|| (sourceMetadata ? requiresActivityCompletion(sourceMetadata.mode) : false);
 	const completionSchemaPath = resolve(codexHome, 'activity-completion.schema.json');
@@ -406,7 +410,8 @@ export async function runSandboxGuest() {
 			text(canonicalAssignment.agentClass), canonicalActivity, canonicalAssignment.acceptanceCriteria) : null;
 		const replayableCompletion = correctedCompletion ? omitUnreplayableVerification(correctedCompletion) : null;
 		const diagnosticSecrets = [operationToken, ...(subscriptionAuth ? providerCredentialValues(JSON.parse(subscriptionAuth.toString('utf8'))) : []), ...(subscriptionAuth ? providerCredentialValues(JSON.parse(await readFile(resolve(codexHome, 'auth.json'), 'utf8'))) : [])];
-		const observedCompletion = replayableCompletion ? await observeReportedActivityCommands(replayableCompletion, diagnosticSecrets, execute, canonicalAssignment) : null;
+		const observedCompletion = replayableCompletion ? releaseReview ? await releaseReview.complete(replayableCompletion)
+			: await observeReportedActivityCommands(replayableCompletion, diagnosticSecrets, execute, canonicalAssignment) : null;
 		const activityCompletion = attachObservedTesterFailures(observedCompletion?.report ?? null, events,
 			text(canonicalAssignment.agentClass), canonicalActivity, canonicalAssignment.acceptanceCriteria);
 		assertArchitectSourceCitation(activityCompletion, source?.commit ?? null, text(canonicalAssignment.agentClass), canonicalActivity);

@@ -1,6 +1,26 @@
 schemaVersion: treeseed.guarantee-verifiers/v1
 ownerPackage: "@treeseed/agent"
 verifiers:
+  agent.golden.provider-event-credential-redaction:
+    kind: vitestCase
+    ownerPackage: '@treeseed/agent'
+    testFile: tests/modern/execution/provider-failure.test.ts
+    testName: redacts nested provider tool-output credentials without rewriting raw validation events
+  agent.golden.provider-event-evidence-preservation:
+    kind: vitestCase
+    ownerPackage: '@treeseed/agent'
+    testFile: tests/modern/execution/provider-failure.test.ts
+    testName: preserves clean event evidence, usage and long output without failure-summary truncation
+  agent.golden.provider-event-key-redaction:
+    kind: vitestCase
+    ownerPackage: '@treeseed/agent'
+    testFile: tests/modern/execution/provider-failure.test.ts
+    testName: redacts credential-bearing diagnostic keys and overlapping values longest first
+  agent.golden.provider-event-rotated-credential-redaction:
+    kind: vitestCase
+    ownerPackage: '@treeseed/agent'
+    testFile: tests/modern/execution/provider-failure.test.ts
+    testName: removes issued and rotated credentials while retaining failed check disposition
   agent.golden.closeout-before-publication:
     kind: vitestCase
     ownerPackage: '@treeseed/agent'

@@ -3,6 +3,18 @@ id: agent.golden.component-boundaries
 title: Golden execution component boundaries
 scope: local-component-tests
 workflow:
+  - id: provider-event-credential-redaction
+    action: { verifier: agent.golden.provider-event-credential-redaction }
+    expect: { status: passed }
+  - id: provider-event-evidence-preservation
+    action: { verifier: agent.golden.provider-event-evidence-preservation }
+    expect: { status: passed }
+  - id: provider-event-key-redaction
+    action: { verifier: agent.golden.provider-event-key-redaction }
+    expect: { status: passed }
+  - id: provider-event-rotated-credential-redaction
+    action: { verifier: agent.golden.provider-event-rotated-credential-redaction }
+    expect: { status: passed }
   - id: closeout-before-publication
     action: { verifier: agent.golden.closeout-before-publication }
     expect: { status: passed }

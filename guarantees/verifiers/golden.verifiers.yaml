@@ -86,6 +86,21 @@ verifiers:
     ownerPackage: '@treeseed/agent'
     testFile: tests/modern/execution/verification/canonical-work-reuse.test.ts
     testName: reuses materialized exact context without skipping missing predecessor read-back
+  agent.golden.revision-original-source:
+    kind: vitestCase
+    ownerPackage: '@treeseed/agent'
+    testFile: tests/modern/execution/verification/work-item-source-contract.test.ts
+    testName: reviews the entire revised candidate against the original work-item Git source rather than the last commit delta
+  agent.golden.selected-objective:
+    kind: vitestCase
+    ownerPackage: '@treeseed/agent'
+    testFile: tests/modern/execution/verification/work-item-source-contract.test.ts
+    testName: renders the exact selected objective without replacing it with another work item or weakening full acceptance criteria
+  agent.golden.work-item-source-denial:
+    kind: vitestCase
+    ownerPackage: '@treeseed/agent'
+    testFile: tests/modern/execution/verification/work-item-source-contract.test.ts
+    testName: fails closed when the exact proposal or selected work item is absent
   agent.golden.aggregate-build-reuse:
     kind: vitestCase
     ownerPackage: '@treeseed/agent'

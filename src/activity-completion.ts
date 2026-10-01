@@ -23,13 +23,13 @@ export function estimateMutableField(item: JsonRecord, agentClass: string) {
 		: item.agentClass === agentClass ? 'estimate' : undefined;
 }
 
-export function estimateProposalSource(context: JsonRecord): JsonRecord {
+export function assignmentProposalSource(context: JsonRecord): JsonRecord {
 	const source = record(record(context.assignment).sourceRef);
 	const items = Array.isArray(context.context) ? context.context.map(record) : [];
-	const item = items.find(item => ['store', 'model', 'id', 'repository', 'commit', 'path']
+	const item = items.find(item => ['store', 'model', 'id', 'repository', 'commit', 'path', 'revision', 'digest']
 		.every(key => record(item.ref)[key] === source[key]));
 	const proposal = record(record(item?.value).frontmatter);
-	if (source.model !== 'proposal' || !Object.keys(proposal).length) throw new Error('estimate_exact_proposal_context_required');
+	if (source.model !== 'proposal' || !Object.keys(proposal).length) throw new Error('assignment_exact_proposal_context_required');
 	return proposal;
 }
 

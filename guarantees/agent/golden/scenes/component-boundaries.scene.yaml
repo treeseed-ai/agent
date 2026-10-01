@@ -3,6 +3,15 @@ id: agent.golden.component-boundaries
 title: Golden execution component boundaries
 scope: local-component-tests
 workflow:
+  - id: ongoing-time-discipline
+    action: { verifier: agent.golden.ongoing-time-discipline }
+    expect: { status: passed }
+  - id: measured-time-discipline
+    action: { verifier: agent.golden.measured-time-discipline }
+    expect: { status: passed }
+  - id: unfinished-work-authority
+    action: { verifier: agent.golden.unfinished-work-authority }
+    expect: { status: passed }
   - id: revision-original-source
     action: { verifier: agent.golden.revision-original-source }
     expect: { status: passed }

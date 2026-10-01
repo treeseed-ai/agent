@@ -51,6 +51,12 @@ workflow:
   - id: runner-test-first-denial
     action: { verifier: agent.golden.runner-test-first-denial }
     expect: { status: passed }
+  - id: canonical-context-reuse
+    action: { verifier: agent.golden.canonical-context-reuse }
+    expect: { status: passed }
+  - id: aggregate-build-reuse
+    action: { verifier: agent.golden.aggregate-build-reuse }
+    expect: { status: passed }
   - id: retired-pair-custody
     action: { verifier: agent.golden.retired-pair-custody }
     expect: { status: passed }

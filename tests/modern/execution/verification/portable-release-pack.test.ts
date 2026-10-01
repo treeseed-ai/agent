@@ -32,7 +32,7 @@ describe('portable release verification in independent workspaces', () => {
 			expect(prompt).toContain('tarball packed in this workspace');
 			expect(prompt).toContain('report the missing replayable check as an unmet criterion');
 			expect(prompt).toContain('inspect their script composition');
-			expect(prompt).toContain('Do not run a separate generator or full suite already owned by that aggregate gate');
+			expect(prompt).toContain('Do not run a separate build, generator or full suite already owned by that aggregate gate');
 		}
 	});
 });

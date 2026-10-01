@@ -278,7 +278,7 @@ describe('Codex chat executor', () => {
 		expect(prompt).toContain('inspect package.json scripts once');
 		expect(prompt).toContain('do not run npm install or npm ci again');
 		expect(prompt).toContain('inspect their script composition');
-		expect(prompt).toContain('Do not run a separate generator or full suite already owned by that aggregate gate');
+		expect(prompt).toContain('Do not run a separate build, generator or full suite already owned by that aggregate gate');
 		expect(prompt).toContain('retry that gate once');
 		expect(prompt).toContain('At 90 seconds remaining, stop new work');
 		expect(prompt).toContain('Reserve at least 60 seconds');

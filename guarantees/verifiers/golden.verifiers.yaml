@@ -81,6 +81,16 @@ verifiers:
     ownerPackage: '@treeseed/agent'
     testFile: tests/modern/execution/verification/replay-failure.test.ts
     testName: keeps unscoped non-test setup and resource runner failures fail-closed
+  agent.golden.canonical-context-reuse:
+    kind: vitestCase
+    ownerPackage: '@treeseed/agent'
+    testFile: tests/modern/execution/verification/canonical-work-reuse.test.ts
+    testName: reuses materialized exact context without skipping missing predecessor read-back
+  agent.golden.aggregate-build-reuse:
+    kind: vitestCase
+    ownerPackage: '@treeseed/agent'
+    testFile: tests/modern/execution/verification/canonical-work-reuse.test.ts
+    testName: avoids separate aggregate-owned builds without weakening independent release gates
   agent.golden.retired-pair-custody:
     kind: vitestCase
     ownerPackage: '@treeseed/agent'

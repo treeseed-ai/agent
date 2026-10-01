@@ -9,16 +9,15 @@ import { dirname, resolve } from 'node:path';
 import { sandboxAssignmentSchema, sandboxResultSchema, sourceWorkspaceKeySchema, type SandboxAssignment } from '@treeseed/sdk/capacity-provider/sandbox';
 import { providerCredentialValues, providerFailureSummary, redactProviderDiagnostic, redactProviderEvents } from './provider-failure.ts';
 import { activityAllowsVerification } from './guest-contract.ts';
-import { activityCompletionOutputSchema, validateActivityCompletion, type ActivityCompletionReport } from '../activity-completion.ts';
-import { completionFrontmatterSchema, completionOutputTargetVariants, promptFromContext, assertPredecessorSynthesis, assertArchitectSourceCitation, assertTesterFailureEvidence, attachObservedTesterFailures, correctObservedTestFirstRedVerification, omitUnreplayableVerification, codexReasoningArguments, codexProjectInstructionArguments, codexInteractiveTimeoutMs, requiresActivityCompletion, reportedVerificationCommands, record, text, providerToolName, codexToolInFlight, codexIdleTimeoutMs, codexCloseoutTimeoutMs, codexResumeIdleTimeoutMs } from './guest-contract.ts';
+import { activityCompletionOutputSchema, validateActivityCompletion } from '../activity-completion.ts';
+import { completionFrontmatterSchema, completionOutputTargetVariants, promptFromContext, assertPredecessorSynthesis, assertArchitectSourceCitation, assertTesterFailureEvidence, attachObservedTesterFailures, correctObservedTestFirstRedVerification, omitUnreplayableVerification, codexReasoningArguments, codexProjectInstructionArguments, codexInteractiveTimeoutMs, requiresActivityCompletion, record, text, providerToolName, codexToolInFlight, codexIdleTimeoutMs, codexCloseoutTimeoutMs, codexResumeIdleTimeoutMs } from './guest-contract.ts';
 import { recoverPlanningSynthesis } from './planning-synthesis-recovery.ts';
+import { objectDigest, observeReportedActivityCommands } from './verification.ts';
+export { observeReportedActivityCommands, verifyReportedActivityCommands, requiresNodeDependencyRestore } from './verification.ts';
 
 const inputRoot = '/run/treeseed-assignment';
 const outputRoot = '/run/treeseed-output';
 const workspaceRoot = '/workspace';
-const canonical = (value: unknown): string => Array.isArray(value) ? `[${value.map(canonical).join(',')}]` : value && typeof value === 'object'
-	? `{${Object.entries(value as Record<string, unknown>).filter(([, item]) => item !== undefined).sort(([a], [b]) => a.localeCompare(b)).map(([key, item]) => `${JSON.stringify(key)}:${canonical(item)}`).join(',')}}` : JSON.stringify(value);
-const objectDigest = (value: unknown) => `sha256:${createHash('sha256').update(canonical(value)).digest('hex')}`;
 const progress = (stage: string) => writeFile(resolve(outputRoot, 'progress.json'), `${JSON.stringify({ stage, occurredAt: new Date().toISOString() })}\n`, { mode: 0o600 });
 async function fileDigest(path: string) {
 	const hash = createHash('sha256'); for await (const chunk of createReadStream(path)) hash.update(chunk as Buffer);
@@ -166,52 +165,6 @@ export async function runTreeDxMcpServer(){
 			process.stdout.write(`${JSON.stringify({jsonrpc:'2.0',id,result})}\n`);
 		}catch(error){process.stdout.write(`${JSON.stringify({jsonrpc:'2.0',id,error:{code:-32000,message:error instanceof Error?error.message:String(error)}})}\n`);}
 	}
-}
-
-/** Convert model-reported passing checks into runner-observed evidence. */
-export async function verifyReportedActivityCommands(report: ActivityCompletionReport,
-	execute: (command: string) => Promise<void> = async (command) => {
-		await run('/bin/sh', ['-lc', command], { cwd: '/workspace/project', timeoutMs: 120_000 });
-	}) {
-	const commands = reportedVerificationCommands(report);
-	for (const command of commands) {
-		try { await execute(command); }
-		catch { throw new Error(`Runner-observed verification failed: ${command}`); }
-	}
-	return report;
-}
-
-export async function observeReportedActivityCommands(report: ActivityCompletionReport, secrets: string[] = [], execute: typeof run = run) {
-	const commands = reportedVerificationCommands(report);
-	if (commands.some(requiresNodeDependencyRestore)
-		&& await stat('/workspace/project/package-lock.json').then(() => true, () => false)
-		&& !await stat('/workspace/project/node_modules/.bin/vitest').then(() => true, () => false)) {
-		try { await run('npm', ['ci', '--prefer-offline', '--no-audit', '--no-fund'],
-			{ cwd: '/workspace/project', timeoutMs: 120_000 }); }
-		catch (error) {
-			const exit = /exited (\d+)/u.exec(error instanceof Error ? error.message : String(error))?.[1] ?? 'unknown';
-			throw new Error(`Runner verification dependency restore failed (exit ${exit}).`);
-		}
-	}
-	const verification = [];
-	for (const command of commands) {
-		const started = process.hrtime.bigint(); let failedOutput = '';
-		try {
-			const output = await execute('/bin/sh', ['-lc', command], { cwd: '/workspace/project', captureStdout: true,
-				maxStdoutBytes: 8_388_608, timeoutMs: 120_000,
-				onLine: line => { failedOutput = `${failedOutput}\n${redactProviderDiagnostic(line, secrets)}`.slice(-1_024); } });
-			verification.push({ command, status: 'passed' as const, exitCode: 0,
-				outputDigest: objectDigest({ stdout: output.stdout, stderr: output.stderr }),
-				durationSeconds: Math.ceil(Number(process.hrtime.bigint() - started) / 1e9) });
-		} catch (error) {
-			const exit = /exited (\d+)/u.exec(error instanceof Error ? error.message : String(error))?.[1] ?? 'unknown';
-			throw new Error(`Runner-observed verification failed (exit ${exit}): ${redactProviderDiagnostic(command, secrets)}; ${redactProviderDiagnostic(error, secrets)}; ${failedOutput}`);
-		}
-	}
-	return { report, verification };
-}
-export function requiresNodeDependencyRestore(command: string) {
-	return /^(?:npm\s+(?:run|exec|test)(?:\s|$)|npx(?:\s|$))/u.test(command.trim());
 }
 
 export function providerResourceAbort(events: Record<string, unknown>[]) {
@@ -445,7 +398,7 @@ export async function runSandboxGuest() {
 			text(canonicalAssignment.agentClass), canonicalActivity, canonicalAssignment.acceptanceCriteria) : null;
 		const replayableCompletion = correctedCompletion ? omitUnreplayableVerification(correctedCompletion) : null;
 		const diagnosticSecrets = [operationToken, ...(subscriptionAuth ? providerCredentialValues(JSON.parse(subscriptionAuth.toString('utf8'))) : []), ...(subscriptionAuth ? providerCredentialValues(JSON.parse(await readFile(resolve(codexHome, 'auth.json'), 'utf8'))) : [])];
-		const observedCompletion = replayableCompletion ? await observeReportedActivityCommands(replayableCompletion, diagnosticSecrets) : null;
+		const observedCompletion = replayableCompletion ? await observeReportedActivityCommands(replayableCompletion, diagnosticSecrets, run, canonicalAssignment) : null;
 		const activityCompletion = attachObservedTesterFailures(observedCompletion?.report ?? null, events,
 			text(canonicalAssignment.agentClass), canonicalActivity, canonicalAssignment.acceptanceCriteria);
 		assertArchitectSourceCitation(activityCompletion, source?.commit ?? null, text(canonicalAssignment.agentClass), canonicalActivity);

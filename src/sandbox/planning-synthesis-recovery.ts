@@ -15,8 +15,8 @@ export async function recoverPlanningSynthesis(input: {
 	responsePath: string;
 	schemaPath: string;
 	allowVerification: boolean;
-	durationSeconds: number;
-	started: bigint;
+	remainingMs(): number;
+	execute: typeof run;
 	model: string;
 	reasoningEffort?: string;
 	providerEnvironment: Record<string, string>;
@@ -29,13 +29,13 @@ export async function recoverPlanningSynthesis(input: {
 	if (!firstResponse) return false;
 	const first = validateActivityCompletion(JSON.parse(firstResponse), input.allowVerification);
 	const missing = missingPredecessorCitations(input.context, first);
-	const remainingMs = input.durationSeconds * 1_000 - Number(process.hrtime.bigint() - input.started) / 1e6 - 5_000;
+	const remainingMs = input.remainingMs();
 	if (!missing.length || remainingMs < 30_000) return false;
 	const predecessors = record(input.context.canonicalAssignmentContext).predecessorResults;
 	const prompt = planningSynthesisCorrectionPrompt(missing, first, Array.isArray(predecessors) ? predecessors : []);
 	await input.progress('provider.planning-synthesis-recovery.starting');
 	const events: Event[] = [];
-	await run('/usr/local/bin/codex', ['exec', 'resume', input.threadId, '--json', '--dangerously-bypass-approvals-and-sandbox',
+	await input.execute('/usr/local/bin/codex', ['exec', 'resume', input.threadId, '--json', '--dangerously-bypass-approvals-and-sandbox',
 		'--model', input.model, ...codexReasoningArguments(input.reasoningEffort), ...codexProjectInstructionArguments(),
 		'--output-schema', input.schemaPath, '--output-last-message', input.responsePath, '-'], {
 		cwd: '/workspace/project', env: input.providerEnvironment,

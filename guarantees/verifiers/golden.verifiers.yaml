@@ -1,6 +1,91 @@
 schemaVersion: treeseed.guarantee-verifiers/v1
 ownerPackage: "@treeseed/agent"
 verifiers:
+  agent.golden.api-deadline-clamp:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/verification/remaining-budget.test.ts
+    testName: "clamps the signed guest budget to the exact earlier API execution deadline"
+  agent.golden.api-clock-fail-closed:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/verification/remaining-budget.test.ts
+    testName: "fails closed on missing or malformed API execution clock authority"
+  agent.golden.api-deadline-remeasurement:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/verification/remaining-budget.test.ts
+    testName: "remeasures the original API deadline as time passes without resetting the guest budget"
+  agent.golden.mandatory-replay-budget:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/verification/remaining-budget.test.ts
+    testName: "remeasures the original remaining budget before every required replay command"
+  agent.golden.exhausted-budget-denial:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/verification/remaining-budget.test.ts
+    testName: "refuses exhausted and invalid budgets before starting any subprocess"
+  agent.golden.mandatory-replay-exhaustion:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/verification/remaining-budget.test.ts
+    testName: "fails rather than skipping a later mandatory command when the budget is exhausted"
+  agent.golden.stricter-command-window:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/verification/remaining-budget.test.ts
+    testName: "retains stricter command limits and short positive productive windows"
+  agent.golden.setup-closeout-reserve:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/verification/remaining-budget.test.ts
+    testName: "preserves the original safe closeout reserve when setup has consumed execution time"
+  agent.golden.model-closeout-denial:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/verification/remaining-budget.test.ts
+    testName: "does not start another model turn after its existing closeout reserve is consumed"
+  agent.golden.replay-dependency-budget:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/verification/remaining-budget.test.ts
+    testName: "restores replay dependencies through the same bounded executor"
+  agent.golden.real-replay-deadline:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/verification/remaining-budget.test.ts
+    testName: "does not convert a mandatory replay overrun into a passing receipt"
+  agent.golden.mandatory-replay-reserve:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/timing/time-budget-discipline.test.ts
+    testName: "reserves mandatory runner replay inside the original assignment budget"
+  agent.golden.synthesis-api-deadline:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/sandbox/planning-synthesis-recovery.test.ts
+    testName: "uses the same shrinking API deadline executor for citation recovery"
+  agent.golden.runtime-api-clock:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/sandbox/runtime-clock.test.ts
+    testName: "reads the unchanged API clock through the existing authenticated tool relay"
+  agent.golden.runtime-clock-budget:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/sandbox/runtime-clock.test.ts
+    testName: "bounds the runtime clock request by its caller remaining execution window"
+  agent.golden.runtime-clock-denial:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/sandbox/runtime-clock.test.ts
+    testName: "does not fabricate clock authority from a denied relay response or malformed JSON"
+  agent.golden.runtime-clock-environment:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/sandbox/runtime-clock.test.ts
+    testName: "fails before opening a relay request when its private runtime environment is incomplete"
   agent.golden.canonical-safe-closeout:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

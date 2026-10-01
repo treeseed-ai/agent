@@ -1,4 +1,4 @@
-import { run } from './process-runner.ts';
+import { run, withinAssignmentBudget, remainingExecutionMs } from './process-runner.ts';
 import { createHash } from 'node:crypto';
 import { createReadStream } from 'node:fs';
 import { createServer } from 'node:http';
@@ -24,7 +24,7 @@ async function fileDigest(path: string) {
 	return `sha256:${hash.digest('hex')}`;
 }
 
-async function materialize(assignment: SandboxAssignment) {
+async function materialize(assignment: SandboxAssignment, execute: typeof run) {
 	for (const descriptor of assignment.inputs) {
 		try {
 			await progress(`input.${descriptor.id}.stat`);
@@ -35,10 +35,10 @@ async function materialize(assignment: SandboxAssignment) {
 			const target = resolve(descriptor.targetPath); if (!target.startsWith(`${workspaceRoot}/`)) throw new Error('target escaped the guest workspace');
 			await progress(`input.${descriptor.id}.copy`);
 			await mkdir(descriptor.mediaType.endsWith('+tar') ? target : dirname(target), { recursive: true, mode: 0o700 });
-			if (descriptor.mediaType === 'application/vnd.treeseed.directory+tar') await run('/bin/tar', ['--extract', '--file', source, '--directory', target, '--no-same-owner', '--no-same-permissions'], { timeoutMs: 10_000 });
+			if (descriptor.mediaType === 'application/vnd.treeseed.directory+tar') await execute('/bin/tar', ['--extract', '--file', source, '--directory', target, '--no-same-owner', '--no-same-permissions'], { timeoutMs: 10_000 });
 			else if (descriptor.mediaType === 'application/json' || descriptor.mediaType === 'application/x-pem-file') await writeFile(target, await readFile(source), { mode: descriptor.disposition === 'read-only' ? 0o400 : 0o600 });
 			else throw new Error(`unsupported media type ${descriptor.mediaType}`);
-			if (descriptor.disposition === 'read-only') { await run('/bin/chmod', ['-R', 'a-w', target], { timeoutMs: 10_000 }); await chmod(target, 0o500); }
+			if (descriptor.disposition === 'read-only') { await execute('/bin/chmod', ['-R', 'a-w', target], { timeoutMs: 10_000 }); await chmod(target, 0o500); }
 			await progress(`input.${descriptor.id}.ready`);
 		} catch (error) { throw new Error(`Guest input materialization failed for ${descriptor.id}: ${error instanceof Error ? error.message : String(error)}`); }
 	}
@@ -147,11 +147,12 @@ export function codexTreeDxMcpConfig(sandboxId:string,operationToken:string,assi
 	return `[features]\ncode_mode_host = true\n\n[mcp_servers.treedx]\ncommand = ${JSON.stringify(process.execPath)}\nargs = ${JSON.stringify([process.argv[1],'--treedx-mcp'])}\nrequired = true\nstartup_timeout_sec = 10\ntool_timeout_sec = 30\n\n[mcp_servers.treedx.env]\n${Object.entries(values).map(([key,value])=>`${key} = ${JSON.stringify(value)}`).join('\n')}\n`;
 }
 
-async function invokeTreeDxRelay(tool:string,arguments_:Record<string,unknown>){
-	const relayUrl=text(process.env.TREESEED_RELAY_URL),sandboxId=text(process.env.TREESEED_SANDBOX_ID),operationToken=text(process.env.TREESEED_GUEST_TOKEN),caPath=text(process.env.TREESEED_RELAY_CA);
+export async function invokeTreeDxRelay(tool:string,arguments_:Record<string,unknown>,environment:NodeJS.ProcessEnv=process.env,timeoutMs=30_000){
+	const relayUrl=text(environment.TREESEED_RELAY_URL),sandboxId=text(environment.TREESEED_SANDBOX_ID),operationToken=text(environment.TREESEED_GUEST_TOKEN),caPath=text(environment.TREESEED_RELAY_CA);
 	if(!relayUrl||!sandboxId||!operationToken||!caPath) throw new Error('TreeDX MCP relay environment is incomplete.');
+	if(!Number.isFinite(timeoutMs)||timeoutMs<=0) throw new Error('assignment_execution_budget_exhausted');
 	const encoded=Buffer.from(JSON.stringify({tool,arguments:arguments_})),url=new URL(relayUrl),ca=await readFile(caPath);
-	return new Promise<unknown>((resolve,reject)=>{const request=httpsRequest({hostname:url.hostname,port:Number(url.port),ca,servername:'treeseed-sandbox-relay',method:'POST',path:`/${'v1'}/sandboxes/${encodeURIComponent(sandboxId)}/tools/treedx`,headers:{authorization:`Bearer ${operationToken}`,'content-type':'application/json','content-length':String(encoded.byteLength)}},(response)=>{let body='';response.setEncoding('utf8');response.on('data',(chunk)=>{body+=chunk;});response.on('end',()=>{try{const value=body?JSON.parse(body):{};(response.statusCode??500)<400?resolve(value):reject(new Error(String(value.error??`TreeDX relay returned ${response.statusCode}.`)));}catch(error){reject(error);}});});request.once('error',reject);request.end(encoded);});
+	return new Promise<unknown>((resolve,reject)=>{const request=httpsRequest({hostname:url.hostname,port:Number(url.port),ca,signal:AbortSignal.timeout(Math.floor(timeoutMs)),servername:'treeseed-sandbox-relay',method:'POST',path:`/${'v1'}/sandboxes/${encodeURIComponent(sandboxId)}/tools/treedx`,headers:{authorization:`Bearer ${operationToken}`,'content-type':'application/json','content-length':String(encoded.byteLength)}},(response)=>{let body='';response.setEncoding('utf8');response.on('data',(chunk)=>{body+=chunk;});response.on('end',()=>{try{const value=body?JSON.parse(body):{};(response.statusCode??500)<400?resolve(value):reject(new Error(String(value.error??`TreeDX relay returned ${response.statusCode}.`)));}catch(error){reject(error);}});});request.once('error',reject);request.end(encoded);});
 }
 
 export async function runTreeDxMcpServer(){
@@ -222,10 +223,18 @@ export async function runSandboxGuest() {
 	const started = process.hrtime.bigint(), usageBefore = process.resourceUsage();
 	await progress('guest.started');
 	const assignment = sandboxAssignmentSchema.parse(JSON.parse(await readFile(resolve(inputRoot, 'assignment.json'), 'utf8')));
+	let executionDeadlineAt: string | null = null;
+	const getRemainingMs = () => remainingExecutionMs(assignment.resources.durationSeconds, Number(process.hrtime.bigint() - started) / 1e6, executionDeadlineAt);
+	const execute = withinAssignmentBudget(run, getRemainingMs);
 	await progress('assignment.verified');
 	const sandboxId = (await readFile(resolve(inputRoot, 'sandbox-id'), 'utf8')).trim(), operationToken = (await readFile(resolve(inputRoot, 'operation-token'), 'utf8')).trim();
 	const assignmentProxy = `http://${encodeURIComponent(sandboxId)}:${encodeURIComponent(operationToken)}@10.89.0.1:7444`;
-	await materialize(assignment); const context = record(JSON.parse(await readFile('/workspace/.treeseed/context.json', 'utf8')));
+	await materialize(assignment, execute); const context = record(JSON.parse(await readFile('/workspace/.treeseed/context.json', 'utf8')));
+	const relayEnvironment = { TREESEED_RELAY_URL: assignment.network.relayUrl, TREESEED_SANDBOX_ID: sandboxId,
+		TREESEED_GUEST_TOKEN: operationToken, TREESEED_RELAY_CA: '/workspace/.treeseed/relay-ca.crt' };
+	// Reuse the same API clock, without counting a trusted runtime read as a model check.
+	executionDeadlineAt = text(record(await invokeTreeDxRelay('treeseed_time_status', {}, relayEnvironment, Math.min(30_000, getRemainingMs()))).deadlineAt);
+	getRemainingMs();
 	await mkdir('/workspace/project', { recursive: true, mode: 0o700 });
 	await progress('inputs.ready');
 	if (assignment.contextManifestDigest !== assignment.inputs.find((input) => input.id === 'execution-context')?.digest || assignment.identityManifestDigest !== objectDigest(record(record(context.identity).manifest))) throw new Error('Guest context or identity manifest does not match the signed assignment.');
@@ -238,12 +247,12 @@ export async function runSandboxGuest() {
 		text(record(canonicalAssignment.workspace).mode));
 	if (source) {
 		if (source.teamId !== assignment.teamId || source.projectId !== assignment.projectId) throw new Error('Attached source does not match assignment scope.');
-		const head = (await run('/usr/bin/git', ['rev-parse', '--verify', 'HEAD^{commit}'], { cwd: '/workspace/project', captureStdout: true, maxStdoutBytes: 128, timeoutMs: 10_000 })).stdout.trim();
+		const head = (await execute('/usr/bin/git', ['rev-parse', '--verify', 'HEAD^{commit}'], { cwd: '/workspace/project', captureStdout: true, maxStdoutBytes: 128, timeoutMs: 10_000 })).stdout.trim();
 		if (head !== source.commit) throw new Error('Attached source differs from its exact authorized commit.');
 		context.projectManifest = { ...record(context.projectManifest), source, revision: head, mode: sourceMetadata?.mode, publication: sourceMetadata?.publication };
 		if (allowVerification) {
 			await progress('workspace.dependencies.starting');
-			await prepareNodeWorkspace('/workspace/project', assignmentProxy);
+			await prepareNodeWorkspace('/workspace/project', assignmentProxy, execute);
 			await progress('workspace.dependencies.ready');
 		}
 	}
@@ -277,12 +286,12 @@ export async function runSandboxGuest() {
 		'--disable', 'browser_use', '--disable', 'apps', '--disable', 'multi_agent_v2', '--disable', 'image_generation', '--color', 'never', '--output-last-message', responsePath, '-C', '/workspace/project', '-'];
 	let providerError: Error | null = null, providerThreadId: string | null = null, closeoutInterrupted = false;
 	const providerEnvironment = { PATH: '/usr/local/bin:/usr/bin:/bin', HOME: codexHome, CODEX_HOME: codexHome,
-		TREESEED_RELAY_URL:assignment.network.relayUrl,TREESEED_SANDBOX_ID:sandboxId,TREESEED_GUEST_TOKEN:operationToken,TREESEED_RELAY_CA:'/workspace/.treeseed/relay-ca.crt',
+		...relayEnvironment,
 		...(relay ? { OPENAI_BASE_URL: relay.baseUrl, OPENAI_API_KEY: 'treeseed-assignment-relay' } : {}),
 		...(subscriptionProxy ? { HTTPS_PROXY: subscriptionProxy, https_proxy: subscriptionProxy } : {}), LANG: 'C.UTF-8' };
 	try {
 		await progress('provider.starting');
-		await run('/usr/local/bin/codex', providerArguments, {
+		await execute('/usr/local/bin/codex', providerArguments, {
 			cwd: '/workspace/project', input: composedPrompt, env: providerEnvironment,
 			timeoutMs: codexInteractiveTimeoutMs(assignment.resources.durationSeconds),
 			idleTimeoutMs: canonicalActivity === 'estimating' ? codexIdleTimeoutMs(assignment.resources.durationSeconds) : undefined,
@@ -301,7 +310,7 @@ export async function runSandboxGuest() {
 			providerError = new Error(`Codex execution failed: ${detail || fallback || 'no structured error was supplied'}`);
 		});
 		if (closeoutInterrupted) {
-			const remainingMs = assignment.resources.durationSeconds * 1_000 - Number(process.hrtime.bigint() - started) / 1e6 - 5_000;
+			const remainingMs = getRemainingMs();
 			if (!providerThreadId || remainingMs < 20_000 || codexToolInFlight(events)) throw new Error('Codex turn ended without a safe bounded session continuation.');
 			await progress('provider.closeout-recovery.starting');
 			const resumeArguments = ['exec', 'resume', providerThreadId, '--json', '--dangerously-bypass-approvals-and-sandbox', '--model', assignment.modelPolicy.model,
@@ -309,7 +318,7 @@ export async function runSandboxGuest() {
 				...(structuredCompletion ? ['--output-schema', completionSchemaPath] : []),
 				'--output-last-message', responsePath, '-'];
 			let finalCloseoutInterrupted = false;
-			await run('/usr/local/bin/codex', resumeArguments, {
+			await execute('/usr/local/bin/codex', resumeArguments, {
 				cwd: '/workspace/project', env: providerEnvironment,
 				input: `The prior turn was interrupted to preserve closeout time after its completed tools. Continue this SAME assignment using only evidence already inspected. Do not repeat inspection or start new work. You have at most ${Math.floor(remainingMs / 1_000)} seconds including closeout; the original deadline has not moved. Your NEXT and FINAL tool action must call mcp__treedx__treeseed_time_status through functions.exec with: text(await tools.mcp__treedx__treeseed_time_status({}));. Then immediately produce ${structuredCompletion ? 'the required structured result' : 'the substantive discussion reply'}. If evidence is insufficient, say so honestly rather than waiting for the deadline.`,
 				timeoutMs: Math.floor(remainingMs),
@@ -323,10 +332,10 @@ export async function runSandboxGuest() {
 				throw error;
 			});
 			if (finalCloseoutInterrupted) {
-				const finalRemainingMs = assignment.resources.durationSeconds * 1_000 - Number(process.hrtime.bigint() - started) / 1e6 - 5_000;
+				const finalRemainingMs = getRemainingMs();
 				if (!providerThreadId || finalRemainingMs < 25_000 || codexToolInFlight(events)) throw new Error('Codex estimate closeout has no safe remaining continuation.');
 				await progress('provider.final-closeout-recovery.starting');
-				await run('/usr/local/bin/codex', resumeArguments, {
+				await execute('/usr/local/bin/codex', resumeArguments, {
 					cwd: '/workspace/project', env: providerEnvironment,
 					input: `This is the FINAL continuation of the same estimating assignment. The original deadline has not moved. Use only evidence already inspected; do not inspect or run another command. You have at most ${Math.floor(finalRemainingMs / 1_000)} seconds. Call mcp__treedx__treeseed_time_status once through functions.exec with: text(await tools.mcp__treedx__treeseed_time_status({}));. Then immediately return the required compact estimate JSON. If evidence is incomplete, state the uncertainty in the rationale and finish now.`,
 					timeoutMs: Math.floor(finalRemainingMs),
@@ -345,7 +354,7 @@ export async function runSandboxGuest() {
 		if (providerError) throw providerError;
 		await progress('provider.completed');
 		const initialTiming = timingAwarenessContract(events);
-		const remainingMs = assignment.resources.durationSeconds * 1_000 - Number(process.hrtime.bigint() - started) / 1e6 - 5_000;
+		const remainingMs = getRemainingMs();
 		const threadId = providerThreadId;
 		if (threadId && timingRecoveryEligible(initialTiming, remainingMs) && (await readFile(responsePath, 'utf8').catch(() => '')).trim()) {
 			await progress('provider.final-clock-recovery.starting');
@@ -355,7 +364,7 @@ export async function runSandboxGuest() {
 			const recoveryArguments = ['exec', 'resume', threadId, '--json', '--dangerously-bypass-approvals-and-sandbox', '--model', assignment.modelPolicy.model,
 				...codexReasoningArguments(assignment.modelPolicy.reasoningEffort), ...codexProjectInstructionArguments(),
 				'--output-schema', recoverySchemaPath, '--output-last-message', resolve(codexHome, 'final-clock-response.txt'), '-'];
-			await run('/usr/local/bin/codex', recoveryArguments, {
+			await execute('/usr/local/bin/codex', recoveryArguments, {
 				cwd: '/workspace/project', env: providerEnvironment,
 				input: 'The substantive response was already captured. Do not inspect or change files and do not repeat the task. Your NEXT and ONLY tool action must call mcp__treedx__treeseed_time_status using functions.exec with: text(await tools.mcp__treedx__treeseed_time_status({}));. After the successful clock result, return {"ack":"done"} without any other tool action.',
 				timeoutMs: Math.floor(remainingMs),
@@ -374,8 +383,8 @@ export async function runSandboxGuest() {
 			await progress('provider.final-clock-recovery.completed');
 		}
 		if (structuredCompletion && await recoverPlanningSynthesis({ context, activity: canonicalActivity, threadId,
-			responsePath, schemaPath: completionSchemaPath, allowVerification, durationSeconds: assignment.resources.durationSeconds,
-			started, model: assignment.modelPolicy.model, reasoningEffort: assignment.modelPolicy.reasoningEffort,
+			responsePath, schemaPath: completionSchemaPath, allowVerification, remainingMs: getRemainingMs, execute,
+			model: assignment.modelPolicy.model, reasoningEffort: assignment.modelPolicy.reasoningEffort,
 			providerEnvironment, progress,
 			onEvent(event) { observeTimingAwarenessEvent(timingTracker, event); events.push(event); if (events.length > 256) events.shift(); },
 			verifyClock(correctionEvents) { const correction = timingAwarenessContract(correctionEvents);
@@ -397,7 +406,7 @@ export async function runSandboxGuest() {
 			text(canonicalAssignment.agentClass), canonicalActivity, canonicalAssignment.acceptanceCriteria) : null;
 		const replayableCompletion = correctedCompletion ? omitUnreplayableVerification(correctedCompletion) : null;
 		const diagnosticSecrets = [operationToken, ...(subscriptionAuth ? providerCredentialValues(JSON.parse(subscriptionAuth.toString('utf8'))) : []), ...(subscriptionAuth ? providerCredentialValues(JSON.parse(await readFile(resolve(codexHome, 'auth.json'), 'utf8'))) : [])];
-		const observedCompletion = replayableCompletion ? await observeReportedActivityCommands(replayableCompletion, diagnosticSecrets, run, canonicalAssignment) : null;
+		const observedCompletion = replayableCompletion ? await observeReportedActivityCommands(replayableCompletion, diagnosticSecrets, execute, canonicalAssignment) : null;
 		const activityCompletion = attachObservedTesterFailures(observedCompletion?.report ?? null, events,
 			text(canonicalAssignment.agentClass), canonicalActivity, canonicalAssignment.acceptanceCriteria);
 		assertArchitectSourceCitation(activityCompletion, source?.commit ?? null, text(canonicalAssignment.agentClass), canonicalActivity);
@@ -413,8 +422,8 @@ export async function runSandboxGuest() {
 				GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null', GIT_OPTIONAL_LOCKS: '0' };
 			const gitArguments = ['-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor=false', '-c', 'core.untrackedCache=false'];
 			try {
-				await run('/usr/bin/git', [...gitArguments, 'read-tree', 'HEAD'], { cwd: '/workspace/project', env: verificationEnvironment, timeoutMs: 10_000 });
-				const status = (await run('/usr/bin/git', [...gitArguments, 'status', '--porcelain', '--untracked-files=all'], {
+				await execute('/usr/bin/git', [...gitArguments, 'read-tree', 'HEAD'], { cwd: '/workspace/project', env: verificationEnvironment, timeoutMs: 10_000 });
+				const status = (await execute('/usr/bin/git', [...gitArguments, 'status', '--porcelain', '--untracked-files=all'], {
 					cwd: '/workspace/project', env: verificationEnvironment, captureStdout: true, maxStdoutBytes: 1_048_576, timeoutMs: 10_000,
 				})).stdout.replace(/\n$/u, '');
 				if (status) throw new Error(`Work-mode execution left uncommitted changes: ${status.split('\n').slice(0, 20).map(line => line.length >= 4 ? line.slice(3) : line).join(', ')}`);
@@ -423,10 +432,10 @@ export async function runSandboxGuest() {
 			// execution VM has stopped. Flush the committed tree and Git object database
 			// before returning success so that verifier reads cannot observe a newer ref
 			// with stale worktree blocks from the executed overlay.
-			await run('/bin/sync', [], { timeoutMs: 30_000 });
+			await execute('/bin/sync', [], { timeoutMs: 30_000 });
 		}
 		const changedPaths = sourceMetadata?.mode === 'work' && source
-			? (await run('/usr/bin/git', ['diff', '--name-only', `${source.commit}..HEAD`], { cwd: '/workspace/project', captureStdout: true, maxStdoutBytes: 1_048_576, timeoutMs: 10_000 })).stdout.split('\n').map((path) => path.trim()).filter(Boolean)
+			? (await execute('/usr/bin/git', ['diff', '--name-only', `${source.commit}..HEAD`], { cwd: '/workspace/project', captureStdout: true, maxStdoutBytes: 1_048_576, timeoutMs: 10_000 })).stdout.split('\n').map((path) => path.trim()).filter(Boolean)
 			: [];
 		const providerEventShapes = providerEventShapeSummary(events, diagnosticSecrets);
 		const artifacts: Array<{ id: string; path: string; digest: string; mediaType: string; bytes: number }> = [];
@@ -437,7 +446,7 @@ export async function runSandboxGuest() {
 				cpuUserMicros: usageAfter.userCPUTime - usageBefore.userCPUTime, cpuSystemMicros: usageAfter.systemCPUTime - usageBefore.systemCPUTime, peakRssBytes: usageAfter.maxRSS * 1024 },
 			diagnostics: { systemPrompt: composedPrompt, providerEvents: redactProviderEvents(events, diagnosticSecrets), providerEventShapes, providerArguments, model: assignment.modelPolicy.model, provider: assignment.modelPolicy.provider, contextManifest: context, activityCompletion,
 				verificationRecords: observedCompletion?.verification ?? [], changedPaths,
-				sourceCommit: sourceMetadata?.mode === 'work' ? (await run('/usr/bin/git', ['rev-parse', '--verify', 'HEAD^{commit}'], { cwd: '/workspace/project', captureStdout: true, maxStdoutBytes: 128, timeoutMs: 10_000 })).stdout.trim() : source?.commit ?? null,
+				sourceCommit: sourceMetadata?.mode === 'work' ? (await execute('/usr/bin/git', ['rev-parse', '--verify', 'HEAD^{commit}'], { cwd: '/workspace/project', captureStdout: true, maxStdoutBytes: 128, timeoutMs: 10_000 })).stdout.trim() : source?.commit ?? null,
 				guestKernel: (await readFile('/proc/version', 'utf8')).trim(), guestUid: process.getuid?.() ?? null, sandboxProfile: assignment.profile }, teardown: { verified: false, completedAt: null } });
 		await writeFile(resolve(outputRoot, 'result.json'), `${JSON.stringify(result)}\n`, { mode: 0o600 });
 	} finally { await rm(resolve(codexHome, 'auth.json'), { force: true }); await rm(resolve(codexHome,'config.toml'),{force:true}); await rm(resolve(codexHome,'activity-completion.schema.json'),{force:true}); await relay?.close(); }

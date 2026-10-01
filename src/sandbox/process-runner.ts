@@ -1,5 +1,25 @@
 import { spawn } from 'node:child_process';
 
+/** The API clock can shorten, never enlarge, the signed monotonic guest budget. */
+export function remainingExecutionMs(durationSeconds: number, elapsedMs: number, deadlineAt: string | null, now = Date.now()) {
+	const deadline = deadlineAt === null ? Number.POSITIVE_INFINITY : Date.parse(deadlineAt);
+	if (deadlineAt !== null && !Number.isFinite(deadline)) throw new Error('assignment_execution_clock_invalid');
+	return Math.min(durationSeconds * 1_000 - elapsedMs, deadline - now) - 5_000;
+}
+
+/** Share the guest's existing remaining-time measurement across subprocesses. */
+export function withinAssignmentBudget(execute: typeof run, remainingMs: () => number): typeof run {
+	return (executable, args, options = {}) => {
+		const remaining = Math.floor(remainingMs());
+		if (!Number.isFinite(remaining) || remaining <= 0) return Promise.reject(new Error('assignment_execution_budget_exhausted'));
+		const timeoutMs = Math.min(options.timeoutMs || remaining, remaining);
+		const consumed = (options.timeoutMs || timeoutMs) - timeoutMs;
+		const closeoutTimeoutMs = options.closeoutTimeoutMs === undefined ? undefined : options.closeoutTimeoutMs - consumed;
+		if (closeoutTimeoutMs !== undefined && closeoutTimeoutMs <= 0) return Promise.reject(new Error('assignment_closeout_budget_exhausted'));
+		return execute(executable, args, { ...options, timeoutMs, ...(closeoutTimeoutMs === undefined ? {} : { closeoutTimeoutMs }) });
+	};
+}
+
 /** Run a guest subprocess; an idle interruption never extends its hard deadline. */
 export function run(executable: string, args: string[], options: { cwd?: string; input?: string; env?: NodeJS.ProcessEnv; onLine?: (line: string) => void; captureStdout?: boolean; maxStdoutBytes?: number; timeoutMs?: number; idleTimeoutMs?: number; closeoutTimeoutMs?: number; canInterrupt?: () => boolean } = {}) {
 	return new Promise<{ stderr: string; stdout: string }>((accept, reject) => {

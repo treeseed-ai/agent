@@ -3,6 +3,57 @@ id: agent.golden.component-boundaries
 title: Golden execution component boundaries
 scope: local-component-tests
 workflow:
+  - id: api-deadline-clamp
+    action: { verifier: agent.golden.api-deadline-clamp }
+    expect: { status: passed }
+  - id: api-clock-fail-closed
+    action: { verifier: agent.golden.api-clock-fail-closed }
+    expect: { status: passed }
+  - id: api-deadline-remeasurement
+    action: { verifier: agent.golden.api-deadline-remeasurement }
+    expect: { status: passed }
+  - id: mandatory-replay-budget
+    action: { verifier: agent.golden.mandatory-replay-budget }
+    expect: { status: passed }
+  - id: exhausted-budget-denial
+    action: { verifier: agent.golden.exhausted-budget-denial }
+    expect: { status: passed }
+  - id: mandatory-replay-exhaustion
+    action: { verifier: agent.golden.mandatory-replay-exhaustion }
+    expect: { status: passed }
+  - id: stricter-command-window
+    action: { verifier: agent.golden.stricter-command-window }
+    expect: { status: passed }
+  - id: setup-closeout-reserve
+    action: { verifier: agent.golden.setup-closeout-reserve }
+    expect: { status: passed }
+  - id: model-closeout-denial
+    action: { verifier: agent.golden.model-closeout-denial }
+    expect: { status: passed }
+  - id: replay-dependency-budget
+    action: { verifier: agent.golden.replay-dependency-budget }
+    expect: { status: passed }
+  - id: real-replay-deadline
+    action: { verifier: agent.golden.real-replay-deadline }
+    expect: { status: passed }
+  - id: mandatory-replay-reserve
+    action: { verifier: agent.golden.mandatory-replay-reserve }
+    expect: { status: passed }
+  - id: synthesis-api-deadline
+    action: { verifier: agent.golden.synthesis-api-deadline }
+    expect: { status: passed }
+  - id: runtime-api-clock
+    action: { verifier: agent.golden.runtime-api-clock }
+    expect: { status: passed }
+  - id: runtime-clock-budget
+    action: { verifier: agent.golden.runtime-clock-budget }
+    expect: { status: passed }
+  - id: runtime-clock-denial
+    action: { verifier: agent.golden.runtime-clock-denial }
+    expect: { status: passed }
+  - id: runtime-clock-environment
+    action: { verifier: agent.golden.runtime-clock-environment }
+    expect: { status: passed }
   - id: canonical-safe-closeout
     action: { verifier: agent.golden.canonical-safe-closeout }
     expect: { status: passed }

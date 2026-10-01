@@ -35,7 +35,7 @@ const corrected = { ...first, summary: `${first.summary}\n- result-2: Exact cont
 function input() {
 	return { context: { canonicalAssignmentContext: { assignment: { effectiveProfile: { activity: 'planning' } }, predecessorResults: predecessors } },
 		activity: 'planning', threadId: '00000000-0000-0000-0000-000000000001', responsePath: '/response.json', schemaPath: '/schema.json',
-		allowVerification: false, durationSeconds: 180, started: process.hrtime.bigint(), model: 'configured-model', reasoningEffort: 'low',
+		allowVerification: false, remainingMs: () => 175_000, execute: run, model: 'configured-model', reasoningEffort: 'low',
 		providerEnvironment: {}, onEvent: vi.fn(), verifyClock: vi.fn(), progress: vi.fn(async () => {}) };
 }
 
@@ -81,6 +81,14 @@ it('does not accept a corrected response when its clock-only boundary fails', as
 it('does not start citation recovery without an original session or enough remaining active time', async () => {
 	vi.mocked(readFile).mockResolvedValue(JSON.stringify(first));
 	expect(await recoverPlanningSynthesis({ ...input(), threadId: null })).toBe(false);
-	expect(await recoverPlanningSynthesis({ ...input(), started: process.hrtime.bigint() - 151_000_000_000n })).toBe(false);
+	expect(await recoverPlanningSynthesis({ ...input(), remainingMs: () => 24_000 })).toBe(false);
+	expect(run).not.toHaveBeenCalled();
+});
+
+it('uses the same shrinking API deadline executor for citation recovery', async () => {
+	vi.mocked(readFile).mockResolvedValueOnce(JSON.stringify(first)).mockResolvedValueOnce(JSON.stringify(corrected));
+	const execute = vi.fn<typeof run>(async () => ({ stdout: '', stderr: '' }));
+	expect(await recoverPlanningSynthesis({ ...input(), remainingMs: () => 35_000, execute })).toBe(true);
+	expect(execute).toHaveBeenCalledWith('/usr/local/bin/codex', expect.any(Array), expect.objectContaining({ timeoutMs: 35_000 }));
 	expect(run).not.toHaveBeenCalled();
 });

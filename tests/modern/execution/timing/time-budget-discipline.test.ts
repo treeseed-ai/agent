@@ -5,6 +5,16 @@ import { enforceAssignmentGrant } from '../../../../src/kernel/granted-runtime.t
 
 afterEach(() => vi.useRealTimers());
 describe('ongoing authoritative time-budget discipline', () => {
+	it('reserves mandatory runner replay inside the original assignment budget', () => {
+		for (const activity of ['acting', 'reviewing']) {
+			const prompt = promptFromContext({ canonicalAssignmentContext: { assignment: { id: 'replay', authorityRefs: [{ model: 'decision' }],
+				workspace: { mode: 'git' }, effectiveProfile: { activity, handler: 'actor', prompt: {} },
+			}, context: [], predecessorResults: [] } }, 'low', 180);
+			expect(prompt).toContain('mandatory runner replay');
+			expect(prompt).toContain('inside this same original budget');
+			expect(prompt).toContain('measured command durations');
+		}
+	});
 	it('retains ongoing time discipline for independently verified Git work', () => {
 		const prompt = promptFromContext({ canonicalAssignmentContext: { assignment: { id: 'git-work',
 			workspace: { mode: 'git' }, effectiveProfile: { activity: 'acting', handler: 'actor', prompt: {} },

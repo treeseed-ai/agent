@@ -1,6 +1,26 @@
 schemaVersion: treeseed.guarantee-verifiers/v1
 ownerPackage: "@treeseed/agent"
 verifiers:
+  agent.golden.closeout-before-publication:
+    kind: vitestCase
+    ownerPackage: '@treeseed/agent'
+    testFile: tests/modern/provider/provider-runner.test.ts
+    testName: records actual closeout output before a completion failure without manufacturing success
+  agent.golden.closeout-local-denial:
+    kind: vitestCase
+    ownerPackage: '@treeseed/agent'
+    testFile: tests/modern/provider/provider-runner.test.ts
+    testName: does not submit terminal writes when local closeout custody cannot be recorded
+  agent.golden.closeout-runner-custody:
+    kind: vitestCase
+    ownerPackage: '@treeseed/agent'
+    testFile: tests/modern/provider/runner-admission.test.ts
+    testName: retains executor closure on the existing claim when terminal publication fails
+  agent.golden.closeout-restart-custody:
+    kind: vitestCase
+    ownerPackage: '@treeseed/agent'
+    testFile: tests/modern/lease-recovery.test.ts
+    testName: retains actual closeout custody across restart without promoting absent or failed receipts
   agent.golden.replay-failure-diagnostics:
     kind: vitestCase
     ownerPackage: '@treeseed/agent'

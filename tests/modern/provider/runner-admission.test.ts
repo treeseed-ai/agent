@@ -46,6 +46,22 @@ async function fixture(workers = 1, connectionLimit = workers) {
 }
 
 describe('real provider polling admission', () => {
+	it('retains executor closure on the existing claim when terminal publication fails', async () => {
+		const { config, client } = await fixture();
+		client.nextAssignment.mockResolvedValue({ assignment: request().assignment, leaseToken: 'test-only' } as never);
+		vi.mocked(resolveAgentExecutor).mockResolvedValue({ id: 'codex', observe: async () => ({ available: true }), execute: vi.fn() });
+		vi.mocked(createAssignmentTreeDxFacade).mockResolvedValue(request().treeDx!);
+		const output = { teardown: { verified: true, completedAt: '2026-10-01T09:01:00Z' }, sandboxId: 'sandbox-1' };
+		vi.mocked(runProviderAssignment).mockImplementationOnce(async input => {
+			await input.onCloseoutOutput?.(output);
+			throw new Error('deadlock detected');
+		});
+		await runMultiTeamProviderRunners(config);
+		const recovery = await new ProviderLocalCapacityStore(config.dataDir).claimsForRecovery(true);
+		expect(recovery).toHaveLength(1);
+		expect(recovery[0]).toMatchObject({ closeoutOutput: output, failureMessage: 'deadlock detected', status: 'recovery' });
+		vi.mocked(runProviderAssignment).mockClear();
+	});
 	it('rechecks a transient broker status failure before returning a leased assignment', async () => {
 		const { config, client } = await fixture();
 		const source = request().assignment;

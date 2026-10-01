@@ -9,6 +9,29 @@ import { ProviderLocalCapacityStore } from '../../src/provider/capacity/capacity
 vi.mock('../../src/provider/coordination/client.ts', () => ({ createProviderControlPlaneClient: vi.fn() }));
 
 describe('provider local lease recovery', () => {
+	it('retains actual closeout custody across restart without promoting absent or failed receipts', async () => {
+		for (const output of [{ sandboxId: 'sandbox-1', teardown: { verified: true, completedAt: '2026-10-01T09:01:00Z' }, summary: 'Private executor output' },
+			{ sandboxId: 'sandbox-1', teardown: { verified: false, completedAt: '2026-10-01T09:01:00Z' }, summary: 'Private executor output' },
+			{ summary: 'Private executor output' }]) {
+		const root = await mkdtemp(join(tmpdir(), 'treeseed-closeout-recovery-'));
+		try {
+			const store = new ProviderLocalCapacityStore(root);
+			const claim = await store.claim({ connectionId: 'connection', globalLimit: 1, connectionLimit: 1 });
+			await store.attachLease(claim!.id, { assignmentId: 'assignment', leaseToken: 'lease',
+				leaseExpiresAt: new Date(Date.now() + 300_000).toISOString(), dispatchEnvelope: {} });
+			await store.recordCloseoutOutput(claim!.id, output);
+			await store.recordFailure(claim!.id, 'deadlock detected');
+			const restarted = new ProviderLocalCapacityStore(root);
+			expect(JSON.stringify(await restarted.snapshot())).not.toContain('Private executor output');
+			const api = { assignment: vi.fn().mockResolvedValue({ status: 'leased' }), returnAssignment: vi.fn().mockResolvedValue({}) };
+			vi.mocked(createProviderControlPlaneClient).mockReturnValue(api as never);
+			await recoverProviderLocalLeases({ config: {} as never, store: restarted,
+				connections: [{ connection: { id: 'connection' }, accessToken: { accessToken: 'test-only' }, controlPlaneUrl: 'https://api.example.test' }] as never });
+			expect(api.returnAssignment).toHaveBeenCalledWith('assignment', expect.objectContaining({ output, code: 'provider_runtime_recovery' }));
+			expect((await restarted.snapshot()).claims).toHaveLength(0);
+		} finally { await rm(root, { recursive: true, force: true }); }
+		}
+	});
 	it('recovers a prepared lease on startup but not during an active runner cycle', async () => {
 		const root = await mkdtemp(join(tmpdir(), 'treeseed-ready-lease-'));
 		try {
@@ -46,6 +69,7 @@ describe('provider local lease recovery', () => {
 			reason: failureMessage ? `Provider runtime failed before durable completion: ${failureMessage}` : 'Provider restarted before durable completion.',
 		}));
 		expect(store.finalize).toHaveBeenCalledOnce();
+		expect(api.returnAssignment.mock.calls[0]?.[1]).not.toHaveProperty('output');
 	});
 	it('releases a recovery claim that never acquired lease authority', async () => {
 		const store = {

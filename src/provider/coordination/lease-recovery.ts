@@ -32,6 +32,7 @@ export async function recoverProviderLocalLeases(input: { config: ProviderHostRu
       const assignment = record(observed.data ?? observed.assignment ?? observed);
       const status = textStatus(assignment.status);
       if (status === 'leased' || status === 'running') await client.returnAssignment(claim.assignmentId, { leaseToken: claim.leaseToken, runnerId: claim.runnerId,
+        ...(claim.closeoutOutput ? { output: claim.closeoutOutput } : {}),
         code: claim.failureMessage ? 'provider_runtime_recovery' : 'provider_restart_recovery',
         reason: claim.failureMessage ? `Provider runtime failed before durable completion: ${providerFailureSummary([{ type: 'error', message: claim.failureMessage }], [claim.leaseToken, connection.accessToken.accessToken])}` : 'Provider restarted before durable completion.' });
       await store.finalize(claim.id, status === 'leased' || status === 'running' ? 'restart-return-confirmed' : `authoritative-${status || 'unknown'}`);

@@ -3,6 +3,18 @@ id: agent.golden.component-boundaries
 title: Golden execution component boundaries
 scope: local-component-tests
 workflow:
+  - id: closeout-before-publication
+    action: { verifier: agent.golden.closeout-before-publication }
+    expect: { status: passed }
+  - id: closeout-local-denial
+    action: { verifier: agent.golden.closeout-local-denial }
+    expect: { status: passed }
+  - id: closeout-runner-custody
+    action: { verifier: agent.golden.closeout-runner-custody }
+    expect: { status: passed }
+  - id: closeout-restart-custody
+    action: { verifier: agent.golden.closeout-restart-custody }
+    expect: { status: passed }
   - id: replay-failure-diagnostics
     action: { verifier: agent.golden.replay-failure-diagnostics }
     expect: { status: passed }

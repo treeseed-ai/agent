@@ -289,6 +289,7 @@ export async function runMultiTeamProviderRunners(
 				leaseSeconds: 300,
 				onActiveExecutionStarted: () => localState.beginActiveExecution(claim.id),
 				onActiveExecutionFinished: () => localState.finishActiveExecution(claim.id),
+				onCloseoutOutput: output => localState.recordCloseoutOutput(claim.id, output),
 				renewalIntervalMs: text(assignment.executionKind) === 'conversation' ? 5_000 : undefined,
 				onLeaseRenewed: async (renewedLeaseExpiresAt) => {
 					await executor.renewLease?.(assignmentId, renewedLeaseExpiresAt);

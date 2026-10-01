@@ -60,6 +60,35 @@ function client() {
 const treeDx = { projectId: 'project', handleId: 'handle-1', repositoryId: null, workspaceId: null, invoke: vi.fn() };
 
 	describe('canonical provider assignment runner', () => {
+	it('does not submit terminal writes when local closeout custody cannot be recorded', async () => {
+		const api = client();
+		await expect(runProviderAssignment({ client: api, assignment: assignment(), treeDx,
+			leaseToken: 'lease', runnerId: 'runner', runtimeBuild,
+			onCloseoutOutput: async () => { throw new Error('local custody unavailable'); },
+			executor: { id: 'codex', observe: async () => ({ available: true }), execute: async request => {
+				await request.beginExecution?.();
+				return { status: 'completed', summary: 'Done.', outputs: { timingAwareness } };
+			} } })).rejects.toThrow('local custody unavailable');
+		expect(api.settleAssignment).not.toHaveBeenCalled();
+		expect(api.completeAssignment).not.toHaveBeenCalled();
+	});
+	it('records actual closeout output before a completion failure without manufacturing success', async () => {
+		const api = client();
+		api.completeAssignment.mockRejectedValueOnce(new Error('deadlock detected'));
+		const persist = vi.fn(async () => undefined);
+		const teardown = { verified: true, completedAt: '2026-10-01T09:01:00Z' };
+		await expect(runProviderAssignment({ client: api, assignment: assignment(), treeDx,
+			leaseToken: 'lease', runnerId: 'runner', runtimeBuild, onCloseoutOutput: persist,
+			executor: { id: 'codex', observe: async () => ({ available: true }), execute: async request => {
+				await request.beginExecution?.();
+				return { status: 'completed', summary: 'Done.', outputs: { timingAwareness, sandboxId: 'sandbox-1', teardown },
+					usage: [{ activeSeconds: 12, elapsedSeconds: 15 }] };
+			} } })).rejects.toThrow('deadlock detected');
+		expect(persist).toHaveBeenCalledBefore(api.completeAssignment);
+		expect(persist).toHaveBeenCalledWith(expect.objectContaining({ sandboxId: 'sandbox-1', teardown }));
+		expect(api.settleAssignment).toHaveBeenCalledOnce();
+		expect(api.returnAssignment).not.toHaveBeenCalled();
+	});
 	it('retains verified teardown outputs for failed and returned assignments', async () => {
 		for (const status of ['failed', 'returned'] as const) {
 			const api = client();

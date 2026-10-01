@@ -45,6 +45,8 @@ export interface ProviderAssignmentRunInput {
   onLeaseRenewed?: (leaseExpiresAt: string) => Promise<void>;
 	onActiveExecutionStarted?: () => Promise<void>;
 	onActiveExecutionFinished?: () => Promise<void>;
+	/** Retain actual executor closure on the existing lease before terminal API writes. */
+	onCloseoutOutput?: (output: Record<string, unknown>) => Promise<void>;
   signal?: AbortSignal;
 }
 
@@ -185,6 +187,7 @@ export async function runProviderAssignment(input: ProviderAssignmentRunInput) {
 			input.signal?.removeEventListener('abort', abortFromCaller);
 		}
   }
+	await input.onCloseoutOutput?.({ ...record(result.outputs), artifacts: result.artifacts ?? [] });
 	if (renewalFailure && result.code !== 'assignment_timeout') {
     result = {
       status: 'returned',

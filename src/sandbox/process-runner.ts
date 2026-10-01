@@ -36,7 +36,7 @@ export function run(executable: string, args: string[], options: { cwd?: string;
 			pending += value; const lines = pending.split('\n'); pending = lines.pop() ?? ''; for (const line of lines) if (line.trim()) { resetIdle(); options.onLine?.(line); }
 		});
 		childStderr.setEncoding('utf8'); childStderr.on('data', (chunk) => { stderr = `${stderr}${chunk}`.slice(-32_768); });
-		child.once('error', (error) => { clearTimers(); reject(error); }); child.once('exit', (code, signal) => { clearTimers(); if (pending.trim()) options.onLine?.(pending); interrupted ? reject(new Error('codex_closeout_interrupted')) : code === 0 ? accept({ stderr, stdout }) : reject(new Error(timedOut ? `${executable} exceeded its interactive execution deadline.` : `${executable} exited ${code ?? signal}: ${stderr}`)); });
+		child.once('error', (error) => { clearTimers(); reject(error); }); child.once('exit', (code, signal) => { clearTimers(); if (pending.trim()) options.onLine?.(pending); interrupted ? reject(new Error('codex_closeout_interrupted')) : code === 0 ? accept({ stderr, stdout }) : reject(Object.assign(new Error(timedOut ? `${executable} exceeded its interactive execution deadline.` : `${executable} exited ${code ?? signal}: ${stderr}`), { exitCode: timedOut ? null : code, stdout, stderr })); });
 		child.stdin?.on('error', (error: NodeJS.ErrnoException) => { if (error.code !== 'EPIPE') reject(error); });
 		if (options.input !== undefined) child.stdin?.end(options.input);
 	});

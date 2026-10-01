@@ -45,6 +45,12 @@ workflow:
   - id: replay-success-observation
     action: { verifier: agent.golden.replay-success-observation }
     expect: { status: passed }
+  - id: runner-test-first-red
+    action: { verifier: agent.golden.runner-test-first-red }
+    expect: { status: passed }
+  - id: runner-test-first-denial
+    action: { verifier: agent.golden.runner-test-first-denial }
+    expect: { status: passed }
   - id: retired-pair-custody
     action: { verifier: agent.golden.retired-pair-custody }
     expect: { status: passed }

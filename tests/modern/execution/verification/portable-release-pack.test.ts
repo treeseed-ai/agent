@@ -28,6 +28,9 @@ describe('portable release verification in independent workspaces', () => {
 				authorityRefs:[{model:'decision',id:'decision'}],acceptanceCriteria:['Pack the local release candidate.'],workItemId:'simulate-release',workspace:{mode:'git'}},source:{}}});
 			expect(prompt).toContain('standalone command npm pack in /workspace/project');
 			expect(prompt).toContain('default current-directory output');
+			expect(prompt).toContain('repository-owned standalone archive verification command');
+			expect(prompt).toContain('tarball packed in this workspace');
+			expect(prompt).toContain('report the missing replayable check as an unmet criterion');
 		}
 	});
 });

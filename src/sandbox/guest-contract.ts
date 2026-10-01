@@ -30,9 +30,10 @@ export function codexIdleTimeoutMs(durationSeconds: number) {
 	return durationSeconds >= 120 ? Math.min(90_000, Math.floor(durationSeconds * 250)) : undefined;
 }
 
-export function codexCloseoutTimeoutMs(durationSeconds: number, activity: 'chat' | 'estimating') {
+export function codexCloseoutTimeoutMs(durationSeconds: number, activity: string) {
+	if (!['planning', 'estimating', 'acting', 'reviewing', 'reporting', 'chat'].includes(activity)) return undefined;
 	// The same allocator-issued window must still contain the final clock check,
-	// response and custody closeout. An estimate has a structured proposal patch
+	// response and custody closeout for every canonical activity. An estimate has a structured proposal patch
 	// to return, so reserve up to 90s after bounded inspection. This guard does
 	// not extend the allocator-issued duration or change provider accounting.
 	if (durationSeconds < 90) return undefined;

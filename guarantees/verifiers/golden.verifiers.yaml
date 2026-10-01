@@ -1,6 +1,11 @@
 schemaVersion: treeseed.guarantee-verifiers/v1
 ownerPackage: "@treeseed/agent"
 verifiers:
+  agent.golden.canonical-safe-closeout:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/sandbox/codex-idle-recovery.test.ts
+    testName: "reserves safe closeout for planning acting reviewing and reporting without extending their budgets"
   agent.golden.ongoing-time-discipline:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

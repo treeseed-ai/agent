@@ -28,7 +28,7 @@ export async function observeReportedActivityCommands(report: ActivityCompletion
 	if (commands.some(requiresNodeDependencyRestore)
 		&& await stat('/workspace/project/package-lock.json').then(() => true, () => false)
 		&& !await stat('/workspace/project/node_modules/.bin/vitest').then(() => true, () => false)) {
-		try { await run('npm', ['ci', '--prefer-offline', '--no-audit', '--no-fund'],
+		try { await execute('npm', ['ci', '--prefer-offline', '--no-audit', '--no-fund'],
 			{ cwd: '/workspace/project', timeoutMs: 120_000 }); }
 		catch (error) {
 			const exit = /exited (\d+)/u.exec(error instanceof Error ? error.message : String(error))?.[1] ?? 'unknown';

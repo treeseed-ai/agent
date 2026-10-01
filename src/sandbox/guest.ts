@@ -10,7 +10,7 @@ import { sandboxAssignmentSchema, sandboxResultSchema, sourceWorkspaceKeySchema,
 import { providerCredentialValues, providerFailureSummary, redactProviderDiagnostic } from './provider-failure.ts';
 import { activityAllowsVerification } from './guest-contract.ts';
 import { activityCompletionOutputSchema, validateActivityCompletion, type ActivityCompletionReport } from '../activity-completion.ts';
-import { completionFrontmatterSchema, completionOutputTargetVariants, promptFromContext, assertPredecessorSynthesis, assertArchitectSourceCitation, assertTesterFailureEvidence, attachObservedTesterFailures, correctObservedTesterRedVerification, omitUnreplayableVerification, codexReasoningArguments, codexProjectInstructionArguments, codexInteractiveTimeoutMs, requiresActivityCompletion, reportedVerificationCommands, record, text, providerToolName, codexToolInFlight, codexIdleTimeoutMs, codexCloseoutTimeoutMs, codexResumeIdleTimeoutMs } from './guest-contract.ts';
+import { completionFrontmatterSchema, completionOutputTargetVariants, promptFromContext, assertPredecessorSynthesis, assertArchitectSourceCitation, assertTesterFailureEvidence, attachObservedTesterFailures, correctObservedTestFirstRedVerification, omitUnreplayableVerification, codexReasoningArguments, codexProjectInstructionArguments, codexInteractiveTimeoutMs, requiresActivityCompletion, reportedVerificationCommands, record, text, providerToolName, codexToolInFlight, codexIdleTimeoutMs, codexCloseoutTimeoutMs, codexResumeIdleTimeoutMs } from './guest-contract.ts';
 import { recoverPlanningSynthesis } from './planning-synthesis-recovery.ts';
 
 const inputRoot = '/run/treeseed-assignment';
@@ -441,7 +441,7 @@ export async function runSandboxGuest() {
 		const resourceAbort = providerResourceAbort(events);
 		if (resourceAbort) throw new Error(`sandbox_resource_exhausted: command exited ${resourceAbort.exitCode}: ${resourceAbort.command}`);
 		const validatedCompletion = structuredCompletion ? validateActivityCompletion(JSON.parse(rawResponse), allowVerification) : null;
-		const correctedCompletion = validatedCompletion ? correctObservedTesterRedVerification(validatedCompletion, events,
+		const correctedCompletion = validatedCompletion ? correctObservedTestFirstRedVerification(validatedCompletion, events,
 			text(canonicalAssignment.agentClass), canonicalActivity, canonicalAssignment.acceptanceCriteria) : null;
 		const replayableCompletion = correctedCompletion ? omitUnreplayableVerification(correctedCompletion) : null;
 		const observedCompletion = replayableCompletion ? await observeReportedActivityCommands(replayableCompletion) : null;

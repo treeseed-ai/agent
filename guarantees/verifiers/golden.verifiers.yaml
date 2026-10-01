@@ -1,6 +1,11 @@
 schemaVersion: treeseed.guarantee-verifiers/v1
 ownerPackage: "@treeseed/agent"
 verifiers:
+  agent.golden.paired-test-first-red-evidence:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/verification/test-first-review.test.ts
+    testName: preserves observed red tests in paired review without inventing passing verification
   agent.golden.native-reporter-closure:
     kind: vitestCase
     ownerPackage: '@treeseed/agent'

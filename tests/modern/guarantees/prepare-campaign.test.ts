@@ -15,6 +15,8 @@ const roles = [
 	['tests-first', 'Tester', 'tester', 'git'], ['implement-change', 'Engineer', 'engineer', 'git'],
 	['document-change', 'Technical Writer', 'technical-writer', 'git'], ['simulate-release', 'Releaser', 'releaser', 'git'],
 ] as const;
+const researchStages = 'On the initial acting attempt, publish a real preliminary finding with only exact WorkdayIntent and ControlPlaneClient.invoke citations, marking operation bindings, generated descriptors, and per-field provenance explicitly pending. Do not claim those missing findings or full criterion coverage. On a later correction attempt, address the actual paired Reviewer findings and supply all original research criteria using exact source evidence.';
+const releaseReceipts = 'retains measured passing receipts for exactly npm run release:verify, npm pack, and npm run standards:acceptance -- --archive <packed-filename>.tgz; the paired Reviewer must independently replay those public commands against the same candidate';
 const spec = `### Fixed work-item graph
 | ID | Class | Workspace | Depends on | Review cycles |
 |---|---|---|---|---:|
@@ -29,9 +31,9 @@ The proposal does not duplicate generic role ordering. \`dependsOn\` is reserved
 - Summary: Canonical summary
 | Work item | Project-specific objective and expected output |
 |---|---|
-${roles.map(([, role]) => `| ${role} | ${role} canonical objective${role === 'Architect' ? ' in books/sdk-core.md' : ''}. |`).join('\n')}
+${roles.map(([, role]) => `| ${role} | ${role} canonical objective${role === 'Architect' ? ' in books/sdk-core.md' : ''}.${role === 'Researcher' ? ` ${researchStages}` : ''} |`).join('\n')}
 
-Each Actor is reviewed against its own deliverable: ${roles.map(([, role]) => `${role} verifies its own output${role === 'Architect' ? ' in books/sdk-core.md' : ''}; retains a second required assertion`).join('; ')}. The proposal-wide contract gates apply to the final integrated candidate.
+Each Actor is reviewed against its own deliverable: ${roles.map(([, role]) => `${role} verifies its own output${role === 'Architect' ? ' in books/sdk-core.md' : ''}; retains a second required assertion${role === 'Researcher' ? '; supplies both operation bindings and all four prohibited caller fields' : role === 'Releaser' ? `; ${releaseReceipts}` : ''}`).join('; ')}. The proposal-wide contract gates apply to the final integrated candidate.
 
 ### 2. API
 - Request: Unrelated request`;
@@ -43,6 +45,30 @@ const template = { status: 'draft', id: 'old', title: 'old', contentProvenance: 
 		requestedPermissions: { content: { write: workspace === 'treedx' ? ['knowledge'] : [] } },
 		dependsOn: index === 2 ? ['research-context', 'architecture-contract'] : [], maximumReviewCycles: 2 })) } };
 describe('fresh automated SDK campaign preparation (fixtures are not acceptance)', () => {
+	it('preserves an honest preliminary research gap without weakening the full review criterion', () => {
+		const draft = freshSdkDraft(template, 'review-challenge', canonical, bookRepositoryId, bookExact);
+		const research = draft.executionPlan.workItems[0];
+		expect(research.objective).toContain('explicitly pending');
+		expect(research.objective).toContain('Do not claim those missing findings');
+		expect(research.objective).toContain('On a later correction attempt');
+		expect(research.acceptanceCriteria[0]).toContain('both operation bindings');
+		expect(research.acceptanceCriteria[0]).toContain('all four prohibited caller fields');
+		expect(research.review).toBe('required');
+		expect(research.maximumReviewCycles).toBe(2);
+		expect(research.dependsOn).toEqual([]);
+		expect(draft.executionPlan.workItems.map((item: { id: string }) => item.id)).toEqual(roles.map(([id]) => id));
+	});
+	it('supplies exact public release and archive receipt requirements to the paired assignment', () => {
+		const draft = freshSdkDraft(template, 'release-receipts', canonical, bookRepositoryId, bookExact);
+		const release = draft.executionPlan.workItems[5];
+		for (const command of ['npm run release:verify', 'npm pack', 'npm run standards:acceptance -- --archive'])
+			expect(release.acceptanceCriteria[0]).toContain(command);
+		expect(release.acceptanceCriteria[0]).toContain('measured');
+		expect(release.acceptanceCriteria[0]).toContain('independently replay');
+		expect(release.review).toBe('required');
+		expect(release.maximumReviewCycles).toBe(2);
+		expect(release.dependsOn).toEqual([]);
+	});
 	it('refuses depleted or stale model supply before a metered campaign', () => {
 		const now = '2026-09-28T20:50:50.000Z';
 		const usage = (activeSeconds: number) => ({ day: '2026-09-28', observedAt: '2026-09-28T20:50:45.000Z',

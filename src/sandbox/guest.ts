@@ -181,7 +181,7 @@ export async function verifyReportedActivityCommands(report: ActivityCompletionR
 	return report;
 }
 
-async function observeReportedActivityCommands(report: ActivityCompletionReport) {
+export async function observeReportedActivityCommands(report: ActivityCompletionReport, secrets: string[] = [], execute: typeof run = run) {
 	const commands = reportedVerificationCommands(report);
 	if (commands.some(requiresNodeDependencyRestore)
 		&& await stat('/workspace/project/package-lock.json').then(() => true, () => false)
@@ -195,21 +195,21 @@ async function observeReportedActivityCommands(report: ActivityCompletionReport)
 	}
 	const verification = [];
 	for (const command of commands) {
-		const started = process.hrtime.bigint();
+		const started = process.hrtime.bigint(); let failedOutput = '';
 		try {
-			const output = await run('/bin/sh', ['-lc', command], { cwd: '/workspace/project', captureStdout: true,
-				maxStdoutBytes: 8_388_608, timeoutMs: 120_000 });
+			const output = await execute('/bin/sh', ['-lc', command], { cwd: '/workspace/project', captureStdout: true,
+				maxStdoutBytes: 8_388_608, timeoutMs: 120_000,
+				onLine: line => { failedOutput = `${failedOutput}\n${redactProviderDiagnostic(line, secrets)}`.slice(-1_024); } });
 			verification.push({ command, status: 'passed' as const, exitCode: 0,
 				outputDigest: objectDigest({ stdout: output.stdout, stderr: output.stderr }),
 				durationSeconds: Math.ceil(Number(process.hrtime.bigint() - started) / 1e9) });
 		} catch (error) {
 			const exit = /exited (\d+)/u.exec(error instanceof Error ? error.message : String(error))?.[1] ?? 'unknown';
-			throw new Error(`Runner-observed verification failed (exit ${exit}): ${command}`);
+			throw new Error(`Runner-observed verification failed (exit ${exit}): ${redactProviderDiagnostic(command, secrets)}; ${redactProviderDiagnostic(error, secrets)}; ${failedOutput}`);
 		}
 	}
 	return { report, verification };
 }
-
 export function requiresNodeDependencyRestore(command: string) {
 	return /^(?:npm\s+(?:run|exec|test)(?:\s|$)|npx(?:\s|$))/u.test(command.trim());
 }
@@ -444,7 +444,8 @@ export async function runSandboxGuest() {
 		const correctedCompletion = validatedCompletion ? correctObservedTestFirstRedVerification(validatedCompletion, events,
 			text(canonicalAssignment.agentClass), canonicalActivity, canonicalAssignment.acceptanceCriteria) : null;
 		const replayableCompletion = correctedCompletion ? omitUnreplayableVerification(correctedCompletion) : null;
-		const observedCompletion = replayableCompletion ? await observeReportedActivityCommands(replayableCompletion) : null;
+		const diagnosticSecrets = [operationToken, ...(subscriptionAuth ? providerCredentialValues(JSON.parse(subscriptionAuth.toString('utf8'))) : [])];
+		const observedCompletion = replayableCompletion ? await observeReportedActivityCommands(replayableCompletion, diagnosticSecrets) : null;
 		const activityCompletion = attachObservedTesterFailures(observedCompletion?.report ?? null, events,
 			text(canonicalAssignment.agentClass), canonicalActivity, canonicalAssignment.acceptanceCriteria);
 		assertArchitectSourceCitation(activityCompletion, source?.commit ?? null, text(canonicalAssignment.agentClass), canonicalActivity);
@@ -475,7 +476,6 @@ export async function runSandboxGuest() {
 		const changedPaths = sourceMetadata?.mode === 'work' && source
 			? (await run('/usr/bin/git', ['diff', '--name-only', `${source.commit}..HEAD`], { cwd: '/workspace/project', captureStdout: true, maxStdoutBytes: 1_048_576, timeoutMs: 10_000 })).stdout.split('\n').map((path) => path.trim()).filter(Boolean)
 			: [];
-		const diagnosticSecrets = [operationToken, ...(subscriptionAuth ? providerCredentialValues(JSON.parse(subscriptionAuth.toString('utf8'))) : [])];
 		const providerEventShapes = providerEventShapeSummary(events, diagnosticSecrets);
 		const artifacts: Array<{ id: string; path: string; digest: string; mediaType: string; bytes: number }> = [];
 		const completed = [...events].reverse().find((event) => text(event.type).includes('completed')) ?? {}, elapsedSeconds = Number(process.hrtime.bigint() - started) / 1e9, usageAfter = process.resourceUsage();

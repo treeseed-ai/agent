@@ -238,6 +238,16 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/execution/codex-chat-executor.test.ts
     testName: rejects a Reviewer assignment without an accepted decision
+  agent.golden.researcher-source-trace:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/activity-prompts.test.ts
+    testName: traces runtime source evidence for researcher content without substituting declared intent
+  agent.golden.architect-source-trace:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/activity-prompts.test.ts
+    testName: traces runtime source evidence for architect content without substituting declared intent
   agent.golden.timeout-terminal-output:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

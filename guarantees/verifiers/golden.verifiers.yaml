@@ -1,6 +1,16 @@
 schemaVersion: treeseed.guarantee-verifiers/v1
 ownerPackage: "@treeseed/agent"
 verifiers:
+  agent.golden.replay-failure-diagnostics:
+    kind: vitestCase
+    ownerPackage: '@treeseed/agent'
+    testFile: tests/modern/execution/verification/replay-failure.test.ts
+    testName: retains bounded redacted stdout and stderr from a real failed runner replay
+  agent.golden.replay-success-observation:
+    kind: vitestCase
+    ownerPackage: '@treeseed/agent'
+    testFile: tests/modern/execution/verification/replay-failure.test.ts
+    testName: keeps successful observations and digests unchanged
   agent.golden.retired-pair-custody:
     kind: vitestCase
     ownerPackage: '@treeseed/agent'

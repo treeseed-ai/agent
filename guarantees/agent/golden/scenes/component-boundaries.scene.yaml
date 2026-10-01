@@ -3,6 +3,12 @@ id: agent.golden.component-boundaries
 title: Golden execution component boundaries
 scope: local-component-tests
 workflow:
+  - id: replay-failure-diagnostics
+    action: { verifier: agent.golden.replay-failure-diagnostics }
+    expect: { status: passed }
+  - id: replay-success-observation
+    action: { verifier: agent.golden.replay-success-observation }
+    expect: { status: passed }
   - id: retired-pair-custody
     action: { verifier: agent.golden.retired-pair-custody }
     expect: { status: passed }

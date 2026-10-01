@@ -7,7 +7,7 @@ import { createInterface } from 'node:readline';
 import { chmod, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { sandboxAssignmentSchema, sandboxResultSchema, sourceWorkspaceKeySchema, type SandboxAssignment } from '@treeseed/sdk/capacity-provider/sandbox';
-import { providerCredentialValues, providerFailureSummary, redactProviderDiagnostic } from './provider-failure.ts';
+import { providerCredentialValues, providerFailureSummary, redactProviderDiagnostic, redactProviderEvents } from './provider-failure.ts';
 import { activityAllowsVerification } from './guest-contract.ts';
 import { activityCompletionOutputSchema, validateActivityCompletion, type ActivityCompletionReport } from '../activity-completion.ts';
 import { completionFrontmatterSchema, completionOutputTargetVariants, promptFromContext, assertPredecessorSynthesis, assertArchitectSourceCitation, assertTesterFailureEvidence, attachObservedTesterFailures, correctObservedTestFirstRedVerification, omitUnreplayableVerification, codexReasoningArguments, codexProjectInstructionArguments, codexInteractiveTimeoutMs, requiresActivityCompletion, reportedVerificationCommands, record, text, providerToolName, codexToolInFlight, codexIdleTimeoutMs, codexCloseoutTimeoutMs, codexResumeIdleTimeoutMs } from './guest-contract.ts';
@@ -444,7 +444,7 @@ export async function runSandboxGuest() {
 		const correctedCompletion = validatedCompletion ? correctObservedTestFirstRedVerification(validatedCompletion, events,
 			text(canonicalAssignment.agentClass), canonicalActivity, canonicalAssignment.acceptanceCriteria) : null;
 		const replayableCompletion = correctedCompletion ? omitUnreplayableVerification(correctedCompletion) : null;
-		const diagnosticSecrets = [operationToken, ...(subscriptionAuth ? providerCredentialValues(JSON.parse(subscriptionAuth.toString('utf8'))) : [])];
+		const diagnosticSecrets = [operationToken, ...(subscriptionAuth ? providerCredentialValues(JSON.parse(subscriptionAuth.toString('utf8'))) : []), ...(subscriptionAuth ? providerCredentialValues(JSON.parse(await readFile(resolve(codexHome, 'auth.json'), 'utf8'))) : [])];
 		const observedCompletion = replayableCompletion ? await observeReportedActivityCommands(replayableCompletion, diagnosticSecrets) : null;
 		const activityCompletion = attachObservedTesterFailures(observedCompletion?.report ?? null, events,
 			text(canonicalAssignment.agentClass), canonicalActivity, canonicalAssignment.acceptanceCriteria);
@@ -483,7 +483,7 @@ export async function runSandboxGuest() {
 			status: responseMarkdown === '<!-- treeseed:abstain -->' ? 'completed' : 'completed', summary: 'Kata assignment completed.', responseMarkdown,
 			artifacts, timingAwareness, usage: { ...record(completed.usage), provenance: Object.keys(record(completed.usage)).length ? 'execution-provider' : 'unavailable', activeSeconds: elapsedSeconds, elapsedSeconds,
 				cpuUserMicros: usageAfter.userCPUTime - usageBefore.userCPUTime, cpuSystemMicros: usageAfter.systemCPUTime - usageBefore.systemCPUTime, peakRssBytes: usageAfter.maxRSS * 1024 },
-			diagnostics: { systemPrompt: composedPrompt, providerEvents: events, providerEventShapes, providerArguments, model: assignment.modelPolicy.model, provider: assignment.modelPolicy.provider, contextManifest: context, activityCompletion,
+			diagnostics: { systemPrompt: composedPrompt, providerEvents: redactProviderEvents(events, diagnosticSecrets), providerEventShapes, providerArguments, model: assignment.modelPolicy.model, provider: assignment.modelPolicy.provider, contextManifest: context, activityCompletion,
 				verificationRecords: observedCompletion?.verification ?? [], changedPaths,
 				sourceCommit: sourceMetadata?.mode === 'work' ? (await run('/usr/bin/git', ['rev-parse', '--verify', 'HEAD^{commit}'], { cwd: '/workspace/project', captureStdout: true, maxStdoutBytes: 128, timeoutMs: 10_000 })).stdout.trim() : source?.commit ?? null,
 				guestKernel: (await readFile('/proc/version', 'utf8')).trim(), guestUid: process.getuid?.() ?? null, sandboxProfile: assignment.profile }, teardown: { verified: false, completedAt: null } });

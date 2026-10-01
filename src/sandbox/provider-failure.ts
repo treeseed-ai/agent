@@ -13,10 +13,25 @@ export function providerFailureSummary(events: Record<string, unknown>[], secret
 	return redactProviderDiagnostic(messages.join('; '), secrets);
 }
 
+function redactKnownCredentials(value: string, secrets: string[]) {
+	for (const secret of secrets.filter(value => value.length > 0).sort((a, b) => b.length - a.length)) value = value.replaceAll(secret, '[redacted]');
+	return value;
+}
+
+/** Persist sanitized event evidence; keep the original events for validation. */
+export function redactProviderEvents(events: Record<string, unknown>[], secrets: string[]) {
+	const redactRecord = (value: Record<string, unknown>): Record<string, unknown> => Object.fromEntries(
+		Object.entries(value).map(([key, entry]) => [redactKnownCredentials(key, secrets), redact(entry)]));
+	const redact = (value: unknown): unknown => typeof value === 'string' ? redactKnownCredentials(value, secrets)
+		: Array.isArray(value) ? value.map(redact)
+		: value && typeof value === 'object' ? redactRecord(value as Record<string, unknown>) : value;
+	return events.map(redactRecord);
+}
+
 export function redactProviderDiagnostic(value: unknown, secrets: string[] = []) {
 	let summary = typeof value === 'string' ? value : value && typeof value === 'object'
 		? String((value as Record<string, unknown>).message ?? '') : '';
-	for (const secret of secrets.filter(value => value.length > 0).sort((a, b) => b.length - a.length)) summary = summary.replaceAll(secret, '[redacted]');
+	summary = redactKnownCredentials(summary, secrets);
 	return summary.replace(/https?:\/\/[^\s"<>]+/gu, '[provider URL]')
 		.replace(/\b(?:Bearer|Basic)\s+[^\s,;]+/giu, '[redacted authorization]')
 		.replace(/\b(?:sk-[a-zA-Z0-9_-]+|eyJ[a-zA-Z0-9_.-]+)/gu, '[redacted token]')

@@ -3,6 +3,18 @@ id: agent.golden.component-boundaries
 title: Golden execution component boundaries
 scope: local-component-tests
 workflow:
+  - id: broker-connection-isolation
+    action: { verifier: agent.golden.broker-connection-isolation }
+    expect: { status: passed }
+  - id: broker-reset-no-replay
+    action: { verifier: agent.golden.broker-reset-no-replay }
+    expect: { status: passed }
+  - id: tool-delivery-no-replay
+    action: { verifier: agent.golden.tool-delivery-no-replay }
+    expect: { status: passed }
+  - id: tool-poll-fail-closed
+    action: { verifier: agent.golden.tool-poll-fail-closed }
+    expect: { status: passed }
   - id: provider-event-credential-redaction
     action: { verifier: agent.golden.provider-event-credential-redaction }
     expect: { status: passed }

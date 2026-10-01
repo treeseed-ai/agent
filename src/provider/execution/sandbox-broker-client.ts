@@ -21,7 +21,9 @@ export function remainingPreparationMs(deadlineAt: string, now: number = Date.no
 function call<T>(socketPath: string, method: string, path: string, body?: unknown, signal?: AbortSignal, headers: Record<string, string> = {}, timeoutMs?: number) {
 	return new Promise<T>((resolve, reject) => {
 		const encoded = body === undefined ? undefined : Buffer.from(JSON.stringify(body));
-		const operation = request({ socketPath, method, path, headers: { ...headers, ...(encoded ? { 'content-type': 'application/json', 'content-length': String(encoded.byteLength) } : {}) } }, (response) => {
+		// Control operations may dequeue or deliver exactly once. Use a fresh local
+		// connection instead of replaying a request after pooled-socket retirement.
+		const operation = request({ agent: false, socketPath, method, path, headers: { ...headers, ...(encoded ? { 'content-type': 'application/json', 'content-length': String(encoded.byteLength) } : {}) } }, (response) => {
 			let value = '', bytes = 0; response.setEncoding('utf8'); response.on('data', (chunk: string) => { bytes += Buffer.byteLength(chunk); if (bytes > 16_777_216) operation.destroy(new Error('Sandbox broker response exceeds its bounded limit.')); else value += chunk; });
 			response.on('end', () => {
 				let parsed: unknown; try { parsed = value ? JSON.parse(value) : {}; } catch { return reject(new Error('Sandbox broker returned invalid JSON.')); }
@@ -55,7 +57,7 @@ export class SandboxBrokerClient {
 	}
 	upload(sandboxId: string, token: string, inputId: string, sourcePath: string, bytes: number, signal?: AbortSignal) {
 		return new Promise<void>((resolve, reject) => {
-			const operation = request({ socketPath: this.socketPath, method: 'PUT', path: this.path(`/sandboxes/${encodeURIComponent(sandboxId)}/inputs/${encodeURIComponent(inputId)}`), headers: { authorization: `Bearer ${token}`, 'content-length': String(bytes), 'content-type': 'application/octet-stream' } }, (response) => {
+			const operation = request({ agent: false, socketPath: this.socketPath, method: 'PUT', path: this.path(`/sandboxes/${encodeURIComponent(sandboxId)}/inputs/${encodeURIComponent(inputId)}`), headers: { authorization: `Bearer ${token}`, 'content-length': String(bytes), 'content-type': 'application/octet-stream' } }, (response) => {
 				let value = ''; response.setEncoding('utf8'); response.on('data', (chunk) => { value += chunk; }); response.on('end', () => (response.statusCode ?? 500) < 400 ? resolve() : reject(new Error(`Sandbox input upload failed: ${value.slice(0, 1_000)}`)));
 			});
 			operation.once('error', reject); const stream = createReadStream(sourcePath); stream.once('error', reject); stream.pipe(operation);
@@ -69,7 +71,7 @@ export class SandboxBrokerClient {
 	downloadArtifact(sandboxId: string, token: string, artifactId: string, expectedBytes: number, signal?: AbortSignal) {
 		return new Promise<Buffer>((resolve, reject) => {
 			const chunks: Buffer[] = []; let bytes = 0;
-			const operation = request({ socketPath: this.socketPath, method: 'GET', path: this.path(`/sandboxes/${encodeURIComponent(sandboxId)}/artifacts/${encodeURIComponent(artifactId)}`), headers: { authorization: `Bearer ${token}` } }, (response) => {
+			const operation = request({ agent: false, socketPath: this.socketPath, method: 'GET', path: this.path(`/sandboxes/${encodeURIComponent(sandboxId)}/artifacts/${encodeURIComponent(artifactId)}`), headers: { authorization: `Bearer ${token}` } }, (response) => {
 				if ((response.statusCode ?? 500) >= 400) { response.resume(); return reject(new Error(`Sandbox artifact download failed with ${response.statusCode}.`)); }
 				response.on('data', (chunk: Buffer) => { const value = Buffer.from(chunk); bytes += value.byteLength; if (bytes > expectedBytes) operation.destroy(new Error('Sandbox artifact exceeded its verified size.')); else chunks.push(value); });
 				response.on('end', () => bytes === expectedBytes ? resolve(Buffer.concat(chunks)) : reject(new Error('Sandbox artifact size changed during collection.')));

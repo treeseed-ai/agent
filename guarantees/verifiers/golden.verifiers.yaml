@@ -1,6 +1,26 @@
 schemaVersion: treeseed.guarantee-verifiers/v1
 ownerPackage: "@treeseed/agent"
 verifiers:
+  agent.golden.broker-connection-isolation:
+    kind: vitestCase
+    ownerPackage: '@treeseed/agent'
+    testFile: tests/modern/execution/sandbox-broker-preparation.test.ts
+    testName: isolates every control request from peer-retired pooled Unix sockets without replay
+  agent.golden.broker-reset-no-replay:
+    kind: vitestCase
+    ownerPackage: '@treeseed/agent'
+    testFile: tests/modern/execution/sandbox-broker-preparation.test.ts
+    testName: fails closed on polling and completion resets without retrying either operation
+  agent.golden.tool-delivery-no-replay:
+    kind: vitestCase
+    ownerPackage: '@treeseed/agent'
+    testFile: tests/modern/execution/sandbox-tool-pump.test.ts
+    testName: observes failed delivery immediately, cancels once, and never sends a second response
+  agent.golden.tool-poll-fail-closed:
+    kind: vitestCase
+    ownerPackage: '@treeseed/agent'
+    testFile: tests/modern/execution/sandbox-tool-pump.test.ts
+    testName: contains a polling transport failure before execution is awaited
   agent.golden.provider-event-credential-redaction:
     kind: vitestCase
     ownerPackage: '@treeseed/agent'

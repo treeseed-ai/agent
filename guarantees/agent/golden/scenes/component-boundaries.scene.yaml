@@ -3,6 +3,9 @@ id: agent.golden.component-boundaries
 title: Golden execution component boundaries
 scope: local-component-tests
 workflow:
+  - id: paired-test-first-red-evidence
+    action: { verifier: agent.golden.paired-test-first-red-evidence }
+    expect: { status: passed }
   - id: native-reporter-closure
     action: { verifier: agent.golden.native-reporter-closure }
     expect: { status: passed }

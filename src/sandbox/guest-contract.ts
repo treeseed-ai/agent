@@ -287,16 +287,20 @@ export function attachObservedTesterFailures(completion: ActivityCompletionRepor
 	return completion;
 }
 
-export function correctObservedTesterRedVerification(completion: ActivityCompletionReport, events: Array<Record<string, unknown>>,
+export function correctObservedTestFirstRedVerification(completion: ActivityCompletionReport, events: Array<Record<string, unknown>>,
 	agentClass: string, activity: string, acceptanceCriteria: unknown): ActivityCompletionReport {
 	const criteria = Array.isArray(acceptanceCriteria) ? acceptanceCriteria.map(text).join(' ') : '';
-	if (agentClass !== 'tester' || activity !== 'acting' || !/report failing test names and paths/iu.test(criteria)
-		|| !completion.summary.includes('Frozen-base failing tests:')) return completion;
+	const testFirst = /report failing test names and paths|failing-on-base|tests?[^.]*fail on (?:the )?frozen base/iu.test(criteria);
+	if (!testFirst || !((agentClass === 'tester' && activity === 'acting')
+		|| (agentClass === 'reviewer' && activity === 'reviewing'))) return completion;
 	const failedCommands = new Map<string, number>();
 	for (const event of events) {
 		const item = record(event.item), command = text(item.command), exitCode = Number(item.exit_code);
 		if (text(event.type) === 'item.completed' && text(item.type) === 'command_execution'
-			&& Number.isInteger(exitCode) && exitCode !== 0) failedCommands.set(command.trim(), exitCode);
+			&& Number.isInteger(exitCode)) {
+			if (exitCode === 0) failedCommands.delete(command.trim());
+			else failedCommands.set(command.trim(), exitCode);
+		}
 	}
 	return { ...completion, verification: completion.verification.map((entry) => {
 		if (entry.status !== 'passed' || entry.commands.length !== 1) return entry;

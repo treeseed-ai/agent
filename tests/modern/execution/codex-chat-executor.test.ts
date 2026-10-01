@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { executeAssignmentTreeDxTool } from '../../../src/provider/execution/microvm-executor.ts';
 import { providerExecutionProgress } from '../../../src/sandbox/guest.ts';
 import { codexThreadId, codexTreeDxMcpConfig, completedTimeStatusChecks, prepareNodeWorkspace, providerEventShapeSummary, providerResourceAbort, providerResponsePreview, requiresNodeDependencyRestore, timingAwarenessContract, timingRecoveryEligible, treeDxToolDefinitions, verifyReportedActivityCommands } from '../../../src/sandbox/guest.ts';
-import { assertArchitectSourceCitation, assertPredecessorSynthesis, assertReplayableVerificationCommand, assertTesterFailureEvidence, attachObservedTesterFailures, correctObservedTesterRedVerification, omitUnreplayableVerification, codexInteractiveTimeoutMs, codexProjectInstructionArguments, codexReasoningArguments, completionFrontmatterSchema, completionOutputTargetVariants, promptFromContext, requiresActivityCompletion } from '../../../src/sandbox/guest-contract.ts';
+import { assertArchitectSourceCitation, assertPredecessorSynthesis, assertReplayableVerificationCommand, assertTesterFailureEvidence, attachObservedTesterFailures, correctObservedTestFirstRedVerification, omitUnreplayableVerification, codexInteractiveTimeoutMs, codexProjectInstructionArguments, codexReasoningArguments, completionFrontmatterSchema, completionOutputTargetVariants, promptFromContext, requiresActivityCompletion } from '../../../src/sandbox/guest-contract.ts';
 import { activityCompletionOutputSchema } from '../../../src/activity-completion.ts';
 import { activityAllowsVerification } from '../../../src/sandbox/guest-contract.ts';
 
@@ -372,11 +372,11 @@ describe('Codex chat executor', () => {
 		expect(() => assertTesterFailureEvidence(observed, 'tester', 'acting', ['Report failing test names and paths.'])).not.toThrow();
 		const redCommand = 'npx vitest run tests/unit/example.test.ts';
 		const mislabeled = { summary: observed?.summary ?? '', verification: [{ status: 'passed', summary: 'red tests', commands: [redCommand] }] };
-		const corrected = correctObservedTesterRedVerification(mislabeled as never,
+		const corrected = correctObservedTestFirstRedVerification(mislabeled as never,
 			[{ type: 'item.completed', item: { type: 'command_execution', command: redCommand, exit_code: 1 } }],
 			'tester', 'acting', ['Report failing test names and paths.']);
 		expect(corrected.verification[0]?.status).toBe('failed');
-		expect(correctObservedTesterRedVerification(mislabeled as never, [], 'tester', 'acting',
+		expect(correctObservedTestFirstRedVerification(mislabeled as never, [], 'tester', 'acting',
 			['Report failing test names and paths.']).verification[0]?.status).toBe('passed');
 		const omitted = omitUnreplayableVerification({ summary: 'Built candidate.', verification: [
 			{ status: 'passed', summary: 'chained', commands: ['git merge-base --is-ancestor abc HEAD && npm run build'] },

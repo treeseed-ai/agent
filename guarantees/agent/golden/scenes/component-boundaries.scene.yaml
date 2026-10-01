@@ -57,6 +57,12 @@ workflow:
   - id: aggregate-build-reuse
     action: { verifier: agent.golden.aggregate-build-reuse }
     expect: { status: passed }
+  - id: research-review-challenge
+    action: { verifier: agent.golden.research-review-challenge }
+    expect: { status: passed }
+  - id: public-release-criteria
+    action: { verifier: agent.golden.public-release-criteria }
+    expect: { status: passed }
   - id: retired-pair-custody
     action: { verifier: agent.golden.retired-pair-custody }
     expect: { status: passed }

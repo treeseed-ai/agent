@@ -91,6 +91,16 @@ verifiers:
     ownerPackage: '@treeseed/agent'
     testFile: tests/modern/execution/verification/canonical-work-reuse.test.ts
     testName: avoids separate aggregate-owned builds without weakening independent release gates
+  agent.golden.research-review-challenge:
+    kind: vitestCase
+    ownerPackage: '@treeseed/agent'
+    testFile: tests/modern/guarantees/prepare-campaign.test.ts
+    testName: preserves an honest preliminary research gap without weakening the full review criterion
+  agent.golden.public-release-criteria:
+    kind: vitestCase
+    ownerPackage: '@treeseed/agent'
+    testFile: tests/modern/guarantees/prepare-campaign.test.ts
+    testName: supplies exact public release and archive receipt requirements to the paired assignment
   agent.golden.retired-pair-custody:
     kind: vitestCase
     ownerPackage: '@treeseed/agent'

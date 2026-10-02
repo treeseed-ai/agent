@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { parse as parseYaml } from 'yaml';
 import { developmentRuntimeSchema } from '@treeseed/sdk/development';
+import { agentDevelopmentRuntimeRoots } from '@treeseed/deployment';
 import { describe, expect, it } from 'vitest';
 
 describe('capacity provider development runtime', () => {
@@ -50,6 +51,12 @@ describe('capacity provider development runtime', () => {
 		const outputs = provider.outputs.map(output => output.path);
 		expect(outputs).toContain('dist');
 		expect(outputs).toContain('.treeseed/docker/runtime/shared');
+	});
+	it('binds the provider output declaration to every public manager root without duplicates', () => {
+		const manifest = parseYaml(readFileSync('treeseed.package.yaml', 'utf8')) as { development: unknown };
+		const outputs = developmentRuntimeSchema.parse(manifest.development).targets.find(target => target.id === 'provider')!.outputs.map(output => output.path);
+		expect(new Set(outputs).size).toBe(outputs.length);
+		for (const root of agentDevelopmentRuntimeRoots) expect(outputs.some(output => root.source === output || root.source.startsWith(`${output}/`))).toBe(true);
 	});
 	it('declares cloned state and drain-gated cleanup', () => {
 		const manifest = parseYaml(readFileSync('treeseed.package.yaml', 'utf8')) as { development: unknown };

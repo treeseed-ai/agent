@@ -1,6 +1,46 @@
 schemaVersion: treeseed.guarantee-verifiers/v1
 ownerPackage: "@treeseed/agent"
 verifiers:
+  agent.golden.provider-public-root-output-binding:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/development-runtime.test.ts
+    testName: "binds the provider output declaration to every public manager root without duplicates"
+  agent.golden.provider-freeze-worktree-denial:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/provider/development/provider-freeze-runtime.test.ts
+    testName: "rejects another worktree before creating or replacing an archive"
+  agent.golden.provider-freeze-missing-authority:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/provider/development/provider-freeze-runtime.test.ts
+    testName: "rejects missing saved workspace or worktree authority through the native operation"
+  agent.golden.provider-freeze-materialization-readback:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/provider/development/provider-freeze-runtime.test.ts
+    testName: "archives the owning copy aliases hidden filtering and normalized modes with exact readback"
+  agent.golden.provider-freeze-repeat-and-mutation:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/provider/development/provider-freeze-runtime.test.ts
+    testName: "repeats identical native freezes but binds changed generated dependency bytes"
+  agent.golden.provider-freeze-external-denial:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/provider/development/provider-freeze-runtime.test.ts
+    testName: "retains the previous archive and source bytes when materialization rejects an external alias"
+  agent.golden.provider-freeze-archiver-failure:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/provider/development/provider-freeze-runtime.test.ts
+    testName: "retains the previous archive and removes private temporary bytes when the native archiver fails"
+  agent.golden.provider-freeze-public-cli-copy:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/provider/development/provider-freeze-composition.test.ts
+    testName: "binds generated dependency changes through public CLI freeze and the owning private copy"
   agent.golden.provider-prepared-output-closure:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"
@@ -9,7 +49,7 @@ verifiers:
   agent.golden.provider-freeze-dependency-bytes:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"
-    testFile: tests/modern/provider-freeze-runtime.test.ts
+    testFile: tests/modern/provider/development/provider-freeze-runtime.test.ts
     testName: "freezes generated provider dependency bytes through the real declared packaging operation"
   agent.golden.provider-source-fixture-link:
     kind: vitestCase

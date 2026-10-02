@@ -26,6 +26,30 @@ jobs:
       - name: Install dependencies
         timeout-minutes: 20
         run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Read checked development materialization artifact
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          github-token: ${{ github.token }}
+          repository: treeseed-ai/deployment
+          run-id: 37041701461
+          name: deployment-candidate-a4e638cb5e861766fedf1b67adfba2e910c6afd1
+          path: .treeseed/tools/deployment-candidate
+      - name: Read checked public CLI composition artifact
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          github-token: ${{ github.token }}
+          repository: treeseed-ai/cli
+          run-id: 37045080284
+          name: cli-candidate-b62c4bd9408f87dd88a46391a61e249f3c4d073f
+          path: .treeseed/tools/cli-candidate
+      - name: Install exact checked development inputs without publication
+        run: |
+          set -euo pipefail
+          jq -e '.repository == "treeseed-ai/deployment" and .commit == "a4e638cb5e861766fedf1b67adfba2e910c6afd1"' .treeseed/tools/deployment-candidate/exact-head.json
+          jq -e '.candidate.sourceCommit == "b62c4bd9408f87dd88a46391a61e249f3c4d073f"' .treeseed/tools/cli-candidate/release-evidence-v1.json
+          echo 'bb493312538753c46a09e8ff768155b8584064dd90c8f3d1e6caae85e3012b35  .treeseed/tools/deployment-candidate/treeseed-deployment-runtime-0.1.0-rc.321.tgz' | sha256sum --check --strict
+          echo 'b8681e69511055a0403296acb50d44357098e3da07678a089dcf04b5d3de873d  .treeseed/tools/cli-candidate/treeseed-cli-0.13.0-rc.85.tgz' | sha256sum --check --strict
+          npm install --no-save --package-lock=false --ignore-scripts --no-audit --no-fund ./.treeseed/tools/deployment-candidate/treeseed-deployment-runtime-0.1.0-rc.321.tgz ./.treeseed/tools/cli-candidate/treeseed-cli-0.13.0-rc.85.tgz
       - uses: treeseed-ai/sdk/.github/actions/install-exact-sdk@38255cf2557862972d9aed166f1d25fe1194bd61
         with:
           github-token: ${{ github.token }}

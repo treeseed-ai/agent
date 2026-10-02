@@ -191,6 +191,9 @@ export function verifyGolden(gate: Gate): void {
 				text(node.projectId), 'ACCEPTANCE_DECISION');
 			assert.ok(decision.id === reference.id && decision.projectId === node.projectId && decision.decisionClass === 'proposal'
 				&& decision.disposition === 'approved', 'ACCEPTANCE_DECISION_AUTHORITY: Only the exact approved proposal Decision authorizes acting');
+			assert.ok(rows(decision.decidedByRefs).some(reference => reference.model === 'user')
+				&& rows(decision.decidedByRefs).every(reference => reference.model !== 'agent'),
+				'ACCEPTANCE_DECISION_OPERATOR: Golden proposal approval requires an external operator, never an agent');
 			assert.deepEqual(decision.subjectRef, source.data, 'ACCEPTANCE_DECISION_PROPOSAL: Decision must bind the exact proposal revision and digest');
 			assert.ok(Number.isFinite(Date.parse(text(decision.decidedAt))) && Date.parse(text(decision.decidedAt)) <= Date.parse(text(latest.createdAt)),
 				'ACCEPTANCE_DECISION_TIME: Decision authority must precede admission');

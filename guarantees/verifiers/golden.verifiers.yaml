@@ -1,6 +1,11 @@
 schemaVersion: treeseed.guarantee-verifiers/v1
 ownerPackage: "@treeseed/agent"
 verifiers:
+  agent.golden.architecture-decision-verifier-operator:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/golden-decision-readback.test.ts
+    testName: "denies agent-authored approval of the golden proposal instead of external operator authority"
   agent.golden.architecture-decision-verifier-complete:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

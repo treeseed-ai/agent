@@ -55,6 +55,68 @@ beforeEach(() => {
 });
 
 describe('golden read-back assertion regressions (fixtures are not live acceptance)', () => {
+  it('rejects any change to the exact five-slot campaign policy rather than accepting larger allowances', () => {
+    const parameters = state.replies.get('workdays show')!.run.parameters;
+    for (const key of ['maximumConcurrency', 'communicationConcurrency']) {
+      parameters[key] = 6;
+      expect(() => gate('lifecycle')).toThrow('ACCEPTANCE_CONCURRENCY_POLICY');
+      parameters[key] = 5;
+    }
+  });
+  it('requires the exact configured chat and estimating contributors rather than only their counts', () => {
+    const items = state.replies.get('assignments list')!.items;
+    for (const activity of ['chat', 'estimating']) {
+      const selected = items.find((item: Row) => item.assignmentAttempt.effectiveProfile.activity === activity);
+      const original = selected.assignmentAttempt.agentClass;
+      selected.assignmentAttempt.agentClass = 'unselected-agent';
+      expect(() => gate('collaboration')).toThrow();
+      selected.assignmentAttempt.agentClass = original;
+    }
+  });
+  it('requires every canonical clock field and successful first and final authoritative tools', () => {
+    const result = state.replies.get('assignments list')!.items[0].assignmentResult;
+    const canonical = { schemaVersion: 'treeseed.assignment-timing-awareness/v1', requiredChecks: 2, completedChecks: 2,
+      firstTool: 'treedx:treeseed_time_status', firstToolSucceeded: true, lastTool: 'treedx:treeseed_time_status',
+      lastToolSucceeded: true, firstToolCompliant: true, finalToolCompliant: true };
+    for (const key of Object.keys(canonical)) {
+      const incomplete: Row = { ...canonical }; delete incomplete[key];
+      result.timingAwareness = incomplete;
+      expect(() => gate('results')).toThrow();
+    }
+    for (const [key, value] of Object.entries({ schemaVersion: 'retired/v1', requiredChecks: 3, firstTool: 'other-tool',
+      lastTool: 'other-tool', firstToolSucceeded: false, lastToolSucceeded: false })) {
+      result.timingAwareness = { ...canonical, [key]: value };
+      expect(() => gate('results')).toThrow();
+    }
+  });
+  it('denies nonfinite measured usage instead of accepting a coerced positive value', () => {
+    const native = state.replies.get('assignments list')!.items[0].assignmentResult.usage.native;
+    for (const value of ['1', Number.POSITIVE_INFINITY, Number.NaN, -1]) {
+      native.activeSeconds = value;
+      expect(() => gate('results')).toThrow();
+    }
+  });
+  it('denies malformed exact output references and results bound to another assignment', () => {
+    const item = state.replies.get('assignments list')!.items[0];
+    const result = item.assignmentResult;
+    for (const reference of [{ kind: 'git', commit }, { kind: 'git', repository: 'sdk', commit: 'staging' },
+      { kind: 'treedx', projectId: 'sdk', repository: 'sdk-library', path: 'notes/result.mdx' },
+      { kind: 'url', url: 'not-a-url' }, { kind: 'invented', commit }]) {
+      result.references = [reference];
+      expect(() => gate('results')).toThrow();
+    }
+    result.references = [{ kind: 'git', repository: 'sdk', commit }];
+    result.assignmentId = 'another-assignment';
+    expect(() => gate('results')).toThrow();
+  });
+  it('requires latest immutable completion custody even when a graph node claims completed', () => {
+    const node = state.replies.get('execution graph')!.nodes[0];
+    node.nodeRevision = 2;
+    node.workItemId = 'work-0';
+    node.sourceRef = { id: 'proposal', revision: 8 };
+    node.authorityRefs = [{ model: 'decision', id: 'decision-1' }];
+    expect(() => gate('graph')).toThrow('ACCEPTANCE_PAIR_CUSTODY');
+  });
 	it('rejects serial execution even when five slots were configured', () => {
 		for (const [index, item] of state.replies.get('assignments list')!.items.entries()) {
 			item.capacityEnvelope.budget.time.executionStartedAt = new Date(index * 1000).toISOString();

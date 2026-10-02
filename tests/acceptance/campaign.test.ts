@@ -39,6 +39,7 @@ test('Frozen SDK campaign drives planning acting review and terminal golden gate
 		'--idempotency-key', `golden-stop:${workdayId}`], team); };
 	const mentions = ['architect', 'researcher', 'tester', 'engineer', 'technical-writer', 'releaser', 'reviewer', 'reporter']
 		.map(role => `@sdk/${role}`).join(' ');
+	let externallyApproved = false;
 	await monitorCampaign({ admittedSimulation: true, admitDiscussion: () => { read(['send', `sdk-golden-${workdayId}`, `${mentions} Discuss the exact frozen proposal, identify your role and dependencies, and publish useful planning contributions. Do not implement during planning.`,
 		'--proposal', freeze.proposal.id, '--workday', workdayId, '--no-wait', '--idempotency-key', `golden-discussion:${workdayId}`], team, false, 240_000); }, read: () => {
 		const observed = read(['workdays', 'show', workdayId], team);
@@ -58,6 +59,9 @@ test('Frozen SDK campaign drives planning acting review and terminal golden gate
 	}, now: Date.now, wait: () => new Promise(resolve => setTimeout(resolve, 30_000)), stop,
 		collaboration: () => {
 			verifyGolden('collaboration');
+			// Observe every new boundary, but never repeat the external governance
+			// mutation just because another polling interval or round completed.
+			if (externallyApproved) return;
 			const project = body.projects[0] as string;
 			const proposal = read(['proposals', 'show', freeze.proposal.id, '--server', 'local', '--project', project], team, true);
 			const version = Number(proposal.activeVersion);
@@ -69,6 +73,7 @@ test('Frozen SDK campaign drives planning acting review and terminal golden gate
 			assert.equal(approval.status, 'accepted', 'ACCEPTANCE_EXTERNAL_APPROVAL: Proposal was not accepted');
 			assert.ok(typeof approval.decisionId === 'string' && approval.decisionId,
 				'ACCEPTANCE_EXACT_DECISION: External approval did not create an exact decision');
+			externallyApproved = true;
 		},
 		verify: () => { for (const gate of ['lifecycle', 'graph', 'revision', 'results', 'settlement', 'reporter'] as const) verifyGolden(gate);
 			verifySdkExternalState(freeze); } });

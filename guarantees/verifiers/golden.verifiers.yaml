@@ -1,6 +1,26 @@
 schemaVersion: treeseed.guarantee-verifiers/v1
 ownerPackage: "@treeseed/agent"
 verifiers:
+  agent.golden.architecture-planning-native-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/architecture/planning-publication.test.ts
+    testName: "publishes all eight material contributions through the configured Writer and native exact commit readback"
+  agent.golden.architecture-planning-native-2:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/architecture/planning-publication.test.ts
+    testName: "denies an omitted predecessor before the owning Writer can publish a real native commit"
+  agent.golden.architecture-planning-native-3:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/architecture/planning-publication.test.ts
+    testName: "denies identifier-only and foreign-result synthesis before native content publication"
+  agent.golden.architecture-planning-native-4:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/architecture/planning-publication.test.ts
+    testName: "retains exact native predecessors and no output residue after provider failure or denied write authority"
   agent.golden.architecture-planning-verifier-1:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

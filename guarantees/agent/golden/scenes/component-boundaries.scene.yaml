@@ -3,6 +3,18 @@ id: agent.golden.component-boundaries
 title: Golden execution component boundaries
 scope: local-component-tests
 workflow:
+  - id: architecture-planning-native-1
+    action: { verifier: agent.golden.architecture-planning-native-1 }
+    expect: { status: passed }
+  - id: architecture-planning-native-2
+    action: { verifier: agent.golden.architecture-planning-native-2 }
+    expect: { status: passed }
+  - id: architecture-planning-native-3
+    action: { verifier: agent.golden.architecture-planning-native-3 }
+    expect: { status: passed }
+  - id: architecture-planning-native-4
+    action: { verifier: agent.golden.architecture-planning-native-4 }
+    expect: { status: passed }
   - id: architecture-planning-verifier-1
     action: { verifier: agent.golden.architecture-planning-verifier-1 }
     expect: { status: passed }

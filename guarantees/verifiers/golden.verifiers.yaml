@@ -1,6 +1,36 @@
 schemaVersion: treeseed.guarantee-verifiers/v1
 ownerPackage: "@treeseed/agent"
 verifiers:
+  agent.golden.architecture-readback-policy:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/golden-readback.test.ts
+    testName: rejects any change to the exact five-slot campaign policy rather than accepting larger allowances
+  agent.golden.architecture-readback-contributors:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/golden-readback.test.ts
+    testName: requires the exact configured chat and estimating contributors rather than only their counts
+  agent.golden.architecture-readback-clocks:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/golden-readback.test.ts
+    testName: requires every canonical clock field and successful first and final authoritative tools
+  agent.golden.architecture-readback-usage:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/golden-readback.test.ts
+    testName: denies nonfinite measured usage instead of accepting a coerced positive value
+  agent.golden.architecture-readback-references:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/golden-readback.test.ts
+    testName: denies malformed exact output references and results bound to another assignment
+  agent.golden.architecture-readback-completion:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/golden-readback.test.ts
+    testName: requires latest immutable completion custody even when a graph node claims completed
   agent.golden.architecture-immutable-paths:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

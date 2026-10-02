@@ -23,8 +23,12 @@ function assignment(id: string, activity: string, agentClass: string, workItemId
 	return { id, workDayId: workdayId, projectId: 'sdk', decisionId: 'decision-test', status: 'completed', leaseToken: null,
 		createdAt, completedAt, assignmentAttempt: { agentClass, workItemId, effectiveProfile: { activity } },
 		capacityEnvelope: { budget: { time: { executionStartedAt: createdAt, closeoutStartedAt: completedAt } } },
-		assignmentResult: { status: 'completed', timingAwareness: { completedChecks: 2, firstToolCompliant: true, finalToolCompliant: true },
-			usage: { native: { activeSeconds: 1 } }, references: [{ kind: 'git', commit }] },
+		assignmentResult: { schemaVersion: 'treeseed.assignment-result/v1', id: `result-${id}`, assignmentId: id,
+			status: 'completed', summary: 'Synthetic assertion input, not live acceptance evidence.', verification: [], diagnostics: [], completedAt,
+			timingAwareness: { schemaVersion: 'treeseed.assignment-timing-awareness/v1', requiredChecks: 2, completedChecks: 2,
+				firstTool: 'treedx:treeseed_time_status', firstToolSucceeded: true, lastTool: 'treedx:treeseed_time_status',
+				lastToolSucceeded: true, firstToolCompliant: true, finalToolCompliant: true },
+			usage: { elapsedSeconds: 1, native: { activeSeconds: 1 } }, references: [{ kind: 'git', repository: 'sdk', commit }] },
 		lifecycleOutput: { teardown: { verified: true }, activityCompletion: { reviewDisposition: 'approved' } } };
 }
 beforeEach(() => {
@@ -47,8 +51,16 @@ beforeEach(() => {
 			appliedPlan: { planningRounds: [{ state: 'complete' }, { state: 'complete' }] } },
 		reportRefs: { sdk: { projectId: 'sdk', path: 'notes/report.mdx', commit } } } });
 	state.replies.set('assignments list', { items, page: { hasMore: false } });
-	state.replies.set('execution graph', { nodes: Array.from({ length: 6 }, (_, index) => ['actor', 'reviewer'].map(pairRole => ({
-		id: `${pairRole}-${index}`, workdayId, pairRole, status: 'completed' }))).flat() });
+	const nodes = Array.from({ length: 6 }, (_, index) => ['actor', 'reviewer'].map(pairRole => ({
+		id: `${pairRole}-${index}`, workdayId, pairRole, workItemId: `work-${index}`, nodeRevision: 2, status: 'completed',
+		sourceRef: { id: 'proposal', revision: 8 }, authorityRefs: [{ model: 'decision', id: 'decision-1' }] }))).flat();
+	for (const node of nodes) for (const item of items.filter(item => item.assignmentAttempt.workItemId === node.workItemId
+		&& item.assignmentAttempt.effectiveProfile.activity === (node.pairRole === 'actor' ? 'acting' : 'reviewing'))) {
+		item.executionNodeId = node.id; item.executionNodeRevision = node.nodeRevision;
+		Object.assign(item.assignmentAttempt, { nodeId: node.id, nodeRevision: node.nodeRevision, workdayId,
+			sourceRef: structuredClone(node.sourceRef), authorityRefs: structuredClone(node.authorityRefs) });
+	}
+	state.replies.set('execution graph', { nodes });
 	state.replies.set('capacity usage', { items: items.map(item => ({ id: `${item.id}:aggregate`, assignmentId: item.id,
 		metadata: { settlementKey: item.id } })), page: { hasMore: false } });
 	state.replies.set('library read', { result: { files: [{ body: `${workdayId} actor-0` }] } });
@@ -110,12 +122,20 @@ describe('golden read-back assertion regressions (fixtures are not live acceptan
     expect(() => gate('results')).toThrow();
   });
   it('requires latest immutable completion custody even when a graph node claims completed', () => {
-    const node = state.replies.get('execution graph')!.nodes[0];
-    node.nodeRevision = 2;
-    node.workItemId = 'work-0';
-    node.sourceRef = { id: 'proposal', revision: 8 };
-    node.authorityRefs = [{ model: 'decision', id: 'decision-1' }];
-    expect(() => gate('graph')).toThrow('ACCEPTANCE_PAIR_CUSTODY');
+    const nodes = state.replies.get('execution graph')!.nodes;
+    const retained = structuredClone(nodes[0]);
+    for (const mutate of [
+      (node: Row) => { node.nodeRevision = 3; },
+      (node: Row) => { node.workItemId = 'other-work'; },
+      (node: Row) => { node.sourceRef.revision = 9; },
+      (node: Row) => { node.authorityRefs[0].id = 'other-decision'; },
+      (node: Row) => { delete node.sourceRef; },
+    ]) {
+      nodes[0] = structuredClone(retained); mutate(nodes[0]);
+      expect(() => gate('graph')).toThrow();
+    }
+    nodes[0] = retained;
+    expect(() => gate('graph')).not.toThrow();
   });
 	it('rejects serial execution even when five slots were configured', () => {
 		for (const [index, item] of state.replies.get('assignments list')!.items.entries()) {
@@ -245,9 +265,9 @@ describe('golden read-back assertion regressions (fixtures are not live acceptan
 		expect(() => gate('collaboration')).toThrow('Two completed graph planning cycles');
 	});
 	it('rejects incomplete generated pairs and absent real revision', () => {
-		state.replies.get('execution graph')!.nodes.pop();
+		const removed = state.replies.get('execution graph')!.nodes.pop();
 		expect(() => gate('graph')).toThrow();
-		state.replies.get('execution graph')!.nodes.push({ workdayId, pairRole: 'reviewer', status: 'completed' });
+		state.replies.get('execution graph')!.nodes.push(removed);
 		state.replies.get('assignments list')!.items = state.replies.get('assignments list')!.items.filter((item: Row) => item.id !== 'revision');
 		expect(() => gate('revision')).toThrow('later real Actor revision');
 	});

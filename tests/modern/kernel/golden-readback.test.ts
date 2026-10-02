@@ -63,7 +63,10 @@ beforeEach(() => {
 	state.replies.set('assignments list', { items, page: { hasMore: false } });
 	const nodes = Array.from({ length: 6 }, (_, index) => ['actor', 'reviewer'].map(pairRole => ({
 		id: `${pairRole}-${index}`, workdayId, pairRole, workItemId: `work-${index}`, nodeRevision: 2, status: 'completed',
-		sourceRef: { id: 'proposal', revision: 8 }, authorityRefs: [{ model: 'decision', id: 'decision-1' }] }))).flat();
+		sourceRef: { store: 'treedx', model: 'proposal', id: 'proposal', revision: 8, digest: `sha256:${'b'.repeat(64)}`,
+			repository: 'sdk-library', commit, path: 'proposals/proposal.mdx' },
+		authorityRefs: [{ store: 'treedx', model: 'decision', id: 'decision-1', revision: 1, digest: `sha256:${'c'.repeat(64)}`,
+			repository: 'sdk-library', commit, path: 'decisions/decision-1.mdx' }] }))).flat();
 	for (const node of nodes) for (const item of items.filter(item => item.assignmentAttempt.workItemId === node.workItemId
 		&& item.assignmentAttempt.effectiveProfile.activity === (node.pairRole === 'actor' ? 'acting' : 'reviewing'))) {
 		item.executionNodeId = node.id; item.executionNodeRevision = node.nodeRevision;
@@ -78,6 +81,24 @@ beforeEach(() => {
 });
 
 describe('golden read-back assertion regressions (fixtures are not live acceptance)', () => {
+  it('denies mutually matching but malformed or moving proposal and decision authority in managed graph readback', () => {
+    const nodes = state.replies.get('execution graph')!.nodes, original = structuredClone(nodes[0]);
+    const assignments = state.replies.get('assignments list')!.items.filter((item: Row) => item.executionNodeId === original.id);
+    const mutations = [
+      (node: Row) => { node.sourceRef.commit = 'staging'; },
+      (node: Row) => { node.sourceRef.digest = 'not-a-digest'; },
+      (node: Row) => { node.sourceRef.model = 'question'; },
+      (node: Row) => { node.authorityRefs[0].store = 'postgresql'; },
+      (node: Row) => { node.authorityRefs[0].commit = 'main'; },
+      (node: Row) => { node.authorityRefs[0].model = 'proposal'; },
+    ];
+    for (const mutate of mutations) {
+      nodes[0] = structuredClone(original); mutate(nodes[0]);
+      for (const item of assignments) Object.assign(item.assignmentAttempt,
+        { sourceRef: structuredClone(nodes[0].sourceRef), authorityRefs: structuredClone(nodes[0].authorityRefs) });
+      expect(() => gate('graph')).toThrow('ACCEPTANCE_PAIR');
+    }
+  });
   it('denies absent malformed or duplicate calibration authority in managed admission readback', () => {
     const item = state.replies.get('assignments list')!.items[0];
     for (const explanation of [undefined, {}, { metadata: { allocation: {} } }]) {
@@ -401,12 +422,11 @@ describe('golden read-back assertion regressions (fixtures are not live acceptan
 			for (const item of items.filter((item: Row) => item.assignmentAttempt.workItemId === workItemId
 				&& item.assignmentAttempt.effectiveProfile.activity === activity)) {
 				item.executionNodeId = node.id; item.executionNodeRevision = 2;
-				Object.assign(item.assignmentAttempt, { nodeId: node.id, nodeRevision: 2, workdayId, sourceRef: { id: 'proposal', revision: 8 },
-					authorityRefs: [{ model: 'decision', id: 'decision-1' }] });
+				Object.assign(item.assignmentAttempt, { nodeId: node.id, nodeRevision: 2, workdayId, sourceRef: structuredClone(node.sourceRef),
+					authorityRefs: structuredClone(node.authorityRefs) });
 				item.assignmentResult.assignmentId = item.id;
 			}
-			Object.assign(node, { status: 'stale', nodeRevision: 3, workItemId, sourceRef: { id: 'proposal', revision: 8 },
-				authorityRefs: [{ model: 'decision', id: 'decision-1' }] });
+			Object.assign(node, { status: 'stale', nodeRevision: 3, workItemId });
 		}
 		expect(() => gate('graph')).not.toThrow();
 		expect(() => gate('revision')).not.toThrow();

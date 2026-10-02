@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { assignmentReferenceSchema, assignmentTimingAwarenessReceiptSchema, estimateSchema, exactEntityReferenceSchema } from '@treeseed/sdk/agent-capacity';
-import { validatePortableContentData } from '@treeseed/sdk/content-validation';
 import { read, row, type Row } from './acceptance-cli.ts';
+import { readDecisionContent, verifyDecisionContent } from './workday/decision-evidence.ts';
 
 const rows = (value: unknown): Row[] => Array.isArray(value) ? value.map(row) : [];
 const text = (value: unknown): string => typeof value === 'string' ? value : '';
@@ -187,31 +187,13 @@ export function verifyGolden(gate: Gate): void {
 			governedDecision = true;
 			const reference = authority.data;
 			assert.ok(reference.repository && reference.path && reference.commit, 'ACCEPTANCE_DECISION_SOURCE: Native exact content readback required');
-			const key = JSON.stringify([reference.repository, reference.commit, reference.path]);
-			let decision = decisionContents.get(key);
-			if (!decision) {
-				const returned = read(['library', 'read', text(node.projectId), reference.path, '--ref', reference.commit], team, true);
-				const observed = row(returned.result ?? returned), file = rows(observed.files).find(item => item.path === reference.path);
-				assert.ok(observed.resolvedRef === reference.commit && file, 'ACCEPTANCE_DECISION_READBACK: Exact returned commit and path required');
-				const parsed = validatePortableContentData('decision', file.frontmatter);
-				assert.ok(parsed.ok, 'ACCEPTANCE_DECISION_CONTENT: Complete canonical classed Decision required');
-				decision = row(parsed.data);
-				decisionContents.set(key, decision);
-			}
+			const decision = verifyDecisionContent(readDecisionContent(reference, text(node.projectId), team, decisionContents, 'ACCEPTANCE_DECISION'),
+				text(node.projectId), 'ACCEPTANCE_DECISION');
 			assert.ok(decision.id === reference.id && decision.projectId === node.projectId && decision.decisionClass === 'proposal'
 				&& decision.disposition === 'approved', 'ACCEPTANCE_DECISION_AUTHORITY: Only the exact approved proposal Decision authorizes acting');
 			assert.deepEqual(decision.subjectRef, source.data, 'ACCEPTANCE_DECISION_PROPOSAL: Decision must bind the exact proposal revision and digest');
 			assert.ok(Number.isFinite(Date.parse(text(decision.decidedAt))) && Date.parse(text(decision.decidedAt)) <= Date.parse(text(latest.createdAt)),
 				'ACCEPTANCE_DECISION_TIME: Decision authority must precede admission');
-			for (const refs of [decision.authorityRefs, decision.decidedByRefs]) {
-				assert.ok(Array.isArray(refs) && refs.length > 0 && new Set(refs.map(value => JSON.stringify(value))).size === refs.length
-					&& refs.every(value => exactEntityReferenceSchema.safeParse(value).success), 'ACCEPTANCE_DECISION_EVIDENCE: Exact unique authority and decision-maker evidence required');
-			}
-			if (decision.decisionMethod === 'approval' || decision.decisionMethod === 'vote') {
-				assert.ok(Array.isArray(decision.positions) && decision.positions.length > 0 && rows(decision.positions).every(position =>
-					exactEntityReferenceSchema.safeParse(position.actorRef).success && ['approve', 'reject', 'abstain'].includes(text(position.position))
-					&& Number.isFinite(Date.parse(text(position.recordedAt)))), 'ACCEPTANCE_DECISION_POSITIONS: Signed-method evidence required');
-			}
 		}
 		assert.ok(governedDecision, 'ACCEPTANCE_PAIR_DECISION: Exact governed Decision content is required');
 		assert.deepEqual(attempt.sourceRef, node.sourceRef, 'ACCEPTANCE_PAIR_SOURCE: Retired source authority drifted');
@@ -221,6 +203,22 @@ export function verifyGolden(gate: Gate): void {
 			const actor = actors.filter(item => row(item.assignmentAttempt).workItemId === node.workItemId)
 				.sort((a, b) => text(b.completedAt).localeCompare(text(a.completedAt)))[0];
 			assert.ok(actor && text(latest.createdAt) > text(actor.completedAt), 'ACCEPTANCE_PAIR_CHRONOLOGY: Approval must follow the latest Actor candidate');
+			const decisions: Row[] = [];
+			for (const reference of rows(row(latest.assignmentResult).references).filter(value => value.kind === 'treedx')) {
+				const content = readDecisionContent(reference, text(latest.projectId), team, decisionContents, 'ACCEPTANCE_REVIEW');
+				if (content.schemaVersion !== 'treeseed.decision/v1') continue; // Notes are evidence, never review disposition authority.
+				const decision = verifyDecisionContent(content, text(latest.projectId), 'ACCEPTANCE_REVIEW');
+				if (decision.decisionClass === 'work-review') decisions.push(decision);
+			}
+			assert.equal(decisions.length, 1, 'ACCEPTANCE_REVIEW_AUTHORITY: Exactly one returned classed work-review Decision required');
+			const reviewed = decisions[0]!, subject = row(reviewed.subjectRef);
+			assert.equal(reviewed.disposition, 'approved', 'ACCEPTANCE_REVIEW_DISPOSITION: Lifecycle output is not governed approval');
+			assert.ok(rows(row(actor.assignmentResult).references).some(reference => subject.store === reference.kind && subject.repository === reference.repository
+				&& subject.commit === reference.commit && (!reference.path || subject.path === reference.path)), 'ACCEPTANCE_REVIEW_CANDIDATE: Exact latest actor result required');
+			assert.ok(rows(reviewed.decidedByRefs).some(reference => JSON.stringify(reference) === JSON.stringify(row(row(attempt.effectiveProfile).profileRef))),
+				'ACCEPTANCE_REVIEW_IDENTITY: Exact assigned reviewing profile evidence required');
+			assert.ok(Number.isFinite(Date.parse(text(reviewed.decidedAt))) && Date.parse(text(reviewed.decidedAt)) >= Date.parse(text(latest.createdAt))
+				&& Date.parse(text(reviewed.decidedAt)) <= Date.parse(text(latest.completedAt)), 'ACCEPTANCE_REVIEW_TIME: Original review window required');
 		}
 	}
 	}

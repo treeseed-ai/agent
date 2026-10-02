@@ -1,6 +1,46 @@
 schemaVersion: treeseed.guarantee-verifiers/v1
 ownerPackage: "@treeseed/agent"
 verifiers:
+  agent.golden.architecture-decision-verifier-complete:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/golden-decision-readback.test.ts
+    testName: "accepts exact classed proposal content with authority, approval and vote evidence"
+  agent.golden.architecture-decision-verifier-content:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/golden-decision-readback.test.ts
+    testName: "denies missing, malformed, wrong-class or unapproved governed Decision content"
+  agent.golden.architecture-decision-verifier-positions:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/golden-decision-readback.test.ts
+    testName: "denies signed-method labels with absent or malformed position evidence"
+  agent.golden.architecture-decision-verifier-subject-time:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/golden-decision-readback.test.ts
+    testName: "denies a different exact proposal revision, digest or subject and future Decision evidence"
+  agent.golden.architecture-decision-verifier-native-readback:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/golden-decision-readback.test.ts
+    testName: "denies missing files, a wrong returned path and moving readback even if operational references agree"
+  agent.golden.architecture-decision-verifier-selected-id:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/golden-decision-readback.test.ts
+    testName: "requires the selected operational Decision identity to equal the governed authority, not merely coexist"
+  agent.golden.architecture-decision-verifier-review-content:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/golden-decision-readback.test.ts
+    testName: "denies missing or unapproved governed final review content even when lifecycle output says approved"
+  agent.golden.architecture-decision-verifier-review-custody:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/golden-decision-readback.test.ts
+    testName: "denies governed review evidence for a different candidate, identity or original time window"
   agent.golden.architecture-proposal-decision-authority:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

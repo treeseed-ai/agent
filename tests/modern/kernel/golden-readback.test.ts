@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { state, gate, read, assignment, classes, workdayId, commit, type Row } from './golden-readback-fixture.ts';
+import { state, gate, read, assignment, classes, workdayId, commit, type Row } from './architecture/golden-readback-fixture.ts';
 
 describe('golden read-back assertion regressions (fixtures are not live acceptance)', () => {
   it('denies mutually matching but malformed or moving proposal and decision authority in managed graph readback', () => {

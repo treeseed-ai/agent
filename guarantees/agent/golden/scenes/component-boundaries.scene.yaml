@@ -3,6 +3,30 @@ id: agent.golden.component-boundaries
 title: Golden execution component boundaries
 scope: local-component-tests
 workflow:
+  - id: architecture-decision-verifier-complete
+    action: { verifier: agent.golden.architecture-decision-verifier-complete }
+    expect: { status: passed }
+  - id: architecture-decision-verifier-content
+    action: { verifier: agent.golden.architecture-decision-verifier-content }
+    expect: { status: passed }
+  - id: architecture-decision-verifier-positions
+    action: { verifier: agent.golden.architecture-decision-verifier-positions }
+    expect: { status: passed }
+  - id: architecture-decision-verifier-subject-time
+    action: { verifier: agent.golden.architecture-decision-verifier-subject-time }
+    expect: { status: passed }
+  - id: architecture-decision-verifier-native-readback
+    action: { verifier: agent.golden.architecture-decision-verifier-native-readback }
+    expect: { status: passed }
+  - id: architecture-decision-verifier-selected-id
+    action: { verifier: agent.golden.architecture-decision-verifier-selected-id }
+    expect: { status: passed }
+  - id: architecture-decision-verifier-review-content
+    action: { verifier: agent.golden.architecture-decision-verifier-review-content }
+    expect: { status: passed }
+  - id: architecture-decision-verifier-review-custody
+    action: { verifier: agent.golden.architecture-decision-verifier-review-custody }
+    expect: { status: passed }
   - id: architecture-proposal-decision-authority
     action: { verifier: agent.golden.architecture-proposal-decision-authority }
     expect: { status: passed }

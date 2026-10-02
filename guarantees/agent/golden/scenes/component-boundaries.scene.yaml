@@ -3,6 +3,12 @@ id: agent.golden.component-boundaries
 title: Golden execution component boundaries
 scope: local-component-tests
 workflow:
+  - id: provider-prepared-output-closure
+    action: { verifier: agent.golden.provider-prepared-output-closure }
+    expect: { status: passed }
+  - id: provider-freeze-dependency-bytes
+    action: { verifier: agent.golden.provider-freeze-dependency-bytes }
+    expect: { status: passed }
   - id: provider-source-fixture-link
     action: { verifier: agent.golden.provider-source-fixture-link }
     expect: { status: passed }

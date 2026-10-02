@@ -44,6 +44,13 @@ describe('capacity provider development runtime', () => {
 			{ id: 'sdk', target: 'package', locality: 'local', reaction: 'rebuild' },
 		]);
 	});
+	it('declares every prepared provider runtime root consumed by the manager copy', () => {
+		const manifest = parseYaml(readFileSync('treeseed.package.yaml', 'utf8')) as { development: unknown };
+		const provider = developmentRuntimeSchema.parse(manifest.development).targets.find(target => target.id === 'provider')!;
+		const outputs = provider.outputs.map(output => output.path);
+		expect(outputs).toContain('dist');
+		expect(outputs).toContain('.treeseed/docker/runtime/shared');
+	});
 	it('declares cloned state and drain-gated cleanup', () => {
 		const manifest = parseYaml(readFileSync('treeseed.package.yaml', 'utf8')) as { development: unknown };
 		const runtime = manifest.development as { schemaVersion: string; targets: Array<{ id: string; statePolicy: string; dependencies: Array<{ id: string; target: string; reaction: string }>; operations: { build: { command: string; args: string[] }; start: { command: string; args: string[] }; cleanup: { command: string; args: string[] } }; shutdown: { activeWorkPolicy: string; drainOperation?: { command: string; args: string[] } }; forbiddenOperations: string[] }> };

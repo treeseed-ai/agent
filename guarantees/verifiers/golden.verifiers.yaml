@@ -1,6 +1,71 @@
 schemaVersion: treeseed.guarantee-verifiers/v1
 ownerPackage: "@treeseed/agent"
 verifiers:
+  agent.golden.release-review-native-first:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/verification/release-review-first.test.ts
+    testName: "runs all independent release checks before model review and never replays them again on an unchanged candidate"
+  agent.golden.release-review-native-receipts:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/verification/release-review-first.test.ts
+    testName: "retains native release evidence when the model honestly reports no personally executed commands"
+  agent.golden.release-review-extra-checks:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/verification/release-review-first.test.ts
+    testName: "still independently replays an additional model-reported command"
+  agent.golden.release-review-candidate-inventory:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/verification/release-review-first.test.ts
+    testName: "rejects missing or ambiguous exact Actor candidate inventory before executing commands"
+  agent.golden.release-review-unsafe-inventory:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/verification/release-review-first.test.ts
+    testName: "rejects unsafe or nonpassing predecessor commands instead of treating Actor receipts as a Reviewer pass"
+  agent.golden.release-review-replay-failure:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/verification/release-review-first.test.ts
+    testName: "keeps a genuine independent release failure fatal before model disposition"
+  agent.golden.release-review-source-custody:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/verification/release-review-first.test.ts
+    testName: "rejects changed HEAD or tracked source before or after pre-review verification"
+  agent.golden.release-review-conflicting-failure:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/verification/release-review-first.test.ts
+    testName: "rejects conflicting model failure claims without converting them to native passes"
+  agent.golden.release-review-original-budget:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/verification/release-review-first.test.ts
+    testName: "bounds early native checks and additional replay to the same original deadline without resetting it"
+  agent.golden.release-review-activity-scope:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/verification/release-review-first.test.ts
+    testName: "does not intercept other activities or ordinary content review"
+  agent.golden.release-review-model-evidence:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/verification/release-review-first.test.ts
+    testName: "gives the review model measured current-attempt evidence without asking it to repeat native release checks"
+  agent.golden.release-review-guest-order:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/verification/release-review-first.test.ts
+    testName: "wires fresh release replay before provider startup and retains its receipt through final completion"
+  agent.golden.release-review-real-pack:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/verification/release-review-first.test.ts
+    testName: "packs and inspects a real fresh Reviewer archive once and detects hidden tracked mutation with a fresh index"
   agent.golden.api-deadline-clamp:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

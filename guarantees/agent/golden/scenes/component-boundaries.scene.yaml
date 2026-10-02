@@ -3,6 +3,45 @@ id: agent.golden.component-boundaries
 title: Golden execution component boundaries
 scope: local-component-tests
 workflow:
+  - id: release-review-native-first
+    action: { verifier: agent.golden.release-review-native-first }
+    expect: { status: passed }
+  - id: release-review-native-receipts
+    action: { verifier: agent.golden.release-review-native-receipts }
+    expect: { status: passed }
+  - id: release-review-extra-checks
+    action: { verifier: agent.golden.release-review-extra-checks }
+    expect: { status: passed }
+  - id: release-review-candidate-inventory
+    action: { verifier: agent.golden.release-review-candidate-inventory }
+    expect: { status: passed }
+  - id: release-review-unsafe-inventory
+    action: { verifier: agent.golden.release-review-unsafe-inventory }
+    expect: { status: passed }
+  - id: release-review-replay-failure
+    action: { verifier: agent.golden.release-review-replay-failure }
+    expect: { status: passed }
+  - id: release-review-source-custody
+    action: { verifier: agent.golden.release-review-source-custody }
+    expect: { status: passed }
+  - id: release-review-conflicting-failure
+    action: { verifier: agent.golden.release-review-conflicting-failure }
+    expect: { status: passed }
+  - id: release-review-original-budget
+    action: { verifier: agent.golden.release-review-original-budget }
+    expect: { status: passed }
+  - id: release-review-activity-scope
+    action: { verifier: agent.golden.release-review-activity-scope }
+    expect: { status: passed }
+  - id: release-review-model-evidence
+    action: { verifier: agent.golden.release-review-model-evidence }
+    expect: { status: passed }
+  - id: release-review-guest-order
+    action: { verifier: agent.golden.release-review-guest-order }
+    expect: { status: passed }
+  - id: release-review-real-pack
+    action: { verifier: agent.golden.release-review-real-pack }
+    expect: { status: passed }
   - id: api-deadline-clamp
     action: { verifier: agent.golden.api-deadline-clamp }
     expect: { status: passed }

@@ -1,7 +1,9 @@
 import { createHash } from 'node:crypto';
-import { stat } from 'node:fs/promises';
+import { mkdtemp, rm, stat } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import type { ActivityCompletionReport } from '../activity-completion.ts';
-import { correctObservedTestFirstRedVerification, reportedVerificationCommands, record, text } from './guest-contract.ts';
+import { correctObservedTestFirstRedVerification, isReleaseReview, reportedVerificationCommands, record, text } from './guest-contract.ts';
 import { run } from './process-runner.ts';
 import { redactProviderDiagnostic } from './provider-failure.ts';
 import type { VerificationResult } from '../kernel/contracts.ts';
@@ -76,4 +78,61 @@ export async function observeReportedActivityCommands(report: ActivityCompletion
 
 export function requiresNodeDependencyRestore(command: string) {
 	return /^(?:npm\s+(?:run|exec|test)(?:\s|$)|npx(?:\s|$))/u.test(command.trim());
+}
+
+/** Fresh Reviewer execution, not a cache of the predecessor's passing receipts. */
+export async function prepareReleaseReview(context: Record<string, unknown>, secrets: string[] = [], execute: typeof run = run) {
+	const canonicalContext = record(context.canonicalAssignmentContext), assignment = record(canonicalContext.assignment);
+	if (!isReleaseReview(assignment)) return null;
+	const source = record(record(context.projectManifest).source), commit = text(source.commit), repository = text(source.repositoryId);
+	if (!repository || !/^[a-f0-9]{40}$/u.test(commit)) throw new Error('release_review_candidate_missing');
+	const ids = Array.isArray(assignment.predecessorResultIds) ? assignment.predecessorResultIds : [];
+	const candidates = (Array.isArray(canonicalContext.predecessorResults) ? canonicalContext.predecessorResults : []).map(record)
+		.filter(result => ids.includes(result.id) && result.status === 'completed'
+			&& Array.isArray(result.references) && result.references.map(record).some(ref =>
+				ref.kind === 'git' && ref.repository === repository && ref.commit === commit));
+	if (candidates.length !== 1) throw new Error('release_review_actor_candidate_mismatch');
+	const inventory = Array.isArray(candidates[0]!.verification) ? candidates[0]!.verification.map(record) : [];
+	if (!inventory.length || inventory.some(entry => entry.status !== 'passed' || entry.exitCode !== 0)) {
+		throw new Error('release_review_passing_command_inventory_missing');
+	}
+	const report: ActivityCompletionReport = { schemaVersion: 'treeseed.activity-completion/v1',
+		summary: 'Independent release verification in the current Reviewer guest.', reviewDisposition: null, contentOutput: null,
+		verification: inventory.map(entry => ({ status: 'passed', summary: 'Command inventory only; execute independently.', commands: [text(entry.command)] })) };
+	const commands = reportedVerificationCommands(report);
+	if (commands.some(command => /\bnpm\s+pack\b/u.test(command) && command !== 'npm pack')) {
+		throw new Error('release_review_pack_must_use_current_directory');
+	}
+	await assertReviewCandidate(commit, execute);
+	const observed = await observeReportedActivityCommands(report, secrets, execute, assignment);
+	await assertReviewCandidate(commit, execute);
+	// This closure owns ONLY receipts measured in this guest on this candidate.
+	// It is never populated from model input or a previous attempt's output.
+	return { verification: observed.verification,
+		async complete(completion: ActivityCompletionReport) {
+			await assertReviewCandidate(commit, execute);
+			reportedVerificationCommands(completion); // Validate even commands already observed here.
+			if (completion.verification.some(entry => entry.status === 'failed' && entry.commands.some(command => commands.includes(command)))) {
+				throw new Error('release_review_verification_changed');
+			}
+			const additional = await observeReportedActivityCommands({ ...completion, verification: completion.verification.map(entry =>
+				({ ...entry, commands: entry.commands.filter(command => !commands.includes(command)) })) }, secrets, execute, assignment);
+			await assertReviewCandidate(commit, execute);
+			return { report: completion, verification: [...observed.verification, ...additional.verification] };
+		} };
+}
+
+async function assertReviewCandidate(commit: string, execute: typeof run) {
+	const root = await mkdtemp(join(tmpdir(), 'treeseed-review-index-'));
+	const env = { PATH: '/usr/bin:/bin', GIT_INDEX_FILE: join(root, 'index'), GIT_CONFIG_NOSYSTEM: '1',
+		GIT_CONFIG_GLOBAL: '/dev/null', GIT_OPTIONAL_LOCKS: '0' };
+	const args = ['-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor=false', '-c', 'core.untrackedCache=false'];
+	const options = { cwd: '/workspace/project', env, timeoutMs: 10_000, captureStdout: true, maxStdoutBytes: 1_048_576 };
+	try {
+		const head = await execute('/usr/bin/git', [...args, 'rev-parse', '--verify', 'HEAD^{commit}'], options);
+		if (head.stdout.trim() !== commit) throw new Error('release_review_candidate_head_changed');
+		await execute('/usr/bin/git', [...args, 'read-tree', commit], options);
+		const status = await execute('/usr/bin/git', [...args, 'status', '--porcelain', '--untracked-files=all'], options);
+		if (status.stdout.trim()) throw new Error('release_review_candidate_source_changed');
+	} finally { await rm(root, { recursive: true, force: true }); }
 }

@@ -25,7 +25,11 @@ it('avoids separate aggregate-owned builds without weakening independent release
 		}, context: [], predecessorResults: [] } });
 		expect(prompt).toContain('Do not run a separate build, generator or full suite already owned by that aggregate gate');
 		expect(prompt).toContain('Independent review still requires this workspace\'s actual checks');
-		expect(prompt).toContain('use the repository-owned standalone archive verification command');
-		if (activity === 'reviewing') expect(prompt).toContain('guest runner independently replays every reported passing verification command');
+		expect(prompt).toContain('repository-owned standalone archive verification command');
+		if (activity === 'reviewing') {
+			expect(prompt).toContain('guest runner independently replays every reported passing verification command');
+			expect(prompt).toContain('CURRENT-ATTEMPT INDEPENDENT RELEASE VERIFICATION');
+			expect(prompt).toContain('do not execute an already observed check again');
+		}
 	}
 });

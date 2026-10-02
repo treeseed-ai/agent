@@ -68,11 +68,25 @@ beforeEach(() => {
 	state.replies.set('execution graph', { nodes });
 	state.replies.set('capacity usage', { items: items.map(item => ({ id: `${item.id}:aggregate`, assignmentId: item.id,
 		metadata: { settlementKey: item.id } })), page: { hasMore: false } });
-	state.replies.set('library read', { result: { files: [{ body: `${workdayId} actor-0`, frontmatter: {
+	state.replies.set('library read', { result: { resolvedRef: commit, files: [{ path: reportRef.path, body: `${workdayId} actor-0`, frontmatter: {
 		schemaVersion: 'treeseed.note/v1', classification: 'workday-report', projectId: 'sdk', subjectRefs: [structuredClone(reporter.assignmentAttempt.sourceRef)] } }] } });
 });
 
 describe('golden read-back assertion regressions (fixtures are not live acceptance)', () => {
+  it('rejects moved missing or foreign report readback even when its body names the workday', () => {
+    const observed = state.replies.get('library read')!.result;
+    for (const mutate of [
+      (value: Row) => { value.resolvedRef = 'staging'; },
+      (value: Row) => { value.resolvedRef = 'b'.repeat(40); },
+      (value: Row) => { value.files[0].path = 'notes/another.mdx'; },
+      (value: Row) => { value.files.push(structuredClone(value.files[0])); },
+      (value: Row) => { value.files = []; },
+    ]) {
+      const changed = structuredClone(observed); mutate(changed);
+      state.replies.get('library read')!.result = changed;
+      expect(() => gate('reporter')).toThrow();
+    }
+  });
   it('requires the single canonical workday report reference and rejects the retired plural map', () => {
     const run = state.replies.get('workdays show')!.run;
     const reference = structuredClone(run.reportRef);

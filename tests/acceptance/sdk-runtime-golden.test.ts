@@ -227,8 +227,11 @@ export function verifyGolden(gate: Gate): void {
 	assert.ok(run.state === 'ended' && Number.isFinite(ended) && Number.isFinite(completedAt) && completedAt <= ended,
 		'ACCEPTANCE_REPORT_CHRONOLOGY: Reporter must complete before the workday ends');
 	const readBack = read(['library', 'read', text(report.projectId), text(report.path), '--ref', text(report.commit)], team, true);
-	const files = rows(row(readBack.result).files);
+	const observed = row(readBack.result);
+	assert.equal(observed.resolvedRef, report.commit, 'ACCEPTANCE_REPORT_READBACK: Resolved report commit must remain exact');
+	const files = rows(observed.files);
 	assert.equal(files.length, 1);
+	assert.equal(files[0]?.path, report.path, 'ACCEPTANCE_REPORT_READBACK: Exact report path required');
 	const frontmatter = row(files[0]?.frontmatter);
 	assert.ok(frontmatter.schemaVersion === 'treeseed.note/v1' && frontmatter.classification === 'workday-report'
 		&& frontmatter.projectId === report.projectId, 'ACCEPTANCE_REPORT_NOTE: Canonical classified report note required');

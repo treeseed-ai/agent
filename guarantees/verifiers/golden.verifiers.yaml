@@ -1,6 +1,11 @@
 schemaVersion: treeseed.guarantee-verifiers/v1
 ownerPackage: "@treeseed/agent"
 verifiers:
+  agent.golden.architecture-report-readback:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/golden-readback.test.ts
+    testName: rejects moved missing or foreign report readback even when its body names the workday
   agent.golden.architecture-report-single:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

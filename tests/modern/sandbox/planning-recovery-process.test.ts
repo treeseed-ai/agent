@@ -79,3 +79,36 @@ it('kills a real correction subprocess when the shared original budget shrinks i
 		expect(Date.now() - startedAt).toBeLessThan(2_000);
 	});
 });
+
+it('distinguishes zero-exit correction with no new response from fresh invalid model output', async () => {
+	await exercise('no-output', 'missing', async input => {
+		await expect(recoverPlanningSynthesis(input)).rejects.toThrow('planning_synthesis_correction_output_missing');
+		await expect(readFile(input.responsePath, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
+	});
+});
+
+it('retains safe changed-response evidence when fresh correction remains invalid', async () => {
+	await exercise('literal-newlines', 'missing', async input => {
+		await expect(recoverPlanningSynthesis(input)).rejects.toThrow('correctionChanged=true');
+	});
+});
+
+it('rejects malformed fresh correction without leaking provider prose through JSON parser errors', async () => {
+	await exercise('invalid-json', 'missing', async input => {
+		let message = ''; try { await recoverPlanningSynthesis(input); } catch (error) { message = (error as Error).message; }
+		expect(message).toBe('planning_synthesis_correction_output_invalid_json');
+		expect(message).not.toContain('PRIVATE MODEL PROSE');
+	});
+});
+
+it('rejects freshly empty correction rather than attributing a stale summary to the model', async () => {
+	await exercise('empty-output', 'missing', async input => {
+		await expect(recoverPlanningSynthesis(input)).rejects.toThrow('planning_synthesis_correction_output_missing');
+	});
+});
+
+it('identifies freshly rewritten identical invalid output without fabricating a correction', async () => {
+	await exercise('unchanged', 'missing', async input => {
+		await expect(recoverPlanningSynthesis(input)).rejects.toThrow('correctionChanged=false');
+	});
+});

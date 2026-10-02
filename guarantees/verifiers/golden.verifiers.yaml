@@ -1,6 +1,51 @@
 schemaVersion: treeseed.guarantee-verifiers/v1
 ownerPackage: "@treeseed/agent"
 verifiers:
+  agent.golden.synthesis-observation-counts:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/sandbox/planning-recovery-contract.test.ts
+    testName: "distinguishes omitted identities from malformed citations using counts only"
+  agent.golden.synthesis-output-missing:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/sandbox/planning-recovery-process.test.ts
+    testName: "distinguishes zero-exit correction with no new response from fresh invalid model output"
+  agent.golden.synthesis-output-changed:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/sandbox/planning-recovery-process.test.ts
+    testName: "retains safe changed-response evidence when fresh correction remains invalid"
+  agent.golden.synthesis-output-invalid-json:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/sandbox/planning-recovery-process.test.ts
+    testName: "rejects malformed fresh correction without leaking provider prose through JSON parser errors"
+  agent.golden.synthesis-output-empty:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/sandbox/planning-recovery-process.test.ts
+    testName: "rejects freshly empty correction rather than attributing a stale summary to the model"
+  agent.golden.synthesis-output-unchanged:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/sandbox/planning-recovery-process.test.ts
+    testName: "identifies freshly rewritten identical invalid output without fabricating a correction"
+  agent.golden.synthesis-cli-schema:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/sandbox/codex-schema-transport.test.ts
+    testName: "forwards the full eight-predecessor schema and prompt through the real pinned CLI without credentials"
+  agent.golden.synthesis-cli-invalid:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/sandbox/codex-schema-transport.test.ts
+    testName: "rejects EN-shaped invalid output even when the real CLI exits zero after strict schema submission"
+  agent.golden.synthesis-cli-malformed-schema:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/sandbox/codex-schema-transport.test.ts
+    testName: "does not contact the endpoint when the pinned CLI receives a malformed output schema"
   agent.golden.planning-recovery-shared-contract:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

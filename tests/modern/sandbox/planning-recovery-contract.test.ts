@@ -48,3 +48,20 @@ it('retains safe line-layout diagnostics on citation failure without including m
 	expect(message).toContain('summaryLines=1; literalNewlines=7');
 	expect(message).not.toContain('PRIVATE MODEL PROSE');
 });
+
+it('distinguishes omitted identities from malformed citations using counts only', () => {
+	const samples = [
+		{ summary: `${ids[0]} PRIVATE MODEL PROSE\nOwn synthesis`, mentions: 1, starts: 0 },
+		{ summary: ids.map(id => `${id} PRIVATE MODEL PROSE`).join('; '), mentions: 8, starts: 0 },
+		{ summary: ids.map(id => `- ${id}:`).join('\n'), mentions: 8, starts: 8 },
+		{ summary: ids.map(id => `- ${id}: PRIVATE MODEL PROSE`).join('\\n'), mentions: 8, starts: 1 },
+		{ summary: `- ${ids[0]}: PRIVATE MODEL PROSE\nOwn synthesis`, mentions: 1, starts: 1 },
+		{ summary: `PRIVATE MODEL PROSE ${ids[0]} ${ids[0]}`, mentions: 1, starts: 0 },
+	];
+	for (const sample of samples) {
+		let message = '';
+		try { assertPredecessorSynthesis(context, { ...completion, summary: sample.summary }); } catch (error) { message = (error as Error).message; }
+		expect(message).toContain(`predecessors=8; mentionedIds=${sample.mentions}; lineStarts=${sample.starts}`);
+		expect(message).not.toContain('PRIVATE MODEL PROSE');
+	}
+});

@@ -8,7 +8,7 @@ import { spawnSync } from 'node:child_process';
 import { activityCompletionOutputSchema } from '../../../src/activity-completion.ts';
 
 vi.mock('../../../src/sandbox/process-runner.ts', () => ({ run: vi.fn() }));
-vi.mock('node:fs/promises', () => ({ readFile: vi.fn() }));
+vi.mock('node:fs/promises', () => ({ readFile: vi.fn(), unlink: vi.fn(async () => {}) }));
 beforeEach(() => vi.resetAllMocks());
 
 it('identifies only missing citations among eight planning predecessors without inventing contributions', () => {

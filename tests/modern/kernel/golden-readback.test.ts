@@ -67,6 +67,22 @@ beforeEach(() => {
 });
 
 describe('golden read-back assertion regressions (fixtures are not live acceptance)', () => {
+  it('requires the single canonical workday report reference and rejects the retired plural map', () => {
+    const run = state.replies.get('workdays show')!.run;
+    run.reportRefs = { sdk: { kind: 'treedx', projectId: 'sdk', repository: 'sdk-library', path: 'notes/report.mdx', commit } };
+    delete run.reportRef;
+    expect(() => gate('reporter')).toThrow();
+  });
+  it('requires exactly one completed reporting assignment before accepting report readback', () => {
+    const items = state.replies.get('assignments list')!.items;
+    state.replies.get('assignments list')!.items = items.filter((item: Row) => item.assignmentAttempt.effectiveProfile.activity !== 'reporting');
+    expect(() => gate('reporter')).toThrow();
+  });
+  it('rejects a report note whose canonical classification or workday subject authority is missing', () => {
+    const file = state.replies.get('library read')!.result.files[0];
+    delete file.frontmatter;
+    expect(() => gate('reporter')).toThrow();
+  });
   it('rejects any change to the exact five-slot campaign policy rather than accepting larger allowances', () => {
     const parameters = state.replies.get('workdays show')!.run.parameters;
     for (const key of ['maximumConcurrency', 'communicationConcurrency']) {

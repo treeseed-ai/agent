@@ -1,9 +1,27 @@
 import { existsSync, readFileSync } from 'node:fs';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { parse as parseYaml } from 'yaml';
 import { developmentRuntimeSchema } from '@treeseed/sdk/development';
 import { describe, expect, it } from 'vitest';
 
 describe('capacity provider development runtime', () => {
+	it('does not retain the unused fixture Git link or its external submodule declaration', () => {
+		const entries = execFileSync('git', ['ls-files', '--stage', '-z'], { encoding: 'utf8' }).split('\0').filter(Boolean);
+		expect(entries.filter(entry => entry.endsWith('\t.fixtures/treeseed-fixtures'))).toEqual([]);
+		expect(existsSync('.gitmodules') ? readFileSync('.gitmodules', 'utf8') : '').not.toContain('.fixtures/treeseed-fixtures');
+	});
+	it('exposes readable owned Git source bytes to an independent native process', () => {
+		const result = spawnSync(process.execPath, ['--input-type=module', '-e', `
+			import { execFileSync } from 'node:child_process';
+			import { readFileSync } from 'node:fs';
+			const files = execFileSync('git', ['ls-files', '-z'], {encoding:'utf8'}).split('\\0').filter(Boolean);
+			for (const file of files) readFileSync(file);
+			console.log(JSON.stringify({files: files.length}));
+		`], { encoding: 'utf8', timeout: 5_000 });
+		expect(result.error).toBeUndefined();
+		expect(result.status, result.stderr).toBe(0);
+		expect(JSON.parse(result.stdout).files).toBeGreaterThan(0);
+	});
 	it('declares the mandatory TreeDX provider service once with explicit manual lifecycle', () => {
 		const manifest = parseYaml(readFileSync('treeseed.package.yaml', 'utf8')) as { development: unknown };
 		const runtime = developmentRuntimeSchema.parse(manifest.development);

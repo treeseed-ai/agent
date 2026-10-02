@@ -3,6 +3,12 @@ id: agent.golden.component-boundaries
 title: Golden execution component boundaries
 scope: local-component-tests
 workflow:
+  - id: provider-source-fixture-link
+    action: { verifier: agent.golden.provider-source-fixture-link }
+    expect: { status: passed }
+  - id: provider-source-readable
+    action: { verifier: agent.golden.provider-source-readable }
+    expect: { status: passed }
   - id: provider-treedx-declaration
     action: { verifier: agent.golden.provider-treedx-declaration }
     expect: { status: passed }

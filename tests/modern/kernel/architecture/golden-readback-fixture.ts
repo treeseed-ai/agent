@@ -21,8 +21,16 @@ export const workdayId = 'workday-test';
 export const commit = 'a'.repeat(40);
 export const gate = (name: string) => state.cases.get(`Golden runtime ${name} evidence satisfies its acceptance boundary`)!();
 export function assignment(id: string, activity: string, agentClass: string, workItemId = '', createdAt = '2026-09-27T00:00:01Z', completedAt = '2026-09-27T00:00:02Z'): Row {
+	// Complete grant/workspace assertion input, not a real compiled profile or admission receipt.
+	const git = activity === 'acting', tools = git ? ['source.read', 'source.write', 'verification'] : ['source.read', 'verification'];
+	const writable = { store: 'treedx', model: 'decision', id: `decision-${id}`, repository: 'sdk-library', commit,
+		path: `decisions/${id}.mdx` };
 	return { id, workDayId: workdayId, projectId: 'sdk', decisionId: 'decision-1', status: 'completed', leaseToken: null,
-		createdAt, completedAt, assignmentAttempt: { agentClass, workItemId, effectiveProfile: { activity },
+		createdAt, completedAt, assignmentAttempt: { agentClass, workItemId, effectiveProfile: { activity,
+			permissionCeiling: { content: { read: ['proposal', 'decision'], write: git ? [] : ['decision'] }, tools: [...tools] } },
+			grant: { contentRead: [], contentWrite: git ? [] : [writable], sourceRead: ['sdk'], sourceWrite: git ? ['sdk'] : [], tools: [...tools] },
+			contextRefs: [], workspace: git ? { mode: 'git', repository: 'sdk', baseCommit: commit, branch: `simulation/fixture/${id}`, writablePaths: ['src'] }
+				: { mode: 'treedx', repository: 'sdk-library', baseCommit: commit, workspaceId: `workspace-${id}`, writablePaths: [writable.path] },
 			estimate: { expectedSeconds: 300, maximumSeconds: 600 }, limits: { maximumSeconds: 10 } },
 		capacityEnvelope: { requestedSeconds: 10, reservedSeconds: 10, budget: { time: { executionStartedAt: createdAt, closeoutStartedAt: completedAt } } },
 		explanation: { metadata: { allocation: { admitted: true, allocatedSeconds: 10, desiredSeconds: 600, limitingConstraint: 'shared-model',

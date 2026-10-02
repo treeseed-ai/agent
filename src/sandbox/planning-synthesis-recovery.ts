@@ -1,13 +1,13 @@
 import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { validateActivityCompletion } from '../activity-completion.ts';
-import { assertPredecessorSynthesis, codexProjectInstructionArguments, codexReasoningArguments,
-	missingPredecessorCitations, planningSynthesisCorrectionPrompt, record } from './guest-contract.ts';
+import { codexProjectInstructionArguments, codexReasoningArguments, record } from './guest-contract.ts';
+import { assertPredecessorSynthesis, missingPredecessorCitations, planningSynthesisCorrectionPrompt } from '../kernel/handlers/planning-synthesis.ts';
 import { run } from './process-runner.ts';
 
 type Event = Record<string, unknown>;
 
-/** Repair only a missing citation, in the original Codex session and active-time budget. */
+/** Correct the full contribution contract in the original session and active-time budget. */
 export async function recoverPlanningSynthesis(input: {
 	context: Event;
 	activity: string;
@@ -29,10 +29,15 @@ export async function recoverPlanningSynthesis(input: {
 	if (!firstResponse) return false;
 	const first = validateActivityCompletion(JSON.parse(firstResponse), input.allowVerification);
 	const missing = missingPredecessorCitations(input.context, first);
+	try { assertPredecessorSynthesis(input.context, first); return false; }
+	catch (error) {
+		if (!(error instanceof Error) || !/^predecessor_result_citation_(?:missing|order_invalid)/u.test(error.message)) throw error;
+	}
 	const remainingMs = input.remainingMs();
-	if (!missing.length || remainingMs < 30_000) return false;
+	if (remainingMs < 30_000) return false;
 	const predecessors = record(input.context.canonicalAssignmentContext).predecessorResults;
-	const prompt = planningSynthesisCorrectionPrompt(missing, first, Array.isArray(predecessors) ? predecessors : []);
+	const evidence = Array.isArray(predecessors) ? predecessors : [];
+	const prompt = planningSynthesisCorrectionPrompt(missing.length ? missing : evidence.map(item => String(record(item).id)), first, evidence);
 	await input.progress('provider.planning-synthesis-recovery.starting');
 	const events: Event[] = [];
 	await input.execute('/usr/local/bin/codex', ['exec', 'resume', input.threadId, '--json', '--dangerously-bypass-approvals-and-sandbox',

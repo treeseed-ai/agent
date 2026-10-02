@@ -6,7 +6,8 @@ import { join } from 'node:path';
 import { executeAssignmentTreeDxTool } from '../../../src/provider/execution/microvm-executor.ts';
 import { providerExecutionProgress } from '../../../src/sandbox/guest.ts';
 import { codexThreadId, codexTreeDxMcpConfig, completedTimeStatusChecks, prepareNodeWorkspace, providerEventShapeSummary, providerResourceAbort, providerResponsePreview, requiresNodeDependencyRestore, timingAwarenessContract, timingRecoveryEligible, treeDxToolDefinitions, verifyReportedActivityCommands } from '../../../src/sandbox/guest.ts';
-import { assertArchitectSourceCitation, assertPredecessorSynthesis, assertReplayableVerificationCommand, assertTesterFailureEvidence, attachObservedTesterFailures, correctObservedTestFirstRedVerification, omitUnreplayableVerification, codexInteractiveTimeoutMs, codexProjectInstructionArguments, codexReasoningArguments, completionFrontmatterSchema, completionOutputTargetVariants, promptFromContext, requiresActivityCompletion } from '../../../src/sandbox/guest-contract.ts';
+import { assertArchitectSourceCitation, assertReplayableVerificationCommand, assertTesterFailureEvidence, attachObservedTesterFailures, correctObservedTestFirstRedVerification, omitUnreplayableVerification, codexInteractiveTimeoutMs, codexProjectInstructionArguments, codexReasoningArguments, completionFrontmatterSchema, completionOutputTargetVariants, promptFromContext, requiresActivityCompletion } from '../../../src/sandbox/guest-contract.ts';
+import { assertPredecessorSynthesis } from '../../../src/kernel/handlers/planning-synthesis.ts';
 import { activityCompletionOutputSchema } from '../../../src/activity-completion.ts';
 import { activityAllowsVerification } from '../../../src/sandbox/guest-contract.ts';
 
@@ -394,7 +395,7 @@ describe('Codex chat executor', () => {
 			predecessorResults: [{ id: 'result-a' }, { id: 'result-b' }] } };
 		const prompt = promptFromContext(context);
 		expect(prompt).toContain('cite every predecessor result by its exact ID');
-		expect(prompt).toContain('result-a, result-b');
+		expect(prompt).toContain('Write the material contribution actually incorporated after each line start');
 		expect(prompt).toContain('Before your final clock check, compare the summary against this entire ID list');
 		expect(prompt).toContain('Required line starts:\n- result-a: \n- result-b: ');
 		expect(prompt).toContain('Return contentOutput: null');

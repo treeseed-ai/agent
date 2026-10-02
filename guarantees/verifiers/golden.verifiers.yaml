@@ -1,6 +1,46 @@
 schemaVersion: treeseed.guarantee-verifiers/v1
 ownerPackage: "@treeseed/agent"
 verifiers:
+  agent.golden.planning-recovery-shared-contract:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/sandbox/planning-recovery-contract.test.ts
+    testName: "gives generation and recovery the identical complete ordered contribution format for arbitrary YAML agent identities"
+  agent.golden.planning-recovery-full-evidence:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/sandbox/planning-recovery-contract.test.ts
+    testName: "supplies all predecessor evidence during correction so existing contributions cannot be discarded"
+  agent.golden.planning-recovery-yaml-identity:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/sandbox/planning-recovery-contract.test.ts
+    testName: "keeps synthesis generation and validation independent of agent identity and predecessor count"
+  agent.golden.planning-recovery-safe-diagnostics:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/sandbox/planning-recovery-contract.test.ts
+    testName: "retains safe line-layout diagnostics on citation failure without including model prose"
+  agent.golden.planning-recovery-process-em:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/sandbox/planning-recovery-process.test.ts
+    testName: "recovers the EM seven-missing-citation shape through real subprocess files clocks and original-budget execution"
+  agent.golden.planning-recovery-process-order:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/sandbox/planning-recovery-process.test.ts
+    testName: "corrects complete but misordered citations through the same bounded real subprocess"
+  agent.golden.planning-recovery-process-literal:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/sandbox/planning-recovery-process.test.ts
+    testName: "rejects literal newline output from a real subprocess without rewriting or fabricating citations"
+  agent.golden.planning-recovery-process-budget:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/sandbox/planning-recovery-process.test.ts
+    testName: "kills a real correction subprocess when the shared original budget shrinks instead of extending it"
   agent.golden.planning-summary-bounded-validation:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

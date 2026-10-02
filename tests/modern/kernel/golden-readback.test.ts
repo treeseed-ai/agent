@@ -73,6 +73,55 @@ beforeEach(() => {
 });
 
 describe('golden read-back assertion regressions (fixtures are not live acceptance)', () => {
+  it('denies absent malformed or duplicate calibration authority in managed admission readback', () => {
+    const item = state.replies.get('assignments list')!.items[0];
+    for (const explanation of [undefined, {}, { metadata: { allocation: {} } }]) {
+      item.explanation = explanation;
+      expect(() => gate('lifecycle')).toThrow('ACCEPTANCE_ALLOCATION');
+    }
+  });
+  it('denies admitted durations that exceed actual receipt constraints or disagree with immutable limits', () => {
+    const item = state.replies.get('assignments list')!.items[0];
+    item.assignmentAttempt.estimate = { expectedSeconds: 300, maximumSeconds: 600 };
+    item.assignmentAttempt.limits = { maximumSeconds: 10 };
+    item.capacityEnvelope.requestedSeconds = 10; item.capacityEnvelope.reservedSeconds = 10;
+    const receipt = { admitted: true, allocatedSeconds: 10, desiredSeconds: 600, limitingConstraint: 'shared-model',
+      calibration: { seconds: 600, multiplier: 2, measurementIds: [] },
+      constraints: [{ id: 'shared-model', remainingSeconds: 10 }],
+      opportunity: { phase: 'planning', weight: 1, totalEligibleWeight: 1, availableSeconds: 10, shareSeconds: 10,
+        committedSeconds: 0, planningCommittedSeconds: 0, remainingSupplySeconds: 10 } };
+    for (const mutate of [
+      (value: Row) => { value.allocatedSeconds = 11; },
+      (value: Row) => { value.constraints = []; },
+      (value: Row) => { value.constraints[0].remainingSeconds = '10'; },
+      (value: Row) => { value.constraints[0].remainingSeconds = Number.POSITIVE_INFINITY; },
+      (value: Row) => { value.admitted = false; },
+    ]) {
+      const changed = structuredClone(receipt); mutate(changed);
+      item.explanation = { metadata: { allocation: changed } };
+      expect(() => gate('lifecycle')).toThrow('ACCEPTANCE_ALLOCATION');
+    }
+  });
+  it('requires cold start maximums unchanged estimates and unique bounded calibration sample authority', () => {
+    const item = state.replies.get('assignments list')!.items[0];
+    item.assignmentAttempt.estimate = { expectedSeconds: 300, maximumSeconds: 600 };
+    item.assignmentAttempt.limits = { maximumSeconds: 10 };
+    const receipt = { admitted: true, allocatedSeconds: 10, desiredSeconds: 600, calibration: { seconds: 600, multiplier: 2, measurementIds: [] },
+      constraints: [{ id: 'shared-model', remainingSeconds: 10 }], opportunity: { phase: 'planning', weight: 1,
+        totalEligibleWeight: 1, availableSeconds: 10, shareSeconds: 10, committedSeconds: 0,
+        planningCommittedSeconds: 0, remainingSupplySeconds: 10 } };
+    for (const mutate of [
+      (value: Row) => { value.calibration.multiplier = Number.NaN; },
+      (value: Row) => { value.calibration.measurementIds = ['same', 'same']; },
+      (value: Row) => { value.calibration.measurementIds = Array.from({ length: 21 }, (_, index) => `sample-${index}`); },
+      (value: Row) => { value.calibration.measurementIds = ['']; },
+      (value: Row) => { value.desiredSeconds = 500; value.calibration.seconds = 500; value.calibration.multiplier = 5 / 3; },
+    ]) {
+      const changed = structuredClone(receipt); mutate(changed);
+      item.explanation = { metadata: { allocation: changed } };
+      expect(() => gate('lifecycle')).toThrow('ACCEPTANCE_ALLOCATION');
+    }
+  });
   it('rejects moved missing or foreign report readback even when its body names the workday', () => {
     const observed = state.replies.get('library read')!.result;
     for (const mutate of [

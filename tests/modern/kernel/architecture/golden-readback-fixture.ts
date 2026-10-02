@@ -89,7 +89,7 @@ beforeEach(() => {
 	state.replies.set('library read decisions/decision-1.mdx', { result: { resolvedRef: commit, files: [{ path: 'decisions/decision-1.mdx', frontmatter: {
 		schemaVersion: 'treeseed.decision/v1', id: 'decision-1', projectId: 'sdk', decisionClass: 'proposal', decisionMethod: 'authority',
 		subjectRef: structuredClone(nodes[0]!.sourceRef), disposition: 'approved', rationale: 'Synthetic complete Decision input, not live evidence.',
-		authorityRefs: [structuredClone(nodes[0]!.sourceRef)], decidedByRefs: [{ store: 'treedx', model: 'agent', id: 'external-operator', revision: 1, digest: `sha256:${'d'.repeat(64)}` }],
+		authorityRefs: [structuredClone(nodes[0]!.sourceRef)], decidedByRefs: [{ store: 'postgresql', model: 'user', id: 'fixture-external-operator' }],
 		decidedAt: '2026-09-26T23:59:00Z' } }] } });
 	state.replies.set('capacity usage', { items: items.map(item => ({ id: `${item.id}:aggregate`, assignmentId: item.id,
 		metadata: { settlementKey: item.id } })), page: { hasMore: false } });

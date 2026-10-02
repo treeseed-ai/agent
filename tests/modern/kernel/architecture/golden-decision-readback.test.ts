@@ -55,6 +55,10 @@ describe('managed Decision content verifier units (synthetic input, not live acc
 		for (const item of state.replies.get('assignments list')!.items) item.decisionId = 'other-selection';
 		expect(() => gate('graph')).toThrow(/ACCEPTANCE_PAIR_DECISION/u);
 	});
+	it('denies agent-authored approval of the golden proposal instead of external operator authority', () => {
+		observed().files[0].frontmatter.decidedByRefs = [{ store: 'treedx', model: 'agent', id: 'planning-agent', revision: 1, digest: `sha256:${'d'.repeat(64)}` }];
+		expect(() => gate('graph')).toThrow(/ACCEPTANCE_DECISION_OPERATOR/u);
+	});
 	it('denies missing or unapproved governed final review content even when lifecycle output says approved', () => {
 		const returned = state.replies.get('library read decisions/approved-revision.mdx')!.result;
 		const original = structuredClone(returned);

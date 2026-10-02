@@ -9,7 +9,7 @@ vi.mock('node:child_process', () => ({ execFileSync: (_command: string, args: st
 	state.args = args;
 	if (state.failure) throw state.failure;
 	const key = args.slice(0, 2).join(' ');
-	const result = state.replies.get(key === 'library read' && args[3]?.startsWith('decisions/') ? `${key} ${args[3]}` : key);
+	const result = state.replies.get(`${key} ${args[3]}`) ?? state.replies.get(key);
 	if (!result) throw new Error(`Unexpected acceptance read: ${key}`);
 	return JSON.stringify({ ok: true, result });
 } }));
@@ -106,4 +106,40 @@ beforeEach(() => {
 		metadata: { settlementKey: item.id } })), page: { hasMore: false } });
 	state.replies.set('library read', { result: { resolvedRef: commit, files: [{ path: reportRef.path, body: `${workdayId} actor-0`, frontmatter: {
 		schemaVersion: 'treeseed.note/v1', classification: 'workday-report', projectId: 'sdk', subjectRefs: [structuredClone(reporter.assignmentAttempt.sourceRef)] } }] } });
+	// Complete planning oracle input only; these mocked reads are NOT published live evidence.
+	const rounds = state.replies.get('workdays show')!.run.parameters.appliedPlan.planningRounds;
+	const source = { store: 'treedx', model: 'proposal', id: 'proposal', repository: 'sdk-library', commit,
+		path: 'proposals/proposal.mdx', revision: 8, digest: `sha256:${'b'.repeat(64)}` };
+	for (const [index, round] of rounds.entries()) {
+		const selected = items.filter(item => item.id.startsWith(`planning-${index + 1}-`));
+		const previous = index ? items.filter(item => item.id.startsWith(`planning-${index}-`)) : [];
+		Object.assign(round, { round: index + 1, assignmentIds: selected.map(item => item.id),
+			startedAt: index ? '2026-09-27T00:00:03Z' : '2026-09-27T00:00:01Z',
+			completedAt: index ? '2026-09-27T00:00:04Z' : '2026-09-27T00:00:02Z' });
+		for (const item of selected) {
+			item.executionNodeId = item.id; item.executionNodeRevision = 1;
+			item.createdAt = round.startedAt; item.completedAt = round.completedAt;
+			Object.assign(item.assignmentAttempt, { nodeId: item.id, nodeRevision: 1, sourceRef: structuredClone(source),
+				predecessorResultIds: previous.map(value => value.assignmentResult.id) });
+			const path = `notes/${item.id}.mdx`, id = `note-${item.id}`;
+			const output = { store: 'treedx', model: 'note', id, repository: 'sdk-library', commit, path };
+			const context = [source, ...previous.map(value => ({ store: 'treedx', model: 'note', id: `note-${value.id}`,
+				...value.assignmentResult.references[0], kind: undefined, projectId: undefined }))]
+				.map(value => Object.fromEntries(Object.entries(value).filter(([, entry]) => entry !== undefined)));
+			item.assignmentAttempt.contextRefs = structuredClone(context);
+			item.assignmentAttempt.grant.contentRead = structuredClone(context);
+			item.assignmentAttempt.grant.contentWrite = [output];
+			item.assignmentAttempt.workspace.writablePaths = [path];
+			item.assignmentAttempt.effectiveProfile.permissionCeiling.content = { read: ['proposal', 'note'], write: ['note'] };
+			const body = previous.map(value => `- ${value.assignmentResult.id}: Incorporated the ${value.assignmentAttempt.agentClass} contribution.`)
+				.concat([`Scoped ${item.assignmentAttempt.agentClass} recommendation; unchanged recommendation unless stated here.`]).join('\n');
+			Object.assign(item.assignmentResult, { summary: body, completedAt: item.completedAt,
+				references: [{ kind: 'treedx', projectId: 'sdk', repository: 'sdk-library', commit, path }] });
+			item.capacityEnvelope.budget.time.executionStartedAt = item.createdAt;
+			item.capacityEnvelope.budget.time.closeoutStartedAt = item.completedAt;
+			state.replies.set(`library read ${path}`, { result: { resolvedRef: commit, files: [{ path, body, frontmatter: {
+				schemaVersion: 'treeseed.note/v1', id, projectId: 'sdk', classification: 'general',
+				subjectRefs: [structuredClone(source)], body, createdAt: item.completedAt } }] } });
+		}
+	}
 });

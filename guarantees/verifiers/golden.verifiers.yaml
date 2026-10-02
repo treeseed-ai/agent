@@ -1,6 +1,46 @@
 schemaVersion: treeseed.guarantee-verifiers/v1
 ownerPackage: "@treeseed/agent"
 verifiers:
+  agent.golden.architecture-planning-verifier-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/golden-planning-readback.test.ts
+    testName: "accepts complete dependency-ordered cycles and exact published contributions without input mutation"
+  agent.golden.architecture-planning-verifier-2:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/golden-planning-readback.test.ts
+    testName: "denies complete round labels without exact unique planning node membership"
+  agent.golden.architecture-planning-verifier-3:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/golden-planning-readback.test.ts
+    testName: "denies reused attempts and malformed or overlapping planning round clocks"
+  agent.golden.architecture-planning-verifier-4:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/golden-planning-readback.test.ts
+    testName: "denies missing duplicate foreign or future predecessor result authority"
+  agent.golden.architecture-planning-verifier-5:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/golden-planning-readback.test.ts
+    testName: "denies changed source context and later turns started before predecessor publication"
+  agent.golden.architecture-planning-verifier-6:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/golden-planning-readback.test.ts
+    testName: "denies empty identifier-only or omitted material contributions in published synthesis"
+  agent.golden.architecture-planning-verifier-7:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/golden-planning-readback.test.ts
+    testName: "denies absent moving or wrong-path native content readback despite valid summary and result refs"
+  agent.golden.architecture-planning-verifier-8:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/golden-planning-readback.test.ts
+    testName: "denies wrong assignment results and content outside the immutable contribution grant"
   agent.golden.architecture-grant-verifier-1:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

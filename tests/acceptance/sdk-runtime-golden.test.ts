@@ -3,6 +3,7 @@ import test from 'node:test';
 import { assignmentReferenceSchema, assignmentTimingAwarenessReceiptSchema, estimateSchema, exactEntityReferenceSchema } from '@treeseed/sdk/agent-capacity';
 import { read, row, type Row } from './acceptance-cli.ts';
 import { readDecisionContent, verifyDecisionContent } from './workday/decision-evidence.ts';
+import { verifyAssignmentAuthority } from './workday/assignment-authority.ts';
 
 const rows = (value: unknown): Row[] => Array.isArray(value) ? value.map(row) : [];
 const text = (value: unknown): string => typeof value === 'string' ? value : '';
@@ -98,6 +99,7 @@ export function verifyGolden(gate: Gate): void {
 	}
 	assert.equal(run.executionMode, 'simulation', 'Every gate requires authoritative simulation custody');
 	const assignments = readWorkdayAssignments(workdayId, text(run.startedAt), team);
+	if (['lifecycle', 'graph', 'revision', 'results', 'reporter'].includes(gate)) for (const item of assignments) verifyAssignmentAuthority(item);
 	let cursor: string | undefined;
 	if (gate === 'lifecycle') for (const item of assignments) {
 		verifyAllocation(item);

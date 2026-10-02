@@ -27,6 +27,9 @@ export function assignment(id: string, activity: string, agentClass: string, wor
 		path: `decisions/${id}.mdx` };
 	return { id, workDayId: workdayId, projectId: 'sdk', decisionId: 'decision-1', status: 'completed', leaseToken: null,
 		createdAt, completedAt, assignmentAttempt: { agentClass, workItemId, effectiveProfile: { activity,
+			profileRef: { store: 'treedx', model: 'agent', id: `configured-${agentClass}`, repository: 'sdk-library', commit,
+				path: `agents/${agentClass}.yaml` }, handler: git ? 'actor' : activity === 'reporting' ? 'reporter' : 'writer',
+			handlerOrigin: 'agent-package', prompt: { system: 'Synthetic governed task instructions for assertion testing only.' },
 			permissionCeiling: { content: { read: ['proposal', 'decision'], write: git ? [] : ['decision'] }, tools: [...tools] } },
 			grant: { contentRead: [], contentWrite: git ? [] : [writable], sourceRead: ['sdk'], sourceWrite: git ? ['sdk'] : [], tools: [...tools] },
 			contextRefs: [], workspace: git ? { mode: 'git', repository: 'sdk', baseCommit: commit, branch: `simulation/fixture/${id}`, writablePaths: ['src'] }

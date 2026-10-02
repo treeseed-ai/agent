@@ -1,6 +1,41 @@
 schemaVersion: treeseed.guarantee-verifiers/v1
 ownerPackage: "@treeseed/agent"
 verifiers:
+  agent.golden.architecture-grant-verifier-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/golden-grant-readback.test.ts
+    testName: "accepts a complete narrower grant and one workspace without changing readback inputs"
+  agent.golden.architecture-grant-verifier-2:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/golden-grant-readback.test.ts
+    testName: "denies a profile ceiling substituted for a missing exact grant"
+  agent.golden.architecture-grant-verifier-3:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/golden-grant-readback.test.ts
+    testName: "denies tools and content models outside the frozen profile ceiling"
+  agent.golden.architecture-grant-verifier-4:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/golden-grant-readback.test.ts
+    testName: "denies two mutable custody systems or writes in a read-only workspace"
+  agent.golden.architecture-grant-verifier-5:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/golden-grant-readback.test.ts
+    testName: "denies unpinned or out-of-workspace mutable TreeDX authority"
+  agent.golden.architecture-grant-verifier-6:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/golden-grant-readback.test.ts
+    testName: "denies Git repository authority outside the sole mutable workspace"
+  agent.golden.architecture-grant-verifier-7:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/golden-grant-readback.test.ts
+    testName: "denies context without an exact content grant or declared source read authority"
   agent.golden.architecture-decision-verifier-operator:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

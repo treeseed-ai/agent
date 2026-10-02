@@ -4,6 +4,7 @@ import { assignmentReferenceSchema, assignmentTimingAwarenessReceiptSchema, esti
 import { read, row, type Row } from './acceptance-cli.ts';
 import { readDecisionContent, verifyDecisionContent } from './workday/decision-evidence.ts';
 import { verifyAssignmentAuthority } from './workday/assignment-authority.ts';
+import { verifyPlanningEvidence } from './workday/planning-evidence.ts';
 
 const rows = (value: unknown): Row[] => Array.isArray(value) ? value.map(row) : [];
 const text = (value: unknown): string => typeof value === 'string' ? value : '';
@@ -144,6 +145,7 @@ export function verifyGolden(gate: Gate): void {
 		&& row(item.assignmentAttempt).agentClass === agentClass).length >= 2, `ACCEPTANCE_PLANNING_ROLE_TURNS: Two planning turns required for ${agentClass}`);
 	const rounds = rows(row(parameters.appliedPlan).planningRounds).filter(round => round.state === 'complete');
 	assert.ok(rounds.length >= 2, 'ACCEPTANCE_PLANNING_CYCLES: Two completed graph planning cycles are required, not merely sixteen assignments');
+	verifyPlanningEvidence(rounds, completed, classes, run, team);
 	assert.deepEqual([...new Set(completed.filter(item => activity(item) === 'estimating').map(item => row(item.assignmentAttempt).agentClass))].sort(),
 		classes.filter(value => value !== 'reporter').sort(), 'ACCEPTANCE_ESTIMATE_ROLES: Exact seven selected estimating contributors must complete');
 	}

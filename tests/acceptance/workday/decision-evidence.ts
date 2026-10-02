@@ -3,7 +3,7 @@ import { exactEntityReferenceSchema } from '@treeseed/sdk/agent-capacity';
 import { validatePortableContentData } from '@treeseed/sdk/content-validation';
 import { read, row, type Row } from '../acceptance-cli.ts';
 
-export function readDecisionContent(reference: Row, projectId: string, team: string, cache: Map<string, Row>, code: string): Row {
+export function readGovernedContentFile(reference: Row, projectId: string, team: string, cache: Map<string, Row>, code: string): Row {
 	assert.ok(reference.repository && reference.path && reference.commit, `${code}_SOURCE: Native exact content readback required`);
 	const key = JSON.stringify([reference.repository, reference.commit, reference.path]);
 	let content = cache.get(key);
@@ -12,9 +12,13 @@ export function readDecisionContent(reference: Row, projectId: string, team: str
 		const observed = row(returned.result ?? returned);
 		const file = Array.isArray(observed.files) ? observed.files.map(row).find(item => item.path === reference.path) : undefined;
 		assert.ok(observed.resolvedRef === reference.commit && file, `${code}_READBACK: Exact returned commit and path required`);
-		content = row(file.frontmatter); cache.set(key, content);
+		content = file; cache.set(key, content);
 	}
 	return content;
+}
+
+export function readDecisionContent(reference: Row, projectId: string, team: string, cache: Map<string, Row>, code: string): Row {
+	return row(readGovernedContentFile(reference, projectId, team, cache, code).frontmatter);
 }
 
 export function verifyDecisionContent(content: Row, projectId: string, code: string): Row {

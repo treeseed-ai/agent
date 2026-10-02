@@ -3,6 +3,36 @@ id: agent.golden.component-boundaries
 title: Golden execution component boundaries
 scope: local-component-tests
 workflow:
+  - id: architecture-profile-rename
+    action: { verifier: agent.golden.architecture-profile-rename }
+    expect: { status: passed }
+  - id: architecture-profile-yaml-prompt
+    action: { verifier: agent.golden.architecture-profile-yaml-prompt }
+    expect: { status: passed }
+  - id: architecture-grant-output-rename
+    action: { verifier: agent.golden.architecture-grant-output-rename }
+    expect: { status: passed }
+  - id: architecture-explicit-integration
+    action: { verifier: agent.golden.architecture-explicit-integration }
+    expect: { status: passed }
+  - id: architecture-retired-profile-fields
+    action: { verifier: agent.golden.architecture-retired-profile-fields }
+    expect: { status: passed }
+  - id: architecture-configured-admission
+    action: { verifier: agent.golden.architecture-configured-admission }
+    expect: { status: passed }
+  - id: architecture-generic-closure
+    action: { verifier: agent.golden.architecture-generic-closure }
+    expect: { status: passed }
+  - id: architecture-native-yaml-context
+    action: { verifier: agent.golden.architecture-native-yaml-context }
+    expect: { status: passed }
+  - id: architecture-immutable-grant
+    action: { verifier: agent.golden.architecture-immutable-grant }
+    expect: { status: passed }
+  - id: architecture-writer-rename
+    action: { verifier: agent.golden.architecture-writer-rename }
+    expect: { status: passed }
   - id: provider-source-fixture-link
     action: { verifier: agent.golden.provider-source-fixture-link }
     expect: { status: passed }

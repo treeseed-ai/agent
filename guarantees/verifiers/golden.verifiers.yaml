@@ -1,6 +1,56 @@
 schemaVersion: treeseed.guarantee-verifiers/v1
 ownerPackage: "@treeseed/agent"
 verifiers:
+  agent.golden.architecture-profile-rename:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/architecture/profile-portability.test.ts
+    testName: "keeps shared guest behavior identical when only the configured agent class is renamed"
+  agent.golden.architecture-profile-yaml-prompt:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/architecture/profile-portability.test.ts
+    testName: "takes task instruction changes solely from the parsed governed YAML profile"
+  agent.golden.architecture-grant-output-rename:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/architecture/profile-portability.test.ts
+    testName: "derives the same exact output targets and schema from grants after an agent rename"
+  agent.golden.architecture-explicit-integration:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/architecture/profile-portability.test.ts
+    testName: "does not direct ordinary acting work to integrate multiple predecessor commits implicitly"
+  agent.golden.architecture-retired-profile-fields:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/architecture/profile-portability.test.ts
+    testName: "rejects every retired profile authority field rather than retaining a compatibility path"
+  agent.golden.architecture-configured-admission:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/architecture/handler-boundaries.test.ts
+    testName: "executes arbitrary YAML-selected deterministic handlers with ordinary execution admission"
+  agent.golden.architecture-generic-closure:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/architecture/handler-boundaries.test.ts
+    testName: "closes a no-sandbox deterministic assignment without special-casing the Reporter handler name"
+  agent.golden.architecture-native-yaml-context:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/architecture/handler-boundaries.test.ts
+    testName: "preserves exact YAML prompts parameters and authorized context through a native configured handler"
+  agent.golden.architecture-immutable-grant:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/architecture/handler-boundaries.test.ts
+    testName: "denies a handler attempting to widen its immutable grant before a real Git publication"
+  agent.golden.architecture-writer-rename:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/architecture/handler-boundaries.test.ts
+    testName: "uses the same Writer behavior after a class rename rather than imposing Architect task semantics"
   agent.golden.provider-source-fixture-link:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

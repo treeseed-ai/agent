@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { assignmentReferenceSchema, assignmentTimingAwarenessReceiptSchema, estimateSchema } from '@treeseed/sdk/agent-capacity';
+import { assignmentReferenceSchema, assignmentTimingAwarenessReceiptSchema, estimateSchema, exactEntityReferenceSchema } from '@treeseed/sdk/agent-capacity';
 import { read, row, type Row } from './acceptance-cli.ts';
 
 const rows = (value: unknown): Row[] => Array.isArray(value) ? value.map(row) : [];
@@ -174,6 +174,16 @@ export function verifyGolden(gate: Gate): void {
 			'ACCEPTANCE_PAIR_CUSTODY: Every node requires its latest exact completed attempt');
 		assert.ok(Object.keys(row(node.sourceRef)).length > 0 && rows(node.authorityRefs).length > 0,
 			'ACCEPTANCE_PAIR_AUTHORITY: Exact proposal and decision authorities are required');
+		const source = exactEntityReferenceSchema.safeParse(node.sourceRef);
+		assert.ok(source.success && source.data.store === 'treedx' && source.data.model === 'proposal',
+			'ACCEPTANCE_PAIR_SOURCE: Governed exact proposal content is required, not a moving or operational substitute');
+		let governedDecision = false;
+		for (const value of rows(node.authorityRefs)) {
+			const authority = exactEntityReferenceSchema.safeParse(value);
+			assert.ok(authority.success, 'ACCEPTANCE_PAIR_AUTHORITY: Every authority must be an exact typed reference');
+			governedDecision ||= authority.data.store === 'treedx' && authority.data.model === 'decision';
+		}
+		assert.ok(governedDecision, 'ACCEPTANCE_PAIR_DECISION: Exact governed Decision content is required');
 		assert.deepEqual(attempt.sourceRef, node.sourceRef, 'ACCEPTANCE_PAIR_SOURCE: Retired source authority drifted');
 		assert.deepEqual(attempt.authorityRefs, node.authorityRefs, 'ACCEPTANCE_PAIR_DECISION: Retired decision authority drifted');
 		if (node.pairRole === 'reviewer') {

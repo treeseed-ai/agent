@@ -98,6 +98,12 @@ describe('golden read-back assertion regressions (fixtures are not live acceptan
         { sourceRef: structuredClone(nodes[0].sourceRef), authorityRefs: structuredClone(nodes[0].authorityRefs) });
       expect(() => gate('graph')).toThrow('ACCEPTANCE_PAIR');
     }
+    nodes[0] = structuredClone(original);
+    nodes[0].authorityRefs.push({ store: 'treedx', model: 'agent', id: 'governed-profile', revision: 1,
+      digest: `sha256:${'d'.repeat(64)}`, repository: 'sdk-library', commit, path: 'agents/governed-profile.mdx' });
+    for (const item of assignments) Object.assign(item.assignmentAttempt,
+      { sourceRef: structuredClone(nodes[0].sourceRef), authorityRefs: structuredClone(nodes[0].authorityRefs) });
+    expect(() => gate('graph')).not.toThrow();
   });
   it('denies absent malformed or duplicate calibration authority in managed admission readback', () => {
     const item = state.replies.get('assignments list')!.items[0];

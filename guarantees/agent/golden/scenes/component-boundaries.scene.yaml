@@ -3,6 +3,9 @@ id: agent.golden.component-boundaries
 title: Golden execution component boundaries
 scope: local-component-tests
 workflow:
+  - id: architecture-proposal-decision-authority
+    action: { verifier: agent.golden.architecture-proposal-decision-authority }
+    expect: { status: passed }
   - id: architecture-allocation-receipt
     action: { verifier: agent.golden.architecture-allocation-receipt }
     expect: { status: passed }

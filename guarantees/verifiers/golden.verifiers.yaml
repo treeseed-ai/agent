@@ -1,6 +1,46 @@
 schemaVersion: treeseed.guarantee-verifiers/v1
 ownerPackage: "@treeseed/agent"
 verifiers:
+  agent.golden.provider-source-fixture-link:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/development-runtime.test.ts
+    testName: "does not retain the unused fixture Git link or its external submodule declaration"
+  agent.golden.provider-source-readable:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/development-runtime.test.ts
+    testName: "exposes readable owned Git source bytes to an independent native process"
+  agent.golden.provider-treedx-declaration:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/development-runtime.test.ts
+    testName: "declares the mandatory TreeDX provider service once with explicit manual lifecycle"
+  agent.golden.provider-treedx-identity:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/development-runtime.test.ts
+    testName: "keeps the mandatory tool dependency independent of provider project identity"
+  agent.golden.sandbox-dependency-scope:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/development-runtime.test.ts
+    testName: "does not impose provider tool services on the sandbox image build"
+  agent.golden.provider-treedx-http-authority:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/assignment-treedx.test.ts
+    testName: "uses the real SDK HTTP boundary with configured identity and exact assignment authority"
+  agent.golden.provider-treedx-http-denial:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/assignment-treedx.test.ts
+    testName: "propagates actual HTTP proxy denial without retrying or fabricating content"
+  agent.golden.provider-treedx-http-preflight:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/assignment-treedx.test.ts
+    testName: "rejects missing handles and unknown operations before any real HTTP side effect"
   agent.golden.synthesis-observation-counts:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

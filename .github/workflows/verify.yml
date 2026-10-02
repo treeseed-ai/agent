@@ -31,7 +31,7 @@ jobs:
           github-token: ${{ github.token }}
       - run: bash -lc 'npm run verify:local'
       - name: Execute coded golden component scenes
-        uses: treeseed-ai/reviewer/.github/actions/run-scenes@e29c5bf2db97188c47fdc67a7a098e81a95ced22
+        uses: treeseed-ai/reviewer/.github/actions/run-scenes@013d38165f0430278ac944592d3b20618736c2d5
         with:
           ids: guarantee.agent.golden.component-boundaries,guarantee.agent.golden.planning-synthesis-recovery
       - name: Pack verified artifact

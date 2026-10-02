@@ -1,9 +1,58 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { createServer, type IncomingMessage } from 'node:http';
+import { once } from 'node:events';
 import { createAssignmentTreeDxFacade } from '../../src/provider/coordination/assignment-treedx.ts';
 
 afterEach(() => vi.unstubAllGlobals());
 
+async function proxyBoundary(status: number, run: (url: string, requests: IncomingMessage[]) => Promise<void>) {
+	const requests: IncomingMessage[] = [];
+	const server = createServer((request, response) => {
+		requests.push(request);
+		response.writeHead(status, { 'content-type': 'application/json' });
+		response.end(JSON.stringify(status === 200 ? { data: { id: 'workspace-http' } } : { error: { message: 'fixture denied' } }));
+	});
+	server.requestTimeout = 2_000;
+	server.listen(0, '127.0.0.1');
+	await once(server, 'listening');
+	const address = server.address();
+	if (!address || typeof address === 'string') throw new Error('HTTP fixture address missing');
+	try { await run(`http://127.0.0.1:${address.port}`, requests); }
+	finally {
+		server.closeAllConnections();
+		await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+	}
+}
+
+const assignedHandle = () => ({ id: 'assignment-http', projectId: 'yaml-project', agentClass: 'custom-yaml-worker',
+	treedxProxyHandle: { id: 'handle-http', token: 'fixture-handle', repositoryId: 'repo-http', workspaceId: 'workspace-http', baseRef: 'a'.repeat(40) } });
+const workspaceInput = (projectId: string) => ({ path: { projectId, workspaceId: 'workspace-http' }, query: {}, body: undefined });
+
 describe('assignment-scoped TreeDX facade', () => {
+	it('uses the real SDK HTTP boundary with configured identity and exact assignment authority', async () => {
+		await proxyBoundary(200, async (url, requests) => {
+			const facade = await createAssignmentTreeDxFacade({ controlPlaneUrl: url, accessToken: 'fixture-provider' }, assignedHandle());
+			expect(await facade.invoke('treedx.workspaces.show', workspaceInput('ungranted-project'), { signal: AbortSignal.timeout(2_000) })).toMatchObject({ data: { id: 'workspace-http' } });
+			expect(requests).toHaveLength(1);
+			expect(requests[0]!.url).toBe('/v1/dx/projects/yaml-project/workspaces/workspace-http');
+			expect(requests[0]!.headers).toMatchObject({ authorization: 'Bearer fixture-provider', 'x-treeseed-assignment-id': 'assignment-http', 'x-treeseed-treedx-proxy-handle-id': 'handle-http', 'x-treeseed-treedx-proxy-handle': 'fixture-handle' });
+		});
+	}, 5_000);
+	it('propagates actual HTTP proxy denial without retrying or fabricating content', async () => {
+		await proxyBoundary(403, async (url, requests) => {
+			const facade = await createAssignmentTreeDxFacade({ controlPlaneUrl: url, accessToken: 'fixture-provider' }, assignedHandle());
+			await expect(facade.invoke('treedx.workspaces.show', workspaceInput('yaml-project'), { signal: AbortSignal.timeout(2_000) })).rejects.toThrow();
+			expect(requests).toHaveLength(1);
+		});
+	}, 5_000);
+	it('rejects missing handles and unknown operations before any real HTTP side effect', async () => {
+		await proxyBoundary(200, async (url, requests) => {
+			await expect(createAssignmentTreeDxFacade({ controlPlaneUrl: url, accessToken: 'fixture-provider' }, { id: 'assignment-http', projectId: 'yaml-project' })).rejects.toThrow('requires an active project-scoped TreeDX proxy handle');
+			const facade = await createAssignmentTreeDxFacade({ controlPlaneUrl: url, accessToken: 'fixture-provider' }, assignedHandle());
+			await expect(facade.invoke('treedx.unknown', {})).rejects.toThrow('not part of the accepted SDK catalog');
+			expect(requests).toEqual([]);
+		});
+	}, 5_000);
 	it('fixes project and proxy-handle authority while invoking only SDK catalog operations', async () => {
 		const fetchImpl = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => new Response(JSON.stringify({ data: { id: 'workspace-1' } }), {
 			status: 200, headers: { 'content-type': 'application/json' },

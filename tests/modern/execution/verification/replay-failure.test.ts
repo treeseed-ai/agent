@@ -14,7 +14,8 @@ it('retains actual runner assertion failures as failed evidence in scoped test-f
 	try {
 		await symlink(resolve('node_modules'), resolve(directory, 'node_modules'), 'dir');
 		await writeFile(resolve(directory, 'example.test.ts'), "import { expect, it } from 'vitest';\nit('rejects duplicate decisions', () => expect([]).toEqual(['decision_selection_invalid']));\n");
-		for (const [agentClass, activity] of [['reviewer', 'reviewing'], ['tester', 'acting']]) {
+		for (const [agentClass, activity] of [['reviewer', 'reviewing'], ['tester', 'acting'],
+			['contract-author', 'acting'], ['independent-inspector', 'reviewing']]) {
 			const result = await observeReportedActivityCommands(report, [],
 				(_executable, _args, options) => run(process.execPath,
 					[resolve('node_modules/vitest/vitest.mjs'), 'run', '--root', directory, '--no-color'], { ...options, cwd: directory }),
@@ -34,7 +35,7 @@ it('retains actual runner assertion failures as failed evidence in scoped test-f
 it('keeps unscoped non-test setup and resource runner failures fail-closed', async () => {
 	const criteria = ['Tester commits failing-on-base SDK tests.'];
 	for (const [agentClass, activity, acceptanceCriteria, command, exitCode, output] of [
-		['engineer', 'acting', criteria, 'npx vitest run tests/unit/example.test.ts', 1, 'FAIL example.test.ts > case\nAssertionError: expected false to be true'],
+		['engineer', 'acting', ['Implementation tests must pass'], 'npx vitest run tests/unit/example.test.ts', 1, 'FAIL example.test.ts > case\nAssertionError: expected false to be true'],
 		['reviewer', 'reviewing', ['Implementation tests must pass'], 'npx vitest run tests/unit/example.test.ts', 1, 'FAIL example.test.ts > case\nAssertionError: expected false to be true'],
 		['reviewer', 'reviewing', criteria, 'node -e "process.exit(1)"', 1, 'FAIL example.test.ts > case\nAssertionError: expected false to be true'],
 		['reviewer', 'reviewing', criteria, 'npx vitest run tests/unit/example.test.ts', 1, 'FAIL example.test.ts [ example.test.ts ]\nCannot find module missing-dependency'],

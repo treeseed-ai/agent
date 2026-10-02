@@ -3,6 +3,33 @@ id: agent.golden.component-boundaries
 title: Golden execution component boundaries
 scope: local-component-tests
 workflow:
+  - id: architecture-immutable-paths
+    action: { verifier: agent.golden.architecture-immutable-paths }
+    expect: { status: passed }
+  - id: architecture-immutable-deadline
+    action: { verifier: agent.golden.architecture-immutable-deadline }
+    expect: { status: passed }
+  - id: architecture-verification-rename
+    action: { verifier: agent.golden.architecture-verification-rename }
+    expect: { status: passed }
+  - id: architecture-failure-evidence-scope
+    action: { verifier: agent.golden.architecture-failure-evidence-scope }
+    expect: { status: passed }
+  - id: architecture-failure-evidence-attachment
+    action: { verifier: agent.golden.architecture-failure-evidence-attachment }
+    expect: { status: passed }
+  - id: architecture-red-status-rename
+    action: { verifier: agent.golden.architecture-red-status-rename }
+    expect: { status: passed }
+  - id: architecture-evidence-input-immutable
+    action: { verifier: agent.golden.architecture-evidence-input-immutable }
+    expect: { status: passed }
+  - id: architecture-evidence-scope-denial
+    action: { verifier: agent.golden.architecture-evidence-scope-denial }
+    expect: { status: passed }
+  - id: architecture-knowledge-task-profile
+    action: { verifier: agent.golden.architecture-knowledge-task-profile }
+    expect: { status: passed }
   - id: architecture-profile-rename
     action: { verifier: agent.golden.architecture-profile-rename }
     expect: { status: passed }

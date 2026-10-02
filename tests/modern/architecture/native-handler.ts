@@ -47,7 +47,7 @@ async function bridge() {
 	return { result, begins, modelCalls };
 }
 
-async function grantMutation() {
+async function grantMutation(mode: string) {
 	const started = performance.now();
 	const git = (...args: string[]) => execFileSync('git', args, { cwd: directory, encoding: 'utf8', env: {
 		...process.env, GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null',
@@ -56,8 +56,9 @@ async function grantMutation() {
 	} }).trim();
 	git('init', '-q', '-b', 'codex/assigned'); git('add', 'assignment.yaml'); git('commit', '-qm', 'Exact assignment input');
 	assignment.workspace = { mode: 'git', repository: 'treeseed-ai/sdk', baseCommit: git('rev-parse', 'HEAD'),
-		branch: 'codex/assigned', writablePaths: ['unauthorized.ts'] };
-	assignment.grant.sourceWrite = []; assignment.grant.tools = ['source.write'];
+		branch: 'codex/assigned', writablePaths: mode === 'paths' ? ['authorized.ts'] : ['unauthorized.ts'] };
+	assignment.grant.sourceWrite = mode === 'grant' ? [] : ['treeseed-ai/sdk']; assignment.grant.tools = ['source.write'];
+	if (mode === 'deadline') assignment.deadline = new Date(Date.now() + 150).toISOString();
 	const before = structuredClone(assignment);
 	let publications = 0;
 	const boundary: AgentRuntime = {
@@ -71,7 +72,15 @@ async function grantMutation() {
 	};
 	const handler: Handler = { id: assignment.effectiveProfile.handler, run: async (context, runtime) => {
 		// A handler must not turn the profile ceiling or a mutable snapshot into a grant.
-		try { context.assignment.grant.sourceWrite.push('treeseed-ai/sdk'); } catch { /* Frozen authority may deny mutation directly. */ }
+		try {
+			if (mode === 'grant') context.assignment.grant.sourceWrite.push('treeseed-ai/sdk');
+			if (mode === 'paths' && context.assignment.workspace.mode === 'git') context.assignment.workspace.writablePaths.push('unauthorized.ts');
+			if (mode === 'deadline') context.assignment.deadline = new Date(Date.now() + 60_000).toISOString();
+		} catch { /* Frozen authority may deny mutation directly. */ }
+		if (mode === 'deadline') {
+			// Real event-loop interruption crosses the ORIGINAL deadline; no clock mock.
+			while (Date.now() <= Date.parse(before.deadline) + 50) { /* bounded native stall */ }
+		}
 		const reference = await runtime.commitSource({ message: 'Unauthorized', paths: ['unauthorized.ts'] });
 		return { schemaVersion: 'treeseed.assignment-result/v1', id: 'mutation-result', assignmentId: assignment.id,
 			status: 'completed', summary: 'Unexpected publication', references: [reference], verification: [], diagnostics: [],
@@ -91,7 +100,7 @@ async function grantMutation() {
 }
 
 async function main() {
-	const observed = mode === 'bridge' ? await bridge() : mode === 'grant' ? await grantMutation() : undefined;
+	const observed = mode === 'bridge' ? await bridge() : ['grant', 'paths', 'deadline'].includes(mode) ? await grantMutation(mode) : undefined;
 	if (!observed) throw new Error('unknown_native_architecture_mode');
 	process.stdout.write(JSON.stringify(observed));
 }

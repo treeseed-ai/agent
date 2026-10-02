@@ -27,7 +27,7 @@ parameters: { style: exact, detail: 3 }
 
 type Observation = { begins?: number; modelCalls?: number; publications?: number; fileExists?: boolean;
 	inputUnchanged?: boolean; error?: string; result?: { status: string; outputs?: Record<string, unknown> } };
-function native(mode: 'bridge' | 'grant', agentClass = 'cartographer'): Observation {
+function native(mode: 'bridge' | 'grant' | 'paths' | 'deadline', agentClass = 'cartographer'): Observation {
 	const root = mkdtempSync(resolve(tmpdir(), 'agent-architecture-native-'));
 	try {
 		const assignment = configuredAssignment(); assignment.agentClass = agentClass;
@@ -72,6 +72,22 @@ it('preserves exact YAML prompts parameters and authorized context through a nat
 it('denies a handler attempting to widen its immutable grant before a real Git publication', () => {
 	const observed = native('grant');
 	expect(observed.error, JSON.stringify(observed)).toBe('assignment_grant_denied:source.path');
+	expect(observed.publications).toBe(0);
+	expect(observed.fileExists).toBe(false);
+	expect(observed.inputUnchanged).toBe(true);
+});
+
+it('denies handler-side writable-path widening before a real Git publication', () => {
+	const observed = native('paths');
+	expect(observed.error, JSON.stringify(observed)).toBe('assignment_grant_denied:source.path');
+	expect(observed.publications).toBe(0);
+	expect(observed.fileExists).toBe(false);
+	expect(observed.inputUnchanged).toBe(true);
+});
+
+it('enforces the original assignment deadline after handler mutation and a native event-loop stall', () => {
+	const observed = native('deadline');
+	expect(observed.error, JSON.stringify(observed)).toBe('assignment_timeout');
 	expect(observed.publications).toBe(0);
 	expect(observed.fileExists).toBe(false);
 	expect(observed.inputUnchanged).toBe(true);

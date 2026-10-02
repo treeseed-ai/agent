@@ -1,6 +1,51 @@
 schemaVersion: treeseed.guarantee-verifiers/v1
 ownerPackage: "@treeseed/agent"
 verifiers:
+  agent.golden.architecture-immutable-paths:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/architecture/handler-boundaries.test.ts
+    testName: "denies handler-side writable-path widening before a real Git publication"
+  agent.golden.architecture-immutable-deadline:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/architecture/handler-boundaries.test.ts
+    testName: "enforces the original assignment deadline after handler mutation and a native event-loop stall"
+  agent.golden.architecture-verification-rename:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/architecture/verification-portability.test.ts
+    testName: "keeps verification admission unchanged when only the agent class is renamed"
+  agent.golden.architecture-failure-evidence-scope:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/architecture/verification-portability.test.ts
+    testName: "requires assigned failing-test evidence for arbitrary configured actors"
+  agent.golden.architecture-failure-evidence-attachment:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/architecture/verification-portability.test.ts
+    testName: "attaches real observed failure names independently of the actor identity"
+  agent.golden.architecture-red-status-rename:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/architecture/verification-portability.test.ts
+    testName: "records the same observed red status for renamed actors and reviewers"
+  agent.golden.architecture-evidence-input-immutable:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/architecture/verification-portability.test.ts
+    testName: "does not mutate the reported verification or invent an observation during evidence correction"
+  agent.golden.architecture-evidence-scope-denial:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/architecture/verification-portability.test.ts
+    testName: "does not infer a test-first evidence requirement from an agent name or malformed criteria"
+  agent.golden.architecture-knowledge-task-profile:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/codex-chat-executor.test.ts
+    testName: "honors profile-owned Architecture Book instructions and an exact knowledge-only grant after a rename"
   agent.golden.architecture-profile-rename:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

@@ -10,7 +10,7 @@ import { assertArchitectSourceCitation, assertReplayableVerificationCommand, ass
 import { assertPredecessorSynthesis } from '../../../src/kernel/handlers/planning-synthesis.ts';
 import { activityCompletionOutputSchema } from '../../../src/activity-completion.ts';
 import { activityAllowsVerification } from '../../../src/sandbox/guest-contract.ts';
-
+import { architectureTaskInstructions } from '../architecture/knowledge-task-fixture.ts';
 describe('Codex chat executor', () => {
 	it('does not install dependencies for read-only planning, estimating, chat, or Architecture knowledge', () => {
 		for (const activity of ['planning', 'estimating', 'chat']) {
@@ -52,14 +52,13 @@ describe('Codex chat executor', () => {
 		expect(providerResourceAbort([{ type: 'item.completed', item: { type: 'command_execution',
 			command: 'npm test', aggregated_output: 'assertion failed\n', exit_code: 1 } }])).toBeNull();
 	});
-	it('requires Architect acting output to be Architecture Book knowledge, not an arbitrary Note', () => {
+	it('honors profile-owned Architecture Book instructions and an exact knowledge-only grant after a rename', () => {
 		const bookRef = { store: 'treedx', model: 'book', id: 'sdk-architecture', repository: 'library', commit: '9'.repeat(40),
 			path: 'books/architecture.md', revision: 1, digest: `sha256:${'b'.repeat(64)}` };
 		const context = { projectManifest: { source: { commit: 'c'.repeat(40) } }, canonicalAssignmentContext: { assignment: { id: 'architect-1', agentClass: 'architect', projectId: 'sdk',
-			workspace: { mode: 'treedx' }, effectiveProfile: { activity: 'acting', handler: 'writer', prompt: {} },
+			workspace: { mode: 'treedx' }, effectiveProfile: { activity: 'acting', handler: 'writer', prompt: { instructions: architectureTaskInstructions('c'.repeat(40)) } },
 			contextRefs: [bookRef], grant: { contentWrite: [{ model: 'knowledge', id: 'architect-knowledge', repository: 'library',
-				commit: 'a'.repeat(40), path: 'knowledge/sdk-architecture/architect-knowledge.md' },
-			{ model: 'note', id: 'architect-note' }] } }, context: [], predecessorResults: [] } };
+				commit: 'a'.repeat(40), path: 'knowledge/sdk-architecture/architect-knowledge.md' }] } }, context: [], predecessorResults: [] } };
 		expect(promptFromContext(context)).toContain('model exactly "knowledge"');
 		expect(promptFromContext(context)).toContain('bookRef equal to the exact authorized Architecture Book reference');
 		expect(promptFromContext(context)).toContain('A negative claim about what is absent from serialized request bytes needs evidence from the actual serializer or request-construction path');
@@ -100,6 +99,9 @@ describe('Codex chat executor', () => {
 		};
 		checkSchema(schema);
 		expect((schema.properties.contentOutput as { anyOf: unknown[] }).anyOf).toHaveLength(1);
+		const before = promptFromContext(context); context.canonicalAssignmentContext.assignment.agentClass = 'configured-author';
+		expect(promptFromContext(context)).toBe(before);
+		for (const instruction of architectureTaskInstructions('c'.repeat(40))) expect(before.split(instruction)).toHaveLength(2);
 	});
 	it('keeps Researcher content-only findings out of executable verification', () => {
 		const prompt = promptFromContext({ canonicalAssignmentContext: { assignment: {

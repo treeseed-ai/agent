@@ -399,11 +399,11 @@ describe('Codex chat executor', () => {
 		expect(prompt).toContain('Required line starts:\n- result-a: \n- result-b: ');
 		expect(prompt).toContain('Return contentOutput: null');
 		expect(() => assertPredecessorSynthesis(context, { schemaVersion: 'treeseed.activity-completion/v1',
-			summary: 'Used result-a only.', verification: [], reviewDisposition: null,
+			summary: '- result-a: Incorporated scoped evidence.', verification: [], reviewDisposition: null,
 			contentOutput: null }))
 			.toThrow('predecessor_result_citation_missing:result-b');
 		expect(() => assertPredecessorSynthesis(context, { schemaVersion: 'treeseed.activity-completion/v1',
-			summary: 'result-a supplied scope; result-b supplied risks.', verification: [], reviewDisposition: null,
+			summary: '- result-a: Supplied scope.\n- result-b: Supplied risks.', verification: [], reviewDisposition: null,
 			contentOutput: null }))
 			.not.toThrow();
 		const estimateContext = { canonicalAssignmentContext: { assignment: { effectiveProfile: { activity: 'estimating' } },

@@ -1,6 +1,71 @@
 schemaVersion: treeseed.guarantee-verifiers/v1
 ownerPackage: "@treeseed/agent"
 verifiers:
+  agent.golden.planning-summary-bounded-validation:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/sandbox/planning-synthesis-recovery.test.ts
+    testName: "rejects long incomplete contribution lines within a bounded real subprocess"
+  agent.golden.planning-summary-schema:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/sandbox/planning-synthesis-recovery.test.ts
+    testName: "constrains the existing planning summary field without adding completion fields or copying contributions"
+  agent.golden.planning-summary-el-omission:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/sandbox/planning-synthesis-recovery.test.ts
+    testName: "rejects the exact EL eighth-predecessor omission at generation and runtime boundaries"
+  agent.golden.planning-summary-all-omissions:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/sandbox/planning-synthesis-recovery.test.ts
+    testName: "rejects an omitted predecessor in every position of the eight-contribution summary"
+  agent.golden.planning-summary-empty-citations:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/sandbox/planning-synthesis-recovery.test.ts
+    testName: "rejects citation-only lists without material contribution text"
+  agent.golden.planning-summary-blank-contribution:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/sandbox/planning-synthesis-recovery.test.ts
+    testName: "rejects a whitespace-only contribution without weakening the other seven citations"
+  agent.golden.planning-summary-prose-citations:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/sandbox/planning-synthesis-recovery.test.ts
+    testName: "does not accept predecessor substrings in prose as structured synthesis lines"
+  agent.golden.planning-summary-literal-ids:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/sandbox/planning-synthesis-recovery.test.ts
+    testName: "escapes exact predecessor IDs instead of interpreting them as regex policy"
+  agent.golden.planning-summary-newlines:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/sandbox/planning-synthesis-recovery.test.ts
+    testName: "accepts complete LF or CRLF contribution lines and substantive Unicode text"
+  agent.golden.planning-summary-order:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/sandbox/planning-synthesis-recovery.test.ts
+    testName: "enforces the instructed contribution order through the same generation and runtime constraint"
+  agent.golden.planning-summary-activity-scope:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/sandbox/planning-synthesis-recovery.test.ts
+    testName: "leaves first-cycle planning and all other activity output schemas unchanged"
+  agent.golden.planning-summary-context-custody:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/sandbox/planning-synthesis-recovery.test.ts
+    testName: "fails closed on ambiguous or multiline planning predecessor identities"
+  agent.golden.planning-summary-recovery-schema:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/sandbox/planning-synthesis-recovery.test.ts
+    testName: "uses the constrained completion schema for the initial model turn and original-session recovery"
   agent.golden.release-review-native-first:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

@@ -249,22 +249,44 @@ export function promptFromContext(context: Record<string, unknown>, reasoningEff
 	return `${timingInstruction} ${timingDiscipline}\n\nYou are exactly ${text(manifest.agentHandle)}. The verified TreeDX context below is ordered by mandatory core, agent-general, activity-specific, and live discussion layers.\n\n${sourceText}\n\nActivity instructions:\n${text(prompt.system)}\n\nActivity task:\n${text(prompt.task) || 'Respond to the committed Discussion message.'}\n\n${required ? 'You were directly addressed and must provide a substantive response.' : 'Respond only if your role adds material value; otherwise return exactly <!-- treeseed:abstain -->.'}\n${projectAccess} Prefer extensionless identifiers such as objectives/core. Do not supply or reason about Git commits for normal TreeDX access; the assignment relay privately enforces consistent views. Do not invoke trsd: the CLI is intentionally absent from assignment guests. Tool and content permissions come from this activity profile. If the first clock reports at most 120 seconds, make no more than one targeted source search and two exact file reads, and do not perform exploratory Git loops. After that focused inspection, check remaining time; with 45 seconds or less, make the required final clock check and answer immediately. Finish sooner when the evidence is sufficient; the deadline is a ceiling, not a target. The assigned reasoning effort is ${reasoningEffort || 'provider-default'}. Scale inspection and research depth to that setting and the question. Do not run unrelated broad test suites or exhaustive scans. Do not inspect outside /workspace or disclose credentials. Return only the message to post.\n\nDiscussion message:\n${text(record(context.message).content)}\n\n${timingStartReminder}`;
 }
 
-export function missingPredecessorCitations(context: Record<string, unknown>, completion: ActivityCompletionReport | null): string[] {
+function planningSynthesisLines(context: Record<string, unknown>): Array<{ id: string; pattern: string }> {
 	const canonical = record(context.canonicalAssignmentContext);
 	const assignment = record(canonical.assignment);
 	if (text(record(assignment.effectiveProfile).activity) !== 'planning') return [];
 	const ids = (Array.isArray(canonical.predecessorResults) ? canonical.predecessorResults : [])
-		.map((value) => text(record(value).id)).filter(Boolean);
+		.map((value) => text(record(value).id));
 	if (ids.length < 2) return [];
+	if (ids.some(id => !id || /[\r\n]/u.test(id)) || new Set(ids).size !== ids.length) {
+		throw new Error('predecessor_result_context_invalid');
+	}
+	return ids.map(id => ({ id, pattern: `- ${id.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')}: \\S[^\\r\\n]*` }));
+}
+
+const synthesisPattern = (lines: Array<{ pattern: string }>) => `^${lines.map(line => line.pattern).join('\\r?\\n')}(?:\\r?\\n[\\s\\S]*)?$`;
+
+/** Constrain the existing summary, not a second citation model or runtime-authored contribution. */
+export function planningSynthesisOutputSchema(context: Record<string, unknown>, schema: Record<string, unknown>) {
+	const lines = planningSynthesisLines(context);
+	if (!lines.length) return schema;
+	const properties = record(schema.properties);
+	return { ...schema, properties: { ...properties, summary: { ...record(properties.summary), pattern: synthesisPattern(lines) } } };
+}
+
+export function missingPredecessorCitations(context: Record<string, unknown>, completion: ActivityCompletionReport | null): string[] {
 	// Planning's WriterHandler commits the completion summary as the Note body.
 	// Requiring contentOutput here would contradict that single governed write path.
 	const body = completion?.summary ?? '';
-	return ids.filter((id) => !body.includes(id));
+	return planningSynthesisLines(context).filter(line => !new RegExp(`(?:^|\\r?\\n)${line.pattern}(?:\\r?\\n|$)`, 'u').test(body))
+		.map(line => line.id);
 }
 
 export function assertPredecessorSynthesis(context: Record<string, unknown>, completion: ActivityCompletionReport | null) {
 	const missing = missingPredecessorCitations(context, completion);
 	if (missing.length) throw new Error(`predecessor_result_citation_missing:${missing.join(',')}`);
+	const lines = planningSynthesisLines(context);
+	if (lines.length && !new RegExp(synthesisPattern(lines), 'u').test(completion?.summary ?? '')) {
+		throw new Error('predecessor_result_citation_order_invalid');
+	}
 }
 
 export function planningSynthesisCorrectionPrompt(missing: string[], completion: ActivityCompletionReport, predecessors: unknown[]): string {

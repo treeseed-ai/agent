@@ -1,6 +1,11 @@
 schemaVersion: treeseed.guarantee-verifiers/v1
 ownerPackage: "@treeseed/agent"
 verifiers:
+  agent.golden.architecture-campaign-approval-once:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/campaign-cli.test.ts
+    testName: "continuously observes collaboration while issuing external approval only once for the exact workday"
   agent.golden.architecture-campaign-recheck-1:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

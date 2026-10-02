@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const state = vi.hoisted(() => ({ run: undefined as (() => Promise<void>) | undefined,
 	read: vi.fn(), verify: vi.fn(), freeze: {} as Record<string, any> }));
@@ -18,7 +18,31 @@ beforeEach(() => {
 		request: { body: { executionMode: 'simulation', projects: ['8cbfb810-6da5-4da2-9ae9-cad53101253f'], proposalIds: ['fresh'],
 			durationSeconds: 3600, allocation: { planningPercent: 100 / 3, allocationWeight: 1, planningTurnMaximumSeconds: 180 } } } };
 });
-describe('native campaign CLI composition (fixtures are not live acceptance)', () => {
+afterEach(() => vi.useRealTimers());
+describe('campaign CLI composition units (mocked transport, not native or live acceptance)', () => {
+	it('continuously observes collaboration while issuing external approval only once for the exact workday', async () => {
+		vi.useFakeTimers();
+		let polls = 0, version = 8;
+		const id = 'workday-aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
+		const start = new Date(Date.now() - 21 * 60_000).toISOString(), endsAt = new Date(Date.now() + 39 * 60_000).toISOString();
+		state.read.mockImplementation((args: string[]) => {
+			if (args[0] === 'workdays' && args[1] === 'start') return { workdayId: id };
+			if (args[0] === 'workdays' && args[1] === 'show') return { run: { id, status: ++polls < 3 ? 'running' : 'completed',
+				executionMode: 'simulation', startedAt: start, parameters: { durationSeconds: 3600, planningPercent: 100 / 3, appliedPlan: { endsAt } } },
+				scheduling: { assignments: [], nodes: [] } };
+			if (args[0] === 'proposals' && args[1] === 'show') return { activeVersion: version };
+			if (args[0] === 'proposals' && args[1] === 'evaluate') { version++; return { status: 'accepted', decisionId: 'decision-1' }; }
+			return {};
+		});
+		const finished = expect(state.run!()).resolves.toBeUndefined();
+		await vi.runAllTimersAsync(); await finished;
+		expect(state.verify.mock.calls.filter(call => call[0] === 'collaboration')).toHaveLength(3);
+		const approvals = state.read.mock.calls.filter(call => call[0][0] === 'proposals' && call[0][1] === 'evaluate');
+		expect(approvals).toHaveLength(1);
+		expect(approvals[0]![0]).toEqual(expect.arrayContaining(['--if-match', '8', '--idempotency-key', `golden-approval:${id}`]));
+		expect(state.read.mock.calls.filter(call => call[0][0] === 'proposals' && call[0][1] === 'show')).toHaveLength(1);
+		expect(state.read.mock.calls.filter(call => call[0][1] === 'stop')).toHaveLength(0);
+	});
 	it('uses the canonical workdayId receipt and every existing terminal gate', async () => {
 		// A cached admission remains replayable after the preflight expires.
 		state.freeze.preflight.expiresAt = '2000-01-01T00:00:00Z';

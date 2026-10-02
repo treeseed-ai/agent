@@ -10,7 +10,7 @@ import { sandboxAssignmentSchema, sandboxResultSchema, sourceWorkspaceKeySchema,
 import { providerCredentialValues, providerFailureSummary, redactProviderDiagnostic, redactProviderEvents } from './provider-failure.ts';
 import { activityAllowsVerification } from './guest-contract.ts';
 import { activityCompletionOutputSchema, validateActivityCompletion } from '../activity-completion.ts';
-import { completionFrontmatterSchema, completionOutputTargetVariants, promptFromContext, assertPredecessorSynthesis, assertArchitectSourceCitation, assertTesterFailureEvidence, attachObservedTesterFailures, correctObservedTestFirstRedVerification, omitUnreplayableVerification, codexReasoningArguments, codexProjectInstructionArguments, codexInteractiveTimeoutMs, requiresActivityCompletion, record, text, providerToolName, codexToolInFlight, codexIdleTimeoutMs, codexCloseoutTimeoutMs, codexResumeIdleTimeoutMs } from './guest-contract.ts';
+import { completionFrontmatterSchema, completionOutputTargetVariants, promptFromContext, planningSynthesisOutputSchema, assertPredecessorSynthesis, assertArchitectSourceCitation, assertTesterFailureEvidence, attachObservedTesterFailures, correctObservedTestFirstRedVerification, omitUnreplayableVerification, codexReasoningArguments, codexProjectInstructionArguments, codexInteractiveTimeoutMs, requiresActivityCompletion, record, text, providerToolName, codexToolInFlight, codexIdleTimeoutMs, codexCloseoutTimeoutMs, codexResumeIdleTimeoutMs } from './guest-contract.ts';
 import { recoverPlanningSynthesis } from './planning-synthesis-recovery.ts';
 import { objectDigest, observeReportedActivityCommands, prepareReleaseReview } from './verification.ts';
 export { observeReportedActivityCommands, verifyReportedActivityCommands, requiresNodeDependencyRestore } from './verification.ts';
@@ -278,8 +278,8 @@ export async function runSandboxGuest() {
 		|| (sourceMetadata ? requiresActivityCompletion(sourceMetadata.mode) : false);
 	const completionSchemaPath = resolve(codexHome, 'activity-completion.schema.json');
 	if (structuredCompletion) {
-		await writeFile(completionSchemaPath, `${JSON.stringify(activityCompletionOutputSchema(completionFrontmatterSchema(context), allowVerification,
-			completionOutputTargetVariants(context), canonicalActivity === 'reviewing'))}\n`, { mode: 0o600 });
+		await writeFile(completionSchemaPath, `${JSON.stringify(planningSynthesisOutputSchema(context, activityCompletionOutputSchema(completionFrontmatterSchema(context), allowVerification,
+			completionOutputTargetVariants(context), canonicalActivity === 'reviewing')))}\n`, { mode: 0o600 });
 	}
 	// Session state stays inside this assignment's disposable Kata guest so a
 	// missing final clock check can be corrected in the same Codex conversation.

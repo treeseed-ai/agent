@@ -3,6 +3,45 @@ id: agent.golden.component-boundaries
 title: Golden execution component boundaries
 scope: local-component-tests
 workflow:
+  - id: planning-summary-bounded-validation
+    action: { verifier: agent.golden.planning-summary-bounded-validation }
+    expect: { status: passed }
+  - id: planning-summary-schema
+    action: { verifier: agent.golden.planning-summary-schema }
+    expect: { status: passed }
+  - id: planning-summary-el-omission
+    action: { verifier: agent.golden.planning-summary-el-omission }
+    expect: { status: passed }
+  - id: planning-summary-all-omissions
+    action: { verifier: agent.golden.planning-summary-all-omissions }
+    expect: { status: passed }
+  - id: planning-summary-empty-citations
+    action: { verifier: agent.golden.planning-summary-empty-citations }
+    expect: { status: passed }
+  - id: planning-summary-blank-contribution
+    action: { verifier: agent.golden.planning-summary-blank-contribution }
+    expect: { status: passed }
+  - id: planning-summary-prose-citations
+    action: { verifier: agent.golden.planning-summary-prose-citations }
+    expect: { status: passed }
+  - id: planning-summary-literal-ids
+    action: { verifier: agent.golden.planning-summary-literal-ids }
+    expect: { status: passed }
+  - id: planning-summary-newlines
+    action: { verifier: agent.golden.planning-summary-newlines }
+    expect: { status: passed }
+  - id: planning-summary-order
+    action: { verifier: agent.golden.planning-summary-order }
+    expect: { status: passed }
+  - id: planning-summary-activity-scope
+    action: { verifier: agent.golden.planning-summary-activity-scope }
+    expect: { status: passed }
+  - id: planning-summary-context-custody
+    action: { verifier: agent.golden.planning-summary-context-custody }
+    expect: { status: passed }
+  - id: planning-summary-recovery-schema
+    action: { verifier: agent.golden.planning-summary-recovery-schema }
+    expect: { status: passed }
   - id: release-review-native-first
     action: { verifier: agent.golden.release-review-native-first }
     expect: { status: passed }

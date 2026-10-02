@@ -46,10 +46,15 @@ beforeEach(() => {
 	requested.lifecycleOutput.activityCompletion.reviewDisposition = 'request-changes';
 	items.push(requested, assignment('revision', 'acting', 'architect', 'work-0', '2026-09-27T00:00:05Z', '2026-09-27T00:00:06Z'),
 		assignment('approved-revision', 'reviewing', 'reviewer', 'work-0', '2026-09-27T00:00:07Z', '2026-09-27T00:00:08Z'));
+	const reportRef = { kind: 'treedx', projectId: 'sdk', repository: 'sdk-library', path: 'notes/report.mdx', commit };
+	const reporter = assignment('closeout-report', 'reporting', 'reporter', '', '2026-09-27T00:00:09Z', '2026-09-27T00:00:10Z');
+	reporter.assignmentAttempt.sourceRef = { store: 'postgresql', model: 'workday', id: workdayId };
+	reporter.assignmentResult.references = [structuredClone(reportRef)];
+	items.push(reporter);
 	state.replies.set('workdays show', { run: { status: 'completed', executionMode: 'simulation', startedAt: '2026-09-27T00:00:00Z',
 		completedAt: '2026-09-27T00:01:00Z', parameters: { durationSeconds: 3600, planningPercent: 100 / 3, allocationWeight: 1, planningTurnMaximumSeconds: 180, maximumConcurrency: 5, communicationConcurrency: 5,
 			appliedPlan: { planningRounds: [{ state: 'complete' }, { state: 'complete' }] } },
-		reportRefs: { sdk: { projectId: 'sdk', path: 'notes/report.mdx', commit } } } });
+		state: 'ended', endedAt: '2026-09-27T00:01:00Z', reportRef } });
 	state.replies.set('assignments list', { items, page: { hasMore: false } });
 	const nodes = Array.from({ length: 6 }, (_, index) => ['actor', 'reviewer'].map(pairRole => ({
 		id: `${pairRole}-${index}`, workdayId, pairRole, workItemId: `work-${index}`, nodeRevision: 2, status: 'completed',
@@ -63,25 +68,57 @@ beforeEach(() => {
 	state.replies.set('execution graph', { nodes });
 	state.replies.set('capacity usage', { items: items.map(item => ({ id: `${item.id}:aggregate`, assignmentId: item.id,
 		metadata: { settlementKey: item.id } })), page: { hasMore: false } });
-	state.replies.set('library read', { result: { files: [{ body: `${workdayId} actor-0` }] } });
+	state.replies.set('library read', { result: { files: [{ body: `${workdayId} actor-0`, frontmatter: {
+		schemaVersion: 'treeseed.note/v1', classification: 'workday-report', projectId: 'sdk', subjectRefs: [structuredClone(reporter.assignmentAttempt.sourceRef)] } }] } });
 });
 
 describe('golden read-back assertion regressions (fixtures are not live acceptance)', () => {
   it('requires the single canonical workday report reference and rejects the retired plural map', () => {
     const run = state.replies.get('workdays show')!.run;
+    const reference = structuredClone(run.reportRef);
     run.reportRefs = { sdk: { kind: 'treedx', projectId: 'sdk', repository: 'sdk-library', path: 'notes/report.mdx', commit } };
     delete run.reportRef;
+    expect(() => gate('reporter')).toThrow();
+    run.reportRef = reference;
     expect(() => gate('reporter')).toThrow();
   });
   it('requires exactly one completed reporting assignment before accepting report readback', () => {
     const items = state.replies.get('assignments list')!.items;
     state.replies.get('assignments list')!.items = items.filter((item: Row) => item.assignmentAttempt.effectiveProfile.activity !== 'reporting');
     expect(() => gate('reporter')).toThrow();
+    const reporter = items.find((item: Row) => item.assignmentAttempt.effectiveProfile.activity === 'reporting');
+    state.replies.get('assignments list')!.items = [...items, { ...structuredClone(reporter), id: 'duplicate-closeout' }];
+    expect(() => gate('reporter')).toThrow();
   });
   it('rejects a report note whose canonical classification or workday subject authority is missing', () => {
     const file = state.replies.get('library read')!.result.files[0];
     delete file.frontmatter;
     expect(() => gate('reporter')).toThrow();
+    for (const frontmatter of [
+      { schemaVersion: 'treeseed.note/v1', classification: 'other', projectId: 'sdk', subjectRefs: [] },
+      { schemaVersion: 'treeseed.note/v1', classification: 'workday-report', projectId: 'other', subjectRefs: [] },
+      { schemaVersion: 'treeseed.note/v1', classification: 'workday-report', projectId: 'sdk', subjectRefs: [{ store: 'postgresql', model: 'workday', id: 'another-workday' }] },
+    ]) { file.frontmatter = frontmatter; expect(() => gate('reporter')).toThrow(); }
+  });
+  it('binds closeout report output completion teardown and chronology to the exact authoritative workday', () => {
+    const items = state.replies.get('assignments list')!.items;
+    const index = items.findIndex((item: Row) => item.assignmentAttempt.effectiveProfile.activity === 'reporting');
+    const original = structuredClone(items[index]);
+    for (const mutate of [
+      (item: Row) => { item.assignmentResult.assignmentId = 'other-assignment'; },
+      (item: Row) => { item.assignmentResult.references[0].commit = 'b'.repeat(40); },
+      (item: Row) => { item.assignmentResult.references.push(structuredClone(item.assignmentResult.references[0])); },
+      (item: Row) => { item.status = 'failed'; },
+      (item: Row) => { item.leaseToken = 'live'; },
+      (item: Row) => { item.lifecycleOutput.teardown.verified = false; },
+      (item: Row) => { item.completedAt = '2026-09-27T00:01:01Z'; },
+      (item: Row) => { item.assignmentAttempt.sourceRef.id = 'other-workday'; },
+    ]) {
+      items[index] = structuredClone(original); mutate(items[index]);
+      expect(() => gate('reporter')).toThrow();
+    }
+    items[index] = original;
+    expect(() => gate('reporter')).not.toThrow();
   });
   it('rejects any change to the exact five-slot campaign policy rather than accepting larger allowances', () => {
     const parameters = state.replies.get('workdays show')!.run.parameters;
@@ -357,7 +394,7 @@ describe('golden read-back assertion regressions (fixtures are not live acceptan
 	it('rejects missing Reporter refs and unrelated report contents', () => {
 		state.replies.get('library read')!.result.files[0].body = 'An unrelated report';
 		expect(() => gate('reporter')).toThrow('this exact workday');
-		state.replies.get('workdays show')!.run.reportRefs = {};
+		delete state.replies.get('workdays show')!.run.reportRef;
 		expect(() => gate('reporter')).toThrow('one exact report');
 	});
 });

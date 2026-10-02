@@ -210,13 +210,33 @@ export function verifyGolden(gate: Gate): void {
 	}
 	}
 	if (gate === 'reporter') {
-	const reports = Object.values(row(run.reportRefs)).map(row);
-	assert.equal(reports.length, 1, 'Native Reporter must store one exact report reference');
-	const report = reports[0]!;
-	assert.ok(text(report.projectId) && text(report.path) && /^[a-f0-9]{40}$/u.test(text(report.commit)));
+	assert.ok(!Object.hasOwn(run, 'reportRefs'), 'ACCEPTANCE_REPORT_AUTHORITY: Retired plural report map is forbidden');
+	const report = row(run.reportRef);
+	assert.ok(report.kind === 'treedx' && assignmentReferenceSchema.safeParse(report).success, 'Native Reporter must store one exact report reference');
+	const reporting = assignments.filter(item => activity(item) === 'reporting');
+	assert.equal(reporting.length, 1, 'ACCEPTANCE_REPORT_ASSIGNMENT: Exactly one selected closeout assignment required');
+	const reporter = reporting[0]!, result = row(reporter.assignmentResult);
+	assert.ok(reporter.status === 'completed' && result.status === 'completed' && result.assignmentId === reporter.id,
+		'ACCEPTANCE_REPORT_COMPLETION: Canonical completed reporting result must bind its assignment');
+	assert.equal(reporter.leaseToken, null, 'ACCEPTANCE_REPORT_LEASE: Closeout lease must be released');
+	assert.equal(row(row(reporter.lifecycleOutput).teardown).verified, true, 'ACCEPTANCE_REPORT_TEARDOWN: Durable closeout teardown required');
+	const references = rows(result.references).filter(ref => ref.kind === 'treedx' && ref.projectId === report.projectId && ref.path === report.path && ref.commit === report.commit);
+	assert.equal(references.length, 1, 'ACCEPTANCE_REPORT_CUSTODY: Workday report must be the exact reporting result output');
+	assert.deepEqual(references[0], report, 'ACCEPTANCE_REPORT_CUSTODY: Report output authority drifted');
+	const ended = Date.parse(text(run.endedAt)), completedAt = Date.parse(text(reporter.completedAt));
+	assert.ok(run.state === 'ended' && Number.isFinite(ended) && Number.isFinite(completedAt) && completedAt <= ended,
+		'ACCEPTANCE_REPORT_CHRONOLOGY: Reporter must complete before the workday ends');
 	const readBack = read(['library', 'read', text(report.projectId), text(report.path), '--ref', text(report.commit)], team, true);
 	const files = rows(row(readBack.result).files);
 	assert.equal(files.length, 1);
+	const frontmatter = row(files[0]?.frontmatter);
+	assert.ok(frontmatter.schemaVersion === 'treeseed.note/v1' && frontmatter.classification === 'workday-report'
+		&& frontmatter.projectId === report.projectId, 'ACCEPTANCE_REPORT_NOTE: Canonical classified report note required');
+	const source = row(row(reporter.assignmentAttempt).sourceRef);
+	assert.ok(source.store === 'postgresql' && source.model === 'workday' && source.id === workdayId, 'ACCEPTANCE_REPORT_SUBJECT: Reporting assignment must bind the exact workday');
+	const subjects = rows(frontmatter.subjectRefs).filter(ref => ref.store === 'postgresql' && ref.model === 'workday' && ref.id === workdayId);
+	assert.equal(subjects.length, 1, 'ACCEPTANCE_REPORT_SUBJECT: Note must retain one exact workday subject');
+	assert.deepEqual(subjects[0], source, 'ACCEPTANCE_REPORT_SUBJECT: Workday subject authority drifted');
 	const body = text(files[0]?.body);
 	assert.ok(body.includes(workdayId), 'Reporter must describe this exact workday');
 	assert.ok(body.includes(text(actors[0]?.id)), 'Reporter must include actual predecessor evidence, not an empty summary');

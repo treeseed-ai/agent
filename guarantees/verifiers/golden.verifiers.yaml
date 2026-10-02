@@ -1,6 +1,26 @@
 schemaVersion: treeseed.guarantee-verifiers/v1
 ownerPackage: "@treeseed/agent"
 verifiers:
+  agent.golden.architecture-report-single:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/golden-readback.test.ts
+    testName: requires the single canonical workday report reference and rejects the retired plural map
+  agent.golden.architecture-report-assignment:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/golden-readback.test.ts
+    testName: requires exactly one completed reporting assignment before accepting report readback
+  agent.golden.architecture-report-subject:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/golden-readback.test.ts
+    testName: rejects a report note whose canonical classification or workday subject authority is missing
+  agent.golden.architecture-report-custody:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/golden-readback.test.ts
+    testName: binds closeout report output completion teardown and chronology to the exact authoritative workday
   agent.golden.architecture-readback-policy:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

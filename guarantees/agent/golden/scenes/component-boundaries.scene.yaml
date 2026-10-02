@@ -3,6 +3,18 @@ id: agent.golden.component-boundaries
 title: Golden execution component boundaries
 scope: local-component-tests
 workflow:
+  - id: architecture-report-single
+    action: { verifier: agent.golden.architecture-report-single }
+    expect: { status: passed }
+  - id: architecture-report-assignment
+    action: { verifier: agent.golden.architecture-report-assignment }
+    expect: { status: passed }
+  - id: architecture-report-subject
+    action: { verifier: agent.golden.architecture-report-subject }
+    expect: { status: passed }
+  - id: architecture-report-custody
+    action: { verifier: agent.golden.architecture-report-custody }
+    expect: { status: passed }
   - id: architecture-readback-policy
     action: { verifier: agent.golden.architecture-readback-policy }
     expect: { status: passed }

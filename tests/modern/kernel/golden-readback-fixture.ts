@@ -21,7 +21,7 @@ export const workdayId = 'workday-test';
 export const commit = 'a'.repeat(40);
 export const gate = (name: string) => state.cases.get(`Golden runtime ${name} evidence satisfies its acceptance boundary`)!();
 export function assignment(id: string, activity: string, agentClass: string, workItemId = '', createdAt = '2026-09-27T00:00:01Z', completedAt = '2026-09-27T00:00:02Z'): Row {
-	return { id, workDayId: workdayId, projectId: 'sdk', decisionId: 'decision-test', status: 'completed', leaseToken: null,
+	return { id, workDayId: workdayId, projectId: 'sdk', decisionId: 'decision-1', status: 'completed', leaseToken: null,
 		createdAt, completedAt, assignmentAttempt: { agentClass, workItemId, effectiveProfile: { activity },
 			estimate: { expectedSeconds: 300, maximumSeconds: 600 }, limits: { maximumSeconds: 10 } },
 		capacityEnvelope: { requestedSeconds: 10, reservedSeconds: 10, budget: { time: { executionStartedAt: createdAt, closeoutStartedAt: completedAt } } },
@@ -75,6 +75,17 @@ beforeEach(() => {
 			sourceRef: structuredClone(node.sourceRef), authorityRefs: structuredClone(node.authorityRefs) });
 	}
 	state.replies.set('execution graph', { nodes });
+	for (const item of items.filter(item => item.assignmentAttempt.effectiveProfile.activity === 'reviewing')) {
+		const profileRef = { store: 'treedx', model: 'agent', id: 'configured-auditor', revision: 1, digest: `sha256:${'e'.repeat(64)}` };
+		item.assignmentAttempt.effectiveProfile.profileRef = structuredClone(profileRef);
+		const path = `decisions/${item.id}.mdx`;
+		item.assignmentResult.references = [{ kind: 'treedx', projectId: 'sdk', repository: 'sdk-library', commit, path }];
+		state.replies.set(`library read ${path}`, { result: { resolvedRef: commit, files: [{ path, frontmatter: {
+			schemaVersion: 'treeseed.decision/v1', id: item.id, projectId: 'sdk', decisionClass: 'work-review', decisionMethod: 'authority',
+			subjectRef: { store: 'git', model: 'source', id: 'candidate', repository: 'sdk', commit },
+			disposition: item.lifecycleOutput.activityCompletion.reviewDisposition, rationale: 'Synthetic independent review input, not live acceptance.',
+			authorityRefs: [structuredClone(nodes[0]!.sourceRef)], decidedByRefs: [profileRef], decidedAt: item.completedAt } }] } });
+	}
 	state.replies.set('library read decisions/decision-1.mdx', { result: { resolvedRef: commit, files: [{ path: 'decisions/decision-1.mdx', frontmatter: {
 		schemaVersion: 'treeseed.decision/v1', id: 'decision-1', projectId: 'sdk', decisionClass: 'proposal', decisionMethod: 'authority',
 		subjectRef: structuredClone(nodes[0]!.sourceRef), disposition: 'approved', rationale: 'Synthetic complete Decision input, not live evidence.',

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { assignmentReferenceSchema, assignmentTimingAwarenessReceiptSchema, estimateSchema, exactEntityReferenceSchema } from '@treeseed/sdk/agent-capacity';
+import { validatePortableContentData } from '@treeseed/sdk/content-validation';
 import { read, row, type Row } from './acceptance-cli.ts';
 
 const rows = (value: unknown): Row[] => Array.isArray(value) ? value.map(row) : [];
@@ -155,6 +156,7 @@ export function verifyGolden(gate: Gate): void {
 	assert.ok(decisionId);
 	const graph = read(['execution', 'graph', 'show', '--decision', decisionId], team);
 	const nodes = rows(graph.nodes).filter(node => node.workdayId === workdayId && node.pairRole);
+	const decisionContents = new Map<string, Row>(); // Deduplicate exact reads only within this invocation.
 	assert.equal(nodes.filter(node => node.pairRole === 'actor').length, 6);
 	assert.equal(nodes.filter(node => node.pairRole === 'reviewer').length, 6);
 	for (const node of nodes) {
@@ -181,7 +183,35 @@ export function verifyGolden(gate: Gate): void {
 		for (const value of rows(node.authorityRefs)) {
 			const authority = exactEntityReferenceSchema.safeParse(value);
 			assert.ok(authority.success, 'ACCEPTANCE_PAIR_AUTHORITY: Every authority must be an exact typed reference');
-			governedDecision ||= authority.data.store === 'treedx' && authority.data.model === 'decision';
+			if (authority.data.store !== 'treedx' || authority.data.model !== 'decision' || authority.data.id !== decisionId) continue;
+			governedDecision = true;
+			const reference = authority.data;
+			assert.ok(reference.repository && reference.path && reference.commit, 'ACCEPTANCE_DECISION_SOURCE: Native exact content readback required');
+			const key = JSON.stringify([reference.repository, reference.commit, reference.path]);
+			let decision = decisionContents.get(key);
+			if (!decision) {
+				const returned = read(['library', 'read', text(node.projectId), reference.path, '--ref', reference.commit], team, true);
+				const observed = row(returned.result ?? returned), file = rows(observed.files).find(item => item.path === reference.path);
+				assert.ok(observed.resolvedRef === reference.commit && file, 'ACCEPTANCE_DECISION_READBACK: Exact returned commit and path required');
+				const parsed = validatePortableContentData('decision', file.frontmatter);
+				assert.ok(parsed.ok, 'ACCEPTANCE_DECISION_CONTENT: Complete canonical classed Decision required');
+				decision = row(parsed.data);
+				decisionContents.set(key, decision);
+			}
+			assert.ok(decision.id === reference.id && decision.projectId === node.projectId && decision.decisionClass === 'proposal'
+				&& decision.disposition === 'approved', 'ACCEPTANCE_DECISION_AUTHORITY: Only the exact approved proposal Decision authorizes acting');
+			assert.deepEqual(decision.subjectRef, source.data, 'ACCEPTANCE_DECISION_PROPOSAL: Decision must bind the exact proposal revision and digest');
+			assert.ok(Number.isFinite(Date.parse(text(decision.decidedAt))) && Date.parse(text(decision.decidedAt)) <= Date.parse(text(latest.createdAt)),
+				'ACCEPTANCE_DECISION_TIME: Decision authority must precede admission');
+			for (const refs of [decision.authorityRefs, decision.decidedByRefs]) {
+				assert.ok(Array.isArray(refs) && refs.length > 0 && new Set(refs.map(value => JSON.stringify(value))).size === refs.length
+					&& refs.every(value => exactEntityReferenceSchema.safeParse(value).success), 'ACCEPTANCE_DECISION_EVIDENCE: Exact unique authority and decision-maker evidence required');
+			}
+			if (decision.decisionMethod === 'approval' || decision.decisionMethod === 'vote') {
+				assert.ok(Array.isArray(decision.positions) && decision.positions.length > 0 && rows(decision.positions).every(position =>
+					exactEntityReferenceSchema.safeParse(position.actorRef).success && ['approve', 'reject', 'abstain'].includes(text(position.position))
+					&& Number.isFinite(Date.parse(text(position.recordedAt)))), 'ACCEPTANCE_DECISION_POSITIONS: Signed-method evidence required');
+			}
 		}
 		assert.ok(governedDecision, 'ACCEPTANCE_PAIR_DECISION: Exact governed Decision content is required');
 		assert.deepEqual(attempt.sourceRef, node.sourceRef, 'ACCEPTANCE_PAIR_SOURCE: Retired source authority drifted');

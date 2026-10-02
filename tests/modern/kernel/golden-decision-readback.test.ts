@@ -51,4 +51,27 @@ describe('managed Decision content verifier units (synthetic input, not live acc
 			expect(() => gate('graph')).toThrow(/ACCEPTANCE_DECISION/u);
 		}
 	});
+	it('requires the selected operational Decision identity to equal the governed authority, not merely coexist', () => {
+		for (const item of state.replies.get('assignments list')!.items) item.decisionId = 'other-selection';
+		expect(() => gate('graph')).toThrow(/ACCEPTANCE_PAIR_DECISION/u);
+	});
+	it('denies missing or unapproved governed final review content even when lifecycle output says approved', () => {
+		const returned = state.replies.get('library read decisions/approved-revision.mdx')!.result;
+		const original = structuredClone(returned);
+		for (const frontmatter of [{ ...original.files[0].frontmatter, disposition: 'request-changes' },
+			{ ...original.files[0].frontmatter, decisionClass: 'proposal' }]) {
+			returned.files[0].frontmatter = frontmatter;
+			expect(() => gate('graph')).toThrow(/ACCEPTANCE_REVIEW/u);
+		}
+		returned.files = []; expect(() => gate('graph')).toThrow(/ACCEPTANCE_REVIEW/u);
+	});
+	it('denies governed review evidence for a different candidate, identity or original time window', () => {
+		const file = state.replies.get('library read decisions/approved-revision.mdx')!.result.files[0];
+		const original = structuredClone(file.frontmatter);
+		for (const value of [{ ...original, subjectRef: { ...original.subjectRef, commit: 'f'.repeat(40) } },
+			{ ...original, decidedByRefs: [{ ...original.decidedByRefs[0], id: 'unassigned-reviewer' }] },
+			{ ...original, decidedAt: '2026-09-28T00:00:00Z' }]) {
+			file.frontmatter = value; expect(() => gate('graph')).toThrow(/ACCEPTANCE_REVIEW/u);
+		}
+	});
 });

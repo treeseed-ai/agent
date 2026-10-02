@@ -3,6 +3,15 @@ id: agent.golden.component-boundaries
 title: Golden execution component boundaries
 scope: local-component-tests
 workflow:
+  - id: architecture-allocation-receipt
+    action: { verifier: agent.golden.architecture-allocation-receipt }
+    expect: { status: passed }
+  - id: architecture-allocation-ceilings
+    action: { verifier: agent.golden.architecture-allocation-ceilings }
+    expect: { status: passed }
+  - id: architecture-allocation-calibration
+    action: { verifier: agent.golden.architecture-allocation-calibration }
+    expect: { status: passed }
   - id: architecture-report-readback
     action: { verifier: agent.golden.architecture-report-readback }
     expect: { status: passed }

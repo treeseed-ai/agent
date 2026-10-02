@@ -21,8 +21,13 @@ const commit = 'a'.repeat(40);
 const gate = (name: string) => state.cases.get(`Golden runtime ${name} evidence satisfies its acceptance boundary`)!();
 function assignment(id: string, activity: string, agentClass: string, workItemId = '', createdAt = '2026-09-27T00:00:01Z', completedAt = '2026-09-27T00:00:02Z'): Row {
 	return { id, workDayId: workdayId, projectId: 'sdk', decisionId: 'decision-test', status: 'completed', leaseToken: null,
-		createdAt, completedAt, assignmentAttempt: { agentClass, workItemId, effectiveProfile: { activity } },
-		capacityEnvelope: { budget: { time: { executionStartedAt: createdAt, closeoutStartedAt: completedAt } } },
+		createdAt, completedAt, assignmentAttempt: { agentClass, workItemId, effectiveProfile: { activity },
+			estimate: { expectedSeconds: 300, maximumSeconds: 600 }, limits: { maximumSeconds: 10 } },
+		capacityEnvelope: { requestedSeconds: 10, reservedSeconds: 10, budget: { time: { executionStartedAt: createdAt, closeoutStartedAt: completedAt } } },
+		explanation: { metadata: { allocation: { admitted: true, allocatedSeconds: 10, desiredSeconds: 600, limitingConstraint: 'shared-model',
+			calibration: { seconds: 600, multiplier: 2, measurementIds: [] }, constraints: [{ id: 'shared-model', remainingSeconds: 10 }],
+			opportunity: { phase: 'planning', weight: 1, totalEligibleWeight: 1, shareSeconds: 10, availableSeconds: 10,
+				remainingSupplySeconds: 10, committedSeconds: 0, planningCommittedSeconds: 0 } } } },
 		assignmentResult: { schemaVersion: 'treeseed.assignment-result/v1', id: `result-${id}`, assignmentId: id,
 			status: 'completed', summary: 'Synthetic assertion input, not live acceptance evidence.', verification: [], diagnostics: [], completedAt,
 			timingAwareness: { schemaVersion: 'treeseed.assignment-timing-awareness/v1', requiredChecks: 2, completedChecks: 2,

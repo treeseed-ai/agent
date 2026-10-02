@@ -1,6 +1,21 @@
 schemaVersion: treeseed.guarantee-verifiers/v1
 ownerPackage: "@treeseed/agent"
 verifiers:
+  agent.golden.architecture-allocation-receipt:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/golden-readback.test.ts
+    testName: "denies absent malformed or duplicate calibration authority in managed admission readback"
+  agent.golden.architecture-allocation-ceilings:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/golden-readback.test.ts
+    testName: "denies admitted durations that exceed actual receipt constraints or disagree with immutable limits"
+  agent.golden.architecture-allocation-calibration:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/golden-readback.test.ts
+    testName: "requires cold start maximums unchanged estimates and unique bounded calibration sample authority"
   agent.golden.architecture-report-readback:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

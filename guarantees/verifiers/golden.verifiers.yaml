@@ -1,6 +1,26 @@
 schemaVersion: treeseed.guarantee-verifiers/v1
 ownerPackage: "@treeseed/agent"
 verifiers:
+  agent.golden.architecture-campaign-recheck-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/campaign.test.ts
+    testName: "stops immediately when later published collaboration becomes invalid after an earlier pass"
+  agent.golden.architecture-campaign-recheck-2:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/campaign.test.ts
+    testName: "independently rechecks final collaboration rather than reusing an earlier successful poll"
+  agent.golden.architecture-campaign-recheck-3:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/campaign.test.ts
+    testName: "waits through planning and acting and verifies the real terminal boundary"
+  agent.golden.architecture-planning-verifier-9:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/golden-planning-readback.test.ts
+    testName: "checks completed planning cycles during an active workday without fabricated terminal timestamps"
   agent.golden.architecture-planning-native-1:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

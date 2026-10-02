@@ -18,7 +18,10 @@ const sourceContext = (attempt: Row): Row[] => rows(attempt.contextRefs).filter(
 export function verifyPlanningEvidence(rounds: Row[], assignments: Row[], selectedClasses: string[], run: Row, team: string): void {
 	const used = new Set<string>(), cache = new Map<string, Row>();
 	let previous: Row[] = [], previousEnd = timestamp(run.startedAt);
-	const end = timestamp(run.completedAt);
+	const duration = row(run.parameters).durationSeconds;
+	assert.ok(typeof duration === 'number' && Number.isInteger(duration) && duration > 0, `${code}_TIME: Original workday window required`);
+	const originalEnd = previousEnd + duration * 1000;
+	const end = run.completedAt ? Math.min(timestamp(run.completedAt), originalEnd) : originalEnd;
 	for (const round of rounds) {
 		assert.ok(Array.isArray(round.assignmentIds) && round.assignmentIds.length > 0
 			&& round.assignmentIds.every(id => typeof id === 'string' && id.length > 0)

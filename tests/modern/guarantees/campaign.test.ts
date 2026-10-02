@@ -17,7 +17,7 @@ describe('automated campaign control (fixtures are not golden acceptance)', () =
 		const collaboration = vi.fn(), verify = vi.fn(), stop = vi.fn();
 		await monitorCampaign({ read: () => ({ status: tick < 3 ? 'running' : 'completed', mode: 'simulation', planningEndsAt: 1, endsAt: 10 }),
 			now: () => tick, wait: async () => { tick += 1; }, collaboration, verify, stop });
-		expect(collaboration).toHaveBeenCalledOnce(); expect(verify).toHaveBeenCalledOnce(); expect(stop).not.toHaveBeenCalled();
+		expect(collaboration).toHaveBeenCalledTimes(4); expect(verify).toHaveBeenCalledOnce(); expect(stop).not.toHaveBeenCalled();
 	});
 	it('keeps planning after the initial window until collaboration and estimates complete', async () => {
 		let tick = 1;
@@ -26,20 +26,36 @@ describe('automated campaign control (fixtures are not golden acceptance)', () =
 		});
 		await monitorCampaign({ read: () => ({ status: tick < 4 ? 'running' : 'completed', mode: 'simulation', planningEndsAt: 1, endsAt: 10 }),
 			now: () => tick, wait: async () => { tick += 1; }, collaboration, verify, stop });
-		expect(collaboration).toHaveBeenCalledTimes(3); expect(verify).toHaveBeenCalledOnce(); expect(stop).not.toHaveBeenCalled();
+		expect(collaboration).toHaveBeenCalledTimes(4); expect(verify).toHaveBeenCalledOnce(); expect(stop).not.toHaveBeenCalled();
 	});
 	it('checks ready collaboration during the initial planning window', async () => {
 		let tick = 1;
 		const collaboration = vi.fn(), verify = vi.fn(), stop = vi.fn();
 		await monitorCampaign({ read: () => ({ status: tick < 3 ? 'running' : 'completed', mode: 'simulation', planningEndsAt: 1200, endsAt: 3600 }),
 			now: () => tick, wait: async () => { tick += 1; }, collaboration, verify, stop });
-		expect(collaboration).toHaveBeenCalledOnce(); expect(verify).toHaveBeenCalledOnce(); expect(stop).not.toHaveBeenCalled();
+		expect(collaboration).toHaveBeenCalledTimes(3); expect(verify).toHaveBeenCalledOnce(); expect(stop).not.toHaveBeenCalled();
 	});
 	it('rejects incomplete collaboration at terminal closeout', async () => {
 		const stop = vi.fn();
 		await expect(monitorCampaign({ read: () => ({ status: 'completed', mode: 'simulation', planningEndsAt: 0, endsAt: 10 }),
 			now: () => 1, wait: vi.fn(), collaboration: () => { throw new Error('ACCEPTANCE_ESTIMATE_ROLES: missing'); }, verify: vi.fn(), stop })).rejects.toThrow('ACCEPTANCE_ESTIMATE_ROLES');
 		expect(stop).not.toHaveBeenCalled();
+	});
+	it('stops immediately when later published collaboration becomes invalid after an earlier pass', async () => {
+		let tick = 0;
+		const stop = vi.fn(), verify = vi.fn(), wait = vi.fn(async () => { tick++; });
+		await expect(monitorCampaign({ read: () => ({ status: tick < 2 ? 'running' : 'completed', mode: 'simulation', planningEndsAt: 1, endsAt: 10 }),
+			now: () => tick, wait, collaboration: () => { if (tick) throw new Error('ACCEPTANCE_PLANNING_CONTENT: later contribution omitted'); },
+			verify, stop })).rejects.toThrow('ACCEPTANCE_PLANNING_CONTENT');
+		expect(stop).toHaveBeenCalledOnce(); expect(wait).toHaveBeenCalledOnce(); expect(verify).not.toHaveBeenCalled();
+	});
+	it('independently rechecks final collaboration rather than reusing an earlier successful poll', async () => {
+		let tick = 0;
+		const stop = vi.fn(), verify = vi.fn();
+		await expect(monitorCampaign({ read: () => ({ status: tick ? 'completed' : 'running', mode: 'simulation', planningEndsAt: 1, endsAt: 10 }),
+			now: () => tick, wait: async () => { tick++; }, collaboration: () => { if (tick) throw new Error('ACCEPTANCE_PLANNING_RESULT: terminal authority moved'); },
+			verify, stop })).rejects.toThrow('ACCEPTANCE_PLANNING_RESULT');
+		expect(stop).not.toHaveBeenCalled(); expect(verify).not.toHaveBeenCalled();
 	});
 	it('stops a live simulation on transport failure but never mutates an unverified production run', async () => {
 		for (const mode of ['simulation', 'production']) {

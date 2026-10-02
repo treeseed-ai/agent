@@ -10,6 +10,10 @@ describe('managed planning cycle and published contribution custody', () => {
 		const before = structuredClone([...state.replies]); expect(() => gate('collaboration')).not.toThrow();
 		expect([...state.replies]).toEqual(before);
 	});
+	it('checks completed planning cycles during an active workday without fabricated terminal timestamps', () => {
+		const run = state.replies.get('workdays show')!.run; run.status = 'running'; delete run.completedAt;
+		expect(() => gate('collaboration')).not.toThrow();
+	});
 	it('denies complete round labels without exact unique planning node membership', () => {
 		for (const assignmentIds of [undefined, [], [...rounds()[0]!.assignmentIds, rounds()[0]!.assignmentIds[0]],
 			['chat-architect', ...rounds()[0]!.assignmentIds.slice(1)]]) {

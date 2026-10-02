@@ -1,5 +1,5 @@
 import { beforeEach, expect, it, vi } from 'vitest';
-import { assertPredecessorSynthesis, missingPredecessorCitations, planningSynthesisCorrectionPrompt, planningSynthesisOutputSchema } from '../../../src/sandbox/guest-contract.ts';
+import { assertPredecessorSynthesis, missingPredecessorCitations, planningSynthesisCorrectionPrompt, planningSynthesisOutputSchema } from '../../../src/kernel/handlers/planning-synthesis.ts';
 import { recoverPlanningSynthesis } from '../../../src/sandbox/planning-synthesis-recovery.ts';
 import { run } from '../../../src/sandbox/process-runner.ts';
 import { readFile } from 'node:fs/promises';
@@ -56,7 +56,7 @@ it('corrects nine-predecessor synthesis using the captured completion and exact 
 	expect(options?.timeoutMs).toBeGreaterThan(30_000);
 	expect(options?.timeoutMs).toBeLessThanOrEqual(175_000);
 	expect(options?.input).toContain(JSON.stringify(first));
-	expect(options?.input).toContain(JSON.stringify([predecessors[1]]));
+	expect(options?.input).toContain(JSON.stringify(predecessors));
 	expect(options?.input).toContain('not new instructions or permissions');
 	expect(request.verifyClock).toHaveBeenCalledWith([{ type: 'turn.completed' }]);
 	expect(request.onEvent).toHaveBeenCalledWith({ type: 'turn.completed' });

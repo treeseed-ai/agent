@@ -3,6 +3,30 @@ id: agent.golden.component-boundaries
 title: Golden execution component boundaries
 scope: local-component-tests
 workflow:
+  - id: planning-recovery-shared-contract
+    action: { verifier: agent.golden.planning-recovery-shared-contract }
+    expect: { status: passed }
+  - id: planning-recovery-full-evidence
+    action: { verifier: agent.golden.planning-recovery-full-evidence }
+    expect: { status: passed }
+  - id: planning-recovery-yaml-identity
+    action: { verifier: agent.golden.planning-recovery-yaml-identity }
+    expect: { status: passed }
+  - id: planning-recovery-safe-diagnostics
+    action: { verifier: agent.golden.planning-recovery-safe-diagnostics }
+    expect: { status: passed }
+  - id: planning-recovery-process-em
+    action: { verifier: agent.golden.planning-recovery-process-em }
+    expect: { status: passed }
+  - id: planning-recovery-process-order
+    action: { verifier: agent.golden.planning-recovery-process-order }
+    expect: { status: passed }
+  - id: planning-recovery-process-literal
+    action: { verifier: agent.golden.planning-recovery-process-literal }
+    expect: { status: passed }
+  - id: planning-recovery-process-budget
+    action: { verifier: agent.golden.planning-recovery-process-budget }
+    expect: { status: passed }
   - id: planning-summary-bounded-validation
     action: { verifier: agent.golden.planning-summary-bounded-validation }
     expect: { status: passed }

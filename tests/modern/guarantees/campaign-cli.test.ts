@@ -9,6 +9,28 @@ vi.mock('../../acceptance/acceptance-cli.ts', () => ({ read: state.read }));
 vi.mock('../../acceptance/sdk-runtime-golden.test.ts', () => ({ verifyGolden: state.verify }));
 vi.mock('../../acceptance/prepare-campaign.ts', () => ({ prepareSdkCampaign: vi.fn(), verifySdkExternalState: vi.fn() }));
 await import('../../acceptance/campaign.test.ts');
+const workdayId = 'workday-aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
+function observed(status = 'completed') {
+	return { run: { id: workdayId, teamId: 'team-fixture', status, executionMode: 'simulation',
+		startedAt: new Date(Date.now() - 21 * 60_000).toISOString(), parameters: { durationSeconds: 3600,
+			planningPercent: 100 / 3, appliedPlan: { endsAt: new Date(Date.now() + 39 * 60_000).toISOString() } } },
+		scheduling: { executionId: workdayId, status, executionMode: 'simulation', assignments: [], nodes: [] },
+		events: [], eventPage: { limit: 50, hasMore: false, nextCursor: null } };
+}
+function event(index = 0) {
+	return { id: `event-${index}`, runId: workdayId, teamId: 'team-fixture', projectId: null, workdayId: null,
+		assignmentId: null, eventIndex: index, eventType: 'workday.started', status: 'recorded', title: null,
+		message: null, parameters: {}, context: {}, refs: {}, metadata: {}, createdAt: '2026-10-02T18:00:00Z' };
+}
+function transport(show: () => unknown) {
+	state.read.mockImplementation((args: string[]) => {
+		if (args[0] === 'workdays' && args[1] === 'start') return { workdayId };
+		if (args[0] === 'workdays' && args[1] === 'show') return show();
+		if (args[0] === 'proposals' && args[1] === 'show') return { activeVersion: 8 };
+		if (args[0] === 'proposals' && args[1] === 'evaluate') return { status: 'accepted', decisionId: 'decision-1' };
+		return {};
+	});
+}
 beforeEach(() => {
 	vi.stubEnv('TREESEED_ACCEPTANCE_FREEZE_PATH', '/freeze');
 	state.read.mockReset(); state.verify.mockReset();
@@ -29,7 +51,8 @@ describe('campaign CLI composition units (mocked transport, not native or live a
 			if (args[0] === 'workdays' && args[1] === 'start') return { workdayId: id };
 			if (args[0] === 'workdays' && args[1] === 'show') return { run: { id, status: ++polls < 3 ? 'running' : 'completed',
 				executionMode: 'simulation', startedAt: start, parameters: { durationSeconds: 3600, planningPercent: 100 / 3, appliedPlan: { endsAt } } },
-				scheduling: { assignments: [], nodes: [] } };
+				scheduling: { executionId: id, status: polls < 3 ? 'running' : 'completed', executionMode: 'simulation', assignments: [], nodes: [] },
+				events: [], eventPage: { limit: 50, hasMore: false, nextCursor: null } };
 			if (args[0] === 'proposals' && args[1] === 'show') return { activeVersion: version };
 			if (args[0] === 'proposals' && args[1] === 'evaluate') { version++; return { status: 'accepted', decisionId: 'decision-1' }; }
 			return {};
@@ -52,7 +75,9 @@ describe('campaign CLI composition units (mocked transport, not native or live a
 				: args[0] === 'proposals' && args[1] === 'show' ? { activeVersion: 8 }
 					: args[0] === 'proposals' && args[1] === 'evaluate' ? { status: 'accepted', decisionId: 'decision-1' }
 						: { run: { id, status: 'completed', executionMode: 'simulation', startedAt: new Date().toISOString(),
-				parameters: { durationSeconds: 3600, planningPercent: 100 / 3, appliedPlan: { endsAt: new Date().toISOString() } } } });
+				parameters: { durationSeconds: 3600, planningPercent: 100 / 3, appliedPlan: { endsAt: new Date().toISOString() } } },
+				scheduling: { executionId: id, status: 'completed', executionMode: 'simulation', assignments: [], nodes: [] },
+				events: [], eventPage: { limit: 50, hasMore: false, nextCursor: null } });
 		await state.run!();
 		expect(state.read.mock.calls[0]![0]).toContain('exact');
 		const send = state.read.mock.calls.find(call => call[0][0] === 'send');
@@ -81,7 +106,8 @@ describe('campaign CLI composition units (mocked transport, not native or live a
 			if (args[0] === 'workdays' && args[1] === 'show') return { run: { id, status: 'running', executionMode: 'simulation',
 				startedAt: new Date(Date.now() - 21 * 60_000).toISOString(),
 				parameters: { durationSeconds: 3600, planningPercent: 100 / 3, appliedPlan: { endsAt: new Date(Date.now() + 60_000).toISOString() } } },
-				scheduling: { assignments: [], nodes: [] } };
+				scheduling: { executionId: id, status: 'running', executionMode: 'simulation', assignments: [], nodes: [] },
+				events: [], eventPage: { limit: 50, hasMore: false, nextCursor: null } };
 			if (args[0] === 'proposals' && args[1] === 'show') return { activeVersion: 8 };
 			if (args[0] === 'proposals' && args[1] === 'evaluate') throw new Error('GOVERNANCE_APPROVAL_REACHED');
 			return {};
@@ -93,5 +119,81 @@ describe('campaign CLI composition units (mocked transport, not native or live a
 		expect(state.read).toHaveBeenCalledWith(
 			expect.arrayContaining(['proposals', 'evaluate', 'fresh', '--if-match', '8', '--input']),
 			'treeseed', true);
+	});
+	it('denies missing unavailable or malformed scheduling instead of inferring observed empty work', async () => {
+		for (const scheduling of [undefined, null, {}, { status: 'unavailable' }, { assignments: [], nodes: null },
+			{ assignments: {}, nodes: [] }, { ...observed().scheduling, assignments: [null] }]) {
+			state.read.mockReset(); state.verify.mockReset();
+			transport(() => ({ ...observed(), scheduling }));
+			await expect.soft(state.run!(), JSON.stringify(scheduling)).rejects.toThrow('ACCEPTANCE_OBSERVATION');
+			expect.soft(state.verify).not.toHaveBeenCalled();
+			expect.soft(state.read.mock.calls.filter(call => call[0][1] === 'stop')).toHaveLength(1);
+		}
+	});
+	it('denies changed scheduling identity mode status and malformed or duplicated count rows', async () => {
+		for (const change of [{ executionId: 'other' }, { executionMode: 'production' }, { status: 'running' },
+			...[-1, 0.5, '1', NaN, Infinity].map(count => ({ assignments: [{ status: 'failed', count }] })),
+			{ assignments: [{ status: '', count: 1 }] }, { nodes: [{ status: 'ready', count: 1 }] },
+			{ assignments: [{ status: 'completed', count: 1 }, { status: 'completed', count: 1 }] }]) {
+			state.read.mockReset(); state.verify.mockReset();
+			transport(() => ({ ...observed(), scheduling: { ...observed().scheduling, ...change } }));
+			await expect.soft(state.run!(), JSON.stringify(change)).rejects.toThrow('ACCEPTANCE_OBSERVATION');
+			expect.soft(state.verify).not.toHaveBeenCalled();
+		}
+	});
+	it('denies missing malformed and incomplete event pagination before terminal golden verification', async () => {
+		for (const change of [{ events: undefined }, { events: {} }, { eventPage: undefined },
+			{ eventPage: { limit: 50, hasMore: 'false', nextCursor: null } },
+			{ eventPage: { limit: 0, hasMore: false, nextCursor: null } },
+			{ eventPage: { limit: 50, hasMore: false, nextCursor: 'unconsumed' } },
+			{ eventPage: { limit: 50, hasMore: true, nextCursor: 'unconsumed' } }]) {
+			state.read.mockReset(); state.verify.mockReset(); transport(() => ({ ...observed(), ...change }));
+			await expect.soft(state.run!(), JSON.stringify(change)).rejects.toThrow('ACCEPTANCE_OBSERVATION');
+			expect.soft(state.verify).not.toHaveBeenCalled();
+		}
+	});
+	it('denies malformed foreign duplicate and missing-index event authority without mutating observations', async () => {
+		for (const events of [[null], [event(), event()], [event(), { ...event(1), id: 'event-0' }],
+			[event(1)], [event(), event(2)], [{ ...event(), runId: 'other' }], [{ ...event(), teamId: 'other' }],
+			[{ ...event(), eventIndex: '0' }], [{ ...event(), createdAt: 'not-a-clock' }],
+			[{ ...event(), refs: null }], [{ ...event(), eventType: '' }]]) {
+			state.read.mockReset(); state.verify.mockReset(); const input = { ...observed(), events }, before = structuredClone(input);
+			transport(() => input);
+			await expect.soft(state.run!(), JSON.stringify(events)).rejects.toThrow('ACCEPTANCE_OBSERVATION');
+			expect.soft(input).toEqual(before); expect.soft(state.verify).not.toHaveBeenCalled();
+		}
+	});
+	it('stops on historical failed event evidence even when current scheduling contains no failures', async () => {
+		for (const status of ['failed', 'error']) {
+			state.read.mockReset(); state.verify.mockReset(); transport(() => ({ ...observed(), events: [{ ...event(), status }] }));
+			await expect.soft(state.run!()).rejects.toThrow('ACCEPTANCE_OBSERVATION');
+			expect.soft(state.verify).not.toHaveBeenCalled();
+		}
+	});
+	it('denies mutated or disappearing previously observed event records on later terminal readback', async () => {
+		vi.useFakeTimers();
+		for (const events of [[], [{ ...event(), refs: { changed: true } }]]) {
+			state.read.mockReset(); state.verify.mockReset(); let polls = 0;
+			transport(() => ({ ...observed(++polls === 1 ? 'running' : 'completed'), events: polls === 1 ? [event()] : events }));
+			const result = expect.soft(state.run!()).rejects.toThrow('ACCEPTANCE_OBSERVATION');
+			await vi.runAllTimersAsync(); await result;
+			expect.soft(state.verify.mock.calls.filter(call => call[0] === 'lifecycle')).toHaveLength(0);
+		}
+	});
+	it('accepts observed empty pre-admission counts and immutable complete event replays without repeated approval', async () => {
+		vi.useFakeTimers(); let polls = 0;
+		const inputs: unknown[] = [];
+		transport(() => { const input = { ...observed(++polls === 1 ? 'running' : 'completed'), events: [event()] }; inputs.push(structuredClone(input)); return input; });
+		const result = expect(state.run!()).resolves.toBeUndefined(); await vi.runAllTimersAsync(); await result;
+		expect(inputs).toHaveLength(2);
+		expect(state.read.mock.calls.filter(call => call[0][1] === 'evaluate')).toHaveLength(1);
+		expect(state.verify.mock.calls.filter(call => call[0] === 'collaboration')).toHaveLength(2);
+	});
+	it('stops when a later scheduling readback becomes unavailable after complete collaboration', async () => {
+		vi.useFakeTimers(); let polls = 0;
+		transport(() => ++polls === 1 ? observed('running') : { ...observed('completed'), scheduling: { status: 'unavailable' } });
+		const result = expect(state.run!()).rejects.toThrow('ACCEPTANCE_OBSERVATION'); await vi.runAllTimersAsync(); await result;
+		expect(state.verify.mock.calls.filter(call => call[0] === 'lifecycle')).toHaveLength(0);
+		expect(state.read.mock.calls.filter(call => call[0][1] === 'stop')).toHaveLength(1);
 	});
 });

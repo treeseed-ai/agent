@@ -33,7 +33,7 @@ jobs:
       - name: Execute coded golden component scenes
         uses: treeseed-ai/reviewer/.github/actions/run-scenes@e29c5bf2db97188c47fdc67a7a098e81a95ced22
         with:
-          ids: guarantee.agent.golden.component-boundaries
+          ids: guarantee.agent.golden.component-boundaries,guarantee.agent.golden.planning-synthesis-recovery
       - name: Pack verified artifact
         run: mkdir -p artifacts && npm pack --json --ignore-scripts --pack-destination artifacts
       - uses: actions/upload-artifact@v4

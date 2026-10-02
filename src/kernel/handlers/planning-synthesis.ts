@@ -43,10 +43,13 @@ export function missingPredecessorCitations(context: Record<string, unknown>, co
 
 export function assertPredecessorSynthesis(context: Record<string, unknown>, completion: ActivityCompletionReport | null) {
 	const missing = missingPredecessorCitations(context, completion);
-	if (missing.length) throw new Error(`predecessor_result_citation_missing:${missing.join(',')}; summaryLines=${(completion?.summary ?? '').split(/\r?\n/u).length}; literalNewlines=${((completion?.summary ?? '').match(/\\n/gu) ?? []).length}`);
 	const lines = planningSynthesisLines(context);
+	const body = completion?.summary ?? '', summaryLines = body.split(/\r?\n/u);
+	// Structural observations only: distinguish omitted IDs from bad layout without retaining model prose.
+	const diagnostics = `summaryLines=${summaryLines.length}; literalNewlines=${(body.match(/\\n/gu) ?? []).length}; predecessors=${lines.length}; mentionedIds=${lines.filter(line => body.includes(line.id)).length}; lineStarts=${lines.filter(line => summaryLines.some(summary => summary.startsWith(`- ${line.id}:`))).length}`;
+	if (missing.length) throw new Error(`predecessor_result_citation_missing:${missing.join(',')}; ${diagnostics}`);
 	if (lines.length && !new RegExp(synthesisPattern(lines), 'u').test(completion?.summary ?? '')) {
-		throw new Error('predecessor_result_citation_order_invalid');
+		throw new Error(`predecessor_result_citation_order_invalid; ${diagnostics}`);
 	}
 }
 

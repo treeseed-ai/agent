@@ -3,6 +3,33 @@ id: agent.golden.planning-synthesis-recovery
 title: Bounded predecessor synthesis correction
 scope: local-component-tests
 workflow:
+  - id: observation-counts
+    action: { verifier: agent.golden.synthesis-observation-counts }
+    expect: { status: passed }
+  - id: correction-output-missing
+    action: { verifier: agent.golden.synthesis-output-missing }
+    expect: { status: passed }
+  - id: correction-output-changed
+    action: { verifier: agent.golden.synthesis-output-changed }
+    expect: { status: passed }
+  - id: correction-output-invalid-json
+    action: { verifier: agent.golden.synthesis-output-invalid-json }
+    expect: { status: passed }
+  - id: correction-output-empty
+    action: { verifier: agent.golden.synthesis-output-empty }
+    expect: { status: passed }
+  - id: correction-output-unchanged
+    action: { verifier: agent.golden.synthesis-output-unchanged }
+    expect: { status: passed }
+  - id: pinned-cli-schema
+    action: { verifier: agent.golden.synthesis-cli-schema }
+    expect: { status: passed }
+  - id: pinned-cli-invalid-output
+    action: { verifier: agent.golden.synthesis-cli-invalid }
+    expect: { status: passed }
+  - id: pinned-cli-malformed-schema
+    action: { verifier: agent.golden.synthesis-cli-malformed-schema }
+    expect: { status: passed }
   - id: planning-recovery-shared-contract
     action: { verifier: agent.golden.planning-recovery-shared-contract }
     expect: { status: passed }

@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
+import { readFile, unlink } from 'node:fs/promises';
 import { validateActivityCompletion } from '../activity-completion.ts';
 import { codexProjectInstructionArguments, codexReasoningArguments, record } from './guest-contract.ts';
 import { assertPredecessorSynthesis, missingPredecessorCitations, planningSynthesisCorrectionPrompt } from '../kernel/handlers/planning-synthesis.ts';
@@ -39,6 +39,9 @@ export async function recoverPlanningSynthesis(input: {
 	const evidence = Array.isArray(predecessors) ? predecessors : [];
 	const prompt = planningSynthesisCorrectionPrompt(missing.length ? missing : evidence.map(item => String(record(item).id)), first, evidence);
 	await input.progress('provider.planning-synthesis-recovery.starting');
+	// The captured completion is already in the prompt. A zero-exit subprocess must produce a fresh response,
+	// not silently leave the initial file looking like an observed correction.
+	await unlink(input.responsePath);
 	const events: Event[] = [];
 	await input.execute('/usr/local/bin/codex', ['exec', 'resume', input.threadId, '--json', '--dangerously-bypass-approvals-and-sandbox',
 		'--model', input.model, ...codexReasoningArguments(input.reasoningEffort), ...codexProjectInstructionArguments(),
@@ -53,8 +56,20 @@ export async function recoverPlanningSynthesis(input: {
 		},
 	});
 	input.verifyClock(events);
-	const corrected = validateActivityCompletion(JSON.parse((await readFile(input.responsePath, 'utf8')).trim()), input.allowVerification);
-	assertPredecessorSynthesis(input.context, corrected);
+	const response = await readFile(input.responsePath, 'utf8').catch(error => {
+		if (error?.code === 'ENOENT') throw new Error('planning_synthesis_correction_output_missing');
+		throw error;
+	});
+	if (!response.trim()) throw new Error('planning_synthesis_correction_output_missing');
+	let decoded: unknown;
+	try { decoded = JSON.parse(response); }
+	catch { throw new Error('planning_synthesis_correction_output_invalid_json'); }
+	const corrected = validateActivityCompletion(decoded, input.allowVerification);
+	try { assertPredecessorSynthesis(input.context, corrected); }
+	catch (error) {
+		if (!(error instanceof Error) || !/^predecessor_result_citation_/u.test(error.message)) throw error;
+		throw new Error(`${error.message}; correctionChanged=${corrected.summary !== first.summary}`);
+	}
 	await input.progress('provider.planning-synthesis-recovery.completed');
 	return true;
 }

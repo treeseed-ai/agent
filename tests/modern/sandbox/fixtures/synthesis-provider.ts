@@ -13,5 +13,6 @@ const summary = evidence.map((item: { id: string; summary: string }) => `- ${ite
 if (mode === 'delay') await new Promise(resolve => setTimeout(resolve, 2_000));
 const clock = { type: 'item.completed', item: { type: 'mcp_tool_call', server: 'treedx', tool: 'treeseed_time_status', status: 'completed', result: { remainingSeconds: 90 } } };
 process.stdout.write(`${JSON.stringify(clock)}\n`);
-await writeFile(responsePath, JSON.stringify({ ...completion, summary }));
+if (mode !== 'no-output') await writeFile(responsePath, mode === 'invalid-json' ? 'PRIVATE MODEL PROSE not JSON'
+	: mode === 'empty-output' ? ' \n\t ' : JSON.stringify(mode === 'unchanged' ? completion : { ...completion, summary }));
 process.stdout.write(`${JSON.stringify(clock)}\n`);

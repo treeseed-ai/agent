@@ -1,6 +1,11 @@
 schemaVersion: treeseed.guarantee-verifiers/v1
 ownerPackage: "@treeseed/agent"
 verifiers:
+  agent.golden.architecture-usage-result-join:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/golden-usage-evidence.test.ts
+    testName: "denies aggregate elapsed or native usage that contradicts the exact completed assignment result"
   agent.golden.architecture-usage-pages-1:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

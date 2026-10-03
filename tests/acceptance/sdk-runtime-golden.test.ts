@@ -286,6 +286,14 @@ export function verifyGolden(gate: Gate): void {
 			&& Object.values(measurement.nativeUsage).every(finite), 'ACCEPTANCE_USAGE_MEASURED: Finite nonnegative native usage required');
 		assert.ok(typeof measurement.accountingMode === 'string' && ['aggregate', 'incremental', 'informational'].includes(measurement.accountingMode),
 			'ACCEPTANCE_USAGE_IDENTITY: Valid accounting mode required');
+		const result = row(assignment.assignmentResult);
+		if (measurement.accountingMode === 'aggregate' && result.status === 'completed') {
+			const usage = row(result.usage), native = row(usage.native), observedNative = row(measurement.nativeUsage);
+			assert.ok(finite(usage.elapsedSeconds) && usage.elapsedSeconds === measurement.elapsedSeconds
+				&& Object.entries(native).every(([key, value]) => finite(value) && observedNative[key] === value)
+				&& (native.activeSeconds === undefined || native.activeSeconds === measurement.activeSeconds),
+				'ACCEPTANCE_USAGE_RESULT: Aggregate measurement must retain the exact completed result usage');
+		}
 		usageItems.push(measurement);
 	}
 	}

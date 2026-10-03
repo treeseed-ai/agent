@@ -2,6 +2,20 @@ import { describe, expect, it, vi } from 'vitest';
 import { state, gate, read, assignment, usageMeasurement, classes, workdayId, commit, type Row } from './architecture/golden-readback-fixture.ts';
 
 describe('golden read-back assertion regressions (fixtures are not live acceptance)', () => {
+  it('denies a returned predecessor sharing the completed retry node revision while retaining advanced revision history', () => {
+    const list = state.replies.get('assignments list')!, latest = list.items.find((item: Row) => item.id === 'actor-1');
+    const prior = structuredClone(latest);
+    Object.assign(prior, { id: 'returned-prior', status: 'returned', completedAt: null,
+      returnedAt: '2026-09-27T00:00:00.900Z', createdAt: '2026-09-27T00:00:00.500Z', assignmentResult: null });
+    Object.assign(prior.capacityEnvelope.budget.time, { executionStartedAt: prior.createdAt, closeoutStartedAt: prior.returnedAt });
+    list.items.push(prior);
+    const sameRevision = (() => { try { gate('graph'); return 'ADMITTED'; } catch (error) { return String(error); } })();
+    prior.executionNodeRevision = latest.executionNodeRevision - 1;
+    prior.assignmentAttempt.nodeRevision = prior.executionNodeRevision;
+    const before = structuredClone([...state.replies]);
+    expect(() => gate('graph')).not.toThrow(); expect([...state.replies]).toEqual(before);
+    expect(sameRevision).toMatch(/ACCEPTANCE_RETRY_REVISION/u);
+  });
   it('denies mutually matching but malformed or moving proposal and decision authority in managed graph readback', () => {
     const nodes = state.replies.get('execution graph')!.nodes, original = structuredClone(nodes[0]);
     const assignments = state.replies.get('assignments list')!.items.filter((item: Row) => item.executionNodeId === original.id);

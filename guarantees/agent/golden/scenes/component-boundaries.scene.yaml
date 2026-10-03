@@ -3,6 +3,12 @@ id: agent.golden.component-boundaries
 title: Golden execution component boundaries
 scope: local-component-tests
 workflow:
+  - id: architecture-teardown-authority-1
+    action: { verifier: agent.golden.architecture-teardown-authority-1 }
+    expect: { status: passed }
+  - id: architecture-teardown-authority-2
+    action: { verifier: agent.golden.architecture-teardown-authority-2 }
+    expect: { status: passed }
   - id: architecture-stopped-lease-custody
     action: { verifier: agent.golden.architecture-stopped-lease-custody }
     expect: { status: passed }

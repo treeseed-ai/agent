@@ -4,7 +4,7 @@ import { assignmentReferenceSchema, assignmentTimingAwarenessReceiptSchema, esti
 import { DEFAULT_CAPACITY_PAGE_LIMIT } from '@treeseed/sdk/capacity-pagination';
 import { read, row, type Row } from './acceptance-cli.ts';
 import { readDecisionContent, verifyDecisionContent } from './workday/decision-evidence.ts';
-import { verifyAssignmentAuthority } from './workday/assignment-authority.ts';
+import { verifyAssignmentAuthority, verifyTeardownAuthority } from './workday/assignment-authority.ts';
 import { verifyPlanningEvidence } from './workday/planning-evidence.ts';
 import { readCompleteEvidence } from './workday/evidence-pages.ts';
 
@@ -101,6 +101,9 @@ export function verifyGolden(gate: Gate): void {
 	}
 	assert.equal(run.executionMode, 'simulation', 'Every gate requires authoritative simulation custody');
 	const assignments = readWorkdayAssignments(workdayId, text(run.startedAt), team);
+	if (['lifecycle', 'results', 'settlement', 'reporter', 'stopped'].includes(gate)) {
+		for (const item of assignments) verifyTeardownAuthority(item);
+	}
 	if (['lifecycle', 'graph', 'revision', 'results', 'reporter'].includes(gate)) for (const item of assignments) verifyAssignmentAuthority(item);
 	if (gate === 'lifecycle') for (const item of assignments) {
 		verifyAllocation(item);

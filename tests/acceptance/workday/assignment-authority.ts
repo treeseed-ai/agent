@@ -2,6 +2,28 @@ import assert from 'node:assert/strict';
 import { assignmentWorkspaceSchema, effectiveActivityProfileSchema, exactGrantSchema, exactEntityReferenceSchema } from '@treeseed/sdk/agent-capacity';
 import { row, type Row } from '../acceptance-cli.ts';
 
+/** Presented revoked authority is necessary, not proof of physical resource closure. */
+export function verifyTeardownAuthority(item: Row): void {
+	const label = 'ACCEPTANCE_TEARDOWN_AUTHORITY';
+	const object = (value: unknown): value is Row => !!value && typeof value === 'object' && !Array.isArray(value);
+	const context = row(item.workspaceContext);
+	for (const proxy of [item.treedxProxyHandle, context.treedxProxyHandle]) {
+		if (proxy === undefined || proxy === null) continue;
+		assert.ok(object(proxy), `${label}: Malformed presented proxy authority`);
+		assert.ok(Object.keys(proxy).length === 0 || proxy.status === 'revoked', `${label}: Proxy authority remains issued or unidentified`);
+	}
+	for (const handles of [item.capabilityHandles, context.capabilityHandles]) {
+		if (handles === undefined || handles === null) continue;
+		assert.ok(object(handles), `${label}: Malformed presented capability authority`);
+		for (const kind of ['repository', 'treeDx', 'workflowOperations', 'secrets']) {
+			const entries = handles[kind];
+			if (entries === undefined) continue;
+			assert.ok(Array.isArray(entries) && entries.every(entry => object(entry) && entry.status === 'revoked'),
+				`${label}: Capability authority remains issued or unidentified`);
+		}
+	}
+}
+
 /** Assertions in the existing managed verifier, not a runtime grant compiler.
  * Independent profile/policy retrieval and atomic admission still need proof. */
 export function verifyAssignmentAuthority(item: Row): void {

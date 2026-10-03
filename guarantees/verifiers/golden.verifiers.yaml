@@ -1,6 +1,11 @@
 schemaVersion: treeseed.guarantee-verifiers/v1
 ownerPackage: "@treeseed/agent"
 verifiers:
+  agent.golden.architecture-cancellation-clock:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/golden-usage-evidence.test.ts
+    testName: "denies zero terminal usage after a productive clock started while preserving preparation-only stopped cleanup"
   agent.golden.architecture-incremental-accounting-1:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

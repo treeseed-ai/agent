@@ -3,6 +3,9 @@ id: agent.golden.component-boundaries
 title: Golden execution component boundaries
 scope: local-component-tests
 workflow:
+  - id: architecture-cancellation-clock
+    action: { verifier: agent.golden.architecture-cancellation-clock }
+    expect: { status: passed }
   - id: architecture-incremental-accounting-1
     action: { verifier: agent.golden.architecture-incremental-accounting-1 }
     expect: { status: passed }

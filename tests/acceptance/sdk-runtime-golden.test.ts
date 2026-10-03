@@ -310,6 +310,17 @@ export function verifyGolden(gate: Gate): void {
 		}
 		const settlements = aggregate.filter(measurement => measurement.assignmentId === item.id);
 		assert.equal(settlements.length, 1, `ACCEPTANCE_SETTLEMENT_COUNT: Exactly one actual settlement required for ${text(item.id)}`);
+		const time = row(row(row(item.capacityEnvelope).budget).time);
+		if (time.executionStartedAt != null) {
+			const started = Date.parse(text(time.executionStartedAt));
+			const terminal = Date.parse(text(item.status === 'completed' ? item.completedAt
+				: item.status === 'returned' ? item.returnedAt ?? item.failedAt ?? item.completedAt
+					: item.failedAt ?? item.returnedAt ?? item.completedAt));
+			assert.ok(Number.isFinite(started) && Number.isFinite(terminal) && terminal >= started,
+				'ACCEPTANCE_USAGE_CLOCK: Declared execution requires ordered terminal clock evidence');
+			assert.ok(terminal === started || (Number(settlements[0]?.activeSeconds) > 0 && Number(settlements[0]?.elapsedSeconds) > 0),
+				'ACCEPTANCE_USAGE_CLOCK: Visibly elapsed productive work cannot settle as zero');
+		}
 		const incremental = usageItems.filter(measurement => measurement.assignmentId === item.id && measurement.accountingMode === 'incremental');
 		assert.ok(incremental.every(measurement => measurement.assignmentAttempt === settlements[0]?.assignmentAttempt)
 			&& incremental.reduce((total, measurement) => total + (measurement.activeSeconds as number), 0) <= (settlements[0]?.activeSeconds as number),

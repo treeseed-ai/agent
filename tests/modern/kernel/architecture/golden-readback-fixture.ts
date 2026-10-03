@@ -1,7 +1,7 @@
 import { beforeEach, vi } from 'vitest';
 
 export type Row = Record<string, any>;
-const state = vi.hoisted(() => ({ cases: new Map<string, () => void>(), replies: new Map<string, Row>(), failure: undefined as Error | undefined, timeout: 0, args: [] as string[] }));
+const state = vi.hoisted(() => ({ cases: new Map<string, () => void>(), replies: new Map<string, Row>(), usagePages: undefined as Row[] | undefined, failure: undefined as Error | undefined, timeout: 0, args: [] as string[] }));
 export { state };
 vi.mock('node:test', () => ({ default: (name: string, _options: unknown, run: () => void) => state.cases.set(name, run) }));
 vi.mock('node:child_process', () => ({ execFileSync: (_command: string, args: string[], options: { timeout: number }) => {
@@ -9,7 +9,8 @@ vi.mock('node:child_process', () => ({ execFileSync: (_command: string, args: st
 	state.args = args;
 	if (state.failure) throw state.failure;
 	const key = args.slice(0, 2).join(' ');
-	const result = state.replies.get(`${key} ${args[3]}`) ?? state.replies.get(key);
+	const result = key === 'capacity usage' && state.usagePages ? state.usagePages.shift()
+		: state.replies.get(`${key} ${args[3]}`) ?? state.replies.get(key);
 	if (!result) throw new Error(`Unexpected acceptance read: ${key}`);
 	// The actual repository sorts its read model; do not reorder the mutable oracle inputs.
 	const presented = key === 'assignments list' ? { ...result, items: [...result.items].sort((a, b) =>
@@ -55,6 +56,7 @@ beforeEach(() => {
 	vi.stubEnv('TREESEED_ACCEPTANCE_WORKDAY_ID', workdayId);
 	state.replies.clear();
 	state.failure = undefined;
+	state.usagePages = undefined;
 	const items: Row[] = classes.flatMap(agentClass => [assignment(`chat-${agentClass}`, 'chat', agentClass),
 		assignment(`planning-1-${agentClass}`, 'planning', agentClass), assignment(`planning-2-${agentClass}`, 'planning', agentClass)]);
 	items.push(...classes.slice(0, 7).map(agentClass => assignment(`estimate-${agentClass}`, 'estimating', agentClass)));

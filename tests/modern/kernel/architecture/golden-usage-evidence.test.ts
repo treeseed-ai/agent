@@ -105,4 +105,11 @@ describe('complete scoped measured usage evidence for managed settlement', () =>
 		});
 		expect(failures).toEqual(failures.map(() => expect.stringMatching(/ACCEPTANCE_USAGE_(ROW|ORDER|PAGE)/u)));
 	});
+	it('denies aggregate elapsed or native usage that contradicts the exact completed assignment result', () => {
+		const original = structuredClone(usage()), first = original.items[0];
+		const mutations = [{ elapsedSeconds: 2 }, { nativeUsage: { activeSeconds: 2 } },
+			{ activeSeconds: 2, elapsedSeconds: 2, nativeUsage: { activeSeconds: 2 } }];
+		expect(outcomes(mutations.map(change => ({ ...original, items: [{ ...first, ...change }, ...original.items.slice(1)] }))))
+			.toEqual(mutations.map(() => expect.stringMatching(/ACCEPTANCE_USAGE_RESULT/u)));
+	});
 });

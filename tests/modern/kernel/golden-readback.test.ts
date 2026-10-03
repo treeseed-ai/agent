@@ -184,6 +184,24 @@ describe('golden read-back assertion regressions (fixtures are not live acceptan
       expect(() => gate('results')).toThrow();
     }
   });
+  it('denies missing malformed before-start future and past-deadline canonical result completion clocks', () => {
+    const item = state.replies.get('assignments list')!.items[0], result = item.assignmentResult;
+    const original = structuredClone(item), clock = result.completedAt;
+    // Supplied DTOs are not independent provider clock readings or live results.
+    item.assignmentAttempt.createdAt = item.createdAt;
+    item.assignmentAttempt.deadline = '2026-09-27T00:00:11Z';
+    const observations: boolean[] = [];
+    for (const completedAt of [undefined, 'invalid', '2026-09-27T00:00:00Z', '2026-09-27T00:00:03Z', '2026-09-27T00:00:12Z']) {
+      result.completedAt = completedAt;
+      let denied = false; try { gate('results'); } catch { denied = true; }
+      observations.push(denied);
+    }
+    result.completedAt = clock;
+    expect(() => gate('results')).not.toThrow();
+    delete item.assignmentAttempt.createdAt; delete item.assignmentAttempt.deadline;
+    expect(item).toEqual(original);
+    expect(observations).toEqual([true, true, true, true, true]);
+  });
   it('denies nonfinite measured usage instead of accepting a coerced positive value', () => {
     const native = state.replies.get('assignments list')!.items[0].assignmentResult.usage.native;
     for (const value of ['1', Number.POSITIVE_INFINITY, Number.NaN, -1]) {

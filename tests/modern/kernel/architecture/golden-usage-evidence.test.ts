@@ -85,7 +85,7 @@ describe('complete scoped measured usage evidence for managed settlement', () =>
 		const original = structuredClone(usage()), first = original.items[0];
 		const additional = Array.from({ length: 100 - original.items.length }, (_, index) => ({ ...first,
 			id: `informational-${String(index).padStart(3, '0')}`, idempotencyKey: `informational-key-${index}`,
-			accountingMode: 'informational' }));
+			accountingMode: 'informational', activeSeconds: 0, elapsedSeconds: 0, nativeUsage: {} }));
 		const continuing = page(ordered([...original.items, ...additional]), true);
 		const before = structuredClone(continuing);
 		state.usagePages = [continuing, page([])]; expect(() => gate('settlement')).not.toThrow();
@@ -96,7 +96,7 @@ describe('complete scoped measured usage evidence for managed settlement', () =>
 		const original = structuredClone(usage()), first = original.items[0];
 		const additional = Array.from({ length: 100 - original.items.length }, (_, index) => ({ ...first,
 			id: `informational-${String(index).padStart(3, '0')}`, idempotencyKey: `informational-key-${index}`,
-			accountingMode: 'informational' }));
+			accountingMode: 'informational', activeSeconds: 0, elapsedSeconds: 0, nativeUsage: {} }));
 		const continuing = page(ordered([...original.items, ...additional]), true);
 		const failures = [continuing, page([continuing.items[0]]), page([{ ...first, id: 'future-tail',
 			idempotencyKey: 'future-key', createdAt: '2099-01-01T00:00:00.000Z' }])].map(tail => {
@@ -111,5 +111,19 @@ describe('complete scoped measured usage evidence for managed settlement', () =>
 			{ activeSeconds: 2, elapsedSeconds: 2, nativeUsage: { activeSeconds: 2 } }];
 		expect(outcomes(mutations.map(change => ({ ...original, items: [{ ...first, ...change }, ...original.items.slice(1)] }))))
 			.toEqual(mutations.map(() => expect.stringMatching(/ACCEPTANCE_USAGE_RESULT/u)));
+	});
+	it('denies informational records that claim productive seconds instead of separate native observation', () => {
+		const original = structuredClone(usage()), first = original.items[0];
+		const informational = { ...first, id: 'informational-time', idempotencyKey: 'informational-time-key',
+			accountingMode: 'informational', usageDimension: 'information', activeSeconds: 1, elapsedSeconds: 1 };
+		expect(outcomes([page(ordered([...original.items, informational]))]))
+			.toEqual([expect.stringMatching(/ACCEPTANCE_USAGE_ACCOUNTING/u)]);
+	});
+	it('denies incremental seconds outside the sole immutable attempt or above its terminal aggregate', () => {
+		const original = structuredClone(usage()), first = original.items[0];
+		const changes = [{ activeSeconds: 2, elapsedSeconds: 2 }, { assignmentAttempt: first.assignmentAttempt + 1 }];
+		const candidates = changes.map(change => page(ordered([...original.items, { ...first, id: 'incremental-time',
+			idempotencyKey: 'incremental-time-key', accountingMode: 'incremental', usageDimension: 'checkpoint', ...change }])));
+		expect(outcomes(candidates)).toEqual(changes.map(() => expect.stringMatching(/ACCEPTANCE_USAGE_ACCOUNTING/u)));
 	});
 });

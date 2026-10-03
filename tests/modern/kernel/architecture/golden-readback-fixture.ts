@@ -1,15 +1,18 @@
 import { beforeEach, vi } from 'vitest';
 
 export type Row = Record<string, any>;
-const state = vi.hoisted(() => ({ cases: new Map<string, () => void>(), replies: new Map<string, Row>(), usagePages: undefined as Row[] | undefined, failure: undefined as Error | undefined, timeout: 0, args: [] as string[] }));
+const state = vi.hoisted(() => ({ cases: new Map<string, () => void>(), replies: new Map<string, Row>(), usagePages: undefined as Row[] | undefined, failure: undefined as Error | undefined, workspaceFailure: undefined as Error | undefined, timeout: 0, args: [] as string[], calls: [] as string[][] }));
 export { state };
 vi.mock('node:test', () => ({ default: (name: string, _options: unknown, run: () => void) => state.cases.set(name, run) }));
 vi.mock('node:child_process', () => ({ execFileSync: (_command: string, args: string[], options: { timeout: number }) => {
 	state.timeout = options.timeout;
 	state.args = args;
+	state.calls.push([...args]);
 	if (state.failure) throw state.failure;
 	const key = args.slice(0, 2).join(' ');
-	const result = key === 'capacity usage' && state.usagePages ? state.usagePages.shift()
+	if (key === 'projects treedx' && state.workspaceFailure) throw state.workspaceFailure;
+	const result = key === 'projects treedx' ? state.replies.get(`workspace ${args[4]}`)
+		: key === 'capacity usage' && state.usagePages ? state.usagePages.shift()
 		: state.replies.get(`${key} ${args[3]}`) ?? state.replies.get(key);
 	if (!result) throw new Error(`Unexpected acceptance read: ${key}`);
 	// The actual repository sorts its read model; do not reorder the mutable oracle inputs.
@@ -64,7 +67,9 @@ beforeEach(() => {
 	vi.stubEnv('TREESEED_ACCEPTANCE_WORKDAY_ID', workdayId);
 	state.replies.clear();
 	state.failure = undefined;
+	state.workspaceFailure = undefined;
 	state.usagePages = undefined;
+	state.calls = [];
 	const items: Row[] = classes.flatMap(agentClass => [assignment(`chat-${agentClass}`, 'chat', agentClass),
 		assignment(`planning-1-${agentClass}`, 'planning', agentClass), assignment(`planning-2-${agentClass}`, 'planning', agentClass)]);
 	items.push(...classes.slice(0, 7).map(agentClass => assignment(`estimate-${agentClass}`, 'estimating', agentClass)));
@@ -81,6 +86,12 @@ beforeEach(() => {
 	reporter.assignmentAttempt.sourceRef = { store: 'postgresql', model: 'workday', id: workdayId };
 	reporter.assignmentResult.references = [structuredClone(reportRef)];
 	items.push(reporter);
+	// Supplied official workspace-read results, not actual remote resource receipts.
+	for (const item of items) if (item.assignmentAttempt.workspace.mode === 'treedx') {
+		const workspace = item.assignmentAttempt.workspace;
+		state.replies.set(`workspace ${workspace.workspaceId}`, { result: { workspaceId: workspace.workspaceId,
+			repoId: workspace.repository, status: 'closed' }, receipt: { projectId: item.projectId } });
+	}
 	state.replies.set('workdays show', { run: { status: 'completed', executionMode: 'simulation', startedAt: '2026-09-27T00:00:00Z',
 		completedAt: '2026-09-27T00:01:00Z', parameters: { durationSeconds: 3600, planningPercent: 100 / 3, allocationWeight: 1, planningTurnMaximumSeconds: 180, maximumConcurrency: 5, communicationConcurrency: 5,
 			appliedPlan: { planningRounds: [{ state: 'complete' }, { state: 'complete' }] } },

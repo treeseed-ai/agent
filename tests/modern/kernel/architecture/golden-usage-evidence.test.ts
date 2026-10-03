@@ -30,18 +30,34 @@ describe('complete scoped measured usage evidence for managed settlement', () =>
 		const item = assignments()[0]!, original = structuredClone(item);
 		const changes = [{ treedxProxyHandle: { status: 'issued', workspaceId: 'workspace-still-open' } },
 			{ workspaceContext: { treedxProxyHandle: { status: 'issued' } } },
+			{ capabilityHandles: { treeDx: [{ status: 'issued' }] } },
 			...['repository', 'treeDx', 'workflowOperations', 'secrets'].map(kind => ({ workspaceContext: {
 				capabilityHandles: { [kind]: [{ id: 'still-issued', status: 'issued' }] } } }))];
 		const results = changes.map(change => {
-			delete item.treedxProxyHandle; delete item.workspaceContext;
+			delete item.treedxProxyHandle; delete item.workspaceContext; delete item.capabilityHandles;
 			Object.assign(item, original, change);
 			try { stopped(); return 'ADMITTED'; } catch (error) { return String(error); }
 		});
-		expect(results).toEqual(changes.map(() => expect.stringMatching(/ACCEPTANCE_TEARDOWN_AUTHORITY/u)));
+		delete item.capabilityHandles;
 		item.treedxProxyHandle = { status: 'revoked', workspaceId: 'historical-workspace-id' };
 		item.workspaceContext = { treedxProxyHandle: { status: 'revoked' }, capabilityHandles: {
 			repository: [], treeDx: [{ id: 'historical-handle', status: 'revoked' }], workflowOperations: [], secrets: [] } };
 		const before = structuredClone([...state.replies]); expect(stopped).not.toThrow(); expect([...state.replies]).toEqual(before);
+		expect(results).toEqual(changes.map(() => expect.stringMatching(/ACCEPTANCE_TEARDOWN_AUTHORITY/u)));
+	});
+	it('rejects malformed presented teardown authority while accepting empty handles without inventing resource closure', () => {
+		const item = assignments()[0]!, original = structuredClone(item);
+		const changes = [{ treedxProxyHandle: [] }, { treedxProxyHandle: 'revoked' }, { treedxProxyHandle: { workspaceId: 'unclassified' } },
+			{ capabilityHandles: [] }, { capabilityHandles: { treeDx: {} } }, { capabilityHandles: { treeDx: [null] } },
+			{ capabilityHandles: { treeDx: [{ status: 'unknown' }] } }, { workspaceContext: { treedxProxyHandle: [] } }];
+		const results = changes.map(change => {
+			delete item.treedxProxyHandle; delete item.capabilityHandles; delete item.workspaceContext;
+			Object.assign(item, original, change);
+			try { gate('settlement'); return 'ADMITTED'; } catch (error) { return String(error); }
+		});
+		delete item.workspaceContext; item.treedxProxyHandle = {}; item.capabilityHandles = {};
+		const before = structuredClone([...state.replies]); expect(() => gate('settlement')).not.toThrow(); expect([...state.replies]).toEqual(before);
+		expect(results).toEqual(changes.map(() => expect.stringMatching(/ACCEPTANCE_TEARDOWN_AUTHORITY/u)));
 	});
 	it('rejects retained lease state expiry or renewal after stop while preserving historical runner identity', () => {
 		const stopped = state.cases.get('Stopped simulation retains terminal leases teardown and exactly-once settlement')!;

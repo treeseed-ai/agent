@@ -11,7 +11,7 @@ function page(items: Row[], hasMore = false): Row {
 	return { items, page: { limit: 100, hasMore, nextCursor: hasMore && last
 		? encodeCapacityPageCursor({ id: last.id, createdAt: last.createdAt }) : null } };
 }
-function measured(item: Row, index = 0): Row {
+function measured(item: Row, index = item.assignmentAttempt.attempt): Row {
 	return { ...usageMeasurement(item), assignmentAttempt: index };
 }
 beforeEach(() => { state.replies.set('capacity usage', page(ordered(assignments().map(value => measured(value))))); });
@@ -24,6 +24,23 @@ function outcomes(candidates: Row[]): string[] {
 // UNIT tests OF actual managed settlement assertions. Supplied measurement DTOs
 // are not actual provider usage, canonical UsageSettlements or real settlement receipts.
 describe('complete scoped measured usage evidence for managed settlement', () => {
+	it('denies a terminal attempt ordinal that changed or disappeared while retaining exact immutable ordinal custody', () => {
+		const item = assignments()[0]!, original = structuredClone(item), values = [2, '1', undefined, 0];
+		const results = values.map(value => {
+			item.attemptCount = value;
+			try { gate('settlement'); return 'ADMITTED'; } catch (error) { return String(error); }
+		});
+		Object.assign(item, original); const before = structuredClone([...state.replies]);
+		expect(() => gate('settlement')).not.toThrow(); expect([...state.replies]).toEqual(before);
+		expect(results).toEqual(values.map(() => expect.stringMatching(/ACCEPTANCE_USAGE_ATTEMPT/u)));
+	});
+	it('denies a measurement from another immutable attempt even when exactly one aggregate and settlement key are present', () => {
+		const original = structuredClone(usage());
+		const changes = [0, 2];
+		const candidates = changes.map(assignmentAttempt => ({ ...original,
+			items: [{ ...original.items[0], assignmentAttempt }, ...original.items.slice(1)] }));
+		expect(outcomes(candidates)).toEqual(changes.map(() => expect.stringMatching(/ACCEPTANCE_USAGE_ATTEMPT/u)));
+	});
 	it('denies issued capability or proxy handles despite a claimed verified teardown and retains revoked evidence', () => {
 		const stopped = state.cases.get('Stopped simulation retains terminal leases teardown and exactly-once settlement')!;
 		state.replies.get('workdays show')!.run.status = 'failed';

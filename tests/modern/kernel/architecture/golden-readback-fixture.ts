@@ -30,7 +30,7 @@ export const gate = (name: string) => state.cases.get(`Golden runtime ${name} ev
 export function usageMeasurement(item: Row): Row {
 	// Scoped measurement assertion input, NOT actual usage or a canonical UsageSettlement.
 	return { id: `${item.id}:aggregate`, assignmentId: item.id, projectId: item.projectId, workDayId: workdayId,
-		idempotencyKey: `usage-${item.id}`, assignmentAttempt: 0, accountingMode: 'aggregate', usageDimension: 'aggregate',
+		idempotencyKey: `usage-${item.id}`, assignmentAttempt: item.assignmentAttempt.attempt, accountingMode: 'aggregate', usageDimension: 'aggregate',
 		activeSeconds: 1, elapsedSeconds: 1, nativeUsage: { activeSeconds: 1 }, createdAt: item.completedAt,
 		metadata: { settlementKey: item.id } };
 }
@@ -39,9 +39,9 @@ export function assignment(id: string, activity: string, agentClass: string, wor
 	const git = activity === 'acting', tools = git ? ['source.read', 'source.write', 'verification'] : ['source.read', 'verification'];
 	const writable = { store: 'treedx', model: 'decision', id: `decision-${id}`, repository: 'sdk-library', commit,
 		path: `decisions/${id}.mdx` };
-	return { id, workDayId: workdayId, projectId: 'sdk', decisionId: 'decision-1', status: 'completed', leaseToken: null,
+	return { id, workDayId: workdayId, projectId: 'sdk', decisionId: 'decision-1', status: 'completed', leaseToken: null, attemptCount: 1,
 		leaseState: 'released', leaseExpiresAt: null, leaseRenewedAt: null, runnerId: null,
-		createdAt, completedAt, assignmentAttempt: { agentClass, workItemId, effectiveProfile: { activity,
+		createdAt, completedAt, assignmentAttempt: { attempt: 1, agentClass, workItemId, effectiveProfile: { activity,
 			profileRef: { store: 'treedx', model: 'agent', id: `configured-${agentClass}`, repository: 'sdk-library', commit,
 				path: `agents/${agentClass}.yaml` }, handler: git ? 'actor' : activity === 'reporting' ? 'reporter' : 'writer',
 			handlerOrigin: 'agent-package', prompt: { system: 'Synthetic governed task instructions for assertion testing only.' },

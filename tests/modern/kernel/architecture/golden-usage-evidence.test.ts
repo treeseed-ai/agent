@@ -24,6 +24,25 @@ function outcomes(candidates: Row[]): string[] {
 // UNIT tests OF actual managed settlement assertions. Supplied measurement DTOs
 // are not actual provider usage, canonical UsageSettlements or real settlement receipts.
 describe('complete scoped measured usage evidence for managed settlement', () => {
+	it('denies issued capability or proxy handles despite a claimed verified teardown and retains revoked evidence', () => {
+		const stopped = state.cases.get('Stopped simulation retains terminal leases teardown and exactly-once settlement')!;
+		state.replies.get('workdays show')!.run.status = 'failed';
+		const item = assignments()[0]!, original = structuredClone(item);
+		const changes = [{ treedxProxyHandle: { status: 'issued', workspaceId: 'workspace-still-open' } },
+			{ workspaceContext: { treedxProxyHandle: { status: 'issued' } } },
+			...['repository', 'treeDx', 'workflowOperations', 'secrets'].map(kind => ({ workspaceContext: {
+				capabilityHandles: { [kind]: [{ id: 'still-issued', status: 'issued' }] } } }))];
+		const results = changes.map(change => {
+			delete item.treedxProxyHandle; delete item.workspaceContext;
+			Object.assign(item, original, change);
+			try { stopped(); return 'ADMITTED'; } catch (error) { return String(error); }
+		});
+		expect(results).toEqual(changes.map(() => expect.stringMatching(/ACCEPTANCE_TEARDOWN_AUTHORITY/u)));
+		item.treedxProxyHandle = { status: 'revoked', workspaceId: 'historical-workspace-id' };
+		item.workspaceContext = { treedxProxyHandle: { status: 'revoked' }, capabilityHandles: {
+			repository: [], treeDx: [{ id: 'historical-handle', status: 'revoked' }], workflowOperations: [], secrets: [] } };
+		const before = structuredClone([...state.replies]); expect(stopped).not.toThrow(); expect([...state.replies]).toEqual(before);
+	});
 	it('rejects retained lease state expiry or renewal after stop while preserving historical runner identity', () => {
 		const stopped = state.cases.get('Stopped simulation retains terminal leases teardown and exactly-once settlement')!;
 		state.replies.get('workdays show')!.run.status = 'failed';

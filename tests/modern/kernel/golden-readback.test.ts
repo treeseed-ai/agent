@@ -2,6 +2,26 @@ import { describe, expect, it, vi } from 'vitest';
 import { state, gate, read, assignment, usageMeasurement, classes, workdayId, commit, type Row } from './architecture/golden-readback-fixture.ts';
 
 describe('golden read-back assertion regressions (fixtures are not live acceptance)', () => {
+  it('denies a Git completion without a candidate in its sole immutable repository and optional branch scope', () => {
+    const item = state.replies.get('assignments list')!.items.find((value: Row) => value.id === 'actor-1');
+    const result = item.assignmentResult, original = structuredClone(result.references), workspace = item.assignmentAttempt.workspace;
+    const outcomes: boolean[] = [];
+    for (const references of [[{ kind: 'git', repository: 'foreign/repository', commit }],
+      [{ kind: 'git', repository: workspace.repository, commit, branch: 'main' }],
+      [{ kind: 'git', repository: workspace.repository, commit, branch: 'simulation/foreign' }],
+      [{ kind: 'url', url: 'https://example.invalid/read-only-citation' }]]) {
+      result.references = references;
+      let denied = false; try { gate('results'); } catch { denied = true; } outcomes.push(denied);
+    }
+    for (const branch of [undefined, workspace.branch]) {
+      result.references = [{ kind: 'git', repository: workspace.repository, commit, ...(branch ? { branch } : {}) },
+        { kind: 'url', url: 'https://example.invalid/read-only-citation' }];
+      const before = structuredClone([...state.replies]);
+      expect(() => gate('results')).not.toThrow(); expect([...state.replies]).toEqual(before);
+    }
+    result.references = original;
+    expect(outcomes).toEqual([true, true, true, true]);
+  });
   it('denies a returned predecessor sharing the completed retry node revision while retaining advanced revision history', () => {
     const list = state.replies.get('assignments list')!, latest = list.items.find((item: Row) => item.id === 'actor-1');
     const prior = structuredClone(latest);

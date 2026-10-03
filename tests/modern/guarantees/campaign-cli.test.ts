@@ -170,6 +170,14 @@ describe('campaign CLI composition units (mocked transport, not native or live a
 			expect.soft(state.verify).not.toHaveBeenCalled();
 		}
 	});
+	it('denies failed returned or expired scheduling counts even on a completed workday', async () => {
+		for (const status of ['failed', 'returned', 'expired']) {
+			state.read.mockReset(); state.verify.mockReset();
+			transport(() => ({ ...observed(), scheduling: { ...observed().scheduling, assignments: [{ status, count: 1 }] } }));
+			await expect.soft(state.run!()).rejects.toThrow('ACCEPTANCE_OBSERVATION');
+			expect.soft(state.verify).not.toHaveBeenCalled();
+		}
+	});
 	it('denies mutated or disappearing previously observed event records on later terminal readback', async () => {
 		vi.useFakeTimers();
 		for (const events of [[], [{ ...event(), refs: { changed: true } }]]) {

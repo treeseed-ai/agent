@@ -285,6 +285,8 @@ export function verifyGolden(gate: Gate): void {
 			&& typeof measurement.assignmentAttempt === 'number' && Number.isInteger(measurement.assignmentAttempt) && measurement.assignmentAttempt >= 0,
 			'ACCEPTANCE_USAGE_IDENTITY: Unique idempotency and valid attempt authority required');
 		usageIds.add(measurement.id); usageKeys.add(measurement.idempotencyKey);
+		assert.ok(measurement.assignmentAttempt === row(assignment.assignmentAttempt).attempt,
+			'ACCEPTANCE_USAGE_ACCOUNTING: ACCEPTANCE_USAGE_ATTEMPT: Measurement must belong to the exact immutable assignment attempt');
 		const finite = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value) && value >= 0;
 		assert.ok(finite(measurement.activeSeconds) && finite(measurement.elapsedSeconds) && measurement.activeSeconds <= measurement.elapsedSeconds
 			&& (!measurement.elapsedSeconds || measurement.activeSeconds > 0), 'ACCEPTANCE_USAGE_MEASURED: Finite truthful productive time required');

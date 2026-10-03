@@ -1,6 +1,16 @@
 schemaVersion: treeseed.guarantee-verifiers/v1
 ownerPackage: "@treeseed/agent"
 verifiers:
+  agent.golden.architecture-terminal-attempt-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/golden-usage-evidence.test.ts
+    testName: "denies a terminal attempt ordinal that changed or disappeared while retaining exact immutable ordinal custody"
+  agent.golden.architecture-terminal-attempt-2:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/golden-usage-evidence.test.ts
+    testName: "denies a measurement from another immutable attempt even when exactly one aggregate and settlement key are present"
   agent.golden.architecture-independent-workspace-1:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

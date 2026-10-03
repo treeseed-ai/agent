@@ -3,6 +3,12 @@ id: agent.golden.component-boundaries
 title: Golden execution component boundaries
 scope: local-component-tests
 workflow:
+  - id: architecture-terminal-attempt-1
+    action: { verifier: agent.golden.architecture-terminal-attempt-1 }
+    expect: { status: passed }
+  - id: architecture-terminal-attempt-2
+    action: { verifier: agent.golden.architecture-terminal-attempt-2 }
+    expect: { status: passed }
   - id: architecture-independent-workspace-1
     action: { verifier: agent.golden.architecture-independent-workspace-1 }
     expect: { status: passed }

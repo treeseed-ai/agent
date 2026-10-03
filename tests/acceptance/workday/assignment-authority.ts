@@ -21,6 +21,9 @@ export function verifyTreeDxWorkspaceClosure(item: Row, team: string): void {
 
 /** Presented revoked authority is necessary, not proof of physical resource closure. */
 export function verifyTeardownAuthority(item: Row): void {
+	const ordinal = row(item.assignmentAttempt).attempt;
+	assert.ok(typeof ordinal === 'number' && Number.isInteger(ordinal) && ordinal >= 1 && item.attemptCount === ordinal,
+		'ACCEPTANCE_USAGE_ATTEMPT: Terminal assignment ordinal must retain its exact immutable attempt');
 	const label = 'ACCEPTANCE_TEARDOWN_AUTHORITY';
 	const object = (value: unknown): value is Row => !!value && typeof value === 'object' && !Array.isArray(value);
 	const context = row(item.workspaceContext);

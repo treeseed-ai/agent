@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { assignmentReferenceSchema, assignmentTimingAwarenessReceiptSchema, estimateSchema, exactEntityReferenceSchema } from '@treeseed/sdk/agent-capacity';
+import { DEFAULT_CAPACITY_PAGE_LIMIT, decodeCapacityPageCursor } from '@treeseed/sdk/capacity-pagination';
 import { read, row, type Row } from './acceptance-cli.ts';
 import { readDecisionContent, verifyDecisionContent } from './workday/decision-evidence.ts';
 import { verifyAssignmentAuthority } from './workday/assignment-authority.ts';
@@ -66,16 +67,44 @@ function phaseBoundaryCancelled(item: Row, run: Row): boolean {
 }
 export function readWorkdayAssignments(workdayId: string, startedAt: string, team: string): Row[] {
 	const assignments: Row[] = [];
+	const start = Date.parse(startedAt), identities = new Set<string>(), cursors = new Set<string>();
+	assert.ok(workdayId && Number.isFinite(start), 'ACCEPTANCE_ASSIGNMENT_ROW: Exact workday start authority required');
 	let cursor: string | undefined;
+	let previous: { id: string; time: number } | undefined;
 	for (let pageNumber = 0; pageNumber < 40; pageNumber += 1) {
-		const page = read(['assignments', 'list', '--limit', '50', ...(cursor ? ['--cursor', cursor] : [])], team);
-		const items = rows(page.items);
-		assignments.push(...items.filter(item => item.workDayId === workdayId));
+		const page = read(['assignments', 'list', '--limit', String(DEFAULT_CAPACITY_PAGE_LIMIT), ...(cursor ? ['--cursor', cursor] : [])], team);
 		const pageInfo = row(page.page);
-		if (!pageInfo.hasMore || items.every(item => text(item.createdAt) < startedAt)) break;
-		cursor = text(pageInfo.nextCursor);
-		assert.ok(cursor, 'Assignment pagination omitted its cursor');
-		assert.ok(pageNumber < 39, 'Complete assignment evidence was not reached');
+		assert.ok(Array.isArray(page.items) && page.items.length <= DEFAULT_CAPACITY_PAGE_LIMIT
+			&& pageInfo.limit === DEFAULT_CAPACITY_PAGE_LIMIT && typeof pageInfo.hasMore === 'boolean',
+			'ACCEPTANCE_ASSIGNMENT_PAGE: Complete typed page authority required');
+		const items: Row[] = [];
+		for (const value of page.items) {
+			assert.ok(value && typeof value === 'object' && !Array.isArray(value), 'ACCEPTANCE_ASSIGNMENT_ROW: Record required');
+			const item = row(value), id = text(item.id), time = Date.parse(text(item.createdAt));
+			assert.ok(id && Number.isFinite(time) && (item.workDayId === null || typeof item.workDayId === 'string')
+				&& !identities.has(id), 'ACCEPTANCE_ASSIGNMENT_ROW: Unique identity, scope and creation clock required');
+			assert.ok(!previous || time < previous.time || (time === previous.time && id < previous.id),
+				'ACCEPTANCE_ASSIGNMENT_ORDER: Exact descending creation/identity order required across all pages');
+			identities.add(id); previous = { id, time }; items.push(item);
+			if (item.workDayId === workdayId) {
+				assert.ok(time >= start, 'ACCEPTANCE_ASSIGNMENT_ROW: Target assignment predates its authoritative workday');
+				assignments.push(item);
+			}
+		}
+		if (!pageInfo.hasMore) {
+			assert.equal(pageInfo.nextCursor, null, 'ACCEPTANCE_ASSIGNMENT_PAGE: Terminal cursor must be explicitly null');
+			break;
+		}
+		assert.ok(items.length === DEFAULT_CAPACITY_PAGE_LIMIT && typeof pageInfo.nextCursor === 'string'
+			&& pageInfo.nextCursor && !cursors.has(pageInfo.nextCursor), 'ACCEPTANCE_ASSIGNMENT_PAGE: Complete progressing page required');
+		let next;
+		try { next = decodeCapacityPageCursor(pageInfo.nextCursor); }
+		catch { assert.fail('ACCEPTANCE_ASSIGNMENT_PAGE: Invalid cursor authority'); }
+		const last = items.at(-1)!;
+		assert.ok(next && next.id === last.id && next.createdAt === last.createdAt,
+			'ACCEPTANCE_ASSIGNMENT_PAGE: Cursor must bind the actual last record');
+		cursor = pageInfo.nextCursor; cursors.add(cursor);
+		assert.ok(pageNumber < 39, 'ACCEPTANCE_ASSIGNMENT_PAGE: Complete assignment evidence was not reached within the original bound');
 	}
 	assert.ok(assignments.length > 0, 'No real assignment evidence');
 	assert.equal(new Set(assignments.map(item => item.id)).size, assignments.length);

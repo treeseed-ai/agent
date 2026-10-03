@@ -1,6 +1,61 @@
 schemaVersion: treeseed.guarantee-verifiers/v1
 ownerPackage: "@treeseed/agent"
 verifiers:
+  agent.golden.architecture-assignment-pages-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/golden-assignment-pagination.test.ts
+    testName: "collects every exact page and scopes workday rows without mutating input"
+  agent.golden.architecture-assignment-pages-2:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/golden-assignment-pagination.test.ts
+    testName: "denies absent malformed or contradictory page authority"
+  agent.golden.architecture-assignment-pages-3:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/golden-assignment-pagination.test.ts
+    testName: "denies malformed collection rows identities and creation clocks"
+  agent.golden.architecture-assignment-pages-4:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/golden-assignment-pagination.test.ts
+    testName: "denies missing nonarray or oversized collection payloads"
+  agent.golden.architecture-assignment-pages-5:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/golden-assignment-pagination.test.ts
+    testName: "denies empty or short continuing pages and cursor authority unrelated to the last row"
+  agent.golden.architecture-assignment-pages-6:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/golden-assignment-pagination.test.ts
+    testName: "denies duplicate records and reversed ordering within or across pages including unrelated workdays"
+  agent.golden.architecture-assignment-pages-7:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/golden-assignment-pagination.test.ts
+    testName: "does not infer completion from old timestamps or stop before explicit terminal authority"
+  agent.golden.architecture-assignment-pages-8:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/golden-assignment-pagination.test.ts
+    testName: "denies missing start authority and target assignments before the original workday start"
+  agent.golden.architecture-assignment-pages-9:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/golden-assignment-pagination.test.ts
+    testName: "retains the original forty-page bound and fails instead of accepting a continuing tail"
+  agent.golden.architecture-assignment-pages-10:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/golden-assignment-pagination.test.ts
+    testName: "accepts equal-clock identity ordering and an explicitly empty terminal page without losing earlier evidence"
+  agent.golden.architecture-assignment-pages-11:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/golden-assignment-pagination.test.ts
+    testName: "denies repeated cursor authority or transport failure after a valid first page instead of returning partial evidence"
   agent.golden.architecture-campaign-observation-1:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

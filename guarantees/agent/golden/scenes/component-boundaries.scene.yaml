@@ -3,6 +3,39 @@ id: agent.golden.component-boundaries
 title: Golden execution component boundaries
 scope: local-component-tests
 workflow:
+  - id: architecture-assignment-pages-1
+    action: { verifier: agent.golden.architecture-assignment-pages-1 }
+    expect: { status: passed }
+  - id: architecture-assignment-pages-2
+    action: { verifier: agent.golden.architecture-assignment-pages-2 }
+    expect: { status: passed }
+  - id: architecture-assignment-pages-3
+    action: { verifier: agent.golden.architecture-assignment-pages-3 }
+    expect: { status: passed }
+  - id: architecture-assignment-pages-4
+    action: { verifier: agent.golden.architecture-assignment-pages-4 }
+    expect: { status: passed }
+  - id: architecture-assignment-pages-5
+    action: { verifier: agent.golden.architecture-assignment-pages-5 }
+    expect: { status: passed }
+  - id: architecture-assignment-pages-6
+    action: { verifier: agent.golden.architecture-assignment-pages-6 }
+    expect: { status: passed }
+  - id: architecture-assignment-pages-7
+    action: { verifier: agent.golden.architecture-assignment-pages-7 }
+    expect: { status: passed }
+  - id: architecture-assignment-pages-8
+    action: { verifier: agent.golden.architecture-assignment-pages-8 }
+    expect: { status: passed }
+  - id: architecture-assignment-pages-9
+    action: { verifier: agent.golden.architecture-assignment-pages-9 }
+    expect: { status: passed }
+  - id: architecture-assignment-pages-10
+    action: { verifier: agent.golden.architecture-assignment-pages-10 }
+    expect: { status: passed }
+  - id: architecture-assignment-pages-11
+    action: { verifier: agent.golden.architecture-assignment-pages-11 }
+    expect: { status: passed }
   - id: architecture-campaign-observation-1
     action: { verifier: agent.golden.architecture-campaign-observation-1 }
     expect: { status: passed }

@@ -101,4 +101,16 @@ describe('complete managed assignment collection custody', () => {
 		})), true));
 		expect(() => collect()).toThrow(); expect(state.calls).toHaveLength(40);
 	});
+	it('accepts equal-clock identity ordering and an explicitly empty terminal page without losing earlier evidence', () => {
+		const items = full().map(value => ({ ...value, createdAt: '2026-10-02T21:00:01.000Z' }));
+		state.pages = [page(items, true), page([])];
+		expect(collect()).toEqual(items); expect(state.calls).toHaveLength(2);
+	});
+	it('denies repeated cursor authority or transport failure after a valid first page instead of returning partial evidence', () => {
+		state.pages = [page(full(), true)];
+		expect(() => collect()).toThrow('Fixture transport exhausted'); expect(state.calls).toHaveLength(2);
+		const next = Array.from({ length: 50 }, (_, index) => item(index + 50));
+		state.pages = [page(full(), true), { ...page(next, true), page: (page(full(), true)).page }]; state.calls = [];
+		expect(() => collect()).toThrow(/ACCEPTANCE_ASSIGNMENT_PAGE/u);
+	});
 });

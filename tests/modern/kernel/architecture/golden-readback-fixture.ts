@@ -11,7 +11,10 @@ vi.mock('node:child_process', () => ({ execFileSync: (_command: string, args: st
 	const key = args.slice(0, 2).join(' ');
 	const result = state.replies.get(`${key} ${args[3]}`) ?? state.replies.get(key);
 	if (!result) throw new Error(`Unexpected acceptance read: ${key}`);
-	return JSON.stringify({ ok: true, result });
+	// The actual repository sorts its read model; do not reorder the mutable oracle inputs.
+	const presented = key === 'assignments list' ? { ...result, items: [...result.items].sort((a, b) =>
+		Date.parse(b.createdAt) - Date.parse(a.createdAt) || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0)) } : result;
+	return JSON.stringify({ ok: true, result: presented });
 } }));
 await import('../../../acceptance/sdk-runtime-golden.test.ts');
 export const { read } = await import('../../../acceptance/acceptance-cli.ts');
@@ -72,7 +75,7 @@ beforeEach(() => {
 		completedAt: '2026-09-27T00:01:00Z', parameters: { durationSeconds: 3600, planningPercent: 100 / 3, allocationWeight: 1, planningTurnMaximumSeconds: 180, maximumConcurrency: 5, communicationConcurrency: 5,
 			appliedPlan: { planningRounds: [{ state: 'complete' }, { state: 'complete' }] } },
 		state: 'ended', endedAt: '2026-09-27T00:01:00Z', reportRef } });
-	state.replies.set('assignments list', { items, page: { hasMore: false } });
+	state.replies.set('assignments list', { items, page: { limit: 50, hasMore: false, nextCursor: null } });
 	const nodes = Array.from({ length: 6 }, (_, index) => ['actor', 'reviewer'].map(pairRole => ({
 		id: `${pairRole}-${index}`, projectId: 'sdk', workdayId, pairRole, workItemId: `work-${index}`, nodeRevision: 2, status: 'completed',
 		sourceRef: { store: 'treedx', model: 'proposal', id: 'proposal', revision: 8, digest: `sha256:${'b'.repeat(64)}`,
@@ -104,7 +107,7 @@ beforeEach(() => {
 		decidedAt: '2026-09-26T23:59:00Z' } }] } });
 	state.replies.set('capacity usage', { items: items.map(item => ({ id: `${item.id}:aggregate`, assignmentId: item.id,
 		metadata: { settlementKey: item.id } })), page: { hasMore: false } });
-	state.replies.set('library read', { result: { resolvedRef: commit, files: [{ path: reportRef.path, body: `${workdayId} actor-0`, frontmatter: {
+	state.replies.set('library read', { result: { resolvedRef: commit, files: [{ path: reportRef.path, body: `${workdayId} ${items.map(item => item.id).join(' ')}`, frontmatter: {
 		schemaVersion: 'treeseed.note/v1', classification: 'workday-report', projectId: 'sdk', subjectRefs: [structuredClone(reporter.assignmentAttempt.sourceRef)] } }] } });
 	// Complete planning oracle input only; these mocked reads are NOT published live evidence.
 	const rounds = state.replies.get('workdays show')!.run.parameters.appliedPlan.planningRounds;

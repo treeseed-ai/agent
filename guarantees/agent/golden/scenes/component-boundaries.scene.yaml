@@ -3,6 +3,9 @@ id: agent.golden.component-boundaries
 title: Golden execution component boundaries
 scope: local-component-tests
 workflow:
+  - id: architecture-return-revision
+    action: { verifier: agent.golden.architecture-return-revision }
+    expect: { status: passed }
   - id: architecture-terminal-attempt-1
     action: { verifier: agent.golden.architecture-terminal-attempt-1 }
     expect: { status: passed }

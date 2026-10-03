@@ -178,6 +178,13 @@ export function verifyGolden(gate: Gate): void {
 			.sort((a, b) => Number(b.executionNodeRevision) - Number(a.executionNodeRevision)
 				|| text(b.createdAt).localeCompare(text(a.createdAt)));
 		const latest = row(attempts[0]), attempt = row(latest.assignmentAttempt);
+		for (const prior of attempts.filter(item => item.status === 'returned')) {
+			const frozen = row(prior.assignmentAttempt);
+			assert.ok(frozen.nodeId === node.id && frozen.nodeRevision === prior.executionNodeRevision
+				&& Number.isInteger(frozen.nodeRevision) && Number(frozen.nodeRevision) >= 1
+				&& Number(frozen.nodeRevision) < Number(attempt.nodeRevision),
+				'ACCEPTANCE_RETRY_REVISION: A completed retry must follow an advanced node revision without rebinding returned history');
+		}
 		assert.ok(latest.status === 'completed' && row(latest.assignmentResult).assignmentId === latest.id
 			&& attempt.nodeId === node.id && attempt.workdayId === workdayId && attempt.workItemId === node.workItemId
 			&& attempt.nodeRevision === latest.executionNodeRevision

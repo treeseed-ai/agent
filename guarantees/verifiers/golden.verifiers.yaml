@@ -1,6 +1,11 @@
 schemaVersion: treeseed.guarantee-verifiers/v1
 ownerPackage: "@treeseed/agent"
 verifiers:
+  agent.golden.architecture-return-revision:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/golden-readback.test.ts
+    testName: "denies a returned predecessor sharing the completed retry node revision while retaining advanced revision history"
   agent.golden.architecture-terminal-attempt-1:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

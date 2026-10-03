@@ -198,7 +198,7 @@ describe('golden read-back assertion regressions (fixtures are not live acceptan
     }
     result.completedAt = clock;
     expect(() => gate('results')).not.toThrow();
-    delete item.assignmentAttempt.createdAt; delete item.assignmentAttempt.deadline;
+    item.assignmentAttempt = original.assignmentAttempt;
     expect(item).toEqual(original);
     expect(observations).toEqual([true, true, true, true, true]);
   });

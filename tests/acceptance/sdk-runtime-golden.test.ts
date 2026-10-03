@@ -265,6 +265,13 @@ export function verifyGolden(gate: Gate): void {
 		const result = row(item.assignmentResult), timing = row(result.timingAwareness);
 		assert.equal(result.status, 'completed', `Missing canonical result for ${text(item.id)}`);
 		assert.equal(result.assignmentId, item.id, 'ACCEPTANCE_RESULT_CUSTODY: Result must bind this exact assignment');
+		const attempt = row(item.assignmentAttempt), time = row(row(row(item.capacityEnvelope).budget).time);
+		const created = Date.parse(text(attempt.createdAt)), start = Date.parse(text(time.executionStartedAt));
+		const deadline = Date.parse(text(attempt.deadline)), terminal = Date.parse(text(item.completedAt));
+		const resultTime = Date.parse(text(result.completedAt));
+		assert.ok([created, start, deadline, terminal, resultTime].every(Number.isFinite)
+			&& created <= start && start <= resultTime && resultTime <= deadline && resultTime <= terminal,
+			'ACCEPTANCE_RESULT_CLOCK: Canonical completion must fit the original immutable productive and actual reporting interval');
 		assert.ok(Number.isInteger(timing.completedChecks) && Number(timing.completedChecks) >= 2,
 			`ACCEPTANCE_CLOCK_BOUNDARIES: Missing first/final clock evidence for ${text(item.id)}`);
 		assert.equal(timing.firstToolCompliant, true);

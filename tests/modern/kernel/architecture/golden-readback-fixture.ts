@@ -37,6 +37,7 @@ export function assignment(id: string, activity: string, agentClass: string, wor
 	const writable = { store: 'treedx', model: 'decision', id: `decision-${id}`, repository: 'sdk-library', commit,
 		path: `decisions/${id}.mdx` };
 	return { id, workDayId: workdayId, projectId: 'sdk', decisionId: 'decision-1', status: 'completed', leaseToken: null,
+		leaseState: 'released', leaseExpiresAt: null, leaseRenewedAt: null, runnerId: null,
 		createdAt, completedAt, assignmentAttempt: { agentClass, workItemId, effectiveProfile: { activity,
 			profileRef: { store: 'treedx', model: 'agent', id: `configured-${agentClass}`, repository: 'sdk-library', commit,
 				path: `agents/${agentClass}.yaml` }, handler: git ? 'actor' : activity === 'reporting' ? 'reporter' : 'writer',

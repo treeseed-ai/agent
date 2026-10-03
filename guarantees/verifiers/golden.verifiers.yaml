@@ -1,6 +1,31 @@
 schemaVersion: treeseed.guarantee-verifiers/v1
 ownerPackage: "@treeseed/agent"
 verifiers:
+  agent.golden.architecture-independent-workspace-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/golden-workspace-readback.test.ts
+    testName: "reads each exact immutable TreeDX workspace through the supported command on every terminal check"
+  agent.golden.architecture-independent-workspace-2:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/golden-workspace-readback.test.ts
+    testName: "denies open foreign or malformed resource readback despite revoked handles and verified teardown"
+  agent.golden.architecture-independent-workspace-3:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/golden-workspace-readback.test.ts
+    testName: "requires the exact project receipt and explicit workspace result rather than an empty success envelope"
+  agent.golden.architecture-independent-workspace-4:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/golden-workspace-readback.test.ts
+    testName: "does not convert missing or denied workspace read authority into confirmed absence"
+  agent.golden.architecture-independent-workspace-5:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/golden-workspace-readback.test.ts
+    testName: "denies missing immutable workspace authority and checks stopped cleanup without rewriting inputs"
   agent.golden.architecture-teardown-authority-1:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

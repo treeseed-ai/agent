@@ -239,6 +239,9 @@ describe('golden read-back assertion regressions (fixtures are not live acceptan
 		const reporter = assignment('native-reporter', 'reporting', 'reporter');
 		state.replies.get('assignments list')!.items.push(reporter);
 		state.replies.get('capacity usage')!.items.push(usageMeasurement(reporter));
+		state.replies.set(`workspace ${reporter.assignmentAttempt.workspace.workspaceId}`, { result: {
+			workspaceId: reporter.assignmentAttempt.workspace.workspaceId, repoId: reporter.assignmentAttempt.workspace.repository,
+			status: 'closed' }, receipt: { projectId: reporter.projectId } });
 		delete reporter.lifecycleOutput.teardown;
 		expect(() => gate('settlement')).toThrow('ACCEPTANCE_SETTLEMENT_TEARDOWN:');
 		reporter.lifecycleOutput.teardown = { verified: true };

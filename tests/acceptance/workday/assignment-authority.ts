@@ -1,6 +1,23 @@
 import assert from 'node:assert/strict';
 import { assignmentWorkspaceSchema, effectiveActivityProfileSchema, exactGrantSchema, exactEntityReferenceSchema } from '@treeseed/sdk/agent-capacity';
-import { row, type Row } from '../acceptance-cli.ts';
+import { read, row, type Row } from '../acceptance-cli.ts';
+
+/** Independent supported read of the immutable TreeDX workspace, not a
+ * substitute for Git worktree, sandbox or provider-session teardown evidence. */
+export function verifyTreeDxWorkspaceClosure(item: Row, team: string): void {
+	const workspace = assignmentWorkspaceSchema.safeParse(row(item.assignmentAttempt).workspace);
+	assert.ok(workspace.success, 'ACCEPTANCE_WORKSPACE_AUTHORITY: Typed immutable workspace required');
+	if (workspace.data.mode !== 'treedx') return;
+	assert.ok(typeof item.projectId === 'string' && item.projectId, 'ACCEPTANCE_WORKSPACE_AUTHORITY: Exact project required');
+	const scope = workspace.data;
+	// This existing descriptor owns project context, not a team selector.
+	const observed = read(['projects', 'treedx', 'workspaces', 'show', scope.workspaceId, '--project', item.projectId,
+		'--server', 'local'], team, true);
+	const resource = row(observed.result), receipt = row(observed.receipt);
+	assert.ok(resource.workspaceId === scope.workspaceId && resource.repoId === scope.repository
+		&& resource.status === 'closed' && receipt.projectId === item.projectId,
+		'ACCEPTANCE_WORKSPACE_READBACK: Independent exact project/repository/workspace closed-resource agreement required');
+}
 
 /** Presented revoked authority is necessary, not proof of physical resource closure. */
 export function verifyTeardownAuthority(item: Row): void {

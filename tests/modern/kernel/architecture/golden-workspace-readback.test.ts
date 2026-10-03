@@ -13,7 +13,7 @@ describe('independent managed workspace closure readback', () => {
 		expect(calls).toHaveLength(expected.length * 2);
 		for (const item of expected) expect(calls.filter(args => args[4] === item.assignmentAttempt.workspace.workspaceId))
 			.toEqual(Array.from({ length: 2 }, () => ['projects', 'treedx', 'workspaces', 'show', item.assignmentAttempt.workspace.workspaceId,
-				'--project', item.projectId, '--server', 'local', '--team', 'treeseed', '--json']));
+				'--project', item.projectId, '--server', 'local', '--json']));
 		expect([...state.replies]).toEqual(before);
 	});
 	it('denies open foreign or malformed resource readback despite revoked handles and verified teardown', () => {

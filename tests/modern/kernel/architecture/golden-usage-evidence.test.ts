@@ -68,12 +68,13 @@ describe('complete scoped measured usage evidence for managed settlement', () =>
 			.toEqual(mutations.map(() => expect.stringMatching(/ACCEPTANCE_USAGE_MEASURED/u)));
 	});
 	it('requires all terminal stopped attempts to settle exactly once without losing failure or cancellation evidence', () => {
+		const stopped = state.cases.get('Stopped simulation retains terminal leases teardown and exactly-once settlement')!;
 		const run = state.replies.get('workdays show')!.run; run.status = 'failed';
 		const selected = assignments().slice(0, 5);
 		['completed', 'failed', 'returned', 'cancelled', 'expired'].forEach((status, index) => { selected[index]!.status = status; });
 		state.replies.get('assignments list')!.items = selected; state.replies.set('capacity usage', page(ordered(selected.map(value => measured(value)))));
-		expect(() => gate('stopped')).not.toThrow();
-		usage().items.pop(); expect(() => gate('stopped')).toThrow(/Exactly one actual settlement/u);
+		expect(stopped).not.toThrow();
+		usage().items.pop(); expect(stopped).toThrow(/Exactly one actual settlement/u);
 	});
 	it('never accepts partial measurements after a continuing page or transport failure', () => {
 		const original = structuredClone(usage());

@@ -5,7 +5,7 @@ verifiers:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/kernel/architecture/golden-usage-evidence.test.ts
-    testName: "rejects retained lease or runner custody after stop despite a null token and verified teardown flag"
+    testName: "rejects retained lease state expiry or renewal after stop while preserving historical runner identity"
   agent.golden.architecture-cancellation-clock:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

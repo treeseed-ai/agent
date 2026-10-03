@@ -24,18 +24,19 @@ function outcomes(candidates: Row[]): string[] {
 // UNIT tests OF actual managed settlement assertions. Supplied measurement DTOs
 // are not actual provider usage, canonical UsageSettlements or real settlement receipts.
 describe('complete scoped measured usage evidence for managed settlement', () => {
-	it('rejects retained lease or runner custody after stop despite a null token and verified teardown flag', () => {
+	it('rejects retained lease state expiry or renewal after stop while preserving historical runner identity', () => {
 		const stopped = state.cases.get('Stopped simulation retains terminal leases teardown and exactly-once settlement')!;
 		state.replies.get('workdays show')!.run.status = 'failed';
 		const item = assignments()[0]!, original = structuredClone(item);
 		const changes = [{ leaseState: 'leased' }, { leaseState: undefined }, { leaseExpiresAt: '2099-01-01T00:00:00Z' },
-			{ leaseRenewedAt: original.createdAt }, { runnerId: 'still-owned-runner' }];
+			{ leaseRenewedAt: original.createdAt }];
 		const results = changes.map(change => {
 			Object.assign(item, original, change);
 			try { stopped(); return 'ADMITTED'; } catch (error) { return String(error); }
 		});
 		expect(results).toEqual(changes.map(() => expect.stringMatching(/ACCEPTANCE_STOP_LEASE/u)));
-		Object.assign(item, original); const before = structuredClone([...state.replies]);
+		// A runner identifier is attribution, not a live lease/session receipt.
+		Object.assign(item, original, { runnerId: 'historical-returning-runner' }); const before = structuredClone([...state.replies]);
 		expect(stopped).not.toThrow(); expect([...state.replies]).toEqual(before);
 	});
 	it('denies zero terminal usage after a productive clock started while preserving preparation-only stopped cleanup', () => {

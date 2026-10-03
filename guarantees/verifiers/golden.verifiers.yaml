@@ -1,6 +1,11 @@
 schemaVersion: treeseed.guarantee-verifiers/v1
 ownerPackage: "@treeseed/agent"
 verifiers:
+  agent.golden.architecture-stopped-lease-custody:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/golden-usage-evidence.test.ts
+    testName: "rejects retained lease or runner custody after stop despite a null token and verified teardown flag"
   agent.golden.architecture-cancellation-clock:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

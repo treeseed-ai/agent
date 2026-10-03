@@ -132,6 +132,9 @@ export function verifyGolden(gate: Gate): void {
 			assert.ok(['completed', 'failed', 'returned', 'cancelled', 'expired'].includes(text(item.status)),
 				'ACCEPTANCE_STOP_ASSIGNMENT: An unfinished assignment remains after stop');
 			assert.equal(item.leaseToken, null, 'ACCEPTANCE_STOP_LEASE: A live lease remains after stop');
+			assert.ok(['unleased', 'released', 'expired'].includes(text(item.leaseState))
+				&& item.leaseExpiresAt === null && item.leaseRenewedAt === null && item.runnerId === null,
+				'ACCEPTANCE_STOP_LEASE: Lease state, expiry, renewal and runner custody must be durably cleared');
 			assert.equal(row(row(item.lifecycleOutput).teardown).verified, true,
 				'ACCEPTANCE_STOP_TEARDOWN: Durable per-attempt teardown evidence is required');
 		}

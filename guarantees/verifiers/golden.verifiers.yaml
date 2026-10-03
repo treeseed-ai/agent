@@ -1,6 +1,21 @@
 schemaVersion: treeseed.guarantee-verifiers/v1
 ownerPackage: "@treeseed/agent"
 verifiers:
+  agent.golden.architecture-incremental-accounting-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/golden-usage-evidence.test.ts
+    testName: "denies informational records that claim productive seconds instead of separate native observation"
+  agent.golden.architecture-incremental-accounting-2:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/golden-usage-evidence.test.ts
+    testName: "denies incremental seconds outside the sole immutable attempt or above its terminal aggregate"
+  agent.golden.architecture-incremental-accounting-3:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/golden-usage-evidence.test.ts
+    testName: "retains valid informational native observations and matching incremental usage without charging them twice"
   agent.golden.architecture-usage-result-join:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

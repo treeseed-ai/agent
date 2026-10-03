@@ -54,7 +54,8 @@ describe('complete scoped measured usage evidence for managed settlement', () =>
 	});
 	it('denies informational suffix impostors and duplicate aggregate accounting independent of identifier spelling', () => {
 		const original = structuredClone(usage()), first = original.items[0];
-		expect(outcomes([{ ...original, items: [{ ...first, accountingMode: 'informational' }, ...original.items.slice(1)] },
+		expect(outcomes([{ ...original, items: [{ ...first, accountingMode: 'informational', activeSeconds: 0, elapsedSeconds: 0,
+			nativeUsage: {} }, ...original.items.slice(1)] },
 			{ ...original, items: ordered([...original.items, { ...first, id: 'second-authoritative-aggregate', idempotencyKey: 'second-key' }]) }]))
 			.toEqual([expect.stringMatching(/ACCEPTANCE_SETTLEMENT_COUNT/u), expect.stringMatching(/ACCEPTANCE_SETTLEMENT_COUNT/u)]);
 	});
@@ -125,5 +126,13 @@ describe('complete scoped measured usage evidence for managed settlement', () =>
 		const candidates = changes.map(change => page(ordered([...original.items, { ...first, id: 'incremental-time',
 			idempotencyKey: 'incremental-time-key', accountingMode: 'incremental', usageDimension: 'checkpoint', ...change }])));
 		expect(outcomes(candidates)).toEqual(changes.map(() => expect.stringMatching(/ACCEPTANCE_USAGE_ACCOUNTING/u)));
+	});
+	it('retains valid informational native observations and matching incremental usage without charging them twice', () => {
+		const original = structuredClone(usage()), first = original.items[0];
+		const rows = ordered([...original.items, { ...first, id: 'informational-native', idempotencyKey: 'informational-native-key',
+			accountingMode: 'informational', usageDimension: 'information', activeSeconds: 0, elapsedSeconds: 0, nativeUsage: { tokens: 7 } },
+			{ ...first, id: 'incremental-time', idempotencyKey: 'incremental-time-key', accountingMode: 'incremental', usageDimension: 'checkpoint' }]);
+		const before = structuredClone(rows); state.usagePages = [page(rows)];
+		expect(() => gate('settlement')).not.toThrow(); expect(rows).toEqual(before);
 	});
 });

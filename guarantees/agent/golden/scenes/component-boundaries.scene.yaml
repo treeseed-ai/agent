@@ -3,6 +3,15 @@ id: agent.golden.component-boundaries
 title: Golden execution component boundaries
 scope: local-component-tests
 workflow:
+  - id: architecture-incremental-accounting-1
+    action: { verifier: agent.golden.architecture-incremental-accounting-1 }
+    expect: { status: passed }
+  - id: architecture-incremental-accounting-2
+    action: { verifier: agent.golden.architecture-incremental-accounting-2 }
+    expect: { status: passed }
+  - id: architecture-incremental-accounting-3
+    action: { verifier: agent.golden.architecture-incremental-accounting-3 }
+    expect: { status: passed }
   - id: architecture-usage-result-join
     action: { verifier: agent.golden.architecture-usage-result-join }
     expect: { status: passed }

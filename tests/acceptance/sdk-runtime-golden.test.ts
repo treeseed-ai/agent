@@ -286,6 +286,8 @@ export function verifyGolden(gate: Gate): void {
 			&& Object.values(measurement.nativeUsage).every(finite), 'ACCEPTANCE_USAGE_MEASURED: Finite nonnegative native usage required');
 		assert.ok(typeof measurement.accountingMode === 'string' && ['aggregate', 'incremental', 'informational'].includes(measurement.accountingMode),
 			'ACCEPTANCE_USAGE_IDENTITY: Valid accounting mode required');
+		assert.ok(measurement.accountingMode !== 'informational' || (measurement.activeSeconds === 0 && measurement.elapsedSeconds === 0),
+			'ACCEPTANCE_USAGE_ACCOUNTING: Informational dimensions cannot charge productive seconds');
 		const result = row(assignment.assignmentResult);
 		if (measurement.accountingMode === 'aggregate' && result.status === 'completed') {
 			const usage = row(result.usage), native = row(usage.native), observedNative = row(measurement.nativeUsage);
@@ -308,6 +310,10 @@ export function verifyGolden(gate: Gate): void {
 		}
 		const settlements = aggregate.filter(measurement => measurement.assignmentId === item.id);
 		assert.equal(settlements.length, 1, `ACCEPTANCE_SETTLEMENT_COUNT: Exactly one actual settlement required for ${text(item.id)}`);
+		const incremental = usageItems.filter(measurement => measurement.assignmentId === item.id && measurement.accountingMode === 'incremental');
+		assert.ok(incremental.every(measurement => measurement.assignmentAttempt === settlements[0]?.assignmentAttempt)
+			&& incremental.reduce((total, measurement) => total + (measurement.activeSeconds as number), 0) <= (settlements[0]?.activeSeconds as number),
+			'ACCEPTANCE_USAGE_ACCOUNTING: Incremental seconds must belong to the sole immutable attempt and fit its terminal aggregate');
 		assert.ok(text(row(settlements[0]?.metadata).settlementKey), 'ACCEPTANCE_SETTLEMENT_KEY: Stable settlement key required');
 		const key = text(row(settlements[0]?.metadata).settlementKey);
 		assert.ok(!settlementKeys.has(key), 'ACCEPTANCE_USAGE_IDENTITY: A settlement key cannot account for two assignments');

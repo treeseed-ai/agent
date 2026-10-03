@@ -3,6 +3,36 @@ id: agent.golden.component-boundaries
 title: Golden execution component boundaries
 scope: local-component-tests
 workflow:
+  - id: architecture-usage-pages-1
+    action: { verifier: agent.golden.architecture-usage-pages-1 }
+    expect: { status: passed }
+  - id: architecture-usage-pages-2
+    action: { verifier: agent.golden.architecture-usage-pages-2 }
+    expect: { status: passed }
+  - id: architecture-usage-pages-3
+    action: { verifier: agent.golden.architecture-usage-pages-3 }
+    expect: { status: passed }
+  - id: architecture-usage-pages-4
+    action: { verifier: agent.golden.architecture-usage-pages-4 }
+    expect: { status: passed }
+  - id: architecture-usage-pages-5
+    action: { verifier: agent.golden.architecture-usage-pages-5 }
+    expect: { status: passed }
+  - id: architecture-usage-pages-6
+    action: { verifier: agent.golden.architecture-usage-pages-6 }
+    expect: { status: passed }
+  - id: architecture-usage-pages-7
+    action: { verifier: agent.golden.architecture-usage-pages-7 }
+    expect: { status: passed }
+  - id: architecture-usage-pages-8
+    action: { verifier: agent.golden.architecture-usage-pages-8 }
+    expect: { status: passed }
+  - id: architecture-usage-pages-9
+    action: { verifier: agent.golden.architecture-usage-pages-9 }
+    expect: { status: passed }
+  - id: architecture-usage-pages-10
+    action: { verifier: agent.golden.architecture-usage-pages-10 }
+    expect: { status: passed }
   - id: architecture-assignment-pages-1
     action: { verifier: agent.golden.architecture-assignment-pages-1 }
     expect: { status: passed }

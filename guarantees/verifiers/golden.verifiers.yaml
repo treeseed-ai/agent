@@ -1,6 +1,56 @@
 schemaVersion: treeseed.guarantee-verifiers/v1
 ownerPackage: "@treeseed/agent"
 verifiers:
+  agent.golden.architecture-usage-pages-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/golden-usage-evidence.test.ts
+    testName: "accepts complete scoped measurements without changing the authoritative input records"
+  agent.golden.architecture-usage-pages-2:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/golden-usage-evidence.test.ts
+    testName: "denies missing malformed or contradictory usage page authority even when every aggregate appears present"
+  agent.golden.architecture-usage-pages-3:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/golden-usage-evidence.test.ts
+    testName: "denies malformed collections rows clocks and duplicate usage identity before counting settlements"
+  agent.golden.architecture-usage-pages-4:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/golden-usage-evidence.test.ts
+    testName: "denies wrong project workday or assignment scope despite matching aggregate IDs and nonempty keys"
+  agent.golden.architecture-usage-pages-5:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/golden-usage-evidence.test.ts
+    testName: "denies informational suffix impostors and duplicate aggregate accounting independent of identifier spelling"
+  agent.golden.architecture-usage-pages-6:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/golden-usage-evidence.test.ts
+    testName: "denies nonfinite coerced negative or unmeasured elapsed and native usage"
+  agent.golden.architecture-usage-pages-7:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/golden-usage-evidence.test.ts
+    testName: "requires all terminal stopped attempts to settle exactly once without losing failure or cancellation evidence"
+  agent.golden.architecture-usage-pages-8:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/golden-usage-evidence.test.ts
+    testName: "never accepts partial measurements after a continuing page or transport failure"
+  agent.golden.architecture-usage-pages-9:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/golden-usage-evidence.test.ts
+    testName: "requires explicit completion after a full usage page and propagates interruption instead of accepting its aggregates"
+  agent.golden.architecture-usage-pages-10:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/golden-usage-evidence.test.ts
+    testName: "denies reused cursors duplicate tails and changed cross-page order rather than trusting page-one aggregates"
   agent.golden.architecture-assignment-pages-1:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { state, gate, read, assignment, classes, workdayId, commit, type Row } from './architecture/golden-readback-fixture.ts';
+import { state, gate, read, assignment, usageMeasurement, classes, workdayId, commit, type Row } from './architecture/golden-readback-fixture.ts';
 
 describe('golden read-back assertion regressions (fixtures are not live acceptance)', () => {
   it('denies mutually matching but malformed or moving proposal and decision authority in managed graph readback', () => {
@@ -238,8 +238,7 @@ describe('golden read-back assertion regressions (fixtures are not live acceptan
 	it('requires native Reporter closure without relaxing accounting or exposing raw assertion payloads', () => {
 		const reporter = assignment('native-reporter', 'reporting', 'reporter');
 		state.replies.get('assignments list')!.items.push(reporter);
-		state.replies.get('capacity usage')!.items.push({ id: `${reporter.id}:aggregate`, assignmentId: reporter.id,
-			metadata: { settlementKey: reporter.id } });
+		state.replies.get('capacity usage')!.items.push(usageMeasurement(reporter));
 		delete reporter.lifecycleOutput.teardown;
 		expect(() => gate('settlement')).toThrow('ACCEPTANCE_SETTLEMENT_TEARDOWN:');
 		reporter.lifecycleOutput.teardown = { verified: true };
@@ -322,7 +321,7 @@ describe('golden read-back assertion regressions (fixtures are not live acceptan
 		const usage = state.replies.get('capacity usage')!.items;
 		const cancelled = usage.shift();
 		expect(() => gate('settlement')).toThrow('Exactly one actual settlement');
-		usage.push(cancelled, { ...cancelled, id: 'duplicate-cancelled:aggregate' });
+		usage.push(cancelled, { ...cancelled, id: 'duplicate-cancelled:aggregate', idempotencyKey: 'duplicate-cancelled-key' });
 		expect(() => gate('settlement')).toThrow('Exactly one actual settlement');
 	});
 	it('does not confuse repeated single-role planning with collaborative cycles', () => {
@@ -403,7 +402,7 @@ describe('golden read-back assertion regressions (fixtures are not live acceptan
 		const usage = state.replies.get('capacity usage')!.items;
 		const first = usage.shift();
 		expect(() => gate('settlement')).toThrow('Exactly one actual settlement');
-		usage.push(first, { ...first, id: 'duplicate:aggregate' });
+		usage.push(first, { ...first, id: 'duplicate:aggregate', idempotencyKey: 'duplicate-key' });
 		expect(() => gate('settlement')).toThrow('Exactly one actual settlement');
 	});
 	it('rejects missing Reporter refs and unrelated report contents', () => {

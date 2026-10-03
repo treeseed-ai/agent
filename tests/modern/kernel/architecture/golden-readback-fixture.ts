@@ -13,7 +13,7 @@ vi.mock('node:child_process', () => ({ execFileSync: (_command: string, args: st
 		: state.replies.get(`${key} ${args[3]}`) ?? state.replies.get(key);
 	if (!result) throw new Error(`Unexpected acceptance read: ${key}`);
 	// The actual repository sorts its read model; do not reorder the mutable oracle inputs.
-	const presented = key === 'assignments list' ? { ...result, items: [...result.items].sort((a, b) =>
+	const presented = (key === 'assignments list' || (key === 'capacity usage' && !state.usagePages)) ? { ...result, items: [...result.items].sort((a, b) =>
 		Date.parse(b.createdAt) - Date.parse(a.createdAt) || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0)) } : result;
 	return JSON.stringify({ ok: true, result: presented });
 } }));
@@ -24,6 +24,13 @@ export const classes = ['architect', 'researcher', 'tester', 'engineer', 'techni
 export const workdayId = 'workday-test';
 export const commit = 'a'.repeat(40);
 export const gate = (name: string) => state.cases.get(`Golden runtime ${name} evidence satisfies its acceptance boundary`)!();
+export function usageMeasurement(item: Row): Row {
+	// Scoped measurement assertion input, NOT actual usage or a canonical UsageSettlement.
+	return { id: `${item.id}:aggregate`, assignmentId: item.id, projectId: item.projectId, workDayId: workdayId,
+		idempotencyKey: `usage-${item.id}`, assignmentAttempt: 0, accountingMode: 'aggregate', usageDimension: 'aggregate',
+		activeSeconds: 1, elapsedSeconds: 1, nativeUsage: { activeSeconds: 1 }, createdAt: item.completedAt,
+		metadata: { settlementKey: item.id } };
+}
 export function assignment(id: string, activity: string, agentClass: string, workItemId = '', createdAt = '2026-09-27T00:00:01Z', completedAt = '2026-09-27T00:00:02Z'): Row {
 	// Complete grant/workspace assertion input, not a real compiled profile or admission receipt.
 	const git = activity === 'acting', tools = git ? ['source.read', 'source.write', 'verification'] : ['source.read', 'verification'];
@@ -107,8 +114,8 @@ beforeEach(() => {
 		subjectRef: structuredClone(nodes[0]!.sourceRef), disposition: 'approved', rationale: 'Synthetic complete Decision input, not live evidence.',
 		authorityRefs: [structuredClone(nodes[0]!.sourceRef)], decidedByRefs: [{ store: 'postgresql', model: 'user', id: 'fixture-external-operator' }],
 		decidedAt: '2026-09-26T23:59:00Z' } }] } });
-	state.replies.set('capacity usage', { items: items.map(item => ({ id: `${item.id}:aggregate`, assignmentId: item.id,
-		metadata: { settlementKey: item.id } })), page: { hasMore: false } });
+	state.replies.set('capacity usage', { items: items.map(usageMeasurement),
+		page: { limit: 100, hasMore: false, nextCursor: null } });
 	state.replies.set('library read', { result: { resolvedRef: commit, files: [{ path: reportRef.path, body: `${workdayId} ${items.map(item => item.id).join(' ')}`, frontmatter: {
 		schemaVersion: 'treeseed.note/v1', classification: 'workday-report', projectId: 'sdk', subjectRefs: [structuredClone(reporter.assignmentAttempt.sourceRef)] } }] } });
 	// Complete planning oracle input only; these mocked reads are NOT published live evidence.

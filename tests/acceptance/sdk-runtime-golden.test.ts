@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { assignmentReferenceSchema, assignmentTimingAwarenessReceiptSchema, estimateSchema, exactEntityReferenceSchema } from '@treeseed/sdk/agent-capacity';
-import { DEFAULT_CAPACITY_PAGE_LIMIT, decodeCapacityPageCursor } from '@treeseed/sdk/capacity-pagination';
+import { DEFAULT_CAPACITY_PAGE_LIMIT } from '@treeseed/sdk/capacity-pagination';
 import { read, row, type Row } from './acceptance-cli.ts';
 import { readDecisionContent, verifyDecisionContent } from './workday/decision-evidence.ts';
 import { verifyAssignmentAuthority } from './workday/assignment-authority.ts';
 import { verifyPlanningEvidence } from './workday/planning-evidence.ts';
+import { readCompleteEvidence } from './workday/evidence-pages.ts';
 
 const rows = (value: unknown): Row[] => Array.isArray(value) ? value.map(row) : [];
 const text = (value: unknown): string => typeof value === 'string' ? value : '';
@@ -67,44 +68,15 @@ function phaseBoundaryCancelled(item: Row, run: Row): boolean {
 }
 export function readWorkdayAssignments(workdayId: string, startedAt: string, team: string): Row[] {
 	const assignments: Row[] = [];
-	const start = Date.parse(startedAt), identities = new Set<string>(), cursors = new Set<string>();
+	const start = Date.parse(startedAt);
 	assert.ok(workdayId && Number.isFinite(start), 'ACCEPTANCE_ASSIGNMENT_ROW: Exact workday start authority required');
-	let cursor: string | undefined;
-	let previous: { id: string; time: number } | undefined;
-	for (let pageNumber = 0; pageNumber < 40; pageNumber += 1) {
-		const page = read(['assignments', 'list', '--limit', String(DEFAULT_CAPACITY_PAGE_LIMIT), ...(cursor ? ['--cursor', cursor] : [])], team);
-		const pageInfo = row(page.page);
-		assert.ok(Array.isArray(page.items) && page.items.length <= DEFAULT_CAPACITY_PAGE_LIMIT
-			&& pageInfo.limit === DEFAULT_CAPACITY_PAGE_LIMIT && typeof pageInfo.hasMore === 'boolean',
-			'ACCEPTANCE_ASSIGNMENT_PAGE: Complete typed page authority required');
-		const items: Row[] = [];
-		for (const value of page.items) {
-			assert.ok(value && typeof value === 'object' && !Array.isArray(value), 'ACCEPTANCE_ASSIGNMENT_ROW: Record required');
-			const item = row(value), id = text(item.id), time = Date.parse(text(item.createdAt));
-			assert.ok(id && Number.isFinite(time) && (item.workDayId === null || typeof item.workDayId === 'string')
-				&& !identities.has(id), 'ACCEPTANCE_ASSIGNMENT_ROW: Unique identity, scope and creation clock required');
-			assert.ok(!previous || time < previous.time || (time === previous.time && id < previous.id),
-				'ACCEPTANCE_ASSIGNMENT_ORDER: Exact descending creation/identity order required across all pages');
-			identities.add(id); previous = { id, time }; items.push(item);
+	for (const item of readCompleteEvidence(['assignments', 'list'], team, DEFAULT_CAPACITY_PAGE_LIMIT, 'ACCEPTANCE_ASSIGNMENT')) {
+			const time = Date.parse(text(item.createdAt));
+			assert.ok(item.workDayId === null || typeof item.workDayId === 'string', 'ACCEPTANCE_ASSIGNMENT_ROW: Workday scope required');
 			if (item.workDayId === workdayId) {
 				assert.ok(time >= start, 'ACCEPTANCE_ASSIGNMENT_ROW: Target assignment predates its authoritative workday');
 				assignments.push(item);
 			}
-		}
-		if (!pageInfo.hasMore) {
-			assert.equal(pageInfo.nextCursor, null, 'ACCEPTANCE_ASSIGNMENT_PAGE: Terminal cursor must be explicitly null');
-			break;
-		}
-		assert.ok(items.length === DEFAULT_CAPACITY_PAGE_LIMIT && typeof pageInfo.nextCursor === 'string'
-			&& pageInfo.nextCursor && !cursors.has(pageInfo.nextCursor), 'ACCEPTANCE_ASSIGNMENT_PAGE: Complete progressing page required');
-		let next;
-		try { next = decodeCapacityPageCursor(pageInfo.nextCursor); }
-		catch { assert.fail('ACCEPTANCE_ASSIGNMENT_PAGE: Invalid cursor authority'); }
-		const last = items.at(-1)!;
-		assert.ok(next && next.id === last.id && next.createdAt === last.createdAt,
-			'ACCEPTANCE_ASSIGNMENT_PAGE: Cursor must bind the actual last record');
-		cursor = pageInfo.nextCursor; cursors.add(cursor);
-		assert.ok(pageNumber < 39, 'ACCEPTANCE_ASSIGNMENT_PAGE: Complete assignment evidence was not reached within the original bound');
 	}
 	assert.ok(assignments.length > 0, 'No real assignment evidence');
 	assert.equal(new Set(assignments.map(item => item.id)).size, assignments.length);
@@ -130,7 +102,6 @@ export function verifyGolden(gate: Gate): void {
 	assert.equal(run.executionMode, 'simulation', 'Every gate requires authoritative simulation custody');
 	const assignments = readWorkdayAssignments(workdayId, text(run.startedAt), team);
 	if (['lifecycle', 'graph', 'revision', 'results', 'reporter'].includes(gate)) for (const item of assignments) verifyAssignmentAuthority(item);
-	let cursor: string | undefined;
 	if (gate === 'lifecycle') for (const item of assignments) {
 		verifyAllocation(item);
 		assert.ok(item.status === 'completed' || phaseBoundaryCancelled(item,run),
@@ -296,24 +267,31 @@ export function verifyGolden(gate: Gate): void {
 	}
 	if (gate === 'settlement' || gate === 'stopped') {
 	const usageItems: Row[] = [];
-	cursor = undefined;
+	const usageIds = new Set<string>(), usageKeys = new Set<string>();
 	for (const projectId of new Set(assignments.map(item => text(item.projectId)))) {
 	assert.ok(projectId, 'Settlement evidence requires exact project attribution');
-	cursor = undefined;
-	for (let pageNumber = 0; pageNumber < 40; pageNumber += 1) {
-		const usage = read(['capacity', 'usage', '--project', projectId, '--workday', workdayId,
-			'--limit', '100', ...(cursor ? ['--cursor', cursor] : [])], team);
-		usageItems.push(...rows(usage.items));
-		const pageInfo = row(usage.page);
-		if (!pageInfo.hasMore) break;
-		const next = text(pageInfo.nextCursor);
-		assert.ok(next && next !== cursor, 'Settlement pagination omitted its next cursor or repeated it');
-		cursor = next;
-		assert.ok(pageNumber < 39, 'Complete settlement evidence was not reached; do not claim a pass');
+	for (const measurement of readCompleteEvidence(['capacity', 'usage', '--project', projectId, '--workday', workdayId], team, 100, 'ACCEPTANCE_USAGE')) {
+		const assignment = assignments.find(item => item.id === measurement.assignmentId);
+		assert.ok(measurement.projectId === projectId && measurement.workDayId === workdayId && assignment
+			&& assignment.projectId === projectId, 'ACCEPTANCE_USAGE_SCOPE: Exact project/workday/assignment attribution required');
+		assert.ok(typeof measurement.id === 'string' && typeof measurement.idempotencyKey === 'string' && measurement.idempotencyKey
+			&& !usageIds.has(measurement.id) && !usageKeys.has(measurement.idempotencyKey)
+			&& typeof measurement.assignmentAttempt === 'number' && Number.isInteger(measurement.assignmentAttempt) && measurement.assignmentAttempt >= 0,
+			'ACCEPTANCE_USAGE_IDENTITY: Unique idempotency and valid attempt authority required');
+		usageIds.add(measurement.id); usageKeys.add(measurement.idempotencyKey);
+		const finite = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value) && value >= 0;
+		assert.ok(finite(measurement.activeSeconds) && finite(measurement.elapsedSeconds) && measurement.activeSeconds <= measurement.elapsedSeconds
+			&& (!measurement.elapsedSeconds || measurement.activeSeconds > 0), 'ACCEPTANCE_USAGE_MEASURED: Finite truthful productive time required');
+		assert.ok(measurement.nativeUsage && typeof measurement.nativeUsage === 'object' && !Array.isArray(measurement.nativeUsage)
+			&& Object.values(measurement.nativeUsage).every(finite), 'ACCEPTANCE_USAGE_MEASURED: Finite nonnegative native usage required');
+		assert.ok(typeof measurement.accountingMode === 'string' && ['aggregate', 'incremental', 'informational'].includes(measurement.accountingMode),
+			'ACCEPTANCE_USAGE_IDENTITY: Valid accounting mode required');
+		usageItems.push(measurement);
 	}
 	}
 	assert.equal(new Set(usageItems.map(item => item.id)).size, usageItems.length, 'Settlement pages repeated usage records');
-	const aggregate = usageItems.filter(item => text(item.id).endsWith(':aggregate'));
+	const aggregate = usageItems.filter(item => item.accountingMode === 'aggregate');
+	const settlementKeys = new Set<string>();
 	for (const item of assignments) {
 		if (gate === 'settlement') {
 			assert.ok(item.status === 'completed' || phaseBoundaryCancelled(item,run), 'Normal settlement requires completed or authoritative phase-cancelled attempts');
@@ -323,6 +301,9 @@ export function verifyGolden(gate: Gate): void {
 		const settlements = aggregate.filter(measurement => measurement.assignmentId === item.id);
 		assert.equal(settlements.length, 1, `ACCEPTANCE_SETTLEMENT_COUNT: Exactly one actual settlement required for ${text(item.id)}`);
 		assert.ok(text(row(settlements[0]?.metadata).settlementKey), 'ACCEPTANCE_SETTLEMENT_KEY: Stable settlement key required');
+		const key = text(row(settlements[0]?.metadata).settlementKey);
+		assert.ok(!settlementKeys.has(key), 'ACCEPTANCE_USAGE_IDENTITY: A settlement key cannot account for two assignments');
+		settlementKeys.add(key);
 	}
 	}
 	if (gate === 'reporter') {

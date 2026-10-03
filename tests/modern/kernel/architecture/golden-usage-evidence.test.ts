@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { encodeCapacityPageCursor } from '@treeseed/sdk/capacity-pagination';
-import { gate, state, workdayId, type Row } from './golden-readback-fixture.ts';
+import { gate, state, usageMeasurement, type Row } from './golden-readback-fixture.ts';
 
 const usage = (): Row => state.replies.get('capacity usage')!;
 const assignments = (): Row[] => state.replies.get('assignments list')!.items;
@@ -12,15 +12,12 @@ function page(items: Row[], hasMore = false): Row {
 		? encodeCapacityPageCursor({ id: last.id, createdAt: last.createdAt }) : null } };
 }
 function measured(item: Row, index = 0): Row {
-	return { id: `${item.id}:aggregate`, idempotencyKey: `usage-${item.id}`, assignmentId: item.id,
-		projectId: item.projectId, workDayId: workdayId, assignmentAttempt: index, accountingMode: 'aggregate',
-		usageDimension: 'aggregate', activeSeconds: 1, elapsedSeconds: 1,
-		nativeUsage: { activeSeconds: 1 }, createdAt: item.completedAt, metadata: { settlementKey: item.id } };
+	return { ...usageMeasurement(item), assignmentAttempt: index };
 }
 beforeEach(() => { state.replies.set('capacity usage', page(ordered(assignments().map(value => measured(value))))); });
 function outcomes(candidates: Row[]): string[] {
 	return candidates.map(candidate => {
-		state.replies.set('capacity usage', candidate); state.usagePages = undefined;
+		state.replies.set('capacity usage', candidate); state.usagePages = [candidate];
 		try { gate('settlement'); return 'ADMITTED'; } catch (error) { return String(error); }
 	});
 }
@@ -49,6 +46,8 @@ describe('complete scoped measured usage evidence for managed settlement', () =>
 		const original = structuredClone(usage());
 		const mutations = [{ projectId: 'foreign-project' }, { workDayId: 'foreign-workday' }, { projectId: '' },
 			{ workDayId: undefined }, { assignmentId: '' }, { idempotencyKey: '' },
+			{ idempotencyKey: 1 }, { idempotencyKey: {} }, { assignmentAttempt: '0' }, { assignmentAttempt: -1 },
+			{ assignmentAttempt: 0.5 }, { assignmentAttempt: undefined }, { accountingMode: 'unknown' }, { accountingMode: {} },
 			{ metadata: { settlementKey: original.items[1].metadata.settlementKey } }];
 		expect(outcomes(mutations.map(change => ({ ...original, items: [{ ...original.items[0], ...change }, ...original.items.slice(1)] }))))
 			.toEqual(mutations.map(() => expect.stringMatching(/ACCEPTANCE_USAGE_(SCOPE|IDENTITY)/u)));
@@ -56,7 +55,7 @@ describe('complete scoped measured usage evidence for managed settlement', () =>
 	it('denies informational suffix impostors and duplicate aggregate accounting independent of identifier spelling', () => {
 		const original = structuredClone(usage()), first = original.items[0];
 		expect(outcomes([{ ...original, items: [{ ...first, accountingMode: 'informational' }, ...original.items.slice(1)] },
-			{ ...original, items: [...original.items, { ...first, id: 'second-authoritative-aggregate', idempotencyKey: 'second-key' }] }]))
+			{ ...original, items: ordered([...original.items, { ...first, id: 'second-authoritative-aggregate', idempotencyKey: 'second-key' }]) }]))
 			.toEqual([expect.stringMatching(/ACCEPTANCE_SETTLEMENT_COUNT/u), expect.stringMatching(/ACCEPTANCE_SETTLEMENT_COUNT/u)]);
 	});
 	it('denies nonfinite coerced negative or unmeasured elapsed and native usage', () => {
@@ -81,5 +80,29 @@ describe('complete scoped measured usage evidence for managed settlement', () =>
 		state.replies.set('capacity usage', { ...original, page: { limit: 100, hasMore: true, nextCursor: 'invalid' } });
 		state.usagePages = [state.replies.get('capacity usage')!, page([])];
 		expect(() => gate('settlement')).toThrow(/ACCEPTANCE_USAGE_PAGE/u);
+	});
+	it('requires explicit completion after a full usage page and propagates interruption instead of accepting its aggregates', () => {
+		const original = structuredClone(usage()), first = original.items[0];
+		const additional = Array.from({ length: 100 - original.items.length }, (_, index) => ({ ...first,
+			id: `informational-${String(index).padStart(3, '0')}`, idempotencyKey: `informational-key-${index}`,
+			accountingMode: 'informational' }));
+		const continuing = page(ordered([...original.items, ...additional]), true);
+		const before = structuredClone(continuing);
+		state.usagePages = [continuing, page([])]; expect(() => gate('settlement')).not.toThrow();
+		expect(continuing).toEqual(before);
+		state.usagePages = [continuing]; expect(() => gate('settlement')).toThrow(/ACCEPTANCE_CLI_COMMAND: capacity.usage/u);
+	});
+	it('denies reused cursors duplicate tails and changed cross-page order rather than trusting page-one aggregates', () => {
+		const original = structuredClone(usage()), first = original.items[0];
+		const additional = Array.from({ length: 100 - original.items.length }, (_, index) => ({ ...first,
+			id: `informational-${String(index).padStart(3, '0')}`, idempotencyKey: `informational-key-${index}`,
+			accountingMode: 'informational' }));
+		const continuing = page(ordered([...original.items, ...additional]), true);
+		const failures = [continuing, page([continuing.items[0]]), page([{ ...first, id: 'future-tail',
+			idempotencyKey: 'future-key', createdAt: '2099-01-01T00:00:00.000Z' }])].map(tail => {
+			state.usagePages = [continuing, tail];
+			try { gate('settlement'); return 'ADMITTED'; } catch (error) { return String(error); }
+		});
+		expect(failures).toEqual(failures.map(() => expect.stringMatching(/ACCEPTANCE_USAGE_(ROW|ORDER|PAGE)/u)));
 	});
 });

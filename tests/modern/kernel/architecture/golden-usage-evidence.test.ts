@@ -24,6 +24,21 @@ function outcomes(candidates: Row[]): string[] {
 // UNIT tests OF actual managed settlement assertions. Supplied measurement DTOs
 // are not actual provider usage, canonical UsageSettlements or real settlement receipts.
 describe('complete scoped measured usage evidence for managed settlement', () => {
+	it('denies zero terminal usage after a productive clock started while preserving preparation-only stopped cleanup', () => {
+		const stopped = state.cases.get('Stopped simulation retains terminal leases teardown and exactly-once settlement')!;
+		state.replies.get('workdays show')!.run.status = 'failed';
+		const item = assignments()[0]!;
+		item.status = 'failed'; item.failedAt = item.completedAt; item.completedAt = null; item.assignmentResult = null;
+		const measurements = ordered(assignments().map(value => measured(value)));
+		const measurement = measurements.find(value => value.assignmentId === item.id)!;
+		measurement.createdAt = item.failedAt; measurement.activeSeconds = 0; measurement.elapsedSeconds = 0; measurement.nativeUsage = {};
+		state.replies.set('capacity usage', page(ordered(measurements)));
+		expect(stopped).toThrow(/ACCEPTANCE_USAGE_CLOCK/u);
+		item.capacityEnvelope.budget.time.executionStartedAt = null;
+		item.capacityEnvelope.budget.time.closeoutStartedAt = null;
+		const before = structuredClone([...state.replies]);
+		expect(stopped).not.toThrow(); expect([...state.replies]).toEqual(before);
+	});
 	it('accepts complete scoped measurements without changing the authoritative input records', () => {
 		const before = structuredClone([...state.replies]); expect(() => gate('settlement')).not.toThrow();
 		expect([...state.replies]).toEqual(before);

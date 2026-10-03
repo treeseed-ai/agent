@@ -60,6 +60,7 @@ export function observeCampaign(observed: unknown, workdayId: string, retained: 
 		'ACCEPTANCE_OBSERVATION: Missing event transition');
 	for (const [id, previous] of retained) assert.deepEqual(current.get(id), previous,
 		'ACCEPTANCE_OBSERVATION: Previously observed event mutated or disappeared');
+	assert.ok(run.status !== 'completed' || !failedBoundary, 'ACCEPTANCE_OBSERVATION: Completed run hides failed scheduling');
 	for (const [id, event] of current) retained.set(id, structuredClone(event));
 	return { run, failedBoundary };
 }

@@ -3,6 +3,33 @@ id: agent.golden.component-boundaries
 title: Golden execution component boundaries
 scope: local-component-tests
 workflow:
+  - id: architecture-campaign-observation-1
+    action: { verifier: agent.golden.architecture-campaign-observation-1 }
+    expect: { status: passed }
+  - id: architecture-campaign-observation-2
+    action: { verifier: agent.golden.architecture-campaign-observation-2 }
+    expect: { status: passed }
+  - id: architecture-campaign-observation-3
+    action: { verifier: agent.golden.architecture-campaign-observation-3 }
+    expect: { status: passed }
+  - id: architecture-campaign-observation-4
+    action: { verifier: agent.golden.architecture-campaign-observation-4 }
+    expect: { status: passed }
+  - id: architecture-campaign-observation-5
+    action: { verifier: agent.golden.architecture-campaign-observation-5 }
+    expect: { status: passed }
+  - id: architecture-campaign-observation-6
+    action: { verifier: agent.golden.architecture-campaign-observation-6 }
+    expect: { status: passed }
+  - id: architecture-campaign-observation-7
+    action: { verifier: agent.golden.architecture-campaign-observation-7 }
+    expect: { status: passed }
+  - id: architecture-campaign-observation-8
+    action: { verifier: agent.golden.architecture-campaign-observation-8 }
+    expect: { status: passed }
+  - id: architecture-campaign-observation-9
+    action: { verifier: agent.golden.architecture-campaign-observation-9 }
+    expect: { status: passed }
   - id: architecture-campaign-approval-once
     action: { verifier: agent.golden.architecture-campaign-approval-once }
     expect: { status: passed }

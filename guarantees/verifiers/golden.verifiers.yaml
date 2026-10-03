@@ -1,6 +1,51 @@
 schemaVersion: treeseed.guarantee-verifiers/v1
 ownerPackage: "@treeseed/agent"
 verifiers:
+  agent.golden.architecture-campaign-observation-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/campaign-cli.test.ts
+    testName: "denies missing unavailable or malformed scheduling instead of inferring observed empty work"
+  agent.golden.architecture-campaign-observation-2:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/campaign-cli.test.ts
+    testName: "denies changed scheduling identity mode status and malformed or duplicated count rows"
+  agent.golden.architecture-campaign-observation-3:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/campaign-cli.test.ts
+    testName: "denies missing malformed and incomplete event pagination before terminal golden verification"
+  agent.golden.architecture-campaign-observation-4:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/campaign-cli.test.ts
+    testName: "denies malformed foreign duplicate and missing-index event authority without mutating observations"
+  agent.golden.architecture-campaign-observation-5:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/campaign-cli.test.ts
+    testName: "stops on historical failed event evidence even when current scheduling contains no failures"
+  agent.golden.architecture-campaign-observation-6:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/campaign-cli.test.ts
+    testName: "denies mutated or disappearing previously observed event records on later terminal readback"
+  agent.golden.architecture-campaign-observation-7:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/campaign-cli.test.ts
+    testName: "accepts observed empty pre-admission counts and immutable complete event replays without repeated approval"
+  agent.golden.architecture-campaign-observation-8:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/campaign-cli.test.ts
+    testName: "stops when a later scheduling readback becomes unavailable after complete collaboration"
+  agent.golden.architecture-campaign-observation-9:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/campaign-cli.test.ts
+    testName: "denies failed returned or expired scheduling counts even on a completed workday"
   agent.golden.architecture-campaign-approval-once:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

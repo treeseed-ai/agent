@@ -61,16 +61,22 @@ describe('source publication real client and isolated Git receipt boundary (inte
 			expect(fixture.input.authority).toEqual(before);
 		} finally { await fixture.close(); }
 	});
-	it('denies a foreign branch receipt even when its exact candidate exists in the controlled Git remote', async () => {
+	it('denies foreign repository and branch receipts even when exact candidates exist in the controlled Git remote', async () => {
 		const fixture = await nativeFixture();
 		try {
-			fixture.set({ state: 'published', reference: { ...fixture.input.reference, branch: 'main' } }, 'main');
-			let denied = false; try { await fixture.publish(); } catch { denied = true; }
-			// The adversarial endpoint published this INPUT; no real broker authorization is claimed.
-			expect(fixture.git(fixture.remote, 'rev-parse', 'refs/heads/main')).toBe(fixture.input.reference.commit);
+			const outcomes: Array<{ denied: boolean; announced: number }> = [], before = structuredClone(fixture.input.authority);
+			for (const change of [{ repository: 'foreign/repository' }, { branch: 'main' }, { branch: 'simulation/foreign/workday/assignment' }]) {
+				fixture.input.events.length = 0;
+				const reference = { ...fixture.input.reference, ...change };
+				fixture.set({ state: 'published', reference }, reference.branch);
+				let denied = false; try { await fixture.publish(); } catch { denied = true; }
+				// The adversarial endpoint published this INPUT; no real broker authorization is claimed.
+				expect(fixture.git(fixture.remote, 'rev-parse', `refs/heads/${reference.branch}`)).toBe(fixture.input.reference.commit);
+				outcomes.push({ denied, announced: fixture.input.events.length });
+			}
 			expect(fixture.git(fixture.remote, 'rev-parse', 'refs/heads/fixture-base')).toBe(fixture.input.workspace.baseCommit);
-			expect(fixture.requests).toHaveLength(1);
-			expect({ denied, announced: fixture.input.events.length }).toEqual({ denied: true, announced: 0 });
+			expect(fixture.requests).toHaveLength(3); expect(fixture.input.authority).toEqual(before);
+			expect(outcomes).toEqual(Array(3).fill({ denied: true, announced: 0 }));
 		} finally { await fixture.close(); }
 	});
 	it('retains denial reset malformed transport and changed candidate failures without replay or Git residue', async () => {

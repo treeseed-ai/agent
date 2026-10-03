@@ -284,6 +284,11 @@ export function verifyGolden(gate: Gate): void {
 		assert.ok(rows(result.references).length > 0, 'A claimed completion without exact output references cannot pass');
 		for (const reference of rows(result.references)) assert.ok(assignmentReferenceSchema.safeParse(reference).success,
 			'ACCEPTANCE_RESULT_REFERENCE: Canonical exact output references required');
+		const workspace = row(attempt.workspace);
+		if (workspace.mode === 'git') assert.ok(rows(result.references).some(reference => reference.kind === 'git'
+			&& reference.repository === workspace.repository
+			&& (reference.branch === undefined || reference.branch === workspace.branch)),
+			'ACCEPTANCE_RESULT_WORKSPACE: Git completion requires an exact candidate in the sole immutable repository and any presented branch must match');
 	}
 	if (gate === 'settlement' || gate === 'stopped') {
 	const usageItems: Row[] = [];

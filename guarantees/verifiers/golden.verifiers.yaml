@@ -1,6 +1,41 @@
 schemaVersion: treeseed.guarantee-verifiers/v1
 ownerPackage: "@treeseed/agent"
 verifiers:
+  agent.golden.architecture-source-publication-unit-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/architecture/source-publication-authority.test.ts
+    testName: "retains exact arbitrary-class authorized repository branch and candidate without input changes"
+  agent.golden.architecture-source-publication-unit-2:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/architecture/source-publication-authority.test.ts
+    testName: "denies foreign repository and branch receipts instead of announcing verified assignment publication"
+  agent.golden.architecture-source-publication-unit-3:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/architecture/source-publication-authority.test.ts
+    testName: "retains denied authority transport invalid commits and failed publication without a success announcement"
+  agent.golden.architecture-source-publication-native-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/architecture/source-publication-native.test.ts
+    testName: "reads the exact candidate and unchanged base through real Git after the real broker client request"
+  agent.golden.architecture-source-publication-native-2:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/architecture/source-publication-native.test.ts
+    testName: "denies foreign repository and branch receipts even when exact candidates exist in the controlled Git remote"
+  agent.golden.architecture-source-publication-native-3:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/architecture/source-publication-native.test.ts
+    testName: "retains denial reset malformed transport and changed candidate failures without replay or Git residue"
+  agent.golden.architecture-source-publication-managed:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/golden-readback.test.ts
+    testName: "denies a Git completion without a candidate in its sole immutable repository and optional branch scope"
   agent.golden.architecture-completion-clock:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

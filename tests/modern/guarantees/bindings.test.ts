@@ -18,6 +18,7 @@ for (const file of readdirSync(resolve(root, 'guarantees/verifiers')).filter(pat
 describe('capacity-provider guarantee execution bindings', () => {
 	it('binds every registered verifier to an executable current implementation', () => {
 		const failures: string[] = [];
+		const namesByFile = new Map<string, string[]>();
 		for (const [id, verifier] of Object.entries(registry.verifiers)) {
 			const path = ['vitestCase', 'nodeTestCase'].includes(verifier.kind) ? verifier.testFile : verifier.command;
 			if (!path || !existsSync(resolve(root, path))) {
@@ -27,15 +28,19 @@ describe('capacity-provider guarantee execution bindings', () => {
 			if (['vitestCase', 'nodeTestCase'].includes(verifier.kind)) {
 				if (verifier.kind === 'vitestCase' && !path.startsWith('tests/modern/')) failures.push(`${id}: excluded from the active Vitest suite`);
 				if (verifier.kind === 'nodeTestCase' && !path.startsWith('tests/acceptance/')) failures.push(`${id}: not an explicit runtime acceptance test`);
+				let names = namesByFile.get(path);
+				if (!names) {
 				const source = ts.createSourceFile(path, readFileSync(resolve(root, path), 'utf8'), ts.ScriptTarget.Latest, true);
-				const names: string[] = [];
+				const collected: string[] = [];
 				function inspect(node: ts.Node): void {
 					if (ts.isCallExpression(node) && ts.isIdentifier(node.expression)
 						&& ['it', 'test'].includes(node.expression.text) && node.arguments[0]
-						&& ts.isStringLiteral(node.arguments[0])) names.push(node.arguments[0].text);
+						&& ts.isStringLiteral(node.arguments[0])) collected.push(node.arguments[0].text);
 					ts.forEachChild(node, inspect);
 				}
 				inspect(source);
+				names = collected; namesByFile.set(path, names);
+				}
 				if (!verifier.testName || !names.includes(verifier.testName)) failures.push(`${id}: missing active named case ${verifier.testName ?? '(unspecified)'}`);
 			}
 		}

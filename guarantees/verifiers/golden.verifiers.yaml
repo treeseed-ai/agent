@@ -1,6 +1,1131 @@
 schemaVersion: treeseed.guarantee-verifiers/v1
 ownerPackage: "@treeseed/agent"
 verifiers:
+  agent.golden.execution-unfinished-handoff-unit-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/context-custody-readback.test.ts
+    testName: "retains the complete original unverified work and failed command in a separately authorized draft under decreasing original time without claiming that work passed"
+  agent.golden.execution-unfinished-handoff-unit-2:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/context-custody-readback.test.ts
+    testName: "denies weakened hidden substituted or falsely passed unfinished work and refreshed expired or increasing handoff clocks without repairing failed evidence"
+  agent.golden.execution-selected-code-unit-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/freeze-integrity.test.ts
+    testName: "requires exact complete independently compiled provider bytes rather than a matching saved runtime label"
+  agent.golden.execution-selected-code-unit-2:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/freeze-integrity.test.ts
+    testName: "denies empty missing extra and changed selected compiled generations without changing either held byte inventory"
+  agent.golden.execution-global-selection-unit-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/record-custody-readback.test.ts
+    testName: "replays exact credential-free original global polling inputs without replacing them with a later terminal usage snapshot"
+  agent.golden.execution-global-selection-unit-2:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/record-custody-readback.test.ts
+    testName: "denies absent reused foreign secret-bearing malformed and changed global choice inputs while preserving every supplied failed observation"
+  agent.golden.execution-global-selection-native-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/provider/architecture/arbitration-native.test.ts
+    testName: "native original global runtime retains exact preclaim eligible metadata and measured seconds on failed custody so independent restart cannot replace the selected team history"
+  agent.golden.execution-poll-quota-unit-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/provider/active-time-accounting.test.ts
+    testName: "denies a positive reservation against either valid zero quota without changing the supplied polling claim or prior recovery history"
+  agent.golden.execution-poll-quota-native-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/provider/architecture/capacity-native.test.ts
+    testName: "native valid zero model and capability ceilings refuse concurrent positive reservations after failed measured execution without replacing polling or accounting custody"
+  agent.golden.execution-protected-observation-unit-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/provider/provider-runner.test.ts
+    testName: "retains exact protected executor observations on the original ordinary and conversation transports without exposing them as public context or changing terminal history"
+  agent.golden.execution-continuation-returned-unit-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/record-custody-readback.test.ts
+    testName: "retains returned failed continuation history while denying an active assignment or retained lease without converting failure into a completed replay"
+  agent.golden.execution-integration-identity-native-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/portable/portable-kernel-integration.test.ts
+    testName: "native renamed integration profiles retain one supplied original base and both independent Git inputs through the same Releaser handler without hidden base construction"
+  agent.golden.execution-predecessor-lineage-unit-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/cross-project-readback.test.ts
+    testName: "retains foreign read-only Git citations without accepting their commit or an ambiguous missing primary source as the dependent writable base"
+  agent.golden.execution-weighted-opportunity-unit-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/golden-readback.test.ts
+    testName: "binds every supplied weighted opportunity to the original applied policy without inventing entitlement or accepting fractional shares and unknown phases"
+  agent.golden.execution-qualification-unit-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/canonical-offer-selection.test.ts
+    testName: "denies validly signed insufficient missing duplicate contradictory and future qualification while retaining attestation-only and exact declared suite inputs"
+  agent.golden.execution-qualification-native-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/provider/architecture/arbitration-native.test.ts
+    testName: "original native provider offer publication denies insufficient future missing and duplicate qualification before signing or changing host custody"
+  agent.golden.execution-local-slot-unit-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/record-custody-readback.test.ts
+    testName: "requires exact local terminal slot history and denies retained renamed foreign duplicate or missing custody without disclosing or changing supplied state"
+  agent.golden.execution-local-slot-native-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/provider/architecture/capacity-native.test.ts
+    testName: "native terminal slot history survives restart concurrent finalization and failed closeout without retained local reservations or a duplicate terminal event"
+  agent.golden.execution-repeating-planning-unit-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/golden-planning-readback.test.ts
+    testName: "denies hidden unfinished reordered renumbered and unrepresented planning rounds without changing supplied history"
+  agent.golden.execution-terminal-drain-unit-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/provider-kernel-executor.test.ts
+    testName: "revoked or expired execution drains every late transport outcome without completing returning retrying or discarding original observations"
+  agent.golden.execution-terminal-drain-native-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/portable/portable-kernel-integration.test.ts
+    testName: "native cancellation and original expiry retain late executor bytes and failed public closeout without another execution or successful retry"
+  agent.golden.execution-offer-signature-unit-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/canonical-offer-selection.test.ts
+    testName: "binds every supplied conformance status and evidence byte to the original provider key without mutating templates or laundering failed qualification"
+  agent.golden.execution-offer-signature-unit-2:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/canonical-offer-selection.test.ts
+    testName: "denies changed missing malformed foreign and reused conformance signatures while retaining the exact supplied failed or revoked evidence"
+  agent.golden.execution-offer-signature-native-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/provider/architecture/arbitration-native.test.ts
+    testName: "independent original provider processes sign exact offer evidence with native encrypted host identity while preserving failed qualification and unchanged runtime history"
+  agent.golden.execution-retained-quota-native-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/provider/architecture/capacity-native.test.ts
+    testName: "independent native finish observation and finalization races retain exact shared model capability and team seconds without charging terminal replay twice"
+  agent.golden.execution-compiled-project-unit-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/handler-registry.test.ts
+    testName: "retains exact renamed project implementations in the sole registry and rejects a conflicting implementation before either handler executes"
+  agent.golden.execution-compiled-project-native-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/project-handler-build.test.ts
+    testName: "isolated original project build executes its compiled handler through the compiled Kernel and rejects missing duplicate and wrong-build selections without mutating held inputs"
+  agent.golden.execution-model-overlap-unit-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/provider-kernel-executor.test.ts
+    testName: "overlapping project handler model calls admit one original executor and retain exact duplicate denial without changing the assignment or native input usage"
+  agent.golden.execution-model-overlap-native-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/portable/project-handler.test.ts
+    testName: "native overlapping project handler model invocations preserve one transport one begin and exact candidate bytes through duplicate denial"
+  agent.golden.execution-pending-model-unit-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/provider-kernel-executor.test.ts
+    testName: "premature project handler return cancels and drains its pending original model call before terminal failure without publishing a completed result"
+  agent.golden.execution-pending-model-native-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/portable/project-handler.test.ts
+    testName: "native premature project handler return cancels one pending HTTP model transport and drains before terminal refusal without changing exact original source bytes"
+  agent.golden.execution-recovery-custody-unit-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/provider/active-time-accounting.test.ts
+    testName: "keeps the first supplied closeout output and failure immutable under exact replay and rejects substituted output before persistence"
+  agent.golden.execution-recovery-custody-unit-2:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/provider/active-time-accounting.test.ts
+    testName: "refuses replacement of a supplied retained lease identity or frozen envelope while keeping the exact original recovery retry valid"
+  agent.golden.execution-recovery-custody-unit-3:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/provider/active-time-accounting.test.ts
+    testName: "denies missing malformed expired and widened supplied renewal clocks without replacing the original attempt deadline"
+  agent.golden.execution-recovery-custody-native-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/provider/architecture/capacity-native.test.ts
+    testName: "native restart and overlapping writes preserve the first closeout output and failed cause while denying every substituted recovery output"
+  agent.golden.execution-recovery-custody-native-2:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/provider/architecture/capacity-native.test.ts
+    testName: "native retained lease replay refuses identity expiry and frozen authority substitutions without erasing original failed custody"
+  agent.golden.execution-recovery-custody-native-3:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/provider/architecture/capacity-native.test.ts
+    testName: "native lease renewal denies malformed elapsed and widened clocks before persistence and retains the original frozen attempt on restart"
+  agent.golden.execution-clock-values-unit-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/sandbox/architecture/clock-authority.test.ts
+    testName: "counts complete immutable clock result bytes including a zero final reading without inventing completion authority"
+  agent.golden.execution-clock-values-unit-2:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/sandbox/architecture/clock-authority.test.ts
+    testName: "refuses successful clock flags with missing malformed contradictory or out of bounds MCP result values without repairing events"
+  agent.golden.execution-clock-values-unit-3:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/sandbox/architecture/clock-authority.test.ts
+    testName: "denies substituted productive windows and increasing remaining values across otherwise complete first and final clock results"
+  agent.golden.execution-clock-values-native-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/sandbox/architecture/clock-native.test.ts
+    testName: "native public guest MCP clock transports exact first and final HTTPS values and rejects corrupted observed payloads without rewriting native bytes"
+  agent.golden.execution-provider-cutover-unit-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/provider-boundary.test.ts
+    testName: "rejects retired provider manifest versions without rewriting supplied authority while retaining the current exact v5 contract"
+  agent.golden.execution-provider-cutover-unit-2:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/provider-boundary.test.ts
+    testName: "refuses an unconfigured runner plan instead of asserting executor readiness without reading its provider authority"
+  agent.golden.execution-provider-cutover-native-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/provider-boundary.test.ts
+    testName: "native packaged provider plans deny legacy translated and malformed manifest bytes before any identity accounting or status write"
+  agent.golden.execution-physical-absence-unit-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/sandbox-physical-readback.test.ts
+    testName: "requires independent exact owning host inventories while retaining unrelated live resources and original failed custody"
+  agent.golden.execution-physical-absence-unit-2:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/sandbox-physical-readback.test.ts
+    testName: "denies residual malformed foreign traversing and mounted physical scope without repairing native observations or failed history"
+  agent.golden.execution-physical-absence-native-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/sandbox-physical-readback.test.ts
+    testName: "native filesystem readback refuses retained files directories dangling links and non-directory ancestors without deleting failed observations"
+  agent.golden.execution-continuation-unit-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/record-custody-readback.test.ts
+    testName: "retains exact public continuation ancestry source and executed Decision custody with distinct unchanged original attempts and results"
+  agent.golden.execution-continuation-unit-2:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/record-custody-readback.test.ts
+    testName: "denies incomplete cyclic foreign expanded stale and reused public continuation evidence without repairing prior failed history"
+  agent.golden.execution-broker-boundary-unit-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/microvm-result-authority.test.ts
+    testName: "requires exact owning sandbox and assignment correlation before accepting a supplied completed result and retains observed usage on denial"
+  agent.golden.execution-broker-boundary-unit-2:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/microvm-result-authority.test.ts
+    testName: "requires one exact verified owning destroy receipt without losing original cleanup errors measurements or unverified observations"
+  agent.golden.execution-broker-boundary-unit-3:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/microvm-result-authority.test.ts
+    testName: "binds artifacts to original declared output identity size and digest before consuming controlled downloads without mutating observations"
+  agent.golden.execution-broker-boundary-native-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/sandbox-broker-preparation.test.ts
+    testName: "native original microvm execution materializes exact inputs and retains measured result only after its owning verified destroy receipt"
+  agent.golden.execution-broker-boundary-native-2:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/sandbox-broker-preparation.test.ts
+    testName: "native original microvm refuses foreign result correlations and preserves owning closeout and exact observed usage without a passing event"
+  agent.golden.execution-broker-boundary-native-3:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/sandbox-broker-preparation.test.ts
+    testName: "native original microvm retains denied interrupted malformed and unverified destroy observations instead of accepting model completion or replaying destruction"
+  agent.golden.execution-broker-boundary-native-4:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/sandbox-broker-preparation.test.ts
+    testName: "native original microvm accepts only declared artifact identity and exact immutable bytes digest and size before verified closeout"
+  agent.golden.execution-sandbox-closeout-unit-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/provider-kernel-executor.test.ts
+    testName: "refuses claimed model completion without exact verified sandbox closeout while retaining every original executor observation"
+  agent.golden.execution-sandbox-closeout-unit-2:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/record-custody-readback.test.ts
+    testName: "retains distinct completed and failed public sandbox closeout without treating an empty Reporter scope as physical isolation"
+  agent.golden.execution-sandbox-closeout-unit-3:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/record-custody-readback.test.ts
+    testName: "denies missing coerced reused foreign and outside-lifecycle sandbox closeout without repairing failed public history"
+  agent.golden.execution-sandbox-closeout-native-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/portable/portable-kernel-integration.test.ts
+    testName: "native configured model completion denies incomplete sandbox closeout without replacing candidate bytes failed history or measured usage"
+  agent.golden.execution-accounting-continuity-native-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/provider/architecture/capacity-native.test.ts
+    testName: "native restart refuses malformed backward and future execution accounting clocks without repairing durable claims or resetting usage"
+  agent.golden.execution-accounting-continuity-unit-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/record-custody-readback.test.ts
+    testName: "retains exact public shared model and capability accounting across closed memberships renamed adapters and legitimate UTC rollover"
+  agent.golden.execution-accounting-continuity-unit-2:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/record-custody-readback.test.ts
+    testName: "denies malformed health clocks usage scopes and reset public availability history without repairing original observations"
+  agent.golden.execution-handler-inspection-unit-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/profile-custody-readback.test.ts
+    testName: "binds public handler inspection to the exact frozen renamed identity and origin without changing grants or source bytes"
+  agent.golden.execution-handler-inspection-unit-2:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/profile-custody-readback.test.ts
+    testName: "denies absent foreign duplicated substituted and origin contradictory handler inspection without repairing frozen authority"
+  agent.golden.execution-recovery-authority-unit-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/timing/single-clock-recovery.test.ts
+    testName: "requires finite numeric remaining authority for final clock recovery without coercion or resetting the boundary"
+  agent.golden.execution-recovery-authority-unit-2:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/timing/single-clock-recovery.test.ts
+    testName: "denies contradictory private timing recovery observations rather than trusting a compliant flag alone"
+  agent.golden.execution-recovery-authority-unit-3:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/sandbox/planning-synthesis-recovery.test.ts
+    testName: "denies malformed remaining authority before removing captured synthesis or invoking its original session"
+  agent.golden.execution-recovery-authority-unit-4:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/sandbox/planning-synthesis-recovery.test.ts
+    testName: "remeasures synthesis recovery authority after progress delivery before deleting or executing captured work"
+  agent.golden.execution-recovery-authority-unit-5:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/sandbox/planning-synthesis-recovery.test.ts
+    testName: "preserves denied captured-response reads as their original cause instead of treating them as absent recovery work"
+  agent.golden.execution-recovery-authority-unit-6:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/sandbox/planning-synthesis-recovery.test.ts
+    testName: "retains original progress removal and executor failures without another continuation or a completed correction"
+  agent.golden.execution-recovery-authority-unit-7:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/provider-kernel-executor.test.ts
+    testName: "returns missing or invalid model clock evidence retryably with exact executor custody and no canonical completion"
+  agent.golden.execution-recovery-authority-native-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/sandbox/planning-recovery-process.test.ts
+    testName: "native captured synthesis and schema remain byte identical when malformed or exhausted authority denies any correction child"
+  agent.golden.execution-recovery-authority-native-2:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/sandbox/planning-recovery-process.test.ts
+    testName: "native progress publication consumes the same measured recovery window without deleting captured work or launching a late correction"
+  agent.golden.execution-recovery-authority-native-3:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/sandbox/planning-recovery-process.test.ts
+    testName: "native captured-response read errors remain errors with original schema bytes and no child or substituted completion"
+  agent.golden.execution-recovery-authority-native-4:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/sandbox/planning-recovery-process.test.ts
+    testName: "native denied recovery progress retains its exact cause and captured bytes before any removal or subprocess"
+  agent.golden.execution-recovery-authority-native-5:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/sandbox/planning-recovery-process.test.ts
+    testName: "native correction honors newly shortened authority after progress without increasing its original child allowance"
+  agent.golden.execution-recovery-authority-native-6:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/portable/portable-kernel-integration.test.ts
+    testName: "native claimed model completions with incomplete clocks retain exact candidate and closeout while returning retryable timing refusal"
+  agent.golden.execution-failure-custody-unit-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/provider-kernel-executor.test.ts
+    testName: "retains exact executor failure usage artifacts and closeout outputs through every bounded retry classification"
+  agent.golden.execution-failure-custody-unit-2:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/provider/provider-runner.test.ts
+    testName: "retains failed executor custody and exact diagnostic usage when informational delivery or settlement is denied"
+  agent.golden.execution-failure-custody-unit-3:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/record-custody-readback.test.ts
+    testName: "binds failed productive closeout to its exact zero-charge diagnostic and distinct terminal native measurement"
+  agent.golden.execution-failure-custody-native-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/portable/portable-kernel-integration.test.ts
+    testName: "native executor failure classifications retain exact durable closeout bytes through Kernel runner and public provider transport"
+  agent.golden.execution-failure-custody-native-2:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/portable/portable-kernel-integration.test.ts
+    testName: "native denied diagnostic and settlement deliveries preserve failed custody for exact closeout retry without another executor turn"
+  agent.golden.architecture-review-finding-unit-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/golden-readback.test.ts
+    testName: "independently reads exact governed review finding bytes from the owning result with omitted or explicit same-publication commit"
+  agent.golden.architecture-review-finding-unit-2:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/golden-readback.test.ts
+    testName: "denies missing substituted malformed or unowned native review findings without repairing raw observations or failed history"
+  agent.golden.architecture-review-finding-native-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/portable/context-integration.test.ts
+    testName: "real configured Reviewer publishes one native finding and Decision batch bound to the exact predecessor and rejects incomplete or changed readback"
+  agent.golden.architecture-revision-custody-unit-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/golden-readback.test.ts
+    testName: "requires the genuine request-changes Decision to bind its exact prior Actor candidate assigned independent Reviewer and recorded interval"
+  agent.golden.architecture-revision-custody-unit-2:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/golden-readback.test.ts
+    testName: "retains the exact original request-changes correction and independent approval result chain without substituted or reused identities"
+  agent.golden.architecture-predecessor-context-unit-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/portable/context-authority.test.ts
+    testName: "denies missing extra duplicated self-owned and reused-attempt predecessor results before reading governed context"
+  agent.golden.architecture-predecessor-context-unit-2:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/portable/context-authority.test.ts
+    testName: "preserves authorized failed command observations and rejects malformed canonical predecessor evidence without repairing it"
+  agent.golden.architecture-predecessor-context-native-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/portable/portable-kernel-integration.test.ts
+    testName: "real Kernel retains exact predecessor evidence and native source bytes while denying unassigned result inventories before execution"
+  agent.golden.architecture-portfolio-relations-unit-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/portfolio-relations.test.ts
+    testName: "derives named project slugs and collective work-item anchors from supplied document and seed authority without copying the returned graph"
+  agent.golden.architecture-portfolio-relations-unit-2:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/portfolio-relations.test.ts
+    testName: "denies absent truncated unknown duplicate or ambiguous document seed and collective endpoint authority"
+  agent.golden.architecture-portfolio-relations-unit-3:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/portfolio-relations.test.ts
+    testName: "denies missing extra duplicated implicit actor-only dangling and wrong-anchor dependencies against the entire independent expected set"
+  agent.golden.architecture-portfolio-relations-unit-4:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/portfolio-relations.test.ts
+    testName: "denies incomplete foreign duplicate moved-library or wrong-workday project bindings rather than accepting a smaller managed portfolio"
+  agent.golden.architecture-cross-project-readback-unit-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/cross-project-readback.test.ts
+    testName: "retains exact relation note independent approved candidate secondary read grants and original primary workspace without rewriting supplied evidence"
+  agent.golden.architecture-cross-project-readback-unit-2:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/cross-project-readback.test.ts
+    testName: "denies missing moved foreign malformed duplicate and byte-drifted note authority against the same exact graph endpoints"
+  agent.golden.architecture-cross-project-readback-unit-3:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/cross-project-readback.test.ts
+    testName: "denies missing unapproved foreign candidate or reviewer profile and mismatched result ownership rather than trusting completed graph status"
+  agent.golden.architecture-cross-project-readback-unit-4:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/cross-project-readback.test.ts
+    testName: "denies missing widened secondary read context foreign writes merged workspaces duplicate records and premature dependent admission"
+  agent.golden.architecture-cross-project-readback-unit-5:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/cross-project-readback.test.ts
+    testName: "denies absent implicit actor-only duplicated and dangling relations and cannot substitute a single-project golden for cross-project custody"
+  agent.golden.architecture-cross-project-unit-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/portable/cross-project-authority.test.ts
+    testName: "materializes exact secondary bytes through its sole read grant without changing the primary mutable workspace"
+  agent.golden.architecture-cross-project-unit-2:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/portable/cross-project-authority.test.ts
+    testName: "denies missing and ambiguous secondary repository authority before falling back to the owning project"
+  agent.golden.architecture-cross-project-unit-3:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/portable/cross-project-authority.test.ts
+    testName: "denies contradictory project selectors and ambiguous aliases without selecting the first grant or rewriting input"
+  agent.golden.architecture-cross-project-native-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/portable/cross-project-native.test.ts
+    testName: "consumes exact secondary book bytes while returning only the original primary Git candidate"
+  agent.golden.architecture-cross-project-native-2:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/portable/cross-project-native.test.ts
+    testName: "missing or ambiguous secondary route authority never opens HTTP or productive execution against the primary project"
+  agent.golden.architecture-cross-project-native-3:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/portable/cross-project-native.test.ts
+    testName: "native tool routing rejects contradictory and ambiguous secondary selectors before official HTTP without a primary fallback"
+  agent.golden.architecture-cross-project-native-4:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/portable/cross-project-native.test.ts
+    testName: "denied moved missing malformed and foreign secondary content retains failed history without a model call or implicit retry"
+  agent.golden.execution-descendant-closeout-unit-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/sandbox/architecture/budget-authority.test.ts
+    testName: "retains each original timeout interruption and failing command cause through bounded execution without a successful retry or widened remaining authority"
+  agent.golden.execution-descendant-closeout-native-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/sandbox/architecture/budget-native.test.ts
+    testName: "native hard stop graceful parent interruption and failed parent exit close every recorded descendant before reporting failure without leaving late bytes"
+  agent.golden.architecture-budget-unit-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/sandbox/architecture/budget-authority.test.ts
+    testName: "denies malformed signed duration elapsed and wall clock numbers without enlarging the original window"
+  agent.golden.architecture-budget-unit-2:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/sandbox/architecture/budget-authority.test.ts
+    testName: "denies invalid explicit hard idle and closeout limits before delegating any subprocess"
+  agent.golden.architecture-budget-unit-3:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/sandbox/architecture/budget-authority.test.ts
+    testName: "retains the same exact closeout boundary through retries and denies the consumed reserve without rewriting options"
+  agent.golden.architecture-budget-native-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/sandbox/architecture/budget-native.test.ts
+    testName: "retains native failing exit stdout and stderr instead of producing a passing command result"
+  agent.golden.execution-verification-window-native-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/sandbox/architecture/budget-native.test.ts
+    testName: "native mandatory verification replays measured commands inside one original window and retains an overrun without a passing receipt or later replay"
+  agent.golden.architecture-budget-native-2:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/sandbox/architecture/budget-native.test.ts
+    testName: "denies malformed explicit native timers before a child starts while retaining every negative observation"
+  agent.golden.architecture-budget-native-3:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/sandbox/architecture/budget-native.test.ts
+    testName: "ongoing native output never extends the original hard stop or leaves a late candidate"
+  agent.golden.architecture-budget-native-4:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/sandbox/architecture/budget-native.test.ts
+    testName: "safe native interruption is not success and its continuation consumes the same original closeout window"
+  agent.golden.architecture-source-attachment-unit-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/architecture/source-attachment-authority.test.ts
+    testName: "retains exact source scope across fresh grants"
+  agent.golden.architecture-source-attachment-unit-2:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/architecture/source-attachment-authority.test.ts
+    testName: "denies changed prepare or attach scope"
+  agent.golden.architecture-source-attachment-unit-3:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/architecture/source-attachment-authority.test.ts
+    testName: "denies renewal scope or lease replacement"
+  agent.golden.architecture-source-attachment-unit-4:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/architecture/source-attachment-authority.test.ts
+    testName: "retains aborted denied and failed source authority"
+  agent.golden.architecture-source-attachment-native-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/architecture/source-attachment-native.test.ts
+    testName: "reads exact prepare attach and renewal over Unix HTTP"
+  agent.golden.architecture-source-attachment-native-2:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/architecture/source-attachment-native.test.ts
+    testName: "denies moved source scope over Unix HTTP"
+  agent.golden.architecture-source-attachment-native-3:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/architecture/source-attachment-native.test.ts
+    testName: "retains renewal lease and transport failures over Unix HTTP"
+  agent.golden.architecture-record-custody-unit-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/record-custody-readback.test.ts
+    testName: "retains supplied completed and failed attempts with one distinct canonical lease reservation result and settlement each"
+  agent.golden.architecture-record-custody-unit-2:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/record-custody-readback.test.ts
+    testName: "denies absent canonical records and never upgrades a legacy ledger or metadata settlement key into a UsageSettlement"
+  agent.golden.architecture-record-custody-unit-3:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/record-custody-readback.test.ts
+    testName: "denies duplicate settlement identities reused keys and conflicting copies across public views without rewriting any evidence"
+  agent.golden.architecture-record-custody-unit-4:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/record-custody-readback.test.ts
+    testName: "denies foreign assignment reservation workday team project provider and class joins against the same immutable attempt"
+  agent.golden.architecture-record-custody-unit-5:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/record-custody-readback.test.ts
+    testName: "denies coerced negative nonfinite missing and extra settlement facts using the unchanged exact canonical target"
+  agent.golden.architecture-record-custody-unit-6:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/record-custody-readback.test.ts
+    testName: "denies foreign duplicate active and reversed-clock lease or reservation authority for a terminal attempt"
+  agent.golden.architecture-record-custody-unit-7:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/record-custody-readback.test.ts
+    testName: "denies missing foreign or mismatched aggregate and result usage without discarding the failed predecessor attempt"
+  agent.golden.architecture-record-custody-unit-8:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/record-custody-readback.test.ts
+    testName: "denies orphan aggregate rows and reused measurement identities even when every terminal attempt has a matching charge"
+  agent.golden.architecture-record-custody-unit-9:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/record-custody-readback.test.ts
+    testName: "validates every supplied failed result against its own immutable attempt and measured usage without replacing failed history"
+  agent.golden.architecture-record-custody-unit-10:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/record-custody-readback.test.ts
+    testName: "denies reused result identities and result clocks outside the recorded productive interval while retaining distinct failed results"
+  agent.golden.architecture-record-custody-unit-11:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/record-custody-readback.test.ts
+    testName: "denies terminal lease and reservation closure clocks preceding their own acquisition without inventing settlement after completion"
+  agent.golden.execution-quota-manifest-unit-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/provider/architecture/arbitration-authority.test.ts
+    testName: "manifest validation uses the original quota schema to deny malformed model daily and capability limits without coercion or changing a valid zero ceiling"
+  agent.golden.execution-quota-manifest-native-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/provider/architecture/arbitration-native.test.ts
+    testName: "native quota manifests reject malformed model daily and capability limits before coordinator polling or changing retained capacity and admit only exact restored bytes"
+  agent.golden.architecture-arbitration-unit-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/provider/architecture/arbitration-authority.test.ts
+    testName: "admits the exact original disk boundary and denies one byte less without changing supplied capacity"
+  agent.golden.architecture-arbitration-unit-2:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/provider/architecture/arbitration-authority.test.ts
+    testName: "denies missing coerced negative fractional and nonfinite native disk facts instead of converting them into a ready host"
+  agent.golden.architecture-arbitration-unit-3:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/provider/architecture/arbitration-authority.test.ts
+    testName: "retains a configured larger reserve and headroom rather than granting more slots by shrinking native hard limits"
+  agent.golden.architecture-arbitration-unit-4:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/provider/architecture/arbitration-authority.test.ts
+    testName: "binds terminal return only through the existing public operation and rejects missing path authority before any transport"
+  agent.golden.architecture-arbitration-native-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/provider/architecture/arbitration-native.test.ts
+    testName: "flows an idle team share to the other eligible team within one original host slot without merging connection authority"
+  agent.golden.architecture-arbitration-native-2:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/provider/architecture/arbitration-native.test.ts
+    testName: "compares measured actual local seconds across two busy teams before the quieter team without rewriting history"
+  agent.golden.architecture-arbitration-native-3:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/provider/architecture/arbitration-native.test.ts
+    testName: "does not poll disabled denied or foreign token-bound connections and never borrows a healthy team token"
+  agent.golden.architecture-arbitration-native-4:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/provider/architecture/arbitration-native.test.ts
+    testName: "applies actual host disk denial before any assignment poll slot or productive accounting admission"
+  agent.golden.architecture-arbitration-native-5:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/provider/architecture/arbitration-native.test.ts
+    testName: "retains the same global durable slot across overlapping independent runtimes and frees it only after the original poll finishes"
+  agent.golden.architecture-arbitration-native-6:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/provider/architecture/arbitration-native.test.ts
+    testName: "releases only unleased polling failures and retries denied unavailable reset and malformed transport without invented usage"
+  agent.golden.architecture-arbitration-native-7:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/provider/architecture/arbitration-native.test.ts
+    testName: "retains malformed leased frozen authority and its original recovery cause rather than manufacturing successful execution"
+  agent.golden.architecture-arbitration-native-8:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/provider/architecture/arbitration-native.test.ts
+    testName: "retains rejected unbound-adapter returns with the original lease instead of treating transport denial as release"
+  agent.golden.architecture-start-custody-unit-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/start-custody-readback.test.ts
+    testName: "accepts complete supplied canonical policy readiness and frozen attempts without rewriting evidence"
+  agent.golden.architecture-start-custody-unit-2:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/start-custody-readback.test.ts
+    testName: "denies missing foreign widened or contradictory applied plan mode clock and policy authority"
+  agent.golden.architecture-start-custody-unit-3:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/start-custody-readback.test.ts
+    testName: "denies missing duplicate foreign partial and out-of-order start readiness events instead of trusting a running disposition"
+  agent.golden.architecture-start-custody-unit-4:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/start-custody-readback.test.ts
+    testName: "denies empty foreign pre-readiness and widened immutable attempts with original supplied inputs retained"
+  agent.golden.architecture-start-custody-unit-5:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/start-custody-readback.test.ts
+    testName: "denies foreign conflicting or malformed recurring intent while retaining ordinary manual start and exact-duration recurrence"
+  agent.golden.architecture-provider-fairness-authority-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/provider/architecture/fairness-authority.test.ts
+    testName: "aggregates actual seconds across all connections before comparing eligible teams without mutating scheduling inputs"
+  agent.golden.architecture-provider-fairness-authority-2:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/provider/architecture/fairness-authority.test.ts
+    testName: "uses team occupancy then team recency then connection occupancy and stable identity only after equal actual usage"
+  agent.golden.architecture-provider-fairness-authority-3:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/provider/architecture/fairness-authority.test.ts
+    testName: "does not let extra connections foreign history or nonlease events manufacture a team fairness entitlement"
+  agent.golden.architecture-provider-fairness-authority-4:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/provider/architecture/fairness-authority.test.ts
+    testName: "keeps stable global eligible-team ordering under connection inventory permutations and an empty initial history"
+  agent.golden.architecture-provider-fairness-authority-5:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/provider/architecture/fairness-authority.test.ts
+    testName: "denies negative nonfinite and coerced actual-second authority instead of selecting a successful global order"
+  agent.golden.architecture-provider-capacity-native-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/provider/architecture/capacity-native.test.ts
+    testName: "enforces global and perconnection slot caps across independent native processes with no lock or temporary residue"
+  agent.golden.architecture-provider-capacity-native-2:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/provider/architecture/capacity-native.test.ts
+    testName: "dispatches the exact complete frozen lease once across native processes and retains its immutable output on restart"
+  agent.golden.architecture-provider-capacity-native-3:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/provider/architecture/capacity-native.test.ts
+    testName: "accounts actual failed execution seconds once across finish restart observations and terminal replay without converting native units"
+  agent.golden.architecture-provider-capacity-native-4:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/provider/architecture/capacity-native.test.ts
+    testName: "retains expired leased custody for recovery instead of admitting another worker or extending the original productive deadline"
+  agent.golden.architecture-provider-capacity-native-5:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/provider/architecture/capacity-native.test.ts
+    testName: "denies conflicting lease replay and malformed native bounds while preserving exact durable state and valid replay"
+  agent.golden.architecture-provider-capacity-native-6:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/provider/architecture/capacity-native.test.ts
+    testName: "shares model and capability native ceilings across teams and rolls back denied reservations before a restart retry"
+  agent.golden.architecture-provider-capacity-native-7:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/provider/architecture/capacity-native.test.ts
+    testName: "fails closed on malformed persisted financial authority without resetting history and retries only after restoring original isolated bytes"
+  agent.golden.architecture-provider-recovery-native-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/provider/architecture/recovery-native.test.ts
+    testName: "retains missing malformed unknown foreign and stale terminal readback rather than releasing original lease authority"
+  agent.golden.architecture-provider-recovery-native-2:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/provider/architecture/recovery-native.test.ts
+    testName: "retains custody on denied unavailable reset malformed and rejected return transports then retries the original output without duplicate return"
+  agent.golden.architecture-provider-recovery-native-3:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/provider/architecture/recovery-native.test.ts
+    testName: "never borrows another team connection or reads remote assignment authority when the exact owning connection is unavailable"
+  agent.golden.architecture-provider-recovery-native-4:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/provider/architecture/recovery-native.test.ts
+    testName: "releases an exact confirmed terminal observation once without a new productive turn or replacing historical executor attribution"
+  agent.golden.architecture-clock-authority-unit-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/sandbox/architecture/clock-authority.test.ts
+    testName: "retains the same exact original productive window in both readings without changing the complete attempt"
+  agent.golden.architecture-clock-authority-unit-2:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/sandbox/architecture/clock-authority.test.ts
+    testName: "denies a clock read before productive execution instead of inventing a start or charging preparation"
+  agent.golden.architecture-clock-authority-unit-3:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/sandbox/architecture/clock-authority.test.ts
+    testName: "denies malformed future reversed and widened productive clock authority rather than returning successful remaining time"
+  agent.golden.architecture-clock-authority-unit-4:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/sandbox/architecture/clock-authority.test.ts
+    testName: "requires two successful clock actions in actual first and final positions without granting compliance to failed checks"
+  agent.golden.architecture-clock-authority-unit-5:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/sandbox/architecture/clock-authority.test.ts
+    testName: "reports zero remaining at the original expired boundary without increasing the allocation or retry allowance"
+  agent.golden.architecture-clock-relay-native-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/sandbox/architecture/clock-native.test.ts
+    testName: "independently reads first and final native HTTPS clock values against unchanged original bounds with no model compliance claim"
+  agent.golden.architecture-clock-relay-native-2:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/sandbox/architecture/clock-native.test.ts
+    testName: "native preparation denial authorization error reset and malformed clock never becomes a successful first or final check"
+  agent.golden.architecture-clock-relay-native-3:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/sandbox/architecture/clock-native.test.ts
+    testName: "exhausted caller windows and missing private relay authority deny before opening native clock transport"
+  agent.golden.architecture-context-authority-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/portable/context-authority.test.ts
+    testName: "retains exact governed content bytes revision digest and project without altering the frozen grant"
+  agent.golden.architecture-context-authority-2:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/portable/context-authority.test.ts
+    testName: "denies moved missing malformed and contradictory exact content before trusting its frontmatter"
+  agent.golden.architecture-context-authority-3:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/portable/context-authority.test.ts
+    testName: "preserves denied and unavailable reads without manufacturing context or retrying a different authority"
+  agent.golden.architecture-context-authority-4:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/portable/context-authority.test.ts
+    testName: "denies unrequested inline context and foreign reporting facts against a complete immutable attempt"
+  agent.golden.architecture-context-authority-5:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/portable/context-authority.test.ts
+    testName: "keeps exact Git context in source custody rather than pretending a reference marker proves native content"
+  agent.golden.architecture-context-integration-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/portable/context-integration.test.ts
+    testName: "loads exact governed content before one model turn while retaining native candidate base and original authority"
+  agent.golden.architecture-context-integration-2:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/portable/context-integration.test.ts
+    testName: "native denied reset malformed missing and moved content blocks model execution without another authority read"
+  agent.golden.architecture-context-integration-3:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/portable/context-integration.test.ts
+    testName: "context byte and item ceilings deny native oversized content before productive execution or source publication"
+  agent.golden.architecture-context-integration-4:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/portable/context-integration.test.ts
+    testName: "foreign digest revision and project content never becomes a successful native assignment or model input"
+  agent.golden.architecture-context-integration-5:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/portable/context-integration.test.ts
+    testName: "ungranted and duplicate exact context is denied before native productive execution without widening source authority"
+  agent.golden.architecture-context-custody-unit-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/context-custody-readback.test.ts
+    testName: "retains exact independent context binding original bytes and full reference without input mutation"
+  agent.golden.architecture-context-custody-unit-2:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/context-custody-readback.test.ts
+    testName: "denies foreign binding moved ref wrong path missing bytes and contradictory book identity before accepting context readback"
+  agent.golden.architecture-context-custody-unit-3:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/context-custody-readback.test.ts
+    testName: "registers native exact context readback without invoking public commands from unit fixtures"
+  agent.golden.architecture-book-knowledge-unit-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/context-custody-readback.test.ts
+    testName: "prepares canonical Knowledge from its separately supplied body without requiring a duplicate frontmatter body or changing the exact Book"
+  agent.golden.architecture-book-knowledge-unit-2:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/context-custody-readback.test.ts
+    testName: "retains canonical Knowledge review and published pages associated with the exact Book without rewriting either artifact"
+  agent.golden.architecture-book-knowledge-unit-3:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/context-custody-readback.test.ts
+    testName: "denies substituted Book identities malformed Knowledge and contradictory native artifact bytes without repairing observations"
+  agent.golden.architecture-book-knowledge-native-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/portable/context-integration.test.ts
+    testName: "real Kernel writer commits and independently reads native Knowledge bytes with the original Book while denying substituted associations before publication"
+  agent.golden.architecture-semantic-red-unit-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/verification/replay-failure.test.ts
+    testName: "retains exact assertion-only test-first output digests without mutating the supplied report or assignment"
+  agent.golden.architecture-semantic-red-unit-2:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/verification/replay-failure.test.ts
+    testName: "denies mixed assertion and nonbehavioral suite failures or incomplete coverage instead of laundering them as test-first red"
+  agent.golden.architecture-semantic-red-native-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/verification/replay-failure.test.ts
+    testName: "real Vitest mixed assertion setup runtime skipped and todo outcomes remain fatal through the owning command observer"
+  agent.golden.architecture-project-handler-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/portable/project-handler.test.ts
+    testName: "runs only the compiled project handler on the exact pinned build through the same native transport and Git result path"
+  agent.golden.architecture-project-handler-2:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/portable/project-handler.test.ts
+    testName: "denies missing duplicate and wrong-build compiled handlers before execution or source publication"
+  agent.golden.architecture-project-handler-3:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/portable/project-handler.test.ts
+    testName: "project-owned executable composition cannot widen the immutable workspace grant or rewrite the reviewed base"
+  agent.golden.architecture-graph-history-unit-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/graph-history-readback.test.ts
+    testName: "retains exact full hundred tail and explicit terminal pages without modifying supplied canonical records"
+  agent.golden.architecture-graph-history-unit-2:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/graph-history-readback.test.ts
+    testName: "denies skipped duplicated unordered foreign malformed and mismatched-digest revision tails"
+  agent.golden.architecture-graph-history-unit-3:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/graph-history-readback.test.ts
+    testName: "denies hidden last tails wrong nonprogressing cursors absent page fields and interrupted transport"
+  agent.golden.architecture-graph-history-unit-4:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/graph-history-readback.test.ts
+    testName: "registers the complete native watch separately from supplied unit pages without executing a campaign"
+  agent.golden.architecture-profile-custody-unit-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/profile-custody-readback.test.ts
+    testName: "retains whole exact governed YAML bytes and frozen handler prompt parameters ceiling without rewriting input"
+  agent.golden.architecture-profile-custody-unit-2:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/profile-custody-readback.test.ts
+    testName: "denies moved missing malformed and digest-contradicting profile content despite valid terminal labels"
+  agent.golden.architecture-profile-custody-unit-3:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/profile-custody-readback.test.ts
+    testName: "denies frozen handler identity prompt parameters and permission drift against independent governed authority"
+  agent.golden.architecture-profile-custody-unit-4:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/profile-custody-readback.test.ts
+    testName: "binds independent profile and public whole-record cases separately from supplied unit evidence"
+  agent.golden.architecture-portable-handler-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/portable/portable-handler-contract.test.ts
+    testName: "selects the same reusable handler for arbitrary renamed identities without role dispatch"
+  agent.golden.architecture-portable-handler-2:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/portable/portable-handler-contract.test.ts
+    testName: "rejects duplicate and unknown selections without replacing the original compiled handler"
+  agent.golden.architecture-portable-handler-3:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/portable/portable-handler-contract.test.ts
+    testName: "keeps prompts parameters context selectors and permission ceilings solely in the configured profile"
+  agent.golden.architecture-portable-kernel-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/portable/portable-kernel-integration.test.ts
+    testName: "runs renamed YAML identities changed prompts and parameters through the same selected handler and exact native candidate"
+  agent.golden.architecture-portable-kernel-2:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/portable/portable-kernel-integration.test.ts
+    testName: "denies unavailable handlers wrong origins and unpinned builds before context transport or native publication"
+  agent.golden.architecture-portable-kernel-3:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/portable/portable-kernel-integration.test.ts
+    testName: "denies concrete changed paths outside the immutable grant while retaining the original reviewed base"
+  agent.golden.architecture-portable-kernel-4:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/portable/portable-kernel-integration.test.ts
+    testName: "denies missing malformed and false timing boundaries from the native transport without accepting a canonical result"
+  agent.golden.architecture-portable-kernel-5:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/portable/portable-kernel-integration.test.ts
+    testName: "denies coerced negative and nonfinite native measurements instead of manufacturing successful usage facts"
+  agent.golden.architecture-portable-kernel-6:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/portable/portable-kernel-integration.test.ts
+    testName: "preserves exact read-only Git citations without requesting or manufacturing a mutable workspace"
+  agent.golden.architecture-portable-kernel-7:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/portable/portable-kernel-integration.test.ts
+    testName: "retains denied reset and malformed transport failures without an automatic second model turn"
+  agent.golden.architecture-portable-kernel-8:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/portable/portable-kernel-integration.test.ts
+    testName: "denies cancelled expired and malformed attempts before the real executor begins"
+  agent.golden.architecture-living-graph-unit-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/living-graph-readback.test.ts
+    testName: "retains exact reviewed provenance and canonical predecessor readback without rewriting evidence"
+  agent.golden.architecture-living-graph-unit-2:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/living-graph-readback.test.ts
+    testName: "denies duplicate dangling cyclic and foreign-team graph edges before trusting completed status"
+  agent.golden.architecture-living-graph-unit-3:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/living-graph-readback.test.ts
+    testName: "denies actor-only downstream edges and cross-project dependencies without exact relation provenance"
+  agent.golden.architecture-living-graph-unit-4:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/living-graph-readback.test.ts
+    testName: "denies missing duplicated unfinished foreign or future predecessor results against whole frozen attempts"
+  agent.golden.architecture-living-graph-unit-5:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/living-graph-readback.test.ts
+    testName: "registers separate live graph and read-only replay cases without invoking a campaign from unit fixtures"
   agent.golden.architecture-source-publication-unit-1:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"
@@ -966,6 +2091,26 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/execution/timing/time-budget-discipline.test.ts
     testName: "does not invent proposal publication authority when time runs short"
+  agent.golden.execution-tool-closeout-unit-2:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/provider-kernel-executor.test.ts
+    testName: "preserves the original tool proxy failure cause and measured closeout evidence without classifying it as completion or retry success"
+  agent.golden.execution-tool-closeout-unit-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/sandbox-tool-pump.test.ts
+    testName: "stopped tool polling cannot execute or deliver a late granted reply after its owning closeout"
+  agent.golden.execution-tool-closeout-native-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/sandbox-broker-preparation.test.ts
+    testName: "native tool pump polling and delivery denials cancel exactly once and retain failed transport without replay"
+  agent.golden.execution-tool-closeout-native-2:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/sandbox-broker-preparation.test.ts
+    testName: "native ordinary tool denial delivers one exact error and explicit stop cannot revive its pending poll"
   agent.golden.broker-connection-isolation:
     kind: vitestCase
     ownerPackage: '@treeseed/agent'
@@ -1504,6 +2649,21 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/provider/sandbox-accounting-usage.test.ts
     testName: "does not invent missing or invalid measurements"
+  agent.golden.execution-handoff-unit-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/context-custody-readback.test.ts
+    testName: "prepares one canonical draft next-work Proposal with exact source evidence and no invented execution authority"
+  agent.golden.execution-handoff-unit-2:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/context-custody-readback.test.ts
+    testName: "denies false ungranted foreign moved malformed and outside-window draft handoff claims without rewriting their evidence"
+  agent.golden.execution-handoff-native-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/portable/context-integration.test.ts
+    testName: "native configured Writer publishes only its granted draft next-work Proposal and retains interrupted readback without a false handoff"
   agent.golden.workspace-paths:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"
@@ -1554,3 +2714,33 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/kernel/provider-kernel-executor.test.ts
     testName: "uses concrete guest changes for Actor and Releaser publication under a recursive grant"
+  agent.golden.execution-arbitration-manifest-unit-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/provider/architecture/arbitration-authority.test.ts
+    testName: "requires distinct team and membership connections to one global provider while retaining every original manifest and exact denial"
+  agent.golden.execution-arbitration-manifest-native-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/provider/architecture/arbitration-native.test.ts
+    testName: "native duplicate team membership and foreign global identity manifests deny before polling or changing retained local capacity then admit only the restored original input"
+  agent.golden.execution-all-attempt-usage-unit-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/provider/provider-runner.test.ts
+    testName: "retains every original usage observation for successful failed returned and communication attempts without double charging native units"
+  agent.golden.execution-all-attempt-usage-unit-2:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/provider/provider-runner.test.ts
+    testName: "blocks successful completion on denied original usage delivery and retains exact closeout and measurements without another executor turn"
+  agent.golden.execution-all-attempt-usage-native-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/portable/portable-kernel-integration.test.ts
+    testName: "native successful usage delivery preserves exact observations and blocks denied closeout before completion without another model turn"
+  agent.golden.execution-all-attempt-usage-native-2:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/sandbox-broker-preparation.test.ts
+    testName: "native microvm Kernel and provider runner retain original successful and failed executor measurements through exact public delivery and denied closeout"

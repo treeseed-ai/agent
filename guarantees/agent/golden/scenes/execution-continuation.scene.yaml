@@ -1,0 +1,8 @@
+schemaVersion: treeseed.scene/v1
+id: agent.golden.execution-continuation
+title: Actual managed settled continuation ancestry
+scope: local-integrated-runtime
+workflow:
+  - id: execution-continuation-live-1
+    action: { verifier: agent.golden.execution-continuation-live-1 }
+    expect: { status: passed }

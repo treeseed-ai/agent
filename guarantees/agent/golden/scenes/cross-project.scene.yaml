@@ -1,0 +1,17 @@
+schemaVersion: treeseed.scene/v1
+id: agent.golden.cross-project
+title: Native managed cross-project relation readback
+scope: local-integrated-runtime
+workflow:
+  - id: portfolio-document-inventory
+    action: { verifier: agent.golden.architecture-portfolio-relations-live-1 }
+    expect: { status: passed }
+  - id: portfolio-immutable-inventory
+    action: { verifier: agent.golden.architecture-portfolio-relations-live-2 }
+    expect: { status: passed }
+  - id: cross-project-exact-custody
+    action: { verifier: agent.golden.architecture-cross-project-readback-live-1 }
+    expect: { status: passed }
+  - id: cross-project-immutable-replay
+    action: { verifier: agent.golden.architecture-cross-project-readback-live-2 }
+    expect: { status: passed }

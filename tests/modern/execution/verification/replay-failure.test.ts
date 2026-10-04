@@ -1,5 +1,6 @@
 import { expect, it } from 'vitest';
 import { observeReportedActivityCommands } from '../../../../src/sandbox/guest.ts';
+import { objectDigest } from '../../../../src/sandbox/verification.ts';
 import { run } from '../../../../src/sandbox/process-runner.ts';
 import { mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -80,4 +81,93 @@ it('keeps successful observations and digests unchanged', async () => {
 	expect(result.report).toEqual(report);
 	expect(result.verification).toEqual([expect.objectContaining({ command: report.verification[0]!.commands[0],
 		status: 'passed', exitCode: 0, outputDigest: expect.stringMatching(/^sha256:[a-f0-9]{64}$/u) })]);
+});
+
+it('retains exact assertion-only test-first output digests without mutating the supplied report or assignment', async () => {
+	const command = 'npm run test:contracts';
+	const report = { schemaVersion: 'treeseed.activity-completion/v1' as const, summary: 'Review the observed red suite',
+		contentOutput: null, reviewDisposition: 'approved' as const,
+		verification: [{ status: 'passed' as const, summary: 'Observe the exact test candidate', commands: [command] }] };
+	const assignment = { agentClass: 'arbitrary-contract-author', effectiveProfile: { activity: 'acting' },
+		acceptanceCriteria: ['Commit failing-on-base SDK tests for the accepted contract.'] };
+	const evidence = { exitCode: 1, stdout: 'FAIL tests/contract/selection.test.ts > trims decisions\nAssertionError: expected trimmed input\n', stderr: '' };
+	const before = structuredClone({ report, assignment, evidence });
+	const failure = Object.assign(new Error('process exited 1'), evidence);
+	const observed = await observeReportedActivityCommands(report, [], async () => { throw failure; }, assignment);
+	expect(observed.report.reviewDisposition).toBe('approved');
+	expect(observed.report.verification[0]?.status).toBe('failed');
+	expect(observed.report.verification[0]?.commands).toEqual([command]);
+	expect(observed.verification).toEqual([{ command, status: 'failed', exitCode: 1,
+		outputDigest: objectDigest({ stdout: evidence.stdout, stderr: evidence.stderr }), durationSeconds: expect.any(Number) }]);
+	expect(Number.isInteger(observed.verification[0]!.durationSeconds)).toBe(true);
+	expect(observed.verification[0]!.durationSeconds).toBeGreaterThanOrEqual(0);
+	expect({ report, assignment, evidence }).toEqual(before);
+});
+
+it('denies mixed assertion and nonbehavioral suite failures or incomplete coverage instead of laundering them as test-first red', async () => {
+	const command = 'npm run test:contracts';
+	const report = { schemaVersion: 'treeseed.activity-completion/v1' as const, summary: 'Claimed complete red suite',
+		contentOutput: null, reviewDisposition: 'approved' as const,
+		verification: [{ status: 'passed' as const, summary: 'Observe all failures', commands: [command] }] };
+	const assignment = { agentClass: 'renamed-independent-inspector', effectiveProfile: { activity: 'reviewing' },
+		acceptanceCriteria: ['Commit failing-on-base SDK tests for the accepted contract.'] };
+	for (const extra of [
+		'FAIL tests/contract/setup.test.ts [ tests/contract/setup.test.ts ]\nSyntaxError: Unexpected token',
+		'FAIL tests/contract/runtime.test.ts > native setup\nTypeError: configuration is not a function',
+		'FAIL tests/contract/runtime.test.ts > native setup\nReferenceError: fixture is not defined',
+		'FAIL tests/contract/runtime.test.ts > native setup\nError: Test timed out in 15000ms',
+		'Test Files  1 failed (1)\nTests  1 failed | 1 skipped (2)',
+		'Test Files  1 failed (1)\nTests  1 failed | 1 todo (2)',
+	]) {
+		const evidence = { exitCode: 1, stdout: 'FAIL tests/contract/selection.test.ts > trims decisions\nAssertionError: expected trimmed input\n', stderr: `${extra}\n` };
+		const before = structuredClone({ report, assignment, evidence });
+		const failure = Object.assign(new Error('process exited 1'), evidence);
+		await expect(observeReportedActivityCommands(report, [], async () => { throw failure; }, assignment))
+			.rejects.toThrow('Runner-observed verification failed');
+		expect({ report, assignment, evidence }).toEqual(before);
+	}
+});
+
+it('real Vitest mixed assertion setup runtime skipped and todo outcomes remain fatal through the owning command observer', async () => {
+	const root = await mkdtemp(resolve(tmpdir(), 'treeseed-mixed-red-'));
+	const command = 'npm run test:contracts';
+	const report = { schemaVersion: 'treeseed.activity-completion/v1' as const, summary: 'Complete contract suite required',
+		contentOutput: null, reviewDisposition: 'approved' as const,
+		verification: [{ status: 'passed' as const, summary: 'Observe actual suite', commands: [command] }] };
+	const assignment = { agentClass: 'renamed-test-author', effectiveProfile: { activity: 'acting' },
+		acceptanceCriteria: ['Commit failing-on-base SDK tests for the accepted contract.'] };
+	const outcomes: { value: unknown; error: unknown }[] = [];
+	try {
+		await symlink(resolve('node_modules'), resolve(root, 'node_modules'), 'dir');
+		await writeFile(resolve(root, 'assertion.test.ts'), "import { expect, it } from 'vitest';\nit('trims decisions', () => expect(' decision ').toBe('decision'));\n");
+		for (const source of [
+			"import { it } from 'vitest';\nthrow new SyntaxError('native setup syntax failure');\nit('unreachable setup', () => {});\n",
+			"import { it } from 'vitest';\nit('native runtime setup', () => { throw new TypeError('native fixture runtime failure'); });\n",
+			"import { it } from 'vitest';\nit.skip('unproven contract', () => {});\n",
+			"import { it } from 'vitest';\nit.todo('unproven contract');\n",
+		]) {
+			await writeFile(resolve(root, 'other.test.ts'), source);
+			const before = structuredClone({ report, assignment });
+			let actualFailure: unknown;
+			const outcome = await observeReportedActivityCommands(report, [], async (_executable, _args, options) => {
+				try {
+					return await run(process.execPath, [resolve('node_modules/vitest/vitest.mjs'), 'run', '--root', root, '--no-color'],
+						{ ...options, cwd: root });
+				} catch (error) { actualFailure = error; throw error; }
+			}, assignment).then(value => ({ value, error: undefined }), (error: unknown) => ({ value: undefined, error }));
+			expect(actualFailure).toBeInstanceOf(Error);
+			expect(actualFailure).toMatchObject({ exitCode: 1 });
+			const raw = Object.assign({ stdout: '', stderr: '' }, actualFailure);
+			expect(`${raw.stdout}\n${raw.stderr}`).toContain('AssertionError');
+			outcomes.push(outcome);
+			expect({ report, assignment }).toEqual(before);
+		}
+		expect(outcomes).toHaveLength(4);
+		// Preserve each actual observation before checking the aggregate denial.
+		for (const outcome of outcomes) {
+			expect(outcome.value).toBeUndefined();
+			expect(outcome.error).toBeInstanceOf(Error);
+			expect(String(outcome.error)).toContain('Runner-observed verification failed');
+		}
+	} finally { await rm(root, { recursive: true, force: true }); }
 });

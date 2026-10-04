@@ -3,6 +3,24 @@ id: agent.golden.settlement
 title: Golden settlement read-back
 scope: local-integrated-runtime
 workflow:
+  - id: execution-global-selection-live-1
+    action: { verifier: agent.golden.execution-global-selection-live-1 }
+    expect: { status: passed }
+  - id: execution-continuation-returned-live-1
+    action: { verifier: agent.golden.execution-continuation-returned-live-1 }
+    expect: { status: passed }
+  - id: execution-local-slot-live-1
+    action: { verifier: agent.golden.execution-local-slot-live-1 }
+    expect: { status: passed }
+  - id: architecture-record-custody-live-1
+    action: { verifier: agent.golden.architecture-record-custody-live-1 }
+    expect: { status: passed }
+  - id: architecture-record-custody-live-2
+    action: { verifier: agent.golden.architecture-record-custody-live-2 }
+    expect: { status: passed }
+  - id: architecture-record-custody-live-3
+    action: { verifier: agent.golden.architecture-record-custody-live-3 }
+    expect: { status: passed }
   - id: settlement-evidence
     action: { verifier: agent.golden.live.settlement }
     expect: { status: passed }

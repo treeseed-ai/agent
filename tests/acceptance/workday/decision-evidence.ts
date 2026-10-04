@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
+import { parse } from 'yaml';
 import { exactEntityReferenceSchema } from '@treeseed/sdk/agent-capacity';
 import { validatePortableContentData } from '@treeseed/sdk/content-validation';
 import { read, row, type Row } from '../acceptance-cli.ts';
@@ -36,4 +38,42 @@ export function verifyDecisionContent(content: Row, projectId: string, code: str
 			&& typeof position.recordedAt === 'string' && Number.isFinite(Date.parse(position.recordedAt))), `${code}_POSITIONS: Signed-method evidence required`);
 	}
 	return decision;
+}
+
+// Acceptance assertion only. Writer finding references omit the commit while
+// being published in the same batch as their owning Decision; resolve that
+// existing representation, without adding a new receipt or Note revision field.
+export function verifyReviewFindingContent(reference: Row, decisionReference: Row, decision: Row, file: Row, review: Row, code: string): Row {
+	assert.ok(exactEntityReferenceSchema.safeParse(reference).success && reference.store === 'treedx'
+		&& reference.model === 'note' && reference.repository && reference.path && reference.id
+		&& Number.isInteger(reference.revision) && Number(reference.revision) > 0 && typeof reference.digest === 'string',
+		`${code}_FINDING_REFERENCE: Exact versioned finding authority required`);
+	const commit = reference.commit ?? decisionReference.commit, result = row(review.assignmentResult), attempt = row(review.assignmentAttempt);
+	assert.ok(typeof commit === 'string' && /^[a-f0-9]{40}$/u.test(commit) && result.assignmentId === review.id && result.status === 'completed'
+		&& Array.isArray(result.references) && result.references.map(row).some(value => value.kind === 'treedx'
+			&& value.projectId === review.projectId && value.repository === reference.repository && value.path === reference.path && value.commit === commit),
+		`${code}_FINDING_OWNER: Finding must be returned by this exact completed Reviewer result`);
+	const targets = row(attempt.grant).contentWrite;
+	assert.ok(Array.isArray(targets) && targets.map(row).filter(value => value.store === 'treedx' && value.model === 'note'
+		&& value.id === reference.id && value.repository === reference.repository && value.path === reference.path
+		&& (value.revision ?? 1) === reference.revision).length === 1, `${code}_FINDING_GRANT: Exact original finding target required`);
+	assert.ok(file.path === reference.path && typeof file.content === 'string', `${code}_FINDING_BYTES: Native raw finding bytes required`);
+	assert.equal(`sha256:${createHash('sha256').update(file.content).digest('hex')}`, reference.digest,
+		`${code}_FINDING_DIGEST: Untrimmed native bytes must match the Decision finding reference`);
+	const match = file.content.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/u);
+	assert.ok(match, `${code}_FINDING_BYTES: Canonical native Markdown required`);
+	const frontmatter = row(parse(match[1]!)), body = match[2]!.trim();
+	assert.deepEqual(frontmatter, file.frontmatter, `${code}_FINDING_READBACK: Parsed and raw native observations must agree`);
+	if (file.body !== undefined) assert.equal(file.body, body, `${code}_FINDING_READBACK: Native body observation drifted`);
+	const parsed = validatePortableContentData('note', { ...frontmatter, body });
+	assert.ok(parsed.ok, `${code}_FINDING_CONTENT: Complete canonical feedback Note required`);
+	const finding = row(parsed.data);
+	assert.equal(finding.id, reference.id, `${code}_FINDING_ID: Exact finding identity required`);
+	assert.equal(finding.projectId, review.projectId, `${code}_FINDING_PROJECT: Finding project drifted`);
+	assert.equal(finding.classification, 'feedback', `${code}_FINDING_CLASS: Actual Reviewer feedback required`);
+	assert.deepEqual(finding.subjectRefs, [decision.subjectRef], `${code}_FINDING_SUBJECT: Finding must bind the same original Actor artifact`);
+	const created = Date.parse(String(finding.createdAt)), start = Date.parse(String(review.createdAt)), end = Date.parse(String(review.completedAt));
+	assert.ok([created, start, end].every(Number.isFinite) && start <= created && created <= end,
+		`${code}_FINDING_CLOCK: Original owning review interval required`);
+	return finding;
 }

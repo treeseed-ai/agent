@@ -1,5 +1,76 @@
 import assert from 'node:assert/strict';
 import { normalizeCapacityPageLimit } from '@treeseed/sdk/capacity-pagination';
+import { appliedWorkdaySchema, assignmentAttemptSchema } from '@treeseed/sdk/agent-capacity';
+import { validateWorkdayIntent, type WorkdayIntent } from '@treeseed/sdk/operator-contracts';
+
+// Existing public show/assignment/schedule reads only. The existing complete
+// event-page gate blocks incomplete show responses; there is no invented events
+// command, private-route fallback, alternate campaign or synthetic receipt.
+export function verifyInitialStartCustody(observed: Row, assignments: Row[]): void {
+	const run = row(observed.run), id = String(run.id ?? '');
+	observeCampaign(observed, id, new Map());
+	const parameters = row(run.parameters), plan = appliedWorkdaySchema.parse(parameters.appliedPlan);
+	const selection = parameters.decisionIds;
+	if (selection !== undefined) assert.ok(Array.isArray(selection) && selection.length > 0
+		&& selection.every(value => typeof value === 'string' && value.length > 0 && value === value.trim())
+		&& new Set(selection).size === selection.length,
+	'ACCEPTANCE_START_SELECTION: Explicit frozen decision inventory must be complete unique and exact');
+	assert.equal(plan.id, id, 'ACCEPTANCE_START_ID: Applied plan differs from public run');
+	assert.equal(plan.teamId, run.teamId, 'ACCEPTANCE_START_TEAM: Applied plan differs from public team');
+	assert.equal(plan.executionMode, run.executionMode, 'ACCEPTANCE_START_MODE: Workday is the sole mode authority');
+	assert.equal(Date.parse(plan.startsAt), Date.parse(String(run.startedAt)), 'ACCEPTANCE_START_CLOCK: Original start changed');
+	assert.equal(Date.parse(plan.endsAt), Date.parse(plan.startsAt) + plan.policySnapshot.durationSeconds * 1000,
+		'ACCEPTANCE_START_CLOCK: Original productive duration changed');
+	assert.equal(Date.parse(String(parameters.deadlineAt)), Date.parse(plan.endsAt), 'ACCEPTANCE_START_CLOCK: Productive deadline drift');
+	for (const [key, value] of Object.entries(plan.policySnapshot)) assert.deepEqual(parameters[key], value,
+		`ACCEPTANCE_START_POLICY: Frozen ${key} differs from applied original authority`);
+	assert.ok(Array.isArray(observed.events), 'ACCEPTANCE_START_EVENTS: Complete event history required');
+	const events = observed.events.map(row), starts = events.filter(event => event.eventType === 'workday.started'), ready = events.filter(event => event.eventType === 'assignment.polling_ready');
+	assert.ok(Array.isArray(parameters.scheduledProjectIds) && parameters.scheduledProjectIds.length > 0,
+		'ACCEPTANCE_START_PROJECTS: Exact admitted project inventory required');
+	assert.equal(starts.length, parameters.scheduledProjectIds.length, 'ACCEPTANCE_START_EVENTS: One start per selected project required');
+	assert.equal(new Set(starts.map(event => event.projectId)).size, starts.length, 'ACCEPTANCE_START_EVENTS: Duplicate project start');
+	assert.deepEqual(starts.map(event => event.projectId).sort(), [...parameters.scheduledProjectIds].sort());
+	assert.equal(ready.length, 1, 'ACCEPTANCE_START_EVENTS: Exactly one polling-ready transition required');
+	const readiness = ready[0]!;
+	for (const event of starts) assert.ok(Number(event.eventIndex) < Number(readiness.eventIndex)
+		&& Date.parse(String(event.createdAt)) <= Date.parse(String(readiness.createdAt)), 'ACCEPTANCE_START_EVENTS: Readiness preceded required start');
+	assert.ok(assignments.length > 0, 'ACCEPTANCE_START_ATTEMPTS: Empty admission is not managed execution proof');
+	for (const item of assignments) {
+		const attempt = assignmentAttemptSchema.parse(item.assignmentAttempt);
+		assert.equal(attempt.workdayId, id, 'ACCEPTANCE_START_ATTEMPT: Foreign frozen workday');
+		assert.equal(attempt.teamId, plan.teamId, 'ACCEPTANCE_START_ATTEMPT: Foreign frozen team');
+		assert.ok(parameters.scheduledProjectIds.includes(attempt.projectId), 'ACCEPTANCE_START_ATTEMPT: Unselected frozen project');
+		if (Array.isArray(selection) && ['acting', 'reviewing'].includes(attempt.effectiveProfile.activity)) {
+			const authority = attempt.authorityRefs.find(reference => reference.model === 'decision');
+			assert.ok(authority && selection.includes(authority.id),
+				'ACCEPTANCE_START_SELECTION: Governed acting or reviewing attempt escaped its original explicit Decision selection');
+		}
+		assert.ok(Date.parse(attempt.createdAt) >= Date.parse(String(readiness.createdAt))
+			&& Date.parse(attempt.createdAt) >= Date.parse(plan.startsAt)
+			&& Date.parse(attempt.deadline) <= Date.parse(plan.endsAt), 'ACCEPTANCE_START_ATTEMPT_CLOCK: Admission preceded readiness or widened original deadline');
+	}
+}
+export function verifyRecurringStartCustody(observed: Row, assignments: Row[], schedule: Row): void {
+	verifyInitialStartCustody(observed, assignments);
+	const run = row(observed.run), plan = appliedWorkdaySchema.parse(row(run.parameters).appliedPlan), intent = row(schedule.intent);
+	assertIntentShape(intent);
+	assert.deepEqual(validateWorkdayIntent(intent), [], 'ACCEPTANCE_RECURRING_INTENT: Complete canonical intent required');
+	assert.equal(schedule.teamId, run.teamId); assert.equal(schedule.lastRunId, run.id, 'ACCEPTANCE_RECURRING_RUN: Exact recurring start must be independently linked');
+	assert.equal(intent.teamId, run.teamId); assert.equal(intent.executionMode, run.executionMode, 'ACCEPTANCE_RECURRING_MODE: Canonical recurring mode drift');
+	const duration = intent.endsAt === undefined ? intent.durationSeconds : (Date.parse(String(intent.endsAt)) - Date.parse(String(intent.startsAt))) / 1000;
+	assert.equal(duration, plan.policySnapshot.durationSeconds, 'ACCEPTANCE_RECURRING_CLOCK: Recurrence changed the original intent duration');
+	const projects = row(run.parameters).scheduledProjectIds;
+	assert.ok(Array.isArray(projects));
+	if (intent.projects !== 'all') { assert.ok(Array.isArray(intent.projects)); assert.deepEqual([...intent.projects].sort(), [...projects].sort()); }
+}
+function assertIntentShape(intent: Row): asserts intent is Row & WorkdayIntent {
+	assert.equal(intent.schemaVersion, 'treeseed.workday-intent/v1');
+	for (const field of ['teamId', 'profileId', 'startsAt']) assert.ok(typeof intent[field] === 'string' && intent[field].length > 0,
+		'ACCEPTANCE_RECURRING_INTENT: Exact required identity or clock missing');
+	assert.ok(intent.projects === 'all' || Array.isArray(intent.projects) && intent.projects.length > 0
+		&& intent.projects.every(project => typeof project === 'string' && project.length > 0));
+}
 
 type Row = Record<string, unknown>;
 function row(value: unknown): Row {

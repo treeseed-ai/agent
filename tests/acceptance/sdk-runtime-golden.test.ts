@@ -3,7 +3,7 @@ import test from 'node:test';
 import { assignmentReferenceSchema, assignmentTimingAwarenessReceiptSchema, estimateSchema, exactEntityReferenceSchema } from '@treeseed/sdk/agent-capacity';
 import { DEFAULT_CAPACITY_PAGE_LIMIT } from '@treeseed/sdk/capacity-pagination';
 import { read, row, type Row } from './acceptance-cli.ts';
-import { readDecisionContent, verifyDecisionContent } from './workday/decision-evidence.ts';
+import { readDecisionContent, readGovernedContentFile, verifyDecisionContent, verifyReviewFindingContent } from './workday/decision-evidence.ts';
 import { verifyAssignmentAuthority, verifyTeardownAuthority, verifyTreeDxWorkspaceClosure } from './workday/assignment-authority.ts';
 import { verifyPlanningEvidence } from './workday/planning-evidence.ts';
 import { readCompleteEvidence } from './workday/evidence-pages.ts';
@@ -15,7 +15,7 @@ const text = (value: unknown): string => typeof value === 'string' ? value : '';
 // These read-back gates do not stand in for campaign orchestration or external-state proof.
 const gates = ['lifecycle', 'collaboration', 'graph', 'revision', 'results', 'settlement', 'reporter', 'stopped'] as const;
 type Gate = typeof gates[number];
-function verifyAllocation(item: Row): void {
+function verifyAllocation(item: Row, run: Row): void {
 	const attempt = row(item.assignmentAttempt), envelope = row(item.capacityEnvelope);
 	const allocation = row(row(row(item.explanation).metadata).allocation), calibration = row(allocation.calibration);
 	const finite = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
@@ -42,11 +42,17 @@ function verifyAllocation(item: Row): void {
 		&& Math.ceil(estimate.data.expectedSeconds * calibration.multiplier) === desired,
 		'ACCEPTANCE_ALLOCATION_CALIBRATION: Finite normalized calibration required');
 	assert.ok(Array.isArray(calibration.measurementIds) && calibration.measurementIds.length <= 20
-		&& calibration.measurementIds.every(id => typeof id === 'string' && id.length > 0)
+		&& calibration.measurementIds.every(id => typeof id === 'string' && id.length > 0 && id === id.trim())
 		&& new Set(calibration.measurementIds).size === calibration.measurementIds.length,
 		'ACCEPTANCE_ALLOCATION_CALIBRATION: At most twenty unique exact sample identities required');
 	if (calibration.measurementIds.length === 0) assert.equal(desired, estimate.data.maximumSeconds, 'ACCEPTANCE_ALLOCATION_CALIBRATION: Cold start must preserve the maximum estimate');
 	const opportunity = row(allocation.opportunity);
+	const weight = row(row(row(run.parameters).appliedPlan).policySnapshot).allocationWeight;
+	assert.ok(finite(weight) && weight > 0, 'ACCEPTANCE_ALLOCATION_POLICY: Original applied policy weight required');
+	assert.equal(opportunity.weight, weight, 'ACCEPTANCE_ALLOCATION_POLICY: Receipt cannot invent another workday entitlement');
+	assert.ok(['planning', 'acting'].includes(text(opportunity.phase)), 'ACCEPTANCE_ALLOCATION_PHASE: Exact original phase required');
+	for (const field of ['shareSeconds', 'availableSeconds']) assert.ok(Number.isInteger(opportunity[field]),
+		'ACCEPTANCE_ALLOCATION_SUPPLY: Original integer shared opportunity required');
 	for (const field of ['shareSeconds', 'availableSeconds', 'remainingSupplySeconds', 'committedSeconds', 'planningCommittedSeconds']) {
 		assert.ok(finite(opportunity[field]) && Number(opportunity[field]) >= 0, 'ACCEPTANCE_ALLOCATION_SUPPLY: Finite weighted supply required');
 	}
@@ -106,7 +112,7 @@ export function verifyGolden(gate: Gate): void {
 	}
 	if (['lifecycle', 'graph', 'revision', 'results', 'reporter'].includes(gate)) for (const item of assignments) verifyAssignmentAuthority(item);
 	if (gate === 'lifecycle') for (const item of assignments) {
-		verifyAllocation(item);
+		verifyAllocation(item, run);
 		assert.ok(item.status === 'completed' || phaseBoundaryCancelled(item,run),
 			`Normal golden cannot contain a failed, returned, expired or non-phase cancelled assignment: ${text(item.id)}`);
 		assert.equal(item.leaseToken, null, `Live lease remains for ${text(item.id)}`);
@@ -149,9 +155,9 @@ export function verifyGolden(gate: Gate): void {
 		[...classes].sort(), 'ACCEPTANCE_CHAT_ROLES: Exact campaign-selected chat contributors must complete');
 	for (const agentClass of classes) assert.ok(completed.filter(item => activity(item) === 'planning'
 		&& row(item.assignmentAttempt).agentClass === agentClass).length >= 2, `ACCEPTANCE_PLANNING_ROLE_TURNS: Two planning turns required for ${agentClass}`);
-	const rounds = rows(row(parameters.appliedPlan).planningRounds).filter(round => round.state === 'complete');
-	assert.ok(rounds.length >= 2, 'ACCEPTANCE_PLANNING_CYCLES: Two completed graph planning cycles are required, not merely sixteen assignments');
-	verifyPlanningEvidence(rounds, completed, classes, run, team);
+	const rounds = rows(row(parameters.appliedPlan).planningRounds);
+	assert.ok(rounds.filter(round => round.state === 'complete').length >= 2, 'ACCEPTANCE_PLANNING_CYCLES: Two completed graph planning cycles are required, not merely sixteen assignments');
+	verifyPlanningEvidence(rounds, assignments, classes, run, team);
 	assert.deepEqual([...new Set(completed.filter(item => activity(item) === 'estimating').map(item => row(item.assignmentAttempt).agentClass))].sort(),
 		classes.filter(value => value !== 'reporter').sort(), 'ACCEPTANCE_ESTIMATE_ROLES: Exact seven selected estimating contributors must complete');
 	}
@@ -250,14 +256,73 @@ export function verifyGolden(gate: Gate): void {
 		const revision = actors.find(item => row(item.assignmentAttempt).workItemId === workItemId
 			&& text(item.createdAt) > text(requested.completedAt));
 		assert.ok(revision, `Request changes requires a later real Actor revision for ${text(workItemId)}`);
-		assert.ok(reviews.some(item => row(item.assignmentAttempt).workItemId === workItemId
-			&& disposition(item) === 'approved' && text(item.createdAt) > text(revision.completedAt)), 'Revision must receive its own later approval');
+		const prior = actors.filter(item => row(item.assignmentAttempt).workItemId === workItemId
+			&& Date.parse(text(item.completedAt)) <= Date.parse(text(requested.createdAt)))
+			.sort((a, b) => Date.parse(text(b.completedAt)) - Date.parse(text(a.completedAt)))[0];
+		assert.ok(prior, 'ACCEPTANCE_REVISION_PRIOR: Request changes must follow its real original Actor');
+		const approval = reviews.find(item => row(item.assignmentAttempt).workItemId === workItemId
+			&& disposition(item) === 'approved' && text(item.createdAt) > text(revision.completedAt));
+		assert.ok(approval, 'Revision must receive its own later approval');
+		const chain = [prior, requested, revision, approval];
+		assert.equal(new Set(chain.map(item => item.id)).size, chain.length, 'ACCEPTANCE_REVISION_IDENTITIES: Distinct attempts required');
+		assert.equal(new Set(chain.map(item => row(item.assignmentResult).id)).size, chain.length,
+			'ACCEPTANCE_REVISION_IDENTITIES: Distinct completed result identities required');
+		for (const item of chain) {
+			const result = row(item.assignmentResult), attempt = row(item.assignmentAttempt);
+			assert.ok(text(result.id) && result.assignmentId === item.id && result.status === 'completed',
+				'ACCEPTANCE_REVISION_RESULT: Exact owning completed result required');
+			assert.ok(Array.isArray(attempt.predecessorResultIds)
+				&& attempt.predecessorResultIds.every((value: unknown) => typeof value === 'string' && value.length > 0)
+				&& new Set(attempt.predecessorResultIds).size === attempt.predecessorResultIds.length,
+				'ACCEPTANCE_REVISION_PREDECESSORS: Original unique result inventory required');
+		}
+		for (const [review, actor] of [[requested, prior], [approval, revision]] as const) {
+			assert.notEqual(row(review.assignmentAttempt).agentClass, row(actor.assignmentAttempt).agentClass,
+				'ACCEPTANCE_REVISION_INDEPENDENCE: Actor cannot supply its own review');
+			const predecessorIds = row(review.assignmentAttempt).predecessorResultIds;
+			assert.ok(Array.isArray(predecessorIds) && predecessorIds.includes(row(actor.assignmentResult).id),
+				'ACCEPTANCE_REVISION_PREDECESSORS: Review must consume its exact Actor result');
+		}
+		const correctionPredecessors = row(revision.assignmentAttempt).predecessorResultIds;
+		assert.ok(Array.isArray(correctionPredecessors) && correctionPredecessors.includes(row(requested.assignmentResult).id),
+			'ACCEPTANCE_REVISION_PREDECESSORS: Correction must consume the original request-changes result');
+		const changes: Row[] = [], changeReferences: Row[] = [], cache = new Map<string, Row>();
+		for (const reference of rows(row(requested.assignmentResult).references).filter(value => value.kind === 'treedx')) {
+			const content = readDecisionContent(reference, text(requested.projectId), team, cache, 'ACCEPTANCE_REVISION');
+			if (content.schemaVersion !== 'treeseed.decision/v1') continue;
+			const decision = verifyDecisionContent(content, text(requested.projectId), 'ACCEPTANCE_REVISION');
+			if (decision.decisionClass === 'work-review') { changes.push(decision); changeReferences.push(reference); }
+		}
+		assert.equal(changes.length, 1, 'ACCEPTANCE_REVISION_DECISION: Exactly one genuine work-review Decision required');
+		const change = changes[0]!, subject = row(change.subjectRef);
+		assert.equal(change.disposition, 'request-changes', 'ACCEPTANCE_REVISION_DISPOSITION: Lifecycle flag is not a governed finding');
+		assert.ok(rows(row(prior.assignmentResult).references).some(reference => subject.store === reference.kind
+			&& subject.repository === reference.repository && subject.commit === reference.commit
+			&& (!reference.path || subject.path === reference.path)), 'ACCEPTANCE_REVISION_CANDIDATE: Exact original Actor artifact required');
+		assert.ok(rows(change.decidedByRefs).some(reference => JSON.stringify(reference)
+			=== JSON.stringify(row(row(row(requested.assignmentAttempt).effectiveProfile).profileRef))),
+			'ACCEPTANCE_REVISION_REVIEWER: Assigned independent Reviewer profile required');
+		const decided = Date.parse(text(change.decidedAt));
+		assert.ok(Number.isFinite(decided) && decided >= Date.parse(text(requested.createdAt))
+			&& decided <= Date.parse(text(requested.completedAt)), 'ACCEPTANCE_REVISION_CLOCK: Original review interval required');
+		assert.ok(Array.isArray(change.findingRefs) && change.findingRefs.length > 0
+			&& new Set(change.findingRefs.map(value => JSON.stringify(value))).size === change.findingRefs.length,
+			'ACCEPTANCE_REVISION_FINDINGS: Genuine unique governed feedback required');
+		for (const finding of change.findingRefs.map(row)) {
+			const source = { ...finding, commit: finding.commit ?? changeReferences[0]!.commit };
+			const file = readGovernedContentFile(source, text(requested.projectId), team, cache, 'ACCEPTANCE_REVISION');
+			verifyReviewFindingContent(finding, changeReferences[0]!, change, file, requested, 'ACCEPTANCE_REVISION');
+			assert.deepEqual(readGovernedContentFile(source, text(requested.projectId), team, new Map<string, Row>(), 'ACCEPTANCE_REVISION'), file,
+				'ACCEPTANCE_REVISION_FINDING_READBACK: Exact native finding observations must remain immutable');
+		}
 	}
 	for (const workItemId of new Set(actors.map(item => row(item.assignmentAttempt).workItemId))) {
 		const itemReviews = reviews.filter(item => row(item.assignmentAttempt).workItemId === workItemId)
 			.sort((a, b) => text(a.completedAt).localeCompare(text(b.completedAt)));
 		assert.equal(disposition(itemReviews.at(-1) ?? {}), 'approved', `Final review did not approve ${text(workItemId)}`);
 	}
+	assert.deepEqual(readWorkdayAssignments(workdayId, text(run.startedAt), team), assignments,
+		'ACCEPTANCE_REVISION_READBACK: Failed review and correction history must remain immutable');
 	}
 	const modelResults = completed.filter(item => ['chat', 'acting', 'reviewing', 'planning', 'estimating'].includes(activity(item)));
 	if (gate === 'results') assert.ok(modelResults.length > 0, 'No model-backed results were inspected');

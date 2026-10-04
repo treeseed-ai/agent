@@ -1,4 +1,6 @@
 import { beforeEach, vi } from 'vitest';
+import { createHash } from 'node:crypto';
+import { stringify } from 'yaml';
 
 export type Row = Record<string, any>;
 const state = vi.hoisted(() => ({ cases: new Map<string, () => void>(), replies: new Map<string, Row>(), usagePages: undefined as Row[] | undefined, failure: undefined as Error | undefined, workspaceFailure: undefined as Error | undefined, timeout: 0, args: [] as string[], calls: [] as string[][] }));
@@ -82,6 +84,11 @@ beforeEach(() => {
 	requested.lifecycleOutput.activityCompletion.reviewDisposition = 'request-changes';
 	items.push(requested, assignment('revision', 'acting', 'architect', 'work-0', '2026-09-27T00:00:05Z', '2026-09-27T00:00:06Z'),
 		assignment('approved-revision', 'reviewing', 'reviewer', 'work-0', '2026-09-27T00:00:07Z', '2026-09-27T00:00:08Z'));
+	// Frozen predecessor assertion inputs, not actual admission or native results.
+	for (const item of items) item.assignmentAttempt.predecessorResultIds = [];
+	requested.assignmentAttempt.predecessorResultIds = ['result-actor-0'];
+	items.find(item => item.id === 'revision')!.assignmentAttempt.predecessorResultIds = ['result-requested'];
+	items.find(item => item.id === 'approved-revision')!.assignmentAttempt.predecessorResultIds = ['result-revision'];
 	const reportRef = { kind: 'treedx', projectId: 'sdk', repository: 'sdk-library', path: 'notes/report.mdx', commit };
 	const reporter = assignment('closeout-report', 'reporting', 'reporter', '', '2026-09-27T00:00:09Z', '2026-09-27T00:00:10Z');
 	reporter.assignmentAttempt.sourceRef = { store: 'postgresql', model: 'workday', id: workdayId };
@@ -95,7 +102,7 @@ beforeEach(() => {
 	}
 	state.replies.set('workdays show', { run: { status: 'completed', executionMode: 'simulation', startedAt: '2026-09-27T00:00:00Z',
 		completedAt: '2026-09-27T00:01:00Z', parameters: { durationSeconds: 3600, planningPercent: 100 / 3, allocationWeight: 1, planningTurnMaximumSeconds: 180, maximumConcurrency: 5, communicationConcurrency: 5,
-			appliedPlan: { planningRounds: [{ state: 'complete' }, { state: 'complete' }] } },
+			appliedPlan: { policySnapshot: { allocationWeight: 1 }, planningRounds: [{ state: 'complete' }, { state: 'complete' }] } },
 		state: 'ended', endedAt: '2026-09-27T00:01:00Z', reportRef } });
 	state.replies.set('assignments list', { items, page: { limit: 50, hasMore: false, nextCursor: null } });
 	const nodes = Array.from({ length: 6 }, (_, index) => ['actor', 'reviewer'].map(pairRole => ({
@@ -121,6 +128,22 @@ beforeEach(() => {
 			subjectRef: { store: 'git', model: 'source', id: 'candidate', repository: 'sdk', commit },
 			disposition: item.lifecycleOutput.activityCompletion.reviewDisposition, rationale: 'Synthetic independent review input, not live acceptance.',
 			authorityRefs: [structuredClone(nodes[0]!.sourceRef)], decidedByRefs: [profileRef], decidedAt: item.completedAt } }] } });
+		if (item.id === 'requested') {
+			// Supplied canonical finding bytes only, not a real Writer publication.
+			const findingPath = 'notes/requested-feedback.mdx', body = 'A supplied review finding requiring a real correction.';
+			const decision = state.replies.get(`library read ${path}`)!.result.files[0].frontmatter;
+			const frontmatter = { schemaVersion: 'treeseed.note/v1', id: 'requested-feedback', projectId: 'sdk', classification: 'feedback',
+				subjectRefs: [structuredClone(decision.subjectRef)], createdAt: item.completedAt };
+			const content = `---\n${stringify(frontmatter, { lineWidth: 0 })}---\n\n${body}\n`;
+			const target = { store: 'treedx', model: 'note', id: frontmatter.id, repository: 'sdk-library', commit, path: findingPath };
+			const { commit: _baseCommit, ...finding } = target;
+			decision.findingRefs = [{ ...finding, revision: 1, digest: `sha256:${createHash('sha256').update(content).digest('hex')}` }];
+			item.assignmentAttempt.grant.contentWrite.push(target);
+			item.assignmentAttempt.workspace.writablePaths.push(findingPath);
+			item.assignmentAttempt.effectiveProfile.permissionCeiling.content.write.push('note');
+			item.assignmentResult.references.push({ kind: 'treedx', projectId: 'sdk', repository: 'sdk-library', commit, path: findingPath });
+			state.replies.set(`library read ${findingPath}`, { result: { resolvedRef: commit, files: [{ path: findingPath, content, body, frontmatter }] } });
+		}
 	}
 	state.replies.set('library read decisions/decision-1.mdx', { result: { resolvedRef: commit, files: [{ path: 'decisions/decision-1.mdx', frontmatter: {
 		schemaVersion: 'treeseed.decision/v1', id: 'decision-1', projectId: 'sdk', decisionClass: 'proposal', decisionMethod: 'authority',

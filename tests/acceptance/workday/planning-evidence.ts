@@ -16,13 +16,34 @@ const sourceContext = (attempt: Row): Row[] => rows(attempt.contextRefs).filter(
 /** Actual managed readback assertions. Structural citation proof is not an
  * independent judgement that every recommendation is materially correct. */
 export function verifyPlanningEvidence(rounds: Row[], assignments: Row[], selectedClasses: string[], run: Row, team: string): void {
+	// Inspect the whole existing applied-plan inventory before selecting the
+	// completed prefix. Filtering first could conceal a missing/renumbered turn
+	// or an unfinished round between two presented completed cycles.
+	const represented = new Set<string>();
+	let incomplete = false;
+	for (const [index, round] of rounds.entries()) {
+		assert.equal(round.round, index + 1, `${code}_INVENTORY: Exact contiguous original round ordinals required`);
+		assert.ok(['pending', 'active', 'complete'].includes(text(round.state)), `${code}_INVENTORY: Unknown round state`);
+		assert.ok(Array.isArray(round.assignmentIds) && round.assignmentIds.length > 0
+			&& round.assignmentIds.every(id => typeof id === 'string' && id.length > 0 && id === id.trim())
+			&& new Set(round.assignmentIds).size === round.assignmentIds.length, `${code}_MEMBERS: Complete unique represented nodes required`);
+		for (const id of round.assignmentIds) {
+			assert.ok(!represented.has(id), `${code}_MEMBERS: Reused node across the entire round inventory`);
+			represented.add(id);
+		}
+		assert.ok(!(incomplete && round.state === 'complete'), `${code}_INVENTORY: Completed rounds cannot hide an unfinished predecessor`);
+		incomplete ||= round.state !== 'complete';
+	}
+	for (const item of assignments.filter(value => activity(value) === 'planning')) {
+		assert.ok(represented.has(text(item.executionNodeId)), `${code}_INVENTORY: Actual planning attempt omitted from the applied-plan inventory`);
+	}
 	const used = new Set<string>(), cache = new Map<string, Row>();
 	let previous: Row[] = [], previousEnd = timestamp(run.startedAt);
 	const duration = row(run.parameters).durationSeconds;
 	assert.ok(typeof duration === 'number' && Number.isInteger(duration) && duration > 0, `${code}_TIME: Original workday window required`);
 	const originalEnd = previousEnd + duration * 1000;
 	const end = run.completedAt ? Math.min(timestamp(run.completedAt), originalEnd) : originalEnd;
-	for (const round of rounds) {
+	for (const round of rounds.filter(value => value.state === 'complete')) {
 		assert.ok(Array.isArray(round.assignmentIds) && round.assignmentIds.length > 0
 			&& round.assignmentIds.every(id => typeof id === 'string' && id.length > 0)
 			&& new Set(round.assignmentIds).size === round.assignmentIds.length, `${code}_MEMBERS: Exact unique round nodes required`);

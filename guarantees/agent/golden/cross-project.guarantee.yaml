@@ -1,0 +1,12 @@
+schemaVersion: treeseed.guarantee/v1
+id: guarantee.agent.golden.cross-project
+journey: Verify native managed cross-project relation and predecessor readback
+ownerPackage: "@treeseed/agent"
+type: agent
+subtype: execution
+status: planned
+gates: [core]
+summary: Multi-project and document-derived fixed portfolio relation inventory readback only; native creation-to-managed-dispatch expansion fairness and whole producer history remain separate unproven contracts.
+scene:
+  required: true
+  manifest: guarantees/agent/golden/scenes/cross-project.scene.yaml

@@ -12,6 +12,17 @@ export function verifyRuntimeClosure(host: Row, guest: Row): void {
     'ACCEPTANCE_FREEZE_RUNTIME_CLOSURE: Host and guest references must agree');
 }
 
+// Independent original compiler output versus selected immutable code, not
+// identity from a caller-supplied image label or a saved source HEAD alone.
+export function verifyCompiledProviderCode(built: ReadonlyMap<string, Uint8Array>, selected: ReadonlyMap<string, Uint8Array>): void {
+	assert.ok(built.size > 0 && [...built.keys()].some(name => name.endsWith('.js')),
+		'ACCEPTANCE_COMPILED_EMPTY: Actual complete owning compiler output required');
+	assert.deepEqual([...selected.keys()].sort(), [...built.keys()].sort(),
+		'ACCEPTANCE_COMPILED_INVENTORY: Selected code is missing or adds an unbuilt file');
+	for (const [name, bytes] of built) assert.ok(Buffer.from(selected.get(name)!).equals(Buffer.from(bytes)),
+		'ACCEPTANCE_COMPILED_BYTES: Selected code differs from independently compiled held input');
+}
+
 // Integrity of the existing operator freeze, not a second campaign authority.
 // This does not prove external immutability or correspondence to live runtime.
 export function verifyFreezeIntegrity(snapshot: unknown, readReceipt: (path: string) => Uint8Array): void {

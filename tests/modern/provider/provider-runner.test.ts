@@ -60,6 +60,117 @@ function client() {
 const treeDx = { projectId: 'project', handleId: 'handle-1', repositoryId: null, workspaceId: null, invoke: vi.fn() };
 
 	describe('canonical provider assignment runner', () => {
+	it('retains exact protected executor observations on the original ordinary and conversation transports without exposing them as public context or changing terminal history', async () => {
+		for (const kind of ['workday', 'conversation'] as const) for (const status of ['completed', 'failed'] as const) {
+			const api = client(), value = assignment(kind), before = structuredClone(value);
+			value.assignmentAttempt.agentClass = 'renamed-observation-owner';
+			const original = structuredClone(value), protectedPayload = { providerEvents: [{ type: 'original-private-action', item: { id: 'original-action' } }] };
+			const event = { type: `execution.${status}`, occurredAt: value.assignmentAttempt.createdAt, summary: 'Original observation.',
+				payload: { sandboxId: 'original-sandbox' }, protectedPayload }, held = structuredClone(event);
+			let executions = 0;
+			await runProviderAssignment({ client: api, assignment: value, treeDx, leaseToken: 'lease', runnerId: 'runner', runtimeBuild,
+				executor: { id: 'codex', observe: async () => ({ available: true }), execute: async request => {
+					executions++; await request.beginExecution?.(); await request.emit?.(event);
+					return { status, summary: 'Original bounded outcome.', outputs: { timingAwareness }, usage: [{ activeSeconds: 1, elapsedSeconds: 1 }] };
+				} } });
+			const calls = kind === 'conversation' ? api.createCommunicationTraceEvent.mock.calls : api.createAssignmentEvent.mock.calls;
+			expect(calls).toHaveLength(1); expect(calls[0]?.[0]).toBe('assignment-1');
+			expect(calls[0]?.[1]).toMatchObject({ leaseToken: 'lease', runnerId: 'runner', sequence: 0, protectedPayload });
+			if (kind === 'workday') {
+				expect(calls[0]?.[1]).toMatchObject({ eventType: event.type.replace(/^/u, 'provider.'), context: event.payload });
+				expect(api.createCommunicationTraceEvent).not.toHaveBeenCalled();
+			} else { expect(calls[0]?.[1]).toMatchObject(event); expect(api.createAssignmentEvent).not.toHaveBeenCalled(); }
+			expect(event).toEqual(held); expect(value).toEqual(original); expect(executions).toBe(1);
+			expect(value.assignmentAttempt.deadline).toBe(before.assignmentAttempt.deadline);
+			if (status === 'failed') { expect(api.failAssignment).toHaveBeenCalledOnce(); expect(api.completeAssignment).not.toHaveBeenCalled(); }
+			else expect(api.completeAssignment).toHaveBeenCalledOnce();
+		}
+	});
+	it('retains every original usage observation for successful failed returned and communication attempts without double charging native units', async () => {
+		for (const status of ['completed', 'failed', 'returned', 'responded', 'abstained'] as const) {
+			const api = client(), value = assignment(status === 'responded' || status === 'abstained' ? 'conversation' : 'workday');
+			const before = structuredClone(value), usage = [
+				{ activeSeconds: 1.125, elapsedSeconds: 2.25, inputTokens: 19, nativeUsage: { input_tokens: 19, output_tokens: 3 } },
+				{ activeSeconds: 0.25, elapsedSeconds: 0.5, outputTokens: 5, nativeUsage: { output_tokens: 5, reasoning_tokens: 2 } },
+			];
+			const reply: AgentExecutionResult = { status, summary: 'Original bounded execution.', code: 'original_execution_outcome',
+				...(status === 'responded' ? { responseMarkdown: 'Original durable answer.' } : {}),
+				outputs: { timingAwareness }, usage };
+			const original = structuredClone(reply); let executions = 0;
+			await runProviderAssignment({ client: api, assignment: value, treeDx, leaseToken: 'lease', runnerId: 'runner', runtimeBuild,
+				executor: { id: 'codex', observe: async () => ({ available: true }), execute: async request => {
+					executions++; await request.beginExecution?.(); return reply;
+				} } });
+			expect(executions).toBe(1); expect(value).toEqual(before); expect(reply).toEqual(original);
+			expect(api.reportAssignmentUsage.mock.calls).toEqual(usage.map((observation, index) => ['assignment-1', {
+				leaseToken: 'lease', runnerId: 'runner', usageDimension: `diagnostic-${index}`, accountingMode: 'informational',
+				activeSeconds: 0, elapsedSeconds: 0, usageActual: observation,
+			}, `usage:assignment-1:runner:${index}`]));
+			if (status === 'failed') {
+				expect(api.settleAssignment).not.toHaveBeenCalled(); expect(api.completeAssignment).not.toHaveBeenCalled();
+				expect(api.failAssignment).toHaveBeenCalledOnce();
+				expect(api.failAssignment).toHaveBeenCalledWith('assignment-1', expect.objectContaining({ activeSeconds: 2, elapsedSeconds: 3, usage: usage[0] }));
+				expect(api.reportAssignmentUsage).toHaveBeenCalledBefore(api.failAssignment);
+			} else {
+				expect(api.settleAssignment.mock.calls).toEqual([['assignment-1', { activeSeconds: 2, elapsedSeconds: 3,
+					usageDimension: 'aggregate', usageActual: usage[0] }, 'assignment-settlement:assignment-1:runner']]);
+				expect(api.reportAssignmentUsage).toHaveBeenCalledBefore(api.settleAssignment);
+				if (status === 'returned') { expect(api.returnAssignment).toHaveBeenCalledOnce(); expect(api.settleAssignment).toHaveBeenCalledBefore(api.returnAssignment); }
+				else { expect(api.completeAssignment).toHaveBeenCalledOnce(); expect(api.settleAssignment).toHaveBeenCalledBefore(api.completeAssignment); }
+			}
+		}
+	});
+	it('blocks successful completion on denied original usage delivery and retains exact closeout and measurements without another executor turn', async () => {
+		for (const denied of ['diagnostic', 'settlement'] as const) {
+			const api = client(), value = assignment(), before = structuredClone(value), failure = new Error(`original successful ${denied} denial`);
+			const usage = { activeSeconds: 1.125, elapsedSeconds: 2.25, inputTokens: 19, nativeUsage: { input_tokens: 19, output_tokens: 3 } };
+			const reply: AgentExecutionResult = { status: 'completed', summary: 'Original completed execution.', outputs: { timingAwareness }, usage: [usage] };
+			const original = structuredClone(reply), held: Record<string, unknown>[] = []; let executions = 0;
+			if (denied === 'diagnostic') api.reportAssignmentUsage.mockRejectedValueOnce(failure); else api.settleAssignment.mockRejectedValueOnce(failure);
+			let observed: unknown;
+			try { await runProviderAssignment({ client: api, assignment: value, treeDx, leaseToken: 'lease', runnerId: 'runner', runtimeBuild,
+				onCloseoutOutput: async output => { held.push(structuredClone(output)); },
+				executor: { id: 'codex', observe: async () => ({ available: true }), execute: async request => {
+					executions++; await request.beginExecution?.(); return reply;
+				} } }); } catch (error) { observed = error; }
+			expect(observed).toBe(failure); expect(executions).toBe(1); expect(reply).toEqual(original); expect(value).toEqual(before);
+			expect(held).toHaveLength(1); expect(held[0]).toMatchObject({ timingAwareness, artifacts: [],
+				assignmentResult: { assignmentId: 'assignment-1', status: 'completed' } });
+			expect(api.reportAssignmentUsage.mock.calls).toEqual([['assignment-1', { leaseToken: 'lease', runnerId: 'runner',
+				usageDimension: 'diagnostic-0', accountingMode: 'informational', activeSeconds: 0, elapsedSeconds: 0, usageActual: usage }, 'usage:assignment-1:runner:0']]);
+			if (denied === 'diagnostic') expect(api.settleAssignment).not.toHaveBeenCalled();
+			else expect(api.settleAssignment.mock.calls).toEqual([['assignment-1', { activeSeconds: 2, elapsedSeconds: 3,
+				usageDimension: 'aggregate', usageActual: usage }, 'assignment-settlement:assignment-1:runner']]);
+			expect(api.completeAssignment).not.toHaveBeenCalled(); expect(api.failAssignment).not.toHaveBeenCalled(); expect(api.returnAssignment).not.toHaveBeenCalled();
+		}
+	});
+	it('retains failed executor custody and exact diagnostic usage when informational delivery or settlement is denied', async () => {
+		for (const denied of ['diagnostic', 'settlement'] as const) {
+			const api = client(), value = assignment(), before = structuredClone(value);
+			const usage = { activeSeconds: 1.125, elapsedSeconds: 2.25, inputTokens: 19, nativeUsage: { input_tokens: 19, output_tokens: 3 } };
+			const outputs = { sandboxId: 'owned-failure-sandbox', teardown: { verified: false, completedAt: null } };
+			const artifacts = [{ id: 'failed-observation', content: 'original failed observation\n' }];
+			const failure = new Error(`original ${denied} denial`), held: Record<string, unknown>[] = [];
+			if (denied === 'diagnostic') api.reportAssignmentUsage.mockRejectedValueOnce(failure);
+			else api.settleAssignment.mockRejectedValueOnce(failure);
+			let executions = 0;
+			await expect(runProviderAssignment({ client: api, assignment: value, treeDx, leaseToken: 'lease', runnerId: 'runner', runtimeBuild,
+				onCloseoutOutput: async output => { held.push(structuredClone(output)); },
+				executor: { id: 'codex', observe: async () => ({ available: true }), execute: async execution => {
+					executions++; await execution.beginExecution?.(); return { status: 'returned', code: 'sandbox_resource_exhausted',
+						summary: 'original resource failure', retryable: true, outputs, artifacts, usage: [usage] };
+				} } })).rejects.toBe(failure);
+			expect(executions).toBe(1); expect(held).toEqual([{ ...outputs, artifacts }]);
+			expect(api.reportAssignmentUsage).toHaveBeenCalledOnce();
+			expect(api.reportAssignmentUsage).toHaveBeenCalledWith('assignment-1', { leaseToken: 'lease', runnerId: 'runner',
+				usageDimension: 'diagnostic-0', accountingMode: 'informational', activeSeconds: 0, elapsedSeconds: 0, usageActual: usage }, 'usage:assignment-1:runner:0');
+			if (denied === 'diagnostic') expect(api.settleAssignment).not.toHaveBeenCalled();
+			else { expect(api.settleAssignment).toHaveBeenCalledOnce(); expect(api.settleAssignment).toHaveBeenCalledWith('assignment-1', { activeSeconds: 2, elapsedSeconds: 3,
+				usageDimension: 'aggregate', usageActual: usage }, 'assignment-settlement:assignment-1:runner'); }
+			expect(api.returnAssignment).not.toHaveBeenCalled(); expect(api.failAssignment).not.toHaveBeenCalled();
+			expect(api.completeAssignment).not.toHaveBeenCalled(); expect(value).toEqual(before);
+		}
+	});
 	it('does not submit terminal writes when local closeout custody cannot be recorded', async () => {
 		const api = client();
 		await expect(runProviderAssignment({ client: api, assignment: assignment(), treeDx,

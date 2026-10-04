@@ -3,6 +3,57 @@ id: agent.golden.graph
 title: Golden graph read-back
 scope: local-integrated-runtime
 workflow:
+  - id: execution-integration-identity-live-1
+    action: { verifier: agent.golden.execution-integration-identity-live-1 }
+    expect: { status: passed }
+  - id: execution-proposal-blockers-live-1
+    action: { verifier: agent.golden.execution-proposal-blockers-live-1 }
+    expect: { status: passed }
+  - id: execution-compiled-project-live-1
+    action: { verifier: agent.golden.execution-compiled-project-live-1 }
+    expect: { status: passed }
+  - id: execution-provider-cutover-live-1
+    action: { verifier: agent.golden.execution-provider-cutover-live-1 }
+    expect: { status: passed }
+  - id: execution-physical-absence-live-1
+    action: { verifier: agent.golden.execution-physical-absence-live-1 }
+    expect: { status: passed }
+  - id: execution-sandbox-closeout-live-1
+    action: { verifier: agent.golden.execution-sandbox-closeout-live-1 }
+    expect: { status: passed }
+  - id: execution-accounting-continuity-live-1
+    action: { verifier: agent.golden.execution-accounting-continuity-live-1 }
+    expect: { status: passed }
+  - id: execution-handler-inspection-live-1
+    action: { verifier: agent.golden.execution-handler-inspection-live-1 }
+    expect: { status: passed }
+  - id: architecture-start-custody-live-1
+    action: { verifier: agent.golden.architecture-start-custody-live-1 }
+    expect: { status: passed }
+  - id: architecture-start-custody-live-2
+    action: { verifier: agent.golden.architecture-start-custody-live-2 }
+    expect: { status: passed }
+  - id: architecture-context-custody-live-1
+    action: { verifier: agent.golden.architecture-context-custody-live-1 }
+    expect: { status: passed }
+  - id: architecture-book-knowledge-live-1
+    action: { verifier: agent.golden.architecture-book-knowledge-live-1 }
+    expect: { status: passed }
+  - id: architecture-graph-history-live-1
+    action: { verifier: agent.golden.architecture-graph-history-live-1 }
+    expect: { status: passed }
+  - id: architecture-profile-custody-live-1
+    action: { verifier: agent.golden.architecture-profile-custody-live-1 }
+    expect: { status: passed }
+  - id: architecture-profile-custody-live-2
+    action: { verifier: agent.golden.architecture-profile-custody-live-2 }
+    expect: { status: passed }
+  - id: architecture-living-graph-live-1
+    action: { verifier: agent.golden.architecture-living-graph-live-1 }
+    expect: { status: passed }
+  - id: architecture-living-graph-live-2
+    action: { verifier: agent.golden.architecture-living-graph-live-2 }
+    expect: { status: passed }
   - id: graph-evidence
     action: { verifier: agent.golden.live.graph }
     expect: { status: passed }

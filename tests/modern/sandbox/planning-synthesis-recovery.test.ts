@@ -2,7 +2,7 @@ import { beforeEach, expect, it, vi } from 'vitest';
 import { assertPredecessorSynthesis, missingPredecessorCitations, planningSynthesisCorrectionPrompt, planningSynthesisOutputSchema } from '../../../src/kernel/handlers/planning-synthesis.ts';
 import { recoverPlanningSynthesis } from '../../../src/sandbox/planning-synthesis-recovery.ts';
 import { run } from '../../../src/sandbox/process-runner.ts';
-import { readFile } from 'node:fs/promises';
+import { readFile, unlink } from 'node:fs/promises';
 import { readFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { activityCompletionOutputSchema } from '../../../src/activity-completion.ts';
@@ -39,7 +39,7 @@ function input() {
 	return { context: { canonicalAssignmentContext: { assignment: { effectiveProfile: { activity: 'planning' } }, predecessorResults: predecessors } },
 		activity: 'planning', threadId: '00000000-0000-0000-0000-000000000001', responsePath: '/response.json', schemaPath: '/schema.json',
 		allowVerification: false, remainingMs: () => 175_000, execute: run, model: 'configured-model', reasoningEffort: 'low',
-		providerEnvironment: {}, onEvent: vi.fn(), verifyClock: vi.fn(), progress: vi.fn(async () => {}) };
+		providerEnvironment: {}, onEvent: vi.fn(), verifyClock: vi.fn(), progress: vi.fn(async (_stage: string) => {}) };
 }
 
 it('corrects nine-predecessor synthesis using the captured completion and exact missing evidence within one original-budget continuation', async () => {
@@ -94,6 +94,67 @@ it('uses the same shrinking API deadline executor for citation recovery', async 
 	expect(await recoverPlanningSynthesis({ ...input(), remainingMs: () => 35_000, execute })).toBe(true);
 	expect(execute).toHaveBeenCalledWith('/usr/local/bin/codex', expect.any(Array), expect.objectContaining({ timeoutMs: 35_000 }));
 	expect(run).not.toHaveBeenCalled();
+});
+
+it('denies malformed remaining authority before removing captured synthesis or invoking its original session', async () => {
+	const values: unknown[] = [NaN, Infinity, -Infinity, undefined, null, '', '30000', '35000', true, [], [35_000], {}];
+	const outcomes = [];
+	for (const value of values) {
+		vi.resetAllMocks();
+		vi.mocked(readFile).mockResolvedValueOnce(JSON.stringify(first)).mockResolvedValueOnce(JSON.stringify(corrected));
+		vi.mocked(run).mockResolvedValue({ stdout: '', stderr: '' });
+		const supplied = Object.assign({ remainingMs: 35_000 }, { remainingMs: value });
+		const request = { ...input(), remainingMs: () => supplied.remainingMs }, before = structuredClone(request.context);
+		outcomes.push({ recovered: await recoverPlanningSynthesis(request), executions: vi.mocked(run).mock.calls.length,
+			removals: vi.mocked(unlink).mock.calls.length, progress: request.progress.mock.calls.length });
+		expect(request.context).toEqual(before);
+	}
+	expect(outcomes).toEqual(values.map(() => ({ recovered: false, executions: 0, removals: 0, progress: 0 })));
+});
+
+it('remeasures synthesis recovery authority after progress delivery before deleting or executing captured work', async () => {
+	for (const remaining of [29_999, 0, -1, NaN, Infinity]) {
+		vi.resetAllMocks();
+		vi.mocked(readFile).mockResolvedValueOnce(JSON.stringify(first)).mockResolvedValueOnce(JSON.stringify(corrected));
+		vi.mocked(run).mockResolvedValue({ stdout: '', stderr: '' });
+		let current = 35_000;
+		const request = { ...input(), remainingMs: () => current };
+		request.progress.mockImplementation(async stage => { if (stage === 'provider.planning-synthesis-recovery.starting') current = remaining; });
+		const before = structuredClone(request.context);
+		expect(await recoverPlanningSynthesis(request)).toBe(false);
+		expect(run).not.toHaveBeenCalled(); expect(unlink).not.toHaveBeenCalled();
+		expect(request.progress).not.toHaveBeenCalledWith('provider.planning-synthesis-recovery.completed');
+		expect(request.context).toEqual(before); expect(current).toBe(remaining);
+	}
+});
+
+it('preserves denied captured-response reads as their original cause instead of treating them as absent recovery work', async () => {
+	for (const code of ['EACCES', 'EIO', 'EISDIR']) {
+		vi.resetAllMocks();
+		const error = Object.assign(new Error('original captured-response read denied'), { code });
+		vi.mocked(readFile).mockRejectedValue(error);
+		const request = input(), before = structuredClone(request.context);
+		await expect(recoverPlanningSynthesis(request)).rejects.toBe(error);
+		expect(run).not.toHaveBeenCalled(); expect(unlink).not.toHaveBeenCalled();
+		expect(request.progress).not.toHaveBeenCalled(); expect(request.context).toEqual(before);
+	}
+});
+
+it('retains original progress removal and executor failures without another continuation or a completed correction', async () => {
+	for (const stage of ['progress', 'removal', 'executor'] as const) {
+		vi.resetAllMocks(); vi.mocked(readFile).mockResolvedValue(JSON.stringify(first));
+		const cause = Object.assign(new Error(`original recovery ${stage} failure`), { code: 'EIO' });
+		const request = input(), before = structuredClone(request.context);
+		if (stage === 'progress') request.progress.mockRejectedValue(cause);
+		if (stage === 'removal') vi.mocked(unlink).mockRejectedValue(cause);
+		if (stage === 'executor') vi.mocked(run).mockRejectedValue(cause);
+		await expect(recoverPlanningSynthesis(request)).rejects.toBe(cause);
+		expect(run).toHaveBeenCalledTimes(stage === 'executor' ? 1 : 0);
+		expect(unlink).toHaveBeenCalledTimes(stage === 'progress' ? 0 : 1);
+		expect(request.verifyClock).not.toHaveBeenCalled();
+		expect(request.progress).not.toHaveBeenCalledWith('provider.planning-synthesis-recovery.completed');
+		expect(request.context).toEqual(before);
+	}
 });
 
 const elIds = ['52afefd75190697f878e9a88', '92b0c8f7e83fe9a2332508bc', 'be16cf5cc7c9ca3b5ab8de0f',

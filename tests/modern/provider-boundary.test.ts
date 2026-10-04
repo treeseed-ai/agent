@@ -1,6 +1,7 @@
 import { mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
+import { spawnSync } from 'node:child_process';
 import { describe, expect, it, vi } from 'vitest';
 import { CONTROL_PLANE_OPERATIONS } from '@treeseed/sdk/operator-contracts';
 import { providerOperationPath } from '../../src/provider/coordination/client.ts';
@@ -54,6 +55,69 @@ function sourceFiles(root: string): string[] {
 }
 
 describe('Agent package ownership boundary', () => {
+	it('rejects retired provider manifest versions without rewriting supplied authority while retaining the current exact v5 contract', () => {
+		const current = createManagedProviderManifestV5({ release: 'authoring-clean-cutover', guestImage: 'isolated/guest',
+			guestImageDigest: digest('5'), baseImageDigest: digest('6'), provenanceDigest: digest('7') });
+		const before = structuredClone(current); expect(validateCapacityProviderManifestV5(current)).toEqual({ ok: true, diagnostics: [] });
+		for (const schemaVersion of [undefined, null, 1, 2, 3, 4, '5', 6]) {
+			const supplied = Object.assign(structuredClone(current), { schemaVersion }), original = structuredClone(supplied);
+			expect(validateCapacityProviderManifestV5(supplied).ok).toBe(false); expect(supplied).toEqual(original);
+		}
+		expect(current).toEqual(before);
+	});
+	it('refuses an unconfigured runner plan instead of asserting executor readiness without reading its provider authority', async () => {
+		for (const manifestPath of [null, '']) {
+			const config = { ...resolveProviderConfig({ env: {} }), manifestPath }, before = structuredClone(config);
+			await expect(runMultiTeamProviderRunners(config, { mode: 'plan' })).rejects.toThrow(/manifest|configuration|authority/iu);
+			expect(config).toEqual(before);
+		}
+	});
+	it('native packaged provider plans deny legacy translated and malformed manifest bytes before any identity accounting or status write', () => {
+		const root = mkdtempSync(resolve(tmpdir(), 'agent-provider-cutover-')), manifestPath = resolve(root, 'manifest.yaml');
+		// Original documented public provider entrypoint, held compiled bytes.
+		// Missing entrypoint fails; no build/install/source or installed fallback.
+		const entrypoint = resolve('dist/provider/lifecycle/entrypoint.js');
+		try {
+			const entrypointBytes = readFileSync(entrypoint), current = createManagedProviderManifestV5({ release: 'authoring-clean-cutover',
+				guestImage: 'isolated/guest', guestImageDigest: digest('5'), baseImageDigest: digest('6'), provenanceDigest: digest('7') });
+			const legacy = { ...structuredClone(current), schemaVersion: 4, ontology: undefined,
+				sandbox: { ...current.sandbox, profiles: current.sandbox.profiles.map(({ lineage: _lineage, ...profile }) => profile) },
+				lanes: current.lanes.map(lane => ({ ...lane, capabilities: ['communication', 'agent-execution'] })),
+				adapters: current.adapters.map(({ offers: _offers, ...adapter }) => ({ ...adapter, capabilities: ['communication'], sandboxProfileIds: ['read'] })) };
+			const variants = [stringifyYaml(legacy), '{invalid', stringifyYaml({ ...current, schemaVersion: '5' }),
+				stringifyYaml({ ...current, configuration: { generation: 'release-compat-v5' } }),
+				stringifyYaml({ ...current, metadata: { compatibilityMigration: 'agent-managed-v4-to-v5' } })];
+			const env: NodeJS.ProcessEnv = { ...process.env, TREESEED_CAPACITY_PROVIDER_MANIFEST: manifestPath, TREESEED_PROVIDER_DATA_DIR: root,
+				TREESEED_SANDBOX_BASE_DIGEST: digest('8'), TREESEED_SANDBOX_PROVENANCE_DIGEST: digest('9') };
+			delete env.TREESEED_DEVELOPMENT_MODE; delete env.TREESEED_CONTROL_PLANE_URL; delete env.TREESEED_DEVELOPMENT_SANDBOX_GUEST_DIGEST;
+			delete env.TREESEED_PROVIDER_ROLE; delete env.TREESEED_PROVIDER_STARTUP_MODE;
+			const commands = [['plan', '--json'], ['manager', '--plan', '--json'], ['runner', '--plan', '--json']];
+			const outcomes = [];
+			for (const bytes of variants) {
+				writeFileSync(manifestPath, bytes);
+				for (const args of commands) {
+					const result = spawnSync(process.execPath, [entrypoint, ...args], { env, encoding: 'utf8', timeout: 15_000, maxBuffer: 1_048_576 });
+					if (result.error || result.signal) throw new Error('Original native provider child failed outside its contract');
+					let failure: unknown; try { failure = JSON.parse(result.stderr); } catch { failure = null; }
+					outcomes.push({ status: result.status, stdout: result.stdout, failure });
+					expect(readFileSync(manifestPath, 'utf8')).toBe(bytes); expect(readdirSync(root)).toEqual(['manifest.yaml']);
+				}
+			}
+			for (const result of outcomes) {
+				expect(result.status).toBe(1); expect(result.stdout).toBe(''); expect(result.failure).toMatchObject({ ok: false, error: expect.any(String) });
+			}
+			const bytes = stringifyYaml(current); writeFileSync(manifestPath, bytes);
+			for (const args of commands) {
+				const result = spawnSync(process.execPath, [entrypoint, ...args], { env, encoding: 'utf8', timeout: 15_000, maxBuffer: 1_048_576 });
+				expect(result.error).toBeUndefined(); expect(result.signal).toBeNull(); expect(result.status).toBe(0); expect(result.stderr).toBe('');
+				expect(JSON.parse(result.stdout)).toMatchObject({ ok: true, mode: 'plan' }); expect(readFileSync(manifestPath, 'utf8')).toBe(bytes);
+				expect(readdirSync(root)).toEqual(['manifest.yaml']);
+			}
+			expect(readFileSync(entrypoint)).toEqual(entrypointBytes);
+		} finally { rmSync(root, { recursive: true, force: true }); }
+		// Local native public command composition, not coordinated publication,
+		// selected source/build equivalence or native productive provider execution.
+	});
 	it('rejects a live provider without a pinned runtime build before polling', async () => {
 		await expect(runMultiTeamProviderRunners(resolveProviderConfig({ env: {} })))
 			.rejects.toThrow('provider_runtime_build_unpinned');

@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { parse } from 'yaml';
 import { validatePortableContentData } from '@treeseed/sdk/content-validation';
-import { read, row, type Row } from '../acceptance-cli.ts';
+import { read, row, type Row } from '../../acceptance-cli.ts';
 
 export function verifyGovernedProfile(item: Row, file: Row): void {
 	const attempt = assignmentAttemptSchema.parse(item.assignmentAttempt), profile = attempt.effectiveProfile;

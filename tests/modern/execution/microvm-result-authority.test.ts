@@ -32,9 +32,13 @@ async function suppliedMicrovm() {
 	input.beginExecution = vi.fn(async () => ({ capacityEnvelope: { budget: { time: { executionStartedAt: createdAt, executionDeadlineAt: attempt.deadline } } } }));
 	input.finishExecution = vi.fn(async () => undefined); input.emit = vi.fn(async () => undefined);
 	const cleanup = vi.fn(async () => undefined), observed: SandboxAssignment[] = [];
+	const clock = (id: string, remainingSeconds: number) => { const value = { startedAt: createdAt, deadlineAt: attempt.deadline, remainingSeconds }; return {
+		type: 'item.completed', item: { id, type: 'mcp_tool_call', server: 'treedx', tool: 'treeseed_time_status', status: 'completed',
+			result: { content: [{ type: 'text', text: JSON.stringify(value) }], structuredContent: value } } }; };
 	let suppliedResult: unknown = sandboxResultSchema.parse({ schemaVersion: 'treeseed.sandbox-result/v1', assignmentId: input.assignmentId, sandboxId: 'owned-unit-sandbox',
 		status: 'completed', summary: 'Supplied completed observation', artifacts: [], timingAwareness,
-		usage: { activeSeconds: 1.125, elapsedSeconds: 2.25, input_tokens: 19, output_tokens: 3 }, diagnostics: {}, teardown: { verified: false, completedAt: null } });
+		usage: { activeSeconds: 1.125, elapsedSeconds: 2.25, input_tokens: 19, output_tokens: 3 },
+		diagnostics: { providerEvents: [clock('initial', 30), clock('final', 29)] }, teardown: { verified: false, completedAt: null } });
 	let suppliedDestroy: unknown, hasSuppliedDestroy = false, destroyFailure: Error | undefined, downloaded = Buffer.from('{"exact":"candidate"}\n');
 	const destroy = vi.fn(async () => {
 		if (destroyFailure) throw destroyFailure;

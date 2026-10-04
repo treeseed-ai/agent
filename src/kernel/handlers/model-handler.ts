@@ -4,6 +4,7 @@ import type { AssignmentContext, AssignmentReference, AssignmentResult } from '@
 import type { AgentRuntime, Handler } from '../contracts.ts';
 import { prepareTreeDxContent } from '../treedx-content-commit.ts';
 import { estimateMutableField, assignmentProposalSource } from '../../activity-completion.ts';
+import { assertPredecessorSynthesis } from './planning-synthesis.ts';
 
 function resultId(assignmentId: string, summary: string): string {
 	return `result-${createHash('sha256').update(`${assignmentId}\n${summary}`).digest('hex').slice(0, 24)}`;
@@ -20,17 +21,14 @@ function prompt(context: AssignmentContext): string {
 	return [
 		assignment.effectiveProfile.prompt.system,
 		...(assignment.effectiveProfile.prompt.instructions ?? []),
-		...(assignment.agentClass === 'architect' && assignment.effectiveProfile.activity === 'acting'
-			? ['Maintain the project Architecture book by writing one validated knowledge page bound to the exact authorized Book reference.'] : []),
 		`Assignment: ${assignment.sourceRef.model}/${assignment.sourceRef.id}`,
 		`Workspace: ${assignment.workspace.mode}`,
 		`Acceptance criteria and exact source context are in the authorized assignment context.`,
 	].filter(Boolean).join('\n\n');
 }
 
-function authorizedArchitectBook(context: AssignmentContext): AssignmentContext['context'][number]['ref'] | null {
- if (context.assignment.agentClass !== 'architect' || context.assignment.effectiveProfile.activity !== 'acting') return null;
- const book = context.context.find((item) => item.ref.store === 'treedx' && item.ref.model === 'book'
+function authorizedKnowledgeBooks(context: AssignmentContext) {
+ return context.context.filter((item) => item.ref.store === 'treedx' && item.ref.model === 'book'
   && context.assignment.contextRefs.some((ref) => isDeepStrictEqual(ref, item.ref))
   && context.assignment.grant.contentRead.some((ref) => isDeepStrictEqual(ref, item.ref))
   && typeof item.value === 'object' && item.value !== null
@@ -41,16 +39,12 @@ function authorizedArchitectBook(context: AssignmentContext): AssignmentContext[
   && typeof item.ref.digest === 'string' && /^sha256:[a-f0-9]{64}$/u.test(item.ref.digest)
   && (item.value as { frontmatter?: { status?: unknown } }).frontmatter?.status === 'published'
   && typeof (item.value as { frontmatter?: { title?: unknown } }).frontmatter?.title === 'string');
- if (!book) throw new Error('architect_architecture_book_context_required');
- return book.ref;
 }
 
-function assertArchitectKnowledgeOutput(context: AssignmentContext, output: { model: string; frontmatter: Record<string, unknown> }, bookRef: AssignmentContext['context'][number]['ref'] | null) {
- if (!bookRef) return;
- if (output.model !== 'knowledge') throw new Error('architect_knowledge_output_required');
- const frontmatter = output.frontmatter as { schemaVersion?: unknown; projectId?: unknown; bookRef?: unknown };
- if (frontmatter.schemaVersion !== 'treeseed.knowledge-page/v2' || frontmatter.projectId !== context.assignment.projectId
-  || !isDeepStrictEqual(frontmatter.bookRef, bookRef)) throw new Error('architect_architecture_book_reference_invalid');
+function assertKnowledgeOutput(context: AssignmentContext, output: { model: string; frontmatter: Record<string, unknown> }): void {
+ if (output.model === 'knowledge' && !authorizedKnowledgeBooks(context).some(book => isDeepStrictEqual(output.frontmatter.bookRef, book.ref))) {
+  throw new Error('knowledge_book_reference_invalid');
+ }
 }
 
 abstract class ModelHandler implements Handler {
@@ -82,8 +76,11 @@ export class WriterHandler extends ModelHandler {
 	readonly id: string = 'writer';
 
  async run(context: AssignmentContext, runtime: AgentRuntime): Promise<AssignmentResult> {
-  const architectBookRef = authorizedArchitectBook(context);
+  if (context.assignment.effectiveProfile.activity === 'acting'
+   && context.assignment.grant.contentWrite.some(target => target.model === 'knowledge')
+   && authorizedKnowledgeBooks(context).length === 0) throw new Error('knowledge_book_context_required');
   const model = await this.invoke(context, runtime);
+		assertPredecessorSynthesis({ canonicalAssignmentContext: context }, model.activityCompletion ?? null);
 		const governedTreeDxWrite = context.assignment.workspace.mode === 'treedx'
 			&& context.assignment.effectiveProfile.activity !== 'chat';
 		const references: AssignmentReference[] = governedTreeDxWrite ? [] : [...(model.references ?? [])];
@@ -95,7 +92,7 @@ export class WriterHandler extends ModelHandler {
 			const reviewing = context.assignment.effectiveProfile.activity === 'reviewing';
 			const output = actingContent ? model.activityCompletion?.contentOutput : null;
 			if (actingContent && !output) throw new Error('writer_content_output_required');
-   if (actingContent && output) assertArchitectKnowledgeOutput(context, output, architectBookRef);
+   if (actingContent && output) assertKnowledgeOutput(context, output);
 			const target = context.assignment.grant.contentWrite.find((candidate) => candidate.model === (output?.model ?? (reviewing ? 'decision' : 'note'))
 				&& (!output || candidate.id === output.frontmatter.id));
 			if (!target) throw new Error('writer_content_commit_grant_required');

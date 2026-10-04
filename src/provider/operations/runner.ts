@@ -142,10 +142,12 @@ export async function runProviderAssignment(input: ProviderAssignmentRunInput) {
       await input.client.createCommunicationTraceEvent(assignmentId, { leaseToken: input.leaseToken, runnerId: input.runnerId, sequence, ...event });
     } else {
       // Protected transcript payloads must not enter recipient-visible workday events.
-      await input.client.createAssignmentEvent(assignmentId, { id: `trace:${traceRunner}:${sequence}`,
-        eventType: `provider.${event.type}`, component: 'execution-provider',
-        status: event.type === 'execution.failed' ? 'failed' : event.type === 'execution.completed' ? 'completed' : 'recorded',
-        message: event.summary, createdAt: event.occurredAt, context: event.payload });
+			const body = { id: `trace:${traceRunner}:${sequence}`,
+				leaseToken: input.leaseToken, runnerId: input.runnerId, sequence, protectedPayload: event.protectedPayload,
+        eventType: `provider.${event.type}` as const, component: 'execution-provider' as const,
+        status: event.type === 'execution.failed' ? 'failed' as const : event.type === 'execution.completed' ? 'completed' as const : 'recorded' as const,
+        message: event.summary, createdAt: event.occurredAt, context: event.payload };
+			await input.client.createAssignmentEvent(assignmentId, body);
     }
   };
   try {
@@ -217,17 +219,18 @@ export async function runProviderAssignment(input: ProviderAssignmentRunInput) {
 		result = { ...result, status: 'completed', responseMarkdown: undefined,
 			outputs: { ...outputs, assignmentResult: assignmentResultSchema.parse({ ...canonical, references: [...canonical.references, reference] }) } };
 	}
-	if (result.status !== 'completed') await reportUsage(input, assignmentId, result);
+	await reportUsage(input, assignmentId, result);
   if (result.status === 'returned') {
 		const usage = record(result.usage?.[0]);
 		await input.client.settleAssignment(assignmentId, { activeSeconds: settlementSeconds(usage.activeSeconds), elapsedSeconds: settlementSeconds(usage.elapsedSeconds),
 			usageDimension: 'aggregate', usageActual: usage }, `assignment-settlement:${assignmentId}:${input.runnerId}`);
-    return input.client.returnAssignment(assignmentId, { leaseToken: input.leaseToken, runnerId: input.runnerId, code: result.code ?? 'agent_executor_returned', reason: result.summary, retryable: result.retryable ?? true, output: record(result.outputs) });
+    return input.client.returnAssignment(assignmentId, { leaseToken: input.leaseToken, runnerId: input.runnerId, code: result.code ?? 'agent_executor_returned', reason: result.summary, retryable: result.retryable ?? true, output: { ...record(result.outputs), artifacts: result.artifacts ?? [] } });
   }
   if (result.status === 'failed') {
 		const usage = record(result.usage?.[0]);
     return input.client.failAssignment(assignmentId, { leaseToken: input.leaseToken, runnerId: input.runnerId, code: result.code ?? 'agent_executor_failed', message: result.summary, retryable: result.retryable ?? false,
-			activeSeconds: settlementSeconds(usage.activeSeconds), elapsedSeconds: settlementSeconds(usage.elapsedSeconds), usage, output: record(result.outputs) });
+			activeSeconds: settlementSeconds(usage.activeSeconds), elapsedSeconds: settlementSeconds(usage.elapsedSeconds), usage,
+			output: { ...record(result.outputs), ...(result.artifacts !== undefined ? { artifacts: result.artifacts } : {}) } });
   }
   const current = await input.client.assignment(assignmentId);
   await input.client.startAssignmentCloseout(assignmentId, { leaseToken: input.leaseToken, runnerId: input.runnerId,

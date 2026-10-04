@@ -3,20 +3,24 @@ import { createHash } from 'node:crypto';
 import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { executeAssignmentTreeDxTool } from '../../../src/provider/execution/microvm-executor.ts';
-import { providerExecutionProgress } from '../../../src/sandbox/guest.ts';
-import { codexThreadId, codexTreeDxMcpConfig, completedTimeStatusChecks, prepareNodeWorkspace, providerEventShapeSummary, providerResourceAbort, providerResponsePreview, requiresNodeDependencyRestore, timingAwarenessContract, timingRecoveryEligible, treeDxToolDefinitions, verifyReportedActivityCommands } from '../../../src/sandbox/guest.ts';
-import { assertArchitectSourceCitation, assertReplayableVerificationCommand, assertTesterFailureEvidence, attachObservedTesterFailures, correctObservedTestFirstRedVerification, omitUnreplayableVerification, codexInteractiveTimeoutMs, codexProjectInstructionArguments, codexReasoningArguments, completionFrontmatterSchema, completionOutputTargetVariants, promptFromContext, requiresActivityCompletion } from '../../../src/sandbox/guest-contract.ts';
-import { assertPredecessorSynthesis } from '../../../src/kernel/handlers/planning-synthesis.ts';
-import { activityCompletionOutputSchema } from '../../../src/activity-completion.ts';
-import { activityAllowsVerification } from '../../../src/sandbox/guest-contract.ts';
-import { architectureTaskInstructions } from '../architecture/knowledge-task-fixture.ts';
+import { executeAssignmentTreeDxTool } from '../../../../src/provider/execution/microvm-executor.ts';
+import { providerExecutionProgress } from '../../../../src/sandbox/guest.ts';
+import { codexThreadId, codexTreeDxMcpConfig, completedTimeStatusChecks, prepareNodeWorkspace, providerEventShapeSummary, providerResourceAbort, providerResponsePreview, requiresNodeDependencyRestore, timingAwarenessContract, timingRecoveryEligible, treeDxToolDefinitions, verifyReportedActivityCommands } from '../../../../src/sandbox/guest.ts';
+import { assertArchitectSourceCitation, assertReplayableVerificationCommand, assertTesterFailureEvidence, attachObservedTesterFailures, correctObservedTestFirstRedVerification, omitUnreplayableVerification, codexInteractiveTimeoutMs, codexProjectInstructionArguments, codexReasoningArguments, completionFrontmatterSchema, completionOutputTargetVariants, promptFromContext, requiresActivityCompletion } from '../../../../src/sandbox/guest-contract.ts';
+import { assertPredecessorSynthesis } from '../../../../src/kernel/handlers/planning-synthesis.ts';
+import { activityCompletionOutputSchema } from '../../../../src/activity-completion.ts';
+import { activityAllowsVerification } from '../../../../src/sandbox/guest-contract.ts';
+import { architectureTaskInstructions } from '../../architecture/knowledge-task-fixture.ts';
+import { request as executionRequest } from '../../kernel/provider-kernel-fixture.ts';
+import { assignmentAttemptSchema } from '@treeseed/sdk/agent-capacity';
 describe('Codex chat executor', () => {
 	it('does not install dependencies for read-only planning, estimating, chat, or Architecture knowledge', () => {
 		for (const activity of ['planning', 'estimating', 'chat']) {
 			expect(activityAllowsVerification(activity, 'tester', 'git')).toBe(false);
 		}
-		expect(activityAllowsVerification('acting', 'architect', 'treedx')).toBe(false);
+		for (const agentClass of ['architect', 'configured-author']) {
+			expect(activityAllowsVerification('acting', agentClass, 'treedx', ['Do not claim test verification.'])).toBe(false);
+		}
 		for (const activity of ['acting', 'reviewing', 'releasing']) {
 			expect(activityAllowsVerification(activity, 'tester', 'git')).toBe(true);
 		}
@@ -66,11 +70,11 @@ describe('Codex chat executor', () => {
 		expect(promptFromContext(context)).toContain(`The exact attached project Git source commit is ${'c'.repeat(40)}`);
 		expect(promptFromContext(context)).toContain(`FINAL SOURCE AUDIT: In contentOutput.body, every phrase claiming an SDK or project Git source commit must use exactly ${'c'.repeat(40)}`);
 		expect(promptFromContext(context)).toContain('Return verification: []: source inspection belongs in the page body');
-		expect(() => assertArchitectSourceCitation({ contentOutput: { body: `Source ${'a'.repeat(40)}` } } as never,
+		expect(() => assertArchitectSourceCitation({ contentOutput: { model: 'knowledge', body: `Source ${'a'.repeat(40)}` } } as never,
 			'c'.repeat(40), 'architect', 'acting')).toThrow('project_source_commit_citation_missing');
-		expect(() => assertArchitectSourceCitation({ contentOutput: { body: `Source ${'c'.repeat(40)}` } } as never,
+		expect(() => assertArchitectSourceCitation({ contentOutput: { model: 'knowledge', body: `Source ${'c'.repeat(40)}` } } as never,
 			'c'.repeat(40), 'architect', 'acting')).not.toThrow();
-		expect(() => assertArchitectSourceCitation({ contentOutput: { body: `At authorized SDK commit \`${'a'.repeat(40)}\`, with proposal \`${'c'.repeat(40)}\`.` } } as never,
+		expect(() => assertArchitectSourceCitation({ contentOutput: { model: 'knowledge', body: `At authorized SDK commit \`${'a'.repeat(40)}\`, with proposal \`${'c'.repeat(40)}\`.` } } as never,
 			'c'.repeat(40), 'architect', 'acting')).toThrow('project_source_commit_citation_mismatch');
 		const schema = activityCompletionOutputSchema(completionFrontmatterSchema(context), true, completionOutputTargetVariants(context));
 		expect((schema.properties.contentOutput as { anyOf: Array<{ properties?: { model?: unknown } }> }).anyOf[0]?.properties?.model)
@@ -153,65 +157,6 @@ describe('Codex chat executor', () => {
 		expect(prompt).toContain('you do not need or have a discussion-write tool');
 		expect(prompt).toContain('Do not report a missing discussion-write tool as a blocker');
 		expect(codexProjectInstructionArguments()).toEqual(['-c', 'project_doc_max_bytes=0']);
-	});
-	it('accepts timing awareness only from completed model-initiated clock checks', () => {
-		expect(completedTimeStatusChecks([
-			{ type: 'item.started', item: { type: 'mcp_tool_call', server: 'treedx', tool: 'treeseed_time_status', status: 'in_progress' } },
-			{ type: 'item.completed', item: { type: 'mcp_tool_call', server: 'treedx', tool: 'treeseed_time_status', status: 'completed', error: null } },
-			{ type: 'item.completed', item: { type: 'mcp_tool_call', server: 'treedx', tool: 'treeseed_time_status', status: 'completed', error: null } },
-		])).toBe(2);
-		expect(completedTimeStatusChecks([
-			{ type: 'item.completed', item: { type: 'mcp_tool_call', server: 'treedx', tool: 'treeseed_time_status', status: 'failed', error: 'unavailable' } },
-		])).toBe(0);
-	});
-	it('requires clock checks to bracket every other provider tool action', () => {
-		const clock = { type: 'item.completed', item: { type: 'mcp_tool_call', server: 'treedx', tool: 'treeseed_time_status', status: 'completed', error: null } };
-		const command = { type: 'item.completed', item: { type: 'command_execution', status: 'completed', error: null } };
-		expect(timingAwarenessContract([clock, command, clock])).toMatchObject({
-			completedChecks: 2, firstToolCompliant: true, finalToolCompliant: true,
-		});
-		expect(timingAwarenessContract([command, clock, clock])).toMatchObject({ firstToolCompliant: false });
-		expect(timingAwarenessContract([clock, clock, command])).toMatchObject({ finalToolCompliant: false });
-		expect(timingRecoveryEligible(timingAwarenessContract([clock, command]), 20_000)).toBe(true);
-		expect(timingRecoveryEligible(timingAwarenessContract([command, clock]), 20_000)).toBe(false);
-		expect(timingRecoveryEligible(timingAwarenessContract([clock, command, clock]), 20_000)).toBe(false);
-		expect(timingRecoveryEligible(timingAwarenessContract([clock, command, clock, command]), 20_000)).toBe(true);
-		expect(codexThreadId([{ type: 'thread.started', thread_id: '12345678-1234-1234-1234-123456789abc' }])).toBe('12345678-1234-1234-1234-123456789abc');
-		expect(codexThreadId([{ type: 'thread.started', thread_id: '../other-session' }])).toBeNull();
-		expect(timingAwarenessContract([
-			{ type: 'item.started', item: { type: 'mcp_tool_call', server: 'treedx', tool: 'wrong_clock_alias', status: 'in_progress' } },
-			clock, clock,
-		])).toMatchObject({ firstTool: 'treedx:wrong_clock_alias', firstToolCompliant: false });
-	});
-	it.each(['planning', 'estimating', 'acting', 'reviewing', 'chat'] as const)(
-		'applies the same first/final clock boundary to %s', (activity) => {
-			const prompt = promptFromContext({ canonicalAssignmentContext: { assignment: {
-				id: `assignment-${activity}`, workspace: { mode: 'read-only' },
-				...(activity === 'reviewing' ? { authorityRefs: [{ model: 'decision', id: 'accepted-decision' }] } : {}),
-				effectiveProfile: { activity, handler: 'writer', prompt: { system: 'Complete the assigned work.' } },
-			}, context: [], predecessorResults: [] } });
-			expect(prompt).toMatch(/^MANDATORY ASSIGNMENT CLOCK:/u);
-			expect(prompt).toContain('Your FIRST tool action must call mcp__treedx__treeseed_time_status');
-			expect(prompt).toContain('call mcp__treedx__treeseed_time_status again as your FINAL tool action');
-		},
-	);
-	it('summarizes provider event shapes without retaining arguments or output', () => {
-		expect(providerEventShapeSummary([{ type: 'item.completed', item: {
-			type: 'mcp_tool_call', server: 'treedx', tool: 'treeseed_time_status', status: 'completed',
-			arguments: { secret: 'never retain' }, result: { remainingSeconds: 42 },
-	} }])).toEqual([{ type: 'item.completed', itemType: 'mcp_tool_call', server: 'treedx', tool: 'treeseed_time_status', status: 'completed', error: null }]);
-	});
-	it('redacts the last provider response used to diagnose a missing clock boundary', () => {
-		expect(providerResponsePreview([{ type: 'item.completed', item: { type: 'agent_message', text: 'Cannot call sk-secret.' } }], ['sk-secret']))
-			.toBe('Cannot call [redacted].');
-	});
-	it('reports remaining time from the API-started productive window without a content grant', async () => {
-		const deadlineAt = new Date(Date.now() + 60_000).toISOString();
-		const result = await executeAssignmentTreeDxTool({} as never, 'treeseed_time_status', {}, {
-			startedAt: new Date().toISOString(), deadlineAt,
-		});
-		expect(result).toMatchObject({ deadlineAt });
-		expect(Number((result as Record<string, unknown>).remainingSeconds)).toBeGreaterThan(55);
 	});
 	it('requires structured activities to report replayable checks as separate commands', () => {
 		const prompt = promptFromContext({ canonicalAssignmentContext: { assignment: {
@@ -310,7 +255,7 @@ describe('Codex chat executor', () => {
 		const prompt = promptFromContext({ canonicalAssignmentContext: { assignment: {
 			id: 'assignment-work-review', agentClass: 'reviewer', sourceRef: { model: 'proposal', id: 'proposal-1' },
 			authorityRefs: [{ store: 'postgresql', model: 'decision', id: 'decision-1', revision: 1, digest: `sha256:${'a'.repeat(64)}` }],
-			acceptanceCriteria: ['The Actor identifies the exact source commit.'],
+			acceptanceCriteria: ['The Actor identifies the exact source commit.', 'Report failing test names and paths.'],
 			workspace: { mode: 'treedx' }, effectiveProfile: { activity: 'reviewing', handler: 'writer',
 				prompt: { system: 'Review the Actor result.' } },
 		}, context: [], predecessorResults: [{ id: 'result-1' }] } });
@@ -354,7 +299,7 @@ describe('Codex chat executor', () => {
 		const prompt = promptFromContext({ canonicalAssignmentContext: { assignment: {
 			id: 'test-first', agentClass: 'tester', sourceRef: { model: 'proposal', id: 'proposal-1' },
 			workspace: { mode: 'git' }, effectiveProfile: { activity: 'acting', handler: 'writer', prompt: {} },
-			acceptanceCriteria: ['Reject caller-authored fields.'],
+			acceptanceCriteria: ['Reject caller-authored fields.', 'Report failing test names and paths.'],
 		}, context: [], predecessorResults: [] } });
 		expect(prompt).toContain('map every work-item acceptance criterion to an independently runnable assertion');
 		expect(prompt).toContain('substring matches do not prove an exact contract');

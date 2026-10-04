@@ -2,12 +2,12 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { executionEdgeSchema, executionNodeSchema, assignmentAttemptSchema, assignmentResultSchema } from '@treeseed/sdk/agent-capacity';
 import { read, row, type Row } from '../acceptance-cli.ts';
-import { readGovernedContentFile } from './decision-evidence.ts';
+import { readGovernedContentFile } from './support/decision-evidence.ts';
 import { readWorkdayAssignments, verifyGolden } from '../sdk-runtime-golden.test.ts';
-import { exactFileKey, verifyCrossProjectCustody } from './cross-project-custody.ts';
-import { readCompleteEvidence } from './evidence-pages.ts';
-import { publicCanonicalRecords, verifyTerminalRecordCustody } from './record-custody.ts';
-import { readPortfolioAuthority, verifyPortfolioRelations } from './portfolio-relations.ts';
+import { exactFileKey, verifyCrossProjectCustody } from './support/cross-project-custody.ts';
+import { readCompleteEvidence } from './support/evidence-pages.ts';
+import { publicCanonicalRecords, verifyTerminalRecordCustody } from './support/record-custody.ts';
+import { readPortfolioAuthority, verifyPortfolioRelations } from './support/portfolio-relations.ts';
 
 function observe() {
 	const id = process.env.TREESEED_ACCEPTANCE_WORKDAY_ID ?? ''; assert.match(id, /^workday-[a-f0-9-]+$/u);

@@ -7,7 +7,7 @@ import * as identity from '../../src/provider/accounts/identity.ts';
 import { createManagedProviderManifestV5 } from '../../src/provider/configuration/managed-manifest.ts';
 import { materializeCapabilityOffers } from '../../src/provider/capabilities/materialize-offers.ts';
 import type { ProviderHostRuntimeConfig } from '../../src/provider/configuration/config.ts';
-import { verifyProviderConformanceSignature, verifyProviderQualification } from '../acceptance/workday/record-custody.ts';
+import { verifyProviderConformanceSignature, verifyProviderQualification } from '../acceptance/workday/support/record-custody.ts';
 
 afterEach(() => vi.restoreAllMocks());
 

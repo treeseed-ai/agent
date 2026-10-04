@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { parse } from 'yaml';
 import { exactEntityReferenceSchema } from '@treeseed/sdk/agent-capacity';
 import { validatePortableContentData } from '@treeseed/sdk/content-validation';
-import { read, row, type Row } from '../acceptance-cli.ts';
+import { read, row, type Row } from '../../acceptance-cli.ts';
 
 export function readGovernedContentFile(reference: Row, projectId: string, team: string, cache: Map<string, Row>, code: string): Row {
 	assert.ok(reference.repository && reference.path && reference.commit, `${code}_SOURCE: Native exact content readback required`);

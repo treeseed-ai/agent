@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { assignmentAttemptSchema, executionEdgeSchema, executionNodeSchema } from '@treeseed/sdk/agent-capacity';
-import { state } from './golden-readback-fixture.ts';
-import { request } from '../provider-kernel-fixture.ts';
-import { verifyGraphProvenance, verifyPredecessorCustody } from '../../../acceptance/workday/evidence-pages.ts';
+import { state } from '../golden-readback-fixture.ts';
+import { request } from '../../provider-kernel-fixture.ts';
+import { verifyGraphProvenance, verifyPredecessorCustody } from '../../../../acceptance/workday/support/evidence-pages.ts';
+await import('../../../../acceptance/workday/living-graph.test.ts');
 
 function graphInput() {
 	const attempt = assignmentAttemptSchema.parse(request().assignment.assignmentAttempt);

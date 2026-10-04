@@ -267,6 +267,15 @@ describe('AgentKernel', () => {
 		context.assignment.effectiveProfile.activity = 'acting';
 		context.assignment.effectiveProfile.handler = 'writer';
 		context.assignment.grant.contentWrite = [{ ...reportTarget, model }];
+		const bookRef = { store: 'treedx' as const, model: 'book', id: 'sdk-core', repository: 'treeseed-ai/sdk-library', commit,
+			path: 'books/sdk-core.md', revision: 1, digest };
+		if (model === 'knowledge') {
+			context.assignment.contextRefs.push(bookRef); context.assignment.grant.contentRead.push(bookRef);
+			context.context.push({ ref: bookRef, mediaType: 'text/markdown', digest, value: { frontmatter: {
+				schemaVersion: 'treeseed.book/v3', id: bookRef.id, projectId: context.assignment.projectId,
+				revision: bookRef.revision, title: 'SDK Core', status: 'published' } } });
+		}
+		const frontmatter = { id: reportTarget.id, ...(model === 'knowledge' ? { bookRef } : {}) };
 		const commits: unknown[] = [];
 		const boundary = runtime(commits);
 		boundary.invokeModel = async () => ({ text: 'Published exact source findings.',
@@ -274,9 +283,9 @@ describe('AgentKernel', () => {
 				firstTool: 'treedx:treeseed_time_status', firstToolSucceeded: true, lastTool: 'treedx:treeseed_time_status',
 				lastToolSucceeded: true, firstToolCompliant: true, finalToolCompliant: true }, usage: { elapsedSeconds: 1 },
 			activityCompletion: { summary: 'Published exact source findings.', reviewDisposition: null,
-				contentOutput: { model, body: 'Substantive governed findings.', frontmatter: { id: reportTarget.id } } } });
+				contentOutput: { model, body: 'Substantive governed findings.', frontmatter } } });
 		const result = await new WriterHandler().run(context, boundary);
-		expect(commits).toEqual([{ body: 'Substantive governed findings.', frontmatter: { id: reportTarget.id } }]);
+		expect(commits).toEqual([{ body: 'Substantive governed findings.', frontmatter }]);
 		expect(result.references).toHaveLength(1);
 		expect(result.summary).toContain('AgentKernel committed governed TreeDX content');
 		context.assignment.grant.contentWrite = [reportTarget];
@@ -309,6 +318,7 @@ describe('AgentKernel', () => {
 	it('requires Architect acting output to extend the exact authorized published Book', async () => {
 		const context = assignmentContext();
 		context.assignment.agentClass = 'architect';
+		context.assignment.effectiveProfile.prompt = { system: 'Extend the exact authorized Book reference.' };
 		context.assignment.effectiveProfile.activity = 'acting';
 		context.assignment.effectiveProfile.handler = 'writer';
 		const bookRef = { store: 'treedx' as const, model: 'book', id: 'sdk-core', revision: 3, digest,
@@ -334,12 +344,12 @@ describe('AgentKernel', () => {
 		expect(commits).toHaveLength(1);
 		expect(prompt).toContain('exact authorized Book reference');
 		context.context = [];
-		await expect(new WriterHandler().run(context, boundary)).rejects.toThrow('architect_architecture_book_context_required');
+		await expect(new WriterHandler().run(context, boundary)).rejects.toThrow('knowledge_book_context_required');
 		expect(calls).toBe(1);
 		context.context = [{ ref: bookRef, mediaType: 'text/markdown', digest,
 			value: { frontmatter: { schemaVersion: 'treeseed.book/v3', id: bookRef.id, projectId: 'project-1',
 				revision: 3, status: 'draft', title: 'SDK Core' } } }];
-		await expect(new WriterHandler().run(context, boundary)).rejects.toThrow('architect_architecture_book_context_required');
+		await expect(new WriterHandler().run(context, boundary)).rejects.toThrow('knowledge_book_context_required');
 		expect(calls).toBe(1);
 	});
 });

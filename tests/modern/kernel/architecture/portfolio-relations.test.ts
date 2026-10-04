@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { assignmentAttemptSchema } from '@treeseed/sdk/agent-capacity';
-import { portfolioRelations, verifyPortfolioRelations } from '../../../acceptance/workday/portfolio-relations.ts';
-import { crossProjectReadbackInputs } from './cross-project-readback-fixture.ts';
+import { portfolioRelations, verifyPortfolioRelations } from '../../../acceptance/workday/support/portfolio-relations.ts';
+import { crossProjectReadbackInputs } from './custody/cross-project-readback-fixture.ts';
 import type { Row } from '../../../acceptance/acceptance-cli.ts';
 
 const document = 'The acceptance portfolio contains these 2 projects:\n\n1. SDK\n2. API\n\nFixed cross-project relations for the portfolio run:\n\n| Approved predecessor | Dependent work item | Reason |\n|---|---|---|\n| SDK `bounded-work` | API `bounded-work` | Supplied UNIT authority input |\n\n';

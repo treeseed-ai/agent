@@ -33,7 +33,7 @@ export function planningSynthesisOutputSchema(context: Record<string, unknown>, 
 	return { ...schema, properties: { ...properties, summary: { ...record(properties.summary), description: planningSynthesisInstruction(context), pattern: synthesisPattern(lines) } } };
 }
 
-export function missingPredecessorCitations(context: Record<string, unknown>, completion: ActivityCompletionReport | null): string[] {
+export function missingPredecessorCitations(context: Record<string, unknown>, completion: (Pick<ActivityCompletionReport, 'summary'> & Partial<Omit<ActivityCompletionReport, 'summary'>>) | null): string[] {
 	// Planning's WriterHandler commits the completion summary as the Note body.
 	// Requiring contentOutput here would contradict that single governed write path.
 	const body = completion?.summary ?? '';
@@ -41,7 +41,7 @@ export function missingPredecessorCitations(context: Record<string, unknown>, co
 		.map(line => line.id);
 }
 
-export function assertPredecessorSynthesis(context: Record<string, unknown>, completion: ActivityCompletionReport | null) {
+export function assertPredecessorSynthesis(context: Record<string, unknown>, completion: (Pick<ActivityCompletionReport, 'summary'> & Partial<Omit<ActivityCompletionReport, 'summary'>>) | null) {
 	const missing = missingPredecessorCitations(context, completion);
 	const lines = planningSynthesisLines(context);
 	const body = completion?.summary ?? '', summaryLines = body.split(/\r?\n/u);

@@ -61,9 +61,14 @@ async function microvmBroker() {
 				if (path.endsWith('/tool-requests/next')) { response.end('{"request":null}'); return; }
 				if (path.endsWith('/execute')) {
 					if (!assigned) throw new Error('Original prepare required');
+					const window = { startedAt: new Date(Date.parse(assigned.leaseExpiresAt) - 30_000).toISOString(), deadlineAt: assigned.leaseExpiresAt };
+					const clock = (id: string, remainingSeconds: number) => { const value = { ...window, remainingSeconds }; return {
+						type: 'item.completed', item: { id, type: 'mcp_tool_call', server: 'treedx', tool: 'treeseed_time_status', status: 'completed',
+							result: { content: [{ type: 'text', text: JSON.stringify(value) }], structuredContent: value } } }; };
 					const result = sandboxResultSchema.parse({ schemaVersion: 'treeseed.sandbox-result/v1', sandboxId: 'owned-native-sandbox', assignmentId: assigned.assignmentId,
 						status: 'completed', summary: 'Controlled complete native result', timingAwareness, artifacts: [],
-						usage: { activeSeconds: 1.125, elapsedSeconds: 2.25, input_tokens: 19, output_tokens: 3 }, diagnostics: {},
+						usage: { activeSeconds: 1.125, elapsedSeconds: 2.25, input_tokens: 19, output_tokens: 3 },
+						diagnostics: { providerEvents: [clock('initial', 30), clock('final', 29)] },
 						teardown: { verified: false, completedAt: null }, ...resultPatch });
 					observations.push(structuredClone(result));
 					response.end(JSON.stringify(result)); return;

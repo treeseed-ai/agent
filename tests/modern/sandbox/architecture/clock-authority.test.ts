@@ -3,7 +3,9 @@ import { executeAssignmentTreeDxTool } from '../../../../src/provider/execution/
 import { completedTimeStatusChecks, timingAwarenessContract } from '../../../../src/sandbox/guest.ts';
 import { clockRequest } from './clock-fixture.ts';
 const clock = (status = 'completed', error: unknown = null) => ({ type: 'item.completed', item: {
-	type: 'mcp_tool_call', server: 'treedx', tool: 'treeseed_time_status', status, error } });
+	type: 'mcp_tool_call', server: 'treedx', tool: 'treeseed_time_status', status, error,
+	result: { content: [{ type: 'text', text: JSON.stringify({ ...window, remainingSeconds: 30 }) }],
+		structuredContent: { ...window, remainingSeconds: 30 } } } });
 const command = { type: 'item.completed', item: { type: 'command_execution', status: 'completed', error: null } };
 const window = { startedAt: '2026-10-04T00:00:00.000Z', deadlineAt: '2026-10-04T00:00:30.000Z' };
 const reading = (remainingSeconds: number) => ({ ...window, remainingSeconds });

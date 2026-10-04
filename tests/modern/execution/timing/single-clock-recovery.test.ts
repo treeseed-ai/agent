@@ -1,9 +1,11 @@
 import { expect, it } from 'vitest';
 import { timingAwarenessContract, timingRecoveryEligible } from '../../../../src/sandbox/guest.ts';
 
+const value = { startedAt: '2026-10-04T00:00:00.000Z', deadlineAt: '2026-10-04T00:00:30.000Z', remainingSeconds: 30 };
+const payload = { content: [{ type: 'text', text: JSON.stringify(value) }], structuredContent: value };
 it('recovers a separate final check when the first clock was also the last tool', () => {
 	const clock = { type: 'item.completed', item: { type: 'mcp_tool_call', server: 'treedx',
-		tool: 'treeseed_time_status', status: 'completed', error: null } };
+		tool: 'treeseed_time_status', status: 'completed', error: null, result: payload } };
 	const single = timingAwarenessContract([clock]);
 	expect(single).toMatchObject({ completedChecks: 1, firstToolCompliant: true, finalToolCompliant: true });
 	expect(timingRecoveryEligible(single, 20_000)).toBe(true);
@@ -16,7 +18,7 @@ it('recovers a separate final check when the first clock was also the last tool'
 
 it('requires finite numeric remaining authority for final clock recovery without coercion or resetting the boundary', () => {
 	const clock = { type: 'item.completed', item: { type: 'mcp_tool_call', server: 'treedx',
-		tool: 'treeseed_time_status', status: 'completed', error: null } };
+		tool: 'treeseed_time_status', status: 'completed', error: null, result: payload } };
 	const contract = timingAwarenessContract([clock]), before = structuredClone(contract);
 	for (const remaining of [15_000, 15_000.5, 20_000]) expect(timingRecoveryEligible(contract, remaining)).toBe(true);
 	const values: unknown[] = [14_999, 0, -1, NaN, Infinity, -Infinity, undefined, null, '', '15000', '20000', true, [], [20_000], {}];
@@ -31,7 +33,7 @@ it('requires finite numeric remaining authority for final clock recovery without
 
 it('denies contradictory private timing recovery observations rather than trusting a compliant flag alone', () => {
 	const clock = { type: 'item.completed', item: { type: 'mcp_tool_call', server: 'treedx',
-		tool: 'treeseed_time_status', status: 'completed', error: null } };
+		tool: 'treeseed_time_status', status: 'completed', error: null, result: payload } };
 	const original = timingAwarenessContract([clock]);
 	const mutations = [
 		{ schemaVersion: 'unknown' }, { requiredChecks: 0 }, { firstTool: 'command_execution' },

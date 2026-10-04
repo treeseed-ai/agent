@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { read, row, type Row } from '../acceptance-cli.ts';
 import { readWorkdayAssignments, verifyGolden } from '../sdk-runtime-golden.test.ts';
-import { verifyInitialStartCustody, verifyRecurringStartCustody } from './campaign-observation.ts';
+import { verifyInitialStartCustody, verifyRecurringStartCustody } from './support/campaign-observation.ts';
 
 function actualStart() {
 	const id = process.env.TREESEED_ACCEPTANCE_WORKDAY_ID ?? '', team = process.env.TREESEED_ACCEPTANCE_TEAM ?? 'treeseed';

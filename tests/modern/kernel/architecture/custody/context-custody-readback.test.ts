@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { state } from './golden-readback-fixture.ts';
-import { verifyDraftProposalHandoff, verifyUnfinishedDraftHandoff, verifyExactContextSource, verifyKnowledgeBookSource } from '../../../acceptance/workday/assignment-authority.ts';
+import { state } from '../golden-readback-fixture.ts';
+import { verifyDraftProposalHandoff, verifyUnfinishedDraftHandoff, verifyExactContextSource, verifyKnowledgeBookSource } from '../../../../acceptance/workday/support/assignment-authority.ts';
 import { stringify } from 'yaml';
-import { exactContext } from './portable/context-fixture.ts';
+import { exactContext } from '../portable/context-fixture.ts';
 import { createHash } from 'node:crypto';
-import { prepareTreeDxContent } from '../../../../src/kernel/treedx-content-commit.ts';
+import { prepareTreeDxContent } from '../../../../../src/kernel/treedx-content-commit.ts';
 import { assignmentAttemptSchema, assignmentResultSchema, exactEntityReferenceSchema } from '@treeseed/sdk/agent-capacity';
-import { row, type Row } from '../../../acceptance/acceptance-cli.ts';
+import { row, type Row } from '../../../../acceptance/acceptance-cli.ts';
 import { readFileSync } from 'node:fs';
 
 function draftFixture() {
@@ -205,7 +205,7 @@ function knowledgeFixture(status = 'review') {
 		expect(outcomes).toEqual(Array(7).fill(true));
 	});
 	it('registers native exact context readback without invoking public commands from unit fixtures', () => {
-		const scene = readFileSync(new URL('../../../acceptance/workday/context-custody.test.ts', import.meta.url), 'utf8');
+		const scene = readFileSync(new URL('../../../../acceptance/workday/context-custody.test.ts', import.meta.url), 'utf8');
 		expect(scene).toContain("test('Actual TreeDX assignment context is independently read at exact granted repository commit path and book revision'");
 		expect(state.calls).toEqual([]);
 	});

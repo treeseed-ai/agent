@@ -2,10 +2,11 @@ import { createHash } from 'node:crypto';
 import { stringify } from 'yaml';
 import { describe, expect, it } from 'vitest';
 import { assignmentAttemptSchema } from '@treeseed/sdk/agent-capacity';
-import { state } from './golden-readback-fixture.ts';
-import { request } from '../provider-kernel-fixture.ts';
-import { portableProfile } from './portable/portable-kernel-fixture.ts';
-import { verifyGovernedProfile, verifyHandlerInspection } from '../../../acceptance/workday/assignment-authority.ts';
+import { state } from '../golden-readback-fixture.ts';
+import { request } from '../../provider-kernel-fixture.ts';
+import { portableProfile } from '../portable/portable-kernel-fixture.ts';
+import { verifyGovernedProfile, verifyHandlerInspection } from '../../../../acceptance/workday/support/assignment-authority.ts';
+await import('../../../../acceptance/workday/profile-custody.test.ts');
 
 function input() {
 	const definition = portableProfile(), activity = definition.activityProfiles.acting!;

@@ -3,10 +3,10 @@ import test from 'node:test';
 import { assignmentReferenceSchema, assignmentTimingAwarenessReceiptSchema, estimateSchema, exactEntityReferenceSchema } from '@treeseed/sdk/agent-capacity';
 import { DEFAULT_CAPACITY_PAGE_LIMIT } from '@treeseed/sdk/capacity-pagination';
 import { read, row, type Row } from './acceptance-cli.ts';
-import { readDecisionContent, readGovernedContentFile, verifyDecisionContent, verifyReviewFindingContent } from './workday/decision-evidence.ts';
-import { verifyAssignmentAuthority, verifyTeardownAuthority, verifyTreeDxWorkspaceClosure } from './workday/assignment-authority.ts';
-import { verifyPlanningEvidence } from './workday/planning-evidence.ts';
-import { readCompleteEvidence } from './workday/evidence-pages.ts';
+import { readDecisionContent, readGovernedContentFile, verifyDecisionContent, verifyReviewFindingContent } from './workday/support/decision-evidence.ts';
+import { verifyAssignmentAuthority, verifyTeardownAuthority, verifyTreeDxWorkspaceClosure } from './workday/support/assignment-authority.ts';
+import { verifyPlanningEvidence } from './workday/support/planning-evidence.ts';
+import { readCompleteEvidence } from './workday/support/evidence-pages.ts';
 
 const rows = (value: unknown): Row[] => Array.isArray(value) ? value.map(row) : [];
 const text = (value: unknown): string => typeof value === 'string' ? value : '';

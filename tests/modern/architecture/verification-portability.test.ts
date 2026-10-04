@@ -14,8 +14,11 @@ const report: ActivityCompletionReport = { schemaVersion: 'treeseed.activity-com
 it('keeps verification admission unchanged when only the agent class is renamed', () => {
 	for (const workspace of ['read-only', 'treedx', 'git']) {
 		for (const activity of ['planning', 'estimating', 'acting', 'reviewing', 'chat']) {
-			expect(activityAllowsVerification(activity, 'architect', workspace), `${activity}/${workspace}`)
-				.toBe(activityAllowsVerification(activity, 'configured-author', workspace));
+				expect(activityAllowsVerification(activity, 'architect', workspace), `${activity}/${workspace}`)
+					.toBe(activityAllowsVerification(activity, 'configured-author', workspace));
+				for (const agentClass of ['architect', 'configured-author']) {
+					expect(activityAllowsVerification(activity, agentClass, workspace, ['Do not claim test verification.'])).toBe(false);
+				}
 		}
 	}
 });

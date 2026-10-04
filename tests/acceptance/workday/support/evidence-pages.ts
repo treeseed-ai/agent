@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { decodeCapacityPageCursor } from '@treeseed/sdk/capacity-pagination';
 import { graphRevisionSchema, type GraphRevision, assignmentAttemptSchema, executionEdgeSchema, executionNodeSchema, validateExecutionGraph } from '@treeseed/sdk/agent-capacity';
-import { read, row, type Row } from '../acceptance-cli.ts';
+import { read, row, type Row } from '../../acceptance-cli.ts';
 
 /** Complete existing watch contract: empty terminal page retains its cursor.
  * This proves retrieval against the independently read current graph, not that

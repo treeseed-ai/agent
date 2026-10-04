@@ -7,7 +7,7 @@ import { parse } from 'yaml';
 import { isDeepStrictEqual } from 'node:util';
 import { read, row, type Row } from '../acceptance-cli.ts';
 import { readWorkdayAssignments } from '../sdk-runtime-golden.test.ts';
-import { verifyAssignmentAuthority, verifyExactContextSource, verifyKnowledgeBookSource, verifyDraftProposalHandoff } from './assignment-authority.ts';
+import { verifyAssignmentAuthority, verifyExactContextSource, verifyKnowledgeBookSource, verifyDraftProposalHandoff } from './support/assignment-authority.ts';
 import { verifySdkArchitectureBook } from '../prepare-campaign.ts';
 
 test('Actual draft Proposal handoff is independently read from its own granted publication without claiming accepted continuation authority', { timeout: 120_000 }, () => {

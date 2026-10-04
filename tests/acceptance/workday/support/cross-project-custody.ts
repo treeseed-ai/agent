@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { assignmentAttemptSchema, assignmentResultSchema, executionEdgeSchema, executionNodeSchema, exactEntityReferenceSchema, type ExactEntityReference } from '@treeseed/sdk/agent-capacity';
 import { exactDependencyLinkSchema, validatePortableContentData } from '@treeseed/sdk/content-validation';
-import { row, type Row } from '../acceptance-cli.ts';
+import { row, type Row } from '../../acceptance-cli.ts';
 import { verifyDecisionContent } from './decision-evidence.ts';
 
 export const exactFileKey = (reference: Pick<ExactEntityReference, 'repository' | 'commit' | 'path'>): string =>

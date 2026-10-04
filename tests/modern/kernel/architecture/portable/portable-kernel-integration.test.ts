@@ -25,13 +25,15 @@ describe('portable configured profiles through real provider Kernel and native G
 				Object.assign(f.attempt.effectiveProfile, { handler: selected.handler, profileRef: { ...f.attempt.effectiveProfile.profileRef, id: profile.id },
 					prompt: selected.prompt, parameters: selected.parameters, permissionCeiling: selected.permissions });
 				f.attempt.grant.tools.push('release'); f.attempt.predecessorResultIds = inputs.map(value => value.id);
-				f.attempt.contextRefs.push(...inputs.map((value, index) => ({ store: 'git' as const, model: 'repository', id: value.id,
-					repository: workspace.repository, commit: index === 0 ? left : right })));
+				// The sole workspace already owns the original base. Do not copy
+				// that same authority into context beside both predecessor sources.
+				f.attempt.contextRefs = inputs.map((value, index) => ({ store: 'git' as const, model: 'repository', id: value.id,
+					repository: workspace.repository, commit: index === 0 ? left : right }));
 				f.input.assignment.workspaceContext = { assignmentAttempt: f.attempt, predecessorResults: inputs };
 				const reply = f.getReply(); reply.outputs = { ...reply.outputs, changedPaths: ['src/left.txt', 'src/right.txt'],
 					sourceReference: { kind: 'git', repository: workspace.repository, commit: integrated, branch: workspace.branch } }; f.setReply(reply);
 				const before = structuredClone(f.input.assignment), result = await f.run();
-				expect(result.status).toBe('completed'); expect(f.requests).toHaveLength(1); expect(f.begin).toHaveLength(1);
+				expect(result.status, `${result.code}: ${result.summary}`).toBe('completed'); expect(f.requests).toHaveLength(1); expect(f.begin).toHaveLength(1);
 				expect(f.requests[0]).toMatchObject({ workspaceContext: { assignmentAttempt: { agentClass: name,
 					workspace: { baseCommit: f.base }, effectiveProfile: { handler: 'releaser' } }, predecessorResults: inputs } });
 				expect(assignmentResultSchema.parse(result.outputs?.assignmentResult).references).toContainEqual({ kind: 'git', repository: workspace.repository, commit: integrated, branch: workspace.branch });
@@ -401,13 +403,26 @@ describe('portable configured profiles through real provider Kernel and native G
 	it('denies coerced negative and nonfinite native measurements instead of manufacturing successful usage facts', async () => {
 		const outcomes: string[] = [];
 		for (const measurement of [{ elapsedSeconds: '2', inputTokens: 7 }, { elapsedSeconds: -1, inputTokens: 7 },
-			{ elapsedSeconds: 2, inputTokens: '7' }, { elapsedSeconds: 2, inputTokens: -7 }, { elapsedSeconds: 2, activeSeconds: null }]) {
+			{ elapsedSeconds: 2, inputTokens: '7' }, { elapsedSeconds: 2, inputTokens: -7 }, { elapsedSeconds: 2, activeSeconds: null }]) for (const leading of [[], [{ elapsedSeconds: 1, inputTokens: 1 }]]) {
 			const f = await portableKernel(); try {
-				await f.candidate(); const reply = f.getReply(); reply.usage = [measurement]; f.setReply(reply);
-				outcomes.push((await f.run()).status); expect(f.requests).toHaveLength(1); expect(f.git('rev-parse', 'fixture-base')).toBe(f.base);
+				const candidate = await f.candidate(); const reply = f.getReply(); reply.usage = [...leading, measurement]; f.setReply(reply);
+				const before = structuredClone(reply), input = structuredClone(f.input.assignment), result = await f.run();
+				outcomes.push(result.status); expect(result.outputs?.assignmentResult).toBeUndefined(); expect(result.usage).toEqual(before.usage);
+				expect(f.getReply()).toEqual(before); expect(f.input.assignment).toEqual(input);
+				expect(f.requests).toHaveLength(1); expect(f.git('rev-parse', 'fixture-base')).toBe(f.base); expect(f.git('rev-parse', 'HEAD')).toBe(candidate);
 			} finally { await f.close(); }
 		}
 		expect(outcomes.every(status => status !== 'completed')).toBe(true);
+		const f = await portableKernel(); try {
+			const candidate = await f.candidate(), reply = f.getReply(); reply.usage = [
+				{ elapsedSeconds: 1.25, inputTokens: 6, outputTokens: 4, activeSeconds: 0.5, nativeUsage: { activeSeconds: 0.5 } },
+				{ elapsedSeconds: 2.75, inputTokens: 14, outputTokens: 6, activeSeconds: 0.75, nativeUsage: { activeSeconds: 0.75 } }];
+			f.setReply(reply); const before = structuredClone(reply), input = structuredClone(f.input.assignment), result = await f.run();
+			expect(result.status).toBe('completed'); expect(assignmentResultSchema.parse(result.outputs?.assignmentResult).usage).toEqual({
+				elapsedSeconds: 4, modelInputTokens: 20, modelOutputTokens: 10, native: { activeSeconds: 1.25 } });
+			expect(result.usage).toEqual(before.usage); expect(f.getReply()).toEqual(before); expect(f.input.assignment).toEqual(input);
+			expect(f.requests).toHaveLength(1); expect(f.git('rev-parse', 'HEAD')).toBe(candidate); expect(f.git('rev-parse', 'fixture-base')).toBe(f.base);
+		} finally { await f.close(); }
 	});
 	it('preserves exact read-only Git citations without requesting or manufacturing a mutable workspace', async () => {
 		const f = await portableKernel(); try {

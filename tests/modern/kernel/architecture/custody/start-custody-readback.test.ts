@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { assignmentAttemptSchema, compileWorkday, DEFAULT_WORKDAY_POLICY } from '@treeseed/sdk/agent-capacity';
-import { request } from '../provider-kernel-fixture.ts';
-import { verifyInitialStartCustody, verifyRecurringStartCustody } from '../../../acceptance/workday/campaign-observation.ts';
-import { state } from './golden-readback-fixture.ts';
-import { row, type Row } from '../../../acceptance/acceptance-cli.ts';
+import { request } from '../../provider-kernel-fixture.ts';
+import { verifyInitialStartCustody, verifyRecurringStartCustody } from '../../../../acceptance/workday/support/campaign-observation.ts';
+import { state } from '../golden-readback-fixture.ts';
+import { row, type Row } from '../../../../acceptance/acceptance-cli.ts';
+await import('../../../../acceptance/workday/start-custody.test.ts');
 
 function suppliedStart() {
 	const original = request().assignment.assignmentAttempt;

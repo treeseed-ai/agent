@@ -19,7 +19,7 @@ function key(reference: ExactEntityReference): string {
 export function prepareTreeDxContent(target: ExactEntityReference, rawValue: unknown) {
 	const value = record(rawValue), body = String(value.body ?? '').trim();
 	const frontmatter = record(value.frontmatter ?? Object.fromEntries(Object.entries(value).filter(([name]) => name !== 'body')));
-	const validation = validatePortableContentData(target.model, target.model === 'note' ? { ...frontmatter, body } : frontmatter);
+	const validation = validatePortableContentData(target.model, ['note', 'knowledge'].includes(target.model) ? { ...frontmatter, body } : frontmatter);
 	if (!validation.ok) throw new Error(`treedx_content_invalid:${JSON.stringify(validation.diagnostics)}`);
 	if (!body) throw new Error('treedx_content_body_required');
 	const validated = record(validation.data);
@@ -43,6 +43,8 @@ export async function commitTreeDxContent(input: {
 			|| !input.attempt.grant.contentWrite.some((candidate) => key(candidate) === key(target))) {
 			throw new Error('assignment_grant_denied:treedx.write');
 		}
+		const value = record(rawValue), frontmatter = record(value.frontmatter ?? value);
+		if (frontmatter.projectId !== input.attempt.projectId) throw new Error('treedx_content_project_mismatch');
 		const { content } = prepareTreeDxContent(target, rawValue);
 		return { target, content };
 	});

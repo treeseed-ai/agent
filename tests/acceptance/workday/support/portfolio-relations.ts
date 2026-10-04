@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { parse } from 'yaml';
 import { assignmentAttemptSchema, executionEdgeSchema, executionNodeSchema } from '@treeseed/sdk/agent-capacity';
-import { row, type Row } from '../acceptance-cli.ts';
+import { row, type Row } from '../../acceptance-cli.ts';
 
 // Acceptance assertions only. Expected relations come from the authoritative
 // document, never from returned graph edges or a second portfolio policy.

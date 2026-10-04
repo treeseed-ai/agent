@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { orderConnectionsForFairPolling } from '../../../../src/provider/teams/multi-team-runtime.ts';
 import { capacityFixture } from './capacity-fixture.ts';
 import { assignmentAttemptSchema } from '@treeseed/sdk/agent-capacity';
-import { verifyProviderLocalSlotClosure } from '../../../acceptance/workday/record-custody.ts';
+import { verifyProviderLocalSlotClosure } from '../../../acceptance/workday/support/record-custody.ts';
 import type { Row } from '../../../acceptance/acceptance-cli.ts';
 
 // Real files, lock/atomic rename, independent Node processes and actual wall

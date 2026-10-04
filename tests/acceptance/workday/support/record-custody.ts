@@ -8,8 +8,8 @@ import { parse } from 'yaml';
 import { assignmentAttemptSchema, assignmentResultSchema, capabilityAccountingLimitsSchema } from '@treeseed/sdk/agent-capacity';
 import { capabilityConformanceSchema, capabilityDefinitionSchema, capabilityDefinitionDigest, capabilityOfferSchema } from '@treeseed/sdk/capacity-provider';
 import { canonicalStandardsJson } from '@treeseed/sdk/standards';
-import { row, type Row } from '../acceptance-cli.ts';
-import { orderConnectionsForFairPolling } from '../../../src/provider/teams/multi-team-runtime.ts';
+import { row, type Row } from '../../acceptance-cli.ts';
+import { orderConnectionsForFairPolling } from '../../../../src/provider/teams/multi-team-runtime.ts';
 
 /** Signature custody only: a signed status/evidence digest is not independent
  * evidence that a qualification suite actually ran or passed. */

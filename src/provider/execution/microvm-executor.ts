@@ -1,5 +1,6 @@
 import { createHash, createPrivateKey, sign } from 'node:crypto';
 import { dirname, resolve } from 'node:path';
+import { setTimeout as delay } from 'node:timers/promises';
 import type { CapacityProviderManifestV5, SandboxAssignment } from '@treeseed/sdk/capacity-provider';
 import { assignmentTimingAwarenessReceiptSchema, providerEnvironmentReceiptSchema, sandboxAssignmentSchema, sandboxLeaseRenewalSchema, sandboxResultSchema } from '@treeseed/sdk/capacity-provider';
 import { assignmentAttemptSchema, type AssignmentReference } from '@treeseed/sdk/agent-capacity';
@@ -13,6 +14,7 @@ import { publishSourceBranch } from './source-branch-publication.ts';
 import { assignmentRuntimeSeconds } from './activity/context.ts';
 import { RenewalDrain } from './activity/renewal-drain.ts';
 import { assignmentOfferId } from './assignment-selection.ts';
+import { clockReading, timingAwarenessContract } from '../../sandbox/guest.ts';
 
 const canonical = (value: unknown): string => Array.isArray(value) ? `[${value.map(canonical).join(',')}]` : value && typeof value === 'object'
 	? `{${Object.entries(value as Record<string, unknown>).filter(([, item]) => item !== undefined).sort(([a], [b]) => a.localeCompare(b)).map(([key, item]) => `${JSON.stringify(key)}:${canonical(item)}`).join(',')}}` : JSON.stringify(value);
@@ -54,6 +56,11 @@ function contextBuildBody(value:Record<string,unknown>) {
 export async function executeAssignmentTreeDxTool(request:Parameters<AgentExecutor['execute']>[0],tool:string,arguments_:Record<string,unknown>, executionTime?: { startedAt: string; deadlineAt: string }) {
 	if (tool === 'treeseed_time_status') {
 		if (!executionTime) throw new Error('Productive execution has not started.');
+		const attempt = assignmentAttemptSchema.parse(request.assignment.assignmentAttempt ?? object(request.assignment.workspaceContext).assignmentAttempt);
+		const start = Date.parse(executionTime.startedAt), end = Date.parse(executionTime.deadlineAt);
+		if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start || start > Date.now()
+			|| start < Date.parse(attempt.createdAt) || end > Date.parse(attempt.deadline)
+			|| end - start > attempt.limits.maximumSeconds * 1_000) throw new Error('Assignment productive execution clock is invalid.');
 		return { startedAt: executionTime.startedAt, deadlineAt: executionTime.deadlineAt,
 			remainingSeconds: Math.max(0, Math.ceil((Date.parse(executionTime.deadlineAt) - Date.now()) / 1_000)) };
 	}
@@ -62,9 +69,20 @@ export async function executeAssignmentTreeDxTool(request:Parameters<AgentExecut
 	const allowed=Array.isArray(assignmentGrant.tools)?assignmentGrant.tools.map(String):[];
 	if(!TOOL_PERMISSION[tool]||!allowed.includes(TOOL_PERMISSION[tool])) throw new Error(`Activity profile does not authorize ${tool}.`);
 	if(!request.treeDx.repositoryId||!request.treeDx.baseRef) throw new Error('Assignment TreeDX current-view authority is unavailable.');
-	const selected=String(arguments_.project??arguments_.projectId??'').trim();
-	const currentGrant=request.treeDx.readRepositories?.find((candidate)=>candidate.repositoryId===request.treeDx.repositoryId);
-	const grant=selected?request.treeDx.readRepositories?.find((candidate)=>candidate.projectId===selected||candidate.projectSlug===selected||candidate.repositoryId===selected):currentGrant;
+	const inventory=request.treeDx.readRepositories??[];
+	const selectors=[arguments_.project,arguments_.projectId].filter(value=>value!==undefined);
+	if(selectors.some(value=>typeof value!=='string'||!value.trim()))throw new Error('Assignment TreeDX project selector is invalid.');
+	const selected=typeof selectors[0]==='string'?selectors[0].trim():'';
+	const current=inventory.filter(candidate=>candidate.repositoryId===request.treeDx.repositoryId);
+	if(current.length>1)throw new Error('Assignment TreeDX current repository is ambiguous.');
+	const matching=(selector:string)=>inventory.filter(candidate=>candidate.projectId===selector||candidate.projectSlug===selector||candidate.repositoryId===selector);
+	const matches=selected?matching(selected):current;
+	if(matches.length>1)throw new Error('Assignment TreeDX project selector is ambiguous.');
+	const grant=matches[0];
+	for(const selector of selectors.slice(1)) {
+		const alternate=matching(String(selector).trim());
+		if(alternate.length!==1||alternate[0]!==grant)throw new Error('Assignment TreeDX project selectors contradict each other.');
+	}
 	if(selected&&!grant&&selected!==request.treeDx.projectId)throw new Error(`Assignment has no TreeDX read grant for project ${selected}.`);
 	const path={projectId:grant?.projectId??request.treeDx.projectId,repoId:grant?.repositoryId??request.treeDx.repositoryId};
 	if(tool==='treedx_read_files') {
@@ -89,7 +107,8 @@ export function startSandboxToolPump(client: Pick<SandboxBrokerClient, 'nextTool
 	const completion = (async () => {
 		while (!controller.signal.aborted) {
 			const pending = await client.nextToolRequest(prepared.sandboxId, prepared.operationToken, controller.signal);
-			if (!pending.request) { await new Promise(resolve => setTimeout(resolve, 50)); continue; }
+			if (controller.signal.aborted) break;
+			if (!pending.request) { await delay(50, undefined, { signal: controller.signal }); continue; }
 			let payload: { result: unknown } | { error: string };
 			try {
 				payload = { result: await executeAssignmentTreeDxTool(request, pending.request.tool, pending.request.arguments, executionTime) };
@@ -204,14 +223,52 @@ export async function createMicrovmExecutor(config: ProviderHostRuntimeConfig, m
 					});
 					if (executionFailure) throw executionFailure;
 					if (!result) throw new Error('Sandbox broker returned no assignment result.');
-					artifacts = await Promise.all(result.artifacts.map(async (artifact) => ({ ...artifact, content: (await client.downloadArtifact(prepared.sandboxId, prepared.operationToken, artifact.id, artifact.bytes, request.signal)).toString('utf8') })));
+					if (result.sandboxId !== prepared.sandboxId || result.assignmentId !== assignment.assignmentId) throw Object.assign(new Error('Sandbox result does not match its owning assignment.'), { code: 'sandbox_result_correlation_mismatch' });
+					const artifactIds = new Set<string>();
+					for (const artifact of result.artifacts) {
+						const declared = assignment.outputs.find(output => output.id === artifact.id);
+						if (!declared || artifactIds.has(artifact.id) || artifact.path !== declared.path || artifact.mediaType !== declared.mediaType
+							|| !Number.isSafeInteger(artifact.bytes) || artifact.bytes < 0 || artifact.bytes > declared.maxBytes) throw Object.assign(new Error('Sandbox artifact is outside declared output authority.'), { code: 'sandbox_artifact_unauthorized' });
+						artifactIds.add(artifact.id);
+					}
+					artifacts = await Promise.all(result.artifacts.map(async artifact => {
+						const bytes = await client.downloadArtifact(prepared.sandboxId, prepared.operationToken, artifact.id, artifact.bytes, request.signal);
+						if (bytes.length !== artifact.bytes || `sha256:${createHash('sha256').update(bytes).digest('hex')}` !== artifact.digest) throw Object.assign(new Error('Sandbox artifact bytes disagree with their declared size or digest.'), { code: 'sandbox_artifact_integrity_invalid' });
+						return { ...artifact, content: bytes.toString('utf8') };
+					}));
+					if (result.status === 'completed') {
+						const events = object(result.diagnostics).providerEvents;
+						const receipt = timingAwarenessEvidence(result.timingAwareness);
+						const actual = Array.isArray(events) ? timingAwarenessContract(events.map(object)) : undefined;
+						const identities = new Set<string>(), pending = new Set<string>(); let remaining = Infinity, checkedBeforeBlocking = false;
+						let valid = !!actual && actual.completedChecks === receipt.completedChecks && actual.completedChecks >= 2 && actual.firstToolCompliant && actual.finalToolCompliant;
+						for (const event of Array.isArray(events) ? events : []) {
+							const row = object(event), item = object(row.item);
+							if (row.type === 'item.started' && ['command_execution', 'mcp_tool_call'].includes(String(item.type))) pending.add(String(item.id));
+							if (row.type !== 'item.completed') continue;
+							if (item.type === 'mcp_tool_call' && item.server === 'treedx' && item.tool === 'treeseed_time_status') {
+								const reading = clockReading(item.result);
+								if (typeof item.id !== 'string' || identities.has(item.id) || !reading || reading.startedAt !== executionStartedAt || reading.deadlineAt !== executionDeadlineAt
+									|| reading.remainingSeconds <= 0 || reading.remainingSeconds > remaining) valid = false;
+								identities.add(String(item.id)); remaining = reading?.remainingSeconds ?? remaining; checkedBeforeBlocking = true;
+							} else if (item.type === 'command_execution') { if (!checkedBeforeBlocking) valid = false; checkedBeforeBlocking = false; }
+							pending.delete(String(item.id));
+						}
+						if (!valid || pending.size) throw new Error('Completed sandbox result lacks valid timing-awareness evidence.');
+					}
 					if (result.status === 'completed' && current.source?.authorization.mode === 'work') sourceReference = await publishSourceBranch(client, prepared, current.source, assignment, result, request);
 				} catch (error) { transportFailure = error; } finally {
 					request.signal?.removeEventListener('abort', cancelSandbox);
 					const renewals = active.get(request.assignmentId)?.renewals;
 					active.delete(request.assignmentId);
 					await renewals?.close();
-					const receipt = await client.destroy(prepared.sandboxId, prepared.operationToken).catch(() => null); teardown = receipt && typeof receipt.teardown === 'object' ? receipt.teardown as Record<string, unknown> : teardown;
+					let destroyFailure: unknown;
+					const receipt = await client.destroy(prepared.sandboxId, prepared.operationToken).catch(error => { destroyFailure = error; return null; });
+					teardown = object(receipt?.teardown);
+					if (!receipt || receipt.sandboxId !== prepared.sandboxId || receipt.destroyed !== true || teardown.verified !== true
+						|| typeof teardown.completedAt !== 'string' || !Number.isFinite(Date.parse(teardown.completedAt)) || Date.parse(teardown.completedAt) > Date.now()) {
+						transportFailure = Object.assign(new Error('Sandbox teardown could not be independently verified.'), { code: 'sandbox_teardown_unverified', cause: destroyFailure ?? transportFailure });
+					}
 					try {
 						await request.emit?.({ type: 'sandbox.destroyed', occurredAt: new Date().toISOString(), summary: `Kata sandbox ${prepared.sandboxId} teardown ${teardown.verified === true ? 'verified' : 'could not be verified'}.`, payload: { sandboxId: prepared.sandboxId, teardown } });
 					} catch (error) { if (!request.signal?.aborted) throw error; }

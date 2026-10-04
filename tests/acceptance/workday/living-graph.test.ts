@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { verifyGraphProvenance, verifyPredecessorCustody } from './evidence-pages.ts';
+import { verifyGraphProvenance, verifyPredecessorCustody } from './support/evidence-pages.ts';
 import { read, row, type Row } from '../acceptance-cli.ts';
 import { readWorkdayAssignments, verifyGolden } from '../sdk-runtime-golden.test.ts';
 

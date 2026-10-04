@@ -1,9 +1,9 @@
 import { createHash } from 'node:crypto';
 import { assignmentAttemptSchema, assignmentResultSchema, executionEdgeSchema, executionNodeSchema } from '@treeseed/sdk/agent-capacity';
 import { exactDependencyLinkSchema } from '@treeseed/sdk/content-validation';
-import { request } from '../provider-kernel-fixture.ts';
-import { exactFileKey } from '../../../acceptance/workday/cross-project-custody.ts';
-import type { Row } from '../../../acceptance/acceptance-cli.ts';
+import { request } from '../../provider-kernel-fixture.ts';
+import { exactFileKey } from '../../../../acceptance/workday/support/cross-project-custody.ts';
+import type { Row } from '../../../../acceptance/acceptance-cli.ts';
 
 // Supplied UNIT inputs only. No API admission, actual review, relation creation,
 // provider charge, native clocks or physical closure evidence is manufactured.

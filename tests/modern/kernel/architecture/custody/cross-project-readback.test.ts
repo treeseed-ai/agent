@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { state } from './golden-readback-fixture.ts';
-import { row } from '../../../acceptance/acceptance-cli.ts';
-import { exactFileKey, verifyCrossProjectCustody } from '../../../acceptance/workday/cross-project-custody.ts';
+import { state } from '../golden-readback-fixture.ts';
+import { row } from '../../../../acceptance/acceptance-cli.ts';
+import { exactFileKey, verifyCrossProjectCustody } from '../../../../acceptance/workday/support/cross-project-custody.ts';
 import { crossProjectReadbackInputs } from './cross-project-readback-fixture.ts';
-await import('../../../acceptance/workday/cross-project.test.ts');
+await import('../../../../acceptance/workday/cross-project.test.ts');
 
 const check = (f: ReturnType<typeof crossProjectReadbackInputs>) => verifyCrossProjectCustody(f.graph, f.items, f.notes, f.decisions);
 describe('managed cross-project exact relation assertion contracts', () => {

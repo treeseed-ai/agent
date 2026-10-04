@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { promptFromContext } from '../../../src/sandbox/guest-contract.ts';
+import { promptFromContext } from '../../../../src/sandbox/guest-contract.ts';
 
 describe('estimating predecessor context', () => {
 	it('bounds result summaries and drops usage while retaining exact content references', () => {

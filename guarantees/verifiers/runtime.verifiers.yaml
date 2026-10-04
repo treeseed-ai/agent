@@ -4,7 +4,7 @@ verifiers:
   agent.golden.execution-global-selection-live-1:
     kind: nodeTestCase
     ownerPackage: "@treeseed/agent"
-    testFile: tests/acceptance/workday/record-custody.test.ts
+    testFile: tests/acceptance/workday/provider-custody.test.ts
     testName: "Actual global provider retains original multi-team polling choices beside complete public terminal attempts and unchanged exactly-once charges without reconstructing historical eligibility"
   agent.golden.execution-integration-identity-live-1:
     kind: nodeTestCase
@@ -34,7 +34,7 @@ verifiers:
   agent.golden.execution-provider-cutover-live-1:
     kind: nodeTestCase
     ownerPackage: "@treeseed/agent"
-    testFile: tests/acceptance/workday/record-custody.test.ts
+    testFile: tests/acceptance/workday/provider-custody.test.ts
     testName: "Actual managed provider retains one exact current manifest and packaged read-only plan without compatibility translation or changed execution history"
   agent.golden.execution-physical-absence-live-1:
     kind: nodeTestCase
@@ -224,7 +224,7 @@ verifiers:
   agent.execution-provider.codex.contract:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"
-    testFile: tests/modern/execution/codex-chat-executor.test.ts
+    testFile: tests/modern/execution/timing/guest-clock-contract.test.ts
     testName: requires clock checks to bracket every other provider tool action
   agent.runtime.enforce-provider-local-budget:
     kind: vitestCase
@@ -244,7 +244,7 @@ verifiers:
   agent.runtime.assignment-time-status:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"
-    testFile: tests/modern/execution/codex-chat-executor.test.ts
+    testFile: tests/modern/execution/timing/guest-clock-contract.test.ts
     testName: reports remaining time from the API-started productive window without a content grant
   agent.trace.inspect-execution:
     kind: vitestCase
@@ -259,7 +259,7 @@ verifiers:
   agent.trace.redact-provider-secrets:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"
-    testFile: tests/modern/execution/codex-chat-executor.test.ts
+    testFile: tests/modern/execution/codex/codex-chat-executor.test.ts
     testName: preserves tool and model progress categories without secret-bearing payloads
   agent.architecture.normalize-activity-profile-agent:
     kind: vitestCase
@@ -279,7 +279,7 @@ verifiers:
   agent.architecture.enforce-activity-profile-tool-scope:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"
-    testFile: tests/modern/execution/codex-context.test.ts
+    testFile: tests/modern/execution/codex/codex-context.test.ts
     testName: binds live TreeDX tools to profile policy, repository, and exact ref
   agent.architecture.enforce-assignment-feature-branch-policy:
     kind: vitestCase

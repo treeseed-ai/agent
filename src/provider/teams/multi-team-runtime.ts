@@ -50,6 +50,7 @@ export function orderConnectionsForFairPolling<T extends { connection: { id: str
 	}
 	const teamUsage = new Map<string, number>();
 	for (const [connectionId, seconds] of Object.entries(snapshot.activeSecondsByConnection ?? {})) {
+		if (!Number.isFinite(seconds) || seconds < 0) throw new Error('Provider-local fair-polling accounting is invalid.');
 		const teamId = teamForConnection.get(connectionId);
 		if (teamId) teamUsage.set(teamId, (teamUsage.get(teamId) ?? 0) + seconds);
 	}
@@ -175,7 +176,11 @@ export async function runMultiTeamProviderRunners(
 	config: ProviderHostRuntimeConfig,
 	options: { mode?: 'plan' | 'live'; background?: boolean } = {},
 ) {
-	if (options.mode === 'plan') return buildProviderRunnerPlan(config);
+	if (options.mode === 'plan') {
+		if (!config.manifestPath) throw new Error('A capacity provider manifest is required.');
+		await loadProviderManifest(config.manifestPath, config.dataDir);
+		return buildProviderRunnerPlan(config);
+	}
 	if (!/^sha256:[a-f0-9]{64}$/u.test(config.env.TREESEED_PROVIDER_RUNTIME_BUILD ?? ''))
 		throw new Error('provider_runtime_build_unpinned');
 	const loaded = await loadProviderManifest(config.manifestPath ?? '', config.dataDir);

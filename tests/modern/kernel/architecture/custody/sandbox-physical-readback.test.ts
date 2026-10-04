@@ -2,10 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { request } from '../provider-kernel-fixture.ts';
+import { request } from '../../provider-kernel-fixture.ts';
 import { assignmentAttemptSchema } from '@treeseed/sdk/agent-capacity';
-import { row, type Row } from '../../../acceptance/acceptance-cli.ts';
-import { verifySandboxDirectoryAbsence, verifySandboxHostAbsence } from '../../../acceptance/workday/record-custody.ts';
+import { row, type Row } from '../../../../acceptance/acceptance-cli.ts';
+import { verifySandboxDirectoryAbsence, verifySandboxHostAbsence } from '../../../../acceptance/workday/support/record-custody.ts';
 
 function supplied() {
 	const original = request().assignment.assignmentAttempt;

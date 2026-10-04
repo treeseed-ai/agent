@@ -15,7 +15,7 @@ export const objectDigest = (value: unknown) => `sha256:${createHash('sha256').u
 /** Convert model-reported passing checks into runner-observed evidence. */
 export async function verifyReportedActivityCommands(report: ActivityCompletionReport,
 	execute: (command: string) => Promise<void> = async (command) => {
-		await run('/bin/sh', ['-lc', command], { cwd: '/workspace/project', timeoutMs: 120_000 });
+		await run('/bin/sh', ['-c', command], { cwd: '/workspace/project', timeoutMs: 120_000 });
 	}) {
 	for (const command of reportedVerificationCommands(report)) {
 		try { await execute(command); }
@@ -41,7 +41,7 @@ export async function observeReportedActivityCommands(report: ActivityCompletion
 	for (const command of commands) {
 		const started = process.hrtime.bigint(); let failedOutput = '';
 		try {
-			const output = await execute('/bin/sh', ['-lc', command], { cwd: '/workspace/project', captureStdout: true,
+			const output = await execute('/bin/sh', ['-c', command], { cwd: '/workspace/project', captureStdout: true,
 				maxStdoutBytes: 8_388_608, timeoutMs: 120_000,
 				onLine: line => { failedOutput = `${failedOutput}\n${redactProviderDiagnostic(line, secrets)}`.slice(-1_024); } });
 			verification.push({ command, status: 'passed' as const, exitCode: 0,
@@ -56,7 +56,7 @@ export async function observeReportedActivityCommands(report: ActivityCompletion
 			// Only actual assertion failures are test-first red evidence. Setup failures,
 			// killed processes and unknown exits remain fatal even in a test-first scope.
 			if (observed.exitCode === 1 && /\bFAIL\s+\S+\.test\.tsx?\s+>/u.test(output) && /\bAssertionError\b/u.test(output)
-				&& !/Cannot find module|Failed to load|heap out of memory|Unhandled Error/iu.test(output)) {
+				&& !/Cannot find module|Failed to load|heap out of memory|Unhandled Error|SyntaxError|TypeError|ReferenceError|timed?\s*out|timeout|\bskipped\b|\btodo\b/iu.test(output)) {
 				const corrected = correctObservedTestFirstRedVerification(report,
 					[{ type: 'item.completed', item: { type: 'command_execution', command, exit_code: 1 } }],
 					text(assignment.agentClass), text(record(assignment.effectiveProfile).activity), assignment.acceptanceCriteria);

@@ -1,12 +1,15 @@
 import { createHash } from 'node:crypto';
+import { isDeepStrictEqual } from 'node:util';
 import { canonicalStandardsJson } from '@treeseed/sdk/standards';
 import {
 	authorizedContextItemSchema,
+	assignmentResultSchema,
 	type AssignmentAttempt,
 	type AssignmentContext,
 	type ExactEntityReference,
 } from '@treeseed/sdk/agent-capacity';
 import type { AssignmentTreeDxFacade } from '../provider/execution/contracts.ts';
+import { assertAssignmentContextRead } from './granted-runtime.ts';
 
 const record = (value: unknown): Record<string, unknown> =>
 	value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -26,8 +29,11 @@ function digest(value: unknown): string {
 }
 
 function projectFor(reference: ExactEntityReference, treeDx: AssignmentTreeDxFacade): string {
-	return treeDx.readRepositories?.find((candidate) => candidate.repositoryId === reference.repository)?.projectId
-		?? treeDx.projectId;
+	const matches = (treeDx.readRepositories ?? []).filter(candidate => candidate.repositoryId === reference.repository);
+	if (matches.length > 1) throw new Error('assignment_context_repository_ambiguous');
+	if (matches.length === 1) return matches[0]!.projectId;
+	if (reference.repository === treeDx.repositoryId) return treeDx.projectId;
+	throw new Error('assignment_context_repository_ungranted');
 }
 
 async function readReference(reference: ExactEntityReference, treeDx: AssignmentTreeDxFacade) {
@@ -54,7 +60,7 @@ async function readReference(reference: ExactEntityReference, treeDx: Assignment
 		throw new Error(`assignment_context_read_failed:${reference.id}:${reference.commit}:${reference.path}:${message}`, { cause: error });
 	}
 	const result = payload(response);
-	const resolvedRef = String(result.resolvedRef ?? reference.commit);
+	const resolvedRef = result.resolvedRef;
 	if (resolvedRef !== reference.commit) throw new Error(`assignment_context_reference_moved:${reference.id}`);
 	const file = record(Array.isArray(result.files) ? result.files[0] : result.file);
 	const requestedPath = String(file.requestedPath ?? file.logicalPath ?? file.path ?? reference.path);
@@ -76,12 +82,28 @@ async function readReference(reference: ExactEntityReference, treeDx: Assignment
 	return authorizedContextItemSchema.parse({ ref: reference, mediaType: 'text/mdx', digest: digest(value), value });
 }
 
+export function assertPredecessorResultAuthority(attempt: AssignmentAttempt, results: AssignmentContext['predecessorResults']): void {
+	const expected = attempt.predecessorResultIds;
+	if (new Set(expected).size !== expected.length || results.length !== expected.length
+		|| new Set(results.map(result => result.id)).size !== results.length
+		|| new Set(results.map(result => result.assignmentId)).size !== results.length
+		|| results.some(result => !expected.includes(result.id) || result.assignmentId === attempt.id)) {
+		throw new Error('assignment_predecessor_result_authority_mismatch');
+	}
+	for (const result of results) if (!isDeepStrictEqual(assignmentResultSchema.parse(result), result)) {
+		throw new Error('assignment_predecessor_result_invalid');
+	}
+}
+
 export async function materializeAssignmentContext(input: {
 	attempt: AssignmentAttempt;
 	predecessorResults: AssignmentContext['predecessorResults'];
 	authorizedContext?: unknown[];
 	treeDx: AssignmentTreeDxFacade;
 }): Promise<AssignmentContext> {
+	assertPredecessorResultAuthority(input.attempt, input.predecessorResults);
+	const refs = input.attempt.contextRefs.map(canonicalStandardsJson);
+	if (new Set(refs).size !== refs.length) throw new Error('assignment_context_reference_duplicate');
 	const inline = (input.authorizedContext ?? []).map(value => authorizedContextItemSchema.parse(value));
 	const reporting = input.attempt.effectiveProfile.activity === 'reporting';
 	if ((reporting && inline.length !== 1) || (!reporting && inline.length)) throw new Error('assignment_inline_context_denied');
@@ -92,6 +114,11 @@ export async function materializeAssignmentContext(input: {
 			|| item.ref.id !== input.attempt.workdayId || value.workdayId !== input.attempt.workdayId
 			|| value.teamId !== input.attempt.teamId || item.digest !== digest(item.value)) {
 			throw new Error('assignment_inline_context_authority_mismatch');
+		}
+	}
+	for (const reference of input.attempt.contextRefs) {
+		if (!inline.some(item => canonicalStandardsJson(item.ref) === canonicalStandardsJson(reference))) {
+			assertAssignmentContextRead(reference, input.attempt.grant);
 		}
 	}
 	const context = await Promise.all(input.attempt.contextRefs.map(reference => {

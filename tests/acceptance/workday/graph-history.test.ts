@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { completeGraphHistory } from './evidence-pages.ts';
+import { completeGraphHistory } from './support/evidence-pages.ts';
 import { read, row, type Row } from '../acceptance-cli.ts';
 
 test('Complete graph watch retains every canonical revision through explicit terminal read and stable independent current graph', { timeout: 120_000 }, () => {

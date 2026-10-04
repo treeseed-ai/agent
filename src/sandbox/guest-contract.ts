@@ -56,7 +56,6 @@ export function completionFrontmatterSchema(context: Record<string, unknown>) {
 		return estimateProposalOutputSchema(proposal, text(assignment.agentClass), text(assignment.workItemId) || undefined);
 	}
 	if (text(profile.activity) !== 'acting' || text(record(assignment.workspace).mode) !== 'treedx' || text(profile.handler) !== 'writer') return undefined;
-	if (text(assignment.agentClass) === 'architect') return describeContentFrontmatterJsonSchema('knowledge');
 	const grants = record(assignment.grant).contentWrite;
 	const models = [...new Set((Array.isArray(grants) ? grants : []).map(reference => text(record(reference).model)))];
 	return models.length ? { anyOf: models.map(model => {
@@ -70,7 +69,7 @@ export function completionOutputTargetVariants(context: Record<string, unknown>)
 	if (text(profile.activity) !== 'acting' || text(record(assignment.workspace).mode) !== 'treedx' || text(profile.handler) !== 'writer') return [];
 	const grants = record(assignment.grant).contentWrite;
 	return (Array.isArray(grants) ? grants : []).map(record)
-		.filter((target) => text(target.id) && (text(assignment.agentClass) !== 'architect' || text(target.model) === 'knowledge'))
+		.filter((target) => text(target.id))
 		.map((target) => {
 			const model = text(target.model), id = text(target.id);
 			if (!isPortableContentModel(model)) throw new Error('writer_content_model_invalid');
@@ -124,19 +123,8 @@ export function promptFromContext(context: Record<string, unknown>, reasoningEff
 		const acceptanceCriteria = Array.isArray(assignment.acceptanceCriteria) ? assignment.acceptanceCriteria.map(text).filter(Boolean) : [];
 		const workspace = record(assignment.workspace);
 		const attachedSourceCommit = text(record(record(context.projectManifest).source).commit);
-		const gitPredecessors = text(workspace.mode) === 'git'
-			? [...new Set(predecessors.flatMap((value) => {
-				const references = record(value).references;
-				return Array.isArray(references) ? references.map(record)
-					.filter((reference) => text(reference.kind) === 'git'
-						&& text(reference.repository) === text(workspace.repository)
-						&& text(reference.commit) !== text(workspace.baseCommit))
-					.map((reference) => text(reference.commit)) : [];
-			}))] : [];
 		const gitWorkspaceAuthority = text(workspace.mode) === 'git'
-			? `Git workspace authority: keep HEAD descended from the assigned base commit ${text(workspace.baseCommit)}. Do not checkout, reset, rebase, or otherwise move the assigned worktree onto an older or unrelated revision. Inspect historical revisions with read-only Git commands or an exported temporary copy, then commit the final candidate on the assigned branch.${gitPredecessors.length
-				? ` The final commit must also descend from these exact authorized predecessor commits: ${gitPredecessors.join(', ')}. Check ancestry for each. When one is not already an ancestor, integrate it with a real Git merge on the assigned branch, resolve conflicts, and verify both the base and every predecessor are ancestors before completion. Merely copying or cherry-picking changes does not preserve required ancestry. If an authorized commit is unavailable or cannot be safely integrated, report that blocker instead of claiming completion.`
-				: ''}`
+			? `Git workspace authority: keep HEAD descended from the assigned base commit ${text(workspace.baseCommit)}. Do not checkout, reset, rebase, or otherwise move the assigned worktree onto an older or unrelated revision. Inspect historical revisions with read-only Git commands or an exported temporary copy, then commit the final candidate on the assigned branch. Predecessor references are read context, not authority to change the assigned base or merge additional commits.`
 			: '';
 		const estimating = text(profile.handler) === 'estimate';
 		// Estimates use predecessor contributions as orientation, not as a second
@@ -149,16 +137,12 @@ export function promptFromContext(context: Record<string, unknown>, reasoningEff
 		}) : predecessors;
 		const releasing = text(profile.handler) === 'releaser';
 		const reviewingRelease = isReleaseReview(assignment);
-		const architectKnowledge = text(assignment.agentClass) === 'architect' && text(profile.activity) === 'acting'
-			&& text(record(assignment.workspace).mode) === 'treedx';
 		const targetPairs = completionOutputTargetVariants(context).map(({ model, frontmatter }) =>
 			`${model}/${text(record(record(frontmatter.properties).id).const)}`);
 		const proposalOutput = estimating
 			? `This estimating assignment must return contentOutput with model "proposal", a substantive Markdown body, and the compact estimate patch required by the output schema. ${text(assignment.workItemId) ? 'Return the one estimate payload bound to this assignment; do not repeat a work-item id.' : 'Include each Reviewer-owned work item with its exact id and reviewEstimate.'} AgentKernel maps the patch into the exact assigned proposal and preserves every other field. Put rationale inside each estimate and source evidence in contentOutput.body, citing the attached Git repository and its exact source commit. Never attribute source paths to the TreeDX library commit. Cite predecessor contributions in contentOutput.body only: never copy their estimates into other work items. Use the exact proposal write target and source authority in the assignment. Do not create a Note or a separate estimate artifact.`
 			: text(profile.activity) === 'acting' && text(record(assignment.workspace).mode) === 'treedx' && text(profile.handler) === 'writer'
-				? architectKnowledge
-					? 'Return contentOutput with model exactly "knowledge" and the exact authorized Knowledge write target ID. Its frontmatter must include schemaVersion "treeseed.knowledge-page/v2", this projectId, and bookRef equal to the exact authorized Architecture Book reference in context. A Note or Book output is invalid. AgentKernel validates and commits this page. Copy every related reference ID, commit, and digest exactly from the authorized context, never from memory. Return verification: []: source inspection belongs in the page body and AgentKernel performs the exact commit read-back; do not report source searches or chained commands as executable acceptance checks.'
-					: `Return one substantive contentOutput satisfying the assigned acceptance criteria. Choose exactly one authorized model/ID pair: ${targetPairs.join(', ')}. Set contentOutput.model and contentOutput.frontmatter.id to that same pair. AgentKernel validates and commits this output in your one TreeDX workspace; you do not need a separate write tool. Do not substitute a Note for required Book or Knowledge output.`
+				? `Return one substantive contentOutput satisfying the assigned acceptance criteria. Choose exactly one authorized model/ID pair: ${targetPairs.join(', ')}. Set contentOutput.model and contentOutput.frontmatter.id to that same pair. AgentKernel validates and commits this output in your one TreeDX workspace; you do not need a separate write tool. Do not substitute a Note for required Book or Knowledge output.`
 				: 'Return contentOutput as null unless this handler explicitly requires governed content output.';
 		const authorized = items.map((item) => `Reference: ${JSON.stringify(item.ref)}\nDigest: ${text(item.digest)}\n\n${JSON.stringify(item.value)}`).join('\n\n');
 		return [
@@ -173,7 +157,7 @@ export function promptFromContext(context: Record<string, unknown>, reasoningEff
 			originalGitSources.length && text(profile.activity) === 'reviewing'
 				? 'Compare the entire candidate tree against the original work-item project Git source, not HEAD^ or the previous Actor commit. Keep earlier candidate commits in the coverage audit while checking the requested correction and regressions. A last-commit diff shows only the correction, not all delivered work. For failing-on-base tests, the original source is the frozen implementation baseline; the attached candidate includes all test revisions. Inspect both exact refs independently before choosing a disposition.' : '',
 			gitWorkspaceAuthority,
-			attachedSourceCommit ? `The exact attached project Git source commit is ${attachedSourceCommit}. Use this commit for citations to project source files. TreeDX library and proposal commits are different repositories and must never be cited as project Git source commits.` : '',
+			attachedSourceCommit ? `Attached Git source authority: ${attachedSourceCommit}. Use this commit for citations to project source files. TreeDX library and proposal commits are different repositories and must never be cited as project Git source commits.` : '',
 			'Use only the exact authorized context and predecessor results below. The attached repository root is /workspace/project. Inspect it with ordinary shell and Git commands whenever source is attached; do not answer from supplied summaries alone. Use the treedx_* MCP tools for governed knowledge. The trsd CLI is intentionally absent from assignment guests. Do not claim an inspection or verification you did not perform.',
 			'The authorized context below is already materialized at its exact refs. Do not rebuild that same context with treedx_build_context or rediscover supplied IDs, Books, proposals, or source commits. Read a missing or incomplete exact reference when needed; required predecessor read-back still applies. Batch independent targeted source reads. Produce a concise, decision-complete result covering every acceptance criterion, without repeating the supplied background or broadening the assignment.',
 			text(profile.activity) === 'reviewing'
@@ -198,23 +182,20 @@ export function promptFromContext(context: Record<string, unknown>, reasoningEff
 				? `${reviewingRelease ? 'Audit the measured current-attempt receipts for' : 'When packed exports or declarations are required, use'} the repository-owned standalone archive verification command against the tarball packed in this workspace${reviewingRelease ? '; do not execute an already observed check again' : ', and report its actual measured result'}. Discover the archive option in the existing package scripts and verifier source; do not replace executable archive verification with a summary, an untracked inline program, or the other role's receipt. If the repository lacks that check, report the missing replayable check as an unmet criterion rather than claim it passed.`
 				: '',
 			acceptanceCriteria.length ? `Work-item acceptance criteria:\n${JSON.stringify(acceptanceCriteria)}` : 'No additional work-item acceptance criteria were supplied.',
-			text(profile.activity) === 'reviewing' && acceptedDecision && text(assignment.agentClass) === 'reviewer'
+			text(profile.activity) === 'reviewing' && acceptedDecision && acceptanceCriteria.some(criterion => /report failing test names and paths/iu.test(criterion))
 				? 'For a test-first result, distinguish intended red tests from already-correct boundaries: independently passing frozen-base checks are valid evidence and need not be made to fail. On the FIRST review, audit both the test diff and the durable Actor result summary. If the work item requires failing test names and paths, the summary must enumerate the exact names and paths observed in the focused frozen-base run; a generic claim that tests were added is not evidence. Report this omission together with every coverage gap on the first request-changes disposition. Request changes only for an actual uncovered acceptance criterion, not because every test did not turn red.'
 				: '',
-			text(profile.activity) === 'acting' && text(assignment.agentClass) === 'tester'
+			text(profile.activity) === 'acting' && acceptanceCriteria.some(criterion => /report failing test names and paths/iu.test(criterion))
 				? 'For test-first work, map every work-item acceptance criterion to an independently runnable assertion before committing. Assert exact observable values, paths, ordering, and serialized bytes wherever the criterion requires them; substring matches do not prove an exact contract. For a portable request contract, assert the complete expected serialized object and exact JSON bytes, including absent fields and digests; a partial expected object or subset check is insufficient. Test optional-field omission and presence in separate fixtures; never replace an omission test with a presence test during revision. Prove an excluded input is absent from serialized bytes separately from proving its validation diagnostic. When criteria require rejection before normalization, never expect a rejected input to normalize successfully; assert rejection and valid-input serialization separately. When an exact field allowlist is required, compare the runtime allowlist with the entire expected list and prove arbitrary unknown input keys are rejected through the actual runtime key-validation path. When a command binding has both catalog and canonical-tree declarations, assert both rather than inspecting only one. Cover both sides of each stated boundary and every named forbidden field. Keep expected frozen-base failures separate so an earlier failure cannot hide evidence for another criterion. An already-correct behavior may pass on the frozen base; record that passing boundary instead of forcing it red. Include policy-vs-intent exclusions explicitly when the criterion names them. Before completing, audit each acceptance sentence against a specific test assertion, including boundary and absence cases; if any sentence lacks an assertion, add it before committing. On revision, preserve every previously covered criterion while correcting the Reviewer findings. Run the focused suite. In completion.summary, include a section headed "Frozen-base failing tests:" with the exact test file path and verbatim name of EACH failing test observed, plus the focused command and exit code. A generic statement that tests were added or failed does not satisfy this result contract. Intentional red tests are not passing verification; never report them as passed.'
 				: '',
 			authorized ? `Authorized context:\n${authorized}` : 'No additional context references were authorized.',
 			predecessors.length ? `Predecessor results${estimating ? ' (bounded excerpts; use exact references for full content)' : ''}:\n${JSON.stringify(predecessorPrompt)}` : 'There are no predecessor results.',
 			planningSynthesisInstruction(context),
 			proposalOutput,
-			text(profile.activity) === 'acting' && text(workspace.mode) === 'treedx' && text(profile.handler) === 'writer'
-				? 'For every source-backed claim, cite the exact authorized project Git commit and the source seam that proves it. A negative claim about what is absent from serialized request bytes needs evidence from the actual serializer or request-construction path; a type declaration or policy field alone does not prove serialization. Distinguish declared types and desired policy from observed runtime behavior. Trace each named field through the actual parsing, validation, and serialization path before claiming exclusion or rejection. If authorized sources cannot prove a criterion, state the limitation and cite the exact inspected scope; never infer implementation from the requirement or substitute another repository or commit. Audit every acceptance criterion against these findings before completing, including on revision: correct the requested finding without dropping evidence for the other criteria.'
-				: '',
 			text(profile.activity) === 'planning' && text(profile.handler) === 'writer'
 				? 'Return your substantive planning contribution in completion.summary and contentOutput: null. AgentKernel commits that summary as the granted TreeDX Note after you finish; no content-write tool is needed or exposed. Do not create or commit a planning file in the project checkout, claim publication happened inside the guest, or report the absence of a write tool as a blocker. The durable assignment result will contain the exact committed Note reference. Planning may inspect source and propose work, but must not implement, deploy, or release it.'
 				: '',
-			text(assignment.agentClass) === 'researcher' && text(profile.activity) === 'acting'
+			text(profile.handler) === 'writer' && text(profile.activity) === 'acting' && acceptanceCriteria.some(criterion => /do not claim test verification/iu.test(criterion))
 				? 'Research findings are content and source inspection, not executable acceptance. Return verification: [] unless this exact work-item criterion expressly requires an executable verification command. If it says not to claim test verification, verification must be [] even if you ran exploratory Git checks. Never place a chained command, shell script, or search in verification. In contentOutput.frontmatter.relatedRefs, include a Git reference only when it has both the exact authorized repository ID and its 40-character source commit; otherwise omit that optional reference and cite the path and observed source commit in contentOutput.body. Do not use a TreeDX library commit as a Git source commit.'
 				: '',
 			estimating
@@ -229,9 +210,6 @@ export function promptFromContext(context: Record<string, unknown>, reasoningEff
 			'For Git work, commit every intended change and leave the worktree clean. The verification field is only for deliberate acceptance checks with a defined pass condition; never include exploratory search or inspection commands such as rg, grep, find, ls, cat, sed, or git status there. When an acceptance criterion requires verification, run and report at least one project-specific executable check; git diff --check alone is not sufficient. Report the exact standalone acceptance commands actually run, with their observed pass or fail status and exit code; never mark a failure passed. Every reported command must be syntactically complete with balanced quotes; prefer a short standard project check over a complex inline program. A search that finds no matches exits nonzero: treat that as a finding, never as passing verification. If a command was originally executed with chaining, redirection, substitution, or a script, omit it completely; never rewrite it into a cleaner command for the report. Put each command in its own JSON array item; never join commands with &&, ||, ;, redirection, command substitution, or a shell script. Tool authority is enforced by the assignment grant.',
 			`Assigned reasoning effort: ${reasoningEffort || 'provider-default'}.`,
 			`Productive execution budget: ${(executionSeconds ?? text(record(assignment.limits).maximumSeconds)) || 'unknown'} seconds. When time is short, stop broadening scope and finish the highest-value verified result.`,
-			architectKnowledge && attachedSourceCommit
-				? `FINAL SOURCE AUDIT: In contentOutput.body, every phrase claiming an SDK or project Git source commit must use exactly ${attachedSourceCommit}. Check every such citation against this literal before your final clock call. A TreeDX Book, Objective, proposal, or library commit may be cited only with its TreeDX repository/model label; it is NEVER the SDK Git source commit. A response that calls another hash the SDK commit is rejected before publication.`
-				: '',
 			timingStartReminder,
 		].join('\n\n');
 	}
@@ -245,8 +223,8 @@ export function promptFromContext(context: Record<string, unknown>, reasoningEff
 }
 
 
-export function assertArchitectSourceCitation(completion: ActivityCompletionReport | null, exactSourceCommit: string | null, agentClass: string, activity: string) {
-	if (agentClass !== 'architect' || activity !== 'acting' || !exactSourceCommit) return;
+export function assertArchitectSourceCitation(completion: ActivityCompletionReport | null, exactSourceCommit: string | null, _agentClass: string, activity: string) {
+	if (activity !== 'acting' || !exactSourceCommit || completion?.contentOutput?.model !== 'knowledge') return;
 	const body = text(record(completion?.contentOutput).body);
 	if (!body.includes(exactSourceCommit)) throw new Error(`project_source_commit_citation_missing:${exactSourceCommit}`);
 	const assertedSourceCommits = [...body.matchAll(/\b(?:SDK|project)\s+(?:(?:Git|source)\s+){0,2}commit\s+`?([a-f0-9]{40})/giu)]
@@ -256,8 +234,8 @@ export function assertArchitectSourceCitation(completion: ActivityCompletionRepo
 	}
 }
 
-export function assertTesterFailureEvidence(completion: ActivityCompletionReport | null, agentClass: string, activity: string, acceptanceCriteria: unknown) {
-	if (agentClass !== 'tester' || activity !== 'acting') return;
+export function assertTesterFailureEvidence(completion: ActivityCompletionReport | null, _agentClass: string, activity: string, acceptanceCriteria: unknown) {
+	if (activity !== 'acting') return;
 	const criteria = Array.isArray(acceptanceCriteria) ? acceptanceCriteria.map(text).join(' ') : '';
 	if (!/report failing test names and paths/iu.test(criteria)) return;
 	const summary = completion?.summary ?? '';
@@ -268,7 +246,7 @@ export function assertTesterFailureEvidence(completion: ActivityCompletionReport
 
 export function attachObservedTesterFailures(completion: ActivityCompletionReport | null, events: Array<Record<string, unknown>>,
 	agentClass: string, activity: string, acceptanceCriteria: unknown): ActivityCompletionReport | null {
-	if (!completion || agentClass !== 'tester' || activity !== 'acting') return completion;
+	if (!completion || activity !== 'acting') return completion;
 	const criteria = Array.isArray(acceptanceCriteria) ? acceptanceCriteria.map(text).join(' ') : '';
 	if (!/report failing test names and paths/iu.test(criteria) || completion.summary.includes('Frozen-base failing tests:')) return completion;
 	for (const event of [...events].reverse()) {
@@ -289,8 +267,7 @@ export function correctObservedTestFirstRedVerification(completion: ActivityComp
 	agentClass: string, activity: string, acceptanceCriteria: unknown): ActivityCompletionReport {
 	const criteria = Array.isArray(acceptanceCriteria) ? acceptanceCriteria.map(text).join(' ') : '';
 	const testFirst = /report failing test names and paths|failing-on-base|tests?[^.]*fail on (?:the )?frozen base/iu.test(criteria);
-	if (!testFirst || !((agentClass === 'tester' && activity === 'acting')
-		|| (agentClass === 'reviewer' && activity === 'reviewing'))) return completion;
+	if (!testFirst || !['acting', 'reviewing'].includes(activity)) return completion;
 	const failedCommands = new Map<string, number>();
 	for (const event of events) {
 		const item = record(event.item), command = text(item.command), exitCode = Number(item.exit_code);
@@ -382,7 +359,8 @@ function hasUnsafeShellControl(command: string) {
 	return quote !== null || escaped;
 }
 /** The same permission controls output verification and eager dependency restoration. */
-export function activityAllowsVerification(activity: string, agentClass: string, workspaceMode: string): boolean {
+export function activityAllowsVerification(activity: string, _agentClass: string, _workspaceMode: string, acceptanceCriteria?: unknown): boolean {
 	return !['planning', 'estimating', 'chat'].includes(activity)
-		&& !(activity === 'acting' && agentClass === 'architect' && workspaceMode === 'treedx');
+		&& !(Array.isArray(acceptanceCriteria) && acceptanceCriteria.some(criterion =>
+			typeof criterion === 'string' && /(?:do not|must not|not to) (?:claim|report) test verification/iu.test(criterion)));
 }

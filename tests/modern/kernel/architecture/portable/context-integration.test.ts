@@ -10,8 +10,8 @@ import { portableKernel, portableProfile } from './portable-kernel-fixture.ts';
 import { contextBoundary, exactContext } from './context-fixture.ts';
 import { timingAwareness } from '../../provider-kernel-fixture.ts';
 import { row } from '../../../../acceptance/acceptance-cli.ts';
-import { verifyReviewFindingContent } from '../../../../acceptance/workday/decision-evidence.ts';
-import { verifyDraftProposalHandoff, verifyUnfinishedDraftHandoff } from '../../../../acceptance/workday/assignment-authority.ts';
+import { verifyReviewFindingContent } from '../../../../acceptance/workday/support/decision-evidence.ts';
+import { verifyDraftProposalHandoff, verifyUnfinishedDraftHandoff } from '../../../../acceptance/workday/support/assignment-authority.ts';
 import { objectDigest } from '../../../../../src/sandbox/verification.ts';
 
 async function fixture() {

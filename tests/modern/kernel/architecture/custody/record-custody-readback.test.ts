@@ -3,9 +3,9 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { parse } from 'yaml';
 import { assignmentAttemptSchema, assignmentResultSchema } from '@treeseed/sdk/agent-capacity';
-import { request } from '../provider-kernel-fixture.ts';
-import { publicCanonicalRecords, verifyTerminalRecordCustody, verifyFailedExecutionCustody, verifyAvailabilityAccountingHistory, verifySandboxCloseoutCustody, verifyWorkdayContinuationCustody, verifyProviderLocalSlotClosure, verifyProviderPollingSelection } from '../../../acceptance/workday/record-custody.ts';
-import { row, type Row } from '../../../acceptance/acceptance-cli.ts';
+import { request } from '../../provider-kernel-fixture.ts';
+import { publicCanonicalRecords, verifyTerminalRecordCustody, verifyFailedExecutionCustody, verifyAvailabilityAccountingHistory, verifySandboxCloseoutCustody, verifyWorkdayContinuationCustody, verifyProviderLocalSlotClosure, verifyProviderPollingSelection } from '../../../../acceptance/workday/support/record-custody.ts';
+import { row, type Row } from '../../../../acceptance/acceptance-cli.ts';
 
 function supplied() {
 	const items: Row[] = [], leases: Row[] = [], reservations: Row[] = [], settlements: Row[] = [], measurements: Row[] = [];

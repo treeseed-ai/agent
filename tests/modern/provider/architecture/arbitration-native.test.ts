@@ -3,7 +3,7 @@ import { arbitrationFixture } from './arbitration-fixture.ts';
 import { readFile } from 'node:fs/promises';
 import { loadProviderManifest } from '../../../../src/provider/configuration/manifest.ts';
 import { capabilityOfferDigest, capabilityOfferSchema, CORE_CAPABILITY_DEFINITIONS } from '@treeseed/sdk/capacity-provider';
-import { verifyProviderConformanceSignature, verifyProviderQualification, verifyProviderPollingSelection } from '../../../acceptance/workday/record-custody.ts';
+import { verifyProviderConformanceSignature, verifyProviderQualification, verifyProviderPollingSelection } from '../../../acceptance/workday/support/record-custody.ts';
 import { row } from '../../../acceptance/acceptance-cli.ts';
 
 // Actual runtime/coordinator/OS custody/SDK HTTP/disk/store in independent

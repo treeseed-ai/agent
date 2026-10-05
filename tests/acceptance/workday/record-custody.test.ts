@@ -160,7 +160,7 @@ test('Actual participating provider availability retains closed accounting histo
 	assert.ok(participating.some(session => session.status === 'closed'), 'ACCEPTANCE_AVAILABILITY_CLOSED: Actual retained closed publication required');
 	verifyAvailabilityAccountingHistory(participating, providers, teamId);
 	for (const session of participating) {
-		const pressure = row(row(session.snapshot).runnerPressure), ids = pressure.activeAssignmentIds;
+		const ids = row(session.snapshot).activeAssignmentIds;
 		assert.ok(Array.isArray(ids) && ids.every(id => typeof id === 'string' && id.length > 0)
 			&& new Set(ids).size === ids.length, 'ACCEPTANCE_AVAILABILITY_ASSIGNMENTS: Exact unique assignment inventory required');
 		for (const id of ids) {

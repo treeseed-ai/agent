@@ -1,6 +1,7 @@
 import { access, mkdir } from 'node:fs/promises';
 import { constants } from 'node:fs';
 import type { ProviderSupplyOffer } from '@treeseed/sdk/capacity-provider/contracts';
+import { CapacityProviderApiError } from '@treeseed/sdk/capacity-provider';
 import type { ProviderConnectionRuntimeContext, ProviderHostRuntimeConfig } from '../configuration/config.ts';
 import { discoverProviderBudgets } from '../configuration/budgets.ts';
 import { loadProviderManifest } from '../configuration/manifest.ts';
@@ -106,7 +107,8 @@ export async function publishProviderAvailability(
 	};
 	const prior = await localState.session(key);
 	const session = prior
-		? await client.refreshAvailabilitySession(prior.id, { ...snapshot, expectedSequence: prior.sequence }).catch(async () => {
+		? await client.refreshAvailabilitySession(prior.id, { ...snapshot, expectedSequence: prior.sequence }).catch(async (error: unknown) => {
+			if (!(error instanceof CapacityProviderApiError) || error.status !== 409 || error.code !== 'provider_availability_refresh_conflict') throw error;
 			await localState.removeSession(key);
 			return client.createAvailabilitySession(snapshot);
 		})

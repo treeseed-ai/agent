@@ -7,6 +7,41 @@ import type { ProviderConnectionRuntimeContext } from '../../../src/provider/con
 const connections = ['a', 'b', 'c'].map((id) => ({ connection: { id }, teamId: id }));
 
 describe('provider-global connection polling', () => {
+	it('preserves original availability session authority on every non-recoverable refresh failure and recreates only the owning closed or changed session conflict', async () => {
+		const config: ProviderConnectionRuntimeContext = { dataDir: '/unused-unit-provider', environment: 'test', manifestPath: null,
+			maxConcurrentRunners: 1, maxConcurrentWorkdays: 1, budgetFile: null, dailyAgentSecondsLimit: null, monthlyAgentSecondsLimit: null,
+			env: {}, redactedEnv: {}, connectionId: 'owner', teamId: 'team', providerId: 'provider', membershipId: 'membership',
+			controlPlaneUrl: 'http://unit.invalid', controlPlaneAudience: 'http://unit.invalid', accessToken: 'unit-token',
+			adapters: [], lanes: [], providerCapacity: { maxConcurrentWorkers: 1 } };
+		const store = new ProviderLocalCapacityStore(config.dataDir), prior = { connectionId: 'owner|team|provider', id: 'original-session', sequence: 7, updatedAt: '2026-10-05T00:00:00.000Z' };
+		const availability = { adapters: [], lanes: [], capacity: { maxConcurrentWorkers: 1 } }, before = structuredClone({ availability, prior });
+		vi.spyOn(store, 'snapshot').mockResolvedValue({ revision: 1, claims: [], events: [], activeSecondsByConnection: {} });
+		vi.spyOn(store, 'session').mockResolvedValue(prior); const remove = vi.spyOn(store, 'removeSession').mockResolvedValue();
+		const save = vi.spyOn(store, 'saveSession').mockImplementation(async (_key, session) => session);
+		const outcomes = []; let status = 200, code = '', fault = '', methods: string[] = [];
+		vi.stubGlobal('fetch', vi.fn(async (_url: unknown, init: RequestInit) => {
+			methods.push(String(init.method));
+			if (init.method === 'PUT' && fault === 'reset') throw new Error('Original transport interruption');
+			return new Response(init.method === 'PUT' && fault === 'json' ? '{' : JSON.stringify(init.method === 'PUT' && status !== 200
+				? { type: 'about:blank', title: 'Original denial', status, code }
+				: { data: { id: 'new-session', sequence: 1, status: 'open' } }),
+				{ status: init.method === 'PUT' ? status : 200, headers: { 'content-type': 'application/json' } });
+		}));
+		try {
+			for (const failure of [{ status: 401 }, { status: 403 }, { status: 400 }, { status: 503 }, { status: 409 },
+				{ status: 200, fault: 'reset' }, { status: 200, fault: 'json' }]) {
+				status = failure.status; code = 'isolated_denial'; fault = failure.fault ?? ''; methods = []; remove.mockClear(); save.mockClear();
+				let cause: unknown; try { await publishProviderAvailability(config, availability, store); } catch (error) { cause = error; }
+				outcomes.push({ failed: cause instanceof Error, methods: [...methods], removes: remove.mock.calls.length, saves: save.mock.calls.length });
+			}
+			status = 409; code = 'provider_availability_refresh_conflict'; fault = ''; methods = []; remove.mockClear(); save.mockClear();
+			await publishProviderAvailability(config, availability, store);
+			expect(methods).toEqual(['PUT', 'POST']); expect(remove).toHaveBeenCalledWith(prior.connectionId);
+			expect(save).toHaveBeenCalledWith(prior.connectionId, { id: 'new-session', sequence: 1 });
+			expect({ availability, prior }).toEqual(before);
+			expect(outcomes).toEqual(Array.from({ length: 7 }, () => ({ failed: true, methods: ['PUT'], removes: 0, saves: 0 })));
+		} finally { vi.restoreAllMocks(); vi.unstubAllGlobals(); }
+	});
 	it('publishes exact retained connection assignment identities without leaking lease custody or inventing assignments for polling slots', async () => {
 		const config: ProviderConnectionRuntimeContext = { dataDir: '/unused-unit-provider', environment: 'test', manifestPath: null,
 			maxConcurrentRunners: 5, maxConcurrentWorkdays: 1, budgetFile: null, dailyAgentSecondsLimit: null, monthlyAgentSecondsLimit: null,

@@ -56,12 +56,11 @@ describe('document-wide native provider capacity custody', () => {
 				{ method: 'POST', path: '/v1/provider/availability-sessions' },
 				{ method: 'PUT', path: '/v1/provider/availability-sessions/native-session' },
 				{ method: 'PUT', path: '/v1/provider/availability-sessions/native-session' },
-				{ method: 'POST', path: '/v1/provider/availability-sessions' },
-				{ method: 'POST', path: '/v1/provider/availability-sessions' },
+				{ method: 'PUT', path: '/v1/provider/availability-sessions/native-session' },
 				{ method: 'PUT', path: '/v1/provider/availability-sessions/native-session' },
 			]);
 			expect(requests.map(value => value.body.runnerPressure)).toEqual([
-				...Array.from({ length: 5 }, () => ({ activeWorkers: 5, maxConcurrentWorkers: 5, activeAssignmentIds: ['native-0', 'native-1', 'native-2'] })),
+				...Array.from({ length: 4 }, () => ({ activeWorkers: 5, maxConcurrentWorkers: 5, activeAssignmentIds: ['native-0', 'native-1', 'native-2'] })),
 				{ activeWorkers: 2, maxConcurrentWorkers: 5, activeAssignmentIds: [] },
 			]);
 			expect(JSON.stringify(requests)).not.toContain('leaseToken'); expect(JSON.stringify(requests)).not.toContain('native-4');
@@ -71,7 +70,7 @@ describe('document-wide native provider capacity custody', () => {
 			expect(availability).toEqual(before); expect(await f.entries()).toEqual(['capacity-state.json']);
 			const originalBytes = await f.bytes(); await writeFile(f.path, '{', 'utf8');
 			await expect(publishProviderAvailability(config, availability, f.reopen())).rejects.toThrow();
-			expect(requests).toHaveLength(6); expect(await f.bytes()).toBe('{');
+			expect(requests).toHaveLength(5); expect(await f.bytes()).toBe('{');
 			await writeFile(f.path, originalBytes, 'utf8');
 			expect((await f.reopen().snapshot()).claims).toHaveLength(2);
 		} finally { server.closeAllConnections(); if (server.listening) await new Promise<void>(resolve => server.close(() => resolve()));

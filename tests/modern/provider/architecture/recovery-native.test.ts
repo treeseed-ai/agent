@@ -4,6 +4,7 @@ import type { ProviderConnectionRuntime } from '../../../../src/provider/coordin
 import type { ProviderHostRuntimeConfig } from '../../../../src/provider/configuration/config.ts';
 import { recoverProviderLocalLeases } from '../../../../src/provider/coordination/lease-recovery.ts';
 import { capacityFixture } from './capacity-fixture.ts';
+import { publishProviderAvailability } from '../../../../src/provider/lifecycle/lifecycle.ts';
 
 async function recoveryFixture() {
 	const f = await capacityFixture();
@@ -11,12 +12,20 @@ async function recoveryFixture() {
 	let observed: unknown = { id: f.attempt.id, teamId: f.attempt.teamId, providerId: f.attempt.provider.providerId,
 		status: 'running', assignmentAttempt: f.attempt };
 	let code = 200, fault = '', returnCode = 200, returnReply: unknown = { assignment: { id: f.attempt.id, status: 'returned' } };
+	let availability: { status: number; code: string } | null = null;
 	const server = createServer((request, response) => {
 		let body = ''; request.setEncoding('utf8'); request.on('data', chunk => { body += chunk; });
 		request.on('end', () => {
 			const path = new URL(request.url ?? '', 'http://127.0.0.1').pathname;
 			requests.push({ method: request.method ?? '', path, body: body ? JSON.parse(body) : null });
 			if (fault === 'reset') { request.socket.destroy(); return; }
+			if (availability && path.startsWith('/v1/provider/availability-sessions')) {
+				const status = request.method === 'POST' && availability.status === 409 && availability.code === 'provider_availability_refresh_conflict' ? 200 : availability.status;
+				response.statusCode = status; response.setHeader('content-type', 'application/json');
+				response.end(fault === 'json' ? '{' : JSON.stringify(status === 200
+					? { data: { id: 'native-session', sequence: request.method === 'POST' ? 1 : 2, status: 'open' } }
+					: { type: 'about:blank', title: 'Original publication failure', status: availability.status, code: availability.code })); return;
+			}
 			const returning = path.endsWith('/return'), status = returning ? returnCode : code;
 			response.statusCode = status; response.setHeader('content-type', 'application/json');
 			if (fault === 'json') response.end('{');
@@ -47,6 +56,11 @@ async function recoveryFixture() {
 		await f.store.recordCloseoutOutput(claim.id, { status: 'blocked', unfinishedWork: ['unchanged original assignment'] });
 		await f.store.recordFailure(claim.id, 'original interrupted provider execution');
 		return { ...f, claim, lease, connection, requests,
+			setAvailability(status: number, problemCode = 'isolated_denial', error = '') { availability = { status, code: problemCode }; fault = error; },
+			publish: () => publishProviderAvailability({ ...config, connectionId: connection.connection.id, controlPlaneUrl: url,
+				controlPlaneAudience: url, teamId: connection.teamId, providerId: connection.providerId, membershipId: connection.membershipId,
+				accessToken: token, adapters: [], lanes: [], providerCapacity: { maxConcurrentWorkers: 1 } },
+				{ adapters: [], lanes: [], capacity: { maxConcurrentWorkers: 1 }, activeWorkers: 1 }, f.reopen()),
 			setReturnReply(value: unknown) { returnReply = value; },
 			setReply(value: unknown, status = 200, error = '', returnedStatus = 200) { observed = value; code = status; fault = error; returnCode = returnedStatus; },
 			run: (connections = [connection]) => recoverProviderLocalLeases({ config, connections, store: f.reopen() }),
@@ -58,6 +72,38 @@ async function recoveryFixture() {
 // real durable local files. Upstream JSON and principal/token are INPUTS,
 // NOT native API settlement, independent authentication or remote cleanup.
 describe('document-wide native provider recovery boundary', () => {
+	it('native denied unavailable malformed and disconnected availability refresh retains the original session and failed assignment for exact retry instead of creating replacement authority', async () => {
+		const outcomes = [];
+		for (const failure of [{ status: 401 }, { status: 403 }, { status: 503 }, { status: 400 },
+			{ status: 409 }, { status: 200, fault: 'reset' }, { status: 200, fault: 'json' }]) {
+			const f = await recoveryFixture();
+			try {
+				f.setAvailability(200); await f.publish(); const key = `${f.connection.connection.id}|${f.connection.teamId}|${f.connection.providerId}`;
+				const prior = await f.reopen().session(key), claims = await f.reopen().claimsForRecovery();
+				f.setAvailability(failure.status, 'isolated_denial', failure.fault ?? ''); let cause: unknown;
+				try { await f.publish(); } catch (error) { cause = error; }
+				const retained = await f.reopen().session(key), attempted = f.requests.slice(1);
+				outcomes.push({ failed: cause instanceof Error, retained: retained?.id === prior?.id && retained?.sequence === prior?.sequence,
+					methods: attempted.map(value => value.method) });
+				expect(await f.reopen().claimsForRecovery()).toEqual(claims);
+				f.setAvailability(200); await f.publish();
+				const retry = f.requests.at(-1)!; expect(retry.method).toBe('PUT'); expect(retry.body).toEqual(attempted[0]?.body);
+				expect((await f.reopen().session(key))?.sequence).toBe(2);
+				expect(await f.reopen().claimsForRecovery()).toEqual(claims);
+			} finally { await f.close(); }
+		}
+		expect(outcomes).toEqual(Array.from({ length: 7 }, () => ({ failed: true, retained: true, methods: ['PUT'] })));
+		const f = await recoveryFixture();
+		try {
+			f.setAvailability(200); await f.publish(); const claims = await f.reopen().claimsForRecovery();
+			f.setAvailability(409, 'provider_availability_refresh_conflict'); await f.publish();
+			expect(f.requests.map(value => value.method)).toEqual(['POST', 'PUT', 'POST']);
+			expect(f.requests[1]?.body).toMatchObject({ expectedSequence: 1 });
+			const { expectedSequence: _sequence, ...input } = Object.fromEntries(Object.entries(f.requests[1]!.body ?? {}));
+			expect(f.requests[2]?.body).toEqual(input);
+			expect(await f.reopen().claimsForRecovery()).toEqual(claims);
+		} finally { await f.close(); }
+	});
 	it('native recovery retains exact failed lease and output after malformed successful return receipts and releases only the unchanged confirmed retry', async () => {
 		for (const reply of [null, {}, { assignment: {} }, { assignment: { id: 'foreign', status: 'returned' } },
 			{ assignment: { id: 'assignment-1', status: 'running' } }]) {

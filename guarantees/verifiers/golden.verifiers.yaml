@@ -1,6 +1,16 @@
 schemaVersion: treeseed.guarantee-verifiers/v1
 ownerPackage: "@treeseed/agent"
 verifiers:
+  agent.golden.execution-availability-retry-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/provider/multi-team-fair-polling.test.ts
+    testName: "preserves original availability session authority on every non-recoverable refresh failure and recreates only the owning closed or changed session conflict"
+  agent.golden.execution-availability-retry-native:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/provider/architecture/recovery-native.test.ts
+    testName: "native denied unavailable malformed and disconnected availability refresh retains the original session and failed assignment for exact retry instead of creating replacement authority"
   agent.golden.execution-availability-assignments-unit:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

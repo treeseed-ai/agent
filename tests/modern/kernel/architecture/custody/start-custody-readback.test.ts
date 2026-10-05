@@ -21,13 +21,33 @@ function suppliedStart() {
 		events,
 		eventPage: { limit: 50, hasMore: false, nextCursor: null } };
 	const assignments: Row[] = [{ id: attempt.id, assignmentAttempt: attempt }];
-	const schedule: Row = { id: 'schedule-1', teamId: plan.teamId, lastRunId: plan.id, intent: { schemaVersion: 'treeseed.workday-intent/v1',
+	const schedule: Row = { id: 'schedule-1', teamId: plan.teamId, lastRunId: plan.id, cadenceSeconds: 60, stateVersion: 1,
+		intent: { schemaVersion: 'treeseed.workday-intent/v1',
 		teamId: plan.teamId, profileId: 'default', projects: ['project-1'], executionMode: 'simulation', startsAt: plan.startsAt, durationSeconds: 60 } };
 	return { observed, assignments, schedule, events };
 }
 // UNIT of the actual native read-back assertions. Supplied DTOs are not an
 // independently captured real start receipt, event producer or live execution.
 describe('managed initial manual and recurring start custody', () => {
+	it('denies coerced missing and out-of-bound recurrence cadence and state versions without rewriting governed execution observations', () => {
+		const invalid = [
+			...['60', null, undefined, true, false, [], [60], {}, NaN, Infinity, -Infinity, -1, 0, 59, 60.5]
+				.map(value => ({ field: 'cadenceSeconds', value })),
+			...['1', null, undefined, true, false, [], [1], {}, NaN, Infinity, -Infinity, -1, 0, 1.5]
+				.map(value => ({ field: 'stateVersion', value })),
+		];
+		const outcomes = invalid.map(({ field, value }) => {
+			const f = suppliedStart(); f.schedule[field] = value;
+			const held = structuredClone(f); let cause: unknown;
+			try { verifyRecurringStartCustody(f.observed, f.assignments, f.schedule); } catch (error) { cause = error; }
+			expect(f).toEqual(held); return cause;
+		});
+		for (const cause of outcomes) expect(cause).toBeInstanceOf(Error);
+		for (const cadenceSeconds of [60, 3600]) for (const stateVersion of [1, 2]) {
+			const f = suppliedStart(); Object.assign(f.schedule, { cadenceSeconds, stateVersion }); const held = structuredClone(f);
+			expect(() => verifyRecurringStartCustody(f.observed, f.assignments, f.schedule)).not.toThrow(); expect(f).toEqual(held);
+		}
+	});
 	it('retains a short active allocation separately from the original phase deadline and denies later immutable authority without repairing observations', () => {
 		const f = suppliedStart(), attempt = row(f.assignments[0]!.assignmentAttempt);
 		row(attempt.limits).maximumSeconds = 3;

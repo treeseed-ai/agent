@@ -1613,3 +1613,6 @@ workflow:
   - id: execution-allocated-deadline-unit
     action: { verifier: agent.golden.execution-allocated-deadline-unit }
     expect: { status: passed }
+  - id: execution-recurrence-numbers-unit
+    action: { verifier: agent.golden.execution-recurrence-numbers-unit }
+    expect: { status: passed }

@@ -53,6 +53,9 @@ export function verifyInitialStartCustody(observed: Row, assignments: Row[]): vo
 }
 export function verifyRecurringStartCustody(observed: Row, assignments: Row[], schedule: Row): void {
 	verifyInitialStartCustody(observed, assignments);
+	for (const [field, minimum] of [['cadenceSeconds', 60], ['stateVersion', 1]] as const)
+		assert.ok(typeof schedule[field] === 'number' && Number.isInteger(schedule[field]) && schedule[field] >= minimum,
+			'ACCEPTANCE_RECURRING_SCHEDULE: Canonical integer cadence and state version required');
 	const run = row(observed.run), plan = appliedWorkdaySchema.parse(row(run.parameters).appliedPlan), intent = row(schedule.intent);
 	assertIntentShape(intent);
 	assert.deepEqual(validateWorkdayIntent(intent), [], 'ACCEPTANCE_RECURRING_INTENT: Complete canonical intent required');

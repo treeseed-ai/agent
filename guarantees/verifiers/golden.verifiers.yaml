@@ -1,6 +1,11 @@
 schemaVersion: treeseed.guarantee-verifiers/v1
 ownerPackage: "@treeseed/agent"
 verifiers:
+  agent.golden.execution-manifest-validation-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/provider-boundary.test.ts
+    testName: "validates each unchanged native manifest once per load and revalidates an applied connection overlay without caching authority across calls"
   agent.golden.execution-process-group-unit:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

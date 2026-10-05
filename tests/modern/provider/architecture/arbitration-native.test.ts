@@ -44,7 +44,9 @@ describe('whole native provider polling arbitration boundary', () => {
 	});
 	it('original native provider offer publication denies insufficient future missing and duplicate qualification before signing or changing host custody', async () => {
 		const modes = ['insufficient', 'missing-suite', 'future', 'duplicate', 'failed-first', 'revoked-last'];
-		const f = await arbitrationFixture(), outcomes: Array<{ mode: string; cause: unknown }> = [];
+		// Use the same original initialization in the owned offer child, avoiding
+		// a second module startup within the unchanged five-second watchdog.
+		const f = await arbitrationFixture(1, true), outcomes: Array<{ mode: string; cause: unknown }> = [];
 		try {
 			await f.store.snapshot(); const baseline = await f.bytes(), routes = structuredClone(f.routes);
 			const original = structuredClone(f.manifest), bytes = await readFile(f.config.manifestPath!);
@@ -68,12 +70,12 @@ describe('whole native provider polling arbitration boundary', () => {
 				const { offerDigest: ignored, ...material } = changed; changed.offerDigest = capabilityOfferDigest(material);
 				target.offer = changed; await f.write(); const retained = await readFile(f.config.manifestPath!), unchanged = structuredClone(f.manifest); let cause: unknown;
 				try { await offers(); } catch (error) { cause = error; }
-				expect(await readFile(f.config.manifestPath!)).toEqual(retained); expect(f.manifest).toEqual(unchanged);
+				expect((await readFile(f.config.manifestPath!)).equals(retained)).toBe(true); expect(f.manifest).toEqual(unchanged);
 				expect(await f.bytes()).toBe(baseline); expect(f.routes).toEqual(routes);
-				target.offer = structuredClone(source); await f.write(); expect(await readFile(f.config.manifestPath!)).toEqual(bytes);
+				target.offer = structuredClone(source); await f.write(); expect((await readFile(f.config.manifestPath!)).equals(bytes)).toBe(true);
 			const retry = row(await offers()); expect(retry).toEqual(first);
 			if (!Array.isArray(retry.adapters)) throw new Error('Native published adapter inventory required');
-			expect(f.manifest).toEqual(original); expect(await readFile(f.config.manifestPath!)).toEqual(bytes);
+			expect(f.manifest).toEqual(original); expect((await readFile(f.config.manifestPath!)).equals(bytes)).toBe(true);
 			expect(await f.bytes()).toBe(baseline); expect(f.routes).toEqual(routes);
 			// Real original publisher/loader/OS identity/native child boundary;
 			// supplied suite metadata is not an independently executed suite.

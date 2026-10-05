@@ -17,6 +17,11 @@ import { stringify as stringifyYaml } from 'yaml';
 import { createManagedProviderManifestV5 } from '../../src/provider/configuration/managed-manifest.ts';
 import { assertGitWorkPublication, assignmentAllowedServices, timingAwarenessEvidence } from '../../src/provider/execution/microvm-executor.ts';
 import { capabilityOfferDigest, validateCapacityProviderManifestV5, type CapabilityOffer } from '@treeseed/sdk/capacity-provider';
+import * as providerContracts from '@treeseed/sdk/capacity-provider/contracts';
+vi.mock('@treeseed/sdk/capacity-provider/contracts', async importOriginal => {
+	const original = await importOriginal<typeof import('@treeseed/sdk/capacity-provider/contracts')>();
+	return { ...original, validateCapacityProviderManifestV5: vi.fn(original.validateCapacityProviderManifestV5) };
+});
 
 const digest = (value: string) => `sha256:${value.repeat(64)}`;
 function providerManifestFixture() {
@@ -62,6 +67,24 @@ function sourceFiles(root: string): string[] {
 }
 
 describe('Agent package ownership boundary', () => {
+	it('validates each unchanged native manifest once per load and revalidates an applied connection overlay without caching authority across calls', async () => {
+		const directory = mkdtempSync(resolve(tmpdir(), 'agent-manifest-validation-'));
+		const path = resolve(directory, 'manifest.yaml'), manifest = createManagedProviderManifestV5({ release: 'validation-custody', guestImage: 'isolated/guest',
+			guestImageDigest: digest('5'), baseImageDigest: digest('6'), provenanceDigest: digest('7') });
+		const bytes = stringifyYaml(manifest), held = structuredClone(manifest);
+		const observed = vi.mocked(providerContracts.validateCapacityProviderManifestV5); observed.mockClear();
+		try {
+			writeFileSync(path, bytes);
+			for (let count = 1; count <= 2; count += 1) {
+				expect((await loadProviderManifest(path, directory, {})).manifest).toEqual(held);
+				expect(observed).toHaveBeenCalledTimes(count);
+			}
+			writeFileSync(resolve(directory, 'connections.yaml'), '[]\n');
+			expect((await loadProviderManifest(path, directory, {})).manifest).toEqual({ ...held, connections: [] });
+			expect(observed).toHaveBeenCalledTimes(4);
+			expect(readFileSync(path, 'utf8')).toBe(bytes); expect(manifest).toEqual(held);
+		} finally { observed.mockClear(); rmSync(directory, { recursive: true, force: true }); }
+	});
 	it('rejects retired provider manifest versions without rewriting supplied authority while retaining the current exact v5 contract', () => {
 		const current = createManagedProviderManifestV5({ release: 'authoring-clean-cutover', guestImage: 'isolated/guest',
 			guestImageDigest: digest('5'), baseImageDigest: digest('6'), provenanceDigest: digest('7') });

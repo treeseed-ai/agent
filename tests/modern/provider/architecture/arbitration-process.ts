@@ -5,8 +5,9 @@ import type { ProviderHostRuntimeConfig } from '../../../../src/provider/configu
 
 // Child entrypoint for the EXISTING runtime, not another arbitration runner.
 // The parent supplies only a disposable directory and controlled loopback API.
-const [action, directory] = process.argv.slice(2);
+const [action, directory, sessionInitialization] = process.argv.slice(2);
 if (!directory || !['initialize', 'run', 'offers', 'offers-session'].includes(action ?? '')) throw new Error('Exact isolated arbitration action required');
+if (sessionInitialization !== undefined && (action !== 'offers-session' || sessionInitialization !== 'initialize')) throw new Error('Exact native session initialization required');
 const config: ProviderHostRuntimeConfig = JSON.parse(await readFile(`${directory}/config.json`, 'utf8'));
 if (config.dataDir !== directory || config.manifestPath !== `${directory}/manifest.yaml`) throw new Error('Fixture custody mismatch');
 async function load() {
@@ -24,16 +25,20 @@ async function offers() {
 	return { publicJwk: identity.publicJwk,
 		adapters: await materializeCapabilityOffers({ config, loaded, providerId: loaded.manifest.connections[0]!.providerId }) };
 }
-if (action === 'initialize') {
+async function initialize() {
 	const loaded = await load();
 	await initializeCapacityProviderIdentity({ ref: loaded.manifest.identity.privateKeyRef, baseDirectory: directory, dataDirectory: directory });
 	for (const connection of loaded.manifest.connections) await writeProviderSecret(connection.membershipCredentialRef,
 		`isolated-${connection.id}`, directory, directory);
+}
+if (action === 'initialize') {
+	await initialize();
 	process.stdout.write(JSON.stringify({ initialized: true }));
 } else if (action === 'offers') {
 	process.stdout.write(JSON.stringify(await offers()));
 } else if (action === 'offers-session') {
 	if (!process.send) throw new Error('Owned native offer IPC required');
+	if (sessionInitialization === 'initialize') await initialize();
 	// Same owning loader and publisher on EVERY call, including after denial.
 	// Only process/module startup is shared; manifest and identity are reread.
 	process.on('message', async message => {

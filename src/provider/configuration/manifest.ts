@@ -56,8 +56,12 @@ export async function loadProviderManifest(path = process.env.TREESEED_CAPACITY_
 		manifest = { ...manifest, sandbox: { ...manifest.sandbox, profiles: manifest.sandbox.profiles.map((profile) => ({ ...profile, guestImageDigest: developmentGuestDigest })) } };
 	}
 	if (manifest.schemaVersion !== 5) throw new Error('Capacity providers require a v5 capability-offer manifest.');
-	const effectiveValidation = validateCapacityProviderManifestV5(manifest);
-	if (!effectiveValidation.ok) throw new Error(`Invalid capacity provider manifest: ${diagnosticMessage(effectiveValidation.diagnostics)}`);
+	// The source was already validated. Revalidate only an actually replaced
+	// overlay/guest selection; every independent load still rereads its bytes.
+	if (manifest !== parsed) {
+		const effectiveValidation = validateCapacityProviderManifestV5(manifest);
+		if (!effectiveValidation.ok) throw new Error(`Invalid capacity provider manifest: ${diagnosticMessage(effectiveValidation.diagnostics)}`);
+	}
 	return { path: absolute, directory: dirname(absolute), ...(dataDirectory ? { dataDirectory } : {}), manifest };
 }
 

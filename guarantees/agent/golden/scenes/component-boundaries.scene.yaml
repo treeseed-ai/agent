@@ -3,6 +3,9 @@ id: agent.golden.component-boundaries
 title: Golden execution component boundaries
 scope: local-component-tests
 workflow:
+  - id: execution-manifest-validation-unit
+    action: { verifier: agent.golden.execution-manifest-validation-unit }
+    expect: { status: passed }
   - id: execution-process-group-unit
     action: { verifier: agent.golden.execution-process-group-unit }
   - id: execution-provider-build-typecheck-unit

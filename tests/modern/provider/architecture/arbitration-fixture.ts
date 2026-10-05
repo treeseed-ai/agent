@@ -16,7 +16,7 @@ import { ProviderLocalCapacityStore } from '../../../../src/provider/capacity/ca
 import type { ProviderHostRuntimeConfig } from '../../../../src/provider/configuration/config.ts';
 import { request } from '../../kernel/provider-kernel-fixture.ts';
 
-export async function arbitrationFixture(workers = 1) {
+export async function arbitrationFixture(workers = 1, initializeInOfferSession = false) {
 	const directory = await mkdtemp(join(tmpdir(), 'agent-global-arbitration-'));
 	const runtimeBuild = `sha256:${'d'.repeat(64)}`;
 	const manifest = createManagedProviderManifestV5({ release: 'authoring-native', guestImage: 'isolated/guest',
@@ -95,7 +95,8 @@ export async function arbitrationFixture(workers = 1) {
 		});
 		const openOffers = async () => {
 			if (offerSession) throw new Error('Only one allocated offer session allowed');
-			const session = fork(fileURLToPath(new URL('./arbitration-process.ts', import.meta.url)), ['offers-session', directory],
+			const session = fork(fileURLToPath(new URL('./arbitration-process.ts', import.meta.url)),
+				['offers-session', directory, ...(initializeInOfferSession ? ['initialize'] : [])],
 				{ env, execArgv: [], stdio: ['ignore', 'ignore', 'ignore', 'ipc'], serialization: 'advanced' });
 			offerSession = session; offerSessionExit = once(session, 'exit');
 			const ready = await offerMessage(session);
@@ -122,7 +123,7 @@ export async function arbitrationFixture(workers = 1) {
 				{ env, timeout: 15_000, maxBuffer: 1024 * 1024 }); children.add(running);
 			try { return JSON.parse((await running).stdout) as unknown; } finally { children.delete(running); }
 		};
-		await write(); await child('initialize');
+		await write(); if (!initializeInOfferSession) await child('initialize');
 		const store = new ProviderLocalCapacityStore(directory);
 		const attempt = assignmentAttemptSchema.parse(request().assignment.assignmentAttempt);
 		return { directory, manifest, config, store, routes, tokenPath, pollPath, faults, write, openOffers,

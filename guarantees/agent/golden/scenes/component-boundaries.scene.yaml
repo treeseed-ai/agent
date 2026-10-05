@@ -1575,3 +1575,6 @@ workflow:
   - id: execution-all-attempt-usage-native-2
     action: { verifier: agent.golden.execution-all-attempt-usage-native-2 }
     expect: { status: passed }
+  - id: execution-native-usage-provenance-unit
+    action: { verifier: agent.golden.execution-native-usage-provenance-unit }
+    expect: { status: passed }

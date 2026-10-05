@@ -4,6 +4,7 @@ import { dirname } from 'node:path';
 import { assignmentAttemptSchema, assignmentResultSchema } from '@treeseed/sdk/agent-capacity';
 import { nativeCloseoutTransport, portableKernel, portableProfile } from './portable-kernel-fixture.ts';
 import { contextPredecessor } from './context-fixture.ts';
+import { sandboxAccountingUsage } from '../../../../../src/provider/execution/microvm-executor.ts';
 
 const closeoutTransport = (f: Awaited<ReturnType<typeof portableKernel>>) => nativeCloseoutTransport(f, dirname(f.checkout));
 
@@ -103,7 +104,12 @@ describe('portable configured profiles through real provider Kernel and native G
 			try {
 				const candidate = await f.candidate(), reply = f.getReply(), before = structuredClone(f.input.assignment);
 				const bytes = execFileSync('git', ['show', `${candidate}:src/output.txt`], { cwd: f.checkout });
-				const usage = { activeSeconds: 1.125, elapsedSeconds: 2.25, inputTokens: 19, nativeUsage: { input_tokens: 19, output_tokens: 3 } };
+				const raw = { activeSeconds: 1.125, elapsedSeconds: 2.25, input_tokens: 19, output_tokens: 3,
+					cpuUserMicros: 17, provenance: 'execution-provider' }, rawBefore = structuredClone(raw);
+				const usage = sandboxAccountingUsage(raw);
+				expect(usage).toEqual({ activeSeconds: 1.125, elapsedSeconds: 2.25, inputTokens: 19, outputTokens: 3,
+					cpuUserMicros: 17, provenance: 'execution-provider', nativeUsage: { activeSeconds: 1.125, elapsedSeconds: 2.25,
+						input_tokens: 19, output_tokens: 3, cpuUserMicros: 17 } }); expect(raw).toEqual(rawBefore);
 				reply.usage = [usage]; f.setReply(reply); const original = structuredClone(reply);
 				api = await closeoutTransport(f); if (denial) api.deny('reportUsage', denial.status, denial.fault);
 				let failure: unknown; try { await api.run(); } catch (error) { failure = error; }

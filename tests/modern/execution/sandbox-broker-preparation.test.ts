@@ -128,6 +128,7 @@ describe('sandbox broker control transport', () => {
 						status: 'completed', error: null, result: { content: [{ type: 'text', text: JSON.stringify(value) }], structuredContent: value } } };
 				};
 				f.patchResult({ ...(mode === 'failed' || mode === 'expired' ? { status: mode } : {}),
+					usage: { activeSeconds: 1.125, elapsedSeconds: 2.25, input_tokens: 19, output_tokens: 3, provenance: 'execution-provider' },
 					diagnostics: { providerEvents: [clock('original-first-clock', 30), clock('original-final-clock', 29)] } });
 				api = await nativeCloseoutTransport({ attempt, input: f.input, executor: f.executor }, f.directory, true);
 				if (mode === 'diagnostic-denied') api.deny('reportUsage', 403); if (mode === 'settlement-denied') api.deny('settleAssignment', 503);
@@ -141,7 +142,8 @@ describe('sandbox broker control transport', () => {
 				expect(Number.isInteger(diagnosticEvents[0]!.body.sequence)).toBe(true);
 				expect(Object.hasOwn(diagnosticEvents[0]!.body.context ?? {}, 'providerEvents')).toBe(false);
 				const usage = { activeSeconds: 1.125, elapsedSeconds: 2.25, inputTokens: 19, outputTokens: 3,
-					nativeUsage: raw.usage };
+					provenance: 'execution-provider', nativeUsage: { activeSeconds: 1.125, elapsedSeconds: 2.25, input_tokens: 19, output_tokens: 3 } };
+				expect(raw.usage).toEqual({ ...usage.nativeUsage, provenance: 'execution-provider' });
 				expect(api.requests.filter(item => item.operation === 'reportUsage')).toEqual([{ operation: 'reportUsage',
 					key: `usage:${attempt.id}:${f.input.runnerId}:0`, body: { leaseToken: f.input.leaseToken, runnerId: f.input.runnerId,
 						usageDimension: 'diagnostic-0', accountingMode: 'informational', activeSeconds: 0, elapsedSeconds: 0, usageActual: usage } }]);

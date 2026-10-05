@@ -27,7 +27,11 @@ function object(value:unknown):Record<string,unknown>{return value&&typeof value
 export function sandboxAccountingUsage(usage: Record<string, unknown>): Record<string, unknown> {
 	const fields = { input_tokens: 'inputTokens', cached_input_tokens: 'cachedInputTokens',
 		output_tokens: 'outputTokens', reasoning_output_tokens: 'reasoningTokens' };
-	const normalized: Record<string, unknown> = { ...usage, nativeUsage: { ...usage } };
+	// Provenance is diagnostic metadata, not a provider-native numeric unit.
+	// Retain every other raw observation, including invalid values: the owning
+	// aggregate validator must reject them, never silently manufacture a count.
+	const nativeUsage = { ...usage }; delete nativeUsage.provenance;
+	const normalized: Record<string, unknown> = { ...usage, nativeUsage };
 	for (const [native, canonical] of Object.entries(fields)) {
 		const value = usage[native];
 		if (typeof value === 'number' && Number.isFinite(value) && value >= 0) normalized[canonical] = value;

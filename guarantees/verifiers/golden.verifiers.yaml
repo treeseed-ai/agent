@@ -2764,3 +2764,8 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/execution/sandbox-broker-preparation.test.ts
     testName: "native microvm Kernel and provider runner retain original successful and failed executor measurements through exact public delivery and denied closeout"
+  agent.golden.execution-native-usage-provenance-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/provider/sandbox-accounting-usage.test.ts
+    testName: "keeps original provenance outside numeric native usage and preserves every measured unit without laundering invalid observations"

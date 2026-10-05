@@ -6,7 +6,7 @@ import { resolve } from 'node:path';
 import { resolveProviderConfig } from '../../../src/provider/configuration/config.ts';
 import { loadProviderManifest } from '../../../src/provider/configuration/manifest.ts';
 import { loadCapacityProviderIdentity } from '../../../src/provider/accounts/identity.ts';
-import { assignmentAttemptSchema, assignmentResultSchema, capabilityAccountingLimitsSchema, remainingCapabilitySeconds } from '@treeseed/sdk/agent-capacity';
+import { assignmentAttemptSchema, assignmentResultSchema, capabilityAccountingLimitsSchema, remainingCapabilitySeconds, usageSettlementSchema, validateProviderAssignment } from '@treeseed/sdk/agent-capacity';
 import { capabilityOfferDigest, capabilityOfferSchema } from '@treeseed/sdk/capacity-provider';
 import { decodeCapacityPageCursor } from '@treeseed/sdk/capacity-pagination';
 import { verifyPlatformRepository } from '@treeseed/sdk/platform';
@@ -20,7 +20,22 @@ import { actual, verify, availabilityHistory } from './support/record-readback.t
 // No private route, canonical reconstruction, inferred charge, alternate runner
 // or physical closure claim from SQL IDs. Physical/resource guarantees remain separate.
 test('Every native managed attempt exposes one unchanged canonical lease reservation result and UsageSettlement across public views', { timeout: 120_000 }, () => {
-	const f = actual(); verify(f); verifyGolden('settlement'); verifyGolden('reporter');
+	const f = actual(), before = structuredClone(f);
+	for (const item of f.items) assert.deepEqual(validateProviderAssignment(item), { ok: true, diagnostics: [] },
+		'ACCEPTANCE_CANONICAL_PUBLIC: Exact operational identities and canonical snapshots must agree without repair');
+	const settlements = publicCanonicalRecords(f.views, 'treeseed.usage-settlement/v1');
+	assert.equal(settlements.length, f.items.length, 'ACCEPTANCE_NATIVE_UNITS: One actual stored settlement per attempt required');
+	for (const settlement of settlements) {
+		assert.deepEqual(usageSettlementSchema.parse(settlement), settlement, 'ACCEPTANCE_SETTLEMENT_RAW: Stored canonical authority must not be normalized');
+		const native = row(settlement.nativeUsage);
+		assert.ok(settlement.nativeUsage && typeof settlement.nativeUsage === 'object' && !Array.isArray(settlement.nativeUsage));
+		assert.ok(!Object.hasOwn(native, 'provenance'), 'ACCEPTANCE_NATIVE_UNITS: Diagnostic provenance is not a native measurement');
+		for (const value of Object.values(native)) assert.ok(typeof value === 'number' && Number.isFinite(value) && value >= 0,
+			'ACCEPTANCE_NATIVE_UNITS: Original numeric units must remain uncoerced');
+		const aggregate = f.measurements.filter(value => value.assignmentId === settlement.assignmentId && value.accountingMode === 'aggregate');
+		assert.equal(aggregate.length, 1); assert.deepEqual(aggregate[0]!.nativeUsage, native);
+	}
+	verify(f); verifyGolden('settlement'); verifyGolden('reporter'); assert.deepEqual(f, before); assert.deepEqual(actual(), before);
 });
 test('Actual managed continuation reads its complete original settled ancestry and retains exact prior source Decision result and charge history without expanding custody', { timeout: 120_000 }, () => {
 	const lineage: Array<ReturnType<typeof actual>> = [], seen = new Set<string>(); let id = process.env.TREESEED_ACCEPTANCE_WORKDAY_ID ?? '';
@@ -196,6 +211,14 @@ test('Actual participating provider availability retains closed accounting histo
 });
 test('Native failed controlled attempts retain their own canonical settlement and original frozen authority on repeated public readback', { timeout: 120_000 }, () => {
 	const f = actual(); assert.ok(f.items.some(item => ['failed', 'returned', 'expired', 'cancelled'].includes(String(item.status))), 'ACCEPTANCE_CANONICAL_FAILURE: Actual controlled failed attempt required');
+	for (const item of f.items.filter(item => item.status === 'cancelled')) {
+		const attempt = assignmentAttemptSchema.parse(item.assignmentAttempt);
+		assert.equal(item.completedAt, null, 'ACCEPTANCE_CANCELLATION_HISTORY: Cancellation cannot become completed execution');
+		const aggregate = f.measurements.filter(value => value.assignmentId === item.id && value.assignmentAttempt === attempt.attempt && value.accountingMode === 'aggregate');
+		assert.equal(aggregate.length, 1, 'ACCEPTANCE_CANCELLATION_USAGE: Cancellation requires its original exactly-once terminal measurement');
+		assert.ok(typeof aggregate[0]!.activeSeconds === 'number' && Number.isFinite(aggregate[0]!.activeSeconds)
+			&& typeof aggregate[0]!.elapsedSeconds === 'number' && Number.isFinite(aggregate[0]!.elapsedSeconds));
+	}
 	verify(f); verifyGolden('stopped');
 });
 test('Actual failed productive execution retains owning closeout and unchanged informational native usage beside exactly one terminal charge', { timeout: 120_000 }, () => {

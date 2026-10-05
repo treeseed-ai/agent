@@ -1,6 +1,16 @@
 schemaVersion: treeseed.guarantee-verifiers/v1
 ownerPackage: "@treeseed/agent"
 verifiers:
+  agent.golden.execution-availability-assignments-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/provider/multi-team-fair-polling.test.ts
+    testName: "publishes exact retained connection assignment identities without leaking lease custody or inventing assignments for polling slots"
+  agent.golden.execution-availability-assignments-native:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/provider/architecture/capacity-native.test.ts
+    testName: "native availability publication retains ready running and interrupted assignment custody through denied transport retry and drops only confirmed terminal identities"
   agent.golden.execution-report-note-unit:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

@@ -83,6 +83,10 @@ export async function publishProviderAvailability(
 ) {
 	const client = createProviderControlPlaneClient(config);
 	const key = `${config.connectionId}|${config.teamId}|${config.providerId}`;
+	const local = await localState.snapshot();
+	const activeAssignmentIds = [...new Set(local.claims.filter(claim => claim.connectionId === config.connectionId
+		&& claim.status !== 'polling' && typeof claim.assignmentId === 'string' && claim.assignmentId.length > 0)
+		.map(claim => claim.assignmentId!))];
 	const snapshot = {
 		ttlSeconds: 90,
 		environment: config.environment,
@@ -93,7 +97,7 @@ export async function publishProviderAvailability(
 		capabilities: providerAvailabilityCapabilities(availability),
 		runnerPressure: { activeWorkers: availability.activeWorkers ?? 0,
 			maxConcurrentWorkers: Number(availability.capacity.maxConcurrentWorkers ?? config.maxConcurrentRunners),
-			activeAssignmentIds: [] },
+			activeAssignmentIds },
 		constraints: { outboundOnly: true, ...availability.constraints },
 		metadata: {
 			source: '@treeseed/agent/provider-manager',

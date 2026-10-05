@@ -6,11 +6,77 @@ import { capacityFixture } from './capacity-fixture.ts';
 import { assignmentAttemptSchema } from '@treeseed/sdk/agent-capacity';
 import { verifyProviderLocalSlotClosure } from '../../../acceptance/workday/support/record-custody.ts';
 import type { Row } from '../../../acceptance/acceptance-cli.ts';
+import { createServer } from 'node:http';
+import { publishProviderAvailability } from '../../../../src/provider/lifecycle/lifecycle.ts';
+import type { ProviderConnectionRuntimeContext } from '../../../../src/provider/configuration/config.ts';
 
 // Real files, lock/atomic rename, independent Node processes and actual wall
 // clocks. Frozen clocks/grants are fixture inputs, NOT API time, native model
 // charges, real control-plane authentication or physical sandbox closure.
 describe('document-wide native provider capacity custody', () => {
+	it('native availability publication retains ready running and interrupted assignment custody through denied transport retry and drops only confirmed terminal identities', async () => {
+		const f = await capacityFixture(), requests: Array<{ method: string; path: string; body: Row }> = [];
+		let denied = false, sequence = 0;
+		const server = createServer((request, response) => {
+			let bytes = ''; request.setEncoding('utf8'); request.on('data', value => { bytes += value; });
+			request.on('end', () => {
+				requests.push({ method: request.method ?? '', path: request.url ?? '', body: JSON.parse(bytes) });
+				response.setHeader('content-type', 'application/json'); response.statusCode = denied ? 503 : 200;
+				response.end(JSON.stringify(denied ? { type: 'about:blank', title: 'Original publication denial', status: 503, code: 'isolated_unavailable' }
+					: { data: { id: 'native-session', sequence: ++sequence, status: 'open' } }));
+			});
+		});
+		try {
+			await new Promise<void>((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
+			const address = server.address(); if (!address || typeof address === 'string') throw new Error('Original native endpoint required');
+			const url = `http://127.0.0.1:${address.port}`, config: ProviderConnectionRuntimeContext = {
+				dataDir: f.directory, environment: 'test', manifestPath: null, maxConcurrentRunners: 5, maxConcurrentWorkdays: 1,
+				budgetFile: null, dailyAgentSecondsLimit: null, monthlyAgentSecondsLimit: null, env: {}, redactedEnv: {},
+				connectionId: 'owner', teamId: f.attempt.teamId, providerId: f.attempt.provider.providerId, membershipId: 'membership',
+				controlPlaneUrl: url, controlPlaneAudience: url, accessToken: 'isolated-native-token', adapters: [], lanes: [], providerCapacity: { maxConcurrentWorkers: 5 } };
+			const claims = [];
+			for (const [index, status] of ['ready', 'running', 'recovery', 'polling', 'foreign'].entries()) {
+				const claim = await f.store.claim({ connectionId: status === 'foreign' ? 'foreign' : 'owner', globalLimit: 5, connectionLimit: 5 });
+				if (!claim) throw new Error('Original native slot required'); claims.push(claim);
+				if (status !== 'polling') await f.store.attachLease(claim.id, { ...f.lease(`native-${index}`), accounting: undefined });
+				if (status === 'running' || status === 'recovery') await f.store.claimDispatch(claim.id);
+				if (status === 'recovery') { await f.store.recordCloseoutOutput(claim.id, { status: 'blocked', unfinishedWork: ['original interruption'] });
+					await f.store.recordFailure(claim.id, 'original native publication custody'); }
+			}
+			const retained = await f.reopen().claimsForRecovery(), held = structuredClone(retained);
+			const availability = { adapters: [], lanes: [], capacity: { maxConcurrentWorkers: 5 }, activeWorkers: 5 }, before = structuredClone(availability);
+			await publishProviderAvailability(config, availability, f.reopen());
+			await publishProviderAvailability(config, availability, f.reopen());
+			denied = true; await expect(publishProviderAvailability(config, availability, f.reopen())).rejects.toThrow();
+			expect(await f.reopen().claimsForRecovery()).toEqual(held);
+			denied = false; await publishProviderAvailability(config, availability, f.reopen());
+			for (const claim of claims.slice(0, 3)) expect(await f.store.finalize(claim.id, 'terminal-receipt-confirmed')).toBe(true);
+			await publishProviderAvailability(config, { ...availability, activeWorkers: 2 }, f.reopen());
+			expect(requests.map(value => ({ method: value.method, path: value.path }))).toEqual([
+				{ method: 'POST', path: '/v1/provider/availability-sessions' },
+				{ method: 'PUT', path: '/v1/provider/availability-sessions/native-session' },
+				{ method: 'PUT', path: '/v1/provider/availability-sessions/native-session' },
+				{ method: 'POST', path: '/v1/provider/availability-sessions' },
+				{ method: 'POST', path: '/v1/provider/availability-sessions' },
+				{ method: 'PUT', path: '/v1/provider/availability-sessions/native-session' },
+			]);
+			expect(requests.map(value => value.body.runnerPressure)).toEqual([
+				...Array.from({ length: 5 }, () => ({ activeWorkers: 5, maxConcurrentWorkers: 5, activeAssignmentIds: ['native-0', 'native-1', 'native-2'] })),
+				{ activeWorkers: 2, maxConcurrentWorkers: 5, activeAssignmentIds: [] },
+			]);
+			expect(JSON.stringify(requests)).not.toContain('leaseToken'); expect(JSON.stringify(requests)).not.toContain('native-4');
+			const after = await f.reopen().snapshot(); expect(after.claims).toHaveLength(2);
+			expect(after.events.filter(value => value.message === 'original native publication custody')).toHaveLength(1);
+			expect(after.events.filter(value => value.outcome === 'terminal-receipt-confirmed')).toHaveLength(3);
+			expect(availability).toEqual(before); expect(await f.entries()).toEqual(['capacity-state.json']);
+			const originalBytes = await f.bytes(); await writeFile(f.path, '{', 'utf8');
+			await expect(publishProviderAvailability(config, availability, f.reopen())).rejects.toThrow();
+			expect(requests).toHaveLength(6); expect(await f.bytes()).toBe('{');
+			await writeFile(f.path, originalBytes, 'utf8');
+			expect((await f.reopen().snapshot()).claims).toHaveLength(2);
+		} finally { server.closeAllConnections(); if (server.listening) await new Promise<void>(resolve => server.close(() => resolve()));
+			expect(server.listening).toBe(false); await f.close(); }
+	});
 	it('native valid zero model and capability ceilings refuse concurrent positive reservations after failed measured execution without replacing polling or accounting custody', async () => {
 		const f = await capacityFixture();
 		try {

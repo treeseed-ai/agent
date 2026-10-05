@@ -160,6 +160,19 @@ test('Actual participating provider availability retains closed accounting histo
 	assert.ok(participating.some(session => session.status === 'closed'), 'ACCEPTANCE_AVAILABILITY_CLOSED: Actual retained closed publication required');
 	verifyAvailabilityAccountingHistory(participating, providers, teamId);
 	for (const session of participating) {
+		const pressure = row(row(session.snapshot).runnerPressure), ids = pressure.activeAssignmentIds;
+		assert.ok(Array.isArray(ids) && ids.every(id => typeof id === 'string' && id.length > 0)
+			&& new Set(ids).size === ids.length, 'ACCEPTANCE_AVAILABILITY_ASSIGNMENTS: Exact unique assignment inventory required');
+		for (const id of ids) {
+			const item = read(['assignments', 'show', id], f.team), attempt = assignmentAttemptSchema.parse(item.assignmentAttempt);
+			assert.equal(item.id, id); assert.equal(attempt.id, id); assert.equal(attempt.teamId, session.teamId);
+			assert.equal(attempt.provider.providerId, session.providerId); assert.equal(item.membershipId, session.membershipId);
+			assert.ok(Date.parse(attempt.createdAt) <= Date.parse(String(session.refreshedAt)),
+				'ACCEPTANCE_AVAILABILITY_ASSIGNMENTS: Future assignment cannot be retained publication authority');
+		}
+		// A retained recovery claim may outlive remote completion until local
+		// terminal confirmation. Latest session snapshots do not prove every
+		// historical active set; native producer tests cover that publication.
 		const adapters = row(session.snapshot).adapters; assert.ok(Array.isArray(adapters) && adapters.length > 0);
 		const offerIds = new Set<string>();
 		for (const adapter of adapters.map(row)) {

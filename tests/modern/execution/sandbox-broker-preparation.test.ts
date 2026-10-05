@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
-import { createHash } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { assignmentAttemptSchema } from '@treeseed/sdk/agent-capacity';
@@ -54,7 +54,7 @@ async function microvmBroker() {
 			try {
 				const bytes = Buffer.concat(chunks); response.setHeader('content-type', 'application/json');
 				if (path === '/v1/sandboxes') {
-					assigned = sandboxAssignmentSchema.parse(JSON.parse(bytes.toString('utf8')));
+					assigned = sandboxAssignmentSchema.parse(JSON.parse(bytes.toString('utf8')).assignment);
 					response.end('{"sandboxId":"owned-native-sandbox","operationToken":"controlled-native-operation"}'); return;
 				}
 				if (request.method === 'PUT' && path.includes('/inputs/')) { uploads.set(path.split('/').at(-1)!, bytes); response.end('{}'); return; }
@@ -85,10 +85,25 @@ async function microvmBroker() {
 			} catch (error) { response.statusCode = 500; response.end(JSON.stringify({ error: error instanceof Error ? error.message : 'Native input failed' })); }
 		});
 	});
+	const previousCustodyKey = process.env.TREESEED_PROVIDER_CREDENTIAL_KEK_FILE;
+	let custodyKey: string | undefined;
+	const close = async () => {
+		try { await fixture.close(); }
+		finally {
+			if (custodyKey && process.env.TREESEED_PROVIDER_CREDENTIAL_KEK_FILE === custodyKey) {
+				if (previousCustodyKey === undefined) delete process.env.TREESEED_PROVIDER_CREDENTIAL_KEK_FILE;
+				else process.env.TREESEED_PROVIDER_CREDENTIAL_KEK_FILE = previousCustodyKey;
+			}
+		}
+	};
 	try {
-		// Original host inputs are mandatory: no certificate/key replacement,
-		// environment override, skip, broker activation or installed fallback.
+		// The relay CA remains the required original host input. Only this fresh
+		// fixture identity uses an allocated mode-0600 OS custody key; no host
+		// provider secret is read, changed, or used as test authority.
 		const relayBytes = await readFile('/etc/treeseed/sandbox/relay-ca.crt');
+		custodyKey = join(fixture.directory, 'identity-custody-key');
+		await writeFile(custodyKey, randomBytes(32), { mode: 0o600 });
+		process.env.TREESEED_PROVIDER_CREDENTIAL_KEK_FILE = custodyKey;
 		const manifest = createManagedProviderManifestV5({ release: 'native-executor-input', guestImage: 'isolated/guest',
 			guestImageDigest: digest, baseImageDigest: digest, provenanceDigest: digest });
 		manifest.sandbox.brokerSocket = join(fixture.directory, 'broker.sock');
@@ -108,12 +123,12 @@ async function microvmBroker() {
 			leaseExpiresAt: attempt.deadline, capacityEnvelope: { budget: { time: { preparationDeadlineAt: attempt.deadline } } } };
 		input.beginExecution = async () => { beginCalls++; return { capacityEnvelope: { budget: { time: { executionStartedAt: createdAt, executionDeadlineAt: attempt.deadline } } } }; };
 		input.finishExecution = async () => { finishCalls++; }; input.emit = async event => { events.push({ type: event.type, payload: event.payload }); };
-		return { ...fixture, executor, input, paths, uploads, events, relayBytes, manifest, observations,
+		return { ...fixture, close, executor, input, paths, uploads, events, relayBytes, manifest, observations,
 			assignment: () => assigned, counters: () => ({ beginCalls, finishCalls }), destroyedAt: () => destroyedAt,
 			patchResult(value: Record<string, unknown>) { resultPatch = value; },
 			patchDestroy(value: unknown, fault = '') { destroyReply = value; destroyFault = fault; },
 			artifact(value: Buffer) { artifactBytes = Buffer.from(value); } };
-	} catch (error) { await fixture.close(); throw error; }
+	} catch (error) { await close(); throw error; }
 }
 
 describe('sandbox broker control transport', () => {
@@ -133,7 +148,7 @@ describe('sandbox broker control transport', () => {
 				api = await nativeCloseoutTransport({ attempt, input: f.input, executor: f.executor }, f.directory, true);
 				if (mode === 'diagnostic-denied') api.deny('reportUsage', 403); if (mode === 'settlement-denied') api.deny('settleAssignment', 503);
 				let failure: unknown; try { await api.run(); } catch (error) { failure = error; }
-				expect(f.observations).toHaveLength(1); const raw = structuredClone(f.observations[0]!);
+				expect(f.observations, failure instanceof Error ? failure.message : String(api.requests.find(item => item.operation === 'failAssignment')?.body.message ?? 'Native executor observation required')).toHaveLength(1); const raw = structuredClone(f.observations[0]!);
 				const diagnosticEvents = api.requests.filter(item => item.operation === 'createEvent'
 					&& ['provider.execution.completed', 'provider.execution.failed'].includes(String(item.body.eventType)));
 				expect(diagnosticEvents).toHaveLength(1);
@@ -157,7 +172,8 @@ describe('sandbox broker control transport', () => {
 				} else {
 					expect(failure).toBeUndefined();
 					if (mode === 'failed') {
-						expect(api.requests.filter(item => item.operation === 'failAssignment')).toEqual([{ operation: 'failAssignment', key: undefined,
+						expect(api.requests.filter(item => item.operation === 'failAssignment')).toEqual([{ operation: 'failAssignment',
+							key: expect.stringMatching(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u),
 							body: { leaseToken: f.input.leaseToken, runnerId: f.input.runnerId, code: 'sandbox_failed',
 								message: raw.summary, retryable: false, activeSeconds: 2, elapsedSeconds: 3, usage,
 								output: { sandboxId: raw.sandboxId, teardown: { verified: true, completedAt: f.destroyedAt() } } } }]);

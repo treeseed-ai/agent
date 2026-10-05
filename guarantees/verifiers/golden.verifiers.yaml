@@ -56,6 +56,11 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/provider/architecture/capacity-native.test.ts
     testName: "native valid zero model and capability ceilings refuse concurrent positive reservations after failed measured execution without replacing polling or accounting custody"
+  agent.golden.execution-public-event-unit-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/provider/provider-runner.test.ts
+    testName: "omits absent protected evidence from ordinary executor events while retaining exact SDK-valid public bytes and terminal history"
   agent.golden.execution-protected-observation-unit-1:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

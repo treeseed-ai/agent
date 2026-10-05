@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { runProviderAssignment } from '../../../src/provider/operations/runner.ts';
 import type { AgentExecutionResult, AgentExecutor } from '../../../src/provider/execution/contracts.ts';
+import { CONTROL_PLANE_OPERATIONS } from '@treeseed/sdk/operator-contracts';
 
 const digest = `sha256:${'a'.repeat(64)}`;
 const runtimeBuild = `sha256:${'b'.repeat(64)}`;
@@ -60,6 +61,26 @@ function client() {
 const treeDx = { projectId: 'project', handleId: 'handle-1', repositoryId: null, workspaceId: null, invoke: vi.fn() };
 
 	describe('canonical provider assignment runner', () => {
+	it('omits absent protected evidence from ordinary executor events while retaining exact SDK-valid public bytes and terminal history', async () => {
+		const api = client(), value = assignment(), before = structuredClone(value);
+		const event = { type: 'execution.preparing', occurredAt: value.assignmentAttempt.createdAt,
+			summary: 'Original preparation.', payload: { profile: 'unit' } }, held = structuredClone(event);
+		let executions = 0;
+		await runProviderAssignment({ client: api, assignment: value, treeDx, leaseToken: 'lease', runnerId: 'runner', runtimeBuild,
+			executor: { id: 'codex', observe: async () => ({ available: true }), execute: async request => {
+				executions++; await request.beginExecution?.(); await request.emit?.(event);
+				return { status: 'completed', summary: 'Original complete outcome.', outputs: { timingAwareness }, usage: [{ activeSeconds: 1, elapsedSeconds: 1 }] };
+			} } });
+		expect(api.createAssignmentEvent).toHaveBeenCalledOnce();
+		const [id, body] = api.createAssignmentEvent.mock.calls[0]!;
+		expect(id).toBe(value.id); expect(Object.hasOwn(body, 'protectedPayload')).toBe(false);
+		expect(body).toEqual({ id: expect.stringMatching(/^trace:[a-f0-9]{24}:0$/u), leaseToken: 'lease', runnerId: 'runner', sequence: 0,
+			eventType: 'provider.execution.preparing', component: 'execution-provider', status: 'recorded',
+			message: event.summary, createdAt: event.occurredAt, context: event.payload });
+		expect(CONTROL_PLANE_OPERATIONS.providers.createEvent.schema.body.parse(body)).toEqual(body);
+		expect(value).toEqual(before); expect(event).toEqual(held); expect(executions).toBe(1);
+		expect(api.completeAssignment).toHaveBeenCalledOnce(); expect(api.failAssignment).not.toHaveBeenCalled();
+	});
 	it('retains exact protected executor observations on the original ordinary and conversation transports without exposing them as public context or changing terminal history', async () => {
 		for (const kind of ['workday', 'conversation'] as const) for (const status of ['completed', 'failed'] as const) {
 			const api = client(), value = assignment(kind), before = structuredClone(value);

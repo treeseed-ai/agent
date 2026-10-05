@@ -36,6 +36,9 @@ workflow:
   - id: execution-poll-quota-native-1
     action: { verifier: agent.golden.execution-poll-quota-native-1 }
     expect: { status: passed }
+  - id: execution-public-event-unit-1
+    action: { verifier: agent.golden.execution-public-event-unit-1 }
+    expect: { status: passed }
   - id: agent.golden.execution-protected-observation-unit-1
     action: { verifier: agent.golden.execution-protected-observation-unit-1 }
     expect: { status: passed }

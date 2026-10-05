@@ -143,7 +143,8 @@ export async function runProviderAssignment(input: ProviderAssignmentRunInput) {
     } else {
       // Protected transcript payloads must not enter recipient-visible workday events.
 			const body = { id: `trace:${traceRunner}:${sequence}`,
-				leaseToken: input.leaseToken, runnerId: input.runnerId, sequence, protectedPayload: event.protectedPayload,
+				leaseToken: input.leaseToken, runnerId: input.runnerId, sequence,
+				...(event.protectedPayload === undefined ? {} : { protectedPayload: event.protectedPayload }),
         eventType: `provider.${event.type}` as const, component: 'execution-provider' as const,
         status: event.type === 'execution.failed' ? 'failed' as const : event.type === 'execution.completed' ? 'completed' as const : 'recorded' as const,
         message: event.summary, createdAt: event.occurredAt, context: event.payload };

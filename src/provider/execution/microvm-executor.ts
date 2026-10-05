@@ -271,7 +271,7 @@ export async function createMicrovmExecutor(config: ProviderHostRuntimeConfig, m
 					teardown = object(receipt?.teardown);
 					if (!receipt || receipt.sandboxId !== prepared.sandboxId || receipt.destroyed !== true || teardown.verified !== true
 						|| typeof teardown.completedAt !== 'string' || !Number.isFinite(Date.parse(teardown.completedAt)) || Date.parse(teardown.completedAt) > Date.now()) {
-						transportFailure = Object.assign(new Error('Sandbox teardown could not be independently verified.'), { code: 'sandbox_teardown_unverified', cause: destroyFailure ?? transportFailure });
+						transportFailure = Object.assign(new Error(`Sandbox teardown could not be independently verified.${destroyFailure instanceof Error ? ` ${destroyFailure.message}` : ''}`), { code: 'sandbox_teardown_unverified', cause: destroyFailure ?? transportFailure });
 					}
 					try {
 						await request.emit?.({ type: 'sandbox.destroyed', occurredAt: new Date().toISOString(), summary: `Kata sandbox ${prepared.sandboxId} teardown ${teardown.verified === true ? 'verified' : 'could not be verified'}.`, payload: { sandboxId: prepared.sandboxId, teardown } });

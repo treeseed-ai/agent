@@ -18,13 +18,8 @@ export function assertAssignmentContextRead(ref: ExactEntityReference, grant: Pi
 	if (!allowed) throw new Error('assignment_grant_denied:content.read');
 }
 
-export function enforceAssignmentGrant(runtime: AgentRuntime, input: {
-	contentRead: ExactEntityReference[];
-	contentWrite: ExactEntityReference[];
-	sourceRead: string[];
-	sourceWrite: string[];
-	tools: string[];
-}, workspace: { mode: string; writablePaths?: string[] }, assertAuthority: () => void): AgentRuntime {
+export function enforceAssignmentGrant(runtime: AgentRuntime, input: AssignmentAttempt['grant'],
+	workspace: { mode: string; writablePaths?: string[] }, assertAuthority: () => void): AgentRuntime {
 	const writable = new Set(input.contentWrite.map(referenceKey));
 	const tools = new Set(input.tools);
 	return {

@@ -34,6 +34,10 @@ test('Every native managed attempt exposes one unchanged canonical lease reserva
 			'ACCEPTANCE_NATIVE_UNITS: Original numeric units must remain uncoerced');
 		const aggregate = f.measurements.filter(value => value.assignmentId === settlement.assignmentId && value.accountingMode === 'aggregate');
 		assert.equal(aggregate.length, 1); assert.deepEqual(aggregate[0]!.nativeUsage, native);
+		for (const field of ['activeSeconds', 'elapsedSeconds'] as const) if (Object.hasOwn(native, field)) {
+			assert.equal(native[field], aggregate[0]![field],
+				'ACCEPTANCE_NATIVE_SECONDS: Repeated terminal seconds must agree without charging infrastructure as active work');
+		}
 	}
 	verify(f); verifyGolden('settlement'); verifyGolden('reporter'); assert.deepEqual(f, before); assert.deepEqual(actual(), before);
 });

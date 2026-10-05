@@ -2,6 +2,7 @@ import type { ProviderConnectionRuntime } from './coordinator.ts';
 import { createProviderControlPlaneClient } from './client.ts';
 import type { ProviderHostRuntimeConfig } from '../configuration/config.ts';
 import { ProviderLocalCapacityStore } from '../capacity/capacity-core/local-capacity-store.ts';
+import { providerFailureSummary } from '../../sandbox/provider-failure.ts';
 
 function record(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -11,6 +12,11 @@ export async function recoverProviderLocalLeases(input: { config: ProviderHostRu
   const store = input.store ?? new ProviderLocalCapacityStore(input.config.dataDir);
   const results: Record<string, unknown>[] = [];
   for (const claim of await store.claimsForRecovery(input.includeRunning !== false)) {
+    if (!claim.assignmentId && !claim.leaseToken) {
+      await store.finalize(claim.id, 'unleased-claim-released');
+      results.push({ claimId: claim.id, status: 'released', reason: 'no_lease_acquired' });
+      continue;
+    }
     const connection = input.connections.find((entry) => entry.connection.id === claim.connectionId);
     if (!connection || !claim.assignmentId || !claim.leaseToken) {
       await store.recordFailure(claim.id, 'Connection or lease identity is unavailable during recovery.');
@@ -25,7 +31,10 @@ export async function recoverProviderLocalLeases(input: { config: ProviderHostRu
       const observed = record(await client.assignment(claim.assignmentId));
       const assignment = record(observed.data ?? observed.assignment ?? observed);
       const status = textStatus(assignment.status);
-      if (status === 'leased' || status === 'running') await client.returnAssignment(claim.assignmentId, { leaseToken: claim.leaseToken, runnerId: claim.runnerId, code: 'provider_restart_recovery', reason: 'Provider restarted before durable completion.' });
+      if (status === 'leased' || status === 'running') await client.returnAssignment(claim.assignmentId, { leaseToken: claim.leaseToken, runnerId: claim.runnerId,
+        ...(claim.closeoutOutput ? { output: claim.closeoutOutput } : {}),
+        code: claim.failureMessage ? 'provider_runtime_recovery' : 'provider_restart_recovery',
+        reason: claim.failureMessage ? `Provider runtime failed before durable completion: ${providerFailureSummary([{ type: 'error', message: claim.failureMessage }], [claim.leaseToken, connection.accessToken.accessToken])}` : 'Provider restarted before durable completion.' });
       await store.finalize(claim.id, status === 'leased' || status === 'running' ? 'restart-return-confirmed' : `authoritative-${status || 'unknown'}`);
       results.push({ claimId: claim.id, assignmentId: claim.assignmentId, status: 'released', observedStatus: status });
     } catch (error) {

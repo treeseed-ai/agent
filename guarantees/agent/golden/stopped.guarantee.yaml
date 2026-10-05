@@ -1,0 +1,12 @@
+schemaVersion: treeseed.guarantee/v1
+id: guarantee.agent.golden.stopped
+journey: Verify stopped simulation evidence
+ownerPackage: "@treeseed/agent"
+type: agent
+subtype: execution
+status: planned
+gates: [core]
+summary: Terminal cancellation, released leases, per-attempt teardown and settlement; not golden success or host disk plateau proof.
+scene:
+  required: true
+  manifest: guarantees/agent/golden/scenes/stopped.scene.yaml

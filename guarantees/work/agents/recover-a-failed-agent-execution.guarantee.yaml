@@ -39,7 +39,8 @@ actors: { allowed: [capacity_operator, team_owner], forbidden: [anonymous_user, 
 devices: { required: [] }
 gates: [core]
 preconditions: { fixtures: [integrated_treeseed_project] }
-api: { required: true, verifierRefs: [agent.catalog.profile-live-proof] }
+# Component coverage only; interruption-resume live acceptance is still required.
+api: { required: true, verifierRefs: [agent.golden.settlement, agent.golden.lease-denial, agent.golden.rollover] }
 content: { required: true, verifierRefs: [] }
 audit: { required: true, verifierRefs: [] }
 negativeCases: []

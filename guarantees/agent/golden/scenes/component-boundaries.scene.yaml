@@ -1,0 +1,488 @@
+schemaVersion: treeseed.scene/v1
+id: agent.golden.component-boundaries
+title: Golden execution component boundaries
+scope: local-component-tests
+workflow:
+  - id: provider-source-fixture-link
+    action: { verifier: agent.golden.provider-source-fixture-link }
+    expect: { status: passed }
+  - id: provider-source-readable
+    action: { verifier: agent.golden.provider-source-readable }
+    expect: { status: passed }
+  - id: provider-treedx-declaration
+    action: { verifier: agent.golden.provider-treedx-declaration }
+    expect: { status: passed }
+  - id: provider-treedx-identity
+    action: { verifier: agent.golden.provider-treedx-identity }
+    expect: { status: passed }
+  - id: sandbox-dependency-scope
+    action: { verifier: agent.golden.sandbox-dependency-scope }
+    expect: { status: passed }
+  - id: provider-treedx-http-authority
+    action: { verifier: agent.golden.provider-treedx-http-authority }
+    expect: { status: passed }
+  - id: provider-treedx-http-denial
+    action: { verifier: agent.golden.provider-treedx-http-denial }
+    expect: { status: passed }
+  - id: provider-treedx-http-preflight
+    action: { verifier: agent.golden.provider-treedx-http-preflight }
+    expect: { status: passed }
+  - id: planning-recovery-shared-contract
+    action: { verifier: agent.golden.planning-recovery-shared-contract }
+    expect: { status: passed }
+  - id: planning-recovery-full-evidence
+    action: { verifier: agent.golden.planning-recovery-full-evidence }
+    expect: { status: passed }
+  - id: planning-recovery-yaml-identity
+    action: { verifier: agent.golden.planning-recovery-yaml-identity }
+    expect: { status: passed }
+  - id: planning-recovery-safe-diagnostics
+    action: { verifier: agent.golden.planning-recovery-safe-diagnostics }
+    expect: { status: passed }
+  - id: planning-recovery-process-em
+    action: { verifier: agent.golden.planning-recovery-process-em }
+    expect: { status: passed }
+  - id: planning-recovery-process-order
+    action: { verifier: agent.golden.planning-recovery-process-order }
+    expect: { status: passed }
+  - id: planning-recovery-process-literal
+    action: { verifier: agent.golden.planning-recovery-process-literal }
+    expect: { status: passed }
+  - id: planning-recovery-process-budget
+    action: { verifier: agent.golden.planning-recovery-process-budget }
+    expect: { status: passed }
+  - id: planning-summary-bounded-validation
+    action: { verifier: agent.golden.planning-summary-bounded-validation }
+    expect: { status: passed }
+  - id: planning-summary-schema
+    action: { verifier: agent.golden.planning-summary-schema }
+    expect: { status: passed }
+  - id: planning-summary-el-omission
+    action: { verifier: agent.golden.planning-summary-el-omission }
+    expect: { status: passed }
+  - id: planning-summary-all-omissions
+    action: { verifier: agent.golden.planning-summary-all-omissions }
+    expect: { status: passed }
+  - id: planning-summary-empty-citations
+    action: { verifier: agent.golden.planning-summary-empty-citations }
+    expect: { status: passed }
+  - id: planning-summary-blank-contribution
+    action: { verifier: agent.golden.planning-summary-blank-contribution }
+    expect: { status: passed }
+  - id: planning-summary-prose-citations
+    action: { verifier: agent.golden.planning-summary-prose-citations }
+    expect: { status: passed }
+  - id: planning-summary-literal-ids
+    action: { verifier: agent.golden.planning-summary-literal-ids }
+    expect: { status: passed }
+  - id: planning-summary-newlines
+    action: { verifier: agent.golden.planning-summary-newlines }
+    expect: { status: passed }
+  - id: planning-summary-order
+    action: { verifier: agent.golden.planning-summary-order }
+    expect: { status: passed }
+  - id: planning-summary-activity-scope
+    action: { verifier: agent.golden.planning-summary-activity-scope }
+    expect: { status: passed }
+  - id: planning-summary-context-custody
+    action: { verifier: agent.golden.planning-summary-context-custody }
+    expect: { status: passed }
+  - id: planning-summary-recovery-schema
+    action: { verifier: agent.golden.planning-summary-recovery-schema }
+    expect: { status: passed }
+  - id: release-review-native-first
+    action: { verifier: agent.golden.release-review-native-first }
+    expect: { status: passed }
+  - id: release-review-native-receipts
+    action: { verifier: agent.golden.release-review-native-receipts }
+    expect: { status: passed }
+  - id: release-review-extra-checks
+    action: { verifier: agent.golden.release-review-extra-checks }
+    expect: { status: passed }
+  - id: release-review-candidate-inventory
+    action: { verifier: agent.golden.release-review-candidate-inventory }
+    expect: { status: passed }
+  - id: release-review-unsafe-inventory
+    action: { verifier: agent.golden.release-review-unsafe-inventory }
+    expect: { status: passed }
+  - id: release-review-replay-failure
+    action: { verifier: agent.golden.release-review-replay-failure }
+    expect: { status: passed }
+  - id: release-review-source-custody
+    action: { verifier: agent.golden.release-review-source-custody }
+    expect: { status: passed }
+  - id: release-review-conflicting-failure
+    action: { verifier: agent.golden.release-review-conflicting-failure }
+    expect: { status: passed }
+  - id: release-review-original-budget
+    action: { verifier: agent.golden.release-review-original-budget }
+    expect: { status: passed }
+  - id: release-review-activity-scope
+    action: { verifier: agent.golden.release-review-activity-scope }
+    expect: { status: passed }
+  - id: release-review-model-evidence
+    action: { verifier: agent.golden.release-review-model-evidence }
+    expect: { status: passed }
+  - id: release-review-guest-order
+    action: { verifier: agent.golden.release-review-guest-order }
+    expect: { status: passed }
+  - id: release-review-real-pack
+    action: { verifier: agent.golden.release-review-real-pack }
+    expect: { status: passed }
+  - id: api-deadline-clamp
+    action: { verifier: agent.golden.api-deadline-clamp }
+    expect: { status: passed }
+  - id: api-clock-fail-closed
+    action: { verifier: agent.golden.api-clock-fail-closed }
+    expect: { status: passed }
+  - id: api-deadline-remeasurement
+    action: { verifier: agent.golden.api-deadline-remeasurement }
+    expect: { status: passed }
+  - id: mandatory-replay-budget
+    action: { verifier: agent.golden.mandatory-replay-budget }
+    expect: { status: passed }
+  - id: exhausted-budget-denial
+    action: { verifier: agent.golden.exhausted-budget-denial }
+    expect: { status: passed }
+  - id: mandatory-replay-exhaustion
+    action: { verifier: agent.golden.mandatory-replay-exhaustion }
+    expect: { status: passed }
+  - id: stricter-command-window
+    action: { verifier: agent.golden.stricter-command-window }
+    expect: { status: passed }
+  - id: setup-closeout-reserve
+    action: { verifier: agent.golden.setup-closeout-reserve }
+    expect: { status: passed }
+  - id: model-closeout-denial
+    action: { verifier: agent.golden.model-closeout-denial }
+    expect: { status: passed }
+  - id: replay-dependency-budget
+    action: { verifier: agent.golden.replay-dependency-budget }
+    expect: { status: passed }
+  - id: real-replay-deadline
+    action: { verifier: agent.golden.real-replay-deadline }
+    expect: { status: passed }
+  - id: mandatory-replay-reserve
+    action: { verifier: agent.golden.mandatory-replay-reserve }
+    expect: { status: passed }
+  - id: synthesis-api-deadline
+    action: { verifier: agent.golden.synthesis-api-deadline }
+    expect: { status: passed }
+  - id: runtime-api-clock
+    action: { verifier: agent.golden.runtime-api-clock }
+    expect: { status: passed }
+  - id: runtime-clock-budget
+    action: { verifier: agent.golden.runtime-clock-budget }
+    expect: { status: passed }
+  - id: runtime-clock-denial
+    action: { verifier: agent.golden.runtime-clock-denial }
+    expect: { status: passed }
+  - id: runtime-clock-environment
+    action: { verifier: agent.golden.runtime-clock-environment }
+    expect: { status: passed }
+  - id: canonical-safe-closeout
+    action: { verifier: agent.golden.canonical-safe-closeout }
+    expect: { status: passed }
+  - id: ongoing-time-discipline
+    action: { verifier: agent.golden.ongoing-time-discipline }
+    expect: { status: passed }
+  - id: measured-time-discipline
+    action: { verifier: agent.golden.measured-time-discipline }
+    expect: { status: passed }
+  - id: unfinished-work-authority
+    action: { verifier: agent.golden.unfinished-work-authority }
+    expect: { status: passed }
+  - id: revision-original-source
+    action: { verifier: agent.golden.revision-original-source }
+    expect: { status: passed }
+  - id: selected-objective
+    action: { verifier: agent.golden.selected-objective }
+    expect: { status: passed }
+  - id: work-item-source-denial
+    action: { verifier: agent.golden.work-item-source-denial }
+    expect: { status: passed }
+  - id: broker-connection-isolation
+    action: { verifier: agent.golden.broker-connection-isolation }
+    expect: { status: passed }
+  - id: broker-reset-no-replay
+    action: { verifier: agent.golden.broker-reset-no-replay }
+    expect: { status: passed }
+  - id: tool-delivery-no-replay
+    action: { verifier: agent.golden.tool-delivery-no-replay }
+    expect: { status: passed }
+  - id: tool-poll-fail-closed
+    action: { verifier: agent.golden.tool-poll-fail-closed }
+    expect: { status: passed }
+  - id: provider-event-credential-redaction
+    action: { verifier: agent.golden.provider-event-credential-redaction }
+    expect: { status: passed }
+  - id: provider-event-evidence-preservation
+    action: { verifier: agent.golden.provider-event-evidence-preservation }
+    expect: { status: passed }
+  - id: provider-event-key-redaction
+    action: { verifier: agent.golden.provider-event-key-redaction }
+    expect: { status: passed }
+  - id: provider-event-rotated-credential-redaction
+    action: { verifier: agent.golden.provider-event-rotated-credential-redaction }
+    expect: { status: passed }
+  - id: closeout-before-publication
+    action: { verifier: agent.golden.closeout-before-publication }
+    expect: { status: passed }
+  - id: closeout-local-denial
+    action: { verifier: agent.golden.closeout-local-denial }
+    expect: { status: passed }
+  - id: closeout-runner-custody
+    action: { verifier: agent.golden.closeout-runner-custody }
+    expect: { status: passed }
+  - id: closeout-restart-custody
+    action: { verifier: agent.golden.closeout-restart-custody }
+    expect: { status: passed }
+  - id: replay-failure-diagnostics
+    action: { verifier: agent.golden.replay-failure-diagnostics }
+    expect: { status: passed }
+  - id: replay-success-observation
+    action: { verifier: agent.golden.replay-success-observation }
+    expect: { status: passed }
+  - id: runner-test-first-red
+    action: { verifier: agent.golden.runner-test-first-red }
+    expect: { status: passed }
+  - id: runner-test-first-denial
+    action: { verifier: agent.golden.runner-test-first-denial }
+    expect: { status: passed }
+  - id: canonical-context-reuse
+    action: { verifier: agent.golden.canonical-context-reuse }
+    expect: { status: passed }
+  - id: aggregate-build-reuse
+    action: { verifier: agent.golden.aggregate-build-reuse }
+    expect: { status: passed }
+  - id: research-review-challenge
+    action: { verifier: agent.golden.research-review-challenge }
+    expect: { status: passed }
+  - id: public-release-criteria
+    action: { verifier: agent.golden.public-release-criteria }
+    expect: { status: passed }
+  - id: retired-pair-custody
+    action: { verifier: agent.golden.retired-pair-custody }
+    expect: { status: passed }
+  - id: pretransport-closure
+    action: { verifier: agent.golden.pretransport-closure }
+    expect: { status: passed }
+  - id: pretransport-closure-denial
+    action: { verifier: agent.golden.pretransport-closure-denial }
+    expect: { status: passed }
+  - id: paired-test-first-red-evidence
+    action: { verifier: agent.golden.paired-test-first-red-evidence }
+    expect: { status: passed }
+  - id: native-reporter-closure
+    action: { verifier: agent.golden.native-reporter-closure }
+    expect: { status: passed }
+  - id: native-reporter-settlement
+    action: { verifier: agent.golden.native-reporter-settlement }
+    expect: { status: passed }
+  - id: persistent-freeze-receipts
+    action: { verifier: agent.golden.persistent-freeze-receipts }
+    expect: { status: passed }
+  - id: continuation-authority
+    action: { verifier: agent.golden.continuation-authority }
+    expect: { status: passed }
+  - id: continuation-request-identity
+    action: { verifier: agent.golden.continuation-request-identity }
+    expect: { status: passed }
+  - id: continuation-denial
+    action: { verifier: agent.golden.continuation-denial }
+    expect: { status: passed }
+  - id: continuation-release-revision
+    action: { verifier: agent.golden.continuation-release-revision }
+    expect: { status: passed }
+  - id: continuation-revision-denial
+    action: { verifier: agent.golden.continuation-revision-denial }
+    expect: { status: passed }
+  - id: phase-cancelled-lifecycle
+    action: { verifier: agent.golden.phase-cancelled-lifecycle }
+    expect: { status: passed }
+  - id: phase-cancelled-settlement
+    action: { verifier: agent.golden.phase-cancelled-settlement }
+    expect: { status: passed }
+  - id: portable-release-pack
+    action: { verifier: agent.golden.portable-release-pack }
+    expect: { status: passed }
+  - id: portable-release-guidance
+    action: { verifier: agent.golden.portable-release-guidance }
+    expect: { status: passed }
+  - id: provider-policy-parity
+    action: { verifier: agent.golden.provider-policy-parity }
+    expect: { status: passed }
+  - id: host-duration-bounds
+    action: { verifier: agent.golden.host-duration-bounds }
+    expect: { status: passed }
+  - id: failed-only-stop
+    action: { verifier: agent.golden.failed-only-stop }
+    expect: { status: passed }
+  - id: concurrent-refill
+    action: { verifier: agent.golden.concurrent-refill }
+    expect: { status: passed }
+  - id: connection-ceiling
+    action: { verifier: agent.golden.connection-ceiling }
+    expect: { status: passed }
+  - id: adapter-ceiling
+    action: { verifier: agent.golden.adapter-ceiling }
+    expect: { status: passed }
+  - id: overlap-evidence
+    action: { verifier: agent.golden.overlap-evidence }
+    expect: { status: passed }
+  - id: cli-supervision
+    action: { verifier: agent.golden.cli-supervision }
+    expect: { status: passed }
+  - id: admission-replay
+    action: { verifier: agent.golden.admission-replay }
+    expect: { status: passed }
+  - id: debug-window
+    action: { verifier: agent.golden.debug-window }
+    expect: { status: passed }
+  - id: fluid-planning
+    action: { verifier: agent.golden.fluid-planning }
+    expect: { status: passed }
+  - id: early-collaboration
+    action: { verifier: agent.golden.early-collaboration }
+    expect: { status: passed }
+  - id: campaign-supply
+    action: { verifier: agent.golden.campaign-supply }
+    expect: { status: passed }
+  - id: paired-review-profile
+    action: { verifier: agent.golden.paired-review-profile }
+    expect: { status: passed }
+  - id: review-requires-decision
+    action: { verifier: agent.golden.review-requires-decision }
+    expect: { status: passed }
+  - id: terminal-teardown-output
+    action: { verifier: agent.golden.timeout-terminal-output }
+    expect: { status: passed }
+  - id: bounded-timeout-drain
+    action: { verifier: agent.golden.timeout-drain }
+    expect: { status: passed }
+  - id: late-timeout-result
+    action: { verifier: agent.golden.timeout-late-result }
+    expect: { status: passed }
+  - id: canonical-release-revision
+    action: { verifier: agent.golden.canonical-release-revision }
+    expect: { status: passed }
+  - id: recursive-workspace-grant
+    action: { verifier: agent.golden.recursive-workspace-grant }
+    expect: { status: passed }
+  - id: planning-completion
+    action: { verifier: agent.golden.planning-completion }
+    expect: { status: passed }
+  - id: chat-receipt-denied
+    action: { verifier: agent.golden.chat-receipt-denied }
+    expect: { status: passed }
+  - id: chat-abstention
+    action: { verifier: agent.golden.chat-abstention }
+    expect: { status: passed }
+  - id: team-enrollment
+    action: { verifier: agent.golden.team-enrollment }
+    expect: { status: passed }
+  - id: token-binding
+    action: { verifier: agent.golden.token-binding }
+    expect: { status: passed }
+  - id: disk-admission
+    action: { verifier: agent.golden.disk-admission }
+    expect: { status: passed }
+  - id: disk-supply
+    action: { verifier: agent.golden.disk-supply }
+    expect: { status: passed }
+  - id: kernel-authority
+    action: { verifier: agent.golden.kernel-authority }
+    expect: { status: passed }
+  - id: context-grant
+    action: { verifier: agent.golden.context-grant }
+    expect: { status: passed }
+  - id: architect-book-preflight
+    action: { verifier: agent.golden.architect-book-preflight }
+    expect: { status: passed }
+  - id: architect-book-context
+    action: { verifier: agent.golden.architect-book-context }
+    expect: { status: passed }
+  - id: architect-book-output
+    action: { verifier: agent.golden.architect-book-output }
+    expect: { status: passed }
+  - id: researcher-source-trace
+    action: { verifier: agent.golden.researcher-source-trace }
+    expect: { status: passed }
+  - id: architect-source-trace
+    action: { verifier: agent.golden.architect-source-trace }
+    expect: { status: passed }
+  - id: estimate-publication
+    action: { verifier: agent.golden.estimate-publication }
+    expect: { status: passed }
+  - id: actor
+    action: { verifier: agent.golden.actor }
+    expect: { status: passed }
+  - id: reviewer
+    action: { verifier: agent.golden.reviewer }
+    expect: { status: passed }
+  - id: reviewer-disposition-schema
+    action: { verifier: agent.golden.reviewer-disposition-schema }
+    expect: { status: passed }
+  - id: reviewer-disposition-prompt
+    action: { verifier: agent.golden.reviewer-disposition-prompt }
+    expect: { status: passed }
+  - id: clock
+    action: { verifier: agent.golden.clock }
+    expect: { status: passed }
+  - id: revision
+    action: { verifier: agent.golden.revision }
+    expect: { status: passed }
+  - id: reporter
+    action: { verifier: agent.golden.reporter }
+    expect: { status: passed }
+  - id: caps
+    action: { verifier: agent.golden.caps }
+    expect: { status: passed }
+  - id: rollover
+    action: { verifier: agent.golden.rollover }
+    expect: { status: passed }
+  - id: settlement
+    action: { verifier: agent.golden.settlement }
+    expect: { status: passed }
+  - id: lease-denial
+    action: { verifier: agent.golden.lease-denial }
+    expect: { status: passed }
+  - id: credential-isolation
+    action: { verifier: agent.golden.credential-isolation }
+    expect: { status: passed }
+  - id: measurement
+    action: { verifier: agent.golden.measurement }
+    expect: { status: passed }
+  - id: workspace-paths
+    action: { verifier: agent.golden.workspace-paths }
+    expect: { status: passed }
+  - id: workspace-denials
+    action: { verifier: agent.golden.workspace-denials }
+    expect: { status: passed }
+  - id: runtime-close
+    action: { verifier: agent.golden.runtime-close }
+    expect: { status: passed }
+  - id: runtime-crash
+    action: { verifier: agent.golden.runtime-crash }
+    expect: { status: passed }
+  - id: productive-overrun
+    action: { verifier: agent.golden.productive-overrun }
+    expect: { status: passed }
+  - id: deadline-mutation
+    action: { verifier: agent.golden.deadline-mutation }
+    expect: { status: passed }
+  - id: discussion-publication
+    action: { verifier: agent.golden.discussion-publication }
+    expect: { status: passed }
+  - id: discussion-publication-failure
+    action: { verifier: agent.golden.discussion-publication-failure }
+    expect: { status: passed }
+  - id: discussion-settlement-failure
+    action: { verifier: agent.golden.discussion-settlement-failure }
+    expect: { status: passed }
+  - id: discussion-summary-boundary
+    action: { verifier: agent.golden.chat-summary-boundary }
+    expect: { status: passed }
+  - id: concrete-source-publication
+    action: { verifier: agent.golden.concrete-source-paths }
+    expect: { status: passed }

@@ -1,0 +1,5 @@
+scope: local-integrated-runtime
+workflow:
+  - id: exact-release-continuation
+    action: { verifier: agent.golden.live.continuation }
+    expect: { status: passed }

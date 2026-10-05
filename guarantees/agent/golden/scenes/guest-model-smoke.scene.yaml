@@ -1,0 +1,8 @@
+schemaVersion: treeseed.scene/v1
+id: agent.golden.guest-model-smoke
+title: Subscription model access in the current Kata guest
+scope: local-integrated-runtime
+workflow:
+  - id: real-guest-response
+    action: { verifier: agent.golden.live.guest-model-smoke }
+    expect: { status: passed }

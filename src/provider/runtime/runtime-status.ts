@@ -19,6 +19,7 @@ export async function writeProviderRuntimeStatus(dataDirectory: string, status: 
 		pid: process.pid,
 		updatedAt: new Date().toISOString(),
 		...status,
+		ok: status.ok && !(status.result && typeof status.result === 'object' && 'ok' in status.result && status.result.ok === false),
 	};
 	const temporary = `${path}.${process.pid}.tmp`;
 	await writeFile(temporary, `${JSON.stringify(payload, null, 2)}\n`, { encoding: 'utf8', mode: 0o600 });

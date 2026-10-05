@@ -1,0 +1,8 @@
+schemaVersion: treeseed.scene/v1
+id: agent.golden.collaboration
+title: Golden collaboration read-back
+scope: local-integrated-runtime
+workflow:
+  - id: collaboration-evidence
+    action: { verifier: agent.golden.live.collaboration }
+    expect: { status: passed }

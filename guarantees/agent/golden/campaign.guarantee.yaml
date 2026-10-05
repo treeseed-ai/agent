@@ -1,0 +1,12 @@
+schemaVersion: treeseed.guarantee/v1
+id: guarantee.agent.golden.campaign
+journey: Execute a frozen SDK golden campaign
+ownerPackage: "@treeseed/agent"
+type: agent
+subtype: execution
+status: planned
+gates: [core]
+summary: Supported CLI admission and automatic planning/terminal gates; full specification coverage remains separately enforced.
+scene:
+  required: true
+  manifest: guarantees/agent/golden/scenes/campaign.scene.yaml

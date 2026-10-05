@@ -40,7 +40,6 @@ api:
   required: true
   verifierRefs:
     - agent.assignment.fail
-    - agent.assignment.fallback-evidence-stable
 content:
   required: false
   verifierRefs: []
@@ -48,7 +47,6 @@ audit:
   required: true
   verifierRefs:
     - agent.assignment.fail
-    - agent.assignment.fallback-evidence-stable
 negativeCases:
   - id: unauthorized-actor-denied
     actor: anonymous_user

@@ -26,7 +26,7 @@ services:
     environment:
       NODE_ENV: development
       TREESEED_PROVIDER_CHOWN_DATA: "0"
-      TREESEED_PROVIDER_RUNNER_POLL_SECONDS: "5"
+      TREESEED_PROVIDER_RUNNER_POLL_SECONDS: "1"
     volumes:
       - ../..:/workspace:ro
       - "${TREESEED_HOST_CODEX_AUTH_FILE:-/dev/null}:/run/treeseed-secrets/codex-auth.json:ro"

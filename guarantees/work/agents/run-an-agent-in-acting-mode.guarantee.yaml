@@ -33,7 +33,8 @@ actors: { allowed: [capacity_operator, team_owner], forbidden: [anonymous_user, 
 devices: { required: [] }
 gates: [core]
 preconditions: { fixtures: [bounded_source_project] }
-api: { required: true, verifierRefs: [agent.catalog.profile-live-proof] }
+# Component coverage only; this does not satisfy the declared live outcomes.
+api: { required: true, verifierRefs: [agent.golden.actor, agent.golden.revision, agent.golden.workspace-denials] }
 content: { required: false, verifierRefs: [] }
 audit: { required: true, verifierRefs: [] }
 negativeCases: []

@@ -41,6 +41,66 @@ node ./dist/provider/lifecycle/entrypoint.js runner --plan --json
 
 See [Capacity Provider Runtime](./docs/capacity-provider-runtime.md) for the lifecycle and recovery contract.
 
+Project-owned handlers are compiled into the provider image, never loaded from an assignment. A project TypeScript entry exports `projectHandlers: readonly Handler[]` (import `Handler` from `@treeseed/agent`). Set `TREESEED_AGENT_PROJECT_HANDLERS_ENTRY` to that entry only while building the provider image; the build replaces the empty registry module in `dist`. The runner statically imports it, and assignment dispatch requires the exact pinned runtime build and a matching handler origin. A normal build without this input includes only Agent-package handlers.
+
+## Automated golden evidence
+
+Guarantees and native acceptance verifiers ship with this package. Use the
+unified Reviewer runner against a checkout or installed package root:
+
+```bash
+TREESEED_ACCEPTANCE_WORKDAY_ID=workday-... treeseed-reviewer-guarantees \
+  --workspace /path/to/agent --environment local \
+  --ids guarantee.agent.golden.runtime-readback --run-id unique-evidence-id
+```
+
+Select `guarantee.agent.golden.lifecycle`, `collaboration`, `graph`, `revision`,
+`results`, `settlement`, or `reporter` for one boundary, or comma-separated IDs
+for several. The full `runtime-readback` guarantee composes those same checks;
+it is not a full campaign pass. Component scenes remain a separate evidence
+scope. Missing workday identity, incomplete evidence, skipped tests and missing
+verifier assets fail closed. Installed native tests use Reviewer's loader, not
+Agent's development dependencies.
+
+Run `guarantee.agent.golden.freeze-integrity` with
+`TREESEED_ACCEPTANCE_FREEZE_PATH=/absolute/path/to/existing.freeze.json` to check
+the existing snapshot's receipt bytes and host/guest digest agreement. Missing,
+replaced or malformed receipts fail with stable `ACCEPTANCE_FREEZE_*` codes.
+This narrow gate does not prove capture-before-activation, complete external
+inventory, live-runtime correspondence or unchanged proposal objectives.
+
+After the planning window ends, `guarantee.agent.golden.planning-boundary`
+checks the same collaboration assertions. A known missing-role/cycle/estimate
+criterion stops only the selected active simulation through `trsd workdays stop`
+with a stable idempotency key, then retains the failed verdict. It refuses
+production, early, terminal or malformed-window runs; arbitrary transport/auth
+errors do not authorize mutation. This is one boundary guard, not full lifecycle
+monitoring or proof of successful settlement and teardown.
+
+`guarantee.agent.golden.stopped` separately verifies terminal cancellation,
+released assignment leases, durable per-attempt teardown and exactly one usage
+settlement per attempt. It reuses normal settlement pagination and checks every
+participating project. Passing stopped-run evidence cannot count as a golden
+pass or prove host filesystem cleanup/retention.
+
+`guarantee.agent.golden.campaign` consumes an unexpired existing freeze through
+`TREESEED_ACCEPTANCE_FREEZE_PATH`, starts its exact preflight, admits all eight
+discussion roles, monitors planning and acting, and runs the existing terminal
+gates. It rejects a planning window that cannot fit conservative serial turns
+before starting, stops known failed planning boundaries, and bounds closeout.
+It never substitutes fixtures for live results or renews an expired preflight.
+For automatic fresh preparation, provide `TREESEED_ACCEPTANCE_DRAFT_PATH` to an
+estimate-free fixed proposal template and `TREESEED_ACCEPTANCE_PLATFORM_PATH`
+to the Platform checkout, with a new output freeze path. The same test creates
+and opens the proposal, captures live runtime/supply and external SDK refs,
+then freezes the supported preflight before admission. Source-reading roles
+receive the same exact Git pin; objectives, dependencies and review bounds
+remain unchanged. Existing freeze files are never overwritten.
+
+Complete specification bindings, project-specific products,
+external-state comparison and controlled failures are still required
+before this suite can represent all of Platform's acceptance specification.
+
 ## Public package surface
 
 - `@treeseed/agent`: executor contracts and the catalog-driven assignment runner;

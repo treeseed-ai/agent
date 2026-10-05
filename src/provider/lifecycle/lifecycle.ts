@@ -3,27 +3,36 @@ import { constants } from 'node:fs';
 import type { ProviderSupplyOffer } from '@treeseed/sdk/capacity-provider/contracts';
 import type { ProviderConnectionRuntimeContext, ProviderHostRuntimeConfig } from '../configuration/config.ts';
 import { discoverProviderBudgets } from '../configuration/budgets.ts';
-import { discoverProviderCapabilities } from '../configuration/capabilities.ts';
 import { loadProviderManifest } from '../configuration/manifest.ts';
 import { createProviderControlPlaneClient } from '../coordination/client.ts';
 import { ProviderLocalCapacityStore } from '../capacity/capacity-core/local-capacity-store.ts';
 import { observeProviderDiskCapacity } from '../runtime/disk-capacity.ts';
+import { SandboxBrokerClient } from '../execution/sandbox-broker-client.ts';
 
-export function okPayload(role: string, payload: Record<string, unknown> = {}) {
-	return { ok: true, role, ...payload };
+export function okPayload<T extends Record<string, unknown>>(role: string, payload: T) {
+	return { ok: true as const, role, ...payload };
 }
 
 export async function checkProviderHealth(config: ProviderHostRuntimeConfig) {
 	await mkdir(config.dataDir, { recursive: true });
 	const writable = await access(config.dataDir, constants.W_OK).then(() => true, () => false);
 	const disk = writable ? await observeProviderDiskCapacity({ path: config.dataDir, env: config.env }) : null;
+	const manifest = config.manifestPath ? (await loadProviderManifest(config.manifestPath, config.dataDir)).manifest : null;
+	const brokerSocket = manifest?.sandbox.required ? manifest.sandbox.brokerSocket : null;
+	const broker = brokerSocket
+		? await new SandboxBrokerClient(brokerSocket).status(AbortSignal.timeout(3_000))
+			.then(() => ({ required: true, ready: true, socket: brokerSocket, reason: null }))
+			.catch((error: unknown) => ({ required: true, ready: false, socket: brokerSocket, reason: error instanceof Error ? error.message : String(error) }))
+		: { required: false, ready: true, socket: null, reason: null };
 	return okPayload('healthcheck', {
-		status: writable && disk?.ok ? 'ok' : 'degraded',
+		status: writable && disk?.ok && broker.ready ? 'ok' : 'degraded',
 		environment: config.environment,
 		dataDirWritable: writable,
 		disk,
 		manifestConfigured: Boolean(config.manifestPath),
-		executorConfigured: Boolean(config.executorModule),
+		manifestVersion: manifest?.schemaVersion ?? null,
+		executorConfigured: Boolean(manifest?.adapters.length),
+		broker,
 	});
 }
 
@@ -31,12 +40,13 @@ export async function buildProviderPlan(config: ProviderHostRuntimeConfig) {
 	const manifest = config.manifestPath
 		? (await loadProviderManifest(config.manifestPath, config.dataDir)).manifest
 		: null;
+	const adapterCapabilities = manifest?.adapters.flatMap((adapter) => adapter.offers.flatMap(({ offer }) => offer.capabilities.map(({ id }) => id))) ?? [];
 	const capabilities = manifest
 		? [...new Set([
-			...manifest.adapters.flatMap((adapter) => adapter.capabilities ?? []),
+			...adapterCapabilities,
 			...manifest.lanes.flatMap((lane) => lane.capabilities ?? []),
 		])].sort()
-		: discoverProviderCapabilities(config).map((capability) => capability.id);
+		: [];
 	return okPayload('plan', {
 		mode: 'plan',
 		dataDir: config.dataDir,
@@ -44,12 +54,13 @@ export async function buildProviderPlan(config: ProviderHostRuntimeConfig) {
 		capacity: manifest?.capacity ?? discoverProviderBudgets(config),
 		lanes: manifest?.lanes ?? [],
 		adapters: manifest?.adapters ?? [],
-		executorConfigured: Boolean(config.executorModule),
+		executorConfigured: Boolean(manifest?.adapters.length),
 		redactedEnv: config.redactedEnv,
 	});
 }
 
 export interface ProviderAvailabilityProjection {
+	manifestVersion?: number;
 	offer?: ProviderSupplyOffer;
 	adapters: Array<Record<string, unknown>>;
 	lanes: Array<Record<string, unknown>>;
@@ -86,7 +97,7 @@ export async function publishProviderAvailability(
 		constraints: { outboundOnly: true, ...availability.constraints },
 		metadata: {
 			source: '@treeseed/agent/provider-manager',
-			sourceClosureDigest: config.env.TREESEED_PROVIDER_SOURCE_CLOSURE_DIGEST ?? null,
+			runtimeBuild: config.env.TREESEED_PROVIDER_RUNTIME_BUILD ?? null,
 		},
 	};
 	const prior = await localState.session(key);
@@ -106,7 +117,7 @@ export async function publishProviderAvailability(
 export function buildProviderRunnerPlan(config: ProviderHostRuntimeConfig) {
 	return okPayload('runner', {
 		mode: 'plan',
-		executorConfigured: Boolean(config.executorModule),
+		executorConfigured: true,
 		flow: [
 			'read API-issued assignment lease',
 			'execute through trusted Agent executor',

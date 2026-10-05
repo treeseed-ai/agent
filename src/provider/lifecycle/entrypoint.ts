@@ -136,7 +136,9 @@ async function main() {
 	}
 	if (role === 'healthcheck' || role === 'doctor') {
 		const { checkProviderHealth } = await import('./lifecycle.ts');
-		emit(await checkProviderHealth(config));
+		const health = await checkProviderHealth(config);
+		emit(health);
+		if (role === 'healthcheck' && health.status !== 'ok') process.exitCode = 1;
 		return;
 	}
 	if (role === 'plan') {
@@ -149,28 +151,45 @@ async function main() {
 		const input = await stdinJson();
 		const { createCapacityProviderCoordinator } = await import('../teams/multi-team-runtime.ts');
 		const coordinator = await createCapacityProviderCoordinator(config);
-		const connectionId = String(input.connectionId ?? `local-${String(input.teamId ?? '')}`);
-		if (input.action === 'complete') {
-			const receipt = await coordinator.exchangeRegistrationCredential(connectionId);
-			emit({ ok: true, connectionId, status: receipt.status, teamId: receipt.teamId, providerId: receipt.providerId, membershipId: receipt.membershipId });
-			return;
-		}
-		const enrollmentToken = String(input.enrollmentToken ?? '');
-		const teamId = String(input.teamId ?? '');
+		const connectionId = String(input.connectionId ?? 'primary');
 		const loaded = await import('../configuration/manifest.ts').then(({ loadProviderManifest }) => loadProviderManifest(config.manifestPath!, config.dataDir));
-		if (!enrollmentToken || !teamId) throw new Error('Provider enrollment requires a team and one-time token.');
-		await import('../accounts/identity.ts').then(({ ensureCapacityProviderIdentity }) => ensureCapacityProviderIdentity({
+		const privateIdentity = await import('../accounts/identity.ts').then(({ ensureCapacityProviderIdentity }) => ensureCapacityProviderIdentity({
 			ref: loaded.manifest.identity.privateKeyRef,
 			baseDirectory: loaded.directory,
 			dataDirectory: config.dataDir,
 		}));
-		const receipt = await coordinator.beginJoin({ id: connectionId,
-			...(input.serverProfile ? { serverProfile: String(input.serverProfile) } : { controlPlaneUrl: String(input.controlPlaneUrl ?? '') }),
-			controlPlaneAudience: String(input.controlPlaneAudience ?? input.controlPlaneUrl ?? ''), registrationKeyRef: 'memory://one-time',
-			offer: { maxConcurrentRunners: loaded.manifest.capacity.maxConcurrentWorkers,
-				capabilities: [...new Set(loaded.manifest.adapters.flatMap((adapter) => adapter.capabilities ?? []))],
-				metadata: { manifestGeneration: loaded.manifest.configuration.generation } } }, enrollmentToken);
-		emit({ ok: true, connectionId, status: receipt.status, teamId: receipt.teamId, providerId: receipt.providerId, requestId: receipt.requestId });
+		const publicJwk = privateIdentity.publicJwk;
+		const signingKeyId = `provider-${await import('node:crypto').then(({ createHash }) => createHash('sha256').update(publicJwk.x).digest('hex').slice(0, 16))}`;
+		if (input.action === 'identities') {
+			emit({ ok: true, identities: loaded.manifest.connections.map((connection) => ({
+				connectionId: connection.id,
+				teamId: connection.teamId,
+				providerId: connection.providerId,
+				sandboxIdentity: { signingKeyId, publicJwk },
+			})) });
+			return;
+		}
+		if (input.action === 'identity') {
+			const connection = loaded.manifest.connections.find((candidate) => candidate.id === connectionId);
+			if (!connection) throw new Error(`Provider connection ${connectionId} is not configured.`);
+			emit({ ok: true, connectionId, status: 'configured', teamId: connection.teamId, providerId: connection.providerId,
+				sandboxIdentity: { signingKeyId, publicJwk } });
+			return;
+		}
+		if (input.action === 'complete') {
+			if (input.maxConcurrentRunners !== undefined && typeof input.maxConcurrentRunners !== 'number') throw new Error('Connection concurrency must be a number.');
+			const receipt = await coordinator.exchangeRegistrationCredential(connectionId, input.maxConcurrentRunners as number | undefined);
+			emit({ ok: true, connectionId, status: receipt.status, teamId: receipt.teamId, providerId: receipt.providerId, membershipId: receipt.membershipId });
+			return;
+		}
+		const { providerEnrollmentInput } = await import('./enrollment-input.ts');
+		const enrollment = providerEnrollmentInput(input, {
+			maxConcurrentRunners: loaded.manifest.capacity.maxConcurrentWorkers,
+			capabilities: loaded.manifest.adapters.flatMap((adapter) => adapter.offers.flatMap(({ offer }) => offer.capabilities.map(({ id }) => id))),
+			manifestGeneration: loaded.manifest.configuration.generation,
+		});
+		const receipt = await coordinator.beginJoin(enrollment.join, enrollment.registrationCode);
+		emit({ ok: true, connectionId, status: receipt.status, teamId: receipt.teamId, providerId: receipt.providerId, requestId: receipt.requestId, sandboxIdentity: { signingKeyId, publicJwk } });
 		return;
 	}
 	if (role === 'manager') {
@@ -196,7 +215,7 @@ async function main() {
 		if (!config.manifestPath) throw new Error('A capacity provider manifest is required to run provider runners.');
 		const { runMultiTeamProviderRunners } = await import('../teams/multi-team-runtime.ts');
 		if (once || mode === 'plan' || diagnostic) emit(await runMultiTeamProviderRunners(config, { mode: mode === 'plan' || diagnostic ? 'plan' : 'live' }));
-		else await runLoop('runner', config.dataDir, pollSeconds('TREESEED_PROVIDER_RUNNER_POLL_SECONDS', 15), () => runMultiTeamProviderRunners(config, { background: true }));
+		else await runLoop('runner', config.dataDir, pollSeconds('TREESEED_PROVIDER_RUNNER_POLL_SECONDS', 2), () => runMultiTeamProviderRunners(config, { background: true }));
 		return;
 	}
 }

@@ -1,0 +1,72 @@
+import type {
+	AssignmentContext,
+	AssignmentReference,
+	AssignmentResult,
+	AssignmentTimingAwarenessReceipt,
+	ExactEntityReference,
+} from '@treeseed/sdk/agent-capacity';
+
+export interface ModelInvocationRequest {
+	prompt: string;
+	context: unknown[];
+	parameters?: Record<string, unknown>;
+}
+
+export interface ModelInvocationResult {
+	text: string;
+	timingAwareness: AssignmentTimingAwarenessReceipt;
+	usage: AssignmentResult['usage'];
+	activityCompletion?: {
+		summary: string;
+		reviewDisposition: 'approved' | 'rejected' | 'revision-required' | null;
+		contentOutput: { model: string; body: string; frontmatter: Record<string, unknown> } | null;
+	};
+	references?: AssignmentReference[];
+	verification?: VerificationResult[];
+	/** Concrete paths observed by the guest, never workspace grant patterns. */
+	changedPaths?: string[];
+}
+
+export interface VerificationRequest {
+	command: string;
+}
+
+export interface VerificationResult {
+	command: string;
+	status: 'passed' | 'failed' | 'skipped';
+	exitCode: number;
+	outputDigest: string;
+	durationSeconds?: number;
+}
+
+export interface TreeDxCommitRequest {
+	writes: Array<{ target: ExactEntityReference; value: unknown }>;
+}
+
+export interface SourceCommitRequest {
+	message: string;
+	paths: string[];
+}
+
+export interface AgentRuntime {
+	readContext(ref: ExactEntityReference): Promise<unknown>;
+	invokeModel(request: ModelInvocationRequest): Promise<ModelInvocationResult>;
+	runVerification(request: VerificationRequest): Promise<VerificationResult>;
+	commitTreeDx(request: TreeDxCommitRequest): Promise<AssignmentReference[]>;
+	commitSource(request: SourceCommitRequest): Promise<AssignmentReference>;
+	now(): string;
+}
+
+export interface Handler {
+	readonly id: string;
+	run(context: AssignmentContext, runtime: AgentRuntime): Promise<AssignmentResult>;
+}
+
+export interface KernelAssignmentRequest {
+	context: AssignmentContext;
+	runtimeBuild: string;
+	runtime: AgentRuntime;
+	signal?: AbortSignal;
+	/** Resolves only when productive execution begins; preparation is outside the activity limit. */
+	executionStarted?: Promise<void>;
+}

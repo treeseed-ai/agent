@@ -1,0 +1,8 @@
+schemaVersion: treeseed.scene/v1
+id: agent.golden.graph
+title: Golden graph read-back
+scope: local-integrated-runtime
+workflow:
+  - id: graph-evidence
+    action: { verifier: agent.golden.live.graph }
+    expect: { status: passed }

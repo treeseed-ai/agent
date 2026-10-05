@@ -1,0 +1,93 @@
+import { describe,expect,it,vi } from 'vitest';
+import { readCoreContextPack } from '../../src/provider/execution/core-context-pack.ts';
+import { MANAGED_CONTEXT_CAPACITY } from '../../src/provider/configuration/legacy-manifest.ts';
+
+const file=(path:string,content:string,frontmatter:Record<string,unknown>={})=>({path,logicalPath:path.replace(/\.(?:md|mdx|ya?ml)$/u,''),content,frontmatter});
+const response=(items:unknown[])=>({data:{result:{data:{items}}}});
+const workdayAttempt = (activity: string) => ({ id: 'assignment-1',
+	sourceRef: { store: 'treedx', model: 'proposal', id: 'proposal-1', path: 'proposals/accepted.mdx', commit: 'a'.repeat(40) },
+	effectiveProfile: { activity, prompt: { system: 'Use the exact assigned proposal.' } },
+	workItemId: 'work-item-1', acceptanceCriteria: ['Review the exact assigned proposal.'],
+	predecessorResultIds: [], authorityRefs: [], grant: {}, deadline: '2099-01-01T00:00:00.000Z', limits: { maximumSeconds: 180 } });
+
+function request(overrides:Record<string,unknown>={}) {
+	const projectFiles=[
+		file('agents/architect.mdx','# Architect',{id:'agent:architect',purpose:'Owns architecture',responsibilities:['Maintain architecture'],capabilities:['architecture'],activityProfiles:{chat:{handler:'writer',permissions:{content:{read:['book'],write:['discussion']},tools:['discussion']},prompt:{system:'Answer architecture questions from exact evidence.'}}},systemPrompt:'must not enter peer roster'}),
+		file('agents/engineer.mdx','# Engineer',{id:'agent:engineer',purpose:'Builds software',responsibilities:['Implement changes'],capabilities:['code-change'],activityProfiles:{acting:{handler:'actor',permissions:{content:{read:['book'],write:[]},tools:['source.read','source.write']},prompt:{system:'Implement accepted changes from exact evidence.'}}},systemPrompt:'must not enter peer roster'}),
+		file('objectives/architecture.mdx','# Architecture objective',{title:'Architecture',status:'active',group_ids:['architecture']}),
+		file('objectives/release.mdx','# Release objective',{title:'Release',status:'active',group_ids:['release']}),
+	];
+	const teamFiles=[
+		file('README.md','# Team Library'),file('objectives/core.mdx','# Team objective'),
+		file('objectives/communication.mdx','# Communicate',{title:'Communication',status:'active',group_ids:[]}),
+	];
+	const invoke=vi.fn(async (_operation:string,input:Record<string,any>)=>{
+		const team=input.path.projectId==='team-project';
+		const paths=Array.isArray(input.body.paths)?input.body.paths:[];
+		if(_operation==='treedx.repositories.paths.list')return response((team?teamFiles:projectFiles).map(({path})=>({path})));
+		const source=team?teamFiles:projectFiles;
+		return response(paths.flatMap((path:string)=>source.filter((entry)=>entry.path===path||entry.logicalPath===path)));
+	});
+	return {assignmentId:'assignment-1',assignment:{metadata:{communication:{discussionId:'discussion-1',topicId:'topic-1',recipients:['@sdk/architect']},contextCapacity:structuredClone(MANAGED_CONTEXT_CAPACITY)}},treeDx:{projectId:'sdk-project',repositoryId:'sdk-repo',baseRef:'sdk-ref',readRepositories:[],invoke},...overrides} as any;
+}
+
+describe('mandatory assignment context pack',()=>{
+	it('uses the bounded workday task instead of requiring a discussion, without transport credentials', async () => {
+		const work = request(); work.assignment.executionKind = 'workday'; delete work.assignment.metadata.communication;
+		work.assignment.assignmentAttempt = workdayAttempt('reviewing');
+		work.assignment.leaseToken = 'do-not-send';
+		const pack = await readCoreContextPack(work, {
+			identity: { manifest: { teamId:'team-1', projectId:'sdk-project', projectSlug:'sdk', agentProfile:{path:'agents/architect.mdx'},
+				teamLibrary:{projectId:'team-project',repositoryId:'team-repo',immutableRef:'team-ref'} }, sources: [] }, focused: {}, message: {},
+		});
+		expect(pack.sources.find(source => source.kind === 'assignment-task')?.content).toContain('proposals/accepted.mdx');
+		expect(pack.sources.some(source => source.kind.startsWith('discussion-'))).toBe(false);
+		expect(JSON.stringify(pack.sources)).not.toContain('do-not-send');
+	});
+	it('reads project identity from its bounded secondary repository when the writable workspace is Team Library', async () => {
+		const work = request(); work.assignment.executionKind = 'workday'; delete work.assignment.metadata.communication;
+		work.assignment.assignmentAttempt = workdayAttempt('reporting');
+		work.treeDx.repositoryId = 'team-repo'; work.treeDx.baseRef = 'team-ref';
+		work.treeDx.readRepositories = [{ projectId:'sdk-project', projectSlug:'sdk', repositoryId:'sdk-repo', baseRef:'sdk-ref', allowedPaths:['README.md','agents/**','objectives/**'], allowedModels:['knowledge','agent','objective'], source:'same-team' }];
+		await readCoreContextPack(work, { identity: { manifest: { teamId:'team-1', projectId:'sdk-project', projectSlug:'sdk', agentProfile:{path:'agents/architect.mdx'}, teamLibrary:{projectId:'team-project',repositoryId:'team-repo',immutableRef:'team-ref'} }, sources: [] }, focused: {}, message: {} });
+		const projectCalls = work.treeDx.invoke.mock.calls.filter(([,input]:any[])=>input.path.projectId==='sdk-project');
+		expect(projectCalls.length).toBeGreaterThan(0);
+		expect(projectCalls.every(([,input]:any[])=>input.path.repoId==='sdk-repo')).toBe(true);
+	});
+	it('compiles team anchors, the complete roster, group objectives, configured layers, and the live message',async()=>{
+		const pack=await readCoreContextPack(request(),{
+			identity:{manifest:{teamId:'team-1',projectId:'sdk-project',projectSlug:'sdk',agentProfile:{path:'agents/architect.mdx'},teamLibrary:{projectId:'team-project',repositoryId:'team-repo',immutableRef:'team-ref'}},sources:[
+				{kind:'project-readme',path:'README.md',content:'# SDK'},
+				{kind:'core-objective',path:'objectives/core',content:'# SDK objective'},
+				{kind:'agent-profile',path:'agents/architect.mdx',content:'# Architect'},
+			]},focused:{sources:[{layer:'agent',path:'architecture/principles.mdx',content:'# Principles'},{layer:'activity',path:'architecture/principles.mdx',content:'# Principles'},{layer:'activity',path:'standards/conversation.mdx',content:'# Conversation'}],queryLayers:{agent:['architecture'],activity:['chat']}},message:{path:'discussion/message.mdx',content:'Describe the SDK.',history:[{path:'discussion/prior.mdx',content:'Earlier context.'}]},
+		});
+		expect(pack.manifest.schemaVersion).toBe('treeseed.assignment-context-pack/v1');
+		expect(pack.sources.map((source:any)=>source.kind)).toEqual(expect.arrayContaining(['project-readme','core-objective','agent-profile','team-readme','team-core-objective','agent-roster','discussion-message','discussion-history','discussion-state']));
+		expect(pack.sources.some((source:any)=>source.path==='objectives/architecture.mdx')).toBe(true);
+		expect(pack.sources.some((source:any)=>source.path==='objectives/release.mdx')).toBe(true);
+		expect(pack.roster).toHaveLength(2);
+		expect(JSON.stringify(pack.roster)).not.toContain('must not enter peer roster');
+		expect(pack.manifest.sources).toContainEqual(expect.objectContaining({layer:'activity',path:'architecture/principles.mdx',disposition:'omitted',reason:expect.stringMatching(/^duplicate_of:/u)}));
+	});
+
+	it('fails closed when a mandatory Team Library anchor is absent',async()=>{
+		const broken=request();
+		broken.treeDx.invoke=vi.fn(async (operation:string,input:Record<string,any>)=>{
+			if(operation==='treedx.repositories.paths.list')return response([]);
+			if(input.path.projectId==='team-project')return response([file('README.md','# Team Library')]);
+			return response([]);
+		});
+		await expect(readCoreContextPack(broken,{identity:{manifest:{teamId:'team-1',projectId:'sdk-project',projectSlug:'sdk',agentProfile:{path:'agents/architect.mdx'},teamLibrary:{projectId:'team-project',repositoryId:'team-repo',immutableRef:'team-ref'}},sources:[]},focused:{},message:{}})).rejects.toThrow(/README\.md and objectives\/core are mandatory/u);
+	});
+
+	it('measures Unicode using the actual managed offer and distinguishes incompatible units from overflow',async()=>{
+		const input={identity:{manifest:{teamId:'team-1',projectId:'sdk-project',projectSlug:'sdk',agentProfile:{path:'agents/architect.mdx'},teamLibrary:{projectId:'team-project',repositoryId:'team-repo',immutableRef:'team-ref'}},sources:[]},focused:{},message:{path:'message.mdx',content:'你好 🌱'}};
+		const pack=await readCoreContextPack(request(),input);
+		expect(pack.manifest.capacity.measurement).toBe('bytes');
+		expect(pack.manifest.sources.find(source=>source.kind==='discussion-message')?.measurement).toEqual({unit:'bytes',amount:Buffer.byteLength(input.message.content),provenance:'utf8-byte-length'});
+		const incompatible=request();incompatible.assignment.metadata.contextCapacity.measurement='tokens';
+		await expect(readCoreContextPack(incompatible,input)).rejects.toMatchObject({code:'provider_context_measurement_mismatch'});
+		await expect(readCoreContextPack(request(),{...input,message:{...input.message,content:'x'.repeat(128_001)}})).rejects.toMatchObject({code:'provider_context_capacity_overflow'});
+	});
+});

@@ -1,0 +1,14 @@
+schemaVersion: treeseed.guarantee/v1
+id: guarantee.agent.golden.runtime-readback
+journey: Verify real SDK golden graph and runtime completion
+ownerPackage: "@treeseed/agent"
+type: agent
+subtype: execution
+status: planned
+gates: [core]
+summary: Real CLI read-back; not a replacement for campaign freeze, external-state comparison or managed-release acceptance.
+scene:
+  required: true
+  manifest: guarantees/agent/golden/scenes/runtime-readback.scene.yaml
+dependencies:
+  guarantees: [guarantee.agent.golden.lifecycle, guarantee.agent.golden.collaboration, guarantee.agent.golden.graph, guarantee.agent.golden.revision, guarantee.agent.golden.results, guarantee.agent.golden.settlement, guarantee.agent.golden.reporter]

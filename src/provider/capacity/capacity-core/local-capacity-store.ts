@@ -15,9 +15,18 @@ export interface ProviderLocalSlotClaim {
 	executionProviderId?: string;
 	laneId?: string;
 	requestedSeconds?: number;
+	capabilityId?: string;
+	modelConfigurationId?: string;
+	activeStartedAt?: string;
+	activeFinishedAt?: string;
+	accountedThrough?: string;
 	nativeUnit?: string;
 	requestedNativeAmount?: number;
 	dispatchEnvelope?: unknown;
+	/** First runtime failure, retained across recovery attempts without replacing its cause. */
+	failureMessage?: string;
+	/** Exact executor output retained until the API acknowledges terminal custody. */
+	closeoutOutput?: Record<string, unknown>;
 	acquiredAt: string;
 	updatedAt: string;
 	expiresAt: string;
@@ -27,6 +36,8 @@ interface ProviderLocalCapacityState {
 	schemaVersion: 1;
 	revision: number;
 	claims: ProviderLocalSlotClaim[];
+	/** Settled active time only; outstanding claims retain their unconsumed reservation. */
+	usage: Record<string, Record<string, number>>;
 	sessions: Array<{ connectionId: string; id: string; sequence: number; updatedAt: string }>;
 	tokens: Array<{ connectionId: string; token: ProviderAccessTokenIssue; updatedAt: string }>;
 	connections: Array<{ connectionId: string; schedulable: boolean; reason?: string; updatedAt: string }>;
@@ -34,7 +45,24 @@ interface ProviderLocalCapacityState {
 	updatedAt: string;
 }
 
-const emptyState = (): ProviderLocalCapacityState => ({ schemaVersion: 1, revision: 0, claims: [], sessions: [], tokens: [], connections: [], events: [], updatedAt: new Date(0).toISOString() });
+const emptyState = (): ProviderLocalCapacityState => ({ schemaVersion: 1, revision: 0, claims: [], usage: {}, sessions: [], tokens: [], connections: [], events: [], updatedAt: new Date(0).toISOString() });
+
+function accountActiveTime(state: ProviderLocalCapacityState, claim: ProviderLocalSlotClaim, now: string) {
+	if (!claim.activeStartedAt || !claim.modelConfigurationId || !claim.capabilityId) return;
+	let cursor = Date.parse(claim.accountedThrough ?? claim.activeStartedAt);
+	const end = Date.parse(claim.activeFinishedAt ?? now);
+	while (cursor < end) {
+		const day = new Date(cursor).toISOString().slice(0, 10);
+		const next = Math.min(end, Date.parse(`${day}T00:00:00.000Z`) + 86_400_000);
+		const usage = state.usage[day] ??= {};
+		for (const key of [JSON.stringify([claim.modelConfigurationId]), JSON.stringify([claim.modelConfigurationId, claim.capabilityId]),
+			JSON.stringify(['connection', claim.connectionId])]) {
+			usage[key] = (usage[key] ?? 0) + (next - cursor) / 1000;
+		}
+		cursor = next;
+	}
+	claim.accountedThrough = new Date(Math.max(cursor, Date.parse(claim.activeStartedAt))).toISOString();
+}
 
 function delay(milliseconds: number) {
 	return new Promise((resolveDelay) => setTimeout(resolveDelay, milliseconds));
@@ -57,6 +85,10 @@ export class ProviderLocalCapacityStore {
 			parsed.tokens ??= [];
 			parsed.events ??= [];
 			parsed.connections ??= [];
+			parsed.usage ??= {};
+			if (!parsed.usage || typeof parsed.usage !== 'object' || Array.isArray(parsed.usage)
+				|| Object.values(parsed.usage).some(day => !day || typeof day !== 'object'
+					|| Object.values(day).some(amount => !Number.isFinite(amount) || amount < 0))) throw new Error('Provider-local active-time accounting is invalid.');
 			if (!Array.isArray(parsed.sessions)) throw new Error('Provider-local availability-session state is invalid.');
 			if (!Array.isArray(parsed.tokens)) throw new Error('Provider-local access-token state is invalid.');
 			if (!Array.isArray(parsed.events)) throw new Error('Provider-local lifecycle evidence is invalid.');
@@ -89,6 +121,7 @@ export class ProviderLocalCapacityStore {
 		try {
 			const state = await this.read();
 			const now = new Date().toISOString();
+			for (const claim of state.claims) accountActiveTime(state, claim, now);
 			const expired = state.claims.filter((claim) => claim.status !== 'recovery' && Date.parse(claim.expiresAt) <= Date.parse(now));
 			const expiredIds = new Set(expired.map((claim) => claim.id));
 			state.claims = state.claims.flatMap((claim) => {
@@ -130,13 +163,39 @@ export class ProviderLocalCapacityStore {
 	async attachLease(claimId: string, input: {
 		assignmentId: string; leaseToken: string; leaseExpiresAt: string; executionProviderId?: string; laneId?: string; requestedSeconds?: number; nativeUnit?: string; requestedNativeAmount?: number;
 		dispatchEnvelope: unknown;
+		accounting?: { capabilityId: string; modelConfigurationId: string; dailyActiveSecondsLimit: number;
+			capabilityDailyActiveSecondsLimit: number; maximumAssignmentSeconds?: number };
 		executionProviderLimit?: ProviderLocalNativeLimit;
 		laneLimit?: ProviderLocalNativeLimit;
 	}) {
 		return this.update((state, now) => {
 			const claim = state.claims.find((entry) => entry.id === claimId);
 			if (!claim) throw new Error(`Provider-local slot claim ${claimId} expired before lease persistence.`);
+			if (claim.status !== 'polling') {
+				if (claim.assignmentId === input.assignmentId && claim.leaseToken === input.leaseToken
+					&& claim.requestedSeconds === input.requestedSeconds
+					&& claim.capabilityId === input.accounting?.capabilityId
+					&& claim.modelConfigurationId === input.accounting?.modelConfigurationId) return { ...claim };
+				throw new Error('Provider-local lease reservation cannot be replaced or resized.');
+			}
 			const peers = state.claims.filter((entry) => entry.id !== claimId && entry.status !== 'polling');
+			if (input.accounting) {
+				const seconds = input.requestedSeconds;
+				const bounds = input.accounting;
+				if (!bounds.capabilityId || !bounds.modelConfigurationId || !Number.isFinite(seconds) || seconds! <= 0
+					|| [bounds.dailyActiveSecondsLimit, bounds.capabilityDailyActiveSecondsLimit].some(value => !Number.isFinite(value) || value < 0)
+					|| (bounds.maximumAssignmentSeconds !== undefined && (!Number.isFinite(bounds.maximumAssignmentSeconds) || bounds.maximumAssignmentSeconds <= 0))
+					|| seconds! > (bounds.maximumAssignmentSeconds ?? Infinity)) throw new Error('Provider-local assignment accounting bounds are invalid.');
+				const dayUsage = state.usage[now.slice(0, 10)] ?? {};
+				for (const [key, cap, capability] of [[JSON.stringify([bounds.modelConfigurationId]), bounds.dailyActiveSecondsLimit, undefined],
+					[JSON.stringify([bounds.modelConfigurationId, bounds.capabilityId]), bounds.capabilityDailyActiveSecondsLimit, bounds.capabilityId]] as const) {
+					const reserved = peers.filter(peer => peer.modelConfigurationId === bounds.modelConfigurationId
+						&& (!capability || peer.capabilityId === capability)).reduce((sum, peer) => sum + Math.max(0,
+							(peer.requestedSeconds ?? 0) - (peer.activeStartedAt ? (Date.parse(peer.accountedThrough ?? peer.activeStartedAt) - Date.parse(peer.activeStartedAt)) / 1000 : 0)), 0);
+					if ((dayUsage[key] ?? 0) + reserved + seconds! > cap) throw new Error('Provider-local daily active-time capacity is exhausted.');
+				}
+				Object.assign(claim, { capabilityId: bounds.capabilityId, modelConfigurationId: bounds.modelConfigurationId });
+			}
 			const assertLimit = (label: string, selected: string | undefined, limit: ProviderLocalNativeLimit | undefined, field: 'executionProviderId' | 'laneId') => {
 				if (!selected || !limit) return;
 				const selectedPeers = peers.filter((entry) => entry[field] === selected);
@@ -150,8 +209,11 @@ export class ProviderLocalCapacityStore {
 			};
 			assertLimit('execution-provider', input.executionProviderId, input.executionProviderLimit, 'executionProviderId');
 			assertLimit('lane', input.laneId, input.laneLimit, 'laneId');
-			const { executionProviderLimit: _executionProviderLimit, laneLimit: _laneLimit, ...lease } = input;
+			const { executionProviderLimit: _executionProviderLimit, laneLimit: _laneLimit, accounting: _accounting, ...lease } = input;
 			Object.assign(claim, { status: 'ready' as const, ...lease, updatedAt: now, expiresAt: input.leaseExpiresAt });
+			state.events.push({ id: randomUUID(), claimId, connectionId: claim.connectionId,
+				assignmentId: input.assignmentId, outcome: 'leased', recordedAt: now });
+			state.events = state.events.slice(-100);
 			return { ...claim };
 		});
 	}
@@ -178,12 +240,9 @@ export class ProviderLocalCapacityStore {
 		});
 	}
 
-	async claimDispatch(connectionIds?: string[]) {
+	async claimDispatch(claimId: string) {
 		return this.update((state, now) => {
-			const eligible = connectionIds ? new Set(connectionIds) : null;
-			const claim = state.claims
-				.filter((entry) => entry.status === 'ready' && (!eligible || eligible.has(entry.connectionId)))
-				.sort((left, right) => left.acquiredAt.localeCompare(right.acquiredAt) || left.id.localeCompare(right.id))[0];
+			const claim = state.claims.find(entry => entry.id === claimId && entry.status === 'ready');
 			if (!claim) return null;
 			claim.status = 'running';
 			claim.updatedAt = now;
@@ -202,11 +261,39 @@ export class ProviderLocalCapacityStore {
 		});
 	}
 
+	async beginActiveExecution(claimId: string) {
+		return this.update((state, now) => {
+			const claim = state.claims.find(entry => entry.id === claimId);
+			if (!claim || claim.status !== 'running') throw new Error('Provider-local active execution requires a running lease.');
+			if (claim.activeFinishedAt) throw new Error('Provider-local completed execution cannot restart.');
+			claim.activeStartedAt ??= now;
+			claim.accountedThrough ??= claim.activeStartedAt;
+		});
+	}
+
+	async finishActiveExecution(claimId: string) {
+		return this.update((state, now) => {
+			const claim = state.claims.find(entry => entry.id === claimId);
+			if (!claim) throw new Error('Provider-local execution accounting lost its lease.');
+			claim.activeFinishedAt ??= now;
+		});
+	}
+
+	async recordCloseoutOutput(claimId: string, output: Record<string, unknown>) {
+		return this.update((state, now) => {
+			const claim = state.claims.find(entry => entry.id === claimId);
+			if (!claim?.assignmentId || !claim.leaseToken) throw new Error('Provider closeout output requires its existing lease claim.');
+			claim.closeoutOutput = output;
+			claim.updatedAt = now;
+		});
+	}
+
 	async recordFailure(claimId: string, message: string) {
 		return this.update((state, now) => {
 			const claim = state.claims.find((entry) => entry.id === claimId);
 			if (!claim) return false;
 			claim.status = 'recovery';
+			claim.failureMessage ??= message.slice(0, 500);
 			claim.updatedAt = now;
 			state.events.push({ id: randomUUID(), claimId, connectionId: claim.connectionId, ...(claim.assignmentId ? { assignmentId: claim.assignmentId } : {}), outcome: 'lifecycle-unconfirmed', message: message.slice(0, 500), recordedAt: now });
 			state.events = state.events.slice(-100);
@@ -223,11 +310,36 @@ export class ProviderLocalCapacityStore {
 	}
 
 	async snapshot() {
-		return this.update((state) => ({ revision: state.revision + 1, claims: state.claims.map(({ dispatchEnvelope: _dispatchEnvelope, ...claim }) => ({ ...claim, leaseToken: claim.leaseToken ? '<redacted>' : undefined })), events: state.events.map((event) => ({ ...event })) }));
+		return this.update((state, now) => ({ revision: state.revision + 1,
+			claims: state.claims.map(({ dispatchEnvelope: _dispatchEnvelope, closeoutOutput: _closeoutOutput, ...claim }) => ({ ...claim, leaseToken: claim.leaseToken ? '<redacted>' : undefined })),
+			events: state.events.map((event) => ({ ...event })),
+			activeSecondsByConnection: Object.fromEntries(Object.entries(state.usage[now.slice(0, 10)] ?? {}).flatMap(([key, seconds]) => {
+				const scope: unknown = JSON.parse(key);
+				return Array.isArray(scope) && scope[0] === 'connection' && typeof scope[1] === 'string'
+					? [[scope[1], seconds]] : [];
+			})),
+		}));
+	}
+
+	async activeTimeObservation(modelConfigurationId: string, capabilityIds: string[]) {
+		return this.update((state, now) => {
+			const day = now.slice(0, 10);
+			const usage = state.usage[day] ?? {};
+			const observation = (capabilityId?: string) => ({ day,
+				activeSeconds: usage[JSON.stringify(capabilityId ? [modelConfigurationId, capabilityId] : [modelConfigurationId])] ?? 0,
+				reservedSeconds: state.claims.filter(claim => claim.modelConfigurationId === modelConfigurationId
+					&& (!capabilityId || claim.capabilityId === capabilityId)).reduce((sum, claim) => sum + Math.max(0,
+					(claim.requestedSeconds ?? 0) - (claim.activeStartedAt ? (Date.parse(claim.accountedThrough ?? claim.activeStartedAt)
+						- Date.parse(claim.activeStartedAt)) / 1000 : 0)), 0),
+			});
+			return { observedAt: now, modelUsage: observation(), capabilityUsage: Object.fromEntries(capabilityIds.map(id => [id, observation(id)])) };
+		});
 	}
 
 	async claimsForRecovery(includeRunning = true) {
-		return this.update((state) => state.claims.filter((claim) => claim.status === 'recovery' || (includeRunning && claim.status === 'running')).map((claim) => ({ ...claim })));
+		return this.update((state) => state.claims.filter((claim) => claim.status === 'recovery'
+			|| (includeRunning && claim.status === 'ready')
+			|| (includeRunning && claim.status === 'running')).map((claim) => ({ ...claim })));
 	}
 
 	async session(connectionId: string) {

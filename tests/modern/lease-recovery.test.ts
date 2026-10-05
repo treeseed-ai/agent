@@ -1,0 +1,97 @@
+import { describe, expect, it, vi } from 'vitest';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { recoverProviderLocalLeases } from '../../src/provider/coordination/lease-recovery.ts';
+import { createProviderControlPlaneClient } from '../../src/provider/coordination/client.ts';
+import { ProviderLocalCapacityStore } from '../../src/provider/capacity/capacity-core/local-capacity-store.ts';
+
+vi.mock('../../src/provider/coordination/client.ts', () => ({ createProviderControlPlaneClient: vi.fn() }));
+
+describe('provider local lease recovery', () => {
+	it('retains actual closeout custody across restart without promoting absent or failed receipts', async () => {
+		for (const output of [{ sandboxId: 'sandbox-1', teardown: { verified: true, completedAt: '2026-10-01T09:01:00Z' }, summary: 'Private executor output' },
+			{ sandboxId: 'sandbox-1', teardown: { verified: false, completedAt: '2026-10-01T09:01:00Z' }, summary: 'Private executor output' },
+			{ summary: 'Private executor output' }]) {
+		const root = await mkdtemp(join(tmpdir(), 'treeseed-closeout-recovery-'));
+		try {
+			const store = new ProviderLocalCapacityStore(root);
+			const claim = await store.claim({ connectionId: 'connection', globalLimit: 1, connectionLimit: 1 });
+			await store.attachLease(claim!.id, { assignmentId: 'assignment', leaseToken: 'lease',
+				leaseExpiresAt: new Date(Date.now() + 300_000).toISOString(), dispatchEnvelope: {} });
+			await store.recordCloseoutOutput(claim!.id, output);
+			await store.recordFailure(claim!.id, 'deadlock detected');
+			const restarted = new ProviderLocalCapacityStore(root);
+			expect(JSON.stringify(await restarted.snapshot())).not.toContain('Private executor output');
+			const api = { assignment: vi.fn().mockResolvedValue({ status: 'leased' }), returnAssignment: vi.fn().mockResolvedValue({}) };
+			vi.mocked(createProviderControlPlaneClient).mockReturnValue(api as never);
+			await recoverProviderLocalLeases({ config: {} as never, store: restarted,
+				connections: [{ connection: { id: 'connection' }, accessToken: { accessToken: 'test-only' }, controlPlaneUrl: 'https://api.example.test' }] as never });
+			expect(api.returnAssignment).toHaveBeenCalledWith('assignment', expect.objectContaining({ output, code: 'provider_runtime_recovery' }));
+			expect((await restarted.snapshot()).claims).toHaveLength(0);
+		} finally { await rm(root, { recursive: true, force: true }); }
+		}
+	});
+	it('recovers a prepared lease on startup but not during an active runner cycle', async () => {
+		const root = await mkdtemp(join(tmpdir(), 'treeseed-ready-lease-'));
+		try {
+			const store = new ProviderLocalCapacityStore(root);
+			const claim = await store.claim({ connectionId: 'connection', globalLimit: 1, connectionLimit: 1 });
+			expect(claim).not.toBeNull();
+			await store.attachLease(claim!.id, {
+				assignmentId: 'assignment', leaseToken: 'lease', leaseExpiresAt: new Date(Date.now() + 300_000).toISOString(),
+				dispatchEnvelope: {},
+			});
+			await expect(store.claimsForRecovery(false)).resolves.toEqual([]);
+			await expect(store.claimsForRecovery(true)).resolves.toEqual([
+				expect.objectContaining({ id: claim!.id, status: 'ready', assignmentId: 'assignment' }),
+			]);
+			const api = { assignment: vi.fn(), returnAssignment: vi.fn() };
+			vi.mocked(createProviderControlPlaneClient).mockReturnValue(api as never);
+			await expect(recoverProviderLocalLeases({ config: {} as never, store, includeRunning: false,
+				connections: [{ connection: { id: 'connection' }, accessToken: { accessToken: 'test-only' }, controlPlaneUrl: 'https://api.example.test' }] as never,
+			})).resolves.toEqual([]);
+			expect(api.returnAssignment).not.toHaveBeenCalled();
+		} finally {
+			await rm(root, { recursive: true, force: true });
+		}
+	});
+
+	it.each([undefined, 'Original execution failure'])('preserves the runtime cause rather than claiming every failure is a restart: %s', async failureMessage => {
+		const api = { assignment: vi.fn().mockResolvedValue({ status: 'leased' }), returnAssignment: vi.fn().mockResolvedValue({}) };
+		vi.mocked(createProviderControlPlaneClient).mockReturnValue(api as never);
+		const store = { claimsForRecovery: vi.fn().mockResolvedValue([{ id: 'claim', connectionId: 'connection',
+			assignmentId: 'assignment', leaseToken: 'lease', runnerId: 'runner', failureMessage }]), finalize: vi.fn(), recordFailure: vi.fn() };
+		await recoverProviderLocalLeases({ config: {} as never, store: store as never,
+			connections: [{ connection: { id: 'connection' }, accessToken: { accessToken: 'test-only' }, controlPlaneUrl: 'https://api.example.test' }] as never });
+		expect(api.returnAssignment).toHaveBeenCalledWith('assignment', expect.objectContaining({
+			code: failureMessage ? 'provider_runtime_recovery' : 'provider_restart_recovery',
+			reason: failureMessage ? `Provider runtime failed before durable completion: ${failureMessage}` : 'Provider restarted before durable completion.',
+		}));
+		expect(store.finalize).toHaveBeenCalledOnce();
+		expect(api.returnAssignment.mock.calls[0]?.[1]).not.toHaveProperty('output');
+	});
+	it('releases a recovery claim that never acquired lease authority', async () => {
+		const store = {
+			claimsForRecovery: vi.fn(async () => [{ id: 'claim-unleased', connectionId: 'retired-team', status: 'recovery' }]),
+			finalize: vi.fn(async () => true),
+			recordFailure: vi.fn(),
+		};
+		const result = await recoverProviderLocalLeases({ config: {} as never, connections: [], store: store as never });
+		expect(store.finalize).toHaveBeenCalledWith('claim-unleased', 'unleased-claim-released');
+		expect(store.recordFailure).not.toHaveBeenCalled();
+		expect(result).toEqual([{ claimId: 'claim-unleased', status: 'released', reason: 'no_lease_acquired' }]);
+	});
+
+	it('retains a partially recorded lease when authority cannot be proven', async () => {
+		const store = {
+			claimsForRecovery: vi.fn(async () => [{ id: 'claim-partial', connectionId: 'retired-team', status: 'recovery', assignmentId: 'assignment-1' }]),
+			finalize: vi.fn(),
+			recordFailure: vi.fn(async () => true),
+		};
+		const result = await recoverProviderLocalLeases({ config: {} as never, connections: [], store: store as never });
+		expect(store.finalize).not.toHaveBeenCalled();
+		expect(store.recordFailure).toHaveBeenCalledOnce();
+		expect(result).toEqual([{ claimId: 'claim-partial', status: 'retained', reason: 'lease_authority_unavailable' }]);
+	});
+});

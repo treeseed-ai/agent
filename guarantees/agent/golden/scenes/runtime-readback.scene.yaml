@@ -1,0 +1,26 @@
+schemaVersion: treeseed.scene/v1
+id: agent.golden.runtime-readback
+title: SDK golden runtime read-back
+scope: local-integrated-runtime
+workflow:
+  - id: lifecycle-evidence
+    action: { verifier: agent.golden.live.lifecycle }
+    expect: { status: passed }
+  - id: collaboration-evidence
+    action: { verifier: agent.golden.live.collaboration }
+    expect: { status: passed }
+  - id: graph-evidence
+    action: { verifier: agent.golden.live.graph }
+    expect: { status: passed }
+  - id: revision-evidence
+    action: { verifier: agent.golden.live.revision }
+    expect: { status: passed }
+  - id: results-evidence
+    action: { verifier: agent.golden.live.results }
+    expect: { status: passed }
+  - id: settlement-evidence
+    action: { verifier: agent.golden.live.settlement }
+    expect: { status: passed }
+  - id: reporter-evidence
+    action: { verifier: agent.golden.live.reporter }
+    expect: { status: passed }

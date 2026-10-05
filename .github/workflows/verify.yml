@@ -2,13 +2,17 @@ name: Verify TreeSeed Agent
 
 on:
   push:
+    branches: [staging, main]
     paths-ignore: ["docs/src/content/**"]
   pull_request:
-    paths-ignore: ["docs/src/content/**"]
+    # Required verification must also run for ancestry-only reconciliation PRs.
   workflow_dispatch:
 
 jobs:
   verify:
+    permissions:
+      contents: read
+      actions: read
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -21,8 +25,15 @@ jobs:
           cache-dependency-path: package-lock.json
       - name: Install dependencies
         timeout-minutes: 20
-        run: npm run release:setup
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - uses: treeseed-ai/sdk/.github/actions/install-exact-sdk@38255cf2557862972d9aed166f1d25fe1194bd61
+        with:
+          github-token: ${{ github.token }}
       - run: bash -lc 'npm run verify:local'
+      - name: Execute coded golden component scenes
+        uses: treeseed-ai/reviewer/.github/actions/run-scenes@013d38165f0430278ac944592d3b20618736c2d5
+        with:
+          ids: guarantee.agent.golden.component-boundaries,guarantee.agent.golden.planning-synthesis-recovery
       - name: Pack verified artifact
         run: mkdir -p artifacts && npm pack --json --ignore-scripts --pack-destination artifacts
       - uses: actions/upload-artifact@v4

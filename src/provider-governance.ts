@@ -12,7 +12,6 @@ export {
 	DEFAULT_PROVIDER_MANIFEST,
 	loadProviderManifest,
 	writeProviderConnections,
-	providerSecretPath,
 	providerConnectionControlPlaneUrl,
 	providerConnectionControlPlaneAudience,
 	providerServerProfileEnvironmentName,
@@ -22,7 +21,6 @@ export {
 	stageProviderSecret,
 	writeProviderSecret,
 	type LoadedProviderManifest,
-	type ProviderSecretResolver,
 } from './provider/configuration/manifest.ts';
 export {
 	readProviderConnectionState,

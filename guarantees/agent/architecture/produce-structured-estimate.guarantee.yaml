@@ -33,7 +33,8 @@ actors: { allowed: [capacity_operator, team_owner], forbidden: [anonymous_user, 
 devices: { required: [] }
 gates: [core]
 preconditions: { fixtures: [integrated_treeseed_project] }
-api: { required: true, verifierRefs: [agent.catalog.profile-live-proof] }
+# Component coverage only; a genuine exact-revision live estimate is required.
+api: { required: true, verifierRefs: [agent.golden.estimate-publication, agent.golden.context-grant] }
 content: { required: true, verifierRefs: [] }
 audit: { required: true, verifierRefs: [] }
 negativeCases: []

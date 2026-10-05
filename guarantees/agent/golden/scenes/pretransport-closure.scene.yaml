@@ -1,0 +1,11 @@
+schemaVersion: treeseed.scene/v1
+id: agent.golden.pretransport-closure
+title: Pre-transport context failure closure
+scope: local-component-tests
+workflow:
+  - id: closure
+    action: { verifier: agent.golden.pretransport-closure }
+    expect: { status: passed }
+  - id: post-transport-denial
+    action: { verifier: agent.golden.pretransport-closure-denial }
+    expect: { status: passed }

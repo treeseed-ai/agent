@@ -1,6 +1,6 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import type {
-	CapacityProviderManifestV3,
+	CapacityProviderManifest,
 	CapacityProviderJoinInput,
 	ProviderAccessTokenIssue,
 	ProviderConnectionConfig,
@@ -28,9 +28,9 @@ import {
 	writeProviderConnections,
 	writeProviderSecret,
 	type LoadedProviderManifest,
-	type ProviderSecretResolver,
 } from '../configuration/manifest.ts';
 import { ProviderLocalCapacityStore } from '../capacity/capacity-core/local-capacity-store.ts';
+import { isRecoverableCredentialRejection, recoverAuthorizedCredential } from './credential-recovery.ts';
 
 export interface ProviderConnectionRuntime {
 	connection: ProviderConnectionConfig;
@@ -41,6 +41,7 @@ export interface ProviderConnectionRuntime {
 	membershipId: string;
 	credentialId: string;
 	accessToken: ProviderAccessTokenIssue;
+	accessTokenProvider: (minimumValidityMs?: number) => Promise<string>;
 }
 
 export interface ProviderConnectionResult {
@@ -59,7 +60,7 @@ interface CoordinatorIdentity {
 	publicJwk: Awaited<ReturnType<typeof loadCapacityProviderIdentity>>['publicJwk'];
 }
 
-function unsignedRegistration(manifest: CapacityProviderManifestV3, connection: CapacityProviderJoinInput, identity: CoordinatorIdentity) {
+function unsignedRegistration(manifest: CapacityProviderManifest, connection: CapacityProviderJoinInput, identity: CoordinatorIdentity) {
 	return {
 		schemaVersion: 1 as const,
 		displayName: manifest.identity.displayName,
@@ -76,16 +77,22 @@ function nextState(connectionId: string, controlPlaneUrl: string, prior: Provide
 	return next as ProviderConnectionState;
 }
 
+export function providerRegistrationIdempotencyKey(connectionId: string, registrationCode: string) {
+	const codeGeneration = createHash('sha256').update(registrationCode).digest('hex').slice(0, 16);
+	return `register:${connectionId}:${codeGeneration}`;
+}
+
 export class CapacityProviderCoordinator {
 	private identity: CoordinatorIdentity | null = null;
 	private manifestMutation = Promise.resolve();
 	private readonly tokenRefreshes = new Map<string, Promise<ProviderAccessTokenIssue>>();
+	private readonly credentialRecoveries = new Map<string, Promise<ProviderConnectionConfig>>();
 	private readonly localState: ProviderLocalCapacityStore;
 
 	constructor(
 		private readonly loaded: LoadedProviderManifest,
 		private readonly dataDir: string,
-		private readonly options: { env?: NodeJS.ProcessEnv; secretResolver?: ProviderSecretResolver; fetch?: typeof fetch } = {},
+		private readonly options: { env?: NodeJS.ProcessEnv;  fetch?: typeof fetch } = {},
 	) { this.localState = new ProviderLocalCapacityStore(dataDir); }
 
 	private async providerIdentity() {
@@ -94,7 +101,6 @@ export class CapacityProviderCoordinator {
 			baseDirectory: this.loaded.directory,
 			dataDirectory: this.dataDir,
 			env: this.options.env,
-			resolver: this.options.secretResolver,
 		});
 		return this.identity;
 	}
@@ -116,10 +122,12 @@ export class CapacityProviderCoordinator {
 		minimumValidityMs?: number;
 	}) {
 		const identity = await this.providerIdentity();
-		const credential = await resolveProviderSecret(input.credentialRef, { env: this.options.env, baseDirectory: this.loaded.directory, dataDirectory: this.dataDir, resolver: this.options.secretResolver });
+		const credential = await resolveProviderSecret(input.credentialRef, { env: this.options.env, baseDirectory: this.loaded.directory, dataDirectory: this.dataDir });
 		const cached = await this.localState.token(input.connection.id);
 		const minimumValidityMs = Math.max(5 * 60_000, Number(input.minimumValidityMs) || 0);
-		if (cached && Date.parse(cached.expiresAt) - Date.now() > minimumValidityMs) return cached;
+		if (cached && cached.status === 'active' && !cached.revokedAt && cached.teamId === input.connection.teamId
+			&& cached.providerId === input.connection.providerId && cached.membershipId === input.connection.membershipId
+			&& cached.credentialId === input.credentialId && Date.parse(cached.expiresAt) - Date.now() > minimumValidityMs) return cached;
 		const idempotencyKey = `access:${input.connection.id}:${randomUUID()}`;
 		const requestedValiditySeconds = Math.ceil((minimumValidityMs + 60_000) / 1000);
 		const body = { credentialId: input.credentialId, idempotencyKey, requestedValiditySeconds };
@@ -157,11 +165,40 @@ export class CapacityProviderCoordinator {
 		if (connection.enabled === false) return { connectionId: connection.id, status: 'disabled' };
 		const controlPlaneUrl = providerConnectionControlPlaneUrl(connection, this.options.env);
 		const controlPlaneAudience = providerConnectionControlPlaneAudience(connection, this.options.env);
-		const accessToken = await this.connectApproved({ connection, controlPlaneUrl, controlPlaneAudience, credentialRef: connection.membershipCredentialRef, credentialId: connection.membershipCredentialId });
-		return { connectionId: connection.id, status: 'connected', teamId: connection.teamId, providerId: connection.providerId, membershipId: connection.membershipId, runtime: { connection, controlPlaneUrl, controlPlaneAudience, teamId: connection.teamId, providerId: connection.providerId, membershipId: connection.membershipId, credentialId: connection.membershipCredentialId, accessToken } };
+		const connect = () => this.connectApproved({ connection, controlPlaneUrl, controlPlaneAudience, credentialRef: connection.membershipCredentialRef, credentialId: connection.membershipCredentialId });
+		let accessToken: ProviderAccessTokenIssue;
+		try { accessToken = await connect(); }
+		catch (error) {
+			if (!isRecoverableCredentialRejection(error)) throw error;
+			connection = await this.recoverConnectionCredential(connection, controlPlaneUrl, controlPlaneAudience);
+			accessToken = await connect();
+		}
+		return { connectionId: connection.id, status: 'connected', teamId: connection.teamId, providerId: connection.providerId, membershipId: connection.membershipId, runtime: { connection, controlPlaneUrl, controlPlaneAudience, teamId: connection.teamId, providerId: connection.providerId, membershipId: connection.membershipId, credentialId: connection.membershipCredentialId, accessToken,
+			accessTokenProvider: async (minimumValidityMs?: number) => (await this.accessTokenForConnection(connection, minimumValidityMs)).accessToken } };
 	}
 
-	async beginJoin(join: CapacityProviderJoinInput, oneTimeRegistrationKey?: string): Promise<ProviderConnectionResult> {
+	private async recoverConnectionCredential(connection: ProviderConnectionConfig, controlPlaneUrl: string, controlPlaneAudience: string) {
+		const existing = this.credentialRecoveries.get(connection.id);
+		if (existing) return existing;
+		const recovery = recoverAuthorizedCredential(connection, {
+			read: () => readProviderConnectionState(this.dataDir, connection.id),
+			exchange: async (requestId, idempotencyKey) => {
+				const identity = await this.providerIdentity();
+				const path = providerOperationPath(CONTROL_PLANE_OPERATIONS.providers.exchangeCredential, { requestId });
+				const proof = await this.proof({ audience: controlPlaneAudience, method: 'POST', path, body: { requestId, idempotencyKey }, identity });
+				return this.client(controlPlaneUrl).exchangeCredential(requestId, proof, idempotencyKey);
+			},
+			writeSecret: (ref, value) => writeProviderSecret(ref, value, this.loaded.directory, this.dataDir),
+			writeState: state => writeProviderConnectionState(this.dataDir, state),
+			clearToken: () => this.localState.removeToken(connection.id),
+			materialize: state => this.materializeApprovedConnection(state),
+		});
+		this.credentialRecoveries.set(connection.id, recovery);
+		try { return await recovery; }
+		finally { if (this.credentialRecoveries.get(connection.id) === recovery) this.credentialRecoveries.delete(connection.id); }
+	}
+
+	async beginJoin(join: CapacityProviderJoinInput, suppliedRegistrationCode?: string): Promise<ProviderConnectionResult> {
 		if (this.loaded.manifest.connections.some((connection) => connection.id === join.id)) throw new Error(`Provider connection ${join.id} is already approved and configured.`);
 		const existing = await readProviderConnectionState(this.dataDir, join.id);
 		if (existing?.registrationRequestId) return this.pollRegistrationStatus(join.id);
@@ -172,8 +209,8 @@ export class CapacityProviderCoordinator {
 		const unsigned = unsignedRegistration(this.loaded.manifest, join, identity);
 		const proof = await this.proof({ audience: controlPlaneAudience, method: 'POST', path: providerOperationPath(CONTROL_PLANE_OPERATIONS.providers.register), body: unsigned, identity });
 		const submission: ProviderRegistrationSubmission = { ...unsigned, proof };
-		const registrationKey = oneTimeRegistrationKey ?? await resolveProviderSecret(join.registrationKeyRef, { env: this.options.env, baseDirectory: this.loaded.directory, dataDirectory: this.dataDir, resolver: this.options.secretResolver });
-		const request = await client.register(registrationKey, submission, `register:${join.id}`);
+		const registrationCode = suppliedRegistrationCode ?? await resolveProviderSecret(join.registrationKeyRef, { env: this.options.env, baseDirectory: this.loaded.directory, dataDirectory: this.dataDir });
+		const request = await client.register(registrationCode, submission, providerRegistrationIdempotencyKey(join.id, registrationCode));
 		const state = nextState(join.id, controlPlaneUrl, null, { serverProfile: join.serverProfile ?? null, controlPlaneAudience, offer: join.offer, teamId: request.teamId, providerId: request.providerId, registrationRequestId: request.id, registrationStatus: request.status });
 		await writeProviderConnectionState(this.dataDir, state);
 		return { connectionId: join.id, status: 'pending-approval', teamId: request.teamId, providerId: request.providerId, requestId: request.id };
@@ -241,8 +278,14 @@ export class CapacityProviderCoordinator {
 		};
 	}
 
-	async exchangeRegistrationCredential(connectionId: string): Promise<ProviderConnectionResult> {
+	async exchangeRegistrationCredential(connectionId: string, maxConcurrentRunners?: number): Promise<ProviderConnectionResult> {
 		let existing = await readProviderConnectionState(this.dataDir, connectionId);
+		if (maxConcurrentRunners !== undefined) {
+			if (!Number.isInteger(maxConcurrentRunners) || maxConcurrentRunners < 1 || maxConcurrentRunners > this.loaded.manifest.capacity.maxConcurrentWorkers) throw new Error('Connection concurrency must fit the configured host capacity.');
+			if (!existing?.generatedCredentialRef || !existing.credentialId || !existing.membershipId) throw new Error('Concurrency updates require an already enrolled connection.');
+			existing = nextState(connectionId, existing.controlPlaneUrl, existing, { offer: { ...existing.offer, maxConcurrentRunners } });
+			await writeProviderConnectionState(this.dataDir, existing);
+		}
 		if (existing?.generatedCredentialRef && existing.credentialId && existing.membershipId) {
 			return this.reconcileConnection(await this.materializeApprovedConnection(existing));
 		}
@@ -367,9 +410,10 @@ export class CapacityProviderCoordinator {
 			this.identity = null;
 			await this.localState.clearTokens();
 			return identity;
-		} catch (error) {
-			await staged.rollback();
-			throw error;
+		} catch {
+			// The API may have accepted rotation before a transport or local commit failure.
+			// Retain the encrypted pending identity for explicit recovery; never destroy it.
+			throw new Error(`Provider identity rotation is uncertain; retain custody transaction ${staged.temporaryPath} for recovery.`);
 		}
 	}
 }

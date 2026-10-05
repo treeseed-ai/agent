@@ -1,6 +1,6 @@
 {
   "name": "@treeseed/agent",
-  "version": "0.13.0-rc.16",
+  "version": "0.13.0-rc.57",
   "description": "Treeseed agent service runtime package.",
   "license": "Apache-2.0",
   "repository": {
@@ -25,14 +25,12 @@
     "./provider-governance": {
       "types": "./dist/provider-governance.d.ts",
       "default": "./dist/provider-governance.js"
-    },
-    "./executors/codex-chat": {
-      "types": "./dist/provider/execution/codex-chat-executor.d.ts",
-      "default": "./dist/provider/execution/codex-chat-executor.js"
     }
   },
   "files": [
     "README.md",
+    "guarantees",
+    "tests/acceptance",
     "dist",
     "Dockerfile",
     "docker-entrypoint.sh",
@@ -61,13 +59,16 @@
     "verify": "TMPDIR=/tmp node --import tsx ./scripts/support/verify-driver.ts",
     "release:setup": "npm run setup:ci",
     "release:check-tag": "node --import tsx ./scripts/packages/assert-release-tag-version.ts",
-    "release:verify": "npm run check:file-lengths && node --import tsx ./scripts/packages/release-verify.ts",
+    "typecheck": "tsc --noEmit",
+    "release:verify": "npm run typecheck && npm run check:file-lengths && node --import tsx ./scripts/packages/release-verify.ts",
+    "release:custody": "node --import tsx ./scripts/release/release-custody.ts",
     "release:publish": "node --import tsx ./scripts/packages/publish-package.ts",
     "test:provider-runtime": "npm run test:modern"
   },
   "dependencies": {
-    "@openai/codex": "0.149.0",
-    "@treeseed/sdk": "0.13.0-rc.29",
+    "@openai/codex": "0.158.0",
+    "@treeseed/deployment": "https://github.com/treeseed-ai/deployment/releases/download/0.1.0-rc.243/treeseed-deployment-runtime-0.1.0-rc.243.tgz",
+    "@treeseed/sdk": "0.13.0-rc.122",
     "esbuild": "0.28.2",
     "typescript": "^5.9.3",
     "yaml": "^2.8.1"

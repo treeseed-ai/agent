@@ -1,3 +1,0 @@
-[submodule ".fixtures/treeseed-fixtures"]
-	path = .fixtures/treeseed-fixtures
-	url = https://github.com/treeseed-ai/fixtures.git

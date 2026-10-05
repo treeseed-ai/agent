@@ -1,6 +1,11 @@
 schemaVersion: treeseed.guarantee-verifiers/v1
 ownerPackage: "@treeseed/agent"
 verifiers:
+  agent.golden.execution-provider-build-typecheck-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/project-handler-build.test.ts
+    testName: "public verification builds the exact provider declarations before strict complete test typing and retains one build before native tests"
   agent.golden.execution-qualification-batch-unit-1:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

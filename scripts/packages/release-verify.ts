@@ -21,6 +21,7 @@ if (!manifest.exports?.['.'] || !manifest.exports?.['./provider-governance']) {
 }
 
 run('npm', ['run', 'build:dist', '--workspaces=false']);
+run('npm', ['run', 'typecheck', '--workspaces=false']);
 run('npm', ['run', 'test:modern', '--workspaces=false']);
 
 const stage = mkdtempSync(join(tmpdir(), 'treeseed-agent-pack-'));

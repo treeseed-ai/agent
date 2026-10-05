@@ -11,6 +11,7 @@ import type { Handler } from '../../../src/kernel/contracts.ts';
 import type { executeKernelAssignment } from '../../../src/kernel/provider-kernel-executor.ts';
 import { portableKernel } from './architecture/portable/portable-kernel-fixture.ts';
 import { verifyCompiledProviderCode } from '../../acceptance/freeze-integrity.ts';
+import ts from 'typescript';
 
 const packageRoot = resolve(fileURLToPath(new URL('../../..', import.meta.url)));
 const fixture = fileURLToPath(new URL('../../fixtures/project-handlers.ts', import.meta.url));
@@ -38,6 +39,27 @@ async function artifactBytes(root: string): Promise<Map<string, Buffer>> {
 }
 
 describe('pinned project handler build', () => {
+	it('public verification builds the exact provider declarations before strict complete test typing and retains one build before native tests', async () => {
+		const manifest: { scripts: Record<string, string> } = JSON.parse(await readFile(resolve(packageRoot, 'package.json'), 'utf8'));
+		expect(manifest.scripts['release:verify']).toBe('npm run check:file-lengths && node --import tsx ./scripts/packages/release-verify.ts');
+		expect(manifest.scripts.typecheck).toBe('tsc --noEmit');
+		const file = ts.createSourceFile('release-verify.ts', await readFile(resolve(packageRoot, 'scripts/packages/release-verify.ts'), 'utf8'), ts.ScriptTarget.Latest, true);
+		const calls = file.statements.flatMap(statement => {
+			if (!ts.isExpressionStatement(statement) || !ts.isCallExpression(statement.expression)) return [];
+			const call = statement.expression;
+			if (!ts.isIdentifier(call.expression) || call.expression.text !== 'run') return [];
+			const [command, args] = call.arguments;
+			if (!command || !ts.isStringLiteral(command) || !args || !ts.isArrayLiteralExpression(args)) throw new Error('Exact native verification command required');
+			return [{ command: command.text, args: args.elements.map(argument => {
+				if (!ts.isStringLiteral(argument)) throw new Error('Literal original verification argument required'); return argument.text;
+			}) }];
+		});
+		expect(calls).toEqual([
+			{ command: 'npm', args: ['run', 'build:dist', '--workspaces=false'] },
+			{ command: 'npm', args: ['run', 'typecheck', '--workspaces=false'] },
+			{ command: 'npm', args: ['run', 'test:modern', '--workspaces=false'] },
+		]);
+	});
 	it('isolated original project build executes its compiled handler through the compiled Kernel and rejects missing duplicate and wrong-build selections without mutating held inputs', async () => {
 		const directory = await mkdtemp(join(tmpdir(), 'agent-project-build-')), clone = join(directory, 'package');
 		let f: Awaited<ReturnType<typeof portableKernel>> | undefined;
@@ -53,11 +75,11 @@ describe('pinned project handler build', () => {
 			await mkdir(clone);
 			// Invoke ONLY the original compiler in an allocated copy. Original
 			// source/dist/build lock remain untouched; no install or new compiler.
-			for (const name of ['src', 'scripts']) {
+			for (const name of ['src', 'scripts', 'tests']) {
 				await collect(resolve(packageRoot, name), name);
 				await cp(resolve(packageRoot, name), join(clone, name), { recursive: true });
 			}
-			for (const name of ['package.json', 'tsconfig.json', 'tsconfig.dist.json', 'tests/fixtures/project-handlers.ts']) {
+			for (const name of ['package.json', 'tsconfig.json', 'tsconfig.dist.json', 'vitest.config.ts']) {
 				const bytes = await readFile(resolve(packageRoot, name)); inputs.set(name, bytes);
 				await mkdir(resolve(clone, name, '..'), { recursive: true }); await cp(resolve(packageRoot, name), resolve(clone, name));
 			}
@@ -67,6 +89,10 @@ describe('pinned project handler build', () => {
 				cwd: clone, env, encoding: 'utf8', timeout: 120_000,
 			});
 			expect(compilation.error).toBeUndefined(); expect(compilation.signal).toBeNull(); expect(compilation.status).toBe(0);
+			const typing = spawnSync(process.execPath, ['node_modules/typescript/bin/tsc', '--noEmit', '--pretty', 'false'], {
+				cwd: clone, env, encoding: 'utf8', timeout: 120_000,
+			});
+			expect(typing.error).toBeUndefined(); expect(typing.signal).toBeNull(); expect(typing.status, `${typing.stdout}\n${typing.stderr}`).toBe(0);
 			const selected: { projectHandlers: Handler[] } = await import(pathToFileURL(resolve(clone, 'dist/kernel/project-handlers.js')).href);
 			const compiled: { executeKernelAssignment: typeof executeKernelAssignment } = await import(pathToFileURL(resolve(clone, 'dist/kernel/provider-kernel-executor.js')).href);
 			expect(selected.projectHandlers.map(handler => handler.id)).toEqual(['sdk/fixture']);

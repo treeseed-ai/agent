@@ -347,8 +347,13 @@ export function verifyGolden(gate: Gate): void {
 		const activeSeconds = row(row(result.usage).native).activeSeconds;
 		assert.ok(typeof activeSeconds === 'number' && Number.isFinite(activeSeconds) && activeSeconds > 0, 'Measured active usage must be positive and finite');
 		assert.ok(rows(result.references).length > 0, 'A claimed completion without exact output references cannot pass');
-		for (const reference of rows(result.references)) assert.ok(assignmentReferenceSchema.safeParse(reference).success,
-			'ACCEPTANCE_RESULT_REFERENCE: Canonical exact output references required');
+		const references = rows(result.references).map(reference => {
+			const checked = assignmentReferenceSchema.safeParse(reference);
+			assert.ok(checked.success, 'ACCEPTANCE_RESULT_REFERENCE: Canonical exact output references required');
+			return checked.data;
+		});
+		assert.equal(new Set(references.map(reference => JSON.stringify(reference))).size, references.length,
+			'ACCEPTANCE_RESULT_REFERENCE: Repeated canonical output evidence is not distinct custody');
 		const workspace = row(attempt.workspace);
 		if (workspace.mode === 'git') assert.ok(rows(result.references).some(reference => reference.kind === 'git'
 			&& reference.repository === workspace.repository

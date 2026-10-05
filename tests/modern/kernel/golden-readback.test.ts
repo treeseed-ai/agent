@@ -4,6 +4,20 @@ import { stringify } from 'yaml';
 import { state, gate, read, assignment, usageMeasurement, classes, workdayId, commit, type Row } from './architecture/golden-readback-fixture.ts';
 
 describe('golden read-back assertion regressions (fixtures are not live acceptance)', () => {
+	it('denies repeated canonical result references without changing distinct output evidence or failed observations', () => {
+		const item = state.replies.get('assignments list')!.items[0], result = item.assignmentResult;
+		const original = structuredClone(result), first = { kind: 'url', url: 'https://example.test/one' };
+		result.references = [...original.references, first, { kind: 'url', url: 'https://example.test/two' }];
+		const distinct = structuredClone(result); expect(() => gate('results')).not.toThrow(); expect(result).toEqual(distinct);
+		const denied: boolean[] = [];
+		for (const repeated of [structuredClone(first), { url: first.url, kind: first.kind }]) {
+			result.references = [...distinct.references, repeated]; const held = structuredClone(result);
+			let failure = false; try { gate('results'); } catch { failure = true; }
+			denied.push(failure); expect(result).toEqual(held);
+		}
+		item.assignmentResult = original; expect(() => gate('results')).not.toThrow();
+		expect(item.assignmentResult).toEqual(original); expect(denied).toEqual([true, true]);
+	});
   it('rejects moved missing or foreign report readback even when its body names the workday', () => {
     const observed = state.replies.get('library read')!.result;
     for (const mutate of [

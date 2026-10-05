@@ -28,6 +28,10 @@ function offerInput() {
 describe('canonical assignment offer selection', () => {
 	it('checks every exact qualification in one complete ontology batch without accepting empty partial duplicate or moved definitions or changing inputs', async () => {
 		const f = offerInput(), published = await materializeCapabilityOffers(f.input);
+		for (const adapter of f.input.loaded.manifest.adapters) for (const { offer } of adapter.offers) {
+			const { offerDigest, ...material } = offer;
+			expect(offerDigest).toBe(capabilityOfferDigest(material));
+		}
 		for (const adapter of published) for (const { offer } of adapter.offers) {
 			const definitions = offer.capabilities.map(reference => {
 				const definition = CORE_CAPABILITY_DEFINITIONS.find(value => value.id === reference.id);

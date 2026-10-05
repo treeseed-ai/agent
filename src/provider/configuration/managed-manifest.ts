@@ -108,7 +108,8 @@ export function createManagedProviderManifestV5(input: ManagedProviderManifestRe
 		const offers = baseAdapter.offers.flatMap(binding => {
 			const capabilities = binding.offer.capabilities.filter(({ id }) => policy.accepts(id));
 			if (!capabilities.length) return [];
-			const material = { ...binding.offer, offerId: `${policy.id}-${binding.offer.offerId}`,
+			const { offerDigest: _originalDigest, ...template } = binding.offer;
+			const material = { ...template, offerId: `${policy.id}-${binding.offer.offerId}`,
 				capabilities, conformance: binding.offer.conformance.filter(({ capability }) => policy.accepts(capability.id)) };
 			return [{ ...binding, offer: { ...material, offerDigest: capabilityOfferDigest(material) } }];
 		});

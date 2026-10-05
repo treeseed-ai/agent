@@ -16,7 +16,7 @@ import { providerEnrollmentInput } from '../../src/provider/lifecycle/enrollment
 import { stringify as stringifyYaml } from 'yaml';
 import { createManagedProviderManifestV5 } from '../../src/provider/configuration/managed-manifest.ts';
 import { assertGitWorkPublication, assignmentAllowedServices, timingAwarenessEvidence } from '../../src/provider/execution/microvm-executor.ts';
-import { validateCapacityProviderManifestV5 } from '@treeseed/sdk/capacity-provider';
+import { capabilityOfferDigest, validateCapacityProviderManifestV5, type CapabilityOffer } from '@treeseed/sdk/capacity-provider';
 
 const digest = (value: string) => `sha256:${value.repeat(64)}`;
 function providerManifestFixture() {
@@ -24,13 +24,18 @@ function providerManifestFixture() {
 		id, purpose: id, priority, reservedConcurrentWorkers, maxConcurrentWorkers: 4, borrowWhenIdle: true, lendWhenIdle: true,
 		reclaimPolicy: 'admission', queueLimit: 10, timeoutSeconds: 120, capabilities: ['treeseed.coordination.conversation'],
 	});
-	const capability = { id: 'treeseed.coordination.conversation', version: '1.0.0', digest: digest('1') };
-	const offer = { schemaVersion: 'treeseed.capability-offer/v2', offerId: 'conversation', capabilities: [capability], features: [], configurationSupport: {},
+	const managed = createManagedProviderManifestV5({ release: 'unit-custody-input', guestImage: 'isolated/guest',
+		guestImageDigest: digest('5'), baseImageDigest: digest('6'), provenanceDigest: digest('7') });
+	const qualification = managed.adapters.flatMap(adapter => adapter.offers.flatMap(binding => binding.offer.conformance))
+		.find(receipt => receipt.capability.id === 'treeseed.coordination.conversation');
+	if (!qualification) throw new Error('Original managed conversation qualification input required');
+	const capability = qualification.capability;
+	const offer: CapabilityOffer = { schemaVersion: 'treeseed.capability-offer/v2', offerId: 'conversation', capabilities: [capability], features: [], configurationSupport: {},
 		permissionClasses: [], contextModes: ['manifest'], inputContracts: [], outputContracts: [], interactionModes: ['interactive'],
-		conformance: [{ schemaVersion: 'treeseed.capability-conformance/v1', providerId: 'runtime-provider', capability, tier: 'signed-attestation', status: 'passed',
-			evidenceDigest: digest('2'), suite: null, issuedAt: '2026-08-30T00:00:00.000Z', expiresAt: null, signature: { keyId: 'provider', algorithm: 'Ed25519', value: 'fixture' } }],
+		conformance: [structuredClone(qualification)],
 		contextCapacity: { mode:'bounded',measurement:'tokens',defaultInitial:32_000,maximum:128_000,reservedOutput:8_000,transportPayloadBytes:4_194_304,measurementProvenance:{provider:'openai',implementation:'provider-reported-tokenizer',version:null} },
 		limits: {}, commercial: { currency: null, estimatedCost: null }, region: null, trust: ['provider-signed'], offerDigest: digest('3') };
+	const { offerDigest: _suppliedDigest, ...material } = offer; offer.offerDigest = capabilityOfferDigest(material);
 	return {
 		schemaVersion: 5, ownership: { type: 'team', teamId: 'team:fixture' }, configuration: { generation: 'fixture-v5' },
 		identity: { privateKeyRef: 'data://identity-v3.json', displayName: 'Fixture provider' }, ontology: { generation: 1, digest: digest('4') },

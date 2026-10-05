@@ -2769,3 +2769,8 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/provider/sandbox-accounting-usage.test.ts
     testName: "keeps original provenance outside numeric native usage and preserves every measured unit without laundering invalid observations"
+  agent.golden.execution-allocated-deadline-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/custody/start-custody-readback.test.ts
+    testName: "retains a short active allocation separately from the original phase deadline and denies later immutable authority without repairing observations"

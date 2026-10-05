@@ -28,6 +28,18 @@ function suppliedStart() {
 // UNIT of the actual native read-back assertions. Supplied DTOs are not an
 // independently captured real start receipt, event producer or live execution.
 describe('managed initial manual and recurring start custody', () => {
+	it('retains a short active allocation separately from the original phase deadline and denies later immutable authority without repairing observations', () => {
+		const f = suppliedStart(), attempt = row(f.assignments[0]!.assignmentAttempt);
+		row(attempt.limits).maximumSeconds = 3;
+		const phaseDeadline = String(row(row(f.observed.run).parameters).deadlineAt);
+		attempt.deadline = phaseDeadline;
+		const original = structuredClone(f);
+		expect(() => verifyInitialStartCustody(f.observed, f.assignments)).not.toThrow(); expect(f).toEqual(original);
+		attempt.deadline = new Date(Date.parse(phaseDeadline) + 1).toISOString();
+		const denied = structuredClone(f);
+		expect(() => verifyInitialStartCustody(f.observed, f.assignments)).toThrow('ACCEPTANCE_START_ATTEMPT_CLOCK');
+		expect(f).toEqual(denied);
+	});
 	it('accepts complete supplied canonical policy readiness and frozen attempts without rewriting evidence', () => {
 		const f = suppliedStart(), before = structuredClone(f); expect(() => verifyInitialStartCustody(f.observed, f.assignments)).not.toThrow();
 		expect(() => verifyRecurringStartCustody(f.observed, f.assignments, f.schedule)).not.toThrow(); expect(f).toEqual(before);

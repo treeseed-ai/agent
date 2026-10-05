@@ -6,25 +6,48 @@ import type { ProviderHostRuntimeConfig } from '../../../../src/provider/configu
 // Child entrypoint for the EXISTING runtime, not another arbitration runner.
 // The parent supplies only a disposable directory and controlled loopback API.
 const [action, directory] = process.argv.slice(2);
-if (!directory || !['initialize', 'run', 'offers'].includes(action ?? '')) throw new Error('Exact isolated arbitration action required');
+if (!directory || !['initialize', 'run', 'offers', 'offers-session'].includes(action ?? '')) throw new Error('Exact isolated arbitration action required');
 const config: ProviderHostRuntimeConfig = JSON.parse(await readFile(`${directory}/config.json`, 'utf8'));
 if (config.dataDir !== directory || config.manifestPath !== `${directory}/manifest.yaml`) throw new Error('Fixture custody mismatch');
-const loaded = await loadProviderManifest(config.manifestPath, directory);
-for (const connection of loaded.manifest.connections) {
-	const url = new URL(connection.controlPlaneUrl ?? '');
-	if (url.protocol !== 'http:' || url.hostname !== '127.0.0.1') throw new Error('Only the disposable loopback endpoint is allowed');
+async function load() {
+	const loaded = await loadProviderManifest(config.manifestPath ?? undefined, directory);
+	for (const connection of loaded.manifest.connections) {
+		const url = new URL(connection.controlPlaneUrl ?? '');
+		if (url.protocol !== 'http:' || url.hostname !== '127.0.0.1') throw new Error('Only the disposable loopback endpoint is allowed');
+	}
+	return loaded;
+}
+async function offers() {
+	const loaded = await load();
+	const { materializeCapabilityOffers } = await import('../../../../dist/provider/capabilities/materialize-offers.js');
+	const identity = await loadCapacityProviderIdentity({ ref: loaded.manifest.identity.privateKeyRef, baseDirectory: directory, dataDirectory: directory });
+	return { publicJwk: identity.publicJwk,
+		adapters: await materializeCapabilityOffers({ config, loaded, providerId: loaded.manifest.connections[0]!.providerId }) };
 }
 if (action === 'initialize') {
+	const loaded = await load();
 	await initializeCapacityProviderIdentity({ ref: loaded.manifest.identity.privateKeyRef, baseDirectory: directory, dataDirectory: directory });
 	for (const connection of loaded.manifest.connections) await writeProviderSecret(connection.membershipCredentialRef,
 		`isolated-${connection.id}`, directory, directory);
 	process.stdout.write(JSON.stringify({ initialized: true }));
 } else if (action === 'offers') {
-	const { materializeCapabilityOffers } = await import('../../../../dist/provider/capabilities/materialize-offers.js');
-	const identity = await loadCapacityProviderIdentity({ ref: loaded.manifest.identity.privateKeyRef, baseDirectory: directory, dataDirectory: directory });
-	process.stdout.write(JSON.stringify({ publicJwk: identity.publicJwk,
-		adapters: await materializeCapabilityOffers({ config, loaded, providerId: loaded.manifest.connections[0]!.providerId }) }));
+	process.stdout.write(JSON.stringify(await offers()));
+} else if (action === 'offers-session') {
+	if (!process.send) throw new Error('Owned native offer IPC required');
+	// Same owning loader and publisher on EVERY call, including after denial.
+	// Only process/module startup is shared; manifest and identity are reread.
+	process.on('message', async message => {
+		if (message !== 'offers') throw new Error('Exact native offer action required');
+		try { process.send!({ value: await offers() }); }
+		catch (cause) {
+			if (!(cause instanceof Error)) throw cause;
+			process.send!({ error: { name: cause.name, message: cause.message, stack: cause.stack } });
+		}
+	});
+	process.on('disconnect', () => process.exit(0));
+	process.send({ ready: true });
 } else {
+	await load();
 	const { runMultiTeamProviderRunners } = await import('../../../../dist/provider/teams/multi-team-runtime.js');
 	process.stdout.write(JSON.stringify(await runMultiTeamProviderRunners(config)));
 }

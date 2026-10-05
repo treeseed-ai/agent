@@ -44,17 +44,20 @@ describe('whole native provider polling arbitration boundary', () => {
 	});
 	it('original native provider offer publication denies insufficient future missing and duplicate qualification before signing or changing host custody', async () => {
 		const modes = ['insufficient', 'missing-suite', 'future', 'duplicate', 'failed-first', 'revoked-last'];
-		const outcomes = await Promise.all(modes.map(async mode => {
-			const f = await arbitrationFixture();
-			try {
+		const f = await arbitrationFixture(), outcomes: Array<{ mode: string; cause: unknown }> = [];
+		try {
 			await f.store.snapshot(); const baseline = await f.bytes(), routes = structuredClone(f.routes);
 			const original = structuredClone(f.manifest), bytes = await readFile(f.config.manifestPath!);
-			const first = row(await f.offers()); expect(f.routes).toEqual(routes); expect(await f.bytes()).toBe(baseline);
+			const offers = await f.openOffers();
+			const first = row(await offers()); expect(f.routes).toEqual(routes); expect(await f.bytes()).toBe(baseline);
 			const target = f.manifest.adapters.flatMap(adapter => adapter.offers).find(binding => binding.offer.conformance.some(receipt => receipt.tier === 'automated-suite'));
 			if (!target) throw new Error('Original managed automated-suite input required');
 			const source = structuredClone(target.offer), index = source.conformance.findIndex(receipt => receipt.tier === 'automated-suite');
 			const definition = CORE_CAPABILITY_DEFINITIONS.find(value => value.id === source.conformance[index]!.capability.id);
 			if (!definition || definition.qualificationTier !== 'automated-suite') throw new Error('Original declared automated tier required');
+			// Reuse the same retained native identity/history for all supplied-input
+			// denials. Each retry reloads actual bytes in the same native child.
+			for (const mode of modes) {
 				const changed = structuredClone(source), receipt = changed.conformance[index]!;
 				if (mode === 'insufficient') { receipt.tier = 'signed-attestation'; receipt.suite = null; }
 				if (mode === 'missing-suite') receipt.suite = null;
@@ -64,13 +67,22 @@ describe('whole native provider polling arbitration boundary', () => {
 				if (mode === 'revoked-last') changed.conformance.push({ ...structuredClone(receipt), status: 'revoked' });
 				const { offerDigest: ignored, ...material } = changed; changed.offerDigest = capabilityOfferDigest(material);
 				target.offer = changed; await f.write(); const retained = await readFile(f.config.manifestPath!), unchanged = structuredClone(f.manifest); let cause: unknown;
-				try { await f.offers(); } catch (error) { cause = error; }
+				try { await offers(); } catch (error) { cause = error; }
 				expect(await readFile(f.config.manifestPath!)).toEqual(retained); expect(f.manifest).toEqual(unchanged);
 				expect(await f.bytes()).toBe(baseline); expect(f.routes).toEqual(routes);
 				target.offer = structuredClone(source); await f.write(); expect(await readFile(f.config.manifestPath!)).toEqual(bytes);
-			const retry = row(await f.offers()); expect(retry).toEqual(first);
+			const retry = row(await offers()); expect(retry).toEqual(first);
 			if (!Array.isArray(retry.adapters)) throw new Error('Native published adapter inventory required');
-			for (const adapter of retry.adapters.map(row)) {
+			expect(f.manifest).toEqual(original); expect(await readFile(f.config.manifestPath!)).toEqual(bytes);
+			expect(await f.bytes()).toBe(baseline); expect(f.routes).toEqual(routes);
+			// Real original publisher/loader/OS identity/native child boundary;
+			// supplied suite metadata is not an independently executed suite.
+				outcomes.push({ mode, cause });
+			}
+			// Every independently published retry above is exactly equal to this
+			// same snapshot. Verify its immutable signatures once, not six times.
+			if (!Array.isArray(first.adapters)) throw new Error('Native published adapter inventory required');
+			for (const adapter of first.adapters.map(row)) {
 				if (!Array.isArray(adapter.offers)) throw new Error('Native published offer inventory required');
 				for (const binding of adapter.offers.map(row)) {
 					const offer = capabilityOfferSchema.parse(binding.offer);
@@ -79,16 +91,10 @@ describe('whole native provider polling arbitration boundary', () => {
 						if (!declared) throw new Error('Original fixture ontology required');
 						return declared;
 					});
-					verifyProviderQualification(offer, definitions, retry.publicJwk, original.connections[0]!.providerId, new Date().toISOString());
+					verifyProviderQualification(offer, definitions, first.publicJwk, original.connections[0]!.providerId, new Date().toISOString());
 				}
 			}
-			expect(f.manifest).toEqual(original); expect(await readFile(f.config.manifestPath!)).toEqual(bytes);
-			expect(await f.bytes()).toBe(baseline); expect(f.routes).toEqual(routes);
-			// Real original publisher/loader/OS identity/native child boundary;
-			// supplied suite metadata is not an independently executed suite.
-				return { mode, cause };
-			} finally { await f.close(); }
-		}));
+		} finally { await f.close(); }
 		for (const outcome of outcomes) expect(outcome.cause, outcome.mode).toBeInstanceOf(Error);
 		for (const outcome of outcomes) expect(String(outcome.cause), outcome.mode).toMatch(/conformance|qualification/iu);
 	});

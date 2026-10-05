@@ -1,4 +1,5 @@
-import { execFile } from 'node:child_process';
+import { execFile, fork, type ChildProcess } from 'node:child_process';
+import { once } from 'node:events';
 import { randomBytes } from 'node:crypto';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
@@ -83,6 +84,37 @@ export async function arbitrationFixture(workers = 1) {
 		delete env.TREESEED_DEVELOPMENT_SANDBOX_GUEST_DIGEST;
 		const write = async () => { await writeFile(config.manifestPath!, stringify(manifest, { aliasDuplicateObjects: false })); await writeFile(join(directory, 'config.json'), JSON.stringify(config)); };
 		const children = new Set<Promise<{ stdout: string; stderr: string }>>();
+		let offerSession: ChildProcess | undefined;
+		let offerSessionExit: Promise<unknown[]> | undefined;
+		const offerMessage = (session: ChildProcess) => new Promise<unknown>((resolve, reject) => {
+			const cleanup = () => { session.off('message', message); session.off('exit', exited); session.off('error', failed); };
+			const message = (value: unknown) => { cleanup(); resolve(value); };
+			const exited = (code: number | null, signal: NodeJS.Signals | null) => { cleanup(); reject(new Error(`Native offer session exited: ${code}/${signal}`)); };
+			const failed = (error: Error) => { cleanup(); reject(error); };
+			session.once('message', message); session.once('exit', exited); session.once('error', failed);
+		});
+		const openOffers = async () => {
+			if (offerSession) throw new Error('Only one allocated offer session allowed');
+			const session = fork(fileURLToPath(new URL('./arbitration-process.ts', import.meta.url)), ['offers-session', directory],
+				{ env, execArgv: [], stdio: ['ignore', 'ignore', 'ignore', 'ipc'], serialization: 'advanced' });
+			offerSession = session; offerSessionExit = once(session, 'exit');
+			const ready = await offerMessage(session);
+			if (!ready || typeof ready !== 'object' || !('ready' in ready) || ready.ready !== true) throw new Error('Actual offer session readiness required');
+			return async () => {
+				const response = offerMessage(session); session.send('offers'); const result = await response;
+				if (!result || typeof result !== 'object') throw new Error('Actual offer session response required');
+				if ('error' in result) {
+					const detail = result.error;
+					if (!detail || typeof detail !== 'object' || !('message' in detail) || typeof detail.message !== 'string') throw new Error('Native offer error required');
+					const error = new Error(detail.message);
+					if ('name' in detail && typeof detail.name === 'string') error.name = detail.name;
+					if ('stack' in detail && typeof detail.stack === 'string') error.stack = detail.stack;
+					throw error;
+				}
+				if (!('value' in result)) throw new Error('Actual signed offer value required');
+				return result.value;
+			};
+		};
 		const child = async (action: 'initialize' | 'run' | 'offers') => {
 			// Pinned Node 24 executes this erasable TypeScript entrypoint natively;
 			// the owning provider implementation remains the exact compiled build.
@@ -93,7 +125,7 @@ export async function arbitrationFixture(workers = 1) {
 		await write(); await child('initialize');
 		const store = new ProviderLocalCapacityStore(directory);
 		const attempt = assignmentAttemptSchema.parse(request().assignment.assignmentAttempt);
-		return { directory, manifest, config, store, routes, tokenPath, pollPath, faults, write,
+		return { directory, manifest, config, store, routes, tokenPath, pollPath, faults, write, openOffers,
 			run: () => child('run'), offers: () => child('offers'), setLease(value: unknown, status = 200) { leased = value; returnStatus = status; },
 			hold() { held = true; }, release() { held = false; for (const resolve of releases) resolve(); releases.clear(); },
 			async awaitPoll() {
@@ -119,6 +151,11 @@ export async function arbitrationFixture(workers = 1) {
 			bytes: () => readFile(join(directory, 'runtime', 'capacity-state.json'), 'utf8'),
 			async close() {
 				held = false; for (const resolve of releases) resolve(); releases.clear();
+				if (offerSession?.connected) offerSession.disconnect();
+				if (offerSessionExit) {
+					const [code, signal] = await offerSessionExit;
+					if (code !== 0 || signal !== null) throw new Error(`Native offer session cleanup failed: ${code}/${signal}`);
+				}
 				await Promise.allSettled([...children]); server.closeAllConnections();
 				await new Promise<void>(resolve => server.close(() => resolve())); await rm(directory, { recursive: true, force: true });
 			} };

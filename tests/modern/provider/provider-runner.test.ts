@@ -90,13 +90,15 @@ const treeDx = { projectId: 'project', handleId: 'handle-1', repositoryId: null,
 		for (const status of ['completed', 'failed', 'returned', 'responded', 'abstained'] as const) {
 			const api = client(), value = assignment(status === 'responded' || status === 'abstained' ? 'conversation' : 'workday');
 			const before = structuredClone(value), usage = [
-				{ activeSeconds: 1.125, elapsedSeconds: 2.25, inputTokens: 19, nativeUsage: { input_tokens: 19, output_tokens: 3 } },
-				{ activeSeconds: 0.25, elapsedSeconds: 0.5, outputTokens: 5, nativeUsage: { output_tokens: 5, reasoning_tokens: 2 } },
+				{ activeSeconds: 0.75, elapsedSeconds: 1.25, inputTokens: 19, nativeUsage: { input_tokens: 19, output_tokens: 3 } },
+				{ activeSeconds: 1.5, elapsedSeconds: 2.5, outputTokens: 5, nativeUsage: { output_tokens: 5, reasoning_tokens: 2 } },
 			];
 			const reply: AgentExecutionResult = { status, summary: 'Original bounded execution.', code: 'original_execution_outcome',
 				...(status === 'responded' ? { responseMarkdown: 'Original durable answer.' } : {}),
 				outputs: { timingAwareness }, usage };
 			const original = structuredClone(reply); let executions = 0;
+			const aggregate = { activeSeconds: 2.25, elapsedSeconds: 3.75, inputTokens: 19, outputTokens: 5,
+				nativeUsage: { input_tokens: 19, output_tokens: 8, reasoning_tokens: 2 } };
 			await runProviderAssignment({ client: api, assignment: value, treeDx, leaseToken: 'lease', runnerId: 'runner', runtimeBuild,
 				executor: { id: 'codex', observe: async () => ({ available: true }), execute: async request => {
 					executions++; await request.beginExecution?.(); return reply;
@@ -109,11 +111,11 @@ const treeDx = { projectId: 'project', handleId: 'handle-1', repositoryId: null,
 			if (status === 'failed') {
 				expect(api.settleAssignment).not.toHaveBeenCalled(); expect(api.completeAssignment).not.toHaveBeenCalled();
 				expect(api.failAssignment).toHaveBeenCalledOnce();
-				expect(api.failAssignment).toHaveBeenCalledWith('assignment-1', expect.objectContaining({ activeSeconds: 2, elapsedSeconds: 3, usage: usage[0] }));
+				expect(api.failAssignment).toHaveBeenCalledWith('assignment-1', expect.objectContaining({ activeSeconds: 3, elapsedSeconds: 4, usage: aggregate }));
 				expect(api.reportAssignmentUsage).toHaveBeenCalledBefore(api.failAssignment);
 			} else {
-				expect(api.settleAssignment.mock.calls).toEqual([['assignment-1', { activeSeconds: 2, elapsedSeconds: 3,
-					usageDimension: 'aggregate', usageActual: usage[0] }, 'assignment-settlement:assignment-1:runner']]);
+				expect(api.settleAssignment.mock.calls).toEqual([['assignment-1', { activeSeconds: 3, elapsedSeconds: 4,
+					usageDimension: 'aggregate', usageActual: aggregate }, 'assignment-settlement:assignment-1:runner']]);
 				expect(api.reportAssignmentUsage).toHaveBeenCalledBefore(api.settleAssignment);
 				if (status === 'returned') { expect(api.returnAssignment).toHaveBeenCalledOnce(); expect(api.settleAssignment).toHaveBeenCalledBefore(api.returnAssignment); }
 				else { expect(api.completeAssignment).toHaveBeenCalledOnce(); expect(api.settleAssignment).toHaveBeenCalledBefore(api.completeAssignment); }

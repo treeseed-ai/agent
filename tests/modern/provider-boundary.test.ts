@@ -1,7 +1,7 @@
 import { mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
-import { spawnSync } from 'node:child_process';
+import { execFile } from 'node:child_process';
 import { describe, expect, it, vi } from 'vitest';
 import { CONTROL_PLANE_OPERATIONS } from '@treeseed/sdk/operator-contracts';
 import { providerOperationPath } from '../../src/provider/coordination/client.ts';
@@ -42,7 +42,9 @@ function providerManifestFixture() {
 		}] },
 		lanes: [lane('communication', 100, 1), lane('platform', 70, 0), lane('workday', 50, 0)],
 		adapters: [{ id: 'codex-local', adapter: 'codex', isolation: 'microvm', module: 'module:codex-chat', profile: 'api', protocol: 'responses',
-			model: { model: 'gpt-5.4' }, credentialProfiles: [], laneIds: ['communication', 'platform', 'workday'], maxConcurrentWorkers: 4, nativeLimits: {}, offers: [{ offer, sandboxProfileId: 'read' }] }],
+			model: { model: 'gpt-5.4' }, credentialProfiles: [], laneIds: ['communication', 'platform', 'workday'], maxConcurrentWorkers: 4,
+			nativeLimits: { modelConfigurationId: 'fixture-model', dailyActiveSecondsLimit: 0,
+				capabilityLimits: { 'treeseed.coordination.conversation': { dailyActiveSecondsLimit: 0 } } }, offers: [{ offer, sandboxProfileId: 'read' }] }],
 		connections: [], metadata: { custody: 'test-only' },
 	};
 }
@@ -72,12 +74,10 @@ describe('Agent package ownership boundary', () => {
 			expect(config).toEqual(before);
 		}
 	});
-	it('native packaged provider plans deny legacy translated and malformed manifest bytes before any identity accounting or status write', () => {
-		const root = mkdtempSync(resolve(tmpdir(), 'agent-provider-cutover-')), manifestPath = resolve(root, 'manifest.yaml');
+	it('native packaged provider plans deny legacy translated and malformed manifest bytes before any identity accounting or status write', async () => {
 		// Original documented public provider entrypoint, held compiled bytes.
 		// Missing entrypoint fails; no build/install/source or installed fallback.
 		const entrypoint = resolve('dist/provider/lifecycle/entrypoint.js');
-		try {
 			const entrypointBytes = readFileSync(entrypoint), current = createManagedProviderManifestV5({ release: 'authoring-clean-cutover',
 				guestImage: 'isolated/guest', guestImageDigest: digest('5'), baseImageDigest: digest('6'), provenanceDigest: digest('7') });
 			const legacy = { ...structuredClone(current), schemaVersion: 4, ontology: undefined,
@@ -87,34 +87,35 @@ describe('Agent package ownership boundary', () => {
 			const variants = [stringifyYaml(legacy), '{invalid', stringifyYaml({ ...current, schemaVersion: '5' }),
 				stringifyYaml({ ...current, configuration: { generation: 'release-compat-v5' } }),
 				stringifyYaml({ ...current, metadata: { compatibilityMigration: 'agent-managed-v4-to-v5' } })];
-			const env: NodeJS.ProcessEnv = { ...process.env, TREESEED_CAPACITY_PROVIDER_MANIFEST: manifestPath, TREESEED_PROVIDER_DATA_DIR: root,
+			const env: NodeJS.ProcessEnv = { ...process.env,
 				TREESEED_SANDBOX_BASE_DIGEST: digest('8'), TREESEED_SANDBOX_PROVENANCE_DIGEST: digest('9') };
 			delete env.TREESEED_DEVELOPMENT_MODE; delete env.TREESEED_CONTROL_PLANE_URL; delete env.TREESEED_DEVELOPMENT_SANDBOX_GUEST_DIGEST;
 			delete env.TREESEED_PROVIDER_ROLE; delete env.TREESEED_PROVIDER_STARTUP_MODE;
 			const commands = [['plan', '--json'], ['manager', '--plan', '--json'], ['runner', '--plan', '--json']];
-			const outcomes = [];
-			for (const bytes of variants) {
-				writeFileSync(manifestPath, bytes);
-				for (const args of commands) {
-					const result = spawnSync(process.execPath, [entrypoint, ...args], { env, encoding: 'utf8', timeout: 15_000, maxBuffer: 1_048_576 });
-					if (result.error || result.signal) throw new Error('Original native provider child failed outside its contract');
-					let failure: unknown; try { failure = JSON.parse(result.stderr); } catch { failure = null; }
-					outcomes.push({ status: result.status, stdout: result.stdout, failure });
+			// Independent inputs permit concurrent native commands; each retains its
+			// own bytes and cleanup, under the unchanged owning test watchdog.
+			const outcomes = await Promise.allSettled([...variants, stringifyYaml(current)].flatMap((bytes, index) => commands.map(async args => {
+				const root = mkdtempSync(resolve(tmpdir(), 'agent-provider-cutover-')), manifestPath = resolve(root, 'manifest.yaml');
+				try {
+					writeFileSync(manifestPath, bytes);
+					const result = await new Promise<{ status: number; stdout: string; stderr: string }>((done, reject) => {
+						execFile(process.execPath, [entrypoint, ...args], { env: { ...env, TREESEED_CAPACITY_PROVIDER_MANIFEST: manifestPath,
+							TREESEED_PROVIDER_DATA_DIR: root }, encoding: 'utf8', timeout: 15_000, maxBuffer: 1_048_576 }, (error, stdout, stderr) => {
+							if (error && (error.killed || error.signal || typeof error.code !== 'number')) return reject(error);
+							done({ status: error && typeof error.code === 'number' ? error.code : 0, stdout, stderr });
+						});
+					});
+					if (index < variants.length) {
+						expect(result.status).toBe(1); expect(result.stdout).toBe('');
+						expect(JSON.parse(result.stderr)).toMatchObject({ ok: false, error: expect.any(String) });
+					} else {
+						expect(result.status).toBe(0); expect(result.stderr).toBe(''); expect(JSON.parse(result.stdout)).toMatchObject({ ok: true, mode: 'plan' });
+					}
 					expect(readFileSync(manifestPath, 'utf8')).toBe(bytes); expect(readdirSync(root)).toEqual(['manifest.yaml']);
-				}
-			}
-			for (const result of outcomes) {
-				expect(result.status).toBe(1); expect(result.stdout).toBe(''); expect(result.failure).toMatchObject({ ok: false, error: expect.any(String) });
-			}
-			const bytes = stringifyYaml(current); writeFileSync(manifestPath, bytes);
-			for (const args of commands) {
-				const result = spawnSync(process.execPath, [entrypoint, ...args], { env, encoding: 'utf8', timeout: 15_000, maxBuffer: 1_048_576 });
-				expect(result.error).toBeUndefined(); expect(result.signal).toBeNull(); expect(result.status).toBe(0); expect(result.stderr).toBe('');
-				expect(JSON.parse(result.stdout)).toMatchObject({ ok: true, mode: 'plan' }); expect(readFileSync(manifestPath, 'utf8')).toBe(bytes);
-				expect(readdirSync(root)).toEqual(['manifest.yaml']);
-			}
+				} finally { rmSync(root, { recursive: true, force: true }); }
+			})));
 			expect(readFileSync(entrypoint)).toEqual(entrypointBytes);
-		} finally { rmSync(root, { recursive: true, force: true }); }
+			for (const outcome of outcomes) if (outcome.status === 'rejected') throw outcome.reason;
 		// Local native public command composition, not coordinated publication,
 		// selected source/build equivalence or native productive provider execution.
 	});
@@ -241,7 +242,7 @@ describe('Agent package ownership boundary', () => {
 		} finally { rmSync(root, { recursive: true, force: true }); }
 	});
 
-	it('migrates manager-custodied v4 manifests in memory with exact release lineage', async () => {
+	it('rejects retired manager-custodied v4 manifests even with release lineage and preserves their bytes', async () => {
 		const root = mkdtempSync(resolve(tmpdir(), 'treeseed-provider-v4-'));
 		const manifestPath = resolve(root, 'treeseed.capacity-provider.yaml');
 		const current = providerManifestFixture();
@@ -253,14 +254,11 @@ describe('Agent package ownership boundary', () => {
 		writeFileSync(manifestPath, stringifyYaml(legacy));
 		const canonical = readFileSync(manifestPath, 'utf8');
 		try {
-			await expect(loadProviderManifest(manifestPath, root)).rejects.toThrow(/release-bound sandbox base and provenance/u);
-			const loaded = await loadProviderManifest(manifestPath, root, { TREESEED_SANDBOX_BASE_DIGEST: digest('8'), TREESEED_SANDBOX_PROVENANCE_DIGEST: digest('9') });
-			expect(loaded.manifest).toMatchObject({ schemaVersion: 5, ownership: current.ownership, capacity: current.capacity,
-				configuration: { generation: 'fixture-v5-compat-v5' }, ontology: { generation: 3 }, metadata: { compatibilityMigration: 'agent-managed-v4-to-v5' } });
-			expect(loaded.manifest.adapters[0]?.offers.map(({ offer }) => offer.offerId)).toEqual(['codex-conversation', 'codex-engineering', 'codex-data', 'codex-publishing']);
-			for (const { offer } of loaded.manifest.adapters[0]!.offers) expect(offer.contextCapacity).toMatchObject({measurement:'bytes',measurementProvenance:{implementation:'utf8-byte-length'}});
-			expect(loaded.manifest.sandbox.profiles[0]?.lineage).toMatchObject({ baseImageDigest: digest('8'), provenanceDigest: digest('9') });
+			await expect(loadProviderManifest(manifestPath, root, {})).rejects.toThrow(/Invalid capacity provider manifest/u);
+			await expect(loadProviderManifest(manifestPath, root, { TREESEED_SANDBOX_BASE_DIGEST: digest('8'), TREESEED_SANDBOX_PROVENANCE_DIGEST: digest('9') }))
+				.rejects.toThrow(/Invalid capacity provider manifest/u);
 			expect(readFileSync(manifestPath, 'utf8')).toBe(canonical);
+			expect(readdirSync(root)).toEqual(['treeseed.capacity-provider.yaml']);
 		} finally { rmSync(root, { recursive: true, force: true }); }
 	});
 

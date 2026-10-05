@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { classes, gate, state, type Row } from './golden-readback-fixture.ts';
+import { encodeCapacityPageCursor } from '@treeseed/sdk/capacity-pagination';
 
 const rounds = (): Row[] => state.replies.get('workdays show')!.run.parameters.appliedPlan.planningRounds;
 const later = (): Row => state.replies.get('assignments list')!.items.find((item: Row) => item.id === 'planning-2-engineer');
@@ -20,7 +21,7 @@ describe('managed planning cycle and published contribution custody', () => {
 				const prior = previous.find((item: Row) => item.assignmentAttempt.agentClass === agentClass)!;
 				const item: Row = structuredClone(prior), id = `planning-${ordinal}-${agentClass}`, path = `notes/${id}.mdx`, noteId = `note-${id}`;
 				Object.assign(item, { id, executionNodeId: id, createdAt: start, completedAt: finish });
-				Object.assign(item.assignmentAttempt, { nodeId: id, createdAt: start,
+				Object.assign(item.assignmentAttempt, { id, idempotencyKey: id, nodeId: id, createdAt: start,
 					deadline: new Date(Date.parse(start) + 10_000).toISOString(), predecessorResultIds: previous.map((entry: Row) => entry.assignmentResult.id) });
 				const source = item.assignmentAttempt.sourceRef, commit = item.assignmentAttempt.workspace.baseCommit;
 				const context = [structuredClone(source), ...previous.map((entry: Row) => ({ store: 'treedx', model: 'note',
@@ -39,7 +40,16 @@ describe('managed planning cycle and published contribution custody', () => {
 				items.push(item); ids.push(id);
 			}
 			rounds().push({ round: ordinal, state: 'complete', assignmentIds: ids, startedAt: start, completedAt: finish });
-			const held = structuredClone([...state.replies]); expect(() => gate('collaboration')).not.toThrow(); expect([...state.replies]).toEqual(held);
+			const sorted = [...items].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)
+				|| (a.id < b.id ? 1 : a.id > b.id ? -1 : 0));
+			state.assignmentPages = [];
+			for (let offset = 0; offset < sorted.length; offset += 50) {
+				const pageItems = sorted.slice(offset, offset + 50), hasMore = offset + 50 < sorted.length, last = pageItems.at(-1)!;
+				state.assignmentPages.push({ items: pageItems, page: { limit: 50, hasMore,
+					nextCursor: hasMore ? encodeCapacityPageCursor({ id: last.id, createdAt: last.createdAt }) : null } });
+			}
+			const held = structuredClone([...state.replies]); gate('collaboration'); expect([...state.replies]).toEqual(held);
+			expect(state.assignmentPages).toEqual([]); state.assignmentPages = undefined;
 		}
 	});
 	it('denies hidden unfinished reordered renumbered and unrepresented planning rounds without changing supplied history', () => {

@@ -71,6 +71,11 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/kernel/closure/golden-authority-readback.test.ts
     testName: "binds every supplied weighted opportunity to the original applied policy without inventing entitlement or accepting fractional shares and unknown phases"
+  agent.golden.execution-qualification-authority-unit-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/provider/architecture/arbitration-authority.test.ts
+    testName: "denies downgraded missing future duplicate failed and revoked qualification without changing offer authority"
   agent.golden.execution-qualification-unit-1:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"
@@ -831,6 +836,16 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/provider/architecture/capacity-native.test.ts
     testName: "fails closed on malformed persisted financial authority without resetting history and retries only after restoring original isolated bytes"
+  agent.golden.execution-recovery-receipt-unit-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/lease-recovery.test.ts
+    testName: "requires an exact returned assignment receipt before finalizing recovery and retains every malformed successful transport reply"
+  agent.golden.execution-recovery-receipt-native-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/provider/architecture/recovery-native.test.ts
+    testName: "native recovery retains exact failed lease and output after malformed successful return receipts and releases only the unchanged confirmed retry"
   agent.golden.architecture-provider-recovery-native-1:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

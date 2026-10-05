@@ -324,8 +324,12 @@ describe('sandbox broker control transport', () => {
 	});
 	it('native tool pump polling and delivery denials cancel exactly once and retain failed transport without replay', async () => {
 		for (const operation of ['poll', 'delivery']) for (const fault of ['403', '503', 'reset', 'json']) {
-			const input = executionRequest(), before = structuredClone(input.assignment), paths: string[] = [], bodies: string[] = [];
-			const now = new Date().toISOString(), time = { startedAt: now, deadlineAt: now }; // Deliberately elapsed input reports zero, never productive authority.
+			const input = executionRequest(), paths: string[] = [], bodies: string[] = [];
+			// A valid, already elapsed canonical interval reaches the clock tool
+			// and reports zero; a zero-length interval is malformed authority.
+			const end = new Date(Date.now() - 1_000).toISOString(), start = new Date(Date.parse(end) - 1_000).toISOString();
+			input.assignment.assignmentAttempt = assignmentAttemptSchema.parse({ ...assignmentAttemptSchema.parse(input.assignment.assignmentAttempt), createdAt: start, deadline: end });
+			const before = structuredClone(input.assignment), time = { startedAt: start, deadlineAt: end };
 			let cancelled: (() => void) | undefined, cancelFailure: unknown, cancellation: Promise<unknown> | undefined;
 			const cancelledRequest = new Promise<void>(resolve => { cancelled = resolve; });
 			const fixture = await broker((request, response) => {

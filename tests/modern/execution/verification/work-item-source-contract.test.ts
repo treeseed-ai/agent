@@ -41,7 +41,7 @@ it('reviews the entire revised candidate against the original work-item Git sour
 		expect(git('diff', '--name-only', first, candidate)).toBe('duplicates.test.ts');
 		const prompt = promptFromContext(context(base, candidate));
 		expect(prompt).toContain(`Original work-item project Git sources:\n${JSON.stringify([{ store: 'git', repository: 'project', commit: base, path: '.' }])}`);
-		expect(prompt).toContain(`The exact attached project Git source commit is ${candidate}`);
+		expect(prompt).toContain(`Authoritative attached project Git source: ${candidate}`);
 		expect(prompt).toContain('Compare the entire candidate tree against the original work-item project Git source, not HEAD^ or the previous Actor commit');
 		expect(prompt).toContain('Keep earlier candidate commits in the coverage audit');
 		expect(prompt).toContain('Do not fabricate a disposition');

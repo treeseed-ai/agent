@@ -7,6 +7,27 @@ import { createManagedProviderManifestV5 } from '../../../../src/provider/config
 import { capabilityAccountingLimitsSchema } from '@treeseed/sdk/agent-capacity';
 
 describe('provider arbitration hardgate boundary authority', () => {
+	it('denies downgraded missing future duplicate failed and revoked qualification without changing offer authority', () => {
+		const digest = `sha256:${'d'.repeat(64)}`, manifest = createManagedProviderManifestV5({ release: 'qualification-authority',
+			guestImage: 'isolated/guest', guestImageDigest: digest, baseImageDigest: digest, provenanceDigest: digest });
+		const original = structuredClone(manifest), target = manifest.adapters.flatMap(value => value.offers)
+			.find(binding => binding.offer.conformance.some(receipt => receipt.tier === 'automated-suite'))!;
+		const index = target.offer.conformance.findIndex(receipt => receipt.tier === 'automated-suite');
+		for (const mode of ['insufficient', 'missing-suite', 'future', 'duplicate', 'failed', 'revoked']) {
+			const offer = structuredClone(target.offer), receipt = offer.conformance[index]!;
+			if (mode === 'insufficient') { receipt.tier = 'signed-attestation'; receipt.suite = null; }
+			if (mode === 'missing-suite') receipt.suite = null;
+			if (mode === 'future') receipt.issuedAt = new Date(Date.now() + 60_000).toISOString();
+			if (mode === 'duplicate') offer.conformance.push(structuredClone(receipt));
+			if (mode === 'failed' || mode === 'revoked') receipt.status = mode;
+			const supplied = structuredClone(manifest); supplied.adapters.flatMap(value => value.offers)
+				.find(binding => binding.offer.offerId === target.offer.offerId)!.offer = offer;
+			const held = structuredClone(supplied), result = validateCapacityProviderManifestV5(supplied);
+			expect(result.ok, mode).toBe(false); expect(result.diagnostics.some(value => value.code.startsWith('provider_offer_conformance')), mode).toBe(true);
+			expect(supplied).toEqual(held);
+		}
+		expect(validateCapacityProviderManifestV5(manifest)).toEqual({ ok: true, diagnostics: [] }); expect(manifest).toEqual(original);
+	});
 	it('manifest validation uses the original quota schema to deny malformed model daily and capability limits without coercion or changing a valid zero ceiling', () => {
 		const digest = `sha256:${'d'.repeat(64)}`, manifest = createManagedProviderManifestV5({ release: 'quota-authority',
 			guestImage: 'isolated/guest', guestImageDigest: digest, baseImageDigest: digest, provenanceDigest: digest });

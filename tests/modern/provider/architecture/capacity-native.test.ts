@@ -116,7 +116,7 @@ describe('document-wide native provider capacity custody', () => {
 				const start = Date.parse(`${day}T00:00:00.000Z`), end = start + 86_400_000;
 				if (!Number.isFinite(start)) throw new Error('Actual UTC accounting day required');
 				return Object.fromEntries(retained.map(claim => [claim.connectionId,
-					Math.max(0, Math.min(Date.parse(claim.activeFinishedAt!), end) - Math.max(Date.parse(claim.activeStartedAt!), start)) / 1_000]));
+					Math.max(0, Math.min(Date.parse(claim.activeFinishedAt!), end) - Math.max(Date.parse(claim.activeStartedAt!), start))]));
 			};
 			const remaining = retained.reduce((sum, claim) => sum + Math.max(0, (claim.requestedSeconds ?? 0)
 				- (Date.parse(claim.activeFinishedAt!) - Date.parse(claim.activeStartedAt!)) / 1_000), 0);
@@ -124,7 +124,9 @@ describe('document-wide native provider capacity custody', () => {
 				const value = object(raw), model = object(value.modelUsage), capabilities = object(value.capabilityUsage);
 				if (typeof model.day !== 'string' || typeof value.observedAt !== 'string') throw new Error('Actual native observation clocks required');
 				expect(model.day).toBe(value.observedAt.slice(0, 10));
-				const expected = { day: model.day, activeSeconds: Object.values(measured(model.day)).reduce((sum, seconds) => sum + seconds, 0), reservedSeconds };
+				// Independent integer native Date milliseconds, summed before the
+				// one conversion to seconds; no tolerance or measurement rounding.
+				const expected = { day: model.day, activeSeconds: Object.values(measured(model.day)).reduce((sum, milliseconds) => sum + milliseconds, 0) / 1_000, reservedSeconds };
 				expect(model).toEqual(expected); expect(capabilities[f.attempt.provider.executionCapabilityId]).toEqual(expected);
 			};
 			check(observation, remaining);
@@ -145,7 +147,8 @@ describe('document-wide native provider capacity custody', () => {
 			check(terminal, 0);
 			const snapshot = await f.reopen().snapshot(), durable = object(JSON.parse(await f.bytes()));
 			if (typeof durable.updatedAt !== 'string') throw new Error('Actual native snapshot clock required');
-			expect(snapshot.claims).toEqual([]); expect(snapshot.activeSecondsByConnection).toEqual(measured(durable.updatedAt.slice(0, 10)));
+			expect(snapshot.claims).toEqual([]); expect(snapshot.activeSecondsByConnection).toEqual(Object.fromEntries(
+				Object.entries(measured(durable.updatedAt.slice(0, 10))).map(([connection, milliseconds]) => [connection, milliseconds / 1_000])));
 			for (const claim of claims) expect(snapshot.events.filter(value => value.claimId === claim.id && value.outcome === 'native-accounted-terminal-confirmed')).toHaveLength(1);
 			expect(snapshot.events.some(value => value.claimId === claims[0]!.id && value.message === 'original measured native failure')).toBe(true);
 			expect(await f.entries()).toEqual(['capacity-state.json']);

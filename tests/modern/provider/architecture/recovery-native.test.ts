@@ -10,7 +10,7 @@ async function recoveryFixture() {
 	const requests: Array<{ method: string; path: string; body: unknown }> = [];
 	let observed: unknown = { id: f.attempt.id, teamId: f.attempt.teamId, providerId: f.attempt.provider.providerId,
 		status: 'running', assignmentAttempt: f.attempt };
-	let code = 200, fault = '', returnCode = 200;
+	let code = 200, fault = '', returnCode = 200, returnReply: unknown = { assignment: { id: f.attempt.id, status: 'returned' } };
 	const server = createServer((request, response) => {
 		let body = ''; request.setEncoding('utf8'); request.on('data', chunk => { body += chunk; });
 		request.on('end', () => {
@@ -21,7 +21,7 @@ async function recoveryFixture() {
 			response.statusCode = status; response.setHeader('content-type', 'application/json');
 			if (fault === 'json') response.end('{');
 			else if (status !== 200) response.end(JSON.stringify({ type: 'about:blank', title: 'Controlled denial', status, code: 'fixture_denied' }));
-			else response.end(JSON.stringify({ data: returning ? { assignment: { id: f.attempt.id, status: 'returned' } } : observed }));
+			else response.end(JSON.stringify({ data: returning ? returnReply : observed }));
 		});
 	});
 	try {
@@ -42,9 +42,12 @@ async function recoveryFixture() {
 		const claim = await f.store.claim({ connectionId: connection.connection.id, globalLimit: 1, connectionLimit: 1 });
 		if (!claim) throw new Error('Actual native recovery slot required');
 		const lease = f.lease(); await f.store.attachLease(claim.id, lease); await f.store.claimDispatch(claim.id);
+		observed = { id: f.attempt.id, teamId: f.attempt.teamId, providerId: f.attempt.provider.providerId,
+			status: 'running', assignmentAttempt: lease.dispatchEnvelope.assignment.assignmentAttempt };
 		await f.store.recordCloseoutOutput(claim.id, { status: 'blocked', unfinishedWork: ['unchanged original assignment'] });
 		await f.store.recordFailure(claim.id, 'original interrupted provider execution');
 		return { ...f, claim, lease, connection, requests,
+			setReturnReply(value: unknown) { returnReply = value; },
 			setReply(value: unknown, status = 200, error = '', returnedStatus = 200) { observed = value; code = status; fault = error; returnCode = returnedStatus; },
 			run: (connections = [connection]) => recoverProviderLocalLeases({ config, connections, store: f.reopen() }),
 			close: async () => { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); await f.close(); } };
@@ -55,6 +58,24 @@ async function recoveryFixture() {
 // real durable local files. Upstream JSON and principal/token are INPUTS,
 // NOT native API settlement, independent authentication or remote cleanup.
 describe('document-wide native provider recovery boundary', () => {
+	it('native recovery retains exact failed lease and output after malformed successful return receipts and releases only the unchanged confirmed retry', async () => {
+		for (const reply of [null, {}, { assignment: {} }, { assignment: { id: 'foreign', status: 'returned' } },
+			{ assignment: { id: 'assignment-1', status: 'running' } }]) {
+			const f = await recoveryFixture();
+			try {
+				const prior = (await f.reopen().claimsForRecovery())[0]!, before = structuredClone(reply);
+				f.setReturnReply(reply); expect((await f.run())[0]?.status).toBe('retained');
+				const retained = (await f.reopen().claimsForRecovery())[0]!;
+				expect(retained.dispatchEnvelope).toEqual(prior.dispatchEnvelope); expect(retained.closeoutOutput).toEqual(prior.closeoutOutput);
+				expect(retained.leaseToken).toBe(prior.leaseToken); expect(retained.failureMessage).toBe(prior.failureMessage);
+				expect(reply).toEqual(before); expect((await f.reopen().snapshot()).events.some(event => event.outcome === 'restart-return-confirmed')).toBe(false);
+				f.setReturnReply({ assignment: { id: f.attempt.id, status: 'returned' } }); expect((await f.run())[0]?.status).toBe('released');
+				expect(await f.reopen().claimsForRecovery()).toEqual([]); expect(await f.run()).toEqual([]);
+				const requests = f.requests.filter(item => item.method === 'POST'); expect(requests).toHaveLength(2);
+				expect(requests[1]).toEqual(requests[0]); expect((await f.reopen().snapshot()).events.filter(event => event.outcome === 'restart-return-confirmed')).toHaveLength(1);
+			} finally { await f.close(); }
+		}
+	});
 	it('retains missing malformed unknown foreign and stale terminal readback rather than releasing original lease authority', async () => {
 		const mutations = [{}, { id: 'foreign', status: 'completed' }, { id: 'assignment-1', status: 'unknown' },
 			{ id: 'assignment-1', status: 'completed', teamId: 'foreign-team' },

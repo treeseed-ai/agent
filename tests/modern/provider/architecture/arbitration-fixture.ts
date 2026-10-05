@@ -81,10 +81,12 @@ export async function arbitrationFixture(workers = 1) {
 		// No inherited runtime redirection, development override or externally selected server.
 		delete env.TREESEED_DEVELOPMENT_MODE; delete env.TREESEED_CONTROL_PLANE_URL;
 		delete env.TREESEED_DEVELOPMENT_SANDBOX_GUEST_DIGEST;
-		const write = async () => { await writeFile(config.manifestPath!, stringify(manifest)); await writeFile(join(directory, 'config.json'), JSON.stringify(config)); };
+		const write = async () => { await writeFile(config.manifestPath!, stringify(manifest, { aliasDuplicateObjects: false })); await writeFile(join(directory, 'config.json'), JSON.stringify(config)); };
 		const children = new Set<Promise<{ stdout: string; stderr: string }>>();
 		const child = async (action: 'initialize' | 'run' | 'offers') => {
-			const running = promisify(execFile)(process.execPath, ['--import', 'tsx', fileURLToPath(new URL('./arbitration-process.ts', import.meta.url)), action, directory],
+			// Pinned Node 24 executes this erasable TypeScript entrypoint natively;
+			// the owning provider implementation remains the exact compiled build.
+			const running = promisify(execFile)(process.execPath, [fileURLToPath(new URL('./arbitration-process.ts', import.meta.url)), action, directory],
 				{ env, timeout: 15_000, maxBuffer: 1024 * 1024 }); children.add(running);
 			try { return JSON.parse((await running).stdout) as unknown; } finally { children.delete(running); }
 		};

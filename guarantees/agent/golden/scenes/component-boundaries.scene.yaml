@@ -45,6 +45,9 @@ workflow:
   - id: execution-weighted-opportunity-unit-1
     action: { verifier: agent.golden.execution-weighted-opportunity-unit-1 }
     expect: { status: passed }
+  - id: execution-qualification-authority-unit-1
+    action: { verifier: agent.golden.execution-qualification-authority-unit-1 }
+    expect: { status: passed }
   - id: execution-qualification-unit-1
     action: { verifier: agent.golden.execution-qualification-unit-1 }
     expect: { status: passed }
@@ -491,6 +494,12 @@ workflow:
     expect: { status: passed }
   - id: architecture-provider-capacity-native-7
     action: { verifier: agent.golden.architecture-provider-capacity-native-7 }
+    expect: { status: passed }
+  - id: execution-recovery-receipt-unit-1
+    action: { verifier: agent.golden.execution-recovery-receipt-unit-1 }
+    expect: { status: passed }
+  - id: execution-recovery-receipt-native-1
+    action: { verifier: agent.golden.execution-recovery-receipt-native-1 }
     expect: { status: passed }
   - id: architecture-provider-recovery-native-1
     action: { verifier: agent.golden.architecture-provider-recovery-native-1 }

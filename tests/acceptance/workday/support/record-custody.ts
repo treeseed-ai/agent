@@ -1,15 +1,14 @@
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
 import { createHash, createPublicKey, verify } from 'node:crypto';
-import { lstatSync, readFileSync } from 'node:fs';
+import { lstatSync } from 'node:fs';
 import { isAbsolute, resolve } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
-import { parse } from 'yaml';
 import { assignmentAttemptSchema, assignmentResultSchema, capabilityAccountingLimitsSchema } from '@treeseed/sdk/agent-capacity';
 import { capabilityConformanceSchema, capabilityDefinitionSchema, capabilityDefinitionDigest, capabilityOfferSchema } from '@treeseed/sdk/capacity-provider';
 import { canonicalStandardsJson } from '@treeseed/sdk/standards';
 import { row, type Row } from '../../acceptance-cli.ts';
 import { orderConnectionsForFairPolling } from '../../../../src/provider/teams/multi-team-runtime.ts';
+import { assertCanonicalRecordShapes } from './canonical-record-shape.ts';
 
 /** Signature custody only: a signed status/evidence digest is not independent
  * evidence that a qualification suite actually ran or passed. */
@@ -58,52 +57,6 @@ export function verifyProviderQualification(value: unknown, definitionValue: unk
 		&& Date.parse(receipt.expiresAt) > Date.parse(receipt.issuedAt), 'ACCEPTANCE_QUALIFICATION_CLOCK: Original unexpired qualification required');
 }
 
-let authority: { root: string; head: string; bytes: string; definitions: Row } | undefined;
-function definitions(): Row {
-	if (!authority) {
-		const root = process.env.TREESEED_DEVELOPMENT_WORKSPACE_ROOT;
-		assert.ok(root, 'ACCEPTANCE_CANONICAL_INPUT: Exact existing development workspace authority required');
-		const head = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim();
-		const bytes = readFileSync(resolve(root, 'docs/agent.schema.yml'), 'utf8');
-		assert.equal(bytes, execFileSync('git', ['show', `${head}:docs/agent.schema.yml`], { cwd: root, encoding: 'utf8' }), 'ACCEPTANCE_CANONICAL_INPUT: Canonical bytes differ from tracked authority');
-		authority = { root, head, bytes, definitions: row(row(parse(bytes)).$defs) };
-	}
-	assert.equal(execFileSync('git', ['rev-parse', 'HEAD'], { cwd: authority.root, encoding: 'utf8' }).trim(), authority.head);
-	assert.equal(readFileSync(resolve(authority.root, 'docs/agent.schema.yml'), 'utf8'), authority.bytes);
-	return authority.definitions;
-}
-// Assertions derive the three simple operational shapes from the exact target,
-// not a second schema or a transformation of old SQL/DTO financial records.
-function declared(value: unknown, input: Row, path: string): void {
-	const spec = typeof input.$ref === 'string' ? row(definitions()[input.$ref.slice('#/$defs/'.length)]) : input;
-	if (Object.hasOwn(spec, 'const')) assert.equal(value, spec.const, `ACCEPTANCE_CANONICAL_SHAPE: ${path}`);
-	if (Array.isArray(spec.enum)) assert.ok(spec.enum.includes(value), `ACCEPTANCE_CANONICAL_SHAPE: ${path}`);
-	if (spec.type === 'object') {
-		assert.ok(value && typeof value === 'object' && !Array.isArray(value), `ACCEPTANCE_CANONICAL_SHAPE: ${path}`);
-		const record = row(value), properties = row(spec.properties);
-		const required = spec.required;
-		assert.ok(Array.isArray(required) || required === undefined);
-		if (Array.isArray(required)) for (const key of required) assert.ok(typeof key === 'string' && Object.hasOwn(record, key), `ACCEPTANCE_CANONICAL_SHAPE: ${path}.${String(key)}`);
-		for (const [key, child] of Object.entries(record)) {
-			if (Object.hasOwn(properties, key)) declared(child, row(properties[key]), `${path}.${key}`);
-			else { assert.notEqual(spec.additionalProperties, false, `ACCEPTANCE_CANONICAL_SHAPE: ${path}.${key}`);
-				if (spec.additionalProperties && typeof spec.additionalProperties === 'object') declared(child, row(spec.additionalProperties), `${path}.${key}`); }
-		}
-	}
-	if (spec.type === 'string') {
-		assert.equal(typeof value, 'string', `ACCEPTANCE_CANONICAL_SHAPE: ${path}`); const text = String(value);
-		if (typeof spec.minLength === 'number') assert.ok(text.length >= spec.minLength);
-		if (typeof spec.maxLength === 'number') assert.ok(text.length <= spec.maxLength);
-		if (typeof spec.pattern === 'string') assert.match(text, new RegExp(spec.pattern, 'u'));
-		if (spec.format === 'date-time') assert.ok(/^\d{4}-\d{2}-\d{2}T/u.test(text) && Number.isFinite(Date.parse(text)), `ACCEPTANCE_CANONICAL_SHAPE: ${path}`);
-	}
-	if (spec.type === 'number' || spec.type === 'integer') {
-		assert.ok(typeof value === 'number' && Number.isFinite(value), `ACCEPTANCE_CANONICAL_SHAPE: ${path}`);
-		if (spec.type === 'integer') assert.ok(Number.isInteger(value));
-		if (typeof spec.minimum === 'number') assert.ok(value >= spec.minimum);
-		if (typeof spec.exclusiveMinimum === 'number') assert.ok(value > spec.exclusiveMinimum);
-	}
-}
 export function publicCanonicalRecords(views: unknown[], schemaVersion: string): Row[] {
 	const records = new Map<string, Row>();
 	const visit = (value: unknown): void => {
@@ -442,17 +395,22 @@ export function verifyWorkdayContinuationCustody(runs: Row[], items: Row[]): voi
 }
 export function verifyTerminalRecordCustody(items: Row[], leases: Row[], reservations: Row[], settlements: Row[], measurements: Row[]): void {
 	assert.ok(items.length > 0, 'ACCEPTANCE_CANONICAL_EMPTY: Every real attempt must be independently available');
-	const target = definitions();
-	for (const [name, records] of [['Lease', leases], ['Reservation', reservations], ['UsageSettlement', settlements]] as const) {
-		assert.ok(target[name], `ACCEPTANCE_CANONICAL_INPUT: Target lacks ${name}`);
-		for (const record of records) declared(record, row(target[name]), name);
+	assertCanonicalRecordShapes([['Lease', leases], ['Reservation', reservations], ['UsageSettlement', settlements]]);
+	for (const records of [leases, reservations, settlements]) {
 		assert.equal(new Set(records.map(record => record.id)).size, records.length, 'ACCEPTANCE_CANONICAL_DUPLICATE: Duplicate operational identity');
 	}
 	assert.equal(new Set(settlements.map(record => record.idempotencyKey)).size, settlements.length, 'ACCEPTANCE_CANONICAL_DUPLICATE: Settlement key reused');
 	assert.equal(new Set(items.map(item => item.id)).size, items.length, 'ACCEPTANCE_CANONICAL_DUPLICATE: Attempt identity reused');
 	assert.equal(leases.length, items.length); assert.equal(reservations.length, items.length); assert.equal(settlements.length, items.length);
+	const ids = new Set(items.map(item => item.id)), resultIds = new Set<string>();
+	const aggregates = measurements.filter(value => value.accountingMode === 'aggregate');
+	assert.equal(aggregates.length, items.length, 'ACCEPTANCE_CANONICAL_MEASURED: Exact represented aggregate inventory required');
+	assert.ok(aggregates.every(value => ids.has(value.assignmentId)), 'ACCEPTANCE_CANONICAL_MEASURED: Orphan aggregate');
+	assert.ok(aggregates.every(value => typeof value.id === 'string' && value.id && value.id === value.id.trim()), 'ACCEPTANCE_CANONICAL_MEASURED: Original measurement identity required');
+	assert.equal(new Set(aggregates.map(value => value.id)).size, aggregates.length, 'ACCEPTANCE_CANONICAL_MEASURED: Measurement identity reused');
 	for (const item of items) {
 		const attempt = assignmentAttemptSchema.parse(item.assignmentAttempt);
+		assert.deepEqual(attempt, item.assignmentAttempt, 'ACCEPTANCE_CANONICAL_RAW: Parsing cannot repair frozen authority');
 		assert.equal(item.id, attempt.id); assert.equal(item.attemptCount, attempt.attempt);
 		for (const [field, expected] of Object.entries({ teamId: attempt.teamId, projectId: attempt.projectId,
 			capacityProviderId: attempt.provider.providerId, executionProviderId: attempt.provider.executionProviderId,
@@ -471,14 +429,21 @@ export function verifyTerminalRecordCustody(items: Row[], leases: Row[], reserva
 		assert.equal(s.projectId, attempt.projectId); assert.equal(s.agentClass, attempt.agentClass);
 		assert.ok(l.state !== 'active' && r.state !== 'held', 'ACCEPTANCE_CANONICAL_TERMINAL: Lease or reservation remains live');
 		assert.ok(Date.parse(String(l.acquiredAt)) <= Date.parse(String(l.expiresAt)), 'ACCEPTANCE_CANONICAL_CLOCK: Lease clock reversed');
+		if (l.releasedAt !== undefined) assert.ok(Date.parse(String(l.releasedAt)) >= Date.parse(String(l.acquiredAt)), 'ACCEPTANCE_CANONICAL_CLOCK: Lease release precedes acquisition');
+		if (r.closedAt !== undefined) assert.ok(Date.parse(String(r.closedAt)) >= Date.parse(String(r.reservedAt)), 'ACCEPTANCE_CANONICAL_CLOCK: Reservation closure precedes reservation');
 		assert.ok(Date.parse(String(s.settledAt)) >= Date.parse(attempt.createdAt), 'ACCEPTANCE_CANONICAL_CLOCK: Settlement preceded attempt');
 		const aggregate = measurements.filter(value => value.assignmentId === attempt.id && value.accountingMode === 'aggregate');
 		assert.equal(aggregate.length, 1, 'ACCEPTANCE_CANONICAL_MEASURED: One independently read aggregate required');
 		assert.equal(aggregate[0]!.assignmentAttempt, attempt.attempt); assert.equal(s.actualSeconds, aggregate[0]!.activeSeconds);
 		assert.equal(aggregate[0]!.projectId, attempt.projectId); assert.equal(aggregate[0]!.workDayId, attempt.workdayId);
 		assert.deepEqual(s.nativeUsage, aggregate[0]!.nativeUsage, 'ACCEPTANCE_CANONICAL_MEASURED: Native units changed');
-		if (attempt.status === 'completed') {
-			const result = assignmentResultSchema.parse(item.assignmentResult); assert.equal(result.assignmentId, attempt.id); assert.equal(result.status, 'completed');
+		if (attempt.status === 'completed' || item.assignmentResult !== null && item.assignmentResult !== undefined) {
+			const result = assignmentResultSchema.parse(item.assignmentResult);
+			assert.deepEqual(result, item.assignmentResult, 'ACCEPTANCE_CANONICAL_RAW: Parsing cannot repair result authority');
+			assert.equal(result.assignmentId, attempt.id); assert.equal(result.status, attempt.status);
+			assert.ok(!resultIds.has(result.id), 'ACCEPTANCE_CANONICAL_DUPLICATE: Result identity reused'); resultIds.add(result.id);
+			const completed = Date.parse(result.completedAt), start = Date.parse(attempt.startedAt ?? attempt.createdAt), finish = Date.parse(attempt.finishedAt ?? attempt.deadline);
+			assert.ok(start <= completed && completed <= finish && completed <= Date.parse(attempt.deadline), 'ACCEPTANCE_CANONICAL_CLOCK: Result outside original productive interval');
 			assert.equal(result.usage.elapsedSeconds, aggregate[0]!.elapsedSeconds);
 			assert.deepEqual(result.usage.native, s.nativeUsage, 'ACCEPTANCE_CANONICAL_MEASURED: Result and stored settlement disagree');
 		}

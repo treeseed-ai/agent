@@ -23,6 +23,37 @@ import { isDeepStrictEqual } from 'node:util';
 const record = (value: unknown): Record<string, unknown> =>
 	value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
 
+/** One reduction for canonical model results and terminal provider accounting.
+ * Raw observations remain diagnostic evidence; native units are never rounded. */
+export function aggregateExecutionUsage(measurements: unknown): { elapsedSeconds: number; inputTokens?: number; outputTokens?: number; [key: string]: unknown } {
+	if (!Array.isArray(measurements) || !measurements.length) throw new Error('model_elapsed_usage_missing');
+	const totals: Record<string, number> = {}, native: Record<string, number> = {};
+	for (const input of measurements) {
+		if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('model_elapsed_usage_invalid');
+		const usage = record(input);
+		if (typeof usage.elapsedSeconds !== 'number' || !Number.isFinite(usage.elapsedSeconds) || usage.elapsedSeconds < 0) throw new Error('model_elapsed_usage_invalid');
+		if (Object.hasOwn(usage, 'nativeUsage') && (!usage.nativeUsage || typeof usage.nativeUsage !== 'object' || Array.isArray(usage.nativeUsage))) throw new Error('model_native_usage_invalid');
+		for (const [key, value] of Object.entries(usage)) {
+			if (['provenance', 'nativeUsage'].includes(key)) continue;
+			if (typeof value !== 'number' || !Number.isFinite(value) || value < 0
+				|| ['inputTokens', 'outputTokens'].includes(key) && !Number.isSafeInteger(value)) throw new Error('model_native_usage_invalid');
+			totals[key] = (totals[key] ?? 0) + value;
+		}
+		for (const [key, value] of Object.entries(record(usage.nativeUsage))) {
+			if (typeof value !== 'number' || !Number.isFinite(value) || value < 0
+				|| Object.hasOwn(usage, key) && usage[key] !== value) throw new Error('model_native_usage_invalid');
+			native[key] = (native[key] ?? 0) + value;
+		}
+	}
+	if (Object.values(totals).some(value => !Number.isFinite(value)) || Object.values(native).some(value => !Number.isFinite(value))
+		|| ['inputTokens', 'outputTokens'].some(key => Object.hasOwn(totals, key) && !Number.isSafeInteger(totals[key]))) throw new Error('model_native_usage_invalid');
+	const aggregate = measurements.length === 1 ? structuredClone(record(measurements[0]))
+		: { ...totals, ...(Object.keys(native).length ? { nativeUsage: native } : {}) };
+	return { ...aggregate, elapsedSeconds: totals.elapsedSeconds!,
+		...(Object.hasOwn(totals, 'inputTokens') ? { inputTokens: totals.inputTokens! } : {}),
+		...(Object.hasOwn(totals, 'outputTokens') ? { outputTokens: totals.outputTokens! } : {}) };
+}
+
 function gitReference(result: AgentExecutionResult, repository: string): AssignmentReference {
 	const outputs = record(result.outputs);
 	const parsed = assignmentReferenceSchema.safeParse(outputs.sourceReference);
@@ -128,44 +159,15 @@ export async function executeKernelAssignment(input: {
 			if (!['completed', 'responded', 'abstained'].includes(transport.result.status)) {
 				throw Object.assign(new Error(transport.result.summary), { code: transport.result.code });
 			}
-			const measurements = transport.result.usage;
-			if (!Array.isArray(measurements) || measurements.length === 0) throw new Error('model_elapsed_usage_missing');
-			let measuredElapsed = 0, inputTokens: number | undefined, outputTokens: number | undefined;
+			const usage = aggregateExecutionUsage(transport.result.usage), elapsedSeconds = Math.ceil(Number(usage.elapsedSeconds));
+			const inputTokens = usage.inputTokens, outputTokens = usage.outputTokens;
 			const nativeUsage: Record<string, number> = {};
-			for (const usage of measurements) {
-				if (!usage || typeof usage !== 'object' || Array.isArray(usage)
-					|| typeof usage.elapsedSeconds !== 'number' || !Number.isFinite(usage.elapsedSeconds) || usage.elapsedSeconds < 0) {
-					throw new Error('model_elapsed_usage_invalid');
-				}
-				measuredElapsed += usage.elapsedSeconds;
-				for (const field of ['inputTokens', 'outputTokens'] as const) if (Object.hasOwn(usage, field)) {
-					const value = usage[field];
-					if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) throw new Error('model_native_usage_invalid');
-					if (field === 'inputTokens') inputTokens = (inputTokens ?? 0) + value;
-					else outputTokens = (outputTokens ?? 0) + value;
-				}
-				const native = usage.nativeUsage;
-				if (Object.hasOwn(usage, 'nativeUsage') && (!native || typeof native !== 'object' || Array.isArray(native))) {
-					throw new Error('model_native_usage_invalid');
-				}
-				const observedNative: Record<string, number> = {};
-				for (const [key, value] of [...Object.entries(usage).filter(([key]) =>
-					!['elapsedSeconds', 'inputTokens', 'outputTokens', 'provenance', 'nativeUsage'].includes(key)), ...Object.entries(record(native))]) {
-					if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) throw new Error('model_native_usage_invalid');
-					// The nested native inventory represents the same observation, not
-					// another charge; retain it instead of counting a copied scalar twice.
-					if (Object.hasOwn(observedNative, key)) {
-						if (observedNative[key] !== value) throw new Error('model_native_usage_invalid');
-						continue;
-					}
-					observedNative[key] = value;
-				}
-				for (const [key, value] of Object.entries(observedNative)) nativeUsage[key] = (nativeUsage[key] ?? 0) + value;
+			for (const [key, value] of [...Object.entries(usage).filter(([key]) =>
+				!['elapsedSeconds', 'inputTokens', 'outputTokens', 'provenance', 'nativeUsage'].includes(key)), ...Object.entries(record(usage.nativeUsage))]) {
+				if (typeof value !== 'number') throw new Error('model_native_usage_invalid');
+				nativeUsage[key] = value;
 			}
-			const elapsedSeconds = Math.ceil(measuredElapsed);
-			if (!Number.isSafeInteger(elapsedSeconds) || inputTokens !== undefined && !Number.isSafeInteger(inputTokens)
-				|| outputTokens !== undefined && !Number.isSafeInteger(outputTokens)
-				|| Object.values(nativeUsage).some(value => !Number.isFinite(value))) throw new Error('model_native_usage_invalid');
+			if (!Number.isSafeInteger(elapsedSeconds)) throw new Error('model_native_usage_invalid');
 			const references = Array.isArray(record(transport.result.outputs).contentReferences)
 				? record(transport.result.outputs).contentReferences as AssignmentReference[] : [];
 			const verification = Array.isArray(record(transport.result.outputs).verificationRecords)

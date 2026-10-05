@@ -1,8 +1,6 @@
 import { readFile } from 'node:fs/promises';
-import { loadProviderManifest, writeProviderSecret } from '../../../../src/provider/configuration/manifest.ts';
-import { initializeCapacityProviderIdentity, loadCapacityProviderIdentity } from '../../../../src/provider/accounts/identity.ts';
-import { materializeCapabilityOffers } from '../../../../src/provider/capabilities/materialize-offers.ts';
-import { runMultiTeamProviderRunners } from '../../../../src/provider/teams/multi-team-runtime.ts';
+import { loadProviderManifest, writeProviderSecret } from '../../../../dist/provider/configuration/manifest.js';
+import { initializeCapacityProviderIdentity, loadCapacityProviderIdentity } from '../../../../dist/provider/accounts/identity.js';
 import type { ProviderHostRuntimeConfig } from '../../../../src/provider/configuration/config.ts';
 
 // Child entrypoint for the EXISTING runtime, not another arbitration runner.
@@ -22,7 +20,11 @@ if (action === 'initialize') {
 		`isolated-${connection.id}`, directory, directory);
 	process.stdout.write(JSON.stringify({ initialized: true }));
 } else if (action === 'offers') {
+	const { materializeCapabilityOffers } = await import('../../../../dist/provider/capabilities/materialize-offers.js');
 	const identity = await loadCapacityProviderIdentity({ ref: loaded.manifest.identity.privateKeyRef, baseDirectory: directory, dataDirectory: directory });
 	process.stdout.write(JSON.stringify({ publicJwk: identity.publicJwk,
 		adapters: await materializeCapabilityOffers({ config, loaded, providerId: loaded.manifest.connections[0]!.providerId }) }));
-} else process.stdout.write(JSON.stringify(await runMultiTeamProviderRunners(config)));
+} else {
+	const { runMultiTeamProviderRunners } = await import('../../../../dist/provider/teams/multi-team-runtime.js');
+	process.stdout.write(JSON.stringify(await runMultiTeamProviderRunners(config)));
+}

@@ -43,8 +43,10 @@ describe('whole native provider polling arbitration boundary', () => {
 		} finally { await f.close(); }
 	});
 	it('original native provider offer publication denies insufficient future missing and duplicate qualification before signing or changing host custody', async () => {
-		const f = await arbitrationFixture();
-		try {
+		const modes = ['insufficient', 'missing-suite', 'future', 'duplicate', 'failed-first', 'revoked-last'];
+		const outcomes = await Promise.all(modes.map(async mode => {
+			const f = await arbitrationFixture();
+			try {
 			await f.store.snapshot(); const baseline = await f.bytes(), routes = structuredClone(f.routes);
 			const original = structuredClone(f.manifest), bytes = await readFile(f.config.manifestPath!);
 			const first = row(await f.offers()); expect(f.routes).toEqual(routes); expect(await f.bytes()).toBe(baseline);
@@ -53,8 +55,6 @@ describe('whole native provider polling arbitration boundary', () => {
 			const source = structuredClone(target.offer), index = source.conformance.findIndex(receipt => receipt.tier === 'automated-suite');
 			const definition = CORE_CAPABILITY_DEFINITIONS.find(value => value.id === source.conformance[index]!.capability.id);
 			if (!definition || definition.qualificationTier !== 'automated-suite') throw new Error('Original declared automated tier required');
-			const outcomes: Array<{ mode: string; cause: unknown }> = [];
-			for (const mode of ['insufficient', 'missing-suite', 'future', 'duplicate', 'failed-first', 'revoked-last']) {
 				const changed = structuredClone(source), receipt = changed.conformance[index]!;
 				if (mode === 'insufficient') { receipt.tier = 'signed-attestation'; receipt.suite = null; }
 				if (mode === 'missing-suite') receipt.suite = null;
@@ -65,12 +65,9 @@ describe('whole native provider polling arbitration boundary', () => {
 				const { offerDigest: ignored, ...material } = changed; changed.offerDigest = capabilityOfferDigest(material);
 				target.offer = changed; await f.write(); const retained = await readFile(f.config.manifestPath!), unchanged = structuredClone(f.manifest); let cause: unknown;
 				try { await f.offers(); } catch (error) { cause = error; }
-				outcomes.push({ mode, cause }); expect(await readFile(f.config.manifestPath!)).toEqual(retained); expect(f.manifest).toEqual(unchanged);
+				expect(await readFile(f.config.manifestPath!)).toEqual(retained); expect(f.manifest).toEqual(unchanged);
 				expect(await f.bytes()).toBe(baseline); expect(f.routes).toEqual(routes);
 				target.offer = structuredClone(source); await f.write(); expect(await readFile(f.config.manifestPath!)).toEqual(bytes);
-			}
-			for (const outcome of outcomes) expect(outcome.cause, outcome.mode).toBeInstanceOf(Error);
-			for (const outcome of outcomes) expect(String(outcome.cause), outcome.mode).toMatch(/conformance|qualification/iu);
 			const retry = row(await f.offers()); expect(retry).toEqual(first);
 			if (!Array.isArray(retry.adapters)) throw new Error('Native published adapter inventory required');
 			for (const adapter of retry.adapters.map(row)) {
@@ -88,7 +85,11 @@ describe('whole native provider polling arbitration boundary', () => {
 			expect(await f.bytes()).toBe(baseline); expect(f.routes).toEqual(routes);
 			// Real original publisher/loader/OS identity/native child boundary;
 			// supplied suite metadata is not an independently executed suite.
-		} finally { await f.close(); }
+				return { mode, cause };
+			} finally { await f.close(); }
+		}));
+		for (const outcome of outcomes) expect(outcome.cause, outcome.mode).toBeInstanceOf(Error);
+		for (const outcome of outcomes) expect(String(outcome.cause), outcome.mode).toMatch(/conformance|qualification/iu);
 	});
 	it('independent original provider processes sign exact offer evidence with native encrypted host identity while preserving failed qualification and unchanged runtime history', async () => {
 		const f = await arbitrationFixture();
@@ -206,8 +207,8 @@ describe('whole native provider polling arbitration boundary', () => {
 		} finally { await f.close(); }
 	});
 	it('does not poll disabled denied or foreign token-bound connections and never borrows a healthy team token', async () => {
-		const modes = ['disabled', 'denied', 'team', 'provider', 'membership', 'credential', 'short'], outcomes = [];
-		for (const mode of modes) {
+		const modes = ['disabled', 'denied', 'team', 'provider', 'membership', 'credential', 'short'];
+		const outcomes = await Promise.all(modes.map(async mode => {
 			const f = await arbitrationFixture();
 			try {
 				const busy = f.manifest.connections.find(item => item.id === 'busy-a')!;
@@ -216,10 +217,10 @@ describe('whole native provider polling arbitration boundary', () => {
 				else f.faults.set(busy.id, { tokenPatch: mode === 'short' ? { expiresAt: new Date().toISOString() }
 					: { [`${mode}Id`]: 'foreign' } });
 				await f.write(); await f.run();
-				outcomes.push({ foreignPoll: f.routes.some(item => item.path === f.pollPath && item.connectionId === busy.id),
-					claims: (await f.store.snapshot()).claims.length });
+				return { foreignPoll: f.routes.some(item => item.path === f.pollPath && item.connectionId === busy.id),
+					claims: (await f.store.snapshot()).claims.length };
 			} finally { await f.close(); }
-		}
+		}));
 		expect(outcomes).toEqual(modes.map(() => ({ foreignPoll: false, claims: 0 })));
 	});
 	it('applies actual host disk denial before any assignment poll slot or productive accounting admission', async () => {
@@ -243,8 +244,8 @@ describe('whole native provider polling arbitration boundary', () => {
 		} finally { await f.close(); }
 	});
 	it('releases only unleased polling failures and retries denied unavailable reset and malformed transport without invented usage', async () => {
-		const modes = ['denied', 'unavailable', 'reset', 'json'], outcomes = [];
-		for (const mode of modes) {
+		const modes = ['denied', 'unavailable', 'reset', 'json'];
+		const outcomes = await Promise.all(modes.map(async mode => {
 			const f = await arbitrationFixture();
 			try {
 				// First populate independently scoped real coordinator tokens; fault applies to subsequent actual polls.
@@ -252,11 +253,12 @@ describe('whole native provider polling arbitration boundary', () => {
 				f.faults.set('busy-a', mode === 'denied' ? { code: 403 } : mode === 'unavailable' ? { code: 503 }
 					: { fault: mode === 'reset' ? 'reset' : 'json' });
 				await f.run(); const snapshot = await f.store.snapshot();
-				outcomes.push({ claims: snapshot.claims.length, seconds: snapshot.activeSecondsByConnection,
-					terminal: f.routes.some(item => item.path.endsWith('/return')) });
+				const outcome = { claims: snapshot.claims.length, seconds: snapshot.activeSecondsByConnection,
+					terminal: f.routes.some(item => item.path.endsWith('/return')) };
 				f.faults.clear(); await f.run(); expect((await f.store.snapshot()).claims).toEqual([]);
+				return outcome;
 			} finally { await f.close(); }
-		}
+		}));
 		expect(outcomes).toEqual(modes.map(() => ({ claims: 0, seconds: {}, terminal: false })));
 	});
 	it('retains malformed leased frozen authority and its original recovery cause rather than manufacturing successful execution', async () => {
@@ -292,6 +294,7 @@ describe('whole native provider polling arbitration boundary', () => {
 	it('native duplicate team membership and foreign global identity manifests deny before polling or changing retained local capacity then admit only the restored original input', async () => {
 		const f = await arbitrationFixture();
 		try {
+			await f.store.snapshot();
 			const original = structuredClone(f.manifest), baseline = await f.bytes(), routes = structuredClone(f.routes);
 			for (const field of ['teamId', 'membershipId', 'providerId'] as const) {
 				const first = f.manifest.connections[0]!, second = f.manifest.connections[1]!;

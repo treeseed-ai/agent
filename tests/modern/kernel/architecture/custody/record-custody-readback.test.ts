@@ -14,7 +14,8 @@ function supplied() {
 		const at = '2026-09-13T12:00:01.000Z', attempt = assignmentAttemptSchema.parse({ ...original, id: `attempt-${index}`, idempotencyKey: `attempt-${index}`,
 			leaseId: `lease-${index}`, reservationId: `reservation-${index}`, status, deadline: '2026-09-13T12:00:30.000Z' });
 		const nativeUsage = { activeSeconds: 1, tokens: 7 };
-		items.push({ id: attempt.id, attemptCount: attempt.attempt, teamId: attempt.teamId, projectId: attempt.projectId,
+		items.push({ id: attempt.id, status, leaseState: 'released', leaseToken: null, leaseExpiresAt: null, leaseRenewedAt: null,
+			attemptCount: attempt.attempt, teamId: attempt.teamId, projectId: attempt.projectId,
 			membershipId: 'supplied-approved-membership', capacityProviderId: attempt.provider.providerId, executionProviderId: attempt.provider.executionProviderId,
 			workDayId: attempt.workdayId, executionNodeId: attempt.nodeId, executionNodeRevision: attempt.nodeRevision, graphRevision: attempt.graphRevision,
 			assignmentAttempt: attempt, assignmentResult: status === 'completed' ? assignmentResultSchema.parse({

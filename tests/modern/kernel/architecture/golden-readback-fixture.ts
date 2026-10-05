@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { stringify } from 'yaml';
 
 export type Row = Record<string, any>;
-const state = vi.hoisted(() => ({ cases: new Map<string, () => void>(), replies: new Map<string, Row>(), usagePages: undefined as Row[] | undefined, failure: undefined as Error | undefined, workspaceFailure: undefined as Error | undefined, timeout: 0, args: [] as string[], calls: [] as string[][] }));
+const state = vi.hoisted(() => ({ cases: new Map<string, () => void>(), replies: new Map<string, Row>(), assignmentPages: undefined as Row[] | undefined, usagePages: undefined as Row[] | undefined, failure: undefined as Error | undefined, workspaceFailure: undefined as Error | undefined, timeout: 0, args: [] as string[], calls: [] as string[][] }));
 export { state };
 vi.mock('node:test', () => ({ default: (name: string, _options: unknown, run: () => void) => state.cases.set(name, run) }));
 vi.mock('node:child_process', () => ({ execFileSync: (_command: string, args: string[], options: { timeout: number }) => {
@@ -14,6 +14,7 @@ vi.mock('node:child_process', () => ({ execFileSync: (_command: string, args: st
 	const key = args.slice(0, 2).join(' ');
 	if (key === 'projects treedx' && state.workspaceFailure) throw state.workspaceFailure;
 	const result = key === 'projects treedx' ? state.replies.get(`workspace ${args[4]}`)
+		: key === 'assignments list' && state.assignmentPages ? state.assignmentPages.shift()
 		: key === 'capacity usage' && state.usagePages ? state.usagePages.shift()
 		: state.replies.get(`${key} ${args[3]}`) ?? state.replies.get(key);
 	if (!result) throw new Error(`Unexpected acceptance read: ${key}`);
@@ -69,6 +70,7 @@ export function assignment(id: string, activity: string, agentClass: string, wor
 beforeEach(() => {
 	vi.stubEnv('TREESEED_ACCEPTANCE_WORKDAY_ID', workdayId);
 	state.replies.clear();
+	state.assignmentPages = undefined;
 	state.failure = undefined;
 	state.workspaceFailure = undefined;
 	state.usagePages = undefined;

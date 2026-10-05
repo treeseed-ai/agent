@@ -8,6 +8,10 @@ import type { ProviderLocalNativeLimit } from './native-capacity-limits.ts';
 export interface ProviderLocalSlotClaim {
 	id: string;
 	connectionId: string;
+	/** Credential-free input to the existing polling ranker at this atomic claim. */
+	selection?: { id: string; input: { connections: Array<{ connection: { id: string }; teamId: string }>;
+		snapshot: { claims: Array<{ connectionId: string }>; events: Array<{ connectionId: string; outcome: string }>;
+			activeSecondsByConnection: Record<string, number> } } };
 	runnerId: string;
 	status: 'polling' | 'ready' | 'running' | 'recovery';
 	assignmentId?: string;
@@ -47,6 +51,15 @@ interface ProviderLocalCapacityState {
 }
 
 const emptyState = (): ProviderLocalCapacityState => ({ schemaVersion: 1, revision: 0, claims: [], usage: {}, sessions: [], tokens: [], connections: [], events: [], updatedAt: new Date(0).toISOString() });
+
+function pollingSnapshot(state: ProviderLocalCapacityState, now: string) {
+	return { claims: state.claims.map(({ connectionId }) => ({ connectionId })),
+		events: state.events.map(({ connectionId, outcome }) => ({ connectionId, outcome })),
+		activeSecondsByConnection: Object.fromEntries(Object.entries(state.usage[now.slice(0, 10)] ?? {}).flatMap(([key, seconds]) => {
+			const scope: unknown = JSON.parse(key);
+			return Array.isArray(scope) && scope[0] === 'connection' && typeof scope[1] === 'string' ? [[scope[1], seconds]] : [];
+		})) };
+}
 
 function clock(value: unknown): number {
 	if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/.test(value) || !Number.isFinite(Date.parse(value))) {
@@ -163,12 +176,17 @@ export class ProviderLocalCapacityStore {
 		}
 	}
 
-	async claim(input: { connectionId: string; globalLimit: number; connectionLimit: number; pollingTtlMs?: number }): Promise<ProviderLocalSlotClaim | null> {
+	async claim(input: { connectionId: string; globalLimit: number; connectionLimit: number; pollingTtlMs?: number;
+		select?: (snapshot: ReturnType<typeof pollingSnapshot>) => { connectionId: string; connectionLimit: number;
+			selection: NonNullable<ProviderLocalSlotClaim['selection']> } | null }): Promise<ProviderLocalSlotClaim | null> {
 		return this.update((state, now) => {
-			if (state.claims.length >= input.globalLimit || state.claims.filter((claim) => claim.connectionId === input.connectionId).length >= input.connectionLimit) return null;
+			if (state.claims.length >= input.globalLimit) return null;
+			const selected = input.select ? input.select(pollingSnapshot(state, now)) : input;
+			if (!selected || state.claims.filter(claim => claim.connectionId === selected.connectionId).length >= selected.connectionLimit) return null;
 			const id = randomUUID();
 			const claim: ProviderLocalSlotClaim = {
-				id, connectionId: input.connectionId, runnerId: `provider-runner-${id}`, status: 'polling', acquiredAt: now, updatedAt: now,
+				id, connectionId: selected.connectionId, runnerId: `provider-runner-${id}`, status: 'polling', acquiredAt: now, updatedAt: now,
+				...('selection' in selected ? { selection: structuredClone(selected.selection) } : {}),
 				expiresAt: new Date(Date.parse(now) + (input.pollingTtlMs ?? 60_000)).toISOString(),
 			};
 			state.claims.push(claim);
@@ -348,11 +366,7 @@ export class ProviderLocalCapacityStore {
 		return this.update((state, now) => ({ revision: state.revision + 1,
 			claims: state.claims.map(({ dispatchEnvelope: _dispatchEnvelope, closeoutOutput: _closeoutOutput, ...claim }) => ({ ...claim, leaseToken: claim.leaseToken ? '<redacted>' : undefined })),
 			events: state.events.map((event) => ({ ...event })),
-			activeSecondsByConnection: Object.fromEntries(Object.entries(state.usage[now.slice(0, 10)] ?? {}).flatMap(([key, seconds]) => {
-				const scope: unknown = JSON.parse(key);
-				return Array.isArray(scope) && scope[0] === 'connection' && typeof scope[1] === 'string'
-					? [[scope[1], seconds]] : [];
-			})),
+			activeSecondsByConnection: pollingSnapshot(state, now).activeSecondsByConnection,
 		}));
 	}
 

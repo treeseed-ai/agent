@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createPublicKey, generateKeyPairSync, sign } from 'node:crypto';
+import { createHash, createPublicKey, generateKeyPairSync, sign } from 'node:crypto';
 import { capabilityOfferDigest, CORE_CAPABILITY_DEFINITIONS, capabilityDefinitionDigest, type CapabilityOffer } from '@treeseed/sdk/capacity-provider';
 import { canonicalStandardsJson } from '@treeseed/sdk/standards';
 import { assignmentOfferId } from '../../src/provider/execution/assignment-selection.ts';
@@ -72,9 +72,20 @@ describe('canonical assignment offer selection', () => {
 	});
 	it('binds every supplied conformance status and evidence byte to the original provider key without mutating templates or laundering failed qualification', async () => {
 		const f = offerInput(), template = f.input.loaded.manifest.adapters[0]!.offers[0]!.offer;
+		const valid = structuredClone(f.input), published = await materializeCapabilityOffers(f.input);
 		template.conformance[0]!.status = 'failed'; template.conformance[1]!.status = 'revoked';
 		const original = structuredClone(f.input), key = structuredClone(f.supplied);
-		const published = await materializeCapabilityOffers(f.input);
+		await expect(materializeCapabilityOffers(f.input)).rejects.toThrow('Invalid provider qualification:');
+		// Retained failed and revoked receipts are signed controlled evidence,
+		// never an advertisement published by the owning provider.
+		for (const [adapterIndex, adapter] of published.entries()) for (const [offerIndex, binding] of adapter.offers.entries()) {
+			const source = original.loaded.manifest.adapters[adapterIndex]!.offers[offerIndex]!.offer;
+			for (const [index, receipt] of binding.offer.conformance.entries()) {
+				receipt.status = source.conformance[index]!.status; receipt.signature.value = '';
+				receipt.signature.value = sign(null, Buffer.from(canonicalStandardsJson(receipt)), f.privateKey).toString('base64url');
+			}
+			const { offerDigest: ignored, ...material } = binding.offer; binding.offer.offerDigest = capabilityOfferDigest(material);
+		}
 		expect(published).toHaveLength(original.loaded.manifest.adapters.length);
 		for (const [adapterIndex, adapter] of published.entries()) for (const [offerIndex, binding] of adapter.offers.entries()) {
 			const source = original.loaded.manifest.adapters[adapterIndex]!.offers[offerIndex]!.offer;
@@ -87,6 +98,9 @@ describe('canonical assignment offer selection', () => {
 		}
 		expect(published[0]!.offers[0]!.offer.conformance.slice(0, 2).map(value => value.status)).toEqual(['failed', 'revoked']);
 		expect(f.input).toEqual(original); expect(f.supplied).toEqual(key);
+		f.input.loaded = valid.loaded;
+		expect(await materializeCapabilityOffers(f.input)).toHaveLength(valid.loaded.manifest.adapters.length);
+		expect(f.input).toEqual(valid);
 	});
 	it('denies changed missing malformed foreign and reused conformance signatures while retaining the exact supplied failed or revoked evidence', async () => {
 		const f = offerInput(), published = await materializeCapabilityOffers(f.input), source = published[0]!.offers[0]!.offer.conformance[0]!;
@@ -115,8 +129,13 @@ describe('canonical assignment offer selection', () => {
 		}
 		for (const status of ['failed', 'revoked'] as const) {
 			const next = offerInput(); next.input.loaded.manifest.adapters[0]!.offers[0]!.offer.conformance[0]!.status = status;
-			const receipt = (await materializeCapabilityOffers(next.input))[0]!.offers[0]!.offer.conformance[0]!;
+			const before = structuredClone(next.input);
+			await expect(materializeCapabilityOffers(next.input)).rejects.toThrow('Invalid provider qualification:');
+			const receipt = structuredClone(source); receipt.status = status;
+			receipt.signature.keyId = `provider-${createHash('sha256').update(next.supplied.publicJwk.x).digest('hex').slice(0, 16)}`;
+			receipt.signature.value = ''; receipt.signature.value = sign(null, Buffer.from(canonicalStandardsJson(receipt)), next.privateKey).toString('base64url');
 			verifyProviderConformanceSignature(receipt, next.supplied.publicJwk, next.input.providerId); expect(receipt.status).toBe(status);
+			expect(next.input).toEqual(before);
 		}
 		expect(published[0]!.offers[0]!.offer.conformance[0]).toEqual(source);
 	});

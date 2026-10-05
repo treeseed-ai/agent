@@ -139,20 +139,21 @@ it('real Vitest mixed assertion setup runtime skipped and todo outcomes remain f
 	const outcomes: { value: unknown; error: unknown }[] = [];
 	try {
 		await symlink(resolve('node_modules'), resolve(root, 'node_modules'), 'dir');
-		await writeFile(resolve(root, 'assertion.test.ts'), "import { expect, it } from 'vitest';\nit('trims decisions', () => expect(' decision ').toBe('decision'));\n");
-		for (const source of [
+		const executions = await Promise.allSettled([
 			"import { it } from 'vitest';\nthrow new SyntaxError('native setup syntax failure');\nit('unreachable setup', () => {});\n",
 			"import { it } from 'vitest';\nit('native runtime setup', () => { throw new TypeError('native fixture runtime failure'); });\n",
 			"import { it } from 'vitest';\nit.skip('unproven contract', () => {});\n",
 			"import { it } from 'vitest';\nit.todo('unproven contract');\n",
-		]) {
-			await writeFile(resolve(root, 'other.test.ts'), source);
+		].map(async (source, index) => {
+			const directory = await mkdtemp(resolve(root, `case-${index}-`));
+			await writeFile(resolve(directory, 'assertion.test.ts'), "import { expect, it } from 'vitest';\nit('trims decisions', () => expect(' decision ').toBe('decision'));\n");
+			await writeFile(resolve(directory, 'other.test.ts'), source);
 			const before = structuredClone({ report, assignment });
 			let actualFailure: unknown;
 			const outcome = await observeReportedActivityCommands(report, [], async (_executable, _args, options) => {
 				try {
-					return await run(process.execPath, [resolve('node_modules/vitest/vitest.mjs'), 'run', '--root', root, '--no-color'],
-						{ ...options, cwd: root });
+					return await run(process.execPath, [resolve('node_modules/vitest/vitest.mjs'), 'run', '--root', directory, '--no-color', '--maxWorkers=1'],
+						{ ...options, cwd: directory });
 				} catch (error) { actualFailure = error; throw error; }
 			}, assignment).then(value => ({ value, error: undefined }), (error: unknown) => ({ value: undefined, error }));
 			expect(actualFailure).toBeInstanceOf(Error);
@@ -161,7 +162,8 @@ it('real Vitest mixed assertion setup runtime skipped and todo outcomes remain f
 			expect(`${raw.stdout}\n${raw.stderr}`).toContain('AssertionError');
 			outcomes.push(outcome);
 			expect({ report, assignment }).toEqual(before);
-		}
+		}));
+		for (const execution of executions) if (execution.status === 'rejected') throw execution.reason;
 		expect(outcomes).toHaveLength(4);
 		// Preserve each actual observation before checking the aggregate denial.
 		for (const outcome of outcomes) {

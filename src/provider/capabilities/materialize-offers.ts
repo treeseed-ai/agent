@@ -2,6 +2,7 @@ import { createHash, createPrivateKey, sign } from 'node:crypto';
 import {
 	capabilityOfferDigest,
 	capabilityOfferSchema,
+	validateCapacityProviderManifestV5,
 	type CapacityProviderManifestV5,
 } from '@treeseed/sdk/capacity-provider';
 import type { ProviderHostRuntimeConfig } from '../configuration/config.ts';
@@ -26,6 +27,8 @@ export async function materializeCapabilityOffers(input: {
 	loaded: LoadedProviderManifest & { manifest: CapacityProviderManifestV5 };
 	providerId: string;
 }) {
+	const validation = validateCapacityProviderManifestV5(input.loaded.manifest);
+	if (!validation.ok) throw new Error(`Invalid provider qualification: ${validation.diagnostics.map(value => value.message).join('; ')}`);
 	const identity = await loadCapacityProviderIdentity({
 		ref: input.loaded.manifest.identity.privateKeyRef,
 		baseDirectory: input.loaded.directory,

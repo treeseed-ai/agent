@@ -157,7 +157,20 @@ test('Actual participating provider availability retains closed accounting histo
 	verifyAvailabilityAccountingHistory(participating, providers, teamId);
 	for (const session of participating) {
 		const adapters = row(session.snapshot).adapters; assert.ok(Array.isArray(adapters) && adapters.length > 0);
+		const offerIds = new Set<string>();
 		for (const adapter of adapters.map(row)) {
+			assert.ok(typeof adapter.runtimeBuild === 'string' && /^sha256:[a-f0-9]{64}$/u.test(adapter.runtimeBuild),
+				'ACCEPTANCE_AVAILABILITY_BUILD: Exact retained runtime build required');
+			assert.ok(Array.isArray(adapter.offers) && adapter.offers.length > 0,
+				'ACCEPTANCE_AVAILABILITY_OFFERS: Public readback must retain every executable offer');
+			for (const raw of adapter.offers) {
+				const offer = capabilityOfferSchema.parse(raw);
+				assert.deepEqual(offer, raw, 'ACCEPTANCE_AVAILABILITY_OFFER_RAW: Retained authority cannot be normalized');
+				assert.ok(!offerIds.has(offer.offerId), 'ACCEPTANCE_AVAILABILITY_OFFER_ID: Provider-global offer identities must remain unique within publication');
+				offerIds.add(offer.offerId);
+				const { offerDigest, ...material } = offer;
+				assert.equal(capabilityOfferDigest(material), offerDigest, 'ACCEPTANCE_AVAILABILITY_OFFER_DIGEST: Whole retained offer bytes must agree');
+			}
 			const limits = capabilityAccountingLimitsSchema.parse(adapter.nativeLimits), report = row(adapter.accountingObservation);
 			const scopes = [[limits.dailyActiveSecondsLimit, report.modelUsage], ...Object.entries(limits.capabilityLimits)
 				.map(([id, bound]) => [bound.dailyActiveSecondsLimit, row(report.capabilityUsage)[id]])];

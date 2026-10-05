@@ -13,6 +13,7 @@ import { row } from '../../../../acceptance/acceptance-cli.ts';
 import { verifyReviewFindingContent } from '../../../../acceptance/workday/support/decision-evidence.ts';
 import { verifyDraftProposalHandoff, verifyUnfinishedDraftHandoff } from '../../../../acceptance/workday/support/assignment-authority.ts';
 import { objectDigest } from '../../../../../src/sandbox/verification.ts';
+import { canonicalStandardsJson } from '@treeseed/sdk/standards';
 
 async function fixture() {
 	const kernel = await portableKernel(), exact = exactContext();
@@ -22,6 +23,66 @@ async function fixture() {
 	return { ...kernel, exact, boundary, close: async () => { try { await boundary.close(); } finally { await kernel.close(); } } };
 }
 describe('owning context Kernel through native content HTTP and source Git', () => {
+	it('native renamed Reporter commits one canonical exact-workday Note without model dispatch and retains interrupted raw readback without a passing result', async () => {
+		for (const interrupted of [false, true]) {
+			const f = await portableKernel(); let boundary: Awaited<ReturnType<typeof contextBoundary>> | undefined;
+			try {
+				const repository = 'sdk-library', path = 'notes/bounded-report.mdx';
+				const profileInput = { schemaVersion: 'treeseed.agent/v1', id: 'renamed-closeout', name: 'Renamed Closeout', agentClass: 'renamed-closeout',
+					purpose: 'Publish the exact granted deterministic closeout evidence.', responsibilities: ['Retain the original workday evidence.'],
+					capabilities: ['reporting'], context: { include: ['assignment-subject', 'predecessor-results'] }, activityProfiles: {
+						reporting: { handler: 'reporter', prompt: { system: 'Record only exact original workday evidence.' },
+							permissions: { content: { read: ['note'], write: ['note'] }, tools: [] } } } };
+				const checked = validateAgentDefinitionModel(parse(stringify(profileInput)));
+				if (!checked.ok || !checked.data?.activityProfiles.reporting) throw new Error('Exact governed reporting profile required');
+				const profile = checked.data, selected = profile.activityProfiles.reporting!;
+				const source = { store: 'postgresql' as const, model: 'workday', id: f.attempt.workdayId };
+				const target = { store: 'treedx' as const, model: 'note', id: 'bounded-report', repository, commit: f.base, path };
+				const evidence = { teamId: f.attempt.teamId, workdayId: f.attempt.workdayId, nodes: [], edges: [], attempts: [], reservations: [], usage: [] };
+				Object.assign(f.attempt, { agentClass: profile.agentClass, sourceRef: source, contextRefs: [source],
+					workspace: { mode: 'treedx', repository, workspaceId: 'bounded-report-workspace', baseCommit: f.base, writablePaths: ['notes'] },
+					grant: { contentRead: [], contentWrite: [target], sourceRead: [], sourceWrite: [], tools: [] },
+					effectiveProfile: { ...f.attempt.effectiveProfile, activity: 'reporting', handler: selected.handler,
+						profileRef: { ...f.attempt.effectiveProfile.profileRef, id: profile.id }, prompt: selected.prompt, permissionCeiling: selected.permissions } });
+				Object.assign(f.input.assignment.workspaceContext!, { authorizedContext: [{ ref: source, mediaType: 'application/json',
+					digest: `sha256:${createHash('sha256').update(canonicalStandardsJson(evidence)).digest('hex')}`, value: evidence }] });
+				boundary = await contextBoundary(f.attempt.projectId, repository, {});
+				boundary.facade = { ...boundary.facade, workspaceId: 'bounded-report-workspace', readRepositories: [{
+					projectId: f.attempt.projectId, projectSlug: 'sdk', repositoryId: repository, baseRef: f.base,
+					allowedPaths: ['notes'], allowedModels: ['note'], source: 'same-team' }] };
+				f.input.treeDx = boundary.facade;
+				const held = structuredClone({ attempt: f.attempt, context: f.input.assignment.workspaceContext, evidence, profileInput });
+				let candidate = '', content = '', writes = 0, commits = 0;
+				boundary.setResponder(input => {
+					const body = row(input.body);
+					if (Array.isArray(body.files)) {
+						expect(body.files).toHaveLength(1); const file = row(body.files[0]); expect(file.path).toBe(path);
+						if (typeof file.content !== 'string') throw new Error('Native exact report bytes required');
+						content = file.content; mkdirSync(join(f.checkout, 'notes'), { recursive: true }); writeFileSync(join(f.checkout, path), content);
+						writes++; return {};
+					}
+					if (typeof body.message === 'string') { f.git('add', path); f.git('commit', '-m', body.message); candidate = f.git('rev-parse', 'HEAD'); commits++; return { commitSha: candidate }; }
+					if (candidate && body.ref === candidate) return { resolvedRef: candidate, files: [{ path, content: interrupted ? `${content}\n` : content }] };
+					throw new Error('Unexpected report operation');
+				});
+				const result = await f.run();
+				expect(writes).toBe(1); expect(commits).toBe(1); expect(f.requests).toEqual([]);
+				expect(execFileSync('git', ['show', `${candidate}:${path}`], { cwd: f.checkout, encoding: 'utf8' })).toBe(content);
+				expect(f.git('rev-parse', `${candidate}^`)).toBe(f.base);
+				const parsed = /^---\n([\s\S]*?)\n---\n([\s\S]*)$/u.exec(content); if (!parsed) throw new Error('Canonical native report document required');
+				const frontmatter = row(parse(parsed[1]!)), body = parsed[2]!.trim();
+				expect(validatePortableContentData('note', { ...frontmatter, body }).ok).toBe(true);
+				expect(frontmatter).toMatchObject({ id: target.id, projectId: f.attempt.projectId, classification: 'workday-report', subjectRefs: [source] });
+				const report = JSON.parse(body.replace(/^```json\n|\n```$/gu, ''));
+				expect(report.workday).toEqual(evidence); expect(report.assignmentId).toBe(f.attempt.id); expect(report.workdayId).toBe(f.attempt.workdayId);
+				if (interrupted) { expect(result).toMatchObject({ status: 'failed', summary: 'treedx_commit_readback_mismatch' }); expect(result.outputs?.assignmentResult).toBeUndefined(); }
+				else { expect(result.status).toBe('completed'); expect(result.outputs?.assignmentResult).toMatchObject({ assignmentId: f.attempt.id,
+					references: [{ kind: 'treedx', projectId: f.attempt.projectId, repository, path, commit: candidate }] }); }
+				expect(f.git('rev-parse', 'HEAD')).toBe(candidate);
+				expect({ attempt: f.attempt, context: f.input.assignment.workspaceContext, evidence, profileInput }).toEqual(held);
+			} finally { try { await boundary?.close(); } finally { await f.close(); } }
+		}
+	});
 	it('native configured Writer publishes only its granted draft next-work Proposal and retains interrupted readback without a false handoff', async () => {
 		const outcomes: Array<{ mutation: string; status: string; writes: number; commits: number; canonical: boolean; unchangedHead: boolean }> = [];
 		for (const mutation of ['valid', 'missing-grant', 'wrong-id', 'wrong-project', 'readback', 'readonly-claim']) {

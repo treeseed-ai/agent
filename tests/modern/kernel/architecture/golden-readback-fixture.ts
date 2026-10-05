@@ -155,7 +155,8 @@ beforeEach(() => {
 	state.replies.set('capacity usage', { items: items.map(usageMeasurement),
 		page: { limit: 100, hasMore: false, nextCursor: null } });
 	state.replies.set('library read', { result: { resolvedRef: commit, files: [{ path: reportRef.path, body: `${workdayId} ${items.map(item => item.id).join(' ')}`, frontmatter: {
-		schemaVersion: 'treeseed.note/v1', classification: 'workday-report', projectId: 'sdk', subjectRefs: [structuredClone(reporter.assignmentAttempt.sourceRef)] } }] } });
+		schemaVersion: 'treeseed.note/v1', id: 'bounded-report', classification: 'workday-report', projectId: 'sdk',
+		createdAt: reporter.completedAt, subjectRefs: [structuredClone(reporter.assignmentAttempt.sourceRef)] } }] } });
 	// Complete planning oracle input only; these mocked reads are NOT published live evidence.
 	const rounds = state.replies.get('workdays show')!.run.parameters.appliedPlan.planningRounds;
 	const source = { store: 'treedx', model: 'proposal', id: 'proposal', repository: 'sdk-library', commit,

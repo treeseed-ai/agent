@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
+import { isDeepStrictEqual } from 'node:util';
 import test from 'node:test';
 import { assignmentReferenceSchema, assignmentTimingAwarenessReceiptSchema, estimateSchema, exactEntityReferenceSchema } from '@treeseed/sdk/agent-capacity';
 import { DEFAULT_CAPACITY_PAGE_LIMIT } from '@treeseed/sdk/capacity-pagination';
+import { validatePortableContentData } from '@treeseed/sdk/content-validation';
 import { read, row, type Row } from './acceptance-cli.ts';
 import { readDecisionContent, readGovernedContentFile, verifyDecisionContent, verifyReviewFindingContent } from './workday/support/decision-evidence.ts';
 import { verifyAssignmentAuthority, verifyTeardownAuthority, verifyTreeDxWorkspaceClosure } from './workday/support/assignment-authority.ts';
@@ -460,6 +462,9 @@ export function verifyGolden(gate: Gate): void {
 	assert.equal(subjects.length, 1, 'ACCEPTANCE_REPORT_SUBJECT: Note must retain one exact workday subject');
 	assert.deepEqual(subjects[0], source, 'ACCEPTANCE_REPORT_SUBJECT: Workday subject authority drifted');
 	const body = text(files[0]?.body);
+	const canonicalReport = { ...frontmatter, body }, checkedReport = validatePortableContentData('note', canonicalReport);
+	assert.ok(checkedReport.ok && isDeepStrictEqual(checkedReport.data, canonicalReport),
+		'ACCEPTANCE_REPORT_NOTE: Full canonical report Note fields and authority required');
 	assert.ok(body.includes(workdayId), 'Reporter must describe this exact workday');
 	assert.ok(body.includes(text(actors[0]?.id)), 'Reporter must include actual predecessor evidence, not an empty summary');
 	}

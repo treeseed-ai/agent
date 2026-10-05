@@ -4,6 +4,22 @@ import { stringify } from 'yaml';
 import { state, gate, read, assignment, usageMeasurement, classes, workdayId, commit, type Row } from './architecture/golden-readback-fixture.ts';
 
 describe('golden read-back assertion regressions (fixtures are not live acceptance)', () => {
+	it('denies malformed canonical report Note fields while retaining the exact workday readback and original failed observations', () => {
+		const file = state.replies.get('library read')!.result.files[0], original = structuredClone(file);
+		expect(() => gate('reporter')).not.toThrow();
+		const denied: boolean[] = [];
+		for (const change of [{ id: undefined }, { id: ' padded ' }, { id: 'a'.repeat(201) },
+			{ createdAt: undefined }, { createdAt: 'not-a-clock' }, { unknownAuthority: 'unowned' },
+			{ subjectRefs: [...original.frontmatter.subjectRefs, original.frontmatter.subjectRefs[0]] },
+			{ subjectRefs: [...original.frontmatter.subjectRefs, { store: 'postgresql', model: 'result', id: null }] }]) {
+			file.frontmatter = { ...original.frontmatter, ...change }; const held = structuredClone(file);
+			let failed = false; try { gate('reporter'); } catch { failed = true; }
+			denied.push(failed); expect(file).toEqual(held);
+		}
+		file.frontmatter = original.frontmatter;
+		expect(() => gate('reporter')).not.toThrow(); expect(file).toEqual(original);
+		expect(denied).toEqual(Array(8).fill(true));
+	});
 	it('denies repeated canonical result references without changing distinct output evidence or failed observations', () => {
 		const item = state.replies.get('assignments list')!.items[0], result = item.assignmentResult;
 		const original = structuredClone(result), first = { kind: 'url', url: 'https://example.test/one' };

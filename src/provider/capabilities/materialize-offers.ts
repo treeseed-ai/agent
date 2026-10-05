@@ -4,7 +4,7 @@ import {
 	capabilityOfferSchema,
 	validateCapacityProviderManifestV5,
 	type CapacityProviderManifestV5,
-} from '@treeseed/sdk/capacity-provider';
+} from '@treeseed/sdk/capacity-provider/contracts';
 import type { ProviderHostRuntimeConfig } from '../configuration/config.ts';
 import type { LoadedProviderManifest } from '../configuration/manifest.ts';
 import { loadCapacityProviderIdentity } from '../accounts/identity.ts';

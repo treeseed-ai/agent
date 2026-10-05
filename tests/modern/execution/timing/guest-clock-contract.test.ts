@@ -67,7 +67,7 @@ describe('Codex chat executor', () => {
 			.toBe('Cannot call [redacted].');
 	});
 	it('reports remaining time from the API-started productive window without a content grant', async () => {
-		const startedAt = new Date().toISOString(), deadlineAt = new Date(Date.now() + 60_000).toISOString();
+		const now = Date.now(), startedAt = new Date(now).toISOString(), deadlineAt = new Date(now + 60_000).toISOString();
 		const input = executionRequest(), attempt = assignmentAttemptSchema.parse(input.assignment.assignmentAttempt);
 		attempt.limits.maximumSeconds = 60;
 		attempt.createdAt = startedAt; attempt.deadline = deadlineAt;

@@ -74,11 +74,12 @@ describe('whole native provider polling arbitration boundary', () => {
 				if (!Array.isArray(adapter.offers)) throw new Error('Native published offer inventory required');
 				for (const binding of adapter.offers.map(row)) {
 					const offer = capabilityOfferSchema.parse(binding.offer);
-					for (const reference of offer.capabilities) {
+					const definitions = offer.capabilities.map(reference => {
 						const declared = CORE_CAPABILITY_DEFINITIONS.find(value => value.id === reference.id && value.version === reference.version);
 						if (!declared) throw new Error('Original fixture ontology required');
-						verifyProviderQualification(offer, declared, retry.publicJwk, original.connections[0]!.providerId, new Date().toISOString());
-					}
+						return declared;
+					});
+					verifyProviderQualification(offer, definitions, retry.publicJwk, original.connections[0]!.providerId, new Date().toISOString());
 				}
 			}
 			expect(f.manifest).toEqual(original); expect(await readFile(f.config.manifestPath!)).toEqual(bytes);

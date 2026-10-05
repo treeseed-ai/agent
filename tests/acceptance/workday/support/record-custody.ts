@@ -35,26 +35,39 @@ export function verifyProviderConformanceSignature(value: unknown, publicIdentit
 /** The declared tier, exact receipt and clock are independently readable.
  * Suite identity/digest custody does NOT establish actual suite execution. */
 export function verifyProviderQualification(value: unknown, definitionValue: unknown, publicIdentity: unknown, providerId: string, admittedAt: string): void {
-	const offer = capabilityOfferSchema.parse(value), definition = capabilityDefinitionSchema.parse(definitionValue);
-	assert.deepEqual(offer, value); assert.deepEqual(definition, definitionValue);
-	const { digest, ...material } = definition;
-	assert.equal(capabilityDefinitionDigest(material), digest, 'ACCEPTANCE_QUALIFICATION_DEFINITION: Exact public ontology bytes required');
-	assert.notEqual(definition.status, 'revoked', 'ACCEPTANCE_QUALIFICATION_DEFINITION: Revoked capability cannot authorize supply');
-	assert.ok(Number.isFinite(Date.parse(admittedAt)), 'ACCEPTANCE_QUALIFICATION_CLOCK: Original admission clock required');
-	const references = offer.capabilities.filter(reference => reference.id === definition.id);
-	assert.equal(references.length, 1, 'ACCEPTANCE_QUALIFICATION_REFERENCE: Unique exact declared capability required');
-	assert.deepEqual(references[0], { id: definition.id, version: definition.version, digest });
-	const receipts = offer.conformance.filter(receipt => receipt.capability.id === definition.id);
-	assert.equal(receipts.length, 1, 'ACCEPTANCE_QUALIFICATION_RECEIPT: Duplicate or contradictory qualification cannot be selected by array order');
-	const receipt = receipts[0]!;
-	assert.deepEqual(receipt.capability, references[0]); verifyProviderConformanceSignature(receipt, publicIdentity, providerId);
-	assert.equal(receipt.status, 'passed', 'ACCEPTANCE_QUALIFICATION_STATUS: Retained failed or revoked receipt is not passing supply');
-	const tiers = ['signed-attestation', 'automated-suite', 'reviewed-certification'];
-	assert.ok(tiers.indexOf(receipt.tier) >= tiers.indexOf(definition.qualificationTier), 'ACCEPTANCE_QUALIFICATION_TIER: Original declared minimum tier required');
-	if (receipt.tier !== 'signed-attestation') assert.ok(receipt.suite, 'ACCEPTANCE_QUALIFICATION_SUITE: Automated or reviewed suite identity cannot be absent');
-	assert.ok(Date.parse(receipt.issuedAt) <= Date.parse(admittedAt), 'ACCEPTANCE_QUALIFICATION_CLOCK: Future qualification is not authority at admission');
-	if (receipt.expiresAt) assert.ok(Date.parse(receipt.expiresAt) > Date.parse(admittedAt)
-		&& Date.parse(receipt.expiresAt) > Date.parse(receipt.issuedAt), 'ACCEPTANCE_QUALIFICATION_CLOCK: Original unexpired qualification required');
+	const offer = capabilityOfferSchema.parse(value);
+	assert.deepEqual(offer, value);
+	const definitions = Array.isArray(definitionValue) ? definitionValue : [definitionValue];
+	assert.ok(definitions.length > 0, 'ACCEPTANCE_QUALIFICATION_DEFINITION: Nonempty declared ontology required');
+	if (Array.isArray(definitionValue)) {
+		const references = definitions.map(value => {
+			const definition = capabilityDefinitionSchema.parse(value);
+			return { id: definition.id, version: definition.version, digest: definition.digest };
+		});
+		assert.deepEqual(references, offer.capabilities, 'ACCEPTANCE_QUALIFICATION_REFERENCE: Complete original ordered ontology required');
+	}
+	for (const supplied of definitions) {
+		const definition = capabilityDefinitionSchema.parse(supplied);
+		assert.deepEqual(definition, supplied);
+		const { digest, ...material } = definition;
+		assert.equal(capabilityDefinitionDigest(material), digest, 'ACCEPTANCE_QUALIFICATION_DEFINITION: Exact public ontology bytes required');
+		assert.notEqual(definition.status, 'revoked', 'ACCEPTANCE_QUALIFICATION_DEFINITION: Revoked capability cannot authorize supply');
+		assert.ok(Number.isFinite(Date.parse(admittedAt)), 'ACCEPTANCE_QUALIFICATION_CLOCK: Original admission clock required');
+		const references = offer.capabilities.filter(reference => reference.id === definition.id);
+		assert.equal(references.length, 1, 'ACCEPTANCE_QUALIFICATION_REFERENCE: Unique exact declared capability required');
+		assert.deepEqual(references[0], { id: definition.id, version: definition.version, digest });
+		const receipts = offer.conformance.filter(receipt => receipt.capability.id === definition.id);
+		assert.equal(receipts.length, 1, 'ACCEPTANCE_QUALIFICATION_RECEIPT: Duplicate or contradictory qualification cannot be selected by array order');
+		const receipt = receipts[0]!;
+		assert.deepEqual(receipt.capability, references[0]); verifyProviderConformanceSignature(receipt, publicIdentity, providerId);
+		assert.equal(receipt.status, 'passed', 'ACCEPTANCE_QUALIFICATION_STATUS: Retained failed or revoked receipt is not passing supply');
+		const tiers = ['signed-attestation', 'automated-suite', 'reviewed-certification'];
+		assert.ok(tiers.indexOf(receipt.tier) >= tiers.indexOf(definition.qualificationTier), 'ACCEPTANCE_QUALIFICATION_TIER: Original declared minimum tier required');
+		if (receipt.tier !== 'signed-attestation') assert.ok(receipt.suite, 'ACCEPTANCE_QUALIFICATION_SUITE: Automated or reviewed suite identity cannot be absent');
+		assert.ok(Date.parse(receipt.issuedAt) <= Date.parse(admittedAt), 'ACCEPTANCE_QUALIFICATION_CLOCK: Future qualification is not authority at admission');
+		if (receipt.expiresAt) assert.ok(Date.parse(receipt.expiresAt) > Date.parse(admittedAt)
+			&& Date.parse(receipt.expiresAt) > Date.parse(receipt.issuedAt), 'ACCEPTANCE_QUALIFICATION_CLOCK: Original unexpired qualification required');
+	}
 }
 
 export function publicCanonicalRecords(views: unknown[], schemaVersion: string): Row[] {

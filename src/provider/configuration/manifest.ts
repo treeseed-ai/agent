@@ -6,7 +6,7 @@ import {
 	type CapacityProviderJoinInput,
 	type CapacityProviderManifestV5,
 	type ProviderConnectionConfig,
-} from '@treeseed/sdk/capacity-provider';
+} from '@treeseed/sdk/capacity-provider/contracts';
 import { readProviderSecret, deleteProviderSecret, stageOsProviderSecret } from '../security/os-custody.ts';
 
 export const DEFAULT_PROVIDER_MANIFEST = 'treeseed.capacity-provider.yaml';

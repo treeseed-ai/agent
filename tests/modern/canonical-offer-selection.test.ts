@@ -26,6 +26,25 @@ function offerInput() {
 }
 
 describe('canonical assignment offer selection', () => {
+	it('checks every exact qualification in one complete ontology batch without accepting empty partial duplicate or moved definitions or changing inputs', async () => {
+		const f = offerInput(), published = await materializeCapabilityOffers(f.input);
+		for (const adapter of published) for (const { offer } of adapter.offers) {
+			const definitions = offer.capabilities.map(reference => {
+				const definition = CORE_CAPABILITY_DEFINITIONS.find(value => value.id === reference.id);
+				if (!definition) throw new Error('Original exact ontology required');
+				return definition;
+			});
+			const before = structuredClone({ offer, definitions }), now = new Date().toISOString();
+			verifyProviderQualification(offer, definitions, f.supplied.publicJwk, f.input.providerId, now);
+			for (const changed of [[], definitions.slice(1), [...definitions, definitions[0]],
+				definitions.map((value, index) => index === 0 ? { ...value, digest: `sha256:${'0'.repeat(64)}` } : value)]) {
+				const retained = structuredClone(changed);
+				expect(() => verifyProviderQualification(offer, changed, f.supplied.publicJwk, f.input.providerId, now)).toThrow();
+				expect(changed).toEqual(retained);
+			}
+			expect({ offer, definitions }).toEqual(before);
+		}
+	});
 	it('denies validly signed insufficient missing duplicate contradictory and future qualification while retaining attestation-only and exact declared suite inputs', async () => {
 		const f = offerInput(), published = await materializeCapabilityOffers(f.input), original = published[0]!.offers[0]!.offer;
 		const now = '2026-10-04T12:00:00.000Z';

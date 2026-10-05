@@ -15,14 +15,26 @@ import { verifyCompiledProviderCode } from '../../acceptance/freeze-integrity.ts
 const packageRoot = resolve(fileURLToPath(new URL('../../..', import.meta.url)));
 const fixture = fileURLToPath(new URL('../../fixtures/project-handlers.ts', import.meta.url));
 
-function build(entry?: string) {
+function build(root: string, entry?: string) {
 	const env = { ...process.env };
 	delete env.TREESEED_AGENT_PROJECT_HANDLERS_ENTRY;
 	if (entry) env.TREESEED_AGENT_PROJECT_HANDLERS_ENTRY = entry;
 	const result = spawnSync(process.execPath, ['--import', 'tsx', './scripts/build/build-dist.ts'], {
-		cwd: packageRoot, env, encoding: 'utf8', timeout: 120_000,
+		cwd: root, env, encoding: 'utf8', timeout: 120_000,
 	});
 	if (result.status !== 0) throw new Error(`${result.stdout}\n${result.stderr}`);
+}
+
+async function artifactBytes(root: string): Promise<Map<string, Buffer>> {
+	const bytes = new Map<string, Buffer>();
+	const visit = async (directory: string, prefix: string): Promise<void> => {
+		for (const entry of await readdir(directory, { withFileTypes: true })) {
+			const name = join(prefix, entry.name), path = join(directory, entry.name);
+			if (entry.isDirectory()) await visit(path, name);
+			else { expect(entry.isFile()).toBe(true); bytes.set(name, await readFile(path)); }
+		}
+	};
+	await visit(root, ''); return bytes;
 }
 
 describe('pinned project handler build', () => {
@@ -101,17 +113,28 @@ describe('pinned project handler build', () => {
 		} finally { try { await f?.close(); } finally { await rm(directory, { recursive: true, force: true }); } }
 	}, 30_000);
 	it('compiles a project handler into the statically imported runner registry', async () => {
+		const directory = await mkdtemp(join(tmpdir(), 'agent-project-registry-')), clone = join(directory, 'package');
+		const held = await artifactBytes(resolve(packageRoot, 'dist'));
 		try {
-			build(fixture);
-			const registry = await import(`${pathToFileURL(resolve(packageRoot, 'dist/kernel/project-handlers.js')).href}?fixture=1`);
+			await mkdir(clone);
+			for (const name of ['src', 'scripts']) await cp(resolve(packageRoot, name), join(clone, name), { recursive: true });
+			for (const name of ['package.json', 'tsconfig.json', 'tsconfig.dist.json', 'tests/fixtures/project-handlers.ts']) {
+				await mkdir(resolve(clone, name, '..'), { recursive: true }); await cp(resolve(packageRoot, name), resolve(clone, name));
+			}
+			await symlink(resolve(packageRoot, 'node_modules'), resolve(clone, 'node_modules'), 'dir');
+			build(clone, resolve(clone, 'tests/fixtures/project-handlers.ts'));
+			const registry = await import(pathToFileURL(resolve(clone, 'dist/kernel/project-handlers.js')).href);
 			expect(registry.projectHandlers.map((handler: { id: string }) => handler.id)).toEqual(['sdk/fixture']);
 			expect(new HandlerRegistry(registry.projectHandlers).resolve('sdk/fixture')).toBe(registry.projectHandlers[0]);
-			const runnerSource = await import('node:fs/promises').then((fs) => fs.readFile(resolve(packageRoot,
+			const runnerSource = await import('node:fs/promises').then((fs) => fs.readFile(resolve(clone,
 				'dist/provider/teams/multi-team-runtime.js'), 'utf8'));
 			expect(runnerSource).toContain('project-handlers.js');
 			expect(runnerSource).toContain('handlers: [...projectHandlers]');
+			expect(await artifactBytes(resolve(packageRoot, 'dist'))).toEqual(held);
+			build(clone);
+			expect(await artifactBytes(resolve(packageRoot, 'dist'))).toEqual(held);
 		} finally {
-			build();
+			await rm(directory, { recursive: true, force: true });
 		}
 	}, 30_000);
 });

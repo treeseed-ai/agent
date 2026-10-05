@@ -1,6 +1,11 @@
 schemaVersion: treeseed.guarantee-verifiers/v1
 ownerPackage: "@treeseed/agent"
 verifiers:
+  agent.golden.execution-qualification-batch-unit-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/canonical-offer-selection.test.ts
+    testName: "checks every exact qualification in one complete ontology batch without accepting empty partial duplicate or moved definitions or changing inputs"
   agent.golden.execution-unfinished-handoff-unit-1:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

@@ -1,7 +1,31 @@
-import { describe, expect, it } from 'vitest';
-import { remainingExecutionMs, run, withinAssignmentBudget } from '../../../../src/sandbox/process-runner.ts';
+import { describe, expect, it, vi } from 'vitest';
+import { remainingExecutionMs, run, withinAssignmentBudget, ownedProcessGroupExists } from '../../../../src/sandbox/process-runner.ts';
 
 describe('original execution budget and subprocess limit authority', () => {
+	it('requires native ESRCH for owned process group absence and preserves permission and unknown observation failures', () => {
+		const kill = vi.spyOn(process, 'kill');
+		try {
+			kill.mockReturnValue(true);
+			expect(ownedProcessGroupExists(12345, true)).toBe(true); expect(kill).toHaveBeenLastCalledWith(-12345, 0);
+			expect(ownedProcessGroupExists(12345, false)).toBe(true); expect(kill).toHaveBeenLastCalledWith(12345, 0);
+			const absent = Object.assign(new Error('Native absence input'), { code: 'ESRCH' });
+			kill.mockImplementation(() => { throw absent; }); expect(ownedProcessGroupExists(12345, true)).toBe(false);
+			for (const error of [Object.assign(new Error('Permission denied input'), { code: 'EPERM' }), new Error('Unknown native observation input')]) {
+				kill.mockImplementation(() => { throw error; }); expect(() => ownedProcessGroupExists(12345, true)).toThrow(error);
+			}
+			kill.mockReturnValue(true); kill.mockClear();
+			for (const value of [0, 1, -1, process.pid, 1.5, NaN, Infinity, null, undefined, '', '12345', true, [], {}]) {
+				const input = Object.assign({ pid: 12345, group: true }, { pid: value }), before = structuredClone(input);
+				expect(() => ownedProcessGroupExists(input.pid, input.group)).toThrow('assignment_subprocess_identity_invalid');
+				expect(input).toEqual(before);
+			}
+			for (const value of [null, undefined, '', 1, [], {}]) {
+				const input = Object.assign({ pid: 12345, group: true }, { group: value });
+				expect(() => ownedProcessGroupExists(input.pid, input.group)).toThrow('assignment_subprocess_identity_invalid');
+			}
+			expect(kill).not.toHaveBeenCalled();
+		} finally { kill.mockRestore(); }
+	});
 	it('retains each original timeout interruption and failing command cause through bounded execution without a successful retry or widened remaining authority', async () => {
 		const failures = [Object.assign(new Error('original interactive execution deadline'), { exitCode: null, stdout: 'original timed output', stderr: '' }),
 			new Error('codex_closeout_interrupted'), Object.assign(new Error('original command exit 23'), { exitCode: 23, stdout: 'original failed output', stderr: 'original failed cause' })];

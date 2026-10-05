@@ -74,6 +74,7 @@ describe('native subprocess original budget and safe closeout', () => {
 	it('native hard stop graceful parent interruption and failed parent exit close every recorded descendant before reporting failure without leaving late bytes', async () => {
 		expect(process.platform).toBe('linux');
 		const outcomes: Array<{ mode: string; failed: boolean; parentAbsent: boolean; descendantAbsent: boolean; outputAbsent: boolean }> = [];
+		const nativeDiagnostics: Array<{ mode: string; parent: number; descendant: number; status: string | null }> = [];
 		const absent = (pid: number) => {
 			try { process.kill(pid, 0); return false; } catch (error) {
 				if (error instanceof Error && 'code' in error && error.code === 'ESRCH') return true;
@@ -103,6 +104,10 @@ describe('native subprocess original budget and safe closeout', () => {
 					if (error instanceof Error && 'code' in error && error.code === 'ENOENT') outputAbsent = true; else throw error;
 				}
 				outcomes.push({ mode, failed: failure instanceof Error, parentAbsent: absent(parent), descendantAbsent: absent(descendant), outputAbsent });
+				let status: string | null = null;
+				try { status = await readFile(`/proc/${descendant}/status`, 'utf8'); }
+				catch (error) { if (!(error instanceof Error && 'code' in error && error.code === 'ENOENT')) throw error; }
+				nativeDiagnostics.push({ mode, parent, descendant, status });
 				expect(failure).toBeInstanceOf(Error);
 				if (!(failure instanceof Error)) throw new Error('Original command failure required');
 				if (mode === 'descendant-hard') expect(failure).toMatchObject({ message: expect.stringContaining('interactive execution deadline'), exitCode: null });
@@ -121,7 +126,7 @@ describe('native subprocess original budget and safe closeout', () => {
 								const status = await readFile(`/proc/${descendant}/status`, 'utf8');
 								// An unreaped process is still a failed absence observation;
 								// it cannot execute late writes and must not be signalled.
-								if (!/^State:\s+Z\b/mu.test(status)) throw new Error('Cannot clean up an unproven descendant identity');
+								if (!/^State:\s+Z\b/mu.test(status)) throw new Error(`Cannot clean up an unproven descendant identity: ${JSON.stringify({ nativeDiagnostics, observedStatus: status })}`);
 							}
 						} catch (error) {
 							if (!(error instanceof Error && 'code' in error && (error.code === 'ENOENT' || error.code === 'ESRCH'))) throw error;
@@ -131,7 +136,7 @@ describe('native subprocess original budget and safe closeout', () => {
 			}
 		}
 		// Collect every original failed-parent observation before asserting absence.
-		expect(outcomes).toEqual(['descendant-hard', 'descendant-closeout', 'descendant-failed'].map(mode => ({ mode,
+		expect(outcomes, JSON.stringify(nativeDiagnostics)).toEqual(['descendant-hard', 'descendant-closeout', 'descendant-failed'].map(mode => ({ mode,
 			failed: true, parentAbsent: true, descendantAbsent: true, outputAbsent: true })));
 	}, 15_000);
 	it('retains native failing exit stdout and stderr instead of producing a passing command result', async () => {

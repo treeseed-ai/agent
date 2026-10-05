@@ -1,6 +1,11 @@
 schemaVersion: treeseed.guarantee-verifiers/v1
 ownerPackage: "@treeseed/agent"
 verifiers:
+  agent.golden.execution-process-group-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/sandbox/architecture/budget-authority.test.ts
+    testName: "requires native ESRCH for owned process group absence and preserves permission and unknown observation failures"
   agent.golden.execution-provider-build-typecheck-unit:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

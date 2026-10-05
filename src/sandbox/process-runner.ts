@@ -1,5 +1,29 @@
 import { spawn } from 'node:child_process';
 
+const FORCE_CLOSEOUT_MS = 3_000;
+
+export function ownedProcessGroupExists(pid: number, group: boolean): boolean {
+	if (!Number.isSafeInteger(pid) || pid <= 1 || pid === process.pid || typeof group !== 'boolean') {
+		throw new Error('assignment_subprocess_identity_invalid');
+	}
+	try { process.kill(group ? -pid : pid, 0); return true; }
+	catch (error) {
+		if (error instanceof Error && 'code' in error && error.code === 'ESRCH') return false;
+		throw error;
+	}
+}
+
+async function drainOwnedProcessGroup(pid: number, group: boolean): Promise<void> {
+	// SIGKILL acknowledgement is infrastructure teardown, not productive work.
+	// Reuse the existing forced-closeout bound; never restart the command,
+	// change its execution timeout, or treat a zombie/EPERM as absence.
+	const until = performance.now() + FORCE_CLOSEOUT_MS;
+	while (ownedProcessGroupExists(pid, group)) {
+		if (performance.now() >= until) throw new Error('assignment_subprocess_cleanup_incomplete');
+		await new Promise<void>(resolve => setTimeout(resolve, 10));
+	}
+}
+
 /** The API clock can shorten, never enlarge, the signed monotonic guest budget. */
 export function remainingExecutionMs(durationSeconds: number, elapsedMs: number, deadlineAt: string | null, now = Date.now()) {
 	if (typeof durationSeconds !== 'number' || !Number.isFinite(durationSeconds) || durationSeconds <= 0
@@ -57,7 +81,7 @@ export function run(executable: string, args: string[], options: { cwd?: string;
 			if (interrupted || options.canInterrupt?.() === false) return false;
 			interrupted = true;
 			signalOwned('SIGINT');
-			interruptTimeout = setTimeout(() => signalOwned('SIGKILL'), 3_000);
+			interruptTimeout = setTimeout(() => signalOwned('SIGKILL'), FORCE_CLOSEOUT_MS);
 			return true;
 		};
 		const resetIdle = () => {
@@ -82,8 +106,9 @@ export function run(executable: string, args: string[], options: { cwd?: string;
 		childStderr.setEncoding('utf8'); childStderr.on('data', (chunk) => { stderr = `${stderr}${chunk}`.slice(-32_768); });
 		child.once('error', (error) => { clearTimers(); signalOwned('SIGKILL'); reject(error); });
 		child.once('exit', () => { signalOwned('SIGKILL'); clearTimers(); });
-		child.once('close', (code, signal) => {
+		child.once('close', async (code, signal) => {
 			clearTimers(); if (pending.trim()) options.onLine?.(pending);
+			if (child.pid) try { await drainOwnedProcessGroup(child.pid, group); } catch (error) { cleanupError = error; }
 			if (cleanupError) { reject(Object.assign(new Error('assignment_subprocess_cleanup_failed', { cause: cleanupError }), { exitCode: code, stdout, stderr })); return; }
 			interrupted ? reject(new Error('codex_closeout_interrupted')) : code === 0 ? accept({ stderr, stdout })
 				: reject(Object.assign(new Error(timedOut ? `${executable} exceeded its interactive execution deadline.` : `${executable} exited ${code ?? signal}: ${stderr}`), { exitCode: timedOut ? null : code, stdout, stderr }));

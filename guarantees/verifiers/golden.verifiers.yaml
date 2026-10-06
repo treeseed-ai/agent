@@ -2929,3 +2929,23 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/execution/verification/replay-failure.test.ts
     testName: "retains actual runner assertion failures for an arbitrarily renamed independent reviewer without claiming a passing replay"
+  agent.golden.execution-compiler-batch-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/project-handler-build.test.ts
+    testName: "compiles all original provider TypeScript entries in one native compiler batch without disabling strict declarations"
+  agent.golden.execution-poll-unavailable-native:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/provider/architecture/arbitration-native.test.ts
+    testName: "retains actual unavailable unleased polling history through an independent original runtime retry without invented usage"
+  agent.golden.execution-poll-reset-native:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/provider/architecture/arbitration-native.test.ts
+    testName: "retains actual reset unleased polling history through an independent original runtime retry without invented usage"
+  agent.golden.execution-poll-malformed-native:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/provider/architecture/arbitration-native.test.ts
+    testName: "retains actual malformed response unleased polling history through an independent original runtime retry without invented usage"

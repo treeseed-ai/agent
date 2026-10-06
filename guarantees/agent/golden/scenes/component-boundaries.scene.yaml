@@ -1673,3 +1673,15 @@ workflow:
   - id: execution-native-red-renamed-reviewer
     action: { verifier: agent.golden.execution-native-red-renamed-reviewer }
     expect: { status: passed }
+  - id: execution-compiler-batch-unit
+    action: { verifier: agent.golden.execution-compiler-batch-unit }
+    expect: { status: passed }
+  - id: execution-poll-unavailable-native
+    action: { verifier: agent.golden.execution-poll-unavailable-native }
+    expect: { status: passed }
+  - id: execution-poll-reset-native
+    action: { verifier: agent.golden.execution-poll-reset-native }
+    expect: { status: passed }
+  - id: execution-poll-malformed-native
+    action: { verifier: agent.golden.execution-poll-malformed-native }
+    expect: { status: passed }

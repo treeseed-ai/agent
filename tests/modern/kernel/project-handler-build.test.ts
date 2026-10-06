@@ -39,6 +39,22 @@ async function artifactBytes(root: string): Promise<Map<string, Buffer>> {
 }
 
 describe('pinned project handler build', () => {
+	it('compiles all original provider TypeScript entries in one native compiler batch without disabling strict declarations', async () => {
+		const source = ts.createSourceFile('build-dist.ts', await readFile(resolve(packageRoot, 'scripts/build/build-dist.ts'), 'utf8'), ts.ScriptTarget.Latest, true);
+		const compile = source.statements.find((value): value is ts.FunctionDeclaration => ts.isFunctionDeclaration(value) && value.name?.text === 'compileModules');
+		expect(compile).toBeDefined();
+		const calls: ts.CallExpression[] = [];
+		const visit = (node: ts.Node) => { if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === 'build') calls.push(node); ts.forEachChild(node, visit); };
+		if (compile) visit(compile);
+		expect(calls).toHaveLength(1);
+		const options = calls[0]?.arguments[0]; expect(options && ts.isObjectLiteralExpression(options)).toBe(true);
+		if (!options || !ts.isObjectLiteralExpression(options)) throw new Error('Original native compiler options required');
+		const properties = new Map(options.properties.filter(ts.isPropertyAssignment).map(value => [value.name.getText(source), value.initializer.getText(source)]));
+		expect(properties.get('entryPoints')).toBe('filePaths'); expect(properties.get('outbase')).toBe('sourceRoot'); expect(properties.get('outdir')).toBe('outputRoot');
+		expect(properties.get('bundle')).toBe('false');
+		const declarations = source.statements.find((value): value is ts.FunctionDeclaration => ts.isFunctionDeclaration(value) && value.name?.text === 'emitDeclarations');
+		expect(declarations?.getText(source)).toContain('noEmitOnError: true'); expect(declarations?.getText(source)).toContain('noCheck: false');
+	});
 	it('public verification builds the exact provider declarations before strict complete test typing and retains one build before native tests', async () => {
 		const manifest: { scripts: Record<string, string> } = JSON.parse(await readFile(resolve(packageRoot, 'package.json'), 'utf8'));
 		expect(manifest.scripts['release:verify']).toBe('npm run check:file-lengths && node --import tsx ./scripts/packages/release-verify.ts');

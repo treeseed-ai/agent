@@ -6,6 +6,23 @@ import { capabilityOfferDigest, capabilityOfferSchema, CORE_CAPABILITY_DEFINITIO
 import { verifyProviderConformanceSignature, verifyProviderQualification, verifyProviderPollingSelection } from '../../../acceptance/workday/support/record-custody.ts';
 import { row } from '../../../acceptance/acceptance-cli.ts';
 
+async function unleasedPollingFailure(mode: 'denied' | 'unavailable' | 'reset' | 'json') {
+	const f = await arbitrationFixture(1, true);
+	try {
+		await f.run(); const originalRoutes = structuredClone(f.routes);
+		f.faults.set('busy-a', mode === 'denied' ? { code: 403 } : mode === 'unavailable' ? { code: 503 }
+			: { fault: mode === 'reset' ? 'reset' : 'json' });
+		await f.run(); const snapshot = await f.store.snapshot();
+		const outcome = { claims: snapshot.claims.length, seconds: snapshot.activeSecondsByConnection,
+			terminal: f.routes.some(item => item.path.endsWith('/return')) };
+		const failedRoutes = structuredClone(f.routes); f.faults.clear(); await f.run();
+		expect((await f.store.snapshot()).claims).toEqual([]);
+		expect(f.routes.slice(0, originalRoutes.length)).toEqual(originalRoutes);
+		expect(f.routes.slice(0, failedRoutes.length)).toEqual(failedRoutes);
+		expect(outcome).toEqual({ claims: 0, seconds: {}, terminal: false });
+	} finally { await f.close(); }
+}
+
 // Actual runtime/coordinator/OS custody/SDK HTTP/disk/store in independent
 // processes, NOT mocks of arbitration. Controlled API replies remain INPUTS:
 // these cases do not establish API hardgate policy, productive Kata execution,
@@ -254,22 +271,16 @@ describe('whole native provider polling arbitration boundary', () => {
 		} finally { await f.close(); }
 	});
 	it('releases only unleased polling failures and retries denied unavailable reset and malformed transport without invented usage', async () => {
-		const modes = ['denied', 'unavailable', 'reset', 'json'];
-		const outcomes = await Promise.all(modes.map(async mode => {
-			const f = await arbitrationFixture();
-			try {
-				// First populate independently scoped real coordinator tokens; fault applies to subsequent actual polls.
-				await f.run(); f.routes.splice(0);
-				f.faults.set('busy-a', mode === 'denied' ? { code: 403 } : mode === 'unavailable' ? { code: 503 }
-					: { fault: mode === 'reset' ? 'reset' : 'json' });
-				await f.run(); const snapshot = await f.store.snapshot();
-				const outcome = { claims: snapshot.claims.length, seconds: snapshot.activeSecondsByConnection,
-					terminal: f.routes.some(item => item.path.endsWith('/return')) };
-				f.faults.clear(); await f.run(); expect((await f.store.snapshot()).claims).toEqual([]);
-				return outcome;
-			} finally { await f.close(); }
-		}));
-		expect(outcomes).toEqual(modes.map(() => ({ claims: 0, seconds: {}, terminal: false })));
+		await unleasedPollingFailure('denied');
+	});
+	it('retains actual unavailable unleased polling history through an independent original runtime retry without invented usage', async () => {
+		await unleasedPollingFailure('unavailable');
+	});
+	it('retains actual reset unleased polling history through an independent original runtime retry without invented usage', async () => {
+		await unleasedPollingFailure('reset');
+	});
+	it('retains actual malformed response unleased polling history through an independent original runtime retry without invented usage', async () => {
+		await unleasedPollingFailure('json');
 	});
 	it('retains malformed leased frozen authority and its original recovery cause rather than manufacturing successful execution', async () => {
 		const f = await arbitrationFixture();

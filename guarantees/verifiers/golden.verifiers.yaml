@@ -2884,3 +2884,8 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/kernel/architecture/custody/start-custody-readback.test.ts
     testName: "denies coerced missing and out-of-bound recurrence cadence and state versions without rewriting governed execution observations"
+  agent.golden.execution-canonical-prerequisite-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/bindings.test.ts
+    testName: "supplies exact canonical execution authority before complete verification and inherited scene prerequisites"

@@ -14,10 +14,19 @@ jobs:
       contents: read
       actions: read
     runs-on: ubuntu-latest
+    env:
+      TREESEED_DEVELOPMENT_WORKSPACE_ROOT: ${{ github.workspace }}/.treeseed/platform-authority
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
+      - name: Checkout exact canonical execution authority
+        uses: actions/checkout@v4
+        with:
+          repository: treeseed-ai/platform
+          ref: e4c4cad1e526f53d3549c8fc27c3e60122b20ee4
+          path: .treeseed/platform-authority
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: 24.12.0
@@ -50,7 +59,7 @@ jobs:
           echo 'bb493312538753c46a09e8ff768155b8584064dd90c8f3d1e6caae85e3012b35  .treeseed/tools/deployment-candidate/treeseed-deployment-runtime-0.1.0-rc.321.tgz' | sha256sum --check --strict
           echo 'b8681e69511055a0403296acb50d44357098e3da07678a089dcf04b5d3de873d  .treeseed/tools/cli-candidate/treeseed-cli-0.13.0-rc.85.tgz' | sha256sum --check --strict
           npm install --no-save --package-lock=false --ignore-scripts --no-audit --no-fund ./.treeseed/tools/deployment-candidate/treeseed-deployment-runtime-0.1.0-rc.321.tgz ./.treeseed/tools/cli-candidate/treeseed-cli-0.13.0-rc.85.tgz
-      - uses: treeseed-ai/sdk/.github/actions/install-exact-sdk@38255cf2557862972d9aed166f1d25fe1194bd61
+      - uses: treeseed-ai/sdk/.github/actions/install-exact-sdk@f13880dd8cac225a88834ad88068b9d92fe017e8
         with:
           github-token: ${{ github.token }}
       - run: bash -lc 'npm run verify:local'

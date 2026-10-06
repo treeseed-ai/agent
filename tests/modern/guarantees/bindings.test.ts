@@ -16,6 +16,18 @@ for (const file of readdirSync(resolve(root, 'guarantees/verifiers')).filter(pat
 }
 
 describe('capacity-provider guarantee execution bindings', () => {
+	it('supplies exact canonical execution authority before complete verification and inherited scene prerequisites', () => {
+		const workflow = parse(readFileSync(resolve(root, '.github/workflows/verify.yml'), 'utf8'));
+		const job = workflow.jobs.verify, steps = job.steps;
+		const checkouts = steps.filter((step: { uses?: string; with?: { repository?: string } }) =>
+			step.uses?.startsWith('actions/checkout@') && step.with?.repository === 'treeseed-ai/platform');
+		expect(checkouts).toHaveLength(1);
+		expect(checkouts[0].with).toMatchObject({ ref: 'e4c4cad1e526f53d3549c8fc27c3e60122b20ee4', path: '.treeseed/platform-authority', 'persist-credentials': false });
+		expect(job.env.TREESEED_DEVELOPMENT_WORKSPACE_ROOT).toBe('${{ github.workspace }}/.treeseed/platform-authority');
+		const verify = steps.findIndex((step: { run?: string }) => step.run?.includes('npm run verify:local'));
+		const scene = steps.findIndex((step: { uses?: string }) => step.uses?.includes('reviewer/.github/actions/run-scenes@'));
+		expect(steps.indexOf(checkouts[0])).toBeLessThan(verify); expect(verify).toBeGreaterThan(-1); expect(scene).toBeGreaterThan(verify);
+	});
 	it('binds every registered verifier to an executable current implementation', () => {
 		const failures: string[] = [];
 		const namesByFile = new Map<string, string[]>();

@@ -1646,3 +1646,6 @@ workflow:
   - id: execution-recurrence-numbers-unit
     action: { verifier: agent.golden.execution-recurrence-numbers-unit }
     expect: { status: passed }
+  - id: execution-canonical-prerequisite-unit
+    action: { verifier: agent.golden.execution-canonical-prerequisite-unit }
+    expect: { status: passed }

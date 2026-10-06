@@ -2989,3 +2989,23 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/provider/architecture/arbitration-native.test.ts
     testName: "retains actual malformed response unleased polling history through an independent original runtime retry without invented usage"
+  agent.golden.recovery-post-removal-denial-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/sandbox/planning-synthesis-recovery.test.ts
+    testName: "rejects exhausted or malformed authority after response removal without starting a correction or claiming completion"
+  agent.golden.recovery-post-removal-budget-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/sandbox/planning-synthesis-recovery.test.ts
+    testName: "remeasures post-removal correction time without increasing either earlier remaining-time bound"
+  agent.golden.recovery-post-removal-denial-native:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/sandbox/planning-recovery-process.test.ts
+    testName: "native response removal cannot launch a late correction from pre-removal authority or claim a successful retry"
+  agent.golden.recovery-post-removal-budget-native:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/sandbox/planning-recovery-process.test.ts
+    testName: "native correction child uses post-removal remaining authority through the original executor and exact fresh response"

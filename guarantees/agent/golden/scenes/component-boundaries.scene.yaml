@@ -3,6 +3,9 @@ id: agent.golden.component-boundaries
 title: Golden execution component boundaries
 scope: local-component-tests
 workflow:
+  - id: execution-candidate-inputs-unit
+    action: { verifier: agent.golden.execution-candidate-inputs-unit }
+    expect: { status: passed }
   - id: execution-availability-retry-unit
     action: { verifier: agent.golden.execution-availability-retry-unit }
     expect: { status: passed }

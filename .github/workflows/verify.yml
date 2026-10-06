@@ -7,6 +7,7 @@ on:
   pull_request:
     # Required verification must also run for ancestry-only reconciliation PRs.
   workflow_dispatch:
+  workflow_call:
 
 jobs:
   verify:
@@ -77,9 +78,9 @@ jobs:
         with:
           ids: guarantee.agent.golden.component-boundaries,guarantee.agent.golden.planning-synthesis-recovery
       - name: Pack verified artifact
-        run: mkdir -p artifacts && npm pack --json --ignore-scripts --pack-destination artifacts
+        run: mkdir -p artifacts && npm pack --json --ignore-scripts --pack-destination artifacts && npm sbom --sbom-format cyclonedx > artifacts/sbom.cdx.json
       - uses: actions/upload-artifact@v4
         with:
           name: agent-${{ github.sha }}
-          path: artifacts/*.tgz
+          path: artifacts/
           if-no-files-found: error

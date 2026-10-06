@@ -7,6 +7,33 @@ const hash = (marker: string) => `sha256:${marker.repeat(64)}`;
 afterEach(() => rmSync('release-assets', { recursive: true, force: true }));
 
 describe('Agent RC publication', () => {
+	it('candidate packaging consumes the same checked verification workflow before packing and each native image preparation installs the exact checked SDK before compilation', () => {
+		const publish = parse(readFileSync('.github/workflows/publish.yml', 'utf8')) as { jobs: Record<string, {
+			uses?: string; permissions?: Record<string, string>; steps?: Array<{ uses?: string; run?: string; with?: Record<string, unknown> }> }> };
+		const verify = parse(readFileSync('.github/workflows/verify.yml', 'utf8')) as {
+			on: Record<string, unknown>; jobs: { verify: { steps: Array<{ uses?: string; name?: string; run?: string; with?: Record<string, unknown> }> } } };
+		expect(Object.hasOwn(verify.on, 'workflow_call')).toBe(true);
+		expect(publish.jobs['candidate-package']?.uses).toBe('./.github/workflows/verify.yml');
+		expect(publish.jobs['candidate-package']?.permissions).toEqual({ contents: 'read', actions: 'read' });
+		expect(publish.jobs['candidate-package']?.steps).toBeUndefined();
+		const sdk = verify.jobs.verify.steps.find(step => step.uses?.startsWith('treeseed-ai/sdk/.github/actions/install-exact-sdk@'));
+		expect(sdk?.uses).toMatch(/@[a-f0-9]{40}$/u);
+		for (const name of ['candidate-base-build', 'candidate-build']) {
+			const steps = publish.jobs[name]?.steps; expect(steps).toBeDefined();
+			if (!steps || !sdk) throw new Error('Checked native candidate preparation inputs required');
+			const install = steps.findIndex(step => step.uses === sdk.uses);
+			const prepare = steps.findIndex(step => step.run?.includes('capacity-provider:build'));
+			expect(install).toBeGreaterThan(0); expect(prepare).toBeGreaterThan(install);
+			expect(steps.slice(0, install).filter(step => step.run).map(step => step.run))
+				.toEqual(['npm ci --ignore-scripts --no-audit --no-fund']);
+			expect(steps[prepare]?.run).toBe('npm run capacity-provider:build -- --prepare-only');
+		}
+		const pack = verify.jobs.verify.steps.find(step => step.name === 'Pack verified artifact');
+		expect(pack?.run).toContain('npm pack --json --ignore-scripts --pack-destination artifacts');
+		expect(pack?.run).toContain('npm sbom --sbom-format cyclonedx > artifacts/sbom.cdx.json');
+		const download = publish.jobs['candidate-seal']?.steps?.find(step => step.uses?.startsWith('actions/download-artifact@'));
+		expect(download?.with).toEqual({ name: 'agent-${{ github.sha }}', path: 'release-assets' });
+	});
 	it('builds a protected staging candidate and promotes exact custody without rebuilding', () => {
 		const source = readFileSync('.github/workflows/publish.yml', 'utf8');
 		const workflow = parse(source) as { jobs: Record<string, { if?: string; needs?: string | string[]; steps?: Array<{ uses?: string }> }> };

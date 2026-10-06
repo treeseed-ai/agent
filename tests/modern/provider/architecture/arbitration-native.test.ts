@@ -171,6 +171,10 @@ describe('whole native provider polling arbitration boundary', () => {
 		onTestFailed(() => { throw new Error(`ACCEPTANCE_PROVIDER_MANIFEST_${phase}: original native failure retained`); });
 		const f = await arbitrationFixture(1, true);
 		try {
+			// Complete native YAML remains the actual loader input. Flow formatting
+			// removes repeated indentation bytes, not offers, fields or validation.
+			const block = await readFile(f.config.manifestPath!, 'utf8');
+			await f.write(true); expect(isDeepStrictEqual(parse(await readFile(f.config.manifestPath!, 'utf8')), parse(block))).toBe(true);
 			// The original identity initialization belongs to this native child.
 			// Every denial rereads the actual manifest through the original runtime;
 			// the restored retry below still starts an independent native process.
@@ -226,7 +230,7 @@ describe('whole native provider polling arbitration boundary', () => {
 			// Settle every bounded batch before custody/cleanup; parsing forty full
 			// documents must not serialize CPU work in the runtime session. No
 			// parsed manifest, cached result or alternate validator is supplied.
-			const batches = Array.from({ length: 4 }, (_, index) => suppliedInputs.slice(index * 10, (index + 1) * 10));
+			const batches = Array.from({ length: 2 }, (_, index) => suppliedInputs.slice(index * 20, (index + 1) * 20));
 			const outcomes = await Promise.allSettled(batches.map(batch => f.loadPaths(batch.map(input => input.path))));
 			const denials = outcomes.flatMap(outcome => {
 				if (outcome.status === 'rejected') throw outcome.reason;
@@ -250,13 +254,13 @@ describe('whole native provider polling arbitration boundary', () => {
 			// fail at that same loader before real coordinator/token/HTTP activity.
 			for (const [index, patch] of [{ modelConfigurationId: '' }, { dailyActiveSecondsLimit: -1 }, { capabilityLimits: {} }].entries()) {
 				phase = `RUNTIME_DENIAL_${index}`;
-				f.manifest.adapters[0]!.nativeLimits = { ...limits, ...patch }; await f.write();
+				f.manifest.adapters[0]!.nativeLimits = { ...limits, ...patch }; await f.write(true);
 				const bytes = await readFile(f.config.manifestPath!, 'utf8');
 				await expect(run()).rejects.toThrow(/Invalid capacity provider manifest:.*adapters\[0\]\.nativeLimits/u);
 				expect(await readFile(f.config.manifestPath!, 'utf8')).toBe(bytes);
 				expect(await f.bytes()).toBe(baseline); expect(f.routes).toEqual(routes);
 			}
-			phase = 'RESTORE'; f.manifest.adapters[0]!.nativeLimits = limits; await f.write();
+			phase = 'RESTORE'; f.manifest.adapters[0]!.nativeLimits = limits; await f.write(true);
 			expect(await readFile(f.config.manifestPath!, 'utf8')).toBe(manifestBytes);
 			phase = 'INDEPENDENT_RETRY'; await f.run();
 			phase = 'FINAL_CUSTODY'; expect(isDeepStrictEqual(f.manifest, original)).toBe(true);

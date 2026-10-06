@@ -82,7 +82,8 @@ export async function arbitrationFixture(workers = 1, initializeInOwnedChild = f
 		// No inherited runtime redirection, development override or externally selected server.
 		delete env.TREESEED_DEVELOPMENT_MODE; delete env.TREESEED_CONTROL_PLANE_URL;
 		delete env.TREESEED_DEVELOPMENT_SANDBOX_GUEST_DIGEST;
-		const write = async () => { await writeFile(config.manifestPath!, stringify(manifest, { aliasDuplicateObjects: false })); await writeFile(join(directory, 'config.json'), JSON.stringify(config)); };
+		const write = async (flow = false) => { await writeFile(config.manifestPath!, stringify(manifest, { aliasDuplicateObjects: false,
+			...(flow ? { collectionStyle: 'flow' as const, lineWidth: 0 } : {}) })); await writeFile(join(directory, 'config.json'), JSON.stringify(config)); };
 		const children = new Set<Promise<{ stdout: string; stderr: string }>>();
 		let initializationPending = initializeInOwnedChild;
 		let offerSession: ChildProcess | undefined;

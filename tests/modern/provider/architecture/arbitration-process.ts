@@ -48,6 +48,20 @@ if (action === 'initialize') {
 	// Only process/module startup is shared; manifest and identity are reread.
 	process.on('message', async message => {
 		const expected = action === 'offers-session' ? 'offers' : 'run';
+		if (action === 'run-session' && message && typeof message === 'object' && 'loadManifestPaths' in message) {
+			const paths = message.loadManifestPaths;
+			if (!Array.isArray(paths) || !paths.length || new Set(paths).size !== paths.length ||
+				paths.some(path => typeof path !== 'string' || !path.startsWith(`${directory}/quota-input-`) ||
+					!/^\d+\.yaml$/u.test(path.slice(`${directory}/quota-input-`.length)))) throw new Error('Only allocated native quota inputs allowed');
+			const results = await Promise.all(paths.map(async path => {
+				try { await loadProviderManifest(path, directory, {}); return { path, status: 'fulfilled' }; }
+				catch (error) {
+					if (!(error instanceof Error)) throw error;
+					return { path, status: 'rejected', error: { name: error.name, message: error.message, stack: error.stack } };
+				}
+			}));
+			process.send!({ value: results }); return;
+		}
 		if (message !== expected) throw new Error('Exact native session action required');
 		try { process.send!({ value: await (message === 'offers' ? offers() : run()) }); }
 		catch (cause) {

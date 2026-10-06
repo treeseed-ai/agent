@@ -175,7 +175,11 @@ describe('whole native provider polling arbitration boundary', () => {
 			// The original identity initialization belongs to this native child.
 			// Every denial rereads the actual manifest through the original runtime;
 			// the restored retry below still starts an independent native process.
-			phase = 'CHILD_INITIALIZATION'; const run = await f.openRun();
+			phase = 'CHILD_INITIALIZATION';
+			// Initialization reads only the unchanged original file. Start it
+			// alongside independent loader inputs; retain its actual error instead
+			// of leaving a rejected startup promise unobserved during native I/O.
+			const startup = f.openRun().then(run => ({ run }), (error: unknown) => ({ error }));
 			await f.store.snapshot();
 			const original = structuredClone(f.manifest), baseline = await f.bytes(), routes = structuredClone(f.routes);
 			const limits = structuredClone(f.manifest.adapters[0]!.nativeLimits), capability = f.manifest.adapters[0]!.offers[0]!.offer.capabilities[0]!.id;
@@ -210,6 +214,9 @@ describe('whole native provider polling arbitration boundary', () => {
 				expect(await readFile(path, 'utf8')).toBe(bytes); expect(isDeepStrictEqual(nativeLimits, supplied)).toBe(true);
 				expect(isDeepStrictEqual(f.manifest, before)).toBe(true); expect(await f.bytes()).toBe(baseline); expect(f.routes).toEqual(routes);
 			}));
+			phase = 'CHILD_READINESS'; const ready = await startup;
+			if ('error' in ready) throw ready.error;
+			const run = ready.run;
 			// Settle every allocated operation before cleanup, retaining all denied
 			// input bytes and causes even when one assertion or native read fails.
 			expect(denials).toHaveLength(malformed.length);

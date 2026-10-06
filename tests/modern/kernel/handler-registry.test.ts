@@ -5,6 +5,17 @@ import type { Handler } from '../../../src/kernel/contracts.ts';
 import { request } from './provider-kernel-fixture.ts';
 
 describe('pinned handler and activity authority', () => {
+	it('retains exact renamed project implementations in the sole registry and rejects a conflicting implementation before either handler executes', () => {
+		const first: Handler = { id: 'configured/renamed-a', run: vi.fn() }, second: Handler = { id: 'other-project/renamed-b', run: vi.fn() };
+		const selected = [second, first], before = [...selected], registry = new HandlerRegistry(selected);
+		expect(registry.describe()).toEqual([{ id: first.id }, { id: second.id }]);
+		expect(registry.resolve(first.id)).toBe(first); expect(registry.resolve(second.id)).toBe(second);
+		const conflicting: Handler = { id: first.id, run: vi.fn() };
+		expect(() => new HandlerRegistry([first, second, conflicting])).toThrow(`duplicate_handler:${first.id}`);
+		expect(() => registry.resolve('configured/missing')).toThrow('unknown_handler:configured/missing');
+		expect(selected).toEqual(before); expect(selected[0]).toBe(second); expect(selected[1]).toBe(first);
+		expect(first.run).not.toHaveBeenCalled(); expect(second.run).not.toHaveBeenCalled(); expect(conflicting.run).not.toHaveBeenCalled();
+	});
 	it('rejects duplicate handlers rather than choosing an arbitrary implementation', () => {
 		const handler: Handler = { id: 'actor', run: vi.fn() };
 		expect(() => new HandlerRegistry([handler, handler])).toThrow('duplicate_handler:actor');

@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { stringify } from 'yaml';
 import { calculateAssignmentAllocation, capabilityAccountingLimitsSchema } from '@treeseed/sdk/agent-capacity';
+import { capabilityOfferDigest } from '@treeseed/sdk/capacity-provider';
 import { createManagedProviderManifestV5 } from '../../../src/provider/configuration/managed-manifest.ts';
 import { loadProviderManifest } from '../../../src/provider/configuration/manifest.ts';
 
@@ -37,8 +38,11 @@ it('loads identical provider policy in development and released execution', asyn
 	const current = createManagedProviderManifestV5({ release: 'old', guestImage: 'sandbox', guestImageDigest: digest, baseImageDigest: digest, provenanceDigest: digest });
 	const release = current.adapters[0]!.offers.find(({ offer }) => offer.capabilities.some(({ id }) => id === 'treeseed.engineering.release'))!;
 	current.adapters[0]!.offers = current.adapters[0]!.offers.map((entry) => entry === release
-		? { ...entry, offer: { ...entry.offer, capabilities: entry.offer.capabilities.filter(({ id }) => id !== 'treeseed.engineering.release') } }
+		? { ...entry, offer: { ...entry.offer, capabilities: entry.offer.capabilities.filter(({ id }) => id !== 'treeseed.engineering.release'),
+			conformance: entry.offer.conformance.filter(({ capability }) => capability.id !== 'treeseed.engineering.release') } }
 		: entry);
+	for (const binding of current.adapters[0]!.offers) { const { offerDigest: _digest, ...material } = binding.offer;
+		binding.offer.offerDigest = capabilityOfferDigest(material); }
 	current.connections = [{ id: 'preserved' } as typeof current.connections[number]];
 	current.adapters[0]!.model = { model: 'gpt-6-luna', reasoningEffort: 'low' };
 	current.adapters[1]!.model = { model: 'gpt-5.6-sol', reasoningEffort: 'medium' };

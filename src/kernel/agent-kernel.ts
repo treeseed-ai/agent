@@ -3,6 +3,7 @@ import { assignmentPathAllowed } from '@treeseed/sdk/agent-capacity';
 import { enforceAssignmentGrant } from './granted-runtime.ts';
 import { HandlerRegistry } from './handler-registry.ts';
 import type { KernelAssignmentRequest } from './contracts.ts';
+import { assertPredecessorResultAuthority } from './materialize-context.ts';
 
 function encodedBytes(value: unknown): number {
 	return Buffer.byteLength(JSON.stringify(value), 'utf8');
@@ -20,8 +21,10 @@ export class AgentKernel {
 	constructor(private readonly registry: HandlerRegistry) {}
 
 	async runAssignment(request: KernelAssignmentRequest) {
+		assertPredecessorResultAuthority(request.context.assignment, request.context.predecessorResults);
 		const context = assignmentContextSchema.parse(request.context);
-		const assignment = context.assignment;
+		// The handler receives its own context, never the authority used by gates.
+		const assignment = structuredClone(context.assignment);
 		if (assignment.provider.runtimeBuild !== request.runtimeBuild) throw new Error('runtime_build_mismatch');
 		if (Date.parse(assignment.deadline) <= Date.now()) throw new Error('assignment_expired');
 		if (request.signal?.aborted) throw new Error('assignment_cancelled');
@@ -62,14 +65,23 @@ export class AgentKernel {
 		const validated = parsedResult.data;
 		if (validated.assignmentId !== assignment.id) throw new Error('assignment_result_identity_mismatch');
 		for (const reference of validated.references) {
-			if (reference.kind === 'git' && (assignment.workspace.mode !== 'git'
-				|| reference.repository !== assignment.workspace.repository
-				|| reference.branch !== assignment.workspace.branch)) throw new Error('assignment_result_reference_denied');
+			if (reference.kind === 'git') {
+				const candidate = assignment.workspace.mode === 'git' && reference.repository === assignment.workspace.repository
+					&& (reference.branch === undefined || reference.branch === assignment.workspace.branch);
+				const citation = assignment.grant.sourceRead.includes(reference.repository)
+					&& assignment.contextRefs.some(ref => ref.store === 'git' && ref.repository === reference.repository
+						&& ref.commit === reference.commit && ref.path === reference.path)
+					&& reference.branch === undefined;
+				if (!candidate && !citation) throw new Error('assignment_result_reference_denied');
+			}
 			if (reference.kind === 'treedx' && (assignment.workspace.mode !== 'treedx'
 				|| reference.repository !== assignment.workspace.repository
 				|| !assignmentPathAllowed(reference.path, assignment.workspace.writablePaths))) throw new Error('assignment_result_reference_denied');
 		}
-		if (assignment.workspace.mode === 'git' && !validated.references.some((reference) => reference.kind === 'git')) {
+		const workspace = assignment.workspace;
+		if (workspace.mode === 'git' && !validated.references.some((reference) => reference.kind === 'git'
+			&& reference.repository === workspace.repository
+			&& (reference.branch === undefined || reference.branch === workspace.branch))) {
 			throw new Error('assignment_result_workspace_reference_required');
 		}
 		if (assignment.workspace.mode === 'treedx' && assignment.effectiveProfile.activity !== 'chat'

@@ -5,10 +5,34 @@ import { join } from 'node:path';
 import { recoverProviderLocalLeases } from '../../src/provider/coordination/lease-recovery.ts';
 import { createProviderControlPlaneClient } from '../../src/provider/coordination/client.ts';
 import { ProviderLocalCapacityStore } from '../../src/provider/capacity/capacity-core/local-capacity-store.ts';
+import { assignmentAttemptSchema } from '@treeseed/sdk/agent-capacity';
+import { request } from './kernel/provider-kernel-fixture.ts';
+
+const frozen = assignmentAttemptSchema.parse({ ...assignmentAttemptSchema.parse(request().assignment.assignmentAttempt), id: 'assignment', idempotencyKey: 'assignment' });
+const dispatchEnvelope = { assignment: { id: frozen.id, assignmentAttempt: frozen } };
+const observed = { id: frozen.id, teamId: frozen.teamId, providerId: frozen.provider.providerId, status: 'leased', assignmentAttempt: frozen };
+const connections = [{ connection: { id: 'connection' }, teamId: frozen.teamId, providerId: frozen.provider.providerId,
+	accessToken: { accessToken: 'test-only' }, controlPlaneUrl: 'https://api.example.test' }];
 
 vi.mock('../../src/provider/coordination/client.ts', () => ({ createProviderControlPlaneClient: vi.fn() }));
 
 describe('provider local lease recovery', () => {
+	it('requires an exact returned assignment receipt before finalizing recovery and retains every malformed successful transport reply', async () => {
+		for (const reply of [undefined, null, {}, { assignment: {} }, { assignment: { id: 'foreign', status: 'returned' } },
+			{ assignment: { id: frozen.id, status: 'running' } }, { assignment: { id: frozen.id, status: null } }]) {
+			const input = structuredClone(reply), api = { assignment: vi.fn().mockResolvedValue(observed), returnAssignment: vi.fn().mockResolvedValue(reply) };
+			vi.mocked(createProviderControlPlaneClient).mockReturnValue(api as never);
+			const claim = { id: 'claim', connectionId: 'connection', assignmentId: frozen.id, leaseToken: 'lease', runnerId: 'runner',
+				failureMessage: 'original failure', dispatchEnvelope }, before = structuredClone(claim);
+			const store = { claimsForRecovery: vi.fn().mockResolvedValue([claim]), finalize: vi.fn(), recordFailure: vi.fn() };
+			expect((await recoverProviderLocalLeases({ config: {} as never, store: store as never, connections: connections as never }))[0]?.status).toBe('retained');
+			expect(store.finalize).not.toHaveBeenCalled(); expect(store.recordFailure).toHaveBeenCalledOnce();
+			expect(reply).toEqual(input); expect(claim).toEqual(before);
+			api.returnAssignment.mockResolvedValue({ assignment: { id: frozen.id, status: 'returned' } });
+			expect((await recoverProviderLocalLeases({ config: {} as never, store: store as never, connections: connections as never }))[0]?.status).toBe('released');
+			expect(store.finalize).toHaveBeenCalledOnce(); expect(api.returnAssignment.mock.calls[1]).toEqual(api.returnAssignment.mock.calls[0]);
+		}
+	});
 	it('retains actual closeout custody across restart without promoting absent or failed receipts', async () => {
 		for (const output of [{ sandboxId: 'sandbox-1', teardown: { verified: true, completedAt: '2026-10-01T09:01:00Z' }, summary: 'Private executor output' },
 			{ sandboxId: 'sandbox-1', teardown: { verified: false, completedAt: '2026-10-01T09:01:00Z' }, summary: 'Private executor output' },
@@ -18,15 +42,15 @@ describe('provider local lease recovery', () => {
 			const store = new ProviderLocalCapacityStore(root);
 			const claim = await store.claim({ connectionId: 'connection', globalLimit: 1, connectionLimit: 1 });
 			await store.attachLease(claim!.id, { assignmentId: 'assignment', leaseToken: 'lease',
-				leaseExpiresAt: new Date(Date.now() + 300_000).toISOString(), dispatchEnvelope: {} });
+				leaseExpiresAt: new Date(Date.now() + 300_000).toISOString(), dispatchEnvelope });
 			await store.recordCloseoutOutput(claim!.id, output);
 			await store.recordFailure(claim!.id, 'deadlock detected');
 			const restarted = new ProviderLocalCapacityStore(root);
 			expect(JSON.stringify(await restarted.snapshot())).not.toContain('Private executor output');
-			const api = { assignment: vi.fn().mockResolvedValue({ status: 'leased' }), returnAssignment: vi.fn().mockResolvedValue({}) };
+			const api = { assignment: vi.fn().mockResolvedValue(observed), returnAssignment: vi.fn().mockResolvedValue({ assignment: { id: frozen.id, status: 'returned' } }) };
 			vi.mocked(createProviderControlPlaneClient).mockReturnValue(api as never);
 			await recoverProviderLocalLeases({ config: {} as never, store: restarted,
-				connections: [{ connection: { id: 'connection' }, accessToken: { accessToken: 'test-only' }, controlPlaneUrl: 'https://api.example.test' }] as never });
+				connections: connections as never });
 			expect(api.returnAssignment).toHaveBeenCalledWith('assignment', expect.objectContaining({ output, code: 'provider_runtime_recovery' }));
 			expect((await restarted.snapshot()).claims).toHaveLength(0);
 		} finally { await rm(root, { recursive: true, force: true }); }
@@ -40,7 +64,7 @@ describe('provider local lease recovery', () => {
 			expect(claim).not.toBeNull();
 			await store.attachLease(claim!.id, {
 				assignmentId: 'assignment', leaseToken: 'lease', leaseExpiresAt: new Date(Date.now() + 300_000).toISOString(),
-				dispatchEnvelope: {},
+				dispatchEnvelope,
 			});
 			await expect(store.claimsForRecovery(false)).resolves.toEqual([]);
 			await expect(store.claimsForRecovery(true)).resolves.toEqual([
@@ -49,7 +73,7 @@ describe('provider local lease recovery', () => {
 			const api = { assignment: vi.fn(), returnAssignment: vi.fn() };
 			vi.mocked(createProviderControlPlaneClient).mockReturnValue(api as never);
 			await expect(recoverProviderLocalLeases({ config: {} as never, store, includeRunning: false,
-				connections: [{ connection: { id: 'connection' }, accessToken: { accessToken: 'test-only' }, controlPlaneUrl: 'https://api.example.test' }] as never,
+				connections: connections as never,
 			})).resolves.toEqual([]);
 			expect(api.returnAssignment).not.toHaveBeenCalled();
 		} finally {
@@ -58,12 +82,12 @@ describe('provider local lease recovery', () => {
 	});
 
 	it.each([undefined, 'Original execution failure'])('preserves the runtime cause rather than claiming every failure is a restart: %s', async failureMessage => {
-		const api = { assignment: vi.fn().mockResolvedValue({ status: 'leased' }), returnAssignment: vi.fn().mockResolvedValue({}) };
+		const api = { assignment: vi.fn().mockResolvedValue(observed), returnAssignment: vi.fn().mockResolvedValue({ assignment: { id: frozen.id, status: 'returned' } }) };
 		vi.mocked(createProviderControlPlaneClient).mockReturnValue(api as never);
 		const store = { claimsForRecovery: vi.fn().mockResolvedValue([{ id: 'claim', connectionId: 'connection',
-			assignmentId: 'assignment', leaseToken: 'lease', runnerId: 'runner', failureMessage }]), finalize: vi.fn(), recordFailure: vi.fn() };
+			assignmentId: 'assignment', leaseToken: 'lease', runnerId: 'runner', failureMessage, dispatchEnvelope }]), finalize: vi.fn(), recordFailure: vi.fn() };
 		await recoverProviderLocalLeases({ config: {} as never, store: store as never,
-			connections: [{ connection: { id: 'connection' }, accessToken: { accessToken: 'test-only' }, controlPlaneUrl: 'https://api.example.test' }] as never });
+			connections: connections as never });
 		expect(api.returnAssignment).toHaveBeenCalledWith('assignment', expect.objectContaining({
 			code: failureMessage ? 'provider_runtime_recovery' : 'provider_restart_recovery',
 			reason: failureMessage ? `Provider runtime failed before durable completion: ${failureMessage}` : 'Provider restarted before durable completion.',

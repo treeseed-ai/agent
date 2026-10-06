@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createHash } from 'node:crypto';
-import { assertObjectiveContentModel, discussionMessageSourcePaths, readDiscussionSourceMessage, readFocusedTreeDxContext, readIdentityContext } from '../../../src/provider/execution/codex-chat-executor.ts';
-import { executeAssignmentTreeDxTool } from '../../../src/provider/execution/microvm-executor.ts';
-import { promptFromContext } from '../../../src/sandbox/guest-contract.ts';
+import { assertObjectiveContentModel, discussionMessageSourcePaths, readDiscussionSourceMessage, readFocusedTreeDxContext, readIdentityContext } from '../../../../src/provider/execution/codex-chat-executor.ts';
+import { executeAssignmentTreeDxTool } from '../../../../src/provider/execution/microvm-executor.ts';
+import { promptFromContext } from '../../../../src/sandbox/guest-contract.ts';
 
 const coreObjective = { schemaVersion: 'treeseed.objective/v1', id: 'sdk-core', projectId: 'project-1',
 	title: 'Core objective', outcome: 'Maintain the SDK contract.', status: 'active' };

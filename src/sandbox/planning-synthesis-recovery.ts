@@ -25,7 +25,10 @@ export async function recoverPlanningSynthesis(input: {
 	progress(stage: string): Promise<void>;
 }): Promise<boolean> {
 	if (input.activity !== 'planning' || !input.threadId) return false;
-	const firstResponse = (await readFile(input.responsePath, 'utf8').catch(() => '')).trim();
+	const firstResponse = (await readFile(input.responsePath, 'utf8').catch(error => {
+		if (error?.code === 'ENOENT') return '';
+		throw error;
+	})).trim();
 	if (!firstResponse) return false;
 	const first = validateActivityCompletion(JSON.parse(firstResponse), input.allowVerification);
 	const missing = missingPredecessorCitations(input.context, first);
@@ -34,11 +37,13 @@ export async function recoverPlanningSynthesis(input: {
 		if (!(error instanceof Error) || !/^predecessor_result_citation_(?:missing|order_invalid)/u.test(error.message)) throw error;
 	}
 	const remainingMs = input.remainingMs();
-	if (remainingMs < 30_000) return false;
+	if (typeof remainingMs !== 'number' || !Number.isFinite(remainingMs) || remainingMs < 30_000) return false;
 	const predecessors = record(input.context.canonicalAssignmentContext).predecessorResults;
 	const evidence = Array.isArray(predecessors) ? predecessors : [];
 	const prompt = planningSynthesisCorrectionPrompt(missing.length ? missing : evidence.map(item => String(record(item).id)), first, evidence);
 	await input.progress('provider.planning-synthesis-recovery.starting');
+	const currentRemaining = input.remainingMs();
+	if (typeof currentRemaining !== 'number' || !Number.isFinite(currentRemaining) || currentRemaining < 30_000) return false;
 	// The captured completion is already in the prompt. A zero-exit subprocess must produce a fresh response,
 	// not silently leave the initial file looking like an observed correction.
 	await unlink(input.responsePath);
@@ -47,7 +52,7 @@ export async function recoverPlanningSynthesis(input: {
 		'--model', input.model, ...codexReasoningArguments(input.reasoningEffort), ...codexProjectInstructionArguments(),
 		'--output-schema', input.schemaPath, '--output-last-message', input.responsePath, '-'], {
 		cwd: '/workspace/project', env: input.providerEnvironment,
-		input: prompt, timeoutMs: Math.floor(remainingMs),
+		input: prompt, timeoutMs: Math.floor(Math.min(remainingMs, currentRemaining)),
 		onLine(line) {
 			let event: Event;
 			try { event = record(JSON.parse(line)); }

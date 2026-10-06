@@ -73,8 +73,8 @@ export class SandboxBrokerClient {
 			const chunks: Buffer[] = []; let bytes = 0;
 			const operation = request({ agent: false, socketPath: this.socketPath, method: 'GET', path: this.path(`/sandboxes/${encodeURIComponent(sandboxId)}/artifacts/${encodeURIComponent(artifactId)}`), headers: { authorization: `Bearer ${token}` } }, (response) => {
 				if ((response.statusCode ?? 500) >= 400) { response.resume(); return reject(new Error(`Sandbox artifact download failed with ${response.statusCode}.`)); }
-				response.on('data', (chunk: Buffer) => { const value = Buffer.from(chunk); bytes += value.byteLength; if (bytes > expectedBytes) operation.destroy(new Error('Sandbox artifact exceeded its verified size.')); else chunks.push(value); });
-				response.on('end', () => bytes === expectedBytes ? resolve(Buffer.concat(chunks)) : reject(new Error('Sandbox artifact size changed during collection.')));
+				response.on('data', (chunk: Buffer) => { const value = Buffer.from(chunk); bytes += value.byteLength; if (bytes > expectedBytes) operation.destroy(Object.assign(new Error('Sandbox artifact exceeded its verified size.'), { code: 'sandbox_artifact_integrity_invalid' })); else chunks.push(value); });
+				response.on('end', () => bytes === expectedBytes ? resolve(Buffer.concat(chunks)) : reject(Object.assign(new Error('Sandbox artifact size changed during collection.'), { code: 'sandbox_artifact_integrity_invalid' })));
 			});
 			operation.once('error', reject); if (signal) signal.addEventListener('abort', () => operation.destroy(new Error('Sandbox artifact download aborted.')), { once: true }); operation.end();
 		});

@@ -1,12 +1,17 @@
 import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
+import { isDeepStrictEqual } from 'node:util';
 import type { ProviderAccessTokenIssue } from '@treeseed/sdk/capacity-provider/contracts';
 import type { ProviderLocalNativeLimit } from './native-capacity-limits.ts';
 
 export interface ProviderLocalSlotClaim {
 	id: string;
 	connectionId: string;
+	/** Credential-free input to the existing polling ranker at this atomic claim. */
+	selection?: { id: string; input: { connections: Array<{ connection: { id: string }; teamId: string }>;
+		snapshot: { claims: Array<{ connectionId: string }>; events: Array<{ connectionId: string; outcome: string }>;
+			activeSecondsByConnection: Record<string, number> } } };
 	runnerId: string;
 	status: 'polling' | 'ready' | 'running' | 'recovery';
 	assignmentId?: string;
@@ -47,7 +52,29 @@ interface ProviderLocalCapacityState {
 
 const emptyState = (): ProviderLocalCapacityState => ({ schemaVersion: 1, revision: 0, claims: [], usage: {}, sessions: [], tokens: [], connections: [], events: [], updatedAt: new Date(0).toISOString() });
 
+function pollingSnapshot(state: ProviderLocalCapacityState, now: string) {
+	return { claims: state.claims.map(({ connectionId }) => ({ connectionId })),
+		events: state.events.map(({ connectionId, outcome }) => ({ connectionId, outcome })),
+		activeSecondsByConnection: Object.fromEntries(Object.entries(state.usage[now.slice(0, 10)] ?? {}).flatMap(([key, seconds]) => {
+			const scope: unknown = JSON.parse(key);
+			return Array.isArray(scope) && scope[0] === 'connection' && typeof scope[1] === 'string' ? [[scope[1], seconds]] : [];
+		})) };
+}
+
+function clock(value: unknown): number {
+	if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/.test(value) || !Number.isFinite(Date.parse(value))) {
+		throw new Error('Provider-local authority clock is invalid.');
+	}
+	return Date.parse(value);
+}
+
 function accountActiveTime(state: ProviderLocalCapacityState, claim: ProviderLocalSlotClaim, now: string) {
+	const observed = clock(now);
+	for (const value of [claim.activeStartedAt, claim.activeFinishedAt, claim.accountedThrough]) if (value !== undefined) clock(value);
+	if (claim.activeStartedAt !== undefined) {
+		const start = clock(claim.activeStartedAt), end = clock(claim.activeFinishedAt ?? now), through = clock(claim.accountedThrough ?? claim.activeStartedAt);
+		if (start > end || end > observed || through < start || through > end) throw new Error('Provider-local active-time chronology is invalid.');
+	} else if (claim.activeFinishedAt !== undefined || claim.accountedThrough !== undefined) throw new Error('Provider-local active-time start is missing.');
 	if (!claim.activeStartedAt || !claim.modelConfigurationId || !claim.capabilityId) return;
 	let cursor = Date.parse(claim.accountedThrough ?? claim.activeStartedAt);
 	const end = Date.parse(claim.activeFinishedAt ?? now);
@@ -57,7 +84,9 @@ function accountActiveTime(state: ProviderLocalCapacityState, claim: ProviderLoc
 		const usage = state.usage[day] ??= {};
 		for (const key of [JSON.stringify([claim.modelConfigurationId]), JSON.stringify([claim.modelConfigurationId, claim.capabilityId]),
 			JSON.stringify(['connection', claim.connectionId])]) {
-			usage[key] = (usage[key] ?? 0) + (next - cursor) / 1000;
+			// These observations originate in integer Date milliseconds. Accumulate
+			// that precision before converting to seconds, not floating-point deltas.
+			usage[key] = (Math.round((usage[key] ?? 0) * 1000) + next - cursor) / 1000;
 		}
 		cursor = next;
 	}
@@ -147,12 +176,17 @@ export class ProviderLocalCapacityStore {
 		}
 	}
 
-	async claim(input: { connectionId: string; globalLimit: number; connectionLimit: number; pollingTtlMs?: number }): Promise<ProviderLocalSlotClaim | null> {
+	async claim(input: { connectionId: string; globalLimit: number; connectionLimit: number; pollingTtlMs?: number;
+		select?: (snapshot: ReturnType<typeof pollingSnapshot>) => { connectionId: string; connectionLimit: number;
+			selection: NonNullable<ProviderLocalSlotClaim['selection']> } | null }): Promise<ProviderLocalSlotClaim | null> {
 		return this.update((state, now) => {
-			if (state.claims.length >= input.globalLimit || state.claims.filter((claim) => claim.connectionId === input.connectionId).length >= input.connectionLimit) return null;
+			if (state.claims.length >= input.globalLimit) return null;
+			const selected = input.select ? input.select(pollingSnapshot(state, now)) : input;
+			if (!selected || state.claims.filter(claim => claim.connectionId === selected.connectionId).length >= selected.connectionLimit) return null;
 			const id = randomUUID();
 			const claim: ProviderLocalSlotClaim = {
-				id, connectionId: input.connectionId, runnerId: `provider-runner-${id}`, status: 'polling', acquiredAt: now, updatedAt: now,
+				id, connectionId: selected.connectionId, runnerId: `provider-runner-${id}`, status: 'polling', acquiredAt: now, updatedAt: now,
+				...('selection' in selected ? { selection: structuredClone(selected.selection) } : {}),
 				expiresAt: new Date(Date.parse(now) + (input.pollingTtlMs ?? 60_000)).toISOString(),
 			};
 			state.claims.push(claim);
@@ -173,6 +207,9 @@ export class ProviderLocalCapacityStore {
 			if (!claim) throw new Error(`Provider-local slot claim ${claimId} expired before lease persistence.`);
 			if (claim.status !== 'polling') {
 				if (claim.assignmentId === input.assignmentId && claim.leaseToken === input.leaseToken
+					&& claim.leaseExpiresAt === input.leaseExpiresAt && claim.executionProviderId === input.executionProviderId
+					&& claim.laneId === input.laneId && claim.nativeUnit === input.nativeUnit
+					&& claim.requestedNativeAmount === input.requestedNativeAmount && isDeepStrictEqual(claim.dispatchEnvelope, input.dispatchEnvelope)
 					&& claim.requestedSeconds === input.requestedSeconds
 					&& claim.capabilityId === input.accounting?.capabilityId
 					&& claim.modelConfigurationId === input.accounting?.modelConfigurationId) return { ...claim };
@@ -198,6 +235,10 @@ export class ProviderLocalCapacityStore {
 			}
 			const assertLimit = (label: string, selected: string | undefined, limit: ProviderLocalNativeLimit | undefined, field: 'executionProviderId' | 'laneId') => {
 				if (!selected || !limit) return;
+				if ((limit.maxConcurrentRunners !== undefined && (!Number.isSafeInteger(limit.maxConcurrentRunners) || limit.maxConcurrentRunners < 0))
+					|| (limit.availableAgentSeconds !== undefined && (!Number.isFinite(limit.availableAgentSeconds) || limit.availableAgentSeconds < 0))
+					|| (limit.nativeAllowances !== undefined && (!limit.nativeAllowances || typeof limit.nativeAllowances !== 'object' || Array.isArray(limit.nativeAllowances)
+						|| Object.values(limit.nativeAllowances).some(value => !Number.isFinite(value) || value < 0)))) throw new Error('Provider-local native bounds are invalid.');
 				const selectedPeers = peers.filter((entry) => entry[field] === selected);
 				if (limit.maxConcurrentRunners !== undefined && selectedPeers.length >= limit.maxConcurrentRunners) throw new Error(`Provider-local ${label} concurrency is exhausted for ${selected}.`);
 				const committed = selectedPeers.reduce((total, entry) => total + (entry.requestedSeconds ?? 0), 0);
@@ -222,6 +263,11 @@ export class ProviderLocalCapacityStore {
 		return this.update((state, now) => {
 			const claim = state.claims.find((entry) => entry.id === claimId);
 			if (!claim) throw new Error(`Provider-local slot claim ${claimId} expired before rejected lease recovery was persisted.`);
+			if (claim.status !== 'polling') {
+				if (claim.assignmentId !== input.assignmentId || claim.leaseToken !== input.leaseToken || claim.leaseExpiresAt !== input.leaseExpiresAt
+					|| !isDeepStrictEqual(claim.dispatchEnvelope, input.dispatchEnvelope)) throw new Error('Provider-local retained lease authority cannot be replaced.');
+				return { ...claim };
+			}
 			Object.assign(claim, { ...input, status: 'running' as const, updatedAt: now, expiresAt: input.leaseExpiresAt });
 			return { ...claim };
 		});
@@ -233,6 +279,12 @@ export class ProviderLocalCapacityStore {
 			if (!claim || claim.assignmentId !== input.assignmentId || !['ready', 'running'].includes(claim.status)) {
 				throw new Error(`Provider-local slot claim ${claimId} cannot renew assignment ${input.assignmentId}.`);
 			}
+			const expires = clock(input.leaseExpiresAt);
+			const envelope = claim.dispatchEnvelope;
+			const assignment = envelope && typeof envelope === 'object' ? Reflect.get(envelope, 'assignment') : undefined;
+			const attempt = assignment && typeof assignment === 'object' ? Reflect.get(assignment, 'assignmentAttempt') : undefined;
+			if (expires <= clock(now) || (attempt !== undefined && (!attempt || typeof attempt !== 'object'
+				|| expires > clock(Reflect.get(attempt, 'deadline'))))) throw new Error('Provider-local lease renewal exceeds its original authority.');
 			claim.leaseExpiresAt = input.leaseExpiresAt;
 			claim.expiresAt = input.leaseExpiresAt;
 			claim.updatedAt = now;
@@ -283,6 +335,7 @@ export class ProviderLocalCapacityStore {
 		return this.update((state, now) => {
 			const claim = state.claims.find(entry => entry.id === claimId);
 			if (!claim?.assignmentId || !claim.leaseToken) throw new Error('Provider closeout output requires its existing lease claim.');
+			if (claim.closeoutOutput !== undefined && !isDeepStrictEqual(claim.closeoutOutput, output)) throw new Error('Provider closeout output cannot replace its original observation.');
 			claim.closeoutOutput = output;
 			claim.updatedAt = now;
 		});
@@ -313,11 +366,7 @@ export class ProviderLocalCapacityStore {
 		return this.update((state, now) => ({ revision: state.revision + 1,
 			claims: state.claims.map(({ dispatchEnvelope: _dispatchEnvelope, closeoutOutput: _closeoutOutput, ...claim }) => ({ ...claim, leaseToken: claim.leaseToken ? '<redacted>' : undefined })),
 			events: state.events.map((event) => ({ ...event })),
-			activeSecondsByConnection: Object.fromEntries(Object.entries(state.usage[now.slice(0, 10)] ?? {}).flatMap(([key, seconds]) => {
-				const scope: unknown = JSON.parse(key);
-				return Array.isArray(scope) && scope[0] === 'connection' && typeof scope[1] === 'string'
-					? [[scope[1], seconds]] : [];
-			})),
+			activeSecondsByConnection: pollingSnapshot(state, now).activeSecondsByConnection,
 		}));
 	}
 

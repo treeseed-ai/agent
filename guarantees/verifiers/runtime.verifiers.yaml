@@ -1,6 +1,156 @@
 schemaVersion: treeseed.guarantee-verifiers/v1
 ownerPackage: "@treeseed/agent"
 verifiers:
+  agent.golden.execution-global-selection-live-1:
+    kind: nodeTestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/acceptance/workday/provider-custody.test.ts
+    testName: "Actual global provider retains original multi-team polling choices beside complete public terminal attempts and unchanged exactly-once charges without reconstructing historical eligibility"
+  agent.golden.execution-integration-identity-live-1:
+    kind: nodeTestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/acceptance/workday/context-custody.test.ts
+    testName: "Actual accepted integration work retains its original single base exact independent predecessor results and governed release authority without a name-derived composite workspace"
+  agent.golden.execution-proposal-blockers-live-1:
+    kind: nodeTestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/acceptance/workday/context-custody.test.ts
+    testName: "Actual managed proposal execution retains native blocking feedback and its exact prior resolution before the governing classed Decision without replacing original content or history"
+  agent.golden.execution-continuation-returned-live-1:
+    kind: nodeTestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/acceptance/workday/record-custody.test.ts
+    testName: "Actual managed continuation retains a returned ancestor with its exact released lease failed history and settled charge instead of a completed replacement"
+  agent.golden.execution-local-slot-live-1:
+    kind: nodeTestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/acceptance/workday/record-custody.test.ts
+    testName: "Actual owning provider host reads retained completed and failed local slot closure without recovery mutation or replacing public charges"
+  agent.golden.execution-compiled-project-live-1:
+    kind: nodeTestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/acceptance/workday/profile-custody.test.ts
+    testName: "Actual completed project-owned handler retains its exact governed selection canonical result and settled managed history through independent public reads"
+  agent.golden.execution-provider-cutover-live-1:
+    kind: nodeTestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/acceptance/workday/provider-custody.test.ts
+    testName: "Actual managed provider retains one exact current manifest and packaged read-only plan without compatibility translation or changed execution history"
+  agent.golden.execution-physical-absence-live-1:
+    kind: nodeTestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/acceptance/workday/record-custody.test.ts
+    testName: "Actual owning host independently reads native task container mount and directory absence for completed and failed managed sandboxes without erasing history"
+  agent.golden.execution-continuation-live-1:
+    kind: nodeTestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/acceptance/workday/record-custody.test.ts
+    testName: "Actual managed continuation reads its complete original settled ancestry and retains exact prior source Decision result and charge history without expanding custody"
+  agent.golden.execution-sandbox-closeout-live-1:
+    kind: nodeTestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/acceptance/workday/record-custody.test.ts
+    testName: "Actual completed and failed isolated attempts retain distinct verified public closeout beside unchanged candidates results and terminal charges"
+  agent.golden.execution-accounting-continuity-live-1:
+    kind: nodeTestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/acceptance/workday/record-custody.test.ts
+    testName: "Actual participating provider availability retains closed accounting history and monotonic exact public observations beside unchanged terminal attempt charges"
+  agent.golden.execution-handler-inspection-live-1:
+    kind: nodeTestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/acceptance/workday/profile-custody.test.ts
+    testName: "Actual governed handlers remain inspectable through exact public list and show without changing frozen execution authority or profile bytes"
+  agent.golden.execution-recovery-authority-live-1:
+    kind: nodeTestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/acceptance/workday/record-custody.test.ts
+    testName: "Actual model timing refusal remains returned with its exact failed history closeout and terminal charge rather than a completed replay"
+  agent.golden.execution-failure-custody-live-1:
+    kind: nodeTestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/acceptance/workday/record-custody.test.ts
+    testName: "Actual failed productive execution retains owning closeout and unchanged informational native usage beside exactly one terminal charge"
+  agent.golden.architecture-portfolio-relations-live-1:
+    kind: nodeTestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/acceptance/workday/cross-project.test.ts
+    testName: "Native portfolio managed graph contains every document-derived fixed relation across all seeded projects with exact note review grant and settlement custody"
+  agent.golden.architecture-portfolio-relations-live-2:
+    kind: nodeTestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/acceptance/workday/cross-project.test.ts
+    testName: "Native portfolio repeated binding note review graph and financial reads retain the complete independent relation inventory without reconciliation mutation"
+  agent.golden.architecture-cross-project-readback-live-1:
+    kind: nodeTestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/acceptance/workday/cross-project.test.ts
+    testName: "Cross-project managed graph consumes exact relation notes approved predecessor candidates and secondary read grants before dependent admission"
+  agent.golden.architecture-cross-project-readback-live-2:
+    kind: nodeTestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/acceptance/workday/cross-project.test.ts
+    testName: "Cross-project managed repeated public note decision graph and assignment reads retain original custody without new output settlement or graph mutation"
+  agent.golden.architecture-record-custody-live-1:
+    kind: nodeTestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/acceptance/workday/record-custody.test.ts
+    testName: "Every native managed attempt exposes one unchanged canonical lease reservation result and UsageSettlement across public views"
+  agent.golden.architecture-record-custody-live-2:
+    kind: nodeTestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/acceptance/workday/record-custody.test.ts
+    testName: "Native failed controlled attempts retain their own canonical settlement and original frozen authority on repeated public readback"
+  agent.golden.architecture-record-custody-live-3:
+    kind: nodeTestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/acceptance/workday/record-custody.test.ts
+    testName: "Native terminal accounting retains exactly the represented aggregate inventory and validates actual failed results and owning lifecycle clocks"
+  agent.golden.architecture-start-custody-live-1:
+    kind: nodeTestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/acceptance/workday/start-custody.test.ts
+    testName: "Actual workday start retains exact applied policy original clocks and complete native readiness before every frozen attempt"
+  agent.golden.architecture-start-custody-live-2:
+    kind: nodeTestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/acceptance/workday/start-custody.test.ts
+    testName: "Actual recurring start independently links unchanged canonical intent to the same managed execution and settled readback"
+  agent.golden.architecture-context-custody-live-1:
+    kind: nodeTestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/acceptance/workday/context-custody.test.ts
+    testName: "Actual TreeDX assignment context is independently read at exact granted repository commit path and book revision"
+  agent.golden.architecture-book-knowledge-live-1:
+    kind: nodeTestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/acceptance/workday/context-custody.test.ts
+    testName: "Actual SDK architecture Knowledge is independently read from its owning result and bound to the exact published SDK Core Book"
+  agent.golden.architecture-graph-history-live-1:
+    kind: nodeTestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/acceptance/workday/graph-history.test.ts
+    testName: "Complete graph watch retains every canonical revision through explicit terminal read and stable independent current graph"
+  agent.golden.architecture-profile-custody-live-1:
+    kind: nodeTestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/acceptance/workday/profile-custody.test.ts
+    testName: "Every actual assignment matches independently read exact governed profile bytes handler prompt parameters and narrower grants"
+  agent.golden.architecture-profile-custody-live-2:
+    kind: nodeTestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/acceptance/workday/profile-custody.test.ts
+    testName: "Public assignment views preserve whole canonical attempts results and original authority across repeated readback"
+  agent.golden.architecture-living-graph-live-1:
+    kind: nodeTestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/acceptance/workday/living-graph.test.ts
+    testName: "Living team graph public views preserve exact nodes edges provenance and frozen predecessor results"
+  agent.golden.architecture-living-graph-live-2:
+    kind: nodeTestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/acceptance/workday/living-graph.test.ts
+    testName: "Living graph read-only reconciliation and node inspection preserve assignments usage and every public graph record"
   agent.workday.produce-summary:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"
@@ -74,7 +224,7 @@ verifiers:
   agent.execution-provider.codex.contract:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"
-    testFile: tests/modern/execution/codex-chat-executor.test.ts
+    testFile: tests/modern/execution/timing/guest-clock-contract.test.ts
     testName: requires clock checks to bracket every other provider tool action
   agent.runtime.enforce-provider-local-budget:
     kind: vitestCase
@@ -94,7 +244,7 @@ verifiers:
   agent.runtime.assignment-time-status:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"
-    testFile: tests/modern/execution/codex-chat-executor.test.ts
+    testFile: tests/modern/execution/timing/guest-clock-contract.test.ts
     testName: reports remaining time from the API-started productive window without a content grant
   agent.trace.inspect-execution:
     kind: vitestCase
@@ -109,7 +259,7 @@ verifiers:
   agent.trace.redact-provider-secrets:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"
-    testFile: tests/modern/execution/codex-chat-executor.test.ts
+    testFile: tests/modern/execution/codex/codex-chat-executor.test.ts
     testName: preserves tool and model progress categories without secret-bearing payloads
   agent.architecture.normalize-activity-profile-agent:
     kind: vitestCase
@@ -129,7 +279,7 @@ verifiers:
   agent.architecture.enforce-activity-profile-tool-scope:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"
-    testFile: tests/modern/execution/codex-context.test.ts
+    testFile: tests/modern/execution/codex/codex-context.test.ts
     testName: binds live TreeDX tools to profile policy, repository, and exact ref
   agent.architecture.enforce-assignment-feature-branch-policy:
     kind: vitestCase
@@ -141,6 +291,16 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/kernel/provider-kernel-review.test.ts
     testName: commits EstimateHandler output as the one proposal-owned execution plan
+  agent.golden.execution-tool-closeout-live-1:
+    kind: nodeTestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/acceptance/workday/record-custody.test.ts
+    testName: "Actual tool proxy failure retains its public cause verified closeout and one unchanged terminal charge without a passing replay"
+  agent.golden.execution-handoff-live-1:
+    kind: nodeTestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/acceptance/workday/context-custody.test.ts
+    testName: "Actual draft Proposal handoff is independently read from its own granted publication without claiming accepted continuation authority"
   agent.golden.live.lifecycle:
     kind: nodeTestCase
     ownerPackage: "@treeseed/agent"

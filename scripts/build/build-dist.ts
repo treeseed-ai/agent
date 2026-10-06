@@ -31,20 +31,21 @@ function rewriteRuntimeSpecifiers(contents: string) {
 		.replace(/(['"`])((?:\.\.\/)+)src\//g, '$1$2');
 }
 
-async function compileModule(filePath: string, sourceRoot: string, outputRoot: string) {
-	const relativePath = relative(sourceRoot, filePath);
-	const outputFile = resolve(outputRoot, relativePath.replace(/\.ts$/u, '.js'));
-	ensureDir(outputFile);
+async function compileModules(filePaths: string[], sourceRoot: string, outputRoot: string) {
 	await build({
-		entryPoints: [filePath],
-		outfile: outputFile,
+		entryPoints: filePaths,
+		outbase: sourceRoot,
+		outdir: outputRoot,
 		platform: 'node',
 		format: 'esm',
 		bundle: false,
 		logLevel: 'silent',
 	});
-	const builtSource = readFileSync(outputFile, 'utf8');
-	writeFileSync(outputFile, rewriteRuntimeSpecifiers(builtSource), 'utf8');
+	for (const filePath of filePaths) {
+		const outputFile = resolve(outputRoot, relative(sourceRoot, filePath).replace(/\.ts$/u, '.js'));
+		const builtSource = readFileSync(outputFile, 'utf8');
+		writeFileSync(outputFile, rewriteRuntimeSpecifiers(builtSource), 'utf8');
+	}
 }
 
 async function compileProjectHandlers() {
@@ -129,10 +130,11 @@ await acquireBuildLock();
 try {
 	rmSync(distRoot, { recursive: true, force: true });
 
-	for (const filePath of walkFiles(srcRoot)) {
+	const sourceFiles = walkFiles(srcRoot);
+	await compileModules(sourceFiles.filter(filePath => JS_SOURCE_EXTENSIONS.has(extname(filePath))), srcRoot, distRoot);
+	for (const filePath of sourceFiles) {
 		const extension = extname(filePath);
-		if (JS_SOURCE_EXTENSIONS.has(extension)) await compileModule(filePath, srcRoot, distRoot);
-		else if (COPY_EXTENSIONS.has(extension)) copyAsset(filePath, srcRoot, distRoot);
+		if (COPY_EXTENSIONS.has(extension)) copyAsset(filePath, srcRoot, distRoot);
 	}
 
 	emitDeclarations();

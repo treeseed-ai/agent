@@ -1,0 +1,12 @@
+schemaVersion: treeseed.guarantee/v1
+id: guarantee.agent.golden.draft-handoff
+journey: Read back an actual authorized draft next-work handoff
+ownerPackage: "@treeseed/agent"
+type: agent
+subtype: execution
+status: planned
+gates: [core]
+summary: Requires a real draft-handoff scenario; ordinary completed SDK work need not produce unfinished work. Exact granted publication readback only, not model timing adaptation or accepted continuation authority.
+scene:
+  required: true
+  manifest: guarantees/agent/golden/scenes/draft-handoff.scene.yaml

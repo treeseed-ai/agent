@@ -20,8 +20,13 @@ it('preserves observed red tests in paired review without inventing passing veri
 	expect(replay.mock.calls).toEqual([['git diff --check']]);
 	await expect(verifyReportedActivityCommands(corrected, async () => { throw new Error('exit 1'); }))
 		.rejects.toThrow('Runner-observed verification failed');
+	// Scope comes from the assigned work, never the first-party agent name.
+	for (const [agentClass, activity] of [['engineer', 'acting'], ['contract-author', 'acting'],
+		['independent-inspector', 'reviewing']] as const) {
+		expect(correctObservedTestFirstRedVerification(report, events, agentClass, activity, criteria)).toEqual(corrected);
+	}
 	for (const [agentClass, activity, scopedCriteria] of [
-		['engineer', 'acting', criteria], ['reviewer', 'planning', criteria],
+		['engineer', 'acting', ['Implementation tests must pass.']], ['reviewer', 'planning', criteria],
 		['reviewer', 'reviewing', ['Implementation tests must pass.']],
 	] as const) {
 		expect(correctObservedTestFirstRedVerification(report, events, agentClass, activity, scopedCriteria)).toEqual(report);

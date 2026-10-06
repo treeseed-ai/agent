@@ -9,6 +9,8 @@ describe('pre-transport context failure closure', () => {
 		const attempt = input.assignment.assignmentAttempt as Record<string, unknown>;
 		attempt.contextRefs = [{ store: 'treedx', model: 'proposal', id: 'proposal-1', repository: 'sdk-library',
 			commit, path: 'proposals/change.mdx', digest }];
+		attempt.grant = { contentRead: attempt.contextRefs, contentWrite: [], sourceRead: [], sourceWrite: [], tools: [] };
+		input.treeDx = { ...input.treeDx, repositoryId: 'sdk-library' };
 		vi.mocked(input.treeDx.invoke).mockRejectedValue(new Error('TreeDX proxy handle has expired.'));
 		const executor: AgentExecutor = { id: 'codex', observe: async () => ({ available: true }), execute: vi.fn() };
 		const result = await executeKernelAssignment({ executor, request: input, runtimeBuild });

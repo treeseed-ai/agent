@@ -129,7 +129,7 @@ export async function monitorCampaign(input: {
 		observedStatus = run.status; observedMode = run.mode;
 		assert.equal(run.mode, 'simulation', 'ACCEPTANCE_CAMPAIGN_MODE: No production campaign mutation');
 		if (run.status === 'completed') {
-			if (!planningVerified) input.collaboration();
+			input.collaboration();
 			input.verify(); return;
 		}
 		assert.equal(run.status, 'running', 'ACCEPTANCE_CAMPAIGN_TERMINAL: Unsuccessful terminal campaign');
@@ -138,13 +138,11 @@ export async function monitorCampaign(input: {
 		}
 		assert.ok(Number.isFinite(run.planningEndsAt) && Number.isFinite(run.endsAt),
 			'ACCEPTANCE_CAMPAIGN_TIME: Authoritative deadlines required');
-		if (!planningVerified) {
-			try { input.collaboration(); planningVerified = true; }
-			catch (failure) {
-				// The initial planning percentage is a minimum, not a deadline
-				// for estimates or discussion. Other errors remain fail-closed.
-				if (!incompleteCollaboration(failure)) throw failure;
-			}
+		try { input.collaboration(); planningVerified = true; }
+		catch (failure) {
+			// Initial incomplete participation may continue, but an earlier pass is
+			// never a receipt for later rounds or changed contribution authority.
+			if (planningVerified || !incompleteCollaboration(failure)) throw failure;
 		}
 		if (input.now() > run.endsAt + 600_000) {
 			assert.fail('ACCEPTANCE_CAMPAIGN_TIMEOUT: Settlement did not complete within bounded closeout');

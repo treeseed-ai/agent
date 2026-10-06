@@ -1,6 +1,6 @@
 import { describe,expect,it,vi } from 'vitest';
 import { readCoreContextPack } from '../../src/provider/execution/core-context-pack.ts';
-import { MANAGED_CONTEXT_CAPACITY } from '../../src/provider/configuration/legacy-manifest.ts';
+import { MANAGED_CONTEXT_CAPACITY } from '../../src/provider/configuration/managed-manifest.ts';
 
 const file=(path:string,content:string,frontmatter:Record<string,unknown>={})=>({path,logicalPath:path.replace(/\.(?:md|mdx|ya?ml)$/u,''),content,frontmatter});
 const response=(items:unknown[])=>({data:{result:{data:{items}}}});

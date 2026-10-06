@@ -16,8 +16,25 @@ for (const file of readdirSync(resolve(root, 'guarantees/verifiers')).filter(pat
 }
 
 describe('capacity-provider guarantee execution bindings', () => {
+	it('supplies exact canonical execution authority before complete verification and inherited scene prerequisites', () => {
+		const workflow = parse(readFileSync(resolve(root, '.github/workflows/verify.yml'), 'utf8'));
+		const job = workflow.jobs.verify, steps = job.steps;
+		const checkouts = steps.filter((step: { uses?: string; with?: { repository?: string } }) =>
+			step.uses?.startsWith('actions/checkout@') && step.with?.repository === 'treeseed-ai/platform');
+		expect(checkouts).toHaveLength(1);
+		expect(checkouts[0].with).toMatchObject({ ref: 'e4c4cad1e526f53d3549c8fc27c3e60122b20ee4', path: '.treeseed/platform-authority', 'persist-credentials': false });
+		expect(job.env.TREESEED_DEVELOPMENT_WORKSPACE_ROOT).toBe('${{ github.workspace }}/.treeseed/platform-authority');
+		const verify = steps.findIndex((step: { run?: string }) => step.run?.includes('npm run verify:local'));
+		const scene = steps.findIndex((step: { uses?: string }) => step.uses?.includes('reviewer/.github/actions/run-scenes@'));
+		expect(steps.indexOf(checkouts[0])).toBeLessThan(verify); expect(verify).toBeGreaterThan(-1); expect(scene).toBeGreaterThan(verify);
+		const relay = steps.findIndex((step: { name?: string }) => step.name === 'Prepare disposable native relay CA');
+		expect(relay).toBeGreaterThan(-1); expect(relay).toBeLessThan(verify);
+		expect(steps[relay].run).toContain('openssl x509 -in "$relay_fixture/ca.pem" -noout -checkend 0');
+		expect(steps[relay].run).toContain('sudo install -m 0644 "$relay_fixture/ca.pem" /etc/treeseed/sandbox/relay-ca.crt');
+	});
 	it('binds every registered verifier to an executable current implementation', () => {
 		const failures: string[] = [];
+		const namesByFile = new Map<string, string[]>();
 		for (const [id, verifier] of Object.entries(registry.verifiers)) {
 			const path = ['vitestCase', 'nodeTestCase'].includes(verifier.kind) ? verifier.testFile : verifier.command;
 			if (!path || !existsSync(resolve(root, path))) {
@@ -27,15 +44,19 @@ describe('capacity-provider guarantee execution bindings', () => {
 			if (['vitestCase', 'nodeTestCase'].includes(verifier.kind)) {
 				if (verifier.kind === 'vitestCase' && !path.startsWith('tests/modern/')) failures.push(`${id}: excluded from the active Vitest suite`);
 				if (verifier.kind === 'nodeTestCase' && !path.startsWith('tests/acceptance/')) failures.push(`${id}: not an explicit runtime acceptance test`);
+				let names = namesByFile.get(path);
+				if (!names) {
 				const source = ts.createSourceFile(path, readFileSync(resolve(root, path), 'utf8'), ts.ScriptTarget.Latest, true);
-				const names: string[] = [];
+				const collected: string[] = [];
 				function inspect(node: ts.Node): void {
 					if (ts.isCallExpression(node) && ts.isIdentifier(node.expression)
 						&& ['it', 'test'].includes(node.expression.text) && node.arguments[0]
-						&& ts.isStringLiteral(node.arguments[0])) names.push(node.arguments[0].text);
+						&& ts.isStringLiteral(node.arguments[0])) collected.push(node.arguments[0].text);
 					ts.forEachChild(node, inspect);
 				}
 				inspect(source);
+				names = collected; namesByFile.set(path, names);
+				}
 				if (!verifier.testName || !names.includes(verifier.testName)) failures.push(`${id}: missing active named case ${verifier.testName ?? '(unspecified)'}`);
 			}
 		}
@@ -47,6 +68,20 @@ describe('capacity-provider guarantee execution bindings', () => {
 			for (const entry of readdirSync(directory, { withFileTypes: true })) {
 				const path = resolve(directory, entry.name);
 				if (entry.isDirectory()) visit(path);
+				else if (entry.name.endsWith('.scene.yaml')) {
+					const scene = parse(readFileSync(path, 'utf8')) as { scope?: string; workflow?: Array<{
+						id?: string; demoOnly?: boolean; action?: { verifier?: string }; expect?: { status?: string } }> };
+					if (!['local-component-tests', 'local-integrated-runtime'].includes(scene.scope ?? '')) continue;
+					if (!scene.workflow?.length) { failures.push(`${path}: empty executable scene`); continue; }
+					const ids = new Set<string>();
+					for (const step of scene.workflow) {
+						if (!step.id || ids.has(step.id) || step.demoOnly || !step.action?.verifier
+							|| step.expect?.status !== 'passed') {
+							failures.push(`${path}: invalid executable step ${step.id ?? '(missing)'}`);
+						}
+						if (step.id) ids.add(step.id);
+					}
+				}
 				else if (entry.name.endsWith('.guarantee.yaml')) {
 					const guarantee = parse(readFileSync(path, 'utf8')) as Record<string, unknown>;
 					function references(value: unknown): void {
@@ -58,7 +93,7 @@ describe('capacity-provider guarantee execution bindings', () => {
 							} else references(child);
 						}
 					}
-					references(guarantee);
+					 references(guarantee);
 				}
 			}
 		}

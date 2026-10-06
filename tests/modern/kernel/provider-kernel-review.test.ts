@@ -9,13 +9,14 @@ describe('provider AgentKernel governed output', () => {
 	it('commits a structured Reviewer disposition through the kernel-owned TreeDX path', async () => {
 		const input = request();
 		const attempt = input.assignment.assignmentAttempt as Record<string, any>;
+		attempt.predecessorResultIds = ['actor-result'];
 		attempt.effectiveProfile = { ...attempt.effectiveProfile, activity: 'reviewing', handler: 'writer',
-			permissionCeiling: { content: { read: ['proposal'], write: ['note', 'decision'] }, tools: ['verification'] } };
+			permissionCeiling: { content: { read: ['proposal'], write: ['note', 'decision'] }, tools: ['verification', 'source.read'] } };
 		const findingTarget = { store: 'treedx', model: 'note', id: 'review-finding', repository: 'treeseed-ai/sdk-library',
 			commit, path: 'notes/review-finding.mdx' };
 		const target = { store: 'treedx', model: 'decision', id: 'review-decision', repository: 'treeseed-ai/sdk-library',
 			commit, path: 'decisions/review-decision.mdx' };
-		attempt.grant = { contentRead: [], contentWrite: [findingTarget, target], sourceRead: ['treeseed-ai/sdk'], sourceWrite: [], tools: ['verification'] };
+		attempt.grant = { contentRead: [], contentWrite: [findingTarget, target], sourceRead: ['treeseed-ai/sdk'], sourceWrite: [], tools: ['verification', 'source.read'] };
 		attempt.workspace = { mode: 'treedx', workspaceId: 'workspace-1', repository: target.repository,
 			baseCommit: commit, writablePaths: [findingTarget.path, target.path] };
 		(input.assignment.workspaceContext as Record<string, any>).predecessorResults = [{
@@ -29,7 +30,7 @@ describe('provider AgentKernel governed output', () => {
 			invoke: vi.fn(async (operation, value: any) => {
 				if (operation === 'treedx.workspaces.files.batch') for (const file of value.body.files) written[file.path] = file.content;
 				if (operation === 'treedx.workspaces.commit') return { commitSha: candidateCommit };
-				if (operation === 'treedx.repositories.files.read') return { files: value.body.paths.map((path: string) => ({ path, content: written[path] })) };
+				if (operation === 'treedx.repositories.files.read') return { resolvedRef: value.body.ref, files: value.body.paths.map((path: string) => ({ path, content: written[path] })) };
 				return {};
 			}) };
 		const review = 'Candidate satisfies the exact acceptance criteria after reviewing the complete immutable proposal source and every cited requirement without relying on an inferred or mutable planning authority.';
@@ -39,7 +40,7 @@ describe('provider AgentKernel governed output', () => {
 			usage: [{ elapsedSeconds: 3 }],
 		}; }) };
 		const result = await executeKernelAssignment({ executor, request: input, runtimeBuild });
-		expect(result.status).toBe('completed');
+		expect(result.status, JSON.stringify(result)).toBe('completed');
 		expect(result.outputs?.assignmentResult).toMatchObject({ references: [
 			{ kind: 'treedx', commit: candidateCommit, path: findingTarget.path },
 			{ kind: 'treedx', commit: candidateCommit, path: target.path },
@@ -55,13 +56,14 @@ describe('provider AgentKernel governed output', () => {
 	it('commits the governed Reviewer decision when the model also cites the candidate', async () => {
 		const input = request();
 		const attempt = input.assignment.assignmentAttempt as Record<string, any>;
+		attempt.predecessorResultIds = ['actor-result'];
 		attempt.effectiveProfile = { ...attempt.effectiveProfile, activity: 'reviewing', handler: 'writer',
-			permissionCeiling: { content: { read: ['proposal'], write: ['note', 'decision'] }, tools: ['verification'] } };
+			permissionCeiling: { content: { read: ['proposal'], write: ['note', 'decision'] }, tools: ['verification', 'source.read'] } };
 		const findingTarget = { store: 'treedx', model: 'note', id: 'review-finding', repository: 'treeseed-ai/sdk-library',
 			commit, path: 'notes/review-finding.mdx' };
 		const target = { store: 'treedx', model: 'decision', id: 'review-decision', repository: 'treeseed-ai/sdk-library',
 			commit, path: 'decisions/review-decision.mdx' };
-		attempt.grant = { contentRead: [], contentWrite: [findingTarget, target], sourceRead: ['treeseed-ai/sdk'], sourceWrite: [], tools: ['verification'] };
+		attempt.grant = { contentRead: [], contentWrite: [findingTarget, target], sourceRead: ['treeseed-ai/sdk'], sourceWrite: [], tools: ['verification', 'source.read'] };
 		attempt.workspace = { mode: 'treedx', workspaceId: 'workspace-1', repository: target.repository,
 			baseCommit: commit, writablePaths: [findingTarget.path, target.path] };
 		(input.assignment.workspaceContext as Record<string, any>).predecessorResults = [{
@@ -74,7 +76,7 @@ describe('provider AgentKernel governed output', () => {
 			invoke: vi.fn(async (operation, value: any) => {
 				if (operation === 'treedx.workspaces.files.batch') for (const file of value.body.files) written[file.path] = file.content;
 				if (operation === 'treedx.workspaces.commit') return { commitSha: candidateCommit };
-				if (operation === 'treedx.repositories.files.read') return { files: value.body.paths.map((path: string) => ({ path, content: written[path] })) };
+				if (operation === 'treedx.repositories.files.read') return { resolvedRef: value.body.ref, files: value.body.paths.map((path: string) => ({ path, content: written[path] })) };
 				return {};
 			}) };
 		const citedCandidate = { kind: 'git' as const, repository: 'treeseed-ai/sdk', commit, branch: 'treeseed/assignments/candidate' };
@@ -86,7 +88,7 @@ describe('provider AgentKernel governed output', () => {
 			usage: [{ elapsedSeconds: 2 }],
 		}; }) };
 		const result = await executeKernelAssignment({ executor, request: input, runtimeBuild });
-		expect(result.status).toBe('completed');
+		expect(result.status, JSON.stringify(result)).toBe('completed');
 		const assignmentResult = result.outputs?.assignmentResult as { references?: unknown[] } | undefined;
 		expect(assignmentResult?.references).toEqual([
 			expect.objectContaining({ kind: 'treedx', commit: candidateCommit, path: findingTarget.path }),
@@ -100,13 +102,14 @@ describe('provider AgentKernel governed output', () => {
 	it('binds a read-only work review to the exact source when its predecessor produced no candidate', async () => {
 		const input = request();
 		const attempt = input.assignment.assignmentAttempt as Record<string, any>;
+		attempt.predecessorResultIds = ['architect-result'];
 		attempt.effectiveProfile = { ...attempt.effectiveProfile, activity: 'reviewing', handler: 'writer',
-			permissionCeiling: { content: { read: ['proposal'], write: ['note', 'decision'] }, tools: ['verification'] } };
+			permissionCeiling: { content: { read: ['proposal'], write: ['note', 'decision'] }, tools: ['verification', 'source.read'] } };
 		const findingTarget = { store: 'treedx', model: 'note', id: 'read-only-finding', repository: 'treeseed-ai/sdk-library',
 			commit, path: 'notes/read-only-finding.mdx' };
 		const target = { store: 'treedx', model: 'decision', id: 'read-only-review', repository: 'treeseed-ai/sdk-library',
 			commit, path: 'decisions/read-only-review.mdx' };
-		attempt.grant = { contentRead: [], contentWrite: [findingTarget, target], sourceRead: ['treeseed-ai/sdk'], sourceWrite: [], tools: ['verification'] };
+		attempt.grant = { contentRead: [], contentWrite: [findingTarget, target], sourceRead: ['treeseed-ai/sdk'], sourceWrite: [], tools: ['verification', 'source.read'] };
 		attempt.contextRefs = [{ store: 'git', model: 'repository', id: 'sdk-source', repository: 'treeseed-ai/sdk', commit }];
 		attempt.workspace = { mode: 'treedx', workspaceId: 'workspace-1', repository: target.repository,
 			baseCommit: commit, writablePaths: [findingTarget.path, target.path] };
@@ -120,7 +123,7 @@ describe('provider AgentKernel governed output', () => {
 			invoke: vi.fn(async (operation, value: any) => {
 				if (operation === 'treedx.workspaces.files.batch') for (const file of value.body.files) written[file.path] = file.content;
 				if (operation === 'treedx.workspaces.commit') return { commitSha: candidateCommit };
-				if (operation === 'treedx.repositories.files.read') return { files: value.body.paths.map((path: string) => ({ path, content: written[path] })) };
+				if (operation === 'treedx.repositories.files.read') return { resolvedRef: value.body.ref, files: value.body.paths.map((path: string) => ({ path, content: written[path] })) };
 				return {};
 			}) };
 		const executor: AgentExecutor = { id: 'codex', observe: async () => ({ available: true }), execute: vi.fn(async (request): Promise<AgentExecutionResult> => { await request.beginExecution?.(); return {
@@ -131,7 +134,7 @@ describe('provider AgentKernel governed output', () => {
 			usage: [{ elapsedSeconds: 2 }],
 		}; }) };
 		const result = await executeKernelAssignment({ executor, request: input, runtimeBuild });
-		expect(result.status).toBe('completed');
+		expect(result.status, JSON.stringify(result)).toBe('completed');
 		expect(written[target.path]).toContain(`store: ${attempt.sourceRef.store}`);
 		expect(written[target.path]).toContain(`id: ${attempt.sourceRef.id}`);
 	});
@@ -146,7 +149,7 @@ describe('provider AgentKernel governed output', () => {
 		attempt.sourceRef = target;
 		attempt.contextRefs = [target];
 		attempt.limits = { ...attempt.limits, maximumContextBytes: 10000, maximumContextTokens: 5000 };
-		attempt.grant = { contentRead: [], contentWrite: [target], sourceRead: ['treeseed-ai/sdk'], sourceWrite: [], tools: ['source.read'] };
+		attempt.grant = { contentRead: [target], contentWrite: [target], sourceRead: ['treeseed-ai/sdk'], sourceWrite: [], tools: ['source.read'] };
 		attempt.workspace = { mode: 'treedx', workspaceId: 'workspace-1', repository: target.repository,
 			baseCommit: commit, writablePaths: [target.path] };
 		let written = '';
@@ -154,7 +157,7 @@ describe('provider AgentKernel governed output', () => {
 			invoke: vi.fn(async (operation, value: any) => {
 				if (operation === 'treedx.workspaces.files.batch') written = value.body.files[0].content;
 				if (operation === 'treedx.workspaces.commit') return { commitSha: candidateCommit };
-				if (operation === 'treedx.repositories.files.read') return { files: [{ path: target.path, content: written || 'Exact proposal source', frontmatter: proposal }] };
+				if (operation === 'treedx.repositories.files.read') return { resolvedRef: value.body.ref, files: [{ path: target.path, content: written || 'Exact proposal source', frontmatter: proposal }] };
 				return {};
 			}) };
 		const proposal = {

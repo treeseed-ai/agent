@@ -7,6 +7,7 @@ import { verifyFreezeIntegrity } from './freeze-integrity.ts';
 import { read } from './acceptance-cli.ts';
 import { verifyGolden } from './sdk-runtime-golden.test.ts';
 import { prepareSdkCampaign, verifySdkExternalState } from './prepare-campaign.ts';
+import { observeCampaign } from './workday/support/campaign-observation.ts';
 
 type Row = Record<string, any>;
 test('Frozen SDK campaign drives planning acting review and terminal golden gates', { timeout: 36_000_000 }, async () => {
@@ -39,25 +40,22 @@ test('Frozen SDK campaign drives planning acting review and terminal golden gate
 		'--idempotency-key', `golden-stop:${workdayId}`], team); };
 	const mentions = ['architect', 'researcher', 'tester', 'engineer', 'technical-writer', 'releaser', 'reviewer', 'reporter']
 		.map(role => `@sdk/${role}`).join(' ');
+	let externallyApproved = false;
+	const observedEvents = new Map<string, Record<string, unknown>>();
 	await monitorCampaign({ admittedSimulation: true, admitDiscussion: () => { read(['send', `sdk-golden-${workdayId}`, `${mentions} Discuss the exact frozen proposal, identify your role and dependencies, and publish useful planning contributions. Do not implement during planning.`,
 		'--proposal', freeze.proposal.id, '--workday', workdayId, '--no-wait', '--idempotency-key', `golden-discussion:${workdayId}`], team, false, 240_000); }, read: () => {
 		const observed = read(['workdays', 'show', workdayId], team);
-		const current = observed.run as Row;
-		assert.equal(current.id, workdayId, 'ACCEPTANCE_CAMPAIGN_ID: Read-back changed identity');
-		const scheduling = observed.scheduling as Row;
-		const failed = (items: Row[], kind: 'assignment' | 'graph') => {
-			for (const status of ['failed', 'returned', 'expired'] as const) {
-				if (items.some((item: Row) => item.status === status && item.count > 0)) return `${kind}_${status}` as const;
-			}
-			return undefined;
-		};
-		const failedBoundary = failed(scheduling?.assignments ?? [], 'assignment') ?? failed(scheduling?.nodes ?? [], 'graph');
+		const snapshot = observeCampaign(observed, workdayId, observedEvents);
+		const current = snapshot.run as Row, failedBoundary = snapshot.failedBoundary;
 		return { status: current.status, mode: current.executionMode, failedBoundary,
 			planningEndsAt: Date.parse(current.startedAt) + current.parameters.durationSeconds * current.parameters.planningPercent * 10,
 			endsAt: Date.parse(current.parameters.appliedPlan.endsAt) };
 	}, now: Date.now, wait: () => new Promise(resolve => setTimeout(resolve, 30_000)), stop,
 		collaboration: () => {
 			verifyGolden('collaboration');
+			// Observe every new boundary, but never repeat the external governance
+			// mutation just because another polling interval or round completed.
+			if (externallyApproved) return;
 			const project = body.projects[0] as string;
 			const proposal = read(['proposals', 'show', freeze.proposal.id, '--server', 'local', '--project', project], team, true);
 			const version = Number(proposal.activeVersion);
@@ -69,6 +67,7 @@ test('Frozen SDK campaign drives planning acting review and terminal golden gate
 			assert.equal(approval.status, 'accepted', 'ACCEPTANCE_EXTERNAL_APPROVAL: Proposal was not accepted');
 			assert.ok(typeof approval.decisionId === 'string' && approval.decisionId,
 				'ACCEPTANCE_EXACT_DECISION: External approval did not create an exact decision');
+			externallyApproved = true;
 		},
 		verify: () => { for (const gate of ['lifecycle', 'graph', 'revision', 'results', 'settlement', 'reporter'] as const) verifyGolden(gate);
 			verifySdkExternalState(freeze); } });

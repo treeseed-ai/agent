@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -9,7 +9,7 @@ import { recoverPlanningSynthesis } from '../../../src/sandbox/planning-synthesi
 import { run, withinAssignmentBudget } from '../../../src/sandbox/process-runner.ts';
 import { timingAwarenessContract } from '../../../src/sandbox/guest.ts';
 
-async function exercise(mode: string, initial: 'missing' | 'reversed', operation: (input: Parameters<typeof recoverPlanningSynthesis>[0], root: string) => Promise<void>) {
+async function exercise(mode: string, initial: 'missing' | 'reversed', operation: (input: Parameters<typeof recoverPlanningSynthesis>[0], root: string) => Promise<void>, expectedCalls = 1) {
 	const root = await mkdtemp(join(tmpdir(), 'treeseed-synthesis-process-'));
 	try {
 		const predecessors = Array.from({ length: 8 }, (_, index) => ({ id: `result-process-${index}`, summary: `Observed contribution ${index}` }));
@@ -40,7 +40,7 @@ async function exercise(mode: string, initial: 'missing' | 'reversed', operation
 				expect(clock.firstToolCompliant).toBe(true); expect(clock.finalToolCompliant).toBe(true);
 				expect(clock.completedChecks).toBe(2); } };
 		await operation(request, root);
-		expect(calls).toBe(1);
+		expect(calls).toBe(expectedCalls);
 	} finally { await rm(root, { recursive: true, force: true }); }
 }
 
@@ -110,5 +110,78 @@ it('rejects freshly empty correction rather than attributing a stale summary to 
 it('identifies freshly rewritten identical invalid output without fabricating a correction', async () => {
 	await exercise('unchanged', 'missing', async input => {
 		await expect(recoverPlanningSynthesis(input)).rejects.toThrow('correctionChanged=false');
+	});
+});
+
+it('native captured synthesis and schema remain byte identical when malformed or exhausted authority denies any correction child', async () => {
+	for (const value of [29_999, 0, -1, NaN, Infinity, -Infinity, '35000', null, undefined]) {
+		await exercise('valid', 'missing', async input => {
+			const original = await readFile(input.responsePath), schema = await readFile(input.schemaPath), context = structuredClone(input.context);
+			const supplied = Object.assign({ remainingMs: 35_000 }, { remainingMs: value });
+			input.remainingMs = () => supplied.remainingMs;
+			expect(await recoverPlanningSynthesis(input)).toBe(false);
+			expect(await readFile(input.responsePath)).toEqual(original); expect(await readFile(input.schemaPath)).toEqual(schema);
+			expect(input.context).toEqual(context);
+		}, 0);
+	}
+});
+
+it('native progress publication consumes the same measured recovery window without deleting captured work or launching a late correction', async () => {
+	await exercise('valid', 'missing', async (input, root) => {
+		const original = await readFile(input.responsePath), schema = await readFile(input.schemaPath), context = structuredClone(input.context);
+		const marker = join(root, 'progress-observation'), deadline = Date.now() + 31_000;
+		input.remainingMs = () => deadline - Date.now();
+		const progress: string[] = [];
+		input.progress = async stage => {
+			progress.push(stage);
+			if (stage !== 'provider.planning-synthesis-recovery.starting') return;
+			// Actual native filesystem publication, followed by bounded real work.
+			// This timer consumes authority; it is not an extension or fake clock.
+			await writeFile(marker, 'original progress publication\n');
+			await new Promise<void>(resolve => setTimeout(resolve, 1_100));
+		};
+		expect(await recoverPlanningSynthesis(input)).toBe(false);
+		expect(input.remainingMs()).toBeLessThan(30_000);
+		expect(await readFile(marker, 'utf8')).toBe('original progress publication\n');
+		expect(await readFile(input.responsePath)).toEqual(original); expect(await readFile(input.schemaPath)).toEqual(schema);
+		expect(progress).toEqual(['provider.planning-synthesis-recovery.starting']); expect(input.context).toEqual(context);
+	}, 0);
+});
+
+it('native captured-response read errors remain errors with original schema bytes and no child or substituted completion', async () => {
+	await exercise('valid', 'missing', async (input, root) => {
+		const responsePath = input.responsePath, original = await readFile(responsePath), schema = await readFile(input.schemaPath);
+		input.responsePath = root;
+		await expect(recoverPlanningSynthesis(input)).rejects.toMatchObject({ code: 'EISDIR' });
+		expect((await stat(root)).isDirectory()).toBe(true);
+		expect(await readFile(responsePath)).toEqual(original); expect(await readFile(input.schemaPath)).toEqual(schema);
+	}, 0);
+});
+
+it('native denied recovery progress retains its exact cause and captured bytes before any removal or subprocess', async () => {
+	await exercise('valid', 'missing', async input => {
+		const original = await readFile(input.responsePath), schema = await readFile(input.schemaPath), context = structuredClone(input.context);
+		const cause = Object.assign(new Error('original native progress publication denied'), { code: 'EACCES' });
+		input.progress = async () => { throw cause; };
+		await expect(recoverPlanningSynthesis(input)).rejects.toBe(cause);
+		expect(await readFile(input.responsePath)).toEqual(original); expect(await readFile(input.schemaPath)).toEqual(schema);
+		expect(input.context).toEqual(context);
+	}, 0);
+});
+
+it('native correction honors newly shortened authority after progress without increasing its original child allowance', async () => {
+	await exercise('valid', 'missing', async input => {
+		const originalExecute = input.execute, initial = 35_000;
+		let current = initial, measuredTimeout: number | undefined;
+		input.remainingMs = () => current;
+		input.progress = async stage => { if (stage === 'provider.planning-synthesis-recovery.starting') current = 30_000; };
+		input.execute = async (executable, args, options) => {
+			measuredTimeout = options?.timeoutMs;
+			return originalExecute(executable, args, options);
+		};
+		expect(await recoverPlanningSynthesis(input)).toBe(true);
+		expect(measuredTimeout).toBe(30_000); expect(current).toBe(30_000);
+		const report = validateActivityCompletion(JSON.parse(await readFile(input.responsePath, 'utf8')), false);
+		expect(() => assertPredecessorSynthesis(input.context, report)).not.toThrow();
 	});
 });

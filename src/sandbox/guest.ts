@@ -1,5 +1,6 @@
 import { run, withinAssignmentBudget, remainingExecutionMs } from './process-runner.ts';
 import { createHash } from 'node:crypto';
+import { isDeepStrictEqual } from 'node:util';
 import { createReadStream } from 'node:fs';
 import { createServer } from 'node:http';
 import { request as httpsRequest } from 'node:https';
@@ -69,15 +70,7 @@ export function treeDxToolDefinitions(){return [
 	];}
 
 export function completedTimeStatusChecks(events: Record<string, unknown>[]) {
-	return events.filter(event => {
-		const item = record(event.item);
-		return event.type === 'item.completed'
-			&& item.type === 'mcp_tool_call'
-			&& item.server === 'treedx'
-			&& item.tool === 'treeseed_time_status'
-			&& item.status === 'completed'
-			&& !item.error;
-	}).length;
+	return timingAwarenessContract(events).completedChecks;
 }
 
 type TimingAwarenessTracker = {
@@ -86,14 +79,39 @@ type TimingAwarenessTracker = {
 	firstToolSucceeded: boolean;
 	lastTool: string | null;
 	lastToolSucceeded: boolean;
+	clockWindow?: { startedAt: string; deadlineAt: string; remainingSeconds: number };
+	clockInvalid?: boolean;
 };
+
+export function clockReading(raw: unknown): TimingAwarenessTracker['clockWindow'] | undefined {
+	const result = record(raw);
+	if (result.isError || !Array.isArray(result.content) || result.content.length !== 1) return;
+	const content = record(result.content[0]);
+	if (content.type !== 'text' || typeof content.text !== 'string') return;
+	let parsed: unknown;
+	try { parsed = JSON.parse(content.text); } catch { return; }
+	if (result.structuredContent !== undefined && !isDeepStrictEqual(parsed, result.structuredContent)) return;
+	const value = record(parsed), start = value.startedAt, end = value.deadlineAt, remaining = value.remainingSeconds;
+	const iso = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/u;
+	if (typeof start !== 'string' || typeof end !== 'string' || !iso.test(start) || !iso.test(end)
+		|| !Number.isFinite(Date.parse(start)) || !Number.isFinite(Date.parse(end)) || Date.parse(end) <= Date.parse(start)
+		|| typeof remaining !== 'number' || !Number.isSafeInteger(remaining) || remaining < 0
+		|| remaining > Math.ceil((Date.parse(end) - Date.parse(start)) / 1_000)) return;
+	return { startedAt: start, deadlineAt: end, remainingSeconds: remaining };
+}
 
 export function observeTimingAwarenessEvent(tracker: TimingAwarenessTracker, event: Record<string, unknown>) {
 	const tool = providerToolName(event);
 	if (!tool) return tracker;
 	const item = record(event.item);
 	const completed = event.type === 'item.completed';
-	const succeeded = completed && item.status === 'completed' && !item.error;
+	let succeeded = completed && item.status === 'completed' && !item.error;
+	if (completed && tool === 'treedx:treeseed_time_status' && succeeded) {
+		const reading = clockReading(item.result), prior = tracker.clockWindow;
+		if (!reading || prior && (reading.startedAt !== prior.startedAt || reading.deadlineAt !== prior.deadlineAt
+			|| reading.remainingSeconds > prior.remainingSeconds)) { tracker.clockInvalid = true; succeeded = false; }
+		else tracker.clockWindow = reading;
+	}
 	if (!tracker.firstTool) { tracker.firstTool = tool; tracker.firstToolSucceeded = succeeded; }
 	else if (completed && tracker.firstTool === tool && tracker.lastTool === tool) tracker.firstToolSucceeded ||= succeeded;
 	tracker.lastTool = tool;
@@ -104,18 +122,22 @@ export function observeTimingAwarenessEvent(tracker: TimingAwarenessTracker, eve
 
 export function timingAwarenessContract(events: Record<string, unknown>[]) {
 	const tracker = events.reduce(observeTimingAwarenessEvent, { completedChecks: 0, firstTool: null, firstToolSucceeded: false, lastTool: null, lastToolSucceeded: false } as TimingAwarenessTracker);
-	return { requiredChecks: 2, ...tracker,
+	const { clockWindow: _window, clockInvalid, ...receipt } = tracker;
+	return { requiredChecks: 2, ...receipt,
 		schemaVersion: 'treeseed.assignment-timing-awareness/v1' as const,
-		firstToolCompliant: tracker.firstTool === 'treedx:treeseed_time_status' && tracker.firstToolSucceeded,
-		finalToolCompliant: tracker.lastTool === 'treedx:treeseed_time_status' && tracker.lastToolSucceeded };
+		firstToolCompliant: !clockInvalid && tracker.firstTool === 'treedx:treeseed_time_status' && tracker.firstToolSucceeded,
+		finalToolCompliant: !clockInvalid && tracker.lastTool === 'treedx:treeseed_time_status' && tracker.lastToolSucceeded };
 }
 
 export function timingRecoveryEligible(contract: ReturnType<typeof timingAwarenessContract>, remainingMs: number) {
 	// A model may make the second clock check, then use another tool. In that
 	// case the final-tool boundary is still broken; one same-session clock-only
 	// continuation can repair it without extending the allocator deadline.
-	return contract.firstToolCompliant && (contract.completedChecks < 2 || !contract.finalToolCompliant)
-		&& remainingMs >= 15_000;
+	return contract.schemaVersion === 'treeseed.assignment-timing-awareness/v1' && contract.requiredChecks === 2
+		&& contract.firstTool === 'treedx:treeseed_time_status' && contract.firstToolSucceeded === true && contract.firstToolCompliant === true
+		&& typeof contract.finalToolCompliant === 'boolean' && Number.isSafeInteger(contract.completedChecks) && contract.completedChecks >= 1
+		&& (contract.completedChecks < 2 || !contract.finalToolCompliant)
+		&& typeof remainingMs === 'number' && Number.isFinite(remainingMs) && remainingMs >= 15_000;
 }
 
 export function codexThreadId(events: Record<string, unknown>[]) {
@@ -245,7 +267,7 @@ export async function runSandboxGuest() {
 	const canonicalActivity = text(record(record(record(context.canonicalAssignmentContext).assignment).effectiveProfile).activity);
 	const canonicalAssignment = record(record(context.canonicalAssignmentContext).assignment);
 	const allowVerification = activityAllowsVerification(canonicalActivity, text(canonicalAssignment.agentClass),
-		text(record(canonicalAssignment.workspace).mode));
+		text(record(canonicalAssignment.workspace).mode), canonicalAssignment.acceptanceCriteria);
 	if (source) {
 		if (source.teamId !== assignment.teamId || source.projectId !== assignment.projectId) throw new Error('Attached source does not match assignment scope.');
 		const head = (await execute('/usr/bin/git', ['rev-parse', '--verify', 'HEAD^{commit}'], { cwd: '/workspace/project', captureStdout: true, maxStdoutBytes: 128, timeoutMs: 10_000 })).stdout.trim();
@@ -396,9 +418,10 @@ export async function runSandboxGuest() {
 				if (!correction.firstToolCompliant || !correction.finalToolCompliant || correctionEvents.some((event) => providerToolName(event) && providerToolName(event) !== 'treedx:treeseed_time_status')) throw new Error('Planning synthesis correction failed its clock-only tool boundary.'); },
 		}) && subscriptionAuth) {
 			await writeFile(resolve(outputRoot, 'codex-auth.json'), await readFile(resolve(codexHome, 'auth.json')), { mode: 0o600 }); }
-		const timingAwareness = { schemaVersion: 'treeseed.assignment-timing-awareness/v1' as const, requiredChecks: 2 as const, ...timingTracker,
-			firstToolCompliant: timingTracker.firstTool === 'treedx:treeseed_time_status' && timingTracker.firstToolSucceeded,
-			finalToolCompliant: timingTracker.lastTool === 'treedx:treeseed_time_status' && timingTracker.lastToolSucceeded };
+		const { clockWindow: _window, clockInvalid, ...timingReceipt } = timingTracker;
+		const timingAwareness = { schemaVersion: 'treeseed.assignment-timing-awareness/v1' as const, requiredChecks: 2 as const, ...timingReceipt,
+			firstToolCompliant: !clockInvalid && timingTracker.firstTool === 'treedx:treeseed_time_status' && timingTracker.firstToolSucceeded,
+			finalToolCompliant: !clockInvalid && timingTracker.lastTool === 'treedx:treeseed_time_status' && timingTracker.lastToolSucceeded };
 		if (timingAwareness.completedChecks < 2 || !timingAwareness.firstToolCompliant || !timingAwareness.finalToolCompliant) {
 			const secrets = [operationToken, ...(subscriptionAuth ? providerCredentialValues(JSON.parse(subscriptionAuth.toString('utf8'))) : [])];
 			throw new Error(`Agent timing-awareness contract requires treeseed_time_status as the first and final tool actions with two completed checks. Provider errors: ${providerFailureSummary(events, secrets) || '(none)'}. Observed ${JSON.stringify(timingAwareness)}. Provider event shapes: ${JSON.stringify(providerEventShapeSummary(events, secrets))}. Response preview: ${providerResponsePreview(events, secrets) || '(empty)'}`);

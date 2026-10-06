@@ -22,9 +22,13 @@ describe('canonical workspace path enforcement', () => {
 	});
 	it('denies traversal and sibling-prefix escapes before publication', () => {
 		for (const path of ['src/../../outside', 'src/../secret', '/etc/passwd', '../src/file.ts', 'src/./file.ts',
-			'src//file.ts', 'src\\..\\secret', 'src/file\0.ts', '', 'src-other/file.ts']) {
+			'src//file.ts', 'src\\..\\secret', 'src/file\0.ts', '', 'src-other/file.ts', 'tests/protected.test.ts']) {
 			const { scoped, commitSource } = fixture();
-			expect(() => scoped.commitSource({ message: 'Work', paths: [path] })).toThrow('assignment_grant_denied:source.path');
+			for (const paths of [[path], ['src/authorized.ts', path], [path, 'src/authorized.ts']]) {
+				const input = { message: 'Work', paths }, before = structuredClone(input);
+				expect(() => scoped.commitSource(input)).toThrow('assignment_grant_denied:source.path');
+				expect(input).toEqual(before);
+			}
 			expect(commitSource).not.toHaveBeenCalled();
 		}
 	});

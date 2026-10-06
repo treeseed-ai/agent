@@ -1,0 +1,8 @@
+schemaVersion: treeseed.scene/v1
+id: agent.golden.draft-handoff
+title: Actual draft next-work publication custody
+scope: local-integrated-runtime
+workflow:
+  - id: execution-handoff-live-1
+    action: { verifier: agent.golden.execution-handoff-live-1 }
+    expect: { status: passed }

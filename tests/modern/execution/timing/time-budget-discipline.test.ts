@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { promptFromContext } from '../../../../src/sandbox/guest-contract.ts';
 import { executeAssignmentTreeDxTool } from '../../../../src/provider/execution/microvm-executor.ts';
 import { enforceAssignmentGrant } from '../../../../src/kernel/granted-runtime.ts';
+import { assignmentAttemptSchema } from '@treeseed/sdk/agent-capacity';
+import { request } from '../../kernel/provider-kernel-fixture.ts';
 
 afterEach(() => vi.useRealTimers());
 describe('ongoing authoritative time-budget discipline', () => {
@@ -40,12 +42,16 @@ describe('ongoing authoritative time-budget discipline', () => {
 	it('measures decreasing real authority without resetting time on repeated checks', async () => {
 		vi.useFakeTimers({ toFake: ['Date'] });
 		const startedAt = '2026-10-01T20:20:00.000Z', deadlineAt = '2026-10-01T20:23:00.000Z';
+		const input = request(), original = assignmentAttemptSchema.parse(input.assignment.assignmentAttempt);
+		const attempt = assignmentAttemptSchema.parse({ ...original, createdAt: startedAt, deadline: deadlineAt,
+			limits: { ...original.limits, maximumSeconds: 180 } });
+		input.assignment = { ...input.assignment, assignmentAttempt: attempt };
 		for (const [at, remainingSeconds] of [['20:20:00', 180], ['20:21:20', 100], ['20:22:30', 30], ['20:23:01', 0]] as const) {
 			vi.setSystemTime(new Date(`2026-10-01T${at}.000Z`));
-			await expect(executeAssignmentTreeDxTool({} as never, 'treeseed_time_status', {}, { startedAt, deadlineAt }))
+			await expect(executeAssignmentTreeDxTool(input, 'treeseed_time_status', {}, { startedAt, deadlineAt }))
 				.resolves.toEqual({ startedAt, deadlineAt, remainingSeconds });
 		}
-		await expect(executeAssignmentTreeDxTool({} as never, 'treeseed_time_status', {})).rejects.toThrow('Productive execution has not started');
+		await expect(executeAssignmentTreeDxTool(input, 'treeseed_time_status', {})).rejects.toThrow('Productive execution has not started');
 	});
 	it('does not invent proposal publication authority when time runs short', () => {
 		const commitTreeDx = vi.fn();

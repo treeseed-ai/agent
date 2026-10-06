@@ -2,15 +2,25 @@ import { describe, expect, it, vi } from 'vitest';
 import { createHash } from 'node:crypto';
 import { canonicalStandardsJson } from '@treeseed/sdk/standards';
 import { materializeAssignmentContext } from '../../../src/kernel/materialize-context.ts';
+import { assignmentAttemptSchema, type AssignmentAttempt } from '@treeseed/sdk/agent-capacity';
+import { request } from './provider-kernel-fixture.ts';
+
+function attempt(input: { contextRefs: AssignmentAttempt['contextRefs']; effectiveProfile: Pick<AssignmentAttempt['effectiveProfile'], 'activity'>;
+	sourceRef?: AssignmentAttempt['sourceRef']; teamId?: string; workdayId?: string; grant?: Pick<AssignmentAttempt['grant'], 'contentRead'> }): AssignmentAttempt {
+	const original = assignmentAttemptSchema.parse(request().assignment.assignmentAttempt);
+	return assignmentAttemptSchema.parse({ ...original, ...input, predecessorResultIds: [],
+		effectiveProfile: { ...original.effectiveProfile, ...input.effectiveProfile },
+		grant: { ...original.grant, contentRead: input.grant?.contentRead ?? input.contextRefs.filter(ref => ref.store === 'treedx') } });
+}
 
 describe('canonical assignment context materialization', () => {
 	it('keeps an exact Git path in source custody without invoking TreeDX', async () => {
 		const commit = 'b'.repeat(40);
-		const reference = { store: 'git', model: 'repository', id: 'sdk-fixture', repository: 'treeseed-ai/sdk',
+		const reference: AssignmentAttempt['sourceRef'] = { store: 'git', model: 'repository', id: 'sdk-fixture', repository: 'treeseed-ai/sdk',
 			commit, path: 'tests/fixtures/agent-execution/review-cycle.json' };
 		const invoke = vi.fn();
 		const context = await materializeAssignmentContext({
-			attempt: { contextRefs: [reference], effectiveProfile: { activity: 'acting' } } as never,
+			attempt: attempt({ contextRefs: [reference], effectiveProfile: { activity: 'acting' } }),
 			predecessorResults: [],
 			treeDx: { projectId: 'sdk-project', repositoryId: 'sdk-library', workspaceId: null, invoke } as never,
 		});
@@ -21,13 +31,13 @@ describe('canonical assignment context materialization', () => {
 
 	it('unwraps the control-plane envelope and accepts an exact extensionless TreeDX path', async () => {
 		const commit = 'a'.repeat(40);
-		const reference = { store: 'treedx', model: 'objective', id: 'team:objective',
+		const reference: AssignmentAttempt['sourceRef'] = { store: 'treedx', model: 'objective', id: 'team:objective',
 			repository: 'team-repository', commit, path: 'objectives/core' };
 		const invoke = vi.fn(async () => ({ result: { result: { ok: true, resolvedRef: commit, files: [{
 			path: 'objectives/core.mdx', requestedPath: 'objectives/core', content: '# Core', frontmatter: { id: 'core' },
 		}] } } }));
 		const context = await materializeAssignmentContext({
-			attempt: { contextRefs: [reference], effectiveProfile: { activity: 'acting' } } as never,
+			attempt: attempt({ contextRefs: [reference], effectiveProfile: { activity: 'acting' } }),
 			predecessorResults: [],
 			treeDx: { projectId: 'team-project', repositoryId: 'team-repository', workspaceId: null, invoke } as never,
 		});
@@ -41,43 +51,43 @@ describe('canonical assignment context materialization', () => {
 	it('materializes the published SDK Book from exact granted TreeDX custody', async () => {
 		const commit = 'e'.repeat(40);
 		const content = '# SDK Core';
-		const reference = { store: 'treedx', model: 'book', id: 'sdk-core', repository: 'sdk-library', commit,
+		const reference: AssignmentAttempt['sourceRef'] = { store: 'treedx', model: 'book', id: 'sdk-core', repository: 'sdk-library', commit,
 			path: 'books/sdk-core.md', revision: 1, digest: `sha256:${createHash('sha256').update(content).digest('hex')}` };
 		const frontmatter = { schemaVersion: 'treeseed.book/v3', id: 'sdk-core', projectId: 'sdk-project',
 			revision: 1, title: 'SDK Core', status: 'published' };
 		const invoke = vi.fn(async () => ({ result: { result: { resolvedRef: commit, files: [{
 			path: reference.path, requestedPath: reference.path, content, frontmatter,
 		}] } } }));
-		const context = await materializeAssignmentContext({ attempt: {
+		const context = await materializeAssignmentContext({ attempt: attempt({
 			contextRefs: [reference], grant: { contentRead: [reference] }, effectiveProfile: { activity: 'acting' },
-		} as never, predecessorResults: [], treeDx: { projectId: 'sdk-project', repositoryId: 'sdk-library', workspaceId: null, invoke } as never });
+		}), predecessorResults: [], treeDx: { projectId: 'sdk-project', repositoryId: 'sdk-library', workspaceId: null, invoke } as never });
 		expect(context.context[0]).toMatchObject({ ref: reference, value: { frontmatter, content: '# SDK Core' } });
 		expect(invoke).toHaveBeenCalledWith('treedx.repositories.files.read', expect.objectContaining({
 			body: expect.objectContaining({ ref: commit, paths: ['books/sdk-core.md'] }),
 		}));
 		for (const invalid of [{ ...reference, digest: `sha256:${'0'.repeat(64)}` },
 			{ ...reference, revision: 2 }, { ...reference, digest: undefined }]) {
-			await expect(materializeAssignmentContext({ attempt: { contextRefs: [invalid], grant: { contentRead: [invalid] },
-				effectiveProfile: { activity: 'acting' } } as never, predecessorResults: [],
+			await expect(materializeAssignmentContext({ attempt: attempt({ contextRefs: [invalid], grant: { contentRead: [invalid] },
+				effectiveProfile: { activity: 'acting' } }), predecessorResults: [],
 				treeDx: { projectId: 'sdk-project', repositoryId: 'sdk-library', workspaceId: null, invoke } as never }))
 				.rejects.toThrow('assignment_context_book_reference_invalid');
 		}
 	});
 	it.each(['team', 'workday', 'digest', 'activity'])('rejects inline Reporter context with incorrect %s authority', async failure => {
-		const ref = { store: 'postgresql', model: 'workday', id: 'workday', revision: 1, digest: `sha256:${'a'.repeat(64)}` };
+		const ref: AssignmentAttempt['sourceRef'] = { store: 'postgresql', model: 'workday', id: 'workday', revision: 1, digest: `sha256:${'a'.repeat(64)}` };
 		const value = { teamId: failure === 'team' ? 'another' : 'team', workdayId: failure === 'workday' ? 'another' : 'workday' };
-		await expect(materializeAssignmentContext({ attempt: { contextRefs: [], sourceRef: ref, teamId: 'team', workdayId: 'workday',
-			effectiveProfile: { activity: failure === 'activity' ? 'acting' : 'reporting' } } as never,
+		await expect(materializeAssignmentContext({ attempt: attempt({ contextRefs: [], sourceRef: ref, teamId: 'team', workdayId: 'workday',
+			effectiveProfile: { activity: failure === 'activity' ? 'acting' : 'reporting' } }),
 			predecessorResults: [], treeDx: {} as never, authorizedContext: [{ ref, mediaType: 'application/json', value,
 				digest: failure === 'digest' ? ref.digest : `sha256:${createHash('sha256').update(canonicalStandardsJson(value)).digest('hex')}` }] }))
 			.rejects.toThrow(/assignment_inline_context/u);
 	});
 	it('accepts PostgreSQL JSONB key reordering without weakening exact authority', async () => {
-		const ref = { store: 'postgresql', model: 'workday', id: 'workday', revision: 1, digest: `sha256:${'a'.repeat(64)}` };
+		const ref: AssignmentAttempt['sourceRef'] = { store: 'postgresql', model: 'workday', id: 'workday', revision: 1, digest: `sha256:${'a'.repeat(64)}` };
 		const value = { teamId: 'team', workdayId: 'workday', nodes: [{ id: 'actor', status: 'completed' }] };
 		const reordered = { nodes: [{ status: 'completed', id: 'actor' }], workdayId: 'workday', teamId: 'team' };
-		const context = await materializeAssignmentContext({ attempt: { contextRefs: [ref], sourceRef: ref,
-			teamId: 'team', workdayId: 'workday', effectiveProfile: { activity: 'reporting' } } as never,
+		const context = await materializeAssignmentContext({ attempt: attempt({ contextRefs: [ref], sourceRef: ref,
+			teamId: 'team', workdayId: 'workday', effectiveProfile: { activity: 'reporting' } }),
 			predecessorResults: [], treeDx: { invoke: vi.fn() } as never,
 			authorizedContext: [{ ref: { digest: ref.digest, revision: 1, id: 'workday', model: 'workday', store: 'postgresql' },
 				mediaType: 'application/json', value: reordered,

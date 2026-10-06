@@ -1,0 +1,14 @@
+schemaVersion: treeseed.scene/v1
+id: agent.golden.execution-failure-custody
+title: Actual controlled execution failure custody
+scope: local-integrated-runtime
+workflow:
+  - id: execution-recovery-authority-live-1
+    action: { verifier: agent.golden.execution-recovery-authority-live-1 }
+    expect: { status: passed }
+  - id: execution-failure-custody-live-1
+    action: { verifier: agent.golden.execution-failure-custody-live-1 }
+    expect: { status: passed }
+  - id: execution-tool-closeout-live-1
+    action: { verifier: agent.golden.execution-tool-closeout-live-1 }
+    expect: { status: passed }

@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import type { ProviderProtocolClient } from '@treeseed/sdk/capacity-provider';
 import { assignmentReferenceSchema, assignmentResultSchema } from '@treeseed/sdk/agent-capacity';
 import type { AgentExecutionRequest, AgentExecutor, AgentExecutionResult, AssignmentTreeDxFacade } from '../execution/contracts.ts';
-import { executeKernelAssignment } from '../../kernel/provider-kernel-executor.ts';
+import { aggregateExecutionUsage, executeKernelAssignment } from '../../kernel/provider-kernel-executor.ts';
 import type { Handler } from '../../kernel/contracts.ts';
 
 function record(value: unknown): Record<string, unknown> {
@@ -25,8 +25,8 @@ function text(...values: unknown[]) {
 }
 
 function settlementSeconds(value: unknown) {
-	const seconds = Number(value ?? 0);
-	if (!Number.isFinite(seconds) || seconds < 0) throw new Error('Execution provider reported invalid assignment timing.');
+	const seconds = value === undefined ? 0 : value;
+	if (typeof seconds !== 'number' || !Number.isFinite(seconds) || seconds < 0) throw new Error('Execution provider reported invalid assignment timing.');
 	return Math.ceil(seconds);
 }
 
@@ -142,10 +142,13 @@ export async function runProviderAssignment(input: ProviderAssignmentRunInput) {
       await input.client.createCommunicationTraceEvent(assignmentId, { leaseToken: input.leaseToken, runnerId: input.runnerId, sequence, ...event });
     } else {
       // Protected transcript payloads must not enter recipient-visible workday events.
-      await input.client.createAssignmentEvent(assignmentId, { id: `trace:${traceRunner}:${sequence}`,
-        eventType: `provider.${event.type}`, component: 'execution-provider',
-        status: event.type === 'execution.failed' ? 'failed' : event.type === 'execution.completed' ? 'completed' : 'recorded',
-        message: event.summary, createdAt: event.occurredAt, context: event.payload });
+			const body = { id: `trace:${traceRunner}:${sequence}`,
+				leaseToken: input.leaseToken, runnerId: input.runnerId, sequence,
+				...(event.protectedPayload === undefined ? {} : { protectedPayload: event.protectedPayload }),
+        eventType: `provider.${event.type}` as const, component: 'execution-provider' as const,
+        status: event.type === 'execution.failed' ? 'failed' as const : event.type === 'execution.completed' ? 'completed' as const : 'recorded' as const,
+        message: event.summary, createdAt: event.occurredAt, context: event.payload };
+			await input.client.createAssignmentEvent(assignmentId, body);
     }
   };
   try {
@@ -217,17 +220,22 @@ export async function runProviderAssignment(input: ProviderAssignmentRunInput) {
 		result = { ...result, status: 'completed', responseMarkdown: undefined,
 			outputs: { ...outputs, assignmentResult: assignmentResultSchema.parse({ ...canonical, references: [...canonical.references, reference] }) } };
 	}
-	if (result.status !== 'completed') await reportUsage(input, assignmentId, result);
+	if (!result.usage?.length && activeStartedAt === null) {
+		// No productive invocation occurred. Measure the real preparation scope;
+		// do not claim model-native usage or useful active time for a denied input.
+		result = { ...result, usage: [{ activeSeconds: 0, elapsedSeconds: (performance.now() - elapsedStartedAt) / 1000 }] };
+	}
+	await reportUsage(input, assignmentId, result);
+	const usage = aggregateExecutionUsage(result.usage);
   if (result.status === 'returned') {
-		const usage = record(result.usage?.[0]);
 		await input.client.settleAssignment(assignmentId, { activeSeconds: settlementSeconds(usage.activeSeconds), elapsedSeconds: settlementSeconds(usage.elapsedSeconds),
 			usageDimension: 'aggregate', usageActual: usage }, `assignment-settlement:${assignmentId}:${input.runnerId}`);
-    return input.client.returnAssignment(assignmentId, { leaseToken: input.leaseToken, runnerId: input.runnerId, code: result.code ?? 'agent_executor_returned', reason: result.summary, retryable: result.retryable ?? true, output: record(result.outputs) });
+    return input.client.returnAssignment(assignmentId, { leaseToken: input.leaseToken, runnerId: input.runnerId, code: result.code ?? 'agent_executor_returned', reason: result.summary, retryable: result.retryable ?? true, output: { ...record(result.outputs), artifacts: result.artifacts ?? [] } });
   }
   if (result.status === 'failed') {
-		const usage = record(result.usage?.[0]);
     return input.client.failAssignment(assignmentId, { leaseToken: input.leaseToken, runnerId: input.runnerId, code: result.code ?? 'agent_executor_failed', message: result.summary, retryable: result.retryable ?? false,
-			activeSeconds: settlementSeconds(usage.activeSeconds), elapsedSeconds: settlementSeconds(usage.elapsedSeconds), usage, output: record(result.outputs) });
+			activeSeconds: settlementSeconds(usage.activeSeconds), elapsedSeconds: settlementSeconds(usage.elapsedSeconds), usage,
+			output: { ...record(result.outputs), ...(result.artifacts !== undefined ? { artifacts: result.artifacts } : {}) } });
   }
   const current = await input.client.assignment(assignmentId);
   await input.client.startAssignmentCloseout(assignmentId, { leaseToken: input.leaseToken, runnerId: input.runnerId,
@@ -239,7 +247,6 @@ export async function runProviderAssignment(input: ProviderAssignmentRunInput) {
     output: { ...record(result.outputs), artifacts: result.artifacts ?? [] },
     metadata: {} as Record<string, unknown>,
   };
-  const usage = record(result.usage?.[0]);
   await input.client.settleAssignment(assignmentId, { activeSeconds: settlementSeconds(usage.activeSeconds), elapsedSeconds: settlementSeconds(usage.elapsedSeconds),
     usageDimension: 'aggregate', usageActual: usage }, `assignment-settlement:${assignmentId}:${input.runnerId}`);
   return input.client.completeAssignment(assignmentId, completion);

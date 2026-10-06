@@ -3,6 +3,1092 @@ id: agent.golden.component-boundaries
 title: Golden execution component boundaries
 scope: local-component-tests
 workflow:
+  - id: execution-availability-retry-unit
+    action: { verifier: agent.golden.execution-availability-retry-unit }
+    expect: { status: passed }
+  - id: execution-availability-retry-native
+    action: { verifier: agent.golden.execution-availability-retry-native }
+    expect: { status: passed }
+  - id: execution-availability-assignments-unit
+    action: { verifier: agent.golden.execution-availability-assignments-unit }
+    expect: { status: passed }
+  - id: execution-availability-assignments-native
+    action: { verifier: agent.golden.execution-availability-assignments-native }
+    expect: { status: passed }
+  - id: execution-report-note-unit
+    action: { verifier: agent.golden.execution-report-note-unit }
+    expect: { status: passed }
+  - id: execution-report-note-native
+    action: { verifier: agent.golden.execution-report-note-native }
+    expect: { status: passed }
+  - id: execution-reference-inventory-unit
+    action: { verifier: agent.golden.execution-reference-inventory-unit }
+    expect: { status: passed }
+  - id: execution-manifest-validation-unit
+    action: { verifier: agent.golden.execution-manifest-validation-unit }
+    expect: { status: passed }
+  - id: execution-process-group-unit
+    action: { verifier: agent.golden.execution-process-group-unit }
+    expect: { status: passed }
+  - id: execution-scene-binding-unit
+    action: { verifier: agent.golden.execution-scene-binding-unit }
+    expect: { status: passed }
+  - id: execution-provider-build-typecheck-unit
+    action: { verifier: agent.golden.execution-provider-build-typecheck-unit }
+    expect: { status: passed }
+  - id: execution-qualification-batch-unit-1
+    action: { verifier: agent.golden.execution-qualification-batch-unit-1 }
+    expect: { status: passed }
+  - id: execution-unfinished-handoff-unit-1
+    action: { verifier: agent.golden.execution-unfinished-handoff-unit-1 }
+    expect: { status: passed }
+  - id: execution-unfinished-handoff-unit-2
+    action: { verifier: agent.golden.execution-unfinished-handoff-unit-2 }
+    expect: { status: passed }
+  - id: execution-selected-code-unit-1
+    action: { verifier: agent.golden.execution-selected-code-unit-1 }
+    expect: { status: passed }
+  - id: execution-selected-code-unit-2
+    action: { verifier: agent.golden.execution-selected-code-unit-2 }
+    expect: { status: passed }
+  - id: execution-global-selection-unit-1
+    action: { verifier: agent.golden.execution-global-selection-unit-1 }
+    expect: { status: passed }
+  - id: execution-global-selection-unit-2
+    action: { verifier: agent.golden.execution-global-selection-unit-2 }
+    expect: { status: passed }
+  - id: execution-global-selection-native-1
+    action: { verifier: agent.golden.execution-global-selection-native-1 }
+    expect: { status: passed }
+  - id: execution-poll-quota-unit-1
+    action: { verifier: agent.golden.execution-poll-quota-unit-1 }
+    expect: { status: passed }
+  - id: execution-poll-quota-native-1
+    action: { verifier: agent.golden.execution-poll-quota-native-1 }
+    expect: { status: passed }
+  - id: execution-public-event-unit-1
+    action: { verifier: agent.golden.execution-public-event-unit-1 }
+    expect: { status: passed }
+  - id: agent.golden.execution-protected-observation-unit-1
+    action: { verifier: agent.golden.execution-protected-observation-unit-1 }
+    expect: { status: passed }
+  - id: execution-continuation-returned-unit-1
+    action: { verifier: agent.golden.execution-continuation-returned-unit-1 }
+    expect: { status: passed }
+  - id: execution-integration-identity-native-1
+    action: { verifier: agent.golden.execution-integration-identity-native-1 }
+    expect: { status: passed }
+  - id: execution-predecessor-lineage-unit-1
+    action: { verifier: agent.golden.execution-predecessor-lineage-unit-1 }
+    expect: { status: passed }
+  - id: execution-weighted-opportunity-unit-1
+    action: { verifier: agent.golden.execution-weighted-opportunity-unit-1 }
+    expect: { status: passed }
+  - id: execution-qualification-authority-unit-1
+    action: { verifier: agent.golden.execution-qualification-authority-unit-1 }
+    expect: { status: passed }
+  - id: execution-qualification-unit-1
+    action: { verifier: agent.golden.execution-qualification-unit-1 }
+    expect: { status: passed }
+  - id: execution-qualification-native-1
+    action: { verifier: agent.golden.execution-qualification-native-1 }
+    expect: { status: passed }
+  - id: execution-local-slot-unit-1
+    action: { verifier: agent.golden.execution-local-slot-unit-1 }
+    expect: { status: passed }
+  - id: execution-local-slot-native-1
+    action: { verifier: agent.golden.execution-local-slot-native-1 }
+    expect: { status: passed }
+  - id: execution-repeating-planning-unit-1
+    action: { verifier: agent.golden.execution-repeating-planning-unit-1 }
+    expect: { status: passed }
+  - id: execution-terminal-drain-unit-1
+    action: { verifier: agent.golden.execution-terminal-drain-unit-1 }
+    expect: { status: passed }
+  - id: execution-terminal-drain-native-1
+    action: { verifier: agent.golden.execution-terminal-drain-native-1 }
+    expect: { status: passed }
+  - id: execution-offer-signature-unit-1
+    action: { verifier: agent.golden.execution-offer-signature-unit-1 }
+    expect: { status: passed }
+  - id: execution-offer-signature-unit-2
+    action: { verifier: agent.golden.execution-offer-signature-unit-2 }
+    expect: { status: passed }
+  - id: execution-offer-signature-native-1
+    action: { verifier: agent.golden.execution-offer-signature-native-1 }
+    expect: { status: passed }
+  - id: execution-retained-quota-native-1
+    action: { verifier: agent.golden.execution-retained-quota-native-1 }
+    expect: { status: passed }
+  - id: execution-compiled-project-unit-1
+    action: { verifier: agent.golden.execution-compiled-project-unit-1 }
+    expect: { status: passed }
+  - id: execution-compiled-project-native-1
+    action: { verifier: agent.golden.execution-compiled-project-native-1 }
+    expect: { status: passed }
+  - id: execution-model-overlap-unit-1
+    action: { verifier: agent.golden.execution-model-overlap-unit-1 }
+    expect: { status: passed }
+  - id: execution-model-overlap-native-1
+    action: { verifier: agent.golden.execution-model-overlap-native-1 }
+    expect: { status: passed }
+  - id: execution-pending-model-unit-1
+    action: { verifier: agent.golden.execution-pending-model-unit-1 }
+    expect: { status: passed }
+  - id: execution-pending-model-native-1
+    action: { verifier: agent.golden.execution-pending-model-native-1 }
+    expect: { status: passed }
+  - id: execution-recovery-custody-unit-1
+    action: { verifier: agent.golden.execution-recovery-custody-unit-1 }
+    expect: { status: passed }
+  - id: execution-recovery-custody-unit-2
+    action: { verifier: agent.golden.execution-recovery-custody-unit-2 }
+    expect: { status: passed }
+  - id: execution-recovery-custody-unit-3
+    action: { verifier: agent.golden.execution-recovery-custody-unit-3 }
+    expect: { status: passed }
+  - id: execution-recovery-custody-native-1
+    action: { verifier: agent.golden.execution-recovery-custody-native-1 }
+    expect: { status: passed }
+  - id: execution-recovery-custody-native-2
+    action: { verifier: agent.golden.execution-recovery-custody-native-2 }
+    expect: { status: passed }
+  - id: execution-recovery-custody-native-3
+    action: { verifier: agent.golden.execution-recovery-custody-native-3 }
+    expect: { status: passed }
+  - id: execution-clock-values-unit-1
+    action: { verifier: agent.golden.execution-clock-values-unit-1 }
+    expect: { status: passed }
+  - id: execution-clock-values-unit-2
+    action: { verifier: agent.golden.execution-clock-values-unit-2 }
+    expect: { status: passed }
+  - id: execution-clock-values-unit-3
+    action: { verifier: agent.golden.execution-clock-values-unit-3 }
+    expect: { status: passed }
+  - id: execution-clock-values-native-1
+    action: { verifier: agent.golden.execution-clock-values-native-1 }
+    expect: { status: passed }
+  - id: execution-provider-cutover-unit-1
+    action: { verifier: agent.golden.execution-provider-cutover-unit-1 }
+    expect: { status: passed }
+  - id: execution-provider-cutover-unit-2
+    action: { verifier: agent.golden.execution-provider-cutover-unit-2 }
+    expect: { status: passed }
+  - id: execution-provider-cutover-native-1
+    action: { verifier: agent.golden.execution-provider-cutover-native-1 }
+    expect: { status: passed }
+  - id: execution-physical-absence-unit-1
+    action: { verifier: agent.golden.execution-physical-absence-unit-1 }
+    expect: { status: passed }
+  - id: execution-physical-absence-unit-2
+    action: { verifier: agent.golden.execution-physical-absence-unit-2 }
+    expect: { status: passed }
+  - id: execution-physical-absence-native-1
+    action: { verifier: agent.golden.execution-physical-absence-native-1 }
+    expect: { status: passed }
+  - id: execution-continuation-unit-1
+    action: { verifier: agent.golden.execution-continuation-unit-1 }
+    expect: { status: passed }
+  - id: execution-continuation-unit-2
+    action: { verifier: agent.golden.execution-continuation-unit-2 }
+    expect: { status: passed }
+  - id: execution-broker-boundary-unit-1
+    action: { verifier: agent.golden.execution-broker-boundary-unit-1 }
+    expect: { status: passed }
+  - id: execution-broker-boundary-unit-2
+    action: { verifier: agent.golden.execution-broker-boundary-unit-2 }
+    expect: { status: passed }
+  - id: execution-broker-boundary-unit-3
+    action: { verifier: agent.golden.execution-broker-boundary-unit-3 }
+    expect: { status: passed }
+  - id: execution-broker-boundary-native-1
+    action: { verifier: agent.golden.execution-broker-boundary-native-1 }
+    expect: { status: passed }
+  - id: execution-broker-boundary-native-2
+    action: { verifier: agent.golden.execution-broker-boundary-native-2 }
+    expect: { status: passed }
+  - id: execution-broker-boundary-native-3
+    action: { verifier: agent.golden.execution-broker-boundary-native-3 }
+    expect: { status: passed }
+  - id: execution-broker-boundary-native-4
+    action: { verifier: agent.golden.execution-broker-boundary-native-4 }
+    expect: { status: passed }
+  - id: execution-sandbox-closeout-unit-1
+    action: { verifier: agent.golden.execution-sandbox-closeout-unit-1 }
+    expect: { status: passed }
+  - id: execution-sandbox-closeout-unit-2
+    action: { verifier: agent.golden.execution-sandbox-closeout-unit-2 }
+    expect: { status: passed }
+  - id: execution-sandbox-closeout-unit-3
+    action: { verifier: agent.golden.execution-sandbox-closeout-unit-3 }
+    expect: { status: passed }
+  - id: execution-sandbox-closeout-native-1
+    action: { verifier: agent.golden.execution-sandbox-closeout-native-1 }
+    expect: { status: passed }
+  - id: execution-accounting-continuity-native-1
+    action: { verifier: agent.golden.execution-accounting-continuity-native-1 }
+    expect: { status: passed }
+  - id: execution-accounting-continuity-unit-1
+    action: { verifier: agent.golden.execution-accounting-continuity-unit-1 }
+    expect: { status: passed }
+  - id: execution-accounting-continuity-unit-2
+    action: { verifier: agent.golden.execution-accounting-continuity-unit-2 }
+    expect: { status: passed }
+  - id: execution-handler-inspection-unit-1
+    action: { verifier: agent.golden.execution-handler-inspection-unit-1 }
+    expect: { status: passed }
+  - id: execution-handler-inspection-unit-2
+    action: { verifier: agent.golden.execution-handler-inspection-unit-2 }
+    expect: { status: passed }
+  - id: execution-recovery-authority-unit-1
+    action: { verifier: agent.golden.execution-recovery-authority-unit-1 }
+    expect: { status: passed }
+  - id: execution-recovery-authority-unit-2
+    action: { verifier: agent.golden.execution-recovery-authority-unit-2 }
+    expect: { status: passed }
+  - id: execution-recovery-authority-unit-3
+    action: { verifier: agent.golden.execution-recovery-authority-unit-3 }
+    expect: { status: passed }
+  - id: execution-recovery-authority-unit-4
+    action: { verifier: agent.golden.execution-recovery-authority-unit-4 }
+    expect: { status: passed }
+  - id: execution-recovery-authority-unit-5
+    action: { verifier: agent.golden.execution-recovery-authority-unit-5 }
+    expect: { status: passed }
+  - id: execution-recovery-authority-unit-6
+    action: { verifier: agent.golden.execution-recovery-authority-unit-6 }
+    expect: { status: passed }
+  - id: execution-recovery-authority-unit-7
+    action: { verifier: agent.golden.execution-recovery-authority-unit-7 }
+    expect: { status: passed }
+  - id: execution-recovery-authority-native-1
+    action: { verifier: agent.golden.execution-recovery-authority-native-1 }
+    expect: { status: passed }
+  - id: execution-recovery-authority-native-2
+    action: { verifier: agent.golden.execution-recovery-authority-native-2 }
+    expect: { status: passed }
+  - id: execution-recovery-authority-native-3
+    action: { verifier: agent.golden.execution-recovery-authority-native-3 }
+    expect: { status: passed }
+  - id: execution-recovery-authority-native-4
+    action: { verifier: agent.golden.execution-recovery-authority-native-4 }
+    expect: { status: passed }
+  - id: execution-recovery-authority-native-5
+    action: { verifier: agent.golden.execution-recovery-authority-native-5 }
+    expect: { status: passed }
+  - id: execution-recovery-authority-native-6
+    action: { verifier: agent.golden.execution-recovery-authority-native-6 }
+    expect: { status: passed }
+  - id: execution-failure-custody-unit-1
+    action: { verifier: agent.golden.execution-failure-custody-unit-1 }
+    expect: { status: passed }
+  - id: execution-failure-custody-unit-2
+    action: { verifier: agent.golden.execution-failure-custody-unit-2 }
+    expect: { status: passed }
+  - id: execution-failure-custody-unit-3
+    action: { verifier: agent.golden.execution-failure-custody-unit-3 }
+    expect: { status: passed }
+  - id: execution-failure-custody-native-1
+    action: { verifier: agent.golden.execution-failure-custody-native-1 }
+    expect: { status: passed }
+  - id: execution-failure-custody-native-2
+    action: { verifier: agent.golden.execution-failure-custody-native-2 }
+    expect: { status: passed }
+  - id: architecture-revision-custody-unit-1
+    action: { verifier: agent.golden.architecture-revision-custody-unit-1 }
+    expect: { status: passed }
+  - id: architecture-revision-custody-unit-2
+    action: { verifier: agent.golden.architecture-revision-custody-unit-2 }
+    expect: { status: passed }
+  - id: architecture-predecessor-context-unit-1
+    action: { verifier: agent.golden.architecture-predecessor-context-unit-1 }
+    expect: { status: passed }
+  - id: architecture-predecessor-context-unit-2
+    action: { verifier: agent.golden.architecture-predecessor-context-unit-2 }
+    expect: { status: passed }
+  - id: architecture-predecessor-context-native-1
+    action: { verifier: agent.golden.architecture-predecessor-context-native-1 }
+    expect: { status: passed }
+  - id: architecture-portfolio-relations-unit-1
+    action: { verifier: agent.golden.architecture-portfolio-relations-unit-1 }
+    expect: { status: passed }
+  - id: architecture-portfolio-relations-unit-2
+    action: { verifier: agent.golden.architecture-portfolio-relations-unit-2 }
+    expect: { status: passed }
+  - id: architecture-portfolio-relations-unit-3
+    action: { verifier: agent.golden.architecture-portfolio-relations-unit-3 }
+    expect: { status: passed }
+  - id: architecture-portfolio-relations-unit-4
+    action: { verifier: agent.golden.architecture-portfolio-relations-unit-4 }
+    expect: { status: passed }
+  - id: architecture-cross-project-readback-unit-1
+    action: { verifier: agent.golden.architecture-cross-project-readback-unit-1 }
+    expect: { status: passed }
+  - id: architecture-cross-project-readback-unit-2
+    action: { verifier: agent.golden.architecture-cross-project-readback-unit-2 }
+    expect: { status: passed }
+  - id: architecture-cross-project-readback-unit-3
+    action: { verifier: agent.golden.architecture-cross-project-readback-unit-3 }
+    expect: { status: passed }
+  - id: architecture-cross-project-readback-unit-4
+    action: { verifier: agent.golden.architecture-cross-project-readback-unit-4 }
+    expect: { status: passed }
+  - id: architecture-cross-project-readback-unit-5
+    action: { verifier: agent.golden.architecture-cross-project-readback-unit-5 }
+    expect: { status: passed }
+  - id: architecture-cross-project-unit-1
+    action: { verifier: agent.golden.architecture-cross-project-unit-1 }
+    expect: { status: passed }
+  - id: architecture-cross-project-unit-2
+    action: { verifier: agent.golden.architecture-cross-project-unit-2 }
+    expect: { status: passed }
+  - id: architecture-cross-project-unit-3
+    action: { verifier: agent.golden.architecture-cross-project-unit-3 }
+    expect: { status: passed }
+  - id: architecture-cross-project-native-1
+    action: { verifier: agent.golden.architecture-cross-project-native-1 }
+    expect: { status: passed }
+  - id: architecture-cross-project-native-2
+    action: { verifier: agent.golden.architecture-cross-project-native-2 }
+    expect: { status: passed }
+  - id: architecture-cross-project-native-3
+    action: { verifier: agent.golden.architecture-cross-project-native-3 }
+    expect: { status: passed }
+  - id: architecture-cross-project-native-4
+    action: { verifier: agent.golden.architecture-cross-project-native-4 }
+    expect: { status: passed }
+  - id: execution-descendant-closeout-unit-1
+    action: { verifier: agent.golden.execution-descendant-closeout-unit-1 }
+    expect: { status: passed }
+  - id: execution-descendant-closeout-native-1
+    action: { verifier: agent.golden.execution-descendant-closeout-native-1 }
+    expect: { status: passed }
+  - id: architecture-budget-unit-1
+    action: { verifier: agent.golden.architecture-budget-unit-1 }
+    expect: { status: passed }
+  - id: architecture-budget-unit-2
+    action: { verifier: agent.golden.architecture-budget-unit-2 }
+    expect: { status: passed }
+  - id: architecture-budget-unit-3
+    action: { verifier: agent.golden.architecture-budget-unit-3 }
+    expect: { status: passed }
+  - id: architecture-budget-native-1
+    action: { verifier: agent.golden.architecture-budget-native-1 }
+    expect: { status: passed }
+  - id: execution-verification-window-native-1
+    action: { verifier: agent.golden.execution-verification-window-native-1 }
+    expect: { status: passed }
+  - id: architecture-budget-native-2
+    action: { verifier: agent.golden.architecture-budget-native-2 }
+    expect: { status: passed }
+  - id: architecture-budget-native-3
+    action: { verifier: agent.golden.architecture-budget-native-3 }
+    expect: { status: passed }
+  - id: architecture-budget-native-4
+    action: { verifier: agent.golden.architecture-budget-native-4 }
+    expect: { status: passed }
+  - id: architecture-source-attachment-unit-1
+    action: { verifier: agent.golden.architecture-source-attachment-unit-1 }
+    expect: { status: passed }
+  - id: architecture-source-attachment-unit-2
+    action: { verifier: agent.golden.architecture-source-attachment-unit-2 }
+    expect: { status: passed }
+  - id: architecture-source-attachment-unit-3
+    action: { verifier: agent.golden.architecture-source-attachment-unit-3 }
+    expect: { status: passed }
+  - id: architecture-source-attachment-unit-4
+    action: { verifier: agent.golden.architecture-source-attachment-unit-4 }
+    expect: { status: passed }
+  - id: architecture-source-attachment-native-1
+    action: { verifier: agent.golden.architecture-source-attachment-native-1 }
+    expect: { status: passed }
+  - id: architecture-source-attachment-native-2
+    action: { verifier: agent.golden.architecture-source-attachment-native-2 }
+    expect: { status: passed }
+  - id: architecture-source-attachment-native-3
+    action: { verifier: agent.golden.architecture-source-attachment-native-3 }
+    expect: { status: passed }
+  - id: architecture-record-custody-unit-1
+    action: { verifier: agent.golden.architecture-record-custody-unit-1 }
+    expect: { status: passed }
+  - id: architecture-record-custody-unit-2
+    action: { verifier: agent.golden.architecture-record-custody-unit-2 }
+    expect: { status: passed }
+  - id: architecture-record-custody-unit-3
+    action: { verifier: agent.golden.architecture-record-custody-unit-3 }
+    expect: { status: passed }
+  - id: architecture-record-custody-unit-4
+    action: { verifier: agent.golden.architecture-record-custody-unit-4 }
+    expect: { status: passed }
+  - id: architecture-record-custody-unit-5
+    action: { verifier: agent.golden.architecture-record-custody-unit-5 }
+    expect: { status: passed }
+  - id: architecture-record-custody-unit-6
+    action: { verifier: agent.golden.architecture-record-custody-unit-6 }
+    expect: { status: passed }
+  - id: architecture-record-custody-unit-7
+    action: { verifier: agent.golden.architecture-record-custody-unit-7 }
+    expect: { status: passed }
+  - id: architecture-record-custody-unit-8
+    action: { verifier: agent.golden.architecture-record-custody-unit-8 }
+    expect: { status: passed }
+  - id: architecture-record-custody-unit-9
+    action: { verifier: agent.golden.architecture-record-custody-unit-9 }
+    expect: { status: passed }
+  - id: architecture-record-custody-unit-10
+    action: { verifier: agent.golden.architecture-record-custody-unit-10 }
+    expect: { status: passed }
+  - id: architecture-record-custody-unit-11
+    action: { verifier: agent.golden.architecture-record-custody-unit-11 }
+    expect: { status: passed }
+  - id: execution-quota-manifest-unit-1
+    action: { verifier: agent.golden.execution-quota-manifest-unit-1 }
+    expect: { status: passed }
+  - id: execution-quota-manifest-native-1
+    action: { verifier: agent.golden.execution-quota-manifest-native-1 }
+    expect: { status: passed }
+  - id: architecture-arbitration-unit-1
+    action: { verifier: agent.golden.architecture-arbitration-unit-1 }
+    expect: { status: passed }
+  - id: architecture-arbitration-unit-2
+    action: { verifier: agent.golden.architecture-arbitration-unit-2 }
+    expect: { status: passed }
+  - id: architecture-arbitration-unit-3
+    action: { verifier: agent.golden.architecture-arbitration-unit-3 }
+    expect: { status: passed }
+  - id: architecture-arbitration-unit-4
+    action: { verifier: agent.golden.architecture-arbitration-unit-4 }
+    expect: { status: passed }
+  - id: architecture-arbitration-native-1
+    action: { verifier: agent.golden.architecture-arbitration-native-1 }
+    expect: { status: passed }
+  - id: architecture-arbitration-native-2
+    action: { verifier: agent.golden.architecture-arbitration-native-2 }
+    expect: { status: passed }
+  - id: architecture-arbitration-native-3
+    action: { verifier: agent.golden.architecture-arbitration-native-3 }
+    expect: { status: passed }
+  - id: architecture-arbitration-native-4
+    action: { verifier: agent.golden.architecture-arbitration-native-4 }
+    expect: { status: passed }
+  - id: architecture-arbitration-native-5
+    action: { verifier: agent.golden.architecture-arbitration-native-5 }
+    expect: { status: passed }
+  - id: architecture-arbitration-native-6
+    action: { verifier: agent.golden.architecture-arbitration-native-6 }
+    expect: { status: passed }
+  - id: architecture-arbitration-native-7
+    action: { verifier: agent.golden.architecture-arbitration-native-7 }
+    expect: { status: passed }
+  - id: architecture-arbitration-native-8
+    action: { verifier: agent.golden.architecture-arbitration-native-8 }
+    expect: { status: passed }
+  - id: architecture-start-custody-unit-1
+    action: { verifier: agent.golden.architecture-start-custody-unit-1 }
+    expect: { status: passed }
+  - id: architecture-start-custody-unit-2
+    action: { verifier: agent.golden.architecture-start-custody-unit-2 }
+    expect: { status: passed }
+  - id: architecture-start-custody-unit-3
+    action: { verifier: agent.golden.architecture-start-custody-unit-3 }
+    expect: { status: passed }
+  - id: architecture-start-custody-unit-4
+    action: { verifier: agent.golden.architecture-start-custody-unit-4 }
+    expect: { status: passed }
+  - id: architecture-start-custody-unit-5
+    action: { verifier: agent.golden.architecture-start-custody-unit-5 }
+    expect: { status: passed }
+  - id: architecture-provider-fairness-authority-1
+    action: { verifier: agent.golden.architecture-provider-fairness-authority-1 }
+    expect: { status: passed }
+  - id: architecture-provider-fairness-authority-2
+    action: { verifier: agent.golden.architecture-provider-fairness-authority-2 }
+    expect: { status: passed }
+  - id: architecture-provider-fairness-authority-3
+    action: { verifier: agent.golden.architecture-provider-fairness-authority-3 }
+    expect: { status: passed }
+  - id: architecture-provider-fairness-authority-4
+    action: { verifier: agent.golden.architecture-provider-fairness-authority-4 }
+    expect: { status: passed }
+  - id: architecture-provider-fairness-authority-5
+    action: { verifier: agent.golden.architecture-provider-fairness-authority-5 }
+    expect: { status: passed }
+  - id: architecture-provider-capacity-native-1
+    action: { verifier: agent.golden.architecture-provider-capacity-native-1 }
+    expect: { status: passed }
+  - id: architecture-provider-capacity-native-2
+    action: { verifier: agent.golden.architecture-provider-capacity-native-2 }
+    expect: { status: passed }
+  - id: architecture-provider-capacity-native-3
+    action: { verifier: agent.golden.architecture-provider-capacity-native-3 }
+    expect: { status: passed }
+  - id: architecture-provider-capacity-native-4
+    action: { verifier: agent.golden.architecture-provider-capacity-native-4 }
+    expect: { status: passed }
+  - id: architecture-provider-capacity-native-5
+    action: { verifier: agent.golden.architecture-provider-capacity-native-5 }
+    expect: { status: passed }
+  - id: architecture-provider-capacity-native-6
+    action: { verifier: agent.golden.architecture-provider-capacity-native-6 }
+    expect: { status: passed }
+  - id: architecture-provider-capacity-native-7
+    action: { verifier: agent.golden.architecture-provider-capacity-native-7 }
+    expect: { status: passed }
+  - id: execution-recovery-receipt-unit-1
+    action: { verifier: agent.golden.execution-recovery-receipt-unit-1 }
+    expect: { status: passed }
+  - id: execution-recovery-receipt-native-1
+    action: { verifier: agent.golden.execution-recovery-receipt-native-1 }
+    expect: { status: passed }
+  - id: architecture-provider-recovery-native-1
+    action: { verifier: agent.golden.architecture-provider-recovery-native-1 }
+    expect: { status: passed }
+  - id: architecture-provider-recovery-native-2
+    action: { verifier: agent.golden.architecture-provider-recovery-native-2 }
+    expect: { status: passed }
+  - id: architecture-provider-recovery-native-3
+    action: { verifier: agent.golden.architecture-provider-recovery-native-3 }
+    expect: { status: passed }
+  - id: architecture-provider-recovery-native-4
+    action: { verifier: agent.golden.architecture-provider-recovery-native-4 }
+    expect: { status: passed }
+  - id: architecture-clock-authority-unit-1
+    action: { verifier: agent.golden.architecture-clock-authority-unit-1 }
+    expect: { status: passed }
+  - id: architecture-clock-authority-unit-2
+    action: { verifier: agent.golden.architecture-clock-authority-unit-2 }
+    expect: { status: passed }
+  - id: architecture-clock-authority-unit-3
+    action: { verifier: agent.golden.architecture-clock-authority-unit-3 }
+    expect: { status: passed }
+  - id: architecture-clock-authority-unit-4
+    action: { verifier: agent.golden.architecture-clock-authority-unit-4 }
+    expect: { status: passed }
+  - id: architecture-clock-authority-unit-5
+    action: { verifier: agent.golden.architecture-clock-authority-unit-5 }
+    expect: { status: passed }
+  - id: architecture-clock-relay-native-1
+    action: { verifier: agent.golden.architecture-clock-relay-native-1 }
+    expect: { status: passed }
+  - id: architecture-clock-relay-native-2
+    action: { verifier: agent.golden.architecture-clock-relay-native-2 }
+    expect: { status: passed }
+  - id: architecture-clock-relay-native-3
+    action: { verifier: agent.golden.architecture-clock-relay-native-3 }
+    expect: { status: passed }
+  - id: architecture-context-authority-1
+    action: { verifier: agent.golden.architecture-context-authority-1 }
+    expect: { status: passed }
+  - id: architecture-context-authority-2
+    action: { verifier: agent.golden.architecture-context-authority-2 }
+    expect: { status: passed }
+  - id: architecture-context-authority-3
+    action: { verifier: agent.golden.architecture-context-authority-3 }
+    expect: { status: passed }
+  - id: architecture-context-authority-4
+    action: { verifier: agent.golden.architecture-context-authority-4 }
+    expect: { status: passed }
+  - id: architecture-context-authority-5
+    action: { verifier: agent.golden.architecture-context-authority-5 }
+    expect: { status: passed }
+  - id: architecture-context-integration-1
+    action: { verifier: agent.golden.architecture-context-integration-1 }
+    expect: { status: passed }
+  - id: architecture-context-integration-2
+    action: { verifier: agent.golden.architecture-context-integration-2 }
+    expect: { status: passed }
+  - id: architecture-context-integration-3
+    action: { verifier: agent.golden.architecture-context-integration-3 }
+    expect: { status: passed }
+  - id: architecture-context-integration-4
+    action: { verifier: agent.golden.architecture-context-integration-4 }
+    expect: { status: passed }
+  - id: architecture-context-integration-5
+    action: { verifier: agent.golden.architecture-context-integration-5 }
+    expect: { status: passed }
+  - id: architecture-context-custody-unit-1
+    action: { verifier: agent.golden.architecture-context-custody-unit-1 }
+    expect: { status: passed }
+  - id: architecture-context-custody-unit-2
+    action: { verifier: agent.golden.architecture-context-custody-unit-2 }
+    expect: { status: passed }
+  - id: architecture-context-custody-unit-3
+    action: { verifier: agent.golden.architecture-context-custody-unit-3 }
+    expect: { status: passed }
+  - id: architecture-book-knowledge-unit-1
+    action: { verifier: agent.golden.architecture-book-knowledge-unit-1 }
+    expect: { status: passed }
+  - id: architecture-book-knowledge-unit-2
+    action: { verifier: agent.golden.architecture-book-knowledge-unit-2 }
+    expect: { status: passed }
+  - id: architecture-book-knowledge-unit-3
+    action: { verifier: agent.golden.architecture-book-knowledge-unit-3 }
+    expect: { status: passed }
+  - id: architecture-book-knowledge-native-1
+    action: { verifier: agent.golden.architecture-book-knowledge-native-1 }
+    expect: { status: passed }
+  - id: architecture-semantic-red-unit-1
+    action: { verifier: agent.golden.architecture-semantic-red-unit-1 }
+    expect: { status: passed }
+  - id: architecture-semantic-red-unit-2
+    action: { verifier: agent.golden.architecture-semantic-red-unit-2 }
+    expect: { status: passed }
+  - id: architecture-semantic-red-native-1
+    action: { verifier: agent.golden.architecture-semantic-red-native-1 }
+    expect: { status: passed }
+  - id: architecture-review-finding-unit-1
+    action: { verifier: agent.golden.architecture-review-finding-unit-1 }
+    expect: { status: passed }
+  - id: architecture-review-finding-unit-2
+    action: { verifier: agent.golden.architecture-review-finding-unit-2 }
+    expect: { status: passed }
+  - id: architecture-review-finding-native-1
+    action: { verifier: agent.golden.architecture-review-finding-native-1 }
+    expect: { status: passed }
+  - id: architecture-project-handler-1
+    action: { verifier: agent.golden.architecture-project-handler-1 }
+    expect: { status: passed }
+  - id: architecture-project-handler-2
+    action: { verifier: agent.golden.architecture-project-handler-2 }
+    expect: { status: passed }
+  - id: architecture-project-handler-3
+    action: { verifier: agent.golden.architecture-project-handler-3 }
+    expect: { status: passed }
+  - id: architecture-graph-history-unit-1
+    action: { verifier: agent.golden.architecture-graph-history-unit-1 }
+    expect: { status: passed }
+  - id: architecture-graph-history-unit-2
+    action: { verifier: agent.golden.architecture-graph-history-unit-2 }
+    expect: { status: passed }
+  - id: architecture-graph-history-unit-3
+    action: { verifier: agent.golden.architecture-graph-history-unit-3 }
+    expect: { status: passed }
+  - id: architecture-graph-history-unit-4
+    action: { verifier: agent.golden.architecture-graph-history-unit-4 }
+    expect: { status: passed }
+  - id: architecture-profile-custody-unit-1
+    action: { verifier: agent.golden.architecture-profile-custody-unit-1 }
+    expect: { status: passed }
+  - id: architecture-profile-custody-unit-2
+    action: { verifier: agent.golden.architecture-profile-custody-unit-2 }
+    expect: { status: passed }
+  - id: architecture-profile-custody-unit-3
+    action: { verifier: agent.golden.architecture-profile-custody-unit-3 }
+    expect: { status: passed }
+  - id: architecture-profile-custody-unit-4
+    action: { verifier: agent.golden.architecture-profile-custody-unit-4 }
+    expect: { status: passed }
+  - id: architecture-portable-handler-1
+    action: { verifier: agent.golden.architecture-portable-handler-1 }
+    expect: { status: passed }
+  - id: architecture-portable-handler-2
+    action: { verifier: agent.golden.architecture-portable-handler-2 }
+    expect: { status: passed }
+  - id: architecture-portable-handler-3
+    action: { verifier: agent.golden.architecture-portable-handler-3 }
+    expect: { status: passed }
+  - id: architecture-portable-kernel-1
+    action: { verifier: agent.golden.architecture-portable-kernel-1 }
+    expect: { status: passed }
+  - id: architecture-portable-kernel-2
+    action: { verifier: agent.golden.architecture-portable-kernel-2 }
+    expect: { status: passed }
+  - id: architecture-portable-kernel-3
+    action: { verifier: agent.golden.architecture-portable-kernel-3 }
+    expect: { status: passed }
+  - id: architecture-portable-kernel-4
+    action: { verifier: agent.golden.architecture-portable-kernel-4 }
+    expect: { status: passed }
+  - id: architecture-portable-kernel-5
+    action: { verifier: agent.golden.architecture-portable-kernel-5 }
+    expect: { status: passed }
+  - id: architecture-portable-kernel-6
+    action: { verifier: agent.golden.architecture-portable-kernel-6 }
+    expect: { status: passed }
+  - id: architecture-portable-kernel-7
+    action: { verifier: agent.golden.architecture-portable-kernel-7 }
+    expect: { status: passed }
+  - id: architecture-portable-kernel-8
+    action: { verifier: agent.golden.architecture-portable-kernel-8 }
+    expect: { status: passed }
+  - id: architecture-living-graph-unit-1
+    action: { verifier: agent.golden.architecture-living-graph-unit-1 }
+    expect: { status: passed }
+  - id: architecture-living-graph-unit-2
+    action: { verifier: agent.golden.architecture-living-graph-unit-2 }
+    expect: { status: passed }
+  - id: architecture-living-graph-unit-3
+    action: { verifier: agent.golden.architecture-living-graph-unit-3 }
+    expect: { status: passed }
+  - id: architecture-living-graph-unit-4
+    action: { verifier: agent.golden.architecture-living-graph-unit-4 }
+    expect: { status: passed }
+  - id: architecture-living-graph-unit-5
+    action: { verifier: agent.golden.architecture-living-graph-unit-5 }
+    expect: { status: passed }
+  - id: architecture-source-publication-unit-1
+    action: { verifier: agent.golden.architecture-source-publication-unit-1 }
+    expect: { status: passed }
+  - id: architecture-source-publication-unit-2
+    action: { verifier: agent.golden.architecture-source-publication-unit-2 }
+    expect: { status: passed }
+  - id: architecture-source-publication-unit-3
+    action: { verifier: agent.golden.architecture-source-publication-unit-3 }
+    expect: { status: passed }
+  - id: architecture-source-publication-native-1
+    action: { verifier: agent.golden.architecture-source-publication-native-1 }
+    expect: { status: passed }
+  - id: architecture-source-publication-native-2
+    action: { verifier: agent.golden.architecture-source-publication-native-2 }
+    expect: { status: passed }
+  - id: architecture-source-publication-native-3
+    action: { verifier: agent.golden.architecture-source-publication-native-3 }
+    expect: { status: passed }
+  - id: architecture-source-publication-managed
+    action: { verifier: agent.golden.architecture-source-publication-managed }
+    expect: { status: passed }
+  - id: architecture-completion-clock
+    action: { verifier: agent.golden.architecture-completion-clock }
+    expect: { status: passed }
+  - id: architecture-return-revision
+    action: { verifier: agent.golden.architecture-return-revision }
+    expect: { status: passed }
+  - id: architecture-terminal-attempt-1
+    action: { verifier: agent.golden.architecture-terminal-attempt-1 }
+    expect: { status: passed }
+  - id: architecture-terminal-attempt-2
+    action: { verifier: agent.golden.architecture-terminal-attempt-2 }
+    expect: { status: passed }
+  - id: architecture-independent-workspace-1
+    action: { verifier: agent.golden.architecture-independent-workspace-1 }
+    expect: { status: passed }
+  - id: architecture-independent-workspace-2
+    action: { verifier: agent.golden.architecture-independent-workspace-2 }
+    expect: { status: passed }
+  - id: architecture-independent-workspace-3
+    action: { verifier: agent.golden.architecture-independent-workspace-3 }
+    expect: { status: passed }
+  - id: architecture-independent-workspace-4
+    action: { verifier: agent.golden.architecture-independent-workspace-4 }
+    expect: { status: passed }
+  - id: architecture-independent-workspace-5
+    action: { verifier: agent.golden.architecture-independent-workspace-5 }
+    expect: { status: passed }
+  - id: architecture-teardown-authority-1
+    action: { verifier: agent.golden.architecture-teardown-authority-1 }
+    expect: { status: passed }
+  - id: architecture-teardown-authority-2
+    action: { verifier: agent.golden.architecture-teardown-authority-2 }
+    expect: { status: passed }
+  - id: architecture-stopped-lease-custody
+    action: { verifier: agent.golden.architecture-stopped-lease-custody }
+    expect: { status: passed }
+  - id: architecture-cancellation-clock
+    action: { verifier: agent.golden.architecture-cancellation-clock }
+    expect: { status: passed }
+  - id: architecture-incremental-accounting-1
+    action: { verifier: agent.golden.architecture-incremental-accounting-1 }
+    expect: { status: passed }
+  - id: architecture-incremental-accounting-2
+    action: { verifier: agent.golden.architecture-incremental-accounting-2 }
+    expect: { status: passed }
+  - id: architecture-incremental-accounting-3
+    action: { verifier: agent.golden.architecture-incremental-accounting-3 }
+    expect: { status: passed }
+  - id: architecture-usage-result-join
+    action: { verifier: agent.golden.architecture-usage-result-join }
+    expect: { status: passed }
+  - id: architecture-usage-pages-1
+    action: { verifier: agent.golden.architecture-usage-pages-1 }
+    expect: { status: passed }
+  - id: architecture-usage-pages-2
+    action: { verifier: agent.golden.architecture-usage-pages-2 }
+    expect: { status: passed }
+  - id: architecture-usage-pages-3
+    action: { verifier: agent.golden.architecture-usage-pages-3 }
+    expect: { status: passed }
+  - id: architecture-usage-pages-4
+    action: { verifier: agent.golden.architecture-usage-pages-4 }
+    expect: { status: passed }
+  - id: architecture-usage-pages-5
+    action: { verifier: agent.golden.architecture-usage-pages-5 }
+    expect: { status: passed }
+  - id: architecture-usage-pages-6
+    action: { verifier: agent.golden.architecture-usage-pages-6 }
+    expect: { status: passed }
+  - id: architecture-usage-pages-7
+    action: { verifier: agent.golden.architecture-usage-pages-7 }
+    expect: { status: passed }
+  - id: architecture-usage-pages-8
+    action: { verifier: agent.golden.architecture-usage-pages-8 }
+    expect: { status: passed }
+  - id: architecture-usage-pages-9
+    action: { verifier: agent.golden.architecture-usage-pages-9 }
+    expect: { status: passed }
+  - id: architecture-usage-pages-10
+    action: { verifier: agent.golden.architecture-usage-pages-10 }
+    expect: { status: passed }
+  - id: architecture-assignment-pages-1
+    action: { verifier: agent.golden.architecture-assignment-pages-1 }
+    expect: { status: passed }
+  - id: architecture-assignment-pages-2
+    action: { verifier: agent.golden.architecture-assignment-pages-2 }
+    expect: { status: passed }
+  - id: architecture-assignment-pages-3
+    action: { verifier: agent.golden.architecture-assignment-pages-3 }
+    expect: { status: passed }
+  - id: architecture-assignment-pages-4
+    action: { verifier: agent.golden.architecture-assignment-pages-4 }
+    expect: { status: passed }
+  - id: architecture-assignment-pages-5
+    action: { verifier: agent.golden.architecture-assignment-pages-5 }
+    expect: { status: passed }
+  - id: architecture-assignment-pages-6
+    action: { verifier: agent.golden.architecture-assignment-pages-6 }
+    expect: { status: passed }
+  - id: architecture-assignment-pages-7
+    action: { verifier: agent.golden.architecture-assignment-pages-7 }
+    expect: { status: passed }
+  - id: architecture-assignment-pages-8
+    action: { verifier: agent.golden.architecture-assignment-pages-8 }
+    expect: { status: passed }
+  - id: architecture-assignment-pages-9
+    action: { verifier: agent.golden.architecture-assignment-pages-9 }
+    expect: { status: passed }
+  - id: architecture-assignment-pages-10
+    action: { verifier: agent.golden.architecture-assignment-pages-10 }
+    expect: { status: passed }
+  - id: architecture-assignment-pages-11
+    action: { verifier: agent.golden.architecture-assignment-pages-11 }
+    expect: { status: passed }
+  - id: architecture-campaign-observation-1
+    action: { verifier: agent.golden.architecture-campaign-observation-1 }
+    expect: { status: passed }
+  - id: architecture-campaign-observation-2
+    action: { verifier: agent.golden.architecture-campaign-observation-2 }
+    expect: { status: passed }
+  - id: architecture-campaign-observation-3
+    action: { verifier: agent.golden.architecture-campaign-observation-3 }
+    expect: { status: passed }
+  - id: architecture-campaign-observation-4
+    action: { verifier: agent.golden.architecture-campaign-observation-4 }
+    expect: { status: passed }
+  - id: architecture-campaign-observation-5
+    action: { verifier: agent.golden.architecture-campaign-observation-5 }
+    expect: { status: passed }
+  - id: architecture-campaign-observation-6
+    action: { verifier: agent.golden.architecture-campaign-observation-6 }
+    expect: { status: passed }
+  - id: architecture-campaign-observation-7
+    action: { verifier: agent.golden.architecture-campaign-observation-7 }
+    expect: { status: passed }
+  - id: architecture-campaign-observation-8
+    action: { verifier: agent.golden.architecture-campaign-observation-8 }
+    expect: { status: passed }
+  - id: architecture-campaign-observation-9
+    action: { verifier: agent.golden.architecture-campaign-observation-9 }
+    expect: { status: passed }
+  - id: architecture-campaign-approval-once
+    action: { verifier: agent.golden.architecture-campaign-approval-once }
+    expect: { status: passed }
+  - id: architecture-campaign-recheck-1
+    action: { verifier: agent.golden.architecture-campaign-recheck-1 }
+    expect: { status: passed }
+  - id: architecture-campaign-recheck-2
+    action: { verifier: agent.golden.architecture-campaign-recheck-2 }
+    expect: { status: passed }
+  - id: architecture-campaign-recheck-3
+    action: { verifier: agent.golden.architecture-campaign-recheck-3 }
+    expect: { status: passed }
+  - id: architecture-planning-verifier-9
+    action: { verifier: agent.golden.architecture-planning-verifier-9 }
+    expect: { status: passed }
+  - id: architecture-planning-native-1
+    action: { verifier: agent.golden.architecture-planning-native-1 }
+    expect: { status: passed }
+  - id: architecture-planning-native-2
+    action: { verifier: agent.golden.architecture-planning-native-2 }
+    expect: { status: passed }
+  - id: architecture-planning-native-3
+    action: { verifier: agent.golden.architecture-planning-native-3 }
+    expect: { status: passed }
+  - id: architecture-planning-native-4
+    action: { verifier: agent.golden.architecture-planning-native-4 }
+    expect: { status: passed }
+  - id: architecture-planning-verifier-1
+    action: { verifier: agent.golden.architecture-planning-verifier-1 }
+    expect: { status: passed }
+  - id: architecture-planning-verifier-2
+    action: { verifier: agent.golden.architecture-planning-verifier-2 }
+    expect: { status: passed }
+  - id: architecture-planning-verifier-3
+    action: { verifier: agent.golden.architecture-planning-verifier-3 }
+    expect: { status: passed }
+  - id: architecture-planning-verifier-4
+    action: { verifier: agent.golden.architecture-planning-verifier-4 }
+    expect: { status: passed }
+  - id: architecture-planning-verifier-5
+    action: { verifier: agent.golden.architecture-planning-verifier-5 }
+    expect: { status: passed }
+  - id: architecture-planning-verifier-6
+    action: { verifier: agent.golden.architecture-planning-verifier-6 }
+    expect: { status: passed }
+  - id: architecture-planning-verifier-7
+    action: { verifier: agent.golden.architecture-planning-verifier-7 }
+    expect: { status: passed }
+  - id: architecture-planning-verifier-8
+    action: { verifier: agent.golden.architecture-planning-verifier-8 }
+    expect: { status: passed }
+  - id: architecture-grant-verifier-1
+    action: { verifier: agent.golden.architecture-grant-verifier-1 }
+    expect: { status: passed }
+  - id: architecture-grant-verifier-2
+    action: { verifier: agent.golden.architecture-grant-verifier-2 }
+    expect: { status: passed }
+  - id: architecture-grant-verifier-3
+    action: { verifier: agent.golden.architecture-grant-verifier-3 }
+    expect: { status: passed }
+  - id: architecture-grant-verifier-4
+    action: { verifier: agent.golden.architecture-grant-verifier-4 }
+    expect: { status: passed }
+  - id: architecture-grant-verifier-5
+    action: { verifier: agent.golden.architecture-grant-verifier-5 }
+    expect: { status: passed }
+  - id: architecture-grant-verifier-6
+    action: { verifier: agent.golden.architecture-grant-verifier-6 }
+    expect: { status: passed }
+  - id: architecture-grant-verifier-7
+    action: { verifier: agent.golden.architecture-grant-verifier-7 }
+    expect: { status: passed }
+  - id: architecture-decision-verifier-operator
+    action: { verifier: agent.golden.architecture-decision-verifier-operator }
+    expect: { status: passed }
+  - id: architecture-decision-verifier-complete
+    action: { verifier: agent.golden.architecture-decision-verifier-complete }
+    expect: { status: passed }
+  - id: architecture-decision-verifier-content
+    action: { verifier: agent.golden.architecture-decision-verifier-content }
+    expect: { status: passed }
+  - id: architecture-decision-verifier-positions
+    action: { verifier: agent.golden.architecture-decision-verifier-positions }
+    expect: { status: passed }
+  - id: architecture-decision-verifier-subject-time
+    action: { verifier: agent.golden.architecture-decision-verifier-subject-time }
+    expect: { status: passed }
+  - id: architecture-decision-verifier-native-readback
+    action: { verifier: agent.golden.architecture-decision-verifier-native-readback }
+    expect: { status: passed }
+  - id: architecture-decision-verifier-selected-id
+    action: { verifier: agent.golden.architecture-decision-verifier-selected-id }
+    expect: { status: passed }
+  - id: architecture-decision-verifier-review-content
+    action: { verifier: agent.golden.architecture-decision-verifier-review-content }
+    expect: { status: passed }
+  - id: architecture-decision-verifier-review-custody
+    action: { verifier: agent.golden.architecture-decision-verifier-review-custody }
+    expect: { status: passed }
+  - id: architecture-proposal-decision-authority
+    action: { verifier: agent.golden.architecture-proposal-decision-authority }
+    expect: { status: passed }
+  - id: architecture-allocation-receipt
+    action: { verifier: agent.golden.architecture-allocation-receipt }
+    expect: { status: passed }
+  - id: architecture-allocation-ceilings
+    action: { verifier: agent.golden.architecture-allocation-ceilings }
+    expect: { status: passed }
+  - id: architecture-allocation-calibration
+    action: { verifier: agent.golden.architecture-allocation-calibration }
+    expect: { status: passed }
+  - id: architecture-report-readback
+    action: { verifier: agent.golden.architecture-report-readback }
+    expect: { status: passed }
+  - id: architecture-report-single
+    action: { verifier: agent.golden.architecture-report-single }
+    expect: { status: passed }
+  - id: architecture-report-assignment
+    action: { verifier: agent.golden.architecture-report-assignment }
+    expect: { status: passed }
+  - id: architecture-report-subject
+    action: { verifier: agent.golden.architecture-report-subject }
+    expect: { status: passed }
+  - id: architecture-report-custody
+    action: { verifier: agent.golden.architecture-report-custody }
+    expect: { status: passed }
+  - id: architecture-readback-policy
+    action: { verifier: agent.golden.architecture-readback-policy }
+    expect: { status: passed }
+  - id: architecture-readback-contributors
+    action: { verifier: agent.golden.architecture-readback-contributors }
+    expect: { status: passed }
+  - id: architecture-readback-clocks
+    action: { verifier: agent.golden.architecture-readback-clocks }
+    expect: { status: passed }
+  - id: architecture-readback-usage
+    action: { verifier: agent.golden.architecture-readback-usage }
+    expect: { status: passed }
+  - id: architecture-readback-references
+    action: { verifier: agent.golden.architecture-readback-references }
+    expect: { status: passed }
+  - id: architecture-readback-completion
+    action: { verifier: agent.golden.architecture-readback-completion }
+    expect: { status: passed }
+  - id: architecture-immutable-paths
+    action: { verifier: agent.golden.architecture-immutable-paths }
+    expect: { status: passed }
+  - id: architecture-immutable-deadline
+    action: { verifier: agent.golden.architecture-immutable-deadline }
+    expect: { status: passed }
+  - id: architecture-verification-rename
+    action: { verifier: agent.golden.architecture-verification-rename }
+    expect: { status: passed }
+  - id: architecture-failure-evidence-scope
+    action: { verifier: agent.golden.architecture-failure-evidence-scope }
+    expect: { status: passed }
+  - id: architecture-failure-evidence-attachment
+    action: { verifier: agent.golden.architecture-failure-evidence-attachment }
+    expect: { status: passed }
+  - id: architecture-red-status-rename
+    action: { verifier: agent.golden.architecture-red-status-rename }
+    expect: { status: passed }
+  - id: architecture-evidence-input-immutable
+    action: { verifier: agent.golden.architecture-evidence-input-immutable }
+    expect: { status: passed }
+  - id: architecture-evidence-scope-denial
+    action: { verifier: agent.golden.architecture-evidence-scope-denial }
+    expect: { status: passed }
+  - id: architecture-knowledge-task-profile
+    action: { verifier: agent.golden.architecture-knowledge-task-profile }
+    expect: { status: passed }
+  - id: architecture-profile-rename
+    action: { verifier: agent.golden.architecture-profile-rename }
+    expect: { status: passed }
+  - id: architecture-profile-yaml-prompt
+    action: { verifier: agent.golden.architecture-profile-yaml-prompt }
+    expect: { status: passed }
+  - id: architecture-grant-output-rename
+    action: { verifier: agent.golden.architecture-grant-output-rename }
+    expect: { status: passed }
+  - id: architecture-explicit-integration
+    action: { verifier: agent.golden.architecture-explicit-integration }
+    expect: { status: passed }
+  - id: architecture-retired-profile-fields
+    action: { verifier: agent.golden.architecture-retired-profile-fields }
+    expect: { status: passed }
+  - id: architecture-configured-admission
+    action: { verifier: agent.golden.architecture-configured-admission }
+    expect: { status: passed }
+  - id: architecture-generic-closure
+    action: { verifier: agent.golden.architecture-generic-closure }
+    expect: { status: passed }
+  - id: architecture-native-yaml-context
+    action: { verifier: agent.golden.architecture-native-yaml-context }
+    expect: { status: passed }
+  - id: architecture-immutable-grant
+    action: { verifier: agent.golden.architecture-immutable-grant }
+    expect: { status: passed }
+  - id: architecture-writer-rename
+    action: { verifier: agent.golden.architecture-writer-rename }
+    expect: { status: passed }
   - id: provider-public-root-output-binding
     action: { verifier: agent.golden.provider-public-root-output-binding }
     expect: { status: passed }
@@ -236,6 +1322,18 @@ workflow:
     expect: { status: passed }
   - id: broker-reset-no-replay
     action: { verifier: agent.golden.broker-reset-no-replay }
+    expect: { status: passed }
+  - id: execution-tool-closeout-unit-2
+    action: { verifier: agent.golden.execution-tool-closeout-unit-2 }
+    expect: { status: passed }
+  - id: execution-tool-closeout-unit-1
+    action: { verifier: agent.golden.execution-tool-closeout-unit-1 }
+    expect: { status: passed }
+  - id: execution-tool-closeout-native-1
+    action: { verifier: agent.golden.execution-tool-closeout-native-1 }
+    expect: { status: passed }
+  - id: execution-tool-closeout-native-2
+    action: { verifier: agent.golden.execution-tool-closeout-native-2 }
     expect: { status: passed }
   - id: tool-delivery-no-replay
     action: { verifier: agent.golden.tool-delivery-no-replay }
@@ -483,6 +1581,15 @@ workflow:
   - id: measurement
     action: { verifier: agent.golden.measurement }
     expect: { status: passed }
+  - id: execution-handoff-unit-1
+    action: { verifier: agent.golden.execution-handoff-unit-1 }
+    expect: { status: passed }
+  - id: execution-handoff-unit-2
+    action: { verifier: agent.golden.execution-handoff-unit-2 }
+    expect: { status: passed }
+  - id: execution-handoff-native-1
+    action: { verifier: agent.golden.execution-handoff-native-1 }
+    expect: { status: passed }
   - id: workspace-paths
     action: { verifier: agent.golden.workspace-paths }
     expect: { status: passed }
@@ -515,4 +1622,70 @@ workflow:
     expect: { status: passed }
   - id: concrete-source-publication
     action: { verifier: agent.golden.concrete-source-paths }
+    expect: { status: passed }
+  - id: execution-arbitration-manifest-unit-1
+    action: { verifier: agent.golden.execution-arbitration-manifest-unit-1 }
+    expect: { status: passed }
+  - id: execution-arbitration-manifest-native-1
+    action: { verifier: agent.golden.execution-arbitration-manifest-native-1 }
+    expect: { status: passed }
+  - id: execution-all-attempt-usage-unit-1
+    action: { verifier: agent.golden.execution-all-attempt-usage-unit-1 }
+    expect: { status: passed }
+  - id: execution-all-attempt-usage-unit-2
+    action: { verifier: agent.golden.execution-all-attempt-usage-unit-2 }
+    expect: { status: passed }
+  - id: execution-all-attempt-usage-native-1
+    action: { verifier: agent.golden.execution-all-attempt-usage-native-1 }
+    expect: { status: passed }
+  - id: execution-all-attempt-usage-native-2
+    action: { verifier: agent.golden.execution-all-attempt-usage-native-2 }
+    expect: { status: passed }
+  - id: execution-native-usage-provenance-unit
+    action: { verifier: agent.golden.execution-native-usage-provenance-unit }
+    expect: { status: passed }
+  - id: execution-allocated-deadline-unit
+    action: { verifier: agent.golden.execution-allocated-deadline-unit }
+    expect: { status: passed }
+  - id: execution-recurrence-numbers-unit
+    action: { verifier: agent.golden.execution-recurrence-numbers-unit }
+    expect: { status: passed }
+  - id: execution-canonical-prerequisite-unit
+    action: { verifier: agent.golden.execution-canonical-prerequisite-unit }
+    expect: { status: passed }
+  - id: execution-microvm-clock-chat
+    action: { verifier: agent.golden.execution-microvm-clock-chat }
+    expect: { status: passed }
+  - id: execution-microvm-clock-planning
+    action: { verifier: agent.golden.execution-microvm-clock-planning }
+    expect: { status: passed }
+  - id: execution-microvm-clock-estimating
+    action: { verifier: agent.golden.execution-microvm-clock-estimating }
+    expect: { status: passed }
+  - id: execution-microvm-clock-acting
+    action: { verifier: agent.golden.execution-microvm-clock-acting }
+    expect: { status: passed }
+  - id: execution-microvm-clock-reviewing
+    action: { verifier: agent.golden.execution-microvm-clock-reviewing }
+    expect: { status: passed }
+  - id: execution-native-red-test-author
+    action: { verifier: agent.golden.execution-native-red-test-author }
+    expect: { status: passed }
+  - id: execution-native-red-renamed-author
+    action: { verifier: agent.golden.execution-native-red-renamed-author }
+    expect: { status: passed }
+  - id: execution-native-red-renamed-reviewer
+    action: { verifier: agent.golden.execution-native-red-renamed-reviewer }
+    expect: { status: passed }
+  - id: execution-compiler-batch-unit
+    action: { verifier: agent.golden.execution-compiler-batch-unit }
+    expect: { status: passed }
+  - id: execution-poll-unavailable-native
+    action: { verifier: agent.golden.execution-poll-unavailable-native }
+    expect: { status: passed }
+  - id: execution-poll-reset-native
+    action: { verifier: agent.golden.execution-poll-reset-native }
+    expect: { status: passed }
+  - id: execution-poll-malformed-native
+    action: { verifier: agent.golden.execution-poll-malformed-native }
     expect: { status: passed }

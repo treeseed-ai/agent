@@ -1689,3 +1689,6 @@ workflow:
   - id: execution-poll-malformed-native
     action: { verifier: agent.golden.execution-poll-malformed-native }
     expect: { status: passed }
+  - id: execution-manifest-invocation-unit
+    action: { verifier: agent.golden.execution-manifest-invocation-unit }
+    expect: { status: passed }

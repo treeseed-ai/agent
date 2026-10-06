@@ -3,10 +3,42 @@ import { orderConnectionsForFairPolling } from '../../../src/provider/teams/mult
 import { publishProviderAvailability } from '../../../src/provider/lifecycle/lifecycle.ts';
 import { ProviderLocalCapacityStore } from '../../../src/provider/capacity/capacity-core/local-capacity-store.ts';
 import type { ProviderConnectionRuntimeContext } from '../../../src/provider/configuration/config.ts';
+import * as manifestLoader from '../../../src/provider/configuration/manifest.ts';
+import * as leaseRecovery from '../../../src/provider/coordination/lease-recovery.ts';
+import * as diskCapacity from '../../../src/provider/runtime/disk-capacity.ts';
+import { CapacityProviderCoordinator } from '../../../src/provider/coordination/coordinator.ts';
+import { createManagedProviderManifestV5 } from '../../../src/provider/configuration/managed-manifest.ts';
+import { runMultiTeamProviderManager, runMultiTeamProviderRunners } from '../../../src/provider/teams/multi-team-runtime.ts';
 
 const connections = ['a', 'b', 'c'].map((id) => ({ connection: { id }, teamId: id }));
 
 describe('provider-global connection polling', () => {
+	it('uses one freshly validated manifest per manager or runner invocation without rereading or caching authority across invocations', async () => {
+		const digest = `sha256:${'d'.repeat(64)}`, manifest = createManagedProviderManifestV5({ release: 'unit-invocation',
+			guestImage: 'isolated/guest', guestImageDigest: digest, baseImageDigest: digest, provenanceDigest: digest });
+		const config = { dataDir: '/unused-unit-manifest', manifestPath: '/unused-unit-manifest/manifest.yaml', environment: 'test',
+			maxConcurrentRunners: 1, maxConcurrentWorkdays: 1, budgetFile: null, dailyAgentSecondsLimit: null, monthlyAgentSecondsLimit: null,
+			env: { TREESEED_PROVIDER_RUNTIME_BUILD: digest }, redactedEnv: {} };
+		const loaded = { path: config.manifestPath, directory: config.dataDir, dataDirectory: config.dataDir, manifest };
+		const before = structuredClone({ config, loaded }), failure = new Error('Original independent manifest read refused');
+		const loader = vi.spyOn(manifestLoader, 'loadProviderManifest');
+		const reconcile = vi.spyOn(CapacityProviderCoordinator.prototype, 'reconcileAll').mockResolvedValue([]);
+		vi.spyOn(ProviderLocalCapacityStore.prototype, 'snapshot').mockResolvedValue({ revision: 1, claims: [], events: [], activeSecondsByConnection: {} });
+		vi.spyOn(leaseRecovery, 'recoverProviderLocalLeases').mockResolvedValue([]);
+		vi.spyOn(diskCapacity, 'observeProviderDiskCapacity').mockResolvedValue(diskCapacity.evaluateProviderDiskCapacity({
+			path: config.dataDir, totalBytes: 100 * 1024 ** 3, availableBytes: 50 * 1024 ** 3 }));
+		try {
+			for (const run of [runMultiTeamProviderManager, runMultiTeamProviderRunners]) {
+				loader.mockReset(); reconcile.mockClear(); loader.mockResolvedValueOnce(loaded).mockRejectedValue(failure);
+				const result = await run(config);
+				expect(result.ok).toBe(true); expect(loader).toHaveBeenCalledExactlyOnceWith(config.manifestPath, config.dataDir);
+				expect(reconcile).toHaveBeenCalledTimes(1);
+				await expect(run(config)).rejects.toBe(failure);
+				expect(loader).toHaveBeenCalledTimes(2); expect(reconcile).toHaveBeenCalledTimes(1);
+				expect({ config, loaded }).toEqual(before);
+			}
+		} finally { vi.restoreAllMocks(); }
+	});
 	it('preserves original availability session authority on every non-recoverable refresh failure and recreates only the owning closed or changed session conflict', async () => {
 		const config: ProviderConnectionRuntimeContext = { dataDir: '/unused-unit-provider', environment: 'test', manifestPath: null,
 			maxConcurrentRunners: 1, maxConcurrentWorkdays: 1, budgetFile: null, dailyAgentSecondsLimit: null, monthlyAgentSecondsLimit: null,

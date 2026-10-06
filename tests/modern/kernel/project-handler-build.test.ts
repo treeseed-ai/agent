@@ -155,10 +155,11 @@ describe('pinned project handler build', () => {
 			expect(owner.requests).toEqual([]); expect(owner.begin).toEqual([]); expect(owner.git('rev-parse', 'HEAD')).toBe(owner.base);
 			expect(owner.input.assignment).toEqual(before);
 			phase = 'FINAL_CUSTODY';
-			expect(await readFile(resolve(clone, 'dist/kernel/project-handlers.js'))).toEqual(moduleBytes);
-			expect(await readFile(resolve(clone, 'dist/kernel/provider-kernel-executor.js'))).toEqual(kernelBytes);
+			expect((await readFile(resolve(clone, 'dist/kernel/project-handlers.js'))).equals(moduleBytes)).toBe(true);
+			expect((await readFile(resolve(clone, 'dist/kernel/provider-kernel-executor.js'))).equals(kernelBytes)).toBe(true);
 			for (const [name, bytes] of inputs) {
-				expect(await readFile(resolve(clone, name))).toEqual(bytes); expect(await readFile(resolve(packageRoot, name))).toEqual(bytes);
+				expect((await readFile(resolve(clone, name))).equals(bytes), name).toBe(true);
+				expect((await readFile(resolve(packageRoot, name))).equals(bytes), name).toBe(true);
 			}
 			await expect(readFile(resolve(clone, '.treeseed/build-dist.lock/owner'))).rejects.toMatchObject({ code: 'ENOENT' });
 			const held = new Map(built); built.clear(); await emitted(resolve(clone, 'dist'), ''); verifyCompiledProviderCode(held, built);
@@ -182,9 +183,9 @@ describe('pinned project handler build', () => {
 				'dist/provider/teams/multi-team-runtime.js'), 'utf8'));
 			expect(runnerSource).toContain('project-handlers.js');
 			expect(runnerSource).toContain('handlers: [...projectHandlers]');
-			expect(await artifactBytes(resolve(packageRoot, 'dist'))).toEqual(held);
+			verifyCompiledProviderCode(held, await artifactBytes(resolve(packageRoot, 'dist')));
 			build(clone);
-			expect(await artifactBytes(resolve(packageRoot, 'dist'))).toEqual(held);
+			verifyCompiledProviderCode(held, await artifactBytes(resolve(packageRoot, 'dist')));
 		} finally {
 			await rm(directory, { recursive: true, force: true });
 		}

@@ -119,7 +119,7 @@ export async function runMultiTeamProviderManager(
 	if (!/^sha256:[a-f0-9]{64}$/u.test(config.env.TREESEED_PROVIDER_RUNTIME_BUILD ?? ''))
 		throw new Error('provider_runtime_build_unpinned');
 	const localState = new ProviderLocalCapacityStore(config.dataDir);
-	const connections = await reconcileProviderConnections(config);
+	const connections = await new CapacityProviderCoordinator(loaded, config.dataDir).reconcileAll();
 	await localState.snapshot();
 	const disk = await observeProviderDiskCapacity({ path: config.dataDir, env: config.env });
 	const results = await Promise.all(connections.map(async (connection) => {
@@ -184,7 +184,7 @@ export async function runMultiTeamProviderRunners(
 	if (!/^sha256:[a-f0-9]{64}$/u.test(config.env.TREESEED_PROVIDER_RUNTIME_BUILD ?? ''))
 		throw new Error('provider_runtime_build_unpinned');
 	const loaded = await loadProviderManifest(config.manifestPath ?? '', config.dataDir);
-	const connections = (await reconcileProviderConnections(config)).flatMap((entry) => entry.runtime ? [entry.runtime] : []);
+	const connections = (await new CapacityProviderCoordinator(loaded, config.dataDir).reconcileAll()).flatMap((entry) => entry.runtime ? [entry.runtime] : []);
 	const localState = new ProviderLocalCapacityStore(config.dataDir);
 	await recoverProviderLocalLeases({ config, connections, store: localState, includeRunning: false });
 	const results: Record<string, unknown>[] = [];

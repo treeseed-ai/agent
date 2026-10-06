@@ -6,8 +6,8 @@ import type { ProviderHostRuntimeConfig } from '../../../../src/provider/configu
 // Child entrypoint for the EXISTING runtime, not another arbitration runner.
 // The parent supplies only a disposable directory and controlled loopback API.
 const [action, directory, sessionInitialization] = process.argv.slice(2);
-if (!directory || !['initialize', 'run', 'offers', 'offers-session', 'run-session'].includes(action ?? '')) throw new Error('Exact isolated arbitration action required');
-if (sessionInitialization !== undefined && (!['offers-session', 'run-session', 'run'].includes(action!) || sessionInitialization !== 'initialize')) throw new Error('Exact native session initialization required');
+if (!directory || !['initialize', 'run', 'offers', 'offers-session', 'run-session', 'load'].includes(action ?? '')) throw new Error('Exact isolated arbitration action required');
+if (sessionInitialization !== undefined && action !== 'load' && (!['offers-session', 'run-session', 'run'].includes(action!) || sessionInitialization !== 'initialize')) throw new Error('Exact native session initialization required');
 const config: ProviderHostRuntimeConfig = JSON.parse(await readFile(`${directory}/config.json`, 'utf8'));
 if (config.dataDir !== directory || config.manifestPath !== `${directory}/manifest.yaml`) throw new Error('Fixture custody mismatch');
 async function load() {
@@ -36,7 +36,21 @@ async function run() {
 	const { runMultiTeamProviderRunners } = await import('../../../../dist/provider/teams/multi-team-runtime.js');
 	return runMultiTeamProviderRunners(config);
 }
-if (action === 'initialize') {
+async function loadPaths(paths: unknown) {
+	if (!Array.isArray(paths) || !paths.length || new Set(paths).size !== paths.length ||
+		paths.some(path => typeof path !== 'string' || !path.startsWith(`${directory}/quota-input-`) ||
+			!/^\d+\.yaml$/u.test(path.slice(`${directory}/quota-input-`.length)))) throw new Error('Only allocated native quota inputs allowed');
+	return Promise.all(paths.map(async path => {
+		try { await loadProviderManifest(path, directory, {}); return { path, status: 'fulfilled' }; }
+		catch (error) {
+			if (!(error instanceof Error)) throw error;
+			return { path, status: 'rejected', error: { name: error.name, message: error.message, stack: error.stack } };
+		}
+	}));
+}
+if (action === 'load') {
+	process.stdout.write(JSON.stringify(await loadPaths(JSON.parse(sessionInitialization ?? 'null'))));
+} else if (action === 'initialize') {
 	await initialize();
 	process.stdout.write(JSON.stringify({ initialized: true }));
 } else if (action === 'offers') {
@@ -49,18 +63,7 @@ if (action === 'initialize') {
 	process.on('message', async message => {
 		const expected = action === 'offers-session' ? 'offers' : 'run';
 		if (action === 'run-session' && message && typeof message === 'object' && 'loadManifestPaths' in message) {
-			const paths = message.loadManifestPaths;
-			if (!Array.isArray(paths) || !paths.length || new Set(paths).size !== paths.length ||
-				paths.some(path => typeof path !== 'string' || !path.startsWith(`${directory}/quota-input-`) ||
-					!/^\d+\.yaml$/u.test(path.slice(`${directory}/quota-input-`.length)))) throw new Error('Only allocated native quota inputs allowed');
-			const results = await Promise.all(paths.map(async path => {
-				try { await loadProviderManifest(path, directory, {}); return { path, status: 'fulfilled' }; }
-				catch (error) {
-					if (!(error instanceof Error)) throw error;
-					return { path, status: 'rejected', error: { name: error.name, message: error.message, stack: error.stack } };
-				}
-			}));
-			process.send!({ value: results }); return;
+			process.send!({ value: await loadPaths(message.loadManifestPaths) }); return;
 		}
 		if (message !== expected) throw new Error('Exact native session action required');
 		try { process.send!({ value: await (message === 'offers' ? offers() : run()) }); }

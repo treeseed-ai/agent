@@ -222,9 +222,17 @@ describe('whole native provider polling arbitration boundary', () => {
 				return input.value;
 			});
 			phase = 'COMPILED_NATIVE_LOADER';
-			// The SAME owned native child loads every full input through its actual
-			// compiled owning loader. No parsed manifest or validation is supplied.
-			const denials = await run(suppliedInputs.map(input => input.path));
+			// Independent native children use the SAME original compiled loader.
+			// Settle every bounded batch before custody/cleanup; parsing forty full
+			// documents must not serialize CPU work in the runtime session. No
+			// parsed manifest, cached result or alternate validator is supplied.
+			const batches = Array.from({ length: 4 }, (_, index) => suppliedInputs.slice(index * 10, (index + 1) * 10));
+			const outcomes = await Promise.allSettled(batches.map(batch => f.loadPaths(batch.map(input => input.path))));
+			const denials = outcomes.flatMap(outcome => {
+				if (outcome.status === 'rejected') throw outcome.reason;
+				if (!Array.isArray(outcome.value)) throw new Error('Actual native loader batch outcomes required');
+				return outcome.value;
+			});
 			expect(Array.isArray(denials)).toBe(true);
 			if (!Array.isArray(denials)) throw new Error('Actual native loader outcomes required');
 			expect(denials).toHaveLength(malformed.length);

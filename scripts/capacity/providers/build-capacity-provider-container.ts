@@ -2,6 +2,7 @@ import { copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, readdirSync,
 import { dirname, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
+import { fileURLToPath } from 'node:url';
 import { packageRoot } from '../../packages/package-tools.ts';
 
 const require = createRequire(import.meta.url);
@@ -196,7 +197,7 @@ function prepareRuntimeDependencies(installedSdkRoot: string | null) {
 	}
 }
 
-function runtimePackageNames(installedNodeModules: string) {
+export function runtimePackageNames(installedNodeModules: string) {
 	const lockfile = JSON.parse(readFileSync(resolve(packageRoot, 'package-lock.json'), 'utf8')) as {
 		packages?: Record<string, { dev?: boolean }>;
 	};
@@ -240,7 +241,7 @@ function installedPackageDependencies(installedNodeModules: string, packageName:
 	}
 }
 
-function copyRuntimePackage(installedNodeModules: string, packageName: string, runtimeRoot: string) {
+export function copyRuntimePackage(installedNodeModules: string, packageName: string, runtimeRoot: string) {
 	let source = resolve(installedNodeModules, packageName);
 	if (!existsSync(source)) {
 		const lockfile = JSON.parse(readFileSync(resolve(packageRoot, 'package-lock.json'), 'utf8')) as { packages?: Record<string, unknown> };
@@ -309,6 +310,7 @@ function pruneProviderRuntimeToolingFromRuntimeTree(runtimeRoot: string) {
 	}
 }
 
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
 run('npm', ['run', 'build:dist'], packageRoot);
 const installedSdkRoot = packSdk();
 rmSync(resolve(dockerContextRoot, 'runtime'), { recursive: true, force: true });
@@ -333,6 +335,7 @@ if (selectedRoles.has('guest')) {
 	runDockerBuildWithRetry(['build', ...dockerBuildCacheArgs(), '-f', 'Dockerfile.sandbox-codex', '--build-arg', `SANDBOX_BASE=${roleImages.base}`, '-t', roleImages.guest, '.'], packageRoot);
 }
 console.log(`Built capacity provider image roles ${[...selectedRoles].join(', ')} from ${packageRoot}.`);
+}
 
 function dockerBuildCacheArgs() {
 	return noCache ? ['--no-cache'] : [];

@@ -1128,6 +1128,15 @@ workflow:
   - id: provider-freeze-dependency-bytes
     action: { verifier: agent.golden.provider-freeze-dependency-bytes }
     expect: { status: passed }
+  - id: provider-preparation-selected-dependency-unit
+    action: { verifier: agent.golden.provider-preparation-selected-dependency-unit }
+    expect: { status: passed }
+  - id: provider-preparation-missing-dependency-unit
+    action: { verifier: agent.golden.provider-preparation-missing-dependency-unit }
+    expect: { status: passed }
+  - id: provider-preparation-sdk-native
+    action: { verifier: agent.golden.provider-preparation-sdk-native }
+    expect: { status: passed }
   - id: provider-source-fixture-link
     action: { verifier: agent.golden.provider-source-fixture-link }
     expect: { status: passed }

@@ -27,6 +27,10 @@ describe('capacity-provider guarantee execution bindings', () => {
 		const verify = steps.findIndex((step: { run?: string }) => step.run?.includes('npm run verify:local'));
 		const scene = steps.findIndex((step: { uses?: string }) => step.uses?.includes('reviewer/.github/actions/run-scenes@'));
 		expect(steps.indexOf(checkouts[0])).toBeLessThan(verify); expect(verify).toBeGreaterThan(-1); expect(scene).toBeGreaterThan(verify);
+		const relay = steps.findIndex((step: { name?: string }) => step.name === 'Prepare disposable native relay CA');
+		expect(relay).toBeGreaterThan(-1); expect(relay).toBeLessThan(verify);
+		expect(steps[relay].run).toContain('openssl x509 -in "$relay_fixture/ca.pem" -noout -checkend 0');
+		expect(steps[relay].run).toContain('sudo install -m 0644 "$relay_fixture/ca.pem" /etc/treeseed/sandbox/relay-ca.crt');
 	});
 	it('binds every registered verifier to an executable current implementation', () => {
 		const failures: string[] = [];

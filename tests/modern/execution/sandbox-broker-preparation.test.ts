@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
-import { createHash, randomBytes } from 'node:crypto';
+import { createHash, randomBytes, X509Certificate } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { assignmentAttemptSchema } from '@treeseed/sdk/agent-capacity';
@@ -97,10 +97,14 @@ async function microvmBroker() {
 		}
 	};
 	try {
-		// The relay CA remains the required original host input. Only this fresh
+		// The relay CA remains the required original native binding (a disposable
+		// certificate on the CI runner). Only this fresh
 		// fixture identity uses an allocated mode-0600 OS custody key; no host
 		// provider secret is read, changed, or used as test authority.
 		const relayBytes = await readFile('/etc/treeseed/sandbox/relay-ca.crt');
+		const relayCertificate = new X509Certificate(relayBytes);
+		expect(relayCertificate.ca).toBe(true);
+		expect(relayCertificate.verify(relayCertificate.publicKey)).toBe(true);
 		custodyKey = join(fixture.directory, 'identity-custody-key');
 		await writeFile(custodyKey, randomBytes(32), { mode: 0o600 });
 		process.env.TREESEED_PROVIDER_CREDENTIAL_KEK_FILE = custodyKey;

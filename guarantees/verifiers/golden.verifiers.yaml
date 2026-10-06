@@ -1,6 +1,11 @@
 schemaVersion: treeseed.guarantee-verifiers/v1
 ownerPackage: "@treeseed/agent"
 verifiers:
+  agent.golden.execution-manifest-invocation-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/provider/multi-team-fair-polling.test.ts
+    testName: "uses one freshly validated manifest per manager or runner invocation without rereading or caching authority across invocations"
   agent.golden.execution-scene-binding-unit:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

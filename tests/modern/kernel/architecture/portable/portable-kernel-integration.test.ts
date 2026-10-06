@@ -51,11 +51,15 @@ describe('portable configured profiles through real provider Kernel and native G
 		}
 	});
 	it('native cancellation and original expiry retain late executor bytes and failed public closeout without another execution or successful retry', async () => {
-		for (const cause of ['cancel', 'expire'] as const) for (const late of ['completed', 'returned', 'throw'] as const) {
+		// Six independent allocated boundaries share no repository, host slot,
+		// transport or deadline. Observe their original clocks concurrently instead
+		// of serially accumulating three one-second expiry windows in one watchdog.
+		const scenarios = (['cancel', 'expire'] as const).flatMap(cause => (['completed', 'returned', 'throw'] as const).map(late => ({ cause, late })));
+		const outcomes = await Promise.allSettled(scenarios.map(async ({ cause, late }) => {
 			let release!: () => void, stopped!: () => void;
 			const gate = new Promise<void>(resolve => { release = resolve; }), interrupted = new Promise<void>(resolve => { stopped = resolve; });
 			// A shorter original test input is allocated before admission; the
-			// existing thirty-second watchdog and every admitted clock stay fixed.
+			// original five-second test watchdog and every admitted clock stay fixed.
 			const f = await portableKernel(gate, cause === 'expire' ? 1 : undefined), abort = new AbortController();
 			let api: Awaited<ReturnType<typeof closeoutTransport>> | undefined, running: Promise<unknown> | undefined;
 			try {
@@ -95,6 +99,10 @@ describe('portable configured profiles through real provider Kernel and native G
 				// Native HTTP abort, owning Kernel/runner and durable local custody;
 				// delayed counters/teardown are controlled inputs, not Kata/model proof.
 			} finally { release(); await Promise.allSettled(running ? [running] : []); try { await api?.close(); } finally { await f.close(); } }
+		}));
+		expect(outcomes).toHaveLength(scenarios.length);
+		for (const [index, outcome] of outcomes.entries()) {
+			expect(outcome.status, `${scenarios[index]!.cause}/${scenarios[index]!.late}: ${outcome.status === 'rejected' ? String(outcome.reason) : 'complete'}`).toBe('fulfilled');
 		}
 	});
 	it('native successful usage delivery preserves exact observations and blocks denied closeout before completion without another model turn', async () => {

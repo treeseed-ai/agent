@@ -1,6 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, onTestFailed } from 'vitest';
 import { arbitrationFixture } from './arbitration-fixture.ts';
 import { readFile } from 'node:fs/promises';
+import { isDeepStrictEqual } from 'node:util';
 import { loadProviderManifest } from '../../../../src/provider/configuration/manifest.ts';
 import { capabilityOfferDigest, capabilityOfferSchema, CORE_CAPABILITY_DEFINITIONS } from '@treeseed/sdk/capacity-provider';
 import { verifyProviderConformanceSignature, verifyProviderQualification, verifyProviderPollingSelection } from '../../../acceptance/workday/support/record-custody.ts';
@@ -165,12 +166,14 @@ describe('whole native provider polling arbitration boundary', () => {
 		} finally { await f.close(); }
 	});
 	it('native quota manifests reject malformed model daily and capability limits before coordinator polling or changing retained capacity and admit only exact restored bytes', async () => {
+		let phase = 'FIXTURE';
+		onTestFailed(() => { throw new Error(`ACCEPTANCE_PROVIDER_MANIFEST_${phase}: original native failure retained`); });
 		const f = await arbitrationFixture(1, true);
 		try {
 			// The original identity initialization belongs to this native child.
 			// Every denial rereads the actual manifest through the original runtime;
 			// the restored retry below still starts an independent native process.
-			const run = await f.openRun();
+			phase = 'CHILD_INITIALIZATION'; const run = await f.openRun();
 			await f.store.snapshot();
 			const original = structuredClone(f.manifest), baseline = await f.bytes(), routes = structuredClone(f.routes);
 			const limits = structuredClone(f.manifest.adapters[0]!.nativeLimits), capability = f.manifest.adapters[0]!.offers[0]!.offer.capabilities[0]!.id;
@@ -185,26 +188,29 @@ describe('whole native provider polling arbitration boundary', () => {
 			for (const maximumAssignmentSeconds of [null, '1', false, 0, -1, 1.5, NaN, Infinity, -Infinity]) {
 				malformed.push({ ...limits, capabilityLimits: { [capability]: { dailyActiveSecondsLimit: 0, maximumAssignmentSeconds } } });
 			}
-			for (const nativeLimits of malformed) {
+			for (const [index, nativeLimits] of malformed.entries()) {
+				phase = `LOADER_${index}`;
 				f.manifest.adapters[0]!.nativeLimits = nativeLimits; await f.write();
 				const before = structuredClone(f.manifest), bytes = await readFile(f.config.manifestPath!, 'utf8');
 				await expect(loadProviderManifest(f.config.manifestPath!, f.directory, {}))
 					.rejects.toThrow(/Invalid capacity provider manifest:.*adapters\[0\]\.nativeLimits/u);
 				expect(await readFile(f.config.manifestPath!, 'utf8')).toBe(bytes);
-				expect(f.manifest).toEqual(before); expect(await f.bytes()).toBe(baseline); expect(f.routes).toEqual(routes);
+				expect(isDeepStrictEqual(f.manifest, before)).toBe(true); expect(await f.bytes()).toBe(baseline); expect(f.routes).toEqual(routes);
 			}
 			// The original-runtime child proves all three field categories
 			// fail at that same loader before real coordinator/token/HTTP activity.
-			for (const patch of [{ modelConfigurationId: '' }, { dailyActiveSecondsLimit: -1 }, { capabilityLimits: {} }]) {
+			for (const [index, patch] of [{ modelConfigurationId: '' }, { dailyActiveSecondsLimit: -1 }, { capabilityLimits: {} }].entries()) {
+				phase = `RUNTIME_DENIAL_${index}`;
 				f.manifest.adapters[0]!.nativeLimits = { ...limits, ...patch }; await f.write();
 				const bytes = await readFile(f.config.manifestPath!, 'utf8');
 				await expect(run()).rejects.toThrow(/Invalid capacity provider manifest:.*adapters\[0\]\.nativeLimits/u);
 				expect(await readFile(f.config.manifestPath!, 'utf8')).toBe(bytes);
 				expect(await f.bytes()).toBe(baseline); expect(f.routes).toEqual(routes);
 			}
-			f.manifest.adapters[0]!.nativeLimits = limits; await f.write();
+			phase = 'RESTORE'; f.manifest.adapters[0]!.nativeLimits = limits; await f.write();
 			expect(await readFile(f.config.manifestPath!, 'utf8')).toBe(manifestBytes);
-			await f.run(); expect(f.manifest).toEqual(original);
+			phase = 'INDEPENDENT_RETRY'; await f.run();
+			phase = 'FINAL_CUSTODY'; expect(isDeepStrictEqual(f.manifest, original)).toBe(true);
 			expect(new Set(f.routes.filter(item => item.path === f.pollPath).map(item => item.connectionId)))
 				.toEqual(new Set(original.connections.map(item => item.id)));
 			expect((await f.store.snapshot()).claims).toEqual([]);

@@ -118,11 +118,11 @@ export async function arbitrationFixture(workers = 1, initializeInOwnedChild = f
 				return result.value;
 			};
 		};
-		const child = async (action: 'initialize' | 'run' | 'offers') => {
+		const child = async (action: 'initialize' | 'run' | 'offers' | 'load', paths?: string[]) => {
 			// Pinned Node 24 executes this erasable TypeScript entrypoint natively;
 			// the owning provider implementation remains the exact compiled build.
 			const running = promisify(execFile)(process.execPath, [fileURLToPath(new URL('./arbitration-process.ts', import.meta.url)), action, directory,
-				...(action === 'run' && initializationPending ? ['initialize'] : [])],
+				...(action === 'load' ? [JSON.stringify(paths)] : action === 'run' && initializationPending ? ['initialize'] : [])],
 				{ env, timeout: 15_000, maxBuffer: 1024 * 1024 }); children.add(running);
 			try { const value = JSON.parse((await running).stdout) as unknown; if (action === 'run') initializationPending = false; return value; } finally { children.delete(running); }
 		};
@@ -131,6 +131,7 @@ export async function arbitrationFixture(workers = 1, initializeInOwnedChild = f
 		const attempt = assignmentAttemptSchema.parse(request().assignment.assignmentAttempt);
 		return { directory, manifest, config, store, routes, tokenPath, pollPath, faults, write,
 			openOffers: () => openSession('offers'), openRun: () => openSession('run'),
+			loadPaths: (paths: string[]) => child('load', paths),
 			run: () => child('run'), offers: () => child('offers'), setLease(value: unknown, status = 200) { leased = value; returnStatus = status; },
 			hold() { held = true; }, release() { held = false; for (const resolve of releases) resolve(); releases.clear(); },
 			async awaitPoll() {

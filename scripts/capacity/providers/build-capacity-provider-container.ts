@@ -167,16 +167,16 @@ function packSdk() {
 
 function prepareRuntimeDependencies(installedSdkRoot: string | null) {
 	const installedNodeModules = resolveInstalledNodeModulesRoot();
-	const runtimePackages = runtimePackageNames(installedNodeModules);
+	const runtimePackages = runtimePackageSources(installedNodeModules);
 	const runtimeRoot = sharedRuntimeRoot();
 	rmSync(runtimeRoot, { recursive: true, force: true });
 	mkdirSync(runtimeRoot, { recursive: true });
 	copyFileSync(resolve(packageRoot, 'package.json'), resolve(runtimeRoot, 'package.json'));
 	copyFileSync(resolve(packageRoot, 'package-lock.json'), resolve(runtimeRoot, 'package-lock.json'));
 	mkdirSync(resolve(runtimeRoot, 'node_modules'), { recursive: true });
-	for (const packageName of runtimePackages) {
+	for (const [packageName, dependency] of runtimePackages) {
 		if (packageName === '@treeseed/sdk') continue;
-		copyRuntimePackage(installedNodeModules, packageName, runtimeRoot);
+		copyRuntimePackage(installedNodeModules, packageName, runtimeRoot, dependency);
 	}
 	mkdirSync(resolve(runtimeRoot, 'node_modules', '@treeseed'), { recursive: true });
 	if (installedSdkRoot) {
@@ -198,60 +198,78 @@ function prepareRuntimeDependencies(installedSdkRoot: string | null) {
 }
 
 export function runtimePackageNames(installedNodeModules: string) {
+	return [...runtimePackageSources(installedNodeModules).keys()].sort();
+}
+
+type RuntimeDependency = { source: string | null; required: boolean };
+
+function runtimePackageSources(installedNodeModules: string) {
 	const lockfile = JSON.parse(readFileSync(resolve(packageRoot, 'package-lock.json'), 'utf8')) as {
-		packages?: Record<string, { dev?: boolean }>;
+		packages?: Record<string, { dev?: boolean; optional?: boolean }>;
 	};
-	const allowed = new Set<string>();
+	const sdkRoot = resolveSdkPackageRoot();
+	const allowed = new Map<string, RuntimeDependency>();
 	const queue: string[] = [];
+	function include(name: string, required: boolean, owner: string) {
+		const existing = allowed.get(name);
+		if (existing) { existing.required ||= required; return; }
+		const source = name === '@treeseed/sdk' ? sdkRoot : runtimePackageSource(installedNodeModules, name, owner, sdkRoot);
+		allowed.set(name, { source, required });
+		queue.push(name);
+	}
 	for (const [packagePath, metadata] of Object.entries(lockfile.packages ?? {})) {
 		if (!packagePath.startsWith('node_modules/') || metadata.dev === true) continue;
 		const packageName = topLevelPackageName(packagePath.split('node_modules/').at(-1) ?? '');
 		if (!packageName) continue;
-		if (!allowed.has(packageName)) {
-			allowed.add(packageName);
-			queue.push(packageName);
-		}
+		include(packageName, metadata.optional !== true, packageRoot);
 	}
+	include('@treeseed/sdk', true, packageRoot);
 	for (let index = 0; index < queue.length; index += 1) {
 		const packageName = queue[index];
 		if (!packageName) continue;
-		for (const dependencyName of installedPackageDependencies(installedNodeModules, packageName)) {
-			if (allowed.has(dependencyName)) continue;
-			allowed.add(dependencyName);
-			queue.push(dependencyName);
+		const source = allowed.get(packageName)!.source;
+		if (!source) continue;
+		const pkg = JSON.parse(readFileSync(resolve(source, 'package.json'), 'utf8')) as {
+			dependencies?: Record<string, string>; optionalDependencies?: Record<string, string>;
+		};
+		for (const name of Object.keys(pkg.dependencies ?? {})) {
+			include(name, !(name in (pkg.optionalDependencies ?? {})), source);
+		}
+		for (const name of Object.keys(pkg.optionalDependencies ?? {})) {
+			include(name, false, source);
 		}
 	}
-	return [...allowed].sort();
+	return allowed;
 }
 
-function installedPackageDependencies(installedNodeModules: string, packageName: string) {
-	const packageJsonPath = resolve(installedNodeModules, packageName, 'package.json');
-	if (!existsSync(packageJsonPath)) return [];
-	try {
-		const pkg = JSON.parse(readFileSync(packageJsonPath, 'utf8')) as {
-			dependencies?: Record<string, string>;
-			optionalDependencies?: Record<string, string>;
-		};
-		return [
-			...Object.keys(pkg.dependencies ?? {}),
-			...Object.keys(pkg.optionalDependencies ?? {}),
-		];
-	} catch {
-		return [];
+function runtimePackageSource(installedNodeModules: string, packageName: string, owner: string, sdkRoot: string) {
+	for (const root of [owner, sdkRoot]) {
+		let current = root;
+		while (true) {
+			const candidate = resolve(current, 'node_modules', packageName);
+			if (existsSync(resolve(candidate, 'package.json'))) return candidate;
+			const parent = dirname(current);
+			if (parent === current) break;
+			current = parent;
+		}
 	}
+	const installed = resolve(installedNodeModules, packageName);
+	if (existsSync(resolve(installed, 'package.json'))) return installed;
+	const lockfile = JSON.parse(readFileSync(resolve(packageRoot, 'package-lock.json'), 'utf8')) as { packages?: Record<string, unknown> };
+	const path = Object.keys(lockfile.packages ?? {}).filter(candidate => candidate.endsWith(`node_modules/${packageName}`))
+		.sort((left, right) => left.length - right.length).find(candidate => existsSync(resolve(packageRoot, candidate, 'package.json')));
+	return path ? resolve(packageRoot, path) : null;
 }
 
-export function copyRuntimePackage(installedNodeModules: string, packageName: string, runtimeRoot: string) {
-	let source = resolve(installedNodeModules, packageName);
-	if (!existsSync(source)) {
-		const lockfile = JSON.parse(readFileSync(resolve(packageRoot, 'package-lock.json'), 'utf8')) as { packages?: Record<string, unknown> };
-		const packagePath = Object.keys(lockfile.packages ?? {}).filter((candidate) => candidate.endsWith(`node_modules/${packageName}`)).sort((left, right) => left.length - right.length).find((candidate) => existsSync(resolve(packageRoot, candidate)));
-		if (packagePath) source = resolve(packageRoot, packagePath);
+export function copyRuntimePackage(installedNodeModules: string, packageName: string, runtimeRoot: string,
+	dependency = runtimePackageSources(installedNodeModules).get(packageName)) {
+	if (!dependency?.source) {
+		if (dependency?.required !== false) throw new Error(`Missing required runtime dependency: ${packageName}`);
+		return;
 	}
-	if (!existsSync(source)) return;
 	const target = resolve(runtimeRoot, 'node_modules', packageName);
 	mkdirSync(target, { recursive: true });
-	run('cp', ['-a', `${source}/.`, target], packageRoot);
+	run('cp', ['-a', `${dependency.source}/.`, target], packageRoot);
 }
 
 function topLevelPackageName(relativePath: string) {
@@ -262,28 +280,6 @@ function topLevelPackageName(relativePath: string) {
 		return parts.length >= 2 ? `${parts[0]}/${parts[1]}` : parts[0];
 	}
 	return parts[0] ?? null;
-}
-
-function pruneDevDependenciesFromRuntimeTree(runtimeRoot: string) {
-	const lockfile = JSON.parse(readFileSync(resolve(packageRoot, 'package-lock.json'), 'utf8')) as {
-		packages?: Record<string, { dev?: boolean }>;
-	};
-	for (const [packagePath, metadata] of Object.entries(lockfile.packages ?? {})) {
-		if (!packagePath.startsWith('node_modules/') || metadata.dev !== true) continue;
-		const target = resolve(runtimeRoot, packagePath);
-		rmSync(target, { recursive: true, force: true });
-	}
-	const nodeModulesRoot = resolve(runtimeRoot, 'node_modules');
-	for (const scopeName of readdirSync(nodeModulesRoot)) {
-		if (!scopeName.startsWith('@')) continue;
-		const scopePath = resolve(nodeModulesRoot, scopeName);
-		try {
-			if (readdirSync(scopePath).length === 0) {
-				rmSync(scopePath, { recursive: true, force: true });
-			}
-		} catch {
-		}
-	}
 }
 
 function pruneProviderRuntimeToolingFromRuntimeTree(runtimeRoot: string) {
@@ -316,7 +312,6 @@ const installedSdkRoot = packSdk();
 rmSync(resolve(dockerContextRoot, 'runtime'), { recursive: true, force: true });
 const runtimeRoot = sharedRuntimeRoot();
 prepareRuntimeDependencies(installedSdkRoot);
-pruneDevDependenciesFromRuntimeTree(runtimeRoot);
 pruneProviderRuntimeToolingFromRuntimeTree(runtimeRoot);
 if (prepareOnly) {
 	console.log(`Prepared capacity provider Docker context at ${dockerContextRoot}.`);

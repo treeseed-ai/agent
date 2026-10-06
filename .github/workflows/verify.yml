@@ -73,7 +73,7 @@ jobs:
           sudo install -m 0644 "$relay_fixture/ca.pem" /etc/treeseed/sandbox/relay-ca.crt
       - run: bash -lc 'npm run verify:local'
       - name: Execute coded golden component scenes
-        uses: treeseed-ai/reviewer/.github/actions/run-scenes@21042577587be3d5cc16cd8399b181ebfcd11ede
+        uses: treeseed-ai/reviewer/.github/actions/run-scenes@ea16c08f3f70fcf27d2e1d816df26af23e84a4b4
         with:
           ids: guarantee.agent.golden.component-boundaries,guarantee.agent.golden.planning-synthesis-recovery
       - name: Pack verified artifact

@@ -4,6 +4,7 @@ import { canonicalStandardsJson } from '@treeseed/sdk/standards';
 import type { AgentExecutionRequest, AgentExecutionResult, AgentExecutor } from '../../../src/provider/execution/contracts.ts';
 import { executeKernelAssignment } from '../../../src/kernel/provider-kernel-executor.ts';
 import type { Handler } from '../../../src/kernel/contracts.ts';
+import { assignmentAttemptSchema, assignmentResultSchema } from '@treeseed/sdk/agent-capacity';
 
 import { commit, candidateCommit, digest, runtimeBuild, timingAwareness, request } from './provider-kernel-fixture.ts';
 
@@ -30,13 +31,15 @@ describe('provider AgentKernel execution', () => {
 		}
 	});
 	it('routes a canonical acting assignment through AgentKernel and preserves the verified Git reference', async () => {
+		const teardown = { verified: true, completedAt: new Date().toISOString() };
+		const measurements: Record<string, unknown>[] = [{ elapsedSeconds: 4, inputTokens: 20, outputTokens: 10 }];
 		const executor: AgentExecutor = {
 			id: 'codex', observe: async () => ({ available: true }),
 			execute: vi.fn(async (request): Promise<AgentExecutionResult> => { await request.beginExecution?.(); return {
 				status: 'completed', summary: 'Implemented and verified.',
-				outputs: { timingAwareness, teardown: { verified: false, completedAt: null }, sourceReference: { kind: 'git', repository: 'treeseed-ai/sdk', commit: candidateCommit,
+				outputs: { timingAwareness, teardown, changedPaths: ['src/main.ts'], sourceReference: { kind: 'git', repository: 'treeseed-ai/sdk', commit: candidateCommit,
 					branch: 'treeseed/assignments/assignment-1' } },
-				usage: [{ elapsedSeconds: 4, inputTokens: 20, outputTokens: 10 }],
+				usage: measurements,
 			}; }),
 		};
 		const result = await executeKernelAssignment({ executor, request: request(), runtimeBuild });
@@ -45,12 +48,19 @@ describe('provider AgentKernel execution', () => {
 			authorizedContext: [{ ref: { id: 'sdk-source', commit }, value: { repository: 'treeseed-ai/sdk', commit } }],
 		});
 		expect(result.status).toBe('completed');
-		expect(result.outputs?.teardown).toEqual({ verified: false, completedAt: null });
+		expect(result.outputs?.teardown).toEqual(teardown);
 		expect(result.outputs?.assignmentResult).toMatchObject({
 			assignmentId: 'assignment-1', status: 'completed',
 			references: [{ kind: 'git', repository: 'treeseed-ai/sdk', commit: candidateCommit }],
 			usage: { elapsedSeconds: 4, modelInputTokens: 20, modelOutputTokens: 10 },
 		});
+		measurements.splice(0, measurements.length,
+			{ elapsedSeconds: 1.25, inputTokens: 6, outputTokens: 4, activeSeconds: 0.5, nativeUsage: { activeSeconds: 0.5 } },
+			{ elapsedSeconds: 2.75, inputTokens: 14, outputTokens: 6, activeSeconds: 0.75, nativeUsage: { activeSeconds: 0.75 } });
+		const before = structuredClone(measurements), repeated = await executeKernelAssignment({ executor, request: request(), runtimeBuild });
+		expect(repeated.status).toBe('completed'); expect(repeated.usage).toEqual(before); expect(measurements).toEqual(before);
+		expect(assignmentResultSchema.parse(repeated.outputs?.assignmentResult).usage).toEqual({
+			elapsedSeconds: 4, modelInputTokens: 20, modelOutputTokens: 10, native: { activeSeconds: 1.25 } });
 	});
 
 	it('fails closed before transport when the provider runtime build differs', async () => {

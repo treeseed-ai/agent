@@ -1,60 +1,188 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-
-type Row = Record<string, any>;
-const state = vi.hoisted(() => ({ cases: new Map<string, () => void>(), replies: new Map<string, Row>(), failure: undefined as Error | undefined, timeout: 0, args: [] as string[] }));
-vi.mock('node:test', () => ({ default: (name: string, _options: unknown, run: () => void) => state.cases.set(name, run) }));
-vi.mock('node:child_process', () => ({ execFileSync: (_command: string, args: string[], options: { timeout: number }) => {
-	state.timeout = options.timeout;
-	state.args = args;
-	if (state.failure) throw state.failure;
-	const key = args.slice(0, 2).join(' ');
-	const result = state.replies.get(key);
-	if (!result) throw new Error(`Unexpected acceptance read: ${key}`);
-	return JSON.stringify({ ok: true, result });
-} }));
-await import('../../acceptance/sdk-runtime-golden.test.ts');
-const { read } = await import('../../acceptance/acceptance-cli.ts');
-
-const classes = ['architect', 'researcher', 'tester', 'engineer', 'technical-writer', 'releaser', 'reviewer', 'reporter'];
-const workdayId = 'workday-test';
-const commit = 'a'.repeat(40);
-const gate = (name: string) => state.cases.get(`Golden runtime ${name} evidence satisfies its acceptance boundary`)!();
-function assignment(id: string, activity: string, agentClass: string, workItemId = '', createdAt = '2026-09-27T00:00:01Z', completedAt = '2026-09-27T00:00:02Z'): Row {
-	return { id, workDayId: workdayId, projectId: 'sdk', decisionId: 'decision-test', status: 'completed', leaseToken: null,
-		createdAt, completedAt, assignmentAttempt: { agentClass, workItemId, effectiveProfile: { activity } },
-		capacityEnvelope: { budget: { time: { executionStartedAt: createdAt, closeoutStartedAt: completedAt } } },
-		assignmentResult: { status: 'completed', timingAwareness: { completedChecks: 2, firstToolCompliant: true, finalToolCompliant: true },
-			usage: { native: { activeSeconds: 1 } }, references: [{ kind: 'git', commit }] },
-		lifecycleOutput: { teardown: { verified: true }, activityCompletion: { reviewDisposition: 'approved' } } };
-}
-beforeEach(() => {
-	vi.stubEnv('TREESEED_ACCEPTANCE_WORKDAY_ID', workdayId);
-	state.replies.clear();
-	state.failure = undefined;
-	const items: Row[] = classes.flatMap(agentClass => [assignment(`chat-${agentClass}`, 'chat', agentClass),
-		assignment(`planning-1-${agentClass}`, 'planning', agentClass), assignment(`planning-2-${agentClass}`, 'planning', agentClass)]);
-	items.push(...classes.slice(0, 7).map(agentClass => assignment(`estimate-${agentClass}`, 'estimating', agentClass)));
-	for (let index = 0; index < 6; index++) {
-		items.push(assignment(`actor-${index}`, 'acting', classes[index]!, `work-${index}`));
-		items.push(assignment(`review-${index}`, 'reviewing', 'reviewer', `work-${index}`, '2026-09-27T00:00:03Z', '2026-09-27T00:00:04Z'));
-	}
-	const requested = assignment('requested', 'reviewing', 'reviewer', 'work-0', '2026-09-27T00:00:03Z', '2026-09-27T00:00:04Z');
-	requested.lifecycleOutput.activityCompletion.reviewDisposition = 'request-changes';
-	items.push(requested, assignment('revision', 'acting', 'architect', 'work-0', '2026-09-27T00:00:05Z', '2026-09-27T00:00:06Z'),
-		assignment('approved-revision', 'reviewing', 'reviewer', 'work-0', '2026-09-27T00:00:07Z', '2026-09-27T00:00:08Z'));
-	state.replies.set('workdays show', { run: { status: 'completed', executionMode: 'simulation', startedAt: '2026-09-27T00:00:00Z',
-		completedAt: '2026-09-27T00:01:00Z', parameters: { durationSeconds: 3600, planningPercent: 100 / 3, allocationWeight: 1, planningTurnMaximumSeconds: 180, maximumConcurrency: 5, communicationConcurrency: 5,
-			appliedPlan: { planningRounds: [{ state: 'complete' }, { state: 'complete' }] } },
-		reportRefs: { sdk: { projectId: 'sdk', path: 'notes/report.mdx', commit } } } });
-	state.replies.set('assignments list', { items, page: { hasMore: false } });
-	state.replies.set('execution graph', { nodes: Array.from({ length: 6 }, (_, index) => ['actor', 'reviewer'].map(pairRole => ({
-		id: `${pairRole}-${index}`, workdayId, pairRole, status: 'completed' }))).flat() });
-	state.replies.set('capacity usage', { items: items.map(item => ({ id: `${item.id}:aggregate`, assignmentId: item.id,
-		metadata: { settlementKey: item.id } })), page: { hasMore: false } });
-	state.replies.set('library read', { result: { files: [{ body: `${workdayId} actor-0` }] } });
-});
+import { describe, expect, it, vi } from 'vitest';
+import { createHash } from 'node:crypto';
+import { stringify } from 'yaml';
+import { state, gate, read, assignment, usageMeasurement, classes, workdayId, commit, type Row } from './architecture/golden-readback-fixture.ts';
 
 describe('golden read-back assertion regressions (fixtures are not live acceptance)', () => {
+	it('denies malformed canonical report Note fields while retaining the exact workday readback and original failed observations', () => {
+		const file = state.replies.get('library read')!.result.files[0], original = structuredClone(file);
+		expect(() => gate('reporter')).not.toThrow();
+		const denied: boolean[] = [];
+		for (const change of [{ id: undefined }, { id: ' padded ' }, { id: 'a'.repeat(201) },
+			{ createdAt: undefined }, { createdAt: 'not-a-clock' }, { unknownAuthority: 'unowned' },
+			{ subjectRefs: [...original.frontmatter.subjectRefs, original.frontmatter.subjectRefs[0]] },
+			{ subjectRefs: [...original.frontmatter.subjectRefs, { store: 'postgresql', model: 'result', id: null }] }]) {
+			file.frontmatter = { ...original.frontmatter, ...change }; const held = structuredClone(file);
+			let failed = false; try { gate('reporter'); } catch { failed = true; }
+			denied.push(failed); expect(file).toEqual(held);
+		}
+		file.frontmatter = original.frontmatter;
+		expect(() => gate('reporter')).not.toThrow(); expect(file).toEqual(original);
+		expect(denied).toEqual(Array(8).fill(true));
+	});
+	it('denies repeated canonical result references without changing distinct output evidence or failed observations', () => {
+		const item = state.replies.get('assignments list')!.items[0], result = item.assignmentResult;
+		const original = structuredClone(result), first = { kind: 'url', url: 'https://example.test/one' };
+		result.references = [...original.references, first, { kind: 'url', url: 'https://example.test/two' }];
+		const distinct = structuredClone(result); expect(() => gate('results')).not.toThrow(); expect(result).toEqual(distinct);
+		const denied: boolean[] = [];
+		for (const repeated of [structuredClone(first), { url: first.url, kind: first.kind }]) {
+			result.references = [...distinct.references, repeated]; const held = structuredClone(result);
+			let failure = false; try { gate('results'); } catch { failure = true; }
+			denied.push(failure); expect(result).toEqual(held);
+		}
+		item.assignmentResult = original; expect(() => gate('results')).not.toThrow();
+		expect(item.assignmentResult).toEqual(original); expect(denied).toEqual([true, true]);
+	});
+  it('rejects moved missing or foreign report readback even when its body names the workday', () => {
+    const observed = state.replies.get('library read')!.result;
+    for (const mutate of [
+      (value: Row) => { value.resolvedRef = 'staging'; },
+      (value: Row) => { value.resolvedRef = 'b'.repeat(40); },
+      (value: Row) => { value.files[0].path = 'notes/another.mdx'; },
+      (value: Row) => { value.files.push(structuredClone(value.files[0])); },
+      (value: Row) => { value.files = []; },
+    ]) {
+      const changed = structuredClone(observed); mutate(changed);
+      state.replies.get('library read')!.result = changed;
+      expect(() => gate('reporter')).toThrow();
+    }
+  });
+  it('requires the single canonical workday report reference and rejects the retired plural map', () => {
+    const run = state.replies.get('workdays show')!.run;
+    const reference = structuredClone(run.reportRef);
+    run.reportRefs = { sdk: { kind: 'treedx', projectId: 'sdk', repository: 'sdk-library', path: 'notes/report.mdx', commit } };
+    delete run.reportRef;
+    expect(() => gate('reporter')).toThrow();
+    run.reportRef = reference;
+    expect(() => gate('reporter')).toThrow();
+  });
+  it('requires exactly one completed reporting assignment before accepting report readback', () => {
+    const items = state.replies.get('assignments list')!.items;
+    state.replies.get('assignments list')!.items = items.filter((item: Row) => item.assignmentAttempt.effectiveProfile.activity !== 'reporting');
+    expect(() => gate('reporter')).toThrow();
+    const reporter = items.find((item: Row) => item.assignmentAttempt.effectiveProfile.activity === 'reporting');
+    state.replies.get('assignments list')!.items = [...items, { ...structuredClone(reporter), id: 'duplicate-closeout' }];
+    expect(() => gate('reporter')).toThrow();
+  });
+  it('rejects a report note whose canonical classification or workday subject authority is missing', () => {
+    const file = state.replies.get('library read')!.result.files[0];
+    delete file.frontmatter;
+    expect(() => gate('reporter')).toThrow();
+    for (const frontmatter of [
+      { schemaVersion: 'treeseed.note/v1', classification: 'other', projectId: 'sdk', subjectRefs: [] },
+      { schemaVersion: 'treeseed.note/v1', classification: 'workday-report', projectId: 'other', subjectRefs: [] },
+      { schemaVersion: 'treeseed.note/v1', classification: 'workday-report', projectId: 'sdk', subjectRefs: [{ store: 'postgresql', model: 'workday', id: 'another-workday' }] },
+    ]) { file.frontmatter = frontmatter; expect(() => gate('reporter')).toThrow(); }
+  });
+  it('binds closeout report output completion teardown and chronology to the exact authoritative workday', () => {
+    const items = state.replies.get('assignments list')!.items;
+    const index = items.findIndex((item: Row) => item.assignmentAttempt.effectiveProfile.activity === 'reporting');
+    const original = structuredClone(items[index]);
+    for (const mutate of [
+      (item: Row) => { item.assignmentResult.assignmentId = 'other-assignment'; },
+      (item: Row) => { item.assignmentResult.references[0].commit = 'b'.repeat(40); },
+      (item: Row) => { item.assignmentResult.references.push(structuredClone(item.assignmentResult.references[0])); },
+      (item: Row) => { item.status = 'failed'; },
+      (item: Row) => { item.leaseToken = 'live'; },
+      (item: Row) => { item.lifecycleOutput.teardown.verified = false; },
+      (item: Row) => { item.completedAt = '2026-09-27T00:01:01Z'; },
+      (item: Row) => { item.assignmentAttempt.sourceRef.id = 'other-workday'; },
+    ]) {
+      items[index] = structuredClone(original); mutate(items[index]);
+      expect(() => gate('reporter')).toThrow();
+    }
+    items[index] = original;
+    expect(() => gate('reporter')).not.toThrow();
+  });
+  it('rejects any change to the exact five-slot campaign policy rather than accepting larger allowances', () => {
+    const parameters = state.replies.get('workdays show')!.run.parameters;
+    for (const key of ['maximumConcurrency', 'communicationConcurrency']) {
+      parameters[key] = 6;
+      expect(() => gate('lifecycle')).toThrow('ACCEPTANCE_CONCURRENCY_POLICY');
+      parameters[key] = 5;
+    }
+  });
+  it('requires the exact configured chat and estimating contributors rather than only their counts', () => {
+    const items = state.replies.get('assignments list')!.items;
+    for (const activity of ['chat', 'estimating']) {
+      const selected = items.find((item: Row) => item.assignmentAttempt.effectiveProfile.activity === activity);
+      const original = selected.assignmentAttempt.agentClass;
+      selected.assignmentAttempt.agentClass = 'unselected-agent';
+      expect(() => gate('collaboration')).toThrow();
+      selected.assignmentAttempt.agentClass = original;
+    }
+  });
+  it('requires every canonical clock field and successful first and final authoritative tools', () => {
+    const result = state.replies.get('assignments list')!.items[0].assignmentResult;
+    const canonical = { schemaVersion: 'treeseed.assignment-timing-awareness/v1', requiredChecks: 2, completedChecks: 2,
+      firstTool: 'treedx:treeseed_time_status', firstToolSucceeded: true, lastTool: 'treedx:treeseed_time_status',
+      lastToolSucceeded: true, firstToolCompliant: true, finalToolCompliant: true };
+    for (const key of Object.keys(canonical)) {
+      const incomplete: Row = { ...canonical }; delete incomplete[key];
+      result.timingAwareness = incomplete;
+      expect(() => gate('results')).toThrow();
+    }
+    for (const [key, value] of Object.entries({ schemaVersion: 'retired/v1', requiredChecks: 3, firstTool: 'other-tool',
+      lastTool: 'other-tool', firstToolSucceeded: false, lastToolSucceeded: false })) {
+      result.timingAwareness = { ...canonical, [key]: value };
+      expect(() => gate('results')).toThrow();
+    }
+  });
+  it('denies missing malformed before-start future and past-deadline canonical result completion clocks', () => {
+    const item = state.replies.get('assignments list')!.items[0], result = item.assignmentResult;
+    const original = structuredClone(item), clock = result.completedAt;
+    // Supplied DTOs are not independent provider clock readings or live results.
+    item.assignmentAttempt.createdAt = item.createdAt;
+    item.assignmentAttempt.deadline = '2026-09-27T00:00:11Z';
+    const observations: boolean[] = [];
+    for (const completedAt of [undefined, 'invalid', '2026-09-27T00:00:00Z', '2026-09-27T00:00:03Z', '2026-09-27T00:00:12Z']) {
+      result.completedAt = completedAt;
+      let denied = false; try { gate('results'); } catch { denied = true; }
+      observations.push(denied);
+    }
+    result.completedAt = clock;
+    expect(() => gate('results')).not.toThrow();
+    item.assignmentAttempt = original.assignmentAttempt;
+    expect(item).toEqual(original);
+    expect(observations).toEqual([true, true, true, true, true]);
+  });
+  it('denies nonfinite measured usage instead of accepting a coerced positive value', () => {
+    const native = state.replies.get('assignments list')!.items[0].assignmentResult.usage.native;
+    for (const value of ['1', Number.POSITIVE_INFINITY, Number.NaN, -1]) {
+      native.activeSeconds = value;
+      expect(() => gate('results')).toThrow();
+    }
+  });
+  it('denies malformed exact output references and results bound to another assignment', () => {
+    const item = state.replies.get('assignments list')!.items[0];
+    const result = item.assignmentResult;
+    for (const reference of [{ kind: 'git', commit }, { kind: 'git', repository: 'sdk', commit: 'staging' },
+      { kind: 'treedx', projectId: 'sdk', repository: 'sdk-library', path: 'notes/result.mdx' },
+      { kind: 'url', url: 'not-a-url' }, { kind: 'invented', commit }]) {
+      result.references = [reference];
+      expect(() => gate('results')).toThrow();
+    }
+    result.references = [{ kind: 'git', repository: 'sdk', commit }];
+    result.assignmentId = 'another-assignment';
+    expect(() => gate('results')).toThrow();
+  });
+  it('requires latest immutable completion custody even when a graph node claims completed', () => {
+    const nodes = state.replies.get('execution graph')!.nodes;
+    const retained = structuredClone(nodes[0]);
+    for (const mutate of [
+      (node: Row) => { node.nodeRevision = 3; },
+      (node: Row) => { node.workItemId = 'other-work'; },
+      (node: Row) => { node.sourceRef.revision = 9; },
+      (node: Row) => { node.authorityRefs[0].id = 'other-decision'; },
+      (node: Row) => { delete node.sourceRef; },
+    ]) {
+      nodes[0] = structuredClone(retained); mutate(nodes[0]);
+      expect(() => gate('graph')).toThrow();
+    }
+    nodes[0] = retained;
+    expect(() => gate('graph')).not.toThrow();
+  });
 	it('rejects serial execution even when five slots were configured', () => {
 		for (const [index, item] of state.replies.get('assignments list')!.items.entries()) {
 			item.capacityEnvelope.budget.time.executionStartedAt = new Date(index * 1000).toISOString();
@@ -87,8 +215,10 @@ describe('golden read-back assertion regressions (fixtures are not live acceptan
 	it('requires native Reporter closure without relaxing accounting or exposing raw assertion payloads', () => {
 		const reporter = assignment('native-reporter', 'reporting', 'reporter');
 		state.replies.get('assignments list')!.items.push(reporter);
-		state.replies.get('capacity usage')!.items.push({ id: `${reporter.id}:aggregate`, assignmentId: reporter.id,
-			metadata: { settlementKey: reporter.id } });
+		state.replies.get('capacity usage')!.items.push(usageMeasurement(reporter));
+		state.replies.set(`workspace ${reporter.assignmentAttempt.workspace.workspaceId}`, { result: {
+			workspaceId: reporter.assignmentAttempt.workspace.workspaceId, repoId: reporter.assignmentAttempt.workspace.repository,
+			status: 'closed' }, receipt: { projectId: reporter.projectId } });
 		delete reporter.lifecycleOutput.teardown;
 		expect(() => gate('settlement')).toThrow('ACCEPTANCE_SETTLEMENT_TEARDOWN:');
 		reporter.lifecycleOutput.teardown = { verified: true };
@@ -171,7 +301,7 @@ describe('golden read-back assertion regressions (fixtures are not live acceptan
 		const usage = state.replies.get('capacity usage')!.items;
 		const cancelled = usage.shift();
 		expect(() => gate('settlement')).toThrow('Exactly one actual settlement');
-		usage.push(cancelled, { ...cancelled, id: 'duplicate-cancelled:aggregate' });
+		usage.push(cancelled, { ...cancelled, id: 'duplicate-cancelled:aggregate', idempotencyKey: 'duplicate-cancelled-key' });
 		expect(() => gate('settlement')).toThrow('Exactly one actual settlement');
 	});
 	it('does not confuse repeated single-role planning with collaborative cycles', () => {
@@ -183,9 +313,9 @@ describe('golden read-back assertion regressions (fixtures are not live acceptan
 		expect(() => gate('collaboration')).toThrow('Two completed graph planning cycles');
 	});
 	it('rejects incomplete generated pairs and absent real revision', () => {
-		state.replies.get('execution graph')!.nodes.pop();
+		const removed = state.replies.get('execution graph')!.nodes.pop();
 		expect(() => gate('graph')).toThrow();
-		state.replies.get('execution graph')!.nodes.push({ workdayId, pairRole: 'reviewer', status: 'completed' });
+		state.replies.get('execution graph')!.nodes.push(removed);
 		state.replies.get('assignments list')!.items = state.replies.get('assignments list')!.items.filter((item: Row) => item.id !== 'revision');
 		expect(() => gate('revision')).toThrow('later real Actor revision');
 	});
@@ -198,12 +328,11 @@ describe('golden read-back assertion regressions (fixtures are not live acceptan
 			for (const item of items.filter((item: Row) => item.assignmentAttempt.workItemId === workItemId
 				&& item.assignmentAttempt.effectiveProfile.activity === activity)) {
 				item.executionNodeId = node.id; item.executionNodeRevision = 2;
-				Object.assign(item.assignmentAttempt, { nodeId: node.id, nodeRevision: 2, workdayId, sourceRef: { id: 'proposal', revision: 8 },
-					authorityRefs: [{ model: 'decision', id: 'decision-1' }] });
+				Object.assign(item.assignmentAttempt, { nodeId: node.id, nodeRevision: 2, workdayId, sourceRef: structuredClone(node.sourceRef),
+					authorityRefs: structuredClone(node.authorityRefs) });
 				item.assignmentResult.assignmentId = item.id;
 			}
-			Object.assign(node, { status: 'stale', nodeRevision: 3, workItemId, sourceRef: { id: 'proposal', revision: 8 },
-				authorityRefs: [{ model: 'decision', id: 'decision-1' }] });
+			Object.assign(node, { status: 'stale', nodeRevision: 3, workItemId });
 		}
 		expect(() => gate('graph')).not.toThrow();
 		expect(() => gate('revision')).not.toThrow();
@@ -253,13 +382,13 @@ describe('golden read-back assertion regressions (fixtures are not live acceptan
 		const usage = state.replies.get('capacity usage')!.items;
 		const first = usage.shift();
 		expect(() => gate('settlement')).toThrow('Exactly one actual settlement');
-		usage.push(first, { ...first, id: 'duplicate:aggregate' });
+		usage.push(first, { ...first, id: 'duplicate:aggregate', idempotencyKey: 'duplicate-key' });
 		expect(() => gate('settlement')).toThrow('Exactly one actual settlement');
 	});
 	it('rejects missing Reporter refs and unrelated report contents', () => {
 		state.replies.get('library read')!.result.files[0].body = 'An unrelated report';
 		expect(() => gate('reporter')).toThrow('this exact workday');
-		state.replies.get('workdays show')!.run.reportRefs = {};
+		delete state.replies.get('workdays show')!.run.reportRef;
 		expect(() => gate('reporter')).toThrow('one exact report');
 	});
 });

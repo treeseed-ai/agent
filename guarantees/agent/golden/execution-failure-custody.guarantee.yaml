@@ -1,0 +1,12 @@
+schemaVersion: treeseed.guarantee/v1
+id: guarantee.agent.golden.execution-failure-custody
+journey: Verify actual controlled execution and tool-proxy failure closeout
+ownerPackage: "@treeseed/agent"
+type: agent
+subtype: execution
+status: planned
+gates: [core]
+summary: Requires a real controlled-failure managed workday; normal successful SDK work is not required to fail. Public cause, closeout and accounting custody only, not independent physical resource absence or whole external charge provenance.
+scene:
+  required: true
+  manifest: guarantees/agent/golden/scenes/execution-failure-custody.scene.yaml

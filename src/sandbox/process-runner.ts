@@ -1,16 +1,55 @@
 import { spawn } from 'node:child_process';
 
+const FORCE_CLOSEOUT_MS = 3_000;
+
+export function ownedProcessGroupExists(pid: number, group: boolean): boolean {
+	if (!Number.isSafeInteger(pid) || pid <= 1 || pid === process.pid || typeof group !== 'boolean') {
+		throw new Error('assignment_subprocess_identity_invalid');
+	}
+	try { process.kill(group ? -pid : pid, 0); return true; }
+	catch (error) {
+		if (error instanceof Error && 'code' in error && error.code === 'ESRCH') return false;
+		throw error;
+	}
+}
+
+async function drainOwnedProcessGroup(pid: number, group: boolean): Promise<void> {
+	// SIGKILL acknowledgement is infrastructure teardown, not productive work.
+	// Reuse the existing forced-closeout bound; never restart the command,
+	// change its execution timeout, or treat a zombie/EPERM as absence.
+	const until = performance.now() + FORCE_CLOSEOUT_MS;
+	while (ownedProcessGroupExists(pid, group)) {
+		if (performance.now() >= until) throw new Error('assignment_subprocess_cleanup_incomplete');
+		await new Promise<void>(resolve => setTimeout(resolve, 10));
+	}
+}
+
 /** The API clock can shorten, never enlarge, the signed monotonic guest budget. */
 export function remainingExecutionMs(durationSeconds: number, elapsedMs: number, deadlineAt: string | null, now = Date.now()) {
+	if (typeof durationSeconds !== 'number' || !Number.isFinite(durationSeconds) || durationSeconds <= 0
+		|| typeof elapsedMs !== 'number' || !Number.isFinite(elapsedMs) || elapsedMs < 0
+		|| typeof now !== 'number' || !Number.isFinite(now)
+		|| deadlineAt !== null && typeof deadlineAt !== 'string') throw new Error('assignment_execution_clock_invalid');
 	const deadline = deadlineAt === null ? Number.POSITIVE_INFINITY : Date.parse(deadlineAt);
 	if (deadlineAt !== null && !Number.isFinite(deadline)) throw new Error('assignment_execution_clock_invalid');
 	return Math.min(durationSeconds * 1_000 - elapsedMs, deadline - now) - 5_000;
 }
 
+function assertTimerOptions(options: { timeoutMs?: number; idleTimeoutMs?: number; closeoutTimeoutMs?: number }): void {
+	for (const key of ['timeoutMs', 'idleTimeoutMs', 'closeoutTimeoutMs'] as const) {
+		if (Object.hasOwn(options, key) && (typeof options[key] !== 'number' || !Number.isFinite(options[key]) || options[key]! <= 0)) {
+			throw new Error('assignment_subprocess_timer_invalid');
+		}
+	}
+}
+
 /** Share the guest's existing remaining-time measurement across subprocesses. */
 export function withinAssignmentBudget(execute: typeof run, remainingMs: () => number): typeof run {
 	return (executable, args, options = {}) => {
-		const remaining = Math.floor(remainingMs());
+		try { assertTimerOptions(options); } catch (error) { return Promise.reject(error); }
+		const observed = remainingMs();
+		if (typeof observed !== 'number' || !Number.isFinite(observed)) return Promise.reject(new Error('assignment_execution_budget_exhausted'));
+		const remaining = Math.floor(observed);
 		if (!Number.isFinite(remaining) || remaining <= 0) return Promise.reject(new Error('assignment_execution_budget_exhausted'));
 		const timeoutMs = Math.min(options.timeoutMs || remaining, remaining);
 		const consumed = (options.timeoutMs || timeoutMs) - timeoutMs;
@@ -23,17 +62,26 @@ export function withinAssignmentBudget(execute: typeof run, remainingMs: () => n
 /** Run a guest subprocess; an idle interruption never extends its hard deadline. */
 export function run(executable: string, args: string[], options: { cwd?: string; input?: string; env?: NodeJS.ProcessEnv; onLine?: (line: string) => void; captureStdout?: boolean; maxStdoutBytes?: number; timeoutMs?: number; idleTimeoutMs?: number; closeoutTimeoutMs?: number; canInterrupt?: () => boolean } = {}) {
 	return new Promise<{ stderr: string; stdout: string }>((accept, reject) => {
-		const child = spawn(executable, args, { cwd: options.cwd, env: options.env, stdio: [options.input === undefined ? 'ignore' : 'pipe', 'pipe', 'pipe'] }); let pending = '', stderr = '', stdout = '', timedOut = false, interrupted = false;
+		assertTimerOptions(options);
+		const group = process.platform !== 'win32';
+		const child = spawn(executable, args, { cwd: options.cwd, env: options.env, detached: group,
+			stdio: [options.input === undefined ? 'ignore' : 'pipe', 'pipe', 'pipe'] }); let pending = '', stderr = '', stdout = '', timedOut = false, interrupted = false;
+		let cleanupError: unknown;
+		const signalOwned = (signal: NodeJS.Signals) => {
+			if (!child.pid) return;
+			try { if (group) process.kill(-child.pid, signal); else child.kill(signal); }
+			catch (error) { if (!(error instanceof Error && 'code' in error && error.code === 'ESRCH')) cleanupError = error; }
+		};
 		if (!child.stdout || !child.stderr) { reject(new Error(`Could not capture ${executable} output.`)); return; }
 		const childStdout = child.stdout, childStderr = child.stderr;
-		const timeout = options.timeoutMs ? setTimeout(() => { timedOut = true; child.kill('SIGKILL'); }, options.timeoutMs) : null;
+		const timeout = options.timeoutMs ? setTimeout(() => { timedOut = true; signalOwned('SIGKILL'); }, options.timeoutMs) : null;
 		let idleTimeout: ReturnType<typeof setTimeout> | null = null, closeoutTimeout: ReturnType<typeof setTimeout> | null = null,
 			interruptTimeout: ReturnType<typeof setTimeout> | null = null;
 		const interrupt = () => {
 			if (interrupted || options.canInterrupt?.() === false) return false;
 			interrupted = true;
-			child.kill('SIGINT');
-			interruptTimeout = setTimeout(() => child.kill('SIGKILL'), 3_000);
+			signalOwned('SIGINT');
+			interruptTimeout = setTimeout(() => signalOwned('SIGKILL'), FORCE_CLOSEOUT_MS);
 			return true;
 		};
 		const resetIdle = () => {
@@ -52,11 +100,19 @@ export function run(executable: string, args: string[], options: { cwd?: string;
 			if (closeoutTimeout) clearTimeout(closeoutTimeout); if (interruptTimeout) clearTimeout(interruptTimeout); };
 		childStdout.setEncoding('utf8'); childStdout.on('data', (chunk) => {
 			const value = String(chunk);
-			if (options.captureStdout) { stdout += value; if (Buffer.byteLength(stdout) > (options.maxStdoutBytes ?? 8_388_608)) child.kill('SIGKILL'); }
+			if (options.captureStdout) { stdout += value; if (Buffer.byteLength(stdout) > (options.maxStdoutBytes ?? 8_388_608)) signalOwned('SIGKILL'); }
 			pending += value; const lines = pending.split('\n'); pending = lines.pop() ?? ''; for (const line of lines) if (line.trim()) { resetIdle(); options.onLine?.(line); }
 		});
 		childStderr.setEncoding('utf8'); childStderr.on('data', (chunk) => { stderr = `${stderr}${chunk}`.slice(-32_768); });
-		child.once('error', (error) => { clearTimers(); reject(error); }); child.once('exit', (code, signal) => { clearTimers(); if (pending.trim()) options.onLine?.(pending); interrupted ? reject(new Error('codex_closeout_interrupted')) : code === 0 ? accept({ stderr, stdout }) : reject(Object.assign(new Error(timedOut ? `${executable} exceeded its interactive execution deadline.` : `${executable} exited ${code ?? signal}: ${stderr}`), { exitCode: timedOut ? null : code, stdout, stderr })); });
+		child.once('error', (error) => { clearTimers(); signalOwned('SIGKILL'); reject(error); });
+		child.once('exit', () => { signalOwned('SIGKILL'); clearTimers(); });
+		child.once('close', async (code, signal) => {
+			clearTimers(); if (pending.trim()) options.onLine?.(pending);
+			if (child.pid) try { await drainOwnedProcessGroup(child.pid, group); } catch (error) { cleanupError = error; }
+			if (cleanupError) { reject(Object.assign(new Error('assignment_subprocess_cleanup_failed', { cause: cleanupError }), { exitCode: code, stdout, stderr })); return; }
+			interrupted ? reject(new Error('codex_closeout_interrupted')) : code === 0 ? accept({ stderr, stdout })
+				: reject(Object.assign(new Error(timedOut ? `${executable} exceeded its interactive execution deadline.` : `${executable} exited ${code ?? signal}: ${stderr}`), { exitCode: timedOut ? null : code, stdout, stderr }));
+		});
 		child.stdin?.on('error', (error: NodeJS.ErrnoException) => { if (error.code !== 'EPIPE') reject(error); });
 		if (options.input !== undefined) child.stdin?.end(options.input);
 	});

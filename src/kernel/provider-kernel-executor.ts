@@ -18,9 +18,41 @@ import { ActorHandler, EstimateHandler, ReleaserHandler, ReviewerHandler, Writer
 import { ReporterHandler } from './handlers/reporter.ts';
 import { materializeAssignmentContext } from './materialize-context.ts';
 import { commitTreeDxContent } from './treedx-content-commit.ts';
+import { isDeepStrictEqual } from 'node:util';
 
 const record = (value: unknown): Record<string, unknown> =>
 	value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
+
+/** One reduction for canonical model results and terminal provider accounting.
+ * Raw observations remain diagnostic evidence; native units are never rounded. */
+export function aggregateExecutionUsage(measurements: unknown): { elapsedSeconds: number; inputTokens?: number; outputTokens?: number; [key: string]: unknown } {
+	if (!Array.isArray(measurements) || !measurements.length) throw new Error('model_elapsed_usage_missing');
+	const totals: Record<string, number> = {}, native: Record<string, number> = {};
+	for (const input of measurements) {
+		if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('model_elapsed_usage_invalid');
+		const usage = record(input);
+		if (typeof usage.elapsedSeconds !== 'number' || !Number.isFinite(usage.elapsedSeconds) || usage.elapsedSeconds < 0) throw new Error('model_elapsed_usage_invalid');
+		if (Object.hasOwn(usage, 'nativeUsage') && (!usage.nativeUsage || typeof usage.nativeUsage !== 'object' || Array.isArray(usage.nativeUsage))) throw new Error('model_native_usage_invalid');
+		for (const [key, value] of Object.entries(usage)) {
+			if (['provenance', 'nativeUsage'].includes(key)) continue;
+			if (typeof value !== 'number' || !Number.isFinite(value) || value < 0
+				|| ['inputTokens', 'outputTokens'].includes(key) && !Number.isSafeInteger(value)) throw new Error('model_native_usage_invalid');
+			totals[key] = (totals[key] ?? 0) + value;
+		}
+		for (const [key, value] of Object.entries(record(usage.nativeUsage))) {
+			if (typeof value !== 'number' || !Number.isFinite(value) || value < 0
+				|| Object.hasOwn(usage, key) && usage[key] !== value) throw new Error('model_native_usage_invalid');
+			native[key] = (native[key] ?? 0) + value;
+		}
+	}
+	if (Object.values(totals).some(value => !Number.isFinite(value)) || Object.values(native).some(value => !Number.isFinite(value))
+		|| ['inputTokens', 'outputTokens'].some(key => Object.hasOwn(totals, key) && !Number.isSafeInteger(totals[key]))) throw new Error('model_native_usage_invalid');
+	const aggregate = measurements.length === 1 ? structuredClone(record(measurements[0]))
+		: { ...totals, ...(Object.keys(native).length ? { nativeUsage: native } : {}) };
+	return { ...aggregate, elapsedSeconds: totals.elapsedSeconds!,
+		...(Object.hasOwn(totals, 'inputTokens') ? { inputTokens: totals.inputTokens! } : {}),
+		...(Object.hasOwn(totals, 'outputTokens') ? { outputTokens: totals.outputTokens! } : {}) };
+}
 
 function gitReference(result: AgentExecutionResult, repository: string): AssignmentReference {
 	const outputs = record(result.outputs);
@@ -44,9 +76,10 @@ export async function executeKernelAssignment(input: {
 	const visible = input.request.assignment;
 	const attemptValue = visible.assignmentAttempt ?? record(visible.workspaceContext).assignmentAttempt;
 	const attempt = assignmentAttemptSchema.safeParse(attemptValue);
-	if (!attempt.success) return {
+	if (!attempt.success || !isDeepStrictEqual(attempt.data, attemptValue)) return {
 		status: 'failed', code: 'assignment_attempt_invalid',
-		summary: attempt.error.issues.map((issue) => `${issue.path.join('.')}: ${issue.message}`).join('; '), retryable: false,
+		summary: attempt.success ? 'Assignment attempt must already be canonical.'
+			: attempt.error.issues.map((issue) => `${issue.path.join('.')}: ${issue.message}`).join('; '), retryable: false,
 	};
 	if (attempt.data.provider.runtimeBuild !== input.runtimeBuild) return {
 		status: 'failed', code: 'runtime_build_mismatch', summary: 'runtime_build_mismatch', retryable: false,
@@ -71,10 +104,11 @@ export async function executeKernelAssignment(input: {
 	}
 	const predecessorValues = Array.isArray(record(visible.workspaceContext).predecessorResults)
 		? record(visible.workspaceContext).predecessorResults as unknown[] : [];
-	const predecessorResults = predecessorValues.map((value) => assignmentResultSchema.parse(value));
+	let predecessorResults: AssignmentResult[];
 	const preparationStarted = performance.now();
 	let context: AssignmentContext;
-	try { context = assignmentContextSchema.parse(await materializeAssignmentContext({
+	try { predecessorResults = predecessorValues.map((value) => assignmentResultSchema.parse(value));
+		context = assignmentContextSchema.parse(await materializeAssignmentContext({
 		attempt: attempt.data,
 		predecessorResults,
 		authorizedContext: Array.isArray(record(visible.workspaceContext).authorizedContext)
@@ -109,13 +143,14 @@ export async function executeKernelAssignment(input: {
 	const runtime: AgentRuntime = {
 		now: () => new Date().toISOString(),
 		readContext: async (ref) => {
+			await transportRequest.beginExecution();
 			const item = context.context.find((entry) => JSON.stringify(entry.ref, Object.keys(entry.ref).sort())
 				=== JSON.stringify(ref, Object.keys(ref).sort()));
 			if (!item) throw new Error('assignment_context_reference_denied');
 			return item.value;
 		},
 		invokeModel: async () => {
-			if (transport.result) throw new Error('model_already_invoked');
+			if (transport.pending || transport.result) throw new Error('model_already_invoked');
 			transport.pending = input.executor.execute(transportRequest);
 			transport.result = await transport.pending;
 			if (!executionStart) throw Object.assign(new Error('execution_start_not_observed'), { code: 'execution_start_not_observed' });
@@ -124,14 +159,15 @@ export async function executeKernelAssignment(input: {
 			if (!['completed', 'responded', 'abstained'].includes(transport.result.status)) {
 				throw Object.assign(new Error(transport.result.summary), { code: transport.result.code });
 			}
-			const usage = record(transport.result.usage?.[0]);
-			const elapsedSeconds = Math.max(1, Math.ceil(Number(usage.elapsedSeconds)));
-			if (!Number.isFinite(elapsedSeconds)) throw new Error('model_elapsed_usage_missing');
+			const usage = aggregateExecutionUsage(transport.result.usage), elapsedSeconds = Math.ceil(Number(usage.elapsedSeconds));
+			const inputTokens = usage.inputTokens, outputTokens = usage.outputTokens;
 			const nativeUsage: Record<string, number> = {};
-			for (const [key, value] of Object.entries(usage)) {
-				if (!['elapsedSeconds', 'inputTokens', 'outputTokens', 'provenance'].includes(key)
-					&& typeof value === 'number' && Number.isFinite(value) && value >= 0) nativeUsage[key] = value;
+			for (const [key, value] of [...Object.entries(usage).filter(([key]) =>
+				!['elapsedSeconds', 'inputTokens', 'outputTokens', 'provenance', 'nativeUsage'].includes(key)), ...Object.entries(record(usage.nativeUsage))]) {
+				if (typeof value !== 'number') throw new Error('model_native_usage_invalid');
+				nativeUsage[key] = value;
 			}
+			if (!Number.isSafeInteger(elapsedSeconds)) throw new Error('model_native_usage_invalid');
 			const references = Array.isArray(record(transport.result.outputs).contentReferences)
 				? record(transport.result.outputs).contentReferences as AssignmentReference[] : [];
 			const verification = Array.isArray(record(transport.result.outputs).verificationRecords)
@@ -139,14 +175,23 @@ export async function executeKernelAssignment(input: {
 			const activityCompletion = record(record(transport.result.outputs).activityCompletion);
 			const timing = assignmentTimingAwarenessReceiptSchema.safeParse(record(transport.result.outputs).timingAwareness);
 			if (!timing.success) throw new Error(`model_timing_result_invalid: ${timing.error.message}`);
+			const outputs = record(transport.result.outputs);
+			if (outputs.sandboxId !== undefined || Object.hasOwn(outputs, 'teardown')) {
+				const teardown = record(outputs.teardown), completed = teardown.completedAt;
+				if (teardown.verified !== true || typeof completed !== 'string'
+					|| !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/u.test(completed)
+					|| !Number.isFinite(Date.parse(completed)) || Date.parse(completed) > Date.now()) {
+					throw Object.assign(new Error('sandbox_teardown_unverified'), { code: 'sandbox_teardown_unverified' });
+				}
+			}
 			const timingAwareness = timing.data;
 			return {
 				text: transport.result.responseMarkdown ?? transport.result.summary,
 				timingAwareness,
 				usage: {
 					elapsedSeconds,
-					...(Number.isFinite(Number(usage.inputTokens)) ? { modelInputTokens: Math.floor(Number(usage.inputTokens)) } : {}),
-					...(Number.isFinite(Number(usage.outputTokens)) ? { modelOutputTokens: Math.floor(Number(usage.outputTokens)) } : {}),
+					...(inputTokens !== undefined ? { modelInputTokens: inputTokens } : {}),
+					...(outputTokens !== undefined ? { modelOutputTokens: outputTokens } : {}),
 					...(Object.keys(nativeUsage).length ? { native: nativeUsage } : {}),
 				},
 				references,
@@ -185,15 +230,15 @@ export async function executeKernelAssignment(input: {
 	const kernel = new AgentKernel(registry);
 	let result: AssignmentResult;
 	try {
-		// Reporter is deterministic and has no model transport preparation phase.
-		if (attempt.data.effectiveProfile.handler === 'reporter') await transportRequest.beginExecution();
 		const handled = await kernel.runAssignment({
 			context, runtimeBuild: input.runtimeBuild, runtime, signal, executionStarted,
 		});
+		if (transport.pending && !transport.result) throw new Error('model_execution_not_awaited');
 		const parsedResult = assignmentResultSchema.safeParse(handled);
 		if (!parsedResult.success) throw new Error(`assignment_result_invalid: ${parsedResult.error.message}`);
 		result = parsedResult.data;
 	} catch (error) {
+		const revoked = signal.aborted || (error as { code?: unknown })?.code === 'assignment_timeout';
 		localAbort.abort(error);
 		// The productive deadline is closed. Drain only cancellation/teardown,
 		// not another model turn, before publishing the terminal result.
@@ -204,35 +249,39 @@ export async function executeKernelAssignment(input: {
 					transport.pending.then(value => { transport.result = value; }, failure => {
 						const details = record(failure);
 						transport.result = { status: 'failed', summary: 'Isolated execution failed.',
-							outputs: record(details.outputs), ...(Array.isArray(details.usage) ? { usage: details.usage } : {}) };
+							outputs: record(details.outputs), ...(Array.isArray(details.usage) ? { usage: details.usage } : {}),
+							...(Array.isArray(details.artifacts) ? { artifacts: details.artifacts } : {}) };
 					}),
 					new Promise<void>(resolve => { timer = setTimeout(resolve, 30_000); }),
 				]);
 			} finally { if (timer) clearTimeout(timer); }
 		}
 		const summary = error instanceof Error ? error.message : String(error);
+		const failure = transport.result ?? record(error);
+		const evidence = { ...(failure.outputs !== undefined ? { outputs: failure.outputs as AgentExecutionResult['outputs'] } : {}),
+			...(Array.isArray(failure.usage) ? { usage: failure.usage } : {}),
+			...(Array.isArray(failure.artifacts) ? { artifacts: failure.artifacts } : {}) };
 		// The isolation transport has already classified bounded infrastructure
 		// failures. Preserve that authority through AgentKernel instead of
 		// converting a retryable return into a terminal semantic failure.
-		if (transport.result?.status === 'returned' && (error as { code?: unknown })?.code !== 'assignment_timeout') return transport.result;
+		if (transport.result?.status === 'returned' && !revoked) return transport.result;
 		// Upstream saturation is not an invalid agent result. Preserve the existing
 		// provider return/retry path; it retains normal admission and deadline limits.
-		if (summary.startsWith('Kata guest exited 1: Codex execution failed: Selected model is at capacity. Please try a different model.')) {
+		if (!revoked && summary.startsWith('Kata guest exited 1: Codex execution failed: Selected model is at capacity. Please try a different model.')) {
 			return { status: 'returned', code: 'execution_provider_unavailable', summary, retryable: true,
-				...(transport.result ? { usage: transport.result.usage } : {}) };
+				...evidence };
 		}
-		if (summary.includes('Agent timing-awareness contract requires')) {
+		if (!revoked && (summary.includes('Agent timing-awareness contract requires') || summary.startsWith('model_timing_result_invalid:'))) {
 			return { status: 'returned', code: 'assignment_timing_awareness_missing', summary, retryable: true,
-				...(transport.result ? { usage: transport.result.usage } : {}) };
+				...evidence };
 		}
-		if (['ECONNRESET', 'ETIMEDOUT', 'EPIPE'].includes(String((error as { code?: unknown })?.code ?? ''))) {
+		if (!revoked && ['ECONNRESET', 'ETIMEDOUT', 'EPIPE'].includes(String((error as { code?: unknown })?.code ?? ''))) {
 			return { status: 'returned', code: 'execution_transport_interrupted', summary, retryable: true,
-				...(transport.result ? { usage: transport.result.usage } : {}) };
+				...evidence };
 		}
 		return { status: 'failed', code: typeof (error as { code?: unknown })?.code === 'string'
 			? String((error as { code: string }).code) : 'agent_kernel_failed', summary, retryable: false,
-			...(transport.result ? { outputs: transport.result.outputs, usage: transport.result.usage,
-				artifacts: transport.result.artifacts } : {}),
+			...evidence,
 		};
 	}
 	const communication = attempt.data.effectiveProfile.activity === 'chat';
@@ -244,7 +293,7 @@ export async function executeKernelAssignment(input: {
 			// Native Reporter never acquires a sandbox. A successful bounded Kernel
 			// completion has closed its granted runtime; acknowledge that no-op
 			// resource closure without claiming a broker sandbox was destroyed.
-			...(attempt.data.effectiveProfile.handler === 'reporter' && !transport.pending
+			...(!transport.pending
 				? { teardown: { verified: true, completedAt: new Date().toISOString() } } : {}),
 		},
 		usage: transport.result?.usage ?? [{ elapsedSeconds: result.usage.elapsedSeconds }],

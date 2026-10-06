@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { startSandboxToolPump } from '../../../src/provider/execution/microvm-executor.ts';
+import { request } from '../kernel/provider-kernel-fixture.ts';
 
 const prepared = { sandboxId: 'sandbox', operationToken: 'test-operation' };
 const time = { startedAt: '2026-09-17T00:00:00.000Z', deadlineAt: '2026-09-18T00:00:00.000Z' };
@@ -11,6 +12,22 @@ function waitForAbort(_sandbox: string, _token: string, signal?: AbortSignal): P
 }
 
 describe('sandbox tool pump lifecycle', () => {
+	it('stopped tool polling cannot execute or deliver a late granted reply after its owning closeout', async () => {
+		const input: Parameters<typeof startSandboxToolPump>[2] = request(), original = structuredClone(input.assignment), invoke = vi.fn(async () => ({}));
+		input.treeDx = { ...input.treeDx, repositoryId: 'sdk-library', baseRef: 'a'.repeat(40), invoke };
+		let resolvePoll: ((value: { request: { id: string; tool: string; arguments: Record<string, unknown> } }) => void) | undefined;
+		let observedSignal: AbortSignal | undefined;
+		const pending = new Promise<{ request: { id: string; tool: string; arguments: Record<string, unknown> } }>(resolve => { resolvePoll = resolve; });
+		const client = { nextToolRequest: vi.fn((_id: string, _token: string, signal?: AbortSignal) => { observedSignal = signal; return pending; }),
+			completeToolRequest: vi.fn(async () => ({})) }, cancel = vi.fn();
+		const stop = startSandboxToolPump(client, prepared, input, time, cancel), stopped = stop();
+		expect(observedSignal?.aborted).toBe(true);
+		if (!resolvePoll) throw new Error('Original owned poll must be pending');
+		resolvePoll({ request: { id: 'late-owned-tool', tool: 'treedx_read_files', arguments: { paths: ['proposals/sdk.mdx'] } } });
+		expect(await stopped).toBeUndefined(); expect(await stop()).toBeUndefined();
+		expect(invoke).not.toHaveBeenCalled(); expect(client.completeToolRequest).not.toHaveBeenCalled(); expect(cancel).not.toHaveBeenCalled();
+		expect(client.nextToolRequest).toHaveBeenCalledOnce(); expect(input.assignment).toEqual(original);
+	});
 	it('observes failed delivery immediately, cancels once, and never sends a second response', async () => {
 		const error = new Error('TreeDX tool request is not pending.');
 		const client = {

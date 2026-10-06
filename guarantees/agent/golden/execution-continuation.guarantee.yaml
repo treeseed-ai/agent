@@ -1,0 +1,12 @@
+schemaVersion: treeseed.guarantee/v1
+id: guarantee.agent.golden.execution-continuation
+journey: Verify original settled ancestry of an actual managed continuation
+ownerPackage: "@treeseed/agent"
+type: agent
+subtype: execution
+status: planned
+gates: [core]
+summary: Requires an actual continuation and complete original parent workdays, immutable source and Decision selections, independent terminal accounting readback and retained failed history. Not proof of a model-authored before-deadline proposal, native governance approval, external charge provenance or physical isolation teardown.
+scene:
+  required: true
+  manifest: guarantees/agent/golden/scenes/execution-continuation.scene.yaml

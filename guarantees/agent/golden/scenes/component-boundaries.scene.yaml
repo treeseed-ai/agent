@@ -1710,3 +1710,15 @@ workflow:
   - id: execution-manifest-invocation-unit
     action: { verifier: agent.golden.execution-manifest-invocation-unit }
     expect: { status: passed }
+  - id: recovery-post-removal-denial-unit
+    action: { verifier: agent.golden.recovery-post-removal-denial-unit }
+    expect: { status: passed }
+  - id: recovery-post-removal-budget-unit
+    action: { verifier: agent.golden.recovery-post-removal-budget-unit }
+    expect: { status: passed }
+  - id: recovery-post-removal-denial-native
+    action: { verifier: agent.golden.recovery-post-removal-denial-native }
+    expect: { status: passed }
+  - id: recovery-post-removal-budget-native
+    action: { verifier: agent.golden.recovery-post-removal-budget-native }
+    expect: { status: passed }

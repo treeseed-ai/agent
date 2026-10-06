@@ -96,6 +96,35 @@ it('uses the same shrinking API deadline executor for citation recovery', async 
 	expect(run).not.toHaveBeenCalled();
 });
 
+it('rejects exhausted or malformed authority after response removal without starting a correction or claiming completion', async () => {
+	for (const remaining of [29_999, 0, -1, NaN, Infinity]) {
+		vi.resetAllMocks(); vi.mocked(readFile).mockResolvedValue(JSON.stringify(first));
+		let current = 35_000;
+		vi.mocked(unlink).mockImplementation(async () => { current = remaining; });
+		const request = { ...input(), remainingMs: () => current }, before = structuredClone(request.context);
+		await expect(recoverPlanningSynthesis(request)).rejects.toThrow('planning_synthesis_correction_budget_exhausted');
+		expect(unlink).toHaveBeenCalledTimes(1); expect(run).not.toHaveBeenCalled();
+		expect(request.verifyClock).not.toHaveBeenCalled();
+		expect(request.progress).not.toHaveBeenCalledWith('provider.planning-synthesis-recovery.completed');
+		expect(request.context).toEqual(before); expect(current).toBe(remaining);
+	}
+});
+
+it('remeasures post-removal correction time without increasing either earlier remaining-time bound', async () => {
+	for (const remaining of [31_000, 45_000]) {
+		vi.resetAllMocks();
+		vi.mocked(readFile).mockResolvedValueOnce(JSON.stringify(first)).mockResolvedValueOnce(JSON.stringify(corrected));
+		vi.mocked(run).mockResolvedValue({ stdout: '', stderr: '' });
+		let current = 35_000;
+		vi.mocked(unlink).mockImplementation(async () => { current = remaining; });
+		const request = { ...input(), remainingMs: () => current }, before = structuredClone(request.context);
+		expect(await recoverPlanningSynthesis(request)).toBe(true);
+		expect(run).toHaveBeenCalledTimes(1);
+		expect(vi.mocked(run).mock.calls[0]![2]?.timeoutMs).toBe(Math.min(35_000, remaining));
+		expect(request.context).toEqual(before);
+	}
+});
+
 it('denies malformed remaining authority before removing captured synthesis or invoking its original session', async () => {
 	const values: unknown[] = [NaN, Infinity, -Infinity, undefined, null, '', '30000', '35000', true, [], [35_000], {}];
 	const outcomes = [];

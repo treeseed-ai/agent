@@ -1,7 +1,8 @@
 import { describe, expect, it, onTestFailed } from 'vitest';
 import { arbitrationFixture } from './arbitration-fixture.ts';
-import { readFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import { isDeepStrictEqual } from 'node:util';
+import { isMap, parse, parseDocument, stringify } from 'yaml';
 import { loadProviderManifest } from '../../../../src/provider/configuration/manifest.ts';
 import { capabilityOfferDigest, capabilityOfferSchema, CORE_CAPABILITY_DEFINITIONS } from '@treeseed/sdk/capacity-provider';
 import { verifyProviderConformanceSignature, verifyProviderQualification, verifyProviderPollingSelection } from '../../../acceptance/workday/support/record-custody.ts';
@@ -178,6 +179,9 @@ describe('whole native provider polling arbitration boundary', () => {
 			const original = structuredClone(f.manifest), baseline = await f.bytes(), routes = structuredClone(f.routes);
 			const limits = structuredClone(f.manifest.adapters[0]!.nativeLimits), capability = f.manifest.adapters[0]!.offers[0]!.offer.capabilities[0]!.id;
 			const manifestBytes = await readFile(f.config.manifestPath!, 'utf8');
+			const limitsNode: unknown = parseDocument(manifestBytes).getIn(['adapters', 0, 'nativeLimits'], true);
+			if (!isMap(limitsNode) || !limitsNode.range) throw new Error('Original native limits byte range required');
+			const [start, end] = limitsNode.range, prefix = manifestBytes.slice(0, start), suffix = manifestBytes.slice(end);
 			const malformed: Record<string, unknown>[] = [];
 			for (const modelConfigurationId of [undefined, null, '', ' ', 0, false, [], {}]) malformed.push({ ...limits, modelConfigurationId });
 			for (const dailyActiveSecondsLimit of [undefined, null, '0', false, -1, NaN, Infinity, -Infinity]) {
@@ -190,8 +194,15 @@ describe('whole native provider polling arbitration boundary', () => {
 			}
 			for (const [index, nativeLimits] of malformed.entries()) {
 				phase = `LOADER_${index}`;
-				f.manifest.adapters[0]!.nativeLimits = nativeLimits; await f.write();
+				// Change only the controlled input field. All other native YAML bytes
+				// and the original child config remain exact, without reserializing
+				// every unchanged signed offer for each of the forty denied inputs.
+				const wire = stringify(nativeLimits, { collectionStyle: 'flow', lineWidth: 0, aliasDuplicateObjects: false });
+				expect(isDeepStrictEqual(parse(wire), parse(stringify(nativeLimits)))).toBe(true);
+				f.manifest.adapters[0]!.nativeLimits = nativeLimits;
+				await writeFile(f.config.manifestPath!, prefix + wire + suffix);
 				const before = structuredClone(f.manifest), bytes = await readFile(f.config.manifestPath!, 'utf8');
+				expect(bytes.slice(0, start)).toBe(prefix); expect(bytes.slice(start + wire.length)).toBe(suffix);
 				await expect(loadProviderManifest(f.config.manifestPath!, f.directory, {}))
 					.rejects.toThrow(/Invalid capacity provider manifest:.*adapters\[0\]\.nativeLimits/u);
 				expect(await readFile(f.config.manifestPath!, 'utf8')).toBe(bytes);

@@ -130,10 +130,10 @@ describe('whole native provider polling arbitration boundary', () => {
 			f.manifest.adapters[0]!.offers[0]!.offer.offerDigest = capabilityOfferDigest(suppliedMaterial);
 			await f.write(); const denied = structuredClone(f.manifest), deniedBytes = await readFile(f.config.manifestPath!);
 			await expect(f.offers()).rejects.toThrow(/Only passing capability conformance may be advertised/u);
-			expect(await readFile(f.config.manifestPath!)).toEqual(deniedBytes); expect(f.manifest).toEqual(denied);
+			expect((await readFile(f.config.manifestPath!)).equals(deniedBytes)).toBe(true); expect(f.manifest).toEqual(denied);
 			expect(await f.bytes()).toBe(baseline); expect(f.routes).toEqual(routes);
 			f.manifest.adapters = structuredClone(original.adapters); await f.write();
-			expect(await readFile(f.config.manifestPath!)).toEqual(bytes);
+			expect((await readFile(f.config.manifestPath!)).equals(bytes)).toBe(true);
 			const [firstValue, secondValue] = await Promise.all([f.offers(), f.offers()]);
 			expect(secondValue).toEqual(firstValue); const first = row(firstValue);
 			expect(Array.isArray(first.adapters)).toBe(true); if (!Array.isArray(first.adapters)) throw new Error('Original signed adapter inventory required');
@@ -156,7 +156,7 @@ describe('whole native provider polling arbitration boundary', () => {
 					const { offerDigest, ...material } = offer; expect(capabilityOfferDigest(material)).toBe(offerDigest);
 				}
 			}
-			expect(await readFile(f.config.manifestPath!)).toEqual(bytes); expect(f.manifest).toEqual(original);
+			expect((await readFile(f.config.manifestPath!)).equals(bytes)).toBe(true); expect(f.manifest).toEqual(original);
 			expect(denied.adapters[0]!.offers[0]!.offer.conformance.slice(0, 2).map(value => value.status)).toEqual(['failed', 'revoked']);
 			expect(deniedBytes.length).toBeGreaterThan(0);
 			expect(await f.bytes()).toBe(baseline); expect(f.routes).toEqual(routes);

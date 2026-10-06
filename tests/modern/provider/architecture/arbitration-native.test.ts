@@ -165,8 +165,12 @@ describe('whole native provider polling arbitration boundary', () => {
 		} finally { await f.close(); }
 	});
 	it('native quota manifests reject malformed model daily and capability limits before coordinator polling or changing retained capacity and admit only exact restored bytes', async () => {
-		const f = await arbitrationFixture();
+		const f = await arbitrationFixture(1, true);
 		try {
+			// The original identity initialization belongs to this native child.
+			// Every denial rereads the actual manifest through the original runtime;
+			// the restored retry below still starts an independent native process.
+			const run = await f.openRun();
 			await f.store.snapshot();
 			const original = structuredClone(f.manifest), baseline = await f.bytes(), routes = structuredClone(f.routes);
 			const limits = structuredClone(f.manifest.adapters[0]!.nativeLimits), capability = f.manifest.adapters[0]!.offers[0]!.offer.capabilities[0]!.id;
@@ -189,12 +193,12 @@ describe('whole native provider polling arbitration boundary', () => {
 				expect(await readFile(f.config.manifestPath!, 'utf8')).toBe(bytes);
 				expect(f.manifest).toEqual(before); expect(await f.bytes()).toBe(baseline); expect(f.routes).toEqual(routes);
 			}
-			// Independent original-runtime children prove all three field categories
+			// The original-runtime child proves all three field categories
 			// fail at that same loader before real coordinator/token/HTTP activity.
 			for (const patch of [{ modelConfigurationId: '' }, { dailyActiveSecondsLimit: -1 }, { capabilityLimits: {} }]) {
 				f.manifest.adapters[0]!.nativeLimits = { ...limits, ...patch }; await f.write();
 				const bytes = await readFile(f.config.manifestPath!, 'utf8');
-				await expect(f.run()).rejects.toThrow(/Invalid capacity provider manifest:.*adapters\[0\]\.nativeLimits/u);
+				await expect(run()).rejects.toThrow(/Invalid capacity provider manifest:.*adapters\[0\]\.nativeLimits/u);
 				expect(await readFile(f.config.manifestPath!, 'utf8')).toBe(bytes);
 				expect(await f.bytes()).toBe(baseline); expect(f.routes).toEqual(routes);
 			}

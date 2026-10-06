@@ -6,8 +6,8 @@ import type { ProviderHostRuntimeConfig } from '../../../../src/provider/configu
 // Child entrypoint for the EXISTING runtime, not another arbitration runner.
 // The parent supplies only a disposable directory and controlled loopback API.
 const [action, directory, sessionInitialization] = process.argv.slice(2);
-if (!directory || !['initialize', 'run', 'offers', 'offers-session'].includes(action ?? '')) throw new Error('Exact isolated arbitration action required');
-if (sessionInitialization !== undefined && (!['offers-session', 'run'].includes(action!) || sessionInitialization !== 'initialize')) throw new Error('Exact native session initialization required');
+if (!directory || !['initialize', 'run', 'offers', 'offers-session', 'run-session'].includes(action ?? '')) throw new Error('Exact isolated arbitration action required');
+if (sessionInitialization !== undefined && (!['offers-session', 'run-session', 'run'].includes(action!) || sessionInitialization !== 'initialize')) throw new Error('Exact native session initialization required');
 const config: ProviderHostRuntimeConfig = JSON.parse(await readFile(`${directory}/config.json`, 'utf8'));
 if (config.dataDir !== directory || config.manifestPath !== `${directory}/manifest.yaml`) throw new Error('Fixture custody mismatch');
 async function load() {
@@ -31,19 +31,25 @@ async function initialize() {
 	for (const connection of loaded.manifest.connections) await writeProviderSecret(connection.membershipCredentialRef,
 		`isolated-${connection.id}`, directory, directory);
 }
+async function run() {
+	await load();
+	const { runMultiTeamProviderRunners } = await import('../../../../dist/provider/teams/multi-team-runtime.js');
+	return runMultiTeamProviderRunners(config);
+}
 if (action === 'initialize') {
 	await initialize();
 	process.stdout.write(JSON.stringify({ initialized: true }));
 } else if (action === 'offers') {
 	process.stdout.write(JSON.stringify(await offers()));
-} else if (action === 'offers-session') {
+} else if (action === 'offers-session' || action === 'run-session') {
 	if (!process.send) throw new Error('Owned native offer IPC required');
 	if (sessionInitialization === 'initialize') await initialize();
 	// Same owning loader and publisher on EVERY call, including after denial.
 	// Only process/module startup is shared; manifest and identity are reread.
 	process.on('message', async message => {
-		if (message !== 'offers') throw new Error('Exact native offer action required');
-		try { process.send!({ value: await offers() }); }
+		const expected = action === 'offers-session' ? 'offers' : 'run';
+		if (message !== expected) throw new Error('Exact native session action required');
+		try { process.send!({ value: await (message === 'offers' ? offers() : run()) }); }
 		catch (cause) {
 			if (!(cause instanceof Error)) throw cause;
 			process.send!({ error: { name: cause.name, message: cause.message, stack: cause.stack } });
@@ -53,7 +59,5 @@ if (action === 'initialize') {
 	process.send({ ready: true });
 } else {
 	if (sessionInitialization === 'initialize') await initialize();
-	await load();
-	const { runMultiTeamProviderRunners } = await import('../../../../dist/provider/teams/multi-team-runtime.js');
-	process.stdout.write(JSON.stringify(await runMultiTeamProviderRunners(config)));
+	process.stdout.write(JSON.stringify(await run()));
 }

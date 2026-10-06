@@ -94,17 +94,17 @@ export async function arbitrationFixture(workers = 1, initializeInOwnedChild = f
 			const failed = (error: Error) => { cleanup(); reject(error); };
 			session.once('message', message); session.once('exit', exited); session.once('error', failed);
 		});
-		const openOffers = async () => {
+		const openSession = async (action: 'offers' | 'run') => {
 			if (offerSession) throw new Error('Only one allocated offer session allowed');
 			const session = fork(fileURLToPath(new URL('./arbitration-process.ts', import.meta.url)),
-				['offers-session', directory, ...(initializationPending ? ['initialize'] : [])],
+				[`${action}-session`, directory, ...(initializationPending ? ['initialize'] : [])],
 				{ env, execArgv: [], stdio: ['ignore', 'ignore', 'ignore', 'ipc'], serialization: 'advanced' });
 			offerSession = session; offerSessionExit = once(session, 'exit');
 			const ready = await offerMessage(session);
 			if (!ready || typeof ready !== 'object' || !('ready' in ready) || ready.ready !== true) throw new Error('Actual offer session readiness required');
 			initializationPending = false;
 			return async () => {
-				const response = offerMessage(session); session.send('offers'); const result = await response;
+				const response = offerMessage(session); session.send(action); const result = await response;
 				if (!result || typeof result !== 'object') throw new Error('Actual offer session response required');
 				if ('error' in result) {
 					const detail = result.error;
@@ -129,7 +129,8 @@ export async function arbitrationFixture(workers = 1, initializeInOwnedChild = f
 		await write(); if (!initializeInOwnedChild) await child('initialize');
 		const store = new ProviderLocalCapacityStore(directory);
 		const attempt = assignmentAttemptSchema.parse(request().assignment.assignmentAttempt);
-		return { directory, manifest, config, store, routes, tokenPath, pollPath, faults, write, openOffers,
+		return { directory, manifest, config, store, routes, tokenPath, pollPath, faults, write,
+			openOffers: () => openSession('offers'), openRun: () => openSession('run'),
 			run: () => child('run'), offers: () => child('offers'), setLease(value: unknown, status = 200) { leased = value; returnStatus = status; },
 			hold() { held = true; }, release() { held = false; for (const resolve of releases) resolve(); releases.clear(); },
 			async awaitPoll() {

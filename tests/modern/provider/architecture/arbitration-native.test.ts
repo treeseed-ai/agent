@@ -1,6 +1,7 @@
 import { describe, expect, it, onTestFailed } from 'vitest';
 import { arbitrationFixture } from './arbitration-fixture.ts';
 import { readFile, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
 import { isMap, parse, parseDocument, stringify } from 'yaml';
 import { loadProviderManifest } from '../../../../src/provider/configuration/manifest.ts';
@@ -192,22 +193,29 @@ describe('whole native provider polling arbitration boundary', () => {
 			for (const maximumAssignmentSeconds of [null, '1', false, 0, -1, 1.5, NaN, Infinity, -Infinity]) {
 				malformed.push({ ...limits, capabilityLimits: { [capability]: { dailyActiveSecondsLimit: 0, maximumAssignmentSeconds } } });
 			}
-			for (const [index, nativeLimits] of malformed.entries()) {
-				phase = `LOADER_${index}`;
+			phase = 'INDEPENDENT_LOADER_INPUTS';
+			const denials = await Promise.allSettled(malformed.map(async (nativeLimits, index) => {
 				// Change only the controlled input field. All other native YAML bytes
-				// and the original child config remain exact, without reserializing
-				// every unchanged signed offer for each of the forty denied inputs.
+				// and the original child config remain exact. Independent allocated
+				// paths permit concurrent I/O without racing one shared manifest;
+				// every loader still parses and validates its complete native bytes.
 				const wire = stringify(nativeLimits, { collectionStyle: 'flow', lineWidth: 0, aliasDuplicateObjects: false });
 				expect(isDeepStrictEqual(parse(wire), parse(stringify(nativeLimits)))).toBe(true);
-				f.manifest.adapters[0]!.nativeLimits = nativeLimits;
-				await writeFile(f.config.manifestPath!, prefix + wire + suffix);
-				const before = structuredClone(f.manifest), bytes = await readFile(f.config.manifestPath!, 'utf8');
+				const path = join(f.directory, `quota-input-${index}.yaml`), supplied = structuredClone(nativeLimits);
+				await writeFile(path, prefix + wire + suffix, { flag: 'wx' });
+				const before = structuredClone(f.manifest), bytes = await readFile(path, 'utf8');
 				expect(bytes.slice(0, start)).toBe(prefix); expect(bytes.slice(start + wire.length)).toBe(suffix);
-				await expect(loadProviderManifest(f.config.manifestPath!, f.directory, {}))
+				await expect(loadProviderManifest(path, f.directory, {}))
 					.rejects.toThrow(/Invalid capacity provider manifest:.*adapters\[0\]\.nativeLimits/u);
-				expect(await readFile(f.config.manifestPath!, 'utf8')).toBe(bytes);
+				expect(await readFile(path, 'utf8')).toBe(bytes); expect(isDeepStrictEqual(nativeLimits, supplied)).toBe(true);
 				expect(isDeepStrictEqual(f.manifest, before)).toBe(true); expect(await f.bytes()).toBe(baseline); expect(f.routes).toEqual(routes);
-			}
+			}));
+			// Settle every allocated operation before cleanup, retaining all denied
+			// input bytes and causes even when one assertion or native read fails.
+			expect(denials).toHaveLength(malformed.length);
+			for (const [index, denial] of denials.entries()) expect(denial.status,
+				`native quota input ${index}: ${denial.status === 'rejected' ? String(denial.reason) : 'complete'}`).toBe('fulfilled');
+			expect(await readFile(f.config.manifestPath!, 'utf8')).toBe(manifestBytes);
 			// The original-runtime child proves all three field categories
 			// fail at that same loader before real coordinator/token/HTTP activity.
 			for (const [index, patch] of [{ modelConfigurationId: '' }, { dailyActiveSecondsLimit: -1 }, { capabilityLimits: {} }].entries()) {

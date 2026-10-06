@@ -75,12 +75,16 @@ describe('microvm result and closeout authority', () => {
 			expect(f.result()).toEqual(supplied); expect(f.input.assignment).toEqual(before); expect(f.client.execute).toHaveBeenCalledTimes(1);
 			expect(f.client.destroy).toHaveBeenCalledTimes(1); expect(f.client.destroy).toHaveBeenCalledWith('owned-unit-sandbox', 'unit-operation'); expect(f.cleanup).toHaveBeenCalledTimes(1);
 		}
+	});
+	async function clockObservations(activity: 'chat' | 'planning' | 'estimating' | 'acting' | 'reviewing') {
+		const f = await suppliedMicrovm();
 		const clockOutcomes: Array<{ mode: string; result: unknown; failure: unknown; completed: boolean }> = [];
-		for (const activity of ['chat', 'planning', 'estimating', 'acting', 'reviewing'] as const)
 			for (const mode of ['exact', 'missing', 'foreign-window', 'receipt-count', 'pending', 'zero', 'negative', 'string', 'null',
 				'fraction', 'over-window', 'increasing', 'absent-remaining', 'content-drift', 'clock-error', 'duplicate-clock',
 				'first-nonclock', 'final-nonclock', 'blocking-without-recheck', 'wrong-server', 'wrong-tool', 'frequent']) {
-				const f = await suppliedMicrovm(), attempt = assignmentAttemptSchema.parse(f.input.assignment.assignmentAttempt);
+				// Reset only per-input UNIT call counters, not recorded outcomes or authority.
+				vi.clearAllMocks();
+				const attempt = assignmentAttemptSchema.parse(f.input.assignment.assignmentAttempt);
 				attempt.effectiveProfile.activity = activity; attempt.agentClass = 'renamed-clock-consumer';
 				f.input.assignment.assignmentAttempt = attempt;
 				const original = sandboxResultSchema.parse(f.result()), window = { startedAt: attempt.createdAt, deadlineAt: attempt.deadline };
@@ -124,7 +128,12 @@ describe('microvm result and closeout authority', () => {
 			if (['exact', 'frequent'].includes(observed.mode)) { expect(observed.failure).toBeUndefined(); expect(observed.result).toMatchObject({ status: 'completed' }); }
 			else { expect(observed.result).toBeUndefined(); expect(observed.failure).toMatchObject({ message: 'Completed sandbox result lacks valid timing-awareness evidence.' }); expect(observed.completed).toBe(false); }
 		}
-	});
+	}
+	it('checks every chat timing observation without resetting the original productive window', () => clockObservations('chat'));
+	it('checks every planning timing observation without resetting the original productive window', () => clockObservations('planning'));
+	it('checks every estimating timing observation without resetting the original productive window', () => clockObservations('estimating'));
+	it('checks every acting timing observation without resetting the original productive window', () => clockObservations('acting'));
+	it('checks every reviewing timing observation without resetting the original productive window', () => clockObservations('reviewing'));
 	it('requires one exact verified owning destroy receipt without losing original cleanup errors measurements or unverified observations', async () => {
 		for (const supplied of [null, {}, { sandboxId: 'foreign', destroyed: true, teardown: { verified: true, completedAt: new Date().toISOString() } },
 			{ sandboxId: 'owned-unit-sandbox', destroyed: false, teardown: { verified: false, completedAt: null } },

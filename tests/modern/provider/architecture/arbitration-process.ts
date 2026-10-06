@@ -7,7 +7,7 @@ import type { ProviderHostRuntimeConfig } from '../../../../src/provider/configu
 // The parent supplies only a disposable directory and controlled loopback API.
 const [action, directory, sessionInitialization] = process.argv.slice(2);
 if (!directory || !['initialize', 'run', 'offers', 'offers-session'].includes(action ?? '')) throw new Error('Exact isolated arbitration action required');
-if (sessionInitialization !== undefined && (action !== 'offers-session' || sessionInitialization !== 'initialize')) throw new Error('Exact native session initialization required');
+if (sessionInitialization !== undefined && (!['offers-session', 'run'].includes(action!) || sessionInitialization !== 'initialize')) throw new Error('Exact native session initialization required');
 const config: ProviderHostRuntimeConfig = JSON.parse(await readFile(`${directory}/config.json`, 'utf8'));
 if (config.dataDir !== directory || config.manifestPath !== `${directory}/manifest.yaml`) throw new Error('Fixture custody mismatch');
 async function load() {
@@ -52,6 +52,7 @@ if (action === 'initialize') {
 	process.on('disconnect', () => process.exit(0));
 	process.send({ ready: true });
 } else {
+	if (sessionInitialization === 'initialize') await initialize();
 	await load();
 	const { runMultiTeamProviderRunners } = await import('../../../../dist/provider/teams/multi-team-runtime.js');
 	process.stdout.write(JSON.stringify(await runMultiTeamProviderRunners(config)));

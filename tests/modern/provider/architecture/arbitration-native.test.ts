@@ -12,7 +12,8 @@ import { row } from '../../../acceptance/acceptance-cli.ts';
 // provider-generated external charges, physical cleanup or managed fairness.
 describe('whole native provider polling arbitration boundary', () => {
 	it('native original global runtime retains exact preclaim eligible metadata and measured seconds on failed custody so independent restart cannot replace the selected team history', async () => {
-		const f = await arbitrationFixture();
+		// Initialize in the first actual run child; the retry is still an independent restart.
+		const f = await arbitrationFixture(1, true);
 		try {
 			await f.measure('busy-a'); await f.measure('busy-b');
 			const snapshot = await f.store.snapshot(), manifest = structuredClone(f.manifest), bytes = await readFile(f.config.manifestPath!);

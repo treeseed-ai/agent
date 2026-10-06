@@ -6,7 +6,7 @@ import { mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 
-it('retains actual runner assertion failures as failed evidence in scoped test-first review', async () => {
+async function actualTestFirstRed(agentClass: string, activity: string) {
 	const directory = await mkdtemp(resolve(tmpdir(), 'agent296-red-'));
 	const command = 'npx vitest run tests/unit/example.test.ts';
 	const report = { schemaVersion: 'treeseed.activity-completion/v1' as const, summary: 'Exact red suite reviewed',
@@ -15,8 +15,6 @@ it('retains actual runner assertion failures as failed evidence in scoped test-f
 	try {
 		await symlink(resolve('node_modules'), resolve(directory, 'node_modules'), 'dir');
 		await writeFile(resolve(directory, 'example.test.ts'), "import { expect, it } from 'vitest';\nit('rejects duplicate decisions', () => expect([]).toEqual(['decision_selection_invalid']));\n");
-		for (const [agentClass, activity] of [['reviewer', 'reviewing'], ['tester', 'acting'],
-			['contract-author', 'acting'], ['independent-inspector', 'reviewing']]) {
 			const result = await observeReportedActivityCommands(report, [],
 				(_executable, _args, options) => run(process.execPath,
 					[resolve('node_modules/vitest/vitest.mjs'), 'run', '--root', directory, '--no-color'], { ...options, cwd: directory }),
@@ -29,9 +27,12 @@ it('retains actual runner assertion failures as failed evidence in scoped test-f
 			expect(result.verification).toEqual([expect.objectContaining({ command, status: 'failed', exitCode: 1,
 				outputDigest: expect.stringMatching(/^sha256:[a-f0-9]{64}$/u) })]);
 			expect(result.report.summary).toContain('Runner-observed test-first red');
-		}
 	} finally { await rm(directory, { recursive: true, force: true }); }
-});
+}
+it('retains actual runner assertion failures as failed evidence in scoped test-first review', () => actualTestFirstRed('reviewer', 'reviewing'));
+it('retains actual runner assertion failures for the original test author without claiming a passing replay', () => actualTestFirstRed('tester', 'acting'));
+it('retains actual runner assertion failures for an arbitrarily renamed test author without claiming a passing replay', () => actualTestFirstRed('contract-author', 'acting'));
+it('retains actual runner assertion failures for an arbitrarily renamed independent reviewer without claiming a passing replay', () => actualTestFirstRed('independent-inspector', 'reviewing'));
 
 it('keeps unscoped non-test setup and resource runner failures fail-closed', async () => {
 	const criteria = ['Tester commits failing-on-base SDK tests.'];

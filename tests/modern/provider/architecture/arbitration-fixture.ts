@@ -16,7 +16,7 @@ import { ProviderLocalCapacityStore } from '../../../../src/provider/capacity/ca
 import type { ProviderHostRuntimeConfig } from '../../../../src/provider/configuration/config.ts';
 import { request } from '../../kernel/provider-kernel-fixture.ts';
 
-export async function arbitrationFixture(workers = 1, initializeInOfferSession = false) {
+export async function arbitrationFixture(workers = 1, initializeInOwnedChild = false) {
 	const directory = await mkdtemp(join(tmpdir(), 'agent-global-arbitration-'));
 	const runtimeBuild = `sha256:${'d'.repeat(64)}`;
 	const manifest = createManagedProviderManifestV5({ release: 'authoring-native', guestImage: 'isolated/guest',
@@ -84,6 +84,7 @@ export async function arbitrationFixture(workers = 1, initializeInOfferSession =
 		delete env.TREESEED_DEVELOPMENT_SANDBOX_GUEST_DIGEST;
 		const write = async () => { await writeFile(config.manifestPath!, stringify(manifest, { aliasDuplicateObjects: false })); await writeFile(join(directory, 'config.json'), JSON.stringify(config)); };
 		const children = new Set<Promise<{ stdout: string; stderr: string }>>();
+		let initializationPending = initializeInOwnedChild;
 		let offerSession: ChildProcess | undefined;
 		let offerSessionExit: Promise<unknown[]> | undefined;
 		const offerMessage = (session: ChildProcess) => new Promise<unknown>((resolve, reject) => {
@@ -96,11 +97,12 @@ export async function arbitrationFixture(workers = 1, initializeInOfferSession =
 		const openOffers = async () => {
 			if (offerSession) throw new Error('Only one allocated offer session allowed');
 			const session = fork(fileURLToPath(new URL('./arbitration-process.ts', import.meta.url)),
-				['offers-session', directory, ...(initializeInOfferSession ? ['initialize'] : [])],
+				['offers-session', directory, ...(initializationPending ? ['initialize'] : [])],
 				{ env, execArgv: [], stdio: ['ignore', 'ignore', 'ignore', 'ipc'], serialization: 'advanced' });
 			offerSession = session; offerSessionExit = once(session, 'exit');
 			const ready = await offerMessage(session);
 			if (!ready || typeof ready !== 'object' || !('ready' in ready) || ready.ready !== true) throw new Error('Actual offer session readiness required');
+			initializationPending = false;
 			return async () => {
 				const response = offerMessage(session); session.send('offers'); const result = await response;
 				if (!result || typeof result !== 'object') throw new Error('Actual offer session response required');
@@ -119,11 +121,12 @@ export async function arbitrationFixture(workers = 1, initializeInOfferSession =
 		const child = async (action: 'initialize' | 'run' | 'offers') => {
 			// Pinned Node 24 executes this erasable TypeScript entrypoint natively;
 			// the owning provider implementation remains the exact compiled build.
-			const running = promisify(execFile)(process.execPath, [fileURLToPath(new URL('./arbitration-process.ts', import.meta.url)), action, directory],
+			const running = promisify(execFile)(process.execPath, [fileURLToPath(new URL('./arbitration-process.ts', import.meta.url)), action, directory,
+				...(action === 'run' && initializationPending ? ['initialize'] : [])],
 				{ env, timeout: 15_000, maxBuffer: 1024 * 1024 }); children.add(running);
-			try { return JSON.parse((await running).stdout) as unknown; } finally { children.delete(running); }
+			try { const value = JSON.parse((await running).stdout) as unknown; if (action === 'run') initializationPending = false; return value; } finally { children.delete(running); }
 		};
-		await write(); if (!initializeInOfferSession) await child('initialize');
+		await write(); if (!initializeInOwnedChild) await child('initialize');
 		const store = new ProviderLocalCapacityStore(directory);
 		const attempt = assignmentAttemptSchema.parse(request().assignment.assignmentAttempt);
 		return { directory, manifest, config, store, routes, tokenPath, pollPath, faults, write, openOffers,

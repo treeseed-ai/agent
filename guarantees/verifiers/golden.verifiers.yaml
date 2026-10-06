@@ -2889,3 +2889,43 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/guarantees/bindings.test.ts
     testName: "supplies exact canonical execution authority before complete verification and inherited scene prerequisites"
+  agent.golden.execution-microvm-clock-chat:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/microvm-result-authority.test.ts
+    testName: "checks every chat timing observation without resetting the original productive window"
+  agent.golden.execution-microvm-clock-planning:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/microvm-result-authority.test.ts
+    testName: "checks every planning timing observation without resetting the original productive window"
+  agent.golden.execution-microvm-clock-estimating:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/microvm-result-authority.test.ts
+    testName: "checks every estimating timing observation without resetting the original productive window"
+  agent.golden.execution-microvm-clock-acting:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/microvm-result-authority.test.ts
+    testName: "checks every acting timing observation without resetting the original productive window"
+  agent.golden.execution-microvm-clock-reviewing:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/microvm-result-authority.test.ts
+    testName: "checks every reviewing timing observation without resetting the original productive window"
+  agent.golden.execution-native-red-test-author:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/verification/replay-failure.test.ts
+    testName: "retains actual runner assertion failures for the original test author without claiming a passing replay"
+  agent.golden.execution-native-red-renamed-author:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/verification/replay-failure.test.ts
+    testName: "retains actual runner assertion failures for an arbitrarily renamed test author without claiming a passing replay"
+  agent.golden.execution-native-red-renamed-reviewer:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/verification/replay-failure.test.ts
+    testName: "retains actual runner assertion failures for an arbitrarily renamed independent reviewer without claiming a passing replay"

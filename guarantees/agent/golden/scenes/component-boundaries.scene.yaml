@@ -1649,3 +1649,27 @@ workflow:
   - id: execution-canonical-prerequisite-unit
     action: { verifier: agent.golden.execution-canonical-prerequisite-unit }
     expect: { status: passed }
+  - id: execution-microvm-clock-chat
+    action: { verifier: agent.golden.execution-microvm-clock-chat }
+    expect: { status: passed }
+  - id: execution-microvm-clock-planning
+    action: { verifier: agent.golden.execution-microvm-clock-planning }
+    expect: { status: passed }
+  - id: execution-microvm-clock-estimating
+    action: { verifier: agent.golden.execution-microvm-clock-estimating }
+    expect: { status: passed }
+  - id: execution-microvm-clock-acting
+    action: { verifier: agent.golden.execution-microvm-clock-acting }
+    expect: { status: passed }
+  - id: execution-microvm-clock-reviewing
+    action: { verifier: agent.golden.execution-microvm-clock-reviewing }
+    expect: { status: passed }
+  - id: execution-native-red-test-author
+    action: { verifier: agent.golden.execution-native-red-test-author }
+    expect: { status: passed }
+  - id: execution-native-red-renamed-author
+    action: { verifier: agent.golden.execution-native-red-renamed-author }
+    expect: { status: passed }
+  - id: execution-native-red-renamed-reviewer
+    action: { verifier: agent.golden.execution-native-red-renamed-reviewer }
+    expect: { status: passed }

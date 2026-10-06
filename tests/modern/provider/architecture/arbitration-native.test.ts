@@ -171,8 +171,8 @@ describe('whole native provider polling arbitration boundary', () => {
 		onTestFailed(() => { throw new Error(`ACCEPTANCE_PROVIDER_MANIFEST_${phase}: original native failure retained`); });
 		const f = await arbitrationFixture(1, true);
 		try {
-			// Complete native YAML remains the actual loader input. Flow formatting
-			// removes repeated indentation bytes, not offers, fields or validation.
+			// JSON flow is valid YAML. The unchanged YAML parser still reads every
+			// complete document; quoting changes no offers, fields or validation.
 			const block = await readFile(f.config.manifestPath!, 'utf8');
 			await f.write(true); expect(isDeepStrictEqual(parse(await readFile(f.config.manifestPath!, 'utf8')), parse(block))).toBe(true);
 			// The original identity initialization belongs to this native child.

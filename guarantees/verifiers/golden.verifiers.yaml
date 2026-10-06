@@ -1,6 +1,16 @@
 schemaVersion: treeseed.guarantee-verifiers/v1
 ownerPackage: "@treeseed/agent"
 verifiers:
+  agent.golden.execution-packed-sbom-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/release-publication.test.ts
+    testName: "packed provider SBOM is generated from the actual declared installation rather than checked development overrides"
+  agent.golden.execution-packed-sbom-native:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/release-publication.test.ts
+    testName: "native packed provider installation exports its genuine complete npm SBOM and immutable archive without publishing"
   agent.golden.execution-candidate-inputs-unit:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

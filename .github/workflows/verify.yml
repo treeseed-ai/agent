@@ -78,7 +78,7 @@ jobs:
         with:
           ids: guarantee.agent.golden.component-boundaries,guarantee.agent.golden.planning-synthesis-recovery
       - name: Pack verified artifact
-        run: mkdir -p artifacts && npm pack --json --ignore-scripts --pack-destination artifacts && npm sbom --sbom-format cyclonedx > artifacts/sbom.cdx.json
+        run: test -s artifacts/sbom.cdx.json && test -n "$(find artifacts -maxdepth 1 -name 'treeseed-agent-*.tgz' -print -quit)"
       - uses: actions/upload-artifact@v4
         with:
           name: agent-${{ github.sha }}

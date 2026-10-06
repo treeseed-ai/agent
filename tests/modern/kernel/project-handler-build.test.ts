@@ -60,7 +60,11 @@ describe('pinned project handler build', () => {
 		expect(manifest.scripts['release:verify']).toBe('npm run check:file-lengths && node --import tsx ./scripts/packages/release-verify.ts');
 		expect(manifest.scripts.typecheck).toBe('tsc --noEmit');
 		const file = ts.createSourceFile('release-verify.ts', await readFile(resolve(packageRoot, 'scripts/packages/release-verify.ts'), 'utf8'), ts.ScriptTarget.Latest, true);
-		const calls = file.statements.flatMap(statement => {
+		const entrypoint = file.statements.find((statement): statement is ts.IfStatement => ts.isIfStatement(statement)
+			&& statement.expression.getText(file).includes('import.meta.url'));
+		expect(entrypoint && ts.isBlock(entrypoint.thenStatement)).toBe(true);
+		if (!entrypoint || !ts.isBlock(entrypoint.thenStatement)) throw new Error('Original direct verification entrypoint required');
+		const calls = entrypoint.thenStatement.statements.flatMap(statement => {
 			if (!ts.isExpressionStatement(statement) || !ts.isCallExpression(statement.expression)) return [];
 			const call = statement.expression;
 			if (!ts.isIdentifier(call.expression) || call.expression.text !== 'run') return [];

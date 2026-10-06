@@ -1,5 +1,9 @@
 import { execFileSync } from 'node:child_process';
-import { readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { createHash } from 'node:crypto';
+import ts from 'typescript';
 import { parse } from 'yaml';
 import { afterEach, describe, expect, it } from 'vitest';
 
@@ -29,11 +33,51 @@ describe('Agent RC publication', () => {
 			expect(steps[prepare]?.run).toBe('npm run capacity-provider:build -- --prepare-only');
 		}
 		const pack = verify.jobs.verify.steps.find(step => step.name === 'Pack verified artifact');
-		expect(pack?.run).toContain('npm pack --json --ignore-scripts --pack-destination artifacts');
-		expect(pack?.run).toContain('npm sbom --sbom-format cyclonedx > artifacts/sbom.cdx.json');
+		expect(pack?.run).toContain('test -s artifacts/sbom.cdx.json');
+		expect(pack?.run).not.toContain('npm sbom');
+		expect(pack?.run).not.toContain('npm pack');
 		const download = publish.jobs['candidate-seal']?.steps?.find(step => step.uses?.startsWith('actions/download-artifact@'));
 		expect(download?.with).toEqual({ name: 'agent-${{ github.sha }}', path: 'release-assets' });
 	});
+	it('packed provider SBOM is generated from the actual declared installation rather than checked development overrides', () => {
+		const source = ts.createSourceFile('release-verify.ts', readFileSync('scripts/packages/release-verify.ts', 'utf8'), ts.ScriptTarget.Latest, true);
+		const verify = source.statements.find((value): value is ts.FunctionDeclaration => ts.isFunctionDeclaration(value) && value.name?.text === 'verifyPackedPackage');
+		expect(verify).toBeDefined();
+		const calls: ts.CallExpression[] = [];
+		if (verify) { const visit = (node: ts.Node) => { if (ts.isCallExpression(node)) calls.push(node); ts.forEachChild(node, visit); }; visit(verify); }
+		const sbom = calls.find(call => ts.isIdentifier(call.expression) && call.expression.text === 'spawnSync'
+			&& call.arguments[1]?.getText(source).includes("'sbom'"));
+		expect(sbom?.arguments[1]?.getText(source)).toBe("['sbom', '--sbom-format', 'cyclonedx']");
+		expect(sbom?.arguments[2]?.getText(source)).toContain('cwd: stage');
+		expect(verify?.getText(source)).toContain('sbom.status !== 0');
+		expect(verify?.getText(source)).toContain("JSON.parse(sbom.stdout)");
+		const install = calls.find(call => ts.isIdentifier(call.expression) && call.expression.text === 'run'
+			&& call.arguments[1]?.getText(source).includes("'--prefix', installedSdk"));
+		expect(install?.arguments[1]?.getText(source)).toBe("['install', '--prefix', installedSdk, '--ignore-scripts', '--no-save', '--package-lock=false', '--no-audit', '--no-fund']");
+		expect(install?.arguments[2]?.getText(source)).toBe('stage');
+	});
+	it('native packed provider installation exports its genuine complete npm SBOM and immutable archive without publishing', async () => {
+		const { verifyPackedPackage } = await import('../../scripts/packages/release-verify.ts');
+		const root = mkdtempSync(join(tmpdir(), 'agent-packed-sbom-'));
+		const manifest = readFileSync('package.json'), lock = readFileSync('package-lock.json');
+		try {
+			const result = verifyPackedPackage(root);
+			const archive = readFileSync(result.archive), sbomBytes = readFileSync(result.sbom);
+			const sbom: { bomFormat: string; metadata: { component: { name: string } }; components: Array<{ name: string; version: string; 'bom-ref': string }>; dependencies: Array<{ ref: string; dependsOn: string[] }> } = JSON.parse(sbomBytes.toString('utf8'));
+			expect(sbom.bomFormat).toBe('CycloneDX');
+			const agent = sbom.components.filter(component => component.name === '@treeseed/agent');
+			expect(agent).toHaveLength(1); expect(agent[0]?.version).toBe(JSON.parse(manifest.toString('utf8')).version);
+			const deployment = sbom.components.filter(component => component.name === '@treeseed/deployment');
+			expect(deployment).toHaveLength(1);
+			expect(deployment[0]?.version).toBe(JSON.parse(lock.toString('utf8')).packages['node_modules/@treeseed/deployment'].version);
+			const dependencies = sbom.dependencies.find(value => value.ref === agent[0]?.['bom-ref']);
+			expect(dependencies?.dependsOn).toContain(deployment[0]?.['bom-ref']);
+			expect(sbom.components.length).toBeGreaterThan(Object.keys(JSON.parse(manifest.toString('utf8')).dependencies).length);
+			expect(createHash('sha256').update(readFileSync(result.archive)).digest('hex')).toBe(createHash('sha256').update(archive).digest('hex'));
+			expect(readFileSync(result.sbom)).toEqual(sbomBytes);
+			expect(readFileSync('package.json')).toEqual(manifest); expect(readFileSync('package-lock.json')).toEqual(lock);
+		} finally { rmSync(root, { recursive: true, force: true }); }
+	}, 30_000);
 	it('builds a protected staging candidate and promotes exact custody without rebuilding', () => {
 		const source = readFileSync('.github/workflows/publish.yml', 'utf8');
 		const workflow = parse(source) as { jobs: Record<string, { if?: string; needs?: string | string[]; steps?: Array<{ uses?: string }> }> };

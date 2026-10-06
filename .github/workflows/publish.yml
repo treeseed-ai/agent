@@ -7,17 +7,8 @@ on:
 jobs:
   candidate-package:
     if: github.ref == 'refs/heads/staging' || github.ref == 'refs/heads/main'
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-        with: { submodules: recursive }
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
-        with: { node-version: 24 }
-      - run: npm ci --no-audit --no-fund
-      - run: npm run verify:local
-      - run: mkdir -p source-assets && npm pack --json --ignore-scripts --pack-destination source-assets && npm sbom --sbom-format cyclonedx > source-assets/sbom.cdx.json
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with: { name: "agent-source-${{ github.sha }}", path: source-assets/, if-no-files-found: error }
+    permissions: { contents: read, actions: read }
+    uses: ./.github/workflows/verify.yml
   candidate-build:
     if: github.ref == 'refs/heads/staging' || github.ref == 'refs/heads/main'
     needs: [candidate-package, candidate-base-build]
@@ -37,7 +28,10 @@ jobs:
         with: { submodules: recursive }
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with: { node-version: 24 }
-      - run: npm ci --ignore-scripts && npm run capacity-provider:build -- --prepare-only
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - uses: treeseed-ai/sdk/.github/actions/install-exact-sdk@8536de5233983765a049392f307244d741470480
+        with: { github-token: "${{ github.token }}" }
+      - run: npm run capacity-provider:build -- --prepare-only
       - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f
       - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9
         with: { username: "${{ vars.DOCKERHUB_USERNAME || vars.TREESEED_DOCKERHUB_USERNAME }}", password: "${{ secrets.DOCKERHUB_TOKEN || secrets.TREESEED_DOCKERHUB_TOKEN }}" }
@@ -74,7 +68,10 @@ jobs:
         with: { submodules: recursive }
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with: { node-version: 24 }
-      - run: npm ci --ignore-scripts && npm run capacity-provider:build -- --prepare-only
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - uses: treeseed-ai/sdk/.github/actions/install-exact-sdk@8536de5233983765a049392f307244d741470480
+        with: { github-token: "${{ github.token }}" }
+      - run: npm run capacity-provider:build -- --prepare-only
       - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f
       - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9
         with: { username: "${{ vars.DOCKERHUB_USERNAME || vars.TREESEED_DOCKERHUB_USERNAME }}", password: "${{ secrets.DOCKERHUB_TOKEN || secrets.TREESEED_DOCKERHUB_TOKEN }}" }
@@ -98,7 +95,7 @@ jobs:
       - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9
         with: { username: "${{ vars.DOCKERHUB_USERNAME || vars.TREESEED_DOCKERHUB_USERNAME }}", password: "${{ secrets.DOCKERHUB_TOKEN || secrets.TREESEED_DOCKERHUB_TOKEN }}" }
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
-        with: { name: "agent-source-${{ github.sha }}", path: release-assets }
+        with: { name: "agent-${{ github.sha }}", path: release-assets }
       - name: Seal manifests and component assets
         run: |
           for pair in MANAGER=treeseed/agent-manager RUNNER=treeseed/agent-runner; do

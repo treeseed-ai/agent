@@ -68,6 +68,20 @@ describe('capacity-provider guarantee execution bindings', () => {
 			for (const entry of readdirSync(directory, { withFileTypes: true })) {
 				const path = resolve(directory, entry.name);
 				if (entry.isDirectory()) visit(path);
+				else if (entry.name.endsWith('.scene.yaml')) {
+					const scene = parse(readFileSync(path, 'utf8')) as { scope?: string; workflow?: Array<{
+						id?: string; demoOnly?: boolean; action?: { verifier?: string }; expect?: { status?: string } }> };
+					if (!['local-component-tests', 'local-integrated-runtime'].includes(scene.scope ?? '')) continue;
+					if (!scene.workflow?.length) { failures.push(`${path}: empty executable scene`); continue; }
+					const ids = new Set<string>();
+					for (const step of scene.workflow) {
+						if (!step.id || ids.has(step.id) || step.demoOnly || !step.action?.verifier
+							|| step.expect?.status !== 'passed') {
+							failures.push(`${path}: invalid executable step ${step.id ?? '(missing)'}`);
+						}
+						if (step.id) ids.add(step.id);
+					}
+				}
 				else if (entry.name.endsWith('.guarantee.yaml')) {
 					const guarantee = parse(readFileSync(path, 'utf8')) as Record<string, unknown>;
 					function references(value: unknown): void {
@@ -79,7 +93,7 @@ describe('capacity-provider guarantee execution bindings', () => {
 							} else references(child);
 						}
 					}
-					references(guarantee);
+					 references(guarantee);
 				}
 			}
 		}

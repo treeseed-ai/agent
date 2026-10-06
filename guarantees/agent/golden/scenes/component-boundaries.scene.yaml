@@ -29,6 +29,10 @@ workflow:
     expect: { status: passed }
   - id: execution-process-group-unit
     action: { verifier: agent.golden.execution-process-group-unit }
+    expect: { status: passed }
+  - id: execution-scene-binding-unit
+    action: { verifier: agent.golden.execution-scene-binding-unit }
+    expect: { status: passed }
   - id: execution-provider-build-typecheck-unit
     action: { verifier: agent.golden.execution-provider-build-typecheck-unit }
     expect: { status: passed }

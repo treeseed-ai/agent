@@ -1,6 +1,11 @@
 schemaVersion: treeseed.guarantee-verifiers/v1
 ownerPackage: "@treeseed/agent"
 verifiers:
+  agent.golden.execution-scene-binding-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/bindings.test.ts
+    testName: "resolves every guarantee verifier reference without silently ignoring planned contracts"
   agent.golden.execution-availability-retry-unit:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

@@ -3,6 +3,36 @@ id: agent.golden.component-boundaries
 title: Golden execution component boundaries
 scope: local-component-tests
 workflow:
+  - id: provider-public-root-output-binding
+    action: { verifier: agent.golden.provider-public-root-output-binding }
+    expect: { status: passed }
+  - id: provider-freeze-worktree-denial
+    action: { verifier: agent.golden.provider-freeze-worktree-denial }
+    expect: { status: passed }
+  - id: provider-freeze-missing-authority
+    action: { verifier: agent.golden.provider-freeze-missing-authority }
+    expect: { status: passed }
+  - id: provider-freeze-materialization-readback
+    action: { verifier: agent.golden.provider-freeze-materialization-readback }
+    expect: { status: passed }
+  - id: provider-freeze-repeat-and-mutation
+    action: { verifier: agent.golden.provider-freeze-repeat-and-mutation }
+    expect: { status: passed }
+  - id: provider-freeze-external-denial
+    action: { verifier: agent.golden.provider-freeze-external-denial }
+    expect: { status: passed }
+  - id: provider-freeze-archiver-failure
+    action: { verifier: agent.golden.provider-freeze-archiver-failure }
+    expect: { status: passed }
+  - id: provider-freeze-public-cli-copy
+    action: { verifier: agent.golden.provider-freeze-public-cli-copy }
+    expect: { status: passed }
+  - id: provider-prepared-output-closure
+    action: { verifier: agent.golden.provider-prepared-output-closure }
+    expect: { status: passed }
+  - id: provider-freeze-dependency-bytes
+    action: { verifier: agent.golden.provider-freeze-dependency-bytes }
+    expect: { status: passed }
   - id: provider-source-fixture-link
     action: { verifier: agent.golden.provider-source-fixture-link }
     expect: { status: passed }

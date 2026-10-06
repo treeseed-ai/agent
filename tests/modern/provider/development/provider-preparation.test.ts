@@ -96,9 +96,14 @@ it('original native provider preparation runs its compiled health entrypoint wit
     const dependency = join(f.runtime, 'node_modules/zod-to-json-schema/package.json');
     expect(existsSync(dependency), 'Current SDK required production package omitted').toBe(true);
     expect(readFileSync(dependency)).toEqual(readFileSync(join(f.sdk, 'node_modules/zod-to-json-schema/package.json')));
+    const isolated = join(f.allocation, 'provider-runtime');
+    cpSync(f.runtime, isolated, { recursive: true });
+    expect(existsSync(join(f.allocation, 'node_modules'))).toBe(false);
     const environment: NodeJS.ProcessEnv = { ...process.env, TREESEED_PROVIDER_DATA_DIR: join(f.allocation, 'data') };
     delete environment.TREESEED_CAPACITY_PROVIDER_MANIFEST;
-    const health = spawnSync(process.execPath, ['./dist/provider/lifecycle/entrypoint.js', 'healthcheck', '--json'], { cwd: f.runtime, env: environment, encoding: 'utf8', timeout: 10_000 });
+    delete environment.NODE_PATH;
+    delete environment.NODE_OPTIONS;
+    const health = spawnSync(process.execPath, ['./dist/provider/lifecycle/entrypoint.js', 'healthcheck', '--json'], { cwd: isolated, env: environment, encoding: 'utf8', timeout: 10_000 });
     expect(health.error).toBeUndefined(); expect(health.signal).toBe(null);
     expect(health.status, health.stderr).toBe(0);
     expect(JSON.parse(health.stdout)).toMatchObject({ ok: true, role: 'healthcheck', manifestConfigured: false, broker: { required: false, ready: true } });

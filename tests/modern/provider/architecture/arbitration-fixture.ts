@@ -103,8 +103,8 @@ export async function arbitrationFixture(workers = 1, initializeInOwnedChild = f
 			const ready = await offerMessage(session);
 			if (!ready || typeof ready !== 'object' || !('ready' in ready) || ready.ready !== true) throw new Error('Actual offer session readiness required');
 			initializationPending = false;
-			return async () => {
-				const response = offerMessage(session); session.send(action); const result = await response;
+			return async (manifestPaths?: string[]) => {
+				const response = offerMessage(session); session.send(manifestPaths ? { loadManifestPaths: manifestPaths } : action); const result = await response;
 				if (!result || typeof result !== 'object') throw new Error('Actual offer session response required');
 				if ('error' in result) {
 					const detail = result.error;

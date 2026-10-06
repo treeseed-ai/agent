@@ -1,9 +1,9 @@
 import { describe, expect, it, onTestFailed } from 'vitest';
 import { arbitrationFixture } from './arbitration-fixture.ts';
 import { readFile, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
 import { isMap, parse, parseDocument, stringify } from 'yaml';
-import { loadProviderManifest } from '../../../../src/provider/configuration/manifest.ts';
 import { capabilityOfferDigest, capabilityOfferSchema, CORE_CAPABILITY_DEFINITIONS } from '@treeseed/sdk/capacity-provider';
 import { verifyProviderConformanceSignature, verifyProviderQualification, verifyProviderPollingSelection } from '../../../acceptance/workday/support/record-custody.ts';
 import { row } from '../../../acceptance/acceptance-cli.ts';
@@ -174,7 +174,11 @@ describe('whole native provider polling arbitration boundary', () => {
 			// The original identity initialization belongs to this native child.
 			// Every denial rereads the actual manifest through the original runtime;
 			// the restored retry below still starts an independent native process.
-			phase = 'CHILD_INITIALIZATION'; const run = await f.openRun();
+			phase = 'CHILD_INITIALIZATION';
+			// Initialization reads only the unchanged original file. Start it
+			// alongside independent loader inputs; retain its actual error instead
+			// of leaving a rejected startup promise unobserved during native I/O.
+			const startup = f.openRun().then(run => ({ run }), (error: unknown) => ({ error }));
 			await f.store.snapshot();
 			const original = structuredClone(f.manifest), baseline = await f.bytes(), routes = structuredClone(f.routes);
 			const limits = structuredClone(f.manifest.adapters[0]!.nativeLimits), capability = f.manifest.adapters[0]!.offers[0]!.offer.capabilities[0]!.id;
@@ -192,22 +196,48 @@ describe('whole native provider polling arbitration boundary', () => {
 			for (const maximumAssignmentSeconds of [null, '1', false, 0, -1, 1.5, NaN, Infinity, -Infinity]) {
 				malformed.push({ ...limits, capabilityLimits: { [capability]: { dailyActiveSecondsLimit: 0, maximumAssignmentSeconds } } });
 			}
-			for (const [index, nativeLimits] of malformed.entries()) {
-				phase = `LOADER_${index}`;
+			phase = 'INDEPENDENT_LOADER_INPUTS';
+			const inputs = await Promise.allSettled(malformed.map(async (nativeLimits, index) => {
 				// Change only the controlled input field. All other native YAML bytes
-				// and the original child config remain exact, without reserializing
-				// every unchanged signed offer for each of the forty denied inputs.
+				// and the original child config remain exact. Independent allocated
+				// paths permit concurrent I/O without racing one shared manifest;
+				// every loader still parses and validates its complete native bytes.
 				const wire = stringify(nativeLimits, { collectionStyle: 'flow', lineWidth: 0, aliasDuplicateObjects: false });
 				expect(isDeepStrictEqual(parse(wire), parse(stringify(nativeLimits)))).toBe(true);
-				f.manifest.adapters[0]!.nativeLimits = nativeLimits;
-				await writeFile(f.config.manifestPath!, prefix + wire + suffix);
-				const before = structuredClone(f.manifest), bytes = await readFile(f.config.manifestPath!, 'utf8');
+				const path = join(f.directory, `quota-input-${index}.yaml`), supplied = structuredClone(nativeLimits);
+				await writeFile(path, prefix + wire + suffix, { flag: 'wx' });
+				const before = structuredClone(f.manifest), bytes = await readFile(path, 'utf8');
 				expect(bytes.slice(0, start)).toBe(prefix); expect(bytes.slice(start + wire.length)).toBe(suffix);
-				await expect(loadProviderManifest(f.config.manifestPath!, f.directory, {}))
-					.rejects.toThrow(/Invalid capacity provider manifest:.*adapters\[0\]\.nativeLimits/u);
-				expect(await readFile(f.config.manifestPath!, 'utf8')).toBe(bytes);
-				expect(isDeepStrictEqual(f.manifest, before)).toBe(true); expect(await f.bytes()).toBe(baseline); expect(f.routes).toEqual(routes);
+				return { path, bytes, nativeLimits, supplied, before };
+			}));
+			phase = 'CHILD_READINESS'; const ready = await startup;
+			if ('error' in ready) throw ready.error;
+			const run = ready.run;
+			// Settle every allocated operation before cleanup, retaining all denied
+			// input bytes and causes even when one assertion or native read fails.
+			expect(inputs).toHaveLength(malformed.length);
+			const suppliedInputs = inputs.map((input, index) => {
+				expect(input.status, `native quota input ${index}: ${input.status === 'rejected' ? String(input.reason) : 'complete'}`).toBe('fulfilled');
+				if (input.status !== 'fulfilled') throw input.reason;
+				return input.value;
+			});
+			phase = 'COMPILED_NATIVE_LOADER';
+			// The SAME owned native child loads every full input through its actual
+			// compiled owning loader. No parsed manifest or validation is supplied.
+			const denials = await run(suppliedInputs.map(input => input.path));
+			expect(Array.isArray(denials)).toBe(true);
+			if (!Array.isArray(denials)) throw new Error('Actual native loader outcomes required');
+			expect(denials).toHaveLength(malformed.length);
+			for (const [index, input] of suppliedInputs.entries()) {
+				const denial = row(denials[index]); expect(denial.path).toBe(input.path); expect(denial.status).toBe('rejected');
+				const error = row(denial.error); expect(error.name).toBe('Error');
+				expect(error.message).toMatch(/Invalid capacity provider manifest:.*adapters\[0\]\.nativeLimits/u);
+				expect(await readFile(input.path, 'utf8')).toBe(input.bytes);
+				expect(isDeepStrictEqual(input.nativeLimits, input.supplied)).toBe(true);
+				expect(isDeepStrictEqual(f.manifest, input.before)).toBe(true);
+				expect(await f.bytes()).toBe(baseline); expect(f.routes).toEqual(routes);
 			}
+			expect(await readFile(f.config.manifestPath!, 'utf8')).toBe(manifestBytes);
 			// The original-runtime child proves all three field categories
 			// fail at that same loader before real coordinator/token/HTTP activity.
 			for (const [index, patch] of [{ modelConfigurationId: '' }, { dailyActiveSecondsLimit: -1 }, { capabilityLimits: {} }].entries()) {

@@ -1,7 +1,7 @@
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { resolve } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, onTestFailed } from 'vitest';
 import { HandlerRegistry } from '../../../src/kernel/handler-registry.ts';
 import { cp, mkdtemp, mkdir, readFile, readdir, rm, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -79,6 +79,10 @@ describe('pinned project handler build', () => {
 	it('isolated original project build executes its compiled handler through the compiled Kernel and rejects missing duplicate and wrong-build selections without mutating held inputs', async () => {
 		const directory = await mkdtemp(join(tmpdir(), 'agent-project-build-')), clone = join(directory, 'package');
 		let f: Awaited<ReturnType<typeof portableKernel>> | undefined;
+		let phase = 'INPUT_CUSTODY';
+		// Append a credential-free phase to the native failure report; Vitest
+		// retains its original errors instead of replacing them with this hook.
+		onTestFailed(() => { throw new Error(`ACCEPTANCE_PROJECT_BUILD_${phase}: original native failure retained`); });
 		const inputs = new Map<string, Buffer>();
 		const collect = async (root: string, prefix: string): Promise<void> => {
 			for (const entry of await readdir(root, { withFileTypes: true })) {
@@ -101,14 +105,17 @@ describe('pinned project handler build', () => {
 			}
 			await symlink(resolve(packageRoot, 'node_modules'), resolve(clone, 'node_modules'), 'dir');
 			const env = { ...process.env, TREESEED_AGENT_PROJECT_HANDLERS_ENTRY: resolve(clone, 'tests/fixtures/project-handlers.ts') };
+			phase = 'COMPILE';
 			const compilation = spawnSync(process.execPath, ['--import', 'tsx', './scripts/build/build-dist.ts'], {
 				cwd: clone, env, encoding: 'utf8', timeout: 120_000,
 			});
 			expect(compilation.error).toBeUndefined(); expect(compilation.signal).toBeNull(); expect(compilation.status).toBe(0);
+			phase = 'STRICT_TYPING';
 			const typing = spawnSync(process.execPath, ['node_modules/typescript/bin/tsc', '--noEmit', '--pretty', 'false'], {
 				cwd: clone, env, encoding: 'utf8', timeout: 120_000,
 			});
 			expect(typing.error).toBeUndefined(); expect(typing.signal).toBeNull(); expect(typing.status, `${typing.stdout}\n${typing.stderr}`).toBe(0);
+			phase = 'COMPILED_MODULES';
 			const selected: { projectHandlers: Handler[] } = await import(pathToFileURL(resolve(clone, 'dist/kernel/project-handlers.js')).href);
 			const compiled: { executeKernelAssignment: typeof executeKernelAssignment } = await import(pathToFileURL(resolve(clone, 'dist/kernel/provider-kernel-executor.js')).href);
 			expect(selected.projectHandlers.map(handler => handler.id)).toEqual(['sdk/fixture']);
@@ -127,6 +134,7 @@ describe('pinned project handler build', () => {
 			expect(await import(pathToFileURL(resolve(clone, 'dist/kernel/project-handlers.js')).href)).toBe(selected);
 			expect(await import(pathToFileURL(resolve(clone, 'dist/kernel/provider-kernel-executor.js')).href)).toBe(compiled);
 			f = await portableKernel(); const owner = f;
+			phase = 'KERNEL';
 			owner.attempt.effectiveProfile.handler = 'sdk/fixture'; owner.attempt.effectiveProfile.handlerOrigin = 'project-runtime';
 			owner.attempt.workspace = { mode: 'read-only' }; owner.attempt.grant.sourceWrite = [];
 			const before = structuredClone(owner.input.assignment);
@@ -137,6 +145,7 @@ describe('pinned project handler build', () => {
 			const canonical = assignmentResultSchema.parse(result.outputs?.assignmentResult);
 			expect(canonical).toMatchObject({ id: 'fixture-result', assignmentId: owner.attempt.id, status: 'completed',
 				summary: 'Project-owned handler selected.', references: [], verification: [], usage: { elapsedSeconds: 0 }, diagnostics: [] });
+			phase = 'DENIED_SELECTIONS';
 			for (const handlers of [[], [...selected.projectHandlers, ...selected.projectHandlers]]) {
 				const denied = await run(handlers); expect(denied.status).toBe('failed'); expect(denied.code).toBe('handler_unavailable');
 				expect(denied.outputs?.assignmentResult).toBeUndefined(); expect(owner.input.assignment).toEqual(before);
@@ -145,6 +154,7 @@ describe('pinned project handler build', () => {
 			expect(wrongBuild).toEqual({ status: 'failed', code: 'runtime_build_mismatch', summary: 'runtime_build_mismatch', retryable: false });
 			expect(owner.requests).toEqual([]); expect(owner.begin).toEqual([]); expect(owner.git('rev-parse', 'HEAD')).toBe(owner.base);
 			expect(owner.input.assignment).toEqual(before);
+			phase = 'FINAL_CUSTODY';
 			expect(await readFile(resolve(clone, 'dist/kernel/project-handlers.js'))).toEqual(moduleBytes);
 			expect(await readFile(resolve(clone, 'dist/kernel/provider-kernel-executor.js'))).toEqual(kernelBytes);
 			for (const [name, bytes] of inputs) {

@@ -103,7 +103,9 @@ development:
         verify: { command: npm, args: [run, test:provider-runtime], environment: {}, timeoutSeconds: 1800 }
         cleanup: { command: docker, args: [managed-agent-provider], environment: {}, timeoutSeconds: 300 }
       ready: { kind: process, graceSeconds: 5 }
-      outputs: [{ path: dist, mediaType: application/vnd.treeseed.agent-runtime, digestAlgorithm: sha256 }]
+      outputs:
+        - { path: dist, mediaType: application/vnd.treeseed.agent-runtime, digestAlgorithm: sha256 }
+        - { path: .treeseed/docker/runtime/shared, mediaType: application/vnd.treeseed.agent-runtime, digestAlgorithm: sha256 }
       endpoints: []
       dependencies:
         - { id: sdk, target: package, locality: local, reaction: rebuild }
@@ -119,8 +121,8 @@ development:
       forbiddenOperations: [hot-reload, force-kill-active-assignment, automatic-assignment-cancel]
       freeze:
         kind: archive
-        operation: { command: npm, args: [pack, --json], environment: {}, timeoutSeconds: 1800 }
-        artifacts: [treeseed-agent-*.tgz]
+        operation: { command: node, args: [--import, tsx, scripts/capacity/providers/freeze-provider-runtime.ts], environment: {}, timeoutSeconds: 1800 }
+        artifacts: [treeseed-agent-provider-runtime.tgz]
         contractOperations: []
       promotion: { liveAdmissible: false, candidateRequiresVerification: true }
 dockerImages:

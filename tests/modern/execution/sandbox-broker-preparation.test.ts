@@ -42,7 +42,7 @@ describe('sandbox broker control transport', () => {
 				return { capacityEnvelope: { budget: { time: { executionStartedAt, executionDeadlineAt } } } };
 			};
 			const result = await executeKernelAssignment({ request: f.input, executor: f.executor, runtimeBuild: attempt.provider.runtimeBuild });
-			expect(result.status).toBe('responded'); const canonical = result.outputs?.assignmentResult;
+			expect(result.status).toBe('completed'); const canonical = result.outputs?.assignmentResult;
 			const terminal = f.events.filter(event => event.type === 'execution.completed'); expect(terminal).toHaveLength(1);
 			expect(Date.parse(executionDeadlineAt)).toBeLessThan(Date.parse(attempt.deadline));
 			const item = { id: attempt.id, status: 'completed', assignmentAttempt: attempt, assignmentResult: canonical,

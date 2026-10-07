@@ -74,6 +74,8 @@ jobs:
           openssl x509 -in "$relay_fixture/ca.pem" -noout -checkend 0
           sudo install -d -m 0755 /etc/treeseed/sandbox
           sudo install -m 0644 "$relay_fixture/ca.pem" /etc/treeseed/sandbox/relay-ca.crt
+      - name: Reproduce whole guest native boundary before complete verification
+        run: node node_modules/vitest/vitest.mjs run --config ./vitest.config.ts tests/modern/sandbox/architecture/clock-native.test.ts
       - run: bash -lc 'npm run verify:local'
       - name: Execute coded golden component scenes
         uses: treeseed-ai/reviewer/.github/actions/run-scenes@ea16c08f3f70fcf27d2e1d816df26af23e84a4b4

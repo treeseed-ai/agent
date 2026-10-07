@@ -15,7 +15,7 @@ test('Actual completed model assignments retain their exact first final and inte
 	const id = process.env.TREESEED_ACCEPTANCE_WORKDAY_ID ?? '', team = process.env.TREESEED_ACCEPTANCE_TEAM ?? 'treeseed';
 	assert.match(id, /^workday-[a-f0-9-]+$/u);
 	const observed = read(['workdays', 'show', id], team), run = row(observed.run); assert.equal(run.id, id); assert.equal(run.status, 'completed');
-	const items = readWorkdayAssignments(id, String(run.startedAt), team), args = ['workdays', 'events', id, '--diagnostics', 'full'];
+	const items = readWorkdayAssignments(id, String(run.startedAt), team), args = ['workdays', 'events', 'list', id, '--diagnostics', 'full'];
 	const events = readCompleteEvidence(args, team, 100, 'ACCEPTANCE_MODEL_CLOCK', 'ascending');
 	assert.ok(events.every(event => event.runId === id && event.teamId === run.teamId), 'ACCEPTANCE_MODEL_CLOCK_SCOPE');
 	const indexes = events.map(event => event.eventIndex); assert.ok(indexes.every(Number.isSafeInteger) && new Set(indexes).size === indexes.length);

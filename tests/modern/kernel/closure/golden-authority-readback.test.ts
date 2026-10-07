@@ -12,7 +12,7 @@ describe('golden read-back assertion regressions (fixtures are not live acceptan
       third = { id: 'c', createdAt: '2026-10-04T00:00:01.000Z' }, cursor = encodeCapacityPageCursor(second);
     const pages = [{ items: [first, second], page: { limit: 2, hasMore: true, nextCursor: cursor } },
       { items: [third], page: { limit: 2, hasMore: false, nextCursor: null } }];
-    const args = ['workdays', 'events', workdayId, '--diagnostics', 'full'], held = structuredClone(pages), input = [...args];
+    const args = ['workdays', 'events', 'list', workdayId, '--diagnostics', 'full'], held = structuredClone(pages), input = [...args];
     expect(listCommandPaths(TREESEED_COMMAND_TREE_V1)).toContain(args.slice(0, 3).join(' '));
     state.eventPages = structuredClone(pages);
     expect(readCompleteEvidence(args, 'treeseed', 2, 'ACCEPTANCE_MODEL_CLOCK', 'ascending')).toEqual([first, second, third]);

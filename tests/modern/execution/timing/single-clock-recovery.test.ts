@@ -1,7 +1,7 @@
 import { expect, it } from 'vitest';
 import { timingAwarenessContract, timingRecoveryEligible } from '../../../../src/sandbox/guest.ts';
 
-const value = { startedAt: '2026-10-04T00:00:00.000Z', deadlineAt: '2026-10-04T00:00:30.000Z', remainingSeconds: 30 };
+const value = { startedAt: '2026-10-04T00:00:00.000Z', deadlineAt: '2026-10-04T00:00:30.000Z', observedAt: '2026-10-04T00:00:00.000Z', remainingSeconds: 30 };
 const payload = { content: [{ type: 'text', text: JSON.stringify(value) }], structuredContent: value };
 it('recovers a separate final check when the first clock was also the last tool', () => {
 	const clock = { type: 'item.completed', item: { type: 'mcp_tool_call', server: 'treedx',

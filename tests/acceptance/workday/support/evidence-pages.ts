@@ -90,7 +90,7 @@ export function verifyGraphProvenance(graph: Row): void {
 
 /** Same public descending cursor contract for assignment and measured-usage readback.
  * This is an acceptance assertion, not a runner or another observation authority. */
-export function readCompleteEvidence(args: string[], team: string, limit: number, prefix: string): Row[] {
+export function readCompleteEvidence(args: string[], team: string, limit: number, prefix: string, direction: 'descending' | 'ascending' = 'descending'): Row[] {
 	const records: Row[] = [], identities = new Set<string>(), cursors = new Set<string>();
 	let cursor: string | undefined, previous: { id: string; time: number } | undefined;
 	for (let pageNumber = 0; pageNumber < 40; pageNumber += 1) {
@@ -103,8 +103,8 @@ export function readCompleteEvidence(args: string[], team: string, limit: number
 			const item = row(value), id = typeof item.id === 'string' ? item.id : '';
 			const time = Date.parse(typeof item.createdAt === 'string' ? item.createdAt : '');
 			assert.ok(id && Number.isFinite(time) && !identities.has(id), `${prefix}_ROW: Unique identity and creation clock required`);
-			assert.ok(!previous || time < previous.time || (time === previous.time && id < previous.id),
-				`${prefix}_ORDER: Exact descending creation/identity order required across all pages`);
+			assert.ok(!previous || (direction === 'descending' ? time < previous.time || (time === previous.time && id < previous.id)
+				: time > previous.time || (time === previous.time && id > previous.id)), `${prefix}_ORDER: Exact creation/identity order required across all pages`);
 			identities.add(id); previous = { id, time }; records.push(item);
 		}
 		if (!page.hasMore) {

@@ -3,6 +3,18 @@ id: agent.golden.component-boundaries
 title: Golden execution component boundaries
 scope: local-component-tests
 workflow:
+  - id: execution-clock-events-unit
+    action: { verifier: agent.golden.execution-clock-events-unit }
+    expect: { status: passed }
+  - id: execution-clock-readback-unit
+    action: { verifier: agent.golden.execution-clock-readback-unit }
+    expect: { status: passed }
+  - id: execution-clock-observation-unit-1
+    action: { verifier: agent.golden.execution-clock-observation-unit-1 }
+    expect: { status: passed }
+  - id: execution-clock-observation-unit-2
+    action: { verifier: agent.golden.execution-clock-observation-unit-2 }
+    expect: { status: passed }
   - id: execution-clock-input-unit
     action: { verifier: agent.golden.execution-clock-input-unit }
     expect: { status: passed }

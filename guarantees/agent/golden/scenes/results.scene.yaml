@@ -3,6 +3,9 @@ id: agent.golden.results
 title: Golden results read-back
 scope: local-integrated-runtime
 workflow:
+  - id: execution-clock-observation-live-1
+    action: { verifier: agent.golden.execution-clock-observation-live-1 }
+    expect: { status: passed }
   - id: results-evidence
     action: { verifier: agent.golden.live.results }
     expect: { status: passed }

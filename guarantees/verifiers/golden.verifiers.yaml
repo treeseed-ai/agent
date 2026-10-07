@@ -1,6 +1,26 @@
 schemaVersion: treeseed.guarantee-verifiers/v1
 ownerPackage: "@treeseed/agent"
 verifiers:
+  agent.golden.execution-clock-events-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/closure/golden-authority-readback.test.ts
+    testName: "reads complete ascending public event pages with exact diagnostic selection and refuses duplicate reversed or unbound cursor evidence without rewriting pages"
+  agent.golden.execution-clock-readback-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/timing/guest-clock-contract.test.ts
+    testName: "binds public raw model clock evidence to its exact completed assignment event receipt and immutable original timestamps"
+  agent.golden.execution-clock-observation-unit-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/timing/guest-clock-contract.test.ts
+    testName: "retains exact clock timestamps and derives remaining seconds from the same observation without rewriting provider evidence"
+  agent.golden.execution-clock-observation-unit-2:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/timing/guest-clock-contract.test.ts
+    testName: "denies missing malformed regressing and contradictory clock timestamps without repairing either raw observation"
   agent.golden.execution-clock-input-unit:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

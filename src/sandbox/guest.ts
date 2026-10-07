@@ -79,7 +79,7 @@ type TimingAwarenessTracker = {
 	firstToolSucceeded: boolean;
 	lastTool: string | null;
 	lastToolSucceeded: boolean;
-	clockWindow?: { startedAt: string; deadlineAt: string; remainingSeconds: number };
+	clockWindow?: { startedAt: string; deadlineAt: string; observedAt: string; remainingSeconds: number };
 	clockInvalid?: boolean;
 };
 
@@ -91,13 +91,15 @@ export function clockReading(raw: unknown): TimingAwarenessTracker['clockWindow'
 	let parsed: unknown;
 	try { parsed = JSON.parse(content.text); } catch { return; }
 	if (result.structuredContent !== undefined && !isDeepStrictEqual(parsed, result.structuredContent)) return;
-	const value = record(parsed), start = value.startedAt, end = value.deadlineAt, remaining = value.remainingSeconds;
+	const value = record(parsed), start = value.startedAt, end = value.deadlineAt, observed = value.observedAt, remaining = value.remainingSeconds;
 	const iso = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/u;
 	if (typeof start !== 'string' || typeof end !== 'string' || !iso.test(start) || !iso.test(end)
 		|| !Number.isFinite(Date.parse(start)) || !Number.isFinite(Date.parse(end)) || Date.parse(end) <= Date.parse(start)
+		|| typeof observed !== 'string' || !iso.test(observed) || !Number.isFinite(Date.parse(observed))
+		|| new Date(observed).toISOString() !== observed || Date.parse(observed) < Date.parse(start)
 		|| typeof remaining !== 'number' || !Number.isSafeInteger(remaining) || remaining < 0
-		|| remaining > Math.ceil((Date.parse(end) - Date.parse(start)) / 1_000)) return;
-	return { startedAt: start, deadlineAt: end, remainingSeconds: remaining };
+		|| remaining !== Math.max(0, Math.ceil((Date.parse(end) - Date.parse(observed)) / 1_000))) return;
+	return { startedAt: start, deadlineAt: end, observedAt: observed, remainingSeconds: remaining };
 }
 
 export function observeTimingAwarenessEvent(tracker: TimingAwarenessTracker, event: Record<string, unknown>) {
@@ -109,7 +111,7 @@ export function observeTimingAwarenessEvent(tracker: TimingAwarenessTracker, eve
 	if (completed && tool === 'treedx:treeseed_time_status' && succeeded) {
 		const reading = clockReading(item.result), prior = tracker.clockWindow;
 		if (!reading || prior && (reading.startedAt !== prior.startedAt || reading.deadlineAt !== prior.deadlineAt
-			|| reading.remainingSeconds > prior.remainingSeconds)) { tracker.clockInvalid = true; succeeded = false; }
+			|| reading.remainingSeconds > prior.remainingSeconds || Date.parse(reading.observedAt) < Date.parse(prior.observedAt))) { tracker.clockInvalid = true; succeeded = false; }
 		else tracker.clockWindow = reading;
 	}
 	if (!tracker.firstTool) { tracker.firstTool = tool; tracker.firstToolSucceeded = succeeded; }

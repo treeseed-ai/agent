@@ -2,8 +2,34 @@ import { describe, expect, it, vi } from 'vitest';
 import { createHash } from 'node:crypto';
 import { stringify } from 'yaml';
 import { state, gate, read, assignment, usageMeasurement, classes, workdayId, commit, type Row } from '../architecture/golden-readback-fixture.ts';
+import { encodeCapacityPageCursor } from '@treeseed/sdk/capacity-pagination';
+import { listCommandPaths, TREESEED_COMMAND_TREE_V1 } from '@treeseed/sdk/operator-contracts';
+import { readCompleteEvidence } from '../../../acceptance/workday/support/evidence-pages.ts';
 
 describe('golden read-back assertion regressions (fixtures are not live acceptance)', () => {
+  it('reads complete ascending public event pages with exact diagnostic selection and refuses duplicate reversed or unbound cursor evidence without rewriting pages', () => {
+    const first = { id: 'a', createdAt: '2026-10-04T00:00:00.000Z' }, second = { id: 'b', createdAt: first.createdAt },
+      third = { id: 'c', createdAt: '2026-10-04T00:00:01.000Z' }, cursor = encodeCapacityPageCursor(second);
+    const pages = [{ items: [first, second], page: { limit: 2, hasMore: true, nextCursor: cursor } },
+      { items: [third], page: { limit: 2, hasMore: false, nextCursor: null } }];
+    const args = ['workdays', 'events', 'list', workdayId, '--diagnostics', 'full'], held = structuredClone(pages), input = [...args];
+    expect(listCommandPaths(TREESEED_COMMAND_TREE_V1)).toContain(args.slice(0, 3).join(' '));
+    state.eventPages = structuredClone(pages);
+    expect(readCompleteEvidence(args, 'treeseed', 2, 'ACCEPTANCE_MODEL_CLOCK', 'ascending')).toEqual([first, second, third]);
+    expect(state.calls.slice(-2)).toEqual([ [...args, '--limit', '2', '--server', 'local', '--team', 'treeseed', '--json'],
+      [...args, '--limit', '2', '--cursor', cursor, '--server', 'local', '--team', 'treeseed', '--json'] ]);
+    for (const mode of ['duplicate', 'reversed', 'wrong-cursor', 'missing-tail']) {
+      const supplied = structuredClone(pages);
+      if (mode === 'duplicate') supplied[1]!.items = [second];
+      if (mode === 'reversed') supplied[0]!.items = [second, first];
+      if (mode === 'wrong-cursor') supplied[0]!.page.nextCursor = encodeCapacityPageCursor(first);
+      if (mode === 'missing-tail') supplied.splice(1);
+      state.eventPages = structuredClone(supplied); const before = structuredClone(supplied);
+      expect(() => readCompleteEvidence(args, 'treeseed', 2, 'ACCEPTANCE_MODEL_CLOCK', 'ascending')).toThrow(); expect(supplied).toEqual(before);
+    }
+    expect(pages).toEqual(held); expect(args).toEqual(input);
+    // Controlled public CLI replies are UNIT inputs, not native API/model proof.
+  });
   it('binds every supplied weighted opportunity to the original applied policy without inventing entitlement or accepting fractional shares and unknown phases', () => {
     const item = state.replies.get('assignments list')!.items[0], run = state.replies.get('workdays show')!.run;
     const original = structuredClone([...state.replies]); expect(() => gate('lifecycle')).not.toThrow();

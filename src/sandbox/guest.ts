@@ -255,6 +255,8 @@ export async function runSandboxGuest() {
 	const sandboxId = (await readFile(resolve(inputRoot, 'sandbox-id'), 'utf8')).trim(), operationToken = (await readFile(resolve(inputRoot, 'operation-token'), 'utf8')).trim();
 	const assignmentProxy = `http://${encodeURIComponent(sandboxId)}:${encodeURIComponent(operationToken)}@10.89.0.1:7444`;
 	await materialize(assignment, execute); const context = record(JSON.parse(await readFile('/workspace/.treeseed/context.json', 'utf8')));
+	// Exclude materialization from active usage; retain original timer/deadline bounds.
+	const productiveStarted = process.hrtime.bigint();
 	const relayEnvironment = { TREESEED_RELAY_URL: assignment.network.relayUrl, TREESEED_SANDBOX_ID: sandboxId,
 		TREESEED_GUEST_TOKEN: operationToken, TREESEED_RELAY_CA: '/workspace/.treeseed/relay-ca.crt' };
 	// Reuse the same API clock, without counting a trusted runtime read as a model check.
@@ -475,10 +477,11 @@ export async function runSandboxGuest() {
 			: [];
 		const providerEventShapes = providerEventShapeSummary(events, diagnosticSecrets);
 		const artifacts: Array<{ id: string; path: string; digest: string; mediaType: string; bytes: number }> = [];
-		const completed = [...events].reverse().find((event) => text(event.type).includes('completed')) ?? {}, elapsedSeconds = Number(process.hrtime.bigint() - started) / 1e9, usageAfter = process.resourceUsage();
+		const completed = [...events].reverse().find((event) => text(event.type).includes('completed')) ?? {}, finished = process.hrtime.bigint(),
+			elapsedSeconds = Number(finished - started) / 1e9, activeSeconds = Number(finished - productiveStarted) / 1e9, usageAfter = process.resourceUsage();
 		const result = sandboxResultSchema.parse({ schemaVersion: 'treeseed.sandbox-result/v1', sandboxId, assignmentId: assignment.assignmentId,
 			status: responseMarkdown === '<!-- treeseed:abstain -->' ? 'completed' : 'completed', summary: 'Kata assignment completed.', responseMarkdown,
-			artifacts, timingAwareness, usage: { ...record(completed.usage), provenance: Object.keys(record(completed.usage)).length ? 'execution-provider' : 'unavailable', activeSeconds: elapsedSeconds, elapsedSeconds,
+			artifacts, timingAwareness, usage: { ...record(completed.usage), provenance: Object.keys(record(completed.usage)).length ? 'execution-provider' : 'unavailable', activeSeconds, elapsedSeconds,
 				cpuUserMicros: usageAfter.userCPUTime - usageBefore.userCPUTime, cpuSystemMicros: usageAfter.systemCPUTime - usageBefore.systemCPUTime, peakRssBytes: usageAfter.maxRSS * 1024 },
 			diagnostics: { systemPrompt: composedPrompt, providerEvents: redactProviderEvents(events, diagnosticSecrets), providerEventShapes, providerArguments, model: assignment.modelPolicy.model, provider: assignment.modelPolicy.provider, contextManifest: context, activityCompletion,
 				verificationRecords: observedCompletion?.verification ?? [], changedPaths,

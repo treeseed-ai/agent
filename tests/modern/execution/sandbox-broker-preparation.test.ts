@@ -9,6 +9,8 @@ import { startSandboxToolPump } from '../../../src/provider/execution/microvm-ex
 import { request as executionRequest, timingAwareness } from '../kernel/provider-kernel-fixture.ts';
 import { nativeCloseoutTransport } from '../kernel/architecture/portable/portable-kernel-fixture.ts';
 import { broker, microvmBroker } from './fixtures/broker-preparation.ts';
+import { executeKernelAssignment } from '../../../src/kernel/provider-kernel-executor.ts';
+import { verifyModelClockEvidence } from '../../acceptance/workday/support/assignment-authority.ts';
 
 describe('sandbox broker preparation authority', () => {
 	it('uses the API-issued preparation deadline instead of an independent fifteen-second cutoff', () => {
@@ -25,6 +27,38 @@ describe('sandbox broker preparation authority', () => {
 });
 
 describe('sandbox broker control transport', () => {
+	it('native original Kernel and microvm preserve the issued shorter productive clock separately from immutable phase authority through exact event readback', async () => {
+		const f = await microvmBroker();
+		try {
+			const attempt = assignmentAttemptSchema.parse(f.input.assignment.assignmentAttempt), before = structuredClone(f.input.assignment);
+			let executionStartedAt = '', executionDeadlineAt = '';
+			f.input.beginExecution = async () => {
+				executionStartedAt = new Date().toISOString(); executionDeadlineAt = new Date(Date.parse(executionStartedAt) + 3_000).toISOString();
+				const clock = (id: string) => { const value = { startedAt: executionStartedAt, deadlineAt: executionDeadlineAt,
+					observedAt: executionStartedAt, remainingSeconds: 3 }; return { type: 'item.completed', item: {
+					id, type: 'mcp_tool_call', server: 'treedx', tool: 'treeseed_time_status', status: 'completed', error: null,
+					result: { content: [{ type: 'text', text: JSON.stringify(value) }], structuredContent: value } } }; };
+				f.patchResult({ diagnostics: { providerEvents: [clock('short-window-first'), clock('short-window-final')] } });
+				return { capacityEnvelope: { budget: { time: { executionStartedAt, executionDeadlineAt } } } };
+			};
+			const result = await executeKernelAssignment({ request: f.input, executor: f.executor, runtimeBuild: attempt.provider.runtimeBuild });
+			expect(result.status).toBe('completed'); const canonical = result.outputs?.assignmentResult;
+			const terminal = f.events.filter(event => event.type === 'execution.completed'); expect(terminal).toHaveLength(1);
+			expect(Date.parse(executionDeadlineAt)).toBeLessThan(Date.parse(attempt.deadline));
+			const item = { id: attempt.id, status: 'completed', assignmentAttempt: attempt, assignmentResult: canonical,
+				capacityEnvelope: { budget: { time: { executionStartedAt, executionDeadlineAt } } } };
+			const event = { ...terminal[0], id: 'native-short-clock-event', assignmentId: attempt.id, runId: attempt.workdayId,
+				workdayId: attempt.workdayId, teamId: attempt.teamId, projectId: attempt.projectId, eventIndex: 1,
+				eventType: 'provider.execution.completed', status: 'recorded', createdAt: new Date().toISOString() };
+			const held = structuredClone({ item, event }); expect(() => verifyModelClockEvidence(item, event)).not.toThrow();
+			expect({ item, event }).toEqual(held); expect(f.input.assignment).toEqual(before); expect(f.observations).toHaveLength(1);
+			expect(f.paths.filter(path => path.endsWith('/execute'))).toHaveLength(1);
+			expect(f.paths.filter(path => path.startsWith('DELETE '))).toEqual(['DELETE /v1/sandboxes/owned-native-sandbox']);
+			// Real owning Kernel/Unix/materialization; API window and provider events
+			// are supplied inputs, not native API issuance/model use/charges/Kata proof.
+		} finally { await f.close(); }
+		expect(f.server.listening).toBe(false); await expect(stat(f.directory)).rejects.toMatchObject({ code: 'ENOENT' });
+	});
 	it('native microvm Kernel and provider runner retain original successful and failed executor measurements through exact public delivery and denied closeout', async () => {
 		for (const mode of ['completed', 'failed', 'expired', 'diagnostic-denied', 'settlement-denied'] as const) {
 			const f = await microvmBroker(); let api: Awaited<ReturnType<typeof nativeCloseoutTransport>> | undefined;

@@ -55,7 +55,8 @@ async function nativeClock() {
 }
 describe('native trusted guest clock relay and owning provider tool', () => {
 	it('native whole guest retains first and final clock bytes across a long provider stream and cannot forget an early killed command', async () => {
-		const outcomes: Array<{ mode: string; failure: string; events: Record<string, unknown>[]; clockValues: unknown[]; retainedPrivateFiles: string[] }> = [];
+		const outcomes: Array<{ mode: string; failure: string; events: Record<string, unknown>[]; clockValues: unknown[]; retainedPrivateFiles: string[];
+			usage?: ReturnType<typeof sandboxResultSchema.parse>['usage'] }> = [];
 		for (const mode of ['completed', 'resource-abort', 'invalid-context', 'missing-subscription']) {
 			const f = await nativeClock();
 			try {
@@ -105,11 +106,12 @@ describe('native trusted guest clock relay and owning provider tool', () => {
 					'--chdir', process.cwd(), process.execPath, '--import', 'tsx', provider, '--guest'],
 					{ timeout: 20_000, killSignal: 'SIGKILL', maxBuffer: 1_048_576, env: { PATH: `${dirname(process.execPath)}:/usr/bin:/bin` } });
 				} catch (error) { failure = error instanceof Error ? error.message : String(error); }
-				let events: Record<string, unknown>[] = [];
+				let events: Record<string, unknown>[] = [], usage: ReturnType<typeof sandboxResultSchema.parse>['usage'] | undefined;
 				const resultPath = join(output, 'result.json');
 				try { const result = sandboxResultSchema.parse(JSON.parse(await readFile(resultPath, 'utf8')));
 					if (!Array.isArray(result.diagnostics.providerEvents)) throw new Error('Native raw event array required');
 					events = result.diagnostics.providerEvents;
+					usage = result.usage;
 					if (mode === 'completed') expect(result.timingAwareness).toMatchObject({ completedChecks: 2, firstToolCompliant: true, finalToolCompliant: true });
 				} catch (error) { if (!(error instanceof Error && 'code' in error && error.code === 'ENOENT')) throw error; }
 				const retainedPrivateFiles: string[] = [];
@@ -117,7 +119,7 @@ describe('native trusted guest clock relay and owning provider tool', () => {
 					try { await stat(join(workspace, '.treeseed/codex', name)); retainedPrivateFiles.push(name); }
 					catch (error) { if (!(error instanceof Error && 'code' in error && error.code === 'ENOENT')) throw error; }
 				}
-				outcomes.push({ mode, failure, events, clockValues: structuredClone(f.readings.slice(1)), retainedPrivateFiles });
+				outcomes.push({ mode, failure, events, clockValues: structuredClone(f.readings.slice(1)), retainedPrivateFiles, usage });
 				expect(await readFile(join(input, 'assignment.json'), 'utf8')).toBe(held);
 				expect(await readFile(join(input, 'input-execution-context'))).toEqual(bytes);
 				expect(f.calls, `${mode}: ${failure}`).toEqual(Array.from({ length: mode === 'invalid-context' || mode === 'missing-subscription' ? 1 : 3 },
@@ -129,6 +131,12 @@ describe('native trusted guest clock relay and owning provider tool', () => {
 			} finally { await f.close(); await expect(stat(f.directory)).rejects.toMatchObject({ code: 'ENOENT' }); }
 		}
 		expect(outcomes[0]!.failure, outcomes.map(value => `${value.mode}: ${value.failure}`).join('\n')).toBe('');
+		const usage = outcomes[0]!.usage;
+		expect(typeof usage?.activeSeconds).toBe('number'); expect(typeof usage?.elapsedSeconds).toBe('number');
+		expect(Number(usage?.activeSeconds)).toBeGreaterThan(0);
+		expect(Number(usage?.activeSeconds)).toBeLessThan(Number(usage?.elapsedSeconds));
+		// Actual whole-guest monotonic measurements must exclude materialization;
+		// this controlled provider process is not native model billing or Settlement.
 		const summary = outcomes.slice(0, 2).map(value => ({ mode: value.mode, rawEvents: value.events.length,
 			retainedClocks: completedTimeStatusChecks(value.events), resourceFailure: value.failure.includes('sandbox_resource_exhausted: command exited 137') }));
 		expect(summary, JSON.stringify(summary))

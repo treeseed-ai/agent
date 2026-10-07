@@ -122,8 +122,9 @@ describe('native trusted guest clock relay and owning provider tool', () => {
 			} finally { await f.close(); await expect(stat(f.directory)).rejects.toMatchObject({ code: 'ENOENT' }); }
 		}
 		expect(outcomes[0]!.failure, outcomes.map(value => `${value.mode}: ${value.failure}`).join('\n')).toBe('');
-		expect(outcomes.map(value => ({ mode: value.mode, rawEvents: value.events.length,
-			retainedClocks: completedTimeStatusChecks(value.events), resourceFailure: value.failure.includes('sandbox_resource_exhausted: command exited 137') })))
+		const summary = outcomes.map(value => ({ mode: value.mode, rawEvents: value.events.length,
+			retainedClocks: completedTimeStatusChecks(value.events), resourceFailure: value.failure.includes('sandbox_resource_exhausted: command exited 137') }));
+		expect(summary, JSON.stringify(summary))
 			.toEqual([{ mode: 'completed', rawEvents: 302, retainedClocks: 2, resourceFailure: false },
 				{ mode: 'resource-abort', rawEvents: 0, retainedClocks: 0, resourceFailure: true }]);
 		expect(outcomes[0]!.events).toHaveLength(302);

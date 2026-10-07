@@ -101,10 +101,11 @@ export async function portableKernel(responseReady?: Promise<void>, originalMaxi
 		const base = git('rev-parse', 'HEAD'), profile = portableProfile(), input = request();
 		const original = assignmentAttemptSchema.parse(input.assignment.assignmentAttempt), selected = profile.activityProfiles.acting;
 		if (!selected) throw new Error('Complete configured acting profile required');
-		// A fresh input's original thirty-second productive window; never move
-		// an admitted/live attempt's deadline or inherit the legacy far-future clock.
+		// Preserve the fresh input's original thirty-second phase deadline.
+		// A shorter active allocation does not charge native preparation time;
+		// neither clock is refreshed after admission or executor setup.
 		const maximumSeconds = originalMaximumSeconds ?? original.limits.maximumSeconds;
-		const createdAt = new Date().toISOString(), deadline = new Date(Date.parse(createdAt) + maximumSeconds * 1000).toISOString();
+		const createdAt = new Date().toISOString(), deadline = new Date(Date.parse(createdAt) + original.limits.maximumSeconds * 1000).toISOString();
 		const attempt = assignmentAttemptSchema.parse({ ...original, createdAt, deadline, agentClass: profile.agentClass,
 			limits: { ...original.limits, maximumSeconds }, estimate: { expectedSeconds: Math.min(original.estimate.expectedSeconds, maximumSeconds), maximumSeconds },
 			effectiveProfile: { ...original.effectiveProfile, profileRef: { ...original.effectiveProfile.profileRef, id: profile.id },

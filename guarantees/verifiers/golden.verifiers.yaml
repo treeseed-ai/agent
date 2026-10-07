@@ -231,6 +231,21 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/kernel/architecture/portable/portable-kernel-integration.test.ts
     testName: "native cancellation and original expiry retain late executor bytes and failed public closeout without another execution or successful retry"
+  agent.golden.execution-preparation-clock-unit-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/agent-kernel.test.ts
+    testName: "does not charge preparation time against the productive execution limit"
+  agent.golden.execution-phase-deadline-unit-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/agent-kernel.test.ts
+    testName: "enforces the absolute assignment deadline even before productive execution begins"
+  agent.golden.execution-preparation-clock-native-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/portable/portable-kernel-integration.test.ts
+    testName: "native preparation retains the original phase deadline independently of a shorter active allocation"
   agent.golden.execution-offer-signature-unit-1:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

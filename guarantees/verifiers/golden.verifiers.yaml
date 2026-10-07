@@ -1,6 +1,21 @@
 schemaVersion: treeseed.guarantee-verifiers/v1
 ownerPackage: "@treeseed/agent"
 verifiers:
+  agent.golden.execution-noncompleted-clock-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/microvm-result-authority.test.ts
+    testName: "checks exact first final frequent and denied clock evidence for every failed cancelled and expired result without replacing the original failure or usage"
+  agent.golden.execution-noncompleted-clock-native:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/sandbox-broker-preparation.test.ts
+    testName: "native microvm refuses missing substituted duplicate pending and unbracketed failed result clocks while preserving original measurements failure and allocated resource closure"
+  agent.golden.execution-failed-guest-measurements-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/sandbox/runtime-clock.test.ts
+    testName: "publishes original failed provider measurements and complete raw clocks as a failed sandbox result without manufacturing a successful response or an incomplete receipt"
   agent.golden.execution-issued-window-unit:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

@@ -250,7 +250,7 @@ export async function createMicrovmExecutor(config: ProviderHostRuntimeConfig, m
 						if (bytes.length !== artifact.bytes || `sha256:${createHash('sha256').update(bytes).digest('hex')}` !== artifact.digest) throw Object.assign(new Error('Sandbox artifact bytes disagree with their declared size or digest.'), { code: 'sandbox_artifact_integrity_invalid' });
 						return { ...artifact, content: bytes.toString('utf8') };
 					}));
-					if (result.status === 'completed') {
+					{
 						const events = object(result.diagnostics).providerEvents;
 						const receipt = timingAwarenessEvidence(result.timingAwareness);
 						const actual = Array.isArray(events) ? timingAwarenessContract(events.map(object)) : undefined;
@@ -268,7 +268,8 @@ export async function createMicrovmExecutor(config: ProviderHostRuntimeConfig, m
 							} else if (item.type === 'command_execution') { if (!checkedBeforeBlocking) valid = false; checkedBeforeBlocking = false; }
 							pending.delete(String(item.id));
 						}
-						if (!valid || pending.size) throw new Error('Completed sandbox result lacks valid timing-awareness evidence.');
+						if (!valid || pending.size) throw new Error(`${result.status === 'completed' ? 'Completed' : 'Non-completed'} sandbox result lacks valid timing-awareness evidence.`,
+							result.status === 'completed' ? undefined : { cause: new Error(result.summary) });
 					}
 					if (result.status === 'completed' && current.source?.authorization.mode === 'work') sourceReference = await publishSourceBranch(client, prepared, current.source, assignment, result, request);
 				} catch (error) { transportFailure = error; } finally {

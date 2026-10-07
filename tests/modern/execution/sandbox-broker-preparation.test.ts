@@ -27,6 +27,40 @@ describe('sandbox broker preparation authority', () => {
 });
 
 describe('sandbox broker control transport', () => {
+	it('native microvm refuses missing substituted duplicate pending and unbracketed failed result clocks while preserving original measurements failure and allocated resource closure', async () => {
+		const outcomes: Array<{ status: string; mode: string; result: unknown; failure: unknown; terminal: boolean }> = [];
+		for (const status of ['failed', 'cancelled', 'expired'] as const) for (const mode of ['exact', 'missing', 'foreign-window', 'receipt-count', 'duplicate', 'pending', 'first-nonclock', 'final-nonclock']) {
+			const f = await microvmBroker();
+			try {
+				const attempt = assignmentAttemptSchema.parse(f.input.assignment.assignmentAttempt);
+				const clock = (id: string, remainingSeconds: number) => {
+					const value = { startedAt: attempt.createdAt, deadlineAt: mode === 'foreign-window' ? new Date(Date.parse(attempt.deadline) + 1).toISOString() : attempt.deadline,
+						observedAt: new Date(Date.parse(attempt.deadline) - remainingSeconds * 1_000).toISOString(), remainingSeconds };
+					return { type: 'item.completed', item: { id, type: 'mcp_tool_call', server: 'treedx', tool: 'treeseed_time_status', status: 'completed', error: null,
+						result: { content: [{ type: 'text', text: JSON.stringify(value) }], structuredContent: value } } };
+				};
+				const events: unknown[] = [clock('first', 30), clock(mode === 'duplicate' ? 'first' : 'final', 29)];
+				const command = { type: mode === 'pending' ? 'item.started' : 'item.completed', item: { id: 'original-command', type: 'command_execution' } };
+				if (mode === 'pending') events.splice(1, 0, command); if (mode === 'first-nonclock') events.unshift(command); if (mode === 'final-nonclock') events.push(command);
+				const patch = { status, summary: `Original ${status} provider observation`, diagnostics: { providerEvents: mode === 'missing' ? [] : events },
+					timingAwareness: { ...timingAwareness, completedChecks: mode === 'receipt-count' ? 3 : 2 } }, held = structuredClone(patch), before = structuredClone(f.input.assignment);
+				f.patchResult(patch); let result: unknown, failure: unknown;
+				try { result = await f.executor.execute(f.input); } catch (error) { failure = error; }
+				outcomes.push({ status, mode, result, failure, terminal: f.events.some(event => ['execution.completed', 'execution.failed'].includes(event.type)) });
+				expect(patch).toEqual(held); expect(f.input.assignment).toEqual(before); expect(f.counters()).toEqual({ beginCalls: 1, finishCalls: 1 });
+				expect(f.paths.filter(path => path.endsWith('/execute'))).toHaveLength(1); expect(f.paths.filter(path => path.startsWith('DELETE '))).toEqual(['DELETE /v1/sandboxes/owned-native-sandbox']);
+			} finally { await f.close(); }
+			expect(f.server.listening).toBe(false); await expect(stat(f.directory)).rejects.toMatchObject({ code: 'ENOENT' });
+		}
+		for (const observed of outcomes) {
+			if (observed.mode === 'exact') { expect(observed.failure).toBeUndefined(); expect(observed.result).toMatchObject({ status: observed.status === 'failed' ? 'failed' : 'returned' }); expect(observed.terminal).toBe(true); }
+			else {
+				expect(observed.result).toBeUndefined(); expect(observed.terminal).toBe(false);
+				expect(observed.failure).toMatchObject({ message: 'Non-completed sandbox result lacks valid timing-awareness evidence.', cause: { message: `Original ${observed.status} provider observation` },
+					usage: [{ activeSeconds: 1.125, elapsedSeconds: 2.25, inputTokens: 19, outputTokens: 3 }] });
+			}
+		}
+	});
 	it('native microvm denies invalid issued productive authority before any broker execution while retaining the original assignment and closing allocated resources', async () => {
 		const outcomes: Array<{ mode: string; executed: number; clockClosed: number; started: number; message: string; closeoutCause: boolean }> = [];
 		for (const mode of ['missing', 'object', 'malformed', 'before-admission', 'future', 'reversed', 'beyond-phase', 'over-duration', 'expired', 'close-denied']) {

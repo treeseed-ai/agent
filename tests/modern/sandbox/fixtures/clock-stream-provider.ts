@@ -9,22 +9,26 @@ if (process.argv.includes('--guest')) {
 } else {
 	await writeFile('/run/treeseed-output/provider-invoked', 'Controlled subprocess invoked.\n');
 	for await (const _chunk of process.stdin) { /* Consume the original prompt. */ }
+	const mode = (await readFile('/run/treeseed-assignment/stream-mode', 'utf8')).trim();
 	const clock = async (id: string) => {
 		const value = await invokeTreeDxRelay('treeseed_time_status', {}, process.env);
-		process.stdout.write(`${JSON.stringify({ type: 'item.completed', item: {
+		process.stdout.write(`${JSON.stringify({ type: 'item.completed', ...(mode.startsWith('provider-') ? { usage: { input_tokens: 19, output_tokens: 3 } } : {}), item: {
 			id, type: 'mcp_tool_call', server: 'treedx', tool: 'treeseed_time_status', status: 'completed', error: null,
 			result: { content: [{ type: 'text', text: JSON.stringify(value) }], structuredContent: value },
 		} })}\n`);
 	};
 	await clock('original-first-clock');
-	if ((await readFile('/run/treeseed-assignment/stream-mode', 'utf8')).trim() === 'resource-abort') process.stdout.write(`${JSON.stringify({ type: 'item.completed', item: {
+	if (mode === 'resource-abort') process.stdout.write(`${JSON.stringify({ type: 'item.completed', item: {
 		id: 'original-killed-command', type: 'command_execution', command: 'original controlled command', exit_code: 137, aggregated_output: 'Killed\n',
 	} })}\n`);
 	for (let index = 0; index < 300; index++) process.stdout.write(`${JSON.stringify({ type: 'item.completed', item: {
 		id: `reasoning-${index}`, type: 'reasoning', text: `Controlled observation ${index}`,
 	} })}\n`);
-	await clock('original-final-clock');
-	const path = process.argv[process.argv.indexOf('--output-last-message') + 1];
-	if (!path?.startsWith('/workspace/')) throw new Error('Original guest response path required');
-	await writeFile(path, 'Controlled provider response; not real model evidence.\n');
+	if (mode !== 'provider-incomplete') await clock('original-final-clock');
+	if (mode.startsWith('provider-')) { process.stderr.write('Original controlled provider exit 23.\n'); process.exitCode = 23; }
+	else {
+		const path = process.argv[process.argv.indexOf('--output-last-message') + 1];
+		if (!path?.startsWith('/workspace/')) throw new Error('Original guest response path required');
+		await writeFile(path, 'Controlled provider response; not real model evidence.\n');
+	}
 }

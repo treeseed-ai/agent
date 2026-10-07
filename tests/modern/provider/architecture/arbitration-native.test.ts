@@ -34,6 +34,9 @@ describe('whole native provider polling arbitration boundary', () => {
 		// Initialize in the first actual run child; the retry is still an independent restart.
 		const f = await arbitrationFixture(1, true);
 		try {
+			// Keep the same complete YAML input bytes for both independent restarts,
+			// without repeated cold block-indentation parsing in each native child.
+			await f.write(true);
 			await f.measure('busy-a'); await f.measure('busy-b');
 			const snapshot = await f.store.snapshot(), manifest = structuredClone(f.manifest), bytes = await readFile(f.config.manifestPath!);
 			const expected = { connections: manifest.connections.map(connection => ({ connection: { id: connection.id }, teamId: connection.teamId! })),

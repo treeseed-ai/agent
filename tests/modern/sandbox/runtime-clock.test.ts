@@ -104,7 +104,7 @@ function mockGuestFiles(files: Map<string, Buffer<ArrayBuffer>>) {
 }
 
 it('measures active guest preparation model tools and closeout separately from infrastructure materialization without moving the original execution clock', async () => {
-	const f = suppliedGuestFiles('completed'); mockGuestFiles(f.files);
+	const f = suppliedGuestFiles('completed'); f.files.set('/proc/version', Buffer.from('Controlled unit kernel input.')); mockGuestFiles(f.files);
 	// Supplied monotonic UNIT observations, not native elapsed time or usage.
 	let observed = 0n; const monotonic = vi.spyOn(process.hrtime, 'bigint').mockImplementation(() => observed);
 	const materializedRead = vi.mocked(readFile).getMockImplementation()!;

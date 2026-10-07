@@ -38,7 +38,17 @@ describe('owning context Kernel through native content HTTP and source Git', () 
 				const profile = checked.data, selected = profile.activityProfiles.reporting!;
 				const source = { store: 'postgresql' as const, model: 'workday', id: f.attempt.workdayId };
 				const target = { store: 'treedx' as const, model: 'note', id: 'bounded-report', repository, commit: f.base, path };
-				const evidence = { teamId: f.attempt.teamId, workdayId: f.attempt.workdayId, nodes: [], edges: [], attempts: [], reservations: [], usage: [] };
+				const failed = assignmentResultSchema.parse({ schemaVersion: 'treeseed.assignment-result/v1', id: 'retained-failed-result', assignmentId: 'retained-failed-attempt',
+					status: 'failed', summary: 'Supplied original failure; never a passing replay.', references: [], verification: [], diagnostics: [{ code: 'retained-denial', severity: 'error', message: 'Retained supplied denial.' }],
+					usage: { elapsedSeconds: 1 }, completedAt: f.attempt.createdAt });
+				const retry = assignmentResultSchema.parse({ ...failed, id: 'retry-result', assignmentId: 'retry-attempt', status: 'completed', summary: 'Supplied distinct retry.', diagnostics: [] });
+				const predecessors = [failed, retry]; f.attempt.predecessorResultIds = predecessors.map(item => item.id);
+				Object.assign(f.input.assignment.workspaceContext!, { predecessorResults: predecessors });
+				const evidence = { teamId: f.attempt.teamId, workdayId: f.attempt.workdayId, nodes: [{ id: 'retained-node', status: 'completed' }],
+					edges: [{ id: 'retained-edge', from_node_id: 'retained-node', to_node_id: 'closeout' }],
+					attempts: predecessors.map(item => ({ id: item.assignmentId, status: item.status })),
+					reservations: predecessors.map(item => ({ id: `${item.assignmentId}-reservation`, state: 'consumed', assignment_id: item.assignmentId })),
+					usage: predecessors.map(item => ({ id: `${item.assignmentId}-usage`, assignment_id: item.assignmentId, elapsed_seconds: item.usage.elapsedSeconds })) };
 				Object.assign(f.attempt, { agentClass: profile.agentClass, sourceRef: source, contextRefs: [source],
 					workspace: { mode: 'treedx', repository, workspaceId: 'bounded-report-workspace', baseCommit: f.base, writablePaths: ['notes'] },
 					grant: { contentRead: [], contentWrite: [target], sourceRead: [], sourceWrite: [], tools: [] },
@@ -66,7 +76,7 @@ describe('owning context Kernel through native content HTTP and source Git', () 
 					throw new Error('Unexpected report operation');
 				});
 				const result = await f.run();
-				expect(writes).toBe(1); expect(commits).toBe(1); expect(f.requests).toEqual([]);
+				expect(writes, JSON.stringify({ status: result.status, code: result.code, summary: result.summary })).toBe(1); expect(commits).toBe(1); expect(f.requests).toEqual([]);
 				expect(execFileSync('git', ['show', `${candidate}:${path}`], { cwd: f.checkout, encoding: 'utf8' })).toBe(content);
 				expect(f.git('rev-parse', `${candidate}^`)).toBe(f.base);
 				const parsed = /^---\n([\s\S]*?)\n---\n([\s\S]*)$/u.exec(content); if (!parsed) throw new Error('Canonical native report document required');
@@ -74,10 +84,11 @@ describe('owning context Kernel through native content HTTP and source Git', () 
 				expect(validatePortableContentData('note', { ...frontmatter, body }).ok).toBe(true);
 				expect(frontmatter).toMatchObject({ id: target.id, projectId: f.attempt.projectId, classification: 'workday-report', subjectRefs: [source] });
 				const report = JSON.parse(body.replace(/^```json\n|\n```$/gu, ''));
-				expect(report.workday).toEqual(evidence); expect(report.assignmentId).toBe(f.attempt.id); expect(report.workdayId).toBe(f.attempt.workdayId);
+				expect(report).toEqual({ classification: 'workday-report', workday: evidence, assignmentId: f.attempt.id, workdayId: f.attempt.workdayId, predecessorResults: predecessors });
 				if (interrupted) { expect(result).toMatchObject({ status: 'failed', summary: 'treedx_commit_readback_mismatch' }); expect(result.outputs?.assignmentResult).toBeUndefined(); }
 				else { expect(result.status).toBe('completed'); expect(result.outputs?.assignmentResult).toMatchObject({ assignmentId: f.attempt.id,
-					references: [{ kind: 'treedx', projectId: f.attempt.projectId, repository, path, commit: candidate }] }); }
+					references: [{ kind: 'treedx', projectId: f.attempt.projectId, repository, path, commit: candidate }] });
+					expect(assignmentResultSchema.parse(result.outputs?.assignmentResult).usage).toEqual({ elapsedSeconds: expect.any(Number) }); }
 				expect(f.git('rev-parse', 'HEAD')).toBe(candidate);
 				expect({ attempt: f.attempt, context: f.input.assignment.workspaceContext, evidence, profileInput }).toEqual(held);
 			} finally { try { await boundary?.close(); } finally { await f.close(); } }

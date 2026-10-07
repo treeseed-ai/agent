@@ -21,7 +21,8 @@ export function modelExecutionInventory(items: Row[], events: Row[], run: Row): 
 		assert.equal(event.runId, run.id); assert.equal(event.teamId, run.teamId);
 		identities.add(event.id); indexes.add(Number(event.eventIndex));
 	}
-	const modelEvent = (event: Row) => Object.hasOwn(row(event.context), 'model') || row(event.context).isolation === 'microvm';
+	const modelEvent = (event: Row) => Object.hasOwn(row(event.context), 'model') || row(event.context).isolation === 'microvm'
+		|| Object.hasOwn(row(event.protectedPayload), 'providerEvents');
 	const starts = events.filter(event => event.eventType === 'provider.execution.started' && modelEvent(event));
 	assert.ok(starts.length > 0, 'ACCEPTANCE_MODEL_INVENTORY_EMPTY');
 	const seen = new Set<string>(), inventory = starts.map(started => {

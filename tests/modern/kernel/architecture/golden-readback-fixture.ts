@@ -21,7 +21,7 @@ vi.mock('node:child_process', () => ({ execFileSync: (_command: string, args: st
 		: state.replies.get(`${key} ${args[3]}`) ?? state.replies.get(key);
 	if (!result) throw new Error(`Unexpected acceptance read: ${key}`);
 	// The actual repository sorts its read model; do not reorder the mutable oracle inputs.
-	const presented = (key === 'assignments list' || (key === 'capacity usage' && !state.usagePages)) ? { ...result, items: [...result.items].sort((a, b) =>
+	const presented = (key === 'assignments list' || key === 'capacity ledger' || (key === 'capacity usage' && !state.usagePages)) ? { ...result, items: [...result.items].sort((a, b) =>
 		Date.parse(b.createdAt) - Date.parse(a.createdAt) || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0)) } : result;
 	return JSON.stringify({ ok: true, result: presented });
 } }));
@@ -201,9 +201,17 @@ beforeEach(() => {
 	}
 	// Frozen closeout authority is supplied test input, not actual SQL history.
 	const predecessors = items.filter(item => item.id !== reporter.id).map(item => structuredClone(item.assignmentResult));
+	const settlements = items.filter(item => item.id !== reporter.id).map(item => ({ schemaVersion: 'treeseed.usage-settlement/v1',
+		id: `settlement-${item.id}`, idempotencyKey: `settlement-${item.id}`, assignmentId: item.id,
+		reservationId: `reservation-${item.id}`, workdayId, teamId: 'team-1', projectId: item.projectId,
+		agentClass: item.assignmentAttempt.agentClass, providerId: 'supplied-provider', actualSeconds: 1,
+		nativeUsage: { activeSeconds: 1 }, settledAt: item.completedAt }));
+	state.replies.set('capacity ledger', { items: settlements.map(value => ({ id: value.id, createdAt: value.settledAt,
+		phase: 'task_completed_actual_settlement', assignmentId: value.assignmentId, usageSettlement: value })),
+		page: { limit: 100, hasMore: false, nextCursor: null } });
 	const evidence = { teamId: 'team-1', workdayId, nodes: structuredClone(nodes), edges: [],
 		attempts: items.filter(item => item.id !== reporter.id).map(item => ({ id: item.id, status: item.status, assignment_result_json: JSON.stringify(item.assignmentResult) })),
-		reservations: [], usage: structuredClone(state.replies.get('capacity usage')!.items) };
+		reservations: [], usage: structuredClone(state.replies.get('capacity usage')!.items), settlements };
 	reporter.assignmentAttempt.predecessorResultIds = predecessors.map(item => item.id);
 	reporter.workspaceContext = { predecessorResults: predecessors, authorizedContext: [{ ref: structuredClone(reporter.assignmentAttempt.sourceRef),
 		mediaType: 'application/json', digest: `sha256:${createHash('sha256').update(canonicalStandardsJson(evidence)).digest('hex')}`, value: evidence }] };

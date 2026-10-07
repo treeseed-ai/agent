@@ -1,9 +1,54 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createHash } from 'node:crypto';
+import { canonicalStandardsJson } from '@treeseed/sdk/standards';
 import { stringify } from 'yaml';
 import { state, gate, read, assignment, usageMeasurement, classes, workdayId, commit, type Row } from './architecture/golden-readback-fixture.ts';
 
 describe('golden read-back assertion regressions (fixtures are not live acceptance)', () => {
+	it('denies omitted duplicated or substituted frozen Reporter attempts even when the note and digest agree without repairing public results', () => {
+		const assignments = state.replies.get('assignments list')!.items, reporter = assignments.find((item: Row) => item.assignmentAttempt.effectiveProfile.activity === 'reporting');
+		const file = state.replies.get('library read')!.result.files[0], original = structuredClone(file), context = structuredClone(reporter.workspaceContext);
+		expect(() => gate('reporter')).not.toThrow(); const denied: boolean[] = [];
+		for (const mode of ['empty', 'missing', 'duplicate', 'foreign', 'status', 'missing-result', 'malformed-result', 'changed-result']) {
+			const changed = structuredClone(context), inline = changed.authorizedContext[0], value = inline.value;
+			if (mode === 'empty') value.attempts = []; if (mode === 'missing') value.attempts.pop();
+			if (mode === 'duplicate') value.attempts[1] = structuredClone(value.attempts[0]); if (mode === 'foreign') value.attempts[0].id = 'foreign';
+			if (mode === 'status') value.attempts[0].status = 'failed'; if (mode === 'missing-result') value.attempts[0].assignment_result_json = null;
+			if (mode === 'malformed-result') value.attempts[0].assignment_result_json = '{';
+			if (mode === 'changed-result') { const result = JSON.parse(value.attempts[0].assignment_result_json); result.id = 'substituted'; value.attempts[0].assignment_result_json = JSON.stringify(result); }
+			inline.digest = `sha256:${createHash('sha256').update(canonicalStandardsJson(value)).digest('hex')}`;
+			const payload = JSON.parse(original.body.slice(8, -4)); payload.workday = value; file.body = `\`\`\`json\n${JSON.stringify(payload)}\n\`\`\``;
+			reporter.workspaceContext = changed; const held = structuredClone({ changed, file, assignments });
+			let failed = false; try { gate('reporter'); } catch { failed = true; } denied.push(failed); expect({ changed, file, assignments }).toEqual(held);
+		}
+		reporter.workspaceContext = context; file.body = original.body; expect(() => gate('reporter')).not.toThrow(); expect(denied).toEqual(Array(8).fill(true));
+	});
+	it('denies omitted duplicated changed and corrupt report settlements against independent complete ledger readback without repairing frozen or failed evidence', () => {
+		const reporter = state.replies.get('assignments list')!.items.find((item: Row) => item.assignmentAttempt.effectiveProfile.activity === 'reporting');
+		const file = state.replies.get('library read')!.result.files[0], original = structuredClone(file);
+		const context = structuredClone(reporter.workspaceContext), ledger = structuredClone(state.replies.get('capacity ledger')!);
+		expect(() => gate('reporter')).not.toThrow(); const denied: boolean[] = [];
+		for (const mode of ['missing', 'empty', 'duplicate', 'changed', 'foreign', 'corrupt-ledger', 'missing-page', 'empty-both', 'partial-both']) {
+			const changed = structuredClone(context), inline = changed.authorizedContext[0], value = inline.value;
+			const supplied = structuredClone(ledger);
+			if (mode === 'missing') Reflect.deleteProperty(value, 'settlements'); if (mode === 'empty') value.settlements = [];
+			if (mode === 'duplicate') value.settlements.push(structuredClone(value.settlements[0]));
+			if (mode === 'changed') value.settlements[0].actualSeconds = 2;
+			if (mode === 'foreign') value.settlements[0].teamId = 'foreign';
+			if (mode === 'corrupt-ledger') Reflect.deleteProperty(supplied.items[0], 'usageSettlement');
+			if (mode === 'missing-page') Reflect.deleteProperty(supplied, 'page');
+			if (mode === 'empty-both') { value.settlements = []; supplied.items = []; }
+			if (mode === 'partial-both') { const removed = value.settlements.pop(); supplied.items = supplied.items.filter((entry: Row) => entry.id !== removed.id); }
+			inline.digest = `sha256:${createHash('sha256').update(canonicalStandardsJson(value)).digest('hex')}`;
+			const payload = JSON.parse(original.body.slice(8, -4)); payload.workday = value;
+			file.body = `\`\`\`json\n${JSON.stringify(payload)}\n\`\`\``; reporter.workspaceContext = changed;
+			state.replies.set('capacity ledger', supplied); const held = structuredClone({ changed, supplied, file });
+			let failure = false; try { gate('reporter'); } catch { failure = true; } denied.push(failure);
+			expect({ changed, supplied, file }).toEqual(held);
+		}
+		reporter.workspaceContext = context; file.body = original.body; state.replies.set('capacity ledger', ledger);
+		expect(() => gate('reporter')).not.toThrow(); expect(denied).toEqual(Array(9).fill(true)); expect(file).toEqual(original);
+	});
 	it('denies substituted truncated and prose-only report bodies against the exact frozen closeout evidence without repairing failed observations', () => {
 		const reporter = state.replies.get('assignments list')!.items.find((item: Row) => item.assignmentAttempt.effectiveProfile.activity === 'reporting');
 		const file = state.replies.get('library read')!.result.files[0], original = structuredClone(file);

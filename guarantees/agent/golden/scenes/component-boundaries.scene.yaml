@@ -3,6 +3,15 @@ id: agent.golden.component-boundaries
 title: Golden execution component boundaries
 scope: local-component-tests
 workflow:
+  - id: execution-report-attempt-unit
+    action: { verifier: agent.golden.execution-report-attempt-unit }
+    expect: { status: passed }
+  - id: execution-report-settlement-unit
+    action: { verifier: agent.golden.execution-report-settlement-unit }
+    expect: { status: passed }
+  - id: execution-profile-ambiguity-native
+    action: { verifier: agent.golden.execution-profile-ambiguity-native }
+    expect: { status: passed }
   - id: execution-report-snapshot-unit
     action: { verifier: agent.golden.execution-report-snapshot-unit }
     expect: { status: passed }

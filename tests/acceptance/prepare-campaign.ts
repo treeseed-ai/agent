@@ -32,7 +32,9 @@ export function verifySdkPublishedProfiles(agents: Row[], publishedHead: string)
 	assert.ok(Array.isArray(agents), 'ACCEPTANCE_CHAT_PROFILE_PUBLISHED: SDK agent inventory required');
 	const roles = ['architect', 'researcher', 'tester', 'engineer', 'technical-writer', 'releaser', 'reviewer', 'reporter'];
 	for (const role of roles) {
-		const agent = agents.find(item => item.agentSlug === role);
+		const matches = agents.filter(item => item.agentSlug === role);
+		assert.equal(matches.length, 1, `ACCEPTANCE_CHAT_PROFILE_PUBLISHED: ${role} requires one unambiguous governed identity`);
+		const agent = matches[0];
 		assert.equal(agent?.definitionRevision, publishedHead,
 			`ACCEPTANCE_CHAT_PROFILE_PUBLISHED: ${role} definition is not the published SDK library head`);
 		const definition = agent?.definition as { capabilities?: string[]; activityProfiles?: { chat?: { prompt?: { system?: string } } } } | undefined;

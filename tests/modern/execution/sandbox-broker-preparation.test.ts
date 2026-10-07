@@ -159,7 +159,8 @@ describe('sandbox broker control transport', () => {
 					&& ['provider.execution.completed', 'provider.execution.failed'].includes(String(item.body.eventType)));
 				expect(diagnosticEvents).toHaveLength(1);
 				expect(diagnosticEvents[0]!.body).toMatchObject({ leaseToken: f.input.leaseToken, runnerId: f.input.runnerId,
-					protectedPayload: raw.diagnostics });
+					context: { model: f.assignment()!.modelPolicy.model, provider: f.assignment()!.modelPolicy.provider,
+						timingAwareness: raw.timingAwareness, timing: { elapsedSeconds: raw.usage.elapsedSeconds } }, protectedPayload: raw.diagnostics });
 				expect(Number.isInteger(diagnosticEvents[0]!.body.sequence)).toBe(true);
 				expect(Object.hasOwn(diagnosticEvents[0]!.body.context ?? {}, 'providerEvents')).toBe(false);
 				const usage = { activeSeconds: 1.125, elapsedSeconds: 2.25, inputTokens: 19, outputTokens: 3,

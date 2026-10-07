@@ -67,6 +67,29 @@ async function suppliedMicrovm() {
 }
 
 describe('microvm result and closeout authority', () => {
+	it('retains exact failed cancelled and expired model clock usage and resource observations without fabricating missing receipts or successful completion', async () => {
+		for (const status of ['failed', 'cancelled', 'expired'] as const) for (const hasReceipt of [true, false]) {
+			const f = await suppliedMicrovm(), original = sandboxResultSchema.parse(f.result());
+			const supplied = { ...original, status, summary: `Original ${status} observation`,
+				usage: { ...original.usage, cpuUserMicros: 123, cpuSystemMicros: 45, peakRssBytes: 4096 },
+				timingAwareness: hasReceipt ? original.timingAwareness : undefined };
+			f.setResult(supplied); const before = structuredClone(f.input.assignment), result = await f.executor.execute(f.input);
+			const emitted = vi.mocked(f.input.emit!).mock.calls.map(([event]) => event), failures = emitted.filter(event => event.type === 'execution.failed');
+			expect(failures).toHaveLength(1); expect(emitted.some(event => event.type === 'execution.completed')).toBe(false);
+			expect(failures[0]).toMatchObject({ summary: supplied.summary, payload: { sandboxId: original.sandboxId, status,
+				model: f.observed[0]!.modelPolicy.model, provider: f.observed[0]!.modelPolicy.provider,
+				capabilities: f.observed[0]!.modelPolicy.capabilities, usage: result.usage, timing: { elapsedSeconds: original.usage.elapsedSeconds },
+				resources: { cpuUserMicros: 123, cpuSystemMicros: 45, peakRssBytes: 4096 },
+				timingAwareness: hasReceipt ? original.timingAwareness : null }, protectedPayload: original.diagnostics });
+			expect(result.status).toBe(status === 'failed' ? 'failed' : 'returned'); expect(result.summary).toBe(supplied.summary);
+			expect(result.usage).toEqual([{ activeSeconds: 1.125, elapsedSeconds: 2.25, inputTokens: 19, outputTokens: 3,
+				cpuUserMicros: 123, cpuSystemMicros: 45, peakRssBytes: 4096,
+				nativeUsage: { activeSeconds: 1.125, elapsedSeconds: 2.25, input_tokens: 19, output_tokens: 3,
+					cpuUserMicros: 123, cpuSystemMicros: 45, peakRssBytes: 4096 } }]);
+			expect(f.result()).toEqual(supplied); expect(f.input.assignment).toEqual(before);
+			expect(f.client.destroy).toHaveBeenCalledTimes(1); expect(f.cleanup).toHaveBeenCalledTimes(1);
+		}
+	});
 	it('requires exact owning sandbox and assignment correlation before accepting a supplied completed result and retains observed usage on denial', async () => {
 		for (const patch of [{ sandboxId: 'foreign' }, { assignmentId: 'foreign' }]) {
 			const f = await suppliedMicrovm(), original = sandboxResultSchema.parse(f.result()), supplied = { ...original, ...patch }, before = structuredClone(f.input.assignment);

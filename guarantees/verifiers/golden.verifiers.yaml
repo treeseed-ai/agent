@@ -466,6 +466,11 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/execution/microvm-result-authority.test.ts
     testName: "requires exact owning sandbox and assignment correlation before accepting a supplied completed result and retains observed usage on denial"
+  agent.golden.execution-failed-model-observations-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/microvm-result-authority.test.ts
+    testName: "retains exact failed cancelled and expired model clock usage and resource observations without fabricating missing receipts or successful completion"
   agent.golden.execution-broker-boundary-unit-2:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

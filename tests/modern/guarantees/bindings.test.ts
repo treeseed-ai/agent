@@ -16,6 +16,21 @@ for (const file of readdirSync(resolve(root, 'guarantees/verifiers')).filter(pat
 }
 
 describe('capacity-provider guarantee execution bindings', () => {
+	it('binds exact six-pair graph and Reporter chronology requirements to their existing post-campaign native gates', () => {
+		const manifest = parse(readFileSync(resolve(root, 'guarantees/agent/golden/sdk-complete.guarantee.yaml'), 'utf8'));
+		const scene = parse(readFileSync(resolve(root, manifest.scene.manifest), 'utf8'));
+		const refs: string[] = scene.workflow.map((step: { action: { verifier: string } }) => step.action.verifier);
+		for (const [criterion, ref, testName] of [
+			['6d6749cd8c2676c6c50c009b55025ec3b951589db602440f63b76ba021159f20', 'agent.golden.live.graph', 'Golden runtime graph evidence satisfies its acceptance boundary'],
+			['3bf7f808c3baf5cc63fc5e8e8c065bc2cd87dea9e2df9aae4d1924565af6acd8', 'agent.golden.live.reporter', 'Golden runtime reporter evidence satisfies its acceptance boundary'],
+		]) {
+			expect(manifest.acceptanceCriteria.filter((value: { criterion: string }) => value.criterion === criterion))
+				.toEqual([{ criterion, verifierRefs: [ref] }]);
+			expect(registry.verifiers[ref]).toMatchObject({ kind: 'nodeTestCase', testFile: 'tests/acceptance/sdk-runtime-golden.test.ts', testName });
+			expect(refs.filter(value => value === ref)).toHaveLength(1);
+			expect(refs.indexOf(ref)).toBeGreaterThan(refs.indexOf('agent.golden.live.campaign'));
+		}
+	});
 	it('binds the exact model clock criterion to complete post campaign native readback without substituting component evidence', () => {
 		const manifest = parse(readFileSync(resolve(root, 'guarantees/agent/golden/sdk-complete.guarantee.yaml'), 'utf8'));
 		const prospectiveInputs = [
@@ -44,7 +59,9 @@ describe('capacity-provider guarantee execution bindings', () => {
 			verifierRefs: ['agent.golden.execution-clock-observation-live-1'] },
 			{ criterion: '7eaf9fdc1c264e2d0b28d2fc751da33a2ffcf98ca0d6446ac6e8672503dfa533',
 				verifierRefs: ['agent.golden.live.reporter', 'agent.golden.live.settlement'] }, ...prospectiveInputs,
-			{ criterion: '80496650a6ed5888fbda21ddcb15047d221874adb709887306dede9e3e93ff55', verifierRefs: ['agent.golden.live.results'] }]);
+			{ criterion: '80496650a6ed5888fbda21ddcb15047d221874adb709887306dede9e3e93ff55', verifierRefs: ['agent.golden.live.results'] },
+			{ criterion: '6d6749cd8c2676c6c50c009b55025ec3b951589db602440f63b76ba021159f20', verifierRefs: ['agent.golden.live.graph'] },
+			{ criterion: '3bf7f808c3baf5cc63fc5e8e8c065bc2cd87dea9e2df9aae4d1924565af6acd8', verifierRefs: ['agent.golden.live.reporter'] }]);
 		const scene = parse(readFileSync(resolve(root, manifest.scene.manifest), 'utf8'));
 		expect(scene.scope).toBe('local-integrated-runtime');
 		const refs = scene.workflow.map((step: { action: { verifier: string } }) => step.action.verifier);

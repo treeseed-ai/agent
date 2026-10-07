@@ -1,6 +1,10 @@
 schemaVersion: treeseed.guarantee-verifiers/v1
 ownerPackage: "@treeseed/agent"
 verifiers:
+  agent.golden.execution-sdk-boundary-bindings-unit:
+    kind: vitestCase
+    testFile: tests/modern/guarantees/bindings.test.ts
+    testName: binds exact six-pair graph and Reporter chronology requirements to their existing post-campaign native gates
   agent.golden.execution-clock-replay-unit:
     kind: vitestCase
     testFile: tests/modern/sandbox/architecture/clock-authority.test.ts

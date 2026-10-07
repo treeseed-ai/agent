@@ -1,6 +1,11 @@
 schemaVersion: treeseed.guarantee-verifiers/v1
 ownerPackage: "@treeseed/agent"
 verifiers:
+  agent.golden.execution-clock-observation-live-1:
+    kind: nodeTestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/acceptance/workday/context-custody.test.ts
+    testName: "Actual completed model assignments retain their exact first final and intermediate clock timestamps through authorized complete public event readback"
   agent.golden.execution-global-selection-live-1:
     kind: nodeTestCase
     ownerPackage: "@treeseed/agent"

@@ -12,7 +12,8 @@ const completion = JSON.parse(prompt.split('Captured completion:\n')[1].split('\
 const summary = evidence.map((item: { id: string; summary: string }) => `- ${item.id}: ${item.summary}`).join(mode === 'literal-newlines' ? '\\n' : '\n');
 if (mode === 'delay') await new Promise(resolve => setTimeout(resolve, 2_000));
 const startedAt = new Date().toISOString(), deadlineAt = new Date(Date.parse(startedAt) + 35_000).toISOString();
-const clock = (id: string, remainingSeconds: number) => { const value = { startedAt, deadlineAt, remainingSeconds }; return {
+const clock = (id: string, remainingSeconds: number) => { const value = { startedAt, deadlineAt, remainingSeconds,
+	observedAt: new Date(Date.parse(deadlineAt) - remainingSeconds * 1_000).toISOString() }; return {
 	type: 'item.completed', item: { id, type: 'mcp_tool_call', server: 'treedx', tool: 'treeseed_time_status', status: 'completed',
 		result: { content: [{ type: 'text', text: JSON.stringify(value) }], structuredContent: value } } }; };
 process.stdout.write(`${JSON.stringify(clock('initial', 35))}\n`);

@@ -245,8 +245,8 @@ describe('sandbox broker control transport', () => {
 		for (const mode of ['exact', 'missing', 'foreign-window', 'receipt-count', 'pending', 'zero', 'negative', 'string', 'null',
 			'fraction', 'over-window', 'increasing', 'absent-remaining', 'content-drift', 'clock-error', 'duplicate-clock',
 			'first-nonclock', 'final-nonclock', 'blocking-without-recheck', 'wrong-server', 'wrong-tool', 'frequent',
-			'absent-timestamp', 'null-timestamp', 'malformed-timestamp', 'numeric-timestamp', 'before-start-timestamp',
-			'expired-positive-timestamp', 'remaining-timestamp-drift', 'regressing-timestamp', 'timestamp-content-drift']) {
+			'absent-timestamp', 'null-timestamp', 'malformed-timestamp', 'numeric-timestamp', 'before-start-timestamp', 'expired-positive-timestamp',
+			'remaining-timestamp-drift', 'regressing-timestamp', 'timestamp-content-drift']) {
 			const f = await microvmBroker(); try {
 				const attempt = assignmentAttemptSchema.parse(f.input.assignment.assignmentAttempt), window = { startedAt: attempt.createdAt, deadlineAt: attempt.deadline };
 				const observed = mode === 'foreign-window' ? { startedAt: new Date(Date.parse(window.startedAt) + 1).toISOString(),
@@ -281,22 +281,14 @@ describe('sandbox broker control transport', () => {
 				if (['absent-timestamp', 'null-timestamp', 'malformed-timestamp', 'numeric-timestamp', 'before-start-timestamp',
 					'expired-positive-timestamp', 'remaining-timestamp-drift', 'regressing-timestamp', 'timestamp-content-drift'].includes(mode)) {
 					const values: Record<string, unknown> = { ...window, remainingSeconds: 29, observedAt: new Date(Date.parse(window.startedAt) + 1_000).toISOString() };
-					if (mode === 'absent-timestamp') delete values.observedAt;
-					if (mode === 'null-timestamp') values.observedAt = null;
-					if (mode === 'malformed-timestamp') values.observedAt = 'not-a-clock';
-					if (mode === 'numeric-timestamp') values.observedAt = Date.parse(window.startedAt);
-					if (mode === 'before-start-timestamp') values.observedAt = new Date(Date.parse(window.startedAt) - 1).toISOString();
-					if (mode === 'expired-positive-timestamp') values.observedAt = window.deadlineAt;
-					if (mode === 'remaining-timestamp-drift') values.observedAt = window.startedAt;
-					if (mode === 'regressing-timestamp') {
-						const first = clock('first-clock', 30); first.item.result.structuredContent.observedAt = new Date(Date.parse(window.startedAt) + 900).toISOString();
-						first.item.result.content[0]!.text = JSON.stringify(first.item.result.structuredContent); events[0] = first;
-						values.observedAt = new Date(Date.parse(window.startedAt) + 100).toISOString(); values.remainingSeconds = 30;
-					}
-					const final = clock('final-clock', 29);
-					events[1] = { ...final, item: { ...final.item, result: { content: [{ type: 'text', text: JSON.stringify(values) }],
-						structuredContent: mode === 'timestamp-content-drift' ? { ...values, observedAt: window.startedAt } : values } } };
-				}
+					if (mode === 'absent-timestamp') delete values.observedAt; if (mode === 'null-timestamp') values.observedAt = null;
+					if (mode === 'malformed-timestamp') values.observedAt = 'not-a-clock'; if (mode === 'numeric-timestamp') values.observedAt = Date.parse(window.startedAt);
+					if (mode === 'before-start-timestamp') values.observedAt = new Date(Date.parse(window.startedAt) - 1).toISOString(); if (mode === 'expired-positive-timestamp') values.observedAt = window.deadlineAt;
+					if (mode === 'remaining-timestamp-drift') values.observedAt = window.startedAt; if (mode === 'regressing-timestamp') {
+						const first = clock('first-clock', 30), value = { ...first.item.result.structuredContent, observedAt: new Date(Date.parse(window.startedAt) + 900).toISOString() };
+					events[0] = { ...first, item: { ...first.item, result: { content: [{ type: 'text', text: JSON.stringify(value) }], structuredContent: value } } };
+						values.observedAt = new Date(Date.parse(window.startedAt) + 100).toISOString(); values.remainingSeconds = 30; }
+					const final = clock('final-clock', 29), result = { content: [{ type: 'text', text: JSON.stringify(values) }], structuredContent: mode === 'timestamp-content-drift' ? { ...values, observedAt: window.startedAt } : values }; events[1] = { ...final, item: { ...final.item, result } }; }
 				const patch = { diagnostics: mode === 'missing' ? {} : { providerEvents: events },
 					timingAwareness: { ...timingAwareness, completedChecks: ['receipt-count', 'frequent'].includes(mode) ? 3 : 2 } };
 				f.patchResult(patch); const before = structuredClone(f.input.assignment), raw = structuredClone(patch);

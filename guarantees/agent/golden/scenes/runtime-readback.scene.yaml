@@ -3,6 +3,9 @@ id: agent.golden.runtime-readback
 title: SDK golden runtime read-back
 scope: local-integrated-runtime
 workflow:
+  - id: execution-clock-observation-live-1
+    action: { verifier: agent.golden.execution-clock-observation-live-1 }
+    expect: { status: passed }
   - id: lifecycle-evidence
     action: { verifier: agent.golden.live.lifecycle }
     expect: { status: passed }

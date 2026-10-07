@@ -1,6 +1,11 @@
 schemaVersion: treeseed.guarantee-verifiers/v1
 ownerPackage: "@treeseed/agent"
 verifiers:
+  agent.golden.execution-clock-readback-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/timing/guest-clock-contract.test.ts
+    testName: "binds public raw model clock evidence to its exact completed assignment event receipt and immutable original timestamps"
   agent.golden.execution-clock-observation-unit-1:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

@@ -7,8 +7,29 @@ import { parse } from 'yaml';
 import { isDeepStrictEqual } from 'node:util';
 import { read, row, type Row } from '../acceptance-cli.ts';
 import { readWorkdayAssignments } from '../sdk-runtime-golden.test.ts';
-import { verifyAssignmentAuthority, verifyExactContextSource, verifyKnowledgeBookSource, verifyDraftProposalHandoff } from './support/assignment-authority.ts';
+import { verifyAssignmentAuthority, verifyExactContextSource, verifyKnowledgeBookSource, verifyDraftProposalHandoff, verifyModelClockEvidence } from './support/assignment-authority.ts';
+import { readCompleteEvidence } from './support/evidence-pages.ts';
 import { verifySdkArchitectureBook } from '../prepare-campaign.ts';
+
+test('Actual completed model assignments retain their exact first final and intermediate clock timestamps through authorized complete public event readback', { timeout: 120_000 }, () => {
+	const id = process.env.TREESEED_ACCEPTANCE_WORKDAY_ID ?? '', team = process.env.TREESEED_ACCEPTANCE_TEAM ?? 'treeseed';
+	assert.match(id, /^workday-[a-f0-9-]+$/u);
+	const observed = read(['workdays', 'show', id], team), run = row(observed.run); assert.equal(run.id, id); assert.equal(run.status, 'completed');
+	const items = readWorkdayAssignments(id, String(run.startedAt), team), args = ['workdays', 'events', id, '--diagnostics', 'full'];
+	const events = readCompleteEvidence(args, team, 100, 'ACCEPTANCE_MODEL_CLOCK', 'ascending');
+	assert.ok(events.every(event => event.runId === id && event.teamId === run.teamId), 'ACCEPTANCE_MODEL_CLOCK_SCOPE');
+	const indexes = events.map(event => event.eventIndex); assert.ok(indexes.every(Number.isSafeInteger) && new Set(indexes).size === indexes.length);
+	assert.deepEqual([...indexes].sort((a, b) => Number(a) - Number(b)), Array.from({ length: indexes.length }, (_, index) => index), 'ACCEPTANCE_MODEL_CLOCK_COMPLETE_EVENTS');
+	const models = items.filter(item => item.status === 'completed' && ['chat', 'planning', 'estimating', 'acting', 'reviewing'].includes(String(row(row(item.assignmentAttempt).effectiveProfile).activity)));
+	assert.ok(models.length > 0, 'ACCEPTANCE_MODEL_CLOCK_EMPTY');
+	for (const item of models) {
+		const completions = events.filter(event => event.assignmentId === item.id && event.eventType === 'provider.execution.completed');
+		assert.equal(completions.length, 1, 'ACCEPTANCE_MODEL_CLOCK_COMPLETION_IDENTITY'); verifyModelClockEvidence(item, completions[0]!);
+	}
+	assert.ok(isDeepStrictEqual(readCompleteEvidence(args, team, 100, 'ACCEPTANCE_MODEL_CLOCK', 'ascending'), events), 'ACCEPTANCE_MODEL_CLOCK_IMMUTABLE');
+	assert.ok(isDeepStrictEqual(readWorkdayAssignments(id, String(run.startedAt), team), items), 'ACCEPTANCE_MODEL_CLOCK_ATTEMPT_READBACK');
+	assert.ok(isDeepStrictEqual(read(['workdays', 'show', id], team), observed), 'ACCEPTANCE_MODEL_CLOCK_WORKDAY_READBACK');
+});
 
 test('Actual draft Proposal handoff is independently read from its own granted publication without claiming accepted continuation authority', { timeout: 120_000 }, () => {
 	const id = process.env.TREESEED_ACCEPTANCE_WORKDAY_ID ?? '', team = process.env.TREESEED_ACCEPTANCE_TEAM ?? 'treeseed';

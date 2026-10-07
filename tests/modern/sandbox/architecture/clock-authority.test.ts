@@ -4,11 +4,11 @@ import { completedTimeStatusChecks, timingAwarenessContract } from '../../../../
 import { clockRequest } from './clock-fixture.ts';
 const clock = (status = 'completed', error: unknown = null) => ({ type: 'item.completed', item: {
 	type: 'mcp_tool_call', server: 'treedx', tool: 'treeseed_time_status', status, error,
-	result: { content: [{ type: 'text', text: JSON.stringify({ ...window, remainingSeconds: 30 }) }],
-		structuredContent: { ...window, remainingSeconds: 30 } } } });
+	result: { content: [{ type: 'text', text: JSON.stringify({ ...window, observedAt: window.startedAt, remainingSeconds: 30 }) }],
+		structuredContent: { ...window, observedAt: window.startedAt, remainingSeconds: 30 } } } });
 const command = { type: 'item.completed', item: { type: 'command_execution', status: 'completed', error: null } };
 const window = { startedAt: '2026-10-04T00:00:00.000Z', deadlineAt: '2026-10-04T00:00:30.000Z' };
-const reading = (remainingSeconds: number) => ({ ...window, remainingSeconds });
+const reading = (remainingSeconds: number) => ({ ...window, observedAt: new Date(Date.parse(window.deadlineAt) - remainingSeconds * 1_000).toISOString(), remainingSeconds });
 const mcpResult = (value: unknown) => ({ content: [{ type: 'text', text: JSON.stringify(value) }], structuredContent: value });
 const observedClock = (result: unknown) => ({ ...clock(), item: { ...clock().item, result } });
 

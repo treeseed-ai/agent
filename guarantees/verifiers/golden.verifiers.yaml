@@ -1,6 +1,21 @@
 schemaVersion: treeseed.guarantee-verifiers/v1
 ownerPackage: "@treeseed/agent"
 verifiers:
+  agent.golden.execution-report-attempt-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/golden-readback.test.ts
+    testName: "denies omitted duplicated or substituted frozen Reporter attempts even when the note and digest agree without repairing public results"
+  agent.golden.execution-report-settlement-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/golden-readback.test.ts
+    testName: "denies omitted duplicated changed and corrupt report settlements against independent complete ledger readback without repairing frozen or failed evidence"
+  agent.golden.execution-profile-ambiguity-native:
+    kind: vitestCase
+    ownerPackage: '@treeseed/agent'
+    testFile: tests/modern/guarantees/preflight/campaign-freeze-native.test.ts
+    testName: native public SDK profile inventory denies ambiguous governed identities without repairing bytes or hiding denied reads before unchanged retry
   agent.golden.execution-report-snapshot-unit:
     kind: vitestCase
     ownerPackage: '@treeseed/agent'

@@ -3,12 +3,45 @@ import { createHash, createPublicKey, verify } from 'node:crypto';
 import { lstatSync } from 'node:fs';
 import { isAbsolute, resolve } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
-import { assignmentAttemptSchema, assignmentResultSchema, capabilityAccountingLimitsSchema } from '@treeseed/sdk/agent-capacity';
+import { assignmentAttemptSchema, assignmentResultSchema, capabilityAccountingLimitsSchema, usageSettlementSchema } from '@treeseed/sdk/agent-capacity';
 import { capabilityConformanceSchema, capabilityDefinitionSchema, capabilityDefinitionDigest, capabilityOfferSchema } from '@treeseed/sdk/capacity-provider';
 import { canonicalStandardsJson } from '@treeseed/sdk/standards';
 import { row, type Row } from '../../acceptance-cli.ts';
 import { orderConnectionsForFairPolling } from '../../../../src/provider/teams/multi-team-runtime.ts';
 import { assertCanonicalRecordShapes } from './canonical-record-shape.ts';
+import { readCompleteEvidence } from './evidence-pages.ts';
+
+export function verifyReportRecordCustody(snapshot: Row, reporter: Row, assignments: Row[], team: string): void {
+	assert.ok(Array.isArray(snapshot.attempts), 'ACCEPTANCE_REPORT_ATTEMPTS: Complete original assignment collection required');
+	const observed = snapshot.attempts.map(value => { const attempt = row(value), result = typeof attempt.assignment_result_json === 'string' ? JSON.parse(attempt.assignment_result_json) : attempt.assignment_result_json;
+		if (result !== null && result !== undefined) assert.deepEqual(assignmentResultSchema.parse(result), result); return { id: attempt.id, status: attempt.status, result: result ?? null }; });
+	const original = assignments.filter(value => value.id !== reporter.id).map(value => ({ id: value.id, status: value.status, result: value.assignmentResult ?? null }));
+	const byId = (left: { id: unknown }, right: { id: unknown }) => String(left.id) < String(right.id) ? -1 : String(left.id) > String(right.id) ? 1 : 0;
+	assert.deepEqual(observed.sort(byId), original.sort(byId), 'ACCEPTANCE_REPORT_ATTEMPTS: Every original attempt status and canonical result must be retained');
+	assert.ok(Array.isArray(snapshot.settlements), 'ACCEPTANCE_REPORT_SETTLEMENTS: Complete canonical collection required');
+	const represented = snapshot.settlements.map(value => {
+		const parsed = usageSettlementSchema.parse(value); assert.deepEqual(parsed, value); return parsed;
+	});
+	assert.equal(new Set(represented.map(value => value.id)).size, represented.length, 'ACCEPTANCE_REPORT_SETTLEMENTS: Duplicate identity');
+	const expected: typeof represented = [], assignmentIds = new Set(assignments.map(value => value.id));
+	for (const projectId of new Set(assignments.map(value => String(value.projectId)))) {
+		const args = ['capacity', 'ledger', '--project', projectId, '--workday', String(reporter.workDayId)];
+		const ledger = readCompleteEvidence(args, team, 100, 'ACCEPTANCE_REPORT_LEDGER');
+		assert.deepEqual(readCompleteEvidence(args, team, 100, 'ACCEPTANCE_REPORT_LEDGER'), ledger, 'ACCEPTANCE_REPORT_LEDGER_IMMUTABLE');
+		for (const entry of ledger.filter(value => value.phase === 'task_completed_actual_settlement' && value.assignmentId !== reporter.id)) {
+			const value = usageSettlementSchema.parse(entry.usageSettlement); assert.deepEqual(value, entry.usageSettlement);
+			assert.ok(assignmentIds.has(value.assignmentId) && value.assignmentId === entry.assignmentId && value.id === entry.id
+				&& value.teamId === snapshot.teamId && value.workdayId === reporter.workDayId && value.projectId === projectId
+				&& value.settledAt === entry.createdAt, 'ACCEPTANCE_REPORT_SETTLEMENTS: Exact ledger and workday authority required');
+			expected.push(value);
+		}
+	}
+	assert.equal(expected.length, assignmentIds.size - 1, 'ACCEPTANCE_REPORT_SETTLEMENTS: Every pre-Reporter attempt requires its own settlement');
+	assert.equal(new Set(expected.map(value => value.assignmentId)).size, expected.length,
+		'ACCEPTANCE_REPORT_SETTLEMENTS: One attempt cannot substitute for another missing settlement');
+	const order = (left: (typeof represented)[number], right: (typeof represented)[number]) => left.id < right.id ? -1 : left.id > right.id ? 1 : 0;
+	assert.deepEqual([...represented].sort(order), expected.sort(order), 'ACCEPTANCE_REPORT_SETTLEMENTS: Every original predecessor settlement must be retained');
+}
 
 /** Signature custody only: a signed status/evidence digest is not independent
  * evidence that a qualification suite actually ran or passed. */

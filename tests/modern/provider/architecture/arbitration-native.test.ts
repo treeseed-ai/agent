@@ -314,13 +314,14 @@ describe('whole native provider polling arbitration boundary', () => {
 					: { [`${mode}Id`]: 'foreign' } });
 				// Flow YAML represents the same complete manifest without seven
 				// independent children repeatedly tokenizing its block indentation.
-				await f.write(true); phases.set(mode, 'RUN'); await f.run(); phases.set(mode, 'READBACK');
+				await f.write(true); phases.set(mode, 'RUN'); const result = row(await f.run()); phases.set(mode, 'READBACK');
 				return { foreignPoll: f.routes.some(item => item.path === f.pollPath && item.connectionId === busy.id),
 					healthyPoll: f.routes.some(item => item.path === f.pollPath && item.connectionId === 'quiet'),
+					productiveModulesLoaded: result.productiveModulesLoaded,
 					claims: (await f.store.snapshot()).claims.length };
 			} finally { phases.set(mode, 'CLOSE'); await f.close(); phases.set(mode, 'CLOSED'); }
 		}));
-		expect(outcomes).toEqual(modes.map(() => ({ foreignPoll: false, healthyPoll: true, claims: 0 })));
+		expect(outcomes).toEqual(modes.map(() => ({ foreignPoll: false, healthyPoll: true, productiveModulesLoaded: [], claims: 0 })));
 	});
 	it('applies actual host disk denial before any assignment poll slot or productive accounting admission', async () => {
 		const f = await arbitrationFixture();

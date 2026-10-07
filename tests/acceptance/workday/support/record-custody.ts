@@ -30,6 +30,9 @@ export function verifyReportSettlementCustody(snapshot: Row, reporter: Row, assi
 			expected.push(value);
 		}
 	}
+	assert.equal(expected.length, assignmentIds.size - 1, 'ACCEPTANCE_REPORT_SETTLEMENTS: Every pre-Reporter attempt requires its own settlement');
+	assert.equal(new Set(expected.map(value => value.assignmentId)).size, expected.length,
+		'ACCEPTANCE_REPORT_SETTLEMENTS: One attempt cannot substitute for another missing settlement');
 	const order = (left: (typeof represented)[number], right: (typeof represented)[number]) => left.id < right.id ? -1 : left.id > right.id ? 1 : 0;
 	assert.deepEqual([...represented].sort(order), expected.sort(order), 'ACCEPTANCE_REPORT_SETTLEMENTS: Every original predecessor settlement must be retained');
 }

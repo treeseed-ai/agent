@@ -186,6 +186,11 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/guarantees/preflight/campaign-freeze-native.test.ts
     testName: "native SDK preparation retains invalid campaign bytes and creates no proposal freeze or receipt directory before complete authority validation"
+  agent.golden.campaign-allocation-custody-native:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/preflight/campaign-freeze-native.test.ts
+    testName: "native pre-run reader denies every changed project weight class target and campaign identity while retaining exact bytes before unchanged retry"
   agent.golden.execution-packed-sbom-unit:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

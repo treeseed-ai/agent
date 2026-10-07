@@ -3,6 +3,9 @@ id: agent.golden.component-boundaries
 title: Golden execution component boundaries
 scope: local-component-tests
 workflow:
+  - id: campaign-allocation-custody-native
+    action: { verifier: agent.golden.campaign-allocation-custody-native }
+    expect: { status: passed }
   - id: execution-report-attempt-unit
     action: { verifier: agent.golden.execution-report-attempt-unit }
     expect: { status: passed }

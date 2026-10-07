@@ -149,6 +149,15 @@ describe('fresh automated SDK campaign preparation (fixtures are not acceptance)
 				system: 'For coordination-only messages, answer promptly. Inspect project files only when asked about source.' } },
 				reviewing: { prompt: { system: 'Review only a completed Actor candidate bound to an accepted decision; approve only proven work. Proposal feedback and estimates belong to planning.' } } } } }));
 		expect(() => verifySdkPublishedProfiles(profiles, head)).not.toThrow();
+		const original = structuredClone(profiles), ambiguities: boolean[] = [];
+		for (const profile of profiles) for (const staleFirst of [false, true]) {
+			const duplicate = { ...structuredClone(profile), definitionRevision: 'd'.repeat(40) };
+			const supplied = staleFirst ? [duplicate, ...structuredClone(profiles)] : [...structuredClone(profiles), duplicate];
+			const held = structuredClone(supplied); let denied = false;
+			try { verifySdkPublishedProfiles(supplied, head); } catch (error) { denied = error instanceof Error && error.message.includes('ACCEPTANCE_CHAT_PROFILE_PUBLISHED'); }
+			ambiguities.push(denied); expect(supplied).toEqual(held);
+		}
+		expect(profiles).toEqual(original); expect(ambiguities).toEqual(Array(16).fill(true));
 		expect(() => verifySdkPublishedProfiles(profiles, 'd'.repeat(40))).toThrow('ACCEPTANCE_CHAT_PROFILE_PUBLISHED');
 		const stale = structuredClone(profiles);
 		stale[5]!.definition.activityProfiles.chat.prompt.system = 'Research project sources before answering every message.';

@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { ControlPlaneClient, defaultLocalControlPlaneServer } from '@treeseed/sdk/control-plane-client';
 import { controlPlaneOperation } from '@treeseed/sdk/operator-contracts';
 import { afterEach, expect, it, vi } from 'vitest';
-import { prepareSdkCampaign } from '../../../acceptance/prepare-campaign.ts';
+import { prepareSdkCampaign, verifySdkPublishedProfiles } from '../../../acceptance/prepare-campaign.ts';
 import { readPreRunCampaignFreeze } from '../../../acceptance/freeze-integrity.ts';
 import { portfolioRelations, verifyProjectLibraryLookup } from '../../../acceptance/workday/support/portfolio-relations.ts';
 import { campaignInputs } from './campaign-freeze-fixture.ts';
@@ -15,6 +15,54 @@ import { row, type Row } from '../../../acceptance/acceptance-cli.ts';
 import { encodeCapacityPageCursor } from '@treeseed/sdk/capacity-pagination';
 
 afterEach(() => vi.unstubAllEnvs());
+
+it('native public SDK profile inventory denies ambiguous governed identities without repairing bytes or hiding denied reads before unchanged retry', async () => {
+	const head = 'a'.repeat(40), projectId = 'isolated-sdk-project';
+	const profiles = ['architect', 'researcher', 'tester', 'engineer', 'technical-writer', 'releaser', 'reviewer', 'reporter']
+		.map(agentSlug => ({ agentSlug, definitionRevision: head, definition: { capabilities: ['candidate-review'], activityProfiles: {
+			chat: { prompt: { system: 'For coordination-only messages, answer promptly. Inspect project files only when asked about source.' } },
+			reviewing: { prompt: { system: 'Review only a completed Actor candidate bound to an accepted decision; approve only proven work. Proposal feedback and estimates belong to planning.' } } } } }));
+	const held = structuredClone(profiles), history: Array<{ method: string; path: string; body: string }> = [];
+	let supplied = structuredClone(profiles), mode = 'exact';
+	const server = createServer((request, response) => {
+		let body = ''; request.setEncoding('utf8'); request.on('data', bytes => { body += String(bytes); }); request.on('end', () => {
+			history.push({ method: request.method ?? '', path: request.url ?? '', body }); response.setHeader('content-type', 'application/json');
+			if (request.method !== 'GET' || body || request.url !== `/v1/projects/${projectId}/agents`) { response.writeHead(500).end('{}'); return; }
+			if (mode === '403' || mode === '503') { response.writeHead(Number(mode)).end(JSON.stringify({ status: Number(mode), code: 'controlled_profile_denial', title: 'Retained denial' })); return; }
+			if (mode === 'json') { response.end('{'); return; } response.end(JSON.stringify({ data: { agents: supplied } }));
+		});
+	});
+	const observations: Array<{ mode: string; denied: boolean }> = [];
+	try {
+		await new Promise<void>((accept, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', accept); });
+		const address = server.address(); if (!address || typeof address === 'string') throw new Error('Allocated profile server required');
+		const client = new ControlPlaneClient({ profile: defaultLocalControlPlaneServer({ TREESEED_API_BASE_URL: `http://127.0.0.1:${address.port}` }), accessToken: 'controlled-profile-input' });
+		const execute = async () => {
+			const input = { path: { projectId }, query: {}, body: undefined }, original = structuredClone(input), originalProfiles = structuredClone(supplied);
+			let denied = false;
+			try {
+				const response = row((await client.invoke(controlPlaneOperation('agents.list'), input)).data);
+				if (!Array.isArray(response.agents)) throw new Error('Original profile collection required');
+				verifySdkPublishedProfiles(response.agents.map(row), head);
+			} catch { denied = true; }
+			expect(input).toEqual(original); expect(supplied).toEqual(originalProfiles); observations.push({ mode, denied }); return denied;
+		};
+		expect(await execute()).toBe(false);
+		for (const profile of profiles) for (const staleFirst of [false, true]) {
+			mode = `${profile.agentSlug}:${staleFirst}`; const duplicate = { ...structuredClone(profile), definitionRevision: 'b'.repeat(40) };
+			supplied = staleFirst ? [duplicate, ...structuredClone(profiles)] : [...structuredClone(profiles), duplicate]; await execute();
+		}
+		const ambiguities = observations.slice(1); supplied = structuredClone(profiles);
+		for (const denied of ['403', '503', 'json']) { mode = denied; expect(await execute()).toBe(true); }
+		const retained = structuredClone(observations), requests = structuredClone(history); mode = 'exact'; expect(await execute()).toBe(false);
+		expect(observations.slice(0, retained.length)).toEqual(retained); expect(history.slice(0, requests.length)).toEqual(requests);
+		expect(history.every(value => value.method === 'GET' && value.body === '')).toBe(true); expect(profiles).toEqual(held);
+		expect(ambiguities.map(value => value.denied)).toEqual(Array(16).fill(true));
+		// Supplied revisions/definitions/token are inputs, not native governance,
+		// model usage or a completed managed SDK campaign.
+	} finally { server.closeAllConnections(); if (server.listening) await new Promise<void>((accept, reject) => server.close(error => error ? reject(error) : accept())); }
+	expect(server.listening).toBe(false);
+});
 
 it('native public SDK event reads retain completed failed and returned model inventory and denial history before exact retry without source fallback', async () => {
 	const run = { id: 'workday-native-clock', teamId: 'native-team' }, items = ['completed', 'failed', 'returned'].map((status, index) => ({

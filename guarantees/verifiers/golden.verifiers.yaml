@@ -1,6 +1,11 @@
 schemaVersion: treeseed.guarantee-verifiers/v1
 ownerPackage: "@treeseed/agent"
 verifiers:
+  agent.golden.execution-profile-ambiguity-native:
+    kind: vitestCase
+    ownerPackage: '@treeseed/agent'
+    testFile: tests/modern/guarantees/preflight/campaign-freeze-native.test.ts
+    testName: native public SDK profile inventory denies ambiguous governed identities without repairing bytes or hiding denied reads before unchanged retry
   agent.golden.execution-report-snapshot-unit:
     kind: vitestCase
     ownerPackage: '@treeseed/agent'

@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { mkdtemp, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import type { ActivityCompletionReport } from '../activity-completion.ts';
 import { correctObservedTestFirstRedVerification, isReleaseReview, reportedVerificationCommands, record, text } from './guest-contract.ts';
 import { run } from './process-runner.ts';
@@ -78,6 +78,23 @@ export async function observeReportedActivityCommands(report: ActivityCompletion
 
 export function requiresNodeDependencyRestore(command: string) {
 	return /^(?:npm\s+(?:run|exec|test)(?:\s|$)|npx(?:\s|$))/u.test(command.trim());
+}
+
+export async function prepareNodeWorkspace(
+	root = '/workspace/project',
+	proxyUrl?: string,
+	execute: (executable: string, args: string[], options: { cwd: string; timeoutMs: number; env?: NodeJS.ProcessEnv }) => Promise<unknown>
+		= (executable, args, options) => run(executable, args, options),
+) {
+	const hasLock = await stat(resolve(root, 'package-lock.json')).then(() => true, () => false);
+	const hasManifest = await stat(resolve(root, 'package.json')).then(() => true, () => false);
+	const hasModules = await stat(resolve(root, 'node_modules')).then(() => true, () => false);
+	if (!hasLock || !hasManifest || hasModules) return false;
+	await execute('npm', ['ci', '--prefer-offline', '--no-audit', '--no-fund'], {
+		cwd: root, timeoutMs: 120_000,
+		...(proxyUrl ? { env: { ...process.env, HTTPS_PROXY: proxyUrl, https_proxy: proxyUrl } } : {}),
+	});
+	return true;
 }
 
 /** Fresh Reviewer execution, not a cache of the predecessor's passing receipts. */

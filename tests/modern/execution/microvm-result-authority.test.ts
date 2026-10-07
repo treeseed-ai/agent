@@ -67,6 +67,70 @@ async function suppliedMicrovm() {
 }
 
 describe('microvm result and closeout authority', () => {
+	it('denies missing malformed future expired and widened issued productive authority before executor work and closes the original clock without repairing inputs', async () => {
+		const outcomes: Array<{ mode: string; executed: number; clockClosed: number; started: number; message: string; closeoutCause: boolean }> = [];
+		for (const mode of ['missing', 'object', 'malformed', 'before-admission', 'future', 'reversed', 'beyond-phase', 'over-duration', 'expired', 'close-denied']) {
+			const f = await suppliedMicrovm(), attempt = assignmentAttemptSchema.parse(f.input.assignment.assignmentAttempt);
+			let executionStartedAt: unknown = attempt.createdAt, executionDeadlineAt: unknown = attempt.deadline;
+			if (mode === 'missing') executionStartedAt = undefined;
+			if (mode === 'close-denied') { executionStartedAt = undefined; f.input.finishExecution = vi.fn(async () => { throw new Error('Original execution close denied.'); }); }
+			if (mode === 'object') executionStartedAt = new Date(attempt.createdAt);
+			if (mode === 'malformed') executionDeadlineAt = 'not-a-clock';
+			if (mode === 'before-admission') executionStartedAt = new Date(Date.parse(attempt.createdAt) - 1).toISOString();
+			if (mode === 'future') executionStartedAt = new Date(Date.parse(attempt.deadline) - 1_000).toISOString();
+			if (mode === 'reversed') executionDeadlineAt = attempt.createdAt;
+			if (mode === 'beyond-phase') executionDeadlineAt = new Date(Date.parse(attempt.deadline) + 1).toISOString();
+			if (mode === 'over-duration') {
+				attempt.limits.maximumSeconds = 3; f.input.assignment.assignmentAttempt = attempt;
+			}
+			if (mode === 'expired') {
+				attempt.createdAt = new Date(Date.now() - 10_000).toISOString(); f.input.assignment.assignmentAttempt = attempt;
+				executionStartedAt = attempt.createdAt; executionDeadlineAt = new Date(Date.now() - 1_000).toISOString();
+			}
+			const supplied = { capacityEnvelope: { budget: { time: { executionStartedAt, executionDeadlineAt } } } }, held = structuredClone(supplied), before = structuredClone(f.input.assignment);
+			f.input.beginExecution = vi.fn(async () => supplied); let failure: unknown;
+			try { await f.executor.execute(f.input); } catch (error) { failure = error; }
+			outcomes.push({ mode, executed: f.client.execute.mock.calls.length, clockClosed: vi.mocked(f.input.finishExecution!).mock.calls.length,
+				started: vi.mocked(f.input.emit!).mock.calls.filter(([event]) => event.type === 'execution.started' || event.type === 'execution.completed').length,
+				message: failure instanceof Error ? failure.message : '', closeoutCause: failure instanceof Error && failure.cause instanceof Error && failure.cause.message === 'Original execution close denied.' });
+			expect(f.client.destroy).toHaveBeenCalledTimes(1); expect(f.cleanup).toHaveBeenCalledTimes(1);
+			expect(supplied).toEqual(held); expect(f.input.assignment).toEqual(before);
+		}
+		expect(outcomes).toEqual(outcomes.map(({ mode }) => ({ mode, executed: 0, clockClosed: 1, started: 0, closeoutCause: mode === 'close-denied',
+			message: ['missing', 'object', 'malformed', 'close-denied'].includes(mode) ? 'API execution start omitted its authoritative productive window.'
+				: mode === 'expired' ? 'Assignment productive execution window expired.' : 'Assignment productive execution clock is invalid.' })));
+	});
+	it('retains exact failed cancelled and expired model clock usage and resource observations without fabricating missing receipts or successful completion', async () => {
+		for (const status of ['failed', 'cancelled', 'expired'] as const) for (const hasReceipt of [true, false]) {
+			const f = await suppliedMicrovm(), original = sandboxResultSchema.parse(f.result());
+			const supplied = { ...original, status, summary: `Original ${status} observation`,
+				usage: { ...original.usage, cpuUserMicros: 123, cpuSystemMicros: 45, peakRssBytes: 4096 },
+				timingAwareness: hasReceipt ? original.timingAwareness : undefined };
+			f.setResult(supplied); const before = structuredClone(f.input.assignment);
+			if (!hasReceipt) {
+				await expect(f.executor.execute(f.input)).rejects.toMatchObject({ issues: [{ path: ['timingAwareness'], code: 'invalid_type' }] });
+				expect(vi.mocked(f.input.emit!).mock.calls.some(([event]) => ['execution.completed', 'execution.failed'].includes(event.type))).toBe(false);
+				expect(f.result()).toEqual(supplied); expect(f.input.assignment).toEqual(before);
+				expect(f.client.destroy).toHaveBeenCalledTimes(1); expect(f.cleanup).toHaveBeenCalledTimes(1); continue;
+			}
+			const result = await f.executor.execute(f.input);
+			const emitted = vi.mocked(f.input.emit!).mock.calls.map(([event]) => event), failures = emitted.filter(event => event.type === 'execution.failed');
+			expect(failures).toHaveLength(1); expect(emitted.some(event => event.type === 'execution.completed')).toBe(false);
+			expect(failures[0]).toMatchObject({ summary: supplied.summary, payload: { sandboxId: original.sandboxId, status,
+				model: f.observed[0]!.modelPolicy.model, provider: f.observed[0]!.modelPolicy.provider,
+				capabilities: f.observed[0]!.modelPolicy.capabilities, usage: result.usage, timing: { elapsedSeconds: original.usage.elapsedSeconds },
+				resources: { cpuUserMicros: 123, cpuSystemMicros: 45, peakRssBytes: 4096 },
+				timingAwareness: original.timingAwareness }, protectedPayload: original.diagnostics });
+			expect(result.status).toBe(status === 'failed' ? 'failed' : 'returned'); expect(result.summary).toBe(supplied.summary);
+			expect(result.outputs?.timingAwareness).toEqual(original.timingAwareness);
+			expect(result.usage).toEqual([{ activeSeconds: 1.125, elapsedSeconds: 2.25, inputTokens: 19, outputTokens: 3,
+				cpuUserMicros: 123, cpuSystemMicros: 45, peakRssBytes: 4096,
+				nativeUsage: { activeSeconds: 1.125, elapsedSeconds: 2.25, input_tokens: 19, output_tokens: 3,
+					cpuUserMicros: 123, cpuSystemMicros: 45, peakRssBytes: 4096 } }]);
+			expect(f.result()).toEqual(supplied); expect(f.input.assignment).toEqual(before);
+			expect(f.client.destroy).toHaveBeenCalledTimes(1); expect(f.cleanup).toHaveBeenCalledTimes(1);
+		}
+	});
 	it('requires exact owning sandbox and assignment correlation before accepting a supplied completed result and retains observed usage on denial', async () => {
 		for (const patch of [{ sandboxId: 'foreign' }, { assignmentId: 'foreign' }]) {
 			const f = await suppliedMicrovm(), original = sandboxResultSchema.parse(f.result()), supplied = { ...original, ...patch }, before = structuredClone(f.input.assignment);
@@ -77,7 +141,7 @@ describe('microvm result and closeout authority', () => {
 			expect(f.client.destroy).toHaveBeenCalledTimes(1); expect(f.client.destroy).toHaveBeenCalledWith('owned-unit-sandbox', 'unit-operation'); expect(f.cleanup).toHaveBeenCalledTimes(1);
 		}
 	});
-	async function clockObservations(activity: 'chat' | 'planning' | 'estimating' | 'acting' | 'reviewing') {
+	async function clockObservations(activity: 'chat' | 'planning' | 'estimating' | 'acting' | 'reviewing', status: 'completed' | 'failed' | 'cancelled' | 'expired' = 'completed', deferAssertions = false) {
 		const f = await suppliedMicrovm();
 		const clockOutcomes: Array<{ mode: string; result: unknown; failure: unknown; completed: boolean }> = [];
 			for (const mode of ['exact', 'missing', 'foreign-window', 'receipt-count', 'pending', 'zero', 'negative', 'string', 'null',
@@ -118,7 +182,7 @@ describe('microvm result and closeout authority', () => {
 				if (mode === 'wrong-server') { const action = clock('final-clock', 29); action.item.server = 'foreign-clock'; events[1] = action; }
 				if (mode === 'wrong-tool') { const action = clock('final-clock', 29); action.item.tool = 'foreign-time-status'; events[1] = action; }
 				if (mode === 'pending') events.splice(1, 0, { type: 'item.started', item: { id: 'uncompleted-command', type: 'command_execution', status: 'in_progress' } });
-				const supplied = { ...original, diagnostics: mode === 'missing' ? {} : { providerEvents: events },
+				const supplied = { ...original, status, summary: `Original ${status} provider observation`, diagnostics: mode === 'missing' ? {} : { providerEvents: events },
 					timingAwareness: { ...timingAwareness, completedChecks: ['receipt-count', 'frequent'].includes(mode) ? 3 : 2 } };
 				f.setResult(supplied); const before = structuredClone(f.input.assignment); let result: Awaited<ReturnType<typeof f.executor.execute>> | undefined, failure: unknown;
 				try { result = await f.executor.execute(f.input); } catch (error) { failure = error; }
@@ -126,16 +190,25 @@ describe('microvm result and closeout authority', () => {
 				expect(f.result()).toEqual(supplied); expect(f.input.assignment).toEqual(before); expect(f.client.execute).toHaveBeenCalledTimes(1);
 				expect(f.client.destroy).toHaveBeenCalledTimes(1); expect(f.cleanup).toHaveBeenCalledTimes(1);
 			}
-		for (const observed of clockOutcomes) {
-			if (['exact', 'frequent'].includes(observed.mode)) { expect(observed.failure).toBeUndefined(); expect(observed.result).toMatchObject({ status: 'completed' }); }
-			else { expect(observed.result).toBeUndefined(); expect(observed.failure).toMatchObject({ message: 'Completed sandbox result lacks valid timing-awareness evidence.' }); expect(observed.completed).toBe(false); }
-		}
+		const verify = () => { for (const observed of clockOutcomes) {
+			if (['exact', 'frequent'].includes(observed.mode)) { expect(observed.failure).toBeUndefined(); expect(observed.result).toMatchObject({ status: status === 'completed' ? 'completed' : status === 'failed' ? 'failed' : 'returned' }); }
+			else {
+				expect(observed.result).toBeUndefined(); expect(observed.failure).toMatchObject({ message: `${status === 'completed' ? 'Completed' : 'Non-completed'} sandbox result lacks valid timing-awareness evidence.` }); expect(observed.completed).toBe(false);
+				if (status !== 'completed') expect(observed.failure).toMatchObject({ cause: { message: `Original ${status} provider observation` }, usage: [{ activeSeconds: 1.125, elapsedSeconds: 2.25, inputTokens: 19, outputTokens: 3 }] });
+			}
+		} };
+		if (!deferAssertions) verify(); return verify;
 	}
 	it('checks every chat timing observation without resetting the original productive window', () => clockObservations('chat'));
 	it('checks every planning timing observation without resetting the original productive window', () => clockObservations('planning'));
 	it('checks every estimating timing observation without resetting the original productive window', () => clockObservations('estimating'));
 	it('checks every acting timing observation without resetting the original productive window', () => clockObservations('acting'));
 	it('checks every reviewing timing observation without resetting the original productive window', () => clockObservations('reviewing'));
+	it('checks exact first final frequent and denied clock evidence for every failed cancelled and expired result without replacing the original failure or usage', async () => {
+		const observations = [];
+		for (const status of ['failed', 'cancelled', 'expired'] as const) observations.push(await clockObservations('acting', status, true));
+		for (const verify of observations) verify();
+	});
 	it('requires one exact verified owning destroy receipt without losing original cleanup errors measurements or unverified observations', async () => {
 		for (const supplied of [null, {}, { sandboxId: 'foreign', destroyed: true, teardown: { verified: true, completedAt: new Date().toISOString() } },
 			{ sandboxId: 'owned-unit-sandbox', destroyed: false, teardown: { verified: false, completedAt: null } },

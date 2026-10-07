@@ -21,11 +21,11 @@ export function modelExecutionInventory(items: Row[], events: Row[], run: Row): 
 		assert.equal(event.runId, run.id); assert.equal(event.teamId, run.teamId);
 		identities.add(event.id); indexes.add(Number(event.eventIndex));
 	}
-	const modelEvent = (event: Row) => Object.hasOwn(row(event.payload), 'model') || row(event.payload).isolation === 'microvm';
+	const modelEvent = (event: Row) => Object.hasOwn(row(event.context), 'model') || row(event.context).isolation === 'microvm';
 	const starts = events.filter(event => event.eventType === 'provider.execution.started' && modelEvent(event));
 	assert.ok(starts.length > 0, 'ACCEPTANCE_MODEL_INVENTORY_EMPTY');
 	const seen = new Set<string>(), inventory = starts.map(started => {
-		assert.ok(typeof row(started.payload).model === 'string' && String(row(started.payload).model).trim(), 'ACCEPTANCE_MODEL_INVENTORY_MODEL');
+		assert.ok(typeof row(started.context).model === 'string' && String(row(started.context).model).trim(), 'ACCEPTANCE_MODEL_INVENTORY_MODEL');
 		assert.ok(typeof started.assignmentId === 'string' && !seen.has(started.assignmentId), 'ACCEPTANCE_MODEL_INVENTORY_ATTEMPT');
 		seen.add(started.assignmentId); const item = owners.get(started.assignmentId);
 		assert.ok(item, 'ACCEPTANCE_MODEL_INVENTORY_OWNER'); const attempt = row(item.assignmentAttempt);
@@ -50,19 +50,22 @@ export function modelExecutionInventory(items: Row[], events: Row[], run: Row): 
 /** Raw public owning-event assertions, not a second runtime clock or receipt. */
 export function verifyModelClockEvidence(item: Row, event: Row): void {
 	const attempt = row(item.assignmentAttempt), result = row(item.assignmentResult), time = row(row(row(item.capacityEnvelope).budget).time);
-	assert.equal(item.status, 'completed'); assert.equal(result.assignmentId, item.id); assert.equal(result.status, 'completed');
+	assert.ok(['completed', 'failed'].includes(String(result.status)), 'ACCEPTANCE_MODEL_CLOCK_RESULT');
+	assert.equal(item.status, result.status); assert.equal(result.assignmentId, item.id);
 	for (const field of ['id', 'teamId', 'projectId', 'workdayId']) assert.ok(typeof attempt[field] === 'string' && attempt[field], 'ACCEPTANCE_MODEL_CLOCK_AUTHORITY');
 	assert.equal(attempt.id, item.id); assert.equal(event.assignmentId, item.id); assert.equal(event.runId, attempt.workdayId);
 	assert.equal(event.workdayId, attempt.workdayId); assert.equal(event.teamId, attempt.teamId); assert.equal(event.projectId, attempt.projectId);
-	assert.equal(event.eventType, 'provider.execution.completed'); assert.ok(['recorded', 'completed'].includes(String(event.status)), 'ACCEPTANCE_MODEL_CLOCK_EVENT');
+	assert.equal(event.eventType, `provider.execution.${result.status}`); assert.ok(['recorded', 'completed'].includes(String(event.status)), 'ACCEPTANCE_MODEL_CLOCK_EVENT');
 	assert.ok(typeof event.id === 'string' && event.id && Number.isSafeInteger(event.eventIndex), 'ACCEPTANCE_MODEL_CLOCK_EVENT_ID');
 	const raw = row(event.protectedPayload).providerEvents;
 	assert.ok(Array.isArray(raw) && raw.length > 0 && raw.every(value => value && typeof value === 'object' && !Array.isArray(value)), 'ACCEPTANCE_MODEL_CLOCK_RAW');
 	const events = raw.map(row), actual = timingAwarenessContract(events);
 	assert.ok(isDeepStrictEqual(actual, result.timingAwareness) && actual.completedChecks >= 2 && actual.firstToolCompliant && actual.finalToolCompliant,
 		'ACCEPTANCE_MODEL_CLOCK_RECEIPT: Actual retained model actions must match the canonical receipt');
-	const deadline = Date.parse(String(attempt.deadline)), started = Date.parse(String(time.executionStartedAt)), completed = Date.parse(String(result.completedAt));
-	assert.ok([deadline, started, completed].every(Number.isFinite) && started <= completed && completed <= deadline, 'ACCEPTANCE_MODEL_CLOCK_WINDOW');
+	const phaseDeadline = Date.parse(String(attempt.deadline)), deadline = Date.parse(String(time.executionDeadlineAt)),
+		started = Date.parse(String(time.executionStartedAt)), completed = Date.parse(String(result.completedAt));
+	assert.ok([phaseDeadline, deadline, started, completed].every(Number.isFinite) && started < deadline
+		&& deadline <= phaseDeadline && started <= completed && completed < deadline, 'ACCEPTANCE_MODEL_CLOCK_WINDOW');
 	assert.ok(Number.isFinite(Date.parse(String(event.createdAt))) && Date.parse(String(event.createdAt)) >= completed, 'ACCEPTANCE_MODEL_CLOCK_REPORTING');
 	const ids = new Set<string>(), pending = new Set<string>(); let previous = -Infinity, checked = false;
 	for (const action of events) {
@@ -71,7 +74,7 @@ export function verifyModelClockEvidence(item: Row, event: Row): void {
 		if (action.type !== 'item.completed') continue;
 		if (value.type === 'mcp_tool_call' && value.server === 'treedx' && value.tool === 'treeseed_time_status') {
 			const reading = clockReading(value.result); assert.ok(reading, 'ACCEPTANCE_MODEL_CLOCK_READING');
-			assert.equal(reading.startedAt, time.executionStartedAt); assert.equal(reading.deadlineAt, attempt.deadline);
+			assert.equal(reading.startedAt, time.executionStartedAt); assert.equal(reading.deadlineAt, time.executionDeadlineAt);
 			const observed = Date.parse(reading.observedAt);
 			assert.ok(observed >= started && observed >= previous && observed <= completed && reading.remainingSeconds > 0,
 				'ACCEPTANCE_MODEL_CLOCK_TIMESTAMP: Original live observation must precede completion and not regress');

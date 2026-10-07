@@ -3,6 +3,39 @@ id: agent.golden.component-boundaries
 title: Golden execution component boundaries
 scope: local-component-tests
 workflow:
+  - id: execution-failed-clock-readback-unit
+    action: { verifier: agent.golden.execution-failed-clock-readback-unit }
+    expect: { status: passed }
+  - id: execution-canonical-failure-unit
+    action: { verifier: agent.golden.execution-canonical-failure-unit }
+    expect: { status: passed }
+  - id: execution-noncompleted-clock-unit
+    action: { verifier: agent.golden.execution-noncompleted-clock-unit }
+    expect: { status: passed }
+  - id: execution-noncompleted-clock-native
+    action: { verifier: agent.golden.execution-noncompleted-clock-native }
+    expect: { status: passed }
+  - id: execution-failed-guest-measurements-unit
+    action: { verifier: agent.golden.execution-failed-guest-measurements-unit }
+    expect: { status: passed }
+  - id: execution-issued-window-unit
+    action: { verifier: agent.golden.execution-issued-window-unit }
+    expect: { status: passed }
+  - id: execution-issued-window-native
+    action: { verifier: agent.golden.execution-issued-window-native }
+    expect: { status: passed }
+  - id: execution-active-materialization-unit
+    action: { verifier: agent.golden.execution-active-materialization-unit }
+    expect: { status: passed }
+  - id: execution-productive-window-readback-unit
+    action: { verifier: agent.golden.execution-productive-window-readback-unit }
+    expect: { status: passed }
+  - id: execution-productive-window-readback-native
+    action: { verifier: agent.golden.execution-productive-window-readback-native }
+    expect: { status: passed }
+  - id: execution-failed-model-observations-unit
+    action: { verifier: agent.golden.execution-failed-model-observations-unit }
+    expect: { status: passed }
   - id: execution-model-inventory-unit
     action: { verifier: agent.golden.execution-model-inventory-unit }
     expect: { status: passed }

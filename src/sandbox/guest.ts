@@ -14,8 +14,8 @@ import { activityCompletionOutputSchema, validateActivityCompletion } from '../a
 import { completionFrontmatterSchema, completionOutputTargetVariants, promptFromContext, assertArchitectSourceCitation, assertTesterFailureEvidence, attachObservedTesterFailures, correctObservedTestFirstRedVerification, omitUnreplayableVerification, codexReasoningArguments, codexProjectInstructionArguments, codexInteractiveTimeoutMs, requiresActivityCompletion, record, text, providerToolName, codexToolInFlight, codexIdleTimeoutMs, codexCloseoutTimeoutMs, codexResumeIdleTimeoutMs } from './guest-contract.ts';
 import { planningSynthesisOutputSchema, assertPredecessorSynthesis } from '../kernel/handlers/planning-synthesis.ts';
 import { recoverPlanningSynthesis } from './planning-synthesis-recovery.ts';
-import { objectDigest, observeReportedActivityCommands, prepareReleaseReview } from './verification.ts';
-export { observeReportedActivityCommands, verifyReportedActivityCommands, requiresNodeDependencyRestore } from './verification.ts';
+import { objectDigest, observeReportedActivityCommands, prepareReleaseReview, prepareNodeWorkspace } from './verification.ts';
+export { observeReportedActivityCommands, verifyReportedActivityCommands, requiresNodeDependencyRestore, prepareNodeWorkspace } from './verification.ts';
 
 const inputRoot = '/run/treeseed-assignment';
 const outputRoot = '/run/treeseed-output';
@@ -77,6 +77,8 @@ type TimingAwarenessTracker = {
 	completedChecks: number;
 	firstTool: string | null;
 	firstToolSucceeded: boolean;
+	firstToolItemId?: unknown;
+	firstToolPending?: boolean;
 	lastTool: string | null;
 	lastToolSucceeded: boolean;
 	clockWindow?: { startedAt: string; deadlineAt: string; observedAt: string; remainingSeconds: number };
@@ -114,8 +116,12 @@ export function observeTimingAwarenessEvent(tracker: TimingAwarenessTracker, eve
 			|| reading.remainingSeconds > prior.remainingSeconds || Date.parse(reading.observedAt) < Date.parse(prior.observedAt))) { tracker.clockInvalid = true; succeeded = false; }
 		else tracker.clockWindow = reading;
 	}
-	if (!tracker.firstTool) { tracker.firstTool = tool; tracker.firstToolSucceeded = succeeded; }
-	else if (completed && tracker.firstTool === tool && tracker.lastTool === tool) tracker.firstToolSucceeded ||= succeeded;
+	if (!tracker.firstTool) {
+		tracker.firstTool = tool; tracker.firstToolSucceeded = succeeded;
+		tracker.firstToolItemId = item.id; tracker.firstToolPending = !completed;
+	} else if (tracker.firstToolPending && completed && tracker.firstTool === tool && tracker.firstToolItemId === item.id) {
+		tracker.firstToolSucceeded = succeeded; tracker.firstToolPending = false;
+	}
 	tracker.lastTool = tool;
 	tracker.lastToolSucceeded = succeeded;
 	if (completed && tool === 'treedx:treeseed_time_status' && succeeded) tracker.completedChecks += 1;
@@ -124,7 +130,7 @@ export function observeTimingAwarenessEvent(tracker: TimingAwarenessTracker, eve
 
 export function timingAwarenessContract(events: Record<string, unknown>[]) {
 	const tracker = events.reduce(observeTimingAwarenessEvent, { completedChecks: 0, firstTool: null, firstToolSucceeded: false, lastTool: null, lastToolSucceeded: false } as TimingAwarenessTracker);
-	const { clockWindow: _window, clockInvalid, ...receipt } = tracker;
+	const { clockWindow: _window, clockInvalid, firstToolItemId: _firstId, firstToolPending: _firstPending, ...receipt } = tracker;
 	return { requiredChecks: 2, ...receipt,
 		schemaVersion: 'treeseed.assignment-timing-awareness/v1' as const,
 		firstToolCompliant: !clockInvalid && tracker.firstTool === 'treedx:treeseed_time_status' && tracker.firstToolSucceeded,
@@ -226,23 +232,6 @@ export function providerExecutionProgress(event: Record<string, unknown>) {
 	return `provider.command.${event.type === 'item.started' ? 'started' : 'completed'}.${category}${typeof item.exit_code === 'number' ? `.exit-${item.exit_code}` : ''}`;
 }
 
-export async function prepareNodeWorkspace(
-	root = '/workspace/project',
-	proxyUrl?: string,
-	execute: (executable: string, args: string[], options: { cwd: string; timeoutMs: number; env?: NodeJS.ProcessEnv }) => Promise<unknown>
-		= (executable, args, options) => run(executable, args, options),
-) {
-	const hasLock = await stat(resolve(root, 'package-lock.json')).then(() => true, () => false);
-	const hasManifest = await stat(resolve(root, 'package.json')).then(() => true, () => false);
-	const hasModules = await stat(resolve(root, 'node_modules')).then(() => true, () => false);
-	if (!hasLock || !hasManifest || hasModules) return false;
-	await execute('npm', ['ci', '--prefer-offline', '--no-audit', '--no-fund'], {
-		cwd: root, timeoutMs: 120_000,
-		...(proxyUrl ? { env: { ...process.env, HTTPS_PROXY: proxyUrl, https_proxy: proxyUrl } } : {}),
-	});
-	return true;
-}
-
 /** Keep completion evidence replayable: one validation command or pipeline, never a shell workflow or source mutation. */
 export async function runSandboxGuest() {
 	const started = process.hrtime.bigint(), usageBefore = process.resourceUsage();
@@ -255,6 +244,8 @@ export async function runSandboxGuest() {
 	const sandboxId = (await readFile(resolve(inputRoot, 'sandbox-id'), 'utf8')).trim(), operationToken = (await readFile(resolve(inputRoot, 'operation-token'), 'utf8')).trim();
 	const assignmentProxy = `http://${encodeURIComponent(sandboxId)}:${encodeURIComponent(operationToken)}@10.89.0.1:7444`;
 	await materialize(assignment, execute); const context = record(JSON.parse(await readFile('/workspace/.treeseed/context.json', 'utf8')));
+	// Exclude materialization from active usage; retain original timer/deadline bounds.
+	const productiveStarted = process.hrtime.bigint();
 	const relayEnvironment = { TREESEED_RELAY_URL: assignment.network.relayUrl, TREESEED_SANDBOX_ID: sandboxId,
 		TREESEED_GUEST_TOKEN: operationToken, TREESEED_RELAY_CA: '/workspace/.treeseed/relay-ca.crt' };
 	// Reuse the same API clock, without counting a trusted runtime read as a model check.
@@ -316,7 +307,7 @@ export async function runSandboxGuest() {
 		...codexProjectInstructionArguments(),
 		...(structuredCompletion ? ['--output-schema', completionSchemaPath] : []),
 		'--disable', 'browser_use', '--disable', 'apps', '--disable', 'multi_agent_v2', '--disable', 'image_generation', '--color', 'never', '--output-last-message', responsePath, '-C', '/workspace/project', '-'];
-	let providerError: Error | null = null, providerThreadId: string | null = null, closeoutInterrupted = false;
+	let providerThreadId: string | null = null, closeoutInterrupted = false;
 	const providerEnvironment = { PATH: '/usr/local/bin:/usr/bin:/bin', HOME: codexHome, CODEX_HOME: codexHome,
 		...relayEnvironment,
 		...(relay ? { OPENAI_BASE_URL: relay.baseUrl, OPENAI_API_KEY: 'treeseed-assignment-relay' } : {}),
@@ -324,7 +315,7 @@ export async function runSandboxGuest() {
 		await progress('provider.starting');
 		const idleTimeoutMs = canonicalActivity === 'estimating' ? codexIdleTimeoutMs(assignment.resources.durationSeconds) : undefined;
 		const closeoutTimeoutMs = codexCloseoutTimeoutMs(assignment.resources.durationSeconds, canonicalActivity);
-		await execute('/usr/local/bin/codex', providerArguments, {
+		const providerError = await execute('/usr/local/bin/codex', providerArguments, {
 			cwd: '/workspace/project', input: composedPrompt, env: providerEnvironment,
 			timeoutMs: codexInteractiveTimeoutMs(assignment.resources.durationSeconds),
 			...(idleTimeoutMs === undefined ? {} : { idleTimeoutMs }),
@@ -334,13 +325,13 @@ export async function runSandboxGuest() {
 				providerThreadId ??= codexThreadId([event]);
 				const executionProgress = providerExecutionProgress(event); if (executionProgress) void progress(executionProgress).catch(() => undefined);
 				observeTimingAwarenessEvent(timingTracker, event); events.push(event); },
-		}).catch(error => {
-			if (error instanceof Error && error.message === 'codex_closeout_interrupted') { closeoutInterrupted = true; return; }
+		}).then(() => null).catch(error => {
+			if (error instanceof Error && error.message === 'codex_closeout_interrupted') { closeoutInterrupted = true; return null; }
 			const secrets = [operationToken, ...(subscriptionAuth ? providerCredentialValues(JSON.parse(subscriptionAuth.toString('utf8'))) : [])];
 			const detail = providerFailureSummary(events, secrets);
 			// Avoid leaking credentials through the subprocess stderr fallback too.
 			const fallback = providerFailureSummary([{ type: 'error', message: error instanceof Error ? error.message : String(error) }], secrets);
-			providerError = new Error(`Codex execution failed: ${detail || fallback || 'no structured error was supplied'}`);
+			return new Error(`Codex execution failed: ${detail || fallback || 'no structured error was supplied'}`);
 		});
 		if (closeoutInterrupted) {
 			const remainingMs = getRemainingMs();
@@ -385,12 +376,11 @@ export async function runSandboxGuest() {
 			const refreshed = await readFile(resolve(codexHome, 'auth.json'));
 			await writeFile(resolve(outputRoot, 'codex-auth.json'), refreshed, { mode: 0o600 });
 		}
-		if (providerError) throw providerError;
-		await progress('provider.completed');
+		await progress(providerError ? 'provider.failed' : 'provider.completed');
 		const initialTiming = timingAwarenessContract(events);
 		const remainingMs = getRemainingMs();
 		const threadId = providerThreadId;
-		if (threadId && timingRecoveryEligible(initialTiming, remainingMs) && (await readFile(responsePath, 'utf8').catch(() => '')).trim()) {
+		if (!providerError && threadId && timingRecoveryEligible(initialTiming, remainingMs) && (await readFile(responsePath, 'utf8').catch(() => '')).trim()) {
 			await progress('provider.final-clock-recovery.starting');
 			const recoveryEvents: Record<string, unknown>[] = [];
 			const recoverySchemaPath = resolve(codexHome, 'final-clock.schema.json');
@@ -416,7 +406,7 @@ export async function runSandboxGuest() {
 			}
 			await progress('provider.final-clock-recovery.completed');
 		}
-		if (structuredCompletion && await recoverPlanningSynthesis({ context, activity: canonicalActivity, threadId,
+		if (!providerError && structuredCompletion && await recoverPlanningSynthesis({ context, activity: canonicalActivity, threadId,
 			responsePath, schemaPath: completionSchemaPath, allowVerification, remainingMs: getRemainingMs, execute,
 			model: assignment.modelPolicy.model, reasoningEffort: assignment.modelPolicy.reasoningEffort,
 			providerEnvironment, progress,
@@ -425,18 +415,18 @@ export async function runSandboxGuest() {
 				if (!correction.firstToolCompliant || !correction.finalToolCompliant || correctionEvents.some((event) => providerToolName(event) && providerToolName(event) !== 'treedx:treeseed_time_status')) throw new Error('Planning synthesis correction failed its clock-only tool boundary.'); },
 		}) && subscriptionAuth) {
 			await writeFile(resolve(outputRoot, 'codex-auth.json'), await readFile(resolve(codexHome, 'auth.json')), { mode: 0o600 }); }
-		const { clockWindow: _window, clockInvalid, ...timingReceipt } = timingTracker;
+		const { clockWindow: _window, clockInvalid, firstToolItemId: _firstId, firstToolPending: _firstPending, ...timingReceipt } = timingTracker;
 		const timingAwareness = { schemaVersion: 'treeseed.assignment-timing-awareness/v1' as const, requiredChecks: 2 as const, ...timingReceipt,
 			firstToolCompliant: !clockInvalid && timingTracker.firstTool === 'treedx:treeseed_time_status' && timingTracker.firstToolSucceeded,
 			finalToolCompliant: !clockInvalid && timingTracker.lastTool === 'treedx:treeseed_time_status' && timingTracker.lastToolSucceeded };
 		if (timingAwareness.completedChecks < 2 || !timingAwareness.firstToolCompliant || !timingAwareness.finalToolCompliant) {
 			const secrets = [operationToken, ...(subscriptionAuth ? providerCredentialValues(JSON.parse(subscriptionAuth.toString('utf8'))) : [])];
-			throw new Error(`Agent timing-awareness contract requires treeseed_time_status as the first and final tool actions with two completed checks. Provider errors: ${providerFailureSummary(events, secrets) || '(none)'}. Observed ${JSON.stringify(timingAwareness)}. Provider event shapes: ${JSON.stringify(providerEventShapeSummary(events, secrets))}. Response preview: ${providerResponsePreview(events, secrets) || '(empty)'}`);
+			throw new Error(`Agent timing-awareness contract requires treeseed_time_status as the first and final tool actions with two completed checks. Provider errors: ${providerError?.message ?? (providerFailureSummary(events, secrets) || '(none)')}. Observed ${JSON.stringify(timingAwareness)}. Provider event shapes: ${JSON.stringify(providerEventShapeSummary(events, secrets))}. Response preview: ${providerResponsePreview(events, secrets) || '(empty)'}`);
 		}
-		const rawResponse = (await readFile(responsePath, 'utf8')).trim(); if (!rawResponse) throw new Error('Execution provider returned an empty response.');
+		const rawResponse = providerError ? '' : (await readFile(responsePath, 'utf8')).trim(); if (!providerError && !rawResponse) throw new Error('Execution provider returned an empty response.');
 		const resourceAbort = providerResourceAbort(events);
 		if (resourceAbort) throw new Error(`sandbox_resource_exhausted: command exited ${resourceAbort.exitCode}: ${resourceAbort.command}`);
-		const validatedCompletion = structuredCompletion ? validateActivityCompletion(JSON.parse(rawResponse), allowVerification) : null;
+		const validatedCompletion = !providerError && structuredCompletion ? validateActivityCompletion(JSON.parse(rawResponse), allowVerification) : null;
 		const correctedCompletion = validatedCompletion ? correctObservedTestFirstRedVerification(validatedCompletion, events,
 			text(canonicalAssignment.agentClass), canonicalActivity, canonicalAssignment.acceptanceCriteria) : null;
 		const replayableCompletion = correctedCompletion ? omitUnreplayableVerification(correctedCompletion) : null;
@@ -445,11 +435,13 @@ export async function runSandboxGuest() {
 			: await observeReportedActivityCommands(replayableCompletion, diagnosticSecrets, execute, canonicalAssignment) : null;
 		const activityCompletion = attachObservedTesterFailures(observedCompletion?.report ?? null, events,
 			text(canonicalAssignment.agentClass), canonicalActivity, canonicalAssignment.acceptanceCriteria);
-		assertArchitectSourceCitation(activityCompletion, source?.commit ?? null, text(canonicalAssignment.agentClass), canonicalActivity);
-		assertTesterFailureEvidence(activityCompletion, text(canonicalAssignment.agentClass), canonicalActivity, canonicalAssignment.acceptanceCriteria);
-		assertPredecessorSynthesis(context, activityCompletion);
+		if (!providerError) {
+			assertArchitectSourceCitation(activityCompletion, source?.commit ?? null, text(canonicalAssignment.agentClass), canonicalActivity);
+			assertTesterFailureEvidence(activityCompletion, text(canonicalAssignment.agentClass), canonicalActivity, canonicalAssignment.acceptanceCriteria);
+			assertPredecessorSynthesis(context, activityCompletion);
+		}
 		const responseMarkdown = activityCompletion?.summary ?? rawResponse;
-		if (sourceMetadata?.mode === 'work') {
+		if (!providerError && sourceMetadata?.mode === 'work') {
 			// Do not trust the execution repository's index flags or stat cache when
 			// deciding whether a candidate is clean. The later verifier uses a fresh
 			// index as well, so both boundaries now evaluate the same committed tree.
@@ -475,10 +467,11 @@ export async function runSandboxGuest() {
 			: [];
 		const providerEventShapes = providerEventShapeSummary(events, diagnosticSecrets);
 		const artifacts: Array<{ id: string; path: string; digest: string; mediaType: string; bytes: number }> = [];
-		const completed = [...events].reverse().find((event) => text(event.type).includes('completed')) ?? {}, elapsedSeconds = Number(process.hrtime.bigint() - started) / 1e9, usageAfter = process.resourceUsage();
+		const completed = [...events].reverse().find((event) => text(event.type).includes('completed')) ?? {}, finished = process.hrtime.bigint(),
+			elapsedSeconds = Number(finished - started) / 1e9, activeSeconds = Number(finished - productiveStarted) / 1e9, usageAfter = process.resourceUsage();
 		const result = sandboxResultSchema.parse({ schemaVersion: 'treeseed.sandbox-result/v1', sandboxId, assignmentId: assignment.assignmentId,
-			status: responseMarkdown === '<!-- treeseed:abstain -->' ? 'completed' : 'completed', summary: 'Kata assignment completed.', responseMarkdown,
-			artifacts, timingAwareness, usage: { ...record(completed.usage), provenance: Object.keys(record(completed.usage)).length ? 'execution-provider' : 'unavailable', activeSeconds: elapsedSeconds, elapsedSeconds,
+			status: providerError ? 'failed' : 'completed', summary: providerError?.message ?? 'Kata assignment completed.', responseMarkdown: providerError ? undefined : responseMarkdown,
+			artifacts, timingAwareness, usage: { ...record(completed.usage), provenance: Object.keys(record(completed.usage)).length ? 'execution-provider' : 'unavailable', activeSeconds, elapsedSeconds,
 				cpuUserMicros: usageAfter.userCPUTime - usageBefore.userCPUTime, cpuSystemMicros: usageAfter.systemCPUTime - usageBefore.systemCPUTime, peakRssBytes: usageAfter.maxRSS * 1024 },
 			diagnostics: { systemPrompt: composedPrompt, providerEvents: redactProviderEvents(events, diagnosticSecrets), providerEventShapes, providerArguments, model: assignment.modelPolicy.model, provider: assignment.modelPolicy.provider, contextManifest: context, activityCompletion,
 				verificationRecords: observedCompletion?.verification ?? [], changedPaths,

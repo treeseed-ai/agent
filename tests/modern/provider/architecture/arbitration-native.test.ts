@@ -34,6 +34,9 @@ describe('whole native provider polling arbitration boundary', () => {
 		// Initialize in the first actual run child; the retry is still an independent restart.
 		const f = await arbitrationFixture(1, true);
 		try {
+			// Keep the same complete YAML input bytes for both independent restarts,
+			// without repeated cold block-indentation parsing in each native child.
+			await f.write(true);
 			await f.measure('busy-a'); await f.measure('busy-b');
 			const snapshot = await f.store.snapshot(), manifest = structuredClone(f.manifest), bytes = await readFile(f.config.manifestPath!);
 			const expected = { connections: manifest.connections.map(connection => ({ connection: { id: connection.id }, teamId: connection.teamId! })),
@@ -298,20 +301,30 @@ describe('whole native provider polling arbitration boundary', () => {
 	});
 	it('does not poll disabled denied or foreign token-bound connections and never borrows a healthy team token', async () => {
 		const modes = ['disabled', 'denied', 'team', 'provider', 'membership', 'credential', 'short'];
+		const phases = new Map<string, string>();
+		onTestFailed(() => { throw new Error(`ACCEPTANCE_PROVIDER_TOKEN_ISOLATION_${modes.map(mode => `${mode}_${phases.get(mode) ?? 'NOT_STARTED'}`).join('_')}: original native failure retained`); });
 		const outcomes = await Promise.all(modes.map(async mode => {
-			const f = await arbitrationFixture();
+			phases.set(mode, 'INITIALIZE');
+			// Each mode still owns an independent process and private identity. The
+			// original initializer runs in that mode's owning runtime child, not a
+			// second child loading the same complete module graph before polling.
+			const f = await arbitrationFixture(1, true);
 			try {
 				const busy = f.manifest.connections.find(item => item.id === 'busy-a')!;
 				if (mode === 'disabled') busy.enabled = false;
 				else if (mode === 'denied') f.faults.set(busy.id, { code: 403 });
 				else f.faults.set(busy.id, { tokenPatch: mode === 'short' ? { expiresAt: new Date().toISOString() }
 					: { [`${mode}Id`]: 'foreign' } });
-				await f.write(); await f.run();
+				// Flow YAML represents the same complete manifest without seven
+				// independent children repeatedly tokenizing its block indentation.
+				await f.write(true); phases.set(mode, 'RUN'); const result = row(await f.run()); phases.set(mode, 'READBACK');
 				return { foreignPoll: f.routes.some(item => item.path === f.pollPath && item.connectionId === busy.id),
+					healthyPoll: f.routes.some(item => item.path === f.pollPath && item.connectionId === 'quiet'),
+					productiveModulesLoaded: result.productiveModulesLoaded,
 					claims: (await f.store.snapshot()).claims.length };
-			} finally { await f.close(); }
+			} finally { phases.set(mode, 'CLOSE'); await f.close(); phases.set(mode, 'CLOSED'); }
 		}));
-		expect(outcomes).toEqual(modes.map(() => ({ foreignPoll: false, claims: 0 })));
+		expect(outcomes).toEqual(modes.map(() => ({ foreignPoll: false, healthyPoll: true, productiveModulesLoaded: [], claims: 0 })));
 	});
 	it('applies actual host disk denial before any assignment poll slot or productive accounting admission', async () => {
 		const f = await arbitrationFixture();

@@ -16,7 +16,63 @@ import { assignmentAttemptSchema } from '@treeseed/sdk/agent-capacity';
 import { redactProviderEvents } from '../../../../src/sandbox/provider-failure.ts';
 import { verifyModelClockEvidence, modelExecutionInventory } from '../../../acceptance/workday/support/assignment-authority.ts';
 const clockResult = { content: [{ type: 'text', text: JSON.stringify({ startedAt: '2026-10-04T00:00:00.000Z', deadlineAt: '2026-10-04T00:01:00.000Z', observedAt: '2026-10-04T00:00:00.000Z', remainingSeconds: 60 }) }] };
+const startedAt = '2026-10-04T00:00:00.000Z', deadlineAt = '2026-10-04T00:01:00.000Z';
+function publicClockEvidenceFixture() {
+	const clock = (id: string, observedAt: string, remainingSeconds: number) => { const value = { startedAt, deadlineAt, observedAt, remainingSeconds }; return {
+		type: 'item.completed', item: { id, type: 'mcp_tool_call', server: 'treedx', tool: 'treeseed_time_status', status: 'completed', error: null,
+			result: { content: [{ type: 'text', text: JSON.stringify(value) }], structuredContent: value } } }; };
+	const events = [clock('first', startedAt, 60), clock('final', '2026-10-04T00:00:01.000Z', 59)];
+	return { item: { id: 'assignment-clock', status: 'completed', assignmentAttempt: { id: 'assignment-clock', teamId: 'team-clock', projectId: 'sdk',
+		workdayId: 'workday-clock', deadline: deadlineAt }, capacityEnvelope: { budget: { time: { executionStartedAt: startedAt, executionDeadlineAt: deadlineAt } } },
+		assignmentResult: { assignmentId: 'assignment-clock', status: 'completed', completedAt: '2026-10-04T00:00:02.000Z', timingAwareness: {
+			schemaVersion: 'treeseed.assignment-timing-awareness/v1', requiredChecks: 2, completedChecks: 2, firstTool: 'treedx:treeseed_time_status',
+			firstToolSucceeded: true, lastTool: 'treedx:treeseed_time_status', lastToolSucceeded: true, firstToolCompliant: true, finalToolCompliant: true } } },
+		event: { id: 'provider-runtime:assignment-clock:complete', runId: 'workday-clock', workdayId: 'workday-clock', teamId: 'team-clock', projectId: 'sdk',
+			assignmentId: 'assignment-clock', eventIndex: 3, eventType: 'provider.execution.completed', status: 'recorded',
+			createdAt: '2026-10-04T00:00:02.001Z', protectedPayload: { providerEvents: events } } };
+}
 describe('Codex chat executor', () => {
+	it('reads exact failed model clocks without relabeling failure and denies missing contradictory late or substituted terminal evidence', () => {
+		const f = publicClockEvidenceFixture(); f.item.status = 'failed'; f.item.assignmentResult.status = 'failed'; f.event.eventType = 'provider.execution.failed';
+		const before = structuredClone(f); expect(() => verifyModelClockEvidence(f.item, f.event)).not.toThrow(); expect(f).toEqual(before);
+		for (const mode of ['completed-root', 'returned-root', 'completed-result', 'blocked-result', 'completed-event', 'missing-result',
+			'missing-raw', 'empty-raw', 'foreign-result', 'foreign-event', 'changed-receipt', 'duplicate-clock', 'failed-first-retried-clock', 'late-result']) {
+			const changed = structuredClone(f);
+			if (mode === 'completed-root' || mode === 'returned-root') changed.item.status = mode.split('-')[0]!;
+			if (mode === 'completed-result' || mode === 'blocked-result') changed.item.assignmentResult.status = mode.split('-')[0]!;
+			if (mode === 'completed-event') changed.event.eventType = 'provider.execution.completed';
+			if (mode === 'missing-result') Reflect.deleteProperty(changed.item, 'assignmentResult');
+			if (mode === 'missing-raw') Reflect.deleteProperty(changed.event, 'protectedPayload');
+			if (mode === 'empty-raw') changed.event.protectedPayload.providerEvents = [];
+			if (mode === 'foreign-result') changed.item.assignmentResult.assignmentId = 'foreign';
+			if (mode === 'foreign-event') changed.event.assignmentId = 'foreign';
+			if (mode === 'changed-receipt') changed.item.assignmentResult.timingAwareness.completedChecks = 3;
+			if (mode === 'duplicate-clock') changed.event.protectedPayload.providerEvents[1]!.item.id = 'first';
+			if (mode === 'failed-first-retried-clock') {
+				const denied = structuredClone(changed.event.protectedPayload.providerEvents[0]!);
+				Object.assign(denied.item, { id: 'original-denied-first', status: 'failed', error: 'Retained clock denial', result: undefined });
+				changed.event.protectedPayload.providerEvents.unshift(denied);
+			}
+			if (mode === 'late-result') changed.item.assignmentResult.completedAt = deadlineAt;
+			const held = structuredClone(changed); expect(() => verifyModelClockEvidence(changed.item, changed.event), mode).toThrow(); expect(changed).toEqual(held);
+		}
+	});
+	it('binds model clock readback to the issued productive window inside the unchanged phase deadline and denies missing widened or late productive evidence', () => {
+		const f = publicClockEvidenceFixture();
+		f.item.assignmentAttempt.deadline = '2026-10-04T00:20:00.000Z';
+		const before = structuredClone(f); expect(() => verifyModelClockEvidence(f.item, f.event)).not.toThrow(); expect(f).toEqual(before);
+		for (const mode of ['absent', 'empty', 'malformed', 'before-start', 'beyond-phase', 'changed-clock', 'late-result']) {
+			const changed = structuredClone(f), time = changed.item.capacityEnvelope.budget.time;
+			if (mode === 'absent') Reflect.deleteProperty(time, 'executionDeadlineAt');
+			if (mode === 'empty') time.executionDeadlineAt = '';
+			if (mode === 'malformed') time.executionDeadlineAt = 'not-a-clock';
+			if (mode === 'before-start') time.executionDeadlineAt = '2026-10-03T23:59:59.000Z';
+			if (mode === 'beyond-phase') time.executionDeadlineAt = '2026-10-04T00:20:00.001Z';
+			if (mode === 'changed-clock') time.executionDeadlineAt = '2026-10-04T00:01:01.000Z';
+			if (mode === 'late-result') changed.item.assignmentResult.completedAt = time.executionDeadlineAt;
+			const held = structuredClone(changed); expect(() => verifyModelClockEvidence(changed.item, changed.event)).toThrow(); expect(changed).toEqual(held);
+		}
+	});
 	it('discovers every recorded model execution including failed and returned renamed activities and denies missing ambiguous or foreign inventory without rewriting history', () => {
 		const fixture = () => {
 			const run = { id: 'workday-clock', teamId: 'team-clock' }, items = ['completed', 'failed', 'returned'].map((status, index) => ({
@@ -25,13 +81,13 @@ describe('Codex chat executor', () => {
 			const events = items.flatMap((item, index) => ['started', index ? 'failed' : 'completed'].map((phase, offset) => ({
 				id: `original-event-${index}-${offset}`, eventIndex: index * 2 + offset, eventType: `provider.execution.${phase}`,
 				runId: run.id, workdayId: run.id, teamId: run.teamId, projectId: 'original-project', assignmentId: item.id,
-				createdAt: `2026-10-07T00:00:0${index * 2 + offset}.000Z`, payload: { model: 'supplied-not-actual-model', isolation: 'microvm' } })));
+				createdAt: `2026-10-07T00:00:0${index * 2 + offset}.000Z`, context: { model: 'supplied-not-actual-model', isolation: 'microvm' } })));
 			return { run, items, events };
 		};
 		const f = fixture(), before = structuredClone(f);
 		expect(modelExecutionInventory(f.items, f.events, f.run).map(value => value.item.status)).toEqual(['completed', 'failed', 'returned']); expect(f).toEqual(before);
 		for (const mode of ['empty', 'missing-start', 'missing-terminal', 'duplicate-start', 'duplicate-terminal', 'duplicate-owner', 'missing-owner',
-			'foreign-run', 'foreign-team', 'foreign-project', 'foreign-attempt', 'empty-model', 'missing-model', 'bad-clock', 'reversed', 'duplicate-index']) {
+			'foreign-run', 'foreign-team', 'foreign-project', 'foreign-attempt', 'empty-model', 'missing-model', 'payload-only', 'bad-clock', 'reversed', 'duplicate-index']) {
 			const supplied = fixture();
 			if (mode === 'empty') supplied.events = [];
 			if (mode === 'missing-start') supplied.events.splice(0, 1);
@@ -44,8 +100,9 @@ describe('Codex chat executor', () => {
 			if (mode === 'foreign-team') supplied.events[0]!.teamId = 'foreign';
 			if (mode === 'foreign-project') supplied.events[0]!.projectId = 'foreign';
 			if (mode === 'foreign-attempt') supplied.items[0]!.assignmentAttempt.id = 'foreign';
-			if (mode === 'empty-model') supplied.events[0]!.payload.model = '';
-			if (mode === 'missing-model') Object.assign(supplied.events[0]!.payload, { model: undefined });
+			if (mode === 'empty-model') supplied.events[0]!.context.model = '';
+			if (mode === 'missing-model') Object.assign(supplied.events[0]!.context, { model: undefined });
+			if (mode === 'payload-only') for (const event of supplied.events) Object.assign(event, { payload: event.context, context: undefined });
 			if (mode === 'bad-clock') supplied.events[0]!.createdAt = 'invalid';
 			if (mode === 'reversed') supplied.events[0]!.createdAt = '2026-10-07T00:00:59.000Z';
 			if (mode === 'duplicate-index') supplied.events[1]!.eventIndex = 0;
@@ -78,20 +135,7 @@ describe('Codex chat executor', () => {
 	});
 	it('binds public raw model clock evidence to its exact completed assignment event receipt and immutable original timestamps', () => {
 		const startedAt = '2026-10-04T00:00:00.000Z', deadlineAt = '2026-10-04T00:01:00.000Z';
-		const fixture = () => {
-			const clock = (id: string, observedAt: string, remainingSeconds: number) => { const value = { startedAt, deadlineAt, observedAt, remainingSeconds }; return {
-				type: 'item.completed', item: { id, type: 'mcp_tool_call', server: 'treedx', tool: 'treeseed_time_status', status: 'completed', error: null,
-					result: { content: [{ type: 'text', text: JSON.stringify(value) }], structuredContent: value } } }; };
-			const events = [clock('first', startedAt, 60), clock('final', '2026-10-04T00:00:01.000Z', 59)];
-			return { item: { id: 'assignment-clock', status: 'completed', assignmentAttempt: { id: 'assignment-clock', teamId: 'team-clock', projectId: 'sdk',
-				workdayId: 'workday-clock', deadline: deadlineAt }, capacityEnvelope: { budget: { time: { executionStartedAt: startedAt } } },
-				assignmentResult: { assignmentId: 'assignment-clock', status: 'completed', completedAt: '2026-10-04T00:00:02.000Z', timingAwareness: {
-					schemaVersion: 'treeseed.assignment-timing-awareness/v1', requiredChecks: 2, completedChecks: 2, firstTool: 'treedx:treeseed_time_status',
-					firstToolSucceeded: true, lastTool: 'treedx:treeseed_time_status', lastToolSucceeded: true, firstToolCompliant: true, finalToolCompliant: true } } },
-				event: { id: 'provider-runtime:assignment-clock:complete', runId: 'workday-clock', workdayId: 'workday-clock', teamId: 'team-clock', projectId: 'sdk',
-					assignmentId: 'assignment-clock', eventIndex: 3, eventType: 'provider.execution.completed', status: 'recorded',
-					createdAt: '2026-10-04T00:00:02.001Z', protectedPayload: { providerEvents: events } } };
-		};
+		const fixture = publicClockEvidenceFixture;
 		const original = fixture(), before = structuredClone(original); expect(() => verifyModelClockEvidence(original.item, original.event)).not.toThrow(); expect(original).toEqual(before);
 		const mutations: Array<(f: ReturnType<typeof fixture>) => void> = [
 			f => { f.item.status = 'failed'; }, f => { f.event.assignmentId = 'foreign'; }, f => { f.event.teamId = 'foreign'; },

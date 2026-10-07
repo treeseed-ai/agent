@@ -104,6 +104,14 @@ describe('original productive clock and actual first final tool boundary contrac
 	});
 	it('requires two successful clock actions in actual first and final positions without granting compliance to failed checks', () => {
 		expect(timingAwarenessContract([clock(), command, clock()])).toMatchObject({ completedChecks: 2, firstToolCompliant: true, finalToolCompliant: true });
+		const started = { type: 'item.started', item: { ...clock().item, id: 'original-first', status: 'in_progress' } };
+		const completed = { ...clock(), item: { ...clock().item, id: 'original-first' } };
+		expect(timingAwarenessContract([started, completed, command, clock()])).toMatchObject({ completedChecks: 2, firstToolCompliant: true, finalToolCompliant: true });
+		for (const prefix of [[clock('failed', 'denied')], [{ ...clock('failed', 'denied'), item: { ...clock('failed', 'denied').item, id: 'original-denied' } }],
+			[started, { ...completed, item: { ...completed.item, id: 'foreign-first' } }]]) {
+			const events = [...prefix, clock(), clock()], before = structuredClone(events), receipt = timingAwarenessContract(events);
+			expect(receipt.completedChecks).toBeGreaterThanOrEqual(2); expect(receipt.firstToolCompliant).toBe(false); expect(events).toEqual(before);
+		}
 		const outcomes = [[command, clock(), clock()], [clock(), clock(), command], [clock('failed', 'denied'), command, clock()],
 			[clock(), command, clock('failed', 'denied')], [clock()], []].map(events => {
 			const receipt = timingAwarenessContract(events); return receipt.completedChecks >= 2 && receipt.firstToolCompliant && receipt.finalToolCompliant;

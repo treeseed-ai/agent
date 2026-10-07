@@ -16,6 +16,20 @@ for (const file of readdirSync(resolve(root, 'guarantees/verifiers')).filter(pat
 }
 
 describe('capacity-provider guarantee execution bindings', () => {
+	it('binds the exact model clock criterion to complete post campaign native readback without substituting component evidence', () => {
+		const manifest = parse(readFileSync(resolve(root, 'guarantees/agent/golden/sdk-complete.guarantee.yaml'), 'utf8'));
+		expect(manifest.acceptanceCriteria).toEqual([{ criterion: 'b635827ed7862d56b8764dfad30114b9ee18d02b4aa709a257841e18a1bd0f0d',
+			verifierRefs: ['agent.golden.execution-clock-observation-live-1'] }]);
+		const scene = parse(readFileSync(resolve(root, manifest.scene.manifest), 'utf8'));
+		expect(scene.scope).toBe('local-integrated-runtime');
+		const refs = scene.workflow.map((step: { action: { verifier: string } }) => step.action.verifier);
+		expect(refs.filter((ref: string) => ref === 'agent.golden.execution-clock-observation-live-1')).toHaveLength(1);
+		expect(refs.indexOf('agent.golden.live.campaign')).toBeGreaterThan(-1);
+		expect(refs.indexOf('agent.golden.execution-clock-observation-live-1')).toBeGreaterThan(refs.indexOf('agent.golden.live.campaign'));
+		expect(registry.verifiers['agent.golden.execution-clock-observation-live-1']).toMatchObject({ kind: 'nodeTestCase',
+			testFile: 'tests/acceptance/workday/context-custody.test.ts',
+			testName: 'Every actual recorded model execution is included in exact clock evidence readback without discarding failed or returned attempts' });
+	});
 	it('supplies exact canonical execution authority before complete verification and inherited scene prerequisites', () => {
 		const workflow = parse(readFileSync(resolve(root, '.github/workflows/verify.yml'), 'utf8'));
 		const job = workflow.jobs.verify, steps = job.steps;

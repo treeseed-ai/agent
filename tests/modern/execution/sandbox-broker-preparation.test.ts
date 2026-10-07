@@ -1,18 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
-import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
-import { createHash, randomBytes, X509Certificate } from 'node:crypto';
-import { tmpdir } from 'node:os';
+import { type IncomingMessage, type ServerResponse } from 'node:http';
+import { stat, writeFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import { assignmentAttemptSchema } from '@treeseed/sdk/agent-capacity';
-import { sandboxAssignmentSchema, sandboxResultSchema } from '@treeseed/sdk/capacity-provider';
-import { remainingPreparationMs, SandboxBrokerClient } from '../../../src/provider/execution/sandbox-broker-client.ts';
-import { createMicrovmExecutor, startSandboxToolPump } from '../../../src/provider/execution/microvm-executor.ts';
-import { createManagedProviderManifestV5 } from '../../../src/provider/configuration/managed-manifest.ts';
-import { initializeCapacityProviderIdentity } from '../../../src/provider/accounts/identity.ts';
-import type { ProviderHostRuntimeConfig } from '../../../src/provider/configuration/config.ts';
-import { request as executionRequest, timingAwareness, digest } from '../kernel/provider-kernel-fixture.ts';
+import { remainingPreparationMs } from '../../../src/provider/execution/sandbox-broker-client.ts';
+import { startSandboxToolPump } from '../../../src/provider/execution/microvm-executor.ts';
+import { request as executionRequest, timingAwareness } from '../kernel/provider-kernel-fixture.ts';
 import { nativeCloseoutTransport } from '../kernel/architecture/portable/portable-kernel-fixture.ts';
+import { broker, microvmBroker } from './fixtures/broker-preparation.ts';
+import { executeKernelAssignment } from '../../../src/kernel/provider-kernel-executor.ts';
+import { verifyModelClockEvidence } from '../../acceptance/workday/support/assignment-authority.ts';
 
 describe('sandbox broker preparation authority', () => {
 	it('uses the API-issued preparation deadline instead of an independent fifteen-second cutoff', () => {
@@ -28,115 +26,113 @@ describe('sandbox broker preparation authority', () => {
 	});
 });
 
-async function broker(handle: (request: IncomingMessage, response: ServerResponse) => void) {
-	const directory = await mkdtemp(join(tmpdir(), 'agent-broker-transport-'));
-	const socket = join(directory, 'broker.sock');
-	const server = createServer(handle);
-	await new Promise<void>((resolve, reject) => { server.once('error', reject); server.listen(socket, resolve); });
-	return { client: new SandboxBrokerClient(socket), directory, server, async close() {
-		server.closeAllConnections();
-		await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
-		await rm(directory, { recursive: true, force: true });
-	} };
-}
-
-// Original executor, signer, OS custody, native materialization and Unix HTTP.
-// Replies are controlled broker INPUTS, not actual Kata/host physical proof.
-async function microvmBroker() {
-	const paths: string[] = [], uploads = new Map<string, Buffer>();
-	const observations: Array<ReturnType<typeof sandboxResultSchema.parse>> = [];
-	let assigned: ReturnType<typeof sandboxAssignmentSchema.parse> | undefined, destroyedAt = '', beginCalls = 0, finishCalls = 0;
-	let resultPatch: Record<string, unknown> = {}, destroyReply: unknown, destroyFault = '', artifactBytes = Buffer.from('original artifact\n');
-	const events: Array<{ type: string; payload?: Record<string, unknown> }> = [];
-	const fixture = await broker((request, response) => {
-		const path = request.url ?? ''; paths.push(`${request.method} ${path}`); const chunks: Buffer[] = [];
-		request.on('data', chunk => { chunks.push(Buffer.from(chunk)); }); request.on('end', () => {
+describe('sandbox broker control transport', () => {
+	it('native microvm refuses missing substituted duplicate pending and unbracketed failed result clocks while preserving original measurements failure and allocated resource closure', async () => {
+		const outcomes: Array<{ status: string; mode: string; result: unknown; failure: unknown; terminal: boolean }> = [];
+		for (const status of ['failed', 'cancelled', 'expired'] as const) for (const mode of ['exact', 'missing', 'foreign-window', 'receipt-count', 'duplicate', 'pending', 'first-nonclock', 'final-nonclock']) {
+			const f = await microvmBroker();
 			try {
-				const bytes = Buffer.concat(chunks); response.setHeader('content-type', 'application/json');
-				if (path === '/v1/sandboxes') {
-					assigned = sandboxAssignmentSchema.parse(JSON.parse(bytes.toString('utf8')).assignment);
-					response.end('{"sandboxId":"owned-native-sandbox","operationToken":"controlled-native-operation"}'); return;
-				}
-				if (request.method === 'PUT' && path.includes('/inputs/')) { uploads.set(path.split('/').at(-1)!, bytes); response.end('{}'); return; }
-				if (path.endsWith('/tool-requests/next')) { response.end('{"request":null}'); return; }
-				if (path.endsWith('/execute')) {
-					if (!assigned) throw new Error('Original prepare required');
-					const window = { startedAt: new Date(Date.parse(assigned.leaseExpiresAt) - 30_000).toISOString(), deadlineAt: assigned.leaseExpiresAt };
-					const clock = (id: string, remainingSeconds: number) => { const value = { ...window, remainingSeconds,
-						observedAt: new Date(Date.parse(window.deadlineAt) - remainingSeconds * 1_000).toISOString() }; return {
-						type: 'item.completed', item: { id, type: 'mcp_tool_call', server: 'treedx', tool: 'treeseed_time_status', status: 'completed',
-							result: { content: [{ type: 'text', text: JSON.stringify(value) }], structuredContent: value } } }; };
-					const result = sandboxResultSchema.parse({ schemaVersion: 'treeseed.sandbox-result/v1', sandboxId: 'owned-native-sandbox', assignmentId: assigned.assignmentId,
-						status: 'completed', summary: 'Controlled complete native result', timingAwareness, artifacts: [],
-						usage: { activeSeconds: 1.125, elapsedSeconds: 2.25, input_tokens: 19, output_tokens: 3 },
-						diagnostics: { providerEvents: [clock('initial', 30), clock('final', 29)] },
-						teardown: { verified: false, completedAt: null }, ...resultPatch });
-					observations.push(structuredClone(result));
-					response.end(JSON.stringify(result)); return;
-				}
-				if (path.includes('/artifacts/')) { response.end(artifactBytes); return; }
-				if (request.method === 'DELETE') {
-					destroyedAt = new Date().toISOString();
-					if (destroyFault === 'reset') { request.socket.destroy(); return; }
-					if (destroyFault === 'json') { response.end('{'); return; }
-					if (destroyFault === '403' || destroyFault === '503') { response.statusCode = Number(destroyFault); response.end(JSON.stringify({ error: `original destroy ${destroyFault}` })); return; }
-					response.end(JSON.stringify(destroyReply ?? { sandboxId: 'owned-native-sandbox', destroyed: true, teardown: { verified: true, completedAt: destroyedAt } })); return;
-				}
-				response.statusCode = 500; response.end('{"error":"Unexpected native broker operation"}');
-			} catch (error) { response.statusCode = 500; response.end(JSON.stringify({ error: error instanceof Error ? error.message : 'Native input failed' })); }
-		});
-	});
-	const previousCustodyKey = process.env.TREESEED_PROVIDER_CREDENTIAL_KEK_FILE;
-	let custodyKey: string | undefined;
-	const close = async () => {
-		try { await fixture.close(); }
-		finally {
-			if (custodyKey && process.env.TREESEED_PROVIDER_CREDENTIAL_KEK_FILE === custodyKey) {
-				if (previousCustodyKey === undefined) delete process.env.TREESEED_PROVIDER_CREDENTIAL_KEK_FILE;
-				else process.env.TREESEED_PROVIDER_CREDENTIAL_KEK_FILE = previousCustodyKey;
+				const attempt = assignmentAttemptSchema.parse(f.input.assignment.assignmentAttempt);
+				const clock = (id: string, remainingSeconds: number) => {
+					const value = { startedAt: attempt.createdAt, deadlineAt: mode === 'foreign-window' ? new Date(Date.parse(attempt.deadline) + 1).toISOString() : attempt.deadline,
+						observedAt: new Date(Date.parse(attempt.deadline) - remainingSeconds * 1_000).toISOString(), remainingSeconds };
+					return { type: 'item.completed', item: { id, type: 'mcp_tool_call', server: 'treedx', tool: 'treeseed_time_status', status: 'completed', error: null,
+						result: { content: [{ type: 'text', text: JSON.stringify(value) }], structuredContent: value } } };
+				};
+				const events: unknown[] = [clock('first', 30), clock(mode === 'duplicate' ? 'first' : 'final', 29)];
+				const command = { type: mode === 'pending' ? 'item.started' : 'item.completed', item: { id: 'original-command', type: 'command_execution' } };
+				if (mode === 'pending') events.splice(1, 0, command); if (mode === 'first-nonclock') events.unshift(command); if (mode === 'final-nonclock') events.push(command);
+				const patch = { status, summary: `Original ${status} provider observation`, diagnostics: { providerEvents: mode === 'missing' ? [] : events },
+					timingAwareness: { ...timingAwareness, completedChecks: mode === 'receipt-count' ? 3 : 2 } }, held = structuredClone(patch), before = structuredClone(f.input.assignment);
+				f.patchResult(patch); let result: unknown, failure: unknown;
+				try { result = await f.executor.execute(f.input); } catch (error) { failure = error; }
+				outcomes.push({ status, mode, result, failure, terminal: f.events.some(event => ['execution.completed', 'execution.failed'].includes(event.type)) });
+				expect(patch).toEqual(held); expect(f.input.assignment).toEqual(before); expect(f.counters()).toEqual({ beginCalls: 1, finishCalls: 1 });
+				expect(f.paths.filter(path => path.endsWith('/execute'))).toHaveLength(1); expect(f.paths.filter(path => path.startsWith('DELETE '))).toEqual(['DELETE /v1/sandboxes/owned-native-sandbox']);
+			} finally { await f.close(); }
+			expect(f.server.listening).toBe(false); await expect(stat(f.directory)).rejects.toMatchObject({ code: 'ENOENT' });
+		}
+		for (const observed of outcomes) {
+			if (observed.mode === 'exact') { expect(observed.failure).toBeUndefined(); expect(observed.result).toMatchObject({ status: observed.status === 'failed' ? 'failed' : 'returned' }); expect(observed.terminal).toBe(true); }
+			else {
+				expect(observed.result).toBeUndefined(); expect(observed.terminal).toBe(false);
+				expect(observed.failure).toMatchObject({ message: 'Non-completed sandbox result lacks valid timing-awareness evidence.', cause: { message: `Original ${observed.status} provider observation` },
+					usage: [{ activeSeconds: 1.125, elapsedSeconds: 2.25, inputTokens: 19, outputTokens: 3 }] });
 			}
 		}
-	};
-	try {
-		// The relay CA remains the required original native binding (a disposable
-		// certificate on the CI runner). Only this fresh
-		// fixture identity uses an allocated mode-0600 OS custody key; no host
-		// provider secret is read, changed, or used as test authority.
-		const relayBytes = await readFile('/etc/treeseed/sandbox/relay-ca.crt');
-		const relayCertificate = new X509Certificate(relayBytes);
-		expect(relayCertificate.ca).toBe(true);
-		expect(relayCertificate.verify(relayCertificate.publicKey)).toBe(true);
-		custodyKey = join(fixture.directory, 'identity-custody-key');
-		await writeFile(custodyKey, randomBytes(32), { mode: 0o600 });
-		process.env.TREESEED_PROVIDER_CREDENTIAL_KEK_FILE = custodyKey;
-		const manifest = createManagedProviderManifestV5({ release: 'native-executor-input', guestImage: 'isolated/guest',
-			guestImageDigest: digest, baseImageDigest: digest, provenanceDigest: digest });
-		manifest.sandbox.brokerSocket = join(fixture.directory, 'broker.sock');
-		manifest.identity.privateKeyRef = 'data://native-executor-identity';
-		await initializeCapacityProviderIdentity({ ref: manifest.identity.privateKeyRef, baseDirectory: fixture.directory, dataDirectory: fixture.directory });
-		const adapter = manifest.adapters[0], binding = adapter?.offers[0];
-		if (!adapter || !binding) throw new Error('Original managed offer binding required');
-		const config: ProviderHostRuntimeConfig = { dataDir: fixture.directory, manifestPath: join(fixture.directory, 'manifest.yaml'), environment: 'local',
-			maxConcurrentRunners: 1, maxConcurrentWorkdays: 1, budgetFile: null, dailyAgentSecondsLimit: null, monthlyAgentSecondsLimit: null, env: {}, redactedEnv: {} };
-		const executor = await createMicrovmExecutor(config, manifest, adapter), input = executionRequest(), createdAt = new Date().toISOString();
-		const attempt = assignmentAttemptSchema.parse({ ...assignmentAttemptSchema.parse(input.assignment.assignmentAttempt), createdAt,
-			deadline: new Date(Date.parse(createdAt) + 30_000).toISOString(), workspace: { mode: 'read-only' }, contextRefs: [],
-			grant: { contentRead: [], contentWrite: [], sourceRead: [], sourceWrite: [], tools: [] },
-			provider: { ...assignmentAttemptSchema.parse(input.assignment.assignmentAttempt).provider, offerId: binding.offer.offerId } });
-		input.assignment = { id: attempt.id, assignmentAttempt: attempt, workspaceContext: { assignmentAttempt: attempt, predecessorResults: [] },
-			capacityProviderId: attempt.provider.providerId, teamId: attempt.teamId, projectId: attempt.projectId, attemptCount: attempt.attempt,
-			leaseExpiresAt: attempt.deadline, capacityEnvelope: { budget: { time: { preparationDeadlineAt: attempt.deadline } } } };
-		input.beginExecution = async () => { beginCalls++; return { capacityEnvelope: { budget: { time: { executionStartedAt: createdAt, executionDeadlineAt: attempt.deadline } } } }; };
-		input.finishExecution = async () => { finishCalls++; }; input.emit = async event => { events.push({ type: event.type, payload: event.payload }); };
-		return { ...fixture, close, executor, input, paths, uploads, events, relayBytes, manifest, observations,
-			assignment: () => assigned, counters: () => ({ beginCalls, finishCalls }), destroyedAt: () => destroyedAt,
-			patchResult(value: Record<string, unknown>) { resultPatch = value; },
-			patchDestroy(value: unknown, fault = '') { destroyReply = value; destroyFault = fault; },
-			artifact(value: Buffer) { artifactBytes = Buffer.from(value); } };
-	} catch (error) { await close(); throw error; }
-}
-
-describe('sandbox broker control transport', () => {
+	});
+	it('native microvm denies invalid issued productive authority before any broker execution while retaining the original assignment and closing allocated resources', async () => {
+		const outcomes: Array<{ mode: string; executed: number; clockClosed: number; started: number; message: string; closeoutCause: boolean }> = [];
+		for (const mode of ['missing', 'object', 'malformed', 'before-admission', 'future', 'reversed', 'beyond-phase', 'over-duration', 'expired', 'close-denied']) {
+			const f = await microvmBroker();
+			try {
+				const attempt = assignmentAttemptSchema.parse(f.input.assignment.assignmentAttempt);
+				let executionStartedAt: unknown = attempt.createdAt, executionDeadlineAt: unknown = attempt.deadline;
+				if (mode === 'missing') executionStartedAt = undefined;
+				if (mode === 'close-denied') {
+					executionStartedAt = undefined; const originalFinish = f.input.finishExecution!;
+					f.input.finishExecution = async () => { await originalFinish(); throw new Error('Original execution close denied.'); };
+				}
+				if (mode === 'object') executionStartedAt = new Date(attempt.createdAt);
+				if (mode === 'malformed') executionDeadlineAt = 'not-a-clock';
+				if (mode === 'before-admission') executionStartedAt = new Date(Date.parse(attempt.createdAt) - 1).toISOString();
+				if (mode === 'future') executionStartedAt = new Date(Date.parse(attempt.deadline) - 1_000).toISOString();
+				if (mode === 'reversed') executionDeadlineAt = attempt.createdAt;
+				if (mode === 'beyond-phase') executionDeadlineAt = new Date(Date.parse(attempt.deadline) + 1).toISOString();
+				if (mode === 'over-duration') { attempt.limits.maximumSeconds = 3; f.input.assignment.assignmentAttempt = attempt; }
+				if (mode === 'expired') {
+					attempt.createdAt = new Date(Date.now() - 10_000).toISOString(); f.input.assignment.assignmentAttempt = attempt;
+					executionStartedAt = attempt.createdAt; executionDeadlineAt = new Date(Date.now() - 1_000).toISOString();
+				}
+				const supplied = { capacityEnvelope: { budget: { time: { executionStartedAt, executionDeadlineAt } } } }, held = structuredClone(supplied), before = structuredClone(f.input.assignment);
+				f.input.beginExecution = async () => supplied; let failure: unknown;
+				try { await f.executor.execute(f.input); } catch (error) { failure = error; }
+				outcomes.push({ mode, executed: f.paths.filter(path => path.endsWith('/execute')).length,
+					clockClosed: f.counters().finishCalls, started: f.events.filter(event => event.type === 'execution.started').length,
+					message: failure instanceof Error ? failure.message : '', closeoutCause: failure instanceof Error && failure.cause instanceof Error && failure.cause.message === 'Original execution close denied.' });
+				expect(supplied).toEqual(held); expect(f.input.assignment).toEqual(before);
+				expect(f.paths.filter(path => path.startsWith('DELETE '))).toEqual(['DELETE /v1/sandboxes/owned-native-sandbox']);
+			} finally { await f.close(); }
+			expect(f.server.listening).toBe(false); await expect(stat(f.directory)).rejects.toMatchObject({ code: 'ENOENT' });
+		}
+		expect(outcomes).toEqual(outcomes.map(({ mode }) => ({ mode, executed: 0, clockClosed: 1, started: 0, closeoutCause: mode === 'close-denied',
+			message: ['missing', 'object', 'malformed', 'close-denied'].includes(mode) ? 'API execution start omitted its authoritative productive window.'
+				: mode === 'expired' ? 'Assignment productive execution window expired.' : 'Assignment productive execution clock is invalid.' })));
+		// Native original executor/Unix/signing/custody; supplied API windows are
+		// denial inputs, not actual governance/model usage or physical Kata proof.
+	});
+	it('native original Kernel and microvm preserve the issued shorter productive clock separately from immutable phase authority through exact event readback', async () => {
+		for (const status of ['completed', 'failed'] as const) { const f = await microvmBroker();
+		try {
+			const attempt = assignmentAttemptSchema.parse(f.input.assignment.assignmentAttempt), before = structuredClone(f.input.assignment);
+			let executionStartedAt = '', executionDeadlineAt = '';
+			f.input.beginExecution = async () => {
+				executionStartedAt = new Date().toISOString(); executionDeadlineAt = new Date(Date.parse(executionStartedAt) + 3_000).toISOString();
+				const clock = (id: string) => { const value = { startedAt: executionStartedAt, deadlineAt: executionDeadlineAt,
+					observedAt: executionStartedAt, remainingSeconds: 3 }; return { type: 'item.completed', item: {
+					id, type: 'mcp_tool_call', server: 'treedx', tool: 'treeseed_time_status', status: 'completed', error: null,
+					result: { content: [{ type: 'text', text: JSON.stringify(value) }], structuredContent: value } } }; };
+				f.patchResult({ status, diagnostics: { providerEvents: [clock('short-window-first'), clock('short-window-final')] } });
+				return { capacityEnvelope: { budget: { time: { executionStartedAt, executionDeadlineAt } } } };
+			};
+			const result = await executeKernelAssignment({ request: f.input, executor: f.executor, runtimeBuild: attempt.provider.runtimeBuild });
+			expect(result.status).toBe(status); const canonical = result.outputs?.assignmentResult;
+			const terminal = f.events.filter(event => event.type === `execution.${status}`); expect(terminal).toHaveLength(1);
+			expect(Date.parse(executionDeadlineAt)).toBeLessThan(Date.parse(attempt.deadline));
+			const item = { id: attempt.id, status, assignmentAttempt: attempt, assignmentResult: canonical,
+				capacityEnvelope: { budget: { time: { executionStartedAt, executionDeadlineAt } } } };
+			const event = { ...terminal[0], id: 'native-short-clock-event', assignmentId: attempt.id, runId: attempt.workdayId,
+				workdayId: attempt.workdayId, teamId: attempt.teamId, projectId: attempt.projectId, eventIndex: 1,
+				eventType: `provider.execution.${status}`, status: 'recorded', createdAt: new Date().toISOString() };
+			const held = structuredClone({ item, event }); expect(() => verifyModelClockEvidence(item, event)).not.toThrow();
+			expect({ item, event }).toEqual(held); expect(f.input.assignment).toEqual(before); expect(f.observations).toHaveLength(1);
+			expect(f.paths.filter(path => path.endsWith('/execute'))).toHaveLength(1);
+			expect(f.paths.filter(path => path.startsWith('DELETE '))).toEqual(['DELETE /v1/sandboxes/owned-native-sandbox']);
+			// Real owning Kernel/Unix/materialization; API window and provider events
+			// are supplied inputs, not native API issuance/model use/charges/Kata proof.
+		} finally { await f.close(); }
+		expect(f.server.listening).toBe(false); await expect(stat(f.directory)).rejects.toMatchObject({ code: 'ENOENT' }); }
+	});
 	it('native microvm Kernel and provider runner retain original successful and failed executor measurements through exact public delivery and denied closeout', async () => {
 		for (const mode of ['completed', 'failed', 'expired', 'diagnostic-denied', 'settlement-denied'] as const) {
 			const f = await microvmBroker(); let api: Awaited<ReturnType<typeof nativeCloseoutTransport>> | undefined;
@@ -159,7 +155,8 @@ describe('sandbox broker control transport', () => {
 					&& ['provider.execution.completed', 'provider.execution.failed'].includes(String(item.body.eventType)));
 				expect(diagnosticEvents).toHaveLength(1);
 				expect(diagnosticEvents[0]!.body).toMatchObject({ leaseToken: f.input.leaseToken, runnerId: f.input.runnerId,
-					protectedPayload: raw.diagnostics });
+					context: { model: f.assignment()!.modelPolicy.model, provider: f.assignment()!.modelPolicy.provider,
+						timingAwareness: raw.timingAwareness, timing: { elapsedSeconds: raw.usage.elapsedSeconds } }, protectedPayload: raw.diagnostics });
 				expect(Number.isInteger(diagnosticEvents[0]!.body.sequence)).toBe(true);
 				expect(Object.hasOwn(diagnosticEvents[0]!.body.context ?? {}, 'providerEvents')).toBe(false);
 				const usage = { activeSeconds: 1.125, elapsedSeconds: 2.25, inputTokens: 19, outputTokens: 3,
@@ -182,7 +179,9 @@ describe('sandbox broker control transport', () => {
 							key: expect.stringMatching(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u),
 							body: { leaseToken: f.input.leaseToken, runnerId: f.input.runnerId, code: 'sandbox_failed',
 								message: raw.summary, retryable: false, activeSeconds: 2, elapsedSeconds: 3, usage,
-								output: { sandboxId: raw.sandboxId, teardown: { verified: true, completedAt: f.destroyedAt() } } } }]);
+								output: { sandboxId: raw.sandboxId, teardown: { verified: true, completedAt: f.destroyedAt() }, timingAwareness: raw.timingAwareness,
+									assignmentResult: expect.objectContaining({ assignmentId: attempt.id, status: 'failed', summary: raw.summary,
+										timingAwareness: raw.timingAwareness, references: [], verification: [], usage: expect.objectContaining({ elapsedSeconds: 3, modelInputTokens: 19, modelOutputTokens: 3 }) }) } } }]);
 						expect(api.requests.some(item => item.operation === 'settleAssignment')).toBe(false);
 					} else {
 						expect(api.requests.filter(item => item.operation === 'settleAssignment')).toEqual([{ operation: 'settleAssignment',

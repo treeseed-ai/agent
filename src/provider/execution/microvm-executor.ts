@@ -209,9 +209,18 @@ export async function createMicrovmExecutor(config: ProviderHostRuntimeConfig, m
 					if (!request.beginExecution) throw new Error('Productive execution start authority is unavailable.');
 					const startedAssignment = await request.beginExecution();
 					const executionTime = object(object(object(startedAssignment.capacityEnvelope).budget).time);
-					const executionStartedAt = String(executionTime.executionStartedAt ?? '');
-					const executionDeadlineAt = String(executionTime.executionDeadlineAt ?? '');
-					if (!Number.isFinite(Date.parse(executionStartedAt)) || !Number.isFinite(Date.parse(executionDeadlineAt))) throw new Error('API execution start omitted its authoritative productive window.');
+					const executionStartedAt = typeof executionTime.executionStartedAt === 'string' ? executionTime.executionStartedAt : '';
+					const executionDeadlineAt = typeof executionTime.executionDeadlineAt === 'string' ? executionTime.executionDeadlineAt : '';
+					try {
+						if (!Number.isFinite(Date.parse(executionStartedAt)) || !Number.isFinite(Date.parse(executionDeadlineAt))) throw new Error('API execution start omitted its authoritative productive window.');
+						// Reuse the owning clock bounds, without recording a model action.
+						const clock = object(await executeAssignmentTreeDxTool(request, 'treeseed_time_status', {}, { startedAt: executionStartedAt, deadlineAt: executionDeadlineAt }));
+						if (clock.remainingSeconds === 0) throw new Error('Assignment productive execution window expired.');
+					} catch (error) {
+						try { await request.finishExecution?.(); }
+						catch (closeoutError) { throw Object.assign(error instanceof Error ? error : new Error(String(error)), { cause: closeoutError }); }
+						throw error;
+					}
 					await request.emit?.({ type: 'execution.started', occurredAt: new Date().toISOString(), summary: `Kata execution started in ${prepared.sandboxId}.`, payload: { sandboxId: prepared.sandboxId, model: assignment.modelPolicy.model, isolation: 'microvm' } });
 					let toolFailure: Error | undefined;
 					let executionFailure: unknown;
@@ -241,7 +250,7 @@ export async function createMicrovmExecutor(config: ProviderHostRuntimeConfig, m
 						if (bytes.length !== artifact.bytes || `sha256:${createHash('sha256').update(bytes).digest('hex')}` !== artifact.digest) throw Object.assign(new Error('Sandbox artifact bytes disagree with their declared size or digest.'), { code: 'sandbox_artifact_integrity_invalid' });
 						return { ...artifact, content: bytes.toString('utf8') };
 					}));
-					if (result.status === 'completed') {
+					{
 						const events = object(result.diagnostics).providerEvents;
 						const receipt = timingAwarenessEvidence(result.timingAwareness);
 						const actual = Array.isArray(events) ? timingAwarenessContract(events.map(object)) : undefined;
@@ -259,7 +268,8 @@ export async function createMicrovmExecutor(config: ProviderHostRuntimeConfig, m
 							} else if (item.type === 'command_execution') { if (!checkedBeforeBlocking) valid = false; checkedBeforeBlocking = false; }
 							pending.delete(String(item.id));
 						}
-						if (!valid || pending.size) throw new Error('Completed sandbox result lacks valid timing-awareness evidence.');
+						if (!valid || pending.size) throw new Error(`${result.status === 'completed' ? 'Completed' : 'Non-completed'} sandbox result lacks valid timing-awareness evidence.`,
+							result.status === 'completed' ? undefined : { cause: new Error(result.summary) });
 					}
 					if (result.status === 'completed' && current.source?.authorization.mode === 'work') sourceReference = await publishSourceBranch(client, prepared, current.source, assignment, result, request);
 				} catch (error) { transportFailure = error; } finally {
@@ -291,13 +301,17 @@ export async function createMicrovmExecutor(config: ProviderHostRuntimeConfig, m
 				})() : null;
 				if (environmentReceipt) await request.emit?.({ type: 'sandbox.environment.attested', occurredAt: environmentReceipt.createdAt, summary: 'Provider environment attestation recorded.', payload: { environmentReceipt } });
 				const usage = sandboxAccountingUsage(result.usage);
+				const diagnostics = object(result.diagnostics), observation = { sandboxId: result.sandboxId, model: assignment.modelPolicy.model,
+					provider: assignment.modelPolicy.provider, capabilities: assignment.modelPolicy.capabilities, usage: [usage],
+					timing: { elapsedSeconds: result.usage.elapsedSeconds }, resources: { cpuUserMicros: result.usage.cpuUserMicros,
+						cpuSystemMicros: result.usage.cpuSystemMicros, peakRssBytes: result.usage.peakRssBytes }, artifacts: result.artifacts,
+					activityCompletion: diagnostics.activityCompletion ?? null, timingAwareness: result.timingAwareness,
+					changedPaths: diagnostics.changedPaths ?? [], teardown };
 				if (result.status === 'completed') {
 					const abstained = result.responseMarkdown?.trim() === '<!-- treeseed:abstain -->';
-					const diagnostics = object(result.diagnostics);
 					const timingAwareness = timingAwarenessEvidence(result.timingAwareness);
-					await request.emit?.({ type: 'execution.completed', occurredAt: new Date().toISOString(), summary: result.summary, payload: { sandboxId: result.sandboxId, model: assignment.modelPolicy.model, provider: assignment.modelPolicy.provider, capabilities: assignment.modelPolicy.capabilities,
-						usage: [usage], timing: { elapsedSeconds: result.usage.elapsedSeconds }, resources: { cpuUserMicros: result.usage.cpuUserMicros, cpuSystemMicros: result.usage.cpuSystemMicros, peakRssBytes: result.usage.peakRssBytes }, artifacts: result.artifacts,
-						activityCompletion: diagnostics.activityCompletion ?? null, timingAwareness, changedPaths: diagnostics.changedPaths ?? [], teardown }, protectedPayload: result.diagnostics });
+					await request.emit?.({ type: 'execution.completed', occurredAt: new Date().toISOString(), summary: result.summary,
+						payload: { ...observation, timingAwareness }, protectedPayload: result.diagnostics });
 					return { status: abstained ? 'abstained' : result.responseMarkdown ? 'responded' : 'completed', summary: result.summary, ...(!abstained && result.responseMarkdown ? { responseMarkdown: result.responseMarkdown } : {}), outputs: { sandboxId: result.sandboxId, teardown, environmentReceipt,
 						verificationRecords: object(result.diagnostics).verificationRecords ?? [],
 						activityCompletion: object(result.diagnostics).activityCompletion ?? null,
@@ -305,12 +319,13 @@ export async function createMicrovmExecutor(config: ProviderHostRuntimeConfig, m
 						providerEventShapes: Array.isArray(diagnostics.providerEventShapes) ? diagnostics.providerEventShapes : [],
 						...(sourceReference ? { sourceReference } : {}) }, artifacts, usage: [usage] };
 				}
-				await request.emit?.({ type: 'execution.failed', occurredAt: new Date().toISOString(), summary: result.summary, payload: { sandboxId: result.sandboxId, status: result.status, teardown }, protectedPayload: result.diagnostics });
+				await request.emit?.({ type: 'execution.failed', occurredAt: new Date().toISOString(), summary: result.summary,
+					payload: { ...observation, status: result.status }, protectedPayload: result.diagnostics });
 				const resourceExhausted = result.summary.includes('sandbox_resource_exhausted:');
 				return { status: result.status === 'failed' && !resourceExhausted ? 'failed' : 'returned',
 					code: resourceExhausted ? 'sandbox_resource_exhausted' : `sandbox_${result.status}`,
 					summary: result.summary, retryable: resourceExhausted || result.status !== 'failed',
-					outputs: { sandboxId: result.sandboxId, teardown }, usage: [usage] };
+					outputs: { sandboxId: result.sandboxId, teardown, timingAwareness: timingAwarenessEvidence(result.timingAwareness) }, usage: [usage] };
 			} finally { await materialized.cleanup(); }
 		},
 	};

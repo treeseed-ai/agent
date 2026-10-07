@@ -12,6 +12,9 @@ workflow:
   - id: lifecycle-campaign
     action: { verifier: agent.golden.live.campaign }
     expect: { status: passed }
+  - id: six-pair-graph-readback
+    action: { verifier: agent.golden.live.graph }
+    expect: { status: passed }
   - id: sdk-product
     action: { verifier: sdk.golden.live.product }
     expect: { status: passed }

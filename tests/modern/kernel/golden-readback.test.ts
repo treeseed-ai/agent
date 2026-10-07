@@ -15,12 +15,24 @@ describe('golden read-back assertion regressions (fixtures are not live acceptan
 			if (mode === 'assignment') changed.assignmentId = 'foreign'; if (mode === 'snapshot') changed.workday.teamId = 'foreign';
 			if (mode === 'attempts') changed.workday.attempts = []; if (mode === 'usage') changed.workday.usage = [];
 			if (mode === 'predecessors') changed.predecessorResults.pop(); if (mode === 'extra') changed.unowned = true;
-			file.body = mode === 'prose' ? `${workdayId} actor-0` : mode === 'truncated' ? `${workdayId} actor-0 {` : `\`\`\`json\n${JSON.stringify(changed)}\n\`\`\``;
+			const labels = `${workdayId} ${payload.predecessorResults.map((item: Row) => item.assignmentId).join(' ')}`;
+			file.body = mode === 'prose' ? labels : mode === 'truncated' ? `${labels} {` : `\`\`\`json\n${JSON.stringify(changed)}\n\`\`\``;
 			const failed = structuredClone(file); let failure = false; try { gate('reporter'); } catch { failure = true; }
 			denied.push(failure); expect(file).toEqual(failed); expect(reporter).toEqual(held);
 		}
 		file.body = original.body; expect(() => gate('reporter')).not.toThrow(); expect(file).toEqual(original);
 		expect(denied).toEqual(Array(10).fill(true));
+		const context = structuredClone(reporter.workspaceContext), invalid: boolean[] = [];
+		for (const mode of ['missing', 'empty', 'duplicate', 'digest', 'source', 'team', 'workday', 'collections', 'predecessors']) {
+			const changed = structuredClone(context), inline = changed.authorizedContext[0];
+			if (mode === 'missing') Reflect.deleteProperty(changed, 'authorizedContext'); if (mode === 'empty') changed.authorizedContext = [];
+			if (mode === 'duplicate') changed.authorizedContext.push(structuredClone(inline)); if (mode === 'digest') inline.digest = `sha256:${'f'.repeat(64)}`;
+			if (mode === 'source') inline.ref.id = 'foreign'; if (mode === 'team') inline.value.teamId = 'foreign'; if (mode === 'workday') inline.value.workdayId = 'foreign';
+			if (mode === 'collections') Reflect.deleteProperty(inline.value, 'attempts'); if (mode === 'predecessors') changed.predecessorResults.pop();
+			reporter.workspaceContext = changed; const failed = structuredClone(changed); let failure = false; try { gate('reporter'); } catch { failure = true; }
+			invalid.push(failure); expect(changed).toEqual(failed); expect(file).toEqual(original);
+		}
+		reporter.workspaceContext = context; expect(() => gate('reporter')).not.toThrow(); expect(invalid).toEqual(Array(9).fill(true));
 	});
 	it('denies recorded model dispatch for the exact renamed reporting assignment across complete immutable workday event pages', () => {
 		const reporter = state.replies.get('assignments list')!.items.find((item: Row) => item.assignmentAttempt.effectiveProfile.activity === 'reporting');

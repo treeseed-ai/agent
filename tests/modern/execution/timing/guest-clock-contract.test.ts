@@ -56,13 +56,13 @@ describe('Codex chat executor', () => {
 			const events = items.flatMap((item, index) => ['started', index ? 'failed' : 'completed'].map((phase, offset) => ({
 				id: `original-event-${index}-${offset}`, eventIndex: index * 2 + offset, eventType: `provider.execution.${phase}`,
 				runId: run.id, workdayId: run.id, teamId: run.teamId, projectId: 'original-project', assignmentId: item.id,
-				createdAt: `2026-10-07T00:00:0${index * 2 + offset}.000Z`, payload: { model: 'supplied-not-actual-model', isolation: 'microvm' } })));
+				createdAt: `2026-10-07T00:00:0${index * 2 + offset}.000Z`, context: { model: 'supplied-not-actual-model', isolation: 'microvm' } })));
 			return { run, items, events };
 		};
 		const f = fixture(), before = structuredClone(f);
 		expect(modelExecutionInventory(f.items, f.events, f.run).map(value => value.item.status)).toEqual(['completed', 'failed', 'returned']); expect(f).toEqual(before);
 		for (const mode of ['empty', 'missing-start', 'missing-terminal', 'duplicate-start', 'duplicate-terminal', 'duplicate-owner', 'missing-owner',
-			'foreign-run', 'foreign-team', 'foreign-project', 'foreign-attempt', 'empty-model', 'missing-model', 'bad-clock', 'reversed', 'duplicate-index']) {
+			'foreign-run', 'foreign-team', 'foreign-project', 'foreign-attempt', 'empty-model', 'missing-model', 'payload-only', 'bad-clock', 'reversed', 'duplicate-index']) {
 			const supplied = fixture();
 			if (mode === 'empty') supplied.events = [];
 			if (mode === 'missing-start') supplied.events.splice(0, 1);
@@ -75,8 +75,9 @@ describe('Codex chat executor', () => {
 			if (mode === 'foreign-team') supplied.events[0]!.teamId = 'foreign';
 			if (mode === 'foreign-project') supplied.events[0]!.projectId = 'foreign';
 			if (mode === 'foreign-attempt') supplied.items[0]!.assignmentAttempt.id = 'foreign';
-			if (mode === 'empty-model') supplied.events[0]!.payload.model = '';
-			if (mode === 'missing-model') Object.assign(supplied.events[0]!.payload, { model: undefined });
+			if (mode === 'empty-model') supplied.events[0]!.context.model = '';
+			if (mode === 'missing-model') Object.assign(supplied.events[0]!.context, { model: undefined });
+			if (mode === 'payload-only') for (const event of supplied.events) Object.assign(event, { payload: event.context, context: undefined });
 			if (mode === 'bad-clock') supplied.events[0]!.createdAt = 'invalid';
 			if (mode === 'reversed') supplied.events[0]!.createdAt = '2026-10-07T00:00:59.000Z';
 			if (mode === 'duplicate-index') supplied.events[1]!.eventIndex = 0;

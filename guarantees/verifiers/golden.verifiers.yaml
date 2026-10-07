@@ -1,6 +1,26 @@
 schemaVersion: treeseed.guarantee-verifiers/v1
 ownerPackage: "@treeseed/agent"
 verifiers:
+  agent.golden.live.campaign-freeze:
+    kind: nodeTestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/acceptance/freeze-integrity.test.ts
+    testName: "Golden pre-run campaign freeze retains every schema-valid expanded input and original manifest bytes before SDK execution"
+  agent.golden.campaign-freeze-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/preflight/campaign-freeze.test.ts
+    testName: "denies missing malformed and partial whole campaign authority before any SDK preparation command or output"
+  agent.golden.campaign-freeze-path-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/preflight/campaign-freeze.test.ts
+    testName: "requires an explicit original campaign path rather than generating SDK-only authority or guessing an old freeze"
+  agent.golden.campaign-freeze-native:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/preflight/campaign-freeze-native.test.ts
+    testName: "native SDK preparation retains invalid campaign bytes and creates no proposal freeze or receipt directory before complete authority validation"
   agent.golden.execution-packed-sbom-unit:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

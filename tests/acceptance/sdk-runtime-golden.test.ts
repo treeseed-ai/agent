@@ -8,7 +8,7 @@ import { DEFAULT_CAPACITY_PAGE_LIMIT } from '@treeseed/sdk/capacity-pagination';
 import { validatePortableContentData } from '@treeseed/sdk/content-validation';
 import { read, row, type Row } from './acceptance-cli.ts';
 import { readDecisionContent, readGovernedContentFile, verifyDecisionContent, verifyReviewFindingContent } from './workday/support/decision-evidence.ts';
-import { verifyAssignmentAuthority, verifyTeardownAuthority, verifyTreeDxWorkspaceClosure } from './workday/support/assignment-authority.ts';
+import { verifyAssignmentAuthority, verifyTeardownAuthority, verifyTreeDxWorkspaceClosure, verifyMeasuredVerification } from './workday/support/assignment-authority.ts';
 import { verifyPlanningEvidence } from './workday/support/planning-evidence.ts';
 import { readCompleteEvidence } from './workday/support/evidence-pages.ts';
 import { verifyReportRecordCustody } from './workday/support/record-custody.ts';
@@ -327,7 +327,7 @@ export function verifyGolden(gate: Gate): void {
 	assert.deepEqual(readWorkdayAssignments(workdayId, text(run.startedAt), team), assignments,
 		'ACCEPTANCE_REVISION_READBACK: Failed review and correction history must remain immutable');
 	}
-	const modelResults = completed.filter(item => ['chat', 'acting', 'reviewing', 'planning', 'estimating'].includes(activity(item)));
+	const modelResults = completed.filter(item => ['chat', 'acting', 'reviewing', 'planning', 'estimating'].includes(activity(item))); if (gate === 'results') for (const item of completed) verifyMeasuredVerification(row(item.assignmentResult));
 	if (gate === 'results') assert.ok(modelResults.length > 0, 'No model-backed results were inspected');
 	if (gate === 'results') for (const item of modelResults) {
 		const result = row(item.assignmentResult), timing = row(result.timingAwareness);

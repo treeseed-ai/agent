@@ -15,6 +15,9 @@ workflow:
   - id: sdk-product
     action: { verifier: sdk.golden.live.product }
     expect: { status: passed }
+  - id: measured-verification-records
+    action: { verifier: agent.golden.live.results }
+    expect: { status: passed }
   - id: execution-clock-observation-live-1
     action: { verifier: agent.golden.execution-clock-observation-live-1 }
     expect: { status: passed }

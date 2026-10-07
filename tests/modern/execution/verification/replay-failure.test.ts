@@ -5,6 +5,7 @@ import { run } from '../../../../src/sandbox/process-runner.ts';
 import { mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
+import { verifyMeasuredVerification } from '../../../acceptance/workday/support/assignment-authority.ts';
 
 async function actualTestFirstRed(agentClass: string, activity: string) {
 	const directory = await mkdtemp(resolve(tmpdir(), 'agent296-red-'));
@@ -27,6 +28,12 @@ async function actualTestFirstRed(agentClass: string, activity: string) {
 			expect(result.verification).toEqual([expect.objectContaining({ command, status: 'failed', exitCode: 1,
 				outputDigest: expect.stringMatching(/^sha256:[a-f0-9]{64}$/u) })]);
 			expect(result.report.summary).toContain('Runner-observed test-first red');
+			const held = structuredClone(result);
+			expect(() => verifyMeasuredVerification(result)).not.toThrow();
+			const partial = { verification: result.verification.map(record => { const changed = { ...record }; delete changed.durationSeconds; return changed; }) };
+			const incomplete = structuredClone(partial);
+			expect(() => verifyMeasuredVerification(partial)).toThrow('ACCEPTANCE_VERIFICATION_RECORD');
+			expect(partial).toEqual(incomplete); expect(result).toEqual(held);
 	} finally { await rm(directory, { recursive: true, force: true }); }
 }
 it('retains actual runner assertion failures as failed evidence in scoped test-first review', () => actualTestFirstRed('reviewer', 'reviewing'));
@@ -82,6 +89,7 @@ it('keeps successful observations and digests unchanged', async () => {
 	expect(result.report).toEqual(report);
 	expect(result.verification).toEqual([expect.objectContaining({ command: report.verification[0]!.commands[0],
 		status: 'passed', exitCode: 0, outputDigest: expect.stringMatching(/^sha256:[a-f0-9]{64}$/u) })]);
+	const held = structuredClone(result); expect(() => verifyMeasuredVerification(result)).not.toThrow(); expect(result).toEqual(held);
 });
 
 it('retains exact assertion-only test-first output digests without mutating the supplied report or assignment', async () => {

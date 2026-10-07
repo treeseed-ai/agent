@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { assignmentWorkspaceSchema, effectiveActivityProfileSchema, exactGrantSchema, exactEntityReferenceSchema, assignmentAttemptSchema, assignmentReferenceSchema, assignmentResultSchema, validateAgentDefinitionModel } from '@treeseed/sdk/agent-capacity';
+import { assignmentWorkspaceSchema, effectiveActivityProfileSchema, exactGrantSchema, exactEntityReferenceSchema, assignmentAttemptSchema, assignmentReferenceSchema, assignmentResultSchema, verificationRecordSchema, validateAgentDefinitionModel } from '@treeseed/sdk/agent-capacity';
 import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { parse } from 'yaml';
@@ -284,6 +284,18 @@ export function verifyTeardownAuthority(item: Row): void {
 			assert.ok(Array.isArray(entries) && entries.every(entry => object(entry) && entry.status === 'revoked'),
 				`${label}: Capability authority remains issued or unidentified`);
 		}
+	}
+}
+
+/** Acceptance requires measurement even though the portable record permits
+ * omitted duration. Preserve failed/skipped records; never invent a duration. */
+export function verifyMeasuredVerification(result: Row): void {
+	const label = 'ACCEPTANCE_VERIFICATION_RECORD: Exact canonical record and measured duration required';
+	assert.ok(Array.isArray(result.verification), label);
+	for (const value of result.verification) {
+		const checked = verificationRecordSchema.safeParse(value);
+		assert.ok(checked.success && isDeepStrictEqual(checked.data, value)
+			&& typeof checked.data.durationSeconds === 'number', label);
 	}
 }
 

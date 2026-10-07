@@ -1,6 +1,11 @@
 schemaVersion: treeseed.guarantee-verifiers/v1
 ownerPackage: "@treeseed/agent"
 verifiers:
+  agent.golden.execution-measured-verification-unit:
+    kind: vitestCase
+    ownerPackage: '@treeseed/agent'
+    testFile: tests/modern/kernel/architecture/golden-usage-evidence.test.ts
+    testName: denies incomplete malformed or unmeasured verification records on every completed result without rewriting failed observations
   agent.golden.execution-report-attempt-unit:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

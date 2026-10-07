@@ -43,7 +43,8 @@ describe('capacity-provider guarantee execution bindings', () => {
 		expect(manifest.acceptanceCriteria).toEqual([{ criterion: 'b635827ed7862d56b8764dfad30114b9ee18d02b4aa709a257841e18a1bd0f0d',
 			verifierRefs: ['agent.golden.execution-clock-observation-live-1'] },
 			{ criterion: '7eaf9fdc1c264e2d0b28d2fc751da33a2ffcf98ca0d6446ac6e8672503dfa533',
-				verifierRefs: ['agent.golden.live.reporter', 'agent.golden.live.settlement'] }, ...prospectiveInputs]);
+				verifierRefs: ['agent.golden.live.reporter', 'agent.golden.live.settlement'] }, ...prospectiveInputs,
+			{ criterion: '80496650a6ed5888fbda21ddcb15047d221874adb709887306dede9e3e93ff55', verifierRefs: ['agent.golden.live.results'] }]);
 		const scene = parse(readFileSync(resolve(root, manifest.scene.manifest), 'utf8'));
 		expect(scene.scope).toBe('local-integrated-runtime');
 		const refs = scene.workflow.map((step: { action: { verifier: string } }) => step.action.verifier);
@@ -54,6 +55,10 @@ describe('capacity-provider guarantee execution bindings', () => {
 			testName: 'Golden pre-run campaign freeze retains every schema-valid expanded input and original manifest bytes before SDK execution' });
 		expect(refs.filter((ref: string) => ref === 'agent.golden.execution-clock-observation-live-1')).toHaveLength(1);
 		expect(refs.indexOf('agent.golden.live.campaign')).toBeGreaterThan(-1);
+		expect(refs.filter((ref: string) => ref === 'agent.golden.live.results')).toHaveLength(1);
+		expect(refs.indexOf('agent.golden.live.results')).toBeGreaterThan(refs.indexOf('agent.golden.live.campaign'));
+		expect(registry.verifiers['agent.golden.live.results']).toMatchObject({ kind: 'nodeTestCase',
+			testFile: 'tests/acceptance/sdk-runtime-golden.test.ts', testName: 'Golden runtime results evidence satisfies its acceptance boundary' });
 		expect(refs.indexOf('agent.golden.execution-clock-observation-live-1')).toBeGreaterThan(refs.indexOf('agent.golden.live.campaign'));
 		for (const ref of ['agent.golden.live.reporter', 'agent.golden.live.settlement']) {
 			expect(refs.filter((value: string) => value === ref)).toHaveLength(1);

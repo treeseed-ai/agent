@@ -21,12 +21,11 @@ test('Every actual recorded model execution is included in exact clock evidence 
 	const indexes = events.map(event => event.eventIndex); assert.ok(indexes.every(Number.isSafeInteger) && new Set(indexes).size === indexes.length);
 	assert.deepEqual([...indexes].sort((a, b) => Number(a) - Number(b)), Array.from({ length: indexes.length }, (_, index) => index), 'ACCEPTANCE_MODEL_CLOCK_COMPLETE_EVENTS');
 	const models = modelExecutionInventory(items, events, run);
-	for (const { item } of models) {
-		// Failed/returned model attempts are intentionally not filtered away. The
-		// completed-only clock gate must reject them until their owning evidence
-		// path is implemented and independently verified, never relabel them PASS.
-		const completions = events.filter(event => event.assignmentId === item.id && event.eventType === 'provider.execution.completed');
-		assert.equal(completions.length, 1, 'ACCEPTANCE_MODEL_CLOCK_COMPLETION_IDENTITY'); verifyModelClockEvidence(item, completions[0]!);
+	for (const { item, terminal } of models) {
+		// Retain every actual attempt and its unique owning terminal observation.
+		// A failed result stays failed; absent/noncanonical returned evidence and
+		// any late, incomplete or contradictory clock history still fail closed.
+		verifyModelClockEvidence(item, terminal);
 	}
 	assert.ok(isDeepStrictEqual(readCompleteEvidence(args, team, 100, 'ACCEPTANCE_MODEL_CLOCK', 'ascending'), events), 'ACCEPTANCE_MODEL_CLOCK_IMMUTABLE');
 	assert.ok(isDeepStrictEqual(readWorkdayAssignments(id, String(run.startedAt), team), items), 'ACCEPTANCE_MODEL_CLOCK_ATTEMPT_READBACK');

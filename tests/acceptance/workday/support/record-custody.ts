@@ -3,12 +3,36 @@ import { createHash, createPublicKey, verify } from 'node:crypto';
 import { lstatSync } from 'node:fs';
 import { isAbsolute, resolve } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
-import { assignmentAttemptSchema, assignmentResultSchema, capabilityAccountingLimitsSchema } from '@treeseed/sdk/agent-capacity';
+import { assignmentAttemptSchema, assignmentResultSchema, capabilityAccountingLimitsSchema, usageSettlementSchema } from '@treeseed/sdk/agent-capacity';
 import { capabilityConformanceSchema, capabilityDefinitionSchema, capabilityDefinitionDigest, capabilityOfferSchema } from '@treeseed/sdk/capacity-provider';
 import { canonicalStandardsJson } from '@treeseed/sdk/standards';
 import { row, type Row } from '../../acceptance-cli.ts';
 import { orderConnectionsForFairPolling } from '../../../../src/provider/teams/multi-team-runtime.ts';
 import { assertCanonicalRecordShapes } from './canonical-record-shape.ts';
+import { readCompleteEvidence } from './evidence-pages.ts';
+
+export function verifyReportSettlementCustody(snapshot: Row, reporter: Row, assignments: Row[], team: string): void {
+	assert.ok(Array.isArray(snapshot.settlements), 'ACCEPTANCE_REPORT_SETTLEMENTS: Complete canonical collection required');
+	const represented = snapshot.settlements.map(value => {
+		const parsed = usageSettlementSchema.parse(value); assert.deepEqual(parsed, value); return parsed;
+	});
+	assert.equal(new Set(represented.map(value => value.id)).size, represented.length, 'ACCEPTANCE_REPORT_SETTLEMENTS: Duplicate identity');
+	const expected: typeof represented = [], assignmentIds = new Set(assignments.map(value => value.id));
+	for (const projectId of new Set(assignments.map(value => String(value.projectId)))) {
+		const args = ['capacity', 'ledger', '--project', projectId, '--workday', String(reporter.workDayId)];
+		const ledger = readCompleteEvidence(args, team, 100, 'ACCEPTANCE_REPORT_LEDGER');
+		assert.deepEqual(readCompleteEvidence(args, team, 100, 'ACCEPTANCE_REPORT_LEDGER'), ledger, 'ACCEPTANCE_REPORT_LEDGER_IMMUTABLE');
+		for (const entry of ledger.filter(value => value.phase === 'task_completed_actual_settlement' && value.assignmentId !== reporter.id)) {
+			const value = usageSettlementSchema.parse(entry.usageSettlement); assert.deepEqual(value, entry.usageSettlement);
+			assert.ok(assignmentIds.has(value.assignmentId) && value.assignmentId === entry.assignmentId && value.id === entry.id
+				&& value.teamId === snapshot.teamId && value.workdayId === reporter.workDayId && value.projectId === projectId
+				&& value.settledAt === entry.createdAt, 'ACCEPTANCE_REPORT_SETTLEMENTS: Exact ledger and workday authority required');
+			expected.push(value);
+		}
+	}
+	const order = (left: (typeof represented)[number], right: (typeof represented)[number]) => left.id < right.id ? -1 : left.id > right.id ? 1 : 0;
+	assert.deepEqual([...represented].sort(order), expected.sort(order), 'ACCEPTANCE_REPORT_SETTLEMENTS: Every original predecessor settlement must be retained');
+}
 
 /** Signature custody only: a signed status/evidence digest is not independent
  * evidence that a qualification suite actually ran or passed. */

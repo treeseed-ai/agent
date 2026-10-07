@@ -4,6 +4,31 @@ import { stringify } from 'yaml';
 import { state, gate, read, assignment, usageMeasurement, classes, workdayId, commit, type Row } from './architecture/golden-readback-fixture.ts';
 
 describe('golden read-back assertion regressions (fixtures are not live acceptance)', () => {
+	it('denies recorded model dispatch for the exact renamed reporting assignment across complete immutable workday event pages', () => {
+		const reporter = state.replies.get('assignments list')!.items.find((item: Row) => item.assignmentAttempt.effectiveProfile.activity === 'reporting');
+		reporter.assignmentAttempt.agentClass = 'arbitrary-closeout-identity';
+		const events = { items: [{ id: 'other-model-start', eventIndex: 0, runId: workdayId, teamId: 'team-1',
+			assignmentId: 'actor-0', eventType: 'provider.execution.started', createdAt: '2026-09-27T00:00:01Z',
+			context: { model: 'supplied-model', isolation: 'microvm' } }], page: { limit: 100, hasMore: false, nextCursor: null } };
+		state.replies.get('workdays show')!.run.teamId = 'team-1'; state.replies.set('workdays events', events);
+		const before = structuredClone({ reporter, events }); expect(() => gate('reporter')).not.toThrow();
+		const denied: boolean[] = [];
+		for (const mode of ['model-start', 'model-terminal', 'isolation', 'raw-model', 'foreign-run', 'foreign-team', 'missing-index', 'duplicate', 'empty', 'missing-page']) {
+			const changed = structuredClone(events); const event = changed.items[0]!;
+			if (mode === 'model-start' || mode === 'model-terminal') {
+				event.assignmentId = reporter.id; if (mode === 'model-terminal') event.eventType = 'provider.execution.completed';
+			}
+			if (mode === 'isolation') { event.assignmentId = reporter.id; Reflect.deleteProperty(event.context, 'model'); }
+			if (mode === 'raw-model') { event.assignmentId = reporter.id; Object.assign(event, { context: {}, protectedPayload: { providerEvents: [{ type: 'turn.started' }] } }); }
+			if (mode === 'foreign-run') event.runId = 'foreign'; if (mode === 'foreign-team') event.teamId = 'foreign';
+			if (mode === 'missing-index') event.eventIndex = 1; if (mode === 'duplicate') changed.items.push(structuredClone(event));
+			if (mode === 'empty') changed.items = []; if (mode === 'missing-page') Reflect.deleteProperty(changed, 'page');
+			state.replies.set('workdays events', changed); const held = structuredClone(changed);
+			let failure = false; try { gate('reporter'); } catch { failure = true; } denied.push(failure); expect(changed).toEqual(held);
+		}
+		state.replies.set('workdays events', events); expect(() => gate('reporter')).not.toThrow();
+		expect({ reporter, events }).toEqual(before); expect(denied).toEqual(Array(10).fill(true));
+	});
 	it('denies malformed canonical report Note fields while retaining the exact workday readback and original failed observations', () => {
 		const file = state.replies.get('library read')!.result.files[0], original = structuredClone(file);
 		expect(() => gate('reporter')).not.toThrow();

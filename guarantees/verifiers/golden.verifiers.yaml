@@ -1,6 +1,11 @@
 schemaVersion: treeseed.guarantee-verifiers/v1
 ownerPackage: "@treeseed/agent"
 verifiers:
+  agent.golden.execution-reporter-model-denial-unit:
+    kind: vitestCase
+    ownerPackage: '@treeseed/agent'
+    testFile: tests/modern/kernel/golden-readback.test.ts
+    testName: denies recorded model dispatch for the exact renamed reporting assignment across complete immutable workday event pages
   agent.golden.execution-failed-clock-readback-unit:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

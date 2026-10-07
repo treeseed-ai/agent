@@ -32,7 +32,8 @@ async function suppliedMicrovm() {
 	input.beginExecution = vi.fn(async () => ({ capacityEnvelope: { budget: { time: { executionStartedAt: createdAt, executionDeadlineAt: attempt.deadline } } } }));
 	input.finishExecution = vi.fn(async () => undefined); input.emit = vi.fn(async () => undefined);
 	const cleanup = vi.fn(async () => undefined), observed: SandboxAssignment[] = [];
-	const clock = (id: string, remainingSeconds: number) => { const value = { startedAt: createdAt, deadlineAt: attempt.deadline, remainingSeconds }; return {
+	const clock = (id: string, remainingSeconds: number) => { const value = { startedAt: createdAt, deadlineAt: attempt.deadline, remainingSeconds,
+		observedAt: new Date(Date.parse(attempt.deadline) - remainingSeconds * 1_000).toISOString() }; return {
 		type: 'item.completed', item: { id, type: 'mcp_tool_call', server: 'treedx', tool: 'treeseed_time_status', status: 'completed',
 			result: { content: [{ type: 'text', text: JSON.stringify(value) }], structuredContent: value } } }; };
 	let suppliedResult: unknown = sandboxResultSchema.parse({ schemaVersion: 'treeseed.sandbox-result/v1', assignmentId: input.assignmentId, sandboxId: 'owned-unit-sandbox',
@@ -90,7 +91,8 @@ describe('microvm result and closeout authority', () => {
 				const original = sandboxResultSchema.parse(f.result()), window = { startedAt: attempt.createdAt, deadlineAt: attempt.deadline };
 				const observed = mode === 'foreign-window' ? { startedAt: new Date(Date.parse(window.startedAt) + 1).toISOString(),
 					deadlineAt: new Date(Date.parse(window.deadlineAt) + 1).toISOString() } : window;
-				const clock = (id: string, remainingSeconds: unknown) => { const value = { ...observed, remainingSeconds }; return {
+				const clock = (id: string, remainingSeconds: unknown) => { const value = { ...observed, remainingSeconds,
+					observedAt: new Date(Date.parse(observed.deadlineAt) - (typeof remainingSeconds === 'number' && Number.isFinite(remainingSeconds) ? remainingSeconds : 29) * 1_000).toISOString() }; return {
 					type: 'item.completed', item: { id, type: 'mcp_tool_call', server: 'treedx', tool: 'treeseed_time_status', status: 'completed', error: null,
 						result: { content: [{ type: 'text', text: JSON.stringify(value) }], structuredContent: value } } }; };
 				const events: unknown[] = [clock('first-clock', 30), clock('final-clock', 29)];

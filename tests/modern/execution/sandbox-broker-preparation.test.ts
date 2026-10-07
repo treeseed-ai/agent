@@ -62,7 +62,8 @@ async function microvmBroker() {
 				if (path.endsWith('/execute')) {
 					if (!assigned) throw new Error('Original prepare required');
 					const window = { startedAt: new Date(Date.parse(assigned.leaseExpiresAt) - 30_000).toISOString(), deadlineAt: assigned.leaseExpiresAt };
-					const clock = (id: string, remainingSeconds: number) => { const value = { ...window, remainingSeconds }; return {
+					const clock = (id: string, remainingSeconds: number) => { const value = { ...window, remainingSeconds,
+						observedAt: new Date(Date.parse(window.deadlineAt) - remainingSeconds * 1_000).toISOString() }; return {
 						type: 'item.completed', item: { id, type: 'mcp_tool_call', server: 'treedx', tool: 'treeseed_time_status', status: 'completed',
 							result: { content: [{ type: 'text', text: JSON.stringify(value) }], structuredContent: value } } }; };
 					const result = sandboxResultSchema.parse({ schemaVersion: 'treeseed.sandbox-result/v1', sandboxId: 'owned-native-sandbox', assignmentId: assigned.assignmentId,
@@ -142,7 +143,8 @@ describe('sandbox broker control transport', () => {
 			try {
 				const attempt = assignmentAttemptSchema.parse(f.input.assignment.assignmentAttempt), before = structuredClone(f.input.assignment);
 				const clock = (id: string, remainingSeconds: number) => {
-					const value = { startedAt: attempt.createdAt, deadlineAt: attempt.deadline, remainingSeconds };
+					const value = { startedAt: attempt.createdAt, deadlineAt: attempt.deadline, remainingSeconds,
+						observedAt: new Date(Date.parse(attempt.deadline) - remainingSeconds * 1_000).toISOString() };
 					return { type: 'item.completed', item: { id, type: 'mcp_tool_call', server: 'treedx', tool: 'treeseed_time_status',
 						status: 'completed', error: null, result: { content: [{ type: 'text', text: JSON.stringify(value) }], structuredContent: value } } };
 				};
@@ -242,12 +244,15 @@ describe('sandbox broker control transport', () => {
 		const clockOutcomes: Array<{ mode: string; result: unknown; failure: unknown; completed: boolean }> = [];
 		for (const mode of ['exact', 'missing', 'foreign-window', 'receipt-count', 'pending', 'zero', 'negative', 'string', 'null',
 			'fraction', 'over-window', 'increasing', 'absent-remaining', 'content-drift', 'clock-error', 'duplicate-clock',
-			'first-nonclock', 'final-nonclock', 'blocking-without-recheck', 'wrong-server', 'wrong-tool', 'frequent']) {
+			'first-nonclock', 'final-nonclock', 'blocking-without-recheck', 'wrong-server', 'wrong-tool', 'frequent',
+			'absent-timestamp', 'null-timestamp', 'malformed-timestamp', 'numeric-timestamp', 'before-start-timestamp', 'expired-positive-timestamp',
+			'remaining-timestamp-drift', 'regressing-timestamp', 'timestamp-content-drift']) {
 			const f = await microvmBroker(); try {
 				const attempt = assignmentAttemptSchema.parse(f.input.assignment.assignmentAttempt), window = { startedAt: attempt.createdAt, deadlineAt: attempt.deadline };
 				const observed = mode === 'foreign-window' ? { startedAt: new Date(Date.parse(window.startedAt) + 1).toISOString(),
 					deadlineAt: new Date(Date.parse(window.deadlineAt) + 1).toISOString() } : window;
-				const clock = (id: string, remainingSeconds: unknown) => { const value = { ...observed, remainingSeconds }; return {
+				const clock = (id: string, remainingSeconds: unknown) => { const value = { ...observed, remainingSeconds,
+					observedAt: new Date(Date.parse(observed.deadlineAt) - (typeof remainingSeconds === 'number' && Number.isFinite(remainingSeconds) ? remainingSeconds : 29) * 1_000).toISOString() }; return {
 					type: 'item.completed', item: { id, type: 'mcp_tool_call', server: 'treedx', tool: 'treeseed_time_status', status: 'completed', error: null,
 						result: { content: [{ type: 'text', text: JSON.stringify(value) }], structuredContent: value } } }; };
 				const events: unknown[] = [clock('first-clock', 30), clock('final-clock', 29)];
@@ -273,6 +278,17 @@ describe('sandbox broker control transport', () => {
 				if (mode === 'wrong-server') { const action = clock('final-clock', 29); action.item.server = 'foreign-clock'; events[1] = action; }
 				if (mode === 'wrong-tool') { const action = clock('final-clock', 29); action.item.tool = 'foreign-time-status'; events[1] = action; }
 				if (mode === 'pending') events.splice(1, 0, { type: 'item.started', item: { id: 'uncompleted-command', type: 'command_execution', status: 'in_progress' } });
+				if (['absent-timestamp', 'null-timestamp', 'malformed-timestamp', 'numeric-timestamp', 'before-start-timestamp',
+					'expired-positive-timestamp', 'remaining-timestamp-drift', 'regressing-timestamp', 'timestamp-content-drift'].includes(mode)) {
+					const values: Record<string, unknown> = { ...window, remainingSeconds: 29, observedAt: new Date(Date.parse(window.startedAt) + 1_000).toISOString() };
+					if (mode === 'absent-timestamp') delete values.observedAt; if (mode === 'null-timestamp') values.observedAt = null;
+					if (mode === 'malformed-timestamp') values.observedAt = 'not-a-clock'; if (mode === 'numeric-timestamp') values.observedAt = Date.parse(window.startedAt);
+					if (mode === 'before-start-timestamp') values.observedAt = new Date(Date.parse(window.startedAt) - 1).toISOString(); if (mode === 'expired-positive-timestamp') values.observedAt = window.deadlineAt;
+					if (mode === 'remaining-timestamp-drift') values.observedAt = window.startedAt; if (mode === 'regressing-timestamp') {
+						const first = clock('first-clock', 30), value = { ...first.item.result.structuredContent, observedAt: new Date(Date.parse(window.startedAt) + 900).toISOString() };
+					events[0] = { ...first, item: { ...first.item, result: { content: [{ type: 'text', text: JSON.stringify(value) }], structuredContent: value } } };
+						values.observedAt = new Date(Date.parse(window.startedAt) + 100).toISOString(); values.remainingSeconds = 30; }
+					const final = clock('final-clock', 29), result = { content: [{ type: 'text', text: JSON.stringify(values) }], structuredContent: mode === 'timestamp-content-drift' ? { ...values, observedAt: window.startedAt } : values }; events[1] = { ...final, item: { ...final.item, result } }; }
 				const patch = { diagnostics: mode === 'missing' ? {} : { providerEvents: events },
 					timingAwareness: { ...timingAwareness, completedChecks: ['receipt-count', 'frequent'].includes(mode) ? 3 : 2 } };
 				f.patchResult(patch); const before = structuredClone(f.input.assignment), raw = structuredClone(patch);

@@ -484,8 +484,7 @@ export function verifyGolden(gate: Gate): void {
 		&& evidence.digest === `sha256:${createHash('sha256').update(canonicalStandardsJson(value)).digest('hex')}`, 'ACCEPTANCE_REPORT_CONTEXT: Exact frozen workday authority required');
 	assert.ok(['nodes', 'edges', 'attempts', 'reservations', 'usage'].every(key => Array.isArray(value[key])), 'ACCEPTANCE_REPORT_CONTEXT: Complete represented collections required'); assert.ok(Array.isArray(frozen.predecessorResults), 'ACCEPTANCE_REPORT_PREDECESSORS');
 	assert.deepEqual(rows(frozen.predecessorResults).map(item => item.id), row(reporter.assignmentAttempt).predecessorResultIds, 'ACCEPTANCE_REPORT_PREDECESSORS');
-	const encoded = /^```json\n([\s\S]+)\n```$/u.exec(body); assert.ok(encoded, 'ACCEPTANCE_REPORT_BODY: Deterministic JSON report required');
-	assert.deepEqual(JSON.parse(encoded[1]!), { classification: 'workday-report', workdayId, assignmentId: reporter.id,
+	const encoded = /^```json\n([\s\S]+)\n```$/u.exec(body); assert.ok(encoded, 'ACCEPTANCE_REPORT_BODY: Deterministic JSON report required'); assert.deepEqual(JSON.parse(encoded[1]!), { classification: 'workday-report', workdayId, assignmentId: reporter.id,
 		workday: evidence.value, predecessorResults: frozen.predecessorResults }, 'ACCEPTANCE_REPORT_BODY: Every frozen evidence byte must retain its original meaning');
 	}
 }

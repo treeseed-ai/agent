@@ -1,6 +1,26 @@
 schemaVersion: treeseed.guarantee-verifiers/v1
 ownerPackage: "@treeseed/agent"
 verifiers:
+  agent.golden.execution-preparation-cleanup-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/sandbox/runtime-clock.test.ts
+    testName: "removes private guest configuration and supplied auth on preparation denial while retaining the protected credential return"
+  agent.golden.execution-preparation-context-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/timing/guest-clock-contract.test.ts
+    testName: "denies missing foreign and empty selected proposal work-item context without repairing the supplied assignment"
+  agent.golden.execution-clock-stream-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/timing/guest-clock-contract.test.ts
+    testName: "retains ordered untrimmed first and final clocks and early fatal command evidence through a long sanitized provider observation"
+  agent.golden.execution-clock-stream-native:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/sandbox/architecture/clock-native.test.ts
+    testName: "native whole guest retains first and final clock bytes across a long provider stream and cannot forget an early killed command"
   agent.golden.execution-clock-events-unit:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

@@ -77,6 +77,10 @@ it('denies every omitted run changed policy selection derived field and fault al
 			(value: Campaign) => { const run = structuredClone(value.allocationInputsByRun[key]!), classes = run.input.allocation.agentClassPercentages, project = Object.keys(classes)[0]!; classes[project] = { ...classes[project]!, architect: 0 }; value.allocationInputsByRun[key] = run; },
 		]),
 		...Object.keys(campaignInputs(slugs).allocationInputsByRun).map(key => (value: Campaign) => { delete value.allocationInputsByRun[key]; }),
+		...Object.keys(campaignInputs(slugs).allocationInputsByRun).filter(key => key !== 'all-project-portfolio').flatMap(key => [
+			(value: Campaign) => { const run = structuredClone(value.allocationInputsByRun[key]!); run.input.durationSeconds = 7200; value.allocationInputsByRun[key] = run; },
+			(value: Campaign) => { const run = structuredClone(value.allocationInputsByRun[key]!); run.input.allocation.planningPercent = 20; value.allocationInputsByRun[key] = run; },
+		]),
 		value => { value.allocationInputsByRun.extra = structuredClone(value.allocationInputsByRun.sdk!); },
 		value => { value.proposals.pop(); },
 		value => { value.proposals[1]!.projectId = value.proposals[0]!.projectId; },

@@ -27,11 +27,14 @@ it('native pre-run reader denies every changed project weight class target and c
 		const original = campaignInputs(slugs), complete = `${JSON.stringify(original, null, 2)}\n`;
 		writeFileSync(campaign, complete); const accepted = readPreRunCampaignFreeze();
 		const observations: Array<{ key: string; mode: string; bytes: string; denied: boolean }> = [];
-		for (const key of Object.keys(original.allocationInputsByRun)) for (const mode of ['project', 'weight', 'class']) {
+		for (const key of Object.keys(original.allocationInputsByRun)) for (const mode of key === 'all-project-portfolio'
+			? ['project', 'weight', 'class'] : ['project', 'weight', 'class', 'duration', 'planning']) {
 			const changed = structuredClone(original), run = structuredClone(changed.allocationInputsByRun[key]!); changed.allocationInputsByRun[key] = run;
 			if (mode === 'project') run.input.projects = ['foreign'];
 			if (mode === 'weight') { const weights = run.input.allocation.projectPercentages; weights[Object.keys(weights)[0]!]! += 1; }
 			if (mode === 'class') { const classes = run.input.allocation.agentClassPercentages, project = Object.keys(classes)[0]!; classes[project] = { ...classes[project]!, architect: 0 }; }
+			if (mode === 'duration') run.input.durationSeconds = 7200;
+			if (mode === 'planning') run.input.allocation.planningPercent = 20;
 			const bytes = `${JSON.stringify(changed, null, 2)}\n`; writeFileSync(campaign, bytes); let denied = false;
 			try { readPreRunCampaignFreeze(); } catch (error) { denied = error instanceof Error && error.message.includes('ACCEPTANCE_CAMPAIGN_FREEZE'); }
 			observations.push({ key, mode, bytes, denied }); expect(readFileSync(campaign, 'utf8')).toBe(bytes); expect(readdirSync(root)).toEqual(['campaign.json']);
@@ -40,7 +43,7 @@ it('native pre-run reader denies every changed project weight class target and c
 			const changed = { ...original, campaignId }, bytes = `${JSON.stringify(changed, null, 2)}\n`; writeFileSync(campaign, bytes);
 			expect(() => readPreRunCampaignFreeze()).toThrow('ACCEPTANCE_CAMPAIGN_FREEZE'); expect(readFileSync(campaign, 'utf8')).toBe(bytes);
 		}
-		expect(observations).toHaveLength(75); expect(observations.map(value => value.denied)).toEqual(Array(75).fill(true));
+		expect(observations).toHaveLength(123); expect(observations.map(value => value.denied)).toEqual(Array(123).fill(true));
 		const held = structuredClone(observations); writeFileSync(campaign, complete);
 		expect(readPreRunCampaignFreeze()).toEqual(accepted); expect(readFileSync(campaign, 'utf8')).toBe(complete); expect(observations).toEqual(held);
 		// Native owning filesystem reader and exact frozen authority. These are

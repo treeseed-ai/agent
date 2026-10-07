@@ -48,8 +48,8 @@ it('native public SDK profile inventory denies ambiguous governed identities wit
 			expect(input).toEqual(original); expect(supplied).toEqual(originalProfiles); observations.push({ mode, denied }); return denied;
 		};
 		expect(await execute()).toBe(false);
-		for (const profile of profiles) for (const staleFirst of [false, true]) {
-			mode = `${profile.agentSlug}:${staleFirst}`; const duplicate = { ...structuredClone(profile), definitionRevision: 'b'.repeat(40) };
+		for (const profile of profiles) for (const definitionRevision of [head, 'b'.repeat(40)]) for (const staleFirst of [false, true]) {
+			mode = `${profile.agentSlug}:${definitionRevision}:${staleFirst}`; const duplicate = { ...structuredClone(profile), definitionRevision };
 			supplied = staleFirst ? [duplicate, ...structuredClone(profiles)] : [...structuredClone(profiles), duplicate]; await execute();
 		}
 		const ambiguities = observations.slice(1); supplied = structuredClone(profiles);
@@ -57,7 +57,7 @@ it('native public SDK profile inventory denies ambiguous governed identities wit
 		const retained = structuredClone(observations), requests = structuredClone(history); mode = 'exact'; expect(await execute()).toBe(false);
 		expect(observations.slice(0, retained.length)).toEqual(retained); expect(history.slice(0, requests.length)).toEqual(requests);
 		expect(history.every(value => value.method === 'GET' && value.body === '')).toBe(true); expect(profiles).toEqual(held);
-		expect(ambiguities.map(value => value.denied)).toEqual(Array(16).fill(true));
+		expect(ambiguities.map(value => value.denied)).toEqual(Array(32).fill(true)); expect(history).toHaveLength(37);
 		// Supplied revisions/definitions/token are inputs, not native governance,
 		// model usage or a completed managed SDK campaign.
 	} finally { server.closeAllConnections(); if (server.listening) await new Promise<void>((accept, reject) => server.close(error => error ? reject(error) : accept())); }

@@ -77,7 +77,8 @@ describe('owning context Kernel through native content HTTP and source Git', () 
 				expect(report.workday).toEqual(evidence); expect(report.assignmentId).toBe(f.attempt.id); expect(report.workdayId).toBe(f.attempt.workdayId);
 				if (interrupted) { expect(result).toMatchObject({ status: 'failed', summary: 'treedx_commit_readback_mismatch' }); expect(result.outputs?.assignmentResult).toBeUndefined(); }
 				else { expect(result.status).toBe('completed'); expect(result.outputs?.assignmentResult).toMatchObject({ assignmentId: f.attempt.id,
-					references: [{ kind: 'treedx', projectId: f.attempt.projectId, repository, path, commit: candidate }] }); }
+					references: [{ kind: 'treedx', projectId: f.attempt.projectId, repository, path, commit: candidate }] });
+					expect(assignmentResultSchema.parse(result.outputs?.assignmentResult).usage).toEqual({ elapsedSeconds: expect.any(Number) }); }
 				expect(f.git('rev-parse', 'HEAD')).toBe(candidate);
 				expect({ attempt: f.attempt, context: f.input.assignment.workspaceContext, evidence, profileInput }).toEqual(held);
 			} finally { try { await boundary?.close(); } finally { await f.close(); } }

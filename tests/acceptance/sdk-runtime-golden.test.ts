@@ -437,6 +437,16 @@ export function verifyGolden(gate: Gate): void {
 	const reporting = assignments.filter(item => activity(item) === 'reporting');
 	assert.equal(reporting.length, 1, 'ACCEPTANCE_REPORT_ASSIGNMENT: Exactly one selected closeout assignment required');
 	const reporter = reporting[0]!, result = row(reporter.assignmentResult);
+	const eventArgs = ['workdays', 'events', 'list', workdayId, '--diagnostics', 'full'];
+	const events = readCompleteEvidence(eventArgs, team, 100, 'ACCEPTANCE_REPORT_EVENTS', 'ascending');
+	assert.ok(events.length > 0 && events.every(event => event.runId === workdayId && event.teamId === run.teamId), 'ACCEPTANCE_REPORT_EVENTS_SCOPE');
+	assert.deepEqual(events.map(event => event.eventIndex), Array.from({ length: events.length }, (_, index) => index), 'ACCEPTANCE_REPORT_EVENTS_COMPLETE');
+	for (const event of events.filter(event => event.assignmentId === reporter.id)) {
+		const context = row(event.context), raw = row(event.protectedPayload).providerEvents;
+		assert.ok(!Object.hasOwn(context, 'model') && context.isolation !== 'microvm'
+			&& (raw === undefined || Array.isArray(raw) && raw.length === 0), 'ACCEPTANCE_REPORT_MODEL: Deterministic reporting cannot dispatch a model');
+	}
+	assert.ok(isDeepStrictEqual(readCompleteEvidence(eventArgs, team, 100, 'ACCEPTANCE_REPORT_EVENTS', 'ascending'), events), 'ACCEPTANCE_REPORT_EVENTS_IMMUTABLE');
 	assert.ok(reporter.status === 'completed' && result.status === 'completed' && result.assignmentId === reporter.id,
 		'ACCEPTANCE_REPORT_COMPLETION: Canonical completed reporting result must bind its assignment');
 	assert.equal(reporter.leaseToken, null, 'ACCEPTANCE_REPORT_LEASE: Closeout lease must be released');

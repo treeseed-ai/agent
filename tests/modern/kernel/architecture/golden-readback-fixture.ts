@@ -104,7 +104,10 @@ beforeEach(() => {
 		state.replies.set(`workspace ${workspace.workspaceId}`, { result: { workspaceId: workspace.workspaceId,
 			repoId: workspace.repository, status: 'closed' }, receipt: { projectId: item.projectId } });
 	}
-	state.replies.set('workdays show', { run: { status: 'completed', executionMode: 'simulation', startedAt: '2026-09-27T00:00:00Z',
+	state.replies.set('workdays events', { items: [{ id: 'supplied-workday-event', eventIndex: 0, runId: workdayId,
+		teamId: 'team-1', assignmentId: null, eventType: 'workday.started', createdAt: '2026-09-27T00:00:00Z', context: {} }],
+		page: { limit: 100, hasMore: false, nextCursor: null } });
+	state.replies.set('workdays show', { run: { teamId: 'team-1', status: 'completed', executionMode: 'simulation', startedAt: '2026-09-27T00:00:00Z',
 		completedAt: '2026-09-27T00:01:00Z', parameters: { durationSeconds: 3600, planningPercent: 100 / 3, allocationWeight: 1, planningTurnMaximumSeconds: 180, maximumConcurrency: 5, communicationConcurrency: 5,
 			appliedPlan: { policySnapshot: { allocationWeight: 1 }, planningRounds: [{ state: 'complete' }, { state: 'complete' }] } },
 		state: 'ended', endedAt: '2026-09-27T00:01:00Z', reportRef } });

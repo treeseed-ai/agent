@@ -13,3 +13,5 @@ scene:
 acceptanceCriteria:
   - criterion: b635827ed7862d56b8764dfad30114b9ee18d02b4aa709a257841e18a1bd0f0d
     verifierRefs: [agent.golden.execution-clock-observation-live-1]
+  - criterion: 7eaf9fdc1c264e2d0b28d2fc751da33a2ffcf98ca0d6446ac6e8672503dfa533
+    verifierRefs: [agent.golden.live.reporter, agent.golden.live.settlement]

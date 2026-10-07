@@ -120,7 +120,7 @@ describe('native trusted guest clock relay and owning provider tool', () => {
 				outcomes.push({ mode, failure, events, clockValues: structuredClone(f.readings.slice(1)), retainedPrivateFiles });
 				expect(await readFile(join(input, 'assignment.json'), 'utf8')).toBe(held);
 				expect(await readFile(join(input, 'input-execution-context'))).toEqual(bytes);
-				expect(f.calls).toEqual(Array.from({ length: mode === 'invalid-context' || mode === 'missing-subscription' ? 1 : 3 },
+				expect(f.calls, `${mode}: ${failure}`).toEqual(Array.from({ length: mode === 'invalid-context' || mode === 'missing-subscription' ? 1 : 3 },
 					() => ({ path: '/v1/sandboxes/isolated-clock/tools/treedx', tool: 'treeseed_time_status', arguments: {} })));
 				if (mode === 'invalid-context' || mode === 'missing-subscription') {
 					await expect(stat(join(output, 'provider-invoked'))).rejects.toMatchObject({ code: 'ENOENT' });

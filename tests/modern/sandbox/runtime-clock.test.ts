@@ -103,7 +103,7 @@ function mockGuestFiles(files: Map<string, Buffer<ArrayBuffer>>) {
 		vi.mocked(createReadStream).mockImplementation(path => Object.assign(Readable.from([files.get(String(path))]), { path: String(path), pending: false, bytesRead: 0, close() {} }));
 }
 
-it('measures active guest preparation model tools and closeout separately from infrastructure materialization without moving the original execution clock', async () => {
+async function suppliedGuestExecution(providerFailure?: Error, incompleteClock = false) {
 	const f = suppliedGuestFiles('completed'); f.files.set('/proc/version', Buffer.from('Controlled unit kernel input.')); mockGuestFiles(f.files);
 	// Supplied monotonic UNIT observations, not native elapsed time or usage.
 	let observed = 0n; const monotonic = vi.spyOn(process.hrtime, 'bigint').mockImplementation(() => observed);
@@ -117,12 +117,14 @@ it('measures active guest preparation model tools and closeout separately from i
 	vi.mocked(run).mockImplementation(async (executable, args, options) => {
 		expect(executable).toBe('/usr/local/bin/codex'); expect(options?.timeoutMs).toBeGreaterThan(0);
 		for (const [id, seconds] of [['original-first', 0], ['original-final', 2]] as const) {
+			if (incompleteClock && id === 'original-final') continue;
 			const value = { ...f.execution, observedAt: new Date(Date.parse(f.execution.startedAt) + seconds * 1_000).toISOString(), remainingSeconds: 30 - seconds };
 			options?.onLine?.(JSON.stringify({ type: 'item.completed', usage: { input_tokens: 19, output_tokens: 3 }, item: {
 				id, type: 'mcp_tool_call', server: 'treedx', tool: 'treeseed_time_status', status: 'completed', error: null,
 				result: { content: [{ type: 'text', text: JSON.stringify(value) }], structuredContent: value } } }));
 		}
 		observed = 7_000_000_000n;
+		if (providerFailure) throw providerFailure;
 		f.files.set(args[args.indexOf('--output-last-message') + 1]!, Buffer.from('Controlled unit response.'));
 		return { stdout: '', stderr: '' };
 	});
@@ -133,7 +135,18 @@ it('measures active guest preparation model tools and closeout separately from i
 		expect(result.timingAwareness).toMatchObject({ completedChecks: 2, firstToolCompliant: true, finalToolCompliant: true });
 		for (const [path, value] of f.held) expect(f.files.get(path)).toEqual(value);
 		expect(['auth.json', 'config.toml', 'activity-completion.schema.json'].filter(name => f.files.has(f.privateRoot + name))).toEqual([]);
+		return result;
 	} finally { monotonic.mockRestore(); }
+}
+it('measures active guest preparation model tools and closeout separately from infrastructure materialization without moving the original execution clock', async () => {
+	expect((await suppliedGuestExecution()).status).toBe('completed');
+});
+it('publishes original failed provider measurements and complete raw clocks as a failed sandbox result without manufacturing a successful response or an incomplete receipt', async () => {
+	const result = await suppliedGuestExecution(new Error('Original controlled provider exit 23.'));
+	expect(result.status).toBe('failed'); expect(result.summary).toBe('Codex execution failed: Original controlled provider exit 23.');
+	expect(result.responseMarkdown).toBeUndefined();
+	expect(result.diagnostics.providerEvents).toHaveLength(2);
+	await expect(suppliedGuestExecution(new Error('Original controlled provider exit 23.'), true)).rejects.toThrow('Agent timing-awareness contract requires');
 });
 
 it('removes private guest configuration and supplied auth on preparation denial while retaining the protected credential return', async () => {

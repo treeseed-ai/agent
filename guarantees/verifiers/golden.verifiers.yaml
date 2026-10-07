@@ -1,6 +1,11 @@
 schemaVersion: treeseed.guarantee-verifiers/v1
 ownerPackage: "@treeseed/agent"
 verifiers:
+  agent.golden.execution-failed-guest-measurements-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/sandbox/runtime-clock.test.ts
+    testName: "publishes original failed provider measurements and complete raw clocks as a failed sandbox result without manufacturing a successful response or an incomplete receipt"
   agent.golden.execution-issued-window-unit:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

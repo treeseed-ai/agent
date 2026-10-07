@@ -87,7 +87,7 @@ describe('Codex chat executor', () => {
 		const f = fixture(), before = structuredClone(f);
 		expect(modelExecutionInventory(f.items, f.events, f.run).map(value => value.item.status)).toEqual(['completed', 'failed', 'returned']); expect(f).toEqual(before);
 		for (const mode of ['empty', 'missing-start', 'missing-terminal', 'duplicate-start', 'duplicate-terminal', 'duplicate-owner', 'missing-owner',
-			'foreign-run', 'foreign-team', 'foreign-project', 'foreign-attempt', 'empty-model', 'missing-model', 'payload-only', 'bad-clock', 'reversed', 'duplicate-index']) {
+			'foreign-run', 'foreign-team', 'foreign-project', 'foreign-attempt', 'empty-model', 'missing-model', 'payload-only', 'stripped-raw', 'stripped-empty-raw', 'stripped-malformed-raw', 'bad-clock', 'reversed', 'duplicate-index']) {
 			const supplied = fixture();
 			if (mode === 'empty') supplied.events = [];
 			if (mode === 'missing-start') supplied.events.splice(0, 1);
@@ -103,6 +103,11 @@ describe('Codex chat executor', () => {
 			if (mode === 'empty-model') supplied.events[0]!.context.model = '';
 			if (mode === 'missing-model') Object.assign(supplied.events[0]!.context, { model: undefined });
 			if (mode === 'payload-only') for (const event of supplied.events) Object.assign(event, { payload: event.context, context: undefined });
+			if (mode.startsWith('stripped-')) {
+				for (const event of supplied.events.slice(2, 4)) Object.assign(event, { context: {} });
+				Object.assign(supplied.events[3]!, { protectedPayload: { providerEvents: mode === 'stripped-raw' ? [{ type: 'turn.started' }]
+					: mode === 'stripped-empty-raw' ? [] : { malformed: true } } });
+			}
 			if (mode === 'bad-clock') supplied.events[0]!.createdAt = 'invalid';
 			if (mode === 'reversed') supplied.events[0]!.createdAt = '2026-10-07T00:00:59.000Z';
 			if (mode === 'duplicate-index') supplied.events[1]!.eventIndex = 0;

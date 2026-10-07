@@ -18,3 +18,9 @@ workflow:
   - id: execution-clock-observation-live-1
     action: { verifier: agent.golden.execution-clock-observation-live-1 }
     expect: { status: passed }
+  - id: reporter-evidence
+    action: { verifier: agent.golden.live.reporter }
+    expect: { status: passed }
+  - id: settlement-evidence
+    action: { verifier: agent.golden.live.settlement }
+    expect: { status: passed }

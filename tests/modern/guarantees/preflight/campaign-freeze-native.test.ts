@@ -41,6 +41,11 @@ it('native public SDK event reads retain completed failed and returned model inv
 			if (pageNumber === 2 && mode === 'duplicate') supplied[0]!.assignmentId = items[0]!.id;
 			if (pageNumber === 2 && mode === 'empty-model') supplied[0]!.context.model = '';
 			if (mode === 'payload-only') for (const event of supplied) Object.assign(event, { payload: event.context, context: undefined });
+			if (pageNumber === 1 && mode.startsWith('stripped-')) {
+				for (const event of supplied) Object.assign(event, { context: {} });
+				Object.assign(supplied[1]!, { protectedPayload: { providerEvents: mode === 'stripped-raw' ? [{ type: 'turn.started' }]
+					: mode === 'stripped-empty-raw' ? [] : { malformed: true } } });
+			}
 			response.end(JSON.stringify({ data: { items: supplied, page: { limit: 2, hasMore: pageNumber < 2,
 				nextCursor: pageNumber < 2 ? encodeCapacityPageCursor(events[pageNumber * 2 + 1]!) : null } } }));
 		});
@@ -60,7 +65,7 @@ it('native public SDK event reads retain completed failed and returned model inv
 					expect(input).toEqual(before); if (!Array.isArray(page.items)) throw new Error('Native original event collection required'); observed.push(...page.items.map(row));
 				}
 				const inventory = modelExecutionInventory(items, observed, run);
-				expect(inventory.map(value => value.item.status)).toEqual(['completed', 'failed', 'returned']);
+				if (!mode.startsWith('stripped-')) expect(inventory.map(value => value.item.status)).toEqual(['completed', 'failed', 'returned']);
 				if (mode === 'exact') expect(observed).toEqual(events);
 			} catch (failure) { denied = true; error = failure instanceof Error ? failure.message : String(failure); }
 			if (['missing-start', 'foreign', 'duplicate', 'empty-model', 'payload-only'].includes(mode)) expect(error).toMatch(/ACCEPTANCE_MODEL_INVENTORY|Expected values to be strictly equal/u);
@@ -68,9 +73,12 @@ it('native public SDK event reads retain completed failed and returned model inv
 		};
 		expect(await execute(), JSON.stringify(observations)).toBe(false);
 		for (const fault of ['missing-start', 'foreign', 'duplicate', 'empty-model', 'payload-only', '403', '503', 'json']) { mode = fault; expect(await execute(), mode).toBe(true); }
+		for (const fault of ['stripped-raw', 'stripped-empty-raw', 'stripped-malformed-raw']) { mode = fault; await execute(); }
 		const retained = structuredClone(observations), requests = structuredClone(history); mode = 'exact'; expect(await execute(), JSON.stringify(observations)).toBe(false);
 		expect(observations.slice(0, retained.length)).toEqual(retained); expect(history.slice(0, requests.length)).toEqual(requests);
 		expect(history.every(value => value.method === 'GET' && value.body === '')).toBe(true); expect({ run, items, events }).toEqual(held);
+		expect(observations.filter(value => value.mode.startsWith('stripped-')).map(value => ({ denied: value.denied, missingStart: value.error.includes('ACCEPTANCE_MODEL_INVENTORY_MISSING_START') })))
+			.toEqual(Array(3).fill({ denied: true, missingStart: true }));
 		// Supplied event/status/token bytes are NOT genuine API governance,
 		// model execution, all-attempt charge production or physical teardown.
 	} finally { server.closeAllConnections(); if (server.listening) await new Promise<void>((accept, reject) => server.close(error => error ? reject(error) : accept())); }

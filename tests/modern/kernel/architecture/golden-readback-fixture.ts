@@ -1,6 +1,7 @@
 import { beforeEach, vi } from 'vitest';
 import { createHash } from 'node:crypto';
 import { stringify } from 'yaml';
+import { canonicalStandardsJson } from '@treeseed/sdk/standards';
 
 export type Row = Record<string, any>;
 const state = vi.hoisted(() => ({ cases: new Map<string, () => void>(), replies: new Map<string, Row>(), assignmentPages: undefined as Row[] | undefined, usagePages: undefined as Row[] | undefined, eventPages: undefined as Row[] | undefined, failure: undefined as Error | undefined, workspaceFailure: undefined as Error | undefined, timeout: 0, args: [] as string[], calls: [] as string[][] }));
@@ -104,7 +105,10 @@ beforeEach(() => {
 		state.replies.set(`workspace ${workspace.workspaceId}`, { result: { workspaceId: workspace.workspaceId,
 			repoId: workspace.repository, status: 'closed' }, receipt: { projectId: item.projectId } });
 	}
-	state.replies.set('workdays show', { run: { status: 'completed', executionMode: 'simulation', startedAt: '2026-09-27T00:00:00Z',
+	state.replies.set('workdays events', { items: [{ id: 'supplied-workday-event', eventIndex: 0, runId: workdayId,
+		teamId: 'team-1', assignmentId: null, eventType: 'workday.started', createdAt: '2026-09-27T00:00:00Z', context: {} }],
+		page: { limit: 100, hasMore: false, nextCursor: null } });
+	state.replies.set('workdays show', { run: { teamId: 'team-1', status: 'completed', executionMode: 'simulation', startedAt: '2026-09-27T00:00:00Z',
 		completedAt: '2026-09-27T00:01:00Z', parameters: { durationSeconds: 3600, planningPercent: 100 / 3, allocationWeight: 1, planningTurnMaximumSeconds: 180, maximumConcurrency: 5, communicationConcurrency: 5,
 			appliedPlan: { policySnapshot: { allocationWeight: 1 }, planningRounds: [{ state: 'complete' }, { state: 'complete' }] } },
 		state: 'ended', endedAt: '2026-09-27T00:01:00Z', reportRef } });
@@ -195,4 +199,14 @@ beforeEach(() => {
 				subjectRefs: [structuredClone(source)], body, createdAt: item.completedAt } }] } });
 		}
 	}
+	// Frozen closeout authority is supplied test input, not actual SQL history.
+	const predecessors = items.filter(item => item.id !== reporter.id).map(item => structuredClone(item.assignmentResult));
+	const evidence = { teamId: 'team-1', workdayId, nodes: structuredClone(nodes), edges: [],
+		attempts: items.filter(item => item.id !== reporter.id).map(item => ({ id: item.id, status: item.status, assignment_result_json: JSON.stringify(item.assignmentResult) })),
+		reservations: [], usage: structuredClone(state.replies.get('capacity usage')!.items) };
+	reporter.assignmentAttempt.predecessorResultIds = predecessors.map(item => item.id);
+	reporter.workspaceContext = { predecessorResults: predecessors, authorizedContext: [{ ref: structuredClone(reporter.assignmentAttempt.sourceRef),
+		mediaType: 'application/json', digest: `sha256:${createHash('sha256').update(canonicalStandardsJson(evidence)).digest('hex')}`, value: evidence }] };
+	state.replies.get('library read')!.result.files[0].body = `\`\`\`json\n${JSON.stringify({ classification: 'workday-report', workdayId,
+		assignmentId: reporter.id, workday: evidence, predecessorResults: predecessors }, null, 2)}\n\`\`\``;
 });

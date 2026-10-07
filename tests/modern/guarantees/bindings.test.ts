@@ -19,13 +19,20 @@ describe('capacity-provider guarantee execution bindings', () => {
 	it('binds the exact model clock criterion to complete post campaign native readback without substituting component evidence', () => {
 		const manifest = parse(readFileSync(resolve(root, 'guarantees/agent/golden/sdk-complete.guarantee.yaml'), 'utf8'));
 		expect(manifest.acceptanceCriteria).toEqual([{ criterion: 'b635827ed7862d56b8764dfad30114b9ee18d02b4aa709a257841e18a1bd0f0d',
-			verifierRefs: ['agent.golden.execution-clock-observation-live-1'] }]);
+			verifierRefs: ['agent.golden.execution-clock-observation-live-1'] },
+			{ criterion: '7eaf9fdc1c264e2d0b28d2fc751da33a2ffcf98ca0d6446ac6e8672503dfa533',
+				verifierRefs: ['agent.golden.live.reporter', 'agent.golden.live.settlement'] }]);
 		const scene = parse(readFileSync(resolve(root, manifest.scene.manifest), 'utf8'));
 		expect(scene.scope).toBe('local-integrated-runtime');
 		const refs = scene.workflow.map((step: { action: { verifier: string } }) => step.action.verifier);
 		expect(refs.filter((ref: string) => ref === 'agent.golden.execution-clock-observation-live-1')).toHaveLength(1);
 		expect(refs.indexOf('agent.golden.live.campaign')).toBeGreaterThan(-1);
 		expect(refs.indexOf('agent.golden.execution-clock-observation-live-1')).toBeGreaterThan(refs.indexOf('agent.golden.live.campaign'));
+		for (const ref of ['agent.golden.live.reporter', 'agent.golden.live.settlement']) {
+			expect(refs.filter((value: string) => value === ref)).toHaveLength(1);
+			expect(refs.indexOf(ref)).toBeGreaterThan(refs.indexOf('agent.golden.live.campaign'));
+			expect(registry.verifiers[ref]).toMatchObject({ kind: 'nodeTestCase', testFile: 'tests/acceptance/sdk-runtime-golden.test.ts' });
+		}
 		expect(registry.verifiers['agent.golden.execution-clock-observation-live-1']).toMatchObject({ kind: 'nodeTestCase',
 			testFile: 'tests/acceptance/workday/context-custody.test.ts',
 			testName: 'Every actual recorded model execution is included in exact clock evidence readback without discarding failed or returned attempts' });
@@ -40,7 +47,7 @@ describe('capacity-provider guarantee execution bindings', () => {
 		expect(job.env.TREESEED_DEVELOPMENT_WORKSPACE_ROOT).toBe('${{ github.workspace }}/.treeseed/platform-authority');
 		const verify = steps.findIndex((step: { run?: string }) => step.run?.includes('npm run verify:local'));
 		const scene = steps.findIndex((step: { uses?: string }) => step.uses?.includes('reviewer/.github/actions/run-scenes@'));
-		expect(steps[scene].uses).toBe('treeseed-ai/reviewer/.github/actions/run-scenes@ea16c08f3f70fcf27d2e1d816df26af23e84a4b4');
+		expect(steps[scene].uses).toBe('treeseed-ai/reviewer/.github/actions/run-scenes@1e3019fbf24163116222dc96a70c126bf3488389');
 		expect(steps.indexOf(checkouts[0])).toBeLessThan(verify); expect(verify).toBeGreaterThan(-1); expect(scene).toBeGreaterThan(verify);
 		const relay = steps.findIndex((step: { name?: string }) => step.name === 'Prepare disposable native relay CA');
 		expect(relay).toBeGreaterThan(-1); expect(relay).toBeLessThan(verify);

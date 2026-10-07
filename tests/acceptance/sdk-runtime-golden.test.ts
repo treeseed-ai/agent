@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import { isDeepStrictEqual } from 'node:util';
+import { createHash } from 'node:crypto';
 import test from 'node:test';
-import { assignmentReferenceSchema, assignmentTimingAwarenessReceiptSchema, estimateSchema, exactEntityReferenceSchema } from '@treeseed/sdk/agent-capacity';
+import { assignmentReferenceSchema, assignmentTimingAwarenessReceiptSchema, authorizedContextItemSchema, estimateSchema, exactEntityReferenceSchema } from '@treeseed/sdk/agent-capacity';
+import { canonicalStandardsJson } from '@treeseed/sdk/standards';
 import { DEFAULT_CAPACITY_PAGE_LIMIT } from '@treeseed/sdk/capacity-pagination';
 import { validatePortableContentData } from '@treeseed/sdk/content-validation';
 import { read, row, type Row } from './acceptance-cli.ts';
@@ -437,6 +439,16 @@ export function verifyGolden(gate: Gate): void {
 	const reporting = assignments.filter(item => activity(item) === 'reporting');
 	assert.equal(reporting.length, 1, 'ACCEPTANCE_REPORT_ASSIGNMENT: Exactly one selected closeout assignment required');
 	const reporter = reporting[0]!, result = row(reporter.assignmentResult);
+	const eventArgs = ['workdays', 'events', 'list', workdayId, '--diagnostics', 'full'];
+	const events = readCompleteEvidence(eventArgs, team, 100, 'ACCEPTANCE_REPORT_EVENTS', 'ascending');
+	assert.ok(events.length > 0 && events.every(event => event.runId === workdayId && event.teamId === run.teamId), 'ACCEPTANCE_REPORT_EVENTS_SCOPE');
+	assert.deepEqual(events.map(event => event.eventIndex), Array.from({ length: events.length }, (_, index) => index), 'ACCEPTANCE_REPORT_EVENTS_COMPLETE');
+	for (const event of events.filter(event => event.assignmentId === reporter.id)) {
+		const context = row(event.context), raw = row(event.protectedPayload).providerEvents;
+		assert.ok(!Object.hasOwn(context, 'model') && context.isolation !== 'microvm'
+			&& (raw === undefined || Array.isArray(raw) && raw.length === 0), 'ACCEPTANCE_REPORT_MODEL: Deterministic reporting cannot dispatch a model');
+	}
+	assert.ok(isDeepStrictEqual(readCompleteEvidence(eventArgs, team, 100, 'ACCEPTANCE_REPORT_EVENTS', 'ascending'), events), 'ACCEPTANCE_REPORT_EVENTS_IMMUTABLE');
 	assert.ok(reporter.status === 'completed' && result.status === 'completed' && result.assignmentId === reporter.id,
 		'ACCEPTANCE_REPORT_COMPLETION: Canonical completed reporting result must bind its assignment');
 	assert.equal(reporter.leaseToken, null, 'ACCEPTANCE_REPORT_LEASE: Closeout lease must be released');
@@ -465,8 +477,15 @@ export function verifyGolden(gate: Gate): void {
 	const canonicalReport = { ...frontmatter, body }, checkedReport = validatePortableContentData('note', canonicalReport);
 	assert.ok(checkedReport.ok && isDeepStrictEqual(checkedReport.data, canonicalReport),
 		'ACCEPTANCE_REPORT_NOTE: Full canonical report Note fields and authority required');
-	assert.ok(body.includes(workdayId), 'Reporter must describe this exact workday');
-	assert.ok(body.includes(text(actors[0]?.id)), 'Reporter must include actual predecessor evidence, not an empty summary');
+	assert.ok(body.includes(workdayId), 'Reporter must describe this exact workday'); assert.ok(body.includes(text(actors[0]?.id)), 'Reporter must include actual predecessor evidence, not an empty summary');
+	const frozen = row(reporter.workspaceContext), inline = rows(frozen.authorizedContext); assert.equal(inline.length, 1, 'ACCEPTANCE_REPORT_CONTEXT'); const evidence = authorizedContextItemSchema.parse(inline[0]), value = row(evidence.value);
+	assert.ok(isDeepStrictEqual(evidence, inline[0]) && isDeepStrictEqual(evidence.ref, source)
+		&& value.teamId === run.teamId && value.workdayId === workdayId && evidence.mediaType === 'application/json'
+		&& evidence.digest === `sha256:${createHash('sha256').update(canonicalStandardsJson(value)).digest('hex')}`, 'ACCEPTANCE_REPORT_CONTEXT: Exact frozen workday authority required');
+	assert.ok(['nodes', 'edges', 'attempts', 'reservations', 'usage'].every(key => Array.isArray(value[key])), 'ACCEPTANCE_REPORT_CONTEXT: Complete represented collections required'); assert.ok(Array.isArray(frozen.predecessorResults), 'ACCEPTANCE_REPORT_PREDECESSORS');
+	assert.deepEqual(rows(frozen.predecessorResults).map(item => item.id), row(reporter.assignmentAttempt).predecessorResultIds, 'ACCEPTANCE_REPORT_PREDECESSORS');
+	const encoded = /^```json\n([\s\S]+)\n```$/u.exec(body); assert.ok(encoded, 'ACCEPTANCE_REPORT_BODY: Deterministic JSON report required'); assert.deepEqual(JSON.parse(encoded[1]!), { classification: 'workday-report', workdayId, assignmentId: reporter.id,
+		workday: evidence.value, predecessorResults: frozen.predecessorResults }, 'ACCEPTANCE_REPORT_BODY: Every frozen evidence byte must retain its original meaning');
 	}
 }
 

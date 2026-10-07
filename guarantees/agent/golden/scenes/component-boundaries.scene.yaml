@@ -84,6 +84,12 @@ workflow:
   - id: execution-clock-input-unit
     action: { verifier: agent.golden.execution-clock-input-unit }
     expect: { status: passed }
+  - id: execution-clock-start-order-unit
+    action: { verifier: agent.golden.execution-clock-start-order-unit }
+    expect: { status: passed }
+  - id: execution-clock-start-readback-unit
+    action: { verifier: agent.golden.execution-clock-start-readback-unit }
+    expect: { status: passed }
   - id: execution-clock-input-native
     action: { verifier: agent.golden.execution-clock-input-native }
     expect: { status: passed }

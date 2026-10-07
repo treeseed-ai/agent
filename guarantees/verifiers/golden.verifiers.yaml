@@ -121,6 +121,16 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/sandbox/architecture/clock-authority.test.ts
     testName: "rejects every caller supplied clock field without changing the original productive authority"
+  agent.golden.execution-clock-start-order-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/sandbox/architecture/clock-authority.test.ts
+    testName: "denies work started before the original first clock read completes even when later clock results look valid"
+  agent.golden.execution-clock-start-readback-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/timing/guest-clock-contract.test.ts
+    testName: "rejects retrospectively legitimized command starts in exact public clock evidence without rewriting observations or receipts"
   agent.golden.execution-clock-input-native:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

@@ -56,7 +56,7 @@ async function nativeClock() {
 describe('native trusted guest clock relay and owning provider tool', () => {
 	it('native whole guest retains first and final clock bytes across a long provider stream and cannot forget an early killed command', async () => {
 		const outcomes: Array<{ mode: string; failure: string; events: Record<string, unknown>[]; clockValues: unknown[]; retainedPrivateFiles: string[] }> = [];
-		for (const mode of ['completed', 'resource-abort']) {
+		for (const mode of ['completed', 'resource-abort', 'invalid-context', 'missing-subscription']) {
 			const f = await nativeClock();
 			try {
 				const input = join(f.directory, 'input'), output = join(f.directory, 'output'), workspace = join(f.directory, 'workspace');
@@ -68,6 +68,7 @@ describe('native trusted guest clock relay and owning provider tool', () => {
 				}, predecessorResults: [], context: [{ ref: f.attempt.sourceRef, value: { frontmatter: {
 					executionPlan: { workItems: [{ id: f.attempt.workItemId, agentClass: f.attempt.agentClass }] },
 				} } }] } };
+				if (mode === 'invalid-context') context.canonicalAssignmentContext.context = [];
 				const bytes = Buffer.from(JSON.stringify(context)), digest = (value: Buffer) => `sha256:${createHash('sha256').update(value).digest('hex')}`;
 				await writeFile(join(input, 'input-execution-context'), bytes); await copyFile(f.cert, join(input, 'input-relay-ca'));
 				const ca = await readFile(f.cert);
@@ -82,6 +83,7 @@ describe('native trusted guest clock relay and owning provider tool', () => {
 					network: { defaultDeny: true, relayUrl: f.environment.TREESEED_RELAY_URL, allowedServices: ['treedx'] },
 					modelPolicy: { provider: 'controlled-native-input', model: 'not-a-real-model', capabilities: [] }, credentialHandles: [], treeDxHandleIds: [],
 					leaseExpiresAt: f.attempt.deadline, signature: { keyId: 'controlled-native-input', algorithm: 'Ed25519', value: 'supplied-not-issued' } });
+				if (mode === 'missing-subscription') assignment.network.allowedServices.push('codex-subscription');
 				const held = JSON.stringify(assignment); await writeFile(join(input, 'assignment.json'), held);
 				await writeFile(join(input, 'sandbox-id'), 'isolated-clock'); await writeFile(join(input, 'operation-token'), 'isolated-clock-token');
 				await writeFile(join(input, 'stream-mode'), mode);
@@ -111,18 +113,23 @@ describe('native trusted guest clock relay and owning provider tool', () => {
 					if (mode === 'completed') expect(result.timingAwareness).toMatchObject({ completedChecks: 2, firstToolCompliant: true, finalToolCompliant: true });
 				} catch (error) { if (!(error instanceof Error && 'code' in error && error.code === 'ENOENT')) throw error; }
 				const retainedPrivateFiles: string[] = [];
-				for (const name of ['auth.json', 'config.toml']) {
+				for (const name of ['auth.json', 'config.toml', 'activity-completion.schema.json']) {
 					try { await stat(join(workspace, '.treeseed/codex', name)); retainedPrivateFiles.push(name); }
 					catch (error) { if (!(error instanceof Error && 'code' in error && error.code === 'ENOENT')) throw error; }
 				}
 				outcomes.push({ mode, failure, events, clockValues: structuredClone(f.readings.slice(1)), retainedPrivateFiles });
 				expect(await readFile(join(input, 'assignment.json'), 'utf8')).toBe(held);
 				expect(await readFile(join(input, 'input-execution-context'))).toEqual(bytes);
-				expect(f.calls).toEqual(Array.from({ length: 3 }, () => ({ path: '/v1/sandboxes/isolated-clock/tools/treedx', tool: 'treeseed_time_status', arguments: {} })));
+				expect(f.calls).toEqual(Array.from({ length: mode === 'invalid-context' || mode === 'missing-subscription' ? 1 : 3 },
+					() => ({ path: '/v1/sandboxes/isolated-clock/tools/treedx', tool: 'treeseed_time_status', arguments: {} })));
+				if (mode === 'invalid-context' || mode === 'missing-subscription') {
+					await expect(stat(join(output, 'provider-invoked'))).rejects.toMatchObject({ code: 'ENOENT' });
+					await expect(stat(resultPath)).rejects.toMatchObject({ code: 'ENOENT' });
+				} else expect((await stat(join(output, 'provider-invoked'))).isFile()).toBe(true);
 			} finally { await f.close(); await expect(stat(f.directory)).rejects.toMatchObject({ code: 'ENOENT' }); }
 		}
 		expect(outcomes[0]!.failure, outcomes.map(value => `${value.mode}: ${value.failure}`).join('\n')).toBe('');
-		const summary = outcomes.map(value => ({ mode: value.mode, rawEvents: value.events.length,
+		const summary = outcomes.slice(0, 2).map(value => ({ mode: value.mode, rawEvents: value.events.length,
 			retainedClocks: completedTimeStatusChecks(value.events), resourceFailure: value.failure.includes('sandbox_resource_exhausted: command exited 137') }));
 		expect(summary, JSON.stringify(summary))
 			.toEqual([{ mode: 'completed', rawEvents: 302, retainedClocks: 2, resourceFailure: false },
@@ -135,6 +142,8 @@ describe('native trusted guest clock relay and owning provider tool', () => {
 		}
 		expect(timingAwarenessContract(outcomes[0]!.events)).toMatchObject({ completedChecks: 2, firstToolCompliant: true, finalToolCompliant: true });
 		expect(outcomes[1]!.failure).toContain('sandbox_resource_exhausted: command exited 137'); expect(outcomes[1]!.events).toEqual([]);
+		expect(outcomes[2]!.failure).toContain('assignment_proposal_context_required'); expect(outcomes[2]!.events).toEqual([]);
+		expect(outcomes[3]!.failure).toContain('Authorized Codex subscription credential is missing'); expect(outcomes[3]!.events).toEqual([]);
 		for (const outcome of outcomes) expect(outcome.retainedPrivateFiles).toEqual([]);
 	}, 30_000);
 	it('native public guest MCP clock transports exact first and final HTTPS values and rejects corrupted observed payloads without rewriting native bytes', async () => {

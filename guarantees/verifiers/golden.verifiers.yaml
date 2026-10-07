@@ -1,6 +1,11 @@
 schemaVersion: treeseed.guarantee-verifiers/v1
 ownerPackage: "@treeseed/agent"
 verifiers:
+  agent.golden.execution-preparation-context-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/timing/guest-clock-contract.test.ts
+    testName: "denies missing foreign and empty selected proposal work-item context without repairing the supplied assignment"
   agent.golden.execution-clock-stream-unit:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

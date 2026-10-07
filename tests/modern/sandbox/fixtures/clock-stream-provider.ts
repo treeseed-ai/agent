@@ -7,6 +7,7 @@ import { invokeTreeDxRelay, runSandboxGuest } from '../../../../src/sandbox/gues
 if (process.argv.includes('--guest')) {
 	await runSandboxGuest();
 } else {
+	await writeFile('/run/treeseed-output/provider-invoked', 'Controlled subprocess invoked.\n');
 	for await (const _chunk of process.stdin) { /* Consume the original prompt. */ }
 	const clock = async (id: string) => {
 		const value = await invokeTreeDxRelay('treeseed_time_status', {}, process.env);

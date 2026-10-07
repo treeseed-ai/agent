@@ -17,6 +17,17 @@ import { redactProviderEvents } from '../../../../src/sandbox/provider-failure.t
 import { verifyModelClockEvidence } from '../../../acceptance/workday/support/assignment-authority.ts';
 const clockResult = { content: [{ type: 'text', text: JSON.stringify({ startedAt: '2026-10-04T00:00:00.000Z', deadlineAt: '2026-10-04T00:01:00.000Z', observedAt: '2026-10-04T00:00:00.000Z', remainingSeconds: 60 }) }] };
 describe('Codex chat executor', () => {
+	it('denies missing foreign and empty selected proposal work-item context without repairing the supplied assignment', () => {
+		const sourceRef = { store: 'treedx', model: 'proposal', id: 'supplied-proposal', repository: 'supplied-library', commit: 'a'.repeat(40), path: 'proposals/supplied.yaml' };
+		for (const context of [[], [{ ref: { ...sourceRef, id: 'foreign' }, value: { frontmatter: { executionPlan: { workItems: [{ id: 'selected' }] } } } }],
+			[{ ref: sourceRef, value: { frontmatter: { executionPlan: { workItems: [] } } } }],
+			[{ ref: sourceRef, value: { frontmatter: { executionPlan: { workItems: [{ id: 'foreign' }] } } } }]]) {
+			const input = { canonicalAssignmentContext: { assignment: { id: 'supplied-assignment', sourceRef, workItemId: 'selected',
+				workspace: { mode: 'read-only' }, effectiveProfile: { activity: 'chat', handler: 'writer' } }, context, predecessorResults: [] } };
+			const before = structuredClone(input);
+			expect(() => promptFromContext(input)).toThrow(); expect(input).toEqual(before);
+		}
+	});
 	it('retains ordered untrimmed first and final clocks and early fatal command evidence through a long sanitized provider observation', () => {
 		const clock = (id: string) => ({ type: 'item.completed', item: { id, type: 'mcp_tool_call', server: 'treedx', tool: 'treeseed_time_status',
 			status: 'completed', result: structuredClone(clockResult) } });

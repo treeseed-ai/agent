@@ -14,7 +14,7 @@ import { AgentKernel } from './agent-kernel.ts';
 import type { AgentRuntime } from './contracts.ts';
 import type { Handler } from './contracts.ts';
 import { HandlerRegistry } from './handler-registry.ts';
-import { ActorHandler, EstimateHandler, ReleaserHandler, ReviewerHandler, WriterHandler } from './handlers/model-handler.ts';
+import { ActorHandler, EstimateHandler, ReleaserHandler, ReviewerHandler, WriterHandler, resultId } from './handlers/model-handler.ts';
 import { ReporterHandler } from './handlers/reporter.ts';
 import { materializeAssignmentContext } from './materialize-context.ts';
 import { commitTreeDxContent } from './treedx-content-commit.ts';
@@ -52,6 +52,20 @@ export function aggregateExecutionUsage(measurements: unknown): { elapsedSeconds
 	return { ...aggregate, elapsedSeconds: totals.elapsedSeconds!,
 		...(Object.hasOwn(totals, 'inputTokens') ? { inputTokens: totals.inputTokens! } : {}),
 		...(Object.hasOwn(totals, 'outputTokens') ? { outputTokens: totals.outputTokens! } : {}) };
+}
+
+function canonicalExecutionUsage(measurements: unknown): AssignmentResult['usage'] {
+	const usage = aggregateExecutionUsage(measurements), elapsedSeconds = Math.ceil(usage.elapsedSeconds);
+	const native: Record<string, number> = {};
+	for (const [key, value] of [...Object.entries(usage).filter(([key]) =>
+		!['elapsedSeconds', 'inputTokens', 'outputTokens', 'provenance', 'nativeUsage'].includes(key)), ...Object.entries(record(usage.nativeUsage))]) {
+		if (typeof value !== 'number') throw new Error('model_native_usage_invalid');
+		native[key] = value;
+	}
+	if (!Number.isSafeInteger(elapsedSeconds)) throw new Error('model_native_usage_invalid');
+	return { elapsedSeconds, ...(usage.inputTokens !== undefined ? { modelInputTokens: usage.inputTokens } : {}),
+		...(usage.outputTokens !== undefined ? { modelOutputTokens: usage.outputTokens } : {}),
+		...(Object.keys(native).length ? { native } : {}) };
 }
 
 function gitReference(result: AgentExecutionResult, repository: string): AssignmentReference {
@@ -159,15 +173,7 @@ export async function executeKernelAssignment(input: {
 			if (!['completed', 'responded', 'abstained'].includes(transport.result.status)) {
 				throw Object.assign(new Error(transport.result.summary), { code: transport.result.code });
 			}
-			const usage = aggregateExecutionUsage(transport.result.usage), elapsedSeconds = Math.ceil(Number(usage.elapsedSeconds));
-			const inputTokens = usage.inputTokens, outputTokens = usage.outputTokens;
-			const nativeUsage: Record<string, number> = {};
-			for (const [key, value] of [...Object.entries(usage).filter(([key]) =>
-				!['elapsedSeconds', 'inputTokens', 'outputTokens', 'provenance', 'nativeUsage'].includes(key)), ...Object.entries(record(usage.nativeUsage))]) {
-				if (typeof value !== 'number') throw new Error('model_native_usage_invalid');
-				nativeUsage[key] = value;
-			}
-			if (!Number.isSafeInteger(elapsedSeconds)) throw new Error('model_native_usage_invalid');
+			const usage = canonicalExecutionUsage(transport.result.usage);
 			const references = Array.isArray(record(transport.result.outputs).contentReferences)
 				? record(transport.result.outputs).contentReferences as AssignmentReference[] : [];
 			const verification = Array.isArray(record(transport.result.outputs).verificationRecords)
@@ -188,12 +194,7 @@ export async function executeKernelAssignment(input: {
 			return {
 				text: transport.result.responseMarkdown ?? transport.result.summary,
 				timingAwareness,
-				usage: {
-					elapsedSeconds,
-					...(inputTokens !== undefined ? { modelInputTokens: inputTokens } : {}),
-					...(outputTokens !== undefined ? { modelOutputTokens: outputTokens } : {}),
-					...(Object.keys(nativeUsage).length ? { native: nativeUsage } : {}),
-				},
+				usage,
 				references,
 				verification,
 				changedPaths: Array.isArray(record(transport.result.outputs).changedPaths)
@@ -279,8 +280,21 @@ export async function executeKernelAssignment(input: {
 			return { status: 'returned', code: 'execution_transport_interrupted', summary, retryable: true,
 				...evidence };
 		}
-		return { status: 'failed', code: typeof (error as { code?: unknown })?.code === 'string'
-			? String((error as { code: string }).code) : 'agent_kernel_failed', summary, retryable: false,
+		const code = typeof (error as { code?: unknown })?.code === 'string' ? String((error as { code: string }).code) : 'agent_kernel_failed';
+		if (transport.result?.status === 'failed' && executionStart) {
+			// Only observed model measurements can produce a canonical failed result.
+			// Invalid or absent observations remain raw failed evidence, never guesses.
+			try {
+				const outputs = record(evidence.outputs), failed = assignmentResultSchema.parse({
+					schemaVersion: 'treeseed.assignment-result/v1', id: resultId(attempt.data.id, summary), assignmentId: attempt.data.id,
+					status: 'failed', summary, references: [], verification: [], usage: canonicalExecutionUsage(transport.result.usage),
+					diagnostics: [{ code, severity: 'error', message: summary }], completedAt: runtime.now(),
+					...(Object.hasOwn(outputs, 'timingAwareness') ? { timingAwareness: outputs.timingAwareness } : {}),
+				});
+				evidence.outputs = { ...outputs, assignmentResult: failed };
+			} catch { /* Preserve original failure and measurements without a manufactured result. */ }
+		}
+		return { status: 'failed', code, summary, retryable: false,
 			...evidence,
 		};
 	}

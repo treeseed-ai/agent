@@ -6,7 +6,7 @@ import { prepareTreeDxContent } from '../treedx-content-commit.ts';
 import { estimateMutableField, assignmentProposalSource } from '../../activity-completion.ts';
 import { assertPredecessorSynthesis } from './planning-synthesis.ts';
 
-function resultId(assignmentId: string, summary: string): string {
+export function resultId(assignmentId: string, summary: string): string {
 	return `result-${createHash('sha256').update(`${assignmentId}\n${summary}`).digest('hex').slice(0, 24)}`;
 }
 

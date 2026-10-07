@@ -10,8 +10,71 @@ import { prepareSdkCampaign } from '../../../acceptance/prepare-campaign.ts';
 import { readPreRunCampaignFreeze } from '../../../acceptance/freeze-integrity.ts';
 import { portfolioRelations, verifyProjectLibraryLookup } from '../../../acceptance/workday/support/portfolio-relations.ts';
 import { campaignInputs } from './campaign-freeze-fixture.ts';
+import { modelExecutionInventory } from '../../../acceptance/workday/support/assignment-authority.ts';
+import { row, type Row } from '../../../acceptance/acceptance-cli.ts';
+import { encodeCapacityPageCursor } from '@treeseed/sdk/capacity-pagination';
 
 afterEach(() => vi.unstubAllEnvs());
+
+it('native public SDK event reads retain completed failed and returned model inventory and denial history before exact retry without source fallback', async () => {
+	const run = { id: 'workday-native-clock', teamId: 'native-team' }, items = ['completed', 'failed', 'returned'].map((status, index) => ({
+		id: `native-assignment-${index}`, status, assignmentAttempt: { id: `native-assignment-${index}`, workdayId: run.id, teamId: run.teamId, projectId: 'native-project' } }));
+	const events = items.flatMap((item, index) => ['started', index ? 'failed' : 'completed'].map((phase, offset) => ({
+		id: `native-event-${index}-${offset}`, eventIndex: index * 2 + offset, eventType: `provider.execution.${phase}`, assignmentId: item.id,
+		runId: run.id, workdayId: run.id, teamId: run.teamId, projectId: 'native-project', createdAt: `2026-10-07T00:00:0${index * 2 + offset}.000Z`,
+		payload: { model: 'controlled-native-input-not-a-model-call', isolation: 'microvm' } })));
+	const held = structuredClone({ run, items, events }), history: Array<{ path: string; method: string; body: string }> = [], observations: Array<{ mode: string; denied: boolean; error: string }> = [];
+	let mode = 'exact';
+	const server = createServer((request, response) => {
+		let body = ''; request.setEncoding('utf8'); request.on('data', bytes => { body += String(bytes); });
+		request.on('end', () => {
+			history.push({ path: request.url ?? '', method: request.method ?? '', body }); response.setHeader('content-type', 'application/json');
+			const url = new URL(request.url ?? '', 'http://127.0.0.1');
+			if (request.method !== 'GET' || body || url.pathname !== `/v1/teams/${run.teamId}/workday-runs/${run.id}/events`
+				|| url.searchParams.get('diagnostics') !== 'full' || url.searchParams.get('limit') !== '2') { response.writeHead(500).end('{}'); return; }
+			if (['403', '503'].includes(mode)) { response.writeHead(Number(mode)).end(JSON.stringify({ status: Number(mode), code: 'controlled_event_read_denied', title: 'Retained denial' })); return; }
+			if (mode === 'json') { response.end('{'); return; }
+			const pageNumber = url.searchParams.get('cursor') === encodeCapacityPageCursor(events[3]!) ? 2 : url.searchParams.has('cursor') ? 1 : 0;
+			const supplied = structuredClone(events.slice(pageNumber * 2, pageNumber * 2 + 2));
+			if (pageNumber === 0 && mode === 'missing-start') supplied[0]!.eventType = 'controlled-not-a-model-start';
+			if (pageNumber === 1 && mode === 'foreign') supplied[0]!.projectId = 'foreign';
+			if (pageNumber === 2 && mode === 'duplicate') supplied[0]!.assignmentId = items[0]!.id;
+			if (pageNumber === 2 && mode === 'empty-model') supplied[0]!.payload.model = '';
+			response.end(JSON.stringify({ data: { items: supplied, page: { limit: 2, hasMore: pageNumber < 2,
+				nextCursor: pageNumber < 2 ? encodeCapacityPageCursor(events[pageNumber * 2 + 1]!) : null } } }));
+		});
+	});
+	try {
+		await new Promise<void>((accept, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', accept); });
+		const address = server.address(); if (!address || typeof address === 'string') throw new Error('Allocated native event server required');
+		const client = new ControlPlaneClient({ profile: defaultLocalControlPlaneServer({ TREESEED_API_BASE_URL: `http://127.0.0.1:${address.port}` }), accessToken: 'controlled-read-input' });
+		const execute = async () => {
+			const observed: Row[] = []; let denied = false, error = '';
+			try {
+				// Three actual original public-operation requests consume all supplied
+				// pages. This is transport/consumer proof, not a new paging algorithm.
+				for (const cursor of [undefined, encodeCapacityPageCursor(events[1]!), encodeCapacityPageCursor(events[3]!)]) {
+					const input = { path: { teamId: run.teamId, runId: run.id }, query: { limit: 2, diagnostics: 'full', ...(cursor ? { cursor } : {}) }, body: undefined }, before = structuredClone(input);
+					const page = row((await client.invoke(controlPlaneOperation('workdays.events.list'), input)).data);
+					expect(input).toEqual(before); if (!Array.isArray(page.items)) throw new Error('Native original event collection required'); observed.push(...page.items.map(row));
+				}
+				const inventory = modelExecutionInventory(items, observed, run);
+				expect(inventory.map(value => value.item.status)).toEqual(['completed', 'failed', 'returned']);
+				if (mode === 'exact') expect(observed).toEqual(events);
+			} catch (failure) { denied = true; error = failure instanceof Error ? failure.message : String(failure); }
+			if (['missing-start', 'foreign', 'duplicate', 'empty-model'].includes(mode)) expect(error).toMatch(/ACCEPTANCE_MODEL_INVENTORY|Expected values to be strictly equal/u);
+			observations.push({ mode, denied, error }); return denied;
+		};
+		expect(await execute(), JSON.stringify(observations)).toBe(false);
+		for (const fault of ['missing-start', 'foreign', 'duplicate', 'empty-model', '403', '503', 'json']) { mode = fault; expect(await execute(), mode).toBe(true); }
+		const retained = structuredClone(observations), requests = structuredClone(history); mode = 'exact'; expect(await execute(), JSON.stringify(observations)).toBe(false);
+		expect(observations.slice(0, retained.length)).toEqual(retained); expect(history.slice(0, requests.length)).toEqual(requests);
+		expect(history.every(value => value.method === 'GET' && value.body === '')).toBe(true); expect({ run, items, events }).toEqual(held);
+		// Supplied event/status/token bytes are NOT genuine API governance,
+		// model execution, all-attempt charge production or physical teardown.
+	} finally { server.closeAllConnections(); if (server.listening) await new Promise<void>((accept, reject) => server.close(error => error ? reject(error) : accept())); }
+	expect(server.listening).toBe(false);
+});
 
 it('native public CLI and SDK lookup transports exact library identity into Agent validation and retains denied observations before unchanged retry', async () => {
 	// Existing checked compiled CLI input, not a source fallback or replacement

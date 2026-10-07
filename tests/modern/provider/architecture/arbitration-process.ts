@@ -1,4 +1,5 @@
 import { readFile } from 'node:fs/promises';
+import { registerHooks } from 'node:module';
 import { loadProviderManifest, writeProviderSecret } from '../../../../dist/provider/configuration/manifest.js';
 import { initializeCapacityProviderIdentity, loadCapacityProviderIdentity } from '../../../../dist/provider/accounts/identity.js';
 import type { ProviderHostRuntimeConfig } from '../../../../src/provider/configuration/config.ts';
@@ -33,8 +34,20 @@ async function initialize() {
 }
 async function run() {
 	await load();
-	const { runMultiTeamProviderRunners } = await import('../../../../dist/provider/teams/multi-team-runtime.js');
-	return runMultiTeamProviderRunners(config);
+	// Observe actual native module loading without replacing any source or
+	// resolution. Idle/token-denied polling must not start productive modules.
+	const productivePaths = ['provider/execution/executor-loader.js', 'provider/operations/runner.js',
+		'provider/coordination/assignment-treedx.js', 'kernel/project-handlers.js'];
+	const productiveModulesLoaded: string[] = [];
+	const observer = registerHooks({ load(url, context, nextLoad) {
+		const result = nextLoad(url, context);
+		for (const path of productivePaths) if (url === new URL(`../../../../dist/${path}`, import.meta.url).href) productiveModulesLoaded.push(path);
+		return result;
+	} });
+	try {
+		const { runMultiTeamProviderRunners } = await import('../../../../dist/provider/teams/multi-team-runtime.js');
+		return { ...await runMultiTeamProviderRunners(config), productiveModulesLoaded };
+	} finally { observer.deregister(); }
 }
 async function loadPaths(paths: unknown) {
 	if (!Array.isArray(paths) || !paths.length || new Set(paths).size !== paths.length ||

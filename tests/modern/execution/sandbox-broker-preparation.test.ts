@@ -102,7 +102,7 @@ describe('sandbox broker control transport', () => {
 		// denial inputs, not actual governance/model usage or physical Kata proof.
 	});
 	it('native original Kernel and microvm preserve the issued shorter productive clock separately from immutable phase authority through exact event readback', async () => {
-		const f = await microvmBroker();
+		for (const status of ['completed', 'failed'] as const) { const f = await microvmBroker();
 		try {
 			const attempt = assignmentAttemptSchema.parse(f.input.assignment.assignmentAttempt), before = structuredClone(f.input.assignment);
 			let executionStartedAt = '', executionDeadlineAt = '';
@@ -112,18 +112,18 @@ describe('sandbox broker control transport', () => {
 					observedAt: executionStartedAt, remainingSeconds: 3 }; return { type: 'item.completed', item: {
 					id, type: 'mcp_tool_call', server: 'treedx', tool: 'treeseed_time_status', status: 'completed', error: null,
 					result: { content: [{ type: 'text', text: JSON.stringify(value) }], structuredContent: value } } }; };
-				f.patchResult({ diagnostics: { providerEvents: [clock('short-window-first'), clock('short-window-final')] } });
+				f.patchResult({ status, diagnostics: { providerEvents: [clock('short-window-first'), clock('short-window-final')] } });
 				return { capacityEnvelope: { budget: { time: { executionStartedAt, executionDeadlineAt } } } };
 			};
 			const result = await executeKernelAssignment({ request: f.input, executor: f.executor, runtimeBuild: attempt.provider.runtimeBuild });
-			expect(result.status).toBe('completed'); const canonical = result.outputs?.assignmentResult;
-			const terminal = f.events.filter(event => event.type === 'execution.completed'); expect(terminal).toHaveLength(1);
+			expect(result.status).toBe(status); const canonical = result.outputs?.assignmentResult;
+			const terminal = f.events.filter(event => event.type === `execution.${status}`); expect(terminal).toHaveLength(1);
 			expect(Date.parse(executionDeadlineAt)).toBeLessThan(Date.parse(attempt.deadline));
-			const item = { id: attempt.id, status: 'completed', assignmentAttempt: attempt, assignmentResult: canonical,
+			const item = { id: attempt.id, status, assignmentAttempt: attempt, assignmentResult: canonical,
 				capacityEnvelope: { budget: { time: { executionStartedAt, executionDeadlineAt } } } };
 			const event = { ...terminal[0], id: 'native-short-clock-event', assignmentId: attempt.id, runId: attempt.workdayId,
 				workdayId: attempt.workdayId, teamId: attempt.teamId, projectId: attempt.projectId, eventIndex: 1,
-				eventType: 'provider.execution.completed', status: 'recorded', createdAt: new Date().toISOString() };
+				eventType: `provider.execution.${status}`, status: 'recorded', createdAt: new Date().toISOString() };
 			const held = structuredClone({ item, event }); expect(() => verifyModelClockEvidence(item, event)).not.toThrow();
 			expect({ item, event }).toEqual(held); expect(f.input.assignment).toEqual(before); expect(f.observations).toHaveLength(1);
 			expect(f.paths.filter(path => path.endsWith('/execute'))).toHaveLength(1);
@@ -131,7 +131,7 @@ describe('sandbox broker control transport', () => {
 			// Real owning Kernel/Unix/materialization; API window and provider events
 			// are supplied inputs, not native API issuance/model use/charges/Kata proof.
 		} finally { await f.close(); }
-		expect(f.server.listening).toBe(false); await expect(stat(f.directory)).rejects.toMatchObject({ code: 'ENOENT' });
+		expect(f.server.listening).toBe(false); await expect(stat(f.directory)).rejects.toMatchObject({ code: 'ENOENT' }); }
 	});
 	it('native microvm Kernel and provider runner retain original successful and failed executor measurements through exact public delivery and denied closeout', async () => {
 		for (const mode of ['completed', 'failed', 'expired', 'diagnostic-denied', 'settlement-denied'] as const) {
@@ -179,7 +179,9 @@ describe('sandbox broker control transport', () => {
 							key: expect.stringMatching(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u),
 							body: { leaseToken: f.input.leaseToken, runnerId: f.input.runnerId, code: 'sandbox_failed',
 								message: raw.summary, retryable: false, activeSeconds: 2, elapsedSeconds: 3, usage,
-								output: { sandboxId: raw.sandboxId, teardown: { verified: true, completedAt: f.destroyedAt() } } } }]);
+								output: { sandboxId: raw.sandboxId, teardown: { verified: true, completedAt: f.destroyedAt() }, timingAwareness: raw.timingAwareness,
+									assignmentResult: expect.objectContaining({ assignmentId: attempt.id, status: 'failed', summary: raw.summary,
+										timingAwareness: raw.timingAwareness, references: [], verification: [], usage: expect.objectContaining({ elapsedSeconds: 3, modelInputTokens: 19, modelOutputTokens: 3 }) }) } } }]);
 						expect(api.requests.some(item => item.operation === 'settleAssignment')).toBe(false);
 					} else {
 						expect(api.requests.filter(item => item.operation === 'settleAssignment')).toEqual([{ operation: 'settleAssignment',

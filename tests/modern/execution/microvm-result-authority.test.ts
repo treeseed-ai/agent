@@ -122,6 +122,7 @@ describe('microvm result and closeout authority', () => {
 				resources: { cpuUserMicros: 123, cpuSystemMicros: 45, peakRssBytes: 4096 },
 				timingAwareness: original.timingAwareness }, protectedPayload: original.diagnostics });
 			expect(result.status).toBe(status === 'failed' ? 'failed' : 'returned'); expect(result.summary).toBe(supplied.summary);
+			expect(result.outputs?.timingAwareness).toEqual(original.timingAwareness);
 			expect(result.usage).toEqual([{ activeSeconds: 1.125, elapsedSeconds: 2.25, inputTokens: 19, outputTokens: 3,
 				cpuUserMicros: 123, cpuSystemMicros: 45, peakRssBytes: 4096,
 				nativeUsage: { activeSeconds: 1.125, elapsedSeconds: 2.25, input_tokens: 19, output_tokens: 3,

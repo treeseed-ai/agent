@@ -5,14 +5,10 @@ import { createProviderControlPlaneClient } from '../coordination/client.ts';
 import { recoverProviderLocalLeases } from '../coordination/lease-recovery.ts';
 import { ProviderLocalCapacityStore } from '../capacity/capacity-core/local-capacity-store.ts';
 import { publishProviderAvailability, buildProviderRunnerPlan } from '../lifecycle/lifecycle.ts';
-import { resolveAgentExecutor } from '../execution/executor-loader.ts';
-import { runProviderAssignment } from '../operations/runner.ts';
-import { createAssignmentTreeDxFacade } from '../coordination/assignment-treedx.ts';
 import type { CapacityProviderManifestV5 } from '@treeseed/sdk/capacity-provider';
 import { materializeCapabilityOffers } from '../capabilities/materialize-offers.ts';
 import { assignmentOfferId } from '../execution/assignment-selection.ts';
 import { assignmentAttemptSchema, capabilityAccountingLimitsSchema } from '@treeseed/sdk/agent-capacity';
-import { projectHandlers } from '../../kernel/project-handlers.ts';
 import { observeProviderDiskCapacity } from '../runtime/disk-capacity.ts';
 
 // In-process task ownership only; durable capacity/lease authority stays in localState.
@@ -131,6 +127,7 @@ export async function runMultiTeamProviderManager(
 		const configuredAdapters = await materializeCapabilityOffers({ config, loaded: loaded as typeof loaded & { manifest: CapacityProviderManifestV5 }, providerId: connection.runtime.providerId });
 		const capacitySnapshot = await localState.snapshot();
 		const adapters = await Promise.all(configuredAdapters.map(async (adapter) => {
+			const { resolveAgentExecutor } = await import('../execution/executor-loader.ts');
 			const executor = await resolveAgentExecutor(config, adapter, loaded.manifest).catch(() => null);
 			const executorObservation = executor
 				? await executor.observe()
@@ -270,6 +267,9 @@ export async function runMultiTeamProviderRunners(
 					retryable: true });
 				await localState.release(claim.id); results.push({ connectionId: connection.connection.id, status: 'idle', reason: 'assignment_adapter_unavailable' }); return;
 			}
+			// Idle or denied polls do not load the productive execution graph.
+			// The exact configured executor is still resolved for an actual lease.
+			const { resolveAgentExecutor } = await import('../execution/executor-loader.ts');
 			const executor = await resolveAgentExecutor(config, adapter, loaded.manifest);
 			let executorObservation = executor ? await executor.observe() : null;
 			if (executor && executorObservation?.available === false) executorObservation = await executor.observe();
@@ -297,6 +297,9 @@ export async function runMultiTeamProviderRunners(
 				laneLimit: { maxConcurrentRunners: loaded.manifest.lanes.find(lane => lane.id === providerLaneId)?.maxConcurrentWorkers },
 			});
 			if (!await localState.claimDispatch(claim.id)) throw new Error('Exact provider-local dispatch claim is unavailable.');
+			const [{ createAssignmentTreeDxFacade }, { runProviderAssignment }, { projectHandlers }] = await Promise.all([
+				import('../coordination/assignment-treedx.ts'), import('../operations/runner.ts'), import('../../kernel/project-handlers.ts'),
+			]);
 			const treeDx = await createAssignmentTreeDxFacade(runtime, assignment);
 			const terminal = await runProviderAssignment({
 				client,

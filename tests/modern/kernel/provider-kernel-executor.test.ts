@@ -9,6 +9,39 @@ import { assignmentAttemptSchema, assignmentResultSchema } from '@treeseed/sdk/a
 import { commit, candidateCommit, digest, runtimeBuild, timingAwareness, request } from './provider-kernel-fixture.ts';
 
 describe('provider AgentKernel execution', () => {
+	it('retains a measured failed model execution as its exact canonical failed result without successful artifacts or invented timing or usage', async () => {
+		const checks: Array<() => void> = [];
+		for (const receipt of [timingAwareness, undefined]) {
+			const input = request(), attempt = assignmentAttemptSchema.parse(input.assignment.assignmentAttempt);
+			attempt.agentClass = 'renamed-failure-owner'; input.assignment.assignmentAttempt = attempt;
+			const before = structuredClone(input.assignment), usage = [{ elapsedSeconds: 2.25, inputTokens: 19, outputTokens: 3, activeSeconds: 1.125 }];
+			const reply: AgentExecutionResult = { status: 'failed', code: 'original_model_failure', summary: 'Original measured model failure.',
+				outputs: { ...(receipt ? { timingAwareness: receipt } : {}), originalObservation: { retained: true } }, usage };
+			const held = structuredClone(reply); let executions = 0; const started = Date.now();
+			const result = await executeKernelAssignment({ runtimeBuild, request: input, executor: { id: 'codex', observe: async () => ({ available: true }),
+				execute: async execution => { executions++; await execution.beginExecution?.(); return reply; } } });
+			const ended = Date.now(); checks.push(() => {
+			const canonical = assignmentResultSchema.parse(result.outputs?.assignmentResult);
+			expect(canonical).toEqual({ schemaVersion: 'treeseed.assignment-result/v1', id: expect.stringMatching(/^result-[a-f0-9]{24}$/u),
+				assignmentId: attempt.id, status: 'failed', summary: reply.summary, references: [], verification: [],
+				usage: { elapsedSeconds: 3, modelInputTokens: 19, modelOutputTokens: 3, native: { activeSeconds: 1.125 } },
+				diagnostics: [{ code: reply.code, severity: 'error', message: reply.summary }], ...(receipt ? { timingAwareness: receipt } : {}), completedAt: canonical.completedAt });
+			expect(Date.parse(canonical.completedAt)).toBeGreaterThanOrEqual(started); expect(Date.parse(canonical.completedAt)).toBeLessThanOrEqual(ended);
+			expect(result).toMatchObject({ status: 'failed', summary: reply.summary, usage, outputs: { originalObservation: { retained: true } } });
+			expect(result.artifacts ?? []).toEqual([]); expect(executions).toBe(1); expect(input.assignment).toEqual(before); expect(reply).toEqual(held);
+			});
+		}
+		for (const fields of [{}, { usage: [] }, { usage: [{ elapsedSeconds: -1 }] }, { usage: [{ elapsedSeconds: '2' }] },
+			{ usage: [{ elapsedSeconds: 2, inputTokens: 0.5 }] }, { usage: [{ elapsedSeconds: 2, activeSeconds: 1, nativeUsage: { activeSeconds: 2 } }] },
+			{ usage: [{ elapsedSeconds: 2 }], outputs: { timingAwareness: {} } }]) {
+			const input = request(), reply: AgentExecutionResult = { status: 'failed', summary: 'Original invalid or unmeasured failure.', ...fields };
+			const held = structuredClone(reply), result = await executeKernelAssignment({ runtimeBuild, request: input, executor: { id: 'codex', observe: async () => ({ available: true }),
+				execute: async execution => { await execution.beginExecution?.(); return reply; } } });
+			checks.push(() => { expect(result.status).toBe('failed'); expect(result.outputs?.assignmentResult).toBeUndefined();
+				expect(result.usage).toEqual(reply.usage); expect(reply).toEqual(held); });
+		}
+		for (const check of checks) check();
+	});
 	it('uses concrete guest changes for Actor and Releaser publication under a recursive grant', async () => {
 		for (const handler of ['actor', 'releaser']) {
 		const input = request();

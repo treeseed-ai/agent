@@ -32,6 +32,26 @@ function publicClockEvidenceFixture() {
 			createdAt: '2026-10-04T00:00:02.001Z', protectedPayload: { providerEvents: events } } };
 }
 describe('Codex chat executor', () => {
+	it('reads exact failed model clocks without relabeling failure and denies missing contradictory late or substituted terminal evidence', () => {
+		const f = publicClockEvidenceFixture(); f.item.status = 'failed'; f.item.assignmentResult.status = 'failed'; f.event.eventType = 'provider.execution.failed';
+		const before = structuredClone(f); expect(() => verifyModelClockEvidence(f.item, f.event)).not.toThrow(); expect(f).toEqual(before);
+		for (const mode of ['completed-root', 'returned-root', 'completed-result', 'blocked-result', 'completed-event', 'missing-result',
+			'missing-raw', 'empty-raw', 'foreign-result', 'foreign-event', 'changed-receipt', 'duplicate-clock', 'late-result']) {
+			const changed = structuredClone(f);
+			if (mode === 'completed-root' || mode === 'returned-root') changed.item.status = mode.split('-')[0]!;
+			if (mode === 'completed-result' || mode === 'blocked-result') changed.item.assignmentResult.status = mode.split('-')[0]!;
+			if (mode === 'completed-event') changed.event.eventType = 'provider.execution.completed';
+			if (mode === 'missing-result') Reflect.deleteProperty(changed.item, 'assignmentResult');
+			if (mode === 'missing-raw') Reflect.deleteProperty(changed.event, 'protectedPayload');
+			if (mode === 'empty-raw') changed.event.protectedPayload.providerEvents = [];
+			if (mode === 'foreign-result') changed.item.assignmentResult.assignmentId = 'foreign';
+			if (mode === 'foreign-event') changed.event.assignmentId = 'foreign';
+			if (mode === 'changed-receipt') changed.item.assignmentResult.timingAwareness.completedChecks = 3;
+			if (mode === 'duplicate-clock') changed.event.protectedPayload.providerEvents[1]!.item.id = 'first';
+			if (mode === 'late-result') changed.item.assignmentResult.completedAt = deadlineAt;
+			const held = structuredClone(changed); expect(() => verifyModelClockEvidence(changed.item, changed.event), mode).toThrow(); expect(changed).toEqual(held);
+		}
+	});
 	it('binds model clock readback to the issued productive window inside the unchanged phase deadline and denies missing widened or late productive evidence', () => {
 		const f = publicClockEvidenceFixture();
 		f.item.assignmentAttempt.deadline = '2026-10-04T00:20:00.000Z';

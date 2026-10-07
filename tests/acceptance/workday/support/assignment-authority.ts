@@ -50,11 +50,12 @@ export function modelExecutionInventory(items: Row[], events: Row[], run: Row): 
 /** Raw public owning-event assertions, not a second runtime clock or receipt. */
 export function verifyModelClockEvidence(item: Row, event: Row): void {
 	const attempt = row(item.assignmentAttempt), result = row(item.assignmentResult), time = row(row(row(item.capacityEnvelope).budget).time);
-	assert.equal(item.status, 'completed'); assert.equal(result.assignmentId, item.id); assert.equal(result.status, 'completed');
+	assert.ok(['completed', 'failed'].includes(String(result.status)), 'ACCEPTANCE_MODEL_CLOCK_RESULT');
+	assert.equal(item.status, result.status); assert.equal(result.assignmentId, item.id);
 	for (const field of ['id', 'teamId', 'projectId', 'workdayId']) assert.ok(typeof attempt[field] === 'string' && attempt[field], 'ACCEPTANCE_MODEL_CLOCK_AUTHORITY');
 	assert.equal(attempt.id, item.id); assert.equal(event.assignmentId, item.id); assert.equal(event.runId, attempt.workdayId);
 	assert.equal(event.workdayId, attempt.workdayId); assert.equal(event.teamId, attempt.teamId); assert.equal(event.projectId, attempt.projectId);
-	assert.equal(event.eventType, 'provider.execution.completed'); assert.ok(['recorded', 'completed'].includes(String(event.status)), 'ACCEPTANCE_MODEL_CLOCK_EVENT');
+	assert.equal(event.eventType, `provider.execution.${result.status}`); assert.ok(['recorded', 'completed'].includes(String(event.status)), 'ACCEPTANCE_MODEL_CLOCK_EVENT');
 	assert.ok(typeof event.id === 'string' && event.id && Number.isSafeInteger(event.eventIndex), 'ACCEPTANCE_MODEL_CLOCK_EVENT_ID');
 	const raw = row(event.protectedPayload).providerEvents;
 	assert.ok(Array.isArray(raw) && raw.length > 0 && raw.every(value => value && typeof value === 'object' && !Array.isArray(value)), 'ACCEPTANCE_MODEL_CLOCK_RAW');

@@ -325,7 +325,7 @@ export async function createMicrovmExecutor(config: ProviderHostRuntimeConfig, m
 				return { status: result.status === 'failed' && !resourceExhausted ? 'failed' : 'returned',
 					code: resourceExhausted ? 'sandbox_resource_exhausted' : `sandbox_${result.status}`,
 					summary: result.summary, retryable: resourceExhausted || result.status !== 'failed',
-					outputs: { sandboxId: result.sandboxId, teardown }, usage: [usage] };
+					outputs: { sandboxId: result.sandboxId, teardown, timingAwareness: timingAwarenessEvidence(result.timingAwareness) }, usage: [usage] };
 			} finally { await materialized.cleanup(); }
 		},
 	};

@@ -3,6 +3,12 @@ id: agent.golden.component-boundaries
 title: Golden execution component boundaries
 scope: local-component-tests
 workflow:
+  - id: execution-failed-clock-readback-unit
+    action: { verifier: agent.golden.execution-failed-clock-readback-unit }
+    expect: { status: passed }
+  - id: execution-canonical-failure-unit
+    action: { verifier: agent.golden.execution-canonical-failure-unit }
+    expect: { status: passed }
   - id: execution-noncompleted-clock-unit
     action: { verifier: agent.golden.execution-noncompleted-clock-unit }
     expect: { status: passed }

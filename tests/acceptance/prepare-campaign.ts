@@ -80,7 +80,10 @@ export function requireSdkCampaignSupply(supply: Row, durationSeconds: number,
 				&& Date.parse(now) - Date.parse(usage.observedAt) >= 0
 				&& Date.parse(now) - Date.parse(usage.observedAt) <= 90_000,
 				`ACCEPTANCE_CAMPAIGN_SUPPLY: ${id}/${capability} observation missing, stale or unhealthy`);
-			const remaining = cap - Number(usage.activeSeconds) - Number(usage.reservedSeconds);
+			assert.ok(typeof usage.activeSeconds === 'number' && Number.isFinite(usage.activeSeconds) && usage.activeSeconds >= 0
+				&& typeof usage.reservedSeconds === 'number' && Number.isFinite(usage.reservedSeconds) && usage.reservedSeconds >= 0,
+				`ACCEPTANCE_CAMPAIGN_SUPPLY: ${id}/${capability} usage must contain finite nonnegative measured seconds`);
+			const remaining = cap - usage.activeSeconds - usage.reservedSeconds;
 			assert.ok(Number.isFinite(remaining) && remaining >= required,
 				`ACCEPTANCE_CAMPAIGN_SUPPLY: ${id}/${capability} has ${Math.floor(remaining)} active seconds, requires ${Math.ceil(required)}`);
 		}

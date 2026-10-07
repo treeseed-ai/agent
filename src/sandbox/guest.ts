@@ -109,6 +109,7 @@ export function observeTimingAwarenessEvent(tracker: TimingAwarenessTracker, eve
 	if (!tool) return tracker;
 	const item = record(event.item);
 	const completed = event.type === 'item.completed';
+	if (tracker.firstToolPending && (tool !== tracker.firstTool || item.id !== tracker.firstToolItemId)) tracker.clockInvalid = true;
 	let succeeded = completed && item.status === 'completed' && !item.error;
 	if (completed && tool === 'treedx:treeseed_time_status' && succeeded) {
 		const reading = clockReading(item.result), prior = tracker.clockWindow;

@@ -258,6 +258,7 @@ export async function createMicrovmExecutor(config: ProviderHostRuntimeConfig, m
 						let valid = !!actual && actual.completedChecks === receipt.completedChecks && actual.completedChecks >= 2 && actual.firstToolCompliant && actual.finalToolCompliant;
 						for (const event of Array.isArray(events) ? events : []) {
 							const row = object(event), item = object(row.item);
+							if (row.type === 'item.started' && item.type === 'command_execution') { if (!checkedBeforeBlocking) valid = false; checkedBeforeBlocking = false; }
 							if (row.type === 'item.started' && ['command_execution', 'mcp_tool_call'].includes(String(item.type))) pending.add(String(item.id));
 							if (row.type !== 'item.completed') continue;
 							if (item.type === 'mcp_tool_call' && item.server === 'treedx' && item.tool === 'treeseed_time_status') {
@@ -265,7 +266,7 @@ export async function createMicrovmExecutor(config: ProviderHostRuntimeConfig, m
 								if (typeof item.id !== 'string' || identities.has(item.id) || !reading || reading.startedAt !== executionStartedAt || reading.deadlineAt !== executionDeadlineAt
 									|| reading.remainingSeconds <= 0 || reading.remainingSeconds > remaining) valid = false;
 								identities.add(String(item.id)); remaining = reading?.remainingSeconds ?? remaining; checkedBeforeBlocking = true;
-							} else if (item.type === 'command_execution') { if (!checkedBeforeBlocking) valid = false; checkedBeforeBlocking = false; }
+							} else if (item.type === 'command_execution' && !pending.has(String(item.id))) { if (!checkedBeforeBlocking) valid = false; checkedBeforeBlocking = false; }
 							pending.delete(String(item.id));
 						}
 						if (!valid || pending.size) throw new Error(`${result.status === 'completed' ? 'Completed' : 'Non-completed'} sandbox result lacks valid timing-awareness evidence.`,

@@ -71,6 +71,7 @@ export function verifyModelClockEvidence(item: Row, event: Row): void {
 	const ids = new Set<string>(), pending = new Set<string>(); let previous = -Infinity, checked = false;
 	for (const action of events) {
 		const value = row(action.item);
+		if (action.type === 'item.started' && value.type === 'command_execution') { assert.ok(checked, 'ACCEPTANCE_MODEL_CLOCK_RECHECK'); checked = false; }
 		if (action.type === 'item.started' && ['command_execution', 'mcp_tool_call'].includes(String(value.type))) pending.add(String(value.id));
 		if (action.type !== 'item.completed') continue;
 		if (value.type === 'mcp_tool_call' && value.server === 'treedx' && value.tool === 'treeseed_time_status') {
@@ -82,7 +83,7 @@ export function verifyModelClockEvidence(item: Row, event: Row): void {
 			assert.equal(reading.remainingSeconds, Math.ceil((deadline - observed) / 1_000));
 			assert.ok(typeof value.id === 'string' && value.id && !ids.has(value.id), 'ACCEPTANCE_MODEL_CLOCK_DUPLICATE');
 			ids.add(value.id); previous = observed; checked = true;
-		} else if (value.type === 'command_execution') { assert.ok(checked, 'ACCEPTANCE_MODEL_CLOCK_RECHECK'); checked = false; }
+		} else if (value.type === 'command_execution' && !pending.has(String(value.id))) { assert.ok(checked, 'ACCEPTANCE_MODEL_CLOCK_RECHECK'); checked = false; }
 		pending.delete(String(value.id));
 	}
 	assert.equal(ids.size, actual.completedChecks); assert.equal(pending.size, 0, 'ACCEPTANCE_MODEL_CLOCK_PENDING');

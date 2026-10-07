@@ -291,13 +291,17 @@ export async function createMicrovmExecutor(config: ProviderHostRuntimeConfig, m
 				})() : null;
 				if (environmentReceipt) await request.emit?.({ type: 'sandbox.environment.attested', occurredAt: environmentReceipt.createdAt, summary: 'Provider environment attestation recorded.', payload: { environmentReceipt } });
 				const usage = sandboxAccountingUsage(result.usage);
+				const diagnostics = object(result.diagnostics), observation = { sandboxId: result.sandboxId, model: assignment.modelPolicy.model,
+					provider: assignment.modelPolicy.provider, capabilities: assignment.modelPolicy.capabilities, usage: [usage],
+					timing: { elapsedSeconds: result.usage.elapsedSeconds }, resources: { cpuUserMicros: result.usage.cpuUserMicros,
+						cpuSystemMicros: result.usage.cpuSystemMicros, peakRssBytes: result.usage.peakRssBytes }, artifacts: result.artifacts,
+					activityCompletion: diagnostics.activityCompletion ?? null, timingAwareness: result.timingAwareness,
+					changedPaths: diagnostics.changedPaths ?? [], teardown };
 				if (result.status === 'completed') {
 					const abstained = result.responseMarkdown?.trim() === '<!-- treeseed:abstain -->';
-					const diagnostics = object(result.diagnostics);
 					const timingAwareness = timingAwarenessEvidence(result.timingAwareness);
-					await request.emit?.({ type: 'execution.completed', occurredAt: new Date().toISOString(), summary: result.summary, payload: { sandboxId: result.sandboxId, model: assignment.modelPolicy.model, provider: assignment.modelPolicy.provider, capabilities: assignment.modelPolicy.capabilities,
-						usage: [usage], timing: { elapsedSeconds: result.usage.elapsedSeconds }, resources: { cpuUserMicros: result.usage.cpuUserMicros, cpuSystemMicros: result.usage.cpuSystemMicros, peakRssBytes: result.usage.peakRssBytes }, artifacts: result.artifacts,
-						activityCompletion: diagnostics.activityCompletion ?? null, timingAwareness, changedPaths: diagnostics.changedPaths ?? [], teardown }, protectedPayload: result.diagnostics });
+					await request.emit?.({ type: 'execution.completed', occurredAt: new Date().toISOString(), summary: result.summary,
+						payload: { ...observation, timingAwareness }, protectedPayload: result.diagnostics });
 					return { status: abstained ? 'abstained' : result.responseMarkdown ? 'responded' : 'completed', summary: result.summary, ...(!abstained && result.responseMarkdown ? { responseMarkdown: result.responseMarkdown } : {}), outputs: { sandboxId: result.sandboxId, teardown, environmentReceipt,
 						verificationRecords: object(result.diagnostics).verificationRecords ?? [],
 						activityCompletion: object(result.diagnostics).activityCompletion ?? null,
@@ -305,7 +309,8 @@ export async function createMicrovmExecutor(config: ProviderHostRuntimeConfig, m
 						providerEventShapes: Array.isArray(diagnostics.providerEventShapes) ? diagnostics.providerEventShapes : [],
 						...(sourceReference ? { sourceReference } : {}) }, artifacts, usage: [usage] };
 				}
-				await request.emit?.({ type: 'execution.failed', occurredAt: new Date().toISOString(), summary: result.summary, payload: { sandboxId: result.sandboxId, status: result.status, teardown }, protectedPayload: result.diagnostics });
+				await request.emit?.({ type: 'execution.failed', occurredAt: new Date().toISOString(), summary: result.summary,
+					payload: { ...observation, status: result.status }, protectedPayload: result.diagnostics });
 				const resourceExhausted = result.summary.includes('sandbox_resource_exhausted:');
 				return { status: result.status === 'failed' && !resourceExhausted ? 'failed' : 'returned',
 					code: resourceExhausted ? 'sandbox_resource_exhausted' : `sandbox_${result.status}`,

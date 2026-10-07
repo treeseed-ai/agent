@@ -11,7 +11,13 @@ import { orderConnectionsForFairPolling } from '../../../../src/provider/teams/m
 import { assertCanonicalRecordShapes } from './canonical-record-shape.ts';
 import { readCompleteEvidence } from './evidence-pages.ts';
 
-export function verifyReportSettlementCustody(snapshot: Row, reporter: Row, assignments: Row[], team: string): void {
+export function verifyReportRecordCustody(snapshot: Row, reporter: Row, assignments: Row[], team: string): void {
+	assert.ok(Array.isArray(snapshot.attempts), 'ACCEPTANCE_REPORT_ATTEMPTS: Complete original assignment collection required');
+	const observed = snapshot.attempts.map(value => { const attempt = row(value), result = typeof attempt.assignment_result_json === 'string' ? JSON.parse(attempt.assignment_result_json) : attempt.assignment_result_json;
+		if (result !== null && result !== undefined) assert.deepEqual(assignmentResultSchema.parse(result), result); return { id: attempt.id, status: attempt.status, result: result ?? null }; });
+	const original = assignments.filter(value => value.id !== reporter.id).map(value => ({ id: value.id, status: value.status, result: value.assignmentResult ?? null }));
+	const byId = (left: { id: unknown }, right: { id: unknown }) => String(left.id) < String(right.id) ? -1 : String(left.id) > String(right.id) ? 1 : 0;
+	assert.deepEqual(observed.sort(byId), original.sort(byId), 'ACCEPTANCE_REPORT_ATTEMPTS: Every original attempt status and canonical result must be retained');
 	assert.ok(Array.isArray(snapshot.settlements), 'ACCEPTANCE_REPORT_SETTLEMENTS: Complete canonical collection required');
 	const represented = snapshot.settlements.map(value => {
 		const parsed = usageSettlementSchema.parse(value); assert.deepEqual(parsed, value); return parsed;

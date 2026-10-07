@@ -6,12 +6,14 @@ import { mkdir, rm, stat, writeFile } from 'node:fs/promises';
 import { createReadStream } from 'node:fs';
 import { Readable } from 'node:stream';
 import { createHash } from 'node:crypto';
-import { sandboxAssignmentSchema } from '@treeseed/sdk/capacity-provider/sandbox';
+import { sandboxAssignmentSchema, sandboxResultSchema } from '@treeseed/sdk/capacity-provider/sandbox';
 import { clockRequest } from './architecture/clock-fixture.ts';
 import { objectDigest } from '../../../src/sandbox/verification.ts';
 import { invokeTreeDxRelay, runSandboxGuest, timingAwarenessContract } from '../../../src/sandbox/guest.ts';
+import { run } from '../../../src/sandbox/process-runner.ts';
 
 vi.mock('node:https', () => ({ request: vi.fn() }));
+vi.mock('../../../src/sandbox/process-runner.ts', async original => ({ ...await original<typeof import('../../../src/sandbox/process-runner.ts')>(), run: vi.fn() }));
 vi.mock('node:fs', async original => ({ ...await original<typeof import('node:fs')>(), createReadStream: vi.fn() }));
 vi.mock('node:fs/promises', async original => ({ ...await original<typeof import('node:fs/promises')>(),
 	readFile: vi.fn(), writeFile: vi.fn(), mkdir: vi.fn(), rm: vi.fn(), stat: vi.fn() }));
@@ -62,19 +64,18 @@ it('fails before opening a relay request when its private runtime environment is
 	expect(request).not.toHaveBeenCalled();
 });
 
-it('removes private guest configuration and supplied auth on preparation denial while retaining the protected credential return', async () => {
-	const outcomes: Array<{ mode: string; privateFiles: string[] }> = [];
-	for (const mode of ['invalid-context', 'missing-subscription']) {
+function suppliedGuestFiles(mode: string) {
 		const { attempt, execution } = clockRequest();
 		const context = { identity: { manifest: {} }, canonicalAssignmentContext: { assignment: { ...attempt,
-			workspace: { mode: 'read-only' }, effectiveProfile: { activity: 'chat', handler: 'writer' } }, context: [], predecessorResults: [] } };
+			workspace: { mode: 'read-only' }, effectiveProfile: { activity: 'chat', handler: 'writer' } }, context: mode === 'completed' ? [{ ref: attempt.sourceRef,
+				value: { frontmatter: { executionPlan: { workItems: [{ id: attempt.workItemId }] } } } }] : [], predecessorResults: [] } };
 		const bytes = Buffer.from(JSON.stringify(context)), digest = `sha256:${createHash('sha256').update(bytes).digest('hex')}`;
 		const assignment = sandboxAssignmentSchema.parse({ schemaVersion: 'treeseed.sandbox-assignment/v1', assignmentId: attempt.id,
 			attempt: attempt.attempt, runnerId: 'supplied-unit', providerId: attempt.provider.providerId, teamId: attempt.teamId, projectId: attempt.projectId,
 			profile: 'supplied-unit', guestImage: 'supplied-unit', guestImageDigest: digest, identityManifestDigest: objectDigest(context.identity.manifest),
 			contextManifestDigest: digest, resources: { cpuCores: 1, memoryBytes: 536870912, diskBytes: 67108864, durationSeconds: 30, processLimit: 32, outputBytes: 1048576 },
 			inputs: [{ id: 'execution-context', digest, bytes: bytes.length, disposition: 'copy-on-write', mediaType: 'application/json', targetPath: '/workspace/.treeseed/context.json' }],
-			outputs: [], network: { defaultDeny: true, relayUrl: 'https://relay.invalid:7444', allowedServices: ['treedx', 'codex-subscription'] },
+			outputs: [], network: { defaultDeny: true, relayUrl: 'https://relay.invalid:7444', allowedServices: mode === 'completed' ? ['treedx'] : ['treedx', 'codex-subscription'] },
 			modelPolicy: { provider: 'supplied-unit', model: 'not-a-real-model', capabilities: [] }, credentialHandles: [], treeDxHandleIds: [],
 			leaseExpiresAt: attempt.deadline, signature: { keyId: 'supplied-unit', algorithm: 'Ed25519', value: 'supplied-not-issued' } });
 		const root = '/run/treeseed-assignment/', privateRoot = '/workspace/.treeseed/codex/', suppliedAuth = Buffer.from('{"access_token":"supplied-unit-credential"}');
@@ -83,6 +84,9 @@ it('removes private guest configuration and supplied auth on preparation denial 
 			['/workspace/.treeseed/relay-ca.crt', Buffer.from('supplied-ca')]]);
 		if (mode === 'invalid-context') files.set(`${root}codex-auth.json`, suppliedAuth);
 		const held = new Map(files);
+		return { files, held, execution, root, privateRoot, suppliedAuth };
+}
+function mockGuestFiles(files: Map<string, Buffer<ArrayBuffer>>) {
 		vi.mocked(readFile).mockImplementation(async (path, options) => {
 			const value = files.get(String(path)); if (!value) throw Object.assign(new Error('missing supplied input'), { code: 'ENOENT' });
 			return options === 'utf8' ? value.toString('utf8') : value;
@@ -97,6 +101,45 @@ it('removes private guest configuration and supplied auth on preparation denial 
 				isFile: () => true, isDirectory: () => false, isBlockDevice: () => false, isCharacterDevice: () => false,
 				isSymbolicLink: () => false, isFIFO: () => false, isSocket: () => false }; });
 		vi.mocked(createReadStream).mockImplementation(path => Object.assign(Readable.from([files.get(String(path))]), { path: String(path), pending: false, bytesRead: 0, close() {} }));
+}
+
+it('measures active guest preparation model tools and closeout separately from infrastructure materialization without moving the original execution clock', async () => {
+	const f = suppliedGuestFiles('completed'); mockGuestFiles(f.files);
+	// Supplied monotonic UNIT observations, not native elapsed time or usage.
+	let observed = 0n; const monotonic = vi.spyOn(process.hrtime, 'bigint').mockImplementation(() => observed);
+	const materializedRead = vi.mocked(readFile).getMockImplementation()!;
+	vi.mocked(readFile).mockImplementation(async (path, options) => {
+		const result = await materializedRead(path, options);
+		if (String(path) === '/workspace/.treeseed/context.json') observed = 5_000_000_000n;
+		return result;
+	});
+	response(JSON.stringify({ ...f.execution, observedAt: f.execution.startedAt, remainingSeconds: 30 }));
+	vi.mocked(run).mockImplementation(async (executable, args, options) => {
+		expect(executable).toBe('/usr/local/bin/codex'); expect(options?.timeoutMs).toBeGreaterThan(0);
+		for (const [id, seconds] of [['original-first', 0], ['original-final', 2]] as const) {
+			const value = { ...f.execution, observedAt: new Date(Date.parse(f.execution.startedAt) + seconds * 1_000).toISOString(), remainingSeconds: 30 - seconds };
+			options?.onLine?.(JSON.stringify({ type: 'item.completed', usage: { input_tokens: 19, output_tokens: 3 }, item: {
+				id, type: 'mcp_tool_call', server: 'treedx', tool: 'treeseed_time_status', status: 'completed', error: null,
+				result: { content: [{ type: 'text', text: JSON.stringify(value) }], structuredContent: value } } }));
+		}
+		observed = 7_000_000_000n;
+		f.files.set(args[args.indexOf('--output-last-message') + 1]!, Buffer.from('Controlled unit response.'));
+		return { stdout: '', stderr: '' };
+	});
+	try {
+		await runSandboxGuest();
+		const result = sandboxResultSchema.parse(JSON.parse(f.files.get('/run/treeseed-output/result.json')!.toString('utf8')));
+		expect(result.usage).toMatchObject({ activeSeconds: 2, elapsedSeconds: 7, input_tokens: 19, output_tokens: 3, provenance: 'execution-provider' });
+		expect(result.timingAwareness).toMatchObject({ completedChecks: 2, firstToolCompliant: true, finalToolCompliant: true });
+		for (const [path, value] of f.held) expect(f.files.get(path)).toEqual(value);
+		expect(['auth.json', 'config.toml', 'activity-completion.schema.json'].filter(name => f.files.has(f.privateRoot + name))).toEqual([]);
+	} finally { monotonic.mockRestore(); }
+});
+
+it('removes private guest configuration and supplied auth on preparation denial while retaining the protected credential return', async () => {
+	const outcomes: Array<{ mode: string; privateFiles: string[] }> = [];
+	for (const mode of ['invalid-context', 'missing-subscription']) {
+		const { files, held, execution, privateRoot, suppliedAuth } = suppliedGuestFiles(mode); mockGuestFiles(files);
 		response(JSON.stringify({ ...execution, observedAt: execution.startedAt, remainingSeconds: 30 }));
 		await expect(runSandboxGuest()).rejects.toThrow(mode === 'invalid-context' ? 'assignment_exact_proposal_context_required' : 'Authorized Codex subscription credential is missing');
 		outcomes.push({ mode, privateFiles: ['config.toml', 'auth.json', 'activity-completion.schema.json'].filter(name => files.has(privateRoot + name)) });

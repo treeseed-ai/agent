@@ -1,6 +1,11 @@
 schemaVersion: treeseed.guarantee-verifiers/v1
 ownerPackage: "@treeseed/agent"
 verifiers:
+  agent.golden.execution-active-materialization-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/sandbox/runtime-clock.test.ts
+    testName: "measures active guest preparation model tools and closeout separately from infrastructure materialization without moving the original execution clock"
   agent.golden.execution-model-inventory-unit:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

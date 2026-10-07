@@ -24,7 +24,7 @@ async function fixture() {
 }
 describe('owning context Kernel through native content HTTP and source Git', () => {
 	it('native renamed Reporter commits one canonical exact-workday Note without model dispatch and retains interrupted raw readback without a passing result', async () => {
-		for (const mode of ['original', 'settlement', 'interrupted']) {
+		for (const mode of ['original', 'settlement', 'attempt-result', 'interrupted']) {
 			const interrupted = mode === 'interrupted';
 			const f = await portableKernel(); let boundary: Awaited<ReturnType<typeof contextBoundary>> | undefined;
 			try {
@@ -43,12 +43,14 @@ describe('owning context Kernel through native content HTTP and source Git', () 
 					status: 'failed', summary: 'Supplied original failure; never a passing replay.', references: [], verification: [], diagnostics: [{ code: 'retained-denial', severity: 'error', message: 'Retained supplied denial.' }],
 					usage: { elapsedSeconds: 1 }, completedAt: f.attempt.createdAt });
 				const retry = assignmentResultSchema.parse({ ...failed, id: 'retry-result', assignmentId: 'retry-attempt', status: 'completed', summary: 'Supplied distinct retry.', diagnostics: [] });
-				const predecessors = mode === 'settlement' ? [assignmentResultSchema.parse({ ...failed, id: 'f', assignmentId: 'a' })] : [failed, retry];
+				const predecessors = mode === 'settlement' || mode === 'attempt-result' ? [assignmentResultSchema.parse({ ...failed, id: 'f', assignmentId: 'a',
+					...(mode === 'attempt-result' ? { summary: 'Retained failure.', diagnostics: [] } : {}) })] : [failed, retry];
 				f.attempt.predecessorResultIds = predecessors.map(item => item.id);
 				Object.assign(f.input.assignment.workspaceContext!, { predecessorResults: predecessors });
 				const evidence = { teamId: f.attempt.teamId, workdayId: f.attempt.workdayId, nodes: [{ id: 'retained-node', status: 'completed' }],
 					edges: [{ id: 'retained-edge', from_node_id: 'retained-node', to_node_id: 'closeout' }],
-					attempts: predecessors.map(item => ({ id: item.assignmentId, status: item.status })),
+					attempts: predecessors.map(item => ({ id: item.assignmentId, status: item.status,
+						...(mode === 'attempt-result' ? { assignment_result_json: JSON.stringify(item) } : {}) })),
 					reservations: predecessors.map(item => ({ id: `${item.assignmentId}-reservation`, state: 'consumed', assignment_id: item.assignmentId })),
 					usage: predecessors.map(item => ({ id: `${item.assignmentId}-usage`, assignment_id: item.assignmentId, elapsed_seconds: item.usage.elapsedSeconds })),
 					settlements: mode === 'settlement' ? predecessors.map(item => usageSettlementSchema.parse({ schemaVersion: 'treeseed.usage-settlement/v1',

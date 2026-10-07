@@ -5,6 +5,24 @@ import { stringify } from 'yaml';
 import { state, gate, read, assignment, usageMeasurement, classes, workdayId, commit, type Row } from './architecture/golden-readback-fixture.ts';
 
 describe('golden read-back assertion regressions (fixtures are not live acceptance)', () => {
+	it('denies omitted duplicated or substituted frozen Reporter attempts even when the note and digest agree without repairing public results', () => {
+		const assignments = state.replies.get('assignments list')!.items, reporter = assignments.find((item: Row) => item.assignmentAttempt.effectiveProfile.activity === 'reporting');
+		const file = state.replies.get('library read')!.result.files[0], original = structuredClone(file), context = structuredClone(reporter.workspaceContext);
+		expect(() => gate('reporter')).not.toThrow(); const denied: boolean[] = [];
+		for (const mode of ['empty', 'missing', 'duplicate', 'foreign', 'status', 'missing-result', 'malformed-result', 'changed-result']) {
+			const changed = structuredClone(context), inline = changed.authorizedContext[0], value = inline.value;
+			if (mode === 'empty') value.attempts = []; if (mode === 'missing') value.attempts.pop();
+			if (mode === 'duplicate') value.attempts[1] = structuredClone(value.attempts[0]); if (mode === 'foreign') value.attempts[0].id = 'foreign';
+			if (mode === 'status') value.attempts[0].status = 'failed'; if (mode === 'missing-result') value.attempts[0].assignment_result_json = null;
+			if (mode === 'malformed-result') value.attempts[0].assignment_result_json = '{';
+			if (mode === 'changed-result') { const result = JSON.parse(value.attempts[0].assignment_result_json); result.id = 'substituted'; value.attempts[0].assignment_result_json = JSON.stringify(result); }
+			inline.digest = `sha256:${createHash('sha256').update(canonicalStandardsJson(value)).digest('hex')}`;
+			const payload = JSON.parse(original.body.slice(8, -4)); payload.workday = value; file.body = `\`\`\`json\n${JSON.stringify(payload)}\n\`\`\``;
+			reporter.workspaceContext = changed; const held = structuredClone({ changed, file, assignments });
+			let failed = false; try { gate('reporter'); } catch { failed = true; } denied.push(failed); expect({ changed, file, assignments }).toEqual(held);
+		}
+		reporter.workspaceContext = context; file.body = original.body; expect(() => gate('reporter')).not.toThrow(); expect(denied).toEqual(Array(8).fill(true));
+	});
 	it('denies omitted duplicated changed and corrupt report settlements against independent complete ledger readback without repairing frozen or failed evidence', () => {
 		const reporter = state.replies.get('assignments list')!.items.find((item: Row) => item.assignmentAttempt.effectiveProfile.activity === 'reporting');
 		const file = state.replies.get('library read')!.result.files[0], original = structuredClone(file);

@@ -62,11 +62,14 @@ describe('native trusted guest clock relay and owning provider tool', () => {
 				child.stdin!.end(requests.map(value => JSON.stringify(value)).join('\n') + '\n');
 			});
 			const ended = Date.now(); expect(output.stderr).toBe('');
-			const responses: Array<{ jsonrpc: string; id: number; result: { content: Array<{ type: string; text: string }>; structuredContent: { startedAt: string; deadlineAt: string; remainingSeconds: number } } }> = output.stdout.trim().split('\n').map(line => JSON.parse(line));
+			const responses: Array<{ jsonrpc: string; id: number; result: { content: Array<{ type: string; text: string }>; structuredContent: { startedAt: string; deadlineAt: string; remainingSeconds: number; observedAt: string } } }> = output.stdout.trim().split('\n').map(line => JSON.parse(line));
 			expect(responses.map(value => ({ jsonrpc: value.jsonrpc, id: value.id }))).toEqual(requests.map(({ jsonrpc, id }) => ({ jsonrpc, id })));
 			for (const response of responses) {
 				const value = response.result.structuredContent;
 				expect(value).toMatchObject(f.execution); expect(response.result.content).toEqual([{ type: 'text', text: JSON.stringify(value) }]);
+				expect(typeof value.observedAt).toBe('string'); const observed = Date.parse(value.observedAt);
+				expect(observed).toBeGreaterThanOrEqual(began); expect(observed).toBeLessThanOrEqual(ended);
+				expect(value.remainingSeconds).toBe(Math.max(0, Math.ceil((Date.parse(f.attempt.deadline) - observed) / 1000)));
 				expect(Number.isInteger(value.remainingSeconds)).toBe(true);
 				expect(value.remainingSeconds).toBeGreaterThanOrEqual(Math.max(0, Math.ceil((Date.parse(f.attempt.deadline) - ended) / 1_000)));
 				expect(value.remainingSeconds).toBeLessThanOrEqual(Math.max(0, Math.ceil((Date.parse(f.attempt.deadline) - began) / 1_000)));
@@ -84,6 +87,26 @@ describe('native trusted guest clock relay and owning provider tool', () => {
 			expect(f.input.assignment).toEqual(inputBefore); expect(await readFile(entrypoint)).toEqual(sourceBefore);
 			// Event wrappers/corruptions are INPUTS. This exercises actual MCP/TLS/
 			// provider tool composition, NOT actual Codex model actions or API issuance.
+		} finally { await f.close(); }
+	});
+	it('native trusted clock rejects caller supplied authority and retains denial before exact empty argument retry', async () => {
+		const f = await nativeClock(); try {
+			const before = structuredClone(f.input.assignment), authority = structuredClone(f.execution), observations: unknown[] = [];
+			const fields = ['now', 'observedAt', 'startedAt', 'deadlineAt', 'remainingSeconds', 'executionSeconds', 'closeoutSeconds'];
+			for (const field of fields) {
+				const args = { [field]: field.endsWith('Seconds') ? 1 : authority.startedAt }, held = structuredClone(args);
+				try { observations.push({ admitted: true, value: await invokeTreeDxRelay('treeseed_time_status', args, f.environment, 5000) }); }
+				catch (error) { observations.push({ admitted: false, message: error instanceof Error ? error.message : String(error) }); }
+				expect(args).toEqual(held);
+			}
+			expect(observations).toHaveLength(fields.length);
+			for (const value of observations) expect(value).toMatchObject({ admitted: false, message: expect.stringContaining('Clock tool does not accept caller supplied arguments') });
+			const retained = structuredClone(observations), calls = structuredClone(f.calls);
+			const began = Date.now(), retry = await f.read(), ended = Date.now(); expect(retry).toMatchObject(authority);
+			if (!retry || typeof retry !== 'object' || !('observedAt' in retry)) throw new Error('Actual retry clock timestamp required.');
+			expect(Date.parse(String(retry.observedAt))).toBeGreaterThanOrEqual(began); expect(Date.parse(String(retry.observedAt))).toBeLessThanOrEqual(ended);
+			expect(f.calls.slice(0, -1)).toEqual(calls); expect(f.calls.at(-1)?.arguments).toEqual({}); expect(observations).toEqual(retained);
+			expect(f.input.assignment).toEqual(before); expect(f.execution).toEqual(authority);
 		} finally { await f.close(); }
 	});
 	it('independently reads first and final native HTTPS clock values against unchanged original bounds with no model compliance claim', async () => {

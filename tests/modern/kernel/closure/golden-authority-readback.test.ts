@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { stringify } from 'yaml';
 import { state, gate, read, assignment, usageMeasurement, classes, workdayId, commit, type Row } from '../architecture/golden-readback-fixture.ts';
 import { encodeCapacityPageCursor } from '@treeseed/sdk/capacity-pagination';
+import { listCommandPaths, TREESEED_COMMAND_TREE_V1 } from '@treeseed/sdk/operator-contracts';
 import { readCompleteEvidence } from '../../../acceptance/workday/support/evidence-pages.ts';
 
 describe('golden read-back assertion regressions (fixtures are not live acceptance)', () => {
@@ -12,6 +13,7 @@ describe('golden read-back assertion regressions (fixtures are not live acceptan
     const pages = [{ items: [first, second], page: { limit: 2, hasMore: true, nextCursor: cursor } },
       { items: [third], page: { limit: 2, hasMore: false, nextCursor: null } }];
     const args = ['workdays', 'events', workdayId, '--diagnostics', 'full'], held = structuredClone(pages), input = [...args];
+    expect(listCommandPaths(TREESEED_COMMAND_TREE_V1)).toContain(args.slice(0, 3).join(' '));
     state.eventPages = structuredClone(pages);
     expect(readCompleteEvidence(args, 'treeseed', 2, 'ACCEPTANCE_MODEL_CLOCK', 'ascending')).toEqual([first, second, third]);
     expect(state.calls.slice(-2)).toEqual([ [...args, '--limit', '2', '--server', 'local', '--team', 'treeseed', '--json'],

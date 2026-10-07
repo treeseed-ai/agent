@@ -302,7 +302,10 @@ describe('whole native provider polling arbitration boundary', () => {
 		onTestFailed(() => { throw new Error(`ACCEPTANCE_PROVIDER_TOKEN_ISOLATION_${modes.map(mode => `${mode}_${phases.get(mode) ?? 'NOT_STARTED'}`).join('_')}: original native failure retained`); });
 		const outcomes = await Promise.all(modes.map(async mode => {
 			phases.set(mode, 'INITIALIZE');
-			const f = await arbitrationFixture();
+			// Each mode still owns an independent process and private identity. The
+			// original initializer runs in that mode's owning runtime child, not a
+			// second child loading the same complete module graph before polling.
+			const f = await arbitrationFixture(1, true);
 			try {
 				const busy = f.manifest.connections.find(item => item.id === 'busy-a')!;
 				if (mode === 'disabled') busy.enabled = false;

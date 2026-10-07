@@ -19,13 +19,13 @@ const clockResult = { content: [{ type: 'text', text: JSON.stringify({ startedAt
 describe('Codex chat executor', () => {
 	it('denies missing foreign and empty selected proposal work-item context without repairing the supplied assignment', () => {
 		const sourceRef = { store: 'treedx', model: 'proposal', id: 'supplied-proposal', repository: 'supplied-library', commit: 'a'.repeat(40), path: 'proposals/supplied.yaml' };
-		for (const context of [[], [{ ref: { ...sourceRef, id: 'foreign' }, value: { frontmatter: { executionPlan: { workItems: [{ id: 'selected' }] } } } }],
+		for (const [index, context] of [[], [{ ref: { ...sourceRef, id: 'foreign' }, value: { frontmatter: { executionPlan: { workItems: [{ id: 'selected' }] } } } }],
 			[{ ref: sourceRef, value: { frontmatter: { executionPlan: { workItems: [] } } } }],
-			[{ ref: sourceRef, value: { frontmatter: { executionPlan: { workItems: [{ id: 'foreign' }] } } } }]]) {
+			[{ ref: sourceRef, value: { frontmatter: { executionPlan: { workItems: [{ id: 'foreign' }] } } } }]].entries()) {
 			const input = { canonicalAssignmentContext: { assignment: { id: 'supplied-assignment', sourceRef, workItemId: 'selected',
 				workspace: { mode: 'read-only' }, effectiveProfile: { activity: 'chat', handler: 'writer' } }, context, predecessorResults: [] } };
 			const before = structuredClone(input);
-			expect(() => promptFromContext(input)).toThrow(); expect(input).toEqual(before);
+			expect(() => promptFromContext(input)).toThrow(index < 2 ? 'assignment_exact_proposal_context_required' : 'assignment_work_item_context_required'); expect(input).toEqual(before);
 		}
 	});
 	it('retains ordered untrimmed first and final clocks and early fatal command evidence through a long sanitized provider observation', () => {

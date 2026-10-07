@@ -142,9 +142,10 @@ describe('native trusted guest clock relay and owning provider tool', () => {
 		}
 		expect(timingAwarenessContract(outcomes[0]!.events)).toMatchObject({ completedChecks: 2, firstToolCompliant: true, finalToolCompliant: true });
 		expect(outcomes[1]!.failure).toContain('sandbox_resource_exhausted: command exited 137'); expect(outcomes[1]!.events).toEqual([]);
-		expect(outcomes[2]!.failure).toContain('assignment_proposal_context_required'); expect(outcomes[2]!.events).toEqual([]);
+		expect(outcomes[2]!.failure).toContain('assignment_exact_proposal_context_required'); expect(outcomes[2]!.events).toEqual([]);
 		expect(outcomes[3]!.failure).toContain('Authorized Codex subscription credential is missing'); expect(outcomes[3]!.events).toEqual([]);
-		for (const outcome of outcomes) expect(outcome.retainedPrivateFiles).toEqual([]);
+		for (const outcome of outcomes) expect(outcome.retainedPrivateFiles,
+			JSON.stringify(outcomes.map(value => ({ mode: value.mode, retainedPrivateFiles: value.retainedPrivateFiles })))).toEqual([]);
 	}, 30_000);
 	it('native public guest MCP clock transports exact first and final HTTPS values and rejects corrupted observed payloads without rewriting native bytes', async () => {
 		const f = await nativeClock(); try {

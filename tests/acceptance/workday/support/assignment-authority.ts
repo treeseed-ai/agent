@@ -7,6 +7,46 @@ import { validatePortableContentData } from '@treeseed/sdk/content-validation';
 import { read, row, type Row } from '../../acceptance-cli.ts';
 import { clockReading, timingAwarenessContract } from '../../../../src/sandbox/guest.ts';
 
+/** Discover actual model execution from owning events, never configured role names
+ * or completed status. Missing failed-attempt evidence must remain fatal. */
+export function modelExecutionInventory(items: Row[], events: Row[], run: Row): Array<{ item: Row; started: Row; terminal: Row }> {
+	assert.ok(typeof run.id === 'string' && run.id && typeof run.teamId === 'string' && run.teamId, 'ACCEPTANCE_MODEL_INVENTORY_SCOPE');
+	const owners = new Map<string, Row>(), identities = new Set<string>(), indexes = new Set<number>();
+	for (const item of items) {
+		assert.ok(typeof item.id === 'string' && item.id && !owners.has(item.id), 'ACCEPTANCE_MODEL_INVENTORY_ASSIGNMENT'); owners.set(item.id, item);
+	}
+	for (const event of events) {
+		assert.ok(typeof event.id === 'string' && event.id && !identities.has(event.id) && Number.isSafeInteger(event.eventIndex)
+			&& Number(event.eventIndex) >= 0 && !indexes.has(Number(event.eventIndex)), 'ACCEPTANCE_MODEL_INVENTORY_EVENT');
+		assert.equal(event.runId, run.id); assert.equal(event.teamId, run.teamId);
+		identities.add(event.id); indexes.add(Number(event.eventIndex));
+	}
+	const modelEvent = (event: Row) => Object.hasOwn(row(event.payload), 'model') || row(event.payload).isolation === 'microvm';
+	const starts = events.filter(event => event.eventType === 'provider.execution.started' && modelEvent(event));
+	assert.ok(starts.length > 0, 'ACCEPTANCE_MODEL_INVENTORY_EMPTY');
+	const seen = new Set<string>(), inventory = starts.map(started => {
+		assert.ok(typeof row(started.payload).model === 'string' && String(row(started.payload).model).trim(), 'ACCEPTANCE_MODEL_INVENTORY_MODEL');
+		assert.ok(typeof started.assignmentId === 'string' && !seen.has(started.assignmentId), 'ACCEPTANCE_MODEL_INVENTORY_ATTEMPT');
+		seen.add(started.assignmentId); const item = owners.get(started.assignmentId);
+		assert.ok(item, 'ACCEPTANCE_MODEL_INVENTORY_OWNER'); const attempt = row(item.assignmentAttempt);
+		assert.equal(attempt.id, item.id); assert.equal(attempt.workdayId, run.id); assert.equal(attempt.teamId, run.teamId);
+		assert.ok(typeof attempt.projectId === 'string' && attempt.projectId, 'ACCEPTANCE_MODEL_INVENTORY_PROJECT');
+		const terminals = events.filter(event => event.assignmentId === item.id
+			&& ['provider.execution.completed', 'provider.execution.failed'].includes(String(event.eventType)));
+		assert.equal(terminals.length, 1, 'ACCEPTANCE_MODEL_INVENTORY_TERMINAL'); const terminal = terminals[0]!;
+		for (const event of [started, terminal]) {
+			assert.equal(event.workdayId, run.id); assert.equal(event.projectId, attempt.projectId);
+			assert.ok(Number.isFinite(Date.parse(String(event.createdAt))), 'ACCEPTANCE_MODEL_INVENTORY_CLOCK');
+		}
+		assert.ok(Number(started.eventIndex) < Number(terminal.eventIndex)
+			&& Date.parse(String(started.createdAt)) <= Date.parse(String(terminal.createdAt)), 'ACCEPTANCE_MODEL_INVENTORY_ORDER');
+		return { item, started, terminal };
+	});
+	for (const event of events.filter(event => ['provider.execution.completed', 'provider.execution.failed'].includes(String(event.eventType)) && modelEvent(event)))
+		assert.ok(seen.has(String(event.assignmentId)), 'ACCEPTANCE_MODEL_INVENTORY_MISSING_START');
+	return inventory;
+}
+
 /** Raw public owning-event assertions, not a second runtime clock or receipt. */
 export function verifyModelClockEvidence(item: Row, event: Row): void {
 	const attempt = row(item.assignmentAttempt), result = row(item.assignmentResult), time = row(row(row(item.capacityEnvelope).budget).time);

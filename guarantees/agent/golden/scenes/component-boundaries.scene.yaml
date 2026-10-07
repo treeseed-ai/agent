@@ -3,6 +3,12 @@ id: agent.golden.component-boundaries
 title: Golden execution component boundaries
 scope: local-component-tests
 workflow:
+  - id: execution-model-inventory-unit
+    action: { verifier: agent.golden.execution-model-inventory-unit }
+    expect: { status: passed }
+  - id: execution-model-inventory-native
+    action: { verifier: agent.golden.execution-model-inventory-native }
+    expect: { status: passed }
   - id: execution-preparation-cleanup-unit
     action: { verifier: agent.golden.execution-preparation-cleanup-unit }
     expect: { status: passed }

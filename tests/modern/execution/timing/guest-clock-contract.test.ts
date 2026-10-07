@@ -14,9 +14,45 @@ import { architectureTaskInstructions } from '../../architecture/knowledge-task-
 import { request as executionRequest } from '../../kernel/provider-kernel-fixture.ts';
 import { assignmentAttemptSchema } from '@treeseed/sdk/agent-capacity';
 import { redactProviderEvents } from '../../../../src/sandbox/provider-failure.ts';
-import { verifyModelClockEvidence } from '../../../acceptance/workday/support/assignment-authority.ts';
+import { verifyModelClockEvidence, modelExecutionInventory } from '../../../acceptance/workday/support/assignment-authority.ts';
 const clockResult = { content: [{ type: 'text', text: JSON.stringify({ startedAt: '2026-10-04T00:00:00.000Z', deadlineAt: '2026-10-04T00:01:00.000Z', observedAt: '2026-10-04T00:00:00.000Z', remainingSeconds: 60 }) }] };
 describe('Codex chat executor', () => {
+	it('discovers every recorded model execution including failed and returned renamed activities and denies missing ambiguous or foreign inventory without rewriting history', () => {
+		const fixture = () => {
+			const run = { id: 'workday-clock', teamId: 'team-clock' }, items = ['completed', 'failed', 'returned'].map((status, index) => ({
+				id: `assignment-${index}`, status, assignmentAttempt: { id: `assignment-${index}`, workdayId: run.id, teamId: run.teamId,
+					projectId: 'original-project', effectiveProfile: { activity: 'arbitrarily-renamed-model-input' } } }));
+			const events = items.flatMap((item, index) => ['started', index ? 'failed' : 'completed'].map((phase, offset) => ({
+				id: `original-event-${index}-${offset}`, eventIndex: index * 2 + offset, eventType: `provider.execution.${phase}`,
+				runId: run.id, workdayId: run.id, teamId: run.teamId, projectId: 'original-project', assignmentId: item.id,
+				createdAt: `2026-10-07T00:00:0${index * 2 + offset}.000Z`, payload: { model: 'supplied-not-actual-model', isolation: 'microvm' } })));
+			return { run, items, events };
+		};
+		const f = fixture(), before = structuredClone(f);
+		expect(modelExecutionInventory(f.items, f.events, f.run).map(value => value.item.status)).toEqual(['completed', 'failed', 'returned']); expect(f).toEqual(before);
+		for (const mode of ['empty', 'missing-start', 'missing-terminal', 'duplicate-start', 'duplicate-terminal', 'duplicate-owner', 'missing-owner',
+			'foreign-run', 'foreign-team', 'foreign-project', 'foreign-attempt', 'empty-model', 'missing-model', 'bad-clock', 'reversed', 'duplicate-index']) {
+			const supplied = fixture();
+			if (mode === 'empty') supplied.events = [];
+			if (mode === 'missing-start') supplied.events.splice(0, 1);
+			if (mode === 'missing-terminal') supplied.events.splice(1, 1);
+			if (mode.startsWith('duplicate-') && ['duplicate-start', 'duplicate-terminal'].includes(mode)) supplied.events.push({
+				...supplied.events[mode === 'duplicate-start' ? 0 : 1]!, id: 'additional-event', eventIndex: 6 });
+			if (mode === 'duplicate-owner') supplied.items.push(structuredClone(supplied.items[0]!));
+			if (mode === 'missing-owner') supplied.items.splice(0, 1);
+			if (mode === 'foreign-run') supplied.events[0]!.runId = 'foreign';
+			if (mode === 'foreign-team') supplied.events[0]!.teamId = 'foreign';
+			if (mode === 'foreign-project') supplied.events[0]!.projectId = 'foreign';
+			if (mode === 'foreign-attempt') supplied.items[0]!.assignmentAttempt.id = 'foreign';
+			if (mode === 'empty-model') supplied.events[0]!.payload.model = '';
+			if (mode === 'missing-model') Object.assign(supplied.events[0]!.payload, { model: undefined });
+			if (mode === 'bad-clock') supplied.events[0]!.createdAt = 'invalid';
+			if (mode === 'reversed') supplied.events[0]!.createdAt = '2026-10-07T00:00:59.000Z';
+			if (mode === 'duplicate-index') supplied.events[1]!.eventIndex = 0;
+			const held = structuredClone(supplied); expect(() => modelExecutionInventory(supplied.items, supplied.events, supplied.run), mode).toThrow(); expect(supplied).toEqual(held);
+		}
+		// Supplied records prove this acceptance consumer, not native model production.
+	});
 	it('denies missing foreign and empty selected proposal work-item context without repairing the supplied assignment', () => {
 		const sourceRef = { store: 'treedx', model: 'proposal', id: 'supplied-proposal', repository: 'supplied-library', commit: 'a'.repeat(40), path: 'proposals/supplied.yaml' };
 		for (const [index, context] of [[], [{ ref: { ...sourceRef, id: 'foreign' }, value: { frontmatter: { executionPlan: { workItems: [{ id: 'selected' }] } } } }],

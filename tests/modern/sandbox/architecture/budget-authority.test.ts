@@ -80,14 +80,14 @@ describe('original execution budget and subprocess limit authority', () => {
 		const execute: typeof run = async () => { calls += 1; return { stdout: '', stderr: '' }; };
 		const denied: boolean[] = [];
 		for (const field of ['timeoutMs', 'idleTimeoutMs', 'closeoutTimeoutMs'] as const) {
-			for (const value of [0, -1, NaN, Infinity, -Infinity, null, '', '20000', true, false, [], {}]) {
+			for (const value of [undefined, 0, -1, NaN, Infinity, -Infinity, null, '', '20000', true, false, [], {}]) {
 				const options = Object.assign({ timeoutMs: 20_000 }, { [field]: value }), before = structuredClone(options);
 				try { await withinAssignmentBudget(execute, () => 10_000)('controlled-command', [], options); denied.push(false); }
 				catch { denied.push(true); }
 				expect(options).toEqual(before);
 			}
 		}
-		expect(denied).toEqual(Array(36).fill(true)); expect(calls).toBe(0);
+		expect(denied).toEqual(Array(39).fill(true)); expect(calls).toBe(0);
 		for (const value of [undefined, null, '', '10000', true, false, [], {}, NaN, Infinity, -Infinity, 0, -1]) {
 			const supplied = Object.assign({ remainingMs: 10_000 }, { remainingMs: value }), before = structuredClone(supplied);
 			await expect(withinAssignmentBudget(execute, () => supplied.remainingMs)('controlled-command', [], { timeoutMs: 5_000 }))
@@ -95,6 +95,9 @@ describe('original execution budget and subprocess limit authority', () => {
 			expect(supplied).toEqual(before);
 		}
 		expect(calls).toBe(0);
+		const absent = { timeoutMs: 5_000 }, held = structuredClone(absent);
+		await expect(withinAssignmentBudget(execute, () => 10_000)('controlled-command', [], absent)).resolves.toEqual({ stdout: '', stderr: '' });
+		expect(calls).toBe(1); expect(absent).toEqual(held); expect(Object.hasOwn(absent, 'idleTimeoutMs')).toBe(false);
 	});
 	it('retains the same exact closeout boundary through retries and denies the consumed reserve without rewriting options', async () => {
 		const delegated: Array<Parameters<typeof run>[2]> = [];

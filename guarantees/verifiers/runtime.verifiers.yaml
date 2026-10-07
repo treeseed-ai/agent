@@ -5,7 +5,7 @@ verifiers:
     kind: nodeTestCase
     ownerPackage: "@treeseed/agent"
     testFile: tests/acceptance/workday/context-custody.test.ts
-    testName: "Actual completed model assignments retain their exact first final and intermediate clock timestamps through authorized complete public event readback"
+    testName: "Every actual recorded model execution is included in exact clock evidence readback without discarding failed or returned attempts"
   agent.golden.execution-global-selection-live-1:
     kind: nodeTestCase
     ownerPackage: "@treeseed/agent"

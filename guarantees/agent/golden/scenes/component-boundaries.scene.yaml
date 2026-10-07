@@ -3,6 +3,15 @@ id: agent.golden.component-boundaries
 title: Golden execution component boundaries
 scope: local-component-tests
 workflow:
+  - id: execution-native-token-agreement-unit
+    action: { verifier: agent.golden.execution-native-token-agreement-unit }
+    expect: { status: passed }
+  - id: execution-native-token-agreement-native
+    action: { verifier: agent.golden.execution-native-token-agreement-native }
+    expect: { status: passed }
+  - id: execution-native-token-agreement-gate-unit
+    action: { verifier: agent.golden.execution-native-token-agreement-gate-unit }
+    expect: { status: passed }
   - id: execution-measured-verification-unit
     action: { verifier: agent.golden.execution-measured-verification-unit }
     expect: { status: passed }

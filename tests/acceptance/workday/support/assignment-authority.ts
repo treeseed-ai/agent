@@ -299,6 +299,16 @@ export function verifyMeasuredVerification(result: Row): void {
 	}
 }
 
+/** Independent comparison of two presented observations; no inferred tokens. */
+export function verifyNativeCounterAgreement(measurement: Row): void {
+	const native = row(measurement.nativeUsage);
+	for (const [normalized, raw] of [['inputTokens', 'input_tokens'], ['outputTokens', 'output_tokens'],
+		['cachedInputTokens', 'cached_input_tokens'], ['reasoningTokens', 'reasoning_output_tokens']]) {
+		if (Object.hasOwn(measurement, normalized!) && Object.hasOwn(native, raw!))
+			assert.equal(measurement[normalized!], native[raw!], 'ACCEPTANCE_USAGE_NATIVE_COUNTER: Original token counts disagree');
+	}
+}
+
 /** Assertions in the existing managed verifier, not a runtime grant compiler.
  * Independent profile/policy retrieval and atomic admission still need proof. */
 export function verifyAssignmentAuthority(item: Row): void {

@@ -8,7 +8,7 @@ import { DEFAULT_CAPACITY_PAGE_LIMIT } from '@treeseed/sdk/capacity-pagination';
 import { validatePortableContentData } from '@treeseed/sdk/content-validation';
 import { read, row, type Row } from './acceptance-cli.ts';
 import { readDecisionContent, readGovernedContentFile, verifyDecisionContent, verifyReviewFindingContent } from './workday/support/decision-evidence.ts';
-import { verifyAssignmentAuthority, verifyTeardownAuthority, verifyTreeDxWorkspaceClosure, verifyMeasuredVerification } from './workday/support/assignment-authority.ts';
+import { verifyAssignmentAuthority, verifyTeardownAuthority, verifyTreeDxWorkspaceClosure, verifyMeasuredVerification, verifyNativeCounterAgreement } from './workday/support/assignment-authority.ts';
 import { verifyPlanningEvidence } from './workday/support/planning-evidence.ts';
 import { readCompleteEvidence } from './workday/support/evidence-pages.ts';
 import { verifyReportRecordCustody } from './workday/support/record-custody.ts';
@@ -384,6 +384,7 @@ export function verifyGolden(gate: Gate): void {
 			&& (!measurement.elapsedSeconds || measurement.activeSeconds > 0), 'ACCEPTANCE_USAGE_MEASURED: Finite truthful productive time required');
 		assert.ok(measurement.nativeUsage && typeof measurement.nativeUsage === 'object' && !Array.isArray(measurement.nativeUsage)
 			&& Object.values(measurement.nativeUsage).every(finite), 'ACCEPTANCE_USAGE_MEASURED: Finite nonnegative native usage required');
+		verifyNativeCounterAgreement(measurement);
 		assert.ok(typeof measurement.accountingMode === 'string' && ['aggregate', 'incremental', 'informational'].includes(measurement.accountingMode),
 			'ACCEPTANCE_USAGE_IDENTITY: Valid accounting mode required');
 		assert.ok(measurement.accountingMode !== 'informational' || (measurement.activeSeconds === 0 && measurement.elapsedSeconds === 0),
@@ -488,7 +489,6 @@ export function verifyGolden(gate: Gate): void {
 		workday: evidence.value, predecessorResults: frozen.predecessorResults }, 'ACCEPTANCE_REPORT_BODY: Every frozen evidence byte must retain its original meaning');
 	}
 }
-
 test('Golden runtime lifecycle evidence satisfies its acceptance boundary', { timeout: 120_000 }, () => verifyGolden('lifecycle'));
 test('Golden runtime collaboration evidence satisfies its acceptance boundary', { timeout: 120_000 }, () => verifyGolden('collaboration'));
 test('Golden runtime graph evidence satisfies its acceptance boundary', { timeout: 120_000 }, () => verifyGolden('graph'));

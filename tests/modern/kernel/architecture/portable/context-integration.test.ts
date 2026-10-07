@@ -33,14 +33,15 @@ describe('owning context Kernel through native content HTTP and source Git', () 
 				for (const status of ['completed', 'failed'] as const) {
 					const reply = { ...original, status, usage: [{ elapsedSeconds: 2, [normalized!]: 8, nativeUsage: { [native!]: 7 } }] };
 					f.setReply(reply); const held = structuredClone(reply), result = await f.run();
-					outcomes.push(result.status === 'failed' && result.outputs?.assignmentResult === undefined);
+					outcomes.push(result.status === 'failed' && result.outputs?.assignmentResult === undefined); expect(result).toMatchObject({
+						code: 'agent_kernel_failed', retryable: false, summary: status === 'failed' ? original.summary : 'model_native_usage_invalid' });
 					expect(result.usage).toEqual(reply.usage); expect(f.getReply()).toEqual(held); expect(f.input.assignment).toEqual(before);
 					expect(execFileSync('git', ['show', `${candidate}:src/output.txt`], { cwd: f.checkout })).toEqual(bytes);
 				}
-				f.setReply(original); const retry = await f.run(); expect(retry.status).toBe('completed');
-				expect(f.requests).toHaveLength(3); expect(f.begin).toHaveLength(3); expect(f.getReply()).toEqual(original);
-				expect(f.git('rev-parse', 'HEAD')).toBe(candidate); expect(f.git('rev-parse', 'fixture-base')).toBe(f.base);
-				// Controlled native HTTP observations, not real model billing or API settlement.
+				const exact = { ...original, usage: [{ elapsedSeconds: 2, [normalized!]: 7, nativeUsage: { [native!]: 7 } }] };
+				f.setReply(exact); const retry = await f.run(); expect(retry.status).toBe('completed'); expect(retry.usage).toEqual(exact.usage);
+				expect(f.requests).toHaveLength(3); expect(f.begin).toHaveLength(3); expect(f.getReply()).toEqual(exact);
+				expect(f.git('rev-parse', 'HEAD')).toBe(candidate); expect(f.git('rev-parse', 'fixture-base')).toBe(f.base); // Controlled HTTP, not real model billing or API settlement.
 			} finally { await f.close(); expect(existsSync(f.checkout)).toBe(false); }
 		}
 		expect(outcomes).toEqual(Array.from({ length: 8 }, () => true));

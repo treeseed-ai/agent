@@ -1,6 +1,18 @@
 schemaVersion: treeseed.guarantee-verifiers/v1
 ownerPackage: "@treeseed/agent"
 verifiers:
+  agent.golden.execution-native-token-agreement-unit:
+    kind: vitestCase
+    testFile: tests/modern/provider/sandbox-accounting-usage.test.ts
+    testName: "denies contradictory normalized and native token counters per observation without repairing either representation"
+  agent.golden.execution-native-token-agreement-native:
+    kind: vitestCase
+    testFile: tests/modern/kernel/architecture/portable/context-integration.test.ts
+    testName: "native Kernel denies contradictory normalized token observations without rewriting raw replies candidate bytes or failed history"
+  agent.golden.execution-native-token-agreement-gate-unit:
+    kind: vitestCase
+    testFile: tests/modern/kernel/architecture/golden-usage-evidence.test.ts
+    testName: "denies contradictory normalized and native token counts without changing supplied settlement observations"
   agent.golden.execution-measured-verification-unit:
     kind: vitestCase
     ownerPackage: '@treeseed/agent'

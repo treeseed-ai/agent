@@ -7,6 +7,7 @@ import { assignmentAttemptSchema, type AssignmentReference } from '@treeseed/sdk
 import type { ProviderHostRuntimeConfig } from '../configuration/config.ts';
 import { loadCapacityProviderIdentity } from '../accounts/identity.ts';
 import type { AgentExecutor } from './contracts.ts';
+import { SANDBOX_TOKEN_COUNTER_FIELDS } from './contracts.ts';
 import { SandboxBrokerClient } from './sandbox-broker-client.ts';
 import { materializeSandboxInputs } from './sandbox-input-materializer.ts';
 import { activeSandboxAttempt, prepareAssignmentSource, renewAssignmentSource, type ActiveSource } from './source-workspace.ts';
@@ -25,14 +26,12 @@ const TOOL_PERMISSION:Record<string,string>={treedx_build_context:'source.read',
 function object(value:unknown):Record<string,unknown>{return value&&typeof value==='object'&&!Array.isArray(value)?value as Record<string,unknown>:{};}
 /** Translate harness-native counters once at the sandbox transport boundary. */
 export function sandboxAccountingUsage(usage: Record<string, unknown>): Record<string, unknown> {
-	const fields = { input_tokens: 'inputTokens', cached_input_tokens: 'cachedInputTokens',
-		output_tokens: 'outputTokens', reasoning_output_tokens: 'reasoningTokens' };
 	// Provenance is diagnostic metadata, not a provider-native numeric unit.
 	// Retain every other raw observation, including invalid values: the owning
 	// aggregate validator must reject them, never silently manufacture a count.
 	const nativeUsage = { ...usage }; delete nativeUsage.provenance;
 	const normalized: Record<string, unknown> = { ...usage, nativeUsage };
-	for (const [native, canonical] of Object.entries(fields)) {
+	for (const [native, canonical] of Object.entries(SANDBOX_TOKEN_COUNTER_FIELDS)) {
 		const value = usage[native];
 		if (typeof value === 'number' && Number.isFinite(value) && value >= 0) normalized[canonical] = value;
 		delete normalized[native];

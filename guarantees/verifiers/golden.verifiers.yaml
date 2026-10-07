@@ -1,6 +1,11 @@
 schemaVersion: treeseed.guarantee-verifiers/v1
 ownerPackage: "@treeseed/agent"
 verifiers:
+  agent.golden.execution-preparation-cleanup-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/sandbox/runtime-clock.test.ts
+    testName: "removes private guest configuration and supplied auth on preparation denial while retaining the protected credential return"
   agent.golden.execution-preparation-context-unit:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

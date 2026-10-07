@@ -179,7 +179,9 @@ describe('sandbox broker control transport', () => {
 							key: expect.stringMatching(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u),
 							body: { leaseToken: f.input.leaseToken, runnerId: f.input.runnerId, code: 'sandbox_failed',
 								message: raw.summary, retryable: false, activeSeconds: 2, elapsedSeconds: 3, usage,
-								output: { sandboxId: raw.sandboxId, teardown: { verified: true, completedAt: f.destroyedAt() } } } }]);
+								output: { sandboxId: raw.sandboxId, teardown: { verified: true, completedAt: f.destroyedAt() },
+									assignmentResult: expect.objectContaining({ assignmentId: attempt.id, status: 'failed', summary: raw.summary,
+										timingAwareness: raw.timingAwareness, references: [], verification: [], usage: expect.objectContaining({ elapsedSeconds: 3, modelInputTokens: 19, modelOutputTokens: 3 }) }) } } }]);
 						expect(api.requests.some(item => item.operation === 'settleAssignment')).toBe(false);
 					} else {
 						expect(api.requests.filter(item => item.operation === 'settleAssignment')).toEqual([{ operation: 'settleAssignment',

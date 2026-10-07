@@ -1,6 +1,11 @@
 schemaVersion: treeseed.guarantee-verifiers/v1
 ownerPackage: "@treeseed/agent"
 verifiers:
+  agent.golden.execution-canonical-failure-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/provider-kernel-executor.test.ts
+    testName: "retains a measured failed model execution as its exact canonical failed result without successful artifacts or invented timing or usage"
   agent.golden.execution-noncompleted-clock-unit:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

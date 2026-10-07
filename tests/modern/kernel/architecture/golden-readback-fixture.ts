@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { stringify } from 'yaml';
 
 export type Row = Record<string, any>;
-const state = vi.hoisted(() => ({ cases: new Map<string, () => void>(), replies: new Map<string, Row>(), assignmentPages: undefined as Row[] | undefined, usagePages: undefined as Row[] | undefined, failure: undefined as Error | undefined, workspaceFailure: undefined as Error | undefined, timeout: 0, args: [] as string[], calls: [] as string[][] }));
+const state = vi.hoisted(() => ({ cases: new Map<string, () => void>(), replies: new Map<string, Row>(), assignmentPages: undefined as Row[] | undefined, usagePages: undefined as Row[] | undefined, eventPages: undefined as Row[] | undefined, failure: undefined as Error | undefined, workspaceFailure: undefined as Error | undefined, timeout: 0, args: [] as string[], calls: [] as string[][] }));
 export { state };
 vi.mock('node:test', () => ({ default: (name: string, _options: unknown, run: () => void) => state.cases.set(name, run) }));
 vi.mock('node:child_process', () => ({ execFileSync: (_command: string, args: string[], options: { timeout: number }) => {
@@ -16,6 +16,7 @@ vi.mock('node:child_process', () => ({ execFileSync: (_command: string, args: st
 	const result = key === 'projects treedx' ? state.replies.get(`workspace ${args[4]}`)
 		: key === 'assignments list' && state.assignmentPages ? state.assignmentPages.shift()
 		: key === 'capacity usage' && state.usagePages ? state.usagePages.shift()
+		: key === 'workdays events' && state.eventPages ? state.eventPages.shift()
 		: state.replies.get(`${key} ${args[3]}`) ?? state.replies.get(key);
 	if (!result) throw new Error(`Unexpected acceptance read: ${key}`);
 	// The actual repository sorts its read model; do not reorder the mutable oracle inputs.
@@ -74,6 +75,7 @@ beforeEach(() => {
 	state.failure = undefined;
 	state.workspaceFailure = undefined;
 	state.usagePages = undefined;
+	state.eventPages = undefined;
 	state.calls = [];
 	const items: Row[] = classes.flatMap(agentClass => [assignment(`chat-${agentClass}`, 'chat', agentClass),
 		assignment(`planning-1-${agentClass}`, 'planning', agentClass), assignment(`planning-2-${agentClass}`, 'planning', agentClass)]);

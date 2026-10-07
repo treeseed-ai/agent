@@ -135,6 +135,15 @@ workflow:
   - id: execution-terminal-drain-native-1
     action: { verifier: agent.golden.execution-terminal-drain-native-1 }
     expect: { status: passed }
+  - id: execution-preparation-clock-unit-1
+    action: { verifier: agent.golden.execution-preparation-clock-unit-1 }
+    expect: { status: passed }
+  - id: execution-phase-deadline-unit-1
+    action: { verifier: agent.golden.execution-phase-deadline-unit-1 }
+    expect: { status: passed }
+  - id: execution-preparation-clock-native-1
+    action: { verifier: agent.golden.execution-preparation-clock-native-1 }
+    expect: { status: passed }
   - id: execution-offer-signature-unit-1
     action: { verifier: agent.golden.execution-offer-signature-unit-1 }
     expect: { status: passed }

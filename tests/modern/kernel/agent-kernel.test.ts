@@ -57,9 +57,12 @@ describe('AgentKernel', () => {
 
 	it('does not charge preparation time against the productive execution limit', async () => {
 		vi.useFakeTimers();
+		vi.setSystemTime(new Date('2026-09-13T12:00:00.000Z'));
 		const context = assignmentContext();
 		context.assignment.effectiveProfile.handler = 'timed';
 		context.assignment.limits.maximumSeconds = 1;
+		context.assignment.deadline = '2026-09-13T12:00:45.000Z';
+		const before = structuredClone(context);
 		let startExecution!: () => void;
 		const executionStarted = new Promise<void>((resolve) => { startExecution = resolve; });
 		const never = new Promise<never>(() => undefined);
@@ -71,9 +74,11 @@ describe('AgentKernel', () => {
 		void running.then(() => { settled = true; }, () => { settled = true; });
 		await vi.advanceTimersByTimeAsync(30_000);
 		expect(settled).toBe(false);
+		expect(context).toEqual(before);
 		startExecution();
 		await vi.advanceTimersByTimeAsync(1_001);
 		await expect(running).rejects.toMatchObject({ message: 'assignment_timeout', code: 'assignment_timeout' });
+		expect(context).toEqual(before);
 	});
 
 	it('enforces the absolute assignment deadline even before productive execution begins', async () => {
@@ -82,6 +87,7 @@ describe('AgentKernel', () => {
 		const context = assignmentContext();
 		context.assignment.effectiveProfile.handler = 'waiting';
 		context.assignment.deadline = '2026-09-13T12:00:02.000Z';
+		const before = structuredClone(context);
 		const handler: Handler = { id: 'waiting', run: async () => new Promise<never>(() => undefined) };
 		const executionStarted = new Promise<void>(() => undefined);
 		const running = new AgentKernel(new HandlerRegistry([handler])).runAssignment({
@@ -90,6 +96,7 @@ describe('AgentKernel', () => {
 		const failure = expect(running).rejects.toMatchObject({ message: 'assignment_timeout', code: 'assignment_timeout' });
 		await vi.advanceTimersByTimeAsync(2_001);
 		await failure;
+		expect(context).toEqual(before);
 	});
 
 	it('refuses a completed handler result at the exact deadline', async () => {

@@ -9,6 +9,19 @@ import { sandboxAccountingUsage } from '../../../../../src/provider/execution/mi
 const closeoutTransport = (f: Awaited<ReturnType<typeof portableKernel>>) => nativeCloseoutTransport(f, dirname(f.checkout));
 
 describe('portable configured profiles through real provider Kernel and native Git', () => {
+	it('native preparation retains the original phase deadline independently of a shorter active allocation', async () => {
+		const f = await portableKernel(undefined, 1);
+		try {
+			const before = structuredClone(f.attempt), candidate = await f.candidate();
+			expect(Date.parse(f.attempt.deadline) - Date.parse(f.attempt.createdAt)).toBe(30_000);
+			expect(f.attempt.limits.maximumSeconds).toBe(1);
+			expect(f.attempt.estimate.maximumSeconds).toBe(1);
+			expect(f.attempt).toEqual(before);
+			expect(f.git('rev-parse', 'HEAD')).toBe(candidate);
+			expect(f.git('rev-parse', 'fixture-base')).toBe(f.base);
+			expect(f.requests).toEqual([]); expect(f.begin).toEqual([]);
+		} finally { await f.close(); }
+	});
 	it('native renamed integration profiles retain one supplied original base and both independent Git inputs through the same Releaser handler without hidden base construction', async () => {
 		for (const name of ['configured-integration-author', 'customer-composition-worker']) {
 			const f = await portableKernel(); try {

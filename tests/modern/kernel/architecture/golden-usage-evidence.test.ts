@@ -24,6 +24,30 @@ function outcomes(candidates: Row[]): string[] {
 // UNIT tests OF actual managed settlement assertions. Supplied measurement DTOs
 // are not actual provider usage, canonical UsageSettlements or real settlement receipts.
 describe('complete scoped measured usage evidence for managed settlement', () => {
+	it('denies incomplete malformed or unmeasured verification records on every completed result without rewriting failed observations', () => {
+		const valid = { command: 'npm run test:contracts', status: 'failed', exitCode: 1,
+			outputDigest: `sha256:${'a'.repeat(64)}`, durationSeconds: 0 };
+		const item = assignments()[0]!, result = item.assignmentResult, original = structuredClone(result);
+		result.verification = ['passed', 'failed', 'skipped'].map((status, index) => ({ ...valid, status, exitCode: index === 0 ? 0 : 1 }));
+		const positive = structuredClone(result); expect(() => gate('results')).not.toThrow(); expect(result).toEqual(positive);
+		const changes = [undefined, null, {}, [null], [[]], ...Object.keys(valid).map(key => {
+			const changed = { ...valid }; Reflect.deleteProperty(changed, key); return [changed];
+		}), ...[{ command: '' }, { status: 'invented' }, { exitCode: '1' }, { exitCode: 0.5 },
+			{ outputDigest: '' }, { outputDigest: 'sha256:invalid' }, { durationSeconds: null }, { durationSeconds: '1' },
+			{ durationSeconds: -1 }, { durationSeconds: 0.5 }, { durationSeconds: NaN }, { durationSeconds: Infinity },
+			{ durationSeconds: -Infinity }, { unknownAuthority: true }].map(change => [{ ...valid, ...change }])];
+		const denied: boolean[] = [];
+		for (const verification of changes) {
+			result.verification = verification; const held = structuredClone(result); let failure = false;
+			try { gate('results'); } catch { failure = true; } denied.push(failure); expect(result).toEqual(held);
+		}
+		Object.assign(result, original); expect(() => gate('results')).not.toThrow();
+		expect(result).toEqual(original);
+		const reporter = assignments().find(value => value.assignmentAttempt.effectiveProfile.activity === 'reporting')!;
+		reporter.assignmentResult.verification = [{ ...valid, durationSeconds: undefined }]; const held = structuredClone(reporter);
+		let reportingDenied = false; try { gate('results'); } catch { reportingDenied = true; }
+		expect(reporter).toEqual(held); expect(reportingDenied).toBe(true); expect(denied).toEqual(changes.map(() => true));
+	});
 	it('denies a terminal attempt ordinal that changed or disappeared while retaining exact immutable ordinal custody', () => {
 		const item = assignments()[0]!, original = structuredClone(item), values = [2, '1', undefined, 0];
 		const results = values.map(value => {

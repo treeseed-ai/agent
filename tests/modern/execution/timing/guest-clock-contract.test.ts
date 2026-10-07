@@ -4,7 +4,7 @@ import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { executeAssignmentTreeDxTool } from '../../../../src/provider/execution/microvm-executor.ts';
-import { providerExecutionProgress } from '../../../../src/sandbox/guest.ts';
+import { clockReading, providerExecutionProgress } from '../../../../src/sandbox/guest.ts';
 import { codexThreadId, codexTreeDxMcpConfig, completedTimeStatusChecks, prepareNodeWorkspace, providerEventShapeSummary, providerResourceAbort, providerResponsePreview, requiresNodeDependencyRestore, timingAwarenessContract, timingRecoveryEligible, treeDxToolDefinitions, verifyReportedActivityCommands } from '../../../../src/sandbox/guest.ts';
 import { assertArchitectSourceCitation, assertReplayableVerificationCommand, assertTesterFailureEvidence, attachObservedTesterFailures, correctObservedTestFirstRedVerification, omitUnreplayableVerification, codexInteractiveTimeoutMs, codexProjectInstructionArguments, codexReasoningArguments, completionFrontmatterSchema, completionOutputTargetVariants, promptFromContext, requiresActivityCompletion } from '../../../../src/sandbox/guest-contract.ts';
 import { assertPredecessorSynthesis } from '../../../../src/kernel/handlers/planning-synthesis.ts';
@@ -13,8 +13,37 @@ import { activityAllowsVerification } from '../../../../src/sandbox/guest-contra
 import { architectureTaskInstructions } from '../../architecture/knowledge-task-fixture.ts';
 import { request as executionRequest } from '../../kernel/provider-kernel-fixture.ts';
 import { assignmentAttemptSchema } from '@treeseed/sdk/agent-capacity';
-const clockResult = { content: [{ type: 'text', text: JSON.stringify({ startedAt: '2026-10-04T00:00:00.000Z', deadlineAt: '2026-10-04T00:01:00.000Z', remainingSeconds: 60 }) }] };
+const clockResult = { content: [{ type: 'text', text: JSON.stringify({ startedAt: '2026-10-04T00:00:00.000Z', deadlineAt: '2026-10-04T00:01:00.000Z', observedAt: '2026-10-04T00:00:00.000Z', remainingSeconds: 60 }) }] };
 describe('Codex chat executor', () => {
+	it('retains exact clock timestamps and derives remaining seconds from the same observation without rewriting provider evidence', () => {
+		const startedAt = '2026-10-04T00:00:00.000Z', deadlineAt = '2026-10-04T00:01:00.000Z';
+		for (const [observedAt, remainingSeconds] of [['2026-10-04T00:00:00.000Z', 60], ['2026-10-04T00:00:00.001Z', 60],
+			['2026-10-04T00:00:01.000Z', 59], ['2026-10-04T00:00:59.999Z', 1], ['2026-10-04T00:01:00.000Z', 0],
+			['2026-10-04T00:01:00.001Z', 0]] as const) {
+			const value = { startedAt, deadlineAt, observedAt, remainingSeconds };
+			const result = { content: [{ type: 'text', text: JSON.stringify(value) }], structuredContent: value }, before = structuredClone(result);
+			expect(clockReading(result)).toEqual(value); expect(result).toEqual(before);
+		}
+	});
+	it('denies missing malformed regressing and contradictory clock timestamps without repairing either raw observation', () => {
+		const base = { startedAt: '2026-10-04T00:00:00.000Z', deadlineAt: '2026-10-04T00:01:00.000Z', observedAt: '2026-10-04T00:00:00.000Z', remainingSeconds: 60 };
+		const action = (value: Record<string, unknown>) => ({ type: 'item.completed', item: { type: 'mcp_tool_call', server: 'treedx',
+			tool: 'treeseed_time_status', status: 'completed', error: null, result: { content: [{ type: 'text', text: JSON.stringify(value) }], structuredContent: value } } });
+		const absent = { startedAt: base.startedAt, deadlineAt: base.deadlineAt, remainingSeconds: 60 };
+		for (const value of [absent, ...[undefined, null, '', 'not-a-clock', 0, false, [], {}, '2026-02-30T00:00:00.000Z',
+			'2026-10-03T23:59:59.999Z'].map(observedAt => ({ ...base, observedAt })),
+			{ ...base, observedAt: '2026-10-04T00:00:01.000Z', remainingSeconds: 60 },
+			{ ...base, observedAt: '2026-10-04T00:01:00.000Z', remainingSeconds: 1 }]) {
+			for (const events of [[action(value), action(base)], [action(base), action(value)]]) {
+				const before = structuredClone(events);
+				expect(timingAwarenessContract(events)).toMatchObject({ firstToolCompliant: false, finalToolCompliant: false });
+				expect(events).toEqual(before);
+			}
+		}
+		const events = [action({ ...base, observedAt: '2026-10-04T00:00:00.900Z' }), action({ ...base, observedAt: '2026-10-04T00:00:00.100Z' })];
+		const before = structuredClone(events);
+		expect(timingAwarenessContract(events)).toMatchObject({ firstToolCompliant: false, finalToolCompliant: false }); expect(events).toEqual(before);
+	});
 	it('accepts timing awareness only from completed model-initiated clock checks', () => {
 		expect(completedTimeStatusChecks([
 			{ type: 'item.started', item: { type: 'mcp_tool_call', server: 'treedx', tool: 'treeseed_time_status', status: 'in_progress' } },

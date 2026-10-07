@@ -1,6 +1,16 @@
 schemaVersion: treeseed.guarantee-verifiers/v1
 ownerPackage: "@treeseed/agent"
 verifiers:
+  agent.golden.execution-clock-observation-unit-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/timing/guest-clock-contract.test.ts
+    testName: "retains exact clock timestamps and derives remaining seconds from the same observation without rewriting provider evidence"
+  agent.golden.execution-clock-observation-unit-2:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/timing/guest-clock-contract.test.ts
+    testName: "denies missing malformed regressing and contradictory clock timestamps without repairing either raw observation"
   agent.golden.execution-clock-input-unit:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

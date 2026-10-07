@@ -47,12 +47,17 @@ export async function recoverPlanningSynthesis(input: {
 	// The captured completion is already in the prompt. A zero-exit subprocess must produce a fresh response,
 	// not silently leave the initial file looking like an observed correction.
 	await unlink(input.responsePath);
+	// Removal is asynchronous work inside the same original authority. Never
+	// launch from the earlier measurement after that boundary consumed time.
+	const launchRemaining = input.remainingMs();
+	if (typeof launchRemaining !== 'number' || !Number.isFinite(launchRemaining) || launchRemaining < 30_000)
+		throw new Error('planning_synthesis_correction_budget_exhausted');
 	const events: Event[] = [];
 	await input.execute('/usr/local/bin/codex', ['exec', 'resume', input.threadId, '--json', '--dangerously-bypass-approvals-and-sandbox',
 		'--model', input.model, ...codexReasoningArguments(input.reasoningEffort), ...codexProjectInstructionArguments(),
 		'--output-schema', input.schemaPath, '--output-last-message', input.responsePath, '-'], {
 		cwd: '/workspace/project', env: input.providerEnvironment,
-		input: prompt, timeoutMs: Math.floor(Math.min(remainingMs, currentRemaining)),
+		input: prompt, timeoutMs: Math.floor(Math.min(remainingMs, currentRemaining, launchRemaining)),
 		onLine(line) {
 			let event: Event;
 			try { event = record(JSON.parse(line)); }

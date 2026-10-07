@@ -1128,6 +1128,15 @@ workflow:
   - id: provider-freeze-dependency-bytes
     action: { verifier: agent.golden.provider-freeze-dependency-bytes }
     expect: { status: passed }
+  - id: provider-preparation-selected-dependency-unit
+    action: { verifier: agent.golden.provider-preparation-selected-dependency-unit }
+    expect: { status: passed }
+  - id: provider-preparation-missing-dependency-unit
+    action: { verifier: agent.golden.provider-preparation-missing-dependency-unit }
+    expect: { status: passed }
+  - id: provider-preparation-sdk-native
+    action: { verifier: agent.golden.provider-preparation-sdk-native }
+    expect: { status: passed }
   - id: provider-source-fixture-link
     action: { verifier: agent.golden.provider-source-fixture-link }
     expect: { status: passed }
@@ -1700,4 +1709,16 @@ workflow:
     expect: { status: passed }
   - id: execution-manifest-invocation-unit
     action: { verifier: agent.golden.execution-manifest-invocation-unit }
+    expect: { status: passed }
+  - id: recovery-post-removal-denial-unit
+    action: { verifier: agent.golden.recovery-post-removal-denial-unit }
+    expect: { status: passed }
+  - id: recovery-post-removal-budget-unit
+    action: { verifier: agent.golden.recovery-post-removal-budget-unit }
+    expect: { status: passed }
+  - id: recovery-post-removal-denial-native
+    action: { verifier: agent.golden.recovery-post-removal-denial-native }
+    expect: { status: passed }
+  - id: recovery-post-removal-budget-native
+    action: { verifier: agent.golden.recovery-post-removal-budget-native }
     expect: { status: passed }

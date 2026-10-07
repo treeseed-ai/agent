@@ -3,6 +3,7 @@ import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { existsSync } from 'node:fs';
 import { activityCompletionOutputSchema, validateActivityCompletion } from '../../../src/activity-completion.ts';
 import { assertPredecessorSynthesis, planningSynthesisOutputSchema } from '../../../src/kernel/handlers/planning-synthesis.ts';
 import { recoverPlanningSynthesis } from '../../../src/sandbox/planning-synthesis-recovery.ts';
@@ -183,5 +184,32 @@ it('native correction honors newly shortened authority after progress without in
 		expect(measuredTimeout).toBe(30_000); expect(current).toBe(30_000);
 		const report = validateActivityCompletion(JSON.parse(await readFile(input.responsePath, 'utf8')), false);
 		expect(() => assertPredecessorSynthesis(input.context, report)).not.toThrow();
+	});
+});
+
+it('native response removal cannot launch a late correction from pre-removal authority or claim a successful retry', async () => {
+	await exercise('valid', 'missing', async input => {
+		const schema = await readFile(input.schemaPath), context = structuredClone(input.context);
+		// Controlled authority input changes at the actual owning filesystem boundary.
+		// It is not a live API clock or an extension of the original watchdog.
+		input.remainingMs = () => existsSync(input.responsePath) ? 35_000 : 29_999;
+		await expect(recoverPlanningSynthesis(input)).rejects.toThrow('planning_synthesis_correction_budget_exhausted');
+		await expect(readFile(input.responsePath)).rejects.toMatchObject({ code: 'ENOENT' });
+		expect(await readFile(input.schemaPath)).toEqual(schema); expect(input.context).toEqual(context);
+	}, 0);
+});
+
+it('native correction child uses post-removal remaining authority through the original executor and exact fresh response', async () => {
+	await exercise('valid', 'missing', async input => {
+		const execute = input.execute, schema = await readFile(input.schemaPath), context = structuredClone(input.context);
+		input.remainingMs = () => existsSync(input.responsePath) ? 35_000 : 31_000;
+		input.execute = async (executable, args, options) => {
+			expect(options?.timeoutMs).toBe(31_000);
+			return execute(executable, args, options);
+		};
+		expect(await recoverPlanningSynthesis(input)).toBe(true);
+		const report = validateActivityCompletion(JSON.parse(await readFile(input.responsePath, 'utf8')), false);
+		expect(() => assertPredecessorSynthesis(input.context, report)).not.toThrow();
+		expect(await readFile(input.schemaPath)).toEqual(schema); expect(input.context).toEqual(context);
 	});
 });

@@ -77,6 +77,8 @@ type TimingAwarenessTracker = {
 	completedChecks: number;
 	firstTool: string | null;
 	firstToolSucceeded: boolean;
+	firstToolItemId?: unknown;
+	firstToolPending?: boolean;
 	lastTool: string | null;
 	lastToolSucceeded: boolean;
 	clockWindow?: { startedAt: string; deadlineAt: string; observedAt: string; remainingSeconds: number };
@@ -114,8 +116,12 @@ export function observeTimingAwarenessEvent(tracker: TimingAwarenessTracker, eve
 			|| reading.remainingSeconds > prior.remainingSeconds || Date.parse(reading.observedAt) < Date.parse(prior.observedAt))) { tracker.clockInvalid = true; succeeded = false; }
 		else tracker.clockWindow = reading;
 	}
-	if (!tracker.firstTool) { tracker.firstTool = tool; tracker.firstToolSucceeded = succeeded; }
-	else if (completed && tracker.firstTool === tool && tracker.lastTool === tool) tracker.firstToolSucceeded ||= succeeded;
+	if (!tracker.firstTool) {
+		tracker.firstTool = tool; tracker.firstToolSucceeded = succeeded;
+		tracker.firstToolItemId = item.id; tracker.firstToolPending = !completed;
+	} else if (tracker.firstToolPending && completed && tracker.firstTool === tool && tracker.firstToolItemId === item.id) {
+		tracker.firstToolSucceeded = succeeded; tracker.firstToolPending = false;
+	}
 	tracker.lastTool = tool;
 	tracker.lastToolSucceeded = succeeded;
 	if (completed && tool === 'treedx:treeseed_time_status' && succeeded) tracker.completedChecks += 1;
@@ -124,7 +130,7 @@ export function observeTimingAwarenessEvent(tracker: TimingAwarenessTracker, eve
 
 export function timingAwarenessContract(events: Record<string, unknown>[]) {
 	const tracker = events.reduce(observeTimingAwarenessEvent, { completedChecks: 0, firstTool: null, firstToolSucceeded: false, lastTool: null, lastToolSucceeded: false } as TimingAwarenessTracker);
-	const { clockWindow: _window, clockInvalid, ...receipt } = tracker;
+	const { clockWindow: _window, clockInvalid, firstToolItemId: _firstId, firstToolPending: _firstPending, ...receipt } = tracker;
 	return { requiredChecks: 2, ...receipt,
 		schemaVersion: 'treeseed.assignment-timing-awareness/v1' as const,
 		firstToolCompliant: !clockInvalid && tracker.firstTool === 'treedx:treeseed_time_status' && tracker.firstToolSucceeded,
@@ -409,7 +415,7 @@ export async function runSandboxGuest() {
 				if (!correction.firstToolCompliant || !correction.finalToolCompliant || correctionEvents.some((event) => providerToolName(event) && providerToolName(event) !== 'treedx:treeseed_time_status')) throw new Error('Planning synthesis correction failed its clock-only tool boundary.'); },
 		}) && subscriptionAuth) {
 			await writeFile(resolve(outputRoot, 'codex-auth.json'), await readFile(resolve(codexHome, 'auth.json')), { mode: 0o600 }); }
-		const { clockWindow: _window, clockInvalid, ...timingReceipt } = timingTracker;
+		const { clockWindow: _window, clockInvalid, firstToolItemId: _firstId, firstToolPending: _firstPending, ...timingReceipt } = timingTracker;
 		const timingAwareness = { schemaVersion: 'treeseed.assignment-timing-awareness/v1' as const, requiredChecks: 2 as const, ...timingReceipt,
 			firstToolCompliant: !clockInvalid && timingTracker.firstTool === 'treedx:treeseed_time_status' && timingTracker.firstToolSucceeded,
 			finalToolCompliant: !clockInvalid && timingTracker.lastTool === 'treedx:treeseed_time_status' && timingTracker.lastToolSucceeded };

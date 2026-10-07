@@ -1,6 +1,6 @@
 import { expect } from 'vitest';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { randomBytes, X509Certificate } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -120,5 +120,4 @@ export async function microvmBroker() {
 			artifact(value: Buffer) { artifactBytes = Buffer.from(value); } };
 	} catch (error) { await close(); throw error; }
 }
-
 

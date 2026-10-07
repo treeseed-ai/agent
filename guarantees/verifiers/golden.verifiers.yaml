@@ -471,6 +471,16 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/execution/microvm-result-authority.test.ts
     testName: "retains exact failed cancelled and expired model clock usage and resource observations without fabricating missing receipts or successful completion"
+  agent.golden.execution-productive-window-readback-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/timing/guest-clock-contract.test.ts
+    testName: "binds model clock readback to the issued productive window inside the unchanged phase deadline and denies missing widened or late productive evidence"
+  agent.golden.execution-productive-window-readback-native:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/sandbox-broker-preparation.test.ts
+    testName: "native original Kernel and microvm preserve the issued shorter productive clock separately from immutable phase authority through exact event readback"
   agent.golden.execution-broker-boundary-unit-2:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

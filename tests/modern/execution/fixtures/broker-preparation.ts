@@ -32,7 +32,7 @@ export async function microvmBroker() {
 	const observations: Array<ReturnType<typeof sandboxResultSchema.parse>> = [];
 	let assigned: ReturnType<typeof sandboxAssignmentSchema.parse> | undefined, destroyedAt = '', beginCalls = 0, finishCalls = 0;
 	let resultPatch: Record<string, unknown> = {}, destroyReply: unknown, destroyFault = '', artifactBytes = Buffer.from('original artifact\n');
-	const events: Array<{ type: string; payload?: Record<string, unknown> }> = [];
+	const events: Array<Parameters<NonNullable<ReturnType<typeof executionRequest>['emit']>>[0]> = [];
 	const fixture = await broker((request, response) => {
 		const path = request.url ?? ''; paths.push(`${request.method} ${path}`); const chunks: Buffer[] = [];
 		request.on('data', chunk => { chunks.push(Buffer.from(chunk)); }); request.on('end', () => {
@@ -112,7 +112,7 @@ export async function microvmBroker() {
 			capacityProviderId: attempt.provider.providerId, teamId: attempt.teamId, projectId: attempt.projectId, attemptCount: attempt.attempt,
 			leaseExpiresAt: attempt.deadline, capacityEnvelope: { budget: { time: { preparationDeadlineAt: attempt.deadline } } } };
 		input.beginExecution = async () => { beginCalls++; return { capacityEnvelope: { budget: { time: { executionStartedAt: createdAt, executionDeadlineAt: attempt.deadline } } } }; };
-		input.finishExecution = async () => { finishCalls++; }; input.emit = async event => { events.push({ type: event.type, payload: event.payload }); };
+		input.finishExecution = async () => { finishCalls++; }; input.emit = async event => { events.push(structuredClone(event)); };
 		return { ...fixture, close, executor, input, paths, uploads, events, relayBytes, manifest, observations,
 			assignment: () => assigned, counters: () => ({ beginCalls, finishCalls }), destroyedAt: () => destroyedAt,
 			patchResult(value: Record<string, unknown>) { resultPatch = value; },
@@ -120,4 +120,3 @@ export async function microvmBroker() {
 			artifact(value: Buffer) { artifactBytes = Buffer.from(value); } };
 	} catch (error) { await close(); throw error; }
 }
-

@@ -16,7 +16,38 @@ import { assignmentAttemptSchema } from '@treeseed/sdk/agent-capacity';
 import { redactProviderEvents } from '../../../../src/sandbox/provider-failure.ts';
 import { verifyModelClockEvidence, modelExecutionInventory } from '../../../acceptance/workday/support/assignment-authority.ts';
 const clockResult = { content: [{ type: 'text', text: JSON.stringify({ startedAt: '2026-10-04T00:00:00.000Z', deadlineAt: '2026-10-04T00:01:00.000Z', observedAt: '2026-10-04T00:00:00.000Z', remainingSeconds: 60 }) }] };
+const startedAt = '2026-10-04T00:00:00.000Z', deadlineAt = '2026-10-04T00:01:00.000Z';
+function publicClockEvidenceFixture() {
+	const clock = (id: string, observedAt: string, remainingSeconds: number) => { const value = { startedAt, deadlineAt, observedAt, remainingSeconds }; return {
+		type: 'item.completed', item: { id, type: 'mcp_tool_call', server: 'treedx', tool: 'treeseed_time_status', status: 'completed', error: null,
+			result: { content: [{ type: 'text', text: JSON.stringify(value) }], structuredContent: value } } }; };
+	const events = [clock('first', startedAt, 60), clock('final', '2026-10-04T00:00:01.000Z', 59)];
+	return { item: { id: 'assignment-clock', status: 'completed', assignmentAttempt: { id: 'assignment-clock', teamId: 'team-clock', projectId: 'sdk',
+		workdayId: 'workday-clock', deadline: deadlineAt }, capacityEnvelope: { budget: { time: { executionStartedAt: startedAt, executionDeadlineAt: deadlineAt } } },
+		assignmentResult: { assignmentId: 'assignment-clock', status: 'completed', completedAt: '2026-10-04T00:00:02.000Z', timingAwareness: {
+			schemaVersion: 'treeseed.assignment-timing-awareness/v1', requiredChecks: 2, completedChecks: 2, firstTool: 'treedx:treeseed_time_status',
+			firstToolSucceeded: true, lastTool: 'treedx:treeseed_time_status', lastToolSucceeded: true, firstToolCompliant: true, finalToolCompliant: true } } },
+		event: { id: 'provider-runtime:assignment-clock:complete', runId: 'workday-clock', workdayId: 'workday-clock', teamId: 'team-clock', projectId: 'sdk',
+			assignmentId: 'assignment-clock', eventIndex: 3, eventType: 'provider.execution.completed', status: 'recorded',
+			createdAt: '2026-10-04T00:00:02.001Z', protectedPayload: { providerEvents: events } } };
+}
 describe('Codex chat executor', () => {
+	it('binds model clock readback to the issued productive window inside the unchanged phase deadline and denies missing widened or late productive evidence', () => {
+		const f = publicClockEvidenceFixture();
+		f.item.assignmentAttempt.deadline = '2026-10-04T00:20:00.000Z';
+		const before = structuredClone(f); expect(() => verifyModelClockEvidence(f.item, f.event)).not.toThrow(); expect(f).toEqual(before);
+		for (const mode of ['absent', 'empty', 'malformed', 'before-start', 'beyond-phase', 'changed-clock', 'late-result']) {
+			const changed = structuredClone(f), time = changed.item.capacityEnvelope.budget.time;
+			if (mode === 'absent') Reflect.deleteProperty(time, 'executionDeadlineAt');
+			if (mode === 'empty') time.executionDeadlineAt = '';
+			if (mode === 'malformed') time.executionDeadlineAt = 'not-a-clock';
+			if (mode === 'before-start') time.executionDeadlineAt = '2026-10-03T23:59:59.000Z';
+			if (mode === 'beyond-phase') time.executionDeadlineAt = '2026-10-04T00:20:00.001Z';
+			if (mode === 'changed-clock') time.executionDeadlineAt = '2026-10-04T00:01:01.000Z';
+			if (mode === 'late-result') changed.item.assignmentResult.completedAt = time.executionDeadlineAt;
+			const held = structuredClone(changed); expect(() => verifyModelClockEvidence(changed.item, changed.event)).toThrow(); expect(changed).toEqual(held);
+		}
+	});
 	it('discovers every recorded model execution including failed and returned renamed activities and denies missing ambiguous or foreign inventory without rewriting history', () => {
 		const fixture = () => {
 			const run = { id: 'workday-clock', teamId: 'team-clock' }, items = ['completed', 'failed', 'returned'].map((status, index) => ({
@@ -78,20 +109,7 @@ describe('Codex chat executor', () => {
 	});
 	it('binds public raw model clock evidence to its exact completed assignment event receipt and immutable original timestamps', () => {
 		const startedAt = '2026-10-04T00:00:00.000Z', deadlineAt = '2026-10-04T00:01:00.000Z';
-		const fixture = () => {
-			const clock = (id: string, observedAt: string, remainingSeconds: number) => { const value = { startedAt, deadlineAt, observedAt, remainingSeconds }; return {
-				type: 'item.completed', item: { id, type: 'mcp_tool_call', server: 'treedx', tool: 'treeseed_time_status', status: 'completed', error: null,
-					result: { content: [{ type: 'text', text: JSON.stringify(value) }], structuredContent: value } } }; };
-			const events = [clock('first', startedAt, 60), clock('final', '2026-10-04T00:00:01.000Z', 59)];
-			return { item: { id: 'assignment-clock', status: 'completed', assignmentAttempt: { id: 'assignment-clock', teamId: 'team-clock', projectId: 'sdk',
-				workdayId: 'workday-clock', deadline: deadlineAt }, capacityEnvelope: { budget: { time: { executionStartedAt: startedAt } } },
-				assignmentResult: { assignmentId: 'assignment-clock', status: 'completed', completedAt: '2026-10-04T00:00:02.000Z', timingAwareness: {
-					schemaVersion: 'treeseed.assignment-timing-awareness/v1', requiredChecks: 2, completedChecks: 2, firstTool: 'treedx:treeseed_time_status',
-					firstToolSucceeded: true, lastTool: 'treedx:treeseed_time_status', lastToolSucceeded: true, firstToolCompliant: true, finalToolCompliant: true } } },
-				event: { id: 'provider-runtime:assignment-clock:complete', runId: 'workday-clock', workdayId: 'workday-clock', teamId: 'team-clock', projectId: 'sdk',
-					assignmentId: 'assignment-clock', eventIndex: 3, eventType: 'provider.execution.completed', status: 'recorded',
-					createdAt: '2026-10-04T00:00:02.001Z', protectedPayload: { providerEvents: events } } };
-		};
+		const fixture = publicClockEvidenceFixture;
 		const original = fixture(), before = structuredClone(original); expect(() => verifyModelClockEvidence(original.item, original.event)).not.toThrow(); expect(original).toEqual(before);
 		const mutations: Array<(f: ReturnType<typeof fixture>) => void> = [
 			f => { f.item.status = 'failed'; }, f => { f.event.assignmentId = 'foreign'; }, f => { f.event.teamId = 'foreign'; },

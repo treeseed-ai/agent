@@ -22,7 +22,7 @@ it('native public SDK event reads retain completed failed and returned model inv
 	const events = items.flatMap((item, index) => ['started', index ? 'failed' : 'completed'].map((phase, offset) => ({
 		id: `native-event-${index}-${offset}`, eventIndex: index * 2 + offset, eventType: `provider.execution.${phase}`, assignmentId: item.id,
 		runId: run.id, workdayId: run.id, teamId: run.teamId, projectId: 'native-project', createdAt: `2026-10-07T00:00:0${index * 2 + offset}.000Z`,
-		payload: { model: 'controlled-native-input-not-a-model-call', isolation: 'microvm' } })));
+		context: { model: 'controlled-native-input-not-a-model-call', isolation: 'microvm' } })));
 	const held = structuredClone({ run, items, events }), history: Array<{ path: string; method: string; body: string }> = [], observations: Array<{ mode: string; denied: boolean; error: string }> = [];
 	let mode = 'exact';
 	const server = createServer((request, response) => {
@@ -39,7 +39,8 @@ it('native public SDK event reads retain completed failed and returned model inv
 			if (pageNumber === 0 && mode === 'missing-start') supplied[0]!.eventType = 'controlled-not-a-model-start';
 			if (pageNumber === 1 && mode === 'foreign') supplied[0]!.projectId = 'foreign';
 			if (pageNumber === 2 && mode === 'duplicate') supplied[0]!.assignmentId = items[0]!.id;
-			if (pageNumber === 2 && mode === 'empty-model') supplied[0]!.payload.model = '';
+			if (pageNumber === 2 && mode === 'empty-model') supplied[0]!.context.model = '';
+			if (mode === 'payload-only') for (const event of supplied) Object.assign(event, { payload: event.context, context: undefined });
 			response.end(JSON.stringify({ data: { items: supplied, page: { limit: 2, hasMore: pageNumber < 2,
 				nextCursor: pageNumber < 2 ? encodeCapacityPageCursor(events[pageNumber * 2 + 1]!) : null } } }));
 		});
@@ -62,11 +63,11 @@ it('native public SDK event reads retain completed failed and returned model inv
 				expect(inventory.map(value => value.item.status)).toEqual(['completed', 'failed', 'returned']);
 				if (mode === 'exact') expect(observed).toEqual(events);
 			} catch (failure) { denied = true; error = failure instanceof Error ? failure.message : String(failure); }
-			if (['missing-start', 'foreign', 'duplicate', 'empty-model'].includes(mode)) expect(error).toMatch(/ACCEPTANCE_MODEL_INVENTORY|Expected values to be strictly equal/u);
+			if (['missing-start', 'foreign', 'duplicate', 'empty-model', 'payload-only'].includes(mode)) expect(error).toMatch(/ACCEPTANCE_MODEL_INVENTORY|Expected values to be strictly equal/u);
 			observations.push({ mode, denied, error }); return denied;
 		};
 		expect(await execute(), JSON.stringify(observations)).toBe(false);
-		for (const fault of ['missing-start', 'foreign', 'duplicate', 'empty-model', '403', '503', 'json']) { mode = fault; expect(await execute(), mode).toBe(true); }
+		for (const fault of ['missing-start', 'foreign', 'duplicate', 'empty-model', 'payload-only', '403', '503', 'json']) { mode = fault; expect(await execute(), mode).toBe(true); }
 		const retained = structuredClone(observations), requests = structuredClone(history); mode = 'exact'; expect(await execute(), JSON.stringify(observations)).toBe(false);
 		expect(observations.slice(0, retained.length)).toEqual(retained); expect(history.slice(0, requests.length)).toEqual(requests);
 		expect(history.every(value => value.method === 'GET' && value.body === '')).toBe(true); expect({ run, items, events }).toEqual(held);

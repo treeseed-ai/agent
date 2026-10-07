@@ -298,18 +298,24 @@ describe('whole native provider polling arbitration boundary', () => {
 	});
 	it('does not poll disabled denied or foreign token-bound connections and never borrows a healthy team token', async () => {
 		const modes = ['disabled', 'denied', 'team', 'provider', 'membership', 'credential', 'short'];
+		const phases = new Map<string, string>();
+		onTestFailed(() => { throw new Error(`ACCEPTANCE_PROVIDER_TOKEN_ISOLATION_${modes.map(mode => `${mode}_${phases.get(mode) ?? 'NOT_STARTED'}`).join('_')}: original native failure retained`); });
 		const outcomes = await Promise.all(modes.map(async mode => {
-			const f = await arbitrationFixture();
+			phases.set(mode, 'INITIALIZE');
+			// Each mode still owns an independent process and private identity. The
+			// original initializer runs in that mode's owning runtime child, not a
+			// second child loading the same complete module graph before polling.
+			const f = await arbitrationFixture(1, true);
 			try {
 				const busy = f.manifest.connections.find(item => item.id === 'busy-a')!;
 				if (mode === 'disabled') busy.enabled = false;
 				else if (mode === 'denied') f.faults.set(busy.id, { code: 403 });
 				else f.faults.set(busy.id, { tokenPatch: mode === 'short' ? { expiresAt: new Date().toISOString() }
 					: { [`${mode}Id`]: 'foreign' } });
-				await f.write(); await f.run();
+				await f.write(); phases.set(mode, 'RUN'); await f.run(); phases.set(mode, 'READBACK');
 				return { foreignPoll: f.routes.some(item => item.path === f.pollPath && item.connectionId === busy.id),
 					claims: (await f.store.snapshot()).claims.length };
-			} finally { await f.close(); }
+			} finally { phases.set(mode, 'CLOSE'); await f.close(); phases.set(mode, 'CLOSED'); }
 		}));
 		expect(outcomes).toEqual(modes.map(() => ({ foreignPoll: false, claims: 0 })));
 	});

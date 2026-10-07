@@ -21,11 +21,11 @@ export function modelExecutionInventory(items: Row[], events: Row[], run: Row): 
 		assert.equal(event.runId, run.id); assert.equal(event.teamId, run.teamId);
 		identities.add(event.id); indexes.add(Number(event.eventIndex));
 	}
-	const modelEvent = (event: Row) => Object.hasOwn(row(event.payload), 'model') || row(event.payload).isolation === 'microvm';
+	const modelEvent = (event: Row) => Object.hasOwn(row(event.context), 'model') || row(event.context).isolation === 'microvm';
 	const starts = events.filter(event => event.eventType === 'provider.execution.started' && modelEvent(event));
 	assert.ok(starts.length > 0, 'ACCEPTANCE_MODEL_INVENTORY_EMPTY');
 	const seen = new Set<string>(), inventory = starts.map(started => {
-		assert.ok(typeof row(started.payload).model === 'string' && String(row(started.payload).model).trim(), 'ACCEPTANCE_MODEL_INVENTORY_MODEL');
+		assert.ok(typeof row(started.context).model === 'string' && String(row(started.context).model).trim(), 'ACCEPTANCE_MODEL_INVENTORY_MODEL');
 		assert.ok(typeof started.assignmentId === 'string' && !seen.has(started.assignmentId), 'ACCEPTANCE_MODEL_INVENTORY_ATTEMPT');
 		seen.add(started.assignmentId); const item = owners.get(started.assignmentId);
 		assert.ok(item, 'ACCEPTANCE_MODEL_INVENTORY_OWNER'); const attempt = row(item.assignmentAttempt);

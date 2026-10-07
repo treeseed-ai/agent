@@ -1,6 +1,21 @@
 schemaVersion: treeseed.guarantee-verifiers/v1
 ownerPackage: "@treeseed/agent"
 verifiers:
+  agent.golden.execution-library-binding-native-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/preflight/campaign-freeze-native.test.ts
+    testName: "native public CLI and SDK lookup transports exact library identity into Agent validation and retains denied observations before unchanged retry"
+  agent.golden.execution-library-binding-unit-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/portfolio-relations.test.ts
+    testName: "retains the exact public project and library envelope without deriving a slug from an ID or changing either authority"
+  agent.golden.execution-library-binding-unit-2:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/portfolio-relations.test.ts
+    testName: "denies missing malformed foreign and mismatched project library identities without repairing the public observation"
   agent.golden.campaign-freeze-preparation-unit:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

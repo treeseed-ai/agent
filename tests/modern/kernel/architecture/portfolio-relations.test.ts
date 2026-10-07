@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { assignmentAttemptSchema } from '@treeseed/sdk/agent-capacity';
-import { portfolioRelations, verifyPortfolioRelations } from '../../../acceptance/workday/support/portfolio-relations.ts';
+import { portfolioRelations, verifyPortfolioRelations, verifyProjectLibraryLookup } from '../../../acceptance/workday/support/portfolio-relations.ts';
 import { crossProjectReadbackInputs } from './custody/cross-project-readback-fixture.ts';
 import type { Row } from '../../../acceptance/acceptance-cli.ts';
 
@@ -14,6 +14,29 @@ function inputs() {
 function verify(value: ReturnType<typeof inputs>) { verifyPortfolioRelations(value.expected, value.bindings, value.graph, value.items, value.workday); }
 
 describe('independent portfolio relation inventory', () => {
+	it('retains the exact public project and library envelope without deriving a slug from an ID or changing either authority', () => {
+		const lookup = { project: { id: 'configured-project-id', slug: 'configured-project', teamId: 'original-team' },
+			library: { projectId: 'configured-project-id', teamId: 'original-team', repositoryId: 'original-library', contentRepositoryRef: 'refs/heads/staging' } };
+		const before = structuredClone(lookup);
+		expect(verifyProjectLibraryLookup('configured-project', lookup)).toBe(lookup.library); expect(lookup).toEqual(before);
+	});
+	it('denies missing malformed foreign and mismatched project library identities without repairing the public observation', () => {
+		const lookup = () => ({ project: { id: 'configured-project-id', slug: 'configured-project', teamId: 'original-team' },
+			library: { projectId: 'configured-project-id', teamId: 'original-team', repositoryId: 'original-library' } });
+		const values: unknown[] = [undefined, null, '', [], {}, { project: null, library: null }];
+		for (const [section, fields] of [['project', ['id', 'slug', 'teamId']], ['library', ['projectId', 'teamId', 'repositoryId']]] as const) {
+			for (const field of fields) for (const invalid of [undefined, null, '', ' ', 1, false, [], {}]) {
+				const value = lookup(); Object.assign(value[section], { [field]: invalid }); values.push(value);
+			}
+		}
+		for (const change of [ { project: { id: 'foreign-id', slug: 'configured-project', teamId: 'original-team' } },
+			{ library: { projectId: 'foreign-id', teamId: 'original-team', repositoryId: 'original-library' } },
+			{ library: { projectId: 'configured-project-id', teamId: 'foreign-team', repositoryId: 'original-library' } } ]) values.push({ ...lookup(), ...change });
+		for (const value of values) { const before = structuredClone(value);
+			expect(() => verifyProjectLibraryLookup('configured-project', value)).toThrow('ACCEPTANCE_PROJECT_LIBRARY'); expect(value).toEqual(before); }
+		const original = lookup(); expect(() => verifyProjectLibraryLookup('foreign-slug', original)).toThrow('ACCEPTANCE_PROJECT_LIBRARY');
+		expect(original).toEqual(lookup());
+	});
 	it('derives named project slugs and collective work-item anchors from supplied document and seed authority without copying the returned graph', () => {
 		const original = inputs(), before = structuredClone(original); verify(original); expect(original).toEqual(before);
 		const expanded = portfolioRelations(document.replace('2 projects', '4 projects').replace('2. API\n', '2. API\n3. Engineering Template\n4. Platform\n')

@@ -1,9 +1,13 @@
 import { execFile, execFileSync } from 'node:child_process';
 import { createServer } from 'node:https';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
-import { join, resolve } from 'node:path';
+import { chmod, copyFile, mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from 'node:fs/promises';
+import { dirname, join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
+import { promisify } from 'node:util';
+import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
+import { sandboxAssignmentSchema, sandboxResultSchema } from '@treeseed/sdk/capacity-provider/sandbox';
+import { objectDigest } from '../../../../src/sandbox/verification.ts';
 import { executeAssignmentTreeDxTool } from '../../../../src/provider/execution/microvm-executor.ts';
 import { completedTimeStatusChecks, invokeTreeDxRelay, timingAwarenessContract } from '../../../../src/sandbox/guest.ts';
 import { clockRequest } from './clock-fixture.ts';
@@ -41,13 +45,81 @@ async function nativeClock() {
 		const address = server.address(); if (!address || typeof address === 'string') throw new Error('Native TLS clock address required');
 		const environment = { TREESEED_RELAY_URL: `https://127.0.0.1:${address.port}`, TREESEED_SANDBOX_ID: 'isolated-clock',
 			TREESEED_GUEST_TOKEN: 'isolated-clock-token', TREESEED_RELAY_CA: cert };
-		return { input, attempt, execution, calls, environment, set(code = 200, transportFault = '', productiveStarted = true) { status = code; fault = transportFault; started = productiveStarted; },
+		return { directory, cert, input, attempt, execution, calls, environment, set(code = 200, transportFault = '', productiveStarted = true) { status = code; fault = transportFault; started = productiveStarted; },
 			read: (timeoutMs = 5_000) => invokeTreeDxRelay('treeseed_time_status', {}, environment, timeoutMs),
 			close: async () => { server!.closeAllConnections(); try { await new Promise<void>((resolve, reject) => server!.close(error => error ? reject(error) : resolve())); }
 				finally { await rm(directory, { recursive: true, force: true }); } } };
 	} catch (error) { server?.closeAllConnections(); if (server?.listening) await new Promise<void>(resolve => server!.close(() => resolve())); await rm(directory, { recursive: true, force: true }); throw error; }
 }
 describe('native trusted guest clock relay and owning provider tool', () => {
+	it('native whole guest retains first and final clock bytes across a long provider stream and cannot forget an early killed command', async () => {
+		const outcomes: Array<{ mode: string; failure: string; events: Record<string, unknown>[]; retainedPrivateFiles: string[] }> = [];
+		for (const mode of ['completed', 'resource-abort']) {
+			const f = await nativeClock();
+			try {
+				const input = join(f.directory, 'input'), output = join(f.directory, 'output'), workspace = join(f.directory, 'workspace');
+				for (const path of [input, output, join(workspace, 'project')]) await mkdir(path, { recursive: true });
+				await symlink(resolve('node_modules'), join(workspace, 'project/node_modules'));
+				const context = { identity: { manifest: {} }, canonicalAssignmentContext: { assignment: {
+					...f.attempt, workspace: { mode: 'read-only' }, effectiveProfile: { activity: 'chat', handler: 'writer',
+						prompt: { system: 'Controlled native fixture only.' } },
+				}, predecessorResults: [], context: [{ ref: f.attempt.sourceRef, value: { frontmatter: {
+					executionPlan: { workItems: [{ id: f.attempt.workItemId, agentClass: f.attempt.agentClass }] },
+				} } }] } };
+				const bytes = Buffer.from(JSON.stringify(context)), digest = (value: Buffer) => `sha256:${createHash('sha256').update(value).digest('hex')}`;
+				await writeFile(join(input, 'input-execution-context'), bytes); await copyFile(f.cert, join(input, 'input-relay-ca'));
+				const ca = await readFile(f.cert);
+				const assignment = sandboxAssignmentSchema.parse({ schemaVersion: 'treeseed.sandbox-assignment/v1',
+					assignmentId: f.attempt.id, attempt: f.attempt.attempt, runnerId: 'native-fixture', providerId: f.attempt.provider.providerId,
+					teamId: f.attempt.teamId, projectId: f.attempt.projectId, profile: 'configured-chat', guestImage: 'controlled-input', guestImageDigest: digest(bytes),
+					identityManifestDigest: objectDigest(context.identity.manifest), contextManifestDigest: digest(bytes),
+					resources: { cpuCores: 1, memoryBytes: 536870912, diskBytes: 67108864, durationSeconds: 30, processLimit: 32, outputBytes: 1048576 },
+					inputs: [{ id: 'execution-context', digest: digest(bytes), bytes: bytes.length, disposition: 'copy-on-write', mediaType: 'application/json',
+						targetPath: '/workspace/.treeseed/context.json' }, { id: 'relay-ca', digest: digest(ca), bytes: ca.length, disposition: 'copy-on-write',
+						mediaType: 'application/x-pem-file', targetPath: '/workspace/.treeseed/relay-ca.crt' }], outputs: [],
+					network: { defaultDeny: true, relayUrl: f.environment.TREESEED_RELAY_URL, allowedServices: ['treedx'] },
+					modelPolicy: { provider: 'controlled-native-input', model: 'not-a-real-model', capabilities: [] }, credentialHandles: [], treeDxHandleIds: [],
+					leaseExpiresAt: f.attempt.deadline, signature: { keyId: 'controlled-native-input', algorithm: 'Ed25519', value: 'supplied-not-issued' } });
+				const held = JSON.stringify(assignment); await writeFile(join(input, 'assignment.json'), held);
+				await writeFile(join(input, 'sandbox-id'), 'isolated-clock'); await writeFile(join(input, 'operation-token'), 'isolated-clock-token');
+				await writeFile(join(input, 'stream-mode'), mode);
+				const provider = resolve('tests/modern/sandbox/fixtures/clock-stream-provider.ts'), executable = join(input, 'codex');
+				await writeFile(executable, (await readFile(provider, 'utf8')).replace("'../../../../src/sandbox/guest.ts'", JSON.stringify(resolve('src/sandbox/guest.ts'))));
+				await chmod(executable, 0o755);
+				// Namespace mounts only allocated writable roots. Never write the
+				// guest's fixed paths on the host or invoke its released Codex image.
+				let failure = '';
+				try { await promisify(execFile)('bwrap', ['--unshare-user', '--unshare-pid', '--die-with-parent', '--new-session', '--tmpfs', '/',
+					'--ro-bind', '/usr', '/usr', '--ro-bind', '/lib', '/lib', '--ro-bind', '/lib64', '/lib64', '--ro-bind', '/etc', '/etc',
+					'--proc', '/proc', '--dev', '/dev', '--tmpfs', '/run', '--tmpfs', '/tmp', '--tmpfs', '/usr/local/bin',
+					'--ro-bind', resolve('..'), resolve('..'), '--ro-bind', dirname(dirname(process.execPath)), dirname(dirname(process.execPath)),
+					'--ro-bind', input, '/run/treeseed-assignment', '--bind', output, '/run/treeseed-output', '--bind', workspace, '/workspace',
+					'--ro-bind', process.execPath, '/usr/local/bin/node', '--ro-bind', executable, '/usr/local/bin/codex',
+					'--chdir', process.cwd(), process.execPath, '--import', 'tsx', provider, '--guest'],
+					{ timeout: 20_000, killSignal: 'SIGKILL', maxBuffer: 1_048_576, env: { PATH: `${dirname(process.execPath)}:/usr/bin:/bin` } });
+				} catch (error) { failure = error instanceof Error ? error.message : String(error); }
+				let events: Record<string, unknown>[] = [];
+				const resultPath = join(output, 'result.json');
+				try { const result = sandboxResultSchema.parse(JSON.parse(await readFile(resultPath, 'utf8')));
+					if (!Array.isArray(result.diagnostics.providerEvents)) throw new Error('Native raw event array required');
+					events = result.diagnostics.providerEvents;
+					if (mode === 'completed') expect(result.timingAwareness).toMatchObject({ completedChecks: 2, firstToolCompliant: true, finalToolCompliant: true });
+				} catch (error) { if (!(error instanceof Error && 'code' in error && error.code === 'ENOENT')) throw error; }
+				const retainedPrivateFiles: string[] = [];
+				for (const name of ['auth.json', 'config.toml']) {
+					try { await stat(join(workspace, '.treeseed/codex', name)); retainedPrivateFiles.push(name); }
+					catch (error) { if (!(error instanceof Error && 'code' in error && error.code === 'ENOENT')) throw error; }
+				}
+				outcomes.push({ mode, failure, events, retainedPrivateFiles }); expect(await readFile(join(input, 'assignment.json'), 'utf8')).toBe(held);
+				expect(await readFile(join(input, 'input-execution-context'))).toEqual(bytes);
+			} finally { await f.close(); await expect(stat(f.directory)).rejects.toMatchObject({ code: 'ENOENT' }); }
+		}
+		expect(outcomes[0]!.failure, outcomes.map(value => `${value.mode}: ${value.failure}`).join('\n')).toBe('');
+		expect(outcomes[0]!.events).toHaveLength(302);
+		expect(timingAwarenessContract(outcomes[0]!.events)).toMatchObject({ completedChecks: 2, firstToolCompliant: true, finalToolCompliant: true });
+		expect(outcomes[1]!.failure).toContain('sandbox_resource_exhausted: command exited 137'); expect(outcomes[1]!.events).toEqual([]);
+		for (const outcome of outcomes) expect(outcome.retainedPrivateFiles).toEqual([]);
+	}, 30_000);
 	it('native public guest MCP clock transports exact first and final HTTPS values and rejects corrupted observed payloads without rewriting native bytes', async () => {
 		const f = await nativeClock(); try {
 			const inputBefore = structuredClone(f.input.assignment), entrypoint = resolve('src/sandbox/guest.ts'), sourceBefore = await readFile(entrypoint);

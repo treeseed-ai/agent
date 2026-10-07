@@ -13,9 +13,22 @@ import { activityAllowsVerification } from '../../../../src/sandbox/guest-contra
 import { architectureTaskInstructions } from '../../architecture/knowledge-task-fixture.ts';
 import { request as executionRequest } from '../../kernel/provider-kernel-fixture.ts';
 import { assignmentAttemptSchema } from '@treeseed/sdk/agent-capacity';
+import { redactProviderEvents } from '../../../../src/sandbox/provider-failure.ts';
 import { verifyModelClockEvidence } from '../../../acceptance/workday/support/assignment-authority.ts';
 const clockResult = { content: [{ type: 'text', text: JSON.stringify({ startedAt: '2026-10-04T00:00:00.000Z', deadlineAt: '2026-10-04T00:01:00.000Z', observedAt: '2026-10-04T00:00:00.000Z', remainingSeconds: 60 }) }] };
 describe('Codex chat executor', () => {
+	it('retains ordered untrimmed first and final clocks and early fatal command evidence through a long sanitized provider observation', () => {
+		const clock = (id: string) => ({ type: 'item.completed', item: { id, type: 'mcp_tool_call', server: 'treedx', tool: 'treeseed_time_status',
+			status: 'completed', result: structuredClone(clockResult) } });
+		const command = { type: 'item.completed', item: { id: 'original-fatal-command', type: 'command_execution', command: 'original command', exit_code: 137, aggregated_output: 'Killed\n' } };
+		const events = [clock('first'), command, ...Array.from({ length: 300 }, (_, index) => ({ type: 'item.completed',
+			item: { id: `reasoning-${index}`, type: 'reasoning', text: 'supplied-secret' } })), clock('final')];
+		const before = structuredClone(events), sanitized = redactProviderEvents(events, ['supplied-secret']);
+		expect(sanitized).toHaveLength(303); expect(sanitized[0]).toEqual(before[0]); expect(sanitized.at(-1)).toEqual(before.at(-1));
+		expect(sanitized[2]).toMatchObject({ item: { text: '[redacted]' } });
+		expect(timingAwarenessContract(sanitized)).toMatchObject({ completedChecks: 2, firstToolCompliant: true, finalToolCompliant: true });
+		expect(providerResourceAbort(sanitized)).toEqual({ exitCode: 137, command: 'original command' }); expect(events).toEqual(before);
+	});
 	it('binds public raw model clock evidence to its exact completed assignment event receipt and immutable original timestamps', () => {
 		const startedAt = '2026-10-04T00:00:00.000Z', deadlineAt = '2026-10-04T00:01:00.000Z';
 		const fixture = () => {

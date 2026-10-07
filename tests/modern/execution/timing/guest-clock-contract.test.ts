@@ -36,7 +36,7 @@ describe('Codex chat executor', () => {
 		const f = publicClockEvidenceFixture(); f.item.status = 'failed'; f.item.assignmentResult.status = 'failed'; f.event.eventType = 'provider.execution.failed';
 		const before = structuredClone(f); expect(() => verifyModelClockEvidence(f.item, f.event)).not.toThrow(); expect(f).toEqual(before);
 		for (const mode of ['completed-root', 'returned-root', 'completed-result', 'blocked-result', 'completed-event', 'missing-result',
-			'missing-raw', 'empty-raw', 'foreign-result', 'foreign-event', 'changed-receipt', 'duplicate-clock', 'late-result']) {
+			'missing-raw', 'empty-raw', 'foreign-result', 'foreign-event', 'changed-receipt', 'duplicate-clock', 'failed-first-retried-clock', 'late-result']) {
 			const changed = structuredClone(f);
 			if (mode === 'completed-root' || mode === 'returned-root') changed.item.status = mode.split('-')[0]!;
 			if (mode === 'completed-result' || mode === 'blocked-result') changed.item.assignmentResult.status = mode.split('-')[0]!;
@@ -48,6 +48,11 @@ describe('Codex chat executor', () => {
 			if (mode === 'foreign-event') changed.event.assignmentId = 'foreign';
 			if (mode === 'changed-receipt') changed.item.assignmentResult.timingAwareness.completedChecks = 3;
 			if (mode === 'duplicate-clock') changed.event.protectedPayload.providerEvents[1]!.item.id = 'first';
+			if (mode === 'failed-first-retried-clock') {
+				const denied = structuredClone(changed.event.protectedPayload.providerEvents[0]!);
+				Object.assign(denied.item, { id: 'original-denied-first', status: 'failed', error: 'Retained clock denial', result: undefined });
+				changed.event.protectedPayload.providerEvents.unshift(denied);
+			}
 			if (mode === 'late-result') changed.item.assignmentResult.completedAt = deadlineAt;
 			const held = structuredClone(changed); expect(() => verifyModelClockEvidence(changed.item, changed.event), mode).toThrow(); expect(changed).toEqual(held);
 		}

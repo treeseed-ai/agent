@@ -112,17 +112,22 @@ describe('Agent package ownership boundary', () => {
 				sandbox: { ...current.sandbox, profiles: current.sandbox.profiles.map(({ lineage: _lineage, ...profile }) => profile) },
 				lanes: current.lanes.map(lane => ({ ...lane, capabilities: ['communication', 'agent-execution'] })),
 				adapters: current.adapters.map(({ offers: _offers, ...adapter }) => ({ ...adapter, capabilities: ['communication'], sandboxProfileIds: ['read'] })) };
-			const variants = [stringifyYaml(legacy), '{invalid', stringifyYaml({ ...current, schemaVersion: '5' }),
-				stringifyYaml({ ...current, configuration: { generation: 'release-compat-v5' } }),
-				stringifyYaml({ ...current, metadata: { compatibilityMigration: 'agent-managed-v4-to-v5' } })];
+			// Retain native block YAML on both legacy and valid authority; the three
+			// unrelated field-denial rows can use the same exact flow-YAML objects.
+			const variants = [stringifyYaml(legacy), '{invalid', JSON.stringify({ ...current, schemaVersion: '5' }),
+				JSON.stringify({ ...current, configuration: { generation: 'release-compat-v5' } }),
+				JSON.stringify({ ...current, metadata: { compatibilityMigration: 'agent-managed-v4-to-v5' } })];
 			const env: NodeJS.ProcessEnv = { ...process.env,
 				TREESEED_SANDBOX_BASE_DIGEST: digest('8'), TREESEED_SANDBOX_PROVENANCE_DIGEST: digest('9') };
 			delete env.TREESEED_DEVELOPMENT_MODE; delete env.TREESEED_CONTROL_PLANE_URL; delete env.TREESEED_DEVELOPMENT_SANDBOX_GUEST_DIGEST;
 			delete env.TREESEED_PROVIDER_ROLE; delete env.TREESEED_PROVIDER_STARTUP_MODE;
 			const commands = [['plan', '--json'], ['manager', '--plan', '--json'], ['runner', '--plan', '--json']];
-			// Independent inputs permit concurrent native commands; each retains its
-			// own bytes and cleanup, under the unchanged owning test watchdog.
-			const outcomes = await Promise.allSettled([...variants, stringifyYaml(current)].flatMap((bytes, index) => commands.map(async args => {
+			// Each row still executes all three independent public commands together.
+			// Finish its owned children before starting the next unrelated input row;
+			// eighteen simultaneous cold starts are not a provider concurrency proof.
+			const outcomes: PromiseSettledResult<void>[] = [];
+			for (const [index, bytes] of [...variants, stringifyYaml(current)].entries()) {
+			outcomes.push(...await Promise.allSettled(commands.map(async args => {
 				const root = mkdtempSync(resolve(tmpdir(), 'agent-provider-cutover-')), manifestPath = resolve(root, 'manifest.yaml');
 				try {
 					writeFileSync(manifestPath, bytes);
@@ -142,6 +147,8 @@ describe('Agent package ownership boundary', () => {
 					expect(readFileSync(manifestPath, 'utf8')).toBe(bytes); expect(readdirSync(root)).toEqual(['manifest.yaml']);
 				} finally { rmSync(root, { recursive: true, force: true }); }
 			})));
+			}
+			expect(outcomes).toHaveLength((variants.length + 1) * commands.length);
 			expect(readFileSync(entrypoint)).toEqual(entrypointBytes);
 			for (const outcome of outcomes) if (outcome.status === 'rejected') throw outcome.reason;
 		// Local native public command composition, not coordinated publication,

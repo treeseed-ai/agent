@@ -10,3 +10,6 @@ summary: Compose the same real lifecycle campaign and SDK-owned product verifier
 scene:
   required: true
   manifest: guarantees/agent/golden/scenes/sdk-complete.scene.yaml
+acceptanceCriteria:
+  - criterion: b635827ed7862d56b8764dfad30114b9ee18d02b4aa709a257841e18a1bd0f0d
+    verifierRefs: [agent.golden.execution-clock-observation-live-1]

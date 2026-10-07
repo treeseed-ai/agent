@@ -167,6 +167,7 @@ describe('native trusted guest clock relay and owning provider tool', () => {
 		}
 		expect(timingAwarenessContract(failed.events)).toMatchObject({ completedChecks: 2, firstToolCompliant: true, finalToolCompliant: true });
 		expect(outcomes[5]!.failure).toContain('Agent timing-awareness contract requires'); expect(outcomes[5]!.resultStatus).toBeUndefined(); expect(outcomes[5]!.events).toEqual([]);
+		expect(outcomes[5]!.failure).toContain('exited 23: Original controlled provider exit 23.');
 		for (const outcome of outcomes) expect(outcome.retainedPrivateFiles,
 			JSON.stringify(outcomes.map(value => ({ mode: value.mode, retainedPrivateFiles: value.retainedPrivateFiles })))).toEqual([]);
 	}, 30_000);

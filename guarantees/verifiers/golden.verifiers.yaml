@@ -1,6 +1,21 @@
 schemaVersion: treeseed.guarantee-verifiers/v1
 ownerPackage: "@treeseed/agent"
 verifiers:
+  agent.golden.campaign-freeze-preparation-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/preflight/campaign-freeze.test.ts
+    testName: "uses the original operator proposal and start and denies changed CLI intent or policy before any proposal creation"
+  agent.golden.campaign-freeze-complete-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/preflight/campaign-freeze.test.ts
+    testName: "retains all twenty five prospective schema valid inputs with pending genuine estimates and unchanged exact selection weights"
+  agent.golden.campaign-freeze-input-denials-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/preflight/campaign-freeze.test.ts
+    testName: "denies every omitted run changed policy selection derived field and fault allocation without repairing supplied campaign inputs"
   agent.golden.live.campaign-freeze:
     kind: nodeTestCase
     ownerPackage: "@treeseed/agent"

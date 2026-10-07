@@ -3,6 +3,15 @@ id: agent.golden.component-boundaries
 title: Golden execution component boundaries
 scope: local-component-tests
 workflow:
+  - id: campaign-freeze-preparation-unit
+    action: { verifier: agent.golden.campaign-freeze-preparation-unit }
+    expect: { status: passed }
+  - id: campaign-freeze-complete-unit
+    action: { verifier: agent.golden.campaign-freeze-complete-unit }
+    expect: { status: passed }
+  - id: campaign-freeze-input-denials-unit
+    action: { verifier: agent.golden.campaign-freeze-input-denials-unit }
+    expect: { status: passed }
   - id: campaign-freeze-unit
     action: { verifier: agent.golden.campaign-freeze-unit }
     expect: { status: passed }

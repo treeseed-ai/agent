@@ -10,7 +10,7 @@ describe('golden read-back assertion regressions (fixtures are not live acceptan
 		const file = state.replies.get('library read')!.result.files[0], original = structuredClone(file);
 		const context = structuredClone(reporter.workspaceContext), ledger = structuredClone(state.replies.get('capacity ledger')!);
 		expect(() => gate('reporter')).not.toThrow(); const denied: boolean[] = [];
-		for (const mode of ['missing', 'empty', 'duplicate', 'changed', 'foreign', 'corrupt-ledger', 'missing-page']) {
+		for (const mode of ['missing', 'empty', 'duplicate', 'changed', 'foreign', 'corrupt-ledger', 'missing-page', 'empty-both', 'partial-both']) {
 			const changed = structuredClone(context), inline = changed.authorizedContext[0], value = inline.value;
 			const supplied = structuredClone(ledger);
 			if (mode === 'missing') Reflect.deleteProperty(value, 'settlements'); if (mode === 'empty') value.settlements = [];
@@ -19,6 +19,8 @@ describe('golden read-back assertion regressions (fixtures are not live acceptan
 			if (mode === 'foreign') value.settlements[0].teamId = 'foreign';
 			if (mode === 'corrupt-ledger') Reflect.deleteProperty(supplied.items[0], 'usageSettlement');
 			if (mode === 'missing-page') Reflect.deleteProperty(supplied, 'page');
+			if (mode === 'empty-both') { value.settlements = []; supplied.items = []; }
+			if (mode === 'partial-both') { const removed = value.settlements.pop(); supplied.items = supplied.items.filter((entry: Row) => entry.id !== removed.id); }
 			inline.digest = `sha256:${createHash('sha256').update(canonicalStandardsJson(value)).digest('hex')}`;
 			const payload = JSON.parse(original.body.slice(8, -4)); payload.workday = value;
 			file.body = `\`\`\`json\n${JSON.stringify(payload)}\n\`\`\``; reporter.workspaceContext = changed;
@@ -27,7 +29,7 @@ describe('golden read-back assertion regressions (fixtures are not live acceptan
 			expect({ changed, supplied, file }).toEqual(held);
 		}
 		reporter.workspaceContext = context; file.body = original.body; state.replies.set('capacity ledger', ledger);
-		expect(() => gate('reporter')).not.toThrow(); expect(denied).toEqual(Array(7).fill(true)); expect(file).toEqual(original);
+		expect(() => gate('reporter')).not.toThrow(); expect(denied).toEqual(Array(9).fill(true)); expect(file).toEqual(original);
 	});
 	it('denies substituted truncated and prose-only report bodies against the exact frozen closeout evidence without repairing failed observations', () => {
 		const reporter = state.replies.get('assignments list')!.items.find((item: Row) => item.assignmentAttempt.effectiveProfile.activity === 'reporting');

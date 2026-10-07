@@ -31,9 +31,15 @@ describe('provider AgentKernel execution', () => {
 			expect(result.artifacts ?? []).toEqual([]); expect(executions).toBe(1); expect(input.assignment).toEqual(before); expect(reply).toEqual(held);
 			});
 		}
-		const input = request(), result = await executeKernelAssignment({ runtimeBuild, request: input, executor: { id: 'codex', observe: async () => ({ available: true }),
-			execute: async execution => { await execution.beginExecution?.(); return { status: 'failed', summary: 'Original unmeasured failure.' }; } } });
-		expect(result.status).toBe('failed'); expect(result.outputs?.assignmentResult).toBeUndefined();
+		for (const fields of [{}, { usage: [] }, { usage: [{ elapsedSeconds: -1 }] }, { usage: [{ elapsedSeconds: '2' }] },
+			{ usage: [{ elapsedSeconds: 2, inputTokens: 0.5 }] }, { usage: [{ elapsedSeconds: 2, activeSeconds: 1, nativeUsage: { activeSeconds: 2 } }] },
+			{ usage: [{ elapsedSeconds: 2 }], outputs: { timingAwareness: {} } }]) {
+			const input = request(), reply: AgentExecutionResult = { status: 'failed', summary: 'Original invalid or unmeasured failure.', ...fields };
+			const held = structuredClone(reply), result = await executeKernelAssignment({ runtimeBuild, request: input, executor: { id: 'codex', observe: async () => ({ available: true }),
+				execute: async execution => { await execution.beginExecution?.(); return reply; } } });
+			checks.push(() => { expect(result.status).toBe('failed'); expect(result.outputs?.assignmentResult).toBeUndefined();
+				expect(result.usage).toEqual(reply.usage); expect(reply).toEqual(held); });
+		}
 		for (const check of checks) check();
 	});
 	it('uses concrete guest changes for Actor and Releaser publication under a recursive grant', async () => {

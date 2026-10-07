@@ -71,8 +71,8 @@ describe('portable configured profiles through real provider Kernel and native G
 		const outcomes = await Promise.allSettled(scenarios.map(async ({ cause, late }) => {
 			let release!: () => void, stopped!: () => void;
 			const gate = new Promise<void>(resolve => { release = resolve; }), interrupted = new Promise<void>(resolve => { stopped = resolve; });
-			// A shorter original test input is allocated before admission; the
-			// original five-second test watchdog and every admitted clock stay fixed.
+			// A shorter active input is allocated before admission, independently
+			// of its original phase deadline. The five-second watchdog stays fixed.
 			const f = await portableKernel(gate, cause === 'expire' ? 1 : undefined), abort = new AbortController();
 			let api: Awaited<ReturnType<typeof closeoutTransport>> | undefined, running: Promise<unknown> | undefined;
 			try {

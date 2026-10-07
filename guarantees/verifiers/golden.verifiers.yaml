@@ -1,6 +1,10 @@
 schemaVersion: treeseed.guarantee-verifiers/v1
 ownerPackage: "@treeseed/agent"
 verifiers:
+  agent.golden.execution-clock-replay-unit:
+    kind: vitestCase
+    testFile: tests/modern/sandbox/architecture/clock-authority.test.ts
+    testName: refuses replayed identified clock completions as independent first and final actions without rewriting retained events
   agent.golden.execution-native-token-agreement-unit:
     kind: vitestCase
     testFile: tests/modern/provider/sandbox-accounting-usage.test.ts

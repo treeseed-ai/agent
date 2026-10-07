@@ -10,6 +10,7 @@ import { commit, candidateCommit, digest, runtimeBuild, timingAwareness, request
 
 describe('provider AgentKernel execution', () => {
 	it('retains a measured failed model execution as its exact canonical failed result without successful artifacts or invented timing or usage', async () => {
+		const checks: Array<() => void> = [];
 		for (const receipt of [timingAwareness, undefined]) {
 			const input = request(), attempt = assignmentAttemptSchema.parse(input.assignment.assignmentAttempt);
 			attempt.agentClass = 'renamed-failure-owner'; input.assignment.assignmentAttempt = attempt;
@@ -19,7 +20,8 @@ describe('provider AgentKernel execution', () => {
 			const held = structuredClone(reply); let executions = 0; const started = Date.now();
 			const result = await executeKernelAssignment({ runtimeBuild, request: input, executor: { id: 'codex', observe: async () => ({ available: true }),
 				execute: async execution => { executions++; await execution.beginExecution?.(); return reply; } } });
-			const ended = Date.now(), canonical = assignmentResultSchema.parse(result.outputs?.assignmentResult);
+			const ended = Date.now(); checks.push(() => {
+			const canonical = assignmentResultSchema.parse(result.outputs?.assignmentResult);
 			expect(canonical).toEqual({ schemaVersion: 'treeseed.assignment-result/v1', id: expect.stringMatching(/^result-[a-f0-9]{24}$/u),
 				assignmentId: attempt.id, status: 'failed', summary: reply.summary, references: [], verification: [],
 				usage: { elapsedSeconds: 3, modelInputTokens: 19, modelOutputTokens: 3, native: { activeSeconds: 1.125 } },
@@ -27,10 +29,12 @@ describe('provider AgentKernel execution', () => {
 			expect(Date.parse(canonical.completedAt)).toBeGreaterThanOrEqual(started); expect(Date.parse(canonical.completedAt)).toBeLessThanOrEqual(ended);
 			expect(result).toMatchObject({ status: 'failed', summary: reply.summary, usage, outputs: { originalObservation: { retained: true } } });
 			expect(result.artifacts ?? []).toEqual([]); expect(executions).toBe(1); expect(input.assignment).toEqual(before); expect(reply).toEqual(held);
+			});
 		}
 		const input = request(), result = await executeKernelAssignment({ runtimeBuild, request: input, executor: { id: 'codex', observe: async () => ({ available: true }),
 			execute: async execution => { await execution.beginExecution?.(); return { status: 'failed', summary: 'Original unmeasured failure.' }; } } });
 		expect(result.status).toBe('failed'); expect(result.outputs?.assignmentResult).toBeUndefined();
+		for (const check of checks) check();
 	});
 	it('uses concrete guest changes for Actor and Releaser publication under a recursive grant', async () => {
 		for (const handler of ['actor', 'releaser']) {

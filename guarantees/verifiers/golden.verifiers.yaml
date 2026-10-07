@@ -1,6 +1,11 @@
 schemaVersion: treeseed.guarantee-verifiers/v1
 ownerPackage: "@treeseed/agent"
 verifiers:
+  agent.golden.execution-failed-clock-readback-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/timing/guest-clock-contract.test.ts
+    testName: "reads exact failed model clocks without relabeling failure and denies missing contradictory late or substituted terminal evidence"
   agent.golden.execution-canonical-failure-unit:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

@@ -73,14 +73,21 @@ describe('microvm result and closeout authority', () => {
 			const supplied = { ...original, status, summary: `Original ${status} observation`,
 				usage: { ...original.usage, cpuUserMicros: 123, cpuSystemMicros: 45, peakRssBytes: 4096 },
 				timingAwareness: hasReceipt ? original.timingAwareness : undefined };
-			f.setResult(supplied); const before = structuredClone(f.input.assignment), result = await f.executor.execute(f.input);
+			f.setResult(supplied); const before = structuredClone(f.input.assignment);
+			if (!hasReceipt) {
+				await expect(f.executor.execute(f.input)).rejects.toMatchObject({ issues: [{ path: ['timingAwareness'], code: 'invalid_type' }] });
+				expect(vi.mocked(f.input.emit!).mock.calls.some(([event]) => ['execution.completed', 'execution.failed'].includes(event.type))).toBe(false);
+				expect(f.result()).toEqual(supplied); expect(f.input.assignment).toEqual(before);
+				expect(f.client.destroy).toHaveBeenCalledTimes(1); expect(f.cleanup).toHaveBeenCalledTimes(1); continue;
+			}
+			const result = await f.executor.execute(f.input);
 			const emitted = vi.mocked(f.input.emit!).mock.calls.map(([event]) => event), failures = emitted.filter(event => event.type === 'execution.failed');
 			expect(failures).toHaveLength(1); expect(emitted.some(event => event.type === 'execution.completed')).toBe(false);
 			expect(failures[0]).toMatchObject({ summary: supplied.summary, payload: { sandboxId: original.sandboxId, status,
 				model: f.observed[0]!.modelPolicy.model, provider: f.observed[0]!.modelPolicy.provider,
 				capabilities: f.observed[0]!.modelPolicy.capabilities, usage: result.usage, timing: { elapsedSeconds: original.usage.elapsedSeconds },
 				resources: { cpuUserMicros: 123, cpuSystemMicros: 45, peakRssBytes: 4096 },
-				timingAwareness: hasReceipt ? original.timingAwareness : null }, protectedPayload: original.diagnostics });
+				timingAwareness: original.timingAwareness }, protectedPayload: original.diagnostics });
 			expect(result.status).toBe(status === 'failed' ? 'failed' : 'returned'); expect(result.summary).toBe(supplied.summary);
 			expect(result.usage).toEqual([{ activeSeconds: 1.125, elapsedSeconds: 2.25, inputTokens: 19, outputTokens: 3,
 				cpuUserMicros: 123, cpuSystemMicros: 45, peakRssBytes: 4096,

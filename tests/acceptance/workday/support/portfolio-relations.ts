@@ -4,7 +4,31 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { parse } from 'yaml';
 import { assignmentAttemptSchema, executionEdgeSchema, executionNodeSchema } from '@treeseed/sdk/agent-capacity';
-import { row, type Row } from '../../acceptance-cli.ts';
+import { read, row, type Row } from '../../acceptance-cli.ts';
+
+// The existing public library command resolves a slug under its authenticated
+// active team. Do not feed a slug to the ID-only project TreeDX operation.
+export function verifyProjectLibraryLookup(slug: string, lookup: unknown): Row {
+	const fail = 'ACCEPTANCE_PROJECT_LIBRARY: Exact public project and library identity required';
+	const envelope = row(lookup), project = row(envelope.project), library = row(envelope.library);
+	assert.equal(project.slug, slug, fail);
+	assert.ok(typeof project.id === 'string' && project.id.trim() === project.id && project.id.length > 0, fail);
+	assert.ok(typeof project.teamId === 'string' && project.teamId.trim() === project.teamId && project.teamId.length > 0, fail);
+	assert.equal(library.projectId, project.id, fail); assert.equal(library.teamId, project.teamId, fail);
+	assert.ok(typeof library.repositoryId === 'string' && library.repositoryId.trim() === library.repositoryId && library.repositoryId.length > 0, fail);
+	return library;
+}
+
+export function readPortfolioLibraries(slugs: readonly string[], team: string): Map<string, Row> {
+	const bindings = new Map<string, Row>();
+	for (const slug of slugs) bindings.set(slug, verifyProjectLibraryLookup(slug, read(['library', 'show', slug], team, true)));
+	assert.equal(bindings.size, slugs.length, 'ACCEPTANCE_PROJECT_LIBRARY: Duplicate project slug');
+	assert.equal(new Set([...bindings.values()].map(value => value.projectId)).size, slugs.length, 'ACCEPTANCE_PROJECT_LIBRARY: Duplicate project identity');
+	assert.equal(new Set([...bindings.values()].map(value => value.repositoryId)).size, slugs.length, 'ACCEPTANCE_PROJECT_LIBRARY: Duplicate library identity');
+	assert.ok(slugs.length > 0 && new Set([...bindings.values()].map(value => value.teamId)).size === 1,
+		'ACCEPTANCE_PROJECT_LIBRARY: Missing or mixed active team authority');
+	return bindings;
+}
 
 // Acceptance assertions only. Expected relations come from the authoritative
 // document, never from returned graph edges or a second portfolio policy.

@@ -120,11 +120,20 @@ it('uses the original operator proposal and start and denies changed CLI intent 
 	state.files.set('/supplied-platform/docs/agent-acceptance.md', document);
 	state.files.set('/supplied-platform/seeds/treeseed.yaml', seed); state.files.set('/draft.json', JSON.stringify(template));
 	state.writes.mockImplementation((path: string, bytes: string) => state.files.set(path, bytes));
-	for (const scenario of ['intent-drift', 'policy-drift', 'unchanged']) {
-		state.bytes = JSON.stringify(supplied); state.writes.mockClear(); state.commands.mockClear();
+	for (const scenario of ['intent-drift', 'policy-drift', 'project-drift', 'lookup-team-drift', 'lookup-slug-drift', 'lookup-repository-missing', 'lookup-denied', 'unchanged']) {
+		state.bytes = JSON.stringify(supplied); state.writes.mockClear(); state.commands.mockClear(); state.execute.mockClear(); state.publicRead.mockClear();
 		state.execute.mockImplementation((command: string, args: string[]) => command.endsWith('/codex') ? 'codex-cli 0.158.0'
 			: args.includes('rev-parse') || command === 'gh' ? head : 'Controlled external baseline');
 		state.publicRead.mockImplementation((args: string[]) => {
+			if (args[0] === 'library' && args[1] === 'show') {
+				if (scenario === 'lookup-denied') throw new Error('ACCEPTANCE_CLI_COMMAND: library.show team_access_denied');
+				const selected = supplied.proposals.find(proposal => proposal.slug === args[2]);
+				expect(selected).toBeDefined();
+				const projectId = scenario === 'project-drift' ? `foreign-${selected!.projectId}` : selected!.projectId;
+				return { project: { id: projectId, slug: scenario === 'lookup-slug-drift' ? 'foreign' : selected!.slug, teamId: 'supplied-team-id' },
+					library: { projectId, teamId: scenario === 'lookup-team-drift' ? 'foreign-team-id' : 'supplied-team-id',
+						repositoryId: scenario === 'lookup-repository-missing' ? '' : `repository-${selected!.slug}` } };
+			}
 			if (args[0] === 'workdays' && args[1] === 'profiles') return { ...supplied.workdayPolicy,
 				revision: scenario === 'policy-drift' ? 3 : supplied.workdayPolicy.revision };
 			if (args[0] === 'dev') return { status: 'active', manifestDigest: digest, guestImageDigest: digest };
@@ -149,13 +158,19 @@ it('uses the original operator proposal and start and denies changed CLI intent 
 		});
 		if (scenario === 'unchanged') {
 			prepareSdkCampaign('/draft.json', '/sdk.freeze.json', 'supplied-team');
+			expect(state.publicRead.mock.calls.filter(call => call[0][0] === 'library' && call[0][1] === 'show')
+				.map(call => call.slice(0, 3))).toEqual(supplied.proposals.map(proposal => [['library', 'show', proposal.slug], 'supplied-team', true]));
 			const plan = state.publicRead.mock.calls.find(call => call[0].includes('--plan'))![0];
 			expect(plan).toEqual(expect.arrayContaining(['--proposal', sdk.input.proposalIds[0], '--start', sdk.input.startsAt]));
 			expect(state.files.get('/sdk.freeze.json.receipts-allocated/operator-campaign.json')).toBe(state.bytes);
 		} else {
-			expect(() => prepareSdkCampaign('/draft.json', '/sdk.freeze.json', 'supplied-team')).toThrow('ACCEPTANCE_CAMPAIGN_FREEZE');
+			if (scenario === 'intent-drift' || scenario === 'policy-drift')
+				expect(() => prepareSdkCampaign('/draft.json', '/sdk.freeze.json', 'supplied-team')).toThrow('ACCEPTANCE_CAMPAIGN_FREEZE');
+			else expect.soft(() => prepareSdkCampaign('/draft.json', '/sdk.freeze.json', 'supplied-team'))
+				.toThrow(/ACCEPTANCE_(CAMPAIGN_FREEZE|PROJECT_LIBRARY|CLI_COMMAND)/u);
 			expect(state.writes).not.toHaveBeenCalled();
 			expect(state.publicRead.mock.calls.filter(call => call[0][0] === 'proposals')).toHaveLength(0);
+			if (scenario === 'project-drift' || scenario.startsWith('lookup-')) expect.soft(state.execute).not.toHaveBeenCalled();
 		}
 		expect(state.bytes).toBe(JSON.stringify(supplied));
 	}

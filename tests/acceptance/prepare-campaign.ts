@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
-import { createHash, randomUUID } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, join, resolve } from 'node:path';
 import { read } from './acceptance-cli.ts';
 import { freshSdkDraft, requirePlanningWindow, sdkProposalText, sdkCampaignWindow } from './campaign.ts';
-import { verifyRuntimeClosure } from './freeze-integrity.ts';
+import { readPreRunCampaignFreeze, verifyRuntimeClosure } from './freeze-integrity.ts';
 
 type Row = Record<string, any>;
 export function requirePinnedCodex(pinned: string, installed: string): void {
@@ -92,6 +92,15 @@ export function requireSdkCampaignSupply(supply: Row, durationSeconds: number,
 
 /** Preparation is part of the same native test, never a separate execution authority. */
 export function prepareSdkCampaign(draftPath: string, freezePath: string, team: string): void {
+	const operatorFreeze = readPreRunCampaignFreeze();
+	assert.ok(operatorFreeze.sdkInput && typeof operatorFreeze.sdkInput === 'object');
+	const frozenInput = operatorFreeze.sdkInput;
+	assert.ok('proposalIds' in frozenInput && Array.isArray(frozenInput.proposalIds)
+		&& frozenInput.proposalIds.length === 1 && typeof frozenInput.proposalIds[0] === 'string');
+	assert.ok('projects' in frozenInput && Array.isArray(frozenInput.projects)
+		&& frozenInput.projects.length === 1 && typeof frozenInput.projects[0] === 'string');
+	assert.ok('startsAt' in frozenInput && typeof frozenInput.startsAt === 'string');
+	const id = frozenInput.proposalIds[0];
 	assert.ok(!existsSync(freezePath), 'ACCEPTANCE_FREEZE_EXISTS: Never overwrite a campaign freeze');
 	const platform = process.env.TREESEED_ACCEPTANCE_PLATFORM_PATH;
 	assert.ok(platform && existsSync(join(platform, 'docs/agent-acceptance.md')),
@@ -102,13 +111,15 @@ export function prepareSdkCampaign(draftPath: string, freezePath: string, team: 
 	requirePinnedCodex(pinnedCodex, installedCodex);
 	const { durationSeconds, planningPercent, planningTurnMaximumSeconds } = sdkCampaignWindow;
 	requirePlanningWindow(durationSeconds, planningPercent, planningTurnMaximumSeconds);
-	const policy = read(['workdays', 'profiles', 'show', 'default'], team).policy as Row;
+	const policyReadback = read(['workdays', 'profiles', 'show', 'default'], team);
+	assert.deepEqual({ id: policyReadback.id, revision: policyReadback.revision, policy: policyReadback.policy },
+		operatorFreeze.manifest.workdayPolicy, 'ACCEPTANCE_CAMPAIGN_FREEZE: Live policy differs from frozen revision');
+	const policy = policyReadback.policy as Row;
 	assert.ok(Number(policy?.maximumConcurrency) >= 5 && Number(policy?.communicationConcurrency) >= 5,
 		'ACCEPTANCE_CONCURRENCY_POLICY: Configure at least five workday and communication slots before admission');
 	const host = read(['dev', 'host', 'status'], team, true);
 	assert.equal(host.status, 'active', 'ACCEPTANCE_CAMPAIGN_HOST: Active development runtime required');
 	verifyRuntimeClosure(host, { digest: host.guestImageDigest });
-	const id = `golden-sdk-decision-governed-workday-intent-v4-${randomUUID()}`;
 	const template = JSON.parse(readFileSync(draftPath, 'utf8')) as Row;
 	const canonical = sdkProposalText(readFileSync(join(platform, 'docs/agent-acceptance.md'), 'utf8'));
 	const libraryRef = (template.executionPlan?.workItems as Row[] | undefined)
@@ -122,6 +133,7 @@ export function prepareSdkCampaign(draftPath: string, freezePath: string, team: 
 	const bookExact = { revision: Number(bookFile.frontmatter?.revision),
 		digest: `sha256:${createHash('sha256').update(bookFile.content).digest('hex')}` };
 	const draft = freshSdkDraft(template, id, canonical, String(bookReadback.repoId ?? ''), bookExact);
+	assert.equal(draft.projectId, frozenInput.projects[0], 'ACCEPTANCE_CAMPAIGN_FREEZE: Frozen SDK project differs from proposal');
 	const bookRef = (draft.executionPlan.workItems as Row[])
 		.find(item => item.id === 'architecture-contract')?.contextRefs?.find((ref: Row) => ref.model === 'book') as Row | undefined;
 	assert.ok(bookRef?.id && bookRef.path && bookRef.commit, 'ACCEPTANCE_CAMPAIGN_BOOK: Exact Architect Book reference required');
@@ -134,28 +146,35 @@ export function prepareSdkCampaign(draftPath: string, freezePath: string, team: 
 	assert.equal(providers.length, 1, 'ACCEPTANCE_CAMPAIGN_SUPPLY: Individual host campaign requires unambiguous provider');
 	const supply = read(['providers', 'status', providers[0]!.providerId], team);
 	requireSdkCampaignSupply(supply, durationSeconds, planningPercent, new Date().toISOString());
+	const project = draft.projectId as string;
+	const classes = Object.fromEntries(['architect', 'researcher', 'tester', 'engineer', 'technical-writer', 'releaser', 'reviewer', 'reporter'].map(role => [role, 12.5]));
+	const args = ['workdays', 'plan', '--profile', 'default', '--projects', project, '--proposal', id,
+		'--start', frozenInput.startsAt,
+		'--duration', String(durationSeconds), '--execution-mode', 'simulation', '--planning-percent', String(planningPercent), '--allocation-weight', '1',
+		'--planning-turn-maximum-seconds', String(planningTurnMaximumSeconds), '--project-percentages', JSON.stringify({ [project]: 100 }),
+		'--agent-class-percentages', JSON.stringify({ [project]: classes })];
+	const request = read([...args, '--plan'], team).input;
+	assert.ok(request && typeof request === 'object' && 'body' in request,
+		'ACCEPTANCE_CAMPAIGN_FREEZE: Public CLI omitted the planned request body');
+	assert.deepEqual(request.body, frozenInput, 'ACCEPTANCE_CAMPAIGN_FREEZE: Public CLI changed the frozen SDK intent');
+	assert.equal(readFileSync(operatorFreeze.path, 'utf8'), operatorFreeze.bytes,
+		'ACCEPTANCE_CAMPAIGN_FREEZE: Operator manifest changed before proposal creation');
 	const artifacts = acceptanceReceiptDirectory(freezePath);
 	const inputPath = join(artifacts, 'proposal.json');
 	writeFileSync(inputPath, JSON.stringify(draft));
-	const project = draft.projectId as string;
 	const created = read(['proposals', 'create', inputPath, '--server', 'local', '--project', project,
 		'--idempotency-key', `golden-create:${id}`], team, true);
 	const proposal = (created.proposal ?? created) as Row;
 	assert.equal(proposal.id, id, 'ACCEPTANCE_CAMPAIGN_PROPOSAL: Create changed proposal identity');
 	read(['proposals', 'open', id, '--server', 'local', '--project', project,
 		'--if-match', String(proposal.activeVersion), '--idempotency-key', `golden-open:${id}`], team, true);
-	const classes = Object.fromEntries(['architect', 'researcher', 'tester', 'engineer', 'technical-writer', 'releaser', 'reviewer', 'reporter'].map(role => [role, 12.5]));
-	const args = ['workdays', 'plan', '--profile', 'default', '--projects', project, '--proposal', id,
-		'--duration', String(durationSeconds), '--execution-mode', 'simulation', '--planning-percent', String(planningPercent), '--allocation-weight', '1',
-		'--planning-turn-maximum-seconds', String(planningTurnMaximumSeconds), '--project-percentages', JSON.stringify({ [project]: 100 }),
-		'--agent-class-percentages', JSON.stringify({ [project]: classes })];
-	const request = read([...args, '--plan'], team).input;
 	const receipts: Record<string, string> = {};
 	const capture = (name: string, bytes: string) => {
 		const path = join(artifacts, name); writeFileSync(path, bytes);
 		receipts[path] = `sha256:${createHash('sha256').update(bytes).digest('hex')}`;
 	};
 	capture('proposal-input.json', readFileSync(inputPath, 'utf8'));
+	capture('operator-campaign.json', operatorFreeze.bytes);
 	capture('architecture-book.json', JSON.stringify(bookReadback));
 	capture('sdk-agent-profiles.json', JSON.stringify({ publishedLibraryHead, agents: agentProfiles.agents }));
 	capture('codex-version.json', JSON.stringify({ pinned: pinnedCodex, installed: installedCodex }));
@@ -165,6 +184,8 @@ export function prepareSdkCampaign(draftPath: string, freezePath: string, team: 
 		execFileSync('git', ['-C', resolve(platform, 'packages', name), 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim()]));
 	captureSdkExternalState(platform, capture);
 	const preflight = read([...args, '--idempotency-key', `golden-plan:${id}`], team);
+	assert.equal(readFileSync(operatorFreeze.path, 'utf8'), operatorFreeze.bytes,
+		'ACCEPTANCE_CAMPAIGN_FREEZE: Operator manifest changed during preparation');
 	const current = read(['proposals', 'show', id, '--server', 'local', '--project', project], team, true);
 	writeFileSync(freezePath, JSON.stringify({ createdAt: new Date().toISOString(),
 		proposal: { id, revision: current.activeVersion, digest: current.activeContentHash, estimates: 0 }, request, preflight, sourceHeads,

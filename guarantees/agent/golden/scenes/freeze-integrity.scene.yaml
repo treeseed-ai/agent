@@ -3,6 +3,9 @@ id: agent.golden.freeze-integrity
 title: Frozen receipt integrity
 scope: local-integrated-runtime
 workflow:
+  - id: frozen-campaign-inputs
+    action: { verifier: agent.golden.live.campaign-freeze }
+    expect: { status: passed }
   - id: frozen-evidence
     action: { verifier: agent.golden.live.freeze-integrity }
     expect: { status: passed }

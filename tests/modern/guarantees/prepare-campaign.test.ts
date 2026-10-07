@@ -88,6 +88,33 @@ describe('fresh automated SDK campaign preparation (fixtures are not acceptance)
 			.toThrow('codex-research/shared-model has 1244 active seconds, requires 3600');
 		supply.availability[0]!.executionProviders[1] = provider('codex-research', 7_200, 0);
 		expect(() => requireSdkCampaignSupply(supply, 3_600, 100 / 3, now)).not.toThrow();
+		const valid = structuredClone(supply);
+		const outcomes: { channel: string; field: string; index: number; denied: boolean }[] = [];
+		for (const channel of ['modelUsage', 'planning'] as const) {
+			for (const field of ['activeSeconds', 'reservedSeconds'] as const) {
+				for (const [index, value] of [undefined, null, '', '0', '1', true, false, -1, NaN, Infinity, -Infinity, {}, []].entries()) {
+					const supplied = structuredClone(valid), observation = supplied.availability[0]!.executionProviders[0]!.accountingObservation;
+					const measured = channel === 'modelUsage' ? observation.modelUsage : observation.capabilityUsage['treeseed.coordination.planning'];
+					Reflect.set(measured, field, value);
+					const held = structuredClone(supplied);
+					let denied = false;
+					try { requireSdkCampaignSupply(supplied, 3_600, 100 / 3, now); }
+					catch (error) { denied = error instanceof Error && error.message.includes('ACCEPTANCE_CAMPAIGN_SUPPLY'); }
+					outcomes.push({channel,field,index,denied});
+					expect(supplied).toEqual(held);
+				}
+			}
+		}
+		// Real measured seconds may be fractional; validation must not round them
+		// or rewrite the public observation into a fabricated zero-usage history.
+		const fractional = structuredClone(valid);
+		fractional.availability[0]!.executionProviders[0]!.accountingObservation.modelUsage.activeSeconds = 0.125;
+		fractional.availability[0]!.executionProviders[0]!.accountingObservation.modelUsage.reservedSeconds = 0.25;
+		const fractionalHeld = structuredClone(fractional);
+		expect(() => requireSdkCampaignSupply(fractional, 3_600, 100 / 3, now)).not.toThrow();
+		expect(fractional).toEqual(fractionalHeld);
+		expect(outcomes).toHaveLength(52);
+		expect(outcomes.filter(outcome => !outcome.denied)).toEqual([]);
 		supply.availability.push({ executionProviders: [provider('codex-implementation', 43_200, 40_981)],
 			refreshed_at: '2026-09-28T19:58:56.000Z' });
 		expect(() => requireSdkCampaignSupply(supply, 3_600, 100 / 3, now)).not.toThrow();

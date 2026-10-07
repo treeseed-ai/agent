@@ -59,10 +59,31 @@ describe('original productive clock and actual first final tool boundary contrac
 	});
 	it('retains the same exact original productive window in both readings without changing the complete attempt', async () => {
 		const f = clockRequest(), before = structuredClone(f.input.assignment);
+		const began = Date.now();
 		const readings = await Promise.all([executeAssignmentTreeDxTool(f.input, 'treeseed_time_status', {}, f.execution),
 			executeAssignmentTreeDxTool(f.input, 'treeseed_time_status', {}, f.execution)]);
-		for (const value of readings) expect(value).toMatchObject({ startedAt: f.execution.startedAt, deadlineAt: f.attempt.deadline });
+		const ended = Date.now();
+		for (const value of readings) {
+			expect(value).toMatchObject({ startedAt: f.execution.startedAt, deadlineAt: f.attempt.deadline });
+			if (!value || typeof value !== 'object' || !('observedAt' in value) || !('remainingSeconds' in value)) throw new Error('Actual clock timestamp required.');
+			expect(typeof value.observedAt).toBe('string'); const observed = Date.parse(String(value.observedAt));
+			expect(observed).toBeGreaterThanOrEqual(began); expect(observed).toBeLessThanOrEqual(ended);
+			expect(value.remainingSeconds).toBe(Math.max(0, Math.ceil((Date.parse(f.attempt.deadline) - observed) / 1000)));
+		}
 		expect(f.input.assignment).toEqual(before);
+	});
+	it('rejects every caller supplied clock field without changing the original productive authority', async () => {
+		const f = clockRequest(), before = structuredClone(f.input.assignment), authority = structuredClone(f.execution), outcomes: boolean[] = [];
+		for (const field of ['now', 'observedAt', 'startedAt', 'deadlineAt', 'remainingSeconds', 'executionSeconds', 'closeoutSeconds']) {
+			for (const value of [undefined, null, 0, '2026-10-07T00:00:00.000Z', {}]) {
+				const args = { [field]: value }, held = structuredClone(args);
+				try { await executeAssignmentTreeDxTool(f.input, 'treeseed_time_status', args, f.execution); outcomes.push(false); }
+				catch (error) { outcomes.push(error instanceof Error && error.message.includes('Clock tool does not accept caller supplied arguments')); }
+				expect(args).toEqual(held); expect(Object.hasOwn(args, field)).toBe(true);
+			}
+		}
+		expect(outcomes).toEqual(Array(35).fill(true)); expect(f.input.assignment).toEqual(before); expect(f.execution).toEqual(authority);
+		expect(await executeAssignmentTreeDxTool(f.input, 'treeseed_time_status', {}, f.execution)).toMatchObject(authority);
 	});
 	it('denies a clock read before productive execution instead of inventing a start or charging preparation', async () => {
 		const f = clockRequest(), before = structuredClone(f.input.assignment);
@@ -92,7 +113,10 @@ describe('original productive clock and actual first final tool boundary contrac
 	it('reports zero remaining at the original expired boundary without increasing the allocation or retry allowance', async () => {
 		const f = clockRequest(); f.attempt.createdAt = '2000-01-01T00:00:00.000Z'; f.attempt.deadline = '2000-01-01T00:00:30.000Z';
 		const authority = { startedAt: f.attempt.createdAt, deadlineAt: f.attempt.deadline }, before = structuredClone(f.input.assignment);
-		expect(await executeAssignmentTreeDxTool(f.input, 'treeseed_time_status', {}, authority)).toEqual({ ...authority, remainingSeconds: 0 });
+		const began = Date.now(), value = await executeAssignmentTreeDxTool(f.input, 'treeseed_time_status', {}, authority), ended = Date.now();
+		expect(value).toEqual({ ...authority, remainingSeconds: 0, observedAt: expect.any(String) });
+		if (!value || typeof value !== 'object' || !('observedAt' in value)) throw new Error('Actual expired clock timestamp required.');
+		expect(Date.parse(String(value.observedAt))).toBeGreaterThanOrEqual(began); expect(Date.parse(String(value.observedAt))).toBeLessThanOrEqual(ended);
 		expect(f.input.assignment).toEqual(before);
 	});
 });

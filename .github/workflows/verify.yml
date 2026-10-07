@@ -14,7 +14,7 @@ jobs:
     permissions:
       contents: read
       actions: read
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     env:
       TREESEED_DEVELOPMENT_WORKSPACE_ROOT: ${{ github.workspace }}/.treeseed/platform-authority
     steps:
@@ -67,7 +67,13 @@ jobs:
         run: |
           set -euo pipefail
           sudo apt-get update
-          sudo apt-get install --yes bubblewrap
+          sudo apt-get install --yes bubblewrap apparmor
+          # Use Ubuntu's packaged per-application namespace policy; never
+          # disable AppArmor, relax its sysctl, or run the guest as host root.
+          test -f /etc/apparmor.d/bwrap-userns-restrict
+          sudo apparmor_parser -r /etc/apparmor.d/bwrap-userns-restrict
+          test "$(cat /proc/sys/kernel/apparmor_restrict_unprivileged_userns)" = 1
+          bwrap --unshare-user --unshare-pid --ro-bind / / /usr/bin/true
           relay_fixture=$(mktemp -d)
           trap 'rm -r "$relay_fixture"' EXIT
           openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj '/CN=capacity-agent-test-relay' -keyout "$relay_fixture/key.pem" -out "$relay_fixture/ca.pem"

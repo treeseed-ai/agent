@@ -281,7 +281,10 @@ export async function runSandboxGuest() {
 			await progress('workspace.dependencies.ready');
 		}
 	}
-	const codexHome = '/workspace/.treeseed/codex', responsePath = '/workspace/.treeseed/response.md'; await mkdir(codexHome, { recursive: true, mode: 0o700 });
+	const codexHome = '/workspace/.treeseed/codex', responsePath = '/workspace/.treeseed/response.md';
+	let relay: Awaited<ReturnType<typeof startModelRelay>> | null = null;
+	try {
+	await mkdir(codexHome, { recursive: true, mode: 0o700 });
 	await writeFile(resolve(codexHome,'config.toml'),codexTreeDxMcpConfig(sandboxId,operationToken,assignment),{mode:0o600});
 	const subscriptionAuth = await readFile(resolve(inputRoot, 'codex-auth.json')).catch(() => null);
 	if (assignment.network.allowedServices.includes('codex-subscription') && !subscriptionAuth) throw new Error('Authorized Codex subscription credential is missing from the guest input.');
@@ -291,7 +294,7 @@ export async function runSandboxGuest() {
 		// non-refreshing Codex process cannot strand the host credential updater.
 		await writeFile(resolve(outputRoot, 'codex-auth.json'), subscriptionAuth, { mode: 0o600, flag: 'wx' });
 	}
-	const relay = subscriptionAuth ? null : await startModelRelay(assignment, sandboxId, operationToken);
+	relay = subscriptionAuth ? null : await startModelRelay(assignment, sandboxId, operationToken);
 	const subscriptionProxy = subscriptionAuth ? assignmentProxy : null;
 	const reviewSecrets = [operationToken, ...(subscriptionAuth ? providerCredentialValues(JSON.parse(subscriptionAuth.toString('utf8'))) : [])];
 	await progress('workspace.release-review-verification.starting');
@@ -318,7 +321,6 @@ export async function runSandboxGuest() {
 		...relayEnvironment,
 		...(relay ? { OPENAI_BASE_URL: relay.baseUrl, OPENAI_API_KEY: 'treeseed-assignment-relay' } : {}),
 		...(subscriptionProxy ? { HTTPS_PROXY: subscriptionProxy, https_proxy: subscriptionProxy } : {}), LANG: 'C.UTF-8' };
-	try {
 		await progress('provider.starting');
 		const idleTimeoutMs = canonicalActivity === 'estimating' ? codexIdleTimeoutMs(assignment.resources.durationSeconds) : undefined;
 		const closeoutTimeoutMs = codexCloseoutTimeoutMs(assignment.resources.durationSeconds, canonicalActivity);

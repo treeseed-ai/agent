@@ -4,6 +4,24 @@ import { stringify } from 'yaml';
 import { state, gate, read, assignment, usageMeasurement, classes, workdayId, commit, type Row } from './architecture/golden-readback-fixture.ts';
 
 describe('golden read-back assertion regressions (fixtures are not live acceptance)', () => {
+	it('denies substituted truncated and prose-only report bodies against the exact frozen closeout evidence without repairing failed observations', () => {
+		const reporter = state.replies.get('assignments list')!.items.find((item: Row) => item.assignmentAttempt.effectiveProfile.activity === 'reporting');
+		const file = state.replies.get('library read')!.result.files[0], original = structuredClone(file);
+		const payload = JSON.parse(original.body.slice(8, -4)), held = structuredClone(reporter);
+		expect(() => gate('reporter')).not.toThrow(); const denied: boolean[] = [];
+		for (const mode of ['prose', 'truncated', 'classification', 'workday', 'assignment', 'snapshot', 'attempts', 'usage', 'predecessors', 'extra']) {
+			const changed = structuredClone(payload);
+			if (mode === 'classification') changed.classification = 'general'; if (mode === 'workday') changed.workdayId = 'foreign';
+			if (mode === 'assignment') changed.assignmentId = 'foreign'; if (mode === 'snapshot') changed.workday.teamId = 'foreign';
+			if (mode === 'attempts') changed.workday.attempts = []; if (mode === 'usage') changed.workday.usage = [];
+			if (mode === 'predecessors') changed.predecessorResults.pop(); if (mode === 'extra') changed.unowned = true;
+			file.body = mode === 'prose' ? `${workdayId} actor-0` : mode === 'truncated' ? `${workdayId} actor-0 {` : `\`\`\`json\n${JSON.stringify(changed)}\n\`\`\``;
+			const failed = structuredClone(file); let failure = false; try { gate('reporter'); } catch { failure = true; }
+			denied.push(failure); expect(file).toEqual(failed); expect(reporter).toEqual(held);
+		}
+		file.body = original.body; expect(() => gate('reporter')).not.toThrow(); expect(file).toEqual(original);
+		expect(denied).toEqual(Array(10).fill(true));
+	});
 	it('denies recorded model dispatch for the exact renamed reporting assignment across complete immutable workday event pages', () => {
 		const reporter = state.replies.get('assignments list')!.items.find((item: Row) => item.assignmentAttempt.effectiveProfile.activity === 'reporting');
 		reporter.assignmentAttempt.agentClass = 'arbitrary-closeout-identity';

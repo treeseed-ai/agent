@@ -27,6 +27,39 @@ describe('sandbox broker preparation authority', () => {
 });
 
 describe('sandbox broker control transport', () => {
+	it('native microvm denies invalid issued productive authority before any broker execution while retaining the original assignment and closing allocated resources', async () => {
+		const outcomes: Array<{ mode: string; executed: number; clockClosed: number; started: number; failed: boolean }> = [];
+		for (const mode of ['missing', 'object', 'malformed', 'before-admission', 'future', 'reversed', 'beyond-phase', 'over-duration', 'expired']) {
+			const f = await microvmBroker();
+			try {
+				const attempt = assignmentAttemptSchema.parse(f.input.assignment.assignmentAttempt);
+				let executionStartedAt: unknown = attempt.createdAt, executionDeadlineAt: unknown = attempt.deadline;
+				if (mode === 'missing') executionStartedAt = undefined;
+				if (mode === 'object') executionStartedAt = new Date(attempt.createdAt);
+				if (mode === 'malformed') executionDeadlineAt = 'not-a-clock';
+				if (mode === 'before-admission') executionStartedAt = new Date(Date.parse(attempt.createdAt) - 1).toISOString();
+				if (mode === 'future') executionStartedAt = new Date(Date.parse(attempt.deadline) - 1_000).toISOString();
+				if (mode === 'reversed') executionDeadlineAt = attempt.createdAt;
+				if (mode === 'beyond-phase') executionDeadlineAt = new Date(Date.parse(attempt.deadline) + 1).toISOString();
+				if (mode === 'over-duration') { attempt.limits.maximumSeconds = 3; f.input.assignment.assignmentAttempt = attempt; }
+				if (mode === 'expired') {
+					attempt.createdAt = new Date(Date.now() - 10_000).toISOString(); f.input.assignment.assignmentAttempt = attempt;
+					executionStartedAt = attempt.createdAt; executionDeadlineAt = new Date(Date.now() - 1_000).toISOString();
+				}
+				const supplied = { capacityEnvelope: { budget: { time: { executionStartedAt, executionDeadlineAt } } } }, held = structuredClone(supplied), before = structuredClone(f.input.assignment);
+				f.input.beginExecution = async () => supplied; let failure: unknown;
+				try { await f.executor.execute(f.input); } catch (error) { failure = error; }
+				outcomes.push({ mode, executed: f.paths.filter(path => path.endsWith('/execute')).length,
+					clockClosed: f.counters().finishCalls, started: f.events.filter(event => event.type === 'execution.started').length, failed: failure instanceof Error });
+				expect(supplied).toEqual(held); expect(f.input.assignment).toEqual(before);
+				expect(f.paths.filter(path => path.startsWith('DELETE '))).toEqual(['DELETE /v1/sandboxes/owned-native-sandbox']);
+			} finally { await f.close(); }
+			expect(f.server.listening).toBe(false); await expect(stat(f.directory)).rejects.toMatchObject({ code: 'ENOENT' });
+		}
+		expect(outcomes).toEqual(outcomes.map(({ mode }) => ({ mode, executed: 0, clockClosed: 1, started: 0, failed: true })));
+		// Native original executor/Unix/signing/custody; supplied API windows are
+		// denial inputs, not actual governance/model usage or physical Kata proof.
+	});
 	it('native original Kernel and microvm preserve the issued shorter productive clock separately from immutable phase authority through exact event readback', async () => {
 		const f = await microvmBroker();
 		try {

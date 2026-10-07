@@ -3,6 +3,12 @@ id: agent.golden.component-boundaries
 title: Golden execution component boundaries
 scope: local-component-tests
 workflow:
+  - id: execution-issued-window-unit
+    action: { verifier: agent.golden.execution-issued-window-unit }
+    expect: { status: passed }
+  - id: execution-issued-window-native
+    action: { verifier: agent.golden.execution-issued-window-native }
+    expect: { status: passed }
   - id: execution-active-materialization-unit
     action: { verifier: agent.golden.execution-active-materialization-unit }
     expect: { status: passed }

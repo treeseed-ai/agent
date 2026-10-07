@@ -1,6 +1,16 @@
 schemaVersion: treeseed.guarantee-verifiers/v1
 ownerPackage: "@treeseed/agent"
 verifiers:
+  agent.golden.execution-issued-window-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/microvm-result-authority.test.ts
+    testName: "denies missing malformed future expired and widened issued productive authority before executor work and closes the original clock without repairing inputs"
+  agent.golden.execution-issued-window-native:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/sandbox-broker-preparation.test.ts
+    testName: "native microvm denies invalid issued productive authority before any broker execution while retaining the original assignment and closing allocated resources"
   agent.golden.execution-active-materialization-unit:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

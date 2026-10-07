@@ -59,14 +59,15 @@ function contextBuildBody(value:Record<string,unknown>) {
 }
 export async function executeAssignmentTreeDxTool(request:Parameters<AgentExecutor['execute']>[0],tool:string,arguments_:Record<string,unknown>, executionTime?: { startedAt: string; deadlineAt: string }) {
 	if (tool === 'treeseed_time_status') {
+		if (Object.keys(arguments_).length) throw new Error('Clock tool does not accept caller supplied arguments.');
 		if (!executionTime) throw new Error('Productive execution has not started.');
 		const attempt = assignmentAttemptSchema.parse(request.assignment.assignmentAttempt ?? object(request.assignment.workspaceContext).assignmentAttempt);
-		const start = Date.parse(executionTime.startedAt), end = Date.parse(executionTime.deadlineAt);
-		if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start || start > Date.now()
+		const start = Date.parse(executionTime.startedAt), end = Date.parse(executionTime.deadlineAt), observed = Date.now();
+		if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start || start > observed
 			|| start < Date.parse(attempt.createdAt) || end > Date.parse(attempt.deadline)
 			|| end - start > attempt.limits.maximumSeconds * 1_000) throw new Error('Assignment productive execution clock is invalid.');
-		return { startedAt: executionTime.startedAt, deadlineAt: executionTime.deadlineAt,
-			remainingSeconds: Math.max(0, Math.ceil((Date.parse(executionTime.deadlineAt) - Date.now()) / 1_000)) };
+		return { startedAt: executionTime.startedAt, deadlineAt: executionTime.deadlineAt, observedAt: new Date(observed).toISOString(),
+			remainingSeconds: Math.max(0, Math.ceil((end - observed) / 1_000)) };
 	}
 	const attempt=object(request.assignment.assignmentAttempt??object(request.assignment.workspaceContext).assignmentAttempt);
 	const assignmentGrant=object(attempt.grant);

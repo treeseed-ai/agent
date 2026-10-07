@@ -373,6 +373,7 @@ describe('sandbox broker control transport', () => {
 			try {
 				const observed = new Promise<void>((resolve, reject) => { watchdog = setTimeout(() => reject(new Error('Original native cancellation not observed')), 2_000);
 					cancelledRequest.then(resolve, reject); });
+				const clockBegan = Date.now();
 				stop = startSandboxToolPump(fixture.client, { sandboxId: 'sandbox', operationToken: 'test-operation' }, input, time, () => {
 					cancellation = fixture.client.cancel('sandbox', 'test-operation').catch(error => { cancelFailure = error; });
 				});
@@ -383,7 +384,17 @@ describe('sandbox broker control transport', () => {
 				if (fault === 'reset') expect(failure).toMatchObject({ code: 'ECONNRESET' });
 				expect(paths).toEqual(operation === 'poll' ? ['/v1/sandboxes/sandbox/tool-requests/next', '/v1/sandboxes/sandbox/cancel']
 					: ['/v1/sandboxes/sandbox/tool-requests/next', '/v1/sandboxes/sandbox/tool-requests/tool-clock', '/v1/sandboxes/sandbox/cancel']);
-				expect(bodies).toEqual(operation === 'poll' ? ['', ''] : ['', JSON.stringify({ result: { ...time, remainingSeconds: 0 } }), '']);
+				if (operation === 'poll') expect(bodies).toEqual(['', '']);
+				else {
+					const payload = JSON.parse(bodies[1]!) as unknown;
+					expect(payload).toEqual({ result: { ...time, remainingSeconds: 0, observedAt: expect.any(String) } });
+					if (!payload || typeof payload !== 'object' || !('result' in payload) || !payload.result || typeof payload.result !== 'object'
+						|| !('observedAt' in payload.result) || typeof payload.result.observedAt !== 'string') throw new Error('Actual native clock timestamp required.');
+					const observed = Date.parse(payload.result.observedAt);
+					expect(new Date(observed).toISOString()).toBe(payload.result.observedAt);
+					expect(observed).toBeGreaterThanOrEqual(clockBegan); expect(observed).toBeLessThanOrEqual(Date.now());
+					expect(bodies).toEqual(['', JSON.stringify({ result: { ...time, observedAt: payload.result.observedAt, remainingSeconds: 0 } }), '']);
+				}
 				expect(input.assignment).toEqual(before);
 			} finally {
 				if (watchdog) clearTimeout(watchdog); await stop?.(); await cancellation; await fixture.close();

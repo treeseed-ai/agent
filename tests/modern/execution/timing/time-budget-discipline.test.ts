@@ -47,9 +47,10 @@ describe('ongoing authoritative time-budget discipline', () => {
 			limits: { ...original.limits, maximumSeconds: 180 } });
 		input.assignment = { ...input.assignment, assignmentAttempt: attempt };
 		for (const [at, remainingSeconds] of [['20:20:00', 180], ['20:21:20', 100], ['20:22:30', 30], ['20:23:01', 0]] as const) {
-			vi.setSystemTime(new Date(`2026-10-01T${at}.000Z`));
+			const observedAt = `2026-10-01T${at}.000Z`;
+			vi.setSystemTime(new Date(observedAt));
 			await expect(executeAssignmentTreeDxTool(input, 'treeseed_time_status', {}, { startedAt, deadlineAt }))
-				.resolves.toEqual({ startedAt, deadlineAt, remainingSeconds });
+				.resolves.toEqual({ startedAt, deadlineAt, remainingSeconds, observedAt });
 		}
 		await expect(executeAssignmentTreeDxTool(input, 'treeseed_time_status', {})).rejects.toThrow('Productive execution has not started');
 	});

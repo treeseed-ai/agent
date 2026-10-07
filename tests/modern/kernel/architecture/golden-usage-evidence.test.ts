@@ -24,6 +24,22 @@ function outcomes(candidates: Row[]): string[] {
 // UNIT tests OF actual managed settlement assertions. Supplied measurement DTOs
 // are not actual provider usage, canonical UsageSettlements or real settlement receipts.
 describe('complete scoped measured usage evidence for managed settlement', () => {
+	it('denies contradictory normalized and native token counts without changing supplied settlement observations', () => {
+		const original = structuredClone(usage()), first = original.items[0], item = assignments().find(value => value.id === first.assignmentId)!;
+		const native = structuredClone(item.assignmentResult.usage.native), denied: boolean[] = [];
+		for (const [normalized, raw] of [['inputTokens', 'input_tokens'], ['outputTokens', 'output_tokens'],
+			['cachedInputTokens', 'cached_input_tokens'], ['reasoningTokens', 'reasoning_output_tokens']]) {
+			item.assignmentResult.usage.native = { ...native, [raw!]: 7 };
+			const exact = { ...first, [normalized!]: 7, nativeUsage: { ...first.nativeUsage, [raw!]: 7 } };
+			state.usagePages = [page(ordered([exact, ...original.items.slice(1)]))]; expect(() => gate('settlement')).not.toThrow();
+			const changed = { ...exact, [normalized!]: 8 }, before = structuredClone(changed);
+			state.usagePages = [page(ordered([changed, ...original.items.slice(1)]))]; let failure = '';
+			try { gate('settlement'); } catch (error) { failure = String(error); }
+			denied.push(failure.includes('ACCEPTANCE_USAGE_NATIVE_COUNTER')); expect(changed).toEqual(before);
+		}
+		item.assignmentResult.usage.native = native; state.usagePages = [original]; expect(() => gate('settlement')).not.toThrow();
+		expect(denied).toEqual([true, true, true, true]);
+	});
 	it('denies incomplete malformed or unmeasured verification records on every completed result without rewriting failed observations', () => {
 		const valid = { command: 'npm run test:contracts', status: 'failed', exitCode: 1,
 			outputDigest: `sha256:${'a'.repeat(64)}`, durationSeconds: 0 };

@@ -61,8 +61,10 @@ export function verifyModelClockEvidence(item: Row, event: Row): void {
 	const events = raw.map(row), actual = timingAwarenessContract(events);
 	assert.ok(isDeepStrictEqual(actual, result.timingAwareness) && actual.completedChecks >= 2 && actual.firstToolCompliant && actual.finalToolCompliant,
 		'ACCEPTANCE_MODEL_CLOCK_RECEIPT: Actual retained model actions must match the canonical receipt');
-	const deadline = Date.parse(String(attempt.deadline)), started = Date.parse(String(time.executionStartedAt)), completed = Date.parse(String(result.completedAt));
-	assert.ok([deadline, started, completed].every(Number.isFinite) && started <= completed && completed <= deadline, 'ACCEPTANCE_MODEL_CLOCK_WINDOW');
+	const phaseDeadline = Date.parse(String(attempt.deadline)), deadline = Date.parse(String(time.executionDeadlineAt)),
+		started = Date.parse(String(time.executionStartedAt)), completed = Date.parse(String(result.completedAt));
+	assert.ok([phaseDeadline, deadline, started, completed].every(Number.isFinite) && started < deadline
+		&& deadline <= phaseDeadline && started <= completed && completed < deadline, 'ACCEPTANCE_MODEL_CLOCK_WINDOW');
 	assert.ok(Number.isFinite(Date.parse(String(event.createdAt))) && Date.parse(String(event.createdAt)) >= completed, 'ACCEPTANCE_MODEL_CLOCK_REPORTING');
 	const ids = new Set<string>(), pending = new Set<string>(); let previous = -Infinity, checked = false;
 	for (const action of events) {
@@ -71,7 +73,7 @@ export function verifyModelClockEvidence(item: Row, event: Row): void {
 		if (action.type !== 'item.completed') continue;
 		if (value.type === 'mcp_tool_call' && value.server === 'treedx' && value.tool === 'treeseed_time_status') {
 			const reading = clockReading(value.result); assert.ok(reading, 'ACCEPTANCE_MODEL_CLOCK_READING');
-			assert.equal(reading.startedAt, time.executionStartedAt); assert.equal(reading.deadlineAt, attempt.deadline);
+			assert.equal(reading.startedAt, time.executionStartedAt); assert.equal(reading.deadlineAt, time.executionDeadlineAt);
 			const observed = Date.parse(reading.observedAt);
 			assert.ok(observed >= started && observed >= previous && observed <= completed && reading.remainingSeconds > 0,
 				'ACCEPTANCE_MODEL_CLOCK_TIMESTAMP: Original live observation must precede completion and not regress');

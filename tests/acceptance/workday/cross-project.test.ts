@@ -7,7 +7,7 @@ import { readWorkdayAssignments, verifyGolden } from '../sdk-runtime-golden.test
 import { exactFileKey, verifyCrossProjectCustody } from './support/cross-project-custody.ts';
 import { readCompleteEvidence } from './support/evidence-pages.ts';
 import { publicCanonicalRecords, verifyTerminalRecordCustody } from './support/record-custody.ts';
-import { readPortfolioAuthority, verifyPortfolioRelations } from './support/portfolio-relations.ts';
+import { readPortfolioAuthority, readPortfolioLibraries, verifyPortfolioRelations } from './support/portfolio-relations.ts';
 
 function observe() {
 	const id = process.env.TREESEED_ACCEPTANCE_WORKDAY_ID ?? ''; assert.match(id, /^workday-[a-f0-9-]+$/u);
@@ -63,8 +63,7 @@ test('Cross-project managed repeated public note decision graph and assignment r
 
 function observePortfolio() {
 	const authority = readPortfolioAuthority(), actual = observe();
-	const bindings = new Map<string, Row>();
-	for (const project of authority.expected.projects) bindings.set(project.slug, read(['projects', 'treedx', 'show', project.slug], actual.team));
+	const bindings = readPortfolioLibraries(authority.expected.projects.map(project => project.slug), actual.team);
 	verifyPortfolioRelations(authority.expected, bindings, actual.graph, actual.items, actual.id);
 	assert.deepEqual(readPortfolioAuthority(), authority);
 	return { authority, bindings: [...bindings.entries()], actual };

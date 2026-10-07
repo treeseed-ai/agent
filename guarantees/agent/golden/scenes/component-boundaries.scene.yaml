@@ -3,6 +3,15 @@ id: agent.golden.component-boundaries
 title: Golden execution component boundaries
 scope: local-component-tests
 workflow:
+  - id: execution-library-binding-native-1
+    action: { verifier: agent.golden.execution-library-binding-native-1 }
+    expect: { status: passed }
+  - id: execution-library-binding-unit-1
+    action: { verifier: agent.golden.execution-library-binding-unit-1 }
+    expect: { status: passed }
+  - id: execution-library-binding-unit-2
+    action: { verifier: agent.golden.execution-library-binding-unit-2 }
+    expect: { status: passed }
   - id: campaign-freeze-preparation-unit
     action: { verifier: agent.golden.campaign-freeze-preparation-unit }
     expect: { status: passed }

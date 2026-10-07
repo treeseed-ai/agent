@@ -121,7 +121,7 @@ it('uses the original operator proposal and start and denies changed CLI intent 
 	state.files.set('/supplied-platform/seeds/treeseed.yaml', seed); state.files.set('/draft.json', JSON.stringify(template));
 	state.writes.mockImplementation((path: string, bytes: string) => state.files.set(path, bytes));
 	for (const scenario of ['intent-drift', 'policy-drift', 'project-drift', 'lookup-team-drift', 'lookup-slug-drift', 'lookup-repository-missing', 'lookup-denied', 'unchanged']) {
-		state.bytes = JSON.stringify(supplied); state.writes.mockClear(); state.commands.mockClear();
+		state.bytes = JSON.stringify(supplied); state.writes.mockClear(); state.commands.mockClear(); state.execute.mockClear(); state.publicRead.mockClear();
 		state.execute.mockImplementation((command: string, args: string[]) => command.endsWith('/codex') ? 'codex-cli 0.158.0'
 			: args.includes('rev-parse') || command === 'gh' ? head : 'Controlled external baseline');
 		state.publicRead.mockImplementation((args: string[]) => {

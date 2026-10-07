@@ -5,7 +5,7 @@ import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, join, resolve } from 'node:path';
 import { read } from './acceptance-cli.ts';
 import { freshSdkDraft, requirePlanningWindow, sdkProposalText, sdkCampaignWindow } from './campaign.ts';
-import { readPreRunCampaignFreeze, verifyRuntimeClosure } from './freeze-integrity.ts';
+import { readCampaignProjectLibraries, readPreRunCampaignFreeze, verifyRuntimeClosure } from './freeze-integrity.ts';
 
 type Row = Record<string, any>;
 export function requirePinnedCodex(pinned: string, installed: string): void {
@@ -105,6 +105,7 @@ export function prepareSdkCampaign(draftPath: string, freezePath: string, team: 
 	const platform = process.env.TREESEED_ACCEPTANCE_PLATFORM_PATH;
 	assert.ok(platform && existsSync(join(platform, 'docs/agent-acceptance.md')),
 		'ACCEPTANCE_CAMPAIGN_WORKSPACE: Explicit Platform workspace required');
+	readCampaignProjectLibraries(operatorFreeze.manifest, team);
 	const agentPath = resolve(platform, 'packages/agent');
 	const pinnedCodex = (JSON.parse(readFileSync(join(agentPath, 'package.json'), 'utf8')) as Row).dependencies['@openai/codex'] as string;
 	const installedCodex = execFileSync(join(agentPath, 'node_modules/.bin/codex'), ['--version'], { encoding: 'utf8', timeout: 30_000 }).trim();

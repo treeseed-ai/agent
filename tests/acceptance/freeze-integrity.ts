@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { workdayIntentRequestSchema } from '@treeseed/sdk/operator-contracts';
 import { workdayPolicySchema } from '@treeseed/sdk/agent-capacity';
-import { portfolioRelations } from './workday/support/portfolio-relations.ts';
+import { portfolioRelations, readPortfolioLibraries } from './workday/support/portfolio-relations.ts';
 
 type Row = Record<string, unknown>;
 const row = (value: unknown): Row => value && typeof value === 'object' && !Array.isArray(value) ? value as Row : {};
@@ -87,6 +87,16 @@ export function readPreRunCampaignFreeze() {
 		verifyPreRunCampaignInputs(manifest, expected.projects.map(project => project.slug));
 	} catch (cause) { throw new Error('ACCEPTANCE_CAMPAIGN_FREEZE: Invalid expanded operator authority', { cause }); }
 	return { path, bytes, manifest: row(manifest), sdkInput: row(row(row(manifest).allocationInputsByRun).sdk).input };
+}
+
+export function readCampaignProjectLibraries(manifest: Row, team: string): Map<string, Row> {
+	const fail = 'ACCEPTANCE_CAMPAIGN_FREEZE: Frozen project differs from live public library authority';
+	assert.ok(Array.isArray(manifest.proposals), fail);
+	const proposals = manifest.proposals.map(row);
+	const slugs = proposals.map(proposal => { assert.ok(typeof proposal.slug === 'string', fail); return proposal.slug; });
+	const bindings = readPortfolioLibraries(slugs, team);
+	for (const proposal of proposals) assert.equal(bindings.get(String(proposal.slug))?.projectId, proposal.projectId, fail);
+	return bindings;
 }
 
 export function verifyRuntimeClosure(host: Row, guest: Row): void {

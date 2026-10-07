@@ -209,9 +209,18 @@ export async function createMicrovmExecutor(config: ProviderHostRuntimeConfig, m
 					if (!request.beginExecution) throw new Error('Productive execution start authority is unavailable.');
 					const startedAssignment = await request.beginExecution();
 					const executionTime = object(object(object(startedAssignment.capacityEnvelope).budget).time);
-					const executionStartedAt = String(executionTime.executionStartedAt ?? '');
-					const executionDeadlineAt = String(executionTime.executionDeadlineAt ?? '');
-					if (!Number.isFinite(Date.parse(executionStartedAt)) || !Number.isFinite(Date.parse(executionDeadlineAt))) throw new Error('API execution start omitted its authoritative productive window.');
+					const executionStartedAt = typeof executionTime.executionStartedAt === 'string' ? executionTime.executionStartedAt : '';
+					const executionDeadlineAt = typeof executionTime.executionDeadlineAt === 'string' ? executionTime.executionDeadlineAt : '';
+					try {
+						if (!Number.isFinite(Date.parse(executionStartedAt)) || !Number.isFinite(Date.parse(executionDeadlineAt))) throw new Error('API execution start omitted its authoritative productive window.');
+						// Reuse the owning clock bounds, without recording a model action.
+						const clock = object(await executeAssignmentTreeDxTool(request, 'treeseed_time_status', {}, { startedAt: executionStartedAt, deadlineAt: executionDeadlineAt }));
+						if (clock.remainingSeconds === 0) throw new Error('Assignment productive execution window expired.');
+					} catch (error) {
+						try { await request.finishExecution?.(); }
+						catch (closeoutError) { throw Object.assign(error instanceof Error ? error : new Error(String(error)), { cause: closeoutError }); }
+						throw error;
+					}
 					await request.emit?.({ type: 'execution.started', occurredAt: new Date().toISOString(), summary: `Kata execution started in ${prepared.sandboxId}.`, payload: { sandboxId: prepared.sandboxId, model: assignment.modelPolicy.model, isolation: 'microvm' } });
 					let toolFailure: Error | undefined;
 					let executionFailure: unknown;

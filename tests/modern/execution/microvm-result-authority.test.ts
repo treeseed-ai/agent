@@ -67,6 +67,39 @@ async function suppliedMicrovm() {
 }
 
 describe('microvm result and closeout authority', () => {
+	it('denies missing malformed future expired and widened issued productive authority before executor work and closes the original clock without repairing inputs', async () => {
+		const outcomes: Array<{ mode: string; executed: number; clockClosed: number; started: number; message: string; closeoutCause: boolean }> = [];
+		for (const mode of ['missing', 'object', 'malformed', 'before-admission', 'future', 'reversed', 'beyond-phase', 'over-duration', 'expired', 'close-denied']) {
+			const f = await suppliedMicrovm(), attempt = assignmentAttemptSchema.parse(f.input.assignment.assignmentAttempt);
+			let executionStartedAt: unknown = attempt.createdAt, executionDeadlineAt: unknown = attempt.deadline;
+			if (mode === 'missing') executionStartedAt = undefined;
+			if (mode === 'close-denied') { executionStartedAt = undefined; f.input.finishExecution = vi.fn(async () => { throw new Error('Original execution close denied.'); }); }
+			if (mode === 'object') executionStartedAt = new Date(attempt.createdAt);
+			if (mode === 'malformed') executionDeadlineAt = 'not-a-clock';
+			if (mode === 'before-admission') executionStartedAt = new Date(Date.parse(attempt.createdAt) - 1).toISOString();
+			if (mode === 'future') executionStartedAt = new Date(Date.parse(attempt.deadline) - 1_000).toISOString();
+			if (mode === 'reversed') executionDeadlineAt = attempt.createdAt;
+			if (mode === 'beyond-phase') executionDeadlineAt = new Date(Date.parse(attempt.deadline) + 1).toISOString();
+			if (mode === 'over-duration') {
+				attempt.limits.maximumSeconds = 3; f.input.assignment.assignmentAttempt = attempt;
+			}
+			if (mode === 'expired') {
+				attempt.createdAt = new Date(Date.now() - 10_000).toISOString(); f.input.assignment.assignmentAttempt = attempt;
+				executionStartedAt = attempt.createdAt; executionDeadlineAt = new Date(Date.now() - 1_000).toISOString();
+			}
+			const supplied = { capacityEnvelope: { budget: { time: { executionStartedAt, executionDeadlineAt } } } }, held = structuredClone(supplied), before = structuredClone(f.input.assignment);
+			f.input.beginExecution = vi.fn(async () => supplied); let failure: unknown;
+			try { await f.executor.execute(f.input); } catch (error) { failure = error; }
+			outcomes.push({ mode, executed: f.client.execute.mock.calls.length, clockClosed: vi.mocked(f.input.finishExecution!).mock.calls.length,
+				started: vi.mocked(f.input.emit!).mock.calls.filter(([event]) => event.type === 'execution.started' || event.type === 'execution.completed').length,
+				message: failure instanceof Error ? failure.message : '', closeoutCause: failure instanceof Error && failure.cause instanceof Error && failure.cause.message === 'Original execution close denied.' });
+			expect(f.client.destroy).toHaveBeenCalledTimes(1); expect(f.cleanup).toHaveBeenCalledTimes(1);
+			expect(supplied).toEqual(held); expect(f.input.assignment).toEqual(before);
+		}
+		expect(outcomes).toEqual(outcomes.map(({ mode }) => ({ mode, executed: 0, clockClosed: 1, started: 0, closeoutCause: mode === 'close-denied',
+			message: ['missing', 'object', 'malformed', 'close-denied'].includes(mode) ? 'API execution start omitted its authoritative productive window.'
+				: mode === 'expired' ? 'Assignment productive execution window expired.' : 'Assignment productive execution clock is invalid.' })));
+	});
 	it('retains exact failed cancelled and expired model clock usage and resource observations without fabricating missing receipts or successful completion', async () => {
 		for (const status of ['failed', 'cancelled', 'expired'] as const) for (const hasReceipt of [true, false]) {
 			const f = await suppliedMicrovm(), original = sandboxResultSchema.parse(f.result());

@@ -154,6 +154,7 @@ export async function executeKernelAssignment(input: {
 			return executionStart;
 		} };
 	const transport = { result: null as AgentExecutionResult | null, pending: null as Promise<AgentExecutionResult> | null };
+	let modelFailure: Error | undefined;
 	const runtime: AgentRuntime = {
 		now: () => new Date().toISOString(),
 		readContext: async (ref) => {
@@ -171,7 +172,9 @@ export async function executeKernelAssignment(input: {
 			if (transport.result.status === 'abstained' && attempt.data.effectiveProfile.activity !== 'chat')
 				throw Object.assign(new Error(transport.result.summary), { code: 'agent_abstained' });
 			if (!['completed', 'responded', 'abstained'].includes(transport.result.status)) {
-				throw Object.assign(new Error(transport.result.summary), { code: transport.result.code });
+				const failure = Object.assign(new Error(transport.result.summary), { code: transport.result.code });
+				if (transport.result.status === 'failed') modelFailure = failure;
+				throw failure;
 			}
 			const usage = canonicalExecutionUsage(transport.result.usage);
 			const references = Array.isArray(record(transport.result.outputs).contentReferences)
@@ -281,7 +284,7 @@ export async function executeKernelAssignment(input: {
 				...evidence };
 		}
 		const code = typeof (error as { code?: unknown })?.code === 'string' ? String((error as { code: string }).code) : 'agent_kernel_failed';
-		if (transport.result?.status === 'failed' && executionStart) {
+		if (!revoked && error === modelFailure && transport.result?.status === 'failed' && executionStart) {
 			// Only observed model measurements can produce a canonical failed result.
 			// Invalid or absent observations remain raw failed evidence, never guesses.
 			try {

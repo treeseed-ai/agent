@@ -66,6 +66,8 @@ jobs:
       - name: Prepare disposable native relay CA
         run: |
           set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install --yes bubblewrap
           relay_fixture=$(mktemp -d)
           trap 'rm -r "$relay_fixture"' EXIT
           openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj '/CN=capacity-agent-test-relay' -keyout "$relay_fixture/key.pem" -out "$relay_fixture/ca.pem"

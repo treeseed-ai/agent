@@ -320,16 +320,18 @@ export async function runSandboxGuest() {
 		...(subscriptionProxy ? { HTTPS_PROXY: subscriptionProxy, https_proxy: subscriptionProxy } : {}), LANG: 'C.UTF-8' };
 	try {
 		await progress('provider.starting');
+		const idleTimeoutMs = canonicalActivity === 'estimating' ? codexIdleTimeoutMs(assignment.resources.durationSeconds) : undefined;
+		const closeoutTimeoutMs = codexCloseoutTimeoutMs(assignment.resources.durationSeconds, canonicalActivity);
 		await execute('/usr/local/bin/codex', providerArguments, {
 			cwd: '/workspace/project', input: composedPrompt, env: providerEnvironment,
 			timeoutMs: codexInteractiveTimeoutMs(assignment.resources.durationSeconds),
-			idleTimeoutMs: canonicalActivity === 'estimating' ? codexIdleTimeoutMs(assignment.resources.durationSeconds) : undefined,
-			closeoutTimeoutMs: codexCloseoutTimeoutMs(assignment.resources.durationSeconds, canonicalActivity),
+			...(idleTimeoutMs === undefined ? {} : { idleTimeoutMs }),
+			...(closeoutTimeoutMs === undefined ? {} : { closeoutTimeoutMs }),
 			canInterrupt: () => Boolean(providerThreadId && timingTracker.firstToolSucceeded && !codexToolInFlight(events)),
 			onLine(line) { let event: Record<string, unknown>; try { event = record(JSON.parse(line)); } catch { event = { type: 'provider.event.invalid', digest: createHash('sha256').update(line).digest('hex') }; }
 				providerThreadId ??= codexThreadId([event]);
 				const executionProgress = providerExecutionProgress(event); if (executionProgress) void progress(executionProgress).catch(() => undefined);
-				observeTimingAwarenessEvent(timingTracker, event); events.push(event); if (events.length > 256) events.shift(); },
+				observeTimingAwarenessEvent(timingTracker, event); events.push(event); },
 		}).catch(error => {
 			if (error instanceof Error && error.message === 'codex_closeout_interrupted') { closeoutInterrupted = true; return; }
 			const secrets = [operationToken, ...(subscriptionAuth ? providerCredentialValues(JSON.parse(subscriptionAuth.toString('utf8'))) : [])];
@@ -347,15 +349,16 @@ export async function runSandboxGuest() {
 				...(structuredCompletion ? ['--output-schema', completionSchemaPath] : []),
 				'--output-last-message', responsePath, '-'];
 			let finalCloseoutInterrupted = false;
+			const resumeIdleTimeoutMs = codexResumeIdleTimeoutMs(remainingMs);
 			await execute('/usr/local/bin/codex', resumeArguments, {
 				cwd: '/workspace/project', env: providerEnvironment,
 				input: `The prior turn was interrupted to preserve closeout time after its completed tools. Continue this SAME assignment using only evidence already inspected. Do not repeat inspection or start new work. You have at most ${Math.floor(remainingMs / 1_000)} seconds including closeout; the original deadline has not moved. Your NEXT and FINAL tool action must call mcp__treedx__treeseed_time_status through functions.exec with: text(await tools.mcp__treedx__treeseed_time_status({}));. Then immediately produce ${structuredCompletion ? 'the required structured result' : 'the substantive discussion reply'}. If evidence is insufficient, say so honestly rather than waiting for the deadline.`,
 				timeoutMs: Math.floor(remainingMs),
-				...(canonicalActivity === 'estimating' ? { idleTimeoutMs: codexResumeIdleTimeoutMs(remainingMs),
+				...(canonicalActivity === 'estimating' ? { ...(resumeIdleTimeoutMs === undefined ? {} : { idleTimeoutMs: resumeIdleTimeoutMs }),
 					canInterrupt: () => timingTracker.firstToolSucceeded && !codexToolInFlight(events) } : {}),
 				onLine(line) { let event: Record<string, unknown>; try { event = record(JSON.parse(line)); } catch { event = { type: 'provider.event.invalid', digest: createHash('sha256').update(line).digest('hex') }; }
 					const executionProgress = providerExecutionProgress(event); if (executionProgress) void progress(executionProgress).catch(() => undefined);
-					observeTimingAwarenessEvent(timingTracker, event); events.push(event); if (events.length > 256) events.shift(); },
+					observeTimingAwarenessEvent(timingTracker, event); events.push(event); },
 			}).catch(error => {
 				if (error instanceof Error && error.message === 'codex_closeout_interrupted') { finalCloseoutInterrupted = true; return; }
 				throw error;
@@ -370,7 +373,7 @@ export async function runSandboxGuest() {
 					timeoutMs: Math.floor(finalRemainingMs),
 					onLine(line) { let event: Record<string, unknown>; try { event = record(JSON.parse(line)); } catch { event = { type: 'provider.event.invalid', digest: createHash('sha256').update(line).digest('hex') }; }
 					const executionProgress = providerExecutionProgress(event); if (executionProgress) void progress(executionProgress).catch(() => undefined);
-					observeTimingAwarenessEvent(timingTracker, event); events.push(event); if (events.length > 256) events.shift(); },
+					observeTimingAwarenessEvent(timingTracker, event); events.push(event); },
 				});
 				await progress('provider.final-closeout-recovery.completed');
 			}
@@ -398,7 +401,7 @@ export async function runSandboxGuest() {
 				input: 'The substantive response was already captured. Do not inspect or change files and do not repeat the task. Your NEXT and ONLY tool action must call mcp__treedx__treeseed_time_status using functions.exec with: text(await tools.mcp__treedx__treeseed_time_status({}));. After the successful clock result, return {"ack":"done"} without any other tool action.',
 				timeoutMs: Math.floor(remainingMs),
 				onLine(line) { let event: Record<string, unknown>; try { event = record(JSON.parse(line)); } catch { event = { type: 'provider.event.invalid', digest: createHash('sha256').update(line).digest('hex') }; }
-					observeTimingAwarenessEvent(timingTracker, event); events.push(event); recoveryEvents.push(event); if (events.length > 256) events.shift(); },
+					observeTimingAwarenessEvent(timingTracker, event); events.push(event); recoveryEvents.push(event); },
 			});
 			const recoveryTiming = timingAwarenessContract(recoveryEvents);
 			if (!recoveryTiming.firstToolCompliant || !recoveryTiming.finalToolCompliant
@@ -415,7 +418,7 @@ export async function runSandboxGuest() {
 			responsePath, schemaPath: completionSchemaPath, allowVerification, remainingMs: getRemainingMs, execute,
 			model: assignment.modelPolicy.model, reasoningEffort: assignment.modelPolicy.reasoningEffort,
 			providerEnvironment, progress,
-			onEvent(event) { observeTimingAwarenessEvent(timingTracker, event); events.push(event); if (events.length > 256) events.shift(); },
+			onEvent(event) { observeTimingAwarenessEvent(timingTracker, event); events.push(event); },
 			verifyClock(correctionEvents) { const correction = timingAwarenessContract(correctionEvents);
 				if (!correction.firstToolCompliant || !correction.finalToolCompliant || correctionEvents.some((event) => providerToolName(event) && providerToolName(event) !== 'treedx:treeseed_time_status')) throw new Error('Planning synthesis correction failed its clock-only tool boundary.'); },
 		}) && subscriptionAuth) {

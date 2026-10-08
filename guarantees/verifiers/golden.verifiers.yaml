@@ -846,6 +846,46 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/kernel/architecture/portable/cross-project-authority.test.ts
     testName: "materializes exact secondary bytes through its sole read grant without changing the primary mutable workspace"
+  agent.golden.exact-repository-scope-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/portable/cross-project-authority.test.ts
+    testName: "resolves independently pinned reads from one repository by exact commit path and model rather than repository row count"
+  agent.golden.exact-repository-tool-scope-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/portable/cross-project-authority.test.ts
+    testName: "routes explicit exact file tools and the primary current view across independently pinned repository scopes"
+  agent.golden.exact-repository-tool-denial-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/portable/cross-project-authority.test.ts
+    testName: "denies unmatched pinned file-tool commits and paths before invocation without primary fallback"
+  agent.golden.exact-repository-tool-denial-native:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/portable/cross-project-native.test.ts
+    testName: "unmatched pinned file-tool scope denies before official HTTP while native source and authority remain unchanged"
+  agent.golden.exact-repository-tool-scope-native:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/portable/cross-project-native.test.ts
+    testName: "official native file tools select the exact pinned primary or explicit project scope without collapsing repository grants"
+  agent.golden.exact-repository-scope-denial-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/portable/cross-project-authority.test.ts
+    testName: "denies absent exact commit path or model scope even for the primary repository without falling back or changing grants"
+  agent.golden.exact-repository-scope-native:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/portable/cross-project-native.test.ts
+    testName: "owning Kernel consumes exact scoped context when one repository has independently pinned grants without merging authority"
+  agent.golden.exact-repository-scope-denial-native:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/portable/cross-project-native.test.ts
+    testName: "owning Kernel refuses unmatched primary exact read scopes before native HTTP or execution and retains candidate bytes"
   agent.golden.architecture-cross-project-unit-2:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

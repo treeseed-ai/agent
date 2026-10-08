@@ -3,7 +3,7 @@ import { dirname, resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import type { CapacityProviderManifestV5, SandboxAssignment } from '@treeseed/sdk/capacity-provider';
 import { assignmentTimingAwarenessReceiptSchema, providerEnvironmentReceiptSchema, sandboxAssignmentSchema, sandboxLeaseRenewalSchema, sandboxResultSchema } from '@treeseed/sdk/capacity-provider';
-import { assignmentAttemptSchema, type AssignmentReference } from '@treeseed/sdk/agent-capacity';
+import { assignmentAttemptSchema, assignmentPathAllowed, type AssignmentReference } from '@treeseed/sdk/agent-capacity';
 import type { ProviderHostRuntimeConfig } from '../configuration/config.ts';
 import { loadCapacityProviderIdentity } from '../accounts/identity.ts';
 import type { AgentExecutor } from './contracts.ts';
@@ -77,12 +77,17 @@ export async function executeAssignmentTreeDxTool(request:Parameters<AgentExecut
 	const selectors=[arguments_.project,arguments_.projectId].filter(value=>value!==undefined);
 	if(selectors.some(value=>typeof value!=='string'||!value.trim()))throw new Error('Assignment TreeDX project selector is invalid.');
 	const selected=typeof selectors[0]==='string'?selectors[0].trim():'';
-	const current=inventory.filter(candidate=>candidate.repositoryId===request.treeDx.repositoryId);
-	if(current.length>1)throw new Error('Assignment TreeDX current repository is ambiguous.');
-	const matching=(selector:string)=>inventory.filter(candidate=>candidate.projectId===selector||candidate.projectSlug===selector||candidate.repositoryId===selector);
+	const ref=tool==='treedx_read_files'?String(arguments_.ref??'').trim():'';
+	if(ref&&!/^[a-f0-9]{40}$/u.test(ref)) throw new Error('TreeDX read ref must be an exact commit.');
+	const paths=tool==='treedx_read_files'&&Array.isArray(arguments_.paths)?arguments_.paths.slice(0,20).map(String):[];
+	const exact=(candidate:typeof inventory[number])=>!ref||(candidate.baseRef===ref&&paths.every(path=>assignmentPathAllowed(path,candidate.allowedPaths)));
+	const primary=inventory.filter(candidate=>candidate.repositoryId===request.treeDx.repositoryId);
+	const current=primary.filter(candidate=>exact(candidate)&&(ref||candidate.baseRef===request.treeDx.baseRef));
+	const matching=(selector:string)=>inventory.filter(candidate=>(candidate.projectId===selector||candidate.projectSlug===selector||candidate.repositoryId===selector)&&exact(candidate));
 	const matches=selected?matching(selected):current;
 	if(matches.length>1)throw new Error('Assignment TreeDX project selector is ambiguous.');
 	const grant=matches[0];
+	if(!grant&&((!selected&&primary.length)||inventory.some(candidate=>candidate.projectId===selected||candidate.projectSlug===selected||candidate.repositoryId===selected)))throw new Error('Assignment has no TreeDX read grant for the exact requested scope.');
 	for(const selector of selectors.slice(1)) {
 		const alternate=matching(String(selector).trim());
 		if(alternate.length!==1||alternate[0]!==grant)throw new Error('Assignment TreeDX project selectors contradict each other.');
@@ -90,9 +95,7 @@ export async function executeAssignmentTreeDxTool(request:Parameters<AgentExecut
 	if(selected&&!grant&&selected!==request.treeDx.projectId)throw new Error(`Assignment has no TreeDX read grant for project ${selected}.`);
 	const path={projectId:grant?.projectId??request.treeDx.projectId,repoId:grant?.repositoryId??request.treeDx.repositoryId};
 	if(tool==='treedx_read_files') {
-		const ref=String(arguments_.ref??'').trim();
-		if(ref&&!/^[a-f0-9]{40}$/u.test(ref)) throw new Error('TreeDX read ref must be an exact commit.');
-		return request.treeDx.invoke('treedx.repositories.files.read',{path,body:{...(ref?{ref}:{}),paths:Array.isArray(arguments_.paths)?arguments_.paths.slice(0,20).map(String):[],encoding:'utf8',parseFrontmatter:true,allowProtected:true}});
+		return request.treeDx.invoke('treedx.repositories.files.read',{path,body:{...(ref?{ref}:{}),paths,encoding:'utf8',parseFrontmatter:true,allowProtected:true}});
 	}
 	if(tool==='treedx_search_files') return request.treeDx.invoke('treedx.repositories.files.search',{path,body:{paths:Array.isArray(arguments_.paths)?arguments_.paths.slice(0,20).map(String):undefined,query:String(arguments_.query??'').slice(0,2_000),limit:Math.min(100,Math.max(1,Number(arguments_.limit??30))),includeBody:arguments_.includeBody===true,includeFrontmatter:true}});
 	if(tool==='treedx_list_paths') return request.treeDx.invoke('treedx.repositories.paths.list',{path,body:{paths:Array.isArray(arguments_.paths)?arguments_.paths.slice(0,20).map(String):[],kinds:['blob'],limit:Math.min(200,Math.max(1,Number(arguments_.limit??100)))}});

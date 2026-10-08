@@ -299,6 +299,25 @@ export function verifyMeasuredVerification(result: Row): void {
 	}
 }
 
+/** Existing recovery authority cannot become measured zero by losing its clock. */
+export function verifyTerminalUsageClock(item: Row, settlement: Row): void {
+	const text = (value: unknown): string => typeof value === 'string' ? value : '';
+	const time = row(row(row(item.capacityEnvelope).budget).time);
+	assert.ok(!(row(row(item.metadata).leaseRecovery).disposition === 'operator-action' && time.executionStartedAt == null
+		&& settlement.activeSeconds === 0 && settlement.elapsedSeconds === 0),
+		'ACCEPTANCE_USAGE_UNRESOLVED: Zero settlement cannot resolve operator-action execution with unavailable active clock');
+	if (time.executionStartedAt != null) {
+		const started = Date.parse(text(time.executionStartedAt));
+		const terminal = Date.parse(text(item.status === 'completed' ? item.completedAt
+			: item.status === 'returned' ? item.returnedAt ?? item.failedAt ?? item.completedAt
+				: item.failedAt ?? item.returnedAt ?? item.completedAt));
+		assert.ok(Number.isFinite(started) && Number.isFinite(terminal) && terminal >= started,
+			'ACCEPTANCE_USAGE_CLOCK: Declared execution requires ordered terminal clock evidence');
+		assert.ok(terminal === started || (Number(settlement.activeSeconds) > 0 && Number(settlement.elapsedSeconds) > 0),
+			'ACCEPTANCE_USAGE_CLOCK: Visibly elapsed productive work cannot settle as zero');
+	}
+}
+
 /** Independent comparison of two presented observations; no inferred tokens. */
 export function verifyNativeCounterAgreement(measurement: Row): void {
 	const native = row(measurement.nativeUsage);

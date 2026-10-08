@@ -148,7 +148,7 @@ export async function runMultiTeamProviderManager(
 				offers: adapter.offers.map(({ offer }) => offer),
 				laneIds: adapter.laneIds,
 				maxConcurrentWorkers: adapter.maxConcurrentWorkers,
-				activeWorkers: capacitySnapshot.claims.filter((claim) => claim.executionProviderId === adapter.id).length,
+				activeWorkers: capacitySnapshot.claims.filter((claim) => claim.executionProviderId === adapter.id && claim.status !== 'unresolved').length,
 				capabilities,
 				nativeLimits: adapter.nativeLimits,
 				...(accounting ? { accountingObservation: { modelUsage: scopedObservation(accounting.modelUsage),
@@ -163,7 +163,7 @@ export async function runMultiTeamProviderManager(
 			adapters,
 			lanes: loaded.manifest.lanes,
 			capacity: loaded.manifest.capacity,
-			activeWorkers: (await localState.snapshot()).claims.length,
+			activeWorkers: (await localState.snapshot()).claims.filter(claim => claim.status !== 'unresolved').length,
 		}, localState);
 	}));
 	return { ok: results.every((entry) => entry.ok !== false), role: 'manager', connections: results };
@@ -345,7 +345,7 @@ export async function runMultiTeamProviderRunners(
 	// permitted slots; connection/model/lane limits remain enforced by the store.
 	const pending = pendingRunners.get(config.dataDir) ?? new Set<Promise<void>>();
 	if (options.background) pendingRunners.set(config.dataDir, pending);
-	const occupied = Math.max(pending.size, (await localState.snapshot()).claims.length);
+	const occupied = Math.max(pending.size, (await localState.snapshot()).claims.filter(claim => claim.status !== 'unresolved').length);
 	const slots = Math.max(0, loaded.manifest.capacity.maxConcurrentWorkers - occupied);
 	const tasks = ordered.length ? Array.from({ length: slots }, (_, index) => {
 		const connection = ordered[index % ordered.length]!;

@@ -3259,3 +3259,8 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/sandbox/planning-recovery-process.test.ts
     testName: "native correction child uses post-removal remaining authority through the original executor and exact fresh response"
+  agent.golden.assignment-workday-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/golden-assignment-pagination.test.ts
+    testName: "requests the exact workday on every page without dropping failed target evidence or changing supplied pages"

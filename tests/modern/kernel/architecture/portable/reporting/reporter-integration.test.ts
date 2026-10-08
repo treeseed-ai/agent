@@ -81,8 +81,8 @@ describe('native deterministic content execution window', () => {
 				});
 				if (provider) {
 					await provider.run();
-					const persisted = await provider.reopen().snapshot();
-					const claim = persisted.claims.find(claim => claim.id === provider!.claim.id);
+					const persisted = await provider.reopen().claimsForRecovery();
+					const claim = persisted.find(claim => claim.id === provider!.claim.id);
 					if (!claim?.activeStartedAt || !claim.activeFinishedAt || !claim.closeoutOutput) throw new Error('Actual native active clock and closeout custody required');
 					const settlement = provider.requests.filter(request => request.operation === 'settleAssignment');
 					expect(settlement).toHaveLength(1);

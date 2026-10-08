@@ -13,6 +13,30 @@ const mcpResult = (value: unknown) => ({ content: [{ type: 'text', text: JSON.st
 const observedClock = (result: unknown) => ({ ...clock(), item: { ...clock().item, result } });
 
 describe('original productive clock and actual first final tool boundary contract', () => {
+	it('refuses replayed identified clock completions as independent first and final actions without rewriting retained events', () => {
+		const first = { ...clock(), item: { ...clock().item, id: 'original-first-clock' } };
+		const final = { ...first, item: { ...first.item, id: 'original-final-clock' } };
+		const positive = [first, command, final], held = structuredClone(positive);
+		expect(timingAwarenessContract(positive)).toMatchObject({ completedChecks: 2, firstToolCompliant: true, finalToolCompliant: true });
+		expect(positive).toEqual(held);
+		for (const replay of [structuredClone(first), { ...final, item: { ...final.item, id: first.item.id, result: mcpResult(reading(20)) } }]) {
+			const events = [first, command, replay], before = structuredClone(events), receipt = timingAwarenessContract(events);
+			expect(receipt.completedChecks).toBe(1); expect(receipt.firstToolCompliant).toBe(false); expect(receipt.finalToolCompliant).toBe(false);
+			expect(events).toEqual(before);
+		}
+	});
+	it('denies work started before the original first clock read completes even when later clock results look valid', () => {
+		const first = { ...clock(), item: { ...clock().item, id: 'original-first' } }, final = { ...clock(), item: { ...clock().item, id: 'original-final' } };
+		const started = { type: 'item.started', item: { ...first.item, status: 'in_progress', result: undefined } };
+		const work = { ...command, item: { ...command.item, id: 'original-work' } }, workStarted = { ...work, type: 'item.started' };
+		const positive = [started, first, workStarted, work, final], held = structuredClone(positive);
+		expect(timingAwarenessContract(positive)).toMatchObject({ completedChecks: 2, firstToolCompliant: true, finalToolCompliant: true }); expect(positive).toEqual(held);
+		const denied = [[started, workStarted, first, work, final], [started, workStarted, work, first, final],
+			[started, { type: 'item.started', item: { id: 'original-read', type: 'mcp_tool_call', server: 'treedx', tool: 'treedx_read_files' } }, first, final]];
+		const admitted = denied.map(events => { const before = structuredClone(events), receipt = timingAwarenessContract(events);
+			expect(receipt.completedChecks).toBe(2); expect(events).toEqual(before); return receipt.firstToolCompliant && receipt.finalToolCompliant; });
+		expect(admitted).toEqual([false, false, false]);
+	});
 	it('counts complete immutable clock result bytes including a zero final reading without inventing completion authority', () => {
 		for (const finalSeconds of [20, 0]) {
 			const events = [observedClock(mcpResult(reading(30))), command, observedClock(mcpResult(reading(finalSeconds)))];

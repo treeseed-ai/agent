@@ -70,7 +70,17 @@ it('retains all twenty five prospective schema valid inputs with pending genuine
 it('denies every omitted run changed policy selection derived field and fault allocation without repairing supplied campaign inputs', () => {
 	type Campaign = ReturnType<typeof campaignInputs>;
 	const changes: Array<(value: Campaign) => void> = [
+		...[undefined, null, '', '   ', 1].map(campaignId => (value: Campaign) => { Object.assign(value, { campaignId }); }),
+		...Object.keys(campaignInputs(slugs).allocationInputsByRun).flatMap(key => [
+			(value: Campaign) => { const run = structuredClone(value.allocationInputsByRun[key]!); run.input.projects = ['foreign']; value.allocationInputsByRun[key] = run; },
+			(value: Campaign) => { const run = structuredClone(value.allocationInputsByRun[key]!), weights = run.input.allocation.projectPercentages; weights[Object.keys(weights)[0]!]! += 1; value.allocationInputsByRun[key] = run; },
+			(value: Campaign) => { const run = structuredClone(value.allocationInputsByRun[key]!), classes = run.input.allocation.agentClassPercentages, project = Object.keys(classes)[0]!; classes[project] = { ...classes[project]!, architect: 0 }; value.allocationInputsByRun[key] = run; },
+		]),
 		...Object.keys(campaignInputs(slugs).allocationInputsByRun).map(key => (value: Campaign) => { delete value.allocationInputsByRun[key]; }),
+		...Object.keys(campaignInputs(slugs).allocationInputsByRun).filter(key => key !== 'all-project-portfolio').flatMap(key => [
+			(value: Campaign) => { const run = structuredClone(value.allocationInputsByRun[key]!); run.input.durationSeconds = 7200; value.allocationInputsByRun[key] = run; },
+			(value: Campaign) => { const run = structuredClone(value.allocationInputsByRun[key]!); run.input.allocation.planningPercent = 20; value.allocationInputsByRun[key] = run; },
+		]),
 		value => { value.allocationInputsByRun.extra = structuredClone(value.allocationInputsByRun.sdk!); },
 		value => { value.proposals.pop(); },
 		value => { value.proposals[1]!.projectId = value.proposals[0]!.projectId; },

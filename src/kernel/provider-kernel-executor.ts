@@ -10,6 +10,7 @@ import {
 	type AssignmentContext,
 } from '@treeseed/sdk/agent-capacity';
 import type { AgentExecutionRequest, AgentExecutionResult, AgentExecutor } from '../provider/execution/contracts.ts';
+import { SANDBOX_TOKEN_COUNTER_FIELDS } from '../provider/execution/contracts.ts';
 import { AgentKernel } from './agent-kernel.ts';
 import type { AgentRuntime } from './contracts.ts';
 import type { Handler } from './contracts.ts';
@@ -33,6 +34,10 @@ export function aggregateExecutionUsage(measurements: unknown): { elapsedSeconds
 		const usage = record(input);
 		if (typeof usage.elapsedSeconds !== 'number' || !Number.isFinite(usage.elapsedSeconds) || usage.elapsedSeconds < 0) throw new Error('model_elapsed_usage_invalid');
 		if (Object.hasOwn(usage, 'nativeUsage') && (!usage.nativeUsage || typeof usage.nativeUsage !== 'object' || Array.isArray(usage.nativeUsage))) throw new Error('model_native_usage_invalid');
+		for (const [native, normalized] of Object.entries(SANDBOX_TOKEN_COUNTER_FIELDS)) {
+			if (Object.hasOwn(usage, normalized) && Object.hasOwn(record(usage.nativeUsage), native)
+				&& usage[normalized] !== record(usage.nativeUsage)[native]) throw new Error('model_native_usage_invalid');
+		}
 		for (const [key, value] of Object.entries(usage)) {
 			if (['provenance', 'nativeUsage'].includes(key)) continue;
 			if (typeof value !== 'number' || !Number.isFinite(value) || value < 0

@@ -16,6 +16,42 @@ import { encodeCapacityPageCursor } from '@treeseed/sdk/capacity-pagination';
 
 afterEach(() => vi.unstubAllEnvs());
 
+it('native pre-run reader denies every changed project weight class target and campaign identity while retaining exact bytes before unchanged retry', () => {
+	const root = mkdtempSync(join(tmpdir(), 'agent-campaign-allocation-custody-')), campaign = join(root, 'campaign.json');
+	try {
+		const authority = process.env.TREESEED_DEVELOPMENT_WORKSPACE_ROOT;
+		expect(typeof authority).toBe('string');
+		vi.stubEnv('TREESEED_ACCEPTANCE_PLATFORM_PATH', authority); vi.stubEnv('TREESEED_ACCEPTANCE_CAMPAIGN_PATH', campaign);
+		const slugs = portfolioRelations(readFileSync(resolve(authority!, 'docs/agent-acceptance.md'), 'utf8'),
+			readFileSync(resolve(authority!, 'seeds/treeseed.yaml'), 'utf8')).projects.map(project => project.slug);
+		const original = campaignInputs(slugs), complete = `${JSON.stringify(original, null, 2)}\n`;
+		writeFileSync(campaign, complete); const accepted = readPreRunCampaignFreeze();
+		const observations: Array<{ key: string; mode: string; bytes: string; denied: boolean }> = [];
+		for (const key of Object.keys(original.allocationInputsByRun)) for (const mode of key === 'all-project-portfolio'
+			? ['project', 'weight', 'class'] : ['project', 'weight', 'class', 'duration', 'planning']) {
+			const changed = structuredClone(original), run = structuredClone(changed.allocationInputsByRun[key]!); changed.allocationInputsByRun[key] = run;
+			if (mode === 'project') run.input.projects = ['foreign'];
+			if (mode === 'weight') { const weights = run.input.allocation.projectPercentages; weights[Object.keys(weights)[0]!]! += 1; }
+			if (mode === 'class') { const classes = run.input.allocation.agentClassPercentages, project = Object.keys(classes)[0]!; classes[project] = { ...classes[project]!, architect: 0 }; }
+			if (mode === 'duration') run.input.durationSeconds = 7200;
+			if (mode === 'planning') run.input.allocation.planningPercent = 20;
+			const bytes = `${JSON.stringify(changed, null, 2)}\n`; writeFileSync(campaign, bytes); let denied = false;
+			try { readPreRunCampaignFreeze(); } catch (error) { denied = error instanceof Error && error.message.includes('ACCEPTANCE_CAMPAIGN_FREEZE'); }
+			observations.push({ key, mode, bytes, denied }); expect(readFileSync(campaign, 'utf8')).toBe(bytes); expect(readdirSync(root)).toEqual(['campaign.json']);
+		}
+		for (const campaignId of [undefined, null, '', '   ', 1]) {
+			const changed = { ...original, campaignId }, bytes = `${JSON.stringify(changed, null, 2)}\n`; writeFileSync(campaign, bytes);
+			expect(() => readPreRunCampaignFreeze()).toThrow('ACCEPTANCE_CAMPAIGN_FREEZE'); expect(readFileSync(campaign, 'utf8')).toBe(bytes);
+		}
+		expect(observations).toHaveLength(123); expect(observations.map(value => value.denied)).toEqual(Array(123).fill(true));
+		const held = structuredClone(observations); writeFileSync(campaign, complete);
+		expect(readPreRunCampaignFreeze()).toEqual(accepted); expect(readFileSync(campaign, 'utf8')).toBe(complete); expect(observations).toEqual(held);
+		// Native owning filesystem reader and exact frozen authority. These are
+		// prospective inputs, NOT accepted decisions, estimates or actual runs.
+	} finally { rmSync(root, { recursive: true, force: true }); }
+	expect(existsSync(root)).toBe(false);
+});
+
 it('native public SDK profile inventory denies ambiguous governed identities without repairing bytes or hiding denied reads before unchanged retry', async () => {
 	const head = 'a'.repeat(40), projectId = 'isolated-sdk-project';
 	const profiles = ['architect', 'researcher', 'tester', 'engineer', 'technical-writer', 'releaser', 'reviewer', 'reporter']

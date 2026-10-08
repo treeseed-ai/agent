@@ -32,6 +32,24 @@ function publicClockEvidenceFixture() {
 			createdAt: '2026-10-04T00:00:02.001Z', protectedPayload: { providerEvents: events } } };
 }
 describe('Codex chat executor', () => {
+	it('rejects retrospectively legitimized command starts in exact public clock evidence without rewriting observations or receipts', () => {
+		const admitted: boolean[] = [];
+		for (const mode of ['checked', 'first-pending', 'recheck-pending']) {
+			const f = publicClockEvidenceFixture(), [first, final] = f.event.protectedPayload.providerEvents;
+			if (!first || !final) throw new Error('Original complete clock inputs required.');
+			const command = (id: string, type = 'item.completed') => ({ type, item: { id, type: 'command_execution', status: 'completed' } });
+			const pending = { type: 'item.started', item: { ...first.item, status: 'in_progress', result: undefined } };
+			const middle = { ...first, item: { ...first.item, id: 'original-recheck' } };
+			const events = mode === 'checked' ? [pending, first, command('work', 'item.started'), command('work'), final]
+				: mode === 'first-pending' ? [pending, command('work', 'item.started'), first, command('work'), final]
+					: [first, command('first-work'), command('second-work', 'item.started'), middle, command('second-work'), final];
+			Object.assign(f.event.protectedPayload, { providerEvents: events }); f.item.assignmentResult.timingAwareness.completedChecks = mode === 'recheck-pending' ? 3 : 2;
+			const before = structuredClone(f);
+			try { verifyModelClockEvidence(f.item, f.event); admitted.push(true); } catch { admitted.push(false); }
+			expect(f).toEqual(before);
+		}
+		expect(admitted).toEqual([true, false, false]);
+	});
 	it('reads exact failed model clocks without relabeling failure and denies missing contradictory late or substituted terminal evidence', () => {
 		const f = publicClockEvidenceFixture(); f.item.status = 'failed'; f.item.assignmentResult.status = 'failed'; f.event.eventType = 'provider.execution.failed';
 		const before = structuredClone(f); expect(() => verifyModelClockEvidence(f.item, f.event)).not.toThrow(); expect(f).toEqual(before);

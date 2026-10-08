@@ -1,5 +1,9 @@
 import type { SourceWorkspaceResponse } from '@treeseed/sdk/capacity-provider/sandbox';
 
+/** The existing sandbox translation and aggregate validator share one mapping. */
+export const SANDBOX_TOKEN_COUNTER_FIELDS = Object.freeze({ input_tokens: 'inputTokens', cached_input_tokens: 'cachedInputTokens',
+	output_tokens: 'outputTokens', reasoning_output_tokens: 'reasoningTokens' } as const);
+
 export interface AssignmentTreeDxFacade {
   readonly projectId: string;
 	readonly handleId: string;

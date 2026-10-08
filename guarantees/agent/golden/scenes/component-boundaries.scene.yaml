@@ -1911,3 +1911,6 @@ workflow:
   - id: exact-repository-scope-denial-native
     action: { verifier: agent.golden.exact-repository-scope-denial-native }
     expect: { status: passed }
+  - id: native-active-usage-unit
+    action: { verifier: agent.golden.native-active-usage-unit }
+    expect: { status: passed }

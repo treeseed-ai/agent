@@ -3324,3 +3324,8 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/kernel/architecture/golden-assignment-pagination.test.ts
     testName: "requests the exact workday on every page without dropping failed target evidence or changing supplied pages"
+  agent.golden.native-active-usage-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/provider/provider-runner.test.ts
+    testName: "accounts the original admitted active interval when native observations contain only elapsed time without changing observations or charging native units twice"

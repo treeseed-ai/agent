@@ -61,6 +61,31 @@ function client() {
 const treeDx = { projectId: 'project', handleId: 'handle-1', repositoryId: null, workspaceId: null, invoke: vi.fn() };
 
 	describe('canonical provider assignment runner', () => {
+	it('accounts the original admitted active interval when native observations contain only elapsed time without changing observations or charging native units twice', async () => {
+		const api = client(), value = assignment(), before = structuredClone(value);
+		let now = 0;
+		const clock = vi.spyOn(performance, 'now').mockImplementation(() => now);
+		const usage = [{ elapsedSeconds: 4, inputTokens: 19, nativeUsage: { input_tokens: 19 } }];
+		const reply: AgentExecutionResult = { status: 'completed', summary: 'Original elapsed-only result.', outputs: { timingAwareness }, usage };
+		const held = structuredClone(reply), closeout: Record<string, unknown>[] = [];
+		try {
+			await runProviderAssignment({ client: api, assignment: value, treeDx, leaseToken: 'lease', runnerId: 'runner', runtimeBuild,
+				onCloseoutOutput: async output => { closeout.push(structuredClone(output)); },
+				executor: { id: 'codex', observe: async () => ({ available: true }), execute: async request => {
+					await request.beginExecution?.(); now = 2000; await request.finishExecution?.();
+					now = 9000; return reply;
+				} } });
+			expect(api.settleAssignment.mock.calls).toEqual([['assignment-1', { activeSeconds: 2, elapsedSeconds: 4,
+				usageDimension: 'aggregate', usageActual: { elapsedSeconds: 4, activeSeconds: 2, inputTokens: 19, nativeUsage: { input_tokens: 19 } } },
+				'assignment-settlement:assignment-1:runner']]);
+			expect(api.reportAssignmentUsage.mock.calls.map(call => call[1].usageActual)).toEqual([...usage, { activeSeconds: 2, elapsedSeconds: 0 }]);
+			expect(closeout[0]).toMatchObject({ assignmentResult: { usage: { elapsedSeconds: 4, modelInputTokens: 19,
+				native: { activeSeconds: 2, input_tokens: 19 } } } });
+			expect(api.settleAssignment).toHaveBeenCalledBefore(api.completeAssignment);
+			expect(api.completeAssignment).toHaveBeenCalledOnce(); expect(api.startAssignmentExecution).toHaveBeenCalledOnce();
+			expect(reply).toEqual(held); expect(value).toEqual(before);
+		} finally { clock.mockRestore(); }
+	});
 	it('omits absent protected evidence from ordinary executor events while retaining exact SDK-valid public bytes and terminal history', async () => {
 		const api = client(), value = assignment(), before = structuredClone(value);
 		const event = { type: 'execution.preparing', occurredAt: value.assignmentAttempt.createdAt,

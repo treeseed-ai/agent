@@ -4,6 +4,43 @@ import { executeAssignmentTreeDxTool } from '../../../../../src/provider/executi
 import { crossProjectKernel } from './cross-project-fixture.ts';
 
 describe('secondary read through owning Kernel official client native HTTP and Git', () => {
+	it('owning Kernel consumes exact scoped context when one repository has independently pinned grants without merging authority', async () => {
+		for (const mismatch of ['commit', 'path', 'model']) {
+			const f = await crossProjectKernel(); try {
+				const grant = f.data.grants[1]!;
+				f.data.grants.unshift({ ...grant, ...(mismatch === 'commit' ? { baseRef: 'f'.repeat(40) }
+					: mismatch === 'path' ? { allowedPaths: ['proposals/other.mdx'] } : { allowedModels: ['proposal'] }) });
+				const candidate = await f.candidate(), before = structuredClone({ assignment: f.input.assignment, grants: f.data.grants });
+				const result = await f.run(); expect(result.status).toBe('completed');
+				expect(assignmentResultSchema.parse(result.outputs?.assignmentResult).references[0]).toMatchObject({
+					kind: 'git', repository: 'treeseed-ai/sdk', commit: candidate });
+				expect(f.calls).toEqual([{ path: `/v1/dx/projects/${f.data.projectId}/repos/${f.data.ref.repository}/files/read`,
+					body: { ref: f.data.ref.commit, paths: [f.data.ref.path], encoding: 'utf8', parseFrontmatter: true, allowProtected: true },
+					assignmentId: f.attempt.id, handleId: 'cross-project-handle' }]);
+				expect(f.requests).toHaveLength(1); expect(f.begin).toHaveLength(1);
+				expect(f.git('show', `${candidate}:src/output.txt`)).toBe('exact candidate');
+				expect(f.git('rev-parse', 'fixture-base')).toBe(f.base);
+				expect({ assignment: f.input.assignment, grants: f.data.grants }).toEqual(before);
+			} finally { await f.close(); }
+		}
+	});
+	it('owning Kernel refuses unmatched primary exact read scopes before native HTTP or execution and retains candidate bytes', async () => {
+		for (const mismatch of ['commit', 'path', 'model']) {
+			const f = await crossProjectKernel(); try {
+				const facade = { ...f.facade, repositoryId: f.data.ref.repository };
+				f.input.treeDx = facade;
+				Object.assign(f.data.grants[1]!, mismatch === 'commit' ? { baseRef: 'f'.repeat(40) }
+					: mismatch === 'path' ? { allowedPaths: ['books/other.md'] } : { allowedModels: ['proposal'] });
+				const before = structuredClone({ assignment: f.input.assignment, grants: f.data.grants });
+				const result = await f.run(); expect(result.status).toBe('failed');
+				expect(result.summary).toContain('assignment_context_repository_ungranted');
+				expect(f.calls).toEqual([]); expect(f.requests).toEqual([]); expect(f.begin).toEqual([]);
+				expect(f.git('rev-parse', 'HEAD')).toBe(f.base);
+				expect(f.git('show', 'HEAD:src/output.txt')).toBe('original base');
+				expect({ assignment: f.input.assignment, grants: f.data.grants }).toEqual(before);
+			} finally { await f.close(); }
+		}
+	});
 	it('consumes exact secondary book bytes while returning only the original primary Git candidate', async () => {
 		const f = await crossProjectKernel(); try {
 			const candidate = await f.candidate(), before = structuredClone(f.input.assignment), result = await f.run();

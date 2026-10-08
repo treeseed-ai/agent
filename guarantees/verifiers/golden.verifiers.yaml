@@ -856,6 +856,16 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/kernel/architecture/portable/cross-project-authority.test.ts
     testName: "routes explicit exact file tools and the primary current view across independently pinned repository scopes"
+  agent.golden.exact-repository-tool-denial-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/portable/cross-project-authority.test.ts
+    testName: "denies unmatched pinned file-tool commits and paths before invocation without primary fallback"
+  agent.golden.exact-repository-tool-denial-native:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/portable/cross-project-native.test.ts
+    testName: "unmatched pinned file-tool scope denies before official HTTP while native source and authority remain unchanged"
   agent.golden.exact-repository-tool-scope-native:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

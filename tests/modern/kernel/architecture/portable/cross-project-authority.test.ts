@@ -13,6 +13,16 @@ function unit() {
 	return { ...f, calls, facade };
 }
 describe('exact secondary content route authority', () => {
+	it('denies unmatched pinned file-tool commits and paths before invocation without primary fallback', async () => {
+		for (const mismatch of ['commit', 'path']) {
+			const f = unit(); f.input.treeDx = { ...f.facade, repositoryId: f.ref.repository, baseRef: f.ref.commit };
+			const args = { ref: mismatch === 'commit' ? 'f'.repeat(40) : f.ref.commit,
+				paths: mismatch === 'path' ? ['books/other.md'] : [f.ref.path] };
+			const before = structuredClone({ args, attempt: f.attempt, grants: f.grants });
+			await expect(executeAssignmentTreeDxTool(f.input, 'treedx_read_files', args)).rejects.toThrow('no TreeDX read grant');
+			expect(f.calls).toEqual([]); expect({ args, attempt: f.attempt, grants: f.grants }).toEqual(before);
+		}
+	});
 	it('routes explicit exact file tools and the primary current view across independently pinned repository scopes', async () => {
 		for (const selected of [false, true]) {
 			const f = unit(), facade = { ...f.facade, projectId: f.projectId, repositoryId: f.ref.repository, baseRef: f.ref.commit };

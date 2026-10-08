@@ -4,6 +4,20 @@ import { executeAssignmentTreeDxTool } from '../../../../../src/provider/executi
 import { crossProjectKernel } from './cross-project-fixture.ts';
 
 describe('secondary read through owning Kernel official client native HTTP and Git', () => {
+	it('unmatched pinned file-tool scope denies before official HTTP while native source and authority remain unchanged', async () => {
+		for (const mismatch of ['commit', 'path']) {
+			const f = await crossProjectKernel(); try {
+				f.input.treeDx = { ...f.facade, repositoryId: f.data.ref.repository, baseRef: f.data.ref.commit };
+				const args = { ref: mismatch === 'commit' ? 'f'.repeat(40) : f.data.ref.commit,
+					paths: mismatch === 'path' ? ['books/other.md'] : [f.data.ref.path] };
+				const before = structuredClone({ args, assignment: f.input.assignment, grants: f.data.grants });
+				await expect(executeAssignmentTreeDxTool(f.input, 'treedx_read_files', args)).rejects.toThrow('no TreeDX read grant');
+				expect(f.calls).toEqual([]); expect(f.requests).toEqual([]); expect(f.begin).toEqual([]);
+				expect(f.git('rev-parse', 'HEAD')).toBe(f.base); expect(f.git('show', 'HEAD:src/output.txt')).toBe('original base');
+				expect({ args, assignment: f.input.assignment, grants: f.data.grants }).toEqual(before);
+			} finally { await f.close(); }
+		}
+	});
 	it('official native file tools select the exact pinned primary or explicit project scope without collapsing repository grants', async () => {
 		for (const selected of [false, true]) {
 			const f = await crossProjectKernel(); try {

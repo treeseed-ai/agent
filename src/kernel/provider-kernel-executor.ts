@@ -229,8 +229,10 @@ export async function executeKernelAssignment(input: {
 			if (!match) throw new Error('verification_command_not_observed_in_guest');
 			return match;
 		},
-		commitTreeDx: ({ writes }) => commitTreeDxContent({ attempt: attempt.data,
-			treeDx: input.request.treeDx, writes }),
+		commitTreeDx: async ({ writes }) => {
+			await transportRequest.beginExecution();
+			return commitTreeDxContent({ attempt: attempt.data, treeDx: input.request.treeDx, writes });
+		},
 		commitSource: async () => {
 			if (!transport.result || attempt.data.workspace.mode !== 'git') throw new Error('source_transport_result_missing');
 			return gitReference(transport.result, attempt.data.workspace.repository);

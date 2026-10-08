@@ -38,12 +38,9 @@ function assignmentSourceResponse(request: AgentExecutionRequest, response: Sour
   return parsed;
 }
 
-/** API counts ended attempts from zero; signed sandbox attempts are one-based. */
-export function activeSandboxAttempt(attemptCount: unknown): number {
-  if (!Number.isSafeInteger(attemptCount) || Number(attemptCount) < 0 || Number(attemptCount) >= Number.MAX_SAFE_INTEGER) {
-    throw new Error('Assignment has an invalid lifecycle attempt counter.');
-  }
-  return Number(attemptCount) + 1;
+/** The canonical admitted Attempt is the source and sandbox ordinal authority. */
+export function activeSandboxAttempt(attempt: unknown): number {
+  return assignmentAttemptSchema.parse(attempt).attempt;
 }
 
 /** Trusted provider process only. The guest receives source metadata, never this callback or sealed credentials. */

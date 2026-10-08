@@ -167,6 +167,7 @@ export async function createMicrovmExecutor(config: ProviderHostRuntimeConfig, m
 		},
 		async execute(request) {
 			const attempt = assignmentAttemptSchema.safeParse(request.assignment.assignmentAttempt ?? object(request.assignment.workspaceContext).assignmentAttempt);
+			if (!attempt.success) throw attempt.error;
 			const metadata = request.assignment.metadata && typeof request.assignment.metadata === 'object' ? request.assignment.metadata as Record<string, unknown> : {};
 			const reasoningEffort = adapter.model?.reasoningEffort;
 			const offerId = assignmentOfferId(request.assignment);
@@ -179,7 +180,7 @@ export async function createMicrovmExecutor(config: ProviderHostRuntimeConfig, m
 			// canonical attempt selects it or grants an exact source read.
 			const materialized = await materializeSandboxInputs(request);
 			try {
-				const unsigned = { schemaVersion: 'treeseed.sandbox-assignment/v1', assignmentId: request.assignmentId, attempt: activeSandboxAttempt(request.assignment.attemptCount), runnerId: request.runnerId,
+				const unsigned = { schemaVersion: 'treeseed.sandbox-assignment/v1', assignmentId: request.assignmentId, attempt: activeSandboxAttempt(attempt.data), runnerId: request.runnerId,
 				providerId: String(request.assignment.capacityProviderId ?? request.assignment.capacity_provider_id ?? ''), teamId: String(request.assignment.teamId ?? request.assignment.team_id ?? ''), projectId: String(request.assignment.projectId ?? request.assignment.project_id ?? ''),
 				profile: profile.id, ...(profile.contract ? { environmentContract: profile.contract } : {}), guestImage: profile.guestImage, guestImageDigest: profile.guestImageDigest,
 				identityManifestDigest: digest(materialized.identityManifest), contextManifestDigest: materialized.contextManifestDigest, resources: { ...profile.resources, durationSeconds: assignmentRuntimeSeconds(request.assignment) },

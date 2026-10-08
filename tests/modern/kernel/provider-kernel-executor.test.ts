@@ -271,6 +271,7 @@ describe('provider AgentKernel execution', () => {
 
 	it('runs the deterministic Reporter through the scoped TreeDX runtime without invoking a model', async () => {
 		const input = request();
+		const beginExecution = vi.fn(async () => ({})); input.beginExecution = beginExecution;
 		const attempt = input.assignment.assignmentAttempt as Record<string, any>;
 		attempt.sourceRef = { store: 'postgresql', model: 'workday', id: 'workday-1', revision: 1, digest };
 		const evidence = { teamId: 'team-1', workdayId: 'workday-1', nodes: [], edges: [],
@@ -292,13 +293,17 @@ describe('provider AgentKernel execution', () => {
 			readRepositories: [{ projectId:'team-project', projectSlug:'team', repositoryId:target.repository, baseRef:commit, allowedPaths:['notes/workday-report.mdx'], allowedModels:['note'], source:'team-library' }],
 			invoke: vi.fn(async (operation, value: any) => {
 				expect(value.path.projectId).toBe('team-project');
-				if (operation === 'treedx.workspaces.files.batch') written = value.body.files[0].content;
+				if (operation === 'treedx.workspaces.files.batch') {
+					expect(beginExecution).toHaveBeenCalledTimes(1);
+					written = value.body.files[0].content;
+				}
 				if (operation === 'treedx.workspaces.commit') return { commitSha: candidateCommit };
 				if (operation === 'treedx.repositories.files.read') return { files: [{ path: target.path, content: written }] };
 				return {};
 			}) };
 		const executor: AgentExecutor = { id: 'codex', observe: async () => ({ available: true }), execute: vi.fn() };
 		const result = await executeKernelAssignment({ executor, request: input, runtimeBuild });
+		expect(beginExecution).toHaveBeenCalledTimes(1);
 		expect(executor.execute).not.toHaveBeenCalled();
 		expect(result.outputs?.teardown).toMatchObject({ verified: true, completedAt: expect.stringMatching(/^\d{4}-/u) });
 		expect(result.outputs?.assignmentResult).toMatchObject({
@@ -314,6 +319,18 @@ describe('provider AgentKernel execution', () => {
 		const failed = await executeKernelAssignment({ executor, request: input, runtimeBuild });
 		expect(failed).toMatchObject({ status: 'failed', code: 'agent_kernel_failed', summary: 'treedx_commit_readback_mismatch' });
 		expect(failed.outputs?.teardown).toBeUndefined();
+		expect(executor.execute).not.toHaveBeenCalled();
+		const deniedInput = request();
+		deniedInput.assignment = structuredClone(input.assignment);
+		deniedInput.treeDx = { ...input.treeDx, invoke: vi.fn() };
+		deniedInput.beginExecution = vi.fn(async () => { throw new Error('original_execution_start_denied'); });
+		const deniedBefore = structuredClone(deniedInput.assignment);
+		const denied = await executeKernelAssignment({ executor, request: deniedInput, runtimeBuild });
+		expect(denied).toMatchObject({ status: 'failed', summary: 'original_execution_start_denied' });
+		expect(denied.outputs?.assignmentResult).toBeUndefined();
+		expect(deniedInput.beginExecution).toHaveBeenCalledTimes(1);
+		expect(deniedInput.treeDx.invoke).not.toHaveBeenCalled();
+		expect(deniedInput.assignment).toEqual(deniedBefore);
 		expect(executor.execute).not.toHaveBeenCalled();
 		attempt.deadline = new Date(Date.now() - 1).toISOString();
 		const expired = await executeKernelAssignment({ executor, request: input, runtimeBuild });

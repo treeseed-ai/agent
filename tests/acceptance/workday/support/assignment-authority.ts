@@ -299,15 +299,13 @@ export function verifyMeasuredVerification(result: Row): void {
 	}
 }
 
-/** Independent comparison of two presented observations; no inferred tokens. */
+/** Existing recovery authority cannot become measured zero by losing its clock. */
 export function verifyTerminalUsageClock(item: Row, settlement: Row): void {
 	const text = (value: unknown): string => typeof value === 'string' ? value : '';
 	const time = row(row(row(item.capacityEnvelope).budget).time);
 	assert.ok(!(row(row(item.metadata).leaseRecovery).disposition === 'operator-action' && time.executionStartedAt == null
-		&& settlement.activeSeconds === 0 && settlement.elapsedSeconds === 0
-		&& ['capacity_workday_deadline_terminalization', 'capacity_workday_terminal_recovery',
-			'capacity_workday_explicit_terminalization', 'capacity_workday_terminalization'].includes(text(settlement.source))),
-		'ACCEPTANCE_USAGE_UNRESOLVED: Automatic workday zero settlement cannot resolve unknown operator-action execution');
+		&& settlement.activeSeconds === 0 && settlement.elapsedSeconds === 0),
+		'ACCEPTANCE_USAGE_UNRESOLVED: Zero settlement cannot resolve operator-action execution with unavailable active clock');
 	if (time.executionStartedAt != null) {
 		const started = Date.parse(text(time.executionStartedAt));
 		const terminal = Date.parse(text(item.status === 'completed' ? item.completedAt

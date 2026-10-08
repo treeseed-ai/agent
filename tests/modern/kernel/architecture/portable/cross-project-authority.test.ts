@@ -13,6 +13,54 @@ function unit() {
 	return { ...f, calls, facade };
 }
 describe('exact secondary content route authority', () => {
+	it('denies unmatched pinned file-tool commits and paths before invocation without primary fallback', async () => {
+		for (const mismatch of ['commit', 'path']) {
+			const f = unit(); f.input.treeDx = { ...f.facade, repositoryId: f.ref.repository, baseRef: f.ref.commit };
+			const args = { ref: mismatch === 'commit' ? 'f'.repeat(40) : f.ref.commit,
+				paths: mismatch === 'path' ? ['books/other.md'] : [f.ref.path] };
+			const before = structuredClone({ args, attempt: f.attempt, grants: f.grants });
+			await expect(executeAssignmentTreeDxTool(f.input, 'treedx_read_files', args)).rejects.toThrow('no TreeDX read grant');
+			expect(f.calls).toEqual([]); expect({ args, attempt: f.attempt, grants: f.grants }).toEqual(before);
+		}
+	});
+	it('routes explicit exact file tools and the primary current view across independently pinned repository scopes', async () => {
+		for (const selected of [false, true]) {
+			const f = unit(), facade = { ...f.facade, projectId: f.projectId, repositoryId: f.ref.repository, baseRef: f.ref.commit };
+			f.input.treeDx = facade; f.grants.unshift({ ...f.grants[1]!, baseRef: 'f'.repeat(40), allowedPaths: ['proposals/other.mdx'] });
+			const args = { ...(selected ? { project: 'secondary', projectId: f.projectId } : {}), ref: f.ref.commit, paths: [f.ref.path] };
+			const before = structuredClone({ args, attempt: f.attempt, grants: f.grants });
+			expect(await executeAssignmentTreeDxTool(f.input, 'treedx_read_files', args)).toEqual(f.response);
+			expect(f.calls).toEqual([{ operation: 'treedx.repositories.files.read', input: {
+				path: { projectId: f.projectId, repoId: f.ref.repository }, body: { ref: f.ref.commit, paths: [f.ref.path],
+					encoding: 'utf8', parseFrontmatter: true, allowProtected: true } } }]);
+			expect({ args, attempt: f.attempt, grants: f.grants }).toEqual(before);
+		}
+	});
+	it('resolves independently pinned reads from one repository by exact commit path and model rather than repository row count', async () => {
+		for (const mismatch of ['commit', 'path', 'model']) {
+			const f = unit(), grant = f.grants[1]!;
+			f.grants.unshift({ ...grant, ...(mismatch === 'commit' ? { baseRef: 'f'.repeat(40) }
+				: mismatch === 'path' ? { allowedPaths: ['proposals/other.mdx'] } : { allowedModels: ['proposal'] }) });
+			const before = structuredClone({ attempt: f.attempt, grants: f.grants });
+			const context = await materializeAssignmentContext({ attempt: f.attempt, predecessorResults: [], treeDx: f.facade });
+			expect(context.context[0]).toMatchObject({ ref: f.ref, value: { content: f.response.files[0].content } });
+			expect(f.calls).toHaveLength(1);
+			expect(f.calls[0]!.input).toEqual({ path: { projectId: f.projectId, repoId: f.ref.repository }, body: {
+				ref: f.ref.commit, paths: [f.ref.path], encoding: 'utf8', parseFrontmatter: true, allowProtected: true } });
+			expect({ attempt: f.attempt, grants: f.grants }).toEqual(before);
+		}
+	});
+	it('denies absent exact commit path or model scope even for the primary repository without falling back or changing grants', async () => {
+		for (const mismatch of ['commit', 'path', 'model']) {
+			const f = unit(), facade = { ...f.facade, repositoryId: f.ref.repository };
+			Object.assign(f.grants[1]!, mismatch === 'commit' ? { baseRef: 'f'.repeat(40) }
+				: mismatch === 'path' ? { allowedPaths: ['books/other.md'] } : { allowedModels: ['proposal'] });
+			const before = structuredClone({ attempt: f.attempt, grants: f.grants });
+			await expect(materializeAssignmentContext({ attempt: f.attempt, predecessorResults: [], treeDx: facade }))
+				.rejects.toThrow('assignment_context_repository_ungranted');
+			expect(f.calls).toEqual([]); expect({ attempt: f.attempt, grants: f.grants }).toEqual(before);
+		}
+	});
 	it('materializes exact secondary bytes through its sole read grant without changing the primary mutable workspace', async () => {
 		const f = unit(), before = structuredClone(f.attempt);
 		const context = await materializeAssignmentContext({ attempt: f.attempt, predecessorResults: [], treeDx: f.facade });

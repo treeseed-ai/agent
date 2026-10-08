@@ -115,13 +115,16 @@ describe('Codex governed context', () => {
 	});
 
 	it('resolves an exact predecessor repository ID only through an authorized TreeDX read grant',async()=>{
-		let input:any;const request:any={assignment:{assignmentAttempt:{grant:{tools:['source.read']}}},treeDx:{projectId:'sdk-project',repositoryId:'team-repo',baseRef:'commit-1',
-			readRepositories:[{projectId:'sdk-project',projectSlug:'sdk',repositoryId:'sdk-repo',baseRef:'commit-2',allowedPaths:['**'],allowedModels:['knowledge'],source:'project-library'}],
-			invoke:async(_operation:string,value:any)=>{input=value;return {ok:true};}}};
 		const ref='9dbd4dd76ad0868ebab15d4ad9657a413c41b967';
+		let input:any;const request:any={assignment:{assignmentAttempt:{grant:{tools:['source.read']}}},treeDx:{projectId:'sdk-project',repositoryId:'team-repo',baseRef:'commit-1',
+			readRepositories:[{projectId:'sdk-project',projectSlug:'sdk',repositoryId:'sdk-repo',baseRef:ref,allowedPaths:['**'],allowedModels:['knowledge'],source:'project-library'}],
+			invoke:async(_operation:string,value:any)=>{input=value;return {ok:true};}}};
 		await executeAssignmentTreeDxTool(request,'treedx_read_files',{project:'sdk-repo',paths:['knowledge/sdk-architecture/page.md'],ref});
 		expect(input.path).toEqual({projectId:'sdk-project',repoId:'sdk-repo'});
 		expect(input.body.ref).toBe(ref);
+		const originalInput = structuredClone(input);
+		await expect(executeAssignmentTreeDxTool(request,'treedx_read_files',{project:'sdk-repo',paths:['knowledge/sdk-architecture/page.md'],ref:'f'.repeat(40)})).rejects.toThrow(/no TreeDX read grant/u);
+		expect(input).toEqual(originalInput);
 		await expect(executeAssignmentTreeDxTool(request,'treedx_read_files',{project:'other-repo',paths:['knowledge/secret.md'],ref})).rejects.toThrow(/no TreeDX read grant/u);
 	});
 

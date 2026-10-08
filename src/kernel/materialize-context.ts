@@ -4,6 +4,7 @@ import { canonicalStandardsJson } from '@treeseed/sdk/standards';
 import {
 	authorizedContextItemSchema,
 	assignmentResultSchema,
+	assignmentPathAllowed,
 	type AssignmentAttempt,
 	type AssignmentContext,
 	type ExactEntityReference,
@@ -29,10 +30,13 @@ function digest(value: unknown): string {
 }
 
 function projectFor(reference: ExactEntityReference, treeDx: AssignmentTreeDxFacade): string {
-	const matches = (treeDx.readRepositories ?? []).filter(candidate => candidate.repositoryId === reference.repository);
+	const repositories = (treeDx.readRepositories ?? []).filter(candidate => candidate.repositoryId === reference.repository);
+	const matches = repositories.filter(candidate => candidate.baseRef === reference.commit
+		&& candidate.allowedModels.includes(reference.model)
+		&& typeof reference.path === 'string' && assignmentPathAllowed(reference.path, candidate.allowedPaths));
 	if (matches.length > 1) throw new Error('assignment_context_repository_ambiguous');
 	if (matches.length === 1) return matches[0]!.projectId;
-	if (reference.repository === treeDx.repositoryId) return treeDx.projectId;
+	if (!repositories.length && reference.repository === treeDx.repositoryId) return treeDx.projectId;
 	throw new Error('assignment_context_repository_ungranted');
 }
 

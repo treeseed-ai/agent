@@ -294,7 +294,7 @@ verifiers:
   agent.golden.execution-report-note-native:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"
-    testFile: tests/modern/kernel/architecture/portable/context-integration.test.ts
+    testFile: tests/modern/kernel/architecture/portable/reporting/reporter-integration.test.ts
     testName: "native renamed Reporter commits one canonical exact-workday Note without model dispatch and retains interrupted raw readback without a passing result"
   agent.golden.execution-reference-inventory-unit:
     kind: vitestCase

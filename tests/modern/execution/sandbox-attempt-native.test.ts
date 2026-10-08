@@ -22,7 +22,7 @@ it('native provider signs the canonical source attempt unchanged through Unix br
 			const { signature, ...unsigned } = signed;
 			const identity = await loadCapacityProviderIdentity({ ref: f.manifest.identity.privateKeyRef, baseDirectory: f.directory, dataDirectory: f.directory });
 			outcomes.push({ canonical: ordinal, signed: signed.attempt, signatureValid: verify(null, Buffer.from(canonical(unsigned)),
-				createPublicKey({ key: identity.publicJwk, format: 'jwk' }), Buffer.from(signature.value, 'base64url')) });
+				createPublicKey({ key: { ...identity.publicJwk }, format: 'jwk' }), Buffer.from(signature.value, 'base64url')) });
 			expect(result.status).toBe('completed'); expect(f.input.assignment).toEqual(held);
 			expect(f.paths.filter(path => path === 'POST /v1/sandboxes')).toHaveLength(1);
 			expect(f.paths.filter(path => path.endsWith('/execute'))).toHaveLength(1);

@@ -3349,3 +3349,8 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/provider/architecture/recovery-native.test.ts
     testName: "native operator-held terminal recovery retains missing denied or malformed audit authority without returning or deleting failed custody"
+  agent.golden.unknown-terminal-time-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/golden-usage-evidence.test.ts
+    testName: "denies automatic zero settlement of operator-action execution with no active clock without rewriting failed observations"

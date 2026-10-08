@@ -5,6 +5,12 @@ const actor = (): Row => state.replies.get('assignments list')!.items.find((item
 // UNIT tests of the actual managed verifier. Synthetic rows are not admission,
 // provider permission, native persistence or live acceptance evidence.
 describe('managed exact assignment grant readback', () => {
+	it('denies source read authority without its frozen exact Git context rather than accepting a later provider pin', () => {
+		const value = actor(); value.contextRefs = value.contextRefs.filter((ref: Row) => ref.store !== 'git');
+		const before = structuredClone([...state.replies]);
+		expect(() => gate('graph')).toThrow(/ACCEPTANCE_ASSIGNMENT_SOURCE_CONTEXT/u);
+		expect([...state.replies]).toEqual(before);
+	});
 	it('accepts a complete narrower grant and one workspace without changing readback inputs', () => {
 		const before = structuredClone([...state.replies]); expect(() => gate('graph')).not.toThrow();
 		expect([...state.replies]).toEqual(before);

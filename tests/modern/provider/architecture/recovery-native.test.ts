@@ -107,7 +107,7 @@ describe('document-wide native provider recovery boundary', () => {
 			expect(after.modelUsage).toEqual(accounting.modelUsage); expect(after.capabilityUsage).toEqual(accounting.capabilityUsage);
 			const slot = await f.reopen().claim({ connectionId: f.connection.connection.id, globalLimit: 1, connectionLimit: 1 });
 			expect(slot).not.toBeNull();
-			const lease = f.lease('next-attempt');
+			const lease = f.lease;
 			await expect(f.reopen().attachLease(slot!.id, { ...lease, accounting: { ...lease.accounting,
 				dailyActiveSecondsLimit: prior.requestedSeconds!, capabilityDailyActiveSecondsLimit: prior.requestedSeconds! } }))
 				.rejects.toThrow('daily active-time capacity');

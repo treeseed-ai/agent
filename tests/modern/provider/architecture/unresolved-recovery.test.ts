@@ -22,7 +22,7 @@ describe('original operator unresolved usage authority', () => {
 			value => ({ ...value, unresolvedUsageRecovery: null }),
 			value => ({ ...value, status: 'running' }),
 			value => ({ ...value, stateVersion: 8 }),
-			value => ({ ...value, assignmentAttempt: { ...value.assignmentAttempt, ordinal: frozen.ordinal + 1 } }),
+			value => ({ ...value, assignmentAttempt: { ...value.assignmentAttempt, attempt: frozen.attempt + 1 } }),
 			...['assignmentId', 'reservationId', 'actorId', 'reason', 'recoveredAt'].map(field =>
 				(value: ReturnType<typeof observed>) => ({ ...value, unresolvedUsageRecovery: { ...value.unresolvedUsageRecovery, [field]: '' } })),
 			...['assignmentId', 'reservationId'].map(field => (value: ReturnType<typeof observed>) =>

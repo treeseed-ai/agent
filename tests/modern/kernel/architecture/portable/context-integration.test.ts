@@ -3,7 +3,7 @@ import { assignmentResultSchema, usageSettlementSchema, validateAgentDefinitionM
 import { validatePortableContentData } from '@treeseed/sdk/content-validation';
 import { createHash } from 'node:crypto';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parse, stringify } from 'yaml';
 import { portableKernel, portableProfile } from './portable-kernel-fixture.ts';
@@ -23,6 +23,29 @@ async function fixture() {
 	return { ...kernel, exact, boundary, close: async () => { try { await boundary.close(); } finally { await kernel.close(); } } };
 }
 describe('owning context Kernel through native content HTTP and source Git', () => {
+	it('native Kernel denies contradictory normalized token observations without rewriting raw replies candidate bytes or failed history', async () => {
+		const outcomes: boolean[] = [];
+		for (const [normalized, native] of [['inputTokens', 'input_tokens'], ['outputTokens', 'output_tokens'],
+			['cachedInputTokens', 'cached_input_tokens'], ['reasoningTokens', 'reasoning_output_tokens']]) {
+			const f = await portableKernel(); try {
+				const candidate = await f.candidate(), original = f.getReply(), before = structuredClone(f.input.assignment);
+				const bytes = execFileSync('git', ['show', `${candidate}:src/output.txt`], { cwd: f.checkout });
+				for (const status of ['completed', 'failed'] as const) {
+					const reply = { ...original, status, usage: [{ elapsedSeconds: 2, [normalized!]: 8, nativeUsage: { [native!]: 7 } }] };
+					f.setReply(reply); const held = structuredClone(reply), result = await f.run();
+					outcomes.push(result.status === 'failed' && result.outputs?.assignmentResult === undefined); expect(result).toMatchObject({
+						code: 'agent_kernel_failed', retryable: false, summary: status === 'failed' ? original.summary : 'model_native_usage_invalid' });
+					expect(result.usage).toEqual(reply.usage); expect(f.getReply()).toEqual(held); expect(f.input.assignment).toEqual(before);
+					expect(execFileSync('git', ['show', `${candidate}:src/output.txt`], { cwd: f.checkout })).toEqual(bytes);
+				}
+				const exact = { ...original, usage: [{ elapsedSeconds: 2, [normalized!]: 7, nativeUsage: { [native!]: 7 } }] };
+				f.setReply(exact); const retry = await f.run(); expect(retry.status).toBe('completed'); expect(retry.usage).toEqual(exact.usage);
+				expect(f.requests).toHaveLength(3); expect(f.begin).toHaveLength(3); expect(f.getReply()).toEqual(exact);
+				expect(f.git('rev-parse', 'HEAD')).toBe(candidate); expect(f.git('rev-parse', 'fixture-base')).toBe(f.base); // Controlled HTTP, not real model billing or API settlement.
+			} finally { await f.close(); expect(existsSync(f.checkout)).toBe(false); }
+		}
+		expect(outcomes).toEqual(Array.from({ length: 8 }, () => true));
+	});
 	it('native renamed Reporter commits one canonical exact-workday Note without model dispatch and retains interrupted raw readback without a passing result', async () => {
 		for (const mode of ['original', 'settlement', 'attempt-result', 'interrupted']) {
 			const interrupted = mode === 'interrupted';

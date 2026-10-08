@@ -146,7 +146,7 @@ describe('microvm result and closeout authority', () => {
 		const clockOutcomes: Array<{ mode: string; result: unknown; failure: unknown; completed: boolean }> = [];
 			for (const mode of ['exact', 'missing', 'foreign-window', 'receipt-count', 'pending', 'zero', 'negative', 'string', 'null',
 				'fraction', 'over-window', 'increasing', 'absent-remaining', 'content-drift', 'clock-error', 'duplicate-clock',
-				'first-nonclock', 'final-nonclock', 'blocking-without-recheck', 'wrong-server', 'wrong-tool', 'frequent']) {
+				'first-nonclock', 'final-nonclock', 'blocking-without-recheck', 'first-read-pending', 'recheck-pending', 'checked-command', 'wrong-server', 'wrong-tool', 'frequent']) {
 				// Reset only per-input UNIT call counters, not recorded outcomes or authority.
 				vi.clearAllMocks();
 				const attempt = assignmentAttemptSchema.parse(f.input.assignment.assignmentAttempt);
@@ -177,13 +177,16 @@ describe('microvm result and closeout authority', () => {
 				if (mode === 'first-nonclock') events.unshift(command('before-first-clock'));
 				if (mode === 'final-nonclock') events.push(command('after-final-clock'));
 				if (mode === 'blocking-without-recheck') events.splice(1, 0, command('first-blocking'), command('second-blocking'));
+				if (['checked-command', 'first-read-pending'].includes(mode)) events.splice(0, 2, { type: 'item.started', item: { ...clock('first-clock', 30).item, status: 'in_progress', result: undefined } },
+					...(mode === 'checked-command' ? [clock('first-clock', 30), { ...command('blocking'), type: 'item.started' }] : [{ ...command('blocking'), type: 'item.started' }, clock('first-clock', 30)]), command('blocking'), clock('final-clock', 29));
+				if (mode === 'recheck-pending') events.splice(1, 0, command('first-blocking'), { ...command('second-blocking'), type: 'item.started' }, clock('between-commands', 30), command('second-blocking'));
 				if (mode === 'frequent') events.splice(0, 2, clock('first-clock', 30), command('first-blocking'),
 					clock('between-commands', 29), command('second-blocking'), clock('final-clock', 28));
 				if (mode === 'wrong-server') { const action = clock('final-clock', 29); action.item.server = 'foreign-clock'; events[1] = action; }
 				if (mode === 'wrong-tool') { const action = clock('final-clock', 29); action.item.tool = 'foreign-time-status'; events[1] = action; }
 				if (mode === 'pending') events.splice(1, 0, { type: 'item.started', item: { id: 'uncompleted-command', type: 'command_execution', status: 'in_progress' } });
 				const supplied = { ...original, status, summary: `Original ${status} provider observation`, diagnostics: mode === 'missing' ? {} : { providerEvents: events },
-					timingAwareness: { ...timingAwareness, completedChecks: ['receipt-count', 'frequent'].includes(mode) ? 3 : 2 } };
+					timingAwareness: { ...timingAwareness, completedChecks: ['receipt-count', 'frequent', 'recheck-pending'].includes(mode) ? 3 : 2 } };
 				f.setResult(supplied); const before = structuredClone(f.input.assignment); let result: Awaited<ReturnType<typeof f.executor.execute>> | undefined, failure: unknown;
 				try { result = await f.executor.execute(f.input); } catch (error) { failure = error; }
 				clockOutcomes.push({ mode, result, failure, completed: vi.mocked(f.input.emit!).mock.calls.some(([event]) => event.type === 'execution.completed') });
@@ -191,7 +194,7 @@ describe('microvm result and closeout authority', () => {
 				expect(f.client.destroy).toHaveBeenCalledTimes(1); expect(f.cleanup).toHaveBeenCalledTimes(1);
 			}
 		const verify = () => { for (const observed of clockOutcomes) {
-			if (['exact', 'frequent'].includes(observed.mode)) { expect(observed.failure).toBeUndefined(); expect(observed.result).toMatchObject({ status: status === 'completed' ? 'completed' : status === 'failed' ? 'failed' : 'returned' }); }
+			if (['exact', 'frequent', 'checked-command'].includes(observed.mode)) { expect(observed.failure).toBeUndefined(); expect(observed.result).toMatchObject({ status: status === 'completed' ? 'completed' : status === 'failed' ? 'failed' : 'returned' }); }
 			else {
 				expect(observed.result).toBeUndefined(); expect(observed.failure).toMatchObject({ message: `${status === 'completed' ? 'Completed' : 'Non-completed'} sandbox result lacks valid timing-awareness evidence.` }); expect(observed.completed).toBe(false);
 				if (status !== 'completed') expect(observed.failure).toMatchObject({ cause: { message: `Original ${status} provider observation` }, usage: [{ activeSeconds: 1.125, elapsedSeconds: 2.25, inputTokens: 19, outputTokens: 3 }] });

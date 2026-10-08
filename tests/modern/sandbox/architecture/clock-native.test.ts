@@ -60,7 +60,7 @@ describe('native trusted guest clock relay and owning provider tool', () => {
 	it('native whole guest retains first and final clock bytes across a long provider stream and cannot forget an early killed command', async () => {
 		const outcomes: Array<{ mode: string; failure: string; events: Record<string, unknown>[]; clockValues: unknown[]; retainedPrivateFiles: string[];
 			usage?: ReturnType<typeof sandboxResultSchema.parse>['usage']; resultStatus?: string; summary?: string; responseMarkdown?: string }> = [];
-		for (const mode of ['completed', 'resource-abort', 'invalid-context', 'missing-subscription', 'provider-failure', 'provider-incomplete', 'first-clock-denied']) {
+		for (const mode of ['completed', 'resource-abort', 'invalid-context', 'missing-subscription', 'provider-failure', 'provider-incomplete', 'first-clock-denied', 'replayed-clock']) {
 			const f = await nativeClock();
 			try {
 				if (mode === 'first-clock-denied') f.set(200, 'first-model-clock-denied');
@@ -113,6 +113,12 @@ describe('native trusted guest clock relay and owning provider tool', () => {
 				let events: Record<string, unknown>[] = [], usage: ReturnType<typeof sandboxResultSchema.parse>['usage'] | undefined,
 					resultStatus: string | undefined, summary: string | undefined, responseMarkdown: string | undefined;
 				const resultPath = join(output, 'result.json');
+				if (mode === 'replayed-clock') {
+					const retained = await readFile(join(output, 'provider-first-clock.json'), 'utf8'), raw = JSON.parse(retained);
+					expect(raw.item.id).toBe('original-first-clock'); expect(raw.item.result.structuredContent).toEqual(f.readings[1]);
+					expect(raw.item.result.content).toEqual([{ type: 'text', text: JSON.stringify(f.readings[1]) }]);
+					expect(await readFile(join(output, 'provider-first-clock.json'), 'utf8')).toBe(retained);
+				}
 				try { const result = sandboxResultSchema.parse(JSON.parse(await readFile(resultPath, 'utf8')));
 					if (!Array.isArray(result.diagnostics.providerEvents)) throw new Error('Native raw event array required');
 					events = result.diagnostics.providerEvents;
@@ -128,7 +134,7 @@ describe('native trusted guest clock relay and owning provider tool', () => {
 				outcomes.push({ mode, failure, events, clockValues: structuredClone(f.readings.slice(1)), retainedPrivateFiles, usage, resultStatus, summary, responseMarkdown });
 				expect(await readFile(join(input, 'assignment.json'), 'utf8')).toBe(held);
 				expect(await readFile(join(input, 'input-execution-context'))).toEqual(bytes);
-				expect(f.calls, `${mode}: ${failure}`).toEqual(Array.from({ length: mode === 'invalid-context' || mode === 'missing-subscription' ? 1 : mode === 'provider-incomplete' ? 2 : 3 },
+				expect(f.calls, `${mode}: ${failure}`).toEqual(Array.from({ length: mode === 'invalid-context' || mode === 'missing-subscription' ? 1 : mode === 'provider-incomplete' || mode === 'replayed-clock' ? 2 : 3 },
 					() => ({ path: '/v1/sandboxes/isolated-clock/tools/treedx', tool: 'treeseed_time_status', arguments: {} })).concat(mode === 'first-clock-denied'
 						? [{ path: '/v1/sandboxes/isolated-clock/tools/treedx', tool: 'treeseed_time_status', arguments: {} }] : []));
 				if (mode === 'invalid-context' || mode === 'missing-subscription') {
@@ -175,6 +181,8 @@ describe('native trusted guest clock relay and owning provider tool', () => {
 		expect(outcomes[5]!.failure).toContain('exited 23: Original controlled provider exit 23.');
 		expect(outcomes[6]!.failure).toContain('Agent timing-awareness contract requires');
 		expect(outcomes[6]!.clockValues).toHaveLength(2); expect(outcomes[6]!.resultStatus).toBeUndefined(); expect(outcomes[6]!.events).toEqual([]);
+		expect(outcomes[7]!.failure).toContain('Agent timing-awareness contract requires');
+		expect(outcomes[7]!.clockValues).toHaveLength(1); expect(outcomes[7]!.resultStatus).toBeUndefined(); expect(outcomes[7]!.events).toEqual([]);
 		for (const outcome of outcomes) expect(outcome.retainedPrivateFiles,
 			JSON.stringify(outcomes.map(value => ({ mode: value.mode, retainedPrivateFiles: value.retainedPrivateFiles })))).toEqual([]);
 	}, 30_000);

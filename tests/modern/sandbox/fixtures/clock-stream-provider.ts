@@ -12,10 +12,12 @@ if (process.argv.includes('--guest')) {
 	const mode = (await readFile('/run/treeseed-assignment/stream-mode', 'utf8')).trim();
 	const clock = async (id: string) => {
 		const value = await invokeTreeDxRelay('treeseed_time_status', {}, process.env);
-		process.stdout.write(`${JSON.stringify({ type: 'item.completed', ...(mode.startsWith('provider-') ? { usage: { input_tokens: 19, output_tokens: 3 } } : {}), item: {
+		const event = { type: 'item.completed', ...(mode.startsWith('provider-') ? { usage: { input_tokens: 19, output_tokens: 3 } } : {}), item: {
 			id, type: 'mcp_tool_call', server: 'treedx', tool: 'treeseed_time_status', status: 'completed', error: null,
 			result: { content: [{ type: 'text', text: JSON.stringify(value) }], structuredContent: value },
-		} })}\n`);
+		} };
+		if (mode === 'replayed-clock') await writeFile('/run/treeseed-output/provider-first-clock.json', JSON.stringify(event));
+		process.stdout.write(`${JSON.stringify(event)}\n`);
 	};
 	if (mode === 'first-clock-denied') {
 		let denied: unknown;
@@ -31,7 +33,8 @@ if (process.argv.includes('--guest')) {
 	for (let index = 0; index < 300; index++) process.stdout.write(`${JSON.stringify({ type: 'item.completed', item: {
 		id: `reasoning-${index}`, type: 'reasoning', text: `Controlled observation ${index}`,
 	} })}\n`);
-	if (mode !== 'provider-incomplete') await clock('original-final-clock');
+	if (mode === 'replayed-clock') process.stdout.write(`${await readFile('/run/treeseed-output/provider-first-clock.json', 'utf8')}\n`);
+	else if (mode !== 'provider-incomplete') await clock('original-final-clock');
 	if (mode.startsWith('provider-')) { process.stderr.write('Original controlled provider exit 23.\n'); process.exitCode = 23; }
 	else {
 		const path = process.argv[process.argv.indexOf('--output-last-message') + 1];

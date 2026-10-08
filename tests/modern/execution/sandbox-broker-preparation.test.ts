@@ -25,11 +25,10 @@ describe('sandbox broker preparation authority', () => {
 		expect(() => remainingPreparationMs(new Date(now - 1).toISOString(), now)).toThrow('Authoritative sandbox preparation window');
 	});
 });
-
 describe('sandbox broker control transport', () => {
 	it('native microvm refuses missing substituted duplicate pending and unbracketed failed result clocks while preserving original measurements failure and allocated resource closure', async () => {
 		const outcomes: Array<{ status: string; mode: string; result: unknown; failure: unknown; terminal: boolean }> = [];
-		for (const status of ['failed', 'cancelled', 'expired'] as const) for (const mode of ['exact', 'missing', 'foreign-window', 'receipt-count', 'duplicate', 'pending', 'first-nonclock', 'final-nonclock']) {
+		for (const status of ['completed', 'failed', 'cancelled', 'expired'] as const) for (const mode of ['exact', 'checked-command', 'first-read-pending', 'recheck-pending', 'missing', 'foreign-window', 'receipt-count', 'duplicate', 'pending', 'first-nonclock', 'final-nonclock']) {
 			const f = await microvmBroker();
 			try {
 				const attempt = assignmentAttemptSchema.parse(f.input.assignment.assignmentAttempt);
@@ -42,8 +41,10 @@ describe('sandbox broker control transport', () => {
 				const events: unknown[] = [clock('first', 30), clock(mode === 'duplicate' ? 'first' : 'final', 29)];
 				const command = { type: mode === 'pending' ? 'item.started' : 'item.completed', item: { id: 'original-command', type: 'command_execution' } };
 				if (mode === 'pending') events.splice(1, 0, command); if (mode === 'first-nonclock') events.unshift(command); if (mode === 'final-nonclock') events.push(command);
+				if (['checked-command', 'first-read-pending'].includes(mode)) events.splice(0, 2, { type: 'item.started', item: { ...clock('first', 30).item, status: 'in_progress', result: undefined } }, ...(mode === 'checked-command' ? [clock('first', 30), { ...command, type: 'item.started' }] : [{ ...command, type: 'item.started' }, clock('first', 30)]), command, clock('final', 29));
+				if (mode === 'recheck-pending') events.splice(1, 0, command, { ...command, type: 'item.started', item: { ...command.item, id: 'second-command' } }, clock('recheck', 30), { ...command, item: { ...command.item, id: 'second-command' } });
 				const patch = { status, summary: `Original ${status} provider observation`, diagnostics: { providerEvents: mode === 'missing' ? [] : events },
-					timingAwareness: { ...timingAwareness, completedChecks: mode === 'receipt-count' ? 3 : 2 } }, held = structuredClone(patch), before = structuredClone(f.input.assignment);
+					timingAwareness: { ...timingAwareness, completedChecks: ['receipt-count', 'recheck-pending'].includes(mode) ? 3 : 2 } }, held = structuredClone(patch), before = structuredClone(f.input.assignment);
 				f.patchResult(patch); let result: unknown, failure: unknown;
 				try { result = await f.executor.execute(f.input); } catch (error) { failure = error; }
 				outcomes.push({ status, mode, result, failure, terminal: f.events.some(event => ['execution.completed', 'execution.failed'].includes(event.type)) });
@@ -53,10 +54,10 @@ describe('sandbox broker control transport', () => {
 			expect(f.server.listening).toBe(false); await expect(stat(f.directory)).rejects.toMatchObject({ code: 'ENOENT' });
 		}
 		for (const observed of outcomes) {
-			if (observed.mode === 'exact') { expect(observed.failure).toBeUndefined(); expect(observed.result).toMatchObject({ status: observed.status === 'failed' ? 'failed' : 'returned' }); expect(observed.terminal).toBe(true); }
+			if (['exact', 'checked-command'].includes(observed.mode)) { expect(observed.failure).toBeUndefined(); expect(observed.result).toMatchObject({ status: ['completed', 'failed'].includes(observed.status) ? observed.status : 'returned' }); expect(observed.terminal).toBe(true); }
 			else {
 				expect(observed.result).toBeUndefined(); expect(observed.terminal).toBe(false);
-				expect(observed.failure).toMatchObject({ message: 'Non-completed sandbox result lacks valid timing-awareness evidence.', cause: { message: `Original ${observed.status} provider observation` },
+				expect(observed.failure).toMatchObject({ message: `${observed.status === 'completed' ? 'Completed' : 'Non-completed'} sandbox result lacks valid timing-awareness evidence.`, ...(observed.status === 'completed' ? {} : { cause: { message: `Original ${observed.status} provider observation` } }),
 					usage: [{ activeSeconds: 1.125, elapsedSeconds: 2.25, inputTokens: 19, outputTokens: 3 }] });
 			}
 		}

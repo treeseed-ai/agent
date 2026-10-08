@@ -1,6 +1,31 @@
 schemaVersion: treeseed.guarantee-verifiers/v1
 ownerPackage: "@treeseed/agent"
 verifiers:
+  agent.golden.execution-sdk-boundary-bindings-unit:
+    kind: vitestCase
+    testFile: tests/modern/guarantees/bindings.test.ts
+    testName: binds exact six-pair graph and Reporter chronology requirements to their existing post-campaign native gates
+  agent.golden.execution-clock-replay-unit:
+    kind: vitestCase
+    testFile: tests/modern/sandbox/architecture/clock-authority.test.ts
+    testName: refuses replayed identified clock completions as independent first and final actions without rewriting retained events
+  agent.golden.execution-native-token-agreement-unit:
+    kind: vitestCase
+    testFile: tests/modern/provider/sandbox-accounting-usage.test.ts
+    testName: "denies contradictory normalized and native token counters per observation without repairing either representation"
+  agent.golden.execution-native-token-agreement-native:
+    kind: vitestCase
+    testFile: tests/modern/kernel/architecture/portable/context-integration.test.ts
+    testName: "native Kernel denies contradictory normalized token observations without rewriting raw replies candidate bytes or failed history"
+  agent.golden.execution-native-token-agreement-gate-unit:
+    kind: vitestCase
+    testFile: tests/modern/kernel/architecture/golden-usage-evidence.test.ts
+    testName: "denies contradictory normalized and native token counts without changing supplied settlement observations"
+  agent.golden.execution-measured-verification-unit:
+    kind: vitestCase
+    ownerPackage: '@treeseed/agent'
+    testFile: tests/modern/kernel/architecture/golden-usage-evidence.test.ts
+    testName: denies incomplete malformed or unmeasured verification records on every completed result without rewriting failed observations
   agent.golden.execution-report-attempt-unit:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"
@@ -121,6 +146,16 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/sandbox/architecture/clock-authority.test.ts
     testName: "rejects every caller supplied clock field without changing the original productive authority"
+  agent.golden.execution-clock-start-order-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/sandbox/architecture/clock-authority.test.ts
+    testName: "denies work started before the original first clock read completes even when later clock results look valid"
+  agent.golden.execution-clock-start-readback-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/timing/guest-clock-contract.test.ts
+    testName: "rejects retrospectively legitimized command starts in exact public clock evidence without rewriting observations or receipts"
   agent.golden.execution-clock-input-native:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"
@@ -176,6 +211,11 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/guarantees/preflight/campaign-freeze-native.test.ts
     testName: "native SDK preparation retains invalid campaign bytes and creates no proposal freeze or receipt directory before complete authority validation"
+  agent.golden.campaign-allocation-custody-native:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/preflight/campaign-freeze-native.test.ts
+    testName: "native pre-run reader denies every changed project weight class target and campaign identity while retaining exact bytes before unchanged retry"
   agent.golden.execution-packed-sbom-unit:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

@@ -64,7 +64,7 @@ export function verifyPreRunCampaignInputs(snapshot: unknown, slugs: readonly st
 		assert.deepEqual(allocation.projectPercentages, Object.fromEntries(selected.map(project =>
 			[project.projectId, key === 'all-project-portfolio' ? 1 : 100 / selected.length])), fail);
 		assert.deepEqual(allocation.agentClassPercentages, Object.fromEntries(selected.map(project => [project.projectId, classes])), fail);
-		if (key === 'sdk' || key.startsWith('fault-')) {
+		if (key !== 'all-project-portfolio') {
 			assert.equal(input.durationSeconds, 3600, fail); assert.equal(allocation.planningPercent, 100 / 3, fail);
 		}
 		if (key.startsWith('fault-')) {

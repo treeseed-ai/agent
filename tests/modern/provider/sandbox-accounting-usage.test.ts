@@ -3,6 +3,22 @@ import { sandboxAccountingUsage } from '../../../src/provider/execution/microvm-
 import { aggregateExecutionUsage } from '../../../src/kernel/provider-kernel-executor.ts';
 
 describe('sandbox accounting usage', () => {
+	it('denies contradictory normalized and native token counters per observation without repairing either representation', () => {
+		const fields = [['inputTokens', 'input_tokens'], ['outputTokens', 'output_tokens'],
+			['cachedInputTokens', 'cached_input_tokens'], ['reasoningTokens', 'reasoning_output_tokens']] as const;
+		const denied: boolean[] = [];
+		for (const [normalized, native] of fields) {
+			const exact = { elapsedSeconds: 0.25, [normalized]: 7, nativeUsage: { [native]: 7 } }, held = structuredClone(exact);
+			expect(aggregateExecutionUsage([exact])).toEqual(exact); expect(exact).toEqual(held);
+			for (const observations of [[{ ...exact, [normalized]: 8 }],
+				[{ ...exact, [normalized]: 8 }, { ...exact, [normalized]: 6 }]]) {
+				const before = structuredClone(observations); let failure = '';
+				try { aggregateExecutionUsage(observations); } catch (error) { failure = String(error); }
+				denied.push(failure.includes('model_native_usage_invalid')); expect(observations).toEqual(before);
+			}
+		}
+		expect(denied).toEqual(Array.from({ length: fields.length * 2 }, () => true));
+	});
 	it('keeps original provenance outside numeric native usage and preserves every measured unit without laundering invalid observations', () => {
 		for (const provenance of ['execution-provider', 'unavailable']) {
 			const measured = { activeSeconds: 0.125, elapsedSeconds: 0.25, input_tokens: 7, output_tokens: 0,

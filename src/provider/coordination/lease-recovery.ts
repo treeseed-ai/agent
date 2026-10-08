@@ -5,9 +5,29 @@ import { ProviderLocalCapacityStore } from '../capacity/capacity-core/local-capa
 import { providerFailureSummary } from '../../sandbox/provider-failure.ts';
 import { assignmentAttemptSchema } from '@treeseed/sdk/agent-capacity';
 import { isDeepStrictEqual } from 'node:util';
+import type { AssignmentAttempt } from '@treeseed/sdk/agent-capacity';
 
 function record(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+/** The original authenticated assignment read exposes the sole operator audit.
+ * This never authorizes a measured charge or modifies the frozen attempt. */
+export function isUnresolvedUsageRecovery(observed: unknown, frozen: AssignmentAttempt): boolean {
+  const assignment = record(observed), audit = record(assignment.unresolvedUsageRecovery);
+  const current = assignmentAttemptSchema.safeParse(assignment.assignmentAttempt);
+  const keys = ['assignmentId', 'reservationId', 'usageStatus', 'settled', 'expectedStateVersion', 'actorId', 'reason', 'recoveredAt'];
+  return current.success && ['expired', 'failed', 'cancelled'].includes(textStatus(assignment.status))
+    && current.data.status === assignment.status
+    && isDeepStrictEqual({ ...current.data, status: frozen.status, finishedAt: frozen.finishedAt }, { ...frozen, finishedAt: frozen.finishedAt })
+    && assignment.id === frozen.id && assignment.teamId === frozen.teamId && assignment.providerId === frozen.provider.providerId
+    && Object.keys(audit).length === keys.length && keys.every(key => Object.hasOwn(audit, key))
+    && audit.assignmentId === frozen.id && audit.reservationId === frozen.reservationId
+    && audit.usageStatus === 'unresolved' && audit.settled === false
+    && Number.isSafeInteger(audit.expectedStateVersion) && Number(audit.expectedStateVersion) > 0
+    && audit.expectedStateVersion === assignment.stateVersion
+    && ['actorId', 'reason'].every(key => typeof audit[key] === 'string' && String(audit[key]).trim().length > 0)
+    && typeof audit.recoveredAt === 'string' && /^\d{4}-\d{2}-\d{2}T.*Z$/u.test(audit.recoveredAt) && Number.isFinite(Date.parse(audit.recoveredAt));
 }
 
 export async function recoverProviderLocalLeases(input: { config: ProviderHostRuntimeConfig; connections: ProviderConnectionRuntime[]; store?: ProviderLocalCapacityStore; includeRunning?: boolean }) {
@@ -35,6 +55,15 @@ export async function recoverProviderLocalLeases(input: { config: ProviderHostRu
       const status = textStatus(assignment.status);
       const frozen = assignmentAttemptSchema.parse(record(record(claim.dispatchEnvelope).assignment).assignmentAttempt);
       const current = assignmentAttemptSchema.parse(assignment.assignmentAttempt);
+      if (connection.teamId === frozen.teamId && connection.providerId === frozen.provider.providerId
+        && isUnresolvedUsageRecovery(assignment, frozen)) {
+        await store.retainUnresolvedUsage(claim.id);
+        results.push({ claimId: claim.id, assignmentId: claim.assignmentId, status: 'released', observedStatus: status,
+          usageStatus: 'unresolved', settled: false });
+        continue;
+      }
+      if (record(record(assignment.metadata).leaseRecovery).disposition === 'operator-action'
+        || assignment.unresolvedUsageRecovery !== undefined) throw new Error('Original operator unresolved recovery audit is missing or invalid.');
       if (assignment.id !== claim.assignmentId || assignment.teamId !== frozen.teamId
         || assignment.providerId !== frozen.provider.providerId || connection.teamId !== frozen.teamId
         || connection.providerId !== frozen.provider.providerId

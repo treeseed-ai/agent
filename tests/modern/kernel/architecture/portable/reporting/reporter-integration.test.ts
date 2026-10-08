@@ -7,15 +7,16 @@ import { execFileSync } from 'node:child_process';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parse, stringify } from 'yaml';
-import { portableKernel } from '../portable-kernel-fixture.ts';
+import { portableKernel, nativeCloseoutTransport } from '../portable-kernel-fixture.ts';
 import { contextBoundary } from '../context-fixture.ts';
 import { row } from '../../../../../acceptance/acceptance-cli.ts';
 
 describe('native deterministic content execution window', () => {
 	it('native renamed Reporter commits one canonical exact-workday Note without model dispatch and retains interrupted raw readback without a passing result', async () => {
-		for (const mode of ['original', 'settlement', 'attempt-result', 'interrupted', 'start-denied']) {
+		for (const mode of ['original', 'settlement', 'attempt-result', 'interrupted', 'start-denied', 'provider']) {
 			const interrupted = mode === 'interrupted';
 			const f = await portableKernel(); let boundary: Awaited<ReturnType<typeof contextBoundary>> | undefined;
+			let provider: Awaited<ReturnType<typeof nativeCloseoutTransport>> | undefined;
 			try {
 				const repository = 'sdk-library', path = 'notes/bounded-report.mdx';
 				const profileInput = { schemaVersion: 'treeseed.agent/v1', id: 'renamed-closeout', name: 'Renamed Closeout', agentClass: 'renamed-closeout',
@@ -59,6 +60,7 @@ describe('native deterministic content execution window', () => {
 					projectId: f.attempt.projectId, projectSlug: 'sdk', repositoryId: repository, baseRef: f.base,
 					allowedPaths: ['notes'], allowedModels: ['note'], source: 'same-team' }] };
 				f.input.treeDx = boundary.facade;
+				if (mode === 'provider') provider = await nativeCloseoutTransport(f, join(f.checkout, '.provider-custody'), true);
 				const held = structuredClone({ attempt: f.attempt, context: f.input.assignment.workspaceContext, evidence, profileInput });
 				let candidate = '', content = '', writes = 0, commits = 0;
 				let deniedStarts = 0;
@@ -66,7 +68,8 @@ describe('native deterministic content execution window', () => {
 				boundary.setResponder(input => {
 					const body = row(input.body);
 					if (Array.isArray(body.files)) {
-						expect(f.begin).toEqual([{ assignmentId: f.attempt.id, originalDeadline: f.attempt.deadline }]);
+						if (provider) expect(provider.requests.filter(request => request.operation === 'startExecution')).toHaveLength(1);
+						else expect(f.begin).toEqual([{ assignmentId: f.attempt.id, originalDeadline: f.attempt.deadline }]);
 						expect(body.files).toHaveLength(1); const file = row(body.files[0]); expect(file.path).toBe(path);
 						if (typeof file.content !== 'string') throw new Error('Native exact report bytes required');
 						content = file.content; mkdirSync(join(f.checkout, 'notes'), { recursive: true }); writeFileSync(join(f.checkout, path), content);
@@ -76,6 +79,28 @@ describe('native deterministic content execution window', () => {
 					if (candidate && body.ref === candidate) return { resolvedRef: candidate, files: [{ path, content: interrupted ? `${content}\n` : content }] };
 					throw new Error('Unexpected report operation');
 				});
+				if (provider) {
+					await provider.run();
+					const persisted = await provider.reopen().claimsForRecovery();
+					const claim = persisted.find(claim => claim.id === provider!.claim.id);
+					if (!claim?.activeStartedAt || !claim.activeFinishedAt || !claim.closeoutOutput) throw new Error('Actual native active clock and closeout custody required');
+					const settlement = provider.requests.filter(request => request.operation === 'settleAssignment');
+					expect(settlement).toHaveLength(1);
+					const usage = row(settlement[0]!.body.usageActual);
+					expect(typeof usage.activeSeconds).toBe('number'); expect(Number(usage.activeSeconds)).toBeGreaterThan(0);
+					expect(settlement[0]!.body.activeSeconds).toBe(Math.ceil(Number(usage.activeSeconds)));
+					expect(assignmentResultSchema.parse(claim.closeoutOutput.assignmentResult).usage.native?.activeSeconds).toBe(usage.activeSeconds);
+					expect(provider.requests.findIndex(request => request.operation === 'settleAssignment'))
+						.toBeLessThan(provider.requests.findIndex(request => request.operation === 'completeAssignment'));
+					expect(provider.requests.filter(request => request.operation === 'completeAssignment')).toHaveLength(1);
+					expect(writes).toBe(1); expect(commits).toBe(1); expect(f.requests).toEqual([]);
+					expect(execFileSync('git', ['show', `${candidate}:${path}`], { cwd: f.checkout, encoding: 'utf8' })).toBe(content);
+					expect(f.git('rev-parse', `${candidate}^`)).toBe(f.base);
+					expect(assignmentResultSchema.parse(claim.closeoutOutput.assignmentResult).references)
+						.toEqual([{ kind: 'treedx', projectId: f.attempt.projectId, repository, path, commit: candidate, workspaceId: 'bounded-report-workspace' }]);
+					expect({ attempt: f.attempt, context: f.input.assignment.workspaceContext, evidence, profileInput }).toEqual(held);
+					continue;
+				}
 				const result = await f.run();
 				if (mode === 'start-denied') {
 					expect(result).toMatchObject({ status: 'failed', summary: 'original_native_execution_start_denied' });
@@ -102,7 +127,7 @@ describe('native deterministic content execution window', () => {
 					expect(assignmentResultSchema.parse(result.outputs?.assignmentResult).usage).toEqual({ elapsedSeconds: expect.any(Number) }); }
 				expect(f.git('rev-parse', 'HEAD')).toBe(candidate);
 				expect({ attempt: f.attempt, context: f.input.assignment.workspaceContext, evidence, profileInput }).toEqual(held);
-			} finally { try { await boundary?.close(); } finally { await f.close(); } }
+			} finally { try { await provider?.close(); } finally { try { await boundary?.close(); } finally { await f.close(); } } }
 		}
 	});
 });

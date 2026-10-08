@@ -86,7 +86,7 @@ export async function publishProviderAvailability(
 	const key = `${config.connectionId}|${config.teamId}|${config.providerId}`;
 	const local = await localState.snapshot();
 	const activeAssignmentIds = [...new Set(local.claims.filter(claim => claim.connectionId === config.connectionId
-		&& claim.status !== 'polling' && typeof claim.assignmentId === 'string' && claim.assignmentId.length > 0)
+		&& !['polling', 'unresolved'].includes(claim.status) && typeof claim.assignmentId === 'string' && claim.assignmentId.length > 0)
 		.map(claim => claim.assignmentId!))];
 	const snapshot = {
 		ttlSeconds: 90,

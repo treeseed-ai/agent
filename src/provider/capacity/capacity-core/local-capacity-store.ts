@@ -13,7 +13,7 @@ export interface ProviderLocalSlotClaim {
 		snapshot: { claims: Array<{ connectionId: string }>; events: Array<{ connectionId: string; outcome: string }>;
 			activeSecondsByConnection: Record<string, number> } } };
 	runnerId: string;
-	status: 'polling' | 'ready' | 'running' | 'recovery';
+	status: 'polling' | 'ready' | 'running' | 'recovery' | 'unresolved';
 	assignmentId?: string;
 	leaseToken?: string;
 	leaseExpiresAt?: string;
@@ -53,7 +53,7 @@ interface ProviderLocalCapacityState {
 const emptyState = (): ProviderLocalCapacityState => ({ schemaVersion: 1, revision: 0, claims: [], usage: {}, sessions: [], tokens: [], connections: [], events: [], updatedAt: new Date(0).toISOString() });
 
 function pollingSnapshot(state: ProviderLocalCapacityState, now: string) {
-	return { claims: state.claims.map(({ connectionId }) => ({ connectionId })),
+	return { claims: state.claims.filter(claim => claim.status !== 'unresolved').map(({ connectionId }) => ({ connectionId })),
 		events: state.events.map(({ connectionId, outcome }) => ({ connectionId, outcome })),
 		activeSecondsByConnection: Object.fromEntries(Object.entries(state.usage[now.slice(0, 10)] ?? {}).flatMap(([key, seconds]) => {
 			const scope: unknown = JSON.parse(key);
@@ -151,7 +151,7 @@ export class ProviderLocalCapacityStore {
 			const state = await this.read();
 			const now = new Date().toISOString();
 			for (const claim of state.claims) accountActiveTime(state, claim, now);
-			const expired = state.claims.filter((claim) => claim.status !== 'recovery' && Date.parse(claim.expiresAt) <= Date.parse(now));
+			const expired = state.claims.filter((claim) => !['recovery', 'unresolved'].includes(claim.status) && Date.parse(claim.expiresAt) <= Date.parse(now));
 			const expiredIds = new Set(expired.map((claim) => claim.id));
 			state.claims = state.claims.flatMap((claim) => {
 				if (!expiredIds.has(claim.id)) return [claim];
@@ -180,9 +180,9 @@ export class ProviderLocalCapacityStore {
 		select?: (snapshot: ReturnType<typeof pollingSnapshot>) => { connectionId: string; connectionLimit: number;
 			selection: NonNullable<ProviderLocalSlotClaim['selection']> } | null }): Promise<ProviderLocalSlotClaim | null> {
 		return this.update((state, now) => {
-			if (state.claims.length >= input.globalLimit) return null;
+			if (state.claims.filter(claim => claim.status !== 'unresolved').length >= input.globalLimit) return null;
 			const selected = input.select ? input.select(pollingSnapshot(state, now)) : input;
-			if (!selected || state.claims.filter(claim => claim.connectionId === selected.connectionId).length >= selected.connectionLimit) return null;
+			if (!selected || state.claims.filter(claim => claim.connectionId === selected.connectionId && claim.status !== 'unresolved').length >= selected.connectionLimit) return null;
 			const id = randomUUID();
 			const claim: ProviderLocalSlotClaim = {
 				id, connectionId: selected.connectionId, runnerId: `provider-runner-${id}`, status: 'polling', acquiredAt: now, updatedAt: now,
@@ -240,7 +240,7 @@ export class ProviderLocalCapacityStore {
 					|| (limit.nativeAllowances !== undefined && (!limit.nativeAllowances || typeof limit.nativeAllowances !== 'object' || Array.isArray(limit.nativeAllowances)
 						|| Object.values(limit.nativeAllowances).some(value => !Number.isFinite(value) || value < 0)))) throw new Error('Provider-local native bounds are invalid.');
 				const selectedPeers = peers.filter((entry) => entry[field] === selected);
-				if (limit.maxConcurrentRunners !== undefined && selectedPeers.length >= limit.maxConcurrentRunners) throw new Error(`Provider-local ${label} concurrency is exhausted for ${selected}.`);
+				if (limit.maxConcurrentRunners !== undefined && selectedPeers.filter(peer => peer.status !== 'unresolved').length >= limit.maxConcurrentRunners) throw new Error(`Provider-local ${label} concurrency is exhausted for ${selected}.`);
 				const committed = selectedPeers.reduce((total, entry) => total + (entry.requestedSeconds ?? 0), 0);
 				if (limit.availableAgentSeconds !== undefined && committed + (input.requestedSeconds ?? 0) > limit.availableAgentSeconds) throw new Error(`Provider-local ${label} agent-time allowance is exhausted for ${selected}.`);
 				if (input.nativeUnit && input.requestedNativeAmount !== undefined && limit.nativeAllowances?.[input.nativeUnit] !== undefined) {
@@ -310,6 +310,20 @@ export class ProviderLocalCapacityStore {
 			state.events = state.events.slice(-100);
 			state.claims = state.claims.filter((entry) => entry.id !== claimId);
 			return true;
+		});
+	}
+
+	/** Retain original unknown-usage custody and period holds; release only its
+	 * concurrency after the owning recovery verified the original operator audit. */
+	async retainUnresolvedUsage(claimId: string) {
+		return this.update((state, now) => {
+			const claim = state.claims.find(entry => entry.id === claimId);
+			if (claim?.status === 'unresolved') return;
+			if (!claim || claim.status !== 'recovery' || claim.activeStartedAt || claim.activeFinishedAt || claim.accountedThrough)
+				throw new Error('Unresolved recovery requires original unmeasured failed custody.');
+			claim.status = 'unresolved'; claim.updatedAt = now;
+			state.events.push({ id: randomUUID(), claimId, connectionId: claim.connectionId, assignmentId: claim.assignmentId,
+				outcome: 'operator-usage-unresolved', recordedAt: now });
 		});
 	}
 

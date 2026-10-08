@@ -72,6 +72,48 @@ async function recoveryFixture() {
 // real durable local files. Upstream JSON and principal/token are INPUTS,
 // NOT native API settlement, independent authentication or remote cleanup.
 describe('document-wide native provider recovery boundary', () => {
+	it('native operator-held terminal recovery retains missing denied or malformed audit authority without returning or deleting failed custody', async () => {
+		for (const recovery of [undefined, null, {}, { usageStatus: 'unresolved', settled: true }]) {
+			const f = await recoveryFixture(); try {
+				const prior = (await f.reopen().claimsForRecovery())[0]!;
+				f.setReply({ id: f.attempt.id, teamId: f.attempt.teamId, providerId: f.attempt.provider.providerId,
+					status: 'expired', stateVersion: 7, metadata: { leaseRecovery: { disposition: 'operator-action' } },
+					assignmentAttempt: f.lease.dispatchEnvelope.assignment.assignmentAttempt, unresolvedUsageRecovery: recovery });
+				expect((await f.run())[0]).toMatchObject({ status: 'retained' });
+				const held = (await f.reopen().claimsForRecovery())[0]!;
+				expect(held).toEqual({ ...prior, updatedAt: held.updatedAt });
+				expect(await f.reopen().claim({ connectionId: f.connection.connection.id, globalLimit: 1, connectionLimit: 1 })).toBeNull();
+				expect(f.requests).toHaveLength(1); expect(f.requests[0]?.method).toBe('GET');
+			} finally { await f.close(); }
+		}
+	});
+	it('native unresolved operator recovery frees only concurrency while preserving exact failed output and unknown period reservation across reopened stores', async () => {
+		const f = await recoveryFixture(); try {
+			const prior = (await f.reopen().claimsForRecovery())[0]!;
+			const frozen = f.lease.dispatchEnvelope.assignment.assignmentAttempt;
+			const accounting = await f.reopen().activeTimeObservation(frozen.provider.modelConfigurationId, [frozen.provider.executionCapabilityId]);
+			const value = { id: frozen.id, teamId: frozen.teamId, providerId: frozen.provider.providerId,
+				status: 'expired', stateVersion: 7, assignmentAttempt: { ...frozen, status: 'expired', finishedAt: frozen.deadline },
+				unresolvedUsageRecovery: { assignmentId: frozen.id, reservationId: frozen.reservationId, usageStatus: 'unresolved',
+					settled: false, expectedStateVersion: 7, actorId: 'operator', reason: 'Active measurement unavailable', recoveredAt: frozen.deadline } };
+			const before = structuredClone(value); f.setReply(value);
+			expect((await f.run())[0]).toMatchObject({ status: 'released', usageStatus: 'unresolved', settled: false });
+			expect(await f.run()).toEqual([]); expect(f.requests).toHaveLength(1); expect(f.requests[0]?.method).toBe('GET');
+			const state: { claims: Array<typeof prior>; events: Array<{ outcome: string }> } = JSON.parse(await f.bytes());
+			expect(state.claims).toHaveLength(1);
+			expect(state.claims[0]).toEqual({ ...prior, status: 'unresolved', updatedAt: state.claims[0]!.updatedAt });
+			expect(state.events.filter(event => event.outcome === 'operator-usage-unresolved')).toHaveLength(1);
+			const after = await f.reopen().activeTimeObservation(frozen.provider.modelConfigurationId, [frozen.provider.executionCapabilityId]);
+			expect(after.modelUsage).toEqual(accounting.modelUsage); expect(after.capabilityUsage).toEqual(accounting.capabilityUsage);
+			const slot = await f.reopen().claim({ connectionId: f.connection.connection.id, globalLimit: 1, connectionLimit: 1 });
+			expect(slot).not.toBeNull();
+			const lease = f.lease;
+			await expect(f.reopen().attachLease(slot!.id, { ...lease, accounting: { ...lease.accounting,
+				dailyActiveSecondsLimit: prior.requestedSeconds!, capabilityDailyActiveSecondsLimit: prior.requestedSeconds! } }))
+				.rejects.toThrow('daily active-time capacity');
+			expect(value).toEqual(before); expect(await f.entries()).toEqual(['capacity-state.json']);
+		} finally { await f.close(); }
+	});
 	it('native denied unavailable malformed and disconnected availability refresh retains the original session and failed assignment for exact retry instead of creating replacement authority', async () => {
 		const outcomes = [];
 		for (const failure of [{ status: 401 }, { status: 403 }, { status: 503 }, { status: 400 },

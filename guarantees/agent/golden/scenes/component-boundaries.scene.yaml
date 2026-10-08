@@ -1911,3 +1911,18 @@ workflow:
   - id: exact-repository-scope-denial-native
     action: { verifier: agent.golden.exact-repository-scope-denial-native }
     expect: { status: passed }
+  - id: native-active-usage-unit
+    action: { verifier: agent.golden.native-active-usage-unit }
+    expect: { status: passed }
+  - id: unresolved-recovery-unit
+    action: { verifier: agent.golden.unresolved-recovery-unit }
+    expect: { status: passed }
+  - id: unresolved-recovery-denial-unit
+    action: { verifier: agent.golden.unresolved-recovery-denial-unit }
+    expect: { status: passed }
+  - id: unresolved-recovery-native
+    action: { verifier: agent.golden.unresolved-recovery-native }
+    expect: { status: passed }
+  - id: unresolved-recovery-denial-native
+    action: { verifier: agent.golden.unresolved-recovery-denial-native }
+    expect: { status: passed }

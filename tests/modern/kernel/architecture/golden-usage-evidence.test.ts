@@ -24,6 +24,32 @@ function outcomes(candidates: Row[]): string[] {
 // UNIT tests OF actual managed settlement assertions. Supplied measurement DTOs
 // are not actual provider usage, canonical UsageSettlements or real settlement receipts.
 describe('complete scoped measured usage evidence for managed settlement', () => {
+	it('denies automatic zero settlement of operator-action execution with no active clock without rewriting failed observations', () => {
+		const stopped = state.cases.get('Stopped simulation retains terminal leases teardown and exactly-once settlement')!;
+		state.replies.get('workdays show')!.run.status = 'failed';
+		const item = assignments()[0]!;
+		item.status = 'expired'; item.failedAt = item.completedAt; item.completedAt = null; item.assignmentResult = null;
+		item.capacityEnvelope.budget.time.executionStartedAt = null;
+		item.capacityEnvelope.budget.time.closeoutStartedAt = null;
+		item.metadata = { leaseRecovery: { disposition: 'operator-action', reasonCode: 'expired_lease_side_effect_evidence_present' } };
+		const measurements = ordered(assignments().map(value => measured(value)));
+		const measurement = measurements.find(value => value.assignmentId === item.id)!;
+		measurement.createdAt = item.failedAt; measurement.activeSeconds = 0; measurement.elapsedSeconds = 0; measurement.nativeUsage = {};
+		state.replies.set('capacity usage', page(ordered(measurements)));
+		for (const reasonCode of ['expired_lease_execution_usage_unknown', 'expired_lease_side_effect_evidence_present',
+			'expired_lease_financial_transition_uncertain', 'expired_lease_settlement_without_success_evidence']) {
+			item.metadata.leaseRecovery.reasonCode = reasonCode; const before = structuredClone([...state.replies]);
+			expect(stopped).toThrow(/ACCEPTANCE_USAGE_UNRESOLVED/u);
+			expect([...state.replies]).toEqual(before);
+		}
+		measurement.activeSeconds = 2; measurement.elapsedSeconds = 3; measurement.nativeUsage = { activeSeconds: 2 };
+		const measuredBefore = structuredClone([...state.replies]); expect(stopped).not.toThrow();
+		expect([...state.replies]).toEqual(measuredBefore);
+		delete item.metadata.leaseRecovery;
+		measurement.activeSeconds = 0; measurement.elapsedSeconds = 0; measurement.nativeUsage = {};
+		const unstartedBefore = structuredClone([...state.replies]); expect(stopped).not.toThrow();
+		expect([...state.replies]).toEqual(unstartedBefore);
+	});
 	it('denies contradictory normalized and native token counts without changing supplied settlement observations', () => {
 		const original = structuredClone(usage()), first = original.items[0], item = assignments().find(value => value.id === first.assignmentId)!;
 		const native = structuredClone(item.assignmentResult.usage.native), denied: boolean[] = [];

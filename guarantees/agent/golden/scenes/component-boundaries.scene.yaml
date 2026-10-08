@@ -1926,3 +1926,6 @@ workflow:
   - id: unresolved-recovery-denial-native
     action: { verifier: agent.golden.unresolved-recovery-denial-native }
     expect: { status: passed }
+  - id: unknown-terminal-time-unit
+    action: { verifier: agent.golden.unknown-terminal-time-unit }
+    expect: { status: passed }

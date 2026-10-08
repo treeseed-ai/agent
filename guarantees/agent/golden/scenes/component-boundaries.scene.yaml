@@ -1872,3 +1872,6 @@ workflow:
   - id: recovery-post-removal-budget-native
     action: { verifier: agent.golden.recovery-post-removal-budget-native }
     expect: { status: passed }
+  - id: assignment-workday-unit
+    action: { verifier: agent.golden.assignment-workday-unit }
+    expect: { status: passed }

@@ -3,6 +3,18 @@ id: agent.golden.component-boundaries
 title: Golden execution component boundaries
 scope: local-component-tests
 workflow:
+  - id: canonical-sandbox-attempt-unit
+    action: { verifier: agent.golden.canonical-sandbox-attempt-unit }
+    expect: { status: passed }
+  - id: canonical-sandbox-attempt-denial-unit
+    action: { verifier: agent.golden.canonical-sandbox-attempt-denial-unit }
+    expect: { status: passed }
+  - id: canonical-sandbox-attempt-native
+    action: { verifier: agent.golden.canonical-sandbox-attempt-native }
+    expect: { status: passed }
+  - id: canonical-sandbox-attempt-denial-native
+    action: { verifier: agent.golden.canonical-sandbox-attempt-denial-native }
+    expect: { status: passed }
   - id: source-context-required-unit
     action: { verifier: agent.golden.source-context-required-unit }
     expect: { status: passed }

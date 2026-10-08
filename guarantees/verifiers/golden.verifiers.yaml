@@ -1,6 +1,26 @@
 schemaVersion: treeseed.guarantee-verifiers/v1
 ownerPackage: "@treeseed/agent"
 verifiers:
+  agent.golden.canonical-sandbox-attempt-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/microvm-result-authority.test.ts
+    testName: "signs the exact canonical attempt ordinal without deriving another attempt from lifecycle counters"
+  agent.golden.canonical-sandbox-attempt-denial-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/microvm-result-authority.test.ts
+    testName: "denies missing or malformed canonical attempt ordinals before any broker admission without repairing authority"
+  agent.golden.canonical-sandbox-attempt-native:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/sandbox-attempt-native.test.ts
+    testName: "native provider signs the canonical source attempt unchanged through Unix broker admission and exact resource closeout"
+  agent.golden.canonical-sandbox-attempt-denial-native:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/sandbox-attempt-native.test.ts
+    testName: "native provider refuses malformed canonical attempt authority before Unix admission without retaining an allocated fixture"
   agent.golden.source-context-required-unit:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

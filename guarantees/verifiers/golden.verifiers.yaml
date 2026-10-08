@@ -3329,3 +3329,23 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/provider/provider-runner.test.ts
     testName: "accounts the original admitted active interval when native observations contain only elapsed time without changing observations or charging native units twice"
+  agent.golden.unresolved-recovery-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/provider/architecture/unresolved-recovery.test.ts
+    testName: "admits only the exact original terminal attempt and unresolved operator audit without deriving measurement or modifying evidence"
+  agent.golden.unresolved-recovery-denial-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/provider/architecture/unresolved-recovery.test.ts
+    testName: "denies missing malformed foreign moved measured or successful recovery evidence rather than releasing unknown capacity"
+  agent.golden.unresolved-recovery-native:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/provider/architecture/recovery-native.test.ts
+    testName: "native unresolved operator recovery frees only concurrency while preserving exact failed output and unknown period reservation across reopened stores"
+  agent.golden.unresolved-recovery-denial-native:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/provider/architecture/recovery-native.test.ts
+    testName: "native operator-held terminal recovery retains missing denied or malformed audit authority without returning or deleting failed custody"

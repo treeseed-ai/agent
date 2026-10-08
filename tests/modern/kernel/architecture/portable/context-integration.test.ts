@@ -47,7 +47,7 @@ describe('owning context Kernel through native content HTTP and source Git', () 
 		expect(outcomes).toEqual(Array.from({ length: 8 }, () => true));
 	});
 	it('native renamed Reporter commits one canonical exact-workday Note without model dispatch and retains interrupted raw readback without a passing result', async () => {
-		for (const mode of ['original', 'settlement', 'attempt-result', 'interrupted']) {
+		for (const mode of ['original', 'settlement', 'attempt-result', 'interrupted', 'start-denied']) {
 			const interrupted = mode === 'interrupted';
 			const f = await portableKernel(); let boundary: Awaited<ReturnType<typeof contextBoundary>> | undefined;
 			try {
@@ -95,9 +95,12 @@ describe('owning context Kernel through native content HTTP and source Git', () 
 				f.input.treeDx = boundary.facade;
 				const held = structuredClone({ attempt: f.attempt, context: f.input.assignment.workspaceContext, evidence, profileInput });
 				let candidate = '', content = '', writes = 0, commits = 0;
+				let deniedStarts = 0;
+				if (mode === 'start-denied') f.input.beginExecution = async () => { deniedStarts++; throw new Error('original_native_execution_start_denied'); };
 				boundary.setResponder(input => {
 					const body = row(input.body);
 					if (Array.isArray(body.files)) {
+						expect(f.begin).toEqual([{ assignmentId: f.attempt.id, originalDeadline: f.attempt.deadline }]);
 						expect(body.files).toHaveLength(1); const file = row(body.files[0]); expect(file.path).toBe(path);
 						if (typeof file.content !== 'string') throw new Error('Native exact report bytes required');
 						content = file.content; mkdirSync(join(f.checkout, 'notes'), { recursive: true }); writeFileSync(join(f.checkout, path), content);
@@ -108,6 +111,16 @@ describe('owning context Kernel through native content HTTP and source Git', () 
 					throw new Error('Unexpected report operation');
 				});
 				const result = await f.run();
+				if (mode === 'start-denied') {
+					expect(result).toMatchObject({ status: 'failed', summary: 'original_native_execution_start_denied' });
+					expect(result.outputs?.assignmentResult).toBeUndefined(); expect(result.outputs?.teardown).toBeUndefined();
+					expect(writes).toBe(0); expect(commits).toBe(0); expect(candidate).toBe(''); expect(content).toBe('');
+					expect(deniedStarts).toBe(1); expect(f.requests).toEqual([]); expect(f.begin).toEqual([]); expect(boundary.calls).toEqual([]);
+					expect(f.git('rev-parse', 'HEAD')).toBe(f.base);
+					expect({ attempt: f.attempt, context: f.input.assignment.workspaceContext, evidence, profileInput }).toEqual(held);
+					continue;
+				}
+				expect(f.begin).toEqual([{ assignmentId: f.attempt.id, originalDeadline: f.attempt.deadline }]);
 				expect(writes, JSON.stringify({ status: result.status, code: result.code, summary: result.summary })).toBe(1); expect(commits).toBe(1); expect(f.requests).toEqual([]);
 				expect(execFileSync('git', ['show', `${candidate}:${path}`], { cwd: f.checkout, encoding: 'utf8' })).toBe(content);
 				expect(f.git('rev-parse', `${candidate}^`)).toBe(f.base);

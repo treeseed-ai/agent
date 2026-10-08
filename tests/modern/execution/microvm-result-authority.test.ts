@@ -67,6 +67,27 @@ async function suppliedMicrovm() {
 }
 
 describe('microvm result and closeout authority', () => {
+	it('signs the exact canonical attempt ordinal without deriving another attempt from lifecycle counters', async () => {
+		const outcomes: Array<{ canonical: number; signed: number | undefined }> = [];
+		for (const ordinal of [1, 2, 100]) {
+			const f = await suppliedMicrovm(), attempt = assignmentAttemptSchema.parse(f.input.assignment.assignmentAttempt);
+			attempt.attempt = ordinal; f.input.assignment.assignmentAttempt = attempt; f.input.assignment.attemptCount = ordinal;
+			const held = structuredClone(f.input.assignment); await f.executor.execute(f.input);
+			outcomes.push({ canonical: ordinal, signed: f.observed[0]?.attempt });
+			expect(f.input.assignment).toEqual(held); expect(f.observed).toHaveLength(1);
+			expect(f.client.destroy).toHaveBeenCalledOnce(); expect(f.cleanup).toHaveBeenCalledOnce();
+		}
+		expect(outcomes).toEqual([1, 2, 100].map(ordinal => ({ canonical: ordinal, signed: ordinal })));
+	});
+	it('denies missing or malformed canonical attempt ordinals before any broker admission without repairing authority', async () => {
+		for (const ordinal of [undefined, null, '1', 0, -1, 0.5, NaN, Infinity]) {
+			const f = await suppliedMicrovm(), attempt = Object.assign({}, f.input.assignment.assignmentAttempt, { attempt: ordinal });
+			f.input.assignment.assignmentAttempt = attempt; f.input.assignment.workspaceContext = { assignmentAttempt: attempt, predecessorResults: [] };
+			const held = structuredClone(f.input.assignment); await expect(f.executor.execute(f.input)).rejects.toThrow();
+			expect(f.observed).toEqual([]); expect(f.client.prepare).not.toHaveBeenCalled();
+			expect(f.client.execute).not.toHaveBeenCalled(); expect(f.input.assignment).toEqual(held);
+		}
+	});
 	it('denies missing malformed future expired and widened issued productive authority before executor work and closes the original clock without repairing inputs', async () => {
 		const outcomes: Array<{ mode: string; executed: number; clockClosed: number; started: number; message: string; closeoutCause: boolean }> = [];
 		for (const mode of ['missing', 'object', 'malformed', 'before-admission', 'future', 'reversed', 'beyond-phase', 'over-duration', 'expired', 'close-denied']) {

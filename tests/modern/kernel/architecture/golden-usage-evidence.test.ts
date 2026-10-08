@@ -36,9 +36,9 @@ describe('complete scoped measured usage evidence for managed settlement', () =>
 		const measurement = measurements.find(value => value.assignmentId === item.id)!;
 		measurement.createdAt = item.failedAt; measurement.activeSeconds = 0; measurement.elapsedSeconds = 0; measurement.nativeUsage = {};
 		state.replies.set('capacity usage', page(ordered(measurements)));
-		for (const source of ['capacity_workday_deadline_terminalization', 'capacity_workday_terminal_recovery',
-			'capacity_workday_explicit_terminalization', 'capacity_workday_terminalization']) {
-			measurement.source = source; const before = structuredClone([...state.replies]);
+		for (const reasonCode of ['expired_lease_execution_usage_unknown', 'expired_lease_side_effect_evidence_present',
+			'expired_lease_financial_transition_uncertain', 'expired_lease_settlement_without_success_evidence']) {
+			item.metadata.leaseRecovery.reasonCode = reasonCode; const before = structuredClone([...state.replies]);
 			expect(stopped).toThrow(/ACCEPTANCE_USAGE_UNRESOLVED/u);
 			expect([...state.replies]).toEqual(before);
 		}

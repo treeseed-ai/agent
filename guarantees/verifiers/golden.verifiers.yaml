@@ -851,6 +851,16 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/kernel/architecture/portable/cross-project-authority.test.ts
     testName: "resolves independently pinned reads from one repository by exact commit path and model rather than repository row count"
+  agent.golden.exact-repository-tool-scope-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/portable/cross-project-authority.test.ts
+    testName: "routes explicit exact file tools and the primary current view across independently pinned repository scopes"
+  agent.golden.exact-repository-tool-scope-native:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/portable/cross-project-native.test.ts
+    testName: "official native file tools select the exact pinned primary or explicit project scope without collapsing repository grants"
   agent.golden.exact-repository-scope-denial-unit:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

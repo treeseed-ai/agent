@@ -13,6 +13,19 @@ function unit() {
 	return { ...f, calls, facade };
 }
 describe('exact secondary content route authority', () => {
+	it('routes explicit exact file tools and the primary current view across independently pinned repository scopes', async () => {
+		for (const selected of [false, true]) {
+			const f = unit(), facade = { ...f.facade, projectId: f.projectId, repositoryId: f.ref.repository, baseRef: f.ref.commit };
+			f.input.treeDx = facade; f.grants.unshift({ ...f.grants[1]!, baseRef: 'f'.repeat(40), allowedPaths: ['proposals/other.mdx'] });
+			const args = { ...(selected ? { project: 'secondary', projectId: f.projectId } : {}), ref: f.ref.commit, paths: [f.ref.path] };
+			const before = structuredClone({ args, attempt: f.attempt, grants: f.grants });
+			expect(await executeAssignmentTreeDxTool(f.input, 'treedx_read_files', args)).toEqual(f.response);
+			expect(f.calls).toEqual([{ operation: 'treedx.repositories.files.read', input: {
+				path: { projectId: f.projectId, repoId: f.ref.repository }, body: { ref: f.ref.commit, paths: [f.ref.path],
+					encoding: 'utf8', parseFrontmatter: true, allowProtected: true } } }]);
+			expect({ args, attempt: f.attempt, grants: f.grants }).toEqual(before);
+		}
+	});
 	it('resolves independently pinned reads from one repository by exact commit path and model rather than repository row count', async () => {
 		for (const mismatch of ['commit', 'path', 'model']) {
 			const f = unit(), grant = f.grants[1]!;

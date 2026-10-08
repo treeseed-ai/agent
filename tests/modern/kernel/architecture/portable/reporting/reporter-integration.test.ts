@@ -97,7 +97,7 @@ describe('native deterministic content execution window', () => {
 					expect(execFileSync('git', ['show', `${candidate}:${path}`], { cwd: f.checkout, encoding: 'utf8' })).toBe(content);
 					expect(f.git('rev-parse', `${candidate}^`)).toBe(f.base);
 					expect(assignmentResultSchema.parse(claim.closeoutOutput.assignmentResult).references)
-						.toEqual([{ kind: 'treedx', projectId: f.attempt.projectId, repository, path, commit: candidate }]);
+						.toEqual([{ kind: 'treedx', projectId: f.attempt.projectId, repository, path, commit: candidate, workspaceId: 'bounded-report-workspace' }]);
 					expect({ attempt: f.attempt, context: f.input.assignment.workspaceContext, evidence, profileInput }).toEqual(held);
 					continue;
 				}

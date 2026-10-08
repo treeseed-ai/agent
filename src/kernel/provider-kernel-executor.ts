@@ -59,7 +59,7 @@ export function aggregateExecutionUsage(measurements: unknown): { elapsedSeconds
 		...(Object.hasOwn(totals, 'outputTokens') ? { outputTokens: totals.outputTokens! } : {}) };
 }
 
-function canonicalExecutionUsage(measurements: unknown): AssignmentResult['usage'] {
+export function canonicalExecutionUsage(measurements: unknown): AssignmentResult['usage'] {
 	const usage = aggregateExecutionUsage(measurements), elapsedSeconds = Math.ceil(usage.elapsedSeconds);
 	const native: Record<string, number> = {};
 	for (const [key, value] of [...Object.entries(usage).filter(([key]) =>

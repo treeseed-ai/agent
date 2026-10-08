@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import type { ProviderProtocolClient } from '@treeseed/sdk/capacity-provider';
 import { assignmentReferenceSchema, assignmentResultSchema } from '@treeseed/sdk/agent-capacity';
 import type { AgentExecutionRequest, AgentExecutor, AgentExecutionResult, AssignmentTreeDxFacade } from '../execution/contracts.ts';
-import { aggregateExecutionUsage, executeKernelAssignment } from '../../kernel/provider-kernel-executor.ts';
+import { aggregateExecutionUsage, canonicalExecutionUsage, executeKernelAssignment } from '../../kernel/provider-kernel-executor.ts';
 import type { Handler } from '../../kernel/contracts.ts';
 
 function record(value: unknown): Record<string, unknown> {
@@ -179,9 +179,16 @@ export async function runProviderAssignment(input: ProviderAssignmentRunInput) {
 				executionAbort.abort(result!.code ?? result!.status);
 			}
 			if (executionStart) await finishExecution();
-			if (activeStartedAt !== null && !result!.usage?.length) {
-				result!.usage = [{ activeSeconds: ((activeFinishedAt ?? performance.now()) - activeStartedAt) / 1000,
-					elapsedSeconds: (performance.now() - elapsedStartedAt) / 1000 }];
+			if (activeStartedAt !== null && !(result!.usage ?? []).some(usage => Object.hasOwn(usage, 'activeSeconds'))) {
+				// Original admitted provider clock supplies only the missing active
+				// dimension. Retain native observations and do not double count elapsed
+				// time, tokens or charges already supplied by the executor/handler.
+				const measured = { activeSeconds: ((activeFinishedAt ?? performance.now()) - activeStartedAt) / 1000,
+					elapsedSeconds: result!.usage?.length ? 0 : (performance.now() - elapsedStartedAt) / 1000 };
+				result!.usage = [...(result!.usage ?? []), measured];
+				const canonical = assignmentResultSchema.safeParse(record(result!.outputs).assignmentResult);
+				if (canonical.success) result!.outputs = { ...result!.outputs,
+					assignmentResult: { ...canonical.data, usage: canonicalExecutionUsage(result!.usage) } };
 			}
 		} finally {
 			stopped = true;

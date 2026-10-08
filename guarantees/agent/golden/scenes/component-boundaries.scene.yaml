@@ -3,6 +3,9 @@ id: agent.golden.component-boundaries
 title: Golden execution component boundaries
 scope: local-component-tests
 workflow:
+  - id: source-context-required-unit
+    action: { verifier: agent.golden.source-context-required-unit }
+    expect: { status: passed }
   - id: execution-sdk-boundary-bindings-unit
     action: { verifier: agent.golden.execution-sdk-boundary-bindings-unit }
     expect: { status: passed }

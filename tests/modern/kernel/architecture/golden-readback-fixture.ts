@@ -53,7 +53,7 @@ export function assignment(id: string, activity: string, agentClass: string, wor
 			handlerOrigin: 'agent-package', prompt: { system: 'Synthetic governed task instructions for assertion testing only.' },
 			permissionCeiling: { content: { read: ['proposal', 'decision'], write: git ? [] : ['decision'] }, tools: [...tools] } },
 			grant: { contentRead: [], contentWrite: git ? [] : [writable], sourceRead: ['sdk'], sourceWrite: git ? ['sdk'] : [], tools: [...tools] },
-			contextRefs: [], workspace: git ? { mode: 'git', repository: 'sdk', baseCommit: commit, branch: `simulation/fixture/${id}`, writablePaths: ['src'] }
+			contextRefs: [{ store: 'git', model: 'repository', id: 'sdk', repository: 'sdk', commit }], workspace: git ? { mode: 'git', repository: 'sdk', baseCommit: commit, branch: `simulation/fixture/${id}`, writablePaths: ['src'] }
 				: { mode: 'treedx', repository: 'sdk-library', baseCommit: commit, workspaceId: `workspace-${id}`, writablePaths: [writable.path] },
 			estimate: { expectedSeconds: 300, maximumSeconds: 600 }, limits: { maximumSeconds: 10 } },
 		capacityEnvelope: { requestedSeconds: 10, reservedSeconds: 10, budget: { time: { executionStartedAt: createdAt, closeoutStartedAt: completedAt } } },
@@ -183,7 +183,7 @@ beforeEach(() => {
 			const context = [source, ...previous.map(value => ({ store: 'treedx', model: 'note', id: `note-${value.id}`,
 				...value.assignmentResult.references[0], kind: undefined, projectId: undefined }))]
 				.map(value => Object.fromEntries(Object.entries(value).filter(([, entry]) => entry !== undefined)));
-			item.assignmentAttempt.contextRefs = structuredClone(context);
+			item.assignmentAttempt.contextRefs = [...structuredClone(context), { store: 'git', model: 'repository', id: 'sdk', repository: 'sdk', commit }];
 			item.assignmentAttempt.grant.contentRead = structuredClone(context);
 			item.assignmentAttempt.grant.contentWrite = [output];
 			item.assignmentAttempt.workspace.writablePaths = [path];

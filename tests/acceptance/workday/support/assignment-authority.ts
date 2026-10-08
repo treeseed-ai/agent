@@ -340,6 +340,11 @@ export function verifyAssignmentAuthority(item: Row): void {
 			`${label}: Mutable TreeDX authority is unpinned or outside its workspace`);
 	}
 	assert.ok(Array.isArray(attempt.contextRefs), `${label}: Exact context custody required`);
+	for (const repository of value.sourceRead) assert.ok(attempt.contextRefs.some((input: unknown) => {
+		const reference = exactEntityReferenceSchema.safeParse(input);
+		return reference.success && reference.data.store === 'git' && reference.data.repository === repository
+			&& typeof reference.data.commit === 'string' && /^[a-f0-9]{40}$/u.test(reference.data.commit);
+	}), 'ACCEPTANCE_ASSIGNMENT_SOURCE_CONTEXT: Source read requires frozen exact Git context');
 	for (const input of attempt.contextRefs) {
 		const reference = exactEntityReferenceSchema.safeParse(input);
 		assert.ok(reference.success, `${label}: Malformed context authority`);

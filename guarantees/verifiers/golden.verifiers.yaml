@@ -1,6 +1,11 @@
 schemaVersion: treeseed.guarantee-verifiers/v1
 ownerPackage: "@treeseed/agent"
 verifiers:
+  agent.golden.source-context-required-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/golden-grant-readback.test.ts
+    testName: "denies source read authority without its frozen exact Git context rather than accepting a later provider pin"
   agent.golden.execution-sdk-boundary-bindings-unit:
     kind: vitestCase
     testFile: tests/modern/guarantees/bindings.test.ts

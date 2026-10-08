@@ -26,7 +26,8 @@ describe('managed planning cycle and published contribution custody', () => {
 				const source = item.assignmentAttempt.sourceRef, commit = item.assignmentAttempt.workspace.baseCommit;
 				const context = [structuredClone(source), ...previous.map((entry: Row) => ({ store: 'treedx', model: 'note',
 					id: `note-${entry.id}`, repository: 'sdk-library', commit, path: entry.assignmentResult.references[0].path }))];
-				item.assignmentAttempt.contextRefs = structuredClone(context); item.assignmentAttempt.grant.contentRead = structuredClone(context);
+				item.assignmentAttempt.contextRefs = [...structuredClone(context), ...prior.assignmentAttempt.contextRefs.filter((ref: Row) => ref.store === 'git')];
+				item.assignmentAttempt.grant.contentRead = structuredClone(context);
 				item.assignmentAttempt.grant.contentWrite = [{ store: 'treedx', model: 'note', id: noteId, repository: 'sdk-library', commit, path }];
 				item.assignmentAttempt.workspace.workspaceId = `workspace-${id}`; item.assignmentAttempt.workspace.writablePaths = [path];
 				const body = previous.map((entry: Row) => `- ${entry.assignmentResult.id}: Incorporated the ${entry.assignmentAttempt.agentClass} contribution.`)

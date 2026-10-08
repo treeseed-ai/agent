@@ -79,7 +79,7 @@ export function readWorkdayAssignments(workdayId: string, startedAt: string, tea
 	const assignments: Row[] = [];
 	const start = Date.parse(startedAt);
 	assert.ok(workdayId && Number.isFinite(start), 'ACCEPTANCE_ASSIGNMENT_ROW: Exact workday start authority required');
-	for (const item of readCompleteEvidence(['assignments', 'list'], team, DEFAULT_CAPACITY_PAGE_LIMIT, 'ACCEPTANCE_ASSIGNMENT')) {
+	for (const item of readCompleteEvidence(['assignments', 'list', '--workday', workdayId], team, DEFAULT_CAPACITY_PAGE_LIMIT, 'ACCEPTANCE_ASSIGNMENT')) {
 			const time = Date.parse(text(item.createdAt));
 			assert.ok(item.workDayId === null || typeof item.workDayId === 'string', 'ACCEPTANCE_ASSIGNMENT_ROW: Workday scope required');
 			if (item.workDayId === workdayId) {

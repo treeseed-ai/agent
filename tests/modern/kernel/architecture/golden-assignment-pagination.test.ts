@@ -44,8 +44,8 @@ describe('complete managed assignment collection custody', () => {
 		state.pages = [page(full().map((value, index) => index === 1 ? { ...value, workDayId: 'other-workday' } : value), true), page([item(50)])];
 		const before = structuredClone(state.pages);
 		expect(collect().map(value => value.id)).toEqual([...full().filter((_, index) => index !== 1), item(50)].map(value => value.id));
-		expect(state.calls).toEqual([['assignments', 'list', '--limit', '50'],
-			['assignments', 'list', '--limit', '50', '--cursor', (state.pages[0]!.page as Row).nextCursor]]);
+		expect(state.calls).toEqual([['assignments', 'list', '--workday', 'workday-target', '--limit', '50'],
+			['assignments', 'list', '--workday', 'workday-target', '--limit', '50', '--cursor', (state.pages[0]!.page as Row).nextCursor]]);
 		expect(state.pages).toEqual(before);
 	});
 	it('denies absent malformed or contradictory page authority', () => {

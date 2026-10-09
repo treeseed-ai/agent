@@ -67,6 +67,14 @@ function sourceFiles(root: string): string[] {
 }
 
 describe('Agent package ownership boundary', () => {
+	it('shipped acceptance assets resolve shared owning contracts only through public package entrypoints', () => {
+		const privateImports = sourceFiles(resolve('tests/acceptance')).flatMap(path => {
+			const source = readFileSync(path, 'utf8');
+			return [...source.matchAll(/(?:from\s*|import\s*\()(['"])([^'"]+)\1/gu)]
+				.filter(value => /(?:^|\/)src\//u.test(value[2]!)).map(value => ({ path, specifier: value[2] }));
+		});
+		expect(privateImports).toEqual([]);
+	});
 	it('validates each unchanged native manifest once per load and revalidates an applied connection overlay without caching authority across calls', async () => {
 		const directory = mkdtempSync(resolve(tmpdir(), 'agent-manifest-validation-'));
 		const path = resolve(directory, 'manifest.yaml'), manifest = createManagedProviderManifestV5({ release: 'validation-custody', guestImage: 'isolated/guest',

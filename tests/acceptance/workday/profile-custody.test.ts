@@ -25,9 +25,9 @@ test('Actual completed project-owned handler retains its exact governed selectio
 		const attempt = assignmentAttemptSchema.parse(item.assignmentAttempt), profile = attempt.effectiveProfile;
 		assert.ok(profile.handler.includes('/')); assert.match(attempt.provider.runtimeBuild, /^sha256:[a-f0-9]{64}$/u);
 		verifyGovernedProfile(item, readGovernedContentFile(profile.profileRef, attempt.projectId, f.team, cache, 'ACCEPTANCE_PROJECT_HANDLER_PROFILE'));
-		const listArgs = ['agents', 'handlers', 'list', '--project', attempt.projectId];
-		const showArgs = ['agents', 'handlers', 'show', profile.handler, '--project', attempt.projectId];
-		const catalog = read(listArgs, f.team), shown = read(showArgs, f.team); verifyHandlerInspection(item, catalog, shown);
+		const listArgs = ['agents', 'handlers', 'list', '--project', attempt.projectId, '--server', 'local'];
+		const showArgs = ['agents', 'handlers', 'show', profile.handler, '--project', attempt.projectId, '--server', 'local'];
+		const catalog = read(listArgs, f.team, true), shown = read(showArgs, f.team, true); verifyHandlerInspection(item, catalog, shown);
 		observations.push({ args: listArgs, value: catalog }, { args: showArgs, value: shown });
 		if (item.status === 'completed') {
 			const result = assignmentResultSchema.parse(item.assignmentResult);
@@ -38,7 +38,7 @@ test('Actual completed project-owned handler retains its exact governed selectio
 		assert.deepEqual(read(['assignments', 'show', attempt.id], f.team), item);
 	}
 	verifyGolden('settlement'); verifyGolden('reporter'); verifyGolden('stopped');
-	for (const observed of observations) assert.deepEqual(read(observed.args, f.team), observed.value);
+	for (const observed of observations) assert.deepEqual(read(observed.args, f.team, true), observed.value);
 	const again = new Map<string, Row>();
 	for (const item of selected) {
 		const attempt = assignmentAttemptSchema.parse(item.assignmentAttempt);
@@ -77,14 +77,14 @@ test('Actual governed handlers remain inspectable through exact public list and 
 	for (const item of f.assignments) {
 		const attempt = assignmentAttemptSchema.parse(item.assignmentAttempt), profile = attempt.effectiveProfile;
 		verifyGovernedProfile(item, readGovernedContentFile(profile.profileRef, attempt.projectId, f.team, cache, 'ACCEPTANCE_HANDLER_PROFILE'));
-		if (!catalogs.has(attempt.projectId)) catalogs.set(attempt.projectId, read(['agents', 'handlers', 'list', '--project', attempt.projectId], f.team));
+		if (!catalogs.has(attempt.projectId)) catalogs.set(attempt.projectId, read(['agents', 'handlers', 'list', '--project', attempt.projectId, '--server', 'local'], f.team, true));
 		const key = JSON.stringify([attempt.projectId, profile.handler]);
-		if (!selected.has(key)) selected.set(key, read(['agents', 'handlers', 'show', profile.handler, '--project', attempt.projectId], f.team));
+		if (!selected.has(key)) selected.set(key, read(['agents', 'handlers', 'show', profile.handler, '--project', attempt.projectId, '--server', 'local'], f.team, true));
 		verifyHandlerInspection(item, catalogs.get(attempt.projectId)!, selected.get(key)!);
 	}
-	for (const [projectId, catalog] of catalogs) assert.deepEqual(read(['agents', 'handlers', 'list', '--project', projectId], f.team), catalog);
+	for (const [projectId, catalog] of catalogs) assert.deepEqual(read(['agents', 'handlers', 'list', '--project', projectId, '--server', 'local'], f.team, true), catalog);
 	for (const [key, handler] of selected) { const [projectId, handlerId] = JSON.parse(key);
-		assert.deepEqual(read(['agents', 'handlers', 'show', handlerId, '--project', projectId], f.team), handler); }
+		assert.deepEqual(read(['agents', 'handlers', 'show', handlerId, '--project', projectId, '--server', 'local'], f.team, true), handler); }
 	const reread = new Map<string, Row>();
 	for (const item of f.assignments) { const attempt = assignmentAttemptSchema.parse(item.assignmentAttempt);
 		verifyGovernedProfile(item, readGovernedContentFile(attempt.effectiveProfile.profileRef, attempt.projectId, f.team, reread, 'ACCEPTANCE_HANDLER_PROFILE_REPEAT')); }

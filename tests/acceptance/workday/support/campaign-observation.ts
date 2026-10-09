@@ -2,13 +2,13 @@ import assert from 'node:assert/strict';
 import { normalizeCapacityPageLimit } from '@treeseed/sdk/capacity-pagination';
 import { appliedWorkdaySchema, assignmentAttemptSchema } from '@treeseed/sdk/agent-capacity';
 import { validateWorkdayIntent, type WorkdayIntent } from '@treeseed/sdk/operator-contracts';
+import { collectCompleteEvidence } from './evidence-pages.ts';
 
-// Existing public show/assignment/schedule reads only. The existing complete
-// event-page gate blocks incomplete show responses; there is no invented events
-// command, private-route fallback, alternate campaign or synthetic receipt.
-export function verifyInitialStartCustody(observed: Row, assignments: Row[]): void {
+// Read later pages only through the existing public events operation. Without
+// a supplied reader an incomplete show still denies; no inferred terminal page.
+export function verifyInitialStartCustody(observed: Row, assignments: Row[], readEvents?: (cursor: string, limit: number) => Row): void {
 	const run = row(observed.run), id = String(run.id ?? '');
-	observeCampaign(observed, id, new Map());
+	const snapshot = observeCampaign(observed, id, new Map(), readEvents);
 	const parameters = row(run.parameters), plan = appliedWorkdaySchema.parse(parameters.appliedPlan);
 	const selection = parameters.decisionIds;
 	if (selection !== undefined) assert.ok(Array.isArray(selection) && selection.length > 0
@@ -25,7 +25,7 @@ export function verifyInitialStartCustody(observed: Row, assignments: Row[]): vo
 	for (const [key, value] of Object.entries(plan.policySnapshot)) assert.deepEqual(parameters[key], value,
 		`ACCEPTANCE_START_POLICY: Frozen ${key} differs from applied original authority`);
 	assert.ok(Array.isArray(observed.events), 'ACCEPTANCE_START_EVENTS: Complete event history required');
-	const events = observed.events.map(row), starts = events.filter(event => event.eventType === 'workday.started'), ready = events.filter(event => event.eventType === 'assignment.polling_ready');
+	const events = snapshot.events, starts = events.filter(event => event.eventType === 'workday.started'), ready = events.filter(event => event.eventType === 'assignment.polling_ready');
 	assert.ok(Array.isArray(parameters.scheduledProjectIds) && parameters.scheduledProjectIds.length > 0,
 		'ACCEPTANCE_START_PROJECTS: Exact admitted project inventory required');
 	assert.equal(starts.length, parameters.scheduledProjectIds.length, 'ACCEPTANCE_START_EVENTS: One start per selected project required');
@@ -51,8 +51,8 @@ export function verifyInitialStartCustody(observed: Row, assignments: Row[]): vo
 			&& Date.parse(attempt.deadline) <= Date.parse(plan.endsAt), 'ACCEPTANCE_START_ATTEMPT_CLOCK: Admission preceded readiness or widened original deadline');
 	}
 }
-export function verifyRecurringStartCustody(observed: Row, assignments: Row[], schedule: Row): void {
-	verifyInitialStartCustody(observed, assignments);
+export function verifyRecurringStartCustody(observed: Row, assignments: Row[], schedule: Row, readEvents?: (cursor: string, limit: number) => Row): void {
+	verifyInitialStartCustody(observed, assignments, readEvents);
 	for (const [field, minimum] of [['cadenceSeconds', 60], ['stateVersion', 1]] as const)
 		assert.ok(typeof schedule[field] === 'number' && Number.isInteger(schedule[field]) && schedule[field] >= minimum,
 			'ACCEPTANCE_RECURRING_SCHEDULE: Canonical integer cadence and state version required');
@@ -86,7 +86,7 @@ function text(value: unknown) {
 }
 
 /** Acceptance-only custody of existing public workday records; not another event authority. */
-export function observeCampaign(observed: unknown, workdayId: string, retained: Map<string, Row>) {
+export function observeCampaign(observed: unknown, workdayId: string, retained: Map<string, Row>, readEvents?: (cursor: string, limit: number) => Row) {
 	const data = row(observed), run = row(data.run), scheduling = row(data.scheduling);
 	assert.equal(run.id, workdayId, 'ACCEPTANCE_CAMPAIGN_ID: Read-back changed identity');
 	assert.equal(scheduling.executionId, workdayId, 'ACCEPTANCE_OBSERVATION: Scheduling changed workday');
@@ -109,15 +109,20 @@ export function observeCampaign(observed: unknown, workdayId: string, retained: 
 	}
 	const page = row(data.eventPage);
 	assert.ok(typeof page.limit === 'number', 'ACCEPTANCE_OBSERVATION: Missing event page limit');
+	const limit = page.limit;
 	try { normalizeCapacityPageLimit(page.limit); } catch { assert.fail('ACCEPTANCE_OBSERVATION: Invalid event page limit'); }
-	// The supported CLI currently exposes show, not later event pages. Never invent
-	// a command or infer completion from the first page; the missing route blocks.
-	assert.equal(page.hasMore, false, 'ACCEPTANCE_OBSERVATION: Incomplete event pagination');
-	assert.equal(page.nextCursor, null, 'ACCEPTANCE_OBSERVATION: Unconsumed event cursor');
+	assert.equal(typeof page.hasMore, 'boolean', 'ACCEPTANCE_OBSERVATION: Incomplete event pagination');
 	assert.ok(Array.isArray(data.events), 'ACCEPTANCE_OBSERVATION: Missing event observations');
 	assert.ok(data.events.length <= page.limit, 'ACCEPTANCE_OBSERVATION: Event page exceeds declared limit');
+	if (page.hasMore) assert.ok(readEvents, 'ACCEPTANCE_OBSERVATION: Incomplete event pagination without public reader');
+	else assert.equal(page.nextCursor, null, 'ACCEPTANCE_OBSERVATION: Unconsumed event cursor');
+	const events: unknown[] = page.hasMore ? collectCompleteEvidence(cursor => {
+		if (cursor === undefined) return { items: data.events, page };
+		assert.ok(readEvents, 'ACCEPTANCE_OBSERVATION: Public event reader required');
+		return row(readEvents(cursor, limit));
+	}, limit, 'ACCEPTANCE_OBSERVATION', 'ascending') : data.events;
 	const current = new Map<string, Row>(), indexes = new Set<number>();
-	for (const value of data.events) {
+	for (const value of events) {
 		const event = row(value), id = text(event.id);
 		assert.equal(event.runId, workdayId, 'ACCEPTANCE_OBSERVATION: Foreign event workday');
 		assert.equal(event.teamId, text(run.teamId), 'ACCEPTANCE_OBSERVATION: Foreign event team');
@@ -136,5 +141,5 @@ export function observeCampaign(observed: unknown, workdayId: string, retained: 
 		'ACCEPTANCE_OBSERVATION: Previously observed event mutated or disappeared');
 	assert.ok(run.status !== 'completed' || !failedBoundary, 'ACCEPTANCE_OBSERVATION: Completed run hides failed scheduling');
 	for (const [id, event] of current) retained.set(id, structuredClone(event));
-	return { run, failedBoundary };
+	return { run, failedBoundary, events: [...current.values()] };
 }

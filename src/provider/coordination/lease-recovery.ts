@@ -20,7 +20,7 @@ export function isUnresolvedUsageRecovery(observed: unknown, frozen: AssignmentA
   return current.success && ['expired', 'failed', 'cancelled'].includes(textStatus(assignment.status))
     && current.data.status === assignment.status
     && isDeepStrictEqual({ ...current.data, status: frozen.status, finishedAt: frozen.finishedAt }, { ...frozen, finishedAt: frozen.finishedAt })
-    && assignment.id === frozen.id && assignment.teamId === frozen.teamId && assignment.providerId === frozen.provider.providerId
+    && assignment.id === frozen.id && assignment.teamId === frozen.teamId && assignment.capacityProviderId === frozen.provider.providerId
     && Object.keys(audit).length === keys.length && keys.every(key => Object.hasOwn(audit, key))
     && audit.assignmentId === frozen.id && audit.reservationId === frozen.reservationId
     && audit.usageStatus === 'unresolved' && audit.settled === false
@@ -65,9 +65,10 @@ export async function recoverProviderLocalLeases(input: { config: ProviderHostRu
       if (record(record(assignment.metadata).leaseRecovery).disposition === 'operator-action'
         || assignment.unresolvedUsageRecovery !== undefined) throw new Error('Original operator unresolved recovery audit is missing or invalid.');
       if (assignment.id !== claim.assignmentId || assignment.teamId !== frozen.teamId
-        || assignment.providerId !== frozen.provider.providerId || connection.teamId !== frozen.teamId
+        || assignment.capacityProviderId !== frozen.provider.providerId || connection.teamId !== frozen.teamId
         || connection.providerId !== frozen.provider.providerId
-        || !isDeepStrictEqual({ ...current, status: frozen.status }, frozen)
+        || current.status !== status
+        || !isDeepStrictEqual({ ...current, status: frozen.status, finishedAt: ['leased', 'running'].includes(status) ? current.finishedAt : frozen.finishedAt }, { ...frozen, finishedAt: frozen.finishedAt })
         || !['leased', 'running', 'completed', 'failed', 'returned', 'cancelled', 'expired', 'responded', 'abstained'].includes(status)) {
         throw new Error('Provider recovery assignment authority does not match its retained lease.');
       }

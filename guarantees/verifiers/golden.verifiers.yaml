@@ -3354,3 +3354,13 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/kernel/architecture/golden-usage-evidence.test.ts
     testName: "denies automatic zero settlement of operator-action execution with no active clock without rewriting failed observations"
+  agent.golden.recovery-public-provider-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/provider/architecture/unresolved-recovery.test.ts
+    testName: "uses the public capacityProviderId and frozen canonical provider without accepting a missing foreign or legacy-only provider identity"
+  agent.golden.recovery-public-provider-native:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/provider/architecture/recovery-native.test.ts
+    testName: "native recovery consumes the public capacityProviderId through the original client and retains foreign or legacy-only authority without replacing failed custody"

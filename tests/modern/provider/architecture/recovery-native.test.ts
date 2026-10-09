@@ -9,8 +9,8 @@ import { publishProviderAvailability } from '../../../../src/provider/lifecycle/
 async function recoveryFixture() {
 	const f = await capacityFixture();
 	const requests: Array<{ method: string; path: string; body: unknown }> = [];
-	let observed: unknown = { id: f.attempt.id, teamId: f.attempt.teamId, providerId: f.attempt.provider.providerId,
-		status: 'running', assignmentAttempt: f.attempt };
+	let observed: unknown = { id: f.attempt.id, teamId: f.attempt.teamId, capacityProviderId: f.attempt.provider.providerId,
+		status: 'running', assignmentAttempt: { ...f.attempt, status: 'running' } };
 	let code = 200, fault = '', returnCode = 200, returnReply: unknown = { assignment: { id: f.attempt.id, status: 'returned' } };
 	let availability: { status: number; code: string } | null = null;
 	const server = createServer((request, response) => {
@@ -51,8 +51,8 @@ async function recoveryFixture() {
 		const claim = await f.store.claim({ connectionId: connection.connection.id, globalLimit: 1, connectionLimit: 1 });
 		if (!claim) throw new Error('Actual native recovery slot required');
 		const lease = f.lease(); await f.store.attachLease(claim.id, lease); await f.store.claimDispatch(claim.id);
-		observed = { id: f.attempt.id, teamId: f.attempt.teamId, providerId: f.attempt.provider.providerId,
-			status: 'running', assignmentAttempt: lease.dispatchEnvelope.assignment.assignmentAttempt };
+		observed = { id: f.attempt.id, teamId: f.attempt.teamId, capacityProviderId: f.attempt.provider.providerId,
+			status: 'running', assignmentAttempt: { ...lease.dispatchEnvelope.assignment.assignmentAttempt, status: 'running' } };
 		await f.store.recordCloseoutOutput(claim.id, { status: 'blocked', unfinishedWork: ['unchanged original assignment'] });
 		await f.store.recordFailure(claim.id, 'original interrupted provider execution');
 		return { ...f, claim, lease, connection, requests,
@@ -72,11 +72,44 @@ async function recoveryFixture() {
 // real durable local files. Upstream JSON and principal/token are INPUTS,
 // NOT native API settlement, independent authentication or remote cleanup.
 describe('document-wide native provider recovery boundary', () => {
+	it('native recovery consumes the public capacityProviderId through the original client and retains foreign or legacy-only authority without replacing failed custody', async () => {
+		const variants = ['valid', 'valid-with-foreign-alias', 'missing', 'empty', 'null', 'foreign', 'legacy-only', 'foreign-canonical'] as const;
+		const outcomes: Array<{ variant: string; status: unknown; claimStatus: string }> = [];
+		for (const variant of variants) {
+			const f = await recoveryFixture(); try {
+				const prior = (await f.reopen().claimsForRecovery())[0]!, frozen = f.lease.dispatchEnvelope.assignment.assignmentAttempt;
+				const value: Record<string, unknown> = { id: frozen.id, teamId: frozen.teamId, capacityProviderId: frozen.provider.providerId,
+					status: 'expired', stateVersion: 7, metadata: { leaseRecovery: { disposition: 'operator-action' } },
+					assignmentAttempt: { ...frozen, status: 'expired', finishedAt: frozen.deadline },
+					unresolvedUsageRecovery: { assignmentId: frozen.id, reservationId: frozen.reservationId, usageStatus: 'unresolved',
+						settled: false, expectedStateVersion: 7, actorId: 'operator', reason: 'Original active clock absent', recoveredAt: frozen.deadline } };
+				if (variant === 'valid-with-foreign-alias') value.providerId = 'non-authoritative-foreign-alias';
+				if (variant === 'missing' || variant === 'legacy-only') delete value.capacityProviderId;
+				if (variant === 'empty') value.capacityProviderId = '';
+				if (variant === 'null') value.capacityProviderId = null;
+				if (variant === 'foreign') value.capacityProviderId = 'foreign-provider';
+				if (variant === 'legacy-only' || variant === 'foreign' || variant === 'empty' || variant === 'null') value.providerId = frozen.provider.providerId;
+				if (variant === 'foreign-canonical') value.assignmentAttempt = { ...frozen, status: 'expired', finishedAt: frozen.deadline,
+					provider: { ...frozen.provider, providerId: 'foreign-canonical-provider' } };
+				const before = structuredClone(value), accounting = await f.reopen().activeTimeObservation(frozen.provider.modelConfigurationId, [frozen.provider.executionCapabilityId]);
+				f.setReply(value); const result = await f.run();
+				const state: { claims: Array<typeof prior> } = JSON.parse(await f.bytes()); expect(state.claims).toHaveLength(1);
+				const held = state.claims[0]!; outcomes.push({ variant, status: result[0]?.status, claimStatus: held.status });
+				expect(held).toEqual({ ...prior, status: held.status, updatedAt: held.updatedAt });
+				const after = await f.reopen().activeTimeObservation(frozen.provider.modelConfigurationId, [frozen.provider.executionCapabilityId]);
+				expect(after.modelUsage).toEqual(accounting.modelUsage); expect(after.capabilityUsage).toEqual(accounting.capabilityUsage);
+				expect(f.requests).toEqual([{ method: 'GET', path: `/v1/provider/assignments/${frozen.id}`, body: null }]);
+				expect(value).toEqual(before); expect(await f.entries()).toEqual(['capacity-state.json']);
+			} finally { await f.close(); }
+		}
+		expect(outcomes).toEqual(variants.map(variant => ({ variant,
+			status: variant.startsWith('valid') ? 'released' : 'retained', claimStatus: variant.startsWith('valid') ? 'unresolved' : 'recovery' })));
+	});
 	it('native operator-held terminal recovery retains missing denied or malformed audit authority without returning or deleting failed custody', async () => {
 		for (const recovery of [undefined, null, {}, { usageStatus: 'unresolved', settled: true }]) {
 			const f = await recoveryFixture(); try {
 				const prior = (await f.reopen().claimsForRecovery())[0]!;
-				f.setReply({ id: f.attempt.id, teamId: f.attempt.teamId, providerId: f.attempt.provider.providerId,
+				f.setReply({ id: f.attempt.id, teamId: f.attempt.teamId, capacityProviderId: f.attempt.provider.providerId,
 					status: 'expired', stateVersion: 7, metadata: { leaseRecovery: { disposition: 'operator-action' } },
 					assignmentAttempt: f.lease.dispatchEnvelope.assignment.assignmentAttempt, unresolvedUsageRecovery: recovery });
 				expect((await f.run())[0]).toMatchObject({ status: 'retained' });
@@ -92,7 +125,7 @@ describe('document-wide native provider recovery boundary', () => {
 			const prior = (await f.reopen().claimsForRecovery())[0]!;
 			const frozen = f.lease.dispatchEnvelope.assignment.assignmentAttempt;
 			const accounting = await f.reopen().activeTimeObservation(frozen.provider.modelConfigurationId, [frozen.provider.executionCapabilityId]);
-			const value = { id: frozen.id, teamId: frozen.teamId, providerId: frozen.provider.providerId,
+			const value = { id: frozen.id, teamId: frozen.teamId, capacityProviderId: frozen.provider.providerId,
 				status: 'expired', stateVersion: 7, assignmentAttempt: { ...frozen, status: 'expired', finishedAt: frozen.deadline },
 				unresolvedUsageRecovery: { assignmentId: frozen.id, reservationId: frozen.reservationId, usageStatus: 'unresolved',
 					settled: false, expectedStateVersion: 7, actorId: 'operator', reason: 'Active measurement unavailable', recoveredAt: frozen.deadline } };
@@ -178,6 +211,19 @@ describe('document-wide native provider recovery boundary', () => {
 			} finally { await f.close(); }
 		}
 		expect(outcomes).toEqual(mutations.map(() => ({ retained: true, disposition: 'retained', original: true, returned: false })));
+		const f = await recoveryFixture(); try {
+			const frozen = f.lease.dispatchEnvelope.assignment.assignmentAttempt;
+			f.setReply({ id: frozen.id, teamId: frozen.teamId, capacityProviderId: frozen.provider.providerId,
+				status: 'running', assignmentAttempt: { ...frozen, status: 'running', finishedAt: frozen.deadline } });
+			expect((await f.run())[0]?.status).toBe('retained');
+			expect(await f.reopen().claimsForRecovery()).toHaveLength(1);
+			expect(f.requests).toHaveLength(1); expect(f.requests[0]?.method).toBe('GET');
+			f.setReply({ id: frozen.id, teamId: frozen.teamId, capacityProviderId: frozen.provider.providerId,
+				status: 'completed', assignmentAttempt: { ...frozen, status: 'running', finishedAt: frozen.deadline } });
+			expect((await f.run())[0]?.status).toBe('retained');
+			expect(await f.reopen().claimsForRecovery()).toHaveLength(1);
+			expect(f.requests).toHaveLength(2); expect(f.requests[1]?.method).toBe('GET');
+		} finally { await f.close(); }
 	});
 	it('retains custody on denied unavailable reset malformed and rejected return transports then retries the original output without duplicate return', async () => {
 		const outcomes = [];
@@ -185,8 +231,8 @@ describe('document-wide native provider recovery boundary', () => {
 			{ status: 200, fault: 'reset', returned: 200 }, { status: 200, fault: 'json', returned: 200 }, { status: 200, fault: '', returned: 403 }]) {
 			const f = await recoveryFixture();
 			try {
-				const current = { id: f.attempt.id, teamId: f.attempt.teamId, providerId: f.attempt.provider.providerId,
-					status: 'running', assignmentAttempt: f.lease.dispatchEnvelope.assignment.assignmentAttempt };
+				const current = { id: f.attempt.id, teamId: f.attempt.teamId, capacityProviderId: f.attempt.provider.providerId,
+					status: 'running', assignmentAttempt: { ...f.lease.dispatchEnvelope.assignment.assignmentAttempt, status: 'running' } };
 				f.setReply(current, failure.status, failure.fault, failure.returned);
 				const failed = await f.run(), held = (await f.reopen().claimsForRecovery())[0];
 				outcomes.push({ retained: failed[0]?.status === 'retained' && held?.leaseToken === f.lease.leaseToken,
@@ -217,8 +263,9 @@ describe('document-wide native provider recovery boundary', () => {
 	it('releases an exact confirmed terminal observation once without a new productive turn or replacing historical executor attribution', async () => {
 		const f = await recoveryFixture();
 		try {
-			f.setReply({ id: f.attempt.id, teamId: f.attempt.teamId, providerId: f.attempt.provider.providerId,
-				status: 'completed', runnerId: f.claim.runnerId, assignmentAttempt: f.lease.dispatchEnvelope.assignment.assignmentAttempt });
+			f.setReply({ id: f.attempt.id, teamId: f.attempt.teamId, capacityProviderId: f.attempt.provider.providerId,
+				status: 'completed', runnerId: f.claim.runnerId, assignmentAttempt: {
+					...f.lease.dispatchEnvelope.assignment.assignmentAttempt, status: 'completed', finishedAt: f.attempt.deadline } });
 			expect((await f.run())[0]).toMatchObject({ status: 'released', observedStatus: 'completed' });
 			expect(await f.run()).toEqual([]); expect(f.requests).toHaveLength(1); expect(f.requests[0]?.method).toBe('GET');
 			expect((await f.reopen().snapshot()).events.filter(item => item.outcome === 'authoritative-completed')).toHaveLength(1);

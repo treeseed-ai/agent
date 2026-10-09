@@ -10,7 +10,7 @@ import { request } from './kernel/provider-kernel-fixture.ts';
 
 const frozen = assignmentAttemptSchema.parse({ ...assignmentAttemptSchema.parse(request().assignment.assignmentAttempt), id: 'assignment', idempotencyKey: 'assignment' });
 const dispatchEnvelope = { assignment: { id: frozen.id, assignmentAttempt: frozen } };
-const observed = { id: frozen.id, teamId: frozen.teamId, providerId: frozen.provider.providerId, status: 'leased', assignmentAttempt: frozen };
+const observed = { id: frozen.id, teamId: frozen.teamId, capacityProviderId: frozen.provider.providerId, status: 'leased', assignmentAttempt: frozen };
 const connections = [{ connection: { id: 'connection' }, teamId: frozen.teamId, providerId: frozen.provider.providerId,
 	accessToken: { accessToken: 'test-only' }, controlPlaneUrl: 'https://api.example.test' }];
 
@@ -25,12 +25,24 @@ describe('provider local lease recovery', () => {
 			const claim = { id: 'claim', connectionId: 'connection', assignmentId: frozen.id, leaseToken: 'lease', runnerId: 'runner',
 				failureMessage: 'original failure', dispatchEnvelope }, before = structuredClone(claim);
 			const store = { claimsForRecovery: vi.fn().mockResolvedValue([claim]), finalize: vi.fn(), recordFailure: vi.fn() };
-			expect((await recoverProviderLocalLeases({ config: {} as never, store: store as never, connections: connections as never }))[0]?.status).toBe('retained');
+			const recover = () => recoverProviderLocalLeases({ config: {} as never, store: store as never, connections: connections as never });
+			expect((await recover())[0]?.status).toBe('retained');
 			expect(store.finalize).not.toHaveBeenCalled(); expect(store.recordFailure).toHaveBeenCalledOnce();
 			expect(reply).toEqual(input); expect(claim).toEqual(before);
 			api.returnAssignment.mockResolvedValue({ assignment: { id: frozen.id, status: 'returned' } });
-			expect((await recoverProviderLocalLeases({ config: {} as never, store: store as never, connections: connections as never }))[0]?.status).toBe('released');
+			expect((await recover())[0]?.status).toBe('released');
 			expect(store.finalize).toHaveBeenCalledOnce(); expect(api.returnAssignment.mock.calls[1]).toEqual(api.returnAssignment.mock.calls[0]);
+			const terminal = { ...observed, status: 'completed', assignmentAttempt: { ...frozen, status: 'completed', finishedAt: frozen.deadline } };
+			const terminalBefore = structuredClone(terminal); api.assignment.mockResolvedValue(terminal);
+			expect((await recover())[0]).toMatchObject({ status: 'released', observedStatus: 'completed' });
+			expect(store.finalize).toHaveBeenCalledTimes(2); expect(api.returnAssignment).toHaveBeenCalledTimes(2);
+			expect(terminal).toEqual(terminalBefore); expect(claim).toEqual(before);
+			api.assignment.mockResolvedValue({ ...observed, assignmentAttempt: { ...frozen, finishedAt: frozen.deadline } });
+			expect((await recover())[0]?.status).toBe('retained');
+			expect(store.finalize).toHaveBeenCalledTimes(2); expect(api.returnAssignment).toHaveBeenCalledTimes(2);
+			api.assignment.mockResolvedValue({ ...terminal, assignmentAttempt: { ...terminal.assignmentAttempt, status: 'running' } });
+			expect((await recover())[0]?.status).toBe('retained');
+			expect(store.finalize).toHaveBeenCalledTimes(2); expect(api.returnAssignment).toHaveBeenCalledTimes(2);
 		}
 	});
 	it('retains actual closeout custody across restart without promoting absent or failed receipts', async () => {

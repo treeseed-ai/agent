@@ -3364,3 +3364,13 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/provider/architecture/recovery-native.test.ts
     testName: "native recovery consumes the public capacityProviderId through the original client and retains foreign or legacy-only authority without replacing failed custody"
+  agent.golden.recovery-synthesized-terminal-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/provider/architecture/unresolved-recovery.test.ts
+    testName: "retains terminal API-recovery performance without treating synthesized zero values as measured settlement authority"
+  agent.golden.recovery-synthesized-terminal-native:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/provider/architecture/recovery-native.test.ts
+    testName: "native terminal recovery retains original failed custody across repeated API-generated unmeasured performance observations"

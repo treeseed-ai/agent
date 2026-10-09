@@ -72,6 +72,13 @@ export async function recoverProviderLocalLeases(input: { config: ProviderHostRu
         || !['leased', 'running', 'completed', 'failed', 'returned', 'cancelled', 'expired', 'responded', 'abstained'].includes(status)) {
         throw new Error('Provider recovery assignment authority does not match its retained lease.');
       }
+      // API recovery synthesizes disposition evidence, not measured settlement.
+      // Retain the original provider observation until its explicit recovery audit
+      // is present; a terminal status must not discard unresolved usage custody.
+      if (!['leased', 'running'].includes(status)
+        && record(record(record(assignment.lifecycleOutput).performance).systemAssessment).generatedBy === 'api-recovery') {
+        throw new Error('Synthesized recovery performance does not acknowledge measured usage custody.');
+      }
       if (status === 'leased' || status === 'running') {
         const response = record(await client.returnAssignment(claim.assignmentId, { leaseToken: claim.leaseToken, runnerId: claim.runnerId,
         ...(claim.closeoutOutput ? { output: claim.closeoutOutput } : {}),

@@ -251,7 +251,8 @@ describe('document-wide native provider recovery boundary', () => {
 		const f = await recoveryFixture();
 		try {
 			f.setReply({ id: f.attempt.id, teamId: f.attempt.teamId, capacityProviderId: f.attempt.provider.providerId,
-				status: 'completed', runnerId: f.claim.runnerId, assignmentAttempt: f.lease.dispatchEnvelope.assignment.assignmentAttempt });
+				status: 'completed', runnerId: f.claim.runnerId, assignmentAttempt: {
+					...f.lease.dispatchEnvelope.assignment.assignmentAttempt, status: 'completed', finishedAt: f.attempt.deadline } });
 			expect((await f.run())[0]).toMatchObject({ status: 'released', observedStatus: 'completed' });
 			expect(await f.run()).toEqual([]); expect(f.requests).toHaveLength(1); expect(f.requests[0]?.method).toBe('GET');
 			expect((await f.reopen().snapshot()).events.filter(item => item.outcome === 'authoritative-completed')).toHaveLength(1);

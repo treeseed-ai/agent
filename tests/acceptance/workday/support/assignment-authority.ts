@@ -5,7 +5,7 @@ import { isDeepStrictEqual } from 'node:util';
 import { parse } from 'yaml';
 import { validatePortableContentData } from '@treeseed/sdk/content-validation';
 import { read, row, type Row } from '../../acceptance-cli.ts';
-import { clockReading, timingAwarenessContract } from '../../../../src/sandbox/guest.ts';
+import { clockReading, timingAwarenessContract } from '@treeseed/agent';
 
 /** Discover actual model execution from owning events, never configured role names
  * or completed status. Missing failed-attempt evidence must remain fatal. */

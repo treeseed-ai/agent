@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { assignmentReferenceSchema, exactEntityReferenceSchema } from '@treeseed/sdk/agent-capacity';
 import { validatePortableContentData } from '@treeseed/sdk/content-validation';
-import { assertPredecessorSynthesis } from '../../../../src/kernel/handlers/planning-synthesis.ts';
+import { assertPredecessorSynthesis } from '@treeseed/agent';
 import { row, type Row } from '../../acceptance-cli.ts';
 import { readGovernedContentFile } from './decision-evidence.ts';
 import { verifyAssignmentAuthority } from './assignment-authority.ts';

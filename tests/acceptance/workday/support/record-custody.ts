@@ -7,7 +7,7 @@ import { assignmentAttemptSchema, assignmentResultSchema, capabilityAccountingLi
 import { capabilityConformanceSchema, capabilityDefinitionSchema, capabilityDefinitionDigest, capabilityOfferSchema } from '@treeseed/sdk/capacity-provider';
 import { canonicalStandardsJson } from '@treeseed/sdk/standards';
 import { row, type Row } from '../../acceptance-cli.ts';
-import { orderConnectionsForFairPolling } from '../../../../src/provider/teams/multi-team-runtime.ts';
+import { orderConnectionsForFairPolling } from '@treeseed/agent/provider-governance';
 import { assertCanonicalRecordShapes } from './canonical-record-shape.ts';
 import { readCompleteEvidence } from './evidence-pages.ts';
 

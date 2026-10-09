@@ -10,7 +10,7 @@ async function recoveryFixture() {
 	const f = await capacityFixture();
 	const requests: Array<{ method: string; path: string; body: unknown }> = [];
 	let observed: unknown = { id: f.attempt.id, teamId: f.attempt.teamId, capacityProviderId: f.attempt.provider.providerId,
-		status: 'running', assignmentAttempt: f.attempt };
+		status: 'running', assignmentAttempt: { ...f.attempt, status: 'running' } };
 	let code = 200, fault = '', returnCode = 200, returnReply: unknown = { assignment: { id: f.attempt.id, status: 'returned' } };
 	let availability: { status: number; code: string } | null = null;
 	const server = createServer((request, response) => {
@@ -52,7 +52,7 @@ async function recoveryFixture() {
 		if (!claim) throw new Error('Actual native recovery slot required');
 		const lease = f.lease(); await f.store.attachLease(claim.id, lease); await f.store.claimDispatch(claim.id);
 		observed = { id: f.attempt.id, teamId: f.attempt.teamId, capacityProviderId: f.attempt.provider.providerId,
-			status: 'running', assignmentAttempt: lease.dispatchEnvelope.assignment.assignmentAttempt };
+			status: 'running', assignmentAttempt: { ...lease.dispatchEnvelope.assignment.assignmentAttempt, status: 'running' } };
 		await f.store.recordCloseoutOutput(claim.id, { status: 'blocked', unfinishedWork: ['unchanged original assignment'] });
 		await f.store.recordFailure(claim.id, 'original interrupted provider execution');
 		return { ...f, claim, lease, connection, requests,
@@ -211,6 +211,19 @@ describe('document-wide native provider recovery boundary', () => {
 			} finally { await f.close(); }
 		}
 		expect(outcomes).toEqual(mutations.map(() => ({ retained: true, disposition: 'retained', original: true, returned: false })));
+		const f = await recoveryFixture(); try {
+			const frozen = f.lease.dispatchEnvelope.assignment.assignmentAttempt;
+			f.setReply({ id: frozen.id, teamId: frozen.teamId, capacityProviderId: frozen.provider.providerId,
+				status: 'running', assignmentAttempt: { ...frozen, status: 'running', finishedAt: frozen.deadline } });
+			expect((await f.run())[0]?.status).toBe('retained');
+			expect(await f.reopen().claimsForRecovery()).toHaveLength(1);
+			expect(f.requests).toHaveLength(1); expect(f.requests[0]?.method).toBe('GET');
+			f.setReply({ id: frozen.id, teamId: frozen.teamId, capacityProviderId: frozen.provider.providerId,
+				status: 'completed', assignmentAttempt: { ...frozen, status: 'running', finishedAt: frozen.deadline } });
+			expect((await f.run())[0]?.status).toBe('retained');
+			expect(await f.reopen().claimsForRecovery()).toHaveLength(1);
+			expect(f.requests).toHaveLength(2); expect(f.requests[1]?.method).toBe('GET');
+		} finally { await f.close(); }
 	});
 	it('retains custody on denied unavailable reset malformed and rejected return transports then retries the original output without duplicate return', async () => {
 		const outcomes = [];
@@ -219,7 +232,7 @@ describe('document-wide native provider recovery boundary', () => {
 			const f = await recoveryFixture();
 			try {
 				const current = { id: f.attempt.id, teamId: f.attempt.teamId, capacityProviderId: f.attempt.provider.providerId,
-					status: 'running', assignmentAttempt: f.lease.dispatchEnvelope.assignment.assignmentAttempt };
+					status: 'running', assignmentAttempt: { ...f.lease.dispatchEnvelope.assignment.assignmentAttempt, status: 'running' } };
 				f.setReply(current, failure.status, failure.fault, failure.returned);
 				const failed = await f.run(), held = (await f.reopen().claimsForRecovery())[0];
 				outcomes.push({ retained: failed[0]?.status === 'retained' && held?.leaseToken === f.lease.leaseToken,

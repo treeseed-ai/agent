@@ -37,6 +37,12 @@ describe('provider local lease recovery', () => {
 			expect((await recover())[0]).toMatchObject({ status: 'released', observedStatus: 'completed' });
 			expect(store.finalize).toHaveBeenCalledTimes(2); expect(api.returnAssignment).toHaveBeenCalledTimes(2);
 			expect(terminal).toEqual(terminalBefore); expect(claim).toEqual(before);
+			api.assignment.mockResolvedValue({ ...observed, assignmentAttempt: { ...frozen, finishedAt: frozen.deadline } });
+			expect((await recover())[0]?.status).toBe('retained');
+			expect(store.finalize).toHaveBeenCalledTimes(2); expect(api.returnAssignment).toHaveBeenCalledTimes(2);
+			api.assignment.mockResolvedValue({ ...terminal, assignmentAttempt: { ...terminal.assignmentAttempt, status: 'running' } });
+			expect((await recover())[0]?.status).toBe('retained');
+			expect(store.finalize).toHaveBeenCalledTimes(2); expect(api.returnAssignment).toHaveBeenCalledTimes(2);
 		}
 	});
 	it('retains actual closeout custody across restart without promoting absent or failed receipts', async () => {

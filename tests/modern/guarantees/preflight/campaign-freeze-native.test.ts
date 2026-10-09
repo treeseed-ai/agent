@@ -13,6 +13,87 @@ import { campaignInputs } from './campaign-freeze-fixture.ts';
 import { modelExecutionInventory } from '../../../acceptance/workday/support/assignment-authority.ts';
 import { row, type Row } from '../../../acceptance/acceptance-cli.ts';
 import { encodeCapacityPageCursor } from '@treeseed/sdk/capacity-pagination';
+import { observeCampaign } from '../../../acceptance/workday/support/campaign-observation.ts';
+
+it('native public SDK event pages reach the original campaign observer with complete immutable history and retain denied tails before exact retry', async () => {
+	const run = { id: 'workday-native-campaign-events', teamId: 'native-team', status: 'completed', executionMode: 'simulation' };
+	const events = Array.from({ length: 52 }, (_, eventIndex) => ({ id: `event-${String(eventIndex).padStart(3, '0')}`,
+		runId: run.id, teamId: run.teamId, eventIndex, eventType: 'controlled.recorded', status: 'recorded',
+		createdAt: '2026-10-09T00:00:00.000Z', parameters: {}, context: {}, refs: {}, metadata: {} }));
+	const cursor = encodeCapacityPageCursor(events[49]!), first = { run,
+		scheduling: { executionId: run.id, status: run.status, executionMode: run.executionMode, assignments: [], nodes: [] },
+		events: events.slice(0, 50), eventPage: { limit: 50, hasMore: true, nextCursor: cursor } };
+	const held = structuredClone({ first, events }), history: Array<{ method: string; path: string; body: string }> = [];
+	const observations: Array<{ mode: string; denied: boolean; tailReads: number; failure: string }> = [], retained = new Map<string, Row>();
+	let mode = 'exact';
+	const server = createServer((request, response) => {
+		let body = ''; request.setEncoding('utf8'); request.on('data', bytes => { body += String(bytes); });
+		request.on('end', () => {
+			history.push({ method: request.method ?? '', path: request.url ?? '', body });
+			const url = new URL(request.url ?? '', 'http://127.0.0.1'); response.setHeader('content-type', 'application/json');
+			if (request.method !== 'GET' || body) { response.writeHead(500).end('{}'); return; }
+			if (url.pathname === `/v1/teams/${run.teamId}/workday-runs/${run.id}` && !url.search) {
+				response.end(JSON.stringify({ data: first })); return;
+			}
+			if (url.pathname !== `/v1/teams/${run.teamId}/workday-runs/${run.id}/events`
+				|| url.searchParams.get('limit') !== '50' || url.searchParams.get('cursor') !== cursor) { response.writeHead(500).end('{}'); return; }
+			if (mode === 'reset') { request.socket.destroy(); return; }
+			if (mode === '403' || mode === '503') { response.writeHead(Number(mode)).end(JSON.stringify({ status: Number(mode), code: 'controlled_tail_denied', title: 'Retained native denial' })); return; }
+			if (mode === 'json') { response.end('{'); return; }
+			const items = structuredClone(events.slice(50));
+			if (mode === 'foreign') items[0]!.teamId = 'foreign';
+			if (mode === 'duplicate-index') items[0]!.eventIndex = 0;
+			if (mode === 'missing-index') items.shift();
+			if (mode === 'changed') Object.assign(items[0]!.refs, { changed: true });
+			if (mode === 'failed') items[0]!.status = 'failed';
+			response.end(JSON.stringify({ data: { items, page: { limit: 50, hasMore: false, nextCursor: null } } }));
+		});
+	});
+	try {
+		await new Promise<void>((accept, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', accept); });
+		const address = server.address(); if (!address || typeof address === 'string') throw new Error('Allocated native event server required');
+		const client = new ControlPlaneClient({ profile: defaultLocalControlPlaneServer({ TREESEED_API_BASE_URL: `http://127.0.0.1:${address.port}` }), accessToken: 'controlled-event-read-input' });
+		// The original synchronous observer consumes the exact replies received by
+		// the real SDK/HTTP boundary. Prefetch is test transport setup, not a new
+		// production pager; the composition unit checks actual on-demand CLI calls.
+		const inspect: (value: unknown, id: string, kept: Map<string, Row>, next: (cursor: string, limit: number) => Row)
+			=> ReturnType<typeof observeCampaign> = observeCampaign;
+		const execute = async () => {
+			const path = { teamId: run.teamId, runId: run.id }, query = { limit: 50, cursor }, input = { path, query }, before = structuredClone(input);
+			const observed = row((await client.invoke(controlPlaneOperation('workdays.show'), { path, query: {}, body: undefined })).data);
+			let tail: Row | undefined, nativeFailure: unknown;
+			try { tail = row((await client.invoke(controlPlaneOperation('workdays.events.list'), { path, query, body: undefined })).data); }
+			catch (error) { nativeFailure = error; }
+			const rawBefore = structuredClone({ observed, tail }), keptBefore = structuredClone([...retained]);
+			let denied = false, tailReads = 0, failure = '';
+			try {
+				inspect(observed, run.id, retained, (next, limit) => {
+					tailReads++; expect({ next, limit }).toEqual({ next: cursor, limit: 50 });
+					if (nativeFailure) throw nativeFailure; if (!tail) throw new Error('Native tail required'); return tail;
+				});
+			} catch (error) { denied = true; failure = error instanceof Error ? error.message : String(error); }
+			observations.push({ mode, denied, tailReads, failure });
+			if (mode === '403' || mode === '503') expect(nativeFailure).toMatchObject({ status: Number(mode), problem: { code: 'controlled_tail_denied' } });
+			if (denied) expect(failure.length).toBeGreaterThan(0);
+			expect(input).toEqual(before); expect({ observed, tail }).toEqual(rawBefore);
+			if (denied) expect([...retained]).toEqual(keptBefore);
+			else expect([...retained.values()]).toEqual(events);
+			return { denied, tailReads };
+		};
+		expect(await execute()).toEqual({ denied: false, tailReads: 1 });
+		for (const fault of ['403', '503', 'reset', 'json', 'foreign', 'duplicate-index', 'missing-index', 'changed', 'failed']) {
+			mode = fault; expect(await execute(), fault).toEqual({ denied: true, tailReads: 1 });
+		}
+		const failures = structuredClone(observations), requests = structuredClone(history); mode = 'exact';
+		expect(await execute()).toEqual({ denied: false, tailReads: 1 });
+		expect(observations.slice(0, failures.length)).toEqual(failures); expect(history.slice(0, requests.length)).toEqual(requests);
+		expect(history).toHaveLength(22); expect(history.every(value => value.method === 'GET' && value.body === '')).toBe(true);
+		expect({ first, events }).toEqual(held);
+		// Controlled event/status/token inputs are not native governance, model
+		// execution, provider-generated charges, producer completeness or teardown.
+	} finally { server.closeAllConnections(); if (server.listening) await new Promise<void>((accept, reject) => server.close(error => error ? reject(error) : accept())); }
+	expect(server.listening).toBe(false);
+}, 30_000);
 
 afterEach(() => vi.unstubAllEnvs());
 

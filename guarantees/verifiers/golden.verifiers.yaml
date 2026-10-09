@@ -1,6 +1,31 @@
 schemaVersion: treeseed.guarantee-verifiers/v1
 ownerPackage: "@treeseed/agent"
 verifiers:
+  agent.golden.campaign-event-pages-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/campaign-cli.test.ts
+    testName: "consumes every original public event page before terminal campaign verification and retains exact immutable event history"
+  agent.golden.campaign-event-pages-denial-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/campaign-cli.test.ts
+    testName: "denies missing malformed repeated foreign or failed later event pages and stops the exact simulation before further work"
+  agent.golden.campaign-event-pages-retention-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/campaign-cli.test.ts
+    testName: "denies changed or disappearing retained later-page events without repairing earlier complete history"
+  agent.golden.campaign-event-pages-native:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/preflight/campaign-freeze-native.test.ts
+    testName: "native public SDK event pages reach the original campaign observer with complete immutable history and retain denied tails before exact retry"
+  agent.golden.handler-readback-scope-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/custody/profile-custody-readback.test.ts
+    testName: "native handler readback composition uses exact project and server without attaching an unsupported team option"
   agent.golden.canonical-sandbox-attempt-unit:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

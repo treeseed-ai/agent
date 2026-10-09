@@ -91,10 +91,15 @@ export function verifyGraphProvenance(graph: Row): void {
 /** Same public descending cursor contract for assignment and measured-usage readback.
  * This is an acceptance assertion, not a runner or another observation authority. */
 export function readCompleteEvidence(args: string[], team: string, limit: number, prefix: string, direction: 'descending' | 'ascending' = 'descending'): Row[] {
+	return collectCompleteEvidence(cursor => read([...args, '--limit', String(limit), ...(cursor ? ['--cursor', cursor] : [])], team), limit, prefix, direction);
+}
+
+/** One cursor validator for the existing public CLI and campaign show page. */
+export function collectCompleteEvidence(fetchPage: (cursor: string | undefined) => Row, limit: number, prefix: string, direction: 'descending' | 'ascending'): Row[] {
 	const records: Row[] = [], identities = new Set<string>(), cursors = new Set<string>();
 	let cursor: string | undefined, previous: { id: string; time: number } | undefined;
 	for (let pageNumber = 0; pageNumber < 40; pageNumber += 1) {
-		const observed = read([...args, '--limit', String(limit), ...(cursor ? ['--cursor', cursor] : [])], team);
+		const observed = fetchPage(cursor);
 		const page = row(observed.page);
 		assert.ok(Array.isArray(observed.items) && observed.items.length <= limit && page.limit === limit
 			&& typeof page.hasMore === 'boolean', `${prefix}_PAGE: Complete typed page authority required`);

@@ -3,6 +3,21 @@ id: agent.golden.component-boundaries
 title: Golden execution component boundaries
 scope: local-component-tests
 workflow:
+  - id: campaign-event-pages-unit
+    action: { verifier: agent.golden.campaign-event-pages-unit }
+    expect: { status: passed }
+  - id: campaign-event-pages-denial-unit
+    action: { verifier: agent.golden.campaign-event-pages-denial-unit }
+    expect: { status: passed }
+  - id: campaign-event-pages-retention-unit
+    action: { verifier: agent.golden.campaign-event-pages-retention-unit }
+    expect: { status: passed }
+  - id: campaign-event-pages-native
+    action: { verifier: agent.golden.campaign-event-pages-native }
+    expect: { status: passed }
+  - id: handler-readback-scope-unit
+    action: { verifier: agent.golden.handler-readback-scope-unit }
+    expect: { status: passed }
   - id: canonical-sandbox-attempt-unit
     action: { verifier: agent.golden.canonical-sandbox-attempt-unit }
     expect: { status: passed }

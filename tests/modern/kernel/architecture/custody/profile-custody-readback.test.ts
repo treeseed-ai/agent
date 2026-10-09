@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { stringify } from 'yaml';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { assignmentAttemptSchema } from '@treeseed/sdk/agent-capacity';
 import { state } from '../golden-readback-fixture.ts';
 import { request } from '../../provider-kernel-fixture.ts';
@@ -19,6 +19,28 @@ function input() {
 	return { item: { id: attempt.id, assignmentAttempt: attempt }, file: { path, content } };
 }
 describe('independent governed profile assertion contract', () => {
+	it('native handler readback composition uses exact project and server without attaching an unsupported team option', () => {
+		const f = input(), id = 'workday-aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', attempt = f.item.assignmentAttempt;
+		vi.stubEnv('TREESEED_ACCEPTANCE_WORKDAY_ID', id);
+		const run = { id, executionMode: 'simulation', startedAt: attempt.createdAt };
+		const item = { ...f.item, workDayId: id, createdAt: attempt.createdAt };
+		const profile = attempt.effectiveProfile, catalog = { projectId: attempt.projectId,
+			handlers: [{ id: profile.handler, origin: profile.handlerOrigin }] };
+		state.replies.set('workdays show', { run });
+		state.replies.set('assignments list', { items: [item], page: { limit: 50, hasMore: false, nextCursor: null } });
+		state.replies.set(`library read ${f.file.path}`, { result: { resolvedRef: profile.profileRef.commit, files: [f.file] } });
+		state.replies.set('agents handlers --project', catalog);
+		state.replies.set(`agents handlers ${profile.handler}`, { projectId: attempt.projectId, handler: catalog.handlers[0] });
+		const held = structuredClone([...state.replies]);
+		const nativeCase = state.cases.get('Actual governed handlers remain inspectable through exact public list and show without changing frozen execution authority or profile bytes');
+		expect(nativeCase).toBeTypeOf('function'); expect(() => nativeCase!()).not.toThrow();
+		const list = ['agents', 'handlers', 'list', '--project', attempt.projectId, '--server', 'local', '--json'];
+		const show = ['agents', 'handlers', 'show', profile.handler, '--project', attempt.projectId, '--server', 'local', '--json'];
+		expect(state.calls.filter(args => args.slice(0, 2).join(' ') === 'agents handlers')).toEqual([list, show, list, show]);
+		expect([...state.replies]).toEqual(held);
+		// Mocked CLI observation proves harness composition only; the existing
+		// packaged CLI HTTP integration and managed native case remain separate.
+	});
 	it('binds public handler inspection to the exact frozen renamed identity and origin without changing grants or source bytes', () => {
 		for (const handler of ['actor', 'configured/renamed-handler']) {
 			const f = input(); f.item.assignmentAttempt.effectiveProfile.handler = handler;

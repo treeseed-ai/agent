@@ -1,11 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { encodeCapacityPageCursor } from '@treeseed/sdk/capacity-pagination';
 
 const state = vi.hoisted(() => ({ run: undefined as (() => Promise<void>) | undefined,
 	read: vi.fn(), verify: vi.fn(), freeze: {} as Record<string, any> }));
 vi.mock('node:test', () => ({ default: (_name: string, _options: unknown, run: () => Promise<void>) => { state.run = run; } }));
 vi.mock('node:fs', () => ({ existsSync: () => true, readFileSync: (path: string) => path === '/freeze'
 	? JSON.stringify(state.freeze) : Buffer.alloc(0) }));
-vi.mock('../../acceptance/acceptance-cli.ts', () => ({ read: state.read }));
+vi.mock('../../acceptance/acceptance-cli.ts', async importOriginal => ({
+	...await importOriginal<typeof import('../../acceptance/acceptance-cli.ts')>(), read: state.read,
+}));
 vi.mock('../../acceptance/sdk-runtime-golden.test.ts', () => ({ verifyGolden: state.verify }));
 vi.mock('../../acceptance/prepare-campaign.ts', () => ({ prepareSdkCampaign: vi.fn(), verifySdkExternalState: vi.fn() }));
 await import('../../acceptance/campaign.test.ts');
@@ -42,6 +45,94 @@ beforeEach(() => {
 });
 afterEach(() => vi.useRealTimers());
 describe('campaign CLI composition units (mocked transport, not native or live acceptance)', () => {
+	it('consumes every original public event page before terminal campaign verification and retains exact immutable event history', async () => {
+		vi.useFakeTimers(); let polls = 0;
+		const events = Array.from({ length: 52 }, (_, index) => ({ ...event(index), id: `event-${String(index).padStart(3, '0')}` }));
+		const cursor = encodeCapacityPageCursor(events[49]!);
+		const first = { events: events.slice(0, 50), eventPage: { limit: 50, hasMore: true, nextCursor: cursor } };
+		const tail = { items: events.slice(50), page: { limit: 50, hasMore: false, nextCursor: null } };
+		const held = structuredClone({ first, tail });
+		state.read.mockImplementation((args: string[]) => {
+			if (args[0] === 'workdays' && args[1] === 'start') return { workdayId };
+			if (args[0] === 'workdays' && args[1] === 'show') return { ...observed(++polls === 1 ? 'running' : 'completed'), ...first };
+			if (args.slice(0, 3).join(' ') === 'workdays events list') {
+				expect(args).toEqual(['workdays', 'events', 'list', workdayId, '--limit', '50', '--cursor', cursor]); return tail;
+			}
+			if (args[0] === 'proposals' && args[1] === 'show') return { activeVersion: 8 };
+			if (args[0] === 'proposals' && args[1] === 'evaluate') return { status: 'accepted', decisionId: 'decision-1' };
+			return {};
+		});
+		const result = expect(state.run!()).resolves.toBeUndefined(); await vi.runAllTimersAsync(); await result;
+		expect(state.read.mock.calls.filter(call => call[0].slice(0, 3).join(' ') === 'workdays events list')).toHaveLength(2);
+		expect(state.verify.mock.calls.map(call => call[0])).toEqual(['collaboration', 'collaboration', 'lifecycle', 'graph', 'revision', 'results', 'settlement', 'reporter']);
+		expect(state.read.mock.calls.filter(call => call[0][1] === 'stop')).toHaveLength(0);
+		expect({ first, tail }).toEqual(held);
+	});
+	it('denies missing malformed repeated foreign or failed later event pages and stops the exact simulation before further work', async () => {
+		const events = Array.from({ length: 52 }, (_, index) => ({ ...event(index), id: `event-${String(index).padStart(3, '0')}` }));
+		const cursor = encodeCapacityPageCursor(events[49]!);
+		for (const mode of ['absent', 'items', 'limit', 'has-more', 'terminal-cursor', 'empty-more', 'wrong-cursor',
+			'duplicate-id', 'duplicate-index', 'missing-index', 'foreign-run', 'foreign-team', 'clock', 'refs', 'failed', 'error',
+			'403', '503', 'reset', 'json']) {
+			state.read.mockReset(); state.verify.mockReset();
+			const first = { ...observed(), events: structuredClone(events.slice(0, 50)), eventPage: { limit: 50, hasMore: true, nextCursor: cursor } };
+			const items = structuredClone(events.slice(50)), page: Record<string, unknown> = { limit: 50, hasMore: false, nextCursor: null };
+			const tail: Record<string, unknown> = { items, page };
+			if (mode === 'items') tail.items = {};
+			if (mode === 'limit') page.limit = '50';
+			if (mode === 'has-more') page.hasMore = 'false';
+			if (mode === 'terminal-cursor') page.nextCursor = cursor;
+			if (mode === 'empty-more') { tail.items = []; page.hasMore = true; page.nextCursor = cursor; }
+			if (mode === 'wrong-cursor') { page.hasMore = true; page.nextCursor = encodeCapacityPageCursor(events[0]!); }
+			if (mode === 'duplicate-id') items[0]!.id = events[0]!.id;
+			if (mode === 'duplicate-index') items[0]!.eventIndex = 0;
+			if (mode === 'missing-index') items.shift();
+			if (mode === 'foreign-run') items[0]!.runId = 'foreign';
+			if (mode === 'foreign-team') items[0]!.teamId = 'foreign';
+			if (mode === 'clock') items[0]!.createdAt = 'malformed';
+			if (mode === 'refs') Object.assign(items[0]!, { refs: null });
+			if (mode === 'failed' || mode === 'error') items[0]!.status = mode;
+			const held = structuredClone({ first, tail }); let laterReads = 0;
+			state.read.mockImplementation((args: string[]) => {
+				if (args[0] === 'workdays' && args[1] === 'start') return { workdayId };
+				if (args[0] === 'workdays' && args[1] === 'show') return first;
+				if (args.slice(0, 3).join(' ') === 'workdays events list') {
+					laterReads++; if (['403', '503', 'reset', 'json'].includes(mode)) throw new Error(`ACCEPTANCE_CLI_COMMAND: controlled_${mode}`);
+					return mode === 'absent' ? undefined : tail;
+				}
+				return {};
+			});
+			await expect.soft(state.run!(), mode).rejects.toThrow(/ACCEPTANCE_OBSERVATION|ACCEPTANCE_CLI_COMMAND/u);
+			expect.soft(laterReads, mode).toBe(1); expect.soft(state.verify, mode).not.toHaveBeenCalled();
+			expect.soft(state.read.mock.calls.filter(call => call[0][1] === 'stop'), mode).toHaveLength(1);
+			expect.soft({ first, tail }, mode).toEqual(held);
+		}
+	});
+	it('denies changed or disappearing retained later-page events without repairing earlier complete history', async () => {
+		vi.useFakeTimers();
+		for (const mode of ['changed', 'disappeared']) {
+			state.read.mockReset(); state.verify.mockReset(); let polls = 0;
+			const events = Array.from({ length: 52 }, (_, index) => ({ ...event(index), id: `event-${String(index).padStart(3, '0')}` }));
+			const cursor = encodeCapacityPageCursor(events[49]!), changed = structuredClone(events.slice(50));
+			if (mode === 'changed') Object.assign(changed[0]!.refs, { changed: true }); else changed.splice(0);
+			const held = structuredClone({ events, changed });
+			state.read.mockImplementation((args: string[]) => {
+				if (args[0] === 'workdays' && args[1] === 'start') return { workdayId };
+				if (args[0] === 'workdays' && args[1] === 'show') return { ...observed(++polls === 1 ? 'running' : 'completed'),
+					events: events.slice(0, 50), eventPage: { limit: 50, hasMore: true, nextCursor: cursor } };
+				if (args.slice(0, 3).join(' ') === 'workdays events list') return { items: polls === 1 ? events.slice(50) : changed,
+					page: { limit: 50, hasMore: false, nextCursor: null } };
+				if (args[0] === 'proposals' && args[1] === 'show') return { activeVersion: 8 };
+				if (args[0] === 'proposals' && args[1] === 'evaluate') return { status: 'accepted', decisionId: 'decision-1' };
+				return {};
+			});
+			const failure = expect.soft(state.run!(), mode).rejects.toThrow('ACCEPTANCE_OBSERVATION');
+			await vi.runAllTimersAsync(); await failure;
+			expect.soft(state.verify.mock.calls.map(call => call[0]), mode).toEqual(['collaboration']);
+			expect.soft(state.read.mock.calls.filter(call => call[0][1] === 'stop'), mode).toHaveLength(1);
+			expect.soft({ events, changed }, mode).toEqual(held);
+		}
+	});
 	it('continuously observes collaboration while issuing external approval only once for the exact workday', async () => {
 		vi.useFakeTimers();
 		let polls = 0, version = 8;

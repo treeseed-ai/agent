@@ -3,6 +3,12 @@ id: agent.golden.component-boundaries
 title: Golden execution component boundaries
 scope: local-component-tests
 workflow:
+  - id: installed-asset-imports-unit
+    action: { verifier: agent.golden.installed-asset-imports-unit }
+    expect: { status: passed }
+  - id: installed-public-contracts-native
+    action: { verifier: agent.golden.installed-public-contracts-native }
+    expect: { status: passed }
   - id: campaign-event-pages-unit
     action: { verifier: agent.golden.campaign-event-pages-unit }
     expect: { status: passed }

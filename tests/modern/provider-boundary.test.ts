@@ -1,7 +1,8 @@
-import { mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, lstatSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { execFile } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
 import { CONTROL_PLANE_OPERATIONS } from '@treeseed/sdk/operator-contracts';
 import { providerOperationPath } from '../../src/provider/coordination/client.ts';
@@ -67,6 +68,45 @@ function sourceFiles(root: string): string[] {
 }
 
 describe('Agent package ownership boundary', () => {
+	it('shipped acceptance assets resolve shared owning contracts only through public package entrypoints', () => {
+		const privateImports = sourceFiles(resolve('tests/acceptance')).flatMap(path => {
+			const source = readFileSync(path, 'utf8');
+			return [...source.matchAll(/(?:from\s*|import\s*\()(['"])([^'"]+)\1/gu)]
+				.filter(value => /(?:^|\/)src\//u.test(value[2]!)).map(value => ({ path, specifier: value[2] }));
+		});
+		expect(privateImports).toEqual([]);
+	});
+	it('native production archive installation retains acceptance assets and executes their shared public contracts without checkout source or development dependencies', async () => {
+		const root = mkdtempSync(resolve(tmpdir(), 'agent-installed-acceptance-'));
+		const execute = (file: string, args: string[], cwd: string) => new Promise<string>((done, reject) => {
+			execFile(file, args, { cwd, env: { ...process.env, NODE_OPTIONS: '' }, encoding: 'utf8', timeout: 20_000, maxBuffer: 4_194_304 }, (error, stdout, stderr) => {
+				if (error) reject(new Error(`Installed contract command failed: ${file}; ${error.message}; ${stderr}`)); else done(stdout);
+			});
+		});
+		try {
+			const [sdk] = JSON.parse(await execute('npm', ['pack', '--ignore-scripts', '--json', '--pack-destination', root], resolve('node_modules/@treeseed/sdk'))) as Array<{ filename: string; integrity: string }>;
+			expect(sdk).toBeDefined(); const sdkArchive = resolve(root, sdk!.filename), sdkBytes = readFileSync(sdkArchive);
+			expect(`sha512-${createHash('sha512').update(sdkBytes).digest('base64')}`).toBe(sdk!.integrity);
+			const [packed] = JSON.parse(await execute('npm', ['pack', '--ignore-scripts', '--json', '--pack-destination', root], process.cwd())) as Array<{ filename: string; integrity: string; files: Array<{ path: string }> }>;
+			expect(packed).toBeDefined(); const archive = resolve(root, packed!.filename), bytes = readFileSync(archive);
+			expect(`sha512-${createHash('sha512').update(bytes).digest('base64')}`).toBe(packed!.integrity);
+			await execute('npm', ['install', '--prefix', root, '--omit=dev', '--ignore-scripts', '--package-lock=false', '--no-save', '--no-audit', '--no-fund', archive, sdkArchive], root);
+			const installed = resolve(root, 'node_modules/@treeseed/agent');
+			expect(lstatSync(installed).isSymbolicLink()).toBe(false); expect(realpathSync(installed)).toBe(installed);
+			expect(existsSync(resolve(installed, 'src'))).toBe(false);
+			expect(existsSync(resolve(root, 'node_modules/vitest'))).toBe(false); expect(existsSync(resolve(root, 'node_modules/tsx'))).toBe(false);
+			for (const path of sourceFiles(resolve('tests/acceptance'))) {
+				const relative = path.slice(process.cwd().length + 1);
+				expect(packed!.files.some(file => file.path === relative), relative).toBe(true);
+				expect(readFileSync(resolve(installed, relative))).toEqual(readFileSync(path));
+			}
+			copyFileSync('tests/fixtures/installed-agent-contracts.ts', resolve(root, 'consumer.ts'));
+			expect(JSON.parse(await execute(process.execPath, ['consumer.ts'], root))).toEqual({ installedPublicContracts: 'passed' });
+			expect(readFileSync(archive)).toEqual(bytes);
+			expect(readFileSync(sdkArchive)).toEqual(sdkBytes);
+			console.log(JSON.stringify({ archive: packed!.filename, sha256: createHash('sha256').update(bytes).digest('hex'), sdkSha256: createHash('sha256').update(sdkBytes).digest('hex'), installedPublicContracts: 'passed' }));
+		} finally { rmSync(root, { recursive: true, force: true }); expect(existsSync(root)).toBe(false); }
+	}, 30_000);
 	it('validates each unchanged native manifest once per load and revalidates an applied connection overlay without caching authority across calls', async () => {
 		const directory = mkdtempSync(resolve(tmpdir(), 'agent-manifest-validation-'));
 		const path = resolve(directory, 'manifest.yaml'), manifest = createManagedProviderManifestV5({ release: 'validation-custody', guestImage: 'isolated/guest',

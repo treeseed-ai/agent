@@ -28,3 +28,5 @@ export {
 	writeProviderConnectionState,
 	type ProviderConnectionState,
 } from './provider/coordination/connection-state.ts';
+export { resolveProviderConfig } from './provider/configuration/config.ts';
+export { orderConnectionsForFairPolling } from './provider/teams/multi-team-runtime.ts';

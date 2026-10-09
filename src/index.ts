@@ -18,3 +18,5 @@ export { ActorHandler, EstimateHandler, ReleaserHandler, ReviewerHandler, Writer
 export { ReporterHandler } from './kernel/handlers/reporter.ts';
 export { HandlerRegistry } from './kernel/handler-registry.ts';
 export type { AgentRuntime, Handler, KernelAssignmentRequest } from './kernel/contracts.ts';
+export { assertPredecessorSynthesis } from './kernel/handlers/planning-synthesis.ts';
+export { clockReading, timingAwarenessContract } from './sandbox/guest.ts';

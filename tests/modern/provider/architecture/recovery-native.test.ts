@@ -72,6 +72,29 @@ async function recoveryFixture() {
 // real durable local files. Upstream JSON and principal/token are INPUTS,
 // NOT native API settlement, independent authentication or remote cleanup.
 describe('document-wide native provider recovery boundary', () => {
+	it('native terminal recovery retains original failed custody across repeated API-generated unmeasured performance observations', async () => {
+		const outcomes = [];
+		for (const status of ['failed', 'cancelled', 'expired']) {
+			const f = await recoveryFixture(); try {
+				const prior = (await f.reopen().claimsForRecovery())[0]!, frozen = f.lease.dispatchEnvelope.assignment.assignmentAttempt;
+				const accounting = await f.reopen().activeTimeObservation(frozen.provider.modelConfigurationId, [frozen.provider.executionCapabilityId]);
+				const value = { id: frozen.id, teamId: frozen.teamId, capacityProviderId: frozen.provider.providerId, status,
+					assignmentAttempt: { ...frozen, status, finishedAt: frozen.deadline }, lifecycleOutput: { performance: {
+						actual: { activeSeconds: 0, elapsedSeconds: 0 }, systemAssessment: { generatedBy: 'api-recovery' } } } };
+				const held = structuredClone(value); f.setReply(value);
+				for (let read = 0; read < 2; read++) {
+					outcomes.push((await f.run())[0]?.status);
+					const claim = (await f.reopen().claimsForRecovery())[0];
+					expect(claim).toEqual({ ...prior, updatedAt: claim?.updatedAt });
+				}
+				const after = await f.reopen().activeTimeObservation(frozen.provider.modelConfigurationId, [frozen.provider.executionCapabilityId]);
+				expect(after.modelUsage).toEqual(accounting.modelUsage); expect(after.capabilityUsage).toEqual(accounting.capabilityUsage);
+				expect(f.requests).toEqual(Array.from({ length: 2 }, () => ({ method: 'GET', path: `/v1/provider/assignments/${frozen.id}`, body: null })));
+				expect(value).toEqual(held); expect(await f.entries()).toEqual(['capacity-state.json']);
+			} finally { await f.close(); }
+		}
+		expect(outcomes).toEqual(Array.from({ length: 6 }, () => 'retained'));
+	});
 	it('native recovery consumes the public capacityProviderId through the original client and retains foreign or legacy-only authority without replacing failed custody', async () => {
 		const variants = ['valid', 'valid-with-foreign-alias', 'missing', 'empty', 'null', 'foreign', 'legacy-only', 'foreign-canonical'] as const;
 		const outcomes: Array<{ variant: string; status: unknown; claimStatus: string }> = [];

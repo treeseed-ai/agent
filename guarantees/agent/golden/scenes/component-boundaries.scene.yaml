@@ -1929,3 +1929,9 @@ workflow:
   - id: unknown-terminal-time-unit
     action: { verifier: agent.golden.unknown-terminal-time-unit }
     expect: { status: passed }
+  - id: recovery-public-provider-unit
+    action: { verifier: agent.golden.recovery-public-provider-unit }
+    expect: { status: passed }
+  - id: recovery-public-provider-native
+    action: { verifier: agent.golden.recovery-public-provider-native }
+    expect: { status: passed }

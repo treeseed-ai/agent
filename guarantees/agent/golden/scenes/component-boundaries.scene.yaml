@@ -1935,3 +1935,9 @@ workflow:
   - id: recovery-public-provider-native
     action: { verifier: agent.golden.recovery-public-provider-native }
     expect: { status: passed }
+  - id: recovery-synthesized-terminal-unit
+    action: { verifier: agent.golden.recovery-synthesized-terminal-unit }
+    expect: { status: passed }
+  - id: recovery-synthesized-terminal-native
+    action: { verifier: agent.golden.recovery-synthesized-terminal-native }
+    expect: { status: passed }

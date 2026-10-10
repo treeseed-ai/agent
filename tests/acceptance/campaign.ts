@@ -25,11 +25,11 @@ function checkedStart(started: StartRow, freeze: StartRow): string {
 	assert.ok(typeof id === 'string' && /^workday-[a-f0-9-]+$/u.test(id), 'ACCEPTANCE_CAMPAIGN_ID: Supported start omitted exact run');
 	assert.equal(started.schemaVersion, 'treeseed.workday-start-receipt/v1', 'ACCEPTANCE_WORKDAY_START: Original API receipt required');
 	assert.ok(typeof preflight.id === 'string' && preflight.id.trim() && typeof preflight.teamId === 'string' && preflight.teamId.trim()
-		&& typeof preflight.preflightDigest === 'string' && /^sha256:[a-f0-9]{64}$/u.test(preflight.preflightDigest), 'ACCEPTANCE_WORKDAY_START: Exact frozen preflight required');
+		&& typeof preflight.preflightDigest === 'string' && /^sha256:[A-Za-z0-9_-]{43}$/u.test(preflight.preflightDigest), 'ACCEPTANCE_WORKDAY_START: Exact frozen preflight required');
 	assert.equal(started.preflightId, preflight.id, 'ACCEPTANCE_WORKDAY_START: Foreign preflight');
 	assert.equal(started.preflightDigest, preflight.preflightDigest, 'ACCEPTANCE_WORKDAY_START: Changed preflight digest');
 	assert.ok(typeof started.startedAt === 'string' && Number.isFinite(Date.parse(started.startedAt))
-		&& typeof started.transactionReceiptId === 'string' && /^workday-start:[a-f0-9]{64}$/u.test(started.transactionReceiptId), 'ACCEPTANCE_WORKDAY_START: Original start and transaction identity required');
+		&& typeof started.transactionReceiptId === 'string' && /^workday-start:[A-Za-z0-9_-]{43}$/u.test(started.transactionReceiptId), 'ACCEPTANCE_WORKDAY_START: Original start and transaction identity required');
 	for (const field of ['acceptedExecutionNodeIds', 'assignmentIds', 'reservationIds', 'providerReceiptRefs']) {
 		const values = started[field];
 		assert.ok(Array.isArray(values) && values.every(value => typeof value === 'string' && value.trim() === value && value.length > 0)

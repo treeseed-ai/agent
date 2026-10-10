@@ -87,6 +87,20 @@ describe('capacity-provider guarantee execution bindings', () => {
 			testFile: 'tests/acceptance/workday/context-custody.test.ts',
 			testName: 'Every actual recorded model execution is included in exact clock evidence readback without discarding failed or returned attempts' });
 	});
+	it('selects existing normal SDK profile context graph and canonical-record readbacks after the same lifecycle without requiring controlled failures or continuation',()=>{
+  const manifest=parse(readFileSync(resolve(root,'guarantees/agent/golden/sdk-complete.guarantee.yaml'),'utf8'));
+  const scene=parse(readFileSync(resolve(root,manifest.scene.manifest),'utf8'));
+  expect(scene.scope).toBe('local-integrated-runtime');
+  const refs:string[]=scene.workflow.map((step:{action:{verifier:string}})=>step.action.verifier);
+  for(const ref of ['agent.golden.architecture-profile-custody-live-1','agent.golden.architecture-profile-custody-live-2',
+   'agent.golden.architecture-context-custody-live-1','agent.golden.architecture-book-knowledge-live-1',
+   'agent.golden.architecture-graph-history-live-1','agent.golden.architecture-record-custody-live-1']) {
+   expect(refs.filter(value=>value===ref),ref).toHaveLength(1);
+   expect(refs.indexOf(ref),ref).toBeGreaterThan(refs.indexOf('agent.golden.live.campaign'));
+   expect(registry.verifiers[ref]).toMatchObject({kind:'nodeTestCase'});
+  }
+  for(const ref of refs)expect(registry.verifiers[ref]?.testName??'',ref).not.toMatch(/controlled|continuation|completed and failed/u);
+ });
 	it('supplies exact canonical execution authority before complete verification and inherited scene prerequisites', () => {
 		const workflow = parse(readFileSync(resolve(root, '.github/workflows/verify.yml'), 'utf8'));
 		const job = workflow.jobs.verify, steps = job.steps;

@@ -12,7 +12,7 @@ scene:
   manifest: guarantees/agent/golden/scenes/sdk-complete.scene.yaml
 acceptanceCriteria:
   - criterion: b635827ed7862d56b8764dfad30114b9ee18d02b4aa709a257841e18a1bd0f0d
-    verifierRefs: [agent.golden.execution-clock-observation-live-1]
+    verifierRefs: [agent.golden.execution-clock-observation-live-1, api.golden.execution-protected-observation-live-1]
   - criterion: 7eaf9fdc1c264e2d0b28d2fc751da33a2ffcf98ca0d6446ac6e8672503dfa533
     verifierRefs: [agent.golden.live.reporter, agent.golden.live.settlement]
   - criterion: 5a286ca84dffc7ea229c2035a106c26aa0f8fe4e78da3cb035b1bc4859810e95

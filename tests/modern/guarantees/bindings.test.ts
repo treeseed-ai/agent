@@ -111,7 +111,7 @@ describe('capacity-provider guarantee execution bindings', () => {
 		expect(job.env.TREESEED_DEVELOPMENT_WORKSPACE_ROOT).toBe('${{ github.workspace }}/.treeseed/platform-authority');
 		const verify = steps.findIndex((step: { run?: string }) => step.run?.includes('npm run verify:local'));
 		const scene = steps.findIndex((step: { uses?: string }) => step.uses?.includes('reviewer/.github/actions/run-scenes@'));
-		expect(steps[scene].uses).toBe('treeseed-ai/reviewer/.github/actions/run-scenes@c8bfadc036029f37ecc197884faf63df3f6d59a2');
+		expect(steps[scene].uses).toBe('treeseed-ai/reviewer/.github/actions/run-scenes@879c7406582b0d7da4dcdcd5356ec21daa286662');
 		expect(steps.indexOf(checkouts[0])).toBeLessThan(verify); expect(verify).toBeGreaterThan(-1); expect(scene).toBeGreaterThan(verify);
 		const relay = steps.findIndex((step: { name?: string }) => step.name === 'Prepare disposable native relay CA');
 		expect(relay).toBeGreaterThan(-1); expect(relay).toBeLessThan(verify);

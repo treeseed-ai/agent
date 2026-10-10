@@ -81,7 +81,7 @@ describe('capacity-provider guarantee execution bindings', () => {
 		const protectedClock = 'api.golden.execution-protected-observation-live-1';
 		expect(refs.filter((ref: string) => ref === protectedClock)).toHaveLength(1);
 		expect(refs.indexOf(protectedClock)).toBeGreaterThan(refs.indexOf('agent.golden.execution-clock-observation-live-1'));
-		expect(refs).not.toContain('api.golden.execution-clock-adaptation-live-1');
+		expect(refs).not.toContain('api.golden.execution-unfinished-handoff-live-1');
 		for (const ref of ['agent.golden.live.reporter', 'agent.golden.live.settlement']) {
 			expect(refs.filter((value: string) => value === ref)).toHaveLength(1);
 			expect(refs.indexOf(ref)).toBeGreaterThan(refs.indexOf('agent.golden.live.campaign'));

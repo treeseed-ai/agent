@@ -3,6 +3,12 @@ id: agent.golden.component-boundaries
 title: Golden execution component boundaries
 scope: local-component-tests
 workflow:
+  - id: live-assignment-clock-order-unit
+    action: { verifier: agent.golden.live-assignment-clock-order-unit }
+    expect: { status: passed }
+  - id: live-assignment-clock-boundaries-unit
+    action: { verifier: agent.golden.live-assignment-clock-boundaries-unit }
+    expect: { status: passed }
   - id: chat-probe-input-unit
     action: { verifier: agent.golden.chat-probe-input-unit }
     expect: { status: passed }

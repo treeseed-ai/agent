@@ -8,7 +8,7 @@ import { assignmentAttemptSchema, assignmentResultSchema, capabilityAccountingLi
 import { capabilityOfferDigest, capabilityOfferSchema } from '@treeseed/sdk/capacity-provider';
 import { decodeCapacityPageCursor } from '@treeseed/sdk/capacity-pagination';
 import { verifyPlatformRepository } from '@treeseed/sdk/platform';
-import { read, row, type Row } from '../acceptance-cli.ts';
+import { acceptanceWorkdayId, read, row, type Row } from '../acceptance-cli.ts';
 import { readWorkdayAssignments, verifyGolden } from '../sdk-runtime-golden.test.ts';
 import { readCompleteEvidence } from './support/evidence-pages.ts';
 import { publicCanonicalRecords, verifyTerminalRecordCustody, verifyFailedExecutionCustody, verifyAvailabilityAccountingHistory, verifySandboxCloseoutCustody, verifyWorkdayContinuationCustody, verifySandboxHostAbsence, verifySandboxDirectoryAbsence, verifyProviderConformanceSignature, verifyProviderQualification, verifyProviderLocalSlotClosure, verifyProviderPollingSelection } from './support/record-custody.ts';
@@ -41,7 +41,7 @@ test('Every native managed attempt exposes one unchanged canonical lease reserva
 	verify(f); verifyGolden('settlement'); verifyGolden('reporter'); assert.deepEqual(f, before); assert.deepEqual(actual(), before);
 });
 test('Actual managed continuation reads its complete original settled ancestry and retains exact prior source Decision result and charge history without expanding custody', { timeout: 120_000 }, () => {
-	const lineage: Array<ReturnType<typeof actual>> = [], seen = new Set<string>(); let id = process.env.TREESEED_ACCEPTANCE_WORKDAY_ID ?? '';
+	const lineage: Array<ReturnType<typeof actual>> = [], seen = new Set<string>(); let id = acceptanceWorkdayId();
 	while (id) {
 		assert.ok(!seen.has(id) && seen.size < 64, 'ACCEPTANCE_CONTINUATION_CYCLE: Original complete bounded ancestry required'); seen.add(id);
 		const observed = actual(id); lineage.push(observed); const parameters = row(observed.run.parameters);
@@ -58,7 +58,7 @@ test('Actual managed continuation reads its complete original settled ancestry a
 	// or provider-generated charge provenance from record agreement alone.
 });
 test('Actual managed continuation retains a returned ancestor with its exact released lease failed history and settled charge instead of a completed replacement', { timeout: 120_000 }, () => {
-	const lineage: Array<ReturnType<typeof actual>> = [], seen = new Set<string>(); let id = process.env.TREESEED_ACCEPTANCE_WORKDAY_ID ?? '';
+	const lineage: Array<ReturnType<typeof actual>> = [], seen = new Set<string>(); let id = acceptanceWorkdayId();
 	while (id) {
 		assert.ok(!seen.has(id) && seen.size < 64, 'ACCEPTANCE_CONTINUATION_CYCLE: Complete original ancestry required'); seen.add(id);
 		const observed = actual(id); lineage.push(observed); const parameters = row(observed.run.parameters);

@@ -1,10 +1,84 @@
 import assert from 'node:assert/strict';
 import type { CommunicationSendRequest } from '@treeseed/sdk/operator-contracts';
+import { closeSync, constants, fstatSync, fsyncSync, linkSync, lstatSync, mkdtempSync, openSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { dirname, isAbsolute, resolve } from 'node:path';
 
-export function retainCampaignWorkdayStart(started: Record<string, unknown>): string {
-	const id = started.workdayId;
+type StartRow = Record<string, unknown>;
+const startRow = (value: unknown): StartRow => {
+	assert.ok(value && typeof value === 'object' && !Array.isArray(value), 'ACCEPTANCE_WORKDAY_START: Complete original object required');
+	return value as StartRow;
+};
+function startBytes(path: string): Buffer {
+	assert.ok(isAbsolute(path) && realpathSync(path) === resolve(path), 'ACCEPTANCE_WORKDAY_START: Independent regular retained file required');
+	assert.ok(lstatSync(path).isFile(), 'ACCEPTANCE_WORKDAY_START: Retained bytes must be a regular file');
+	const fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+	try {
+		assert.ok(fstatSync(fd).isFile() && (fstatSync(fd).mode & 0o444) !== 0, 'ACCEPTANCE_WORKDAY_START: Retained bytes must be a readable regular file');
+		return readFileSync(fd);
+	} finally { closeSync(fd); }
+}
+function checkedStart(started: StartRow, freeze: StartRow): string {
+	const id = started.workdayId, preflight = startRow(freeze.preflight);
+	assert.deepEqual(Object.keys(started).sort(), ['schemaVersion', 'workdayId', 'preflightId', 'preflightDigest', 'startedAt',
+		'acceptedExecutionNodeIds', 'assignmentIds', 'reservationIds', 'providerReceiptRefs', 'transactionReceiptId'].sort(),
+		'ACCEPTANCE_WORKDAY_START: Complete unchanged original receipt fields required');
 	assert.ok(typeof id === 'string' && /^workday-[a-f0-9-]+$/u.test(id), 'ACCEPTANCE_CAMPAIGN_ID: Supported start omitted exact run');
+	assert.equal(started.schemaVersion, 'treeseed.workday-start-receipt/v1', 'ACCEPTANCE_WORKDAY_START: Original API receipt required');
+	assert.ok(typeof preflight.id === 'string' && preflight.id.trim() && typeof preflight.teamId === 'string' && preflight.teamId.trim()
+		&& typeof preflight.preflightDigest === 'string' && /^sha256:[a-f0-9]{64}$/u.test(preflight.preflightDigest), 'ACCEPTANCE_WORKDAY_START: Exact frozen preflight required');
+	assert.equal(started.preflightId, preflight.id, 'ACCEPTANCE_WORKDAY_START: Foreign preflight');
+	assert.equal(started.preflightDigest, preflight.preflightDigest, 'ACCEPTANCE_WORKDAY_START: Changed preflight digest');
+	assert.ok(typeof started.startedAt === 'string' && Number.isFinite(Date.parse(started.startedAt))
+		&& typeof started.transactionReceiptId === 'string' && /^workday-start:[a-f0-9]{64}$/u.test(started.transactionReceiptId), 'ACCEPTANCE_WORKDAY_START: Original start and transaction identity required');
+	for (const field of ['acceptedExecutionNodeIds', 'assignmentIds', 'reservationIds', 'providerReceiptRefs']) {
+		const values = started[field];
+		assert.ok(Array.isArray(values) && values.every(value => typeof value === 'string' && value.trim() === value && value.length > 0)
+			&& new Set(values).size === values.length, 'ACCEPTANCE_WORKDAY_START: Complete original receipt inventories required');
+	}
+	return id;
+}
+
+/** Retain the existing API receipt, never another run authority or mutable freeze. */
+export function retainCampaignWorkdayStart(started: StartRow, freezePath: string, freeze: StartRow): string {
+	const id = checkedStart(started, freeze), bytes = startBytes(freezePath);
+	assert.deepEqual(JSON.parse(bytes.toString('utf8')), freeze, 'ACCEPTANCE_WORKDAY_START: Frozen input changed');
+	const explicit = process.env.TREESEED_ACCEPTANCE_WORKDAY_ID;
+	const path = `${freezePath}.workday-start.json`, pending = mkdtempSync(`${path}.pending-`);
+	let originalFailure: unknown;
+	try {
+		const temporary = resolve(pending, 'receipt.json'), fd = openSync(temporary, 'wx', 0o600);
+		try { writeFileSync(fd, JSON.stringify(started)); fsyncSync(fd); } finally { closeSync(fd); }
+		try { linkSync(temporary, path); }
+		catch (failure) { if ((failure as NodeJS.ErrnoException).code !== 'EEXIST') throw failure; }
+		assert.deepEqual(JSON.parse(startBytes(path).toString('utf8')), started, 'ACCEPTANCE_WORKDAY_START: Retained receipt differs from exact API replay');
+		const directory = openSync(dirname(path), constants.O_RDONLY);
+		try { fsyncSync(directory); } finally { closeSync(directory); }
+		assert.deepEqual(startBytes(freezePath), bytes, 'ACCEPTANCE_WORKDAY_START: Frozen input changed during capture');
+	} catch (failure) { originalFailure = failure; throw failure; }
+	finally {
+		try { rmSync(pending, { recursive: true, force: true }); }
+		catch (failure) { throw originalFailure ? new AggregateError([originalFailure, failure], 'ACCEPTANCE_WORKDAY_START: Capture and scoped cleanup failed') : failure; }
+	}
+	if (explicit) assert.equal(explicit, id, 'ACCEPTANCE_WORKDAY_START: Conflicting explicit workday');
 	process.env.TREESEED_ACCEPTANCE_WORKDAY_ID = id;
+	return id;
+}
+
+/** Explicit advanced-case IDs remain supported; SDK children use the original receipt. */
+export function campaignWorkdayId(read: (args: string[], team: string) => StartRow, team: string, environment: NodeJS.ProcessEnv = process.env): string {
+	const explicit = environment.TREESEED_ACCEPTANCE_WORKDAY_ID;
+	if (explicit) { assert.match(explicit, /^workday-[a-f0-9-]+$/u); return explicit; }
+	const path = environment.TREESEED_ACCEPTANCE_FREEZE_PATH;
+	assert.ok(path && team && team.trim() === team, 'ACCEPTANCE_WORKDAY_START: Explicit frozen SDK input and team required');
+	const bytes = startBytes(path), freeze = startRow(JSON.parse(bytes.toString('utf8'))), receiptPath = `${path}.workday-start.json`;
+	const receiptBytes = startBytes(receiptPath), receipt = startRow(JSON.parse(receiptBytes.toString('utf8'))), id = checkedStart(receipt, freeze);
+	const run = startRow(read(['workdays', 'show', id], team).run), preflight = startRow(freeze.preflight), body = startRow(startRow(freeze.request).body);
+	assert.equal(run.id, id); assert.equal(run.teamId, preflight.teamId); assert.equal(run.executionMode, 'simulation');
+	assert.equal(run.startedAt, receipt.startedAt, 'ACCEPTANCE_WORKDAY_START: Original public start changed');
+	assert.deepEqual(startRow(run.parameters).proposalIds, body.proposalIds);
+	assert.deepEqual(startRow(run.parameters).scheduledProjectIds, body.projects);
+	assert.deepEqual(body.proposalIds, [startRow(freeze.proposal).id]); assert.equal(body.executionMode, 'simulation');
+	assert.deepEqual(startBytes(path), bytes); assert.deepEqual(startBytes(receiptPath), receiptBytes);
 	return id;
 }
 

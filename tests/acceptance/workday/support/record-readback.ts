@@ -7,12 +7,12 @@ import { assignmentAttemptSchema, assignmentResultSchema, capabilityAccountingLi
 import { capabilityOfferDigest, capabilityOfferSchema } from '@treeseed/sdk/capacity-provider';
 import { decodeCapacityPageCursor } from '@treeseed/sdk/capacity-pagination';
 import { verifyPlatformRepository } from '@treeseed/sdk/platform';
-import { read, row, type Row } from '../../acceptance-cli.ts';
+import { acceptanceWorkdayId, read, row, type Row } from '../../acceptance-cli.ts';
 import { readWorkdayAssignments, verifyGolden } from '../../sdk-runtime-golden.test.ts';
 import { readCompleteEvidence } from './evidence-pages.ts';
 import { publicCanonicalRecords, verifyTerminalRecordCustody, verifyFailedExecutionCustody, verifyAvailabilityAccountingHistory, verifySandboxCloseoutCustody, verifyWorkdayContinuationCustody, verifySandboxHostAbsence, verifySandboxDirectoryAbsence, verifyProviderConformanceSignature, verifyProviderQualification, verifyProviderLocalSlotClosure, verifyProviderPollingSelection } from './record-custody.ts';
 
-export function actual(id = process.env.TREESEED_ACCEPTANCE_WORKDAY_ID ?? '') {
+export function actual(id = acceptanceWorkdayId()) {
 	const team = process.env.TREESEED_ACCEPTANCE_TEAM ?? 'treeseed';
 	assert.match(id, /^workday-[a-f0-9-]+$/u, 'ACCEPTANCE_CANONICAL_RUN: Exact native workday required');
 	const observed = read(['workdays', 'show', id], team), run = row(observed.run); assert.equal(run.id, id); assert.equal(run.executionMode, 'simulation');

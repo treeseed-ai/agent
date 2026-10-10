@@ -34,16 +34,19 @@ test('Frozen SDK campaign drives planning acting review and terminal golden gate
 	// API validates first admission expiry and replays the exact cached start after expiry.
 	const started = read(['workdays', 'start', '--preflight', freeze.preflight.id, '--digest', freeze.preflight.preflightDigest,
 		'--yes', '--idempotency-key', `golden-start:${freeze.preflight.id}`], team);
-	const workdayId = retainCampaignWorkdayStart(started);
+	const workdayId = started.workdayId;
+	assert.ok(typeof workdayId === 'string' && /^workday-[a-f0-9-]+$/u.test(workdayId), 'ACCEPTANCE_CAMPAIGN_ID: Supported start omitted exact run');
 	const stop = () => { read(['workdays', 'stop', workdayId, '--yes', '--reason', 'Automated golden boundary failed',
 		'--idempotency-key', `golden-stop:${workdayId}`], team); };
 	let externallyApproved = false;
 	const observedEvents = new Map<string, Record<string, unknown>>();
 	const observedAssignments = new Map<string, Record<string, unknown>>();
 	let currentRun: Record<string, unknown> | undefined;
-	await monitorCampaign({ admittedSimulation: true, admitDiscussion: () => openSdkCampaignDiscussion(freeze.proposal.id, workdayId,
+	await monitorCampaign({ admittedSimulation: true, admitDiscussion: () => {
+		retainCampaignWorkdayStart(started, path, freeze);
+		return openSdkCampaignDiscussion(freeze.proposal.id, workdayId,
 		(channel, request, key) => read(['send', channel, request.message, '--proposal', request.proposalId!,
-			'--workday', request.parentWorkdayId!, '--no-wait', '--idempotency-key', key], team, false, 240_000)), read: () => {
+			'--workday', request.parentWorkdayId!, '--no-wait', '--idempotency-key', key], team, false, 240_000)); }, read: () => {
 		const observed = read(['workdays', 'show', workdayId], team);
 		const snapshot = observeCampaign(observed, workdayId, observedEvents, (cursor, limit) =>
 			read(['workdays', 'events', 'list', workdayId, '--limit', String(limit), '--cursor', cursor], team));

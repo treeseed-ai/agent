@@ -3,6 +3,21 @@ id: agent.golden.component-boundaries
 title: Golden execution component boundaries
 scope: local-component-tests
 workflow:
+  - id: workday-start-receipt-unit
+    action: { verifier: agent.golden.workday-start-receipt-unit }
+    expect: { status: passed }
+  - id: workday-start-denials-unit
+    action: { verifier: agent.golden.workday-start-denials-unit }
+    expect: { status: passed }
+  - id: workday-start-readback-unit
+    action: { verifier: agent.golden.workday-start-readback-unit }
+    expect: { status: passed }
+  - id: workday-start-stop-unit
+    action: { verifier: agent.golden.workday-start-stop-unit }
+    expect: { status: passed }
+  - id: workday-start-native
+    action: { verifier: agent.golden.workday-start-native }
+    expect: { status: passed }
   - id: live-assignment-clock-order-unit
     action: { verifier: agent.golden.live-assignment-clock-order-unit }
     expect: { status: passed }

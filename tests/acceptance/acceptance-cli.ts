@@ -1,8 +1,12 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
+import { campaignWorkdayId } from './campaign.ts';
 
 export type Row = Record<string, unknown>;
 export const row = (value: unknown): Row => value && typeof value === 'object' && !Array.isArray(value) ? value as Row : {};
+export function acceptanceWorkdayId(): string {
+	return campaignWorkdayId(read, process.env.TREESEED_ACCEPTANCE_TEAM ?? 'treeseed');
+}
 export function safeCliFailureCode(stdout: string, stderr: string, nativeCode: unknown): string {
 	for (const output of [stdout, stderr]) {
 		try {

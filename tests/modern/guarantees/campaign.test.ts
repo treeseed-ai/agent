@@ -1,7 +1,19 @@
 import { describe, expect, it, vi } from 'vitest';
-import { monitorCampaign, requirePlanningWindow, sdkCampaignWindow } from '../../acceptance/campaign.ts';
+import { monitorCampaign, openSdkCampaignDiscussion, requirePlanningWindow, sdkCampaignWindow } from '../../acceptance/campaign.ts';
 
 describe('automated campaign control (fixtures are not golden acceptance)', () => {
+	it('denies missing malformed or ambiguous chat identities before sending and preserves exact request bytes through unchanged retries', async () => {
+		const send = vi.fn();
+		for (const invalid of ['', ' ', ' proposal', 'proposal ', 'x'.repeat(201), null, undefined, 42]) {
+			for (const ids of [[invalid, 'workday'], ['proposal', invalid]])
+				await expect(openSdkCampaignDiscussion(ids[0] as string, ids[1] as string, send)).rejects.toThrow('ACCEPTANCE_CHAT_INPUT');
+		}
+		expect(send).not.toHaveBeenCalled();
+		await openSdkCampaignDiscussion('proposal', 'workday', send);
+		const held = structuredClone(send.mock.calls); expect(held).toHaveLength(9);
+		await openSdkCampaignDiscussion('proposal', 'workday', send);
+		expect(send.mock.calls.slice(9)).toEqual(held); expect(send.mock.calls.slice(0, 9)).toEqual(held);
+	});
 	it('validates every observed assignment before collaboration or terminal verification and stops on a live authority violation', async () => {
 		for (const status of ['running', 'completed']) {
 			const original = new Error('ACCEPTANCE_LIVE_ASSIGNMENT: Original denied authority');

@@ -51,6 +51,21 @@ beforeEach(() => {
 });
 afterEach(() => vi.useRealTimers());
 describe('campaign CLI composition units (mocked transport, not native or live acceptance)', () => {
+	it('stops the exact admitted simulation on every addressed probe send failure before approval or later progress', async () => {
+		for (let denied = 0; denied < 9; denied++) {
+			state.read.mockReset(); state.verify.mockReset(); transport(() => observed('running'));
+			const original = state.read.getMockImplementation()!;
+			const failure = new Error(`controlled-send-${denied}`); let sends = 0;
+			state.read.mockImplementation((args: string[]) => {
+				if (args[0] === 'send' && sends++ === denied) throw failure;
+				return original(args);
+			});
+			await expect(state.run!()).rejects.toBe(failure);
+			expect(sends).toBe(denied + 1); expect(state.verify).not.toHaveBeenCalled();
+			expect(state.read.mock.calls.filter(call => call[0][1] === 'evaluate')).toHaveLength(0);
+			expect(state.read.mock.calls.filter(call => call[0][1] === 'stop').map(call => call[0][2])).toEqual([workdayId]);
+		}
+	});
 	it('denies live assignment inspection before collaboration approval and verification while stopping only the exact admitted simulation', async () => {
 		const original = new Error('ACCEPTANCE_LIVE_ASSIGNMENT: Controlled immutable authority failure');
 		state.inspect.mockImplementation(() => { throw original; }); transport(() => observed('running'));
@@ -189,6 +204,18 @@ describe('campaign CLI composition units (mocked transport, not native or live a
 		expect(send?.[3]).toBe(240_000);
 		expect(send?.[0]).toContain('--no-wait');
 		expect(send?.[0]).toContain(`golden-discussion:${id}`);
+		const sends = state.read.mock.calls.filter(call => call[0][0] === 'send');
+		expect(sends).toHaveLength(9);
+		const roles = ['architect', 'researcher', 'tester', 'engineer', 'technical-writer', 'releaser', 'reviewer', 'reporter'];
+		for (const [index, role] of roles.entries()) {
+			const args = sends[index + 1]![0] as string[];
+			expect(args[2]).toMatch(new RegExp(`^@sdk/${role} `));
+			expect(args[2].match(/@sdk\/[a-z-]+/gu)).toEqual([`@sdk/${role}`]);
+			expect(args).toEqual(expect.arrayContaining(['--proposal', 'fresh', '--workday', id,
+				'--no-wait', '--idempotency-key', `golden-chat:${id}:${role}`]));
+			expect(sends[index + 1]![3]).toBe(240_000);
+		}
+
 		expect(state.verify.mock.calls.map(call => call[0])).toEqual(['collaboration', 'lifecycle', 'graph', 'revision', 'results', 'settlement', 'reporter']);
 		expect(process.env.TREESEED_ACCEPTANCE_WORKDAY_ID).toBe(id);
 	});

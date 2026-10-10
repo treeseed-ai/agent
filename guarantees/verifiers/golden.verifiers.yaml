@@ -3454,3 +3454,8 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/provider/architecture/recovery-native.test.ts
     testName: "native terminal recovery retains original failed custody across repeated API-generated unmeasured performance observations"
+  agent.golden.execution-normal-sdk-readback-binding-unit:
+    kind: vitestCase
+    ownerPackage: '@treeseed/agent'
+    testFile: tests/modern/guarantees/bindings.test.ts
+    testName: selects existing normal SDK profile context graph and canonical-record readbacks after the same lifecycle without requiring controlled failures or continuation

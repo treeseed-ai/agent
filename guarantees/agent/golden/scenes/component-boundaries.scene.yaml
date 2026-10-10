@@ -1989,3 +1989,6 @@ workflow:
   - id: recovery-synthesized-terminal-native
     action: { verifier: agent.golden.recovery-synthesized-terminal-native }
     expect: { status: passed }
+  - id: execution-normal-sdk-readback-binding-unit
+    action: { verifier: agent.golden.execution-normal-sdk-readback-binding-unit }
+    expect: { status: passed }

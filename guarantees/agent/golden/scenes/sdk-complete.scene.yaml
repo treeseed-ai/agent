@@ -15,6 +15,21 @@ workflow:
   - id: six-pair-graph-readback
     action: { verifier: agent.golden.live.graph }
     expect: { status: passed }
+  - id: governed-profile-readback
+    action: { verifier: agent.golden.architecture-profile-custody-live-1 }
+    expect: { status: passed }
+  - id: canonical-assignment-readback
+    action: { verifier: agent.golden.architecture-profile-custody-live-2 }
+    expect: { status: passed }
+  - id: exact-context-readback
+    action: { verifier: agent.golden.architecture-context-custody-live-1 }
+    expect: { status: passed }
+  - id: sdk-book-knowledge-readback
+    action: { verifier: agent.golden.architecture-book-knowledge-live-1 }
+    expect: { status: passed }
+  - id: complete-graph-history
+    action: { verifier: agent.golden.architecture-graph-history-live-1 }
+    expect: { status: passed }
   - id: sdk-product
     action: { verifier: sdk.golden.live.product }
     expect: { status: passed }
@@ -29,4 +44,7 @@ workflow:
     expect: { status: passed }
   - id: settlement-evidence
     action: { verifier: agent.golden.live.settlement }
+    expect: { status: passed }
+  - id: canonical-terminal-records
+    action: { verifier: agent.golden.architecture-record-custody-live-1 }
     expect: { status: passed }

@@ -181,11 +181,17 @@ describe('capacity-provider guarantee execution bindings', () => {
 				}
 				else if (entry.name.endsWith('.guarantee.yaml')) {
 					const guarantee = parse(readFileSync(path, 'utf8')) as Record<string, unknown>;
+					const scenePath = (guarantee.scene as { manifest?: string } | undefined)?.manifest;
+					const scene = scenePath ? parse(readFileSync(resolve(root, scenePath), 'utf8')) : undefined;
+					const selected: string[] = scene?.workflow?.map((step: { action: { verifier: string } }) => step.action.verifier) ?? [];
 					function references(value: unknown): void {
 						if (!value || typeof value !== 'object') return;
 						for (const [key, child] of Object.entries(value)) {
 							if (key === 'verifierRefs' && Array.isArray(child)) {
-								for (const id of child) if (typeof id !== 'string' || !registry.verifiers[id])
+								// Cross-package definitions are resolved by the workspace Reviewer.
+								// Independent Agent tests still require an exact selected scene ref.
+								for (const id of child) if (typeof id !== 'string' || (!registry.verifiers[id]
+									&& (id.startsWith('agent.') || !selected.includes(id))))
 									failures.push(`${guarantee.id}: unregistered ${String(id)}`);
 							} else references(child);
 						}

@@ -94,7 +94,8 @@ describe('capacity-provider guarantee execution bindings', () => {
   const refs:string[]=scene.workflow.map((step:{action:{verifier:string}})=>step.action.verifier);
   for(const ref of ['agent.golden.architecture-profile-custody-live-1','agent.golden.architecture-profile-custody-live-2',
    'agent.golden.architecture-context-custody-live-1','agent.golden.architecture-book-knowledge-live-1',
-   'agent.golden.architecture-graph-history-live-1','agent.golden.architecture-record-custody-live-1']) {
+   'agent.golden.architecture-graph-history-live-1','agent.golden.architecture-record-custody-live-1',
+   'agent.golden.execution-normal-sdk-physical-absence-live-1']) {
    expect(refs.filter(value=>value===ref),ref).toHaveLength(1);
    expect(refs.indexOf(ref),ref).toBeGreaterThan(refs.indexOf('agent.golden.live.campaign'));
    expect(registry.verifiers[ref]).toMatchObject({kind:'nodeTestCase'});

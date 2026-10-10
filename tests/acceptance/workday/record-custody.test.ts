@@ -13,6 +13,7 @@ import { readWorkdayAssignments, verifyGolden } from '../sdk-runtime-golden.test
 import { readCompleteEvidence } from './support/evidence-pages.ts';
 import { publicCanonicalRecords, verifyTerminalRecordCustody, verifyFailedExecutionCustody, verifyAvailabilityAccountingHistory, verifySandboxCloseoutCustody, verifyWorkdayContinuationCustody, verifySandboxHostAbsence, verifySandboxDirectoryAbsence, verifyProviderConformanceSignature, verifyProviderQualification, verifyProviderLocalSlotClosure, verifyProviderPollingSelection } from './support/record-custody.ts';
 import { actual, verify, availabilityHistory } from './support/record-readback.ts';
+import { verifyPublicSandboxAbsence } from './support/sandbox-inventory.ts';
 
 // Existing supported public reads, complete pages and SAME native managed run.
 // No private route, canonical reconstruction, inferred charge, alternate runner
@@ -93,6 +94,24 @@ test('Actual completed and failed isolated attempts retain distinct verified pub
 	assert.deepEqual(f, before); const again = actual(); verifySandboxCloseoutCustody(again.items); assert.deepEqual(again, before);
 	// This independently reads original public custody, not container/process/
 	// filesystem absence. Native broker/Kata physical closure remains separate.
+});
+test('Actual normal SDK workday reads complete public owning host sandbox absence while retaining unrelated resources and original settled history', { timeout: 120_000 }, async () => {
+ const deadline = performance.now() + 120_000, f = actual(), before = structuredClone(f);
+ assert.equal(f.run.status, 'completed');
+ const isolated = f.items.filter(item => Object.hasOwn(row(item.lifecycleOutput), 'sandboxId'));
+ assert.ok(isolated.length > 0 && isolated.every(item => item.status === 'completed'),
+  'ACCEPTANCE_SANDBOX_NORMAL: Completed normal workday required; controlled failures belong to their separate case');
+ const config = resolveProviderConfig({ requireConnection: true }); assert.ok(config.manifestPath);
+ const loaded = await loadProviderManifest(config.manifestPath, config.dataDir), manifestBefore = structuredClone(loaded.manifest);
+ const inspect = () => {
+  const remaining = Math.floor(deadline - performance.now() - 5_000); assert.ok(remaining > 0, 'ACCEPTANCE_SANDBOX_OBSERVATION_TIME: Original case deadline exhausted');
+  return verifyPublicSandboxAbsence(f.items, loaded.manifest.connections, loaded.manifest.sandbox.brokerSocket,
+   read(['host', 'sandbox', 'status'], '', true, remaining));
+ };
+ const paths = inspect(); verify(f); assert.deepEqual(inspect(), paths); assert.deepEqual(f, before);
+ assert.deepEqual((await loadProviderManifest(config.manifestPath, config.dataDir)).manifest, manifestBefore);
+ // Exact represented sandboxes only. Warm VMs, NBD, source jobs, sessions and
+ // complete producer inventory remain independent obligations, not inferred absence.
 });
 test('Actual owning host independently reads native task container mount and directory absence for completed and failed managed sandboxes without erasing history', { timeout: 120_000 }, async () => {
 	const f = actual(), before = structuredClone(f), config = resolveProviderConfig({ requireConnection: true });

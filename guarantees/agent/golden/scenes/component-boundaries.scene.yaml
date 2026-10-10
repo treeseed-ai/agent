@@ -1992,3 +1992,15 @@ workflow:
   - id: execution-normal-sdk-readback-binding-unit
     action: { verifier: agent.golden.execution-normal-sdk-readback-binding-unit }
     expect: { status: passed }
+  - id: execution-public-sandbox-inventory-unit-1
+    action: { verifier: agent.golden.execution-public-sandbox-inventory-unit-1 }
+    expect: { status: passed }
+  - id: execution-public-sandbox-inventory-unit-2
+    action: { verifier: agent.golden.execution-public-sandbox-inventory-unit-2 }
+    expect: { status: passed }
+  - id: execution-public-sandbox-inventory-unit-3
+    action: { verifier: agent.golden.execution-public-sandbox-inventory-unit-3 }
+    expect: { status: passed }
+  - id: execution-public-sandbox-inventory-unit-4
+    action: { verifier: agent.golden.execution-public-sandbox-inventory-unit-4 }
+    expect: { status: passed }

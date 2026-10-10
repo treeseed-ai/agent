@@ -3459,3 +3459,23 @@ verifiers:
     ownerPackage: '@treeseed/agent'
     testFile: tests/modern/guarantees/bindings.test.ts
     testName: selects existing normal SDK profile context graph and canonical-record readbacks after the same lifecycle without requiring controlled failures or continuation
+  agent.golden.execution-public-sandbox-inventory-unit-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/custody/public-sandbox-inventory.test.ts
+    testName: "accepts exact complete confirmed absence while retaining unrelated live resources and original observations"
+  agent.golden.execution-public-sandbox-inventory-unit-2:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/custody/public-sandbox-inventory.test.ts
+    testName: "denies missing incomplete failed foreign malformed and stale observations without repairing failed history"
+  agent.golden.execution-public-sandbox-inventory-unit-3:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/custody/public-sandbox-inventory.test.ts
+    testName: "denies missing malformed duplicated changed and residual native task container and mount inventories"
+  agent.golden.execution-public-sandbox-inventory-unit-4:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/custody/public-sandbox-inventory.test.ts
+    testName: "denies unreadable incomplete duplicate malformed and residual directory entries of every native kind"

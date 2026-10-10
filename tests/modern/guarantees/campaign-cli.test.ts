@@ -189,6 +189,18 @@ describe('campaign CLI composition units (mocked transport, not native or live a
 		expect(send?.[3]).toBe(240_000);
 		expect(send?.[0]).toContain('--no-wait');
 		expect(send?.[0]).toContain(`golden-discussion:${id}`);
+		const sends = state.read.mock.calls.filter(call => call[0][0] === 'send');
+		expect(sends).toHaveLength(9);
+		const roles = ['architect', 'researcher', 'tester', 'engineer', 'technical-writer', 'releaser', 'reviewer', 'reporter'];
+		for (const [index, role] of roles.entries()) {
+			const args = sends[index + 1]![0] as string[];
+			expect(args[2]).toMatch(new RegExp(`^@sdk/${role} `));
+			expect(args[2].match(/@sdk\/[a-z-]+/gu)).toEqual([`@sdk/${role}`]);
+			expect(args).toEqual(expect.arrayContaining(['--proposal', 'fresh', '--workday', id,
+				'--no-wait', '--idempotency-key', `golden-chat:${id}:${role}`]));
+			expect(sends[index + 1]![3]).toBe(240_000);
+		}
+
 		expect(state.verify.mock.calls.map(call => call[0])).toEqual(['collaboration', 'lifecycle', 'graph', 'revision', 'results', 'settlement', 'reporter']);
 		expect(process.env.TREESEED_ACCEPTANCE_WORKDAY_ID).toBe(id);
 	});

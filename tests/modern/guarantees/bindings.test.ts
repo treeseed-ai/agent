@@ -16,6 +16,20 @@ for (const file of readdirSync(resolve(root, 'guarantees/verifiers')).filter(pat
 }
 
 describe('capacity-provider guarantee execution bindings', () => {
+	it('selects the owning normal SDK clean schema readback exactly once after terminal records and before physical absence', () => {
+		const manifest = parse(readFileSync(resolve(root, 'guarantees/agent/golden/sdk-complete.guarantee.yaml'), 'utf8'));
+		const scene = parse(readFileSync(resolve(root, manifest.scene.manifest), 'utf8'));
+		const refs: string[] = scene.workflow.map((step: { action: { verifier: string } }) => step.action.verifier);
+		const ref = 'api.golden.execution-normal-sdk-clean-schema-live-1';
+		expect(scene.scope).toBe('local-integrated-runtime');
+		expect(refs.filter(value => value === ref)).toHaveLength(1);
+		expect(refs.indexOf(ref)).toBeGreaterThan(refs.indexOf('agent.golden.architecture-record-custody-live-1'));
+		expect(refs.indexOf(ref)).toBeLessThan(refs.indexOf('agent.golden.execution-normal-sdk-physical-absence-live-1'));
+		expect(refs).not.toContain('api.golden.execution-clean-schema-live-1');
+		// The workspace Reviewer resolves API's exact owning definition. An
+		// independent Agent checkout must not copy it or require API source.
+		expect(registry.verifiers[ref]).toBeUndefined();
+	});
 	it('binds exact six-pair graph and Reporter chronology requirements to their existing post-campaign native gates', () => {
 		const manifest = parse(readFileSync(resolve(root, 'guarantees/agent/golden/sdk-complete.guarantee.yaml'), 'utf8'));
 		const scene = parse(readFileSync(resolve(root, manifest.scene.manifest), 'utf8'));

@@ -5,14 +5,14 @@ import { assignmentAttemptSchema, assignmentResultSchema, exactEntityReferenceSc
 import { validatePortableContentData } from '@treeseed/sdk/content-validation';
 import { parse } from 'yaml';
 import { isDeepStrictEqual } from 'node:util';
-import { read, row, type Row } from '../acceptance-cli.ts';
+import { acceptanceWorkdayId, read, row, type Row } from '../acceptance-cli.ts';
 import { readWorkdayAssignments } from '../sdk-runtime-golden.test.ts';
 import { verifyAssignmentAuthority, verifyExactContextSource, verifyKnowledgeBookSource, verifyDraftProposalHandoff, verifyModelClockEvidence, modelExecutionInventory } from './support/assignment-authority.ts';
 import { readCompleteEvidence } from './support/evidence-pages.ts';
 import { verifySdkArchitectureBook } from '../prepare-campaign.ts';
 
 test('Every actual recorded model execution is included in exact clock evidence readback without discarding failed or returned attempts', { timeout: 120_000 }, () => {
-	const id = process.env.TREESEED_ACCEPTANCE_WORKDAY_ID ?? '', team = process.env.TREESEED_ACCEPTANCE_TEAM ?? 'treeseed';
+	const id = acceptanceWorkdayId(), team = process.env.TREESEED_ACCEPTANCE_TEAM ?? 'treeseed';
 	assert.match(id, /^workday-[a-f0-9-]+$/u);
 	const observed = read(['workdays', 'show', id], team), run = row(observed.run); assert.equal(run.id, id); assert.equal(run.status, 'completed');
 	const items = readWorkdayAssignments(id, String(run.startedAt), team), args = ['workdays', 'events', 'list', id, '--diagnostics', 'full'];
@@ -33,7 +33,7 @@ test('Every actual recorded model execution is included in exact clock evidence 
 });
 
 test('Actual draft Proposal handoff is independently read from its own granted publication without claiming accepted continuation authority', { timeout: 120_000 }, () => {
-	const id = process.env.TREESEED_ACCEPTANCE_WORKDAY_ID ?? '', team = process.env.TREESEED_ACCEPTANCE_TEAM ?? 'treeseed';
+	const id = acceptanceWorkdayId(), team = process.env.TREESEED_ACCEPTANCE_TEAM ?? 'treeseed';
 	assert.match(id, /^workday-[a-f0-9-]+$/u);
 	const workday = read(['workdays', 'show', id], team), run = row(workday.run); assert.equal(run.id, id);
 	const assignments = readWorkdayAssignments(id, String(run.startedAt), team), observations: Array<{ args: string[]; value: Row }> = [];
@@ -59,7 +59,7 @@ test('Actual draft Proposal handoff is independently read from its own granted p
 	assert.deepEqual(read(['workdays', 'show', id], team), workday);
 });
 test('Actual managed proposal execution retains native blocking feedback and its exact prior resolution before the governing classed Decision without replacing original content or history', { timeout: 120_000 }, () => {
-	const id = process.env.TREESEED_ACCEPTANCE_WORKDAY_ID ?? '', team = process.env.TREESEED_ACCEPTANCE_TEAM ?? 'treeseed';
+	const id = acceptanceWorkdayId(), team = process.env.TREESEED_ACCEPTANCE_TEAM ?? 'treeseed';
 	assert.match(id, /^workday-[a-f0-9-]+$/u);
 	const workday = read(['workdays', 'show', id], team), run = row(workday.run), items = readWorkdayAssignments(id, String(run.startedAt), team);
 	const observations: Array<{ args: string[]; value: Row }> = [], seen = new Set<string>(); let resolved = 0;
@@ -114,7 +114,7 @@ test('Actual managed proposal execution retains native blocking feedback and its
 });
 
 test('Actual accepted integration work retains its original single base exact independent predecessor results and governed release authority without a name-derived composite workspace', { timeout: 120_000 }, () => {
-	const id = process.env.TREESEED_ACCEPTANCE_WORKDAY_ID ?? '', team = process.env.TREESEED_ACCEPTANCE_TEAM ?? 'treeseed';
+	const id = acceptanceWorkdayId(), team = process.env.TREESEED_ACCEPTANCE_TEAM ?? 'treeseed';
 	assert.match(id, /^workday-[a-f0-9-]+$/u);
 	const workday = read(['workdays', 'show', id], team), run = row(workday.run), items = readWorkdayAssignments(id, String(run.startedAt), team);
 	const observations: Array<{ args: string[]; value: Row }> = []; let integrations = 0;
@@ -171,7 +171,7 @@ test('Actual accepted integration work retains its original single base exact in
 });
 
 test('Actual TreeDX assignment context is independently read at exact granted repository commit path and book revision', { timeout: 120_000 }, () => {
-	const id = process.env.TREESEED_ACCEPTANCE_WORKDAY_ID ?? '', team = process.env.TREESEED_ACCEPTANCE_TEAM ?? 'treeseed';
+	const id = acceptanceWorkdayId(), team = process.env.TREESEED_ACCEPTANCE_TEAM ?? 'treeseed';
 	assert.match(id, /^workday-[a-f0-9-]+$/u, 'ACCEPTANCE_CONTEXT_WORKDAY: Actual workday required');
 	const run = row(read(['workdays', 'show', id], team).run); assert.equal(run.id, id);
 	const assignments = readWorkdayAssignments(id, String(run.startedAt), team); assert.ok(assignments.length > 0);
@@ -201,7 +201,7 @@ test('Actual TreeDX assignment context is independently read at exact granted re
 });
 
 test('Actual SDK architecture Knowledge is independently read from its owning result and bound to the exact published SDK Core Book', { timeout: 120_000 }, () => {
-	const id = process.env.TREESEED_ACCEPTANCE_WORKDAY_ID ?? '', team = process.env.TREESEED_ACCEPTANCE_TEAM ?? 'treeseed';
+	const id = acceptanceWorkdayId(), team = process.env.TREESEED_ACCEPTANCE_TEAM ?? 'treeseed';
 	assert.match(id, /^workday-[a-f0-9-]+$/u);
 	const workday = read(['workdays', 'show', id], team), run = row(workday.run);
 	assert.equal(run.id, id); assert.equal(run.status, 'completed'); assert.equal(run.executionMode, 'simulation');

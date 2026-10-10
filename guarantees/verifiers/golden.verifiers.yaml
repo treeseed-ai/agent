@@ -1,6 +1,31 @@
 schemaVersion: treeseed.guarantee-verifiers/v1
 ownerPackage: "@treeseed/agent"
 verifiers:
+  agent.golden.workday-start-receipt-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/monitoring/workday-start.test.ts
+    testName: "retains the exact API start receipt for later isolated verifiers without mutating the frozen input or original receipt"
+  agent.golden.workday-start-denials-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/monitoring/workday-start.test.ts
+    testName: "denies incomplete foreign malformed redirected or conflicting start receipts while retaining exact prior bytes and scoped cleanup through replay"
+  agent.golden.workday-start-readback-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/monitoring/workday-start.test.ts
+    testName: "resolves only the original API receipt through an independent scoped public workday read and rejects moved input or changed public authority"
+  agent.golden.workday-start-stop-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/campaign-cli.test.ts
+    testName: "stops the exact admitted simulation on receipt capture denial before discussion approval or later verification"
+  agent.golden.workday-start-native:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/monitoring/workday-start-native.test.ts
+    testName: "native public SDK start and independent child preserve the exact API receipt across process isolation without replaying admission"
   agent.golden.live-assignment-clock-order-unit:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

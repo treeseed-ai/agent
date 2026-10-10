@@ -6,7 +6,7 @@ import { assignmentReferenceSchema, assignmentTimingAwarenessReceiptSchema, auth
 import { canonicalStandardsJson } from '@treeseed/sdk/standards';
 import { DEFAULT_CAPACITY_PAGE_LIMIT } from '@treeseed/sdk/capacity-pagination';
 import { validatePortableContentData } from '@treeseed/sdk/content-validation';
-import { read, row, type Row } from './acceptance-cli.ts';
+import { acceptanceWorkdayId, read, row, type Row } from './acceptance-cli.ts';
 import { readDecisionContent, readGovernedContentFile, verifyDecisionContent, verifyReviewFindingContent } from './workday/support/decision-evidence.ts';
 import { verifyAssignmentAuthority, verifyTeardownAuthority, verifyTreeDxWorkspaceClosure, verifyMeasuredVerification, verifyNativeCounterAgreement, verifyTerminalUsageClock } from './workday/support/assignment-authority.ts';
 import { verifyPlanningEvidence } from './workday/support/planning-evidence.ts';
@@ -92,7 +92,7 @@ export function readWorkdayAssignments(workdayId: string, startedAt: string, tea
 	return assignments;
 }
 export function verifyGolden(gate: Gate): void {
-	const workdayId = process.env.TREESEED_ACCEPTANCE_WORKDAY_ID ?? '';
+	const workdayId = acceptanceWorkdayId();
 	assert.ok(workdayId.startsWith('workday-'), 'Explicit real workday ID is required; no fixture or skipped pass is allowed');
 	const team = process.env.TREESEED_ACCEPTANCE_TEAM ?? 'treeseed';
 	const workday = read(['workdays', 'show', workdayId], team);

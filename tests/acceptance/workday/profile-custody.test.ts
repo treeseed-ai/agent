@@ -1,13 +1,13 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { assignmentAttemptSchema, assignmentResultSchema } from '@treeseed/sdk/agent-capacity';
-import { read, row, type Row } from '../acceptance-cli.ts';
+import { acceptanceWorkdayId, read, row, type Row } from '../acceptance-cli.ts';
 import { readGovernedContentFile } from './support/decision-evidence.ts';
 import { verifyGovernedProfile, verifyHandlerInspection } from './support/assignment-authority.ts';
 import { readWorkdayAssignments, verifyGolden } from '../sdk-runtime-golden.test.ts';
 
 function evidence() {
-	const id = process.env.TREESEED_ACCEPTANCE_WORKDAY_ID ?? '';
+	const id = acceptanceWorkdayId();
 	assert.match(id, /^workday-[a-f0-9-]+$/u, 'ACCEPTANCE_PROFILE_WORKDAY: Actual exact workday required');
 	const team = process.env.TREESEED_ACCEPTANCE_TEAM ?? 'treeseed', run = row(read(['workdays', 'show', id], team).run);
 	assert.equal(run.id, id); assert.equal(run.executionMode, 'simulation');

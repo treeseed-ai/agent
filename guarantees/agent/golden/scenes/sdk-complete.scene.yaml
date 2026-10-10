@@ -6,6 +6,9 @@ workflow:
   - id: frozen-campaign-inputs
     action: { verifier: agent.golden.live.campaign-freeze }
     expect: { status: passed }
+  - id: native-cli-diagnostic-boundary
+    action: { verifier: cli.golden.execution-diagnostics-read-native }
+    expect: { status: passed }
   - id: guest-model-smoke
     action: { verifier: agent.golden.live.guest-model-smoke }
     expect: { status: passed }

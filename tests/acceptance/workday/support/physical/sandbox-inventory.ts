@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { isAbsolute, resolve } from 'node:path';
-import { row, type Row } from '../../acceptance-cli.ts';
-import { verifySandboxHostAbsence } from './record-custody.ts';
+import { row, type Row } from '../../../acceptance-cli.ts';
+import { verifySandboxHostAbsence } from '../record-custody.ts';
 
 /** Consume the fixed, read-only manager/supervisor observation. No runtime is
  * constructed, caller path executed, or unrelated resource removed here. */

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { assignmentAttemptSchema, assignmentResultSchema } from '@treeseed/sdk/agent-capacity';
 import { request } from '../../provider-kernel-fixture.ts';
 import { row, type Row } from '../../../../acceptance/acceptance-cli.ts';
-import { verifyPublicSandboxAbsence } from '../../../../acceptance/workday/support/sandbox-inventory.ts';
+import { verifyPublicSandboxAbsence } from '../../../../acceptance/workday/support/physical/sandbox-inventory.ts';
 
 function supplied() {
  const original = request().assignment.assignmentAttempt;

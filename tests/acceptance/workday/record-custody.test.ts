@@ -13,7 +13,7 @@ import { readWorkdayAssignments, verifyGolden } from '../sdk-runtime-golden.test
 import { readCompleteEvidence } from './support/evidence-pages.ts';
 import { publicCanonicalRecords, verifyTerminalRecordCustody, verifyFailedExecutionCustody, verifyAvailabilityAccountingHistory, verifySandboxCloseoutCustody, verifyWorkdayContinuationCustody, verifySandboxHostAbsence, verifySandboxDirectoryAbsence, verifyProviderConformanceSignature, verifyProviderQualification, verifyProviderLocalSlotClosure, verifyProviderPollingSelection } from './support/record-custody.ts';
 import { actual, verify, availabilityHistory } from './support/record-readback.ts';
-import { verifyPublicSandboxAbsence } from './support/sandbox-inventory.ts';
+import { verifyPublicSandboxAbsence } from './support/physical/sandbox-inventory.ts';
 
 // Existing supported public reads, complete pages and SAME native managed run.
 // No private route, canonical reconstruction, inferred charge, alternate runner

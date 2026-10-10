@@ -100,7 +100,13 @@ describe('capacity-provider guarantee execution bindings', () => {
    expect(refs.indexOf(ref),ref).toBeGreaterThan(refs.indexOf('agent.golden.live.campaign'));
    expect(registry.verifiers[ref]).toMatchObject({kind:'nodeTestCase'});
   }
-  for(const ref of refs)expect(registry.verifiers[ref]?.testName??'',ref).not.toMatch(/controlled|continuation|completed and failed/u);
+  const cliRef='cli.golden.execution-diagnostics-read-native';
+  expect(refs.filter(ref=>ref===cliRef)).toHaveLength(1);
+  expect(refs.indexOf(cliRef)).toBeLessThan(refs.indexOf('agent.golden.live.campaign'));
+  // The workspace runner resolves this existing CLI-owned native definition;
+  // Agent's independent suite must not require another source checkout.
+  for(const ref of refs.filter(value=>value!==cliRef))expect(registry.verifiers[ref]?.testName??'',ref)
+   .not.toMatch(/controlled|continuation|completed and failed/u);
  });
 	it('supplies exact canonical execution authority before complete verification and inherited scene prerequisites', () => {
 		const workflow = parse(readFileSync(resolve(root, '.github/workflows/verify.yml'), 'utf8'));

@@ -69,7 +69,7 @@ export function campaignWorkdayId(read: (args: string[], team: string) => StartR
 	const explicit = environment.TREESEED_ACCEPTANCE_WORKDAY_ID;
 	if (explicit) { assert.match(explicit, /^workday-[a-f0-9-]+$/u); return explicit; }
 	const path = environment.TREESEED_ACCEPTANCE_FREEZE_PATH;
-	assert.ok(path && team && team.trim() === team, 'ACCEPTANCE_WORKDAY_START: Explicit frozen SDK input and team required');
+	assert.ok(path && team && team.trim() === team, 'ACCEPTANCE_WORKDAY_START: Explicit real workday ID or explicit frozen SDK input and team required');
 	const bytes = startBytes(path), freeze = startRow(JSON.parse(bytes.toString('utf8'))), receiptPath = `${path}.workday-start.json`;
 	const receiptBytes = startBytes(receiptPath), receipt = startRow(JSON.parse(receiptBytes.toString('utf8'))), id = checkedStart(receipt, freeze);
 	const run = startRow(read(['workdays', 'show', id], team).run), preflight = startRow(freeze.preflight), body = startRow(startRow(freeze.request).body);

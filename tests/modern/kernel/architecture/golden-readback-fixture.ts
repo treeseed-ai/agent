@@ -29,7 +29,7 @@ await import('../../../acceptance/sdk-runtime-golden.test.ts');
 export const { read } = await import('../../../acceptance/acceptance-cli.ts');
 
 export const classes = ['architect', 'researcher', 'tester', 'engineer', 'technical-writer', 'releaser', 'reviewer', 'reporter'];
-export const workdayId = 'workday-test';
+export const workdayId = 'workday-11111111-1111-4111-8111-111111111111';
 export const commit = 'a'.repeat(40);
 export const gate = (name: string) => state.cases.get(`Golden runtime ${name} evidence satisfies its acceptance boundary`)!();
 export function usageMeasurement(item: Row): Row {

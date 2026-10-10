@@ -84,7 +84,7 @@ jobs:
         run: node node_modules/vitest/vitest.mjs run --config ./vitest.config.ts tests/modern/sandbox/architecture/clock-native.test.ts
       - run: bash -lc 'npm run verify:local'
       - name: Execute coded golden component scenes
-        uses: treeseed-ai/reviewer/.github/actions/run-scenes@7845a9e159f74f6e7adb988b0a367580b77555b1
+        uses: treeseed-ai/reviewer/.github/actions/run-scenes@47d25eb8360c26f8cdf5b017f4e1500969c25285
         with:
           ids: guarantee.agent.golden.component-boundaries,guarantee.agent.golden.planning-synthesis-recovery
       - name: Pack verified artifact

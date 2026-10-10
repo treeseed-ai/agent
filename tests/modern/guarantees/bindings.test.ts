@@ -57,7 +57,7 @@ describe('capacity-provider guarantee execution bindings', () => {
 			'b918b519ac545fdd61faab208687ccc64e1f3d03c9a84dfc57a5cfee6190f3f3',
 		].map(criterion => ({ criterion, verifierRefs: ['agent.golden.live.campaign-freeze'] }));
 		expect(manifest.acceptanceCriteria).toEqual([{ criterion: 'b635827ed7862d56b8764dfad30114b9ee18d02b4aa709a257841e18a1bd0f0d',
-			verifierRefs: ['agent.golden.execution-clock-observation-live-1'] },
+			verifierRefs: ['agent.golden.execution-clock-observation-live-1', 'api.golden.execution-protected-observation-live-1'] },
 			{ criterion: '7eaf9fdc1c264e2d0b28d2fc751da33a2ffcf98ca0d6446ac6e8672503dfa533',
 				verifierRefs: ['agent.golden.live.reporter', 'agent.golden.live.settlement'] }, ...prospectiveInputs,
 			{ criterion: '80496650a6ed5888fbda21ddcb15047d221874adb709887306dede9e3e93ff55', verifierRefs: ['agent.golden.live.results'] },
@@ -78,6 +78,10 @@ describe('capacity-provider guarantee execution bindings', () => {
 		expect(registry.verifiers['agent.golden.live.results']).toMatchObject({ kind: 'nodeTestCase',
 			testFile: 'tests/acceptance/sdk-runtime-golden.test.ts', testName: 'Golden runtime results evidence satisfies its acceptance boundary' });
 		expect(refs.indexOf('agent.golden.execution-clock-observation-live-1')).toBeGreaterThan(refs.indexOf('agent.golden.live.campaign'));
+		const protectedClock = 'api.golden.execution-protected-observation-live-1';
+		expect(refs.filter((ref: string) => ref === protectedClock)).toHaveLength(1);
+		expect(refs.indexOf(protectedClock)).toBeGreaterThan(refs.indexOf('agent.golden.execution-clock-observation-live-1'));
+		expect(refs).not.toContain('api.golden.execution-clock-adaptation-live-1');
 		for (const ref of ['agent.golden.live.reporter', 'agent.golden.live.settlement']) {
 			expect(refs.filter((value: string) => value === ref)).toHaveLength(1);
 			expect(refs.indexOf(ref)).toBeGreaterThan(refs.indexOf('agent.golden.live.campaign'));

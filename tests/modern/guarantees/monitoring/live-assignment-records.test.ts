@@ -75,6 +75,21 @@ describe('live canonical assignment observation (controlled inputs, not managed 
 			expect(() => observeLiveAssignmentRecords(run, [moved], retained, inspect)).toThrow('Original lifecycle clock changed');
 		}
 		expect(inspect).toHaveBeenCalledOnce();
+		const statuses = ['created', 'leased', 'running', 'completed', 'blocked', 'failed', 'cancelled', 'expired'];
+		for (const previous of statuses) for (const next of statuses) {
+			const terminal = statuses.indexOf(previous) >= 3;
+			const backwards = statuses.indexOf(next) < statuses.indexOf(previous) && !terminal;
+			if (!backwards && (!terminal || next === previous)) continue;
+			const original = liveAssignmentRecord(), prior = row(original.assignmentAttempt), held = new Map<string, Row>();
+			prior.status = previous;
+			observeLiveAssignmentRecords(run, [original], held, () => {});
+			const moved = structuredClone(original); row(moved.assignmentAttempt).status = next;
+			const before = structuredClone({ moved, held }), deniedInspection = vi.fn();
+			expect(() => observeLiveAssignmentRecords(run, [moved], held, deniedInspection), `${previous} -> ${next}`).toThrow('Lifecycle status regressed or changed terminal disposition');
+			expect(deniedInspection).not.toHaveBeenCalled(); expect({ moved, held }).toEqual(before);
+			observeLiveAssignmentRecords(run, [original], held, deniedInspection);
+			expect(held).toEqual(before.held); expect(deniedInspection).not.toHaveBeenCalled();
+		}
 	});
 	it('preserves the original independent inspection failure and prior batch through denial and exact retry', () => {
 		const item = liveAssignmentRecord(), run = liveRun(item), retained = new Map<string, Row>(), original = new Error('controlled_denial');

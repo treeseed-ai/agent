@@ -96,6 +96,14 @@ describe('capacity-provider guarantee execution bindings', () => {
   const scene=parse(readFileSync(resolve(root,manifest.scene.manifest),'utf8'));
   expect(scene.scope).toBe('local-integrated-runtime');
   const refs:string[]=scene.workflow.map((step:{action:{verifier:string}})=>step.action.verifier);
+  const schemaRef='api.golden.execution-normal-sdk-clean-schema-live-1';
+  expect(refs.filter(value=>value===schemaRef)).toHaveLength(1);
+  expect(refs.indexOf(schemaRef)).toBeGreaterThan(refs.indexOf('agent.golden.architecture-record-custody-live-1'));
+  expect(refs.indexOf(schemaRef)).toBeLessThan(refs.indexOf('agent.golden.execution-normal-sdk-physical-absence-live-1'));
+  expect(refs).not.toContain('api.golden.execution-clean-schema-live-1');
+  // Reuse this selected binding case; API owns the actual public/native proof.
+  // Independent Agent discovery must not duplicate API's verifier definition.
+  expect(registry.verifiers[schemaRef]).toBeUndefined();
   for(const ref of ['agent.golden.architecture-profile-custody-live-1','agent.golden.architecture-profile-custody-live-2',
    'agent.golden.architecture-context-custody-live-1','agent.golden.architecture-book-knowledge-live-1',
    'agent.golden.architecture-graph-history-live-1','agent.golden.architecture-record-custody-live-1',
@@ -122,7 +130,7 @@ describe('capacity-provider guarantee execution bindings', () => {
 		expect(job.env.TREESEED_DEVELOPMENT_WORKSPACE_ROOT).toBe('${{ github.workspace }}/.treeseed/platform-authority');
 		const verify = steps.findIndex((step: { run?: string }) => step.run?.includes('npm run verify:local'));
 		const scene = steps.findIndex((step: { uses?: string }) => step.uses?.includes('reviewer/.github/actions/run-scenes@'));
-		expect(steps[scene].uses).toBe('treeseed-ai/reviewer/.github/actions/run-scenes@108f153b18896e62cd0fb7507c2fa78c4ffaec36');
+		expect(steps[scene].uses).toBe('treeseed-ai/reviewer/.github/actions/run-scenes@df1a0bb3b4791aa39f5212fedfb845042636f283');
 		expect(steps.indexOf(checkouts[0])).toBeLessThan(verify); expect(verify).toBeGreaterThan(-1); expect(scene).toBeGreaterThan(verify);
 		const relay = steps.findIndex((step: { name?: string }) => step.name === 'Prepare disposable native relay CA');
 		expect(relay).toBeGreaterThan(-1); expect(relay).toBeLessThan(verify);

@@ -54,6 +54,9 @@ workflow:
   - id: canonical-terminal-records
     action: { verifier: agent.golden.architecture-record-custody-live-1 }
     expect: { status: passed }
+  - id: normal-sdk-clean-schema
+    action: { verifier: api.golden.execution-normal-sdk-clean-schema-live-1 }
+    expect: { status: passed }
   - id: normal-sdk-public-physical-absence
     action: { verifier: agent.golden.execution-normal-sdk-physical-absence-live-1 }
     expect: { status: passed }

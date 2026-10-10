@@ -112,6 +112,7 @@ export function requirePlanningWindow(durationSeconds: number, planningPercent: 
 export async function monitorCampaign(input: {
 	admitDiscussion?: () => void;
 	admittedSimulation?: boolean;
+	inspect?: () => void;
 	read: () => { status: string; mode: string; planningEndsAt: number; endsAt: number;
 		failedBoundary?: 'assignment_failed' | 'assignment_returned' | 'assignment_expired' |
 			'graph_failed' | 'graph_returned' | 'graph_expired' };
@@ -128,6 +129,7 @@ export async function monitorCampaign(input: {
 		const run = input.read();
 		observedStatus = run.status; observedMode = run.mode;
 		assert.equal(run.mode, 'simulation', 'ACCEPTANCE_CAMPAIGN_MODE: No production campaign mutation');
+		input.inspect?.();
 		if (run.status === 'completed') {
 			input.collaboration();
 			input.verify(); return;

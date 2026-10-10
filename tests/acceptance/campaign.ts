@@ -1,4 +1,18 @@
 import assert from 'node:assert/strict';
+import type { CommunicationSendRequest } from '@treeseed/sdk/operator-contracts';
+
+/** The existing communication boundary owns admission, replies and graph custody. */
+export async function openSdkCampaignDiscussion(proposalId: string, workdayId: string,
+	send: (channel: string, body: CommunicationSendRequest, key: string) => unknown | Promise<unknown>): Promise<void> {
+	for (const id of [proposalId, workdayId]) assert.ok(typeof id === 'string' && id.trim() === id
+		&& id.length > 0 && id.length <= 200, 'ACCEPTANCE_CHAT_INPUT: Exact proposal and workday required');
+	const roles = ['architect', 'researcher', 'tester', 'engineer', 'technical-writer', 'releaser', 'reviewer', 'reporter'];
+	const channel = `sdk-golden-${workdayId}`;
+	const context = { proposalId, parentWorkdayId: workdayId };
+	await send(channel, { ...context, message: `${roles.map(role => `@sdk/${role}`).join(' ')} Discuss the exact frozen proposal, identify your role and dependencies, and publish useful planning contributions. Do not implement during planning.` }, `golden-discussion:${workdayId}`);
+	for (const role of roles) await send(channel, { ...context,
+		message: `@sdk/${role} For the exact frozen proposal, state your responsibility and one dependency or verification concern. Answer only this coordination question; do not inspect or change project files, publish work products or mutate graph edges.` }, `golden-chat:${workdayId}:${role}`);
+}
 
 export const sdkCampaignWindow = Object.freeze({ durationSeconds: 3600, planningPercent: 100 / 3, planningTurnMaximumSeconds: 180 });
 
@@ -110,7 +124,7 @@ export function requirePlanningWindow(durationSeconds: number, planningPercent: 
 }
 
 export async function monitorCampaign(input: {
-	admitDiscussion?: () => void;
+	admitDiscussion?: () => void | Promise<void>;
 	admittedSimulation?: boolean;
 	inspect?: () => void;
 	read: () => { status: string; mode: string; planningEndsAt: number; endsAt: number;
@@ -124,7 +138,7 @@ export async function monitorCampaign(input: {
 		&& /^ACCEPTANCE_(CHAT_ROLES|PLANNING_ROLE_TURNS|PLANNING_CYCLES|ESTIMATE_ROLES):/u.test(failure.message);
 	let observedStatus = input.admittedSimulation ? 'running' : '', observedMode = input.admittedSimulation ? 'simulation' : '';
 	try {
-	input.admitDiscussion?.();
+	await input.admitDiscussion?.();
 	for (;;) {
 		const run = input.read();
 		observedStatus = run.status; observedMode = run.mode;

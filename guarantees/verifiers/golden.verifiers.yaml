@@ -1,6 +1,21 @@
 schemaVersion: treeseed.guarantee-verifiers/v1
 ownerPackage: "@treeseed/agent"
 verifiers:
+  agent.golden.chat-probe-input-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/campaign.test.ts
+    testName: "denies missing malformed or ambiguous chat identities before sending and preserves exact request bytes through unchanged retries"
+  agent.golden.chat-probe-stop-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/campaign-cli.test.ts
+    testName: "stops the exact admitted simulation on every addressed probe send failure before approval or later progress"
+  agent.golden.chat-probe-native:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/campaign-chat-native.test.ts
+    testName: "native public communication requests preserve every addressed probe and stop on denial malformed output or interruption before unchanged retry"
   agent.golden.live-assignment-control-unit:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

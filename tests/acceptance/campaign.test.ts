@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { monitorCampaign, requirePlanningWindow } from './campaign.ts';
+import { monitorCampaign, openSdkCampaignDiscussion, requirePlanningWindow } from './campaign.ts';
 import { verifyFreezeIntegrity } from './freeze-integrity.ts';
 import { read } from './acceptance-cli.ts';
 import { verifyGolden } from './sdk-runtime-golden.test.ts';
@@ -40,14 +40,13 @@ test('Frozen SDK campaign drives planning acting review and terminal golden gate
 	process.env.TREESEED_ACCEPTANCE_WORKDAY_ID = workdayId;
 	const stop = () => { read(['workdays', 'stop', workdayId, '--yes', '--reason', 'Automated golden boundary failed',
 		'--idempotency-key', `golden-stop:${workdayId}`], team); };
-	const mentions = ['architect', 'researcher', 'tester', 'engineer', 'technical-writer', 'releaser', 'reviewer', 'reporter']
-		.map(role => `@sdk/${role}`).join(' ');
 	let externallyApproved = false;
 	const observedEvents = new Map<string, Record<string, unknown>>();
 	const observedAssignments = new Map<string, Record<string, unknown>>();
 	let currentRun: Record<string, unknown> | undefined;
-	await monitorCampaign({ admittedSimulation: true, admitDiscussion: () => { read(['send', `sdk-golden-${workdayId}`, `${mentions} Discuss the exact frozen proposal, identify your role and dependencies, and publish useful planning contributions. Do not implement during planning.`,
-		'--proposal', freeze.proposal.id, '--workday', workdayId, '--no-wait', '--idempotency-key', `golden-discussion:${workdayId}`], team, false, 240_000); }, read: () => {
+	await monitorCampaign({ admittedSimulation: true, admitDiscussion: () => openSdkCampaignDiscussion(freeze.proposal.id, workdayId,
+		(channel, request, key) => read(['send', channel, request.message, '--proposal', request.proposalId!,
+			'--workday', request.parentWorkdayId!, '--no-wait', '--idempotency-key', key], team, false, 240_000)), read: () => {
 		const observed = read(['workdays', 'show', workdayId], team);
 		const snapshot = observeCampaign(observed, workdayId, observedEvents, (cursor, limit) =>
 			read(['workdays', 'events', 'list', workdayId, '--limit', String(limit), '--cursor', cursor], team));

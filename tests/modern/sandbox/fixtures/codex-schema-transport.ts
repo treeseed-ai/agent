@@ -1,10 +1,10 @@
 // Real pinned CLI, synthetic loopback SSE: this proves transport, NOT live model compliance.
 import { createServer } from 'node:http';
-import { spawn } from 'node:child_process';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
+import { run } from '../../../../src/sandbox/process-runner.ts';
 
 export async function codexSchemaTransport(schema: unknown, responseText: string, prompt: string) {
 	const root = await mkdtemp(join(tmpdir(), 'agent-codex-schema-'));
@@ -35,16 +35,24 @@ export async function codexSchemaTransport(schema: unknown, responseText: string
 		await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
 		const address = server.address(); if (!address || typeof address === 'string') throw new Error('Fixture address missing.');
 		const cli = join(dirname(createRequire(import.meta.url).resolve('@openai/codex/package.json')), 'bin/codex.js');
-		const child = spawn(process.execPath, [cli, 'exec', '--ephemeral', '--ignore-user-config', '--ignore-rules', '--skip-git-repo-check', '--json',
+		const args = [cli, 'exec', '--ephemeral', '--ignore-user-config', '--ignore-rules', '--skip-git-repo-check', '--json',
 			'--model', 'offline-fixture-model', '-c', 'model_provider="offline"', '-c', 'model_providers.offline.name="offline fixture"',
 			'-c', `model_providers.offline.base_url="http://127.0.0.1:${address.port}/v1"`, '-c', 'model_providers.offline.wire_api="responses"',
 			'-c', 'model_providers.offline.requires_openai_auth=false', '-c', 'model_providers.offline.supports_websockets=false',
 			'-c', 'model_providers.offline.request_max_retries=0', '-c', 'project_doc_max_bytes=0',
-			'--output-schema', join(root, 'schema.json'), '--output-last-message', join(root, 'response.json'), '-'],
-			{ cwd: root, env: { PATH: process.env.PATH ?? '' }, stdio: ['pipe', 'pipe', 'pipe'] });
-		let stdout = '', stderr = ''; child.stdout.on('data', chunk => { stdout += String(chunk); }); child.stderr.on('data', chunk => { stderr += String(chunk); });
-		const timer = setTimeout(() => child.kill('SIGKILL'), 15_000);
-		const code = await new Promise<number | null>((resolve, reject) => { child.once('error', reject); child.once('close', resolve); child.stdin.end(prompt); }).finally(() => clearTimeout(timer));
+			'--output-schema', join(root, 'schema.json'), '--output-last-message', join(root, 'response.json'), '-'];
+		let stdout = '', stderr = '', code = 0;
+		try {
+			({ stdout, stderr } = await run(process.execPath, args,
+				{ cwd: root, env: { PATH: process.env.PATH ?? '' }, input: prompt, captureStdout: true, timeoutMs: 15_000 }));
+		} catch (error) {
+			const native = error as Error & { exitCode?: number | null; stdout?: string; stderr?: string };
+			// Only an observed normal CLI rejection can satisfy the negative case.
+			// Timeouts, launch errors and incomplete descendant closure remain fatal.
+			if (!(error instanceof Error) || native.message === 'assignment_subprocess_cleanup_failed'
+				|| !Number.isInteger(native.exitCode) || native.exitCode! <= 0) throw error;
+			code = native.exitCode!; stdout = native.stdout ?? ''; stderr = native.stderr ?? '';
+		}
 		return { code, requests, stdout, stderr, response: await readFile(join(root, 'response.json'), 'utf8').catch(() => null) };
 	} finally {
 		server.closeAllConnections(); if (server.listening) await new Promise<void>(resolve => server.close(() => resolve()));

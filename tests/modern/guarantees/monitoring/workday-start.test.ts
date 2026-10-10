@@ -36,6 +36,10 @@ it('denies incomplete foreign malformed redirected or conflicting start receipts
 			expect(() => retainCampaignWorkdayStart(changed, f.path, f.freeze), mode).toThrow();
 			expect(existsSync(f.retained), mode).toBe(false); expect(readFileSync(f.path)).toEqual(f.bytes);
 		}
+		for (const digest of ['c'.repeat(64), 'c'.repeat(42), 'c'.repeat(44), `${'c'.repeat(42)}!`]) {
+			expect(() => retainCampaignWorkdayStart({ ...f.receipt, transactionReceiptId: `workday-start:${digest}` }, f.path, f.freeze)).toThrow();
+			expect(existsSync(f.retained)).toBe(false); expect(readFileSync(f.path)).toEqual(f.bytes);
+		}
 		for (const bytes of ['', '{', JSON.stringify({ ...f.receipt, workdayId: 'workday-22222222-2222-4222-8222-222222222222' })]) {
 			writeFileSync(f.retained, bytes);
 			expect(() => retainCampaignWorkdayStart(f.receipt, f.path, f.freeze)).toThrow(); expect(readFileSync(f.retained, 'utf8')).toBe(bytes);

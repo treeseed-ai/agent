@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { monitorCampaign, openSdkCampaignDiscussion, requirePlanningWindow } from './campaign.ts';
+import { monitorCampaign, openSdkCampaignDiscussion, requirePlanningWindow, retainCampaignWorkdayStart } from './campaign.ts';
 import { verifyFreezeIntegrity } from './freeze-integrity.ts';
 import { read } from './acceptance-cli.ts';
 import { verifyGolden } from './sdk-runtime-golden.test.ts';
@@ -34,10 +34,7 @@ test('Frozen SDK campaign drives planning acting review and terminal golden gate
 	// API validates first admission expiry and replays the exact cached start after expiry.
 	const started = read(['workdays', 'start', '--preflight', freeze.preflight.id, '--digest', freeze.preflight.preflightDigest,
 		'--yes', '--idempotency-key', `golden-start:${freeze.preflight.id}`], team);
-	const run = { id: started.workdayId };
-	assert.ok(typeof run.id === 'string' && /^workday-[a-f0-9-]+$/u.test(run.id), 'ACCEPTANCE_CAMPAIGN_ID: Supported start omitted exact run');
-	const workdayId = run.id;
-	process.env.TREESEED_ACCEPTANCE_WORKDAY_ID = workdayId;
+	const workdayId = retainCampaignWorkdayStart(started);
 	const stop = () => { read(['workdays', 'stop', workdayId, '--yes', '--reason', 'Automated golden boundary failed',
 		'--idempotency-key', `golden-stop:${workdayId}`], team); };
 	let externallyApproved = false;

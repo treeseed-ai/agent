@@ -1,6 +1,13 @@
 import assert from 'node:assert/strict';
 import type { CommunicationSendRequest } from '@treeseed/sdk/operator-contracts';
 
+export function retainCampaignWorkdayStart(started: Record<string, unknown>): string {
+	const id = started.workdayId;
+	assert.ok(typeof id === 'string' && /^workday-[a-f0-9-]+$/u.test(id), 'ACCEPTANCE_CAMPAIGN_ID: Supported start omitted exact run');
+	process.env.TREESEED_ACCEPTANCE_WORKDAY_ID = id;
+	return id;
+}
+
 /** The existing communication boundary owns admission, replies and graph custody. */
 export async function openSdkCampaignDiscussion(proposalId: string, workdayId: string,
 	send: (channel: string, body: CommunicationSendRequest, key: string) => unknown | Promise<unknown>): Promise<void> {

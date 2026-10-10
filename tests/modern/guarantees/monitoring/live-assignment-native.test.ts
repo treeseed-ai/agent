@@ -32,6 +32,12 @@ it('native configured Kernel Git result and public SDK assignment reads reach th
 			const returned = structuredClone(item);
 			if (mode === 'runtime') row(row(returned.assignmentAttempt).provider).runtimeBuild = `sha256:${'f'.repeat(64)}`;
 			if (mode === 'grant') row(row(returned.assignmentAttempt).grant).tools = ['release'];
+			const observed = row(returned.assignmentAttempt), created = Date.parse(String(observed.createdAt));
+			if (mode === 'start-before-creation') observed.startedAt = new Date(created - 1).toISOString();
+			if (mode === 'finish-before-creation') observed.finishedAt = new Date(created - 1).toISOString();
+			if (mode === 'finish-before-start') {
+				observed.startedAt = new Date(created + 2).toISOString(); observed.finishedAt = new Date(created + 1).toISOString();
+			}
 			if (mode !== 'exact') failed.push({ mode, record: structuredClone(returned) });
 			response.end(JSON.stringify({ data: returned }));
 		});
@@ -51,12 +57,12 @@ it('native configured Kernel Git result and public SDK assignment reads reach th
 		};
 		await Promise.all([execute(), execute()]); expect(inspections).toBe(1);
 		const held = structuredClone(retained);
-		for (const denied of ['runtime', 'grant', 'denied', 'interrupted']) {
+		for (const denied of ['runtime', 'grant', 'denied', 'interrupted', 'start-before-creation', 'finish-before-creation', 'finish-before-start']) {
 			mode = denied; await expect(execute(), denied).rejects.toThrow(); expect(retained).toEqual(held);
 		}
 		const originalFailures = structuredClone(failed); mode = 'exact'; await execute();
-		expect(retained).toEqual(held); expect(failed).toEqual(originalFailures); expect(failed).toHaveLength(2);
-		expect(requests).toEqual(Array(7).fill(`GET /v1/teams/${f.attempt.teamId}/capacity/assignments/${f.attempt.id}`));
+		expect(retained).toEqual(held); expect(failed).toEqual(originalFailures); expect(failed).toHaveLength(5);
+		expect(requests).toEqual(Array(10).fill(`GET /v1/teams/${f.attempt.teamId}/capacity/assignments/${f.attempt.id}`));
 		expect({ item, run }).toEqual(before); expect(f.requests).toHaveLength(1);
 		// Native owning Kernel/handler/Git and SDK transport; upstream record,
 		// profile bytes and handler catalog are controlled. This does not prove

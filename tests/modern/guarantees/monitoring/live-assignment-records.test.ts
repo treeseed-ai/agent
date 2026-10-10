@@ -8,14 +8,29 @@ describe('live canonical assignment observation (controlled inputs, not managed 
 		for (const mode of ['start-before-creation', 'finish-before-creation', 'finish-before-start']) {
 			const item = liveAssignmentRecord(), run = liveRun(item), retained = new Map<string, Row>(), inspect = vi.fn();
 			const attempt = row(item.assignmentAttempt), created = Date.parse(String(attempt.createdAt));
+			item.id = attempt.id = `invalid-clock-${item.id}`;
 			if (mode === 'start-before-creation') attempt.startedAt = new Date(created - 1).toISOString();
 			if (mode === 'finish-before-creation') attempt.finishedAt = new Date(created - 1).toISOString();
 			if (mode === 'finish-before-start') {
 				attempt.startedAt = new Date(created + 2).toISOString(); attempt.finishedAt = new Date(created + 1).toISOString();
 			}
 			const before = structuredClone({ item, run, retained });
-			expect(() => observeLiveAssignmentRecords(run, [item], retained, inspect), mode).toThrow('Original lifecycle clock order');
+			expect(() => observeLiveAssignmentRecords(run, [liveAssignmentRecord(), item], retained, inspect), mode).toThrow('Original lifecycle clock order');
 			expect(inspect, mode).not.toHaveBeenCalled(); expect({ item, run, retained }, mode).toEqual(before);
+		}
+	});
+	it('accepts equal lifecycle boundaries and retains late failed closeout as original evidence without extending its deadline', () => {
+		for (const mode of ['unstarted', 'equal', 'late-failure']) {
+			const item = liveAssignmentRecord(), attempt = row(item.assignmentAttempt), run = liveRun(item), retained = new Map<string, Row>();
+			if (mode === 'unstarted') attempt.finishedAt = attempt.createdAt;
+			if (mode === 'equal') attempt.startedAt = attempt.finishedAt = attempt.createdAt;
+			if (mode === 'late-failure') {
+				attempt.startedAt = attempt.createdAt; attempt.finishedAt = new Date(Date.parse(String(attempt.deadline)) + 1).toISOString();
+				attempt.status = item.status = 'failed'; item.leaseState = 'released'; item.failedAt = attempt.finishedAt;
+			}
+			const before = structuredClone({ item, run });
+			observeLiveAssignmentRecords(run, [item], retained, () => {});
+			expect(retained.get(String(item.id))).toEqual(attempt); expect({ item, run }).toEqual(before);
 		}
 	});
 	it('observes empty initial admission then every new canonical attempt once without changing input or repeating independent inspection', () => {

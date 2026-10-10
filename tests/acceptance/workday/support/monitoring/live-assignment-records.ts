@@ -38,6 +38,11 @@ export function observeLiveAssignmentRecords(run: Row, items: readonly Row[], re
 		assert.ok(projects.includes(attempt.projectId), `${label}: Unselected project`);
 		const created = Date.parse(attempt.createdAt), deadline = Date.parse(attempt.deadline);
 		assert.ok(created >= started && deadline > created, `${label}: Original admission clock required`);
+		const executionStart = attempt.startedAt === undefined ? created : Date.parse(attempt.startedAt);
+		assert.ok(executionStart >= created && (attempt.finishedAt === undefined || Date.parse(attempt.finishedAt) >= executionStart),
+			`${label}: Original lifecycle clock order required`);
+		// Late failed closeout remains observed truth; this does not move or
+		// extend the original execution deadline or permit campaign progress.
 		verifyAssignmentAuthority(item);
 		const previous = retained.get(attempt.id);
 		if (previous) {

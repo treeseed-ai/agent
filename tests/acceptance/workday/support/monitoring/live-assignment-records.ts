@@ -49,6 +49,9 @@ export function observeLiveAssignmentRecords(run: Row, items: readonly Row[], re
 			// API alone advances these lifecycle fields. Every issued authority
 			// field, including estimates, limits, runtime and deadline, is fixed.
 			assert.deepEqual(issuedAuthority(attempt), issuedAuthority(previous), `${label}: Issued authority changed`);
+			const active = ['created', 'leased', 'running'], prior = active.indexOf(String(previous.status)), next = active.indexOf(attempt.status);
+			assert.ok(prior < 0 ? attempt.status === previous.status : next < 0 || next >= prior,
+				`${label}: Lifecycle status regressed or changed terminal disposition`);
 			for (const field of ['startedAt', 'finishedAt']) if (previous[field] !== undefined)
 				assert.equal(attempt[field as 'startedAt' | 'finishedAt'], previous[field], `${label}: Original lifecycle clock changed`);
 		} else pending.push(item);

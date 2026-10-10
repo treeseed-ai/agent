@@ -79,12 +79,16 @@ describe('live canonical assignment observation (controlled inputs, not managed 
 		for (const previous of statuses) for (const next of statuses) {
 			const terminal = statuses.indexOf(previous) >= 3;
 			const backwards = statuses.indexOf(next) < statuses.indexOf(previous) && !terminal;
-			if (!backwards && (!terminal || next === previous)) continue;
 			const original = liveAssignmentRecord(), prior = row(original.assignmentAttempt), held = new Map<string, Row>();
 			prior.status = previous;
 			observeLiveAssignmentRecords(run, [original], held, () => {});
 			const moved = structuredClone(original); row(moved.assignmentAttempt).status = next;
 			const before = structuredClone({ moved, held }), deniedInspection = vi.fn();
+			if (!backwards && (!terminal || next === previous)) {
+				observeLiveAssignmentRecords(run, [moved], held, deniedInspection);
+				expect(held.get(String(moved.id))).toEqual(moved.assignmentAttempt);
+				expect(moved).toEqual(before.moved); expect(deniedInspection).not.toHaveBeenCalled(); continue;
+			}
 			expect(() => observeLiveAssignmentRecords(run, [moved], held, deniedInspection), `${previous} -> ${next}`).toThrow('Lifecycle status regressed or changed terminal disposition');
 			expect(deniedInspection).not.toHaveBeenCalled(); expect({ moved, held }).toEqual(before);
 			observeLiveAssignmentRecords(run, [original], held, deniedInspection);

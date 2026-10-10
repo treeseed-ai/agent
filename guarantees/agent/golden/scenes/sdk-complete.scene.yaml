@@ -6,6 +6,9 @@ workflow:
   - id: frozen-campaign-inputs
     action: { verifier: agent.golden.live.campaign-freeze }
     expect: { status: passed }
+  - id: native-cli-diagnostic-boundary
+    action: { verifier: cli.golden.execution-diagnostics-read-native }
+    expect: { status: passed }
   - id: guest-model-smoke
     action: { verifier: agent.golden.live.guest-model-smoke }
     expect: { status: passed }
@@ -14,6 +17,21 @@ workflow:
     expect: { status: passed }
   - id: six-pair-graph-readback
     action: { verifier: agent.golden.live.graph }
+    expect: { status: passed }
+  - id: governed-profile-readback
+    action: { verifier: agent.golden.architecture-profile-custody-live-1 }
+    expect: { status: passed }
+  - id: canonical-assignment-readback
+    action: { verifier: agent.golden.architecture-profile-custody-live-2 }
+    expect: { status: passed }
+  - id: exact-context-readback
+    action: { verifier: agent.golden.architecture-context-custody-live-1 }
+    expect: { status: passed }
+  - id: sdk-book-knowledge-readback
+    action: { verifier: agent.golden.architecture-book-knowledge-live-1 }
+    expect: { status: passed }
+  - id: complete-graph-history
+    action: { verifier: agent.golden.architecture-graph-history-live-1 }
     expect: { status: passed }
   - id: sdk-product
     action: { verifier: sdk.golden.live.product }
@@ -29,4 +47,10 @@ workflow:
     expect: { status: passed }
   - id: settlement-evidence
     action: { verifier: agent.golden.live.settlement }
+    expect: { status: passed }
+  - id: canonical-terminal-records
+    action: { verifier: agent.golden.architecture-record-custody-live-1 }
+    expect: { status: passed }
+  - id: normal-sdk-public-physical-absence
+    action: { verifier: agent.golden.execution-normal-sdk-physical-absence-live-1 }
     expect: { status: passed }

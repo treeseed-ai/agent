@@ -3,6 +3,33 @@ id: agent.golden.component-boundaries
 title: Golden execution component boundaries
 scope: local-component-tests
 workflow:
+  - id: live-assignment-control-unit
+    action: { verifier: agent.golden.live-assignment-control-unit }
+    expect: { status: passed }
+  - id: live-assignment-composition-unit
+    action: { verifier: agent.golden.live-assignment-composition-unit }
+    expect: { status: passed }
+  - id: live-assignment-records-unit
+    action: { verifier: agent.golden.live-assignment-records-unit }
+    expect: { status: passed }
+  - id: live-assignment-denial-unit
+    action: { verifier: agent.golden.live-assignment-denial-unit }
+    expect: { status: passed }
+  - id: live-assignment-immutability-unit
+    action: { verifier: agent.golden.live-assignment-immutability-unit }
+    expect: { status: passed }
+  - id: live-assignment-retry-unit
+    action: { verifier: agent.golden.live-assignment-retry-unit }
+    expect: { status: passed }
+  - id: live-assignment-profile-unit
+    action: { verifier: agent.golden.live-assignment-profile-unit }
+    expect: { status: passed }
+  - id: live-assignment-profile-denial-unit
+    action: { verifier: agent.golden.live-assignment-profile-denial-unit }
+    expect: { status: passed }
+  - id: live-assignment-records-native
+    action: { verifier: agent.golden.live-assignment-records-native }
+    expect: { status: passed }
   - id: installed-asset-imports-unit
     action: { verifier: agent.golden.installed-asset-imports-unit }
     expect: { status: passed }
@@ -1961,4 +1988,19 @@ workflow:
     expect: { status: passed }
   - id: recovery-synthesized-terminal-native
     action: { verifier: agent.golden.recovery-synthesized-terminal-native }
+    expect: { status: passed }
+  - id: execution-normal-sdk-readback-binding-unit
+    action: { verifier: agent.golden.execution-normal-sdk-readback-binding-unit }
+    expect: { status: passed }
+  - id: execution-public-sandbox-inventory-unit-1
+    action: { verifier: agent.golden.execution-public-sandbox-inventory-unit-1 }
+    expect: { status: passed }
+  - id: execution-public-sandbox-inventory-unit-2
+    action: { verifier: agent.golden.execution-public-sandbox-inventory-unit-2 }
+    expect: { status: passed }
+  - id: execution-public-sandbox-inventory-unit-3
+    action: { verifier: agent.golden.execution-public-sandbox-inventory-unit-3 }
+    expect: { status: passed }
+  - id: execution-public-sandbox-inventory-unit-4
+    action: { verifier: agent.golden.execution-public-sandbox-inventory-unit-4 }
     expect: { status: passed }

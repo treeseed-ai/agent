@@ -1,6 +1,51 @@
 schemaVersion: treeseed.guarantee-verifiers/v1
 ownerPackage: "@treeseed/agent"
 verifiers:
+  agent.golden.live-assignment-control-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/campaign.test.ts
+    testName: "validates every observed assignment before collaboration or terminal verification and stops on a live authority violation"
+  agent.golden.live-assignment-composition-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/campaign-cli.test.ts
+    testName: "denies live assignment inspection before collaboration approval and verification while stopping only the exact admitted simulation"
+  agent.golden.live-assignment-records-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/monitoring/live-assignment-records.test.ts
+    testName: "observes empty initial admission then every new canonical attempt once without changing input or repeating independent inspection"
+  agent.golden.live-assignment-denial-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/monitoring/live-assignment-records.test.ts
+    testName: "denies malformed foreign duplicated unselected or unauthorized canonical rows before any new inspection and preserves observations"
+  agent.golden.live-assignment-immutability-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/monitoring/live-assignment-records.test.ts
+    testName: "denies every changed issued authority field and disappearance while allowing only API lifecycle advancement with stable original clocks"
+  agent.golden.live-assignment-retry-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/monitoring/live-assignment-records.test.ts
+    testName: "preserves the original independent inspection failure and prior batch through denial and exact retry"
+  agent.golden.live-assignment-profile-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/custody/profile-custody-readback.test.ts
+    testName: "live profile inspection reads the independent canonical assignment exact governed bytes and public handler boundary before accepting a new observation"
+  agent.golden.live-assignment-profile-denial-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/custody/profile-custody-readback.test.ts
+    testName: "live profile inspection denies an independently substituted runtime or failed public read without repairing the original attempt"
+  agent.golden.live-assignment-records-native:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/monitoring/live-assignment-native.test.ts
+    testName: "native configured Kernel Git result and public SDK assignment reads reach the live observer with denied original observations retained before exact retry"
   agent.golden.installed-asset-imports-unit:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"
@@ -3409,3 +3454,28 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/provider/architecture/recovery-native.test.ts
     testName: "native terminal recovery retains original failed custody across repeated API-generated unmeasured performance observations"
+  agent.golden.execution-normal-sdk-readback-binding-unit:
+    kind: vitestCase
+    ownerPackage: '@treeseed/agent'
+    testFile: tests/modern/guarantees/bindings.test.ts
+    testName: selects existing normal SDK profile context graph and canonical-record readbacks after the same lifecycle without requiring controlled failures or continuation
+  agent.golden.execution-public-sandbox-inventory-unit-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/custody/public-sandbox-inventory.test.ts
+    testName: "accepts exact complete confirmed absence while retaining unrelated live resources and original observations"
+  agent.golden.execution-public-sandbox-inventory-unit-2:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/custody/public-sandbox-inventory.test.ts
+    testName: "denies missing incomplete failed foreign malformed and stale observations without repairing failed history"
+  agent.golden.execution-public-sandbox-inventory-unit-3:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/custody/public-sandbox-inventory.test.ts
+    testName: "denies missing malformed duplicated changed and residual native task container and mount inventories"
+  agent.golden.execution-public-sandbox-inventory-unit-4:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/custody/public-sandbox-inventory.test.ts
+    testName: "denies unreadable incomplete duplicate malformed and residual directory entries of every native kind"

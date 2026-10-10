@@ -8,6 +8,8 @@ import { read } from './acceptance-cli.ts';
 import { verifyGolden } from './sdk-runtime-golden.test.ts';
 import { prepareSdkCampaign, verifySdkExternalState } from './prepare-campaign.ts';
 import { observeCampaign } from './workday/support/campaign-observation.ts';
+import { readCompleteEvidence } from './workday/support/evidence-pages.ts';
+import { observeLiveAssignmentRecords, inspectLiveAssignmentProfile } from './workday/support/monitoring/live-assignment-records.ts';
 
 type Row = Record<string, any>;
 test('Frozen SDK campaign drives planning acting review and terminal golden gates', { timeout: 36_000_000 }, async () => {
@@ -42,15 +44,22 @@ test('Frozen SDK campaign drives planning acting review and terminal golden gate
 		.map(role => `@sdk/${role}`).join(' ');
 	let externallyApproved = false;
 	const observedEvents = new Map<string, Record<string, unknown>>();
+	const observedAssignments = new Map<string, Record<string, unknown>>();
+	let currentRun: Record<string, unknown> | undefined;
 	await monitorCampaign({ admittedSimulation: true, admitDiscussion: () => { read(['send', `sdk-golden-${workdayId}`, `${mentions} Discuss the exact frozen proposal, identify your role and dependencies, and publish useful planning contributions. Do not implement during planning.`,
 		'--proposal', freeze.proposal.id, '--workday', workdayId, '--no-wait', '--idempotency-key', `golden-discussion:${workdayId}`], team, false, 240_000); }, read: () => {
 		const observed = read(['workdays', 'show', workdayId], team);
 		const snapshot = observeCampaign(observed, workdayId, observedEvents, (cursor, limit) =>
 			read(['workdays', 'events', 'list', workdayId, '--limit', String(limit), '--cursor', cursor], team));
 		const current = snapshot.run as Row, failedBoundary = snapshot.failedBoundary;
+		currentRun = current;
 		return { status: current.status, mode: current.executionMode, failedBoundary,
 			planningEndsAt: Date.parse(current.startedAt) + current.parameters.durationSeconds * current.parameters.planningPercent * 10,
 			endsAt: Date.parse(current.parameters.appliedPlan.endsAt) };
+	}, inspect: () => {
+		assert.ok(currentRun, 'ACCEPTANCE_LIVE_ASSIGNMENT: Original observed workday required');
+		const assignments = readCompleteEvidence(['assignments', 'list', '--workday', workdayId], team, 50, 'ACCEPTANCE_LIVE_ASSIGNMENT');
+		observeLiveAssignmentRecords(currentRun, assignments, observedAssignments, item => inspectLiveAssignmentProfile(item, team));
 	}, now: Date.now, wait: () => new Promise(resolve => setTimeout(resolve, 30_000)), stop,
 		collaboration: () => {
 			verifyGolden('collaboration');

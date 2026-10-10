@@ -341,3 +341,8 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/acceptance/sdk-runtime-golden.test.ts
     testName: Golden runtime reporter evidence satisfies its acceptance boundary
+  agent.golden.execution-normal-sdk-physical-absence-live-1:
+    kind: nodeTestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/acceptance/workday/record-custody.test.ts
+    testName: "Actual normal SDK workday reads complete public owning host sandbox absence while retaining unrelated resources and original settled history"

@@ -2,6 +2,20 @@ import { describe, expect, it, vi } from 'vitest';
 import { monitorCampaign, requirePlanningWindow, sdkCampaignWindow } from '../../acceptance/campaign.ts';
 
 describe('automated campaign control (fixtures are not golden acceptance)', () => {
+	it('validates every observed assignment before collaboration or terminal verification and stops on a live authority violation', async () => {
+		for (const status of ['running', 'completed']) {
+			const original = new Error('ACCEPTANCE_LIVE_ASSIGNMENT: Original denied authority');
+			const stop = vi.fn(), collaboration = vi.fn(), verify = vi.fn(), wait = vi.fn();
+			const inspect = vi.fn(() => { throw original; });
+			let polls = 0;
+			const input = { admittedSimulation: true, read: () => ({ status: polls++ === 0 ? status : 'completed', mode: 'simulation', planningEndsAt: 1, endsAt: 10 }),
+				now: () => 1, wait, collaboration, verify, stop, inspect };
+			await expect(monitorCampaign(input)).rejects.toBe(original);
+			expect(inspect).toHaveBeenCalledOnce(); expect(collaboration).not.toHaveBeenCalled();
+			expect(verify).not.toHaveBeenCalled(); expect(wait).not.toHaveBeenCalled();
+			expect(stop).toHaveBeenCalledTimes(status === 'running' ? 1 : 0);
+		}
+	});
 	it('enforces one hour with twenty minutes planning without inventing per-assignment demand', () => {
 		expect(sdkCampaignWindow.durationSeconds).toBe(3600);
 		expect(sdkCampaignWindow.durationSeconds * sdkCampaignWindow.planningPercent / 100).toBeCloseTo(1200);

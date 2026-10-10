@@ -54,6 +54,7 @@ describe('capacity-provider guarantee execution bindings', () => {
 			'772870fb89c0c04ea930fb424cc66a0a057131849b5ba8b59f9d1f0da8e48567',
 			'bff803652752fed25c48491f7eb474367fd2c061801612238e24f29037db2424',
 			'7f4f6bb99633197d6e94efa969cf8fa2da8f65e559aeb22da5707a8fb82c4265',
+			'b918b519ac545fdd61faab208687ccc64e1f3d03c9a84dfc57a5cfee6190f3f3',
 		].map(criterion => ({ criterion, verifierRefs: ['agent.golden.live.campaign-freeze'] }));
 		expect(manifest.acceptanceCriteria).toEqual([{ criterion: 'b635827ed7862d56b8764dfad30114b9ee18d02b4aa709a257841e18a1bd0f0d',
 			verifierRefs: ['agent.golden.execution-clock-observation-live-1'] },
@@ -86,6 +87,27 @@ describe('capacity-provider guarantee execution bindings', () => {
 			testFile: 'tests/acceptance/workday/context-custody.test.ts',
 			testName: 'Every actual recorded model execution is included in exact clock evidence readback without discarding failed or returned attempts' });
 	});
+	it('selects existing normal SDK profile context graph and canonical-record readbacks after the same lifecycle without requiring controlled failures or continuation',()=>{
+  const manifest=parse(readFileSync(resolve(root,'guarantees/agent/golden/sdk-complete.guarantee.yaml'),'utf8'));
+  const scene=parse(readFileSync(resolve(root,manifest.scene.manifest),'utf8'));
+  expect(scene.scope).toBe('local-integrated-runtime');
+  const refs:string[]=scene.workflow.map((step:{action:{verifier:string}})=>step.action.verifier);
+  for(const ref of ['agent.golden.architecture-profile-custody-live-1','agent.golden.architecture-profile-custody-live-2',
+   'agent.golden.architecture-context-custody-live-1','agent.golden.architecture-book-knowledge-live-1',
+   'agent.golden.architecture-graph-history-live-1','agent.golden.architecture-record-custody-live-1',
+   'agent.golden.execution-normal-sdk-physical-absence-live-1']) {
+   expect(refs.filter(value=>value===ref),ref).toHaveLength(1);
+   expect(refs.indexOf(ref),ref).toBeGreaterThan(refs.indexOf('agent.golden.live.campaign'));
+   expect(registry.verifiers[ref]).toMatchObject({kind:'nodeTestCase'});
+  }
+  const cliRef='cli.golden.execution-diagnostics-read-native';
+  expect(refs.filter(ref=>ref===cliRef)).toHaveLength(1);
+  expect(refs.indexOf(cliRef)).toBeLessThan(refs.indexOf('agent.golden.live.campaign'));
+  // The workspace runner resolves this existing CLI-owned native definition;
+  // Agent's independent suite must not require another source checkout.
+  for(const ref of refs.filter(value=>value!==cliRef))expect(registry.verifiers[ref]?.testName??'',ref)
+   .not.toMatch(/controlled|continuation|completed and failed/u);
+ });
 	it('supplies exact canonical execution authority before complete verification and inherited scene prerequisites', () => {
 		const workflow = parse(readFileSync(resolve(root, '.github/workflows/verify.yml'), 'utf8'));
 		const job = workflow.jobs.verify, steps = job.steps;
@@ -96,7 +118,7 @@ describe('capacity-provider guarantee execution bindings', () => {
 		expect(job.env.TREESEED_DEVELOPMENT_WORKSPACE_ROOT).toBe('${{ github.workspace }}/.treeseed/platform-authority');
 		const verify = steps.findIndex((step: { run?: string }) => step.run?.includes('npm run verify:local'));
 		const scene = steps.findIndex((step: { uses?: string }) => step.uses?.includes('reviewer/.github/actions/run-scenes@'));
-		expect(steps[scene].uses).toBe('treeseed-ai/reviewer/.github/actions/run-scenes@1e3019fbf24163116222dc96a70c126bf3488389');
+		expect(steps[scene].uses).toBe('treeseed-ai/reviewer/.github/actions/run-scenes@62d261910f8bd157ba6575b185a586263dff8e44');
 		expect(steps.indexOf(checkouts[0])).toBeLessThan(verify); expect(verify).toBeGreaterThan(-1); expect(scene).toBeGreaterThan(verify);
 		const relay = steps.findIndex((step: { name?: string }) => step.name === 'Prepare disposable native relay CA');
 		expect(relay).toBeGreaterThan(-1); expect(relay).toBeLessThan(verify);

@@ -2071,6 +2071,16 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/kernel/architecture/golden-decision-readback.test.ts
     testName: "accepts exact classed proposal content with authority, approval and vote evidence"
+  agent.golden.architecture-decision-verifier-original-bytes:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/golden-decision-readback.test.ts
+    testName: "denies substituted original Decision bytes parsed views and owning inventories without changing authority before exact retry"
+  agent.golden.architecture-decision-native:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/golden-decision-native.test.ts
+    testName: "native public library reads bind original Git Decision bytes and parsed views to exact authority while retaining denied observations before unchanged retry"
   agent.golden.architecture-decision-verifier-content:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

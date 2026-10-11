@@ -1,9 +1,38 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { parse } from 'yaml';
+import { parse, parseDocument, visit } from 'yaml';
 import { exactEntityReferenceSchema } from '@treeseed/sdk/agent-capacity';
 import { validatePortableContentData } from '@treeseed/sdk/content-validation';
 import { read, row, type Row } from '../../acceptance-cli.ts';
+
+function verifyDecisionFile(reference: Row, file: Row, code: string): Row {
+	assert.ok(exactEntityReferenceSchema.safeParse(reference).success && reference.store === 'treedx'
+		&& reference.model === 'decision' && reference.id && reference.revision && reference.digest
+		&& reference.repository && reference.commit && reference.path, `${code}_SOURCE: Exact Decision authority required`);
+	assert.ok(file.path === reference.path && typeof file.content === 'string' && Buffer.byteLength(file.content) <= 1_048_576
+		&& `sha256:${createHash('sha256').update(file.content).digest('hex')}` === reference.digest,
+		`${code}_BYTES: Original untrimmed Decision bytes must match issued authority`);
+	const match = file.content.match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/u);
+	assert.ok(match, `${code}_BYTES: Original Decision frontmatter required`);
+	const document = parseDocument(match[1]);
+	assert.equal(document.errors.length, 0, `${code}_BYTES: Unambiguous Decision YAML required`);
+	visit(document, (_key, node) => {
+		if (node && typeof node === 'object' && 'anchor' in node) assert.ok(!node.anchor, `${code}_BYTES: Anchored Decision YAML denied`);
+	});
+	const content = row(document.toJS({ maxAliasCount: 0 }));
+	assert.deepEqual(content, file.frontmatter, `${code}_READBACK: Parsed Decision view contradicts original bytes`);
+	assert.ok(content.schemaVersion === 'treeseed.decision/v1' && content.id === reference.id,
+		`${code}_CONTENT: Original exact Decision identity required`);
+	return file;
+}
+
+/** Shared by the original CLI consumer and native public library-read proof. */
+export function verifyGovernedDecisionRead(reference: Row, returned: Row, code: string): Row {
+	assert.ok(returned.ok === true && returned.repoId === reference.repository && returned.resolvedRef === reference.commit
+		&& Array.isArray(returned.files) && returned.files.length === 1,
+		`${code}_READBACK: Complete exact owning Decision inventory required`);
+	return verifyDecisionFile(reference, row(returned.files[0]), code);
+}
 
 export function readGovernedContentFile(reference: Row, projectId: string, team: string, cache: Map<string, Row>, code: string): Row {
 	assert.ok(reference.repository && reference.path && reference.commit, `${code}_SOURCE: Native exact content readback required`);
@@ -14,8 +43,10 @@ export function readGovernedContentFile(reference: Row, projectId: string, team:
 		const observed = row(returned.result ?? returned);
 		const file = Array.isArray(observed.files) ? observed.files.map(row).find(item => item.path === reference.path) : undefined;
 		assert.ok(observed.resolvedRef === reference.commit && file, `${code}_READBACK: Exact returned commit and path required`);
-		content = file; cache.set(key, content);
+		content = reference.model === 'decision' ? verifyGovernedDecisionRead(reference, observed, code) : file;
+		cache.set(key, content);
 	}
+	if (reference.model === 'decision') verifyDecisionFile(reference, content, code);
 	return content;
 }
 

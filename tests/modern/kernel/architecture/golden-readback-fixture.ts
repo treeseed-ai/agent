@@ -32,6 +32,20 @@ export const classes = ['architect', 'researcher', 'tester', 'engineer', 'techni
 export const workdayId = 'workday-11111111-1111-4111-8111-111111111111';
 export const commit = 'a'.repeat(40);
 export const gate = (name: string) => state.cases.get(`Golden runtime ${name} evidence satisfies its acceptance boundary`)!();
+export function retainProposalDecisionBytes(): void {
+	const observed = state.replies.get('library read decisions/decision-1.mdx')!.result;
+	const file = observed.files[0];
+	file.content = `---\n${stringify(file.frontmatter, { lineWidth: 0 })}---\n`;
+	Object.assign(observed, { ok: true, repoId: 'sdk-library' });
+	const digest = `sha256:${createHash('sha256').update(file.content).digest('hex')}`;
+	const update = (value: unknown): void => {
+		if (!value || typeof value !== 'object') return;
+		const record = value as Row;
+		if (record.model === 'decision' && record.id === 'decision-1') record.digest = digest;
+		for (const child of Object.values(record)) update(child);
+	};
+	for (const value of state.replies.values()) update(value);
+}
 export function usageMeasurement(item: Row): Row {
 	// Scoped measurement assertion input, NOT actual usage or a canonical UsageSettlement.
 	return { id: `${item.id}:aggregate`, assignmentId: item.id, projectId: item.projectId, workDayId: workdayId,
@@ -158,6 +172,7 @@ beforeEach(() => {
 		subjectRef: structuredClone(nodes[0]!.sourceRef), disposition: 'approved', rationale: 'Synthetic complete Decision input, not live evidence.',
 		authorityRefs: [structuredClone(nodes[0]!.sourceRef)], decidedByRefs: [{ store: 'postgresql', model: 'user', id: 'fixture-external-operator' }],
 		decidedAt: '2026-09-26T23:59:00Z' } }] } });
+	retainProposalDecisionBytes();
 	state.replies.set('capacity usage', { items: items.map(usageMeasurement),
 		page: { limit: 100, hasMore: false, nextCursor: null } });
 	state.replies.set('library read', { result: { resolvedRef: commit, files: [{ path: reportRef.path, body: `${workdayId} ${items.map(item => item.id).join(' ')}`, frontmatter: {

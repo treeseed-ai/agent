@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { state, gate, type Row } from './golden-readback-fixture.ts';
+import { state, gate, retainProposalDecisionBytes, type Row } from './golden-readback-fixture.ts';
 import { createHash } from 'node:crypto';
 import { stringify } from 'yaml';
 import { readDecisionContent } from '../../../acceptance/workday/support/decision-evidence.ts';
@@ -28,6 +28,14 @@ describe('managed Decision content verifier units (synthetic input, not live acc
 		];
 		const held = structuredClone({ reference, original, failed });
 		for (const value of failed) expect(() => observe(value)).toThrow(/ACCEPTANCE_DECISION/u);
+		for (const raw of ['{}', `---\nid: native\nid: duplicate\n---\n`, `---\nid: &named native\ncopy: *named\n---\n`,
+			`---\n${stringify({ ...frontmatter, id: 'foreign-decision' }, { lineWidth: 0 })}---\n`]) {
+			const changed = { ...file, content: raw };
+			state.replies.get('library read decisions/decision-1.mdx')!.result = { ...original, files: [changed] };
+			const authority = { ...reference, digest: `sha256:${createHash('sha256').update(raw).digest('hex')}` };
+			expect(() => readDecisionContent(authority, 'sdk', 'team-1', new Map(), 'ACCEPTANCE_DECISION'))
+				.toThrow(/ACCEPTANCE_DECISION/u);
+		}
 		const cache = new Map<string, Row>(); observe(original, cache);
 		expect(() => readDecisionContent({ ...reference, digest: `sha256:${'f'.repeat(64)}` }, 'sdk', 'team-1', cache, 'ACCEPTANCE_DECISION'))
 			.toThrow(/ACCEPTANCE_DECISION/u);
@@ -39,6 +47,7 @@ describe('managed Decision content verifier units (synthetic input, not live acc
 		for (const decisionMethod of ['authority', 'approval', 'vote']) {
 			decision.decisionMethod = decisionMethod;
 			if (decisionMethod !== 'authority') decision.positions = [{ actorRef: structuredClone(decision.decidedByRefs[0]), position: 'approve', recordedAt: decision.decidedAt }];
+			retainProposalDecisionBytes();
 			expect(() => gate('graph')).not.toThrow();
 		}
 	});
@@ -88,6 +97,7 @@ describe('managed Decision content verifier units (synthetic input, not live acc
 	});
 	it('denies agent-authored approval of the golden proposal instead of external operator authority', () => {
 		observed().files[0].frontmatter.decidedByRefs = [{ store: 'treedx', model: 'agent', id: 'planning-agent', revision: 1, digest: `sha256:${'d'.repeat(64)}` }];
+		retainProposalDecisionBytes();
 		expect(() => gate('graph')).toThrow(/ACCEPTANCE_DECISION_OPERATOR/u);
 	});
 	it('denies missing or unapproved governed final review content even when lifecycle output says approved', () => {

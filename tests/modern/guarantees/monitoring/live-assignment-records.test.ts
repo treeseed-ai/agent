@@ -47,6 +47,20 @@ describe('live canonical assignment observation (controlled inputs, not managed 
 		expect({ item, run }).toEqual(before); expect(retained.get(String(item.id))).not.toBe(item.assignmentAttempt);
 	});
 	it('denies malformed foreign duplicated unselected or unauthorized canonical rows before any new inspection and preserves observations', () => {
+		for (const mode of ['missing-plan', 'plan-id', 'plan-team', 'plan-mode', 'plan-start', 'plan-end', 'plan-policy', 'deadline-at']) {
+			const item = liveAssignmentRecord(), run = liveRun(item), retained = new Map<string, Row>(), inspect = vi.fn();
+			const parameters = row(run.parameters), plan = row(parameters.appliedPlan);
+			if (mode === 'missing-plan') delete parameters.appliedPlan;
+			if (mode === 'plan-id') plan.id = 'foreign'; if (mode === 'plan-team') plan.teamId = 'foreign';
+			if (mode === 'plan-mode') plan.executionMode = 'production';
+			if (mode === 'plan-start') plan.startsAt = new Date(Date.parse(String(plan.startsAt)) - 1).toISOString();
+			if (mode === 'plan-end') plan.endsAt = new Date(Date.parse(String(plan.endsAt)) + 1).toISOString();
+			if (mode === 'plan-policy') parameters.durationSeconds = Number(parameters.durationSeconds) + 1;
+			if (mode === 'deadline-at') parameters.deadlineAt = new Date(Date.parse(String(plan.endsAt)) + 1).toISOString();
+			const before = structuredClone({ item, run, retained });
+			expect(() => observeLiveAssignmentRecords(run, [item], retained, inspect), mode).toThrow();
+			expect(inspect, mode).not.toHaveBeenCalled(); expect({ item, run, retained }, mode).toEqual(before);
+		}
 		for (const mode of ['attempt', 'retired', 'team', 'workday', 'project', 'duplicate', 'clock', 'deadline', 'grant', 'workspace', 'context', 'mode']) {
 			const item = liveAssignmentRecord(), run = liveRun(item), retained = new Map<string, Row>(), inspect = vi.fn();
 			observeLiveAssignmentRecords(run, [item], retained, inspect); inspect.mockClear();

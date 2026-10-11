@@ -391,6 +391,26 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/guarantees/preflight/campaign-freeze.test.ts
     testName: "denies a seed-valid campaign without exact protected primary and library bases before preparation"
+  agent.golden.campaign-profiles-required-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/preflight/campaign-freeze.test.ts
+    testName: "denies unobserved governed profiles for every project before runtime or proposal preparation"
+  agent.golden.campaign-profiles-readback-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/preflight/campaign-freeze.test.ts
+    testName: "reads every frozen project profile and denies foreign revisions without changing the original campaign"
+  agent.golden.campaign-profiles-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/preflight/campaign-profiles.test.ts
+    testName: "retains exact configured profile bytes and denies incomplete stale foreign or contradictory profile inventories"
+  agent.golden.campaign-profiles-native:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/preflight/campaign-profiles-native.test.ts
+    testName: "native Git and public CLI SDK reads bind all project profiles and retain denied observations before exact concurrent retry"
   agent.golden.campaign-bases-readback-unit:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

@@ -5,6 +5,7 @@ import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, join, resolve } from 'node:path';
 import { parse } from 'yaml';
 import { read } from './acceptance-cli.ts';
+import { readCampaignProfiles } from './workday/support/preflight/campaign-profiles.ts';
 import { freshSdkDraft, requirePlanningWindow, sdkProposalText, sdkCampaignWindow } from './campaign.ts';
 import { readCampaignProjectLibraries, readCampaignRepositoryBases, readPreRunCampaignFreeze, verifyCampaignWorkdayPolicy, verifyRuntimeClosure } from './freeze-integrity.ts';
 
@@ -120,6 +121,7 @@ export function prepareSdkCampaign(draftPath: string, freezePath: string, team: 
 	const policyReadback = verifyCampaignWorkdayPolicy(operatorFreeze.manifest,
 		read(['workdays', 'profiles', 'show', 'default'], team), libraries.get('sdk')?.teamId);
 	const protectedHeads = readCampaignRepositoryBases(operatorFreeze);
+	const profiles = readCampaignProfiles(operatorFreeze, libraries, team);
 	const agentPath = resolve(platform, 'packages/agent');
 	const pinnedCodex = (JSON.parse(readFileSync(join(agentPath, 'package.json'), 'utf8')) as Row).dependencies['@openai/codex'] as string;
 	const installedCodex = execFileSync(join(agentPath, 'node_modules/.bin/codex'), ['--version'], { encoding: 'utf8', timeout: 30_000 }).trim();
@@ -150,10 +152,8 @@ export function prepareSdkCampaign(draftPath: string, freezePath: string, team: 
 		.find(item => item.id === 'architecture-contract')?.contextRefs?.find((ref: Row) => ref.model === 'book') as Row | undefined;
 	assert.ok(bookRef?.id && bookRef.path && bookRef.commit, 'ACCEPTANCE_CAMPAIGN_BOOK: Exact Architect Book reference required');
 	verifySdkArchitectureBook(bookReadback, { ...bookRef, projectId: draft.projectId, title: canonical.architectureBook.title });
-	const publishedLibraryHead = execFileSync('gh', ['api', 'repos/treeseed-ai/sdk-library/branches/staging', '--jq', '.commit.sha'],
-		{ encoding: 'utf8', timeout: 30_000 }).trim();
-	const agentProfiles = read(['agents', 'list', '--project', 'sdk', '--server', 'local'], team, true);
-	verifySdkPublishedProfiles(agentProfiles.agents as Row[], publishedLibraryHead);
+	const sdkProfiles = profiles.get('sdk'); assert.ok(sdkProfiles);
+	verifySdkPublishedProfiles(sdkProfiles.inventory.agents as Row[], sdkProfiles.ref);
 	const providers = (read(['providers', 'list'], team).items as Row[]).filter(item => item.status === 'approved');
 	assert.equal(providers.length, 1, 'ACCEPTANCE_CAMPAIGN_SUPPLY: Individual host campaign requires unambiguous provider');
 	const supply = read(['providers', 'status', providers[0]!.providerId], team);
@@ -189,7 +189,7 @@ export function prepareSdkCampaign(draftPath: string, freezePath: string, team: 
 	capture('operator-campaign.json', operatorFreeze.bytes);
 	capture('protected-staging-heads.json', JSON.stringify(protectedHeads));
 	capture('architecture-book.json', JSON.stringify(bookReadback));
-	capture('sdk-agent-profiles.json', JSON.stringify({ publishedLibraryHead, agents: agentProfiles.agents }));
+	capture('governed-agent-profiles.json', JSON.stringify([...profiles]));
 	capture('codex-version.json', JSON.stringify({ pinned: pinnedCodex, installed: installedCodex }));
 	const runtime = read(['dev', 'status'], team, true);
 	capture('runtime.json', JSON.stringify(runtime)); capture('supply.json', JSON.stringify(supply));
@@ -201,6 +201,8 @@ export function prepareSdkCampaign(draftPath: string, freezePath: string, team: 
 		'ACCEPTANCE_CAMPAIGN_FREEZE: Operator manifest changed during preparation');
 	assert.deepEqual(readCampaignRepositoryBases(operatorFreeze), protectedHeads,
 		'ACCEPTANCE_CAMPAIGN_FREEZE: Protected repositories changed during preparation');
+	assert.deepEqual(readCampaignProfiles(operatorFreeze, libraries, team), profiles,
+		'ACCEPTANCE_CAMPAIGN_PROFILES: Governed profiles changed during preparation');
 	const current = read(['proposals', 'show', id, '--server', 'local', '--project', project], team, true);
 	writeFileSync(freezePath, JSON.stringify({ createdAt: new Date().toISOString(),
 		proposal: { id, revision: current.activeVersion, digest: current.activeContentHash, estimates: 0 }, request, preflight, sourceHeads,

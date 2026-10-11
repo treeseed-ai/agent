@@ -173,6 +173,9 @@ beforeEach(() => {
 		authorityRefs: [structuredClone(nodes[0]!.sourceRef)], decidedByRefs: [{ store: 'postgresql', model: 'user', id: 'fixture-external-operator' }],
 		decidedAt: '2026-09-26T23:59:00Z' } }] } });
 	retainProposalDecisionBytes();
+	for (const reply of state.replies.values()) for (const file of reply.result?.files ?? [])
+		if (file.frontmatter?.decisionClass === 'work-review')
+			file.content = `---\n${stringify(file.frontmatter, { lineWidth: 0 })}---\n`;
 	state.replies.set('capacity usage', { items: items.map(usageMeasurement),
 		page: { limit: 100, hasMore: false, nextCursor: null } });
 	state.replies.set('library read', { result: { resolvedRef: commit, files: [{ path: reportRef.path, body: `${workdayId} ${items.map(item => item.id).join(' ')}`, frontmatter: {

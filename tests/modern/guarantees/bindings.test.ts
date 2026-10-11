@@ -59,6 +59,19 @@ describe('capacity-provider guarantee execution bindings', () => {
 				verifierRefs: ['agent.golden.live.campaign', book] }]);
 		expect(refs.filter(value => value === book)).toHaveLength(1);
 		expect(refs.indexOf(book)).toBeGreaterThan(refs.indexOf('agent.golden.live.campaign'));
+		const issuance = ['api.golden.execution-normal-sdk-clean-schema-live-1',
+			'agent.golden.architecture-record-custody-live-1'];
+		expect(manifest.acceptanceCriteria.filter((value: { criterion: string }) =>
+			value.criterion === '22f329d858029233d66c747de963c8ac14c8655b0fe536ee1921ec39101ca1b8'))
+			.toEqual([{ criterion: '22f329d858029233d66c747de963c8ac14c8655b0fe536ee1921ec39101ca1b8', verifierRefs: issuance }]);
+		for (const ref of issuance) {
+			expect(refs.filter(value => value === ref)).toHaveLength(1);
+			expect(refs.indexOf(ref)).toBeGreaterThan(refs.indexOf('agent.golden.live.campaign'));
+		}
+		expect(registry.verifiers[issuance[0]!]).toBeUndefined();
+		expect(registry.verifiers[issuance[1]!]).toMatchObject({ kind: 'nodeTestCase',
+			testFile: 'tests/acceptance/workday/record-custody.test.ts',
+			testName: 'Every native managed attempt exposes one unchanged canonical lease reservation result and UsageSettlement across public views' });
 	});
 	it('binds the exact model clock criterion to complete post campaign native readback without substituting component evidence', () => {
 		const manifest = parse(readFileSync(resolve(root, 'guarantees/agent/golden/sdk-complete.guarantee.yaml'), 'utf8'));
@@ -100,7 +113,9 @@ describe('capacity-provider guarantee execution bindings', () => {
 			{ criterion: '936013d37582fbedab56e17601be3581682b72565d8b7fdaedb75f6a3cd2e64f',
 				verifierRefs: ['agent.golden.live.campaign', 'agent.golden.architecture-book-knowledge-live-1'] },
 			{ criterion: '4f295a5342aaf08b1ca056a5aa8bc00df27a07cf116b6721b6179d575c6b76df',
-				verifierRefs: ['sdk.golden.live.product'] }]);
+				verifierRefs: ['sdk.golden.live.product'] },
+			{ criterion: '22f329d858029233d66c747de963c8ac14c8655b0fe536ee1921ec39101ca1b8',
+				verifierRefs: ['api.golden.execution-normal-sdk-clean-schema-live-1', 'agent.golden.architecture-record-custody-live-1'] }]);
 		const scene = parse(readFileSync(resolve(root, manifest.scene.manifest), 'utf8'));
 		expect(scene.scope).toBe('local-integrated-runtime');
 		const refs = scene.workflow.map((step: { action: { verifier: string } }) => step.action.verifier);

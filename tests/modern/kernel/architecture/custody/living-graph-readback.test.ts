@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { assignmentAttemptSchema, executionEdgeSchema, executionNodeSchema } from '@treeseed/sdk/agent-capacity';
 import { state, workdayId } from '../golden-readback-fixture.ts';
 import { request } from '../../provider-kernel-fixture.ts';
+import { reviewedGraphFixture } from './graph/review-readiness-fixture.ts';
 import { verifyGraphProvenance, verifyPredecessorCustody } from '../../../../acceptance/workday/support/evidence-pages.ts';
 await import('../../../../acceptance/workday/living-graph.test.ts');
 
@@ -36,6 +37,15 @@ function predecessorInput() {
 }
 // UNIT of newly authored native read-back assertions, not a live graph receipt.
 describe('living team graph managed assertion contract', () => {
+	it('denies omitted graph-required review results even when every declared predecessor agrees', () => {
+		const f = reviewedGraphFixture(); f.assignments[2]!.assignmentAttempt.predecessorResultIds = ['result-actor'];
+		const held = structuredClone(f); verifyGraphProvenance(f.graph);
+		expect(() => verifyPredecessorCustody(f.assignments)).toThrow(); expect(f).toEqual(held);
+	});
+	it('denies missing exact edge source authority rather than accepting provenance labels alone', () => {
+		const graph = graphInput(); delete graph.edges[1]!.sourceRef; const held = structuredClone(graph);
+		expect(() => verifyGraphProvenance(graph)).toThrow(); expect(graph).toEqual(held);
+	});
 	it('retains exact reviewed provenance and canonical predecessor readback without rewriting evidence', () => {
 		const graph = graphInput(), assignments = predecessorInput(), before = structuredClone({ graph, assignments });
 		expect(() => verifyGraphProvenance(graph)).not.toThrow(); expect(() => verifyPredecessorCustody(assignments)).not.toThrow();

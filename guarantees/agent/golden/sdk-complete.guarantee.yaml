@@ -93,3 +93,7 @@ acceptanceCriteria:
     verifierRefs: [api.golden.execution-normal-sdk-clean-schema-live-1, agent.golden.architecture-record-custody-live-1]
   - criterion: 6e8f096457026f1992cb08a4e36f02a7c5b55b472e7019ff615866256fac85d2
     verifierRefs: [agent.golden.live.campaign, sdk.golden.live.product]
+  - criterion: 0cb616106a09f5279323a975d315c59ebefb6e5e0db2ef52e153c0995038158f
+    verifierRefs: [agent.golden.live.campaign, sdk.golden.live.product]
+  - criterion: f02eb0d95e0572b52f73700b689cd584d9ae57a880ca5658546c1cae44b535e4
+    verifierRefs: [agent.golden.live.campaign, sdk.golden.live.product]

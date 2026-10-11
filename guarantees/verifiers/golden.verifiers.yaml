@@ -386,6 +386,21 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/guarantees/preflight/campaign-freeze.test.ts
     testName: "denies absent malformed and changed seed identity or canonical content before preparation without rewriting original evidence"
+  agent.golden.campaign-bases-required-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/preflight/campaign-freeze.test.ts
+    testName: "denies a seed-valid campaign without exact protected primary and library bases before preparation"
+  agent.golden.campaign-bases-readback-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/preflight/campaign-freeze.test.ts
+    testName: "retains every seeded base and denies malformed missing moved and interrupted protected ref observations"
+  agent.golden.campaign-bases-native:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/preflight/campaign-bases-native.test.ts
+    testName: "native Git proves all protected primary and library bases and retains original bases across runtime repair and denied retries"
   agent.golden.campaign-freeze-native:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

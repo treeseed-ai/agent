@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { canonicalSeedBundlePayload, validateSeedBundle, workdayIntentRequestSchema, type SeedBundle } from '@treeseed/sdk/operator-contracts';
 import { workdayPolicySchema, workdayProfileSchema } from '@treeseed/sdk/agent-capacity';
@@ -82,6 +84,7 @@ export function readPreRunCampaignFreeze() {
 	let bytes: string, manifest: unknown;
 	try { bytes = readFileSync(path, 'utf8'); manifest = JSON.parse(bytes); }
 	catch { assert.fail('ACCEPTANCE_CAMPAIGN_FREEZE: Missing or malformed operator manifest'); }
+	let repositories: SeedBundle['resources']['repositories'] = [];
 	try {
 		const seedBytes = readFileSync(resolve(platform, 'seeds/treeseed.yaml'), 'utf8');
 		const seed = parse(seedBytes) as SeedBundle;
@@ -93,8 +96,57 @@ export function readPreRunCampaignFreeze() {
 		const expected = portfolioRelations(readFileSync(resolve(platform, 'docs/agent-acceptance.md'), 'utf8'),
 			seedBytes);
 		verifyPreRunCampaignInputs(manifest, expected.projects.map(project => project.slug));
+		repositories = expected.projects.flatMap(({ slug }) => {
+			const projects = seed.resources.projects.filter(project => project.slug === slug);
+			assert.equal(projects.length, 1);
+			return (['primary', 'library'] as const).map(role => {
+				const key = role === 'primary' ? projects[0]!.primaryRepository : projects[0]!.libraryRepository;
+				const matches = seed.resources.repositories.filter(repository => repository.key === key
+					&& repository.project === projects[0]!.key && repository.role === role);
+				assert.equal(matches.length, 1); assert.equal(matches[0]!.repositoryPolicy.stagingBranch, 'staging');
+				return matches[0]!;
+			});
+		});
+		assert.equal(new Set(repositories.map(repository => repository.key)).size, repositories.length);
+		assert.equal(new Set(repositories.map(repository => repository.gitUrl)).size, repositories.length);
+		const bases = row(row(manifest).repositoryBases);
+		assert.deepEqual(Object.keys(bases).sort(), repositories.map(repository => repository.key).sort());
+		for (const commit of Object.values(bases)) assert.ok(typeof commit === 'string' && /^[a-f0-9]{40}$/u.test(commit));
 	} catch (cause) { throw new Error('ACCEPTANCE_CAMPAIGN_FREEZE: Invalid expanded operator authority', { cause }); }
-	return { path, bytes, manifest: row(manifest), sdkInput: row(row(row(manifest).allocationInputsByRun).sdk).input };
+	return { path, bytes, manifest: row(manifest), repositories, sdkInput: row(row(row(manifest).allocationInputsByRun).sdk).input };
+}
+
+/** Resolve only seed-owned protected refs. A runtime repair may advance staging;
+ * the original subject base must remain in that protected history, never move. */
+export function readCampaignRepositoryBases(freeze: ReturnType<typeof readPreRunCampaignFreeze>): Record<string, string> {
+	const fail = 'ACCEPTANCE_CAMPAIGN_FREEZE: Frozen repository base lacks protected staging custody';
+	const git = (args: string[]) => execFileSync('git', args, { encoding: 'utf8', timeout: 30_000,
+		maxBuffer: 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+	const observe = () => Object.fromEntries(freeze.repositories.map(repository => {
+		const bytes = git(['ls-remote', '--exit-code', '--refs', repository.gitUrl, 'refs/heads/staging']);
+		assert.match(bytes, /^[a-f0-9]{40}\trefs\/heads\/staging$/u, fail);
+		return [repository.key, bytes.slice(0, 40)];
+	}));
+	let scratch: string | undefined;
+	try {
+		const heads = observe(), bases = row(freeze.manifest.repositoryBases);
+		for (const repository of freeze.repositories) {
+			const base = bases[repository.key], head = heads[repository.key];
+			assert.ok(typeof base === 'string' && /^[a-f0-9]{40}$/u.test(base) && head, fail);
+			if (base === head) continue;
+			if (!scratch) { scratch = mkdtempSync(resolve(tmpdir(), 'agent-protected-base-')); git(['init', '--bare', scratch]); }
+			// Fetch commit history without source trees into one disposable object
+			// store. Do not mutate any checkout, remote ref, library or frozen base.
+			git(['-C', scratch, 'fetch', '--filter=tree:0', '--no-tags', repository.gitUrl, 'refs/heads/staging']);
+			assert.equal(git(['-C', scratch, 'rev-parse', 'FETCH_HEAD']), head, fail);
+			git(['-C', scratch, 'cat-file', '-e', `${base}^{commit}`]);
+			git(['-C', scratch, 'merge-base', '--is-ancestor', base, head]);
+		}
+		assert.deepEqual(observe(), heads, `${fail}: Protected refs changed during observation`);
+		assert.equal(readFileSync(freeze.path, 'utf8'), freeze.bytes, `${fail}: Operator manifest changed`);
+		return heads;
+	} catch (cause) { throw new Error(fail, { cause }); }
+	finally { if (scratch) rmSync(scratch, { recursive: true, force: true }); }
 }
 
 export function readCampaignProjectLibraries(manifest: Row, team: string): Map<string, Row> {

@@ -6,7 +6,7 @@ import { basename, join, resolve } from 'node:path';
 import { parse } from 'yaml';
 import { read } from './acceptance-cli.ts';
 import { freshSdkDraft, requirePlanningWindow, sdkProposalText, sdkCampaignWindow } from './campaign.ts';
-import { readCampaignProjectLibraries, readPreRunCampaignFreeze, verifyCampaignWorkdayPolicy, verifyRuntimeClosure } from './freeze-integrity.ts';
+import { readCampaignProjectLibraries, readCampaignRepositoryBases, readPreRunCampaignFreeze, verifyCampaignWorkdayPolicy, verifyRuntimeClosure } from './freeze-integrity.ts';
 
 type Row = Record<string, any>;
 export function requirePinnedCodex(pinned: string, installed: string): void {
@@ -119,6 +119,7 @@ export function prepareSdkCampaign(draftPath: string, freezePath: string, team: 
 	const libraries = readCampaignProjectLibraries(operatorFreeze.manifest, team);
 	const policyReadback = verifyCampaignWorkdayPolicy(operatorFreeze.manifest,
 		read(['workdays', 'profiles', 'show', 'default'], team), libraries.get('sdk')?.teamId);
+	const protectedHeads = readCampaignRepositoryBases(operatorFreeze);
 	const agentPath = resolve(platform, 'packages/agent');
 	const pinnedCodex = (JSON.parse(readFileSync(join(agentPath, 'package.json'), 'utf8')) as Row).dependencies['@openai/codex'] as string;
 	const installedCodex = execFileSync(join(agentPath, 'node_modules/.bin/codex'), ['--version'], { encoding: 'utf8', timeout: 30_000 }).trim();
@@ -186,6 +187,7 @@ export function prepareSdkCampaign(draftPath: string, freezePath: string, team: 
 	};
 	capture('proposal-input.json', readFileSync(inputPath, 'utf8'));
 	capture('operator-campaign.json', operatorFreeze.bytes);
+	capture('protected-staging-heads.json', JSON.stringify(protectedHeads));
 	capture('architecture-book.json', JSON.stringify(bookReadback));
 	capture('sdk-agent-profiles.json', JSON.stringify({ publishedLibraryHead, agents: agentProfiles.agents }));
 	capture('codex-version.json', JSON.stringify({ pinned: pinnedCodex, installed: installedCodex }));
@@ -197,6 +199,8 @@ export function prepareSdkCampaign(draftPath: string, freezePath: string, team: 
 	const preflight = read([...args, '--idempotency-key', `golden-plan:${id}`], team);
 	assert.equal(readFileSync(operatorFreeze.path, 'utf8'), operatorFreeze.bytes,
 		'ACCEPTANCE_CAMPAIGN_FREEZE: Operator manifest changed during preparation');
+	assert.deepEqual(readCampaignRepositoryBases(operatorFreeze), protectedHeads,
+		'ACCEPTANCE_CAMPAIGN_FREEZE: Protected repositories changed during preparation');
 	const current = read(['proposals', 'show', id, '--server', 'local', '--project', project], team, true);
 	writeFileSync(freezePath, JSON.stringify({ createdAt: new Date().toISOString(),
 		proposal: { id, revision: current.activeVersion, digest: current.activeContentHash, estimates: 0 }, request, preflight, sourceHeads,

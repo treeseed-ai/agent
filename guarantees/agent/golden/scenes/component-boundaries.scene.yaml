@@ -252,6 +252,15 @@ workflow:
   - id: campaign-seed-custody-unit
     action: { verifier: agent.golden.campaign-seed-custody-unit }
     expect: { status: passed }
+  - id: campaign-bases-required-unit
+    action: { verifier: agent.golden.campaign-bases-required-unit }
+    expect: { status: passed }
+  - id: campaign-bases-readback-unit
+    action: { verifier: agent.golden.campaign-bases-readback-unit }
+    expect: { status: passed }
+  - id: campaign-bases-native
+    action: { verifier: agent.golden.campaign-bases-native }
+    expect: { status: passed }
   - id: campaign-freeze-native
     action: { verifier: agent.golden.campaign-freeze-native }
     expect: { status: passed }

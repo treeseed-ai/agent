@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { decodeCapacityPageCursor } from '@treeseed/sdk/capacity-pagination';
-import { graphRevisionSchema, type GraphRevision, assignmentAttemptSchema, executionEdgeSchema, executionNodeSchema, validateExecutionGraph } from '@treeseed/sdk/agent-capacity';
+import { graphRevisionSchema, type GraphRevision, assignmentAttemptSchema, assignmentResultSchema, executionEdgeSchema, executionNodeSchema, validateExecutionGraph } from '@treeseed/sdk/agent-capacity';
 import { read, row, type Row } from '../../acceptance-cli.ts';
 
 /** Complete existing watch contract: empty terminal page retains its cursor.
@@ -39,27 +39,73 @@ const graphList = (value: unknown): Row[] => {
 	assert.ok(Array.isArray(value), 'ACCEPTANCE_TEAM_GRAPH_COLLECTION: Complete array required');
 	return value.map(row);
 };
-export function verifyPredecessorCustody(assignments: Row[]): void {
-	const results = new Map(assignments.map(item => [row(item.assignmentResult).id, item]));
+export function verifyPredecessorCustody(assignments: Row[], graph: Row): Array<{ review: Row; actor: Row }> {
+	verifyGraphProvenance(graph);
+	const nodes = graphList(graph.nodes).map(value => executionNodeSchema.parse(value));
+	const edges = graphList(graph.edges).map(value => executionEdgeSchema.parse(value));
+	assert.equal(new Set(assignments.map(item => item.id)).size, assignments.length, 'ACCEPTANCE_PREDECESSOR_IDENTITY: Duplicate attempt');
+	const results = new Map<string, Row>(), attempts = new Map<Row, ReturnType<typeof assignmentAttemptSchema.parse>>();
 	for (const item of assignments) {
-		const parsed = assignmentAttemptSchema.safeParse(item.assignmentAttempt);
-		assert.ok(parsed.success, 'ACCEPTANCE_PREDECESSOR_ATTEMPT: Whole canonical frozen attempt required');
-		const attempt = parsed.data;
-		assert.equal(attempt.id, item.id); assert.equal(attempt.nodeRevision, item.executionNodeRevision);
-		assert.equal(new Set(attempt.predecessorResultIds).size, attempt.predecessorResultIds.length,
-			'ACCEPTANCE_PREDECESSOR_IDENTITY: Duplicate predecessor result');
+		const attempt = assignmentAttemptSchema.parse(item.assignmentAttempt); attempts.set(item, attempt);
+		assert.deepEqual(attempt, item.assignmentAttempt, 'ACCEPTANCE_PREDECESSOR_ATTEMPT: Original canonical bytes cannot be repaired on read');
+		assert.ok(attempt.id === item.id && attempt.nodeId === item.executionNodeId && attempt.nodeRevision === item.executionNodeRevision
+			&& attempt.projectId === item.projectId && attempt.teamId === item.teamId && attempt.teamId === graph.teamId
+			&& attempt.workdayId === item.workDayId && attempt.createdAt === item.createdAt,
+			'ACCEPTANCE_PREDECESSOR_ATTEMPT: Canonical attempt and owning public identity disagree');
+		if (item.assignmentResult !== undefined && item.assignmentResult !== null) {
+			const result = assignmentResultSchema.parse(item.assignmentResult);
+			assert.deepEqual(result, item.assignmentResult, 'ACCEPTANCE_PREDECESSOR_RESULT: Original canonical result cannot be repaired on read');
+			assert.ok(result.assignmentId === item.id && (item.status !== 'completed' || result.status === 'completed') && result.completedAt === item.completedAt
+				&& Date.parse(result.completedAt) >= Date.parse(attempt.createdAt) && !results.has(result.id),
+				'ACCEPTANCE_PREDECESSOR_RESULT: Unique original result and lawful completion clock required');
+			results.set(result.id, item);
+		}
+	}
+	const pairs = new Map<string, { review: Row; actor: Row }>();
+	for (const item of assignments) {
+		const attempt = attempts.get(item)!;
+		assert.equal(new Set(attempt.predecessorResultIds).size, attempt.predecessorResultIds.length, 'ACCEPTANCE_PREDECESSOR_IDENTITY: Duplicate predecessor result');
 		for (const resultId of attempt.predecessorResultIds) {
 			const predecessor = results.get(resultId);
 			assert.ok(predecessor, 'ACCEPTANCE_PREDECESSOR_MISSING: Every declared result needs independent assignment readback');
-			assert.equal(predecessor.status, 'completed');
-			assert.equal(predecessor.projectId, attempt.projectId,
-				'ACCEPTANCE_PREDECESSOR_PROJECT: Cross-project consumption needs the separate relation/read-grant acceptance case');
-			assert.equal(row(predecessor.assignmentResult).assignmentId, predecessor.id);
-			const completed = Date.parse(String(predecessor.completedAt)), admitted = Date.parse(String(item.createdAt));
-			assert.ok(Number.isFinite(completed) && Number.isFinite(admitted) && completed <= admitted,
-				'ACCEPTANCE_PREDECESSOR_CLOCK: Dependent admission must follow actual predecessor completion');
+			assert.equal(predecessor.status, 'completed'); assert.equal(predecessor.projectId, attempt.projectId,
+				'ACCEPTANCE_PREDECESSOR_PROJECT: Cross-project consumption needs separate relation/read-grant proof');
+			assert.ok(attempts.get(predecessor)!.workdayId === attempt.workdayId && Date.parse(String(predecessor.completedAt)) <= Date.parse(attempt.createdAt),
+				'ACCEPTANCE_PREDECESSOR_CLOCK: Exact-workday completion must precede dependent admission');
+		}
+		const node = nodes.find(value => value.id === attempt.nodeId);
+		assert.ok(node && node.projectId === attempt.projectId, 'ACCEPTANCE_REQUIRED_PREDECESSOR: Independent owning graph node required');
+		const incoming = edges.filter(edge => edge.toNodeId === node.id && edge.graphRevisionCreated <= attempt.graphRevision
+			&& (edge.graphRevisionRemoved === undefined || edge.graphRevisionRemoved > attempt.graphRevision));
+		for (const edge of incoming) {
+			const source = nodes.find(value => value.id === edge.fromNodeId)!;
+			if (source.kind === 'condition') continue; // Existing governed Decision/readiness verifier owns condition authority.
+			const candidates = assignments.filter(prior => attempts.get(prior)!.nodeId === source.id
+				&& attempts.get(prior)!.workdayId === attempt.workdayId && Date.parse(String(prior.createdAt)) <= Date.parse(attempt.createdAt))
+				.sort((a, b) => attempts.get(b)!.nodeRevision - attempts.get(a)!.nodeRevision || Date.parse(String(b.createdAt)) - Date.parse(String(a.createdAt)));
+			const predecessor = candidates[0], second = candidates[1];
+			assert.ok(predecessor && !(second && attempts.get(predecessor)!.nodeRevision === attempts.get(second)!.nodeRevision
+				&& predecessor.createdAt === second.createdAt), 'ACCEPTANCE_REQUIRED_PREDECESSOR: Missing or ambiguous original predecessor attempt');
+			assert.ok(predecessor.status === 'completed' && Date.parse(String(predecessor.completedAt)) <= Date.parse(attempt.createdAt)
+				&& attempt.predecessorResultIds.includes(String(row(predecessor.assignmentResult).id)),
+				'ACCEPTANCE_REQUIRED_PREDECESSOR: Every graph predecessor must complete and be consumed before admission');
+			assert.deepEqual(attempts.get(predecessor)!.sourceRef, source.sourceRef, 'ACCEPTANCE_REQUIRED_PREDECESSOR: Original predecessor source drifted');
+			if (source.pairRole === 'reviewer') {
+				assert.equal(row(row(predecessor.lifecycleOutput).activityCompletion).reviewDisposition, 'approved',
+					'ACCEPTANCE_REQUIRED_REVIEW: Actor completion or a non-approving review cannot authorize downstream work');
+				const pairEdges = edges.filter(pair => pair.provenance === 'review-pair' && pair.toNodeId === source.id
+					&& pair.graphRevisionCreated <= attempts.get(predecessor)!.graphRevision
+					&& (pair.graphRevisionRemoved === undefined || pair.graphRevisionRemoved > attempts.get(predecessor)!.graphRevision));
+				assert.equal(pairEdges.length, 1, 'ACCEPTANCE_REQUIRED_REVIEW: Exactly one original Actor/Reviewer edge required');
+				const actor = assignments.find(prior => prior.executionNodeId === pairEdges[0]!.fromNodeId
+					&& attempts.get(predecessor)!.predecessorResultIds.includes(String(row(prior.assignmentResult).id)));
+				assert.ok(actor && attempt.predecessorResultIds.includes(String(row(actor.assignmentResult).id)),
+					'ACCEPTANCE_REQUIRED_REVIEW: Dependent input must retain the exact reviewed Actor result');
+				pairs.set(String(predecessor.id), { review: predecessor, actor });
+			}
 		}
 	}
+	return [...pairs.values()];
 }
 /** A preview must prove an identical graph before the supported actual reconciliation. */
 export function verifyGraphNoopPlan(graph: Row, plan: Row): void {
@@ -72,8 +118,10 @@ export function verifyGraphNoopPlan(graph: Row, plan: Row): void {
 }
 
 export function verifyGraphProvenance(graph: Row): void {
-	const nodes = graphList(graph.nodes).map(value => executionNodeSchema.parse(value));
-	const edges = graphList(graph.edges).map(value => executionEdgeSchema.parse(value));
+	const nodes = graphList(graph.nodes).map(value => { const parsed = executionNodeSchema.parse(value);
+		assert.deepEqual(parsed, value, 'ACCEPTANCE_EDGE_PROVENANCE: Original node cannot be repaired'); return parsed; });
+	const edges = graphList(graph.edges).map(value => { const parsed = executionEdgeSchema.parse(value);
+		assert.deepEqual(parsed, value, 'ACCEPTANCE_EDGE_PROVENANCE: Original edge cannot be repaired'); return parsed; });
 	assert.ok(nodes.length > 0 && edges.length > 0, 'ACCEPTANCE_TEAM_GRAPH_EMPTY: Empty projection cannot pass');
 	assert.equal(new Set(nodes.map(value => value.id)).size, nodes.length);
 	assert.equal(new Set(edges.map(value => value.id)).size, edges.length);
@@ -83,8 +131,12 @@ export function verifyGraphProvenance(graph: Row): void {
 	for (const edge of edges) {
 		const from = nodes.find(value => value.id === edge.fromNodeId), to = nodes.find(value => value.id === edge.toNodeId);
 		assert.ok(from && to); assert.equal(from.teamId, graph.teamId); assert.equal(to.teamId, graph.teamId);
+		assert.equal(edge.teamId, graph.teamId, 'ACCEPTANCE_EDGE_PROVENANCE: Foreign edge team');
+		assert.ok(edge.sourceRef, 'ACCEPTANCE_EDGE_PROVENANCE: Exact source reference required for every edge');
 		assert.ok(['profile-agent', 'profile-event', 'work-item', 'review-pair', 'governance', 'treedx-link'].includes(String(edge.provenance)),
 			'ACCEPTANCE_EDGE_PROVENANCE: Exact governed edge origin required');
+		if (['review-pair', 'profile-agent', 'work-item'].includes(edge.provenance))
+			assert.deepEqual(edge.sourceRef, to.sourceRef, 'ACCEPTANCE_EDGE_PROVENANCE: Governed dependency source differs from its owning node');
 		if (edge.provenance === 'review-pair') {
 			assert.equal(from.pairRole, 'actor'); assert.equal(to.pairRole, 'reviewer');
 			assert.equal(from.workItemId, to.workItemId); assert.equal(from.projectId, to.projectId);

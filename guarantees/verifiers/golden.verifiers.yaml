@@ -1,6 +1,41 @@
 schemaVersion: treeseed.guarantee-verifiers/v1
 ownerPackage: "@treeseed/agent"
 verifiers:
+  agent.golden.required-review-omission-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/custody/living-graph-readback.test.ts
+    testName: "denies omitted graph-required review results even when every declared predecessor agrees"
+  agent.golden.edge-source-authority-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/custody/living-graph-readback.test.ts
+    testName: "denies missing exact edge source authority rather than accepting provenance labels alone"
+  agent.golden.work-review-bytes-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/custody/graph/review-readiness.test.ts
+    testName: "denies missing or contradictory original work-review bytes even when parsed approval views agree"
+  agent.golden.required-review-denials-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/custody/graph/review-readiness.test.ts
+    testName: "denies every omitted contradictory unfinished ambiguous or non-approving required predecessor without rewriting history"
+  agent.golden.required-review-authority-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/custody/graph/review-readiness.test.ts
+    testName: "requires the exact consumed Actor candidate original authority assigned Reviewer and measured approval interval"
+  agent.golden.required-review-history-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/custody/graph/review-readiness.test.ts
+    testName: "retains the original request-changes history while requiring the later approved pair instead of reusing old review authority"
+  agent.golden.required-review-native:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/custody/graph/review-readiness-native.test.ts
+    testName: "native committed review sources and public SDK graph assignments deny missing approval custody before unchanged concurrent retry"
   agent.golden.authored-request-grants-unit:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

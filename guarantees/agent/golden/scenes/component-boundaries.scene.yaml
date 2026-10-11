@@ -3,6 +3,27 @@ id: agent.golden.component-boundaries
 title: Golden execution component boundaries
 scope: local-component-tests
 workflow:
+  - id: required-review-omission-unit
+    action: { verifier: agent.golden.required-review-omission-unit }
+    expect: { status: passed }
+  - id: edge-source-authority-unit
+    action: { verifier: agent.golden.edge-source-authority-unit }
+    expect: { status: passed }
+  - id: work-review-bytes-unit
+    action: { verifier: agent.golden.work-review-bytes-unit }
+    expect: { status: passed }
+  - id: required-review-denials-unit
+    action: { verifier: agent.golden.required-review-denials-unit }
+    expect: { status: passed }
+  - id: required-review-authority-unit
+    action: { verifier: agent.golden.required-review-authority-unit }
+    expect: { status: passed }
+  - id: required-review-history-unit
+    action: { verifier: agent.golden.required-review-history-unit }
+    expect: { status: passed }
+  - id: required-review-native
+    action: { verifier: agent.golden.required-review-native }
+    expect: { status: passed }
   - id: authored-request-grants-unit
     action: { verifier: agent.golden.authored-request-grants-unit }
     expect: { status: passed }

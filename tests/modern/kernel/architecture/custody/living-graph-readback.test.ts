@@ -1,46 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import { assignmentAttemptSchema, executionEdgeSchema, executionNodeSchema } from '@treeseed/sdk/agent-capacity';
 import { state, workdayId } from '../golden-readback-fixture.ts';
-import { request } from '../../provider-kernel-fixture.ts';
 import { reviewedGraphFixture } from './graph/review-readiness-fixture.ts';
 import { verifyGraphProvenance, verifyPredecessorCustody } from '../../../../acceptance/workday/support/evidence-pages.ts';
 await import('../../../../acceptance/workday/living-graph.test.ts');
 
-function graphInput() {
-	const attempt = assignmentAttemptSchema.parse(request().assignment.assignmentAttempt);
-	const node = (id: string, workItemId: string, pairRole: 'actor' | 'reviewer') => executionNodeSchema.parse({
-		schemaVersion: 'treeseed.execution-node/v1', id, teamId: attempt.teamId, projectId: attempt.projectId, workItemId,
-		kind: pairRole === 'actor' ? 'acting' : 'reviewing', pairRole, sourceRef: attempt.sourceRef, authorityRefs: attempt.authorityRefs,
-		ruleRevision: 1, nodeRevision: 1, agentClass: pairRole === 'actor' ? 'configured-builder' : 'reviewer', status: 'completed',
-		estimate: attempt.estimate, requiredCapabilities: [], requestedPermissions: attempt.effectiveProfile.permissionCeiling,
-		workspace: pairRole === 'actor' ? 'git' : 'treedx', acceptanceCriteria: attempt.acceptanceCriteria,
-		maximumReviewCycles: 2, graphRevisionCreated: 1, graphRevisionUpdated: 1,
-	});
-	const nodes = [node('actor', 'first', 'actor'), node('review', 'first', 'reviewer'), node('next', 'next', 'actor')];
-	const edge = (id: string, fromNodeId: string, toNodeId: string, provenance: 'review-pair' | 'work-item') => executionEdgeSchema.parse({
-		schemaVersion: 'treeseed.execution-edge/v1', id, teamId: attempt.teamId, fromNodeId, toNodeId, provenance,
-		sourceRef: attempt.sourceRef, graphRevisionCreated: 1,
-	});
-	return { teamId: attempt.teamId, revision: 1, digest: `sha256:${'d'.repeat(64)}`, nodes,
-		edges: [edge('paired', 'actor', 'review', 'review-pair'), edge('dependent', 'review', 'next', 'work-item')] };
-}
-function predecessorInput() {
-	const first = assignmentAttemptSchema.parse(request().assignment.assignmentAttempt);
-	const next = assignmentAttemptSchema.parse({ ...first, id: 'dependent', idempotencyKey: 'dependent',
-		createdAt: '2026-09-13T12:00:03.000Z', predecessorResultIds: ['result-first'] });
-	return [
-		{ id: first.id, projectId: first.projectId, executionNodeRevision: first.nodeRevision, status: 'completed', assignmentAttempt: first,
-			createdAt: first.createdAt, completedAt: '2026-09-13T12:00:02.000Z', assignmentResult: { id: 'result-first', assignmentId: first.id } },
-		{ id: next.id, projectId: next.projectId, executionNodeRevision: next.nodeRevision, status: 'completed', assignmentAttempt: next,
-			createdAt: next.createdAt, completedAt: '2026-09-13T12:00:04.000Z', assignmentResult: { id: 'result-next', assignmentId: next.id } },
-	];
-}
+const graphInput = () => reviewedGraphFixture().graph;
+const predecessorInput = () => reviewedGraphFixture().assignments;
 // UNIT of newly authored native read-back assertions, not a live graph receipt.
 describe('living team graph managed assertion contract', () => {
 	it('denies omitted graph-required review results even when every declared predecessor agrees', () => {
 		const f = reviewedGraphFixture(); f.assignments[2]!.assignmentAttempt.predecessorResultIds = ['result-actor'];
 		const held = structuredClone(f); verifyGraphProvenance(f.graph);
-		expect(() => verifyPredecessorCustody(f.assignments)).toThrow(); expect(f).toEqual(held);
+		expect(() => verifyPredecessorCustody(f.assignments, f.graph)).toThrow(); expect(f).toEqual(held);
 	});
 	it('denies missing exact edge source authority rather than accepting provenance labels alone', () => {
 		const graph = graphInput(); delete graph.edges[1]!.sourceRef; const held = structuredClone(graph);
@@ -48,7 +19,7 @@ describe('living team graph managed assertion contract', () => {
 	});
 	it('retains exact reviewed provenance and canonical predecessor readback without rewriting evidence', () => {
 		const graph = graphInput(), assignments = predecessorInput(), before = structuredClone({ graph, assignments });
-		expect(() => verifyGraphProvenance(graph)).not.toThrow(); expect(() => verifyPredecessorCustody(assignments)).not.toThrow();
+		expect(() => verifyGraphProvenance(graph)).not.toThrow(); expect(() => verifyPredecessorCustody(assignments, graph)).not.toThrow();
 		expect({ graph, assignments }).toEqual(before);
 	});
 	it('denies duplicate dangling cyclic and foreign-team graph edges before trusting completed status', () => {
@@ -79,7 +50,7 @@ describe('living team graph managed assertion contract', () => {
 			if (mode === 'foreign-project') rows[0]!.projectId = 'foreign-project';
 			if (mode === 'future') rows[0]!.completedAt = '2026-09-13T12:00:04.000Z';
 			if (mode === 'wrong-result-owner') rows[0]!.assignmentResult.assignmentId = 'unrelated';
-			try { verifyPredecessorCustody(rows); outcomes.push(false); } catch { outcomes.push(true); }
+			try { verifyPredecessorCustody(rows, graphInput()); outcomes.push(false); } catch { outcomes.push(true); }
 		}
 		expect(outcomes).toEqual([true, true, true, true, true, true]);
 	});

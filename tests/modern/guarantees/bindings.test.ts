@@ -72,6 +72,10 @@ describe('capacity-provider guarantee execution bindings', () => {
 		expect(registry.verifiers[issuance[1]!]).toMatchObject({ kind: 'nodeTestCase',
 			testFile: 'tests/acceptance/workday/record-custody.test.ts',
 			testName: 'Every native managed attempt exposes one unchanged canonical lease reservation result and UsageSettlement across public views' });
+		expect(manifest.acceptanceCriteria.filter((value: { criterion: string }) =>
+			value.criterion === '6e8f096457026f1992cb08a4e36f02a7c5b55b472e7019ff615866256fac85d2'))
+			.toEqual([{ criterion: '6e8f096457026f1992cb08a4e36f02a7c5b55b472e7019ff615866256fac85d2',
+				verifierRefs: ['agent.golden.live.campaign', product] }]);
 	});
 	it('binds the exact model clock criterion to complete post campaign native readback without substituting component evidence', () => {
 		const manifest = parse(readFileSync(resolve(root, 'guarantees/agent/golden/sdk-complete.guarantee.yaml'), 'utf8'));
@@ -115,7 +119,9 @@ describe('capacity-provider guarantee execution bindings', () => {
 			{ criterion: '4f295a5342aaf08b1ca056a5aa8bc00df27a07cf116b6721b6179d575c6b76df',
 				verifierRefs: ['sdk.golden.live.product'] },
 			{ criterion: '22f329d858029233d66c747de963c8ac14c8655b0fe536ee1921ec39101ca1b8',
-				verifierRefs: ['api.golden.execution-normal-sdk-clean-schema-live-1', 'agent.golden.architecture-record-custody-live-1'] }]);
+				verifierRefs: ['api.golden.execution-normal-sdk-clean-schema-live-1', 'agent.golden.architecture-record-custody-live-1'] },
+			{ criterion: '6e8f096457026f1992cb08a4e36f02a7c5b55b472e7019ff615866256fac85d2',
+				verifierRefs: ['agent.golden.live.campaign', 'sdk.golden.live.product'] }]);
 		const scene = parse(readFileSync(resolve(root, manifest.scene.manifest), 'utf8'));
 		expect(scene.scope).toBe('local-integrated-runtime');
 		const refs = scene.workflow.map((step: { action: { verifier: string } }) => step.action.verifier);

@@ -22,6 +22,26 @@ function supplied() {
   mountInfo: '1 0 0:1 / / rw - rootfs rootfs rw\n',
   managedDirectory: { rootPresent: true, entries: [{ name: 'unrelated-live-directory', type: 'directory' }] },
  } };
+ const storageRoot = '/var/lib/treeseed/agent/workspaces', diskId = 'workspace-lease-11111111-1111-4111-8111-111111111111';
+ const disk = { id: diskId, directory: `${storageRoot}/leases/${diskId}`, image: `${storageRoot}/leases/${diskId}/work.qcow2`,
+  device: '/dev/nbd99', unit: `treeseed-${diskId}.service` };
+ const metadata = (name: string, value: Row) => ({ name, type: 'file', digest: 'a'.repeat(64), metadata: value });
+ const journals = { jobs: { rootPresent: true, entries: [metadata(`${id}.json`, {
+  schemaVersion: 'treeseed.assignment-source-job/v1', state: 'stopped', owner: { assignmentId: attempt.id,
+   providerId: attempt.provider.providerId, teamId: attempt.teamId, projectId: attempt.projectId, attempt: attempt.attempt },
+  leaseId: 'lease-owned', disk, builderIds: ['sandbox-warm-22222222-2222-4222-8222-222222222222'],
+ })] }, candidates: { rootPresent: true, entries: [metadata(`${id}.json`, { state: 'published', assignmentId: attempt.id,
+  attempt: attempt.attempt, providerId: attempt.provider.providerId, verifierId: 'sandbox-warm-33333333-3333-4333-8333-333333333333', verifierStopped: true })] },
+  results: { rootPresent: true, entries: [metadata(`${id}.json`, { schemaVersion: 'treeseed.source-result/v1', sandboxId: id,
+   leaseId: 'lease-owned', status: 'completed', teardownVerified: true, completedAt: '2026-09-13T12:00:01.000Z' })] } };
+ const observed = { leaseDirectoryPresent: true, disks: [{ id: 'workspace-lease-44444444-4444-4444-8444-444444444444', type: 'directory', bytes: 4096, device: null }], journals };
+ status.workspace = { startedAt: '2026-09-13T12:00:03.000Z', completedAt: '2026-09-13T12:00:04.000Z',
+  complete: true, errors: [], scope: { storageRoot, mountNamespace: 'mnt:[1234]' }, initialized: true, images: [],
+  leases: [{ id: 'lease-owned', image_id: 'image-owned', provider_id: attempt.provider.providerId,
+   assignment_id: attempt.id, attempt: attempt.attempt, mode: 'work', state: 'released', result_artifact_id: `${id}.json` },
+   { id: 'lease-unrelated', image_id: 'image-other', provider_id: 'provider-unrelated', assignment_id: 'assignment-unrelated',
+    attempt: 1, mode: 'work', state: 'active', result_artifact_id: null }],
+  ...observed, confirmation: { ...structuredClone(observed), mountNamespace: 'mnt:[1234]' } };
  return { items, connections: [{ providerId: attempt.provider.providerId, teamId: attempt.teamId }], brokerSocket, status, id };
 }
 const verify = (f: ReturnType<typeof supplied>) => verifyPublicSandboxAbsence(f.items, f.connections, f.brokerSocket, f.status);
@@ -40,6 +60,65 @@ describe('public owning sandbox inventory consumption', () => {
    assignmentId: attempt.id, status: 'completed', summary: 'Supplied unit input, not a managed result.', references: [], verification: [],
    usage: { elapsedSeconds: 1, native: { activeSeconds: 1 } }, diagnostics: [], completedAt: item.completedAt });
   const completed = structuredClone(f); expect(verify(f)).toHaveLength(1); expect(f).toEqual(completed);
+  const changes: Array<(f: ReturnType<typeof supplied>) => void> = [
+   f => { delete f.status.workspace; }, f => { row(f.status.workspace).complete = false; },
+   f => { row(f.status.workspace).errors = ['interrupted']; }, f => { row(f.status.workspace).initialized = false; },
+   f => { row(f.status.workspace).leases = null; }, f => { row(f.status.workspace).images = null; },
+   f => { row(row(f.status.workspace).scope).storageRoot = '/caller/path'; },
+   f => { row(row(f.status.workspace).scope).mountNamespace = 'mnt:[5678]'; },
+   f => { row(f.status.workspace).startedAt = '2026-09-13T12:00:00.000Z'; },
+   f => { row(f.status.workspace).completedAt = '2026-09-13T12:00:02.000Z'; },
+   f => { row(f.status.workspace).journals = null; }, f => { row(f.status.workspace).confirmation = null; },
+  ];
+  for (const change of changes) {
+   const denied = structuredClone(f); change(denied); const before = structuredClone(denied);
+   expect(() => verify(denied)).toThrow(); expect(denied).toEqual(before);
+  }
+  const source = (f: ReturnType<typeof supplied>, kind: string) => row(row(row(f.status.workspace).journals)[kind]);
+  const metadata = (f: ReturnType<typeof supplied>, kind: string) => row(row((source(f, kind).entries as Row[])[0]).metadata);
+  const lease = (f: ReturnType<typeof supplied>) => row((row(f.status.workspace).leases as Row[])[0]);
+  const semanticChanges: Array<(f: ReturnType<typeof supplied>) => void> = [
+   f => { source(f, 'jobs').entries = []; }, f => { source(f, 'results').entries = []; }, f => { source(f, 'candidates').entries = []; },
+   f => { source(f, 'jobs').rootPresent = false; }, f => { row((source(f, 'jobs').entries as Row[])[0]).metadata = null; },
+   f => { row((source(f, 'jobs').entries as Row[])[0]).digest = ''; },
+   f => { (source(f, 'jobs').entries as Row[]).push(structuredClone((source(f, 'jobs').entries as Row[])[0]!)); },
+   f => { metadata(f, 'jobs').state = 'attached'; }, f => { metadata(f, 'jobs').schemaVersion = 'foreign'; },
+   f => { row(metadata(f, 'jobs').owner).providerId = 'foreign'; }, f => { row(metadata(f, 'jobs').owner).teamId = 'foreign'; },
+   f => { row(metadata(f, 'jobs').owner).projectId = 'foreign'; }, f => { row(metadata(f, 'jobs').owner).attempt = 2; },
+   f => { metadata(f, 'jobs').leaseId = 'foreign'; }, f => { lease(f).provider_id = 'foreign'; },
+   f => { lease(f).state = 'active'; }, f => { lease(f).attempt = 2; }, f => { lease(f).result_artifact_id = 'foreign'; },
+   f => { (row(f.status.workspace).leases as Row[]).push(structuredClone(lease(f))); },
+   f => { row(metadata(f, 'jobs').disk).directory = '/caller/path'; }, f => { row(metadata(f, 'jobs').disk).image = '/caller/path'; },
+   f => { row(metadata(f, 'jobs').disk).unit = 'foreign.service'; }, f => { row(metadata(f, 'jobs').disk).device = '/dev/sda'; },
+   f => { row(metadata(f, 'jobs').disk).id = '../escape'; }, f => { metadata(f, 'jobs').builderIds = ['foreign']; },
+   f => { metadata(f, 'jobs').builderIds = Array(2).fill('sandbox-warm-22222222-2222-4222-8222-222222222222'); },
+   f => { metadata(f, 'results').leaseId = 'foreign'; }, f => { metadata(f, 'results').sandboxId = 'foreign'; },
+   f => { metadata(f, 'results').status = 'failed'; }, f => { metadata(f, 'results').teardownVerified = false; },
+   f => { metadata(f, 'results').completedAt = '2026-09-13T12:00:03.000Z'; },
+   f => { metadata(f, 'candidates').state = 'retained'; }, f => { metadata(f, 'candidates').providerId = 'foreign'; },
+   f => { metadata(f, 'candidates').assignmentId = 'foreign'; }, f => { metadata(f, 'candidates').attempt = 2; },
+   f => { metadata(f, 'candidates').verifierStopped = false; }, f => { metadata(f, 'candidates').verifierId = 'foreign'; },
+  ];
+  for (const type of ['directory', 'file', 'symlink', 'other']) semanticChanges.push(f => {
+   (row(f.status.workspace).disks as Row[]).push({ id: row(metadata(f, 'jobs').disk).id, type, bytes: null, device: null });
+  });
+  for (const id of ['sandbox-warm-22222222-2222-4222-8222-222222222222', 'sandbox-warm-33333333-3333-4333-8333-333333333333'])
+   for (const suffix of ['', '-ready']) for (const kind of ['tasks', 'containers']) semanticChanges.push(f => {
+    row(f.status.inventory)[kind] += `${id}${suffix}\n`; row(row(f.status.inventory).confirmation)[kind] = row(f.status.inventory)[kind];
+   });
+  semanticChanges.push(f => { row(f.status.inventory).mountInfo += `2 1 0:2 / ${String(row(metadata(f, 'jobs').disk).directory)}/input rw - tmpfs tmpfs rw\n`; });
+  for (const change of semanticChanges) {
+   const denied = structuredClone(f); change(denied); const workspace = row(denied.status.workspace);
+   for (const name of ['leaseDirectoryPresent', 'disks', 'journals']) row(workspace.confirmation)[name] = structuredClone(workspace[name]);
+   const before = structuredClone(denied); expect(() => verify(denied)).toThrow(); expect(denied).toEqual(before);
+  }
+  const analysis = structuredClone(f), original = assignmentAttemptSchema.parse(analysis.items[0]!.assignmentAttempt);
+  analysis.items[0]!.assignmentAttempt = assignmentAttemptSchema.parse({ ...original,
+   workspace: { mode: 'read-only' }, grant: { ...original.grant, sourceWrite: [], tools: original.grant.tools.filter(tool => tool !== 'source.write') } });
+  lease(analysis).mode = 'analysis'; source(analysis, 'candidates').entries = [];
+  delete metadata(analysis, 'jobs').builderIds; // Original cache hit has no builder allocation.
+  row(row(analysis.status.workspace).confirmation).journals = structuredClone(row(analysis.status.workspace).journals);
+  const analysisBefore = structuredClone(analysis); expect(verify(analysis)).toHaveLength(1); expect(analysis).toEqual(analysisBefore);
  });
  it('denies missing incomplete failed foreign malformed and stale observations without repairing failed history', () => {
   const changes: Array<(f: ReturnType<typeof supplied>) => void> = [

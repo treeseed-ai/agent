@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 
 const root = resolve(import.meta.dirname, '../../..');
 const sdkFixedGraphCriteria = [
+	'e2bf7c70f63b2f4d1532a2d9c62fd7d5b4305151bcadc9c650a3a48bcd8649e7',
 	'47b521b0831f30babf7664f8e12de9b9336a9c949de98473e1767212d7a76cd2',
 	'95e989b76535f28f68527b4e3cf57ca49437695c9f97c57acdfca81d2f62055a',
 	'96a6b0f3ae0587119f592e97fc93efdaae676674a34fb9e9511fd0a9a044fd6e',

@@ -3,6 +3,12 @@ id: agent.golden.component-boundaries
 title: Golden execution component boundaries
 scope: local-component-tests
 workflow:
+  - id: sole-workday-mode-unit
+    action: { verifier: agent.golden.sole-workday-mode-unit }
+    expect: { status: passed }
+  - id: sole-simulation-mode-binding-unit
+    action: { verifier: agent.golden.sole-simulation-mode-binding-unit }
+    expect: { status: passed }
   - id: canonical-public-record-binding-unit
     action: { verifier: agent.golden.canonical-public-record-binding-unit }
     expect: { status: passed }

@@ -103,8 +103,8 @@ it('native configured Kernel Git result and public SDK assignment reads reach th
 		parameters.deadlineAt = originalDeadline;
 		const originalFailures = structuredClone(failed); mode = 'exact'; await execute();
 		expect(retained).toEqual(held); expect(failed).toEqual(originalFailures); expect(failed).toHaveLength(22);
-		expect(requests.filter(value => value === `GET /v1/teams/${f.attempt.teamId}/capacity/assignments/${f.attempt.id}`)).toHaveLength(17);
-		expect(requests.filter(value => value === `GET /v1/teams/${f.attempt.teamId}/workday-runs/${f.attempt.workdayId}`)).toHaveLength(17);
+		expect(requests.filter(value => value === `GET /v1/teams/${f.attempt.teamId}/capacity/assignments/${f.attempt.id}`)).toHaveLength(25);
+		expect(requests.filter(value => value === `GET /v1/teams/${f.attempt.teamId}/workday-runs/${f.attempt.workdayId}`)).toHaveLength(25);
 		expect(requests).toHaveLength(50);
 		expect({ item, run }).toEqual(before); expect(f.requests).toHaveLength(1);
 		// Native owning Kernel/handler/Git and SDK transport; upstream record,

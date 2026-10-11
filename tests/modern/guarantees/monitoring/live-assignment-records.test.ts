@@ -4,6 +4,16 @@ import { observeLiveAssignmentRecords } from '../../../acceptance/workday/suppor
 import { liveAssignmentRecord, liveRun } from './live-assignment-fixture.ts';
 
 describe('live canonical assignment observation (controlled inputs, not managed proof)', () => {
+	it('denies normalized applied workday identity without retaining observations or rewriting original public bytes', () => {
+		for (const field of ['id', 'teamId', 'policyId']) {
+			const item = liveAssignmentRecord(), run = liveRun(item), plan = row(row(run.parameters).appliedPlan);
+			plan[field] = ` ${String(plan[field])} `;
+			const before = structuredClone({ item, run }), retained = new Map<string, Row>(), inspect = vi.fn();
+			expect.soft(() => observeLiveAssignmentRecords(run, [item], retained, inspect), field).toThrow('ACCEPTANCE_START_RAW');
+			expect.soft(retained.size, field).toBe(0); expect.soft(inspect, field).not.toHaveBeenCalled();
+			expect({ item, run }).toEqual(before);
+		}
+	});
 	it('denies newly observed lifecycle clocks before creation or start without retaining a partly verified batch or changing failed observations', () => {
 		for (const mode of ['start-before-creation', 'finish-before-creation', 'finish-before-start']) {
 			const item = liveAssignmentRecord(), run = liveRun(item), retained = new Map<string, Row>(), inspect = vi.fn();

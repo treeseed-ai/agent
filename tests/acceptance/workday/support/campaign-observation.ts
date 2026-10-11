@@ -9,6 +9,7 @@ import { collectCompleteEvidence } from './evidence-pages.ts';
 export function verifyAppliedWorkdayCustody(run: Row) {
 	const id = String(run.id ?? '');
 	const parameters = row(run.parameters), plan = appliedWorkdaySchema.parse(parameters.appliedPlan);
+	assert.deepEqual(plan, parameters.appliedPlan, 'ACCEPTANCE_START_RAW: Public Workday authority must already be canonical without normalization');
 	assert.equal(plan.id, id, 'ACCEPTANCE_START_ID: Applied plan differs from public run');
 	assert.equal(plan.teamId, run.teamId, 'ACCEPTANCE_START_TEAM: Applied plan differs from public team');
 	assert.equal(plan.executionMode, run.executionMode, 'ACCEPTANCE_START_MODE: Workday is the sole mode authority');

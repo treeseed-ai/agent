@@ -1,6 +1,21 @@
 schemaVersion: treeseed.guarantee-verifiers/v1
 ownerPackage: "@treeseed/agent"
 verifiers:
+  agent.golden.canonical-public-record-binding-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/bindings.test.ts
+    testName: "binds canonical public CLI records to unchanged Workday attempt result settlement and independent native schema assertions"
+  agent.golden.canonical-workday-raw-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/monitoring/live-assignment-records.test.ts
+    testName: "denies normalized applied workday identity without retaining observations or rewriting original public bytes"
+  agent.golden.normal-sdk-legacy-denial-binding-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/bindings.test.ts
+    testName: "binds retired authority denial to selected normal SDK native schema and unchanged canonical record readback without requiring controlled failures"
   agent.golden.required-review-omission-unit:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

@@ -1,6 +1,11 @@
 schemaVersion: treeseed.guarantee-verifiers/v1
 ownerPackage: "@treeseed/agent"
 verifiers:
+  agent.golden.normal-sdk-legacy-denial-binding-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/bindings.test.ts
+    testName: "binds retired authority denial to selected normal SDK native schema and unchanged canonical record readback without requiring controlled failures"
   agent.golden.required-review-omission-unit:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

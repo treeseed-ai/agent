@@ -11,6 +11,18 @@ scene:
   required: true
   manifest: guarantees/agent/golden/scenes/sdk-complete.scene.yaml
 acceptanceCriteria:
+  - criterion: 95e989b76535f28f68527b4e3cf57ca49437695c9f97c57acdfca81d2f62055a
+    verifierRefs: [sdk.golden.live.product]
+  - criterion: 96a6b0f3ae0587119f592e97fc93efdaae676674a34fb9e9511fd0a9a044fd6e
+    verifierRefs: [sdk.golden.live.product]
+  - criterion: 11dc8f94be641ad4a78110ac48b1a33144ab46b5a4faac7b3eba1c3873360ec6
+    verifierRefs: [sdk.golden.live.product]
+  - criterion: 9aa7395c3dc83d555538ad7b6ecfa3d307744044bab0de0574731218ca2e7710
+    verifierRefs: [sdk.golden.live.product]
+  - criterion: ae904659a63c9d7478fecc4ba97674ff617e9aee8e0d4e2c3aa96ce1eb16a7cd
+    verifierRefs: [sdk.golden.live.product]
+  - criterion: a36158a2e8f122136ece95b41cfd72c345beefa609df5ec27e296b56e77de930
+    verifierRefs: [sdk.golden.live.product]
   - criterion: b635827ed7862d56b8764dfad30114b9ee18d02b4aa709a257841e18a1bd0f0d
     verifierRefs: [agent.golden.execution-clock-observation-live-1, api.golden.execution-protected-observation-live-1]
   - criterion: 7eaf9fdc1c264e2d0b28d2fc751da33a2ffcf98ca0d6446ac6e8672503dfa533

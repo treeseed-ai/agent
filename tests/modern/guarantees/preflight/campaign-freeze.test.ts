@@ -19,7 +19,7 @@ vi.mock('../../../acceptance/acceptance-cli.ts', async importOriginal => ({
 	state.commands(...args); return state.publicRead(...args);
 } }));
 import { prepareSdkCampaign } from '../../../acceptance/prepare-campaign.ts';
-import { verifyPreRunCampaignInputs } from '../../../acceptance/freeze-integrity.ts';
+import { readPreRunCampaignFreeze, verifyPreRunCampaignInputs } from '../../../acceptance/freeze-integrity.ts';
 import { campaignInputs } from './campaign-freeze-fixture.ts';
 import { sdkProposalText } from '../../../acceptance/campaign.ts';
 import { portfolioRelations } from '../../../acceptance/workday/support/portfolio-relations.ts';
@@ -56,6 +56,35 @@ it('denies missing malformed and partial whole campaign authority before any SDK
 it('requires an explicit original campaign path rather than generating SDK-only authority or guessing an old freeze', () => {
 	vi.stubEnv('TREESEED_ACCEPTANCE_CAMPAIGN_PATH', '');
 	expect(() => prepareSdkCampaign('/draft.json', '/sdk.freeze.json', 'supplied-team')).toThrow('ACCEPTANCE_CAMPAIGN_FREEZE');
+	expect(state.commands).not.toHaveBeenCalled(); expect(state.writes).not.toHaveBeenCalled();
+});
+
+it('denies absent malformed and changed seed identity or canonical content before preparation without rewriting original evidence', () => {
+	const authority = process.env.TREESEED_DEVELOPMENT_WORKSPACE_ROOT!;
+	const document = nativeFs.readFileSync(resolve(authority, 'docs/agent-acceptance.md'), 'utf8');
+	const seed = nativeFs.readFileSync(resolve(authority, 'seeds/treeseed.yaml'), 'utf8');
+	const original = campaignInputs(portfolioRelations(document, seed).projects.map(project => project.slug), seed);
+	state.files.set('/supplied-platform/docs/agent-acceptance.md', document);
+	state.files.set('/supplied-platform/seeds/treeseed.yaml', seed); state.bytes = JSON.stringify(original);
+	const accepted = readPreRunCampaignFreeze();
+	for (const value of [undefined, null, '', [], {}, { ...original.seed, name: 'foreign' },
+		{ ...original.seed, version: 0 }, { ...original.seed, version: 12 }, { ...original.seed, version: '11' },
+		{ ...original.seed, digest: 'staging' }, { ...original.seed, digest: `sha256:${'0'.repeat(64)}` }]) {
+		state.bytes = JSON.stringify({ ...original, seed: value }); const held = state.bytes;
+		expect.soft(() => prepareSdkCampaign('/draft.json', '/sdk.freeze.json', 'supplied-team')).toThrow('ACCEPTANCE_CAMPAIGN_FREEZE');
+		expect.soft(state.bytes).toBe(held); expect.soft(state.files.get('/supplied-platform/seeds/treeseed.yaml')).toBe(seed);
+	}
+	state.bytes = JSON.stringify(original);
+	for (const value of ['', '{', 'null', '[]', '{}', seed.replace('version: 11', 'version: 0'),
+		seed.replace('seed-bundle/v3', 'seed-bundle/v2'), seed.replace('description:', 'changedContent:'),
+		seed.replace('resources:', 'resources: broken\nunusedResources:')]) {
+		state.files.set('/supplied-platform/seeds/treeseed.yaml', value);
+		expect.soft(() => prepareSdkCampaign('/draft.json', '/sdk.freeze.json', 'supplied-team')).toThrow('ACCEPTANCE_CAMPAIGN_FREEZE');
+		expect.soft(state.files.get('/supplied-platform/seeds/treeseed.yaml')).toBe(value);
+	}
+	state.files.set('/supplied-platform/seeds/treeseed.yaml', `${seed}\n# Formatting does not change the canonical digest.\n`);
+	expect(readPreRunCampaignFreeze()).toEqual(accepted);
+	state.files.set('/supplied-platform/seeds/treeseed.yaml', seed); expect(readPreRunCampaignFreeze()).toEqual(accepted);
 	expect(state.commands).not.toHaveBeenCalled(); expect(state.writes).not.toHaveBeenCalled();
 });
 
@@ -120,7 +149,7 @@ it('uses the original operator proposal and start and denies changed CLI intent 
 	const seed = nativeFs.readFileSync(resolve(authority!, 'seeds/treeseed.yaml'), 'utf8');
 	const canonical = sdkProposalText(document), head = 'a'.repeat(40), content = 'Controlled published Book';
 	const digest = `sha256:${createHash('sha256').update(content).digest('hex')}`;
-	const supplied = campaignInputs(portfolioRelations(document, seed).projects.map(project => project.slug));
+	const supplied = campaignInputs(portfolioRelations(document, seed).projects.map(project => project.slug), seed);
 	const sdk = supplied.allocationInputsByRun.sdk!;
 	const template = { status: 'draft', projectId: sdk.input.projects[0], contentProvenance: {},
 		executionPlan: { workItems: canonical.workItems.map(item => ({ ...item, activity: 'acting', review: 'required',

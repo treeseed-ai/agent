@@ -105,7 +105,7 @@ it('native pre-run reader denies every changed project weight class target and c
 		vi.stubEnv('TREESEED_ACCEPTANCE_PLATFORM_PATH', authority); vi.stubEnv('TREESEED_ACCEPTANCE_CAMPAIGN_PATH', campaign);
 		const slugs = portfolioRelations(readFileSync(resolve(authority!, 'docs/agent-acceptance.md'), 'utf8'),
 			readFileSync(resolve(authority!, 'seeds/treeseed.yaml'), 'utf8')).projects.map(project => project.slug);
-		const original = campaignInputs(slugs), complete = `${JSON.stringify(original, null, 2)}\n`;
+		const original = campaignInputs(slugs, readFileSync(resolve(authority!, 'seeds/treeseed.yaml'), 'utf8')), complete = `${JSON.stringify(original, null, 2)}\n`;
 		writeFileSync(campaign, complete); const accepted = readPreRunCampaignFreeze();
 		const observations: Array<{ key: string; mode: string; bytes: string; denied: boolean }> = [];
 		for (const key of Object.keys(original.allocationInputsByRun)) for (const mode of key === 'all-project-portfolio'
@@ -319,11 +319,30 @@ it('native SDK preparation retains invalid campaign bytes and creates no proposa
 		vi.stubEnv('TREESEED_ACCEPTANCE_CAMPAIGN_PATH', campaign);
 		const slugs = portfolioRelations(readFileSync(join(root, 'docs/agent-acceptance.md'), 'utf8'),
 			readFileSync(join(root, 'seeds/treeseed.yaml'), 'utf8')).projects.map(project => project.slug);
-		const complete = `${JSON.stringify(campaignInputs(slugs), null, 2)}\n`;
+		const seedPath = join(root, 'seeds/treeseed.yaml'), seed = readFileSync(seedPath, 'utf8');
+		const input = campaignInputs(slugs, seed), complete = `${JSON.stringify(input, null, 2)}\n`;
 		writeFileSync(campaign, complete);
 		const original = readPreRunCampaignFreeze();
 		expect(readPreRunCampaignFreeze()).toEqual(original);
 		expect(original.bytes).toBe(complete); expect(readFileSync(campaign, 'utf8')).toBe(complete);
+		const deniedSeeds: Array<{ campaign: string; seed: string; denied: boolean }> = [];
+		const attempts = [
+			...[undefined, null, {}, { ...input.seed, name: 'foreign' }, { ...input.seed, version: 12 },
+				{ ...input.seed, digest: `sha256:${'0'.repeat(64)}` }].map(value => ({ campaign: JSON.stringify({ ...input, seed: value }), seed })),
+			...['', '{', 'null', seed.replace('seed-bundle/v3', 'seed-bundle/v2'),
+				seed.replace('description:', 'changedContent:')].map(value => ({ campaign: complete, seed: value })),
+		];
+		for (const attempt of attempts) {
+			writeFileSync(campaign, attempt.campaign); writeFileSync(seedPath, attempt.seed);
+			const inventory = readdirSync(root, { recursive: true }); let denied = false;
+			try { readPreRunCampaignFreeze(); }
+			catch (failure) { denied = failure instanceof Error && failure.message.includes('ACCEPTANCE_CAMPAIGN_FREEZE'); }
+			deniedSeeds.push({ ...attempt, denied }); expect.soft(denied).toBe(true);
+			expect(readFileSync(campaign, 'utf8')).toBe(attempt.campaign); expect(readFileSync(seedPath, 'utf8')).toBe(attempt.seed);
+			expect(readdirSync(root, { recursive: true })).toEqual(inventory); expect(existsSync(freeze)).toBe(false);
+		}
+		const retainedSeeds = structuredClone(deniedSeeds); writeFileSync(campaign, complete); writeFileSync(seedPath, seed);
+		expect(readPreRunCampaignFreeze()).toEqual(original); expect(deniedSeeds).toEqual(retainedSeeds);
 		const outcomes: Array<{ error: string; created: boolean }> = [];
 		for (const bytes of ['', '{', '{}', JSON.stringify({ campaignId: 'native-invalid',
 			proposals: [{ slug: 'sdk', projectId: 'sdk-project', id: 'sdk-proposal' }],

@@ -291,12 +291,6 @@ activityProfiles:
 				const book = { store: 'treedx' as const, model: 'book', id: 'sdk-core', repository, commit: bookCommit, path: bookPath,
 					revision: 1, digest: `sha256:${createHash('sha256').update(bookBytes).digest('hex')}` };
 				const bookResponse = { resolvedRef: bookCommit, files: [{ path: bookPath, requestedPath: bookPath, content: native(bookCommit, bookPath), frontmatter: bookFrontmatter }] };
-				const preflight = { ...bookResponse, repoId: repository }, bookAuthority = { ...book, projectId: f.attempt.projectId, title: 'SDK Core' };
-				verifySdkArchitectureBook(preflight, bookAuthority);
-				const denied = { ...preflight, files: [...preflight.files, ...preflight.files] }, held = structuredClone(denied);
-				expect.soft(() => verifySdkArchitectureBook(denied, bookAuthority)).toThrow('ACCEPTANCE_CAMPAIGN_BOOK');
-				expect(denied).toEqual(held); expect(f.git('rev-parse', 'HEAD')).toBe(bookCommit);
-				verifySdkArchitectureBook(preflight, bookAuthority);
 				const target = { store: 'treedx' as const, model: 'knowledge', id: 'sdk.architecture', repository, commit: bookCommit, path: knowledgePath };
 				const profile = portableProfile('architect', 'writer');
 				Object.assign(f.attempt, { agentClass: profile.agentClass, workItemId: 'architecture-contract', contextRefs: [book],
@@ -323,6 +317,19 @@ activityProfiles:
 						content: mutation === 'readback' ? 'Changed native readback' : native(candidate, knowledgePath) }] };
 					throw new Error('Unexpected exact content operation');
 				});
+				const observed = row(await boundary.facade.invoke('treedx.repositories.files.read', {
+					path: { projectId: f.attempt.projectId, repoId: repository }, query: {},
+					body: { ref: bookCommit, paths: [bookPath], encoding: 'utf8', parseFrontmatter: true } }));
+				const preflight = { ...observed, repoId: repository }, bookAuthority = { ...book, projectId: f.attempt.projectId, title: 'SDK Core' };
+				verifySdkArchitectureBook(preflight, bookAuthority);
+				const denied = { ...preflight, files: [...bookResponse.files, ...bookResponse.files] }, held = structuredClone(denied);
+				expect(() => verifySdkArchitectureBook(denied, bookAuthority)).toThrow('ACCEPTANCE_CAMPAIGN_BOOK');
+				const changedBytes = bookBytes.replace('title: SDK Core', 'title: SDK Architecture');
+				const contradicted = { ...preflight, files: [{ ...bookResponse.files[0]!, content: changedBytes }] };
+				expect(() => verifySdkArchitectureBook(contradicted, { ...bookAuthority,
+					digest: `sha256:${createHash('sha256').update(changedBytes).digest('hex')}` })).toThrow('ACCEPTANCE_CAMPAIGN_BOOK');
+				expect(denied).toEqual(held); expect(f.git('rev-parse', 'HEAD')).toBe(bookCommit); expect(f.requests).toHaveLength(0);
+				verifySdkArchitectureBook(preflight, bookAuthority);
 				const frontmatter: Record<string, unknown> = { schemaVersion: 'treeseed.knowledge-page/v2', id: target.id, projectId: f.attempt.projectId,
 					bookRef: book, title: 'SDK boundary', slug: 'sdk-boundary', status: 'review', visibility: 'team', order: 0 };
 				if (mutation.startsWith('book-')) { const name = mutation.slice(5); frontmatter.bookRef = { ...book,

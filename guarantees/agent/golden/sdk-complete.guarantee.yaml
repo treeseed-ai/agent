@@ -71,3 +71,5 @@ acceptanceCriteria:
     verifierRefs: [sdk.golden.live.product]
   - criterion: 936013d37582fbedab56e17601be3581682b72565d8b7fdaedb75f6a3cd2e64f
     verifierRefs: [agent.golden.live.campaign, agent.golden.architecture-book-knowledge-live-1]
+  - criterion: 4f295a5342aaf08b1ca056a5aa8bc00df27a07cf116b6721b6179d575c6b76df
+    verifierRefs: [sdk.golden.live.product]

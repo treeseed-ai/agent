@@ -146,6 +146,31 @@ it('retains every seeded base and denies malformed missing moved and interrupted
 	expect(freeze).toEqual(before); expect(state.writes).not.toHaveBeenCalled();
 });
 
+it('denies unobserved governed profiles for every project before runtime or proposal preparation', () => {
+	const authority = process.env.TREESEED_DEVELOPMENT_WORKSPACE_ROOT!;
+	const document = nativeFs.readFileSync(resolve(authority, 'docs/agent-acceptance.md'), 'utf8');
+	const seed = nativeFs.readFileSync(resolve(authority, 'seeds/treeseed.yaml'), 'utf8');
+	const supplied = campaignInputs(portfolioRelations(document, seed).projects.map(project => project.slug), seed);
+	state.bytes = JSON.stringify(supplied);
+	state.files.set('/supplied-platform/docs/agent-acceptance.md', document);
+	state.files.set('/supplied-platform/seeds/treeseed.yaml', seed);
+	state.execute.mockImplementation((_command: string, args: string[]) => {
+		if (args.includes('--refs')) return `${'a'.repeat(40)}\trefs/heads/staging\n`;
+		throw new Error('Runtime must not be inspected before all governed profiles');
+	});
+	state.publicRead.mockImplementation((args: string[]) => {
+		if (args[0] === 'library' && args[1] === 'show') {
+			const selected = supplied.proposals.find(proposal => proposal.slug === args[2])!;
+			return { project: { id: selected.projectId, slug: selected.slug, teamId: 'team' },
+				library: { projectId: selected.projectId, teamId: 'team', repositoryId: `library-${selected.slug}` } };
+		}
+		if (args[0] === 'workdays') return { ...supplied.workdayPolicy, teamId: 'team' };
+		throw new Error('Unobserved governed definition');
+	});
+	expect(() => prepareSdkCampaign('/draft.json', '/sdk.freeze.json', 'team')).toThrow('ACCEPTANCE_CAMPAIGN_PROFILES');
+	expect(state.writes).not.toHaveBeenCalled(); expect(state.bytes).toBe(JSON.stringify(supplied));
+});
+
 it('retains all twenty five prospective schema valid inputs with pending genuine estimates and unchanged exact selection weights', () => {
 	const supplied = campaignInputs(slugs), before = structuredClone(supplied);
 	verifyPreRunCampaignInputs(supplied, slugs);

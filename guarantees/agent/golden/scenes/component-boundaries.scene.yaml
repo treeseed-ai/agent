@@ -3,6 +3,9 @@ id: agent.golden.component-boundaries
 title: Golden execution component boundaries
 scope: local-component-tests
 workflow:
+  - id: default-policy-binding-unit
+    action: { verifier: agent.golden.default-policy-binding-unit }
+    expect: { status: passed }
   - id: derived-public-mode-unit
     action: { verifier: agent.golden.derived-public-mode-unit }
     expect: { status: passed }

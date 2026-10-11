@@ -4,11 +4,20 @@ import { appliedWorkdaySchema, assignmentAttemptSchema } from '@treeseed/sdk/age
 import { validateWorkdayIntent, type WorkdayIntent } from '@treeseed/sdk/operator-contracts';
 import { collectCompleteEvidence } from './evidence-pages.ts';
 
+/** Public labels derive from the original Workday; free-form nested content is not mode authority. */
+export function verifyDerivedWorkdayModes(run: Row, records: readonly Row[]): void {
+	assert.ok(run.executionMode === 'simulation' || run.executionMode === 'production', 'ACCEPTANCE_DERIVED_MODE: Exact owning Workday mode required');
+	for (const record of records) if (Object.hasOwn(record, 'executionMode')) assert.equal(record.executionMode, run.executionMode,
+		'ACCEPTANCE_DERIVED_MODE: Public label contradicts the sole Workday authority');
+}
+
 /** The original applied workday owns productive clocks and policy in both
  * initial-start and live assignment read-back. */
 export function verifyAppliedWorkdayCustody(run: Row) {
 	const id = String(run.id ?? '');
-	const parameters = row(run.parameters), plan = appliedWorkdaySchema.parse(parameters.appliedPlan);
+	const parameters = row(run.parameters);
+	assert.ok(!Object.hasOwn(parameters, 'executionMode'), 'ACCEPTANCE_START_MODE: Workday is the sole mode authority; duplicate parameter mode forbidden');
+	const plan = appliedWorkdaySchema.parse(parameters.appliedPlan);
 	assert.deepEqual(plan, parameters.appliedPlan, 'ACCEPTANCE_START_RAW: Public Workday authority must already be canonical without normalization');
 	assert.equal(plan.id, id, 'ACCEPTANCE_START_ID: Applied plan differs from public run');
 	assert.equal(plan.teamId, run.teamId, 'ACCEPTANCE_START_TEAM: Applied plan differs from public team');

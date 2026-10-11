@@ -40,6 +40,13 @@ describe('capacity-provider guarantee execution bindings', () => {
 		expect(refs.indexOf(product)).toBeGreaterThan(refs.indexOf('agent.golden.live.campaign'));
 		// SDK owns the semantic assertions and native integration; do not copy its verifier here.
 		expect(registry.verifiers[product]).toBeUndefined();
+		const book = 'agent.golden.architecture-book-knowledge-live-1';
+		expect(manifest.acceptanceCriteria.filter((value: { criterion: string }) =>
+			value.criterion === '936013d37582fbedab56e17601be3581682b72565d8b7fdaedb75f6a3cd2e64f'))
+			.toEqual([{ criterion: '936013d37582fbedab56e17601be3581682b72565d8b7fdaedb75f6a3cd2e64f',
+				verifierRefs: ['agent.golden.live.campaign', book] }]);
+		expect(refs.filter(value => value === book)).toHaveLength(1);
+		expect(refs.indexOf(book)).toBeGreaterThan(refs.indexOf('agent.golden.live.campaign'));
 	});
 	it('binds the exact model clock criterion to complete post campaign native readback without substituting component evidence', () => {
 		const manifest = parse(readFileSync(resolve(root, 'guarantees/agent/golden/sdk-complete.guarantee.yaml'), 'utf8'));
@@ -75,7 +82,9 @@ describe('capacity-provider guarantee execution bindings', () => {
 			{ criterion: '6d6749cd8c2676c6c50c009b55025ec3b951589db602440f63b76ba021159f20', verifierRefs: ['agent.golden.live.graph'] },
 			{ criterion: '3bf7f808c3baf5cc63fc5e8e8c065bc2cd87dea9e2df9aae4d1924565af6acd8', verifierRefs: ['agent.golden.live.reporter'] },
 			{ criterion: '9a9b626b666f555139baf8aabcead659ca30e7f88ad8002f73f2b35ddf542ad4', verifierRefs: ['sdk.golden.live.product'] },
-			{ criterion: '8fc0d803455b8e437a458732d5b6ba575f885eb35ba387e93e14230dd40d27b7', verifierRefs: ['sdk.golden.live.product'] }]);
+			{ criterion: '8fc0d803455b8e437a458732d5b6ba575f885eb35ba387e93e14230dd40d27b7', verifierRefs: ['sdk.golden.live.product'] },
+			{ criterion: '936013d37582fbedab56e17601be3581682b72565d8b7fdaedb75f6a3cd2e64f',
+				verifierRefs: ['agent.golden.live.campaign', 'agent.golden.architecture-book-knowledge-live-1'] }]);
 		const scene = parse(readFileSync(resolve(root, manifest.scene.manifest), 'utf8'));
 		expect(scene.scope).toBe('local-integrated-runtime');
 		const refs = scene.workflow.map((step: { action: { verifier: string } }) => step.action.verifier);

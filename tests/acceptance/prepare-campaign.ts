@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, join, resolve } from 'node:path';
+import { parse } from 'yaml';
 import { read } from './acceptance-cli.ts';
 import { freshSdkDraft, requirePlanningWindow, sdkProposalText, sdkCampaignWindow } from './campaign.ts';
 import { readCampaignProjectLibraries, readPreRunCampaignFreeze, verifyRuntimeClosure } from './freeze-integrity.ts';
@@ -16,7 +17,15 @@ export function requirePinnedCodex(pinned: string, installed: string): void {
 export function verifySdkArchitectureBook(readback: Row, reference: Row): void {
 	assert.equal(readback.repoId, reference.repository, 'ACCEPTANCE_CAMPAIGN_BOOK: Resolved TreeDX repository mismatch');
 	assert.equal(readback.resolvedRef, reference.commit, 'ACCEPTANCE_CAMPAIGN_BOOK: Resolved TreeDX commit mismatch');
-	const bookFile = (readback.files as Row[] | undefined)?.find(file => file.path === reference.path);
+	assert.ok(Array.isArray(readback.files) && readback.files.length === 1,
+		'ACCEPTANCE_CAMPAIGN_BOOK: One complete exact Book file required');
+	const bookFile = readback.files[0] as Row;
+	assert.equal(bookFile?.path, reference.path, 'ACCEPTANCE_CAMPAIGN_BOOK: Exact Book path required');
+	assert.equal(typeof bookFile?.content, 'string', 'ACCEPTANCE_CAMPAIGN_BOOK: Original Book bytes required');
+	const document = String(bookFile.content).match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)$/u);
+	assert.ok(document, 'ACCEPTANCE_CAMPAIGN_BOOK: Original Book frontmatter required');
+	assert.deepEqual(parse(document[1]!), bookFile.frontmatter,
+		'ACCEPTANCE_CAMPAIGN_BOOK: Parsed readback contradicts original Book bytes');
 	assert.equal(bookFile?.frontmatter?.id, reference.id, 'ACCEPTANCE_CAMPAIGN_BOOK: Pinned TreeDX Book identity mismatch');
 	assert.equal(bookFile?.frontmatter?.title, reference.title, 'ACCEPTANCE_CAMPAIGN_BOOK: Pinned TreeDX Book title mismatch');
 	assert.equal(bookFile?.frontmatter?.status, 'published', 'ACCEPTANCE_CAMPAIGN_BOOK: Pinned TreeDX Book is not published');

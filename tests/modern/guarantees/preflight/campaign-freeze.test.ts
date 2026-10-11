@@ -1,6 +1,7 @@
 import { beforeEach, afterEach, expect, it, vi } from 'vitest';
 import { createHash } from 'node:crypto';
 import { resolve } from 'node:path';
+import { stringify } from 'yaml';
 
 const state = vi.hoisted(() => ({ bytes: '{}', reads: [] as string[], files: new Map<string, string>(),
 	commands: vi.fn(), writes: vi.fn(), execute: vi.fn(), publicRead: vi.fn() }));
@@ -149,10 +150,13 @@ it('uses the original operator proposal and start and denies changed CLI intent 
 	expect(authority).toBeTruthy();
 	const document = nativeFs.readFileSync(resolve(authority!, 'docs/agent-acceptance.md'), 'utf8');
 	const seed = nativeFs.readFileSync(resolve(authority!, 'seeds/treeseed.yaml'), 'utf8');
-	const canonical = sdkProposalText(document), head = 'a'.repeat(40), content = 'Controlled published Book';
-	const digest = `sha256:${createHash('sha256').update(content).digest('hex')}`;
+	const canonical = sdkProposalText(document), head = 'a'.repeat(40);
 	const supplied = campaignInputs(portfolioRelations(document, seed).projects.map(project => project.slug), seed);
 	const sdk = supplied.allocationInputsByRun.sdk!;
+	const bookFrontmatter = { id: canonical.architectureBook.id, title: canonical.architectureBook.title,
+		schemaVersion: 'treeseed.book/v3', projectId: sdk.input.projects[0], revision: 1, status: 'published' };
+	const content = `---\n${stringify(bookFrontmatter)}---\n\nControlled published Book\n`;
+	const digest = `sha256:${createHash('sha256').update(content).digest('hex')}`;
 	const template = { status: 'draft', projectId: sdk.input.projects[0], contentProvenance: {},
 		executionPlan: { workItems: canonical.workItems.map(item => ({ ...item, activity: 'acting', review: 'required',
 			maximumReviewCycles: 2, requestedPermissions: { content: { write: item.workspace === 'treedx' ? ['knowledge'] : [] } },
@@ -179,8 +183,7 @@ it('uses the original operator proposal and start and denies changed CLI intent 
 				revision: scenario === 'policy-drift' ? 3 : supplied.workdayPolicy.revision };
 			if (args[0] === 'dev') return { status: 'active', manifestDigest: digest, guestImageDigest: digest };
 			if (args[0] === 'library') return { result: { repoId: 'repo_supplied', resolvedRef: head,
-				files: [{ path: canonical.architectureBook.path, content, frontmatter: { ...canonical.architectureBook,
-					schemaVersion: 'treeseed.book/v3', projectId: template.projectId, revision: 1, status: 'published' } }] } };
+				files: [{ path: canonical.architectureBook.path, content, frontmatter: bookFrontmatter }] } };
 			if (args[0] === 'agents') return { agents: ['architect', 'researcher', 'tester', 'engineer', 'technical-writer', 'releaser', 'reviewer', 'reporter']
 				.map(agentSlug => ({ agentSlug, definitionRevision: head, definition: { capabilities: [], activityProfiles: {
 					chat: { prompt: { system: 'For coordination-only messages; Inspect project files only when asked.' } },

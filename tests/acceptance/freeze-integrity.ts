@@ -87,6 +87,11 @@ export function readPreRunCampaignFreeze() {
 	let repositories: SeedBundle['resources']['repositories'] = [];
 	let projects: SeedBundle['resources']['projects'] = [];
 	try {
+		// Reject malformed base values before parsing and validating the whole
+		// seed. Exact required keys still come only from validated seed authority.
+		const bases = row(row(manifest).repositoryBases);
+		assert.ok(Object.keys(bases).length > 0);
+		for (const commit of Object.values(bases)) assert.ok(typeof commit === 'string' && /^[a-f0-9]{40}$/u.test(commit));
 		const seedBytes = readFileSync(resolve(platform, 'seeds/treeseed.yaml'), 'utf8');
 		const seed = parse(seedBytes) as SeedBundle;
 		assert.deepEqual(validateSeedBundle(seed), [], 'ACCEPTANCE_CAMPAIGN_FREEZE: Valid current seed bundle required');
@@ -112,9 +117,7 @@ export function readPreRunCampaignFreeze() {
 		});
 		assert.equal(new Set(repositories.map(repository => repository.key)).size, repositories.length);
 		assert.equal(new Set(repositories.map(repository => repository.gitUrl)).size, repositories.length);
-		const bases = row(row(manifest).repositoryBases);
 		assert.deepEqual(Object.keys(bases).sort(), repositories.map(repository => repository.key).sort());
-		for (const commit of Object.values(bases)) assert.ok(typeof commit === 'string' && /^[a-f0-9]{40}$/u.test(commit));
 	} catch (cause) { throw new Error('ACCEPTANCE_CAMPAIGN_FREEZE: Invalid expanded operator authority', { cause }); }
 	return { path, bytes, manifest: row(manifest), projects, repositories, sdkInput: row(row(row(manifest).allocationInputsByRun).sdk).input };
 }

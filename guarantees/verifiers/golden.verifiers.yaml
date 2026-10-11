@@ -1,6 +1,11 @@
 schemaVersion: treeseed.guarantee-verifiers/v1
 ownerPackage: "@treeseed/agent"
 verifiers:
+  agent.golden.canonical-workday-raw-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/monitoring/live-assignment-records.test.ts
+    testName: "denies normalized applied workday identity without retaining observations or rewriting original public bytes"
   agent.golden.normal-sdk-legacy-denial-binding-unit:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

@@ -91,7 +91,7 @@ it('native configured Kernel Git result and public SDK assignment reads reach th
 		expect(unobserved.size).toBe(0); expect(run).toEqual(deniedRun); expect(retained).toEqual(held); expect(inspections).toBe(1);
 		parameters.deadlineAt = originalDeadline;
 		const originalFailures = structuredClone(failed); mode = 'exact'; await execute();
-		expect(retained).toEqual(held); expect(failed).toEqual(originalFailures); expect(failed).toHaveLength(11);
+		expect(retained).toEqual(held); expect(failed).toEqual(originalFailures); expect(failed).toHaveLength(14);
 		expect(requests.filter(value => value === `GET /v1/teams/${f.attempt.teamId}/capacity/assignments/${f.attempt.id}`)).toHaveLength(17);
 		expect(requests.filter(value => value === `GET /v1/teams/${f.attempt.teamId}/workday-runs/${f.attempt.workdayId}`)).toHaveLength(17);
 		expect(requests).toHaveLength(34);

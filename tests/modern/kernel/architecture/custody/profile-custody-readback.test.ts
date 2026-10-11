@@ -8,6 +8,7 @@ import { portableProfile } from '../portable/portable-kernel-fixture.ts';
 import { verifyGovernedProfile, verifyHandlerInspection } from '../../../../acceptance/workday/support/assignment-authority.ts';
 import { inspectLiveAssignmentProfile } from '../../../../acceptance/workday/support/monitoring/live-assignment-records.ts';
 import { liveAssignmentRecord } from '../../../guarantees/monitoring/live-assignment-fixture.ts';
+import { profileOrderFixture, profileOrderFailures, mutateProfileOrder } from './graph/profile-order-fixture.ts';
 await import('../../../../acceptance/workday/profile-custody.test.ts');
 
 function input() {
@@ -21,6 +22,24 @@ function input() {
 	return { item: { id: attempt.id, assignmentAttempt: attempt }, file: { path, content } };
 }
 describe('independent governed profile assertion contract', () => {
+	it('rejects graph dependencies that differ from independently read renamed governed profile bytes without rewriting authority', () => {
+		const f = profileOrderFixture(), inspect = (value: typeof f) => Reflect.apply(verifyGovernedProfile, undefined, [value.item, value.file, value.graph]);
+		const before = structuredClone(f); expect(() => inspect(f)).not.toThrow(); expect(f).toEqual(before);
+		for (const mode of profileOrderFailures) {
+			const changed = structuredClone(f); mutateProfileOrder(changed.graph, mode); const held = structuredClone(changed);
+			expect.soft(() => inspect(changed), mode).toThrow('ACCEPTANCE_PROFILE_DEPENDENCY'); expect(changed).toEqual(held);
+		}
+		expect(() => inspect(f)).not.toThrow(); expect(f).toEqual(before);
+		const independent = profileOrderFixture([]); independent.graph.edges = [];
+		expect(() => inspect(independent)).not.toThrow();
+		const unreviewed = profileOrderFixture(); unreviewed.graph.nodes.pop(); unreviewed.graph.edges[0]!.fromNodeId = 'earlier-actor';
+		expect(() => inspect(unreviewed)).not.toThrow();
+		const external = profileOrderFixture(), attempt = external.item.assignmentAttempt;
+		Reflect.set(external.graph, 'nodes', [external.graph.nodes[0], { id: 'missing-class', teamId: attempt.teamId, projectId: attempt.projectId,
+			sourceRef: attempt.sourceRef, kind: 'condition', condition: { conditionType: 'external', expectedState: 'agent-class:earlier-configured-class', subjectRef: attempt.sourceRef } }]);
+		external.graph.edges[0]!.fromNodeId = 'missing-class'; expect(() => inspect(external)).not.toThrow();
+		Reflect.set(external.graph, 'nodes', [external.graph.nodes[0]]); expect(() => inspect(external)).toThrow('ACCEPTANCE_PROFILE_DEPENDENCY');
+	});
 	it('live profile inspection reads the independent canonical assignment exact governed bytes and public handler boundary before accepting a new observation', () => {
 		const f = input(), item = liveAssignmentRecord(f.item.assignmentAttempt), attempt = f.item.assignmentAttempt, profile = attempt.effectiveProfile;
 		const handler = { id: profile.handler, origin: profile.handlerOrigin };

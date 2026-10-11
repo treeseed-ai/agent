@@ -1,6 +1,16 @@
 schemaVersion: treeseed.guarantee-verifiers/v1
 ownerPackage: "@treeseed/agent"
 verifiers:
+  agent.golden.governed-profile-order-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/custody/profile-custody-readback.test.ts
+    testName: "rejects graph dependencies that differ from independently read renamed governed profile bytes without rewriting authority"
+  agent.golden.governed-profile-order-native:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/custody/graph/living-graph-native.test.ts
+    testName: "native exact Git profile and public SDK graph reads reject changed governed dependencies and retain denied observations before unchanged retry"
   agent.golden.workday-start-receipt-unit:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

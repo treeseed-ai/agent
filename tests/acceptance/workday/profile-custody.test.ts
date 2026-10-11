@@ -49,12 +49,13 @@ test('Actual completed project-owned handler retains its exact governed selectio
 	// source-to-selected-guest-build hash or executable handler-code observation.
 });
 test('Every actual assignment matches independently read exact governed profile bytes handler prompt parameters and narrower grants', { timeout: 120_000 }, () => {
-	const f = evidence(), cache = new Map<string, Row>();
+	const f = evidence(), cache = new Map<string, Row>(), graph = read(['execution', 'graph', '--server', 'local'], f.team);
 	for (const item of f.assignments) {
 		const attempt = assignmentAttemptSchema.parse(item.assignmentAttempt);
 		const file = readGovernedContentFile(attempt.effectiveProfile.profileRef, attempt.projectId, f.team, cache, 'ACCEPTANCE_PROFILE');
-		verifyGovernedProfile(item, file);
+		verifyGovernedProfile(item, file, graph);
 	}
+	assert.deepEqual(read(['execution', 'graph', '--server', 'local'], f.team), graph);
 	assert.deepEqual(readWorkdayAssignments(f.id, String(f.run.startedAt), f.team), f.assignments);
 });
 test('Public assignment views preserve whole canonical attempts results and original authority across repeated readback', { timeout: 120_000 }, () => {

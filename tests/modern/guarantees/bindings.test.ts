@@ -5,7 +5,8 @@ import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
 
 const root = resolve(import.meta.dirname, '../../..');
-const sdkAuthoredRowCriteria = [
+const sdkFixedGraphCriteria = [
+	'47b521b0831f30babf7664f8e12de9b9336a9c949de98473e1767212d7a76cd2',
 	'95e989b76535f28f68527b4e3cf57ca49437695c9f97c57acdfca81d2f62055a',
 	'96a6b0f3ae0587119f592e97fc93efdaae676674a34fb9e9511fd0a9a044fd6e',
 	'11dc8f94be641ad4a78110ac48b1a33144ab46b5a4faac7b3eba1c3873360ec6',
@@ -41,7 +42,7 @@ describe('capacity-provider guarantee execution bindings', () => {
 		const product = 'sdk.golden.live.product';
 		for (const criterion of ['9a9b626b666f555139baf8aabcead659ca30e7f88ad8002f73f2b35ddf542ad4',
 			'8fc0d803455b8e437a458732d5b6ba575f885eb35ba387e93e14230dd40d27b7',
-			...sdkAuthoredRowCriteria,
+			...sdkFixedGraphCriteria,
 			'4f295a5342aaf08b1ca056a5aa8bc00df27a07cf116b6721b6179d575c6b76df']) {
 			expect(manifest.acceptanceCriteria.filter((value: { criterion: string }) => value.criterion === criterion))
 				.toEqual([{ criterion, verifierRefs: [product] }]);
@@ -85,7 +86,7 @@ describe('capacity-provider guarantee execution bindings', () => {
 			'b918b519ac545fdd61faab208687ccc64e1f3d03c9a84dfc57a5cfee6190f3f3',
 		].map(criterion => ({ criterion, verifierRefs: ['agent.golden.live.campaign-freeze'] }));
 		expect(manifest.acceptanceCriteria).toEqual([
-			...sdkAuthoredRowCriteria.map(criterion => ({ criterion, verifierRefs: ['sdk.golden.live.product'] })),
+			...sdkFixedGraphCriteria.map(criterion => ({ criterion, verifierRefs: ['sdk.golden.live.product'] })),
 			{ criterion: 'b635827ed7862d56b8764dfad30114b9ee18d02b4aa709a257841e18a1bd0f0d',
 			verifierRefs: ['agent.golden.execution-clock-observation-live-1', 'api.golden.execution-protected-observation-live-1'] },
 			{ criterion: '7eaf9fdc1c264e2d0b28d2fc751da33a2ffcf98ca0d6446ac6e8672503dfa533',

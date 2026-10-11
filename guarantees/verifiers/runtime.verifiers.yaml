@@ -155,7 +155,7 @@ verifiers:
     kind: nodeTestCase
     ownerPackage: "@treeseed/agent"
     testFile: tests/acceptance/workday/living-graph.test.ts
-    testName: "Living graph read-only reconciliation and node inspection preserve assignments usage and every public graph record"
+    testName: "Living graph identical reconciliation and node inspection preserve assignments usage and every public graph record"
   agent.workday.produce-summary:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

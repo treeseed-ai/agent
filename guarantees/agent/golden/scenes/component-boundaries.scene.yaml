@@ -987,6 +987,12 @@ workflow:
   - id: architecture-living-graph-unit-5
     action: { verifier: agent.golden.architecture-living-graph-unit-5 }
     expect: { status: passed }
+  - id: architecture-living-graph-unit-6
+    action: { verifier: agent.golden.architecture-living-graph-unit-6 }
+    expect: { status: passed }
+  - id: architecture-living-graph-native-1
+    action: { verifier: agent.golden.architecture-living-graph-native-1 }
+    expect: { status: passed }
   - id: architecture-source-publication-unit-1
     action: { verifier: agent.golden.architecture-source-publication-unit-1 }
     expect: { status: passed }

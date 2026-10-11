@@ -33,6 +33,9 @@ workflow:
   - id: complete-graph-history
     action: { verifier: agent.golden.architecture-graph-history-live-1 }
     expect: { status: passed }
+  - id: identical-graph-reconciliation
+    action: { verifier: agent.golden.architecture-living-graph-live-2 }
+    expect: { status: passed }
   - id: sdk-product
     action: { verifier: sdk.golden.live.product }
     expect: { status: passed }

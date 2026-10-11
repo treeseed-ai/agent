@@ -103,3 +103,5 @@ acceptanceCriteria:
     verifierRefs: [agent.golden.live.campaign, sdk.golden.live.product]
   - criterion: ce87c6c4895321258d1ff9d3f00d7e0db7f1adb6639696756208e784d546667a
     verifierRefs: [agent.golden.live.graph, sdk.golden.live.product]
+  - criterion: 4ff1e6e55ccb0038c0f79331029c2ad083409c36058b1e3335b1b44a263b2ce0
+    verifierRefs: [agent.golden.live.graph, agent.golden.architecture-graph-history-live-1, agent.golden.architecture-living-graph-live-2]

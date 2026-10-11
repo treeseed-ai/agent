@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { assignmentWorkspaceSchema, effectiveActivityProfileSchema, exactGrantSchema, exactEntityReferenceSchema, assignmentAttemptSchema, assignmentReferenceSchema, assignmentResultSchema, verificationRecordSchema, validateAgentDefinitionModel, executionEdgeSchema } from '@treeseed/sdk/agent-capacity';
+import { activityProfileSchema, assignmentWorkspaceSchema, effectiveActivityProfileSchema, exactGrantSchema, exactEntityReferenceSchema, assignmentAttemptSchema, assignmentReferenceSchema, assignmentResultSchema, verificationRecordSchema, validateAgentDefinitionModel, executionEdgeSchema } from '@treeseed/sdk/agent-capacity';
 import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { parse } from 'yaml';
@@ -120,6 +120,16 @@ export function verifyGovernedProfile(item: Row, file: Row, graph?: Row): void {
 		const selected = nodes.filter(node => node.id === attempt.nodeId);
 		assert.ok(selected.length === 1 && scope(selected[0]!) && selected[0]!.pairRole === 'actor'
 			&& selected[0]!.agentClass === attempt.agentClass && selected[0]!.workItemId === attempt.workItemId, `${code}: Exact original Actor required`);
+		const requestCode = 'ACCEPTANCE_PROFILE_PERMISSION_REQUEST';
+		const requested = activityProfileSchema.shape.permissions.safeParse(selected[0]!.requestedPermissions);
+		assert.ok(requested.success, `${requestCode}: Canonical original request required`);
+		const permissions = requested.data;
+		for (const [wanted, ceiling] of [[permissions.tools, activity.permissions.tools],
+			[permissions.content.read, activity.permissions.content.read], [permissions.content.write, activity.permissions.content.write]])
+			assert.ok(wanted.every(value => ceiling.some(allowed => allowed === value)), `${requestCode}: Request exceeds governed ceiling`);
+		assert.ok(attempt.grant.tools.every(tool => permissions.tools.includes(tool)), `${requestCode}: Tool grant exceeds authored request`);
+		for (const [refs, models] of [[attempt.grant.contentRead, permissions.content.read], [attempt.grant.contentWrite, permissions.content.write]] as const)
+			assert.ok(refs.every(ref => ref.store !== 'treedx' || models.some(model => model === ref.model)), `${requestCode}: Content grant exceeds authored request`);
 		const expected: string[] = [];
 		for (const agentClass of activity.dependsOn?.agents ?? []) {
 			const predecessors = nodes.filter(node => scope(node) && node.pairRole === 'actor' && node.agentClass === agentClass);

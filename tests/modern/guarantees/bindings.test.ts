@@ -141,8 +141,8 @@ describe('capacity-provider guarantee execution bindings', () => {
 			'b918b519ac545fdd61faab208687ccc64e1f3d03c9a84dfc57a5cfee6190f3f3',
 		].map(criterion => ({ criterion, verifierRefs: ['agent.golden.live.campaign-freeze'] }));
 		expect(manifest.acceptanceCriteria).toEqual([
-			{ criterion: 'a6f86094d3c2dc802a54319c3b55c1fb50fa3f1bdc5f9ee831088347c22732bb', verifierRefs: ['agent.golden.architecture-profile-custody-live-1', 'sdk.golden.live.product'] },
 			...sdkPermissionCriteria.map(criterion => ({ criterion, verifierRefs: ['agent.golden.architecture-profile-custody-live-1', 'sdk.golden.live.product'] })),
+			{ criterion: 'a6f86094d3c2dc802a54319c3b55c1fb50fa3f1bdc5f9ee831088347c22732bb', verifierRefs: ['agent.golden.architecture-profile-custody-live-1', 'sdk.golden.live.product'] },
 			...sdkFixedGraphCriteria.map(criterion => ({ criterion, verifierRefs: ['sdk.golden.live.product'] })),
 			{ criterion: 'b635827ed7862d56b8764dfad30114b9ee18d02b4aa709a257841e18a1bd0f0d',
 			verifierRefs: ['agent.golden.execution-clock-observation-live-1', 'api.golden.execution-protected-observation-live-1'] },

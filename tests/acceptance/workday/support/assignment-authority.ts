@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { assignmentWorkspaceSchema, effectiveActivityProfileSchema, exactGrantSchema, exactEntityReferenceSchema, assignmentAttemptSchema, assignmentReferenceSchema, assignmentResultSchema, verificationRecordSchema, validateAgentDefinitionModel } from '@treeseed/sdk/agent-capacity';
+import { assignmentWorkspaceSchema, effectiveActivityProfileSchema, exactGrantSchema, exactEntityReferenceSchema, assignmentAttemptSchema, assignmentReferenceSchema, assignmentResultSchema, verificationRecordSchema, validateAgentDefinitionModel, executionEdgeSchema } from '@treeseed/sdk/agent-capacity';
 import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { parse } from 'yaml';
@@ -89,7 +89,7 @@ export function verifyModelClockEvidence(item: Row, event: Row): void {
 	assert.equal(ids.size, actual.completedChecks); assert.equal(pending.size, 0, 'ACCEPTANCE_MODEL_CLOCK_PENDING');
 }
 
-export function verifyGovernedProfile(item: Row, file: Row): void {
+export function verifyGovernedProfile(item: Row, file: Row, graph?: Row): void {
 	const attempt = assignmentAttemptSchema.parse(item.assignmentAttempt), profile = attempt.effectiveProfile;
 	assert.equal(file.path, profile.profileRef.path, 'ACCEPTANCE_PROFILE_PATH: Exact governed path required');
 	assert.equal(typeof file.content, 'string', 'ACCEPTANCE_PROFILE_BYTES: Original governed bytes required');
@@ -110,6 +110,41 @@ export function verifyGovernedProfile(item: Row, file: Row): void {
 	assert.deepEqual(profile.parameters, activity.parameters); assert.deepEqual(profile.additionalContext, activity.additionalContext);
 	assert.deepEqual(profile.permissionCeiling, activity.permissions);
 	verifyAssignmentAuthority(item);
+	if (graph && profile.activity === 'acting') {
+		const code = 'ACCEPTANCE_PROFILE_DEPENDENCY';
+		assert.ok(graph.teamId === attempt.teamId && Array.isArray(graph.nodes) && Array.isArray(graph.edges), `${code}: Complete owning graph required`);
+		const nodes: Row[] = graph.nodes;
+		assert.ok(nodes.every(node => node && typeof node === 'object' && !Array.isArray(node))
+			&& new Set(nodes.map(node => node.id)).size === nodes.length, `${code}: Unique original graph nodes required`);
+		const scope = (node: Row) => node.teamId === attempt.teamId && node.projectId === attempt.projectId && isDeepStrictEqual(node.sourceRef, attempt.sourceRef);
+		const selected = nodes.filter(node => node.id === attempt.nodeId);
+		assert.ok(selected.length === 1 && scope(selected[0]!) && selected[0]!.pairRole === 'actor'
+			&& selected[0]!.agentClass === attempt.agentClass && selected[0]!.workItemId === attempt.workItemId, `${code}: Exact original Actor required`);
+		const expected: string[] = [];
+		for (const agentClass of activity.dependsOn?.agents ?? []) {
+			const predecessors = nodes.filter(node => scope(node) && node.pairRole === 'actor' && node.agentClass === agentClass);
+			if (predecessors.length) for (const predecessor of predecessors) {
+				if (predecessor.id === attempt.nodeId) continue;
+				const paired = nodes.filter(node => scope(node) && node.workItemId === predecessor.workItemId && node.pairRole === 'reviewer');
+				assert.ok(paired.length <= 1, `${code}: Ambiguous reviewed predecessor`);
+				expected.push(String(paired[0]?.id ?? predecessor.id));
+			} else {
+				const conditions = nodes.filter(node => scope(node) && node.kind === 'condition' && row(node.condition).conditionType === 'external'
+					&& row(node.condition).expectedState === `agent-class:${agentClass}` && isDeepStrictEqual(row(node.condition).subjectRef, attempt.sourceRef));
+				assert.equal(conditions.length, 1, `${code}: Exact missing-class condition required`); expected.push(String(conditions[0]!.id));
+			}
+		}
+		const edges = (graph.edges as unknown[]).map(value => { const checked = executionEdgeSchema.safeParse(value);
+			assert.ok(checked.success, `${code}: Canonical original graph edge required`); return checked.data; });
+		assert.equal(new Set(edges.map(edge => edge.id)).size, edges.length, `${code}: Duplicate edge identity`);
+		const incoming = edges.filter(edge => edge.toNodeId === attempt.nodeId && edge.provenance === 'profile-agent');
+		assert.equal(incoming.length, expected.length, `${code}: Graph must retain every governed dependency and no substitute`);
+		for (const id of expected) {
+			const matching = incoming.filter(edge => edge.fromNodeId === id);
+			assert.ok(matching.length === 1 && matching[0]!.teamId === attempt.teamId && matching[0]!.graphRevisionRemoved === undefined
+				&& isDeepStrictEqual(matching[0]!.sourceRef, attempt.sourceRef), `${code}: Exact original dependency edge required`);
+		}
+	}
 }
 export function verifyHandlerInspection(item: Row, catalog: Row, selected: Row): void {
 	const attempt = assignmentAttemptSchema.parse(item.assignmentAttempt), profile = attempt.effectiveProfile;

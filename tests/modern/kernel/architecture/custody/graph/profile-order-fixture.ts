@@ -5,11 +5,11 @@ import { request } from '../../../provider-kernel-fixture.ts';
 import { portableProfile } from '../../portable/portable-kernel-fixture.ts';
 
 export const profileOrderFailures = ['missing', 'extra', 'duplicate', 'actor', 'class', 'source', 'team', 'project', 'removed', 'foreign', 'work-item'] as const;
-export function profileOrderFixture() {
+export function profileOrderFixture(dependencies = ['earlier-configured-class']) {
 	const definition = portableProfile(), activity = definition.activityProfiles.acting!;
-	activity.dependsOn = { agents: ['earlier-configured-class'] };
+	activity.dependsOn = { agents: dependencies };
 	const content = stringify(definition), path = 'agents/renamed-author.yaml';
-	const attempt = assignmentAttemptSchema.parse({ ...request().assignment.assignmentAttempt, agentClass: definition.agentClass,
+	const attempt = assignmentAttemptSchema.parse({ ...assignmentAttemptSchema.parse(request().assignment.assignmentAttempt), agentClass: definition.agentClass,
 		effectiveProfile: { profileRef: { store: 'treedx', model: 'agent', id: definition.id, revision: 1,
 			digest: `sha256:${createHash('sha256').update(content).digest('hex')}`, repository: 'native-library', commit: 'a'.repeat(40), path },
 			activity: 'acting', handler: activity.handler, handlerOrigin: 'agent-package', prompt: activity.prompt,

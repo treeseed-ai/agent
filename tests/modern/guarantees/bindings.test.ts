@@ -73,6 +73,7 @@ describe('capacity-provider guarantee execution bindings', () => {
 			testFile: 'tests/acceptance/workday/record-custody.test.ts',
 			testName: 'Every native managed attempt exposes one unchanged canonical lease reservation result and UsageSettlement across public views' });
 		for (const criterion of ['6e8f096457026f1992cb08a4e36f02a7c5b55b472e7019ff615866256fac85d2',
+			'2b8cb6c3b6c1014b10ea1263a4e5f0aea2a1b93ae71ec69a0abbb410b304fab1',
 			'0cb616106a09f5279323a975d315c59ebefb6e5e0db2ef52e153c0995038158f',
 			'f02eb0d95e0572b52f73700b689cd584d9ae57a880ca5658546c1cae44b535e4'])
 			expect(manifest.acceptanceCriteria.filter((value: { criterion: string }) => value.criterion === criterion))
@@ -126,6 +127,8 @@ describe('capacity-provider guarantee execution bindings', () => {
 			{ criterion: '0cb616106a09f5279323a975d315c59ebefb6e5e0db2ef52e153c0995038158f',
 				verifierRefs: ['agent.golden.live.campaign', 'sdk.golden.live.product'] },
 			{ criterion: 'f02eb0d95e0572b52f73700b689cd584d9ae57a880ca5658546c1cae44b535e4',
+				verifierRefs: ['agent.golden.live.campaign', 'sdk.golden.live.product'] },
+			{ criterion: '2b8cb6c3b6c1014b10ea1263a4e5f0aea2a1b93ae71ec69a0abbb410b304fab1',
 				verifierRefs: ['agent.golden.live.campaign', 'sdk.golden.live.product'] }]);
 		const scene = parse(readFileSync(resolve(root, manifest.scene.manifest), 'utf8'));
 		expect(scene.scope).toBe('local-integrated-runtime');

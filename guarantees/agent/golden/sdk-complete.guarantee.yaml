@@ -17,6 +17,8 @@ acceptanceCriteria:
     verifierRefs: [agent.golden.live.reporter, agent.golden.live.settlement]
   - criterion: 5a286ca84dffc7ea229c2035a106c26aa0f8fe4e78da3cb035b1bc4859810e95
     verifierRefs: [agent.golden.live.campaign-freeze]
+  - criterion: ab2ac9ce3bbbf837b5c65b9b6246aa6850713b4d82fc15c52d590144dd265a0b
+    verifierRefs: [agent.golden.live.campaign-freeze]
   - criterion: 1dd6f762ce6507847246f790bf57d735bcefe27c21bf8338a179dddbe3d0f930
     verifierRefs: [agent.golden.live.campaign-freeze]
   - criterion: ee31029693c8c8c0e9e1b8506a341cbb4ddbc15c585cf16de713dc540f68bf55

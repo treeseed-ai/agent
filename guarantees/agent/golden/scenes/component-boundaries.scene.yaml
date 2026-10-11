@@ -231,6 +231,9 @@ workflow:
   - id: campaign-freeze-path-unit
     action: { verifier: agent.golden.campaign-freeze-path-unit }
     expect: { status: passed }
+  - id: campaign-seed-custody-unit
+    action: { verifier: agent.golden.campaign-seed-custody-unit }
+    expect: { status: passed }
   - id: campaign-freeze-native
     action: { verifier: agent.golden.campaign-freeze-native }
     expect: { status: passed }

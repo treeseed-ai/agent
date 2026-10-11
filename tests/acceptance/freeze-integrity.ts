@@ -2,8 +2,9 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { workdayIntentRequestSchema } from '@treeseed/sdk/operator-contracts';
+import { canonicalSeedBundlePayload, validateSeedBundle, workdayIntentRequestSchema, type SeedBundle } from '@treeseed/sdk/operator-contracts';
 import { workdayPolicySchema } from '@treeseed/sdk/agent-capacity';
+import { parse } from 'yaml';
 import { portfolioRelations, readPortfolioLibraries } from './workday/support/portfolio-relations.ts';
 
 type Row = Record<string, unknown>;
@@ -82,8 +83,15 @@ export function readPreRunCampaignFreeze() {
 	try { bytes = readFileSync(path, 'utf8'); manifest = JSON.parse(bytes); }
 	catch { assert.fail('ACCEPTANCE_CAMPAIGN_FREEZE: Missing or malformed operator manifest'); }
 	try {
+		const seedBytes = readFileSync(resolve(platform, 'seeds/treeseed.yaml'), 'utf8');
+		const seed = parse(seedBytes) as SeedBundle;
+		assert.deepEqual(validateSeedBundle(seed), [], 'ACCEPTANCE_CAMPAIGN_FREEZE: Valid current seed bundle required');
+		const computed = `sha256:${createHash('sha256').update(canonicalSeedBundlePayload(seed)).digest('hex')}`;
+		assert.equal(seed.digest, computed, 'ACCEPTANCE_CAMPAIGN_FREEZE: Seed canonical digest mismatch');
+		assert.deepEqual(row(manifest).seed, { name: seed.name, version: seed.version, digest: seed.digest },
+			'ACCEPTANCE_CAMPAIGN_FREEZE: Frozen seed identity differs from current source');
 		const expected = portfolioRelations(readFileSync(resolve(platform, 'docs/agent-acceptance.md'), 'utf8'),
-			readFileSync(resolve(platform, 'seeds/treeseed.yaml'), 'utf8'));
+			seedBytes);
 		verifyPreRunCampaignInputs(manifest, expected.projects.map(project => project.slug));
 	} catch (cause) { throw new Error('ACCEPTANCE_CAMPAIGN_FREEZE: Invalid expanded operator authority', { cause }); }
 	return { path, bytes, manifest: row(manifest), sdkInput: row(row(row(manifest).allocationInputsByRun).sdk).input };

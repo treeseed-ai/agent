@@ -67,8 +67,10 @@ it('denies absent malformed and changed seed identity or canonical content befor
 	state.files.set('/supplied-platform/docs/agent-acceptance.md', document);
 	state.files.set('/supplied-platform/seeds/treeseed.yaml', seed); state.bytes = JSON.stringify(original);
 	const accepted = readPreRunCampaignFreeze();
-	for (const value of [undefined, null, '', [], {}, { ...original.seed, name: 'foreign' },
+	for (const value of [undefined, null, '', [], {}, { name: original.seed!.name },
+		{ ...original.seed, name: '' }, { ...original.seed, name: 'foreign' },
 		{ ...original.seed, version: 0 }, { ...original.seed, version: 12 }, { ...original.seed, version: '11' },
+		{ ...original.seed, version: 1.5 }, { ...original.seed, digest: null },
 		{ ...original.seed, digest: 'staging' }, { ...original.seed, digest: `sha256:${'0'.repeat(64)}` }]) {
 		state.bytes = JSON.stringify({ ...original, seed: value }); const held = state.bytes;
 		expect.soft(() => prepareSdkCampaign('/draft.json', '/sdk.freeze.json', 'supplied-team')).toThrow('ACCEPTANCE_CAMPAIGN_FREEZE');

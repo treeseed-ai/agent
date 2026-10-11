@@ -327,9 +327,13 @@ it('native SDK preparation retains invalid campaign bytes and creates no proposa
 		expect(original.bytes).toBe(complete); expect(readFileSync(campaign, 'utf8')).toBe(complete);
 		const deniedSeeds: Array<{ campaign: string; seed: string; denied: boolean }> = [];
 		const attempts = [
-			...[undefined, null, {}, { ...input.seed, name: 'foreign' }, { ...input.seed, version: 12 },
+			...[undefined, null, '', [], {}, { name: input.seed!.name }, { ...input.seed, name: '' },
+				{ ...input.seed, name: 'foreign' }, { ...input.seed, version: 0 }, { ...input.seed, version: '11' },
+				{ ...input.seed, version: 1.5 }, { ...input.seed, version: 12 }, { ...input.seed, digest: null },
+				{ ...input.seed, digest: 'staging' },
 				{ ...input.seed, digest: `sha256:${'0'.repeat(64)}` }].map(value => ({ campaign: JSON.stringify({ ...input, seed: value }), seed })),
-			...['', '{', 'null', seed.replace('seed-bundle/v3', 'seed-bundle/v2'),
+			...['', '{', 'null', '[]', '{}', seed.replace('version: 11', 'version: 0'),
+				seed.replace('resources:', 'resources: broken\nunusedResources:'), seed.replace('seed-bundle/v3', 'seed-bundle/v2'),
 				seed.replace('description:', 'changedContent:')].map(value => ({ campaign: complete, seed: value })),
 		];
 		for (const attempt of attempts) {
@@ -343,6 +347,10 @@ it('native SDK preparation retains invalid campaign bytes and creates no proposa
 		}
 		const retainedSeeds = structuredClone(deniedSeeds); writeFileSync(campaign, complete); writeFileSync(seedPath, seed);
 		expect(readPreRunCampaignFreeze()).toEqual(original); expect(deniedSeeds).toEqual(retainedSeeds);
+		rmSync(seedPath); expect(() => readPreRunCampaignFreeze()).toThrow('ACCEPTANCE_CAMPAIGN_FREEZE');
+		expect(existsSync(seedPath)).toBe(false); expect(existsSync(freeze)).toBe(false);
+		writeFileSync(seedPath, `${seed}\n# Same canonical seed after source restoration.\n`);
+		expect(readPreRunCampaignFreeze()).toEqual(original); writeFileSync(seedPath, seed);
 		const outcomes: Array<{ error: string; created: boolean }> = [];
 		for (const bytes of ['', '{', '{}', JSON.stringify({ campaignId: 'native-invalid',
 			proposals: [{ slug: 'sdk', projectId: 'sdk-project', id: 'sdk-proposal' }],

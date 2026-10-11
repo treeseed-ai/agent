@@ -3534,3 +3534,13 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/kernel/architecture/custody/public-sandbox-inventory.test.ts
     testName: "denies unreadable incomplete duplicate malformed and residual directory entries of every native kind"
+  agent.golden.campaign-fresh-estimates-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/prepare-campaign.test.ts
+    testName: "rejects reused estimates and inconsistent source pins before mutation"
+  agent.golden.campaign-fresh-estimates-native:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/preflight/campaign-freeze-native.test.ts
+    testName: "native draft file preparation rejects canonical and retired estimates without changing original bytes before exact retry"

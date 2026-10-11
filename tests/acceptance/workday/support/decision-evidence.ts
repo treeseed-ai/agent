@@ -1,17 +1,14 @@
 import assert from 'node:assert/strict';
+import { isDeepStrictEqual } from 'node:util';
 import { createHash } from 'node:crypto';
 import { parse, parseDocument, visit } from 'yaml';
 import { exactEntityReferenceSchema } from '@treeseed/sdk/agent-capacity';
 import { validatePortableContentData } from '@treeseed/sdk/content-validation';
 import { read, row, type Row } from '../../acceptance-cli.ts';
 
-function verifyDecisionFile(reference: Row, file: Row, code: string): Row {
-	assert.ok(exactEntityReferenceSchema.safeParse(reference).success && reference.store === 'treedx'
-		&& reference.model === 'decision' && reference.id && reference.revision && reference.digest
-		&& reference.repository && reference.commit && reference.path, `${code}_SOURCE: Exact Decision authority required`);
-	assert.ok(file.path === reference.path && typeof file.content === 'string' && Buffer.byteLength(file.content) <= 1_048_576
-		&& `sha256:${createHash('sha256').update(file.content).digest('hex')}` === reference.digest,
-		`${code}_BYTES: Original untrimmed Decision bytes must match issued authority`);
+function decisionFileContent(file: Row, code: string): Row {
+	assert.ok(typeof file.content === 'string' && Buffer.byteLength(file.content) <= 1_048_576,
+		`${code}_BYTES: Original committed Decision bytes required`);
 	const match = file.content.match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/u);
 	assert.ok(match, `${code}_BYTES: Original Decision frontmatter required`);
 	const document = parseDocument(match[1]);
@@ -21,6 +18,17 @@ function verifyDecisionFile(reference: Row, file: Row, code: string): Row {
 	});
 	const content = row(document.toJS({ maxAliasCount: 0 }));
 	assert.deepEqual(content, file.frontmatter, `${code}_READBACK: Parsed Decision view contradicts original bytes`);
+	return content;
+}
+
+function verifyDecisionFile(reference: Row, file: Row, code: string): Row {
+	assert.ok(exactEntityReferenceSchema.safeParse(reference).success && reference.store === 'treedx'
+		&& reference.model === 'decision' && reference.id && reference.revision && reference.digest
+		&& reference.repository && reference.commit && reference.path, `${code}_SOURCE: Exact Decision authority required`);
+	assert.ok(file.path === reference.path && typeof file.content === 'string'
+		&& `sha256:${createHash('sha256').update(file.content).digest('hex')}` === reference.digest,
+		`${code}_BYTES: Original untrimmed Decision bytes must match issued authority`);
+	const content = decisionFileContent(file, code);
 	assert.ok(content.schemaVersion === 'treeseed.decision/v1' && content.id === reference.id,
 		`${code}_CONTENT: Original exact Decision identity required`);
 	return file;
@@ -107,4 +115,38 @@ export function verifyReviewFindingContent(reference: Row, decisionReference: Ro
 	assert.ok([created, start, end].every(Number.isFinite) && start <= created && created <= end,
 		`${code}_FINDING_CLOCK: Original owning review interval required`);
 	return finding;
+}
+
+/** Same classed approval assertion for final graph pairs and actually consumed predecessor reviews. */
+export function verifyApprovedWorkReview(review: Row, actor: Row, content: Row): void {
+	const decision = verifyDecisionContent(content, String(review.projectId), 'ACCEPTANCE_REVIEW');
+	assert.ok(Array.isArray(decision.authorityRefs) && decision.authorityRefs.some(reference => isDeepStrictEqual(reference, row(review.assignmentAttempt).sourceRef)),
+		'ACCEPTANCE_REVIEW_AUTHORITY: Exact original proposal authority required');
+	const subject = row(decision.subjectRef), result = row(actor.assignmentResult), attempt = row(review.assignmentAttempt);
+	assert.ok(review.status === 'completed' && row(review.assignmentResult).assignmentId === review.id
+		&& row(row(review.lifecycleOutput).activityCompletion).reviewDisposition === 'approved'
+		&& decision.decisionClass === 'work-review' && decision.disposition === 'approved',
+		'ACCEPTANCE_REVIEW_DISPOSITION: Lifecycle output and terminal status are not governed approval');
+	assert.ok(Array.isArray(result.references) && result.references.map(row).some(reference => subject.store === reference.kind
+		&& subject.repository === reference.repository && subject.commit === reference.commit && (!reference.path || subject.path === reference.path)),
+		'ACCEPTANCE_REVIEW_CANDIDATE: Exact consumed Actor result required');
+	assert.ok(Array.isArray(decision.decidedByRefs) && decision.decidedByRefs.map(row).some(reference =>
+		isDeepStrictEqual(reference, row(attempt.effectiveProfile).profileRef)), 'ACCEPTANCE_REVIEW_IDENTITY: Assigned reviewing profile required');
+	assert.ok(Date.parse(String(actor.completedAt)) < Date.parse(String(review.createdAt))
+		&& Number.isFinite(Date.parse(String(decision.decidedAt))) && Date.parse(String(decision.decidedAt)) >= Date.parse(String(review.createdAt))
+		&& Date.parse(String(decision.decidedAt)) <= Date.parse(String(review.completedAt)),
+		'ACCEPTANCE_REVIEW_TIME: Original independent review interval required');
+}
+
+export function readApprovedWorkReview(review: Row, actor: Row, team: string, cache: Map<string, Row>): void {
+	const references = row(review.assignmentResult).references;
+	assert.ok(Array.isArray(references), 'ACCEPTANCE_REVIEW_AUTHORITY: Original result references required');
+	const decisions = references.map(row).filter(reference => reference.kind === 'treedx').map(reference => {
+		const file = readGovernedContentFile(reference, String(review.projectId), team, cache, 'ACCEPTANCE_REVIEW');
+		if (row(file.frontmatter).schemaVersion !== 'treeseed.decision/v1') return undefined;
+		const content = decisionFileContent(file, 'ACCEPTANCE_REVIEW');
+		return verifyDecisionContent(content, String(review.projectId), 'ACCEPTANCE_REVIEW');
+	}).filter((content): content is Row => content !== undefined && content.decisionClass === 'work-review');
+	assert.equal(decisions.length, 1, 'ACCEPTANCE_REVIEW_AUTHORITY: Exactly one returned classed work-review Decision required');
+	verifyApprovedWorkReview(review, actor, decisions[0]!);
 }

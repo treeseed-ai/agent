@@ -7,7 +7,7 @@ import { canonicalStandardsJson } from '@treeseed/sdk/standards';
 import { DEFAULT_CAPACITY_PAGE_LIMIT } from '@treeseed/sdk/capacity-pagination';
 import { validatePortableContentData } from '@treeseed/sdk/content-validation';
 import { acceptanceWorkdayId, read, row, type Row } from './acceptance-cli.ts';
-import { readDecisionContent, readGovernedContentFile, verifyDecisionContent, verifyReviewFindingContent } from './workday/support/decision-evidence.ts';
+import { readApprovedWorkReview, readDecisionContent, readGovernedContentFile, verifyDecisionContent, verifyReviewFindingContent } from './workday/support/decision-evidence.ts';
 import { verifyAssignmentAuthority, verifyTeardownAuthority, verifyTreeDxWorkspaceClosure, verifyMeasuredVerification, verifyNativeCounterAgreement, verifyTerminalUsageClock } from './workday/support/assignment-authority.ts';
 import { verifyPlanningEvidence } from './workday/support/planning-evidence.ts';
 import { readCompleteEvidence } from './workday/support/evidence-pages.ts';
@@ -231,23 +231,8 @@ export function verifyGolden(gate: Gate): void {
 			assert.equal(row(row(latest.lifecycleOutput).activityCompletion).reviewDisposition, 'approved', 'ACCEPTANCE_PAIR_APPROVAL: Final review must approve');
 			const actor = actors.filter(item => row(item.assignmentAttempt).workItemId === node.workItemId)
 				.sort((a, b) => text(b.completedAt).localeCompare(text(a.completedAt)))[0];
-			assert.ok(actor && text(latest.createdAt) > text(actor.completedAt), 'ACCEPTANCE_PAIR_CHRONOLOGY: Approval must follow the latest Actor candidate');
-			const decisions: Row[] = [];
-			for (const reference of rows(row(latest.assignmentResult).references).filter(value => value.kind === 'treedx')) {
-				const content = readDecisionContent(reference, text(latest.projectId), team, decisionContents, 'ACCEPTANCE_REVIEW');
-				if (content.schemaVersion !== 'treeseed.decision/v1') continue; // Notes are evidence, never review disposition authority.
-				const decision = verifyDecisionContent(content, text(latest.projectId), 'ACCEPTANCE_REVIEW');
-				if (decision.decisionClass === 'work-review') decisions.push(decision);
-			}
-			assert.equal(decisions.length, 1, 'ACCEPTANCE_REVIEW_AUTHORITY: Exactly one returned classed work-review Decision required');
-			const reviewed = decisions[0]!, subject = row(reviewed.subjectRef);
-			assert.equal(reviewed.disposition, 'approved', 'ACCEPTANCE_REVIEW_DISPOSITION: Lifecycle output is not governed approval');
-			assert.ok(rows(row(actor.assignmentResult).references).some(reference => subject.store === reference.kind && subject.repository === reference.repository
-				&& subject.commit === reference.commit && (!reference.path || subject.path === reference.path)), 'ACCEPTANCE_REVIEW_CANDIDATE: Exact latest actor result required');
-			assert.ok(rows(reviewed.decidedByRefs).some(reference => JSON.stringify(reference) === JSON.stringify(row(row(attempt.effectiveProfile).profileRef))),
-				'ACCEPTANCE_REVIEW_IDENTITY: Exact assigned reviewing profile evidence required');
-			assert.ok(Number.isFinite(Date.parse(text(reviewed.decidedAt))) && Date.parse(text(reviewed.decidedAt)) >= Date.parse(text(latest.createdAt))
-				&& Date.parse(text(reviewed.decidedAt)) <= Date.parse(text(latest.completedAt)), 'ACCEPTANCE_REVIEW_TIME: Original review window required');
+			assert.ok(actor, 'ACCEPTANCE_PAIR_CHRONOLOGY: Exact Actor result required');
+			readApprovedWorkReview(latest, actor, team, decisionContents);
 		}
 	}
 	}

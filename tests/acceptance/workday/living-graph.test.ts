@@ -3,6 +3,7 @@ import test from 'node:test';
 import { completeGraphHistory, verifyGraphNoopPlan, verifyGraphProvenance, verifyPredecessorCustody } from './support/evidence-pages.ts';
 import { read, row, type Row } from '../acceptance-cli.ts';
 import { readWorkdayAssignments, verifyGolden } from '../sdk-runtime-golden.test.ts';
+import { readApprovedWorkReview } from './support/decision-evidence.ts';
 
 // Use the existing public CLI, requiring an identical plan before reconciliation. No synthetic fallback, optional skip,
 // private route, new receipt, or alternate campaign implementation is allowed.
@@ -21,7 +22,9 @@ function context() {
 test('Living team graph public views preserve exact nodes edges provenance and frozen predecessor results', { timeout: 120_000 }, () => {
 	verifyGolden('graph');
 	const f = context(), graph = read(['execution', 'graph', 'show'], f.team);
-	verifyGraphProvenance(graph); verifyPredecessorCustody(f.assignments);
+	const decisions = new Map<string, Row>();
+	for (const { review, actor } of verifyPredecessorCustody(f.assignments, graph))
+		readApprovedWorkReview(review, actor, f.team, decisions);
 	for (const projectId of new Set(list(graph.nodes).map(node => String(node.projectId)))) {
 		const filtered = read(['execution', 'graph', 'show', '--project', projectId], f.team);
 		const nodes = list(graph.nodes).filter(node => node.projectId === projectId), ids = new Set(nodes.map(node => node.id));

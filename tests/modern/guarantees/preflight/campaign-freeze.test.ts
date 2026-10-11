@@ -91,6 +91,22 @@ it('denies absent malformed and changed seed identity or canonical content befor
 	expect(state.commands).not.toHaveBeenCalled(); expect(state.writes).not.toHaveBeenCalled();
 });
 
+it('denies a seed-valid campaign without exact protected primary and library bases before preparation', () => {
+	const authority = process.env.TREESEED_DEVELOPMENT_WORKSPACE_ROOT!;
+	const document = nativeFs.readFileSync(resolve(authority, 'docs/agent-acceptance.md'), 'utf8');
+	const seed = nativeFs.readFileSync(resolve(authority, 'seeds/treeseed.yaml'), 'utf8');
+	const original = campaignInputs(portfolioRelations(document, seed).projects.map(project => project.slug), seed);
+	state.files.set('/supplied-platform/docs/agent-acceptance.md', document);
+	state.files.set('/supplied-platform/seeds/treeseed.yaml', seed);
+	for (const repositoryBases of [undefined, null, '', [], {}, { sdk: 'staging' }, { 'repository:treeseed/sdk': 'a'.repeat(40) }]) {
+		state.bytes = JSON.stringify({ ...original, repositoryBases }); const held = state.bytes;
+		expect.soft(() => prepareSdkCampaign('/draft.json', '/sdk.freeze.json', 'supplied-team'))
+			.toThrow(/ACCEPTANCE_CAMPAIGN_FREEZE.*Invalid expanded operator authority/u);
+		expect(state.bytes).toBe(held);
+	}
+	expect(state.commands).not.toHaveBeenCalled(); expect(state.writes).not.toHaveBeenCalled();
+});
+
 it('retains all twenty five prospective schema valid inputs with pending genuine estimates and unchanged exact selection weights', () => {
 	const supplied = campaignInputs(slugs), before = structuredClone(supplied);
 	verifyPreRunCampaignInputs(supplied, slugs);

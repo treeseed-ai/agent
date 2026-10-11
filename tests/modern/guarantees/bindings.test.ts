@@ -42,6 +42,13 @@ describe('capacity-provider guarantee execution bindings', () => {
 		}
 		expect(manifest.acceptanceCriteria.filter((value: { criterion: string }) => value.criterion === '81543856c351d2d7f2599a17d9225b1d5d6785c88897775ff79ec4b2af482b65'))
 			.toEqual([{ criterion: '81543856c351d2d7f2599a17d9225b1d5d6785c88897775ff79ec4b2af482b65', verifierRefs: ['agent.golden.live.campaign-freeze'] }]);
+		const noop = 'agent.golden.architecture-living-graph-live-2';
+		expect(manifest.acceptanceCriteria.filter((value: { criterion: string }) => value.criterion === '4ff1e6e55ccb0038c0f79331029c2ad083409c36058b1e3335b1b44a263b2ce0'))
+			.toEqual([{ criterion: '4ff1e6e55ccb0038c0f79331029c2ad083409c36058b1e3335b1b44a263b2ce0', verifierRefs: ['agent.golden.live.graph', 'agent.golden.architecture-graph-history-live-1', noop] }]);
+		expect(refs.filter(value => value === noop)).toHaveLength(1);
+		expect(refs.indexOf(noop)).toBeGreaterThan(refs.indexOf('agent.golden.architecture-graph-history-live-1'));
+		expect(registry.verifiers[noop]).toMatchObject({ kind: 'nodeTestCase', testFile: 'tests/acceptance/workday/living-graph.test.ts',
+			testName: 'Living graph identical reconciliation and node inspection preserve assignments usage and every public graph record' });
 		const product = 'sdk.golden.live.product';
 		for (const criterion of ['9a9b626b666f555139baf8aabcead659ca30e7f88ad8002f73f2b35ddf542ad4',
 			'8fc0d803455b8e437a458732d5b6ba575f885eb35ba387e93e14230dd40d27b7',
@@ -138,7 +145,8 @@ describe('capacity-provider guarantee execution bindings', () => {
 			{ criterion: '2b8cb6c3b6c1014b10ea1263a4e5f0aea2a1b93ae71ec69a0abbb410b304fab1',
 				verifierRefs: ['agent.golden.live.campaign', 'sdk.golden.live.product'] },
 			{ criterion: 'ce87c6c4895321258d1ff9d3f00d7e0db7f1adb6639696756208e784d546667a',
-				verifierRefs: ['agent.golden.live.graph', 'sdk.golden.live.product'] }]);
+				verifierRefs: ['agent.golden.live.graph', 'sdk.golden.live.product'] },
+			{ criterion: '4ff1e6e55ccb0038c0f79331029c2ad083409c36058b1e3335b1b44a263b2ce0', verifierRefs: ['agent.golden.live.graph', 'agent.golden.architecture-graph-history-live-1', 'agent.golden.architecture-living-graph-live-2'] }]);
 		const scene = parse(readFileSync(resolve(root, manifest.scene.manifest), 'utf8'));
 		expect(scene.scope).toBe('local-integrated-runtime');
 		const refs = scene.workflow.map((step: { action: { verifier: string } }) => step.action.verifier);

@@ -33,6 +33,12 @@ describe('capacity-provider guarantee execution bindings', () => {
 		const product = 'sdk.golden.live.product';
 		for (const criterion of ['9a9b626b666f555139baf8aabcead659ca30e7f88ad8002f73f2b35ddf542ad4',
 			'8fc0d803455b8e437a458732d5b6ba575f885eb35ba387e93e14230dd40d27b7',
+			'95e989b76535f28f68527b4e3cf57ca49437695c9f97c57acdfca81d2f62055a',
+			'96a6b0f3ae0587119f592e97fc93efdaae676674a34fb9e9511fd0a9a044fd6e',
+			'11dc8f94be641ad4a78110ac48b1a33144ab46b5a4faac7b3eba1c3873360ec6',
+			'9aa7395c3dc83d555538ad7b6ecfa3d307744044bab0de0574731218ca2e7710',
+			'ae904659a63c9d7478fecc4ba97674ff617e9aee8e0d4e2c3aa96ce1eb16a7cd',
+			'a36158a2e8f122136ece95b41cfd72c345beefa609df5ec27e296b56e77de930',
 			'4f295a5342aaf08b1ca056a5aa8bc00df27a07cf116b6721b6179d575c6b76df']) {
 			expect(manifest.acceptanceCriteria.filter((value: { criterion: string }) => value.criterion === criterion))
 				.toEqual([{ criterion, verifierRefs: [product] }]);

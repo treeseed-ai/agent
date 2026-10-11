@@ -32,6 +32,17 @@ for (const file of readdirSync(resolve(root, 'guarantees/verifiers')).filter(pat
 }
 
 describe('capacity-provider guarantee execution bindings', () => {
+	it('binds retired authority denial to selected normal SDK native schema and unchanged canonical record readback without requiring controlled failures', () => {
+		const manifest = parse(readFileSync(resolve(root, 'guarantees/agent/golden/sdk-complete.guarantee.yaml'), 'utf8'));
+		const scene = parse(readFileSync(resolve(root, manifest.scene.manifest), 'utf8'));
+		const refs: string[] = scene.workflow.map((step: { action: { verifier: string } }) => step.action.verifier);
+		const required = ['api.golden.execution-normal-sdk-clean-schema-live-1', 'agent.golden.architecture-record-custody-live-1'];
+		expect(manifest.acceptanceCriteria.filter((value: { criterion: string }) => value.criterion === '2e5d3dfc2cd33fd0656866a59ce59153137c199b766309decab4f71ecbf4e8d7'))
+			.toEqual([{ criterion: '2e5d3dfc2cd33fd0656866a59ce59153137c199b766309decab4f71ecbf4e8d7', verifierRefs: required }]);
+		for (const ref of required) { expect(refs.filter(value => value === ref)).toHaveLength(1);
+			expect(refs.indexOf(ref)).toBeGreaterThan(refs.indexOf('agent.golden.live.campaign')); }
+		expect(refs).not.toContain('api.golden.execution-clean-schema-live-1');
+	});
 	it('binds exact six-pair graph and Reporter chronology requirements to their existing post-campaign native gates', () => {
 		const manifest = parse(readFileSync(resolve(root, 'guarantees/agent/golden/sdk-complete.guarantee.yaml'), 'utf8'));
 		const scene = parse(readFileSync(resolve(root, manifest.scene.manifest), 'utf8'));
@@ -148,6 +159,7 @@ describe('capacity-provider guarantee execution bindings', () => {
 			'b918b519ac545fdd61faab208687ccc64e1f3d03c9a84dfc57a5cfee6190f3f3',
 		].map(criterion => ({ criterion, verifierRefs: ['agent.golden.live.campaign-freeze'] }));
 		expect(manifest.acceptanceCriteria).toEqual([
+			{ criterion: '2e5d3dfc2cd33fd0656866a59ce59153137c199b766309decab4f71ecbf4e8d7', verifierRefs: ['api.golden.execution-normal-sdk-clean-schema-live-1', 'agent.golden.architecture-record-custody-live-1'] },
 			...sdkPermissionCriteria.map(criterion => ({ criterion, verifierRefs: ['agent.golden.architecture-profile-custody-live-1', 'sdk.golden.live.product'] })),
 			{ criterion: 'a6f86094d3c2dc802a54319c3b55c1fb50fa3f1bdc5f9ee831088347c22732bb', verifierRefs: ['agent.golden.architecture-profile-custody-live-1', 'sdk.golden.live.product'] },
 			...sdkFixedGraphCriteria.map(criterion => ({ criterion, verifierRefs: ['sdk.golden.live.product'] })),

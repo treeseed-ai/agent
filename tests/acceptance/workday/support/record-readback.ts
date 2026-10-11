@@ -10,7 +10,7 @@ import { verifyPlatformRepository } from '@treeseed/sdk/platform';
 import { acceptanceWorkdayId, read, row, type Row } from '../../acceptance-cli.ts';
 import { readWorkdayAssignments, verifyGolden } from '../../sdk-runtime-golden.test.ts';
 import { readCompleteEvidence } from './evidence-pages.ts';
-import { verifyAppliedWorkdayCustody } from './campaign-observation.ts';
+import { verifyAppliedWorkdayCustody, verifyDerivedWorkdayModes } from './campaign-observation.ts';
 import { publicCanonicalRecords, verifyTerminalRecordCustody, verifyFailedExecutionCustody, verifyAvailabilityAccountingHistory, verifySandboxCloseoutCustody, verifyWorkdayContinuationCustody, verifySandboxHostAbsence, verifySandboxDirectoryAbsence, verifyProviderConformanceSignature, verifyProviderQualification, verifyProviderLocalSlotClosure, verifyProviderPollingSelection } from './record-custody.ts';
 
 export function actual(id = acceptanceWorkdayId()) {
@@ -29,6 +29,7 @@ export function actual(id = acceptanceWorkdayId()) {
 }
 export function verify(f: ReturnType<typeof actual>) {
 	verifyAppliedWorkdayCustody(f.run);
+	verifyDerivedWorkdayModes(f.run, [...f.views.flat().map(row), ...f.measurements]);
 	// Public record shape checks are NOT the whole canonical equivalence gate.
 	// Use the original owning SDK repository verifier on the exact existing
 	// development authority, with no copied schema or record reconstruction.

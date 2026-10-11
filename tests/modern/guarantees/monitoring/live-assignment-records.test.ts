@@ -1,9 +1,24 @@
 import { describe, expect, it, vi } from 'vitest';
 import { row, type Row } from '../../../acceptance/acceptance-cli.ts';
+import { verifyDerivedWorkdayModes } from '../../../acceptance/workday/support/campaign-observation.ts';
 import { observeLiveAssignmentRecords } from '../../../acceptance/workday/support/monitoring/live-assignment-records.ts';
 import { liveAssignmentRecord, liveRun } from './live-assignment-fixture.ts';
 
 describe('live canonical assignment observation (controlled inputs, not managed proof)', () => {
+	it('retains exact derived public mode labels across assignment usage result and settlement views while denying every contradictory original label', () => {
+		for (const executionMode of ['simulation', 'production']) {
+			const run = { executionMode };
+			const records = ['assignment', 'graph', 'usage', 'result', 'settlement'].map(kind => ({ kind, executionMode, metadata: { example: { executionMode: 'production' } } }));
+			const before = structuredClone({ run, records }); verifyDerivedWorkdayModes(run, records); verifyDerivedWorkdayModes(run, [{ id: 'no-independent-label' }]);
+			for (const value of [undefined, null, '', executionMode === 'simulation' ? 'production' : 'simulation', false, 0, {}, []]) for (let index = 0; index < records.length; index++) {
+				const changed: Row[] = structuredClone(records); changed[index]!.executionMode = value;
+				const failed = structuredClone(changed); expect(() => verifyDerivedWorkdayModes(run, changed)).toThrow('ACCEPTANCE_DERIVED_MODE'); expect(changed).toEqual(failed);
+			}
+			expect({ run, records }).toEqual(before);
+		}
+		for (const executionMode of [undefined, null, '', 'simulation ', false, 0, {}, []]) expect(() => verifyDerivedWorkdayModes({ executionMode }, [])).toThrow('ACCEPTANCE_DERIVED_MODE');
+	});
+
 	it('denies contradictory derived assignment mode before inspection without treating matching public labels as another authority', () => {
 		for (const executionMode of [undefined, null, '', 'production', 'simulation ', false, 0, {}, []]) {
 			const item = liveAssignmentRecord(), run = liveRun(item), retained = new Map<string, Row>(), inspect = vi.fn();

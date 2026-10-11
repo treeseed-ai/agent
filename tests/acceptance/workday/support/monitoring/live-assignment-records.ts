@@ -3,7 +3,7 @@ import { assignmentAttemptSchema, validateProviderAssignment } from '@treeseed/s
 import { read, row, type Row } from '../../../acceptance-cli.ts';
 import { verifyAssignmentAuthority, verifyGovernedProfile, verifyHandlerInspection } from '../assignment-authority.ts';
 import { readGovernedContentFile } from '../decision-evidence.ts';
-import { verifyAppliedWorkdayCustody } from '../campaign-observation.ts';
+import { verifyAppliedWorkdayCustody, verifyDerivedWorkdayModes } from '../campaign-observation.ts';
 
 const issuedAuthority = ({ status: _status, startedAt: _started, finishedAt: _finished, ...value }: Row) => value;
 
@@ -31,6 +31,7 @@ export function observeLiveAssignmentRecords(run: Row, items: readonly Row[], re
 		&& projects.every(value => typeof value === 'string' && value) && new Set(projects).size === projects.length,
 		`${label}: Original start and complete admitted project selection required`);
 	const observed = new Map<string, Row>(), pending: Row[] = [];
+	verifyDerivedWorkdayModes(run, items);
 	for (const item of items) {
 		assert.ok(validateProviderAssignment(item).ok, `${label}: Complete unchanged canonical public record required`);
 		const attempt = assignmentAttemptSchema.parse(item.assignmentAttempt);

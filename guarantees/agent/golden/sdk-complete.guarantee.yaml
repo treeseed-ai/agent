@@ -12,7 +12,7 @@ scene:
   manifest: guarantees/agent/golden/scenes/sdk-complete.scene.yaml
 acceptanceCriteria:
   - criterion: 64ffc06b0d268ad11fbf692ca201cd75423c0afae2a6be3e2ae7cd2eea7fb17f
-    verifierRefs: [agent.golden.live.campaign, api.golden.execution-normal-sdk-clean-schema-live-1, agent.golden.architecture-record-custody-live-1]
+    verifierRefs: [agent.golden.live.campaign, api.golden.execution-normal-sdk-clean-schema-live-1, agent.golden.architecture-record-custody-live-1, agent.golden.architecture-living-graph-live-1]
   - criterion: 6c6e922d724fe9bf966e3f11456af2f176224cdff4792c9b7a73ce8047659e55
     verifierRefs: [api.golden.execution-normal-sdk-clean-schema-live-1, agent.golden.architecture-record-custody-live-1]
   - criterion: 2e5d3dfc2cd33fd0656866a59ce59153137c199b766309decab4f71ecbf4e8d7

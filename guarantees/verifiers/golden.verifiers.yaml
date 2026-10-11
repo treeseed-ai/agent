@@ -1,6 +1,16 @@
 schemaVersion: treeseed.guarantee-verifiers/v1
 ownerPackage: "@treeseed/agent"
 verifiers:
+  agent.golden.derived-public-mode-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/monitoring/live-assignment-records.test.ts
+    testName: "retains exact derived public mode labels across assignment usage result and settlement views while denying every contradictory original label"
+  agent.golden.derived-assignment-mode-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/monitoring/live-assignment-records.test.ts
+    testName: "denies contradictory derived assignment mode before inspection without treating matching public labels as another authority"
   agent.golden.sole-workday-mode-unit:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

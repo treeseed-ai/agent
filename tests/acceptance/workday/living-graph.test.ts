@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { verifyDerivedWorkdayModes } from './support/campaign-observation.ts';
 import { completeGraphHistory, verifyGraphNoopPlan, verifyGraphProvenance, verifyPredecessorCustody } from './support/evidence-pages.ts';
 import { read, row, type Row } from '../acceptance-cli.ts';
 import { readWorkdayAssignments, verifyGolden } from '../sdk-runtime-golden.test.ts';
@@ -22,6 +23,7 @@ function context() {
 test('Living team graph public views preserve exact nodes edges provenance and frozen predecessor results', { timeout: 120_000 }, () => {
 	verifyGolden('graph');
 	const f = context(), graph = read(['execution', 'graph', 'show'], f.team);
+	verifyDerivedWorkdayModes(f.run, list(graph.nodes).filter(node => node.workdayId === f.id));
 	const decisions = new Map<string, Row>();
 	for (const { review, actor } of verifyPredecessorCustody(f.assignments, graph))
 		readApprovedWorkReview(review, actor, f.team, decisions);

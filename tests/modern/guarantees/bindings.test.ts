@@ -52,6 +52,10 @@ describe('capacity-provider guarantee execution bindings', () => {
 		expect(refs.indexOf(product)).toBeGreaterThan(refs.indexOf('agent.golden.live.campaign'));
 		// SDK owns the semantic assertions and native integration; do not copy its verifier here.
 		expect(registry.verifiers[product]).toBeUndefined();
+		expect(manifest.acceptanceCriteria.filter((value: { criterion: string }) =>
+			value.criterion === 'ce87c6c4895321258d1ff9d3f00d7e0db7f1adb6639696756208e784d546667a'))
+			.toEqual([{ criterion: 'ce87c6c4895321258d1ff9d3f00d7e0db7f1adb6639696756208e784d546667a',
+				verifierRefs: ['agent.golden.live.graph', product] }]);
 		const book = 'agent.golden.architecture-book-knowledge-live-1';
 		expect(manifest.acceptanceCriteria.filter((value: { criterion: string }) =>
 			value.criterion === '936013d37582fbedab56e17601be3581682b72565d8b7fdaedb75f6a3cd2e64f'))
@@ -129,7 +133,9 @@ describe('capacity-provider guarantee execution bindings', () => {
 			{ criterion: 'f02eb0d95e0572b52f73700b689cd584d9ae57a880ca5658546c1cae44b535e4',
 				verifierRefs: ['agent.golden.live.campaign', 'sdk.golden.live.product'] },
 			{ criterion: '2b8cb6c3b6c1014b10ea1263a4e5f0aea2a1b93ae71ec69a0abbb410b304fab1',
-				verifierRefs: ['agent.golden.live.campaign', 'sdk.golden.live.product'] }]);
+				verifierRefs: ['agent.golden.live.campaign', 'sdk.golden.live.product'] },
+			{ criterion: 'ce87c6c4895321258d1ff9d3f00d7e0db7f1adb6639696756208e784d546667a',
+				verifierRefs: ['agent.golden.live.graph', 'sdk.golden.live.product'] }]);
 		const scene = parse(readFileSync(resolve(root, manifest.scene.manifest), 'utf8'));
 		expect(scene.scope).toBe('local-integrated-runtime');
 		const refs = scene.workflow.map((step: { action: { verifier: string } }) => step.action.verifier);

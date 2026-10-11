@@ -1224,6 +1224,12 @@ workflow:
   - id: architecture-decision-verifier-complete
     action: { verifier: agent.golden.architecture-decision-verifier-complete }
     expect: { status: passed }
+  - id: architecture-decision-verifier-original-bytes
+    action: { verifier: agent.golden.architecture-decision-verifier-original-bytes }
+    expect: { status: passed }
+  - id: architecture-decision-native
+    action: { verifier: agent.golden.architecture-decision-native }
+    expect: { status: passed }
   - id: architecture-decision-verifier-content
     action: { verifier: agent.golden.architecture-decision-verifier-content }
     expect: { status: passed }

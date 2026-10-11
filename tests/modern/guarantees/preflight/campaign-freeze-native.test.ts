@@ -14,6 +14,73 @@ import { modelExecutionInventory } from '../../../acceptance/workday/support/ass
 import { row, type Row } from '../../../acceptance/acceptance-cli.ts';
 import { encodeCapacityPageCursor } from '@treeseed/sdk/capacity-pagination';
 import { observeCampaign } from '../../../acceptance/workday/support/campaign-observation.ts';
+import { freshSdkDraft, sdkProposalText } from '../../../acceptance/campaign.ts';
+
+it('native draft file preparation rejects canonical and retired estimates without changing original bytes before exact retry', async () => {
+	const root = mkdtempSync(join(tmpdir(), 'agent-fresh-draft-estimates-')), path = join(root, 'draft.json');
+	const requests: Array<{ method: string; path: string; body: string }> = [];
+	const server = createServer((request, response) => {
+		let body = ''; request.setEncoding('utf8'); request.on('data', bytes => { body += String(bytes); });
+		request.on('end', () => {
+			requests.push({ method: request.method ?? '', path: request.url ?? '', body });
+			response.setHeader('content-type', 'application/json'); response.end(JSON.stringify({ data: JSON.parse(body) }));
+		});
+	});
+	try {
+		await new Promise<void>((accept, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', accept); });
+		const address = server.address(); if (!address || typeof address === 'string') throw new Error('Native proposal server required');
+		const client = new ControlPlaneClient({ profile: defaultLocalControlPlaneServer({ TREESEED_API_BASE_URL: `http://127.0.0.1:${address.port}` }), accessToken: 'controlled-draft-test-token' });
+		const authority = process.env.TREESEED_DEVELOPMENT_WORKSPACE_ROOT;
+		expect(typeof authority).toBe('string');
+		const canonical = sdkProposalText(readFileSync(resolve(authority!, 'docs/agent-acceptance.md'), 'utf8'));
+		const git = { store: 'git', model: 'repository', id: 'sdk', repository: 'treeseed-ai/sdk', commit: 'a'.repeat(40) };
+		const library = { store: 'treedx', model: 'repository', id: 'sdk-library', path: '.', repository: 'treeseed-ai/sdk-library', commit: 'b'.repeat(40) };
+		const template = { schemaVersion: 'treeseed.proposal/v1', id: 'original-draft', projectId: 'sdk-project', status: 'draft',
+			contentProvenance: { contentPath: 'proposals/governance/original-draft.mdx' },
+			title: canonical.title, request: canonical.request, summary: canonical.summary,
+			executionPlan: { workItems: canonical.workItems.map(item => ({ id: item.id, agentClass: item.agentClass,
+				workspace: item.workspace, activity: 'acting', review: 'required', maximumReviewCycles: 2, dependsOn: [],
+				objective: item.objective, acceptanceCriteria: [item.acceptanceCriteria], requiredCapabilities: ['source.read'],
+				contextRefs: [item.workspace === 'treedx' ? library : git],
+				requestedPermissions: { content: { read: ['proposal', 'decision'], write: item.workspace === 'treedx' ? ['knowledge'] : [] }, tools: ['source.read'] } })) } };
+		const complete = JSON.stringify(template), exactBook = { revision: 1, digest: `sha256:${'c'.repeat(64)}` };
+		const execute = async () => {
+			// The original preparer's file/JSON boundary and Agent draft function,
+			// followed by its real public SDK operation and native HTTP transport.
+			const draft = freshSdkDraft(JSON.parse(readFileSync(path, 'utf8')) as Record<string, unknown>,
+				'fresh-sdk-draft', canonical, 'repo_sdk_library', exactBook);
+			const input = { path: { projectId: template.projectId }, query: {}, body: draft }, before = structuredClone(input);
+			const result = await client.invoke(controlPlaneOperation('governance.proposals.create'), input);
+			expect(result.data).toEqual(draft); expect(input).toEqual(before);
+			return draft;
+		};
+		writeFileSync(path, complete);
+		const accepted = await execute(), observations: Array<{ field: string; index: number; bytes: string; denied: boolean }> = [];
+		for (const field of ['estimate', 'reviewEstimate', 'ownerEstimate', 'reviewerEstimate']) {
+			for (const value of [{ expectedSeconds: 120, maximumSeconds: 240 }, null, 0, false, '', {}, []]) {
+				for (let index = 0; index < template.executionPlan.workItems.length; index++) {
+					const changed = structuredClone(template); Object.assign(changed.executionPlan.workItems[index]!, { [field]: value });
+					const bytes = JSON.stringify(changed); writeFileSync(path, bytes); let denied = false;
+					try { await execute(); } catch (error) { denied = error instanceof Error && error.message.includes('ACCEPTANCE_CAMPAIGN_FRESH'); }
+					observations.push({ field, index, bytes, denied }); expect.soft(denied, `${field}/${index}/${JSON.stringify(value)}`).toBe(true);
+					expect(readFileSync(path, 'utf8')).toBe(bytes); expect(readdirSync(root)).toEqual(['draft.json']);
+				}
+			}
+		}
+		const retained = structuredClone(observations), retainedRequests = structuredClone(requests); writeFileSync(path, complete);
+		expect(await execute()).toEqual(accepted); expect(readFileSync(path, 'utf8')).toBe(complete); expect(observations).toEqual(retained);
+		expect(observations).toHaveLength(168); expect(readdirSync(root)).toEqual(['draft.json']);
+		expect(requests.slice(0, retainedRequests.length)).toEqual(retainedRequests); expect(requests).toHaveLength(2);
+		for (const request of requests) expect(request).toEqual({ method: 'POST', path: '/v1/projects/sdk-project/proposals', body: JSON.stringify(accepted) });
+		// Controlled Book/source identities and estimates above are not genuine
+		// governed campaign authority, estimating results or a managed acceptance pass.
+	} finally {
+		server.closeAllConnections(); if (server.listening) await new Promise<void>((accept, reject) => server.close(error => error ? reject(error) : accept()));
+		rmSync(root, { recursive: true, force: true });
+	}
+	expect(server.listening).toBe(false);
+	expect(existsSync(root)).toBe(false);
+}, 30_000);
 
 it('native public SDK event pages reach the original campaign observer with complete immutable history and retain denied tails before exact retry', async () => {
 	const run = { id: 'workday-native-campaign-events', teamId: 'native-team', status: 'completed', executionMode: 'simulation' };

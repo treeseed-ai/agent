@@ -110,8 +110,9 @@ test('Actual normal SDK workday reads complete public owning host sandbox absenc
  };
  const paths = inspect(); verify(f); assert.deepEqual(inspect(), paths); assert.deepEqual(f, before);
  assert.deepEqual((await loadProviderManifest(config.manifestPath, config.dataDir)).manifest, manifestBefore);
- // Exact represented sandboxes only. Warm VMs, NBD, source jobs, sessions and
- // complete producer inventory remain independent obligations, not inferred absence.
+ // Original source jobs/results join exact released leases, absent disks and
+ // recorded builders/verifiers. Execution VMs, NBD, sessions and complete
+ // producer inventories remain independent obligations, not inferred absence.
 });
 test('Actual owning host independently reads native task container mount and directory absence for completed and failed managed sandboxes without erasing history', { timeout: 120_000 }, async () => {
 	const f = actual(), before = structuredClone(f), config = resolveProviderConfig({ requireConnection: true });

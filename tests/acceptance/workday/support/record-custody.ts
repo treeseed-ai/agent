@@ -10,7 +10,6 @@ import { row, type Row } from '../../acceptance-cli.ts';
 import { orderConnectionsForFairPolling } from '@treeseed/agent/provider-governance';
 import { assertCanonicalRecordShapes } from './canonical-record-shape.ts';
 import { readCompleteEvidence } from './evidence-pages.ts';
-
 export function verifyReportRecordCustody(snapshot: Row, reporter: Row, assignments: Row[], team: string): void {
 	assert.ok(Array.isArray(snapshot.attempts), 'ACCEPTANCE_REPORT_ATTEMPTS: Complete original assignment collection required');
 	const observed = snapshot.attempts.map(value => { const attempt = row(value), result = typeof attempt.assignment_result_json === 'string' ? JSON.parse(attempt.assignment_result_json) : attempt.assignment_result_json;
@@ -244,6 +243,15 @@ export function verifySandboxCloseoutCustody(items: Row[]): void {
 /** Independently observed host inventories, never a positive broker receipt.
  * Only the exact represented execution IDs are checked; unrelated warm pool
  * resources are legitimate and are not deleted or required to disappear. */
+export function sandboxMountPaths(mountInfo: string): string[] {
+	assert.ok(mountInfo.trim(), 'ACCEPTANCE_SANDBOX_MOUNTS: Readable host mount inventory required');
+	return mountInfo.trim().split('\n').map(line => {
+		const fields = line.split(' '), separator = fields.indexOf('-');
+		assert.ok(separator >= 6 && fields.length >= separator + 4 && /^\d+$/u.test(fields[0]!) && /^\d+$/u.test(fields[1]!),
+			'ACCEPTANCE_SANDBOX_MOUNTS: Incomplete native mountinfo cannot prove absence');
+		return fields[4]!.replace(/\\([0-7]{3})/gu, (_, octal: string) => String.fromCharCode(Number.parseInt(octal, 8)));
+	});
+}
 export function verifySandboxHostAbsence(items: Row[], connections: Array<{ providerId: string; teamId: string }>,
 	root: string, tasks: string, containers: string, mountInfo: string): string[] {
 	verifySandboxCloseoutCustody(items);
@@ -254,13 +262,7 @@ export function verifySandboxHostAbsence(items: Row[], connections: Array<{ prov
 			'ACCEPTANCE_SANDBOX_INVENTORY: Complete native quiet inventory malformed'); return new Set(ids);
 	};
 	const taskIds = inventory(tasks), containerIds = inventory(containers);
-	assert.ok(mountInfo.trim(), 'ACCEPTANCE_SANDBOX_MOUNTS: Readable host mount inventory required');
-	const mounts = mountInfo.trim().split('\n').map(line => {
-		const fields = line.split(' '), separator = fields.indexOf('-');
-		assert.ok(separator >= 6 && fields.length >= separator + 4 && /^\d+$/u.test(fields[0]!) && /^\d+$/u.test(fields[1]!),
-			'ACCEPTANCE_SANDBOX_MOUNTS: Incomplete native mountinfo cannot prove absence');
-		return fields[4]!.replace(/\\([0-7]{3})/gu, (_, octal: string) => String.fromCharCode(Number.parseInt(octal, 8)));
-	});
+	const mounts = sandboxMountPaths(mountInfo);
 	return items.filter(item => Object.hasOwn(row(item.lifecycleOutput), 'sandboxId')).map(item => {
 		const attempt = assignmentAttemptSchema.parse(item.assignmentAttempt), id = row(item.lifecycleOutput).sandboxId;
 		assert.ok(connections.some(connection => connection.providerId === attempt.provider.providerId && connection.teamId === attempt.teamId),

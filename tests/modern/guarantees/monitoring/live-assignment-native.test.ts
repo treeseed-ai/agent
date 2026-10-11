@@ -34,6 +34,11 @@ it('native configured Kernel Git result and public SDK assignment reads reach th
 					const plan = row(row(observed.parameters).appliedPlan), field = mode.slice('raw-workday-'.length);
 					plan[field] = ` ${String(plan[field])} `; failed.push({ mode, record: structuredClone(observed) });
 				}
+				if (mode.startsWith('duplicate-workday-')) {
+					const values: Row = { simulation: 'simulation', production: 'production', null: null, empty: '' };
+					row(observed.parameters).executionMode = values[mode.slice('duplicate-workday-'.length)];
+					failed.push({ mode, record: structuredClone(observed) });
+				}
 				response.end(JSON.stringify({ data: { run: observed } })); return;
 			}
 			if (mode === 'denied') { response.writeHead(403).end(JSON.stringify({ status: 403, title: 'Controlled native denial', code: 'controlled_assignment_denied' })); return; }
@@ -78,6 +83,12 @@ it('native configured Kernel Git result and public SDK assignment reads reach th
 			await expect(execute(untouched), field).rejects.toThrow('ACCEPTANCE_START_RAW');
 			expect(untouched.size).toBe(0); expect(retained).toEqual(held); expect(inspections).toBe(1);
 		}
+		for (const duplicate of ['simulation', 'production', 'null', 'empty']) {
+			mode = `duplicate-workday-${duplicate}`; const untouched = new Map<string, Row>();
+			await expect(execute(untouched)).rejects.toThrow('ACCEPTANCE_START_MODE');
+			expect(untouched.size).toBe(0); expect(retained).toEqual(held); expect(inspections).toBe(1);
+			mode = 'exact'; await execute(); expect(retained).toEqual(held); expect(inspections).toBe(1);
+		}
 		for (const denied of ['runtime', 'grant', 'denied', 'interrupted', 'start-before-creation', 'finish-before-creation', 'finish-before-start', 'status-regression', 'terminal-substitution']) {
 			mode = denied; await expect(execute(), denied).rejects.toThrow(); expect(retained).toEqual(held);
 		}
@@ -91,10 +102,10 @@ it('native configured Kernel Git result and public SDK assignment reads reach th
 		expect(unobserved.size).toBe(0); expect(run).toEqual(deniedRun); expect(retained).toEqual(held); expect(inspections).toBe(1);
 		parameters.deadlineAt = originalDeadline;
 		const originalFailures = structuredClone(failed); mode = 'exact'; await execute();
-		expect(retained).toEqual(held); expect(failed).toEqual(originalFailures); expect(failed).toHaveLength(14);
+		expect(retained).toEqual(held); expect(failed).toEqual(originalFailures); expect(failed).toHaveLength(22);
 		expect(requests.filter(value => value === `GET /v1/teams/${f.attempt.teamId}/capacity/assignments/${f.attempt.id}`)).toHaveLength(17);
 		expect(requests.filter(value => value === `GET /v1/teams/${f.attempt.teamId}/workday-runs/${f.attempt.workdayId}`)).toHaveLength(17);
-		expect(requests).toHaveLength(34);
+		expect(requests).toHaveLength(50);
 		expect({ item, run }).toEqual(before); expect(f.requests).toHaveLength(1);
 		// Native owning Kernel/handler/Git and SDK transport; upstream record,
 		// profile bytes and handler catalog are controlled. This does not prove

@@ -33,8 +33,9 @@ describe('capacity-provider guarantee execution bindings', () => {
 	});
 	it('binds the exact model clock criterion to complete post campaign native readback without substituting component evidence', () => {
 		const manifest = parse(readFileSync(resolve(root, 'guarantees/agent/golden/sdk-complete.guarantee.yaml'), 'utf8'));
-		const prospectiveInputs = [
+		const preRunBindings = [
 			'5a286ca84dffc7ea229c2035a106c26aa0f8fe4e78da3cb035b1bc4859810e95',
+			'ab2ac9ce3bbbf837b5c65b9b6246aa6850713b4d82fc15c52d590144dd265a0b',
 			'1dd6f762ce6507847246f790bf57d735bcefe27c21bf8338a179dddbe3d0f930',
 			'ee31029693c8c8c0e9e1b8506a341cbb4ddbc15c585cf16de713dc540f68bf55',
 			'70a2f58978eb3f6f32b214260bc87ac3ebfe11060c801f179bfc75da2d06e2ef',
@@ -59,7 +60,7 @@ describe('capacity-provider guarantee execution bindings', () => {
 		expect(manifest.acceptanceCriteria).toEqual([{ criterion: 'b635827ed7862d56b8764dfad30114b9ee18d02b4aa709a257841e18a1bd0f0d',
 			verifierRefs: ['agent.golden.execution-clock-observation-live-1', 'api.golden.execution-protected-observation-live-1'] },
 			{ criterion: '7eaf9fdc1c264e2d0b28d2fc751da33a2ffcf98ca0d6446ac6e8672503dfa533',
-				verifierRefs: ['agent.golden.live.reporter', 'agent.golden.live.settlement'] }, ...prospectiveInputs,
+				verifierRefs: ['agent.golden.live.reporter', 'agent.golden.live.settlement'] }, ...preRunBindings,
 			{ criterion: '80496650a6ed5888fbda21ddcb15047d221874adb709887306dede9e3e93ff55', verifierRefs: ['agent.golden.live.results'] },
 			{ criterion: '6d6749cd8c2676c6c50c009b55025ec3b951589db602440f63b76ba021159f20', verifierRefs: ['agent.golden.live.graph'] },
 			{ criterion: '3bf7f808c3baf5cc63fc5e8e8c065bc2cd87dea9e2df9aae4d1924565af6acd8', verifierRefs: ['agent.golden.live.reporter'] }]);

@@ -361,6 +361,11 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/guarantees/preflight/campaign-freeze.test.ts
     testName: "requires an explicit original campaign path rather than generating SDK-only authority or guessing an old freeze"
+  agent.golden.campaign-seed-custody-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/preflight/campaign-freeze.test.ts
+    testName: "denies absent malformed and changed seed identity or canonical content before preparation without rewriting original evidence"
   agent.golden.campaign-freeze-native:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

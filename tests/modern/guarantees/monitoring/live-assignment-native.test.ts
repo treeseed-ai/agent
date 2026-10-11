@@ -35,6 +35,8 @@ it('native configured Kernel Git result and public SDK assignment reads reach th
 			if (mode === 'grant') row(row(returned.assignmentAttempt).grant).tools = ['release'];
 			if (mode === 'status-regression') row(returned.assignmentAttempt).status = 'running';
 			if (mode === 'terminal-substitution') row(returned.assignmentAttempt).status = 'failed';
+			if (mode === 'deadline-after-workday') row(returned.assignmentAttempt).deadline =
+				new Date(Date.parse(String(row(row(run.parameters).appliedPlan).endsAt)) + 1).toISOString();
 			const observed = row(returned.assignmentAttempt), created = Date.parse(String(observed.createdAt));
 			if (mode === 'start-before-creation') observed.startedAt = new Date(created - 1).toISOString();
 			if (mode === 'finish-before-creation') observed.finishedAt = new Date(created - 1).toISOString();
@@ -48,11 +50,11 @@ it('native configured Kernel Git result and public SDK assignment reads reach th
 		const address = server.address(); if (!address || typeof address === 'string') throw new Error('Native observer address required');
 		const client = new ControlPlaneClient({ profile: defaultLocalControlPlaneServer({ TREESEED_API_BASE_URL: `http://127.0.0.1:${address.port}` }), accessToken: 'controlled-read-input' });
 		let inspections = 0;
-		const execute = async () => {
+		const execute = async (observations = retained) => {
 			const returned = row((await client.invoke(controlPlaneOperation('assignments.show'), {
 				path: { teamId: f.attempt.teamId, assignmentId: f.attempt.id }, query: {}, body: undefined,
 			})).data);
-			observeLiveAssignmentRecords(run, [returned], retained, value => {
+			observeLiveAssignmentRecords(run, [returned], observations, value => {
 				inspections++; verifyGovernedProfile(value, { path, content });
 				const handler = { id: f.attempt.effectiveProfile.handler, origin: f.attempt.effectiveProfile.handlerOrigin };
 				verifyHandlerInspection(value, { projectId: f.attempt.projectId, handlers: [handler] }, { projectId: f.attempt.projectId, handler });
@@ -63,9 +65,18 @@ it('native configured Kernel Git result and public SDK assignment reads reach th
 		for (const denied of ['runtime', 'grant', 'denied', 'interrupted', 'start-before-creation', 'finish-before-creation', 'finish-before-start', 'status-regression', 'terminal-substitution']) {
 			mode = denied; await expect(execute(), denied).rejects.toThrow(); expect(retained).toEqual(held);
 		}
+		const unobserved = new Map<string, Row>(); mode = 'deadline-after-workday';
+		await expect(execute(unobserved)).rejects.toThrow('Original workday deadline');
+		expect(unobserved.size).toBe(0); expect(retained).toEqual(held); expect(inspections).toBe(1);
+		mode = 'exact'; const parameters = row(run.parameters), originalDeadline = parameters.deadlineAt;
+		parameters.deadlineAt = new Date(Date.parse(String(originalDeadline)) + 1).toISOString();
+		const deniedRun = structuredClone(run);
+		await expect(execute(unobserved)).rejects.toThrow('Productive deadline drift');
+		expect(unobserved.size).toBe(0); expect(run).toEqual(deniedRun); expect(retained).toEqual(held); expect(inspections).toBe(1);
+		parameters.deadlineAt = originalDeadline;
 		const originalFailures = structuredClone(failed); mode = 'exact'; await execute();
-		expect(retained).toEqual(held); expect(failed).toEqual(originalFailures); expect(failed).toHaveLength(7);
-		expect(requests).toEqual(Array(12).fill(`GET /v1/teams/${f.attempt.teamId}/capacity/assignments/${f.attempt.id}`));
+		expect(retained).toEqual(held); expect(failed).toEqual(originalFailures); expect(failed).toHaveLength(8);
+		expect(requests).toEqual(Array(14).fill(`GET /v1/teams/${f.attempt.teamId}/capacity/assignments/${f.attempt.id}`));
 		expect({ item, run }).toEqual(before); expect(f.requests).toHaveLength(1);
 		// Native owning Kernel/handler/Git and SDK transport; upstream record,
 		// profile bytes and handler catalog are controlled. This does not prove

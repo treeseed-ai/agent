@@ -4,17 +4,11 @@ import { appliedWorkdaySchema, assignmentAttemptSchema } from '@treeseed/sdk/age
 import { validateWorkdayIntent, type WorkdayIntent } from '@treeseed/sdk/operator-contracts';
 import { collectCompleteEvidence } from './evidence-pages.ts';
 
-// Read later pages only through the existing public events operation. Without
-// a supplied reader an incomplete show still denies; no inferred terminal page.
-export function verifyInitialStartCustody(observed: Row, assignments: Row[], readEvents?: (cursor: string, limit: number) => Row): void {
-	const run = row(observed.run), id = String(run.id ?? '');
-	const snapshot = observeCampaign(observed, id, new Map(), readEvents);
+/** The original applied workday owns productive clocks and policy in both
+ * initial-start and live assignment read-back. */
+export function verifyAppliedWorkdayCustody(run: Row) {
+	const id = String(run.id ?? '');
 	const parameters = row(run.parameters), plan = appliedWorkdaySchema.parse(parameters.appliedPlan);
-	const selection = parameters.decisionIds;
-	if (selection !== undefined) assert.ok(Array.isArray(selection) && selection.length > 0
-		&& selection.every(value => typeof value === 'string' && value.length > 0 && value === value.trim())
-		&& new Set(selection).size === selection.length,
-	'ACCEPTANCE_START_SELECTION: Explicit frozen decision inventory must be complete unique and exact');
 	assert.equal(plan.id, id, 'ACCEPTANCE_START_ID: Applied plan differs from public run');
 	assert.equal(plan.teamId, run.teamId, 'ACCEPTANCE_START_TEAM: Applied plan differs from public team');
 	assert.equal(plan.executionMode, run.executionMode, 'ACCEPTANCE_START_MODE: Workday is the sole mode authority');
@@ -24,6 +18,19 @@ export function verifyInitialStartCustody(observed: Row, assignments: Row[], rea
 	assert.equal(Date.parse(String(parameters.deadlineAt)), Date.parse(plan.endsAt), 'ACCEPTANCE_START_CLOCK: Productive deadline drift');
 	for (const [key, value] of Object.entries(plan.policySnapshot)) assert.deepEqual(parameters[key], value,
 		`ACCEPTANCE_START_POLICY: Frozen ${key} differs from applied original authority`);
+	return plan;
+}
+
+// Read later pages only through the existing public events operation. Without
+// a supplied reader an incomplete show still denies; no inferred terminal page.
+export function verifyInitialStartCustody(observed: Row, assignments: Row[], readEvents?: (cursor: string, limit: number) => Row): void {
+	const run = row(observed.run), id = String(run.id ?? '');
+	const snapshot = observeCampaign(observed, id, new Map(), readEvents);
+	const parameters = row(run.parameters), plan = verifyAppliedWorkdayCustody(run), selection = parameters.decisionIds;
+	if (selection !== undefined) assert.ok(Array.isArray(selection) && selection.length > 0
+		&& selection.every(value => typeof value === 'string' && value.length > 0 && value === value.trim())
+		&& new Set(selection).size === selection.length,
+	'ACCEPTANCE_START_SELECTION: Explicit frozen decision inventory must be complete unique and exact');
 	assert.ok(Array.isArray(observed.events), 'ACCEPTANCE_START_EVENTS: Complete event history required');
 	const events = snapshot.events, starts = events.filter(event => event.eventType === 'workday.started'), ready = events.filter(event => event.eventType === 'assignment.polling_ready');
 	assert.ok(Array.isArray(parameters.scheduledProjectIds) && parameters.scheduledProjectIds.length > 0,

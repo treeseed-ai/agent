@@ -3,6 +3,7 @@ import { assignmentAttemptSchema, validateProviderAssignment } from '@treeseed/s
 import { read, row, type Row } from '../../../acceptance-cli.ts';
 import { verifyAssignmentAuthority, verifyGovernedProfile, verifyHandlerInspection } from '../assignment-authority.ts';
 import { readGovernedContentFile } from '../decision-evidence.ts';
+import { verifyAppliedWorkdayCustody } from '../campaign-observation.ts';
 
 const issuedAuthority = ({ status: _status, startedAt: _started, finishedAt: _finished, ...value }: Row) => value;
 
@@ -24,6 +25,7 @@ export function observeLiveAssignmentRecords(run: Row, items: readonly Row[], re
 	const label = 'ACCEPTANCE_LIVE_ASSIGNMENT';
 	assert.ok(typeof run.id === 'string' && run.id && typeof run.teamId === 'string' && run.teamId, `${label}: Exact workday and team required`);
 	assert.equal(run.executionMode, 'simulation', `${label}: Workday is the sole mode authority`);
+	const plan = verifyAppliedWorkdayCustody(run), workdayEnd = Date.parse(plan.endsAt);
 	const started = Date.parse(String(run.startedAt)), projects = row(run.parameters).scheduledProjectIds;
 	assert.ok(Number.isFinite(started) && Array.isArray(projects) && projects.length > 0
 		&& projects.every(value => typeof value === 'string' && value) && new Set(projects).size === projects.length,
@@ -38,6 +40,7 @@ export function observeLiveAssignmentRecords(run: Row, items: readonly Row[], re
 		assert.ok(projects.includes(attempt.projectId), `${label}: Unselected project`);
 		const created = Date.parse(attempt.createdAt), deadline = Date.parse(attempt.deadline);
 		assert.ok(created >= started && deadline > created, `${label}: Original admission clock required`);
+		assert.ok(deadline <= workdayEnd, `${label}: Original workday deadline cannot be extended`);
 		const executionStart = attempt.startedAt === undefined ? created : Date.parse(attempt.startedAt);
 		assert.ok(executionStart >= created && (attempt.finishedAt === undefined || Date.parse(attempt.finishedAt) >= executionStart),
 			`${label}: Original lifecycle clock order required`);

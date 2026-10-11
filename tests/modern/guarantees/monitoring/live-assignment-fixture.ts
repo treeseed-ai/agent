@@ -1,9 +1,11 @@
-import { assignmentAttemptSchema, type AssignmentAttempt } from '@treeseed/sdk/agent-capacity';
+import { assignmentAttemptSchema, compileWorkday, DEFAULT_WORKDAY_POLICY, type AssignmentAttempt } from '@treeseed/sdk/agent-capacity';
 import { request } from '../../kernel/provider-kernel-fixture.ts';
 import type { Row } from '../../../acceptance/acceptance-cli.ts';
 
 // Controlled public assertion input only; never a real admission or usage receipt.
-export function liveAssignmentRecord(attempt: AssignmentAttempt = assignmentAttemptSchema.parse(request().assignment.assignmentAttempt)): Row {
+export function liveAssignmentRecord(attempt: AssignmentAttempt = assignmentAttemptSchema.parse({
+	...assignmentAttemptSchema.parse(request().assignment.assignmentAttempt), deadline: '2026-09-13T13:00:00.000Z',
+})): Row {
 	const mode = ['acting', 'reviewing', 'reporting'].includes(attempt.effectiveProfile.activity) ? 'acting' : 'planning';
 	const envelope = { teamId: attempt.teamId, projectId: attempt.projectId, workDayId: attempt.workdayId, mode,
 		projectAgentClassId: 'opaque-configured-row', capacityProviderId: attempt.provider.providerId,
@@ -15,6 +17,9 @@ export function liveAssignmentRecord(attempt: AssignmentAttempt = assignmentAtte
 }
 export function liveRun(item: Row): Row {
 	const attempt = assignmentAttemptSchema.parse(item.assignmentAttempt);
+	const plan = compileWorkday({ id: attempt.workdayId, teamId: attempt.teamId, executionMode: 'simulation',
+		policyId: 'default', policyRevision: 1, startsAt: attempt.createdAt, agentIds: [],
+		policy: { ...DEFAULT_WORKDAY_POLICY, durationSeconds: 3600 } });
 	return { id: attempt.workdayId, teamId: attempt.teamId, executionMode: 'simulation', startedAt: attempt.createdAt,
-		parameters: { scheduledProjectIds: [attempt.projectId] } };
+		parameters: { ...plan.policySnapshot, deadlineAt: plan.endsAt, appliedPlan: plan, scheduledProjectIds: [attempt.projectId] } };
 }

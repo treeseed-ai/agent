@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { assignmentAttemptSchema, executionEdgeSchema, executionNodeSchema } from '@treeseed/sdk/agent-capacity';
-import { state } from '../golden-readback-fixture.ts';
+import { state, workdayId } from '../golden-readback-fixture.ts';
 import { request } from '../../provider-kernel-fixture.ts';
 import { verifyGraphProvenance, verifyPredecessorCustody } from '../../../../acceptance/workday/support/evidence-pages.ts';
 await import('../../../../acceptance/workday/living-graph.test.ts');
@@ -72,6 +72,23 @@ describe('living team graph managed assertion contract', () => {
 			try { verifyPredecessorCustody(rows); outcomes.push(false); } catch { outcomes.push(true); }
 		}
 		expect(outcomes).toEqual([true, true, true, true, true, true]);
+	});
+	it('rejects a changed reconciliation preview before performing an actual noop or accepting unchanged public reads', () => {
+		const graph = graphInput();
+		state.replies.get('workdays show')!.run.id = workdayId;
+		state.replies.set('execution graph', graph);
+		for (const node of graph.nodes) {
+			state.replies.set(`execution node show ${node.id}`, node);
+			state.replies.set(`execution node explain ${node.id}`, { node, graphRevision: graph.revision,
+				predecessors: graph.edges.filter(edge => edge.toNodeId === node.id).map(edge => ({ edge })) });
+		}
+		const changes = { added: [], changed: [], completed: [], blocked: [], stale: [], removedEdges: [], addedEdges: [] };
+		const plan = { teamId: graph.teamId, baseRevision: graph.revision, desiredRevision: 2, desiredDigest: graph.digest, changes };
+		state.replies.set('execution reconcile', plan);
+		const observe = state.cases.get('Living graph read-only reconciliation and node inspection preserve assignments usage and every public graph record')!;
+		observe();
+		state.replies.set('execution reconcile', { ...plan, changes: { ...changes, added: ['foreign-node'] } });
+		expect(observe).toThrow(/ACCEPTANCE_GRAPH_NOOP/u);
 	});
 	it('registers separate live graph and read-only replay cases without invoking a campaign from unit fixtures', () => {
 		expect(state.cases.has('Living team graph public views preserve exact nodes edges provenance and frozen predecessor results')).toBe(true);

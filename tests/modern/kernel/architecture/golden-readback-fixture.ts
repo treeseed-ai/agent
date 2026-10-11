@@ -18,7 +18,7 @@ vi.mock('node:child_process', () => ({ execFileSync: (_command: string, args: st
 		: key === 'assignments list' && state.assignmentPages ? state.assignmentPages.shift()
 		: key === 'capacity usage' && state.usagePages ? state.usagePages.shift()
 		: key === 'workdays events' && state.eventPages ? state.eventPages.shift()
-		: state.replies.get(`${key} ${args[3]}`) ?? state.replies.get(key);
+		: state.replies.get(`${key} ${args[2]} ${args[3]}`) ?? state.replies.get(`${key} ${args[3]}`) ?? state.replies.get(key);
 	if (!result) throw new Error(`Unexpected acceptance read: ${key}`);
 	// The actual repository sorts its read model; do not reorder the mutable oracle inputs.
 	const presented = (key === 'assignments list' || key === 'capacity ledger' || (key === 'capacity usage' && !state.usagePages)) ? { ...result, items: [...result.items].sort((a, b) =>

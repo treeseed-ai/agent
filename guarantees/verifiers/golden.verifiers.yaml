@@ -421,6 +421,26 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/guarantees/preflight/campaign-freeze.test.ts
     testName: "uses the original operator proposal and start and denies changed CLI intent or policy before any proposal creation"
+  agent.golden.campaign-offers-read-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/preflight/campaign-offers.test.ts
+    testName: "reads every exact frozen provider offer revision and original configuration through the public boundary without changing supplied observations"
+  agent.golden.campaign-offers-denials-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/preflight/campaign-offers.test.ts
+    testName: "denies missing malformed foreign moved duplicated and incomplete provider offer authority while retaining every original failed input before exact retry"
+  agent.golden.campaign-offers-binding-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/preflight/campaign-offers.test.ts
+    testName: "selects original provider offer readback in the normal SDK freeze and retains preparation evidence before proposal creation"
+  agent.golden.campaign-offers-native:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/preflight/campaign-offers-native.test.ts
+    testName: "native owning provider offers and public SDK reads retain exact frozen revision configuration denial and interruption observations before unchanged concurrent retry"
   agent.golden.campaign-policy-native:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

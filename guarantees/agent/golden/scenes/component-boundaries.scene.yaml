@@ -60,6 +60,14 @@ workflow:
   - id: campaign-fresh-estimates-native
     action: { verifier: agent.golden.campaign-fresh-estimates-native }
     expect: { status: passed }
+  - id: campaign-offers-read-unit
+    action: { verifier: agent.golden.campaign-offers-read-unit }
+  - id: campaign-offers-denials-unit
+    action: { verifier: agent.golden.campaign-offers-denials-unit }
+  - id: campaign-offers-binding-unit
+    action: { verifier: agent.golden.campaign-offers-binding-unit }
+  - id: campaign-offers-native
+    action: { verifier: agent.golden.campaign-offers-native }
   - id: campaign-policy-native
     action: { verifier: agent.golden.campaign-policy-native }
     expect: { status: passed }

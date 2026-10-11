@@ -12,6 +12,17 @@ it('reads every exact frozen provider offer revision and original configuration 
 	expect(reader.mock.calls).toEqual([[['providers', 'offers', 'show', f.providerId], 'renamed-team']]);
 	const refreshed = structuredClone(f.inventory); for (const offer of refreshed.offers) offer.observedAt = '2026-10-11T00:01:00.000Z';
 	expect(verifyCampaignProviderOffer(f.manifest, f.providerId, refreshed)).toBe(refreshed);
+	const second = structuredClone(f.manifest.allocationInputsByRun.sdk!.providerSupply[0]!); second.providerId = 'second-provider';
+	f.manifest.allocationInputsByRun.sdk!.providerSupply.push(second);
+	const beforeMultiple = structuredClone(f), observations = new Map([f.providerId, second.providerId].map(providerId => [providerId, { ...f.inventory, providerId }]));
+	const all = vi.fn((args: string[]) => observations.get(args[3]!)!);
+	expect(readCampaignProviderOffers(f.manifest, 'renamed-team', all)).toEqual(observations);
+	expect(all.mock.calls.map(call => call[0][3])).toEqual([f.providerId, second.providerId]);
+	const denied = new Error('Original second provider denial');
+	const partial = vi.fn((args: string[]) => { if (args[3] === second.providerId) throw denied; return f.inventory; });
+	expect(() => readCampaignProviderOffers(f.manifest, 'renamed-team', partial)).toThrow(denied);
+	expect(partial).toHaveBeenCalledTimes(2); expect(f).toEqual(beforeMultiple);
+	f.manifest.allocationInputsByRun.sdk!.providerSupply.pop();
 	expect(f).toEqual(held);
 });
 
@@ -37,6 +48,15 @@ it('denies missing malformed foreign moved duplicated and incomplete provider of
 		const held = structuredClone({ f, observed });
 		expect(() => verifyCampaignProviderOffer(f.manifest, f.providerId, observed), mode).toThrow();
 		expect({ f, observed }).toEqual(held); expect(verifyCampaignProviderOffer(f.manifest, f.providerId, f.inventory)).toBe(f.inventory);
+	}
+	for (const revision of [0, -1, Number.NaN, undefined, '1', 1.5, Number.POSITIVE_INFINITY]) {
+		const f = campaignOffers(), reader = vi.fn(() => f.inventory); Reflect.set(f.manifest, 'providerOfferRevision', revision);
+		const held = structuredClone(f); expect(() => readCampaignProviderOffers(f.manifest, 'team', reader)).toThrow();
+		expect(reader).not.toHaveBeenCalled(); expect(f).toEqual(held);
+	}
+	for (const team of ['', ' ', ' team', 'team ']) {
+		const f = campaignOffers(), reader = vi.fn(() => f.inventory);
+		expect(() => readCampaignProviderOffers(f.manifest, team, reader)).toThrow(); expect(reader).not.toHaveBeenCalled();
 	}
 	for (const mode of ['missing-supply', 'empty-supply', 'foreign-supply', 'duplicate-supply', 'missing-offers', 'empty-offers']) {
 		const f = campaignOffers(), supply = f.manifest.allocationInputsByRun.sdk!.providerSupply;

@@ -4,6 +4,7 @@ import test from 'node:test';
 import { readCampaignProjectLibraries, readCampaignRepositoryBases, readPreRunCampaignFreeze, verifyCampaignWorkdayPolicy, verifyFreezeIntegrity } from './freeze-integrity.ts';
 import { read } from './acceptance-cli.ts';
 import { readCampaignProfiles } from './workday/support/preflight/campaign-profiles.ts';
+import { readCampaignProviderOffers } from './workday/support/preflight/campaign-provider-offers.ts';
 
 test('Golden pre-run campaign freeze retains every schema-valid expanded input and original manifest bytes before SDK execution', () => {
 	const original = readPreRunCampaignFreeze();
@@ -14,10 +15,14 @@ test('Golden pre-run campaign freeze retains every schema-valid expanded input a
 	const protectedHeads = readCampaignRepositoryBases(original);
 	const profiles = readCampaignProfiles(original, bindings, team);
 	const policy = verifyCampaignWorkdayPolicy(original.manifest, read(['workdays', 'profiles', 'show', 'default'], team), bindings.get('sdk')?.teamId);
+	const providerOffers = readCampaignProviderOffers(original.manifest, team);
 	assert.deepEqual(readCampaignProjectLibraries(original.manifest, team), bindings);
 	assert.deepEqual(readCampaignRepositoryBases(original), protectedHeads);
 	assert.deepEqual(readCampaignProfiles(original, bindings, team), profiles);
 	assert.deepEqual(verifyCampaignWorkdayPolicy(original.manifest, read(['workdays', 'profiles', 'show', 'default'], team), bindings.get('sdk')?.teamId), policy);
+	const finalProviderOffers = readCampaignProviderOffers(original.manifest, team);
+	assert.deepEqual([...finalProviderOffers.keys()], [...providerOffers.keys()]);
+	console.log(JSON.stringify({ providerOfferReadback: { before: [...providerOffers], after: [...finalProviderOffers] } }));
 	const independentlyRead = readPreRunCampaignFreeze();
 	assert.deepEqual(independentlyRead, original);
 	assert.deepEqual(readFileSync(original.path), held);

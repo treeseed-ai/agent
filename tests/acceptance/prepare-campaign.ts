@@ -8,6 +8,7 @@ import { read } from './acceptance-cli.ts';
 import { readCampaignProfiles } from './workday/support/preflight/campaign-profiles.ts';
 import { freshSdkDraft, requirePlanningWindow, sdkProposalText, sdkCampaignWindow } from './campaign.ts';
 import { readCampaignProjectLibraries, readCampaignRepositoryBases, readPreRunCampaignFreeze, verifyCampaignWorkdayPolicy, verifyRuntimeClosure } from './freeze-integrity.ts';
+import { readCampaignProviderOffers } from './workday/support/preflight/campaign-provider-offers.ts';
 
 type Row = Record<string, any>;
 export function requirePinnedCodex(pinned: string, installed: string): void {
@@ -122,6 +123,7 @@ export function prepareSdkCampaign(draftPath: string, freezePath: string, team: 
 		read(['workdays', 'profiles', 'show', 'default'], team), libraries.get('sdk')?.teamId);
 	const protectedHeads = readCampaignRepositoryBases(operatorFreeze);
 	const profiles = readCampaignProfiles(operatorFreeze, libraries, team);
+	const providerOffers = readCampaignProviderOffers(operatorFreeze.manifest, team);
 	const agentPath = resolve(platform, 'packages/agent');
 	const pinnedCodex = (JSON.parse(readFileSync(join(agentPath, 'package.json'), 'utf8')) as Row).dependencies['@openai/codex'] as string;
 	const installedCodex = execFileSync(join(agentPath, 'node_modules/.bin/codex'), ['--version'], { encoding: 'utf8', timeout: 30_000 }).trim();
@@ -156,6 +158,7 @@ export function prepareSdkCampaign(draftPath: string, freezePath: string, team: 
 	verifySdkPublishedProfiles(sdkProfiles.inventory.agents as Row[], sdkProfiles.ref);
 	const providers = (read(['providers', 'list'], team).items as Row[]).filter(item => item.status === 'approved');
 	assert.equal(providers.length, 1, 'ACCEPTANCE_CAMPAIGN_SUPPLY: Individual host campaign requires unambiguous provider');
+	assert.ok(providerOffers.has(providers[0]!.providerId), 'ACCEPTANCE_CAMPAIGN_OFFERS: Selected provider differs from frozen offer authority');
 	const supply = read(['providers', 'status', providers[0]!.providerId], team);
 	requireSdkCampaignSupply(supply, durationSeconds, planningPercent, new Date().toISOString());
 	const project = draft.projectId as string;
@@ -190,6 +193,7 @@ export function prepareSdkCampaign(draftPath: string, freezePath: string, team: 
 	capture('protected-staging-heads.json', JSON.stringify(protectedHeads));
 	capture('architecture-book.json', JSON.stringify(bookReadback));
 	capture('governed-agent-profiles.json', JSON.stringify([...profiles]));
+	capture('provider-offers.json', JSON.stringify([...providerOffers]));
 	capture('codex-version.json', JSON.stringify({ pinned: pinnedCodex, installed: installedCodex }));
 	const runtime = read(['dev', 'status'], team, true);
 	capture('runtime.json', JSON.stringify(runtime)); capture('supply.json', JSON.stringify(supply));
@@ -203,6 +207,7 @@ export function prepareSdkCampaign(draftPath: string, freezePath: string, team: 
 		'ACCEPTANCE_CAMPAIGN_FREEZE: Protected repositories changed during preparation');
 	assert.deepEqual(readCampaignProfiles(operatorFreeze, libraries, team), profiles,
 		'ACCEPTANCE_CAMPAIGN_PROFILES: Governed profiles changed during preparation');
+	capture('provider-offers-final.json', JSON.stringify([...readCampaignProviderOffers(operatorFreeze.manifest, team)]));
 	const current = read(['proposals', 'show', id, '--server', 'local', '--project', project], team, true);
 	writeFileSync(freezePath, JSON.stringify({ createdAt: new Date().toISOString(),
 		proposal: { id, revision: current.activeVersion, digest: current.activeContentHash, estimates: 0 }, request, preflight, sourceHeads,

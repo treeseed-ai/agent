@@ -8,7 +8,7 @@ import { portableProfile } from '../portable/portable-kernel-fixture.ts';
 import { verifyGovernedProfile, verifyHandlerInspection } from '../../../../acceptance/workday/support/assignment-authority.ts';
 import { inspectLiveAssignmentProfile } from '../../../../acceptance/workday/support/monitoring/live-assignment-records.ts';
 import { liveAssignmentRecord } from '../../../guarantees/monitoring/live-assignment-fixture.ts';
-import { profileOrderFixture, profileOrderFailures, mutateProfileOrder } from './graph/profile-order-fixture.ts';
+import { profileOrderFixture, profileOrderFailures, mutateProfileOrder, grantRequestCases, grantRequestFixture } from './graph/profile-order-fixture.ts';
 await import('../../../../acceptance/workday/profile-custody.test.ts');
 
 function input() {
@@ -22,6 +22,14 @@ function input() {
 	return { item: { id: attempt.id, assignmentAttempt: attempt }, file: { path, content } };
 }
 describe('independent governed profile assertion contract', () => {
+	it('rejects actual grants above the original authored request even within a broader independently read profile ceiling', () => {
+		for (const mode of grantRequestCases) {
+			const f = grantRequestFixture(mode), held = structuredClone(f);
+			expect.soft(() => verifyGovernedProfile(f.item, f.file, f.graph), mode).toThrow('ACCEPTANCE_PROFILE_PERMISSION_REQUEST'); expect(f).toEqual(held);
+			f.graph.nodes[0]!.requestedPermissions = structuredClone(f.item.assignmentAttempt.effectiveProfile.permissionCeiling);
+			const retry = structuredClone(f); expect(() => verifyGovernedProfile(f.item, f.file, f.graph)).not.toThrow(); expect(f).toEqual(retry);
+		}
+	});
 	it('rejects graph dependencies that differ from independently read renamed governed profile bytes without rewriting authority', () => {
 		const f = profileOrderFixture(), inspect = (value: typeof f) => Reflect.apply(verifyGovernedProfile, undefined, [value.item, value.file, value.graph]);
 		const before = structuredClone(f); expect(() => inspect(f)).not.toThrow(); expect(f).toEqual(before);

@@ -278,7 +278,7 @@ it('uses the original operator proposal and start and denies changed CLI intent 
 	state.files.set('/supplied-platform/seeds/treeseed.yaml', seed); state.files.set('/draft.json', JSON.stringify(template));
 	state.writes.mockImplementation((path: string, bytes: string) => state.files.set(path, bytes));
 	for (const scenario of ['intent-drift', 'policy-drift', 'policy-team', 'policy-owner-missing', 'policy-malformed', 'policy-unknown',
-		'project-drift', 'lookup-team-drift', 'lookup-slug-drift', 'lookup-repository-missing', 'lookup-denied', 'unchanged']) {
+		'offer-revision', 'offer-provider', 'offer-denied', 'project-drift', 'lookup-team-drift', 'lookup-slug-drift', 'lookup-repository-missing', 'lookup-denied', 'unchanged']) {
 		state.bytes = JSON.stringify(supplied); state.writes.mockClear(); state.commands.mockClear(); state.execute.mockClear(); state.publicRead.mockClear();
 		state.execute.mockImplementation((command: string, args: string[]) => command.endsWith('/codex') ? 'codex-cli 0.158.0'
 			: args.includes('--refs') ? `${head}\trefs/heads/staging\n`
@@ -305,6 +305,11 @@ it('uses the original operator proposal and start and denies changed CLI intent 
 			if (args[0] === 'library') return { result: { repoId: 'repo_supplied', resolvedRef: head,
 				files: [{ path: canonical.architectureBook.path, content, frontmatter: bookFrontmatter }] } };
 			if (args[0] === 'agents') return campaignProfiles(args[3]!, head, `repository-${args[3]}`).inventory;
+			if (args[0] === 'providers' && args[1] === 'offers') {
+				if (scenario === 'offer-denied') throw new Error('ACCEPTANCE_CLI_COMMAND: providers.offers.show denied');
+				return { schemaVersion: 'treeseed.provider-offer-inventory/v1', providerId: scenario === 'offer-provider' ? 'foreign' : args[3],
+					revision: scenario === 'offer-revision' ? supplied.providerOfferRevision + 1 : supplied.providerOfferRevision, offers: [] };
+			}
 			if (args[0] === 'providers' && args[1] === 'list') return { items: [{ status: 'approved', providerId: 'supplied' }] };
 			if (args[0] === 'providers') {
 				const now = new Date().toISOString(), measured = { day: now.slice(0, 10), observedAt: now, healthy: true, activeSeconds: 0, reservedSeconds: 0 };

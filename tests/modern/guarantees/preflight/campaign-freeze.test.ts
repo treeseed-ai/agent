@@ -2,6 +2,7 @@ import { beforeEach, afterEach, expect, it, vi } from 'vitest';
 import { createHash } from 'node:crypto';
 import { resolve } from 'node:path';
 import { stringify } from 'yaml';
+import { campaignOffers } from './campaign-offers-fixture.ts';
 
 const state = vi.hoisted(() => ({ bytes: '{}', reads: [] as string[], files: new Map<string, string>(),
 	commands: vi.fn(), writes: vi.fn(), execute: vi.fn(), publicRead: vi.fn() }));
@@ -265,6 +266,8 @@ it('uses the original operator proposal and start and denies changed CLI intent 
 	const canonical = sdkProposalText(document), head = 'a'.repeat(40);
 	const supplied = campaignInputs(portfolioRelations(document, seed).projects.map(project => project.slug), seed);
 	const sdk = supplied.allocationInputsByRun.sdk!;
+	const frozenOffers = campaignOffers().inventory.offers;
+	for (const provider of sdk.providerSupply) Reflect.set(provider, 'offers', structuredClone(frozenOffers));
 	const bookFrontmatter = { id: canonical.architectureBook.id, title: canonical.architectureBook.title,
 		schemaVersion: 'treeseed.book/v3', projectId: sdk.input.projects[0], revision: 1, status: 'published' };
 	const content = `---\n${stringify(bookFrontmatter)}---\n\nControlled published Book\n`;
@@ -278,7 +281,7 @@ it('uses the original operator proposal and start and denies changed CLI intent 
 	state.files.set('/supplied-platform/seeds/treeseed.yaml', seed); state.files.set('/draft.json', JSON.stringify(template));
 	state.writes.mockImplementation((path: string, bytes: string) => state.files.set(path, bytes));
 	for (const scenario of ['intent-drift', 'policy-drift', 'policy-team', 'policy-owner-missing', 'policy-malformed', 'policy-unknown',
-		'project-drift', 'lookup-team-drift', 'lookup-slug-drift', 'lookup-repository-missing', 'lookup-denied', 'unchanged']) {
+		'offer-revision', 'offer-provider', 'offer-denied', 'project-drift', 'lookup-team-drift', 'lookup-slug-drift', 'lookup-repository-missing', 'lookup-denied', 'unchanged']) {
 		state.bytes = JSON.stringify(supplied); state.writes.mockClear(); state.commands.mockClear(); state.execute.mockClear(); state.publicRead.mockClear();
 		state.execute.mockImplementation((command: string, args: string[]) => command.endsWith('/codex') ? 'codex-cli 0.158.0'
 			: args.includes('--refs') ? `${head}\trefs/heads/staging\n`
@@ -305,7 +308,12 @@ it('uses the original operator proposal and start and denies changed CLI intent 
 			if (args[0] === 'library') return { result: { repoId: 'repo_supplied', resolvedRef: head,
 				files: [{ path: canonical.architectureBook.path, content, frontmatter: bookFrontmatter }] } };
 			if (args[0] === 'agents') return campaignProfiles(args[3]!, head, `repository-${args[3]}`).inventory;
-			if (args[0] === 'providers' && args[1] === 'list') return { items: [{ status: 'approved', providerId: 'supplied' }] };
+			if (args[0] === 'providers' && args[1] === 'offers') {
+				if (scenario === 'offer-denied') throw new Error('ACCEPTANCE_CLI_COMMAND: providers.offers.show denied');
+				return { schemaVersion: 'treeseed.provider-offer-inventory/v1', providerId: scenario === 'offer-provider' ? 'foreign' : args[3],
+					revision: scenario === 'offer-revision' ? supplied.providerOfferRevision + 1 : supplied.providerOfferRevision, offers: structuredClone(frozenOffers) };
+			}
+			if (args[0] === 'providers' && args[1] === 'list') return { items: [{ status: 'approved', providerId: 'supplied-provider' }] };
 			if (args[0] === 'providers') {
 				const now = new Date().toISOString(), measured = { day: now.slice(0, 10), observedAt: now, healthy: true, activeSeconds: 0, reservedSeconds: 0 };
 				return { healthy: true, availability: [{ refreshed_at: now, executionProviders: [{ id: 'supplied', status: 'active',
@@ -328,7 +336,7 @@ it('uses the original operator proposal and start and denies changed CLI intent 
 			if (scenario === 'intent-drift' || scenario.startsWith('policy-'))
 				expect(() => prepareSdkCampaign('/draft.json', '/sdk.freeze.json', 'supplied-team')).toThrow('ACCEPTANCE_CAMPAIGN_FREEZE');
 			else expect.soft(() => prepareSdkCampaign('/draft.json', '/sdk.freeze.json', 'supplied-team'))
-				.toThrow(/ACCEPTANCE_(CAMPAIGN_FREEZE|PROJECT_LIBRARY|CLI_COMMAND)/u);
+				.toThrow(/ACCEPTANCE_(CAMPAIGN_FREEZE|CAMPAIGN_OFFERS|PROJECT_LIBRARY|CLI_COMMAND)/u);
 			expect(state.writes).not.toHaveBeenCalled();
 			expect(state.publicRead.mock.calls.filter(call => call[0][0] === 'proposals')).toHaveLength(0);
 			if (scenario === 'project-drift' || scenario.startsWith('lookup-')) expect.soft(state.execute).not.toHaveBeenCalled();

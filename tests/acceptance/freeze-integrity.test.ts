@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
-import { readCampaignProjectLibraries, readPreRunCampaignFreeze, verifyFreezeIntegrity } from './freeze-integrity.ts';
+import { readCampaignProjectLibraries, readPreRunCampaignFreeze, verifyCampaignWorkdayPolicy, verifyFreezeIntegrity } from './freeze-integrity.ts';
+import { read } from './acceptance-cli.ts';
 
 test('Golden pre-run campaign freeze retains every schema-valid expanded input and original manifest bytes before SDK execution', () => {
 	const original = readPreRunCampaignFreeze();
@@ -9,7 +10,9 @@ test('Golden pre-run campaign freeze retains every schema-valid expanded input a
 	assert.equal(held.toString('utf8'), original.bytes);
 	const team = process.env.TREESEED_ACCEPTANCE_TEAM ?? 'treeseed';
 	const bindings = readCampaignProjectLibraries(original.manifest, team);
+	const policy = verifyCampaignWorkdayPolicy(original.manifest, read(['workdays', 'profiles', 'show', 'default'], team), bindings.get('sdk')?.teamId);
 	assert.deepEqual(readCampaignProjectLibraries(original.manifest, team), bindings);
+	assert.deepEqual(verifyCampaignWorkdayPolicy(original.manifest, read(['workdays', 'profiles', 'show', 'default'], team), bindings.get('sdk')?.teamId), policy);
 	const independentlyRead = readPreRunCampaignFreeze();
 	assert.deepEqual(independentlyRead, original);
 	assert.deepEqual(readFileSync(original.path), held);

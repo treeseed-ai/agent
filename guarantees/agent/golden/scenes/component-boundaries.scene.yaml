@@ -9,6 +9,9 @@ workflow:
   - id: campaign-fresh-estimates-native
     action: { verifier: agent.golden.campaign-fresh-estimates-native }
     expect: { status: passed }
+  - id: campaign-policy-native
+    action: { verifier: agent.golden.campaign-policy-native }
+    expect: { status: passed }
   - id: workday-start-receipt-unit
     action: { verifier: agent.golden.workday-start-receipt-unit }
     expect: { status: passed }

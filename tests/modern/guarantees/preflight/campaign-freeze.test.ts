@@ -20,7 +20,7 @@ vi.mock('../../../acceptance/acceptance-cli.ts', async importOriginal => ({
 	state.commands(...args); return state.publicRead(...args);
 } }));
 import { prepareSdkCampaign } from '../../../acceptance/prepare-campaign.ts';
-import { readPreRunCampaignFreeze, verifyPreRunCampaignInputs } from '../../../acceptance/freeze-integrity.ts';
+import { readCampaignRepositoryBases, readPreRunCampaignFreeze, verifyPreRunCampaignInputs } from '../../../acceptance/freeze-integrity.ts';
 import { campaignInputs } from './campaign-freeze-fixture.ts';
 import { sdkProposalText } from '../../../acceptance/campaign.ts';
 import { portfolioRelations } from '../../../acceptance/workday/support/portfolio-relations.ts';
@@ -107,6 +107,45 @@ it('denies a seed-valid campaign without exact protected primary and library bas
 	expect(state.commands).not.toHaveBeenCalled(); expect(state.writes).not.toHaveBeenCalled();
 });
 
+it('retains every seeded base and denies malformed missing moved and interrupted protected ref observations', () => {
+	const authority = process.env.TREESEED_DEVELOPMENT_WORKSPACE_ROOT!;
+	const document = nativeFs.readFileSync(resolve(authority, 'docs/agent-acceptance.md'), 'utf8');
+	const seed = nativeFs.readFileSync(resolve(authority, 'seeds/treeseed.yaml'), 'utf8');
+	const original = campaignInputs(portfolioRelations(document, seed).projects.map(project => project.slug), seed);
+	state.files.set('/supplied-platform/docs/agent-acceptance.md', document);
+	state.files.set('/supplied-platform/seeds/treeseed.yaml', seed);
+	state.bytes = JSON.stringify(original); state.files.set('/supplied-campaign.json', state.bytes);
+	const freeze = readPreRunCampaignFreeze(), before = structuredClone(freeze), exact = `${'a'.repeat(40)}\trefs/heads/staging\n`;
+	expect(freeze.repositories).toHaveLength(34);
+	state.files.delete('/supplied-campaign.json');
+	for (const key of Object.keys(original.repositoryBases)) for (const value of [undefined, null, '', 'staging', 'A'.repeat(40), 'a'.repeat(39), 1]) {
+		state.bytes = JSON.stringify({ ...original, repositoryBases: { ...original.repositoryBases, [key]: value } });
+		expect.soft(() => readPreRunCampaignFreeze()).toThrow('ACCEPTANCE_CAMPAIGN_FREEZE');
+	}
+	state.bytes = JSON.stringify({ ...original, repositoryBases: { ...original.repositoryBases, unknown: 'a'.repeat(40) } });
+	expect(() => readPreRunCampaignFreeze()).toThrow('ACCEPTANCE_CAMPAIGN_FREEZE');
+	state.bytes = JSON.stringify(original);
+	state.files.set('/supplied-campaign.json', state.bytes);
+	state.execute.mockImplementation(() => exact);
+	expect(readCampaignRepositoryBases(freeze)).toEqual(original.repositoryBases);
+	expect(state.execute).toHaveBeenCalledTimes(68);
+	for (const output of ['', '{}', `${exact}${exact}`, `${'a'.repeat(40)}\trefs/heads/main`, `staging\trefs/heads/staging`]) {
+		state.execute.mockImplementation(() => output);
+		expect(() => readCampaignRepositoryBases(freeze)).toThrow('ACCEPTANCE_CAMPAIGN_FREEZE');
+	}
+	for (const signal of ['SIGTERM', 'ETIMEDOUT', 'access denied']) {
+		state.execute.mockImplementation(() => { throw new Error(signal); });
+		expect(() => readCampaignRepositoryBases(freeze)).toThrow('ACCEPTANCE_CAMPAIGN_FREEZE');
+	}
+	let count = 0; state.execute.mockImplementation(() => ++count > 34 ? exact.replace(/^a/u, 'b') : exact);
+	expect(() => readCampaignRepositoryBases(freeze)).toThrow('ACCEPTANCE_CAMPAIGN_FREEZE');
+	state.execute.mockImplementation(() => exact); state.files.set('/supplied-campaign.json', '{}');
+	expect(() => readCampaignRepositoryBases(freeze)).toThrow('ACCEPTANCE_CAMPAIGN_FREEZE');
+	state.files.set('/supplied-campaign.json', state.bytes);
+	expect(readCampaignRepositoryBases(freeze)).toEqual(original.repositoryBases);
+	expect(freeze).toEqual(before); expect(state.writes).not.toHaveBeenCalled();
+});
+
 it('retains all twenty five prospective schema valid inputs with pending genuine estimates and unchanged exact selection weights', () => {
 	const supplied = campaignInputs(slugs), before = structuredClone(supplied);
 	verifyPreRunCampaignInputs(supplied, slugs);
@@ -185,6 +224,7 @@ it('uses the original operator proposal and start and denies changed CLI intent 
 		'project-drift', 'lookup-team-drift', 'lookup-slug-drift', 'lookup-repository-missing', 'lookup-denied', 'unchanged']) {
 		state.bytes = JSON.stringify(supplied); state.writes.mockClear(); state.commands.mockClear(); state.execute.mockClear(); state.publicRead.mockClear();
 		state.execute.mockImplementation((command: string, args: string[]) => command.endsWith('/codex') ? 'codex-cli 0.158.0'
+			: args.includes('--refs') ? `${head}\trefs/heads/staging\n`
 			: args.includes('rev-parse') || command === 'gh' ? head : 'Controlled external baseline');
 		state.publicRead.mockImplementation((args: string[]) => {
 			if (args[0] === 'library' && args[1] === 'show') {

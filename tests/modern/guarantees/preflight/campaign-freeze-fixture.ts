@@ -1,9 +1,10 @@
 import { DEFAULT_WORKDAY_POLICY } from '@treeseed/sdk/agent-capacity';
 import { parse } from 'yaml';
+import type { SeedBundle } from '@treeseed/sdk/operator-contracts';
 
 // Controlled prospective test inputs, never genuine estimates or accepted runs.
 export function campaignInputs(slugs: readonly string[], seedBytes?: string) {
-	const bundle = seedBytes ? parse(seedBytes) as { name: string; version: number; digest: string } : undefined;
+	const bundle = seedBytes ? parse(seedBytes) as SeedBundle : undefined;
 	const seed = bundle ? { name: bundle.name, version: bundle.version, digest: bundle.digest } : undefined;
 	const proposals = slugs.map(slug => ({ slug, id: `proposal-${slug}`, projectId: `project-${slug}` }));
 	const policy = { id: 'default', revision: 2, policy: { ...DEFAULT_WORKDAY_POLICY,
@@ -28,5 +29,8 @@ export function campaignInputs(slugs: readonly string[], seedBytes?: string) {
 	for (const fault of ['actor-summary-corruption', 'review-exhaustion', 'provider-interruption',
 		'provider-ineligibility', 'mid-workday-question', 'external-mutation-denial'])
 		inputs[`fault-${fault}`] = { ...inputs.sdk!, id: `fault-${fault}`, sourceAcceptedRun: 'sdk', injectedFault: fault };
-	return { campaignId: 'supplied-complete', seed, proposals, workdayPolicy: policy, providerOfferRevision: 3, allocationInputsByRun: inputs };
+	const selected = bundle?.resources.projects.filter(project => slugs.includes(project.slug)) ?? [];
+	const keys = selected.flatMap(project => [project.primaryRepository!, project.libraryRepository!]);
+	const repositoryBases = Object.fromEntries(keys.map(key => [key, 'a'.repeat(40)]));
+	return { campaignId: 'supplied-complete', seed, proposals, repositoryBases, workdayPolicy: policy, providerOfferRevision: 3, allocationInputsByRun: inputs };
 }

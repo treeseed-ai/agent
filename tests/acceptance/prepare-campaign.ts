@@ -6,7 +6,7 @@ import { basename, join, resolve } from 'node:path';
 import { parse } from 'yaml';
 import { read } from './acceptance-cli.ts';
 import { freshSdkDraft, requirePlanningWindow, sdkProposalText, sdkCampaignWindow } from './campaign.ts';
-import { readCampaignProjectLibraries, readPreRunCampaignFreeze, verifyRuntimeClosure } from './freeze-integrity.ts';
+import { readCampaignProjectLibraries, readPreRunCampaignFreeze, verifyCampaignWorkdayPolicy, verifyRuntimeClosure } from './freeze-integrity.ts';
 
 type Row = Record<string, any>;
 export function requirePinnedCodex(pinned: string, installed: string): void {
@@ -116,16 +116,15 @@ export function prepareSdkCampaign(draftPath: string, freezePath: string, team: 
 	const platform = process.env.TREESEED_ACCEPTANCE_PLATFORM_PATH;
 	assert.ok(platform && existsSync(join(platform, 'docs/agent-acceptance.md')),
 		'ACCEPTANCE_CAMPAIGN_WORKSPACE: Explicit Platform workspace required');
-	readCampaignProjectLibraries(operatorFreeze.manifest, team);
+	const libraries = readCampaignProjectLibraries(operatorFreeze.manifest, team);
+	const policyReadback = verifyCampaignWorkdayPolicy(operatorFreeze.manifest,
+		read(['workdays', 'profiles', 'show', 'default'], team), libraries.get('sdk')?.teamId);
 	const agentPath = resolve(platform, 'packages/agent');
 	const pinnedCodex = (JSON.parse(readFileSync(join(agentPath, 'package.json'), 'utf8')) as Row).dependencies['@openai/codex'] as string;
 	const installedCodex = execFileSync(join(agentPath, 'node_modules/.bin/codex'), ['--version'], { encoding: 'utf8', timeout: 30_000 }).trim();
 	requirePinnedCodex(pinnedCodex, installedCodex);
 	const { durationSeconds, planningPercent, planningTurnMaximumSeconds } = sdkCampaignWindow;
 	requirePlanningWindow(durationSeconds, planningPercent, planningTurnMaximumSeconds);
-	const policyReadback = read(['workdays', 'profiles', 'show', 'default'], team);
-	assert.deepEqual({ id: policyReadback.id, revision: policyReadback.revision, policy: policyReadback.policy },
-		operatorFreeze.manifest.workdayPolicy, 'ACCEPTANCE_CAMPAIGN_FREEZE: Live policy differs from frozen revision');
 	const policy = policyReadback.policy as Row;
 	assert.ok(Number(policy?.maximumConcurrency) >= 5 && Number(policy?.communicationConcurrency) >= 5,
 		'ACCEPTANCE_CONCURRENCY_POLICY: Configure at least five workday and communication slots before admission');

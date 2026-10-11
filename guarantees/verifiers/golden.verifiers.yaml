@@ -336,6 +336,11 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/guarantees/preflight/campaign-freeze.test.ts
     testName: "uses the original operator proposal and start and denies changed CLI intent or policy before any proposal creation"
+  agent.golden.campaign-policy-native:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/preflight/campaign-policy-native.test.ts
+    testName: "native public workday policy reads reject foreign moved malformed and denied authority without rewriting frozen inputs before exact retry"
   agent.golden.campaign-freeze-complete-unit:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

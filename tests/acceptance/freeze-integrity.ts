@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { canonicalSeedBundlePayload, validateSeedBundle, workdayIntentRequestSchema, type SeedBundle } from '@treeseed/sdk/operator-contracts';
-import { workdayPolicySchema } from '@treeseed/sdk/agent-capacity';
+import { workdayPolicySchema, workdayProfileSchema } from '@treeseed/sdk/agent-capacity';
 import { parse } from 'yaml';
 import { portfolioRelations, readPortfolioLibraries } from './workday/support/portfolio-relations.ts';
 
@@ -105,6 +105,17 @@ export function readCampaignProjectLibraries(manifest: Row, team: string): Map<s
 	const bindings = readPortfolioLibraries(slugs, team);
 	for (const proposal of proposals) assert.equal(bindings.get(String(proposal.slug))?.projectId, proposal.projectId, fail);
 	return bindings;
+}
+
+/** The existing team-owned profile is the policy authority, not a caller revision alone. */
+export function verifyCampaignWorkdayPolicy(manifest: Row, observed: unknown, teamId: unknown): Row {
+	const fail = 'ACCEPTANCE_CAMPAIGN_FREEZE: Live owning policy differs from frozen authority';
+	const parsed = workdayProfileSchema.safeParse(observed);
+	assert.ok(parsed.success && typeof teamId === 'string' && teamId && parsed.data.teamId === teamId, fail);
+	assert.deepEqual(parsed.data, observed, fail);
+	const { teamId: _owner, ...policy } = parsed.data;
+	assert.deepEqual(policy, manifest.workdayPolicy, fail);
+	return parsed.data;
 }
 
 export function verifyRuntimeClosure(host: Row, guest: Row): void {

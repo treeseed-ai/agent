@@ -35,6 +35,8 @@ acceptanceCriteria:
     verifierRefs: [agent.golden.live.campaign-freeze]
   - criterion: ab2ac9ce3bbbf837b5c65b9b6246aa6850713b4d82fc15c52d590144dd265a0b
     verifierRefs: [agent.golden.live.campaign-freeze]
+  - criterion: 81543856c351d2d7f2599a17d9225b1d5d6785c88897775ff79ec4b2af482b65
+    verifierRefs: [agent.golden.live.campaign-freeze]
   - criterion: 1dd6f762ce6507847246f790bf57d735bcefe27c21bf8338a179dddbe3d0f930
     verifierRefs: [agent.golden.live.campaign-freeze]
   - criterion: ee31029693c8c8c0e9e1b8506a341cbb4ddbc15c585cf16de713dc540f68bf55

@@ -165,7 +165,8 @@ it('uses the original operator proposal and start and denies changed CLI intent 
 	state.files.set('/supplied-platform/docs/agent-acceptance.md', document);
 	state.files.set('/supplied-platform/seeds/treeseed.yaml', seed); state.files.set('/draft.json', JSON.stringify(template));
 	state.writes.mockImplementation((path: string, bytes: string) => state.files.set(path, bytes));
-	for (const scenario of ['intent-drift', 'policy-drift', 'project-drift', 'lookup-team-drift', 'lookup-slug-drift', 'lookup-repository-missing', 'lookup-denied', 'unchanged']) {
+	for (const scenario of ['intent-drift', 'policy-drift', 'policy-team', 'policy-owner-missing', 'policy-malformed', 'policy-unknown',
+		'project-drift', 'lookup-team-drift', 'lookup-slug-drift', 'lookup-repository-missing', 'lookup-denied', 'unchanged']) {
 		state.bytes = JSON.stringify(supplied); state.writes.mockClear(); state.commands.mockClear(); state.execute.mockClear(); state.publicRead.mockClear();
 		state.execute.mockImplementation((command: string, args: string[]) => command.endsWith('/codex') ? 'codex-cli 0.158.0'
 			: args.includes('rev-parse') || command === 'gh' ? head : 'Controlled external baseline');
@@ -180,6 +181,9 @@ it('uses the original operator proposal and start and denies changed CLI intent 
 						repositoryId: scenario === 'lookup-repository-missing' ? '' : `repository-${selected!.slug}` } };
 			}
 			if (args[0] === 'workdays' && args[1] === 'profiles') return { ...supplied.workdayPolicy,
+				...(scenario === 'policy-owner-missing' ? {} : { teamId: scenario === 'policy-team' ? 'foreign-team-id' : 'supplied-team-id' }),
+				policy: scenario === 'policy-malformed' ? {} : supplied.workdayPolicy.policy,
+				...(scenario === 'policy-unknown' ? { compatibilityPolicy: true } : {}),
 				revision: scenario === 'policy-drift' ? 3 : supplied.workdayPolicy.revision };
 			if (args[0] === 'dev') return { status: 'active', manifestDigest: digest, guestImageDigest: digest };
 			if (args[0] === 'library') return { result: { repoId: 'repo_supplied', resolvedRef: head,
@@ -208,7 +212,7 @@ it('uses the original operator proposal and start and denies changed CLI intent 
 			expect(plan).toEqual(expect.arrayContaining(['--proposal', sdk.input.proposalIds[0], '--start', sdk.input.startsAt]));
 			expect(state.files.get('/sdk.freeze.json.receipts-allocated/operator-campaign.json')).toBe(state.bytes);
 		} else {
-			if (scenario === 'intent-drift' || scenario === 'policy-drift')
+			if (scenario === 'intent-drift' || scenario.startsWith('policy-'))
 				expect(() => prepareSdkCampaign('/draft.json', '/sdk.freeze.json', 'supplied-team')).toThrow('ACCEPTANCE_CAMPAIGN_FREEZE');
 			else expect.soft(() => prepareSdkCampaign('/draft.json', '/sdk.freeze.json', 'supplied-team'))
 				.toThrow(/ACCEPTANCE_(CAMPAIGN_FREEZE|PROJECT_LIBRARY|CLI_COMMAND)/u);

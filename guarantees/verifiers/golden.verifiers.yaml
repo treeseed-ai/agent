@@ -1,6 +1,11 @@
 schemaVersion: treeseed.guarantee-verifiers/v1
 ownerPackage: "@treeseed/agent"
 verifiers:
+  agent.golden.authored-request-grants-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/custody/profile-custody-readback.test.ts
+    testName: "rejects actual grants above the original authored request even within a broader independently read profile ceiling"
   agent.golden.governed-profile-order-unit:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

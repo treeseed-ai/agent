@@ -15,6 +15,12 @@ const sdkFixedGraphCriteria = [
 	'ae904659a63c9d7478fecc4ba97674ff617e9aee8e0d4e2c3aa96ce1eb16a7cd',
 	'a36158a2e8f122136ece95b41cfd72c345beefa609df5ec27e296b56e77de930',
 ];
+const sdkPermissionCriteria = [
+	'5225ed550726fbcb844fa46c968221c6aa84e694f477dbec024a2c62604e6e5e',
+	'bb1e425861ce6c4e6e61ed4f2eeaa39cbcb87cb621edc8e0d10dba4cf82ab681',
+	'210c4c11e3c7150e04ba6c29bdab3ad6277418567fb0db8c6b7c342c13cdd897',
+	'a213575995fddb824b0b28283bf4cd9532b73b573da57ac3c492aa9aea00bcdc',
+];
 type Verifier = { kind: string; testFile?: string; testName?: string; command?: string };
 const registry: { verifiers: Record<string, Verifier> } = { verifiers: {} };
 for (const file of readdirSync(resolve(root, 'guarantees/verifiers')).filter(path => path.endsWith('.verifiers.yaml'))) {
@@ -50,6 +56,8 @@ describe('capacity-provider guarantee execution bindings', () => {
 			testName: 'Living graph identical reconciliation and node inspection preserve assignments usage and every public graph record' });
 		const product = 'sdk.golden.live.product';
 		const profile = 'agent.golden.architecture-profile-custody-live-1';
+		for (const criterion of sdkPermissionCriteria) expect(manifest.acceptanceCriteria.filter((value: { criterion: string }) => value.criterion === criterion))
+			.toEqual([{ criterion, verifierRefs: [profile, product] }]);
 		expect(manifest.acceptanceCriteria.filter((value: { criterion: string }) => value.criterion === 'a6f86094d3c2dc802a54319c3b55c1fb50fa3f1bdc5f9ee831088347c22732bb'))
 			.toEqual([{ criterion: 'a6f86094d3c2dc802a54319c3b55c1fb50fa3f1bdc5f9ee831088347c22732bb', verifierRefs: [profile, product] }]);
 		expect(refs.filter(value => value === profile)).toHaveLength(1);
@@ -133,6 +141,7 @@ describe('capacity-provider guarantee execution bindings', () => {
 			'b918b519ac545fdd61faab208687ccc64e1f3d03c9a84dfc57a5cfee6190f3f3',
 		].map(criterion => ({ criterion, verifierRefs: ['agent.golden.live.campaign-freeze'] }));
 		expect(manifest.acceptanceCriteria).toEqual([
+			...sdkPermissionCriteria.map(criterion => ({ criterion, verifierRefs: ['agent.golden.architecture-profile-custody-live-1', 'sdk.golden.live.product'] })),
 			{ criterion: 'a6f86094d3c2dc802a54319c3b55c1fb50fa3f1bdc5f9ee831088347c22732bb', verifierRefs: ['agent.golden.architecture-profile-custody-live-1', 'sdk.golden.live.product'] },
 			...sdkFixedGraphCriteria.map(criterion => ({ criterion, verifierRefs: ['sdk.golden.live.product'] })),
 			{ criterion: 'b635827ed7862d56b8764dfad30114b9ee18d02b4aa709a257841e18a1bd0f0d',

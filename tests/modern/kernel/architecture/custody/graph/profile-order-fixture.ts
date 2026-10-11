@@ -15,13 +15,36 @@ export function profileOrderFixture(dependencies = ['earlier-configured-class'])
 			activity: 'acting', handler: activity.handler, handlerOrigin: 'agent-package', prompt: activity.prompt,
 			parameters: activity.parameters, permissionCeiling: activity.permissions } });
 	const actor = { id: attempt.nodeId, teamId: attempt.teamId, projectId: attempt.projectId, workItemId: attempt.workItemId,
-		sourceRef: attempt.sourceRef, agentClass: attempt.agentClass, pairRole: 'actor' };
+		sourceRef: attempt.sourceRef, agentClass: attempt.agentClass, pairRole: 'actor', requestedPermissions: structuredClone(activity.permissions) };
 	const predecessor = { ...actor, id: 'earlier-actor', workItemId: 'earlier-work', agentClass: 'earlier-configured-class' };
 	const reviewer = { ...predecessor, id: 'earlier-reviewer', agentClass: 'reviewer', pairRole: 'reviewer' };
 	const edge = { schemaVersion: 'treeseed.execution-edge/v1', id: 'profile-edge', teamId: attempt.teamId,
 		fromNodeId: reviewer.id, toNodeId: actor.id, provenance: 'profile-agent', sourceRef: attempt.sourceRef, graphRevisionCreated: 1 };
 	return { item: { id: attempt.id, assignmentAttempt: attempt }, file: { path, content },
 		graph: { teamId: attempt.teamId, nodes: [actor, predecessor, reviewer], edges: [edge] } };
+}
+export const grantRequestCases = ['grant-tools', 'grant-content-read', 'grant-content-write', 'grant-missing', 'grant-malformed', 'grant-outside-profile'] as const;
+export function grantRequestFixture(mode: string) {
+	const f = profileOrderFixture(), attempt = f.item.assignmentAttempt, node = f.graph.nodes[0]!;
+	if (mode === 'grant-tools') node.requestedPermissions.tools = ['source.read'];
+	if (mode === 'grant-content-read') {
+		attempt.grant.contentRead.push(structuredClone(attempt.sourceRef)); node.requestedPermissions.content.read = ['decision'];
+	}
+	if (mode === 'grant-content-write') {
+		const definition = portableProfile(), activity = definition.activityProfiles.acting!;
+		activity.dependsOn = { agents: ['earlier-configured-class'] }; activity.permissions.content.write = ['knowledge'];
+		f.file.content = stringify(definition); attempt.effectiveProfile.profileRef.digest = `sha256:${createHash('sha256').update(f.file.content).digest('hex')}`;
+		attempt.effectiveProfile.permissionCeiling = structuredClone(activity.permissions); node.requestedPermissions = structuredClone(activity.permissions);
+		const path = 'knowledge/native.mdx', commit = 'a'.repeat(40);
+		attempt.workspace = { mode: 'treedx', repository: 'native-library', baseCommit: commit, workspaceId: 'native-workspace', writablePaths: [path] };
+		attempt.grant.sourceWrite = []; attempt.grant.tools = ['source.read'];
+		attempt.grant.contentWrite = [{ store: 'treedx', model: 'knowledge', id: 'native-knowledge', repository: 'native-library', commit, path }];
+		node.requestedPermissions.content.write = [];
+	}
+	if (mode === 'grant-missing') Reflect.deleteProperty(node, 'requestedPermissions');
+	if (mode === 'grant-malformed') Reflect.set(node.requestedPermissions, 'tools', null);
+	if (mode === 'grant-outside-profile') node.requestedPermissions.content.read.push('question');
+	return f;
 }
 export function mutateProfileOrder(graph: ReturnType<typeof profileOrderFixture>['graph'], mode: string): void {
 	const edge = graph.edges[0]!;

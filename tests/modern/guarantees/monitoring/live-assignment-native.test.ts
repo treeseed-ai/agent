@@ -44,6 +44,8 @@ it('native configured Kernel Git result and public SDK assignment reads reach th
 			if (mode === 'denied') { response.writeHead(403).end(JSON.stringify({ status: 403, title: 'Controlled native denial', code: 'controlled_assignment_denied' })); return; }
 			if (mode === 'interrupted') { request.socket.destroy(); return; }
 			const returned = structuredClone(item);
+			if (mode === 'derived-production') returned.executionMode = 'production';
+			if (mode === 'derived-malformed') returned.executionMode = null;
 			if (mode === 'runtime') row(row(returned.assignmentAttempt).provider).runtimeBuild = `sha256:${'f'.repeat(64)}`;
 			if (mode === 'grant') row(row(returned.assignmentAttempt).grant).tools = ['release'];
 			if (mode === 'status-regression') row(returned.assignmentAttempt).status = 'running';
@@ -89,7 +91,7 @@ it('native configured Kernel Git result and public SDK assignment reads reach th
 			expect(untouched.size).toBe(0); expect(retained).toEqual(held); expect(inspections).toBe(1);
 			mode = 'exact'; await execute(); expect(retained).toEqual(held); expect(inspections).toBe(1);
 		}
-		for (const denied of ['runtime', 'grant', 'denied', 'interrupted', 'start-before-creation', 'finish-before-creation', 'finish-before-start', 'status-regression', 'terminal-substitution']) {
+		for (const denied of ['derived-production', 'derived-malformed', 'runtime', 'grant', 'denied', 'interrupted', 'start-before-creation', 'finish-before-creation', 'finish-before-start', 'status-regression', 'terminal-substitution']) {
 			mode = denied; await expect(execute(), denied).rejects.toThrow(); expect(retained).toEqual(held);
 		}
 		const unobserved = new Map<string, Row>(); mode = 'deadline-after-workday';
@@ -102,10 +104,10 @@ it('native configured Kernel Git result and public SDK assignment reads reach th
 		expect(unobserved.size).toBe(0); expect(run).toEqual(deniedRun); expect(retained).toEqual(held); expect(inspections).toBe(1);
 		parameters.deadlineAt = originalDeadline;
 		const originalFailures = structuredClone(failed); mode = 'exact'; await execute();
-		expect(retained).toEqual(held); expect(failed).toEqual(originalFailures); expect(failed).toHaveLength(22);
-		expect(requests.filter(value => value === `GET /v1/teams/${f.attempt.teamId}/capacity/assignments/${f.attempt.id}`)).toHaveLength(25);
-		expect(requests.filter(value => value === `GET /v1/teams/${f.attempt.teamId}/workday-runs/${f.attempt.workdayId}`)).toHaveLength(25);
-		expect(requests).toHaveLength(50);
+		expect(retained).toEqual(held); expect(failed).toEqual(originalFailures); expect(failed).toHaveLength(24);
+		expect(requests.filter(value => value === `GET /v1/teams/${f.attempt.teamId}/capacity/assignments/${f.attempt.id}`)).toHaveLength(27);
+		expect(requests.filter(value => value === `GET /v1/teams/${f.attempt.teamId}/workday-runs/${f.attempt.workdayId}`)).toHaveLength(27);
+		expect(requests).toHaveLength(54);
 		expect({ item, run }).toEqual(before); expect(f.requests).toHaveLength(1);
 		// Native owning Kernel/handler/Git and SDK transport; upstream record,
 		// profile bytes and handler catalog are controlled. This does not prove

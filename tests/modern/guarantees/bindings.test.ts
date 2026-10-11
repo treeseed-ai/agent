@@ -53,6 +53,8 @@ describe('capacity-provider guarantee execution bindings', () => {
 			.toEqual([{ criterion: '6d6749cd8c2676c6c50c009b55025ec3b951589db602440f63b76ba021159f20', verifierRefs: ['agent.golden.live.graph', product] }]);
 		expect(refs.filter(value => value === 'agent.golden.live.graph')).toHaveLength(1);
 		expect(refs.indexOf('agent.golden.live.graph')).toBeGreaterThan(refs.indexOf('agent.golden.live.campaign'));
+		expect(registry.verifiers['agent.golden.live.graph']).toMatchObject({ kind: 'nodeTestCase', testFile: 'tests/acceptance/sdk-runtime-golden.test.ts',
+			testName: 'Golden runtime graph evidence satisfies its acceptance boundary' });
 		for (const criterion of ['9a9b626b666f555139baf8aabcead659ca30e7f88ad8002f73f2b35ddf542ad4',
 			'8fc0d803455b8e437a458732d5b6ba575f885eb35ba387e93e14230dd40d27b7',
 			...sdkFixedGraphCriteria,

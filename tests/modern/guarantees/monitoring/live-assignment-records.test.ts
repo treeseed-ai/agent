@@ -32,6 +32,12 @@ describe('live canonical assignment observation (controlled inputs, not managed 
 			observeLiveAssignmentRecords(run, [item], retained, () => {});
 			expect(retained.get(String(item.id))).toEqual(attempt); expect({ item, run }).toEqual(before);
 		}
+		// The exact workday end is allowed; one millisecond beyond it is not.
+		const item = liveAssignmentRecord(), run = liveRun(item), retained = new Map<string, Row>(), inspect = vi.fn();
+		row(item.assignmentAttempt).deadline = new Date(Date.parse(String(row(row(run.parameters).appliedPlan).endsAt)) + 1).toISOString();
+		const before = structuredClone({ item, run, retained });
+		expect(() => observeLiveAssignmentRecords(run, [item], retained, inspect)).toThrow('Original workday deadline');
+		expect(inspect).not.toHaveBeenCalled(); expect({ item, run, retained }).toEqual(before);
 	});
 	it('observes empty initial admission then every new canonical attempt once without changing input or repeating independent inspection', () => {
 		const item = liveAssignmentRecord(), run = liveRun(item), before = structuredClone({ item, run }), retained = new Map<string, Row>(), inspect = vi.fn();

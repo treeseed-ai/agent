@@ -255,6 +255,18 @@ workflow:
   - id: campaign-bases-required-unit
     action: { verifier: agent.golden.campaign-bases-required-unit }
     expect: { status: passed }
+  - id: campaign-profiles-required-unit
+    action: { verifier: agent.golden.campaign-profiles-required-unit }
+    expect: { status: passed }
+  - id: campaign-profiles-readback-unit
+    action: { verifier: agent.golden.campaign-profiles-readback-unit }
+    expect: { status: passed }
+  - id: campaign-profiles-unit
+    action: { verifier: agent.golden.campaign-profiles-unit }
+    expect: { status: passed }
+  - id: campaign-profiles-native
+    action: { verifier: agent.golden.campaign-profiles-native }
+    expect: { status: passed }
   - id: campaign-bases-readback-unit
     action: { verifier: agent.golden.campaign-bases-readback-unit }
     expect: { status: passed }

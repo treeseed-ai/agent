@@ -85,7 +85,13 @@ export function readPreRunCampaignFreeze() {
 	try { bytes = readFileSync(path, 'utf8'); manifest = JSON.parse(bytes); }
 	catch { assert.fail('ACCEPTANCE_CAMPAIGN_FREEZE: Missing or malformed operator manifest'); }
 	let repositories: SeedBundle['resources']['repositories'] = [];
+	let projects: SeedBundle['resources']['projects'] = [];
 	try {
+		// Reject malformed base values before parsing and validating the whole
+		// seed. Exact required keys still come only from validated seed authority.
+		const bases = row(row(manifest).repositoryBases);
+		assert.ok(Object.keys(bases).length > 0);
+		for (const commit of Object.values(bases)) assert.ok(typeof commit === 'string' && /^[a-f0-9]{40}$/u.test(commit));
 		const seedBytes = readFileSync(resolve(platform, 'seeds/treeseed.yaml'), 'utf8');
 		const seed = parse(seedBytes) as SeedBundle;
 		assert.deepEqual(validateSeedBundle(seed), [], 'ACCEPTANCE_CAMPAIGN_FREEZE: Valid current seed bundle required');
@@ -96,24 +102,24 @@ export function readPreRunCampaignFreeze() {
 		const expected = portfolioRelations(readFileSync(resolve(platform, 'docs/agent-acceptance.md'), 'utf8'),
 			seedBytes);
 		verifyPreRunCampaignInputs(manifest, expected.projects.map(project => project.slug));
-		repositories = expected.projects.flatMap(({ slug }) => {
-			const projects = seed.resources.projects.filter(project => project.slug === slug);
-			assert.equal(projects.length, 1);
+		projects = expected.projects.map(({ slug }) => {
+			const matches = seed.resources.projects.filter(project => project.slug === slug);
+			assert.equal(matches.length, 1); return matches[0]!;
+		});
+		repositories = projects.flatMap(project => {
 			return (['primary', 'library'] as const).map(role => {
-				const key = role === 'primary' ? projects[0]!.primaryRepository : projects[0]!.libraryRepository;
+				const key = role === 'primary' ? project.primaryRepository : project.libraryRepository;
 				const matches = seed.resources.repositories.filter(repository => repository.key === key
-					&& repository.project === projects[0]!.key && repository.role === role);
+					&& repository.project === project.key && repository.role === role);
 				assert.equal(matches.length, 1); assert.equal(matches[0]!.repositoryPolicy.stagingBranch, 'staging');
 				return matches[0]!;
 			});
 		});
 		assert.equal(new Set(repositories.map(repository => repository.key)).size, repositories.length);
 		assert.equal(new Set(repositories.map(repository => repository.gitUrl)).size, repositories.length);
-		const bases = row(row(manifest).repositoryBases);
 		assert.deepEqual(Object.keys(bases).sort(), repositories.map(repository => repository.key).sort());
-		for (const commit of Object.values(bases)) assert.ok(typeof commit === 'string' && /^[a-f0-9]{40}$/u.test(commit));
 	} catch (cause) { throw new Error('ACCEPTANCE_CAMPAIGN_FREEZE: Invalid expanded operator authority', { cause }); }
-	return { path, bytes, manifest: row(manifest), repositories, sdkInput: row(row(row(manifest).allocationInputsByRun).sdk).input };
+	return { path, bytes, manifest: row(manifest), projects, repositories, sdkInput: row(row(row(manifest).allocationInputsByRun).sdk).input };
 }
 
 /** Resolve only seed-owned protected refs. A runtime repair may advance staging;

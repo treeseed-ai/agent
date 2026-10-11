@@ -21,9 +21,10 @@ vi.mock('../../../acceptance/acceptance-cli.ts', async importOriginal => ({
 } }));
 import { prepareSdkCampaign } from '../../../acceptance/prepare-campaign.ts';
 import { readCampaignRepositoryBases, readPreRunCampaignFreeze, verifyPreRunCampaignInputs } from '../../../acceptance/freeze-integrity.ts';
-import { campaignInputs } from './campaign-freeze-fixture.ts';
+import { campaignInputs, campaignProfiles } from './campaign-freeze-fixture.ts';
 import { sdkProposalText } from '../../../acceptance/campaign.ts';
 import { portfolioRelations } from '../../../acceptance/workday/support/portfolio-relations.ts';
+import { readCampaignProfiles } from '../../../acceptance/workday/support/preflight/campaign-profiles.ts';
 const nativeFs = await vi.importActual<typeof import('node:fs')>('node:fs');
 const slugs = ['sdk', 'api', ...Array.from({ length: 15 }, (_, index) => `supplied-project-${index}`)];
 
@@ -146,6 +147,62 @@ it('retains every seeded base and denies malformed missing moved and interrupted
 	expect(freeze).toEqual(before); expect(state.writes).not.toHaveBeenCalled();
 });
 
+it('denies unobserved governed profiles for every project before runtime or proposal preparation', () => {
+	const authority = process.env.TREESEED_DEVELOPMENT_WORKSPACE_ROOT!;
+	const document = nativeFs.readFileSync(resolve(authority, 'docs/agent-acceptance.md'), 'utf8');
+	const seed = nativeFs.readFileSync(resolve(authority, 'seeds/treeseed.yaml'), 'utf8');
+	const supplied = campaignInputs(portfolioRelations(document, seed).projects.map(project => project.slug), seed);
+	state.bytes = JSON.stringify(supplied);
+	state.files.set('/supplied-platform/docs/agent-acceptance.md', document);
+	state.files.set('/supplied-platform/seeds/treeseed.yaml', seed);
+	state.execute.mockImplementation((_command: string, args: string[]) => {
+		if (args.includes('--refs')) return `${'a'.repeat(40)}\trefs/heads/staging\n`;
+		throw new Error('Runtime must not be inspected before all governed profiles');
+	});
+	state.publicRead.mockImplementation((args: string[]) => {
+		if (args[0] === 'library' && args[1] === 'show') {
+			const selected = supplied.proposals.find(proposal => proposal.slug === args[2])!;
+			return { project: { id: selected.projectId, slug: selected.slug, teamId: 'team' },
+				library: { projectId: selected.projectId, teamId: 'team', repositoryId: `library-${selected.slug}` } };
+		}
+		if (args[0] === 'workdays') return { ...supplied.workdayPolicy, teamId: 'team' };
+		throw new Error('Unobserved governed definition');
+	});
+	expect(() => prepareSdkCampaign('/draft.json', '/sdk.freeze.json', 'team')).toThrow('ACCEPTANCE_CAMPAIGN_PROFILES');
+	expect(state.writes).not.toHaveBeenCalled(); expect(state.bytes).toBe(JSON.stringify(supplied));
+});
+
+it('reads every frozen project profile and denies foreign revisions without changing the original campaign', () => {
+	const authority = process.env.TREESEED_DEVELOPMENT_WORKSPACE_ROOT!;
+	const document = nativeFs.readFileSync(resolve(authority, 'docs/agent-acceptance.md'), 'utf8');
+	const seed = nativeFs.readFileSync(resolve(authority, 'seeds/treeseed.yaml'), 'utf8');
+	const supplied = campaignInputs(portfolioRelations(document, seed).projects.map(project => project.slug), seed);
+	state.bytes = JSON.stringify(supplied);
+	state.files.set('/supplied-platform/docs/agent-acceptance.md', document);
+	state.files.set('/supplied-platform/seeds/treeseed.yaml', seed);
+	const freeze = readPreRunCampaignFreeze(), bindings = new Map(supplied.proposals.map(proposal => [proposal.slug,
+		{ projectId: proposal.projectId, repositoryId: `library-${proposal.slug}` }]));
+	const profiles = new Map(supplied.proposals.map(proposal => [proposal.slug, campaignProfiles(proposal.slug, 'a'.repeat(40), `library-${proposal.slug}`)]));
+	let foreign = '';
+	state.publicRead.mockImplementation((args: string[], _team: string, raw: boolean) => {
+		expect(raw).toBe(true); expect(args).not.toContain('--team');
+		const slug = args[0] === 'agents' ? args[3]! : args[2]!, profile = structuredClone(profiles.get(slug)!);
+		if (args[0] === 'agents') {
+			if (slug === foreign) profile.inventory.agents[7]!.definitionRevision = 'b'.repeat(40);
+			return profile.inventory;
+		}
+		expect(args).toContain('--ref'); expect(args[args.indexOf('--ref') + 1]).toBe('a'.repeat(40));
+		return { result: args[1] === 'paths' ? profile.paths : profile.files.find(value => value.files[0]!.path === args[3]) };
+	});
+	const accepted = readCampaignProfiles(freeze, bindings, 'team'); expect(accepted.size).toBe(17);
+	for (const proposal of supplied.proposals) {
+		foreign = proposal.slug;
+		expect(() => readCampaignProfiles(freeze, bindings, 'team')).toThrow('ACCEPTANCE_CAMPAIGN_PROFILES');
+	}
+	foreign = ''; expect(readCampaignProfiles(freeze, bindings, 'team')).toEqual(accepted);
+	expect(state.bytes).toBe(freeze.bytes); expect(state.writes).not.toHaveBeenCalled(); expect(state.execute).not.toHaveBeenCalled();
+});
+
 it('retains all twenty five prospective schema valid inputs with pending genuine estimates and unchanged exact selection weights', () => {
 	const supplied = campaignInputs(slugs), before = structuredClone(supplied);
 	verifyPreRunCampaignInputs(supplied, slugs);
@@ -242,12 +299,12 @@ it('uses the original operator proposal and start and denies changed CLI intent 
 				...(scenario === 'policy-unknown' ? { compatibilityPolicy: true } : {}),
 				revision: scenario === 'policy-drift' ? 3 : supplied.workdayPolicy.revision };
 			if (args[0] === 'dev') return { status: 'active', manifestDigest: digest, guestImageDigest: digest };
+			if (args[0] === 'library' && args[1] === 'paths') return { result: campaignProfiles(args[2]!, head, `repository-${args[2]}`).paths };
+			if (args[0] === 'library' && args[1] === 'read' && args[3]?.startsWith('agents/')) return {
+				result: campaignProfiles(args[2]!, head, `repository-${args[2]}`).files.find(value => value.files[0]!.path === args[3]) };
 			if (args[0] === 'library') return { result: { repoId: 'repo_supplied', resolvedRef: head,
 				files: [{ path: canonical.architectureBook.path, content, frontmatter: bookFrontmatter }] } };
-			if (args[0] === 'agents') return { agents: ['architect', 'researcher', 'tester', 'engineer', 'technical-writer', 'releaser', 'reviewer', 'reporter']
-				.map(agentSlug => ({ agentSlug, definitionRevision: head, definition: { capabilities: [], activityProfiles: {
-					chat: { prompt: { system: 'For coordination-only messages; Inspect project files only when asked.' } },
-					reviewing: { prompt: { system: 'Review only a completed Actor candidate bound to an accepted decision; approve only proven work. Proposal feedback and estimates belong to planning.' } } } } })) };
+			if (args[0] === 'agents') return campaignProfiles(args[3]!, head, `repository-${args[3]}`).inventory;
 			if (args[0] === 'providers' && args[1] === 'list') return { items: [{ status: 'approved', providerId: 'supplied' }] };
 			if (args[0] === 'providers') {
 				const now = new Date().toISOString(), measured = { day: now.slice(0, 10), observedAt: now, healthy: true, activeSeconds: 0, reservedSeconds: 0 };

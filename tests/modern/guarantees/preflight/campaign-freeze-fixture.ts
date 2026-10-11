@@ -1,5 +1,6 @@
 import { DEFAULT_WORKDAY_POLICY } from '@treeseed/sdk/agent-capacity';
-import { parse } from 'yaml';
+import { parse, stringify } from 'yaml';
+import { createHash } from 'node:crypto';
 import type { SeedBundle } from '@treeseed/sdk/operator-contracts';
 
 // Controlled prospective test inputs, never genuine estimates or accepted runs.
@@ -33,4 +34,32 @@ export function campaignInputs(slugs: readonly string[], seedBytes?: string) {
 	const keys = selected.flatMap(project => [project.primaryRepository!, project.libraryRepository!]);
 	const repositoryBases = Object.fromEntries(keys.map(key => [key, 'a'.repeat(40)]));
 	return { campaignId: 'supplied-complete', seed, proposals, repositoryBases, workdayPolicy: policy, providerOfferRevision: 3, allocationInputsByRun: inputs };
+}
+
+// Controlled configuration bytes for independent index/source/API comparisons.
+export function campaignProfiles(slug: string, ref: string, repoId: string,
+	names = ['architect', 'researcher', 'tester', 'engineer', 'technical-writer', 'releaser', 'reviewer', 'reporter']) {
+	const agents = names.map(agentSlug => ({ agentSlug, definitionRevision: ref, definition: {
+		schemaVersion: 'treeseed.agent/v1', id: `${slug}/${agentSlug}`, name: `Configured ${agentSlug}`, agentClass: agentSlug,
+		purpose: 'Controlled governed profile custody', responsibilities: ['Retain exact configured authority'],
+		capabilities: ['source-read'], context: { include: ['project'] }, activityProfiles: {
+			chat: { handler: 'writer', permissions: { content: { read: ['proposal'], write: [] }, tools: ['source.read'] },
+				prompt: { system: 'For coordination-only messages; Inspect project files only when asked.' } },
+			...(agentSlug === 'reviewer' ? { reviewing: { handler: 'reviewer',
+				permissions: { content: { read: ['proposal'], write: [] }, tools: ['source.read'] },
+				prompt: { system: 'Review only a completed Actor candidate bound to an accepted decision; approve only proven work. Proposal feedback and estimates belong to planning.' } } } : {}),
+		},
+	} }));
+	const files = agents.map(agent => {
+		const content = `---\n${stringify(agent.definition)}---\n\nControlled independent source.\n`;
+		return { ok: true, ref, resolvedRef: ref, repoId,
+			files: [{ path: `agents/${agent.agentSlug}.mdx`, content, frontmatter: agent.definition }] };
+	});
+	const entries = files.map(observed => {
+		const file = observed.files[0]!, bytes = Buffer.from(file.content);
+		return { path: file.path, kind: 'blob', mode: '100644', size: bytes.length,
+			objectId: createHash('sha1').update(`blob ${bytes.length}\0`).update(bytes).digest('hex') };
+	});
+	return { paths: { ok: true, ref, resolvedRef: ref, repoId, entries, page: { hasMore: false, nextCursor: null } },
+		files, inventory: { projectId: `project-${slug}`, agents } };
 }

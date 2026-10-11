@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { stringify } from 'yaml';
 import { describe, expect, it } from 'vitest';
 import { freshSdkDraft, sdkProposalText } from '../../acceptance/campaign.ts';
 import { verifyRuntimeClosure } from '../../acceptance/freeze-integrity.ts';
@@ -8,7 +9,9 @@ const git = { store: 'git', commit: 'a'.repeat(40), repository: 'sdk' };
 const library = { store: 'treedx', model: 'repository', id: 'sdk-library', path: '.',
   repository: 'treeseed-ai/sdk-library', commit: 'b'.repeat(40) };
 const bookRepositoryId = 'repo_sdk_library';
-const bookContent = 'Published SDK Core Book';
+const bookFrontmatter = { schemaVersion: 'treeseed.book/v3', id: 'sdk-core', projectId: 'sdk', revision: 1,
+	title: 'SDK Core', status: 'published' };
+const bookContent = `---\n${stringify(bookFrontmatter)}---\n\nPublished SDK Core Book\n`;
 const bookExact = { revision: 1, digest: `sha256:${createHash('sha256').update(bookContent).digest('hex')}` };
 const roles = [
 	['research-context', 'Researcher', 'researcher', 'treedx'], ['architecture-contract', 'Architect', 'architect', 'treedx'],
@@ -125,8 +128,18 @@ describe('fresh automated SDK campaign preparation (fixtures are not acceptance)
 		const reference = { id: 'sdk-core', path: 'books/sdk-core.md', title: 'SDK Core', projectId: 'sdk',
 			repository: bookRepositoryId, commit: library.commit, ...bookExact };
 		const readback = { repoId: bookRepositoryId, resolvedRef: library.commit,
-			files: [{ path: reference.path, content: bookContent, frontmatter: { schemaVersion: 'treeseed.book/v3',
-				id: reference.id, projectId: 'sdk', revision: 1, title: 'SDK Core', status: 'published' } }] };
+			files: [{ path: reference.path, content: bookContent, frontmatter: bookFrontmatter }] };
+		expect(() => verifySdkArchitectureBook(readback, reference)).not.toThrow();
+		for (const files of [[readback.files[0]!, readback.files[0]!],
+			[{ ...readback.files[0]!, path: 'books/unrelated.md' }, readback.files[0]!]]) {
+			const denied = { ...readback, files }, before = structuredClone(denied);
+			expect.soft(() => verifySdkArchitectureBook(denied, reference)).toThrow('ACCEPTANCE_CAMPAIGN_BOOK');
+			expect(denied).toEqual(before);
+		}
+		const alteredBytes = bookContent.replace('title: SDK Core', 'title: SDK Architecture');
+		const contradictory = { ...readback, files: [{ ...readback.files[0]!, content: alteredBytes }] };
+		const contradictoryRef = { ...reference, digest: `sha256:${createHash('sha256').update(alteredBytes).digest('hex')}` };
+		expect.soft(() => verifySdkArchitectureBook(contradictory, contradictoryRef)).toThrow('ACCEPTANCE_CAMPAIGN_BOOK');
 		expect(() => verifySdkArchitectureBook(readback, reference)).not.toThrow();
 		expect(() => verifySdkArchitectureBook({ ...readback, files: [] }, reference)).toThrow('ACCEPTANCE_CAMPAIGN_BOOK');
 		expect(() => verifySdkArchitectureBook({ ...readback, repoId: 'repo_other' }, reference)).toThrow('ACCEPTANCE_CAMPAIGN_BOOK');

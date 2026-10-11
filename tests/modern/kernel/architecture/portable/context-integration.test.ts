@@ -14,6 +14,7 @@ import { verifyReviewFindingContent } from '../../../../acceptance/workday/suppo
 import { verifyDraftProposalHandoff, verifyUnfinishedDraftHandoff } from '../../../../acceptance/workday/support/assignment-authority.ts';
 import { objectDigest } from '../../../../../src/sandbox/verification.ts';
 import { canonicalStandardsJson } from '@treeseed/sdk/standards';
+import { verifySdkArchitectureBook } from '../../../../acceptance/prepare-campaign.ts';
 
 async function fixture() {
 	const kernel = await portableKernel(), exact = exactContext();
@@ -290,6 +291,12 @@ activityProfiles:
 				const book = { store: 'treedx' as const, model: 'book', id: 'sdk-core', repository, commit: bookCommit, path: bookPath,
 					revision: 1, digest: `sha256:${createHash('sha256').update(bookBytes).digest('hex')}` };
 				const bookResponse = { resolvedRef: bookCommit, files: [{ path: bookPath, requestedPath: bookPath, content: native(bookCommit, bookPath), frontmatter: bookFrontmatter }] };
+				const preflight = { ...bookResponse, repoId: repository }, bookAuthority = { ...book, projectId: f.attempt.projectId, title: 'SDK Core' };
+				verifySdkArchitectureBook(preflight, bookAuthority);
+				const denied = { ...preflight, files: [...preflight.files, ...preflight.files] }, held = structuredClone(denied);
+				expect.soft(() => verifySdkArchitectureBook(denied, bookAuthority)).toThrow('ACCEPTANCE_CAMPAIGN_BOOK');
+				expect(denied).toEqual(held); expect(f.git('rev-parse', 'HEAD')).toBe(bookCommit);
+				verifySdkArchitectureBook(preflight, bookAuthority);
 				const target = { store: 'treedx' as const, model: 'knowledge', id: 'sdk.architecture', repository, commit: bookCommit, path: knowledgePath };
 				const profile = portableProfile('architect', 'writer');
 				Object.assign(f.attempt, { agentClass: profile.agentClass, workItemId: 'architecture-contract', contextRefs: [book],

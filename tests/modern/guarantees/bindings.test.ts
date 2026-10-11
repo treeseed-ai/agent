@@ -40,6 +40,8 @@ describe('capacity-provider guarantee execution bindings', () => {
 			expect(refs.filter(value => value === ref)).toHaveLength(1);
 			expect(refs.indexOf(ref)).toBeGreaterThan(refs.indexOf('agent.golden.live.campaign'));
 		}
+		expect(manifest.acceptanceCriteria.filter((value: { criterion: string }) => value.criterion === '81543856c351d2d7f2599a17d9225b1d5d6785c88897775ff79ec4b2af482b65'))
+			.toEqual([{ criterion: '81543856c351d2d7f2599a17d9225b1d5d6785c88897775ff79ec4b2af482b65', verifierRefs: ['agent.golden.live.campaign-freeze'] }]);
 		const product = 'sdk.golden.live.product';
 		for (const criterion of ['9a9b626b666f555139baf8aabcead659ca30e7f88ad8002f73f2b35ddf542ad4',
 			'8fc0d803455b8e437a458732d5b6ba575f885eb35ba387e93e14230dd40d27b7',
@@ -88,6 +90,7 @@ describe('capacity-provider guarantee execution bindings', () => {
 		const preRunBindings = [
 			'5a286ca84dffc7ea229c2035a106c26aa0f8fe4e78da3cb035b1bc4859810e95',
 			'ab2ac9ce3bbbf837b5c65b9b6246aa6850713b4d82fc15c52d590144dd265a0b',
+			'81543856c351d2d7f2599a17d9225b1d5d6785c88897775ff79ec4b2af482b65',
 			'1dd6f762ce6507847246f790bf57d735bcefe27c21bf8338a179dddbe3d0f930',
 			'ee31029693c8c8c0e9e1b8506a341cbb4ddbc15c585cf16de713dc540f68bf55',
 			'70a2f58978eb3f6f32b214260bc87ac3ebfe11060c801f179bfc75da2d06e2ef',

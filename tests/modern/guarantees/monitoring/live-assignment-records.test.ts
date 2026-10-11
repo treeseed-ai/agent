@@ -4,6 +4,17 @@ import { observeLiveAssignmentRecords } from '../../../acceptance/workday/suppor
 import { liveAssignmentRecord, liveRun } from './live-assignment-fixture.ts';
 
 describe('live canonical assignment observation (controlled inputs, not managed proof)', () => {
+	it('denies every duplicate Workday parameter mode before inspecting assignments and retains original failed observations unchanged', () => {
+		for (const executionMode of [undefined, null, '', 'simulation', 'production', 'simulation ', false, 0, {}, []]) {
+			const item = liveAssignmentRecord(), run = liveRun(item), retained = new Map<string, Row>(), inspect = vi.fn();
+			row(run.parameters).executionMode = executionMode;
+			const before = structuredClone({ item, run, retained });
+			expect.soft(() => observeLiveAssignmentRecords(run, [item], retained, inspect)).toThrow('ACCEPTANCE_START_MODE');
+			expect.soft(inspect).not.toHaveBeenCalled(); expect.soft(retained.size).toBe(0);
+			expect({ item, run, retained }).toEqual(before);
+		}
+	});
+
 	it('denies normalized applied workday identity without retaining observations or rewriting original public bytes', () => {
 		for (const field of ['id', 'teamId', 'policyId']) {
 			const item = liveAssignmentRecord(), run = liveRun(item), plan = row(row(run.parameters).appliedPlan);

@@ -169,7 +169,8 @@ export function freshSdkDraft(template: Record<string, any>, id: string, canonic
 		assert.ok(required && item.id === required.id && item.agentClass === required.agentClass && item.workspace === required.workspace &&
 			item.maximumReviewCycles === 2 && item.activity === 'acting' && item.review === 'required',
 			'ACCEPTANCE_CAMPAIGN_OBJECTIVES: Template structure differs from the fixed graph');
-		assert.ok(!item.ownerEstimate && !item.reviewerEstimate, 'ACCEPTANCE_CAMPAIGN_FRESH: Reused estimates prohibited');
+		assert.ok(['estimate', 'reviewEstimate', 'ownerEstimate', 'reviewerEstimate'].every(field => !Object.hasOwn(item, field)),
+			'ACCEPTANCE_CAMPAIGN_FRESH: Reused estimates prohibited');
 		item.objective = required.objective;
 		item.acceptanceCriteria = [required.acceptanceCriteria];
 		item.dependsOn = [];

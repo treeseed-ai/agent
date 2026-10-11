@@ -215,6 +215,21 @@ describe('fresh automated SDK campaign preparation (fixtures are not acceptance)
 	});
 	it('rejects reused estimates and inconsistent source pins before mutation', () => {
 		expect(() => freshSdkDraft({ ...template, executionPlan: { workItems: template.executionPlan.workItems.map(item => ({ ...item, ownerEstimate: {} })) } }, 'new', canonical, bookRepositoryId, bookExact)).toThrow('ACCEPTANCE_CAMPAIGN_FRESH');
+		for (const field of ['estimate', 'reviewEstimate', 'ownerEstimate', 'reviewerEstimate']) {
+			for (const value of [{ expectedSeconds: 120, maximumSeconds: 240 }, null, 0, false, '', {}, [], undefined]) {
+				for (let index = 0; index < template.executionPlan.workItems.length; index++) {
+					const reused = structuredClone(template);
+					Object.assign(reused.executionPlan.workItems[index]!, { [field]: value });
+					const before = structuredClone(reused);
+					expect.soft(() => freshSdkDraft(reused, 'new', canonical, bookRepositoryId, bookExact), `${field}/${index}/${JSON.stringify(value)}`)
+						.toThrow('ACCEPTANCE_CAMPAIGN_FRESH');
+					expect(reused).toEqual(before);
+				}
+			}
+		}
+		expect(freshSdkDraft(template, 'new', canonical, bookRepositoryId, bookExact).executionPlan.workItems
+			.every((item: Record<string, unknown>) => ['estimate', 'reviewEstimate', 'ownerEstimate', 'reviewerEstimate']
+				.every(field => !Object.hasOwn(item, field)))).toBe(true);
 		const moved = structuredClone(template); moved.executionPlan.workItems[2]!.contextRefs.push({ ...git, commit: 'b'.repeat(40) });
 		expect(() => freshSdkDraft(moved, 'new', canonical, bookRepositoryId, bookExact)).toThrow('ACCEPTANCE_CAMPAIGN_SOURCE');
 		const missingLibrary = structuredClone(template);

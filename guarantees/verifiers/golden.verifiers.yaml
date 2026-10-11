@@ -1675,7 +1675,17 @@ verifiers:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/kernel/architecture/custody/living-graph-readback.test.ts
-    testName: "registers separate live graph and read-only replay cases without invoking a campaign from unit fixtures"
+    testName: "registers separate live graph and identical replay cases without invoking a campaign from unit fixtures"
+  agent.golden.architecture-living-graph-unit-6:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/custody/living-graph-readback.test.ts
+    testName: "rejects a changed reconciliation preview before performing an actual noop or accepting unchanged public reads"
+  agent.golden.architecture-living-graph-native-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/custody/graph/living-graph-native.test.ts
+    testName: "native public reconciliation denies changed previews before actual commands and retains original receipts through concurrent unchanged retry"
   agent.golden.architecture-source-publication-unit-1:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

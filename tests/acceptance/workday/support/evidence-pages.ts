@@ -61,6 +61,16 @@ export function verifyPredecessorCustody(assignments: Row[]): void {
 		}
 	}
 }
+/** A preview must prove an identical graph before the supported actual reconciliation. */
+export function verifyGraphNoopPlan(graph: Row, plan: Row): void {
+	const fail = 'ACCEPTANCE_GRAPH_NOOP: Reconciliation preview differs from held graph authority';
+	assert.equal(plan.teamId, graph.teamId, fail); assert.equal(plan.baseRevision, graph.revision, fail);
+	assert.equal(plan.desiredDigest, graph.digest, fail);
+	const changes = graphRevisionSchema.shape.changes.safeParse(plan.changes);
+	assert.ok(changes.success, fail); assert.deepEqual(changes.data, plan.changes, fail);
+	assert.ok(Object.values(changes.data).every(ids => ids.length === 0), fail);
+}
+
 export function verifyGraphProvenance(graph: Row): void {
 	const nodes = graphList(graph.nodes).map(value => executionNodeSchema.parse(value));
 	const edges = graphList(graph.edges).map(value => executionEdgeSchema.parse(value));

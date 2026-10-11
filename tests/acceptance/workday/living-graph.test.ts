@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { verifyGraphProvenance, verifyPredecessorCustody } from './support/evidence-pages.ts';
+import { completeGraphHistory, verifyGraphNoopPlan, verifyGraphProvenance, verifyPredecessorCustody } from './support/evidence-pages.ts';
 import { read, row, type Row } from '../acceptance-cli.ts';
 import { readWorkdayAssignments, verifyGolden } from '../sdk-runtime-golden.test.ts';
 
-// Read only the existing public CLI. No synthetic fallback, optional skip,
+// Use the existing public CLI, requiring an identical plan before reconciliation. No synthetic fallback, optional skip,
 // private route, new receipt, or alternate campaign implementation is allowed.
 const list = (value: unknown): Row[] => {
 	assert.ok(Array.isArray(value), 'ACCEPTANCE_TEAM_GRAPH_COLLECTION: Complete array required');
@@ -30,7 +30,7 @@ test('Living team graph public views preserve exact nodes edges provenance and f
 		assert.deepEqual(filtered.edges, list(graph.edges).filter(edge => ids.has(edge.fromNodeId) && ids.has(edge.toNodeId)));
 	}
 });
-test('Living graph read-only reconciliation and node inspection preserve assignments usage and every public graph record', { timeout: 120_000 }, () => {
+test('Living graph identical reconciliation and node inspection preserve assignments usage and every public graph record', { timeout: 120_000 }, () => {
 	const f = context(), before = read(['execution', 'graph', 'show'], f.team);
 	verifyGraphProvenance(before);
 	for (const node of list(before.nodes)) {
@@ -40,10 +40,14 @@ test('Living graph read-only reconciliation and node inspection preserve assignm
 		const incoming = list(before.edges).filter(edge => edge.toNodeId === node.id);
 		assert.deepEqual(list(explanation.predecessors).map(value => value.edge), incoming);
 	}
+	const history = () => completeGraphHistory(before, cursor => read(['execution', 'graph', 'watch', '--cursor', cursor], f.team));
+	const original = history();
 	for (let repetition = 0; repetition < 3; repetition++) {
 		const plan = read(['execution', 'reconcile', '--plan'], f.team);
-		assert.equal(plan.baseRevision, before.revision);
+		verifyGraphNoopPlan(before, plan);
+		assert.deepEqual(read(['execution', 'reconcile'], f.team), original.at(-1), 'ACCEPTANCE_GRAPH_NOOP: Original revision receipt changed');
 		assert.deepEqual(read(['execution', 'graph', 'show'], f.team), before);
+		assert.deepEqual(history(), original, 'ACCEPTANCE_GRAPH_NOOP: Canonical history changed');
 		assert.deepEqual(readWorkdayAssignments(f.id, String(f.run.startedAt), f.team), f.assignments);
 	}
 	verifyGolden('settlement'); verifyGolden('reporter');

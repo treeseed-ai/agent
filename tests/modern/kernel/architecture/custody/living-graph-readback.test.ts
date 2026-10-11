@@ -84,14 +84,35 @@ describe('living team graph managed assertion contract', () => {
 		}
 		const changes = { added: [], changed: [], completed: [], blocked: [], stale: [], removedEdges: [], addedEdges: [] };
 		const plan = { teamId: graph.teamId, baseRevision: graph.revision, desiredRevision: 2, desiredDigest: graph.digest, changes };
-		state.replies.set('execution reconcile', plan);
-		const observe = state.cases.get('Living graph read-only reconciliation and node inspection preserve assignments usage and every public graph record')!;
+		const revision = { schemaVersion: 'treeseed.graph-revision/v1', teamId: graph.teamId, revision: graph.revision, ruleRevision: 1,
+			graphDigest: graph.digest, changedSourceRefs: [graph.nodes[0]!.sourceRef], changes: { ...changes, added: ['original-node'] },
+			createdAt: '2026-09-13T12:00:00.000Z' };
+		state.replies.set('execution graph watch --cursor 0', { items: [revision], nextCursor: '1' });
+		state.replies.set('execution graph watch --cursor 1', { items: [], nextCursor: '1' });
+		state.replies.set('execution reconcile --plan --server', plan);
+		state.replies.set('execution reconcile', revision);
+		const observe = state.cases.get('Living graph identical reconciliation and node inspection preserve assignments usage and every public graph record')!;
 		observe();
-		state.replies.set('execution reconcile', { ...plan, changes: { ...changes, added: ['foreign-node'] } });
+		const invalid = [
+			...Object.keys(changes).map(key => ({ ...plan, changes: { ...changes, [key]: ['foreign-node'] } })),
+			{ ...plan, teamId: 'foreign-team' }, { ...plan, baseRevision: 2 }, { ...plan, desiredDigest: `sha256:${'f'.repeat(64)}` },
+			{ ...plan, changes: null }, { ...plan, changes: {} }, { ...plan, changes: { ...changes, alternate: [] } },
+		];
+		const held = structuredClone({ graph, plan, revision, invalid });
+		for (const changed of invalid) {
+			state.replies.set('execution reconcile --plan --server', changed);
+			const start = state.calls.length;
+			expect(observe).toThrow(/ACCEPTANCE_GRAPH_NOOP/u);
+			expect(state.calls.slice(start).filter(args => args[0] === 'execution' && args[1] === 'reconcile' && !args.includes('--plan'))).toEqual([]);
+		}
+		state.replies.set('execution reconcile --plan --server', plan);
+		state.replies.set('execution reconcile', { ...revision, ruleRevision: 2 });
 		expect(observe).toThrow(/ACCEPTANCE_GRAPH_NOOP/u);
+		state.replies.set('execution reconcile', revision); observe();
+		expect({ graph, plan, revision, invalid }).toEqual(held);
 	});
-	it('registers separate live graph and read-only replay cases without invoking a campaign from unit fixtures', () => {
+	it('registers separate live graph and identical replay cases without invoking a campaign from unit fixtures', () => {
 		expect(state.cases.has('Living team graph public views preserve exact nodes edges provenance and frozen predecessor results')).toBe(true);
-		expect(state.cases.has('Living graph read-only reconciliation and node inspection preserve assignments usage and every public graph record')).toBe(true);
+		expect(state.cases.has('Living graph identical reconciliation and node inspection preserve assignments usage and every public graph record')).toBe(true);
 	});
 });

@@ -8,11 +8,55 @@ import { simulationSourceBranch } from '@treeseed/sdk/capacity-provider/sandbox'
 import { assignmentAttemptSchema, assignmentResultSchema, validateProviderAssignment } from '@treeseed/sdk/agent-capacity';
 import { portableKernel } from '../../kernel/architecture/portable/portable-kernel-fixture.ts';
 import { row, type Row } from '../../../acceptance/acceptance-cli.ts';
-import { verifyGitInputContext, verifyGovernedProfile, verifyHandlerInspection } from '../../../acceptance/workday/support/assignment-authority.ts';
+import { verifyExactContextSource, verifyGitInputContext, verifyGovernedProfile, verifyHandlerInspection } from '../../../acceptance/workday/support/assignment-authority.ts';
 import { observeLiveAssignmentRecords, verifyLiveAssignmentGraph, verifyLiveProviderRuntime, verifyLiveSimulationWorkspace, verifyLiveSourceContext } from '../../../acceptance/workday/support/monitoring/live-assignment-records.ts';
 import { verifyAllocation } from '../../../acceptance/workday/support/monitoring/assignment-allocation.ts';
 import { verifyPredecessorCustody } from '../../../acceptance/workday/support/evidence-pages.ts';
 import { liveAssignmentGraph, liveAssignmentRecord, liveProviderSession, liveRun } from './live-assignment-fixture.ts';
+import { contextBoundary, exactContext } from '../../kernel/architecture/portable/context-fixture.ts';
+
+it('native Kernel and independent content transport deny moved tampered denied and interrupted live Book observations without caching partial authority before unchanged retry', async () => {
+	const f = await portableKernel(), exact = exactContext(); let boundary: Awaited<ReturnType<typeof contextBoundary>> | undefined;
+	try {
+		boundary = await contextBoundary(f.attempt.projectId, exact.ref.repository, exact.response);
+		f.attempt.contextRefs.push(exact.ref); f.attempt.grant.contentRead.push(exact.ref);
+		f.attempt.effectiveProfile.permissionCeiling.content.read.push('book'); f.input.treeDx = boundary.facade;
+		const candidate = await f.candidate(), produced = await f.run(); expect(produced.status).toBe('completed');
+		const result = assignmentResultSchema.parse(produced.outputs?.assignmentResult);
+		const item: Row = { ...liveAssignmentRecord(f.attempt), status: 'completed', leaseState: 'released', completedAt: result.completedAt, assignmentResult: result };
+		Object.assign(row(item.assignmentAttempt), { status: 'completed', finishedAt: result.completedAt });
+		const run = liveRun(item), before = structuredClone({ item, run }), failures: Array<{ mode: string; returned?: Row; error?: string }> = [];
+		const observe = async () => {
+			const retained = new Map<string, Row>();
+			try {
+				const returned = row(await boundary!.facade.invoke('treedx.repositories.files.read', {
+					path: { projectId: f.attempt.projectId, repoId: exact.ref.repository },
+					query: { path: exact.ref.path, ref: exact.ref.commit, encoding: 'utf8', parseFrontmatter: true },
+				}));
+				observeLiveAssignmentRecords(run, [item], retained, () => verifyExactContextSource(exact.ref, f.attempt.projectId,
+					{ repositoryId: exact.ref.repository }, returned));
+				return retained;
+			} catch (error) { expect(retained.size).toBe(0); throw error; }
+		};
+		expect((await Promise.all([observe(), observe()])).every(value => value.size === 1)).toBe(true);
+		for (const mode of ['moved', 'missing', 'tampered', 'foreign-book', 'foreign-revision', 'denied', 'interrupted', 'malformed']) {
+			const response = structuredClone(exact.response);
+			if (mode === 'moved') response.resolvedRef = 'f'.repeat(40);
+			if (mode === 'missing') response.files = [];
+			if (mode === 'tampered') response.files[0]!.content += 'unissued bytes';
+			if (mode === 'foreign-book') response.files[0]!.frontmatter.id = 'foreign-book';
+			if (mode === 'foreign-revision') response.files[0]!.frontmatter.revision++;
+			boundary.set(response, mode === 'denied' ? 403 : 200, mode === 'interrupted' ? 'reset' : mode === 'malformed' ? 'json' : '');
+			failures.push({ mode, returned: structuredClone(response) });
+			await expect(observe(), mode).rejects.toThrow(); expect({ item, run }).toEqual(before);
+			expect(f.git('show', `${candidate}:src/output.txt`)).toBe('exact candidate');
+		}
+		const heldFailures = structuredClone(failures); boundary.set(exact.response);
+		expect((await observe()).size).toBe(1); expect(failures).toEqual(heldFailures); expect(failures).toHaveLength(8);
+		expect({ item, run }).toEqual(before); expect(f.requests).toHaveLength(1);
+		expect(boundary.calls).toHaveLength(12); // One original Kernel read and eleven independent observations.
+	} finally { try { await boundary?.close(); } finally { await f.close(); } }
+});
 
 it('native configured Kernel Git result and public SDK assignment reads reach the live observer with denied original observations retained before exact retry', async () => {
 	const f = await portableKernel(); let server: ReturnType<typeof createServer> | undefined;

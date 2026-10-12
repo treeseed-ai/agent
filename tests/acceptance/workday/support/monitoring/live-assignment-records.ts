@@ -9,6 +9,7 @@ import { verifyAppliedWorkdayCustody, verifyDerivedWorkdayModes } from '../campa
 import { verifyGraphProvenance, verifyPredecessorCustody } from '../evidence-pages.ts';
 import { verifyAllocation } from './assignment-allocation.ts';
 import { availabilityHistory } from './provider-history.ts';
+import { inspectAssignmentContext } from './assignment-context.ts';
 
 const issuedAuthority = ({ status: _status, startedAt: _started, finishedAt: _finished, ...value }: Row) => value;
 
@@ -145,6 +146,7 @@ export function inspectLiveAssignmentProfile(item: Row, team: string, items: rea
 	verifyAllocation(shown, run);
 	verifyLiveProviderRuntime(item, availabilityHistory(team));
 	verifyGovernedProfile(item, readGovernedContentFile(profile.profileRef, attempt.projectId, team, new Map(), 'ACCEPTANCE_LIVE_PROFILE'), graph);
+	inspectAssignmentContext(item, team);
 	const catalog = read(['agents', 'handlers', 'list', '--project', attempt.projectId, '--server', 'local'], team, true);
 	const selected = read(['agents', 'handlers', 'show', profile.handler, '--project', attempt.projectId, '--server', 'local'], team, true);
 	verifyHandlerInspection(item, catalog, selected);

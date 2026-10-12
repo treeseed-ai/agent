@@ -296,6 +296,36 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/guarantees/monitoring/live-assignment-native.test.ts
     testName: "native configured Kernel Git result and public SDK assignment reads reach the live observer with denied original observations retained before exact retry"
+  agent.golden.live-context-missing-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/monitoring/live-graph-inspection.test.ts
+    testName: "denies a self-consistent granted Book when its independent original content read is missing before live admission continues"
+  agent.golden.live-context-read-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/monitoring/live-context-inspection.test.ts
+    testName: "reads original owning binding and exact Book bytes before live progress with no input mutation or source fallback"
+  agent.golden.live-context-denials-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/monitoring/live-context-inspection.test.ts
+    testName: "denies missing malformed foreign moved or tampered original context and retains each failed observation before exact retry"
+  agent.golden.live-context-scope-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/monitoring/live-context-inspection.test.ts
+    testName: "uses only original proxy read scope and rejects a foreign fallback repository without broadening its paths"
+  agent.golden.live-context-git-only-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/monitoring/live-context-inspection.test.ts
+    testName: "retains Git-only context without inventing a TreeDX read or a passing nonempty content inventory"
+  agent.golden.live-context-native:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/monitoring/live-assignment-native.test.ts
+    testName: "native Kernel and independent content transport deny moved tampered denied and interrupted live Book observations without caching partial authority before unchanged retry"
   agent.golden.installed-asset-imports-unit:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

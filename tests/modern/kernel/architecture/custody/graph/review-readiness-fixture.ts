@@ -11,7 +11,15 @@ export function reviewedGraphFixture() {
 			nodeId, workItemId, createdAt: at(index * 2), leaseId: `lease-${nodeId}`, reservationId: `reservation-${nodeId}`,
 			agentClass: reviewer ? 'configured-auditor' : 'configured-author',
 			effectiveProfile: { ...base.effectiveProfile, activity: reviewer ? 'reviewing' : 'acting',
-				profileRef: { ...base.effectiveProfile.profileRef, id: reviewer ? 'configured-auditor' : 'configured-author' } },
+				profileRef: { ...base.effectiveProfile.profileRef, id: reviewer ? 'configured-auditor' : 'configured-author' },
+				...(reviewer ? { permissionCeiling: { content: { read: ['proposal', 'decision'], write: ['decision'] },
+					tools: ['source.read', 'verification', 'discussion'] } } : {}) },
+			...(reviewer ? { grant: { contentRead: [], contentWrite: [{ store: 'treedx', model: 'decision', id: 'native-work-review',
+				repository: 'native-library', commit: 'c'.repeat(40), path: 'decisions/review.mdx' }], sourceRead: ['native-source'], sourceWrite: [],
+				tools: ['source.read', 'verification', 'discussion'] },
+				contextRefs: [{ store: 'git', model: 'source', id: 'native-candidate', repository: 'native-source', commit: 'b'.repeat(40) }],
+				workspace: { mode: 'treedx', repository: 'native-library', baseCommit: 'c'.repeat(40), workspaceId: 'review-decisions',
+					writablePaths: ['decisions/review.mdx'] } } : {}),
 			predecessorResultIds: index === 0 ? [] : index === 1 ? ['result-actor'] : ['result-actor', 'result-review'] });
 		return { id: attempt.id, teamId: attempt.teamId, projectId: attempt.projectId, workDayId: attempt.workdayId,
 			executionNodeId: nodeId, executionNodeRevision: attempt.nodeRevision, status: 'completed', assignmentAttempt: attempt,
@@ -85,6 +93,20 @@ export function mutateReview(decision: ReturnType<typeof reviewedDecision>, mode
 	if (mode === 'authority') decision.authorityRefs = [{ ...decision.authorityRefs[0]!, id: 'foreign-proposal' }];
 	if (mode === 'early') decision.decidedAt = '2026-09-13T12:00:01.500Z'; if (mode === 'late') decision.decidedAt = '2026-09-13T12:00:05.000Z';
 	if (mode === 'positions') decision.decisionMethod = 'vote';
+}
+
+export const reviewGrantFailures = ['review-source-write', 'review-source-tool', 'review-candidate-context', 'review-candidate-ref',
+	'review-verification', 'review-discussion', 'review-decision', 'review-activity'] as const;
+export function mutateReviewGrant(f: ReturnType<typeof reviewedGraphFixture>, mode: string): void {
+	const attempt = f.assignments[1]!.assignmentAttempt;
+	if (mode === 'review-source-write') attempt.grant.sourceWrite.push('native-source');
+	if (mode === 'review-source-tool') attempt.grant.tools.push('source.write');
+	if (mode === 'review-candidate-context') attempt.contextRefs = [];
+	if (mode === 'review-candidate-ref') attempt.contextRefs[0]!.commit = 'e'.repeat(40);
+	if (mode === 'review-verification') attempt.grant.tools = attempt.grant.tools.filter(value => value !== 'verification');
+	if (mode === 'review-discussion') attempt.grant.tools = attempt.grant.tools.filter(value => value !== 'discussion');
+	if (mode === 'review-decision') attempt.grant.contentWrite = [];
+	if (mode === 'review-activity') attempt.effectiveProfile.activity = 'acting';
 }
 
 /** Preserve the first request-changes attempt while a later distinct pair is approved. */

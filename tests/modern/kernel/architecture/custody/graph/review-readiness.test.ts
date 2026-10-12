@@ -2,7 +2,7 @@ import { expect, it } from 'vitest';
 import { gate, state } from '../../golden-readback-fixture.ts';
 import { verifyPredecessorCustody } from '../../../../../acceptance/workday/support/evidence-pages.ts';
 import { verifyApprovedWorkReview } from '../../../../../acceptance/workday/support/decision-evidence.ts';
-import { mutateReadiness, mutateReview, readinessFailures, reviewedDecision, reviewedGraphFixture, reviewedRevisionFixture, reviewFailures } from './review-readiness-fixture.ts';
+import { mutateReadiness, mutateReview, mutateReviewGrant, readinessFailures, reviewedDecision, reviewedGraphFixture, reviewedRevisionFixture, reviewFailures, reviewGrantFailures } from './review-readiness-fixture.ts';
 
 it('denies missing or contradictory original work-review bytes even when parsed approval views agree', () => {
 	const file = state.replies.get('library read decisions/approved-revision.mdx')!.result.files[0];
@@ -30,6 +30,11 @@ it('requires the exact consumed Actor candidate original authority assigned Revi
 	for (const mode of reviewFailures) {
 		const changed = structuredClone(decision); mutateReview(changed, mode); const before = structuredClone(changed);
 		expect(() => verifyApprovedWorkReview(f.assignments[1]!, f.assignments[0]!, changed), mode).toThrow(); expect(changed).toEqual(before);
+	}
+	for (const mode of reviewGrantFailures) {
+		const changed = reviewedGraphFixture(); mutateReviewGrant(changed, mode); const before = structuredClone(changed);
+		expect(() => verifyApprovedWorkReview(changed.assignments[1]!, changed.assignments[0]!, reviewedDecision(changed)), mode).toThrow();
+		expect(changed).toEqual(before);
 	}
 	expect({ f, decision }).toEqual(held);
 });

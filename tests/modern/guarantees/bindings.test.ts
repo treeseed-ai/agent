@@ -222,7 +222,7 @@ describe('capacity-provider guarantee execution bindings', () => {
 			verifierRefs: ['agent.golden.execution-clock-observation-live-1', 'api.golden.execution-protected-observation-live-1'] },
 			{ criterion: '7eaf9fdc1c264e2d0b28d2fc751da33a2ffcf98ca0d6446ac6e8672503dfa533',
 				verifierRefs: ['agent.golden.live.reporter', 'agent.golden.live.settlement'] }, ...preRunBindings,
-			{ criterion: '80496650a6ed5888fbda21ddcb15047d221874adb709887306dede9e3e93ff55', verifierRefs: ['agent.golden.live.results'] },
+			{ criterion: '80496650a6ed5888fbda21ddcb15047d221874adb709887306dede9e3e93ff55', verifierRefs: ['agent.golden.live.results', 'api.golden.execution-protected-observation-live-1'] },
 			{ criterion: '6d6749cd8c2676c6c50c009b55025ec3b951589db602440f63b76ba021159f20', verifierRefs: ['agent.golden.live.graph', 'sdk.golden.live.product'] },
 			{ criterion: '697358e950cb89fc5928569468cd955c25daa8fda7ff97fd1a4af35e2eb95fc6', verifierRefs: ['agent.golden.live.graph', 'agent.golden.architecture-living-graph-live-1'] },
 			{ criterion: '3bf7f808c3baf5cc63fc5e8e8c065bc2cd87dea9e2df9aae4d1924565af6acd8', verifierRefs: ['agent.golden.live.reporter'] },

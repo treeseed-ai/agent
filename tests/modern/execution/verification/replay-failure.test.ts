@@ -2,7 +2,8 @@ import { expect, it } from 'vitest';
 import { observeReportedActivityCommands } from '../../../../src/sandbox/guest.ts';
 import { objectDigest } from '../../../../src/sandbox/verification.ts';
 import { run } from '../../../../src/sandbox/process-runner.ts';
-import { mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { verifyMeasuredVerification } from '../../../acceptance/workday/support/assignment-authority.ts';
@@ -15,18 +16,31 @@ async function actualTestFirstRed(agentClass: string, activity: string) {
 		verification: [{ status: 'passed' as const, summary: 'Red suite inspected', commands: [command] }] };
 	try {
 		await symlink(resolve('node_modules'), resolve(directory, 'node_modules'), 'dir');
-		await writeFile(resolve(directory, 'example.test.ts'), "import { expect, it } from 'vitest';\nit('rejects duplicate decisions', () => expect([]).toEqual(['decision_selection_invalid']));\n");
+		await mkdir(resolve(directory, 'tests/unit'), { recursive: true });
+		await writeFile(resolve(directory, 'tests/unit/example.test.ts'), "import { expect, it } from 'vitest';\nit('rejects duplicate decisions', () => expect([]).toEqual(['decision_selection_invalid']));\n");
+		let nativeOutput: { stdout: string; stderr: string } | undefined;
+		const began = process.hrtime.bigint();
 			const result = await observeReportedActivityCommands(report, [],
-				(_executable, _args, options) => run(process.execPath,
-					[resolve('node_modules/vitest/vitest.mjs'), 'run', '--root', directory, '--no-color'], { ...options, cwd: directory }),
+				async (executable, args, options) => {
+					try { return await run(executable, args, { ...options, cwd: directory }); }
+					catch (error) {
+						if (!error || typeof error !== 'object' || !('stdout' in error) || typeof error.stdout !== 'string'
+							|| !('stderr' in error) || typeof error.stderr !== 'string') throw error;
+						nativeOutput = { stdout: error.stdout, stderr: error.stderr }; throw error;
+					}
+				},
 				{ agentClass, effectiveProfile: { activity }, acceptanceCriteria: ['Tester commits failing-on-base SDK tests.'] });
+			if (!nativeOutput) throw new Error('Original native command output required');
+			const outputDigest = `sha256:${createHash('sha256').update(JSON.stringify({ stderr: nativeOutput.stderr, stdout: nativeOutput.stdout })).digest('hex')}`;
 			expect(result.report.reviewDisposition).toBe('approved');
 			expect(result.report.verification[0]?.status).toBe('failed');
 			expect(result.report.verification[0]?.commands).toEqual([command]);
 			expect(result.report.verification[0]?.summary).toContain('rejects duplicate decisions');
 			expect(result.report.verification[0]?.summary).toContain('AssertionError');
-			expect(result.verification).toEqual([expect.objectContaining({ command, status: 'failed', exitCode: 1,
-				outputDigest: expect.stringMatching(/^sha256:[a-f0-9]{64}$/u) })]);
+			expect(result.verification).toEqual([{ command, status: 'failed', exitCode: 1, outputDigest, durationSeconds: expect.any(Number) }]);
+			expect(Number.isInteger(result.verification[0]!.durationSeconds)).toBe(true);
+			expect(result.verification[0]!.durationSeconds).toBeGreaterThanOrEqual(0);
+			expect(result.verification[0]!.durationSeconds).toBeLessThanOrEqual(Math.ceil(Number(process.hrtime.bigint() - began) / 1e9));
 			expect(result.report.summary).toContain('Runner-observed test-first red');
 			const held = structuredClone(result);
 			expect(() => verifyMeasuredVerification(result)).not.toThrow();

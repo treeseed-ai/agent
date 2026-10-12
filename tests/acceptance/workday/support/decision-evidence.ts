@@ -119,14 +119,14 @@ export function verifyReviewFindingContent(reference: Row, decisionReference: Ro
 }
 
 /** Same classed approval assertion for final graph pairs and actually consumed predecessor reviews. */
-export function verifyApprovedWorkReview(review: Row, actor: Row, content: Row): void {
+export function verifyWorkReview(review: Row, actor: Row, content: Row, disposition: 'approved' | 'request-changes' = 'approved'): void {
 	const decision = verifyDecisionContent(content, String(review.projectId), 'ACCEPTANCE_REVIEW');
 	assert.ok(Array.isArray(decision.authorityRefs) && decision.authorityRefs.some(reference => isDeepStrictEqual(reference, row(review.assignmentAttempt).sourceRef)),
 		'ACCEPTANCE_REVIEW_AUTHORITY: Exact original proposal authority required');
 	const subject = row(decision.subjectRef), result = row(actor.assignmentResult), attempt = row(review.assignmentAttempt);
 	assert.ok(review.status === 'completed' && row(review.assignmentResult).assignmentId === review.id
-		&& row(row(review.lifecycleOutput).activityCompletion).reviewDisposition === 'approved'
-		&& decision.decisionClass === 'work-review' && decision.disposition === 'approved',
+		&& row(row(review.lifecycleOutput).activityCompletion).reviewDisposition === disposition
+		&& decision.decisionClass === 'work-review' && decision.disposition === disposition,
 		'ACCEPTANCE_REVIEW_DISPOSITION: Lifecycle output and terminal status are not governed approval');
 	assert.ok(Array.isArray(result.references) && result.references.map(row).some(reference => subject.store === reference.kind
 		&& subject.repository === reference.repository && subject.commit === reference.commit && (!reference.path || subject.path === reference.path)),
@@ -168,7 +168,7 @@ export function verifyReviewCandidateAuthority(review: Row, content: Row): void 
 		'ACCEPTANCE_REVIEW_WRITE: Candidate content must remain immutable');
 }
 
-export function readApprovedWorkReview(review: Row, actor: Row, team: string, cache: Map<string, Row>): void {
+export function readWorkReviewDecision(review: Row, team: string, cache: Map<string, Row>): Row {
 	const references = row(review.assignmentResult).references;
 	assert.ok(Array.isArray(references), 'ACCEPTANCE_REVIEW_AUTHORITY: Original result references required');
 	const decisions = references.map(row).filter(reference => reference.kind === 'treedx').map(reference => {
@@ -178,5 +178,9 @@ export function readApprovedWorkReview(review: Row, actor: Row, team: string, ca
 		return verifyDecisionContent(content, String(review.projectId), 'ACCEPTANCE_REVIEW');
 	}).filter((content): content is Row => content !== undefined && content.decisionClass === 'work-review');
 	assert.equal(decisions.length, 1, 'ACCEPTANCE_REVIEW_AUTHORITY: Exactly one returned classed work-review Decision required');
-	verifyApprovedWorkReview(review, actor, decisions[0]!);
+	return decisions[0]!;
+}
+
+export function readApprovedWorkReview(review: Row, actor: Row, team: string, cache: Map<string, Row>): void {
+	verifyWorkReview(review, actor, readWorkReviewDecision(review, team, cache));
 }

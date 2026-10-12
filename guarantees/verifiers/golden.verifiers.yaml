@@ -221,6 +221,11 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/guarantees/monitoring/live-graph-inspection.test.ts
     testName: "accepts exact independent graph authority without rewriting source observations and denies every substituted issued field"
+  agent.golden.live-node-revision-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/monitoring/live-graph-inspection.test.ts
+    testName: "retains a legitimate earlier completed attempt when independently verified request-changes history advances its graph node"
   agent.golden.live-graph-missing-unit:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

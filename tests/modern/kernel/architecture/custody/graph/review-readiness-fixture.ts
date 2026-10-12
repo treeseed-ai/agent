@@ -35,8 +35,8 @@ export function reviewedGraphFixture(candidateStore: 'git' | 'treedx' = 'git') {
 		id: item.executionNodeId, teamId: base.teamId, projectId: base.projectId, workItemId: item.assignmentAttempt.workItemId,
 		kind: item.executionNodeId === 'review' ? 'reviewing' : 'acting', pairRole: item.executionNodeId === 'review' ? 'reviewer' : 'actor',
 		sourceRef: base.sourceRef, authorityRefs: base.authorityRefs, ruleRevision: 1, nodeRevision: 1, agentClass: item.assignmentAttempt.agentClass,
-		status: 'completed', estimate: base.estimate, requiredCapabilities: [], requestedPermissions: base.effectiveProfile.permissionCeiling,
-		workspace: 'git', acceptanceCriteria: base.acceptanceCriteria, maximumReviewCycles: 2, graphRevisionCreated: 1, graphRevisionUpdated: 1 }));
+		status: 'completed', estimate: base.estimate, requiredCapabilities: [], requestedPermissions: item.assignmentAttempt.effectiveProfile.permissionCeiling,
+		workspace: item.assignmentAttempt.workspace.mode, acceptanceCriteria: base.acceptanceCriteria, maximumReviewCycles: 2, graphRevisionCreated: 1, graphRevisionUpdated: 1 }));
 	const edges = [['paired', 'actor', 'review', 'review-pair'], ['dependent', 'review', 'next', 'work-item']].map(([id, fromNodeId, toNodeId, provenance]) =>
 		executionEdgeSchema.parse({ schemaVersion: 'treeseed.execution-edge/v1', id, teamId: base.teamId, fromNodeId, toNodeId,
 			provenance, sourceRef: base.sourceRef, graphRevisionCreated: 1 }));

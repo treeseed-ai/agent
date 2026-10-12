@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
+import { isDeepStrictEqual } from 'node:util';
 import { assignmentAttemptSchema, capabilityAccountingLimitsSchema, executionNodeSchema, validateProviderAssignment } from '@treeseed/sdk/agent-capacity';
 import { read, row, type Row } from '../../../acceptance-cli.ts';
 import { verifyAssignmentAuthority, verifyGovernedProfile, verifyHandlerInspection } from '../assignment-authority.ts';
-import { readGovernedContentFile } from '../decision-evidence.ts';
+import { readGovernedContentFile, readWorkReviewDecision, verifyWorkReview } from '../decision-evidence.ts';
 import { verifyAppliedWorkdayCustody, verifyDerivedWorkdayModes } from '../campaign-observation.ts';
 import { verifyGraphProvenance, verifyPredecessorCustody } from '../evidence-pages.ts';
 import { verifyAllocation } from './assignment-allocation.ts';
@@ -36,7 +37,7 @@ export function verifyLiveProviderRuntime(item: Row, publications: readonly Row[
 }
 
 /** A matching list/show pair cannot establish independent graph authority. */
-export function verifyLiveAssignmentGraph(item: Row, graph: Row): void {
+export function verifyLiveAssignmentGraph(item: Row, graph: Row, items: readonly Row[] = [item], decisions: ReadonlyMap<string, Row> = new Map()): void {
 	const code = 'ACCEPTANCE_LIVE_GRAPH', attempt = assignmentAttemptSchema.parse(item.assignmentAttempt);
 	assert.equal(graph.teamId, attempt.teamId, `${code}: Foreign graph`);
 	assert.ok(Number.isSafeInteger(graph.revision) && Number(graph.revision) >= attempt.graphRevision,
@@ -48,7 +49,7 @@ export function verifyLiveAssignmentGraph(item: Row, graph: Row): void {
 	assert.ok(parsed.success, `${code}: Canonical independent owning node required`);
 	const node = parsed.data;
 	assert.deepEqual(node, matches[0], `${code}: Original graph node must not be normalized`);
-	for (const field of ['teamId', 'projectId', 'nodeRevision', 'agentClass', 'workItemId', 'sourceRef', 'authorityRefs',
+	for (const field of ['teamId', 'projectId', 'agentClass', 'workItemId', 'sourceRef', 'authorityRefs',
 		'estimate', 'requiredCapabilities', 'acceptanceCriteria'] as const)
 		assert.deepEqual(node[field], attempt[field], `${code}: Issued ${field} differs from independent graph`);
 	if (node.workdayId !== undefined) assert.equal(node.workdayId, attempt.workdayId, `${code}: Foreign node workday`);
@@ -58,6 +59,30 @@ export function verifyLiveAssignmentGraph(item: Row, graph: Row): void {
 	assert.ok(node.graphRevisionCreated <= attempt.graphRevision && node.graphRevisionUpdated <= Number(graph.revision),
 		`${code}: Node does not belong to the original issued graph history`);
 	verifyGraphProvenance(graph);
+	assert.ok(node.nodeRevision >= attempt.nodeRevision, `${code}: Graph cannot precede issued node revision`);
+	if (node.nodeRevision === attempt.nodeRevision) return;
+	// An older result can first appear after its real paired review advanced the
+	// node. Only original independently read classed Decisions explain that gap.
+	const pairs = (graph.edges as Row[]).filter(edge => edge.provenance === 'review-pair' && edge.graphRevisionRemoved === undefined
+		&& (node.pairRole === 'actor' ? edge.fromNodeId === node.id : node.pairRole === 'reviewer' && edge.toNodeId === node.id));
+	assert.equal(pairs.length, 1, `${code}: Original pair required for advanced node history`);
+	const pair = pairs[0]!, revisions = new Set<number>();
+	for (const review of items) {
+		const issued = assignmentAttemptSchema.parse(review.assignmentAttempt);
+		if (issued.nodeId !== pair.toNodeId || issued.workdayId !== attempt.workdayId || issued.projectId !== attempt.projectId
+			|| issued.teamId !== attempt.teamId || issued.nodeRevision < attempt.nodeRevision || issued.nodeRevision >= node.nodeRevision
+			|| Date.parse(String(review.completedAt)) < Date.parse(attempt.createdAt)
+			|| row(row(review.lifecycleOutput).activityCompletion).reviewDisposition !== 'request-changes') continue;
+		assert.equal(review.status, 'completed', `${code}: Unfinished review cannot advance authority`);
+		assert.deepEqual(issued.sourceRef, attempt.sourceRef, `${code}: Foreign revision authority`);
+		const actors = items.filter(value => row(value.assignmentAttempt).nodeId === pair.fromNodeId
+			&& issued.predecessorResultIds.includes(String(row(value.assignmentResult).id)));
+		assert.equal(actors.length, 1, `${code}: Original exact reviewed Actor required`);
+		const decision = decisions.get(String(review.id)); assert.ok(decision, `${code}: Original governed revision Decision required`);
+		verifyWorkReview(review, actors[0]!, decision, 'request-changes');
+		assert.ok(!revisions.has(issued.nodeRevision), `${code}: Duplicate revision authority`); revisions.add(issued.nodeRevision);
+	}
+	assert.equal(attempt.nodeRevision + revisions.size, node.nodeRevision, `${code}: Every advanced revision needs independent original authority`);
 }
 
 export function inspectLiveAssignmentProfile(item: Row, team: string, items: readonly Row[]): void {
@@ -67,8 +92,15 @@ export function inspectLiveAssignmentProfile(item: Row, team: string, items: rea
 	assert.deepEqual(issuedAuthority(row(shown.assignmentAttempt)), issuedAuthority(attempt),
 		'ACCEPTANCE_LIVE_ASSIGNMENT: Independent public view changed issued authority');
 	const graph = read(['execution', 'graph', 'show'], team);
-	verifyLiveAssignmentGraph(item, graph);
 	assert.ok(Array.isArray(items) && items.some(value => value.id === attempt.id), 'ACCEPTANCE_LIVE_ASSIGNMENT: Complete original assignment inventory required');
+	const decisions = new Map<string, Row>(), content = new Map<string, Row>();
+	if (Array.isArray(graph.nodes) && graph.nodes.some(value => row(value).id === attempt.nodeId && Number(row(value).nodeRevision) > attempt.nodeRevision)) {
+		for (const review of items) if (review.status === 'completed' && row(review.assignmentAttempt).workdayId === attempt.workdayId
+			&& isDeepStrictEqual(row(review.assignmentAttempt).sourceRef, attempt.sourceRef)
+			&& row(row(review.lifecycleOutput).activityCompletion).reviewDisposition === 'request-changes')
+			decisions.set(String(review.id), readWorkReviewDecision(review, team, content));
+	}
+	verifyLiveAssignmentGraph(item, graph, items, decisions);
 	verifyPredecessorCustody([...items], graph);
 	const run = row(read(['workdays', 'show', attempt.workdayId], team).run);
 	assert.equal(run.id, attempt.workdayId, 'ACCEPTANCE_LIVE_ASSIGNMENT: Foreign owning workday');
@@ -80,7 +112,7 @@ export function inspectLiveAssignmentProfile(item: Row, team: string, items: rea
 	const catalog = read(['agents', 'handlers', 'list', '--project', attempt.projectId, '--server', 'local'], team, true);
 	const selected = read(['agents', 'handlers', 'show', profile.handler, '--project', attempt.projectId, '--server', 'local'], team, true);
 	verifyHandlerInspection(item, catalog, selected);
-	verifyLiveAssignmentGraph(item, read(['execution', 'graph', 'show'], team));
+	verifyLiveAssignmentGraph(item, read(['execution', 'graph', 'show'], team), items, decisions);
 }
 
 /** Observe the existing canonical records before campaign progress. This is

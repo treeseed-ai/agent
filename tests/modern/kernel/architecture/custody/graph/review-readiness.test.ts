@@ -1,7 +1,7 @@
 import { expect, it } from 'vitest';
 import { gate, state } from '../../golden-readback-fixture.ts';
 import { verifyPredecessorCustody } from '../../../../../acceptance/workday/support/evidence-pages.ts';
-import { verifyApprovedWorkReview, verifyReviewCandidateAuthority } from '../../../../../acceptance/workday/support/decision-evidence.ts';
+import { verifyWorkReview, verifyReviewCandidateAuthority } from '../../../../../acceptance/workday/support/decision-evidence.ts';
 import { contentReviewFailures, mutateContentReview, mutateReadiness, mutateReview, mutateReviewGrant, readinessFailures, reviewedDecision, reviewedGraphFixture, reviewedRevisionFixture, reviewFailures, reviewGrantFailures } from './review-readiness-fixture.ts';
 
 it('denies missing or contradictory original work-review bytes even when parsed approval views agree', () => {
@@ -26,21 +26,21 @@ it('denies every omitted contradictory unfinished ambiguous or non-approving req
 
 it('requires the exact consumed Actor candidate original authority assigned Reviewer and measured approval interval', () => {
 	const f = reviewedGraphFixture(), decision = reviewedDecision(f), held = structuredClone({ f, decision });
-	expect(() => verifyApprovedWorkReview(f.assignments[1]!, f.assignments[0]!, decision)).not.toThrow();
+	expect(() => verifyWorkReview(f.assignments[1]!, f.assignments[0]!, decision)).not.toThrow();
 	for (const mode of reviewFailures) {
 		const changed = structuredClone(decision); mutateReview(changed, mode); const before = structuredClone(changed);
-		expect(() => verifyApprovedWorkReview(f.assignments[1]!, f.assignments[0]!, changed), mode).toThrow(); expect(changed).toEqual(before);
+		expect(() => verifyWorkReview(f.assignments[1]!, f.assignments[0]!, changed), mode).toThrow(); expect(changed).toEqual(before);
 	}
 	for (const mode of reviewGrantFailures) {
 		const changed = reviewedGraphFixture(); mutateReviewGrant(changed, mode); const before = structuredClone(changed);
-		expect(() => verifyApprovedWorkReview(changed.assignments[1]!, changed.assignments[0]!, reviewedDecision(changed)), mode).toThrow();
+		expect(() => verifyWorkReview(changed.assignments[1]!, changed.assignments[0]!, reviewedDecision(changed)), mode).toThrow();
 		expect(changed).toEqual(before);
 	}
 	const content = reviewedGraphFixture('treedx');
-	expect(() => verifyApprovedWorkReview(content.assignments[1]!, content.assignments[0]!, reviewedDecision(content))).not.toThrow();
+	expect(() => verifyWorkReview(content.assignments[1]!, content.assignments[0]!, reviewedDecision(content))).not.toThrow();
 	for (const mode of contentReviewFailures) {
 		const changed = reviewedGraphFixture('treedx'); mutateContentReview(changed, mode); const before = structuredClone(changed);
-		expect(() => verifyApprovedWorkReview(changed.assignments[1]!, changed.assignments[0]!, reviewedDecision(changed)), mode).toThrow();
+		expect(() => verifyWorkReview(changed.assignments[1]!, changed.assignments[0]!, reviewedDecision(changed)), mode).toThrow();
 		expect(changed).toEqual(before);
 	}
 	expect({ f, decision }).toEqual(held);

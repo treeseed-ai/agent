@@ -156,6 +156,9 @@ workflow:
   - id: live-graph-identity-unit
     action: { verifier: agent.golden.live-graph-identity-unit }
     expect: { status: passed }
+  - id: live-node-revision-unit
+    action: { verifier: agent.golden.live-node-revision-unit }
+    expect: { status: passed }
   - id: live-graph-missing-unit
     action: { verifier: agent.golden.live-graph-missing-unit }
     expect: { status: passed }

@@ -61,6 +61,21 @@ it('retains a legitimate earlier completed attempt when independently verified r
 	const before = structuredClone(f), decisions = new Map([[review.id, decision]]);
 	expect(() => verifyLiveAssignmentGraph(f.assignments[0]!, f.graph, f.assignments, decisions)).not.toThrow();
 	expect(f).toEqual(before);
+	expect(() => verifyLiveAssignmentGraph(f.assignments[0]!, f.graph, f.assignments, new Map())).toThrow('ACCEPTANCE_LIVE_GRAPH');
+	for (const change of [
+		(value: Record<string, any>) => { value.disposition = 'approved'; },
+		(value: Record<string, any>) => { value.subjectRef.commit = 'f'.repeat(40); },
+		(value: Record<string, any>) => { value.authorityRefs = []; },
+		(value: Record<string, any>) => { value.decidedByRefs = []; },
+		(value: Record<string, any>) => { value.decidedAt = 'invalid'; },
+	]) {
+		const changed = structuredClone(decision); change(changed); const retained = structuredClone(changed);
+		expect(() => verifyLiveAssignmentGraph(f.assignments[0]!, f.graph, f.assignments, new Map([[review.id, changed]]))).toThrow();
+		expect(changed).toEqual(retained); expect(f).toEqual(before);
+	}
+	const skipped = structuredClone(f.graph); skipped.nodes[0]!.nodeRevision++;
+	expect(() => verifyLiveAssignmentGraph(f.assignments[0]!, skipped, f.assignments, decisions)).toThrow('ACCEPTANCE_LIVE_GRAPH');
+	expect(() => verifyLiveAssignmentGraph(f.assignments[0]!, f.graph, f.assignments, decisions)).not.toThrow();
 });
 
 it('denies a missing owning allocation receipt before allowing a newly observed assignment to continue', () => {

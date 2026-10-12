@@ -39,13 +39,20 @@ export function campaignInputs(slugs: readonly string[], seedBytes?: string) {
 // Controlled configuration bytes for independent index/source/API comparisons.
 export function campaignProfiles(slug: string, ref: string, repoId: string,
 	names = ['architect', 'researcher', 'tester', 'engineer', 'technical-writer', 'releaser', 'reviewer', 'reporter']) {
-	const agents = names.map(agentSlug => ({ agentSlug, definitionRevision: ref, definition: {
-		schemaVersion: 'treeseed.agent/v1', id: `${slug}/${agentSlug}`, name: `Configured ${agentSlug}`, agentClass: agentSlug,
+	const classes = ['architect', 'researcher', 'tester', 'engineer', 'technical-writer', 'releaser', 'reviewer', 'reporter'];
+	const profile = (handler: string) => ({ handler,
+		permissions: { content: { read: ['proposal'], write: [] }, tools: ['source.read'] },
+		prompt: { system: 'Inspect only the exact assigned project authority and return the configured activity result.' } });
+	const agents = names.map((agentSlug, index) => ({ agentSlug, definitionRevision: ref, definition: {
+		schemaVersion: 'treeseed.agent/v1', id: `${slug}/${agentSlug}`, name: `Configured ${agentSlug}`, agentClass: classes[index]!,
 		purpose: 'Controlled governed profile custody', responsibilities: ['Retain exact configured authority'],
 		capabilities: ['source-read'], context: { include: ['project'] }, activityProfiles: {
 			chat: { handler: 'writer', permissions: { content: { read: ['proposal'], write: [] }, tools: ['source.read'] },
 				prompt: { system: 'For coordination-only messages; Inspect project files only when asked.' } },
-			...(agentSlug === 'reviewer' ? { reviewing: { handler: 'reviewer',
+			planning: profile('writer'),
+			...(classes[index] === 'reporter' ? { reporting: profile('reporter') } : { estimating: profile('estimate') }),
+			...(index < 6 ? { acting: profile('actor') } : {}),
+			...(classes[index] === 'reviewer' ? { reviewing: { handler: 'reviewer',
 				permissions: { content: { read: ['proposal'], write: [] }, tools: ['source.read'] },
 				prompt: { system: 'Review only a completed Actor candidate bound to an accepted decision; approve only proven work. Proposal feedback and estimates belong to planning.' } } } : {}),
 		},

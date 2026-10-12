@@ -4,6 +4,33 @@ import { stringify } from 'yaml';
 import { verifyCampaignProjectProfiles } from '../../../acceptance/workday/support/preflight/campaign-profiles.ts';
 import { campaignProfiles } from './campaign-freeze-fixture.ts';
 
+it('denies every omitted required activity and substituted class despite matching governed YAML Git bytes and public definitions', () => {
+	const ref = 'a'.repeat(40), binding = { projectId: 'project-renamed', repositoryId: 'library-renamed' };
+	const original = campaignProfiles('renamed', ref, binding.repositoryId, Array.from({ length: 8 }, (_, i) => `configured-${i}`));
+	const inspect = (value: typeof original) => verifyCampaignProjectProfiles(binding, ref, value.paths, value.files, value.inventory);
+	const rehash = (value: typeof original, index: number) => {
+		const definition = value.inventory.agents[index]!.definition, file = value.files[index]!.files[0]!;
+		file.frontmatter = definition; file.content = `---\n${stringify(definition)}---\n\nControlled exact authority.\n`;
+		const bytes = Buffer.from(file.content), entry = value.paths.entries[index]!;
+		entry.size = bytes.length; entry.objectId = createHash('sha1').update(`blob ${bytes.length}\0`).update(bytes).digest('hex');
+	};
+	const held = structuredClone(original); inspect(original); expect(original).toEqual(held);
+	let omissions = 0;
+	for (let index = 0; index < 8; index++) {
+		for (const activity of Object.keys(original.inventory.agents[index]!.definition.activityProfiles)) {
+			const changed = structuredClone(original); Reflect.deleteProperty(changed.inventory.agents[index]!.definition.activityProfiles, activity);
+			rehash(changed, index); const before = structuredClone(changed);
+			expect(() => inspect(changed)).toThrow('ACCEPTANCE_CAMPAIGN_PROFILES'); expect(changed).toEqual(before); omissions++;
+		}
+		for (const agentClass of ['foreign-class', original.inventory.agents[(index + 1) % 8]!.definition.agentClass]) {
+			const changed = structuredClone(original); changed.inventory.agents[index]!.definition.agentClass = agentClass;
+			rehash(changed, index); const before = structuredClone(changed);
+			expect(() => inspect(changed)).toThrow('ACCEPTANCE_CAMPAIGN_PROFILES'); expect(changed).toEqual(before);
+		}
+	}
+	expect(omissions).toBe(31); inspect(original); expect(original).toEqual(held);
+});
+
 it('denies consistently rehashed declared handlers absent from the original compiled production registry without dispatch or input mutation', () => {
 	const ref = 'a'.repeat(40), binding = { projectId: 'project-configured', repositoryId: 'library-configured' };
 	const original = campaignProfiles('configured', ref, binding.repositoryId);

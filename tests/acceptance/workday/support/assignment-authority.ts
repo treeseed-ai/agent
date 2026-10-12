@@ -45,6 +45,9 @@ export function modelExecutionInventory(items: Row[], events: Row[], run: Row): 
 	});
 	for (const event of events.filter(event => ['provider.execution.completed', 'provider.execution.failed'].includes(String(event.eventType)) && modelEvent(event)))
 		assert.ok(seen.has(String(event.assignmentId)), 'ACCEPTANCE_MODEL_INVENTORY_MISSING_START');
+	for (const item of items) if (item.status === 'completed' && Object.hasOwn(row(item.lifecycleOutput), 'sandboxId'))
+		assert.ok(typeof row(item.lifecycleOutput).sandboxId === 'string' && String(row(item.lifecycleOutput).sandboxId).trim()
+			&& seen.has(String(item.id)), 'ACCEPTANCE_MODEL_INVENTORY_MISSING_START');
 	return inventory;
 }
 

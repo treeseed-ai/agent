@@ -296,15 +296,17 @@ it('native public SDK event reads retain completed failed and returned model inv
 					const page = row((await client.invoke(controlPlaneOperation('workdays.events.list'), input)).data);
 					expect(input).toEqual(before); if (!Array.isArray(page.items)) throw new Error('Native original event collection required'); observed.push(...page.items.map(row));
 				}
-				const inventory = modelExecutionInventory(items, observed, run);
+				const suppliedItems = mode === 'omitted-sandbox-start' ? [...items, { ...items[0]!, id: 'omitted-completed-model',
+					assignmentAttempt: { ...items[0]!.assignmentAttempt, id: 'omitted-completed-model' }, lifecycleOutput: { sandboxId: 'native-completed-sandbox' } }] : items;
+				const inventory = modelExecutionInventory(suppliedItems, observed, run);
 				if (!mode.startsWith('stripped-')) expect(inventory.map(value => value.item.status)).toEqual(['completed', 'failed', 'returned']);
 				if (mode === 'exact') expect(observed).toEqual(events);
 			} catch (failure) { denied = true; error = failure instanceof Error ? failure.message : String(failure); }
-			if (['missing-start', 'foreign', 'duplicate', 'empty-model', 'payload-only'].includes(mode)) expect(error).toMatch(/ACCEPTANCE_MODEL_INVENTORY|Expected values to be strictly equal/u);
+			if (['missing-start', 'omitted-sandbox-start', 'foreign', 'duplicate', 'empty-model', 'payload-only'].includes(mode)) expect(error).toMatch(/ACCEPTANCE_MODEL_INVENTORY|Expected values to be strictly equal/u);
 			observations.push({ mode, denied, error }); return denied;
 		};
 		expect(await execute(), JSON.stringify(observations)).toBe(false);
-		for (const fault of ['missing-start', 'foreign', 'duplicate', 'empty-model', 'payload-only', '403', '503', 'json']) { mode = fault; expect(await execute(), mode).toBe(true); }
+		for (const fault of ['missing-start', 'omitted-sandbox-start', 'foreign', 'duplicate', 'empty-model', 'payload-only', '403', '503', 'json']) { mode = fault; expect(await execute(), mode).toBe(true); }
 		for (const fault of ['stripped-raw', 'stripped-empty-raw', 'stripped-malformed-raw']) { mode = fault; await execute(); }
 		const retained = structuredClone(observations), requests = structuredClone(history); mode = 'exact'; expect(await execute(), JSON.stringify(observations)).toBe(false);
 		expect(observations.slice(0, retained.length)).toEqual(retained); expect(history.slice(0, requests.length)).toEqual(requests);

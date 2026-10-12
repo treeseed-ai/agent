@@ -32,9 +32,13 @@ describe('managed exact assignment grant readback', () => {
 	});
 	it('denies unpinned or out-of-workspace mutable TreeDX authority', () => {
 		const value = state.replies.get('assignments list')!.items.find((item: Row) => item.id === 'review-3').assignmentAttempt;
+		const original = structuredClone(value);
 		value.grant.contentWrite[0].commit = 'staging';
 		expect(() => gate('graph')).toThrow(/ACCEPTANCE_ASSIGNMENT_GRANT/u);
-		value.grant.contentWrite[0].commit = 'a'.repeat(40); value.grant.contentWrite[0].path = 'decisions/outside.mdx';
+		Object.assign(value, structuredClone(original)); value.workspace.writablePaths.push('questions/unassigned.mdx');
+		const before = structuredClone([...state.replies]);
+		expect(() => gate('graph')).toThrow(/ACCEPTANCE_ASSIGNMENT_GRANT/u); expect([...state.replies]).toEqual(before);
+		Object.assign(value, structuredClone(original)); value.grant.contentWrite[0].path = 'decisions/outside.mdx';
 		expect(() => gate('graph')).toThrow(/ACCEPTANCE_ASSIGNMENT_GRANT/u);
 	});
 	it('denies Git repository authority outside the sole mutable workspace', () => {

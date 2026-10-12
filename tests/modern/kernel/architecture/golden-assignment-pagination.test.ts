@@ -49,6 +49,10 @@ describe('complete managed assignment collection custody', () => {
 		expect(state.pages).toEqual(before);
 	});
 	it('denies absent malformed or contradictory page authority', () => {
+		const workspace = { mode: 'treedx', repository: 'library', baseCommit: 'a'.repeat(40), workspaceId: 'shared-workspace', writablePaths: ['notes/one.mdx'] };
+		state.pages = [page([0, 1].map(index => ({ ...item(index), assignmentAttempt: { workspace: structuredClone(workspace) } })))]; state.calls = [];
+		const held = structuredClone(state.pages);
+		expect(() => collect()).toThrow('ACCEPTANCE_WORKSPACE_UNIQUE'); expect(state.pages).toEqual(held);
 		const mutations = [undefined, null, [], {}, { hasMore: false }, { limit: '50', hasMore: false, nextCursor: null },
 			{ limit: 51, hasMore: false, nextCursor: null }, { limit: 50, hasMore: 'false', nextCursor: null },
 			{ limit: 50, hasMore: false, nextCursor: 'moving' }];

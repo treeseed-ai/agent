@@ -7,7 +7,7 @@ import { parse } from 'yaml';
 import { isDeepStrictEqual } from 'node:util';
 import { acceptanceWorkdayId, read, row, type Row } from '../acceptance-cli.ts';
 import { readWorkdayAssignments } from '../sdk-runtime-golden.test.ts';
-import { verifyAssignmentAuthority, verifyExactContextSource, verifyKnowledgeBookSource, verifyDraftProposalHandoff, verifyModelClockEvidence, modelExecutionInventory } from './support/assignment-authority.ts';
+import { verifyAssignmentAuthority, verifyGitInputContext, verifyExactContextSource, verifyKnowledgeBookSource, verifyDraftProposalHandoff, verifyModelClockEvidence, modelExecutionInventory } from './support/assignment-authority.ts';
 import { readCompleteEvidence } from './support/evidence-pages.ts';
 import { verifySdkArchitectureBook } from '../prepare-campaign.ts';
 
@@ -155,9 +155,7 @@ test('Actual accepted integration work retains its original single base exact in
 		assert.ok(attempt.effectiveProfile.permissionCeiling.tools.includes('release')); assert.deepEqual(attempt.grant.sourceWrite, [repository]);
 		assert.deepEqual(attempt.grant.contentWrite, []); assert.ok(Array.isArray(planned.dependsOn));
 		for (const dependency of planned.dependsOn) assert.ok(predecessors.some(value => value.previous.workItemId === dependency), 'ACCEPTANCE_INTEGRATION_PLAN: Accepted dependency missing from immutable predecessors');
-		const base = [attempt.sourceRef, ...attempt.contextRefs].filter(ref => ref.store === 'git' && ref.repository === repository && ref.commit === workspace.baseCommit);
-		assert.ok(base.length > 0, 'ACCEPTANCE_INTEGRATION_BASE: Original admitted base must remain an explicit exact source/context ref');
-		for (const ref of primary) assert.ok(attempt.contextRefs.some(value => value.store === 'git' && value.repository === ref.repository && value.commit === ref.commit), 'ACCEPTANCE_INTEGRATION_CONTEXT: Every separate native Git input must remain exact');
+		verifyGitInputContext(item, primary);
 		const result = assignmentResultSchema.parse(item.assignmentResult); assert.equal(result.assignmentId, attempt.id); assert.equal(result.status, 'completed');
 		const candidates = result.references.filter(ref => ref.kind === 'git' && ref.repository === repository); assert.equal(candidates.length, 1);
 		assert.ok(Date.parse(result.completedAt) >= Date.parse(attempt.createdAt) && Date.parse(result.completedAt) <= Date.parse(attempt.deadline));

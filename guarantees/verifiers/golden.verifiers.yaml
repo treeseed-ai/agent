@@ -231,6 +231,11 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/guarantees/monitoring/live-graph-inspection.test.ts
     testName: "denies missing independent graph before accepting a newly issued assignment"
+  agent.golden.live-workspace-base-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/monitoring/live-graph-inspection.test.ts
+    testName: "denies a Git workspace base absent from original exact context before accepting matching assignment views"
   agent.golden.live-allocation-missing-unit:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

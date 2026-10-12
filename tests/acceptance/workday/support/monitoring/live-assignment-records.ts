@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { isDeepStrictEqual } from 'node:util';
-import { assignmentAttemptSchema, capabilityAccountingLimitsSchema, executionNodeSchema, validateProviderAssignment } from '@treeseed/sdk/agent-capacity';
+import { assignmentAttemptSchema, assignmentResultSchema, capabilityAccountingLimitsSchema, executionNodeSchema, validateProviderAssignment } from '@treeseed/sdk/agent-capacity';
 import { read, row, type Row } from '../../../acceptance-cli.ts';
-import { verifyAssignmentAuthority, verifyGovernedProfile, verifyHandlerInspection } from '../assignment-authority.ts';
+import { verifyAssignmentAuthority, verifyGitInputContext, verifyGovernedProfile, verifyHandlerInspection } from '../assignment-authority.ts';
 import { readGovernedContentFile, readWorkReviewDecision, verifyWorkReview } from '../decision-evidence.ts';
 import { verifyAppliedWorkdayCustody, verifyDerivedWorkdayModes } from '../campaign-observation.ts';
 import { verifyGraphProvenance, verifyPredecessorCustody } from '../evidence-pages.ts';
@@ -102,6 +102,8 @@ export function inspectLiveAssignmentProfile(item: Row, team: string, items: rea
 	}
 	verifyLiveAssignmentGraph(item, graph, items, decisions);
 	verifyPredecessorCustody([...items], graph);
+	verifyGitInputContext(item, items.filter(value => attempt.predecessorResultIds.includes(String(row(value.assignmentResult).id)))
+		.flatMap(value => assignmentResultSchema.parse(value.assignmentResult).references));
 	const run = row(read(['workdays', 'show', attempt.workdayId], team).run);
 	assert.equal(run.id, attempt.workdayId, 'ACCEPTANCE_LIVE_ASSIGNMENT: Foreign owning workday');
 	assert.equal(run.teamId, attempt.teamId, 'ACCEPTANCE_LIVE_ASSIGNMENT: Foreign owning team');

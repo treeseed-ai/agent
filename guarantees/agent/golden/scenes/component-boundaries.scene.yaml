@@ -162,6 +162,9 @@ workflow:
   - id: live-graph-missing-unit
     action: { verifier: agent.golden.live-graph-missing-unit }
     expect: { status: passed }
+  - id: live-workspace-base-unit
+    action: { verifier: agent.golden.live-workspace-base-unit }
+    expect: { status: passed }
   - id: live-allocation-missing-unit
     action: { verifier: agent.golden.live-allocation-missing-unit }
     expect: { status: passed }

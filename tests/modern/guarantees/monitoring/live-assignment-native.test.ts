@@ -7,7 +7,7 @@ import { controlPlaneOperation } from '@treeseed/sdk/operator-contracts';
 import { assignmentResultSchema } from '@treeseed/sdk/agent-capacity';
 import { portableKernel } from '../../kernel/architecture/portable/portable-kernel-fixture.ts';
 import { row, type Row } from '../../../acceptance/acceptance-cli.ts';
-import { verifyGovernedProfile, verifyHandlerInspection } from '../../../acceptance/workday/support/assignment-authority.ts';
+import { verifyGitInputContext, verifyGovernedProfile, verifyHandlerInspection } from '../../../acceptance/workday/support/assignment-authority.ts';
 import { observeLiveAssignmentRecords, verifyLiveAssignmentGraph, verifyLiveProviderRuntime } from '../../../acceptance/workday/support/monitoring/live-assignment-records.ts';
 import { verifyAllocation } from '../../../acceptance/workday/support/monitoring/assignment-allocation.ts';
 import { verifyPredecessorCustody } from '../../../acceptance/workday/support/evidence-pages.ts';
@@ -75,6 +75,7 @@ it('native configured Kernel Git result and public SDK assignment reads reach th
 			if (mode === 'denied') { response.writeHead(403).end(JSON.stringify({ status: 403, title: 'Controlled native denial', code: 'controlled_assignment_denied' })); return; }
 			if (mode === 'interrupted') { request.socket.destroy(); return; }
 			const returned = structuredClone(item);
+			if (mode === 'workspace-base') row(row(returned.assignmentAttempt).workspace).baseCommit = 'f'.repeat(40);
 			if (mode === 'allocation-missing') delete row(returned.explanation).metadata;
 			if (mode === 'allocation-reservation') row(returned.capacityEnvelope).reservedSeconds = 0;
 			const allocation = row(row(row(returned.explanation).metadata).allocation);
@@ -110,7 +111,7 @@ it('native configured Kernel Git result and public SDK assignment reads reach th
 				path: { teamId: f.attempt.teamId, assignmentId: f.attempt.id }, query: {}, body: undefined,
 			})).data);
 			observeLiveAssignmentRecords(row(observed.run), [returned], observations, value => {
-				inspections++; verifyAllocation(value, run); verifyGovernedProfile(value, { path, content });
+				inspections++; verifyGitInputContext(value, []); verifyAllocation(value, run); verifyGovernedProfile(value, { path, content });
 				const handler = { id: f.attempt.effectiveProfile.handler, origin: f.attempt.effectiveProfile.handlerOrigin };
 				verifyHandlerInspection(value, { projectId: f.attempt.projectId, handlers: [handler] }, { projectId: f.attempt.projectId, handler });
 			});
@@ -185,6 +186,12 @@ it('native configured Kernel Git result and public SDK assignment reads reach th
 		}
 		const runtimeFailures = structuredClone(failed); mode = 'exact'; await inspectRuntime();
 		expect(failed).toEqual(runtimeFailures); expect(failed.slice(0, allFailures.length)).toEqual(allFailures);
+		mode = 'workspace-base'; const untouched = new Map<string, Row>();
+		await expect(execute(untouched)).rejects.toThrow('ACCEPTANCE_INTEGRATION_BASE');
+		expect(untouched.size).toBe(0); expect({ item, run }).toEqual(before); expect(retained).toEqual(held);
+		const workspaceFailures = structuredClone(failed); mode = 'exact'; await execute(untouched);
+		expect(untouched.size).toBe(1); expect(failed).toEqual(workspaceFailures);
+		expect(failed.slice(0, runtimeFailures.length)).toEqual(runtimeFailures);
 		// Native owning Kernel/handler/Git and SDK transport; upstream record,
 		// profile bytes and handler catalog are controlled. This does not prove
 		// native API admission, TreeDX publication, model usage or physical closure.

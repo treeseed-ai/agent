@@ -51,6 +51,11 @@ it('denies missing independent graph before accepting a newly issued assignment'
 	expect(() => inspectLiveAssignmentProfile(state.item, state.item.teamId)).toThrow('ACCEPTANCE_LIVE_GRAPH');
 });
 
+it('denies a missing owning allocation receipt before allowing a newly observed assignment to continue', () => {
+	delete state.item.explanation.metadata;
+	expect(() => inspectLiveAssignmentProfile(state.item, state.item.teamId)).toThrow('ACCEPTANCE_ALLOCATION_RECEIPT');
+});
+
 it('denies foreign source estimate node and graph revisions rather than accepting internally matching public assignment views', () => {
 	const original = structuredClone(state.graph);
 	for (const change of [

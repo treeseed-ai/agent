@@ -59,6 +59,11 @@ it('denies a missing owning allocation receipt before allowing a newly observed 
 	expect(() => inspectLiveAssignmentProfile(state.item, state.item.teamId)).toThrow('ACCEPTANCE_ALLOCATION_RECEIPT');
 });
 
+it('denies a predecessor result absent from the complete owning assignment inventory before campaign progress', () => {
+	state.item.assignmentAttempt.predecessorResultIds = ['missing-original-result'];
+	expect(() => inspectLiveAssignmentProfile(state.item, state.item.teamId)).toThrow('ACCEPTANCE_PREDECESSOR_MISSING');
+});
+
 it('denies absent independent provider publication rather than trusting the runtime build repeated in assignment views', () => {
 	state.publications = [];
 	expect(() => inspectLiveAssignmentProfile(state.item, state.item.teamId)).toThrow(/ACCEPTANCE_(AVAILABILITY|LIVE_RUNTIME)/u);

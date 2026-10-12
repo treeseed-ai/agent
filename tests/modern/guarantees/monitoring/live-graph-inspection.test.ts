@@ -1,6 +1,7 @@
 import { beforeEach, expect, it, vi } from 'vitest';
 import { liveAssignmentGraph, liveAssignmentRecord, liveProviderSession, liveRun } from './live-assignment-fixture.ts';
 import { reviewedDecision, reviewedRevisionFixture } from '../../kernel/architecture/custody/graph/review-readiness-fixture.ts';
+import { exactContext } from '../../kernel/architecture/portable/context-fixture.ts';
 
 // Unit-only isolation of already separately covered profile/content boundaries.
 // The real configured Kernel/public SDK integration exercises those boundaries.
@@ -27,6 +28,16 @@ beforeEach(() => {
 	state.graph = liveAssignmentGraph(state.item);
 	state.run = liveRun(state.item);
 	state.publications = [liveProviderSession(state.item)];
+});
+
+it('denies a self-consistent granted Book when its independent original content read is missing before live admission continues', () => {
+	const { ref } = exactContext();
+	state.item.assignmentAttempt.contextRefs.push(ref);
+	state.item.assignmentAttempt.grant.contentRead.push(ref);
+	state.item.assignmentAttempt.effectiveProfile.permissionCeiling.content.read.push('book');
+	const before = structuredClone(state);
+	expect(() => inspectLiveAssignmentProfile(state.item, state.item.teamId, [state.item], state.frozen)).toThrow('ACCEPTANCE_CONTEXT');
+	expect(state).toEqual(before);
 });
 
 it('accepts exact independent graph authority without rewriting source observations and denies every substituted issued field', () => {

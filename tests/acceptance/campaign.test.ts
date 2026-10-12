@@ -4,7 +4,7 @@ import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { monitorCampaign, openSdkCampaignDiscussion, requirePlanningWindow, retainCampaignWorkdayStart } from './campaign.ts';
 import { verifyFreezeIntegrity } from './freeze-integrity.ts';
-import { read } from './acceptance-cli.ts';
+import { read, row } from './acceptance-cli.ts';
 import { verifyGolden } from './sdk-runtime-golden.test.ts';
 import { prepareSdkCampaign, verifySdkExternalState } from './prepare-campaign.ts';
 import { observeCampaign } from './workday/support/campaign-observation.ts';
@@ -58,7 +58,7 @@ test('Frozen SDK campaign drives planning acting review and terminal golden gate
 	}, inspect: () => {
 		assert.ok(currentRun, 'ACCEPTANCE_LIVE_ASSIGNMENT: Original observed workday required');
 		const assignments = readCompleteEvidence(['assignments', 'list', '--workday', workdayId], team, 50, 'ACCEPTANCE_LIVE_ASSIGNMENT');
-		observeLiveAssignmentRecords(currentRun, assignments, observedAssignments, item => inspectLiveAssignmentProfile(item, team));
+		observeLiveAssignmentRecords(currentRun, assignments, observedAssignments, item => inspectLiveAssignmentProfile(item, team, assignments, { 'treeseed-ai/sdk': row(freeze.sourceHeads).sdk }));
 	}, now: Date.now, wait: () => new Promise(resolve => setTimeout(resolve, 30_000)), stop,
 		collaboration: () => {
 			verifyGolden('collaboration');

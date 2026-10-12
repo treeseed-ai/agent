@@ -435,3 +435,14 @@ export function verifyAssignmentAuthority(item: Row): void {
 			`${label}: Content context is not in the immutable exact grant`);
 	}
 }
+
+/** Preserve the original native integration input assertions during live reads. */
+export function verifyGitInputContext(item: Row, primary: readonly ReturnType<typeof assignmentReferenceSchema.parse>[]): void {
+	const attempt = assignmentAttemptSchema.parse(item.assignmentAttempt);
+	if (attempt.workspace.mode !== 'git') return;
+	const workspace = attempt.workspace, repository = workspace.repository;
+	const base = [attempt.sourceRef, ...attempt.contextRefs].filter(ref => ref.store === 'git' && ref.repository === repository && ref.commit === workspace.baseCommit);
+	assert.ok(base.length > 0, 'ACCEPTANCE_INTEGRATION_BASE: Original admitted base must remain an explicit exact source/context ref');
+	for (const ref of primary) if (ref.kind === 'git' && ref.repository === repository)
+		assert.ok(attempt.contextRefs.some(value => value.store === 'git' && value.repository === ref.repository && value.commit === ref.commit), 'ACCEPTANCE_INTEGRATION_CONTEXT: Every separate native Git input must remain exact');
+}

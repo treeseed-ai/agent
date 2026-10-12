@@ -10,7 +10,8 @@ import { ControlPlaneClient, defaultLocalControlPlaneServer } from '@treeseed/sd
 import { controlPlaneOperation } from '@treeseed/sdk/operator-contracts';
 import { row } from '../../../../../acceptance/acceptance-cli.ts';
 import { verifyPredecessorCustody } from '../../../../../acceptance/workday/support/evidence-pages.ts';
-import { verifyApprovedWorkReview, verifyReviewCandidateAuthority } from '../../../../../acceptance/workday/support/decision-evidence.ts';
+import { verifyLiveAssignmentGraph } from '../../../../../acceptance/workday/support/monitoring/live-assignment-records.ts';
+import { verifyWorkReview, verifyReviewCandidateAuthority } from '../../../../../acceptance/workday/support/decision-evidence.ts';
 import { verifyAssignmentWorkspaceInventory } from '../../../../../acceptance/workday/support/assignment-authority.ts';
 import { contentReviewFailures, mutateContentReview, mutateReadiness, mutateReview, mutateReviewGrant, readinessFailures, reviewedDecision, reviewedGraphFixture, reviewedRevisionFixture, reviewFailures, reviewGrantFailures } from './review-readiness-fixture.ts';
 
@@ -102,6 +103,7 @@ it('native committed review sources and public SDK graph assignments deny missin
 			try {
 				verifyAssignmentWorkspaceInventory(assignments);
 				const pairs = verifyPredecessorCustody(assignments, graph);
+				const decisions = new Map<string, Record<string, unknown>>();
 				for (const review of assignments.filter(item => row(row(item.lifecycleOutput).activityCompletion).reviewDisposition === 'request-changes')) {
 					const ids = row(review.assignmentAttempt).predecessorResultIds; assert.ok(Array.isArray(ids));
 					const actors = assignments.filter(item => row(row(item.assignmentAttempt).effectiveProfile).activity === 'acting' && ids.includes(row(item.assignmentResult).id));
@@ -115,8 +117,9 @@ it('native committed review sources and public SDK graph assignments deny missin
 					const file = row(observed.files[0]), original = execFileSync('git', ['show', `${reference.commit}:${reference.path}`], { cwd: root, encoding: 'utf8' });
 					assert.equal(file.content, original); const content = row(parse(original.match(/^---\n([\s\S]*?)\n---/u)![1]!));
 					assert.deepEqual(file.frontmatter, content);
-					if (row(row(review.lifecycleOutput).activityCompletion).reviewDisposition === 'approved') verifyApprovedWorkReview(review, actor, content);
-					else { assert.equal(content.disposition, 'request-changes'); verifyReviewCandidateAuthority(review, content); }
+					if (row(row(review.lifecycleOutput).activityCompletion).reviewDisposition === 'approved') verifyWorkReview(review, actor, content);
+					else { assert.equal(content.disposition, 'request-changes'); verifyWorkReview(review, actor, content, 'request-changes'); }
+					decisions.set(String(review.id), content);
 					const subject = row(content.subjectRef);
 					if (subject.store === 'git') assert.equal(git('show', `${subject.commit}:candidate.txt`), 'Controlled original candidate bytes');
 					else {
@@ -126,6 +129,7 @@ it('native committed review sources and public SDK graph assignments deny missin
 						assert.deepEqual(candidateRead.files, [{ path: subject.path, content: 'Controlled original candidate bytes\n' }]);
 					}
 				}
+				for (const item of assignments) verifyLiveAssignmentGraph(item, graph, assignments, decisions);
 			} finally { expect({ graph, assignments }).toEqual(before); }
 		};
 		await Promise.all([observe(), observe()]);

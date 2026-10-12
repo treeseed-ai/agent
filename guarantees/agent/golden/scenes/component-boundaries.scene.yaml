@@ -153,6 +153,51 @@ workflow:
   - id: live-assignment-profile-denial-unit
     action: { verifier: agent.golden.live-assignment-profile-denial-unit }
     expect: { status: passed }
+  - id: live-graph-identity-unit
+    action: { verifier: agent.golden.live-graph-identity-unit }
+    expect: { status: passed }
+  - id: live-node-revision-unit
+    action: { verifier: agent.golden.live-node-revision-unit }
+    expect: { status: passed }
+  - id: live-graph-missing-unit
+    action: { verifier: agent.golden.live-graph-missing-unit }
+    expect: { status: passed }
+  - id: live-workspace-scope-unit
+    action: { verifier: agent.golden.live-workspace-scope-unit }
+    expect: { status: passed }
+  - id: live-workspace-branch-unit
+    action: { verifier: agent.golden.live-workspace-branch-unit }
+    expect: { status: passed }
+  - id: live-workspace-paths-unit
+    action: { verifier: agent.golden.live-workspace-paths-unit }
+    expect: { status: passed }
+  - id: live-frozen-source-denial-unit
+    action: { verifier: agent.golden.live-frozen-source-denial-unit }
+    expect: { status: passed }
+  - id: live-source-context-unit
+    action: { verifier: agent.golden.live-source-context-unit }
+    expect: { status: passed }
+  - id: live-workspace-base-unit
+    action: { verifier: agent.golden.live-workspace-base-unit }
+    expect: { status: passed }
+  - id: live-allocation-missing-unit
+    action: { verifier: agent.golden.live-allocation-missing-unit }
+    expect: { status: passed }
+  - id: live-predecessor-missing-unit
+    action: { verifier: agent.golden.live-predecessor-missing-unit }
+    expect: { status: passed }
+  - id: live-runtime-missing-unit
+    action: { verifier: agent.golden.live-runtime-missing-unit }
+    expect: { status: passed }
+  - id: live-runtime-reopen-unit
+    action: { verifier: agent.golden.live-runtime-reopen-unit }
+    expect: { status: passed }
+  - id: live-runtime-publication-unit
+    action: { verifier: agent.golden.live-runtime-publication-unit }
+    expect: { status: passed }
+  - id: live-graph-denial-unit
+    action: { verifier: agent.golden.live-graph-denial-unit }
+    expect: { status: passed }
   - id: live-assignment-records-native
     action: { verifier: agent.golden.live-assignment-records-native }
     expect: { status: passed }

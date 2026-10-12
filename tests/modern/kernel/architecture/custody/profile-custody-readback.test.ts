@@ -1,13 +1,14 @@
 import { createHash } from 'node:crypto';
 import { stringify } from 'yaml';
 import { describe, expect, it, vi } from 'vitest';
+import { simulationSourceBranch } from '@treeseed/sdk/capacity-provider/sandbox';
 import { assignmentAttemptSchema } from '@treeseed/sdk/agent-capacity';
 import { state } from '../golden-readback-fixture.ts';
 import { request } from '../../provider-kernel-fixture.ts';
 import { portableProfile } from '../portable/portable-kernel-fixture.ts';
 import { verifyGovernedProfile, verifyHandlerInspection } from '../../../../acceptance/workday/support/assignment-authority.ts';
 import { inspectLiveAssignmentProfile } from '../../../../acceptance/workday/support/monitoring/live-assignment-records.ts';
-import { liveAssignmentRecord } from '../../../guarantees/monitoring/live-assignment-fixture.ts';
+import { liveAssignmentGraph, liveAssignmentRecord, liveProviderSession, liveRun } from '../../../guarantees/monitoring/live-assignment-fixture.ts';
 import { profileOrderFixture, profileOrderFailures, mutateProfileOrder, grantRequestCases, grantRequestFixture } from './graph/profile-order-fixture.ts';
 await import('../../../../acceptance/workday/profile-custody.test.ts');
 
@@ -50,27 +51,33 @@ describe('independent governed profile assertion contract', () => {
 	});
 	it('live profile inspection reads the independent canonical assignment exact governed bytes and public handler boundary before accepting a new observation', () => {
 		const f = input(), item = liveAssignmentRecord(f.item.assignmentAttempt), attempt = f.item.assignmentAttempt, profile = attempt.effectiveProfile;
+		const liveAttempt = assignmentAttemptSchema.parse(item.assignmentAttempt); item.assignmentAttempt = liveAttempt;
+		Object.assign(liveAttempt.workspace, { branch: simulationSourceBranch('local', attempt.workdayId, attempt.id), writablePaths: ['.'] });
 		const handler = { id: profile.handler, origin: profile.handlerOrigin };
 		state.replies.set('assignments show', item);
+		state.replies.set('execution graph', liveAssignmentGraph(item));
+		state.replies.set('workdays show', { run: liveRun(item) });
+		state.replies.set('capacity status', { items: [liveProviderSession(item)], page: { limit: 100, hasMore: false, nextCursor: null } });
 		state.replies.set(`library read ${f.file.path}`, { result: { resolvedRef: profile.profileRef.commit, files: [f.file] } });
 		state.replies.set('agents handlers --project', { projectId: attempt.projectId, handlers: [handler] });
 		state.replies.set(`agents handlers ${profile.handler}`, { projectId: attempt.projectId, handler });
-		const before = structuredClone([...state.replies]); inspectLiveAssignmentProfile(item, attempt.teamId);
+		const before = structuredClone([...state.replies]); inspectLiveAssignmentProfile(item, attempt.teamId, [item], Object.fromEntries(attempt.contextRefs.filter(ref => ref.store === 'git').map(ref => [ref.repository!, ref.commit])));
 		expect(state.calls.map(args => args.slice(0, 3))).toEqual([
-			['assignments', 'show', attempt.id], ['library', 'read', attempt.projectId],
-			['agents', 'handlers', 'list'], ['agents', 'handlers', 'show'],
+			['assignments', 'show', attempt.id], ['execution', 'graph', 'show'], ['workdays', 'show', attempt.workdayId], ['capacity', 'status', '--limit'], ['library', 'read', attempt.projectId],
+			['agents', 'handlers', 'list'], ['agents', 'handlers', 'show'], ['execution', 'graph', 'show'],
 		]);
 		expect(state.calls[0]).toContain(attempt.teamId);
-		for (const args of state.calls.slice(1)) expect(args).not.toContain('--team');
+		for (const args of state.calls.filter(args => ['library', 'agents'].includes(args[0]!))) expect(args).not.toContain('--team');
+		for (const args of state.calls.filter(args => args[0] === 'execution')) expect(args).toContain(attempt.teamId);
 		expect([...state.replies]).toEqual(before);
 	});
 	it('live profile inspection denies an independently substituted runtime or failed public read without repairing the original attempt', () => {
 		const f = input(), item = liveAssignmentRecord(f.item.assignmentAttempt), shown = structuredClone(item), before = structuredClone(item);
 		const attempt = shown.assignmentAttempt as Record<string, unknown>, provider = attempt.provider as Record<string, unknown>;
 		provider.runtimeBuild = `sha256:${'f'.repeat(64)}`; state.replies.set('assignments show', shown);
-		expect(() => inspectLiveAssignmentProfile(item, f.item.assignmentAttempt.teamId)).toThrow('Independent public view changed issued authority');
+		expect(() => inspectLiveAssignmentProfile(item, f.item.assignmentAttempt.teamId, [item], {})).toThrow('Independent public view changed issued authority');
 		state.failure = new Error('controlled_denial');
-		expect(() => inspectLiveAssignmentProfile(item, f.item.assignmentAttempt.teamId)).toThrow('ACCEPTANCE_CLI_COMMAND');
+		expect(() => inspectLiveAssignmentProfile(item, f.item.assignmentAttempt.teamId, [item], {})).toThrow('ACCEPTANCE_CLI_COMMAND');
 		expect(item).toEqual(before);
 	});
 	it('native handler readback composition uses exact project and server without attaching an unsupported team option', () => {

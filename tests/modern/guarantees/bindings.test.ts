@@ -218,6 +218,7 @@ describe('capacity-provider guarantee execution bindings', () => {
 			value.criterion === 'fc80e789a38eb6ae75fada867226ac0157844505619b12c90c55cbe317c6cc9d'))
 			.toEqual([{ criterion: 'fc80e789a38eb6ae75fada867226ac0157844505619b12c90c55cbe317c6cc9d', verifierRefs: runtimeHandlers }]);
 		expect(manifest.acceptanceCriteria).toEqual([
+			{ criterion: '4d3a65d9ab4becd82cc9336051f6e069a26bfcd662eb52fe3f7a32f67c8530bf', verifierRefs: ['agent.golden.live.campaign', 'agent.golden.architecture-profile-custody-live-1', 'api.golden.execution-normal-sdk-clean-schema-live-1', 'agent.golden.architecture-record-custody-live-1'] },
 			{ criterion: '9778c4caf01add1b3815fa1cd3fe27ef11073cc98dbdc4a5deeb54e2a441f1dc', verifierRefs: ['sdk.golden.live.product'] },
 			{ criterion: 'fc80e789a38eb6ae75fada867226ac0157844505619b12c90c55cbe317c6cc9d', verifierRefs: runtimeHandlers },
 			{ criterion: '1b8f85527f4b286aff075cfe1892180d1407c503fcebab5193560cb915699ea3', verifierRefs: ['agent.golden.architecture-profile-custody-live-1', 'agent.golden.live.settlement', 'agent.golden.architecture-record-custody-live-1'] },

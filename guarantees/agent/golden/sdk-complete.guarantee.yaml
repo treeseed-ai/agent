@@ -127,6 +127,8 @@ acceptanceCriteria:
     verifierRefs: [agent.golden.live.campaign, agent.golden.architecture-book-knowledge-live-1]
   - criterion: 4f295a5342aaf08b1ca056a5aa8bc00df27a07cf116b6721b6179d575c6b76df
     verifierRefs: [sdk.golden.live.product]
+  - criterion: 888a86bc48b9b3e86f8db79534cc7f49b849247800d4601b3dc9228f086bc071
+    verifierRefs: [api.golden.execution-normal-sdk-clean-schema-live-1, agent.golden.architecture-record-custody-live-1]
   - criterion: 22f329d858029233d66c747de963c8ac14c8655b0fe536ee1921ec39101ca1b8
     verifierRefs: [api.golden.execution-normal-sdk-clean-schema-live-1, agent.golden.architecture-record-custody-live-1]
   - criterion: 6e8f096457026f1992cb08a4e36f02a7c5b55b472e7019ff615866256fac85d2

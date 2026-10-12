@@ -5,7 +5,7 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { canonicalSeedBundlePayload, validateSeedBundle, workdayIntentRequestSchema, type SeedBundle } from '@treeseed/sdk/operator-contracts';
-import { workdayPolicySchema, workdayProfileSchema } from '@treeseed/sdk/agent-capacity';
+import { selectFairReadyNode, workdayPolicySchema, workdayProfileSchema } from '@treeseed/sdk/agent-capacity';
 import { parse } from 'yaml';
 import { portfolioRelations, readPortfolioLibraries } from './workday/support/portfolio-relations.ts';
 
@@ -67,6 +67,21 @@ export function verifyPreRunCampaignInputs(snapshot: unknown, slugs: readonly st
 		assert.deepEqual(allocation.projectPercentages, Object.fromEntries(selected.map(project =>
 			[project.projectId, key === 'all-project-portfolio' ? 1 : 100 / selected.length])), fail);
 		assert.deepEqual(allocation.agentClassPercentages, Object.fromEntries(selected.map(project => [project.projectId, classes])), fail);
+		// Check the current owning allocator's prospective projection. These
+		// ready nodes and empty usage are not future assignments or portfolio receipts.
+		const readyAt = parsed.data.startsAt ?? '1970-01-01T00:00:00.000Z';
+		assert.ok(typeof readyAt === 'string', fail);
+		const nodes = selected.flatMap(project => {
+			const projectId = project.projectId; assert.ok(typeof projectId === 'string', fail);
+			return Object.keys(classes).map(agentClass => ({ id: `${projectId}:${agentClass}`, projectId, agentClass, readyAt }));
+		});
+		const normalized = selectFairReadyNode(nodes, [], workdayPolicySchema.parse({ ...parsedPolicy.data, ...allocation, durationSeconds: input.durationSeconds }));
+		const normalization = 'ACCEPTANCE_CAMPAIGN_NORMALIZATION: Current owning allocator must normalize exact frozen project and class weights';
+		assert.ok(normalized && normalized.explanation && typeof normalized.explanation === 'object', normalization);
+		assert.ok(nodes.some(node => node.id === normalized.id && node.projectId === normalized.projectId && node.agentClass === normalized.agentClass), normalization);
+		assert.equal(normalized.explanation.readyNodeCount, nodes.length, normalization);
+		assert.equal(normalized.explanation.projectTargetPercent, 100 / selected.length, normalization);
+		assert.equal(normalized.explanation.classTargetPercent, 12.5, normalization);
 		if (key !== 'all-project-portfolio') {
 			assert.equal(input.durationSeconds, 3600, fail); assert.equal(allocation.planningPercent, 100 / 3, fail);
 		}

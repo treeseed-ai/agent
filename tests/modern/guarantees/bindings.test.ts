@@ -195,6 +195,7 @@ describe('capacity-provider guarantee execution bindings', () => {
 			'b918b519ac545fdd61faab208687ccc64e1f3d03c9a84dfc57a5cfee6190f3f3',
 		].map(criterion => ({ criterion, verifierRefs: ['agent.golden.live.campaign-freeze'] }));
 		expect(manifest.acceptanceCriteria).toEqual([
+			{ criterion: '8ef82a4f4cb2b8e93d060e38cf8758944d2ba54baca44787811a1d76683f99d4', verifierRefs: ['agent.golden.live.campaign-freeze'] },
 			{ criterion: '2feaea9a8a706e1279affead3af5bacc467f12b285ba2570f183361c5d8203c7', verifierRefs: ['agent.golden.live.campaign-freeze', 'agent.golden.live.campaign'] },
 			{ criterion: '64ffc06b0d268ad11fbf692ca201cd75423c0afae2a6be3e2ae7cd2eea7fb17f', verifierRefs: ['agent.golden.live.campaign', 'api.golden.execution-normal-sdk-clean-schema-live-1', 'agent.golden.architecture-record-custody-live-1', 'agent.golden.architecture-living-graph-live-1'] },
 			{ criterion: '6e48b90ae52851e7b8fd728de8bb32610a60fc7c93dd445a93d3354aa00b652e', verifierRefs: ['agent.golden.live.campaign-freeze', 'agent.golden.live.campaign', 'api.golden.execution-normal-sdk-clean-schema-live-1'] },

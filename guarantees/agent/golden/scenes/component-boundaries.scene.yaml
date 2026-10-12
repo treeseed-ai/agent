@@ -3,6 +3,12 @@ id: agent.golden.component-boundaries
 title: Golden execution component boundaries
 scope: local-component-tests
 workflow:
+  - id: portfolio-normalization-unit
+    action: { verifier: agent.golden.portfolio-normalization-unit }
+    expect: { status: passed }
+  - id: portfolio-normalization-binding-unit
+    action: { verifier: agent.golden.portfolio-normalization-binding-unit }
+    expect: { status: passed }
   - id: default-policy-binding-unit
     action: { verifier: agent.golden.default-policy-binding-unit }
     expect: { status: passed }

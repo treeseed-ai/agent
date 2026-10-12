@@ -342,6 +342,15 @@ workflow:
   - id: campaign-profiles-unit
     action: { verifier: agent.golden.campaign-profiles-unit }
     expect: { status: passed }
+  - id: campaign-runtime-handlers-unit
+    action: { verifier: agent.golden.campaign-runtime-handlers-unit }
+    expect: { status: passed }
+  - id: campaign-uncompiled-handler-unit
+    action: { verifier: agent.golden.campaign-uncompiled-handler-unit }
+    expect: { status: passed }
+  - id: campaign-required-activities-unit
+    action: { verifier: agent.golden.campaign-required-activities-unit }
+    expect: { status: passed }
   - id: campaign-profiles-native
     action: { verifier: agent.golden.campaign-profiles-native }
     expect: { status: passed }

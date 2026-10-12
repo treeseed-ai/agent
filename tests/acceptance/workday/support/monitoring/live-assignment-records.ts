@@ -98,7 +98,26 @@ export function verifyLiveSimulationWorkspace(item: Row, run: Row): void {
 	assert.deepEqual(attempt.workspace.writablePaths, ['.'], `${code}: Exact original simulation checkout write scope required`);
 }
 
-export function inspectLiveAssignmentProfile(item: Row, team: string, items: readonly Row[]): void {
+/** Compare source context with frozen bases and original consumed results. */
+export function verifyLiveSourceContext(item: Row, items: readonly Row[], frozenBases: Readonly<Record<string, unknown>>): void {
+	const attempt = assignmentAttemptSchema.parse(item.assignmentAttempt), code = 'ACCEPTANCE_LIVE_SOURCE_CONTEXT';
+	assert.ok(frozenBases && typeof frozenBases === 'object' && !Array.isArray(frozenBases), `${code}: Original frozen source inventory required`);
+	const predecessors = items.filter(value => attempt.predecessorResultIds.includes(String(row(value.assignmentResult).id)))
+		.flatMap(value => assignmentResultSchema.parse(value.assignmentResult).references);
+	for (const repository of attempt.grant.sourceRead) {
+		const base = frozenBases[repository]; assert.ok(typeof base === 'string' && /^[a-f0-9]{40}$/u.test(base), `${code}: Exact frozen repository base required`);
+		const refs = attempt.contextRefs.filter(ref => ref.store === 'git' && ref.repository === repository);
+		assert.ok(refs.some(ref => ref.commit === base), `${code}: Original frozen source omitted`);
+		const consumed = predecessors.filter((ref): ref is Extract<typeof ref, { kind: 'git' }> => ref.kind === 'git' && ref.repository === repository);
+		const allowed = new Set([base, ...consumed.map(ref => ref.commit)]);
+		assert.ok(refs.every(ref => ref.commit && allowed.has(ref.commit)), `${code}: Unissued foreign source context`);
+		for (const ref of consumed) assert.ok(refs.some(value => value.commit === ref.commit), `${code}: Original consumed source omitted`);
+	}
+	for (const reference of attempt.grant.contentRead)
+		assert.ok(attempt.contextRefs.some(ref => isDeepStrictEqual(ref, reference)), `${code}: Original exact granted content omitted`);
+}
+
+export function inspectLiveAssignmentProfile(item: Row, team: string, items: readonly Row[], frozenBases: Readonly<Record<string, unknown>>): void {
 	const attempt = assignmentAttemptSchema.parse(item.assignmentAttempt), profile = attempt.effectiveProfile;
 	const shown = read(['assignments', 'show', attempt.id], team);
 	assert.ok(validateProviderAssignment(shown).ok, 'ACCEPTANCE_LIVE_ASSIGNMENT: Independent public record is malformed');
@@ -115,6 +134,7 @@ export function inspectLiveAssignmentProfile(item: Row, team: string, items: rea
 	}
 	verifyLiveAssignmentGraph(item, graph, items, decisions);
 	verifyPredecessorCustody([...items], graph);
+	verifyLiveSourceContext(item, items, frozenBases);
 	verifyGitInputContext(item, items.filter(value => attempt.predecessorResultIds.includes(String(row(value.assignmentResult).id)))
 		.flatMap(value => assignmentResultSchema.parse(value.assignmentResult).references));
 	const run = row(read(['workdays', 'show', attempt.workdayId], team).run);

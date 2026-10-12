@@ -171,6 +171,12 @@ workflow:
   - id: live-workspace-paths-unit
     action: { verifier: agent.golden.live-workspace-paths-unit }
     expect: { status: passed }
+  - id: live-frozen-source-denial-unit
+    action: { verifier: agent.golden.live-frozen-source-denial-unit }
+    expect: { status: passed }
+  - id: live-source-context-unit
+    action: { verifier: agent.golden.live-source-context-unit }
+    expect: { status: passed }
   - id: live-workspace-base-unit
     action: { verifier: agent.golden.live-workspace-base-unit }
     expect: { status: passed }

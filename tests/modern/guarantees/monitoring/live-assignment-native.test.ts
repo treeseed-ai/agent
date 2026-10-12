@@ -5,11 +5,11 @@ import { expect, it } from 'vitest';
 import { ControlPlaneClient, defaultLocalControlPlaneServer } from '@treeseed/sdk/control-plane-client';
 import { controlPlaneOperation } from '@treeseed/sdk/operator-contracts';
 import { simulationSourceBranch } from '@treeseed/sdk/capacity-provider/sandbox';
-import { assignmentResultSchema } from '@treeseed/sdk/agent-capacity';
+import { assignmentAttemptSchema, assignmentResultSchema, validateProviderAssignment } from '@treeseed/sdk/agent-capacity';
 import { portableKernel } from '../../kernel/architecture/portable/portable-kernel-fixture.ts';
 import { row, type Row } from '../../../acceptance/acceptance-cli.ts';
 import { verifyGitInputContext, verifyGovernedProfile, verifyHandlerInspection } from '../../../acceptance/workday/support/assignment-authority.ts';
-import { observeLiveAssignmentRecords, verifyLiveAssignmentGraph, verifyLiveProviderRuntime, verifyLiveSimulationWorkspace } from '../../../acceptance/workday/support/monitoring/live-assignment-records.ts';
+import { observeLiveAssignmentRecords, verifyLiveAssignmentGraph, verifyLiveProviderRuntime, verifyLiveSimulationWorkspace, verifyLiveSourceContext } from '../../../acceptance/workday/support/monitoring/live-assignment-records.ts';
 import { verifyAllocation } from '../../../acceptance/workday/support/monitoring/assignment-allocation.ts';
 import { verifyPredecessorCustody } from '../../../acceptance/workday/support/evidence-pages.ts';
 import { liveAssignmentGraph, liveAssignmentRecord, liveProviderSession, liveRun } from './live-assignment-fixture.ts';
@@ -17,6 +17,8 @@ import { liveAssignmentGraph, liveAssignmentRecord, liveProviderSession, liveRun
 it('native configured Kernel Git result and public SDK assignment reads reach the live observer with denied original observations retained before exact retry', async () => {
 	const f = await portableKernel(); let server: ReturnType<typeof createServer> | undefined;
 	try {
+		const configured = f.profile.activityProfiles.acting!; configured.permissions.tools.push('verification');
+		f.attempt.effectiveProfile.permissionCeiling = configured.permissions; f.attempt.grant.tools.push('verification');
 		const content = stringify(f.profile), path = 'agents/configured-native.yaml';
 		Object.assign(f.attempt.effectiveProfile.profileRef, { repository: 'controlled-library', commit: f.base, path,
 			digest: `sha256:${createHash('sha256').update(content).digest('hex')}` });
@@ -83,6 +85,14 @@ it('native configured Kernel Git result and public SDK assignment reads reach th
 			if (mode === 'denied') { response.writeHead(403).end(JSON.stringify({ status: 403, title: 'Controlled native denial', code: 'controlled_assignment_denied' })); return; }
 			if (mode === 'interrupted') { request.socket.destroy(); return; }
 			const returned = structuredClone(item);
+			if (mode === 'source-substitution') {
+				row(row(returned.assignmentAttempt).workspace).baseCommit = 'f'.repeat(40);
+				for (const reference of row(returned.assignmentAttempt).contextRefs as Row[]) if (reference.store === 'git') reference.commit = 'f'.repeat(40);
+			}
+			if (mode === 'immutable-grant') row(row(returned.assignmentAttempt).grant).tools = ['source.read', 'source.write'];
+			if (mode === 'dual-custody') (row(row(returned.assignmentAttempt).grant).contentWrite as Row[]).push({ store: 'treedx', model: 'decision', id: 'second-write', repository: 'native-library', commit: f.base, path: 'decisions/second.md' });
+			if (mode === 'second-repository') (row(row(returned.assignmentAttempt).grant).sourceWrite as string[]).push('foreign/source');
+			if (mode === 'readonly-write') row(returned.assignmentAttempt).workspace = { mode: 'read-only' };
 			if (mode === 'workspace-branch') row(row(returned.assignmentAttempt).workspace).branch = 'simulation/foreign';
 			if (mode === 'workspace-paths') row(row(returned.assignmentAttempt).workspace).writablePaths = ['docs'];
 			if (mode === 'workspace-base') row(row(returned.assignmentAttempt).workspace).baseCommit = 'f'.repeat(40);
@@ -121,7 +131,7 @@ it('native configured Kernel Git result and public SDK assignment reads reach th
 				path: { teamId: f.attempt.teamId, assignmentId: f.attempt.id }, query: {}, body: undefined,
 			})).data);
 			observeLiveAssignmentRecords(row(observed.run), [returned], observations, value => {
-				inspections++; verifyGitInputContext(value, []); verifyLiveSimulationWorkspace(value, run); verifyAllocation(value, run); verifyGovernedProfile(value, { path, content });
+				inspections++; verifyLiveSourceContext(value, [value], { 'treeseed-ai/sdk': f.base }); verifyGitInputContext(value, []); verifyLiveSimulationWorkspace(value, run); verifyAllocation(value, run); verifyGovernedProfile(value, { path, content });
 				const handler = { id: f.attempt.effectiveProfile.handler, origin: f.attempt.effectiveProfile.handlerOrigin };
 				verifyHandlerInspection(value, { projectId: f.attempt.projectId, handlers: [handler] }, { projectId: f.attempt.projectId, handler });
 			});
@@ -203,9 +213,30 @@ it('native configured Kernel Git result and public SDK assignment reads reach th
 			mode = denied; const empty = new Map<string, Row>(); await expect(execute(empty)).rejects.toThrow('ACCEPTANCE_LIVE_WORKSPACE');
 			expect(empty.size).toBe(0); expect({ item, run }).toEqual(before);
 		}
+		mode = 'source-substitution'; const deniedSource = new Map<string, Row>();
+		await expect(execute(deniedSource)).rejects.toThrow('ACCEPTANCE_LIVE_SOURCE_CONTEXT'); expect(deniedSource.size).toBe(0);
 		const workspaceFailures = structuredClone(failed); mode = 'exact'; await execute(untouched);
 		expect(untouched.size).toBe(1); expect(failed).toEqual(workspaceFailures);
 		expect(failed.slice(0, runtimeFailures.length)).toEqual(runtimeFailures);
+		mode = 'immutable-grant'; await expect(execute()).rejects.toThrow('Issued authority changed'); expect(retained).toEqual(held);
+		for (const denied of ['dual-custody', 'second-repository', 'readonly-write']) {
+			mode = denied; const empty = new Map<string, Row>(); await expect(execute(empty), denied).rejects.toThrow('ACCEPTANCE_LIVE_ASSIGNMENT: Complete unchanged canonical public record required');
+			expect(validateProviderAssignment(failed.at(-1)!.record).ok, denied).toBe(false);
+			expect(empty.size).toBe(0); expect(retained).toEqual(held); expect({ item, run }).toEqual(before);
+		}
+		const custodyFailures = structuredClone(failed); mode = 'exact'; await execute();
+		expect(failed).toEqual(custodyFailures); expect(retained).toEqual(held);
+		const issuedChild = assignmentAttemptSchema.parse(item.assignmentAttempt);
+		issuedChild.id = 'native-consumer'; issuedChild.nodeId = 'native-consumer-node'; issuedChild.status = 'leased';
+		issuedChild.createdAt = result.completedAt; delete issuedChild.startedAt; delete issuedChild.finishedAt;
+		issuedChild.predecessorResultIds = [result.id];
+		issuedChild.contextRefs.push({ store: 'git', model: 'repository', id: 'consumed-native-candidate', repository: 'treeseed-ai/sdk', commit: candidate });
+		if (issuedChild.workspace.mode !== 'git') throw new Error('Canonical native consumer requires Git');
+		issuedChild.workspace.branch = simulationSourceBranch(campaign, issuedChild.workdayId, issuedChild.id);
+		issuedChild.workspace.baseCommit = candidate;
+		const child = liveAssignmentRecord(issuedChild); expect(validateProviderAssignment(child).ok).toBe(true);
+		verifyLiveSourceContext(child, [item, child], { 'treeseed-ai/sdk': f.base });
+		expect(f.git('cat-file', '-t', candidate)).toBe('commit'); expect({ item, run }).toEqual(before);
 		// Native owning Kernel/handler/Git and SDK transport; upstream record,
 		// profile bytes and handler catalog are controlled. This does not prove
 		// native API admission, TreeDX publication, model usage or physical closure.

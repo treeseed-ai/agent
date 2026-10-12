@@ -246,6 +246,16 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/guarantees/monitoring/live-graph-inspection.test.ts
     testName: "denies writable paths outside the original simulation workspace contract"
+  agent.golden.live-frozen-source-denial-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/monitoring/live-graph-inspection.test.ts
+    testName: "denies a self-consistent foreign Git base and context against the original frozen source"
+  agent.golden.live-source-context-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/monitoring/live-graph-inspection.test.ts
+    testName: "requires every frozen source and exact granted content while retaining original context and rejecting unissued commits"
   agent.golden.live-workspace-base-unit:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

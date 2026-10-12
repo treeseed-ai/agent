@@ -5,6 +5,7 @@ import { readCampaignProjectLibraries, readCampaignRepositoryBases, readPreRunCa
 import { read } from './acceptance-cli.ts';
 import { readCampaignProfiles } from './workday/support/preflight/campaign-profiles.ts';
 import { readCampaignProviderOffers } from './workday/support/preflight/campaign-provider-offers.ts';
+import { readCampaignProposals } from './workday/support/preflight/campaign-proposals.ts';
 
 test('Golden pre-run campaign freeze retains every schema-valid expanded input and original manifest bytes before SDK execution', () => {
 	const original = readPreRunCampaignFreeze();
@@ -12,11 +13,13 @@ test('Golden pre-run campaign freeze retains every schema-valid expanded input a
 	assert.equal(held.toString('utf8'), original.bytes);
 	const team = process.env.TREESEED_ACCEPTANCE_TEAM ?? 'treeseed';
 	const bindings = readCampaignProjectLibraries(original.manifest, team);
+	const proposals = readCampaignProposals(original, bindings, team);
 	const protectedHeads = readCampaignRepositoryBases(original);
 	const profiles = readCampaignProfiles(original, bindings, team);
 	const policy = verifyCampaignWorkdayPolicy(original.manifest, read(['workdays', 'profiles', 'show', 'default'], team), bindings.get('sdk')?.teamId);
 	const providerOffers = readCampaignProviderOffers(original.manifest, team);
 	assert.deepEqual(readCampaignProjectLibraries(original.manifest, team), bindings);
+	assert.deepEqual(readCampaignProposals(original, bindings, team), proposals);
 	assert.deepEqual(readCampaignRepositoryBases(original), protectedHeads);
 	assert.deepEqual(readCampaignProfiles(original, bindings, team), profiles);
 	assert.deepEqual(verifyCampaignWorkdayPolicy(original.manifest, read(['workdays', 'profiles', 'show', 'default'], team), bindings.get('sdk')?.teamId), policy);

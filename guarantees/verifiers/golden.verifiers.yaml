@@ -1,6 +1,31 @@
 schemaVersion: treeseed.guarantee-verifiers/v1
 ownerPackage: "@treeseed/agent"
 verifiers:
+  agent.golden.campaign-proposals-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/preflight/proposals/campaign-proposals.test.ts
+    testName: "validates every original governed project draft against current document schema source bases and public provenance without mutating estimates or bytes"
+  agent.golden.campaign-proposals-denials-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/preflight/proposals/campaign-proposals.test.ts
+    testName: "denies missing foreign moved malformed or substituted original proposal observations before unchanged retry"
+  agent.golden.campaign-proposals-semantic-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/preflight/proposals/campaign-proposals.test.ts
+    testName: "denies consistently rehashed stale request objectives schema and inherited estimates rather than trusting index agreement"
+  agent.golden.campaign-proposals-sdk-criteria-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/preflight/proposals/campaign-proposals.test.ts
+    testName: "requires all six full SDK Actor review criteria from the existing authoritative parser rather than substituted generic checks"
+  agent.golden.campaign-proposals-native:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/preflight/proposals/campaign-proposals-native.test.ts
+    testName: "native Git and public CLI SDK reads validate all seventeen governed proposal bytes and retain denied observations before exact concurrent retry"
   agent.golden.portfolio-normalization-unit:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

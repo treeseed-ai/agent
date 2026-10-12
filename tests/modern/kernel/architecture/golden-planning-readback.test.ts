@@ -67,6 +67,7 @@ describe('managed planning cycle and published contribution custody', () => {
 		}
 		state.replies.get('workdays show')!.run.parameters.appliedPlan.planningRounds = original;
 		const hidden: Row = structuredClone(later()); hidden.id = 'unrepresented-planning'; hidden.executionNodeId = hidden.id;
+		hidden.assignmentAttempt.workspace.workspaceId = `workspace-${hidden.id}`;
 		hidden.assignmentAttempt.nodeId = hidden.id; hidden.assignmentResult.assignmentId = hidden.id; hidden.assignmentResult.id = `result-${hidden.id}`;
 		items.push(hidden);
 		const held = structuredClone([...state.replies]); expect(() => gate('collaboration')).toThrow(/ACCEPTANCE_PLANNING/u); expect([...state.replies]).toEqual(held);

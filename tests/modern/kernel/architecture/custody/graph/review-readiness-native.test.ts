@@ -11,6 +11,7 @@ import { controlPlaneOperation } from '@treeseed/sdk/operator-contracts';
 import { row } from '../../../../../acceptance/acceptance-cli.ts';
 import { verifyPredecessorCustody } from '../../../../../acceptance/workday/support/evidence-pages.ts';
 import { verifyApprovedWorkReview, verifyReviewCandidateAuthority } from '../../../../../acceptance/workday/support/decision-evidence.ts';
+import { verifyAssignmentWorkspaceInventory } from '../../../../../acceptance/workday/support/assignment-authority.ts';
 import { contentReviewFailures, mutateContentReview, mutateReadiness, mutateReview, mutateReviewGrant, readinessFailures, reviewedDecision, reviewedGraphFixture, reviewedRevisionFixture, reviewFailures, reviewGrantFailures } from './review-readiness-fixture.ts';
 
 it('native committed review sources and public SDK graph assignments deny missing approval custody before unchanged concurrent retry', async () => {
@@ -41,6 +42,7 @@ it('native committed review sources and public SDK graph assignments deny missin
 			const observed = { graph, assignments }; mutateReadiness(observed, mode); mutateReviewGrant(observed, mode); mutateContentReview(observed, mode);
 			if (mode === 'revision-requested-write') mutateReviewGrant(observed, 'review-source-write');
 			if (mode === 'revision-requested-context') mutateReviewGrant(observed, 'review-candidate-context');
+			if (mode === 'revision-shared-workspace') observed.assignments[3]!.assignmentAttempt.workspace = structuredClone(observed.assignments[1]!.assignmentAttempt.workspace);
 			if (sources.has(mode) && mode !== 'revision') {
 				const reference = observed.assignments[1]!.assignmentResult.references[0]!; assert.ok(reference.kind === 'treedx'); reference.commit = sources.get(mode)!;
 			}
@@ -98,6 +100,7 @@ it('native committed review sources and public SDK graph assignments deny missin
 			assert.deepEqual(inventory.page, { limit: 200, hasMore: false, nextCursor: null }); assert.ok(Array.isArray(inventory.items));
 			const assignments = inventory.items.map(row), before = structuredClone({ graph, assignments });
 			try {
+				verifyAssignmentWorkspaceInventory(assignments);
 				const pairs = verifyPredecessorCustody(assignments, graph);
 				for (const review of assignments.filter(item => row(row(item.lifecycleOutput).activityCompletion).reviewDisposition === 'request-changes')) {
 					const ids = row(review.assignmentAttempt).predecessorResultIds; assert.ok(Array.isArray(ids));
@@ -129,11 +132,12 @@ it('native committed review sources and public SDK graph assignments deny missin
 		mode = 'revision'; await Promise.all([observe(), observe()]);
 		mode = 'content'; await Promise.all([observe(), observe()]);
 		for (const fault of [...readinessFailures, ...reviewFailures, ...reviewGrantFailures, ...contentReviewFailures,
-			'revision-requested-write', 'revision-requested-context', 'denied', 'unavailable', 'truncated', 'interrupted']) {
+			'revision-requested-write', 'revision-requested-context', 'revision-shared-workspace', 'denied', 'unavailable', 'truncated', 'interrupted']) {
 			mode = fault; try { await observe(); failures.push({ mode, failure: 'unexpected pass' }); }
 			catch (error) { failures.push({ mode, failure: String(error) }); }
 		}
-		expect(failures).toHaveLength(53); expect(failures.every(value => value.failure !== 'unexpected pass'), JSON.stringify(failures)).toBe(true);
+		expect(failures).toHaveLength(55); expect(failures.every(value => value.failure !== 'unexpected pass'), JSON.stringify(failures)).toBe(true);
+		expect(failures.find(value => value.mode === 'revision-shared-workspace')?.failure).toContain('ACCEPTANCE_WORKSPACE_UNIQUE');
 		const retained = structuredClone(failures); mode = 'exact'; await Promise.all([observe(), observe()]);
 		expect(failures).toEqual(retained); expect({ f, revised, contentGraph }).toEqual(held); expect(git('ls-tree', '-r', 'HEAD')).toBe(tree); expect(git('status', '--porcelain')).toBe('');
 		expect(requests.length).toBeGreaterThan(29);

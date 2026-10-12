@@ -83,6 +83,16 @@ it('denies a Git workspace base absent from original exact context before accept
 	expect(() => inspectLiveAssignmentProfile(state.item, state.item.teamId, [state.item])).toThrow('ACCEPTANCE_INTEGRATION_BASE');
 });
 
+it('denies a foreign simulation branch before accepting matching assignment views', () => {
+	state.item.assignmentAttempt.workspace.branch = 'simulation/foreign-campaign/workday/assignment';
+	expect(() => inspectLiveAssignmentProfile(state.item, state.item.teamId, [state.item])).toThrow('ACCEPTANCE_LIVE_WORKSPACE');
+});
+
+it('denies writable paths outside the original simulation workspace contract', () => {
+	state.item.assignmentAttempt.workspace.writablePaths = ['docs'];
+	expect(() => inspectLiveAssignmentProfile(state.item, state.item.teamId, [state.item])).toThrow('ACCEPTANCE_LIVE_WORKSPACE');
+});
+
 it('denies a missing owning allocation receipt before allowing a newly observed assignment to continue', () => {
 	delete state.item.explanation.metadata;
 	expect(() => inspectLiveAssignmentProfile(state.item, state.item.teamId, [state.item])).toThrow('ACCEPTANCE_ALLOCATION_RECEIPT');

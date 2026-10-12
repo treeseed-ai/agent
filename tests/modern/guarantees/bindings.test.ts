@@ -64,8 +64,12 @@ describe('capacity-provider guarantee execution bindings', () => {
 		const manifest = parse(readFileSync(resolve(root, 'guarantees/agent/golden/sdk-complete.guarantee.yaml'), 'utf8'));
 		const scene = parse(readFileSync(resolve(root, manifest.scene.manifest), 'utf8'));
 		const required = ['api.golden.execution-normal-sdk-clean-schema-live-1', 'agent.golden.architecture-record-custody-live-1'];
-		expect(manifest.acceptanceCriteria.filter((value: { criterion: string }) => value.criterion === '6c6e922d724fe9bf966e3f11456af2f176224cdff4792c9b7a73ce8047659e55'))
-			.toEqual([{ criterion: '6c6e922d724fe9bf966e3f11456af2f176224cdff4792c9b7a73ce8047659e55', verifierRefs: required }]);
+		for (const criterion of ['6c6e922d724fe9bf966e3f11456af2f176224cdff4792c9b7a73ce8047659e55',
+			'888a86bc48b9b3e86f8db79534cc7f49b849247800d4601b3dc9228f086bc071',
+			'349dabbf1022028ef2b7ec696036113837b636df4f164670f3c616b8a563d469']) {
+			expect(manifest.acceptanceCriteria.filter((value: { criterion: string }) => value.criterion === criterion))
+				.toEqual([{ criterion, verifierRefs: required }]);
+		}
 		for (const ref of required) expect(scene.workflow.filter((step: { action: { verifier: string } }) => step.action.verifier === ref)).toHaveLength(1);
 	});
 	it('binds retired authority denial to selected normal SDK native schema and unchanged canonical record readback without requiring controlled failures', () => {
@@ -235,6 +239,10 @@ describe('capacity-provider guarantee execution bindings', () => {
 				verifierRefs: ['agent.golden.live.campaign', 'agent.golden.architecture-book-knowledge-live-1'] },
 			{ criterion: '4f295a5342aaf08b1ca056a5aa8bc00df27a07cf116b6721b6179d575c6b76df',
 				verifierRefs: ['sdk.golden.live.product'] },
+			{ criterion: '888a86bc48b9b3e86f8db79534cc7f49b849247800d4601b3dc9228f086bc071',
+				verifierRefs: ['api.golden.execution-normal-sdk-clean-schema-live-1', 'agent.golden.architecture-record-custody-live-1'] },
+			{ criterion: '349dabbf1022028ef2b7ec696036113837b636df4f164670f3c616b8a563d469',
+				verifierRefs: ['api.golden.execution-normal-sdk-clean-schema-live-1', 'agent.golden.architecture-record-custody-live-1'] },
 			{ criterion: '22f329d858029233d66c747de963c8ac14c8655b0fe536ee1921ec39101ca1b8',
 				verifierRefs: ['api.golden.execution-normal-sdk-clean-schema-live-1', 'agent.golden.architecture-record-custody-live-1'] },
 			{ criterion: '6e8f096457026f1992cb08a4e36f02a7c5b55b472e7019ff615866256fac85d2',

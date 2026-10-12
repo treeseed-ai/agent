@@ -131,6 +131,19 @@ export function verifyApprovedWorkReview(review: Row, actor: Row, content: Row):
 	assert.ok(Array.isArray(result.references) && result.references.map(row).some(reference => subject.store === reference.kind
 		&& subject.repository === reference.repository && subject.commit === reference.commit && (!reference.path || subject.path === reference.path)),
 		'ACCEPTANCE_REVIEW_CANDIDATE: Exact consumed Actor result required');
+	verifyReviewCandidateAuthority(review, decision);
+	assert.ok(Array.isArray(decision.decidedByRefs) && decision.decidedByRefs.map(row).some(reference =>
+		isDeepStrictEqual(reference, row(attempt.effectiveProfile).profileRef)), 'ACCEPTANCE_REVIEW_IDENTITY: Assigned reviewing profile required');
+	assert.ok(Date.parse(String(actor.completedAt)) < Date.parse(String(review.createdAt))
+		&& Number.isFinite(Date.parse(String(decision.decidedAt))) && Date.parse(String(decision.decidedAt)) >= Date.parse(String(review.createdAt))
+		&& Date.parse(String(decision.decidedAt)) <= Date.parse(String(review.completedAt)),
+		'ACCEPTANCE_REVIEW_TIME: Original independent review interval required');
+}
+
+/** The original request-changes and final approval retain the same candidate restrictions. */
+export function verifyReviewCandidateAuthority(review: Row, content: Row): void {
+	const decision = verifyDecisionContent(content, String(review.projectId), 'ACCEPTANCE_REVIEW');
+	const attempt = row(review.assignmentAttempt), subject = row(decision.subjectRef);
 	verifyAssignmentAuthority(review);
 	const grant = row(attempt.grant), workspace = row(attempt.workspace), contexts = attempt.contextRefs;
 	assert.ok(row(attempt.effectiveProfile).activity === 'reviewing' && Array.isArray(grant.sourceWrite) && !grant.sourceWrite.length
@@ -153,12 +166,6 @@ export function verifyApprovedWorkReview(review: Row, actor: Row, content: Row):
 		&& !(workspace.repository === subject.repository && Array.isArray(workspace.writablePaths) && workspace.writablePaths.some((path: string) =>
 			path === '.' || path === subject.path || String(subject.path).startsWith(`${path.replace(/\/$/u, '')}/`))),
 		'ACCEPTANCE_REVIEW_WRITE: Candidate content must remain immutable');
-	assert.ok(Array.isArray(decision.decidedByRefs) && decision.decidedByRefs.map(row).some(reference =>
-		isDeepStrictEqual(reference, row(attempt.effectiveProfile).profileRef)), 'ACCEPTANCE_REVIEW_IDENTITY: Assigned reviewing profile required');
-	assert.ok(Date.parse(String(actor.completedAt)) < Date.parse(String(review.createdAt))
-		&& Number.isFinite(Date.parse(String(decision.decidedAt))) && Date.parse(String(decision.decidedAt)) >= Date.parse(String(review.createdAt))
-		&& Date.parse(String(decision.decidedAt)) <= Date.parse(String(review.completedAt)),
-		'ACCEPTANCE_REVIEW_TIME: Original independent review interval required');
 }
 
 export function readApprovedWorkReview(review: Row, actor: Row, team: string, cache: Map<string, Row>): void {

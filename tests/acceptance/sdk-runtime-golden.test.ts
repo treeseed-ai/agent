@@ -7,7 +7,7 @@ import { canonicalStandardsJson } from '@treeseed/sdk/standards';
 import { DEFAULT_CAPACITY_PAGE_LIMIT } from '@treeseed/sdk/capacity-pagination';
 import { validatePortableContentData } from '@treeseed/sdk/content-validation';
 import { acceptanceWorkdayId, read, row, type Row } from './acceptance-cli.ts';
-import { readApprovedWorkReview, readDecisionContent, readGovernedContentFile, verifyDecisionContent, verifyReviewFindingContent } from './workday/support/decision-evidence.ts';
+import { readApprovedWorkReview, readDecisionContent, readGovernedContentFile, verifyDecisionContent, verifyReviewFindingContent, verifyReviewCandidateAuthority } from './workday/support/decision-evidence.ts';
 import { verifyAssignmentAuthority, verifyTeardownAuthority, verifyTreeDxWorkspaceClosure, verifyMeasuredVerification, verifyNativeCounterAgreement, verifyTerminalUsageClock } from './workday/support/assignment-authority.ts';
 import { verifyPlanningEvidence } from './workday/support/planning-evidence.ts';
 import { readCompleteEvidence } from './workday/support/evidence-pages.ts';
@@ -283,6 +283,7 @@ export function verifyGolden(gate: Gate): void {
 		}
 		assert.equal(changes.length, 1, 'ACCEPTANCE_REVISION_DECISION: Exactly one genuine work-review Decision required');
 		const change = changes[0]!, subject = row(change.subjectRef);
+		verifyReviewCandidateAuthority(requested, change);
 		assert.equal(change.disposition, 'request-changes', 'ACCEPTANCE_REVISION_DISPOSITION: Lifecycle flag is not a governed finding');
 		assert.ok(rows(row(prior.assignmentResult).references).some(reference => subject.store === reference.kind
 			&& subject.repository === reference.repository && subject.commit === reference.commit

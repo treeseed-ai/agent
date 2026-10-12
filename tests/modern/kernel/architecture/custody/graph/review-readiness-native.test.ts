@@ -10,7 +10,7 @@ import { ControlPlaneClient, defaultLocalControlPlaneServer } from '@treeseed/sd
 import { controlPlaneOperation } from '@treeseed/sdk/operator-contracts';
 import { row } from '../../../../../acceptance/acceptance-cli.ts';
 import { verifyPredecessorCustody } from '../../../../../acceptance/workday/support/evidence-pages.ts';
-import { verifyApprovedWorkReview } from '../../../../../acceptance/workday/support/decision-evidence.ts';
+import { verifyApprovedWorkReview, verifyReviewCandidateAuthority } from '../../../../../acceptance/workday/support/decision-evidence.ts';
 import { contentReviewFailures, mutateContentReview, mutateReadiness, mutateReview, mutateReviewGrant, readinessFailures, reviewedDecision, reviewedGraphFixture, reviewedRevisionFixture, reviewFailures, reviewGrantFailures } from './review-readiness-fixture.ts';
 
 it('native committed review sources and public SDK graph assignments deny missing approval custody before unchanged concurrent retry', async () => {
@@ -29,7 +29,7 @@ it('native committed review sources and public SDK graph assignments deny missin
 				const input = row(JSON.parse(bytes)); assert.ok(Array.isArray(input.paths));
 				const candidate = input.paths[0] === 'candidate.txt';
 				assert.deepEqual(input.paths, [candidate ? 'candidate.txt' : 'decisions/review.mdx']);
-				assert.equal(input.ref, candidate ? candidateRef : mode.startsWith('revision-requested')
+				assert.equal(input.ref, candidate ? candidateRef : mode.startsWith('revision')
 					? input.ref === sources.get('disposition') ? sources.get('disposition') : sources.get('revision') : sources.get(mode) ?? sources.get('exact'));
 				const content = execFileSync('git', ['show', `${input.ref}:${input.paths[0]}`], { cwd: root, encoding: 'utf8' });
 				response.end(JSON.stringify({ data: { resolvedRef: input.ref, repoId: candidate ? 'native-source' : 'native-library', files: [{ path: input.paths[0], content,
@@ -98,14 +98,22 @@ it('native committed review sources and public SDK graph assignments deny missin
 			assert.deepEqual(inventory.page, { limit: 200, hasMore: false, nextCursor: null }); assert.ok(Array.isArray(inventory.items));
 			const assignments = inventory.items.map(row), before = structuredClone({ graph, assignments });
 			try {
-				for (const { review, actor } of verifyPredecessorCustody(assignments, graph)) {
+				const pairs = verifyPredecessorCustody(assignments, graph);
+				for (const review of assignments.filter(item => row(row(item.lifecycleOutput).activityCompletion).reviewDisposition === 'request-changes')) {
+					const ids = row(review.assignmentAttempt).predecessorResultIds; assert.ok(Array.isArray(ids));
+					const actors = assignments.filter(item => row(row(item.assignmentAttempt).effectiveProfile).activity === 'acting' && ids.includes(row(item.assignmentResult).id));
+					assert.equal(actors.length, 1); pairs.push({ review, actor: actors[0]! });
+				}
+				for (const { review, actor } of pairs) {
 					const references = row(review.assignmentResult).references; assert.ok(Array.isArray(references));
 					const reference = row(references[0]), observed = row((await client.invoke(controlPlaneOperation('treedx.repositories.files.read'), {
 						path: { projectId: review.projectId, repoId: reference.repository }, query: {}, body: { ref: reference.commit, paths: [reference.path], encoding: 'utf8', parseFrontmatter: true } })).data);
 					assert.equal(observed.resolvedRef, reference.commit); assert.ok(Array.isArray(observed.files) && observed.files.length === 1);
 					const file = row(observed.files[0]), original = execFileSync('git', ['show', `${reference.commit}:${reference.path}`], { cwd: root, encoding: 'utf8' });
 					assert.equal(file.content, original); const content = row(parse(original.match(/^---\n([\s\S]*?)\n---/u)![1]!));
-					assert.deepEqual(file.frontmatter, content); verifyApprovedWorkReview(review, actor, content);
+					assert.deepEqual(file.frontmatter, content);
+					if (row(row(review.lifecycleOutput).activityCompletion).reviewDisposition === 'approved') verifyApprovedWorkReview(review, actor, content);
+					else { assert.equal(content.disposition, 'request-changes'); verifyReviewCandidateAuthority(review, content); }
 					const subject = row(content.subjectRef);
 					if (subject.store === 'git') assert.equal(git('show', `${subject.commit}:candidate.txt`), 'Controlled original candidate bytes');
 					else {

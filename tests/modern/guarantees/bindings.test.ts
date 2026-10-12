@@ -53,8 +53,9 @@ describe('capacity-provider guarantee execution bindings', () => {
 		const scene = parse(readFileSync(resolve(root, manifest.scene.manifest), 'utf8'));
 		const refs = scene.workflow.map((step: { action: { verifier: string } }) => step.action.verifier);
 		const required = ['agent.golden.live.campaign', 'api.golden.execution-normal-sdk-clean-schema-live-1', 'agent.golden.architecture-record-custody-live-1', 'agent.golden.architecture-living-graph-live-1'];
-		expect(manifest.acceptanceCriteria.filter((value: { criterion: string }) => value.criterion === '64ffc06b0d268ad11fbf692ca201cd75423c0afae2a6be3e2ae7cd2eea7fb17f'))
-			.toEqual([{ criterion: '64ffc06b0d268ad11fbf692ca201cd75423c0afae2a6be3e2ae7cd2eea7fb17f', verifierRefs: required }]);
+		for (const criterion of ['64ffc06b0d268ad11fbf692ca201cd75423c0afae2a6be3e2ae7cd2eea7fb17f', '4fec957beaa1692299741d8e2d5730027c2f1012f0ee8a4d17e89fadf3a1a524'])
+			expect(manifest.acceptanceCriteria.filter((value: { criterion: string }) => value.criterion === criterion))
+				.toEqual([{ criterion, verifierRefs: required }]);
 		for (const ref of required) expect(refs.filter((value: string) => value === ref)).toHaveLength(1);
 		expect(refs.indexOf(required[1]!)).toBeGreaterThan(refs.indexOf(required[0]!));
 		expect(refs.indexOf(required[2]!)).toBeGreaterThan(refs.indexOf(required[0]!));

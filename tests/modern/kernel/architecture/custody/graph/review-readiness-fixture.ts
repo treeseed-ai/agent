@@ -135,6 +135,7 @@ export function mutateContentReview(f: ReturnType<typeof reviewedGraphFixture>, 
 		attempt.workspace = { mode: 'treedx', repository: candidate.repository!, baseCommit: candidate.commit!, workspaceId: 'review-content',
 			writablePaths: ['decisions/review.mdx', candidate.path!] };
 		attempt.grant.contentWrite = attempt.grant.contentWrite.map(reference => ({ ...reference, repository: candidate.repository, commit: candidate.commit }));
+		for (const reference of f.assignments[1]!.assignmentResult.references) if (reference.kind === 'treedx') reference.repository = candidate.repository!;
 		if (mode === 'content-root-workspace' && attempt.workspace.mode === 'treedx') attempt.workspace.writablePaths = ['decisions/review.mdx', '.'];
 		if (mode === 'content-write') { attempt.grant.contentWrite.push(structuredClone(candidate)); attempt.effectiveProfile.permissionCeiling.content.write.push('knowledge'); }
 	}

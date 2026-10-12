@@ -136,8 +136,11 @@ export function verifyApprovedWorkReview(review: Row, actor: Row, content: Row):
 	assert.ok(row(attempt.effectiveProfile).activity === 'reviewing' && Array.isArray(grant.sourceWrite) && !grant.sourceWrite.length
 		&& Array.isArray(grant.tools) && !grant.tools.includes('source.write') && grant.tools.includes('verification') && grant.tools.includes('discussion'),
 		'ACCEPTANCE_REVIEW_GRANT: Independent review requires verification/discussion without source mutation');
-	assert.ok(Array.isArray(grant.contentWrite) && grant.contentWrite.map(row).some(reference => reference.store === 'treedx' && reference.model === 'decision'),
-		'ACCEPTANCE_REVIEW_GRANT: Exact governed Decision write authority required');
+	const returned = row(review.assignmentResult).references;
+	assert.ok(Array.isArray(grant.contentWrite) && Array.isArray(returned) && grant.contentWrite.map(row).filter(reference =>
+		reference.store === 'treedx' && reference.model === 'decision' && reference.id === decision.id && returned.map(row).some(output =>
+			output.kind === 'treedx' && output.repository === reference.repository && output.path === reference.path)).length === 1,
+		'ACCEPTANCE_REVIEW_GRANT: Exact returned governed Decision write authority required');
 	const exactCandidate = (reference: Row) => reference.store === subject.store && reference.repository === subject.repository
 		&& reference.commit === subject.commit && (subject.store === 'git'
 			|| reference.path === subject.path && reference.model === subject.model && reference.id === subject.id);

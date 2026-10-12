@@ -32,6 +32,22 @@ for (const file of readdirSync(resolve(root, 'guarantees/verifiers')).filter(pat
 }
 
 describe('capacity-provider guarantee execution bindings', () => {
+	it('binds portfolio normalization to the original prospective campaign freeze without adding a future passing receipt', () => {
+		const manifest = parse(readFileSync(resolve(root, 'guarantees/agent/golden/sdk-complete.guarantee.yaml'), 'utf8'));
+		expect(manifest.acceptanceCriteria.filter((value: { criterion: string }) => value.criterion === '8ef82a4f4cb2b8e93d060e38cf8758944d2ba54baca44787811a1d76683f99d4'))
+			.toEqual([{ criterion: '8ef82a4f4cb2b8e93d060e38cf8758944d2ba54baca44787811a1d76683f99d4', verifierRefs: ['agent.golden.live.campaign-freeze'] }]);
+	});
+	it('binds default policy and immutable issued overrides to preflight campaign and original native SDK policy custody in order', () => {
+		const manifest = parse(readFileSync(resolve(root, 'guarantees/agent/golden/sdk-complete.guarantee.yaml'), 'utf8'));
+		const scene = parse(readFileSync(resolve(root, manifest.scene.manifest), 'utf8'));
+		const required = ['agent.golden.live.campaign-freeze', 'agent.golden.live.campaign', 'api.golden.execution-normal-sdk-clean-schema-live-1'];
+		expect(manifest.acceptanceCriteria.filter((value: { criterion: string }) => value.criterion === '6e48b90ae52851e7b8fd728de8bb32610a60fc7c93dd445a93d3354aa00b652e'))
+			.toEqual([{ criterion: '6e48b90ae52851e7b8fd728de8bb32610a60fc7c93dd445a93d3354aa00b652e', verifierRefs: required }]);
+		const refs: string[] = scene.workflow.map((step: { action: { verifier: string } }) => step.action.verifier);
+		for (const ref of required) expect(refs.filter(value => value === ref)).toHaveLength(1);
+		expect(refs.indexOf(required[1]!)).toBeGreaterThan(refs.indexOf(required[0]!));
+		expect(refs.indexOf(required[2]!)).toBeGreaterThan(refs.indexOf(required[1]!));
+	});
 	it('binds sole simulation mode to immediate campaign observation independent native Workday authority and unchanged canonical terminal records', () => {
 		const manifest = parse(readFileSync(resolve(root, 'guarantees/agent/golden/sdk-complete.guarantee.yaml'), 'utf8'));
 		const scene = parse(readFileSync(resolve(root, manifest.scene.manifest), 'utf8'));
@@ -179,8 +195,10 @@ describe('capacity-provider guarantee execution bindings', () => {
 			'b918b519ac545fdd61faab208687ccc64e1f3d03c9a84dfc57a5cfee6190f3f3',
 		].map(criterion => ({ criterion, verifierRefs: ['agent.golden.live.campaign-freeze'] }));
 		expect(manifest.acceptanceCriteria).toEqual([
+			{ criterion: '8ef82a4f4cb2b8e93d060e38cf8758944d2ba54baca44787811a1d76683f99d4', verifierRefs: ['agent.golden.live.campaign-freeze'] },
 			{ criterion: '2feaea9a8a706e1279affead3af5bacc467f12b285ba2570f183361c5d8203c7', verifierRefs: ['agent.golden.live.campaign-freeze', 'agent.golden.live.campaign'] },
 			{ criterion: '64ffc06b0d268ad11fbf692ca201cd75423c0afae2a6be3e2ae7cd2eea7fb17f', verifierRefs: ['agent.golden.live.campaign', 'api.golden.execution-normal-sdk-clean-schema-live-1', 'agent.golden.architecture-record-custody-live-1', 'agent.golden.architecture-living-graph-live-1'] },
+			{ criterion: '6e48b90ae52851e7b8fd728de8bb32610a60fc7c93dd445a93d3354aa00b652e', verifierRefs: ['agent.golden.live.campaign-freeze', 'agent.golden.live.campaign', 'api.golden.execution-normal-sdk-clean-schema-live-1'] },
 			{ criterion: '6c6e922d724fe9bf966e3f11456af2f176224cdff4792c9b7a73ce8047659e55', verifierRefs: ['api.golden.execution-normal-sdk-clean-schema-live-1', 'agent.golden.architecture-record-custody-live-1'] },
 			{ criterion: '2e5d3dfc2cd33fd0656866a59ce59153137c199b766309decab4f71ecbf4e8d7', verifierRefs: ['api.golden.execution-normal-sdk-clean-schema-live-1', 'agent.golden.architecture-record-custody-live-1'] },
 			...sdkPermissionCriteria.map(criterion => ({ criterion, verifierRefs: ['agent.golden.architecture-profile-custody-live-1', 'sdk.golden.live.product'] })),

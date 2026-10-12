@@ -11,10 +11,14 @@ scene:
   required: true
   manifest: guarantees/agent/golden/scenes/sdk-complete.scene.yaml
 acceptanceCriteria:
+  - criterion: 8ef82a4f4cb2b8e93d060e38cf8758944d2ba54baca44787811a1d76683f99d4
+    verifierRefs: [agent.golden.live.campaign-freeze]
   - criterion: 2feaea9a8a706e1279affead3af5bacc467f12b285ba2570f183361c5d8203c7
     verifierRefs: [agent.golden.live.campaign-freeze, agent.golden.live.campaign]
   - criterion: 64ffc06b0d268ad11fbf692ca201cd75423c0afae2a6be3e2ae7cd2eea7fb17f
     verifierRefs: [agent.golden.live.campaign, api.golden.execution-normal-sdk-clean-schema-live-1, agent.golden.architecture-record-custody-live-1, agent.golden.architecture-living-graph-live-1]
+  - criterion: 6e48b90ae52851e7b8fd728de8bb32610a60fc7c93dd445a93d3354aa00b652e
+    verifierRefs: [agent.golden.live.campaign-freeze, agent.golden.live.campaign, api.golden.execution-normal-sdk-clean-schema-live-1]
   - criterion: 6c6e922d724fe9bf966e3f11456af2f176224cdff4792c9b7a73ce8047659e55
     verifierRefs: [api.golden.execution-normal-sdk-clean-schema-live-1, agent.golden.architecture-record-custody-live-1]
   - criterion: 2e5d3dfc2cd33fd0656866a59ce59153137c199b766309decab4f71ecbf4e8d7

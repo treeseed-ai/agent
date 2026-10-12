@@ -106,7 +106,7 @@ export function mutateReview(decision: ReturnType<typeof reviewedDecision>, mode
 }
 
 export const reviewGrantFailures = ['review-source-write', 'review-source-tool', 'review-candidate-context', 'review-candidate-ref',
-	'review-verification', 'review-discussion', 'review-decision', 'review-activity', 'review-decision-target', 'review-decision-id'] as const;
+	'review-verification', 'review-discussion', 'review-decision', 'review-activity', 'review-decision-target', 'review-decision-id', 'review-extra-workspace-path'] as const;
 export function mutateReviewGrant(f: ReturnType<typeof reviewedGraphFixture>, mode: string): void {
 	const attempt = f.assignments[1]!.assignmentAttempt;
 	if (mode === 'review-source-write') attempt.grant.sourceWrite.push('native-source');
@@ -118,6 +118,7 @@ export function mutateReviewGrant(f: ReturnType<typeof reviewedGraphFixture>, mo
 	if (mode === 'review-decision') attempt.grant.contentWrite = [];
 	if (mode === 'review-activity') attempt.effectiveProfile.activity = 'acting';
 	if (mode === 'review-decision-id') attempt.grant.contentWrite[0]!.id = 'foreign-decision';
+	if (mode === 'review-extra-workspace-path' && attempt.workspace.mode === 'treedx') attempt.workspace.writablePaths.push('notes/unassigned.mdx');
 	if (mode === 'review-decision-target' && attempt.workspace.mode === 'treedx') {
 		attempt.grant.contentWrite[0]!.path = 'decisions/foreign.mdx'; attempt.workspace.writablePaths = ['decisions/foreign.mdx'];
 	}

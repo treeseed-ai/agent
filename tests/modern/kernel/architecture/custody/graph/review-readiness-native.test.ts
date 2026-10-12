@@ -133,7 +133,7 @@ it('native committed review sources and public SDK graph assignments deny missin
 			mode = fault; try { await observe(); failures.push({ mode, failure: 'unexpected pass' }); }
 			catch (error) { failures.push({ mode, failure: String(error) }); }
 		}
-		expect(failures).toHaveLength(53); expect(failures.every(value => value.failure !== 'unexpected pass'), JSON.stringify(failures)).toBe(true);
+		expect(failures).toHaveLength(54); expect(failures.every(value => value.failure !== 'unexpected pass'), JSON.stringify(failures)).toBe(true);
 		const retained = structuredClone(failures); mode = 'exact'; await Promise.all([observe(), observe()]);
 		expect(failures).toEqual(retained); expect({ f, revised, contentGraph }).toEqual(held); expect(git('ls-tree', '-r', 'HEAD')).toBe(tree); expect(git('status', '--porcelain')).toBe('');
 		expect(requests.length).toBeGreaterThan(29);

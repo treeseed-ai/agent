@@ -376,6 +376,18 @@ export function verifyNativeCounterAgreement(measurement: Row): void {
 	}
 }
 
+/** Compare the complete current-workday inventory; exact retries retain one assignment row. */
+export function verifyAssignmentWorkspaceInventory(items: readonly Row[]): void {
+	const ids: string[] = [];
+	for (const item of items) {
+		const observed = row(row(item.assignmentAttempt).workspace);
+		if (observed.mode !== 'treedx') continue;
+		const scope = assignmentWorkspaceSchema.parse(observed);
+		assert.ok(scope.mode === 'treedx'); ids.push(scope.workspaceId);
+	}
+	assert.equal(new Set(ids).size, ids.length, 'ACCEPTANCE_WORKSPACE_UNIQUE: Different assignments cannot share a mutable TreeDX workspace');
+}
+
 /** Assertions in the existing managed verifier, not a runtime grant compiler.
  * Independent profile/policy retrieval and atomic admission still need proof. */
 export function verifyAssignmentAuthority(item: Row): void {
@@ -405,6 +417,8 @@ export function verifyAssignmentAuthority(item: Row): void {
 		for (const reference of value.contentWrite) assert.ok(reference.store === 'treedx' && reference.repository === scope.repository
 			&& reference.commit === scope.baseCommit && reference.path && scope.writablePaths.includes(reference.path),
 			`${label}: Mutable TreeDX authority is unpinned or outside its workspace`);
+		assert.deepEqual([...scope.writablePaths].sort(), [...new Set(value.contentWrite.map(reference => reference.path))].sort(),
+			`${label}: TreeDX workspace must contain only exact granted write paths`);
 	}
 	assert.ok(Array.isArray(attempt.contextRefs), `${label}: Exact context custody required`);
 	for (const repository of value.sourceRead) assert.ok(attempt.contextRefs.some((input: unknown) => {

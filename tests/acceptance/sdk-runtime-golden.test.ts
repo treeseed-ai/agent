@@ -8,7 +8,7 @@ import { DEFAULT_CAPACITY_PAGE_LIMIT } from '@treeseed/sdk/capacity-pagination';
 import { validatePortableContentData } from '@treeseed/sdk/content-validation';
 import { acceptanceWorkdayId, read, row, type Row } from './acceptance-cli.ts';
 import { readApprovedWorkReview, readDecisionContent, readGovernedContentFile, verifyDecisionContent, verifyReviewFindingContent, verifyReviewCandidateAuthority } from './workday/support/decision-evidence.ts';
-import { verifyAssignmentAuthority, verifyTeardownAuthority, verifyTreeDxWorkspaceClosure, verifyMeasuredVerification, verifyNativeCounterAgreement, verifyTerminalUsageClock } from './workday/support/assignment-authority.ts';
+import { verifyAssignmentAuthority, verifyAssignmentWorkspaceInventory, verifyTeardownAuthority, verifyTreeDxWorkspaceClosure, verifyMeasuredVerification, verifyNativeCounterAgreement, verifyTerminalUsageClock } from './workday/support/assignment-authority.ts';
 import { verifyPlanningEvidence } from './workday/support/planning-evidence.ts';
 import { readCompleteEvidence } from './workday/support/evidence-pages.ts';
 import { verifyReportRecordCustody } from './workday/support/record-custody.ts';
@@ -89,6 +89,7 @@ export function readWorkdayAssignments(workdayId: string, startedAt: string, tea
 	}
 	assert.ok(assignments.length > 0, 'No real assignment evidence');
 	assert.equal(new Set(assignments.map(item => item.id)).size, assignments.length);
+	verifyAssignmentWorkspaceInventory(assignments);
 	return assignments;
 }
 export function verifyGolden(gate: Gate): void {

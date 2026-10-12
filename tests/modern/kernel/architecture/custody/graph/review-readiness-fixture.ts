@@ -154,6 +154,7 @@ export function reviewedRevisionFixture() {
 		item.createdAt = item.assignmentAttempt.createdAt = `2026-09-13T12:00:${start}.000Z`;
 		item.completedAt = item.assignmentResult.completedAt = `2026-09-13T12:00:${end}.000Z`;
 		item.assignmentResult.id = `result-${id}`; item.assignmentResult.assignmentId = id;
+		if (item.assignmentAttempt.workspace.mode === 'treedx') item.assignmentAttempt.workspace.workspaceId = `workspace-${id}`;
 	}
 	correction.assignmentAttempt.predecessorResultIds = [requested.assignmentResult.id];
 	approved.assignmentAttempt.predecessorResultIds = [correction.assignmentResult.id]; approved.lifecycleOutput.activityCompletion.reviewDisposition = 'approved';

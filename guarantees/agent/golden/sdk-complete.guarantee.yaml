@@ -11,6 +11,8 @@ scene:
   required: true
   manifest: guarantees/agent/golden/scenes/sdk-complete.scene.yaml
 acceptanceCriteria:
+  - criterion: 614467b937b7b271b37e1e7b484adba4d65cf486993d9273807130dcc351f69e
+    verifierRefs: [sdk.golden.live.product, agent.golden.architecture-living-graph-live-1]
   - criterion: 8ef82a4f4cb2b8e93d060e38cf8758944d2ba54baca44787811a1d76683f99d4
     verifierRefs: [agent.golden.live.campaign-freeze]
   - criterion: 2feaea9a8a706e1279affead3af5bacc467f12b285ba2570f183361c5d8203c7

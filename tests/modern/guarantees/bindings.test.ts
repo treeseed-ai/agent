@@ -116,6 +116,8 @@ describe('capacity-provider guarantee execution bindings', () => {
 			.toEqual([{ criterion: '6d6749cd8c2676c6c50c009b55025ec3b951589db602440f63b76ba021159f20', verifierRefs: ['agent.golden.live.graph', product] }]);
 		expect(refs.filter(value => value === 'agent.golden.live.graph')).toHaveLength(1);
 		const reviewed = 'agent.golden.architecture-living-graph-live-1';
+		expect(manifest.acceptanceCriteria.filter((value: { criterion: string }) => value.criterion === '7db60618a6757d8741156428465e37c46211c1a8a5b2125cae87550534778751'))
+			.toEqual([{ criterion: '7db60618a6757d8741156428465e37c46211c1a8a5b2125cae87550534778751', verifierRefs: [product, profile, reviewed] }]);
 		expect(manifest.acceptanceCriteria.filter((value: { criterion: string }) => value.criterion === '614467b937b7b271b37e1e7b484adba4d65cf486993d9273807130dcc351f69e'))
 			.toEqual([{ criterion: '614467b937b7b271b37e1e7b484adba4d65cf486993d9273807130dcc351f69e', verifierRefs: [product, reviewed] }]);
 		expect(manifest.acceptanceCriteria.filter((value: { criterion: string }) => value.criterion === '697358e950cb89fc5928569468cd955c25daa8fda7ff97fd1a4af35e2eb95fc6'))

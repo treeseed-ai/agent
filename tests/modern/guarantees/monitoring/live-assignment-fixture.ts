@@ -1,4 +1,4 @@
-import { assignmentAttemptSchema, compileWorkday, DEFAULT_WORKDAY_POLICY, type AssignmentAttempt } from '@treeseed/sdk/agent-capacity';
+import { allocateWorkdayCapacity, calculateAssignmentAllocation, appliedWorkdaySchema, assignmentAttemptSchema, compileWorkday, DEFAULT_WORKDAY_POLICY, type AssignmentAttempt } from '@treeseed/sdk/agent-capacity';
 import { request } from '../../kernel/provider-kernel-fixture.ts';
 import type { Row } from '../../../acceptance/acceptance-cli.ts';
 
@@ -10,16 +10,24 @@ export function liveAssignmentRecord(attempt: AssignmentAttempt = assignmentAtte
 	const envelope = { teamId: attempt.teamId, projectId: attempt.projectId, workDayId: attempt.workdayId, mode,
 		projectAgentClassId: 'opaque-configured-row', capacityProviderId: attempt.provider.providerId,
 		executionProviderId: attempt.provider.executionProviderId, reservationId: attempt.reservationId };
-	return { id: attempt.id, membershipId: 'controlled-membership', ...envelope, stateVersion: 1, status: 'leased', leaseState: 'leased',
+	const item = { id: attempt.id, membershipId: 'controlled-membership', ...envelope, stateVersion: 1, status: 'leased', leaseState: 'leased',
 		createdAt: attempt.createdAt, updatedAt: attempt.createdAt, attemptCount: attempt.attempt, executionNodeId: attempt.nodeId,
 		executionNodeRevision: attempt.nodeRevision, graphRevision: attempt.graphRevision, assignmentAttempt: structuredClone(attempt),
-		capacityEnvelope: envelope, workspaceContext: {}, allowedOutputs: {}, explanation: {}, lifecycleOutput: {}, metadata: {} };
+		capacityEnvelope: { ...envelope, requestedSeconds: attempt.limits.maximumSeconds, reservedSeconds: attempt.limits.maximumSeconds },
+		workspaceContext: {}, allowedOutputs: {}, explanation: {} as Row, lifecycleOutput: {}, metadata: {} };
+	const plan = appliedWorkdaySchema.parse(liveRun(item).parameters.appliedPlan), seconds = attempt.limits.maximumSeconds;
+	const opportunity = allocateWorkdayCapacity({ remainingSeconds: seconds, now: attempt.createdAt,
+		workdays: [{ plan, committedSeconds: 0, planningCommittedSeconds: 0, maximumAdditionalSeconds: seconds, actingReady: mode === 'acting' }] })[plan.id];
+	item.explanation = { metadata: { allocation: { ...calculateAssignmentAllocation({ estimate: attempt.estimate,
+		measurements: [], constraints: [{ id: 'shared-model', remainingSeconds: seconds }] }), opportunity } } };
+	return item;
 }
 export function liveRun(item: Row): Row {
 	const attempt = assignmentAttemptSchema.parse(item.assignmentAttempt);
 	const plan = compileWorkday({ id: attempt.workdayId, teamId: attempt.teamId, executionMode: 'simulation',
 		policyId: 'default', policyRevision: 1, startsAt: attempt.createdAt, agentIds: [],
 		policy: { ...DEFAULT_WORKDAY_POLICY, durationSeconds: 3600 } });
+	plan.state = 'active'; // Controlled record represents already admitted work, not a prospective plan.
 	return { id: attempt.workdayId, teamId: attempt.teamId, executionMode: 'simulation', startedAt: attempt.createdAt,
 		parameters: { ...plan.policySnapshot, deadlineAt: plan.endsAt, appliedPlan: plan, scheduledProjectIds: [attempt.projectId] } };
 }

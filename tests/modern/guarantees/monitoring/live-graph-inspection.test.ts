@@ -1,13 +1,13 @@
 import { beforeEach, expect, it, vi } from 'vitest';
-import { liveAssignmentGraph, liveAssignmentRecord } from './live-assignment-fixture.ts';
+import { liveAssignmentGraph, liveAssignmentRecord, liveRun } from './live-assignment-fixture.ts';
 
 // Unit-only isolation of already separately covered profile/content boundaries.
 // The real configured Kernel/public SDK integration exercises those boundaries.
-const state = vi.hoisted(() => ({ item: {} as Record<string, any>, graph: {} as Record<string, any> }));
+const state = vi.hoisted(() => ({ item: {} as Record<string, any>, graph: {} as Record<string, any>, run: {} as Record<string, any> }));
 vi.mock('../../../acceptance/acceptance-cli.ts', async original => ({
 	...await original<typeof import('../../../acceptance/acceptance-cli.ts')>(),
 	read: (args: string[]) => args[0] === 'assignments' ? structuredClone(state.item)
-		: args[0] === 'execution' ? structuredClone(state.graph) : {},
+		: args[0] === 'execution' ? structuredClone(state.graph) : args[0] === 'workdays' ? { run: structuredClone(state.run) } : {},
 }));
 vi.mock('../../../acceptance/workday/support/decision-evidence.ts', async original => ({
 	...await original<typeof import('../../../acceptance/workday/support/decision-evidence.ts')>(), readGovernedContentFile: () => ({}),
@@ -22,6 +22,7 @@ beforeEach(() => {
 	state.item = liveAssignmentRecord();
 	state.item.assignmentAttempt.requiredCapabilities = ['code-change'];
 	state.graph = liveAssignmentGraph(state.item);
+	state.run = liveRun(state.item);
 });
 
 it('accepts exact independent graph authority without rewriting source observations and denies every substituted issued field', () => {

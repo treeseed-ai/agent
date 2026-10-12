@@ -7,7 +7,7 @@ import { request } from '../../provider-kernel-fixture.ts';
 import { portableProfile } from '../portable/portable-kernel-fixture.ts';
 import { verifyGovernedProfile, verifyHandlerInspection } from '../../../../acceptance/workday/support/assignment-authority.ts';
 import { inspectLiveAssignmentProfile } from '../../../../acceptance/workday/support/monitoring/live-assignment-records.ts';
-import { liveAssignmentGraph, liveAssignmentRecord } from '../../../guarantees/monitoring/live-assignment-fixture.ts';
+import { liveAssignmentGraph, liveAssignmentRecord, liveRun } from '../../../guarantees/monitoring/live-assignment-fixture.ts';
 import { profileOrderFixture, profileOrderFailures, mutateProfileOrder, grantRequestCases, grantRequestFixture } from './graph/profile-order-fixture.ts';
 await import('../../../../acceptance/workday/profile-custody.test.ts');
 
@@ -53,12 +53,13 @@ describe('independent governed profile assertion contract', () => {
 		const handler = { id: profile.handler, origin: profile.handlerOrigin };
 		state.replies.set('assignments show', item);
 		state.replies.set('execution graph', liveAssignmentGraph(item));
+		state.replies.set('workdays show', { run: liveRun(item) });
 		state.replies.set(`library read ${f.file.path}`, { result: { resolvedRef: profile.profileRef.commit, files: [f.file] } });
 		state.replies.set('agents handlers --project', { projectId: attempt.projectId, handlers: [handler] });
 		state.replies.set(`agents handlers ${profile.handler}`, { projectId: attempt.projectId, handler });
 		const before = structuredClone([...state.replies]); inspectLiveAssignmentProfile(item, attempt.teamId);
 		expect(state.calls.map(args => args.slice(0, 3))).toEqual([
-			['assignments', 'show', attempt.id], ['execution', 'graph', 'show'], ['library', 'read', attempt.projectId],
+			['assignments', 'show', attempt.id], ['execution', 'graph', 'show'], ['workdays', 'show', attempt.workdayId], ['library', 'read', attempt.projectId],
 			['agents', 'handlers', 'list'], ['agents', 'handlers', 'show'], ['execution', 'graph', 'show'],
 		]);
 		expect(state.calls[0]).toContain(attempt.teamId);

@@ -9,6 +9,7 @@ import { portableKernel } from '../../kernel/architecture/portable/portable-kern
 import { row, type Row } from '../../../acceptance/acceptance-cli.ts';
 import { verifyGovernedProfile, verifyHandlerInspection } from '../../../acceptance/workday/support/assignment-authority.ts';
 import { observeLiveAssignmentRecords, verifyLiveAssignmentGraph } from '../../../acceptance/workday/support/monitoring/live-assignment-records.ts';
+import { verifyAllocation } from '../../../acceptance/workday/support/monitoring/assignment-allocation.ts';
 import { liveAssignmentGraph, liveAssignmentRecord, liveRun } from './live-assignment-fixture.ts';
 
 it('native configured Kernel Git result and public SDK assignment reads reach the live observer with denied original observations retained before exact retry', async () => {
@@ -58,6 +59,12 @@ it('native configured Kernel Git result and public SDK assignment reads reach th
 			if (mode === 'denied') { response.writeHead(403).end(JSON.stringify({ status: 403, title: 'Controlled native denial', code: 'controlled_assignment_denied' })); return; }
 			if (mode === 'interrupted') { request.socket.destroy(); return; }
 			const returned = structuredClone(item);
+			if (mode === 'allocation-missing') delete row(returned.explanation).metadata;
+			if (mode === 'allocation-reservation') row(returned.capacityEnvelope).reservedSeconds = 0;
+			const allocation = row(row(row(returned.explanation).metadata).allocation);
+			if (mode === 'allocation-calibration') row(allocation.calibration).multiplier = 0;
+			if (mode === 'allocation-limiting') allocation.limitingConstraint = 'foreign-limit';
+			if (mode === 'allocation-supply') row(allocation.opportunity).remainingSupplySeconds = 0;
 			if (mode === 'derived-production') returned.executionMode = 'production';
 			if (mode === 'derived-malformed') returned.executionMode = null;
 			if (mode === 'runtime') row(row(returned.assignmentAttempt).provider).runtimeBuild = `sha256:${'f'.repeat(64)}`;
@@ -87,7 +94,7 @@ it('native configured Kernel Git result and public SDK assignment reads reach th
 				path: { teamId: f.attempt.teamId, assignmentId: f.attempt.id }, query: {}, body: undefined,
 			})).data);
 			observeLiveAssignmentRecords(row(observed.run), [returned], observations, value => {
-				inspections++; verifyGovernedProfile(value, { path, content });
+				inspections++; verifyAllocation(value, run); verifyGovernedProfile(value, { path, content });
 				const handler = { id: f.attempt.effectiveProfile.handler, origin: f.attempt.effectiveProfile.handlerOrigin };
 				verifyHandlerInspection(value, { projectId: f.attempt.projectId, handlers: [handler] }, { projectId: f.attempt.projectId, handler });
 			});
@@ -128,7 +135,7 @@ it('native configured Kernel Git result and public SDK assignment reads reach th
 				path: { teamId: f.attempt.teamId }, query: {}, body: undefined,
 			})).data), observations = new Map<string, Row>();
 			observeLiveAssignmentRecords(run, [item], observations, value => {
-				verifyLiveAssignmentGraph(value, graph); verifyGovernedProfile(value, { path, content }, graph);
+				verifyLiveAssignmentGraph(value, graph); verifyAllocation(value, run); verifyGovernedProfile(value, { path, content }, graph);
 				const handler = { id: f.attempt.effectiveProfile.handler, origin: f.attempt.effectiveProfile.handlerOrigin };
 				verifyHandlerInspection(value, { projectId: f.attempt.projectId, handlers: [handler] }, { projectId: f.attempt.projectId, handler });
 			});
@@ -142,6 +149,12 @@ it('native configured Kernel Git result and public SDK assignment reads reach th
 		const graphFailures = structuredClone(failed); mode = 'exact'; expect((await inspectGraph()).size).toBe(1);
 		expect(failed).toEqual(graphFailures); expect(failed.slice(0, originalFailures.length)).toEqual(originalFailures);
 		expect(requests.filter(value => value.endsWith('/execution-graph'))).toHaveLength(12);
+		for (const denied of ['allocation-missing', 'allocation-reservation', 'allocation-calibration', 'allocation-limiting', 'allocation-supply']) {
+			mode = denied; const empty = new Map<string, Row>(); await expect(execute(empty), denied).rejects.toThrow('ACCEPTANCE_ALLOCATION');
+			expect(empty.size).toBe(0); expect({ item, run }).toEqual(before);
+		}
+		const allFailures = structuredClone(failed); mode = 'exact'; const retried = new Map<string, Row>(); await execute(retried);
+		expect(retried.size).toBe(1); expect(failed).toEqual(allFailures); expect(failed.slice(0, graphFailures.length)).toEqual(graphFailures);
 		// Native owning Kernel/handler/Git and SDK transport; upstream record,
 		// profile bytes and handler catalog are controlled. This does not prove
 		// native API admission, TreeDX publication, model usage or physical closure.

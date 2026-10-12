@@ -5,6 +5,7 @@ import { verifyAssignmentAuthority, verifyGovernedProfile, verifyHandlerInspecti
 import { readGovernedContentFile } from '../decision-evidence.ts';
 import { verifyAppliedWorkdayCustody, verifyDerivedWorkdayModes } from '../campaign-observation.ts';
 import { verifyGraphProvenance } from '../evidence-pages.ts';
+import { verifyAllocation } from './assignment-allocation.ts';
 
 const issuedAuthority = ({ status: _status, startedAt: _started, finishedAt: _finished, ...value }: Row) => value;
 
@@ -41,6 +42,11 @@ export function inspectLiveAssignmentProfile(item: Row, team: string): void {
 		'ACCEPTANCE_LIVE_ASSIGNMENT: Independent public view changed issued authority');
 	const graph = read(['execution', 'graph', 'show'], team);
 	verifyLiveAssignmentGraph(item, graph);
+	const run = row(read(['workdays', 'show', attempt.workdayId], team).run);
+	assert.equal(run.id, attempt.workdayId, 'ACCEPTANCE_LIVE_ASSIGNMENT: Foreign owning workday');
+	assert.equal(run.teamId, attempt.teamId, 'ACCEPTANCE_LIVE_ASSIGNMENT: Foreign owning team');
+	verifyAppliedWorkdayCustody(run);
+	verifyAllocation(shown, run);
 	verifyGovernedProfile(item, readGovernedContentFile(profile.profileRef, attempt.projectId, team, new Map(), 'ACCEPTANCE_LIVE_PROFILE'), graph);
 	const catalog = read(['agents', 'handlers', 'list', '--project', attempt.projectId, '--server', 'local'], team, true);
 	const selected = read(['agents', 'handlers', 'show', profile.handler, '--project', attempt.projectId, '--server', 'local'], team, true);

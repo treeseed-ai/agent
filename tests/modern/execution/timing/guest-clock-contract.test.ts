@@ -104,12 +104,23 @@ describe('Codex chat executor', () => {
 		};
 		const f = fixture(), before = structuredClone(f);
 		expect(modelExecutionInventory(f.items, f.events, f.run).map(value => value.item.status)).toEqual(['completed', 'failed', 'returned']); expect(f).toEqual(before);
-		for (const mode of ['empty', 'missing-start', 'missing-terminal', 'duplicate-start', 'duplicate-terminal', 'duplicate-owner', 'missing-owner',
+		const sandbox = fixture(); Object.assign(sandbox.items[0]!, { lifecycleOutput: { sandboxId: 'original-completed-sandbox' } });
+		expect(modelExecutionInventory(sandbox.items, sandbox.events, sandbox.run)).toHaveLength(3);
+		const preparation = Object.assign(structuredClone(sandbox.items[1]!), { id: 'failed-before-model-start', lifecycleOutput: { sandboxId: 'prepared-only' } });
+		expect(modelExecutionInventory([...sandbox.items, preparation], sandbox.events, sandbox.run)).toHaveLength(3);
+		for (const sandboxId of ['', null, false, {}, []]) {
+			const malformed = fixture(); Object.assign(malformed.items[0]!, { lifecycleOutput: { sandboxId } });
+			expect(() => modelExecutionInventory(malformed.items, malformed.events, malformed.run)).toThrow('ACCEPTANCE_MODEL_INVENTORY_MISSING_START');
+		}
+		for (const mode of ['empty', 'missing-start', 'missing-terminal', 'omitted-sandbox-start', 'duplicate-start', 'duplicate-terminal', 'duplicate-owner', 'missing-owner',
 			'foreign-run', 'foreign-team', 'foreign-project', 'foreign-attempt', 'empty-model', 'missing-model', 'payload-only', 'stripped-raw', 'stripped-empty-raw', 'stripped-malformed-raw', 'bad-clock', 'reversed', 'duplicate-index']) {
 			const supplied = fixture();
 			if (mode === 'empty') supplied.events = [];
 			if (mode === 'missing-start') supplied.events.splice(0, 1);
 			if (mode === 'missing-terminal') supplied.events.splice(1, 1);
+			if (mode === 'omitted-sandbox-start') supplied.items.push(Object.assign(structuredClone(supplied.items[0]!), {
+				id: 'omitted-completed-model', assignmentAttempt: { ...supplied.items[0]!.assignmentAttempt, id: 'omitted-completed-model' },
+				lifecycleOutput: { sandboxId: 'original-completed-sandbox' } }));
 			if (mode.startsWith('duplicate-') && ['duplicate-start', 'duplicate-terminal'].includes(mode)) supplied.events.push({
 				...supplied.events[mode === 'duplicate-start' ? 0 : 1]!, id: 'additional-event', eventIndex: 6 });
 			if (mode === 'duplicate-owner') supplied.items.push(structuredClone(supplied.items[0]!));

@@ -1,13 +1,39 @@
 import assert from 'node:assert/strict';
-import { assignmentAttemptSchema, executionNodeSchema, validateProviderAssignment } from '@treeseed/sdk/agent-capacity';
+import { assignmentAttemptSchema, capabilityAccountingLimitsSchema, executionNodeSchema, validateProviderAssignment } from '@treeseed/sdk/agent-capacity';
 import { read, row, type Row } from '../../../acceptance-cli.ts';
 import { verifyAssignmentAuthority, verifyGovernedProfile, verifyHandlerInspection } from '../assignment-authority.ts';
 import { readGovernedContentFile } from '../decision-evidence.ts';
 import { verifyAppliedWorkdayCustody, verifyDerivedWorkdayModes } from '../campaign-observation.ts';
 import { verifyGraphProvenance } from '../evidence-pages.ts';
 import { verifyAllocation } from './assignment-allocation.ts';
+import { availabilityHistory } from './provider-history.ts';
 
 const issuedAuthority = ({ status: _status, startedAt: _started, finishedAt: _finished, ...value }: Row) => value;
+
+/** Compare the issued build/model with original owning provider publication. */
+export function verifyLiveProviderRuntime(item: Row, publications: readonly Row[]): void {
+	const code = 'ACCEPTANCE_LIVE_RUNTIME', attempt = assignmentAttemptSchema.parse(item.assignmentAttempt);
+	const owners = publications.filter(value => value.providerId === attempt.provider.providerId && value.teamId === attempt.teamId)
+		.sort((a, b) => Date.parse(String(b.openedAt)) - Date.parse(String(a.openedAt)) || String(b.id).localeCompare(String(a.id)));
+	const latest = owners[0];
+	assert.ok(latest && ['open', 'closed'].includes(String(latest.status)) && Number.isSafeInteger(latest.sequence) && latest.sequence >= 1,
+		`${code}: Complete independently observed provider publication required`);
+	const opened = Date.parse(String(latest.openedAt)), refreshed = Date.parse(String(latest.refreshedAt));
+	assert.ok(Number.isFinite(opened) && Number.isFinite(refreshed) && opened <= Date.parse(attempt.createdAt) && refreshed >= opened,
+		`${code}: Original publication clocks do not cover the issued provider`);
+	const snapshot = row(latest.snapshot);
+	assert.ok(Array.isArray(snapshot.adapters) && snapshot.adapters.length > 0, `${code}: Original executable adapter inventory required`);
+	const adapters = snapshot.adapters.map(row);
+	assert.ok(adapters.every(value => typeof value.id === 'string' && value.id) && new Set(adapters.map(value => value.id)).size === adapters.length,
+		`${code}: Unique executable adapter identities required`);
+	const selected = adapters.filter(value => value.id === attempt.provider.executionProviderId);
+	assert.equal(selected.length, 1, `${code}: Exact original execution provider required`);
+	assert.equal(selected[0]!.runtimeBuild, attempt.provider.runtimeBuild, `${code}: Issued build differs from independent provider publication`);
+	const limits = capabilityAccountingLimitsSchema.safeParse(selected[0]!.nativeLimits);
+	assert.ok(limits.success, `${code}: Original model/capability limits required`);
+	assert.deepEqual(limits.data, selected[0]!.nativeLimits, `${code}: Original limits must not be normalized`);
+	assert.equal(limits.data.modelConfigurationId, attempt.provider.modelConfigurationId, `${code}: Foreign model configuration`);
+}
 
 /** A matching list/show pair cannot establish independent graph authority. */
 export function verifyLiveAssignmentGraph(item: Row, graph: Row): void {
@@ -47,6 +73,7 @@ export function inspectLiveAssignmentProfile(item: Row, team: string): void {
 	assert.equal(run.teamId, attempt.teamId, 'ACCEPTANCE_LIVE_ASSIGNMENT: Foreign owning team');
 	verifyAppliedWorkdayCustody(run);
 	verifyAllocation(shown, run);
+	verifyLiveProviderRuntime(item, availabilityHistory(team));
 	verifyGovernedProfile(item, readGovernedContentFile(profile.profileRef, attempt.projectId, team, new Map(), 'ACCEPTANCE_LIVE_PROFILE'), graph);
 	const catalog = read(['agents', 'handlers', 'list', '--project', attempt.projectId, '--server', 'local'], team, true);
 	const selected = read(['agents', 'handlers', 'show', profile.handler, '--project', attempt.projectId, '--server', 'local'], team, true);

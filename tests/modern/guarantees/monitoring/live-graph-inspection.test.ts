@@ -1,13 +1,14 @@
 import { beforeEach, expect, it, vi } from 'vitest';
-import { liveAssignmentGraph, liveAssignmentRecord, liveRun } from './live-assignment-fixture.ts';
+import { liveAssignmentGraph, liveAssignmentRecord, liveProviderSession, liveRun } from './live-assignment-fixture.ts';
 
 // Unit-only isolation of already separately covered profile/content boundaries.
 // The real configured Kernel/public SDK integration exercises those boundaries.
-const state = vi.hoisted(() => ({ item: {} as Record<string, any>, graph: {} as Record<string, any>, run: {} as Record<string, any> }));
+const state = vi.hoisted(() => ({ item: {} as Record<string, any>, graph: {} as Record<string, any>, run: {} as Record<string, any>, publications: [] as Record<string, any>[] }));
 vi.mock('../../../acceptance/acceptance-cli.ts', async original => ({
 	...await original<typeof import('../../../acceptance/acceptance-cli.ts')>(),
 	read: (args: string[]) => args[0] === 'assignments' ? structuredClone(state.item)
-		: args[0] === 'execution' ? structuredClone(state.graph) : args[0] === 'workdays' ? { run: structuredClone(state.run) } : {},
+		: args[0] === 'execution' ? structuredClone(state.graph) : args[0] === 'workdays' ? { run: structuredClone(state.run) }
+			: args[0] === 'capacity' ? { items: structuredClone(state.publications), page: { limit: 100, hasMore: false, nextCursor: null } } : {},
 }));
 vi.mock('../../../acceptance/workday/support/decision-evidence.ts', async original => ({
 	...await original<typeof import('../../../acceptance/workday/support/decision-evidence.ts')>(), readGovernedContentFile: () => ({}),
@@ -16,13 +17,14 @@ vi.mock('../../../acceptance/workday/support/assignment-authority.ts', async ori
 	...await original<typeof import('../../../acceptance/workday/support/assignment-authority.ts')>(),
 	verifyGovernedProfile: () => undefined, verifyHandlerInspection: () => undefined,
 }));
-const { inspectLiveAssignmentProfile, verifyLiveAssignmentGraph } = await import('../../../acceptance/workday/support/monitoring/live-assignment-records.ts');
+const { inspectLiveAssignmentProfile, verifyLiveAssignmentGraph, verifyLiveProviderRuntime } = await import('../../../acceptance/workday/support/monitoring/live-assignment-records.ts');
 
 beforeEach(() => {
 	state.item = liveAssignmentRecord();
 	state.item.assignmentAttempt.requiredCapabilities = ['code-change'];
 	state.graph = liveAssignmentGraph(state.item);
 	state.run = liveRun(state.item);
+	state.publications = [liveProviderSession(state.item)];
 });
 
 it('accepts exact independent graph authority without rewriting source observations and denies every substituted issued field', () => {
@@ -58,7 +60,35 @@ it('denies a missing owning allocation receipt before allowing a newly observed 
 });
 
 it('denies absent independent provider publication rather than trusting the runtime build repeated in assignment views', () => {
+	state.publications = [];
 	expect(() => inspectLiveAssignmentProfile(state.item, state.item.teamId)).toThrow(/ACCEPTANCE_(AVAILABILITY|LIVE_RUNTIME)/u);
+});
+
+it('requires the exact independently published provider adapter build model and canonical limits while retaining unrelated histories', () => {
+	const original = structuredClone(state.publications), item = structuredClone(state.item);
+	verifyLiveProviderRuntime(item, original); expect(state.publications).toEqual(original);
+	for (const change of [
+		(value: Record<string, any>) => { value.providerId = 'foreign-provider'; },
+		(value: Record<string, any>) => { value.teamId = 'foreign-team'; },
+		(value: Record<string, any>) => { value.status = 'expired'; },
+		(value: Record<string, any>) => { value.sequence = 0; },
+		(value: Record<string, any>) => { value.openedAt = 'invalid'; },
+		(value: Record<string, any>) => { value.openedAt = new Date(Date.parse(item.assignmentAttempt.createdAt) + 1).toISOString(); },
+		(value: Record<string, any>) => { value.refreshedAt = 'invalid'; },
+		(value: Record<string, any>) => { value.snapshot = {}; },
+		(value: Record<string, any>) => { value.snapshot.adapters = []; },
+		(value: Record<string, any>) => { value.snapshot.adapters.push(structuredClone(value.snapshot.adapters[0])); },
+		(value: Record<string, any>) => { value.snapshot.adapters[0].id = 'foreign-adapter'; },
+		(value: Record<string, any>) => { value.snapshot.adapters[0].runtimeBuild = `sha256:${'f'.repeat(64)}`; },
+		(value: Record<string, any>) => { value.snapshot.adapters[0].nativeLimits = {}; },
+		(value: Record<string, any>) => { value.snapshot.adapters[0].nativeLimits.modelConfigurationId = 'foreign-model'; },
+	]) {
+		const values = structuredClone(original); change(values[0]!); const before = structuredClone(values);
+		expect(() => verifyLiveProviderRuntime(item, values)).toThrow('ACCEPTANCE_LIVE_RUNTIME'); expect(values).toEqual(before);
+	}
+	const unrelated = { ...original[0], id: 'unrelated-session', providerId: 'unrelated-provider' };
+	const values = [unrelated, ...structuredClone(original)], before = structuredClone(values);
+	verifyLiveProviderRuntime(item, values); expect(values).toEqual(before); expect(state.item).toEqual(item);
 });
 
 it('denies foreign source estimate node and graph revisions rather than accepting internally matching public assignment views', () => {

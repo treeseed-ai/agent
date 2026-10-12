@@ -52,3 +52,12 @@ export function liveAssignmentGraph(item: Row): Row {
 		fromNodeId: conditionId, toNodeId: attempt.nodeId, provenance: 'governance', sourceRef: attempt.sourceRef,
 		graphRevisionCreated: attempt.graphRevision }] };
 }
+
+export function liveProviderSession(item: Row): Row {
+	const attempt = assignmentAttemptSchema.parse(item.assignmentAttempt);
+	return { id: 'controlled-runtime-session', membershipId: item.membershipId, teamId: attempt.teamId,
+		providerId: attempt.provider.providerId, openedAt: attempt.createdAt, refreshedAt: attempt.createdAt, status: 'open', sequence: 1,
+		snapshot: { adapters: [{ id: attempt.provider.executionProviderId, runtimeBuild: attempt.provider.runtimeBuild,
+			nativeLimits: { modelConfigurationId: attempt.provider.modelConfigurationId, dailyActiveSecondsLimit: 28800,
+				capabilityLimits: { [attempt.provider.executionCapabilityId]: { dailyActiveSecondsLimit: 7200 } } } }] } };
+}

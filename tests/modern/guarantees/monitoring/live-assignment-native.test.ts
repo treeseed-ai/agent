@@ -8,9 +8,9 @@ import { assignmentResultSchema } from '@treeseed/sdk/agent-capacity';
 import { portableKernel } from '../../kernel/architecture/portable/portable-kernel-fixture.ts';
 import { row, type Row } from '../../../acceptance/acceptance-cli.ts';
 import { verifyGovernedProfile, verifyHandlerInspection } from '../../../acceptance/workday/support/assignment-authority.ts';
-import { observeLiveAssignmentRecords, verifyLiveAssignmentGraph } from '../../../acceptance/workday/support/monitoring/live-assignment-records.ts';
+import { observeLiveAssignmentRecords, verifyLiveAssignmentGraph, verifyLiveProviderRuntime } from '../../../acceptance/workday/support/monitoring/live-assignment-records.ts';
 import { verifyAllocation } from '../../../acceptance/workday/support/monitoring/assignment-allocation.ts';
-import { liveAssignmentGraph, liveAssignmentRecord, liveRun } from './live-assignment-fixture.ts';
+import { liveAssignmentGraph, liveAssignmentRecord, liveProviderSession, liveRun } from './live-assignment-fixture.ts';
 
 it('native configured Kernel Git result and public SDK assignment reads reach the live observer with denied original observations retained before exact retry', async () => {
 	const f = await portableKernel(); let server: ReturnType<typeof createServer> | undefined;
@@ -29,6 +29,17 @@ it('native configured Kernel Git result and public SDK assignment reads reach th
 		let mode = 'exact'; const requests: string[] = [], failed: Array<{ mode: string; record: Row }> = [];
 		server = createServer((request, response) => {
 			requests.push(`${request.method} ${request.url}`); response.setHeader('content-type', 'application/json');
+			if (request.url?.split('?')[0] === `/v1/teams/${f.attempt.teamId}/capacity/availability-sessions`) {
+				const publication = liveProviderSession(item), adapter = publication.snapshot.adapters[0];
+				if (mode === 'publication-denied') { response.writeHead(403).end(JSON.stringify({ status: 403, title: 'Runtime inventory denied', code: 'runtime_denied' })); return; }
+				if (mode === 'publication-interrupted') { request.socket.destroy(); return; }
+				if (mode === 'publication-provider') publication.providerId = 'foreign-provider';
+				if (mode === 'publication-adapter') adapter.id = 'foreign-adapter';
+				if (mode === 'publication-build') adapter.runtimeBuild = `sha256:${'f'.repeat(64)}`;
+				if (mode === 'publication-model') adapter.nativeLimits.modelConfigurationId = 'foreign-model';
+				if (mode !== 'exact') failed.push({ mode, record: structuredClone(publication) });
+				response.end(JSON.stringify({ data: { items: [publication], page: { limit: 100, hasMore: false, nextCursor: null } } })); return;
+			}
 			if (request.url === `/v1/teams/${f.attempt.teamId}/execution-graph`) {
 				const graph = liveAssignmentGraph(item), node = graph.nodes[0];
 				if (mode === 'graph-interrupted') { request.socket.destroy(); return; }
@@ -155,6 +166,18 @@ it('native configured Kernel Git result and public SDK assignment reads reach th
 		}
 		const allFailures = structuredClone(failed); mode = 'exact'; const retried = new Map<string, Row>(); await execute(retried);
 		expect(retried.size).toBe(1); expect(failed).toEqual(allFailures); expect(failed.slice(0, graphFailures.length)).toEqual(graphFailures);
+		const inspectRuntime = async () => {
+			const returned = row((await client.invoke(controlPlaneOperation('capacity.status'), {
+				path: { teamId: f.attempt.teamId }, query: { limit: 100 }, body: undefined,
+			})).data);
+			verifyLiveProviderRuntime(item, returned.items); return returned;
+		};
+		expect((await Promise.all([inspectRuntime(), inspectRuntime()])).every(value => value.items.length === 1)).toBe(true);
+		for (const denied of ['publication-provider', 'publication-adapter', 'publication-build', 'publication-model', 'publication-denied', 'publication-interrupted']) {
+			mode = denied; await expect(inspectRuntime(), denied).rejects.toThrow(); expect({ item, run }).toEqual(before);
+		}
+		const runtimeFailures = structuredClone(failed); mode = 'exact'; await inspectRuntime();
+		expect(failed).toEqual(runtimeFailures); expect(failed.slice(0, allFailures.length)).toEqual(allFailures);
 		// Native owning Kernel/handler/Git and SDK transport; upstream record,
 		// profile bytes and handler catalog are controlled. This does not prove
 		// native API admission, TreeDX publication, model usage or physical closure.

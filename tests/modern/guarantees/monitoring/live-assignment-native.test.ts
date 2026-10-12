@@ -44,7 +44,10 @@ it('native configured Kernel Git result and public SDK assignment reads reach th
 				if (mode === 'publication-build') adapter.runtimeBuild = `sha256:${'f'.repeat(64)}`;
 				if (mode === 'publication-model') row(adapter.nativeLimits).modelConfigurationId = 'foreign-model';
 				if (mode !== 'exact') failed.push({ mode, record: structuredClone(publication) });
-				response.end(JSON.stringify({ data: { items: [publication], page: { limit: 100, hasMore: false, nextCursor: null } } })); return;
+				const later = structuredClone(publication); later.id = 'native-later-session';
+				later.openedAt = new Date(Date.parse(String(publication.openedAt)) + 1000).toISOString(); later.refreshedAt = later.openedAt;
+				row((row(later.snapshot).adapters as Row[])[0]).runtimeBuild = `sha256:${'a'.repeat(64)}`;
+				response.end(JSON.stringify({ data: { items: [later, publication], page: { limit: 100, hasMore: false, nextCursor: null } } })); return;
 			}
 			if (request.url === `/v1/teams/${f.attempt.teamId}/execution-graph`) {
 				const graph = liveAssignmentGraph(item), nodes = graph.nodes as Row[], edges = graph.edges as Row[], node = nodes[0]!;
@@ -187,7 +190,7 @@ it('native configured Kernel Git result and public SDK assignment reads reach th
 			if (!Array.isArray(returned.items)) throw new Error('Complete original native publication collection required');
 			const items = returned.items.map(row); verifyLiveProviderRuntime(item, items); return items;
 		};
-		expect((await Promise.all([inspectRuntime(), inspectRuntime()])).every(value => value.length === 1)).toBe(true);
+		expect((await Promise.all([inspectRuntime(), inspectRuntime()])).every(value => value.length === 2)).toBe(true);
 		for (const denied of ['publication-provider', 'publication-adapter', 'publication-build', 'publication-model', 'publication-denied', 'publication-interrupted']) {
 			mode = denied; await expect(inspectRuntime(), denied).rejects.toThrow(); expect({ item, run }).toEqual(before);
 		}

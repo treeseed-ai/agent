@@ -183,6 +183,9 @@ workflow:
   - id: live-runtime-missing-unit
     action: { verifier: agent.golden.live-runtime-missing-unit }
     expect: { status: passed }
+  - id: live-runtime-reopen-unit
+    action: { verifier: agent.golden.live-runtime-reopen-unit }
+    expect: { status: passed }
   - id: live-runtime-publication-unit
     action: { verifier: agent.golden.live-runtime-publication-unit }
     expect: { status: passed }

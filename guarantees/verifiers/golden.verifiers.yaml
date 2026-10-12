@@ -266,6 +266,11 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/guarantees/monitoring/live-graph-inspection.test.ts
     testName: "denies absent independent provider publication rather than trusting the runtime build repeated in assignment views"
+  agent.golden.live-runtime-reopen-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/monitoring/live-graph-inspection.test.ts
+    testName: "retains original provider publication when a later session opens after the observed assignment was issued"
   agent.golden.live-runtime-publication-unit:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

@@ -15,7 +15,8 @@ const issuedAuthority = ({ status: _status, startedAt: _started, finishedAt: _fi
 /** Compare the issued build/model with original owning provider publication. */
 export function verifyLiveProviderRuntime(item: Row, publications: readonly Row[]): void {
 	const code = 'ACCEPTANCE_LIVE_RUNTIME', attempt = assignmentAttemptSchema.parse(item.assignmentAttempt);
-	const owners = publications.filter(value => value.providerId === attempt.provider.providerId && value.teamId === attempt.teamId)
+	const owners = publications.filter(value => value.providerId === attempt.provider.providerId && value.teamId === attempt.teamId
+			&& Date.parse(String(value.openedAt)) <= Date.parse(attempt.createdAt))
 		.sort((a, b) => Date.parse(String(b.openedAt)) - Date.parse(String(a.openedAt)) || String(b.id).localeCompare(String(a.id)));
 	const latest = owners[0];
 	assert.ok(latest && ['open', 'closed'].includes(String(latest.status)) && Number.isSafeInteger(latest.sequence) && Number(latest.sequence) >= 1,

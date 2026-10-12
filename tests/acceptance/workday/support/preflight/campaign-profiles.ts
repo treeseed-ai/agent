@@ -38,6 +38,7 @@ export function verifyCampaignProjectProfiles(binding: Row, ref: string, paths: 
 	const agents = inventory.agents.map(row);
 	assert.equal(new Set(agents.map(agent => agent.agentSlug)).size, agents.length, fail);
 	const ids = new Set<string>();
+	const classes = new Set<string>();
 	for (const entry of entries) {
 		const matches = files.filter(file => Array.isArray(file.files) && row(file.files[0]).path === entry.path);
 		assert.equal(matches.length, 1, fail);
@@ -54,7 +55,14 @@ export function verifyCampaignProjectProfiles(binding: Row, ref: string, paths: 
 		assert.deepEqual(definition, file.frontmatter, fail);
 		const validated = validateAgentDefinitionModel(definition); assert.equal(validated.ok, true, fail);
 		assert.deepEqual(validated.data, definition, fail);
-		for (const configured of Object.values(row(row(definition).activityProfiles))) {
+		const agentClass = row(definition).agentClass, profiles = row(row(definition).activityProfiles);
+		assert.ok(typeof agentClass === 'string' && !classes.has(agentClass), fail); classes.add(agentClass);
+		// Assertions for the acceptance document's common activity table; no
+		// instructions, dispatch choices or grants are supplied to the runtime.
+		const required = ['chat', 'planning', ...(agentClass === 'reporter' ? ['reporting'] : ['estimating']),
+			...(agentClass === 'reviewer' ? ['reviewing'] : agentClass === 'reporter' ? [] : ['acting'])];
+		assert.ok(required.every(activity => Object.hasOwn(profiles, activity)), `${fail}: Required activity omitted`);
+		for (const configured of Object.values(profiles)) {
 			const handler = row(configured).handler; assert.ok(typeof handler === 'string', fail);
 			try { handlers.resolve(handler); } catch (cause) { throw new Error(`${fail}: Compiled handler unavailable`, { cause }); }
 		}
@@ -64,6 +72,8 @@ export function verifyCampaignProjectProfiles(binding: Row, ref: string, paths: 
 		assert.equal(resolved[0]!.definitionRevision, ref, fail);
 		assert.deepEqual(resolved[0]!.definition, definition, fail);
 	}
+	assert.deepEqual([...classes].sort(), ['architect', 'researcher', 'tester', 'engineer',
+		'technical-writer', 'releaser', 'reviewer', 'reporter'].sort(), fail);
 }
 
 export function readCampaignProfiles(freeze: ReturnType<typeof readPreRunCampaignFreeze>, bindings: Map<string, Row>, team: string) {

@@ -18,7 +18,7 @@ describe('pinned handler and activity authority', () => {
 			agent.ReviewerHandler, agent.WriterHandler, agent.ReporterHandler];
 		expect(handlers).toHaveLength(constructors.length);
 		for (const Constructor of constructors) {
-			const matching = handlers.filter(handler => handler instanceof Constructor);
+			const matching = handlers.filter(handler => Object.getPrototypeOf(handler) === Constructor.prototype);
 			expect(matching).toHaveLength(1); expect(registry.resolve(matching[0]!.id)).toBe(matching[0]);
 		}
 		expect(() => new agent.HandlerRegistry([...handlers, handlers[0]!])).toThrow('duplicate_handler');

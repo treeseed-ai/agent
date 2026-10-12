@@ -64,8 +64,11 @@ describe('capacity-provider guarantee execution bindings', () => {
 		const manifest = parse(readFileSync(resolve(root, 'guarantees/agent/golden/sdk-complete.guarantee.yaml'), 'utf8'));
 		const scene = parse(readFileSync(resolve(root, manifest.scene.manifest), 'utf8'));
 		const required = ['api.golden.execution-normal-sdk-clean-schema-live-1', 'agent.golden.architecture-record-custody-live-1'];
-		expect(manifest.acceptanceCriteria.filter((value: { criterion: string }) => value.criterion === '6c6e922d724fe9bf966e3f11456af2f176224cdff4792c9b7a73ce8047659e55'))
-			.toEqual([{ criterion: '6c6e922d724fe9bf966e3f11456af2f176224cdff4792c9b7a73ce8047659e55', verifierRefs: required }]);
+		for (const criterion of ['6c6e922d724fe9bf966e3f11456af2f176224cdff4792c9b7a73ce8047659e55',
+			'888a86bc48b9b3e86f8db79534cc7f49b849247800d4601b3dc9228f086bc071']) {
+			expect(manifest.acceptanceCriteria.filter((value: { criterion: string }) => value.criterion === criterion))
+				.toEqual([{ criterion, verifierRefs: required }]);
+		}
 		for (const ref of required) expect(scene.workflow.filter((step: { action: { verifier: string } }) => step.action.verifier === ref)).toHaveLength(1);
 	});
 	it('binds retired authority denial to selected normal SDK native schema and unchanged canonical record readback without requiring controlled failures', () => {

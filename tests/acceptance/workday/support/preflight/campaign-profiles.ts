@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { validateAgentDefinitionModel } from '@treeseed/sdk/agent-capacity';
+import { createDefaultHandlers, HandlerRegistry } from '@treeseed/agent';
 import { parse } from 'yaml';
 import { read, row, type Row } from '../../../acceptance-cli.ts';
 import type { readPreRunCampaignFreeze } from '../../../freeze-integrity.ts';
@@ -30,6 +31,7 @@ function profileEntries(binding: Row, ref: string, paths: Row): Row[] {
 
 export function verifyCampaignProjectProfiles(binding: Row, ref: string, paths: Row, files: Row[], inventory: Row): void {
 	const entries = profileEntries(binding, ref, paths);
+	const handlers = new HandlerRegistry(createDefaultHandlers());
 	assert.equal(files.length, entries.length, fail);
 	assert.equal(inventory.projectId, binding.projectId, fail);
 	assert.ok(Array.isArray(inventory.agents) && inventory.agents.length === entries.length, fail);
@@ -52,6 +54,10 @@ export function verifyCampaignProjectProfiles(binding: Row, ref: string, paths: 
 		assert.deepEqual(definition, file.frontmatter, fail);
 		const validated = validateAgentDefinitionModel(definition); assert.equal(validated.ok, true, fail);
 		assert.deepEqual(validated.data, definition, fail);
+		for (const configured of Object.values(row(row(definition).activityProfiles))) {
+			const handler = row(configured).handler; assert.ok(typeof handler === 'string', fail);
+			try { handlers.resolve(handler); } catch (cause) { throw new Error(`${fail}: Compiled handler unavailable`, { cause }); }
+		}
 		const id = row(definition).id; assert.ok(typeof id === 'string' && !ids.has(id), fail); ids.add(id);
 		const slug = (entry.path as string).slice('agents/'.length, -'.mdx'.length);
 		const resolved = agents.filter(agent => agent.agentSlug === slug); assert.equal(resolved.length, 1, fail);

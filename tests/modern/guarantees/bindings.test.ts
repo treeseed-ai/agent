@@ -32,6 +32,11 @@ for (const file of readdirSync(resolve(root, 'guarantees/verifiers')).filter(pat
 }
 
 describe('capacity-provider guarantee execution bindings', () => {
+	it('binds portfolio normalization to the original prospective campaign freeze without adding a future passing receipt', () => {
+		const manifest = parse(readFileSync(resolve(root, 'guarantees/agent/golden/sdk-complete.guarantee.yaml'), 'utf8'));
+		expect(manifest.acceptanceCriteria.filter((value: { criterion: string }) => value.criterion === '8ef82a4f4cb2b8e93d060e38cf8758944d2ba54baca44787811a1d76683f99d4'))
+			.toEqual([{ criterion: '8ef82a4f4cb2b8e93d060e38cf8758944d2ba54baca44787811a1d76683f99d4', verifierRefs: ['agent.golden.live.campaign-freeze'] }]);
+	});
 	it('binds default policy and immutable issued overrides to preflight campaign and original native SDK policy custody in order', () => {
 		const manifest = parse(readFileSync(resolve(root, 'guarantees/agent/golden/sdk-complete.guarantee.yaml'), 'utf8'));
 		const scene = parse(readFileSync(resolve(root, manifest.scene.manifest), 'utf8'));

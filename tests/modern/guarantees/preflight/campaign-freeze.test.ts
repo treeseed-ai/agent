@@ -5,7 +5,8 @@ import { stringify } from 'yaml';
 import { campaignOffers } from './campaign-offers-fixture.ts';
 
 const state = vi.hoisted(() => ({ bytes: '{}', reads: [] as string[], files: new Map<string, string>(),
-	commands: vi.fn(), writes: vi.fn(), execute: vi.fn(), publicRead: vi.fn() }));
+ commands: vi.fn(), writes: vi.fn(), execute: vi.fn(), publicRead: vi.fn(),
+ selection: vi.fn<(value: ReturnType<typeof import('@treeseed/sdk/agent-capacity').selectFairReadyNode>) => unknown>() }));
 vi.mock('node:fs', async importOriginal => ({
 	...await importOriginal<typeof import('node:fs')>(),
 	existsSync: (path: string) => !path.endsWith('sdk.freeze.json'),
@@ -16,6 +17,10 @@ vi.mock('node:fs', async importOriginal => ({
 vi.mock('node:child_process', () => ({ execFileSync: (...args: unknown[]) => {
 	state.commands(...args); return state.execute(...args);
 } }));
+vi.mock('@treeseed/sdk/agent-capacity', async importOriginal => {
+	const actual = await importOriginal<typeof import('@treeseed/sdk/agent-capacity')>();
+	return { ...actual, selectFairReadyNode: (...args: Parameters<typeof actual.selectFairReadyNode>) => state.selection(actual.selectFairReadyNode(...args)) };
+});
 vi.mock('../../../acceptance/acceptance-cli.ts', async importOriginal => ({
 	...await importOriginal<typeof import('../../../acceptance/acceptance-cli.ts')>(), read: (...args: unknown[]) => {
 	state.commands(...args); return state.publicRead(...args);
@@ -31,6 +36,7 @@ const slugs = ['sdk', 'api', ...Array.from({ length: 15 }, (_, index) => `suppli
 
 beforeEach(() => {
 	state.bytes = '{}'; state.reads = []; state.files.clear(); state.commands.mockClear(); state.writes.mockReset();
+	state.selection.mockReset().mockImplementation(value => value);
 	state.execute.mockReset().mockImplementation(() => { throw new Error('Unexpected native command before complete freeze validation'); });
 	state.publicRead.mockReset().mockImplementation(() => { throw new Error('Unexpected public command before complete freeze validation'); });
 	vi.stubEnv('TREESEED_ACCEPTANCE_PLATFORM_PATH', '/supplied-platform');
@@ -210,6 +216,27 @@ it('retains all twenty five prospective schema valid inputs with pending genuine
 	expect(Object.keys(supplied.allocationInputsByRun)).toHaveLength(25);
 	expect(supplied).toEqual(before);
 	expect(state.commands).not.toHaveBeenCalled(); expect(state.writes).not.toHaveBeenCalled();
+});
+
+it('denies allocator normalization drift while retaining the frozen SDK and future portfolio inputs', () => {
+	const supplied = campaignInputs(slugs), held = structuredClone(supplied);
+	type Choice = ReturnType<typeof import('@treeseed/sdk/agent-capacity').selectFairReadyNode>;
+	const changes: Array<(value: Choice) => unknown> = [() => null, () => ({}),
+		value => ({ ...value, id: 'foreign-node' }), value => ({ ...value, explanation: {} }),
+		...['projectTargetPercent', 'classTargetPercent'].flatMap(field => [undefined, null, '100', NaN, Infinity, -1, 0, 1]
+			.map(invalid => (value: Choice) => ({ ...value, explanation: { ...value?.explanation, [field]: invalid } }))),
+		value => value?.explanation.readyNodeCount === 136 ? { ...value, explanation: { ...value.explanation, projectTargetPercent: 1 } } : value,
+	];
+	for (const change of changes) {
+		state.selection.mockImplementation(change);
+		expect(() => verifyPreRunCampaignInputs(supplied, slugs)).toThrow(/ACCEPTANCE_CAMPAIGN_NORMALIZATION/u);
+		expect(supplied).toEqual(held); expect(state.commands).not.toHaveBeenCalled(); expect(state.writes).not.toHaveBeenCalled();
+	}
+	state.selection.mockReset().mockImplementation(value => value); verifyPreRunCampaignInputs(supplied, slugs);
+	expect(state.selection).toHaveBeenCalledTimes(25);
+	const portfolio = state.selection.mock.calls.map(([value]) => value).find(value => value?.explanation.readyNodeCount === 136);
+	expect(portfolio?.explanation).toMatchObject({ projectTargetPercent: 100 / 17, classTargetPercent: 12.5 });
+	expect(supplied).toEqual(held);
 });
 
 it('denies every omitted run changed policy selection derived field and fault allocation without repairing supplied campaign inputs', () => {

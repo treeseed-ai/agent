@@ -108,6 +108,14 @@ it('retains exact simulation workspace authority and rejects malformed or substi
 	verifyLiveSimulationWorkspace(state.item, state.run); expect(state).toEqual(original);
 });
 
+it('retains original provider publication when a later session opens after the observed assignment was issued', () => {
+	const original = liveProviderSession(state.item), later = structuredClone(original);
+	later.id = 'later-runtime-session'; later.openedAt = new Date(Date.parse(String(original.openedAt)) + 1000).toISOString(); later.refreshedAt = later.openedAt;
+	const observations = [later, original], before = structuredClone(observations);
+	expect(() => verifyLiveProviderRuntime(state.item, observations)).not.toThrow();
+	expect(observations).toEqual(before);
+});
+
 it('denies a missing owning allocation receipt before allowing a newly observed assignment to continue', () => {
 	delete state.item.explanation.metadata;
 	expect(() => inspectLiveAssignmentProfile(state.item, state.item.teamId, [state.item])).toThrow('ACCEPTANCE_ALLOCATION_RECEIPT');

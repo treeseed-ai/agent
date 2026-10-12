@@ -78,6 +78,11 @@ it('retains a legitimate earlier completed attempt when independently verified r
 	expect(() => verifyLiveAssignmentGraph(f.assignments[0]!, f.graph, f.assignments, decisions)).not.toThrow();
 });
 
+it('denies a Git workspace base absent from original exact context before accepting matching assignment views', () => {
+	state.item.assignmentAttempt.workspace.baseCommit = 'f'.repeat(40);
+	expect(() => inspectLiveAssignmentProfile(state.item, state.item.teamId, [state.item])).toThrow('ACCEPTANCE_INTEGRATION_BASE');
+});
+
 it('denies a missing owning allocation receipt before allowing a newly observed assignment to continue', () => {
 	delete state.item.explanation.metadata;
 	expect(() => inspectLiveAssignmentProfile(state.item, state.item.teamId, [state.item])).toThrow('ACCEPTANCE_ALLOCATION_RECEIPT');

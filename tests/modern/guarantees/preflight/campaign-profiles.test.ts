@@ -4,6 +4,24 @@ import { stringify } from 'yaml';
 import { verifyCampaignProjectProfiles } from '../../../acceptance/workday/support/preflight/campaign-profiles.ts';
 import { campaignProfiles } from './campaign-freeze-fixture.ts';
 
+it('denies consistently rehashed declared handlers absent from the original compiled production registry without dispatch or input mutation', () => {
+	const ref = 'a'.repeat(40), binding = { projectId: 'project-configured', repositoryId: 'library-configured' };
+	const original = campaignProfiles('configured', ref, binding.repositoryId);
+	for (const index of [0, 7]) {
+		const denied = structuredClone(original), definition = denied.inventory.agents[index]!.definition;
+		definition.activityProfiles.chat.handler = 'unregistered-handler';
+		const file = denied.files[index]!.files[0]!; file.frontmatter = definition;
+		file.content = `---\n${stringify(definition)}---\n\nControlled unchanged unknown-handler observation.\n`;
+		const bytes = Buffer.from(file.content), entry = denied.paths.entries[index]!;
+		entry.size = bytes.length; entry.objectId = createHash('sha1').update(`blob ${bytes.length}\0`).update(bytes).digest('hex');
+		const held = structuredClone(denied);
+		expect.soft(() => verifyCampaignProjectProfiles(binding, ref, denied.paths, denied.files, denied.inventory)).toThrow();
+		expect(denied).toEqual(held);
+	}
+	const held = structuredClone(original);
+	verifyCampaignProjectProfiles(binding, ref, original.paths, original.files, original.inventory); expect(original).toEqual(held);
+});
+
 it('retains exact configured profile bytes and denies incomplete stale foreign or contradictory profile inventories', () => {
 	const ref = 'a'.repeat(40), binding = { projectId: 'project-renamed', repositoryId: 'library-renamed' };
 	const original = campaignProfiles('renamed', ref, binding.repositoryId, Array.from({ length: 8 }, (_, i) => `configured-${i}`));

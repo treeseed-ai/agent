@@ -4,11 +4,12 @@ import { stringify } from 'yaml';
 import { expect, it } from 'vitest';
 import { ControlPlaneClient, defaultLocalControlPlaneServer } from '@treeseed/sdk/control-plane-client';
 import { controlPlaneOperation } from '@treeseed/sdk/operator-contracts';
+import { simulationSourceBranch } from '@treeseed/sdk/capacity-provider/sandbox';
 import { assignmentResultSchema } from '@treeseed/sdk/agent-capacity';
 import { portableKernel } from '../../kernel/architecture/portable/portable-kernel-fixture.ts';
 import { row, type Row } from '../../../acceptance/acceptance-cli.ts';
 import { verifyGitInputContext, verifyGovernedProfile, verifyHandlerInspection } from '../../../acceptance/workday/support/assignment-authority.ts';
-import { observeLiveAssignmentRecords, verifyLiveAssignmentGraph, verifyLiveProviderRuntime } from '../../../acceptance/workday/support/monitoring/live-assignment-records.ts';
+import { observeLiveAssignmentRecords, verifyLiveAssignmentGraph, verifyLiveProviderRuntime, verifyLiveSimulationWorkspace } from '../../../acceptance/workday/support/monitoring/live-assignment-records.ts';
 import { verifyAllocation } from '../../../acceptance/workday/support/monitoring/assignment-allocation.ts';
 import { verifyPredecessorCustody } from '../../../acceptance/workday/support/evidence-pages.ts';
 import { liveAssignmentGraph, liveAssignmentRecord, liveProviderSession, liveRun } from './live-assignment-fixture.ts';
@@ -19,6 +20,9 @@ it('native configured Kernel Git result and public SDK assignment reads reach th
 		const content = stringify(f.profile), path = 'agents/configured-native.yaml';
 		Object.assign(f.attempt.effectiveProfile.profileRef, { repository: 'controlled-library', commit: f.base, path,
 			digest: `sha256:${createHash('sha256').update(content).digest('hex')}` });
+		if (f.attempt.workspace.mode !== 'git') throw new Error('Original native Git fixture required');
+		const campaign = 'native-renamed-campaign', branch = simulationSourceBranch(campaign, f.attempt.workdayId, f.attempt.id);
+		f.git('branch', '-m', branch); Object.assign(f.attempt.workspace, { branch, writablePaths: ['.'] });
 		const candidate = await f.candidate(), produced = await f.run();
 		expect(produced.status, `${produced.code}: ${produced.summary}`).toBe('completed');
 		const result = assignmentResultSchema.parse(produced.outputs?.assignmentResult);
@@ -26,7 +30,8 @@ it('native configured Kernel Git result and public SDK assignment reads reach th
 		expect(f.git('rev-parse', 'HEAD')).toBe(candidate); expect(f.git('merge-base', f.base, candidate)).toBe(f.base);
 		const item: Row = { ...liveAssignmentRecord(f.attempt), status: 'completed', leaseState: 'released', completedAt: result.completedAt, assignmentResult: result };
 		Object.assign(row(item.assignmentAttempt), { status: 'completed', finishedAt: result.completedAt });
-		const run = liveRun(item), retained = new Map<string, Row>(), before = structuredClone({ item, run });
+		const run = liveRun(item); Object.assign(run.parameters, { acceptanceCampaignId: campaign });
+		const retained = new Map<string, Row>(), before = structuredClone({ item, run });
 		let mode = 'exact'; const requests: string[] = [], failed: Array<{ mode: string; record: Row }> = [];
 		server = createServer((request, response) => {
 			requests.push(`${request.method} ${request.url}`); response.setHeader('content-type', 'application/json');
@@ -75,6 +80,8 @@ it('native configured Kernel Git result and public SDK assignment reads reach th
 			if (mode === 'denied') { response.writeHead(403).end(JSON.stringify({ status: 403, title: 'Controlled native denial', code: 'controlled_assignment_denied' })); return; }
 			if (mode === 'interrupted') { request.socket.destroy(); return; }
 			const returned = structuredClone(item);
+			if (mode === 'workspace-branch') row(row(returned.assignmentAttempt).workspace).branch = 'simulation/foreign';
+			if (mode === 'workspace-paths') row(row(returned.assignmentAttempt).workspace).writablePaths = ['docs'];
 			if (mode === 'workspace-base') row(row(returned.assignmentAttempt).workspace).baseCommit = 'f'.repeat(40);
 			if (mode === 'allocation-missing') delete row(returned.explanation).metadata;
 			if (mode === 'allocation-reservation') row(returned.capacityEnvelope).reservedSeconds = 0;
@@ -111,7 +118,7 @@ it('native configured Kernel Git result and public SDK assignment reads reach th
 				path: { teamId: f.attempt.teamId, assignmentId: f.attempt.id }, query: {}, body: undefined,
 			})).data);
 			observeLiveAssignmentRecords(row(observed.run), [returned], observations, value => {
-				inspections++; verifyGitInputContext(value, []); verifyAllocation(value, run); verifyGovernedProfile(value, { path, content });
+				inspections++; verifyGitInputContext(value, []); verifyLiveSimulationWorkspace(value, run); verifyAllocation(value, run); verifyGovernedProfile(value, { path, content });
 				const handler = { id: f.attempt.effectiveProfile.handler, origin: f.attempt.effectiveProfile.handlerOrigin };
 				verifyHandlerInspection(value, { projectId: f.attempt.projectId, handlers: [handler] }, { projectId: f.attempt.projectId, handler });
 			});
@@ -189,6 +196,10 @@ it('native configured Kernel Git result and public SDK assignment reads reach th
 		mode = 'workspace-base'; const untouched = new Map<string, Row>();
 		await expect(execute(untouched)).rejects.toThrow('ACCEPTANCE_INTEGRATION_BASE');
 		expect(untouched.size).toBe(0); expect({ item, run }).toEqual(before); expect(retained).toEqual(held);
+		for (const denied of ['workspace-branch', 'workspace-paths']) {
+			mode = denied; const empty = new Map<string, Row>(); await expect(execute(empty)).rejects.toThrow('ACCEPTANCE_LIVE_WORKSPACE');
+			expect(empty.size).toBe(0); expect({ item, run }).toEqual(before);
+		}
 		const workspaceFailures = structuredClone(failed); mode = 'exact'; await execute(untouched);
 		expect(untouched.size).toBe(1); expect(failed).toEqual(workspaceFailures);
 		expect(failed.slice(0, runtimeFailures.length)).toEqual(runtimeFailures);

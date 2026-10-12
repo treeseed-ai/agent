@@ -1,11 +1,14 @@
 import { allocateWorkdayCapacity, calculateAssignmentAllocation, appliedWorkdaySchema, assignmentAttemptSchema, compileWorkday, DEFAULT_WORKDAY_POLICY, type AssignmentAttempt } from '@treeseed/sdk/agent-capacity';
+import { simulationSourceBranch } from '@treeseed/sdk/capacity-provider/sandbox';
 import { request } from '../../kernel/provider-kernel-fixture.ts';
 import type { Row } from '../../../acceptance/acceptance-cli.ts';
 
 // Controlled public assertion input only; never a real admission or usage receipt.
-export function liveAssignmentRecord(attempt: AssignmentAttempt = assignmentAttemptSchema.parse({
+export function liveAssignmentRecord(input?: AssignmentAttempt): Row {
+	const attempt = input ?? assignmentAttemptSchema.parse({
 	...assignmentAttemptSchema.parse(request().assignment.assignmentAttempt), deadline: '2026-09-13T13:00:00.000Z',
-})): Row {
+});
+	if (!input && attempt.workspace.mode === 'git') Object.assign(attempt.workspace, { branch: simulationSourceBranch('local', attempt.workdayId, attempt.id), writablePaths: ['.'] });
 	const mode = ['acting', 'reviewing', 'reporting'].includes(attempt.effectiveProfile.activity) ? 'acting' : 'planning';
 	const envelope = { teamId: attempt.teamId, projectId: attempt.projectId, workDayId: attempt.workdayId, mode,
 		projectAgentClassId: 'opaque-configured-row', capacityProviderId: attempt.provider.providerId,

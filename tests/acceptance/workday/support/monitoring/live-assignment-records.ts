@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { isDeepStrictEqual } from 'node:util';
 import { assignmentAttemptSchema, assignmentResultSchema, capabilityAccountingLimitsSchema, executionNodeSchema, validateProviderAssignment } from '@treeseed/sdk/agent-capacity';
+import { simulationSourceBranch } from '@treeseed/sdk/capacity-provider/sandbox';
 import { read, row, type Row } from '../../../acceptance-cli.ts';
 import { verifyAssignmentAuthority, verifyGitInputContext, verifyGovernedProfile, verifyHandlerInspection } from '../assignment-authority.ts';
 import { readGovernedContentFile, readWorkReviewDecision, verifyWorkReview } from '../decision-evidence.ts';
@@ -85,6 +86,17 @@ export function verifyLiveAssignmentGraph(item: Row, graph: Row, items: readonly
 	assert.equal(attempt.nodeRevision + revisions.size, node.nodeRevision, `${code}: Every advanced revision needs independent original authority`);
 }
 
+/** Existing simulation branch derivation and owning API whole-checkout scope. */
+export function verifyLiveSimulationWorkspace(item: Row, run: Row): void {
+	const attempt = assignmentAttemptSchema.parse(item.assignmentAttempt), code = 'ACCEPTANCE_LIVE_WORKSPACE';
+	assert.equal(run.executionMode, 'simulation', `${code}: Original simulation authority required`);
+	if (attempt.workspace.mode !== 'git') return;
+	assert.ok(typeof run.id === 'string' && run.id === attempt.workdayId, `${code}: Exact owning workday required`);
+	assert.equal(attempt.workspace.branch, simulationSourceBranch(String(row(run.parameters).acceptanceCampaignId || 'local'), run.id, attempt.id),
+		`${code}: Exact campaign/workday/assignment branch required`);
+	assert.deepEqual(attempt.workspace.writablePaths, ['.'], `${code}: Exact original simulation checkout write scope required`);
+}
+
 export function inspectLiveAssignmentProfile(item: Row, team: string, items: readonly Row[]): void {
 	const attempt = assignmentAttemptSchema.parse(item.assignmentAttempt), profile = attempt.effectiveProfile;
 	const shown = read(['assignments', 'show', attempt.id], team);
@@ -108,6 +120,7 @@ export function inspectLiveAssignmentProfile(item: Row, team: string, items: rea
 	assert.equal(run.id, attempt.workdayId, 'ACCEPTANCE_LIVE_ASSIGNMENT: Foreign owning workday');
 	assert.equal(run.teamId, attempt.teamId, 'ACCEPTANCE_LIVE_ASSIGNMENT: Foreign owning team');
 	verifyAppliedWorkdayCustody(run);
+	verifyLiveSimulationWorkspace(item, run);
 	verifyAllocation(shown, run);
 	verifyLiveProviderRuntime(item, availabilityHistory(team));
 	verifyGovernedProfile(item, readGovernedContentFile(profile.profileRef, attempt.projectId, team, new Map(), 'ACCEPTANCE_LIVE_PROFILE'), graph);

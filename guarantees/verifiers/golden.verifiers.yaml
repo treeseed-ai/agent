@@ -231,6 +231,21 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/guarantees/monitoring/live-graph-inspection.test.ts
     testName: "denies missing independent graph before accepting a newly issued assignment"
+  agent.golden.live-workspace-scope-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/monitoring/live-graph-inspection.test.ts
+    testName: "retains exact simulation workspace authority and rejects malformed or substituted branch scope without rewriting observations"
+  agent.golden.live-workspace-branch-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/monitoring/live-graph-inspection.test.ts
+    testName: "denies a foreign simulation branch before accepting matching assignment views"
+  agent.golden.live-workspace-paths-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/monitoring/live-graph-inspection.test.ts
+    testName: "denies writable paths outside the original simulation workspace contract"
   agent.golden.live-workspace-base-unit:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

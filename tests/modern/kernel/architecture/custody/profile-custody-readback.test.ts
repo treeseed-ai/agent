@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { stringify } from 'yaml';
 import { describe, expect, it, vi } from 'vitest';
+import { simulationSourceBranch } from '@treeseed/sdk/capacity-provider/sandbox';
 import { assignmentAttemptSchema } from '@treeseed/sdk/agent-capacity';
 import { state } from '../golden-readback-fixture.ts';
 import { request } from '../../provider-kernel-fixture.ts';
@@ -50,6 +51,8 @@ describe('independent governed profile assertion contract', () => {
 	});
 	it('live profile inspection reads the independent canonical assignment exact governed bytes and public handler boundary before accepting a new observation', () => {
 		const f = input(), item = liveAssignmentRecord(f.item.assignmentAttempt), attempt = f.item.assignmentAttempt, profile = attempt.effectiveProfile;
+		const liveAttempt = assignmentAttemptSchema.parse(item.assignmentAttempt); item.assignmentAttempt = liveAttempt;
+		Object.assign(liveAttempt.workspace, { branch: simulationSourceBranch('local', attempt.workdayId, attempt.id), writablePaths: ['.'] });
 		const handler = { id: profile.handler, origin: profile.handlerOrigin };
 		state.replies.set('assignments show', item);
 		state.replies.set('execution graph', liveAssignmentGraph(item));

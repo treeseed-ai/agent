@@ -18,7 +18,7 @@ vi.mock('../../../acceptance/workday/support/assignment-authority.ts', async ori
 	...await original<typeof import('../../../acceptance/workday/support/assignment-authority.ts')>(),
 	verifyGovernedProfile: () => undefined, verifyHandlerInspection: () => undefined,
 }));
-const { inspectLiveAssignmentProfile, verifyLiveAssignmentGraph, verifyLiveProviderRuntime } = await import('../../../acceptance/workday/support/monitoring/live-assignment-records.ts');
+const { inspectLiveAssignmentProfile, verifyLiveAssignmentGraph, verifyLiveProviderRuntime, verifyLiveSimulationWorkspace } = await import('../../../acceptance/workday/support/monitoring/live-assignment-records.ts');
 
 beforeEach(() => {
 	state.item = liveAssignmentRecord();
@@ -91,6 +91,21 @@ it('denies a foreign simulation branch before accepting matching assignment view
 it('denies writable paths outside the original simulation workspace contract', () => {
 	state.item.assignmentAttempt.workspace.writablePaths = ['docs'];
 	expect(() => inspectLiveAssignmentProfile(state.item, state.item.teamId, [state.item])).toThrow('ACCEPTANCE_LIVE_WORKSPACE');
+});
+
+it('retains exact simulation workspace authority and rejects malformed or substituted branch scope without rewriting observations', () => {
+	const original = structuredClone(state);
+	verifyLiveSimulationWorkspace(state.item, state.run); expect(state).toEqual(original);
+	for (const field of ['branch', 'writablePaths']) for (const value of [undefined, null, '', [], ['docs'], ['.', '.'], 'simulation/foreign']) {
+		state.item = structuredClone(original.item); state.item.assignmentAttempt.workspace[field] = value;
+		const denied = structuredClone(state.item);
+		expect(() => verifyLiveSimulationWorkspace(state.item, state.run)).toThrow(); expect(state.item).toEqual(denied);
+	}
+	state.item = structuredClone(original.item);
+	for (const value of [undefined, '', 'foreign-workday']) {
+		const run = { ...state.run, id: value }; expect(() => verifyLiveSimulationWorkspace(state.item, run)).toThrow('ACCEPTANCE_LIVE_WORKSPACE');
+	}
+	verifyLiveSimulationWorkspace(state.item, state.run); expect(state).toEqual(original);
 });
 
 it('denies a missing owning allocation receipt before allowing a newly observed assignment to continue', () => {

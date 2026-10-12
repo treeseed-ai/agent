@@ -4,7 +4,7 @@ import { read, row, type Row } from '../../../acceptance-cli.ts';
 import { verifyAssignmentAuthority, verifyGovernedProfile, verifyHandlerInspection } from '../assignment-authority.ts';
 import { readGovernedContentFile } from '../decision-evidence.ts';
 import { verifyAppliedWorkdayCustody, verifyDerivedWorkdayModes } from '../campaign-observation.ts';
-import { verifyGraphProvenance } from '../evidence-pages.ts';
+import { verifyGraphProvenance, verifyPredecessorCustody } from '../evidence-pages.ts';
 import { verifyAllocation } from './assignment-allocation.ts';
 import { availabilityHistory } from './provider-history.ts';
 
@@ -16,7 +16,7 @@ export function verifyLiveProviderRuntime(item: Row, publications: readonly Row[
 	const owners = publications.filter(value => value.providerId === attempt.provider.providerId && value.teamId === attempt.teamId)
 		.sort((a, b) => Date.parse(String(b.openedAt)) - Date.parse(String(a.openedAt)) || String(b.id).localeCompare(String(a.id)));
 	const latest = owners[0];
-	assert.ok(latest && ['open', 'closed'].includes(String(latest.status)) && Number.isSafeInteger(latest.sequence) && latest.sequence >= 1,
+	assert.ok(latest && ['open', 'closed'].includes(String(latest.status)) && Number.isSafeInteger(latest.sequence) && Number(latest.sequence) >= 1,
 		`${code}: Complete independently observed provider publication required`);
 	const opened = Date.parse(String(latest.openedAt)), refreshed = Date.parse(String(latest.refreshedAt));
 	assert.ok(Number.isFinite(opened) && Number.isFinite(refreshed) && opened <= Date.parse(attempt.createdAt) && refreshed >= opened,
@@ -39,7 +39,7 @@ export function verifyLiveProviderRuntime(item: Row, publications: readonly Row[
 export function verifyLiveAssignmentGraph(item: Row, graph: Row): void {
 	const code = 'ACCEPTANCE_LIVE_GRAPH', attempt = assignmentAttemptSchema.parse(item.assignmentAttempt);
 	assert.equal(graph.teamId, attempt.teamId, `${code}: Foreign graph`);
-	assert.ok(Number.isSafeInteger(graph.revision) && graph.revision >= attempt.graphRevision,
+	assert.ok(Number.isSafeInteger(graph.revision) && Number(graph.revision) >= attempt.graphRevision,
 		`${code}: Original issued graph revision is missing or in the future`);
 	assert.ok(Array.isArray(graph.nodes), `${code}: Complete owning graph required`);
 	const matches = graph.nodes.filter((node: Row) => node?.id === attempt.nodeId);
@@ -55,12 +55,12 @@ export function verifyLiveAssignmentGraph(item: Row, graph: Row): void {
 	assert.equal(node.kind, attempt.effectiveProfile.activity === 'chat' ? 'communication' : attempt.effectiveProfile.activity,
 		`${code}: Activity differs from graph authority`);
 	assert.equal(node.workspace, attempt.workspace.mode, `${code}: Workspace differs from graph authority`);
-	assert.ok(node.graphRevisionCreated <= attempt.graphRevision && node.graphRevisionUpdated <= graph.revision,
+	assert.ok(node.graphRevisionCreated <= attempt.graphRevision && node.graphRevisionUpdated <= Number(graph.revision),
 		`${code}: Node does not belong to the original issued graph history`);
 	verifyGraphProvenance(graph);
 }
 
-export function inspectLiveAssignmentProfile(item: Row, team: string): void {
+export function inspectLiveAssignmentProfile(item: Row, team: string, items: readonly Row[]): void {
 	const attempt = assignmentAttemptSchema.parse(item.assignmentAttempt), profile = attempt.effectiveProfile;
 	const shown = read(['assignments', 'show', attempt.id], team);
 	assert.ok(validateProviderAssignment(shown).ok, 'ACCEPTANCE_LIVE_ASSIGNMENT: Independent public record is malformed');
@@ -68,6 +68,8 @@ export function inspectLiveAssignmentProfile(item: Row, team: string): void {
 		'ACCEPTANCE_LIVE_ASSIGNMENT: Independent public view changed issued authority');
 	const graph = read(['execution', 'graph', 'show'], team);
 	verifyLiveAssignmentGraph(item, graph);
+	assert.ok(Array.isArray(items) && items.some(value => value.id === attempt.id), 'ACCEPTANCE_LIVE_ASSIGNMENT: Complete original assignment inventory required');
+	verifyPredecessorCustody([...items], graph);
 	const run = row(read(['workdays', 'show', attempt.workdayId], team).run);
 	assert.equal(run.id, attempt.workdayId, 'ACCEPTANCE_LIVE_ASSIGNMENT: Foreign owning workday');
 	assert.equal(run.teamId, attempt.teamId, 'ACCEPTANCE_LIVE_ASSIGNMENT: Foreign owning team');

@@ -58,7 +58,7 @@ test('Frozen SDK campaign drives planning acting review and terminal golden gate
 	}, inspect: () => {
 		assert.ok(currentRun, 'ACCEPTANCE_LIVE_ASSIGNMENT: Original observed workday required');
 		const assignments = readCompleteEvidence(['assignments', 'list', '--workday', workdayId], team, 50, 'ACCEPTANCE_LIVE_ASSIGNMENT');
-		observeLiveAssignmentRecords(currentRun, assignments, observedAssignments, item => inspectLiveAssignmentProfile(item, team));
+		observeLiveAssignmentRecords(currentRun, assignments, observedAssignments, item => inspectLiveAssignmentProfile(item, team, assignments));
 	}, now: Date.now, wait: () => new Promise(resolve => setTimeout(resolve, 30_000)), stop,
 		collaboration: () => {
 			verifyGolden('collaboration');

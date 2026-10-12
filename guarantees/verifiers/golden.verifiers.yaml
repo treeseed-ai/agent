@@ -216,6 +216,41 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/kernel/architecture/custody/profile-custody-readback.test.ts
     testName: "live profile inspection denies an independently substituted runtime or failed public read without repairing the original attempt"
+  agent.golden.live-graph-identity-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/monitoring/live-graph-inspection.test.ts
+    testName: "accepts exact independent graph authority without rewriting source observations and denies every substituted issued field"
+  agent.golden.live-graph-missing-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/monitoring/live-graph-inspection.test.ts
+    testName: "denies missing independent graph before accepting a newly issued assignment"
+  agent.golden.live-allocation-missing-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/monitoring/live-graph-inspection.test.ts
+    testName: "denies a missing owning allocation receipt before allowing a newly observed assignment to continue"
+  agent.golden.live-predecessor-missing-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/monitoring/live-graph-inspection.test.ts
+    testName: "denies a predecessor result absent from the complete owning assignment inventory before campaign progress"
+  agent.golden.live-runtime-missing-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/monitoring/live-graph-inspection.test.ts
+    testName: "denies absent independent provider publication rather than trusting the runtime build repeated in assignment views"
+  agent.golden.live-runtime-publication-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/monitoring/live-graph-inspection.test.ts
+    testName: "requires the exact independently published provider adapter build model and canonical limits while retaining unrelated histories"
+  agent.golden.live-graph-denial-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/monitoring/live-graph-inspection.test.ts
+    testName: "denies foreign source estimate node and graph revisions rather than accepting internally matching public assignment views"
   agent.golden.live-assignment-records-native:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

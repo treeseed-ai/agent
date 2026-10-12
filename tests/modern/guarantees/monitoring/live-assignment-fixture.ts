@@ -22,7 +22,7 @@ export function liveAssignmentRecord(attempt: AssignmentAttempt = assignmentAtte
 		measurements: [], constraints: [{ id: 'shared-model', remainingSeconds: seconds }] }), opportunity } } };
 	return item;
 }
-export function liveRun(item: Row): Row {
+export function liveRun(item: Row) {
 	const attempt = assignmentAttemptSchema.parse(item.assignmentAttempt);
 	const plan = compileWorkday({ id: attempt.workdayId, teamId: attempt.teamId, executionMode: 'simulation',
 		policyId: 'default', policyRevision: 1, startsAt: attempt.createdAt, agentIds: [],

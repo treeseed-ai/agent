@@ -46,27 +46,27 @@ it('accepts exact independent graph authority without rewriting source observati
 	expect(() => verifyLiveAssignmentGraph(state.item, state.graph)).toThrow('ACCEPTANCE_LIVE_GRAPH');
 	state.graph = structuredClone(before.graph); delete state.graph.nodes[0].workdayId;
 	expect(() => verifyLiveAssignmentGraph(state.item, state.graph)).not.toThrow(); // Shared governed nodes may omit a run binding.
-	state.graph = structuredClone(before.graph); expect(() => inspectLiveAssignmentProfile(state.item, state.item.teamId)).not.toThrow();
+	state.graph = structuredClone(before.graph); expect(() => inspectLiveAssignmentProfile(state.item, state.item.teamId, [state.item])).not.toThrow();
 });
 
 it('denies missing independent graph before accepting a newly issued assignment', () => {
 	state.graph = {};
-	expect(() => inspectLiveAssignmentProfile(state.item, state.item.teamId)).toThrow('ACCEPTANCE_LIVE_GRAPH');
+	expect(() => inspectLiveAssignmentProfile(state.item, state.item.teamId, [state.item])).toThrow('ACCEPTANCE_LIVE_GRAPH');
 });
 
 it('denies a missing owning allocation receipt before allowing a newly observed assignment to continue', () => {
 	delete state.item.explanation.metadata;
-	expect(() => inspectLiveAssignmentProfile(state.item, state.item.teamId)).toThrow('ACCEPTANCE_ALLOCATION_RECEIPT');
+	expect(() => inspectLiveAssignmentProfile(state.item, state.item.teamId, [state.item])).toThrow('ACCEPTANCE_ALLOCATION_RECEIPT');
 });
 
 it('denies a predecessor result absent from the complete owning assignment inventory before campaign progress', () => {
 	state.item.assignmentAttempt.predecessorResultIds = ['missing-original-result'];
-	expect(() => inspectLiveAssignmentProfile(state.item, state.item.teamId)).toThrow('ACCEPTANCE_PREDECESSOR_MISSING');
+	expect(() => inspectLiveAssignmentProfile(state.item, state.item.teamId, [state.item])).toThrow('ACCEPTANCE_PREDECESSOR_MISSING');
 });
 
 it('denies absent independent provider publication rather than trusting the runtime build repeated in assignment views', () => {
 	state.publications = [];
-	expect(() => inspectLiveAssignmentProfile(state.item, state.item.teamId)).toThrow(/ACCEPTANCE_(AVAILABILITY|LIVE_RUNTIME)/u);
+	expect(() => inspectLiveAssignmentProfile(state.item, state.item.teamId, [state.item])).toThrow(/ACCEPTANCE_(AVAILABILITY|LIVE_RUNTIME)/u);
 });
 
 it('requires the exact independently published provider adapter build model and canonical limits while retaining unrelated histories', () => {
@@ -108,7 +108,7 @@ it('denies foreign source estimate node and graph revisions rather than acceptin
 	]) {
 		state.graph = structuredClone(original); change();
 		const before = structuredClone(state);
-		expect.soft(() => inspectLiveAssignmentProfile(state.item, state.item.teamId)).toThrow('ACCEPTANCE_LIVE_GRAPH');
+		expect.soft(() => inspectLiveAssignmentProfile(state.item, state.item.teamId, [state.item])).toThrow('ACCEPTANCE_LIVE_GRAPH');
 		expect(state).toEqual(before);
 	}
 });

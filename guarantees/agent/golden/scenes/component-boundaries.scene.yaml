@@ -153,6 +153,27 @@ workflow:
   - id: live-assignment-profile-denial-unit
     action: { verifier: agent.golden.live-assignment-profile-denial-unit }
     expect: { status: passed }
+  - id: live-graph-identity-unit
+    action: { verifier: agent.golden.live-graph-identity-unit }
+    expect: { status: passed }
+  - id: live-graph-missing-unit
+    action: { verifier: agent.golden.live-graph-missing-unit }
+    expect: { status: passed }
+  - id: live-allocation-missing-unit
+    action: { verifier: agent.golden.live-allocation-missing-unit }
+    expect: { status: passed }
+  - id: live-predecessor-missing-unit
+    action: { verifier: agent.golden.live-predecessor-missing-unit }
+    expect: { status: passed }
+  - id: live-runtime-missing-unit
+    action: { verifier: agent.golden.live-runtime-missing-unit }
+    expect: { status: passed }
+  - id: live-runtime-publication-unit
+    action: { verifier: agent.golden.live-runtime-publication-unit }
+    expect: { status: passed }
+  - id: live-graph-denial-unit
+    action: { verifier: agent.golden.live-graph-denial-unit }
+    expect: { status: passed }
   - id: live-assignment-records-native
     action: { verifier: agent.golden.live-assignment-records-native }
     expect: { status: passed }

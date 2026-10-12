@@ -10,6 +10,7 @@ import { row, type Row } from '../../../acceptance/acceptance-cli.ts';
 import { verifyGovernedProfile, verifyHandlerInspection } from '../../../acceptance/workday/support/assignment-authority.ts';
 import { observeLiveAssignmentRecords, verifyLiveAssignmentGraph, verifyLiveProviderRuntime } from '../../../acceptance/workday/support/monitoring/live-assignment-records.ts';
 import { verifyAllocation } from '../../../acceptance/workday/support/monitoring/assignment-allocation.ts';
+import { verifyPredecessorCustody } from '../../../acceptance/workday/support/evidence-pages.ts';
 import { liveAssignmentGraph, liveAssignmentRecord, liveProviderSession, liveRun } from './live-assignment-fixture.ts';
 
 it('native configured Kernel Git result and public SDK assignment reads reach the live observer with denied original observations retained before exact retry', async () => {
@@ -30,27 +31,31 @@ it('native configured Kernel Git result and public SDK assignment reads reach th
 		server = createServer((request, response) => {
 			requests.push(`${request.method} ${request.url}`); response.setHeader('content-type', 'application/json');
 			if (request.url?.split('?')[0] === `/v1/teams/${f.attempt.teamId}/capacity/availability-sessions`) {
-				const publication = liveProviderSession(item), adapter = publication.snapshot.adapters[0];
+				const publication = liveProviderSession(item), adapter = row((row(publication.snapshot).adapters as Row[])[0]);
 				if (mode === 'publication-denied') { response.writeHead(403).end(JSON.stringify({ status: 403, title: 'Runtime inventory denied', code: 'runtime_denied' })); return; }
 				if (mode === 'publication-interrupted') { request.socket.destroy(); return; }
 				if (mode === 'publication-provider') publication.providerId = 'foreign-provider';
 				if (mode === 'publication-adapter') adapter.id = 'foreign-adapter';
 				if (mode === 'publication-build') adapter.runtimeBuild = `sha256:${'f'.repeat(64)}`;
-				if (mode === 'publication-model') adapter.nativeLimits.modelConfigurationId = 'foreign-model';
+				if (mode === 'publication-model') row(adapter.nativeLimits).modelConfigurationId = 'foreign-model';
 				if (mode !== 'exact') failed.push({ mode, record: structuredClone(publication) });
 				response.end(JSON.stringify({ data: { items: [publication], page: { limit: 100, hasMore: false, nextCursor: null } } })); return;
 			}
 			if (request.url === `/v1/teams/${f.attempt.teamId}/execution-graph`) {
-				const graph = liveAssignmentGraph(item), node = graph.nodes[0];
+				const graph = liveAssignmentGraph(item), nodes = graph.nodes as Row[], edges = graph.edges as Row[], node = nodes[0]!;
 				if (mode === 'graph-interrupted') { request.socket.destroy(); return; }
 				if (mode === 'graph-denied') { response.writeHead(403).end(JSON.stringify({ status: 403, title: 'Original graph denied', code: 'graph_denied' })); return; }
 				if (mode === 'graph-malformed') { response.end('{'); return; }
 				if (mode === 'graph-team') graph.teamId = 'foreign-team';
 				if (mode === 'graph-revision') graph.revision = 0;
-				if (mode === 'graph-node') node.nodeRevision++;
-				if (mode === 'graph-source') node.sourceRef = { ...node.sourceRef, id: 'foreign-source' };
-				if (mode === 'graph-estimate') node.estimate = { ...node.estimate, maximumSeconds: node.estimate.maximumSeconds + 1 };
+				if (mode === 'graph-node') node.nodeRevision = Number(node.nodeRevision) + 1;
+				if (mode === 'graph-source') node.sourceRef = { ...row(node.sourceRef), id: 'foreign-source' };
+				if (mode === 'graph-estimate') node.estimate = { ...row(node.estimate), maximumSeconds: Number(row(node.estimate).maximumSeconds) + 1 };
 				if (mode === 'graph-workspace') node.workspace = 'read-only';
+				if (mode === 'graph-predecessor') {
+					nodes.push({ ...node, id: 'missing-public-node', status: 'completed' });
+					edges.push({ ...edges[0], id: 'missing-public-edge', fromNodeId: 'missing-public-node', provenance: 'work-item' });
+				}
 				if (mode !== 'exact') failed.push({ mode, record: structuredClone(graph) });
 				response.end(JSON.stringify({ data: graph })); return;
 			}
@@ -146,20 +151,21 @@ it('native configured Kernel Git result and public SDK assignment reads reach th
 				path: { teamId: f.attempt.teamId }, query: {}, body: undefined,
 			})).data), observations = new Map<string, Row>();
 			observeLiveAssignmentRecords(run, [item], observations, value => {
-				verifyLiveAssignmentGraph(value, graph); verifyAllocation(value, run); verifyGovernedProfile(value, { path, content }, graph);
+				verifyLiveAssignmentGraph(value, graph); verifyPredecessorCustody([value], graph);
+				verifyAllocation(value, run); verifyGovernedProfile(value, { path, content }, graph);
 				const handler = { id: f.attempt.effectiveProfile.handler, origin: f.attempt.effectiveProfile.handlerOrigin };
 				verifyHandlerInspection(value, { projectId: f.attempt.projectId, handlers: [handler] }, { projectId: f.attempt.projectId, handler });
 			});
 			return observations;
 		};
 		mode = 'exact'; expect((await Promise.all([inspectGraph(), inspectGraph()])).every(value => value.size === 1)).toBe(true);
-		for (const denied of ['graph-team', 'graph-revision', 'graph-node', 'graph-source', 'graph-estimate', 'graph-workspace',
+		for (const denied of ['graph-team', 'graph-revision', 'graph-node', 'graph-source', 'graph-estimate', 'graph-workspace', 'graph-predecessor',
 			'graph-denied', 'graph-malformed', 'graph-interrupted']) {
 			mode = denied; await expect(inspectGraph(), denied).rejects.toThrow(); expect({ item, run }).toEqual(before);
 		}
 		const graphFailures = structuredClone(failed); mode = 'exact'; expect((await inspectGraph()).size).toBe(1);
 		expect(failed).toEqual(graphFailures); expect(failed.slice(0, originalFailures.length)).toEqual(originalFailures);
-		expect(requests.filter(value => value.endsWith('/execution-graph'))).toHaveLength(12);
+		expect(requests.filter(value => value.endsWith('/execution-graph'))).toHaveLength(13);
 		for (const denied of ['allocation-missing', 'allocation-reservation', 'allocation-calibration', 'allocation-limiting', 'allocation-supply']) {
 			mode = denied; const empty = new Map<string, Row>(); await expect(execute(empty), denied).rejects.toThrow('ACCEPTANCE_ALLOCATION');
 			expect(empty.size).toBe(0); expect({ item, run }).toEqual(before);
@@ -170,9 +176,10 @@ it('native configured Kernel Git result and public SDK assignment reads reach th
 			const returned = row((await client.invoke(controlPlaneOperation('capacity.status'), {
 				path: { teamId: f.attempt.teamId }, query: { limit: 100 }, body: undefined,
 			})).data);
-			verifyLiveProviderRuntime(item, returned.items); return returned;
+			if (!Array.isArray(returned.items)) throw new Error('Complete original native publication collection required');
+			const items = returned.items.map(row); verifyLiveProviderRuntime(item, items); return items;
 		};
-		expect((await Promise.all([inspectRuntime(), inspectRuntime()])).every(value => value.items.length === 1)).toBe(true);
+		expect((await Promise.all([inspectRuntime(), inspectRuntime()])).every(value => value.length === 1)).toBe(true);
 		for (const denied of ['publication-provider', 'publication-adapter', 'publication-build', 'publication-model', 'publication-denied', 'publication-interrupted']) {
 			mode = denied; await expect(inspectRuntime(), denied).rejects.toThrow(); expect({ item, run }).toEqual(before);
 		}

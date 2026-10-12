@@ -116,6 +116,8 @@ describe('capacity-provider guarantee execution bindings', () => {
 			.toEqual([{ criterion: '6d6749cd8c2676c6c50c009b55025ec3b951589db602440f63b76ba021159f20', verifierRefs: ['agent.golden.live.graph', product] }]);
 		expect(refs.filter(value => value === 'agent.golden.live.graph')).toHaveLength(1);
 		const reviewed = 'agent.golden.architecture-living-graph-live-1';
+		expect(manifest.acceptanceCriteria.filter((value: { criterion: string }) => value.criterion === '7db60618a6757d8741156428465e37c46211c1a8a5b2125cae87550534778751'))
+			.toEqual([{ criterion: '7db60618a6757d8741156428465e37c46211c1a8a5b2125cae87550534778751', verifierRefs: [product, profile, reviewed] }]);
 		expect(manifest.acceptanceCriteria.filter((value: { criterion: string }) => value.criterion === '614467b937b7b271b37e1e7b484adba4d65cf486993d9273807130dcc351f69e'))
 			.toEqual([{ criterion: '614467b937b7b271b37e1e7b484adba4d65cf486993d9273807130dcc351f69e', verifierRefs: [product, reviewed] }]);
 		expect(manifest.acceptanceCriteria.filter((value: { criterion: string }) => value.criterion === '697358e950cb89fc5928569468cd955c25daa8fda7ff97fd1a4af35e2eb95fc6'))
@@ -197,6 +199,7 @@ describe('capacity-provider guarantee execution bindings', () => {
 			'b918b519ac545fdd61faab208687ccc64e1f3d03c9a84dfc57a5cfee6190f3f3',
 		].map(criterion => ({ criterion, verifierRefs: ['agent.golden.live.campaign-freeze'] }));
 		expect(manifest.acceptanceCriteria).toEqual([
+			{ criterion: '7db60618a6757d8741156428465e37c46211c1a8a5b2125cae87550534778751', verifierRefs: ['sdk.golden.live.product', 'agent.golden.architecture-profile-custody-live-1', 'agent.golden.architecture-living-graph-live-1'] },
 			{ criterion: '614467b937b7b271b37e1e7b484adba4d65cf486993d9273807130dcc351f69e', verifierRefs: ['sdk.golden.live.product', 'agent.golden.architecture-living-graph-live-1'] },
 			{ criterion: '8ef82a4f4cb2b8e93d060e38cf8758944d2ba54baca44787811a1d76683f99d4', verifierRefs: ['agent.golden.live.campaign-freeze'] },
 			{ criterion: '2feaea9a8a706e1279affead3af5bacc467f12b285ba2570f183361c5d8203c7', verifierRefs: ['agent.golden.live.campaign-freeze', 'agent.golden.live.campaign'] },

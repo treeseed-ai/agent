@@ -87,11 +87,14 @@ describe('capacity-provider guarantee execution bindings', () => {
 			['3bf7f808c3baf5cc63fc5e8e8c065bc2cd87dea9e2df9aae4d1924565af6acd8', 'agent.golden.live.reporter', 'Golden runtime reporter evidence satisfies its acceptance boundary'],
 		]) {
 			expect(manifest.acceptanceCriteria.filter((value: { criterion: string }) => value.criterion === criterion))
-				.toEqual([{ criterion, verifierRefs: [ref] }]);
+				.toEqual([{ criterion, verifierRefs: [ref, 'api.golden.execution-normal-sdk-clean-schema-live-1'] }]);
 			expect(registry.verifiers[ref]).toMatchObject({ kind: 'nodeTestCase', testFile: 'tests/acceptance/sdk-runtime-golden.test.ts', testName });
 			expect(refs.filter(value => value === ref)).toHaveLength(1);
 			expect(refs.indexOf(ref)).toBeGreaterThan(refs.indexOf('agent.golden.live.campaign'));
 		}
+		const nativeReporter = 'api.golden.execution-normal-sdk-clean-schema-live-1';
+		expect(refs.filter(value => value === nativeReporter)).toHaveLength(1);
+		expect(refs.indexOf(nativeReporter)).toBeGreaterThan(refs.indexOf('agent.golden.live.reporter'));
 		expect(manifest.acceptanceCriteria.filter((value: { criterion: string }) => value.criterion === '81543856c351d2d7f2599a17d9225b1d5d6785c88897775ff79ec4b2af482b65'))
 			.toEqual([{ criterion: '81543856c351d2d7f2599a17d9225b1d5d6785c88897775ff79ec4b2af482b65', verifierRefs: ['agent.golden.live.campaign-freeze'] }]);
 		const noop = 'agent.golden.architecture-living-graph-live-2';
@@ -225,7 +228,7 @@ describe('capacity-provider guarantee execution bindings', () => {
 			{ criterion: '80496650a6ed5888fbda21ddcb15047d221874adb709887306dede9e3e93ff55', verifierRefs: ['agent.golden.live.results', 'api.golden.execution-protected-observation-live-1'] },
 			{ criterion: '6d6749cd8c2676c6c50c009b55025ec3b951589db602440f63b76ba021159f20', verifierRefs: ['agent.golden.live.graph', 'sdk.golden.live.product'] },
 			{ criterion: '697358e950cb89fc5928569468cd955c25daa8fda7ff97fd1a4af35e2eb95fc6', verifierRefs: ['agent.golden.live.graph', 'agent.golden.architecture-living-graph-live-1'] },
-			{ criterion: '3bf7f808c3baf5cc63fc5e8e8c065bc2cd87dea9e2df9aae4d1924565af6acd8', verifierRefs: ['agent.golden.live.reporter'] },
+			{ criterion: '3bf7f808c3baf5cc63fc5e8e8c065bc2cd87dea9e2df9aae4d1924565af6acd8', verifierRefs: ['agent.golden.live.reporter', 'api.golden.execution-normal-sdk-clean-schema-live-1'] },
 			{ criterion: '9a9b626b666f555139baf8aabcead659ca30e7f88ad8002f73f2b35ddf542ad4', verifierRefs: ['sdk.golden.live.product'] },
 			{ criterion: '8fc0d803455b8e437a458732d5b6ba575f885eb35ba387e93e14230dd40d27b7', verifierRefs: ['sdk.golden.live.product'] },
 			{ criterion: '936013d37582fbedab56e17601be3581682b72565d8b7fdaedb75f6a3cd2e64f',

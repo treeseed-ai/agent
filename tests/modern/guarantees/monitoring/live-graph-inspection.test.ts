@@ -1,5 +1,6 @@
 import { beforeEach, expect, it, vi } from 'vitest';
 import { liveAssignmentGraph, liveAssignmentRecord, liveProviderSession, liveRun } from './live-assignment-fixture.ts';
+import { reviewedDecision, reviewedRevisionFixture } from '../../kernel/architecture/custody/graph/review-readiness-fixture.ts';
 
 // Unit-only isolation of already separately covered profile/content boundaries.
 // The real configured Kernel/public SDK integration exercises those boundaries.
@@ -52,6 +53,14 @@ it('accepts exact independent graph authority without rewriting source observati
 it('denies missing independent graph before accepting a newly issued assignment', () => {
 	state.graph = {};
 	expect(() => inspectLiveAssignmentProfile(state.item, state.item.teamId, [state.item])).toThrow('ACCEPTANCE_LIVE_GRAPH');
+});
+
+it('retains a legitimate earlier completed attempt when independently verified request-changes history advances its graph node', () => {
+	const f = reviewedRevisionFixture(), review = f.assignments[1]!, decision = reviewedDecision(f);
+	decision.disposition = 'request-changes';
+	const before = structuredClone(f), decisions = new Map([[review.id, decision]]);
+	expect(() => verifyLiveAssignmentGraph(f.assignments[0]!, f.graph, f.assignments, decisions)).not.toThrow();
+	expect(f).toEqual(before);
 });
 
 it('denies a missing owning allocation receipt before allowing a newly observed assignment to continue', () => {

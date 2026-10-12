@@ -4,7 +4,7 @@ import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { parse } from 'yaml';
+import { parse, stringify } from 'yaml';
 import { expect, it } from 'vitest';
 import { ControlPlaneClient, defaultLocalControlPlaneServer } from '@treeseed/sdk/control-plane-client';
 import { controlPlaneOperation } from '@treeseed/sdk/operator-contracts';
@@ -70,7 +70,7 @@ it('native Git and public CLI SDK reads bind all project profiles and retain den
 		}
 		git(['add', '.']); git(['commit', '-m', 'Controlled governed definitions']); ref = git(['rev-parse', 'HEAD']);
 		const originalTree = git(['ls-tree', '-r', ref]);
-		for (const project of projects) {
+		const loadSource = (project: typeof projects[number]) => {
 			const source = campaignProfiles(project.slug, ref, `library-${project.slug}`, Array.from({ length: 8 }, (_, i) => `renamed-${i}`));
 			source.paths.entries = git(['ls-tree', '-r', '-l', ref, '--', `${project.slug}/agents`]).split('\n').map(line => {
 				const match = /^(\d+) (\w+) ([a-f0-9]{40})\s+(\d+)\t(.+)$/u.exec(line)!;
@@ -80,9 +80,12 @@ it('native Git and public CLI SDK reads bind all project profiles and retain den
 				const file = observed.files[0]!;
 				file.content = execFileSync('git', ['-C', root, 'show', `${ref}:${project.slug}/${file.path}`], { encoding: 'utf8', timeout: 30_000 });
 				file.frontmatter = parse(file.content.match(/^---\n([\s\S]*?)\n---/u)![1]!);
+				const agent = source.inventory.agents.find(value => file.path === `agents/${value.agentSlug}.mdx`)!;
+				agent.definition = structuredClone(file.frontmatter);
 			}
 			sources.set(project.slug, source);
-		}
+		};
+		for (const project of projects) loadSource(project);
 		await new Promise<void>((accept, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', accept); });
 		const address = server.address(); if (!address || typeof address === 'string') throw new Error('Native profile server required');
 		const client = new ControlPlaneClient({ profile: defaultLocalControlPlaneServer({ TREESEED_API_BASE_URL: `http://127.0.0.1:${address.port}` }), accessToken: 'controlled-profile-read-token' });
@@ -117,8 +120,29 @@ it('native Git and public CLI SDK reads bind all project profiles and retain den
 		for (mode of ['denied', 'interrupted', 'truncated', 'revision', 'prompt', 'duplicate', 'missing', 'foreign', 'tail', 'bytes']) {
 			expect((await execute(projects[16]!)).failure).not.toBe('');
 		}
+		// Every returned byte and API definition now agrees with an actual
+		// malformed Git commit. Hash agreement alone must never authorize it.
+		mode = 'exact'; const validRef = ref, project = projects[16]!, original = structuredClone(sources.get(project.slug)!);
+		const semanticFailures: Array<{ ref: string; failure: string }> = [];
+		for (const defect of ['missing-planning', 'missing-reporting', 'unknown-handler', 'duplicate-class']) {
+			const malformed = structuredClone(original);
+			if (defect === 'missing-planning') Reflect.deleteProperty(malformed.inventory.agents[0]!.definition.activityProfiles, 'planning');
+			if (defect === 'missing-reporting') Reflect.deleteProperty(malformed.inventory.agents[7]!.definition.activityProfiles, 'reporting');
+			if (defect === 'unknown-handler') malformed.inventory.agents[7]!.definition.activityProfiles.chat.handler = 'configured-but-uncompiled';
+			if (defect === 'duplicate-class') malformed.inventory.agents[0]!.definition.agentClass = malformed.inventory.agents[1]!.definition.agentClass;
+			for (const agent of malformed.inventory.agents)
+				writeFileSync(join(root, project.slug, 'agents', `${agent.agentSlug}.mdx`), `---\n${stringify(agent.definition)}---\n\nControlled committed malformed authority.\n`);
+			git(['add', '.']); git(['commit', '-m', `Controlled ${defect} definition`]); ref = git(['rev-parse', 'HEAD']); loadSource(project);
+			const held = structuredClone(sources.get(project.slug)!); const observed = await execute(project);
+			expect(observed.failure).toContain('ACCEPTANCE_CAMPAIGN_PROFILES'); expect(observed.count).toBe(0);
+			expect(sources.get(project.slug)).toEqual(held); semanticFailures.push({ ref, failure: observed.failure });
+			expect(git(['status', '--porcelain'])).toBe('');
+		}
+		expect(new Set(semanticFailures.map(value => value.ref)).size).toBe(4);
+		const failed = structuredClone(semanticFailures); git(['switch', '--detach', validRef]); ref = validRef; loadSource(project);
 		const retained = structuredClone(observations); mode = 'exact';
 		expect(await Promise.all([execute(projects[0]!), execute(projects[16]!)])).toEqual([{ failure: '', count: 8 }, { failure: '', count: 8 }]);
+		expect(semanticFailures).toEqual(failed);
 		expect(observations.slice(0, retained.length)).toEqual(retained);
 		expect(git(['ls-tree', '-r', ref])).toBe(originalTree); expect(git(['status', '--porcelain'])).toBe('');
 		expect(readFileSync(runtime)).toEqual(runtimeBytes);

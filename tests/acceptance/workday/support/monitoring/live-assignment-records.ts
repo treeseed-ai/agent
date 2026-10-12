@@ -1,11 +1,37 @@
 import assert from 'node:assert/strict';
-import { assignmentAttemptSchema, validateProviderAssignment } from '@treeseed/sdk/agent-capacity';
+import { assignmentAttemptSchema, executionNodeSchema, validateProviderAssignment } from '@treeseed/sdk/agent-capacity';
 import { read, row, type Row } from '../../../acceptance-cli.ts';
 import { verifyAssignmentAuthority, verifyGovernedProfile, verifyHandlerInspection } from '../assignment-authority.ts';
 import { readGovernedContentFile } from '../decision-evidence.ts';
 import { verifyAppliedWorkdayCustody, verifyDerivedWorkdayModes } from '../campaign-observation.ts';
+import { verifyGraphProvenance } from '../evidence-pages.ts';
 
 const issuedAuthority = ({ status: _status, startedAt: _started, finishedAt: _finished, ...value }: Row) => value;
+
+/** A matching list/show pair cannot establish independent graph authority. */
+export function verifyLiveAssignmentGraph(item: Row, graph: Row): void {
+	const code = 'ACCEPTANCE_LIVE_GRAPH', attempt = assignmentAttemptSchema.parse(item.assignmentAttempt);
+	assert.equal(graph.teamId, attempt.teamId, `${code}: Foreign graph`);
+	assert.ok(Number.isSafeInteger(graph.revision) && graph.revision >= attempt.graphRevision,
+		`${code}: Original issued graph revision is missing or in the future`);
+	assert.ok(Array.isArray(graph.nodes), `${code}: Complete owning graph required`);
+	const matches = graph.nodes.filter((node: Row) => node?.id === attempt.nodeId);
+	assert.equal(matches.length, 1, `${code}: Unique independent owning node required`);
+	const parsed = executionNodeSchema.safeParse(matches[0]);
+	assert.ok(parsed.success, `${code}: Canonical independent owning node required`);
+	const node = parsed.data;
+	assert.deepEqual(node, matches[0], `${code}: Original graph node must not be normalized`);
+	for (const field of ['teamId', 'projectId', 'nodeRevision', 'agentClass', 'workItemId', 'sourceRef', 'authorityRefs',
+		'estimate', 'requiredCapabilities', 'acceptanceCriteria'] as const)
+		assert.deepEqual(node[field], attempt[field], `${code}: Issued ${field} differs from independent graph`);
+	if (node.workdayId !== undefined) assert.equal(node.workdayId, attempt.workdayId, `${code}: Foreign node workday`);
+	assert.equal(node.kind, attempt.effectiveProfile.activity === 'chat' ? 'communication' : attempt.effectiveProfile.activity,
+		`${code}: Activity differs from graph authority`);
+	assert.equal(node.workspace, attempt.workspace.mode, `${code}: Workspace differs from graph authority`);
+	assert.ok(node.graphRevisionCreated <= attempt.graphRevision && node.graphRevisionUpdated <= graph.revision,
+		`${code}: Node does not belong to the original issued graph history`);
+	verifyGraphProvenance(graph);
+}
 
 export function inspectLiveAssignmentProfile(item: Row, team: string): void {
 	const attempt = assignmentAttemptSchema.parse(item.assignmentAttempt), profile = attempt.effectiveProfile;
@@ -13,14 +39,18 @@ export function inspectLiveAssignmentProfile(item: Row, team: string): void {
 	assert.ok(validateProviderAssignment(shown).ok, 'ACCEPTANCE_LIVE_ASSIGNMENT: Independent public record is malformed');
 	assert.deepEqual(issuedAuthority(row(shown.assignmentAttempt)), issuedAuthority(attempt),
 		'ACCEPTANCE_LIVE_ASSIGNMENT: Independent public view changed issued authority');
-	verifyGovernedProfile(item, readGovernedContentFile(profile.profileRef, attempt.projectId, team, new Map(), 'ACCEPTANCE_LIVE_PROFILE'));
+	const graph = read(['execution', 'graph', 'show'], team);
+	verifyLiveAssignmentGraph(item, graph);
+	verifyGovernedProfile(item, readGovernedContentFile(profile.profileRef, attempt.projectId, team, new Map(), 'ACCEPTANCE_LIVE_PROFILE'), graph);
 	const catalog = read(['agents', 'handlers', 'list', '--project', attempt.projectId, '--server', 'local'], team, true);
 	const selected = read(['agents', 'handlers', 'show', profile.handler, '--project', attempt.projectId, '--server', 'local'], team, true);
 	verifyHandlerInspection(item, catalog, selected);
+	verifyLiveAssignmentGraph(item, read(['execution', 'graph', 'show'], team));
 }
 
 /** Observe the existing canonical records before campaign progress. This is
- * record/profile/grant custody, not proof of graph or provider completeness. */
+ * record/profile/grant custody. Public graph inspection is mandatory for each
+ * new record; provider completeness remains a separate owning observation. */
 export function observeLiveAssignmentRecords(run: Row, items: readonly Row[], retained: Map<string, Row>, inspect: (item: Row) => void): void {
 	const label = 'ACCEPTANCE_LIVE_ASSIGNMENT';
 	assert.ok(typeof run.id === 'string' && run.id && typeof run.teamId === 'string' && run.teamId, `${label}: Exact workday and team required`);

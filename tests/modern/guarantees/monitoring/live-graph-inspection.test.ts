@@ -1,5 +1,5 @@
 import { beforeEach, expect, it, vi } from 'vitest';
-import { liveAssignmentRecord } from './live-assignment-fixture.ts';
+import { liveAssignmentGraph, liveAssignmentRecord } from './live-assignment-fixture.ts';
 
 // Unit-only isolation of already separately covered profile/content boundaries.
 // The real configured Kernel/public SDK integration exercises those boundaries.
@@ -16,15 +16,34 @@ vi.mock('../../../acceptance/workday/support/assignment-authority.ts', async ori
 	...await original<typeof import('../../../acceptance/workday/support/assignment-authority.ts')>(),
 	verifyGovernedProfile: () => undefined, verifyHandlerInspection: () => undefined,
 }));
-const { inspectLiveAssignmentProfile } = await import('../../../acceptance/workday/support/monitoring/live-assignment-records.ts');
+const { inspectLiveAssignmentProfile, verifyLiveAssignmentGraph } = await import('../../../acceptance/workday/support/monitoring/live-assignment-records.ts');
 
 beforeEach(() => {
 	state.item = liveAssignmentRecord();
-	const attempt = state.item.assignmentAttempt;
-	state.graph = { teamId: attempt.teamId, revision: attempt.graphRevision, nodes: [{
-		id: attempt.nodeId, teamId: attempt.teamId, projectId: attempt.projectId, nodeRevision: attempt.nodeRevision,
-		sourceRef: structuredClone(attempt.sourceRef), estimate: structuredClone(attempt.estimate),
-	}], edges: [] };
+	state.item.assignmentAttempt.requiredCapabilities = ['code-change'];
+	state.graph = liveAssignmentGraph(state.item);
+});
+
+it('accepts exact independent graph authority without rewriting source observations and denies every substituted issued field', () => {
+	const before = structuredClone(state);
+	verifyLiveAssignmentGraph(state.item, state.graph); expect(state).toEqual(before);
+	for (const field of ['teamId', 'projectId', 'nodeRevision', 'agentClass', 'workItemId', 'sourceRef', 'authorityRefs',
+		'estimate', 'requiredCapabilities', 'acceptanceCriteria', 'workspace', 'kind', 'workdayId', 'graphRevisionCreated', 'graphRevisionUpdated']) {
+		for (const value of [undefined, null, '', 'foreign-authority', 0, [], {}]) {
+			if (value === undefined && (field === 'workdayId' || before.graph.nodes[0][field] === undefined)) continue;
+			state.graph = structuredClone(before.graph); state.graph.nodes[0][field] = value;
+			const denied = structuredClone(state);
+			expect.soft(() => verifyLiveAssignmentGraph(state.item, state.graph), `${field}/${String(value)}`).toThrow();
+			expect(state).toEqual(denied);
+		}
+	}
+	state.graph = structuredClone(before.graph); state.graph.nodes.push(structuredClone(state.graph.nodes[0]));
+	expect(() => verifyLiveAssignmentGraph(state.item, state.graph)).toThrow('ACCEPTANCE_LIVE_GRAPH');
+	state.graph = structuredClone(before.graph); state.graph.nodes[0].sourceRef.id = ' proposal-with-whitespace ';
+	expect(() => verifyLiveAssignmentGraph(state.item, state.graph)).toThrow('ACCEPTANCE_LIVE_GRAPH');
+	state.graph = structuredClone(before.graph); delete state.graph.nodes[0].workdayId;
+	expect(() => verifyLiveAssignmentGraph(state.item, state.graph)).not.toThrow(); // Shared governed nodes may omit a run binding.
+	state.graph = structuredClone(before.graph); expect(() => inspectLiveAssignmentProfile(state.item, state.item.teamId)).not.toThrow();
 });
 
 it('denies missing independent graph before accepting a newly issued assignment', () => {

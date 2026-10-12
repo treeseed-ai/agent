@@ -23,3 +23,24 @@ export function liveRun(item: Row): Row {
 	return { id: attempt.workdayId, teamId: attempt.teamId, executionMode: 'simulation', startedAt: attempt.createdAt,
 		parameters: { ...plan.policySnapshot, deadlineAt: plan.endsAt, appliedPlan: plan, scheduledProjectIds: [attempt.projectId] } };
 }
+
+// Controlled independent public graph input; this is not native SQL custody.
+export function liveAssignmentGraph(item: Row): Row {
+	const attempt = assignmentAttemptSchema.parse(item.assignmentAttempt), conditionId = `${attempt.nodeId}.authority`;
+	const common = { schemaVersion: 'treeseed.execution-node/v1', teamId: attempt.teamId, projectId: attempt.projectId,
+		sourceRef: attempt.sourceRef, ruleRevision: 1, nodeRevision: attempt.nodeRevision,
+		graphRevisionCreated: attempt.graphRevision, graphRevisionUpdated: attempt.graphRevision };
+	return { teamId: attempt.teamId, revision: attempt.graphRevision, digest: `sha256:${'e'.repeat(64)}`, nodes: [
+		{ ...common, id: attempt.nodeId, workdayId: attempt.workdayId, workItemId: attempt.workItemId,
+			kind: attempt.effectiveProfile.activity === 'chat' ? 'communication' : attempt.effectiveProfile.activity,
+			pairRole: attempt.effectiveProfile.activity === 'acting' ? 'actor' : null, maximumReviewCycles: 2,
+			status: 'assigned', authorityRefs: attempt.authorityRefs, agentClass: attempt.agentClass,
+			estimate: attempt.estimate, requiredCapabilities: attempt.requiredCapabilities,
+			requestedPermissions: attempt.effectiveProfile.permissionCeiling, workspace: attempt.workspace.mode,
+			...(attempt.acceptanceCriteria ? { acceptanceCriteria: attempt.acceptanceCriteria } : {}) },
+		{ ...common, id: conditionId, kind: 'condition', pairRole: null, status: 'completed',
+			condition: { conditionType: 'authority', subjectRef: attempt.authorityRefs[0], expectedState: 'accepted' } },
+	], edges: [{ schemaVersion: 'treeseed.execution-edge/v1', id: `${attempt.nodeId}.governance`, teamId: attempt.teamId,
+		fromNodeId: conditionId, toNodeId: attempt.nodeId, provenance: 'governance', sourceRef: attempt.sourceRef,
+		graphRevisionCreated: attempt.graphRevision }] };
+}

@@ -7,7 +7,7 @@ import { request } from '../../provider-kernel-fixture.ts';
 import { portableProfile } from '../portable/portable-kernel-fixture.ts';
 import { verifyGovernedProfile, verifyHandlerInspection } from '../../../../acceptance/workday/support/assignment-authority.ts';
 import { inspectLiveAssignmentProfile } from '../../../../acceptance/workday/support/monitoring/live-assignment-records.ts';
-import { liveAssignmentRecord } from '../../../guarantees/monitoring/live-assignment-fixture.ts';
+import { liveAssignmentGraph, liveAssignmentRecord } from '../../../guarantees/monitoring/live-assignment-fixture.ts';
 import { profileOrderFixture, profileOrderFailures, mutateProfileOrder, grantRequestCases, grantRequestFixture } from './graph/profile-order-fixture.ts';
 await import('../../../../acceptance/workday/profile-custody.test.ts');
 
@@ -52,16 +52,18 @@ describe('independent governed profile assertion contract', () => {
 		const f = input(), item = liveAssignmentRecord(f.item.assignmentAttempt), attempt = f.item.assignmentAttempt, profile = attempt.effectiveProfile;
 		const handler = { id: profile.handler, origin: profile.handlerOrigin };
 		state.replies.set('assignments show', item);
+		state.replies.set('execution graph', liveAssignmentGraph(item));
 		state.replies.set(`library read ${f.file.path}`, { result: { resolvedRef: profile.profileRef.commit, files: [f.file] } });
 		state.replies.set('agents handlers --project', { projectId: attempt.projectId, handlers: [handler] });
 		state.replies.set(`agents handlers ${profile.handler}`, { projectId: attempt.projectId, handler });
 		const before = structuredClone([...state.replies]); inspectLiveAssignmentProfile(item, attempt.teamId);
 		expect(state.calls.map(args => args.slice(0, 3))).toEqual([
-			['assignments', 'show', attempt.id], ['library', 'read', attempt.projectId],
-			['agents', 'handlers', 'list'], ['agents', 'handlers', 'show'],
+			['assignments', 'show', attempt.id], ['execution', 'graph', 'show'], ['library', 'read', attempt.projectId],
+			['agents', 'handlers', 'list'], ['agents', 'handlers', 'show'], ['execution', 'graph', 'show'],
 		]);
 		expect(state.calls[0]).toContain(attempt.teamId);
-		for (const args of state.calls.slice(1)) expect(args).not.toContain('--team');
+		for (const args of state.calls.filter(args => ['library', 'agents'].includes(args[0]!))) expect(args).not.toContain('--team');
+		for (const args of state.calls.filter(args => args[0] === 'execution')) expect(args).toContain(attempt.teamId);
 		expect([...state.replies]).toEqual(before);
 	});
 	it('live profile inspection denies an independently substituted runtime or failed public read without repairing the original attempt', () => {

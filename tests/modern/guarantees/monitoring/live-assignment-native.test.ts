@@ -8,8 +8,8 @@ import { assignmentResultSchema } from '@treeseed/sdk/agent-capacity';
 import { portableKernel } from '../../kernel/architecture/portable/portable-kernel-fixture.ts';
 import { row, type Row } from '../../../acceptance/acceptance-cli.ts';
 import { verifyGovernedProfile, verifyHandlerInspection } from '../../../acceptance/workday/support/assignment-authority.ts';
-import { observeLiveAssignmentRecords } from '../../../acceptance/workday/support/monitoring/live-assignment-records.ts';
-import { liveAssignmentRecord, liveRun } from './live-assignment-fixture.ts';
+import { observeLiveAssignmentRecords, verifyLiveAssignmentGraph } from '../../../acceptance/workday/support/monitoring/live-assignment-records.ts';
+import { liveAssignmentGraph, liveAssignmentRecord, liveRun } from './live-assignment-fixture.ts';
 
 it('native configured Kernel Git result and public SDK assignment reads reach the live observer with denied original observations retained before exact retry', async () => {
 	const f = await portableKernel(); let server: ReturnType<typeof createServer> | undefined;
@@ -28,6 +28,20 @@ it('native configured Kernel Git result and public SDK assignment reads reach th
 		let mode = 'exact'; const requests: string[] = [], failed: Array<{ mode: string; record: Row }> = [];
 		server = createServer((request, response) => {
 			requests.push(`${request.method} ${request.url}`); response.setHeader('content-type', 'application/json');
+			if (request.url === `/v1/teams/${f.attempt.teamId}/execution-graph`) {
+				const graph = liveAssignmentGraph(item), node = graph.nodes[0];
+				if (mode === 'graph-interrupted') { request.socket.destroy(); return; }
+				if (mode === 'graph-denied') { response.writeHead(403).end(JSON.stringify({ status: 403, title: 'Original graph denied', code: 'graph_denied' })); return; }
+				if (mode === 'graph-malformed') { response.end('{'); return; }
+				if (mode === 'graph-team') graph.teamId = 'foreign-team';
+				if (mode === 'graph-revision') graph.revision = 0;
+				if (mode === 'graph-node') node.nodeRevision++;
+				if (mode === 'graph-source') node.sourceRef = { ...node.sourceRef, id: 'foreign-source' };
+				if (mode === 'graph-estimate') node.estimate = { ...node.estimate, maximumSeconds: node.estimate.maximumSeconds + 1 };
+				if (mode === 'graph-workspace') node.workspace = 'read-only';
+				if (mode !== 'exact') failed.push({ mode, record: structuredClone(graph) });
+				response.end(JSON.stringify({ data: graph })); return;
+			}
 			if (request.method === 'GET' && request.url === `/v1/teams/${f.attempt.teamId}/workday-runs/${f.attempt.workdayId}`) {
 				const observed = structuredClone(run);
 				if (mode.startsWith('raw-workday-')) {
@@ -109,6 +123,25 @@ it('native configured Kernel Git result and public SDK assignment reads reach th
 		expect(requests.filter(value => value === `GET /v1/teams/${f.attempt.teamId}/workday-runs/${f.attempt.workdayId}`)).toHaveLength(27);
 		expect(requests).toHaveLength(54);
 		expect({ item, run }).toEqual(before); expect(f.requests).toHaveLength(1);
+		const inspectGraph = async () => {
+			const graph = row((await client.invoke(controlPlaneOperation('execution.graph.show'), {
+				path: { teamId: f.attempt.teamId }, query: {}, body: undefined,
+			})).data), observations = new Map<string, Row>();
+			observeLiveAssignmentRecords(run, [item], observations, value => {
+				verifyLiveAssignmentGraph(value, graph); verifyGovernedProfile(value, { path, content }, graph);
+				const handler = { id: f.attempt.effectiveProfile.handler, origin: f.attempt.effectiveProfile.handlerOrigin };
+				verifyHandlerInspection(value, { projectId: f.attempt.projectId, handlers: [handler] }, { projectId: f.attempt.projectId, handler });
+			});
+			return observations;
+		};
+		mode = 'exact'; expect((await Promise.all([inspectGraph(), inspectGraph()])).every(value => value.size === 1)).toBe(true);
+		for (const denied of ['graph-team', 'graph-revision', 'graph-node', 'graph-source', 'graph-estimate', 'graph-workspace',
+			'graph-denied', 'graph-malformed', 'graph-interrupted']) {
+			mode = denied; await expect(inspectGraph(), denied).rejects.toThrow(); expect({ item, run }).toEqual(before);
+		}
+		const graphFailures = structuredClone(failed); mode = 'exact'; expect((await inspectGraph()).size).toBe(1);
+		expect(failed).toEqual(graphFailures); expect(failed.slice(0, originalFailures.length)).toEqual(originalFailures);
+		expect(requests.filter(value => value.endsWith('/execution-graph'))).toHaveLength(12);
 		// Native owning Kernel/handler/Git and SDK transport; upstream record,
 		// profile bytes and handler catalog are controlled. This does not prove
 		// native API admission, TreeDX publication, model usage or physical closure.

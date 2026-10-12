@@ -24,6 +24,12 @@ import { isDeepStrictEqual } from 'node:util';
 const record = (value: unknown): Record<string, unknown> =>
 	value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
 
+/** The same original instances serve provider execution and read-only build inspection. */
+export function createDefaultHandlers(): Handler[] {
+	return [new WriterHandler(), new ActorHandler(), new EstimateHandler(),
+		new ReviewerHandler(), new ReleaserHandler(), new ReporterHandler()];
+}
+
 /** One reduction for canonical model results and terminal provider accounting.
  * Raw observations remain diagnostic evidence; native units are never rounded. */
 export function aggregateExecutionUsage(measurements: unknown): { elapsedSeconds: number; inputTokens?: number; outputTokens?: number; [key: string]: unknown } {
@@ -105,8 +111,7 @@ export async function executeKernelAssignment(input: {
 	};
 	let registry: HandlerRegistry;
 	try {
-		const defaultHandlers = [new WriterHandler(), new ActorHandler(), new EstimateHandler(),
-			new ReviewerHandler(), new ReleaserHandler(), new ReporterHandler()];
+		const defaultHandlers = createDefaultHandlers();
 		const defaultIds = new Set(defaultHandlers.map((handler) => handler.id));
 		const selected = attempt.data.effectiveProfile;
 		if ((selected.handlerOrigin === 'agent-package') !== defaultIds.has(selected.handler)) {

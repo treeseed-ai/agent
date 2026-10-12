@@ -213,7 +213,12 @@ describe('capacity-provider guarantee execution bindings', () => {
 			'7f4f6bb99633197d6e94efa969cf8fa2da8f65e559aeb22da5707a8fb82c4265',
 			'b918b519ac545fdd61faab208687ccc64e1f3d03c9a84dfc57a5cfee6190f3f3',
 		].map(criterion => ({ criterion, verifierRefs: ['agent.golden.live.campaign-freeze'] }));
+		const runtimeHandlers = ['agent.golden.live.campaign-freeze', 'deployment.golden.execution-selected-code-preflight-1'];
+		expect(manifest.acceptanceCriteria.filter((value: { criterion: string }) =>
+			value.criterion === 'fc80e789a38eb6ae75fada867226ac0157844505619b12c90c55cbe317c6cc9d'))
+			.toEqual([{ criterion: 'fc80e789a38eb6ae75fada867226ac0157844505619b12c90c55cbe317c6cc9d', verifierRefs: runtimeHandlers }]);
 		expect(manifest.acceptanceCriteria).toEqual([
+			{ criterion: 'fc80e789a38eb6ae75fada867226ac0157844505619b12c90c55cbe317c6cc9d', verifierRefs: runtimeHandlers },
 			{ criterion: '1b8f85527f4b286aff075cfe1892180d1407c503fcebab5193560cb915699ea3', verifierRefs: ['agent.golden.architecture-profile-custody-live-1', 'agent.golden.live.settlement', 'agent.golden.architecture-record-custody-live-1'] },
 			{ criterion: 'dfb95035968dd59b213d812c3023894e30dec856700eaeb985f0556cd53d0088', verifierRefs: ['agent.golden.architecture-profile-custody-live-1', 'agent.golden.live.graph', 'agent.golden.architecture-living-graph-live-1'] },
 			{ criterion: '7db60618a6757d8741156428465e37c46211c1a8a5b2125cae87550534778751', verifierRefs: ['sdk.golden.live.product', 'agent.golden.architecture-profile-custody-live-1', 'agent.golden.architecture-living-graph-live-1'] },
@@ -262,6 +267,12 @@ describe('capacity-provider guarantee execution bindings', () => {
 		const scene = parse(readFileSync(resolve(root, manifest.scene.manifest), 'utf8'));
 		expect(scene.scope).toBe('local-integrated-runtime');
 		const refs = scene.workflow.map((step: { action: { verifier: string } }) => step.action.verifier);
+		for (const ref of runtimeHandlers) expect(refs.filter((value: string) => value === ref)).toHaveLength(1);
+		expect(refs.indexOf(runtimeHandlers[1]!)).toBeGreaterThan(refs.indexOf(runtimeHandlers[0]!));
+		expect(refs.indexOf(runtimeHandlers[1]!)).toBeLessThan(refs.indexOf('agent.golden.live.guest-model-smoke'));
+		expect(refs.indexOf(runtimeHandlers[1]!)).toBeLessThan(refs.indexOf('agent.golden.live.campaign'));
+		expect(refs).not.toContain('deployment.golden.execution-selected-code-live-1');
+		expect(registry.verifiers[runtimeHandlers[1]!]).toBeUndefined();
 		expect(refs.filter((ref: string) => ref === 'agent.golden.live.campaign-freeze')).toHaveLength(1);
 		expect(refs.indexOf('agent.golden.live.campaign-freeze')).toBeLessThan(refs.indexOf('agent.golden.live.campaign'));
 		expect(registry.verifiers['agent.golden.live.campaign-freeze']).toMatchObject({ kind: 'nodeTestCase',

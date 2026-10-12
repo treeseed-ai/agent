@@ -536,6 +536,21 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/guarantees/preflight/campaign-profiles.test.ts
     testName: "retains exact configured profile bytes and denies incomplete stale foreign or contradictory profile inventories"
+  agent.golden.campaign-runtime-handlers-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/handler-registry.test.ts
+    testName: "exposes the original production handler instances for read-only pinned runtime inspection without dispatch or a second handler catalog"
+  agent.golden.campaign-uncompiled-handler-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/preflight/campaign-profiles.test.ts
+    testName: "denies consistently rehashed declared handlers absent from the original compiled production registry without dispatch or input mutation"
+  agent.golden.campaign-required-activities-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/preflight/campaign-profiles.test.ts
+    testName: "denies every omitted required activity and substituted class despite matching governed YAML Git bytes and public definitions"
   agent.golden.campaign-profiles-native:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

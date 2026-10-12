@@ -116,6 +116,14 @@ it('retains original provider publication when a later session opens after the o
 	expect(observations).toEqual(before);
 });
 
+it('denies a self-consistent foreign Git base and context against the original frozen source', () => {
+	const original = structuredClone(state.item.assignmentAttempt.contextRefs.find((ref: Record<string, any>) => ref.store === 'git'));
+	state.item.assignmentAttempt.workspace.baseCommit = 'f'.repeat(40);
+	for (const ref of state.item.assignmentAttempt.contextRefs) if (ref.store === 'git') ref.commit = 'f'.repeat(40);
+	expect(() => inspectLiveAssignmentProfile(state.item, state.item.teamId, [state.item], { [original.repository]: original.commit }))
+		.toThrow('ACCEPTANCE_LIVE_SOURCE_CONTEXT');
+});
+
 it('denies a missing owning allocation receipt before allowing a newly observed assignment to continue', () => {
 	delete state.item.explanation.metadata;
 	expect(() => inspectLiveAssignmentProfile(state.item, state.item.teamId, [state.item])).toThrow('ACCEPTANCE_ALLOCATION_RECEIPT');

@@ -5,6 +5,7 @@ import { parse, parseDocument, visit } from 'yaml';
 import { exactEntityReferenceSchema } from '@treeseed/sdk/agent-capacity';
 import { validatePortableContentData } from '@treeseed/sdk/content-validation';
 import { read, row, type Row } from '../../acceptance-cli.ts';
+import { verifyAssignmentAuthority } from './assignment-authority.ts';
 
 function decisionFileContent(file: Row, code: string): Row {
 	assert.ok(typeof file.content === 'string' && Buffer.byteLength(file.content) <= 1_048_576,
@@ -130,6 +131,25 @@ export function verifyApprovedWorkReview(review: Row, actor: Row, content: Row):
 	assert.ok(Array.isArray(result.references) && result.references.map(row).some(reference => subject.store === reference.kind
 		&& subject.repository === reference.repository && subject.commit === reference.commit && (!reference.path || subject.path === reference.path)),
 		'ACCEPTANCE_REVIEW_CANDIDATE: Exact consumed Actor result required');
+	verifyAssignmentAuthority(review);
+	const grant = row(attempt.grant), workspace = row(attempt.workspace), contexts = attempt.contextRefs;
+	assert.ok(row(attempt.effectiveProfile).activity === 'reviewing' && Array.isArray(grant.sourceWrite) && !grant.sourceWrite.length
+		&& Array.isArray(grant.tools) && !grant.tools.includes('source.write') && grant.tools.includes('verification') && grant.tools.includes('discussion'),
+		'ACCEPTANCE_REVIEW_GRANT: Independent review requires verification/discussion without source mutation');
+	assert.ok(Array.isArray(grant.contentWrite) && grant.contentWrite.map(row).some(reference => reference.store === 'treedx' && reference.model === 'decision'),
+		'ACCEPTANCE_REVIEW_GRANT: Exact governed Decision write authority required');
+	const exactCandidate = (reference: Row) => reference.store === subject.store && reference.repository === subject.repository
+		&& reference.commit === subject.commit && (subject.store === 'git'
+			|| reference.path === subject.path && reference.model === subject.model && reference.id === subject.id);
+	assert.ok(Array.isArray(contexts) && contexts.map(row).some(exactCandidate), 'ACCEPTANCE_REVIEW_READ: Exact candidate context required');
+	assert.ok(subject.store === 'git' ? Array.isArray(grant.sourceRead) && grant.sourceRead.includes(subject.repository)
+		: subject.store === 'treedx' && Array.isArray(grant.contentRead) && grant.contentRead.map(row).some(exactCandidate),
+		'ACCEPTANCE_REVIEW_READ: Exact candidate read authority required');
+	if (subject.store === 'treedx') assert.ok(!grant.contentWrite.map(row).some(reference => reference.repository === subject.repository
+		&& (reference.path === subject.path || reference.model === subject.model && reference.id === subject.id))
+		&& !(workspace.repository === subject.repository && Array.isArray(workspace.writablePaths) && workspace.writablePaths.some((path: string) =>
+			path === '.' || path === subject.path || String(subject.path).startsWith(`${path.replace(/\/$/u, '')}/`))),
+		'ACCEPTANCE_REVIEW_WRITE: Candidate content must remain immutable');
 	assert.ok(Array.isArray(decision.decidedByRefs) && decision.decidedByRefs.map(row).some(reference =>
 		isDeepStrictEqual(reference, row(attempt.effectiveProfile).profileRef)), 'ACCEPTANCE_REVIEW_IDENTITY: Assigned reviewing profile required');
 	assert.ok(Date.parse(String(actor.completedAt)) < Date.parse(String(review.createdAt))

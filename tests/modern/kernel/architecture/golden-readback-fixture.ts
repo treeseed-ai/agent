@@ -55,7 +55,7 @@ export function usageMeasurement(item: Row): Row {
 }
 export function assignment(id: string, activity: string, agentClass: string, workItemId = '', createdAt = '2026-09-27T00:00:01Z', completedAt = '2026-09-27T00:00:02Z'): Row {
 	// Complete grant/workspace assertion input, not a real compiled profile or admission receipt.
-	const git = activity === 'acting', tools = git ? ['source.read', 'source.write', 'verification'] : ['source.read', 'verification'];
+	const git = activity === 'acting', tools = git ? ['source.read', 'source.write', 'verification'] : ['source.read', 'verification', 'discussion'];
 	const writable = { store: 'treedx', model: 'decision', id: `decision-${id}`, repository: 'sdk-library', commit,
 		path: `decisions/${id}.mdx` };
 	return { id, workDayId: workdayId, projectId: 'sdk', decisionId: 'decision-1', status: 'completed', leaseToken: null, attemptCount: 1,

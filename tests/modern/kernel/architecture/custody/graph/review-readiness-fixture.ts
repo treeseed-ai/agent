@@ -2,7 +2,7 @@ import { assignmentAttemptSchema, assignmentResultSchema, executionEdgeSchema, e
 import { request } from '../../../provider-kernel-fixture.ts';
 
 /** Supplied graph/read-back inputs, never generated governance or model evidence. */
-export function reviewedGraphFixture() {
+export function reviewedGraphFixture(candidateStore: 'git' | 'treedx' = 'git') {
 	const base = assignmentAttemptSchema.parse(request().assignment.assignmentAttempt);
 	const at = (second: number) => `2026-09-13T12:00:0${second}.000Z`;
 	const assignments = ['actor', 'review', 'next'].map((nodeId, index) => {
@@ -40,14 +40,24 @@ export function reviewedGraphFixture() {
 	const edges = [['paired', 'actor', 'review', 'review-pair'], ['dependent', 'review', 'next', 'work-item']].map(([id, fromNodeId, toNodeId, provenance]) =>
 		executionEdgeSchema.parse({ schemaVersion: 'treeseed.execution-edge/v1', id, teamId: base.teamId, fromNodeId, toNodeId,
 			provenance, sourceRef: base.sourceRef, graphRevisionCreated: 1 }));
+	if (candidateStore === 'treedx') {
+		const reference = { store: 'treedx' as const, model: 'knowledge' as const, id: 'native-candidate', repository: 'native-source',
+			commit: 'b'.repeat(40), path: 'candidate.txt', revision: 1, digest: `sha256:${'f'.repeat(64)}` };
+		assignments[0]!.assignmentResult.references = [{ kind: 'treedx', projectId: base.projectId, repository: reference.repository, commit: reference.commit, path: reference.path }];
+		const attempt = assignments[1]!.assignmentAttempt;
+		attempt.contextRefs = [structuredClone(reference)]; attempt.grant.contentRead = [structuredClone(reference)]; attempt.grant.sourceRead = [];
+		attempt.effectiveProfile.permissionCeiling.content.read.push('knowledge');
+	}
 	return { graph: { teamId: base.teamId, revision: 1, digest: `sha256:${'d'.repeat(64)}`, nodes, edges }, assignments };
 }
 
 export function reviewedDecision(f: ReturnType<typeof reviewedGraphFixture>) {
 	const actor = f.assignments[0]!, review = f.assignments[1]!, reference = actor.assignmentResult.references[0]!;
-	if (reference.kind !== 'git') throw new Error('Original Git candidate reference required');
+	if (reference.kind !== 'git' && reference.kind !== 'treedx') throw new Error('Original candidate reference required');
 	return { schemaVersion: 'treeseed.decision/v1', id: 'native-work-review', projectId: review.projectId, decisionClass: 'work-review',
-		decisionMethod: 'authority', subjectRef: { store: 'git', model: 'source', id: 'native-candidate', repository: reference.repository, commit: reference.commit },
+		decisionMethod: 'authority', subjectRef: reference.kind === 'git'
+			? { store: 'git', model: 'source', id: 'native-candidate', repository: reference.repository, commit: reference.commit }
+			: { store: 'treedx', model: 'knowledge', id: 'native-candidate', repository: reference.repository, commit: reference.commit, path: reference.path },
 		disposition: 'approved', rationale: 'Controlled independent candidate review input, not managed model evidence.',
 		authorityRefs: [review.assignmentAttempt.sourceRef], decidedByRefs: [review.assignmentAttempt.effectiveProfile.profileRef], decidedAt: review.completedAt };
 }
@@ -107,6 +117,23 @@ export function mutateReviewGrant(f: ReturnType<typeof reviewedGraphFixture>, mo
 	if (mode === 'review-discussion') attempt.grant.tools = attempt.grant.tools.filter(value => value !== 'discussion');
 	if (mode === 'review-decision') attempt.grant.contentWrite = [];
 	if (mode === 'review-activity') attempt.effectiveProfile.activity = 'acting';
+}
+
+export const contentReviewFailures = ['content-read', 'content-context', 'content-write', 'content-workspace', 'content-ref', 'content-id', 'content-model', 'content-root-workspace'] as const;
+export function mutateContentReview(f: ReturnType<typeof reviewedGraphFixture>, mode: string): void {
+	const attempt = f.assignments[1]!.assignmentAttempt, candidate = attempt.contextRefs[0]!;
+	if (mode === 'content-read') attempt.grant.contentRead = [];
+	if (mode === 'content-context') attempt.contextRefs = [];
+	if (mode === 'content-ref') attempt.grant.contentRead[0]!.commit = 'e'.repeat(40);
+	if (mode === 'content-id') attempt.grant.contentRead[0]!.id = 'foreign-candidate';
+	if (mode === 'content-model') attempt.grant.contentRead[0]!.model = 'note';
+	if (mode === 'content-write' || mode === 'content-workspace' || mode === 'content-root-workspace') {
+		attempt.workspace = { mode: 'treedx', repository: candidate.repository!, baseCommit: candidate.commit!, workspaceId: 'review-content',
+			writablePaths: ['decisions/review.mdx', candidate.path!] };
+		attempt.grant.contentWrite = attempt.grant.contentWrite.map(reference => ({ ...reference, repository: candidate.repository, commit: candidate.commit }));
+		if (mode === 'content-root-workspace' && attempt.workspace.mode === 'treedx') attempt.workspace.writablePaths = ['decisions/review.mdx', '.'];
+		if (mode === 'content-write') { attempt.grant.contentWrite.push(structuredClone(candidate)); attempt.effectiveProfile.permissionCeiling.content.write.push('knowledge'); }
+	}
 }
 
 /** Preserve the first request-changes attempt while a later distinct pair is approved. */

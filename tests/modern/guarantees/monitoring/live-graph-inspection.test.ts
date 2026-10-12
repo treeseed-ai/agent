@@ -57,6 +57,10 @@ it('denies a missing owning allocation receipt before allowing a newly observed 
 	expect(() => inspectLiveAssignmentProfile(state.item, state.item.teamId)).toThrow('ACCEPTANCE_ALLOCATION_RECEIPT');
 });
 
+it('denies absent independent provider publication rather than trusting the runtime build repeated in assignment views', () => {
+	expect(() => inspectLiveAssignmentProfile(state.item, state.item.teamId)).toThrow(/ACCEPTANCE_(AVAILABILITY|LIVE_RUNTIME)/u);
+});
+
 it('denies foreign source estimate node and graph revisions rather than accepting internally matching public assignment views', () => {
 	const original = structuredClone(state.graph);
 	for (const change of [

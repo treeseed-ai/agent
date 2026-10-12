@@ -29,15 +29,18 @@ it('native committed review sources and public SDK graph assignments deny missin
 				const input = row(JSON.parse(bytes)); assert.ok(Array.isArray(input.paths));
 				const candidate = input.paths[0] === 'candidate.txt';
 				assert.deepEqual(input.paths, [candidate ? 'candidate.txt' : 'decisions/review.mdx']);
-				assert.equal(input.ref, candidate ? candidateRef : sources.get(mode) ?? sources.get('exact'));
+				assert.equal(input.ref, candidate ? candidateRef : mode.startsWith('revision-requested')
+					? input.ref === sources.get('disposition') ? sources.get('disposition') : sources.get('revision') : sources.get(mode) ?? sources.get('exact'));
 				const content = execFileSync('git', ['show', `${input.ref}:${input.paths[0]}`], { cwd: root, encoding: 'utf8' });
 				response.end(JSON.stringify({ data: { resolvedRef: input.ref, repoId: candidate ? 'native-source' : 'native-library', files: [{ path: input.paths[0], content,
 					...(candidate ? {} : { frontmatter: parse(content.match(/^---\n([\s\S]*?)\n---/u)![1]!) }) }] } })); return;
 			}
-			const prefix = mode === 'revision' ? 'revision-' : mode.startsWith('content') ? 'content-' : '';
+			const prefix = mode.startsWith('revision') ? 'revision-' : mode.startsWith('content') ? 'content-' : '';
 			const graph = JSON.parse(git('show', `${observationRef}:${prefix}graph.json`)) as typeof f.graph;
 			const assignments = JSON.parse(git('show', `${observationRef}:${prefix}assignments.json`)) as typeof f.assignments;
 			const observed = { graph, assignments }; mutateReadiness(observed, mode); mutateReviewGrant(observed, mode); mutateContentReview(observed, mode);
+			if (mode === 'revision-requested-write') mutateReviewGrant(observed, 'review-source-write');
+			if (mode === 'revision-requested-context') mutateReviewGrant(observed, 'review-candidate-context');
 			if (sources.has(mode) && mode !== 'revision') {
 				const reference = observed.assignments[1]!.assignmentResult.references[0]!; assert.ok(reference.kind === 'treedx'); reference.commit = sources.get(mode)!;
 			}
@@ -117,11 +120,12 @@ it('native committed review sources and public SDK graph assignments deny missin
 		await Promise.all([observe(), observe()]);
 		mode = 'revision'; await Promise.all([observe(), observe()]);
 		mode = 'content'; await Promise.all([observe(), observe()]);
-		for (const fault of [...readinessFailures, ...reviewFailures, ...reviewGrantFailures, ...contentReviewFailures, 'denied', 'unavailable', 'truncated', 'interrupted']) {
+		for (const fault of [...readinessFailures, ...reviewFailures, ...reviewGrantFailures, ...contentReviewFailures,
+			'revision-requested-write', 'revision-requested-context', 'denied', 'unavailable', 'truncated', 'interrupted']) {
 			mode = fault; try { await observe(); failures.push({ mode, failure: 'unexpected pass' }); }
 			catch (error) { failures.push({ mode, failure: String(error) }); }
 		}
-		expect(failures).toHaveLength(51); expect(failures.every(value => value.failure !== 'unexpected pass'), JSON.stringify(failures)).toBe(true);
+		expect(failures).toHaveLength(53); expect(failures.every(value => value.failure !== 'unexpected pass'), JSON.stringify(failures)).toBe(true);
 		const retained = structuredClone(failures); mode = 'exact'; await Promise.all([observe(), observe()]);
 		expect(failures).toEqual(retained); expect({ f, revised, contentGraph }).toEqual(held); expect(git('ls-tree', '-r', 'HEAD')).toBe(tree); expect(git('status', '--porcelain')).toBe('');
 		expect(requests.length).toBeGreaterThan(29);

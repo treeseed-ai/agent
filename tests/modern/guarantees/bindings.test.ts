@@ -41,6 +41,12 @@ describe('capacity-provider guarantee execution bindings', () => {
 			value.criterion === '6a572f1a5833a039bdc575588d8e6e272a0e71a29a5faaeeeb7b5c85d6544ee6')).toEqual([
 			{ criterion: '6a572f1a5833a039bdc575588d8e6e272a0e71a29a5faaeeeb7b5c85d6544ee6', verifierRefs: refs },
 		]);
+		const workflow = parse(readFileSync(resolve(root, '.github/workflows/verify.yml'), 'utf8'));
+		const native = workflow.jobs['installed-owner-custody'];
+		expect(native).toBeDefined(); expect(native.needs).toBe('verify');
+		expect(native.environment).toBeUndefined();
+		expect(native.steps.some((step: { run?: string }) => step.run ===
+			'node --import tsx ./scripts/support/verify-installed-owners.ts')).toBe(true);
 	});
 	it('binds final integration to native approved source trees canonical reviews and protected public command observations', () => {
 		const manifest = parse(readFileSync(resolve(root, 'guarantees/agent/golden/sdk-complete.guarantee.yaml'), 'utf8'));

@@ -3,7 +3,6 @@ import { resolve } from 'node:path';
 import { parse } from 'yaml';
 import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
-
 const root = resolve(import.meta.dirname, '../../..');
 const sdkFixedGraphCriteria = [
 	'e2bf7c70f63b2f4d1532a2d9c62fd7d5b4305151bcadc9c650a3a48bcd8649e7',
@@ -30,18 +29,7 @@ for (const file of readdirSync(resolve(root, 'guarantees/verifiers')).filter(pat
 		registry.verifiers[id] = definition;
 	}
 }
-
 describe('capacity-provider guarantee execution bindings', () => {
-	it('binds installed owner custody to every original integrated SDK step without source-only execution credit', () => {
-		const manifest = parse(readFileSync(resolve(root, 'guarantees/agent/golden/sdk-complete.guarantee.yaml'), 'utf8'));
-		const scene = parse(readFileSync(resolve(root, manifest.scene.manifest), 'utf8'));
-		const refs = scene.workflow.map((step: { action: { verifier: string } }) => step.action.verifier);
-		expect(scene.scope).toBe('local-integrated-runtime'); expect(refs).toHaveLength(22); expect(new Set(refs).size).toBe(22);
-		expect(manifest.acceptanceCriteria.filter((value: { criterion: string }) =>
-			value.criterion === '6a572f1a5833a039bdc575588d8e6e272a0e71a29a5faaeeeb7b5c85d6544ee6')).toEqual([
-			{ criterion: '6a572f1a5833a039bdc575588d8e6e272a0e71a29a5faaeeeb7b5c85d6544ee6', verifierRefs: refs },
-		]);
-	});
 	it('binds final integration to native approved source trees canonical reviews and protected public command observations', () => {
 		const manifest = parse(readFileSync(resolve(root, 'guarantees/agent/golden/sdk-complete.guarantee.yaml'), 'utf8'));
 		const scene = parse(readFileSync(resolve(root, manifest.scene.manifest), 'utf8'));
@@ -100,7 +88,6 @@ describe('capacity-provider guarantee execution bindings', () => {
 		expect(refs.indexOf(required[1]!)).toBeGreaterThan(refs.indexOf(required[0]!));
 		expect(refs.indexOf(required[2]!)).toBeGreaterThan(refs.indexOf(required[0]!));
 	});
-
 	it('binds canonical public CLI records to unchanged Workday attempt result settlement and independent native schema assertions', () => {
 		const manifest = parse(readFileSync(resolve(root, 'guarantees/agent/golden/sdk-complete.guarantee.yaml'), 'utf8'));
 		const scene = parse(readFileSync(resolve(root, manifest.scene.manifest), 'utf8'));

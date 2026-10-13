@@ -7,9 +7,21 @@ const later = (): Row => state.replies.get('assignments list')!.items.find((item
 const published = (): Row => state.replies.get(`library read notes/${later().id}.mdx`)!.result;
 // UNIT tests of the actual managed acceptance assertions, not native/live planning proof.
 describe('managed planning cycle and published contribution custody', () => {
+
 	it('accepts complete dependency-ordered cycles and exact published contributions without input mutation', () => {
 		const before = structuredClone([...state.replies]); expect(() => gate('collaboration')).not.toThrow();
 		expect([...state.replies]).toEqual(before);
+  const item = state.replies.get('assignments list')!.items.find((value: Row) => value.id === 'chat-engineer');
+  const original = structuredClone(item), denied: boolean[] = [];
+  expect(() => gate('collaboration')).not.toThrow();
+  for (const lane of [undefined, null, '', 'work', 'workday', 'communication ', {}, 7]) {
+   item.lanePurpose = lane; const held = structuredClone([...state.replies]); let failure = '';
+   try { gate('collaboration'); } catch (error) { failure = String(error); }
+   denied.push(failure.includes('ACCEPTANCE_CHAT_LANE'));
+   expect([...state.replies]).toEqual(held);
+  }
+  Object.assign(item, original); expect(() => gate('collaboration')).not.toThrow();
+  expect(item).toEqual(original); expect(denied).toEqual(Array.from({ length: 8 }, () => true));
 		// Additional supplied UNIT cycles exercise the same managed assertion;
 		// these replies are not native publication or live model evidence.
 		const items: Row[] = state.replies.get('assignments list')!.items;
@@ -52,6 +64,7 @@ describe('managed planning cycle and published contribution custody', () => {
 			const held = structuredClone([...state.replies]); gate('collaboration'); expect([...state.replies]).toEqual(held);
 			expect(state.assignmentPages).toEqual([]); state.assignmentPages = undefined;
 		}
+
 	});
 	it('denies hidden unfinished reordered renumbered and unrepresented planning rounds without changing supplied history', () => {
 		const original = structuredClone(rounds()), items: Row[] = state.replies.get('assignments list')!.items;

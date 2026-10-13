@@ -13,6 +13,12 @@ const timestamp = (value: unknown): number => { const time = Date.parse(text(val
 const activity = (item: Row): string => text(row(row(item.assignmentAttempt).effectiveProfile).activity);
 const sourceContext = (attempt: Row): Row[] => rows(attempt.contextRefs).filter(value => value.store === 'git' || value.model === 'proposal');
 
+/** Chat custody belongs to communication supply, independently of role counts. */
+export function verifyChatCommunicationLanes(assignments: Row[]): void {
+ for (const item of assignments.filter(value => activity(value) === 'chat'))
+  assert.equal(item.lanePurpose, 'communication', 'ACCEPTANCE_CHAT_LANE: Every chat reply must retain communication-lane custody');
+}
+
 /** Actual managed readback assertions. Structural citation proof is not an
  * independent judgement that every recommendation is materially correct. */
 export function verifyPlanningEvidence(rounds: Row[], assignments: Row[], selectedClasses: string[], run: Row, team: string): void {

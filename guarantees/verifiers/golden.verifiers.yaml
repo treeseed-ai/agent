@@ -341,6 +341,11 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/guarantees/bindings.test.ts
     testName: "binds terminal-status insufficiency to every original normal SDK evidence step without a terminal-only shortcut"
+  agent.golden.simulation-git-workspace-binding-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/bindings.test.ts
+    testName: "binds exact simulation Git workspace custody to live approved bases and independently resolved published branches"
   agent.golden.live-context-missing-unit:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

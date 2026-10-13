@@ -32,6 +32,16 @@ for (const file of readdirSync(resolve(root, 'guarantees/verifiers')).filter(pat
 }
 
 describe('capacity-provider guarantee execution bindings', () => {
+	it('binds exact simulation Git workspace custody to live approved bases and independently resolved published branches', () => {
+		const manifest = parse(readFileSync(resolve(root, 'guarantees/agent/golden/sdk-complete.guarantee.yaml'), 'utf8'));
+		const scene = parse(readFileSync(resolve(root, manifest.scene.manifest), 'utf8'));
+		const refs = ['agent.golden.live.campaign', 'agent.golden.architecture-profile-custody-live-1', 'sdk.golden.live.product'];
+		expect(manifest.acceptanceCriteria.filter((value: { criterion: string }) =>
+			value.criterion === '2bcb03ca47bbe9ffe324405ca36a2464dbe0d613a7777b6973d0b10bd6ea50dd')).toEqual([
+			{ criterion: '2bcb03ca47bbe9ffe324405ca36a2464dbe0d613a7777b6973d0b10bd6ea50dd', verifierRefs: refs },
+		]);
+		for (const ref of refs) expect(scene.workflow.filter((step: { action: { verifier: string } }) => step.action.verifier === ref)).toHaveLength(1);
+	});
 	it('binds terminal-status insufficiency to every original normal SDK evidence step without a terminal-only shortcut', () => {
 		const manifest = parse(readFileSync(resolve(root, 'guarantees/agent/golden/sdk-complete.guarantee.yaml'), 'utf8'));
 		const scene = parse(readFileSync(resolve(root, manifest.scene.manifest), 'utf8'));
@@ -228,6 +238,7 @@ describe('capacity-provider guarantee execution bindings', () => {
 			value.criterion === 'fc80e789a38eb6ae75fada867226ac0157844505619b12c90c55cbe317c6cc9d'))
 			.toEqual([{ criterion: 'fc80e789a38eb6ae75fada867226ac0157844505619b12c90c55cbe317c6cc9d', verifierRefs: runtimeHandlers }]);
 		expect(manifest.acceptanceCriteria).toEqual([
+			{ criterion: '2bcb03ca47bbe9ffe324405ca36a2464dbe0d613a7777b6973d0b10bd6ea50dd', verifierRefs: ['agent.golden.live.campaign', 'agent.golden.architecture-profile-custody-live-1', 'sdk.golden.live.product'] },
 			{ criterion: 'a571727bb7e1d74fcf9fda7ba50ecd003db8732cd1be6183c2f80ffa85d43691', verifierRefs: ["agent.golden.live.campaign-freeze","deployment.golden.execution-selected-code-preflight-1","cli.golden.execution-diagnostics-read-native","agent.golden.live.guest-model-smoke","agent.golden.live.campaign","agent.golden.live.graph","agent.golden.architecture-profile-custody-live-1","agent.golden.architecture-profile-custody-live-2","agent.golden.architecture-context-custody-live-1","agent.golden.architecture-book-knowledge-live-1","agent.golden.architecture-graph-history-live-1","agent.golden.architecture-living-graph-live-1","agent.golden.architecture-living-graph-live-2","sdk.golden.live.product","agent.golden.live.results","agent.golden.execution-clock-observation-live-1","api.golden.execution-protected-observation-live-1","agent.golden.live.reporter","agent.golden.live.settlement","agent.golden.architecture-record-custody-live-1","api.golden.execution-normal-sdk-clean-schema-live-1","agent.golden.execution-normal-sdk-physical-absence-live-1"] },
 			{ criterion: '4d3a65d9ab4becd82cc9336051f6e069a26bfcd662eb52fe3f7a32f67c8530bf', verifierRefs: ['agent.golden.live.campaign', 'agent.golden.architecture-profile-custody-live-1', 'api.golden.execution-normal-sdk-clean-schema-live-1', 'agent.golden.architecture-record-custody-live-1'] },
 			{ criterion: '9778c4caf01add1b3815fa1cd3fe27ef11073cc98dbdc4a5deeb54e2a441f1dc', verifierRefs: ['sdk.golden.live.product'] },

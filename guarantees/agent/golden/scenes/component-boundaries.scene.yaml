@@ -30,6 +30,9 @@ workflow:
   - id: terminal-evidence-binding-unit
     action: { verifier: agent.golden.terminal-evidence-binding-unit }
     expect: { status: passed }
+  - id: simulation-git-workspace-binding-unit
+    action: { verifier: agent.golden.simulation-git-workspace-binding-unit }
+    expect: { status: passed }
   - id: live-context-missing-unit
     action: { verifier: agent.golden.live-context-missing-unit }
     expect: { status: passed }

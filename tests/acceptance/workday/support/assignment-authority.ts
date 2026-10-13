@@ -450,3 +450,14 @@ export function verifyGitInputContext(item: Row, primary: readonly ReturnType<ty
 	for (const ref of primary) if (ref.kind === 'git' && ref.repository === repository)
 		assert.ok(attempt.contextRefs.some(value => value.store === 'git' && value.repository === ref.repository && value.commit === ref.commit), 'ACCEPTANCE_INTEGRATION_CONTEXT: Every separate native Git input must remain exact');
 }
+
+/** Products resolve as ordinary immutable TreeDX files through the public reader. */
+export function verifyTreeDxProductRead(reference: Row, returned: Row): void {
+	const code = 'ACCEPTANCE_RESULT_PRODUCT', parsed = assignmentReferenceSchema.safeParse(reference);
+	assert.ok(parsed.success && parsed.data.kind === 'treedx', `${code}: Ordinary TreeDX commit reference required`);
+	assert.deepEqual(parsed.data, reference, `${code}: Original canonical product reference required`);
+	assert.ok(returned.ok === true && returned.repoId === parsed.data.repository && returned.resolvedRef === parsed.data.commit
+		&& Array.isArray(returned.files) && returned.files.length === 1, `${code}: Complete original immutable public read required`);
+	const file = row(returned.files[0]); assert.equal(file.path, parsed.data.path, code);
+	assert.ok(typeof file.content === 'string' && file.content.trim(), `${code}: Actual committed product bytes required`);
+}

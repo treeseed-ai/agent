@@ -8,7 +8,7 @@ import { DEFAULT_CAPACITY_PAGE_LIMIT } from '@treeseed/sdk/capacity-pagination';
 import { validatePortableContentData } from '@treeseed/sdk/content-validation';
 import { acceptanceWorkdayId, read, row, type Row } from './acceptance-cli.ts';
 import { readApprovedWorkReview, readDecisionContent, readGovernedContentFile, verifyDecisionContent, verifyReviewFindingContent, verifyReviewCandidateAuthority } from './workday/support/decision-evidence.ts';
-import { verifyAssignmentAuthority, verifyAssignmentWorkspaceInventory, verifyTeardownAuthority, verifyTreeDxWorkspaceClosure, verifyMeasuredVerification, verifyNativeCounterAgreement, verifyTerminalUsageClock } from './workday/support/assignment-authority.ts';
+import { verifyAssignmentAuthority, verifyAssignmentWorkspaceInventory, verifyTeardownAuthority, verifyTreeDxWorkspaceClosure, verifyMeasuredVerification, verifyNativeCounterAgreement, verifyTerminalUsageClock, verifyTreeDxProductRead } from './workday/support/assignment-authority.ts';
 import { verifyPlanningEvidence, verifyChatCommunicationLanes } from './workday/support/planning-evidence.ts';
 import { readCompleteEvidence } from './workday/support/evidence-pages.ts';
 import { verifyAllocation } from './workday/support/monitoring/assignment-allocation.ts';
@@ -305,6 +305,16 @@ export function verifyGolden(gate: Gate): void {
 			&& reference.repository === workspace.repository
 			&& (reference.branch === undefined || reference.branch === workspace.branch)),
 			'ACCEPTANCE_RESULT_WORKSPACE: Git completion requires an exact candidate in the sole immutable repository and any presented branch must match');
+		if (workspace.mode === 'treedx' && activity(item) !== 'chat') {
+			assert.ok(references.some(reference => reference.kind === 'treedx' && reference.projectId === item.projectId
+				&& reference.repository === workspace.repository && rows(row(attempt.grant).contentWrite).some(target =>
+					target.repository === reference.repository && target.path === reference.path)),
+				'ACCEPTANCE_RESULT_PRODUCT: A content writer requires its granted ordinary TreeDX product; citations cannot substitute');
+		}
+		for (const reference of references.filter(value => value.kind === 'treedx')) {
+			const returned = read(['library', 'read', reference.projectId, reference.path, '--ref', reference.commit], team, true);
+			verifyTreeDxProductRead(reference, row(returned.result ?? returned));
+		}
 	}
 	if (gate === 'settlement' || gate === 'stopped') {
 	const usageItems: Row[] = [];

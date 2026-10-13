@@ -218,6 +218,18 @@ beforeEach(() => {
 				subjectRefs: [structuredClone(source)], body, createdAt: item.completedAt } }] } });
 		}
 	}
+	// Ordinary product UNIT read-back only; these are controlled bytes, not native publication receipts.
+	for (const item of items.filter(value => value.assignmentAttempt.effectiveProfile.activity === 'estimating')) {
+		const target = item.assignmentAttempt.grant.contentWrite[0];
+		item.assignmentResult.references = [{ kind: 'treedx', projectId: item.projectId, repository: target.repository, commit, path: target.path }];
+		state.replies.set(`library read ${target.path}`, { result: { resolvedRef: commit, files: [{ path: target.path,
+			content: `Controlled unit product for ${item.id}.\n`, frontmatter: {}, body: `Controlled unit product for ${item.id}.` }] } });
+	}
+	for (const [key, value] of state.replies) if (key.startsWith('library read') && value.result?.files) {
+		Object.assign(value.result, { ok: true, repoId: 'sdk-library' });
+		for (const file of value.result.files) if (file.content === undefined)
+			file.content = `---\n${stringify(file.frontmatter, { lineWidth: 0 })}---\n\n${file.body ?? 'Controlled unit product.'}\n`;
+	}
 	// Frozen closeout authority is supplied test input, not actual SQL history.
 	const predecessors = items.filter(item => item.id !== reporter.id).map(item => structuredClone(item.assignmentResult));
 	const settlements = items.filter(item => item.id !== reporter.id).map(item => ({ schemaVersion: 'treeseed.usage-settlement/v1',

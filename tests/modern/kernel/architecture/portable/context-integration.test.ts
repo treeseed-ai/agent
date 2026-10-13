@@ -11,7 +11,7 @@ import { contextBoundary, exactContext } from './context-fixture.ts';
 import { timingAwareness } from '../../provider-kernel-fixture.ts';
 import { row } from '../../../../acceptance/acceptance-cli.ts';
 import { verifyReviewFindingContent } from '../../../../acceptance/workday/support/decision-evidence.ts';
-import { verifyDraftProposalHandoff, verifyUnfinishedDraftHandoff } from '../../../../acceptance/workday/support/assignment-authority.ts';
+import { verifyDraftProposalHandoff, verifyUnfinishedDraftHandoff, verifyTreeDxProductRead } from '../../../../acceptance/workday/support/assignment-authority.ts';
 import { objectDigest } from '../../../../../src/sandbox/verification.ts';
 import { canonicalStandardsJson } from '@treeseed/sdk/standards';
 import { verifySdkArchitectureBook } from '../../../../acceptance/prepare-campaign.ts';
@@ -231,7 +231,7 @@ activityProfiles:
 					}
 					if (typeof body.message === 'string') { f.git('add', findingPath, decisionPath); f.git('commit', '-m', body.message);
 						candidate = f.git('rev-parse', 'HEAD'); commits++; return { commitSha: candidate }; }
-					if (body.ref === candidate && candidate) return { resolvedRef: candidate, files: [findingPath, decisionPath]
+					if (body.ref === candidate && candidate) return { ok: true, repoId: repository, resolvedRef: candidate, files: [findingPath, decisionPath]
 						.filter(path => mutation !== 'finding-missing' || path !== findingPath).map(path => ({ path,
 							content: mutation === 'finding-changed' && path === findingPath || mutation === 'decision-changed' && path === decisionPath
 								? `${native(candidate, path)}\n` : native(candidate, path) })) };
@@ -313,7 +313,7 @@ activityProfiles:
 					}
 					if (typeof body.message === 'string') { f.git('add', knowledgePath); f.git('commit', '-m', body.message); candidate = f.git('rev-parse', 'HEAD'); return { commitSha: candidate }; }
 					if (body.ref === bookCommit) return bookResponse;
-					if (body.ref === candidate && candidate) return { resolvedRef: candidate, files: [{ path: knowledgePath,
+					if (body.ref === candidate && candidate) return { ok: true, repoId: repository, resolvedRef: candidate, files: [{ path: knowledgePath,
 						content: mutation === 'readback' ? 'Changed native readback' : native(candidate, knowledgePath) }] };
 					throw new Error('Unexpected exact content operation');
 				});
@@ -350,6 +350,33 @@ activityProfiles:
 					expect(canonical.references[0]).toMatchObject({ kind: 'treedx', projectId: f.attempt.projectId, repository, commit: candidate, path: knowledgePath });
 					const checked = validatePortableContentData('knowledge', { ...row(parse(match![1]!)), body: match![2]!.trim() });
 					expect(checked.ok).toBe(true); expect(row(checked.data)).toMatchObject({ id: target.id, projectId: f.attempt.projectId, bookRef: book, body: 'Supplied architecture body.' });
+					const product = canonical.references[0]!;
+					const originalProduct = row(await boundary.facade.invoke('treedx.repositories.files.read', { path: { projectId: f.attempt.projectId, repoId: repository },
+						query: {}, body: { ref: candidate, paths: [knowledgePath], encoding: 'utf8', parseFrontmatter: true } }));
+					verifyTreeDxProductRead(product, originalProduct);
+					for (const reference of [{ ...product, kind: 'source-candidate' }, { ...product, artifactVersion: 1 }, { ...product, status: 'accepted' }]) {
+						const held = structuredClone(reference); expect(() => verifyTreeDxProductRead(reference, originalProduct)).toThrow('ACCEPTANCE_RESULT_PRODUCT'); expect(reference).toEqual(held);
+					}
+					expect(row((originalProduct.files as unknown[])[0]).content).toBe(native(candidate, knowledgePath));
+					for (const changed of [{ ...originalProduct, ok: false }, { ...originalProduct, repoId: 'foreign' },
+						{ ...originalProduct, resolvedRef: bookCommit }, { ...originalProduct, files: [] },
+						{ ...originalProduct, files: [row((originalProduct.files as unknown[])[0]), row((originalProduct.files as unknown[])[0])] },
+						{ ...originalProduct, files: [{ path: 'knowledge/foreign.mdx', content }] },
+						{ ...originalProduct, files: [{ path: knowledgePath, content: '' }] }]) {
+						const held = structuredClone(changed); expect(() => verifyTreeDxProductRead(product, changed)).toThrow('ACCEPTANCE_RESULT_PRODUCT'); expect(changed).toEqual(held);
+					}
+					verifyTreeDxProductRead(product, originalProduct); expect(native(candidate, knowledgePath)).toBe(content);
+					const readProduct = () => boundary!.facade.invoke('treedx.repositories.files.read', { path: { projectId: f.attempt.projectId, repoId: repository },
+						query: {}, body: { ref: candidate, paths: [knowledgePath], encoding: 'utf8', parseFrontmatter: true } });
+					const originalCanonical = structuredClone(canonical);
+					for (const [code, fault] of [[403, ''], [503, ''], [200, 'json'], [200, 'reset']] as const) {
+						boundary.set({}, code, fault); await expect(readProduct()).rejects.toThrow();
+						expect(canonical).toEqual(originalCanonical); expect(native(candidate, knowledgePath)).toBe(content);
+						expect(f.requests).toHaveLength(1); expect(f.git('rev-parse', 'HEAD')).toBe(candidate);
+					}
+					boundary.set({}, 200); const retriedProduct = row(await readProduct());
+					verifyTreeDxProductRead(product, retriedProduct); expect(retriedProduct).toEqual(originalProduct);
+
 					expect(native(candidate, bookPath)).toBe(bookBytes); expect(f.git('rev-parse', `${candidate}^`)).toBe(bookCommit);
 				} else {
 					expect(result.status).toBe('failed'); expect(result.outputs?.assignmentResult).toBeUndefined();

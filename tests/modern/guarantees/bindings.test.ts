@@ -314,7 +314,8 @@ describe('capacity-provider guarantee execution bindings', () => {
 				verifierRefs: ['agent.golden.live.campaign', 'sdk.golden.live.product'] },
 			{ criterion: 'ce87c6c4895321258d1ff9d3f00d7e0db7f1adb6639696756208e784d546667a',
 				verifierRefs: ['agent.golden.live.graph', 'sdk.golden.live.product'] },
-			{ criterion: '4ff1e6e55ccb0038c0f79331029c2ad083409c36058b1e3335b1b44a263b2ce0', verifierRefs: ['agent.golden.live.graph', 'agent.golden.architecture-graph-history-live-1', 'agent.golden.architecture-living-graph-live-2'] }]);
+			{ criterion: '4ff1e6e55ccb0038c0f79331029c2ad083409c36058b1e3335b1b44a263b2ce0', verifierRefs: ['agent.golden.live.graph', 'agent.golden.architecture-graph-history-live-1', 'agent.golden.architecture-living-graph-live-2'] },
+			{ criterion: '73706b74d24775782c346f427a33f7ea9386e0038f7c50fa7cf317dfa30d1fd1', verifierRefs: ['agent.golden.live.results', 'sdk.golden.live.product', 'agent.golden.live.reporter', 'api.golden.execution-normal-sdk-clean-schema-live-1'] }]);
 		expect(scene.scope).toBe('local-integrated-runtime');
 		for (const ref of runtimeHandlers) expect(refs.filter((value: string) => value === ref)).toHaveLength(1);
 		expect(refs.indexOf(runtimeHandlers[1]!)).toBeGreaterThan(refs.indexOf(runtimeHandlers[0]!));

@@ -40,6 +40,7 @@ try {
   run(`${input.owner}-init`, ['git', 'init', '--quiet'], source);
   run(`${input.owner}-fetch`, ['git', 'fetch', '--depth=1', `https://github.com/treeseed-ai/${input.owner}.git`, input.commit], source);
   run(`${input.owner}-checkout`, ['git', 'checkout', '--detach', 'FETCH_HEAD'], source);
+  run(`${input.owner}-submodules`, ['git', 'submodule', 'update', '--init', '--recursive', '--depth=1'], source);
   assert.equal(run(`${input.owner}-head`, ['git', 'rev-parse', 'HEAD'], source).trim(), input.commit);
   const directory = resolve('.treeseed/installed-owner-inputs', input.owner);
   const archives = readdirSync(directory).filter(path => path.endsWith('.tgz')); assert.equal(archives.length, 1);

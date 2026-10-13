@@ -90,6 +90,12 @@ try {
    assert.equal(digest(readFileSync(archive)), treeDx.sha256);
    const retained = resolve(output, 'dependency-inputs', treeDx.commit); mkdirSync(retained, { recursive: true });
    copyFileSync(archive, resolve(retained, basename(archive)));
+   const prune = ['npm', 'prune', '--ignore-scripts', '--no-audit', '--no-fund', '--workspaces=false'];
+   assert.ok(workflow.jobs.verify.steps.some((step: { run?: string }) => step.run === prune.join(' ')));
+   run(`${input.owner}-locked-dependencies`, prune, source);
+   assert.ok(original);
+   run(`${input.owner}-rehydrate-sdk`, [process.execPath, '--import', 'tsx', 'scripts/build/hydrate-exact-dependency.ts',
+    resolve('.treeseed/installed-owner-inputs', `build-sdk-${original.commit}`), 'install'], source);
    run(`${input.owner}-exact-treedx`, [process.execPath, '--import', 'tsx', 'scripts/build/hydrate-exact-dependency.ts',
     directory, 'install', '@treeseed/treedx'], source);
   }

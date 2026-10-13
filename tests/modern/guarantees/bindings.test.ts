@@ -1,4 +1,6 @@
-import { readFileSync, readdirSync, existsSync } from 'node:fs';
+import { readFileSync, readdirSync, existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { parse } from 'yaml';
 import ts from 'typescript';
@@ -47,6 +49,22 @@ describe('capacity-provider guarantee execution bindings', () => {
 		expect(native.environment).toBeUndefined();
 		expect(native.steps.some((step: { run?: string }) => step.run ===
 			'node --import tsx ./scripts/support/verify-installed-owners.ts')).toBe(true);
+		const held = ['agent', 'api', 'sdk', 'cli', 'deployment', 'reviewer'].map(owner =>
+			({ owner, commit: 'a'.repeat(40), sha256: owner === 'agent' ? null : 'b'.repeat(64) }));
+		const malformed = [null, held.slice(1), [...held.slice(1), held[1]],
+			held.map(value => value.owner === 'cli' ? { ...value, owner: '../cli' } : value),
+			held.map(value => value.owner === 'cli' ? { ...value, commit: 'staging' } : value),
+			held.map(value => value.owner === 'cli' ? { ...value, sha256: 'unheld' } : value)];
+		const directory = mkdtempSync(resolve(tmpdir(), 'installed-input-denial-'));
+		try {
+			for (const input of malformed) {
+				const result = spawnSync(process.execPath, ['--import', import.meta.resolve('tsx'),
+					resolve(root, 'scripts/support/verify-installed-owners.ts')], { cwd: directory, encoding: 'utf8',
+					env: { ...process.env, GITHUB_SHA: 'a'.repeat(40), TREESEED_INSTALLED_OWNER_INPUTS: JSON.stringify(input) } });
+				expect(result.error).toBeUndefined(); expect(result.signal).toBeNull(); expect(result.status).toBe(1);
+				expect(result.stderr).toContain('ERR_ASSERTION'); expect(readdirSync(directory)).toEqual([]);
+			}
+		} finally { rmSync(directory, { recursive: true, force: true }); }
 	});
 	it('binds final integration to native approved source trees canonical reviews and protected public command observations', () => {
 		const manifest = parse(readFileSync(resolve(root, 'guarantees/agent/golden/sdk-complete.guarantee.yaml'), 'utf8'));

@@ -77,7 +77,7 @@ export function liveGovernedContext(attempt: AssignmentAttempt) {
 		proposal.projectId = attempt.projectId;
 		const items = (proposal.executionPlan as { workItems: Array<Record<string, unknown>> }).workItems;
 		for (const item of items) for (const ref of item.contextRefs as Array<Record<string, unknown>>)
-			if (ref.store === 'git') { ref.repository = source.repository; ref.commit = source.commit; }
+			if (ref.store === 'git') Object.assign(ref, source);
 		items[3]!.id = attempt.workItemId; (items[3]!.contextRefs as unknown[]).push(book.ref);
 		(proposal.executionPlan as { workItems: Array<Record<string, unknown>> }).workItems = [items[3]!];
 	});

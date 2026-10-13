@@ -129,6 +129,8 @@ it('native configured Kernel Git result and public SDK assignment reads reach th
 			if (mode === 'denied') { response.writeHead(403).end(JSON.stringify({ status: 403, title: 'Controlled native denial', code: 'controlled_assignment_denied' })); return; }
 			if (mode === 'interrupted') { request.socket.destroy(); return; }
 			const returned = structuredClone(item);
+			if (mode === 'grant-missing-tool') row(row(returned.assignmentAttempt).grant).tools =
+				(row(row(returned.assignmentAttempt).grant).tools as string[]).filter(tool => tool !== 'verification');
 			if (mode === 'source-substitution') {
 				row(row(returned.assignmentAttempt).workspace).baseCommit = 'f'.repeat(40);
 				for (const reference of row(returned.assignmentAttempt).contextRefs as Row[]) if (reference.store === 'git') reference.commit = 'f'.repeat(40);
@@ -212,10 +214,13 @@ it('native configured Kernel Git result and public SDK assignment reads reach th
 		expect(requests).toHaveLength(54);
 		expect({ item, run }).toEqual(before); expect(f.requests).toHaveLength(1);
 		const inspectGraph = async () => {
+			const issued = row((await client.invoke(controlPlaneOperation('assignments.show'), {
+				path: { teamId: f.attempt.teamId, assignmentId: f.attempt.id }, query: {}, body: undefined,
+			})).data);
 			const graph = row((await client.invoke(controlPlaneOperation('execution.graph.show'), {
 				path: { teamId: f.attempt.teamId }, query: {}, body: undefined,
 			})).data), observations = new Map<string, Row>();
-			observeLiveAssignmentRecords(run, [item], observations, value => {
+			observeLiveAssignmentRecords(run, [issued], observations, value => {
 				verifyLiveAssignmentGraph(value, graph); verifyPredecessorCustody([value], graph);
 				verifyAllocation(value, run); verifyGovernedProfile(value, { path, content }, graph);
 				const handler = { id: f.attempt.effectiveProfile.handler, origin: f.attempt.effectiveProfile.handlerOrigin };
@@ -224,6 +229,9 @@ it('native configured Kernel Git result and public SDK assignment reads reach th
 			return observations;
 		};
 		mode = 'exact'; expect((await Promise.all([inspectGraph(), inspectGraph()])).every(value => value.size === 1)).toBe(true);
+		mode = 'grant-missing-tool'; await expect(inspectGraph()).rejects.toThrow('ACCEPTANCE_LIVE_GRAPH');
+		const omittedToolFailure = structuredClone(failed.at(-1));
+		mode = 'exact'; expect((await inspectGraph()).size).toBe(1); expect(failed.at(-1)).toEqual(omittedToolFailure);
 		for (const denied of ['graph-team', 'graph-revision', 'graph-node', 'graph-source', 'graph-estimate', 'graph-workspace', 'graph-predecessor',
 			'graph-denied', 'graph-malformed', 'graph-interrupted']) {
 			mode = denied; await expect(inspectGraph(), denied).rejects.toThrow(); expect({ item, run }).toEqual(before);

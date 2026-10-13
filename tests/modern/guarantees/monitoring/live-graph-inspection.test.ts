@@ -30,6 +30,14 @@ beforeEach(() => {
 	state.publications = [liveProviderSession(state.item)];
 });
 
+it('denies an omitted requested tool even when public assignment views and remaining grant fields agree', () => {
+	state.item.assignmentAttempt.effectiveProfile.permissionCeiling.tools.push('verification');
+	state.graph = liveAssignmentGraph(state.item);
+	const held = structuredClone(state);
+	expect(() => inspectLiveAssignmentProfile(state.item, 'team', [state.item], state.frozen)).toThrow('ACCEPTANCE_LIVE_GRAPH');
+	expect(state).toEqual(held);
+});
+
 it('denies starting on the frozen base instead of the original consumed Git candidate even when both exact commits remain in context', () => {
 	const attempt = state.item.assignmentAttempt, repository = attempt.workspace.repository, candidate = 'f'.repeat(40);
 	const result = contextPredecessor(attempt, 'original-result', 'original-attempt', candidate);

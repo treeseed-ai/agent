@@ -32,6 +32,16 @@ for (const file of readdirSync(resolve(root, 'guarantees/verifiers')).filter(pat
 }
 
 describe('capacity-provider guarantee execution bindings', () => {
+	it('binds final integration to native approved source trees canonical reviews and protected public command observations', () => {
+		const manifest = parse(readFileSync(resolve(root, 'guarantees/agent/golden/sdk-complete.guarantee.yaml'), 'utf8'));
+		const scene = parse(readFileSync(resolve(root, manifest.scene.manifest), 'utf8'));
+		const refs = ['sdk.golden.live.product', 'agent.golden.architecture-living-graph-live-1', 'api.golden.execution-protected-observation-live-1'];
+		expect(manifest.acceptanceCriteria.filter((value: { criterion: string }) =>
+			value.criterion === '5ac90e451b0365ff6c44bfbcde86252eb1b53adf6b97972d00a7d5f15b9bf0e9')).toEqual([
+			{ criterion: '5ac90e451b0365ff6c44bfbcde86252eb1b53adf6b97972d00a7d5f15b9bf0e9', verifierRefs: refs },
+		]);
+		for (const ref of refs) expect(scene.workflow.filter((step: { action: { verifier: string } }) => step.action.verifier === ref)).toHaveLength(1);
+	});
 	it('binds exact simulation Git workspace custody to live approved bases and independently resolved published branches', () => {
 		const manifest = parse(readFileSync(resolve(root, 'guarantees/agent/golden/sdk-complete.guarantee.yaml'), 'utf8'));
 		const scene = parse(readFileSync(resolve(root, manifest.scene.manifest), 'utf8'));

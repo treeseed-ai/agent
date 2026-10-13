@@ -113,7 +113,7 @@ beforeEach(() => {
 			mentionedAgents: [role], recipientIds: [role], fileRefs: [], parentWorkdayId: workdayId, createdAt: '2026-09-27T00:00:00.500Z',
 			contextRefs: [{ kind: 'proposal', id: proposal.id, projectId: item.projectId, immutableRef: commit, path: proposal.path, digest: proposal.digest }] };
 		const content = `---\n${stringify(frontmatter, { lineWidth: 0 })}---\n\n${body}\n`;
-		state.replies.set(`library read ${path}`, { result: { ok: true, repoId: 'sdk-library', resolvedRef: commit, files: [{ path, content, body, frontmatter }] } });
+		state.replies.set(`library read ${path}`, { result: { ok: true, repoId: 'sdk-library', resolvedRef: commit, files: [{ path, content, body: `\n${body}\n`, frontmatter }] } });
 	}
 	items.push(...classes.slice(0, 7).map(agentClass => assignment(`estimate-${agentClass}`, 'estimating', agentClass)));
 	for (let index = 0; index < 6; index++) {

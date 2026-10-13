@@ -32,7 +32,7 @@ export function verifyChatAddressedRead(item: Row, run: Row, returned: Row): boo
 		const parts = file.content.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)$/u); assert.ok(parts, label);
 		const document = parseDocument(parts[1]!); assert.equal(document.errors.length, 0, label);
 		const frontmatter = row(document.toJS({ maxAliasCount: 0 })), body = parts[2]!.trim();
-		assert.deepEqual(frontmatter, file.frontmatter, label); if (file.body !== undefined) assert.equal(file.body, body, label);
+		assert.deepEqual(frontmatter, file.frontmatter, label); if (file.body !== undefined) assert.equal(file.body, parts[2]!, label);
 		assert.ok(validatePortableContentData('discussion_message', { ...frontmatter, body }).ok, label);
 		return { frontmatter, body };
 	};

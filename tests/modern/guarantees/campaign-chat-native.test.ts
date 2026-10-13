@@ -37,7 +37,7 @@ it('native public communication requests preserve every addressed probe and stop
 			authorRef: { store: 'postgresql', model: 'user', id: 'controlled-native-operator' }, authorType: 'user', discussionId: channel,
 			mentionedAgents: [role], recipientIds: [role], parentWorkdayId: workdayId, createdAt: '2026-10-10T00:00:01.000Z', fileRefs: [],
 			contextRefs: [{ kind: 'proposal', id: proposalId, projectId, immutableRef: nativeCommit, path: subject.path, digest: subject.digest }] };
-		return { item, returned: { ok: true, repoId, resolvedRef: nativeCommit, files: [{ path: source.path, frontmatter, body,
+		return { item, returned: { ok: true, repoId, resolvedRef: nativeCommit, files: [{ path: source.path, frontmatter, body: `\n${body}\n`,
 			content: `---\n${stringify(frontmatter, { lineWidth: 0 })}---\n\n${body}\n` }] } };
 	});
 	const fileOperation = controlPlaneOperation('treedx.repositories.files.read'), fileRoute = fileOperation.descriptor.rest;

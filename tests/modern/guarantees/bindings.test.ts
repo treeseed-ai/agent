@@ -59,7 +59,9 @@ describe('capacity-provider guarantee execution bindings', () => {
 		const malformed = [null, held.slice(1), [...held.slice(1), held[1]],
 			held.map(value => value.owner === 'cli' ? { ...value, owner: '../cli' } : value),
 			held.map(value => value.owner === 'cli' ? { ...value, commit: 'staging' } : value),
-			held.map(value => value.owner === 'cli' ? { ...value, sha256: 'unheld' } : value)];
+			held.map(value => value.owner === 'cli' ? { ...value, sha256: 'unheld' } : value),
+			held.map(value => value.owner === 'cli' ? { ...value, buildSdk: { commit: 'staging', sha256: 'b'.repeat(64) } } : value),
+			held.map(value => value.owner === 'cli' ? { ...value, buildSdk: { commit: 'a'.repeat(40), sha256: 'unheld' } } : value)];
 		const directory = mkdtempSync(resolve(tmpdir(), 'installed-input-denial-'));
 		try {
 			for (const input of malformed) {

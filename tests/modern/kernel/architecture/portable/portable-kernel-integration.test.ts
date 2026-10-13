@@ -5,6 +5,7 @@ import { assignmentAttemptSchema, assignmentResultSchema } from '@treeseed/sdk/a
 import { nativeCloseoutTransport, portableKernel, portableProfile } from './portable-kernel-fixture.ts';
 import { contextPredecessor } from './context-fixture.ts';
 import { sandboxAccountingUsage } from '../../../../../src/provider/execution/microvm-executor.ts';
+import { verifyLiveWorkspaceBase } from '../../../../acceptance/workday/support/monitoring/live-assignment-records.ts';
 
 const closeoutTransport = (f: Awaited<ReturnType<typeof portableKernel>>) => nativeCloseoutTransport(f, dirname(f.checkout));
 
@@ -58,6 +59,13 @@ describe('portable configured profiles through real provider Kernel and native G
 				expect(execFileSync('git', ['show', `${right}:src/right.txt`], { cwd: f.checkout })).toEqual(rightBytes);
 				expect(f.git('rev-parse', 'fixture-base')).toBe(f.base); expect(f.git('rev-parse', 'HEAD')).toBe(integrated);
 				expect(f.input.assignment).toEqual(before);
+				const inputsRead = inputs.map(assignmentResult => ({ assignmentResult })), frozen = { [workspace.repository]: f.base };
+				verifyLiveWorkspaceBase({ assignmentAttempt: f.attempt }, inputsRead, frozen);
+				for (const commit of [left, right]) {
+					const wrong = structuredClone(f.attempt); if (wrong.workspace.mode !== 'git') throw new Error('Original Git authority required'); wrong.workspace.baseCommit = commit;
+					const retained = structuredClone(wrong); expect(() => verifyLiveWorkspaceBase({ assignmentAttempt: wrong }, inputsRead, frozen)).toThrow('ACCEPTANCE_LIVE_SOURCE_BASE'); expect(wrong).toEqual(retained);
+				}
+				verifyLiveWorkspaceBase({ assignmentAttempt: f.attempt }, inputsRead, frozen);
 				// Explicit native merge and predecessor DTOs are controlled inputs,
 				// not accepted governance, model-generated work or native review proof.
 			} finally { await f.close(); }

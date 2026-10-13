@@ -296,6 +296,51 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/guarantees/monitoring/live-assignment-native.test.ts
     testName: "native configured Kernel Git result and public SDK assignment reads reach the live observer with denied original observations retained before exact retry"
+  agent.golden.live-workspace-base-denial-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/monitoring/live-graph-inspection.test.ts
+    testName: "denies starting on the frozen base instead of the original consumed Git candidate even when both exact commits remain in context"
+  agent.golden.live-workspace-base-first-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/monitoring/workspace-base.test.ts
+    testName: "requires the frozen first base and exact single predecessor base without changing original authority"
+  agent.golden.live-workspace-base-lineage-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/monitoring/workspace-base.test.ts
+    testName: "requires the terminal consumed source lineage and rejects older unrelated cyclic duplicate or ambiguous source results"
+  agent.golden.live-workspace-base-integration-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/monitoring/workspace-base.test.ts
+    testName: "retains explicit release integration on the frozen base with every independent input instead of silently selecting a branch"
+  agent.golden.live-workspace-base-revision-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/monitoring/workspace-base.test.ts
+    testName: "retains a revised Actor own older candidate while selecting only its original immediate reviewed upstream base"
+  agent.golden.live-workspace-base-authority-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/monitoring/workspace-base.test.ts
+    testName: "rejects a missing or mutable frozen base and preserves non-Git workspace authority unchanged"
+  agent.golden.terminal-evidence-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/campaign-cli.test.ts
+    testName: "denies a completed workday at each required final evidence gate without later gates or another admission and retains the original failure before exact retry"
+  agent.golden.terminal-evidence-native:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/monitoring/terminal-evidence-native.test.ts
+    testName: "native Kernel Git and public SDK completed observations still fail original campaign verification on missing or malformed evidence before unchanged retry"
+  agent.golden.terminal-evidence-binding-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/bindings.test.ts
+    testName: "binds terminal-status insufficiency to every original normal SDK evidence step without a terminal-only shortcut"
   agent.golden.live-context-missing-unit:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

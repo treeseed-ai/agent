@@ -1,6 +1,6 @@
 import { expect, it, vi } from 'vitest';
 import { verifyReportedActivityCommands } from '../../../../src/sandbox/guest.ts';
-import { correctObservedTestFirstRedVerification } from '../../../../src/sandbox/guest-contract.ts';
+import { correctObservedTestFirstRedVerification, isTestFirstVerification, reportedVerificationCommands } from '../../../../src/sandbox/guest-contract.ts';
 
 it('preserves observed red tests in paired review without inventing passing verification', async () => {
 	const command = 'npx vitest run tests/unit/example.test.ts';
@@ -15,6 +15,22 @@ it('preserves observed red tests in paired review without inventing passing veri
 	const corrected = correctObservedTestFirstRedVerification(report, events, 'reviewer', 'reviewing', criteria);
 	expect(corrected.verification[0]?.status).toBe('failed');
 	expect(corrected.reviewDisposition).toBe('approved');
+	expect(reportedVerificationCommands(corrected)).toEqual(['git diff --check']);
+	expect(reportedVerificationCommands(corrected, isTestFirstVerification('reviewing', criteria))).toEqual([command, 'git diff --check']);
+	for (const activity of ['acting', 'reviewing']) {
+		expect(isTestFirstVerification(activity, criteria, command)).toBe(true);
+		for (const unrelated of ['git diff --check', 'node -e "process.exit(1)"'])
+			expect(isTestFirstVerification(activity, criteria, unrelated)).toBe(false);
+	}
+	for (const activity of ['chat', 'planning', 'estimating', 'reporting', '', 'unknown'])
+		expect(isTestFirstVerification(activity, criteria, command)).toBe(false);
+	for (const absent of [undefined, null, [], ['Implementation tests must pass.']])
+		expect(isTestFirstVerification('acting', absent, command)).toBe(false);
+	for (const bad of ['', 'git reset --hard', 'npm test; rm -rf .', 'npm test\0']) {
+		const invalid = { ...corrected, verification: [{ status: 'failed' as const, summary: 'Invalid failed claim', commands: [bad] }] };
+		expect(() => reportedVerificationCommands(invalid, true)).toThrow();
+	}
+
 	const replay = vi.fn(async () => {});
 	await verifyReportedActivityCommands(corrected, replay);
 	expect(replay.mock.calls).toEqual([['git diff --check']]);

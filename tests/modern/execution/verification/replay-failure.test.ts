@@ -147,7 +147,7 @@ it('denies mixed assertion and nonbehavioral suite failures or incomplete covera
 		const evidence = { exitCode: 1, stdout: 'FAIL tests/contract/selection.test.ts > trims decisions\nAssertionError: expected trimmed input\n', stderr: `${extra}\n` };
 		const before = structuredClone({ report, assignment, evidence });
 		const failure = Object.assign(new Error('process exited 1'), evidence);
-		await expect(observeReportedActivityCommands(report, [], async () => { throw failure; }, assignment))
+		for (const status of ['passed', 'failed'] as const) await expect(observeReportedActivityCommands({ ...report, verification: report.verification.map(entry => ({ ...entry, status })) }, [], async () => { throw failure; }, assignment))
 			.rejects.toThrow('Runner-observed verification failed');
 		expect({ report, assignment, evidence }).toEqual(before);
 	}

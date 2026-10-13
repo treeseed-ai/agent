@@ -117,6 +117,11 @@ export function verifyLiveSourceContext(item: Row, items: readonly Row[], frozen
 		assert.ok(refs.every(ref => ref.commit && allowed.has(ref.commit)), `${code}: Unissued foreign source context`);
 		for (const ref of consumed) assert.ok(refs.some(value => value.commit === ref.commit), `${code}: Original consumed source omitted`);
 	}
+	for (const reference of [attempt.sourceRef, ...attempt.authorityRefs]) {
+		if (!reference.repository || !reference.commit || reference.store !== 'treedx' || !reference.path) continue;
+		assert.ok(attempt.contextRefs.some(ref => isDeepStrictEqual(ref, reference)), `${code}: Original governing context omitted`);
+		assert.ok(attempt.grant.contentRead.some(ref => isDeepStrictEqual(ref, reference)), `${code}: Original governing content grant omitted`);
+	}
 	for (const reference of attempt.grant.contentRead)
 		assert.ok(attempt.contextRefs.some(ref => isDeepStrictEqual(ref, reference)), `${code}: Original exact granted content omitted`);
 	verifyGitInputContext(item, predecessors);

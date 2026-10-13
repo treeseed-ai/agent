@@ -11,6 +11,11 @@ describe('provider failure diagnostics', () => {
 		expect(diagnostic).toEqual([{ ...events[0], item: { ...events[0]!.item,
 			aggregated_output: 'before [redacted] after', checks: [null, false, 15, { detail: '[redacted]' }] } }]);
 		expect(events[0]!.item.aggregated_output).toContain(secret);
+		const output = 'original stdout\n'.repeat(300), observations = [{ command: 'npm pack', status: 'passed', exitCode: 0,
+			outputDigest: `sha256:${'a'.repeat(64)}`, durationSeconds: 1, stdout: output + secret, stderr: secret }];
+		const retained = structuredClone(observations);
+		expect(redactProviderEvents(observations, [secret])).toEqual([{ ...observations[0], stdout: output + '[redacted]', stderr: '[redacted]' }]);
+		expect(observations).toEqual(retained);
 	});
 	it('preserves clean event evidence, usage and long output without failure-summary truncation', () => {
 		const events = [{ type: 'turn.completed', usage: { input_tokens: 100, output_tokens: 20 } },

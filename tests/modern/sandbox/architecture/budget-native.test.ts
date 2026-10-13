@@ -50,6 +50,7 @@ describe('native subprocess original budget and safe closeout', () => {
 			const stdout = `${lines.join('\n')}\n`;
 			expect(first.verification[0]).toEqual({ command: commands[0], status: 'passed', exitCode: 0,
 				outputDigest: `sha256:${createHash('sha256').update(JSON.stringify({ stderr: '', stdout })).digest('hex')}`, durationSeconds: expect.any(Number) });
+			expect(Reflect.get(first, 'observations')).toEqual([{ ...first.verification[0], stdout, stderr: '' }]);
 			expect(Number.isInteger(first.verification[0]!.durationSeconds) && first.verification[0]!.durationSeconds! > 0).toBe(true);
 			assertExited(lines); const beforeFailure = structuredClone(first);
 			await expect(observeReportedActivityCommands({ ...input, verification: [{ status: 'passed', summary: 'Actual failed mandatory command', commands: [commands[1]!] }] }, [], bounded))

@@ -38,6 +38,7 @@ async function actualTestFirstRed(agentClass: string, activity: string) {
 			expect(result.report.verification[0]?.summary).toContain('rejects duplicate decisions');
 			expect(result.report.verification[0]?.summary).toContain('AssertionError');
 			expect(result.verification).toEqual([{ command, status: 'failed', exitCode: 1, outputDigest, durationSeconds: expect.any(Number) }]);
+			expect(Reflect.get(result, 'observations')).toEqual([{ ...result.verification[0], ...nativeOutput }]);
 			expect(Number.isInteger(result.verification[0]!.durationSeconds)).toBe(true);
 			expect(result.verification[0]!.durationSeconds).toBeGreaterThanOrEqual(0);
 			expect(result.verification[0]!.durationSeconds).toBeLessThanOrEqual(Math.ceil(Number(process.hrtime.bigint() - began) / 1e9));
@@ -103,6 +104,7 @@ it('keeps successful observations and digests unchanged', async () => {
 	expect(result.report).toEqual(report);
 	expect(result.verification).toEqual([expect.objectContaining({ command: report.verification[0]!.commands[0],
 		status: 'passed', exitCode: 0, outputDigest: expect.stringMatching(/^sha256:[a-f0-9]{64}$/u) })]);
+	expect(Reflect.get(result, 'observations')).toEqual([{ ...result.verification[0], stdout: '42\n', stderr: '' }]);
 	const held = structuredClone(result); expect(() => verifyMeasuredVerification(result)).not.toThrow(); expect(result).toEqual(held);
 });
 

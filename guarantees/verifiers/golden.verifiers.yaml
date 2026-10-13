@@ -1,6 +1,11 @@
 schemaVersion: treeseed.guarantee-verifiers/v1
 ownerPackage: "@treeseed/agent"
 verifiers:
+  agent.golden.sdk-integration-binding-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/bindings.test.ts
+    testName: "binds final integration to native approved source trees canonical reviews and protected public command observations"
   agent.golden.campaign-proposals-unit:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

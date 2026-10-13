@@ -19,6 +19,7 @@ it('native Kernel and independent content transport deny moved tampered denied a
 	const f = await portableKernel(), exact = exactContext(); let boundary: Awaited<ReturnType<typeof contextBoundary>> | undefined;
 	try {
 		boundary = await contextBoundary(f.attempt.projectId, exact.ref.repository, exact.response);
+		f.attempt.sourceRef = exact.ref;
 		f.attempt.contextRefs.push(exact.ref); f.attempt.grant.contentRead.push(exact.ref);
 		f.attempt.effectiveProfile.permissionCeiling.content.read.push('book'); f.input.treeDx = boundary.facade;
 		const candidate = await f.candidate(), produced = await f.run(); expect(produced.status).toBe('completed');
@@ -26,19 +27,29 @@ it('native Kernel and independent content transport deny moved tampered denied a
 		const item: Row = { ...liveAssignmentRecord(f.attempt), status: 'completed', leaseState: 'released', completedAt: result.completedAt, assignmentResult: result };
 		Object.assign(row(item.assignmentAttempt), { status: 'completed', finishedAt: result.completedAt });
 		const run = liveRun(item), before = structuredClone({ item, run }), failures: Array<{ mode: string; returned?: Row; error?: string }> = [];
-		const observe = async () => {
+		const observe = async (observedItem = item) => {
 			const retained = new Map<string, Row>();
 			try {
 				const returned = row(await boundary!.facade.invoke('treedx.repositories.files.read', {
 					path: { projectId: f.attempt.projectId, repoId: exact.ref.repository },
 					query: { path: exact.ref.path, ref: exact.ref.commit, encoding: 'utf8', parseFrontmatter: true },
 				}));
-				observeLiveAssignmentRecords(run, [item], retained, () => verifyExactContextSource(exact.ref, f.attempt.projectId,
-					{ repositoryId: exact.ref.repository }, returned));
+				observeLiveAssignmentRecords(run, [observedItem], retained, value => {
+					verifyLiveSourceContext(value, [value], { 'treeseed-ai/sdk': f.base });
+					verifyExactContextSource(exact.ref, f.attempt.projectId, { repositoryId: exact.ref.repository }, returned);
+				});
 				return retained;
 			} catch (error) { expect(retained.size).toBe(0); throw error; }
 		};
 		expect((await Promise.all([observe(), observe()])).every(value => value.size === 1)).toBe(true);
+		const omitted = structuredClone(item), issued = row(omitted.assignmentAttempt);
+		issued.contextRefs = (issued.contextRefs as Row[]).filter(ref => ref.store !== 'treedx');
+		row(issued.grant).contentRead = [];
+		const denied = structuredClone(omitted);
+		await expect(observe(omitted)).rejects.toThrow('ACCEPTANCE_LIVE_SOURCE_CONTEXT');
+		expect(omitted).toEqual(denied); expect({ item, run }).toEqual(before);
+		expect((await observe()).size).toBe(1);
+
 		for (const mode of ['moved', 'missing', 'tampered', 'foreign-book', 'foreign-revision', 'denied', 'interrupted', 'malformed']) {
 			const response = structuredClone(exact.response);
 			if (mode === 'moved') response.resolvedRef = 'f'.repeat(40);

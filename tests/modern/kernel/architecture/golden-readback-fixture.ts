@@ -2,6 +2,7 @@ import { beforeEach, vi } from 'vitest';
 import { createHash } from 'node:crypto';
 import { stringify } from 'yaml';
 import { canonicalStandardsJson } from '@treeseed/sdk/standards';
+import { sdkCampaignChatQuestion } from '../../../acceptance/campaign.ts';
 
 export type Row = Record<string, any>;
 const state = vi.hoisted(() => ({ cases: new Map<string, () => void>(), replies: new Map<string, Row>(), assignmentPages: undefined as Row[] | undefined, usagePages: undefined as Row[] | undefined, eventPages: undefined as Row[] | undefined, failure: undefined as Error | undefined, workspaceFailure: undefined as Error | undefined, timeout: 0, args: [] as string[], calls: [] as string[][] }));
@@ -95,6 +96,32 @@ beforeEach(() => {
 	state.calls = [];
 	const items: Row[] = classes.flatMap(agentClass => [assignment(`chat-${agentClass}`, 'chat', agentClass),
 		assignment(`planning-1-${agentClass}`, 'planning', agentClass), assignment(`planning-2-${agentClass}`, 'planning', agentClass)]);
+	const discussionPath = `discussions/sdk-golden-${workdayId}.mdx`, discussionFrontmatter = {
+		schemaVersion: 'treeseed.discussion/v1', id: `sdk-golden-${workdayId}`, projectId: 'sdk', teamId: 'team-1', status: 'open',
+		subjectRef: { store: 'postgresql', model: 'project', id: 'sdk' }, participantClasses: [], title: 'SDK probes', createdAt: '2026-09-27T00:00:00.500Z' };
+	const discussionBody = '# SDK probes\n', discussionContent = `---\n${stringify(discussionFrontmatter, { lineWidth: 0 })}---\n${discussionBody}`;
+	const discussionDigest = `sha256:${createHash('sha256').update(discussionContent).digest('hex')}`;
+	state.replies.set(`library read ${discussionPath}`, { result: { ok: true, repoId: 'sdk-library', resolvedRef: commit,
+		files: [{ path: discussionPath, content: discussionContent, body: discussionBody, frontmatter: discussionFrontmatter }] } });
+	// Exact-message UNIT oracle only; these bytes are not a real discussion or model receipt.
+	for (const item of items.filter(value => value.assignmentAttempt.effectiveProfile.activity === 'chat')) {
+		const role = item.assignmentAttempt.agentClass, channel = `sdk-golden-${workdayId}`, path = `discussion-messages/${channel}/${role}.mdx`;
+		const source = { store: 'treedx', model: 'discussion', id: `invocation-${item.id}`, repository: 'sdk-library', commit, path, digest: `sha256:${'d'.repeat(64)}` };
+		const proposal = { store: 'treedx', model: 'proposal', id: 'proposal', repository: 'sdk-library', commit,
+			path: 'proposals/proposal.mdx', revision: 8, digest: `sha256:${'b'.repeat(64)}` };
+		item.invocationId = source.id; item.teamId = 'team-1';
+		Object.assign(item.assignmentAttempt, { sourceRef: source, workdayId, teamId: 'team-1', projectId: item.projectId,
+			contextRefs: [...item.assignmentAttempt.contextRefs, structuredClone(source), structuredClone(proposal)] });
+		item.assignmentAttempt.grant.contentRead = [structuredClone(source), structuredClone(proposal)];
+		item.assignmentAttempt.effectiveProfile.permissionCeiling.content.read.push('discussion');
+		const body = sdkCampaignChatQuestion(role), frontmatter = { schemaVersion: 'treeseed.discussion-message/v1', id: `message-${item.id}`,
+			discussionRef: { store: 'treedx', model: 'discussion', id: channel, path: discussionPath, revision: 1, digest: discussionDigest },
+			authorRef: { store: 'postgresql', model: 'user', id: 'unit-operator' }, authorType: 'user', discussionId: channel,
+			mentionedAgents: [role], recipientIds: [role], fileRefs: [], parentWorkdayId: workdayId, createdAt: '2026-09-27T00:00:00.500Z',
+			contextRefs: [{ kind: 'proposal', id: proposal.id, projectId: item.projectId, immutableRef: commit, path: proposal.path, digest: proposal.digest }] };
+		const content = `---\n${stringify(frontmatter, { lineWidth: 0 })}---\n\n${body}\n`;
+		state.replies.set(`library read ${path}`, { result: { ok: true, repoId: 'sdk-library', resolvedRef: commit, files: [{ path, content, body: `\n${body}\n`, frontmatter }] } });
+	}
 	items.push(...classes.slice(0, 7).map(agentClass => assignment(`estimate-${agentClass}`, 'estimating', agentClass)));
 	for (let index = 0; index < 6; index++) {
 		items.push(assignment(`actor-${index}`, 'acting', classes[index]!, `work-${index}`));
@@ -123,8 +150,8 @@ beforeEach(() => {
 	state.replies.set('workdays events', { items: [{ id: 'supplied-workday-event', eventIndex: 0, runId: workdayId,
 		teamId: 'team-1', assignmentId: null, eventType: 'workday.started', createdAt: '2026-09-27T00:00:00Z', context: {} }],
 		page: { limit: 100, hasMore: false, nextCursor: null } });
-	state.replies.set('workdays show', { run: { teamId: 'team-1', status: 'completed', executionMode: 'simulation', startedAt: '2026-09-27T00:00:00Z',
-		completedAt: '2026-09-27T00:01:00Z', parameters: { durationSeconds: 3600, planningPercent: 100 / 3, allocationWeight: 1, planningTurnMaximumSeconds: 180, maximumConcurrency: 5, communicationConcurrency: 5,
+	state.replies.set('workdays show', { run: { id: workdayId, teamId: 'team-1', status: 'completed', executionMode: 'simulation', startedAt: '2026-09-27T00:00:00Z',
+		completedAt: '2026-09-27T00:01:00Z', parameters: { proposalIds: ['proposal'], durationSeconds: 3600, planningPercent: 100 / 3, allocationWeight: 1, planningTurnMaximumSeconds: 180, maximumConcurrency: 5, communicationConcurrency: 5,
 			appliedPlan: { policySnapshot: { allocationWeight: 1 }, planningRounds: [{ state: 'complete' }, { state: 'complete' }] } },
 		state: 'ended', endedAt: '2026-09-27T00:01:00Z', reportRef } });
 	state.replies.set('assignments list', { items, page: { limit: 50, hasMore: false, nextCursor: null } });

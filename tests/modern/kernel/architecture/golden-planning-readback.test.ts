@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { classes, gate, state, type Row } from './golden-readback-fixture.ts';
+import { stringify } from 'yaml';
+import { createHash } from 'node:crypto';
 import { encodeCapacityPageCursor } from '@treeseed/sdk/capacity-pagination';
 
 const rounds = (): Row[] => state.replies.get('workdays show')!.run.parameters.appliedPlan.planningRounds;
@@ -22,6 +24,64 @@ describe('managed planning cycle and published contribution custody', () => {
   }
   Object.assign(item, original); expect(() => gate('collaboration')).not.toThrow();
   expect(item).toEqual(original); expect(denied).toEqual(Array.from({ length: 8 }, () => true));
+		const contextOriginal = structuredClone(item.assignmentAttempt), deniedContext: boolean[] = [];
+		for (const source of [undefined, null, {}, { store: 'treedx', model: 'discussion', id: 'foreign', repository: 'foreign', commit: 'f'.repeat(40), path: 'discussion-messages/foreign.mdx' }]) {
+			item.assignmentAttempt.sourceRef = source; const held = structuredClone([...state.replies]); let failure = '';
+			try { gate('collaboration'); } catch (error) { failure = String(error); }
+			deniedContext.push(failure.includes('ACCEPTANCE_CHAT_CONTEXT'));
+			expect([...state.replies]).toEqual(held);
+		}
+		item.assignmentAttempt = contextOriginal; expect(() => gate('collaboration')).not.toThrow();
+		const heldContext = structuredClone([...state.replies]); expect([...state.replies]).toEqual(heldContext);
+		expect(deniedContext).toEqual([true, true, true, true]);
+		const sourcePath = item.assignmentAttempt.sourceRef.path, originalRead = structuredClone(state.replies.get(`library read ${sourcePath}`)!);
+		const rawBodyRead = structuredClone(originalRead);
+		rawBodyRead.result.files[0].body = rawBodyRead.result.files[0].content.match(/^---\r?\n[\s\S]*?\r?\n---\r?\n([\s\S]*)$/u)![1];
+		state.replies.set(`library read ${sourcePath}`, rawBodyRead);
+		expect(() => gate('collaboration')).not.toThrow();
+		state.replies.set(`library read ${sourcePath}`, originalRead);
+		const originalInput = structuredClone(item);
+		for (const mutate of [
+			(value: Row) => { value.result.repoId = 'foreign'; }, (value: Row) => { value.result.resolvedRef = 'staging'; },
+			(value: Row) => { value.result.files = []; }, (value: Row) => { value.result.files.push(value.result.files[0]); },
+			(value: Row) => { value.result.files[0].path = 'discussion-messages/foreign.mdx'; },
+			(value: Row) => { value.result.files[0].content = 'unreadable original message'; },
+			(value: Row) => { value.result.files[0].frontmatter.contextRefs[0].id = 'foreign-proposal'; },
+			(value: Row) => { value.result.files[0].body = '@sdk/engineer An unrelated question.'; },
+		]) {
+			const denied = structuredClone(originalRead); mutate(denied); state.replies.set(`library read ${sourcePath}`, denied);
+			const held = structuredClone([...state.replies]); expect(() => gate('collaboration')).toThrow(); expect([...state.replies]).toEqual(held);
+		}
+		for (const fields of [{ recipientIds: ['researcher'] }, { mentionedAgents: [] }, { parentWorkdayId: 'foreign-workday' },
+			{ discussionId: 'foreign-discussion' }, { authorType: 'agent' }, { contextRefs: [] }, { createdAt: '2026-09-26T00:00:00Z' }]) {
+			const denied = structuredClone(originalRead), file = denied.result.files[0]; Object.assign(file.frontmatter, fields);
+			file.content = `---\n${stringify(file.frontmatter, { lineWidth: 0 })}---\n\n${file.body}\n`;
+			state.replies.set(`library read ${sourcePath}`, denied); const held = structuredClone([...state.replies]);
+			expect(() => gate('collaboration')).toThrow(); expect([...state.replies]).toEqual(held);
+		}
+		state.replies.set(`library read ${sourcePath}`, originalRead);
+		for (const mutate of [(value: Row) => { value.invocationId = 'foreign-invocation'; },
+			(value: Row) => { value.assignmentAttempt.predecessorResultIds = ['standing-result']; },
+			(value: Row) => { value.assignmentAttempt.contextRefs = []; },
+			(value: Row) => { value.assignmentAttempt.effectiveProfile.prompt.system = ''; },
+			(value: Row) => { value.assignmentAttempt.grant.contentRead = []; }]) {
+			mutate(item); const held = structuredClone([...state.replies]); expect(() => gate('collaboration')).toThrow();
+			expect([...state.replies]).toEqual(held); Object.assign(item, structuredClone(originalInput));
+		}
+		expect(() => gate('collaboration')).not.toThrow();
+		const discussionKey = [...state.replies.keys()].find(key => key.startsWith('library read discussions/'))!;
+		const originalDiscussion = structuredClone(state.replies.get(discussionKey)!);
+		for (const status of ['closed', 'resolved']) {
+			const denied = structuredClone(originalDiscussion), file = denied.result.files[0]; file.frontmatter.status = status;
+			file.content = `---\n${stringify(file.frontmatter, { lineWidth: 0 })}---\n${file.body}`;
+			const boundMessage = structuredClone(originalRead), requestFile = boundMessage.result.files[0];
+			requestFile.frontmatter.discussionRef.digest = `sha256:${createHash('sha256').update(file.content).digest('hex')}`;
+			requestFile.content = `---\n${stringify(requestFile.frontmatter, { lineWidth: 0 })}---\n${requestFile.body}`;
+			state.replies.set(`library read ${sourcePath}`, boundMessage);
+			state.replies.set(discussionKey, denied); const held = structuredClone([...state.replies]);
+			expect(() => gate('collaboration')).toThrow(); expect([...state.replies]).toEqual(held);
+		}
+		state.replies.set(discussionKey, originalDiscussion); state.replies.set(`library read ${sourcePath}`, originalRead); expect(() => gate('collaboration')).not.toThrow();
 		// Additional supplied UNIT cycles exercise the same managed assertion;
 		// these replies are not native publication or live model evidence.
 		const items: Row[] = state.replies.get('assignments list')!.items;

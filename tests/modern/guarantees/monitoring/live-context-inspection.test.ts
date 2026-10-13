@@ -10,7 +10,8 @@ vi.mock('../../../acceptance/acceptance-cli.ts', async original => ({
 const { inspectAssignmentContext } = await import('../../../acceptance/workday/support/monitoring/assignment-context.ts');
 
 beforeEach(() => {
-	const f = exactContext(); state.binding = { repositoryId: f.ref.repository }; state.content = f.response; state.fault = '';
+	const f = exactContext(); state.binding = { project: { id: f.attempt.projectId, slug: 'sdk', teamId: f.attempt.teamId },
+		library: { projectId: f.attempt.projectId, teamId: f.attempt.teamId, repositoryId: f.ref.repository } }; state.content = f.response; state.fault = '';
 	read.mockReset().mockImplementation((args: string[]) => {
 		if (state.fault) throw new Error(state.fault);
 		return structuredClone(args[1] === 'show' ? state.binding : state.content);
@@ -31,7 +32,7 @@ it('denies missing malformed foreign moved or tampered original context and reta
 	const f = exactContext(), item = { assignmentAttempt: f.attempt }, original = structuredClone(state);
 	for (const change of [
 		() => { state.binding = {}; },
-		() => { state.binding.repositoryId = 'foreign-library'; },
+		() => { state.binding.library.repositoryId = 'foreign-library'; },
 		() => { delete state.content.resolvedRef; },
 		() => { state.content.resolvedRef = 'f'.repeat(40); },
 		() => { state.content.files = []; },
@@ -53,6 +54,7 @@ it('denies missing malformed foreign moved or tampered original context and reta
 
 it('uses only original proxy read scope and rejects a foreign fallback repository without broadening its paths', () => {
 	const f = exactContext(), projectId = 'original-library-project'; state.content.files[0].frontmatter.projectId = projectId;
+	state.binding.project.id = projectId; state.binding.library.projectId = projectId;
 	const scope = { projectId, repositoryId: f.ref.repository, baseRef: f.ref.commit };
 	for (const treedxProxyHandle of [{ readRepositories: [scope] }, { metadata: { readRepositories: [scope] } }]) {
 		read.mockClear(); const item = { assignmentAttempt: f.attempt, treedxProxyHandle }, before = structuredClone(item);
@@ -71,7 +73,8 @@ it('denies an omitted independently declared Book even when supplied context and
 	attempt.workItemId = 'configured-material-work'; const original = liveGovernedContext(attempt);
 	attempt.sourceRef = original.reference;
 	attempt.contextRefs.push(original.reference); attempt.grant.contentRead.push(original.reference);
-	state.binding = original.binding; state.content = original.observed;
+	state.binding = { project: { id: attempt.projectId, slug: 'sdk', teamId: attempt.teamId },
+		library: { ...original.binding, teamId: attempt.teamId } }; state.content = original.observed;
 	const held = structuredClone({ item, state });
 	expect(() => inspectAssignmentContext(item, attempt.teamId)).toThrow('ACCEPTANCE_DECLARED_CONTEXT');
 	expect({ item, state }).toEqual(held);

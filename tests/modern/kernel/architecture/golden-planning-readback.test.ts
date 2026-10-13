@@ -34,6 +34,11 @@ describe('managed planning cycle and published contribution custody', () => {
 		const heldContext = structuredClone([...state.replies]); expect([...state.replies]).toEqual(heldContext);
 		expect(deniedContext).toEqual([true, true, true, true]);
 		const sourcePath = item.assignmentAttempt.sourceRef.path, originalRead = structuredClone(state.replies.get(`library read ${sourcePath}`)!);
+		const rawBodyRead = structuredClone(originalRead);
+		rawBodyRead.result.files[0].body = rawBodyRead.result.files[0].content.match(/^---\r?\n[\s\S]*?\r?\n---\r?\n([\s\S]*)$/u)![1];
+		state.replies.set(`library read ${sourcePath}`, rawBodyRead);
+		expect(() => gate('collaboration')).not.toThrow();
+		state.replies.set(`library read ${sourcePath}`, originalRead);
 		const originalInput = structuredClone(item);
 		for (const mutate of [
 			(value: Row) => { value.result.repoId = 'foreign'; }, (value: Row) => { value.result.resolvedRef = 'staging'; },

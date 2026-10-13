@@ -35,6 +35,19 @@ function run(name: string, command: string[], cwd = temporary, expected = 0, tim
  return result.stdout;
 }
 try {
+ const workflow = parse(readFileSync(resolve('.github/workflows/verify.yml'), 'utf8'));
+ const runtime = workflow.jobs['installed-owner-custody'].steps.filter((step: { with?: { repository?: string } }) => step.with?.repository === 'treeseed-ai/treedx');
+ assert.equal(runtime.length, 1); const declared = runtime[0].with;
+ assert.match(declared.ref, /^[a-f0-9]{40}$/u); assert.equal(declared.path, '.treeseed/installed-owner-inputs/treedx-source');
+ const heldRuntime = resolve(declared.path), runtimeRoot = resolve(workspace, 'packages/treedx');
+ assert.equal(run('treedx-held-head', ['git', 'rev-parse', 'HEAD'], heldRuntime).trim(), declared.ref);
+ mkdirSync(runtimeRoot, { recursive: true });
+ run('treedx-init', ['git', 'init', '--quiet'], runtimeRoot);
+ run('treedx-fetch', ['git', 'fetch', '--depth=1', heldRuntime, declared.ref], runtimeRoot);
+ run('treedx-checkout', ['git', 'checkout', '--detach', 'FETCH_HEAD'], runtimeRoot);
+ run('treedx-submodules', ['git', 'submodule', 'update', '--init', '--recursive', '--depth=1'], runtimeRoot);
+ assert.equal(run('treedx-head', ['git', 'rev-parse', 'HEAD'], runtimeRoot).trim(), declared.ref);
+ const runtimeSource = { owner: 'treedx', commit: declared.ref as string, tree: run('treedx-tree', ['git', 'rev-parse', 'HEAD^{tree}'], runtimeRoot).trim() };
  for (const input of inputs) {
   const source = resolve(workspace, 'packages', input.owner); mkdirSync(source, { recursive: true });
   run(`${input.owner}-init`, ['git', 'init', '--quiet'], source);
@@ -131,7 +144,7 @@ try {
   assert.deepEqual(report.testResults, [{ assertionResults: [] }]);
  }
  for (const input of observations) assert.equal(digest(readFileSync(resolve(prefix, input.filename))), input.archiveSha256);
- writeFileSync(resolve(output, 'custody.json'), JSON.stringify({ owners: observations, selectedAssetLoads: refs.length,
+ writeFileSync(resolve(output, 'custody.json'), JSON.stringify({ owners: observations, runtimeSource, selectedAssetLoads: refs.length,
   sourceArchiveInstalledCustody: true, managedAssertions: 0, managedPass: false, specificationPass: false }, null, 2) + '\n');
  console.log('Six native source candidates and production archives passed installed custody; all22selected assets load. No managed acceptance.');
 } catch (error) {

@@ -4,7 +4,7 @@ verifiers:
   agent.golden.sdk-installed-custody-binding-unit:
     kind: vitestCase
     ownerPackage: '@treeseed/agent'
-    testFile: tests/modern/guarantees/installed-custody-binding.test.ts
+    testFile: tests/modern/guarantees/preflight/installed-custody-binding.test.ts
     testName: binds installed owner custody to every original integrated SDK step without source-only execution credit
   agent.golden.sdk-integration-binding-unit:
     kind: vitestCase

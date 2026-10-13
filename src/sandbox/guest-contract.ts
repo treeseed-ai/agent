@@ -263,11 +263,16 @@ export function attachObservedTesterFailures(completion: ActivityCompletionRepor
 	return completion;
 }
 
+export function isTestFirstVerification(activity: string, acceptanceCriteria: unknown, command?: string): boolean {
+	const criteria = Array.isArray(acceptanceCriteria) ? acceptanceCriteria.map(text).join(' ') : '';
+	return ['acting', 'reviewing'].includes(activity)
+		&& /report failing test names and paths|failing-on-base|tests?[^.]*fail on (?:the )?frozen base/iu.test(criteria)
+		&& (command === undefined || /\b(?:vitest|npm\s+(?:run\s+)?test)\b/iu.test(command));
+}
+
 export function correctObservedTestFirstRedVerification(completion: ActivityCompletionReport, events: Array<Record<string, unknown>>,
 	agentClass: string, activity: string, acceptanceCriteria: unknown): ActivityCompletionReport {
-	const criteria = Array.isArray(acceptanceCriteria) ? acceptanceCriteria.map(text).join(' ') : '';
-	const testFirst = /report failing test names and paths|failing-on-base|tests?[^.]*fail on (?:the )?frozen base/iu.test(criteria);
-	if (!testFirst || !['acting', 'reviewing'].includes(activity)) return completion;
+	if (!isTestFirstVerification(activity, acceptanceCriteria)) return completion;
 	const failedCommands = new Map<string, number>();
 	for (const event of events) {
 		const item = record(event.item), command = text(item.command), exitCode = Number(item.exit_code);
@@ -280,7 +285,7 @@ export function correctObservedTestFirstRedVerification(completion: ActivityComp
 	return { ...completion, verification: completion.verification.map((entry) => {
 		if (entry.status !== 'passed' || entry.commands.length !== 1) return entry;
 		const command = entry.commands[0].trim(), exitCode = failedCommands.get(command);
-		if (exitCode === undefined || !/\b(?:vitest|npm\s+(?:run\s+)?test)\b/iu.test(command)) return entry;
+		if (exitCode === undefined || !isTestFirstVerification(activity, acceptanceCriteria, command)) return entry;
 		return { ...entry, status: 'failed' as const, summary: `${entry.summary} Runner-observed frozen-base exit ${exitCode}; intentional red test is not a passing check.` };
 	}) };
 }
@@ -317,8 +322,8 @@ export function requiresActivityCompletion(sourceMode: unknown) {
 	return sourceMode === 'work';
 }
 
-export function reportedVerificationCommands(report: ActivityCompletionReport) {
-	const commands = [...new Set(report.verification.filter((entry) => entry.status === 'passed').flatMap((entry) => entry.commands))];
+export function reportedVerificationCommands(report: ActivityCompletionReport, includeFailed = false) {
+	const commands = [...new Set(report.verification.filter((entry) => entry.status === 'passed' || includeFailed && entry.status === 'failed').flatMap((entry) => entry.commands))];
 	const longest = Math.max(0, ...commands.map(command => command.length));
 	if (commands.length > maximumVerificationCommands || longest > maximumVerificationCommandLength || commands.some(command => command.includes('\0'))) {
 		throw new Error(`Activity completion verification exceeds bounded policy: ${commands.length}/${maximumVerificationCommands} commands, longest ${longest}/${maximumVerificationCommandLength} characters; NUL bytes are prohibited.`);

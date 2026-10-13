@@ -3,7 +3,7 @@ import { mkdtemp, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import type { ActivityCompletionReport } from '../activity-completion.ts';
-import { correctObservedTestFirstRedVerification, isReleaseReview, reportedVerificationCommands, record, text } from './guest-contract.ts';
+import { correctObservedTestFirstRedVerification, isTestFirstVerification, isReleaseReview, reportedVerificationCommands, record, text } from './guest-contract.ts';
 import { run } from './process-runner.ts';
 import { redactProviderDiagnostic } from './provider-failure.ts';
 import type { VerificationResult } from '../kernel/contracts.ts';
@@ -26,7 +26,8 @@ export async function verifyReportedActivityCommands(report: ActivityCompletionR
 
 export async function observeReportedActivityCommands(report: ActivityCompletionReport, secrets: string[] = [],
 	execute: typeof run = run, assignment: Record<string, unknown> = {}) {
-	const commands = reportedVerificationCommands(report);
+	const testFirst = isTestFirstVerification(text(record(assignment.effectiveProfile).activity), assignment.acceptanceCriteria);
+	const commands = reportedVerificationCommands(report, testFirst);
 	if (commands.some(requiresNodeDependencyRestore)
 		&& await stat('/workspace/project/package-lock.json').then(() => true, () => false)
 		&& !await stat('/workspace/project/node_modules/.bin/vitest').then(() => true, () => false)) {
@@ -57,16 +58,16 @@ export async function observeReportedActivityCommands(report: ActivityCompletion
 			const output = `${text(observed.stdout)}\n${text(observed.stderr)}`.replace(/\u001b\[[0-9;]*m/gu, '');
 			// Only actual assertion failures are test-first red evidence. Setup failures,
 			// killed processes and unknown exits remain fatal even in a test-first scope.
-			if (observed.exitCode === 1 && typeof observed.stdout === 'string' && typeof observed.stderr === 'string'
+			if (isTestFirstVerification(text(record(assignment.effectiveProfile).activity), assignment.acceptanceCriteria, command) && observed.exitCode === 1 && typeof observed.stdout === 'string' && typeof observed.stderr === 'string'
 				&& /\bFAIL\s+\S+\.test\.tsx?\s+>/u.test(output) && /\bAssertionError\b/u.test(output)
 				&& !/Cannot find module|Failed to load|heap out of memory|Unhandled Error|SyntaxError|TypeError|ReferenceError|timed?\s*out|timeout|\bskipped\b|\btodo\b/iu.test(output)) {
 				const corrected = correctObservedTestFirstRedVerification(report,
 					[{ type: 'item.completed', item: { type: 'command_execution', command, exit_code: 1 } }],
 					text(assignment.agentClass), text(record(assignment.effectiveProfile).activity), assignment.acceptanceCriteria);
-				if (corrected.verification.some((entry, index) => entry.status === 'failed' && report.verification[index]?.status === 'passed')) {
+				if (corrected.verification.some(entry => entry.status === 'failed' && entry.commands.length === 1 && entry.commands[0]!.trim() === command.trim())) {
 					report = { ...corrected, summary: `${corrected.summary}\nRunner-observed test-first red: ${redactProviderDiagnostic(command, secrets)} (exit 1); ${diagnostics}`,
-						verification: corrected.verification.map((entry, index) => entry.status === 'failed'
-						&& report.verification[index]?.status === 'passed' ? { ...entry, summary: `${entry.summary} ${diagnostics}` } : entry) };
+						verification: corrected.verification.map(entry => entry.status === 'failed'
+						&& entry.commands.length === 1 && entry.commands[0]!.trim() === command.trim() ? { ...entry, summary: `${entry.summary} ${diagnostics}` } : entry) };
 					const receipt: VerificationResult = { command, status: 'failed', exitCode: 1,
 						outputDigest: objectDigest({ stdout: observed.stdout, stderr: observed.stderr }),
 						durationSeconds: Math.ceil(Number(process.hrtime.bigint() - started) / 1e9) };

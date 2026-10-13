@@ -8,12 +8,12 @@ import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { verifyMeasuredVerification } from '../../../acceptance/workday/support/assignment-authority.ts';
 
-async function actualTestFirstRed(agentClass: string, activity: string) {
+async function actualTestFirstRed(agentClass: string, activity: string, status: 'passed' | 'failed') {
 	const directory = await mkdtemp(resolve(tmpdir(), 'agent296-red-'));
 	const command = 'npx vitest run tests/unit/example.test.ts';
 	const report = { schemaVersion: 'treeseed.activity-completion/v1' as const, summary: 'Exact red suite reviewed',
 		contentOutput: null, reviewDisposition: 'approved' as const,
-		verification: [{ status: 'passed' as const, summary: 'Red suite inspected', commands: [command] }] };
+		verification: [{ status, summary: 'Red suite inspected', commands: [command] }] };
 	try {
 		await symlink(resolve('node_modules'), resolve(directory, 'node_modules'), 'dir');
 		await mkdir(resolve(directory, 'tests/unit'), { recursive: true });
@@ -51,10 +51,10 @@ async function actualTestFirstRed(agentClass: string, activity: string) {
 			expect(partial).toEqual(incomplete); expect(result).toEqual(held);
 	} finally { await rm(directory, { recursive: true, force: true }); }
 }
-it('retains actual runner assertion failures as failed evidence in scoped test-first review', () => actualTestFirstRed('reviewer', 'reviewing'));
-it('retains actual runner assertion failures for the original test author without claiming a passing replay', () => actualTestFirstRed('tester', 'acting'));
-it('retains actual runner assertion failures for an arbitrarily renamed test author without claiming a passing replay', () => actualTestFirstRed('contract-author', 'acting'));
-it('retains actual runner assertion failures for an arbitrarily renamed independent reviewer without claiming a passing replay', () => actualTestFirstRed('independent-inspector', 'reviewing'));
+it('retains actual runner assertion failures as failed evidence in scoped test-first review', async () => { for (const status of ['passed', 'failed'] as const) await actualTestFirstRed('reviewer', 'reviewing', status); });
+it('retains actual runner assertion failures for the original test author without claiming a passing replay', async () => { for (const status of ['passed', 'failed'] as const) await actualTestFirstRed('tester', 'acting', status); });
+it('retains actual runner assertion failures for an arbitrarily renamed test author without claiming a passing replay', async () => { for (const status of ['passed', 'failed'] as const) await actualTestFirstRed('contract-author', 'acting', status); });
+it('retains actual runner assertion failures for an arbitrarily renamed independent reviewer without claiming a passing replay', async () => { for (const status of ['passed', 'failed'] as const) await actualTestFirstRed('independent-inspector', 'reviewing', status); });
 
 it('keeps unscoped non-test setup and resource runner failures fail-closed', async () => {
 	const criteria = ['Tester commits failing-on-base SDK tests.'];
@@ -147,7 +147,7 @@ it('denies mixed assertion and nonbehavioral suite failures or incomplete covera
 		const evidence = { exitCode: 1, stdout: 'FAIL tests/contract/selection.test.ts > trims decisions\nAssertionError: expected trimmed input\n', stderr: `${extra}\n` };
 		const before = structuredClone({ report, assignment, evidence });
 		const failure = Object.assign(new Error('process exited 1'), evidence);
-		await expect(observeReportedActivityCommands(report, [], async () => { throw failure; }, assignment))
+		for (const status of ['passed', 'failed'] as const) await expect(observeReportedActivityCommands({ ...report, verification: report.verification.map(entry => ({ ...entry, status })) }, [], async () => { throw failure; }, assignment))
 			.rejects.toThrow('Runner-observed verification failed');
 		expect({ report, assignment, evidence }).toEqual(before);
 	}

@@ -3,6 +3,33 @@ id: agent.golden.component-boundaries
 title: Golden execution component boundaries
 scope: local-component-tests
 workflow:
+  - id: live-workspace-base-denial-unit
+    action: { verifier: agent.golden.live-workspace-base-denial-unit }
+    expect: { status: passed }
+  - id: live-workspace-base-first-unit
+    action: { verifier: agent.golden.live-workspace-base-first-unit }
+    expect: { status: passed }
+  - id: live-workspace-base-lineage-unit
+    action: { verifier: agent.golden.live-workspace-base-lineage-unit }
+    expect: { status: passed }
+  - id: live-workspace-base-integration-unit
+    action: { verifier: agent.golden.live-workspace-base-integration-unit }
+    expect: { status: passed }
+  - id: live-workspace-base-revision-unit
+    action: { verifier: agent.golden.live-workspace-base-revision-unit }
+    expect: { status: passed }
+  - id: live-workspace-base-authority-unit
+    action: { verifier: agent.golden.live-workspace-base-authority-unit }
+    expect: { status: passed }
+  - id: terminal-evidence-unit
+    action: { verifier: agent.golden.terminal-evidence-unit }
+    expect: { status: passed }
+  - id: terminal-evidence-native
+    action: { verifier: agent.golden.terminal-evidence-native }
+    expect: { status: passed }
+  - id: terminal-evidence-binding-unit
+    action: { verifier: agent.golden.terminal-evidence-binding-unit }
+    expect: { status: passed }
   - id: live-context-missing-unit
     action: { verifier: agent.golden.live-context-missing-unit }
     expect: { status: passed }

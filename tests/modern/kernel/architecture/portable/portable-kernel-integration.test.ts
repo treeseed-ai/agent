@@ -62,10 +62,8 @@ describe('portable configured profiles through real provider Kernel and native G
 				const inputsRead = inputs.map(assignmentResult => ({ assignmentResult })), frozen = { [workspace.repository]: f.base };
 				verifyLiveWorkspaceBase({ assignmentAttempt: f.attempt }, inputsRead, frozen);
 				for (const commit of [left, right]) {
-					const wrong = structuredClone(f.attempt); if (wrong.workspace.mode !== 'git') throw new Error('Original Git authority required');
-					wrong.workspace.baseCommit = commit; const retained = structuredClone(wrong);
-					expect(() => verifyLiveWorkspaceBase({ assignmentAttempt: wrong }, inputsRead, frozen)).toThrow('ACCEPTANCE_LIVE_SOURCE_BASE');
-					expect(wrong).toEqual(retained);
+					const wrong = structuredClone(f.attempt); if (wrong.workspace.mode !== 'git') throw new Error('Original Git authority required'); wrong.workspace.baseCommit = commit;
+					const retained = structuredClone(wrong); expect(() => verifyLiveWorkspaceBase({ assignmentAttempt: wrong }, inputsRead, frozen)).toThrow('ACCEPTANCE_LIVE_SOURCE_BASE'); expect(wrong).toEqual(retained);
 				}
 				verifyLiveWorkspaceBase({ assignmentAttempt: f.attempt }, inputsRead, frozen);
 				// Explicit native merge and predecessor DTOs are controlled inputs,

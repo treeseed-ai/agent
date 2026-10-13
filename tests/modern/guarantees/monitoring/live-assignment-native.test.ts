@@ -131,6 +131,9 @@ it('native configured Kernel Git result and public SDK assignment reads reach th
 			const returned = structuredClone(item);
 			if (mode === 'grant-missing-tool') row(row(returned.assignmentAttempt).grant).tools =
 				(row(row(returned.assignmentAttempt).grant).tools as string[]).filter(tool => tool !== 'verification');
+			if (mode === 'source-omitted') {
+				row(row(returned.assignmentAttempt).grant).sourceRead = [];
+			}
 			if (mode === 'source-substitution') {
 				row(row(returned.assignmentAttempt).workspace).baseCommit = 'f'.repeat(40);
 				for (const reference of row(returned.assignmentAttempt).contextRefs as Row[]) if (reference.store === 'git') reference.commit = 'f'.repeat(40);
@@ -265,6 +268,10 @@ it('native configured Kernel Git result and public SDK assignment reads reach th
 			mode = denied; const empty = new Map<string, Row>(); await expect(execute(empty)).rejects.toThrow('ACCEPTANCE_LIVE_WORKSPACE');
 			expect(empty.size).toBe(0); expect({ item, run }).toEqual(before);
 		}
+		mode = 'source-omitted'; const omittedSource = new Map<string, Row>();
+		await expect(execute(omittedSource)).rejects.toThrow('ACCEPTANCE_LIVE_SOURCE_CONTEXT'); expect(omittedSource.size).toBe(0);
+		const omittedSourceFailure = structuredClone(failed.at(-1)); mode = 'exact'; await execute(new Map());
+		expect(failed.at(-1)).toEqual(omittedSourceFailure); expect(retained).toEqual(held);
 		mode = 'source-substitution'; const deniedSource = new Map<string, Row>();
 		await expect(execute(deniedSource)).rejects.toThrow('ACCEPTANCE_LIVE_SOURCE_CONTEXT'); expect(deniedSource.size).toBe(0);
 		const workspaceFailures = structuredClone(failed); mode = 'exact'; await execute(untouched);

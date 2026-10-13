@@ -149,6 +149,13 @@ it('retains original provider publication when a later session opens after the o
 	expect(observations).toEqual(before);
 });
 
+it('denies omission of the required primary source grant while exact frozen context and public views agree', () => {
+	state.item.assignmentAttempt.grant.sourceRead = [];
+	const before = structuredClone(state.item);
+	expect(() => verifyLiveSourceContext(state.item, [state.item], state.frozen)).toThrow('ACCEPTANCE_LIVE_SOURCE_CONTEXT');
+	expect(state.item).toEqual(before);
+});
+
 it('denies a self-consistent foreign Git base and context against the original frozen source', () => {
 	const original = structuredClone(state.item.assignmentAttempt.contextRefs.find((ref: Record<string, any>) => ref.store === 'git'));
 	state.item.assignmentAttempt.workspace.baseCommit = 'f'.repeat(40);

@@ -42,6 +42,8 @@ describe('capacity-provider guarantee execution bindings', () => {
 		expect(manifest.acceptanceCriteria.filter((value: { criterion: string }) => value.criterion ===
 			'a4199e48998233b28a6aa7480d4a386c32675970f2989ad2719240055fa91443')).toEqual([{
 			criterion: 'a4199e48998233b28a6aa7480d4a386c32675970f2989ad2719240055fa91443', verifierRefs: [refs[0], refs[2]] }]);
+		expect(manifest.acceptanceCriteria.filter((value: { criterion: string }) => value.criterion ===
+			'ee95f7eb3323545534ac708f6ef6ae9d6b9ae2ae40ad4268738084a25d293d86')).toEqual([{ criterion: 'ee95f7eb3323545534ac708f6ef6ae9d6b9ae2ae40ad4268738084a25d293d86', verifierRefs: [refs[0], refs[1]] }]);
 	});
 	it('binds exact simulation Git workspace custody to live approved bases and independently resolved published branches', () => {
 		const manifest = parse(readFileSync(resolve(root, 'guarantees/agent/golden/sdk-complete.guarantee.yaml'), 'utf8'));
@@ -51,6 +53,9 @@ describe('capacity-provider guarantee execution bindings', () => {
 			value.criterion === '2bcb03ca47bbe9ffe324405ca36a2464dbe0d613a7777b6973d0b10bd6ea50dd')).toEqual([
 			{ criterion: '2bcb03ca47bbe9ffe324405ca36a2464dbe0d613a7777b6973d0b10bd6ea50dd', verifierRefs: refs },
 		]);
+		expect(manifest.acceptanceCriteria.filter((value: { criterion: string }) => value.criterion ===
+			'6d34d659df17e81ab1b96cf86c9fb401b7dcaff4a59a49a41999fe38e65f9bd9')).toEqual([{
+			criterion: '6d34d659df17e81ab1b96cf86c9fb401b7dcaff4a59a49a41999fe38e65f9bd9', verifierRefs: refs }]);
 		for (const ref of refs) expect(scene.workflow.filter((step: { action: { verifier: string } }) => step.action.verifier === ref)).toHaveLength(1);
 	});
 	it('binds terminal-status insufficiency to every original normal SDK evidence step without a terminal-only shortcut', () => {
@@ -250,6 +255,8 @@ describe('capacity-provider guarantee execution bindings', () => {
 			value.criterion === 'fc80e789a38eb6ae75fada867226ac0157844505619b12c90c55cbe317c6cc9d'))
 			.toEqual([{ criterion: 'fc80e789a38eb6ae75fada867226ac0157844505619b12c90c55cbe317c6cc9d', verifierRefs: runtimeHandlers }]);
 		expect(manifest.acceptanceCriteria).toEqual([
+			{ criterion: '6d34d659df17e81ab1b96cf86c9fb401b7dcaff4a59a49a41999fe38e65f9bd9', verifierRefs: ["agent.golden.live.campaign", "agent.golden.architecture-profile-custody-live-1", "sdk.golden.live.product"] },
+			{ criterion: 'ee95f7eb3323545534ac708f6ef6ae9d6b9ae2ae40ad4268738084a25d293d86', verifierRefs: ['sdk.golden.live.product', 'agent.golden.architecture-living-graph-live-1'] },
 			{ criterion: 'a4199e48998233b28a6aa7480d4a386c32675970f2989ad2719240055fa91443', verifierRefs: ['sdk.golden.live.product', 'api.golden.execution-protected-observation-live-1'] },
 			{ criterion: '6a572f1a5833a039bdc575588d8e6e272a0e71a29a5faaeeeb7b5c85d6544ee6', verifierRefs: refs },
 			{ criterion: '5ac90e451b0365ff6c44bfbcde86252eb1b53adf6b97972d00a7d5f15b9bf0e9', verifierRefs: ['sdk.golden.live.product', 'agent.golden.architecture-living-graph-live-1', 'api.golden.execution-protected-observation-live-1'] },

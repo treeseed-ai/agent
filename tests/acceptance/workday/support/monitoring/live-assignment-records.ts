@@ -100,7 +100,7 @@ export function verifyLiveSimulationWorkspace(item: Row, run: Row): void {
 }
 
 /** Compare source context with frozen bases and original consumed results. */
-export function verifyLiveSourceContext(item: Row, items: readonly Row[], frozenBases: Readonly<Record<string, unknown>>): void {
+export function verifyLiveSourceContext(item: Row, items: readonly Row[], frozenBases: Readonly<Record<string, unknown>>, graph?: Row): void {
 	const attempt = assignmentAttemptSchema.parse(item.assignmentAttempt), code = 'ACCEPTANCE_LIVE_SOURCE_CONTEXT';
 	assert.ok(frozenBases && typeof frozenBases === 'object' && !Array.isArray(frozenBases), `${code}: Original frozen source inventory required`);
 	const predecessors = items.filter(value => attempt.predecessorResultIds.includes(String(row(value.assignmentResult).id)))
@@ -116,6 +116,65 @@ export function verifyLiveSourceContext(item: Row, items: readonly Row[], frozen
 	}
 	for (const reference of attempt.grant.contentRead)
 		assert.ok(attempt.contextRefs.some(ref => isDeepStrictEqual(ref, reference)), `${code}: Original exact granted content omitted`);
+	verifyGitInputContext(item, predecessors);
+	verifyLiveWorkspaceBase(item, items, frozenBases, graph);
+}
+
+/** An allowed context commit is not necessarily the correct execution base. */
+export function verifyLiveWorkspaceBase(item: Row, items: readonly Row[], frozenBases: Readonly<Record<string, unknown>>, graph?: Row): void {
+	const attempt = assignmentAttemptSchema.parse(item.assignmentAttempt), code = 'ACCEPTANCE_LIVE_SOURCE_BASE';
+	if (attempt.workspace.mode !== 'git') return;
+	const repository = attempt.workspace.repository, frozen = frozenBases[repository];
+	assert.ok(typeof frozen === 'string' && /^[a-f0-9]{40}$/u.test(frozen), `${code}: Original frozen base required`);
+	const consumed = items.filter(value => attempt.predecessorResultIds.includes(String(row(value.assignmentResult).id)))
+		.map(value => ({ item: value, result: assignmentResultSchema.parse(value.assignmentResult) }))
+		.map(value => ({ ...value, commits: [...new Set(value.result.references.flatMap(ref => ref.kind === 'git' && ref.repository === repository ? [ref.commit] : []))] }))
+		.filter(value => value.commits.length > 0);
+	const commits = [...new Set(consumed.flatMap(value => value.commits))];
+	let expected: string = commits[0] ?? frozen;
+	if (commits.length > 1 && attempt.effectiveProfile.activity === 'acting' && attempt.grant.tools.includes('release')) expected = frozen;
+	else if (commits.length > 1) {
+		assert.ok(consumed.every(value => value.commits.length === 1), `${code}: Ambiguous original source result`);
+		const entries = new Map(consumed.map(value => [value.result.id, { ...value, attempt: assignmentAttemptSchema.parse(value.item.assignmentAttempt) }]));
+		assert.equal(entries.size, consumed.length, `${code}: Duplicate source result authority`);
+		const ancestors = (id: string, visiting = new Set<string>()): Set<string> => {
+			assert.ok(!visiting.has(id), `${code}: Cyclic source result lineage`); visiting.add(id);
+			const found = new Set<string>();
+			for (const predecessor of entries.get(id)!.attempt.predecessorResultIds) {
+				if (!entries.has(predecessor)) continue;
+				found.add(predecessor); for (const earlier of ancestors(predecessor, visiting)) found.add(earlier);
+			}
+			visiting.delete(id); return found;
+		};
+		const lineage = [...entries.values()].map(value => ({ ...value, ancestors: ancestors(value.result.id) }));
+		const terminal = lineage.filter(value => value.ancestors.size === entries.size - 1);
+		assert.ok(terminal.length <= 1, `${code}: Ambiguous terminal source lineage`);
+		if (terminal.length === 1) expected = terminal[0]!.commits[0]!;
+		else {
+			// A revised Actor may also retain its own older candidate. The original
+			// immediate reviewed predecessor, rather than that older candidate, is base.
+			assert.ok(graph && graph.teamId === attempt.teamId && Array.isArray(graph.nodes) && Array.isArray(graph.edges)
+				&& attempt.nodeRevision > 1 && attempt.effectiveProfile.activity === 'acting', `${code}: Independent revised graph authority required`);
+			const nodes = (graph.nodes as Row[]).map(value => executionNodeSchema.parse(value));
+			const selected = nodes.filter(node => node.id === attempt.nodeId);
+			assert.ok(selected.length === 1 && selected[0]!.pairRole === 'actor', `${code}: Original revised Actor required`);
+			const edges = (graph.edges as Row[]).filter(edge => Number(edge.graphRevisionCreated) <= attempt.graphRevision
+				&& (edge.graphRevisionRemoved === undefined || Number(edge.graphRevisionRemoved) > attempt.graphRevision));
+			const direct = new Set<string>();
+			for (const edge of edges.filter(value => value.toNodeId === attempt.nodeId)) {
+				const source = nodes.find(node => node.id === edge.fromNodeId); assert.ok(source, `${code}: Original predecessor node required`);
+				if (source.kind === 'condition') continue;
+				direct.add(source.id);
+				if (source.pairRole === 'reviewer') {
+					const pairs = edges.filter(value => value.toNodeId === source.id && value.provenance === 'review-pair');
+					assert.equal(pairs.length, 1, `${code}: Original immediate reviewed Actor required`); direct.add(String(pairs[0]!.fromNodeId));
+				}
+			}
+			const candidates = [...new Set(lineage.filter(value => direct.has(value.attempt.nodeId)).flatMap(value => value.commits))];
+			assert.equal(candidates.length, 1, `${code}: One exact original immediate predecessor base required`); expected = candidates[0]!;
+		}
+	}
+	assert.equal(attempt.workspace.baseCommit, expected, `${code}: Workspace does not start on the original required source`);
 }
 
 export function inspectLiveAssignmentProfile(item: Row, team: string, items: readonly Row[], frozenBases: Readonly<Record<string, unknown>>): void {
@@ -135,9 +194,7 @@ export function inspectLiveAssignmentProfile(item: Row, team: string, items: rea
 	}
 	verifyLiveAssignmentGraph(item, graph, items, decisions);
 	verifyPredecessorCustody([...items], graph);
-	verifyLiveSourceContext(item, items, frozenBases);
-	verifyGitInputContext(item, items.filter(value => attempt.predecessorResultIds.includes(String(row(value.assignmentResult).id)))
-		.flatMap(value => assignmentResultSchema.parse(value.assignmentResult).references));
+	verifyLiveSourceContext(item, items, frozenBases, graph);
 	const run = row(read(['workdays', 'show', attempt.workdayId], team).run);
 	assert.equal(run.id, attempt.workdayId, 'ACCEPTANCE_LIVE_ASSIGNMENT: Foreign owning workday');
 	assert.equal(run.teamId, attempt.teamId, 'ACCEPTANCE_LIVE_ASSIGNMENT: Foreign owning team');

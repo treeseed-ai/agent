@@ -46,7 +46,7 @@ describe('capacity-provider guarantee execution bindings', () => {
 			'ee95f7eb3323545534ac708f6ef6ae9d6b9ae2ae40ad4268738084a25d293d86')).toEqual([{ criterion: 'ee95f7eb3323545534ac708f6ef6ae9d6b9ae2ae40ad4268738084a25d293d86', verifierRefs: [refs[0], refs[1]] }]);
 		const products = ['agent.golden.live.results', 'sdk.golden.live.product', 'agent.golden.live.reporter', 'api.golden.execution-normal-sdk-clean-schema-live-1'];
 		expect(manifest.acceptanceCriteria.filter((value: { criterion: string }) => value.criterion === '73706b74d24775782c346f427a33f7ea9386e0038f7c50fa7cf317dfa30d1fd1'))
-			.toEqual([{ criterion: '73706b74d24775782c346f427a33f7ea9386e0038f7c50fa7cf317dfa30d1fd1', verifierRefs: products },
+			.toEqual([{ criterion: '73706b74d24775782c346f427a33f7ea9386e0038f7c50fa7cf317dfa30d1fd1', verifierRefs: products }]);
 		for (const ref of products) expect(scene.workflow.filter((step: { action: { verifier: string } }) => step.action.verifier === ref)).toHaveLength(1);
 		const chatRefs = ['agent.golden.live.campaign', 'agent.golden.architecture-profile-custody-live-1', 'agent.golden.architecture-context-custody-live-1', 'api.golden.execution-normal-sdk-clean-schema-live-1'];
 		for (const criterion of ['ce8a386ea8718aa7bf61c8a5a4602520e62bc90d036ff71adf98cb583389973d', '81b30905093d840992af882b011c2432cc199883a09a948a0fe1c8aced8518b7'])

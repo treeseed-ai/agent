@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { isDeepStrictEqual } from 'node:util';
 import { assignmentAttemptSchema, exactEntityReferenceSchema } from '@treeseed/sdk/agent-capacity';
 import { read, row, type Row } from '../../../acceptance-cli.ts';
+import { verifyProjectLibraryLookup } from '../portfolio-relations.ts';
 import { verifyExactContextSource, verifyGovernedProposalRead } from '../assignment-authority.ts';
 
 /** Read a declared governing source through the same original content boundary. */
@@ -40,7 +41,8 @@ export function inspectAssignmentContext(item: Row, team: string): number {
 		// An owning project is only a candidate. Its original binding must match.
 		const projectId = scope ? String(scope.projectId) : attempt.projectId;
 		const binding = read(['library', 'show', projectId], team, true);
-		const library = row(binding.result ?? binding);
+		const library = verifyProjectLibraryLookup(projectId, binding);
+		assert.equal(library.teamId, attempt.teamId, 'ACCEPTANCE_CONTEXT_BINDING: Original active team required');
 		assert.ok(ref.path && ref.commit, 'ACCEPTANCE_CONTEXT_REF: Missing independent exact content read authority');
 		const observed = read(['library', 'read', projectId, String(ref.path), '--ref', String(ref.commit)], team, true);
 		verifyAssignmentContextRead(item, ref, projectId, library, row(observed.result ?? observed)); reads++;

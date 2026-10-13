@@ -11,7 +11,8 @@ import { read, row, type Row } from '../../acceptance-cli.ts';
 export function verifyProjectLibraryLookup(slug: string, lookup: unknown): Row {
 	const fail = 'ACCEPTANCE_PROJECT_LIBRARY: Exact public project and library identity required';
 	const envelope = row(lookup), project = row(envelope.project), library = row(envelope.library);
-	assert.equal(project.slug, slug, fail);
+	assert.ok(typeof project.slug === 'string' && project.slug.trim() === project.slug && project.slug.length > 0, fail);
+	assert.ok([project.slug, project.id].includes(slug), fail);
 	assert.ok(typeof project.id === 'string' && project.id.trim() === project.id && project.id.length > 0, fail);
 	assert.ok(typeof project.teamId === 'string' && project.teamId.trim() === project.teamId && project.teamId.length > 0, fail);
 	assert.equal(library.projectId, project.id, fail); assert.equal(library.teamId, project.teamId, fail);

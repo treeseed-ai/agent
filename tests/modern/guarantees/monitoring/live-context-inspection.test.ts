@@ -1,3 +1,4 @@
+import { assignmentAttemptSchema } from '@treeseed/sdk/agent-capacity';
 import { liveAssignmentRecord, liveGovernedContext } from './live-assignment-fixture.ts';
 import { beforeEach, expect, it, vi } from 'vitest';
 import { exactContext } from '../../kernel/architecture/portable/context-fixture.ts';
@@ -7,7 +8,7 @@ const read = vi.hoisted(() => vi.fn());
 vi.mock('../../../acceptance/acceptance-cli.ts', async original => ({
 	...await original<typeof import('../../../acceptance/acceptance-cli.ts')>(), read,
 }));
-const { inspectAssignmentContext } = await import('../../../acceptance/workday/support/monitoring/assignment-context.ts');
+const { inspectAssignmentContext, verifyAssignmentContextRead } = await import('../../../acceptance/workday/support/monitoring/assignment-context.ts');
 
 beforeEach(() => {
 	const f = exactContext(); state.binding = { project: { id: f.attempt.projectId, slug: 'sdk', teamId: f.attempt.teamId },
@@ -69,7 +70,7 @@ it('retains Git-only context without inventing a TreeDX read or a passing nonemp
 });
 
 it('denies an omitted independently declared Book even when supplied context and grants agree', () => {
-	const item = liveAssignmentRecord(), attempt = item.assignmentAttempt;
+	const item = liveAssignmentRecord(), attempt = assignmentAttemptSchema.parse(item.assignmentAttempt); item.assignmentAttempt = attempt;
 	attempt.workItemId = 'configured-material-work'; const original = liveGovernedContext(attempt);
 	attempt.sourceRef = original.reference;
 	attempt.contextRefs.push(original.reference); attempt.grant.contentRead.push(original.reference);
@@ -78,4 +79,47 @@ it('denies an omitted independently declared Book even when supplied context and
 	const held = structuredClone({ item, state });
 	expect(() => inspectAssignmentContext(item, attempt.teamId)).toThrow('ACCEPTANCE_DECLARED_CONTEXT');
 	expect({ item, state }).toEqual(held);
+});
+
+it('denies malformed moved tampered or foreign governing declarations without replacing original bytes before exact retry', () => {
+	const item = liveAssignmentRecord(), attempt = assignmentAttemptSchema.parse(item.assignmentAttempt); item.assignmentAttempt = attempt;
+	attempt.workItemId = 'configured-material-work'; const original = liveGovernedContext(attempt);
+	attempt.sourceRef = original.reference; attempt.contextRefs.push(original.reference, original.book.ref);
+	attempt.grant.contentRead.push(original.reference, original.book.ref);
+	const held = structuredClone({ item, original });
+	const inspect = (value: typeof original.observed, ref = original.reference, observedItem = item) =>
+		verifyAssignmentContextRead(observedItem, ref, attempt.projectId, original.binding, value);
+	expect(() => inspect(original.observed)).not.toThrow();
+	for (const change of [
+		(value: typeof original.observed) => { value.resolvedRef = 'f'.repeat(40); },
+		(value: typeof original.observed) => { value.files = []; },
+		(value: typeof original.observed) => { value.files.push(structuredClone(value.files[0]!)); },
+		(value: typeof original.observed) => { value.files[0]!.content += 'Changed governing bytes'; },
+		(value: typeof original.observed) => { value.files[0]!.frontmatter.projectId = 'foreign-project'; },
+	]) {
+		const value = structuredClone(original.observed); change(value); const failed = structuredClone(value);
+		expect(() => inspect(value)).toThrow(); expect(value).toEqual(failed);
+	}
+	const foreign = structuredClone(item); (foreign.assignmentAttempt as typeof attempt).workItemId = 'absent-original-work';
+	expect(() => inspect(original.observed, original.reference, foreign)).toThrow('ACCEPTANCE_DECLARED_CONTEXT');
+	expect({ item, original }).toEqual(held); expect(() => inspect(original.observed)).not.toThrow();
+});
+
+it('retains the declared TreeDX repository as exact mutable workspace authority without inventing a repository content-read grant', () => {
+	const item = liveAssignmentRecord(), attempt = assignmentAttemptSchema.parse(item.assignmentAttempt);
+	attempt.workItemId = 'configured-material-work';
+	attempt.workspace = { mode: 'treedx', repository: 'sdk-library', baseCommit: 'e'.repeat(40), workspaceId: 'original-workspace', writablePaths: ['knowledge/original.md'] };
+	attempt.grant.sourceWrite = []; attempt.grant.tools = ['source.read'];
+	attempt.effectiveProfile.permissionCeiling.tools = ['source.read']; attempt.effectiveProfile.permissionCeiling.content.write = ['knowledge'];
+	const original = liveGovernedContext(attempt);
+	attempt.sourceRef = original.reference; attempt.contextRefs.push(original.reference, original.book.ref);
+	attempt.grant.contentRead.push(original.reference, original.book.ref);
+	attempt.grant.contentWrite = [{ store: 'treedx', model: 'knowledge', id: 'original-knowledge', repository: 'sdk-library', commit: 'e'.repeat(40), path: 'knowledge/original.md' }];
+	item.assignmentAttempt = attempt; const held = structuredClone({ item, original });
+	const inspect = () => verifyAssignmentContextRead(item, original.reference, attempt.projectId, original.binding, original.observed);
+	expect(inspect).not.toThrow(); expect({ item, original }).toEqual(held);
+	for (const workspace of [{ ...attempt.workspace, repository: 'foreign-library' }, { ...attempt.workspace, baseCommit: 'f'.repeat(40) }]) {
+		const changed = structuredClone(item); (changed.assignmentAttempt as typeof attempt).workspace = workspace;
+		expect(() => verifyAssignmentContextRead(changed, original.reference, attempt.projectId, original.binding, original.observed)).toThrow('ACCEPTANCE_DECLARED_CONTEXT');
+	}
 });

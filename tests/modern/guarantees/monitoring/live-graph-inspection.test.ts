@@ -10,7 +10,9 @@ vi.mock('../../../acceptance/acceptance-cli.ts', async original => ({
 	...await original<typeof import('../../../acceptance/acceptance-cli.ts')>(),
 	read: (args: string[]) => args[0] === 'assignments' ? structuredClone(state.item)
 		: args[0] === 'execution' ? structuredClone(state.graph) : args[0] === 'workdays' ? { run: structuredClone(state.run) }
-			: args[0] === 'capacity' ? { items: structuredClone(state.publications), page: { limit: 100, hasMore: false, nextCursor: null } } : {},
+			: args[0] === 'capacity' ? { items: structuredClone(state.publications), page: { limit: 100, hasMore: false, nextCursor: null } }
+			: args[0] === 'library' && args[1] === 'show' ? { project: { id: args[2], slug: 'sdk', teamId: state.item.teamId },
+				library: { projectId: args[2], teamId: state.item.teamId, repositoryId: state.item.assignmentAttempt.contextRefs.find((ref: Record<string, unknown>) => ref.store === 'treedx')?.repository } } : {},
 }));
 vi.mock('../../../acceptance/workday/support/decision-evidence.ts', async original => ({
 	...await original<typeof import('../../../acceptance/workday/support/decision-evidence.ts')>(), readGovernedContentFile: () => ({}),

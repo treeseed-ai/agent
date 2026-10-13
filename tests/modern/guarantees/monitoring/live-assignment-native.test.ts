@@ -325,7 +325,7 @@ it('native original governing content transport rejects an omitted declared Book
 	attempt.sourceRef = original.reference; attempt.contextRefs.push(original.reference, original.book.ref);
 	attempt.grant.contentRead.push(original.reference, original.book.ref);
 	attempt.effectiveProfile.permissionCeiling.content.read.push('book'); item.assignmentAttempt = attempt;
-	const boundary = await contextBoundary(attempt.projectId, original.reference.repository, original.observed);
+	const boundary = await contextBoundary(attempt.projectId, original.binding.repositoryId, original.observed);
 	try {
 		const held = structuredClone(item);
 		const inspect = async (observedItem = item) => {
@@ -342,5 +342,19 @@ it('native original governing content transport rejects an omitted declared Book
 		const failure = structuredClone(omitted);
 		await expect(inspect(omitted)).rejects.toThrow('ACCEPTANCE_DECLARED_CONTEXT');
 		expect(omitted).toEqual(failure); expect(item).toEqual(held); await inspect();
+		const failures: Array<{ mode: string; returned: Row }> = [];
+		for (const mode of ['moved', 'tampered', 'missing', 'duplicate', 'denied', 'malformed', 'interrupted']) {
+			const returned = structuredClone(original.observed);
+			if (mode === 'moved') returned.resolvedRef = 'f'.repeat(40);
+			if (mode === 'tampered') returned.files[0]!.content += 'Changed original declaration';
+			if (mode === 'missing') returned.files = [];
+			if (mode === 'duplicate') returned.files.push(structuredClone(returned.files[0]!));
+			boundary.set(returned, mode === 'denied' ? 403 : 200, mode === 'malformed' ? 'json' : mode === 'interrupted' ? 'reset' : '');
+			failures.push({ mode, returned: structuredClone(returned) }); await expect(inspect(), mode).rejects.toThrow();
+			expect(item).toEqual(held);
+		}
+		const deniedHistory = structuredClone(failures); boundary.set(original.observed);
+		await inspect(); expect(failures).toEqual(deniedHistory); expect(item).toEqual(held);
+
 	} finally { await boundary.close(); }
 });

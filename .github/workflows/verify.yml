@@ -94,3 +94,110 @@ jobs:
           name: agent-${{ github.sha }}
           path: artifacts/
           if-no-files-found: error
+
+  installed-owner-custody:
+    needs: verify
+    permissions:
+      contents: read
+      actions: read
+    runs-on: ubuntu-latest
+    env:
+      TREESEED_INSTALLED_OWNER_INPUTS: >-
+        [{"owner":"agent","commit":"${{ github.sha }}","sha256":null},{"owner":"api","commit":"5f582adf91f92cda7cf1e41f1f39b4f3fb1359f9","sha256":"04c5f93a441a7135c670dc7dec4326da7550589570d84b49e34f87521f56c1c6","buildSdk":{"commit":"952195376b53bf39742e64f320f2a3b109cc77c0","sha256":"7ba46c788578f526692e81f3713f05e7c00db900b2d810ec27364cb41c008185"},"buildTreeDx":{"commit":"6d358bb2e536af24918f3c33acb2072b9093a603","sha256":"d6de27b42704b4c899562f290950561132fd0d48f38a95e6624eb853e32691cb"}},{"owner":"sdk","commit":"1a7c692cd6369a8700c25e447a7fd1461c487922","sha256":"59f508232738dd062b32156a3efefba18ed96b4496566847825545238593cac4"},{"owner":"cli","commit":"f538a7559ae0756e80c66ec222e78d31f0ce5af1","sha256":"f1800c556e023bb36ad17635e9cbbf8496597c277465db105983cd7383d0e637"},{"owner":"deployment","commit":"d2222a3fa354e9ef30a5ef6b40081303c29fe4dc","sha256":"8a33e23e20263820085188e14eed63c3c868f2829c76e8629829c968ecfd1f5d"},{"owner":"reviewer","commit":"3e8221bbdd04de88634065b9148e67449bfa6e29","sha256":"51a59a4d3bfba61fe69f490cab80d776357b3bee10dc7021687946e3be0bec3f","buildSdk":{"commit":"77a6908d4e7580716e9e2ab92de80150b02cdb06","sha256":"a31b02194665e8705e8d81331da0901f4088f54deb50a34c236d3a661d2d1aa7"}}]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.12.0
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Read held agent archive
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          github-token: ${{ github.token }}
+          repository: treeseed-ai/agent
+          run-id: ${{ github.run_id }}
+          name: agent-${{ github.sha }}
+          path: .treeseed/installed-owner-inputs/agent
+      - name: Read declared native TreeDX runtime source
+        uses: actions/checkout@v4
+        with:
+          repository: treeseed-ai/treedx
+          ref: ba464cc2e276aaa4ad0f948b938984ad7263586e
+          path: .treeseed/installed-owner-inputs/treedx-source
+          persist-credentials: false
+      - name: Read held api archive
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          github-token: ${{ github.token }}
+          repository: treeseed-ai/api
+          run-id: 38246522352
+          name: api-b08ce98fa99e750eb6e1e8f505c456377b5441b8
+          path: .treeseed/installed-owner-inputs/api
+      - name: Read held sdk archive
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          github-token: ${{ github.token }}
+          repository: treeseed-ai/sdk
+          run-id: 38344412551
+          name: sdk-df3fa7e310583311d3e8e5eb61d59738822dc772
+          path: .treeseed/installed-owner-inputs/sdk
+      - name: Read held cli archive
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          github-token: ${{ github.token }}
+          repository: treeseed-ai/cli
+          run-id: 38381452116
+          name: cli-cdd8ad00fcc8b02db0c31bc5637d0d0412ab843e
+          path: .treeseed/installed-owner-inputs/cli
+      - name: Read held deployment archive
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          github-token: ${{ github.token }}
+          repository: treeseed-ai/deployment
+          run-id: 38276866252
+          name: deployment-candidate-5b93cc037d7e138f81f4e9c89c2d877efbd38c20
+          path: .treeseed/installed-owner-inputs/deployment
+      - name: Read held reviewer archive
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          github-token: ${{ github.token }}
+          repository: treeseed-ai/reviewer
+          run-id: 38374788689
+          name: reviewer-99d18d14adfb2e66b292b4ab505c14ffd7a2d4ad
+          path: .treeseed/installed-owner-inputs/reviewer
+      - name: Read original API SDK build input
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          github-token: ${{ github.token }}
+          repository: treeseed-ai/sdk
+          run-id: 37871253007
+          name: sdk-952195376b53bf39742e64f320f2a3b109cc77c0
+          path: .treeseed/installed-owner-inputs/build-sdk-952195376b53bf39742e64f320f2a3b109cc77c0
+      - name: Read original Reviewer SDK build input
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          github-token: ${{ github.token }}
+          repository: treeseed-ai/sdk
+          run-id: 37548599768
+          name: sdk-77a6908d4e7580716e9e2ab92de80150b02cdb06
+          path: .treeseed/installed-owner-inputs/build-sdk-77a6908d4e7580716e9e2ab92de80150b02cdb06
+      - name: Read original API native TreeDX build input
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          github-token: ${{ github.token }}
+          repository: treeseed-ai/api
+          run-id: 38246522352
+          name: api-source-b08ce98fa99e750eb6e1e8f505c456377b5441b8
+          path: .treeseed/installed-owner-inputs/build-treedx-6d358bb2e536af24918f3c33acb2072b9093a603
+      - name: Inspect actual installed owner custody without starting scenes
+        run: node --import tsx ./scripts/support/verify-installed-owners.ts
+      - name: Retain installed custody and failed observations
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: installed-owner-custody-${{ github.sha }}
+          path: artifacts/installed-owner-custody/
+          if-no-files-found: error
+          retention-days: 30

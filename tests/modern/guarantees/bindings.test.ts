@@ -54,7 +54,7 @@ describe('capacity-provider guarantee execution bindings', () => {
 		for (const ref of chatRefs) expect(scene.workflow.filter((step: { action: { verifier: string } }) => step.action.verifier === ref)).toHaveLength(1);
 
 		// Composite requirements reuse the already selected owning assertions.
-		for (const binding of [{"criterion":"8e39bb80de13bd6cbad46f12bb890cc41bf1bac8ae8ec749259a0e94ac5faf99","verifierRefs":["agent.golden.live.graph","agent.golden.architecture-graph-history-live-1","agent.golden.architecture-living-graph-live-1","agent.golden.architecture-living-graph-live-2"]},{"criterion":"47b521b0831f30babf7664f8e12de9b9336a9c949de98473e1767212d7a76cd2","verifierRefs":["sdk.golden.live.product"]}]) {
+		for (const binding of [{"criterion":"8e39bb80de13bd6cbad46f12bb890cc41bf1bac8ae8ec749259a0e94ac5faf99","verifierRefs":["agent.golden.live.graph","agent.golden.architecture-graph-history-live-1","agent.golden.architecture-living-graph-live-1","agent.golden.architecture-living-graph-live-2"]}]) {
 			expect(manifest.acceptanceCriteria.filter((value: { criterion: string }) => value.criterion === binding.criterion)).toEqual([binding]);
 			for (const ref of binding.verifierRefs) expect(scene.workflow.filter((step: { action: { verifier: string } }) => step.action.verifier === ref)).toHaveLength(1);
 		}
@@ -328,8 +328,7 @@ describe('capacity-provider guarantee execution bindings', () => {
 			{ criterion: '73706b74d24775782c346f427a33f7ea9386e0038f7c50fa7cf317dfa30d1fd1', verifierRefs: ['agent.golden.live.results', 'sdk.golden.live.product', 'agent.golden.live.reporter', 'api.golden.execution-normal-sdk-clean-schema-live-1'] },
 			{ criterion: 'ce8a386ea8718aa7bf61c8a5a4602520e62bc90d036ff71adf98cb583389973d', verifierRefs: ['agent.golden.live.campaign', 'agent.golden.architecture-profile-custody-live-1', 'agent.golden.architecture-context-custody-live-1', 'api.golden.execution-normal-sdk-clean-schema-live-1'] },
 			{ criterion: '81b30905093d840992af882b011c2432cc199883a09a948a0fe1c8aced8518b7', verifierRefs: ['agent.golden.live.campaign', 'agent.golden.architecture-profile-custody-live-1', 'agent.golden.architecture-context-custody-live-1', 'api.golden.execution-normal-sdk-clean-schema-live-1'] },
-			{"criterion":"8e39bb80de13bd6cbad46f12bb890cc41bf1bac8ae8ec749259a0e94ac5faf99","verifierRefs":["agent.golden.live.graph","agent.golden.architecture-graph-history-live-1","agent.golden.architecture-living-graph-live-1","agent.golden.architecture-living-graph-live-2"]},
-			{"criterion":"47b521b0831f30babf7664f8e12de9b9336a9c949de98473e1767212d7a76cd2","verifierRefs":["sdk.golden.live.product"]}]);
+			{"criterion":"8e39bb80de13bd6cbad46f12bb890cc41bf1bac8ae8ec749259a0e94ac5faf99","verifierRefs":["agent.golden.live.graph","agent.golden.architecture-graph-history-live-1","agent.golden.architecture-living-graph-live-1","agent.golden.architecture-living-graph-live-2"]}]);
 		expect(scene.scope).toBe('local-integrated-runtime');
 		for (const ref of runtimeHandlers) expect(refs.filter((value: string) => value === ref)).toHaveLength(1);
 		expect(refs.indexOf(runtimeHandlers[1]!)).toBeGreaterThan(refs.indexOf(runtimeHandlers[0]!));

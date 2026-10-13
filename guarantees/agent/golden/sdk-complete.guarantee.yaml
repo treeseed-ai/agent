@@ -11,6 +11,8 @@ scene:
   required: true
   manifest: guarantees/agent/golden/scenes/sdk-complete.scene.yaml
 acceptanceCriteria:
+  - criterion: 2bcb03ca47bbe9ffe324405ca36a2464dbe0d613a7777b6973d0b10bd6ea50dd
+    verifierRefs: [agent.golden.live.campaign, agent.golden.architecture-profile-custody-live-1, sdk.golden.live.product]
   - criterion: a571727bb7e1d74fcf9fda7ba50ecd003db8732cd1be6183c2f80ffa85d43691
     verifierRefs: [agent.golden.live.campaign-freeze, deployment.golden.execution-selected-code-preflight-1, cli.golden.execution-diagnostics-read-native, agent.golden.live.guest-model-smoke, agent.golden.live.campaign, agent.golden.live.graph, agent.golden.architecture-profile-custody-live-1, agent.golden.architecture-profile-custody-live-2, agent.golden.architecture-context-custody-live-1, agent.golden.architecture-book-knowledge-live-1, agent.golden.architecture-graph-history-live-1, agent.golden.architecture-living-graph-live-1, agent.golden.architecture-living-graph-live-2, sdk.golden.live.product, agent.golden.live.results, agent.golden.execution-clock-observation-live-1, api.golden.execution-protected-observation-live-1, agent.golden.live.reporter, agent.golden.live.settlement, agent.golden.architecture-record-custody-live-1, api.golden.execution-normal-sdk-clean-schema-live-1, agent.golden.execution-normal-sdk-physical-absence-live-1]
   - criterion: 4d3a65d9ab4becd82cc9336051f6e069a26bfcd662eb52fe3f7a32f67c8530bf

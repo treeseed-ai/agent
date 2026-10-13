@@ -120,6 +120,7 @@ it('retains the declared TreeDX repository as exact mutable workspace authority 
 	expect(inspect).not.toThrow(); expect({ item, original }).toEqual(held);
 	for (const workspace of [{ ...attempt.workspace, repository: 'foreign-library' }, { ...attempt.workspace, baseCommit: 'f'.repeat(40) }]) {
 		const changed = structuredClone(item); (changed.assignmentAttempt as typeof attempt).workspace = workspace;
+		(changed.assignmentAttempt as typeof attempt).grant.contentWrite = attempt.grant.contentWrite.map(ref => ({ ...ref, repository: workspace.repository, commit: workspace.baseCommit }));
 		expect(() => verifyAssignmentContextRead(changed, original.reference, attempt.projectId, original.binding, original.observed)).toThrow('ACCEPTANCE_DECLARED_CONTEXT');
 	}
 });

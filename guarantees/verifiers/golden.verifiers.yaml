@@ -251,6 +251,11 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/guarantees/monitoring/live-context-inspection.test.ts
     testName: "denies malformed moved tampered or foreign governing declarations without replacing original bytes before exact retry"
+  agent.golden.live-declared-workspace-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/monitoring/live-context-inspection.test.ts
+    testName: "retains the declared TreeDX repository as exact mutable workspace authority without inventing a repository content-read grant"
   agent.golden.live-declared-context-unit:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

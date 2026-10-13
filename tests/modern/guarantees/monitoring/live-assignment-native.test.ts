@@ -355,6 +355,32 @@ it('native original governing content transport rejects an omitted declared Book
 		}
 		const deniedHistory = structuredClone(failures); boundary.set(original.observed);
 		await inspect(); expect(failures).toEqual(deniedHistory); expect(item).toEqual(held);
+		const writable = structuredClone(item), issuedWrite = assignmentAttemptSchema.parse(writable.assignmentAttempt);
+		issuedWrite.workspace = { mode: 'treedx', repository: 'sdk-library', baseCommit: 'e'.repeat(40), workspaceId: 'original-workspace', writablePaths: ['knowledge/original.md'] };
+		issuedWrite.grant.sourceWrite = []; issuedWrite.grant.tools = ['source.read'];
+		issuedWrite.effectiveProfile.permissionCeiling.tools = ['source.read']; issuedWrite.effectiveProfile.permissionCeiling.content.write = ['knowledge'];
+		const declaration = liveGovernedContext(issuedWrite); issuedWrite.sourceRef = declaration.reference;
+		issuedWrite.contextRefs = [...issuedWrite.contextRefs.filter(ref => ref.store === 'git'), declaration.reference, declaration.book.ref];
+		issuedWrite.grant.contentRead = [declaration.reference, declaration.book.ref];
+		issuedWrite.grant.contentWrite = [{ store: 'treedx', model: 'knowledge', id: 'original-knowledge', repository: 'sdk-library', commit: 'e'.repeat(40), path: 'knowledge/original.md' }];
+		writable.assignmentAttempt = issuedWrite; boundary.set(declaration.observed);
+		const inspectWritable = async (value = writable) => {
+			const returned = row(await boundary.facade.invoke('treedx.repositories.files.read', {
+				path: { projectId: attempt.projectId, repoId: declaration.binding.repositoryId },
+				query: { path: declaration.reference.path, ref: declaration.reference.commit, encoding: 'utf8', parseFrontmatter: true },
+			}));
+			verifyAssignmentContextRead(value, declaration.reference, attempt.projectId, declaration.binding, returned);
+		};
+		await inspectWritable(); const writableHeld = structuredClone(writable);
+		for (const scope of [{ ...issuedWrite.workspace, repository: 'foreign-library' }, { ...issuedWrite.workspace, baseCommit: 'f'.repeat(40) }]) {
+			const denied = structuredClone(writable), deniedAttempt = assignmentAttemptSchema.parse(denied.assignmentAttempt);
+			deniedAttempt.workspace = scope;
+			deniedAttempt.grant.contentWrite = deniedAttempt.grant.contentWrite.map(ref => ({ ...ref, repository: scope.repository, commit: scope.baseCommit }));
+			denied.assignmentAttempt = deniedAttempt;
+			await expect(inspectWritable(denied)).rejects.toThrow('ACCEPTANCE_DECLARED_CONTEXT'); expect(writable).toEqual(writableHeld);
+		}
+		await inspectWritable(); expect(writable).toEqual(writableHeld); expect(failures).toEqual(deniedHistory);
+
 
 	} finally { await boundary.close(); }
 });

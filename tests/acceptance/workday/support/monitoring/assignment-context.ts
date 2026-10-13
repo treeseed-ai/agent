@@ -22,6 +22,17 @@ export function verifyAssignmentContextRead(item: Row, reference: Row, projectId
 	for (const input of required) {
 		const ref = exactEntityReferenceSchema.parse(input);
 		if (ref.store !== 'git' && ref.store !== 'treedx') continue;
+		if (ref.store === 'treedx' && ref.model === 'repository') {
+			const url = String(library.contentRepositoryUrl ?? row(row(library.topology).contentRepository).githubUrl ?? '');
+			const named = /^https:\/\/github\.com\/([^/]+\/[^/]+?)(?:\.git)?$/u.exec(url)?.[1];
+			assert.ok([library.repositoryId, named].includes(ref.repository), `${code}: Declared library differs from original binding`);
+			if (attempt.effectiveProfile.activity === 'acting') {
+				assert.ok(attempt.workspace.mode === 'treedx' && attempt.workspace.repository === library.repositoryId
+					&& attempt.workspace.baseCommit === ref.commit, `${code}: Original declared mutable library base required`);
+			}
+			continue;
+		}
+
 		assert.ok(attempt.contextRefs.some(value => isDeepStrictEqual(value, ref)), `${code}: Original declared context omitted`);
 		if (ref.store === 'git') assert.ok(attempt.grant.sourceRead.includes(String(ref.repository)), `${code}: Declared source grant omitted`);
 		else assert.ok(attempt.grant.contentRead.some(value => isDeepStrictEqual(value, ref)), `${code}: Declared content grant omitted`);

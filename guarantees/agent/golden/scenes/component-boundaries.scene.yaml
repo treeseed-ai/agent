@@ -42,6 +42,9 @@ workflow:
   - id: live-declared-context-denials-unit
     action: { verifier: agent.golden.live-declared-context-denials-unit }
     expect: { status: passed }
+  - id: live-declared-workspace-unit
+    action: { verifier: agent.golden.live-declared-workspace-unit }
+    expect: { status: passed }
   - id: live-declared-context-unit
     action: { verifier: agent.golden.live-declared-context-unit }
     expect: { status: passed }

@@ -3,6 +3,24 @@ id: agent.golden.component-boundaries
 title: Golden execution component boundaries
 scope: local-component-tests
 workflow:
+  - id: live-context-missing-unit
+    action: { verifier: agent.golden.live-context-missing-unit }
+    expect: { status: passed }
+  - id: live-context-read-unit
+    action: { verifier: agent.golden.live-context-read-unit }
+    expect: { status: passed }
+  - id: live-context-denials-unit
+    action: { verifier: agent.golden.live-context-denials-unit }
+    expect: { status: passed }
+  - id: live-context-scope-unit
+    action: { verifier: agent.golden.live-context-scope-unit }
+    expect: { status: passed }
+  - id: live-context-git-only-unit
+    action: { verifier: agent.golden.live-context-git-only-unit }
+    expect: { status: passed }
+  - id: live-context-native
+    action: { verifier: agent.golden.live-context-native }
+    expect: { status: passed }
   - id: campaign-proposals-unit
     action: { verifier: agent.golden.campaign-proposals-unit }
     expect: { status: passed }

@@ -10,6 +10,7 @@ import { readWorkdayAssignments } from '../sdk-runtime-golden.test.ts';
 import { verifyAssignmentAuthority, verifyGitInputContext, verifyExactContextSource, verifyKnowledgeBookSource, verifyDraftProposalHandoff, verifyModelClockEvidence, modelExecutionInventory } from './support/assignment-authority.ts';
 import { readCompleteEvidence } from './support/evidence-pages.ts';
 import { verifySdkArchitectureBook } from '../prepare-campaign.ts';
+import { inspectAssignmentContext } from './support/monitoring/assignment-context.ts';
 
 test('Every actual recorded model execution is included in exact clock evidence readback without discarding failed or returned attempts', { timeout: 120_000 }, () => {
 	const id = acceptanceWorkdayId(), team = process.env.TREESEED_ACCEPTANCE_TEAM ?? 'treeseed';
@@ -175,21 +176,7 @@ test('Actual TreeDX assignment context is independently read at exact granted re
 	const assignments = readWorkdayAssignments(id, String(run.startedAt), team); assert.ok(assignments.length > 0);
 	let reads = 0;
 	for (const item of assignments) {
-		verifyAssignmentAuthority(item); const attempt = assignmentAttemptSchema.parse(item.assignmentAttempt);
-		const proxy = row(item.treedxProxyHandle), metadata = row(proxy.metadata);
-		const scopes = Array.isArray(proxy.readRepositories) ? proxy.readRepositories.map(row)
-			: Array.isArray(metadata.readRepositories) ? metadata.readRepositories.map(row) : [];
-		for (const ref of attempt.contextRefs.filter(entry => entry.store === 'treedx')) {
-			const scope = scopes.find(entry => entry.repositoryId === ref.repository && entry.baseRef === ref.commit);
-			// The original owning project remains a candidate, never a successful
-			// foreign-repository fallback: its independent binding must match below.
-			const projectId = scope ? String(scope.projectId) : attempt.projectId;
-			const binding = read(['library', 'show', projectId], team, true);
-			const library = row(binding.result ?? binding);
-			assert.ok(ref.path && ref.commit, 'ACCEPTANCE_CONTEXT_REF: Missing independent exact content read authority');
-			const observed = read(['library', 'read', projectId, ref.path, '--ref', ref.commit], team, true), returned = row(observed.result ?? observed);
-			verifyExactContextSource(ref, projectId, library, returned); reads++;
-		}
+		verifyAssignmentAuthority(item); reads += inspectAssignmentContext(item, team);
 	}
 	assert.ok(reads > 0, 'ACCEPTANCE_CONTEXT_EMPTY: No native TreeDX content read cannot prove this boundary');
 	assert.deepEqual(readWorkdayAssignments(id, String(run.startedAt), team), assignments);

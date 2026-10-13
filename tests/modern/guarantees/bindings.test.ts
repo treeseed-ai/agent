@@ -46,8 +46,12 @@ describe('capacity-provider guarantee execution bindings', () => {
 			'ee95f7eb3323545534ac708f6ef6ae9d6b9ae2ae40ad4268738084a25d293d86')).toEqual([{ criterion: 'ee95f7eb3323545534ac708f6ef6ae9d6b9ae2ae40ad4268738084a25d293d86', verifierRefs: [refs[0], refs[1]] }]);
 		const products = ['agent.golden.live.results', 'sdk.golden.live.product', 'agent.golden.live.reporter', 'api.golden.execution-normal-sdk-clean-schema-live-1'];
 		expect(manifest.acceptanceCriteria.filter((value: { criterion: string }) => value.criterion === '73706b74d24775782c346f427a33f7ea9386e0038f7c50fa7cf317dfa30d1fd1'))
-			.toEqual([{ criterion: '73706b74d24775782c346f427a33f7ea9386e0038f7c50fa7cf317dfa30d1fd1', verifierRefs: products }]);
+			.toEqual([{ criterion: '73706b74d24775782c346f427a33f7ea9386e0038f7c50fa7cf317dfa30d1fd1', verifierRefs: products },
 		for (const ref of products) expect(scene.workflow.filter((step: { action: { verifier: string } }) => step.action.verifier === ref)).toHaveLength(1);
+		const chatRefs = ['agent.golden.live.campaign', 'agent.golden.architecture-profile-custody-live-1', 'agent.golden.architecture-context-custody-live-1', 'api.golden.execution-normal-sdk-clean-schema-live-1'];
+		for (const criterion of ['ce8a386ea8718aa7bf61c8a5a4602520e62bc90d036ff71adf98cb583389973d', '81b30905093d840992af882b011c2432cc199883a09a948a0fe1c8aced8518b7'])
+			expect(manifest.acceptanceCriteria.filter((value: { criterion: string }) => value.criterion === criterion)).toEqual([{ criterion, verifierRefs: chatRefs }]);
+		for (const ref of chatRefs) expect(scene.workflow.filter((step: { action: { verifier: string } }) => step.action.verifier === ref)).toHaveLength(1);
 
 	});
 	it('binds exact simulation Git workspace custody to live approved bases and independently resolved published branches', () => {
@@ -315,7 +319,9 @@ describe('capacity-provider guarantee execution bindings', () => {
 			{ criterion: 'ce87c6c4895321258d1ff9d3f00d7e0db7f1adb6639696756208e784d546667a',
 				verifierRefs: ['agent.golden.live.graph', 'sdk.golden.live.product'] },
 			{ criterion: '4ff1e6e55ccb0038c0f79331029c2ad083409c36058b1e3335b1b44a263b2ce0', verifierRefs: ['agent.golden.live.graph', 'agent.golden.architecture-graph-history-live-1', 'agent.golden.architecture-living-graph-live-2'] },
-			{ criterion: '73706b74d24775782c346f427a33f7ea9386e0038f7c50fa7cf317dfa30d1fd1', verifierRefs: ['agent.golden.live.results', 'sdk.golden.live.product', 'agent.golden.live.reporter', 'api.golden.execution-normal-sdk-clean-schema-live-1'] }]);
+			{ criterion: '73706b74d24775782c346f427a33f7ea9386e0038f7c50fa7cf317dfa30d1fd1', verifierRefs: ['agent.golden.live.results', 'sdk.golden.live.product', 'agent.golden.live.reporter', 'api.golden.execution-normal-sdk-clean-schema-live-1'] },
+			{ criterion: 'ce8a386ea8718aa7bf61c8a5a4602520e62bc90d036ff71adf98cb583389973d', verifierRefs: ['agent.golden.live.campaign', 'agent.golden.architecture-profile-custody-live-1', 'agent.golden.architecture-context-custody-live-1', 'api.golden.execution-normal-sdk-clean-schema-live-1'] },
+			{ criterion: '81b30905093d840992af882b011c2432cc199883a09a948a0fe1c8aced8518b7', verifierRefs: ['agent.golden.live.campaign', 'agent.golden.architecture-profile-custody-live-1', 'agent.golden.architecture-context-custody-live-1', 'api.golden.execution-normal-sdk-clean-schema-live-1'] }]);
 		expect(scene.scope).toBe('local-integrated-runtime');
 		for (const ref of runtimeHandlers) expect(refs.filter((value: string) => value === ref)).toHaveLength(1);
 		expect(refs.indexOf(runtimeHandlers[1]!)).toBeGreaterThan(refs.indexOf(runtimeHandlers[0]!));

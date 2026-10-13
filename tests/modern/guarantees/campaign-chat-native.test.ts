@@ -1,9 +1,11 @@
 import { createServer } from 'node:http';
+import { createHash } from 'node:crypto';
 import { expect, it } from 'vitest';
+import { stringify } from 'yaml';
 import { ControlPlaneClient, defaultLocalControlPlaneServer } from '@treeseed/sdk/control-plane-client';
 import { controlPlaneOperation, type CommunicationSendRequest } from '@treeseed/sdk/operator-contracts';
-import { monitorCampaign, openSdkCampaignDiscussion } from '../../acceptance/campaign.ts';
-import { verifyChatCommunicationLanes } from '../../acceptance/workday/support/planning-evidence.ts';
+import { monitorCampaign, openSdkCampaignDiscussion, sdkCampaignAgents, sdkCampaignChatQuestion } from '../../acceptance/campaign.ts';
+import { verifyChatCommunicationLanes, verifyChatAddressedRead, verifyChatOpenDiscussion } from '../../acceptance/workday/support/planning-evidence.ts';
 
 it('native public communication requests preserve every addressed probe and stop on denial malformed output or interruption before unchanged retry', async () => {
 	const teamId = 'native-team', proposalId = 'native-proposal', workdayId = 'workday-native-chat';
@@ -16,9 +18,65 @@ it('native public communication requests preserve every addressed probe and stop
  const assignmentRoute = controlPlaneOperation('assignments.show').descriptor.rest;
  if (!assignmentRoute || assignmentRoute.method !== 'GET') throw new Error('Original public assignment read route required');
  const assignmentPath = assignmentRoute.path.replace('{teamId}', teamId).replace('{assignmentId}', nativeAssignment.id);
+	const nativeCommit = 'a'.repeat(40), repoId = 'native-library', projectId = 'native-project';
+	const nativeRun = { id: workdayId, teamId, startedAt: '2026-10-10T00:00:00.000Z', parameters: { proposalIds: [proposalId] } };
+	const discussionPath = `discussions/${channel}.mdx`, discussionFrontmatter = { schemaVersion: 'treeseed.discussion/v1', id: channel,
+		projectId, teamId, status: 'open', subjectRef: { store: 'postgresql', model: 'project', id: projectId }, participantClasses: [],
+		title: 'Native SDK probes', createdAt: '2026-10-10T00:00:00.500Z' };
+	const discussionBody = '# Native SDK probes\n', discussionContent = `---\n${stringify(discussionFrontmatter, { lineWidth: 0 })}---\n${discussionBody}`;
+	const discussionDigest = `sha256:${createHash('sha256').update(discussionContent).digest('hex')}`;
+	const nativeDiscussion = { ok: true, repoId, resolvedRef: nativeCommit,
+		files: [{ path: discussionPath, frontmatter: discussionFrontmatter, body: discussionBody, content: discussionContent }] };
+	const nativeProbes = sdkCampaignAgents.map(role => {
+		const id = `native-probe-${role}`, source = { store: 'treedx', model: 'discussion', id: `invocation-${id}`, repository: repoId,
+			commit: nativeCommit, path: `discussion-messages/${channel}/${role}.mdx`, digest: `sha256:${'d'.repeat(64)}` };
+		const subject = { store: 'treedx', model: 'proposal', id: proposalId, repository: repoId, commit: nativeCommit,
+			path: 'proposals/native.mdx', revision: 1, digest: `sha256:${'b'.repeat(64)}` };
+		const target = { store: 'treedx', model: 'discussion', id: `response-${id}`, repository: repoId, commit: nativeCommit, path: `discussion-messages/${channel}/response-${role}.mdx` };
+		const item = { id, invocationId: source.id, workDayId: workdayId, projectId, status: 'completed', createdAt: '2026-10-10T00:00:02.000Z',
+			assignmentAttempt: { sourceRef: source, workdayId, teamId, projectId, agentClass: role, predecessorResultIds: [], contextRefs: [source, subject],
+				effectiveProfile: { activity: 'chat', profileRef: { store: 'treedx', model: 'agent', id: `configured-${role}`, repository: repoId, commit: nativeCommit, path: `agents/${role}.yaml` },
+					handler: 'writer', handlerOrigin: 'agent-package', prompt: { system: 'Answer only the addressed coordination question.' },
+					permissionCeiling: { content: { read: ['discussion', 'proposal'], write: ['discussion'] }, tools: ['discussion'] } },
+				grant: { contentRead: [source, subject], contentWrite: [target], sourceRead: [], sourceWrite: [], tools: ['discussion'] },
+				workspace: { mode: 'treedx', repository: repoId, baseCommit: nativeCommit, workspaceId: `workspace-${id}`, writablePaths: [target.path] } } };
+		const body = sdkCampaignChatQuestion(role), frontmatter = { schemaVersion: 'treeseed.discussion-message/v1', id: `message-${id}`,
+			discussionRef: { store: 'treedx', model: 'discussion', id: channel, path: discussionPath, revision: 1, digest: discussionDigest },
+			authorRef: { store: 'postgresql', model: 'user', id: 'controlled-native-operator' }, authorType: 'user', discussionId: channel,
+			mentionedAgents: [role], recipientIds: [role], parentWorkdayId: workdayId, createdAt: '2026-10-10T00:00:01.000Z', fileRefs: [],
+			contextRefs: [{ kind: 'proposal', id: proposalId, projectId, immutableRef: nativeCommit, path: subject.path, digest: subject.digest }] };
+		return { item, returned: { ok: true, repoId, resolvedRef: nativeCommit, files: [{ path: source.path, frontmatter, body: `\n${body}\n`,
+			content: `---\n${stringify(frontmatter, { lineWidth: 0 })}---\n\n${body}\n` }] } };
+	});
+	const fileOperation = controlPlaneOperation('treedx.repositories.files.read'), fileRoute = fileOperation.descriptor.rest;
+	if (!fileRoute || fileRoute.method !== 'POST') throw new Error('Original public library read route required');
+	const filePath = fileRoute.path.replace('{projectId}', projectId).replace('{repoId}', repoId);
+	let fileMode = 'exact'; const fileRequests: unknown[] = [];
 	const server = createServer((request, response) => {
 		let bytes = ''; request.setEncoding('utf8'); request.on('data', chunk => { bytes += String(chunk); });
 		request.on('end', () => {
+			if (request.method === 'GET') {
+				const selected = nativeProbes.find(probe => request.url === assignmentRoute.path.replace('{teamId}', teamId).replace('{assignmentId}', probe.item.id));
+				if (selected) { response.setHeader('content-type', 'application/json'); response.end(JSON.stringify({ data: selected.item })); return; }
+			}
+			if (request.method === 'POST' && request.url === filePath) {
+				const body = JSON.parse(bytes) as { ref: string; paths: string[] }; fileRequests.push(structuredClone(body));
+				const selected = nativeProbes.find(probe => probe.item.assignmentAttempt.sourceRef.path === body.paths?.[0]);
+				if ((!selected && body.paths?.[0] !== discussionPath) || body.ref !== nativeCommit) { response.writeHead(404).end('{}'); return; }
+				if (fileMode === 'reset') { request.socket.destroy(); return; }
+				if (fileMode === '503') { response.writeHead(503, { 'content-type': 'application/json' }).end(JSON.stringify({ status: 503, code: 'controlled_source_unavailable', title: 'Retained native message denial' })); return; }
+				response.setHeader('content-type', 'application/json'); if (fileMode === 'json') { response.end('{'); return; }
+				if (body.paths?.[0] === discussionPath) {
+					const returned = structuredClone(nativeDiscussion);
+					if (fileMode === 'closed') { returned.files[0]!.frontmatter.status = 'closed'; returned.files[0]!.content = `---\n${stringify(returned.files[0]!.frontmatter, { lineWidth: 0 })}---\n${discussionBody}`; }
+					response.end(JSON.stringify({ data: returned })); return;
+				}
+				if (!selected) { response.writeHead(404).end('{}'); return; }
+				const returned = structuredClone(selected.returned);
+				if (fileMode === 'foreign') returned.files[0]!.frontmatter.contextRefs[0]!.id = 'foreign-proposal';
+				response.end(JSON.stringify({ data: returned })); return;
+			}
+
    if (request.method === 'GET' && request.url === assignmentPath) {
     laneReads.push(request.url); response.setHeader('content-type', 'application/json');
     if (lane === 'reset') { request.socket.destroy(); return; }
@@ -104,6 +162,40 @@ it('native public communication requests preserve every addressed probe and stop
   await inspectLane('communication', false);
   expect(laneObservations.slice(0, retainedLanes.length)).toEqual(retainedLanes);
   expect(requests).toEqual(originalRequests); expect(laneReads).toHaveLength(13);
+
+		for (const probe of nativeProbes) {
+			const source = probe.item.assignmentAttempt.sourceRef;
+			for (const mode of ['exact', 'foreign', '503', 'json', 'reset', 'exact']) {
+				fileMode = mode; const before = structuredClone(probe); let observed: Record<string, unknown> | undefined, returned: Record<string, unknown> | undefined, failure: unknown;
+				try {
+					observed = (await client.invoke(controlPlaneOperation('assignments.show'), { path: { teamId, assignmentId: probe.item.id }, query: {}, body: undefined })).data as Record<string, unknown>;
+					returned = (await client.invoke(fileOperation, { path: { projectId, repoId }, query: {}, body: { ref: source.commit, paths: [source.path], encoding: 'utf8', parseFrontmatter: true } })).data as Record<string, unknown>;
+				} catch (error) { failure = error; }
+				let stopped = 0, advanced = 0, polls = 0;
+				const monitored = monitorCampaign({ admittedSimulation: true, read: () => ({ status: polls++ ? 'completed' : 'running', mode: 'simulation', planningEndsAt: 1, endsAt: 2 }),
+					inspect: () => { if (failure) throw failure; if (!observed || !returned) throw new Error('Original native public reads required');
+						expect(verifyChatAddressedRead(observed, nativeRun, returned)).toBe(true); },
+					now: () => 1, wait: async () => {}, collaboration: () => {}, verify: () => { advanced++; }, stop: () => { stopped++; } });
+				if (mode === 'exact') { await monitored; expect(stopped).toBe(0); expect(advanced).toBe(1); }
+				else { await expect(monitored).rejects.toThrow(); expect(stopped).toBe(1); expect(advanced).toBe(0); }
+				expect(probe).toEqual(before);
+			}
+		}
+		for (const probe of nativeProbes) for (const mode of ['exact', 'closed', '503', 'json', 'reset', 'exact']) {
+			fileMode = mode; let returned: Record<string, unknown> | undefined, failure: unknown;
+			try { returned = (await client.invoke(fileOperation, { path: { projectId, repoId }, query: {}, body: { ref: nativeCommit, paths: [discussionPath], encoding: 'utf8', parseFrontmatter: true } })).data as Record<string, unknown>; }
+			catch (error) { failure = error; }
+			const held = structuredClone(returned); let stopped = 0, advanced = 0, polls = 0;
+			const monitored = monitorCampaign({ admittedSimulation: true, read: () => ({ status: polls++ ? 'completed' : 'running', mode: 'simulation', planningEndsAt: 1, endsAt: 2 }),
+				inspect: () => { if (failure) throw failure; if (!returned) throw new Error('Original native discussion read required'); verifyChatOpenDiscussion(probe.item, nativeRun, probe.returned, returned); },
+				now: () => 1, wait: async () => {}, collaboration: () => {}, verify: () => { advanced++; }, stop: () => { stopped++; } });
+			if (mode === 'exact') { await monitored; expect(stopped).toBe(0); expect(advanced).toBe(1); }
+			else { await expect(monitored).rejects.toThrow(); expect(stopped).toBe(1); expect(advanced).toBe(0); }
+			expect(returned).toEqual(held);
+		}
+		expect(fileRequests).toHaveLength(96);
+		for (const request of fileRequests) expect(request).toMatchObject({ ref: nativeCommit, paths: [expect.stringMatching(new RegExp(`^(?:discussion-messages/${channel}/|discussions/${channel}\\.mdx$)`))], encoding: 'utf8', parseFrontmatter: true });
+		expect(requests).toEqual(originalRequests); expect(receipts).toEqual(heldReceipts); expect(failures).toEqual(retainedFailures);
 
 		// Real SDK request/response validation and native HTTP transport reach the
 		// original campaign controller. Queued receipts and terminal state here are

@@ -82,17 +82,24 @@ export function campaignWorkdayId(read: (args: string[], team: string) => StartR
 	return id;
 }
 
+export const sdkCampaignAgents = ['architect', 'researcher', 'tester', 'engineer', 'technical-writer', 'releaser', 'reviewer', 'reporter'] as const;
+export const sdkCampaignOpeningMessage = `${sdkCampaignAgents.map(role => `@sdk/${role}`).join(' ')} Discuss the exact frozen proposal, identify your role and dependencies, and publish useful planning contributions. Do not implement during planning.`;
+export function sdkCampaignChatQuestion(role: string): string {
+	assert.ok(sdkCampaignAgents.some(value => value === role), 'ACCEPTANCE_CHAT_CONTEXT: Exact selected contributor required');
+	return `@sdk/${role} For the exact frozen proposal, state your responsibility and one dependency or verification concern. Answer only this coordination question; do not inspect or change project files, publish work products or mutate graph edges.`;
+}
+
 /** The existing communication boundary owns admission, replies and graph custody. */
 export async function openSdkCampaignDiscussion(proposalId: string, workdayId: string,
 	send: (channel: string, body: CommunicationSendRequest, key: string) => unknown | Promise<unknown>): Promise<void> {
 	for (const id of [proposalId, workdayId]) assert.ok(typeof id === 'string' && id.trim() === id
 		&& id.length > 0 && id.length <= 200, 'ACCEPTANCE_CHAT_INPUT: Exact proposal and workday required');
-	const roles = ['architect', 'researcher', 'tester', 'engineer', 'technical-writer', 'releaser', 'reviewer', 'reporter'];
+	const roles = sdkCampaignAgents;
 	const channel = `sdk-golden-${workdayId}`;
 	const context = { proposalId, parentWorkdayId: workdayId };
-	await send(channel, { ...context, message: `${roles.map(role => `@sdk/${role}`).join(' ')} Discuss the exact frozen proposal, identify your role and dependencies, and publish useful planning contributions. Do not implement during planning.` }, `golden-discussion:${workdayId}`);
+	await send(channel, { ...context, message: sdkCampaignOpeningMessage }, `golden-discussion:${workdayId}`);
 	for (const role of roles) await send(channel, { ...context,
-		message: `@sdk/${role} For the exact frozen proposal, state your responsibility and one dependency or verification concern. Answer only this coordination question; do not inspect or change project files, publish work products or mutate graph edges.` }, `golden-chat:${workdayId}:${role}`);
+		message: sdkCampaignChatQuestion(role) }, `golden-chat:${workdayId}:${role}`);
 }
 
 export const sdkCampaignWindow = Object.freeze({ durationSeconds: 3600, planningPercent: 100 / 3, planningTurnMaximumSeconds: 180 });

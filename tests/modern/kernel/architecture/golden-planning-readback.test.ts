@@ -22,6 +22,16 @@ describe('managed planning cycle and published contribution custody', () => {
   }
   Object.assign(item, original); expect(() => gate('collaboration')).not.toThrow();
   expect(item).toEqual(original); expect(denied).toEqual(Array.from({ length: 8 }, () => true));
+		const contextOriginal = structuredClone(item.assignmentAttempt), deniedContext: boolean[] = [];
+		for (const source of [undefined, null, {}, { store: 'treedx', model: 'discussion', id: 'foreign', repository: 'foreign', commit: 'f'.repeat(40), path: 'discussion-messages/foreign.mdx' }]) {
+			item.assignmentAttempt.sourceRef = source; const held = structuredClone([...state.replies]); let failure = '';
+			try { gate('collaboration'); } catch (error) { failure = String(error); }
+			deniedContext.push(failure.includes('ACCEPTANCE_CHAT_CONTEXT'));
+			expect([...state.replies]).toEqual(held);
+		}
+		item.assignmentAttempt = contextOriginal; expect(() => gate('collaboration')).not.toThrow();
+		const heldContext = structuredClone([...state.replies]); expect([...state.replies]).toEqual(heldContext);
+		expect(deniedContext).toEqual([true, true, true, true]);
 		// Additional supplied UNIT cycles exercise the same managed assertion;
 		// these replies are not native publication or live model evidence.
 		const items: Row[] = state.replies.get('assignments list')!.items;

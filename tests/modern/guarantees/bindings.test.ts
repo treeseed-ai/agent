@@ -49,6 +49,11 @@ describe('capacity-provider guarantee execution bindings', () => {
 		expect(native.environment).toBeUndefined();
 		expect(native.steps.some((step: { run?: string }) => step.run ===
 			'node --import tsx ./scripts/support/verify-installed-owners.ts')).toBe(true);
+		const inputs = JSON.parse(native.env.TREESEED_INSTALLED_OWNER_INPUTS);
+		expect(inputs.find((value: { owner: string }) => value.owner === 'api').buildSdk).toMatchObject({
+			commit: '952195376b53bf39742e64f320f2a3b109cc77c0', sha256: '7ba46c788578f526692e81f3713f05e7c00db900b2d810ec27364cb41c008185' });
+		expect(inputs.find((value: { owner: string }) => value.owner === 'reviewer').buildSdk).toMatchObject({
+			commit: '77a6908d4e7580716e9e2ab92de80150b02cdb06', sha256: 'a31b02194665e8705e8d81331da0901f4088f54deb50a34c236d3a661d2d1aa7' });
 		const held = ['agent', 'api', 'sdk', 'cli', 'deployment', 'reviewer'].map(owner =>
 			({ owner, commit: 'a'.repeat(40), sha256: owner === 'agent' ? null : 'b'.repeat(64) }));
 		const malformed = [null, held.slice(1), [...held.slice(1), held[1]],

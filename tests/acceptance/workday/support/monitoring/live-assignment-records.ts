@@ -52,6 +52,9 @@ export function verifyLiveAssignmentGraph(item: Row, graph: Row, items: readonly
 	assert.ok(parsed.success, `${code}: Canonical independent owning node required`);
 	const node = parsed.data;
 	assert.deepEqual(node, matches[0], `${code}: Original graph node must not be normalized`);
+	assert.ok(node.requestedPermissions, `${code}: Original authored permission request required`);
+	assert.deepEqual([...attempt.grant.tools].sort(), [...node.requestedPermissions.tools].sort(),
+		`${code}: Exact authored tool grant required; omitted tools are not complete authority`);
 	for (const field of ['teamId', 'projectId', 'agentClass', 'workItemId', 'sourceRef', 'authorityRefs',
 		'estimate', 'requiredCapabilities', 'acceptanceCriteria'] as const)
 		assert.deepEqual(node[field], attempt[field], `${code}: Issued ${field} differs from independent graph`);

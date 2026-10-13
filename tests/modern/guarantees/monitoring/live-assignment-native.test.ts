@@ -238,7 +238,7 @@ it('native configured Kernel Git result and public SDK assignment reads reach th
 		}
 		const graphFailures = structuredClone(failed); mode = 'exact'; expect((await inspectGraph()).size).toBe(1);
 		expect(failed).toEqual(graphFailures); expect(failed.slice(0, originalFailures.length)).toEqual(originalFailures);
-		expect(requests.filter(value => value.endsWith('/execution-graph'))).toHaveLength(13);
+		expect(requests.filter(value => value.endsWith('/execution-graph'))).toHaveLength(15);
 		for (const denied of ['allocation-missing', 'allocation-reservation', 'allocation-calibration', 'allocation-limiting', 'allocation-supply']) {
 			mode = denied; const empty = new Map<string, Row>(); await expect(execute(empty), denied).rejects.toThrow('ACCEPTANCE_ALLOCATION');
 			expect(empty.size).toBe(0); expect({ item, run }).toEqual(before);

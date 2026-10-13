@@ -33,6 +33,9 @@ workflow:
   - id: simulation-git-workspace-binding-unit
     action: { verifier: agent.golden.simulation-git-workspace-binding-unit }
     expect: { status: passed }
+  - id: live-required-tool-unit
+    action: { verifier: agent.golden.live-required-tool-unit }
+    expect: { status: passed }
   - id: live-context-missing-unit
     action: { verifier: agent.golden.live-context-missing-unit }
     expect: { status: passed }

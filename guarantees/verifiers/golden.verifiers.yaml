@@ -236,6 +236,11 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/guarantees/monitoring/live-graph-inspection.test.ts
     testName: "retains exact simulation workspace authority and rejects malformed or substituted branch scope without rewriting observations"
+  agent.golden.live-required-tool-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/monitoring/live-graph-inspection.test.ts
+    testName: "denies an omitted requested tool even when public assignment views and remaining grant fields agree"
   agent.golden.live-workspace-branch-unit:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

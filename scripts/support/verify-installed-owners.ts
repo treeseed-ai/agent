@@ -7,7 +7,7 @@ import { basename, resolve } from 'node:path';
 import { parse } from 'yaml';
 
 // Artifact inspection through the existing Reviewer command; no scene or campaign.
-type Input = { owner: string; commit: string; sha256: string | null; buildSdk?: { commit: string; sha256: string } };
+type Input = { owner: string; commit: string; sha256: string | null; buildSdk?: { commit: string; sha256: string }; buildTreeDx?: { commit: string; sha256: string } };
 const inputs = JSON.parse(process.env.TREESEED_INSTALLED_OWNER_INPUTS ?? 'null') as Input[];
 assert.equal(process.version, 'v24.12.0');
 assert.ok(Array.isArray(inputs) && inputs.length === 6);
@@ -17,9 +17,9 @@ for (const input of inputs) {
  assert.ok(input.sha256 === null || /^[a-f0-9]{64}$/u.test(input.sha256));
  assert.equal(input.sha256 === null, input.owner === 'agent');
  if (input.owner === 'agent') assert.equal(input.commit, process.env.GITHUB_SHA);
- if (Object.hasOwn(input, 'buildSdk')) {
-  assert.ok(input.buildSdk && !Array.isArray(input.buildSdk));
-  assert.match(input.buildSdk.commit, /^[a-f0-9]{40}$/u); assert.match(input.buildSdk.sha256, /^[a-f0-9]{64}$/u);
+ for (const key of ['buildSdk', 'buildTreeDx'] as const) if (Object.hasOwn(input, key)) {
+  const dependency = input[key]; assert.ok(dependency && !Array.isArray(dependency));
+  assert.match(dependency.commit, /^[a-f0-9]{40}$/u); assert.match(dependency.sha256, /^[a-f0-9]{64}$/u);
  }
 }
 const output = resolve('artifacts/installed-owner-custody'), temporary = mkdtempSync(resolve(tmpdir(), 'installed-owner-custody-'));
@@ -79,6 +79,20 @@ try {
     '--no-audit', '--no-fund'], source, 0, undefined, { ...process.env, NODE_ENV: 'production' });
   } else if (input.owner !== 'sdk') run(`${input.owner}-exact-sdk`, ['npm', 'install', '--no-save', '--package-lock=false',
     '--ignore-scripts', '--no-audit', '--no-fund', resolve(prefix, sdk.filename)], source);
+  const treeDx = inputs.find(value => value.owner === input.owner)!.buildTreeDx;
+  if (treeDx) {
+   const workflow = parse(readFileSync(resolve(source, '.github/workflows/verify.yml'), 'utf8'));
+   assert.ok(workflow.jobs.verify.steps.some((step: { uses?: string; with?: Record<string, string> }) =>
+    step.uses === 'actions/checkout@v4' && step.with?.repository === 'treeseed-ai/treedx' && step.with.ref === treeDx.commit));
+   const directory = resolve('.treeseed/installed-owner-inputs', `build-treedx-${treeDx.commit}`, 'artifacts/native-treedx-sdk');
+   const archives = readdirSync(directory).filter(path => path.endsWith('.tgz')); assert.equal(archives.length, 1);
+   const archive = resolve(directory, archives[0]!); assert.equal(lstatSync(archive).isSymbolicLink(), false);
+   assert.equal(digest(readFileSync(archive)), treeDx.sha256);
+   const retained = resolve(output, 'dependency-inputs', treeDx.commit); mkdirSync(retained, { recursive: true });
+   copyFileSync(archive, resolve(retained, basename(archive)));
+   run(`${input.owner}-exact-treedx`, [process.execPath, '--import', 'tsx', 'scripts/build/hydrate-exact-dependency.ts',
+    directory, 'install', '@treeseed/treedx'], source);
+  }
   run(`${input.owner}-build`, ['npm', 'run', 'build'], source);
   assert.equal(run(`${input.owner}-clean`, ['git', 'status', '--porcelain'], source), '');
   const snapshots = resolve(output, 'native-source', input.owner); mkdirSync(snapshots, { recursive: true });

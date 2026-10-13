@@ -1,3 +1,4 @@
+import { liveAssignmentRecord, liveGovernedContext } from './live-assignment-fixture.ts';
 import { beforeEach, expect, it, vi } from 'vitest';
 import { exactContext } from '../../kernel/architecture/portable/context-fixture.ts';
 
@@ -63,4 +64,15 @@ it('uses only original proxy read scope and rejects a foreign fallback repositor
 it('retains Git-only context without inventing a TreeDX read or a passing nonempty content inventory', () => {
 	const f = exactContext(); f.attempt.contextRefs = []; f.attempt.grant.contentRead = [];
 	expect(inspectAssignmentContext({ assignmentAttempt: f.attempt }, f.attempt.teamId)).toBe(0); expect(read).not.toHaveBeenCalled();
+});
+
+it('denies an omitted independently declared Book even when supplied context and grants agree', () => {
+	const item = liveAssignmentRecord(), attempt = item.assignmentAttempt;
+	attempt.workItemId = 'configured-material-work'; const original = liveGovernedContext(attempt);
+	attempt.sourceRef = original.reference;
+	attempt.contextRefs.push(original.reference); attempt.grant.contentRead.push(original.reference);
+	state.binding = original.binding; state.content = original.observed;
+	const held = structuredClone({ item, state });
+	expect(() => inspectAssignmentContext(item, attempt.teamId)).toThrow('ACCEPTANCE_DECLARED_CONTEXT');
+	expect({ item, state }).toEqual(held);
 });

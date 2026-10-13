@@ -1,3 +1,4 @@
+import { verifyAssignmentContextRead } from '../../../acceptance/workday/support/monitoring/assignment-context.ts';
 import { createServer } from 'node:http';
 import { createHash } from 'node:crypto';
 import { stringify } from 'yaml';
@@ -12,7 +13,7 @@ import { verifyExactContextSource, verifyGitInputContext, verifyGovernedProfile,
 import { observeLiveAssignmentRecords, verifyLiveAssignmentGraph, verifyLiveProviderRuntime, verifyLiveSimulationWorkspace, verifyLiveSourceContext } from '../../../acceptance/workday/support/monitoring/live-assignment-records.ts';
 import { verifyAllocation } from '../../../acceptance/workday/support/monitoring/assignment-allocation.ts';
 import { verifyPredecessorCustody } from '../../../acceptance/workday/support/evidence-pages.ts';
-import { liveAssignmentGraph, liveAssignmentRecord, liveProviderSession, liveRun } from './live-assignment-fixture.ts';
+import { liveAssignmentGraph, liveAssignmentRecord, liveProviderSession, liveRun, liveGovernedContext } from './live-assignment-fixture.ts';
 import { contextBoundary, exactContext } from '../../kernel/architecture/portable/context-fixture.ts';
 
 it('native Kernel and independent content transport deny moved tampered denied and interrupted live Book observations without caching partial authority before unchanged retry', async () => {
@@ -22,7 +23,7 @@ it('native Kernel and independent content transport deny moved tampered denied a
 		f.attempt.sourceRef = exact.ref;
 		f.attempt.contextRefs.push(exact.ref); f.attempt.grant.contentRead.push(exact.ref);
 		f.attempt.effectiveProfile.permissionCeiling.content.read.push('book'); f.input.treeDx = boundary.facade;
-		const candidate = await f.candidate(), produced = await f.run(); expect(produced.status).toBe('completed');
+		const candidate = await f.candidate(), produced = await f.run(); expect(produced.status, `${produced.code}: ${produced.summary}`).toBe('completed');
 		const result = assignmentResultSchema.parse(produced.outputs?.assignmentResult);
 		const item: Row = { ...liveAssignmentRecord(f.attempt), status: 'completed', leaseState: 'released', completedAt: result.completedAt, assignmentResult: result };
 		Object.assign(row(item.assignmentAttempt), { status: 'completed', finishedAt: result.completedAt });
@@ -65,7 +66,7 @@ it('native Kernel and independent content transport deny moved tampered denied a
 		const heldFailures = structuredClone(failures); boundary.set(exact.response);
 		expect((await observe()).size).toBe(1); expect(failures).toEqual(heldFailures); expect(failures).toHaveLength(8);
 		expect({ item, run }).toEqual(before); expect(f.requests).toHaveLength(1);
-		expect(boundary.calls).toHaveLength(12); // One original Kernel read and eleven independent observations.
+		expect(boundary.calls).toHaveLength(14); // One original Kernel read and thirteen independent observations.
 	} finally { try { await boundary?.close(); } finally { await f.close(); } }
 });
 
@@ -315,3 +316,31 @@ it('native configured Kernel Git result and public SDK assignment reads reach th
 	}
 	expect(server?.listening).toBe(false);
 }, 30_000);
+
+// Original owning content inspection over native transport. This does not claim
+// model execution, API admission, usage, or a passing managed SDK invocation.
+it('native original governing content transport rejects an omitted declared Book before unchanged retry', async () => {
+	const item = liveAssignmentRecord(), attempt = assignmentAttemptSchema.parse(item.assignmentAttempt);
+	attempt.workItemId = 'configured-material-work'; const original = liveGovernedContext(attempt);
+	attempt.sourceRef = original.reference; attempt.contextRefs.push(original.reference, original.book.ref);
+	attempt.grant.contentRead.push(original.reference, original.book.ref);
+	attempt.effectiveProfile.permissionCeiling.content.read.push('book'); item.assignmentAttempt = attempt;
+	const boundary = await contextBoundary(attempt.projectId, original.reference.repository, original.observed);
+	try {
+		const held = structuredClone(item);
+		const inspect = async (observedItem = item) => {
+			const returned = row(await boundary.facade.invoke('treedx.repositories.files.read', {
+				path: { projectId: attempt.projectId, repoId: original.reference.repository },
+				query: { path: original.reference.path, ref: original.reference.commit, encoding: 'utf8', parseFrontmatter: true },
+			}));
+			verifyAssignmentContextRead(observedItem, original.reference, attempt.projectId, original.binding, returned);
+		};
+		await Promise.all([inspect(), inspect()]);
+		const omitted = structuredClone(item), issued = row(omitted.assignmentAttempt);
+		issued.contextRefs = (issued.contextRefs as Row[]).filter(ref => ref.model !== 'book');
+		row(issued.grant).contentRead = (row(issued.grant).contentRead as Row[]).filter(ref => ref.model !== 'book');
+		const failure = structuredClone(omitted);
+		await expect(inspect(omitted)).rejects.toThrow('ACCEPTANCE_DECLARED_CONTEXT');
+		expect(omitted).toEqual(failure); expect(item).toEqual(held); await inspect();
+	} finally { await boundary.close(); }
+});

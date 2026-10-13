@@ -1,3 +1,5 @@
+import { campaignProposal, rewriteProposal } from '../preflight/proposals/campaign-proposals-fixture.ts';
+import { exactContext } from '../../kernel/architecture/portable/context-fixture.ts';
 import { allocateWorkdayCapacity, calculateAssignmentAllocation, appliedWorkdaySchema, assignmentAttemptSchema, compileWorkday, DEFAULT_WORKDAY_POLICY, type AssignmentAttempt } from '@treeseed/sdk/agent-capacity';
 import { simulationSourceBranch } from '@treeseed/sdk/capacity-provider/sandbox';
 import { request } from '../../kernel/provider-kernel-fixture.ts';
@@ -63,4 +65,25 @@ export function liveProviderSession(item: Row): Row {
 		snapshot: { adapters: [{ id: attempt.provider.executionProviderId, runtimeBuild: attempt.provider.runtimeBuild,
 			nativeLimits: { modelConfigurationId: attempt.provider.modelConfigurationId, dailyActiveSecondsLimit: 28800,
 				capabilityLimits: { [attempt.provider.executionCapabilityId]: { dailyActiveSecondsLimit: 7200 } } } }] } };
+}
+
+/** Controlled independent governing bytes for owning context-reader tests. */
+export function liveGovernedContext(attempt: AssignmentAttempt) {
+	const source = attempt.contextRefs.find(ref => ref.store === 'git');
+	if (!source?.commit || !source.repository || !attempt.workItemId) throw new Error('Original configured work item and source required');
+	const book = exactContext(); book.response.files[0]!.frontmatter.projectId = attempt.projectId;
+	const fixture = campaignProposal(0, source.commit, book.ref.commit, book.ref.commit);
+	rewriteProposal(fixture, proposal => {
+		proposal.projectId = attempt.projectId;
+		const items = (proposal.executionPlan as { workItems: Array<Record<string, unknown>> }).workItems;
+		for (const item of items) for (const ref of item.contextRefs as Array<Record<string, unknown>>)
+			if (ref.store === 'git') { ref.repository = source.repository; ref.commit = source.commit; }
+		items[3]!.id = attempt.workItemId; (items[3]!.contextRefs as unknown[]).push(book.ref);
+		(proposal.executionPlan as { workItems: Array<Record<string, unknown>> }).workItems = [items[3]!];
+	});
+	const file = fixture.observed.files[0]!, reference = { store: 'treedx', model: 'proposal', id: fixture.expected.id,
+		repository: book.ref.repository, commit: fixture.observed.resolvedRef, path: file.path, revision: 1,
+		digest: `sha256:${fixture.governance.activeContentHash}` };
+	return { reference, book, binding: { repositoryId: book.ref.repository, projectId: attempt.projectId },
+		observed: { ...fixture.observed, repoId: book.ref.repository } };
 }

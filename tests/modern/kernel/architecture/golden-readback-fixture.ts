@@ -96,6 +96,13 @@ beforeEach(() => {
 	state.calls = [];
 	const items: Row[] = classes.flatMap(agentClass => [assignment(`chat-${agentClass}`, 'chat', agentClass),
 		assignment(`planning-1-${agentClass}`, 'planning', agentClass), assignment(`planning-2-${agentClass}`, 'planning', agentClass)]);
+	const discussionPath = `discussions/sdk-golden-${workdayId}.mdx`, discussionFrontmatter = {
+		schemaVersion: 'treeseed.discussion/v1', id: `sdk-golden-${workdayId}`, projectId: 'sdk', teamId: 'team-1', status: 'open',
+		subjectRef: { store: 'postgresql', model: 'project', id: 'sdk' }, participantClasses: [], title: 'SDK probes', createdAt: '2026-09-27T00:00:00.500Z' };
+	const discussionBody = '# SDK probes\n', discussionContent = `---\n${stringify(discussionFrontmatter, { lineWidth: 0 })}---\n${discussionBody}`;
+	const discussionDigest = `sha256:${createHash('sha256').update(discussionContent).digest('hex')}`;
+	state.replies.set(`library read ${discussionPath}`, { result: { ok: true, repoId: 'sdk-library', resolvedRef: commit,
+		files: [{ path: discussionPath, content: discussionContent, body: discussionBody, frontmatter: discussionFrontmatter }] } });
 	// Exact-message UNIT oracle only; these bytes are not a real discussion or model receipt.
 	for (const item of items.filter(value => value.assignmentAttempt.effectiveProfile.activity === 'chat')) {
 		const role = item.assignmentAttempt.agentClass, channel = `sdk-golden-${workdayId}`, path = `discussion-messages/${channel}/${role}.mdx`;
@@ -108,7 +115,7 @@ beforeEach(() => {
 		item.assignmentAttempt.grant.contentRead = [structuredClone(source), structuredClone(proposal)];
 		item.assignmentAttempt.effectiveProfile.permissionCeiling.content.read.push('discussion');
 		const body = sdkCampaignChatQuestion(role), frontmatter = { schemaVersion: 'treeseed.discussion-message/v1', id: `message-${item.id}`,
-			discussionRef: { store: 'treedx', model: 'discussion', id: channel, path: `discussions/${channel}.mdx`, revision: 1, digest: `sha256:${'e'.repeat(64)}` },
+			discussionRef: { store: 'treedx', model: 'discussion', id: channel, path: discussionPath, revision: 1, digest: discussionDigest },
 			authorRef: { store: 'postgresql', model: 'user', id: 'unit-operator' }, authorType: 'user', discussionId: channel,
 			mentionedAgents: [role], recipientIds: [role], fileRefs: [], parentWorkdayId: workdayId, createdAt: '2026-09-27T00:00:00.500Z',
 			contextRefs: [{ kind: 'proposal', id: proposal.id, projectId: item.projectId, immutableRef: commit, path: proposal.path, digest: proposal.digest }] };

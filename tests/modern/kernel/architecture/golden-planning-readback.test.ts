@@ -68,6 +68,15 @@ describe('managed planning cycle and published contribution custody', () => {
 			expect([...state.replies]).toEqual(held); Object.assign(item, structuredClone(originalInput));
 		}
 		expect(() => gate('collaboration')).not.toThrow();
+		const discussionKey = [...state.replies.keys()].find(key => key.startsWith('library read discussions/'))!;
+		const originalDiscussion = structuredClone(state.replies.get(discussionKey)!);
+		for (const status of ['closed', 'resolved']) {
+			const denied = structuredClone(originalDiscussion), file = denied.result.files[0]; file.frontmatter.status = status;
+			file.content = `---\n${stringify(file.frontmatter, { lineWidth: 0 })}---\n${file.body}`;
+			state.replies.set(discussionKey, denied); const held = structuredClone([...state.replies]);
+			expect(() => gate('collaboration')).toThrow(); expect([...state.replies]).toEqual(held);
+		}
+		state.replies.set(discussionKey, originalDiscussion); expect(() => gate('collaboration')).not.toThrow();
 		// Additional supplied UNIT cycles exercise the same managed assertion;
 		// these replies are not native publication or live model evidence.
 		const items: Row[] = state.replies.get('assignments list')!.items;

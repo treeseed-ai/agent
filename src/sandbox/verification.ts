@@ -38,15 +38,17 @@ export async function observeReportedActivityCommands(report: ActivityCompletion
 		}
 	}
 	const verification: VerificationResult[] = [];
+	const observations: Array<VerificationResult & { stdout: string; stderr: string }> = [];
 	for (const command of commands) {
 		const started = process.hrtime.bigint(); let failedOutput = '';
 		try {
 			const output = await execute('/bin/sh', ['-c', command], { cwd: '/workspace/project', captureStdout: true,
 				maxStdoutBytes: 8_388_608, timeoutMs: 120_000,
 				onLine: line => { failedOutput = `${failedOutput}\n${redactProviderDiagnostic(line, secrets)}`.slice(-1_024); } });
-			verification.push({ command, status: 'passed' as const, exitCode: 0,
+			const receipt: VerificationResult = { command, status: 'passed', exitCode: 0,
 				outputDigest: objectDigest({ stdout: output.stdout, stderr: output.stderr }),
-				durationSeconds: Math.ceil(Number(process.hrtime.bigint() - started) / 1e9) });
+				durationSeconds: Math.ceil(Number(process.hrtime.bigint() - started) / 1e9) };
+			verification.push(receipt); observations.push({ ...receipt, stdout: output.stdout, stderr: output.stderr });
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error);
 			const exit = /exited (\d+)/u.exec(message)?.[1] ?? 'unknown';
@@ -55,7 +57,8 @@ export async function observeReportedActivityCommands(report: ActivityCompletion
 			const output = `${text(observed.stdout)}\n${text(observed.stderr)}`.replace(/\u001b\[[0-9;]*m/gu, '');
 			// Only actual assertion failures are test-first red evidence. Setup failures,
 			// killed processes and unknown exits remain fatal even in a test-first scope.
-			if (observed.exitCode === 1 && /\bFAIL\s+\S+\.test\.tsx?\s+>/u.test(output) && /\bAssertionError\b/u.test(output)
+			if (observed.exitCode === 1 && typeof observed.stdout === 'string' && typeof observed.stderr === 'string'
+				&& /\bFAIL\s+\S+\.test\.tsx?\s+>/u.test(output) && /\bAssertionError\b/u.test(output)
 				&& !/Cannot find module|Failed to load|heap out of memory|Unhandled Error|SyntaxError|TypeError|ReferenceError|timed?\s*out|timeout|\bskipped\b|\btodo\b/iu.test(output)) {
 				const corrected = correctObservedTestFirstRedVerification(report,
 					[{ type: 'item.completed', item: { type: 'command_execution', command, exit_code: 1 } }],
@@ -64,16 +67,17 @@ export async function observeReportedActivityCommands(report: ActivityCompletion
 					report = { ...corrected, summary: `${corrected.summary}\nRunner-observed test-first red: ${redactProviderDiagnostic(command, secrets)} (exit 1); ${diagnostics}`,
 						verification: corrected.verification.map((entry, index) => entry.status === 'failed'
 						&& report.verification[index]?.status === 'passed' ? { ...entry, summary: `${entry.summary} ${diagnostics}` } : entry) };
-					verification.push({ command, status: 'failed', exitCode: 1,
+					const receipt: VerificationResult = { command, status: 'failed', exitCode: 1,
 						outputDigest: objectDigest({ stdout: observed.stdout, stderr: observed.stderr }),
-						durationSeconds: Math.ceil(Number(process.hrtime.bigint() - started) / 1e9) });
+						durationSeconds: Math.ceil(Number(process.hrtime.bigint() - started) / 1e9) };
+					verification.push(receipt); observations.push({ ...receipt, stdout: observed.stdout, stderr: observed.stderr });
 					continue;
 				}
 			}
 			throw new Error(`Runner-observed verification failed (exit ${exit}): ${redactProviderDiagnostic(command, secrets)}; ${diagnostics}`);
 		}
 	}
-	return { report, verification };
+	return { report, verification, observations };
 }
 
 export function requiresNodeDependencyRestore(command: string) {
@@ -135,7 +139,8 @@ export async function prepareReleaseReview(context: Record<string, unknown>, sec
 			const additional = await observeReportedActivityCommands({ ...completion, verification: completion.verification.map(entry =>
 				({ ...entry, commands: entry.commands.filter(command => !commands.includes(command)) })) }, secrets, execute, assignment);
 			await assertReviewCandidate(commit, execute);
-			return { report: completion, verification: [...observed.verification, ...additional.verification] };
+			return { report: completion, verification: [...observed.verification, ...additional.verification],
+				observations: [...observed.observations, ...additional.observations] };
 		} };
 }
 

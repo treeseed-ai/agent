@@ -171,9 +171,9 @@ it('packs and inspects a real fresh Reviewer archive once and detects hidden tra
 		};
 		const review = await verification.prepareReleaseReview(input, [], withinAssignmentBudget(execute, () => 10_000 - (performance.now() - started)));
 		const observed = await review!.complete({ ...report(), verification: [] });
-		const observations = Reflect.get(observed, 'observations') as Array<Record<string, unknown>> | undefined;
+		const observations = Reflect.get(observed, 'observations');
 		expect(observations).toHaveLength(3);
-		expect(observations?.map(value => value.command)).toEqual(actualCommands);
+		expect(observations?.map((value: { command: unknown }) => value.command)).toEqual(actualCommands);
 		expect(observations?.[1]?.stdout).toBe('native-review-fixture-1.0.0.tgz\n');
 		for (const [index, receipt] of observed.verification.entries()) {
 			const output = observations?.[index]; expect(output).toBeDefined();

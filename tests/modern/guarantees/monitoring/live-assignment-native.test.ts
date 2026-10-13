@@ -280,6 +280,12 @@ it('native configured Kernel Git result and public SDK assignment reads reach th
 		issuedChild.workspace.baseCommit = candidate;
 		const child = liveAssignmentRecord(issuedChild); expect(validateProviderAssignment(child).ok).toBe(true);
 		verifyLiveSourceContext(child, [item, child], { 'treeseed-ai/sdk': f.base });
+		const wrongBase = structuredClone(child);
+		row(row(wrongBase.assignmentAttempt).workspace).baseCommit = f.base;
+		const heldWrongBase = structuredClone(wrongBase);
+		expect(() => verifyLiveSourceContext(wrongBase, [item, wrongBase], { 'treeseed-ai/sdk': f.base }))
+			.toThrow('ACCEPTANCE_LIVE_SOURCE_BASE');
+		expect(wrongBase).toEqual(heldWrongBase);
 		expect(f.git('cat-file', '-t', candidate)).toBe('commit'); expect({ item, run }).toEqual(before);
 		// Native owning Kernel/handler/Git and SDK transport; upstream record,
 		// profile bytes and handler catalog are controlled. This does not prove

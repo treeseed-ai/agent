@@ -1,7 +1,7 @@
 import { beforeEach, expect, it, vi } from 'vitest';
 import { liveAssignmentGraph, liveAssignmentRecord, liveProviderSession, liveRun } from './live-assignment-fixture.ts';
 import { reviewedDecision, reviewedRevisionFixture } from '../../kernel/architecture/custody/graph/review-readiness-fixture.ts';
-import { exactContext } from '../../kernel/architecture/portable/context-fixture.ts';
+import { contextPredecessor, exactContext } from '../../kernel/architecture/portable/context-fixture.ts';
 
 // Unit-only isolation of already separately covered profile/content boundaries.
 // The real configured Kernel/public SDK integration exercises those boundaries.
@@ -28,6 +28,19 @@ beforeEach(() => {
 	state.graph = liveAssignmentGraph(state.item);
 	state.run = liveRun(state.item);
 	state.publications = [liveProviderSession(state.item)];
+});
+
+it('denies starting on the frozen base instead of the original consumed Git candidate even when both exact commits remain in context', () => {
+	const attempt = state.item.assignmentAttempt, repository = attempt.workspace.repository, candidate = 'f'.repeat(40);
+	const result = contextPredecessor(attempt, 'original-result', 'original-attempt', candidate);
+	const previous = { id: result.assignmentId, status: 'completed', assignmentResult: result };
+	attempt.predecessorResultIds = [result.id];
+	attempt.contextRefs.push({ store: 'git', model: 'repository', id: 'consumed-source', repository, commit: candidate });
+	attempt.workspace.baseCommit = candidate;
+	expect(() => verifyLiveSourceContext(state.item, [previous, state.item], state.frozen)).not.toThrow();
+	attempt.workspace.baseCommit = state.frozen[repository]; const before = structuredClone(state);
+	expect(() => verifyLiveSourceContext(state.item, [previous, state.item], state.frozen)).toThrow('ACCEPTANCE_LIVE_SOURCE_BASE');
+	expect(state).toEqual(before);
 });
 
 it('denies a self-consistent granted Book when its independent original content read is missing before live admission continues', () => {

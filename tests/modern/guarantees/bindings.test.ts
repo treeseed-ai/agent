@@ -44,6 +44,11 @@ describe('capacity-provider guarantee execution bindings', () => {
 			criterion: 'a4199e48998233b28a6aa7480d4a386c32675970f2989ad2719240055fa91443', verifierRefs: [refs[0], refs[2]] }]);
 		expect(manifest.acceptanceCriteria.filter((value: { criterion: string }) => value.criterion ===
 			'ee95f7eb3323545534ac708f6ef6ae9d6b9ae2ae40ad4268738084a25d293d86')).toEqual([{ criterion: 'ee95f7eb3323545534ac708f6ef6ae9d6b9ae2ae40ad4268738084a25d293d86', verifierRefs: [refs[0], refs[1]] }]);
+		const products = ['agent.golden.live.results', 'sdk.golden.live.product', 'agent.golden.live.reporter', 'api.golden.execution-normal-sdk-clean-schema-live-1'];
+		expect(manifest.acceptanceCriteria.filter((value: { criterion: string }) => value.criterion === '73706b74d24775782c346f427a33f7ea9386e0038f7c50fa7cf317dfa30d1fd1'))
+			.toEqual([{ criterion: '73706b74d24775782c346f427a33f7ea9386e0038f7c50fa7cf317dfa30d1fd1', verifierRefs: products }]);
+		for (const ref of products) expect(scene.workflow.filter((step: { action: { verifier: string } }) => step.action.verifier === ref)).toHaveLength(1);
+
 	});
 	it('binds exact simulation Git workspace custody to live approved bases and independently resolved published branches', () => {
 		const manifest = parse(readFileSync(resolve(root, 'guarantees/agent/golden/sdk-complete.guarantee.yaml'), 'utf8'));

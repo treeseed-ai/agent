@@ -169,3 +169,5 @@ acceptanceCriteria:
     verifierRefs: [agent.golden.live.graph, sdk.golden.live.product]
   - criterion: 4ff1e6e55ccb0038c0f79331029c2ad083409c36058b1e3335b1b44a263b2ce0
     verifierRefs: [agent.golden.live.graph, agent.golden.architecture-graph-history-live-1, agent.golden.architecture-living-graph-live-2]
+  - criterion: 73706b74d24775782c346f427a33f7ea9386e0038f7c50fa7cf317dfa30d1fd1
+    verifierRefs: [agent.golden.live.results, sdk.golden.live.product, agent.golden.live.reporter, api.golden.execution-normal-sdk-clean-schema-live-1]

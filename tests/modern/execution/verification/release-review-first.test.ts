@@ -31,6 +31,7 @@ it('runs all independent release checks before model review and never replays th
 	expect(review!.verification.every(entry => entry.outputDigest !== `sha256:${'b'.repeat(64)}`)).toBe(true);
 	const observed = await review!.complete(report());
 	expect(observed.verification).toEqual(review!.verification);
+	expect(Reflect.get(observed, 'observations')).toEqual(observed.verification.map(record => ({ ...record, stdout: 'fresh reviewer output', stderr: '' })));
 	expect(execute.mock.calls.filter(call => call[0] === '/bin/sh')).toHaveLength(3);
 });
 
@@ -47,6 +48,7 @@ it('still independently replays an additional model-reported command', async () 
 		{ status: 'passed', summary: 'Additional check', commands: ['npm run test:extra'] }] });
 	expect(execute.mock.calls.filter(call => call[0] === '/bin/sh').map(call => call[1][1])).toEqual([...commands, 'npm run test:extra']);
 	expect(observed.verification.map(entry => entry.command)).toEqual([...commands, 'npm run test:extra']);
+	expect(Reflect.get(observed, 'observations')).toEqual(observed.verification.map(record => ({ ...record, stdout: 'fresh reviewer output', stderr: '' })));
 });
 
 it('rejects missing or ambiguous exact Actor candidate inventory before executing commands', async () => {
@@ -168,7 +170,15 @@ it('packs and inspects a real fresh Reviewer archive once and detects hidden tra
 			return run(executable, executable === '/bin/sh' ? ['-c', args[1]!] : args, { ...options, cwd: root });
 		};
 		const review = await verification.prepareReleaseReview(input, [], withinAssignmentBudget(execute, () => 10_000 - (performance.now() - started)));
-		await review!.complete({ ...report(), verification: [] });
+		const observed = await review!.complete({ ...report(), verification: [] });
+		const observations = Reflect.get(observed, 'observations') as Array<Record<string, unknown>> | undefined;
+		expect(observations).toHaveLength(3);
+		expect(observations?.map(value => value.command)).toEqual(actualCommands);
+		expect(observations?.[1]?.stdout).toBe('native-review-fixture-1.0.0.tgz\n');
+		for (const [index, receipt] of observed.verification.entries()) {
+			const output = observations?.[index]; expect(output).toBeDefined();
+			expect(receipt.outputDigest).toBe(verification.objectDigest({ stdout: output?.stdout, stderr: output?.stderr }));
+		}
 		expect(actualCommands).toEqual(['npm run release:verify', 'npm pack', 'npm run standards:acceptance']);
 		expect((await readFile(join(root, 'native-review-fixture-1.0.0.tgz'))).subarray(0, 2)).toEqual(Buffer.from([0x1f, 0x8b]));
 		await run('/usr/bin/git', ['update-index', '--assume-unchanged', 'README.md'], { cwd: root });

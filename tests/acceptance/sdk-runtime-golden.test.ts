@@ -9,7 +9,7 @@ import { validatePortableContentData } from '@treeseed/sdk/content-validation';
 import { acceptanceWorkdayId, read, row, type Row } from './acceptance-cli.ts';
 import { readApprovedWorkReview, readDecisionContent, readGovernedContentFile, verifyDecisionContent, verifyReviewFindingContent, verifyReviewCandidateAuthority } from './workday/support/decision-evidence.ts';
 import { verifyAssignmentAuthority, verifyAssignmentWorkspaceInventory, verifyTeardownAuthority, verifyTreeDxWorkspaceClosure, verifyMeasuredVerification, verifyNativeCounterAgreement, verifyTerminalUsageClock } from './workday/support/assignment-authority.ts';
-import { verifyPlanningEvidence } from './workday/support/planning-evidence.ts';
+import { verifyPlanningEvidence, verifyChatCommunicationLanes } from './workday/support/planning-evidence.ts';
 import { readCompleteEvidence } from './workday/support/evidence-pages.ts';
 import { verifyAllocation } from './workday/support/monitoring/assignment-allocation.ts';
 import { verifyReportRecordCustody } from './workday/support/record-custody.ts';
@@ -109,6 +109,7 @@ export function verifyGolden(gate: Gate): void {
 	}
 	const activity = (item: Row) => text(row(row(item.assignmentAttempt).effectiveProfile).activity);
 	if (gate === 'collaboration') {
+	verifyChatCommunicationLanes(assignments);
 	const classes = ['architect', 'researcher', 'tester', 'engineer', 'technical-writer', 'releaser', 'reviewer', 'reporter'];
 	assert.deepEqual([...new Set(completed.filter(item => activity(item) === 'chat').map(item => row(item.assignmentAttempt).agentClass))].sort(),
 		[...classes].sort(), 'ACCEPTANCE_CHAT_ROLES: Exact campaign-selected chat contributors must complete');

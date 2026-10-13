@@ -1,3 +1,4 @@
+import { verifyAssignmentContextRead } from '../../../acceptance/workday/support/monitoring/assignment-context.ts';
 import { createServer } from 'node:http';
 import { createHash } from 'node:crypto';
 import { stringify } from 'yaml';
@@ -12,33 +13,44 @@ import { verifyExactContextSource, verifyGitInputContext, verifyGovernedProfile,
 import { observeLiveAssignmentRecords, verifyLiveAssignmentGraph, verifyLiveProviderRuntime, verifyLiveSimulationWorkspace, verifyLiveSourceContext } from '../../../acceptance/workday/support/monitoring/live-assignment-records.ts';
 import { verifyAllocation } from '../../../acceptance/workday/support/monitoring/assignment-allocation.ts';
 import { verifyPredecessorCustody } from '../../../acceptance/workday/support/evidence-pages.ts';
-import { liveAssignmentGraph, liveAssignmentRecord, liveProviderSession, liveRun } from './live-assignment-fixture.ts';
+import { liveAssignmentGraph, liveAssignmentRecord, liveProviderSession, liveRun, liveGovernedContext } from './live-assignment-fixture.ts';
 import { contextBoundary, exactContext } from '../../kernel/architecture/portable/context-fixture.ts';
 
 it('native Kernel and independent content transport deny moved tampered denied and interrupted live Book observations without caching partial authority before unchanged retry', async () => {
 	const f = await portableKernel(), exact = exactContext(); let boundary: Awaited<ReturnType<typeof contextBoundary>> | undefined;
 	try {
 		boundary = await contextBoundary(f.attempt.projectId, exact.ref.repository, exact.response);
+		f.attempt.sourceRef = exact.ref;
 		f.attempt.contextRefs.push(exact.ref); f.attempt.grant.contentRead.push(exact.ref);
 		f.attempt.effectiveProfile.permissionCeiling.content.read.push('book'); f.input.treeDx = boundary.facade;
-		const candidate = await f.candidate(), produced = await f.run(); expect(produced.status).toBe('completed');
+		const candidate = await f.candidate(), produced = await f.run(); expect(produced.status, `${produced.code}: ${produced.summary}`).toBe('completed');
 		const result = assignmentResultSchema.parse(produced.outputs?.assignmentResult);
 		const item: Row = { ...liveAssignmentRecord(f.attempt), status: 'completed', leaseState: 'released', completedAt: result.completedAt, assignmentResult: result };
 		Object.assign(row(item.assignmentAttempt), { status: 'completed', finishedAt: result.completedAt });
 		const run = liveRun(item), before = structuredClone({ item, run }), failures: Array<{ mode: string; returned?: Row; error?: string }> = [];
-		const observe = async () => {
+		const observe = async (observedItem = item) => {
 			const retained = new Map<string, Row>();
 			try {
 				const returned = row(await boundary!.facade.invoke('treedx.repositories.files.read', {
 					path: { projectId: f.attempt.projectId, repoId: exact.ref.repository },
 					query: { path: exact.ref.path, ref: exact.ref.commit, encoding: 'utf8', parseFrontmatter: true },
 				}));
-				observeLiveAssignmentRecords(run, [item], retained, () => verifyExactContextSource(exact.ref, f.attempt.projectId,
-					{ repositoryId: exact.ref.repository }, returned));
+				observeLiveAssignmentRecords(run, [observedItem], retained, value => {
+					verifyLiveSourceContext(value, [value], { 'treeseed-ai/sdk': f.base });
+					verifyExactContextSource(exact.ref, f.attempt.projectId, { repositoryId: exact.ref.repository }, returned);
+				});
 				return retained;
 			} catch (error) { expect(retained.size).toBe(0); throw error; }
 		};
 		expect((await Promise.all([observe(), observe()])).every(value => value.size === 1)).toBe(true);
+		const omitted = structuredClone(item), issued = row(omitted.assignmentAttempt);
+		issued.contextRefs = (issued.contextRefs as Row[]).filter(ref => ref.store !== 'treedx');
+		row(issued.grant).contentRead = [];
+		const denied = structuredClone(omitted);
+		await expect(observe(omitted)).rejects.toThrow('ACCEPTANCE_LIVE_SOURCE_CONTEXT');
+		expect(omitted).toEqual(denied); expect({ item, run }).toEqual(before);
+		expect((await observe()).size).toBe(1);
+
 		for (const mode of ['moved', 'missing', 'tampered', 'foreign-book', 'foreign-revision', 'denied', 'interrupted', 'malformed']) {
 			const response = structuredClone(exact.response);
 			if (mode === 'moved') response.resolvedRef = 'f'.repeat(40);
@@ -54,7 +66,7 @@ it('native Kernel and independent content transport deny moved tampered denied a
 		const heldFailures = structuredClone(failures); boundary.set(exact.response);
 		expect((await observe()).size).toBe(1); expect(failures).toEqual(heldFailures); expect(failures).toHaveLength(8);
 		expect({ item, run }).toEqual(before); expect(f.requests).toHaveLength(1);
-		expect(boundary.calls).toHaveLength(12); // One original Kernel read and eleven independent observations.
+		expect(boundary.calls).toHaveLength(14); // One original Kernel read and thirteen independent observations.
 	} finally { try { await boundary?.close(); } finally { await f.close(); } }
 });
 
@@ -129,6 +141,8 @@ it('native configured Kernel Git result and public SDK assignment reads reach th
 			if (mode === 'denied') { response.writeHead(403).end(JSON.stringify({ status: 403, title: 'Controlled native denial', code: 'controlled_assignment_denied' })); return; }
 			if (mode === 'interrupted') { request.socket.destroy(); return; }
 			const returned = structuredClone(item);
+			if (mode === 'grant-missing-tool') row(row(returned.assignmentAttempt).grant).tools =
+				(row(row(returned.assignmentAttempt).grant).tools as string[]).filter(tool => tool !== 'verification');
 			if (mode === 'source-substitution') {
 				row(row(returned.assignmentAttempt).workspace).baseCommit = 'f'.repeat(40);
 				for (const reference of row(returned.assignmentAttempt).contextRefs as Row[]) if (reference.store === 'git') reference.commit = 'f'.repeat(40);
@@ -212,10 +226,13 @@ it('native configured Kernel Git result and public SDK assignment reads reach th
 		expect(requests).toHaveLength(54);
 		expect({ item, run }).toEqual(before); expect(f.requests).toHaveLength(1);
 		const inspectGraph = async () => {
+			const issued = row((await client.invoke(controlPlaneOperation('assignments.show'), {
+				path: { teamId: f.attempt.teamId, assignmentId: f.attempt.id }, query: {}, body: undefined,
+			})).data);
 			const graph = row((await client.invoke(controlPlaneOperation('execution.graph.show'), {
 				path: { teamId: f.attempt.teamId }, query: {}, body: undefined,
 			})).data), observations = new Map<string, Row>();
-			observeLiveAssignmentRecords(run, [item], observations, value => {
+			observeLiveAssignmentRecords(run, [issued], observations, value => {
 				verifyLiveAssignmentGraph(value, graph); verifyPredecessorCustody([value], graph);
 				verifyAllocation(value, run); verifyGovernedProfile(value, { path, content }, graph);
 				const handler = { id: f.attempt.effectiveProfile.handler, origin: f.attempt.effectiveProfile.handlerOrigin };
@@ -224,13 +241,16 @@ it('native configured Kernel Git result and public SDK assignment reads reach th
 			return observations;
 		};
 		mode = 'exact'; expect((await Promise.all([inspectGraph(), inspectGraph()])).every(value => value.size === 1)).toBe(true);
+		mode = 'grant-missing-tool'; await expect(inspectGraph()).rejects.toThrow('ACCEPTANCE_LIVE_GRAPH');
+		const omittedToolFailure = structuredClone(failed.at(-1));
+		mode = 'exact'; expect((await inspectGraph()).size).toBe(1); expect(failed.at(-1)).toEqual(omittedToolFailure);
 		for (const denied of ['graph-team', 'graph-revision', 'graph-node', 'graph-source', 'graph-estimate', 'graph-workspace', 'graph-predecessor',
 			'graph-denied', 'graph-malformed', 'graph-interrupted']) {
 			mode = denied; await expect(inspectGraph(), denied).rejects.toThrow(); expect({ item, run }).toEqual(before);
 		}
 		const graphFailures = structuredClone(failed); mode = 'exact'; expect((await inspectGraph()).size).toBe(1);
 		expect(failed).toEqual(graphFailures); expect(failed.slice(0, originalFailures.length)).toEqual(originalFailures);
-		expect(requests.filter(value => value.endsWith('/execution-graph'))).toHaveLength(13);
+		expect(requests.filter(value => value.endsWith('/execution-graph'))).toHaveLength(15);
 		for (const denied of ['allocation-missing', 'allocation-reservation', 'allocation-calibration', 'allocation-limiting', 'allocation-supply']) {
 			mode = denied; const empty = new Map<string, Row>(); await expect(execute(empty), denied).rejects.toThrow('ACCEPTANCE_ALLOCATION');
 			expect(empty.size).toBe(0); expect({ item, run }).toEqual(before);
@@ -296,3 +316,71 @@ it('native configured Kernel Git result and public SDK assignment reads reach th
 	}
 	expect(server?.listening).toBe(false);
 }, 30_000);
+
+// Original owning content inspection over native transport. This does not claim
+// model execution, API admission, usage, or a passing managed SDK invocation.
+it('native original governing content transport rejects an omitted declared Book before unchanged retry', async () => {
+	const item = liveAssignmentRecord(), attempt = assignmentAttemptSchema.parse(item.assignmentAttempt);
+	attempt.workItemId = 'configured-material-work'; const original = liveGovernedContext(attempt);
+	attempt.sourceRef = original.reference; attempt.contextRefs.push(original.reference, original.book.ref);
+	attempt.grant.contentRead.push(original.reference, original.book.ref);
+	attempt.effectiveProfile.permissionCeiling.content.read.push('book'); item.assignmentAttempt = attempt;
+	const boundary = await contextBoundary(attempt.projectId, original.binding.repositoryId, original.observed);
+	try {
+		const held = structuredClone(item);
+		const inspect = async (observedItem = item) => {
+			const returned = row(await boundary.facade.invoke('treedx.repositories.files.read', {
+				path: { projectId: attempt.projectId, repoId: original.reference.repository },
+				query: { path: original.reference.path, ref: original.reference.commit, encoding: 'utf8', parseFrontmatter: true },
+			}));
+			verifyAssignmentContextRead(observedItem, original.reference, attempt.projectId, original.binding, returned);
+		};
+		await Promise.all([inspect(), inspect()]);
+		const omitted = structuredClone(item), issued = row(omitted.assignmentAttempt);
+		issued.contextRefs = (issued.contextRefs as Row[]).filter(ref => ref.model !== 'book');
+		row(issued.grant).contentRead = (row(issued.grant).contentRead as Row[]).filter(ref => ref.model !== 'book');
+		const failure = structuredClone(omitted);
+		await expect(inspect(omitted)).rejects.toThrow('ACCEPTANCE_DECLARED_CONTEXT');
+		expect(omitted).toEqual(failure); expect(item).toEqual(held); await inspect();
+		const failures: Array<{ mode: string; returned: Row }> = [];
+		for (const mode of ['moved', 'tampered', 'missing', 'duplicate', 'denied', 'malformed', 'interrupted']) {
+			const returned = structuredClone(original.observed);
+			if (mode === 'moved') returned.resolvedRef = 'f'.repeat(40);
+			if (mode === 'tampered') returned.files[0]!.content += 'Changed original declaration';
+			if (mode === 'missing') returned.files = [];
+			if (mode === 'duplicate') returned.files.push(structuredClone(returned.files[0]!));
+			boundary.set(returned, mode === 'denied' ? 403 : 200, mode === 'malformed' ? 'json' : mode === 'interrupted' ? 'reset' : '');
+			failures.push({ mode, returned: structuredClone(returned) }); await expect(inspect(), mode).rejects.toThrow();
+			expect(item).toEqual(held);
+		}
+		const deniedHistory = structuredClone(failures); boundary.set(original.observed);
+		await inspect(); expect(failures).toEqual(deniedHistory); expect(item).toEqual(held);
+		const writable = structuredClone(item), issuedWrite = assignmentAttemptSchema.parse(writable.assignmentAttempt);
+		issuedWrite.workspace = { mode: 'treedx', repository: 'sdk-library', baseCommit: 'e'.repeat(40), workspaceId: 'original-workspace', writablePaths: ['knowledge/original.md'] };
+		issuedWrite.grant.sourceWrite = []; issuedWrite.grant.tools = ['source.read'];
+		issuedWrite.effectiveProfile.permissionCeiling.tools = ['source.read']; issuedWrite.effectiveProfile.permissionCeiling.content.write = ['knowledge'];
+		const declaration = liveGovernedContext(issuedWrite); issuedWrite.sourceRef = declaration.reference;
+		issuedWrite.contextRefs = [...issuedWrite.contextRefs.filter(ref => ref.store === 'git'), declaration.reference, declaration.book.ref];
+		issuedWrite.grant.contentRead = [declaration.reference, declaration.book.ref];
+		issuedWrite.grant.contentWrite = [{ store: 'treedx', model: 'knowledge', id: 'original-knowledge', repository: 'sdk-library', commit: 'e'.repeat(40), path: 'knowledge/original.md' }];
+		writable.assignmentAttempt = issuedWrite; boundary.set(declaration.observed);
+		const inspectWritable = async (value = writable) => {
+			const returned = row(await boundary.facade.invoke('treedx.repositories.files.read', {
+				path: { projectId: attempt.projectId, repoId: declaration.binding.repositoryId },
+				query: { path: declaration.reference.path, ref: declaration.reference.commit, encoding: 'utf8', parseFrontmatter: true },
+			}));
+			verifyAssignmentContextRead(value, declaration.reference, attempt.projectId, declaration.binding, returned);
+		};
+		await inspectWritable(); const writableHeld = structuredClone(writable);
+		for (const scope of [{ ...issuedWrite.workspace, repository: 'foreign-library' }, { ...issuedWrite.workspace, baseCommit: 'f'.repeat(40) }]) {
+			const denied = structuredClone(writable), deniedAttempt = assignmentAttemptSchema.parse(denied.assignmentAttempt);
+			deniedAttempt.workspace = scope;
+			deniedAttempt.grant.contentWrite = deniedAttempt.grant.contentWrite.map(ref => ({ ...ref, repository: scope.repository, commit: scope.baseCommit }));
+			denied.assignmentAttempt = deniedAttempt;
+			await expect(inspectWritable(denied)).rejects.toThrow('ACCEPTANCE_DECLARED_CONTEXT'); expect(writable).toEqual(writableHeld);
+		}
+		await inspectWritable(); expect(writable).toEqual(writableHeld); expect(failures).toEqual(deniedHistory);
+
+
+	} finally { await boundary.close(); }
+});

@@ -1,7 +1,44 @@
 import assert from 'node:assert/strict';
-import { assignmentAttemptSchema } from '@treeseed/sdk/agent-capacity';
+import { isDeepStrictEqual } from 'node:util';
+import { assignmentAttemptSchema, exactEntityReferenceSchema } from '@treeseed/sdk/agent-capacity';
 import { read, row, type Row } from '../../../acceptance-cli.ts';
-import { verifyExactContextSource } from '../assignment-authority.ts';
+import { verifyProjectLibraryLookup } from '../portfolio-relations.ts';
+import { verifyExactContextSource, verifyGovernedProposalRead } from '../assignment-authority.ts';
+
+/** Read a declared governing source through the same original content boundary. */
+export function verifyAssignmentContextRead(item: Row, reference: Row, projectId: string, library: Row, returned: Row): void {
+	verifyExactContextSource(reference, projectId, library, returned);
+	if (reference.model !== 'proposal') return;
+	const attempt = assignmentAttemptSchema.parse(item.assignmentAttempt), code = 'ACCEPTANCE_DECLARED_CONTEXT';
+	const proposal = verifyGovernedProposalRead(reference, projectId, returned), items = row(proposal.executionPlan).workItems;
+	assert.ok(Array.isArray(items), `${code}: Original work-item inventory required`);
+	const selected = items.map(row).filter(work => !attempt.workItemId || work.id === attempt.workItemId);
+	assert.ok(attempt.workItemId ? selected.length === 1 : selected.length > 0, `${code}: Exact original work item required`);
+	const required = selected.flatMap(work => {
+		assert.ok(Array.isArray(work.contextRefs), `${code}: Original declared context inventory required`); return work.contextRefs;
+	});
+	if (!attempt.workItemId) required.push(...(Array.isArray(proposal.objectiveRefs) ? proposal.objectiveRefs : []),
+		...(Array.isArray(proposal.evidenceRefs) ? proposal.evidenceRefs : []), ...(proposal.discussionRef ? [proposal.discussionRef] : []));
+	for (const input of required) {
+		const ref = exactEntityReferenceSchema.parse(input);
+		if (ref.store !== 'git' && ref.store !== 'treedx') continue;
+		if (ref.store === 'treedx' && ref.model === 'repository') {
+			const url = String(library.contentRepositoryUrl ?? row(row(library.topology).contentRepository).githubUrl ?? '');
+			const named = /^https:\/\/github\.com\/([^/]+\/[^/]+?)(?:\.git)?$/u.exec(url)?.[1];
+			assert.ok([library.repositoryId, named].includes(ref.repository), `${code}: Declared library differs from original binding`);
+			if (attempt.effectiveProfile.activity === 'acting') {
+				assert.ok(attempt.workspace.mode === 'treedx' && attempt.workspace.repository === library.repositoryId
+					&& attempt.workspace.baseCommit === ref.commit, `${code}: Original declared mutable library base required`);
+			}
+			continue;
+		}
+
+		assert.ok(attempt.contextRefs.some(value => isDeepStrictEqual(value, ref)), `${code}: Original declared context omitted`);
+		if (ref.store === 'git') assert.ok(attempt.grant.sourceRead.includes(String(ref.repository)), `${code}: Declared source grant omitted`);
+		else assert.ok(attempt.grant.contentRead.some(value => isDeepStrictEqual(value, ref)), `${code}: Declared content grant omitted`);
+	}
+
+}
 
 /** Original exact context reads, shared by live admission and final read-back. */
 export function inspectAssignmentContext(item: Row, team: string): number {
@@ -15,10 +52,11 @@ export function inspectAssignmentContext(item: Row, team: string): number {
 		// An owning project is only a candidate. Its original binding must match.
 		const projectId = scope ? String(scope.projectId) : attempt.projectId;
 		const binding = read(['library', 'show', projectId], team, true);
-		const library = row(binding.result ?? binding);
+		const library = verifyProjectLibraryLookup(projectId, binding);
+		assert.equal(library.teamId, attempt.teamId, 'ACCEPTANCE_CONTEXT_BINDING: Original active team required');
 		assert.ok(ref.path && ref.commit, 'ACCEPTANCE_CONTEXT_REF: Missing independent exact content read authority');
 		const observed = read(['library', 'read', projectId, String(ref.path), '--ref', String(ref.commit)], team, true);
-		verifyExactContextSource(ref, projectId, library, row(observed.result ?? observed)); reads++;
+		verifyAssignmentContextRead(item, ref, projectId, library, row(observed.result ?? observed)); reads++;
 	}
 	return reads;
 }

@@ -52,6 +52,9 @@ export function verifyLiveAssignmentGraph(item: Row, graph: Row, items: readonly
 	assert.ok(parsed.success, `${code}: Canonical independent owning node required`);
 	const node = parsed.data;
 	assert.deepEqual(node, matches[0], `${code}: Original graph node must not be normalized`);
+	assert.ok(node.requestedPermissions, `${code}: Original authored permission request required`);
+	assert.deepEqual([...attempt.grant.tools].sort(), [...node.requestedPermissions.tools].sort(),
+		`${code}: Exact authored tool grant required; omitted tools are not complete authority`);
 	for (const field of ['teamId', 'projectId', 'agentClass', 'workItemId', 'sourceRef', 'authorityRefs',
 		'estimate', 'requiredCapabilities', 'acceptanceCriteria'] as const)
 		assert.deepEqual(node[field], attempt[field], `${code}: Issued ${field} differs from independent graph`);
@@ -113,6 +116,11 @@ export function verifyLiveSourceContext(item: Row, items: readonly Row[], frozen
 		const allowed = new Set([base, ...consumed.map(ref => ref.commit)]);
 		assert.ok(refs.every(ref => ref.commit && allowed.has(ref.commit)), `${code}: Unissued foreign source context`);
 		for (const ref of consumed) assert.ok(refs.some(value => value.commit === ref.commit), `${code}: Original consumed source omitted`);
+	}
+	for (const reference of [attempt.sourceRef, ...attempt.authorityRefs]) {
+		if (!reference.repository || !reference.commit || reference.store !== 'treedx' || !reference.path) continue;
+		assert.ok(attempt.contextRefs.some(ref => isDeepStrictEqual(ref, reference)), `${code}: Original governing context omitted`);
+		assert.ok(attempt.grant.contentRead.some(ref => isDeepStrictEqual(ref, reference)), `${code}: Original governing content grant omitted`);
 	}
 	for (const reference of attempt.grant.contentRead)
 		assert.ok(attempt.contextRefs.some(ref => isDeepStrictEqual(ref, reference)), `${code}: Original exact granted content omitted`);

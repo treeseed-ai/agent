@@ -10,7 +10,9 @@ vi.mock('../../../acceptance/acceptance-cli.ts', async original => ({
 	...await original<typeof import('../../../acceptance/acceptance-cli.ts')>(),
 	read: (args: string[]) => args[0] === 'assignments' ? structuredClone(state.item)
 		: args[0] === 'execution' ? structuredClone(state.graph) : args[0] === 'workdays' ? { run: structuredClone(state.run) }
-			: args[0] === 'capacity' ? { items: structuredClone(state.publications), page: { limit: 100, hasMore: false, nextCursor: null } } : {},
+			: args[0] === 'capacity' ? { items: structuredClone(state.publications), page: { limit: 100, hasMore: false, nextCursor: null } }
+			: args[0] === 'library' && args[1] === 'show' ? { project: { id: args[2], slug: 'sdk', teamId: state.item.teamId },
+				library: { projectId: args[2], teamId: state.item.teamId, repositoryId: state.item.assignmentAttempt.contextRefs.find((ref: Record<string, unknown>) => ref.store === 'treedx')?.repository } } : {},
 }));
 vi.mock('../../../acceptance/workday/support/decision-evidence.ts', async original => ({
 	...await original<typeof import('../../../acceptance/workday/support/decision-evidence.ts')>(), readGovernedContentFile: () => ({}),
@@ -28,6 +30,14 @@ beforeEach(() => {
 	state.graph = liveAssignmentGraph(state.item);
 	state.run = liveRun(state.item);
 	state.publications = [liveProviderSession(state.item)];
+});
+
+it('denies an omitted requested tool even when public assignment views and remaining grant fields agree', () => {
+	state.item.assignmentAttempt.effectiveProfile.permissionCeiling.tools.push('verification');
+	state.graph = liveAssignmentGraph(state.item);
+	const held = structuredClone(state);
+	expect(() => inspectLiveAssignmentProfile(state.item, 'team', [state.item], state.frozen)).toThrow('ACCEPTANCE_LIVE_GRAPH');
+	expect(state).toEqual(held);
 });
 
 it('denies starting on the frozen base instead of the original consumed Git candidate even when both exact commits remain in context', () => {
@@ -140,6 +150,19 @@ it('retains original provider publication when a later session opens after the o
 	expect(() => verifyLiveProviderRuntime(state.item, observations)).not.toThrow();
 	expect(observations).toEqual(before);
 });
+
+function verifyOmittedGoverningContext(field: 'sourceRef' | 'authorityRefs'): void {
+	const ref = { store: 'treedx', model: field === 'sourceRef' ? 'proposal' : 'decision', id: 'original-governed-input',
+		repository: 'native-library', commit: 'e'.repeat(40), path: field === 'sourceRef' ? 'proposals/original.md' : 'decisions/original.md' };
+	if (field === 'sourceRef') state.item.assignmentAttempt.sourceRef = ref;
+	else state.item.assignmentAttempt.authorityRefs = [ref];
+	const before = structuredClone(state.item);
+	expect(() => verifyLiveSourceContext(state.item, [state.item], state.frozen)).toThrow('ACCEPTANCE_LIVE_SOURCE_CONTEXT');
+	expect(state.item).toEqual(before);
+}
+
+it('denies self-consistent omission of original exact sourceRef from both grant and context', () => verifyOmittedGoverningContext('sourceRef'));
+it('denies self-consistent omission of original exact authorityRefs from both grant and context', () => verifyOmittedGoverningContext('authorityRefs'));
 
 it('denies a self-consistent foreign Git base and context against the original frozen source', () => {
 	const original = structuredClone(state.item.assignmentAttempt.contextRefs.find((ref: Record<string, any>) => ref.store === 'git'));

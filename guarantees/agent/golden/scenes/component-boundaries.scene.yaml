@@ -33,6 +33,27 @@ workflow:
   - id: simulation-git-workspace-binding-unit
     action: { verifier: agent.golden.simulation-git-workspace-binding-unit }
     expect: { status: passed }
+  - id: live-required-source-context-unit
+    action: { verifier: agent.golden.live-required-source-context-unit }
+    expect: { status: passed }
+  - id: live-required-authority-context-unit
+    action: { verifier: agent.golden.live-required-authority-context-unit }
+    expect: { status: passed }
+  - id: live-declared-context-denials-unit
+    action: { verifier: agent.golden.live-declared-context-denials-unit }
+    expect: { status: passed }
+  - id: live-declared-workspace-unit
+    action: { verifier: agent.golden.live-declared-workspace-unit }
+    expect: { status: passed }
+  - id: live-declared-context-unit
+    action: { verifier: agent.golden.live-declared-context-unit }
+    expect: { status: passed }
+  - id: live-declared-context-native
+    action: { verifier: agent.golden.live-declared-context-native }
+    expect: { status: passed }
+  - id: live-required-tool-unit
+    action: { verifier: agent.golden.live-required-tool-unit }
+    expect: { status: passed }
   - id: live-context-missing-unit
     action: { verifier: agent.golden.live-context-missing-unit }
     expect: { status: passed }

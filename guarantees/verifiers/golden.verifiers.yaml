@@ -236,6 +236,41 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/guarantees/monitoring/live-graph-inspection.test.ts
     testName: "retains exact simulation workspace authority and rejects malformed or substituted branch scope without rewriting observations"
+  agent.golden.live-required-source-context-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/monitoring/live-graph-inspection.test.ts
+    testName: "denies self-consistent omission of original exact sourceRef from both grant and context"
+  agent.golden.live-required-authority-context-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/monitoring/live-graph-inspection.test.ts
+    testName: "denies self-consistent omission of original exact authorityRefs from both grant and context"
+  agent.golden.live-declared-context-denials-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/monitoring/live-context-inspection.test.ts
+    testName: "denies malformed moved tampered or foreign governing declarations without replacing original bytes before exact retry"
+  agent.golden.live-declared-workspace-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/monitoring/live-context-inspection.test.ts
+    testName: "retains the declared TreeDX repository as exact mutable workspace authority without inventing a repository content-read grant"
+  agent.golden.live-declared-context-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/monitoring/live-context-inspection.test.ts
+    testName: "denies an omitted independently declared Book even when supplied context and grants agree"
+  agent.golden.live-declared-context-native:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/monitoring/live-assignment-native.test.ts
+    testName: "native original governing content transport rejects an omitted declared Book before unchanged retry"
+  agent.golden.live-required-tool-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/monitoring/live-graph-inspection.test.ts
+    testName: "denies an omitted requested tool even when public assignment views and remaining grant fields agree"
   agent.golden.live-workspace-branch-unit:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

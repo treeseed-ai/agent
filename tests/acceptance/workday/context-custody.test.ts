@@ -1,3 +1,4 @@
+import { verifyProjectLibraryLookup } from './support/portfolio-relations.ts';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import test from 'node:test';
@@ -48,7 +49,7 @@ test('Actual draft Proposal handoff is independently read from its own granted p
 			const args = ['library', 'read', attempt.projectId, ref.path, '--ref', ref.commit], value = read(args, team, true), returned = row(value.result ?? value);
 			assert.ok(Array.isArray(returned.files) && returned.files.length === 1);
 			if (row(row(returned.files[0]).frontmatter).status !== 'draft') continue;
-			const bindingArgs = ['library', 'show', attempt.projectId], bindingValue = read(bindingArgs, team, true), library = row(bindingValue.result ?? bindingValue);
+			const bindingArgs = ['library', 'show', attempt.projectId], bindingValue = read(bindingArgs, team, true), library = verifyProjectLibraryLookup(attempt.projectId, bindingValue);
 			assert.equal(library.repositoryId ?? row(row(row(library.topology).contentRepository).treeDx).repositoryId, ref.repository);
 			verifyAssignmentAuthority(item); verifyDraftProposalHandoff(item, ref, returned); drafts++; observations.push({ args, value });
 			observations.push({ args: bindingArgs, value: bindingValue });
@@ -205,7 +206,7 @@ test('Actual SDK architecture Knowledge is independently read from its owning re
 		assert.ok(attempt.workspace.mode === 'treedx');
 		assert.equal(attempt.workspace.repository, book.repository, 'ACCEPTANCE_SDK_KNOWLEDGE: Original project Book/library workspace required');
 		const get = (args: string[]) => { const value = read(args, team, true); observations.push({ args, value }); return row(value.result ?? value); };
-		const library = get(['library', 'show', attempt.projectId]);
+		const library = verifyProjectLibraryLookup(attempt.projectId, get(['library', 'show', attempt.projectId]));
 		assert.ok(book.path && book.commit);
 		const originalBook = get(['library', 'read', attempt.projectId, book.path, '--ref', book.commit]);
 		verifyExactContextSource(book, attempt.projectId, library, originalBook);

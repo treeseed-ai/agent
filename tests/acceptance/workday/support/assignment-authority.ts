@@ -249,14 +249,7 @@ export function verifyDraftProposalHandoff(item: Row, reference: Row, returned: 
 	assert.ok(Number.isFinite(completed) && completed >= created && completed <= deadline, 'ACCEPTANCE_HANDOFF_CLOCK: Original completion window required');
 }
 
-// A conservative unfinished-work scenario: preserve the exact unverified
-// original work item, not a prose claim that its requirements were satisfied.
-// Clock values are original observations supplied by the owning caller; unit
-// inputs alone never establish model behavior or a live API clock.
-export function verifyUnfinishedDraftHandoff(item: Row, reference: Row, returned: Row, source: Row, clocks: readonly Row[]): void {
-	verifyDraftProposalHandoff(item, reference, returned);
-	const attempt = assignmentAttemptSchema.parse(item.assignmentAttempt), result = assignmentResultSchema.parse(item.assignmentResult);
-	const sourceRef = attempt.sourceRef;
+export function verifyGovernedProposalRead(sourceRef: Row, projectId: string, source: Row): Row {
 	assert.ok(sourceRef.store === 'treedx' && sourceRef.model === 'proposal' && sourceRef.commit && sourceRef.path && sourceRef.digest,
 		'ACCEPTANCE_UNFINISHED_SOURCE: Exact original governed Proposal required');
 	assert.equal(source.resolvedRef, sourceRef.commit); assert.ok(Array.isArray(source.files) && source.files.length === 1);
@@ -264,7 +257,18 @@ export function verifyUnfinishedDraftHandoff(item: Row, reference: Row, returned
 	assert.equal(`sha256:${createHash('sha256').update(String(file.content)).digest('hex')}`, sourceRef.digest);
 	const raw = String(file.content).match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)$/u); assert.ok(raw);
 	const original = row(parse(raw[1]!)); assert.deepEqual(file.frontmatter, original);
-	assert.ok(validatePortableContentData('proposal', original).ok); assert.equal(original.id, sourceRef.id); assert.equal(original.projectId, attempt.projectId);
+	assert.ok(validatePortableContentData('proposal', original).ok); assert.equal(original.id, sourceRef.id); assert.equal(original.projectId, projectId);
+	return original;
+}
+
+// A conservative unfinished-work scenario: preserve the exact unverified
+// original work item, not a prose claim that its requirements were satisfied.
+// Clock values are original observations supplied by the owning caller; unit
+// inputs alone never establish model behavior or a live API clock.
+export function verifyUnfinishedDraftHandoff(item: Row, reference: Row, returned: Row, source: Row, clocks: readonly Row[]): void {
+	verifyDraftProposalHandoff(item, reference, returned);
+	const attempt = assignmentAttemptSchema.parse(item.assignmentAttempt), result = assignmentResultSchema.parse(item.assignmentResult);
+	const sourceRef = attempt.sourceRef, original = verifyGovernedProposalRead(sourceRef, attempt.projectId, source);
 	const work = row(original.executionPlan).workItems; assert.ok(Array.isArray(work));
 	const pending = work.map(row).filter(value => value.id === attempt.workItemId); assert.equal(pending.length, 1);
 	const draftFiles = returned.files; assert.ok(Array.isArray(draftFiles)); const draft = row(row(draftFiles[0]).frontmatter);

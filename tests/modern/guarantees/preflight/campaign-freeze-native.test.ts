@@ -357,7 +357,8 @@ it('native public CLI and SDK lookup transports exact library identity into Agen
 			expect(outputs).toHaveLength(1); expect(args).toEqual(input);
 			const envelope: unknown = JSON.parse(outputs[0]!); let denied = true;
 			if (envelope && typeof envelope === 'object' && 'ok' in envelope && envelope.ok === true && 'result' in envelope) {
-				if (mode === 'accept') { expect(verifyProjectLibraryLookup(project.slug, envelope.result)).toEqual(library); denied = false; }
+				if (mode === 'accept') { expect(verifyProjectLibraryLookup(project.slug, envelope.result)).toEqual(library);
+					expect(verifyProjectLibraryLookup(project.id, envelope.result)).toEqual(library); denied = false; }
 				else expect(() => verifyProjectLibraryLookup(project.slug, envelope.result)).toThrow('ACCEPTANCE_PROJECT_LIBRARY');
 			} else expect(exit).toBe(1);
 			const observation = { exit, bytes: outputs[0]!, denied }; observations.push(observation); return observation;

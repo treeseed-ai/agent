@@ -51,6 +51,9 @@ describe('capacity-provider guarantee execution bindings', () => {
 			{ criterion: '5ac90e451b0365ff6c44bfbcde86252eb1b53adf6b97972d00a7d5f15b9bf0e9', verifierRefs: refs },
 		]);
 		for (const ref of refs) expect(scene.workflow.filter((step: { action: { verifier: string } }) => step.action.verifier === ref)).toHaveLength(1);
+		expect(manifest.acceptanceCriteria.filter((value: { criterion: string }) => value.criterion ===
+			'a4199e48998233b28a6aa7480d4a386c32675970f2989ad2719240055fa91443')).toEqual([{
+			criterion: 'a4199e48998233b28a6aa7480d4a386c32675970f2989ad2719240055fa91443', verifierRefs: [refs[0], refs[2]] }]);
 	});
 	it('binds exact simulation Git workspace custody to live approved bases and independently resolved published branches', () => {
 		const manifest = parse(readFileSync(resolve(root, 'guarantees/agent/golden/sdk-complete.guarantee.yaml'), 'utf8'));

@@ -67,6 +67,11 @@ describe('complete scoped measured usage evidence for managed settlement', () =>
 		expect(denied).toEqual([true, true, true, true]);
 	});
 	it('denies incomplete malformed or unmeasured verification records on every completed result without rewriting failed observations', () => {
+		const writer = assignments().find(value => value.id === 'planning-1-engineer')!, originalReferences = structuredClone(writer.assignmentResult.references);
+		writer.assignmentResult.references = [{ kind: 'url', url: 'https://example.test/controlled-citation' }];
+		const heldProducts = structuredClone([...state.replies]);
+		expect(() => gate('results')).toThrow('ACCEPTANCE_RESULT_PRODUCT'); expect([...state.replies]).toEqual(heldProducts);
+		writer.assignmentResult.references = originalReferences; expect(() => gate('results')).not.toThrow();
 		const valid = { command: 'npm run test:contracts', status: 'failed', exitCode: 1,
 			outputDigest: `sha256:${'a'.repeat(64)}`, durationSeconds: 0 };
 		const item = assignments()[0]!, result = item.assignmentResult, original = structuredClone(result);

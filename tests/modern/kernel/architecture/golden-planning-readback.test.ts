@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { classes, gate, state, type Row } from './golden-readback-fixture.ts';
 import { stringify } from 'yaml';
+import { createHash } from 'node:crypto';
 import { encodeCapacityPageCursor } from '@treeseed/sdk/capacity-pagination';
 
 const rounds = (): Row[] => state.replies.get('workdays show')!.run.parameters.appliedPlan.planningRounds;
@@ -73,10 +74,14 @@ describe('managed planning cycle and published contribution custody', () => {
 		for (const status of ['closed', 'resolved']) {
 			const denied = structuredClone(originalDiscussion), file = denied.result.files[0]; file.frontmatter.status = status;
 			file.content = `---\n${stringify(file.frontmatter, { lineWidth: 0 })}---\n${file.body}`;
+			const boundMessage = structuredClone(originalRead), requestFile = boundMessage.result.files[0];
+			requestFile.frontmatter.discussionRef.digest = `sha256:${createHash('sha256').update(file.content).digest('hex')}`;
+			requestFile.content = `---\n${stringify(requestFile.frontmatter, { lineWidth: 0 })}---\n${requestFile.body}`;
+			state.replies.set(`library read ${sourcePath}`, boundMessage);
 			state.replies.set(discussionKey, denied); const held = structuredClone([...state.replies]);
 			expect(() => gate('collaboration')).toThrow(); expect([...state.replies]).toEqual(held);
 		}
-		state.replies.set(discussionKey, originalDiscussion); expect(() => gate('collaboration')).not.toThrow();
+		state.replies.set(discussionKey, originalDiscussion); state.replies.set(`library read ${sourcePath}`, originalRead); expect(() => gate('collaboration')).not.toThrow();
 		// Additional supplied UNIT cycles exercise the same managed assertion;
 		// these replies are not native publication or live model evidence.
 		const items: Row[] = state.replies.get('assignments list')!.items;

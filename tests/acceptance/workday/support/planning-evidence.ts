@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { parseDocument } from 'yaml';
 import { assignmentReferenceSchema, exactEntityReferenceSchema } from '@treeseed/sdk/agent-capacity';
 import { validatePortableContentData } from '@treeseed/sdk/content-validation';
@@ -62,6 +63,29 @@ export function verifyChatAddressedRead(item: Row, run: Row, returned: Row): boo
 	return individual;
 }
 
+/** The message's original commit and digest own the discussion observation. */
+export function verifyChatOpenDiscussion(item: Row, run: Row, message: Row, returned: Row): void {
+	verifyChatAddressedRead(item, run, message);
+	const label = 'ACCEPTANCE_CHAT_DISCUSSION', source = row(row(item.assignmentAttempt).sourceRef);
+	const request = row(row((message.files as unknown[])[0]).frontmatter), reference = row(request.discussionRef);
+	assert.ok(reference.store === 'treedx' && reference.model === 'discussion' && reference.id === request.discussionId
+		&& reference.path === `discussions/${reference.id}.mdx`, label);
+	assert.ok(returned.ok === true && returned.repoId === source.repository && returned.resolvedRef === source.commit
+		&& Array.isArray(returned.files) && returned.files.length === 1, label);
+	const file = row(returned.files[0]); assert.equal(file.path, reference.path, label);
+	assert.ok(typeof file.content === 'string' && Buffer.byteLength(file.content) <= 1_048_576, label);
+	assert.equal(`sha256:${createHash('sha256').update(file.content).digest('hex')}`, reference.digest, label);
+	const parts = file.content.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)$/u); assert.ok(parts, label);
+	const document = parseDocument(parts[1]!); assert.equal(document.errors.length, 0, label);
+	const original = row(document.toJS({ maxAliasCount: 0 })); assert.deepEqual(original, file.frontmatter, label);
+	if (file.body !== undefined) assert.equal(file.body, parts[2]!, label);
+	assert.ok(validatePortableContentData('discussion', original).ok, label);
+	assert.ok(original.id === reference.id && original.status === 'open' && original.teamId === run.teamId
+		&& original.projectId === item.projectId, label);
+	assert.deepEqual(original.subjectRef, { store: 'postgresql', model: 'project', id: item.projectId }, label);
+	assert.ok(timestamp(original.createdAt) <= timestamp(request.createdAt), label);
+}
+
 /** Read original addressed messages, rather than counting activity labels. */
 export function verifyChatAddressedContext(assignments: Row[], run: Row, team: string): void {
 	const cache = new Map<string, Row>(), probes = new Set<string>();
@@ -77,6 +101,14 @@ export function verifyChatAddressedContext(assignments: Row[], run: Row, team: s
 		if (verifyChatAddressedRead(item, run, returned)) {
 			assert.ok(!probes.has(text(attempt.agentClass)), 'ACCEPTANCE_CHAT_CONTEXT: Duplicate individual probe'); probes.add(text(attempt.agentClass));
 		}
+		const discussion = row(row((returned.files as unknown[])[0]).frontmatter).discussionRef, path = text(row(discussion).path);
+		const discussionKey = JSON.stringify([source.data.repository, source.data.commit, path]);
+		let observedDiscussion = cache.get(discussionKey);
+		if (!observedDiscussion) {
+			const observed = read(['library', 'read', text(item.projectId), path, '--ref', source.data.commit], team, true);
+			observedDiscussion = row(observed.result ?? observed); cache.set(discussionKey, observedDiscussion);
+		}
+		verifyChatOpenDiscussion(item, run, returned, observedDiscussion);
 	}
 	assert.deepEqual([...probes].sort(), [...sdkCampaignAgents].sort(), 'ACCEPTANCE_CHAT_ROLES: Every individual addressed probe required');
 }

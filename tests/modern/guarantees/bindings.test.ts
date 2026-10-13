@@ -32,6 +32,16 @@ for (const file of readdirSync(resolve(root, 'guarantees/verifiers')).filter(pat
 }
 
 describe('capacity-provider guarantee execution bindings', () => {
+	it('binds terminal-status insufficiency to every original normal SDK evidence step without a terminal-only shortcut', () => {
+		const manifest = parse(readFileSync(resolve(root, 'guarantees/agent/golden/sdk-complete.guarantee.yaml'), 'utf8'));
+		const scene = parse(readFileSync(resolve(root, manifest.scene.manifest), 'utf8'));
+		const refs = scene.workflow.map((step: { action: { verifier: string } }) => step.action.verifier);
+		expect(refs).toHaveLength(22); expect(new Set(refs).size).toBe(22);
+		expect(manifest.acceptanceCriteria.filter((value: { criterion: string }) =>
+			value.criterion === 'a571727bb7e1d74fcf9fda7ba50ecd003db8732cd1be6183c2f80ffa85d43691')).toEqual([
+			{ criterion: 'a571727bb7e1d74fcf9fda7ba50ecd003db8732cd1be6183c2f80ffa85d43691', verifierRefs: refs },
+		]);
+	});
 	it('binds portfolio normalization to the original prospective campaign freeze without adding a future passing receipt', () => {
 		const manifest = parse(readFileSync(resolve(root, 'guarantees/agent/golden/sdk-complete.guarantee.yaml'), 'utf8'));
 		expect(manifest.acceptanceCriteria.filter((value: { criterion: string }) => value.criterion === '8ef82a4f4cb2b8e93d060e38cf8758944d2ba54baca44787811a1d76683f99d4'))

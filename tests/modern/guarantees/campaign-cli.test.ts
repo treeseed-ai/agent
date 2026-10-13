@@ -55,6 +55,22 @@ beforeEach(() => {
 });
 afterEach(() => vi.useRealTimers());
 describe('campaign CLI composition units (mocked transport, not native or live acceptance)', () => {
+	it('denies a completed workday at each required final evidence gate without later gates or another admission and retains the original failure before exact retry', async () => {
+		const gates = ['collaboration', 'lifecycle', 'graph', 'revision', 'results', 'settlement', 'reporter'];
+		for (const [index, gate] of gates.entries()) {
+			transport(() => observed()); state.verify.mockReset();
+			const original = new Error(`Original missing ${gate} evidence`), held = structuredClone(state.freeze);
+			state.verify.mockImplementation((value: string) => { if (value === gate) throw original; });
+			await expect(state.run!()).rejects.toBe(original);
+			expect(state.verify.mock.calls.map(call => call[0])).toEqual(gates.slice(0, index + 1));
+			expect(state.read.mock.calls.filter(call => call[0][1] === 'start')).toHaveLength(1);
+			expect(state.read.mock.calls.filter(call => call[0][1] === 'stop')).toEqual([]);
+			expect(state.freeze).toEqual(held);
+			state.read.mockReset(); transport(() => observed()); state.verify.mockReset();
+			await state.run!(); expect(state.verify.mock.calls.map(call => call[0])).toEqual(gates);
+			expect(state.freeze).toEqual(held); state.read.mockReset();
+		}
+	});
 	it('stops the exact admitted simulation on receipt capture denial before discussion approval or later verification', async () => {
 		transport(() => observed('running')); const original = new Error('controlled-receipt-capture-denial');
 		state.retain.mockImplementation(() => { throw original; });

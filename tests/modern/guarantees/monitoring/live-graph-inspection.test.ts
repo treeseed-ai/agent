@@ -151,7 +151,7 @@ it('retains original provider publication when a later session opens after the o
 	expect(observations).toEqual(before);
 });
 
-it.each(['sourceRef', 'authorityRefs'] as const)('denies self-consistent omission of original exact %s from both grant and context', field => {
+function verifyOmittedGoverningContext(field: 'sourceRef' | 'authorityRefs'): void {
 	const ref = { store: 'treedx', model: field === 'sourceRef' ? 'proposal' : 'decision', id: 'original-governed-input',
 		repository: 'native-library', commit: 'e'.repeat(40), path: field === 'sourceRef' ? 'proposals/original.md' : 'decisions/original.md' };
 	if (field === 'sourceRef') state.item.assignmentAttempt.sourceRef = ref;
@@ -159,7 +159,10 @@ it.each(['sourceRef', 'authorityRefs'] as const)('denies self-consistent omissio
 	const before = structuredClone(state.item);
 	expect(() => verifyLiveSourceContext(state.item, [state.item], state.frozen)).toThrow('ACCEPTANCE_LIVE_SOURCE_CONTEXT');
 	expect(state.item).toEqual(before);
-});
+}
+
+it('denies self-consistent omission of original exact sourceRef from both grant and context', () => verifyOmittedGoverningContext('sourceRef'));
+it('denies self-consistent omission of original exact authorityRefs from both grant and context', () => verifyOmittedGoverningContext('authorityRefs'));
 
 it('denies a self-consistent foreign Git base and context against the original frozen source', () => {
 	const original = structuredClone(state.item.assignmentAttempt.contextRefs.find((ref: Record<string, any>) => ref.store === 'git'));

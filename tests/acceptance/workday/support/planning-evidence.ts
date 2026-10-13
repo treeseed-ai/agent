@@ -1,10 +1,12 @@
 import assert from 'node:assert/strict';
+import { parseDocument } from 'yaml';
 import { assignmentReferenceSchema, exactEntityReferenceSchema } from '@treeseed/sdk/agent-capacity';
 import { validatePortableContentData } from '@treeseed/sdk/content-validation';
 import { assertPredecessorSynthesis } from '@treeseed/agent';
-import { row, type Row } from '../../acceptance-cli.ts';
+import { read, row, type Row } from '../../acceptance-cli.ts';
 import { readGovernedContentFile } from './decision-evidence.ts';
 import { verifyAssignmentAuthority } from './assignment-authority.ts';
+import { sdkCampaignAgents, sdkCampaignChatQuestion, sdkCampaignOpeningMessage } from '../../campaign.ts';
 
 const rows = (value: unknown): Row[] => Array.isArray(value) ? value.map(row) : [];
 const text = (value: unknown): string => typeof value === 'string' ? value : '';
@@ -17,6 +19,66 @@ const sourceContext = (attempt: Row): Row[] => rows(attempt.contextRefs).filter(
 export function verifyChatCommunicationLanes(assignments: Row[]): void {
  for (const item of assignments.filter(value => activity(value) === 'chat'))
   assert.equal(item.lanePurpose, 'communication', 'ACCEPTANCE_CHAT_LANE: Every chat reply must retain communication-lane custody');
+}
+
+/** Same exact public read assertion for the managed CLI and native transport. */
+export function verifyChatAddressedRead(item: Row, run: Row, returned: Row): boolean {
+	const label = 'ACCEPTANCE_CHAT_CONTEXT';
+	const readMessage = (reference: Row): { frontmatter: Row; body: string } => {
+		assert.ok(returned.ok === true && returned.repoId === reference.repository && returned.resolvedRef === reference.commit
+			&& Array.isArray(returned.files) && returned.files.length === 1, label);
+		const file = row(returned.files[0]); assert.equal(file.path, reference.path, label);
+		assert.ok(typeof file.content === 'string' && Buffer.byteLength(file.content) <= 1_048_576, label);
+		const parts = file.content.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)$/u); assert.ok(parts, label);
+		const document = parseDocument(parts[1]!); assert.equal(document.errors.length, 0, label);
+		const frontmatter = row(document.toJS({ maxAliasCount: 0 })), body = parts[2]!.trim();
+		assert.deepEqual(frontmatter, file.frontmatter, label); if (file.body !== undefined) assert.equal(file.body, body, label);
+		assert.ok(validatePortableContentData('discussion_message', { ...frontmatter, body }).ok, label);
+		return { frontmatter, body };
+	};
+	const attempt = row(item.assignmentAttempt), source = exactEntityReferenceSchema.safeParse(attempt.sourceRef);
+	assert.ok(source.success && source.data.store === 'treedx' && source.data.model === 'discussion'
+		&& source.data.repository && source.data.path && source.data.commit && source.data.id === item.invocationId, label);
+	assert.ok(item.workDayId === run.id && attempt.workdayId === run.id && attempt.teamId === run.teamId
+		&& item.projectId === attempt.projectId && Array.isArray(attempt.predecessorResultIds) && attempt.predecessorResultIds.length === 0, label);
+	verifyAssignmentAuthority(item);
+	const contexts = rows(attempt.contextRefs), proposal = contexts.filter(ref => ref.store === 'treedx' && ref.model === 'proposal');
+	assert.equal(proposal.length, 1, label); const subject = proposal[0]!;
+	assert.deepEqual(row(run.parameters).proposalIds, [subject.id], label);
+	assert.ok(contexts.some(ref => ref.store === 'treedx' && ref.model === 'discussion' && ref.repository === source.data.repository
+		&& ref.path === source.data.path && ref.commit === source.data.commit), label);
+	const message = readMessage(row(source.data)), frontmatter = message.frontmatter;
+	const individual = message.body === sdkCampaignChatQuestion(text(attempt.agentClass));
+	assert.ok(individual || message.body === sdkCampaignOpeningMessage, label);
+	const recipients = individual ? [attempt.agentClass] : [...sdkCampaignAgents];
+	assert.deepEqual(frontmatter.recipientIds, recipients, label); assert.deepEqual(frontmatter.mentionedAgents, recipients, label);
+	assert.equal(frontmatter.parentWorkdayId, run.id, label); assert.equal(frontmatter.discussionId, `sdk-golden-${run.id}`, label);
+	assert.equal(frontmatter.authorType, 'user', label); assert.deepEqual(frontmatter.fileRefs, [], label);
+	assert.deepEqual(frontmatter.contextRefs, [{ kind: 'proposal', id: subject.id, projectId: item.projectId,
+		immutableRef: subject.commit, path: subject.path, digest: subject.digest }], label);
+	const created = timestamp(frontmatter.createdAt), admitted = timestamp(item.createdAt);
+	assert.ok(timestamp(run.startedAt) <= created && created <= admitted, label);
+	if (individual) assert.equal(item.status, 'completed', 'ACCEPTANCE_CHAT_ROLES: Addressed probes must complete');
+	return individual;
+}
+
+/** Read original addressed messages, rather than counting activity labels. */
+export function verifyChatAddressedContext(assignments: Row[], run: Row, team: string): void {
+	const cache = new Map<string, Row>(), probes = new Set<string>();
+	for (const item of assignments.filter(value => activity(value) === 'chat')) {
+		const attempt = row(item.assignmentAttempt), source = exactEntityReferenceSchema.safeParse(attempt.sourceRef);
+		assert.ok(source.success && source.data.repository && source.data.commit && source.data.path, 'ACCEPTANCE_CHAT_CONTEXT: Exact original message required');
+		const key = JSON.stringify([source.data.repository, source.data.commit, source.data.path]);
+		let returned = cache.get(key);
+		if (!returned) {
+			const observed = read(['library', 'read', text(item.projectId), source.data.path, '--ref', source.data.commit], team, true);
+			returned = row(observed.result ?? observed); cache.set(key, returned);
+		}
+		if (verifyChatAddressedRead(item, run, returned)) {
+			assert.ok(!probes.has(text(attempt.agentClass)), 'ACCEPTANCE_CHAT_CONTEXT: Duplicate individual probe'); probes.add(text(attempt.agentClass));
+		}
+	}
+	assert.deepEqual([...probes].sort(), [...sdkCampaignAgents].sort(), 'ACCEPTANCE_CHAT_ROLES: Every individual addressed probe required');
 }
 
 /** Actual managed readback assertions. Structural citation proof is not an

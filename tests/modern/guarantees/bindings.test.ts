@@ -44,6 +44,11 @@ describe('capacity-provider guarantee execution bindings', () => {
 			criterion: 'a4199e48998233b28a6aa7480d4a386c32675970f2989ad2719240055fa91443', verifierRefs: [refs[0], refs[2]] }]);
 		expect(manifest.acceptanceCriteria.filter((value: { criterion: string }) => value.criterion ===
 			'ee95f7eb3323545534ac708f6ef6ae9d6b9ae2ae40ad4268738084a25d293d86')).toEqual([{ criterion: 'ee95f7eb3323545534ac708f6ef6ae9d6b9ae2ae40ad4268738084a25d293d86', verifierRefs: [refs[0], refs[1]] }]);
+		const chatRefs = ['agent.golden.live.campaign', 'agent.golden.architecture-profile-custody-live-1', 'agent.golden.architecture-context-custody-live-1', 'api.golden.execution-normal-sdk-clean-schema-live-1'];
+		for (const criterion of ['ce8a386ea8718aa7bf61c8a5a4602520e62bc90d036ff71adf98cb583389973d', '81b30905093d840992af882b011c2432cc199883a09a948a0fe1c8aced8518b7'])
+			expect(manifest.acceptanceCriteria.filter((value: { criterion: string }) => value.criterion === criterion)).toEqual([{ criterion, verifierRefs: chatRefs }]);
+		for (const ref of chatRefs) expect(scene.workflow.filter((step: { action: { verifier: string } }) => step.action.verifier === ref)).toHaveLength(1);
+
 	});
 	it('binds exact simulation Git workspace custody to live approved bases and independently resolved published branches', () => {
 		const manifest = parse(readFileSync(resolve(root, 'guarantees/agent/golden/sdk-complete.guarantee.yaml'), 'utf8'));
@@ -309,7 +314,9 @@ describe('capacity-provider guarantee execution bindings', () => {
 				verifierRefs: ['agent.golden.live.campaign', 'sdk.golden.live.product'] },
 			{ criterion: 'ce87c6c4895321258d1ff9d3f00d7e0db7f1adb6639696756208e784d546667a',
 				verifierRefs: ['agent.golden.live.graph', 'sdk.golden.live.product'] },
-			{ criterion: '4ff1e6e55ccb0038c0f79331029c2ad083409c36058b1e3335b1b44a263b2ce0', verifierRefs: ['agent.golden.live.graph', 'agent.golden.architecture-graph-history-live-1', 'agent.golden.architecture-living-graph-live-2'] }]);
+			{ criterion: '4ff1e6e55ccb0038c0f79331029c2ad083409c36058b1e3335b1b44a263b2ce0', verifierRefs: ['agent.golden.live.graph', 'agent.golden.architecture-graph-history-live-1', 'agent.golden.architecture-living-graph-live-2'] },
+			{ criterion: 'ce8a386ea8718aa7bf61c8a5a4602520e62bc90d036ff71adf98cb583389973d', verifierRefs: ['agent.golden.live.campaign', 'agent.golden.architecture-profile-custody-live-1', 'agent.golden.architecture-context-custody-live-1', 'api.golden.execution-normal-sdk-clean-schema-live-1'] },
+			{ criterion: '81b30905093d840992af882b011c2432cc199883a09a948a0fe1c8aced8518b7', verifierRefs: ['agent.golden.live.campaign', 'agent.golden.architecture-profile-custody-live-1', 'agent.golden.architecture-context-custody-live-1', 'api.golden.execution-normal-sdk-clean-schema-live-1'] }]);
 		expect(scene.scope).toBe('local-integrated-runtime');
 		for (const ref of runtimeHandlers) expect(refs.filter((value: string) => value === ref)).toHaveLength(1);
 		expect(refs.indexOf(runtimeHandlers[1]!)).toBeGreaterThan(refs.indexOf(runtimeHandlers[0]!));

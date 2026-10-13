@@ -1,6 +1,11 @@
 schemaVersion: treeseed.guarantee-verifiers/v1
 ownerPackage: "@treeseed/agent"
 verifiers:
+  agent.golden.sdk-installed-custody-binding-unit:
+    kind: vitestCase
+    ownerPackage: '@treeseed/agent'
+    testFile: tests/modern/guarantees/bindings.test.ts
+    testName: binds installed owner custody to every original integrated SDK step without source-only execution credit
   agent.golden.sdk-integration-binding-unit:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

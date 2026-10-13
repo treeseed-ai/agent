@@ -225,6 +225,8 @@ describe('capacity-provider guarantee execution bindings', () => {
 	});
 	it('binds the exact model clock criterion to complete post campaign native readback without substituting component evidence', () => {
 		const manifest = parse(readFileSync(resolve(root, 'guarantees/agent/golden/sdk-complete.guarantee.yaml'), 'utf8'));
+		const scene = parse(readFileSync(resolve(root, manifest.scene.manifest), 'utf8'));
+		const refs = scene.workflow.map((step: { action: { verifier: string } }) => step.action.verifier);
 		const preRunBindings = [
 			'5a286ca84dffc7ea229c2035a106c26aa0f8fe4e78da3cb035b1bc4859810e95',
 			'ab2ac9ce3bbbf837b5c65b9b6246aa6850713b4d82fc15c52d590144dd265a0b',
@@ -258,6 +260,7 @@ describe('capacity-provider guarantee execution bindings', () => {
 			value.criterion === 'fc80e789a38eb6ae75fada867226ac0157844505619b12c90c55cbe317c6cc9d'))
 			.toEqual([{ criterion: 'fc80e789a38eb6ae75fada867226ac0157844505619b12c90c55cbe317c6cc9d', verifierRefs: runtimeHandlers }]);
 		expect(manifest.acceptanceCriteria).toEqual([
+			{ criterion: '6a572f1a5833a039bdc575588d8e6e272a0e71a29a5faaeeeb7b5c85d6544ee6', verifierRefs: refs },
 			{ criterion: '5ac90e451b0365ff6c44bfbcde86252eb1b53adf6b97972d00a7d5f15b9bf0e9', verifierRefs: ['sdk.golden.live.product', 'agent.golden.architecture-living-graph-live-1', 'api.golden.execution-protected-observation-live-1'] },
 			{ criterion: '2bcb03ca47bbe9ffe324405ca36a2464dbe0d613a7777b6973d0b10bd6ea50dd', verifierRefs: ['agent.golden.live.campaign', 'agent.golden.architecture-profile-custody-live-1', 'sdk.golden.live.product'] },
 			{ criterion: 'a571727bb7e1d74fcf9fda7ba50ecd003db8732cd1be6183c2f80ffa85d43691', verifierRefs: ["agent.golden.live.campaign-freeze","deployment.golden.execution-selected-code-preflight-1","cli.golden.execution-diagnostics-read-native","agent.golden.live.guest-model-smoke","agent.golden.live.campaign","agent.golden.live.graph","agent.golden.architecture-profile-custody-live-1","agent.golden.architecture-profile-custody-live-2","agent.golden.architecture-context-custody-live-1","agent.golden.architecture-book-knowledge-live-1","agent.golden.architecture-graph-history-live-1","agent.golden.architecture-living-graph-live-1","agent.golden.architecture-living-graph-live-2","sdk.golden.live.product","agent.golden.live.results","agent.golden.execution-clock-observation-live-1","api.golden.execution-protected-observation-live-1","agent.golden.live.reporter","agent.golden.live.settlement","agent.golden.architecture-record-custody-live-1","api.golden.execution-normal-sdk-clean-schema-live-1","agent.golden.execution-normal-sdk-physical-absence-live-1"] },
@@ -309,9 +312,7 @@ describe('capacity-provider guarantee execution bindings', () => {
 			{ criterion: 'ce87c6c4895321258d1ff9d3f00d7e0db7f1adb6639696756208e784d546667a',
 				verifierRefs: ['agent.golden.live.graph', 'sdk.golden.live.product'] },
 			{ criterion: '4ff1e6e55ccb0038c0f79331029c2ad083409c36058b1e3335b1b44a263b2ce0', verifierRefs: ['agent.golden.live.graph', 'agent.golden.architecture-graph-history-live-1', 'agent.golden.architecture-living-graph-live-2'] }]);
-		const scene = parse(readFileSync(resolve(root, manifest.scene.manifest), 'utf8'));
 		expect(scene.scope).toBe('local-integrated-runtime');
-		const refs = scene.workflow.map((step: { action: { verifier: string } }) => step.action.verifier);
 		for (const ref of runtimeHandlers) expect(refs.filter((value: string) => value === ref)).toHaveLength(1);
 		expect(refs.indexOf(runtimeHandlers[1]!)).toBeGreaterThan(refs.indexOf(runtimeHandlers[0]!));
 		expect(refs.indexOf(runtimeHandlers[1]!)).toBeLessThan(refs.indexOf('agent.golden.live.guest-model-smoke'));

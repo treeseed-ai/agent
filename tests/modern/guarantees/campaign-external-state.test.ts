@@ -54,7 +54,7 @@ describe('SDK simulation external-state gate (fixtures are not upstream proof)',
   state.fault='pages-good';const streamed=vi.fn();captureSdkExternalState('/platform',streamed);
   const releases=JSON.parse(streamed.mock.calls.find(call=>call[0]==='sdk-releases.json')![1]);expect(releases.map((item:{id:number})=>item.id)).toEqual([2,3]);expect(releases[0].title).toContain('][ braces {}');
   const deployments=JSON.parse(streamed.mock.calls.find(call=>call[0]==='sdk-deployments.json')![1]);expect(deployments).toHaveLength(2);expect(deployments.every((item:{statuses:unknown[]})=>item.statuses.length===2)).toBe(true);
-  expect(state.execute.mock.calls.some((call:[string,string[]])=>call[1].at(-1)==='repos/treeseed-ai/sdk/deployments/2/statuses?per_page=100')).toBe(true);
+  expect(state.execute.mock.calls.some(call=>Array.isArray(call[1])&&call[1].at(-1)==='repos/treeseed-ai/sdk/deployments/2/statuses?per_page=100')).toBe(true);
   for(const fault of ['pages-truncated','pages-trailing','pages-object','pages-duplicate']){state.fault=fault;expect(()=>captureSdkExternalState('/platform',()=>{}),fault).toThrow('ACCEPTANCE_EXTERNAL_PAGES');}
 
 	});

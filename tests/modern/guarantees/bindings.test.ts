@@ -403,6 +403,11 @@ describe('capacity-provider guarantee execution bindings', () => {
 		expect(checkouts[0].with).toMatchObject({ ref: 'e4c4cad1e526f53d3549c8fc27c3e60122b20ee4', path: '.treeseed/platform-authority', 'persist-credentials': false });
 		expect(job.env.TREESEED_DEVELOPMENT_WORKSPACE_ROOT).toBe('${{ github.workspace }}/.treeseed/platform-authority');
 		const verify = steps.findIndex((step: { run?: string }) => step.run?.includes('npm run verify:local'));
+		const built = steps.findIndex((step: { name?: string }) => step.name === 'Build public Agent exports for native acceptance readback');
+		const native = steps.findIndex((step: { name?: string }) => step.name === 'Reproduce whole guest native boundary before complete verification');
+		expect(built).toBeGreaterThan(-1); expect(native).toBeGreaterThan(built); expect(native).toBeLessThan(verify);
+		expect(steps[built]?.run).toBe('npm run build:dist');
+
 		const scene = steps.findIndex((step: { uses?: string }) => step.uses?.includes('reviewer/.github/actions/run-scenes@'));
 		expect(steps[scene].uses).toBe('treeseed-ai/reviewer/.github/actions/run-scenes@e60ad2581e7ff041f058af04bd810796fea748f9');
 		expect(steps.indexOf(checkouts[0])).toBeLessThan(verify); expect(verify).toBeGreaterThan(-1); expect(scene).toBeGreaterThan(verify);

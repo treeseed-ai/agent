@@ -134,7 +134,7 @@ describe('automated campaign control (fixtures are not golden acceptance)', () =
 			'observed evidence': 'retained original workdays show: executionMode=production',
 			'why implementation repair is insufficient': 'The observed execution authority contradicts the fixed simulation contract; authority must be reviewed before repair.',
 			'smallest proposed plan correction': 'Review the contradictory authority; no proposal correction has been applied.' };
-		const format = Reflect.get(campaign, 'campaignPlanReviewRequired') as ((details: typeof details, cause: unknown) => Error & { classification: string });
+		const format = Reflect.get(campaign, 'campaignPlanReviewRequired') as ((value: typeof details, cause: unknown) => Error & { classification: string });
 		expect.soft(typeof format).toBe('function');
 		if (typeof format === 'function') {
 			const original = new Error('Original contradictory authority'), before = Object.getOwnPropertyDescriptors(original), held = structuredClone(details);

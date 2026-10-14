@@ -212,6 +212,26 @@ export function requirePlanningWindow(durationSeconds: number, planningPercent: 
 		'ACCEPTANCE_CAMPAIGN_WINDOW: Initial debugging requires twenty minutes planning within at most one hour');
 }
 
+type PlanReviewReport = Record<'project' | 'proposal' | 'workday' | 'failed expectation' | 'observed evidence'
+	| 'why implementation repair is insufficient' | 'smallest proposed plan correction', string>;
+/** Render the existing acceptance contract, retaining the original observation as cause. */
+export function campaignPlanReviewRequired(details: PlanReviewReport, cause: unknown): Error & { classification: 'PLAN_REVIEW_REQUIRED' } {
+	const label = 'ACCEPTANCE_PLAN_REVIEW_REPORT', keys: Array<keyof PlanReviewReport> = ['project', 'proposal', 'workday',
+		'failed expectation', 'observed evidence', 'why implementation repair is insufficient', 'smallest proposed plan correction'];
+	assert.ok(details && typeof details === 'object' && !Array.isArray(details), label);
+	assert.deepEqual(Reflect.ownKeys(details).sort(), [...keys].sort(), label);
+	for (const key of keys) {
+		const descriptor = Object.getOwnPropertyDescriptor(details, key), value: unknown = descriptor?.value;
+		assert.ok(descriptor && Object.hasOwn(descriptor, 'value') && typeof value === 'string' && value.trim() === value
+			&& value.length > 0 && !/[\u0000-\u001f\u007f-\u009f\u2028\u2029]/u.test(value), label);
+	}
+	assert.match(details.project, /^[a-z0-9]+(?:-[a-z0-9]+)*$/u, label);
+	assert.match(details.proposal, /^[^\s]+ sha256:[a-f0-9]{64}$/u, label);
+	assert.ok(details.workday === 'not-started' || /^workday-[a-zA-Z0-9-]+$/u.test(details.workday), label);
+	return Object.assign(new Error('PLAN_REVIEW_REQUIRED\n' + keys.map(key => key + ': ' + details[key]).join('\n'), { cause }),
+		{ classification: 'PLAN_REVIEW_REQUIRED' as const });
+}
+
 /** Preserve original failures; classify only the native conditions proved here.
  * Other failures still require the complete operator assessment/report path. */
 function classifyObservedCampaignFailure(failure: unknown): unknown {
@@ -232,6 +252,7 @@ function classifyObservedCampaignFailure(failure: unknown): unknown {
 }
 
 export async function monitorCampaign(input: {
+	planReview?: { project: string; proposal: string; workday: string; observedEvidence: string; report: (text: string) => void };
 	admitDiscussion?: () => void | Promise<void>;
 	admittedSimulation?: boolean;
 	inspect?: () => void | Promise<void>;
@@ -274,7 +295,18 @@ export async function monitorCampaign(input: {
 		await input.wait();
 	}
 	} catch (failure) {
-		const classified = classifyObservedCampaignFailure(failure);
+		let classified = classifyObservedCampaignFailure(failure);
+		if (classified instanceof Error && Reflect.get(classified, 'classification') === 'PLAN_REVIEW_REQUIRED' && input.planReview) {
+			const original = classified, context = input.planReview;
+			try {
+				classified = campaignPlanReviewRequired({ project: context.project, proposal: context.proposal, workday: context.workday,
+					'failed expectation': 'Agent execution acceptance / Non-negotiable rules / sole simulation mode',
+					'observed evidence': context.observedEvidence,
+					'why implementation repair is insufficient': 'Observed execution authority contradicts the fixed simulation contract; review that authority before repair.',
+					'smallest proposed plan correction': 'Review the contradictory execution authority; no proposal correction has been applied.' }, failure);
+				context.report((classified as Error).message);
+			} catch (reportFailure) { classified = new AggregateError([original, reportFailure], 'ACCEPTANCE_PLAN_REVIEW_REPORT: Original failure and required report both failed'); }
+		}
 		// A failed verifier must not strand an otherwise live simulation. Only the
 		// already-observed simulation workday may be stopped; never mutate a run
 		// whose mode was not proven or whose status is already terminal.

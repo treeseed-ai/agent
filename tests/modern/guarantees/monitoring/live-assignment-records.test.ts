@@ -1,3 +1,4 @@
+import { reviewedRevisionFixture, reviewedDecision } from '../../kernel/architecture/custody/graph/review-readiness-fixture.ts';
 import { describe, expect, it, vi } from 'vitest';
 import { row, type Row } from '../../../acceptance/acceptance-cli.ts';
 import { verifyDerivedWorkdayModes } from '../../../acceptance/workday/support/campaign-observation.ts';
@@ -7,11 +8,11 @@ import { liveAssignmentGraph, liveAssignmentRecord, liveRun } from './live-assig
 
 describe('live canonical assignment observation (controlled inputs, not managed proof)', () => {
 	it('requires complete original normal node revisions and denies duplicate issuance or unexplained extra revisions without repairing failed records', () => {
-		const check = (normalHistory as unknown as Record<string, (items: Row[], graph: Row, decisions: ReadonlyMap<string, Row>) => void>).verifyNormalAttemptRevisions;
+		const check = (normalHistory as unknown as Record<string, (items: Row[], graph: Row, decisions: ReadonlyMap<string, Row>, run: Row) => void>).verifyNormalAttemptRevisions;
 		expect(check, 'original normal history must be verified before terminal success').toBeTypeOf('function');
 		const item=liveAssignmentRecord(), graph=liveAssignmentGraph(item); item.status='completed';
 		row(item.assignmentAttempt).status='completed';
-		const before=structuredClone({item,graph}); check!([item],graph,new Map());
+		const before=structuredClone({item,graph}); check!([item],graph,new Map(),liveRun(item));
 		for(const mode of ['duplicate','gap','first-revision','foreign-node','failed','returned','expired']) {
 			const supplied=structuredClone(item), items=[supplied];
 			if(mode==='duplicate') {const duplicate=structuredClone(item); duplicate.id='duplicate-issued-attempt'; row(duplicate.assignmentAttempt).id=duplicate.id; items.push(duplicate);}
@@ -19,9 +20,25 @@ describe('live canonical assignment observation (controlled inputs, not managed 
 			if(mode==='first-revision') row(supplied.assignmentAttempt).nodeRevision=2;
 			if(mode==='foreign-node') row(supplied.assignmentAttempt).nodeId='unowned-node';
 			if(['failed','returned','expired'].includes(mode)) supplied.status=mode;
-			const failed=structuredClone(items); expect(() => check!(items,graph,new Map()),mode).toThrow('ACCEPTANCE_NORMAL_REVISIONS'); expect(items).toEqual(failed);
+			const failed=structuredClone(items); expect(() => check!(items,graph,new Map(),liveRun(item)),mode).toThrow('ACCEPTANCE_NORMAL_REVISIONS'); expect(items).toEqual(failed);
 		}
-		expect({item,graph}).toEqual(before); check!([item],graph,new Map());
+		expect({item,graph}).toEqual(before); check!([item],graph,new Map(),liveRun(item));
+		const revised=reviewedRevisionFixture(), originalReview=revised.assignments[1]!, decision=reviewedDecision(revised);
+		decision.disposition='request-changes'; const decisions=new Map([[originalReview.id,decision]]);
+		const run=liveRun(revised.assignments[0]!); check!(revised.assignments,revised.graph,decisions,run);
+		const revisedBefore=structuredClone(revised);
+		for(const mutation of ['missing-decision','approved-instead','changed-candidate','missing-first','early-correction']) {
+			const supplied=structuredClone(revised), suppliedDecisions=new Map([[originalReview.id,structuredClone(decision)]]);
+			if(mutation==='missing-decision') suppliedDecisions.clear();
+			if(mutation==='approved-instead') suppliedDecisions.get(originalReview.id)!.disposition='approved';
+			if(mutation==='changed-candidate') suppliedDecisions.get(originalReview.id)!.subjectRef.commit='f'.repeat(40);
+			if(mutation==='missing-first') supplied.assignments.shift();
+			if(mutation==='early-correction') supplied.assignments[2]!.assignmentAttempt.createdAt='2026-09-13T12:00:02.000Z';
+			const failed=structuredClone({supplied,suppliedDecisions}); expect(() => check!(supplied.assignments,supplied.graph,suppliedDecisions,run),mutation).toThrow();
+			expect({supplied,suppliedDecisions}).toEqual(failed);
+		}
+		expect(revised).toEqual(revisedBefore); check!(revised.assignments,revised.graph,decisions,run);
+
 	});
 
 	it('retains exact derived public mode labels across assignment usage result and settlement views while denying every contradictory original label', () => {

@@ -259,13 +259,32 @@ export function campaignPlanReviewRequired(details: PlanReviewReport, cause: unk
 		{ classification: 'PLAN_REVIEW_REQUIRED' as const });
 }
 
+/** Unsafe or missing frozen intent needs operator plan review before any API admission. */
+export function requireCampaignSimulation(freeze: StartRow, freezePath: string, report: (text: string) => void): void {
+	const request = freeze.request, body = request && typeof request === 'object' && !Array.isArray(request) ? (request as StartRow).body : undefined;
+	const mode = body && typeof body === 'object' && !Array.isArray(body) ? (body as StartRow).executionMode : undefined;
+	if (mode === 'simulation') return;
+	const original = new Error('ACCEPTANCE_CAMPAIGN_MODE: Frozen SDK intent must provide simulation authority');
+	let failure: ReturnType<typeof campaignPlanReviewRequired>;
+	try {
+		const proposal = startRow(freeze.proposal);
+		failure = campaignPlanReviewRequired({ project: 'sdk', proposal: String(proposal.id) + ' ' + String(proposal.digest), workday: 'not-started',
+			'failed expectation': 'Agent execution acceptance / Non-negotiable rules / ACCEPTANCE_CAMPAIGN_MODE',
+			'observed evidence': freezePath + ': request.body.executionMode=' + String(mode),
+			'why implementation repair is insufficient': 'Frozen operator intent lacks permitted simulation authority; an implementation repair cannot supply or change operator intent.',
+			'smallest proposed plan correction': 'Propose executionMode: simulation for this frozen request; apply only after plan review.' }, original);
+		report(failure.message);
+	} catch (reportFailure) { throw new AggregateError([original, reportFailure], 'ACCEPTANCE_PLAN_REVIEW_REPORT: Original unsafe intent and required report both failed'); }
+	throw failure;
+}
+
 /** Preserve original failures; classify only the native conditions proved here.
  * Other failures still require the complete operator assessment/report path. */
 function classifyObservedCampaignFailure(failure: unknown): unknown {
 	if (!(failure instanceof Error)) return failure;
-	let classification: 'ENVIRONMENT_DEFECT' | 'PLAN_REVIEW_REQUIRED' | undefined;
+	let classification: 'ENVIRONMENT_DEFECT' | 'IMPLEMENTATION_DEFECT' | undefined;
 	if (failure.message.startsWith('ACCEPTANCE_CAMPAIGN_MODE:')
-		&& Object.getOwnPropertyDescriptor(failure, 'code')?.value === 'ERR_ASSERTION') classification = 'PLAN_REVIEW_REQUIRED';
+		&& Object.getOwnPropertyDescriptor(failure, 'code')?.value === 'ERR_ASSERTION') classification = 'IMPLEMENTATION_DEFECT';
 	else {
 		let current: unknown = failure; const seen = new Set<Error>();
 		while (current instanceof Error && !seen.has(current)) {
@@ -279,7 +298,6 @@ function classifyObservedCampaignFailure(failure: unknown): unknown {
 }
 
 export async function monitorCampaign(input: {
-	planReview?: { project: string; proposal: string; workday: string; observedEvidence: string; report: (text: string) => void };
 	admitDiscussion?: () => void | Promise<void>;
 	admittedSimulation?: boolean;
 	inspect?: () => void | Promise<void>;
@@ -322,18 +340,7 @@ export async function monitorCampaign(input: {
 		await input.wait();
 	}
 	} catch (failure) {
-		let classified = classifyObservedCampaignFailure(failure);
-		if (classified instanceof Error && Reflect.get(classified, 'classification') === 'PLAN_REVIEW_REQUIRED' && input.planReview) {
-			const original = classified, context = input.planReview;
-			try {
-				classified = campaignPlanReviewRequired({ project: context.project, proposal: context.proposal, workday: context.workday,
-					'failed expectation': 'Agent execution acceptance / Non-negotiable rules / sole simulation mode',
-					'observed evidence': context.observedEvidence,
-					'why implementation repair is insufficient': 'Observed execution authority contradicts the fixed simulation contract; review that authority before repair.',
-					'smallest proposed plan correction': 'Review the contradictory execution authority; no proposal correction has been applied.' }, failure);
-				context.report((classified as Error).message);
-			} catch (reportFailure) { classified = new AggregateError([original, reportFailure], 'ACCEPTANCE_PLAN_REVIEW_REPORT: Original failure and required report both failed'); }
-		}
+		const classified = classifyObservedCampaignFailure(failure);
 		// A failed verifier must not strand an otherwise live simulation. Only the
 		// already-observed simulation workday may be stopped; never mutate a run
 		// whose mode was not proven or whose status is already terminal.

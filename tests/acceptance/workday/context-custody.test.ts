@@ -8,7 +8,7 @@ import { parse } from 'yaml';
 import { isDeepStrictEqual } from 'node:util';
 import { acceptanceWorkdayId, read, row, type Row } from '../acceptance-cli.ts';
 import { readWorkdayAssignments } from '../sdk-runtime-golden.test.ts';
-import { verifyAssignmentAuthority, verifyGitInputContext, verifyExactContextSource, verifyKnowledgeBookSource, verifyDraftProposalHandoff, verifyModelClockEvidence, verifyModelUsageWindow, modelExecutionInventory } from './support/assignment-authority.ts';
+import { verifyAssignmentAuthority, verifyGitInputContext, verifyExactContextSource, verifyKnowledgeBookSource, verifyDraftProposalHandoff, verifyModelUsageWindow, modelExecutionInventory } from './support/assignment-authority.ts';
 import { readCompleteEvidence } from './support/evidence-pages.ts';
 import { verifySdkArchitectureBook } from '../prepare-campaign.ts';
 import { inspectAssignmentContext } from './support/monitoring/assignment-context.ts';

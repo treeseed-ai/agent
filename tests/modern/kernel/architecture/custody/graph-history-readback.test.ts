@@ -17,11 +17,22 @@ function input() {
 	return { records, graph: { teamId: 'team', revision: 101, digest: records.at(-1)!.graphDigest } };
 }
 describe('complete managed graph watch assertion', () => {
-	it('retains exact full hundred tail and explicit terminal pages without modifying supplied canonical records', () => {
+	it('retains exact full hundred tail and explicit terminal pages without modifying supplied canonical records', async () => {
 		const f = input(), before = structuredClone(f), calls: string[] = [];
 		expect(completeGraphHistory(f.graph, cursor => { calls.push(cursor); const records = f.records.filter(record => record.revision > Number(cursor)).slice(0, 100);
 			return { items: records, nextCursor: records.length ? String(records.at(-1)!.revision) : cursor }; })).toEqual(f.records);
 		expect(calls).toEqual(['0', '100', '101']); expect(f).toEqual(before);
+		const observe: unknown = Reflect.get(await import('../../../../acceptance/workday/support/monitoring/live-graph-revisions.ts'), 'observeLiveGraphRevisions');
+		expect(typeof observe).toBe('function'); if (typeof observe !== 'function') throw new Error('Original live graph inspection is missing');
+		const retained = new Map(), snapshots: unknown[] = [];
+		const watch = (cursor: string) => { const items = f.records.filter(record => record.revision > Number(cursor)).slice(0, 100);
+			return { items, nextCursor: items.length ? String(items.at(-1)!.revision) : cursor }; };
+		const current = () => f.graph;
+		await Reflect.apply(observe, undefined, ['team', current, watch, retained, (revision: unknown) => snapshots.push(structuredClone(revision))]);
+		expect([...retained.values()]).toEqual(f.records); expect(snapshots).toEqual(f.records);
+		await Reflect.apply(observe, undefined, ['team', current, watch, retained, () => { throw new Error('Exact replay must not duplicate snapshots'); }]);
+		expect([...retained.values()]).toEqual(f.records); expect(f).toEqual(before);
+
 	});
 	it('denies skipped duplicated unordered foreign malformed and mismatched-digest revision tails', () => {
 		const outcomes: boolean[] = [];

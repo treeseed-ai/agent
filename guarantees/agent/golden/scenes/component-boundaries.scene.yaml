@@ -2299,3 +2299,7 @@ workflow:
   - id: native-external-inventory
     action: { verifier: agent.golden.native-external-inventory }
     expect: { status: passed }
+
+  - id: external-pre-admission
+    action: { verifier: agent.golden.external-pre-admission }
+    expect: { status: passed }

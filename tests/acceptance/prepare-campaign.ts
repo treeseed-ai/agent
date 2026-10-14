@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import { canonicalStandardsJson } from '@treeseed/sdk/standards';
+import { developmentSessionSchema, developmentCandidateSchema } from '@treeseed/sdk/development';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
@@ -215,31 +217,150 @@ export function prepareSdkCampaign(draftPath: string, freezePath: string, team: 
 }
 
 export function captureSdkExternalState(platform: string, capture: (name: string, bytes: string) => void): void {
-	for (const [name, [command, args]] of Object.entries(sdkExternalCommands(platform)))
-		capture(name, execFileSync(command, [...args], { encoding: 'utf8', timeout: 30000 }));
+ const {operator,commands}=sdkExternalCommands(platform);
+ for(const[name,command]of commands)capture(name,observeExternalCommand(command));
+ capture('development-selections.json',readCampaignDevelopmentSelections());
+ assert.equal(readFileSync(operator.path,'utf8'),operator.bytes,'ACCEPTANCE_EXTERNAL_SCOPE: Operator selection changed during observation');
 }
 
 export function acceptanceReceiptDirectory(freezePath: string): string {
 	return mkdtempSync(`${freezePath}.receipts-`);
 }
 
+type ExternalCommand = { command: string; args: string[]; kind: 'refs' | 'registry' | 'releases' | 'issues' | 'pull-requests' | 'deployments'; repository?: string };
+
 function sdkExternalCommands(platform: string) {
-	return {
-		'sdk-remote-refs.txt': ['git', ['-C', resolve(platform, 'packages/sdk'), 'ls-remote', 'origin']],
-		'sdk-dist-tags.json': ['npm', ['view', '@treeseed/sdk', 'dist-tags', '--json']],
-		'sdk-releases.json': ['gh', ['api', 'repos/treeseed-ai/sdk/releases', '--paginate']],
-	} as const;
+	assert.equal(resolve(platform), resolve(String(process.env.TREESEED_ACCEPTANCE_PLATFORM_PATH)), 'ACCEPTANCE_EXTERNAL_SCOPE: Original Platform authority required');
+	const operator = readPreRunCampaignFreeze(), commands = new Map<string, ExternalCommand>();
+	const repositories = new Set<string>();
+	for (const source of operator.repositories) {
+		const match = /^https:\/\/github\.com\/([a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+)\.git$/u.exec(source.gitUrl);
+		assert.ok(match && /^[a-zA-Z0-9][a-zA-Z0-9_.-]*$/u.test(source.key) && !repositories.has(match[1]!), 'ACCEPTANCE_EXTERNAL_SCOPE: Unique seed-owned GitHub authority required');
+		repositories.add(match[1]!);
+		const add = (name: string, value: ExternalCommand) => {
+			assert.ok(!commands.has(name), 'ACCEPTANCE_EXTERNAL_SCOPE: Duplicate owning inventory'); commands.set(name, value);
+		};
+		add(source.key + '-remote-refs.txt', { command: 'git', args: ['ls-remote', '--refs', source.gitUrl], kind: 'refs' });
+		for (const kind of ['releases', 'issues', 'pull-requests', 'deployments'] as const) {
+			const endpoint = kind === 'pull-requests' ? 'pulls' : kind;
+			const query = '?per_page=100' + (kind === 'issues' || kind === 'pull-requests' ? '&state=all' : '');
+			add(source.key + '-' + kind + '.json', { command: 'gh', args: ['api', '--hostname', 'github.com', '--method', 'GET', '--paginate', 'repos/' + match[1] + '/' + endpoint + query], kind, repository: match[1] });
+		}
+	}
+	assert.ok(repositories.size > 0, 'ACCEPTANCE_EXTERNAL_SCOPE: Complete original source/library selection required');
+	// SDK is the sole product released by this stage. Its complete registry
+	// document already contains every dist-tag and published version.
+	commands.set('sdk-registry.json', { command: 'npm', args: ['view', '@treeseed/sdk', '--json', '--registry=https://registry.npmjs.org'], kind: 'registry' });
+	return { operator, commands };
+}
+
+/** Frame the original gh --paginate JSON arrays without altering strings,
+ * guessing records from exit zero, or requiring a newer CLI flag. */
+function externalJsonPages(bytes: string): unknown[] {
+	const pages: unknown[] = [], stack: string[] = [];
+	let start = -1, quoted = false, escaped = false;
+	for (let index = 0; index < bytes.length; index++) {
+		const character = bytes[index]!;
+		if (start < 0) {
+			if (/\s/u.test(character)) continue;
+			assert.equal(character, '[', 'ACCEPTANCE_EXTERNAL_PAGES: Original array page required');
+			start = index; stack.push(character); continue;
+		}
+		if (quoted) {
+			if (escaped) escaped = false;
+			else if (character === '\\') escaped = true;
+			else if (character === '"') quoted = false;
+			continue;
+		}
+		if (character === '"') quoted = true;
+		else if (character === '[' || character === '{') stack.push(character);
+		else if (character === ']' || character === '}') {
+			assert.equal(stack.pop(), character === ']' ? '[' : '{', 'ACCEPTANCE_EXTERNAL_PAGES: Original page is malformed');
+			if (!stack.length) { pages.push(JSON.parse(bytes.slice(start, index + 1))); start = -1; }
+		}
+	}
+	assert.ok(start === -1 && !quoted && !escaped && pages.length > 0, 'ACCEPTANCE_EXTERNAL_PAGES: Original paginated stream is missing or interrupted');
+	return pages;
+}
+
+function externalPages(bytes: string): Array<Record<string, unknown>> {
+	const pages: unknown = externalJsonPages(bytes);
+	assert.ok(Array.isArray(pages) && pages.length > 0 && pages.every(Array.isArray), 'ACCEPTANCE_EXTERNAL_PAGES: Original complete paginated arrays required');
+	const rows = pages.flat() as unknown[], ids = new Set<string>();
+	return rows.map(value => {
+		assert.ok(value && typeof value === 'object' && !Array.isArray(value), 'ACCEPTANCE_EXTERNAL_PAGES: Original record required');
+		const item = value as Record<string, unknown>, id = item.id;
+		assert.ok((typeof id === 'string' && id.length > 0 || typeof id === 'number' && Number.isSafeInteger(id) && id > 0)
+			&& !ids.has(String(id)), 'ACCEPTANCE_EXTERNAL_PAGES: Missing or repeated original identity');
+		ids.add(String(id)); return item;
+	});
+}
+
+function observeExternalCommand(input: ExternalCommand): string {
+	const execute = (command: string, args: string[]) => execFileSync(command, args, { encoding: 'utf8', timeout: 30_000, maxBuffer: 32 * 1024 * 1024 });
+	const bytes = execute(input.command, input.args);
+	assert.ok(bytes.length > 0, 'ACCEPTANCE_EXTERNAL_EMPTY: Exit zero without original inventory is inconclusive');
+	if (input.kind === 'refs') {
+		const refs = bytes.trimEnd().split('\n');
+		assert.ok(refs.every(value => /^[a-f0-9]{40}\trefs\/[^\s]+$/u.test(value)) && new Set(refs.map(value => value.split('\t')[1])).size === refs.length,
+			'ACCEPTANCE_EXTERNAL_REFS: Complete unique original branch/tag inventory required');
+		return refs.sort().join('\n') + '\n';
+	}
+	if (input.kind === 'registry') {
+		const value: unknown = JSON.parse(bytes);
+		assert.ok(value && typeof value === 'object' && !Array.isArray(value), 'ACCEPTANCE_EXTERNAL_REGISTRY: Original full SDK registry document required');
+		const registry = value as Row;
+		assert.equal(registry.name, '@treeseed/sdk', 'ACCEPTANCE_EXTERNAL_REGISTRY: Foreign package');
+		assert.ok(Array.isArray(registry.versions) && registry.versions.length > 0 && registry['dist-tags'] && typeof registry['dist-tags'] === 'object', 'ACCEPTANCE_EXTERNAL_REGISTRY: Versions and complete tags required');
+		return canonicalStandardsJson(registry);
+	}
+	let values = externalPages(bytes);
+	// GitHub's issues endpoint includes PR summaries. The original pulls
+	// inventory owns those facts; retain only genuine Issues here.
+	if (input.kind === 'issues') values = values.filter(value => !Object.hasOwn(value, 'pull_request'));
+	if (input.kind === 'deployments') values = values.map(value => {
+		assert.ok(typeof value.id === 'number' && Number.isSafeInteger(value.id) && value.id > 0, 'ACCEPTANCE_EXTERNAL_DEPLOYMENT: Native numeric identity required');
+		const statuses = externalPages(execute('gh', ['api', '--hostname', 'github.com', '--method', 'GET', '--paginate', 'repos/' + input.repository + '/deployments/' + value.id + '/statuses?per_page=100']));
+		assert.ok(!Object.hasOwn(value, 'statuses'), 'ACCEPTANCE_EXTERNAL_DEPLOYMENT: Ambiguous original payload');
+		return { ...value, statuses };
+	});
+	return canonicalStandardsJson(values);
+}
+
+export function readCampaignDevelopmentSelections(): string {
+	const team = process.env.TREESEED_ACCEPTANCE_TEAM ?? 'treeseed';
+	const observed = read(['dev', 'status', '--all'], team, true), sessions = observed.sessions;
+	assert.ok(Array.isArray(sessions), 'ACCEPTANCE_EXTERNAL_SELECTIONS: Complete original manager inventory required');
+	const ids = new Set<string>();
+	const values = sessions.map(value => {
+		assert.ok(value && typeof value === 'object' && !Array.isArray(value), 'ACCEPTANCE_EXTERNAL_SELECTIONS: Original session record required');
+		const record = value as Row, session = developmentSessionSchema.parse(record.session);
+		assert.deepEqual(session, record.session, 'ACCEPTANCE_EXTERNAL_SELECTIONS: Original selection must not be migrated or repaired');
+		assert.ok(!ids.has(session.sessionId) && Array.isArray(record.candidates), 'ACCEPTANCE_EXTERNAL_SELECTIONS: Complete unique session/candidate inventory required'); ids.add(session.sessionId);
+		const targets = session.targets.map(({ health: _health, reaction: _reaction, ...target }) => target);
+		assert.equal(new Set(targets.map(target => target.projectId + '.' + target.targetId)).size, targets.length, 'ACCEPTANCE_EXTERNAL_SELECTIONS: Duplicate selected target');
+		const candidates = record.candidates.map((candidate: unknown) => { const parsed = developmentCandidateSchema.parse(candidate); assert.deepEqual(parsed, candidate); return parsed; });
+		assert.equal(new Set(candidates.map((candidate: { candidateId: string }) => candidate.candidateId)).size, candidates.length, 'ACCEPTANCE_EXTERNAL_SELECTIONS: Duplicate candidate');
+		return { sessionId: session.sessionId, hostId: session.hostId, status: session.status, repositories: session.repositories, targets, candidates };
+	});
+	return canonicalStandardsJson(values);
 }
 
 export function verifySdkExternalState(freeze: Row): void {
 	const platform = process.env.TREESEED_ACCEPTANCE_PLATFORM_PATH;
 	assert.ok(platform, 'ACCEPTANCE_CAMPAIGN_WORKSPACE: Explicit Platform workspace required');
-	const commands = sdkExternalCommands(platform);
-	for (const [name, [command, args]] of Object.entries(commands)) {
-		const paths = Object.keys(freeze.receipts ?? {}).filter(path => basename(path) === name);
-		assert.equal(paths.length, 1, 'ACCEPTANCE_EXTERNAL_INVENTORY: Complete frozen SDK inventory required');
-		const before = readFileSync(paths[0]!, 'utf8');
-		const after = execFileSync(command, [...args], { encoding: 'utf8', timeout: 30000 });
-		assert.equal(after, before, 'ACCEPTANCE_EXTERNAL_CHANGED: Simulation changed upstream SDK refs registry or releases');
-	}
+	const { operator, commands } = sdkExternalCommands(platform);
+	const names = [...commands.keys(), 'development-selections.json'];
+	const paths = new Map(names.map(name => {
+		const matches = Object.keys(freeze.receipts ?? {}).filter(path => basename(path) === name);
+		assert.equal(matches.length, 1, 'ACCEPTANCE_EXTERNAL_INVENTORY: Complete unique frozen owning inventory required'); return [name, matches[0]!] as const;
+	}));
+	// Revalidate every original file before I/O without retaining the whole
+	// portfolio's issue/registry bodies in RAM. Compare one owning inventory at a time.
+	const baseline = (name: string) => { const path=paths.get(name)!;const bytes=readFileSync(path,'utf8');assert.equal(freeze.receipts[path],'sha256:'+createHash('sha256').update(bytes).digest('hex'),'ACCEPTANCE_EXTERNAL_INVENTORY: Original frozen bytes differ from retained digest');return bytes; };
+	for(const name of paths.keys())baseline(name);
+	for(const[name,command]of commands)assert.equal(observeExternalCommand(command),baseline(name),'ACCEPTANCE_EXTERNAL_CHANGED: Simulation changed an external owning boundary');
+	assert.equal(readCampaignDevelopmentSelections(),baseline('development-selections.json'),'ACCEPTANCE_EXTERNAL_CHANGED: Simulation changed a deployment selection');
+	for(const name of paths.keys())baseline(name);
+	assert.equal(readFileSync(operator.path, 'utf8'), operator.bytes, 'ACCEPTANCE_EXTERNAL_SCOPE: Operator selection changed during observation');
 }

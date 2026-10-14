@@ -33,6 +33,8 @@ test('Frozen SDK campaign drives planning acting review and terminal golden gate
 	assert.equal(allocation?.allocationWeight, 1);
 	assert.equal(allocation?.planningTurnMaximumSeconds, 180);
 	requirePlanningWindow(body.durationSeconds, allocation.planningPercent, allocation.planningTurnMaximumSeconds);
+	// Current complete external authority must pass before any metered admission.
+	verifySdkExternalState(freeze);
 	// API validates first admission expiry and replays the exact cached start after expiry.
 	const started = read(['workdays', 'start', '--preflight', freeze.preflight.id, '--digest', freeze.preflight.preflightDigest,
 		'--yes', '--idempotency-key', `golden-start:${freeze.preflight.id}`], team);

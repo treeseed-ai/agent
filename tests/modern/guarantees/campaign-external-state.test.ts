@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const state = vi.hoisted(() => ({ execute: vi.fn(), directory: vi.fn(), read: vi.fn(), files: new Map<string,string>(), fault: '',
 	operator: { path: '/operator.json', bytes: 'original-operator', repositories: [{ key: 'sdk', gitUrl: 'https://github.com/treeseed-ai/sdk.git' }, { key: 'sdk-library', gitUrl: 'https://github.com/treeseed-ai/sdk-library.git' }] } }));
@@ -23,7 +24,7 @@ beforeEach(() => {
 		if(state.fault==='duplicate')records.push(structuredClone(records[0]!));
 		return JSON.stringify([records]);
 	});
-	captureSdkExternalState('/platform',(name,bytes)=>state.files.set('/receipts/'+name,bytes));state.execute.mockClear();state.read.mockClear();
+	captureSdkExternalState('/platform',(name,bytes)=>{ const path='/receipts/'+name;state.files.set(path,bytes);freeze.receipts[path]='sha256:'+createHash('sha256').update(bytes).digest('hex'); });state.execute.mockClear();state.read.mockClear();
 });
 describe('SDK simulation external-state gate (fixtures are not upstream proof)',()=>{
 	it('retains receipt storage beside the immutable freeze and captures each external inventory once',()=>{
@@ -42,7 +43,7 @@ describe('SDK simulation external-state gate (fixtures are not upstream proof)',
 	it('reads all three frozen inventories and accepts only unchanged bytes',()=>{
 		// The former three facts remain covered by the complete sole authorities.
 		verifySdkExternalState(freeze);expect(state.execute).toHaveBeenCalledTimes(11);expect(state.read).toHaveBeenCalledOnce();
-		for(const name of expected){const path='/receipts/'+name,original=state.files.get(path)!;state.files.set(path,original+'changed');const failed=new Map(state.files);expect(()=>verifySdkExternalState(freeze),name).toThrow('ACCEPTANCE_EXTERNAL_CHANGED');expect(state.files).toEqual(failed);state.files.set(path,original);}
+		for(const name of expected){const path='/receipts/'+name,original=state.files.get(path)!;state.files.set(path,original+'changed');const failed=new Map(state.files);expect(()=>verifySdkExternalState(freeze),name).toThrow('ACCEPTANCE_EXTERNAL_INVENTORY');expect(state.files).toEqual(failed);state.files.set(path,original);}
 		for(const fault of ['empty','malformed','duplicate','interrupted']){state.fault=fault;const held=new Map(state.files);expect(()=>verifySdkExternalState(freeze),fault).toThrow();expect(state.files).toEqual(held);}
 		state.fault='';verifySdkExternalState(freeze);
 	});

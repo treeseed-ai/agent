@@ -244,13 +244,13 @@ function sdkExternalCommands(platform: string) {
 		for (const kind of ['releases', 'issues', 'pull-requests', 'deployments'] as const) {
 			const endpoint = kind === 'pull-requests' ? 'pulls' : kind;
 			const query = '?per_page=100' + (kind === 'issues' || kind === 'pull-requests' ? '&state=all' : '');
-			add(source.key + '-' + kind + '.json', { command: 'gh', args: ['api', '--method', 'GET', '--paginate', '--slurp', 'repos/' + match[1] + '/' + endpoint + query], kind, repository: match[1] });
+			add(source.key + '-' + kind + '.json', { command: 'gh', args: ['api', '--hostname', 'github.com', '--method', 'GET', '--paginate', '--slurp', 'repos/' + match[1] + '/' + endpoint + query], kind, repository: match[1] });
 		}
 	}
 	assert.ok(repositories.size > 0, 'ACCEPTANCE_EXTERNAL_SCOPE: Complete original source/library selection required');
 	// SDK is the sole product released by this stage. Its complete registry
 	// document already contains every dist-tag and published version.
-	commands.set('sdk-registry.json', { command: 'npm', args: ['view', '@treeseed/sdk', '--json'], kind: 'registry' });
+	commands.set('sdk-registry.json', { command: 'npm', args: ['view', '@treeseed/sdk', '--json', '--registry=https://registry.npmjs.org'], kind: 'registry' });
 	return { operator, commands };
 }
 
@@ -291,7 +291,7 @@ function observeExternalCommand(input: ExternalCommand): string {
 	if (input.kind === 'issues') values = values.filter(value => !Object.hasOwn(value, 'pull_request'));
 	if (input.kind === 'deployments') values = values.map(value => {
 		assert.ok(typeof value.id === 'number' && Number.isSafeInteger(value.id) && value.id > 0, 'ACCEPTANCE_EXTERNAL_DEPLOYMENT: Native numeric identity required');
-		const statuses = externalPages(execute('gh', ['api', '--method', 'GET', '--paginate', '--slurp', 'repos/' + input.repository + '/deployments/' + value.id + '/statuses?per_page=100']));
+		const statuses = externalPages(execute('gh', ['api', '--hostname', 'github.com', '--method', 'GET', '--paginate', '--slurp', 'repos/' + input.repository + '/deployments/' + value.id + '/statuses?per_page=100']));
 		assert.ok(!Object.hasOwn(value, 'statuses'), 'ACCEPTANCE_EXTERNAL_DEPLOYMENT: Ambiguous original payload');
 		return { ...value, statuses };
 	});
@@ -326,7 +326,9 @@ export function verifySdkExternalState(freeze: Row): void {
 		const matches = Object.keys(freeze.receipts ?? {}).filter(path => basename(path) === name);
 		assert.equal(matches.length, 1, 'ACCEPTANCE_EXTERNAL_INVENTORY: Complete unique frozen owning inventory required'); return [name, matches[0]!] as const;
 	}));
-	for (const [name, command] of commands) assert.equal(observeExternalCommand(command), readFileSync(paths.get(name)!, 'utf8'), 'ACCEPTANCE_EXTERNAL_CHANGED: Simulation changed an external owning boundary');
-	assert.equal(developmentSelections(), readFileSync(paths.get('development-selections.json')!, 'utf8'), 'ACCEPTANCE_EXTERNAL_CHANGED: Simulation changed a deployment selection');
+	const before = new Map([...paths].map(([name,path])=> { const bytes=readFileSync(path,'utf8'); assert.equal(freeze.receipts[path], 'sha256:'+createHash('sha256').update(bytes).digest('hex'), 'ACCEPTANCE_EXTERNAL_INVENTORY: Original frozen bytes differ from retained digest');return [name,bytes] as const; }));
+	for (const [name, command] of commands) assert.equal(observeExternalCommand(command), before.get(name), 'ACCEPTANCE_EXTERNAL_CHANGED: Simulation changed an external owning boundary');
+	assert.equal(developmentSelections(), before.get('development-selections.json'), 'ACCEPTANCE_EXTERNAL_CHANGED: Simulation changed a deployment selection');
+	for(const[name,path]of paths)assert.equal(readFileSync(path,'utf8'),before.get(name),'ACCEPTANCE_EXTERNAL_INVENTORY: Frozen inventory changed during observation');
 	assert.equal(readFileSync(operator.path, 'utf8'), operator.bytes, 'ACCEPTANCE_EXTERNAL_SCOPE: Operator selection changed during observation');
 }

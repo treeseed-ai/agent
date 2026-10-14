@@ -44,7 +44,7 @@ describe('live canonical assignment observation (controlled inputs, not managed 
 		row((retired.nodes as Row[])[0]).nodeRevision=3; expect(() => check!([item],retired,new Map(),terminalRun)).toThrow('ACCEPTANCE_NORMAL_REVISIONS');
 		const cancelled=structuredClone(item); cancelled.status='cancelled'; row(cancelled.assignmentAttempt).status='cancelled'; row(row(cancelled.assignmentAttempt).effectiveProfile).activity='planning';
 		const handoffRun=liveRun(cancelled), parameters=row(handoffRun.parameters), boundary=new Date(Date.parse(handoffRun.startedAt)+Number(parameters.durationSeconds)*Number(parameters.planningPercent)*10).toISOString();
-		cancelled.lifecycleCode='planning_boundary_cancelled'; cancelled.failedAt=boundary; cancelled.capacityEnvelope.budget={time:{authorityDeadlineAt:boundary,executionDeadlineAt:boundary}};
+		cancelled.lifecycleCode='planning_boundary_cancelled'; cancelled.failedAt=boundary; row(cancelled.capacityEnvelope).budget={time:{authorityDeadlineAt:boundary,executionDeadlineAt:boundary}};
 		cancelled.lifecycleOutput={performance:{disposition:'cancelled'}}; const cancelledGraph=liveAssignmentGraph(cancelled), handoffBefore=structuredClone(cancelled);
 		check!([cancelled],cancelledGraph,new Map(),handoffRun);
 		for(const mode of ['early','wrong-authority','acting','wrong-disposition']) {

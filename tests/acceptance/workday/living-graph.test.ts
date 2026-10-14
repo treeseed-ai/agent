@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { verifyNormalAttemptRevisions } from './support/monitoring/live-assignment-records.ts';
 import { verifyDerivedWorkdayModes } from './support/campaign-observation.ts';
 import { completeGraphHistory, verifyGraphNoopPlan, verifyGraphProvenance, verifyPredecessorCustody } from './support/evidence-pages.ts';
 import { read, row, type Row } from '../acceptance-cli.ts';
 import { readWorkdayAssignments, verifyGolden } from '../sdk-runtime-golden.test.ts';
-import { readApprovedWorkReview } from './support/decision-evidence.ts';
+import { readApprovedWorkReview, readWorkReviewDecision } from './support/decision-evidence.ts';
 
 // Use the existing public CLI, requiring an identical plan before reconciliation. No synthetic fallback, optional skip,
 // private route, new receipt, or alternate campaign implementation is allowed.
@@ -25,6 +26,11 @@ test('Living team graph public views preserve exact nodes edges provenance and f
 	const f = context(), graph = read(['execution', 'graph', 'show'], f.team);
 	verifyDerivedWorkdayModes(f.run, list(graph.nodes).filter(node => node.workdayId === f.id));
 	const decisions = new Map<string, Row>();
+	const revisionDecisions=new Map<string,Row>();
+	for(const review of f.assignments) if(row(row(review.lifecycleOutput).activityCompletion).reviewDisposition==='request-changes')
+		revisionDecisions.set(String(review.id),readWorkReviewDecision(review,f.team,decisions));
+	verifyNormalAttemptRevisions(f.assignments,graph,revisionDecisions,f.run);
+
 	for (const { review, actor } of verifyPredecessorCustody(f.assignments, graph))
 		readApprovedWorkReview(review, actor, f.team, decisions);
 	for (const projectId of new Set(list(graph.nodes).map(node => String(node.projectId)))) {

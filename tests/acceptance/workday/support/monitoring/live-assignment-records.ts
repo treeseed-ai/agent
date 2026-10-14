@@ -267,3 +267,57 @@ export function observeLiveAssignmentRecords(run: Row, items: readonly Row[], re
 	for (const item of pending) inspect(item);
 	for (const [id, attempt] of observed) retained.set(id, attempt);
 }
+export function phaseBoundaryCancelled(item: Row, run: Row): boolean {
+	const parameters = row(run.parameters), time = row(row(row(item.capacityEnvelope).budget).time);
+	const boundary = Date.parse(normalText(run.startedAt)) + Number(parameters.durationSeconds) * Number(parameters.planningPercent) * 10;
+	return Number.isFinite(boundary) && item.status === 'cancelled' && item.lifecycleCode === 'planning_boundary_cancelled'
+		&& ['planning','estimating'].includes(normalText(row(row(item.assignmentAttempt).effectiveProfile).activity))
+		&& Date.parse(normalText(time.authorityDeadlineAt)) === boundary
+		&& Date.parse(normalText(time.executionDeadlineAt ?? time.preparationDeadlineAt)) === boundary
+		&& Date.parse(normalText(item.failedAt)) >= boundary
+		&& row(row(item.lifecycleOutput).performance).disposition === 'cancelled';
+}
+
+const normalText = (value: unknown): string => typeof value === 'string' ? value : '';
+
+/** Normal completion cannot conceal duplicate issuance or unexplained revisions.
+ * Read original classed review Decisions independently; never infer authority
+ * from a node counter, a completed status, or an accepted later candidate. */
+export function verifyNormalAttemptRevisions(items: readonly Row[], graph: Row, decisions: ReadonlyMap<string, Row>, run: Row): void {
+	const label='ACCEPTANCE_NORMAL_REVISIONS';
+	assert.ok(items.length>0 && Array.isArray(graph.nodes) && Array.isArray(graph.edges),label);
+	const groups=new Map<string, Array<{item: Row; attempt: ReturnType<typeof assignmentAttemptSchema.parse>}>>();
+	assert.equal(new Set(items.map(item=>item.id)).size,items.length,label);
+	for(const item of items) {
+		const attempt=assignmentAttemptSchema.parse(item.assignmentAttempt);
+		assert.equal(item.id,attempt.id,label); assert.equal(attempt.workdayId,run.id,label); assert.equal(attempt.teamId,graph.teamId,label);
+		assert.ok(item.status==='completed'||phaseBoundaryCancelled(item,run),label+': Normal terminal status or original planning handoff required');
+		const matches: Row[]=(graph.nodes as Row[]).filter(node=>node.id===attempt.nodeId); assert.equal(matches.length,1,label+': Independent owning node required');
+		assert.equal(matches[0]!.projectId,attempt.projectId,label);
+		const group=groups.get(attempt.nodeId)??[]; group.push({item,attempt}); groups.set(attempt.nodeId,group);
+	}
+	for(const[nodeId,group]of groups) {
+		group.sort((a,b)=>a.attempt.nodeRevision-b.attempt.nodeRevision);
+		const node=(graph.nodes as Row[]).find(node=>node.id===nodeId)!;
+		for(const[index,current]of group.entries()) {
+			assert.equal(current.attempt.nodeRevision,index+1,label+': Every original revision must appear exactly once from issuance');
+			if(index===0)continue;
+			const previous=group[index-1]!, pairEdges: Row[]=(graph.edges as Row[]).filter(edge=>edge.provenance==='review-pair'
+				&& (node.pairRole==='actor'?edge.fromNodeId===nodeId:node.pairRole==='reviewer'&&edge.toNodeId===nodeId)
+				&& Number(edge.graphRevisionCreated)<=current.attempt.graphRevision
+				&& (edge.graphRevisionRemoved===undefined||Number(edge.graphRevisionRemoved)>previous.attempt.graphRevision));
+			assert.equal(pairEdges.length,1,label+': Only original paired review can explain another normal revision');
+			const pair=pairEdges[0]!, reviews=items.filter(value=>row(value.assignmentAttempt).nodeId===pair.toNodeId
+				&& row(value.assignmentAttempt).nodeRevision===previous.attempt.nodeRevision);
+			assert.equal(reviews.length,1,label); const review=reviews[0]!, issued=assignmentAttemptSchema.parse(review.assignmentAttempt);
+			const actors=items.filter(value=>row(value.assignmentAttempt).nodeId===pair.fromNodeId
+				&& row(value.assignmentAttempt).nodeRevision===previous.attempt.nodeRevision
+				&& issued.predecessorResultIds.includes(String(row(value.assignmentResult).id)));
+			assert.equal(actors.length,1,label); const decision=decisions.get(String(review.id)); assert.ok(decision,label+': Original request-changes Decision required');
+			verifyWorkReview(review,actors[0]!,decision,'request-changes');
+			assert.ok(Number.isFinite(Date.parse(String(review.completedAt)))&&Date.parse(String(review.completedAt))<=Date.parse(current.attempt.createdAt),label+': Review must finish before revised issuance');
+		}
+		const last=group.at(-1)!.attempt.nodeRevision;
+		assert.ok(node.nodeRevision===last||(run.status==='completed'&&node.status==='stale'&&node.nodeRevision===last+1),label+': Unexplained unissued node revision');
+	}
+}

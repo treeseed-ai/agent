@@ -90,6 +90,9 @@ try {
    run(`${input.owner}-build-sdk-extract`, ['tar', '-xzf', archive, '--strip-components=1', '-C', target], source);
    run(`${input.owner}-exact-sdk`, ['npm', 'install', '--prefix', target, '--ignore-scripts', '--no-save', '--package-lock=false',
     '--no-audit', '--no-fund'], source, 0, undefined, { ...process.env, NODE_ENV: 'production' });
+  } else if (input.owner === 'cli') {
+   run(`${input.owner}-exact-sdk`, [process.execPath, '--import', 'tsx', 'scripts/build/hydrate-exact-sdk.ts',
+    resolve(prefix, sdk.filename), sdk.archiveSha256], source);
   } else if (input.owner !== 'sdk') run(`${input.owner}-exact-sdk`, ['npm', 'install', '--no-save', '--package-lock=false',
     '--ignore-scripts', '--no-audit', '--no-fund', resolve(prefix, sdk.filename)], source);
   const treeDx = inputs.find(value => value.owner === input.owner)!.buildTreeDx;

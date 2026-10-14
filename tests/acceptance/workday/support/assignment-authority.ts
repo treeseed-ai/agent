@@ -92,6 +92,29 @@ export function verifyModelClockEvidence(item: Row, event: Row): void {
 	assert.equal(ids.size, actual.completedChecks); assert.equal(pending.size, 0, 'ACCEPTANCE_MODEL_CLOCK_PENDING');
 }
 
+/** Independent public clock bounds; original guest timers exclude preproductive materialization. */
+export function verifyModelUsageWindow(item: Row, event: Row): void {
+	verifyModelClockEvidence(item, event);
+	const label = 'ACCEPTANCE_MODEL_USAGE_WINDOW', result = row(item.assignmentResult), usage = row(result.usage), native = row(usage.native);
+	const active = native.activeSeconds, elapsed = native.elapsedSeconds, time = row(row(row(item.capacityEnvelope).budget).time);
+	assert.ok(typeof active === 'number' && Number.isFinite(active) && active >= 0
+		&& typeof elapsed === 'number' && Number.isFinite(elapsed) && elapsed >= active, label);
+	assert.equal(usage.elapsedSeconds, Math.ceil(elapsed), label);
+	assert.ok(typeof time.closeoutStartedAt === 'string', label);
+	const start = Date.parse(String(time.executionStartedAt)), closeout = Date.parse(time.closeoutStartedAt), completed = Date.parse(String(result.completedAt));
+	const clocks = (row(event.protectedPayload).providerEvents as Row[]).flatMap(action => {
+		const value = row(action.item);
+		return action.type === 'item.completed' && value.type === 'mcp_tool_call' && value.server === 'treedx'
+			&& value.tool === 'treeseed_time_status' ? [clockReading(value.result)] : [];
+	}).filter(value => value !== null);
+	const first = clocks[0], last = clocks.at(-1); assert.ok(first && last, label);
+	const firstAt = Date.parse(first.observedAt), lastAt = Date.parse(last.observedAt);
+	assert.ok(Number.isFinite(closeout) && closeout >= lastAt && closeout >= start && closeout <= completed, label);
+	// API timestamps retain milliseconds; guest monotonic timers retain finer precision.
+	// Only one millisecond of endpoint quantization is allowed; no deadline is moved.
+	assert.ok(active + 0.001 >= (lastAt - firstAt) / 1_000 && elapsed <= (closeout - start) / 1_000 + 0.001, label);
+}
+
 export function verifyGovernedProfile(item: Row, file: Row, graph?: Row): void {
 	const attempt = assignmentAttemptSchema.parse(item.assignmentAttempt), profile = attempt.effectiveProfile;
 	assert.equal(file.path, profile.profileRef.path, 'ACCEPTANCE_PROFILE_PATH: Exact governed path required');

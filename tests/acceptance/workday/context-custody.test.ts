@@ -8,7 +8,7 @@ import { parse } from 'yaml';
 import { isDeepStrictEqual } from 'node:util';
 import { acceptanceWorkdayId, read, row, type Row } from '../acceptance-cli.ts';
 import { readWorkdayAssignments } from '../sdk-runtime-golden.test.ts';
-import { verifyAssignmentAuthority, verifyGitInputContext, verifyExactContextSource, verifyKnowledgeBookSource, verifyDraftProposalHandoff, verifyModelClockEvidence, modelExecutionInventory } from './support/assignment-authority.ts';
+import { verifyAssignmentAuthority, verifyGitInputContext, verifyExactContextSource, verifyKnowledgeBookSource, verifyDraftProposalHandoff, verifyModelUsageWindow, modelExecutionInventory } from './support/assignment-authority.ts';
 import { readCompleteEvidence } from './support/evidence-pages.ts';
 import { verifySdkArchitectureBook } from '../prepare-campaign.ts';
 import { inspectAssignmentContext } from './support/monitoring/assignment-context.ts';
@@ -27,7 +27,7 @@ test('Every actual recorded model execution is included in exact clock evidence 
 		// Retain every actual attempt and its unique owning terminal observation.
 		// A failed result stays failed; absent/noncanonical returned evidence and
 		// any late, incomplete or contradictory clock history still fail closed.
-		verifyModelClockEvidence(item, terminal);
+		verifyModelUsageWindow(item, terminal);
 	}
 	assert.ok(isDeepStrictEqual(readCompleteEvidence(args, team, 100, 'ACCEPTANCE_MODEL_CLOCK', 'ascending'), events), 'ACCEPTANCE_MODEL_CLOCK_IMMUTABLE');
 	assert.ok(isDeepStrictEqual(readWorkdayAssignments(id, String(run.startedAt), team), items), 'ACCEPTANCE_MODEL_CLOCK_ATTEMPT_READBACK');

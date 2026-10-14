@@ -1,3 +1,4 @@
+import * as authority from '../../../acceptance/workday/support/assignment-authority.ts';
 import { execFile, execFileSync } from 'node:child_process';
 import { createServer } from 'node:https';
 import { chmod, copyFile, mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from 'node:fs/promises';
@@ -112,7 +113,7 @@ describe('native trusted guest clock relay and owning provider tool', () => {
 				} catch (error) { failure = error instanceof Error ? error.message : String(error); }
 				let events: Record<string, unknown>[] = [], usage: ReturnType<typeof sandboxResultSchema.parse>['usage'] | undefined,
 					resultStatus: string | undefined, summary: string | undefined, responseMarkdown: string | undefined;
-				const resultPath = join(output, 'result.json');
+				const resultPath = join(output, 'result.json'), independentlyFinishedAt = new Date().toISOString();
 				if (mode === 'replayed-clock') {
 					const retained = await readFile(join(output, 'provider-first-clock.json'), 'utf8'), raw = JSON.parse(retained);
 					expect(raw.item.id).toBe('original-first-clock'); expect(raw.item.result.structuredContent).toEqual(f.readings[1]);
@@ -125,6 +126,25 @@ describe('native trusted guest clock relay and owning provider tool', () => {
 					usage = result.usage;
 					resultStatus = result.status; summary = result.summary; responseMarkdown = result.responseMarkdown;
 					if (mode === 'completed') expect(result.timingAwareness).toMatchObject({ completedChecks: 2, firstToolCompliant: true, finalToolCompliant: true });
+					if (mode === 'completed' || mode === 'provider-failure') {
+						const verify = Reflect.get(authority, 'verifyModelUsageWindow') as ((item: Record<string, unknown>, event: Record<string, unknown>) => void);
+						expect.soft(typeof verify).toBe('function');
+						if (typeof verify === 'function') {
+							const nativeElapsed = result.usage.elapsedSeconds;
+							if (typeof nativeElapsed !== 'number') throw new Error('Original numeric native elapsed measurement required');
+							const completedAt = new Date().toISOString(), item = { id: f.attempt.id, status: result.status, assignmentAttempt: f.attempt,
+								capacityEnvelope: { budget: { time: { executionStartedAt: f.execution.startedAt, executionDeadlineAt: f.execution.deadlineAt, closeoutStartedAt: independentlyFinishedAt } } },
+								assignmentResult: { assignmentId: f.attempt.id, status: result.status, completedAt, timingAwareness: result.timingAwareness,
+									usage: { elapsedSeconds: Math.ceil(nativeElapsed), native: structuredClone(result.usage) } } };
+							const event = { id: 'native-guest-window-' + mode, assignmentId: f.attempt.id, runId: f.attempt.workdayId, workdayId: f.attempt.workdayId,
+								teamId: f.attempt.teamId, projectId: f.attempt.projectId, eventIndex: 1, eventType: 'provider.execution.' + result.status,
+								status: 'recorded', createdAt: completedAt, protectedPayload: { providerEvents: result.diagnostics.providerEvents } };
+							const held = structuredClone({ item, event, result }); verify(item, event); expect({ item, event, result }).toEqual(held);
+							const changed = structuredClone(item); changed.assignmentResult.usage.native.activeSeconds = 60;
+							expect(() => verify(changed, event)).toThrow('ACCEPTANCE_MODEL_USAGE_WINDOW'); expect({ item, event, result }).toEqual(held);
+						}
+					}
+
 				} catch (error) { if (!(error instanceof Error && 'code' in error && error.code === 'ENOENT')) throw error; }
 				const retainedPrivateFiles: string[] = [];
 				for (const name of ['auth.json', 'config.toml', 'activity-completion.schema.json']) {

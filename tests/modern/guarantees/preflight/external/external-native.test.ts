@@ -47,7 +47,7 @@ it('native Git GitHub registry and protected local manager reads retain every se
 		await expect(async () => verifySdkExternalState(freeze,cancellation.signal)).rejects.toThrow('ACCEPTANCE_EXTERNAL_CHANGED');
 		failures.push({ mode: 'native-upstream-ref', message: readFileSync(join(path, 'info/refs'), 'utf8') });
 		f.git(['-C', path, 'update-ref', 'refs/heads/staging', f.base]); f.git(['-C', path, 'update-server-info']);
-		const originalFailures = structuredClone(failures); await verifySdkExternalState(freeze,cancellation.signal); expect(failures).toEqual(originalFailures);
+		const originalFailures = structuredClone(failures); await measured('exact-retry',()=>verifySdkExternalState(freeze,cancellation.signal)); expect(failures).toEqual(originalFailures);
 		const reader: unknown = Reflect.get(preparation, 'readCampaignDevelopmentSelections'); expect(reader).toBeTypeOf('function');
 		if (typeof reader !== 'function') throw new Error('Original owning manager selection reader missing');
 		const readSelection = (): string => { const value: unknown = reader(); if (typeof value !== 'string') throw new Error('Original native selection bytes missing'); return value; };

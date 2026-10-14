@@ -60,7 +60,7 @@ test('Frozen SDK campaign drives planning acting review and terminal golden gate
 			endsAt: Date.parse(current.parameters.appliedPlan.endsAt) };
 	}, inspect: async () => {
 		assert.ok(currentRun, 'ACCEPTANCE_LIVE_ASSIGNMENT: Original observed workday required');
-		await observeLiveGraphRevisions(team, () => read(['execution', 'graph', 'show'], team),
+		await observeLiveGraphRevisions(String(currentRun.teamId), () => read(['execution', 'graph', 'show'], team),
 			cursor => read(['execution', 'graph', 'watch', '--cursor', cursor], team), observedGraphRevisions,
 			(revision, graph) => console.log(JSON.stringify({ workdayId, observedAt: new Date().toISOString(), graphRevision: revision, graph, workday: currentRun })));
 		const assignments = readCompleteEvidence(['assignments', 'list', '--workday', workdayId], team, 50, 'ACCEPTANCE_LIVE_ASSIGNMENT');

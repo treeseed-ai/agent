@@ -31,6 +31,10 @@ describe('capacity-provider guarantee execution bindings', () => {
 			commit: '952195376b53bf39742e64f320f2a3b109cc77c0', sha256: '7ba46c788578f526692e81f3713f05e7c00db900b2d810ec27364cb41c008185' });
 		expect(inputs.find((value: { owner: string }) => value.owner === 'reviewer').buildSdk).toMatchObject({
 			commit: '77a6908d4e7580716e9e2ab92de80150b02cdb06', sha256: 'a31b02194665e8705e8d81331da0901f4088f54deb50a34c236d3a661d2d1aa7' });
+		const rebuild = readFileSync(resolve(root, 'scripts/support/verify-installed-owners.ts'), 'utf8');
+		expect(rebuild).toContain("else if (input.owner === 'cli')");
+		expect(rebuild).toContain("scripts/build/hydrate-exact-sdk.ts");
+		expect(rebuild).toContain('sdk.archiveSha256');
 		const held = ['agent', 'api', 'sdk', 'cli', 'deployment', 'reviewer'].map(owner =>
 			({ owner, commit: 'a'.repeat(40), sha256: owner === 'agent' ? null : 'b'.repeat(64) }));
 		const malformed = [null, held.slice(1), [...held.slice(1), held[1]],

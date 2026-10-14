@@ -16,13 +16,14 @@ beforeEach(() => {
 		if(state.fault==='interrupted')throw new Error('original subprocess interrupted');
 		if(state.fault==='empty')return '';
 		if(state.fault==='malformed')return '{';
+		if(state.fault==='changed'&&command==='git')return 'f'.repeat(40)+'\trefs/heads/staging\n';
 		if(command==='git')return 'a'.repeat(40)+'\trefs/heads/staging\n';
 		if(command==='npm')return JSON.stringify({name:'@treeseed/sdk',versions:['1.0.0'],'dist-tags':{latest:'1.0.0'},maintainers:[{name:'original-owner'}]});
 		const endpoint=args.at(-1)!;
 		const records=endpoint.includes('/issues?')?[{id:1,title:'Original Issue'},{id:2,pull_request:{url:'original-pull'}}]
 			:endpoint.includes('/deployments?')?[]:[{id:2,title:'Original publication'}];
 		if(state.fault==='duplicate')records.push(structuredClone(records[0]!));
-		return JSON.stringify([records]);
+		return JSON.stringify(records);
 	});
 	captureSdkExternalState('/platform',(name,bytes)=>{ const path='/receipts/'+name;state.files.set(path,bytes);freeze.receipts[path]='sha256:'+createHash('sha256').update(bytes).digest('hex'); });state.execute.mockClear();state.read.mockClear();
 });
@@ -45,6 +46,7 @@ describe('SDK simulation external-state gate (fixtures are not upstream proof)',
 		verifySdkExternalState(freeze);expect(state.execute).toHaveBeenCalledTimes(11);expect(state.read).toHaveBeenCalledOnce();
 		for(const name of expected){const path='/receipts/'+name,original=state.files.get(path)!;state.files.set(path,original+'changed');const failed=new Map(state.files);expect(()=>verifySdkExternalState(freeze),name).toThrow('ACCEPTANCE_EXTERNAL_INVENTORY');expect(state.files).toEqual(failed);state.files.set(path,original);}
 		for(const fault of ['empty','malformed','duplicate','interrupted']){state.fault=fault;const held=new Map(state.files);expect(()=>verifySdkExternalState(freeze),fault).toThrow();expect(state.files).toEqual(held);}
+		state.fault='changed';const original=new Map(state.files);expect(()=>verifySdkExternalState(freeze)).toThrow('ACCEPTANCE_EXTERNAL_CHANGED');expect(state.files).toEqual(original);
 		state.fault='';verifySdkExternalState(freeze);
 	});
 	it('does not pass empty or duplicate inventory',()=>{

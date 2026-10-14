@@ -244,7 +244,7 @@ function sdkExternalCommands(platform: string) {
 		for (const kind of ['releases', 'issues', 'pull-requests', 'deployments'] as const) {
 			const endpoint = kind === 'pull-requests' ? 'pulls' : kind;
 			const query = '?per_page=100' + (kind === 'issues' || kind === 'pull-requests' ? '&state=all' : '');
-			add(source.key + '-' + kind + '.json', { command: 'gh', args: ['api', '--hostname', 'github.com', '--method', 'GET', '--paginate', '--slurp', 'repos/' + match[1] + '/' + endpoint + query], kind, repository: match[1] });
+			add(source.key + '-' + kind + '.json', { command: 'gh', args: ['api', '--hostname', 'github.com', '--method', 'GET', '--paginate', 'repos/' + match[1] + '/' + endpoint + query], kind, repository: match[1] });
 		}
 	}
 	assert.ok(repositories.size > 0, 'ACCEPTANCE_EXTERNAL_SCOPE: Complete original source/library selection required');
@@ -254,8 +254,37 @@ function sdkExternalCommands(platform: string) {
 	return { operator, commands };
 }
 
+/** Frame the original gh --paginate JSON arrays without altering strings,
+ * guessing records from exit zero, or requiring a newer CLI flag. */
+function externalJsonPages(bytes: string): unknown[] {
+	const pages: unknown[] = [], stack: string[] = [];
+	let start = -1, quoted = false, escaped = false;
+	for (let index = 0; index < bytes.length; index++) {
+		const character = bytes[index]!;
+		if (start < 0) {
+			if (/\s/u.test(character)) continue;
+			assert.equal(character, '[', 'ACCEPTANCE_EXTERNAL_PAGES: Original array page required');
+			start = index; stack.push(character); continue;
+		}
+		if (quoted) {
+			if (escaped) escaped = false;
+			else if (character === '\\') escaped = true;
+			else if (character === '"') quoted = false;
+			continue;
+		}
+		if (character === '"') quoted = true;
+		else if (character === '[' || character === '{') stack.push(character);
+		else if (character === ']' || character === '}') {
+			assert.equal(stack.pop(), character === ']' ? '[' : '{', 'ACCEPTANCE_EXTERNAL_PAGES: Original page is malformed');
+			if (!stack.length) { pages.push(JSON.parse(bytes.slice(start, index + 1))); start = -1; }
+		}
+	}
+	assert.ok(start === -1 && !quoted && !escaped && pages.length > 0, 'ACCEPTANCE_EXTERNAL_PAGES: Original paginated stream is missing or interrupted');
+	return pages;
+}
+
 function externalPages(bytes: string): Array<Record<string, unknown>> {
-	const pages: unknown = JSON.parse(bytes);
+	const pages: unknown = externalJsonPages(bytes);
 	assert.ok(Array.isArray(pages) && pages.length > 0 && pages.every(Array.isArray), 'ACCEPTANCE_EXTERNAL_PAGES: Original complete paginated arrays required');
 	const rows = pages.flat() as unknown[], ids = new Set<string>();
 	return rows.map(value => {
@@ -291,7 +320,7 @@ function observeExternalCommand(input: ExternalCommand): string {
 	if (input.kind === 'issues') values = values.filter(value => !Object.hasOwn(value, 'pull_request'));
 	if (input.kind === 'deployments') values = values.map(value => {
 		assert.ok(typeof value.id === 'number' && Number.isSafeInteger(value.id) && value.id > 0, 'ACCEPTANCE_EXTERNAL_DEPLOYMENT: Native numeric identity required');
-		const statuses = externalPages(execute('gh', ['api', '--hostname', 'github.com', '--method', 'GET', '--paginate', '--slurp', 'repos/' + input.repository + '/deployments/' + value.id + '/statuses?per_page=100']));
+		const statuses = externalPages(execute('gh', ['api', '--hostname', 'github.com', '--method', 'GET', '--paginate', 'repos/' + input.repository + '/deployments/' + value.id + '/statuses?per_page=100']));
 		assert.ok(!Object.hasOwn(value, 'statuses'), 'ACCEPTANCE_EXTERNAL_DEPLOYMENT: Ambiguous original payload');
 		return { ...value, statuses };
 	});

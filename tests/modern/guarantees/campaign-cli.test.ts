@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { encodeCapacityPageCursor } from '@treeseed/sdk/capacity-pagination';
 
 const state = vi.hoisted(() => ({ run: undefined as (() => Promise<void>) | undefined,
-	read: vi.fn(), verify: vi.fn(), inspect: vi.fn(), graphInspect: vi.fn(), retain: vi.fn(), retainReview: vi.fn(), freeze: {} as Record<string, any> }));
+	read: vi.fn(), verify: vi.fn(), external: vi.fn(), inspect: vi.fn(), graphInspect: vi.fn(), retain: vi.fn(), retainReview: vi.fn(), freeze: {} as Record<string, any> }));
 vi.mock('node:test', () => ({ default: (_name: string, _options: unknown, run: () => Promise<void>) => { state.run = run; } }));
 vi.mock('node:fs', () => ({ existsSync: () => true, readFileSync: (path: string) => path === '/freeze'
 	? JSON.stringify(state.freeze) : Buffer.alloc(0) }));
@@ -13,7 +13,7 @@ vi.mock('../../acceptance/campaign.ts', async importOriginal => ({
 	...await importOriginal<typeof import('../../acceptance/campaign.ts')>(), retainCampaignWorkdayStart: state.retain, retainCampaignPlanReview: state.retainReview,
 }));
 vi.mock('../../acceptance/sdk-runtime-golden.test.ts', () => ({ verifyGolden: state.verify }));
-vi.mock('../../acceptance/prepare-campaign.ts', () => ({ prepareSdkCampaign: vi.fn(), verifySdkExternalState: vi.fn() }));
+vi.mock('../../acceptance/prepare-campaign.ts', () => ({ prepareSdkCampaign: vi.fn(), verifySdkExternalState: state.external }));
 vi.mock('../../acceptance/workday/support/monitoring/live-assignment-records.ts', () => ({
 	observeLiveAssignmentRecords: state.inspect, inspectLiveAssignmentProfile: vi.fn(),
 }));
@@ -46,7 +46,7 @@ function transport(show: () => unknown) {
 }
 beforeEach(() => {
 	vi.stubEnv('TREESEED_ACCEPTANCE_FREEZE_PATH', '/freeze');
-	state.read.mockReset(); state.verify.mockReset(); state.inspect.mockReset(); state.graphInspect.mockReset();
+	state.read.mockReset(); state.verify.mockReset(); state.external.mockReset(); state.inspect.mockReset(); state.graphInspect.mockReset();
 	state.retainReview.mockReset();
 	state.retain.mockReset().mockImplementation(receipt => { process.env.TREESEED_ACCEPTANCE_WORKDAY_ID = receipt.workdayId; return receipt.workdayId; });
 	state.freeze = { createdAt: new Date().toISOString(), host: { manifestDigest: `sha256:${'a'.repeat(64)}`, guestImageDigest: `sha256:${'b'.repeat(64)}` },
@@ -57,6 +57,18 @@ beforeEach(() => {
 });
 afterEach(() => vi.useRealTimers());
 describe('campaign CLI composition units (mocked transport, not native or live acceptance)', () => {
+ it('denies missing changed denied or interrupted external inventories before admission and retains the original frozen input before exact retry', async () => {
+  const failures: Error[]=[];
+  for(const boundary of ['missing','changed','denied','interrupted']) {
+   state.read.mockReset();state.verify.mockReset();state.inspect.mockReset();state.retain.mockClear();state.external.mockReset();transport(()=>observed());
+   const failure=new Error('Original external inventory '+boundary);failures.push(failure);const held=structuredClone(state.freeze);
+   state.external.mockImplementation(()=>{throw failure;});await expect(state.run!()).rejects.toBe(failure);
+   expect(state.external).toHaveBeenCalledExactlyOnceWith(state.freeze);expect(state.read).not.toHaveBeenCalled();expect(state.retain).not.toHaveBeenCalled();expect(state.verify).not.toHaveBeenCalled();expect(state.inspect).not.toHaveBeenCalled();expect(state.freeze).toEqual(held);
+  }
+  const retained=[...failures];state.external.mockReset();state.read.mockReset();transport(()=>observed());await state.run!();
+  expect(state.external).toHaveBeenCalledTimes(2);expect(state.external.mock.invocationCallOrder[0]).toBeLessThan(state.read.mock.invocationCallOrder[0]!);expect(state.external.mock.invocationCallOrder[1]).toBeGreaterThan(state.verify.mock.invocationCallOrder.at(-1)!);expect(failures).toEqual(retained);
+ });
+
 	it('reports an unsafe frozen request before admission and classifies contradictory runtime as an implementation defect without unsafe mutation', async () => {
 		const stderr = vi.spyOn(console, 'error').mockImplementation(() => {});
 		try {

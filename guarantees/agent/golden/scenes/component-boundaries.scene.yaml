@@ -3,6 +3,9 @@ id: agent.golden.component-boundaries
 title: Golden execution component boundaries
 scope: local-component-tests
 workflow:
+  - id: external-bounded-reads
+    action: { verifier: agent.golden.external-bounded-reads }
+    expect: { status: passed }
   - id: sdk-installed-custody-binding-unit
     action: { verifier: agent.golden.sdk-installed-custody-binding-unit }
     expect: { status: passed }

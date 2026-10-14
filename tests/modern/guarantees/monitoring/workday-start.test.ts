@@ -1,3 +1,4 @@
+import * as campaign from '../../../acceptance/campaign.ts';
 import { afterEach, expect, it, vi } from 'vitest';
 import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { campaignWorkdayId, retainCampaignWorkdayStart } from '../../../acceptance/campaign.ts';
@@ -12,6 +13,8 @@ it('retains the exact API start receipt for later isolated verifiers without mut
 		expect(existsSync(f.retained), 'Actual API receipt must cross the child-process boundary').toBe(true);
 		expect(JSON.parse(readFileSync(f.retained, 'utf8'))).toEqual(before);
 		expect(readFileSync(f.path)).toEqual(f.bytes); expect(f.receipt).toEqual(before);
+		const retain = Reflect.get(campaign, 'retainCampaignPlanReview'); expect.soft(typeof retain).toBe('function');
+
 	} finally { f.close(); }
 	expect(existsSync(f.root)).toBe(false);
 });

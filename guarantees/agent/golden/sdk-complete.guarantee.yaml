@@ -189,4 +189,6 @@ acceptanceCriteria:
     verifierRefs: [agent.golden.execution-clock-observation-live-1, api.golden.execution-protected-observation-live-1, agent.golden.live.results]
   - criterion: 6d60760e803393ac8b34ab27a04de70ca629758febb90080fdeb1dca9d39b16a
     verifierRefs: [agent.golden.live.campaign]
+  - criterion: a07716b1dea1d92f60e010366f4c9330d7543e1efd8c062af74ebcc3849c572d
+    verifierRefs: ["agent.golden.execution-clock-observation-live-1","api.golden.execution-protected-observation-live-1","agent.golden.live.settlement","agent.golden.architecture-record-custody-live-1"]
 

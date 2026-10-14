@@ -37,7 +37,9 @@ const upstream = httpsServer(tls, (request, response) => {
 	}
 	if (host !== 'api.github.com' || request.headers.authorization !== 'token controlled-native-token') { response.writeHead(403).end('{}'); return; }
 	if (fault === 'denied') { response.writeHead(403).end('{"message":"Controlled native denial"}'); return; }
-	if (fault === 'interrupted') { request.socket.destroy(); return; }
+	// Keep the observed native request in flight until its owning AbortSignal
+	// interrupts the actual subprocess; never count pre-I/O cancellation as proof.
+	if (fault === 'interrupted') return;
 	if (fault === 'malformed') { response.writeHead(200, { 'content-type': 'application/json' }).end('{'); return; }
 	const page = Number(url.searchParams.get('page') ?? '1'), status = url.pathname.includes('/statuses');
 	const records: Array<Record<string, unknown>> = status ? [{ id: 30 + page, state: page === 1 ? 'success' : 'inactive' }]

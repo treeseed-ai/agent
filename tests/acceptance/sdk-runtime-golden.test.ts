@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { phaseBoundaryCancelled } from './workday/support/monitoring/live-assignment-records.ts';
 import { isDeepStrictEqual } from 'node:util';
 import { createHash } from 'node:crypto';
 import test from 'node:test';
@@ -20,16 +21,6 @@ const text = (value: unknown): string => typeof value === 'string' ? value : '';
 const gates = ['lifecycle', 'collaboration', 'graph', 'revision', 'results', 'settlement', 'reporter', 'stopped'] as const;
 type Gate = typeof gates[number];
 
-function phaseBoundaryCancelled(item: Row, run: Row): boolean {
-	const parameters = row(run.parameters), time = row(row(row(item.capacityEnvelope).budget).time);
-	const boundary = Date.parse(text(run.startedAt)) + Number(parameters.durationSeconds) * Number(parameters.planningPercent) * 10;
-	return Number.isFinite(boundary) && item.status === 'cancelled' && item.lifecycleCode === 'planning_boundary_cancelled'
-		&& ['planning','estimating'].includes(text(row(row(item.assignmentAttempt).effectiveProfile).activity))
-		&& Date.parse(text(time.authorityDeadlineAt)) === boundary
-		&& Date.parse(text(time.executionDeadlineAt ?? time.preparationDeadlineAt)) === boundary
-		&& Date.parse(text(item.failedAt)) >= boundary
-		&& row(row(item.lifecycleOutput).performance).disposition === 'cancelled';
-}
 export function readWorkdayAssignments(workdayId: string, startedAt: string, team: string): Row[] {
 	const assignments: Row[] = [];
 	const start = Date.parse(startedAt);

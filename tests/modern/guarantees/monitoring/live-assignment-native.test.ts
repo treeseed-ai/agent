@@ -1,3 +1,4 @@
+import * as normalHistory from '../../../acceptance/workday/support/monitoring/live-assignment-records.ts';
 import { verifyAssignmentContextRead } from '../../../acceptance/workday/support/monitoring/assignment-context.ts';
 import { createServer } from 'node:http';
 import { createHash } from 'node:crypto';
@@ -89,6 +90,21 @@ it('native configured Kernel Git result and public SDK assignment reads reach th
 		const item: Row = { ...liveAssignmentRecord(f.attempt), status: 'completed', leaseState: 'released', completedAt: result.completedAt, assignmentResult: result };
 		Object.assign(row(item.assignmentAttempt), { status: 'completed', finishedAt: result.completedAt });
 		const run = liveRun(item); Object.assign(run.parameters, { acceptanceCampaignId: campaign });
+		const normal = (normalHistory as unknown as Record<string, (items: Row[], graph: Row, decisions: ReadonlyMap<string, Row>, run: Row) => void>).verifyNormalAttemptRevisions;
+		expect(normal).toBeTypeOf('function'); normal!([item], liveAssignmentGraph(item), new Map(), run);
+		const originalNormal = structuredClone(item), normalFailures: Row[][] = [];
+		for (const mutation of ['duplicate', 'gap', 'failed', 'returned', 'expired']) {
+			const changed=structuredClone(item), values=[changed];
+			if (mutation==='duplicate' || mutation==='gap') {
+				const extra=structuredClone(item); extra.id='extra-native-issued'; row(extra.assignmentAttempt).id=extra.id;
+				if(mutation==='gap') row(extra.assignmentAttempt).nodeRevision=3; values.push(extra);
+			} else changed.status=mutation;
+			normalFailures.push(structuredClone(values)); expect(() => normal!(values,liveAssignmentGraph(item),new Map(),run),mutation).toThrow('ACCEPTANCE_NORMAL_REVISIONS');
+			expect(values).toEqual(normalFailures.at(-1)); expect(item).toEqual(originalNormal);
+		}
+		const retainedNormalFailures=structuredClone(normalFailures); normal!([item],liveAssignmentGraph(item),new Map(),run);
+		expect(normalFailures).toEqual(retainedNormalFailures); expect(f.git('rev-parse','HEAD')).toBe(candidate);
+
 		const retained = new Map<string, Row>(), before = structuredClone({ item, run });
 		let mode = 'exact'; const requests: string[] = [], failed: Array<{ mode: string; record: Row }> = [];
 		server = createServer((request, response) => {

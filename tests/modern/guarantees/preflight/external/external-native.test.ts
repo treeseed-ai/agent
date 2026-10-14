@@ -1,32 +1,32 @@
-import { afterEach, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, expect, it, vi } from 'vitest';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import * as preparation from '../../../../acceptance/prepare-campaign.ts';
 import { nativeExternalFixture } from './external-native-fixture.ts';
-
-afterEach(() => vi.unstubAllEnvs());
 const { captureSdkExternalState, verifySdkExternalState } = preparation;
-
-it('native Git GitHub registry and protected local manager reads retain every seed-owned external boundary and original failures before exact retry', async context => {
-	const f = await nativeExternalFixture(); let originalFailure: unknown;
-	const cancellation=new AbortController();let closing:Promise<void>|undefined;const close=()=>closing??=f.close();
-	context.onTestFinished(async()=>{cancellation.abort();await close();});
-	const measured=async<T>(phase:string,run:()=>Promise<T>)=>{const started=performance.now();try{return await run();}finally{console.log(JSON.stringify({nativeExternalPhase:phase,elapsedMillis:performance.now()-started}));}};
-	try {
-		for (const [key, value] of Object.entries(f.environment)) vi.stubEnv(key, value);
-		const receipts: Record<string, string> = {}, captures = new Map<string, string>();
-		await measured('capture',()=>captureSdkExternalState(f.root, (name, bytes) => { const path = join(f.root, name); writeFileSync(path, bytes); receipts[path] = f.archiveDigest(path); captures.set(name, bytes); },cancellation.signal));
+let f:Awaited<ReturnType<typeof nativeExternalFixture>>;
+const cancellation=new AbortController(),receipts:Record<string,string>={},captures=new Map<string,string>(),freeze={receipts};
+let frozen:{receipts:Record<string,string>;captures:Map<string,string>};
+const measured=async<T>(phase:string,run:()=>Promise<T>)=>{const started=performance.now();try{return await run();}finally{console.log(JSON.stringify({nativeExternalPhase:phase,elapsedMillis:performance.now()-started}));}};
+beforeAll(async()=>{
+ f=await nativeExternalFixture();
+ for(const[key,value]of Object.entries(f.environment))vi.stubEnv(key,value);
+ await measured('capture',()=>captureSdkExternalState(f.root, (name, bytes) => { const path = join(f.root, name); writeFileSync(path, bytes); receipts[path] = f.archiveDigest(path); captures.set(name, bytes); },cancellation.signal));
 		expect(captures.size).toBe(172); expect(captures.has('sdk-dist-tags.json')).toBe(false);
 		for (const repository of f.repositories) {
 			const refs = captures.get(encodeURIComponent(repository.key) + '-remote-refs.txt')!; expect(refs).toContain(f.base + '\trefs/heads/staging'); expect(refs).toContain(f.base + '\trefs/tags/original');
 			for (const kind of ['releases', 'issues', 'pull-requests', 'deployments']) expect(JSON.parse(captures.get(encodeURIComponent(repository.key) + '-' + kind + '.json')!)).toHaveLength(2);
 		}
-		const freeze = { receipts }, frozen = structuredClone({ receipts, captures });
-		// Capture is the complete original before observation. The complete after
-		// verification below also proves exact retry; do not run an identical
-		// aggregate positive verification twice in this one native case.
-		const failures: Array<{ mode: string; message: string }> = [];
-		for (const fault of ['denied', 'malformed', 'duplicate', 'interrupted']) {
+ frozen=structuredClone({receipts,captures});
+},30_000);
+afterAll(async()=>{try{cancellation.abort();if(f)await f.close();}finally{vi.unstubAllEnvs();}},6_000);
+
+// Setup and each distinct native behavior keep the original 30-second bound.
+// Both cases are selected explicitly in the existing component scene.
+it('native denied malformed duplicate and interrupted external reads retain original frozen bytes before complete exact retry',async()=>{
+ const failures:Array<{mode:string;message:string}>=[];
+ try{
+  for (const fault of ['denied', 'malformed', 'duplicate', 'interrupted']) {
 			const beforeFault=await f.control({snapshot:true});expect(Array.isArray(beforeFault.requests)).toBe(true);const offset=(beforeFault.requests as unknown[]).length;
 			await f.control({ fault }); let message = '';let actualInterruption=false,failureObserved:unknown;
 			try { await measured(fault,async()=>{
@@ -41,8 +41,15 @@ it('native Git GitHub registry and protected local manager reads retain every se
 			expect(failureObserved).toBeInstanceOf(Error);if(fault==='interrupted'){expect(actualInterruption).toBe(true);expect(failureObserved).toBeInstanceOf(AggregateError);expect((failureObserved as AggregateError).errors.some(error=>error&&error.code==='ABORT_ERR')).toBe(true);}
 			failures.push({ mode: fault, message }); expect(message, fault).not.toBe(''); expect({ receipts, captures }).toEqual(frozen);
 		}
-		await f.control({ fault: '' });
-		const repository = f.repositories[0]!, path = join(f.root, 'repositories', repository.key);
+  const retained=structuredClone(failures);await f.control({fault:''});
+  await measured('fault-exact-retry',()=>verifySdkExternalState(freeze,cancellation.signal));
+  expect(failures).toEqual(retained);expect(failures).toHaveLength(4);expect({receipts,captures}).toEqual(frozen);
+ }finally{await f.control({fault:''});}
+},30_000);
+
+it('native Git GitHub registry and protected local manager reads retain every seed-owned external boundary and original failures before exact retry',async()=>{
+ const failures:Array<{mode:string;message:string}>=[];
+ const repository = f.repositories[0]!, path = join(f.root, 'repositories', repository.key);
 		f.git(['-C', path, 'update-ref', 'refs/heads/staging', f.advanced]); f.git(['-C', path, 'update-server-info']);
 		await expect(async () => verifySdkExternalState(freeze,cancellation.signal)).rejects.toThrow('ACCEPTANCE_EXTERNAL_CHANGED');
 		failures.push({ mode: 'native-upstream-ref', message: readFileSync(join(path, 'info/refs'), 'utf8') });
@@ -60,9 +67,7 @@ it('native Git GitHub registry and protected local manager reads retain every se
 		// retain that changed owning history rather than fabricate an identical reset.
 		expect(readSelection()).not.toBe(originalSelection);
 		const snapshot = await f.control({ snapshot: true }); expect(Array.isArray(snapshot.requests)).toBe(true);
-		expect(failures).toEqual(retained); expect({ receipts, captures }).toEqual(frozen); expect(failures).toHaveLength(6);
+		expect(failures).toEqual(retained); expect({ receipts, captures }).toEqual(frozen); expect(failures).toHaveLength(2);
 		// Controlled upstream records/native owner configuration; no current
 		// governed portfolio, model execution or managed passing receipt is claimed.
-	} catch (error) { originalFailure = error; throw error; }
-	finally { try { cancellation.abort();await close(); } catch (cleanup) { throw originalFailure ? new AggregateError([originalFailure, cleanup], 'Native observation and scoped cleanup failed') : cleanup; } }
-}, 30_000);
+},30_000);

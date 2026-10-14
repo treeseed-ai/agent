@@ -3981,3 +3981,9 @@ verifiers:
     ownerPackage: '@treeseed/agent'
     testFile: tests/modern/guarantees/campaign-cli.test.ts
     testName: denies missing changed denied or interrupted external inventories before admission and retains the original frozen input before exact retry
+
+  agent.golden.native-external-failures:
+    kind: vitestCase
+    ownerPackage: '@treeseed/agent'
+    testFile: tests/modern/guarantees/preflight/external/external-native.test.ts
+    testName: native denied malformed duplicate and interrupted external reads retain original frozen bytes before complete exact retry

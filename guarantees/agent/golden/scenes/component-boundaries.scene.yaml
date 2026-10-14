@@ -2306,3 +2306,7 @@ workflow:
   - id: external-pre-admission
     action: { verifier: agent.golden.external-pre-admission }
     expect: { status: passed }
+
+  - id: native-external-failures
+    action: { verifier: agent.golden.native-external-failures }
+    expect: { status: passed }

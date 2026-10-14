@@ -16,7 +16,7 @@ function selection(): {session: DevelopmentSession; candidates: DevelopmentCandi
   repositories:[{projectId:'original-project',repository:'treeseed-ai/sdk',worktree:'/controlled/worktree',commit:'a'.repeat(40),branch:'staging',dirty:false,dirtyDigest:null,recipeDigest:'sha256:'+'b'.repeat(64)}],
   targets:[{projectId:'original-project',targetId:'original-target',mode:'live',generation:1,health:'ready'}],leases:[],restoredReceiptId:null,blockers:[]},candidates:[]};
 }
-beforeEach(() => {
+beforeEach(async () => {
 	vi.stubEnv('TREESEED_ACCEPTANCE_PLATFORM_PATH','/platform');vi.stubEnv('TREESEED_ACCEPTANCE_TEAM','treeseed');state.fault='';state.files.clear();state.execute.mockReset();state.read.mockReset().mockReturnValue({sessions:[selection()]});
 	state.execute.mockImplementation((command:string,args:string[])=> {
 		if(state.fault==='interrupted')throw new Error('original subprocess interrupted');
@@ -37,7 +37,7 @@ beforeEach(() => {
 		return JSON.stringify(records);
 	});
 	state.native.mockReset().mockImplementation((command:string,args:string[],_options:unknown,callback:(error:Error|null,stdout:string,stderr:string)=>void)=>{try{callback(null,state.execute(command,args),'');}catch(error){callback(error as Error,'','');}});
-	captureSdkExternalState('/platform',(name,bytes)=>{ const path='/receipts/'+name;state.files.set(path,bytes);freeze.receipts[path]='sha256:'+createHash('sha256').update(bytes).digest('hex'); });state.execute.mockClear();state.read.mockClear();
+	await captureSdkExternalState('/platform',(name,bytes)=>{ const path='/receipts/'+name;state.files.set(path,bytes);freeze.receipts[path]='sha256:'+createHash('sha256').update(bytes).digest('hex'); });state.execute.mockClear();state.read.mockClear();
 });
 describe('SDK simulation external-state gate (fixtures are not upstream proof)',()=>{
  it('uses at most five concurrent original read commands and waits for every observation without narrowing the inventory',async()=>{
@@ -51,9 +51,9 @@ describe('SDK simulation external-state gate (fixtures are not upstream proof)',
  });
 
 
-	it('retains receipt storage beside the immutable freeze and captures each external inventory once',()=>{
+	it('retains receipt storage beside the immutable freeze and captures each external inventory once',async()=>{
 		state.directory.mockReturnValue('/acceptance/sdk.freeze.json.receipts-unique');expect(acceptanceReceiptDirectory('/acceptance/sdk.freeze.json')).toBe('/acceptance/sdk.freeze.json.receipts-unique');expect(state.directory).toHaveBeenCalledWith('/acceptance/sdk.freeze.json.receipts-');
-		const capture=vi.fn();captureSdkExternalState('/platform',capture);const names=capture.mock.calls.map(call=>call[0]);
+		const capture=vi.fn();await captureSdkExternalState('/platform',capture);const names=capture.mock.calls.map(call=>call[0]);
 		expect([...names].sort()).toEqual([...expected].sort());expect(new Set(names).size).toBe(12);expect(names).not.toContain('sdk-dist-tags.json');expect(state.execute).toHaveBeenCalledTimes(11);
 		for(const[command,args]of state.execute.mock.calls as Array<[string,string[]]>) {
 			if(command==='npm')expect(args).toContain('--registry=https://registry.npmjs.org');
@@ -63,40 +63,40 @@ describe('SDK simulation external-state gate (fixtures are not upstream proof)',
 		expect(state.read).toHaveBeenCalledExactlyOnceWith(['dev','status','--all'],'treeseed',true);
 		const originals=state.operator.repositories;try {
 			state.operator.repositories=originals.map(value=>({...value,key:'repository:treeseed/'+value.key}));
-			const canonical=vi.fn();captureSdkExternalState('/platform',canonical);
+			const canonical=vi.fn();await captureSdkExternalState('/platform',canonical);
 			expect(canonical.mock.calls.map(call=>call[0]).filter((name:string)=>name.includes('remote-refs'))).toEqual(['repository%3Atreeseed%2Fsdk-remote-refs.txt','repository%3Atreeseed%2Fsdk-library-remote-refs.txt']);
 		} finally {state.operator.repositories=originals;}
 
 		expect(JSON.parse(state.files.get('/receipts/sdk-issues.json')!)).toEqual([{id:1,title:'Original Issue'}]);
 		expect(JSON.parse(state.files.get('/receipts/sdk-registry.json')!)['dist-tags']).toEqual({latest:'1.0.0'});
-  state.fault='pages-good';const streamed=vi.fn();captureSdkExternalState('/platform',streamed);
+  state.fault='pages-good';const streamed=vi.fn();await captureSdkExternalState('/platform',streamed);
   const releases=JSON.parse(streamed.mock.calls.find(call=>call[0]==='sdk-releases.json')![1]);expect(releases.map((item:{id:number})=>item.id)).toEqual([2,3]);expect(releases[0].title).toContain('][ braces {}');
   const deployments=JSON.parse(streamed.mock.calls.find(call=>call[0]==='sdk-deployments.json')![1]);expect(deployments).toHaveLength(2);expect(deployments.every((item:{statuses:unknown[]})=>item.statuses.length===2)).toBe(true);
   expect(state.execute.mock.calls.some(call=>Array.isArray(call[1])&&call[1].at(-1)==='repos/treeseed-ai/sdk/deployments/2/statuses?per_page=100')).toBe(true);
-  for(const fault of ['pages-truncated','pages-trailing','pages-object','pages-duplicate']){state.fault=fault;expect(()=>captureSdkExternalState('/platform',()=>{}),fault).toThrow('ACCEPTANCE_EXTERNAL_PAGES');}
+  for(const fault of ['pages-truncated','pages-trailing','pages-object','pages-duplicate']){state.fault=fault;await expect(async()=>captureSdkExternalState('/platform',()=>{}),fault).rejects.toThrow('ACCEPTANCE_EXTERNAL_PAGES');}
 
 	});
-	it('reads all three frozen inventories and accepts only unchanged bytes',()=>{
+	it('reads all three frozen inventories and accepts only unchanged bytes',async()=>{
 		// The former three facts remain covered by the complete sole authorities.
-		verifySdkExternalState(freeze);expect(state.execute).toHaveBeenCalledTimes(11);expect(state.read).toHaveBeenCalledOnce();
-		for(const name of expected){const path='/receipts/'+name,original=state.files.get(path)!;state.files.set(path,original+'changed');const failed=new Map(state.files);expect(()=>verifySdkExternalState(freeze),name).toThrow('ACCEPTANCE_EXTERNAL_INVENTORY');expect(state.files).toEqual(failed);state.files.set(path,original);}
-		for(const fault of ['empty','malformed','duplicate','interrupted']){state.fault=fault;const held=new Map(state.files);expect(()=>verifySdkExternalState(freeze),fault).toThrow();expect(state.files).toEqual(held);}
-		state.fault='changed';const original=new Map(state.files);expect(()=>verifySdkExternalState(freeze)).toThrow('ACCEPTANCE_EXTERNAL_CHANGED');expect(state.files).toEqual(original);
-		state.fault='';verifySdkExternalState(freeze);
+		await verifySdkExternalState(freeze);expect(state.execute).toHaveBeenCalledTimes(11);expect(state.read).toHaveBeenCalledOnce();
+		for(const name of expected){const path='/receipts/'+name,original=state.files.get(path)!;state.files.set(path,original+'changed');const failed=new Map(state.files);await expect(async()=>verifySdkExternalState(freeze),name).rejects.toThrow('ACCEPTANCE_EXTERNAL_INVENTORY');expect(state.files).toEqual(failed);state.files.set(path,original);}
+		for(const fault of ['empty','malformed','duplicate','interrupted']){state.fault=fault;const held=new Map(state.files);await expect(async()=>verifySdkExternalState(freeze),fault).rejects.toThrow();expect(state.files).toEqual(held);}
+		state.fault='changed';const original=new Map(state.files);await expect(async()=>verifySdkExternalState(freeze)).rejects.toThrow('ACCEPTANCE_EXTERNAL_CHANGED');expect(state.files).toEqual(original);
+		state.fault='';await verifySdkExternalState(freeze);
   for(const change of [(value:ReturnType<typeof selection>)=>{value.session.hostId='foreign-host';},(value:ReturnType<typeof selection>)=>{value.session.repositories[0]!.commit='f'.repeat(40);},(value:ReturnType<typeof selection>)=>{value.session.targets[0]!.generation++;},(value:ReturnType<typeof selection>)=>{value.session.targets[0]!.mode='released';}]){
-   const changed=selection();change(changed);const failed=structuredClone(changed);state.read.mockReturnValue({sessions:[changed]});expect(()=>verifySdkExternalState(freeze)).toThrow('ACCEPTANCE_EXTERNAL_CHANGED');expect(changed).toEqual(failed);
+   const changed=selection();change(changed);const failed=structuredClone(changed);state.read.mockReturnValue({sessions:[changed]});await expect(async()=>verifySdkExternalState(freeze)).rejects.toThrow('ACCEPTANCE_EXTERNAL_CHANGED');expect(changed).toEqual(failed);
   }
-  state.read.mockReturnValue({sessions:[selection(),selection()]});expect(()=>verifySdkExternalState(freeze)).toThrow('ACCEPTANCE_EXTERNAL_SELECTIONS');
-  state.read.mockReturnValue({sessions:[{...selection(),candidates:undefined}]});expect(()=>verifySdkExternalState(freeze)).toThrow('ACCEPTANCE_EXTERNAL_SELECTIONS');
-  const health=selection();health.session.targets[0]!.health='degraded';state.read.mockReturnValue({sessions:[health]});verifySdkExternalState(freeze);
-  state.read.mockReturnValue({sessions:[selection()]});verifySdkExternalState(freeze);
+  state.read.mockReturnValue({sessions:[selection(),selection()]});await expect(async()=>verifySdkExternalState(freeze)).rejects.toThrow('ACCEPTANCE_EXTERNAL_SELECTIONS');
+  state.read.mockReturnValue({sessions:[{...selection(),candidates:undefined}]});await expect(async()=>verifySdkExternalState(freeze)).rejects.toThrow('ACCEPTANCE_EXTERNAL_SELECTIONS');
+  const health=selection();health.session.targets[0]!.health='degraded';state.read.mockReturnValue({sessions:[health]});await verifySdkExternalState(freeze);
+  state.read.mockReturnValue({sessions:[selection()]});await verifySdkExternalState(freeze);
 
 	});
-	it('does not pass empty or duplicate inventory',()=>{
+	it('does not pass empty or duplicate inventory',async()=>{
 		const invalid={receipts:Object.fromEntries(Object.keys(freeze.receipts).map(path=>[path,'sha256:'+'0'.repeat(64)]))};
-		expect(()=>verifySdkExternalState(invalid)).toThrow('ACCEPTANCE_EXTERNAL_INVENTORY');expect(state.execute).not.toHaveBeenCalled();
-		expect(()=>verifySdkExternalState({receipts:{}})).toThrow('ACCEPTANCE_EXTERNAL_INVENTORY');expect(state.execute).not.toHaveBeenCalled();expect(state.read).not.toHaveBeenCalled();
-		for(const name of expected){expect(()=>verifySdkExternalState({receipts:{...freeze.receipts,['/duplicate/'+name]:'digest'}}),name).toThrow('ACCEPTANCE_EXTERNAL_INVENTORY');expect(state.execute).not.toHaveBeenCalled();}
-		const original=state.operator.repositories;try{state.operator.repositories=[...original,original[0]!];expect(()=>captureSdkExternalState('/platform',()=>{})).toThrow('ACCEPTANCE_EXTERNAL_SCOPE');expect(state.execute).not.toHaveBeenCalled();}finally{state.operator.repositories=original;}
+		await expect(async()=>verifySdkExternalState(invalid)).rejects.toThrow('ACCEPTANCE_EXTERNAL_INVENTORY');expect(state.execute).not.toHaveBeenCalled();
+		await expect(async()=>verifySdkExternalState({receipts:{}})).rejects.toThrow('ACCEPTANCE_EXTERNAL_INVENTORY');expect(state.execute).not.toHaveBeenCalled();expect(state.read).not.toHaveBeenCalled();
+		for(const name of expected){await expect(async()=>verifySdkExternalState({receipts:{...freeze.receipts,['/duplicate/'+name]:'digest'}}),name).rejects.toThrow('ACCEPTANCE_EXTERNAL_INVENTORY');expect(state.execute).not.toHaveBeenCalled();}
+		const original=state.operator.repositories;try{state.operator.repositories=[...original,original[0]!];await expect(async()=>captureSdkExternalState('/platform',()=>{})).rejects.toThrow('ACCEPTANCE_EXTERNAL_SCOPE');expect(state.execute).not.toHaveBeenCalled();}finally{state.operator.repositories=original;}
 	});
 });

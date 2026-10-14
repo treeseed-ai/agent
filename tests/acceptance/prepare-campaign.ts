@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { canonicalStandardsJson } from '@treeseed/sdk/standards';
 import { developmentSessionSchema, developmentCandidateSchema } from '@treeseed/sdk/development';
 import { createHash } from 'node:crypto';
-import { execFileSync } from 'node:child_process';
+import { execFile, execFileSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, join, resolve } from 'node:path';
 import { parse } from 'yaml';
@@ -106,7 +106,7 @@ export function requireSdkCampaignSupply(supply: Row, durationSeconds: number,
 }
 
 /** Preparation is part of the same native test, never a separate execution authority. */
-export function prepareSdkCampaign(draftPath: string, freezePath: string, team: string): void {
+export function prepareSdkCampaign(draftPath: string, freezePath: string, team: string): Promise<void> {
 	const operatorFreeze = readPreRunCampaignFreeze();
 	assert.ok(operatorFreeze.sdkInput && typeof operatorFreeze.sdkInput === 'object');
 	const frozenInput = operatorFreeze.sdkInput;
@@ -201,7 +201,7 @@ export function prepareSdkCampaign(draftPath: string, freezePath: string, team: 
 	capture('runtime.json', JSON.stringify(runtime)); capture('supply.json', JSON.stringify(supply));
 	const sourceHeads = Object.fromEntries(['sdk', 'api', 'agent', 'deployment', 'cli', 'reviewer'].map(name => [name,
 		execFileSync('git', ['-C', resolve(platform, 'packages', name), 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim()]));
-	captureSdkExternalState(platform, capture);
+	return captureSdkExternalState(platform, capture).then(() => {
 	const preflight = read([...args, '--idempotency-key', `golden-plan:${id}`], team);
 	assert.equal(readFileSync(operatorFreeze.path, 'utf8'), operatorFreeze.bytes,
 		'ACCEPTANCE_CAMPAIGN_FREEZE: Operator manifest changed during preparation');
@@ -214,11 +214,12 @@ export function prepareSdkCampaign(draftPath: string, freezePath: string, team: 
 	writeFileSync(freezePath, JSON.stringify({ createdAt: new Date().toISOString(),
 		proposal: { id, revision: current.activeVersion, digest: current.activeContentHash, estimates: 0 }, request, preflight, sourceHeads,
 		runtimeTargets: runtime, host, guest: { digest: host.guestImageDigest }, providerSupply: supply, receipts }, null, 2), { flag: 'wx' });
+	});
 }
 
-export function captureSdkExternalState(platform: string, capture: (name: string, bytes: string) => void): void {
+export async function captureSdkExternalState(platform: string, capture: (name: string, bytes: string) => void): Promise<void> {
  const {operator,commands}=sdkExternalCommands(platform);
- for(const[name,command]of commands)capture(name,observeExternalCommand(command));
+ await visitExternalCommands(commands,capture);
  capture('development-selections.json',readCampaignDevelopmentSelections());
  assert.equal(readFileSync(operator.path,'utf8'),operator.bytes,'ACCEPTANCE_EXTERNAL_SCOPE: Operator selection changed during observation');
 }
@@ -256,6 +257,18 @@ function sdkExternalCommands(platform: string) {
 	commands.set('sdk-registry.json', { command: 'npm', args: ['view', '@treeseed/sdk', '--json', '--registry=https://registry.npmjs.org'], kind: 'registry' });
 	return { operator, commands };
 }
+
+
+async function visitExternalCommands(commands: Map<string,ExternalCommand>, visit:(name:string,bytes:string)=>void):Promise<void> {
+ const entries=[...commands];
+ for(let offset=0;offset<entries.length;offset+=5){
+  const outcomes=await Promise.allSettled(entries.slice(offset,offset+5).map(async([name,command])=>({name,bytes:await observeExternalCommand(command)})));
+  const failures=outcomes.filter((value):value is PromiseRejectedResult=>value.status==='rejected');
+  if(failures.length)throw new AggregateError(failures.map(value=>value.reason),failures.map(value=>value.reason instanceof Error?value.reason.message:String(value.reason)).join('\n'));
+  for(const outcome of outcomes)if(outcome.status==='fulfilled')visit(outcome.value.name,outcome.value.bytes);
+ }
+}
+
 
 /** Frame the original gh --paginate JSON arrays without altering strings,
  * guessing records from exit zero, or requiring a newer CLI flag. */
@@ -299,9 +312,9 @@ function externalPages(bytes: string): Array<Record<string, unknown>> {
 	});
 }
 
-function observeExternalCommand(input: ExternalCommand): string {
-	const execute = (command: string, args: string[]) => execFileSync(command, args, { encoding: 'utf8', timeout: 30_000, maxBuffer: 32 * 1024 * 1024 });
-	const bytes = execute(input.command, input.args);
+async function observeExternalCommand(input: ExternalCommand): Promise<string> {
+	const execute = (command: string, args: string[]) => new Promise<string>((accept,reject)=>execFile(command,args,{encoding:'utf8',timeout:30_000,maxBuffer:32*1024*1024},(error,stdout)=>error?reject(error):accept(stdout)));
+	const bytes = await execute(input.command, input.args);
 	assert.ok(bytes.length > 0, 'ACCEPTANCE_EXTERNAL_EMPTY: Exit zero without original inventory is inconclusive');
 	if (input.kind === 'refs') {
 		const refs = bytes.trimEnd().split('\n');
@@ -321,12 +334,12 @@ function observeExternalCommand(input: ExternalCommand): string {
 	// GitHub's issues endpoint includes PR summaries. The original pulls
 	// inventory owns those facts; retain only genuine Issues here.
 	if (input.kind === 'issues') values = values.filter(value => !Object.hasOwn(value, 'pull_request'));
-	if (input.kind === 'deployments') values = values.map(value => {
+	if (input.kind === 'deployments') { const expanded: typeof values=[];for(const value of values) {
 		assert.ok(typeof value.id === 'number' && Number.isSafeInteger(value.id) && value.id > 0, 'ACCEPTANCE_EXTERNAL_DEPLOYMENT: Native numeric identity required');
-		const statuses = externalPages(execute('gh', ['api', '--hostname', 'github.com', '--method', 'GET', '--paginate', 'repos/' + input.repository + '/deployments/' + value.id + '/statuses?per_page=100']));
+		const statuses = externalPages(await execute('gh', ['api', '--hostname', 'github.com', '--method', 'GET', '--paginate', 'repos/' + input.repository + '/deployments/' + value.id + '/statuses?per_page=100']));
 		assert.ok(!Object.hasOwn(value, 'statuses'), 'ACCEPTANCE_EXTERNAL_DEPLOYMENT: Ambiguous original payload');
-		return { ...value, statuses };
-	});
+		expanded.push({ ...value, statuses });
+	} values=expanded; }
 	return canonicalStandardsJson(values);
 }
 
@@ -349,7 +362,7 @@ export function readCampaignDevelopmentSelections(): string {
 	return canonicalStandardsJson(values);
 }
 
-export function verifySdkExternalState(freeze: Row): void {
+export async function verifySdkExternalState(freeze: Row): Promise<void> {
 	const platform = process.env.TREESEED_ACCEPTANCE_PLATFORM_PATH;
 	assert.ok(platform, 'ACCEPTANCE_CAMPAIGN_WORKSPACE: Explicit Platform workspace required');
 	const { operator, commands } = sdkExternalCommands(platform);
@@ -362,7 +375,7 @@ export function verifySdkExternalState(freeze: Row): void {
 	// portfolio's issue/registry bodies in RAM. Compare one owning inventory at a time.
 	const baseline = (name: string) => { const path=paths.get(name)!;const bytes=readFileSync(path,'utf8');assert.equal(freeze.receipts[path],'sha256:'+createHash('sha256').update(bytes).digest('hex'),'ACCEPTANCE_EXTERNAL_INVENTORY: Original frozen bytes differ from retained digest');return bytes; };
 	for(const name of paths.keys())baseline(name);
-	for(const[name,command]of commands)assert.equal(observeExternalCommand(command),baseline(name),'ACCEPTANCE_EXTERNAL_CHANGED: Simulation changed an external owning boundary');
+	await visitExternalCommands(commands,(name,bytes)=>assert.equal(bytes,baseline(name),'ACCEPTANCE_EXTERNAL_CHANGED: Simulation changed an external owning boundary'));
 	assert.equal(readCampaignDevelopmentSelections(),baseline('development-selections.json'),'ACCEPTANCE_EXTERNAL_CHANGED: Simulation changed a deployment selection');
 	for(const name of paths.keys())baseline(name);
 	assert.equal(readFileSync(operator.path, 'utf8'), operator.bytes, 'ACCEPTANCE_EXTERNAL_SCOPE: Operator selection changed during observation');

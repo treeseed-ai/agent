@@ -19,7 +19,7 @@ test('Frozen SDK campaign drives planning acting review and terminal golden gate
 	assert.ok(path, 'ACCEPTANCE_FREEZE_REQUIRED: Explicit immutable campaign freeze required');
 	const team = process.env.TREESEED_ACCEPTANCE_TEAM ?? 'treeseed';
 	if (!existsSync(path) && process.env.TREESEED_ACCEPTANCE_DRAFT_PATH)
-		prepareSdkCampaign(process.env.TREESEED_ACCEPTANCE_DRAFT_PATH, path, team);
+		await prepareSdkCampaign(process.env.TREESEED_ACCEPTANCE_DRAFT_PATH, path, team);
 	const freeze = JSON.parse(readFileSync(path, 'utf8')) as Row;
 	verifyFreezeIntegrity(freeze, readFileSync);
 	const body = freeze.request?.body as Row, allocation = body?.allocation as Row;
@@ -34,7 +34,7 @@ test('Frozen SDK campaign drives planning acting review and terminal golden gate
 	assert.equal(allocation?.planningTurnMaximumSeconds, 180);
 	requirePlanningWindow(body.durationSeconds, allocation.planningPercent, allocation.planningTurnMaximumSeconds);
 	// Current complete external authority must pass before any metered admission.
-	verifySdkExternalState(freeze);
+	await verifySdkExternalState(freeze);
 	// API validates first admission expiry and replays the exact cached start after expiry.
 	const started = read(['workdays', 'start', '--preflight', freeze.preflight.id, '--digest', freeze.preflight.preflightDigest,
 		'--yes', '--idempotency-key', `golden-start:${freeze.preflight.id}`], team);
@@ -86,6 +86,6 @@ test('Frozen SDK campaign drives planning acting review and terminal golden gate
 				'ACCEPTANCE_EXACT_DECISION: External approval did not create an exact decision');
 			externallyApproved = true;
 		},
-		verify: () => { for (const gate of ['lifecycle', 'graph', 'revision', 'results', 'settlement', 'reporter'] as const) verifyGolden(gate);
-			verifySdkExternalState(freeze); } });
+		verify: async () => { for (const gate of ['lifecycle', 'graph', 'revision', 'results', 'settlement', 'reporter'] as const) verifyGolden(gate);
+			await verifySdkExternalState(freeze); } });
 });

@@ -31,12 +31,12 @@ export async function observeLiveGraphRevisions(teamId: string, current: () => R
         assert.deepEqual(records[revision - 1], original, label + ': Original revision changed or disappeared');
       }
       for (const record of records) if (!retained.has(record.revision)) {
-        snapshot(structuredClone(record), structuredClone(graph)); retained.set(record.revision, structuredClone(record));
+        snapshot(structuredClone(record), { teamId: graph.teamId, revision: graph.revision, digest: graph.digest }); retained.set(record.revision, structuredClone(record));
       }
       return;
     }
     assert.ok(/^\d+$/u.test(response.nextCursor) && Number.isSafeInteger(Number(response.nextCursor)) && Number(response.nextCursor) > Number(cursor), label);
     cursor = response.nextCursor;
-    if (Number(cursor) > Number(graph.revision)) { graph = await current(); checkHead(graph); }
+    if (Number(cursor) > Number(graph.revision)) { graph = structuredClone(await current()); checkHead(graph); }
   }
 }

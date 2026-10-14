@@ -150,13 +150,14 @@ it('native public reconciliation denies changed previews before actual commands 
 		expect(failures).toEqual(retained); expect({ graph, plan, receipt }).toEqual(held);
 		expect(requests).toHaveLength(44);
 		for (const request of requests) expect(request.path).toBe(`/v1/teams/${graph.teamId}/${request.method === 'GET' ? 'execution-graph' : 'execution-graph/reconcile'}`);
-		mode = 'live-advance'; const snapshots: unknown[] = [], retainedRevisions = new Map();
+		mode = 'live-advance'; const snapshots: unknown[] = [], heads: unknown[] = [], retainedRevisions = new Map();
 		const current = async () => { const value = (await client.invoke(controlPlaneOperation('execution.graph.show'), { path: { teamId: graph.teamId }, query: {}, body: undefined })).data;
 			assert.ok(value && typeof value === 'object' && !Array.isArray(value)); return value as Record<string, unknown>; };
 		const watch = async (cursor: string) => { const value = (await client.invoke(controlPlaneOperation('execution.graph.watch'), { path: { teamId: graph.teamId }, query: { cursor }, body: undefined })).data;
 			assert.ok(value && typeof value === 'object' && !Array.isArray(value)); return value as Record<string, unknown>; };
-		const inspect = () => observeLiveGraphRevisions(graph.teamId, current, watch, retainedRevisions, revision => snapshots.push(structuredClone(revision)));
+		const inspect = () => observeLiveGraphRevisions(graph.teamId, current, watch, retainedRevisions, (revision, head) => { snapshots.push(structuredClone(revision)); heads.push(structuredClone(head)); });
 		await inspect(); expect(snapshots).toEqual([receipt, next]); expect([...retainedRevisions.values()]).toEqual([receipt, next]);
+		expect(heads).toEqual(Array.from({ length: 2 }, () => ({ teamId: graph.teamId, revision: 2, digest: next.graphDigest })));
 		await Promise.all([inspect(), inspect()]); expect(snapshots).toEqual([receipt, next]);
 		const heldRevisions = structuredClone([...retainedRevisions]), failedLive: unknown[] = [];
 		for (const fault of ['hidden', 'duplicate', 'foreign', 'changed', 'denied', 'unavailable', 'json', 'interrupted']) {

@@ -130,10 +130,12 @@ describe('native trusted guest clock relay and owning provider tool', () => {
 						const verify = Reflect.get(authority, 'verifyModelUsageWindow') as ((item: Record<string, unknown>, event: Record<string, unknown>) => void);
 						expect.soft(typeof verify).toBe('function');
 						if (typeof verify === 'function') {
+							const nativeElapsed = result.usage.elapsedSeconds;
+							if (typeof nativeElapsed !== 'number') throw new Error('Original numeric native elapsed measurement required');
 							const completedAt = new Date().toISOString(), item = { id: f.attempt.id, status: result.status, assignmentAttempt: f.attempt,
 								capacityEnvelope: { budget: { time: { executionStartedAt: f.execution.startedAt, executionDeadlineAt: f.execution.deadlineAt, closeoutStartedAt: independentlyFinishedAt } } },
 								assignmentResult: { assignmentId: f.attempt.id, status: result.status, completedAt, timingAwareness: result.timingAwareness,
-									usage: { elapsedSeconds: Math.ceil(result.usage.elapsedSeconds), native: structuredClone(result.usage) } } };
+									usage: { elapsedSeconds: Math.ceil(nativeElapsed), native: structuredClone(result.usage) } } };
 							const event = { id: 'native-guest-window-' + mode, assignmentId: f.attempt.id, runId: f.attempt.workdayId, workdayId: f.attempt.workdayId,
 								teamId: f.attempt.teamId, projectId: f.attempt.projectId, eventIndex: 1, eventType: 'provider.execution.' + result.status,
 								status: 'recorded', createdAt: completedAt, protectedPayload: { providerEvents: result.diagnostics.providerEvents } };

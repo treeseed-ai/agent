@@ -220,7 +220,7 @@ export async function monitorCampaign(input: {
 		failedBoundary?: 'assignment_failed' | 'assignment_returned' | 'assignment_expired' |
 			'graph_failed' | 'graph_returned' | 'graph_expired' };
 	now: () => number; wait: () => Promise<void>; collaboration: () => void;
-	verify: () => void; stop: () => void;
+	verify: () => void; stop: () => void | Promise<void>;
 }): Promise<void> {
 	let planningVerified = false;
 	const incompleteCollaboration = (failure: unknown) => failure instanceof Error
@@ -259,7 +259,7 @@ export async function monitorCampaign(input: {
 		// already-observed simulation workday may be stopped; never mutate a run
 		// whose mode was not proven or whose status is already terminal.
 		if (observedStatus === 'running' && observedMode === 'simulation') {
-			try { input.stop(); }
+			try { await input.stop(); }
 			catch (stopFailure) {
 				// The control plane may terminalize the same run while the stop request
 				// is in flight. Preserve the original acceptance failure in that case.

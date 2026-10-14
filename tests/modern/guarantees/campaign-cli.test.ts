@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { encodeCapacityPageCursor } from '@treeseed/sdk/capacity-pagination';
 
 const state = vi.hoisted(() => ({ run: undefined as (() => Promise<void>) | undefined,
-	read: vi.fn(), verify: vi.fn(), inspect: vi.fn(), retain: vi.fn(), freeze: {} as Record<string, any> }));
+	read: vi.fn(), verify: vi.fn(), inspect: vi.fn(), graphInspect: vi.fn(), retain: vi.fn(), freeze: {} as Record<string, any> }));
 vi.mock('node:test', () => ({ default: (_name: string, _options: unknown, run: () => Promise<void>) => { state.run = run; } }));
 vi.mock('node:fs', () => ({ existsSync: () => true, readFileSync: (path: string) => path === '/freeze'
 	? JSON.stringify(state.freeze) : Buffer.alloc(0) }));
@@ -20,6 +20,7 @@ vi.mock('../../acceptance/workday/support/monitoring/live-assignment-records.ts'
 vi.mock('../../acceptance/workday/support/evidence-pages.ts', async importOriginal => ({
 	...await importOriginal<typeof import('../../acceptance/workday/support/evidence-pages.ts')>(), readCompleteEvidence: () => [],
 }));
+vi.mock('../../acceptance/workday/support/monitoring/live-graph-revisions.ts', () => ({ observeLiveGraphRevisions: state.graphInspect }));
 await import('../../acceptance/campaign.test.ts');
 const workdayId = 'workday-aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
 function observed(status = 'completed') {
@@ -45,7 +46,7 @@ function transport(show: () => unknown) {
 }
 beforeEach(() => {
 	vi.stubEnv('TREESEED_ACCEPTANCE_FREEZE_PATH', '/freeze');
-	state.read.mockReset(); state.verify.mockReset(); state.inspect.mockReset();
+	state.read.mockReset(); state.verify.mockReset(); state.inspect.mockReset(); state.graphInspect.mockReset();
 	state.retain.mockReset().mockImplementation(receipt => { process.env.TREESEED_ACCEPTANCE_WORKDAY_ID = receipt.workdayId; return receipt.workdayId; });
 	state.freeze = { createdAt: new Date().toISOString(), host: { manifestDigest: `sha256:${'a'.repeat(64)}`, guestImageDigest: `sha256:${'b'.repeat(64)}` },
 		guest: { digest: `sha256:${'b'.repeat(64)}` }, receipts: { '/receipt': 'sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855' },
@@ -101,6 +102,11 @@ describe('campaign CLI composition units (mocked transport, not native or live a
 		await expect(state.run!()).rejects.toBe(original);
 		expect(state.inspect).toHaveBeenCalledOnce(); expect(state.verify).not.toHaveBeenCalled();
 		expect(state.read.mock.calls.filter(call => call[0][1] === 'evaluate')).toHaveLength(0);
+		expect(state.read.mock.calls.filter(call => call[0][1] === 'stop').map(call => call[0][2])).toEqual([workdayId]);
+		state.inspect.mockReset(); state.read.mockReset(); transport(() => observed('running'));
+		const missing = new Error('ACCEPTANCE_LIVE_GRAPH: Original graph inventory missing'); state.graphInspect.mockRejectedValue(missing);
+		await expect(state.run!()).rejects.toBe(missing); expect(state.inspect).not.toHaveBeenCalled();
+		expect(state.verify).not.toHaveBeenCalled(); expect(state.read.mock.calls.filter(call => call[0][1] === 'evaluate')).toHaveLength(0);
 		expect(state.read.mock.calls.filter(call => call[0][1] === 'stop').map(call => call[0][2])).toEqual([workdayId]);
 	});
 	it('consumes every original public event page before terminal campaign verification and retains exact immutable event history', async () => {

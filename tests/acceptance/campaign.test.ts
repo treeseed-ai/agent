@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import type { GraphRevision } from '@treeseed/sdk/agent-capacity';
 import { existsSync, readFileSync } from 'node:fs';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
@@ -42,7 +43,7 @@ test('Frozen SDK campaign drives planning acting review and terminal golden gate
 	let externallyApproved = false;
 	const observedEvents = new Map<string, Record<string, unknown>>();
 	const observedAssignments = new Map<string, Record<string, unknown>>();
-	const observedGraphRevisions = new Map();
+	const observedGraphRevisions = new Map<number, GraphRevision>();
 	let currentRun: Record<string, unknown> | undefined;
 	await monitorCampaign({ admittedSimulation: true, admitDiscussion: () => {
 		retainCampaignWorkdayStart(started, path, freeze);

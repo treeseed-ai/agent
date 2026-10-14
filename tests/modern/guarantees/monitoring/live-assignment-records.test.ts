@@ -2,9 +2,28 @@ import { describe, expect, it, vi } from 'vitest';
 import { row, type Row } from '../../../acceptance/acceptance-cli.ts';
 import { verifyDerivedWorkdayModes } from '../../../acceptance/workday/support/campaign-observation.ts';
 import { observeLiveAssignmentRecords } from '../../../acceptance/workday/support/monitoring/live-assignment-records.ts';
-import { liveAssignmentRecord, liveRun } from './live-assignment-fixture.ts';
+import * as normalHistory from '../../../acceptance/workday/support/monitoring/live-assignment-records.ts';
+import { liveAssignmentGraph, liveAssignmentRecord, liveRun } from './live-assignment-fixture.ts';
 
 describe('live canonical assignment observation (controlled inputs, not managed proof)', () => {
+	it('requires complete original normal node revisions and denies duplicate issuance or unexplained extra revisions without repairing failed records', () => {
+		const check = (normalHistory as unknown as Record<string, (items: Row[], graph: Row, decisions: ReadonlyMap<string, Row>) => void>).verifyNormalAttemptRevisions;
+		expect(check, 'original normal history must be verified before terminal success').toBeTypeOf('function');
+		const item=liveAssignmentRecord(), graph=liveAssignmentGraph(item); item.status='completed';
+		row(item.assignmentAttempt).status='completed';
+		const before=structuredClone({item,graph}); check!([item],graph,new Map());
+		for(const mode of ['duplicate','gap','first-revision','foreign-node','failed','returned','expired']) {
+			const supplied=structuredClone(item), items=[supplied];
+			if(mode==='duplicate') {const duplicate=structuredClone(item); duplicate.id='duplicate-issued-attempt'; row(duplicate.assignmentAttempt).id=duplicate.id; items.push(duplicate);}
+			if(mode==='gap') {const extra=structuredClone(item); extra.id='extra-revision'; row(extra.assignmentAttempt).id=extra.id; row(extra.assignmentAttempt).nodeRevision=3; items.push(extra);}
+			if(mode==='first-revision') row(supplied.assignmentAttempt).nodeRevision=2;
+			if(mode==='foreign-node') row(supplied.assignmentAttempt).nodeId='unowned-node';
+			if(['failed','returned','expired'].includes(mode)) supplied.status=mode;
+			const failed=structuredClone(items); expect(() => check!(items,graph,new Map()),mode).toThrow('ACCEPTANCE_NORMAL_REVISIONS'); expect(items).toEqual(failed);
+		}
+		expect({item,graph}).toEqual(before); check!([item],graph,new Map());
+	});
+
 	it('retains exact derived public mode labels across assignment usage result and settlement views while denying every contradictory original label', () => {
 		for (const executionMode of ['simulation', 'production']) {
 			const run = { executionMode };

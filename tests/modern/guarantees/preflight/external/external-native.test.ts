@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, beforeEach, expect, it, vi } from 'vitest';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import * as preparation from '../../../../acceptance/prepare-campaign.ts';
@@ -20,6 +20,8 @@ beforeAll(async()=>{
  frozen=structuredClone({receipts,captures});
 },30_000);
 afterAll(async()=>{try{cancellation.abort();if(f)await f.close();}finally{vi.unstubAllEnvs();}},6_000);
+
+beforeEach(context=>{context.onTestFailed(()=>{cancellation.abort();});});
 
 // Setup and each distinct native behavior keep the original 30-second bound.
 // Both cases are selected explicitly in the existing component scene.

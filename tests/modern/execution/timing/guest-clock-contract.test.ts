@@ -193,7 +193,13 @@ describe('Codex chat executor', () => {
 			const measured = fixture(); Object.assign(measured.item.assignmentResult, { usage: { elapsedSeconds: 2, native: { activeSeconds: 1.25, elapsedSeconds: 1.75 } } });
 			Object.assign(measured.item.capacityEnvelope.budget.time, { closeoutStartedAt: measured.item.assignmentResult.completedAt });
 			const original = structuredClone(measured); verify(measured.item, measured.event); expect(measured).toEqual(original);
-			for (const field of ['activeSeconds', 'elapsedSeconds']) for (const value of [undefined, null, '', false, -1, NaN, Infinity, {}, [], 0.25, 20]) {
+			for (const [activeSeconds, elapsedSeconds, accepted] of [[0.999, 1.75, true], [0.998999, 1.75, false], [1.25, 2.001, true], [1.25, 2.001001, false]] as const) {
+				const checked = structuredClone(measured); Object.assign(checked.item.assignmentResult, { usage: { elapsedSeconds: Math.ceil(elapsedSeconds), native: { activeSeconds, elapsedSeconds } } });
+				const before = structuredClone(checked); if (accepted) expect(() => verify(checked.item, checked.event)).not.toThrow();
+				else expect(() => verify(checked.item, checked.event)).toThrow('ACCEPTANCE_MODEL_USAGE_WINDOW'); expect(checked).toEqual(before);
+			}
+
+			for (const field of ['activeSeconds', 'elapsedSeconds']) for (const value of [undefined, null, '', false, -1, NaN, Infinity, {}, [], 0, 0.25, 20]) {
 				const denied = structuredClone(measured); Reflect.set(Reflect.get(denied.item.assignmentResult, 'usage').native, field, value);
 				const before = structuredClone(denied); expect(() => verify(denied.item, denied.event), field + '/' + String(value)).toThrow('ACCEPTANCE_MODEL_USAGE_WINDOW'); expect(denied).toEqual(before);
 			}

@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import { createServer as httpsServer } from 'node:https';
 import { createServer as httpServer } from 'node:http';
-import { connect, type Server } from 'node:net';
-import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { connect, type Server, type Socket } from 'node:net';
+import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { createManagerApi, DevelopmentSessionStore, paths } from '@treeseed/deployment';
+import { executeHostCommand, DevelopmentSessionStore, paths } from '@treeseed/deployment';
 import { nativeDevelopmentData } from './external-native-data.ts';
 
 const root = resolve(process.argv[2]!), config = JSON.parse(readFileSync(join(root, 'daemon-input.json'), 'utf8')) as {
@@ -47,20 +47,33 @@ const upstream = httpsServer(tls, (request, response) => {
 	if (page === 1) { const next = new URL(url); next.searchParams.set('page', '2'); response.setHeader('link', '<' + next.href + '>; rel="next"'); }
 	response.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(records));
 });
-const proxy = httpServer();
+const proxy = httpServer(), tunnels = new Set<Socket>();
 proxy.on('connect', (request, socket, head) => {
 	if (!['github.com:443', 'api.github.com:443', 'registry.npmjs.org:443'].includes(request.url!)) { socket.end('HTTP/1.1 403 Forbidden\r\n\r\n'); return; }
 	const address = upstream.address(); assert.ok(address && typeof address !== 'string');
+	tunnels.add(socket);socket.once('close',()=>tunnels.delete(socket));
 	const target = connect(address.port, '127.0.0.1', () => { socket.write('HTTP/1.1 200 Connection Established\r\n\r\n'); if (head.length) target.write(head); socket.pipe(target); target.pipe(socket); });
+	tunnels.add(target);target.once('close',()=>tunnels.delete(target));
 	target.on('error', () => socket.destroy()); socket.on('error', () => target.destroy()); socket.on('close', () => target.destroy());
 });
-const manager = createManagerApi();
+const socket='/run/treeseed/manager/api.sock';assert.equal(existsSync(socket),false,'Never replace an unrelated protected manager socket');
+const manager=httpServer((request,response)=>{
+ let bytes='';request.setEncoding('utf8');request.on('data',value=>{bytes+=String(value);});request.on('end',()=>{
+  void(async()=>{try{assert.equal(request.method,'POST');assert.equal(request.url,'/v1/host/commands');const command=JSON.parse(bytes);assert.equal(command.handlerId,'local.dev.status','Fixture admits only the original read operation');
+   const observed=await executeHostCommand(command,{local:true});response.setHeader('content-type','application/json');response.end(JSON.stringify({ok:true,data:observed,error:null}));
+  }catch(error){response.writeHead(400,{'content-type':'application/json'}).end(JSON.stringify({ok:false,data:null,error:{code:'native_manager_observation_failed',message:error instanceof Error?error.message:String(error)}}));}})();
+ });
+});
+
 const listen = (server: Server) => new Promise<number>((accept, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', () => { const address = server.address(); assert.ok(address && typeof address !== 'string'); accept(address.port); }); });
-const [upstreamPort, proxyPort, managerPort] = await Promise.all([listen(upstream), listen(proxy), listen(manager)]);
-process.send!({ ready: true, upstreamPort, proxyPort, managerPort });
+const [upstreamPort, proxyPort] = await Promise.all([listen(upstream), listen(proxy)]);
+await new Promise<void>((accept,reject)=>{manager.once('error',reject);manager.listen(socket,accept);});
+process.send!({ ready: true, upstreamPort, proxyPort, managerPort: 0 });
 process.on('message', (value: unknown) => {
 	assert.ok(value && typeof value === 'object'); const message = value as { id: string; fault?: string; mode?: 'live' | 'candidate' | 'released'; snapshot?: boolean };
 	if (message.fault !== undefined) fault = message.fault;
 	if (message.mode !== undefined && message.mode !== selected) { store.setMode(data.session.sessionId, 'native-project', 'source', message.mode); if (message.mode !== 'released') store.markReady(data.session.sessionId, 'native-project', 'source'); selected = message.mode; }
 	process.send!({ id: message.id, ok: true, ...(message.snapshot ? { requests, records: store.list(true) } : {}) });
 });
+
+process.once('SIGTERM',()=>{for(const tunnel of tunnels)tunnel.destroy();for(const server of [upstream,proxy,manager])server.closeAllConnections();void Promise.all([upstream,proxy,manager].map(server=>new Promise<void>((accept,reject)=>server.close(error=>error?reject(error):accept())))).then(()=>{process.disconnect?.();},error=>{console.error(error);process.exitCode=1;process.disconnect?.();});});

@@ -74,6 +74,8 @@ jobs:
           sudo apparmor_parser -r /etc/apparmor.d/bwrap-userns-restrict
           test "$(cat /proc/sys/kernel/apparmor_restrict_unprivileged_userns)" = 1
           bwrap --unshare-user --unshare-pid --ro-bind / / /usr/bin/true
+          test ! -e /run/treeseed/manager/api.sock
+          sudo install -d -m 0755 -o "$(id -u)" -g "$(id -g)" /run/treeseed/manager
           relay_fixture=$(mktemp -d)
           trap 'rm -r "$relay_fixture"' EXIT
           openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj '/CN=capacity-agent-test-relay' -keyout "$relay_fixture/key.pem" -out "$relay_fixture/ca.pem"

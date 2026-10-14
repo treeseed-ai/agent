@@ -7,7 +7,7 @@ import { nativeExternalFixture } from './external-native-fixture.ts';
 afterEach(() => vi.unstubAllEnvs());
 const { captureSdkExternalState, verifySdkExternalState } = preparation;
 
-it('native Git GitHub registry and mutual TLS manager reads retain every seed-owned external boundary and original failures before exact retry', async () => {
+it('native Git GitHub registry and protected local manager reads retain every seed-owned external boundary and original failures before exact retry', async () => {
 	const f = await nativeExternalFixture(); let originalFailure: unknown;
 	try {
 		for (const [key, value] of Object.entries(f.environment)) vi.stubEnv(key, value);

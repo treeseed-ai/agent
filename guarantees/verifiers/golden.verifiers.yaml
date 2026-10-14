@@ -3969,7 +3969,7 @@ verifiers:
     kind: vitestCase
     ownerPackage: '@treeseed/agent'
     testFile: tests/modern/guarantees/preflight/external/external-native.test.ts
-    testName: native Git GitHub registry and mutual TLS manager reads retain every seed-owned external boundary and original failures before exact retry
+    testName: native Git GitHub registry and protected local manager reads retain every seed-owned external boundary and original failures before exact retry
 
   agent.golden.external-pre-admission:
     kind: vitestCase

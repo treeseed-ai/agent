@@ -2,7 +2,7 @@ schemaVersion: treeseed.guarantee-verifiers/v1
 ownerPackage: "@treeseed/agent"
 verifiers:
   agent.golden.external-bounded-reads:
-    kind: nodeTestCase
+    kind: vitestCase
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/guarantees/campaign-external-state.test.ts
     testName: uses at most five concurrent original read commands and waits for every observation without narrowing the inventory

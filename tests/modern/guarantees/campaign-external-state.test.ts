@@ -47,7 +47,7 @@ describe('SDK simulation external-state gate (fixtures are not upstream proof)',
   });
   const forwarded=new AbortController(),captured=vi.fn(),pending=captureSdkExternalState('/platform',captured,forwarded.signal);expect(pending).toBeInstanceOf(Promise);await pending;
   expect(maximum).toBeGreaterThan(1);expect(maximum).toBeLessThanOrEqual(2);expect(active).toBe(0);expect(finished).toHaveLength(11);expect(state.native).toHaveBeenCalledTimes(11);expect(state.native.mock.calls.every(call=>(call[2] as {signal?:AbortSignal}).signal===forwarded.signal)).toBe(true);
-  expect(captured.mock.calls.map(call=>call[0])).toEqual(expected);expect(new Set(captured.mock.calls.map(call=>call[0])).size).toBe(12);
+  const ordered=[...expected.filter(name=>name.endsWith('-remote-refs.txt')),...expected.filter(name=>!name.endsWith('-remote-refs.txt'))];expect(captured.mock.calls.map(call=>call[0])).toEqual(ordered);expect(state.native.mock.calls.slice(0,2).map(call=>call[0])).toEqual(['git','git']);expect(new Set(captured.mock.calls.map(call=>call[0])).size).toBe(12);
   state.native.mockClear();state.execute.mockClear();state.read.mockClear();const cancelled=new AbortController(),original=new Error('Original cancelled native inventory');cancelled.abort(original);const denied=vi.fn();
   await expect(captureSdkExternalState('/platform',denied,cancelled.signal)).rejects.toBeInstanceOf(AggregateError);expect(state.native).not.toHaveBeenCalled();expect(state.execute).not.toHaveBeenCalled();expect(state.read).not.toHaveBeenCalled();expect(denied).not.toHaveBeenCalled();
  });

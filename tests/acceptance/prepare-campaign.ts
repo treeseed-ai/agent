@@ -217,9 +217,9 @@ export function prepareSdkCampaign(draftPath: string, freezePath: string, team: 
 	});
 }
 
-export async function captureSdkExternalState(platform: string, capture: (name: string, bytes: string) => void): Promise<void> {
+export async function captureSdkExternalState(platform: string, capture: (name: string, bytes: string) => void, signal?: AbortSignal): Promise<void> {
  const {operator,commands}=sdkExternalCommands(platform);
- await visitExternalCommands(commands,capture);
+ await visitExternalCommands(commands,capture,signal);
  capture('development-selections.json',readCampaignDevelopmentSelections());
  assert.equal(readFileSync(operator.path,'utf8'),operator.bytes,'ACCEPTANCE_EXTERNAL_SCOPE: Operator selection changed during observation');
 }
@@ -259,14 +259,19 @@ function sdkExternalCommands(platform: string) {
 }
 
 
-async function visitExternalCommands(commands: Map<string,ExternalCommand>, visit:(name:string,bytes:string)=>void):Promise<void> {
- const entries=[...commands];
- for(let offset=0;offset<entries.length;offset+=5){
-  const outcomes=await Promise.allSettled(entries.slice(offset,offset+5).map(async([name,command])=>({name,bytes:await observeExternalCommand(command)})));
-  const failures=outcomes.filter((value):value is PromiseRejectedResult=>value.status==='rejected');
-  if(failures.length)throw new AggregateError(failures.map(value=>value.reason),failures.map(value=>value.reason instanceof Error?value.reason.message:String(value.reason)).join('\n'));
-  for(const outcome of outcomes)if(outcome.status==='fulfilled')visit(outcome.value.name,outcome.value.bytes);
- }
+
+async function visitExternalCommands(commands: Map<string,ExternalCommand>, visit:(name:string,bytes:string)=>void, signal?:AbortSignal):Promise<void> {
+ const entries=[...commands],failures:unknown[]=[];let next=0,failed=false;
+ // Five workers bound native processes and retained response bytes. A slow
+ // deployment history must not leave the other four slots idle.
+ await Promise.all(Array.from({length:Math.min(5,entries.length)},async()=>{
+  while(!failed&&next<entries.length){
+   const[name,command]=entries[next++]!;
+   try{signal?.throwIfAborted();visit(name,await observeExternalCommand(command,signal));}
+   catch(error){failures.push(error);failed=true;}
+  }
+ }));
+ if(failures.length)throw new AggregateError(failures,failures.map(error=>error instanceof Error?error.message:String(error)).join('\n'));
 }
 
 
@@ -312,8 +317,8 @@ function externalPages(bytes: string): Array<Record<string, unknown>> {
 	});
 }
 
-async function observeExternalCommand(input: ExternalCommand): Promise<string> {
-	const execute = (command: string, args: string[]) => new Promise<string>((accept,reject)=>execFile(command,args,{encoding:'utf8',timeout:30_000,maxBuffer:32*1024*1024},(error,stdout)=>error?reject(error):accept(stdout)));
+async function observeExternalCommand(input: ExternalCommand, signal?:AbortSignal): Promise<string> {
+	const execute = (command: string, args: string[]) => new Promise<string>((accept,reject)=>execFile(command,args,{encoding:'utf8',timeout:30_000,maxBuffer:32*1024*1024,signal},(error,stdout)=>error?reject(error):accept(stdout)));
 	const bytes = await execute(input.command, input.args);
 	assert.ok(bytes.length > 0, 'ACCEPTANCE_EXTERNAL_EMPTY: Exit zero without original inventory is inconclusive');
 	if (input.kind === 'refs') {
@@ -362,7 +367,7 @@ export function readCampaignDevelopmentSelections(): string {
 	return canonicalStandardsJson(values);
 }
 
-export async function verifySdkExternalState(freeze: Row): Promise<void> {
+export async function verifySdkExternalState(freeze: Row, signal?:AbortSignal): Promise<void> {
 	const platform = process.env.TREESEED_ACCEPTANCE_PLATFORM_PATH;
 	assert.ok(platform, 'ACCEPTANCE_CAMPAIGN_WORKSPACE: Explicit Platform workspace required');
 	const { operator, commands } = sdkExternalCommands(platform);
@@ -375,7 +380,7 @@ export async function verifySdkExternalState(freeze: Row): Promise<void> {
 	// portfolio's issue/registry bodies in RAM. Compare one owning inventory at a time.
 	const baseline = (name: string) => { const path=paths.get(name)!;const bytes=readFileSync(path,'utf8');assert.equal(freeze.receipts[path],'sha256:'+createHash('sha256').update(bytes).digest('hex'),'ACCEPTANCE_EXTERNAL_INVENTORY: Original frozen bytes differ from retained digest');return bytes; };
 	for(const name of paths.keys())baseline(name);
-	await visitExternalCommands(commands,(name,bytes)=>assert.equal(bytes,baseline(name),'ACCEPTANCE_EXTERNAL_CHANGED: Simulation changed an external owning boundary'));
+	await visitExternalCommands(commands,(name,bytes)=>assert.equal(bytes,baseline(name),'ACCEPTANCE_EXTERNAL_CHANGED: Simulation changed an external owning boundary'),signal);
 	assert.equal(readCampaignDevelopmentSelections(),baseline('development-selections.json'),'ACCEPTANCE_EXTERNAL_CHANGED: Simulation changed a deployment selection');
 	for(const name of paths.keys())baseline(name);
 	assert.equal(readFileSync(operator.path, 'utf8'), operator.bytes, 'ACCEPTANCE_EXTERNAL_SCOPE: Operator selection changed during observation');

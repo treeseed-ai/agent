@@ -5,7 +5,7 @@ verifiers:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/guarantees/campaign-external-state.test.ts
-    testName: uses at most five concurrent original read commands and waits for every observation without narrowing the inventory
+    testName: uses at most two concurrent original read commands and waits for every observation without narrowing the inventory
   agent.golden.sdk-installed-custody-binding-unit:
     kind: vitestCase
     ownerPackage: '@treeseed/agent'

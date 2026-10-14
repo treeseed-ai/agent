@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { encodeCapacityPageCursor } from '@treeseed/sdk/capacity-pagination';
 
 const state = vi.hoisted(() => ({ run: undefined as (() => Promise<void>) | undefined,
-	read: vi.fn(), verify: vi.fn(), inspect: vi.fn(), graphInspect: vi.fn(), retain: vi.fn(), freeze: {} as Record<string, any> }));
+	read: vi.fn(), verify: vi.fn(), inspect: vi.fn(), graphInspect: vi.fn(), retain: vi.fn(), retainReview: vi.fn(), freeze: {} as Record<string, any> }));
 vi.mock('node:test', () => ({ default: (_name: string, _options: unknown, run: () => Promise<void>) => { state.run = run; } }));
 vi.mock('node:fs', () => ({ existsSync: () => true, readFileSync: (path: string) => path === '/freeze'
 	? JSON.stringify(state.freeze) : Buffer.alloc(0) }));
@@ -10,7 +10,7 @@ vi.mock('../../acceptance/acceptance-cli.ts', async importOriginal => ({
 	...await importOriginal<typeof import('../../acceptance/acceptance-cli.ts')>(), read: state.read,
 }));
 vi.mock('../../acceptance/campaign.ts', async importOriginal => ({
-	...await importOriginal<typeof import('../../acceptance/campaign.ts')>(), retainCampaignWorkdayStart: state.retain,
+	...await importOriginal<typeof import('../../acceptance/campaign.ts')>(), retainCampaignWorkdayStart: state.retain, retainCampaignPlanReview: state.retainReview,
 }));
 vi.mock('../../acceptance/sdk-runtime-golden.test.ts', () => ({ verifyGolden: state.verify }));
 vi.mock('../../acceptance/prepare-campaign.ts', () => ({ prepareSdkCampaign: vi.fn(), verifySdkExternalState: vi.fn() }));
@@ -47,6 +47,7 @@ function transport(show: () => unknown) {
 beforeEach(() => {
 	vi.stubEnv('TREESEED_ACCEPTANCE_FREEZE_PATH', '/freeze');
 	state.read.mockReset(); state.verify.mockReset(); state.inspect.mockReset(); state.graphInspect.mockReset();
+	state.retainReview.mockReset();
 	state.retain.mockReset().mockImplementation(receipt => { process.env.TREESEED_ACCEPTANCE_WORKDAY_ID = receipt.workdayId; return receipt.workdayId; });
 	state.freeze = { createdAt: new Date().toISOString(), host: { manifestDigest: `sha256:${'a'.repeat(64)}`, guestImageDigest: `sha256:${'b'.repeat(64)}` },
 		guest: { digest: `sha256:${'b'.repeat(64)}` }, receipts: { '/receipt': 'sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855' },
@@ -56,6 +57,38 @@ beforeEach(() => {
 });
 afterEach(() => vi.useRealTimers());
 describe('campaign CLI composition units (mocked transport, not native or live acceptance)', () => {
+	it('reports an unsafe frozen request before admission and classifies contradictory runtime as an implementation defect without unsafe mutation', async () => {
+		const stderr = vi.spyOn(console, 'error').mockImplementation(() => {});
+		try {
+			state.freeze.proposal.digest = 'sha256:' + 'a'.repeat(64);
+			state.freeze.request.body.executionMode = 'production';
+			for (const reportFails of [false, true]) {
+				state.read.mockReset(); state.verify.mockReset(); state.inspect.mockReset(); state.retainReview.mockClear(); stderr.mockClear();
+				const held = structuredClone(state.freeze), reportFailure = new Error('Original report destination interrupted');
+				stderr.mockImplementation(() => { if (reportFails) throw reportFailure; }); transport(() => observed());
+				const failure = await state.run!().then(() => undefined, (error: unknown) => error);
+				expect(stderr).toHaveBeenCalledOnce(); const report = stderr.mock.calls[0]![0] as string;
+				expect(state.retainReview).toHaveBeenCalledExactlyOnceWith(report, '/freeze', state.freeze);
+				expect(report.split('\n')).toEqual(['PLAN_REVIEW_REQUIRED', 'project: sdk', 'proposal: fresh ' + state.freeze.proposal.digest,
+					'workday: not-started', 'failed expectation: Agent execution acceptance / Non-negotiable rules / ACCEPTANCE_CAMPAIGN_MODE',
+					'observed evidence: /freeze: request.body.executionMode="production"',
+					'why implementation repair is insufficient: Frozen operator intent lacks permitted simulation authority; an implementation repair cannot supply or change operator intent.',
+					'smallest proposed plan correction: Propose executionMode: simulation for this frozen request; apply only after plan review.']);
+				if (reportFails) { expect(failure).toBeInstanceOf(AggregateError); expect((failure as AggregateError).errors[1]).toBe(reportFailure);
+					expect((failure as AggregateError).errors[0]).toBeInstanceOf(Error); }
+				else expect(failure).toMatchObject({ classification: 'PLAN_REVIEW_REQUIRED', message: report, cause: expect.any(Error) });
+				expect(state.read).not.toHaveBeenCalled(); expect(state.verify).not.toHaveBeenCalled(); expect(state.inspect).not.toHaveBeenCalled(); expect(state.freeze).toEqual(held);
+			}
+			state.freeze.request.body.executionMode = 'simulation'; stderr.mockClear(); stderr.mockImplementation(() => {});
+			for (const status of ['running', 'completed']) {
+				state.read.mockReset(); state.retainReview.mockClear();
+				const shown = observed(status); shown.run.executionMode = 'production'; shown.scheduling.executionMode = 'production'; const held = structuredClone({ shown, freeze: state.freeze }); transport(() => shown);
+				await expect(state.run!()).rejects.toMatchObject({ classification: 'IMPLEMENTATION_DEFECT', cause: expect.any(Error) });
+				expect(stderr).not.toHaveBeenCalled(); expect(state.retainReview).not.toHaveBeenCalled(); expect(state.verify).not.toHaveBeenCalled();
+				expect(state.read.mock.calls.filter(call => call[0][1] === 'stop' || call[0][1] === 'evaluate')).toEqual([]); expect({ shown, freeze: state.freeze }).toEqual(held);
+			}
+		} finally { stderr.mockRestore(); }
+	});
 	it('denies a completed workday at each required final evidence gate without later gates or another admission and retains the original failure before exact retry', async () => {
 		const gates = ['collaboration', 'lifecycle', 'graph', 'revision', 'results', 'settlement', 'reporter'];
 		for (const [index, gate] of gates.entries()) {

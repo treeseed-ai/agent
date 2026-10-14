@@ -126,7 +126,8 @@ it('native public communication requests preserve every addressed probe and stop
 		}
 		for (const denied of ['403', '503', 'malformed', 'interrupted']) for (let position = 0; position < 9; position++) {
 			kind = denied; at = position; index = 0; const before = requests.length, previousProgress = progressed;
-			await expect(execute()).rejects.toThrow();
+			const pending = execute(); await expect(pending).rejects.toThrow();
+			if (denied === 'interrupted') await expect.soft(pending).rejects.toMatchObject({ classification: 'ENVIRONMENT_DEFECT' });
 			expect(progressed).toBe(previousProgress); expect(requests.slice(before)).toEqual(held.slice(0, position + 1));
 			failures.push({ kind, at, requests: structuredClone(requests.slice(before)) });
 			expect(receipts).toEqual(heldReceipts); expect(requests.slice(0, 9)).toEqual(held);

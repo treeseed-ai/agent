@@ -1,3 +1,4 @@
+import * as campaign from '../../acceptance/campaign.ts';
 import { describe, expect, it, vi } from 'vitest';
 import { monitorCampaign, openSdkCampaignDiscussion, requirePlanningWindow, sdkCampaignWindow } from '../../acceptance/campaign.ts';
 
@@ -85,9 +86,14 @@ describe('automated campaign control (fixtures are not golden acceptance)', () =
 	});
 	it('stops a live simulation on transport failure but never mutates an unverified production run', async () => {
 		for (const mode of ['simulation', 'production']) {
-			const stop = vi.fn();
-			await expect(monitorCampaign({ read: () => ({ status: 'running', mode, planningEndsAt: 0, endsAt: 10 }),
-				now: () => 1, wait: vi.fn(), collaboration: () => { throw new Error('transport'); }, verify: vi.fn(), stop })).rejects.toThrow();
+			const stop = vi.fn(), failure = Object.assign(new Error('Original infrastructure connection refused'), { code: 'ECONNREFUSED' });
+			const held = Object.getOwnPropertyDescriptors(failure);
+			const pending = monitorCampaign({ read: () => ({ status: 'running', mode, planningEndsAt: 0, endsAt: 10 }),
+				now: () => 1, wait: vi.fn(), collaboration: () => { throw failure; }, verify: vi.fn(), stop });
+			await expect(pending).rejects.toThrow();
+			await expect.soft(pending).rejects.toMatchObject({ classification: mode === 'simulation' ? 'ENVIRONMENT_DEFECT' : 'IMPLEMENTATION_DEFECT' });
+			if (mode === 'simulation') await expect.soft(pending).rejects.toMatchObject({ cause: failure });
+			expect(Object.getOwnPropertyDescriptors(failure)).toEqual(held);
 			expect(stop).toHaveBeenCalledTimes(mode === 'simulation' ? 1 : 0);
 		}
 	});
@@ -123,6 +129,42 @@ describe('automated campaign control (fixtures are not golden acceptance)', () =
 		}
 	});
 	it('retains both errors if the supported stop fails after a boundary failure', async () => {
+		const details = { project: 'sdk', proposal: 'proposal-original sha256:' + 'a'.repeat(64), workday: 'not-started',
+			'failed expectation': 'Agent execution acceptance / Non-negotiable rules / sole simulation mode',
+			'observed evidence': 'retained original frozen operator request: executionMode=production',
+			'why implementation repair is insufficient': 'The frozen operator request itself requires prohibited production execution; implementation repair cannot authorize that intent.',
+			'smallest proposed plan correction': 'Propose simulation intent after plan review; no correction applied.' };
+
+		for (const mode of [undefined, null, '', ' ', 'simulation ', 'production', 'production\nfield: injected', false, 0, {}, []]) {
+			const input = { proposal: { id: 'original-proposal', digest: 'sha256:' + 'a'.repeat(64) }, request: { body: { executionMode: mode } } }, held = structuredClone(input), reports: string[] = [];
+			expect(() => campaign.requireCampaignSimulation(input, '/original.freeze', text => { reports.push(text); })).toThrow('PLAN_REVIEW_REQUIRED');
+			expect(reports).toHaveLength(1); expect(reports[0]!.split('\n')).toHaveLength(8); expect(input).toEqual(held);
+		}
+		const valid = { proposal: { id: 'original-proposal', digest: 'sha256:' + 'a'.repeat(64) }, request: { body: { executionMode: 'simulation' } } }, report = vi.fn();
+		campaign.requireCampaignSimulation(valid, '/original.freeze', report); expect(report).not.toHaveBeenCalled();
+		const format = Reflect.get(campaign, 'campaignPlanReviewRequired') as ((value: typeof details, cause: unknown) => Error & { classification: string });
+		expect.soft(typeof format).toBe('function');
+		if (typeof format === 'function') {
+			const original = new Error('Original contradictory authority'), before = Object.getOwnPropertyDescriptors(original), held = structuredClone(details);
+			const reported = format(details, original);
+			for (const denied of [null, undefined, [], {}, Object.assign({ ...details }, { [Symbol('extra')]: 'hidden' }),
+				Object.defineProperty({ ...details }, 'project', { get() { throw new Error('Forbidden accessor read'); } })])
+				expect(() => format(denied as typeof details, original)).toThrow('ACCEPTANCE_PLAN_REVIEW_REPORT');
+
+			expect(reported.message).toBe('PLAN_REVIEW_REQUIRED\n' + Object.entries(details).map(([key, value]) => key + ': ' + value).join('\n'));
+			expect(reported.classification).toBe('PLAN_REVIEW_REQUIRED'); expect(reported.cause).toBe(original);
+			expect(details).toEqual(held); expect(Object.getOwnPropertyDescriptors(original)).toEqual(before);
+			for (const key of Object.keys(details)) for (const value of [undefined, null, '', ' ', 'trailing ', 'field\ninjection', 'control\u0000byte', 1, {}, []]) {
+				const denied = { ...details, [key]: value }, retained = structuredClone(denied);
+				expect(() => format(denied as typeof details, original)).toThrow('ACCEPTANCE_PLAN_REVIEW_REPORT'); expect(denied).toEqual(retained);
+			}
+			for (const denied of [{ ...details, extra: 'duplicate authority' }, { ...details, proposal: 'proposal-moving staging' },
+				{ ...details, workday: 'made-up' }, { ...details, project: '../sdk' }])
+				expect(() => format(denied, original)).toThrow('ACCEPTANCE_PLAN_REVIEW_REPORT');
+			for (const key of Object.keys(details)) { const denied: Record<string, unknown> = { ...details }; delete denied[key];
+				expect(() => format(denied as typeof details, original)).toThrow('ACCEPTANCE_PLAN_REVIEW_REPORT'); }
+		}
+
 		await expect(monitorCampaign({ read: () => ({ status: 'running', mode: 'simulation', planningEndsAt: 0, endsAt: 10 }),
 			now: () => 1, wait: vi.fn(), collaboration: () => { throw new Error('read-back failed'); }, verify: vi.fn(), stop: () => { throw new Error('stop failed'); },
 		})).rejects.toThrow('ACCEPTANCE_CAMPAIGN_STOP_FAILED');

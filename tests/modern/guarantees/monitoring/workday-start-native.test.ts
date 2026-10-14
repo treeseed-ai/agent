@@ -20,6 +20,7 @@ it('native public SDK start and independent child preserve the exact API receipt
 			if (mode === 'interrupted') { failed.push({ mode }); request.socket.destroy(); return; }
 			const run = structuredClone(f.run);
 			if (mode === 'foreign-team') run.teamId = 'foreign'; if (mode === 'foreign-workday') run.id = 'workday-22222222-2222-4222-8222-222222222222';
+			if (mode === 'production') run.executionMode = 'production';
 			if (mode === 'changed-clock') run.startedAt = '2026-10-10T20:00:01.000Z';
 			if (mode !== 'exact') failed.push({ mode, run: structuredClone(run) });
 			response.end(JSON.stringify({ data: { run } })); });
@@ -67,6 +68,30 @@ return observed.data;},'controlled-team',{TREESEED_ACCEPTANCE_FREEZE_PATH:${JSON
 		expect(calls).toEqual([{ method: 'POST', path: '/v1/teams/controlled-team/workday-runs', body: { preflightId: f.receipt.preflightId,
 			preflightDigest: f.receipt.preflightDigest, idempotencyKey: `golden-start:${f.receipt.preflightId}` } },
 			...Array.from({ length: 7 }, () => ({ method: 'GET', path: `/v1/teams/controlled-team/workday-runs/${f.receipt.workdayId}`, body: undefined }))]);
+
+		const fs = await import('node:fs'), planPath = f.root + '/unsafe-sdk.freeze.json';
+		const unsafe = { ...f.freeze, proposal: { ...f.freeze.proposal, id: 'unsafe-controlled-proposal' }, request: { body: { ...f.freeze.request.body, executionMode: 'production' } } };
+		const unsafeBytes = JSON.stringify(unsafe); fs.writeFileSync(planPath, unsafeBytes, { mode: 0o600 });
+		const details = { project: 'sdk', proposal: unsafe.proposal.id + ' ' + unsafe.proposal.digest, workday: 'not-started',
+			'failed expectation': 'Agent execution acceptance / Non-negotiable rules / ACCEPTANCE_CAMPAIGN_MODE',
+			'observed evidence': planPath + ': request.body.executionMode="production"',
+			'why implementation repair is insufficient': 'Frozen operator intent lacks permitted simulation authority; an implementation repair cannot supply or change operator intent.',
+			'smallest proposed plan correction': 'Propose executionMode: simulation for this frozen request; apply only after plan review.' };
+		const report = 'PLAN_REVIEW_REQUIRED\n' + Object.entries(details).map(([key, value]) => key + ': ' + value).join('\n'), reportPath = planPath + '.plan-review.txt';
+		const recordReport = `import{readFileSync}from'node:fs';import{requireCampaignSimulation,retainCampaignPlanReview}from ${JSON.stringify(helper)};
+const path=${JSON.stringify(planPath)},freeze=JSON.parse(readFileSync(path,'utf8'));
+try{requireCampaignSimulation(freeze,path,text=>retainCampaignPlanReview(text,path,freeze));throw new Error('Unsafe input was accepted');}
+catch(error){if(error.classification!=='PLAN_REVIEW_REQUIRED')throw error;}`;
+		const record = await execute(process.execPath, ['--import', 'tsx', '--input-type=module', '-e', recordReport], options);
+		expect(record.stdout).toBe(''); expect(readFileSync(reportPath, 'utf8')).toBe(report);
+		const retainReport = `import{retainCampaignPlanReview}from ${JSON.stringify(helper)};retainCampaignPlanReview(${JSON.stringify(report)},${JSON.stringify(planPath)},${JSON.stringify(unsafe)});`;
+		await Promise.all(Array.from({ length: 4 }, () => execute(process.execPath, ['--import', 'tsx', '--input-type=module', '-e', retainReport], options)));
+		const consumeReport = `import{readFileSync}from'node:fs';process.stdout.write(readFileSync(${JSON.stringify(reportPath)},'utf8'));`;
+		expect((await execute(process.execPath, ['--input-type=module', '-e', consumeReport], options)).stdout).toBe(report);
+		await expect(execute(process.execPath, ['--import', 'tsx', '--input-type=module', '-e', retainReport + `process.kill(process.pid,'SIGKILL');`], options)).rejects.toMatchObject({ signal: 'SIGKILL' });
+		expect(readFileSync(reportPath, 'utf8')).toBe(report); expect(readFileSync(f.retained)).toEqual(held); expect(readFileSync(f.path)).toEqual(f.bytes);
+		expect(readFileSync(planPath, 'utf8')).toBe(unsafeBytes); expect(fs.statSync(reportPath).mode & 0o777).toBe(0o600);
+		expect(existsSync(planPath + '.workday-start.json')).toBe(false); expect(calls.filter(call => call.method === 'POST')).toHaveLength(1); expect(failed).toEqual(originalFailures);
 		// Real SDK/HTTP and isolated native processes; API admission is controlled.
 	} finally {
 		server.closeAllConnections(); if (server.listening) await new Promise<void>((accept, reject) => server.close(error => error ? reject(error) : accept()));

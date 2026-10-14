@@ -14,7 +14,7 @@ import { modelExecutionInventory } from '../../../acceptance/workday/support/ass
 import { row, type Row } from '../../../acceptance/acceptance-cli.ts';
 import { encodeCapacityPageCursor } from '@treeseed/sdk/capacity-pagination';
 import { observeCampaign } from '../../../acceptance/workday/support/campaign-observation.ts';
-import { freshSdkDraft, sdkProposalText } from '../../../acceptance/campaign.ts';
+import { freshSdkDraft, sdkProposalText, monitorCampaign, requireCampaignSimulation } from '../../../acceptance/campaign.ts';
 
 it('native draft file preparation rejects canonical and retired estimates without changing original bytes before exact retry', async () => {
 	const root = mkdtempSync(join(tmpdir(), 'agent-fresh-draft-estimates-')), path = join(root, 'draft.json');
@@ -100,7 +100,7 @@ it('native public SDK event pages reach the original campaign observer with comp
 			const url = new URL(request.url ?? '', 'http://127.0.0.1'); response.setHeader('content-type', 'application/json');
 			if (request.method !== 'GET' || body) { response.writeHead(500).end('{}'); return; }
 			if (url.pathname === `/v1/teams/${run.teamId}/workday-runs/${run.id}` && !url.search) {
-				response.end(JSON.stringify({ data: first })); return;
+				response.end(JSON.stringify({ data: mode === 'production-run' ? { ...first, run: { ...run, executionMode: 'production' }, scheduling: { ...first.scheduling, executionMode: 'production' } } : first })); return;
 			}
 			if (url.pathname !== `/v1/teams/${run.teamId}/workday-runs/${run.id}/events`
 				|| url.searchParams.get('limit') !== '50' || url.searchParams.get('cursor') !== cursor) { response.writeHead(500).end('{}'); return; }
@@ -156,6 +156,21 @@ it('native public SDK event pages reach the original campaign observer with comp
 		expect(observations.slice(0, failures.length)).toEqual(failures); expect(history.slice(0, requests.length)).toEqual(requests);
 		expect(history).toHaveLength(22); expect(history.every(value => value.method === 'GET' && value.body === '')).toBe(true);
 		expect({ first, events }).toEqual(held);
+
+		mode = 'production-run';
+		const publicReply = row((await client.invoke(controlPlaneOperation('workdays.show'), { path: { teamId: run.teamId, runId: run.id }, query: {}, body: undefined })).data);
+		const originalReply = structuredClone(publicReply), reports: string[] = [];
+		let stopped = 0, progressed = 0;
+		const monitored = monitorCampaign({ admittedSimulation: true,
+			read: () => ({ status: String(row(publicReply.run).status), mode: String(row(publicReply.run).executionMode), planningEndsAt: 1, endsAt: 2 }),
+			now: () => 1, wait: async () => { progressed++; }, collaboration: () => { progressed++; }, verify: () => { progressed++; }, stop: () => { stopped++; } });
+		await expect(monitored).rejects.toMatchObject({ classification: 'IMPLEMENTATION_DEFECT' });
+		expect(stopped).toBe(0); expect(progressed).toBe(0); expect(publicReply).toEqual(originalReply);
+		const unsafe = { proposal: { id: 'unsafe-original', digest: 'sha256:' + 'a'.repeat(64) }, request: { body: { executionMode: row(publicReply.run).executionMode } } }, heldUnsafe = structuredClone(unsafe);
+		expect(() => requireCampaignSimulation(unsafe, '/controlled/native.freeze', text => { reports.push(text); })).toThrow('PLAN_REVIEW_REQUIRED');
+		expect(reports).toHaveLength(1); expect(reports[0]!.split('\n')).toHaveLength(8);
+		expect(reports[0]).toContain('workday: not-started\n'); expect(reports[0]).toContain('observed evidence: /controlled/native.freeze: request.body.executionMode="production"');
+		expect(unsafe).toEqual(heldUnsafe); expect(publicReply).toEqual(originalReply);
 		// Controlled event/status/token inputs are not native governance, model
 		// execution, provider-generated charges, producer completeness or teardown.
 	} finally { server.closeAllConnections(); if (server.listening) await new Promise<void>((accept, reject) => server.close(error => error ? reject(error) : accept())); }

@@ -261,7 +261,8 @@ function sdkExternalCommands(platform: string) {
 
 
 async function visitExternalCommands(commands: Map<string,ExternalCommand>, visit:(name:string,bytes:string)=>void, signal?:AbortSignal):Promise<void> {
- const entries=[...commands],failures:unknown[]=[];let next=0,failed=false;
+ // Reject moved source/library authority before slower publication inventories.
+ const entries=[...commands].sort((left,right)=>Number(right[1].kind==='refs')-Number(left[1].kind==='refs')),failures:unknown[]=[];let next=0,failed=false;
  // Two workers bound native processes and retained response bytes. A slow
  // deployment history must not leave the other slot idle.
  await Promise.all(Array.from({length:Math.min(2,entries.length)},async()=>{

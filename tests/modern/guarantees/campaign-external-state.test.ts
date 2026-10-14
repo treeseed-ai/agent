@@ -1,3 +1,4 @@
+import type { DevelopmentSession, DevelopmentCandidate } from '@treeseed/sdk/development';
 import { createHash } from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const state = vi.hoisted(() => ({ execute: vi.fn(), directory: vi.fn(), read: vi.fn(), files: new Map<string,string>(), fault: '',
@@ -10,8 +11,13 @@ import { acceptanceReceiptDirectory, captureSdkExternalState, verifySdkExternalS
 afterEach(()=>vi.unstubAllEnvs());
 const expected = ['sdk','sdk-library'].flatMap(repository => ['remote-refs.txt','releases.json','issues.json','pull-requests.json','deployments.json'].map(kind=>repository+'-'+kind)).concat(['sdk-registry.json','development-selections.json']);
 const freeze = { receipts: Object.fromEntries(expected.map(name=>['/receipts/'+name,'original-digest'])) };
+function selection(): {session: DevelopmentSession; candidates: DevelopmentCandidate[]} {
+ return {session:{schemaVersion:'treeseed.development-session/v2',sessionId:'original-session',actor:'controlled-owner',hostId:'original-host',createdAt:'2026-10-14T00:00:00.000Z',status:'active',
+  repositories:[{projectId:'original-project',repository:'treeseed-ai/sdk',worktree:'/controlled/worktree',commit:'a'.repeat(40),branch:'staging',dirty:false,dirtyDigest:null,recipeDigest:'sha256:'+'b'.repeat(64)}],
+  targets:[{projectId:'original-project',targetId:'original-target',mode:'live',generation:1,health:'ready'}],leases:[],restoredReceiptId:null,blockers:[]},candidates:[]};
+}
 beforeEach(() => {
-	vi.stubEnv('TREESEED_ACCEPTANCE_PLATFORM_PATH','/platform');vi.stubEnv('TREESEED_ACCEPTANCE_TEAM','treeseed');state.fault='';state.files.clear();state.execute.mockReset();state.read.mockReset().mockReturnValue({sessions:[]});
+	vi.stubEnv('TREESEED_ACCEPTANCE_PLATFORM_PATH','/platform');vi.stubEnv('TREESEED_ACCEPTANCE_TEAM','treeseed');state.fault='';state.files.clear();state.execute.mockReset();state.read.mockReset().mockReturnValue({sessions:[selection()]});
 	state.execute.mockImplementation((command:string,args:string[])=> {
 		if(state.fault==='interrupted')throw new Error('original subprocess interrupted');
 		if(state.fault==='empty')return '';
@@ -20,6 +26,11 @@ beforeEach(() => {
 		if(command==='git')return 'a'.repeat(40)+'\trefs/heads/staging\n';
 		if(command==='npm')return JSON.stringify({name:'@treeseed/sdk',versions:['1.0.0'],'dist-tags':{latest:'1.0.0'},maintainers:[{name:'original-owner'}]});
 		const endpoint=args.at(-1)!;
+		if(state.fault==='pages-good')return JSON.stringify([{id:2,title:'Preserve ][ braces {} and escaped \" quote'}])+'\n'+JSON.stringify([{id:3,title:'Second page'}]);
+  if(state.fault==='pages-truncated')return '[{"id":2}]\n[';
+  if(state.fault==='pages-trailing')return '[{"id":2}]garbage';
+  if(state.fault==='pages-object')return '{"id":2}';
+  if(state.fault==='pages-duplicate')return '[{"id":2}]\n[{"id":2}]';
 		const records=endpoint.includes('/issues?')?[{id:1,title:'Original Issue'},{id:2,pull_request:{url:'original-pull'}}]
 			:endpoint.includes('/deployments?')?[]:[{id:2,title:'Original publication'}];
 		if(state.fault==='duplicate')records.push(structuredClone(records[0]!));
@@ -40,6 +51,12 @@ describe('SDK simulation external-state gate (fixtures are not upstream proof)',
 		expect(state.read).toHaveBeenCalledExactlyOnceWith(['dev','status','--all'],'treeseed',true);
 		expect(JSON.parse(state.files.get('/receipts/sdk-issues.json')!)).toEqual([{id:1,title:'Original Issue'}]);
 		expect(JSON.parse(state.files.get('/receipts/sdk-registry.json')!)['dist-tags']).toEqual({latest:'1.0.0'});
+  state.fault='pages-good';const streamed=vi.fn();captureSdkExternalState('/platform',streamed);
+  const releases=JSON.parse(streamed.mock.calls.find(call=>call[0]==='sdk-releases.json')![1]);expect(releases.map((item:{id:number})=>item.id)).toEqual([2,3]);expect(releases[0].title).toContain('][ braces {}');
+  const deployments=JSON.parse(streamed.mock.calls.find(call=>call[0]==='sdk-deployments.json')![1]);expect(deployments).toHaveLength(2);expect(deployments.every((item:{statuses:unknown[]})=>item.statuses.length===2)).toBe(true);
+  expect(state.execute.mock.calls.some((call:[string,string[]])=>call[1].at(-1)==='repos/treeseed-ai/sdk/deployments/2/statuses?per_page=100')).toBe(true);
+  for(const fault of ['pages-truncated','pages-trailing','pages-object','pages-duplicate']){state.fault=fault;expect(()=>captureSdkExternalState('/platform',()=>{}),fault).toThrow('ACCEPTANCE_EXTERNAL_PAGES');}
+
 	});
 	it('reads all three frozen inventories and accepts only unchanged bytes',()=>{
 		// The former three facts remain covered by the complete sole authorities.
@@ -48,6 +65,14 @@ describe('SDK simulation external-state gate (fixtures are not upstream proof)',
 		for(const fault of ['empty','malformed','duplicate','interrupted']){state.fault=fault;const held=new Map(state.files);expect(()=>verifySdkExternalState(freeze),fault).toThrow();expect(state.files).toEqual(held);}
 		state.fault='changed';const original=new Map(state.files);expect(()=>verifySdkExternalState(freeze)).toThrow('ACCEPTANCE_EXTERNAL_CHANGED');expect(state.files).toEqual(original);
 		state.fault='';verifySdkExternalState(freeze);
+  for(const change of [(value:ReturnType<typeof selection>)=>{value.session.hostId='foreign-host';},(value:ReturnType<typeof selection>)=>{value.session.repositories[0]!.commit='f'.repeat(40);},(value:ReturnType<typeof selection>)=>{value.session.targets[0]!.generation++;},(value:ReturnType<typeof selection>)=>{value.session.targets[0]!.mode='released';}]){
+   const changed=selection();change(changed);const failed=structuredClone(changed);state.read.mockReturnValue({sessions:[changed]});expect(()=>verifySdkExternalState(freeze)).toThrow('ACCEPTANCE_EXTERNAL_CHANGED');expect(changed).toEqual(failed);
+  }
+  state.read.mockReturnValue({sessions:[selection(),selection()]});expect(()=>verifySdkExternalState(freeze)).toThrow('ACCEPTANCE_EXTERNAL_SELECTIONS');
+  state.read.mockReturnValue({sessions:[{...selection(),candidates:undefined}]});expect(()=>verifySdkExternalState(freeze)).toThrow('ACCEPTANCE_EXTERNAL_SELECTIONS');
+  const health=selection();health.session.targets[0]!.health='degraded';state.read.mockReturnValue({sessions:[health]});verifySdkExternalState(freeze);
+  state.read.mockReturnValue({sessions:[selection()]});verifySdkExternalState(freeze);
+
 	});
 	it('does not pass empty or duplicate inventory',()=>{
 		const invalid={receipts:Object.fromEntries(Object.keys(freeze.receipts).map(path=>[path,'sha256:'+'0'.repeat(64)]))};

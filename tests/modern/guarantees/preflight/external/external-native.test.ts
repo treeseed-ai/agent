@@ -21,7 +21,10 @@ it('native Git GitHub registry and protected local manager reads retain every se
 			const refs = captures.get(encodeURIComponent(repository.key) + '-remote-refs.txt')!; expect(refs).toContain(f.base + '\trefs/heads/staging'); expect(refs).toContain(f.base + '\trefs/tags/original');
 			for (const kind of ['releases', 'issues', 'pull-requests', 'deployments']) expect(JSON.parse(captures.get(encodeURIComponent(repository.key) + '-' + kind + '.json')!)).toHaveLength(2);
 		}
-		const freeze = { receipts }, frozen = structuredClone({ receipts, captures }); await measured('unchanged',()=>verifySdkExternalState(freeze,cancellation.signal));
+		const freeze = { receipts }, frozen = structuredClone({ receipts, captures });
+		// Capture is the complete original before observation. The complete after
+		// verification below also proves exact retry; do not run an identical
+		// aggregate positive verification twice in this one native case.
 		const failures: Array<{ mode: string; message: string }> = [];
 		for (const fault of ['denied', 'malformed', 'duplicate', 'interrupted']) {
 			await f.control({ fault }); let message = ''; try { await verifySdkExternalState(freeze,cancellation.signal); } catch (error) { message = error instanceof Error ? error.message : String(error); }
@@ -39,6 +42,7 @@ it('native Git GitHub registry and protected local manager reads retain every se
 		const readSelection = (): string => { const value: unknown = reader(); if (typeof value !== 'string') throw new Error('Original native selection bytes missing'); return value; };
 		const originalSelection = readSelection();
 		await f.control({ mode: 'released' }); const changed = readSelection(); expect(changed).not.toBe(originalSelection);
+		await expect(verifySdkExternalState(freeze,cancellation.signal)).rejects.toThrow('ACCEPTANCE_EXTERNAL_CHANGED');
 		failures.push({ mode: 'native-manager-selection', message: changed }); const retained = structuredClone(failures);
 		await f.control({ mode: 'live' });
 		// Native setMode followed by markReady advances the restored generation;

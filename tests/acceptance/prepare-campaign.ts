@@ -380,6 +380,7 @@ export async function verifySdkExternalState(freeze: Row, signal?:AbortSignal): 
 	// portfolio's issue/registry bodies in RAM. Compare one owning inventory at a time.
 	const baseline = (name: string) => { const path=paths.get(name)!;const bytes=readFileSync(path,'utf8');assert.equal(freeze.receipts[path],'sha256:'+createHash('sha256').update(bytes).digest('hex'),'ACCEPTANCE_EXTERNAL_INVENTORY: Original frozen bytes differ from retained digest');return bytes; };
 	for(const name of paths.keys())baseline(name);
+	assert.equal(readCampaignDevelopmentSelections(),baseline('development-selections.json'),'ACCEPTANCE_EXTERNAL_CHANGED: Simulation changed a deployment selection');
 	await visitExternalCommands(commands,(name,bytes)=>assert.equal(bytes,baseline(name),'ACCEPTANCE_EXTERNAL_CHANGED: Simulation changed an external owning boundary'),signal);
 	assert.equal(readCampaignDevelopmentSelections(),baseline('development-selections.json'),'ACCEPTANCE_EXTERNAL_CHANGED: Simulation changed a deployment selection');
 	for(const name of paths.keys())baseline(name);

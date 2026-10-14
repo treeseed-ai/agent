@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const state = vi.hoisted(() => ({ execute: vi.fn(), directory: vi.fn(), read: vi.fn(), files: new Map<string,string>(), fault: '',
 	operator: { path: '/operator.json', bytes: 'original-operator', repositories: [{ key: 'sdk', gitUrl: 'https://github.com/treeseed-ai/sdk.git' }, { key: 'sdk-library', gitUrl: 'https://github.com/treeseed-ai/sdk-library.git' }] } }));
 vi.mock('node:child_process', () => ({ execFileSync: (...args: unknown[]) => state.execute(...args) }));
@@ -6,6 +6,7 @@ vi.mock('node:fs', () => ({ readFileSync: (path: string) => { if(path === state.
 vi.mock('../../acceptance/acceptance-cli.ts', () => ({ read: state.read }));
 vi.mock('../../acceptance/freeze-integrity.ts', async original => ({ ...await original<typeof import('../../acceptance/freeze-integrity.ts')>(), readPreRunCampaignFreeze: () => state.operator }));
 import { acceptanceReceiptDirectory, captureSdkExternalState, verifySdkExternalState } from '../../acceptance/prepare-campaign.ts';
+afterEach(()=>vi.unstubAllEnvs());
 const expected = ['sdk','sdk-library'].flatMap(repository => ['remote-refs.txt','releases.json','issues.json','pull-requests.json','deployments.json'].map(kind=>repository+'-'+kind)).concat(['sdk-registry.json','development-selections.json']);
 const freeze = { receipts: Object.fromEntries(expected.map(name=>['/receipts/'+name,'original-digest'])) };
 beforeEach(() => {
@@ -30,7 +31,8 @@ describe('SDK simulation external-state gate (fixtures are not upstream proof)',
 		const capture=vi.fn();captureSdkExternalState('/platform',capture);const names=capture.mock.calls.map(call=>call[0]);
 		expect([...names].sort()).toEqual([...expected].sort());expect(new Set(names).size).toBe(12);expect(names).not.toContain('sdk-dist-tags.json');expect(state.execute).toHaveBeenCalledTimes(11);
 		for(const[command,args]of state.execute.mock.calls as Array<[string,string[]]>) {
-			if(command==='gh'){expect(args).toContain('--method');expect(args[args.indexOf('--method')+1]).toBe('GET');expect(args).toContain('--paginate');expect(args).toContain('--slurp');}
+			if(command==='npm')expect(args).toContain('--registry=https://registry.npmjs.org');
+			if(command==='gh'){expect(args).toContain('--hostname');expect(args[args.indexOf('--hostname')+1]).toBe('github.com');expect(args).toContain('--method');expect(args[args.indexOf('--method')+1]).toBe('GET');expect(args).toContain('--paginate');expect(args).toContain('--slurp');}
 			if(command==='git')expect(args).toEqual(['ls-remote','--refs',expect.stringMatching(/^https:\/\/github\.com\/treeseed-ai\/sdk(?:-library)?\.git$/u)]);
 		}
 		expect(state.read).toHaveBeenCalledExactlyOnceWith(['dev','status','--all'],'treeseed',true);
@@ -45,6 +47,8 @@ describe('SDK simulation external-state gate (fixtures are not upstream proof)',
 		state.fault='';verifySdkExternalState(freeze);
 	});
 	it('does not pass empty or duplicate inventory',()=>{
+		const invalid={receipts:Object.fromEntries(Object.keys(freeze.receipts).map(path=>[path,'sha256:'+'0'.repeat(64)]))};
+		expect(()=>verifySdkExternalState(invalid)).toThrow('ACCEPTANCE_EXTERNAL_INVENTORY');expect(state.execute).not.toHaveBeenCalled();
 		expect(()=>verifySdkExternalState({receipts:{}})).toThrow('ACCEPTANCE_EXTERNAL_INVENTORY');expect(state.execute).not.toHaveBeenCalled();expect(state.read).not.toHaveBeenCalled();
 		for(const name of expected){expect(()=>verifySdkExternalState({receipts:{...freeze.receipts,['/duplicate/'+name]:'digest'}}),name).toThrow('ACCEPTANCE_EXTERNAL_INVENTORY');expect(state.execute).not.toHaveBeenCalled();}
 		const original=state.operator.repositories;try{state.operator.repositories=[...original,original[0]!];expect(()=>captureSdkExternalState('/platform',()=>{})).toThrow('ACCEPTANCE_EXTERNAL_SCOPE');expect(state.execute).not.toHaveBeenCalled();}finally{state.operator.repositories=original;}

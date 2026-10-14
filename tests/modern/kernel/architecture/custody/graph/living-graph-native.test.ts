@@ -97,7 +97,7 @@ it('native public reconciliation denies changed previews before actual commands 
 			if (mode.startsWith('live-')) {
 				const url = new URL(request.url!, 'http://127.0.0.1');
 				if (request.method === 'POST') { assert.equal(url.pathname, '/v1/teams/native-team/workday-runs/workday-live-native/stop'); stopped.push(mode); response.end(JSON.stringify({ data: { stopped: true } })); return; }
-				if (!url.pathname.endsWith('/watch')) { response.end(JSON.stringify({ data: liveGraph })); return; }
+				if (!url.pathname.endsWith('/events')) { response.end(JSON.stringify({ data: liveGraph })); return; }
 				if (mode === 'live-interrupted') { request.socket.destroy(); return; }
 				if (mode === 'live-denied' || mode === 'live-unavailable') { const status = mode === 'live-denied' ? 403 : 503; response.writeHead(status).end(JSON.stringify({ status, code: 'retained_watch_denial', title: 'Retained native watch denial' })); return; }
 				if (mode === 'live-json') { response.end('{'); return; }

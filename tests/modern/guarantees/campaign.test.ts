@@ -87,7 +87,8 @@ describe('automated campaign control (fixtures are not golden acceptance)', () =
 		for (const mode of ['simulation', 'production']) {
 			const stop = vi.fn();
 			await expect(monitorCampaign({ read: () => ({ status: 'running', mode, planningEndsAt: 0, endsAt: 10 }),
-				now: () => 1, wait: vi.fn(), collaboration: () => { throw new Error('transport'); }, verify: vi.fn(), stop })).rejects.toThrow();
+				now: () => 1, wait: vi.fn(), collaboration: () => { throw Object.assign(new Error('Original infrastructure connection refused'), { code: 'ECONNREFUSED' }); }, verify: vi.fn(), stop }))
+				.rejects.toMatchObject({ classification: mode === 'simulation' ? 'ENVIRONMENT_DEFECT' : 'PLAN_REVIEW_REQUIRED' });
 			expect(stop).toHaveBeenCalledTimes(mode === 'simulation' ? 1 : 0);
 		}
 	});

@@ -139,6 +139,10 @@ describe('automated campaign control (fixtures are not golden acceptance)', () =
 		if (typeof format === 'function') {
 			const original = new Error('Original contradictory authority'), before = Object.getOwnPropertyDescriptors(original), held = structuredClone(details);
 			const reported = format(details, original);
+			for (const denied of [null, undefined, [], {}, Object.assign({ ...details }, { [Symbol('extra')]: 'hidden' }),
+				Object.defineProperty({ ...details }, 'project', { get() { throw new Error('Forbidden accessor read'); } })])
+				expect(() => format(denied as typeof details, original)).toThrow('ACCEPTANCE_PLAN_REVIEW_REPORT');
+
 			expect(reported.message).toBe('PLAN_REVIEW_REQUIRED\n' + Object.entries(details).map(([key, value]) => key + ': ' + value).join('\n'));
 			expect(reported.classification).toBe('PLAN_REVIEW_REQUIRED'); expect(reported.cause).toBe(original);
 			expect(details).toEqual(held); expect(Object.getOwnPropertyDescriptors(original)).toEqual(before);

@@ -80,6 +80,8 @@ jobs:
           openssl x509 -in "$relay_fixture/ca.pem" -noout -checkend 0
           sudo install -d -m 0755 /etc/treeseed/sandbox
           sudo install -m 0644 "$relay_fixture/ca.pem" /etc/treeseed/sandbox/relay-ca.crt
+      - name: Build public Agent exports for native acceptance readback
+        run: npm run build:dist
       - name: Reproduce whole guest native boundary before complete verification
         run: node node_modules/vitest/vitest.mjs run --config ./vitest.config.ts tests/modern/sandbox/architecture/clock-native.test.ts
       - run: bash -lc 'npm run verify:local'

@@ -33,7 +33,7 @@ describe('SDK simulation external-state gate (fixtures are not upstream proof)',
 		expect([...names].sort()).toEqual([...expected].sort());expect(new Set(names).size).toBe(12);expect(names).not.toContain('sdk-dist-tags.json');expect(state.execute).toHaveBeenCalledTimes(11);
 		for(const[command,args]of state.execute.mock.calls as Array<[string,string[]]>) {
 			if(command==='npm')expect(args).toContain('--registry=https://registry.npmjs.org');
-			if(command==='gh'){expect(args).toContain('--hostname');expect(args[args.indexOf('--hostname')+1]).toBe('github.com');expect(args).toContain('--method');expect(args[args.indexOf('--method')+1]).toBe('GET');expect(args).toContain('--paginate');expect(args).toContain('--slurp');}
+			if(command==='gh'){expect(args).toContain('--hostname');expect(args[args.indexOf('--hostname')+1]).toBe('github.com');expect(args).toContain('--method');expect(args[args.indexOf('--method')+1]).toBe('GET');expect(args).toContain('--paginate');expect(args).not.toContain('--slurp');}
 			if(command==='git')expect(args).toEqual(['ls-remote','--refs',expect.stringMatching(/^https:\/\/github\.com\/treeseed-ai\/sdk(?:-library)?\.git$/u)]);
 		}
 		expect(state.read).toHaveBeenCalledExactlyOnceWith(['dev','status','--all'],'treeseed',true);

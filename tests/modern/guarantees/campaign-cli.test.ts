@@ -98,6 +98,7 @@ describe('campaign CLI composition units (mocked transport, not native or live a
 	});
 	it('denies live assignment inspection before collaboration approval and verification while stopping only the exact admitted simulation', async () => {
 		const original = new Error('ACCEPTANCE_LIVE_ASSIGNMENT: Controlled immutable authority failure');
+		state.graphInspect.mockImplementation((teamId: string) => { expect(teamId).toBe('team-fixture'); });
 		state.inspect.mockImplementation(() => { throw original; }); transport(() => observed('running'));
 		await expect(state.run!()).rejects.toBe(original);
 		expect(state.inspect).toHaveBeenCalledOnce(); expect(state.verify).not.toHaveBeenCalled();

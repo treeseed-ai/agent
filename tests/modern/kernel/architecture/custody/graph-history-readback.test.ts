@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { assignmentAttemptSchema, graphRevisionSchema } from '@treeseed/sdk/agent-capacity';
 import { state } from '../golden-readback-fixture.ts';
 import { request } from '../../provider-kernel-fixture.ts';
@@ -51,6 +51,19 @@ describe('complete managed graph watch assertion', () => {
 				if (!items.length && !advanced) { published = 2; advanced = true; } return page; }, moved,
 			(record: unknown) => emitted.push(structuredClone(record))]);
 		expect(emitted).toEqual(f.records.slice(0, 2)); expect([...moved.values()]).toEqual(f.records.slice(0, 2)); expect(f).toEqual(before);
+		const empty = new Map();
+		await Reflect.apply(observe, undefined, ['team', () => ({ teamId: 'team', revision: 0, digest: '' }), () => ({ items: [], nextCursor: '0' }), empty,
+			() => { throw new Error('An initial empty graph cannot fabricate a revision'); }]); expect(empty.size).toBe(0);
+		for (const changedHead of [{ ...f.graph, teamId: 'foreign' }, { ...f.graph, revision: 100 }, { ...f.graph, digest: 'sha256:' + 'f'.repeat(64) }]) {
+			await expect(Reflect.apply(observe, undefined, ['team', () => changedHead, watch, retained, () => {}])).rejects.toThrow();
+			expect([...retained]).toEqual(original);
+		}
+		await expect(Reflect.apply(observe, undefined, ['team', current, watch, new Map([[0, undefined]]), () => {}])).rejects.toThrow();
+		const time = vi.spyOn(Date, 'now').mockReturnValueOnce(0).mockReturnValue(120_001);
+		try { await expect(Reflect.apply(observe, undefined, ['team', current, () => { throw new Error('Expired inspection must not read another page'); }, retained, () => {}]))
+			.rejects.toThrow('Original inspection bound elapsed'); } finally { time.mockRestore(); }
+		expect([...retained]).toEqual(original); expect(f).toEqual(before);
+
 
 
 	});

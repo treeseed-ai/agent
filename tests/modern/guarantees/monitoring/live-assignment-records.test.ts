@@ -38,6 +38,25 @@ describe('live canonical assignment observation (controlled inputs, not managed 
 			expect({supplied,suppliedDecisions}).toEqual(failed);
 		}
 		expect(revised).toEqual(revisedBefore); check!(revised.assignments,revised.graph,decisions,run);
+		const terminalRun={...liveRun(item),status:'completed'}, retired=structuredClone(graph); row((retired.nodes as Row[])[0]).status='stale'; row((retired.nodes as Row[])[0]).nodeRevision=2;
+		check!([item],retired,new Map(),terminalRun); const retirementBefore=structuredClone(retired);
+		expect(() => check!([item],retired,new Map(),{...terminalRun,status:'running'})).toThrow('ACCEPTANCE_NORMAL_REVISIONS');
+		row((retired.nodes as Row[])[0]).nodeRevision=3; expect(() => check!([item],retired,new Map(),terminalRun)).toThrow('ACCEPTANCE_NORMAL_REVISIONS');
+		const cancelled=structuredClone(item); cancelled.status='cancelled'; row(cancelled.assignmentAttempt).status='cancelled'; row(row(cancelled.assignmentAttempt).effectiveProfile).activity='planning';
+		const handoffRun=liveRun(cancelled), parameters=row(handoffRun.parameters), boundary=new Date(Date.parse(handoffRun.startedAt)+Number(parameters.durationSeconds)*Number(parameters.planningPercent)*10).toISOString();
+		cancelled.lifecycleCode='planning_boundary_cancelled'; cancelled.failedAt=boundary; cancelled.capacityEnvelope.budget={time:{authorityDeadlineAt:boundary,executionDeadlineAt:boundary}};
+		cancelled.lifecycleOutput={performance:{disposition:'cancelled'}}; const cancelledGraph=liveAssignmentGraph(cancelled), handoffBefore=structuredClone(cancelled);
+		check!([cancelled],cancelledGraph,new Map(),handoffRun);
+		for(const mode of ['early','wrong-authority','acting','wrong-disposition']) {
+			const denied=structuredClone(cancelled);
+			if(mode==='early') denied.failedAt=new Date(Date.parse(boundary)-1).toISOString();
+			if(mode==='wrong-authority') denied.lifecycleCode='assignment_cancelled';
+			if(mode==='acting') row(row(denied.assignmentAttempt).effectiveProfile).activity='acting';
+			if(mode==='wrong-disposition') row(row(denied.lifecycleOutput).performance).disposition='deadline_exhausted';
+			const failed=structuredClone(denied); expect(() => check!([denied],cancelledGraph,new Map(),handoffRun),mode).toThrow('ACCEPTANCE_NORMAL_REVISIONS'); expect(denied).toEqual(failed);
+		}
+		expect(cancelled).toEqual(handoffBefore); check!([item],retirementBefore,new Map(),terminalRun);
+
 
 	});
 

@@ -169,7 +169,7 @@ it('native public SDK event pages reach the original campaign observer with comp
 		const unsafe = { proposal: { id: 'unsafe-original', digest: 'sha256:' + 'a'.repeat(64) }, request: { body: { executionMode: row(publicReply.run).executionMode } } }, heldUnsafe = structuredClone(unsafe);
 		expect(() => requireCampaignSimulation(unsafe, '/controlled/native.freeze', text => { reports.push(text); })).toThrow('PLAN_REVIEW_REQUIRED');
 		expect(reports).toHaveLength(1); expect(reports[0]!.split('\n')).toHaveLength(8);
-		expect(reports[0]).toContain('workday: not-started\n'); expect(reports[0]).toContain('observed evidence: /controlled/native.freeze: request.body.executionMode=production');
+		expect(reports[0]).toContain('workday: not-started\n'); expect(reports[0]).toContain('observed evidence: /controlled/native.freeze: request.body.executionMode="production"');
 		expect(unsafe).toEqual(heldUnsafe); expect(publicReply).toEqual(originalReply);
 		// Controlled event/status/token inputs are not native governance, model
 		// execution, provider-generated charges, producer completeness or teardown.

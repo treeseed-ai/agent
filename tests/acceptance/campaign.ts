@@ -264,13 +264,14 @@ export function requireCampaignSimulation(freeze: StartRow, freezePath: string, 
 	const request = freeze.request, body = request && typeof request === 'object' && !Array.isArray(request) ? (request as StartRow).body : undefined;
 	const mode = body && typeof body === 'object' && !Array.isArray(body) ? (body as StartRow).executionMode : undefined;
 	if (mode === 'simulation') return;
+	const observedMode = typeof mode === 'string' ? JSON.stringify(mode) : mode === undefined ? 'missing' : 'malformed ' + typeof mode;
 	const original = new Error('ACCEPTANCE_CAMPAIGN_MODE: Frozen SDK intent must provide simulation authority');
 	let failure: ReturnType<typeof campaignPlanReviewRequired>;
 	try {
 		const proposal = startRow(freeze.proposal);
 		failure = campaignPlanReviewRequired({ project: 'sdk', proposal: String(proposal.id) + ' ' + String(proposal.digest), workday: 'not-started',
 			'failed expectation': 'Agent execution acceptance / Non-negotiable rules / ACCEPTANCE_CAMPAIGN_MODE',
-			'observed evidence': freezePath + ': request.body.executionMode=' + String(mode),
+			'observed evidence': freezePath + ': request.body.executionMode=' + observedMode,
 			'why implementation repair is insufficient': 'Frozen operator intent lacks permitted simulation authority; an implementation repair cannot supply or change operator intent.',
 			'smallest proposed plan correction': 'Propose executionMode: simulation for this frozen request; apply only after plan review.' }, original);
 		report(failure.message);

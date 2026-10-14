@@ -71,7 +71,7 @@ describe('campaign CLI composition units (mocked transport, not native or live a
 				expect(state.retainReview).toHaveBeenCalledExactlyOnceWith(report, '/freeze', state.freeze);
 				expect(report.split('\n')).toEqual(['PLAN_REVIEW_REQUIRED', 'project: sdk', 'proposal: fresh ' + state.freeze.proposal.digest,
 					'workday: not-started', 'failed expectation: Agent execution acceptance / Non-negotiable rules / ACCEPTANCE_CAMPAIGN_MODE',
-					'observed evidence: /freeze: request.body.executionMode=production',
+					'observed evidence: /freeze: request.body.executionMode="production"',
 					'why implementation repair is insufficient: Frozen operator intent lacks permitted simulation authority; an implementation repair cannot supply or change operator intent.',
 					'smallest proposed plan correction: Propose executionMode: simulation for this frozen request; apply only after plan review.']);
 				if (reportFails) { expect(failure).toBeInstanceOf(AggregateError); expect((failure as AggregateError).errors[1]).toBe(reportFailure);

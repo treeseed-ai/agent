@@ -74,7 +74,7 @@ return observed.data;},'controlled-team',{TREESEED_ACCEPTANCE_FREEZE_PATH:${JSON
 		const unsafeBytes = JSON.stringify(unsafe); fs.writeFileSync(planPath, unsafeBytes, { mode: 0o600 });
 		const details = { project: 'sdk', proposal: unsafe.proposal.id + ' ' + unsafe.proposal.digest, workday: 'not-started',
 			'failed expectation': 'Agent execution acceptance / Non-negotiable rules / ACCEPTANCE_CAMPAIGN_MODE',
-			'observed evidence': planPath + ': request.body.executionMode=production',
+			'observed evidence': planPath + ': request.body.executionMode="production"',
 			'why implementation repair is insufficient': 'Frozen operator intent lacks permitted simulation authority; an implementation repair cannot supply or change operator intent.',
 			'smallest proposed plan correction': 'Propose executionMode: simulation for this frozen request; apply only after plan review.' };
 		const report = 'PLAN_REVIEW_REQUIRED\n' + Object.entries(details).map(([key, value]) => key + ': ' + value).join('\n'), reportPath = planPath + '.plan-review.txt';

@@ -131,9 +131,17 @@ describe('automated campaign control (fixtures are not golden acceptance)', () =
 	it('retains both errors if the supported stop fails after a boundary failure', async () => {
 		const details = { project: 'sdk', proposal: 'proposal-original sha256:' + 'a'.repeat(64), workday: 'not-started',
 			'failed expectation': 'Agent execution acceptance / Non-negotiable rules / sole simulation mode',
-			'observed evidence': 'retained original workdays show: executionMode=production',
-			'why implementation repair is insufficient': 'The observed execution authority contradicts the fixed simulation contract; authority must be reviewed before repair.',
-			'smallest proposed plan correction': 'Review the contradictory authority; no proposal correction has been applied.' };
+			'observed evidence': 'retained original frozen operator request: executionMode=production',
+			'why implementation repair is insufficient': 'The frozen operator request itself requires prohibited production execution; implementation repair cannot authorize that intent.',
+			'smallest proposed plan correction': 'Propose simulation intent after plan review; no correction applied.' };
+
+		for (const mode of [undefined, null, '', ' ', 'simulation ', 'production', 'production\nfield: injected', false, 0, {}, []]) {
+			const input = { proposal: { id: 'original-proposal', digest: 'sha256:' + 'a'.repeat(64) }, request: { body: { executionMode: mode } } }, held = structuredClone(input), reports: string[] = [];
+			expect(() => campaign.requireCampaignSimulation(input, '/original.freeze', text => { reports.push(text); })).toThrow('PLAN_REVIEW_REQUIRED');
+			expect(reports).toHaveLength(1); expect(reports[0]!.split('\n')).toHaveLength(8); expect(input).toEqual(held);
+		}
+		const valid = { proposal: { id: 'original-proposal', digest: 'sha256:' + 'a'.repeat(64) }, request: { body: { executionMode: 'simulation' } } }, report = vi.fn();
+		campaign.requireCampaignSimulation(valid, '/original.freeze', report); expect(report).not.toHaveBeenCalled();
 		const format = Reflect.get(campaign, 'campaignPlanReviewRequired') as ((value: typeof details, cause: unknown) => Error & { classification: string });
 		expect.soft(typeof format).toBe('function');
 		if (typeof format === 'function') {

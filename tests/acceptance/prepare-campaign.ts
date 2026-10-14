@@ -262,9 +262,9 @@ function sdkExternalCommands(platform: string) {
 
 async function visitExternalCommands(commands: Map<string,ExternalCommand>, visit:(name:string,bytes:string)=>void, signal?:AbortSignal):Promise<void> {
  const entries=[...commands],failures:unknown[]=[];let next=0,failed=false;
- // Five workers bound native processes and retained response bytes. A slow
- // deployment history must not leave the other four slots idle.
- await Promise.all(Array.from({length:Math.min(5,entries.length)},async()=>{
+ // Two workers bound native processes and retained response bytes. A slow
+ // deployment history must not leave the other slot idle.
+ await Promise.all(Array.from({length:Math.min(2,entries.length)},async()=>{
   while(!failed&&next<entries.length){
    const[name,command]=entries[next++]!;
    try{signal?.throwIfAborted();visit(name,await observeExternalCommand(command,signal));}

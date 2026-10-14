@@ -1,9 +1,9 @@
 import type { DevelopmentSession, DevelopmentCandidate } from '@treeseed/sdk/development';
 import { createHash } from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-const state = vi.hoisted(() => ({ execute: vi.fn(), directory: vi.fn(), read: vi.fn(), files: new Map<string,string>(), fault: '',
+const state = vi.hoisted(() => ({ execute: vi.fn(), native: vi.fn(), directory: vi.fn(), read: vi.fn(), files: new Map<string,string>(), fault: '',
 	operator: { path: '/operator.json', bytes: 'original-operator', repositories: [{ key: 'sdk', gitUrl: 'https://github.com/treeseed-ai/sdk.git' }, { key: 'sdk-library', gitUrl: 'https://github.com/treeseed-ai/sdk-library.git' }] } }));
-vi.mock('node:child_process', () => ({ execFileSync: (...args: unknown[]) => state.execute(...args) }));
+vi.mock('node:child_process', () => ({ execFileSync: (...args: unknown[]) => state.execute(...args),execFile:(...args:unknown[])=>state.native(...args) }));
 vi.mock('node:fs', () => ({ readFileSync: (path: string) => { if(path === state.operator.path) return state.operator.bytes; const value=state.files.get(path);if(value===undefined)throw new Error('missing original file');return value; }, existsSync: vi.fn(), mkdtempSync: state.directory, writeFileSync: vi.fn() }));
 vi.mock('../../acceptance/acceptance-cli.ts', () => ({ read: state.read }));
 vi.mock('../../acceptance/freeze-integrity.ts', async original => ({ ...await original<typeof import('../../acceptance/freeze-integrity.ts')>(), readPreRunCampaignFreeze: () => state.operator }));
@@ -36,9 +36,21 @@ beforeEach(() => {
 		if(state.fault==='duplicate')records.push(structuredClone(records[0]!));
 		return JSON.stringify(records);
 	});
+	state.native.mockReset().mockImplementation((command:string,args:string[],_options:unknown,callback:(error:Error|null,stdout:string,stderr:string)=>void)=>{try{callback(null,state.execute(command,args),'');}catch(error){callback(error as Error,'','');}});
 	captureSdkExternalState('/platform',(name,bytes)=>{ const path='/receipts/'+name;state.files.set(path,bytes);freeze.receipts[path]='sha256:'+createHash('sha256').update(bytes).digest('hex'); });state.execute.mockClear();state.read.mockClear();
 });
 describe('SDK simulation external-state gate (fixtures are not upstream proof)',()=>{
+ it('uses at most five concurrent original read commands and waits for every observation without narrowing the inventory',async()=>{
+  let active=0,maximum=0;const finished:string[]=[];
+  state.native.mockImplementation((command:string,args:string[],_options:unknown,callback:(error:Error|null,stdout:string,stderr:string)=>void)=>{
+   active++;maximum=Math.max(maximum,active);setTimeout(()=>{try{const bytes=state.execute(command,args);active--;finished.push(command+':'+args.join(' '));callback(null,bytes,'');}catch(error){active--;callback(error as Error,'','');}},1);
+  });
+  const captured=vi.fn(),pending=captureSdkExternalState('/platform',captured);expect(pending).toBeInstanceOf(Promise);await pending;
+  expect(maximum).toBeGreaterThan(1);expect(maximum).toBeLessThanOrEqual(5);expect(active).toBe(0);expect(finished).toHaveLength(11);
+  expect(captured.mock.calls.map(call=>call[0])).toEqual(expected);expect(new Set(captured.mock.calls.map(call=>call[0])).size).toBe(12);
+ });
+
+
 	it('retains receipt storage beside the immutable freeze and captures each external inventory once',()=>{
 		state.directory.mockReturnValue('/acceptance/sdk.freeze.json.receipts-unique');expect(acceptanceReceiptDirectory('/acceptance/sdk.freeze.json')).toBe('/acceptance/sdk.freeze.json.receipts-unique');expect(state.directory).toHaveBeenCalledWith('/acceptance/sdk.freeze.json.receipts-');
 		const capture=vi.fn();captureSdkExternalState('/platform',capture);const names=capture.mock.calls.map(call=>call[0]);

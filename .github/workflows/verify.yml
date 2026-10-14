@@ -138,8 +138,8 @@ jobs:
         with:
           github-token: ${{ github.token }}
           repository: treeseed-ai/api
-          run-id: 38563641609
-          name: api-c3cb35ea1c87f63dfe136c2974dae495ad7fd1d0
+          run-id: 38624553996
+          name: api-05de58440ed3589c9d116afa98c00589dfbb9fee
           path: .treeseed/installed-owner-inputs/api
       - name: Read held sdk archive
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
@@ -154,8 +154,8 @@ jobs:
         with:
           github-token: ${{ github.token }}
           repository: treeseed-ai/cli
-          run-id: 38612800009
-          name: cli-36798a849e5876a2c5840ffe375da86701cf52b7
+          run-id: 38647918411
+          name: cli-6e2579428f4959906cd5b9b669ebbb2b44cb495c
           path: .treeseed/installed-owner-inputs/cli
       - name: Read held deployment archive
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093

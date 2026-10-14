@@ -4,6 +4,8 @@ import { expect, it } from 'vitest';
 import { ControlPlaneClient, defaultLocalControlPlaneServer } from '@treeseed/sdk/control-plane-client';
 import { controlPlaneOperation } from '@treeseed/sdk/operator-contracts';
 import { graphRevisionSchema } from '@treeseed/sdk/agent-capacity';
+import { observeLiveGraphRevisions } from '../../../../../acceptance/workday/support/monitoring/live-graph-revisions.ts';
+import { monitorCampaign } from '../../../../../acceptance/campaign.ts';
 import { verifyGraphNoopPlan } from '../../../../../acceptance/workday/support/evidence-pages.ts';
 import { verifyGovernedProfile } from '../../../../../acceptance/workday/support/assignment-authority.ts';
 import { profileOrderFixture, profileOrderFailures, mutateProfileOrder, grantRequestCases, grantRequestFixture } from './profile-order-fixture.ts';
@@ -84,11 +86,28 @@ it('native public reconciliation denies changed previews before actual commands 
 		graphDigest: graph.digest, changes: { ...changes, added: ['original-node'] }, createdAt: '2026-10-11T00:00:00.000Z' });
 	const held = structuredClone({ graph, plan, receipt }), requests: Array<{ method?: string; path?: string; body: unknown }> = [];
 	const failures: Array<{ mode: string; error: string }> = []; let mode = 'exact';
+	const next = graphRevisionSchema.parse({ ...receipt, revision: 2, graphDigest: 'sha256:' + 'e'.repeat(64), createdAt: '2026-10-11T00:00:01.000Z' });
+	let liveRecords = [receipt], liveGraph = { ...graph }, advanced = false; const stopped: string[] = [];
+
 	const server = createServer((request, response) => {
 		let bytes = ''; request.setEncoding('utf8'); request.on('data', value => { bytes += String(value); });
 		request.on('end', () => {
 			const body = bytes ? JSON.parse(bytes) as { plan?: boolean } : undefined;
 			requests.push({ method: request.method, path: request.url, body }); response.setHeader('content-type', 'application/json');
+			if (mode.startsWith('live-')) {
+				const url = new URL(request.url!, 'http://127.0.0.1');
+				if (request.method === 'POST') { assert.equal(url.pathname, '/v1/teams/native-team/workday-runs/workday-live-native/stop'); stopped.push(mode); response.end(JSON.stringify({ data: { stopped: true } })); return; }
+				if (!url.pathname.endsWith('/events')) { response.end(JSON.stringify({ data: liveGraph })); return; }
+				if (mode === 'live-interrupted') { request.socket.destroy(); return; }
+				if (mode === 'live-denied' || mode === 'live-unavailable') { const status = mode === 'live-denied' ? 403 : 503; response.writeHead(status).end(JSON.stringify({ status, code: 'retained_watch_denial', title: 'Retained native watch denial' })); return; }
+				if (mode === 'live-json') { response.end('{'); return; }
+				const cursor = url.searchParams.get('cursor')!; const items = structuredClone(liveRecords.filter(record => record.revision > Number(cursor)).slice(0, 1));
+				if (mode === 'live-hidden') items.splice(0); if (mode === 'live-duplicate' && items[0]) items.push(structuredClone(items[0]));
+				if (mode === 'live-foreign' && items[0]) items[0].teamId = 'foreign'; if (mode === 'live-changed' && items[0]) items[0].ruleRevision++;
+				response.end(JSON.stringify({ data: { items, nextCursor: items.length ? String(items.at(-1)!.revision) : cursor } }));
+				if (mode === 'live-advance' && !items.length && !advanced) { liveRecords = [receipt, next]; liveGraph = { ...graph, revision: 2, digest: next.graphDigest }; advanced = true; }
+				return;
+			}
 			if (request.method === 'GET') { response.end(JSON.stringify({ data: graph })); return; }
 			if (!body?.plan) { response.end(JSON.stringify({ data: receipt })); return; }
 			if (mode === 'interrupted') { request.socket.destroy(); return; }
@@ -131,6 +150,28 @@ it('native public reconciliation denies changed previews before actual commands 
 		expect(failures).toEqual(retained); expect({ graph, plan, receipt }).toEqual(held);
 		expect(requests).toHaveLength(44);
 		for (const request of requests) expect(request.path).toBe(`/v1/teams/${graph.teamId}/${request.method === 'GET' ? 'execution-graph' : 'execution-graph/reconcile'}`);
+		mode = 'live-advance'; const snapshots: unknown[] = [], heads: unknown[] = [], retainedRevisions = new Map();
+		const current = async () => { const value = (await client.invoke(controlPlaneOperation('execution.graph.show'), { path: { teamId: graph.teamId }, query: {}, body: undefined })).data;
+			assert.ok(value && typeof value === 'object' && !Array.isArray(value)); return value as Record<string, unknown>; };
+		const watch = async (cursor: string) => { const value = (await client.invoke(controlPlaneOperation('execution.graph.watch'), { path: { teamId: graph.teamId }, query: { cursor }, body: undefined })).data;
+			assert.ok(value && typeof value === 'object' && !Array.isArray(value)); return value as Record<string, unknown>; };
+		const inspect = () => observeLiveGraphRevisions(graph.teamId, current, watch, retainedRevisions, (revision, head) => { snapshots.push(structuredClone(revision)); heads.push(structuredClone(head)); });
+		await inspect(); expect(snapshots).toEqual([receipt, next]); expect([...retainedRevisions.values()]).toEqual([receipt, next]);
+		expect(heads).toEqual(Array.from({ length: 2 }, () => ({ teamId: graph.teamId, revision: 2, digest: next.graphDigest })));
+		await Promise.all([inspect(), inspect()]); expect(snapshots).toEqual([receipt, next]);
+		const heldRevisions = structuredClone([...retainedRevisions]), failedLive: unknown[] = [];
+		for (const fault of ['hidden', 'duplicate', 'foreign', 'changed', 'denied', 'unavailable', 'json', 'interrupted']) {
+			mode = 'live-' + fault; let progressed = false;
+			try { await monitorCampaign({ admittedSimulation: true, read: () => ({ status: 'running', mode: 'simulation', planningEndsAt: 1, endsAt: 10 }), inspect,
+				now: () => 1, wait: async () => { progressed = true; }, collaboration: () => { progressed = true; }, verify: () => { progressed = true; },
+				stop: async () => { await client.invoke(controlPlaneOperation('workdays.stop'), { path: { teamId: graph.teamId, runId: 'workday-live-native' }, query: {}, body: { reason: 'Retained live graph boundary failure' } }); } }); }
+			catch (failure) { failedLive.push({ mode, failure: String(failure) }); }
+			expect(progressed, mode).toBe(false); expect(stopped.at(-1)).toBe(mode); expect([...retainedRevisions]).toEqual(heldRevisions);
+		}
+		expect(failedLive).toHaveLength(8); expect(stopped).toHaveLength(8); const originalFailures = structuredClone(failedLive);
+		mode = 'live-exact'; await inspect(); expect(failedLive).toEqual(originalFailures); expect(snapshots).toEqual([receipt, next]);
+		expect({ graph, plan, receipt }).toEqual(held);
+		console.log(JSON.stringify({ retainedNativeLiveGraphFailures: failedLive, stoppedWorkday: 'workday-live-native', snapshots }));
 		// Public SDK/HTTP and original guard; controlled upstream receipts are not native API producer evidence.
 	} finally {
 		server.closeAllConnections();

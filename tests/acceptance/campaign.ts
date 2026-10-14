@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import type { CommunicationSendRequest } from '@treeseed/sdk/operator-contracts';
-import { closeSync, constants, fstatSync, fsyncSync, linkSync, lstatSync, mkdtempSync, openSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { closeSync, constants, existsSync, fstatSync, fsyncSync, linkSync, lstatSync, mkdtempSync, openSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, isAbsolute, resolve } from 'node:path';
 
 type StartRow = Record<string, unknown>;
@@ -38,30 +38,56 @@ function checkedStart(started: StartRow, freeze: StartRow): string {
 	return id;
 }
 
+/** One immutable capture path for original campaign evidence, never new run authority. */
+function retainCampaignBytes(path: string, bytes: string, verify: (retained: Buffer) => void): void {
+	const pending = mkdtempSync(path + '.pending-'); let originalFailure: unknown;
+	try {
+		const temporary = resolve(pending, 'receipt'), fd = openSync(temporary, 'wx', 0o600);
+		try { writeFileSync(fd, bytes); fsyncSync(fd); } finally { closeSync(fd); }
+		try { linkSync(temporary, path); }
+		catch (failure) { if ((failure as NodeJS.ErrnoException).code !== 'EEXIST') throw failure; }
+		verify(startBytes(path));
+		const directory = openSync(dirname(path), constants.O_RDONLY);
+		try { fsyncSync(directory); } finally { closeSync(directory); }
+	} catch (failure) { originalFailure = failure; throw failure; }
+	finally {
+		try { rmSync(pending, { recursive: true, force: true }); }
+		catch (failure) { throw originalFailure ? new AggregateError([originalFailure, failure], 'ACCEPTANCE_CAMPAIGN_RECEIPT: Capture and scoped cleanup failed') : failure; }
+	}
+}
+
 /** Retain the existing API receipt, never another run authority or mutable freeze. */
 export function retainCampaignWorkdayStart(started: StartRow, freezePath: string, freeze: StartRow): string {
 	const id = checkedStart(started, freeze), bytes = startBytes(freezePath);
 	assert.deepEqual(JSON.parse(bytes.toString('utf8')), freeze, 'ACCEPTANCE_WORKDAY_START: Frozen input changed');
 	const explicit = process.env.TREESEED_ACCEPTANCE_WORKDAY_ID;
-	const path = `${freezePath}.workday-start.json`, pending = mkdtempSync(`${path}.pending-`);
-	let originalFailure: unknown;
-	try {
-		const temporary = resolve(pending, 'receipt.json'), fd = openSync(temporary, 'wx', 0o600);
-		try { writeFileSync(fd, JSON.stringify(started)); fsyncSync(fd); } finally { closeSync(fd); }
-		try { linkSync(temporary, path); }
-		catch (failure) { if ((failure as NodeJS.ErrnoException).code !== 'EEXIST') throw failure; }
-		assert.deepEqual(JSON.parse(startBytes(path).toString('utf8')), started, 'ACCEPTANCE_WORKDAY_START: Retained receipt differs from exact API replay');
-		const directory = openSync(dirname(path), constants.O_RDONLY);
-		try { fsyncSync(directory); } finally { closeSync(directory); }
-		assert.deepEqual(startBytes(freezePath), bytes, 'ACCEPTANCE_WORKDAY_START: Frozen input changed during capture');
-	} catch (failure) { originalFailure = failure; throw failure; }
-	finally {
-		try { rmSync(pending, { recursive: true, force: true }); }
-		catch (failure) { throw originalFailure ? new AggregateError([originalFailure, failure], 'ACCEPTANCE_WORKDAY_START: Capture and scoped cleanup failed') : failure; }
-	}
+	retainCampaignBytes(freezePath + '.workday-start.json', JSON.stringify(started), retained =>
+		assert.deepEqual(JSON.parse(retained.toString('utf8')), started, 'ACCEPTANCE_WORKDAY_START: Retained receipt differs from exact API replay'));
+	assert.deepEqual(startBytes(freezePath), bytes, 'ACCEPTANCE_WORKDAY_START: Frozen input changed during capture');
 	if (explicit) assert.equal(explicit, id, 'ACCEPTANCE_WORKDAY_START: Conflicting explicit workday');
 	process.env.TREESEED_ACCEPTANCE_WORKDAY_ID = id;
 	return id;
+}
+
+/** Retain the required report because strict child diagnostics intentionally omit raw stderr. */
+export function retainCampaignPlanReview(report: string, freezePath: string, freeze: StartRow): string {
+	const label = 'ACCEPTANCE_PLAN_REVIEW_REPORT', bytes = startBytes(freezePath);
+	assert.deepEqual(JSON.parse(bytes.toString('utf8')), freeze, label);
+	assert.ok(typeof report === 'string', label); const lines = report.split('\n');
+	assert.equal(lines[0], 'PLAN_REVIEW_REQUIRED', label); assert.equal(lines.length, 8, label);
+	const details = Object.fromEntries(lines.slice(1).map(line => {
+		const at = line.indexOf(': '); assert.ok(at > 0, label); return [line.slice(0, at), line.slice(at + 2)];
+	})) as PlanReviewReport;
+	assert.equal(campaignPlanReviewRequired(details, undefined).message, report, label);
+	assert.equal(details.project, 'sdk', label);
+	const proposal = startRow(freeze.proposal);
+	assert.equal(details.proposal, String(proposal.id) + ' ' + String(proposal.digest), label);
+	const receiptPath = freezePath + '.workday-start.json';
+	if (details.workday === 'not-started') assert.ok(!existsSync(receiptPath), label);
+	else assert.equal(details.workday, checkedStart(startRow(JSON.parse(startBytes(receiptPath).toString('utf8'))), freeze), label);
+	const path = freezePath + '.plan-review.txt';
+	retainCampaignBytes(path, report, retained => assert.equal(retained.toString('utf8'), report, label));
+	assert.deepEqual(startBytes(freezePath), bytes, label); return path;
 }
 
 /** Explicit advanced-case IDs remain supported; SDK children use the original receipt. */

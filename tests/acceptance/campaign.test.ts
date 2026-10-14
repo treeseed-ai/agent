@@ -3,7 +3,7 @@ import type { GraphRevision } from '@treeseed/sdk/agent-capacity';
 import { existsSync, readFileSync } from 'node:fs';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { monitorCampaign, openSdkCampaignDiscussion, requirePlanningWindow, retainCampaignWorkdayStart } from './campaign.ts';
+import { monitorCampaign, openSdkCampaignDiscussion, requirePlanningWindow, retainCampaignWorkdayStart, retainCampaignPlanReview } from './campaign.ts';
 import { verifyFreezeIntegrity } from './freeze-integrity.ts';
 import { read, row } from './acceptance-cli.ts';
 import { verifyGolden } from './sdk-runtime-golden.test.ts';
@@ -47,7 +47,7 @@ test('Frozen SDK campaign drives planning acting review and terminal golden gate
 	let currentRun: Record<string, unknown> | undefined;
 	await monitorCampaign({ planReview: { project: 'sdk', proposal: freeze.proposal.id + ' ' + freeze.proposal.digest, workday: workdayId,
 		get observedEvidence() { return 'workdays show ' + workdayId + ': executionMode=' + String(currentRun?.executionMode); },
-		report: text => console.error(text) }, admittedSimulation: true, admitDiscussion: () => {
+		report: text => { retainCampaignPlanReview(text, path, freeze); console.error(text); } }, admittedSimulation: true, admitDiscussion: () => {
 		retainCampaignWorkdayStart(started, path, freeze);
 		return openSdkCampaignDiscussion(freeze.proposal.id, workdayId,
 		(channel, request, key) => read(['send', channel, request.message, '--proposal', request.proposalId!,

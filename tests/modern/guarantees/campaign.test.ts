@@ -91,7 +91,7 @@ describe('automated campaign control (fixtures are not golden acceptance)', () =
 			const pending = monitorCampaign({ read: () => ({ status: 'running', mode, planningEndsAt: 0, endsAt: 10 }),
 				now: () => 1, wait: vi.fn(), collaboration: () => { throw failure; }, verify: vi.fn(), stop });
 			await expect(pending).rejects.toThrow();
-			await expect.soft(pending).rejects.toMatchObject({ classification: mode === 'simulation' ? 'ENVIRONMENT_DEFECT' : 'PLAN_REVIEW_REQUIRED' });
+			await expect.soft(pending).rejects.toMatchObject({ classification: mode === 'simulation' ? 'ENVIRONMENT_DEFECT' : 'IMPLEMENTATION_DEFECT' });
 			if (mode === 'simulation') await expect.soft(pending).rejects.toMatchObject({ cause: failure });
 			expect(Object.getOwnPropertyDescriptors(failure)).toEqual(held);
 			expect(stop).toHaveBeenCalledTimes(mode === 'simulation' ? 1 : 0);

@@ -57,34 +57,38 @@ beforeEach(() => {
 });
 afterEach(() => vi.useRealTimers());
 describe('campaign CLI composition units (mocked transport, not native or live acceptance)', () => {
-	it('reports the exact frozen plan-review authority before any progress and preserves reporting failure without mutating an unverified production run', async () => {
+	it('reports an unsafe frozen request before admission and classifies contradictory runtime as an implementation defect without unsafe mutation', async () => {
 		const stderr = vi.spyOn(console, 'error').mockImplementation(() => {});
 		try {
 			state.freeze.proposal.digest = 'sha256:' + 'a'.repeat(64);
-			for (const status of ['running', 'completed']) for (const reportFails of [false, true]) {
+			state.freeze.request.body.executionMode = 'production';
+			for (const reportFails of [false, true]) {
 				state.read.mockReset(); state.verify.mockReset(); state.inspect.mockReset(); state.retainReview.mockClear(); stderr.mockClear();
-				const shown = observed(status); shown.run.executionMode = 'production'; shown.scheduling.executionMode = 'production';
-				const held = structuredClone({ freeze: state.freeze, shown }), reportFailure = new Error('Original report destination interrupted');
-				stderr.mockImplementation(() => { if (reportFails) throw reportFailure; }); transport(() => shown);
+				const held = structuredClone(state.freeze), reportFailure = new Error('Original report destination interrupted');
+				stderr.mockImplementation(() => { if (reportFails) throw reportFailure; }); transport(() => observed());
 				const failure = await state.run!().then(() => undefined, (error: unknown) => error);
 				expect(stderr).toHaveBeenCalledOnce(); const report = stderr.mock.calls[0]![0] as string;
 				expect(state.retainReview).toHaveBeenCalledExactlyOnceWith(report, '/freeze', state.freeze);
 				expect(report.split('\n')).toEqual(['PLAN_REVIEW_REQUIRED', 'project: sdk', 'proposal: fresh ' + state.freeze.proposal.digest,
-					'workday: ' + workdayId, 'failed expectation: Agent execution acceptance / Non-negotiable rules / sole simulation mode',
-					'observed evidence: workdays show ' + workdayId + ': executionMode=production',
-					'why implementation repair is insufficient: Observed execution authority contradicts the fixed simulation contract; review that authority before repair.',
-					'smallest proposed plan correction: Review the contradictory execution authority; no proposal correction has been applied.']);
+					'workday: not-started', 'failed expectation: Agent execution acceptance / Non-negotiable rules / ACCEPTANCE_CAMPAIGN_MODE',
+					'observed evidence: /freeze: request.body.executionMode=production',
+					'why implementation repair is insufficient: Frozen operator intent lacks permitted simulation authority; an implementation repair cannot supply or change operator intent.',
+					'smallest proposed plan correction: Propose executionMode: simulation for this frozen request; apply only after plan review.']);
 				if (reportFails) { expect(failure).toBeInstanceOf(AggregateError); expect((failure as AggregateError).errors[1]).toBe(reportFailure);
-					expect((failure as AggregateError).errors[0]).toMatchObject({ classification: 'PLAN_REVIEW_REQUIRED' }); }
+					expect((failure as AggregateError).errors[0]).toBeInstanceOf(Error); }
 				else expect(failure).toMatchObject({ classification: 'PLAN_REVIEW_REQUIRED', message: report, cause: expect.any(Error) });
-				expect(state.verify).not.toHaveBeenCalled(); expect(state.inspect).not.toHaveBeenCalled();
-				expect(state.read.mock.calls.filter(call => call[0][1] === 'stop' || call[0][1] === 'evaluate')).toEqual([]);
-				expect(state.read.mock.calls.filter(call => call[0][1] === 'start')).toHaveLength(1);
-				expect({ freeze: state.freeze, shown }).toEqual(held);
+				expect(state.read).not.toHaveBeenCalled(); expect(state.verify).not.toHaveBeenCalled(); expect(state.inspect).not.toHaveBeenCalled(); expect(state.freeze).toEqual(held);
+			}
+			state.freeze.request.body.executionMode = 'simulation'; stderr.mockClear(); stderr.mockImplementation(() => {});
+			for (const status of ['running', 'completed']) {
+				state.read.mockReset(); state.retainReview.mockClear();
+				const shown = observed(status); shown.run.executionMode = 'production'; shown.scheduling.executionMode = 'production'; const held = structuredClone({ shown, freeze: state.freeze }); transport(() => shown);
+				await expect(state.run!()).rejects.toMatchObject({ classification: 'IMPLEMENTATION_DEFECT', cause: expect.any(Error) });
+				expect(stderr).not.toHaveBeenCalled(); expect(state.retainReview).not.toHaveBeenCalled(); expect(state.verify).not.toHaveBeenCalled();
+				expect(state.read.mock.calls.filter(call => call[0][1] === 'stop' || call[0][1] === 'evaluate')).toEqual([]); expect({ shown, freeze: state.freeze }).toEqual(held);
 			}
 		} finally { stderr.mockRestore(); }
 	});
-
 	it('denies a completed workday at each required final evidence gate without later gates or another admission and retains the original failure before exact retry', async () => {
 		const gates = ['collaboration', 'lifecycle', 'graph', 'revision', 'results', 'settlement', 'reporter'];
 		for (const [index, gate] of gates.entries()) {

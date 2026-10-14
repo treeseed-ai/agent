@@ -14,7 +14,7 @@ import { modelExecutionInventory } from '../../../acceptance/workday/support/ass
 import { row, type Row } from '../../../acceptance/acceptance-cli.ts';
 import { encodeCapacityPageCursor } from '@treeseed/sdk/capacity-pagination';
 import { observeCampaign } from '../../../acceptance/workday/support/campaign-observation.ts';
-import { freshSdkDraft, sdkProposalText, monitorCampaign } from '../../../acceptance/campaign.ts';
+import { freshSdkDraft, sdkProposalText, monitorCampaign, requireCampaignSimulation } from '../../../acceptance/campaign.ts';
 
 it('native draft file preparation rejects canonical and retired estimates without changing original bytes before exact retry', async () => {
 	const root = mkdtempSync(join(tmpdir(), 'agent-fresh-draft-estimates-')), path = join(root, 'draft.json');
@@ -160,21 +160,17 @@ it('native public SDK event pages reach the original campaign observer with comp
 		mode = 'production-run';
 		const publicReply = row((await client.invoke(controlPlaneOperation('workdays.show'), { path: { teamId: run.teamId, runId: run.id }, query: {}, body: undefined })).data);
 		const originalReply = structuredClone(publicReply), reports: string[] = [];
-		const planReview = { project: 'sdk', proposal: 'proposal-original sha256:' + 'a'.repeat(64), workday: run.id,
-			observedEvidence: 'workdays show ' + run.id + ': executionMode=' + row(publicReply.run).executionMode,
-			report: (text: string) => { reports.push(text); } };
 		let stopped = 0, progressed = 0;
-		const monitored = monitorCampaign(Object.assign({ admittedSimulation: true,
+		const monitored = monitorCampaign({ admittedSimulation: true,
 			read: () => ({ status: String(row(publicReply.run).status), mode: String(row(publicReply.run).executionMode), planningEndsAt: 1, endsAt: 2 }),
-			now: () => 1, wait: async () => { progressed++; }, collaboration: () => { progressed++; }, verify: () => { progressed++; }, stop: () => { stopped++; } }, { planReview }));
-		await expect(monitored).rejects.toMatchObject({ classification: 'PLAN_REVIEW_REQUIRED', message: expect.stringMatching(/^PLAN_REVIEW_REQUIRED\nproject: sdk\nproposal: proposal-original sha256:[a-f0-9]{64}\nworkday: workday-native-campaign-events\nfailed expectation: /u) });
-		expect.soft(reports).toHaveLength(1); expect(stopped).toBe(0); expect(progressed).toBe(0); expect(publicReply).toEqual(originalReply);
-		if (reports[0]) {
-			const fields = reports[0].split('\n'); expect(fields).toHaveLength(8);
-			expect(fields[5]).toBe('observed evidence: ' + planReview.observedEvidence);
-			expect(fields[6]).toMatch(/^why implementation repair is insufficient: .+/u);
-			expect(fields[7]).toMatch(/^smallest proposed plan correction: .+/u);
-		}
+			now: () => 1, wait: async () => { progressed++; }, collaboration: () => { progressed++; }, verify: () => { progressed++; }, stop: () => { stopped++; } });
+		await expect(monitored).rejects.toMatchObject({ classification: 'IMPLEMENTATION_DEFECT' });
+		expect(stopped).toBe(0); expect(progressed).toBe(0); expect(publicReply).toEqual(originalReply);
+		const unsafe = { proposal: { id: 'unsafe-original', digest: 'sha256:' + 'a'.repeat(64) }, request: { body: { executionMode: row(publicReply.run).executionMode } } }, heldUnsafe = structuredClone(unsafe);
+		expect(() => requireCampaignSimulation(unsafe, '/controlled/native.freeze', text => { reports.push(text); })).toThrow('PLAN_REVIEW_REQUIRED');
+		expect(reports).toHaveLength(1); expect(reports[0]!.split('\n')).toHaveLength(8);
+		expect(reports[0]).toContain('workday: not-started\n'); expect(reports[0]).toContain('observed evidence: /controlled/native.freeze: request.body.executionMode=production');
+		expect(unsafe).toEqual(heldUnsafe); expect(publicReply).toEqual(originalReply);
 		// Controlled event/status/token inputs are not native governance, model
 		// execution, provider-generated charges, producer completeness or teardown.
 	} finally { server.closeAllConnections(); if (server.listening) await new Promise<void>((accept, reject) => server.close(error => error ? reject(error) : accept())); }

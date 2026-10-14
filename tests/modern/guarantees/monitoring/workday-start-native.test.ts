@@ -69,33 +69,29 @@ return observed.data;},'controlled-team',{TREESEED_ACCEPTANCE_FREEZE_PATH:${JSON
 			preflightDigest: f.receipt.preflightDigest, idempotencyKey: `golden-start:${f.receipt.preflightId}` } },
 			...Array.from({ length: 7 }, () => ({ method: 'GET', path: `/v1/teams/controlled-team/workday-runs/${f.receipt.workdayId}`, body: undefined }))]);
 
-		const reportPath = f.path + '.plan-review.txt';
-		const details = { project: 'sdk', proposal: f.freeze.proposal.id + ' ' + f.freeze.proposal.digest, workday: f.receipt.workdayId,
-			'failed expectation': 'Agent execution acceptance / Non-negotiable rules / sole simulation mode',
-			'observed evidence': 'workdays show ' + f.receipt.workdayId + ': executionMode=production',
-			'why implementation repair is insufficient': 'Observed execution authority contradicts the fixed simulation contract; review that authority before repair.',
-			'smallest proposed plan correction': 'Review the contradictory execution authority; no proposal correction has been applied.' };
-		const report = 'PLAN_REVIEW_REQUIRED\n' + Object.entries(details).map(([key, value]) => key + ': ' + value).join('\n');
-		const reportFreeze = f.freeze, retainedFreezeBytes = f.bytes.toString('utf8'); const fs = await import('node:fs');
-		const retainReport = `import{retainCampaignPlanReview}from ${JSON.stringify(helper)};retainCampaignPlanReview(${JSON.stringify(report)},${JSON.stringify(f.path)},${JSON.stringify(reportFreeze)});`;
-
-		mode = 'production';
-		const recordReport = publicRead + `
-import{monitorCampaign,retainCampaignPlanReview}from ${JSON.stringify(helper)};
-const run=observed.data.run;
-await monitorCampaign({read:()=>({status:run.status,mode:run.executionMode,planningEndsAt:1,endsAt:2}),now:()=>1,
-wait:async()=>{throw new Error('Forbidden progress');},collaboration:()=>{throw new Error('Forbidden progress');},verify:()=>{throw new Error('Forbidden progress');},stop:()=>{throw new Error('Forbidden unsafe mutation');},
-planReview:{project:'sdk',proposal:${JSON.stringify(details.proposal)},workday:run.id,observedEvidence:'workdays show '+run.id+': executionMode='+run.executionMode,
-report:text=>retainCampaignPlanReview(text,${JSON.stringify(f.path)},${JSON.stringify(reportFreeze)})}}).catch(error=>{if(error.classification!=='PLAN_REVIEW_REQUIRED')throw error;});`;
+		const fs = await import('node:fs'), planPath = f.root + '/unsafe-sdk.freeze.json';
+		const unsafe = { ...f.freeze, proposal: { ...f.freeze.proposal, id: 'unsafe-controlled-proposal' }, request: { body: { ...f.freeze.request.body, executionMode: 'production' } } };
+		const unsafeBytes = JSON.stringify(unsafe); fs.writeFileSync(planPath, unsafeBytes, { mode: 0o600 });
+		const details = { project: 'sdk', proposal: unsafe.proposal.id + ' ' + unsafe.proposal.digest, workday: 'not-started',
+			'failed expectation': 'Agent execution acceptance / Non-negotiable rules / ACCEPTANCE_CAMPAIGN_MODE',
+			'observed evidence': planPath + ': request.body.executionMode=production',
+			'why implementation repair is insufficient': 'Frozen operator intent lacks permitted simulation authority; an implementation repair cannot supply or change operator intent.',
+			'smallest proposed plan correction': 'Propose executionMode: simulation for this frozen request; apply only after plan review.' };
+		const report = 'PLAN_REVIEW_REQUIRED\n' + Object.entries(details).map(([key, value]) => key + ': ' + value).join('\n'), reportPath = planPath + '.plan-review.txt';
+		const recordReport = `import{readFileSync}from'node:fs';import{requireCampaignSimulation,retainCampaignPlanReview}from ${JSON.stringify(helper)};
+const path=${JSON.stringify(planPath)},freeze=JSON.parse(readFileSync(path,'utf8'));
+try{requireCampaignSimulation(freeze,path,text=>retainCampaignPlanReview(text,path,freeze));throw new Error('Unsafe input was accepted');}
+catch(error){if(error.classification!=='PLAN_REVIEW_REQUIRED')throw error;}`;
 		const record = await execute(process.execPath, ['--import', 'tsx', '--input-type=module', '-e', recordReport], options);
 		expect(record.stdout).toBe(''); expect(readFileSync(reportPath, 'utf8')).toBe(report);
+		const retainReport = `import{retainCampaignPlanReview}from ${JSON.stringify(helper)};retainCampaignPlanReview(${JSON.stringify(report)},${JSON.stringify(planPath)},${JSON.stringify(unsafe)});`;
 		await Promise.all(Array.from({ length: 4 }, () => execute(process.execPath, ['--import', 'tsx', '--input-type=module', '-e', retainReport], options)));
 		const consumeReport = `import{readFileSync}from'node:fs';process.stdout.write(readFileSync(${JSON.stringify(reportPath)},'utf8'));`;
 		expect((await execute(process.execPath, ['--input-type=module', '-e', consumeReport], options)).stdout).toBe(report);
 		await expect(execute(process.execPath, ['--import', 'tsx', '--input-type=module', '-e', retainReport + `process.kill(process.pid,'SIGKILL');`], options)).rejects.toMatchObject({ signal: 'SIGKILL' });
-		expect(readFileSync(reportPath, 'utf8')).toBe(report); expect(readFileSync(f.retained)).toEqual(held);
-		expect(readFileSync(f.path, 'utf8')).toBe(retainedFreezeBytes); expect(fs.statSync(reportPath).mode & 0o777).toBe(0o600);
-		expect(calls.filter(call => call.method === 'POST')).toHaveLength(1); expect(failed.slice(0, originalFailures.length)).toEqual(originalFailures);
+		expect(readFileSync(reportPath, 'utf8')).toBe(report); expect(readFileSync(f.retained)).toEqual(held); expect(readFileSync(f.path)).toEqual(f.bytes);
+		expect(readFileSync(planPath, 'utf8')).toBe(unsafeBytes); expect(fs.statSync(reportPath).mode & 0o777).toBe(0o600);
+		expect(existsSync(planPath + '.workday-start.json')).toBe(false); expect(calls.filter(call => call.method === 'POST')).toHaveLength(1); expect(failed).toEqual(originalFailures);
 		// Real SDK/HTTP and isolated native processes; API admission is controlled.
 	} finally {
 		server.closeAllConnections(); if (server.listening) await new Promise<void>((accept, reject) => server.close(error => error ? reject(error) : accept()));

@@ -7,6 +7,7 @@ import { verifyFreezeIntegrity } from './freeze-integrity.ts';
 import { read, row } from './acceptance-cli.ts';
 import { verifyGolden } from './sdk-runtime-golden.test.ts';
 import { prepareSdkCampaign, verifySdkExternalState } from './prepare-campaign.ts';
+import { observeLiveGraphRevisions } from './workday/support/monitoring/live-graph-revisions.ts';
 import { observeCampaign } from './workday/support/campaign-observation.ts';
 import { readCompleteEvidence } from './workday/support/evidence-pages.ts';
 import { observeLiveAssignmentRecords, inspectLiveAssignmentProfile } from './workday/support/monitoring/live-assignment-records.ts';
@@ -41,6 +42,7 @@ test('Frozen SDK campaign drives planning acting review and terminal golden gate
 	let externallyApproved = false;
 	const observedEvents = new Map<string, Record<string, unknown>>();
 	const observedAssignments = new Map<string, Record<string, unknown>>();
+	const observedGraphRevisions = new Map();
 	let currentRun: Record<string, unknown> | undefined;
 	await monitorCampaign({ admittedSimulation: true, admitDiscussion: () => {
 		retainCampaignWorkdayStart(started, path, freeze);
@@ -55,8 +57,11 @@ test('Frozen SDK campaign drives planning acting review and terminal golden gate
 		return { status: current.status, mode: current.executionMode, failedBoundary,
 			planningEndsAt: Date.parse(current.startedAt) + current.parameters.durationSeconds * current.parameters.planningPercent * 10,
 			endsAt: Date.parse(current.parameters.appliedPlan.endsAt) };
-	}, inspect: () => {
+	}, inspect: async () => {
 		assert.ok(currentRun, 'ACCEPTANCE_LIVE_ASSIGNMENT: Original observed workday required');
+		await observeLiveGraphRevisions(team, () => read(['execution', 'graph', 'show'], team),
+			cursor => read(['execution', 'graph', 'watch', '--cursor', cursor], team), observedGraphRevisions,
+			(revision, graph) => console.log(JSON.stringify({ workdayId, observedAt: new Date().toISOString(), graphRevision: revision, graph, workday: currentRun })));
 		const assignments = readCompleteEvidence(['assignments', 'list', '--workday', workdayId], team, 50, 'ACCEPTANCE_LIVE_ASSIGNMENT');
 		observeLiveAssignmentRecords(currentRun, assignments, observedAssignments, item => inspectLiveAssignmentProfile(item, team, assignments, { 'treeseed-ai/sdk': row(freeze.sourceHeads).sdk }));
 	}, now: Date.now, wait: () => new Promise(resolve => setTimeout(resolve, 30_000)), stop,

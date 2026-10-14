@@ -49,6 +49,12 @@ describe('SDK simulation external-state gate (fixtures are not upstream proof)',
 			if(command==='git')expect(args).toEqual(['ls-remote','--refs',expect.stringMatching(/^https:\/\/github\.com\/treeseed-ai\/sdk(?:-library)?\.git$/u)]);
 		}
 		expect(state.read).toHaveBeenCalledExactlyOnceWith(['dev','status','--all'],'treeseed',true);
+		const originals=state.operator.repositories;try {
+			state.operator.repositories=originals.map(value=>({...value,key:'repository:treeseed/'+value.key}));
+			const canonical=vi.fn();captureSdkExternalState('/platform',canonical);
+			expect(canonical.mock.calls.map(call=>call[0]).filter((name:string)=>name.includes('remote-refs'))).toEqual(['repository%3Atreeseed%2Fsdk-remote-refs.txt','repository%3Atreeseed%2Fsdk-library-remote-refs.txt']);
+		} finally {state.operator.repositories=originals;}
+
 		expect(JSON.parse(state.files.get('/receipts/sdk-issues.json')!)).toEqual([{id:1,title:'Original Issue'}]);
 		expect(JSON.parse(state.files.get('/receipts/sdk-registry.json')!)['dist-tags']).toEqual({latest:'1.0.0'});
   state.fault='pages-good';const streamed=vi.fn();captureSdkExternalState('/platform',streamed);

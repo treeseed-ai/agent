@@ -54,14 +54,13 @@ export async function nativeExternalFixture() {
 		let logs = '';
 		child = fork(fileURLToPath(new URL('./external-native-daemon.ts', import.meta.url)), [root], { execArgv: ['--import', import.meta.resolve('tsx')], stdio: ['ignore', 'pipe', 'pipe', 'ipc'], env: { ...process.env } });
 		for (const stream of [child.stdout, child.stderr]) stream!.on('data', value => { logs += String(value); if (logs.length > 65536) child!.kill('SIGTERM'); });
-		const ready = await new Promise<{ proxyPort: number; managerPort: number }>((accept, reject) => {
+		const ready = await new Promise<{ proxyPort: number }>((accept, reject) => {
 			const timer = setTimeout(() => reject(new Error('Native owning fixture readiness failed: ' + logs)), 5000);
 			child!.once('exit', code => { clearTimeout(timer); reject(new Error('Native owning fixture exited ' + code + ': ' + logs)); });
-			child!.once('message', value => { clearTimeout(timer); const message = value as { ready?: boolean; proxyPort: number; managerPort: number }; assert.equal(message.ready, true); accept(message); });
+			child!.once('message', value => { clearTimeout(timer); const message = value as { ready?: boolean; proxyPort: number }; assert.equal(message.ready, true); accept(message); });
 		});
 		const cert = join(root, 'ca.pem'), proxy = 'http://127.0.0.1:' + ready.proxyPort;
 		const environment = { TREESEED_ACCEPTANCE_PLATFORM_PATH: root, TREESEED_ACCEPTANCE_CAMPAIGN_PATH: campaign, TREESEED_ACCEPTANCE_TEAM: 'treeseed',
-			TREESEED_HOST_URL: 'https://127.0.0.1:' + ready.managerPort, TREESEED_HOST_CA: cert, TREESEED_HOST_CERT: cert, TREESEED_HOST_KEY: join(root, 'key.pem'),
 			HTTPS_PROXY: proxy, HTTP_PROXY: proxy, https_proxy: proxy, http_proxy: proxy, ALL_PROXY: proxy, NO_PROXY: '127.0.0.1,localhost', no_proxy: '127.0.0.1,localhost',
 			SSL_CERT_FILE: cert, NODE_EXTRA_CA_CERTS: cert, GIT_SSL_CAINFO: cert, GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null',
 			GIT_CONFIG_COUNT: '1', GIT_CONFIG_KEY_0: 'http.https://github.com/.extraheader', GIT_CONFIG_VALUE_0: '',

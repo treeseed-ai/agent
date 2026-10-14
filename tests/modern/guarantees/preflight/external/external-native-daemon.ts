@@ -15,8 +15,6 @@ assert.ok(process.send && root.startsWith('/'));
 // existing host credential, runtime or development session is selected.
 // The exclusive fixed local socket is provisioned only on disposable native CI.
 Object.assign(paths, Object.fromEntries(Object.keys(paths).map(key => [key, join(root, 'manager', key)])));
-mkdirSync(paths.tls, { recursive: true });
-for (const [name, source] of [['server.key', 'key.pem'], ['server.crt', 'ca.pem'], ['ca.crt', 'ca.pem']]) writeFileSync(join(paths.tls, name!), readFileSync(join(root, source!)));
 const data = nativeDevelopmentData(config.base); mkdirSync(join(root, 'manager'), { recursive: true }); writeFileSync(paths.configuration, JSON.stringify(data.host));
 const store = new DevelopmentSessionStore(); store.start(data.session, [data.runtime]);
 const requests: Array<{ method: string; host: string; path: string }> = [];
@@ -70,7 +68,7 @@ const manager=httpServer((request,response)=>{
 const listen = (server: Server) => new Promise<number>((accept, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', () => { const address = server.address(); assert.ok(address && typeof address !== 'string'); accept(address.port); }); });
 const [upstreamPort, proxyPort] = await Promise.all([listen(upstream), listen(proxy)]);
 await new Promise<void>((accept,reject)=>{manager.once('error',reject);manager.listen(socket,accept);});
-process.send!({ ready: true, upstreamPort, proxyPort, managerPort: 0 });
+process.send!({ ready: true, upstreamPort, proxyPort });
 process.on('message', (value: unknown) => {
 	assert.ok(value && typeof value === 'object'); const message = value as { id: string; fault?: string; mode?: 'live' | 'candidate' | 'released'; snapshot?: boolean };
 	if (message.fault !== undefined) fault = message.fault;

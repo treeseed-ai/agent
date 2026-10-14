@@ -219,7 +219,7 @@ export function prepareSdkCampaign(draftPath: string, freezePath: string, team: 
 export function captureSdkExternalState(platform: string, capture: (name: string, bytes: string) => void): void {
  const {operator,commands}=sdkExternalCommands(platform);
  for(const[name,command]of commands)capture(name,observeExternalCommand(command));
- capture('development-selections.json',developmentSelections());
+ capture('development-selections.json',readCampaignDevelopmentSelections());
  assert.equal(readFileSync(operator.path,'utf8'),operator.bytes,'ACCEPTANCE_EXTERNAL_SCOPE: Operator selection changed during observation');
 }
 
@@ -327,7 +327,7 @@ function observeExternalCommand(input: ExternalCommand): string {
 	return canonicalStandardsJson(values);
 }
 
-function developmentSelections(): string {
+export function readCampaignDevelopmentSelections(): string {
 	const team = process.env.TREESEED_ACCEPTANCE_TEAM ?? 'treeseed';
 	const observed = read(['dev', 'status', '--all'], team, true), sessions = observed.sessions;
 	assert.ok(Array.isArray(sessions), 'ACCEPTANCE_EXTERNAL_SELECTIONS: Complete original manager inventory required');
@@ -357,7 +357,7 @@ export function verifySdkExternalState(freeze: Row): void {
 	}));
 	const before = new Map([...paths].map(([name,path])=> { const bytes=readFileSync(path,'utf8'); assert.equal(freeze.receipts[path], 'sha256:'+createHash('sha256').update(bytes).digest('hex'), 'ACCEPTANCE_EXTERNAL_INVENTORY: Original frozen bytes differ from retained digest');return [name,bytes] as const; }));
 	for (const [name, command] of commands) assert.equal(observeExternalCommand(command), before.get(name), 'ACCEPTANCE_EXTERNAL_CHANGED: Simulation changed an external owning boundary');
-	assert.equal(developmentSelections(), before.get('development-selections.json'), 'ACCEPTANCE_EXTERNAL_CHANGED: Simulation changed a deployment selection');
+	assert.equal(readCampaignDevelopmentSelections(), before.get('development-selections.json'), 'ACCEPTANCE_EXTERNAL_CHANGED: Simulation changed a deployment selection');
 	for(const[name,path]of paths)assert.equal(readFileSync(path,'utf8'),before.get(name),'ACCEPTANCE_EXTERNAL_INVENTORY: Frozen inventory changed during observation');
 	assert.equal(readFileSync(operator.path, 'utf8'), operator.bytes, 'ACCEPTANCE_EXTERNAL_SCOPE: Operator selection changed during observation');
 }

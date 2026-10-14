@@ -3964,3 +3964,9 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/guarantees/preflight/campaign-freeze-native.test.ts
     testName: "native draft file preparation rejects canonical and retired estimates without changing original bytes before exact retry"
+
+  agent.golden.native-external-inventory:
+    kind: vitestCase
+    ownerPackage: '@treeseed/agent'
+    testFile: tests/modern/guarantees/preflight/external/external-native.test.ts
+    testName: native Git GitHub registry and mutual TLS manager reads retain every seed-owned external boundary and original failures before exact retry

@@ -13,7 +13,32 @@ it('retains the exact API start receipt for later isolated verifiers without mut
 		expect(existsSync(f.retained), 'Actual API receipt must cross the child-process boundary').toBe(true);
 		expect(JSON.parse(readFileSync(f.retained, 'utf8'))).toEqual(before);
 		expect(readFileSync(f.path)).toEqual(f.bytes); expect(f.receipt).toEqual(before);
-		const retain = Reflect.get(campaign, 'retainCampaignPlanReview'); expect.soft(typeof retain).toBe('function');
+
+		const details = { project: 'sdk', proposal: f.freeze.proposal.id + ' ' + f.freeze.proposal.digest, workday: f.receipt.workdayId,
+			'failed expectation': 'Original exact check', 'observed evidence': 'Original retained native read',
+			'why implementation repair is insufficient': 'Original contradictory authority needs review.',
+			'smallest proposed plan correction': 'Review authority; no correction applied.' };
+		const report = campaign.campaignPlanReviewRequired(details, new Error('Original observed failure')).message, reportPath = f.path + '.plan-review.txt';
+		expect(campaign.retainCampaignPlanReview(report, f.path, f.freeze)).toBe(reportPath);
+		const held = readFileSync(reportPath), receipt = readFileSync(f.retained);
+		for (const denied of [undefined, null, '', report + '\n', report.replace('PLAN_REVIEW_REQUIRED', 'IMPLEMENTATION_DEFECT'),
+			report.replace(details.proposal, 'foreign sha256:' + 'b'.repeat(64)), report.replace(details.workday, 'not-started'),
+			report.replace(details.workday, 'workday-22222222-2222-4222-8222-222222222222'), report.replace('project: sdk', 'project: api'),
+			report.replace('Original exact check', 'Different original failed check')]) {
+			expect(() => campaign.retainCampaignPlanReview(denied as string, f.path, f.freeze)).toThrow();
+			expect(readFileSync(reportPath)).toEqual(held); expect(readFileSync(f.retained)).toEqual(receipt); expect(readFileSync(f.path)).toEqual(f.bytes);
+		}
+		for (const mode of ['symlink', 'directory', 'unreadable', 'truncated', 'different']) {
+			rmSync(reportPath); if (mode === 'symlink') symlinkSync(f.path, reportPath);
+			else if (mode === 'directory') mkdirSync(reportPath);
+			else { writeFileSync(reportPath, mode === 'truncated' ? report.slice(0, -3) : mode === 'different' ? 'Retained different failure' : report); if (mode === 'unreadable') chmodSync(reportPath, 0); }
+			expect(() => campaign.retainCampaignPlanReview(report, f.path, f.freeze), mode).toThrow();
+			expect(readFileSync(f.path)).toEqual(f.bytes); expect(readFileSync(f.retained)).toEqual(receipt);
+			rmSync(reportPath, { recursive: true }); writeFileSync(reportPath, held, { mode: 0o600 });
+		}
+		for (let index = 0; index < 3; index++) campaign.retainCampaignPlanReview(report, f.path, f.freeze);
+		expect(readFileSync(reportPath)).toEqual(held); expect(readdirSync(f.root).sort()).toEqual(['sdk.freeze.json', 'sdk.freeze.json.plan-review.txt', 'sdk.freeze.json.workday-start.json']);
+
 
 	} finally { f.close(); }
 	expect(existsSync(f.root)).toBe(false);

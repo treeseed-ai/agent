@@ -197,14 +197,21 @@ it('native configured Kernel Git result and public SDK assignment reads reach th
 		const address = server.address(); if (!address || typeof address === 'string') throw new Error('Native observer address required');
 		const client = new ControlPlaneClient({ profile: defaultLocalControlPlaneServer({ TREESEED_API_BASE_URL: `http://127.0.0.1:${address.port}` }), accessToken: 'controlled-read-input' });
 		let inspections = 0;
-		const execute = async (observations = retained) => {
+		const execute = async (observations = retained, completeAuthority = false) => {
 			const observed = row((await client.invoke(controlPlaneOperation('workdays.show'), {
 				path: { teamId: f.attempt.teamId, runId: f.attempt.workdayId }, query: {}, body: undefined,
 			})).data);
 			const returned = row((await client.invoke(controlPlaneOperation('assignments.show'), {
 				path: { teamId: f.attempt.teamId, assignmentId: f.attempt.id }, query: {}, body: undefined,
 			})).data);
+			const graph = completeAuthority ? row((await client.invoke(controlPlaneOperation('execution.graph.show'), { path: { teamId: f.attempt.teamId }, query: {}, body: undefined })).data) : undefined;
+			const publication = completeAuthority ? row((await client.invoke(controlPlaneOperation('capacity.status'), { path: { teamId: f.attempt.teamId }, query: { limit: 100 }, body: undefined })).data) : undefined;
 			observeLiveAssignmentRecords(row(observed.run), [returned], observations, value => {
+				if (completeAuthority) {
+					if (!graph || !Array.isArray(publication?.items)) throw new Error('Complete original graph and provider authority required');
+					verifyLiveAssignmentGraph(value, graph); verifyPredecessorCustody([value], graph); verifyLiveProviderRuntime(value, publication.items.map(row));
+					verifyGovernedProfile(value, { path, content }, graph);
+				}
 				inspections++; verifyLiveSourceContext(value, [value], { 'treeseed-ai/sdk': f.base }); verifyGitInputContext(value, []); verifyLiveSimulationWorkspace(value, run); verifyAllocation(value, run); verifyGovernedProfile(value, { path, content });
 				const handler = { id: f.attempt.effectiveProfile.handler, origin: f.attempt.effectiveProfile.handlerOrigin };
 				verifyHandlerInspection(value, { projectId: f.attempt.projectId, handlers: [handler] }, { projectId: f.attempt.projectId, handler });
@@ -306,6 +313,16 @@ it('native configured Kernel Git result and public SDK assignment reads reach th
 		}
 		const custodyFailures = structuredClone(failed); mode = 'exact'; await execute();
 		expect(failed).toEqual(custodyFailures); expect(retained).toEqual(held);
+		// Compound native read-back must finish every independent authority check
+		// before any new attempt enters the retained observation or progress resumes.
+		mode = 'exact'; const composite = new Map<string, Row>();
+		await Promise.all([execute(composite, true), execute(composite, true)]); expect(composite.size).toBe(1);
+		for (const denied of ['graph-team', 'graph-revision', 'graph-node', 'graph-source', 'graph-estimate', 'graph-workspace', 'graph-predecessor', 'graph-denied', 'graph-malformed', 'graph-interrupted', 'publication-provider', 'publication-adapter', 'publication-build', 'publication-model', 'publication-denied', 'publication-interrupted', 'grant-missing-tool', 'source-substitution', 'workspace-branch', 'workspace-paths', 'deadline-after-workday', 'derived-production']) {
+			mode = denied; const empty = new Map<string, Row>(); await expect(execute(empty, true), denied).rejects.toThrow();
+			expect(empty.size).toBe(0); expect(composite.size).toBe(1); expect({ item, run }).toEqual(before);
+		}
+		const compositeFailures = structuredClone(failed); mode = 'exact';
+		await execute(new Map(), true); expect(failed).toEqual(compositeFailures); expect(failed.slice(0, custodyFailures.length)).toEqual(custodyFailures);
 		const issuedChild = assignmentAttemptSchema.parse(item.assignmentAttempt);
 		issuedChild.id = 'native-consumer'; issuedChild.nodeId = 'native-consumer-node'; issuedChild.status = 'leased';
 		issuedChild.createdAt = result.completedAt; delete issuedChild.startedAt; delete issuedChild.finishedAt;

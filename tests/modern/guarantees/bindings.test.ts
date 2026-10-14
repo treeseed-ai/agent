@@ -272,6 +272,7 @@ describe('capacity-provider guarantee execution bindings', () => {
 			value.criterion === 'fc80e789a38eb6ae75fada867226ac0157844505619b12c90c55cbe317c6cc9d'))
 			.toEqual([{ criterion: 'fc80e789a38eb6ae75fada867226ac0157844505619b12c90c55cbe317c6cc9d', verifierRefs: runtimeHandlers }]);
 		expect(manifest.acceptanceCriteria).toEqual([
+			{"criterion":"d4b37f62b1a5213c66ccfb1130237cf8f7e43e9b8732746afc4fd7a629f75ba2","verifierRefs":["agent.golden.live.campaign","agent.golden.architecture-profile-custody-live-1","agent.golden.architecture-context-custody-live-1","agent.golden.architecture-record-custody-live-1"]},
 			{ criterion: '6d34d659df17e81ab1b96cf86c9fb401b7dcaff4a59a49a41999fe38e65f9bd9', verifierRefs: ["agent.golden.live.campaign", "agent.golden.architecture-profile-custody-live-1", "sdk.golden.live.product"] },
 			{ criterion: 'ee95f7eb3323545534ac708f6ef6ae9d6b9ae2ae40ad4268738084a25d293d86', verifierRefs: ['sdk.golden.live.product', 'agent.golden.architecture-living-graph-live-1'] },
 			{ criterion: 'a4199e48998233b28a6aa7480d4a386c32675970f2989ad2719240055fa91443', verifierRefs: ['sdk.golden.live.product', 'api.golden.execution-protected-observation-live-1'] },

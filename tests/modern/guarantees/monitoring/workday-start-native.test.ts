@@ -20,6 +20,7 @@ it('native public SDK start and independent child preserve the exact API receipt
 			if (mode === 'interrupted') { failed.push({ mode }); request.socket.destroy(); return; }
 			const run = structuredClone(f.run);
 			if (mode === 'foreign-team') run.teamId = 'foreign'; if (mode === 'foreign-workday') run.id = 'workday-22222222-2222-4222-8222-222222222222';
+			if (mode === 'production') run.executionMode = 'production';
 			if (mode === 'changed-clock') run.startedAt = '2026-10-10T20:00:01.000Z';
 			if (mode !== 'exact') failed.push({ mode, run: structuredClone(run) });
 			response.end(JSON.stringify({ data: { run } })); });
@@ -69,16 +70,24 @@ return observed.data;},'controlled-team',{TREESEED_ACCEPTANCE_FREEZE_PATH:${JSON
 			...Array.from({ length: 7 }, () => ({ method: 'GET', path: `/v1/teams/controlled-team/workday-runs/${f.receipt.workdayId}`, body: undefined }))]);
 
 		const reportPath = f.path + '.plan-review.txt';
-		const details = { project: 'sdk', proposal: 'proposal-controlled sha256:' + 'a'.repeat(64), workday: f.receipt.workdayId,
+		const details = { project: 'sdk', proposal: f.freeze.proposal.id + ' ' + f.freeze.proposal.digest, workday: f.receipt.workdayId,
 			'failed expectation': 'Agent execution acceptance / Non-negotiable rules / sole simulation mode',
-			'observed evidence': 'Original independent public workday read: executionMode=production',
-			'why implementation repair is insufficient': 'Observed authority contradicts the fixed simulation contract.',
-			'smallest proposed plan correction': 'Review contradictory execution authority; no correction applied.' };
+			'observed evidence': 'workdays show ' + f.receipt.workdayId + ': executionMode=production',
+			'why implementation repair is insufficient': 'Observed execution authority contradicts the fixed simulation contract; review that authority before repair.',
+			'smallest proposed plan correction': 'Review the contradictory execution authority; no proposal correction has been applied.' };
 		const report = 'PLAN_REVIEW_REQUIRED\n' + Object.entries(details).map(([key, value]) => key + ': ' + value).join('\n');
-		const reportFreeze = { ...f.freeze, proposal: { id: 'proposal-controlled', digest: 'sha256:' + 'a'.repeat(64) } };
-		const retainedFreezeBytes = JSON.stringify(reportFreeze); const fs = await import('node:fs'); fs.writeFileSync(f.path, retainedFreezeBytes);
+		const reportFreeze = f.freeze, retainedFreezeBytes = f.bytes.toString('utf8'); const fs = await import('node:fs');
 		const retainReport = `import{retainCampaignPlanReview}from ${JSON.stringify(helper)};retainCampaignPlanReview(${JSON.stringify(report)},${JSON.stringify(f.path)},${JSON.stringify(reportFreeze)});`;
-		const record = await execute(process.execPath, ['--import', 'tsx', '--input-type=module', '-e', retainReport], options);
+
+		mode = 'production';
+		const recordReport = publicRead + `
+import{monitorCampaign,retainCampaignPlanReview}from ${JSON.stringify(helper)};
+const run=observed.data.run;
+await monitorCampaign({read:()=>({status:run.status,mode:run.executionMode,planningEndsAt:1,endsAt:2}),now:()=>1,
+wait:async()=>{throw new Error('Forbidden progress');},collaboration:()=>{throw new Error('Forbidden progress');},verify:()=>{throw new Error('Forbidden progress');},stop:()=>{throw new Error('Forbidden unsafe mutation');},
+planReview:{project:'sdk',proposal:${JSON.stringify(details.proposal)},workday:run.id,observedEvidence:'workdays show '+run.id+': executionMode='+run.executionMode,
+report:text=>retainCampaignPlanReview(text,${JSON.stringify(f.path)},${JSON.stringify(reportFreeze)})}}).catch(error=>{if(error.classification!=='PLAN_REVIEW_REQUIRED')throw error;});`;
+		const record = await execute(process.execPath, ['--import', 'tsx', '--input-type=module', '-e', recordReport], options);
 		expect(record.stdout).toBe(''); expect(readFileSync(reportPath, 'utf8')).toBe(report);
 		await Promise.all(Array.from({ length: 4 }, () => execute(process.execPath, ['--import', 'tsx', '--input-type=module', '-e', retainReport], options)));
 		const consumeReport = `import{readFileSync}from'node:fs';process.stdout.write(readFileSync(${JSON.stringify(reportPath)},'utf8'));`;
@@ -86,7 +95,7 @@ return observed.data;},'controlled-team',{TREESEED_ACCEPTANCE_FREEZE_PATH:${JSON
 		await expect(execute(process.execPath, ['--import', 'tsx', '--input-type=module', '-e', retainReport + `process.kill(process.pid,'SIGKILL');`], options)).rejects.toMatchObject({ signal: 'SIGKILL' });
 		expect(readFileSync(reportPath, 'utf8')).toBe(report); expect(readFileSync(f.retained)).toEqual(held);
 		expect(readFileSync(f.path, 'utf8')).toBe(retainedFreezeBytes); expect(fs.statSync(reportPath).mode & 0o777).toBe(0o600);
-		fs.writeFileSync(f.path, f.bytes);
+		expect(calls.filter(call => call.method === 'POST')).toHaveLength(1); expect(failed.slice(0, originalFailures.length)).toEqual(originalFailures);
 		// Real SDK/HTTP and isolated native processes; API admission is controlled.
 	} finally {
 		server.closeAllConnections(); if (server.listening) await new Promise<void>((accept, reject) => server.close(error => error ? reject(error) : accept()));

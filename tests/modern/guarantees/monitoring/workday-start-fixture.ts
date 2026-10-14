@@ -8,7 +8,7 @@ export function workdayStartFixture() {
 	const receipt = { schemaVersion: 'treeseed.workday-start-receipt/v1', workdayId: 'workday-11111111-1111-4111-8111-111111111111',
 		preflightId: 'controlled-preflight', preflightDigest: `sha256:${createHash('sha256').update('controlled original preflight').digest('base64url')}`, startedAt: '2026-10-10T20:00:00.000Z',
 		acceptedExecutionNodeIds: [], assignmentIds: [], reservationIds: [], providerReceiptRefs: [], transactionReceiptId: `workday-start:${createHash('sha256').update('controlled original start').digest('base64url')}` };
-	const freeze = { preflight: { id: receipt.preflightId, preflightDigest: receipt.preflightDigest, teamId: 'controlled-team' }, proposal: { id: 'controlled-proposal' },
+	const freeze = { preflight: { id: receipt.preflightId, preflightDigest: receipt.preflightDigest, teamId: 'controlled-team' }, proposal: { id: 'controlled-proposal', digest: 'sha256:' + 'a'.repeat(64) },
 		request: { body: { executionMode: 'simulation', projects: ['controlled-project'], proposalIds: ['controlled-proposal'] } } };
 	writeFileSync(path, JSON.stringify(freeze)); const bytes = readFileSync(path);
 	const run = { id: receipt.workdayId, teamId: freeze.preflight.teamId, executionMode: 'simulation', status: 'completed',

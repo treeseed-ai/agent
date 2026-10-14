@@ -219,7 +219,8 @@ export function campaignPlanReviewRequired(details: PlanReviewReport, cause: unk
 	const label = 'ACCEPTANCE_PLAN_REVIEW_REPORT', keys: Array<keyof PlanReviewReport> = ['project', 'proposal', 'workday',
 		'failed expectation', 'observed evidence', 'why implementation repair is insufficient', 'smallest proposed plan correction'];
 	assert.ok(details && typeof details === 'object' && !Array.isArray(details), label);
-	assert.deepEqual(Reflect.ownKeys(details).sort(), [...keys].sort(), label);
+	const ownKeys = Reflect.ownKeys(details); assert.ok(ownKeys.every(key => typeof key === 'string'), label);
+	assert.deepEqual(ownKeys.sort(), [...keys].sort(), label);
 	for (const key of keys) {
 		const descriptor = Object.getOwnPropertyDescriptor(details, key), value: unknown = descriptor?.value;
 		assert.ok(descriptor && Object.hasOwn(descriptor, 'value') && typeof value === 'string' && value.trim() === value

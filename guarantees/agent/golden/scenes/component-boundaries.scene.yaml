@@ -2295,3 +2295,7 @@ workflow:
   - id: execution-public-sandbox-inventory-unit-4
     action: { verifier: agent.golden.execution-public-sandbox-inventory-unit-4 }
     expect: { status: passed }
+
+  - id: native-external-inventory
+    action: { verifier: agent.golden.native-external-inventory }
+    expect: { status: passed }

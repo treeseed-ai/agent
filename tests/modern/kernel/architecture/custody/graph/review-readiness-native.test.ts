@@ -1,3 +1,4 @@
+import { liveRun } from '../../../../guarantees/monitoring/live-assignment-fixture.ts';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
@@ -10,7 +11,7 @@ import { ControlPlaneClient, defaultLocalControlPlaneServer } from '@treeseed/sd
 import { controlPlaneOperation } from '@treeseed/sdk/operator-contracts';
 import { row } from '../../../../../acceptance/acceptance-cli.ts';
 import { verifyPredecessorCustody } from '../../../../../acceptance/workday/support/evidence-pages.ts';
-import { verifyLiveAssignmentGraph } from '../../../../../acceptance/workday/support/monitoring/live-assignment-records.ts';
+import { verifyLiveAssignmentGraph, verifyNormalAttemptRevisions } from '../../../../../acceptance/workday/support/monitoring/live-assignment-records.ts';
 import { verifyWorkReview, verifyReviewCandidateAuthority } from '../../../../../acceptance/workday/support/decision-evidence.ts';
 import { verifyAssignmentWorkspaceInventory } from '../../../../../acceptance/workday/support/assignment-authority.ts';
 import { contentReviewFailures, mutateContentReview, mutateReadiness, mutateReview, mutateReviewGrant, readinessFailures, reviewedDecision, reviewedGraphFixture, reviewedRevisionFixture, reviewFailures, reviewGrantFailures } from './review-readiness-fixture.ts';
@@ -130,6 +131,7 @@ it('native committed review sources and public SDK graph assignments deny missin
 					}
 				}
 				for (const item of assignments) verifyLiveAssignmentGraph(item, graph, assignments, decisions);
+				verifyNormalAttemptRevisions(assignments,graph,decisions,liveRun(assignments[0]!));
 			} finally { expect({ graph, assignments }).toEqual(before); }
 		};
 		await Promise.all([observe(), observe()]);

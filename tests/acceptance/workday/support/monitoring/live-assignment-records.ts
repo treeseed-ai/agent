@@ -292,7 +292,7 @@ export function verifyNormalAttemptRevisions(items: readonly Row[], graph: Row, 
 		const attempt=assignmentAttemptSchema.parse(item.assignmentAttempt);
 		assert.equal(item.id,attempt.id,label); assert.equal(attempt.workdayId,run.id,label); assert.equal(attempt.teamId,graph.teamId,label);
 		assert.ok(item.status==='completed'||phaseBoundaryCancelled(item,run),label+': Normal terminal status or original planning handoff required');
-		const matches=(graph.nodes as Row[]).filter(node=>node.id===attempt.nodeId); assert.equal(matches.length,1,label+': Independent owning node required');
+		const matches: Row[]=(graph.nodes as Row[]).filter(node=>node.id===attempt.nodeId); assert.equal(matches.length,1,label+': Independent owning node required');
 		assert.equal(matches[0]!.projectId,attempt.projectId,label);
 		const group=groups.get(attempt.nodeId)??[]; group.push({item,attempt}); groups.set(attempt.nodeId,group);
 	}
@@ -302,7 +302,7 @@ export function verifyNormalAttemptRevisions(items: readonly Row[], graph: Row, 
 		for(const[index,current]of group.entries()) {
 			assert.equal(current.attempt.nodeRevision,index+1,label+': Every original revision must appear exactly once from issuance');
 			if(index===0)continue;
-			const previous=group[index-1]!, pairEdges=(graph.edges as Row[]).filter(edge=>edge.provenance==='review-pair'
+			const previous=group[index-1]!, pairEdges: Row[]=(graph.edges as Row[]).filter(edge=>edge.provenance==='review-pair'
 				&& (node.pairRole==='actor'?edge.fromNodeId===nodeId:node.pairRole==='reviewer'&&edge.toNodeId===nodeId)
 				&& Number(edge.graphRevisionCreated)<=current.attempt.graphRevision
 				&& (edge.graphRevisionRemoved===undefined||Number(edge.graphRevisionRemoved)>previous.attempt.graphRevision));
@@ -321,4 +321,3 @@ export function verifyNormalAttemptRevisions(items: readonly Row[], graph: Row, 
 		assert.ok(node.nodeRevision===last||(run.status==='completed'&&node.status==='stale'&&node.nodeRevision===last+1),label+': Unexplained unissued node revision');
 	}
 }
-

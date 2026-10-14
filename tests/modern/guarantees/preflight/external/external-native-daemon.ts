@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
 import { createServer as httpsServer } from 'node:https';
 import { createServer as httpServer } from 'node:http';
-import { connect, type Server, type Socket } from 'node:net';
+import { connect, type Server } from 'node:net';
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import type { Duplex } from 'node:stream';
 import { executeHostCommand, DevelopmentSessionStore, paths } from '@treeseed/deployment';
 import { nativeDevelopmentData } from './external-native-data.ts';
 
@@ -11,7 +12,8 @@ const root = resolve(process.argv[2]!), config = JSON.parse(readFileSync(join(ro
 	base: string; repositories: Array<{ key: string; gitUrl: string }>; };
 assert.ok(process.send && root.startsWith('/'));
 // Owning fixture configuration is isolated in this native child. No production
-// host path, credential, runtime or existing development session is selected.
+// existing host credential, runtime or development session is selected.
+// The exclusive fixed local socket is provisioned only on disposable native CI.
 Object.assign(paths, Object.fromEntries(Object.keys(paths).map(key => [key, join(root, 'manager', key)])));
 mkdirSync(paths.tls, { recursive: true });
 for (const [name, source] of [['server.key', 'key.pem'], ['server.crt', 'ca.pem'], ['ca.crt', 'ca.pem']]) writeFileSync(join(paths.tls, name!), readFileSync(join(root, source!)));
@@ -47,7 +49,7 @@ const upstream = httpsServer(tls, (request, response) => {
 	if (page === 1) { const next = new URL(url); next.searchParams.set('page', '2'); response.setHeader('link', '<' + next.href + '>; rel="next"'); }
 	response.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(records));
 });
-const proxy = httpServer(), tunnels = new Set<Socket>();
+const proxy = httpServer(), tunnels = new Set<Duplex>();
 proxy.on('connect', (request, socket, head) => {
 	if (!['github.com:443', 'api.github.com:443', 'registry.npmjs.org:443'].includes(request.url!)) { socket.end('HTTP/1.1 403 Forbidden\r\n\r\n'); return; }
 	const address = upstream.address(); assert.ok(address && typeof address !== 'string');

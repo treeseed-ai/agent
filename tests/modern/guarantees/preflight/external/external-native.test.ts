@@ -27,7 +27,17 @@ it('native Git GitHub registry and protected local manager reads retain every se
 		// aggregate positive verification twice in this one native case.
 		const failures: Array<{ mode: string; message: string }> = [];
 		for (const fault of ['denied', 'malformed', 'duplicate', 'interrupted']) {
-			await f.control({ fault }); let message = ''; try { await verifySdkExternalState(freeze,cancellation.signal); } catch (error) { message = error instanceof Error ? error.message : String(error); }
+			const beforeFault=await f.control({snapshot:true});expect(Array.isArray(beforeFault.requests)).toBe(true);const offset=(beforeFault.requests as unknown[]).length;
+			await f.control({ fault }); let message = '';
+			try { await measured(fault,async()=>{
+				if(fault!=='interrupted'){await verifySdkExternalState(freeze,cancellation.signal);return;}
+				const interrupted=new AbortController(),pending=verifySdkExternalState(freeze,AbortSignal.any([cancellation.signal,interrupted.signal]));
+				const rejected=pending.then(()=>undefined,(error:unknown)=>error);const limit=Date.now()+5000;let observed=false;
+				while(Date.now()<limit){const snapshot=await f.control({snapshot:true});const requests=snapshot.requests as Array<{host:string}>;if(requests.slice(offset).some(request=>request.host==='api.github.com')){observed=true;break;}await new Promise(accept=>setTimeout(accept,10));}
+				interrupted.abort(new Error('Original observed native subprocess interrupted'));
+				const failure=await rejected;expect(observed,'An actual in-flight native GitHub request is required before interruption').toBe(true);expect(failure).toBeInstanceOf(Error);throw failure;
+			}); } catch (error) { message = error instanceof Error ? error.message : String(error); }
+
 			failures.push({ mode: fault, message }); expect(message, fault).not.toBe(''); expect({ receipts, captures }).toEqual(frozen);
 		}
 		await f.control({ fault: '' });

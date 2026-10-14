@@ -49,16 +49,18 @@ jobs:
         with:
           github-token: ${{ github.token }}
           repository: treeseed-ai/cli
-          run-id: 37045080284
-          name: cli-candidate-b62c4bd9408f87dd88a46391a61e249f3c4d073f
+          run-id: 38647918411
+          name: cli-6e2579428f4959906cd5b9b669ebbb2b44cb495c
           path: .treeseed/tools/cli-candidate
       - name: Install exact checked development inputs without publication
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           jq -e '.repository == "treeseed-ai/deployment" and .commit == "a4e638cb5e861766fedf1b67adfba2e910c6afd1"' .treeseed/tools/deployment-candidate/exact-head.json
-          jq -e '.candidate.sourceCommit == "b62c4bd9408f87dd88a46391a61e249f3c4d073f"' .treeseed/tools/cli-candidate/release-evidence-v1.json
+          test "$(gh api repos/treeseed-ai/cli/actions/runs/38647918411 --jq '[.head_sha,.status,.conclusion]|join(" ")')" == '2b27d26c23905423d90c73abb24c888c452a8745 completed success'
           echo 'bb493312538753c46a09e8ff768155b8584064dd90c8f3d1e6caae85e3012b35  .treeseed/tools/deployment-candidate/treeseed-deployment-runtime-0.1.0-rc.321.tgz' | sha256sum --check --strict
-          echo 'b8681e69511055a0403296acb50d44357098e3da07678a089dcf04b5d3de873d  .treeseed/tools/cli-candidate/treeseed-cli-0.13.0-rc.85.tgz' | sha256sum --check --strict
+          echo '49b6d24882af45ba39fd46cdcd999c9c54e84bd416f834fa0042ec5425dbea1a  .treeseed/tools/cli-candidate/treeseed-cli-0.13.0-rc.85.tgz' | sha256sum --check --strict
           npm install --no-save --package-lock=false --ignore-scripts --no-audit --no-fund ./.treeseed/tools/deployment-candidate/treeseed-deployment-runtime-0.1.0-rc.321.tgz ./.treeseed/tools/cli-candidate/treeseed-cli-0.13.0-rc.85.tgz
       - uses: treeseed-ai/sdk/.github/actions/install-exact-sdk@8536de5233983765a049392f307244d741470480
         with:
@@ -107,7 +109,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       TREESEED_INSTALLED_OWNER_INPUTS: >-
-        [{"owner":"agent","commit":"${{ github.sha }}","sha256":null},{"owner":"api","commit":"05de58440ed3589c9d116afa98c00589dfbb9fee","sha256":"78fefd2fc99ef9be210263c1e0f2d8464b0e0294a989f5b40f70f9bd2241ea34","buildSdk":{"commit":"952195376b53bf39742e64f320f2a3b109cc77c0","sha256":"7ba46c788578f526692e81f3713f05e7c00db900b2d810ec27364cb41c008185"},"buildTreeDx":{"commit":"6d358bb2e536af24918f3c33acb2072b9093a603","sha256":"d6de27b42704b4c899562f290950561132fd0d48f38a95e6624eb853e32691cb"}},{"owner":"sdk","commit":"832b340d5f0578db5a4fdbd5a3b9c04624214ec4","sha256":"f56be1f3738ec739d4bcd44e67ad6ff1ef9f3c22de0c2940820e8928ee0929ed"},{"owner":"cli","commit":"d4dfd5ad1d63862f9fbf58820d1bb4fee2c703d2","sha256":"563d8a374644ad73624969ef67707c9267e286fcd020a6935ffae87dfcda56d3"},{"owner":"deployment","commit":"d2222a3fa354e9ef30a5ef6b40081303c29fe4dc","sha256":"8a33e23e20263820085188e14eed63c3c868f2829c76e8629829c968ecfd1f5d"},{"owner":"reviewer","commit":"e110e7396b9c5dadd03f996eeb958ea490fe8547","sha256":"8b609b6cc4714a51fef72f513c7995cea14e01246b113942aa57643a3cd14f37","buildSdk":{"commit":"77a6908d4e7580716e9e2ab92de80150b02cdb06","sha256":"a31b02194665e8705e8d81331da0901f4088f54deb50a34c236d3a661d2d1aa7"}}]
+        [{"owner":"agent","commit":"${{ github.sha }}","sha256":null},{"owner":"api","commit":"05de58440ed3589c9d116afa98c00589dfbb9fee","sha256":"78fefd2fc99ef9be210263c1e0f2d8464b0e0294a989f5b40f70f9bd2241ea34","buildSdk":{"commit":"952195376b53bf39742e64f320f2a3b109cc77c0","sha256":"7ba46c788578f526692e81f3713f05e7c00db900b2d810ec27364cb41c008185"},"buildTreeDx":{"commit":"6d358bb2e536af24918f3c33acb2072b9093a603","sha256":"d6de27b42704b4c899562f290950561132fd0d48f38a95e6624eb853e32691cb"}},{"owner":"sdk","commit":"832b340d5f0578db5a4fdbd5a3b9c04624214ec4","sha256":"f56be1f3738ec739d4bcd44e67ad6ff1ef9f3c22de0c2940820e8928ee0929ed"},{"owner":"cli","commit":"6e2579428f4959906cd5b9b669ebbb2b44cb495c","sha256":"49b6d24882af45ba39fd46cdcd999c9c54e84bd416f834fa0042ec5425dbea1a"},{"owner":"deployment","commit":"d2222a3fa354e9ef30a5ef6b40081303c29fe4dc","sha256":"8a33e23e20263820085188e14eed63c3c868f2829c76e8629829c968ecfd1f5d"},{"owner":"reviewer","commit":"e110e7396b9c5dadd03f996eeb958ea490fe8547","sha256":"8b609b6cc4714a51fef72f513c7995cea14e01246b113942aa57643a3cd14f37","buildSdk":{"commit":"77a6908d4e7580716e9e2ab92de80150b02cdb06","sha256":"a31b02194665e8705e8d81331da0901f4088f54deb50a34c236d3a661d2d1aa7"}}]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

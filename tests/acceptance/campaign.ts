@@ -212,6 +212,25 @@ export function requirePlanningWindow(durationSeconds: number, planningPercent: 
 		'ACCEPTANCE_CAMPAIGN_WINDOW: Initial debugging requires twenty minutes planning within at most one hour');
 }
 
+/** Preserve original failures; classify only the native conditions proved here.
+ * Other failures still require the complete operator assessment/report path. */
+function classifyObservedCampaignFailure(failure: unknown): unknown {
+	if (!(failure instanceof Error)) return failure;
+	let classification: 'ENVIRONMENT_DEFECT' | 'PLAN_REVIEW_REQUIRED' | undefined;
+	if (failure.message.startsWith('ACCEPTANCE_CAMPAIGN_MODE:')
+		&& Object.getOwnPropertyDescriptor(failure, 'code')?.value === 'ERR_ASSERTION') classification = 'PLAN_REVIEW_REQUIRED';
+	else {
+		let current: unknown = failure; const seen = new Set<Error>();
+		while (current instanceof Error && !seen.has(current)) {
+			seen.add(current);
+			const code = Object.getOwnPropertyDescriptor(current, 'code')?.value;
+			if (code === 'ECONNREFUSED' || code === 'UND_ERR_SOCKET') { classification = 'ENVIRONMENT_DEFECT'; break; }
+			current = Object.getOwnPropertyDescriptor(current, 'cause')?.value;
+		}
+	}
+	return classification ? Object.assign(new Error(failure.message, { cause: failure }), { classification }) : failure;
+}
+
 export async function monitorCampaign(input: {
 	admitDiscussion?: () => void | Promise<void>;
 	admittedSimulation?: boolean;
@@ -255,6 +274,7 @@ export async function monitorCampaign(input: {
 		await input.wait();
 	}
 	} catch (failure) {
+		const classified = classifyObservedCampaignFailure(failure);
 		// A failed verifier must not strand an otherwise live simulation. Only the
 		// already-observed simulation workday may be stopped; never mutate a run
 		// whose mode was not proven or whose status is already terminal.
@@ -265,10 +285,10 @@ export async function monitorCampaign(input: {
 				// is in flight. Preserve the original acceptance failure in that case.
 				let current: ReturnType<typeof input.read> | undefined;
 				try { current = input.read(); } catch { /* Retain both failures below. */ }
-				if (current?.mode === 'simulation' && current.status !== 'running') throw failure;
+				if (current?.mode === 'simulation' && current.status !== 'running') throw classified;
 				throw new AggregateError([failure, stopFailure], 'ACCEPTANCE_CAMPAIGN_STOP_FAILED: Failed boundary and supported stop both failed');
 			}
 		}
-		throw failure;
+		throw classified;
 	}
 }

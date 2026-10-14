@@ -80,7 +80,7 @@ describe('SDK simulation external-state gate (fixtures are not upstream proof)',
 	});
 	it('reads all three frozen inventories and accepts only unchanged bytes',async()=>{
 		// The former three facts remain covered by the complete sole authorities.
-		await verifySdkExternalState(freeze);expect(state.execute).toHaveBeenCalledTimes(11);expect(state.read).toHaveBeenCalledOnce();
+		await verifySdkExternalState(freeze);expect(state.execute).toHaveBeenCalledTimes(11);expect(state.read).toHaveBeenCalledTimes(2);
 		for(const name of expected){const path='/receipts/'+name,original=state.files.get(path)!;state.files.set(path,original+'changed');const failed=new Map(state.files);await expect(async()=>verifySdkExternalState(freeze),name).rejects.toThrow('ACCEPTANCE_EXTERNAL_INVENTORY');expect(state.files).toEqual(failed);state.files.set(path,original);}
 		for(const fault of ['empty','malformed','duplicate','interrupted']){state.fault=fault;const held=new Map(state.files);await expect(async()=>verifySdkExternalState(freeze),fault).rejects.toThrow();expect(state.files).toEqual(held);}
 		state.fault='changed';const original=new Map(state.files);await expect(async()=>verifySdkExternalState(freeze)).rejects.toThrow('ACCEPTANCE_EXTERNAL_CHANGED');expect(state.files).toEqual(original);

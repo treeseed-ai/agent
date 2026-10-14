@@ -15,8 +15,8 @@ it('native Git GitHub registry and mutual TLS manager reads retain every seed-ow
 		captureSdkExternalState(f.root, (name, bytes) => { const path = join(f.root, name); writeFileSync(path, bytes); receipts[path] = f.archiveDigest(path); captures.set(name, bytes); });
 		expect(captures.size).toBe(172); expect(captures.has('sdk-dist-tags.json')).toBe(false);
 		for (const repository of f.repositories) {
-			const refs = captures.get(repository.key + '-remote-refs.txt')!; expect(refs).toContain(f.base + '\trefs/heads/staging'); expect(refs).toContain(f.base + '\trefs/tags/original');
-			for (const kind of ['releases', 'issues', 'pull-requests', 'deployments']) expect(JSON.parse(captures.get(repository.key + '-' + kind + '.json')!)).toHaveLength(2);
+			const refs = captures.get(encodeURIComponent(repository.key) + '-remote-refs.txt')!; expect(refs).toContain(f.base + '\trefs/heads/staging'); expect(refs).toContain(f.base + '\trefs/tags/original');
+			for (const kind of ['releases', 'issues', 'pull-requests', 'deployments']) expect(JSON.parse(captures.get(encodeURIComponent(repository.key) + '-' + kind + '.json')!)).toHaveLength(2);
 		}
 		const freeze = { receipts }, frozen = structuredClone({ receipts, captures }); verifySdkExternalState(freeze);
 		const failures: Array<{ mode: string; message: string }> = [];

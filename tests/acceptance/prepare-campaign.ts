@@ -235,16 +235,19 @@ function sdkExternalCommands(platform: string) {
 	const repositories = new Set<string>();
 	for (const source of operator.repositories) {
 		const match = /^https:\/\/github\.com\/([a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+)\.git$/u.exec(source.gitUrl);
-		assert.ok(match && /^[a-zA-Z0-9][a-zA-Z0-9_.-]*$/u.test(source.key) && !repositories.has(match[1]!), 'ACCEPTANCE_EXTERNAL_SCOPE: Unique seed-owned GitHub authority required');
+		assert.ok(match && typeof source.key === 'string' && source.key.length > 0 && source.key === source.key.trim() && !repositories.has(match[1]!), 'ACCEPTANCE_EXTERNAL_SCOPE: Unique seed-owned GitHub authority required');
 		repositories.add(match[1]!);
+		// Seed keys contain namespace separators. Encode the original key losslessly
+		// for one receipt filename; never interpret it as a caller-owned path.
+		const receiptKey = encodeURIComponent(source.key);
 		const add = (name: string, value: ExternalCommand) => {
 			assert.ok(!commands.has(name), 'ACCEPTANCE_EXTERNAL_SCOPE: Duplicate owning inventory'); commands.set(name, value);
 		};
-		add(source.key + '-remote-refs.txt', { command: 'git', args: ['ls-remote', '--refs', source.gitUrl], kind: 'refs' });
+		add(receiptKey + '-remote-refs.txt', { command: 'git', args: ['ls-remote', '--refs', source.gitUrl], kind: 'refs' });
 		for (const kind of ['releases', 'issues', 'pull-requests', 'deployments'] as const) {
 			const endpoint = kind === 'pull-requests' ? 'pulls' : kind;
 			const query = '?per_page=100' + (kind === 'issues' || kind === 'pull-requests' ? '&state=all' : '');
-			add(source.key + '-' + kind + '.json', { command: 'gh', args: ['api', '--hostname', 'github.com', '--method', 'GET', '--paginate', 'repos/' + match[1] + '/' + endpoint + query], kind, repository: match[1] });
+			add(receiptKey + '-' + kind + '.json', { command: 'gh', args: ['api', '--hostname', 'github.com', '--method', 'GET', '--paginate', 'repos/' + match[1] + '/' + endpoint + query], kind, repository: match[1] });
 		}
 	}
 	assert.ok(repositories.size > 0, 'ACCEPTANCE_EXTERNAL_SCOPE: Complete original source/library selection required');

@@ -103,7 +103,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       TREESEED_INSTALLED_OWNER_INPUTS: >-
-        [{"owner":"agent","commit":"${{ github.sha }}","sha256":null},{"owner":"api","commit":"5eadb7c9baf8eb818d1ffc5617cf2972fee8f3ad","sha256":"d8f57414904fcceecf5990171830396aca5680a42cba77eab62252a20d4c879a","buildSdk":{"commit":"952195376b53bf39742e64f320f2a3b109cc77c0","sha256":"7ba46c788578f526692e81f3713f05e7c00db900b2d810ec27364cb41c008185"},"buildTreeDx":{"commit":"6d358bb2e536af24918f3c33acb2072b9093a603","sha256":"d6de27b42704b4c899562f290950561132fd0d48f38a95e6624eb853e32691cb"}},{"owner":"sdk","commit":"3872a51cb5363ffa837240d02ea10a36165f2c24","sha256":"88e1978cd4d89a17e07201c33ee9f8664f5e486166302c8fc8cf42e59876e344"},{"owner":"cli","commit":"f538a7559ae0756e80c66ec222e78d31f0ce5af1","sha256":"f1800c556e023bb36ad17635e9cbbf8496597c277465db105983cd7383d0e637"},{"owner":"deployment","commit":"d2222a3fa354e9ef30a5ef6b40081303c29fe4dc","sha256":"8a33e23e20263820085188e14eed63c3c868f2829c76e8629829c968ecfd1f5d"},{"owner":"reviewer","commit":"e110e7396b9c5dadd03f996eeb958ea490fe8547","sha256":"8b609b6cc4714a51fef72f513c7995cea14e01246b113942aa57643a3cd14f37","buildSdk":{"commit":"77a6908d4e7580716e9e2ab92de80150b02cdb06","sha256":"a31b02194665e8705e8d81331da0901f4088f54deb50a34c236d3a661d2d1aa7"}}]
+        [{"owner":"agent","commit":"${{ github.sha }}","sha256":null},{"owner":"api","commit":"0f8c2f69ef4b19154fe0be34bd9d74debfd2eb40","sha256":"b0e2e0b561eeee1ae1eefc4fc88d24035b21ef93c9be6c3988bd077c513bec83","buildSdk":{"commit":"952195376b53bf39742e64f320f2a3b109cc77c0","sha256":"7ba46c788578f526692e81f3713f05e7c00db900b2d810ec27364cb41c008185"},"buildTreeDx":{"commit":"6d358bb2e536af24918f3c33acb2072b9093a603","sha256":"d6de27b42704b4c899562f290950561132fd0d48f38a95e6624eb853e32691cb"}},{"owner":"sdk","commit":"3872a51cb5363ffa837240d02ea10a36165f2c24","sha256":"88e1978cd4d89a17e07201c33ee9f8664f5e486166302c8fc8cf42e59876e344"},{"owner":"cli","commit":"f538a7559ae0756e80c66ec222e78d31f0ce5af1","sha256":"f1800c556e023bb36ad17635e9cbbf8496597c277465db105983cd7383d0e637"},{"owner":"deployment","commit":"d2222a3fa354e9ef30a5ef6b40081303c29fe4dc","sha256":"8a33e23e20263820085188e14eed63c3c868f2829c76e8629829c968ecfd1f5d"},{"owner":"reviewer","commit":"e110e7396b9c5dadd03f996eeb958ea490fe8547","sha256":"8b609b6cc4714a51fef72f513c7995cea14e01246b113942aa57643a3cd14f37","buildSdk":{"commit":"77a6908d4e7580716e9e2ab92de80150b02cdb06","sha256":"a31b02194665e8705e8d81331da0901f4088f54deb50a34c236d3a661d2d1aa7"}}]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -132,8 +132,8 @@ jobs:
         with:
           github-token: ${{ github.token }}
           repository: treeseed-ai/api
-          run-id: 38463150958
-          name: api-8a06a00b944e2fa260811fc1c2d53f24860fe46d
+          run-id: 38481112580
+          name: api-159ba8c9497bd46d439d559592e9e898e82748d6
           path: .treeseed/installed-owner-inputs/api
       - name: Read held sdk archive
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093

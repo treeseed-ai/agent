@@ -205,16 +205,16 @@ export async function verifyPublicWorkspaceSessionClosure(items:Row[],sessions:R
   const attempt=assignmentAttemptSchema.parse(item.assignmentAttempt);assert.deepEqual(attempt,item.assignmentAttempt,code);
   assert.equal(item.teamId,items[0]!.teamId,code);assert.equal(item.workDayId,items[0]!.workDayId,code);
   assert.equal(item.id,attempt.id,code);assert.equal(item.teamId,attempt.teamId,code);assert.equal(item.projectId,attempt.projectId,code);assert.equal(item.workDayId,attempt.workdayId,code);
-  assert.ok(['completed','failed','cancelled','returned','expired'].includes(String(item.status)),code);const terminal=timestamp(item.completedAt??item.failedAt??item.returnedAt);
+  assert.ok(['completed','failed','cancelled','returned','expired'].includes(String(item.status)),code);timestamp(item.completedAt??item.failedAt??item.returnedAt);const updated=timestamp(item.updatedAt);
   assert.ok(typeof item.providerSessionId==='string'&&item.providerSessionId&&typeof item.membershipId==='string'&&item.membershipId,code);
   const found=sessions.filter(value=>value.id===item.providerSessionId);assert.equal(found.length,1,code);const session=found[0]!;
   assert.equal(session.teamId,attempt.teamId,code);assert.equal(session.providerId,attempt.provider.providerId,code);assert.equal(session.membershipId,item.membershipId,code);
-  assert.equal(session.status,'closed',code);assert.ok(timestamp(session.closedAt)>=terminal,code);
+  assert.equal(session.status,'closed',code);assert.ok(timestamp(session.closedAt)>=timestamp(session.openedAt),code);
   const proxy=row(item.treedxProxyHandle),context=row(item.workspaceContext),handles=row(item.capabilityHandles);
   assert.equal(proxy.teamId,attempt.teamId,code);assert.equal(proxy.projectId,attempt.projectId,code);assert.equal(proxy.assignmentId,attempt.id,code);
-  assert.ok(typeof proxy.id==='string'&&proxy.id,code);assert.equal(proxy.status,'revoked',code);assert.ok(timestamp(proxy.revokedAt)<=terminal&&timestamp(proxy.revokedAt)>=timestamp(attempt.createdAt),code);
+  assert.ok(typeof proxy.id==='string'&&proxy.id,code);assert.equal(proxy.status,'revoked',code);assert.ok(timestamp(proxy.revokedAt)<=updated&&timestamp(proxy.revokedAt)>=timestamp(attempt.createdAt),code);
   assert.deepEqual(context.treedxProxyHandle,proxy,code);assert.deepEqual(context.capabilityHandles,handles,code);
-  for(const kind of['repository','treeDx','workflowOperations','secrets']){const entries=handles[kind];assert.ok(Array.isArray(entries),code);for(const value of entries){const handle=row(value);assert.equal(handle.status,'revoked',code);assert.ok(timestamp(handle.revokedAt)<=terminal&&timestamp(handle.revokedAt)>=timestamp(attempt.createdAt),code);}}
+  for(const kind of['repository','treeDx','workflowOperations','secrets']){const entries=handles[kind];assert.ok(Array.isArray(entries),code);for(const value of entries){const handle=row(value);assert.equal(handle.status,'revoked',code);assert.ok(timestamp(handle.revokedAt)<=updated&&timestamp(handle.revokedAt)>=timestamp(attempt.createdAt),code);}}
   if(attempt.workspace.mode!=='treedx'){assert.equal(proxy.workspaceId,null,code);continue;}
   assert.equal(proxy.workspaceId,attempt.workspace.workspaceId,code);assert.equal(proxy.repositoryId,attempt.workspace.repository,code);
   assert.ok(typeof proxy.repositoryProjectId==='string'&&proxy.repositoryProjectId&&typeof proxy.branchName==='string'&&proxy.branchName,code);

@@ -66,6 +66,8 @@ describe('public owning sandbox inventory consumption', () => {
    assignmentId: attempt.id, status: 'completed', summary: 'Supplied unit input, not a managed result.', references: [], verification: [],
    usage: { elapsedSeconds: 1, native: { activeSeconds: 1 } }, diagnostics: [], completedAt: item.completedAt });
   const completed = structuredClone(f); expect(verify(f)).toHaveLength(1); expect(f).toEqual(completed);
+  const vacant=structuredClone(f),vacantInventory=row(vacant.status.inventory);for(const key of ['vmProcesses','nbdDevices']){vacantInventory[key]=[];row(vacantInventory.confirmation)[key]=[];}expect(verify(vacant)).toHaveLength(1);
+  const detached=structuredClone(f),detachedInventory=row(detached.status.inventory),devices=detachedInventory.nbdDevices as Row[];devices.push({device:'/dev/nbd0',threadId:null,processId:null,executable:null,image:null,failure:null});row(detachedInventory.confirmation).nbdDevices=structuredClone(devices);expect(verify(detached)).toHaveLength(1);
   const changes: Array<(f: ReturnType<typeof supplied>) => void> = [
    f => { delete f.status.workspace; }, f => { row(f.status.workspace).complete = false; },
    f => { row(f.status.workspace).errors = ['interrupted']; }, f => { row(f.status.workspace).initialized = false; },
@@ -124,6 +126,16 @@ describe('public owning sandbox inventory consumption', () => {
     row(f.status.inventory)[kind] += `${id}${suffix}\n`; row(row(f.status.inventory).confirmation)[kind] = row(f.status.inventory)[kind];
    });
   semanticChanges.push(f => { row(f.status.inventory).mountInfo += `2 1 0:2 / ${String(row(metadata(f, 'jobs').disk).directory)}/input rw - tmpfs tmpfs rw\n`; });
+  for(const [key,values]of Object.entries({processId:[null,0,-1,1.5,'123'],startTicks:[null,'','0','-1','ticks'],executable:[null,'relative','/usr/bin/foreign'],name:[null,'','../foreign','name with spaces'],failure:['unreadable']}))for(const value of values)semanticChanges.push(f=>{
+   const inventory=row(f.status.inventory),vms=inventory.vmProcesses as Row[];vms[0]![key]=value;row(inventory.confirmation).vmProcesses=structuredClone(vms);
+  });
+  for(const [key,values]of Object.entries({device:[null,'','/dev/sda'],threadId:[null,0,-1,1.5,'124'],processId:[null,0,-1,1.5,'125'],executable:[null,'relative','/usr/bin/unknown-client'],image:[null,'relative','/absolute/../changed'],failure:['unreadable']}))for(const value of values)semanticChanges.push(f=>{
+   const inventory=row(f.status.inventory),devices=inventory.nbdDevices as Row[];devices[0]![key]=value;row(inventory.confirmation).nbdDevices=structuredClone(devices);
+  });
+  semanticChanges.push(f=>{const inventory=row(f.status.inventory),vms=inventory.vmProcesses as Row[];vms.push(structuredClone(vms[0]!));row(inventory.confirmation).vmProcesses=structuredClone(vms);},
+   f=>{const inventory=row(f.status.inventory),devices=inventory.nbdDevices as Row[];devices.push(structuredClone(devices[0]!));row(inventory.confirmation).nbdDevices=structuredClone(devices);},
+   f=>{f.events[0]!.workdayId='foreign';},f=>{f.events[0]!.projectId='foreign';},
+   f=>{const inventory=row(f.status.inventory),vms=inventory.vmProcesses as Row[];vms[0]!.name='sandbox-sandbox-warm-33333333-3333-4333-8333-333333333333';row(inventory.confirmation).vmProcesses=structuredClone(vms);});
   for (const change of semanticChanges) {
    const denied = structuredClone(f); change(denied); const workspace = row(denied.status.workspace);
    for (const name of ['leaseDirectoryPresent', 'disks', 'journals']) row(workspace.confirmation)[name] = structuredClone(workspace[name]);

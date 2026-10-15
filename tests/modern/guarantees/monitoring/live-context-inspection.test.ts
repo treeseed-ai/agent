@@ -124,3 +124,18 @@ it('retains the declared TreeDX repository as exact mutable workspace authority 
 		expect(() => verifyAssignmentContextRead(changed, original.reference, attempt.projectId, original.binding, original.observed)).toThrow('ACCEPTANCE_DECLARED_CONTEXT');
 	}
 });
+
+it('requires the reviewing assignment criteria to equal the original authored objective boundary even when issued graph and Actor views agree',()=>{
+ const item=liveAssignmentRecord(),attempt=assignmentAttemptSchema.parse(item.assignmentAttempt);attempt.workItemId='configured-material-work';
+ const original=liveGovernedContext(attempt),work=(original.observed.files[0]!.frontmatter.executionPlan as {workItems:Array<Record<string,unknown>>}).workItems[0]!;
+ attempt.sourceRef=original.reference;attempt.contextRefs.push(original.reference,original.book.ref);attempt.grant.contentRead.push(original.reference,original.book.ref);
+ attempt.agentClass='configured-auditor';attempt.effectiveProfile={...attempt.effectiveProfile,activity:'reviewing',handler:'writer',permissionCeiling:{content:{read:['proposal','decision','book'],write:['decision']},tools:['source.read','verification','discussion']}};
+ attempt.grant.sourceWrite=[];attempt.grant.tools=['source.read','verification','discussion'];attempt.grant.contentWrite=[{store:'treedx',model:'decision',id:'original-review',repository:original.book.ref.repository,commit:original.book.ref.commit,path:'decisions/original-review.mdx'}];
+ attempt.workspace={mode:'treedx',repository:original.book.ref.repository!,baseCommit:original.book.ref.commit!,workspaceId:'original-review-workspace',writablePaths:['decisions/original-review.mdx']};attempt.acceptanceCriteria=work.acceptanceCriteria as string[];item.assignmentAttempt=attempt;
+ const held=structuredClone({item,original}),inspect=(value:typeof item)=>verifyAssignmentContextRead(value,original.reference,attempt.projectId,original.binding,original.observed);
+ inspect(item);for(const criteria of [undefined,[],['Unrelated acceptance boundary.'],[...attempt.acceptanceCriteria!,'Broader portfolio result required.'],[...attempt.acceptanceCriteria!,...attempt.acceptanceCriteria!]]){
+  const denied=structuredClone(item);Object.assign(denied.assignmentAttempt as object,{acceptanceCriteria:criteria});const failed=structuredClone(denied);
+  expect.soft(()=>inspect(denied),JSON.stringify(criteria)).toThrow('ACCEPTANCE_REVIEW_OBJECTIVE');expect(denied).toEqual(failed);
+ }
+ expect({item,original}).toEqual(held);inspect(item);
+});

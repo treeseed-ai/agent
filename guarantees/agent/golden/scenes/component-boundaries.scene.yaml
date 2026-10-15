@@ -2310,3 +2310,15 @@ workflow:
   - id: native-external-failures
     action: { verifier: agent.golden.native-external-failures }
     expect: { status: passed }
+
+  - id: plan-review-stop-unit
+    action: { verifier: agent.golden.plan-review-stop-unit }
+    expect: { status: passed }
+
+  - id: plan-review-stop-wiring-unit
+    action: { verifier: agent.golden.plan-review-stop-wiring-unit }
+    expect: { status: passed }
+
+  - id: plan-review-stop-native
+    action: { verifier: agent.golden.plan-review-stop-native }
+    expect: { status: passed }

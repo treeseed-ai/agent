@@ -73,12 +73,7 @@ export function retainCampaignWorkdayStart(started: StartRow, freezePath: string
 export function retainCampaignPlanReview(report: string, freezePath: string, freeze: StartRow): string {
 	const label = 'ACCEPTANCE_PLAN_REVIEW_REPORT', bytes = startBytes(freezePath);
 	assert.deepEqual(JSON.parse(bytes.toString('utf8')), freeze, label);
-	assert.ok(typeof report === 'string', label); const lines = report.split('\n');
-	assert.equal(lines[0], 'PLAN_REVIEW_REQUIRED', label); assert.equal(lines.length, 8, label);
-	const details = Object.fromEntries(lines.slice(1).map(line => {
-		const at = line.indexOf(': '); assert.ok(at > 0, label); return [line.slice(0, at), line.slice(at + 2)];
-	})) as PlanReviewReport;
-	assert.equal(campaignPlanReviewRequired(details, undefined).message, report, label);
+	const details = campaignPlanReviewDetails(report);
 	assert.equal(details.project, 'sdk', label);
 	const proposal = startRow(freeze.proposal);
 	assert.equal(details.proposal, String(proposal.id) + ' ' + String(proposal.digest), label);
@@ -240,6 +235,18 @@ export function requirePlanningWindow(durationSeconds: number, planningPercent: 
 
 type PlanReviewReport = Record<'project' | 'proposal' | 'workday' | 'failed expectation' | 'observed evidence'
 	| 'why implementation repair is insufficient' | 'smallest proposed plan correction', string>;
+/** Parse the existing report once; file custody and failure classification use identical validation. */
+function campaignPlanReviewDetails(report:string):PlanReviewReport {
+ const label='ACCEPTANCE_PLAN_REVIEW_REPORT';
+	assert.ok(typeof report === 'string', label); const lines = report.split('\n');
+	assert.equal(lines[0], 'PLAN_REVIEW_REQUIRED', label); assert.equal(lines.length, 8, label);
+	const details = Object.fromEntries(lines.slice(1).map(line => {
+		const at = line.indexOf(': '); assert.ok(at > 0, label); return [line.slice(0, at), line.slice(at + 2)];
+	})) as PlanReviewReport;
+	assert.equal(campaignPlanReviewRequired(details, undefined).message, report, label);
+ return details;
+}
+
 /** Render the existing acceptance contract, retaining the original observation as cause. */
 export function campaignPlanReviewRequired(details: PlanReviewReport, cause: unknown): Error & { classification: 'PLAN_REVIEW_REQUIRED' } {
 	const label = 'ACCEPTANCE_PLAN_REVIEW_REPORT', keys: Array<keyof PlanReviewReport> = ['project', 'proposal', 'workday',
@@ -283,6 +290,10 @@ export function requireCampaignSimulation(freeze: StartRow, freezePath: string, 
  * Other failures still require the complete operator assessment/report path. */
 function classifyObservedCampaignFailure(failure: unknown): unknown {
 	if (!(failure instanceof Error)) return failure;
+ if(Object.getOwnPropertyDescriptor(failure,'classification')?.value==='PLAN_REVIEW_REQUIRED'){
+  try{campaignPlanReviewDetails(failure.message);return failure;}
+  catch{ return Object.assign(new Error('ACCEPTANCE_PLAN_REVIEW_REPORT: Invalid declared plan-review report',{cause:failure}),{classification:'IMPLEMENTATION_DEFECT'}); }
+ }
 	let classification: 'ENVIRONMENT_DEFECT' | 'IMPLEMENTATION_DEFECT' | undefined;
 	if (failure.message.startsWith('ACCEPTANCE_CAMPAIGN_MODE:')
 		&& Object.getOwnPropertyDescriptor(failure, 'code')?.value === 'ERR_ASSERTION') classification = 'IMPLEMENTATION_DEFECT';
@@ -302,6 +313,7 @@ export async function monitorCampaign(input: {
 	admitDiscussion?: () => void | Promise<void>;
 	admittedSimulation?: boolean;
 	inspect?: () => void | Promise<void>;
+	reportPlanReview?: (report:string) => void | Promise<void>;
 	read: () => { status: string; mode: string; planningEndsAt: number; endsAt: number;
 		failedBoundary?: 'assignment_failed' | 'assignment_returned' | 'assignment_expired' |
 			'graph_failed' | 'graph_returned' | 'graph_expired' };
@@ -342,6 +354,11 @@ export async function monitorCampaign(input: {
 	}
 	} catch (failure) {
 		const classified = classifyObservedCampaignFailure(failure);
+  let finalFailure=classified;
+  if(classified instanceof Error&&Object.getOwnPropertyDescriptor(classified,'classification')?.value==='PLAN_REVIEW_REQUIRED'){
+   try{assert.ok(input.reportPlanReview,'ACCEPTANCE_PLAN_REVIEW_REPORT: Original frozen report retention is required');await input.reportPlanReview(classified.message);}
+   catch(reportFailure){finalFailure=new AggregateError([failure,reportFailure],'ACCEPTANCE_PLAN_REVIEW_REPORT: Original plan-review observation and report retention failed');}
+  }
 		// A failed verifier must not strand an otherwise live simulation. Only the
 		// already-observed simulation workday may be stopped; never mutate a run
 		// whose mode was not proven or whose status is already terminal.
@@ -352,10 +369,10 @@ export async function monitorCampaign(input: {
 				// is in flight. Preserve the original acceptance failure in that case.
 				let current: ReturnType<typeof input.read> | undefined;
 				try { current = input.read(); } catch { /* Retain both failures below. */ }
-				if (current?.mode === 'simulation' && current.status !== 'running') throw classified;
-				throw new AggregateError([failure, stopFailure], 'ACCEPTANCE_CAMPAIGN_STOP_FAILED: Failed boundary and supported stop both failed');
+				if (current?.mode === 'simulation' && current.status !== 'running') throw finalFailure;
+				throw new AggregateError([failure,...(finalFailure===classified?[]:[finalFailure]),stopFailure], 'ACCEPTANCE_CAMPAIGN_STOP_FAILED: Failed boundary and supported stop both failed');
 			}
 		}
-		throw classified;
+		throw finalFailure;
 	}
 }

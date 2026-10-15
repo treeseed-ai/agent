@@ -1,3 +1,4 @@
+import {campaignPlanReviewRequired} from '../../acceptance/campaign.ts';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { encodeCapacityPageCursor } from '@treeseed/sdk/capacity-pagination';
 
@@ -57,6 +58,15 @@ beforeEach(() => {
 });
 afterEach(() => vi.useRealTimers());
 describe('campaign CLI composition units (mocked transport, not native or live acceptance)', () => {
+ it('retains the original late plan-review report and stops the exact admitted simulation without approval or later gates',async()=>{
+  transport(()=>observed('running'));state.freeze.proposal.digest='sha256:'+'a'.repeat(64);const details={project:'sdk',proposal:state.freeze.proposal.id+' '+state.freeze.proposal.digest,workday:workdayId,'failed expectation':'Original plan requires review.','observed evidence':'Retained original observation.','why implementation repair is insufficient':'The original plan requires reviewed correction.','smallest proposed plan correction':'Request review; no change applied.'};
+  const original=campaignPlanReviewRequired(details,Object.assign(new Error('Original transport cause'),{code:'ECONNREFUSED'})),held=structuredClone(state.freeze),stderr=vi.spyOn(console,'error').mockImplementation(()=>{});
+  state.inspect.mockImplementation(()=>{throw original;});try{await expect(state.run!()).rejects.toBe(original);expect(state.retainReview).toHaveBeenCalledExactlyOnceWith(original.message,'/freeze',state.freeze);expect(stderr).toHaveBeenCalledExactlyOnceWith(original.message);
+   expect(state.read.mock.calls.filter(call=>call[0][1]==='stop')).toEqual([[['workdays','stop',workdayId,'--yes','--reason','Automated golden boundary failed','--idempotency-key','golden-stop:'+workdayId],'treeseed']]);
+   expect(state.read.mock.calls.filter(call=>call[0][1]==='evaluate')).toEqual([]);expect(state.verify).not.toHaveBeenCalled();expect(state.freeze).toEqual(held);
+  }finally{stderr.mockRestore();}
+ });
+
  it('denies missing changed denied or interrupted external inventories before admission and retains the original frozen input before exact retry', async () => {
   const failures: Error[]=[];
   for(const boundary of ['missing','changed','denied','interrupted']) {

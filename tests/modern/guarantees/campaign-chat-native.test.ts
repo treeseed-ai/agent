@@ -40,7 +40,8 @@ it('native public communication requests preserve every addressed probe and stop
 					permissionCeiling: { content: { read: ['discussion', 'proposal'], write: ['discussion'] }, tools: ['discussion'] } },
 				grant: { contentRead: [source, subject], contentWrite: [target], sourceRead: [], sourceWrite: [], tools: ['discussion'] },
 				workspace: { mode: 'treedx', repository: repoId, baseCommit: nativeCommit, workspaceId: `workspace-${id}`, writablePaths: [target.path] } } };
-		const body = sdkCampaignChatQuestion(role), frontmatter = { schemaVersion: 'treeseed.discussion-message/v1', id: `message-${id}`,
+		Object.assign(item,{completedAt:'2026-10-10T00:00:03.000Z',assignmentResult:{schemaVersion:'treeseed.assignment-result/v1',id:'result-'+id,assignmentId:id,status:'completed',summary:JSON.stringify({agentClass:role,proposalId,proposalCommit:nativeCommit}),references:[],verification:[],usage:{elapsedSeconds:1,native:{activeSeconds:1}},diagnostics:[],completedAt:'2026-10-10T00:00:03.000Z'}});
+  const body = sdkCampaignChatQuestion(role), frontmatter = { schemaVersion: 'treeseed.discussion-message/v1', id: `message-${id}`,
 			discussionRef: { store: 'treedx', model: 'discussion', id: channel, path: discussionPath, revision: 1, digest: discussionDigest },
 			authorRef: { store: 'postgresql', model: 'user', id: 'controlled-native-operator' }, authorType: 'user', discussionId: channel,
 			mentionedAgents: [role], recipientIds: [role], parentWorkdayId: workdayId, createdAt: '2026-10-10T00:00:01.000Z', fileRefs: [],

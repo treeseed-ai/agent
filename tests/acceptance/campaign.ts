@@ -107,7 +107,7 @@ export const sdkCampaignAgents = ['architect', 'researcher', 'tester', 'engineer
 export const sdkCampaignOpeningMessage = `${sdkCampaignAgents.map(role => `@sdk/${role}`).join(' ')} Discuss the exact frozen proposal, identify your role and dependencies, and publish useful planning contributions. Do not implement during planning.`;
 export function sdkCampaignChatQuestion(role: string): string {
 	assert.ok(sdkCampaignAgents.some(value => value === role), 'ACCEPTANCE_CHAT_CONTEXT: Exact selected contributor required');
-	return `@sdk/${role} For the exact frozen proposal, state your responsibility and one dependency or verification concern. Answer only this coordination question; do not inspect or change project files, publish work products or mutate graph edges.`;
+	return `@sdk/${role} For this exact addressed proposal, return only one JSON object in your general result summary with exactly these fields: agentClass (your assigned class), proposalId (the addressed proposal ID), and proposalCommit (the exact addressed proposal commit). Use only your supplied profile and subject context; do not inspect or change project files, publish work products or mutate graph edges.`;
 }
 
 /** The existing communication boundary owns admission, replies and graph custody. */

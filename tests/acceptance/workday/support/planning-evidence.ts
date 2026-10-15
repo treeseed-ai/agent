@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { parseDocument } from 'yaml';
-import { assignmentReferenceSchema, exactEntityReferenceSchema } from '@treeseed/sdk/agent-capacity';
+import { assignmentReferenceSchema, assignmentResultSchema, exactEntityReferenceSchema } from '@treeseed/sdk/agent-capacity';
 import { validatePortableContentData } from '@treeseed/sdk/content-validation';
 import { assertPredecessorSynthesis } from '@treeseed/agent';
 import { read, row, type Row } from '../../acceptance-cli.ts';
@@ -59,7 +59,17 @@ export function verifyChatAddressedRead(item: Row, run: Row, returned: Row): boo
 		immutableRef: subject.commit, path: subject.path, digest: subject.digest }], label);
 	const created = timestamp(frontmatter.createdAt), admitted = timestamp(item.createdAt);
 	assert.ok(timestamp(run.startedAt) <= created && created <= admitted, label);
-	if (individual) assert.equal(item.status, 'completed', 'ACCEPTANCE_CHAT_ROLES: Addressed probes must complete');
+	if (individual) {
+  assert.equal(item.status, 'completed', 'ACCEPTANCE_CHAT_ROLES: Addressed probes must complete');
+  const answerLabel='ACCEPTANCE_CHAT_ANSWER',parsed=assignmentResultSchema.safeParse(item.assignmentResult);
+  assert.ok(parsed.success,answerLabel+': Original canonical general result required');const result=parsed.data;
+  assert.equal(result.assignmentId,item.id,answerLabel);assert.equal(result.status,'completed',answerLabel);
+  assert.deepEqual(result.verification,[],answerLabel+': Chat must not claim work verification');
+  let answer:unknown;try{answer=JSON.parse(result.summary);}catch{assert.fail(answerLabel+': One exact JSON answer required');}
+  const document=parseDocument(result.summary);assert.equal(document.errors.length,0,answerLabel+': Duplicate or ambiguous answer fields denied');
+  assert.deepEqual(document.toJS({maxAliasCount:0}),answer,answerLabel);
+  assert.deepEqual(answer,{agentClass:attempt.agentClass,proposalId:subject.id,proposalCommit:subject.commit},answerLabel+': Answer must resolve only the original addressed question');
+ }
 	return individual;
 }
 

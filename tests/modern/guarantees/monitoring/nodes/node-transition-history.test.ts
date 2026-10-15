@@ -15,7 +15,7 @@ it('requires complete original node state and revision histories against the cur
   const omitted=events.filter((_,offset)=>offset!==index).map((event,eventIndex)=>({...structuredClone(event),eventIndex})),before=structuredClone(omitted);
   expect(()=>check(run,graph,omitted),'missing '+statuses[index]).toThrow('ACCEPTANCE_NODE_TRANSITIONS');expect(omitted).toEqual(before);
  }
- for(const mode of ['wrong-team','wrong-run','wrong-workday','wrong-project','wrong-node','wrong-revision','missing-revision','future-graph','old-graph','wrong-status','wrong-prior','wrong-clock','before-birth','duplicate','wrong-assignment','wrong-record-status']){
+ for(const mode of ['wrong-team','wrong-run','wrong-workday','wrong-project','wrong-node','wrong-revision','missing-revision','future-graph','old-graph','wrong-status','wrong-prior','wrong-clock','before-birth','before-workday','duplicate','wrong-assignment','wrong-record-status']){
   const changed=structuredClone(events),event=changed[4]!,context=row(event.context);
   if(mode==='wrong-team')event.teamId='foreign';if(mode==='wrong-run')event.runId='foreign';if(mode==='wrong-workday')event.workdayId='foreign';if(mode==='wrong-project')event.projectId='foreign';if(mode==='wrong-node')context.nodeId='foreign';
   if(mode==='wrong-revision')context.nodeRevision=3;if(mode==='missing-revision')delete context.nodeRevision;if(mode==='future-graph')context.graphRevision=Number(graph.revision)+1;if(mode==='old-graph')context.graphRevision=0;

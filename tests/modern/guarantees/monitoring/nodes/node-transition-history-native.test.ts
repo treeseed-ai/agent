@@ -13,7 +13,7 @@ it('native Kernel Git and public SDK node histories deny omitted changed or inte
  const f=await portableKernel();let server:ReturnType<typeof createServer>|undefined;
  try{
   const candidate=await f.candidate(),produced=await f.run();expect(produced.status).toBe('completed');const result=assignmentResultSchema.parse(produced.outputs?.assignmentResult);
-  const item=liveAssignmentRecord(f.attempt),graph=liveAssignmentGraph(item),node=(graph.nodes as Row[])[0]!,run={id:f.attempt.workdayId,teamId:f.attempt.teamId,status:'running',executionMode:'simulation'};
+  const item=liveAssignmentRecord(f.attempt),graph=liveAssignmentGraph(item),node=(graph.nodes as Row[])[0]!,run={id:f.attempt.workdayId,teamId:f.attempt.teamId,status:'running',executionMode:'simulation',startedAt:f.attempt.createdAt};
   node.status='completed';const statuses=['ready','assigned','running','completed'];
   const events:Row[]=statuses.map((status,index)=>({id:'native-node-state-'+index,eventType:'execution.node.state',eventIndex:index,runId:run.id,workdayId:run.id,teamId:run.teamId,projectId:node.projectId,assignmentId:null,status:'recorded',createdAt:index===3?result.completedAt:f.attempt.createdAt,context:{nodeId:node.id,nodeRevision:node.nodeRevision,graphRevision:node.graphRevisionUpdated,status,previousStatus:index?statuses[index-1]:null},parameters:{},metadata:{},refs:{}}));
   const held=structuredClone({graph,events,result}),requests:Array<{method:string;path:string;key:string;body:unknown}>=[],failures:Row[]=[];let mode='exact';
@@ -28,6 +28,7 @@ it('native Kernel Git and public SDK node histories deny omitted changed or inte
    if(mode==='malformed'){response.end('{');return;}if(mode==='interrupted'){request.socket.destroy();return;}
    const values=structuredClone(events);if(mode.startsWith('missing-'))values.splice(Number(mode.slice(8)),1);
    if(mode==='wrong-prior')row(values[2]!.context).previousStatus='completed';if(mode==='wrong-node')row(values[2]!.context).nodeId='foreign';if(mode==='wrong-terminal')row(values[3]!.context).status='failed';if(mode==='wrong-revision')row(values[3]!.context).nodeRevision=2;
+   if(mode==='before-workday')values[0]!.createdAt=new Date(Date.parse(f.attempt.createdAt)-1).toISOString();
    if(mode==='duplicate')values.push(structuredClone(values[2]!));values.forEach((value,eventIndex)=>{value.eventIndex=eventIndex;});
    response.end(JSON.stringify({data:{items:values,page:{limit:100,hasMore:false,nextCursor:null}}}));
   });});
@@ -44,7 +45,7 @@ it('native Kernel Git and public SDK node histories deny omitted changed or inte
    return later;
   };
   expect(await Promise.all([execute(),execute()])).toEqual([true,true]);
-  for(mode of ['missing-0','missing-1','missing-2','missing-3','wrong-prior','wrong-node','wrong-terminal','wrong-revision','duplicate','denied','malformed','interrupted']){let failure:unknown;try{await execute();}catch(error){failure=error;}expect(failure,mode).toBeInstanceOf(Error);failures.push({mode,error:String(failure)});}
+  for(mode of ['missing-0','missing-1','missing-2','missing-3','wrong-prior','wrong-node','wrong-terminal','wrong-revision','before-workday','duplicate','denied','malformed','interrupted']){let failure:unknown;try{await execute();}catch(error){failure=error;}expect(failure,mode).toBeInstanceOf(Error);failures.push({mode,error:String(failure)});}
   const retained=structuredClone(failures);mode='exact';expect(await Promise.all([execute(),execute()])).toEqual([true,true]);expect(failures).toEqual(retained);expect(f.git('rev-parse','HEAD')).toBe(candidate);expect(assignmentResultSchema.parse(produced.outputs?.assignmentResult)).toEqual(result);
   console.log(JSON.stringify({nativeNodeHistoryDenials:failures}));
   // Native Kernel/Git and original SDK/HTTP boundaries; upstream graph/events

@@ -2367,3 +2367,9 @@ workflow:
   - id: execution-resource-closure-native
     action: { verifier: agent.golden.execution-resource-closure-native }
     expect: { status: passed }
+  - id: execution-estimate-publication-unit
+    action: { verifier: agent.golden.execution-estimate-publication-unit }
+    expect: { status: passed }
+  - id: execution-estimate-publication-native
+    action: { verifier: agent.golden.execution-estimate-publication-native }
+    expect: { status: passed }

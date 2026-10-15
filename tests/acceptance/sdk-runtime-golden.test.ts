@@ -1,3 +1,4 @@
+import {verifyManagedEstimates} from './workday/support/estimate-evidence.ts';
 import assert from 'node:assert/strict';
 import { phaseBoundaryCancelled } from './workday/support/monitoring/live-assignment-records.ts';
 import { isDeepStrictEqual } from 'node:util';
@@ -112,6 +113,7 @@ export function verifyGolden(gate: Gate): void {
 	verifyPlanningEvidence(rounds, assignments, classes, run, team);
 	assert.deepEqual([...new Set(completed.filter(item => activity(item) === 'estimating').map(item => row(item.assignmentAttempt).agentClass))].sort(),
 		classes.filter(value => value !== 'reporter').sort(), 'ACCEPTANCE_ESTIMATE_ROLES: Exact seven selected estimating contributors must complete');
+	verifyManagedEstimates(assignments,run,team);
 	}
 	const actors = completed.filter(item => activity(item) === 'acting');
 	if (['graph', 'revision', 'settlement', 'reporter'].includes(gate)) assert.ok(actors.length > 0, 'Missing acting evidence');

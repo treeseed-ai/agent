@@ -4076,3 +4076,13 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/guarantees/preflight/campaign-freeze-native.test.ts
     testName: "native public session pages and exact workspace reads retain closed scoped custody while denying omitted foreign interrupted or still-live resources before unchanged retry"
+  agent.golden.execution-estimate-publication-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/golden-planning-readback.test.ts
+    testName: "denies estimating role counts without original exact published estimate results before readiness"
+  agent.golden.execution-estimate-publication-native:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/planning/estimate-publication-native.test.ts
+    testName: "native configured estimate handlers publish exact class-owned proposal bytes and independent Git reads deny missing foreign altered and interrupted estimate evidence before unchanged retry"

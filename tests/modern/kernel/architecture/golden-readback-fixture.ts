@@ -1,3 +1,4 @@
+import {retainUnitEstimatePublications} from '../../guarantees/planning/estimate-publication-fixture.ts';
 import { beforeEach, vi } from 'vitest';
 import { createHash } from 'node:crypto';
 import { stringify } from 'yaml';
@@ -19,7 +20,7 @@ vi.mock('node:child_process', () => ({ execFileSync: (_command: string, args: st
 		: key === 'assignments list' && state.assignmentPages ? state.assignmentPages.shift()
 		: key === 'capacity usage' && state.usagePages ? state.usagePages.shift()
 		: key === 'workdays events' && state.eventPages ? state.eventPages.shift()
-		: state.replies.get(args.slice(0, 5).join(' ')) ?? state.replies.get(`${key} ${args[2]} ${args[3]}`) ?? state.replies.get(`${key} ${args[3]}`) ?? state.replies.get(key);
+		: (key === 'library read' ? state.replies.get('library read '+args[3]+' --ref '+args[args.indexOf('--ref')+1]) : undefined) ?? state.replies.get(args.slice(0, 5).join(' ')) ?? state.replies.get(`${key} ${args[2]} ${args[3]}`) ?? state.replies.get(`${key} ${args[3]}`) ?? state.replies.get(key);
 	if (!result) throw new Error(`Unexpected acceptance read: ${key}`);
 	// The actual repository sorts its read model; do not reorder the mutable oracle inputs.
 	const presented = (key === 'assignments list' || key === 'capacity ledger' || (key === 'capacity usage' && !state.usagePages)) ? { ...result, items: [...result.items].sort((a, b) =>
@@ -246,13 +247,8 @@ beforeEach(() => {
 				subjectRefs: [structuredClone(source)], body, createdAt: item.completedAt } }] } });
 		}
 	}
-	// Ordinary product UNIT read-back only; these are controlled bytes, not native publication receipts.
-	for (const item of items.filter(value => value.assignmentAttempt.effectiveProfile.activity === 'estimating')) {
-		const target = item.assignmentAttempt.grant.contentWrite[0];
-		item.assignmentResult.references = [{ kind: 'treedx', projectId: item.projectId, repository: target.repository, commit, path: target.path }];
-		state.replies.set(`library read ${target.path}`, { result: { resolvedRef: commit, files: [{ path: target.path,
-			content: `Controlled unit product for ${item.id}.\n`, frontmatter: {}, body: `Controlled unit product for ${item.id}.` }] } });
-	}
+	retainUnitEstimatePublications(items,state.replies,state.replies.get('workdays show')!.run);
+	state.replies.get('capacity usage')!.items=items.map(usageMeasurement);
 	for (const [key, value] of state.replies) if (key.startsWith('library read') && value.result?.files) {
 		Object.assign(value.result, { ok: true, repoId: 'sdk-library' });
 		for (const file of value.result.files) if (file.content === undefined)

@@ -3987,3 +3987,21 @@ verifiers:
     ownerPackage: '@treeseed/agent'
     testFile: tests/modern/guarantees/preflight/external/external-native.test.ts
     testName: native denied malformed duplicate and interrupted external reads retain original frozen bytes before complete exact retry
+
+  agent.golden.plan-review-stop-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/campaign.test.ts
+    testName: "preserves original plan-review classification and exact report while stopping only its running simulation before every later stage"
+
+  agent.golden.plan-review-stop-wiring-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/campaign-cli.test.ts
+    testName: "retains the original late plan-review report and stops the exact admitted simulation without approval or later gates"
+
+  agent.golden.plan-review-stop-native:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/preflight/proposals/campaign-plan-review-native.test.ts
+    testName: "native public scoped stop retains the exact original plan-review report and frozen bytes through report collision denial and terminal race without later stages"

@@ -27,11 +27,11 @@ it('native public scoped stop retains the exact original plan-review report and 
   await new Promise<void>((accept,reject)=>{server.once('error',reject);server.listen(0,'127.0.0.1',accept);});const address=server.address();if(!address||typeof address==='string')throw new Error('Native loopback listener required');
   const client=new ControlPlaneClient({profile:defaultLocalControlPlaneServer({TREESEED_API_BASE_URL:'http://127.0.0.1:'+address.port}),accessToken:'controlled-native-token'});
   const failures:unknown[]=[];
-  for(mode of ['exact','report-collision','missing-report','stop-denied','stop-race']){
+  for(mode of ['exact','report-collision','missing-report','stop-denied','stop-race','malformed-report']){
    status='running';vi.stubEnv('TREESEED_ACCEPTANCE_WORKDAY_ID','');const freezePath=join(root,mode+'.json'),freeze={proposal:{id:'original-proposal',digest:'sha256:'+'a'.repeat(64)},preflight:{id:'original-preflight',teamId,preflightDigest:'sha256:'+'a'.repeat(43)},request:{body:{executionMode:'simulation'}}},bytes=JSON.stringify(freeze);writeFileSync(freezePath,bytes);
    retainCampaignWorkdayStart({schemaVersion:'treeseed.workday-start-receipt/v1',workdayId,preflightId:freeze.preflight.id,preflightDigest:freeze.preflight.preflightDigest,startedAt:'2026-10-15T00:00:00.000Z',acceptedExecutionNodeIds:[],assignmentIds:[],reservationIds:[],providerReceiptRefs:[],transactionReceiptId:'workday-start:'+'b'.repeat(43)},freezePath,freeze);
    const receipt=readFileSync(freezePath+'.workday-start.json'),details={project:'sdk',proposal:freeze.proposal.id+' '+freeze.proposal.digest,workday:workdayId,'failed expectation':'Original frozen plan requires review.','observed evidence':'Retained native observation requires plan review.','why implementation repair is insufficient':'The original plan itself needs reviewed correction.','smallest proposed plan correction':'Request review; no change applied.'};
-   const original=campaignPlanReviewRequired(details,Object.assign(new Error('Retained original transport cause'),{code:'ECONNREFUSED'})),held=Object.getOwnPropertyDescriptors(original),offset=history.length;let later=0,retained=0;
+   const original=mode==='malformed-report'?Object.assign(new Error('PLAN_REVIEW_REQUIRED\ninvalid: report'),{classification:'PLAN_REVIEW_REQUIRED'}):campaignPlanReviewRequired(details,Object.assign(new Error('Retained original transport cause'),{code:'ECONNREFUSED'})),held=Object.getOwnPropertyDescriptors(original),offset=history.length;let later=0,retained=0;
    const reportPath=freezePath+'.plan-review.txt';if(mode==='report-collision')writeFileSync(reportPath,'Original conflicting report retained');
    let current=row(row((await client.invoke(show,{path:{teamId,runId:workdayId},query:{},body:undefined})).data).run);
    const stopInput={path:{teamId,runId:workdayId},query:{},body:{reason:'Automated golden boundary failed'}},stopHeld=structuredClone(stopInput);
@@ -39,13 +39,13 @@ it('native public scoped stop retains the exact original plan-review report and 
     try{await client.invoke(stop,stopInput,{idempotencyKey:'golden-stop:'+workdayId});}
     catch(error){current=row(row((await client.invoke(show,{path:{teamId,runId:workdayId},query:{},body:undefined})).data).run);throw error;}
    }});}catch(error){failure=error;}
-   if(mode==='exact'||mode==='stop-race')expect(failure).toBe(original);else{expect(failure).toBeInstanceOf(AggregateError);expect((failure as AggregateError).errors).toContain(original);}
-   expect(later).toBe(0);expect(retained).toBe(mode==='missing-report'?0:1);const stops=history.slice(offset).filter(item=>item.method===stopRoute.method&&item.path===path(stopRoute.path));expect(stops).toEqual([{method:stopRoute.method,path:path(stopRoute.path),key:'golden-stop:'+workdayId,body:stopInput.body}]);
+   if(mode==='malformed-report')expect(failure).toMatchObject({classification:'IMPLEMENTATION_DEFECT',cause:original});else if(mode==='exact'||mode==='stop-race')expect(failure).toBe(original);else{expect(failure).toBeInstanceOf(AggregateError);expect((failure as AggregateError).errors).toContain(original);}
+   expect(later).toBe(0);expect(retained).toBe(mode==='missing-report'||mode==='malformed-report'?0:1);const stops=history.slice(offset).filter(item=>item.method===stopRoute.method&&item.path===path(stopRoute.path));expect(stops).toEqual([{method:stopRoute.method,path:path(stopRoute.path),key:'golden-stop:'+workdayId,body:stopInput.body}]);
    expect(readFileSync(freezePath,'utf8')).toBe(bytes);expect(readFileSync(freezePath+'.workday-start.json')).toEqual(receipt);expect(stopInput).toEqual(stopHeld);expect(Object.getOwnPropertyDescriptors(original)).toEqual(held);
-   if(mode==='missing-report')expect(existsSync(reportPath)).toBe(false);else expect(readFileSync(reportPath,'utf8')).toBe(mode==='report-collision'?'Original conflicting report retained':original.message);
+   if(mode==='missing-report'||mode==='malformed-report')expect(existsSync(reportPath)).toBe(false);else expect(readFileSync(reportPath,'utf8')).toBe(mode==='report-collision'?'Original conflicting report retained':original.message);
    failures.push({mode,message:failure instanceof Error?failure.message:String(failure),stops:stops.length});
   }
-  expect(failures).toHaveLength(5);console.log(JSON.stringify({nativePlanReviewStopFailures:failures}));
+  expect(failures).toHaveLength(6);console.log(JSON.stringify({nativePlanReviewStopFailures:failures}));
  }finally{server.closeAllConnections();if(server.listening)await new Promise<void>((accept,reject)=>server.close(error=>error?reject(error):accept()));rmSync(root,{recursive:true,force:true});}
  expect(server.listening).toBe(false);expect(existsSync(root)).toBe(false);
  // Controlled public responses prove transport and original report custody;

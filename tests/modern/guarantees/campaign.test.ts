@@ -14,6 +14,10 @@ describe('automated campaign control (fixtures are not golden acceptance)', () =
    await expect.soft(pending).rejects.toBe(original);await expect.soft(pending).rejects.toMatchObject({classification:'PLAN_REVIEW_REQUIRED',cause:transport});
    expect.soft(reportPlanReview).toHaveBeenCalledExactlyOnceWith(original.message);expect(stop).toHaveBeenCalledTimes(status==='running'?1:0);expect(wait).not.toHaveBeenCalled();expect(collaboration).not.toHaveBeenCalled();expect(verify).not.toHaveBeenCalled();expect(Object.getOwnPropertyDescriptors(original)).toEqual(held);
   }
+  for(const message of ['PLAN_REVIEW_REQUIRED','PLAN_REVIEW_REQUIRED\ninvalid: report']){
+   const original=Object.assign(new Error(message),{classification:'PLAN_REVIEW_REQUIRED'}),stop=vi.fn(),reportPlanReview=vi.fn();
+   await expect(monitorCampaign({admittedSimulation:true,read:()=>({status:'running',mode:'simulation',planningEndsAt:1,endsAt:2}),inspect:()=>{throw original;},now:()=>1,wait:vi.fn(),collaboration:vi.fn(),verify:vi.fn(),stop,reportPlanReview})).rejects.toMatchObject({classification:'IMPLEMENTATION_DEFECT',cause:original});expect(stop).toHaveBeenCalledOnce();expect(reportPlanReview).not.toHaveBeenCalled();
+  }
  });
 
 	it('denies missing malformed or ambiguous chat identities before sending and preserves exact request bytes through unchanged retries', async () => {

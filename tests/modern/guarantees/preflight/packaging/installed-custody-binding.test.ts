@@ -25,8 +25,8 @@ describe('capacity-provider guarantee execution bindings', () => {
 		expect(native.steps.some((step: { run?: string }) => step.run ===
 			'node --import tsx ./scripts/support/verify-installed-owners.ts')).toBe(true);
 		const inputs = JSON.parse(native.env.TREESEED_INSTALLED_OWNER_INPUTS);
-        expect(inputs.find((value:{owner:string})=>value.owner==='sdk')).toMatchObject({commit:'1f1a7e01251642ddfc6e06892ec92c798437d3db'});
-        for(const [owner,runId] of [['api',38624553996],['cli',38647918411]] as const){
+        expect(inputs.find((value:{owner:string})=>value.owner==='sdk')).toMatchObject({commit:'1f1a7e01251642ddfc6e06892ec92c798437d3db',sha256:'3269b1c7566f4d37b5f7863a1ef2fb04474e81bfd196065b334925b98142c2f8'});
+        for(const [owner,runId] of [['api',38624553996],['cli',38647918411],['sdk',38658693815]] as const){
             const input=inputs.find((value:{owner:string})=>value.owner===owner);
             const downloads=native.steps.filter((step:{with?:{repository?:string;path?:string}})=>step.with?.repository==='treeseed-ai/'+owner&&step.with?.path==='.treeseed/installed-owner-inputs/'+owner);
             expect(downloads).toHaveLength(1);

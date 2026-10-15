@@ -18,6 +18,8 @@ function proposalFile(reference:Row,file:Row,projectId:string):Row{
  assert.equal(value.projectId,projectId,code);if(reference.id!==undefined)assert.equal(value.id,reference.id,code);return value;
 }
 
+const proposalBody=(file:Row)=>{const raw=String(file.content),match=raw.match(/^---\r?\n[\s\S]*?\r?\n---(?:\r?\n|$)/u);assert.ok(match,code);return raw.slice(match[0].length);};
+
 /** Each actual estimator must publish its owned patch; the latest exact results supply ready estimates. */
 export function verifyEstimatePublications(assignments:Row[],run:Row,readyReference:Row,readyFile:Row,readFile:(reference:Row,projectId:string)=>Row):void{
  const completed=assignments.filter(item=>item.status==='completed'&&row(row(item.assignmentAttempt).effectiveProfile).activity==='estimating');assert.ok(completed.length>0,code);
@@ -38,7 +40,9 @@ export function verifyEstimatePublications(assignments:Row[],run:Row,readyRefere
   const grants=attempt.grant.contentWrite.filter(value=>value.model==='proposal'&&value.id===source.id&&value.repository===source.repository&&value.path===source.path);assert.equal(grants.length,1,code);
   const publications=result.references.filter(value=>value.kind==='treedx'&&value.projectId===attempt.projectId&&value.repository===source.repository&&value.path===source.path);assert.equal(publications.length,1,code);const publication=publications[0]!;
   assert.ok(publication.kind==='treedx'&&publication.workspaceId===attempt.workspace.workspaceId,code);
-  const frozen=proposalFile(source,readFile(source,attempt.projectId),attempt.projectId),candidate=proposalFile(publication,readFile(publication,attempt.projectId),attempt.projectId);
+  const frozenFile=readFile(source,attempt.projectId),candidateFile=readFile(publication,attempt.projectId);
+  const frozen=proposalFile(source,frozenFile,attempt.projectId),candidate=proposalFile(publication,candidateFile,attempt.projectId);
+  assert.equal(proposalBody(candidateFile),proposalBody(frozenFile),code);assert.equal(proposalBody(readyFile),proposalBody(frozenFile),code);
   assert.deepEqual(fixed(frozen),fixed(ready),code);assert.deepEqual(fixed(candidate),fixed(frozen),code);assert.equal(candidate.status,frozen.status,code);
   const candidateItems=rows(row(candidate.executionPlan).workItems),frozenItems=rows(row(frozen.executionPlan).workItems),reviewer=attempt.agentClass==='reviewer',field=reviewer?'reviewEstimate':'estimate',values=new Map<string,unknown>();
   for(const [index,value]of candidateItems.entries()){

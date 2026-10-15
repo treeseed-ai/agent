@@ -20,6 +20,7 @@ it('requires complete original node state and revision histories against the cur
   if(mode==='wrong-team')event.teamId='foreign';if(mode==='wrong-run')event.runId='foreign';if(mode==='wrong-workday')event.workdayId='foreign';if(mode==='wrong-project')event.projectId='foreign';if(mode==='wrong-node')context.nodeId='foreign';
   if(mode==='wrong-revision')context.nodeRevision=3;if(mode==='missing-revision')delete context.nodeRevision;if(mode==='future-graph')context.graphRevision=Number(graph.revision)+1;if(mode==='old-graph')context.graphRevision=0;
   if(mode==='wrong-status')context.status='invented';if(mode==='wrong-prior')context.previousStatus='completed';if(mode==='wrong-clock')event.createdAt='invalid';if(mode==='before-birth')event.createdAt=new Date(Date.parse(created)-1).toISOString();
+  if(mode==='before-workday')changed[0]!.createdAt=new Date(Date.parse(created)-1).toISOString();
   if(mode==='duplicate')changed.push({...structuredClone(event),eventIndex:changed.length});if(mode==='wrong-assignment')event.assignmentId=item.id;if(mode==='wrong-record-status')event.status='failed';
   const before=structuredClone(changed);expect(()=>check(run,graph,changed),mode).toThrow('ACCEPTANCE_NODE_TRANSITIONS');expect(changed).toEqual(before);
  }

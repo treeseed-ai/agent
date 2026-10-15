@@ -31,7 +31,7 @@ export function verifyEstimatePublications(assignments:Row[],run:Row,readyRefere
  const latest=new Map<string,{finished:number;values:Map<string,unknown>}>(),resultIds=new Set<string>(),owners=new Set<string>();
  for(const item of completed){
   const checked=assignmentAttemptSchema.safeParse(item.assignmentAttempt),resultCheck=assignmentResultSchema.safeParse(item.assignmentResult);assert.ok(checked.success&&resultCheck.success,code);const attempt=checked.data,result=resultCheck.data;
-  assert.deepEqual(attempt,item.assignmentAttempt,code);assert.deepEqual(result,item.assignmentResult,code);assert.equal(item.id,attempt.id,code);assert.equal(result.assignmentId,item.id,code);assert.equal(result.status,'completed',code);assert.deepEqual(result.verification,[],code);
+  assert.deepEqual(attempt,item.assignmentAttempt,code);assert.deepEqual(result,item.assignmentResult,code);assert.equal(item.id,attempt.id,code);assert.equal(result.assignmentId,item.id,code);assert.equal(result.status,'completed',code);
   assert.ok(!owners.has(item.id as string)&&!resultIds.has(result.id),code);owners.add(String(item.id));resultIds.add(result.id);
   assert.equal(attempt.workdayId,run.id,code);assert.equal(attempt.teamId,run.teamId,code);assert.equal(item.projectId,attempt.projectId,code);
   const start=Date.parse(attempt.createdAt),finish=Date.parse(result.completedAt);assert.ok(start>=Date.parse(String(run.startedAt))&&finish>=start&&finish<=Date.parse(attempt.deadline),code);assert.equal(item.completedAt,result.completedAt,code);

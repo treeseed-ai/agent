@@ -54,6 +54,10 @@ function supplied() {
 }
 const verify = (f: ReturnType<typeof supplied>) => verifyPublicSandboxAbsence(f.items, f.connections, f.brokerSocket, f.status,f.events);
 describe('public owning sandbox inventory consumption', () => {
+ it('denies active or quarantined owning source leases on terminal non-completed attempts without removing unrelated resources or repairing history',()=>{
+  for(const state of['active','quarantined']){const f=supplied();row((row(f.status.workspace).leases as Row[])[0]).state=state;const before=structuredClone(f);expect.soft(()=>verify(f),state).toThrow(/ACCEPTANCE_SOURCE/u);expect(f).toEqual(before);}
+ });
+
  it('accepts exact complete confirmed absence while retaining unrelated live resources and original observations', () => {
   const f = supplied(), before = structuredClone(f);
   expect(verify(f)).toEqual([`/var/lib/treeseed/sandboxes/${f.id}`]); expect(f).toEqual(before);

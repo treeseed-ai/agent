@@ -87,7 +87,7 @@ jobs:
       - name: Build public Agent exports for native acceptance readback
         run: npm run build:dist
       - name: Reproduce whole guest native boundary before complete verification
-        run: node node_modules/vitest/vitest.mjs run --config ./vitest.config.ts tests/modern/sandbox/architecture/clock-native.test.ts tests/modern/guarantees/preflight/external/external-native.test.ts
+        run: node node_modules/vitest/vitest.mjs run --config ./vitest.config.ts tests/modern/sandbox/architecture/clock-native.test.ts tests/modern/guarantees/preflight/external/external-native.test.ts tests/modern/guarantees/preflight/packaging/installed-custody-binding.test.ts
       - run: bash -lc 'npm run verify:local'
       - name: Execute coded golden component scenes
         uses: treeseed-ai/reviewer/.github/actions/run-scenes@e60ad2581e7ff041f058af04bd810796fea748f9

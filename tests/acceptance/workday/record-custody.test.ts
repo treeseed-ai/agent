@@ -14,6 +14,7 @@ import { readCompleteEvidence } from './support/evidence-pages.ts';
 import { publicCanonicalRecords, verifyTerminalRecordCustody, verifyFailedExecutionCustody, verifyAvailabilityAccountingHistory, verifySandboxCloseoutCustody, verifyWorkdayContinuationCustody, verifySandboxHostAbsence, verifySandboxDirectoryAbsence, verifyProviderConformanceSignature, verifyProviderQualification, verifyProviderLocalSlotClosure, verifyProviderPollingSelection } from './support/record-custody.ts';
 import { actual, verify, availabilityHistory } from './support/record-readback.ts';
 import { verifyPublicSandboxAbsence } from './support/physical/sandbox-inventory.ts';
+import { observeCampaign } from './support/campaign-observation.ts';
 
 // Existing supported public reads, complete pages and SAME native managed run.
 // No private route, canonical reconstruction, inferred charge, alternate runner
@@ -103,16 +104,19 @@ test('Actual normal SDK workday reads complete public owning host sandbox absenc
   'ACCEPTANCE_SANDBOX_NORMAL: Completed normal workday required; controlled failures belong to their separate case');
  const config = resolveProviderConfig({ requireConnection: true }); assert.ok(config.manifestPath);
  const loaded = await loadProviderManifest(config.manifestPath, config.dataDir), manifestBefore = structuredClone(loaded.manifest);
+ const retainedEvents=new Map<string,Row>();
  const inspect = () => {
   const remaining = Math.floor(deadline - performance.now() - 5_000); assert.ok(remaining > 0, 'ACCEPTANCE_SANDBOX_OBSERVATION_TIME: Original case deadline exhausted');
+  const timeLeft=()=>{const left=Math.floor(deadline-performance.now()-5_000);assert.ok(left>0,'ACCEPTANCE_SANDBOX_OBSERVATION_TIME: Original case deadline exhausted');return left;};
+  const history=observeCampaign(read(['workdays','show',f.id],f.team,false,timeLeft()),f.id,retainedEvents,(cursor,limit)=>read(['workdays','events','list',f.id,'--limit',String(limit),'--cursor',cursor],f.team,false,timeLeft())).events;
   return verifyPublicSandboxAbsence(f.items, loaded.manifest.connections, loaded.manifest.sandbox.brokerSocket,
-   read(['host', 'sandbox', 'status'], '', true, remaining));
+   read(['host', 'sandbox', 'status'], '', true, timeLeft()),history);
  };
  const paths = inspect(); verify(f); assert.deepEqual(inspect(), paths); assert.deepEqual(f, before);
  assert.deepEqual((await loadProviderManifest(config.manifestPath, config.dataDir)).manifest, manifestBefore);
  // Original source jobs/results join exact released leases, absent disks and
- // recorded builders/verifiers. Execution VMs, NBD, sessions and complete
- // producer inventories remain independent obligations, not inferred absence.
+ // recorded builders/verifiers and exact public destruction events join complete
+ // VM/NBD observations. Provider sessions and other workspace closure remain independent obligations.
 });
 test('Actual owning host independently reads native task container mount and directory absence for completed and failed managed sandboxes without erasing history', { timeout: 120_000 }, async () => {
 	const f = actual(), before = structuredClone(f), config = resolveProviderConfig({ requireConnection: true });

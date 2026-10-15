@@ -693,6 +693,9 @@ workflow:
   - id: execution-continuation-unit-2
     action: { verifier: agent.golden.execution-continuation-unit-2 }
     expect: { status: passed }
+  - id: execution-vm-custody-unit-1
+    action: { verifier: agent.golden.execution-vm-custody-unit-1 }
+    expect: { status: passed }
   - id: execution-broker-boundary-unit-1
     action: { verifier: agent.golden.execution-broker-boundary-unit-1 }
     expect: { status: passed }

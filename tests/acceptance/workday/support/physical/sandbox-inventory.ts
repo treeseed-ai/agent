@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { isAbsolute, resolve } from 'node:path';
+import { basename, isAbsolute, resolve } from 'node:path';
 import { assignmentAttemptSchema } from '@treeseed/sdk/agent-capacity';
 import { assignmentNeedsSourceWorkspace } from '@treeseed/agent';
 import { row, type Row } from '../../../acceptance-cli.ts';
@@ -12,10 +12,34 @@ function timestamp(value: unknown) {
  return Date.parse(value);
 }
 
+/** Exact confirmed native observations, never a caller-supplied path or command. */
+function nativeHostDevices(inventory:Row) {
+ const scope=row(inventory.scope),confirmation=row(inventory.confirmation),label='ACCEPTANCE_NATIVE_DEVICES';
+ assert.equal(scope.procRoot,'/proc/1/root/proc',label);assert.ok(typeof scope.pidNamespace==='string'&&/^pid:\[\d+\]$/u.test(scope.pidNamespace),label);
+ for(const key of ['vmProcesses','nbdDevices']){assert.ok(Array.isArray(inventory[key]),label+': Complete owning arrays required');assert.deepEqual(inventory[key],confirmation[key],label+': Native observation changed');}
+ const vms=(inventory.vmProcesses as unknown[]).map(row),devices=(inventory.nbdDevices as unknown[]).map(row),pids=new Set<number>(),names=new Set<string>(),blocks=new Set<string>(),images=new Set<string>();
+ const positive=(value:unknown)=>Number.isSafeInteger(value)&&Number(value)>0;
+ for(const vm of vms){
+  assert.equal(vm.failure,null,label);assert.ok(positive(vm.processId)&&!pids.has(Number(vm.processId)),label);pids.add(Number(vm.processId));
+  assert.ok(typeof vm.startTicks==='string'&&/^[1-9][0-9]*$/u.test(vm.startTicks),label);
+  assert.ok(typeof vm.executable==='string'&&isAbsolute(vm.executable),label);const executable=basename(vm.executable.replace(/ \(deleted\)$/u,''));
+  assert.ok(/^qemu-system-[a-zA-Z0-9_]+$/u.test(executable)||executable==='qemu-kvm',label);
+  assert.ok(typeof vm.name==='string'&&/^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,199}$/u.test(vm.name)&&!names.has(vm.name),label);names.add(vm.name);
+ }
+ for(const device of devices){
+  assert.equal(device.failure,null,label);assert.ok(typeof device.device==='string'&&/^\/dev\/nbd[0-9]+$/u.test(device.device)&&!blocks.has(device.device),label);blocks.add(device.device);
+  if(device.threadId===null){assert.equal(device.processId,null,label);assert.equal(device.executable,null,label);assert.equal(device.image,null,label);continue;}
+  assert.ok(positive(device.threadId)&&positive(device.processId),label);
+  assert.ok(typeof device.executable==='string'&&isAbsolute(device.executable)&&basename(device.executable.replace(/ \(deleted\)$/u,''))==='qemu-nbd',label+': Attached image must be independently observable');
+  assert.ok(typeof device.image==='string'&&isAbsolute(device.image)&&resolve(device.image)===device.image,label);images.add(device.image);
+ }
+ return{names,images};
+}
+
 /** Original owning source journals join completed attempts to released leases
  * and absent disks/builders/verifiers. Execution VMs and NBD need their own
  * complete native inventories; these joins never infer their absence. */
-function verifyCompletedSourceAbsence(items: Row[], status: Row) {
+function verifyCompletedSourceAbsence(items: Row[], status: Row,vmNames:Set<string>,nbdImages:Set<string>) {
  const completed = items.filter(item => item.status === 'completed' && Object.hasOwn(row(item.lifecycleOutput), 'sandboxId'));
  const sourced = completed.filter(item => assignmentNeedsSourceWorkspace(assignmentAttemptSchema.safeParse(item.assignmentAttempt)));
  if (!sourced.length) return;
@@ -64,6 +88,7 @@ function verifyCompletedSourceAbsence(items: Row[], status: Row) {
  const taskIds = String(inventory.tasks).split('\n'), containerIds = String(inventory.containers).split('\n'), mounts = sandboxMountPaths(String(inventory.mountInfo));
  const absentVm = (id: unknown) => {
   assert.ok(typeof id === 'string' && /^sandbox-warm-[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/u.test(id));
+  assert.ok(!vmNames.has(`sandbox-${id}`),'ACCEPTANCE_SOURCE_RESIDUE: Owning builder/verifier VM remains');
   for (const name of [id, `${id}-ready`]) assert.ok(!taskIds.includes(name) && !containerIds.includes(name), 'ACCEPTANCE_SOURCE_RESIDUE: Owning builder/verifier remains');
  };
  for (const item of sourced) {
@@ -84,6 +109,7 @@ function verifyCompletedSourceAbsence(items: Row[], status: Row) {
   const disk = row(job.disk); assert.ok(typeof disk.id === 'string' && /^workspace-lease-[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/u.test(disk.id));
   const path: string = `${String(scope.storageRoot)}/leases/${disk.id}`;
   assert.equal(disk.directory, path); assert.equal(disk.image, `${path}/work.qcow2`);
+  assert.ok(!nbdImages.has(String(disk.image)),'ACCEPTANCE_SOURCE_RESIDUE: Owning disk remains attached on a native NBD device');
   assert.ok(typeof disk.device === 'string' && /^\/dev\/nbd\d+$/u.test(disk.device)); assert.equal(disk.unit, `treeseed-${disk.id}.service`);
   assert.ok(!disks.some(value => value.id === disk.id), 'ACCEPTANCE_SOURCE_RESIDUE: Owning disk directory/file/symlink remains');
   assert.ok(!mounts.some(mount => mount === path || mount.startsWith(`${path}/`)), 'ACCEPTANCE_SOURCE_RESIDUE: Owning source mount remains');
@@ -108,7 +134,7 @@ function verifyCompletedSourceAbsence(items: Row[], status: Row) {
 /** Consume the fixed, read-only manager/supervisor observation. No runtime is
  * constructed, caller path executed, or unrelated resource removed here. */
 export function verifyPublicSandboxAbsence(items: Row[], connections: Array<{ providerId: string; teamId: string }>,
- brokerSocket: string, status: Row): string[] {
+ brokerSocket: string, status: Row,events:readonly Row[]): string[] {
  const inventory = row(status.inventory), scope = row(inventory.scope), confirmation = row(inventory.confirmation);
  assert.equal(status.runtime, 'io.containerd.kata.v2', 'ACCEPTANCE_SANDBOX_RUNTIME: Actual owning Kata runtime required');
  assert.equal(status.ready, true, 'ACCEPTANCE_SANDBOX_HOST: Owning host inspection must be ready');
@@ -155,6 +181,17 @@ export function verifyPublicSandboxAbsence(items: Row[], connections: Array<{ pr
  if (!directory.rootPresent) assert.deepEqual(names, [], 'ACCEPTANCE_SANDBOX_DIRECTORY: Absent root cannot contain entries');
  for (const path of paths) assert.ok(!names.includes(path.slice(scope.stateRoot.length + 1)),
   'ACCEPTANCE_SANDBOX_RESIDUE: Owning sandbox directory, file or symlink remains');
- verifyCompletedSourceAbsence(items, status);
+ const devices=nativeHostDevices(inventory),ownedVms=new Set<string>();assert.ok(Array.isArray(events),'ACCEPTANCE_SANDBOX_VM: Complete public event history required');
+ for(const item of items.filter(value=>Object.hasOwn(row(value.lifecycleOutput),'sandboxId'))){
+  const attempt=assignmentAttemptSchema.parse(item.assignmentAttempt),output=row(item.lifecycleOutput);
+  const matches:readonly Row[]=events.filter((observation:Row)=>observation.eventType==='provider.sandbox.destroyed'&&observation.assignmentId===attempt.id);
+  assert.equal(matches.length,1,'ACCEPTANCE_SANDBOX_VM: Exact original public destruction observation required');const event=matches[0]!,context=row(event.context),vmId=context.vmId;
+  assert.equal(event.runId,attempt.workdayId);assert.equal(event.workdayId,attempt.workdayId);assert.equal(event.teamId,attempt.teamId);assert.equal(event.projectId,attempt.projectId);assert.equal(event.status,'recorded');
+  assert.equal(context.sandboxId,output.sandboxId);assert.deepEqual(context.teardown,output.teardown);
+  assert.ok(timestamp(event.createdAt)>=timestamp(row(output.teardown).completedAt)&&timestamp(event.createdAt)<=started,'ACCEPTANCE_SANDBOX_VM: Native observation predates public destruction');
+  assert.ok(typeof vmId==='string'&&/^sandbox-warm-[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/u.test(vmId)&&!ownedVms.has(vmId),'ACCEPTANCE_SANDBOX_VM: Missing malformed or reused acquired identity');ownedVms.add(vmId);
+  assert.ok(!devices.names.has('sandbox-'+vmId),'ACCEPTANCE_SANDBOX_VM: Exact owning execution VM remains');
+ }
+ verifyCompletedSourceAbsence(items, status,devices.names,devices.images);
  return paths;
 }

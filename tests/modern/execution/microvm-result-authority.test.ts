@@ -43,7 +43,10 @@ async function suppliedMicrovm() {
 	let suppliedDestroy: unknown, hasSuppliedDestroy = false, destroyFailure: Error | undefined, downloaded = Buffer.from('{"exact":"candidate"}\n');
 	const destroy = vi.fn(async () => {
 		if (destroyFailure) throw destroyFailure;
-		return hasSuppliedDestroy ? suppliedDestroy : { sandboxId: 'owned-unit-sandbox', destroyed: true, teardown: { verified: true, completedAt: new Date().toISOString() } };
+		const completedAt=new Date().toISOString(),sandboxId='owned-unit-sandbox',vmId='sandbox-warm-11111111-1111-4111-8111-111111111111';
+  return hasSuppliedDestroy ? suppliedDestroy : {sandboxId,destroyed:true,teardown:{verified:true,completedAt},events:[
+   {schemaVersion:'treeseed.sandbox-event/v1',sandboxId,assignmentId:input.assignmentId,sequence:0,occurredAt:completedAt,type:'execution.progress',payload:{stage:'vm.assigned',vmId}},
+   {schemaVersion:'treeseed.sandbox-event/v1',sandboxId,assignmentId:input.assignmentId,sequence:1,occurredAt:completedAt,type:'sandbox.destroyed',payload:{verified:true,vmId}}]};
 	});
 	const downloadArtifact = vi.fn(async () => Buffer.from(downloaded)), execute = vi.fn(async () => suppliedResult);
 	const client = {
@@ -67,6 +70,30 @@ async function suppliedMicrovm() {
 }
 
 describe('microvm result and closeout authority', () => {
+ it('retains only exact acquired VM identity from complete original broker destruction history in the public closeout event', async () => {
+  const vmId='sandbox-warm-11111111-1111-4111-8111-111111111111';
+  for(const mode of ['exact','missing','foreign','duplicate','gap','changed','private']) {
+   const f=await suppliedMicrovm(),sandboxId='owned-unit-sandbox',now=new Date().toISOString();
+   const events=[{schemaVersion:'treeseed.sandbox-event/v1',sandboxId,assignmentId:f.input.assignmentId,sequence:0,occurredAt:now,
+    type:'execution.progress',payload:{stage:'vm.assigned',warmed:true,vmId}},
+    {schemaVersion:'treeseed.sandbox-event/v1',sandboxId,assignmentId:f.input.assignmentId,sequence:1,occurredAt:now,
+     type:'sandbox.destroyed',payload:{verified:true,vmId}}];
+   if(mode==='foreign')events[0]!.assignmentId='foreign';
+   if(mode==='duplicate')events.splice(1,0,structuredClone(events[0]!));
+   if(mode==='gap')events[1]!.sequence=2;
+   if(mode==='changed')events[1]!.payload.vmId='sandbox-warm-22222222-2222-4222-8222-222222222222';
+   if(mode==='private')Object.assign(events[0]!.payload,{credential:'opaque-private-observation'});
+   const receipt={sandboxId,destroyed:true,teardown:{verified:true,completedAt:now},...(mode==='missing'?{}:{events})},before=structuredClone(receipt);
+   f.setDestroy(receipt);let failure:unknown;try{await f.executor.execute(f.input);}catch(error){failure=error;}
+   const emitted=vi.mocked(f.input.emit!).mock.calls.map(([event])=>event),closed=emitted.filter(event=>event.type==='sandbox.destroyed');
+   expect(closed).toHaveLength(1);
+   if(mode==='exact'||mode==='private'){
+    expect(failure).toBeUndefined();expect(closed[0]!.payload).toEqual({sandboxId,teardown:receipt.teardown,vmId});
+    expect(JSON.stringify(closed)).not.toContain('opaque-private-observation');
+   }else{expect(failure).toMatchObject({code:'sandbox_vm_custody_invalid'});expect(closed[0]!.payload).not.toHaveProperty('vmId',vmId);}
+   expect(receipt).toEqual(before);expect(f.client.destroy).toHaveBeenCalledOnce();expect(f.cleanup).toHaveBeenCalledOnce();
+  }
+ });
 	it('signs the exact canonical attempt ordinal without deriving another attempt from lifecycle counters', async () => {
 		const outcomes: Array<{ canonical: number; signed: number | undefined }> = [];
 		for (const ordinal of [1, 2, 100]) {

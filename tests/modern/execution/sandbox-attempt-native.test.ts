@@ -24,6 +24,7 @@ it('native provider signs the canonical source attempt unchanged through Unix br
 			outcomes.push({ canonical: ordinal, signed: signed.attempt, signatureValid: verify(null, Buffer.from(canonical(unsigned)),
 				createPublicKey({ key: { ...identity.publicJwk }, format: 'jwk' }), Buffer.from(signature.value, 'base64url')) });
 			expect(result.status).toBe('completed'); expect(f.input.assignment).toEqual(held);
+			expect(f.events.filter(event=>event.type==='sandbox.destroyed').map(event=>event.payload)).toEqual([{sandboxId:'owned-native-sandbox',teardown:{verified:true,completedAt:f.destroyedAt()},vmId:'sandbox-warm-11111111-1111-4111-8111-111111111111'}]);
 			expect(f.paths.filter(path => path === 'POST /v1/sandboxes')).toHaveLength(1);
 			expect(f.paths.filter(path => path.endsWith('/execute'))).toHaveLength(1);
 			expect(f.paths.filter(path => path.startsWith('DELETE '))).toEqual(['DELETE /v1/sandboxes/owned-native-sandbox']);
@@ -31,6 +32,21 @@ it('native provider signs the canonical source attempt unchanged through Unix br
 		expect(f.server.listening).toBe(false); await expect(stat(f.directory)).rejects.toMatchObject({ code: 'ENOENT' });
 	}
 	expect(outcomes).toEqual([1, 2, 100].map(ordinal => ({ canonical: ordinal, signed: ordinal, signatureValid: true })));
+
+ for(const mode of ['missing','foreign','duplicate','gap','changed','private']) {
+  const f=await microvmBroker();try{
+   const now=new Date().toISOString(),vmId='sandbox-warm-11111111-1111-4111-8111-111111111111',sandboxId='owned-native-sandbox';
+   const events=[{schemaVersion:'treeseed.sandbox-event/v1',sandboxId,assignmentId:f.input.assignmentId,sequence:0,occurredAt:now,type:'execution.progress',payload:{stage:'vm.assigned',vmId}},
+    {schemaVersion:'treeseed.sandbox-event/v1',sandboxId,assignmentId:f.input.assignmentId,sequence:1,occurredAt:now,type:'sandbox.destroyed',payload:{verified:true,vmId}}];
+   if(mode==='foreign')events[0]!.assignmentId='foreign';if(mode==='duplicate')events.splice(1,0,structuredClone(events[0]!));
+   if(mode==='gap')events[1]!.sequence=2;if(mode==='changed')events[1]!.payload.vmId='sandbox-warm-22222222-2222-4222-8222-222222222222';
+   if(mode==='private')Object.assign(events[0]!.payload,{credential:'opaque-private-broker-value'});
+   const receipt={sandboxId,destroyed:true,teardown:{verified:true,completedAt:now},...(mode==='missing'?{}:{events})},held=structuredClone(receipt);f.patchDestroy(receipt);
+   if(mode==='private'){await f.executor.execute(f.input);expect(f.events.filter(event=>event.type==='sandbox.destroyed')[0]!.payload).toEqual({sandboxId,teardown:receipt.teardown,vmId});expect(JSON.stringify(f.events)).not.toContain('opaque-private-broker-value');}
+   else await expect(f.executor.execute(f.input)).rejects.toMatchObject({code:'sandbox_vm_custody_invalid',usage:[{activeSeconds:1.125,elapsedSeconds:2.25,inputTokens:19,outputTokens:3}]});
+   expect(receipt).toEqual(held);expect(f.paths.filter(path=>path.startsWith('DELETE '))).toHaveLength(1);
+  }finally{await f.close();}expect(f.server.listening).toBe(false);await expect(stat(f.directory)).rejects.toMatchObject({code:'ENOENT'});
+ }
 	// Native original signer, OS custody, materializer and public Unix client;
 	// controlled broker replies are not model, API authorization or Kata proof.
 });

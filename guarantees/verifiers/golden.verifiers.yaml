@@ -4059,3 +4059,10 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/kernel/architecture/portable/context-integration.test.ts
     testName: "native configured chat retains the exact general answer through original HTTP executor and Kernel without source publication"
+
+
+  agent.golden.execution-vm-custody-unit-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/microvm-result-authority.test.ts
+    testName: "retains only exact acquired VM identity from complete original broker destruction history in the public closeout event"

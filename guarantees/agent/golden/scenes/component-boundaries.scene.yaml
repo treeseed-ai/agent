@@ -2322,3 +2322,11 @@ workflow:
   - id: plan-review-stop-native
     action: { verifier: agent.golden.plan-review-stop-native }
     expect: { status: passed }
+
+  - id: review-objective-context-unit
+    action: { verifier: agent.golden.review-objective-context-unit }
+    expect: { status: passed }
+
+  - id: review-objective-context-native
+    action: { verifier: agent.golden.review-objective-context-native }
+    expect: { status: passed }

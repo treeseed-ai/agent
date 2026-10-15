@@ -91,3 +91,14 @@ export function liveGovernedContext(attempt: AssignmentAttempt) {
 	return { reference, book, binding: { repositoryId: book.ref.repository, projectId: attempt.projectId },
 		observed: { ...fixture.observed, repoId: book.ref.repository } };
 }
+
+/** Controlled original governed work input and read-only reviewing assignment. */
+export function reviewingGovernedContext(){
+ const item=liveAssignmentRecord(),attempt=assignmentAttemptSchema.parse(item.assignmentAttempt);attempt.workItemId='configured-material-work';
+ const original=liveGovernedContext(attempt),work=(original.observed.files[0]!.frontmatter.executionPlan as {workItems:Array<Record<string,unknown>>}).workItems[0]!;
+ attempt.sourceRef=original.reference;attempt.contextRefs.push(original.reference,original.book.ref);attempt.grant.contentRead.push(original.reference,original.book.ref);
+ attempt.agentClass='configured-auditor';attempt.effectiveProfile={...attempt.effectiveProfile,activity:'reviewing',handler:'writer',permissionCeiling:{content:{read:['proposal','decision','book'],write:['decision']},tools:['source.read','verification','discussion']}};
+ attempt.grant.sourceWrite=[];attempt.grant.tools=['source.read','verification','discussion'];attempt.grant.contentWrite=[{store:'treedx',model:'decision',id:'original-review',repository:original.book.ref.repository,commit:original.book.ref.commit,path:'decisions/original-review.mdx'}];
+ attempt.workspace={mode:'treedx',repository:original.book.ref.repository!,baseCommit:original.book.ref.commit!,workspaceId:'original-review-workspace',writablePaths:['decisions/original-review.mdx']};attempt.acceptanceCriteria=work.acceptanceCriteria as string[];item.assignmentAttempt=attempt;
+ return{item,attempt,original};
+}

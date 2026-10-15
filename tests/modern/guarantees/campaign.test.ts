@@ -3,6 +3,19 @@ import { describe, expect, it, vi } from 'vitest';
 import { monitorCampaign, openSdkCampaignDiscussion, requirePlanningWindow, sdkCampaignWindow } from '../../acceptance/campaign.ts';
 
 describe('automated campaign control (fixtures are not golden acceptance)', () => {
+ it('preserves original plan-review classification and exact report while stopping only its running simulation before every later stage',async()=>{
+  for(const status of ['running','completed']){
+   const transport=Object.assign(new Error('Retained original infrastructure observation'),{code:'ECONNREFUSED'});
+   const details={project:'sdk',proposal:'original-proposal sha256:'+'a'.repeat(64),workday:'workday-aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+    'failed expectation':'Original frozen plan requires review before continuing.', 'observed evidence':'Original retained observation remains authoritative.',
+    'why implementation repair is insufficient':'The frozen requirement itself requires plan review.', 'smallest proposed plan correction':'Request review of the original requirement; no correction applied.'};
+   const original=campaign.campaignPlanReviewRequired(details,transport),held=Object.getOwnPropertyDescriptors(original),reportPlanReview=vi.fn(),stop=vi.fn(),wait=vi.fn(),collaboration=vi.fn(),verify=vi.fn();
+   const pending=monitorCampaign({admittedSimulation:true,read:()=>({status,mode:'simulation',planningEndsAt:1,endsAt:2}),inspect:()=>{throw original;},now:()=>1,wait,collaboration,verify,stop,...{reportPlanReview}});
+   await expect.soft(pending).rejects.toBe(original);await expect.soft(pending).rejects.toMatchObject({classification:'PLAN_REVIEW_REQUIRED',cause:transport});
+   expect.soft(reportPlanReview).toHaveBeenCalledExactlyOnceWith(original.message);expect(stop).toHaveBeenCalledTimes(status==='running'?1:0);expect(wait).not.toHaveBeenCalled();expect(collaboration).not.toHaveBeenCalled();expect(verify).not.toHaveBeenCalled();expect(Object.getOwnPropertyDescriptors(original)).toEqual(held);
+  }
+ });
+
 	it('denies missing malformed or ambiguous chat identities before sending and preserves exact request bytes through unchanged retries', async () => {
 		const send = vi.fn();
 		for (const invalid of ['', ' ', ' proposal', 'proposal ', 'x'.repeat(201), null, undefined, 42]) {

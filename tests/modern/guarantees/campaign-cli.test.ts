@@ -59,6 +59,15 @@ beforeEach(() => {
 });
 afterEach(() => vi.useRealTimers());
 describe('campaign CLI composition units (mocked transport, not native or live acceptance)', () => {
+ it('stops continuously changing concurrent assignment observations within the original inspection bound before campaign progress',async()=>{
+  transport(()=>observed('running'));const implementation=state.read.getMockImplementation()!;let sequence=0;
+  state.evidence.mockImplementation((args:string[])=>args[0]==='assignments'?[]:[{...event(sequence++),assignmentId:'late-'+sequence,eventType:'assignment.leased'}]);
+  state.read.mockImplementation((args:string[],...rest:unknown[])=>args[0]==='assignments'&&args[1]==='show'?{id:args[2]}:Reflect.apply(implementation,undefined,[args,...rest]));
+  state.inspect.mockImplementation(()=>{throw new Error('Continuously changing history advanced to another stage');});
+  await expect(state.run!()).rejects.toThrow('ACCEPTANCE_LIVE_ASSIGNMENT: Complete concurrent transition inventory not reached');expect(state.inspect).not.toHaveBeenCalled();expect(state.verify).not.toHaveBeenCalled();
+  expect(state.evidence.mock.calls.filter(call=>call[0][0]==='workdays')).toHaveLength(40);expect(state.read.mock.calls.filter(call=>call[0][1]==='stop')).toHaveLength(1);
+ });
+
  it('revalidates assignments discovered in later public events before collaboration or approval instead of waiting for another poll',async()=>{
   transport(()=>observed('running'));const implementation=state.read.getMockImplementation()!,late={id:'late-original-assignment'},original=new Error('ACCEPTANCE_ASSIGNMENT_TRANSITIONS: Missing concurrent original creation');
   state.evidence.mockImplementation((args:string[])=>args[0]==='assignments'?[]:[{...event(),assignmentId:late.id,eventType:'assignment.leased'}]);

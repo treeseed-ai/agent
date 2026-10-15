@@ -9,6 +9,19 @@ const later = (): Row => state.replies.get('assignments list')!.items.find((item
 const published = (): Row => state.replies.get(`library read notes/${later().id}.mdx`)!.result;
 // UNIT tests of the actual managed acceptance assertions, not native/live planning proof.
 describe('managed planning cycle and published contribution custody', () => {
+ it('denies estimating role counts without original exact published estimate results before readiness',()=>{
+  const original=structuredClone([...state.replies]);expect(()=>gate('collaboration')).not.toThrow();
+  for(const mode of['omitted-publication','foreign-publication','malformed-result']){
+   state.replies.clear();for(const[key,value]of structuredClone(original))state.replies.set(key,value);
+   const item=state.replies.get('assignments list')!.items.find((value:Row)=>value.id==='estimate-engineer')!;
+   if(mode==='omitted-publication')item.assignmentResult.references=[];
+   if(mode==='foreign-publication')item.assignmentResult.references[0].projectId='foreign';
+   if(mode==='malformed-result')item.assignmentResult.assignmentId='foreign';
+   const held=structuredClone([...state.replies]);expect.soft(()=>gate('collaboration'),mode).toThrow(/ACCEPTANCE_ESTIMATE/u);expect([...state.replies]).toEqual(held);
+  }
+  state.replies.clear();for(const[key,value]of original)state.replies.set(key,value);expect(()=>gate('collaboration')).not.toThrow();
+ });
+
 
 	it('accepts complete dependency-ordered cycles and exact published contributions without input mutation', () => {
 		const before = structuredClone([...state.replies]); expect(() => gate('collaboration')).not.toThrow();

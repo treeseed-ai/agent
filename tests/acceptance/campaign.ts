@@ -306,7 +306,7 @@ export async function monitorCampaign(input: {
 		failedBoundary?: 'assignment_failed' | 'assignment_returned' | 'assignment_expired' |
 			'graph_failed' | 'graph_returned' | 'graph_expired' };
 	now: () => number; wait: () => Promise<void>; collaboration: () => void;
-	verify: () => void; stop: () => void | Promise<void>;
+	verify: () => void | Promise<void>; stop: () => void | Promise<void>;
 }): Promise<void> {
 	let planningVerified = false;
 	const incompleteCollaboration = (failure: unknown) => failure instanceof Error
@@ -321,7 +321,7 @@ export async function monitorCampaign(input: {
 		await input.inspect?.();
 		if (run.status === 'completed') {
 			input.collaboration();
-			input.verify(); return;
+			await input.verify(); return;
 		}
 		assert.equal(run.status, 'running', 'ACCEPTANCE_CAMPAIGN_TERMINAL: Unsuccessful terminal campaign');
 		if (run.failedBoundary) {

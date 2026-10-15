@@ -56,7 +56,7 @@ test('Settled SDK work continues the exact approved candidate through release re
 	const receipts: Record<string, string> = { [freezePath]: `sha256:${createHash('sha256').update(originalBytes).digest('hex')}` };
 	const platform = process.env.TREESEED_ACCEPTANCE_PLATFORM_PATH;
 	assert.ok(platform, 'ACCEPTANCE_CAMPAIGN_WORKSPACE: Explicit Platform workspace required');
-	captureSdkExternalState(platform, (name, bytes) => { const path = join(artifacts, name); writeFileSync(path, bytes);
+	await captureSdkExternalState(platform, (name, bytes) => { const path = join(artifacts, name); writeFileSync(path, bytes);
 		receipts[path] = `sha256:${createHash('sha256').update(bytes).digest('hex')}`; });
 	const frozen = { createdAt: new Date().toISOString(), request, preflight, host, guest: { digest: host.guestImageDigest },
 		providerSupply: supply, parent, authority, receipts };
@@ -79,12 +79,12 @@ test('Settled SDK work continues the exact approved candidate through release re
 			return { status: String(run.status), mode: String(run.executionMode), failedBoundary: failed ? 'assignment_failed' : undefined,
 				planningEndsAt: Date.parse(String(run.startedAt)) + Number(policy.durationSeconds) * Number(policy.planningPercent) * 10,
 				endsAt: Date.parse(String(row(policy.appliedPlan).endsAt)) };
-		}, verify: () => {
+		}, verify: async () => {
 			const run = row(read(['workdays', 'show', workdayId], team).run);
 			const current = readWorkdayAssignments(workdayId, String(run.startedAt), team);
 			verifyContinuationResults(current, authority);
 			for (const gate of ['results','settlement','reporter'] as const) verifyGolden(gate);
-			verifySdkExternalState(frozen);
+			await verifySdkExternalState(frozen);
 		} });
 });
 

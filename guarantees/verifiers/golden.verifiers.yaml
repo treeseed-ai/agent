@@ -1,6 +1,11 @@
 schemaVersion: treeseed.guarantee-verifiers/v1
 ownerPackage: "@treeseed/agent"
 verifiers:
+  agent.golden.external-bounded-reads:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/campaign-external-state.test.ts
+    testName: uses at most two concurrent original read commands and waits for every observation without narrowing the inventory
   agent.golden.sdk-installed-custody-binding-unit:
     kind: vitestCase
     ownerPackage: '@treeseed/agent'
@@ -3964,3 +3969,21 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/guarantees/preflight/campaign-freeze-native.test.ts
     testName: "native draft file preparation rejects canonical and retired estimates without changing original bytes before exact retry"
+
+  agent.golden.native-external-inventory:
+    kind: vitestCase
+    ownerPackage: '@treeseed/agent'
+    testFile: tests/modern/guarantees/preflight/external/external-native.test.ts
+    testName: native Git GitHub registry and protected local manager reads retain every seed-owned external boundary and original failures before exact retry
+
+  agent.golden.external-pre-admission:
+    kind: vitestCase
+    ownerPackage: '@treeseed/agent'
+    testFile: tests/modern/guarantees/campaign-cli.test.ts
+    testName: denies missing changed denied or interrupted external inventories before admission and retains the original frozen input before exact retry
+
+  agent.golden.native-external-failures:
+    kind: vitestCase
+    ownerPackage: '@treeseed/agent'
+    testFile: tests/modern/guarantees/preflight/external/external-native.test.ts
+    testName: native denied malformed duplicate and interrupted external reads retain original frozen bytes before complete exact retry

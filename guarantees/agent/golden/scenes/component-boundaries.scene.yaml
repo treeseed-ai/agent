@@ -3,6 +3,9 @@ id: agent.golden.component-boundaries
 title: Golden execution component boundaries
 scope: local-component-tests
 workflow:
+  - id: external-bounded-reads
+    action: { verifier: agent.golden.external-bounded-reads }
+    expect: { status: passed }
   - id: sdk-installed-custody-binding-unit
     action: { verifier: agent.golden.sdk-installed-custody-binding-unit }
     expect: { status: passed }
@@ -2294,4 +2297,16 @@ workflow:
     expect: { status: passed }
   - id: execution-public-sandbox-inventory-unit-4
     action: { verifier: agent.golden.execution-public-sandbox-inventory-unit-4 }
+    expect: { status: passed }
+
+  - id: native-external-inventory
+    action: { verifier: agent.golden.native-external-inventory }
+    expect: { status: passed }
+
+  - id: external-pre-admission
+    action: { verifier: agent.golden.external-pre-admission }
+    expect: { status: passed }
+
+  - id: native-external-failures
+    action: { verifier: agent.golden.native-external-failures }
     expect: { status: passed }

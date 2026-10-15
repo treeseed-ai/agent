@@ -16,7 +16,7 @@ vi.mock('node:fs', async importOriginal => ({
 }));
 vi.mock('node:child_process', () => ({ execFileSync: (...args: unknown[]) => {
 	state.commands(...args); return state.execute(...args);
-} }));
+},execFile:(command:string,args:string[],_options:unknown,callback:(error:Error|null,stdout:string,stderr:string)=>void)=>{try{state.commands(command,args);callback(null,state.execute(command,args),'');}catch(error){callback(error as Error,'','');}} }));
 vi.mock('@treeseed/sdk/agent-capacity', async importOriginal => {
 	const actual = await importOriginal<typeof import('@treeseed/sdk/agent-capacity')>();
 	return { ...actual, selectFairReadyNode: (...args: Parameters<typeof actual.selectFairReadyNode>) => state.selection(actual.selectFairReadyNode(...args)) };
@@ -285,7 +285,7 @@ it('denies every omitted run changed policy selection derived field and fault al
 	expect(state.commands).not.toHaveBeenCalled(); expect(state.writes).not.toHaveBeenCalled();
 });
 
-it('uses the original operator proposal and start and denies changed CLI intent or policy before any proposal creation', () => {
+it('uses the original operator proposal and start and denies changed CLI intent or policy before any proposal creation', async () => {
 	const authority = process.env.TREESEED_DEVELOPMENT_WORKSPACE_ROOT;
 	expect(authority).toBeTruthy();
 	const document = nativeFs.readFileSync(resolve(authority!, 'docs/agent-acceptance.md'), 'utf8');
@@ -312,7 +312,7 @@ it('uses the original operator proposal and start and denies changed CLI intent 
 		state.bytes = JSON.stringify(supplied); state.writes.mockClear(); state.commands.mockClear(); state.execute.mockClear(); state.publicRead.mockClear();
 		state.execute.mockImplementation((command: string, args: string[]) => command.endsWith('/codex') ? 'codex-cli 0.158.0'
 			: args.includes('--refs') ? `${head}\trefs/heads/staging\n`
-			: args.includes('rev-parse') || command === 'gh' ? head : 'Controlled external baseline');
+			: args.includes('rev-parse') ? head : command === 'gh' ? '[]' : command === 'npm' ? JSON.stringify({name:'@treeseed/sdk',versions:['1.0.0'],'dist-tags':{latest:'1.0.0'}}) : 'Controlled external baseline');
 		state.publicRead.mockImplementation((args: string[]) => {
 			if (args[0] === 'library' && args[1] === 'show') {
 				if (scenario === 'lookup-denied') throw new Error('ACCEPTANCE_CLI_COMMAND: library.show team_access_denied');
@@ -328,6 +328,7 @@ it('uses the original operator proposal and start and denies changed CLI intent 
 				policy: scenario === 'policy-malformed' ? {} : supplied.workdayPolicy.policy,
 				...(scenario === 'policy-unknown' ? { compatibilityPolicy: true } : {}),
 				revision: scenario === 'policy-drift' ? 3 : supplied.workdayPolicy.revision };
+			if (args[0] === 'dev' && args.includes('--all')) return {sessions:[]};
 			if (args[0] === 'dev') return { status: 'active', manifestDigest: digest, guestImageDigest: digest };
 			if (args[0] === 'library' && args[1] === 'paths') return { result: campaignProfiles(args[2]!, head, `repository-${args[2]}`).paths };
 			if (args[0] === 'library' && args[1] === 'read' && args[3]?.startsWith('agents/')) return {
@@ -353,7 +354,7 @@ it('uses the original operator proposal and start and denies changed CLI intent 
 			return { id: 'controlled-preflight', preflightDigest: digest };
 		});
 		if (scenario === 'unchanged') {
-			prepareSdkCampaign('/draft.json', '/sdk.freeze.json', 'supplied-team');
+			await prepareSdkCampaign('/draft.json', '/sdk.freeze.json', 'supplied-team');
 			expect(state.publicRead.mock.calls.filter(call => call[0][0] === 'library' && call[0][1] === 'show')
 				.map(call => call.slice(0, 3))).toEqual(supplied.proposals.map(proposal => [['library', 'show', proposal.slug], 'supplied-team', true]));
 			const plan = state.publicRead.mock.calls.find(call => call[0].includes('--plan'))![0];

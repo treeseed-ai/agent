@@ -107,9 +107,10 @@ test('Actual normal SDK workday reads complete public owning host sandbox absenc
  const retainedEvents=new Map<string,Row>();
  const inspect = () => {
   const remaining = Math.floor(deadline - performance.now() - 5_000); assert.ok(remaining > 0, 'ACCEPTANCE_SANDBOX_OBSERVATION_TIME: Original case deadline exhausted');
-  const history=observeCampaign(read(['workdays','show',f.id],f.team),f.id,retainedEvents,(cursor,limit)=>read(['workdays','events','list',f.id,'--limit',String(limit),'--cursor',cursor],f.team)).events;
+  const timeLeft=()=>{const left=Math.floor(deadline-performance.now()-5_000);assert.ok(left>0,'ACCEPTANCE_SANDBOX_OBSERVATION_TIME: Original case deadline exhausted');return left;};
+  const history=observeCampaign(read(['workdays','show',f.id],f.team,false,timeLeft()),f.id,retainedEvents,(cursor,limit)=>read(['workdays','events','list',f.id,'--limit',String(limit),'--cursor',cursor],f.team,false,timeLeft())).events;
   return verifyPublicSandboxAbsence(f.items, loaded.manifest.connections, loaded.manifest.sandbox.brokerSocket,
-   read(['host', 'sandbox', 'status'], '', true, remaining),history);
+   read(['host', 'sandbox', 'status'], '', true, timeLeft()),history);
  };
  const paths = inspect(); verify(f); assert.deepEqual(inspect(), paths); assert.deepEqual(f, before);
  assert.deepEqual((await loadProviderManifest(config.manifestPath, config.dataDir)).manifest, manifestBefore);

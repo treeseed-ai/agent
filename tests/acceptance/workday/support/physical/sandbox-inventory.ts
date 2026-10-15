@@ -183,7 +183,8 @@ export function verifyPublicSandboxAbsence(items: Row[], connections: Array<{ pr
   'ACCEPTANCE_SANDBOX_RESIDUE: Owning sandbox directory, file or symlink remains');
  const devices=nativeHostDevices(inventory),ownedVms=new Set<string>();assert.ok(Array.isArray(events),'ACCEPTANCE_SANDBOX_VM: Complete public event history required');
  for(const item of items.filter(value=>Object.hasOwn(row(value.lifecycleOutput),'sandboxId'))){
-  const attempt=assignmentAttemptSchema.parse(item.assignmentAttempt),output=row(item.lifecycleOutput),matches=events.filter(event=>event.eventType==='provider.sandbox.destroyed'&&event.assignmentId===attempt.id);
+  const attempt=assignmentAttemptSchema.parse(item.assignmentAttempt),output=row(item.lifecycleOutput);
+  const matches:readonly Row[]=events.filter((observation:Row)=>observation.eventType==='provider.sandbox.destroyed'&&observation.assignmentId===attempt.id);
   assert.equal(matches.length,1,'ACCEPTANCE_SANDBOX_VM: Exact original public destruction observation required');const event=matches[0]!,context=row(event.context),vmId=context.vmId;
   assert.equal(event.runId,attempt.workdayId);assert.equal(event.teamId,attempt.teamId);assert.equal(event.projectId,attempt.projectId);assert.equal(event.status,'recorded');
   assert.equal(context.sandboxId,output.sandboxId);assert.deepEqual(context.teardown,output.teardown);

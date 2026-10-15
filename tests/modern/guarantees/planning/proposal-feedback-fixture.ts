@@ -1,3 +1,5 @@
+import {assignmentAttemptSchema} from '@treeseed/sdk/agent-capacity';
+import {request} from '../../kernel/provider-kernel-fixture.ts';
 import {createHash} from 'node:crypto';
 import {stringify} from 'yaml';
 import {state} from '../../kernel/architecture/golden-readback-fixture.ts';
@@ -5,7 +7,8 @@ import {row,type Row} from '../../../acceptance/acceptance-cli.ts';
 
 /** Controlled public inputs; native API551 owns actual PostgreSQL/TreeDX publication proof. */
 export function proposalFeedbackFixture(){
- const items=(state.replies.get('assignments list')!.items as Row[]).filter(item=>row(row(item.assignmentAttempt).effectiveProfile).activity==='acting');
+ const items=structuredClone((state.replies.get('assignments list')!.items as Row[]).filter(item=>row(row(item.assignmentAttempt).effectiveProfile).activity==='acting'));
+ const base=assignmentAttemptSchema.parse(request().assignment.assignmentAttempt);for(const item of items){const old=row(item.assignmentAttempt);item.assignmentAttempt=assignmentAttemptSchema.parse({...base,...old,id:item.id,idempotencyKey:item.id,teamId:base.teamId,projectId:item.projectId,workdayId:item.workDayId,status:'completed',limits:{...base.limits,...row(old.limits)}});}
  const attempt=row(items[0]!.assignmentAttempt),source=row(attempt.sourceRef),authority=(attempt.authorityRefs as Row[]).find(ref=>ref.id==='decision-1')!;
  const files=new Map<string,Row>();const original=structuredClone(state.replies.get('library read decisions/decision-1.mdx')!) as Row;files.set(String(authority.commit)+':'+String(authority.path),original);
  const content=(model:string,id:string,commit:string,frontmatter:Row)=>{const path=model+'s/'+id+'.mdx',raw='---\n'+stringify(frontmatter,{lineWidth:0})+'---\n\nControlled exact original publication.\n';const ref={store:'treedx',model,id,repository:source.repository,commit,path,revision:1,digest:'sha256:'+createHash('sha256').update(raw).digest('hex')};files.set(commit+':'+path,{result:{resolvedRef:commit,files:[{path,content:raw,frontmatter}]}});return ref;};

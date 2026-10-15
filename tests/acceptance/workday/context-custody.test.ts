@@ -67,7 +67,7 @@ export function verifyProposalFeedback(items:Row[],team:string,observe:typeof re
 		const ref = exactEntityReferenceSchema.parse(reference);
 		assert.ok(ref.store === 'treedx' && ref.repository && ref.commit && ref.path && ref.digest, 'ACCEPTANCE_PROPOSAL_FEEDBACK_REF: Complete original content authority required');
 		const args = ['library', 'read', projectId, ref.path, '--ref', ref.commit], value = observe(args, team, true), returned = row(value.result ?? value);
-		assert.equal(returned.resolvedRef, ref.commit); assert.ok(Array.isArray(returned.files) && returned.files.length === 1);
+		assert.equal(returned.repoId,ref.repository,'ACCEPTANCE_PROPOSAL_FEEDBACK_REPOSITORY'); assert.equal(returned.resolvedRef, ref.commit); assert.ok(Array.isArray(returned.files) && returned.files.length === 1);
 		const file = row(returned.files[0]); assert.equal(file.path, ref.path); assert.equal(typeof file.content, 'string');
 		assert.equal(`sha256:${createHash('sha256').update(String(file.content)).digest('hex')}`, ref.digest);
 		const document = String(file.content).match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)$/u); assert.ok(document);
@@ -101,6 +101,9 @@ export function verifyProposalFeedback(items:Row[],team:string,observe:typeof re
 			const answer = answers[0]!, q = exactRead(row(evidence.questionRef ?? evidence.decisionRef), attempt.projectId),
 				r = exactRead(row(row(answer.evidence).resolutionRef), attempt.projectId);
 			assert.ok(['question', 'decision'].includes(q.ref.model)); assert.equal(r.ref.model, 'discussion-message');
+   assert.equal(q.frontmatter.projectId,attempt.projectId,'ACCEPTANCE_PROPOSAL_FEEDBACK_PROJECT');
+   const subject=row(q.frontmatter.subjectRef);assert.equal(subject.store,'treedx');assert.equal(subject.model,'proposal');assert.equal(subject.id,source.id,'ACCEPTANCE_PROPOSAL_FEEDBACK_SUBJECT');assert.equal(subject.repository,source.repository,'ACCEPTANCE_PROPOSAL_FEEDBACK_SUBJECT');
+
 			assert.equal(answer.proposalVersion, source.revision);
 			const opened = Date.parse(String(event.createdAt)), answered = Date.parse(String(answer.createdAt));
 			assert.ok(Number.isFinite(opened) && Number.isFinite(answered) && opened <= answered && answered <= decisionClock

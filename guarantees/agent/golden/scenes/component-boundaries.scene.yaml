@@ -2382,3 +2382,18 @@ workflow:
   - id: execution-proposal-feedback-native
     action: { verifier: agent.golden.execution-proposal-feedback-native }
     expect: { status: passed }
+  - id: node-transition-history-unit
+    action: { verifier: agent.golden.node-transition-history-unit }
+    expect: { status: passed }
+  - id: node-transition-history-native
+    action: { verifier: agent.golden.node-transition-history-native }
+    expect: { status: passed }
+  - id: node-transition-scoped-stop
+    action: { verifier: agent.golden.node-transition-scoped-stop }
+    expect: { status: passed }
+  - id: node-transition-concurrent-inspection
+    action: { verifier: agent.golden.node-transition-concurrent-inspection }
+    expect: { status: passed }
+  - id: node-transition-inspection-bound
+    action: { verifier: agent.golden.node-transition-inspection-bound }
+    expect: { status: passed }

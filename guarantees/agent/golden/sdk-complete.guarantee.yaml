@@ -221,3 +221,6 @@ acceptanceCriteria:
 
   - criterion: 9ac73476e2d988533827fbfefe5178fc4b83d2b6e6daafe0a14d76816ec643b7
     verifierRefs: [sdk.golden.live.product, agent.golden.architecture-living-graph-live-1, api.golden.execution-protected-observation-live-1, api.golden.execution-normal-sdk-clean-schema-live-1]
+
+  - criterion: d00910e63c8f4df319158d8a692499648dc88c7c01699fd6c175696de27fa41f
+    verifierRefs: [agent.golden.live.campaign]

@@ -11,7 +11,6 @@ import { nativeCloseoutTransport } from '../kernel/architecture/portable/portabl
 import { broker, microvmBroker } from './fixtures/broker-preparation.ts';
 import { executeKernelAssignment } from '../../../src/kernel/provider-kernel-executor.ts';
 import { verifyModelClockEvidence } from '../../acceptance/workday/support/assignment-authority.ts';
-
 describe('sandbox broker preparation authority', () => {
 	it('uses the API-issued preparation deadline instead of an independent fifteen-second cutoff', () => {
 		const now = Date.parse('2026-09-28T00:00:00.000Z');

@@ -53,8 +53,10 @@ describe('Agent RC publication', () => {
 		expect(verify?.getText(source)).toContain("JSON.parse(sbom.stdout)");
 		const install = calls.find(call => ts.isIdentifier(call.expression) && call.expression.text === 'run'
 			&& call.arguments[1]?.getText(source).includes("'--prefix', installedSdk"));
-		expect(install?.arguments[1]?.getText(source)).toBe("['install', '--prefix', installedSdk, '--ignore-scripts', '--no-save', '--package-lock=false', '--no-audit', '--no-fund']");
+		expect(install?.arguments[1]?.getText(source)).toBe("['install', '--prefix', installedSdk, '--ignore-scripts', '--no-save', '--package-lock=false', '--no-audit', '--no-fund', '--prefer-offline']");
 		expect(install?.arguments[2]?.getText(source)).toBe('stage');
+		const packedInstall=calls.find(call=>ts.isIdentifier(call.expression)&&call.expression.text==='run'&&call.arguments[1]?.getText(source).includes('resolve(stage, tarball)'));
+		expect(packedInstall?.arguments[1]?.getText(source)).toBe("['install', '--ignore-scripts', '--no-audit', '--no-fund', '--prefer-offline', resolve(stage, tarball)]");
 	});
 	it('native packed provider installation exports its genuine complete npm SBOM and immutable archive without publishing', async () => {
 		const { verifyPackedPackage } = await import('../../scripts/packages/release-verify.ts');

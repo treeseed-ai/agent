@@ -28,11 +28,11 @@ export function verifyPackedPackage(artifacts = resolve(packageRoot, 'artifacts'
 	const tarball = readdirSync(stage).find((entry) => entry.endsWith('.tgz'));
 	if (!tarball) throw new Error('npm pack did not produce an Agent tarball.');
 	run('npm', ['init', '-y'], stage);
-	run('npm', ['install', '--ignore-scripts', resolve(stage, tarball)], stage);
+	run('npm', ['install', '--ignore-scripts', '--no-audit', '--no-fund', '--prefer-offline', resolve(stage, tarball)], stage);
 	const installedSdk = resolve(stage, 'node_modules/@treeseed/sdk');
 	rmSync(installedSdk, { recursive: true, force: true });
 	cpSync(resolve(packageRoot, 'node_modules/@treeseed/sdk'), installedSdk, { recursive: true });
-	run('npm', ['install', '--prefix', installedSdk, '--ignore-scripts', '--no-save', '--package-lock=false', '--no-audit', '--no-fund'], stage);
+	run('npm', ['install', '--prefix', installedSdk, '--ignore-scripts', '--no-save', '--package-lock=false', '--no-audit', '--no-fund', '--prefer-offline'], stage);
 	run(process.execPath, ['--input-type=module', '-e', [
 		"const agent = await import('@treeseed/agent');",
 		"const governance = await import('@treeseed/agent/provider-governance');",

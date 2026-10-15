@@ -24,6 +24,42 @@ async function fixture() {
 	return { ...kernel, exact, boundary, close: async () => { try { await boundary.close(); } finally { await kernel.close(); } } };
 }
 describe('owning context Kernel through native content HTTP and source Git', () => {
+ it('native configured chat retains the exact general answer through original HTTP executor and Kernel without source publication', async () => {
+  for(const name of ['configured-answer-reader','renamed-subject-reader']) for(const markdown of [false,true]) {
+   const f=await portableKernel();try {
+    const checked=validateAgentDefinitionModel(parse(`schemaVersion: treeseed.agent/v1
+id: configured/${name}
+name: ${name}
+agentClass: ${name}
+purpose: Answer only the addressed context question.
+responsibilities: [Preserve exact subject identity.]
+capabilities: []
+context: {include: [assignment-subject]}
+activityProfiles:
+  chat:
+    handler: actor
+    prompt: {system: Return only the assigned class and exact proposal ID and commit as JSON.}
+    permissions: {content: {read: [], write: []}, tools: []}
+`));
+    if(!checked.ok||!checked.data?.activityProfiles.chat)throw new Error('Original configured chat profile required');
+    const selected=checked.data.activityProfiles.chat;
+    Object.assign(f.attempt,{agentClass:name,workspace:{mode:'read-only'},contextRefs:[],predecessorResultIds:[],
+     sourceRef:{...f.attempt.sourceRef,commit:f.base},grant:{contentRead:[],contentWrite:[],sourceRead:[],sourceWrite:[],tools:[]}});
+    Object.assign(f.attempt.effectiveProfile,{activity:'chat',handler:selected.handler,prompt:selected.prompt,permissionCeiling:selected.permissions});
+    const answer=JSON.stringify({agentClass:name,proposalId:f.attempt.sourceRef.id,proposalCommit:f.base});
+    f.setReply({status:'responded',summary:markdown?'Original sandbox completion marker.':answer,
+     ...(markdown?{responseMarkdown:answer}:{}),outputs:{timingAwareness},usage:[{activeSeconds:1,elapsedSeconds:2}]});
+    const original=structuredClone(f.input.assignment),reply=f.getReply(),result=await f.run();
+    expect(result.status).toBe('responded');expect(result.responseMarkdown).toBe(answer);
+    const canonical=assignmentResultSchema.parse(result.outputs?.assignmentResult);
+    expect(canonical.summary).toBe(answer);expect(canonical.references).toEqual([]);expect(canonical.verification).toEqual([]);
+    expect(canonical.assignmentId).toBe(f.attempt.id);expect(f.requests).toHaveLength(1);expect(f.begin).toHaveLength(1);
+    expect(f.input.assignment).toEqual(original);expect(f.getReply()).toEqual(reply);expect(f.git('rev-parse','HEAD')).toBe(f.base);
+    expect(f.git('status','--porcelain=v1')).toBe('');
+    // Actual owning Kernel and HTTP transport; supplied answer is not model-generated or a governance graph receipt.
+   }finally{await f.close();expect(existsSync(f.checkout)).toBe(false);}
+  }
+ });
 	it('native Kernel denies contradictory normalized token observations without rewriting raw replies candidate bytes or failed history', async () => {
 		const outcomes: boolean[] = [];
 		for (const [normalized, native] of [['inputTokens', 'input_tokens'], ['outputTokens', 'output_tokens'],

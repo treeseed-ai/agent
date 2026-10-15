@@ -34,13 +34,13 @@ it('native Kernel Git and public SDK node histories deny omitted changed or inte
   await new Promise<void>((accept,reject)=>{server!.once('error',reject);server!.listen(0,'127.0.0.1',accept);});const address=server.address();if(!address||typeof address==='string')throw new Error('Native node history address required');
   const client=new ControlPlaneClient({profile:defaultLocalControlPlaneServer({TREESEED_API_BASE_URL:'http://127.0.0.1:'+address.port}),accessToken:'controlled-node-history-token'});
   const execute=async()=>{
-   let later=false;const offset=requests.length,retained=new Map<string,Row>(),captured:Row[]=[];
-   try{await monitorCampaign({admittedSimulation:true,read:()=>({status:mode==='exact'?'completed':'running',mode:'simulation',planningEndsAt:0,endsAt:1}),now:()=>1,wait:async()=>{throw new Error('No later waiting permitted');},collaboration:()=>{throw new Error('Node violation must block approval');},verify:()=>{later=true;},inspect:async()=>{
+   let later=false,collaborated=false;const offset=requests.length,retained=new Map<string,Row>(),captured:Row[]=[];
+   try{await monitorCampaign({admittedSimulation:true,read:()=>({status:mode==='exact'?'completed':'running',mode:'simulation',planningEndsAt:0,endsAt:1}),now:()=>1,wait:async()=>{throw new Error('No later waiting permitted');},collaboration:()=>{collaborated=true;},verify:()=>{later=true;},inspect:async()=>{
     const current=row((await client.invoke(controlPlaneOperation('execution.graph.show'),{path:{teamId:run.teamId},query:{},body:undefined})).data),page=row((await client.invoke(controlPlaneOperation('workdays.events.list'),{path:{teamId:run.teamId,runId:run.id},query:{limit:100},body:undefined})).data);
     const values=observation.retainCampaignEventHistory(page.items as Row[],run,retained,event=>{captured.push(event);});
     const check=Reflect.get(observation,'verifyNodeTransitionHistory') as (run:Row,graph:Row,events:readonly Row[])=>void;check(run,current,values);if(mode==='exact')expect(captured).toEqual(events);
    },stop:async()=>{await client.invoke(controlPlaneOperation('workdays.stop'),{path:{teamId:run.teamId,runId:run.id},query:{},body:{reason:'Automated golden boundary failed'}},{idempotencyKey:'golden-stop:'+run.id});}});
-   }finally{expect({graph,events,result}).toEqual(held);if(mode!=='exact')expect(requests.slice(offset).filter(value=>value.method==='POST')).toEqual([{method:'POST',path:stopPath,key:'golden-stop:'+run.id,body:{reason:'Automated golden boundary failed'}}]);}
+   }finally{expect({graph,events,result}).toEqual(held);if(mode!=='exact'){expect(later).toBe(false);expect(collaborated).toBe(false);expect(requests.slice(offset).filter(value=>value.method==='POST')).toEqual([{method:'POST',path:stopPath,key:'golden-stop:'+run.id,body:{reason:'Automated golden boundary failed'}}]);}}
    return later;
   };
   expect(await Promise.all([execute(),execute()])).toEqual([true,true]);

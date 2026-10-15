@@ -4,7 +4,7 @@ import { expect, it } from 'vitest';
 import { stringify } from 'yaml';
 import { ControlPlaneClient, defaultLocalControlPlaneServer } from '@treeseed/sdk/control-plane-client';
 import { controlPlaneOperation, type CommunicationSendRequest } from '@treeseed/sdk/operator-contracts';
-import { monitorCampaign, openSdkCampaignDiscussion, sdkCampaignAgents, sdkCampaignChatQuestion } from '../../acceptance/campaign.ts';
+import { monitorCampaign, openSdkCampaignDiscussion, sdkCampaignAgents, sdkCampaignChatQuestion, sdkCampaignOpeningMessage } from '../../acceptance/campaign.ts';
 import { verifyChatCommunicationLanes, verifyChatAddressedRead, verifyChatOpenDiscussion } from '../../acceptance/workday/support/planning-evidence.ts';
 
 it('native public communication requests preserve every addressed probe and stop on denial malformed output or interruption before unchanged retry', async () => {
@@ -27,8 +27,8 @@ it('native public communication requests preserve every addressed probe and stop
 	const discussionDigest = `sha256:${createHash('sha256').update(discussionContent).digest('hex')}`;
 	const nativeDiscussion = { ok: true, repoId, resolvedRef: nativeCommit,
 		files: [{ path: discussionPath, frontmatter: discussionFrontmatter, body: discussionBody, content: discussionContent }] };
-	const nativeProbes = sdkCampaignAgents.map(role => {
-		const id = `native-probe-${role}`, source = { store: 'treedx', model: 'discussion', id: `invocation-${id}`, repository: repoId,
+	const nativeProbes = sdkCampaignAgents.flatMap(role => [true,false].map(individual => {
+		const id = `native-probe-${role}-${individual?'individual':'opening'}`, source = { store: 'treedx', model: 'discussion', id: `invocation-${id}`, repository: repoId,
 			commit: nativeCommit, path: `discussion-messages/${channel}/${role}.mdx`, digest: `sha256:${'d'.repeat(64)}` };
 		const subject = { store: 'treedx', model: 'proposal', id: proposalId, repository: repoId, commit: nativeCommit,
 			path: 'proposals/native.mdx', revision: 1, digest: `sha256:${'b'.repeat(64)}` };
@@ -41,14 +41,14 @@ it('native public communication requests preserve every addressed probe and stop
 				grant: { contentRead: [source, subject], contentWrite: [target], sourceRead: [], sourceWrite: [], tools: ['discussion'] },
 				workspace: { mode: 'treedx', repository: repoId, baseCommit: nativeCommit, workspaceId: `workspace-${id}`, writablePaths: [target.path] } } };
 		Object.assign(item,{completedAt:'2026-10-10T00:00:03.000Z',assignmentResult:{schemaVersion:'treeseed.assignment-result/v1',id:'result-'+id,assignmentId:id,status:'completed',summary:JSON.stringify({agentClass:role,proposalId,proposalCommit:nativeCommit}),references:[],verification:[],usage:{elapsedSeconds:1,native:{activeSeconds:1}},diagnostics:[],completedAt:'2026-10-10T00:00:03.000Z'}});
-  const body = sdkCampaignChatQuestion(role), frontmatter = { schemaVersion: 'treeseed.discussion-message/v1', id: `message-${id}`,
+  const body = individual?sdkCampaignChatQuestion(role):sdkCampaignOpeningMessage, frontmatter = { schemaVersion: 'treeseed.discussion-message/v1', id: `message-${id}`,
 			discussionRef: { store: 'treedx', model: 'discussion', id: channel, path: discussionPath, revision: 1, digest: discussionDigest },
 			authorRef: { store: 'postgresql', model: 'user', id: 'controlled-native-operator' }, authorType: 'user', discussionId: channel,
-			mentionedAgents: [role], recipientIds: [role], parentWorkdayId: workdayId, createdAt: '2026-10-10T00:00:01.000Z', fileRefs: [],
+			mentionedAgents: individual?[role]:[...sdkCampaignAgents], recipientIds: individual?[role]:[...sdkCampaignAgents], parentWorkdayId: workdayId, createdAt: '2026-10-10T00:00:01.000Z', fileRefs: [],
 			contextRefs: [{ kind: 'proposal', id: proposalId, projectId, immutableRef: nativeCommit, path: subject.path, digest: subject.digest }] };
-		return { item, returned: { ok: true, repoId, resolvedRef: nativeCommit, files: [{ path: source.path, frontmatter, body: `\n${body}\n`,
+		return { item, individual, returned: { ok: true, repoId, resolvedRef: nativeCommit, files: [{ path: source.path, frontmatter, body: `\n${body}\n`,
 			content: `---\n${stringify(frontmatter, { lineWidth: 0 })}---\n\n${body}\n` }] } };
-	});
+	}));
 	const fileOperation = controlPlaneOperation('treedx.repositories.files.read'), fileRoute = fileOperation.descriptor.rest;
 	if (!fileRoute || fileRoute.method !== 'POST') throw new Error('Original public library read route required');
 	const filePath = fileRoute.path.replace('{projectId}', projectId).replace('{repoId}', repoId);
@@ -58,7 +58,12 @@ it('native public communication requests preserve every addressed probe and stop
 		request.on('end', () => {
 			if (request.method === 'GET') {
 				const selected = nativeProbes.find(probe => request.url === assignmentRoute.path.replace('{teamId}', teamId).replace('{assignmentId}', probe.item.id));
-				if (selected) { response.setHeader('content-type', 'application/json'); response.end(JSON.stringify({ data: selected.item })); return; }
+				if (selected) { response.setHeader('content-type', 'application/json'); const returned=structuredClone(selected.item) as Record<string,unknown>,result=returned.assignmentResult as Record<string,unknown>;
+     if(fileMode==='answer-json')result.summary='not JSON';
+     if(fileMode==='answer-scope')result.summary=JSON.stringify({agentClass:'foreign',proposalId,proposalCommit:nativeCommit});
+     if(fileMode==='answer-extra')result.summary=JSON.stringify({agentClass:selected.item.assignmentAttempt.agentClass,proposalId,proposalCommit:nativeCommit,extra:'unasked content'});
+     if(fileMode==='answer-duplicate')result.summary='{"agentClass":"foreign","agentClass":'+JSON.stringify(selected.item.assignmentAttempt.agentClass)+',"proposalId":'+JSON.stringify(proposalId)+',"proposalCommit":'+JSON.stringify(nativeCommit)+'}';
+     response.end(JSON.stringify({data:returned}));return; }
 			}
 			if (request.method === 'POST' && request.url === filePath) {
 				const body = JSON.parse(bytes) as { ref: string; paths: string[] }; fileRequests.push(structuredClone(body));
@@ -167,7 +172,7 @@ it('native public communication requests preserve every addressed probe and stop
 
 		for (const probe of nativeProbes) {
 			const source = probe.item.assignmentAttempt.sourceRef;
-			for (const mode of ['exact', 'foreign', '503', 'json', 'reset', 'exact']) {
+			for (const mode of ['exact', 'foreign', '503', 'json', 'reset', 'answer-json', 'answer-scope', 'answer-extra', 'answer-duplicate', 'exact']) {
 				fileMode = mode; const before = structuredClone(probe); let observed: Record<string, unknown> | undefined, returned: Record<string, unknown> | undefined, failure: unknown;
 				try {
 					observed = (await client.invoke(controlPlaneOperation('assignments.show'), { path: { teamId, assignmentId: probe.item.id }, query: {}, body: undefined })).data as Record<string, unknown>;
@@ -176,7 +181,7 @@ it('native public communication requests preserve every addressed probe and stop
 				let stopped = 0, advanced = 0, polls = 0;
 				const monitored = monitorCampaign({ admittedSimulation: true, read: () => ({ status: polls++ ? 'completed' : 'running', mode: 'simulation', planningEndsAt: 1, endsAt: 2 }),
 					inspect: () => { if (failure) throw failure; if (!observed || !returned) throw new Error('Original native public reads required');
-						expect(verifyChatAddressedRead(observed, nativeRun, returned)).toBe(true); },
+						expect(verifyChatAddressedRead(observed, nativeRun, returned)).toBe(probe.individual); },
 					now: () => 1, wait: async () => {}, collaboration: () => {}, verify: () => { advanced++; }, stop: () => { stopped++; } });
 				if (mode === 'exact') { await monitored; expect(stopped).toBe(0); expect(advanced).toBe(1); }
 				else { await expect(monitored).rejects.toThrow(); expect(stopped).toBe(1); expect(advanced).toBe(0); }
@@ -195,7 +200,7 @@ it('native public communication requests preserve every addressed probe and stop
 			else { await expect(monitored).rejects.toThrow(); expect(stopped).toBe(1); expect(advanced).toBe(0); }
 			expect(returned).toEqual(held);
 		}
-		expect(fileRequests).toHaveLength(96);
+		expect(fileRequests).toHaveLength(256);
 		for (const request of fileRequests) expect(request).toMatchObject({ ref: nativeCommit, paths: [expect.stringMatching(new RegExp(`^(?:discussion-messages/${channel}/|discussions/${channel}\\.mdx$)`))], encoding: 'utf8', parseFrontmatter: true });
 		expect(requests).toEqual(originalRequests); expect(receipts).toEqual(heldReceipts); expect(failures).toEqual(retainedFailures);
 

@@ -104,7 +104,7 @@ export function campaignWorkdayId(read: (args: string[], team: string) => StartR
 }
 
 export const sdkCampaignAgents = ['architect', 'researcher', 'tester', 'engineer', 'technical-writer', 'releaser', 'reviewer', 'reporter'] as const;
-export const sdkCampaignOpeningMessage = `${sdkCampaignAgents.map(role => `@sdk/${role}`).join(' ')} Discuss the exact frozen proposal, identify your role and dependencies, and publish useful planning contributions. Do not implement during planning.`;
+export const sdkCampaignOpeningMessage = `${sdkCampaignAgents.map(role => `@sdk/${role}`).join(' ')} Open discussion for the exact frozen proposal. Acknowledge this chat only with one JSON object in your general result summary containing exactly agentClass (your assigned class), proposalId (the addressed proposal ID), and proposalCommit (the exact addressed proposal commit). Use only your supplied profile and subject context. Publish useful planning contributions during allocated planning turns; do not implement during planning.`;
 export function sdkCampaignChatQuestion(role: string): string {
 	assert.ok(sdkCampaignAgents.some(value => value === role), 'ACCEPTANCE_CHAT_CONTEXT: Exact selected contributor required');
 	return `@sdk/${role} For this exact addressed proposal, return only one JSON object in your general result summary with exactly these fields: agentClass (your assigned class), proposalId (the addressed proposal ID), and proposalCommit (the exact addressed proposal commit). Use only your supplied profile and subject context; do not inspect or change project files, publish work products or mutate graph edges.`;

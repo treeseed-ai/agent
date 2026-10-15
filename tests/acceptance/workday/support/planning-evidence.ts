@@ -59,7 +59,7 @@ export function verifyChatAddressedRead(item: Row, run: Row, returned: Row): boo
 		immutableRef: subject.commit, path: subject.path, digest: subject.digest }], label);
 	const created = timestamp(frontmatter.createdAt), admitted = timestamp(item.createdAt);
 	assert.ok(timestamp(run.startedAt) <= created && created <= admitted, label);
-	if (individual) {
+	{
   assert.equal(item.status, 'completed', 'ACCEPTANCE_CHAT_ROLES: Addressed probes must complete');
   const answerLabel='ACCEPTANCE_CHAT_ANSWER',parsed=assignmentResultSchema.safeParse(item.assignmentResult);
   assert.ok(parsed.success,answerLabel+': Original canonical general result required');const result=parsed.data;

@@ -62,7 +62,7 @@ export function assignment(id: string, activity: string, agentClass: string, wor
 	return { id, workDayId: workdayId, projectId: 'sdk', decisionId: 'decision-1', status: 'completed', leaseToken: null, attemptCount: 1,
 		...(activity === 'chat' ? { lanePurpose: 'communication' } : {}),
 		leaseState: 'released', leaseExpiresAt: null, leaseRenewedAt: null, runnerId: null,
-		createdAt, completedAt, assignmentAttempt: { attempt: 1, agentClass, workItemId, createdAt,
+		createdAt, completedAt, assignmentAttempt: { attempt: 1, agentClass, workItemId, createdAt, acceptanceCriteria: ['Verify the original controlled work item '+workItemId+'.'],
 			deadline: new Date(Date.parse(createdAt) + 10_000).toISOString(), effectiveProfile: { activity,
 			profileRef: { store: 'treedx', model: 'agent', id: `configured-${agentClass}`, repository: 'sdk-library', commit,
 				path: `agents/${agentClass}.yaml` }, handler: git ? 'actor' : activity === 'reporting' ? 'reporter' : 'writer',

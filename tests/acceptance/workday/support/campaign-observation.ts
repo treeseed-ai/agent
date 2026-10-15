@@ -138,27 +138,8 @@ export function observeCampaign(observed: unknown, workdayId: string, retained: 
 		assert.ok(readEvents, 'ACCEPTANCE_OBSERVATION: Public event reader required');
 		return row(readEvents(cursor, limit));
 	}, limit, 'ACCEPTANCE_OBSERVATION', 'ascending') : data.events;
-	const current = new Map<string, Row>(), indexes = new Set<number>();
-	for (const value of events) {
-		const event = row(value), id = text(event.id);
-		assert.equal(event.runId, workdayId, 'ACCEPTANCE_OBSERVATION: Foreign event workday');
-		assert.equal(event.teamId, text(run.teamId), 'ACCEPTANCE_OBSERVATION: Foreign event team');
-		text(event.eventType); text(event.status);
-		assert.ok(Number.isFinite(Date.parse(text(event.createdAt))), 'ACCEPTANCE_OBSERVATION: Malformed event clock');
-		assert.ok(typeof event.eventIndex === 'number' && Number.isSafeInteger(event.eventIndex) && event.eventIndex >= 0,
-			'ACCEPTANCE_OBSERVATION: Malformed event index');
-		assert.ok(!current.has(id) && !indexes.has(event.eventIndex), 'ACCEPTANCE_OBSERVATION: Duplicate event authority');
-		for (const field of ['parameters', 'context', 'refs', 'metadata']) row(event[field]);
-		assert.ok(event.status !== 'failed' && event.status !== 'error', 'ACCEPTANCE_OBSERVATION: Historical failed event');
-		current.set(id, event); indexes.add(event.eventIndex);
-	}
-	assert.deepEqual([...indexes].sort((a, b) => a - b), Array.from({ length: indexes.size }, (_, i) => i),
-		'ACCEPTANCE_OBSERVATION: Missing event transition');
-	for (const [id, previous] of retained) assert.deepEqual(current.get(id), previous,
-		'ACCEPTANCE_OBSERVATION: Previously observed event mutated or disappeared');
 	assert.ok(run.status !== 'completed' || !failedBoundary, 'ACCEPTANCE_OBSERVATION: Completed run hides failed scheduling');
-	for (const [id, event] of current) retained.set(id, structuredClone(event));
-	return { run, failedBoundary, events: [...current.values()] };
+	return {run,failedBoundary,events:retainCampaignEventHistory(events,run,retained)};
 }
 
 /** The assignment list is held before the complete public history is read.
@@ -236,3 +217,28 @@ export function verifyAssignmentTransitionHistory(run: Row, assignments: readonl
  }
 }
 
+
+/** Same immutable event check for show pagination and the post-assignment public inventory. */
+export function retainCampaignEventHistory(events:readonly unknown[],run:Row,retained:Map<string,Row>):Row[]{
+ const workdayId=String(run.id);
+	const current = new Map<string, Row>(), indexes = new Set<number>();
+	for (const value of events) {
+		const event = row(value), id = text(event.id);
+		assert.equal(event.runId, workdayId, 'ACCEPTANCE_OBSERVATION: Foreign event workday');
+		assert.equal(event.teamId, text(run.teamId), 'ACCEPTANCE_OBSERVATION: Foreign event team');
+		text(event.eventType); text(event.status);
+		assert.ok(Number.isFinite(Date.parse(text(event.createdAt))), 'ACCEPTANCE_OBSERVATION: Malformed event clock');
+		assert.ok(typeof event.eventIndex === 'number' && Number.isSafeInteger(event.eventIndex) && event.eventIndex >= 0,
+			'ACCEPTANCE_OBSERVATION: Malformed event index');
+		assert.ok(!current.has(id) && !indexes.has(event.eventIndex), 'ACCEPTANCE_OBSERVATION: Duplicate event authority');
+		for (const field of ['parameters', 'context', 'refs', 'metadata']) row(event[field]);
+		assert.ok(event.status !== 'failed' && event.status !== 'error', 'ACCEPTANCE_OBSERVATION: Historical failed event');
+		current.set(id, event); indexes.add(event.eventIndex);
+	}
+	assert.deepEqual([...indexes].sort((a, b) => a - b), Array.from({ length: indexes.size }, (_, i) => i),
+		'ACCEPTANCE_OBSERVATION: Missing event transition');
+	for (const [id, previous] of retained) assert.deepEqual(current.get(id), previous,
+		'ACCEPTANCE_OBSERVATION: Previously observed event mutated or disappeared');
+	for (const [id, event] of current) retained.set(id, structuredClone(event));
+	return [...current.values()];
+}

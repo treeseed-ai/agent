@@ -9,7 +9,7 @@ import { read, row } from './acceptance-cli.ts';
 import { verifyGolden } from './sdk-runtime-golden.test.ts';
 import { prepareSdkCampaign, verifySdkExternalState } from './prepare-campaign.ts';
 import { observeLiveGraphRevisions } from './workday/support/monitoring/live-graph-revisions.ts';
-import { observeCampaign } from './workday/support/campaign-observation.ts';
+import { observeCampaign, retainCampaignEventHistory, verifyAssignmentTransitionHistory } from './workday/support/campaign-observation.ts';
 import { readCompleteEvidence } from './workday/support/evidence-pages.ts';
 import { observeLiveAssignmentRecords, inspectLiveAssignmentProfile } from './workday/support/monitoring/live-assignment-records.ts';
 
@@ -66,6 +66,16 @@ test('Frozen SDK campaign drives planning acting review and terminal golden gate
 			cursor => read(['execution', 'graph', 'watch', '--cursor', cursor], team), observedGraphRevisions,
 			(revision, graphHead) => console.log(JSON.stringify({ workdayId, observedAt: new Date().toISOString(), graphRevision: revision, graphHead })));
 		const assignments = readCompleteEvidence(['assignments', 'list', '--workday', workdayId], team, 50, 'ACCEPTANCE_LIVE_ASSIGNMENT');
+  // Read owning records first; transactional observations for those held states
+  // must already be visible in the following complete public event history.
+  const events=readCompleteEvidence(['workdays','events','list',workdayId],team,100,'ACCEPTANCE_OBSERVATION','ascending');
+  retainCampaignEventHistory(events,currentRun,observedEvents);
+  verifyAssignmentTransitionHistory(currentRun,assignments,events);
+  const known=new Set(assignments.map(item=>String(item.id)));
+  for(const event of events)if(typeof event.assignmentId==='string'&&!known.has(event.assignmentId)){
+   const next=read(['assignments','show',event.assignmentId],team);assert.equal(next.id,event.assignmentId,'ACCEPTANCE_LIVE_ASSIGNMENT: Foreign concurrent observation');
+   assignments.push(next);known.add(event.assignmentId);
+  }
 		observeLiveAssignmentRecords(currentRun, assignments, observedAssignments, item => inspectLiveAssignmentProfile(item, team, assignments, { 'treeseed-ai/sdk': row(freeze.sourceHeads).sdk }));
 	}, now: Date.now, wait: () => new Promise(resolve => setTimeout(resolve, 30_000)), stop,
 		collaboration: () => {

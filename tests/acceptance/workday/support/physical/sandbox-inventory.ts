@@ -213,7 +213,7 @@ export async function verifyPublicWorkspaceSessionClosure(items:Row[],sessions:R
   assert.ok(typeof proxy.id==='string'&&proxy.id,code);assert.equal(proxy.status,'revoked',code);assert.ok(timestamp(proxy.revokedAt)<=terminal&&timestamp(proxy.revokedAt)>=timestamp(attempt.createdAt),code);
   assert.deepEqual(context.treedxProxyHandle,proxy,code);assert.deepEqual(context.capabilityHandles,handles,code);
   for(const kind of['repository','treeDx','workflowOperations','secrets']){const entries=handles[kind];assert.ok(Array.isArray(entries),code);for(const value of entries){const handle=row(value);assert.equal(handle.status,'revoked',code);assert.ok(timestamp(handle.revokedAt)<=terminal&&timestamp(handle.revokedAt)>=timestamp(attempt.createdAt),code);}}
-  if(attempt.workspace.mode==='git'){assert.equal(proxy.workspaceId,null,code);continue;}
+  if(attempt.workspace.mode!=='treedx'){assert.equal(proxy.workspaceId,null,code);continue;}
   assert.equal(proxy.workspaceId,attempt.workspace.workspaceId,code);assert.equal(proxy.repositoryId,attempt.workspace.repository,code);
   assert.ok(typeof proxy.repositoryProjectId==='string'&&proxy.repositoryProjectId&&typeof proxy.branchName==='string'&&proxy.branchName,code);
   assert.ok(!workspaces.has(attempt.workspace.workspaceId),code);workspaces.add(attempt.workspace.workspaceId);

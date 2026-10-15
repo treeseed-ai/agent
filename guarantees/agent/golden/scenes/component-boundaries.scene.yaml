@@ -2364,3 +2364,6 @@ workflow:
   - id: execution-resource-closure-unit
     action: { verifier: agent.golden.execution-resource-closure-unit }
     expect: { status: passed }
+  - id: execution-resource-closure-native
+    action: { verifier: agent.golden.execution-resource-closure-native }
+    expect: { status: passed }

@@ -1,3 +1,4 @@
+import { publicResourceClosureFixture } from '../../../guarantees/preflight/physical/resource-closure-fixture.ts';
 import * as physicalResources from '../../../../acceptance/workday/support/physical/sandbox-inventory.ts';
 import { describe, expect, it } from 'vitest';
 import { assignmentAttemptSchema, assignmentResultSchema } from '@treeseed/sdk/agent-capacity';
@@ -199,14 +200,7 @@ describe('public owning sandbox inventory consumption', () => {
  });
 
  it('requires exact closed public sessions revoked grants and independently closed mutable workspaces while retaining unrelated resources',async()=>{
-  const original=request().assignment.assignmentAttempt;if(!original)throw new Error('Original complete attempt required');const clock='2026-09-13T12:00:02.000Z',closed='2026-09-13T12:00:03.000Z';
-  const attempt=assignmentAttemptSchema.parse({...original,status:'completed',finishedAt:clock,workspace:{mode:'treedx',workspaceId:'ws_owned',repository:'library-owned',baseCommit:'a'.repeat(40),writablePaths:['knowledge']},grant:{...original.grant,sourceWrite:[]}});
-  const proxy={id:'handle-owned',teamId:attempt.teamId,projectId:attempt.projectId,assignmentId:attempt.id,workspaceId:'ws_owned',repositoryId:'library-owned',repositoryProjectId:'library-project',branchName:'refs/heads/'+attempt.id,allowedPaths:['knowledge/**'],status:'revoked',revokedAt:clock};
-  const handles={repository:[],treeDx:[{id:'owned-capability',status:'revoked',revokedAt:clock}],workflowOperations:[],secrets:[]};
-  const item:Row={id:attempt.id,teamId:attempt.teamId,projectId:attempt.projectId,workDayId:attempt.workdayId,status:'completed',completedAt:clock,membershipId:'membership-owned',providerSessionId:'session-owned',assignmentAttempt:attempt,treedxProxyHandle:proxy,capabilityHandles:handles,workspaceContext:{treedxProxyHandle:proxy,capabilityHandles:handles}};
-  const session:Row={id:'session-owned',teamId:attempt.teamId,providerId:attempt.provider.providerId,membershipId:'membership-owned',status:'closed',openedAt:attempt.createdAt,closedAt:closed};
-  const response:Row={result:{workspaceId:'ws_owned',repoId:'library-owned',status:'closed',mode:'writable',baseCommitSha:'a'.repeat(40),branchName:proxy.branchName,allowedPaths:['knowledge/**']},receipt:{projectId:'library-project'}};
-  const exact={items:[item],sessions:[session,{...session,id:'unrelated-open',status:'open',closedAt:null}],response};
+  const {exact,attempt,session}=publicResourceClosureFixture();
   const inspect=(value:typeof exact)=>physicalResources.verifyPublicWorkspaceSessionClosure(value.items,value.sessions,(projectId,workspaceId)=>{expect({projectId,workspaceId}).toEqual({projectId:'library-project',workspaceId:'ws_owned'});return value.response;});
   const held=structuredClone(exact);await inspect(exact);expect(exact).toEqual(held);
   const changes:Array<(value:typeof exact)=>void>=[value=>{value.sessions=[];},value=>{value.sessions.push(session);},value=>{value.items[0]!.providerSessionId='foreign';},value=>{value.items[0]!.treedxProxyHandle={};},value=>{value.items[0]!.workspaceContext={};},value=>{value.items[0]!.capabilityHandles={};},value=>{row((row(value.items[0]!.capabilityHandles).treeDx as Row[])[0]).status='issued';}];

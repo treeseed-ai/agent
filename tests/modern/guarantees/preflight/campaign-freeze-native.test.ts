@@ -1,3 +1,4 @@
+import { provePublicResourceClosureTransport } from './physical/resource-closure-native.ts';
 import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync, existsSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -459,3 +460,5 @@ it('native SDK preparation retains invalid campaign bytes and creates no proposa
 	} finally { rmSync(root, { recursive: true, force: true }); }
 	expect(existsSync(root)).toBe(false);
 });
+
+it('native public session pages and exact workspace reads retain closed scoped custody while denying omitted foreign interrupted or still-live resources before unchanged retry',async()=>{await provePublicResourceClosureTransport();});

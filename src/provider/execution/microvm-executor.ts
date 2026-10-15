@@ -2,7 +2,7 @@ import { createHash, createPrivateKey, sign } from 'node:crypto';
 import { dirname, resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import type { CapacityProviderManifestV5, SandboxAssignment } from '@treeseed/sdk/capacity-provider';
-import { assignmentTimingAwarenessReceiptSchema, providerEnvironmentReceiptSchema, sandboxAssignmentSchema, sandboxLeaseRenewalSchema, sandboxResultSchema } from '@treeseed/sdk/capacity-provider';
+import { assignmentTimingAwarenessReceiptSchema, providerEnvironmentReceiptSchema, sandboxAssignmentSchema, sandboxEventSchema, sandboxLeaseRenewalSchema, sandboxResultSchema } from '@treeseed/sdk/capacity-provider';
 import { assignmentAttemptSchema, assignmentPathAllowed, type AssignmentReference } from '@treeseed/sdk/agent-capacity';
 import type { ProviderHostRuntimeConfig } from '../configuration/config.ts';
 import { loadCapacityProviderIdentity } from '../accounts/identity.ts';
@@ -20,6 +20,22 @@ import { clockReading, timingAwarenessContract } from '../../sandbox/guest.ts';
 const canonical = (value: unknown): string => Array.isArray(value) ? `[${value.map(canonical).join(',')}]` : value && typeof value === 'object'
 	? `{${Object.entries(value as Record<string, unknown>).filter(([, item]) => item !== undefined).sort(([a], [b]) => a.localeCompare(b)).map(([key, item]) => `${JSON.stringify(key)}:${canonical(item)}`).join(',')}}` : JSON.stringify(value);
 const digest = (value: unknown) => `sha256:${createHash('sha256').update(canonical(value)).digest('hex')}`;
+
+/** Consume the original broker history; publish only its safe acquired VM identity. */
+function destroyedVmId(receipt:Record<string,unknown>,sandboxId:string,assignmentId:string,executed:boolean):string|null {
+ const raw=receipt.events,closedAt=Date.parse(String(object(receipt.teardown).completedAt));
+ if(!Array.isArray(raw)||!raw.length)throw new Error('Original complete broker history required');
+ const events=raw.map(value=>sandboxEventSchema.parse(value));let previous=-Infinity;
+ for(const [index,event]of events.entries()){
+  const at=Date.parse(event.occurredAt);
+  if(event.sandboxId!==sandboxId||event.assignmentId!==assignmentId||event.sequence!==index||!Number.isFinite(at)||at<previous||at>closedAt)throw new Error('Broker history ownership sequence or timing changed');previous=at;
+ }
+ const closed=events.filter(event=>event.type==='sandbox.destroyed'),assigned=events.filter(event=>event.type==='execution.progress'&&event.payload.stage==='vm.assigned');
+ if(closed.length!==1||events.at(-1)!==closed[0]||closed[0]!.payload.verified!==true||assigned.length>1)throw new Error('Original terminal broker custody required');
+ const vmId=assigned[0]?.payload.vmId??null;
+ if((vmId!==null&&(typeof vmId!=='string'||!/^sandbox-warm-[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/u.test(vmId)))||closed[0]!.payload.vmId!==vmId||(executed&&vmId===null))throw new Error('Acquired and destroyed VM identities disagree');
+ return vmId as string|null;
+}
 
 type V5Adapter = CapacityProviderManifestV5['adapters'][number];
 const TOOL_PERMISSION:Record<string,string>={treedx_build_context:'source.read',treedx_read_files:'source.read',treedx_search_files:'source.read',treedx_list_paths:'source.read'};
@@ -196,7 +212,7 @@ export async function createMicrovmExecutor(config: ProviderHostRuntimeConfig, m
 				await request.emit?.({ type: 'execution.preparing', occurredAt: new Date().toISOString(), summary: 'Requesting a bounded Kata sandbox from the host broker.', payload: { profile: assignment.profile, guestImageDigest: assignment.guestImageDigest } });
 				const preparationDeadlineAt = String(object(object(object(request.assignment.capacityEnvelope).budget).time).preparationDeadlineAt ?? '');
 				const prepared = await client.prepare(assignment, preparationDeadlineAt, request.signal); active.set(request.assignmentId, { sandboxId: prepared.sandboxId, operationToken: prepared.operationToken, providerId: assignment.providerId, teamId: assignment.teamId, renewals: new RenewalDrain() }); let result: ReturnType<typeof sandboxResultSchema.parse> | undefined; let sourceReference: AssignmentReference | undefined; let artifacts: Record<string, unknown>[] = []; let teardown: Record<string, unknown> = { verified: false, completedAt: null };
-				let transportFailure: unknown;
+				let transportFailure: unknown; let vmId:string|null=null;
 				const cancelSandbox = () => { void client.cancel(prepared.sandboxId, prepared.operationToken).catch(() => undefined); };
 					if (request.signal?.aborted) cancelSandbox(); else request.signal?.addEventListener('abort', cancelSandbox, { once: true });
 				try {
@@ -287,9 +303,12 @@ export async function createMicrovmExecutor(config: ProviderHostRuntimeConfig, m
 					if (!receipt || receipt.sandboxId !== prepared.sandboxId || receipt.destroyed !== true || teardown.verified !== true
 						|| typeof teardown.completedAt !== 'string' || !Number.isFinite(Date.parse(teardown.completedAt)) || Date.parse(teardown.completedAt) > Date.now()) {
 						transportFailure = Object.assign(new Error(`Sandbox teardown could not be independently verified.${destroyFailure instanceof Error ? ` ${destroyFailure.message}` : ''}`), { code: 'sandbox_teardown_unverified', cause: destroyFailure ?? transportFailure });
-					}
+					} else {
+      try{vmId=destroyedVmId(receipt,prepared.sandboxId,assignment.assignmentId,Boolean(result));}
+      catch(error){transportFailure=Object.assign(new Error('Sandbox VM custody could not be independently verified.',{cause:transportFailure?new AggregateError([transportFailure,error],'Original execution and broker custody failed'):error}),{code:'sandbox_vm_custody_invalid'});}
+     }
 					try {
-						await request.emit?.({ type: 'sandbox.destroyed', occurredAt: new Date().toISOString(), summary: `Kata sandbox ${prepared.sandboxId} teardown ${teardown.verified === true ? 'verified' : 'could not be verified'}.`, payload: { sandboxId: prepared.sandboxId, teardown } });
+						await request.emit?.({ type: 'sandbox.destroyed', occurredAt: new Date().toISOString(), summary: `Kata sandbox ${prepared.sandboxId} teardown ${teardown.verified === true ? 'verified' : 'could not be verified'}.`, payload: { sandboxId: prepared.sandboxId, teardown, vmId } });
 					} catch (error) { if (!request.signal?.aborted) throw error; }
 				}
 				if (transportFailure) throw Object.assign(transportFailure instanceof Error ? transportFailure : new Error(String(transportFailure)), {

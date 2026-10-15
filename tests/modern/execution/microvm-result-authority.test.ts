@@ -43,7 +43,10 @@ async function suppliedMicrovm() {
 	let suppliedDestroy: unknown, hasSuppliedDestroy = false, destroyFailure: Error | undefined, downloaded = Buffer.from('{"exact":"candidate"}\n');
 	const destroy = vi.fn(async () => {
 		if (destroyFailure) throw destroyFailure;
-		return hasSuppliedDestroy ? suppliedDestroy : { sandboxId: 'owned-unit-sandbox', destroyed: true, teardown: { verified: true, completedAt: new Date().toISOString() } };
+		const completedAt=new Date().toISOString(),sandboxId='owned-unit-sandbox',vmId='sandbox-warm-11111111-1111-4111-8111-111111111111';
+  return hasSuppliedDestroy ? suppliedDestroy : {sandboxId,destroyed:true,teardown:{verified:true,completedAt},events:[
+   {schemaVersion:'treeseed.sandbox-event/v1',sandboxId,assignmentId:input.assignmentId,sequence:0,occurredAt:completedAt,type:'execution.progress',payload:{stage:'vm.assigned',vmId}},
+   {schemaVersion:'treeseed.sandbox-event/v1',sandboxId,assignmentId:input.assignmentId,sequence:1,occurredAt:completedAt,type:'sandbox.destroyed',payload:{verified:true,vmId}}]};
 	});
 	const downloadArtifact = vi.fn(async () => Buffer.from(downloaded)), execute = vi.fn(async () => suppliedResult);
 	const client = {

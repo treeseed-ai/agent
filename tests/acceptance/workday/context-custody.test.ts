@@ -72,7 +72,7 @@ export function verifyProposalFeedback(items:Row[],team:string,observe:typeof re
 		assert.equal(`sha256:${createHash('sha256').update(String(file.content)).digest('hex')}`, ref.digest);
 		const document = String(file.content).match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)$/u); assert.ok(document);
 		const frontmatter = row(parse(document[1]!)); assert.deepEqual(file.frontmatter, frontmatter); assert.equal(frontmatter.id, ref.id);
-		observations.push({ args, value }); return { ref, frontmatter };
+		observations.push({ args, value }); return { ref, frontmatter, body:document[2]! };
 	};
 	for (const item of items) {
 		const attempt = assignmentAttemptSchema.parse(item.assignmentAttempt), source = attempt.sourceRef;
@@ -101,6 +101,9 @@ export function verifyProposalFeedback(items:Row[],team:string,observe:typeof re
 			const answer = answers[0]!, q = exactRead(row(evidence.questionRef ?? evidence.decisionRef), attempt.projectId),
 				r = exactRead(row(row(answer.evidence).resolutionRef), attempt.projectId);
 			assert.ok(['question', 'decision'].includes(q.ref.model)); assert.equal(r.ref.model, 'discussion-message');
+   assert.ok(validatePortableContentData(q.ref.model,q.frontmatter).ok,'ACCEPTANCE_PROPOSAL_FEEDBACK_CONTENT: Canonical original Question or Decision required');
+   assert.ok(r.body.trim()&&validatePortableContentData('discussion_message',{...r.frontmatter,body:r.body}).ok,'ACCEPTANCE_PROPOSAL_FEEDBACK_CONTENT: Canonical nonempty original resolution required');
+
    assert.equal(q.frontmatter.projectId,attempt.projectId,'ACCEPTANCE_PROPOSAL_FEEDBACK_PROJECT');
    const subject=row(q.frontmatter.subjectRef);assert.equal(subject.store,'treedx');assert.equal(subject.model,'proposal');assert.equal(subject.id,source.id,'ACCEPTANCE_PROPOSAL_FEEDBACK_SUBJECT');assert.equal(subject.repository,source.repository,'ACCEPTANCE_PROPOSAL_FEEDBACK_SUBJECT');
 

@@ -1,7 +1,7 @@
 import {expect,it} from 'vitest';
-import * as history from '../../../acceptance/workday/support/campaign-observation.ts';
-import {liveAssignmentRecord,liveAssignmentGraph,liveRun} from './live-assignment-fixture.ts';
-import {row,type Row} from '../../../acceptance/acceptance-cli.ts';
+import * as history from '../../../../acceptance/workday/support/campaign-observation.ts';
+import {liveAssignmentRecord,liveAssignmentGraph,liveRun} from '../live-assignment-fixture.ts';
+import {row,type Row} from '../../../../acceptance/acceptance-cli.ts';
 
 it('requires complete original node state and revision histories against the current owning graph before progress without rewriting failed observations',()=>{
  const check=Reflect.get(history,'verifyNodeTransitionHistory') as ((run:Row,graph:Row,events:readonly Row[])=>void)|undefined;

@@ -3,11 +3,11 @@ import {createServer} from 'node:http';
 import {assignmentResultSchema} from '@treeseed/sdk/agent-capacity';
 import {ControlPlaneClient,defaultLocalControlPlaneServer} from '@treeseed/sdk/control-plane-client';
 import {controlPlaneOperation} from '@treeseed/sdk/operator-contracts';
-import {portableKernel} from '../../kernel/architecture/portable/portable-kernel-fixture.ts';
-import {monitorCampaign} from '../../../acceptance/campaign.ts';
-import * as observation from '../../../acceptance/workday/support/campaign-observation.ts';
-import {row,type Row} from '../../../acceptance/acceptance-cli.ts';
-import {liveAssignmentRecord,liveAssignmentGraph} from './live-assignment-fixture.ts';
+import {portableKernel} from '../../../kernel/architecture/portable/portable-kernel-fixture.ts';
+import {monitorCampaign} from '../../../../acceptance/campaign.ts';
+import * as observation from '../../../../acceptance/workday/support/campaign-observation.ts';
+import {row,type Row} from '../../../../acceptance/acceptance-cli.ts';
+import {liveAssignmentRecord,liveAssignmentGraph} from '../live-assignment-fixture.ts';
 
 it('native Kernel Git and public SDK node histories deny omitted changed or interrupted transitions before scoped stop and preserve exact retry',async()=>{
  const f=await portableKernel();let server:ReturnType<typeof createServer>|undefined;

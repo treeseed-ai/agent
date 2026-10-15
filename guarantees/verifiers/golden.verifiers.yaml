@@ -4104,12 +4104,12 @@ verifiers:
   agent.golden.node-transition-history-unit:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"
-    testFile: tests/modern/guarantees/monitoring/node-transition-history.test.ts
+    testFile: tests/modern/guarantees/monitoring/nodes/node-transition-history.test.ts
     testName: "requires complete original node state and revision histories against the current owning graph before progress without rewriting failed observations"
   agent.golden.node-transition-history-native:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"
-    testFile: tests/modern/guarantees/monitoring/node-transition-history-native.test.ts
+    testFile: tests/modern/guarantees/monitoring/nodes/node-transition-history-native.test.ts
     testName: "native Kernel Git and public SDK node histories deny omitted changed or interrupted transitions before scoped stop and preserve exact retry"
   agent.golden.node-transition-scoped-stop:
     kind: vitestCase

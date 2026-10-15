@@ -199,9 +199,11 @@ export function verifyPublicSandboxAbsence(items: Row[], connections: Array<{ pr
 /** Existing public records identify the exact retired sessions, grants and mutable TreeDX workspaces. */
 export async function verifyPublicWorkspaceSessionClosure(items:Row[],sessions:Row[],readWorkspace:(projectId:string,workspaceId:string)=>Row|Promise<Row>):Promise<void>{
  const code='ACCEPTANCE_RESOURCE_CLOSURE',ids=new Set<string>(),workspaces=new Set<string>();assert.ok(items.length>0,code);
+ assert.equal(new Set(items.map(item=>item.id)).size,items.length,code);
  for(const session of sessions){assert.ok(typeof session.id==='string'&&session.id&&!ids.has(session.id),code);ids.add(session.id);assert.ok(['open','draining','closed','expired'].includes(String(session.status)),code);}
  for(const item of items){
   const attempt=assignmentAttemptSchema.parse(item.assignmentAttempt);assert.deepEqual(attempt,item.assignmentAttempt,code);
+  assert.equal(item.teamId,items[0]!.teamId,code);assert.equal(item.workDayId,items[0]!.workDayId,code);
   assert.equal(item.id,attempt.id,code);assert.equal(item.teamId,attempt.teamId,code);assert.equal(item.projectId,attempt.projectId,code);assert.equal(item.workDayId,attempt.workdayId,code);
   assert.ok(['completed','failed','cancelled','returned','expired'].includes(String(item.status)),code);const terminal=timestamp(item.completedAt??item.failedAt??item.returnedAt);
   assert.ok(typeof item.providerSessionId==='string'&&item.providerSessionId&&typeof item.membershipId==='string'&&item.membershipId,code);

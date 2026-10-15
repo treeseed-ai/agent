@@ -8,7 +8,7 @@ import {assignmentAttemptSchema,assignmentResultSchema,validateAgentDefinitionMo
 import {portableKernel} from '../../kernel/architecture/portable/portable-kernel-fixture.ts';
 import {contextBoundary} from '../../kernel/architecture/portable/context-fixture.ts';
 import {row,type Row} from '../../../acceptance/acceptance-cli.ts';
-import {verifyEstimatePublications} from '../../../acceptance/workday/support/estimate-evidence.ts';
+import {verifyEstimatePublications} from '../../../acceptance/workday/support/planning/estimate-evidence.ts';
 import {estimateClasses,estimateProposal,estimatePatch,proposalBytes,proposalFile,proposalBody} from './estimate-publication-fixture.ts';
 
 it('native configured estimate handlers publish exact class-owned proposal bytes and independent Git reads deny missing foreign altered and interrupted estimate evidence before unchanged retry',async()=>{

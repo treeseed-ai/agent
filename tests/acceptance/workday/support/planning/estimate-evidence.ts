@@ -3,7 +3,7 @@ import {createHash} from 'node:crypto';
 import {parseDocument} from 'yaml';
 import {assignmentAttemptSchema,assignmentResultSchema,exactEntityReferenceSchema,estimateSchema} from '@treeseed/sdk/agent-capacity';
 import {validatePortableContentData} from '@treeseed/sdk/content-validation';
-import {read,row,type Row} from '../../acceptance-cli.ts';
+import {read,row,type Row} from '../../../acceptance-cli.ts';
 
 const code='ACCEPTANCE_ESTIMATE_AUTHORITY';
 const rows=(value:unknown):Row[]=>{assert.ok(Array.isArray(value),code);return value.map(row);};

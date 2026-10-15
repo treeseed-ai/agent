@@ -1,4 +1,4 @@
-import {verifyManagedEstimates} from './workday/support/estimate-evidence.ts';
+import {verifyManagedEstimates} from './workday/support/planning/estimate-evidence.ts';
 import assert from 'node:assert/strict';
 import { phaseBoundaryCancelled } from './workday/support/monitoring/live-assignment-records.ts';
 import { isDeepStrictEqual } from 'node:util';

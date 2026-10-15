@@ -43,6 +43,16 @@ it('requires the exact consumed Actor candidate original authority assigned Revi
 		expect(() => verifyWorkReview(changed.assignments[1]!, changed.assignments[0]!, reviewedDecision(changed)), mode).toThrow();
 		expect(changed).toEqual(before);
 	}
+ for(const store of ['git','treedx'] as const)for(const disposition of ['approved','request-changes']as const){
+  const original=reviewedGraphFixture(store),actor=original.assignments[0]!,review=original.assignments[1]!;
+  review.lifecycleOutput.activityCompletion.reviewDisposition=disposition;const decision={...reviewedDecision(original),disposition},held=structuredClone({original,decision});
+  verifyWorkReview(review,actor,decision,disposition);
+  for(const criteria of [undefined,null,'',[],[''],[' '],['Accept unrelated work.'],[...actor.assignmentAttempt.acceptanceCriteria!,'Demand a broader outcome.'],[...actor.assignmentAttempt.acceptanceCriteria!,...actor.assignmentAttempt.acceptanceCriteria!]]){
+   const denied=structuredClone(review);Object.assign(denied.assignmentAttempt,{acceptanceCriteria:criteria});const failed=structuredClone(denied);
+   expect.soft(()=>verifyWorkReview(denied,actor,decision,disposition),'exact original criteria '+JSON.stringify(criteria)).toThrow('ACCEPTANCE_REVIEW_CRITERIA');expect(denied).toEqual(failed);
+  }
+  expect({original,decision}).toEqual(held);verifyWorkReview(review,actor,decision,disposition);
+ }
 	expect({ f, decision }).toEqual(held);
 });
 

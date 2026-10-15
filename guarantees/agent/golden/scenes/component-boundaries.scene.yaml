@@ -2322,3 +2322,19 @@ workflow:
   - id: plan-review-stop-native
     action: { verifier: agent.golden.plan-review-stop-native }
     expect: { status: passed }
+
+  - id: assignment-transitions-unit
+    action: { verifier: agent.golden.assignment-transitions-unit }
+    expect: { status: passed }
+
+  - id: assignment-transition-retention-unit
+    action: { verifier: agent.golden.assignment-transition-retention-unit }
+    expect: { status: passed }
+
+  - id: assignment-transitions-wiring-unit
+    action: { verifier: agent.golden.assignment-transitions-wiring-unit }
+    expect: { status: passed }
+
+  - id: assignment-transitions-native
+    action: { verifier: agent.golden.assignment-transitions-native }
+    expect: { status: passed }

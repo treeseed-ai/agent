@@ -34,6 +34,7 @@ describe('capacity-provider guarantee execution bindings', () => {
 		const manifest = parse(readFileSync(resolve(root, 'guarantees/agent/golden/sdk-complete.guarantee.yaml'), 'utf8'));
 		const scene = parse(readFileSync(resolve(root, manifest.scene.manifest), 'utf8'));
 		const refs = ['sdk.golden.live.product', 'agent.golden.architecture-living-graph-live-1', 'api.golden.execution-protected-observation-live-1'];
+		expect(manifest.acceptanceCriteria.filter((value:{criterion:string})=>value.criterion==="d5b3bcb8ef18cbdc71fb2cad6fd4a5a4d38a4e203f841050918a824f8676e1bd")).toEqual([{"criterion":"d5b3bcb8ef18cbdc71fb2cad6fd4a5a4d38a4e203f841050918a824f8676e1bd","verifierRefs":["agent.golden.live.campaign","agent.golden.architecture-profile-custody-live-1","agent.golden.architecture-context-custody-live-1","api.golden.execution-normal-sdk-clean-schema-live-1"]}]);
 		expect(manifest.acceptanceCriteria.filter((value:{criterion:string})=>value.criterion==='d00910e63c8f4df319158d8a692499648dc88c7c01699fd6c175696de27fa41f')).toEqual([{criterion:'d00910e63c8f4df319158d8a692499648dc88c7c01699fd6c175696de27fa41f',verifierRefs:['agent.golden.live.campaign']}]);
 		expect(manifest.acceptanceCriteria.filter((value: { criterion: string }) =>
 			value.criterion === '5ac90e451b0365ff6c44bfbcde86252eb1b53adf6b97972d00a7d5f15b9bf0e9')).toEqual([

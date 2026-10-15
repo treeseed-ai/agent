@@ -4081,3 +4081,23 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/kernel/architecture/custody/public-sandbox-inventory.test.ts
     testName: "denies active or quarantined owning source leases on terminal non-completed attempts without removing unrelated resources or repairing history"
+  agent.golden.execution-estimate-publication-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/golden-planning-readback.test.ts
+    testName: "denies estimating role counts without original exact published estimate results before readiness"
+  agent.golden.execution-estimate-publication-native:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/planning/estimate-publication-native.test.ts
+    testName: "native configured estimate handlers publish exact class-owned proposal bytes and independent Git reads deny missing foreign altered and interrupted estimate evidence before unchanged retry"
+  agent.golden.execution-proposal-feedback:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/planning/proposal-feedback.test.ts
+    testName: "normal proposal readback accepts zero blockers and exact prior resolutions while denying incomplete foreign late duplicate changed or interrupted authority without repairing history"
+  agent.golden.execution-proposal-feedback-native:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/planning/proposal-feedback-native.test.ts
+    testName: "native public SDK proposal reads retain exact resolved feedback and deny blocked omitted late malformed or interrupted observations before unchanged retry"

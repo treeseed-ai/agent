@@ -27,6 +27,25 @@ describe('live canonical assignment observation (controlled inputs, not managed 
    if(mode==='duplicate')changed.push({...structuredClone(value),eventIndex:5});if(mode==='wrong-identity')value.id='foreign-terminal';if(mode==='before-created')value.createdAt=at(-1);
    const before=structuredClone(changed);expect(()=>check(run,[item],changed),mode).toThrow('ACCEPTANCE_ASSIGNMENT_TRANSITIONS');expect(changed).toEqual(before);
   }
+
+  const failedItem=structuredClone(item);failedItem.status='failed';failedItem.failedAt=at(4);delete failedItem.completedAt;failedItem.stateVersion=7;
+  row(failedItem.assignmentAttempt).status='failed';failedItem.metadata={...structuredClone(item.metadata),cancellationRequested:true,cancellationRequestedAt:at(1),cancellationRequestedBy:'operator',operatorRetry:{requestedAt:at(5),requestedBy:'operator',reason:'Exact original retry'}};
+  const failureEvents=structuredClone(events);failureEvents[4]!.id='assignment-terminal:'+item.id+':6';failureEvents[4]!.eventType='assignment.failed';failureEvents[4]!.context.status='failed';
+  const cancellation=event('assignment-cancellation-requested:'+item.id,'assignment.cancellation-requested','leased',at(1),2),retry=event('assignment-retry:'+item.id+':7','assignment.retry-requested','failed',at(5),6);
+  Object.assign(cancellation.context,{stateVersion:3});cancellation.parameters={idempotencyKey:'original-cancel',actorId:'operator',reason:'Exact original cancel'};
+  Object.assign(retry.context,{stateVersion:7,nodeRevision:Number(attempt.nodeRevision)+1});retry.parameters={idempotencyKey:'original-retry',actorId:'operator',reason:'Exact original retry'};
+  failureEvents.splice(2,0,cancellation);failureEvents.push(retry);failureEvents.forEach((value,eventIndex)=>{value.eventIndex=eventIndex;});const retainedFailure=structuredClone({failedItem,failureEvents});
+  check(run,[failedItem],failureEvents);
+  for(const mode of ['missing-cancel','missing-retry','cancel-actor','cancel-version','cancel-clock','retry-actor','retry-version','retry-clock','retry-reason','retry-key','retry-before-terminal']){
+   const changed=structuredClone(failureEvents),cancelled=changed[2]!,retried=changed.at(-1)!;
+   if(mode==='missing-cancel')changed.splice(2,1);if(mode==='missing-retry')changed.pop();
+   if(mode==='cancel-actor')Object.assign(cancelled.parameters,{actorId:'foreign'});if(mode==='cancel-version')Object.assign(cancelled.context,{stateVersion:8});if(mode==='cancel-clock')cancelled.createdAt=at(2);
+   if(mode==='retry-actor')Object.assign(retried.parameters,{actorId:'foreign'});if(mode==='retry-version')Object.assign(retried.context,{stateVersion:8});if(mode==='retry-clock')retried.createdAt=at(6);
+   if(mode==='retry-reason')Object.assign(retried.parameters,{reason:'different'});if(mode==='retry-key')Object.assign(retried.parameters,{idempotencyKey:''});
+   if(mode==='retry-before-terminal'){changed.pop();changed.splice(4,0,retried);}changed.forEach((value,eventIndex)=>{value.eventIndex=eventIndex;});const before=structuredClone(changed);
+   expect.soft(()=>check(run,[failedItem],changed),mode).toThrow('ACCEPTANCE_ASSIGNMENT_TRANSITIONS');expect(changed).toEqual(before);
+  }
+  expect({failedItem,failureEvents}).toEqual(retainedFailure);check(run,[failedItem],failureEvents);
   // A later producer transition may commit after the held assignment list.
   // Its original event remains observed; this comparison certifies the held rows.
   const next={...structuredClone(events[0]!),id:'assignment-created:later-attempt',assignmentId:'later-attempt',eventIndex:5};check(run,[item],[...events,next]);

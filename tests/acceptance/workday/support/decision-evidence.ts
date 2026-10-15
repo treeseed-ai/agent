@@ -120,6 +120,11 @@ export function verifyReviewFindingContent(reference: Row, decisionReference: Ro
 
 /** Same classed approval assertion for final graph pairs and actually consumed predecessor reviews. */
 export function verifyWorkReview(review: Row, actor: Row, content: Row, disposition: 'approved' | 'request-changes' = 'approved'): void {
+ const criteria=row(actor.assignmentAttempt).acceptanceCriteria;
+ assert.ok(Array.isArray(criteria)&&criteria.length>0&&criteria.every(value=>typeof value==='string'&&value.trim().length>0),
+  'ACCEPTANCE_REVIEW_CRITERIA: Original Actor criteria required');
+ assert.deepEqual(row(review.assignmentAttempt).acceptanceCriteria,criteria,
+  'ACCEPTANCE_REVIEW_CRITERIA: Paired review must retain only the exact original Actor criteria');
 	const decision = verifyDecisionContent(content, String(review.projectId), 'ACCEPTANCE_REVIEW');
 	assert.ok(Array.isArray(decision.authorityRefs) && decision.authorityRefs.some(reference => isDeepStrictEqual(reference, row(review.assignmentAttempt).sourceRef)),
 		'ACCEPTANCE_REVIEW_AUTHORITY: Exact original proposal authority required');

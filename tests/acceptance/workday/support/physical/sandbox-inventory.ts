@@ -40,9 +40,9 @@ function nativeHostDevices(inventory:Row) {
  * and absent disks/builders/verifiers. Execution VMs and NBD need their own
  * complete native inventories; these joins never infer their absence. */
 function verifyCompletedSourceAbsence(items: Row[], status: Row,vmNames:Set<string>,nbdImages:Set<string>) {
- const completed = items.filter(item => item.status === 'completed' && Object.hasOwn(row(item.lifecycleOutput), 'sandboxId'));
- const sourced = completed.filter(item => assignmentNeedsSourceWorkspace(assignmentAttemptSchema.safeParse(item.assignmentAttempt)));
- if (!sourced.length) return;
+ const represented=items.filter(item=>Object.hasOwn(row(item.lifecycleOutput),'sandboxId')&&assignmentNeedsSourceWorkspace(assignmentAttemptSchema.safeParse(item.assignmentAttempt)));
+ const sourced=represented.filter(item=>item.status==='completed');
+ if(!represented.length)return;
  const workspace = row(status.workspace), scope = row(workspace.scope), inventory = row(status.inventory), confirmation = row(workspace.confirmation);
  assert.equal(workspace.complete, true, 'ACCEPTANCE_SOURCE_INVENTORY: Complete owning source observations required');
  assert.deepEqual(workspace.errors, [], 'ACCEPTANCE_SOURCE_INVENTORY: Original failures cannot certify closure');
@@ -91,6 +91,11 @@ function verifyCompletedSourceAbsence(items: Row[], status: Row,vmNames:Set<stri
   assert.ok(!vmNames.has(`sandbox-${id}`),'ACCEPTANCE_SOURCE_RESIDUE: Owning builder/verifier VM remains');
   for (const name of [id, `${id}-ready`]) assert.ok(!taskIds.includes(name) && !containerIds.includes(name), 'ACCEPTANCE_SOURCE_RESIDUE: Owning builder/verifier remains');
  };
+ // Complete owning inventories also cover interrupted or lawfully cancelled source attempts.
+ const owners=new Map(items.map(item=>[String(item.id),assignmentAttemptSchema.parse(item.assignmentAttempt)]));
+ for(const lease of leases)if(owners.has(String(lease.assignment_id))){const attempt=owners.get(String(lease.assignment_id))!;assert.equal(lease.provider_id,attempt.provider.providerId,'ACCEPTANCE_SOURCE_OWNER');assert.equal(lease.attempt,attempt.attempt,'ACCEPTANCE_SOURCE_OWNER');assert.equal(lease.state,'released','ACCEPTANCE_SOURCE_LEASE: Owning terminal source lease remains live or quarantined');const joined=jobs.filter(value=>row(row(value.metadata).owner).assignmentId===lease.assignment_id&&row(value.metadata).leaseId===lease.id);assert.equal(joined.length,1,'ACCEPTANCE_SOURCE_JOB: Complete owning released lease journal required');}
+ for(const entry of jobs){const job=row(entry.metadata),owner=row(job.owner),attempt=owners.get(String(owner.assignmentId));if(!attempt)continue;assert.deepEqual(owner,{assignmentId:attempt.id,providerId:attempt.provider.providerId,teamId:attempt.teamId,projectId:attempt.projectId,attempt:attempt.attempt},'ACCEPTANCE_SOURCE_OWNER');assert.equal(job.state,'stopped','ACCEPTANCE_SOURCE_JOB');const disk=row(job.disk);assert.ok(typeof disk.id==='string'&&/^workspace-lease-[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/u.test(disk.id),'ACCEPTANCE_SOURCE_DISK');const path=String(scope.storageRoot)+'/leases/'+disk.id;assert.equal(disk.directory,path);assert.equal(disk.image,path+'/work.qcow2');assert.ok(!disks.some(value=>value.id===disk.id)&&!nbdImages.has(String(disk.image))&&!mounts.some(mount=>mount===path||mount.startsWith(path+'/')),'ACCEPTANCE_SOURCE_RESIDUE: Owning terminal source disk remains');if(job.builderIds!==undefined){assert.ok(Array.isArray(job.builderIds)&&new Set(job.builderIds).size===job.builderIds.length,'ACCEPTANCE_SOURCE_JOB');for(const id of job.builderIds)absentVm(id);}}
+ for(const entry of candidates){const candidate=row(entry.metadata),attempt=owners.get(String(candidate.assignmentId));if(!attempt)continue;assert.equal(candidate.providerId,attempt.provider.providerId,'ACCEPTANCE_SOURCE_CANDIDATE');assert.equal(candidate.attempt,attempt.attempt,'ACCEPTANCE_SOURCE_CANDIDATE');assert.equal(candidate.verifierStopped,true,'ACCEPTANCE_SOURCE_CANDIDATE');absentVm(candidate.verifierId);}
  for (const item of sourced) {
   const attempt = assignmentAttemptSchema.parse(item.assignmentAttempt), output = row(item.lifecycleOutput), name = `${String(output.sandboxId)}.json`;
   assert.ok(started >= timestamp(row(output.teardown).completedAt), 'ACCEPTANCE_SOURCE_OBSERVATION_TIME: Source inspection predates teardown');

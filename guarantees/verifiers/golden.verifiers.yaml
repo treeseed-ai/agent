@@ -4076,3 +4076,8 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/guarantees/preflight/campaign-freeze-native.test.ts
     testName: "native public session pages and exact workspace reads retain closed scoped custody while denying omitted foreign interrupted or still-live resources before unchanged retry"
+  agent.golden.execution-terminal-source-lease-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/custody/public-sandbox-inventory.test.ts
+    testName: "denies active or quarantined owning source leases on terminal non-completed attempts without removing unrelated resources or repairing history"

@@ -15,6 +15,12 @@ describe('managed planning cycle and published contribution custody', () => {
 		expect([...state.replies]).toEqual(before);
   const item = state.replies.get('assignments list')!.items.find((value: Row) => value.id === 'chat-engineer');
   const original = structuredClone(item), denied: boolean[] = [];
+  const replyBefore=structuredClone(item.assignmentResult);
+  for(const summary of ['not a JSON answer','{}',JSON.stringify({agentClass:'foreign',proposalId:'proposal',proposalCommit:'f'.repeat(40)})]){
+   item.assignmentResult.summary=summary;const observed=structuredClone([...state.replies]);expect(()=>gate('collaboration')).toThrow('ACCEPTANCE_CHAT_ANSWER');expect([...state.replies]).toEqual(observed);
+  }
+  item.assignmentResult=replyBefore;
+
   expect(() => gate('collaboration')).not.toThrow();
   for (const lane of [undefined, null, '', 'work', 'workday', 'communication ', {}, 7]) {
    item.lanePurpose = lane; const held = structuredClone([...state.replies]); let failure = '';

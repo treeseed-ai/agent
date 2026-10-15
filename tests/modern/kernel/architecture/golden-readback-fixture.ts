@@ -110,6 +110,7 @@ beforeEach(() => {
 		const proposal = { store: 'treedx', model: 'proposal', id: 'proposal', repository: 'sdk-library', commit,
 			path: 'proposals/proposal.mdx', revision: 8, digest: `sha256:${'b'.repeat(64)}` };
 		item.invocationId = source.id; item.teamId = 'team-1';
+  item.assignmentResult.summary=JSON.stringify({agentClass:role,proposalId:proposal.id,proposalCommit:proposal.commit});item.assignmentResult.verification=[];
 		Object.assign(item.assignmentAttempt, { sourceRef: source, workdayId, teamId: 'team-1', projectId: item.projectId,
 			contextRefs: [...item.assignmentAttempt.contextRefs, structuredClone(source), structuredClone(proposal)] });
 		item.assignmentAttempt.grant.contentRead = [structuredClone(source), structuredClone(proposal)];

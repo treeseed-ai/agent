@@ -42,6 +42,8 @@ it('native committed review sources and public SDK graph assignments deny missin
 			const graph = JSON.parse(git('show', `${observationRef}:${prefix}graph.json`)) as typeof f.graph;
 			const assignments = JSON.parse(git('show', `${observationRef}:${prefix}assignments.json`)) as typeof f.assignments;
 			const observed = { graph, assignments }; mutateReadiness(observed, mode); mutateReviewGrant(observed, mode); mutateContentReview(observed, mode);
+   if(mode==='review-criteria-replaced')observed.assignments[1]!.assignmentAttempt.acceptanceCriteria=['Accept unrelated work.'];
+   if(mode==='review-criteria-broadened')observed.assignments[1]!.assignmentAttempt.acceptanceCriteria=[...observed.assignments[0]!.assignmentAttempt.acceptanceCriteria!,'Demand a broader outcome.'];
 			if (mode === 'revision-requested-write') mutateReviewGrant(observed, 'review-source-write');
 			if (mode === 'revision-requested-context') mutateReviewGrant(observed, 'review-candidate-context');
 			if (mode === 'revision-shared-workspace') observed.assignments[3]!.assignmentAttempt.workspace = structuredClone(observed.assignments[1]!.assignmentAttempt.workspace);
@@ -138,11 +140,12 @@ it('native committed review sources and public SDK graph assignments deny missin
 		mode = 'revision'; await Promise.all([observe(), observe()]);
 		mode = 'content'; await Promise.all([observe(), observe()]);
 		for (const fault of [...readinessFailures, ...reviewFailures, ...reviewGrantFailures, ...contentReviewFailures,
-			'revision-requested-write', 'revision-requested-context', 'revision-shared-workspace', 'denied', 'unavailable', 'truncated', 'interrupted']) {
+			'review-criteria-replaced','review-criteria-broadened','revision-requested-write', 'revision-requested-context', 'revision-shared-workspace', 'denied', 'unavailable', 'truncated', 'interrupted']) {
 			mode = fault; try { await observe(); failures.push({ mode, failure: 'unexpected pass' }); }
 			catch (error) { failures.push({ mode, failure: String(error) }); }
 		}
-		expect(failures).toHaveLength(55); expect(failures.every(value => value.failure !== 'unexpected pass'), JSON.stringify(failures)).toBe(true);
+		expect(failures).toHaveLength(57); expect(failures.every(value => value.failure !== 'unexpected pass'), JSON.stringify(failures)).toBe(true);
+  for(const denied of ['review-criteria-replaced','review-criteria-broadened'])expect(failures.find(value=>value.mode===denied)?.failure).toContain('ACCEPTANCE_REVIEW_CRITERIA');
 		expect(failures.find(value => value.mode === 'revision-shared-workspace')?.failure).toContain('ACCEPTANCE_WORKSPACE_UNIQUE');
 		const retained = structuredClone(failures); mode = 'exact'; await Promise.all([observe(), observe()]);
 		expect(failures).toEqual(retained); expect({ f, revised, contentGraph }).toEqual(held); expect(git('ls-tree', '-r', 'HEAD')).toBe(tree); expect(git('status', '--porcelain')).toBe('');

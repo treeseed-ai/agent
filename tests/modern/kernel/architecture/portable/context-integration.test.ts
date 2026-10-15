@@ -33,7 +33,7 @@ name: ${name}
 agentClass: ${name}
 purpose: Answer only the addressed context question.
 responsibilities: [Preserve exact subject identity.]
-capabilities: []
+capabilities: [context-answer]
 context: {include: [assignment-subject]}
 activityProfiles:
   chat:

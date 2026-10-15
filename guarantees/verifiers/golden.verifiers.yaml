@@ -4086,3 +4086,13 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/guarantees/planning/estimate-publication-native.test.ts
     testName: "native configured estimate handlers publish exact class-owned proposal bytes and independent Git reads deny missing foreign altered and interrupted estimate evidence before unchanged retry"
+  agent.golden.execution-proposal-feedback:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/planning/proposal-feedback.test.ts
+    testName: "normal proposal readback accepts zero blockers and exact prior resolutions while denying incomplete foreign late duplicate changed or interrupted authority without repairing history"
+  agent.golden.execution-proposal-feedback-native:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/planning/proposal-feedback-native.test.ts
+    testName: "native public SDK proposal reads retain exact resolved feedback and deny blocked omitted late malformed or interrupted observations before unchanged retry"

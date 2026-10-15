@@ -47,7 +47,7 @@ test('Frozen SDK campaign drives planning acting review and terminal golden gate
 	const observedAssignments = new Map<string, Record<string, unknown>>();
 	const observedGraphRevisions = new Map<number, GraphRevision>();
 	let currentRun: Record<string, unknown> | undefined;
-	await monitorCampaign({ admittedSimulation: true, admitDiscussion: () => {
+	await monitorCampaign({ admittedSimulation: true, reportPlanReview: text => { retainCampaignPlanReview(text,path,freeze); console.error(text); }, admitDiscussion: () => {
 		retainCampaignWorkdayStart(started, path, freeze);
 		return openSdkCampaignDiscussion(freeze.proposal.id, workdayId,
 		(channel, request, key) => read(['send', channel, request.message, '--proposal', request.proposalId!,

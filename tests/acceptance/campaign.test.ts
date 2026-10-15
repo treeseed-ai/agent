@@ -55,7 +55,7 @@ test('Frozen SDK campaign drives planning acting review and terminal golden gate
 			'--workday', request.parentWorkdayId!, '--no-wait', '--idempotency-key', key], team, false, 240_000)); }, read: () => {
 		const observed = read(['workdays', 'show', workdayId], team);
 		const snapshot = observeCampaign(observed, workdayId, observedEvents, (cursor, limit) =>
-			read(['workdays', 'events', 'list', workdayId, '--limit', String(limit), '--cursor', cursor], team,recordEvent);
+			read(['workdays', 'events', 'list', workdayId, '--limit', String(limit), '--cursor', cursor], team),recordEvent);
 		const current = snapshot.run as Row, failedBoundary = snapshot.failedBoundary;
 		currentRun = current;
 		return { status: current.status, mode: current.executionMode, failedBoundary,

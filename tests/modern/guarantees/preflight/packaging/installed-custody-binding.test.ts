@@ -25,6 +25,8 @@ describe('capacity-provider guarantee execution bindings', () => {
 		expect(native.steps.some((step: { run?: string }) => step.run ===
 			'node --import tsx ./scripts/support/verify-installed-owners.ts')).toBe(true);
 		const inputs = JSON.parse(native.env.TREESEED_INSTALLED_OWNER_INPUTS);
+        expect(inputs.find((value:{owner:string})=>value.owner==='deployment')).toMatchObject({commit:'e7cc4bebed7dbed0576fa5029250398f154f81aa',sha256:'05cc8823286e56ae35518d51189b1ee02fd060ebcb4d1a10e20ad7f28356d9c6'});
+        expect(native.steps.filter((step:{with?:{repository?:string;path?:string}})=>step.with?.repository==='treeseed-ai/deployment'&&step.with?.path==='.treeseed/installed-owner-inputs/deployment').map((step:{with:unknown})=>step.with)).toEqual([{'github-token':'${{ github.token }}',repository:'treeseed-ai/deployment','run-id':38716691312,name:'deployment-candidate-e7cc4bebed7dbed0576fa5029250398f154f81aa',path:'.treeseed/installed-owner-inputs/deployment'}]);
         expect(inputs.find((value:{owner:string})=>value.owner==='sdk')).toMatchObject({commit:'d496146ad2797cf0b19b4cb063036838b3d5b7ed',sha256:'521d77b833d2a7fffcf5ebc9450bca0fb56444e1b7fc6d5cdbde078065aa4d42'});
         for(const [owner,runId] of [['api',38686878544],['cli',38647918411],['sdk',38693870774]] as const){
             const input=inputs.find((value:{owner:string})=>value.owner===owner);

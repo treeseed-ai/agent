@@ -230,3 +230,15 @@ acceptanceCriteria:
 
   - criterion: b06a86bd461d6b85f92908c972808a53bdd76d725af810911018c85577480e54
     verifierRefs: ["agent.golden.live.campaign","agent.golden.live.campaign-freeze","agent.golden.architecture-profile-custody-live-1","agent.golden.architecture-context-custody-live-1","agent.golden.architecture-record-custody-live-1","api.golden.execution-normal-sdk-clean-schema-live-1"]
+
+  - criterion: ca2e5e81f54794d251c8f59e64a7665ed274ae2bb382cedc38016e94096085a2
+    verifierRefs: ["agent.golden.live.campaign","agent.golden.live.campaign-freeze","agent.golden.architecture-profile-custody-live-1","agent.golden.architecture-context-custody-live-1","agent.golden.architecture-record-custody-live-1","api.golden.execution-protected-observation-live-1","api.golden.execution-normal-sdk-clean-schema-live-1"]
+
+  - criterion: 14449c0ba65b7b7bc3915fb2ef87db4361db5b3c1a16eb5e3965b15787e0a633
+    verifierRefs: ["agent.golden.live.campaign","agent.golden.live.campaign-freeze","agent.golden.architecture-profile-custody-live-1","agent.golden.architecture-context-custody-live-1","agent.golden.architecture-record-custody-live-1","api.golden.execution-protected-observation-live-1","api.golden.execution-normal-sdk-clean-schema-live-1"]
+
+  - criterion: 303fe1d790ea82e3eae083f6f477e2434ab44df60c2e7b2c799be1f6af61d27a
+    verifierRefs: ["agent.golden.live.campaign","agent.golden.live.campaign-freeze","agent.golden.architecture-profile-custody-live-1","agent.golden.architecture-context-custody-live-1","agent.golden.architecture-record-custody-live-1","api.golden.execution-protected-observation-live-1","api.golden.execution-normal-sdk-clean-schema-live-1"]
+
+  - criterion: 948b5a226d7cc181a951a4492c9cd8e08d4f2526e2635d0d1c0f0df9c41c94bb
+    verifierRefs: ["agent.golden.live.campaign","agent.golden.live.campaign-freeze","agent.golden.architecture-profile-custody-live-1","agent.golden.architecture-context-custody-live-1","agent.golden.architecture-record-custody-live-1","api.golden.execution-protected-observation-live-1","api.golden.execution-normal-sdk-clean-schema-live-1"]

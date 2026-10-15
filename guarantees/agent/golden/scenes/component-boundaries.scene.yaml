@@ -2370,3 +2370,15 @@ workflow:
   - id: execution-terminal-source-lease-unit
     action: { verifier: agent.golden.execution-terminal-source-lease-unit }
     expect: { status: passed }
+  - id: execution-estimate-publication-unit
+    action: { verifier: agent.golden.execution-estimate-publication-unit }
+    expect: { status: passed }
+  - id: execution-estimate-publication-native
+    action: { verifier: agent.golden.execution-estimate-publication-native }
+    expect: { status: passed }
+  - id: execution-proposal-feedback
+    action: { verifier: agent.golden.execution-proposal-feedback }
+    expect: { status: passed }
+  - id: execution-proposal-feedback-native
+    action: { verifier: agent.golden.execution-proposal-feedback-native }
+    expect: { status: passed }

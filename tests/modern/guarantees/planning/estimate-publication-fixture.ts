@@ -12,7 +12,8 @@ export function estimateProposal(projectId='sdk'){
 export function estimatePatch(definition:ReturnType<typeof estimateProposal>,agentClass:string):Row{
  return {...structuredClone(definition),executionPlan:{workItems:definition.executionPlan.workItems.map(item=>({...structuredClone(item),...(agentClass==='reviewer'?{reviewEstimate:{expectedSeconds:1,maximumSeconds:2,rationale:'Controlled reviewer estimate.'}}:item.agentClass===agentClass?{estimate:{expectedSeconds:2,maximumSeconds:3,rationale:'Controlled '+agentClass+' estimate.'}}:{})}))}};
 }
-export const proposalBytes=(definition:Row)=>'---\n'+stringify(definition,{lineWidth:0})+'---\n';
+export const proposalBody='Controlled immutable proposal body.';
+export const proposalBytes=(definition:Row)=>'---\n'+stringify(definition,{lineWidth:0})+'---\n\n'+proposalBody+'\n';
 export const proposalFile=(path:string,definition:Row)=>({path,content:proposalBytes(definition),frontmatter:structuredClone(definition)});
 
 /** Correct canonical estimating inputs for the existing mocked public-read oracle. */

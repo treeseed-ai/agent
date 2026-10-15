@@ -8,6 +8,16 @@ import * as normalHistory from '../../../acceptance/workday/support/monitoring/l
 import { liveAssignmentGraph, liveAssignmentRecord, liveRun } from './live-assignment-fixture.ts';
 
 describe('live canonical assignment observation (controlled inputs, not managed proof)', () => {
+ it('retains every new original transition once and preserves prior history when immutable capture fails',()=>{
+  const retain=Reflect.get(transitionHistory,'retainCampaignEventHistory')as(events:readonly Row[],run:Row,history:Map<string,Row>,capture:(event:Row)=>void)=>Row[];
+  const run={id:'workday-original-history',teamId:'original-team'},event={id:'original-event',runId:run.id,teamId:run.teamId,eventIndex:0,eventType:'assignment.created',status:'recorded',createdAt:'2026-10-15T00:00:00.000Z',context:{original:'unchanged'},parameters:{},metadata:{},refs:{}},events=[event],history=new Map<string,Row>(),captured:Row[]=[],held=structuredClone(events);
+  retain(events,run,history,value=>{captured.push(value);});expect.soft(captured).toEqual(events);expect(events).toEqual(held);expect(history.get(event.id)).toEqual(event);
+  retain(events,run,history,value=>{captured.push(value);});expect.soft(captured).toEqual(events);
+  const pending={...structuredClone(event),id:'pending-event',eventIndex:1},failure=new Error('Original capture interruption'),before=structuredClone(history);
+  expect.soft(()=>retain([...events,pending],run,history,()=>{throw failure;})).toThrow(failure);expect(history).toEqual(before);expect(events).toEqual(held);
+  retain([...events,pending],run,history,value=>{row(value.context).original='capture-only mutation';});expect(history.get(pending.id)).toEqual(pending);expect(events).toEqual(held);
+ });
+
  it('requires every owning assignment transition beyond contiguous public event pages before campaign progress without changing original observations',()=>{
   const check=Reflect.get(transitionHistory,'verifyAssignmentTransitionHistory')as((run:Row,items:readonly Row[],events:readonly Row[])=>void)|undefined;
   expect(check,'complete assignment transition comparison is required').toBeTypeOf('function');if(!check)return;

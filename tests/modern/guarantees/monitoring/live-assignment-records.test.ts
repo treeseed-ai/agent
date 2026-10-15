@@ -29,7 +29,7 @@ describe('live canonical assignment observation (controlled inputs, not managed 
   }
 
   const failedItem=structuredClone(item);failedItem.status='failed';failedItem.failedAt=at(4);delete failedItem.completedAt;failedItem.stateVersion=7;
-  row(failedItem.assignmentAttempt).status='failed';failedItem.metadata={...structuredClone(item.metadata),cancellationRequested:true,cancellationRequestedAt:at(1),cancellationRequestedBy:'operator',operatorRetry:{requestedAt:at(5),requestedBy:'operator',reason:'Exact original retry'}};
+  row(failedItem.assignmentAttempt).status='failed';failedItem.metadata={...structuredClone(row(item.metadata)),cancellationRequested:true,cancellationRequestedAt:at(1),cancellationRequestedBy:'operator',operatorRetry:{requestedAt:at(5),requestedBy:'operator',reason:'Exact original retry'}};
   const failureEvents=structuredClone(events);failureEvents[4]!.id='assignment-terminal:'+item.id+':6';failureEvents[4]!.eventType='assignment.failed';failureEvents[4]!.context.status='failed';
   const cancellation=event('assignment-cancellation-requested:'+item.id,'assignment.cancellation-requested','leased',at(1),2),retry=event('assignment-retry:'+item.id+':7','assignment.retry-requested','failed',at(5),6);
   Object.assign(cancellation.context,{stateVersion:3});cancellation.parameters={idempotencyKey:'original-cancel',actorId:'operator',reason:'Exact original cancel'};

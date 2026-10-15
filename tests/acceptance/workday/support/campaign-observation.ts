@@ -205,12 +205,15 @@ export function verifyAssignmentTransitionHistory(run: Row, assignments: readonl
   }
   if(metadata.cancellationRequested===true){
    const event=one('assignment.cancellation-requested'),context=row(event.context),parameters=row(event.parameters);
+   assert.equal(context.status,'leased',label);assert.ok(leases.some(value=>Number(value.eventIndex)<Number(event.eventIndex)&&clock(value.createdAt)<=clock(event.createdAt)),label+': Cancellation request must follow claim');
    assert.equal(event.id,'assignment-cancellation-requested:'+attempt.id,label);assert.equal(clock(event.createdAt),clock(metadata.cancellationRequestedAt),label);
    assert.ok(Number.isSafeInteger(context.stateVersion)&&Number(context.stateVersion)<=Number(item.stateVersion)&&Number(context.stateVersion)>1,label);
    assert.deepEqual(parameters.actorId,metadata.cancellationRequestedBy,label);assert.ok(typeof parameters.idempotencyKey==='string'&&parameters.idempotencyKey.trim(),label);
   }
   if(metadata.operatorRetry!==undefined){
    const retry=row(metadata.operatorRetry),event=one('assignment.retry-requested'),context=row(event.context),parameters=row(event.parameters),written=version(event,'assignment-retry:'+attempt.id+':');
+   assert.equal(terminal.filter(value=>row(value.context).status===context.status&&version(value,'assignment-terminal:'+attempt.id+':')<written
+    &&Number(value.eventIndex)<Number(event.eventIndex)&&clock(value.createdAt)<=clock(event.createdAt)).length,1,label+': Retry must follow its original terminal observation');
    assert.equal(written,context.stateVersion,label);assert.ok(written<=Number(item.stateVersion),label);assert.equal(clock(event.createdAt),clock(retry.requestedAt),label);
    assert.deepEqual(parameters.actorId,retry.requestedBy,label);assert.deepEqual(parameters.reason,retry.reason,label);assert.ok(typeof parameters.idempotencyKey==='string'&&parameters.idempotencyKey.trim(),label);
   }

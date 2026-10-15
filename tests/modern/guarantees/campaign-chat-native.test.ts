@@ -29,10 +29,10 @@ it('native public communication requests preserve every addressed probe and stop
 		files: [{ path: discussionPath, frontmatter: discussionFrontmatter, body: discussionBody, content: discussionContent }] };
 	const nativeProbes = sdkCampaignAgents.flatMap(role => [true,false].map(individual => {
 		const id = `native-probe-${role}-${individual?'individual':'opening'}`, source = { store: 'treedx', model: 'discussion', id: `invocation-${id}`, repository: repoId,
-			commit: nativeCommit, path: `discussion-messages/${channel}/${role}.mdx`, digest: `sha256:${'d'.repeat(64)}` };
+			commit: nativeCommit, path: `discussion-messages/${channel}/${id}.mdx`, digest: `sha256:${'d'.repeat(64)}` };
 		const subject = { store: 'treedx', model: 'proposal', id: proposalId, repository: repoId, commit: nativeCommit,
 			path: 'proposals/native.mdx', revision: 1, digest: `sha256:${'b'.repeat(64)}` };
-		const target = { store: 'treedx', model: 'discussion', id: `response-${id}`, repository: repoId, commit: nativeCommit, path: `discussion-messages/${channel}/response-${role}.mdx` };
+		const target = { store: 'treedx', model: 'discussion', id: `response-${id}`, repository: repoId, commit: nativeCommit, path: `discussion-messages/${channel}/response-${id}.mdx` };
 		const item = { id, invocationId: source.id, workDayId: workdayId, projectId, status: 'completed', createdAt: '2026-10-10T00:00:02.000Z',
 			assignmentAttempt: { sourceRef: source, workdayId, teamId, projectId, agentClass: role, predecessorResultIds: [], contextRefs: [source, subject],
 				effectiveProfile: { activity: 'chat', profileRef: { store: 'treedx', model: 'agent', id: `configured-${role}`, repository: repoId, commit: nativeCommit, path: `agents/${role}.yaml` },

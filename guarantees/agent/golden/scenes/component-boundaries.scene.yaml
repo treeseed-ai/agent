@@ -2357,3 +2357,7 @@ workflow:
   - id: assignment-concurrent-bound-unit
     action: { verifier: agent.golden.assignment-concurrent-bound-unit }
     expect: { status: passed }
+
+  - id: chat-answer-kernel-native
+    action: { verifier: agent.golden.chat-answer-kernel-native }
+    expect: { status: passed }

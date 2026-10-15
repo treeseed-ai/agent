@@ -1,3 +1,4 @@
+import { stringify } from 'yaml';
 import { describe, expect, it } from 'vitest';
 import { classes, gate, state, type Row } from './golden-readback-fixture.ts';
 import { stringify } from 'yaml';
@@ -11,12 +12,19 @@ const published = (): Row => state.replies.get(`library read notes/${later().id}
 describe('managed planning cycle and published contribution custody', () => {
  it('denies estimating role counts without original exact published estimate results before readiness',()=>{
   const original=structuredClone([...state.replies]);expect(()=>gate('collaboration')).not.toThrow();
-  for(const mode of['omitted-publication','foreign-publication','malformed-result','changed-body']){
+  for(const mode of['omitted-publication','foreign-publication','malformed-result','changed-body','foreign-owner','duplicate-result','stale-ref','invalid-time','missing-write-grant','wrong-work-estimate']){
    state.replies.clear();for(const[key,value]of structuredClone(original))state.replies.set(key,value);
    const item=state.replies.get('assignments list')!.items.find((value:Row)=>value.id==='estimate-engineer')!;
    if(mode==='omitted-publication')item.assignmentResult.references=[];
    if(mode==='foreign-publication')item.assignmentResult.references[0].projectId='foreign';
    if(mode==='malformed-result')item.assignmentResult.assignmentId='foreign';
+   if(mode==='foreign-owner')item.assignmentAttempt.teamId='foreign';
+   if(mode==='duplicate-result')item.assignmentResult.id=state.replies.get('assignments list')!.items.find((value:Row)=>value.id==='estimate-architect')!.assignmentResult.id;
+   if(mode==='stale-ref')item.assignmentResult.references[0].commit='0'.repeat(40);
+   if(mode==='invalid-time')item.assignmentResult.completedAt='2026-09-26T00:00:00.000Z';
+   if(mode==='missing-write-grant')item.assignmentAttempt.grant.contentWrite=[];
+   if(mode==='wrong-work-estimate'){const ref=item.assignmentResult.references[0],reply=state.replies.get('library read '+ref.path+' --ref '+ref.commit)!,file=reply.result.files[0];file.frontmatter.executionPlan.workItems[0].estimate={expectedSeconds:1,maximumSeconds:2,rationale:'Foreign owner estimate.'};file.content='---\n'+stringify(file.frontmatter,{lineWidth:0})+'---\n\nControlled immutable proposal body.\n';}
+
    if(mode==='changed-body'){const ref=item.assignmentResult.references[0],reply=state.replies.get('library read '+ref.path+' --ref '+ref.commit)!;reply.result.files[0].content+='Substituted objective in original proposal body.\n';}
    const held=structuredClone([...state.replies]);expect.soft(()=>gate('collaboration'),mode).toThrow(/ACCEPTANCE_ESTIMATE/u);expect([...state.replies]).toEqual(held);
   }

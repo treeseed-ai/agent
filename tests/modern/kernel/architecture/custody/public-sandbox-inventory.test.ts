@@ -54,6 +54,17 @@ function supplied() {
 }
 const verify = (f: ReturnType<typeof supplied>) => verifyPublicSandboxAbsence(f.items, f.connections, f.brokerSocket, f.status,f.events);
 describe('public owning sandbox inventory consumption', () => {
+ it('denies active or quarantined owning source leases on terminal non-completed attempts without removing unrelated resources or repairing history',()=>{
+  const changes:Array<(f:ReturnType<typeof supplied>)=>void>=[
+   f=>{row(row(row(f.status.workspace).journals).jobs).entries=[];},
+   f=>{const workspace=row(f.status.workspace),job=row(row((row(row(workspace.journals).jobs).entries as Row[])[0]).metadata),disk=row(job.disk);(workspace.disks as Row[]).push({id:disk.id,type:'directory',bytes:1,device:null});row(workspace.confirmation).disks=structuredClone(workspace.disks);},
+   f=>{const inventory=row(f.status.inventory),vms=inventory.vmProcesses as Row[];vms[0]!.name='sandbox-sandbox-warm-22222222-2222-4222-8222-222222222222';row(inventory.confirmation).vmProcesses=structuredClone(vms);},
+   f=>{row(row((row(row(row(f.status.workspace).journals).candidates).entries as Row[])[0]).metadata).verifierStopped=false;},
+  ];
+  for(const change of changes){const f=supplied();change(f);const before=structuredClone(f);expect.soft(()=>verify(f)).toThrow(/ACCEPTANCE_SOURCE/u);expect(f).toEqual(before);}
+  for(const state of['active','quarantined']){const f=supplied();row((row(f.status.workspace).leases as Row[])[0]).state=state;const before=structuredClone(f);expect.soft(()=>verify(f),state).toThrow(/ACCEPTANCE_SOURCE/u);expect(f).toEqual(before);}
+ });
+
  it('accepts exact complete confirmed absence while retaining unrelated live resources and original observations', () => {
   const f = supplied(), before = structuredClone(f);
   expect(verify(f)).toEqual([`/var/lib/treeseed/sandboxes/${f.id}`]); expect(f).toEqual(before);

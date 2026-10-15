@@ -4005,3 +4005,15 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/guarantees/preflight/proposals/campaign-plan-review-native.test.ts
     testName: "native public scoped stop retains the exact original plan-review report and frozen bytes through report collision denial and terminal race without later stages"
+
+  agent.golden.review-objective-context-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/monitoring/live-context-inspection.test.ts
+    testName: "requires the reviewing assignment criteria to equal the original authored objective boundary even when issued graph and Actor views agree"
+
+  agent.golden.review-objective-context-native:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/monitoring/live-assignment-native.test.ts
+    testName: "native public governed objective bytes reject substituted or broadened reviewing criteria before unchanged independent reads"

@@ -4041,3 +4041,15 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/guarantees/monitoring/live-assignment-native.test.ts
     testName: "native public governed objective bytes reject substituted or broadened reviewing criteria before unchanged independent reads"
+
+  agent.golden.assignment-concurrent-discovery-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/campaign-cli.test.ts
+    testName: "revalidates assignments discovered in later public events before collaboration or approval instead of waiting for another poll"
+
+  agent.golden.assignment-concurrent-bound-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/campaign-cli.test.ts
+    testName: "stops continuously changing concurrent assignment observations within the original inspection bound before campaign progress"

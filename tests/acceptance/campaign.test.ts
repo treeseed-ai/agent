@@ -63,20 +63,27 @@ test('Frozen SDK campaign drives planning acting review and terminal golden gate
 			endsAt: Date.parse(current.parameters.appliedPlan.endsAt) };
 	}, inspect: async () => {
 		assert.ok(currentRun, 'ACCEPTANCE_LIVE_ASSIGNMENT: Original observed workday required');
+  const inspectionEndsAt=Date.now()+120_000;
 		await observeLiveGraphRevisions(String(currentRun.teamId), () => read(['execution', 'graph', 'show'], team),
 			cursor => read(['execution', 'graph', 'watch', '--cursor', cursor], team), observedGraphRevisions,
 			(revision, graphHead) => console.log(JSON.stringify({ workdayId, observedAt: new Date().toISOString(), graphRevision: revision, graphHead })));
-		const assignments = readCompleteEvidence(['assignments', 'list', '--workday', workdayId], team, 50, 'ACCEPTANCE_LIVE_ASSIGNMENT');
-  // Read owning records first; transactional observations for those held states
-  // must already be visible in the following complete public event history.
-  const events=readCompleteEvidence(['workdays','events','list',workdayId],team,100,'ACCEPTANCE_OBSERVATION','ascending');
-  retainCampaignEventHistory(events,currentRun,observedEvents,recordEvent);
-  verifyAssignmentTransitionHistory(currentRun,assignments,events);
-  const known=new Set(assignments.map(item=>String(item.id)));
-  for(const event of events)if(typeof event.assignmentId==='string'&&!known.has(event.assignmentId)){
-   const next=read(['assignments','show',event.assignmentId],team);assert.equal(next.id,event.assignmentId,'ACCEPTANCE_LIVE_ASSIGNMENT: Foreign concurrent observation');
-   assignments.push(next);known.add(event.assignmentId);
+  let assignments=readCompleteEvidence(['assignments','list','--workday',workdayId],team,50,'ACCEPTANCE_LIVE_ASSIGNMENT');
+  const seen=new Set(observedEvents.keys());let complete=false;
+  for(let round=0;round<40;round++){
+   assert.ok(Date.now()<=inspectionEndsAt,'ACCEPTANCE_LIVE_ASSIGNMENT: Original inspection bound elapsed');
+   const events=readCompleteEvidence(['workdays','events','list',workdayId],team,100,'ACCEPTANCE_OBSERVATION','ascending');
+   retainCampaignEventHistory(events,currentRun,observedEvents,recordEvent);verifyAssignmentTransitionHistory(currentRun,assignments,events);
+   const known=new Map(assignments.map(item=>[String(item.id),item])),refresh=new Set<string>();
+   for(const event of events)if(typeof event.assignmentId==='string'&&(!known.has(event.assignmentId)||(!seen.has(String(event.id))&&typeof event.eventType==='string'&&event.eventType.startsWith('assignment.'))))refresh.add(event.assignmentId);
+   for(const event of events)seen.add(String(event.id));
+   if(!refresh.size){complete=true;break;}
+   for(const id of refresh){const next=read(['assignments','show',id],team);assert.equal(next.id,id,'ACCEPTANCE_LIVE_ASSIGNMENT: Foreign concurrent observation');const prior=known.get(id);
+    if(prior){assert.deepEqual(next.assignmentAttempt,prior.assignmentAttempt,'ACCEPTANCE_LIVE_ASSIGNMENT: Concurrent issued authority changed');assert.ok(Number.isSafeInteger(next.stateVersion)&&Number(next.stateVersion)>=Number(prior.stateVersion),'ACCEPTANCE_LIVE_ASSIGNMENT: Concurrent owning version regressed');}
+    known.set(id,next);
+   }
+   assignments=[...known.values()]; // Preserve original public list rows; re-read history after fresh roots.
   }
+  assert.ok(complete,'ACCEPTANCE_LIVE_ASSIGNMENT: Complete concurrent transition inventory not reached');
 		observeLiveAssignmentRecords(currentRun, assignments, observedAssignments, item => inspectLiveAssignmentProfile(item, team, assignments, { 'treeseed-ai/sdk': row(freeze.sourceHeads).sdk }));
 	}, now: Date.now, wait: () => new Promise(resolve => setTimeout(resolve, 30_000)), stop,
 		collaboration: () => {

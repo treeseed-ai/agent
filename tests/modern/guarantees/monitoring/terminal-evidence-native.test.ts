@@ -93,10 +93,11 @@ it('native Kernel candidate and public assignment histories reject omitted ownin
    const url=new URL(request.url??'','http://127.0.0.1');requests.push({method:request.method??'',path:url.pathname,body:body?JSON.parse(body):null,key:String(request.headers['idempotency-key']??'')});response.setHeader('content-type','application/json');
    if(request.method==='POST'&&url.pathname===stopPath){response.end(JSON.stringify({data:{run:{id:run.id,status:'cancelled'}}}));return;}
    if(request.method==='GET'&&url.pathname===showPath){response.end(JSON.stringify({data:item}));return;}
+   if(request.method==='GET'&&url.pathname===showPath.slice(0,showPath.lastIndexOf('/'))&&url.searchParams.get('workdayId')===run.id&&url.searchParams.get('limit')==='1'){response.end(JSON.stringify({data:{items:[],page:{limit:1,hasMore:false,nextCursor:null}}}));return;}
    if(request.method!=='GET'||url.pathname!==eventsPath||url.searchParams.get('limit')!=='2'){response.writeHead(404).end('{}');return;}
    if(mode==='denied'){response.writeHead(403).end(JSON.stringify({status:403,title:'Retained original event denial',code:'original_history_denied'}));return;}
    if(mode==='malformed'){response.end('{');return;}if(mode==='interrupted'&&url.searchParams.has('cursor')){request.socket.destroy();return;}
-   const values=structuredClone(original);if(mode==='missing-created')values.splice(0,1);if(mode==='missing-claim')values.splice(1,1);if(mode==='missing-terminal')values.pop();
+   const values=structuredClone(original);if(mode==='missing-created'||mode==='late-missing-created')values.splice(0,1);if(mode==='missing-claim')values.splice(1,1);if(mode==='missing-terminal')values.pop();
    if(mode==='foreign')values[2]!.teamId='foreign';if(mode==='wrong-clock')values[2]!.createdAt=new Date(Date.parse(result.completedAt)+1).toISOString();
    if(mode==='wrong-node')row(values[2]!.context).nodeId='foreign';if(mode==='wrong-result')row(values[2]!.context).resultId='foreign';
    if(mode==='duplicate')values.push(structuredClone(values[2]!));values.forEach((value,eventIndex)=>{value.eventIndex=eventIndex;});
@@ -107,18 +108,25 @@ it('native Kernel candidate and public assignment histories reject omitted ownin
   const client=new ControlPlaneClient({profile:defaultLocalControlPlaneServer({TREESEED_API_BASE_URL:'http://127.0.0.1:'+address.port}),accessToken:'controlled-history-token'});
   const execute=async()=>{
    let later=false;const offset=requests.length,retained=new Map<string,Row>(),captured:Row[]=[];
-   try{await monitorCampaign({admittedSimulation:true,read:()=>({status:mode==='exact'?'completed':'running',mode:'simulation',planningEndsAt:0,endsAt:1}),now:()=>1,wait:async()=>{throw new Error('No later waiting permitted');},collaboration:()=>{},verify:()=>{later=true;},inspect:async()=>{
-    const assignment=row((await client.invoke(controlPlaneOperation('assignments.show'),{path:{teamId:run.teamId,assignmentId:item.id},query:{},body:undefined})).data);
+   try{await monitorCampaign({admittedSimulation:true,read:()=>({status:(mode==='exact'||mode==='late-exact')?'completed':'running',mode:'simulation',planningEndsAt:0,endsAt:1}),now:()=>1,wait:async()=>{throw new Error('No later waiting permitted');},collaboration:()=>{},verify:()=>{later=true;},inspect:async()=>{
+    const late=mode.startsWith('late-');if(late)expect(row((await client.invoke(controlPlaneOperation('assignments.list'),{path:{teamId:run.teamId},query:{workdayId:run.id,limit:1},body:undefined})).data).items).toEqual([]);
+    const assignment=late?undefined:row((await client.invoke(controlPlaneOperation('assignments.show'),{path:{teamId:run.teamId,assignmentId:item.id},query:{},body:undefined})).data);
     const first=row((await client.invoke(controlPlaneOperation('workdays.events.list'),{path:{teamId:run.teamId,runId:run.id},query:{limit:2},body:undefined})).data),page=row(first.page);
     const tail=page.hasMore?row((await client.invoke(controlPlaneOperation('workdays.events.list'),{path:{teamId:run.teamId,runId:run.id},query:{limit:2,cursor:page.nextCursor},body:undefined})).data):undefined;
-    const observation={run:{...run,status:mode==='exact'?'completed':'running'},scheduling:{executionId:run.id,executionMode:'simulation',status:mode==='exact'?'completed':'running',assignments:[],nodes:[]},events:first.items,eventPage:page};
-    const snapshot=observeCampaign(observation,run.id,retained,()=>{if(!tail)throw new Error('Original public tail required');return tail;},event=>{captured.push(event);});verifyAssignmentTransitionHistory(run,[assignment],snapshot.events);if(mode==='exact')expect(captured).toEqual(original);
+    const observation={run:{...run,status:(mode==='exact'||mode==='late-exact')?'completed':'running'},scheduling:{executionId:run.id,executionMode:'simulation',status:(mode==='exact'||mode==='late-exact')?'completed':'running',assignments:[],nodes:[]},events:first.items,eventPage:page};
+    const snapshot=observeCampaign(observation,run.id,retained,()=>{if(!tail)throw new Error('Original public tail required');return tail;},event=>{captured.push(event);});verifyAssignmentTransitionHistory(run,assignment?[assignment]:[],snapshot.events);
+    if(late){const discovered=row((await client.invoke(controlPlaneOperation('assignments.show'),{path:{teamId:run.teamId,assignmentId:item.id},query:{},body:undefined})).data),fresh=row((await client.invoke(controlPlaneOperation('workdays.events.list'),{path:{teamId:run.teamId,runId:run.id},query:{limit:2},body:undefined})).data),freshPage=row(fresh.page);
+     const freshTail=freshPage.hasMore?row((await client.invoke(controlPlaneOperation('workdays.events.list'),{path:{teamId:run.teamId,runId:run.id},query:{limit:2,cursor:freshPage.nextCursor},body:undefined})).data):undefined;
+     const checked=observeCampaign({...observation,events:fresh.items,eventPage:freshPage},run.id,retained,()=>{if(!freshTail)throw new Error('Original concurrent public tail required');return freshTail;},event=>{captured.push(event);});verifyAssignmentTransitionHistory(run,[discovered],checked.events);
+    }
+if((mode==='exact'||mode==='late-exact'))expect(captured).toEqual(original);
    },stop:async()=>{await client.invoke(controlPlaneOperation('workdays.stop'),{path:{teamId:run.teamId,runId:run.id},query:{},body:{reason:'Automated golden boundary failed'}},{idempotencyKey:'golden-stop:'+run.id});}});
-   }finally{expect({item,original}).toEqual(held);if(mode!=='exact')expect(requests.slice(offset).filter(value=>value.method==='POST')).toEqual([{method:'POST',path:stopPath,body:{reason:'Automated golden boundary failed'},key:'golden-stop:'+run.id}]);}
+   }finally{expect({item,original}).toEqual(held);if((mode!=='exact'&&mode!=='late-exact'))expect(requests.slice(offset).filter(value=>value.method==='POST')).toEqual([{method:'POST',path:stopPath,body:{reason:'Automated golden boundary failed'},key:'golden-stop:'+run.id}]);}
    return later;
   };
   expect(await Promise.all([execute(),execute()])).toEqual([true,true]);
-  for(mode of ['missing-created','missing-claim','missing-terminal','foreign','wrong-clock','wrong-node','wrong-result','duplicate','denied','malformed','interrupted']){
+  mode='late-exact';expect(await Promise.all([execute(),execute()])).toEqual([true,true]);
+  for(mode of ['late-missing-created','missing-created','missing-claim','missing-terminal','foreign','wrong-clock','wrong-node','wrong-result','duplicate','denied','malformed','interrupted']){
    let failure:unknown;try{await execute();}catch(error){failure=error;}expect(failure,mode).toBeInstanceOf(Error);failures.push({mode,failure:String(failure)});
   }
   const retained=structuredClone(failures);mode='exact';expect(await Promise.all([execute(),execute()])).toEqual([true,true]);expect(failures).toEqual(retained);expect(f.git('rev-parse','HEAD')).toBe(candidate);expect(assignmentResultSchema.parse(produced.outputs?.assignmentResult)).toEqual(result);
@@ -128,4 +136,3 @@ it('native Kernel candidate and public assignment histories reject omitted ownin
  }finally{if(server?.listening){server.closeAllConnections();await new Promise<void>((accept,reject)=>server!.close(error=>error?reject(error):accept()));}await f.close();}
  expect(server?.listening).toBe(false);
 },30_000);
-

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { normalizeCapacityPageLimit } from '@treeseed/sdk/capacity-pagination';
-import { appliedWorkdaySchema, assignmentAttemptSchema } from '@treeseed/sdk/agent-capacity';
+import { appliedWorkdaySchema, assignmentAttemptSchema, executionNodeSchema } from '@treeseed/sdk/agent-capacity';
 import { validateWorkdayIntent, type WorkdayIntent } from '@treeseed/sdk/operator-contracts';
 import { collectCompleteEvidence } from './evidence-pages.ts';
 
@@ -245,4 +245,40 @@ export function retainCampaignEventHistory(events:readonly unknown[],run:Row,ret
  for(const[id,event]of current)if(!retained.has(id))capture?.(structuredClone(event));
 	for (const [id, event] of current) retained.set(id, structuredClone(event));
 	return [...current.values()];
+}
+
+/** Complete existing node observations must explain the independently read
+ * current node inventory. This creates no graph or transition authority. */
+export function verifyNodeTransitionHistory(run:Row,graph:Row,events:readonly Row[]):void{
+ const label='ACCEPTANCE_NODE_TRANSITIONS',statuses=new Set(['proposed','blocked','ready','assigned','running','completed','failed','cancelled','stale']);
+ assert.equal(graph.teamId,run.teamId,label+': Foreign owning graph');assert.ok(Number.isSafeInteger(graph.revision)&&Number(graph.revision)>=0,label+': Exact graph revision required');
+ assert.ok(Array.isArray(graph.nodes),label+': Complete owning node inventory required');
+ const nodes=new Map<string,ReturnType<typeof executionNodeSchema.parse>>();
+ for(const value of graph.nodes){const parsed=executionNodeSchema.safeParse(value);assert.ok(parsed.success,label+': Canonical owning node required');assert.deepEqual(parsed.data,value,label+': Owning node must not be normalized');
+  const node=parsed.data;assert.equal(node.teamId,run.teamId,label+': Foreign node team');assert.ok(!nodes.has(node.id),label+': Duplicate owning node');assert.ok(node.graphRevisionUpdated<=Number(graph.revision),label+': Future owning node');nodes.set(node.id,node);
+ }
+ const histories=new Map<string,Array<{event:Row;context:Row;clock:number}>>(),ids=new Set<string>(),indexes=new Set<number>();
+ for(const event of events){if(event.eventType!=='execution.node.state')continue;
+  assert.equal(event.teamId,run.teamId,label+': Foreign event team');assert.equal(event.runId,run.id,label+': Foreign event run');assert.equal(event.workdayId,run.id,label+': Foreign event workday');assert.equal(event.assignmentId,null,label+': Node observations are not assignment records');assert.equal(event.status,'recorded',label+': Failed node observation');
+  assert.ok(typeof event.id==='string'&&event.id&&!ids.has(event.id),label+': Duplicate observation');ids.add(event.id);
+  assert.ok(Number.isSafeInteger(event.eventIndex)&&Number(event.eventIndex)>=0&&!indexes.has(Number(event.eventIndex)),label+': Duplicate transition index');indexes.add(Number(event.eventIndex));
+  assert.ok(event.context&&typeof event.context==='object'&&!Array.isArray(event.context),label+': Missing original node context');const context=event.context as Row;
+  assert.ok(typeof context.nodeId==='string',label+': Exact node identity required');const node=nodes.get(context.nodeId);assert.ok(node,label+': Observed owning node missing');
+  assert.equal(event.projectId,node.projectId,label+': Foreign node project');assert.ok(node.workdayId===undefined||node.workdayId===run.id,label+': Foreign owning workday');
+  assert.ok(Number.isSafeInteger(context.nodeRevision)&&Number(context.nodeRevision)>=1,label+': Exact node revision required');
+  assert.ok(Number.isSafeInteger(context.graphRevision)&&Number(context.graphRevision)>=node.graphRevisionCreated&&Number(context.graphRevision)<=Number(graph.revision),label+': Original graph revision missing or in the future');
+  assert.ok(statuses.has(String(context.status)),label+': Unknown node state');assert.ok(context.previousStatus===null||statuses.has(String(context.previousStatus)),label+': Original previous state required');
+  const clock=Date.parse(typeof event.createdAt==='string'?event.createdAt:'');assert.ok(Number.isFinite(clock),label+': Original transition clock required');
+  const history=histories.get(node.id)??[],prior=history.at(-1);
+  if(prior){assert.ok(Number(event.eventIndex)>Number(prior.event.eventIndex)&&clock>=prior.clock,label+': Reversed transition order');assert.equal(context.previousStatus,prior.context.status,label+': Missing node transition');
+   assert.ok(Number(context.nodeRevision)>=Number(prior.context.nodeRevision)&&Number(context.nodeRevision)<=Number(prior.context.nodeRevision)+1,label+': Missing or regressed node revision');
+   assert.ok(Number(context.graphRevision)>=Number(prior.context.graphRevision),label+': Regressed graph revision');assert.ok(context.status!==prior.context.status||context.nodeRevision!==prior.context.nodeRevision,label+': Duplicate unchanged transition');
+  }else if(node.workdayId===run.id)assert.equal(context.previousStatus,null,label+': Missing original node birth');
+  history.push({event,context,clock});histories.set(node.id,history);
+ }
+ for(const node of nodes.values()){
+  const history=histories.get(node.id);if(node.workdayId!==run.id&&!history)continue;
+  assert.ok(history?.length,label+': Missing original owning node history');const last=history.at(-1)!.context;
+  assert.equal(last.status,node.status,label+': Current node state lacks its transition');assert.equal(last.nodeRevision,node.nodeRevision,label+': Current node revision lacks its transition');assert.equal(last.graphRevision,node.graphRevisionUpdated,label+': Current node graph revision lacks its observation');
+ }
 }

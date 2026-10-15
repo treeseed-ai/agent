@@ -56,6 +56,19 @@ describe('live canonical assignment observation (controlled inputs, not managed 
    expect.soft(()=>check(run,[failedItem],changed),mode).toThrow('ACCEPTANCE_ASSIGNMENT_TRANSITIONS');expect(changed).toEqual(before);
   }
   expect({failedItem,failureEvents}).toEqual(retainedFailure);check(run,[failedItem],failureEvents);
+
+  for(const status of ['failed','returned','cancelled','expired']){
+   const terminalItem=structuredClone(item),history=structuredClone(events);terminalItem.status=status;row(terminalItem.assignmentAttempt).status=status==='returned'?'blocked':status;
+   delete terminalItem.completedAt;if(status==='returned')terminalItem.returnedAt=at(4);else terminalItem.failedAt=at(4);
+   history[4]!.eventType='assignment.'+status;history[4]!.context.status=status;
+   const before=structuredClone({terminalItem,history});check(run,[terminalItem],history);expect({terminalItem,history}).toEqual(before);
+   const omitted=history.slice(0,-1);expect(()=>check(run,[terminalItem],omitted),status+' missing terminal').toThrow('ACCEPTANCE_ASSIGNMENT_TRANSITIONS');
+  }
+  const pendingItem=structuredClone(item);pendingItem.status='pending';pendingItem.leaseState='unleased';pendingItem.stateVersion=1;pendingItem.claimedAt=null;pendingItem.metadata={};
+  delete pendingItem.completedAt;delete pendingItem.assignmentResult;const unstarted=row(pendingItem.assignmentAttempt);unstarted.status='created';delete unstarted.startedAt;delete unstarted.finishedAt;
+  check(run,[pendingItem],[events[0]!]);const cancelledItem=structuredClone(pendingItem);cancelledItem.status='cancelled';cancelledItem.stateVersion=2;cancelledItem.failedAt=at(4);row(cancelledItem.assignmentAttempt).status='cancelled';row(cancelledItem.assignmentAttempt).finishedAt=at(4);
+  const cancelledEvent=structuredClone(events[4]!);cancelledEvent.id='assignment-terminal:'+item.id+':2';cancelledEvent.eventIndex=1;cancelledEvent.eventType='assignment.cancelled';Object.assign(cancelledEvent.context,{status:'cancelled',resultId:null});
+  check(run,[cancelledItem],[events[0]!,cancelledEvent]);check(run,[],[]);
   // A later producer transition may commit after the held assignment list.
   // Its original event remains observed; this comparison certifies the held rows.
   const next={...structuredClone(events[0]!),id:'assignment-created:later-attempt',assignmentId:'later-attempt',eventIndex:5};check(run,[item],[...events,next]);

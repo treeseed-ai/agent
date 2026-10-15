@@ -200,3 +200,6 @@ acceptanceCriteria:
   - criterion: 878d21214be322d60129356ce3bc779d71a2381e9fc49e05c5442a485da8fcbb
     verifierRefs: ["agent.golden.live.campaign","agent.golden.architecture-profile-custody-live-1","agent.golden.architecture-context-custody-live-1","agent.golden.architecture-living-graph-live-1","agent.golden.live.results","sdk.golden.live.product","agent.golden.execution-clock-observation-live-1","api.golden.execution-protected-observation-live-1","api.golden.execution-normal-sdk-clean-schema-live-1","agent.golden.architecture-record-custody-live-1"]
 
+
+  - criterion: f2a4ccdf8ff3c85e44b25f5cc4bf1597ef28e63f8217dd52416305c0d6dc345b
+    verifierRefs: [sdk.golden.live.product, agent.golden.architecture-living-graph-live-1, api.golden.execution-protected-observation-live-1]

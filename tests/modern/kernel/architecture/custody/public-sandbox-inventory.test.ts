@@ -1,3 +1,5 @@
+import { publicResourceClosureFixture } from '../../../guarantees/preflight/physical/resource-closure-fixture.ts';
+import * as physicalResources from '../../../../acceptance/workday/support/physical/sandbox-inventory.ts';
 import { describe, expect, it } from 'vitest';
 import { assignmentAttemptSchema, assignmentResultSchema } from '@treeseed/sdk/agent-capacity';
 import { request } from '../../provider-kernel-fixture.ts';
@@ -195,5 +197,21 @@ describe('public owning sandbox inventory consumption', () => {
    const f = supplied(); row(f.status.inventory).managedDirectory = directory;
    const before = structuredClone(f); expect(() => verify(f)).toThrow(); expect(f).toEqual(before);
   }
+ });
+
+ it('requires exact closed public sessions revoked grants and independently closed mutable workspaces while retaining unrelated resources',async()=>{
+  const {exact,attempt,session}=publicResourceClosureFixture();
+  const inspect=(value:typeof exact)=>physicalResources.verifyPublicWorkspaceSessionClosure(value.items,value.sessions,(projectId,workspaceId)=>{expect({projectId,workspaceId}).toEqual({projectId:'library-project',workspaceId:'ws_owned'});return value.response;});
+  const held=structuredClone(exact);await inspect(exact);expect(exact).toEqual(held);
+  const rotated=structuredClone(exact);rotated.sessions[0]!.closedAt=rotated.sessions[0]!.openedAt;await expect.soft(inspect(rotated)).resolves.toBeUndefined();
+  const deferred=structuredClone(exact),later='2026-09-13T12:00:02.001Z';deferred.items[0]!.updatedAt=later;row(deferred.items[0]!.treedxProxyHandle).revokedAt=later;row((row(deferred.items[0]!.capabilityHandles).treeDx as Row[])[0]).revokedAt=later;await expect.soft(inspect(deferred)).resolves.toBeUndefined();
+
+  for(const mode of['git','read-only']as const){const value=structuredClone(exact),original=assignmentAttemptSchema.parse(request().assignment.assignmentAttempt);value.items[0]!.assignmentAttempt=assignmentAttemptSchema.parse({...original,status:'completed',finishedAt:exact.items[0]!.completedAt,workspace:mode==='git'?original.workspace:{mode:'read-only'},grant:{...original.grant,sourceWrite:mode==='git'?original.grant.sourceWrite:[]}});row(value.items[0]!.treedxProxyHandle).workspaceId=null;const before=structuredClone(value);await physicalResources.verifyPublicWorkspaceSessionClosure(value.items,value.sessions,()=>{throw new Error('Read-only or Git scope cannot request a mutable TreeDX resource');});expect(value).toEqual(before);}
+
+  const changes:Array<(value:typeof exact)=>void>=[value=>{delete value.items[0]!.updatedAt;},value=>{row(value.items[0]!.treedxProxyHandle).revokedAt='2026-09-13T12:00:02.001Z';},value=>{row((row(value.items[0]!.capabilityHandles).treeDx as Row[])[0]).revokedAt='2026-09-13T12:00:02.001Z';},value=>{value.items=[];},value=>{value.items.push(structuredClone(value.items[0]!));},value=>{value.items[0]!.status='running';},value=>{value.sessions=[];},value=>{value.sessions.push(session);},value=>{value.items[0]!.providerSessionId='foreign';},value=>{value.items[0]!.treedxProxyHandle={};},value=>{value.items[0]!.workspaceContext={};},value=>{value.items[0]!.capabilityHandles={};},value=>{row((row(value.items[0]!.capabilityHandles).treeDx as Row[])[0]).status='issued';}];
+  for(const field of['teamId','providerId','membershipId','status','closedAt'])changes.push(value=>{value.sessions[0]![field]='foreign';});
+  for(const field of['workspaceId','repoId','status','mode','baseCommitSha','branchName','allowedPaths'])changes.push(value=>{row(value.response.result)[field]='foreign';});
+  changes.push(value=>{row(value.response.receipt).projectId='foreign';},value=>{value.response={};},value=>{row(value.response.result).allowedPaths=['knowledge/**','knowledge/**'];},value=>{value.sessions[0]!.closedAt=new Date(Date.parse(attempt.createdAt)-1).toISOString();});
+  for(const change of changes){const failed=structuredClone(exact);change(failed);const before=structuredClone(failed);await expect(inspect(failed)).rejects.toThrow();expect(failed).toEqual(before);}await inspect(exact);expect(exact).toEqual(held);
  });
 });

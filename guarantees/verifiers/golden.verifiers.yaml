@@ -4066,3 +4066,13 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/execution/microvm-result-authority.test.ts
     testName: "retains only exact acquired VM identity from complete original broker destruction history in the public closeout event"
+  agent.golden.execution-resource-closure-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/custody/public-sandbox-inventory.test.ts
+    testName: "requires exact closed public sessions revoked grants and independently closed mutable workspaces while retaining unrelated resources"
+  agent.golden.execution-resource-closure-native:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/preflight/campaign-freeze-native.test.ts
+    testName: "native public session pages and exact workspace reads retain closed scoped custody while denying omitted foreign interrupted or still-live resources before unchanged retry"

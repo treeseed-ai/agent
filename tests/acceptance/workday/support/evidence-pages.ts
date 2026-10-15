@@ -157,7 +157,7 @@ export function readCompleteEvidence(args: string[], team: string, limit: number
 }
 
 /** One cursor validator for the existing public CLI and campaign show page. */
-export function collectCompleteEvidence(fetchPage: (cursor: string | undefined) => Row, limit: number, prefix: string, direction: 'descending' | 'ascending'): Row[] {
+export function collectCompleteEvidence(fetchPage: (cursor: string | undefined) => Row, limit: number, prefix: string, direction: 'descending' | 'ascending', clockField: 'createdAt' | 'openedAt' = 'createdAt'): Row[] {
 	const records: Row[] = [], identities = new Set<string>(), cursors = new Set<string>();
 	let cursor: string | undefined, previous: { id: string; time: number } | undefined;
 	for (let pageNumber = 0; pageNumber < 40; pageNumber += 1) {
@@ -168,7 +168,7 @@ export function collectCompleteEvidence(fetchPage: (cursor: string | undefined) 
 		for (const value of observed.items) {
 			assert.ok(value && typeof value === 'object' && !Array.isArray(value), `${prefix}_ROW: Record required`);
 			const item = row(value), id = typeof item.id === 'string' ? item.id : '';
-			const time = Date.parse(typeof item.createdAt === 'string' ? item.createdAt : '');
+			const time = Date.parse(typeof item[clockField] === 'string' ? String(item[clockField]) : '');
 			assert.ok(id && Number.isFinite(time) && !identities.has(id), `${prefix}_ROW: Unique identity and creation clock required`);
 			assert.ok(!previous || (direction === 'descending' ? time < previous.time || (time === previous.time && id < previous.id)
 				: time > previous.time || (time === previous.time && id > previous.id)), `${prefix}_ORDER: Exact creation/identity order required across all pages`);
@@ -184,7 +184,7 @@ export function collectCompleteEvidence(fetchPage: (cursor: string | undefined) 
 		try { next = decodeCapacityPageCursor(page.nextCursor); }
 		catch { assert.fail(`${prefix}_PAGE: Invalid cursor authority`); }
 		const last = records.at(-1)!;
-		assert.ok(next && next.id === last.id && next.createdAt === last.createdAt,
+		assert.ok(next && next.id === last.id && next.createdAt === last[clockField],
 			`${prefix}_PAGE: Cursor must bind the actual last record`);
 		cursor = page.nextCursor; cursors.add(cursor);
 	}

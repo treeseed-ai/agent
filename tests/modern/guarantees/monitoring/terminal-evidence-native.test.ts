@@ -106,13 +106,13 @@ it('native Kernel candidate and public assignment histories reject omitted ownin
   await new Promise<void>((accept,reject)=>{server!.once('error',reject);server!.listen(0,'127.0.0.1',accept);});const address=server.address();if(!address||typeof address==='string')throw new Error('Native history listener required');
   const client=new ControlPlaneClient({profile:defaultLocalControlPlaneServer({TREESEED_API_BASE_URL:'http://127.0.0.1:'+address.port}),accessToken:'controlled-history-token'});
   const execute=async()=>{
-   let later=false;const offset=requests.length,retained=new Map<string,Row>();
+   let later=false;const offset=requests.length,retained=new Map<string,Row>(),captured:Row[]=[];
    try{await monitorCampaign({admittedSimulation:true,read:()=>({status:mode==='exact'?'completed':'running',mode:'simulation',planningEndsAt:0,endsAt:1}),now:()=>1,wait:async()=>{throw new Error('No later waiting permitted');},collaboration:()=>{},verify:()=>{later=true;},inspect:async()=>{
     const assignment=row((await client.invoke(controlPlaneOperation('assignments.show'),{path:{teamId:run.teamId,assignmentId:item.id},query:{},body:undefined})).data);
     const first=row((await client.invoke(controlPlaneOperation('workdays.events.list'),{path:{teamId:run.teamId,runId:run.id},query:{limit:2},body:undefined})).data),page=row(first.page);
     const tail=page.hasMore?row((await client.invoke(controlPlaneOperation('workdays.events.list'),{path:{teamId:run.teamId,runId:run.id},query:{limit:2,cursor:page.nextCursor},body:undefined})).data):undefined;
     const observation={run:{...run,status:mode==='exact'?'completed':'running'},scheduling:{executionId:run.id,executionMode:'simulation',status:mode==='exact'?'completed':'running',assignments:[],nodes:[]},events:first.items,eventPage:page};
-    const snapshot=observeCampaign(observation,run.id,retained,()=>{if(!tail)throw new Error('Original public tail required');return tail;});verifyAssignmentTransitionHistory(run,[assignment],snapshot.events);
+    const snapshot=observeCampaign(observation,run.id,retained,()=>{if(!tail)throw new Error('Original public tail required');return tail;},event=>{captured.push(event);});verifyAssignmentTransitionHistory(run,[assignment],snapshot.events);if(mode==='exact')expect(captured).toEqual(original);
    },stop:async()=>{await client.invoke(controlPlaneOperation('workdays.stop'),{path:{teamId:run.teamId,runId:run.id},query:{},body:{reason:'Automated golden boundary failed'}},{idempotencyKey:'golden-stop:'+run.id});}});
    }finally{expect({item,original}).toEqual(held);if(mode!=='exact')expect(requests.slice(offset).filter(value=>value.method==='POST')).toEqual([{method:'POST',path:stopPath,body:{reason:'Automated golden boundary failed'},key:'golden-stop:'+run.id}]);}
    return later;

@@ -62,7 +62,7 @@ describe('campaign CLI composition units (mocked transport, not native or live a
  it('denies omitted owning assignment transitions before collaboration approval or later gates and retains the exact scoped stop',async()=>{
   transport(()=>observed('running'));const original=new Error('ACCEPTANCE_ASSIGNMENT_TRANSITIONS: Missing original claim'),held=structuredClone(state.freeze);
   state.transitions.mockImplementation(()=>{throw original;});await expect(state.run!()).rejects.toBe(original);
-  expect(state.eventHistory).toHaveBeenCalledOnce();expect(state.transitions).toHaveBeenCalledOnce();expect(state.inspect).not.toHaveBeenCalled();expect(state.verify).not.toHaveBeenCalled();
+  expect(state.eventHistory).toHaveBeenCalledOnce();expect(state.eventHistory.mock.calls[0]![3]).toBeTypeOf('function');expect(state.transitions).toHaveBeenCalledOnce();expect(state.inspect).not.toHaveBeenCalled();expect(state.verify).not.toHaveBeenCalled();
   expect(state.read.mock.calls.filter(call=>call[0][1]==='evaluate')).toEqual([]);expect(state.read.mock.calls.filter(call=>call[0][1]==='stop')).toEqual([[['workdays','stop',workdayId,'--yes','--reason','Automated golden boundary failed','--idempotency-key','golden-stop:'+workdayId],'treeseed']]);expect(state.freeze).toEqual(held);
  });
 

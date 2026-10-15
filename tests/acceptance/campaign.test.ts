@@ -44,6 +44,7 @@ test('Frozen SDK campaign drives planning acting review and terminal golden gate
 		'--idempotency-key', `golden-stop:${workdayId}`], team); };
 	let externallyApproved = false;
 	const observedEvents = new Map<string, Record<string, unknown>>();
+ const recordEvent=(event:Record<string,unknown>)=>console.log(JSON.stringify({workdayId,observedAt:new Date().toISOString(),event}));
 	const observedAssignments = new Map<string, Record<string, unknown>>();
 	const observedGraphRevisions = new Map<number, GraphRevision>();
 	let currentRun: Record<string, unknown> | undefined;
@@ -54,7 +55,7 @@ test('Frozen SDK campaign drives planning acting review and terminal golden gate
 			'--workday', request.parentWorkdayId!, '--no-wait', '--idempotency-key', key], team, false, 240_000)); }, read: () => {
 		const observed = read(['workdays', 'show', workdayId], team);
 		const snapshot = observeCampaign(observed, workdayId, observedEvents, (cursor, limit) =>
-			read(['workdays', 'events', 'list', workdayId, '--limit', String(limit), '--cursor', cursor], team));
+			read(['workdays', 'events', 'list', workdayId, '--limit', String(limit), '--cursor', cursor], team,recordEvent);
 		const current = snapshot.run as Row, failedBoundary = snapshot.failedBoundary;
 		currentRun = current;
 		return { status: current.status, mode: current.executionMode, failedBoundary,
@@ -69,7 +70,7 @@ test('Frozen SDK campaign drives planning acting review and terminal golden gate
   // Read owning records first; transactional observations for those held states
   // must already be visible in the following complete public event history.
   const events=readCompleteEvidence(['workdays','events','list',workdayId],team,100,'ACCEPTANCE_OBSERVATION','ascending');
-  retainCampaignEventHistory(events,currentRun,observedEvents);
+  retainCampaignEventHistory(events,currentRun,observedEvents,recordEvent);
   verifyAssignmentTransitionHistory(currentRun,assignments,events);
   const known=new Set(assignments.map(item=>String(item.id)));
   for(const event of events)if(typeof event.assignmentId==='string'&&!known.has(event.assignmentId)){

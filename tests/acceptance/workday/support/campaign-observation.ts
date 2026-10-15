@@ -103,7 +103,7 @@ function text(value: unknown) {
 }
 
 /** Acceptance-only custody of existing public workday records; not another event authority. */
-export function observeCampaign(observed: unknown, workdayId: string, retained: Map<string, Row>, readEvents?: (cursor: string, limit: number) => Row) {
+export function observeCampaign(observed: unknown, workdayId: string, retained: Map<string, Row>, readEvents?: (cursor: string, limit: number) => Row, capture?: (event:Row)=>void) {
 	const data = row(observed), run = row(data.run), scheduling = row(data.scheduling);
 	assert.equal(run.id, workdayId, 'ACCEPTANCE_CAMPAIGN_ID: Read-back changed identity');
 	assert.equal(scheduling.executionId, workdayId, 'ACCEPTANCE_OBSERVATION: Scheduling changed workday');
@@ -139,7 +139,7 @@ export function observeCampaign(observed: unknown, workdayId: string, retained: 
 		return row(readEvents(cursor, limit));
 	}, limit, 'ACCEPTANCE_OBSERVATION', 'ascending') : data.events;
 	assert.ok(run.status !== 'completed' || !failedBoundary, 'ACCEPTANCE_OBSERVATION: Completed run hides failed scheduling');
-	return {run,failedBoundary,events:retainCampaignEventHistory(events,run,retained)};
+	return {run,failedBoundary,events:retainCampaignEventHistory(events,run,retained,capture)};
 }
 
 /** The assignment list is held before the complete public history is read.
@@ -222,7 +222,7 @@ export function verifyAssignmentTransitionHistory(run: Row, assignments: readonl
 
 
 /** Same immutable event check for show pagination and the post-assignment public inventory. */
-export function retainCampaignEventHistory(events:readonly unknown[],run:Row,retained:Map<string,Row>):Row[]{
+export function retainCampaignEventHistory(events:readonly unknown[],run:Row,retained:Map<string,Row>,capture?:(event:Row)=>void):Row[]{
  const workdayId=String(run.id);
 	const current = new Map<string, Row>(), indexes = new Set<number>();
 	for (const value of events) {
@@ -242,6 +242,7 @@ export function retainCampaignEventHistory(events:readonly unknown[],run:Row,ret
 		'ACCEPTANCE_OBSERVATION: Missing event transition');
 	for (const [id, previous] of retained) assert.deepEqual(current.get(id), previous,
 		'ACCEPTANCE_OBSERVATION: Previously observed event mutated or disappeared');
+ for(const[id,event]of current)if(!retained.has(id))capture?.(structuredClone(event));
 	for (const [id, event] of current) retained.set(id, structuredClone(event));
 	return [...current.values()];
 }

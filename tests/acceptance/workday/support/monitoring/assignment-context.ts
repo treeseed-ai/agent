@@ -9,11 +9,21 @@ import { verifyExactContextSource, verifyGovernedProposalRead } from '../assignm
 export function verifyAssignmentContextRead(item: Row, reference: Row, projectId: string, library: Row, returned: Row): void {
 	verifyExactContextSource(reference, projectId, library, returned);
 	if (reference.model !== 'proposal') return;
+ const issued=row(item.assignmentAttempt),ownReview=row(issued.effectiveProfile).activity==='reviewing'&&isDeepStrictEqual(reference,issued.sourceRef);
+ if(ownReview)assert.ok(Array.isArray(issued.acceptanceCriteria)&&issued.acceptanceCriteria.length>0
+  &&issued.acceptanceCriteria.every(value=>typeof value==='string'&&value.trim()),'ACCEPTANCE_REVIEW_OBJECTIVE: Original populated review criteria required');
 	const attempt = assignmentAttemptSchema.parse(item.assignmentAttempt), code = 'ACCEPTANCE_DECLARED_CONTEXT';
 	const proposal = verifyGovernedProposalRead(reference, projectId, returned), items = row(proposal.executionPlan).workItems;
 	assert.ok(Array.isArray(items), `${code}: Original work-item inventory required`);
 	const selected = items.map(row).filter(work => !attempt.workItemId || work.id === attempt.workItemId);
 	assert.ok(attempt.workItemId ? selected.length === 1 : selected.length > 0, `${code}: Exact original work item required`);
+ if(ownReview){
+  assert.ok(attempt.workItemId&&selected.length===1,'ACCEPTANCE_REVIEW_OBJECTIVE: One exact original reviewed work item required');
+  const original=selected[0]!;
+  assert.ok(typeof original.objective==='string'&&original.objective.trim(),'ACCEPTANCE_REVIEW_OBJECTIVE: Exact governed objective required');
+  assert.deepEqual(attempt.acceptanceCriteria,original.acceptanceCriteria,'ACCEPTANCE_REVIEW_OBJECTIVE: Review criteria differ from original authored work');
+ }
+
 	const required = selected.flatMap(work => {
 		assert.ok(Array.isArray(work.contextRefs), `${code}: Original declared context inventory required`); return work.contextRefs;
 	});

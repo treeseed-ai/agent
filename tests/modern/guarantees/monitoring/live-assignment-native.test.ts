@@ -14,7 +14,7 @@ import { verifyExactContextSource, verifyGitInputContext, verifyGovernedProfile,
 import { observeLiveAssignmentRecords, verifyLiveAssignmentGraph, verifyLiveProviderRuntime, verifyLiveSimulationWorkspace, verifyLiveSourceContext } from '../../../acceptance/workday/support/monitoring/live-assignment-records.ts';
 import { verifyAllocation } from '../../../acceptance/workday/support/monitoring/assignment-allocation.ts';
 import { verifyPredecessorCustody } from '../../../acceptance/workday/support/evidence-pages.ts';
-import { liveAssignmentGraph, liveAssignmentRecord, liveProviderSession, liveRun, liveGovernedContext } from './live-assignment-fixture.ts';
+import { liveAssignmentGraph, liveAssignmentRecord, liveProviderSession, liveRun, liveGovernedContext, reviewingGovernedContext } from './live-assignment-fixture.ts';
 import { contextBoundary, exactContext } from '../../kernel/architecture/portable/context-fixture.ts';
 
 it('native Kernel and independent content transport deny moved tampered denied and interrupted live Book observations without caching partial authority before unchanged retry', async () => {
@@ -416,4 +416,22 @@ it('native original governing content transport rejects an omitted declared Book
 
 
 	} finally { await boundary.close(); }
+});
+
+it('native public governed objective bytes reject substituted or broadened reviewing criteria before unchanged independent reads',async()=>{
+ const{item,attempt,original}=reviewingGovernedContext(),boundary=await contextBoundary(attempt.projectId,original.binding.repositoryId,original.observed),held=structuredClone({item,original});
+ const failures:Array<{criteria:unknown;failure:string}>=[];try{
+  const inspect=async(observedItem=item)=>{
+   const returned=row(await boundary.facade.invoke('treedx.repositories.files.read',{path:{projectId:attempt.projectId,repoId:original.reference.repository},query:{path:original.reference.path,ref:original.reference.commit,encoding:'utf8',parseFrontmatter:true}}));
+   verifyAssignmentContextRead(observedItem,original.reference,attempt.projectId,original.binding,returned);
+  };
+  await Promise.all([inspect(),inspect()]);
+  for(const criteria of [undefined,[],['Unrelated acceptance boundary.'],[...attempt.acceptanceCriteria!,'Broader portfolio result required.'],[...attempt.acceptanceCriteria!,...attempt.acceptanceCriteria!]]){
+   const denied=structuredClone(item);Object.assign(denied.assignmentAttempt as object,{acceptanceCriteria:criteria});const failed=structuredClone(denied);let failure:unknown;
+   try{await inspect(denied);}catch(error){failure=error;}expect.soft(String(failure),JSON.stringify(criteria)).toContain('ACCEPTANCE_REVIEW_OBJECTIVE');expect(denied).toEqual(failed);failures.push({criteria,failure:String(failure)});
+  }
+  const retained=structuredClone(failures);await Promise.all([inspect(),inspect()]);expect(failures).toEqual(retained);expect({item,original}).toEqual(held);console.log(JSON.stringify({nativeReviewObjectiveDenials:failures}));
+ }finally{await boundary.close();}
+ // Actual owning facade/SDK/HTTP and pinned raw proposal read. Profile and
+ // upstream content inputs are controlled, not a real managed Reviewer turn.
 });

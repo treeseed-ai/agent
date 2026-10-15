@@ -4029,3 +4029,15 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/guarantees/monitoring/terminal-evidence-native.test.ts
     testName: "native Kernel candidate and public assignment histories reject omitted owning transitions before scoped stop and unchanged concurrent retry"
+
+  agent.golden.review-objective-context-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/monitoring/live-context-inspection.test.ts
+    testName: "requires the reviewing assignment criteria to equal the original authored objective boundary even when issued graph and Actor views agree"
+
+  agent.golden.review-objective-context-native:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/monitoring/live-assignment-native.test.ts
+    testName: "native public governed objective bytes reject substituted or broadened reviewing criteria before unchanged independent reads"

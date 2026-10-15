@@ -1,5 +1,5 @@
 import { assignmentAttemptSchema } from '@treeseed/sdk/agent-capacity';
-import { liveAssignmentRecord, liveGovernedContext } from './live-assignment-fixture.ts';
+import { liveAssignmentRecord, liveGovernedContext, reviewingGovernedContext } from './live-assignment-fixture.ts';
 import { beforeEach, expect, it, vi } from 'vitest';
 import { exactContext } from '../../kernel/architecture/portable/context-fixture.ts';
 
@@ -123,4 +123,14 @@ it('retains the declared TreeDX repository as exact mutable workspace authority 
 		(changed.assignmentAttempt as typeof attempt).grant.contentWrite = attempt.grant.contentWrite.map(ref => ({ ...ref, repository: workspace.repository, commit: workspace.baseCommit }));
 		expect(() => verifyAssignmentContextRead(changed, original.reference, attempt.projectId, original.binding, original.observed)).toThrow('ACCEPTANCE_DECLARED_CONTEXT');
 	}
+});
+
+it('requires the reviewing assignment criteria to equal the original authored objective boundary even when issued graph and Actor views agree',()=>{
+ const{item,attempt,original}=reviewingGovernedContext();
+ const held=structuredClone({item,original}),inspect=(value:typeof item)=>verifyAssignmentContextRead(value,original.reference,attempt.projectId,original.binding,original.observed);
+ inspect(item);for(const criteria of [undefined,[],['Unrelated acceptance boundary.'],[...attempt.acceptanceCriteria!,'Broader portfolio result required.'],[...attempt.acceptanceCriteria!,...attempt.acceptanceCriteria!]]){
+  const denied=structuredClone(item);Object.assign(denied.assignmentAttempt as object,{acceptanceCriteria:criteria});const failed=structuredClone(denied);
+  expect.soft(()=>inspect(denied),JSON.stringify(criteria)).toThrow('ACCEPTANCE_REVIEW_OBJECTIVE');expect(denied).toEqual(failed);
+ }
+ expect({item,original}).toEqual(held);inspect(item);
 });

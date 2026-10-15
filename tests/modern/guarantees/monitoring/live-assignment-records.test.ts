@@ -1,12 +1,80 @@
 import { reviewedRevisionFixture, reviewedDecision } from '../../kernel/architecture/custody/graph/review-readiness-fixture.ts';
 import { describe, expect, it, vi } from 'vitest';
 import { row, type Row } from '../../../acceptance/acceptance-cli.ts';
+import * as transitionHistory from '../../../acceptance/workday/support/campaign-observation.ts';
 import { verifyDerivedWorkdayModes } from '../../../acceptance/workday/support/campaign-observation.ts';
 import { observeLiveAssignmentRecords } from '../../../acceptance/workday/support/monitoring/live-assignment-records.ts';
 import * as normalHistory from '../../../acceptance/workday/support/monitoring/live-assignment-records.ts';
 import { liveAssignmentGraph, liveAssignmentRecord, liveRun } from './live-assignment-fixture.ts';
 
 describe('live canonical assignment observation (controlled inputs, not managed proof)', () => {
+ it('retains every new original transition once and preserves prior history when immutable capture fails',()=>{
+  const retain=Reflect.get(transitionHistory,'retainCampaignEventHistory')as(events:readonly Row[],run:Row,history:Map<string,Row>,capture:(event:Row)=>void)=>Row[];
+  const run={id:'workday-original-history',teamId:'original-team'},event={id:'original-event',runId:run.id,teamId:run.teamId,eventIndex:0,eventType:'assignment.created',status:'recorded',createdAt:'2026-10-15T00:00:00.000Z',context:{original:'unchanged'},parameters:{},metadata:{},refs:{}},events=[event],history=new Map<string,Row>(),captured:Row[]=[],held=structuredClone(events);
+  retain(events,run,history,value=>{captured.push(value);});expect.soft(captured).toEqual(events);expect(events).toEqual(held);expect(history.get(event.id)).toEqual(event);
+  retain(events,run,history,value=>{captured.push(value);});expect.soft(captured).toEqual(events);
+  const pending={...structuredClone(event),id:'pending-event',eventIndex:1},failure=new Error('Original capture interruption'),before=structuredClone(history);
+  expect.soft(()=>retain([...events,pending],run,history,()=>{throw failure;})).toThrow(failure);expect(history).toEqual(before);expect(events).toEqual(held);
+  retain([...events,pending],run,history,value=>{row(value.context).original='capture-only mutation';});expect(history.get(pending.id)).toEqual(pending);expect(events).toEqual(held);
+ });
+
+ it('requires every owning assignment transition beyond contiguous public event pages before campaign progress without changing original observations',()=>{
+  const check=Reflect.get(transitionHistory,'verifyAssignmentTransitionHistory')as((run:Row,items:readonly Row[],events:readonly Row[])=>void)|undefined;
+  expect(check,'complete assignment transition comparison is required').toBeTypeOf('function');if(!check)return;
+  const item=liveAssignmentRecord(),run=liveRun(item),attempt=row(item.assignmentAttempt),created=String(item.createdAt),at=(seconds:number)=>new Date(Date.parse(created)+seconds*1000).toISOString();
+  item.stateVersion=5;item.status='completed';item.leaseState='released';item.claimedAt=at(1);item.completedAt=at(4);item.updatedAt=at(4);
+  attempt.status='completed';attempt.startedAt=at(2);attempt.finishedAt=at(4);item.assignmentResult={id:'original-result'};
+  item.metadata={executionWindow:{startedAt:at(2)},closeoutWindow:{startedAt:at(3)}};
+  const common={nodeId:attempt.nodeId,nodeRevision:attempt.nodeRevision,graphRevision:attempt.graphRevision,leaseId:attempt.leaseId,reservationId:attempt.reservationId,runnerId:null};
+  const event=(id:string,eventType:string,status:string,createdAt:string,index:number)=>({id,runId:run.id,teamId:run.teamId,projectId:attempt.projectId,workdayId:run.id,assignmentId:item.id,eventIndex:index,eventType,status:'recorded',title:eventType,message:null,createdAt,parameters:{},metadata:{},refs:{},context:{...common,status}});
+  const events=[event('assignment-created:'+item.id,'assignment.created','created',created,0),event('assignment-lease:'+item.id+':2','assignment.leased','leased',at(1),1),event('assignment-execution:'+item.id,'assignment.execution.started','running',at(2),2),event('assignment-closeout:'+item.id,'assignment.closeout.started','closeout',at(3),3),event('assignment-terminal:'+item.id+':5','assignment.completed','completed',at(4),4)];
+  Object.assign(events[4]!.context,{resultId:'original-result'});const held=structuredClone({run,item,events});check(run,[item],events);
+  for(let index=0;index<events.length;index++){const omitted=events.filter((_,i)=>i!==index).map((value,eventIndex)=>({...structuredClone(value),eventIndex})),before=structuredClone(omitted);expect(()=>check(run,[item],omitted),'omitted '+events[index]!.eventType).toThrow('ACCEPTANCE_ASSIGNMENT_TRANSITIONS');expect(omitted).toEqual(before);}
+  for(const mode of ['wrong-team','wrong-run','wrong-project','wrong-node','wrong-revision','wrong-lease','wrong-reservation','wrong-clock','wrong-status','wrong-result','duplicate','wrong-identity','before-created']){
+   const changed=structuredClone(events),value=changed[4]!;
+   if(mode==='wrong-team')value.teamId='foreign';if(mode==='wrong-run')value.runId='foreign';if(mode==='wrong-project')value.projectId='foreign';if(mode==='wrong-node')value.context.nodeId='foreign';if(mode==='wrong-revision')value.context.nodeRevision=0;
+   if(mode==='wrong-lease')value.context.leaseId='foreign';if(mode==='wrong-reservation')value.context.reservationId='foreign';if(mode==='wrong-clock')value.createdAt=at(5);if(mode==='wrong-status')value.context.status='failed';if(mode==='wrong-result')Object.assign(value.context,{resultId:'foreign'});
+   if(mode==='duplicate')changed.push({...structuredClone(value),eventIndex:5});if(mode==='wrong-identity')value.id='foreign-terminal';if(mode==='before-created')value.createdAt=at(-1);
+   const before=structuredClone(changed);expect(()=>check(run,[item],changed),mode).toThrow('ACCEPTANCE_ASSIGNMENT_TRANSITIONS');expect(changed).toEqual(before);
+  }
+
+  const failedItem=structuredClone(item);failedItem.status='failed';failedItem.failedAt=at(4);delete failedItem.completedAt;failedItem.stateVersion=7;
+  row(failedItem.assignmentAttempt).status='failed';failedItem.metadata={...structuredClone(row(item.metadata)),cancellationRequested:true,cancellationRequestedAt:at(1),cancellationRequestedBy:'operator',operatorRetry:{requestedAt:at(5),requestedBy:'operator',reason:'Exact original retry'}};
+  const failureEvents=structuredClone(events);failureEvents[4]!.id='assignment-terminal:'+item.id+':6';failureEvents[4]!.eventType='assignment.failed';failureEvents[4]!.context.status='failed';
+  const cancellation=event('assignment-cancellation-requested:'+item.id,'assignment.cancellation-requested','leased',at(1),2),retry=event('assignment-retry:'+item.id+':7','assignment.retry-requested','failed',at(5),6);
+  Object.assign(cancellation.context,{stateVersion:3});cancellation.parameters={idempotencyKey:'original-cancel',actorId:'operator',reason:'Exact original cancel'};
+  Object.assign(retry.context,{stateVersion:7,nodeRevision:Number(attempt.nodeRevision)+1});retry.parameters={idempotencyKey:'original-retry',actorId:'operator',reason:'Exact original retry'};
+  failureEvents.splice(2,0,cancellation);failureEvents.push(retry);failureEvents.forEach((value,eventIndex)=>{value.eventIndex=eventIndex;});const retainedFailure=structuredClone({failedItem,failureEvents});
+  check(run,[failedItem],failureEvents);
+  for(const mode of ['missing-cancel','missing-retry','cancel-actor','cancel-version','cancel-clock','retry-actor','retry-version','retry-clock','retry-reason','retry-key','retry-before-terminal']){
+   const changed=structuredClone(failureEvents),cancelled=changed[2]!,retried=changed.at(-1)!;
+   if(mode==='missing-cancel')changed.splice(2,1);if(mode==='missing-retry')changed.pop();
+   if(mode==='cancel-actor')Object.assign(cancelled.parameters,{actorId:'foreign'});if(mode==='cancel-version')Object.assign(cancelled.context,{stateVersion:8});if(mode==='cancel-clock')cancelled.createdAt=at(2);
+   if(mode==='retry-actor')Object.assign(retried.parameters,{actorId:'foreign'});if(mode==='retry-version')Object.assign(retried.context,{stateVersion:8});if(mode==='retry-clock')retried.createdAt=at(6);
+   if(mode==='retry-reason')Object.assign(retried.parameters,{reason:'different'});if(mode==='retry-key')Object.assign(retried.parameters,{idempotencyKey:''});
+   if(mode==='retry-before-terminal'){changed.pop();changed.splice(4,0,retried);}changed.forEach((value,eventIndex)=>{value.eventIndex=eventIndex;});const before=structuredClone(changed);
+   expect.soft(()=>check(run,[failedItem],changed),mode).toThrow('ACCEPTANCE_ASSIGNMENT_TRANSITIONS');expect(changed).toEqual(before);
+  }
+  expect({failedItem,failureEvents}).toEqual(retainedFailure);check(run,[failedItem],failureEvents);
+
+  for(const status of ['failed','returned','cancelled','expired']){
+   const terminalItem=structuredClone(item),history=structuredClone(events);terminalItem.status=status;row(terminalItem.assignmentAttempt).status=status==='returned'?'blocked':status;
+   delete terminalItem.completedAt;if(status==='returned')terminalItem.returnedAt=at(4);else terminalItem.failedAt=at(4);
+   history[4]!.eventType='assignment.'+status;history[4]!.context.status=status;
+   const before=structuredClone({terminalItem,history});check(run,[terminalItem],history);expect({terminalItem,history}).toEqual(before);
+   const omitted=history.slice(0,-1);expect(()=>check(run,[terminalItem],omitted),status+' missing terminal').toThrow('ACCEPTANCE_ASSIGNMENT_TRANSITIONS');
+  }
+  const pendingItem=structuredClone(item);pendingItem.status='pending';pendingItem.leaseState='unleased';pendingItem.stateVersion=1;pendingItem.claimedAt=null;pendingItem.metadata={};
+  delete pendingItem.completedAt;delete pendingItem.assignmentResult;const unstarted=row(pendingItem.assignmentAttempt);unstarted.status='created';delete unstarted.startedAt;delete unstarted.finishedAt;
+  check(run,[pendingItem],[events[0]!]);const cancelledItem=structuredClone(pendingItem);cancelledItem.status='cancelled';cancelledItem.stateVersion=2;cancelledItem.failedAt=at(4);row(cancelledItem.assignmentAttempt).status='cancelled';row(cancelledItem.assignmentAttempt).finishedAt=at(4);
+  const cancelledEvent=structuredClone(events[4]!);cancelledEvent.id='assignment-terminal:'+item.id+':2';cancelledEvent.eventIndex=1;cancelledEvent.eventType='assignment.cancelled';Object.assign(cancelledEvent.context,{status:'cancelled',resultId:null});
+  check(run,[cancelledItem],[events[0]!,cancelledEvent]);check(run,[],[]);
+  // A later producer transition may commit after the held assignment list.
+  // Its original event remains observed; this comparison certifies the held rows.
+  const next={...structuredClone(events[0]!),id:'assignment-created:later-attempt',assignmentId:'later-attempt',eventIndex:5};check(run,[item],[...events,next]);
+  expect({run,item,events}).toEqual(held);check(run,[item],events);
+ });
+
 	it('requires complete original normal node revisions and denies duplicate issuance or unexplained extra revisions without repairing failed records', () => {
 		const check = (normalHistory as unknown as Record<string, (items: Row[], graph: Row, decisions: ReadonlyMap<string, Row>, run: Row) => void>).verifyNormalAttemptRevisions;
 		expect(check, 'original normal history must be verified before terminal success').toBeTypeOf('function');

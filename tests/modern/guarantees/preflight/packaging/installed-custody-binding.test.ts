@@ -25,8 +25,8 @@ describe('capacity-provider guarantee execution bindings', () => {
 		expect(native.steps.some((step: { run?: string }) => step.run ===
 			'node --import tsx ./scripts/support/verify-installed-owners.ts')).toBe(true);
 		const inputs = JSON.parse(native.env.TREESEED_INSTALLED_OWNER_INPUTS);
-        expect(inputs.find((value:{owner:string})=>value.owner==='sdk')).toMatchObject({commit:'1f1a7e01251642ddfc6e06892ec92c798437d3db',sha256:'3269b1c7566f4d37b5f7863a1ef2fb04474e81bfd196065b334925b98142c2f8'});
-        for(const [owner,runId] of [['api',38624553996],['cli',38647918411],['sdk',38658693815]] as const){
+        expect(inputs.find((value:{owner:string})=>value.owner==='sdk')).toMatchObject({commit:'d496146ad2797cf0b19b4cb063036838b3d5b7ed',sha256:'521d77b833d2a7fffcf5ebc9450bca0fb56444e1b7fc6d5cdbde078065aa4d42'});
+        for(const [owner,runId] of [['api',38686878544],['cli',38647918411],['sdk',38693870774]] as const){
             const input=inputs.find((value:{owner:string})=>value.owner===owner);
             const downloads=native.steps.filter((step:{with?:{repository?:string;path?:string}})=>step.with?.repository==='treeseed-ai/'+owner&&step.with?.path==='.treeseed/installed-owner-inputs/'+owner);
             expect(downloads).toHaveLength(1);
@@ -36,7 +36,7 @@ describe('capacity-provider guarantee execution bindings', () => {
 		expect(inputs.find((value: { owner: string }) => value.owner === 'cli')).toMatchObject({
 			commit: '6e2579428f4959906cd5b9b669ebbb2b44cb495c', sha256: '49b6d24882af45ba39fd46cdcd999c9c54e84bd416f834fa0042ec5425dbea1a' });
 		expect(inputs.find((value: { owner: string }) => value.owner === 'api')).toMatchObject({
-			commit: '05de58440ed3589c9d116afa98c00589dfbb9fee', sha256: '78fefd2fc99ef9be210263c1e0f2d8464b0e0294a989f5b40f70f9bd2241ea34' });
+			commit: '2ecadebbf4e981a9cd247a52be20a477ed275b3e', sha256: 'e778f0ece7c2157e29de5e4a798588fb34cd9562b196d6e1bde37b5d3ce08be5' });
 		expect(inputs.find((value: { owner: string }) => value.owner === 'api').buildTreeDx).toEqual({
 			commit: '6d358bb2e536af24918f3c33acb2072b9093a603', sha256: 'd6de27b42704b4c899562f290950561132fd0d48f38a95e6624eb853e32691cb' });
 		expect(inputs.find((value: { owner: string }) => value.owner === 'api').buildSdk).toMatchObject({

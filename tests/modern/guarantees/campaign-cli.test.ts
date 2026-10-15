@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { encodeCapacityPageCursor } from '@treeseed/sdk/capacity-pagination';
 
 const state = vi.hoisted(() => ({ run: undefined as (() => Promise<void>) | undefined,
-	read: vi.fn(), verify: vi.fn(), external: vi.fn(), inspect: vi.fn(), graphInspect: vi.fn(), retain: vi.fn(), retainReview: vi.fn(), freeze: {} as Record<string, any> }));
+	read: vi.fn(), verify: vi.fn(), external: vi.fn(), inspect: vi.fn(), transitions:vi.fn(), evidence:vi.fn(), eventHistory:vi.fn(), graphInspect: vi.fn(), retain: vi.fn(), retainReview: vi.fn(), freeze: {} as Record<string, any> }));
 vi.mock('node:test', () => ({ default: (_name: string, _options: unknown, run: () => Promise<void>) => { state.run = run; } }));
 vi.mock('node:fs', () => ({ existsSync: () => true, readFileSync: (path: string) => path === '/freeze'
 	? JSON.stringify(state.freeze) : Buffer.alloc(0) }));
@@ -14,12 +14,13 @@ vi.mock('../../acceptance/campaign.ts', async importOriginal => ({
 	...await importOriginal<typeof import('../../acceptance/campaign.ts')>(), retainCampaignWorkdayStart: state.retain, retainCampaignPlanReview: state.retainReview,
 }));
 vi.mock('../../acceptance/sdk-runtime-golden.test.ts', () => ({ verifyGolden: state.verify }));
+vi.mock('../../acceptance/workday/support/campaign-observation.ts',async importOriginal=>({...await importOriginal<typeof import('../../acceptance/workday/support/campaign-observation.ts')>(),verifyAssignmentTransitionHistory:state.transitions,retainCampaignEventHistory:state.eventHistory}));
 vi.mock('../../acceptance/prepare-campaign.ts', () => ({ prepareSdkCampaign: vi.fn(), verifySdkExternalState: state.external }));
 vi.mock('../../acceptance/workday/support/monitoring/live-assignment-records.ts', () => ({
 	observeLiveAssignmentRecords: state.inspect, inspectLiveAssignmentProfile: vi.fn(),
 }));
 vi.mock('../../acceptance/workday/support/evidence-pages.ts', async importOriginal => ({
-	...await importOriginal<typeof import('../../acceptance/workday/support/evidence-pages.ts')>(), readCompleteEvidence: () => [],
+	...await importOriginal<typeof import('../../acceptance/workday/support/evidence-pages.ts')>(), readCompleteEvidence: state.evidence,
 }));
 vi.mock('../../acceptance/workday/support/monitoring/live-graph-revisions.ts', () => ({ observeLiveGraphRevisions: state.graphInspect }));
 await import('../../acceptance/campaign.test.ts');
@@ -48,7 +49,7 @@ function transport(show: () => unknown) {
 beforeEach(() => {
 	vi.stubEnv('TREESEED_ACCEPTANCE_FREEZE_PATH', '/freeze');
 	state.read.mockReset(); state.verify.mockReset(); state.external.mockReset(); state.inspect.mockReset(); state.graphInspect.mockReset();
-	state.retainReview.mockReset();
+	state.evidence.mockReset().mockReturnValue([]);state.retainReview.mockReset();state.transitions.mockReset();state.eventHistory.mockReset();
 	state.retain.mockReset().mockImplementation(receipt => { process.env.TREESEED_ACCEPTANCE_WORKDAY_ID = receipt.workdayId; return receipt.workdayId; });
 	state.freeze = { createdAt: new Date().toISOString(), host: { manifestDigest: `sha256:${'a'.repeat(64)}`, guestImageDigest: `sha256:${'b'.repeat(64)}` },
 		guest: { digest: `sha256:${'b'.repeat(64)}` }, receipts: { '/receipt': 'sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855' },
@@ -58,6 +59,32 @@ beforeEach(() => {
 });
 afterEach(() => vi.useRealTimers());
 describe('campaign CLI composition units (mocked transport, not native or live acceptance)', () => {
+ it('stops continuously changing concurrent assignment observations within the original inspection bound before campaign progress',async()=>{
+  transport(()=>observed('running'));const implementation=state.read.getMockImplementation()!;let sequence=0;
+  state.evidence.mockImplementation((args:string[])=>args[0]==='assignments'?[]:[{...event(sequence++),assignmentId:'late-'+sequence,eventType:'assignment.leased'}]);
+  state.read.mockImplementation((args:string[],...rest:unknown[])=>args[0]==='assignments'&&args[1]==='show'?{id:args[2]}:Reflect.apply(implementation,undefined,[args,...rest]));
+  state.inspect.mockImplementation(()=>{throw new Error('Continuously changing history advanced to another stage');});
+  await expect(state.run!()).rejects.toThrow('ACCEPTANCE_LIVE_ASSIGNMENT: Complete concurrent transition inventory not reached');expect(state.inspect).not.toHaveBeenCalled();expect(state.verify).not.toHaveBeenCalled();
+  expect(state.evidence.mock.calls.filter(call=>call[0][0]==='workdays')).toHaveLength(40);expect(state.read.mock.calls.filter(call=>call[0][1]==='stop')).toHaveLength(1);
+ });
+
+ it('revalidates assignments discovered in later public events before collaboration or approval instead of waiting for another poll',async()=>{
+  transport(()=>observed('running'));const implementation=state.read.getMockImplementation()!,late={id:'late-original-assignment'},original=new Error('ACCEPTANCE_ASSIGNMENT_TRANSITIONS: Missing concurrent original creation');
+  state.evidence.mockImplementation((args:string[])=>args[0]==='assignments'?[]:[{...event(),assignmentId:late.id,eventType:'assignment.leased'}]);
+  state.read.mockImplementation((args:string[],...rest:unknown[])=>args[0]==='assignments'&&args[1]==='show'?structuredClone(late):Reflect.apply(implementation,undefined,[args,...rest]));
+  state.transitions.mockImplementation((_run:unknown,records:Array<{id:string}>)=>{if(records.some(record=>record.id===late.id))throw original;});
+  state.inspect.mockImplementation(()=>{throw new Error('Concurrent assignment advanced without checking its original transition history');});
+  await expect(state.run!()).rejects.toBe(original);expect(state.inspect).not.toHaveBeenCalled();expect(state.verify).not.toHaveBeenCalled();
+  expect(state.read.mock.calls.filter(call=>call[0][1]==='evaluate')).toEqual([]);expect(state.read.mock.calls.filter(call=>call[0][1]==='stop')).toEqual([[['workdays','stop',workdayId,'--yes','--reason','Automated golden boundary failed','--idempotency-key','golden-stop:'+workdayId],'treeseed']]);
+ });
+
+ it('denies omitted owning assignment transitions before collaboration approval or later gates and retains the exact scoped stop',async()=>{
+  transport(()=>observed('running'));const original=new Error('ACCEPTANCE_ASSIGNMENT_TRANSITIONS: Missing original claim'),held=structuredClone(state.freeze);
+  state.transitions.mockImplementation(()=>{throw original;});await expect(state.run!()).rejects.toBe(original);
+  expect(state.eventHistory).toHaveBeenCalledOnce();expect(state.eventHistory.mock.calls[0]![3]).toBeTypeOf('function');expect(state.transitions).toHaveBeenCalledOnce();expect(state.inspect).not.toHaveBeenCalled();expect(state.verify).not.toHaveBeenCalled();
+  expect(state.read.mock.calls.filter(call=>call[0][1]==='evaluate')).toEqual([]);expect(state.read.mock.calls.filter(call=>call[0][1]==='stop')).toEqual([[['workdays','stop',workdayId,'--yes','--reason','Automated golden boundary failed','--idempotency-key','golden-stop:'+workdayId],'treeseed']]);expect(state.freeze).toEqual(held);
+ });
+
  it('retains the original late plan-review report and stops the exact admitted simulation without approval or later gates',async()=>{
   transport(()=>observed('running'));state.freeze.proposal.digest='sha256:'+'a'.repeat(64);const details={project:'sdk',proposal:state.freeze.proposal.id+' '+state.freeze.proposal.digest,workday:workdayId,'failed expectation':'Original plan requires review.','observed evidence':'Retained original observation.','why implementation repair is insufficient':'The original plan requires reviewed correction.','smallest proposed plan correction':'Request review; no change applied.'};
   const original=campaignPlanReviewRequired(details,Object.assign(new Error('Original transport cause'),{code:'ECONNREFUSED'})),held=structuredClone(state.freeze),stderr=vi.spyOn(console,'error').mockImplementation(()=>{});

@@ -103,7 +103,7 @@ function text(value: unknown) {
 }
 
 /** Acceptance-only custody of existing public workday records; not another event authority. */
-export function observeCampaign(observed: unknown, workdayId: string, retained: Map<string, Row>, readEvents?: (cursor: string, limit: number) => Row) {
+export function observeCampaign(observed: unknown, workdayId: string, retained: Map<string, Row>, readEvents?: (cursor: string, limit: number) => Row, capture?: (event:Row)=>void) {
 	const data = row(observed), run = row(data.run), scheduling = row(data.scheduling);
 	assert.equal(run.id, workdayId, 'ACCEPTANCE_CAMPAIGN_ID: Read-back changed identity');
 	assert.equal(scheduling.executionId, workdayId, 'ACCEPTANCE_OBSERVATION: Scheduling changed workday');
@@ -138,6 +138,92 @@ export function observeCampaign(observed: unknown, workdayId: string, retained: 
 		assert.ok(readEvents, 'ACCEPTANCE_OBSERVATION: Public event reader required');
 		return row(readEvents(cursor, limit));
 	}, limit, 'ACCEPTANCE_OBSERVATION', 'ascending') : data.events;
+	assert.ok(run.status !== 'completed' || !failedBoundary, 'ACCEPTANCE_OBSERVATION: Completed run hides failed scheduling');
+	return {run,failedBoundary,events:retainCampaignEventHistory(events,run,retained,capture)};
+}
+
+/** The assignment list is held before the complete public history is read.
+ * Later events remain observations; the next poll inspects their current rows.
+ * Clock-tool contents retain their existing protected native verifier. */
+export function verifyAssignmentTransitionHistory(run: Row, assignments: readonly Row[], events: readonly Row[]): void {
+ const label='ACCEPTANCE_ASSIGNMENT_TRANSITIONS',clock=(value:unknown)=>{assert.ok(typeof value==='string'&&Number.isFinite(Date.parse(value)),label+': Original transition clock required');return Date.parse(value);};
+ const ids=new Set<string>(),indexes=new Set<number>();
+ for(const event of events){
+  assert.equal(event.runId,run.id,label+': Foreign run');assert.equal(event.teamId,run.teamId,label+': Foreign team');
+  assert.ok(typeof event.id==='string'&&event.id&&!ids.has(event.id),label+': Duplicate event');ids.add(event.id);
+  assert.ok(Number.isSafeInteger(event.eventIndex)&&Number(event.eventIndex)>=0&&!indexes.has(Number(event.eventIndex)),label+': Duplicate event index');indexes.add(Number(event.eventIndex));clock(event.createdAt);
+ }
+ assert.deepEqual([...indexes].sort((a,b)=>a-b),Array.from({length:indexes.size},(_,index)=>index),label+': Missing public event');
+ const owners=new Set<string>();
+ for(const item of assignments){
+  const attempt=assignmentAttemptSchema.parse(item.assignmentAttempt),metadata=row(item.metadata);
+  assert.equal(item.id,attempt.id,label);assert.equal(attempt.workdayId,run.id,label);assert.equal(attempt.teamId,run.teamId,label);
+  assert.ok(!owners.has(attempt.id),label+': Duplicate original assignment');owners.add(attempt.id);
+  assert.ok(Number.isSafeInteger(item.stateVersion)&&Number(item.stateVersion)>=1,label+': Exact owning version required');
+  const created=clock(attempt.createdAt);assert.equal(clock(item.createdAt),created,label+': Original creation changed');
+  const observed=events.filter(event=>event.assignmentId===attempt.id&&typeof event.eventType==='string'&&event.eventType.startsWith('assignment.'));
+  const one=(type:string)=>{const matches=observed.filter(event=>event.eventType===type);assert.equal(matches.length,1,label+': Missing or duplicate '+type);return matches[0]!;};
+  const version=(event:Row,prefix:string)=>{assert.ok(typeof event.id==='string'&&event.id.startsWith(prefix),label+': Wrong owning transition identity');const suffix=event.id.slice(prefix.length);assert.match(suffix,/^[1-9][0-9]*$/u,label);const value=Number(suffix);assert.ok(Number.isSafeInteger(value)&&value>1,label);return value;};
+  const birth=one('assignment.created');assert.equal(birth.id,'assignment-created:'+attempt.id,label);assert.equal(clock(birth.createdAt),created,label);
+  const common={nodeId:attempt.nodeId,graphRevision:attempt.graphRevision,leaseId:attempt.leaseId,reservationId:attempt.reservationId};
+  for(const event of observed){
+   assert.equal(event.workdayId,run.id,label);assert.equal(event.projectId,attempt.projectId,label);assert.equal(event.status,'recorded',label);
+   const context=row(event.context);for(const[key,value]of Object.entries(common))assert.deepEqual(context[key],value,label+': Changed '+key);
+   assert.ok(event.eventType==='assignment.retry-requested'?Number.isSafeInteger(context.nodeRevision)&&Number(context.nodeRevision)>=attempt.nodeRevision:context.nodeRevision===attempt.nodeRevision,label+': Changed node revision');
+   assert.ok(clock(event.createdAt)>=created,label+': Transition before creation');
+   if(event!==birth)assert.ok(Number(event.eventIndex)>Number(birth.eventIndex),label+': Transition before creation observation');
+  }
+  assert.equal(row(birth.context).status,'created',label);
+  const leases=observed.filter(event=>event.eventType==='assignment.leased');
+  for(const event of leases){version(event,'assignment-lease:'+attempt.id+':');assert.equal(row(event.context).status,'leased',label);}
+  if(item.claimedAt!==undefined&&item.claimedAt!==null){
+   const first=leases.filter(event=>clock(event.createdAt)===clock(item.claimedAt)&&version(event,'assignment-lease:'+attempt.id+':')<=Number(item.stateVersion));
+   assert.equal(first.length,1,label+': Missing original claim');
+  }else assert.ok(leases.every(event=>version(event,'assignment-lease:'+attempt.id+':')>Number(item.stateVersion)),label+': Unmatched original claim');
+  let execution:Row|undefined,closeout:Row|undefined;
+  for(const phase of ['execution','closeout']as const){
+   const window=metadata[phase+'Window'];if(window===undefined)continue;
+   const original=row(window),event=one('assignment.'+phase+'.started');assert.equal(event.id,'assignment-'+phase+':'+attempt.id,label);assert.equal(clock(event.createdAt),clock(original.startedAt),label);
+   assert.equal(row(event.context).status,phase==='execution'?'running':'closeout',label);
+   assert.ok(leases.some(lease=>Number(lease.eventIndex)<Number(event.eventIndex)&&clock(lease.createdAt)<=clock(event.createdAt)),label+': Window without earlier claim');
+   if(phase==='execution')execution=event;else closeout=event;
+  }
+  if(execution&&closeout)assert.ok(Number(execution.eventIndex)<Number(closeout.eventIndex)&&clock(execution.createdAt)<=clock(closeout.createdAt),label+': Reversed productive windows');
+  const terminalTypes=['completed','failed','returned','cancelled','expired'],terminal=observed.filter(event=>terminalTypes.includes(String(event.eventType).slice('assignment.'.length)));
+  for(const event of terminal){
+   const originalVersion=version(event,'assignment-terminal:'+attempt.id+':'),context=row(event.context);assert.equal(context.status,String(event.eventType).slice('assignment.'.length),label);
+   if(originalVersion<=Number(item.stateVersion))assert.deepEqual(context.resultId,item.assignmentResult?row(item.assignmentResult).id:null,label+': Changed canonical result');
+  }
+  if(terminalTypes.includes(String(item.status))){
+   const matches=terminal.filter(event=>event.eventType==='assignment.'+String(item.status)&&version(event,'assignment-terminal:'+attempt.id+':')<=Number(item.stateVersion));
+   assert.equal(matches.length,1,label+': Missing owning terminal transition');const event=matches[0]!;
+   if(item.status==='completed')assert.equal(clock(event.createdAt),clock(item.completedAt),label+': Changed completion clock');
+   if(item.status==='returned')assert.equal(clock(event.createdAt),clock(item.returnedAt),label+': Changed return clock');
+   if(item.status==='failed'||item.status==='expired')assert.equal(clock(event.createdAt),clock(item.failedAt),label+': Changed failure clock');
+   if(attempt.finishedAt!==undefined)assert.ok(terminal.some(value=>clock(value.createdAt)===clock(attempt.finishedAt)&&version(value,'assignment-terminal:'+attempt.id+':')<=Number(item.stateVersion)),label+': Missing original terminal clock');
+   for(const window of [execution,closeout])if(window)assert.ok(Number(window.eventIndex)<Number(event.eventIndex)&&clock(window.createdAt)<=clock(event.createdAt),label+': Terminal precedes its productive window');
+  }
+  if(metadata.cancellationRequested===true){
+   const event=one('assignment.cancellation-requested'),context=row(event.context),parameters=row(event.parameters);
+   assert.equal(context.status,'leased',label);assert.ok(leases.some(value=>Number(value.eventIndex)<Number(event.eventIndex)&&clock(value.createdAt)<=clock(event.createdAt)),label+': Cancellation request must follow claim');
+   assert.equal(event.id,'assignment-cancellation-requested:'+attempt.id,label);assert.equal(clock(event.createdAt),clock(metadata.cancellationRequestedAt),label);
+   assert.ok(Number.isSafeInteger(context.stateVersion)&&Number(context.stateVersion)<=Number(item.stateVersion)&&Number(context.stateVersion)>1,label);
+   assert.deepEqual(parameters.actorId,metadata.cancellationRequestedBy,label);assert.ok(typeof parameters.idempotencyKey==='string'&&parameters.idempotencyKey.trim(),label);
+  }
+  if(metadata.operatorRetry!==undefined){
+   const retry=row(metadata.operatorRetry),event=one('assignment.retry-requested'),context=row(event.context),parameters=row(event.parameters),written=version(event,'assignment-retry:'+attempt.id+':');
+   assert.equal(terminal.filter(value=>row(value.context).status===context.status&&version(value,'assignment-terminal:'+attempt.id+':')<written
+    &&Number(value.eventIndex)<Number(event.eventIndex)&&clock(value.createdAt)<=clock(event.createdAt)).length,1,label+': Retry must follow its original terminal observation');
+   assert.equal(written,context.stateVersion,label);assert.ok(written<=Number(item.stateVersion),label);assert.equal(clock(event.createdAt),clock(retry.requestedAt),label);
+   assert.deepEqual(parameters.actorId,retry.requestedBy,label);assert.deepEqual(parameters.reason,retry.reason,label);assert.ok(typeof parameters.idempotencyKey==='string'&&parameters.idempotencyKey.trim(),label);
+  }
+ }
+}
+
+
+/** Same immutable event check for show pagination and the post-assignment public inventory. */
+export function retainCampaignEventHistory(events:readonly unknown[],run:Row,retained:Map<string,Row>,capture?:(event:Row)=>void):Row[]{
+ const workdayId=String(run.id);
 	const current = new Map<string, Row>(), indexes = new Set<number>();
 	for (const value of events) {
 		const event = row(value), id = text(event.id);
@@ -156,7 +242,7 @@ export function observeCampaign(observed: unknown, workdayId: string, retained: 
 		'ACCEPTANCE_OBSERVATION: Missing event transition');
 	for (const [id, previous] of retained) assert.deepEqual(current.get(id), previous,
 		'ACCEPTANCE_OBSERVATION: Previously observed event mutated or disappeared');
-	assert.ok(run.status !== 'completed' || !failedBoundary, 'ACCEPTANCE_OBSERVATION: Completed run hides failed scheduling');
+ for(const[id,event]of current)if(!retained.has(id))capture?.(structuredClone(event));
 	for (const [id, event] of current) retained.set(id, structuredClone(event));
-	return { run, failedBoundary, events: [...current.values()] };
+	return [...current.values()];
 }

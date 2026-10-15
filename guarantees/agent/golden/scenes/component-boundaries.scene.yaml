@@ -2323,10 +2323,34 @@ workflow:
     action: { verifier: agent.golden.plan-review-stop-native }
     expect: { status: passed }
 
+  - id: assignment-transitions-unit
+    action: { verifier: agent.golden.assignment-transitions-unit }
+    expect: { status: passed }
+
+  - id: assignment-transition-retention-unit
+    action: { verifier: agent.golden.assignment-transition-retention-unit }
+    expect: { status: passed }
+
+  - id: assignment-transitions-wiring-unit
+    action: { verifier: agent.golden.assignment-transitions-wiring-unit }
+    expect: { status: passed }
+
+  - id: assignment-transitions-native
+    action: { verifier: agent.golden.assignment-transitions-native }
+    expect: { status: passed }
+
   - id: review-objective-context-unit
     action: { verifier: agent.golden.review-objective-context-unit }
     expect: { status: passed }
 
   - id: review-objective-context-native
     action: { verifier: agent.golden.review-objective-context-native }
+    expect: { status: passed }
+
+  - id: assignment-concurrent-discovery-unit
+    action: { verifier: agent.golden.assignment-concurrent-discovery-unit }
+    expect: { status: passed }
+
+  - id: assignment-concurrent-bound-unit
+    action: { verifier: agent.golden.assignment-concurrent-bound-unit }
     expect: { status: passed }

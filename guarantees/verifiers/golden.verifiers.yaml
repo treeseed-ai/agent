@@ -4006,6 +4006,30 @@ verifiers:
     testFile: tests/modern/guarantees/preflight/proposals/campaign-plan-review-native.test.ts
     testName: "native public scoped stop retains the exact original plan-review report and frozen bytes through report collision denial and terminal race without later stages"
 
+  agent.golden.assignment-transitions-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/monitoring/live-assignment-records.test.ts
+    testName: "requires every owning assignment transition beyond contiguous public event pages before campaign progress without changing original observations"
+
+  agent.golden.assignment-transition-retention-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/monitoring/live-assignment-records.test.ts
+    testName: "retains every new original transition once and preserves prior history when immutable capture fails"
+
+  agent.golden.assignment-transitions-wiring-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/campaign-cli.test.ts
+    testName: "denies omitted owning assignment transitions before collaboration approval or later gates and retains the exact scoped stop"
+
+  agent.golden.assignment-transitions-native:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/monitoring/terminal-evidence-native.test.ts
+    testName: "native Kernel candidate and public assignment histories reject omitted owning transitions before scoped stop and unchanged concurrent retry"
+
   agent.golden.review-objective-context-unit:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"
@@ -4017,3 +4041,15 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/guarantees/monitoring/live-assignment-native.test.ts
     testName: "native public governed objective bytes reject substituted or broadened reviewing criteria before unchanged independent reads"
+
+  agent.golden.assignment-concurrent-discovery-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/campaign-cli.test.ts
+    testName: "revalidates assignments discovered in later public events before collaboration or approval instead of waiting for another poll"
+
+  agent.golden.assignment-concurrent-bound-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/campaign-cli.test.ts
+    testName: "stops continuously changing concurrent assignment observations within the original inspection bound before campaign progress"

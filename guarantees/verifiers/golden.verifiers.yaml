@@ -4053,3 +4053,9 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/guarantees/campaign-cli.test.ts
     testName: "stops continuously changing concurrent assignment observations within the original inspection bound before campaign progress"
+
+  agent.golden.chat-answer-kernel-native:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/portable/context-integration.test.ts
+    testName: "native configured chat retains the exact general answer through original HTTP executor and Kernel without source publication"

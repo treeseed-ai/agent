@@ -251,6 +251,7 @@ export function retainCampaignEventHistory(events:readonly unknown[],run:Row,ret
  * current node inventory. This creates no graph or transition authority. */
 export function verifyNodeTransitionHistory(run:Row,graph:Row,events:readonly Row[]):void{
  const label='ACCEPTANCE_NODE_TRANSITIONS',statuses=new Set(['proposed','blocked','ready','assigned','running','completed','failed','cancelled','stale']);
+ const started=Date.parse(typeof run.startedAt==='string'?run.startedAt:'');assert.ok(Number.isFinite(started),label+': Original owning workday start required');
  assert.equal(graph.teamId,run.teamId,label+': Foreign owning graph');assert.ok(Number.isSafeInteger(graph.revision)&&Number(graph.revision)>=0,label+': Exact graph revision required');
  assert.ok(Array.isArray(graph.nodes),label+': Complete owning node inventory required');
  const nodes=new Map<string,ReturnType<typeof executionNodeSchema.parse>>();
@@ -268,7 +269,7 @@ export function verifyNodeTransitionHistory(run:Row,graph:Row,events:readonly Ro
   assert.ok(Number.isSafeInteger(context.nodeRevision)&&Number(context.nodeRevision)>=1,label+': Exact node revision required');
   assert.ok(Number.isSafeInteger(context.graphRevision)&&Number(context.graphRevision)>=node.graphRevisionCreated&&Number(context.graphRevision)<=Number(graph.revision),label+': Original graph revision missing or in the future');
   assert.ok(statuses.has(String(context.status)),label+': Unknown node state');assert.ok(context.previousStatus===null||statuses.has(String(context.previousStatus)),label+': Original previous state required');
-  const clock=Date.parse(typeof event.createdAt==='string'?event.createdAt:'');assert.ok(Number.isFinite(clock),label+': Original transition clock required');
+  const clock=Date.parse(typeof event.createdAt==='string'?event.createdAt:'');assert.ok(Number.isFinite(clock)&&clock>=started,label+': Original transition cannot precede its owning workday');
   const history=histories.get(node.id)??[],prior=history.at(-1);
   if(prior){assert.ok(Number(event.eventIndex)>Number(prior.event.eventIndex)&&clock>=prior.clock,label+': Reversed transition order');assert.equal(context.previousStatus,prior.context.status,label+': Missing node transition');
    assert.ok(Number(context.nodeRevision)>=Number(prior.context.nodeRevision)&&Number(context.nodeRevision)<=Number(prior.context.nodeRevision)+1,label+': Missing or regressed node revision');

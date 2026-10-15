@@ -50,7 +50,7 @@ function supplied() {
  const events:Row[]=[{id:'event-destroyed',runId:attempt.workdayId,workdayId:attempt.workdayId,teamId:attempt.teamId,projectId:attempt.projectId,assignmentId:attempt.id,eventIndex:0,eventType:'provider.sandbox.destroyed',status:'recorded',createdAt:'2026-09-13T12:00:01.000Z',context:{sandboxId:id,teardown:structuredClone(row(items[0]!.lifecycleOutput).teardown),vmId},parameters:{},refs:{},metadata:{}}];
  return { items, connections: [{ providerId: attempt.provider.providerId, teamId: attempt.teamId }], brokerSocket, status, id,events,vmId };
 }
-const verify = (f: ReturnType<typeof supplied>) => Reflect.apply(verifyPublicSandboxAbsence,undefined,[f.items, f.connections, f.brokerSocket, f.status,f.events]);
+const verify = (f: ReturnType<typeof supplied>) => verifyPublicSandboxAbsence(f.items, f.connections, f.brokerSocket, f.status,f.events);
 describe('public owning sandbox inventory consumption', () => {
  it('accepts exact complete confirmed absence while retaining unrelated live resources and original observations', () => {
   const f = supplied(), before = structuredClone(f);

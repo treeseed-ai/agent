@@ -4053,3 +4053,9 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/guarantees/campaign-cli.test.ts
     testName: "stops continuously changing concurrent assignment observations within the original inspection bound before campaign progress"
+
+  agent.golden.execution-vm-custody-unit-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/microvm-result-authority.test.ts
+    testName: "retains only exact acquired VM identity from complete original broker destruction history in the public closeout event"

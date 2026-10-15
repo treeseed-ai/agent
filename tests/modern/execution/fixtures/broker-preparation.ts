@@ -65,7 +65,9 @@ export async function microvmBroker() {
 					if (destroyFault === 'reset') { request.socket.destroy(); return; }
 					if (destroyFault === 'json') { response.end('{'); return; }
 					if (destroyFault === '403' || destroyFault === '503') { response.statusCode = Number(destroyFault); response.end(JSON.stringify({ error: `original destroy ${destroyFault}` })); return; }
-					response.end(JSON.stringify(destroyReply ?? { sandboxId: 'owned-native-sandbox', destroyed: true, teardown: { verified: true, completedAt: destroyedAt } })); return;
+					response.end(JSON.stringify(destroyReply ?? { sandboxId: 'owned-native-sandbox', destroyed: true, teardown: { verified: true, completedAt: destroyedAt },events:[
+      {schemaVersion:'treeseed.sandbox-event/v1',sandboxId:'owned-native-sandbox',assignmentId:assigned!.assignmentId,sequence:0,occurredAt:destroyedAt,type:'execution.progress',payload:{stage:'vm.assigned',warmed:true,vmId:'sandbox-warm-11111111-1111-4111-8111-111111111111'}},
+      {schemaVersion:'treeseed.sandbox-event/v1',sandboxId:'owned-native-sandbox',assignmentId:assigned!.assignmentId,sequence:1,occurredAt:destroyedAt,type:'sandbox.destroyed',payload:{verified:true,vmId:'sandbox-warm-11111111-1111-4111-8111-111111111111'}}] })); return;
 				}
 				response.statusCode = 500; response.end('{"error":"Unexpected native broker operation"}');
 			} catch (error) { response.statusCode = 500; response.end(JSON.stringify({ error: error instanceof Error ? error.message : 'Native input failed' })); }

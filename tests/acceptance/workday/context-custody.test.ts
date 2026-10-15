@@ -60,15 +60,13 @@ test('Actual draft Proposal handoff is independently read from its own granted p
 	assert.deepEqual(readWorkdayAssignments(id, String(run.startedAt), team), assignments);
 	assert.deepEqual(read(['workdays', 'show', id], team), workday);
 });
-test('Actual managed proposal execution retains native blocking feedback and its exact prior resolution before the governing classed Decision without replacing original content or history', { timeout: 120_000 }, () => {
-	const id = acceptanceWorkdayId(), team = process.env.TREESEED_ACCEPTANCE_TEAM ?? 'treeseed';
-	assert.match(id, /^workday-[a-f0-9-]+$/u);
-	const workday = read(['workdays', 'show', id], team), run = row(workday.run), items = readWorkdayAssignments(id, String(run.startedAt), team);
+/** The same exact owning feedback assertions serve normal runs and the dedicated resolved-blocker case. */
+export function verifyProposalFeedback(items:Row[],team:string,observe:typeof read=read):{seen:number;resolved:number}{
 	const observations: Array<{ args: string[]; value: Row }> = [], seen = new Set<string>(); let resolved = 0;
 	const exactRead = (reference: Row, projectId: string) => {
 		const ref = exactEntityReferenceSchema.parse(reference);
 		assert.ok(ref.store === 'treedx' && ref.repository && ref.commit && ref.path && ref.digest, 'ACCEPTANCE_PROPOSAL_FEEDBACK_REF: Complete original content authority required');
-		const args = ['library', 'read', projectId, ref.path, '--ref', ref.commit], value = read(args, team, true), returned = row(value.result ?? value);
+		const args = ['library', 'read', projectId, ref.path, '--ref', ref.commit], value = observe(args, team, true), returned = row(value.result ?? value);
 		assert.equal(returned.resolvedRef, ref.commit); assert.ok(Array.isArray(returned.files) && returned.files.length === 1);
 		const file = row(returned.files[0]); assert.equal(file.path, ref.path); assert.equal(typeof file.content, 'string');
 		assert.equal(`sha256:${createHash('sha256').update(String(file.content)).digest('hex')}`, ref.digest);
@@ -81,7 +79,7 @@ test('Actual managed proposal execution retains native blocking feedback and its
 		if (source.model !== 'proposal' || !['acting', 'reviewing'].includes(attempt.effectiveProfile.activity)) continue;
 		const key = `${attempt.projectId}:${source.id}:${source.revision}:${source.digest}`; if (seen.has(key)) continue; seen.add(key);
 		verifyAssignmentAuthority(item);
-		const args = ['proposals', 'show', source.id, '--server', 'local', '--project', attempt.projectId], proposal = read(args, team, true);
+		const args = ['proposals', 'show', source.id, '--server', 'local', '--project', attempt.projectId], proposal = observe(args, team, true);
 		observations.push({ args, value: proposal });
 		assert.equal(proposal.id, source.id); assert.equal(proposal.status, 'accepted'); assert.equal(proposal.activeVersion, source.revision);
 		assert.equal(`sha256:${proposal.activeContentHash}`, source.digest);
@@ -110,8 +108,16 @@ test('Actual managed proposal execution retains native blocking feedback and its
 			resolved++;
 		}
 	}
-	assert.ok(seen.size > 0 && resolved > 0, 'ACCEPTANCE_PROPOSAL_FEEDBACK_EMPTY: Actual resolved blocking history and governed execution required');
-	for (const observation of observations) assert.deepEqual(read(observation.args, team, true), observation.value);
+	for (const observation of observations) assert.deepEqual(observe(observation.args, team, true), observation.value);
+ return{seen:seen.size,resolved};
+}
+
+test('Actual managed proposal execution retains native blocking feedback and its exact prior resolution before the governing classed Decision without replacing original content or history', { timeout: 120_000 }, () => {
+	const id = acceptanceWorkdayId(), team = process.env.TREESEED_ACCEPTANCE_TEAM ?? 'treeseed';
+	assert.match(id, /^workday-[a-f0-9-]+$/u);
+	const workday = read(['workdays', 'show', id], team), run = row(workday.run), items = readWorkdayAssignments(id, String(run.startedAt), team);
+	const {seen,resolved}=verifyProposalFeedback(items,team);
+	assert.ok(seen > 0 && resolved > 0, 'ACCEPTANCE_PROPOSAL_FEEDBACK_EMPTY: Actual resolved blocking history and governed execution required');
 	assert.deepEqual(readWorkdayAssignments(id, String(run.startedAt), team), items); assert.deepEqual(read(['workdays', 'show', id], team), workday);
 });
 
@@ -180,6 +186,7 @@ test('Actual TreeDX assignment context is independently read at exact granted re
 		verifyAssignmentAuthority(item); reads += inspectAssignmentContext(item, team);
 	}
 	assert.ok(reads > 0, 'ACCEPTANCE_CONTEXT_EMPTY: No native TreeDX content read cannot prove this boundary');
+	assert.ok(verifyProposalFeedback(assignments,team).seen>0,'ACCEPTANCE_PROPOSAL_FEEDBACK_EMPTY: Normal execution requires original accepted proposal authority');
 	assert.deepEqual(readWorkdayAssignments(id, String(run.startedAt), team), assignments);
 	// Other model digests must use their owning model's canonical comparison,
 	// not a guessed universal raw-file digest. This proves exact native TreeDX

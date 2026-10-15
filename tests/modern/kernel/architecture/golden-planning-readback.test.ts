@@ -11,12 +11,13 @@ const published = (): Row => state.replies.get(`library read notes/${later().id}
 describe('managed planning cycle and published contribution custody', () => {
  it('denies estimating role counts without original exact published estimate results before readiness',()=>{
   const original=structuredClone([...state.replies]);expect(()=>gate('collaboration')).not.toThrow();
-  for(const mode of['omitted-publication','foreign-publication','malformed-result']){
+  for(const mode of['omitted-publication','foreign-publication','malformed-result','changed-body']){
    state.replies.clear();for(const[key,value]of structuredClone(original))state.replies.set(key,value);
    const item=state.replies.get('assignments list')!.items.find((value:Row)=>value.id==='estimate-engineer')!;
    if(mode==='omitted-publication')item.assignmentResult.references=[];
    if(mode==='foreign-publication')item.assignmentResult.references[0].projectId='foreign';
    if(mode==='malformed-result')item.assignmentResult.assignmentId='foreign';
+   if(mode==='changed-body'){const ref=item.assignmentResult.references[0],reply=state.replies.get('library read '+ref.path+' --ref '+ref.commit)!;reply.result.files[0].content+='Substituted objective in original proposal body.\n';}
    const held=structuredClone([...state.replies]);expect.soft(()=>gate('collaboration'),mode).toThrow(/ACCEPTANCE_ESTIMATE/u);expect([...state.replies]).toEqual(held);
   }
   state.replies.clear();for(const[key,value]of original)state.replies.set(key,value);expect(()=>gate('collaboration')).not.toThrow();

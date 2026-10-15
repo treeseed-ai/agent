@@ -11,6 +11,11 @@ const published = (): Row => state.replies.get(`library read notes/${later().id}
 describe('managed planning cycle and published contribution custody', () => {
  it('denies estimating role counts without original exact published estimate results before readiness',()=>{
   const original=structuredClone([...state.replies]);expect(()=>gate('collaboration')).not.toThrow();
+  // Controlled unit metadata only; actual command custody remains owned by the selected verification guard.
+  const estimator=state.replies.get('assignments list')!.items.find((value:Row)=>value.id==='estimate-engineer')!,verification=estimator.assignmentResult.verification;
+  estimator.assignmentResult.verification=[{command:'Controlled unit estimate validation',status:'passed',exitCode:0,durationSeconds:1,outputDigest:'sha256:'+'a'.repeat(64)}];
+  expect.soft(()=>gate('collaboration'),'Canonical estimator verification is permitted').not.toThrow();estimator.assignmentResult.verification=verification;
+
   for(const mode of['omitted-publication','foreign-publication','malformed-result','changed-body','foreign-owner','duplicate-result','stale-ref','invalid-time','missing-write-grant','wrong-work-estimate']){
    state.replies.clear();for(const[key,value]of structuredClone(original))state.replies.set(key,value);
    const item=state.replies.get('assignments list')!.items.find((value:Row)=>value.id==='estimate-engineer')!;

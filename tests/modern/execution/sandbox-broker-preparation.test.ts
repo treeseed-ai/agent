@@ -155,6 +155,7 @@ describe('sandbox broker control transport', () => {
 				const diagnosticEvents = api.requests.filter(item => item.operation === 'createEvent'
 					&& ['provider.execution.completed', 'provider.execution.failed'].includes(String(item.body.eventType)));
 				expect(diagnosticEvents).toHaveLength(1);
+				expect(api.requests.filter(item=>item.operation==='createEvent'&&item.body.eventType==='provider.sandbox.destroyed').map(item=>item.body.context)).toEqual([{sandboxId:'owned-native-sandbox',teardown:{verified:true,completedAt:f.destroyedAt()},vmId:'sandbox-warm-11111111-1111-4111-8111-111111111111'}]);
 				expect(diagnosticEvents[0]!.body).toMatchObject({ leaseToken: f.input.leaseToken, runnerId: f.input.runnerId,
 					context: { model: f.assignment()!.modelPolicy.model, provider: f.assignment()!.modelPolicy.provider,
 						timingAwareness: raw.timingAwareness, timing: { elapsedSeconds: raw.usage.elapsedSeconds } }, protectedPayload: raw.diagnostics });

@@ -38,7 +38,7 @@ it('native public scoped stop retains the exact original plan-review report and 
    let failure:unknown;try{await monitorCampaign({admittedSimulation:true,read:()=>({status:String(current.status),mode:String(current.executionMode),planningEndsAt:1,endsAt:2}),inspect:()=>{throw original;},now:()=>1,wait:async()=>{later++;},collaboration:()=>{later++;},verify:()=>{later++;},reportPlanReview:mode==='missing-report'?undefined:report=>{retained++;retainCampaignPlanReview(report,freezePath,freeze);},stop:async()=>{
     try{await client.invoke(stop,stopInput,{idempotencyKey:'golden-stop:'+workdayId});}
     catch(error){current=row(row((await client.invoke(show,{path:{teamId,runId:workdayId},query:{},body:undefined})).data).run);throw error;}
-   });}catch(error){failure=error;}
+   }});}catch(error){failure=error;}
    if(mode==='exact'||mode==='stop-race')expect(failure).toBe(original);else{expect(failure).toBeInstanceOf(AggregateError);expect((failure as AggregateError).errors).toContain(original);}
    expect(later).toBe(0);expect(retained).toBe(mode==='missing-report'?0:1);const stops=history.slice(offset).filter(item=>item.method===stopRoute.method&&item.path===path(stopRoute.path));expect(stops).toEqual([{method:stopRoute.method,path:path(stopRoute.path),key:'golden-stop:'+workdayId,body:stopInput.body}]);
    expect(readFileSync(freezePath,'utf8')).toBe(bytes);expect(readFileSync(freezePath+'.workday-start.json')).toEqual(receipt);expect(stopInput).toEqual(stopHeld);expect(Object.getOwnPropertyDescriptors(original)).toEqual(held);

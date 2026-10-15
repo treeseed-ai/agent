@@ -2361,3 +2361,6 @@ workflow:
   - id: chat-answer-kernel-native
     action: { verifier: agent.golden.chat-answer-kernel-native }
     expect: { status: passed }
+  - id: execution-resource-closure-unit
+    action: { verifier: agent.golden.execution-resource-closure-unit }
+    expect: { status: passed }

@@ -195,3 +195,33 @@ export function verifyPublicSandboxAbsence(items: Row[], connections: Array<{ pr
  verifyCompletedSourceAbsence(items, status,devices.names,devices.images);
  return paths;
 }
+
+/** Existing public records identify the exact retired sessions, grants and mutable TreeDX workspaces. */
+export async function verifyPublicWorkspaceSessionClosure(items:Row[],sessions:Row[],readWorkspace:(projectId:string,workspaceId:string)=>Row|Promise<Row>):Promise<void>{
+ const code='ACCEPTANCE_RESOURCE_CLOSURE',ids=new Set<string>(),workspaces=new Set<string>();assert.ok(items.length>0,code);
+ for(const session of sessions){assert.ok(typeof session.id==='string'&&session.id&&!ids.has(session.id),code);ids.add(session.id);assert.ok(['open','draining','closed','expired'].includes(String(session.status)),code);}
+ for(const item of items){
+  const attempt=assignmentAttemptSchema.parse(item.assignmentAttempt);assert.deepEqual(attempt,item.assignmentAttempt,code);
+  assert.equal(item.id,attempt.id,code);assert.equal(item.teamId,attempt.teamId,code);assert.equal(item.projectId,attempt.projectId,code);assert.equal(item.workDayId,attempt.workdayId,code);
+  assert.ok(['completed','failed','cancelled','returned','expired'].includes(String(item.status)),code);const terminal=timestamp(item.completedAt??item.failedAt??item.returnedAt);
+  assert.ok(typeof item.providerSessionId==='string'&&item.providerSessionId&&typeof item.membershipId==='string'&&item.membershipId,code);
+  const found=sessions.filter(value=>value.id===item.providerSessionId);assert.equal(found.length,1,code);const session=found[0]!;
+  assert.equal(session.teamId,attempt.teamId,code);assert.equal(session.providerId,attempt.provider.providerId,code);assert.equal(session.membershipId,item.membershipId,code);
+  assert.equal(session.status,'closed',code);assert.ok(timestamp(session.closedAt)>=terminal,code);
+  const proxy=row(item.treedxProxyHandle),context=row(item.workspaceContext),handles=row(item.capabilityHandles);
+  assert.equal(proxy.teamId,attempt.teamId,code);assert.equal(proxy.projectId,attempt.projectId,code);assert.equal(proxy.assignmentId,attempt.id,code);
+  assert.ok(typeof proxy.id==='string'&&proxy.id,code);assert.equal(proxy.status,'revoked',code);assert.ok(timestamp(proxy.revokedAt)<=terminal&&timestamp(proxy.revokedAt)>=timestamp(attempt.createdAt),code);
+  assert.deepEqual(context.treedxProxyHandle,proxy,code);assert.deepEqual(context.capabilityHandles,handles,code);
+  for(const kind of['repository','treeDx','workflowOperations','secrets']){const entries=handles[kind];assert.ok(Array.isArray(entries),code);for(const value of entries){const handle=row(value);assert.equal(handle.status,'revoked',code);assert.ok(timestamp(handle.revokedAt)<=terminal&&timestamp(handle.revokedAt)>=timestamp(attempt.createdAt),code);}}
+  if(attempt.workspace.mode==='git'){assert.equal(proxy.workspaceId,null,code);continue;}
+  assert.equal(proxy.workspaceId,attempt.workspace.workspaceId,code);assert.equal(proxy.repositoryId,attempt.workspace.repository,code);
+  assert.ok(typeof proxy.repositoryProjectId==='string'&&proxy.repositoryProjectId&&typeof proxy.branchName==='string'&&proxy.branchName,code);
+  assert.ok(!workspaces.has(attempt.workspace.workspaceId),code);workspaces.add(attempt.workspace.workspaceId);
+  const response=await readWorkspace(proxy.repositoryProjectId,attempt.workspace.workspaceId),resource=row(response.result),receipt=row(response.receipt);
+  assert.equal(receipt.projectId,proxy.repositoryProjectId,code);assert.equal(resource.workspaceId,attempt.workspace.workspaceId,code);assert.equal(resource.repoId,attempt.workspace.repository,code);
+  assert.equal(resource.status,'closed',code);assert.equal(resource.mode,'writable',code);assert.equal(resource.baseCommitSha,attempt.workspace.baseCommit,code);assert.equal(resource.branchName,proxy.branchName,code);
+  assert.ok(Array.isArray(resource.allowedPaths)&&Array.isArray(proxy.allowedPaths),code);
+  assert.ok(resource.allowedPaths.every(value=>typeof value==='string'&&value)&&new Set(resource.allowedPaths).size===resource.allowedPaths.length,code);
+  assert.deepEqual([...resource.allowedPaths].sort(),[...proxy.allowedPaths].sort(),code);
+ }
+}

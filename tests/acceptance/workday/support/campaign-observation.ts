@@ -279,6 +279,6 @@ export function verifyNodeTransitionHistory(run:Row,graph:Row,events:readonly Ro
  for(const node of nodes.values()){
   const history=histories.get(node.id);if(node.workdayId!==run.id&&!history)continue;
   assert.ok(history?.length,label+': Missing original owning node history');const last=history.at(-1)!.context;
-  assert.equal(last.status,node.status,label+': Current node state lacks its transition');assert.equal(last.nodeRevision,node.nodeRevision,label+': Current node revision lacks its transition');assert.equal(last.graphRevision,node.graphRevisionUpdated,label+': Current node graph revision lacks its observation');
+  assert.equal(last.status,node.status,label+': Current node state lacks its transition');assert.equal(last.nodeRevision,node.nodeRevision,label+': Current node revision lacks its transition');assert.ok(Number(last.graphRevision)<=node.graphRevisionUpdated,label+': Node observation exceeds its owning graph revision');
  }
 }

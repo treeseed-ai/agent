@@ -31,5 +31,6 @@ it('requires complete original node state and revision histories against the cur
  const global=structuredClone(graph),globalNode=(global.nodes as Row[])[0]!;delete globalNode.workdayId;
  const globalHistory=structuredClone(events).slice(3);globalHistory.forEach((event,eventIndex)=>{event.eventIndex=eventIndex;});check(run,global,globalHistory);
  const unchanged=structuredClone(graph);(unchanged.nodes as Row[]).push({...structuredClone(node),id:'retained-other-workday',workdayId:'retained-run'});check(run,unchanged,events);
+ const metadataOnly=structuredClone(graph);metadataOnly.revision=Number(graph.revision)+1;(metadataOnly.nodes as Row[])[0]!.graphRevisionUpdated=metadataOnly.revision;check(run,metadataOnly,events);
  check(run,{...graph,nodes:[],revision:0},[]);expect({run,graph,events}).toEqual(held);check(run,graph,events);
 });

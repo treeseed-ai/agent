@@ -4271,3 +4271,8 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/guarantees/monitoring/lifecycle/workday-lifecycle-history-native.test.ts
     testName: "native public SDK Workday and event histories stop the exact simulation on missing contradictory or interrupted Reporter lifecycle evidence and preserve unchanged retry"
+  agent.golden.execution-workday-lifecycle-history-cli-stop:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/campaign-cli.test.ts
+    testName: "stops the exact admitted simulation on an incomplete original Workday lifecycle chain before accounting collaboration or later gates"

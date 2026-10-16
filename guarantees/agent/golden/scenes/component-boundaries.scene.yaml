@@ -2484,3 +2484,6 @@ workflow:
   - id: workday-lifecycle-history-native
     action: { verifier: agent.golden.execution-workday-lifecycle-history-native }
     expect: { status: passed }
+  - id: workday-lifecycle-history-cli-stop
+    action: { verifier: agent.golden.execution-workday-lifecycle-history-cli-stop }
+    expect: { status: passed }

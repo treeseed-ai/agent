@@ -26,6 +26,12 @@ it('native original SDK status and immutable operator bytes reject changed model
   for(const fault of ['model','cap','foreign','denied','unavailable','json','interrupted']){mode=fault;await expect(observe(),fault).rejects.toThrow();expect(frozen).toEqual(held);expect(input).toEqual(heldInput);expect(readFileSync(frozen.path,'utf8')).toBe(frozen.bytes);}
   mode='exact';const bad=campaignModels();bad.availability[0]!.executionProviders[0]!.modelPolicy.reasoningEffort='high';const wrong=capture('wrong-frozen-model',bad),offset=requests.length;
   await expect(observe(wrong)).rejects.toThrow('ACCEPTANCE_CAMPAIGN_MODELS');expect(requests).toHaveLength(offset);expect(readFileSync(wrong.path,'utf8')).toBe(wrong.bytes);
+  const changed=capture('changed-during-read');await expect(verify(changed,async(id:string)=>{const value=await read(id);writeFileSync(changed.path,changed.bytes+' ');return value;})).rejects.toThrow('Operator capture changed during model readback');
+  expect(readFileSync(changed.path,'utf8')).toBe(changed.bytes+' ');writeFileSync(changed.path,changed.bytes);
+  const double=capture('interrupted-and-mutated'),interruption=new Error('original status interruption');let both:unknown;
+  try{await verify(double,async(id:string)=>{await read(id);writeFileSync(double.path,double.bytes+' ');throw interruption;});}catch(error){both=error;}
+  expect(both).toBeInstanceOf(AggregateError);if(!(both instanceof AggregateError))throw new Error('Both original failures must remain available');expect(both.errors).toHaveLength(2);expect(both.errors[0]).toBe(interruption);expect(String(both.errors[1])).toContain('Operator capture changed during model readback');expect(readFileSync(double.path,'utf8')).toBe(double.bytes+' ');writeFileSync(double.path,double.bytes);
+  await verify(double,read);expect(both.errors[0]).toBe(interruption);expect(readFileSync(double.path,'utf8')).toBe(double.bytes);
   const retained=[...failures];await Promise.all([observe(),observe()]);expect(failures).toEqual(retained);expect(frozen).toEqual(held);expect(input).toEqual(heldInput);
   expect(requests.every(value=>value==='GET /v1/teams/native-team/capacity-providers/'+providerId+'/status')).toBe(true);
   // Real configured policy producer, public SDK/HTTP and original captured

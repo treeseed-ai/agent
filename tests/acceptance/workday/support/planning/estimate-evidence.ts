@@ -1,3 +1,5 @@
+import{readCapturedCampaignManifest}from'../../../freeze-integrity.ts';
+import{frozenCampaignDraftReference}from'../preflight/campaign-proposals.ts';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
 import {parseDocument} from 'yaml';
@@ -21,9 +23,12 @@ function proposalFile(reference:Row,file:Row,projectId:string):Row{
 const proposalBody=(file:Row)=>{const raw=String(file.content),match=raw.match(/^---\r?\n[\s\S]*?\r?\n---(?:\r?\n|$)/u);assert.ok(match,code);return raw.slice(match[0].length);};
 
 /** Each actual estimator must publish its owned patch; the latest exact results supply ready estimates. */
-export function verifyEstimatePublications(assignments:Row[],run:Row,readyReference:Row,readyFile:Row,readFile:(reference:Row,projectId:string)=>Row):void{
+export function verifyEstimatePublications(assignments:Row[],run:Row,readyReference:Row,readyFile:Row,readFile:(reference:Row,projectId:string)=>Row,draftReference:unknown):void{
  const completed=assignments.filter(item=>item.status==='completed'&&row(row(item.assignmentAttempt).effectiveProfile).activity==='estimating');assert.ok(completed.length>0,code);
- const ready=proposalFile(readyReference,readyFile,String(readyReference.projectId??completed[0]!.projectId)),work=rows(row(ready.executionPlan).workItems);
+ const projectId=String(readyReference.projectId??completed[0]!.projectId),ready=proposalFile(readyReference,readyFile,projectId),work=rows(row(ready.executionPlan).workItems),original=frozenCampaignDraftReference(draftReference,code);
+ assert.equal(original.id,ready.id,code);assert.equal(original.repository,readyReference.repository,code);assert.equal(original.path,readyReference.path,code);
+ const originalFile=readFile(original,projectId),draft=proposalFile(original,originalFile,projectId);assert.equal(draft.status,'draft',code);assert.deepEqual(fixed(draft),fixed(ready),code);assert.equal(proposalBody(originalFile),proposalBody(readyFile),code);
+
  assert.equal(ready.status,'ready','ACCEPTANCE_ESTIMATE_ROLES: Original proposal is not ready yet');assert.ok(work.length>0&&new Set(work.map(item=>item.id)).size===work.length,code);
  assert.deepEqual(row(run.parameters).proposalIds,[ready.id],code);
  const expected=[...new Set(work.map(item=>String(item.agentClass)))];assert.ok(!expected.includes('reviewer'),code);expected.push('reviewer');
@@ -58,11 +63,12 @@ export function verifyEstimatePublications(assignments:Row[],run:Row,readyRefere
 /** Read the current governed proposal through the same supported public boundary used for approval. */
 export function verifyManagedEstimates(assignments:Row[],run:Row,team:string):void{
  const item=assignments.find(value=>row(row(value.assignmentAttempt).effectiveProfile).activity==='estimating');assert.ok(item,code);const source=row(row(item.assignmentAttempt).sourceRef),projectId=String(item.projectId);
+ const freezePath=process.env.TREESEED_ACCEPTANCE_FREEZE_PATH;assert.ok(freezePath,code+': Original captured campaign freeze required');const manifest=readCapturedCampaignManifest(freezePath),selected=rows(manifest.proposals).filter(value=>value.id===source.id&&value.projectId===projectId);assert.equal(selected.length,1,code+': One original frozen proposal required');const original=frozenCampaignDraftReference(selected[0]!.draftRef,code);
  const proposal=read(['proposals','show',String(source.id),'--server','local','--project',projectId],team,true),provenance=row(row(proposal.metadata).contentProvenance);
  assert.equal(proposal.id,source.id,code);assert.equal(proposal.projectId,projectId,code);assert.equal(proposal.activeContentHash,provenance.digest,code);
  const reference=exactEntityReferenceSchema.parse({store:'treedx',model:'proposal',id:proposal.id,revision:proposal.activeVersion,digest:'sha256:'+String(provenance.digest),repository:provenance.repositoryId,commit:provenance.commitSha,path:provenance.contentPath}),cache=new Map<string,Row>();
  const readFile=(ref:Row,project:string)=>{const key=JSON.stringify([project,ref.repository,ref.commit,ref.path]);let file=cache.get(key);if(!file){const response=read(['library','read',project,String(ref.path),'--ref',String(ref.commit)],team,true),observed=row(response.result??response);assert.equal(observed.repoId,ref.repository,code);assert.equal(observed.resolvedRef,ref.commit,code);assert.ok(Array.isArray(observed.files)&&observed.files.length===1,code);file=row(observed.files[0]);cache.set(key,file);}return file;},ready=readFile(reference,projectId);
- verifyEstimatePublications(assignments,run,reference,ready,readFile);
+ verifyEstimatePublications(assignments,run,reference,ready,readFile,original);
  assert.deepEqual(read(['proposals','show',String(source.id),'--server','local','--project',projectId],team,true),proposal,code);
  for(const item of assignments.filter(value=>row(row(value.assignmentAttempt).effectiveProfile).activity==='acting'))assert.ok(Date.parse(String(item.createdAt))>=Math.max(...assignments.filter(value=>row(row(value.assignmentAttempt).effectiveProfile).activity==='estimating'&&value.status==='completed').map(value=>Date.parse(String(value.completedAt)))),code);
 }

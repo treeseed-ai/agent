@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { resolve } from 'node:path';
+import { basename, isAbsolute, resolve } from 'node:path';
 import { canonicalSeedBundlePayload, validateSeedBundle, workdayIntentRequestSchema, type SeedBundle } from '@treeseed/sdk/operator-contracts';
 import { selectFairReadyNode, workdayPolicySchema, workdayProfileSchema } from '@treeseed/sdk/agent-capacity';
 import { parse } from 'yaml';
@@ -225,4 +225,13 @@ export function verifyFreezeIntegrity(snapshot: unknown, readReceipt: (path: str
 		catch { assert.fail('ACCEPTANCE_FREEZE_RECEIPT_MISSING: Frozen receipt is unavailable'); }
 		assert.equal(actual, expected, 'ACCEPTANCE_FREEZE_RECEIPT_CHANGED: Frozen evidence bytes changed');
 	}
+}
+
+/** Late verification consumes the existing captured operator bytes, never moving live input. */
+export function readCapturedCampaignManifest(path:string,readReceipt:(path:string)=>Uint8Array=readFileSync):Row{
+ const label='ACCEPTANCE_CAPTURED_CAMPAIGN';assert.ok(typeof path==='string'&&isAbsolute(path),label+': Explicit absolute original freeze required');
+ let snapshot:unknown;try{const bytes=Buffer.from(readReceipt(path)),text=bytes.toString('utf8');assert.ok(Buffer.from(text,'utf8').equals(bytes),label+': Original UTF-8 freeze required');snapshot=JSON.parse(text);}catch(cause){throw new Error(label+': Original freeze read failed',{cause});}
+ verifyFreezeIntegrity(snapshot,readReceipt);const receipts=row(row(snapshot).receipts),paths=Object.keys(receipts).filter(name=>basename(name)==='operator-campaign.json');assert.equal(paths.length,1,label+': One original operator capture required');
+ const bytes=Buffer.from(readReceipt(paths[0]!));assert.equal('sha256:'+createHash('sha256').update(bytes).digest('hex'),receipts[paths[0]!],'ACCEPTANCE_FREEZE_RECEIPT_CHANGED: Operator capture changed after integrity read');const text=bytes.toString('utf8');assert.ok(Buffer.from(text,'utf8').equals(bytes),label+': Original UTF-8 operator bytes required');
+ let manifest:unknown;try{manifest=JSON.parse(text);}catch(cause){throw new Error(label+': Original operator capture is malformed',{cause});}assert.ok(manifest&&typeof manifest==='object'&&!Array.isArray(manifest),label+': Original operator object required');return row(manifest);
 }

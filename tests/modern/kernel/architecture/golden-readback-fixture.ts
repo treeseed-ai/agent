@@ -6,8 +6,10 @@ import { canonicalStandardsJson } from '@treeseed/sdk/standards';
 import { sdkCampaignChatQuestion } from '../../../acceptance/campaign.ts';
 
 export type Row = Record<string, any>;
-const state = vi.hoisted(() => ({ cases: new Map<string, () => void>(), replies: new Map<string, Row>(), assignmentPages: undefined as Row[] | undefined, usagePages: undefined as Row[] | undefined, eventPages: undefined as Row[] | undefined, failure: undefined as Error | undefined, workspaceFailure: undefined as Error | undefined, timeout: 0, args: [] as string[], calls: [] as string[][] }));
+const state = vi.hoisted(() => ({ cases: new Map<string, () => void>(), replies: new Map<string, Row>(), assignmentPages: undefined as Row[] | undefined, usagePages: undefined as Row[] | undefined, eventPages: undefined as Row[] | undefined, failure: undefined as Error | undefined, workspaceFailure: undefined as Error | undefined, timeout: 0, args: [] as string[], calls: [] as string[][], operatorProposals: [] as Array<{id:string;projectId:string;draftRef:unknown}> }));
 export { state };
+vi.mock('../../../acceptance/freeze-integrity.ts',async importOriginal=>({...await importOriginal<typeof import('../../../acceptance/freeze-integrity.ts')>(),readCapturedCampaignManifest:(path:string)=>{if(path!=='/controlled-golden-freeze.json')throw new Error('Original controlled captured manifest required');return{proposals:state.operatorProposals};}}));
+
 vi.mock('node:test', () => ({ default: (name: string, _options: unknown, run: () => void) => state.cases.set(name, run) }));
 vi.mock('node:child_process', () => ({ execFileSync: (_command: string, args: string[], options: { timeout: number }) => {
 	state.timeout = options.timeout;
@@ -247,7 +249,7 @@ beforeEach(() => {
 				subjectRefs: [structuredClone(source)], body, createdAt: item.completedAt } }] } });
 		}
 	}
-	retainUnitEstimatePublications(items,state.replies,state.replies.get('workdays show')!.run);
+	const originalEstimates=retainUnitEstimatePublications(items,state.replies,state.replies.get('workdays show')!.run);state.operatorProposals=[{id:originalEstimates.definition.id,projectId:originalEstimates.definition.projectId,draftRef:structuredClone(originalEstimates.source)}];vi.stubEnv('TREESEED_ACCEPTANCE_FREEZE_PATH','/controlled-golden-freeze.json');
 	state.replies.get('capacity usage')!.items=items.map(usageMeasurement);
 	for (const [key, value] of state.replies) if (key.startsWith('library read') && value.result?.files) {
 		Object.assign(value.result, { ok: true, repoId: 'sdk-library' });

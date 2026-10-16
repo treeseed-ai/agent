@@ -2445,3 +2445,18 @@ workflow:
   - id: fresh-sdk-segment-5
     action: { verifier: agent.golden.execution-fresh-sdk-segment-5 }
     expect: { status: passed }
+  - id: planning-window-1
+    action: { verifier: agent.golden.execution-planning-window-1 }
+    expect: { status: passed }
+  - id: planning-window-2
+    action: { verifier: agent.golden.execution-planning-window-2 }
+    expect: { status: passed }
+  - id: planning-window-3
+    action: { verifier: agent.golden.execution-planning-window-3 }
+    expect: { status: passed }
+  - id: planning-window-4
+    action: { verifier: agent.golden.execution-planning-window-4 }
+    expect: { status: passed }
+  - id: planning-window-5
+    action: { verifier: agent.golden.execution-planning-window-5 }
+    expect: { status: passed }

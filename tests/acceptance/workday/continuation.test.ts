@@ -4,7 +4,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
 import { read, row, type Row } from '../acceptance-cli.ts';
-import { monitorCampaign, requirePlanningWindow } from '../campaign.ts';
+import { classifyObservedCampaignFailure, monitorCampaign, requirePlanningWindow } from '../campaign.ts';
 import { verifyRuntimeClosure } from '../freeze-integrity.ts';
 import { readWorkdayAssignments, verifyGolden } from '../sdk-runtime-golden.test.ts';
 import { acceptanceReceiptDirectory, captureSdkExternalState, requireSdkCampaignSupply, verifySdkExternalState } from '../prepare-campaign.ts';
@@ -16,6 +16,7 @@ export const continuationPlanKey = (parentId: string) => `continuation-plan:${pa
 
 /** A focused real continuation gate, not a fresh or complete SDK golden pass. */
 test('Settled SDK work continues the exact approved candidate through release review and Reporter', { timeout: 4_200_000 }, async () => {
+ try {
 	const parentId = process.env.TREESEED_ACCEPTANCE_WORKDAY_ID ?? '';
 	const freezePath = process.env.TREESEED_ACCEPTANCE_FREEZE_PATH ?? '';
 	assert.match(parentId, /^workday-[a-f0-9-]+$/u, 'ACCEPTANCE_CONTINUATION_PARENT: Explicit parent required');
@@ -86,6 +87,7 @@ test('Settled SDK work continues the exact approved candidate through release re
 			for (const gate of ['results','settlement','reporter'] as const) verifyGolden(gate);
 			await verifySdkExternalState(frozen);
 		} });
+ } catch(failure) { throw classifyObservedCampaignFailure(failure); }
 });
 
 export function continuationAuthority(assignments: Row[]): { decisionId: string; sourceRef: unknown; authorityRefs: unknown; candidate: string } {

@@ -2466,3 +2466,9 @@ workflow:
   - id: source-authorization-2
     action: { verifier: agent.golden.execution-source-authorization-2 }
     expect: { status: passed }
+  - id: failure-classification-1
+    action: {verifier: agent.golden.execution-failure-classification-1}
+    expect: {status: passed}
+  - id: failure-classification-2
+    action: {verifier: agent.golden.execution-failure-classification-2}
+    expect: {status: passed}

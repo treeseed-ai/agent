@@ -236,4 +236,4 @@ export function readCapturedCampaignManifest(path:string,readReceipt:(path:strin
  let manifest:unknown;try{manifest=JSON.parse(text);}catch(cause){throw new Error(label+': Original operator capture is malformed',{cause});}assert.ok(manifest&&typeof manifest==='object'&&!Array.isArray(manifest),label+': Original operator object required');return row(manifest);
 }
 
-export {verifySdkCampaignModels} from './workday/support/preflight/campaign-models.ts';
+export {verifySdkCampaignModels,readCampaignProviderModels} from './workday/support/preflight/campaign-models.ts';

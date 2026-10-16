@@ -315,7 +315,7 @@ export function classifyObservedCampaignFailure(failure: unknown): unknown {
 		while (current instanceof Error && !seen.has(current)) {
 			seen.add(current);
 			const code = Object.getOwnPropertyDescriptor(current, 'code')?.value;
-			if (code === 'ECONNREFUSED' || code === 'UND_ERR_SOCKET') { classification = 'ENVIRONMENT_DEFECT'; break; }
+			if (code === 'ECONNREFUSED' || code === 'UND_ERR_SOCKET' || Object.getOwnPropertyDescriptor(current, 'status')?.value === 503) { classification = 'ENVIRONMENT_DEFECT'; break; }
 			current = Object.getOwnPropertyDescriptor(current, 'cause')?.value;
 		}
 	}
@@ -336,8 +336,10 @@ export async function monitorCampaign(input: {
 	verify: () => void | Promise<void>; stop: () => void | Promise<void>;
 }): Promise<void> {
 	let planningVerified = false;
-	const incompleteCollaboration = (failure: unknown) => failure instanceof Error
-		&& /^ACCEPTANCE_(CHAT_ROLES|PLANNING_ROLE_TURNS|PLANNING_CYCLES|ESTIMATE_ROLES):/u.test(String(Object.getOwnPropertyDescriptor(failure,'message')?.value??''));
+	const incompleteCollaboration = (failure: unknown) => {
+		const message=failure instanceof Error?Object.getOwnPropertyDescriptor(failure,'message')?.value:undefined;
+		return typeof message==='string'&&/^ACCEPTANCE_(CHAT_ROLES|PLANNING_ROLE_TURNS|PLANNING_CYCLES|ESTIMATE_ROLES):/u.test(message);
+	};
 	let observedStatus = input.admittedSimulation ? 'running' : '', observedMode = input.admittedSimulation ? 'simulation' : '';
 	try {
 	await input.admitDiscussion?.();

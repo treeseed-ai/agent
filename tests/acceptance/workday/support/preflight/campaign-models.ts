@@ -15,9 +15,11 @@ export function verifySdkCampaignModels(input:unknown):ReadonlyMap<string,Record
  let latest:Record<string,unknown>|undefined,at=-Infinity;
  for(const value of sessions){const session=row(value),time=Date.parse(String(session.refreshed_at));assert.ok(Number.isFinite(time),label+': Unreadable availability clock');if(time>at){latest=session;at=time;}}
  const providers=latest?.executionProviders;assert.ok(Array.isArray(providers),label+': Original execution-provider inventory required');
+ const inventory:Record<string,unknown>[]=providers.map(row),ids=inventory.map(provider=>provider.id);
+ assert.ok(ids.every(id=>typeof id==='string'&&id.length>0&&id.trim()===id)&&new Set(ids).size===ids.length,label+': Complete unique native execution-provider identities required');
  const selected=new Map<string,Record<string,unknown>>();
  for(const [id,cap]of [['codex-research',7200],['codex-implementation',28800]]as const){
-  const matches:Record<string,unknown>[]=providers.map(row).filter(provider=>provider.id===id);assert.equal(matches.length,1,label+': Exact unique '+id+' installation required');const provider=matches[0]!;
+  const matches:Record<string,unknown>[]=inventory.filter(provider=>provider.id===id);assert.equal(matches.length,1,label+': Exact unique '+id+' installation required');const provider=matches[0]!;
   assert.equal(provider.status,'active',label+': '+id+' is not active');
   const parsed=sandboxAssignmentSchema.shape.modelPolicy.safeParse(provider.modelPolicy);assert.ok(parsed.success,label+': '+id+' lacks original typed model policy');
   const policy=parsed.data;assert.deepEqual(policy,provider.modelPolicy,label+': Native model policy must already be canonical');

@@ -40,6 +40,7 @@ it('native public scoped stop retains the exact original plan-review report and 
     catch(error){current=row(row((await client.invoke(show,{path:{teamId,runId:workdayId},query:{},body:undefined})).data).run);throw error;}
    }});}catch(error){failure=error;}
    if(mode==='malformed-report')expect(failure).toMatchObject({classification:'IMPLEMENTATION_DEFECT',cause:original});else if(mode==='exact'||mode==='stop-race')expect(failure).toBe(original);else{expect(failure).toBeInstanceOf(AggregateError);expect((failure as AggregateError).errors).toContain(original);}
+   expect(Object.getOwnPropertyDescriptor(Object(failure),'classification')?.value).toBe(mode==='malformed-report'?'IMPLEMENTATION_DEFECT':'PLAN_REVIEW_REQUIRED');
    expect(later).toBe(0);expect(retained).toBe(mode==='missing-report'||mode==='malformed-report'?0:1);const stops=history.slice(offset).filter(item=>item.method===stopRoute.method&&item.path===path(stopRoute.path));expect(stops).toEqual([{method:stopRoute.method,path:path(stopRoute.path),key:'golden-stop:'+workdayId,body:stopInput.body}]);
    expect(readFileSync(freezePath,'utf8')).toBe(bytes);expect(readFileSync(freezePath+'.workday-start.json')).toEqual(receipt);expect(stopInput).toEqual(stopHeld);expect(Object.getOwnPropertyDescriptors(original)).toEqual(held);
    if(mode==='missing-report'||mode==='malformed-report')expect(existsSync(reportPath)).toBe(false);else expect(readFileSync(reportPath,'utf8')).toBe(mode==='report-collision'?'Original conflicting report retained':original.message);

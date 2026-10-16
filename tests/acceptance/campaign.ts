@@ -282,7 +282,7 @@ export function requireCampaignSimulation(freeze: StartRow, freezePath: string, 
 	if (mode === 'simulation') return;
 	const observedMode = typeof mode === 'string' ? JSON.stringify(mode) : mode === undefined ? 'missing' : 'malformed ' + typeof mode;
 	const original = new Error('ACCEPTANCE_CAMPAIGN_MODE: Frozen SDK intent must provide simulation authority');
-	let failure: ReturnType<typeof campaignPlanReviewRequired>;
+	let failure: ReturnType<typeof campaignPlanReviewRequired> | undefined;
 	try {
 		const proposal = startRow(freeze.proposal);
 		failure = campaignPlanReviewRequired({ project: 'sdk', proposal: String(proposal.id) + ' ' + String(proposal.digest), workday: 'not-started',
@@ -291,31 +291,37 @@ export function requireCampaignSimulation(freeze: StartRow, freezePath: string, 
 			'why implementation repair is insufficient': 'Frozen operator intent lacks permitted simulation authority; an implementation repair cannot supply or change operator intent.',
 			'smallest proposed plan correction': 'Propose executionMode: simulation for this frozen request; apply only after plan review.' }, original);
 		report(failure.message);
-	} catch (reportFailure) { throw new AggregateError([original, reportFailure], 'ACCEPTANCE_PLAN_REVIEW_REPORT: Original unsafe intent and required report both failed'); }
+	} catch (reportFailure) { throw Object.assign(new AggregateError([failure ?? original, reportFailure], 'ACCEPTANCE_PLAN_REVIEW_REPORT: Original unsafe intent and required report both failed'),{classification:failure?'PLAN_REVIEW_REQUIRED':'IMPLEMENTATION_DEFECT'}); }
 	throw failure;
 }
 
-/** Preserve original failures; classify only the native conditions proved here.
- * Other failures still require the complete operator assessment/report path. */
-function classifyObservedCampaignFailure(failure: unknown): unknown {
-	if (!(failure instanceof Error)) return failure;
- if(Object.getOwnPropertyDescriptor(failure,'classification')?.value==='PLAN_REVIEW_REQUIRED'){
-  try{campaignPlanReviewDetails(failure.message);return failure;}
+/** Retain every original admitted-campaign failure and classify the failing boundary.
+ * Underlying repair and reset still require the original operator assessment. */
+export function classifyObservedCampaignFailure(failure: unknown): unknown {
+	if (!(failure instanceof Error)) return Object.assign(new Error('ACCEPTANCE_FAILURE_CLASSIFICATION: Original campaign observer threw a non-Error value', { cause: failure }), { classification: 'IMPLEMENTATION_DEFECT' as const });
+ const rawMessage=Object.getOwnPropertyDescriptor(failure,'message')?.value;
+ const message=typeof rawMessage==='string'?rawMessage:'ACCEPTANCE_FAILURE_CLASSIFICATION: Original error message is unavailable';
+ const declared=Object.getOwnPropertyDescriptor(failure,'classification')?.value;
+ if(declared==='IMPLEMENTATION_DEFECT'||declared==='ENVIRONMENT_DEFECT')return failure;
+ if(declared==='PLAN_REVIEW_REQUIRED'){
+  try{const errors=Object.getOwnPropertyDescriptor(failure,'errors')?.value,original=failure instanceof AggregateError?Object.getOwnPropertyDescriptor(Object(errors),'0')?.value:failure;assert.ok(original instanceof Error,'Original plan-review error required');campaignPlanReviewDetails(Object.getOwnPropertyDescriptor(original,'message')?.value);return failure;}
   catch{ return Object.assign(new Error('ACCEPTANCE_PLAN_REVIEW_REPORT: Invalid declared plan-review report',{cause:failure}),{classification:'IMPLEMENTATION_DEFECT'}); }
  }
 	let classification: 'ENVIRONMENT_DEFECT' | 'IMPLEMENTATION_DEFECT' | undefined;
-	if (failure.message.startsWith('ACCEPTANCE_CAMPAIGN_MODE:')
+	if (message.startsWith('ACCEPTANCE_CAMPAIGN_MODE:')
 		&& Object.getOwnPropertyDescriptor(failure, 'code')?.value === 'ERR_ASSERTION') classification = 'IMPLEMENTATION_DEFECT';
 	else {
 		let current: unknown = failure; const seen = new Set<Error>();
 		while (current instanceof Error && !seen.has(current)) {
 			seen.add(current);
 			const code = Object.getOwnPropertyDescriptor(current, 'code')?.value;
-			if (code === 'ECONNREFUSED' || code === 'UND_ERR_SOCKET') { classification = 'ENVIRONMENT_DEFECT'; break; }
+			if (code === 'ECONNREFUSED' || code === 'UND_ERR_SOCKET' || Object.getOwnPropertyDescriptor(current, 'status')?.value === 503) { classification = 'ENVIRONMENT_DEFECT'; break; }
 			current = Object.getOwnPropertyDescriptor(current, 'cause')?.value;
 		}
 	}
-	return classification ? Object.assign(new Error(failure.message, { cause: failure }), { classification }) : failure;
+	// An unexplained failure in the admitted campaign is an observer/contract defect.
+	// This does not infer a repair, authorize a retry, or replace the retained cause.
+	return Object.assign(new Error(message, { cause: failure }), { classification: classification ?? 'IMPLEMENTATION_DEFECT' });
 }
 
 export async function monitorCampaign(input: {
@@ -330,8 +336,10 @@ export async function monitorCampaign(input: {
 	verify: () => void | Promise<void>; stop: () => void | Promise<void>;
 }): Promise<void> {
 	let planningVerified = false;
-	const incompleteCollaboration = (failure: unknown) => failure instanceof Error
-		&& /^ACCEPTANCE_(CHAT_ROLES|PLANNING_ROLE_TURNS|PLANNING_CYCLES|ESTIMATE_ROLES):/u.test(failure.message);
+	const incompleteCollaboration = (failure: unknown) => {
+		const message=failure instanceof Error?Object.getOwnPropertyDescriptor(failure,'message')?.value:undefined;
+		return typeof message==='string'&&/^ACCEPTANCE_(CHAT_ROLES|PLANNING_ROLE_TURNS|PLANNING_CYCLES|ESTIMATE_ROLES):/u.test(message);
+	};
 	let observedStatus = input.admittedSimulation ? 'running' : '', observedMode = input.admittedSimulation ? 'simulation' : '';
 	try {
 	await input.admitDiscussion?.();
@@ -366,7 +374,7 @@ export async function monitorCampaign(input: {
   let finalFailure=classified;
   if(classified instanceof Error&&Object.getOwnPropertyDescriptor(classified,'classification')?.value==='PLAN_REVIEW_REQUIRED'){
    try{assert.ok(input.reportPlanReview,'ACCEPTANCE_PLAN_REVIEW_REPORT: Original frozen report retention is required');await input.reportPlanReview(classified.message);}
-   catch(reportFailure){finalFailure=new AggregateError([failure,reportFailure],'ACCEPTANCE_PLAN_REVIEW_REPORT: Original plan-review observation and report retention failed');}
+   catch(reportFailure){finalFailure=Object.assign(new AggregateError([failure,reportFailure],'ACCEPTANCE_PLAN_REVIEW_REPORT: Original plan-review observation and report retention failed'),{classification:'PLAN_REVIEW_REQUIRED' as const});}
   }
 		// A failed verifier must not strand an otherwise live simulation. Only the
 		// already-observed simulation workday may be stopped; never mutate a run
@@ -379,7 +387,7 @@ export async function monitorCampaign(input: {
 				let current: ReturnType<typeof input.read> | undefined;
 				try { current = input.read(); } catch { /* Retain both failures below. */ }
 				if (current?.mode === 'simulation' && current.status !== 'running') throw finalFailure;
-				throw new AggregateError([failure,...(finalFailure===classified?[]:[finalFailure]),stopFailure], 'ACCEPTANCE_CAMPAIGN_STOP_FAILED: Failed boundary and supported stop both failed');
+				throw Object.assign(new AggregateError([failure,...(finalFailure===classified?[]:[finalFailure]),stopFailure], 'ACCEPTANCE_CAMPAIGN_STOP_FAILED: Failed boundary and supported stop both failed'),{classification:Object.getOwnPropertyDescriptor(Object(finalFailure),'classification')?.value});
 			}
 		}
 		throw finalFailure;

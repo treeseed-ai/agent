@@ -40,7 +40,7 @@ describe('automated campaign control (fixtures are not golden acceptance)', () =
 			let polls = 0;
 			const input = { admittedSimulation: true, read: () => ({ status: polls++ === 0 ? status : 'completed', mode: 'simulation', planningEndsAt: 1, endsAt: 10 }),
 				now: () => 1, wait, collaboration, verify, stop, inspect };
-			await expect(monitorCampaign(input)).rejects.toBe(original);
+			await expect(monitorCampaign(input).catch((classified:Error & {classification?:string})=>{expect(classified.classification).toBe('IMPLEMENTATION_DEFECT');return classified.cause;})).resolves.toBe(original);
 			expect(inspect).toHaveBeenCalledOnce(); expect(collaboration).not.toHaveBeenCalled();
 			expect(verify).not.toHaveBeenCalled(); expect(wait).not.toHaveBeenCalled();
 			expect(stop).toHaveBeenCalledTimes(status === 'running' ? 1 : 0);

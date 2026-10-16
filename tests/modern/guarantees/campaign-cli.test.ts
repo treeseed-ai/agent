@@ -42,7 +42,7 @@ describe('campaign CLI composition units (mocked transport, not native or live a
  it('denies missing owning node transitions before collaboration approval and later gates with the original scoped stop',async()=>{
   transport(()=>observed('running'));const original=new Error('ACCEPTANCE_NODE_TRANSITIONS: Missing ready transition'),held=structuredClone(state.freeze);
   state.nodeTransitions.mockImplementation(()=>{throw original;});
-  await expect(state.run!()).rejects.toBe(original);expect(state.inspect).not.toHaveBeenCalled();expect(state.verify).not.toHaveBeenCalled();expect(state.freeze).toEqual(held);
+  await expect(state.run!().catch((classified:Error & {classification?:string})=>{expect(classified.classification).toBe('IMPLEMENTATION_DEFECT');return classified.cause;})).resolves.toBe(original);expect(state.inspect).not.toHaveBeenCalled();expect(state.verify).not.toHaveBeenCalled();expect(state.freeze).toEqual(held);
   expect(state.read.mock.calls.filter(call=>call[0][1]==='evaluate')).toEqual([]);expect(state.read.mock.calls.filter(call=>call[0][1]==='stop')).toEqual([[['workdays','stop',workdayId,'--yes','--reason','Automated golden boundary failed','--idempotency-key','golden-stop:'+workdayId],'treeseed']]);
  });
 
@@ -61,13 +61,13 @@ describe('campaign CLI composition units (mocked transport, not native or live a
   state.read.mockImplementation((args:string[],...rest:unknown[])=>args[0]==='assignments'&&args[1]==='show'?structuredClone(late):Reflect.apply(implementation,undefined,[args,...rest]));
   state.transitions.mockImplementation((_run:unknown,records:Array<{id:string}>)=>{if(records.some(record=>record.id===late.id))throw original;});
   state.inspect.mockImplementation(()=>{throw new Error('Concurrent assignment advanced without checking its original transition history');});
-  await expect(state.run!()).rejects.toBe(original);expect(state.inspect).not.toHaveBeenCalled();expect(state.verify).not.toHaveBeenCalled();
+  await expect(state.run!().catch((classified:Error & {classification?:string})=>{expect(classified.classification).toBe('IMPLEMENTATION_DEFECT');return classified.cause;})).resolves.toBe(original);expect(state.inspect).not.toHaveBeenCalled();expect(state.verify).not.toHaveBeenCalled();
   expect(state.read.mock.calls.filter(call=>call[0][1]==='evaluate')).toEqual([]);expect(state.read.mock.calls.filter(call=>call[0][1]==='stop')).toEqual([[['workdays','stop',workdayId,'--yes','--reason','Automated golden boundary failed','--idempotency-key','golden-stop:'+workdayId],'treeseed']]);
  });
 
  it('denies omitted owning assignment transitions before collaboration approval or later gates and retains the exact scoped stop',async()=>{
   transport(()=>observed('running'));const original=new Error('ACCEPTANCE_ASSIGNMENT_TRANSITIONS: Missing original claim'),held=structuredClone(state.freeze);
-  state.transitions.mockImplementation(()=>{throw original;});await expect(state.run!()).rejects.toBe(original);
+  state.transitions.mockImplementation(()=>{throw original;});await expect(state.run!().catch((classified:Error & {classification?:string})=>{expect(classified.classification).toBe('IMPLEMENTATION_DEFECT');return classified.cause;})).resolves.toBe(original);
   expect(state.eventHistory).toHaveBeenCalledOnce();expect(state.eventHistory.mock.calls[0]![3]).toBeTypeOf('function');expect(state.transitions).toHaveBeenCalledOnce();expect(state.inspect).not.toHaveBeenCalled();expect(state.verify).not.toHaveBeenCalled();
   expect(state.read.mock.calls.filter(call=>call[0][1]==='evaluate')).toEqual([]);expect(state.read.mock.calls.filter(call=>call[0][1]==='stop')).toEqual([[['workdays','stop',workdayId,'--yes','--reason','Automated golden boundary failed','--idempotency-key','golden-stop:'+workdayId],'treeseed']]);expect(state.freeze).toEqual(held);
  });
@@ -86,7 +86,7 @@ describe('campaign CLI composition units (mocked transport, not native or live a
   for(const boundary of ['missing','changed','denied','interrupted']) {
    state.read.mockReset();state.verify.mockReset();state.inspect.mockReset();state.retain.mockClear();state.external.mockReset();transport(()=>observed());
    const failure=new Error('Original external inventory '+boundary);failures.push(failure);const held=structuredClone(state.freeze);
-   state.external.mockImplementation(()=>{throw failure;});await expect(state.run!()).rejects.toBe(failure);
+   state.external.mockImplementation(()=>{throw failure;});await expect(state.run!().catch((classified:Error & {classification?:string})=>{expect(classified.classification).toBe('IMPLEMENTATION_DEFECT');return classified.cause;})).resolves.toBe(failure);
    expect(state.external).toHaveBeenCalledExactlyOnceWith(state.freeze);expect(state.read).not.toHaveBeenCalled();expect(state.retain).not.toHaveBeenCalled();expect(state.verify).not.toHaveBeenCalled();expect(state.inspect).not.toHaveBeenCalled();expect(state.freeze).toEqual(held);
   }
   const retained=[...failures];state.external.mockReset();state.read.mockReset();transport(()=>observed());await state.run!();
@@ -131,7 +131,7 @@ describe('campaign CLI composition units (mocked transport, not native or live a
 			transport(() => observed()); state.verify.mockReset();
 			const original = new Error(`Original missing ${gate} evidence`), held = structuredClone(state.freeze);
 			state.verify.mockImplementation((value: string) => { if (value === gate) throw original; });
-			await expect(state.run!()).rejects.toBe(original);
+			await expect(state.run!().catch((classified:Error & {classification?:string})=>{expect(classified.classification).toBe('IMPLEMENTATION_DEFECT');return classified.cause;})).resolves.toBe(original);
 			expect(state.verify.mock.calls.map(call => call[0])).toEqual(gates.slice(0, index + 1));
 			expect(state.read.mock.calls.filter(call => call[0][1] === 'start')).toHaveLength(1);
 			expect(state.read.mock.calls.filter(call => call[0][1] === 'stop')).toEqual([]);
@@ -144,7 +144,7 @@ describe('campaign CLI composition units (mocked transport, not native or live a
 	it('stops the exact admitted simulation on receipt capture denial before discussion approval or later verification', async () => {
 		transport(() => observed('running')); const original = new Error('controlled-receipt-capture-denial');
 		state.retain.mockImplementation(() => { throw original; });
-		await expect(state.run!()).rejects.toBe(original);
+		await expect(state.run!().catch((classified:Error & {classification?:string})=>{expect(classified.classification).toBe('IMPLEMENTATION_DEFECT');return classified.cause;})).resolves.toBe(original);
 		expect(state.retain).toHaveBeenCalledExactlyOnceWith({ workdayId }, '/freeze', state.freeze);
 		expect(state.read.mock.calls.filter(call => call[0][0] === 'send' || call[0][1] === 'evaluate')).toEqual([]);
 		expect(state.read.mock.calls.filter(call => call[0][1] === 'stop').map(call => call[0][2])).toEqual([workdayId]);
@@ -159,7 +159,7 @@ describe('campaign CLI composition units (mocked transport, not native or live a
 				if (args[0] === 'send' && sends++ === denied) throw failure;
 				return original(args);
 			});
-			await expect(state.run!()).rejects.toBe(failure);
+			await expect(state.run!().catch((classified:Error & {classification?:string})=>{expect(classified.classification).toBe('IMPLEMENTATION_DEFECT');return classified.cause;})).resolves.toBe(failure);
 			expect(sends).toBe(denied + 1); expect(state.verify).not.toHaveBeenCalled();
 			expect(state.read.mock.calls.filter(call => call[0][1] === 'evaluate')).toHaveLength(0);
 			expect(state.read.mock.calls.filter(call => call[0][1] === 'stop').map(call => call[0][2])).toEqual([workdayId]);
@@ -169,13 +169,13 @@ describe('campaign CLI composition units (mocked transport, not native or live a
 		const original = new Error('ACCEPTANCE_LIVE_ASSIGNMENT: Controlled immutable authority failure');
 		state.graphInspect.mockImplementation((teamId: string) => { expect(teamId).toBe('team-fixture'); });
 		state.inspect.mockImplementation(() => { throw original; }); transport(() => observed('running'));
-		await expect(state.run!()).rejects.toBe(original);
+		await expect(state.run!().catch((classified:Error & {classification?:string})=>{expect(classified.classification).toBe('IMPLEMENTATION_DEFECT');return classified.cause;})).resolves.toBe(original);
 		expect(state.inspect).toHaveBeenCalledOnce(); expect(state.verify).not.toHaveBeenCalled();
 		expect(state.read.mock.calls.filter(call => call[0][1] === 'evaluate')).toHaveLength(0);
 		expect(state.read.mock.calls.filter(call => call[0][1] === 'stop').map(call => call[0][2])).toEqual([workdayId]);
 		state.inspect.mockReset(); state.read.mockReset(); transport(() => observed('running'));
 		const missing = new Error('ACCEPTANCE_LIVE_GRAPH: Original graph inventory missing'); state.graphInspect.mockRejectedValue(missing);
-		await expect(state.run!()).rejects.toBe(missing); expect(state.inspect).not.toHaveBeenCalled();
+		await expect(state.run!().catch((classified:Error & {classification?:string})=>{expect(classified.classification).toBe('IMPLEMENTATION_DEFECT');return classified.cause;})).resolves.toBe(missing); expect(state.inspect).not.toHaveBeenCalled();
 		expect(state.verify).not.toHaveBeenCalled(); expect(state.read.mock.calls.filter(call => call[0][1] === 'evaluate')).toHaveLength(0);
 		expect(state.read.mock.calls.filter(call => call[0][1] === 'stop').map(call => call[0][2])).toEqual([workdayId]);
 	});

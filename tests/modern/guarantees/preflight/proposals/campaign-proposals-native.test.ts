@@ -1,3 +1,4 @@
+import {createHash} from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
@@ -22,7 +23,7 @@ it('native Git and public CLI SDK reads validate all seventeen governed proposal
 	const sources = new Map<string, ReturnType<typeof campaignProposal>>();
 	const requests: Array<{ method: string; path: string; body: string }> = [];
 	const failures: Array<{ mode: string; project: string; failure: string }> = [];
-	let mode = 'exact', base = '', governed = '';
+	let mode = 'exact', base = '', governed = '', rewritten = '';
 	const server = createServer((request, response) => {
 		let body = ''; request.setEncoding('utf8'); request.on('data', bytes => { body += String(bytes); });
 		request.on('end', () => {
@@ -39,6 +40,13 @@ it('native Git and public CLI SDK reads validate all seventeen governed proposal
 			if (mode === 'interrupted') { request.socket.destroy(); return; }
 			if (mode === 'truncated') { response.end('{'); return; }
 			const source = structuredClone(original);
+   const observedCommit=mode==='consistent-byte-rewrite'?rewritten:governed;
+   if(mode==='consistent-byte-rewrite'){
+    const file=source.observed.files[0]!;file.content=execFileSync('/usr/bin/git',['-C',root,'show',observedCommit+':'+project.slug+'/'+file.path],{encoding:'utf8',timeout:15_000});
+    const digest=createHash('sha256').update(file.content).digest('hex');source.governance.activeContentHash=digest;Object.assign(source.governance.metadata.contentProvenance,{commitSha:observedCommit,digest});
+    source.observed.ref=observedCommit;source.observed.resolvedRef=observedCommit;
+   }
+
 			if (mode === 'stale-request') rewriteProposal(source, proposal => { proposal.request = 'Older issue objective'; });
 			if (mode === 'estimated') rewriteProposal(source, proposal => {
 				const items = row(proposal.executionPlan).workItems;
@@ -55,12 +63,12 @@ it('native Git and public CLI SDK reads validate all seventeen governed proposal
 				response.writeHead(405).end('{}'); return;
 			}
 			const input = row(JSON.parse(body)), file = source.observed.files[0]!;
-			if (input.ref !== governed || !Array.isArray(input.paths) || input.paths.length !== 1 || input.paths[0] !== file.path) {
+			if (input.ref !== observedCommit || !Array.isArray(input.paths) || input.paths.length !== 1 || input.paths[0] !== file.path) {
 				response.writeHead(409).end('{}'); return;
 			}
 			// Exact mode serves the independently committed native bytes, not the fixture's object copy.
 			if (!['stale-request', 'estimated'].includes(mode)) {
-				file.content = execFileSync('/usr/bin/git', ['-C', root, 'show', `${governed}:${project.slug}/${file.path}`], { encoding: 'utf8', timeout: 15_000 });
+				file.content = execFileSync('/usr/bin/git', ['-C', root, 'show', `${observedCommit}:${project.slug}/${file.path}`], { encoding: 'utf8', timeout: 15_000 });
 				file.frontmatter = row(parse(file.content.match(/^---\n([\s\S]*?)\n---/u)![1]!));
 			}
 			if (mode === 'bytes') file.content += 'Altered';
@@ -80,6 +88,9 @@ it('native Git and public CLI SDK reads validate all seventeen governed proposal
 		git('add', '.'); git('commit', '--quiet', '-m', 'Controlled governed proposal bytes'); governed = git('rev-parse', 'HEAD');
 		for (const [index, project] of projects.entries()) sources.set(project.slug, campaignProposal(index, base, base, governed));
 		const originalTree = git('ls-tree', '-r', governed), held = structuredClone([...sources]);
+  const changed=sources.get(projects[16]!.slug)!;writeFileSync(join(root,projects[16]!.slug,changed.observed.files[0]!.path),changed.observed.files[0]!.content+'Native changed draft body with consistent public provenance.\n');
+  git('add','.');git('commit','--quiet','-m','Controlled consistent draft substitution after the operator freeze');rewritten=git('rev-parse','HEAD');
+
 		await new Promise<void>((accept, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', accept); });
 		const address = server.address(); if (!address || typeof address === 'string') throw new Error('Native proposal server required');
 		const client = new ControlPlaneClient({ profile: defaultLocalControlPlaneServer({ TREESEED_API_BASE_URL: `http://127.0.0.1:${address.port}` }), accessToken: 'controlled-proposal-read-token' });
@@ -103,7 +114,7 @@ it('native Git and public CLI SDK reads validate all seventeen governed proposal
 			failures.push({ mode, project: project.slug, failure }); return failure;
 		};
 		for (const project of projects) expect(await execute(project), project.slug).toBe('');
-		for (mode of ['denied', 'interrupted', 'truncated', 'foreign', 'moved', 'missing', 'bytes', 'omitted', 'duplicate', 'stale-request', 'estimated']) {
+		for (mode of ['consistent-byte-rewrite', 'denied', 'interrupted', 'truncated', 'foreign', 'moved', 'missing', 'bytes', 'omitted', 'duplicate', 'stale-request', 'estimated']) {
 			const failure = await execute(projects[16]!); expect(failure, mode).not.toBe('');
 			if (['foreign', 'bytes', 'omitted', 'duplicate', 'stale-request', 'estimated'].includes(mode))
 				expect(failure, mode).toContain('ACCEPTANCE_CAMPAIGN_PROPOSALS');

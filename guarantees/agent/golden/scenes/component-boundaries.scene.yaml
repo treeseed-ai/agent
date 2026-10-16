@@ -2478,3 +2478,6 @@ workflow:
   - id: reporter-workday-authority-native
     action: { verifier: agent.golden.execution-reporter-workday-authority-native }
     expect: { status: passed }
+  - id: configured-model-policy-readback
+    action: { verifier: agent.golden.execution-configured-model-policy-readback }
+    expect: { status: passed }

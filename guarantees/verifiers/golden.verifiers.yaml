@@ -4261,3 +4261,8 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/kernel/closure/reporter-workday-native.test.ts
     testName: "native public SDK readback retains the sole applied-plan report and rejects contradictions interrupted reads and altered authority before unchanged retry"
+  agent.golden.execution-configured-model-policy-readback:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/model-policy-readback.test.ts
+    testName: "derives exact configured sandbox model policy independently of provider identity without changing governed configuration"

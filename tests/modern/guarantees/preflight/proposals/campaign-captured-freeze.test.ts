@@ -7,7 +7,8 @@ it('reads the original captured operator manifest through existing freeze receip
  const read=Reflect.get(freeze,'readCapturedCampaignManifest')as((path:string,reader?:(path:string)=>Uint8Array)=>unknown)|undefined;
  expect(read,'Late proposal verification requires original captured authority').toBeTypeOf('function');if(!read)return;
  const path='/held/freeze.json',capture='/held/receipts/operator-campaign.json',manifest={campaignId:'held',proposals:[{id:'proposal',projectId:'sdk',draftRef:{store:'treedx',model:'proposal',id:'proposal',commit:'a'.repeat(40)}}]},bytes=Buffer.from(JSON.stringify(manifest));
- const snapshot={createdAt:'2026-10-16T00:00:00Z',host:{manifestDigest:'sha256:'+'a'.repeat(64),guestImageDigest:'sha256:'+'b'.repeat(64)},guest:{digest:'sha256:'+'b'.repeat(64)},receipts:{[capture]:'sha256:'+createHash('sha256').update(bytes).digest('hex')}};
+ const receipts:Record<string,string>={[capture]:'sha256:'+createHash('sha256').update(bytes).digest('hex')};
+ const snapshot={createdAt:'2026-10-16T00:00:00Z',host:{manifestDigest:'sha256:'+'a'.repeat(64),guestImageDigest:'sha256:'+'b'.repeat(64)},guest:{digest:'sha256:'+'b'.repeat(64)},receipts};
  const files=new Map([[path,Buffer.from(JSON.stringify(snapshot))],[capture,bytes]]),reader=(name:string)=>{const result=files.get(name);if(!result)throw new Error('Retained controlled missing capture');return result;},held=[...files].map(([name,value])=>[name,value.toString('hex')]);
  expect(read(path,reader)).toEqual(manifest);expect(read(path,reader)).toEqual(manifest);expect([...files].map(([name,value])=>[name,value.toString('hex')])).toEqual(held);
  for(const mode of['missing','changed','duplicate','wrong-name','malformed-root','malformed-manifest','array-manifest','invalid-utf8','interrupted']){

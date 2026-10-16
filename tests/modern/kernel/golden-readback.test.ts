@@ -355,7 +355,9 @@ describe('golden read-back assertion regressions (fixtures are not live acceptan
 	});
 	it('rejects missing workday identity and contradictory mode in every gate', () => {
 		vi.stubEnv('TREESEED_ACCEPTANCE_WORKDAY_ID', '');
+		const originalFreezePath=process.env.TREESEED_ACCEPTANCE_FREEZE_PATH;vi.stubEnv('TREESEED_ACCEPTANCE_FREEZE_PATH','');
 		for (const run of state.cases.values()) expect(run).toThrow('Explicit real workday ID');
+		vi.stubEnv('TREESEED_ACCEPTANCE_FREEZE_PATH',originalFreezePath);
 		vi.stubEnv('TREESEED_ACCEPTANCE_WORKDAY_ID', workdayId);
 		state.replies.get('workdays show')!.run.executionMode = 'production';
 		for (const run of state.cases.values()) expect(run).toThrow();

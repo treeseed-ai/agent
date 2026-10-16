@@ -4,7 +4,7 @@ import {mkdtempSync,mkdirSync,readFileSync,writeFileSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';import {join} from 'node:path';
 import {ControlPlaneClient,defaultLocalControlPlaneServer} from '@treeseed/sdk/control-plane-client';
 import {controlPlaneOperation} from '@treeseed/sdk/operator-contracts';
-import * as freeze from '../../../acceptance/freeze-integrity.ts';
+import * as freeze from '../../../../acceptance/freeze-integrity.ts';
 import {campaignModels} from './campaign-models-fixture.ts';
 
 it('native original SDK status and immutable operator bytes reject changed model caps foreign scope denial and interruption before unchanged concurrent retry',async()=>{

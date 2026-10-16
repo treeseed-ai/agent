@@ -1,5 +1,5 @@
 import {expect,it} from 'vitest';
-import * as freeze from '../../../acceptance/freeze-integrity.ts';
+import * as freeze from '../../../../acceptance/freeze-integrity.ts';
 
 
 import {campaignModels} from './campaign-models-fixture.ts';

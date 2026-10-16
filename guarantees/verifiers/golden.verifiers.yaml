@@ -4269,10 +4269,10 @@ verifiers:
   agent.golden.execution-campaign-model-policy:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"
-    testFile: tests/modern/guarantees/preflight/campaign-models.test.ts
+    testFile: tests/modern/guarantees/preflight/models/campaign-models.test.ts
     testName: "requires actual Luna Low model policy and separate normal campaign caps without substituting provider labels or hiding unrelated resources"
   agent.golden.execution-campaign-model-policy-native:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"
-    testFile: tests/modern/guarantees/preflight/campaign-models-native.test.ts
+    testFile: tests/modern/guarantees/preflight/models/campaign-models-native.test.ts
     testName: "native original SDK status and immutable operator bytes reject changed model caps foreign scope denial and interruption before unchanged concurrent retry"

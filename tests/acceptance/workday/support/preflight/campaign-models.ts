@@ -17,7 +17,7 @@ export function verifySdkCampaignModels(input:unknown):ReadonlyMap<string,Record
  const providers=latest?.executionProviders;assert.ok(Array.isArray(providers),label+': Original execution-provider inventory required');
  const selected=new Map<string,Record<string,unknown>>();
  for(const [id,cap]of [['codex-research',7200],['codex-implementation',28800]]as const){
-  const matches=providers.map(row).filter(provider=>provider.id===id);assert.equal(matches.length,1,label+': Exact unique '+id+' installation required');const provider=matches[0]!;
+  const matches:Record<string,unknown>[]=providers.map(row).filter(provider=>provider.id===id);assert.equal(matches.length,1,label+': Exact unique '+id+' installation required');const provider=matches[0]!;
   assert.equal(provider.status,'active',label+': '+id+' is not active');
   const parsed=sandboxAssignmentSchema.shape.modelPolicy.safeParse(provider.modelPolicy);assert.ok(parsed.success,label+': '+id+' lacks original typed model policy');
   const policy=parsed.data;assert.deepEqual(policy,provider.modelPolicy,label+': Native model policy must already be canonical');

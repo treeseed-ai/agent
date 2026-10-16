@@ -1,5 +1,5 @@
-import {createManagedProviderManifestV5} from '../../../../src/provider/configuration/managed-manifest.ts';
-import {sandboxModelPolicy} from '../../../../src/provider/execution/microvm-executor.ts';
+import {createManagedProviderManifestV5} from '../../../../../src/provider/configuration/managed-manifest.ts';
+import {sandboxModelPolicy} from '../../../../../src/provider/execution/microvm-executor.ts';
 
 export function campaignModels(){
  const digest='sha256:'+'a'.repeat(64),manifest=createManagedProviderManifestV5({release:'model-cap-readback',guestImage:'isolated/guest',guestImageDigest:digest,baseImageDigest:digest,provenanceDigest:digest});

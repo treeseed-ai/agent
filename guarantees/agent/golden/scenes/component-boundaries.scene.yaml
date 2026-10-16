@@ -2472,3 +2472,9 @@ workflow:
   - id: failure-classification-2
     action: {verifier: agent.golden.execution-failure-classification-2}
     expect: {status: passed}
+  - id: reporter-workday-authority-unit
+    action: { verifier: agent.golden.execution-reporter-workday-authority-unit }
+    expect: { status: passed }
+  - id: reporter-workday-authority-native
+    action: { verifier: agent.golden.execution-reporter-workday-authority-native }
+    expect: { status: passed }

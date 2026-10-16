@@ -1,4 +1,4 @@
-import {proveNativeAccountingHistoryTransport} from './accounting-history-native.ts';
+import {proveNativeAccountingHistoryTransport} from '../monitoring/accounting/accounting-history-native.ts';
 import { provePublicResourceClosureTransport } from './physical/resource-closure-native.ts';
 import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync, existsSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';

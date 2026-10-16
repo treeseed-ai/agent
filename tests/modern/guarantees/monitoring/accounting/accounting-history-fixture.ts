@@ -1,5 +1,5 @@
 import { assignmentAttemptSchema, usageSettlementSchema } from '@treeseed/sdk/agent-capacity';
-import { request } from '../kernel/provider-kernel-fixture.ts';
+import { request } from '../../../kernel/provider-kernel-fixture.ts';
 export type Row = Record<string, any>;
 /** Controlled public rows, not generated usage, admission or managed evidence. */
 export function accountingHistoryFixture() {

@@ -3,10 +3,10 @@ import { expect } from 'vitest';
 import { ControlPlaneClient, defaultLocalControlPlaneServer } from '@treeseed/sdk/control-plane-client';
 import { controlPlaneOperation } from '@treeseed/sdk/operator-contracts';
 import { encodeCapacityPageCursor } from '@treeseed/sdk/capacity-pagination';
-import { row } from '../../../acceptance/acceptance-cli.ts';
-import { collectCompleteEvidence } from '../../../acceptance/workday/support/evidence-pages.ts';
-import * as observations from '../../../acceptance/workday/support/campaign-observation.ts';
-import { accountingHistoryFixture, type Row } from '../accounting-history-fixture.ts';
+import { row } from '../../../../acceptance/acceptance-cli.ts';
+import { collectCompleteEvidence } from '../../../../acceptance/workday/support/evidence-pages.ts';
+import * as observations from '../../../../acceptance/workday/support/campaign-observation.ts';
+import { accountingHistoryFixture, type Row } from './accounting-history-fixture.ts';
 
 /** Extend the original native SDK history case. HTTP rows/token are controlled
  * inputs; native PostgreSQL producer proof belongs to API553/554. */

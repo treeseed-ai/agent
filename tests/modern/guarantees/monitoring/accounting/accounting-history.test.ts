@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import * as observations from '../../acceptance/workday/support/campaign-observation.ts';
+import * as observations from '../../../../acceptance/workday/support/campaign-observation.ts';
 import { accountingHistoryFixture, type Row } from './accounting-history-fixture.ts';
 function inspect(f: ReturnType<typeof accountingHistoryFixture>) {
  const verify = Reflect.get(observations, 'verifyAccountingTransitionHistory') as ((run: Row, items: Row[], usage: Row[], ledger: Row[], events: Row[]) => void) | undefined;

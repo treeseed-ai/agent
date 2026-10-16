@@ -1,3 +1,4 @@
+import {compileWorkday} from '@treeseed/sdk/agent-capacity';
 import{expect,it}from'vitest';
 import{createHash}from'node:crypto';
 import{canonicalStandardsJson}from'@treeseed/sdk/standards';
@@ -6,6 +7,9 @@ import{lifecycleHistoryFixture}from'./lifecycle-history-fixture.ts';
 type Row=Record<string,unknown>;
 it('requires every original Workday plan and Reporter transition before continuing and retains exact failed observations without changing derived receipt authority',()=>{
  const f=lifecycleHistoryFixture(),held=structuredClone(f),check=Reflect.get(observation,'verifyWorkdayLifecycleTransitionHistory') as (run:Row,events:readonly Row[])=>void;expect(check).toBeTypeOf('function');
+ const base=f.snapshots[0]!,initial={...compileWorkday({id:base.id,teamId:base.teamId,executionMode:base.executionMode,policyId:base.policyId,policyRevision:base.policyRevision,policy:base.policySnapshot,startsAt:base.startsAt,agentIds:['renamed-native-planner']}),state:'active' as const,activatedAt:base.startsAt};
+ const born=structuredClone(f.events[0]!);(born.context as Row).plan=initial;born.id='workday-lifecycle:'+base.id+':'+createHash('sha256').update(canonicalStandardsJson(born.context)).digest('hex');
+ check({...f.run,status:'running',completedAt:null,parameters:{...f.run.parameters,appliedPlan:initial}},[born]);
  check(f.run,f.events);check(f.run,f.events);const inFlight={...f.run,status:'running',completedAt:null,parameters:{...f.run.parameters,appliedPlan:f.snapshots[1]!}};check(inFlight,f.events);check(inFlight,f.events.slice(0,1));const derived=structuredClone(f.run);derived.parameters.appliedPlan.admittedSecondsByProject={later:9};check(derived,f.events);
  const resign=(event:Row)=>{event.id='workday-lifecycle:'+f.run.id+':'+createHash('sha256').update(canonicalStandardsJson(event.context)).digest('hex');};
  for(const mode of ['missing-0','missing-1','missing-2','missing-3','duplicate','foreign-team','foreign-run','wrong-id','broken-chain','regressed-state','lost-round','changed-policy','changed-deadline','wrong-terminal','wrong-clock','malformed-context']){

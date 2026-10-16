@@ -1,3 +1,4 @@
+import {sourceWorkspaceAuthorizationSchema} from '@treeseed/sdk/capacity-provider/sandbox';
 import assert from 'node:assert/strict';
 import { basename, isAbsolute, resolve } from 'node:path';
 import { assignmentAttemptSchema } from '@treeseed/sdk/agent-capacity';
@@ -234,5 +235,34 @@ export async function verifyPublicWorkspaceSessionClosure(items:Row[],sessions:R
 }
 
 /** Normal SDK composition keeps the later completed/failed physical case separate. */
-export function verifySimulationSourceAuthority(_items:Row[],_status:Row):void {}
+export function verifySimulationSourceAuthority(items:Row[],status:Row):void {
+ const label='ACCEPTANCE_SOURCE_AUTHORITY',workspace=row(status.workspace),journals=row(workspace.journals),jobs=row(journals.jobs);
+ assert.ok(Array.isArray(items)&&items.length>0,label);assert.equal(workspace.complete,true,label);assert.equal(workspace.initialized,true,label);assert.deepEqual(workspace.errors,[],label);
+ assert.equal(row(workspace.scope).storageRoot,'/var/lib/treeseed/agent/workspaces',label);assert.deepEqual(row(workspace.confirmation).journals,journals,label);
+ assert.equal(typeof jobs.rootPresent,'boolean',label);assert.ok(Array.isArray(jobs.entries),label);if(!jobs.rootPresent)assert.deepEqual(jobs.entries,[],label);
+ const owners=new Map<string,{item:Row;attempt:ReturnType<typeof assignmentAttemptSchema.parse>;needed:boolean}>();
+ for(const item of items){const parsed=assignmentAttemptSchema.safeParse(item.assignmentAttempt);assert.ok(parsed.success,label);const attempt=parsed.data;assert.equal(item.id,attempt.id,label);assert.ok(!owners.has(attempt.id),label);owners.set(attempt.id,{item,attempt,needed:assignmentNeedsSourceWorkspace(parsed)});}
+ const entries=(jobs.entries as unknown[]).map(row),names=new Set<string>(),seen=new Set<string>();let verified=0;
+ for(const entry of entries){
+  assert.ok(typeof entry.name==='string'&&/^sandbox-[a-zA-Z0-9-]{1,128}\.json$/u.test(entry.name)&&!names.has(entry.name),label);names.add(entry.name);
+  assert.equal(entry.type,'file',label);assert.ok(typeof entry.digest==='string'&&/^[a-f0-9]{64}$/u.test(entry.digest),label);
+  const job=row(entry.metadata),owner=row(job.owner);assert.ok(typeof owner.assignmentId==='string'&&owner.assignmentId,label);const selected=owners.get(owner.assignmentId);if(!selected)continue;
+  const {item,attempt,needed}=selected;assert.ok(!seen.has(attempt.id),label);seen.add(attempt.id);assert.equal(job.schemaVersion,'treeseed.assignment-source-job/v1',label);assert.equal(job.state,'stopped',label);
+  assert.deepEqual(owner,{assignmentId:attempt.id,providerId:attempt.provider.providerId,teamId:attempt.teamId,projectId:attempt.projectId,attempt:attempt.attempt},label);
+  const sandbox=row(item.lifecycleOutput).sandboxId;if(sandbox!==undefined)assert.equal(entry.name,String(sandbox)+'.json',label);
+  if(!Object.hasOwn(job,'authority')){assert.ok(item.status!=='completed'&&sandbox===undefined,label);continue;}
+  assert.equal(needed,true,label);const parsed=sourceWorkspaceAuthorizationSchema.safeParse(job.authority);assert.ok(parsed.success,label);const authority=parsed.data;assert.deepEqual(authority,job.authority,label);
+  assert.equal(authority.assignmentId,attempt.id,label);assert.equal(authority.providerId,attempt.provider.providerId,label);assert.equal(authority.attempt,attempt.attempt,label);
+  assert.equal(authority.source.teamId,attempt.teamId,label);assert.equal(authority.source.projectId,attempt.projectId,label);
+  assert.ok(['upstream-public','simulation-local'].includes(authority.acquisition),label);assert.equal(Object.hasOwn(authority,'credentialBindingId'),false,label);
+  assert.ok(attempt.grant.sourceRead.includes(authority.source.repositoryId),label);
+  const references=attempt.contextRefs.filter(ref=>ref.store==='git'&&ref.repository===authority.source.repositoryId);
+  assert.ok(references.some(ref=>ref.commit===authority.source.commit),label);for(const commit of authority.source.additionalCommits??[])assert.ok(references.some(ref=>ref.commit===commit),label);
+  if(attempt.workspace.mode==='git'){assert.equal(authority.mode,'work',label);assert.equal(authority.publication,'simulation-branch',label);assert.equal(authority.publicationRef,attempt.workspace.branch,label);assert.equal(authority.source.repositoryId,attempt.workspace.repository,label);assert.equal(authority.source.commit,attempt.workspace.baseCommit,label);}
+  else{assert.equal(authority.mode,'analysis',label);assert.equal(authority.publication,'denied',label);assert.equal(Object.hasOwn(authority,'publicationRef'),false,label);}
+  verified++;
+ }
+ for(const {item,attempt,needed}of owners.values())if(needed&&item.status==='completed'&&Object.hasOwn(row(item.lifecycleOutput),'sandboxId'))assert.ok(seen.has(attempt.id),label);
+ assert.ok(verified>0,label+': Actual original source custody required');
+}
 export function verifyNormalSdkSandboxAbsence(...args:Parameters<typeof verifyPublicSandboxAbsence>){const paths=verifyPublicSandboxAbsence(...args);verifySimulationSourceAuthority(args[0],args[3]);return paths;}

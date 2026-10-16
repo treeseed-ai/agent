@@ -1,40 +1,40 @@
 import {afterEach,beforeEach,vi} from 'vitest';
-export const state = vi.hoisted(() => ({ run: undefined as (() => Promise<void>) | undefined,
+const state = vi.hoisted(() => ({ run: undefined as (() => Promise<void>) | undefined,
 	read: vi.fn(), verify: vi.fn(), external: vi.fn(), inspect: vi.fn(), transitions:vi.fn(), nodeTransitions:vi.fn(), accountingTransitions:vi.fn(), evidence:vi.fn(), eventHistory:vi.fn(), graphInspect: vi.fn(), retain: vi.fn(), retainReview: vi.fn(), freeze: {} as Record<string, any> }));
 vi.mock('node:test', () => ({ default: (_name: string, _options: unknown, run: () => Promise<void>) => { state.run = run; } }));
 vi.mock('node:fs', () => ({ existsSync: () => true, readFileSync: (path: string) => path === '/freeze'
 	? JSON.stringify(state.freeze) : Buffer.alloc(0) }));
-vi.mock('../../acceptance/acceptance-cli.ts', async importOriginal => ({
-	...await importOriginal<typeof import('../../acceptance/acceptance-cli.ts')>(), read: state.read,
+vi.mock('../../../acceptance/acceptance-cli.ts', async importOriginal => ({
+	...await importOriginal<typeof import('../../../acceptance/acceptance-cli.ts')>(), read: state.read,
 }));
-vi.mock('../../acceptance/campaign.ts', async importOriginal => ({
-	...await importOriginal<typeof import('../../acceptance/campaign.ts')>(), retainCampaignWorkdayStart: state.retain, retainCampaignPlanReview: state.retainReview,
+vi.mock('../../../acceptance/campaign.ts', async importOriginal => ({
+	...await importOriginal<typeof import('../../../acceptance/campaign.ts')>(), retainCampaignWorkdayStart: state.retain, retainCampaignPlanReview: state.retainReview,
 }));
-vi.mock('../../acceptance/sdk-runtime-golden.test.ts', () => ({ verifyGolden: state.verify }));
-vi.mock('../../acceptance/workday/support/campaign-observation.ts',async importOriginal=>({...await importOriginal<typeof import('../../acceptance/workday/support/campaign-observation.ts')>(),verifyAssignmentTransitionHistory:state.transitions,verifyNodeTransitionHistory:state.nodeTransitions,verifyAccountingTransitionHistory:state.accountingTransitions,retainCampaignEventHistory:state.eventHistory}));
-vi.mock('../../acceptance/prepare-campaign.ts', () => ({ prepareSdkCampaign: vi.fn(), verifySdkExternalState: state.external }));
-vi.mock('../../acceptance/workday/support/monitoring/live-assignment-records.ts', () => ({
+vi.mock('../../../acceptance/sdk-runtime-golden.test.ts', () => ({ verifyGolden: state.verify }));
+vi.mock('../../../acceptance/workday/support/campaign-observation.ts',async importOriginal=>({...await importOriginal<typeof import('../../../acceptance/workday/support/campaign-observation.ts')>(),verifyAssignmentTransitionHistory:state.transitions,verifyNodeTransitionHistory:state.nodeTransitions,verifyAccountingTransitionHistory:state.accountingTransitions,retainCampaignEventHistory:state.eventHistory}));
+vi.mock('../../../acceptance/prepare-campaign.ts', () => ({ prepareSdkCampaign: vi.fn(), verifySdkExternalState: state.external }));
+vi.mock('../../../acceptance/workday/support/monitoring/live-assignment-records.ts', () => ({
 	observeLiveAssignmentRecords: state.inspect, inspectLiveAssignmentProfile: vi.fn(),
 }));
-vi.mock('../../acceptance/workday/support/evidence-pages.ts', async importOriginal => ({
-	...await importOriginal<typeof import('../../acceptance/workday/support/evidence-pages.ts')>(), readCompleteEvidence: state.evidence,
+vi.mock('../../../acceptance/workday/support/evidence-pages.ts', async importOriginal => ({
+	...await importOriginal<typeof import('../../../acceptance/workday/support/evidence-pages.ts')>(), readCompleteEvidence: state.evidence,
 }));
-vi.mock('../../acceptance/workday/support/monitoring/live-graph-revisions.ts', () => ({ observeLiveGraphRevisions: state.graphInspect }));
-await import('../../acceptance/campaign.test.ts');
-export const workdayId = 'workday-aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
-export function observed(status = 'completed') {
+vi.mock('../../../acceptance/workday/support/monitoring/live-graph-revisions.ts', () => ({ observeLiveGraphRevisions: state.graphInspect }));
+await import('../../../acceptance/campaign.test.ts');
+const workdayId = 'workday-aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
+function observed(status = 'completed') {
 	return { run: { id: workdayId, teamId: 'team-fixture', status, executionMode: 'simulation',
 		startedAt: new Date(Date.now() - 21 * 60_000).toISOString(), parameters: { durationSeconds: 3600,
 			planningPercent: 100 / 3, appliedPlan: { endsAt: new Date(Date.now() + 39 * 60_000).toISOString() } } },
 		scheduling: { executionId: workdayId, status, executionMode: 'simulation', assignments: [], nodes: [] },
 		events: [], eventPage: { limit: 50, hasMore: false, nextCursor: null } };
 }
-export function event(index = 0) {
+function event(index = 0) {
 	return { id: `event-${index}`, runId: workdayId, teamId: 'team-fixture', projectId: null, workdayId: null,
 		assignmentId: null, eventIndex: index, eventType: 'workday.started', status: 'recorded', title: null,
 		message: null, parameters: {}, context: {}, refs: {}, metadata: {}, createdAt: '2026-10-02T18:00:00Z' };
 }
-export function transport(show: () => unknown) {
+function transport(show: () => unknown) {
 	state.read.mockImplementation((args: string[]) => {
 		if (args[0] === 'workdays' && args[1] === 'start') return { workdayId };
 		if (args[0] === 'workdays' && args[1] === 'show') return show();
@@ -55,3 +55,5 @@ beforeEach(() => {
 			durationSeconds: 3600, allocation: { planningPercent: 100 / 3, allocationWeight: 1, planningTurnMaximumSeconds: 180 } } } };
 });
 afterEach(() => vi.useRealTimers());
+
+export function campaignCliFixture(){return {state,workdayId,observed,event,transport};}

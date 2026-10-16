@@ -1,6 +1,8 @@
+import {campaignCliFixture} from './campaign-cli-fixture.ts';
 import {describe,expect,it} from 'vitest';
-import {state,observed,transport} from '../campaign-cli-fixture.ts';
 
+
+const {state,observed,transport}=campaignCliFixture();
 describe('fresh SDK campaign composition with controlled public inputs',()=>{
  it('denies continuation-bearing frozen intent before any normal SDK start or approval without rewriting the operator freeze',async()=>{
   transport(()=>observed('completed'));state.freeze.request.body.continueFromWorkdayId='settled-parent';const held=structuredClone(state.freeze);

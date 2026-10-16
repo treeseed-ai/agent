@@ -1,8 +1,10 @@
+import {campaignCliFixture} from './lifecycle/campaign-cli-fixture.ts';
 import {campaignPlanReviewRequired} from '../../acceptance/campaign.ts';
 import { describe, expect, it, vi } from 'vitest';
 import { encodeCapacityPageCursor } from '@treeseed/sdk/capacity-pagination';
 
-import {state,workdayId,observed,event,transport} from './campaign-cli-fixture.ts';
+
+const {state,workdayId,observed,event,transport}=campaignCliFixture();
 describe('campaign CLI composition units (mocked transport, not native or live acceptance)', () => {
  it('rereads concurrent accounting changes within the original inspection bound before validating stable public usage ledger and history',async()=>{
   transport(()=>observed('completed'));let reads=0;

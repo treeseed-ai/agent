@@ -2460,3 +2460,9 @@ workflow:
   - id: planning-window-5
     action: { verifier: agent.golden.execution-planning-window-5 }
     expect: { status: passed }
+  - id: source-authorization-1
+    action: { verifier: agent.golden.execution-source-authorization-1 }
+    expect: { status: passed }
+  - id: source-authorization-2
+    action: { verifier: agent.golden.execution-source-authorization-2 }
+    expect: { status: passed }

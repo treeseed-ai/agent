@@ -13,6 +13,8 @@ it('classifies every original campaign failure before stop without losing raw ca
  const observations:Array<[unknown,string]>=[[contract,'IMPLEMENTATION_DEFECT'],[type,'IMPLEMENTATION_DEFECT'],[assertion,'IMPLEMENTATION_DEFECT'],[cycle,'IMPLEMENTATION_DEFECT'],[accessor,'IMPLEMENTATION_DEFECT'],[undefined,'IMPLEMENTATION_DEFECT'],[null,'IMPLEMENTATION_DEFECT'],['Retained non-Error throw','IMPLEMENTATION_DEFECT'],[0,'IMPLEMENTATION_DEFECT'],[environment,'ENVIRONMENT_DEFECT'],[new Error('Retained wrapped transport',{cause:socket}),'ENVIRONMENT_DEFECT'],[review,'PLAN_REVIEW_REQUIRED']];
  for(const field of['message','cause'])observations.push([Object.defineProperty(new Error('Original accessor '+field),field,{get(){getterReads++;throw new Error('Forbidden '+field+' accessor');}}),'IMPLEMENTATION_DEFECT']);
  for(const message of[undefined,null,42,{},[],()=>{}])observations.push([Object.defineProperty(new Error('Original malformed message'),'message',{value:message}),'IMPLEMENTATION_DEFECT']);
+ observations.push([Object.assign(new Error('Original public service unavailable'),{status:503}),'ENVIRONMENT_DEFECT']);
+ observations.push([Object.defineProperty(new Error('Original noncoercible message'),'message',{value:{toString(){getterReads++;throw new Error('Forbidden error data coercion');}}}),'IMPLEMENTATION_DEFECT']);
  const retained:unknown[]=[];
  for(const[original,classification]of observations)for(const boundary of['discussion','read','inspect','collaboration','wait','verify']){
   const descriptors=original instanceof Error?Object.getOwnPropertyDescriptors(original):undefined,beforeReads=getterReads;let stops=0,later=0,reports=0;let failure:unknown;

@@ -12,7 +12,7 @@ it('native public campaign failures retain exact typed classification raw transp
   history.push({method:request.method??'',path:request.url??'',key:String(request.headers['idempotency-key']??''),body:bytes?JSON.parse(bytes):null});response.setHeader('content-type','application/json');
   if(request.method===show.descriptor.rest!.method&&request.url===route(show.descriptor.rest!.path)){
    if(mode==='interrupted'){request.socket.destroy();return;}if(mode==='json'||mode==='stop-denied'){response.end('{');return;}
-   if(mode==='denied'){response.statusCode=403;response.end(JSON.stringify({error:{code:'controlled_native_denial',message:'Original denied observer'}}));return;}
+   if(mode==='unavailable'){response.statusCode=503;response.end(JSON.stringify({status:503,title:'Original public service unavailable',code:'controlled_service_unavailable'}));return;}if(mode==='denied'){response.statusCode=403;response.end(JSON.stringify({error:{code:'controlled_native_denial',message:'Original denied observer'}}));return;}
    response.end(JSON.stringify({data:{run:{id:workdayId,teamId,status:'completed',executionMode:'simulation'}}}));return;
   }
   if(request.method===stop.descriptor.rest!.method&&request.url===route(stop.descriptor.rest!.path)){
@@ -30,13 +30,13 @@ it('native public campaign failures retain exact typed classification raw transp
    },now:()=>1,wait:async()=>{later++;},collaboration:()=>{},verify:()=>{later++;},reportPlanReview:report=>{expect(report).toBe((original as Error).message);reports++;},stop:async()=>{await client.invoke(stop,{...input,body:{reason:'Automated golden boundary failed'}},{idempotencyKey:'golden-stop:'+workdayId,signal:AbortSignal.timeout(5_000)});}});}catch(error){failure=error;}
    expect(accessorReads).toBe(0);expect(input).toEqual(held);const stops=history.slice(offset).filter(row=>row.method===stop.descriptor.rest!.method);
    if(mode==='exact'){expect(failure).toBeUndefined();expect(later).toBe(1);expect(stops).toHaveLength(0);return;}
-   const classification=mode==='review'?'PLAN_REVIEW_REQUIRED':mode==='interrupted'?'ENVIRONMENT_DEFECT':'IMPLEMENTATION_DEFECT';
+   const classification=mode==='review'?'PLAN_REVIEW_REQUIRED':(mode==='interrupted'||mode==='unavailable')?'ENVIRONMENT_DEFECT':'IMPLEMENTATION_DEFECT';
    expect.soft(failure).toBeInstanceOf(Error);expect.soft(Object.getOwnPropertyDescriptor(Object(failure),'classification')?.value).toBe(classification);expect.soft(later).toBe(0);expect.soft(stops).toHaveLength(1);expect.soft(stops[0]?.key).toBe('golden-stop:'+workdayId);expect.soft(reports).toBe(mode==='review'?1:0);
    if(mode==='review')expect.soft(failure).toBe(original);else if(mode==='stop-denied'){expect.soft(failure).toBeInstanceOf(AggregateError);expect.soft((failure as AggregateError).errors).toContain(original);}else expect.soft((failure as Error)?.cause).toBe(original);
    failures.push({mode,original,failure});
   };
-  await Promise.all([observe(),observe()]);for(mode of['json','denied','interrupted','review','stop-denied','accessor'])await observe();
-  const retained=[...failures];mode='exact';await Promise.all([observe(),observe()]);expect(failures).toEqual(retained);expect(failures).toHaveLength(6);expect(history.every(row=>[route(show.descriptor.rest!.path),route(stop.descriptor.rest!.path)].includes(row.path))).toBe(true);
+  await Promise.all([observe(),observe()]);for(mode of['json','denied','interrupted','review','stop-denied','accessor','unavailable'])await observe();
+  const retained=[...failures];mode='exact';await Promise.all([observe(),observe()]);expect(failures).toEqual(retained);expect(failures).toHaveLength(7);expect(history.every(row=>[route(show.descriptor.rest!.path),route(stop.descriptor.rest!.path)].includes(row.path))).toBe(true);
  }finally{server.closeAllConnections();if(server.listening)await new Promise<void>((accept,reject)=>server.close(error=>error?reject(error):accept()));}
  expect(server.listening).toBe(false);
  // The native SDK/HTTP transport, monitor and scoped-stop request are real.

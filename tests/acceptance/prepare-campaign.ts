@@ -7,7 +7,7 @@ import { execFile, execFileSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, join, resolve } from 'node:path';
 import { parse } from 'yaml';
-import { read } from './acceptance-cli.ts';
+import { read, row } from './acceptance-cli.ts';
 import { readCampaignProfiles } from './workday/support/preflight/campaign-profiles.ts';
 import { freshSdkDraft, requirePlanningWindow, sdkProposalText, sdkCampaignWindow } from './campaign.ts';
 import { readCampaignProjectLibraries, readCampaignRepositoryBases, readPreRunCampaignFreeze, verifyCampaignWorkdayPolicy, verifyRuntimeClosure } from './freeze-integrity.ts';

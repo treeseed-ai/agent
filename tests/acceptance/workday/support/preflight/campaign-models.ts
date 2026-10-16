@@ -51,7 +51,7 @@ export async function readCampaignProviderModels(input:unknown,readStatus:(provi
  const supply=row(row(manifest.allocationInputsByRun).sdk).providerSupply;assert.ok(Array.isArray(supply)&&supply.length>0,label+': Original frozen supply inventory required');const frozen=supply.map(row),ids=frozen.map(value=>value.providerId);
  assert.ok(ids.every(id=>typeof id==='string'&&id.trim()===id&&id.length>0)&&new Set(ids).size===ids.length,label+': Unique original provider owners required');
  const held=new Map<string,Record<string,unknown>>();for(const value of frozen){const id=String(value.providerId);assert.equal(row(value.provider).providerId,id,label+': Foreign captured provider');verifySdkCampaignModels(value);held.set(id,structuredClone(value));}
- const readbacks=new Map<string,{before:ReturnType<typeof modelView>;after:ReturnType<typeof view>}>();let failed:unknown;
+ const readbacks=new Map<string,{before:ReturnType<typeof modelView>;after:ReturnType<typeof modelView>}>();let failed:unknown;
  try{for(const value of frozen){const id=String(value.providerId),observed=row(await readStatus(id));readbacks.set(id,verifyFrozenCampaignModels(held.get(id)!,observed));}return readbacks;}
  catch(error){failed=error;throw error;}finally{try{assert.deepEqual(Buffer.from(readBytes(path)),bytes,label+': Operator capture changed during model readback');}catch(error){if(failed)throw new AggregateError([failed,error],label+': Original readback and capture integrity both failed');throw error;}}
 }

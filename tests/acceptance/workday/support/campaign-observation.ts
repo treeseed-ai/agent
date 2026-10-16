@@ -3,7 +3,7 @@ import {isDeepStrictEqual} from 'node:util';
 import {canonicalStandardsJson} from '@treeseed/sdk/standards';
 import assert from 'node:assert/strict';
 import { normalizeCapacityPageLimit } from '@treeseed/sdk/capacity-pagination';
-import { appliedWorkdaySchema, assignmentAttemptSchema, executionNodeSchema, usageSettlementSchema } from '@treeseed/sdk/agent-capacity';
+import { compileWorkday, appliedWorkdaySchema, assignmentAttemptSchema, executionNodeSchema, usageSettlementSchema } from '@treeseed/sdk/agent-capacity';
 import { validateWorkdayIntent, type WorkdayIntent } from '@treeseed/sdk/operator-contracts';
 import { collectCompleteEvidence } from './evidence-pages.ts';
 
@@ -380,7 +380,8 @@ export function verifyWorkdayLifecycleTransitionHistory(run:Row,events:readonly 
   for(const plan of[before,next].filter(value=>value!==null))for(const field of['id','teamId','executionMode','startsAt','endsAt','policyId','policyRevision','policySnapshot'])assert.deepEqual(Reflect.get(plan,field),Reflect.get(current,field),label+': Original frozen lifecycle authority changed');
   if(before===null){
    assert.equal(previous,undefined,label+': Repeated initial plan creation');assert.ok(context.previousStatus==='queued'||context.previousStatus==='running',label+': Original initial status required');
-   assert.equal(context.status,'running',label);assert.equal(next.state,'active',label+': Original initial active plan required');assert.equal(next.activatedAt,next.startsAt,label);assert.deepEqual(next.planningRounds,[],label+': Initial plan cannot borrow planning history');
+   assert.equal(context.status,'running',label);assert.equal(next.state,'active',label+': Original initial active plan required');assert.equal(next.activatedAt,next.startsAt,label);const prefix='planning:'+next.id+':1:',agentIds=next.planningRounds.flatMap(round=>round.assignmentIds.map(id=>{assert.ok(id.startsWith(prefix)&&id.length>prefix.length,label+': Original compiled planning identity required');return id.slice(prefix.length);}));
+   const compiled=compileWorkday({id:next.id,teamId:next.teamId,executionMode:next.executionMode,policyId:next.policyId,policyRevision:next.policyRevision,policy:next.policySnapshot,startsAt:next.startsAt,agentIds});assert.deepEqual(workdayLifecycleAuthority(next),workdayLifecycleAuthority({...compiled,state:'active',activatedAt:compiled.startsAt}),label+': Original compiled initial plan required');
    for(const field of['closingAt','endedAt','reportRef'])assert.equal(Reflect.get(next,field),undefined,label+': Initial plan cannot borrow later products');
    const now=clock(event.createdAt);assert.ok(now>=at,label+': Reversed initial observation clock');at=now;previous=next;previousStatus=context.status;
    if(isDeepStrictEqual(workdayLifecycleAuthority(next),workdayLifecycleAuthority(current))&&context.status===run.status)observedCurrent=true;continue;

@@ -4206,3 +4206,28 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/guarantees/lifecycle/fresh-segment-campaign.test.ts
     testName: "denies a continued terminal workday before normal SDK inspection and final gates then accepts only an unchanged fresh retry"
+  agent.golden.execution-planning-window-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/monitoring/allocation/planning-window.test.ts
+    testName: "retains original acting review planning estimating chat and reporting phase receipts at the initial floor and during fluid planning"
+  agent.golden.execution-planning-window-2:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/monitoring/allocation/planning-window.test.ts
+    testName: "denies early acting review foreign or malformed original workday authority without changing the failed observation before exact retry"
+  agent.golden.execution-planning-window-3:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/monitoring/allocation/planning-window.test.ts
+    testName: "denies missing malformed and contradictory original allocator phases without treating planning percentage as a new spending ceiling"
+  agent.golden.execution-planning-window-4:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/monitoring/allocation/planning-window-native.test.ts
+    testName: "native Kernel Git and public SDK planning observations deny early issuance and changed phase before scoped stop while retaining exact failed evidence and unchanged retry"
+  agent.golden.execution-planning-window-5:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/monitoring/allocation/planning-window-campaign.test.ts
+    testName: "original campaign denies early or phase-contradictory assignments before profile inspection approval or final golden gates without changing terminal evidence"

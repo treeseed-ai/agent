@@ -235,3 +235,5 @@ export function readCapturedCampaignManifest(path:string,readReceipt:(path:strin
  const bytes=Buffer.from(readReceipt(paths[0]!));assert.equal('sha256:'+createHash('sha256').update(bytes).digest('hex'),receipts[paths[0]!],'ACCEPTANCE_FREEZE_RECEIPT_CHANGED: Operator capture changed after integrity read');const text=bytes.toString('utf8');assert.ok(Buffer.from(text,'utf8').equals(bytes),label+': Original UTF-8 operator bytes required');
  let manifest:unknown;try{manifest=JSON.parse(text);}catch(cause){throw new Error(label+': Original operator capture is malformed',{cause});}assert.ok(manifest&&typeof manifest==='object'&&!Array.isArray(manifest),label+': Original operator object required');return row(manifest);
 }
+
+export {verifySdkCampaignModels} from './workday/support/preflight/campaign-models.ts';

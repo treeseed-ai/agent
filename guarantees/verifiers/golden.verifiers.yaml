@@ -4276,3 +4276,8 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/guarantees/campaign-cli.test.ts
     testName: "stops the exact admitted simulation on an incomplete original Workday lifecycle chain before accounting collaboration or later gates"
+  agent.golden.execution-reporter-frozen-lifecycle:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/closure/reporter-frozen-lifecycle.test.ts
+    testName: "requires the exact original closing event and all ended planning rounds in frozen Reporter input before accepting its ordinary report"

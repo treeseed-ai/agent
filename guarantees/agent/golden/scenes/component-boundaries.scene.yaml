@@ -2487,3 +2487,6 @@ workflow:
   - id: workday-lifecycle-history-cli-stop
     action: { verifier: agent.golden.execution-workday-lifecycle-history-cli-stop }
     expect: { status: passed }
+  - id: reporter-frozen-lifecycle
+    action: { verifier: agent.golden.execution-reporter-frozen-lifecycle }
+    expect: { status: passed }

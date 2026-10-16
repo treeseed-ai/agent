@@ -2403,3 +2403,21 @@ workflow:
   - id: original-campaign-capture-unit
     action: { verifier: agent.golden.original-campaign-capture-unit }
     expect: { status: passed }
+  - id: accounting-transition-inventory-unit
+    action: { verifier: agent.golden.accounting-transition-inventory-unit }
+    expect: { status: passed }
+  - id: accounting-transition-inventory-denials-unit
+    action: { verifier: agent.golden.accounting-transition-inventory-denials-unit }
+    expect: { status: passed }
+  - id: accounting-transition-authority-unit
+    action: { verifier: agent.golden.accounting-transition-authority-unit }
+    expect: { status: passed }
+  - id: accounting-transition-concurrent-inspection
+    action: { verifier: agent.golden.accounting-transition-concurrent-inspection }
+    expect: { status: passed }
+  - id: accounting-transition-inspection-bound
+    action: { verifier: agent.golden.accounting-transition-inspection-bound }
+    expect: { status: passed }
+  - id: accounting-transition-scoped-stop
+    action: { verifier: agent.golden.accounting-transition-scoped-stop }
+    expect: { status: passed }

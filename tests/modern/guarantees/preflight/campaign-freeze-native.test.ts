@@ -1,3 +1,4 @@
+import {proveNativeAccountingHistoryTransport} from '../monitoring/accounting/accounting-history-native.ts';
 import { provePublicResourceClosureTransport } from './physical/resource-closure-native.ts';
 import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync, existsSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -176,6 +177,7 @@ it('native public SDK event pages reach the original campaign observer with comp
 		// execution, provider-generated charges, producer completeness or teardown.
 	} finally { server.closeAllConnections(); if (server.listening) await new Promise<void>((accept, reject) => server.close(error => error ? reject(error) : accept())); }
 	expect(server.listening).toBe(false);
+ await proveNativeAccountingHistoryTransport();
 }, 30_000);
 
 afterEach(() => vi.unstubAllEnvs());

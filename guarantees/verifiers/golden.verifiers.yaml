@@ -4241,3 +4241,13 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/guarantees/preflight/source/source-authority-native.test.ts
     testName: "native Kernel Git and original broker status client reject foreign credentialed and interrupted source observations without changing owning candidates or retained failed history"
+  agent.golden.execution-failure-classification-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/lifecycle/failures/failure-classification.test.ts
+    testName: "classifies every original campaign failure before stop without losing raw causes or permitting a later stage"
+  agent.golden.execution-failure-classification-2:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/lifecycle/failures/failure-classification-native.test.ts
+    testName: "native public campaign failures retain exact typed classification raw transport causes and scoped stop through denial interruption and unchanged concurrent retry"

@@ -30,8 +30,8 @@ describe('capacity-provider guarantee execution bindings', () => {
 		expect(workflow.jobs.verify.steps.filter((step:{uses?:string})=>step.uses?.startsWith('treeseed-ai/reviewer/.github/actions/run-scenes@')).map((step:{uses:string})=>step.uses)).toEqual(["treeseed-ai/reviewer/.github/actions/run-scenes@c9a12fe72b9273bb95d22e3f57aa69b2d532aa7e"]);
         expect(inputs.find((value:{owner:string})=>value.owner==='deployment')).toMatchObject({commit:'1d5cd28504a44e2abf8dab45612567fae143c544',sha256:'2f71e344f2b72efd44d26d13e10bfbe1517a941648c0ddbb398087606017f7aa'});
         expect(native.steps.filter((step:{with?:{repository?:string;path?:string}})=>step.with?.repository==='treeseed-ai/deployment'&&step.with?.path==='.treeseed/installed-owner-inputs/deployment').map((step:{with:unknown})=>step.with)).toEqual([{'github-token':'${{ github.token }}',repository:'treeseed-ai/deployment','run-id':38910640363,name:'deployment-candidate-1d5cd28504a44e2abf8dab45612567fae143c544',path:'.treeseed/installed-owner-inputs/deployment'}]);
-        expect(inputs.find((value:{owner:string})=>value.owner==='sdk')).toMatchObject({commit:'4337c1dddc4d9bbbaf7f95a1aaa473d812655fd4',sha256:'fab9bd86246af9190d61b87787153be3cd6b553a54eb26bfcc4da928d2c92aac'});
-        for(const [owner,runId] of [['api',38892950686],['cli',38647918411],['sdk',38909329168]] as const){
+        expect(inputs.find((value:{owner:string})=>value.owner==='sdk')).toMatchObject({commit:'379fd0684375609601605edb3aac2c091ae0aa33',sha256:'df9bb10a77e0833e6a2d774c50b5d9c5ff8c7b22ef3017b5590a74d04b619e32'});
+        for(const [owner,runId] of [['api',38964832841],['cli',38647918411],['sdk',38970276890]] as const){
             const input=inputs.find((value:{owner:string})=>value.owner===owner);
             const downloads=native.steps.filter((step:{with?:{repository?:string;path?:string}})=>step.with?.repository==='treeseed-ai/'+owner&&step.with?.path==='.treeseed/installed-owner-inputs/'+owner);
             expect(downloads).toHaveLength(1);
@@ -41,7 +41,7 @@ describe('capacity-provider guarantee execution bindings', () => {
 		expect(inputs.find((value: { owner: string }) => value.owner === 'cli')).toMatchObject({
 			commit: '6e2579428f4959906cd5b9b669ebbb2b44cb495c', sha256: '49b6d24882af45ba39fd46cdcd999c9c54e84bd416f834fa0042ec5425dbea1a' });
 		expect(inputs.find((value: { owner: string }) => value.owner === 'api')).toMatchObject({
-			commit: '1bad792303a9b366328f8b659b3798bae5846a64', sha256: 'a87ff3b10357234dfbae74d98da1f28c4cc1034dec8b832a922a3b522990c7cf' });
+			commit: 'dae1fbef895512ebb41152e18654f4bc8331cd55', sha256: 'c6285469b19d347c6fa4fcf96eb023960163ed82d1670de576dede617d425606' });
 		expect(inputs.find((value: { owner: string }) => value.owner === 'api').buildTreeDx).toEqual({
 			commit: '6d358bb2e536af24918f3c33acb2072b9093a603', sha256: 'd6de27b42704b4c899562f290950561132fd0d48f38a95e6624eb853e32691cb' });
 		expect(inputs.find((value: { owner: string }) => value.owner === 'api').buildSdk).toMatchObject({

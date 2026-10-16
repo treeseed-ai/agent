@@ -20,6 +20,7 @@ it('native provider signs the canonical source attempt unchanged through Unix br
 			const configuration=structuredClone(f.manifest),observation=await f.executor.observe();
 			expect(observation.available).toBe(true);const model=Reflect.get(observation,'modelPolicy');
 			expect(model).toEqual({provider:'openai',model:'configured-luna',reasoningEffort:'low',capabilities:[...new Set(f.manifest.adapters[0]!.offers.flatMap(binding=>binding.offer.capabilities.map(value=>value.id)))]});
+			if(!model)throw new Error('Original configured native model policy is missing');
 			model.model='foreign-observer-mutation';model.capabilities.push('foreign-observer-capability');
 			const held = structuredClone(f.input.assignment), result = await f.executor.execute(f.input), signed = f.assignment();
 			expect(signed?.modelPolicy).toEqual({provider:'openai',model:'configured-luna',reasoningEffort:'low',capabilities:f.manifest.adapters[0]!.offers[0]!.offer.capabilities.map(value=>value.id)});expect(f.manifest).toEqual(configuration);

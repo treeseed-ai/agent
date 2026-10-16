@@ -287,3 +287,5 @@ acceptanceCriteria:
     verifierRefs: ["agent.golden.live.campaign-freeze","agent.golden.live.campaign","agent.golden.architecture-profile-custody-live-1","agent.golden.architecture-context-custody-live-1","sdk.golden.live.product","api.golden.execution-normal-sdk-clean-schema-live-1","agent.golden.execution-normal-sdk-physical-absence-live-1"]
   - criterion: 3e359934ebccfb10c84a6bbc24ad108affd0ba0963bec997915b4a39ce6d3981
     verifierRefs: ["agent.golden.live.campaign-freeze","agent.golden.live.campaign","agent.golden.architecture-profile-custody-live-1","agent.golden.architecture-context-custody-live-1","sdk.golden.live.product","api.golden.execution-normal-sdk-clean-schema-live-1","agent.golden.execution-normal-sdk-physical-absence-live-1","agent.golden.architecture-living-graph-live-1"]
+  - criterion: fcadf4b131012b7b83611df6eb6a1b56e107def698a04d759a191b85a022cabe
+    verifierRefs: ["agent.golden.live.campaign"]

@@ -35,9 +35,10 @@ export function retainUnitEstimatePublications(items:Row[],replies:Map<string,Ro
  }
  // Controlled acting/review clocks follow the actual estimating inputs; original deadlines and duration remain unchanged.
  const after=Math.max(...completedEstimates.map(value=>Date.parse(String(value.completedAt))))+1;
- for(const item of items.filter(value=>['acting','reviewing'].includes(String(row(row(value.assignmentAttempt).effectiveProfile).activity)))){
-  const begin=Date.parse(String(item.createdAt));if(begin>=after)continue;const offset=after-begin,finish=new Date(Date.parse(String(item.completedAt))+offset).toISOString(),attempt=row(item.assignmentAttempt);if(Date.parse(finish)>Date.parse(String(attempt.deadline)))throw new Error('Original controlled deadline cannot be extended');
-  const createdAt=new Date(after).toISOString();Object.assign(item,{createdAt,completedAt:finish});attempt.createdAt=createdAt;if(attempt.finishedAt!==undefined)attempt.finishedAt=finish;row(item.assignmentResult).completedAt=finish;Object.assign(row(row(row(item.capacityEnvelope).budget).time),{executionStartedAt:createdAt,closeoutStartedAt:finish});
+ const issued=items.filter(value=>['acting','reviewing'].includes(String(row(row(value.assignmentAttempt).effectiveProfile).activity))),shift=Math.max(0,after-Math.min(...issued.map(value=>Date.parse(String(value.createdAt)))));
+ for(const item of issued){
+  const begin=Date.parse(String(item.createdAt));if(!shift)continue;const offset=shift,finish=new Date(Date.parse(String(item.completedAt))+offset).toISOString(),attempt=row(item.assignmentAttempt);if(Date.parse(finish)>Date.parse(String(attempt.deadline)))throw new Error('Original controlled deadline cannot be extended');
+  const createdAt=new Date(begin+offset).toISOString();Object.assign(item,{createdAt,completedAt:finish});attempt.createdAt=createdAt;if(attempt.finishedAt!==undefined)attempt.finishedAt=finish;row(item.assignmentResult).completedAt=finish;Object.assign(row(row(row(item.capacityEnvelope).budget).time),{executionStartedAt:createdAt,closeoutStartedAt:finish});
  }
  const readyCommit='f'.repeat(40),digest=createHash('sha256').update(proposalBytes(ready)).digest('hex');set(readyCommit,ready);replies.set('proposals show',{id:definition.id,projectId:definition.projectId,activeVersion:8,activeContentHash:digest,metadata:{contentProvenance:{repositoryId:repository,contentPath:path,commitSha:readyCommit,digest}}});
  return {definition,ready,path,source,readyCommit};

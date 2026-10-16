@@ -172,42 +172,12 @@ beforeEach(() => {
 			sourceRef: structuredClone(node.sourceRef), authorityRefs: structuredClone(node.authorityRefs) });
 	}
 	state.replies.set('execution graph', { nodes });
-	for (const item of items.filter(item => item.assignmentAttempt.effectiveProfile.activity === 'reviewing')) {
-		const profileRef = { store: 'treedx', model: 'agent', id: 'configured-auditor', revision: 1, digest: `sha256:${'e'.repeat(64)}` };
-		item.assignmentAttempt.effectiveProfile.profileRef = structuredClone(profileRef);
-		const path = `decisions/${item.id}.mdx`;
-		item.assignmentResult.references = [{ kind: 'treedx', projectId: 'sdk', repository: 'sdk-library', commit, path }];
-		state.replies.set(`library read ${path}`, { result: { resolvedRef: commit, files: [{ path, frontmatter: {
-			schemaVersion: 'treeseed.decision/v1', id: item.id, projectId: 'sdk', decisionClass: 'work-review', decisionMethod: 'authority',
-			subjectRef: { store: 'git', model: 'source', id: 'candidate', repository: 'sdk', commit },
-			disposition: item.lifecycleOutput.activityCompletion.reviewDisposition, rationale: 'Synthetic independent review input, not live acceptance.',
-			authorityRefs: [structuredClone(nodes[0]!.sourceRef)], decidedByRefs: [profileRef], decidedAt: item.completedAt } }] } });
-		if (item.id === 'requested') {
-			// Supplied canonical finding bytes only, not a real Writer publication.
-			const findingPath = 'notes/requested-feedback.mdx', body = 'A supplied review finding requiring a real correction.';
-			const decision = state.replies.get(`library read ${path}`)!.result.files[0].frontmatter;
-			const frontmatter = { schemaVersion: 'treeseed.note/v1', id: 'requested-feedback', projectId: 'sdk', classification: 'feedback',
-				subjectRefs: [structuredClone(decision.subjectRef)], createdAt: item.completedAt };
-			const content = `---\n${stringify(frontmatter, { lineWidth: 0 })}---\n\n${body}\n`;
-			const target = { store: 'treedx', model: 'note', id: frontmatter.id, repository: 'sdk-library', commit, path: findingPath };
-			const { commit: _baseCommit, ...finding } = target;
-			decision.findingRefs = [{ ...finding, revision: 1, digest: `sha256:${createHash('sha256').update(content).digest('hex')}` }];
-			item.assignmentAttempt.grant.contentWrite.push(target);
-			item.assignmentAttempt.workspace.writablePaths.push(findingPath);
-			item.assignmentAttempt.effectiveProfile.permissionCeiling.content.write.push('note');
-			item.assignmentResult.references.push({ kind: 'treedx', projectId: 'sdk', repository: 'sdk-library', commit, path: findingPath });
-			state.replies.set(`library read ${findingPath}`, { result: { resolvedRef: commit, files: [{ path: findingPath, content, body, frontmatter }] } });
-		}
-	}
 	state.replies.set('library read decisions/decision-1.mdx', { result: { resolvedRef: commit, files: [{ path: 'decisions/decision-1.mdx', frontmatter: {
 		schemaVersion: 'treeseed.decision/v1', id: 'decision-1', projectId: 'sdk', decisionClass: 'proposal', decisionMethod: 'authority',
 		subjectRef: structuredClone(nodes[0]!.sourceRef), disposition: 'approved', rationale: 'Synthetic complete Decision input, not live evidence.',
 		authorityRefs: [structuredClone(nodes[0]!.sourceRef)], decidedByRefs: [{ store: 'postgresql', model: 'user', id: 'fixture-external-operator' }],
 		decidedAt: '2026-09-26T23:59:00Z' } }] } });
 	retainProposalDecisionBytes();
-	for (const reply of state.replies.values()) for (const file of reply.result?.files ?? [])
-		if (file.frontmatter?.decisionClass === 'work-review')
-			file.content = `---\n${stringify(file.frontmatter, { lineWidth: 0 })}---\n`;
 	state.replies.set('capacity usage', { items: items.map(usageMeasurement),
 		page: { limit: 100, hasMore: false, nextCursor: null } });
 	state.replies.set('library read', { result: { resolvedRef: commit, files: [{ path: reportRef.path, body: `${workdayId} ${items.map(item => item.id).join(' ')}`, frontmatter: {
@@ -250,6 +220,36 @@ beforeEach(() => {
 		}
 	}
 	const originalEstimates=retainUnitEstimatePublications(items,state.replies,state.replies.get('workdays show')!.run);state.operatorProposals=[{id:originalEstimates.definition.id,projectId:originalEstimates.definition.projectId,draftRef:structuredClone(originalEstimates.source)}];vi.stubEnv('TREESEED_ACCEPTANCE_FREEZE_PATH','/controlled-golden-freeze.json');
+	for (const item of items.filter(item => item.assignmentAttempt.effectiveProfile.activity === 'reviewing')) {
+		const profileRef = { store: 'treedx', model: 'agent', id: 'configured-auditor', revision: 1, digest: `sha256:${'e'.repeat(64)}` };
+		item.assignmentAttempt.effectiveProfile.profileRef = structuredClone(profileRef);
+		const path = `decisions/${item.id}.mdx`;
+		item.assignmentResult.references = [{ kind: 'treedx', projectId: 'sdk', repository: 'sdk-library', commit, path }];
+		state.replies.set(`library read ${path}`, { result: { resolvedRef: commit, files: [{ path, frontmatter: {
+			schemaVersion: 'treeseed.decision/v1', id: item.id, projectId: 'sdk', decisionClass: 'work-review', decisionMethod: 'authority',
+			subjectRef: { store: 'git', model: 'source', id: 'candidate', repository: 'sdk', commit },
+			disposition: item.lifecycleOutput.activityCompletion.reviewDisposition, rationale: 'Synthetic independent review input, not live acceptance.',
+			authorityRefs: [structuredClone(nodes[0]!.sourceRef)], decidedByRefs: [profileRef], decidedAt: item.completedAt } }] } });
+		if (item.id === 'requested') {
+			// Supplied canonical finding bytes only, not a real Writer publication.
+			const findingPath = 'notes/requested-feedback.mdx', body = 'A supplied review finding requiring a real correction.';
+			const decision = state.replies.get(`library read ${path}`)!.result.files[0].frontmatter;
+			const frontmatter = { schemaVersion: 'treeseed.note/v1', id: 'requested-feedback', projectId: 'sdk', classification: 'feedback',
+				subjectRefs: [structuredClone(decision.subjectRef)], createdAt: item.completedAt };
+			const content = `---\n${stringify(frontmatter, { lineWidth: 0 })}---\n\n${body}\n`;
+			const target = { store: 'treedx', model: 'note', id: frontmatter.id, repository: 'sdk-library', commit, path: findingPath };
+			const { commit: _baseCommit, ...finding } = target;
+			decision.findingRefs = [{ ...finding, revision: 1, digest: `sha256:${createHash('sha256').update(content).digest('hex')}` }];
+			item.assignmentAttempt.grant.contentWrite.push(target);
+			item.assignmentAttempt.workspace.writablePaths.push(findingPath);
+			item.assignmentAttempt.effectiveProfile.permissionCeiling.content.write.push('note');
+			item.assignmentResult.references.push({ kind: 'treedx', projectId: 'sdk', repository: 'sdk-library', commit, path: findingPath });
+			state.replies.set(`library read ${findingPath}`, { result: { resolvedRef: commit, files: [{ path: findingPath, content, body, frontmatter }] } });
+		}
+	}
+	for (const reply of state.replies.values()) for (const file of reply.result?.files ?? [])
+		if (file.frontmatter?.decisionClass === 'work-review')
+			file.content = `---\n${stringify(file.frontmatter, { lineWidth: 0 })}---\n`;
 	state.replies.get('capacity usage')!.items=items.map(usageMeasurement);
 	for (const [key, value] of state.replies) if (key.startsWith('library read') && value.result?.files) {
 		Object.assign(value.result, { ok: true, repoId: 'sdk-library' });

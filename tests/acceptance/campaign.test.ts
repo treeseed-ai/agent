@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import {isDeepStrictEqual} from 'node:util';
 import type { GraphRevision } from '@treeseed/sdk/agent-capacity';
 import { existsSync, readFileSync } from 'node:fs';
 import test from 'node:test';
@@ -9,7 +10,7 @@ import { read, row } from './acceptance-cli.ts';
 import { verifyGolden } from './sdk-runtime-golden.test.ts';
 import { prepareSdkCampaign, verifySdkExternalState } from './prepare-campaign.ts';
 import { observeLiveGraphRevisions } from './workday/support/monitoring/live-graph-revisions.ts';
-import { observeCampaign, retainCampaignEventHistory, verifyAssignmentTransitionHistory } from './workday/support/campaign-observation.ts';
+import { observeCampaign, retainCampaignEventHistory, verifyAssignmentTransitionHistory, verifyNodeTransitionHistory } from './workday/support/campaign-observation.ts';
 import { readCompleteEvidence } from './workday/support/evidence-pages.ts';
 import { observeLiveAssignmentRecords, inspectLiveAssignmentProfile } from './workday/support/monitoring/live-assignment-records.ts';
 
@@ -71,12 +72,16 @@ test('Frozen SDK campaign drives planning acting review and terminal golden gate
   const seen=new Set(observedEvents.keys());let complete=false;
   for(let round=0;round<40;round++){
    assert.ok(Date.now()<=inspectionEndsAt,'ACCEPTANCE_LIVE_ASSIGNMENT: Original inspection bound elapsed');
+   const heldGraph=read(['execution','graph','show'],team);
    const events=readCompleteEvidence(['workdays','events','list',workdayId],team,100,'ACCEPTANCE_OBSERVATION','ascending');
    retainCampaignEventHistory(events,currentRun,observedEvents,recordEvent);verifyAssignmentTransitionHistory(currentRun,assignments,events);
    const known=new Map(assignments.map(item=>[String(item.id),item])),refresh=new Set<string>();
    for(const event of events)if(typeof event.assignmentId==='string'&&(!known.has(event.assignmentId)||(!seen.has(String(event.id))&&typeof event.eventType==='string'&&event.eventType.startsWith('assignment.'))))refresh.add(event.assignmentId);
    for(const event of events)seen.add(String(event.id));
-   if(!refresh.size){complete=true;break;}
+   if(!refresh.size){
+    const freshGraph=read(['execution','graph','show'],team);if(!isDeepStrictEqual(heldGraph,freshGraph))continue;
+    verifyNodeTransitionHistory(currentRun,heldGraph,events);complete=true;break;
+   }
    for(const id of refresh){const next=read(['assignments','show',id],team);assert.equal(next.id,id,'ACCEPTANCE_LIVE_ASSIGNMENT: Foreign concurrent observation');const prior=known.get(id);
     if(prior){assert.deepEqual(next.assignmentAttempt,prior.assignmentAttempt,'ACCEPTANCE_LIVE_ASSIGNMENT: Concurrent issued authority changed');assert.ok(Number.isSafeInteger(next.stateVersion)&&Number(next.stateVersion)>=Number(prior.stateVersion),'ACCEPTANCE_LIVE_ASSIGNMENT: Concurrent owning version regressed');}
     known.set(id,next);

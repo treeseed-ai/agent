@@ -4101,3 +4101,28 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/guarantees/planning/proposal-feedback-native.test.ts
     testName: "native public SDK proposal reads retain exact resolved feedback and deny blocked omitted late malformed or interrupted observations before unchanged retry"
+  agent.golden.node-transition-history-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/monitoring/nodes/node-transition-history.test.ts
+    testName: "requires complete original node state and revision histories against the current owning graph before progress without rewriting failed observations"
+  agent.golden.node-transition-history-native:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/monitoring/nodes/node-transition-history-native.test.ts
+    testName: "native Kernel Git and public SDK node histories deny omitted changed or interrupted transitions before scoped stop and preserve exact retry"
+  agent.golden.node-transition-scoped-stop:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/campaign-cli.test.ts
+    testName: "denies missing owning node transitions before collaboration approval and later gates with the original scoped stop"
+  agent.golden.node-transition-concurrent-inspection:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/campaign-cli.test.ts
+    testName: "rereads concurrent graph changes within the original inspection bound before certifying the final node inventory"
+  agent.golden.node-transition-inspection-bound:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/campaign-cli.test.ts
+    testName: "stops continuously mutating public graph inventory without advancing beyond the original forty-round inspection bound"

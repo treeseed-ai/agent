@@ -76,7 +76,7 @@ describe('native deterministic content execution window', () => {
 					const body = row(input.body);
 					if (Array.isArray(body.files)) {
 						if (provider) expect(provider.requests.filter(request => request.operation === 'startExecution')).toHaveLength(1);
-						else expect(f.begin,JSON.stringify({status:result.status,code:result.code,summary:result.summary})).toEqual([{ assignmentId: f.attempt.id, originalDeadline: f.attempt.deadline }]);
+						else expect(f.begin).toEqual([{ assignmentId: f.attempt.id, originalDeadline: f.attempt.deadline }]);
 						expect(body.files).toHaveLength(1); const file = row(body.files[0]); expect(file.path).toBe(path);
 						if (typeof file.content !== 'string') throw new Error('Native exact report bytes required');
 						content = file.content; mkdirSync(join(f.checkout, 'notes'), { recursive: true }); writeFileSync(join(f.checkout, path), content);
@@ -118,7 +118,7 @@ describe('native deterministic content execution window', () => {
 					expect({ attempt: f.attempt, context: f.input.assignment.workspaceContext, evidence, profileInput }).toEqual(held);
 					continue;
 				}
-				expect(f.begin).toEqual([{ assignmentId: f.attempt.id, originalDeadline: f.attempt.deadline }]);
+				expect(f.begin,JSON.stringify({status:result.status,code:result.code,summary:result.summary})).toEqual([{ assignmentId: f.attempt.id, originalDeadline: f.attempt.deadline }]);
 				expect(writes, JSON.stringify({ status: result.status, code: result.code, summary: result.summary })).toBe(1); expect(commits).toBe(1); expect(f.requests).toEqual([]);
 				expect(execFileSync('git', ['show', `${candidate}:${path}`], { cwd: f.checkout, encoding: 'utf8' })).toBe(content);
 				expect(f.git('rev-parse', `${candidate}^`)).toBe(f.base);

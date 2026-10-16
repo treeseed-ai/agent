@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { estimateSchema } from '@treeseed/sdk/agent-capacity';
+import { estimateSchema,assignmentAttemptSchema,appliedWorkdaySchema,workdayPlanningEndsAt } from '@treeseed/sdk/agent-capacity';
 import { row, type Row } from '../../../acceptance-cli.ts';
 
 const rows = (value: unknown): Row[] => Array.isArray(value) ? value.map(row) : [];
@@ -51,4 +51,20 @@ export function verifyAllocation(item: Row, run: Row): void {
 		&& Number(opportunity.availableSeconds) <= Number(opportunity.shareSeconds)
 		&& Number(opportunity.shareSeconds) <= Number(opportunity.remainingSupplySeconds)
 		&& Number(opportunity.planningCommittedSeconds) <= Number(opportunity.committedSeconds), 'ACCEPTANCE_ALLOCATION_SUPPLY: Weighted supply authority exceeded');
+}
+
+/** Observe original issued authority before continuing the existing SDK campaign.
+ * The API owns phase/admission; this comparison creates no scheduler state. */
+export function verifyPlanningWindow(item:Row,run:Row):void{
+ const label='ACCEPTANCE_PLANNING_WINDOW: Original planning floor and allocator phase required';
+ const parsedAttempt=assignmentAttemptSchema.safeParse(item.assignmentAttempt),parsedPlan=appliedWorkdaySchema.safeParse(row(run.parameters).appliedPlan);
+ assert.ok(parsedAttempt.success&&parsedPlan.success,label);const attempt=parsedAttempt.data,plan=parsedPlan.data;
+ assert.ok(plan.id===run.id&&plan.teamId===run.teamId&&attempt.workdayId===plan.id&&attempt.teamId===plan.teamId&&plan.startsAt===run.startedAt&&plan.executionMode===run.executionMode,label);
+ const issued=Date.parse(attempt.createdAt),floor=Date.parse(workdayPlanningEndsAt(plan)),activity=attempt.effectiveProfile.activity;
+ assert.ok(Number.isFinite(issued)&&Number.isFinite(floor),label);
+ const opportunity=row(row(row(row(item.explanation).metadata).allocation).opportunity);
+ assert.ok(Object.hasOwn(opportunity,'phase')&&typeof opportunity.phase==='string'&&['planning','acting'].includes(opportunity.phase),label);
+ if(['acting','reviewing'].includes(activity)){assert.ok(issued>=floor,label);assert.equal(opportunity.phase,'acting',label);}
+ if(['planning','estimating'].includes(activity)||activity==='chat'&&issued<floor)assert.equal(opportunity.phase,'planning',label);
+ if(activity==='reporting')assert.equal(opportunity.phase,'acting',label);
 }

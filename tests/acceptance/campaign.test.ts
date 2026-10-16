@@ -1,3 +1,4 @@
+import {verifyPlanningWindow} from './workday/support/monitoring/assignment-allocation.ts';
 import assert from 'node:assert/strict';
 import {isDeepStrictEqual} from 'node:util';
 import type { GraphRevision } from '@treeseed/sdk/agent-capacity';
@@ -93,7 +94,8 @@ test('Frozen SDK campaign drives planning acting review and terminal golden gate
    assignments=[...known.values()]; // Preserve original public list rows; re-read history after fresh roots.
   }
   assert.ok(complete,'ACCEPTANCE_LIVE_ASSIGNMENT: Complete concurrent transition inventory not reached');
-		observeLiveAssignmentRecords(currentRun, assignments, observedAssignments, item => inspectLiveAssignmentProfile(item, team, assignments, { 'treeseed-ai/sdk': row(freeze.sourceHeads).sdk }));
+		const inspectedRun=currentRun;
+		observeLiveAssignmentRecords(inspectedRun, assignments, observedAssignments, item => { verifyPlanningWindow(item,inspectedRun); inspectLiveAssignmentProfile(item, team, assignments, { 'treeseed-ai/sdk': row(freeze.sourceHeads).sdk }); });
 	}, now: Date.now, wait: () => new Promise(resolve => setTimeout(resolve, 30_000)), stop,
 		collaboration: () => {
 			verifyGolden('collaboration');

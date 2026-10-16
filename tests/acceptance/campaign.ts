@@ -267,6 +267,15 @@ export function campaignPlanReviewRequired(details: PlanReviewReport, cause: unk
 }
 
 /** Unsafe or missing frozen intent needs operator plan review before any API admission. */
+/** Fresh SDK proof cannot borrow a continuation's completed products or receipt.
+ * Explicit continuation remains in its separate owning acceptance case. */
+export function requireFreshSdkSegment(freeze: StartRow, run?: StartRow): void {
+ const label='ACCEPTANCE_CAMPAIGN_FRESH_SEGMENT: Continued evidence cannot certify a fresh SDK campaign';
+ const body=startRow(startRow(freeze.request).body);
+ assert.ok(!Object.hasOwn(body,'continueFromWorkdayId'),label);
+ if(run) assert.ok(!Object.hasOwn(startRow(run.parameters),'continueFromWorkdayId'),label);
+}
+
 export function requireCampaignSimulation(freeze: StartRow, freezePath: string, report: (text: string) => void): void {
 	const request = freeze.request, body = request && typeof request === 'object' && !Array.isArray(request) ? (request as StartRow).body : undefined;
 	const mode = body && typeof body === 'object' && !Array.isArray(body) ? (body as StartRow).executionMode : undefined;

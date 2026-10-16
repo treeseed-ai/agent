@@ -4,7 +4,7 @@ import type { GraphRevision } from '@treeseed/sdk/agent-capacity';
 import { existsSync, readFileSync } from 'node:fs';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { monitorCampaign, openSdkCampaignDiscussion, requirePlanningWindow, retainCampaignWorkdayStart, retainCampaignPlanReview, requireCampaignSimulation } from './campaign.ts';
+import { monitorCampaign, openSdkCampaignDiscussion, requirePlanningWindow, retainCampaignWorkdayStart, retainCampaignPlanReview, requireCampaignSimulation, requireFreshSdkSegment } from './campaign.ts';
 import { verifyFreezeIntegrity } from './freeze-integrity.ts';
 import { read, row } from './acceptance-cli.ts';
 import { verifyGolden } from './sdk-runtime-golden.test.ts';
@@ -25,6 +25,7 @@ test('Frozen SDK campaign drives planning acting review and terminal golden gate
 	verifyFreezeIntegrity(freeze, readFileSync);
 	const body = freeze.request?.body as Row, allocation = body?.allocation as Row;
 	requireCampaignSimulation(freeze, path, text => { retainCampaignPlanReview(text, path, freeze); console.error(text); });
+	requireFreshSdkSegment(freeze);
 	assert.equal(body?.projects?.length, 1, 'ACCEPTANCE_CAMPAIGN_PROJECT: Individual SDK campaign only');
 	assert.equal(body?.projects[0], '8cbfb810-6da5-4da2-9ae9-cad53101253f', 'ACCEPTANCE_CAMPAIGN_PROJECT: Exact seeded SDK identity required');
 	assert.deepEqual(body.proposalIds, [freeze.proposal?.id], 'ACCEPTANCE_CAMPAIGN_PROPOSAL: Exact frozen proposal required');
@@ -64,6 +65,7 @@ test('Frozen SDK campaign drives planning acting review and terminal golden gate
 			endsAt: Date.parse(current.parameters.appliedPlan.endsAt) };
 	}, inspect: async () => {
 		assert.ok(currentRun, 'ACCEPTANCE_LIVE_ASSIGNMENT: Original observed workday required');
+		requireFreshSdkSegment(freeze,currentRun);
   const inspectionEndsAt=Date.now()+120_000;
   const accounting=()=>({usage:body.projects.flatMap((project:string)=>readCompleteEvidence(['capacity','usage','--project',project,'--workday',workdayId],team,100,'ACCEPTANCE_ACCOUNTING_USAGE')),ledger:body.projects.flatMap((project:string)=>readCompleteEvidence(['capacity','ledger','--project',project,'--workday',workdayId],team,100,'ACCEPTANCE_ACCOUNTING_LEDGER'))});
 		await observeLiveGraphRevisions(String(currentRun.teamId), () => read(['execution', 'graph', 'show'], team),

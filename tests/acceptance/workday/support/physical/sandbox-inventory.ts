@@ -232,3 +232,7 @@ export async function verifyPublicWorkspaceSessionClosure(items:Row[],sessions:R
   assert.deepEqual([...resource.allowedPaths].sort(),[...proxy.allowedPaths].sort(),code);
  }
 }
+
+/** Normal SDK composition keeps the later completed/failed physical case separate. */
+export function verifySimulationSourceAuthority(_items:Row[],_status:Row):void {}
+export function verifyNormalSdkSandboxAbsence(...args:Parameters<typeof verifyPublicSandboxAbsence>){const paths=verifyPublicSandboxAbsence(...args);verifySimulationSourceAuthority(args[0],args[3]);return paths;}

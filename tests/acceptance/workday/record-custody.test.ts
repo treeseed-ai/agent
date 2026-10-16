@@ -13,7 +13,7 @@ import { readWorkdayAssignments, verifyGolden } from '../sdk-runtime-golden.test
 import { readCompleteEvidence, collectCompleteEvidence } from './support/evidence-pages.ts';
 import { publicCanonicalRecords, verifyTerminalRecordCustody, verifyFailedExecutionCustody, verifyAvailabilityAccountingHistory, verifySandboxCloseoutCustody, verifyWorkdayContinuationCustody, verifySandboxHostAbsence, verifySandboxDirectoryAbsence, verifyProviderConformanceSignature, verifyProviderQualification, verifyProviderLocalSlotClosure, verifyProviderPollingSelection } from './support/record-custody.ts';
 import { actual, verify, availabilityHistory } from './support/record-readback.ts';
-import { verifyPublicSandboxAbsence, verifyPublicWorkspaceSessionClosure } from './support/physical/sandbox-inventory.ts';
+import { verifyPublicSandboxAbsence, verifyNormalSdkSandboxAbsence, verifyPublicWorkspaceSessionClosure } from './support/physical/sandbox-inventory.ts';
 import { observeCampaign } from './support/campaign-observation.ts';
 
 // Existing supported public reads, complete pages and SAME native managed run.
@@ -110,7 +110,7 @@ test('Actual normal SDK workday reads complete public owning host sandbox absenc
  const inspect = () => {
   const remaining = Math.floor(deadline - performance.now() - 5_000); assert.ok(remaining > 0, 'ACCEPTANCE_SANDBOX_OBSERVATION_TIME: Original case deadline exhausted');
   const history=observeCampaign(read(['workdays','show',f.id],f.team,false,timeLeft()),f.id,retainedEvents,(cursor,limit)=>read(['workdays','events','list',f.id,'--limit',String(limit),'--cursor',cursor],f.team,false,timeLeft())).events;
-  return verifyPublicSandboxAbsence(f.items, loaded.manifest.connections, loaded.manifest.sandbox.brokerSocket,
+  return verifyNormalSdkSandboxAbsence(f.items, loaded.manifest.connections, loaded.manifest.sandbox.brokerSocket,
    read(['host', 'sandbox', 'status'], '', true, timeLeft()),history);
  };
  await verifyResources(); const paths = inspect(); verify(f); await verifyResources(); assert.deepEqual(inspect(), paths); assert.deepEqual(f, before);

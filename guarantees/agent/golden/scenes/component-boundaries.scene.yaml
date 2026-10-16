@@ -2487,3 +2487,6 @@ workflow:
   - id: campaign-model-policy-native
     action: { verifier: agent.golden.execution-campaign-model-policy-native }
     expect: { status: passed }
+  - id: campaign-model-policy-preflight
+    action: { verifier: agent.golden.execution-campaign-model-policy-preflight }
+    expect: { status: passed }

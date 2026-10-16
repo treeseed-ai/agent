@@ -4276,3 +4276,8 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/guarantees/preflight/models/campaign-models-native.test.ts
     testName: "native original SDK status and immutable operator bytes reject changed model caps foreign scope denial and interruption before unchanged concurrent retry"
+  agent.golden.execution-campaign-model-policy-preflight:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/preflight/models/campaign-models-wiring.test.ts
+    testName: "original first SDK preflight rejects frozen and current model contradictions before library reads or any metered work"

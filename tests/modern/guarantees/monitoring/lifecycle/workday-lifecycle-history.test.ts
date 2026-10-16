@@ -6,7 +6,7 @@ import{lifecycleHistoryFixture}from'./lifecycle-history-fixture.ts';
 type Row=Record<string,unknown>;
 it('requires every original Workday plan and Reporter transition before continuing and retains exact failed observations without changing derived receipt authority',()=>{
  const f=lifecycleHistoryFixture(),held=structuredClone(f),check=Reflect.get(observation,'verifyWorkdayLifecycleTransitionHistory') as (run:Row,events:readonly Row[])=>void;expect(check).toBeTypeOf('function');
- check(f.run,f.events);check(f.run,f.events);const derived=structuredClone(f.run);derived.parameters.appliedPlan.admittedSecondsByProject={later:9};check(derived,f.events);
+ check(f.run,f.events);check(f.run,f.events);const inFlight={...f.run,status:'running',completedAt:null,parameters:{...f.run.parameters,appliedPlan:f.snapshots[1]!}};check(inFlight,f.events);check(inFlight,f.events.slice(0,1));const derived=structuredClone(f.run);derived.parameters.appliedPlan.admittedSecondsByProject={later:9};check(derived,f.events);
  const resign=(event:Row)=>{event.id='workday-lifecycle:'+f.run.id+':'+createHash('sha256').update(canonicalStandardsJson(event.context)).digest('hex');};
  for(const mode of ['missing-0','missing-1','missing-2','missing-3','duplicate','foreign-team','foreign-run','wrong-id','broken-chain','regressed-state','lost-round','changed-policy','changed-deadline','wrong-terminal','wrong-clock','malformed-context']){
   const bad=structuredClone(f.events);if(mode.startsWith('missing-'))bad.splice(Number(mode.slice(8)),1);if(mode==='duplicate')bad.push(structuredClone(bad[1]!));

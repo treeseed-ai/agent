@@ -370,7 +370,7 @@ export function verifyWorkdayLifecycleTransitionHistory(run:Row,events:readonly 
  const clock=(value:unknown)=>{assert.ok(typeof value==='string'&&Number.isFinite(Date.parse(value)),label+': Original lifecycle clock required');return Date.parse(value);};
  const states=['planned','active','closing','ended'],roundStates=['pending','active','complete'];
  if(!history.length){assert.ok(current.state==='planned'&&current.planningRounds.length===0&&run.status!=='completed',label+': Original lifecycle observations missing');return;}
- let previous:ReturnType<typeof appliedWorkdaySchema.parse>|undefined,previousStatus:unknown,at=clock(run.startedAt);
+ let previous:ReturnType<typeof appliedWorkdaySchema.parse>|undefined,previousStatus:unknown,at=clock(run.startedAt),observedCurrent=false;
  for(const event of history){
   assert.equal(event.workdayId,run.id,label);assert.equal(event.projectId,null,label);assert.equal(event.assignmentId,null,label);assert.equal(event.status,'recorded',label);assert.equal(event.title,null,label);assert.equal(event.message,null,label);
   for(const field of['parameters','metadata','refs'])assert.deepEqual(event[field],{},label+': Original lifecycle envelope required');
@@ -378,6 +378,7 @@ export function verifyWorkdayLifecycleTransitionHistory(run:Row,events:readonly 
   assert.equal(event.id,'workday-lifecycle:'+run.id+':'+createHash('sha256').update(canonicalStandardsJson(context)).digest('hex'),label+': Changed original transition identity');
   const before=appliedWorkdaySchema.parse(context.previousPlan),next=appliedWorkdaySchema.parse(context.plan);assert.deepEqual(before,context.previousPlan,label+': Previous plan is not canonical');assert.deepEqual(next,context.plan,label+': Next plan is not canonical');
   for(const plan of[before,next])for(const field of['id','teamId','executionMode','startsAt','endsAt','policyId','policyRevision','policySnapshot'])assert.deepEqual(Reflect.get(plan,field),Reflect.get(current,field),label+': Original frozen lifecycle authority changed');
+  if(isDeepStrictEqual(authority(before),authority(current))&&context.previousStatus===run.status||isDeepStrictEqual(authority(next),authority(current))&&context.status===run.status)observedCurrent=true;
   if(previous){assert.deepEqual(authority(before),authority(previous),label+': Missing original lifecycle transition');assert.equal(context.previousStatus,previousStatus,label+': Missing original status transition');}
   else{assert.equal(before.state,'planned',label+': Initial lifecycle transition missing');assert.equal(before.planningRounds.length,0,label+': Initial planning history missing');assert.ok(context.previousStatus==='queued'||context.previousStatus==='running',label+': Original starting status required');}
   assert.ok(states.indexOf(next.state)>=states.indexOf(before.state),label+': Regressed original lifecycle');assert.equal(context.status,next.state==='ended'?'completed':'running',label+': Plan and terminal status disagree');
@@ -385,7 +386,8 @@ export function verifyWorkdayLifecycleTransitionHistory(run:Row,events:readonly 
   for(const field of['activatedAt','closingAt','endedAt','reportRef'])if(Reflect.get(before,field)!==undefined)assert.deepEqual(Reflect.get(next,field),Reflect.get(before,field),label+': Original lifecycle product or clock changed');
   assert.ok(context.previousStatus!==context.status||!isDeepStrictEqual(before,next),label+': Duplicate unchanged lifecycle observation');const now=clock(event.createdAt);assert.ok(now>=at,label+': Reversed lifecycle clock');at=now;previous=next;previousStatus=context.status;
  }
- assert.ok(previous,label);assert.deepEqual(authority(previous),authority(current),label+': Current Workday omits its original transition');assert.equal(previousStatus,run.status,label+': Current status omits its original transition');
+ assert.ok(previous&&observedCurrent,label+': Current Workday omits its original transition');
+ // As with assignment observations, later public events are retained and validated before the next original Workday poll. A terminal read must match the final transition.
+ if(run.status==='completed'){assert.deepEqual(authority(previous),authority(current),label+': Terminal Workday omits its final transition');assert.equal(previousStatus,run.status,label+': Terminal status omits its final transition');}
  if(current.state==='ended'){assert.equal(current.reportRef?.kind,'treedx',label+': Reporter product missing');assert.equal(current.endedAt,run.completedAt,label+': Original terminal clocks disagree');}
 }
-

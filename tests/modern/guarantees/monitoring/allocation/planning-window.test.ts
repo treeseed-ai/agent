@@ -7,7 +7,7 @@ import {liveAssignmentRecord} from '../live-assignment-fixture.ts';
 import {planningWindowScope} from './planning-window-fixture.ts';
 
 function fixture(activity='acting'){
- const original=request().assignment.assignmentAttempt!;
+ const original=assignmentAttemptSchema.parse(request().assignment.assignmentAttempt);
  const attempt=assignmentAttemptSchema.parse({...original,deadline:'2026-09-13T12:01:00.000Z',effectiveProfile:{...original.effectiveProfile,activity}});
  const item=liveAssignmentRecord(attempt),scope=planningWindowScope(item);row(row(row(item.explanation).metadata).allocation).opportunity=scope.opportunity;return {item,run:scope.run};
 }

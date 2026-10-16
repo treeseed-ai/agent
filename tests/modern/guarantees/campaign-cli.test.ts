@@ -61,7 +61,7 @@ afterEach(() => vi.useRealTimers());
 describe('campaign CLI composition units (mocked transport, not native or live acceptance)', () => {
  it('stops the exact admitted simulation on incomplete public accounting history before later gates while retaining the failed owning inventory',async()=>{
   transport(()=>observed('completed'));
-  const failed=[{id:'retained-unmatched-usage',assignmentId:'omitted-original-attempt',workDayId,projectId:'8cbfb810-6da5-4da2-9ae9-cad53101253f'}],held=structuredClone(failed);
+  const failed=[{id:'retained-unmatched-usage',assignmentId:'omitted-original-attempt',workDayId:workdayId,projectId:'8cbfb810-6da5-4da2-9ae9-cad53101253f'}],held=structuredClone(failed);
   state.evidence.mockImplementation((args:string[])=>args[0]==='capacity'&&args[1]==='usage'?failed:[]);
   state.accountingTransitions.mockImplementation((_run,_assignments,usage)=>{expect(usage).toEqual(held);throw new Error('ACCEPTANCE_ACCOUNTING_TRANSITIONS: Complete original owning history required');});
   await expect(state.run!()).rejects.toThrow('ACCEPTANCE_ACCOUNTING_TRANSITIONS');

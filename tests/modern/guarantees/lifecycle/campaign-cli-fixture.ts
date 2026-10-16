@@ -1,6 +1,6 @@
 import {afterEach,beforeEach,vi} from 'vitest';
 const state = vi.hoisted(() => ({ run: undefined as (() => Promise<void>) | undefined,
-	read: vi.fn(), verify: vi.fn(), external: vi.fn(), inspect: vi.fn(), transitions:vi.fn(), nodeTransitions:vi.fn(), accountingTransitions:vi.fn(), evidence:vi.fn(), eventHistory:vi.fn(), graphInspect: vi.fn(), retain: vi.fn(), retainReview: vi.fn(), freeze: {} as Record<string, any> }));
+	read: vi.fn(), verify: vi.fn(), external: vi.fn(), inspect: vi.fn(), transitions:vi.fn(), nodeTransitions:vi.fn(), accountingTransitions:vi.fn(), lifecycleTransitions:vi.fn(), evidence:vi.fn(), eventHistory:vi.fn(), graphInspect: vi.fn(), retain: vi.fn(), retainReview: vi.fn(), freeze: {} as Record<string, any> }));
 vi.mock('node:test', () => ({ default: (_name: string, _options: unknown, run: () => Promise<void>) => { state.run = run; } }));
 vi.mock('node:fs', () => ({ existsSync: () => true, readFileSync: (path: string) => path === '/freeze'
 	? JSON.stringify(state.freeze) : Buffer.alloc(0) }));
@@ -11,7 +11,7 @@ vi.mock('../../../acceptance/campaign.ts', async importOriginal => ({
 	...await importOriginal<typeof import('../../../acceptance/campaign.ts')>(), retainCampaignWorkdayStart: state.retain, retainCampaignPlanReview: state.retainReview,
 }));
 vi.mock('../../../acceptance/sdk-runtime-golden.test.ts', () => ({ verifyGolden: state.verify }));
-vi.mock('../../../acceptance/workday/support/campaign-observation.ts',async importOriginal=>({...await importOriginal<typeof import('../../../acceptance/workday/support/campaign-observation.ts')>(),verifyAssignmentTransitionHistory:state.transitions,verifyNodeTransitionHistory:state.nodeTransitions,verifyAccountingTransitionHistory:state.accountingTransitions,retainCampaignEventHistory:state.eventHistory}));
+vi.mock('../../../acceptance/workday/support/campaign-observation.ts',async importOriginal=>({...await importOriginal<typeof import('../../../acceptance/workday/support/campaign-observation.ts')>(),verifyAssignmentTransitionHistory:state.transitions,verifyNodeTransitionHistory:state.nodeTransitions,verifyAccountingTransitionHistory:state.accountingTransitions,verifyWorkdayLifecycleTransitionHistory:state.lifecycleTransitions,retainCampaignEventHistory:state.eventHistory}));
 vi.mock('../../../acceptance/prepare-campaign.ts', () => ({ prepareSdkCampaign: vi.fn(), verifySdkExternalState: state.external }));
 vi.mock('../../../acceptance/workday/support/monitoring/live-assignment-records.ts', () => ({
 	observeLiveAssignmentRecords: state.inspect, inspectLiveAssignmentProfile: vi.fn(),
@@ -46,7 +46,7 @@ function transport(show: () => unknown) {
 beforeEach(() => {
 	vi.stubEnv('TREESEED_ACCEPTANCE_FREEZE_PATH', '/freeze');
 	state.read.mockReset(); state.verify.mockReset(); state.external.mockReset(); state.inspect.mockReset(); state.graphInspect.mockReset();
-	state.evidence.mockReset().mockReturnValue([]);state.retainReview.mockReset();state.transitions.mockReset();state.nodeTransitions.mockReset();state.accountingTransitions.mockReset();state.eventHistory.mockReset();
+	state.evidence.mockReset().mockReturnValue([]);state.retainReview.mockReset();state.transitions.mockReset();state.nodeTransitions.mockReset();state.accountingTransitions.mockReset();state.lifecycleTransitions.mockReset();state.eventHistory.mockReset();
 	state.retain.mockReset().mockImplementation(receipt => { process.env.TREESEED_ACCEPTANCE_WORKDAY_ID = receipt.workdayId; return receipt.workdayId; });
 	state.freeze = { createdAt: new Date().toISOString(), host: { manifestDigest: `sha256:${'a'.repeat(64)}`, guestImageDigest: `sha256:${'b'.repeat(64)}` },
 		guest: { digest: `sha256:${'b'.repeat(64)}` }, receipts: { '/receipt': 'sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855' },

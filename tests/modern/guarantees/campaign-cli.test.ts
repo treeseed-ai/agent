@@ -59,6 +59,19 @@ beforeEach(() => {
 });
 afterEach(() => vi.useRealTimers());
 describe('campaign CLI composition units (mocked transport, not native or live acceptance)', () => {
+ it('rereads concurrent accounting changes within the original inspection bound before validating stable public usage ledger and history',async()=>{
+  transport(()=>observed('completed'));let reads=0;
+  state.evidence.mockImplementation((args:string[])=>args[0]==='capacity'&&args[1]==='usage'?[{id:++reads===1?'first-in-flight':'stable-current'}]:[]);
+  await state.run!();expect(reads).toBe(4);expect(state.accountingTransitions).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({id:workdayId}),[],[{id:'stable-current'}],[],[]);
+  expect(state.nodeTransitions).toHaveBeenCalledOnce();expect(state.read.mock.calls.filter(call=>call[0][1]==='stop')).toEqual([]);
+ });
+ it('stops continuously mutating accounting inventory without validating a stale snapshot or advancing beyond the original forty-round inspection bound',async()=>{
+  transport(()=>observed('running'));let reads=0;
+  state.evidence.mockImplementation((args:string[])=>args[0]==='capacity'&&args[1]==='usage'?[{id:'changing-'+(++reads)}]:[]);
+  await expect(state.run!()).rejects.toThrow('ACCEPTANCE_LIVE_ASSIGNMENT: Complete concurrent transition inventory not reached');expect(reads).toBe(80);
+  expect(state.accountingTransitions).not.toHaveBeenCalled();expect(state.nodeTransitions).not.toHaveBeenCalled();expect(state.inspect).not.toHaveBeenCalled();expect(state.verify).not.toHaveBeenCalled();
+  expect(state.read.mock.calls.filter(call=>call[0][1]==='stop')).toHaveLength(1);
+ });
  it('stops the exact admitted simulation on incomplete public accounting history before later gates while retaining the failed owning inventory',async()=>{
   transport(()=>observed('running'));state.nodeTransitions.mockImplementation(()=>{throw new Error('Later node boundary must not run after accounting denial');});
   const failed=[{id:'retained-unmatched-usage',assignmentId:'omitted-original-attempt',workDayId:workdayId,projectId:'8cbfb810-6da5-4da2-9ae9-cad53101253f'}],held=structuredClone(failed);

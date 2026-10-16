@@ -109,7 +109,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       TREESEED_INSTALLED_OWNER_INPUTS: >-
-        [{"owner":"agent","commit":"${{ github.sha }}","sha256":null},{"owner":"api","commit":"7daf0ba93c3bea63d03e69fb3c6d7a87e679f976","sha256":"3b3e9ed662e84b2cb1fa254f5aca1632738e411c1af3abfb5e2caffa93cfbd4d","buildSdk":{"commit":"952195376b53bf39742e64f320f2a3b109cc77c0","sha256":"7ba46c788578f526692e81f3713f05e7c00db900b2d810ec27364cb41c008185"},"buildTreeDx":{"commit":"6d358bb2e536af24918f3c33acb2072b9093a603","sha256":"d6de27b42704b4c899562f290950561132fd0d48f38a95e6624eb853e32691cb"}},{"owner":"sdk","commit":"557f2ca792a8958736791554b67640a67d62b860","sha256":"47c595d999c5b91514c60d5d3d81930aef5e06b6441b9c239c73e08b4810cfb6"},{"owner":"cli","commit":"6e2579428f4959906cd5b9b669ebbb2b44cb495c","sha256":"49b6d24882af45ba39fd46cdcd999c9c54e84bd416f834fa0042ec5425dbea1a"},{"owner":"deployment","commit":"e7cc4bebed7dbed0576fa5029250398f154f81aa","sha256":"05cc8823286e56ae35518d51189b1ee02fd060ebcb4d1a10e20ad7f28356d9c6"},{"owner":"reviewer","commit":"e110e7396b9c5dadd03f996eeb958ea490fe8547","sha256":"8b609b6cc4714a51fef72f513c7995cea14e01246b113942aa57643a3cd14f37","buildSdk":{"commit":"77a6908d4e7580716e9e2ab92de80150b02cdb06","sha256":"a31b02194665e8705e8d81331da0901f4088f54deb50a34c236d3a661d2d1aa7"}}]
+        [{"owner":"agent","commit":"${{ github.sha }}","sha256":null},{"owner":"api","commit":"1bad792303a9b366328f8b659b3798bae5846a64","sha256":"a87ff3b10357234dfbae74d98da1f28c4cc1034dec8b832a922a3b522990c7cf","buildSdk":{"commit":"952195376b53bf39742e64f320f2a3b109cc77c0","sha256":"7ba46c788578f526692e81f3713f05e7c00db900b2d810ec27364cb41c008185"},"buildTreeDx":{"commit":"6d358bb2e536af24918f3c33acb2072b9093a603","sha256":"d6de27b42704b4c899562f290950561132fd0d48f38a95e6624eb853e32691cb"}},{"owner":"sdk","commit":"e0a397dc2960cd68ed7e814963479701342ad09f","sha256":"c2600a4def647e381fa6d5b18775fc7e0881a4f343c63077549f9a5681398f1b"},{"owner":"cli","commit":"6e2579428f4959906cd5b9b669ebbb2b44cb495c","sha256":"49b6d24882af45ba39fd46cdcd999c9c54e84bd416f834fa0042ec5425dbea1a"},{"owner":"deployment","commit":"3f16042dd19ed2aa56876570b7c407fa49c86e32","sha256":"dff78f4a8380aa1dbb89be5fc85e15c593661e477f8b70f3000436d25445daee"},{"owner":"reviewer","commit":"e110e7396b9c5dadd03f996eeb958ea490fe8547","sha256":"8b609b6cc4714a51fef72f513c7995cea14e01246b113942aa57643a3cd14f37","buildSdk":{"commit":"77a6908d4e7580716e9e2ab92de80150b02cdb06","sha256":"a31b02194665e8705e8d81331da0901f4088f54deb50a34c236d3a661d2d1aa7"}}]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -138,16 +138,16 @@ jobs:
         with:
           github-token: ${{ github.token }}
           repository: treeseed-ai/api
-          run-id: 38874118974
-          name: api-7daf0ba93c3bea63d03e69fb3c6d7a87e679f976
+          run-id: 38892950686
+          name: api-1bad792303a9b366328f8b659b3798bae5846a64
           path: .treeseed/installed-owner-inputs/api
       - name: Read held sdk archive
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
           github-token: ${{ github.token }}
           repository: treeseed-ai/sdk
-          run-id: 38858348626
-          name: sdk-557f2ca792a8958736791554b67640a67d62b860
+          run-id: 38900226176
+          name: sdk-e0a397dc2960cd68ed7e814963479701342ad09f
           path: .treeseed/installed-owner-inputs/sdk
       - name: Read held cli archive
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
@@ -162,8 +162,8 @@ jobs:
         with:
           github-token: ${{ github.token }}
           repository: treeseed-ai/deployment
-          run-id: 38716691312
-          name: deployment-candidate-e7cc4bebed7dbed0576fa5029250398f154f81aa
+          run-id: 38897885656
+          name: deployment-candidate-3f16042dd19ed2aa56876570b7c407fa49c86e32
           path: .treeseed/installed-owner-inputs/deployment
       - name: Read held reviewer archive
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093

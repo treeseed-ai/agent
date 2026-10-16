@@ -1,3 +1,4 @@
+import {verifyAppliedWorkdayCustody} from './campaign-observation.ts';
 import assert from 'node:assert/strict';
 import { createHash, createPublicKey, verify } from 'node:crypto';
 import { lstatSync } from 'node:fs';
@@ -10,6 +11,18 @@ import { row, type Row } from '../../acceptance-cli.ts';
 import { orderConnectionsForFairPolling } from '@treeseed/agent/provider-governance';
 import { assertCanonicalRecordShapes } from './canonical-record-shape.ts';
 import { readCompleteEvidence } from './evidence-pages.ts';
+/** The public API record retains an empty historical map; only its original applied plan owns report and lifecycle. */
+export function verifyReportWorkdayAuthority(run:Row){
+ const label='ACCEPTANCE_REPORT_AUTHORITY',plan=verifyAppliedWorkdayCustody(run);
+ assert.ok(run.status==='completed'&&run.executionMode==='simulation'&&plan.state==='ended'&&plan.reportRef?.kind==='treedx',label+': Native Reporter must store one exact report reference');
+ for(const field of ['reportRef','state','endedAt'])assert.ok(!Object.hasOwn(run,field),label+': Duplicate top-level lifecycle or report authority');
+ assert.ok(Object.hasOwn(run,'reportRefs')&&run.reportRefs&&typeof run.reportRefs==='object'&&!Array.isArray(run.reportRefs)&&Object.keys(run.reportRefs).length===0,label+': Populated or malformed retired plural report map');
+ assert.ok(typeof plan.closingAt==='string'&&Number.isFinite(Date.parse(plan.closingAt))&&typeof plan.endedAt==='string'
+  &&Number.isFinite(Date.parse(plan.endedAt))&&Date.parse(plan.closingAt)<=Date.parse(plan.endedAt)
+  &&run.completedAt===plan.endedAt,label+': Original closing and terminal clocks must agree');
+ return plan;
+}
+
 export function verifyReportRecordCustody(snapshot: Row, reporter: Row, assignments: Row[], team: string): void {
 	assert.ok(Array.isArray(snapshot.attempts), 'ACCEPTANCE_REPORT_ATTEMPTS: Complete original assignment collection required');
 	const observed = snapshot.attempts.map(value => { const attempt = row(value), result = typeof attempt.assignment_result_json === 'string' ? JSON.parse(attempt.assignment_result_json) : attempt.assignment_result_json;

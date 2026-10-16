@@ -1,3 +1,4 @@
+import {compileWorkday,DEFAULT_WORKDAY_POLICY} from '@treeseed/sdk/agent-capacity';
 import {retainUnitEstimatePublications} from '../../guarantees/planning/estimate-publication-fixture.ts';
 import { beforeEach, vi } from 'vitest';
 import { createHash } from 'node:crypto';
@@ -274,4 +275,11 @@ beforeEach(() => {
 		mediaType: 'application/json', digest: `sha256:${createHash('sha256').update(canonicalStandardsJson(evidence)).digest('hex')}`, value: evidence }] };
 	state.replies.get('library read')!.result.files[0].body = `\`\`\`json\n${JSON.stringify({ classification: 'workday-report', workdayId,
 		assignmentId: reporter.id, workday: evidence, predecessorResults: predecessors }, null, 2)}\n\`\`\``;
+
+ // Match the original public API record exactly; these remain controlled unit inputs, never a managed receipt.
+ const owning=state.replies.get('workdays show')!.run,priorPlan=owning.parameters.appliedPlan;
+ const compiled=compileWorkday({id:workdayId,teamId:owning.teamId,policyId:'default',policyRevision:1,executionMode:'simulation',startsAt:owning.startedAt,agentIds:[],
+  policy:{...DEFAULT_WORKDAY_POLICY,durationSeconds:owning.parameters.durationSeconds,planningPercent:owning.parameters.planningPercent,maximumConcurrency:owning.parameters.maximumConcurrency,communicationConcurrency:owning.parameters.communicationConcurrency}});
+ Object.assign(owning.parameters,compiled.policySnapshot,{deadlineAt:compiled.endsAt,appliedPlan:{...compiled,planningRounds:priorPlan.planningRounds,state:'ended',closingAt:reporter.createdAt,endedAt:owning.completedAt,reportRef:owning.reportRef}});
+ owning.reportRefs={};delete owning.reportRef;delete owning.state;delete owning.endedAt;
 });

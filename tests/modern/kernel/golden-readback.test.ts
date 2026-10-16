@@ -150,11 +150,11 @@ describe('golden read-back assertion regressions (fixtures are not live acceptan
   });
   it('requires the single canonical workday report reference and rejects the retired plural map', () => {
     const run = state.replies.get('workdays show')!.run;
-    const reference = structuredClone(run.reportRef);
+    const reference = structuredClone(run.parameters.appliedPlan.reportRef);
     run.reportRefs = { sdk: { kind: 'treedx', projectId: 'sdk', repository: 'sdk-library', path: 'notes/report.mdx', commit } };
-    delete run.reportRef;
+    delete run.parameters.appliedPlan.reportRef;
     expect(() => gate('reporter')).toThrow();
-    run.reportRef = reference;
+    run.parameters.appliedPlan.reportRef = reference;
     expect(() => gate('reporter')).toThrow();
   });
   it('requires exactly one completed reporting assignment before accepting report readback', () => {
@@ -490,7 +490,7 @@ describe('golden read-back assertion regressions (fixtures are not live acceptan
 	it('rejects missing Reporter refs and unrelated report contents', () => {
 		state.replies.get('library read')!.result.files[0].body = 'An unrelated report';
 		expect(() => gate('reporter')).toThrow('this exact workday');
-		delete state.replies.get('workdays show')!.run.reportRef;
+		delete state.replies.get('workdays show')!.run.parameters.appliedPlan.reportRef;
 		expect(() => gate('reporter')).toThrow('one exact report');
 	});
 });

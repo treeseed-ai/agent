@@ -14,7 +14,7 @@ import { verifyAssignmentAuthority, verifyAssignmentWorkspaceInventory, verifyTe
 import { verifyPlanningEvidence, verifyChatCommunicationLanes, verifyChatAddressedContext } from './workday/support/planning-evidence.ts';
 import { readCompleteEvidence } from './workday/support/evidence-pages.ts';
 import { verifyAllocation } from './workday/support/monitoring/assignment-allocation.ts';
-import { verifyReportRecordCustody } from './workday/support/record-custody.ts';
+import { verifyReportWorkdayAuthority, verifyReportRecordCustody } from './workday/support/record-custody.ts';
 const rows = (value: unknown): Row[] => Array.isArray(value) ? value.map(row) : [];
 const text = (value: unknown): string => typeof value === 'string' ? value : '';
 // Each exact test is independently selectable by the existing guarantee runner.
@@ -370,8 +370,7 @@ export function verifyGolden(gate: Gate): void {
 	}
 	}
 	if (gate === 'reporter') {
-	assert.ok(!Object.hasOwn(run, 'reportRefs'), 'ACCEPTANCE_REPORT_AUTHORITY: Retired plural report map is forbidden');
-	const report = row(run.reportRef);
+	const reportPlan=verifyReportWorkdayAuthority(run),report=row(reportPlan.reportRef);
 	assert.ok(report.kind === 'treedx' && assignmentReferenceSchema.safeParse(report).success, 'Native Reporter must store one exact report reference');
 	const reporting = assignments.filter(item => activity(item) === 'reporting');
 	assert.equal(reporting.length, 1, 'ACCEPTANCE_REPORT_ASSIGNMENT: Exactly one selected closeout assignment required');
@@ -393,8 +392,8 @@ export function verifyGolden(gate: Gate): void {
 	const references = rows(result.references).filter(ref => ref.kind === 'treedx' && ref.projectId === report.projectId && ref.path === report.path && ref.commit === report.commit);
 	assert.equal(references.length, 1, 'ACCEPTANCE_REPORT_CUSTODY: Workday report must be the exact reporting result output');
 	assert.deepEqual(references[0], report, 'ACCEPTANCE_REPORT_CUSTODY: Report output authority drifted');
-	const ended = Date.parse(text(run.endedAt)), completedAt = Date.parse(text(reporter.completedAt));
-	assert.ok(run.state === 'ended' && Number.isFinite(ended) && Number.isFinite(completedAt) && completedAt <= ended,
+	const ended = Date.parse(text(reportPlan.endedAt)), completedAt = Date.parse(text(reporter.completedAt));
+	assert.ok(reportPlan.state === 'ended' && Number.isFinite(ended) && Number.isFinite(completedAt) && completedAt <= ended,
 		'ACCEPTANCE_REPORT_CHRONOLOGY: Reporter must complete before the workday ends');
 	const readBack = read(['library', 'read', text(report.projectId), text(report.path), '--ref', text(report.commit)], team, true);
 	const observed = row(readBack.result);

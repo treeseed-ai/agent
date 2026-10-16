@@ -283,6 +283,7 @@ beforeEach(() => {
  Object.assign(owning.parameters,compiled.policySnapshot,{deadlineAt:compiled.endsAt,appliedPlan:{...compiled,planningRounds:priorPlan.planningRounds,state:'ended',closingAt:reporter.createdAt,endedAt:owning.completedAt,reportRef:owning.reportRef}});
  owning.reportRefs={};delete owning.reportRef;delete owning.state;delete owning.endedAt;
  // Controlled API input shape only. No actual planning turns, public lifecycle events or managed Reporter outcomes are claimed.
+ owning.parameters.appliedPlan.activatedAt=owning.startedAt;
  const activePlan={...compiled,state:'active',activatedAt:owning.startedAt},roundPlan={...activePlan,planningRounds:priorPlan.planningRounds},closingPlan={...roundPlan,state:'closing',closingAt:reporter.createdAt};
  const snapshots=[compiled,activePlan,roundPlan,closingPlan,owning.parameters.appliedPlan];
  const lifecycleEvents=snapshots.slice(1).map((plan,index)=>{const context={previousStatus:'running',status:index===3?'completed':'running',previousPlan:structuredClone(snapshots[index]),plan:structuredClone(plan)};

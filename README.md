@@ -97,6 +97,17 @@ then freezes the supported preflight before admission. Source-reading roles
 receive the same exact Git pin; objectives, dependencies and review bounds
 remain unchanged. Existing freeze files are never overwritten.
 
+Each project in the operator manifest's `proposals` list must carry a canonical
+whole-proposal `draftRef`: `store: treedx`, `model: proposal`, and the actual
+`id`, `repository`, exact `commit`, `path`, `revision` and SHA-256 `digest`.
+Preflight matches that reference to the current governed draft and original bytes.
+Do not substitute fixture refs or a digest derived only from a later API response.
+The ready-proposal check consumes the original `operator-campaign.json` receipt
+from the existing freeze, verifies genuine class-owned estimating publications,
+and preserves the original proposal body, objectives, topology and acceptance criteria.
+A changed live operator file cannot replace that captured authority; missing,
+altered or ambiguous captured receipts fail closed.
+
 Complete specification bindings, project-specific products,
 external-state comparison and controlled failures are still required
 before this suite can represent all of Platform's acceptance specification.

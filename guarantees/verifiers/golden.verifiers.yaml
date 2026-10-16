@@ -4126,3 +4126,13 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/guarantees/campaign-cli.test.ts
     testName: "stops continuously mutating public graph inventory without advancing beyond the original forty-round inspection bound"
+  agent.golden.original-draft-estimate-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/planning/estimate-frozen-draft.test.ts
+    testName: "requires the original frozen draft identity and bytes before accepting mutually consistent genuine-estimate publication and ready proposal readbacks"
+  agent.golden.original-campaign-capture-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/preflight/proposals/campaign-captured-freeze.test.ts
+    testName: "reads the original captured operator manifest through existing freeze receipts without live input fallback and rejects missing changed ambiguous malformed or interrupted captures"

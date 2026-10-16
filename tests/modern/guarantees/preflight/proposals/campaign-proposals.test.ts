@@ -28,6 +28,7 @@ it('validates every original governed project draft against current document sch
 
 it('denies missing foreign moved malformed or substituted original proposal observations before unchanged retry', () => {
 	const changes: Array<(value: ReturnType<typeof campaignProposal>) => void> = [
+  ...[['store','git'],['model','knowledge'],['id','foreign'],['id',' proposal '],['repository','foreign'],['commit','staging'],['commit','d'.repeat(40)],['path','../private.mdx'],['path','proposals/../private.mdx'],['path','proposals//private.mdx'],['path','/private.mdx'],['revision',0],['revision','1'],['digest',undefined],['anchor','work-item/research-context'],['startLine',1],['endLine',2]].map(([field,bad])=>(value:ReturnType<typeof campaignProposal>)=>{Reflect.set(value.expected.draftRef,String(field),bad);}),
 		value => { value.governance.id = 'foreign'; }, value => { value.governance.projectId = 'foreign'; },
 		value => { value.binding.projectId = 'foreign'; }, value => { value.governance.activeVersion = 0; },
 		value => { value.governance.activeContentHash = 'f'.repeat(64); },

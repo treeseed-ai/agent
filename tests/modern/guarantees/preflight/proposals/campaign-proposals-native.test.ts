@@ -93,7 +93,11 @@ it('native Git and public CLI SDK reads validate all seventeen governed proposal
   const captures=join(root,'.git','native-capture');mkdirSync(captures);const capturePath=join(captures,'operator-campaign.json'),freezePath=join(captures,'freeze.json'),livePath=join(captures,'live.json'),manifest={campaignId:'native-held',proposals:[...sources.values()].map(value=>value.expected)},bytes=Buffer.from(JSON.stringify(manifest));
   const frozen={createdAt:new Date().toISOString(),host:{manifestDigest:'sha256:'+'a'.repeat(64),guestImageDigest:'sha256:'+'b'.repeat(64)},guest:{digest:'sha256:'+'b'.repeat(64)},receipts:{[capturePath]:'sha256:'+createHash('sha256').update(bytes).digest('hex')}};
   writeFileSync(capturePath,bytes);writeFileSync(freezePath,JSON.stringify(frozen));writeFileSync(livePath,JSON.stringify({campaignId:'substituted-live',proposals:[]}));const previous=process.env.TREESEED_ACCEPTANCE_CAMPAIGN_PATH;process.env.TREESEED_ACCEPTANCE_CAMPAIGN_PATH=livePath;
-  try{expect(captured(freezePath)).toEqual(manifest);writeFileSync(capturePath,Buffer.concat([bytes,Buffer.from(' ')]));expect(()=>captured(freezePath)).toThrow('ACCEPTANCE_FREEZE_RECEIPT_CHANGED');writeFileSync(capturePath,bytes);expect(captured(freezePath)).toEqual(manifest);rmSync(capturePath);expect(()=>captured(freezePath)).toThrow('ACCEPTANCE_FREEZE_RECEIPT_MISSING');writeFileSync(capturePath,bytes);expect(captured(freezePath)).toEqual(manifest);}finally{if(previous===undefined)delete process.env.TREESEED_ACCEPTANCE_CAMPAIGN_PATH;else process.env.TREESEED_ACCEPTANCE_CAMPAIGN_PATH=previous;}
+  try{expect(captured(freezePath)).toEqual(manifest);writeFileSync(capturePath,Buffer.concat([bytes,Buffer.from(' ')]));expect(()=>captured(freezePath)).toThrow('ACCEPTANCE_FREEZE_RECEIPT_CHANGED');writeFileSync(capturePath,bytes);expect(captured(freezePath)).toEqual(manifest);rmSync(capturePath);expect(()=>captured(freezePath)).toThrow('ACCEPTANCE_FREEZE_RECEIPT_MISSING');writeFileSync(capturePath,bytes);expect(captured(freezePath)).toEqual(manifest);
+   for(const raw of[Buffer.from('{'),Buffer.from('[]'),Buffer.from([255])]){writeFileSync(capturePath,raw);writeFileSync(freezePath,JSON.stringify({...frozen,receipts:{[capturePath]:'sha256:'+createHash('sha256').update(raw).digest('hex')}}));expect(()=>captured(freezePath)).toThrow();}
+   writeFileSync(capturePath,bytes);const extra=join(captures,'other','operator-campaign.json');mkdirSync(join(captures,'other'));writeFileSync(extra,bytes);writeFileSync(freezePath,JSON.stringify({...frozen,receipts:{...frozen.receipts,[extra]:frozen.receipts[capturePath]}}));expect(()=>captured(freezePath)).toThrow();
+   writeFileSync(freezePath,'{');expect(()=>captured(freezePath)).toThrow();writeFileSync(freezePath,JSON.stringify(frozen));expect(captured(freezePath)).toEqual(manifest);
+  }finally{if(previous===undefined)delete process.env.TREESEED_ACCEPTANCE_CAMPAIGN_PATH;else process.env.TREESEED_ACCEPTANCE_CAMPAIGN_PATH=previous;}
 
   const changed=sources.get(projects[16]!.slug)!;writeFileSync(join(root,projects[16]!.slug,changed.observed.files[0]!.path),changed.observed.files[0]!.content+'Native changed draft body with consistent public provenance.\n');
   git('add','.');git('commit','--quiet','-m','Controlled consistent draft substitution after the operator freeze');rewritten=git('rev-parse','HEAD');
@@ -121,6 +125,12 @@ it('native Git and public CLI SDK reads validate all seventeen governed proposal
 			failures.push({ mode, project: project.slug, failure }); return failure;
 		};
 		for (const project of projects) expect(await execute(project), project.slug).toBe('');
+  const owner=sources.get(projects[16]!.slug)!,originalPin=structuredClone(owner.expected.draftRef);
+  for(const [field,bad]of [['store','git'],['model','knowledge'],['id','foreign'],['id',' '+originalPin.id+' '],['repository','foreign'],['commit','staging'],['commit','d'.repeat(40)],['path','proposals/../private.mdx'],['revision',0],['digest','sha256:'+'f'.repeat(64)],['anchor','work-item/research-context'],['startLine',1]]){
+   Reflect.set(owner.expected.draftRef,String(field),bad);expect(await execute(projects[16]!),String(field)).toContain('ACCEPTANCE_CAMPAIGN_PROPOSALS');owner.expected.draftRef=structuredClone(originalPin);
+  }
+  Reflect.deleteProperty(owner.expected,'draftRef');expect(await execute(projects[16]!)).toContain('ACCEPTANCE_CAMPAIGN_PROPOSALS');owner.expected.draftRef=originalPin;expect(await execute(projects[16]!)).toBe('');
+
 		for (mode of ['consistent-byte-rewrite', 'denied', 'interrupted', 'truncated', 'foreign', 'moved', 'missing', 'bytes', 'omitted', 'duplicate', 'stale-request', 'estimated']) {
 			const failure = await execute(projects[16]!); expect(failure, mode).not.toBe('');
 			if (['foreign', 'bytes', 'omitted', 'duplicate', 'stale-request', 'estimated'].includes(mode))

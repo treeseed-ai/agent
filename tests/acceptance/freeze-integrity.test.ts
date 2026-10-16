@@ -1,17 +1,19 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
-import { readCampaignProjectLibraries, readCampaignRepositoryBases, readPreRunCampaignFreeze, verifyCampaignWorkdayPolicy, verifyFreezeIntegrity } from './freeze-integrity.ts';
+import { readCampaignProjectLibraries, readCampaignRepositoryBases, readPreRunCampaignFreeze, verifyCampaignWorkdayPolicy, verifyFreezeIntegrity, readCampaignProviderModels } from './freeze-integrity.ts';
 import { read } from './acceptance-cli.ts';
 import { readCampaignProfiles } from './workday/support/preflight/campaign-profiles.ts';
 import { readCampaignProviderOffers } from './workday/support/preflight/campaign-provider-offers.ts';
 import { readCampaignProposals } from './workday/support/preflight/campaign-proposals.ts';
 
-test('Golden pre-run campaign freeze retains every schema-valid expanded input and original manifest bytes before SDK execution', () => {
+test('Golden pre-run campaign freeze retains every schema-valid expanded input and original manifest bytes before SDK execution', async () => {
 	const original = readPreRunCampaignFreeze();
 	const held = readFileSync(original.path);
 	assert.equal(held.toString('utf8'), original.bytes);
 	const team = process.env.TREESEED_ACCEPTANCE_TEAM ?? 'treeseed';
+	const modelReadback=await readCampaignProviderModels(original,id=>read(['providers','status',id],team));
+	console.log(JSON.stringify({providerModelReadback:[...modelReadback]}));
 	const bindings = readCampaignProjectLibraries(original.manifest, team);
 	const proposals = readCampaignProposals(original, bindings, team);
 	const protectedHeads = readCampaignRepositoryBases(original);

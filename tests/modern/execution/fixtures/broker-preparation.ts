@@ -1,3 +1,4 @@
+import type {CapacityProviderManifestV5} from '@treeseed/sdk/capacity-provider';
 import { expect } from 'vitest';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
@@ -27,7 +28,7 @@ export async function broker(handle: (request: IncomingMessage, response: Server
 
 // Original executor, signer, OS custody, native materialization and Unix HTTP.
 // Replies are controlled broker INPUTS, not actual Kata/host physical proof.
-export async function microvmBroker() {
+export async function microvmBroker(configure?: (manifest:CapacityProviderManifestV5)=>void) {
 	const paths: string[] = [], uploads = new Map<string, Buffer>();
 	const observations: Array<ReturnType<typeof sandboxResultSchema.parse>> = [];
 	let assigned: ReturnType<typeof sandboxAssignmentSchema.parse> | undefined, destroyedAt = '', beginCalls = 0, finishCalls = 0;
@@ -38,6 +39,7 @@ export async function microvmBroker() {
 		request.on('data', chunk => { chunks.push(Buffer.from(chunk)); }); request.on('end', () => {
 			try {
 				const bytes = Buffer.concat(chunks); response.setHeader('content-type', 'application/json');
+				if(request.method==='GET'&&path==='/v1/status'){response.end('{"ready":true,"checks":{"native":true}}');return;}
 				if (path === '/v1/sandboxes') {
 					assigned = sandboxAssignmentSchema.parse(JSON.parse(bytes.toString('utf8')).assignment);
 					response.end('{"sandboxId":"owned-native-sandbox","operationToken":"controlled-native-operation"}'); return;
@@ -101,6 +103,7 @@ export async function microvmBroker() {
 		manifest.sandbox.brokerSocket = join(fixture.directory, 'broker.sock');
 		manifest.identity.privateKeyRef = 'data://native-executor-identity';
 		await initializeCapacityProviderIdentity({ ref: manifest.identity.privateKeyRef, baseDirectory: fixture.directory, dataDirectory: fixture.directory });
+		configure?.(manifest);
 		const adapter = manifest.adapters[0], binding = adapter?.offers[0];
 		if (!adapter || !binding) throw new Error('Original managed offer binding required');
 		const config: ProviderHostRuntimeConfig = { dataDir: fixture.directory, manifestPath: join(fixture.directory, 'manifest.yaml'), environment: 'local',

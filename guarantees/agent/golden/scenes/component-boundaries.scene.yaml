@@ -2490,3 +2490,15 @@ workflow:
   - id: reporter-frozen-lifecycle
     action: { verifier: agent.golden.execution-reporter-frozen-lifecycle }
     expect: { status: passed }
+  - id: configured-model-policy-readback
+    action: { verifier: agent.golden.execution-configured-model-policy-readback }
+    expect: { status: passed }
+  - id: campaign-model-policy
+    action: { verifier: agent.golden.execution-campaign-model-policy }
+    expect: { status: passed }
+  - id: campaign-model-policy-native
+    action: { verifier: agent.golden.execution-campaign-model-policy-native }
+    expect: { status: passed }
+  - id: campaign-model-policy-preflight
+    action: { verifier: agent.golden.execution-campaign-model-policy-preflight }
+    expect: { status: passed }

@@ -13,7 +13,7 @@ import { readWorkdayAssignments, verifyGolden } from '../sdk-runtime-golden.test
 import { readCompleteEvidence, collectCompleteEvidence } from './support/evidence-pages.ts';
 import { publicCanonicalRecords, verifyTerminalRecordCustody, verifyFailedExecutionCustody, verifyAvailabilityAccountingHistory, verifySandboxCloseoutCustody, verifyWorkdayContinuationCustody, verifySandboxHostAbsence, verifySandboxDirectoryAbsence, verifyProviderConformanceSignature, verifyProviderQualification, verifyProviderLocalSlotClosure, verifyProviderPollingSelection } from './support/record-custody.ts';
 import { actual, verify, availabilityHistory } from './support/record-readback.ts';
-import { verifyPublicSandboxAbsence, verifyPublicWorkspaceSessionClosure } from './support/physical/sandbox-inventory.ts';
+import { verifyNormalSdkSandboxAbsence, verifyPublicWorkspaceSessionClosure } from './support/physical/sandbox-inventory.ts';
 import { observeCampaign } from './support/campaign-observation.ts';
 
 // Existing supported public reads, complete pages and SAME native managed run.
@@ -98,7 +98,7 @@ test('Actual completed and failed isolated attempts retain distinct verified pub
 });
 test('Actual normal SDK workday reads complete public owning host sandbox absence while retaining unrelated resources and original settled history', { timeout: 120_000 }, async () => {
  const deadline = performance.now() + 120_000, f = actual(), before = structuredClone(f);
- assert.equal(f.run.status, 'completed');
+ assert.equal(f.run.status, 'completed'); assert.equal(f.run.executionMode,'simulation');
  const isolated = f.items.filter(item => Object.hasOwn(row(item.lifecycleOutput), 'sandboxId'));
  assert.ok(isolated.length > 0 && isolated.every(item => item.status === 'completed'),
   'ACCEPTANCE_SANDBOX_NORMAL: Completed normal workday required; controlled failures belong to their separate case');
@@ -110,7 +110,7 @@ test('Actual normal SDK workday reads complete public owning host sandbox absenc
  const inspect = () => {
   const remaining = Math.floor(deadline - performance.now() - 5_000); assert.ok(remaining > 0, 'ACCEPTANCE_SANDBOX_OBSERVATION_TIME: Original case deadline exhausted');
   const history=observeCampaign(read(['workdays','show',f.id],f.team,false,timeLeft()),f.id,retainedEvents,(cursor,limit)=>read(['workdays','events','list',f.id,'--limit',String(limit),'--cursor',cursor],f.team,false,timeLeft())).events;
-  return verifyPublicSandboxAbsence(f.items, loaded.manifest.connections, loaded.manifest.sandbox.brokerSocket,
+  return verifyNormalSdkSandboxAbsence(f.items, loaded.manifest.connections, loaded.manifest.sandbox.brokerSocket,
    read(['host', 'sandbox', 'status'], '', true, timeLeft()),history);
  };
  await verifyResources(); const paths = inspect(); verify(f); await verifyResources(); assert.deepEqual(inspect(), paths); assert.deepEqual(f, before);

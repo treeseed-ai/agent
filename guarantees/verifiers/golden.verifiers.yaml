@@ -4231,3 +4231,13 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/guarantees/monitoring/allocation/planning-window-campaign.test.ts
     testName: "original campaign denies early or phase-contradictory assignments before profile inspection approval or final golden gates without changing terminal evidence"
+  agent.golden.execution-source-authorization-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/preflight/source/source-authority.test.ts
+    testName: "normal SDK source custody rejects missing foreign credentialed or writable analysis authority across Git read-only and TreeDX assignments without changing unrelated resources"
+  agent.golden.execution-source-authorization-2:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/preflight/source/source-authority-native.test.ts
+    testName: "native Kernel Git and original broker status client reject foreign credentialed and interrupted source observations without changing owning candidates or retained failed history"

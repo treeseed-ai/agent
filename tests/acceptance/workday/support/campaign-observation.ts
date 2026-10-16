@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { normalizeCapacityPageLimit } from '@treeseed/sdk/capacity-pagination';
-import { appliedWorkdaySchema, assignmentAttemptSchema, executionNodeSchema } from '@treeseed/sdk/agent-capacity';
+import { appliedWorkdaySchema, assignmentAttemptSchema, executionNodeSchema, usageSettlementSchema } from '@treeseed/sdk/agent-capacity';
 import { validateWorkdayIntent, type WorkdayIntent } from '@treeseed/sdk/operator-contracts';
 import { collectCompleteEvidence } from './evidence-pages.ts';
 
@@ -282,4 +282,69 @@ export function verifyNodeTransitionHistory(run:Row,graph:Row,events:readonly Ro
   assert.ok(history?.length,label+': Missing original owning node history');const last=history.at(-1)!.context;
   assert.equal(last.status,node.status,label+': Current node state lacks its transition');assert.equal(last.nodeRevision,node.nodeRevision,label+': Current node revision lacks its transition');assert.ok(Number(last.graphRevision)<=node.graphRevisionUpdated,label+': Node observation exceeds its owning graph revision');
  }
+}
+/** Existing public inventories must explain every accounting observation;
+ * history never reconstructs a missing producer row or creates charge authority. */
+export function verifyAccountingTransitionHistory(run:Row,assignments:readonly Row[],usage:readonly Row[],ledger:readonly Row[],events:readonly Row[]):void{
+ const label='ACCEPTANCE_ACCOUNTING_TRANSITIONS',clock=(value:unknown)=>{assert.ok(typeof value==='string'&&Number.isFinite(Date.parse(value)),label+': Original accounting clock required');return Date.parse(value);};
+ const number=(value:unknown)=>{assert.ok(typeof value==='number'&&Number.isFinite(value)&&value>=0,label+': Original nonnegative numeric accounting required');return value;};
+ const started=clock(run.startedAt),history=retainCampaignEventHistory(events,run,new Map()),owners=new Map<string,{item:Row;attempt:ReturnType<typeof assignmentAttemptSchema.parse>}>();
+ for(const item of assignments){const attempt=assignmentAttemptSchema.parse(item.assignmentAttempt);assert.deepEqual(attempt,item.assignmentAttempt,label+': Issued authority must already be canonical');
+  assert.equal(item.id,attempt.id,label);assert.equal(attempt.teamId,run.teamId,label);assert.equal(attempt.workdayId,run.id,label);assert.equal(item.projectId,attempt.projectId,label);assert.ok(!owners.has(attempt.id),label+': Duplicate owning attempt');owners.set(attempt.id,{item,attempt});
+ }
+ const current=(items:readonly Row[],kind:'usage'|'ledger')=>{const result=new Map<string,Row>();for(const value of items){assert.ok(typeof value.id==='string'&&value.id&&!result.has(value.id),label+': Duplicate or missing '+kind+' identity');
+  const owner=owners.get(String(value.assignmentId));assert.ok(owner,label+': Public '+kind+' omitted its original owning assignment');const{attempt}=owner;
+  assert.equal(value.projectId,attempt.projectId,label);assert.equal(value.workDayId,run.id,label);assert.equal(value.capacityProviderId,attempt.provider.providerId,label);
+  if(kind==='usage'){assert.equal(value.assignmentAttempt,attempt.attempt,label);assert.equal(value.executionProviderId,attempt.provider.executionProviderId,label);assert.ok(['informational','incremental','aggregate'].includes(String(value.accountingMode)),label);}
+  else{assert.equal(value.teamId,run.teamId,label);assert.equal(value.reservationId,attempt.reservationId,label);assert.equal(value.phase,'task_completed_actual_settlement',label);}
+  const native=kind==='usage'?row(value.nativeUsage):undefined;number(value.activeSeconds);number(value.elapsedSeconds);assert.ok(clock(value.createdAt)>=clock(attempt.createdAt),label+': Accounting precedes its original attempt');
+  if(native){for(const unit of Object.values(native))number(unit);for(const field of['activeSeconds','elapsedSeconds'])if(Object.hasOwn(native,field))assert.equal(native[field],value[field],label+': Native repeated seconds disagree');}
+  result.set(value.id,value);
+ }return result;};
+ const currentUsage=current(usage,'usage'),currentLedger=current(ledger,'ledger'),seenUsage=new Set<string>(),seenLedger=new Set<string>(),byOwner=new Map<string,Row[]>(),counterVersions=new Map<string,{version:number;authority:unknown}>();
+ for(const event of history){if(event.eventType!=='capacity.accounting.updated')continue;
+  const owner=owners.get(String(event.assignmentId));assert.ok(owner,label+': Accounting observation omitted its original owner');const{item,attempt}=owner,context=row(event.context),reservation=row(context.reservation),prior=byOwner.get(attempt.id)??[];
+  assert.equal(event.workdayId,run.id,label);assert.equal(event.projectId,attempt.projectId,label);assert.equal(event.status,'recorded',label);
+  for(const field of['parameters','metadata','refs'])assert.deepEqual(event[field],{},label+': Unchanged owning accounting envelope required');
+  assert.deepEqual(Object.keys(context).sort(),['reservation','usageActual','ledgerEntry','remainingSupply'].sort(),label+': Complete original accounting context required');
+  const expected={id:attempt.reservationId,idempotencyKey:attempt.idempotencyKey,assignmentId:attempt.id,teamId:attempt.teamId,projectId:attempt.projectId,workDayId:attempt.workdayId,
+   capacityProviderId:attempt.provider.providerId,executionProviderId:attempt.provider.executionProviderId,membershipId:item.membershipId,requestedSeconds:attempt.limits.maximumSeconds,reservedSeconds:attempt.limits.maximumSeconds,createdAt:attempt.createdAt};
+  for(const[key,value]of Object.entries(expected))assert.deepEqual(reservation[key],value,label+': Reservation changed '+key);
+  assert.equal(reservation.mode,['planning','estimating'].includes(attempt.effectiveProfile.activity)?'planning':'acting',label);
+  assert.ok(['reserved','consuming','consumed'].includes(String(reservation.state)),label+': Normal SDK accounting cannot hide unresolved recovery or failed custody');
+  for(const field of['requestedSeconds','reservedSeconds','activeSeconds','elapsedSeconds','releasedSeconds','overrunSeconds'])number(reservation[field]);
+  const at=clock(event.createdAt);assert.ok(at>=started&&at>=clock(attempt.createdAt),label);assert.equal(clock(reservation.updatedAt),at,label+': Observation differs from actual reservation mutation clock');
+  if(prior.length){assert.ok(Number(event.eventIndex)>Number(prior.at(-1)!.eventIndex)&&at>=clock(prior.at(-1)!.createdAt),label+': Reversed accounting history');assert.equal(row(prior.at(-1)!.context).ledgerEntry,null,label+': Accounting continued after terminal settlement');}
+  const measurement=context.usageActual===null?null:row(context.usageActual),entry=context.ledgerEntry===null?null:row(context.ledgerEntry);
+  if(!prior.length){assert.equal(measurement,null,label+': Original reservation admission missing');assert.equal(entry,null,label);assert.equal(reservation.state,'reserved',label);assert.equal(at,clock(attempt.createdAt),label);
+   for(const field of['activeSeconds','elapsedSeconds','releasedSeconds','overrunSeconds'])assert.equal(reservation[field],0,label);
+  }else{assert.ok(measurement,label+': Duplicate admission or unresolved recovery is not normal SDK accounting');}
+  if(measurement){assert.ok(typeof measurement.id==='string'&&!seenUsage.has(measurement.id),label+': Duplicate usage observation');assert.deepEqual(measurement,currentUsage.get(measurement.id),label+': Missing or changed public usage');seenUsage.add(measurement.id);
+   assert.equal(clock(measurement.createdAt),at,label);assert.ok(Number(measurement.activeSeconds)<=attempt.limits.maximumSeconds,label+': Actual productive usage exceeded original authority');
+  }
+  if(entry){assert.ok(measurement&&measurement.accountingMode==='aggregate',label+': Terminal settlement requires its original aggregate');assert.ok(typeof entry.id==='string'&&!seenLedger.has(entry.id),label+': Duplicate settlement observation');
+   assert.deepEqual(entry,currentLedger.get(entry.id),label+': Missing or changed public settlement');seenLedger.add(entry.id);assert.equal(reservation.state,'consumed',label);
+   const settled=usageSettlementSchema.parse(entry.usageSettlement);assert.deepEqual(settled,entry.usageSettlement,label+': Stored settlement must already be canonical');
+   for(const[key,value]of Object.entries({id:entry.id,idempotencyKey:entry.settlementKey,assignmentId:attempt.id,reservationId:attempt.reservationId,teamId:run.teamId,projectId:attempt.projectId,workdayId:run.id,providerId:attempt.provider.providerId,agentClass:attempt.agentClass,actualSeconds:measurement.activeSeconds,settledAt:event.createdAt}))assert.deepEqual(Reflect.get(settled,key),value,label);
+   assert.deepEqual(settled.nativeUsage,measurement.nativeUsage,label);assert.equal(clock(entry.createdAt),at,label);
+   for(const field of['activeSeconds','elapsedSeconds']){assert.equal(entry[field],measurement[field],label);assert.equal(reservation[field],measurement[field],label);}
+   assert.equal(reservation.releasedSeconds,Math.max(0,attempt.limits.maximumSeconds-Number(measurement.activeSeconds)),label);assert.equal(reservation.overrunSeconds,Math.max(0,Number(measurement.activeSeconds)-attempt.limits.maximumSeconds),label);
+   assert.deepEqual(reservation.consumedProviderUnits,entry.providerUnits,label);assert.deepEqual(reservation.consumedUsd,entry.usd,label);
+  }else if(measurement){assert.ok(measurement.accountingMode==='informational'||measurement.accountingMode==='incremental',label+': Aggregate lacks its atomic settlement');assert.ok(reservation.state==='reserved'||reservation.state==='consuming',label);}
+  assert.ok(Array.isArray(context.remainingSupply)&&context.remainingSupply.length===2,label+': Complete original model and capability claims required');
+  const scopes=new Set<string>(),claimIds=new Set<string>();
+  for(const value of context.remainingSupply){const counter=row(value);assert.ok(typeof counter.id==='string'&&counter.id&&!claimIds.has(counter.id),label+': Missing or duplicate supply claim');claimIds.add(counter.id);
+   assert.ok(counter.scope==='model-day'||counter.scope==='capability-day',label+': Foreign supply scope');assert.ok(!scopes.has(String(counter.scope)),label+': Duplicate supply scope');scopes.add(String(counter.scope));
+   assert.equal(counter.scopeId,JSON.stringify([attempt.provider.providerId,attempt.provider.modelConfigurationId,...(counter.scope==='capability-day'?[attempt.provider.executionCapabilityId]:[])]),label);
+   assert.equal(counter.periodKey,attempt.createdAt.slice(0,10),label);assert.ok(typeof counter.teamId==='string'&&counter.teamId,label+': Original shared counter owner required');assert.equal(counter.releasePolicy,'actual-settlement',label);
+   for(const field of['hardLimit','committedAmount','reservedAmount','releasedAmount','remainingAmount','stateVersion'])number(counter[field]);assert.ok(Number.isSafeInteger(counter.stateVersion)&&Number(counter.stateVersion)>=1,label);
+   assert.equal(counter.reservedAmount,attempt.limits.maximumSeconds,label);assert.equal(counter.releasedAmount,entry?reservation.releasedSeconds:0,label);assert.equal(counter.remainingAmount,Math.max(0,Number(counter.hardLimit)-Number(counter.committedAmount)),label);
+   const authority=[counter.teamId,counter.scope,counter.scopeId,counter.periodKey,counter.hardLimit],previous=counterVersions.get(counter.id);if(previous){assert.deepEqual(authority,previous.authority,label+': Frozen supply authority changed');assert.ok(Number(counter.stateVersion)>=previous.version,label+': Shared counter version regressed');}
+   counterVersions.set(counter.id,{version:Number(counter.stateVersion),authority});
+  }
+  if(prior.length)assert.deepEqual([...claimIds].sort(),(row(prior[0]!.context).remainingSupply as Row[]).map(value=>String(value.id)).sort(),label+': Original supply claims changed');
+  prior.push(event);byOwner.set(attempt.id,prior);
+ }
+ assert.deepEqual([...seenUsage].sort(),[...currentUsage.keys()].sort(),label+': Public usage lacks its original observation');assert.deepEqual([...seenLedger].sort(),[...currentLedger.keys()].sort(),label+': Public settlement lacks its original observation');
+ for(const[id]of owners){const owned=byOwner.get(id);assert.ok(owned?.length,label+': Original reservation admission missing');if(run.status==='completed')assert.ok(row(owned.at(-1)!.context).ledgerEntry,label+': Completed workday lacks final accounting closure');}
 }

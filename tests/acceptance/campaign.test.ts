@@ -10,7 +10,7 @@ import { read, row } from './acceptance-cli.ts';
 import { verifyGolden } from './sdk-runtime-golden.test.ts';
 import { prepareSdkCampaign, verifySdkExternalState } from './prepare-campaign.ts';
 import { observeLiveGraphRevisions } from './workday/support/monitoring/live-graph-revisions.ts';
-import { observeCampaign, retainCampaignEventHistory, verifyAssignmentTransitionHistory, verifyNodeTransitionHistory } from './workday/support/campaign-observation.ts';
+import { observeCampaign, retainCampaignEventHistory, verifyAssignmentTransitionHistory, verifyNodeTransitionHistory, verifyAccountingTransitionHistory } from './workday/support/campaign-observation.ts';
 import { readCompleteEvidence } from './workday/support/evidence-pages.ts';
 import { observeLiveAssignmentRecords, inspectLiveAssignmentProfile } from './workday/support/monitoring/live-assignment-records.ts';
 
@@ -65,6 +65,7 @@ test('Frozen SDK campaign drives planning acting review and terminal golden gate
 	}, inspect: async () => {
 		assert.ok(currentRun, 'ACCEPTANCE_LIVE_ASSIGNMENT: Original observed workday required');
   const inspectionEndsAt=Date.now()+120_000;
+  const accounting=()=>({usage:body.projects.flatMap((project:string)=>readCompleteEvidence(['capacity','usage','--project',project,'--workday',workdayId],team,100,'ACCEPTANCE_ACCOUNTING_USAGE')),ledger:body.projects.flatMap((project:string)=>readCompleteEvidence(['capacity','ledger','--project',project,'--workday',workdayId],team,100,'ACCEPTANCE_ACCOUNTING_LEDGER'))});
 		await observeLiveGraphRevisions(String(currentRun.teamId), () => read(['execution', 'graph', 'show'], team),
 			cursor => read(['execution', 'graph', 'watch', '--cursor', cursor], team), observedGraphRevisions,
 			(revision, graphHead) => console.log(JSON.stringify({ workdayId, observedAt: new Date().toISOString(), graphRevision: revision, graphHead })));
@@ -72,14 +73,15 @@ test('Frozen SDK campaign drives planning acting review and terminal golden gate
   const seen=new Set(observedEvents.keys());let complete=false;
   for(let round=0;round<40;round++){
    assert.ok(Date.now()<=inspectionEndsAt,'ACCEPTANCE_LIVE_ASSIGNMENT: Original inspection bound elapsed');
-   const heldGraph=read(['execution','graph','show'],team);
+   const heldGraph=read(['execution','graph','show'],team),heldAccounting=accounting();
    const events=readCompleteEvidence(['workdays','events','list',workdayId],team,100,'ACCEPTANCE_OBSERVATION','ascending');
    retainCampaignEventHistory(events,currentRun,observedEvents,recordEvent);verifyAssignmentTransitionHistory(currentRun,assignments,events);
    const known=new Map(assignments.map(item=>[String(item.id),item])),refresh=new Set<string>();
    for(const event of events)if(typeof event.assignmentId==='string'&&(!known.has(event.assignmentId)||(!seen.has(String(event.id))&&typeof event.eventType==='string'&&event.eventType.startsWith('assignment.'))))refresh.add(event.assignmentId);
    for(const event of events)seen.add(String(event.id));
    if(!refresh.size){
-    const freshGraph=read(['execution','graph','show'],team);if(!isDeepStrictEqual(heldGraph,freshGraph))continue;
+    const freshGraph=read(['execution','graph','show'],team),freshAccounting=accounting();if(!isDeepStrictEqual(heldGraph,freshGraph)||!isDeepStrictEqual(heldAccounting,freshAccounting))continue;
+    verifyAccountingTransitionHistory(currentRun,assignments,heldAccounting.usage,heldAccounting.ledger,events);
     verifyNodeTransitionHistory(currentRun,heldGraph,events);complete=true;break;
    }
    for(const id of refresh){const next=read(['assignments','show',id],team);assert.equal(next.id,id,'ACCEPTANCE_LIVE_ASSIGNMENT: Foreign concurrent observation');const prior=known.get(id);

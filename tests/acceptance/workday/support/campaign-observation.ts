@@ -1,3 +1,6 @@
+import {createHash} from 'node:crypto';
+import {isDeepStrictEqual} from 'node:util';
+import {canonicalStandardsJson} from '@treeseed/sdk/standards';
 import assert from 'node:assert/strict';
 import { normalizeCapacityPageLimit } from '@treeseed/sdk/capacity-pagination';
 import { appliedWorkdaySchema, assignmentAttemptSchema, executionNodeSchema, usageSettlementSchema } from '@treeseed/sdk/agent-capacity';
@@ -360,3 +363,29 @@ export function verifyAccountingTransitionHistory(run:Row,assignments:readonly R
  assert.deepEqual([...seenUsage].sort(),[...currentUsage.keys()].sort(),label+': Public usage lacks its original observation');assert.deepEqual([...seenLedger].sort(),[...currentLedger.keys()].sort(),label+': Public settlement lacks its original observation');
  for(const[id]of owners){const owned=byOwner.get(id);assert.ok(owned?.length,label+': Original reservation admission missing');if(run.status==='completed')assert.ok(row(owned.at(-1)!.context).ledgerEntry,label+': Completed workday lacks final accounting closure');}
 }
+/** Reconcile every original lifecycle mutation with the public Workday; existing reservation receipts remain derived. */
+export function verifyWorkdayLifecycleTransitionHistory(run:Row,events:readonly Row[]):void{
+ const label='ACCEPTANCE_WORKDAY_TRANSITIONS',current=verifyAppliedWorkdayCustody(run),history=retainCampaignEventHistory(events,run,new Map()).filter(event=>event.eventType==='workday.lifecycle.changed');
+ const authority=(plan:ReturnType<typeof appliedWorkdaySchema.parse>)=>{const{admittedSecondsByProject:_projects,admittedSecondsByAgentClass:_agents,...original}=plan;return original;};
+ const clock=(value:unknown)=>{assert.ok(typeof value==='string'&&Number.isFinite(Date.parse(value)),label+': Original lifecycle clock required');return Date.parse(value);};
+ const states=['planned','active','closing','ended'],roundStates=['pending','active','complete'];
+ if(!history.length){assert.ok(current.state==='planned'&&current.planningRounds.length===0&&run.status!=='completed',label+': Original lifecycle observations missing');return;}
+ let previous:ReturnType<typeof appliedWorkdaySchema.parse>|undefined,previousStatus:unknown,at=clock(run.startedAt);
+ for(const event of history){
+  assert.equal(event.workdayId,run.id,label);assert.equal(event.projectId,null,label);assert.equal(event.assignmentId,null,label);assert.equal(event.status,'recorded',label);assert.equal(event.title,null,label);assert.equal(event.message,null,label);
+  for(const field of['parameters','metadata','refs'])assert.deepEqual(event[field],{},label+': Original lifecycle envelope required');
+  const context=row(event.context);assert.deepEqual(Object.keys(context).sort(),['previousStatus','status','previousPlan','plan'].sort(),label+': Exact original lifecycle context required');
+  assert.equal(event.id,'workday-lifecycle:'+run.id+':'+createHash('sha256').update(canonicalStandardsJson(context)).digest('hex'),label+': Changed original transition identity');
+  const before=appliedWorkdaySchema.parse(context.previousPlan),next=appliedWorkdaySchema.parse(context.plan);assert.deepEqual(before,context.previousPlan,label+': Previous plan is not canonical');assert.deepEqual(next,context.plan,label+': Next plan is not canonical');
+  for(const plan of[before,next])for(const field of['id','teamId','executionMode','startsAt','endsAt','policyId','policyRevision','policySnapshot'])assert.deepEqual(Reflect.get(plan,field),Reflect.get(current,field),label+': Original frozen lifecycle authority changed');
+  if(previous){assert.deepEqual(authority(before),authority(previous),label+': Missing original lifecycle transition');assert.equal(context.previousStatus,previousStatus,label+': Missing original status transition');}
+  else{assert.equal(before.state,'planned',label+': Initial lifecycle transition missing');assert.equal(before.planningRounds.length,0,label+': Initial planning history missing');assert.ok(context.previousStatus==='queued'||context.previousStatus==='running',label+': Original starting status required');}
+  assert.ok(states.indexOf(next.state)>=states.indexOf(before.state),label+': Regressed original lifecycle');assert.equal(context.status,next.state==='ended'?'completed':'running',label+': Plan and terminal status disagree');
+  for(const round of before.planningRounds){const fresh=next.planningRounds.find(value=>value.round===round.round);assert.ok(fresh,label+': Lost original planning round');assert.deepEqual(fresh.assignmentIds,round.assignmentIds,label+': Original admitted turns changed');assert.ok(roundStates.indexOf(fresh.state)>=roundStates.indexOf(round.state),label+': Planning round regressed');for(const field of['startedAt','completedAt'])if(Reflect.get(round,field)!==undefined)assert.equal(Reflect.get(fresh,field),Reflect.get(round,field),label+': Original planning clocks changed');}
+  for(const field of['activatedAt','closingAt','endedAt','reportRef'])if(Reflect.get(before,field)!==undefined)assert.deepEqual(Reflect.get(next,field),Reflect.get(before,field),label+': Original lifecycle product or clock changed');
+  assert.ok(context.previousStatus!==context.status||!isDeepStrictEqual(before,next),label+': Duplicate unchanged lifecycle observation');const now=clock(event.createdAt);assert.ok(now>=at,label+': Reversed lifecycle clock');at=now;previous=next;previousStatus=context.status;
+ }
+ assert.ok(previous,label);assert.deepEqual(authority(previous),authority(current),label+': Current Workday omits its original transition');assert.equal(previousStatus,run.status,label+': Current status omits its original transition');
+ if(current.state==='ended'){assert.equal(current.reportRef?.kind,'treedx',label+': Reporter product missing');assert.equal(current.endedAt,run.completedAt,label+': Original terminal clocks disagree');}
+}
+

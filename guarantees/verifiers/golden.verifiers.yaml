@@ -4181,3 +4181,28 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/guarantees/planning/planning-predecessors.test.ts
     testName: "retains autonomous planning without manufacturing subjectless estimating work or accepting a missing selected estimator inventory"
+  agent.golden.execution-fresh-sdk-segment-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/lifecycle/fresh-segment.test.ts
+    testName: "retains original fresh SDK intent and public workday without borrowing an earlier segment"
+  agent.golden.execution-fresh-sdk-segment-2:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/lifecycle/fresh-segment.test.ts
+    testName: "denies every present continuation field in frozen SDK intent or public workday without deleting or repairing failed evidence"
+  agent.golden.execution-fresh-sdk-segment-3:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/lifecycle/fresh-segment-native.test.ts
+    testName: "native public SDK readback denies continued terminal and live segments before fresh golden advancement while retaining scoped stop and unchanged retry"
+  agent.golden.execution-fresh-sdk-segment-4:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/lifecycle/fresh-segment-campaign.test.ts
+    testName: "denies continuation-bearing frozen intent before any normal SDK start or approval without rewriting the operator freeze"
+  agent.golden.execution-fresh-sdk-segment-5:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/lifecycle/fresh-segment-campaign.test.ts
+    testName: "denies a continued terminal workday before normal SDK inspection and final gates then accepts only an unchanged fresh retry"

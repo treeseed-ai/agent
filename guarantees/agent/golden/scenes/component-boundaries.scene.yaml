@@ -2430,3 +2430,18 @@ workflow:
   - id: estimate-planning-predecessor-3
     action: { verifier: agent.golden.execution-estimate-planning-predecessor-3 }
     expect: { status: passed }
+  - id: fresh-sdk-segment-1
+    action: { verifier: agent.golden.execution-fresh-sdk-segment-1 }
+    expect: { status: passed }
+  - id: fresh-sdk-segment-2
+    action: { verifier: agent.golden.execution-fresh-sdk-segment-2 }
+    expect: { status: passed }
+  - id: fresh-sdk-segment-3
+    action: { verifier: agent.golden.execution-fresh-sdk-segment-3 }
+    expect: { status: passed }
+  - id: fresh-sdk-segment-4
+    action: { verifier: agent.golden.execution-fresh-sdk-segment-4 }
+    expect: { status: passed }
+  - id: fresh-sdk-segment-5
+    action: { verifier: agent.golden.execution-fresh-sdk-segment-5 }
+    expect: { status: passed }

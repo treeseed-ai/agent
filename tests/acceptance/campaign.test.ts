@@ -11,7 +11,7 @@ import { read, row } from './acceptance-cli.ts';
 import { verifyGolden } from './sdk-runtime-golden.test.ts';
 import { prepareSdkCampaign, verifySdkExternalState } from './prepare-campaign.ts';
 import { observeLiveGraphRevisions } from './workday/support/monitoring/live-graph-revisions.ts';
-import { observeCampaign, retainCampaignEventHistory, verifyAssignmentTransitionHistory, verifyNodeTransitionHistory, verifyAccountingTransitionHistory } from './workday/support/campaign-observation.ts';
+import { observeCampaign, retainCampaignEventHistory, verifyAssignmentTransitionHistory, verifyNodeTransitionHistory, verifyAccountingTransitionHistory, verifyWorkdayLifecycleTransitionHistory } from './workday/support/campaign-observation.ts';
 import { readCompleteEvidence } from './workday/support/evidence-pages.ts';
 import { observeLiveAssignmentRecords, inspectLiveAssignmentProfile } from './workday/support/monitoring/live-assignment-records.ts';
 
@@ -85,6 +85,7 @@ test('Frozen SDK campaign drives planning acting review and terminal golden gate
    for(const event of events)seen.add(String(event.id));
    if(!refresh.size){
     const freshGraph=read(['execution','graph','show'],team),freshAccounting=accounting();if(!isDeepStrictEqual(heldGraph,freshGraph)||!isDeepStrictEqual(heldAccounting,freshAccounting))continue;
+    verifyWorkdayLifecycleTransitionHistory(currentRun,events);
     verifyAccountingTransitionHistory(currentRun,assignments,heldAccounting.usage,heldAccounting.ledger,events);
     verifyNodeTransitionHistory(currentRun,heldGraph,events);complete=true;break;
    }

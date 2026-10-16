@@ -6,6 +6,14 @@ import { encodeCapacityPageCursor } from '@treeseed/sdk/capacity-pagination';
 
 const {state,workdayId,observed,event,transport}=campaignCliFixture();
 describe('campaign CLI composition units (mocked transport, not native or live acceptance)', () => {
+ it('stops the exact admitted simulation on an incomplete original Workday lifecycle chain before accounting collaboration or later gates',async()=>{
+  transport(()=>observed('running'));const original=new Error('ACCEPTANCE_WORKDAY_TRANSITIONS: Original closing observation missing'),held=structuredClone(state.freeze);
+  state.lifecycleTransitions.mockImplementation(()=>{throw original;});
+  await expect(state.run!().catch((classified:Error & {classification?:string})=>{expect(classified.classification).toBe('IMPLEMENTATION_DEFECT');return classified.cause;})).resolves.toBe(original);
+  expect(state.lifecycleTransitions).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({id:workdayId}),[]);expect(state.accountingTransitions).not.toHaveBeenCalled();expect(state.nodeTransitions).not.toHaveBeenCalled();expect(state.inspect).not.toHaveBeenCalled();expect(state.verify).not.toHaveBeenCalled();expect(state.freeze).toEqual(held);
+  expect(state.read.mock.calls.filter(call=>call[0][1]==='evaluate')).toEqual([]);expect(state.read.mock.calls.filter(call=>call[0][1]==='stop')).toEqual([[['workdays','stop',workdayId,'--yes','--reason','Automated golden boundary failed','--idempotency-key','golden-stop:'+workdayId],'treeseed']]);
+ });
+
  it('rereads concurrent accounting changes within the original inspection bound before validating stable public usage ledger and history',async()=>{
   transport(()=>observed('completed'));let reads=0;
   state.evidence.mockImplementation((args:string[])=>args[0]==='capacity'&&args[1]==='usage'?[{id:++reads===1?'first-in-flight':'stable-current'}]:[]);

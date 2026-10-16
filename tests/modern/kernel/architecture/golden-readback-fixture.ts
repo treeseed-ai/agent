@@ -282,4 +282,14 @@ beforeEach(() => {
   policy:{...DEFAULT_WORKDAY_POLICY,durationSeconds:owning.parameters.durationSeconds,planningPercent:owning.parameters.planningPercent,maximumConcurrency:owning.parameters.maximumConcurrency,communicationConcurrency:owning.parameters.communicationConcurrency}});
  Object.assign(owning.parameters,compiled.policySnapshot,{deadlineAt:compiled.endsAt,appliedPlan:{...compiled,planningRounds:priorPlan.planningRounds,state:'ended',closingAt:reporter.createdAt,endedAt:owning.completedAt,reportRef:owning.reportRef}});
  owning.reportRefs={};delete owning.reportRef;delete owning.state;delete owning.endedAt;
+ // Controlled API input shape only. No actual planning turns, public lifecycle events or managed Reporter outcomes are claimed.
+ owning.parameters.appliedPlan.activatedAt=owning.startedAt;
+ const activePlan={...compiled,state:'active',activatedAt:owning.startedAt},roundPlan={...activePlan,planningRounds:priorPlan.planningRounds},closingPlan={...roundPlan,state:'closing',closingAt:reporter.createdAt};
+ const snapshots=[compiled,activePlan,roundPlan,closingPlan,owning.parameters.appliedPlan];
+ const lifecycleEvents=snapshots.slice(1).map((plan,index)=>{const context={previousStatus:'running',status:index===3?'completed':'running',previousPlan:index===0?null:structuredClone(snapshots[index]),plan:structuredClone(plan)};
+  return{id:'workday-lifecycle:'+workdayId+':'+createHash('sha256').update(canonicalStandardsJson(context)).digest('hex'),eventIndex:index+1,eventType:'workday.lifecycle.changed',teamId:owning.teamId,runId:workdayId,workdayId,projectId:null,assignmentId:null,status:'recorded',title:null,message:null,parameters:{},context,refs:{},metadata:{},createdAt:index===0?owning.startedAt:index===1?priorPlan.planningRounds.at(-1).completedAt:index===2?reporter.createdAt:owning.completedAt};});
+ const first=state.replies.get('workdays events')!.items[0];Object.assign(first,{workdayId,projectId:null,status:'recorded',title:null,message:null,parameters:{},refs:{},metadata:{}});state.replies.get('workdays events')!.items=[first,...lifecycleEvents];
+ Object.assign(evidence,{closingEvent:lifecycleEvents[2]});reporter.workspaceContext.authorizedContext[0].digest='sha256:'+createHash('sha256').update(canonicalStandardsJson(evidence)).digest('hex');
+ const reportFile=state.replies.get('library read')!.result.files[0];reportFile.body='```json\n'+JSON.stringify({classification:'workday-report',workdayId,assignmentId:reporter.id,workday:evidence,predecessorResults:predecessors},null,2)+'\n```';reportFile.content='---\n'+stringify(reportFile.frontmatter,{lineWidth:0})+'---\n\n'+reportFile.body+'\n';
+
 });

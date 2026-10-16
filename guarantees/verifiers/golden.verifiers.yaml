@@ -4261,3 +4261,23 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/kernel/closure/reporter-workday-native.test.ts
     testName: "native public SDK readback retains the sole applied-plan report and rejects contradictions interrupted reads and altered authority before unchanged retry"
+  agent.golden.execution-workday-lifecycle-history-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/monitoring/lifecycle/workday-lifecycle-history.test.ts
+    testName: "requires every original Workday plan and Reporter transition before continuing and retains exact failed observations without changing derived receipt authority"
+  agent.golden.execution-workday-lifecycle-history-native:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/monitoring/lifecycle/workday-lifecycle-history-native.test.ts
+    testName: "native public SDK Workday and event histories stop the exact simulation on missing contradictory or interrupted Reporter lifecycle evidence and preserve unchanged retry"
+  agent.golden.execution-workday-lifecycle-history-cli-stop:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/campaign-cli.test.ts
+    testName: "stops the exact admitted simulation on an incomplete original Workday lifecycle chain before accounting collaboration or later gates"
+  agent.golden.execution-reporter-frozen-lifecycle:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/closure/reporter-frozen-lifecycle.test.ts
+    testName: "requires the exact original closing event and all ended planning rounds in frozen Reporter input before accepting its ordinary report"

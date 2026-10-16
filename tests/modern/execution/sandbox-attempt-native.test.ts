@@ -13,11 +13,16 @@ const canonical = (value: unknown): string => Array.isArray(value) ? `[${value.m
 it('native provider signs the canonical source attempt unchanged through Unix broker admission and exact resource closeout', async () => {
 	const outcomes: Array<{ canonical: number; signed: number; signatureValid: boolean }> = [];
 	for (const ordinal of [1, 2, 100]) {
-		const f = await microvmBroker();
+		const f = await microvmBroker(manifest=>{const adapter=manifest.adapters[0]!;adapter.id='configured-arbitrary-provider';adapter.model={model:'configured-luna',reasoningEffort:'low'};});
 		try {
 			const attempt = assignmentAttemptSchema.parse(f.input.assignment.assignmentAttempt); attempt.attempt = ordinal;
 			f.input.assignment.assignmentAttempt = attempt; f.input.assignment.attemptCount = ordinal;
+			const configuration=structuredClone(f.manifest),observation=await f.executor.observe();
+			expect(observation.available).toBe(true);const model=Reflect.get(observation,'modelPolicy');
+			expect(model).toEqual({provider:'openai',model:'configured-luna',reasoningEffort:'low',capabilities:[...new Set(f.manifest.adapters[0]!.offers.flatMap(binding=>binding.offer.capabilities.map(value=>value.id)))]});
+			model.model='foreign-observer-mutation';model.capabilities.push('foreign-observer-capability');
 			const held = structuredClone(f.input.assignment), result = await f.executor.execute(f.input), signed = f.assignment();
+			expect(signed?.modelPolicy).toEqual({provider:'openai',model:'configured-luna',reasoningEffort:'low',capabilities:f.manifest.adapters[0]!.offers[0]!.offer.capabilities.map(value=>value.id)});expect(f.manifest).toEqual(configuration);
 			expect(signed).toBeDefined(); if (!signed) throw new Error('Native signed admission missing');
 			const { signature, ...unsigned } = signed;
 			const identity = await loadCapacityProviderIdentity({ ref: f.manifest.identity.privateKeyRef, baseDirectory: f.directory, dataDirectory: f.directory });

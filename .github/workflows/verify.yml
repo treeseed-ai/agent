@@ -41,8 +41,8 @@ jobs:
         with:
           github-token: ${{ github.token }}
           repository: treeseed-ai/deployment
-          run-id: 37041701461
-          name: deployment-candidate-a4e638cb5e861766fedf1b67adfba2e910c6afd1
+          run-id: 38910640363
+          name: deployment-candidate-1d5cd28504a44e2abf8dab45612567fae143c544
           path: .treeseed/tools/deployment-candidate
       - name: Read checked public CLI composition artifact
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
@@ -57,9 +57,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          jq -e '.repository == "treeseed-ai/deployment" and .commit == "a4e638cb5e861766fedf1b67adfba2e910c6afd1"' .treeseed/tools/deployment-candidate/exact-head.json
+          jq -e '.repository == "treeseed-ai/deployment" and .commit == "1d5cd28504a44e2abf8dab45612567fae143c544"' .treeseed/tools/deployment-candidate/exact-head.json
           test "$(gh api repos/treeseed-ai/cli/actions/runs/38647918411 --jq '[.head_sha,.status,.conclusion]|join(" ")')" == '2b27d26c23905423d90c73abb24c888c452a8745 completed success'
-          echo 'bb493312538753c46a09e8ff768155b8584064dd90c8f3d1e6caae85e3012b35  .treeseed/tools/deployment-candidate/treeseed-deployment-runtime-0.1.0-rc.321.tgz' | sha256sum --check --strict
+          echo '2f71e344f2b72efd44d26d13e10bfbe1517a941648c0ddbb398087606017f7aa  .treeseed/tools/deployment-candidate/treeseed-deployment-runtime-0.1.0-rc.321.tgz' | sha256sum --check --strict
           echo '49b6d24882af45ba39fd46cdcd999c9c54e84bd416f834fa0042ec5425dbea1a  .treeseed/tools/cli-candidate/treeseed-cli-0.13.0-rc.85.tgz' | sha256sum --check --strict
           npm install --no-save --package-lock=false --ignore-scripts --no-audit --no-fund ./.treeseed/tools/deployment-candidate/treeseed-deployment-runtime-0.1.0-rc.321.tgz ./.treeseed/tools/cli-candidate/treeseed-cli-0.13.0-rc.85.tgz
       - uses: treeseed-ai/sdk/.github/actions/install-exact-sdk@8536de5233983765a049392f307244d741470480

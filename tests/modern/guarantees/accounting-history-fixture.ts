@@ -1,5 +1,5 @@
 import { assignmentAttemptSchema, usageSettlementSchema } from '@treeseed/sdk/agent-capacity';
-import { request } from '../../kernel/provider-kernel-fixture.ts';
+import { request } from '../kernel/provider-kernel-fixture.ts';
 export type Row = Record<string, any>;
 /** Controlled public rows, not generated usage, admission or managed evidence. */
 export function accountingHistoryFixture() {
@@ -40,5 +40,5 @@ export function accountingHistoryFixture() {
   assignmentId: item.id, eventIndex: index, eventType: 'capacity.accounting.updated', status: 'recorded', title: 'Capacity accounting updated', message: null,
   parameters: {}, metadata: {}, refs: {}, createdAt: at(index === 2 ? 3 : index), context: { reservation: index === 2 ? terminal : { ...reservation, updatedAt: at(index) },
    usageActual: index ? usage[index - 1] : null, ledgerEntry: index === 2 ? ledger[0] : null, remainingSupply: supply(index === 2) } }));
- return structuredClone({ run, items: [item], usage, ledger, events });
+ return { run: structuredClone(run), items: [structuredClone(item)], usage: structuredClone(usage), ledger: structuredClone(ledger), events: structuredClone(events) };
 }

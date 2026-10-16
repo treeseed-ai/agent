@@ -175,7 +175,7 @@ describe('campaign CLI composition units (mocked transport, not native or live a
 		expect(state.read.mock.calls.filter(call => call[0][1] === 'stop').map(call => call[0][2])).toEqual([workdayId]);
 		state.inspect.mockReset(); state.read.mockReset(); transport(() => observed('running'));
 		const missing = new Error('ACCEPTANCE_LIVE_GRAPH: Original graph inventory missing'); state.graphInspect.mockRejectedValue(missing);
-		await expect(state.run!()).rejects.toBe(missing); expect(state.inspect).not.toHaveBeenCalled();
+		await expect(state.run!().catch((classified:Error & {classification?:string})=>{expect(classified.classification).toBe('IMPLEMENTATION_DEFECT');return classified.cause;})).resolves.toBe(missing); expect(state.inspect).not.toHaveBeenCalled();
 		expect(state.verify).not.toHaveBeenCalled(); expect(state.read.mock.calls.filter(call => call[0][1] === 'evaluate')).toHaveLength(0);
 		expect(state.read.mock.calls.filter(call => call[0][1] === 'stop').map(call => call[0][2])).toEqual([workdayId]);
 	});

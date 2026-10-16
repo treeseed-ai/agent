@@ -299,14 +299,16 @@ export function requireCampaignSimulation(freeze: StartRow, freezePath: string, 
  * Underlying repair and reset still require the original operator assessment. */
 export function classifyObservedCampaignFailure(failure: unknown): unknown {
 	if (!(failure instanceof Error)) return Object.assign(new Error('ACCEPTANCE_FAILURE_CLASSIFICATION: Original campaign observer threw a non-Error value', { cause: failure }), { classification: 'IMPLEMENTATION_DEFECT' as const });
+ const rawMessage=Object.getOwnPropertyDescriptor(failure,'message')?.value;
+ const message=typeof rawMessage==='string'?rawMessage:'ACCEPTANCE_FAILURE_CLASSIFICATION: Original error message is unavailable';
  const declared=Object.getOwnPropertyDescriptor(failure,'classification')?.value;
  if(declared==='IMPLEMENTATION_DEFECT'||declared==='ENVIRONMENT_DEFECT')return failure;
  if(declared==='PLAN_REVIEW_REQUIRED'){
-  try{const original=failure instanceof AggregateError?Object.getOwnPropertyDescriptor(failure,'errors')?.value?.[0]:failure;assert.ok(original instanceof Error,'Original plan-review error required');campaignPlanReviewDetails(original.message);return failure;}
+  try{const errors=Object.getOwnPropertyDescriptor(failure,'errors')?.value,original=failure instanceof AggregateError?Object.getOwnPropertyDescriptor(Object(errors),'0')?.value:failure;assert.ok(original instanceof Error,'Original plan-review error required');campaignPlanReviewDetails(Object.getOwnPropertyDescriptor(original,'message')?.value);return failure;}
   catch{ return Object.assign(new Error('ACCEPTANCE_PLAN_REVIEW_REPORT: Invalid declared plan-review report',{cause:failure}),{classification:'IMPLEMENTATION_DEFECT'}); }
  }
 	let classification: 'ENVIRONMENT_DEFECT' | 'IMPLEMENTATION_DEFECT' | undefined;
-	if (failure.message.startsWith('ACCEPTANCE_CAMPAIGN_MODE:')
+	if (message.startsWith('ACCEPTANCE_CAMPAIGN_MODE:')
 		&& Object.getOwnPropertyDescriptor(failure, 'code')?.value === 'ERR_ASSERTION') classification = 'IMPLEMENTATION_DEFECT';
 	else {
 		let current: unknown = failure; const seen = new Set<Error>();
@@ -319,7 +321,7 @@ export function classifyObservedCampaignFailure(failure: unknown): unknown {
 	}
 	// An unexplained failure in the admitted campaign is an observer/contract defect.
 	// This does not infer a repair, authorize a retry, or replace the retained cause.
-	return Object.assign(new Error(failure.message, { cause: failure }), { classification: classification ?? 'IMPLEMENTATION_DEFECT' });
+	return Object.assign(new Error(message, { cause: failure }), { classification: classification ?? 'IMPLEMENTATION_DEFECT' });
 }
 
 export async function monitorCampaign(input: {
@@ -335,7 +337,7 @@ export async function monitorCampaign(input: {
 }): Promise<void> {
 	let planningVerified = false;
 	const incompleteCollaboration = (failure: unknown) => failure instanceof Error
-		&& /^ACCEPTANCE_(CHAT_ROLES|PLANNING_ROLE_TURNS|PLANNING_CYCLES|ESTIMATE_ROLES):/u.test(failure.message);
+		&& /^ACCEPTANCE_(CHAT_ROLES|PLANNING_ROLE_TURNS|PLANNING_CYCLES|ESTIMATE_ROLES):/u.test(String(Object.getOwnPropertyDescriptor(failure,'message')?.value??''));
 	let observedStatus = input.admittedSimulation ? 'running' : '', observedMode = input.admittedSimulation ? 'simulation' : '';
 	try {
 	await input.admitDiscussion?.();

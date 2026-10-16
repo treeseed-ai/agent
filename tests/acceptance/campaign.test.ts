@@ -5,7 +5,7 @@ import type { GraphRevision } from '@treeseed/sdk/agent-capacity';
 import { existsSync, readFileSync } from 'node:fs';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { monitorCampaign, openSdkCampaignDiscussion, requirePlanningWindow, retainCampaignWorkdayStart, retainCampaignPlanReview, requireCampaignSimulation, requireFreshSdkSegment } from './campaign.ts';
+import { classifyObservedCampaignFailure, monitorCampaign, openSdkCampaignDiscussion, requirePlanningWindow, retainCampaignWorkdayStart, retainCampaignPlanReview, requireCampaignSimulation, requireFreshSdkSegment } from './campaign.ts';
 import { verifyFreezeIntegrity } from './freeze-integrity.ts';
 import { read, row } from './acceptance-cli.ts';
 import { verifyGolden } from './sdk-runtime-golden.test.ts';
@@ -17,6 +17,7 @@ import { observeLiveAssignmentRecords, inspectLiveAssignmentProfile } from './wo
 
 type Row = Record<string, any>;
 test('Frozen SDK campaign drives planning acting review and terminal golden gates', { timeout: 36_000_000 }, async () => {
+ try {
 	const path = process.env.TREESEED_ACCEPTANCE_FREEZE_PATH;
 	assert.ok(path, 'ACCEPTANCE_FREEZE_REQUIRED: Explicit immutable campaign freeze required');
 	const team = process.env.TREESEED_ACCEPTANCE_TEAM ?? 'treeseed';
@@ -117,4 +118,5 @@ test('Frozen SDK campaign drives planning acting review and terminal golden gate
 		},
 		verify: async () => { for (const gate of ['lifecycle', 'graph', 'revision', 'results', 'settlement', 'reporter'] as const) verifyGolden(gate);
 			await verifySdkExternalState(freeze); } });
+ } catch(failure) { throw classifyObservedCampaignFailure(failure); }
 });

@@ -282,7 +282,7 @@ export function requireCampaignSimulation(freeze: StartRow, freezePath: string, 
 	if (mode === 'simulation') return;
 	const observedMode = typeof mode === 'string' ? JSON.stringify(mode) : mode === undefined ? 'missing' : 'malformed ' + typeof mode;
 	const original = new Error('ACCEPTANCE_CAMPAIGN_MODE: Frozen SDK intent must provide simulation authority');
-	let failure: ReturnType<typeof campaignPlanReviewRequired>;
+	let failure: ReturnType<typeof campaignPlanReviewRequired> | undefined;
 	try {
 		const proposal = startRow(freeze.proposal);
 		failure = campaignPlanReviewRequired({ project: 'sdk', proposal: String(proposal.id) + ' ' + String(proposal.digest), workday: 'not-started',
@@ -291,16 +291,18 @@ export function requireCampaignSimulation(freeze: StartRow, freezePath: string, 
 			'why implementation repair is insufficient': 'Frozen operator intent lacks permitted simulation authority; an implementation repair cannot supply or change operator intent.',
 			'smallest proposed plan correction': 'Propose executionMode: simulation for this frozen request; apply only after plan review.' }, original);
 		report(failure.message);
-	} catch (reportFailure) { throw new AggregateError([original, reportFailure], 'ACCEPTANCE_PLAN_REVIEW_REPORT: Original unsafe intent and required report both failed'); }
+	} catch (reportFailure) { throw Object.assign(new AggregateError([failure ?? original, reportFailure], 'ACCEPTANCE_PLAN_REVIEW_REPORT: Original unsafe intent and required report both failed'),{classification:failure?'PLAN_REVIEW_REQUIRED':'IMPLEMENTATION_DEFECT'}); }
 	throw failure;
 }
 
 /** Retain every original admitted-campaign failure and classify the failing boundary.
  * Underlying repair and reset still require the original operator assessment. */
-function classifyObservedCampaignFailure(failure: unknown): unknown {
+export function classifyObservedCampaignFailure(failure: unknown): unknown {
 	if (!(failure instanceof Error)) return Object.assign(new Error('ACCEPTANCE_FAILURE_CLASSIFICATION: Original campaign observer threw a non-Error value', { cause: failure }), { classification: 'IMPLEMENTATION_DEFECT' as const });
- if(Object.getOwnPropertyDescriptor(failure,'classification')?.value==='PLAN_REVIEW_REQUIRED'){
-  try{campaignPlanReviewDetails(failure.message);return failure;}
+ const declared=Object.getOwnPropertyDescriptor(failure,'classification')?.value;
+ if(declared==='IMPLEMENTATION_DEFECT'||declared==='ENVIRONMENT_DEFECT')return failure;
+ if(declared==='PLAN_REVIEW_REQUIRED'){
+  try{const original=failure instanceof AggregateError?Object.getOwnPropertyDescriptor(failure,'errors')?.value?.[0]:failure;assert.ok(original instanceof Error,'Original plan-review error required');campaignPlanReviewDetails(original.message);return failure;}
   catch{ return Object.assign(new Error('ACCEPTANCE_PLAN_REVIEW_REPORT: Invalid declared plan-review report',{cause:failure}),{classification:'IMPLEMENTATION_DEFECT'}); }
  }
 	let classification: 'ENVIRONMENT_DEFECT' | 'IMPLEMENTATION_DEFECT' | undefined;

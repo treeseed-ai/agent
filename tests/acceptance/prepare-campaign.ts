@@ -1,3 +1,4 @@
+import {verifyFrozenCampaignModels} from './workday/support/preflight/campaign-models.ts';
 import assert from 'node:assert/strict';
 import { canonicalStandardsJson } from '@treeseed/sdk/standards';
 import { developmentSessionSchema, developmentCandidateSchema } from '@treeseed/sdk/development';
@@ -162,6 +163,11 @@ export function prepareSdkCampaign(draftPath: string, freezePath: string, team: 
 	assert.equal(providers.length, 1, 'ACCEPTANCE_CAMPAIGN_SUPPLY: Individual host campaign requires unambiguous provider');
 	assert.ok(providerOffers.has(providers[0]!.providerId), 'ACCEPTANCE_CAMPAIGN_OFFERS: Selected provider differs from frozen offer authority');
 	const supply = read(['providers', 'status', providers[0]!.providerId], team);
+	const capturedSupply=row(row(operatorFreeze.manifest.allocationInputsByRun).sdk).providerSupply;
+	assert.ok(Array.isArray(capturedSupply),'ACCEPTANCE_CAMPAIGN_MODELS: Original frozen provider supply required');
+	const captured=capturedSupply.map(row).filter(value=>value.providerId===providers[0]!.providerId);
+	assert.equal(captured.length,1,'ACCEPTANCE_CAMPAIGN_MODELS: Exact original selected provider required');
+	verifyFrozenCampaignModels(captured[0],supply);
 	requireSdkCampaignSupply(supply, durationSeconds, planningPercent, new Date().toISOString());
 	const project = draft.projectId as string;
 	const classes = Object.fromEntries(['architect', 'researcher', 'tester', 'engineer', 'technical-writer', 'releaser', 'reviewer', 'reporter'].map(role => [role, 12.5]));

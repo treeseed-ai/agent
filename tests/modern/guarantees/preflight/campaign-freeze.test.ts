@@ -363,7 +363,7 @@ it('uses the original operator proposal and start and denies changed CLI intent 
 			expect(plan).toEqual(expect.arrayContaining(['--proposal', sdk.input.proposalIds[0], '--start', sdk.input.startsAt]));
 			expect(state.files.get('/sdk.freeze.json.receipts-allocated/operator-campaign.json')).toBe(state.bytes);
 		} else {
-			if(scenario.startsWith('model-'))await expect(prepareSdkCampaign('/draft.json','/sdk.freeze.json','supplied-team')).rejects.toThrow('ACCEPTANCE_CAMPAIGN_MODELS');
+			if(scenario.startsWith('model-'))expect(()=>prepareSdkCampaign('/draft.json','/sdk.freeze.json','supplied-team')).toThrow('ACCEPTANCE_CAMPAIGN_MODELS');
 			else if (scenario === 'intent-drift' || scenario.startsWith('policy-'))
 				expect(() => prepareSdkCampaign('/draft.json', '/sdk.freeze.json', 'supplied-team')).toThrow('ACCEPTANCE_CAMPAIGN_FREEZE');
 			else expect.soft(() => prepareSdkCampaign('/draft.json', '/sdk.freeze.json', 'supplied-team'))

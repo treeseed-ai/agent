@@ -32,6 +32,17 @@ export function verifySdkCampaignModels(input:unknown):ReadonlyMap<string,Record
  } return selected;
 }
 
+const modelView=(models:ReadonlyMap<string,Record<string,unknown>>)=>[...models].map(([id,value])=>({id,modelPolicy:value.modelPolicy,nativeLimits:value.nativeLimits}));
+
+/** Shared comparison for initial inspection and the later preparation boundary. */
+export function verifyFrozenCampaignModels(frozen:unknown,current:unknown){
+ const original=row(frozen),observed=row(current),providerId=row(original.provider).providerId;
+ assert.ok(typeof providerId==='string'&&providerId.length>0&&providerId.trim()===providerId,label+': Original provider owner required');
+ assert.equal(row(observed.provider).providerId,providerId,label+': Foreign live provider');
+ const before=modelView(verifySdkCampaignModels(original)),after=modelView(verifySdkCampaignModels(observed));
+ assert.deepEqual(after,before,label+': Native model or capability configuration changed after freeze');return{before,after};
+}
+
 /** Compare the existing immutable operator providerSupply capture with current
  * public owning status. This creates neither a workday nor another authority. */
 export async function readCampaignProviderModels(input:unknown,readStatus:(providerId:string)=>unknown|Promise<unknown>,readBytes:(path:string)=>Uint8Array=readFileSync){
@@ -39,9 +50,8 @@ export async function readCampaignProviderModels(input:unknown,readStatus:(provi
  const path=original.path,bytes=Buffer.from(original.bytes);assert.deepEqual(Buffer.from(readBytes(path)),bytes,label+': Operator capture changed before model readback');assert.deepEqual(JSON.parse(original.bytes),manifest,label+': Operator object differs from original bytes');
  const supply=row(row(manifest.allocationInputsByRun).sdk).providerSupply;assert.ok(Array.isArray(supply)&&supply.length>0,label+': Original frozen supply inventory required');const frozen=supply.map(row),ids=frozen.map(value=>value.providerId);
  assert.ok(ids.every(id=>typeof id==='string'&&id.trim()===id&&id.length>0)&&new Set(ids).size===ids.length,label+': Unique original provider owners required');
- const held=new Map<string,ReadonlyMap<string,Record<string,unknown>>>();for(const value of frozen){const id=String(value.providerId);assert.equal(row(value.provider).providerId,id,label+': Foreign captured provider');held.set(id,verifySdkCampaignModels(value));}
- const view=(models:ReadonlyMap<string,Record<string,unknown>>)=>[...models].map(([id,value])=>({id,modelPolicy:value.modelPolicy,nativeLimits:value.nativeLimits}));
- const readbacks=new Map<string,{before:ReturnType<typeof view>;after:ReturnType<typeof view>}>();let failed:unknown;
- try{for(const value of frozen){const id=String(value.providerId),observed=row(await readStatus(id));assert.equal(row(observed.provider).providerId,id,label+': Foreign live provider');const current=verifySdkCampaignModels(observed),before=view(held.get(id)!),after=view(current);assert.deepEqual(after,before,label+': Native model or capability configuration changed after freeze');readbacks.set(id,{before,after});}return readbacks;}
+ const held=new Map<string,Record<string,unknown>>();for(const value of frozen){const id=String(value.providerId);assert.equal(row(value.provider).providerId,id,label+': Foreign captured provider');verifySdkCampaignModels(value);held.set(id,structuredClone(value));}
+ const readbacks=new Map<string,{before:ReturnType<typeof modelView>;after:ReturnType<typeof view>}>();let failed:unknown;
+ try{for(const value of frozen){const id=String(value.providerId),observed=row(await readStatus(id));readbacks.set(id,verifyFrozenCampaignModels(held.get(id)!,observed));}return readbacks;}
  catch(error){failed=error;throw error;}finally{try{assert.deepEqual(Buffer.from(readBytes(path)),bytes,label+': Operator capture changed during model readback');}catch(error){if(failed)throw new AggregateError([failed,error],label+': Original readback and capture integrity both failed');throw error;}}
 }

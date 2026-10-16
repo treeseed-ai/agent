@@ -1,3 +1,4 @@
+import{exactEntityReferenceSchema}from'@treeseed/sdk/agent-capacity';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
@@ -34,6 +35,15 @@ function projectContract(document: string, name: string) {
  return { title: field('Title'), request: field('Request'), summary: field('Summary'), items, source };
 }
 
+/** One original whole-proposal reference, shared by preflight and later genuine readiness proof. */
+export function frozenCampaignDraftReference(value:unknown,label:string){
+ const parsed=exactEntityReferenceSchema.safeParse(value);assert.ok(parsed.success,label+': Original canonical draft reference required');assert.deepEqual(parsed.data,value,label+': Frozen draft authority cannot be normalized');const ref=parsed.data;
+ assert.ok(ref.store==='treedx'&&ref.model==='proposal'&&ref.repository&&ref.commit&&ref.path&&ref.revision&&ref.digest,label+': Complete original whole-draft authority required');
+ assert.ok(ref.anchor===undefined&&ref.startLine===undefined&&ref.endLine===undefined,label+': A partial draft cannot freeze the whole proposal');
+ assert.ok(/^proposals\/[^\\\s\0]+\.mdx$/u.test(ref.path)&&!ref.path.split('/').some(part=>!part||part==='.'||part==='..'),label+': Original canonical proposal path required');
+ return ref;
+}
+
 function proposalProvenance(expected: Row, binding: Row, governance: Row): Row {
  const provenance = row(row(governance.metadata).contentProvenance);
  assert.equal(binding.projectId, expected.projectId, fail); assert.equal(governance.id, expected.id, fail);
@@ -43,8 +53,9 @@ function proposalProvenance(expected: Row, binding: Row, governance: Row): Row {
  assert.match(String(provenance.commitSha), /^[a-f0-9]{40}$/u, fail);
  assert.match(String(provenance.digest), /^[a-f0-9]{64}$/u, fail);
  assert.equal(governance.activeContentHash, provenance.digest, fail);
- assert.ok(typeof provenance.contentPath === 'string' && /^proposals\/[^\\\s\0]+\.mdx$/u.test(provenance.contentPath)
-  && !provenance.contentPath.split('/').some((part: string) => !part || part === '.' || part === '..'), fail);
+ const original=frozenCampaignDraftReference(expected.draftRef,fail);
+ assert.equal(original.id,expected.id,fail);assert.equal(original.repository,provenance.repositoryId,fail);assert.equal(original.commit,provenance.commitSha,fail);assert.equal(original.path,provenance.contentPath,fail);
+ assert.equal(original.revision,governance.activeVersion,fail);assert.equal(original.digest,'sha256:'+provenance.digest,fail);
  return provenance;
 }
 

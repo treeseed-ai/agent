@@ -2397,3 +2397,9 @@ workflow:
   - id: node-transition-inspection-bound
     action: { verifier: agent.golden.node-transition-inspection-bound }
     expect: { status: passed }
+  - id: original-draft-estimate-unit
+    action: { verifier: agent.golden.original-draft-estimate-unit }
+    expect: { status: passed }
+  - id: original-campaign-capture-unit
+    action: { verifier: agent.golden.original-campaign-capture-unit }
+    expect: { status: passed }

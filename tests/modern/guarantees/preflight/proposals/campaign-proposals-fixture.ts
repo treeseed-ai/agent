@@ -31,7 +31,7 @@ export function campaignProposal(index: number, source = 'a'.repeat(40), library
 				...(workspace === 'treedx' ? [{ store: 'treedx', model: 'repository', id: `library-${index}`, repository: `treeseed-ai/configured-${index}-library`, commit: library }] : [])] })) } };
 	const content = `---\n${stringify(proposal, { aliasDuplicateObjects: false })}---\nOriginal controlled draft body.\n`;
 	const path = `proposals/governance/${expected.id}.mdx`, digest = createHash('sha256').update(content).digest('hex');
-	return { expected, binding, governance: { id: expected.id, projectId: expected.projectId, title: proposal.title,
+	return { expected: {...expected,draftRef:{store:'treedx',model:'proposal',id:expected.id,repository:binding.repositoryId,commit:governed,path,revision:1,digest:'sha256:'+digest}}, binding, governance: { id: expected.id, projectId: expected.projectId, title: proposal.title,
 		body: proposal.request, summary: proposal.summary, activeVersion: 1, activeContentHash: digest,
 		metadata: { contentProvenance: { repositoryId: binding.repositoryId, commitSha: governed, contentPath: path, digest } } },
 		observed: { ok: true, ref: governed, resolvedRef: governed, repoId: binding.repositoryId,
@@ -44,6 +44,7 @@ export function rewriteProposal(value: ReturnType<typeof campaignProposal>, chan
 	file.frontmatter = proposal;
 	const digest = createHash('sha256').update(file.content).digest('hex');
 	value.governance.activeContentHash = digest; value.governance.metadata.contentProvenance.digest = digest;
+	value.expected.draftRef.digest='sha256:'+digest;
 	for (const [indexField, sourceField] of [['title', 'title'], ['body', 'request'], ['summary', 'summary']])
 		Reflect.set(value.governance, indexField!, proposal[sourceField!]);
 }

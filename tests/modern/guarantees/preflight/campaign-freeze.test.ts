@@ -1,3 +1,4 @@
+import {campaignModels} from './models/campaign-models-fixture.ts';
 import { beforeEach, afterEach, expect, it, vi } from 'vitest';
 import { createHash } from 'node:crypto';
 import { resolve } from 'node:path';
@@ -294,7 +295,8 @@ it('uses the original operator proposal and start and denies changed CLI intent 
 	const supplied = campaignInputs(portfolioRelations(document, seed).projects.map(project => project.slug), seed);
 	const sdk = supplied.allocationInputsByRun.sdk!;
 	const frozenOffers = campaignOffers().inventory.offers;
-	for (const provider of sdk.providerSupply) Reflect.set(provider, 'offers', structuredClone(frozenOffers));
+	const modelStatus=campaignModels();
+	for (const provider of sdk.providerSupply) Object.assign(provider,structuredClone(modelStatus),{offers:structuredClone(frozenOffers)});
 	const bookFrontmatter = { id: canonical.architectureBook.id, title: canonical.architectureBook.title,
 		schemaVersion: 'treeseed.book/v3', projectId: sdk.input.projects[0], revision: 1, status: 'published' };
 	const content = `---\n${stringify(bookFrontmatter)}---\n\nControlled published Book\n`;
@@ -308,7 +310,7 @@ it('uses the original operator proposal and start and denies changed CLI intent 
 	state.files.set('/supplied-platform/seeds/treeseed.yaml', seed); state.files.set('/draft.json', JSON.stringify(template));
 	state.writes.mockImplementation((path: string, bytes: string) => state.files.set(path, bytes));
 	for (const scenario of ['intent-drift', 'policy-drift', 'policy-team', 'policy-owner-missing', 'policy-malformed', 'policy-unknown',
-		'offer-revision', 'offer-provider', 'offer-denied', 'project-drift', 'lookup-team-drift', 'lookup-slug-drift', 'lookup-repository-missing', 'lookup-denied', 'unchanged']) {
+		'offer-revision', 'offer-provider', 'offer-denied', 'project-drift', 'lookup-team-drift', 'lookup-slug-drift', 'lookup-repository-missing', 'lookup-denied', 'model-drift', 'model-cap-drift', 'unchanged']) {
 		state.bytes = JSON.stringify(supplied); state.writes.mockClear(); state.commands.mockClear(); state.execute.mockClear(); state.publicRead.mockClear();
 		state.execute.mockImplementation((command: string, args: string[]) => command.endsWith('/codex') ? 'codex-cli 0.158.0'
 			: args.includes('--refs') ? `${head}\trefs/heads/staging\n`
@@ -344,9 +346,9 @@ it('uses the original operator proposal and start and denies changed CLI intent 
 			if (args[0] === 'providers' && args[1] === 'list') return { items: [{ status: 'approved', providerId: 'supplied-provider' }] };
 			if (args[0] === 'providers') {
 				const now = new Date().toISOString(), measured = { day: now.slice(0, 10), observedAt: now, healthy: true, activeSeconds: 0, reservedSeconds: 0 };
-				return { healthy: true, availability: [{ refreshed_at: now, executionProviders: [{ id: 'supplied', status: 'active',
-					nativeLimits: { dailyActiveSecondsLimit: 28800, capabilityLimits: { 'treeseed.coordination.planning': { dailyActiveSecondsLimit: 7200 } } },
-					accountingObservation: { modelUsage: measured, capabilityUsage: { 'treeseed.coordination.planning': measured } } }] }] };
+				const status=structuredClone(modelStatus);status.availability[0]!.refreshed_at=now;
+				for(const provider of status.availability[0]!.executionProviders)Object.assign(provider,{accountingObservation:{modelUsage:measured,capabilityUsage:{'treeseed.coordination.planning':measured}}});
+				if(scenario==='model-drift')status.availability[0]!.executionProviders[0]!.modelPolicy.model='gpt-6-sol';if(scenario==='model-cap-drift')status.availability[0]!.executionProviders[0]!.nativeLimits.dailyActiveSecondsLimit++;return status;
 			}
 			if (args[0] === 'workdays' && args.includes('--plan')) return { input: { body: { ...sdk.input,
 				...(scenario === 'intent-drift' ? { startsAt: '2026-10-07T10:00:00.000Z' } : {}) } } };
@@ -361,7 +363,8 @@ it('uses the original operator proposal and start and denies changed CLI intent 
 			expect(plan).toEqual(expect.arrayContaining(['--proposal', sdk.input.proposalIds[0], '--start', sdk.input.startsAt]));
 			expect(state.files.get('/sdk.freeze.json.receipts-allocated/operator-campaign.json')).toBe(state.bytes);
 		} else {
-			if (scenario === 'intent-drift' || scenario.startsWith('policy-'))
+			if(scenario.startsWith('model-'))await expect(prepareSdkCampaign('/draft.json','/sdk.freeze.json','supplied-team')).rejects.toThrow('ACCEPTANCE_CAMPAIGN_MODELS');
+			else if (scenario === 'intent-drift' || scenario.startsWith('policy-'))
 				expect(() => prepareSdkCampaign('/draft.json', '/sdk.freeze.json', 'supplied-team')).toThrow('ACCEPTANCE_CAMPAIGN_FREEZE');
 			else expect.soft(() => prepareSdkCampaign('/draft.json', '/sdk.freeze.json', 'supplied-team'))
 				.toThrow(/ACCEPTANCE_(CAMPAIGN_FREEZE|CAMPAIGN_OFFERS|PROJECT_LIBRARY|CLI_COMMAND)/u);

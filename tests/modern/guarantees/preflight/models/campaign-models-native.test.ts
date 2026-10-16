@@ -1,4 +1,4 @@
-import {expect,it} from 'vitest';
+import {expect,it,vi} from 'vitest';
 import {createServer} from 'node:http';
 import {mkdtempSync,mkdirSync,readFileSync,writeFileSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';import {join} from 'node:path';
@@ -6,6 +6,8 @@ import {ControlPlaneClient,defaultLocalControlPlaneServer} from '@treeseed/sdk/c
 import {controlPlaneOperation} from '@treeseed/sdk/operator-contracts';
 import * as freeze from '../../../../acceptance/freeze-integrity.ts';
 import {campaignModels} from './campaign-models-fixture.ts';
+import {campaignInputs} from '../campaign-freeze-fixture.ts';
+import {portfolioRelations} from '../../../../acceptance/workday/support/portfolio-relations.ts';
 
 it('native original SDK status and immutable operator bytes reject changed model caps foreign scope denial and interruption before unchanged concurrent retry',async()=>{
  const root=mkdtempSync(join(tmpdir(),'agent-model-freeze-')),requests:string[]=[],failures:Array<{mode:string;observed:unknown;error:unknown}>=[];
@@ -15,7 +17,11 @@ it('native original SDK status and immutable operator bytes reject changed model
   const value=structuredClone(original);if(mode==='model')value.availability[0]!.executionProviders[0]!.modelPolicy.model='gpt-6-sol';if(mode==='cap')value.availability[0]!.executionProviders[0]!.nativeLimits.dailyActiveSecondsLimit++;
   if(mode==='foreign')value.provider.providerId='foreign';response.end(JSON.stringify({data:value}));
  });
- const capture=(name:string,supply=original)=>{const directory=join(root,name);mkdirSync(directory);const path=join(directory,'operator.json'),manifest={allocationInputsByRun:{sdk:{providerSupply:[{providerId,...structuredClone(supply)}]}}},bytes=JSON.stringify(manifest);writeFileSync(path,bytes,{flag:'wx',mode:0o600});return{path,bytes,manifest};};
+ const platform=process.env.TREESEED_DEVELOPMENT_WORKSPACE_ROOT;if(!platform)throw new Error('Original pinned Platform fixture authority required');
+ const seed=readFileSync(join(platform,'seeds/treeseed.yaml'),'utf8'),relations=portfolioRelations(readFileSync(join(platform,'docs/agent-acceptance.md'),'utf8'),seed);
+ const capture=(name:string,supply=original)=>{const directory=join(root,name);mkdirSync(directory);const path=join(directory,'operator.json'),manifest=campaignInputs(relations.projects.map(value=>value.slug),seed);
+  for(const run of Object.values(manifest.allocationInputsByRun))run.providerSupply=[{...run.providerSupply[0]!,providerId,...structuredClone(supply)}];
+  const bytes=JSON.stringify(manifest);writeFileSync(path,bytes,{flag:'wx',mode:0o600});vi.stubEnv('TREESEED_ACCEPTANCE_CAMPAIGN_PATH',path);vi.stubEnv('TREESEED_ACCEPTANCE_PLATFORM_PATH',platform);const checked=freeze.readPreRunCampaignFreeze();expect(checked.bytes).toBe(bytes);expect(checked.manifest).toEqual(manifest);return checked;};
  try{
   await new Promise<void>((accept,reject)=>{server.once('error',reject);server.listen(0,'127.0.0.1',accept);});const address=server.address();if(!address||typeof address==='string')throw new Error('Original native listener required');
   const client=new ControlPlaneClient({profile:defaultLocalControlPlaneServer({TREESEED_API_BASE_URL:'http://127.0.0.1:'+address.port}),accessToken:'controlled-model-readback-token'}),input={path:{teamId:'native-team',providerId},query:{},body:undefined},heldInput=structuredClone(input);
@@ -36,6 +42,6 @@ it('native original SDK status and immutable operator bytes reject changed model
   expect(requests.every(value=>value==='GET /v1/teams/native-team/capacity-providers/'+providerId+'/status')).toBe(true);
   // Real configured policy producer, public SDK/HTTP and original captured
   // operator bytes. API replies are controlled; no model, quota or Kata claim.
- }finally{server.closeAllConnections();if(server.listening)await new Promise<void>((accept,reject)=>server.close(error=>error?reject(error):accept()));rmSync(root,{recursive:true,force:true});}
+ }finally{vi.unstubAllEnvs();server.closeAllConnections();if(server.listening)await new Promise<void>((accept,reject)=>server.close(error=>error?reject(error):accept()));rmSync(root,{recursive:true,force:true});}
  expect(server.listening).toBe(false);
 },30_000);

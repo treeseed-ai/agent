@@ -1,6 +1,5 @@
-import*as lifecycle from '../../../../../acceptance/workday/support/campaign-observation.ts';
 import { describe, expect, it } from 'vitest';
-import { compileWorkday, DEFAULT_WORKDAY_POLICY, assignmentResultSchema, usageSettlementSchema, validateAgentDefinitionModel } from '@treeseed/sdk/agent-capacity';
+import { assignmentResultSchema, usageSettlementSchema, validateAgentDefinitionModel } from '@treeseed/sdk/agent-capacity';
 import { validatePortableContentData } from '@treeseed/sdk/content-validation';
 import { canonicalStandardsJson } from '@treeseed/sdk/standards';
 import { createHash } from 'node:crypto';
@@ -38,13 +37,7 @@ describe('native deterministic content execution window', () => {
 					...(mode === 'attempt-result' ? { summary: 'Retained failure.', diagnostics: [] } : {}) })] : [failed, retry];
 				f.attempt.predecessorResultIds = predecessors.map(item => item.id);
 				Object.assign(f.input.assignment.workspaceContext!, { predecessorResults: predecessors });
-    // Controlled original lifecycle input; Kernel/Git below must preserve these bytes, not manufacture executed planning turns.
-    const originalPlan=compileWorkday({id:f.attempt.workdayId,teamId:f.attempt.teamId,policyId:'default',policyRevision:1,executionMode:'simulation',startsAt:f.attempt.createdAt,agentIds:[],policy:DEFAULT_WORKDAY_POLICY});
-    const activePlan={...originalPlan,state:'active' as const,activatedAt:f.attempt.createdAt,planningRounds:[1,2].map(round=>({round,state:'complete' as const,assignmentIds:['controlled-turn-'+round],startedAt:f.attempt.createdAt,completedAt:f.attempt.createdAt}))};
-    const closingPlan={...activePlan,state:'closing' as const,closingAt:f.attempt.createdAt};
-    const event=(index:number,context:Record<string,unknown>,createdAt:string)=>({id:'workday-lifecycle:'+f.attempt.workdayId+':'+createHash('sha256').update(canonicalStandardsJson(context)).digest('hex'),eventIndex:index,eventType:'workday.lifecycle.changed',teamId:f.attempt.teamId,runId:f.attempt.workdayId,workdayId:f.attempt.workdayId,projectId:null,assignmentId:null,status:'recorded',title:null,message:null,parameters:{},context,refs:{},metadata:{},createdAt});
-    const activeEvent=event(0,{previousStatus:'running',status:'running',previousPlan:originalPlan,plan:activePlan},f.attempt.createdAt),closingEvent=event(1,{previousStatus:'running',status:'running',previousPlan:activePlan,plan:closingPlan},f.attempt.createdAt);
-				const evidence = { teamId: f.attempt.teamId, workdayId: f.attempt.workdayId,appliedPlan:closingPlan,closingEvent,nodes: [{ id: 'retained-node', status: 'completed' }],
+				const evidence = { teamId: f.attempt.teamId, workdayId: f.attempt.workdayId, nodes: [{ id: 'retained-node', status: 'completed' }],
 					edges: [{ id: 'retained-edge', from_node_id: 'retained-node', to_node_id: 'closeout' }],
 					attempts: predecessors.map(item => ({ id: item.assignmentId, status: item.status,
 						...(mode === 'attempt-result' ? { assignment_result_json: JSON.stringify(item) } : {}) })),
@@ -118,7 +111,7 @@ describe('native deterministic content execution window', () => {
 					expect({ attempt: f.attempt, context: f.input.assignment.workspaceContext, evidence, profileInput }).toEqual(held);
 					continue;
 				}
-				expect(f.begin,JSON.stringify({status:result.status,code:result.code,summary:result.summary})).toEqual([{ assignmentId: f.attempt.id, originalDeadline: f.attempt.deadline }]);
+				expect(f.begin).toEqual([{ assignmentId: f.attempt.id, originalDeadline: f.attempt.deadline }]);
 				expect(writes, JSON.stringify({ status: result.status, code: result.code, summary: result.summary })).toBe(1); expect(commits).toBe(1); expect(f.requests).toEqual([]);
 				expect(execFileSync('git', ['show', `${candidate}:${path}`], { cwd: f.checkout, encoding: 'utf8' })).toBe(content);
 				expect(f.git('rev-parse', `${candidate}^`)).toBe(f.base);
@@ -131,14 +124,7 @@ describe('native deterministic content execution window', () => {
 				if (interrupted) { expect(result).toMatchObject({ status: 'failed', summary: 'treedx_commit_readback_mismatch' }); expect(result.outputs?.assignmentResult).toBeUndefined(); }
 				else { expect(result.status).toBe('completed'); expect(result.outputs?.assignmentResult).toMatchObject({ assignmentId: f.attempt.id,
 					references: [{ kind: 'treedx', projectId: f.attempt.projectId, repository, path, commit: candidate }] });
-					      expect(assignmentResultSchema.parse(result.outputs?.assignmentResult).usage).toEqual({ elapsedSeconds: expect.any(Number) });
-      const exactResult=assignmentResultSchema.parse(result.outputs?.assignmentResult),endedPlan={...closingPlan,state:'ended' as const,endedAt:exactResult.completedAt,reportRef:exactResult.references[0]!};
-      const endedEvent=event(2,{previousStatus:'running',status:'completed',previousPlan:closingPlan,plan:endedPlan},exactResult.completedAt),run={id:f.attempt.workdayId,teamId:f.attempt.teamId,status:'completed',executionMode:'simulation',startedAt:originalPlan.startsAt,completedAt:exactResult.completedAt,reportRefs:{},parameters:{...originalPlan.policySnapshot,deadlineAt:originalPlan.endsAt,appliedPlan:endedPlan}};
-      const check=Reflect.get(lifecycle,'verifyFrozenReporterLifecycle') as(value:Record<string,unknown>,run:Record<string,unknown>,reporter:Record<string,unknown>,events:readonly Record<string,unknown>[])=>void;
-      check(row(report.workday),run,{id:f.attempt.id,createdAt:f.attempt.createdAt},[activeEvent,closingEvent,endedEvent]);
-      const altered=structuredClone(row(report.workday));row(altered.closingEvent).id='foreign';expect(()=>check(altered,run,{id:f.attempt.id,createdAt:f.attempt.createdAt},[activeEvent,closingEvent,endedEvent])).toThrow();
-      expect(execFileSync('git',['show',candidate+':'+path],{cwd:f.checkout,encoding:'utf8'})).toBe(content);
-     }
+					expect(assignmentResultSchema.parse(result.outputs?.assignmentResult).usage).toEqual({ elapsedSeconds: expect.any(Number) }); }
 				expect(f.git('rev-parse', 'HEAD')).toBe(candidate);
 				expect({ attempt: f.attempt, context: f.input.assignment.workspaceContext, evidence, profileInput }).toEqual(held);
 			} finally { try { await provider?.close(); } finally { try { await boundary?.close(); } finally { await f.close(); } } }

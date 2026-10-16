@@ -396,7 +396,7 @@ function workdayLifecycleAuthority(plan:ReturnType<typeof appliedWorkdaySchema.p
 /** Reporter retains the original closing input; the public lifecycle remains the sole mutation authority. */
 export function verifyFrozenReporterLifecycle(snapshot:Row,run:Row,reporter:Row,events:readonly Row[]):void{
  const label='ACCEPTANCE_REPORT_LIFECYCLE';verifyWorkdayLifecycleTransitionHistory(run,events);
- const current=verifyReportWorkdayAuthority(run),plan=verifyAppliedWorkdayCustody({...run,parameters:{...row(run.parameters),appliedPlan:snapshot.appliedPlan}});
+ const current=verifyReportWorkdayAuthority(run),plan=verifyAppliedWorkdayCustody({...run,parameters:{...row(run.parameters),appliedPlan:row(row(snapshot.closingEvent).context).plan}});
  assert.equal(snapshot.teamId,run.teamId,label);assert.equal(snapshot.workdayId,run.id,label);assert.equal(plan.state,'closing',label+': Original frozen closing phase required');
  assert.ok(plan.planningRounds.every(round=>round.state==='complete'),label+': Every admitted planning round must have ended');
  const expected:Row={...workdayLifecycleAuthority(current),state:'closing'};delete expected.endedAt;delete expected.reportRef;
@@ -406,4 +406,3 @@ export function verifyFrozenReporterLifecycle(snapshot:Row,run:Row,reporter:Row,
  assert.deepEqual(workdayLifecycleAuthority(appliedWorkdaySchema.parse(row(closing[0]!.context).plan)),workdayLifecycleAuthority(plan),label+': Frozen plan differs from the original closing event');
  const closed=Date.parse(String(plan.closingAt)),issued=Date.parse(String(reporter.createdAt));assert.ok(Number.isFinite(closed)&&Number.isFinite(issued)&&closed<=issued&&closed>=Date.parse(String(run.startedAt)),label+': Reporter cannot precede its original closing observation');
 }
-

@@ -8,7 +8,7 @@ describe('Reporter reads original public applied-plan authority',()=>{
   const plan=compileWorkday({id:workdayId,teamId:run.teamId,policyId:'default',policyRevision:1,executionMode:'simulation',startsAt:run.startedAt,agentIds:[],
    policy:{...DEFAULT_WORKDAY_POLICY,durationSeconds:run.parameters.durationSeconds,planningPercent:run.parameters.planningPercent,maximumConcurrency:5,communicationConcurrency:5}});
   Object.assign(run.parameters,plan.policySnapshot,{deadlineAt:plan.endsAt});
-  run.parameters.appliedPlan={...plan,state:'ended',activatedAt:run.startedAt,closingAt:'2026-09-27T00:00:09Z',endedAt:run.completedAt,reportRef:report};
+  run.parameters.appliedPlan={...plan,state:'ended',activatedAt:run.startedAt,planningRounds:run.parameters.appliedPlan.planningRounds,closingAt:'2026-09-27T00:00:09Z',endedAt:run.completedAt,reportRef:report};
   run.reportRefs={};delete run.reportRef;delete run.state;delete run.endedAt;
   const held=structuredClone({run,assignments:state.replies.get('assignments list'),note:state.replies.get('library read')});
   expect(()=>gate('reporter')).not.toThrow();

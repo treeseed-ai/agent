@@ -2421,3 +2421,12 @@ workflow:
   - id: accounting-transition-scoped-stop
     action: { verifier: agent.golden.accounting-transition-scoped-stop }
     expect: { status: passed }
+  - id: estimate-planning-predecessor-1
+    action: { verifier: agent.golden.execution-estimate-planning-predecessor-1 }
+    expect: { status: passed }
+  - id: estimate-planning-predecessor-2
+    action: { verifier: agent.golden.execution-estimate-planning-predecessor-2 }
+    expect: { status: passed }
+  - id: estimate-planning-predecessor-3
+    action: { verifier: agent.golden.execution-estimate-planning-predecessor-3 }
+    expect: { status: passed }

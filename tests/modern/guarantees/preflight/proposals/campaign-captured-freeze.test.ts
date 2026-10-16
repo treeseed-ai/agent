@@ -19,5 +19,6 @@ it('reads the original captured operator manifest through existing freeze receip
   altered.set(path,mode==='malformed-root'?Buffer.from('{'):Buffer.from(JSON.stringify(root)));
   const before=[...altered].map(([name,value])=>[name,value.toString('hex')]);expect(()=>read(path,name=>{if(mode==='interrupted')throw new Error('Retained original read interruption');const value=altered.get(name);if(!value)throw new Error('Retained missing original bytes');return value;}),mode).toThrow();expect([...altered].map(([name,value])=>[name,value.toString('hex')])).toEqual(before);
  }
+ let captureReads=0;expect(()=>read(path,name=>name===capture&&++captureReads>1?Buffer.from(JSON.stringify({campaignId:'changed-between-integrity-and-read'})):reader(name))).toThrow();
  expect(()=>read('relative/freeze.json',reader)).toThrow();expect(read(path,reader)).toEqual(manifest);
 });

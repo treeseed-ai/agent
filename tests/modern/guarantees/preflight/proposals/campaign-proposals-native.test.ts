@@ -1,3 +1,4 @@
+import*as freeze from'../../../../acceptance/freeze-integrity.ts';
 import {createHash} from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -88,6 +89,12 @@ it('native Git and public CLI SDK reads validate all seventeen governed proposal
 		git('add', '.'); git('commit', '--quiet', '-m', 'Controlled governed proposal bytes'); governed = git('rev-parse', 'HEAD');
 		for (const [index, project] of projects.entries()) sources.set(project.slug, campaignProposal(index, base, base, governed));
 		const originalTree = git('ls-tree', '-r', governed), held = structuredClone([...sources]);
+  const captured=Reflect.get(freeze,'readCapturedCampaignManifest')as((path:string)=>unknown)|undefined;expect(captured,'Original captured native operator authority is required').toBeTypeOf('function');if(!captured)throw new Error('Original capture reader missing');
+  const captures=join(root,'.git','native-capture');mkdirSync(captures);const capturePath=join(captures,'operator-campaign.json'),freezePath=join(captures,'freeze.json'),livePath=join(captures,'live.json'),manifest={campaignId:'native-held',proposals:[...sources.values()].map(value=>value.expected)},bytes=Buffer.from(JSON.stringify(manifest));
+  const frozen={createdAt:new Date().toISOString(),host:{manifestDigest:'sha256:'+'a'.repeat(64),guestImageDigest:'sha256:'+'b'.repeat(64)},guest:{digest:'sha256:'+'b'.repeat(64)},receipts:{[capturePath]:'sha256:'+createHash('sha256').update(bytes).digest('hex')}};
+  writeFileSync(capturePath,bytes);writeFileSync(freezePath,JSON.stringify(frozen));writeFileSync(livePath,JSON.stringify({campaignId:'substituted-live',proposals:[]}));const previous=process.env.TREESEED_ACCEPTANCE_CAMPAIGN_PATH;process.env.TREESEED_ACCEPTANCE_CAMPAIGN_PATH=livePath;
+  try{expect(captured(freezePath)).toEqual(manifest);writeFileSync(capturePath,Buffer.concat([bytes,Buffer.from(' ')]));expect(()=>captured(freezePath)).toThrow('ACCEPTANCE_FREEZE_RECEIPT_CHANGED');writeFileSync(capturePath,bytes);expect(captured(freezePath)).toEqual(manifest);rmSync(capturePath);expect(()=>captured(freezePath)).toThrow('ACCEPTANCE_FREEZE_RECEIPT_MISSING');writeFileSync(capturePath,bytes);expect(captured(freezePath)).toEqual(manifest);}finally{if(previous===undefined)delete process.env.TREESEED_ACCEPTANCE_CAMPAIGN_PATH;else process.env.TREESEED_ACCEPTANCE_CAMPAIGN_PATH=previous;}
+
   const changed=sources.get(projects[16]!.slug)!;writeFileSync(join(root,projects[16]!.slug,changed.observed.files[0]!.path),changed.observed.files[0]!.content+'Native changed draft body with consistent public provenance.\n');
   git('add','.');git('commit','--quiet','-m','Controlled consistent draft substitution after the operator freeze');rewritten=git('rev-parse','HEAD');
 

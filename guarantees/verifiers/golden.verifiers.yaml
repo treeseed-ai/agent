@@ -4251,3 +4251,13 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/guarantees/lifecycle/failures/failure-classification-native.test.ts
     testName: "native public campaign failures retain exact typed classification raw transport causes and scoped stop through denial interruption and unchanged concurrent retry"
+  agent.golden.execution-reporter-workday-authority-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/closure/reporter-workday-authority.test.ts
+    testName: "accepts the original API Workday shape without requiring a second report or lifecycle authority"
+  agent.golden.execution-reporter-workday-authority-native:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/closure/reporter-workday-native.test.ts
+    testName: "native public SDK readback retains the sole applied-plan report and rejects contradictions interrupted reads and altered authority before unchanged retry"

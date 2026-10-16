@@ -4136,3 +4136,33 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/guarantees/preflight/proposals/campaign-captured-freeze.test.ts
     testName: "reads the original captured operator manifest through existing freeze receipts without live input fallback and rejects missing changed ambiguous malformed or interrupted captures"
+  agent.golden.accounting-transition-inventory-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/monitoring/accounting/accounting-history.test.ts
+    testName: "reconciles each original admission checkpoint and aggregate settlement with complete public inventories exact scoped supply and unchanged historical snapshots"
+  agent.golden.accounting-transition-inventory-denials-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/monitoring/accounting/accounting-history.test.ts
+    testName: "denies omitted duplicate foreign unmatched or changed accounting rows without repairing failed inventories before exact retry"
+  agent.golden.accounting-transition-authority-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/monitoring/accounting/accounting-history.test.ts
+    testName: "denies wrong reservation authority malformed supply missing claims regressed versions changed limits and dishonest terminal accounting without losing original evidence"
+  agent.golden.accounting-transition-concurrent-inspection:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/campaign-cli.test.ts
+    testName: "rereads concurrent accounting changes within the original inspection bound before validating stable public usage ledger and history"
+  agent.golden.accounting-transition-inspection-bound:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/campaign-cli.test.ts
+    testName: "stops continuously mutating accounting inventory without validating a stale snapshot or advancing beyond the original forty-round inspection bound"
+  agent.golden.accounting-transition-scoped-stop:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/campaign-cli.test.ts
+    testName: "stops the exact admitted simulation on incomplete public accounting history before later gates while retaining the failed owning inventory"

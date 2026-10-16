@@ -1,3 +1,4 @@
+import {createHash} from 'node:crypto';
 import { expect, it } from 'vitest';
 import { verifyCampaignProjectProposal } from '../../../../acceptance/workday/support/preflight/campaign-proposals.ts';
 import { row } from '../../../../acceptance/acceptance-cli.ts';
@@ -16,6 +17,12 @@ it('validates every original governed project draft against current document sch
 	for (let index = 0; index < 17; index++) {
 		const value = campaignProposal(index), held = structuredClone(value);
 		inspect(value); inspect(value); expect(value).toEqual(held);
+  const omitted=structuredClone(value);Reflect.deleteProperty(omitted.expected,'draftRef');const omittedBefore=structuredClone(omitted);
+  expect.soft(()=>inspect(omitted),'Missing original operator draft authority').toThrow('ACCEPTANCE_CAMPAIGN_PROPOSALS');expect(omitted).toEqual(omittedBefore);
+  const substituted=structuredClone(value);substituted.observed.files[0]!.content+='A consistently rehashed body cannot replace the original frozen draft.\n';
+  const digest=createHash('sha256').update(substituted.observed.files[0]!.content).digest('hex');substituted.governance.activeContentHash=digest;substituted.governance.metadata.contentProvenance.digest=digest;
+  const retained=structuredClone(substituted);expect.soft(()=>inspect(substituted),'Index agreement is not original draft byte authority').toThrow('ACCEPTANCE_CAMPAIGN_PROPOSALS');expect(substituted).toEqual(retained);
+
 	}
 });
 

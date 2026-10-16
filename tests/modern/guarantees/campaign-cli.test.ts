@@ -60,12 +60,12 @@ beforeEach(() => {
 afterEach(() => vi.useRealTimers());
 describe('campaign CLI composition units (mocked transport, not native or live acceptance)', () => {
  it('stops the exact admitted simulation on incomplete public accounting history before later gates while retaining the failed owning inventory',async()=>{
-  transport(()=>observed('completed'));
+  transport(()=>observed('running'));state.nodeTransitions.mockImplementation(()=>{throw new Error('Later node boundary must not run after accounting denial');});
   const failed=[{id:'retained-unmatched-usage',assignmentId:'omitted-original-attempt',workDayId:workdayId,projectId:'8cbfb810-6da5-4da2-9ae9-cad53101253f'}],held=structuredClone(failed);
   state.evidence.mockImplementation((args:string[])=>args[0]==='capacity'&&args[1]==='usage'?failed:[]);
   state.accountingTransitions.mockImplementation((_run,_assignments,usage)=>{expect(usage).toEqual(held);throw new Error('ACCEPTANCE_ACCOUNTING_TRANSITIONS: Complete original owning history required');});
   await expect(state.run!()).rejects.toThrow('ACCEPTANCE_ACCOUNTING_TRANSITIONS');
-  expect(state.accountingTransitions).toHaveBeenCalledOnce();expect(state.verify).not.toHaveBeenCalled();expect(state.inspect).not.toHaveBeenCalled();
+  expect(state.accountingTransitions).toHaveBeenCalledOnce();expect(state.nodeTransitions).not.toHaveBeenCalled();expect(state.verify).not.toHaveBeenCalled();expect(state.inspect).not.toHaveBeenCalled();
   expect(state.read.mock.calls.filter(call=>call[0][1]==='stop')).toHaveLength(1);expect(failed).toEqual(held);
  });
  it('rereads concurrent graph changes within the original inspection bound before certifying the final node inventory',async()=>{

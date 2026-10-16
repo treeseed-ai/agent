@@ -376,8 +376,16 @@ export function verifyWorkdayLifecycleTransitionHistory(run:Row,events:readonly 
   for(const field of['parameters','metadata','refs'])assert.deepEqual(event[field],{},label+': Original lifecycle envelope required');
   const context=row(event.context);assert.deepEqual(Object.keys(context).sort(),['previousStatus','status','previousPlan','plan'].sort(),label+': Exact original lifecycle context required');
   assert.equal(event.id,'workday-lifecycle:'+run.id+':'+createHash('sha256').update(canonicalStandardsJson(context)).digest('hex'),label+': Changed original transition identity');
-  const before=appliedWorkdaySchema.parse(context.previousPlan),next=appliedWorkdaySchema.parse(context.plan);assert.deepEqual(before,context.previousPlan,label+': Previous plan is not canonical');assert.deepEqual(next,context.plan,label+': Next plan is not canonical');
-  for(const plan of[before,next])for(const field of['id','teamId','executionMode','startsAt','endsAt','policyId','policyRevision','policySnapshot'])assert.deepEqual(Reflect.get(plan,field),Reflect.get(current,field),label+': Original frozen lifecycle authority changed');
+  const before=context.previousPlan===null?null:appliedWorkdaySchema.parse(context.previousPlan),next=appliedWorkdaySchema.parse(context.plan);assert.deepEqual(before,context.previousPlan,label+': Previous plan is not canonical');assert.deepEqual(next,context.plan,label+': Next plan is not canonical');
+  for(const plan of[before,next].filter(value=>value!==null))for(const field of['id','teamId','executionMode','startsAt','endsAt','policyId','policyRevision','policySnapshot'])assert.deepEqual(Reflect.get(plan,field),Reflect.get(current,field),label+': Original frozen lifecycle authority changed');
+  if(before===null){
+   assert.equal(previous,undefined,label+': Repeated initial plan creation');assert.ok(context.previousStatus==='queued'||context.previousStatus==='running',label+': Original initial status required');
+   assert.equal(context.status,'running',label);assert.equal(next.state,'active',label+': Original initial active plan required');assert.equal(next.activatedAt,next.startsAt,label);assert.deepEqual(next.planningRounds,[],label+': Initial plan cannot borrow planning history');
+   for(const field of['closingAt','endedAt','reportRef'])assert.equal(Reflect.get(next,field),undefined,label+': Initial plan cannot borrow later products');
+   const now=clock(event.createdAt);assert.ok(now>=at,label+': Reversed initial observation clock');at=now;previous=next;previousStatus=context.status;
+   if(isDeepStrictEqual(workdayLifecycleAuthority(next),workdayLifecycleAuthority(current))&&context.status===run.status)observedCurrent=true;continue;
+  }
+  assert.ok(previous,label+': Original initial plan creation missing');
   if(isDeepStrictEqual(workdayLifecycleAuthority(before),workdayLifecycleAuthority(current))&&context.previousStatus===run.status||isDeepStrictEqual(workdayLifecycleAuthority(next),workdayLifecycleAuthority(current))&&context.status===run.status)observedCurrent=true;
   if(previous){assert.deepEqual(workdayLifecycleAuthority(before),workdayLifecycleAuthority(previous),label+': Missing original lifecycle transition');assert.equal(context.previousStatus,previousStatus,label+': Missing original status transition');}
   else{assert.equal(before.state,'planned',label+': Initial lifecycle transition missing');assert.equal(before.planningRounds.length,0,label+': Initial planning history missing');assert.ok(context.previousStatus==='queued'||context.previousStatus==='running',label+': Original starting status required');}

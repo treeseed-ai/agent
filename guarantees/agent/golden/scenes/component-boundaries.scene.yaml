@@ -2478,3 +2478,15 @@ workflow:
   - id: reporter-workday-authority-native
     action: { verifier: agent.golden.execution-reporter-workday-authority-native }
     expect: { status: passed }
+  - id: workday-lifecycle-history-unit
+    action: { verifier: agent.golden.execution-workday-lifecycle-history-unit }
+    expect: { status: passed }
+  - id: workday-lifecycle-history-native
+    action: { verifier: agent.golden.execution-workday-lifecycle-history-native }
+    expect: { status: passed }
+  - id: workday-lifecycle-history-cli-stop
+    action: { verifier: agent.golden.execution-workday-lifecycle-history-cli-stop }
+    expect: { status: passed }
+  - id: reporter-frozen-lifecycle
+    action: { verifier: agent.golden.execution-reporter-frozen-lifecycle }
+    expect: { status: passed }

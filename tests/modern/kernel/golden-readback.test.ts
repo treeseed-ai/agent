@@ -82,9 +82,8 @@ describe('golden read-back assertion regressions (fixtures are not live acceptan
 	it('denies recorded model dispatch for the exact renamed reporting assignment across complete immutable workday event pages', () => {
 		const reporter = state.replies.get('assignments list')!.items.find((item: Row) => item.assignmentAttempt.effectiveProfile.activity === 'reporting');
 		reporter.assignmentAttempt.agentClass = 'arbitrary-closeout-identity';
-		const events = { items: [{ id: 'other-model-start', eventIndex: 0, runId: workdayId, teamId: 'team-1',
-			assignmentId: 'actor-0', eventType: 'provider.execution.started', createdAt: '2026-09-27T00:00:01Z',
-			context: { model: 'supplied-model', isolation: 'microvm' } }], page: { limit: 100, hasMore: false, nextCursor: null } };
+		const originalEvents=structuredClone(state.replies.get('workdays events')!.items);
+		const events = {items:[{...originalEvents[0],id:'other-model-start',assignmentId:'actor-0',eventType:'provider.execution.started',context:{model:'supplied-model',isolation:'microvm'}},...originalEvents.slice(1)],page:{limit:100,hasMore:false,nextCursor:null}};
 		state.replies.get('workdays show')!.run.teamId = 'team-1'; state.replies.set('workdays events', events);
 		const before = structuredClone({ reporter, events }); expect(() => gate('reporter')).not.toThrow();
 		const denied: boolean[] = [];

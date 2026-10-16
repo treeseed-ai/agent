@@ -1,3 +1,4 @@
+import {verifyReportWorkdayAuthority} from './workday/support/campaign-observation.ts';
 import {verifyManagedEstimates} from './workday/support/planning/estimate-evidence.ts';
 import assert from 'node:assert/strict';
 import { phaseBoundaryCancelled } from './workday/support/monitoring/live-assignment-records.ts';
@@ -14,7 +15,7 @@ import { verifyAssignmentAuthority, verifyAssignmentWorkspaceInventory, verifyTe
 import { verifyPlanningEvidence, verifyChatCommunicationLanes, verifyChatAddressedContext } from './workday/support/planning-evidence.ts';
 import { readCompleteEvidence } from './workday/support/evidence-pages.ts';
 import { verifyAllocation } from './workday/support/monitoring/assignment-allocation.ts';
-import { verifyReportWorkdayAuthority, verifyReportRecordCustody } from './workday/support/record-custody.ts';
+import { verifyReportRecordCustody } from './workday/support/record-custody.ts';
 const rows = (value: unknown): Row[] => Array.isArray(value) ? value.map(row) : [];
 const text = (value: unknown): string => typeof value === 'string' ? value : '';
 // Each exact test is independently selectable by the existing guarantee runner.

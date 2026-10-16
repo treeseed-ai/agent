@@ -491,6 +491,6 @@ describe('golden read-back assertion regressions (fixtures are not live acceptan
 		state.replies.get('library read')!.result.files[0].body = 'An unrelated report';
 		expect(() => gate('reporter')).toThrow('this exact workday');
 		delete state.replies.get('workdays show')!.run.parameters.appliedPlan.reportRef;
-		expect(() => gate('reporter')).toThrow('one exact report');
+		expect(() => gate('reporter')).toThrow('An ended workday requires its exact TreeDX closeout report.');
 	});
 });

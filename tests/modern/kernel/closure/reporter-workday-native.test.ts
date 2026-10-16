@@ -3,7 +3,7 @@ import {it,expect} from 'vitest';
 import {compileWorkday,DEFAULT_WORKDAY_POLICY} from '@treeseed/sdk/agent-capacity';
 import {ControlPlaneClient,defaultLocalControlPlaneServer} from '@treeseed/sdk/control-plane-client';
 import {controlPlaneOperation} from '@treeseed/sdk/operator-contracts';
-import {verifyReportWorkdayAuthority} from '../../../acceptance/workday/support/record-custody.ts';
+import {verifyReportWorkdayAuthority} from '../../../acceptance/workday/support/campaign-observation.ts';
 
 it('native public SDK readback retains the sole applied-plan report and rejects contradictions interrupted reads and altered authority before unchanged retry',async()=>{
  const startsAt='2026-10-16T00:00:00.000Z',workdayId='workday-native-report-authority',teamId='native-report-team';

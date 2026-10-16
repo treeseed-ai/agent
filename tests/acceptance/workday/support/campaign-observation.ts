@@ -31,6 +31,18 @@ export function verifyAppliedWorkdayCustody(run: Row) {
 	return plan;
 }
 
+/** The public API record retains an empty historical map; only its original applied plan owns report and lifecycle. */
+export function verifyReportWorkdayAuthority(run:Row){
+ const label='ACCEPTANCE_REPORT_AUTHORITY',plan=verifyAppliedWorkdayCustody(run);
+ assert.ok(run.status==='completed'&&run.executionMode==='simulation'&&plan.state==='ended'&&plan.reportRef?.kind==='treedx',label+': Native Reporter must store one exact report reference');
+ for(const field of ['reportRef','state','endedAt'])assert.ok(!Object.hasOwn(run,field),label+': Duplicate top-level lifecycle or report authority');
+ assert.ok(Object.hasOwn(run,'reportRefs')&&run.reportRefs&&typeof run.reportRefs==='object'&&!Array.isArray(run.reportRefs)&&Object.keys(run.reportRefs).length===0,label+': Populated or malformed retired plural report map');
+ assert.ok(typeof plan.closingAt==='string'&&Number.isFinite(Date.parse(plan.closingAt))&&typeof plan.endedAt==='string'
+  &&Number.isFinite(Date.parse(plan.endedAt))&&Date.parse(plan.closingAt)<=Date.parse(plan.endedAt)
+  &&run.completedAt===plan.endedAt,label+': Original closing and terminal clocks must agree');
+ return plan;
+}
+
 // Read later pages only through the existing public events operation. Without
 // a supplied reader an incomplete show still denies; no inferred terminal page.
 export function verifyInitialStartCustody(observed: Row, assignments: Row[], readEvents?: (cursor: string, limit: number) => Row): void {

@@ -3,7 +3,7 @@ import { runProviderAssignment } from '../../../src/provider/operations/runner.t
 import type { AgentExecutionResult, AgentExecutor } from '../../../src/provider/execution/contracts.ts';
 import { CONTROL_PLANE_OPERATIONS } from '@treeseed/sdk/operator-contracts';
 
-import { assignment, client, runtimeBuild, timingAwareness, treeDx, responseReference } from './provider-runner-fixture.ts';
+import { assignment, client, runtimeBuild, timingAwareness, treeDx, responseReference } from './operations/runner-fixture.ts';
 
 	describe('canonical provider assignment runner', () => {
 	it('accounts the original admitted active interval when native observations contain only elapsed time without changing observations or charging native units twice', async () => {

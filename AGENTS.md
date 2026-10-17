@@ -1,5 +1,9 @@
 # Agent runtime workspace guidance
 
+## Agent-assisted development and maintenance
+
+Follow the canonical [Platform coaching policy](https://github.com/treeseed-ai/platform/blob/f5e36d4d7eaa785f681119a4f4d220a50b1ca248/AGENTS.md#agent-assisted-development-and-maintenance). Ordinary coaching may reuse complete suites only on the unchanged exact runtime candidate, with fresh focused checks and operational preflight. The fresh complete-suite requirement below applies to every formal scene or guarantee invocation.
+
 ## CRITICAL: complete automated test coverage
 
 Every behavior, contract, state transition, failure path, and edge case must have automated unit, integration, and scene/guarantee-based acceptance coverage. This is mandatory for all projects, especially the capacity-provider and agent system. A behavior without all three layers is an unresolved delivery gap, not completed work.

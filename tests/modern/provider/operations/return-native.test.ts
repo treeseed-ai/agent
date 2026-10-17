@@ -1,8 +1,8 @@
 import { createServer } from 'node:http';
 import { describe, expect, it } from 'vitest';
 import { ProviderProtocolClient } from '@treeseed/sdk/capacity-provider';
-import { runProviderAssignment } from '../../../src/provider/operations/runner.ts';
-import { assignment, client, runtimeBuild, timingAwareness, treeDx } from './provider-runner-fixture.ts';
+import { runProviderAssignment } from '../../../../src/provider/operations/runner.ts';
+import { assignment, client, runtimeBuild, timingAwareness, treeDx } from './runner-fixture.ts';
 
 // Real owning runner, Kernel, handler and public SDK over native HTTP. The
 // upstream reply is controlled input, not native PostgreSQL/accounting proof.

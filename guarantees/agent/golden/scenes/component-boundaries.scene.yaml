@@ -2567,3 +2567,9 @@ workflow:
   - id: return-measurement-native
     action: { verifier: agent.golden.return-measurement-native }
     expect: { status: passed }
+  - id: recovery-started-unit
+    action: { verifier: agent.golden.recovery-started-unit }
+    expect: { status: passed }
+  - id: recovery-started-native
+    action: { verifier: agent.golden.recovery-started-native }
+    expect: { status: passed }

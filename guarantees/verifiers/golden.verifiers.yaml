@@ -4406,3 +4406,13 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/provider/operations/return-native.test.ts
     testName: "native returned execution transmits the same measured settlement and return without inventing model usage or completing work"
+  agent.golden.recovery-started-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/provider/architecture/unresolved-recovery.test.ts
+    testName: "recognizes only the API issued started lifecycle while retaining every frozen authority field during unresolved recovery"
+  agent.golden.recovery-started-native:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/provider/architecture/recovery-native.test.ts
+    testName: "native recovery releases the terminal API started attempt only after exact lifecycle and frozen authority readback"

@@ -1,3 +1,4 @@
+import {createHash} from 'node:crypto';
 import assert from 'node:assert/strict';
 import { decodeCapacityPageCursor } from '@treeseed/sdk/capacity-pagination';
 import { read, row, type Row } from '../../../acceptance-cli.ts';
@@ -24,4 +25,57 @@ export function availabilityHistory(team: string) {
 		cursor = page.nextCursor; cursors.add(cursor);
 	}
 	assert.fail('ACCEPTANCE_AVAILABILITY_PAGE: Complete inventory exceeds the original forty-page acceptance bound');
+}
+
+
+/** Independently recompute the existing API audit digest from public supply bytes. */
+function providerDigest(value:unknown):string{
+ const canonical=(input:unknown):unknown=>Array.isArray(input)?input.map(canonical):input&&typeof input==='object'?Object.fromEntries(Object.entries(input).filter(([,v])=>v!==undefined).sort(([a],[b])=>a.localeCompare(b)).map(([k,v])=>[k,canonical(v)])):input;
+ return 'sha256:'+createHash('sha256').update(JSON.stringify(canonical(value))).digest('base64url');
+}
+const providerClock=(value:unknown)=>{assert.ok(typeof value==='string'&&Number.isFinite(Date.parse(value))&&new Date(value).toISOString()===value,'ACCEPTANCE_PROVIDER_HISTORY: Exact original lifecycle clock required');return Date.parse(value);};
+
+/** The public session owns supply; its audit records own the observed history. */
+function providerObservation(session:Row):Row{
+ const snapshot=row(session.snapshot);assert.ok(Array.isArray(snapshot.adapters),'ACCEPTANCE_PROVIDER_HISTORY: Complete adapter inventory required');
+ const healthy=(value:unknown)=>{assert.ok(value===undefined||value===null||typeof value==='boolean','ACCEPTANCE_PROVIDER_HISTORY: Original health must remain boolean or unknown');return value??null;};
+ return{providerId:session.providerId,membershipId:session.membershipId,availabilitySessionId:session.id,sequence:session.sequence,status:session.status,
+  openedAt:session.openedAt,refreshedAt:session.refreshedAt,expiresAt:session.expiresAt,closedAt:session.closedAt,
+  pressure:snapshot.pressure,availableFrom:snapshot.availableFrom,availableUntil:snapshot.availableUntil,maxConcurrentWorkers:snapshot.maxConcurrentWorkers,
+  availableWorkers:snapshot.availableWorkers,reservedWorkers:snapshot.reservedWorkers,borrowedWorkers:snapshot.borrowedWorkers,lanes:snapshot.lanes,constraintsDigest:providerDigest(snapshot.constraints),
+  adapters:snapshot.adapters.map(value=>{const adapter=row(value),accounting=adapter.accountingObservation===undefined?{}:row(adapter.accountingObservation),model=accounting.modelUsage===undefined?{}:row(accounting.modelUsage),capabilities=accounting.capabilityUsage===undefined?{}:row(accounting.capabilityUsage),observations=adapter.observations===undefined?{}:row(adapter.observations);assert.ok(Array.isArray(adapter.capabilities),'ACCEPTANCE_PROVIDER_HISTORY: Original capabilities required');
+   return{id:adapter.id,status:adapter.status,runtimeBuild:adapter.runtimeBuild??null,capabilities:adapter.capabilities,laneIds:adapter.laneIds,nativeLimitsDigest:providerDigest(adapter.nativeLimits),modelPolicyDigest:observations.modelPolicy===undefined?null:providerDigest(observations.modelPolicy),offers:Array.isArray(adapter.offers)?adapter.offers.map(v=>({offerId:row(v).offerId,offerDigest:row(v).offerDigest})):[],modelHealthy:healthy(model.healthy),capabilityHealth:Object.fromEntries(adapter.capabilities.map(id=>[String(id),healthy(capabilities[String(id)]===undefined?undefined:row(capabilities[String(id)]).healthy)]))};})};
+}
+
+/** Baseline rows are independently read before admission. Earlier closed sessions
+ * stay visible and unchanged; no historical transition is invented for them. */
+export function verifyProviderTransitionHistory(team:string,providers:readonly string[],baseline:readonly Row[],current:readonly Row[],events:readonly Row[],retained:Map<string,Row>):void{
+ const code='ACCEPTANCE_PROVIDER_HISTORY';assert.ok(team&&providers.length&&providers.every(id=>typeof id==='string'&&id)&&new Set(providers).size===providers.length,code+': Exact frozen providers required');
+ const scoped=(values:readonly Row[])=>{const selected=values.filter(value=>providers.includes(String(value.providerId)));assert.equal(new Set(selected.map(value=>value.id)).size,selected.length,code+': Ambiguous session identity');for(const value of selected)assert.equal(value.teamId,team,code+': Foreign session team');return new Map(selected.map(value=>[String(value.id),value]));};
+ const bases=scoped(baseline),sessions=scoped(current),selected=new Map<string,Row>(),bySession=new Map<string,Array<{event:Row;metadata:Row}>>();
+ for(const[id,base]of bases){const value=sessions.get(id);assert.ok(value,code+': Original baseline session disappeared');if(base.status==='closed'||base.status==='expired')assert.deepEqual(value,base,code+': Historical unrelated session changed');}
+ for(const event of events){if(event.action!=='provider.availability.updated')continue;const id=String(event.resource_id);if(!providers.includes(String(event.capacity_provider_id))&&!bases.has(id)&&!sessions.has(id))continue;
+  const source=sessions.get(id);assert.ok(source,code+': Observed provider session omitted by owning inventory');const base=bases.get(id);if(base?.status==='closed'||base?.status==='expired')continue;
+  assert.equal(event.team_id,team,code+': Foreign audit team');assert.equal(event.capacity_provider_id,source.providerId,code+': Foreign provider');assert.equal(event.membership_id,source.membershipId,code+': Foreign membership');assert.equal(event.actor_type,'system',code);assert.equal(event.actor_id,null,code);assert.equal(event.resource_type,'provider-availability-session',code);
+  const metadata=row(JSON.parse(String(event.metadata_json)));assert.equal(metadata.providerId,source.providerId,code);assert.equal(metadata.membershipId,source.membershipId,code);assert.equal(metadata.availabilitySessionId,id,code);
+  assert.ok(Number.isSafeInteger(metadata.sequence)&&Number(metadata.sequence)>=1,code+': Original monotonic sequence required');assert.ok(['open','draining','closed','expired'].includes(String(metadata.status)),code+': Original eligibility required');
+  assert.equal(event.idempotency_key,metadata.sequence+':'+metadata.status,code);assert.equal(event.id,createHash('sha256').update('provider.availability.updated:'+id+':'+metadata.sequence+':'+metadata.status).digest('base64url'),code+': Changed original observation identity');assert.ok(!selected.has(String(event.id)),code+': Duplicate original observation');
+  const opened=providerClock(metadata.openedAt),refreshed=providerClock(metadata.refreshedAt),expires=providerClock(metadata.expiresAt),observed=providerClock(event.created_at);assert.ok(opened<=refreshed&&expires>refreshed,code+': Invalid original validity window');providerClock(metadata.availableFrom);if(metadata.availableUntil!==null)providerClock(metadata.availableUntil);
+  if(metadata.status==='closed'){assert.equal(event.created_at,metadata.closedAt,code);assert.ok(providerClock(metadata.closedAt)>=refreshed,code);}else{assert.equal(metadata.closedAt,null,code);assert.equal(observed,refreshed,code);}
+  for(const field of['maxConcurrentWorkers','availableWorkers','reservedWorkers','borrowedWorkers'])assert.ok(Number.isSafeInteger(metadata[field])&&Number(metadata[field])>=0,code+': Original measured supply required');
+  assert.ok(Array.isArray(metadata.lanes)&&Array.isArray(metadata.adapters),code+': Complete lane and adapter inventories required');assert.match(String(metadata.constraintsDigest),/^sha256:[A-Za-z0-9_-]{43}$/u,code);
+  const adapters=metadata.adapters.map(row);assert.equal(new Set(adapters.map(value=>value.id)).size,adapters.length,code+': Duplicate adapter identity');for(const adapter of adapters){assert.ok(typeof adapter.id==='string'&&adapter.id&&typeof adapter.status==='string'&&Array.isArray(adapter.capabilities)&&Array.isArray(adapter.laneIds)&&Array.isArray(adapter.offers),code);assert.match(String(adapter.nativeLimitsDigest),/^sha256:[A-Za-z0-9_-]{43}$/u,code);if(adapter.modelPolicyDigest!==null)assert.match(String(adapter.modelPolicyDigest),/^sha256:[A-Za-z0-9_-]{43}$/u,code);assert.ok(adapter.modelHealthy===null||typeof adapter.modelHealthy==='boolean',code);const health=row(adapter.capabilityHealth);assert.deepEqual(Object.keys(health).sort(),[...adapter.capabilities].sort(),code);for(const value of Object.values(health))assert.ok(value===null||typeof value==='boolean',code);}
+  const prior=retained.get(String(event.id));if(prior)assert.deepEqual(event,prior,code+': Original retained observation changed');selected.set(String(event.id),event);const history=bySession.get(id)??[];history.push({event,metadata});bySession.set(id,history);
+ }
+ for(const[id,session]of sessions){const base=bases.get(id);if(base?.status==='closed'||base?.status==='expired')continue;const history=(bySession.get(id)??[]).sort((a,b)=>Number(a.metadata.sequence)-Number(b.metadata.sequence)||providerClock(a.event.created_at)-providerClock(b.event.created_at)||(a.metadata.status==='open'?-1:1));
+  const first=base?Number(base.sequence):1;let sequence=first-1,previous:Row|undefined;
+  for(const item of history){const value=item.metadata;if(Number(value.sequence)<first)continue;
+   if(Number(value.sequence)===sequence)assert.ok(previous?.status==='open'&&['draining','closed','expired'].includes(String(value.status)),code+': Duplicate or reversed eligibility transition');else{assert.equal(value.sequence,sequence+1,code+': Missing provider refresh');assert.equal(value.status,'open',code+': Original open publication required');if(previous)assert.equal(previous.status,'open',code+': Refresh after terminal closure');}
+   if(previous){for(const key of['providerId','membershipId','availabilitySessionId','openedAt'])assert.deepEqual(value[key],previous[key],code+': Original provider authority changed');assert.ok(providerClock(item.event.created_at)>=providerClock(previous.status==='closed'?previous.closedAt:previous.refreshedAt),code+': Reversed original provider time');}
+   if(base&&value.sequence===first&&value.status===base.status)assert.deepEqual(value,providerObservation(base),code+': Baseline differs from its original observation');sequence=Number(value.sequence);previous=value;
+  }
+  assert.ok(previous,code+': Complete original provider history missing');assert.deepEqual(previous,providerObservation(session),code+': Current health eligibility timing or source differs from the complete original history');
+ }
+ for(const[id,event]of retained)assert.deepEqual(selected.get(id),event,code+': Original retained transition disappeared');
+ for(const[id,event]of selected)retained.set(id,structuredClone(event));
 }

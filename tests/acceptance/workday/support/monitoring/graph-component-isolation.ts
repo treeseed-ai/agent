@@ -36,7 +36,9 @@ export function verifyCampaignGraphIsolation(graph:Row,input:CampaignGraphIsolat
   }
   for(const node of after.nodes)if(!oldIds.has(node.id)){
    const ownTurn=node.projectId===input.projectId&&node.workdayId===input.workdayId
-    &&(node.sourceRef.model!=='proposal'||ownProposal(node));
+    &&((node.sourceRef.store==='postgresql'&&node.sourceRef.model==='workday'&&node.sourceRef.id===input.workdayId
+     &&['planning','estimating','reviewing','reporting','condition'].includes(node.kind))
+     ||(node.kind==='communication'&&node.sourceRef.store==='treedx'&&node.sourceRef.model==='discussion'));
    assert.ok(ownProposal(node)||ownTurn,label);allowed.add(node.id);
   }
   const unrelated=(edges:typeof before.edges)=>edges.filter(edge=>!allowed.has(edge.fromNodeId)||!allowed.has(edge.toNodeId));

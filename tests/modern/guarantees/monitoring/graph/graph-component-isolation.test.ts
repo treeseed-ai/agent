@@ -47,7 +47,7 @@ it('permits genuine selected workday births but denies a foreign proposal disgui
  const {f,input}=isolation(),graph=structuredClone(f.graph),own={...structuredClone(graph.nodes[1]!),id:'new-workday-condition',workdayId:input.workdayId};
  own.sourceRef={store:'postgresql',model:'workday',id:input.workdayId};graph.nodes.push(own);
  expect(()=>verifyCampaignGraphIsolation(graph,input)).not.toThrow();
- own.sourceRef={...f.outside.sourceRef};expect(()=>verifyCampaignGraphIsolation(graph,input)).toThrow('ACCEPTANCE_GRAPH_COMPONENT');
+ for(const reference of [f.outside.sourceRef,{store:'postgresql',model:'workday',id:'foreign-workday'},{store:'treedx',model:'book',id:input.workdayId},{store:'treedx',model:'discussion',id:input.workdayId}]as const){own.sourceRef={...reference};expect(()=>verifyCampaignGraphIsolation(graph,input)).toThrow('ACCEPTANCE_GRAPH_COMPONENT');}
  const empty={teamId:f.graph.teamId,revision:0,digest:'',nodes:[],edges:[]};
  const first={...structuredClone(f.graph),nodes:f.graph.nodes.filter(node=>node.id!==f.outside.id)};
  expect(()=>verifyCampaignGraphIsolation(first,{...input,baseline:empty,baselineHistory:[]})).not.toThrow();

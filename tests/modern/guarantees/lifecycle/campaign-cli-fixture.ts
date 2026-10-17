@@ -36,6 +36,7 @@ function event(index = 0) {
 }
 function transport(show: () => unknown) {
 	state.read.mockImplementation((args: string[]) => {
+		if(args[0]==='execution'&&args[1]==='graph'&&args[2]==='show')return {teamId:'team-fixture',revision:0,digest:'',nodes:[],edges:[]};
 		if (args[0] === 'workdays' && args[1] === 'start') return { workdayId };
 		if (args[0] === 'workdays' && args[1] === 'show') return show();
 		if (args[0] === 'proposals' && args[1] === 'show') return { activeVersion: 8 };

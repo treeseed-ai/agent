@@ -38,12 +38,12 @@ describe('campaign CLI composition units (mocked transport, not native or live a
  });
  it('rereads concurrent graph changes within the original inspection bound before certifying the final node inventory',async()=>{
   transport(()=>observed('completed'));const implementation=state.read.getMockImplementation()!;let graphReads=0;
-  state.read.mockImplementation((args:string[],...rest:unknown[])=>args[0]==='execution'&&args[1]==='graph'?{teamId:'team-fixture',revision:++graphReads===1?1:2,nodes:[]}:Reflect.apply(implementation,undefined,[args,...rest]));
+  state.read.mockImplementation((args:string[],...rest:unknown[])=>args[0]==='execution'&&args[1]==='graph'&&state.retain.mock.calls.length>0?{teamId:'team-fixture',revision:++graphReads===1?1:2,nodes:[]}:Reflect.apply(implementation,undefined,[args,...rest]));
   await state.run!();expect(graphReads).toBe(4);expect(state.nodeTransitions).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({id:workdayId}),{teamId:'team-fixture',revision:2,nodes:[]},[]);expect(state.read.mock.calls.filter(call=>call[0][1]==='stop')).toEqual([]);
  });
  it('stops continuously mutating public graph inventory without advancing beyond the original forty-round inspection bound',async()=>{
   transport(()=>observed('running'));const implementation=state.read.getMockImplementation()!;let graphReads=0;
-  state.read.mockImplementation((args:string[],...rest:unknown[])=>args[0]==='execution'&&args[1]==='graph'?{teamId:'team-fixture',revision:++graphReads,nodes:[]}:Reflect.apply(implementation,undefined,[args,...rest]));
+  state.read.mockImplementation((args:string[],...rest:unknown[])=>args[0]==='execution'&&args[1]==='graph'&&state.retain.mock.calls.length>0?{teamId:'team-fixture',revision:++graphReads,nodes:[]}:Reflect.apply(implementation,undefined,[args,...rest]));
   await expect(state.run!()).rejects.toThrow('ACCEPTANCE_LIVE_ASSIGNMENT: Complete concurrent transition inventory not reached');expect(graphReads).toBe(80);expect(state.nodeTransitions).not.toHaveBeenCalled();expect(state.verify).not.toHaveBeenCalled();expect(state.read.mock.calls.filter(call=>call[0][1]==='stop')).toHaveLength(1);
  });
 

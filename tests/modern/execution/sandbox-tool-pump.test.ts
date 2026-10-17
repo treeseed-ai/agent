@@ -12,6 +12,22 @@ function waitForAbort(_sandbox: string, _token: string, signal?: AbortSignal): P
 }
 
 describe('sandbox tool pump lifecycle', () => {
+	it('observes original broker lifecycle before tool polling and drains an interrupted observation without any late work or fabricated failure', async () => {
+		const client={nextToolRequest:vi.fn(waitForAbort),completeToolRequest:vi.fn()},cancel=vi.fn(),input=request(),held=structuredClone(input.assignment);let observed:AbortSignal|undefined;
+		const observe=vi.fn(async(signal:AbortSignal)=>{observed=signal;await waitForAbort(prepared.sandboxId,prepared.operationToken,signal);});
+		const stop=startSandboxToolPump(client,prepared,input,time,cancel,observe);
+		try{expect(observe).toHaveBeenCalledOnce();expect(observed?.aborted).toBe(false);expect(client.nextToolRequest).not.toHaveBeenCalled();}
+		finally{expect(await stop()).toBeUndefined();}
+		expect(observed?.aborted).toBe(true);expect(client.nextToolRequest).not.toHaveBeenCalled();expect(cancel).not.toHaveBeenCalled();expect(input.assignment).toEqual(held);
+	});
+	it('cancels the exact original execution once on a missing broker lifecycle snapshot before tool work and retains the original observer failure',async()=>{
+		const failure=new Error('Original native broker snapshot missing'),client={nextToolRequest:vi.fn(waitForAbort),completeToolRequest:vi.fn()},cancel=vi.fn(),input=request(),held=structuredClone(input.assignment),observe=vi.fn(async()=>{throw failure;});
+		const stop=startSandboxToolPump(client,prepared,input,time,cancel,observe);let closed:unknown;
+		try{await new Promise<void>(accept=>setImmediate(accept));expect(cancel).toHaveBeenCalledOnce();expect(client.nextToolRequest).not.toHaveBeenCalled();}
+		finally{closed=await stop();}
+		expect(closed).toBe(failure);expect(await stop()).toBe(failure);expect(observe).toHaveBeenCalledOnce();expect(client.completeToolRequest).not.toHaveBeenCalled();expect(input.assignment).toEqual(held);
+	});
+
 	it('stopped tool polling cannot execute or deliver a late granted reply after its owning closeout', async () => {
 		const input: Parameters<typeof startSandboxToolPump>[2] = request(), original = structuredClone(input.assignment), invoke = vi.fn(async () => ({}));
 		input.treeDx = { ...input.treeDx, repositoryId: 'sdk-library', baseRef: 'a'.repeat(40), invoke };

@@ -31,6 +31,8 @@ it('native provider signs the canonical source attempt unchanged through Unix br
 				createPublicKey({ key: { ...identity.publicJwk }, format: 'jwk' }), Buffer.from(signature.value, 'base64url')) });
 			expect(result.status).toBe('completed'); expect(f.input.assignment).toEqual(held);
 			expect(f.events.filter(event=>event.type==='sandbox.destroyed').map(event=>event.payload)).toEqual([{sandboxId:'owned-native-sandbox',teardown:{verified:true,completedAt:f.destroyedAt()},vmId:'sandbox-warm-11111111-1111-4111-8111-111111111111'}]);
+			const snapshots=f.events.filter(event=>event.type==='sandbox.observed');expect(snapshots.map(event=>event.payload.brokerSequence)).toEqual([0,1,2,3]);expect(snapshots.slice(0,2).map(event=>event.payload.brokerEventType)).toEqual(['sandbox.created','sandbox.ready']);for(const event of snapshots.slice(0,2))expect(f.events.indexOf(event)).toBeLessThan(f.events.findIndex(value=>value.type==='execution.started'));
+			expect(f.paths.indexOf('GET /v1/sandboxes/owned-native-sandbox')).toBeLessThan(f.paths.indexOf('POST /v1/sandboxes/owned-native-sandbox/execute'));
 			expect(f.paths.filter(path => path === 'POST /v1/sandboxes')).toHaveLength(1);
 			expect(f.paths.filter(path => path.endsWith('/execute'))).toHaveLength(1);
 			expect(f.paths.filter(path => path.startsWith('DELETE '))).toEqual(['DELETE /v1/sandboxes/owned-native-sandbox']);

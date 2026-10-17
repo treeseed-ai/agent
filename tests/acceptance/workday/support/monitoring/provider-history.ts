@@ -90,7 +90,7 @@ export function readProviderTransitionHistory(team:string,providers:readonly str
  const selected=(values:Row[])=>values.filter(value=>providers.includes(String(value.providerId)));
  for(let round=0;round<40;round++){
   assert.ok(Number.isFinite(deadline)&&Date.now()<=deadline,'ACCEPTANCE_PROVIDER_HISTORY: Original inspection deadline elapsed');
-  const before=availabilityHistory(team,reader),events=collectCompleteEvidence(cursor=>reader(['capacity','audit','--limit','100',...(cursor?['--cursor',cursor]:[])],team),100,'ACCEPTANCE_PROVIDER_AUDIT','descending','created_at'),after=availabilityHistory(team,reader);
+  const before=availabilityHistory(team,reader),events=collectCompleteEvidence(cursor=>{const observed=reader(['capacity','audit','--limit','100',...(cursor?['--cursor',cursor]:[])],team);assert.ok(!cursor||(Array.isArray(observed.items)&&observed.items.length>0),'ACCEPTANCE_PROVIDER_AUDIT_PAGE: A promised continuation cannot omit its original tail');return observed;},100,'ACCEPTANCE_PROVIDER_AUDIT','descending','created_at'),after=availabilityHistory(team,reader);
   if(isDeepStrictEqual(selected(before),selected(after)))return{sessions:before,events};
  }
  assert.fail('ACCEPTANCE_PROVIDER_HISTORY: Complete concurrent provider inventory not reached within the original forty-round bound');

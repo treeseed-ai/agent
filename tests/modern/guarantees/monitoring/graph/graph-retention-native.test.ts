@@ -15,7 +15,7 @@ it('native original SDK graph inventory detects a lost unrelated component befor
  const observedGraph=()=>{const graph=structuredClone(f.graph),history=structuredClone(f.history);
   if(mode==='operational-progress'||mode==='unrelated-edge'||mode==='unrelated-revision'){
    graph.revision=2;const record=structuredClone(history[0]!);record.revision=2;record.createdAt='2026-10-16T20:00:01.000Z';record.changes={added:[],changed:[],completed:[],blocked:[],stale:[],addedEdges:[],removedEdges:[]};
-   if(mode==='operational-progress'){const node=graph.nodes.find(node=>node.id===f.outside.id)!;node.status='blocked';node.nodeRevision++;node.graphRevisionUpdated=2;record.changedSourceRefs=[node.sourceRef];record.changes.changed=[node.id];record.changes.blocked=[node.id];}
+   if(mode==='operational-progress'){const node=graph.nodes.find(node=>node.id===f.outside.id)!;node.status='blocked';node.graphRevisionUpdated=2;record.changedSourceRefs=[node.sourceRef];record.changes.changed=[node.id];record.changes.blocked=[node.id];}
    else if(mode==='unrelated-revision'){const node=graph.nodes.find(node=>node.id===f.outside.id)!;node.nodeRevision++;node.graphRevisionUpdated=2;record.changedSourceRefs=[node.sourceRef];record.changes.changed=[node.id];}
    else{const edge={...graph.edges[0]!,id:'new-unrelated-cross-component-edge',fromNodeId:f.outside.id,graphRevisionCreated:2};graph.edges.push(edge);record.changes.addedEdges=[edge.id];}
    history.push(record);

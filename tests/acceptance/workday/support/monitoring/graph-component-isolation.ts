@@ -29,10 +29,10 @@ export function verifyCampaignGraphIsolation(graph:Row,input:CampaignGraphIsolat
   const allowed=new Set(before.nodes.filter(ownProposal).map(node=>node.id));
   let size=-1;while(size!==allowed.size){size=allowed.size;for(const edge of before.edges)if(allowed.has(edge.fromNodeId)||allowed.has(edge.toNodeId)){allowed.add(edge.fromNodeId);allowed.add(edge.toNodeId);}}
   const oldIds=new Set(before.nodes.map(node=>node.id)),current=new Map(after.nodes.map(node=>[node.id,node]));
-  const content=(node:typeof before.nodes[number])=>{const {status:_status,nodeRevision:_revision,graphRevisionUpdated:_updated,...authority}=node;return authority;};
+  const content=(node:typeof before.nodes[number])=>{const {status:_status,graphRevisionUpdated:_updated,...authority}=node;return authority;};
   for(const prior of before.nodes)if(!allowed.has(prior.id)){
    const actual=current.get(prior.id);assert.ok(actual,label);assert.deepEqual(content(actual),content(prior),label);
-   assert.ok(actual.nodeRevision>=prior.nodeRevision&&actual.graphRevisionUpdated>=prior.graphRevisionUpdated,label);
+   assert.ok(actual.graphRevisionUpdated>=prior.graphRevisionUpdated,label);
   }
   for(const node of after.nodes)if(!oldIds.has(node.id)){
    const ownTurn=node.projectId===input.projectId&&node.workdayId===input.workdayId

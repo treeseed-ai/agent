@@ -1,3 +1,5 @@
+import {assignmentAttemptSchema} from '@treeseed/sdk/agent-capacity';
+import {sandboxEventSchema} from '@treeseed/sdk/capacity-provider';
 import {isDeepStrictEqual} from 'node:util';
 import {collectCompleteEvidence} from '../evidence-pages.ts';
 import {createHash} from 'node:crypto';
@@ -92,4 +94,37 @@ export function readProviderTransitionHistory(team:string,providers:readonly str
   if(isDeepStrictEqual(selected(before),selected(after)))return{sessions:before,events};
  }
  assert.fail('ACCEPTANCE_PROVIDER_HISTORY: Complete concurrent provider inventory not reached within the original forty-round bound');
+}
+
+/** Replay the owning broker's original sequence, retained through existing
+ * encrypted diagnostics. Public lifecycle and result rows must independently agree. */
+export function verifySandboxTransitionHistory(run:Row,items:readonly Row[],events:readonly Row[]):void{
+ const label='ACCEPTANCE_SANDBOX_HISTORY',owners=new Map<string,Row>();
+ for(const item of items){const attempt=assignmentAttemptSchema.parse(item.assignmentAttempt);assert.deepEqual(attempt,item.assignmentAttempt,label);assert.equal(attempt.id,item.id,label);assert.equal(attempt.workdayId,run.id,label);assert.equal(attempt.teamId,run.teamId,label);assert.ok(!owners.has(attempt.id),label);owners.set(attempt.id,item);}
+ for(const event of events.filter(value=>String(value.eventType).startsWith('provider.sandbox.'))){const owner=owners.get(String(event.assignmentId));assert.ok(owner,label+': Sandbox observation lacks independent owning assignment');const attempt=assignmentAttemptSchema.parse(owner.assignmentAttempt);assert.equal(event.runId,run.id,label);assert.equal(event.workdayId,run.id,label);assert.equal(event.teamId,run.teamId,label);assert.equal(event.projectId,attempt.projectId,label);assert.ok(!Object.hasOwn(row(event.context),'sandboxEvents'),label+': Original broker diagnostics must remain protected');}
+ for(const[id,item]of owners){
+  const attempt=assignmentAttemptSchema.parse(item.assignmentAttempt),output=item.lifecycleOutput===undefined?{}:row(item.lifecycleOutput),owned=events.filter(value=>value.assignmentId===id),created=owned.filter(value=>value.eventType==='provider.sandbox.created'),closed=owned.filter(value=>value.eventType==='provider.sandbox.destroyed');
+  const model=owned.some(value=>String(value.eventType).startsWith('provider.execution.')&&(Object.hasOwn(row(value.context),'model')||row(value.context).isolation==='microvm'));
+  if(!created.length&&!closed.length&&!Object.hasOwn(output,'sandboxId')&&!(item.status==='completed'&&model))continue;
+  assert.equal(created.length,1,label+': Exact public sandbox creation required');assert.ok(closed.length<=1,label+': Duplicate sandbox destruction');
+  const born=created[0]!,context=row(born.context),sandboxId=context.sandboxId;assert.ok(typeof sandboxId==='string'&&sandboxId,label);assert.equal(born.status,'recorded',label);const bornAt=providerClock(born.createdAt);assert.ok(bornAt>=providerClock(attempt.createdAt),label);
+  if(Object.hasOwn(output,'sandboxId'))assert.equal(output.sandboxId,sandboxId,label+': Owning result changed sandbox identity');
+  if(!closed.length){assert.ok(!['completed','failed','cancelled','returned','expired'].includes(String(item.status)),label+': Terminal assignment lacks original broker destruction');continue;}
+  const end=closed[0]!,safe=row(end.context),teardown=row(safe.teardown);assert.equal(end.status,'recorded',label);assert.equal(safe.sandboxId,sandboxId,label);assert.ok(Number(born.eventIndex)<Number(end.eventIndex)&&providerClock(end.createdAt)>=bornAt,label);assert.equal(teardown.verified,true,label+': Original physical teardown is unverified');
+  const teardownAt=providerClock(teardown.completedAt);assert.ok(teardownAt>=bornAt&&teardownAt<=providerClock(end.createdAt)&&teardownAt<=providerClock(attempt.deadline),label+': Teardown exceeded its original clock authority');
+  if(Object.hasOwn(output,'teardown'))assert.deepEqual(safe.teardown,output.teardown,label+': Public and owning result teardown disagree');
+  const raw=row(end.protectedPayload).sandboxEvents;assert.ok(Array.isArray(raw)&&raw.length>=5,label+': Complete original protected broker history required');
+  const history=raw.map(value=>{const parsed=sandboxEventSchema.parse(value);assert.deepEqual(parsed,value,label+': Original native record cannot be repaired on read');return parsed;});
+  let previous=providerClock(attempt.createdAt);const tools=new Set<string>(),seenTools=new Set<string>();
+  for(const[index,event]of history.entries()){
+   assert.equal(event.sequence,index,label+': Original broker sequence has a gap duplicate or reordered event');assert.equal(event.assignmentId,id,label);assert.equal(event.sandboxId,sandboxId,label);const at=providerClock(event.occurredAt);assert.ok(at>=previous&&at<=teardownAt,label+': Original broker lifecycle clock changed');previous=at;
+   if(event.type==='tool.requested'){const request=event.payload.requestId;assert.ok(typeof request==='string'&&request&&!seenTools.has(request),label+': Original tool request identity required');seenTools.add(request);tools.add(request);}
+   if(event.type==='tool.completed'){assert.ok(typeof event.payload.requestId==='string'&&tools.delete(event.payload.requestId),label+': Tool completion lacks its original request');assert.equal(typeof event.payload.ok,'boolean',label);}
+  }
+  assert.equal(history[0]!.type,'sandbox.created',label);assert.equal(history[1]!.type,'sandbox.ready',label);assert.ok(providerClock(history[0]!.occurredAt)<=bornAt,label+': Public creation predates owning broker');
+  const starts=history.filter(value=>value.type==='execution.started'),complete=history.filter(value=>value.type==='execution.completed'),failed=history.filter(value=>value.type==='execution.failed'),vms=history.filter(value=>value.type==='execution.progress'&&value.payload.stage==='vm.assigned'),destroyed=history.filter(value=>value.type==='sandbox.destroyed');
+  assert.equal(starts.length,1,label);assert.equal(complete.length,1,label+': Normal SDK execution lacks original completion');assert.equal(failed.length,0,label+': Failed native execution cannot advance a normal SDK campaign');assert.equal(vms.length,1,label);assert.equal(destroyed.length,1,label);assert.equal(history.at(-1),destroyed[0],label);assert.equal(destroyed[0]!.payload.verified,true,label);assert.equal(tools.size,0,label+': Original tool history is incomplete');
+  assert.ok(starts[0]!.sequence<vms[0]!.sequence&&vms[0]!.sequence<complete[0]!.sequence&&complete[0]!.sequence<destroyed[0]!.sequence,label+': Original execution and VM lifecycle order changed');
+  const vm=vms[0]!.payload.vmId;assert.ok(typeof vm==='string'&&/^sandbox-warm-[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/u.test(vm),label);assert.equal(destroyed[0]!.payload.vmId,vm,label);assert.equal(safe.vmId,vm,label+': Acquired and publicly destroyed VM identities disagree');
+ }
 }

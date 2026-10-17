@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict';
+import {verifyCampaignGraphIsolation,type CampaignGraphIsolation} from './graph-component-isolation.ts';
 import { completeGraphHistory, verifyGraphRetention } from '../evidence-pages.ts';
 import type { GraphRevision } from '@treeseed/sdk/agent-capacity';
 type Row = Record<string, unknown>;
 
 /** Retain every original revision in the existing campaign output; no event or graph authority is created. */
 export async function observeLiveGraphRevisions(teamId: string, current: () => Row | Promise<Row>,
-  watch: (cursor: string) => Row | Promise<Row>, retained: Map<number, GraphRevision>, snapshot: (revision: GraphRevision, graph: Row) => void) {
+  watch: (cursor: string) => Row | Promise<Row>, retained: Map<number, GraphRevision>, snapshot: (revision: GraphRevision, graph: Row) => void, isolation?: CampaignGraphIsolation) {
   const label = 'ACCEPTANCE_LIVE_GRAPH', deadline = Date.now() + 120_000;
   const pages = new Map<string, Row>(); let cursor = '0', graph = structuredClone(await current());
   const checkHead = (value: Row) => {
@@ -27,6 +28,7 @@ export async function observeLiveGraphRevisions(teamId: string, current: () => R
         const page = pages.get(key); assert.ok(page, label + ': Original page missing'); return page;
       });
       verifyGraphRetention(graph, records);
+      if(isolation)verifyCampaignGraphIsolation(graph,isolation);
       for (const [revision, original] of retained) {
         assert.ok(Number.isSafeInteger(revision) && revision > 0 && original?.revision === revision && original.teamId === teamId, label);
         assert.deepEqual(records[revision - 1], original, label + ': Original revision changed or disappeared');

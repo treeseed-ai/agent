@@ -38,6 +38,13 @@ function destroyedVmId(receipt:Record<string,unknown>,sandboxId:string,assignmen
 }
 
 type V5Adapter = CapacityProviderManifestV5['adapters'][number];
+/** One configured policy supplies both public observation and signed dispatch.
+ * A detached capability list prevents a reader from changing future authority. */
+export function sandboxModelPolicy(adapter:V5Adapter,manifest:CapacityProviderManifestV5,capabilities:readonly string[]):SandboxAssignment['modelPolicy']{
+ const reasoningEffort=adapter.model?.reasoningEffort;return {provider:'openai',model:adapter.model?.model??'gpt-5.6-terra',...(reasoningEffort?{reasoningEffort}:{}),capabilities:[...capabilities],
+  ...(manifest.capacity.maxInputTokens?{maxInputTokens:manifest.capacity.maxInputTokens}:{}),...(manifest.capacity.maxOutputTokens?{maxOutputTokens:manifest.capacity.maxOutputTokens}:{}),...(manifest.capacity.maxCost?{maxCost:manifest.capacity.maxCost}:{})};
+}
+
 const TOOL_PERMISSION:Record<string,string>={treedx_build_context:'source.read',treedx_read_files:'source.read',treedx_search_files:'source.read',treedx_list_paths:'source.read'};
 function object(value:unknown):Record<string,unknown>{return value&&typeof value==='object'&&!Array.isArray(value)?value as Record<string,unknown>:{};}
 /** Translate harness-native counters once at the sandbox transport boundary. */
@@ -177,7 +184,7 @@ export async function createMicrovmExecutor(config: ProviderHostRuntimeConfig, m
 			try {
 				const status = await client.status();
 				const checks = status.checks && typeof status.checks === 'object' ? Object.entries(status.checks).filter(([, ready]) => ready !== true).map(([name]) => name) : [];
-				return { available: status.ready === true, capabilities, reason: status.ready === true ? undefined : `${String(status.reason ?? 'sandbox_broker_unavailable')}${checks.length ? `: ${checks.join(',')}` : ''}` };
+				return { available: status.ready === true, capabilities, modelPolicy:sandboxModelPolicy(adapter,manifest,capabilities), reason: status.ready === true ? undefined : `${String(status.reason ?? 'sandbox_broker_unavailable')}${checks.length ? `: ${checks.join(',')}` : ''}` };
 			}
 			catch (error) { return { available: false, capabilities, reason: error instanceof Error ? error.message : String(error) }; }
 		},
@@ -185,7 +192,6 @@ export async function createMicrovmExecutor(config: ProviderHostRuntimeConfig, m
 			const attempt = assignmentAttemptSchema.safeParse(request.assignment.assignmentAttempt ?? object(request.assignment.workspaceContext).assignmentAttempt);
 			if (!attempt.success) throw attempt.error;
 			const metadata = request.assignment.metadata && typeof request.assignment.metadata === 'object' ? request.assignment.metadata as Record<string, unknown> : {};
-			const reasoningEffort = adapter.model?.reasoningEffort;
 			const offerId = assignmentOfferId(request.assignment);
 			const v5Binding = adapter.offers.find(({ offer }) => offer.offerId === offerId) ?? null;
 			const profileId = v5Binding?.sandboxProfileId;
@@ -204,7 +210,7 @@ export async function createMicrovmExecutor(config: ProviderHostRuntimeConfig, m
 					{ id: 'result', path: '/run/treeseed-output/result.json', mediaType: 'application/json', maxBytes: profile.resources.outputBytes },
 				],
 				network: { defaultDeny: true as const, relayUrl: 'https://10.89.0.1:7443', allowedServices: assignmentAllowedServices(request.assignment.executionKind, Boolean(request.treeDx.handleId)), ...(profile.id === 'connected' && typeof metadata.developmentSessionId === 'string' ? { connectedDevelopmentSessionId: metadata.developmentSessionId } : {}) },
-					modelPolicy: { provider: 'openai', model: adapter.model?.model ?? 'gpt-5.6-terra', ...(reasoningEffort ? { reasoningEffort } : {}), capabilities: advertisedCapabilities, ...(manifest.capacity.maxInputTokens ? { maxInputTokens: manifest.capacity.maxInputTokens } : {}), ...(manifest.capacity.maxOutputTokens ? { maxOutputTokens: manifest.capacity.maxOutputTokens } : {}), ...(manifest.capacity.maxCost ? { maxCost: manifest.capacity.maxCost } : {}) },
+					modelPolicy: sandboxModelPolicy(adapter,manifest,advertisedCapabilities),
 				credentialHandles: (adapter.credentialProfiles ?? []).map((id) => ({ id, profileId: id, revealAllowed: false as const })), treeDxHandleIds: [request.treeDx.handleId],
 				leaseExpiresAt: String(request.assignment.leaseExpiresAt ?? new Date(Date.now() + 300_000).toISOString()) };
 				const value = sign(null, Buffer.from(canonical(unsigned)), signingKey).toString('base64url');

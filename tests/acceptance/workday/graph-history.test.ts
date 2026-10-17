@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { completeGraphHistory } from './support/evidence-pages.ts';
+import { completeGraphHistory, verifyGraphRetention } from './support/evidence-pages.ts';
 import { acceptanceWorkdayId, read, row, type Row } from '../acceptance-cli.ts';
 
 test('Complete graph watch retains every canonical revision through explicit terminal read and stable independent current graph', { timeout: 120_000 }, () => {
@@ -12,5 +12,6 @@ test('Complete graph watch retains every canonical revision through explicit ter
 	const before = read(['execution', 'graph', 'show'], team);
 	const page = (cursor: string) => read(['execution', 'graph', 'watch', '--cursor', cursor], team);
 	const first = completeGraphHistory(before, page), second = completeGraphHistory(before, page);
+	verifyGraphRetention(before, first); verifyGraphRetention(before, second);
 	assert.deepEqual(second, first); assert.deepEqual(read(['execution', 'graph', 'show'], team), before);
 });

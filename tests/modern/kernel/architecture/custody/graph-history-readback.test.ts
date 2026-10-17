@@ -14,7 +14,7 @@ function input() {
 		changes: { added: [], changed: [], completed: [], blocked: [], stale: [], removedEdges: [], addedEdges: [] },
 		createdAt: new Date(Date.parse(attempt.createdAt) + index).toISOString(),
 	}));
-	return { records, graph: { teamId: 'team', revision: 101, digest: records.at(-1)!.graphDigest } };
+	return { records, graph: { teamId: 'team', revision: 101, digest: records.at(-1)!.graphDigest, nodes: [], edges: [] } };
 }
 describe('complete managed graph watch assertion', () => {
 	it('retains exact full hundred tail and explicit terminal pages without modifying supplied canonical records', async () => {
@@ -46,13 +46,13 @@ describe('complete managed graph watch assertion', () => {
 			expect([...retained]).toEqual(original); expect(f).toEqual(before);
 		}
 		let published = 1, advanced = false; const moved = new Map(), emitted: unknown[] = [];
-		await Reflect.apply(observe, undefined, ['team', () => ({ teamId: 'team', revision: published, digest: f.records[published - 1]!.graphDigest }),
+		await Reflect.apply(observe, undefined, ['team', () => ({ teamId: 'team', revision: published, digest: f.records[published - 1]!.graphDigest, nodes: [], edges: [] }),
 			(cursor: string) => { const items = f.records.slice(Number(cursor), published); const page = { items, nextCursor: items.length ? String(items.at(-1)!.revision) : cursor };
 				if (!items.length && !advanced) { published = 2; advanced = true; } return page; }, moved,
 			(record: unknown) => emitted.push(structuredClone(record))]);
 		expect(emitted).toEqual(f.records.slice(0, 2)); expect([...moved.values()]).toEqual(f.records.slice(0, 2)); expect(f).toEqual(before);
 		const empty = new Map();
-		await Reflect.apply(observe, undefined, ['team', () => ({ teamId: 'team', revision: 0, digest: '' }), () => ({ items: [], nextCursor: '0' }), empty,
+		await Reflect.apply(observe, undefined, ['team', () => ({ teamId: 'team', revision: 0, digest: '', nodes: [], edges: [] }), () => ({ items: [], nextCursor: '0' }), empty,
 			() => { throw new Error('An initial empty graph cannot fabricate a revision'); }]); expect(empty.size).toBe(0);
 		for (const changedHead of [{ ...f.graph, teamId: 'foreign' }, { ...f.graph, revision: 100 }, { ...f.graph, digest: 'sha256:' + 'f'.repeat(64) }]) {
 			await expect(Reflect.apply(observe, undefined, ['team', () => changedHead, watch, retained, () => {}])).rejects.toThrow();

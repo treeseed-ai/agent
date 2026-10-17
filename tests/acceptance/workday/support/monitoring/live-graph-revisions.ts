@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { completeGraphHistory } from '../evidence-pages.ts';
+import { completeGraphHistory, verifyGraphRetention } from '../evidence-pages.ts';
 import type { GraphRevision } from '@treeseed/sdk/agent-capacity';
 type Row = Record<string, unknown>;
 
@@ -26,6 +26,7 @@ export async function observeLiveGraphRevisions(teamId: string, current: () => R
       const records = Number(graph.revision) === 0 ? [] : completeGraphHistory(graph, key => {
         const page = pages.get(key); assert.ok(page, label + ': Original page missing'); return page;
       });
+      verifyGraphRetention(graph, records);
       for (const [revision, original] of retained) {
         assert.ok(Number.isSafeInteger(revision) && revision > 0 && original?.revision === revision && original.teamId === teamId, label);
         assert.deepEqual(records[revision - 1], original, label + ': Original revision changed or disappeared');

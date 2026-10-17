@@ -1,3 +1,4 @@
+import type {SandboxAssignment} from '@treeseed/sdk/capacity-provider';
 import type { SourceWorkspaceResponse } from '@treeseed/sdk/capacity-provider/sandbox';
 
 /** The existing sandbox translation and aggregate validator share one mapping. */
@@ -45,6 +46,7 @@ export interface AgentExecutorObservation {
   available: boolean;
   activeAssignments?: number;
   capabilities?: string[];
+  modelPolicy?: SandboxAssignment['modelPolicy'];
   reason?: string;
 }
 

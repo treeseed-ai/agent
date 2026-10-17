@@ -38,12 +38,12 @@ describe('campaign CLI composition units (mocked transport, not native or live a
  });
  it('rereads concurrent graph changes within the original inspection bound before certifying the final node inventory',async()=>{
   transport(()=>observed('completed'));const implementation=state.read.getMockImplementation()!;let graphReads=0;
-  state.read.mockImplementation((args:string[],...rest:unknown[])=>args[0]==='execution'&&args[1]==='graph'?{teamId:'team-fixture',revision:++graphReads===1?1:2,nodes:[]}:Reflect.apply(implementation,undefined,[args,...rest]));
+  state.read.mockImplementation((args:string[],...rest:unknown[])=>args[0]==='execution'&&args[1]==='graph'&&state.retain.mock.calls.length>0?{teamId:'team-fixture',revision:++graphReads===1?1:2,nodes:[]}:Reflect.apply(implementation,undefined,[args,...rest]));
   await state.run!();expect(graphReads).toBe(4);expect(state.nodeTransitions).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({id:workdayId}),{teamId:'team-fixture',revision:2,nodes:[]},[]);expect(state.read.mock.calls.filter(call=>call[0][1]==='stop')).toEqual([]);
  });
  it('stops continuously mutating public graph inventory without advancing beyond the original forty-round inspection bound',async()=>{
   transport(()=>observed('running'));const implementation=state.read.getMockImplementation()!;let graphReads=0;
-  state.read.mockImplementation((args:string[],...rest:unknown[])=>args[0]==='execution'&&args[1]==='graph'?{teamId:'team-fixture',revision:++graphReads,nodes:[]}:Reflect.apply(implementation,undefined,[args,...rest]));
+  state.read.mockImplementation((args:string[],...rest:unknown[])=>args[0]==='execution'&&args[1]==='graph'&&state.retain.mock.calls.length>0?{teamId:'team-fixture',revision:++graphReads,nodes:[]}:Reflect.apply(implementation,undefined,[args,...rest]));
   await expect(state.run!()).rejects.toThrow('ACCEPTANCE_LIVE_ASSIGNMENT: Complete concurrent transition inventory not reached');expect(graphReads).toBe(80);expect(state.nodeTransitions).not.toHaveBeenCalled();expect(state.verify).not.toHaveBeenCalled();expect(state.read.mock.calls.filter(call=>call[0][1]==='stop')).toHaveLength(1);
  });
 
@@ -164,6 +164,7 @@ describe('campaign CLI composition units (mocked transport, not native or live a
 			const original = state.read.getMockImplementation()!;
 			const failure = new Error(`controlled-send-${denied}`); let sends = 0;
 			state.read.mockImplementation((args: string[]) => {
+			if(args[0]==='execution'&&args[1]==='graph')return{teamId:'team-fixture',revision:0,digest:'',nodes:[],edges:[]};
 				if (args[0] === 'send' && sends++ === denied) throw failure;
 				return original(args);
 			});
@@ -195,6 +196,7 @@ describe('campaign CLI composition units (mocked transport, not native or live a
 		const tail = { items: events.slice(50), page: { limit: 50, hasMore: false, nextCursor: null } };
 		const held = structuredClone({ first, tail });
 		state.read.mockImplementation((args: string[]) => {
+			if(args[0]==='execution'&&args[1]==='graph')return{teamId:'team-fixture',revision:0,digest:'',nodes:[],edges:[]};
 			if (args[0] === 'workdays' && args[1] === 'start') return { workdayId };
 			if (args[0] === 'workdays' && args[1] === 'show') return { ...observed(++polls === 1 ? 'running' : 'completed'), ...first };
 			if (args.slice(0, 3).join(' ') === 'workdays events list') {
@@ -236,6 +238,7 @@ describe('campaign CLI composition units (mocked transport, not native or live a
 			if (mode === 'failed' || mode === 'error') items[0]!.status = mode;
 			const held = structuredClone({ first, tail }); let laterReads = 0;
 			state.read.mockImplementation((args: string[]) => {
+			if(args[0]==='execution'&&args[1]==='graph')return{teamId:'team-fixture',revision:0,digest:'',nodes:[],edges:[]};
 				if (args[0] === 'workdays' && args[1] === 'start') return { workdayId };
 				if (args[0] === 'workdays' && args[1] === 'show') return first;
 				if (args.slice(0, 3).join(' ') === 'workdays events list') {
@@ -259,6 +262,7 @@ describe('campaign CLI composition units (mocked transport, not native or live a
 			if (mode === 'changed') Object.assign(changed[0]!.refs, { changed: true }); else changed.splice(0);
 			const held = structuredClone({ events, changed });
 			state.read.mockImplementation((args: string[]) => {
+			if(args[0]==='execution'&&args[1]==='graph')return{teamId:'team-fixture',revision:0,digest:'',nodes:[],edges:[]};
 				if (args[0] === 'workdays' && args[1] === 'start') return { workdayId };
 				if (args[0] === 'workdays' && args[1] === 'show') return { ...observed(++polls === 1 ? 'running' : 'completed'),
 					events: events.slice(0, 50), eventPage: { limit: 50, hasMore: true, nextCursor: cursor } };
@@ -281,6 +285,7 @@ describe('campaign CLI composition units (mocked transport, not native or live a
 		const id = 'workday-aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
 		const start = new Date(Date.now() - 21 * 60_000).toISOString(), endsAt = new Date(Date.now() + 39 * 60_000).toISOString();
 		state.read.mockImplementation((args: string[]) => {
+			if(args[0]==='execution'&&args[1]==='graph')return{teamId:'team-fixture',revision:0,digest:'',nodes:[],edges:[]};
 			if (args[0] === 'workdays' && args[1] === 'start') return { workdayId: id };
 			if (args[0] === 'workdays' && args[1] === 'show') return { run: { id, status: ++polls < 3 ? 'running' : 'completed',
 				executionMode: 'simulation', startedAt: start, parameters: { durationSeconds: 3600, planningPercent: 100 / 3, appliedPlan: { endsAt } } },
@@ -303,7 +308,7 @@ describe('campaign CLI composition units (mocked transport, not native or live a
 		// A cached admission remains replayable after the preflight expires.
 		state.freeze.preflight.expiresAt = '2000-01-01T00:00:00Z';
 		const id = 'workday-aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
-		state.read.mockImplementation((args: string[]) => args[1] === 'start' ? { workdayId: id }
+		state.read.mockImplementation((args: string[]) => args[0]==='execution'&&args[1]==='graph'?{teamId:'team-fixture',revision:0,digest:'',nodes:[],edges:[]}:args[1] === 'start' ? { workdayId: id }
 			: args[0] === 'send' ? { receiptId: 'send' }
 				: args[0] === 'proposals' && args[1] === 'show' ? { activeVersion: 8 }
 					: args[0] === 'proposals' && args[1] === 'evaluate' ? { status: 'accepted', decisionId: 'decision-1' }
@@ -312,7 +317,8 @@ describe('campaign CLI composition units (mocked transport, not native or live a
 				scheduling: { executionId: id, status: 'completed', executionMode: 'simulation', assignments: [], nodes: [] },
 				events: [], eventPage: { limit: 50, hasMore: false, nextCursor: null } });
 		await state.run!();
-		expect(state.read.mock.calls[0]![0]).toContain('exact');
+		const admissions=state.read.mock.calls.filter(call=>call[0][0]==='workdays'&&call[0][1]==='start');expect(admissions).toHaveLength(1);expect(admissions[0]![0]).toContain('exact');
+		expect(state.read.mock.calls[0]![0]).toEqual(['execution','graph','show']);
 		const send = state.read.mock.calls.find(call => call[0][0] === 'send');
 		expect(send?.[3]).toBe(240_000);
 		expect(send?.[0]).toContain('--no-wait');
@@ -334,19 +340,20 @@ describe('campaign CLI composition units (mocked transport, not native or live a
 	});
 	it('delegates stale admission to the API and rejects infeasible input or malformed receipts before chat', async () => {
 		state.freeze.preflight.expiresAt = '2000-01-01T00:00:00Z';
-		state.read.mockImplementation(() => { throw new Error('API_PREFLIGHT_EXPIRED'); });
+		state.read.mockImplementation((args:string[]) => {if(args[0]==='execution')return{teamId:'team-fixture',revision:0,digest:'',nodes:[],edges:[]};throw new Error('API_PREFLIGHT_EXPIRED');});
 		await expect(state.run!()).rejects.toThrow('API_PREFLIGHT_EXPIRED');
-		expect(state.read).toHaveBeenCalledTimes(1);
+		expect(state.read).toHaveBeenCalledTimes(2);expect(state.read.mock.calls.filter(call=>call[0][0]==='workdays'&&call[0][1]==='start')).toHaveLength(1);
 		state.read.mockReset();
 		state.freeze.preflight.expiresAt = new Date(Date.now() + 600000).toISOString();
 		state.freeze.request.body.durationSeconds = 7200;
 		await expect(state.run!()).rejects.toThrow('3600'); expect(state.read).not.toHaveBeenCalled();
-		state.freeze.request.body.durationSeconds = 3600; state.read.mockReturnValue({ id: 'invented-shape' });
-		await expect(state.run!()).rejects.toThrow('ACCEPTANCE_CAMPAIGN_ID'); expect(state.read).toHaveBeenCalledOnce();
+		state.freeze.request.body.durationSeconds = 3600; state.read.mockImplementation((args:string[])=>args[0]==='execution'?{teamId:'team-fixture',revision:0,digest:'',nodes:[],edges:[]}:{id:'invented-shape'});
+		await expect(state.run!()).rejects.toThrow('ACCEPTANCE_CAMPAIGN_ID'); expect(state.read).toHaveBeenCalledTimes(2);expect(state.read.mock.calls.filter(call=>call[0][0]==='workdays'&&call[0][1]==='start')).toHaveLength(1);
 	});
 	it('reads proposal governance with project and server, never a team option', async () => {
 		const id = 'workday-aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
 		state.read.mockImplementation((args: string[]) => {
+			if(args[0]==='execution'&&args[1]==='graph')return{teamId:'team-fixture',revision:0,digest:'',nodes:[],edges:[]};
 			if (args[0] === 'workdays' && args[1] === 'start') return { workdayId: id };
 			if (args[0] === 'workdays' && args[1] === 'show') return { run: { id, status: 'running', executionMode: 'simulation',
 				startedAt: new Date(Date.now() - 21 * 60_000).toISOString(),

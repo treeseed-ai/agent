@@ -12,7 +12,7 @@ import { verifyGolden } from './sdk-runtime-golden.test.ts';
 import { prepareSdkCampaign, verifySdkExternalState } from './prepare-campaign.ts';
 import { observeLiveGraphRevisions } from './workday/support/monitoring/live-graph-revisions.ts';
 import { observeCampaign, retainCampaignEventHistory, verifyAssignmentTransitionHistory, verifyNodeTransitionHistory, verifyAccountingTransitionHistory, verifyWorkdayLifecycleTransitionHistory } from './workday/support/campaign-observation.ts';
-import { readCompleteEvidence } from './workday/support/evidence-pages.ts';
+import { readCompleteEvidence, completeGraphHistory, verifyGraphRetention } from './workday/support/evidence-pages.ts';
 import { observeLiveAssignmentRecords, inspectLiveAssignmentProfile } from './workday/support/monitoring/live-assignment-records.ts';
 
 type Row = Record<string, any>;
@@ -40,6 +40,10 @@ test('Frozen SDK campaign drives planning acting review and terminal golden gate
 	// Current complete external authority must pass before any metered admission.
 	await verifySdkExternalState(freeze);
 	// API validates first admission expiry and replays the exact cached start after expiry.
+	const originalGraph=structuredClone(read(['execution','graph','show'],team));
+	const originalGraphHistory=Number(originalGraph.revision)===0?[]:completeGraphHistory(originalGraph,cursor=>read(['execution','graph','watch','--cursor',cursor],team));
+	verifyGraphRetention(originalGraph,originalGraphHistory);
+	console.log(JSON.stringify({observedAt:new Date().toISOString(),preAdmissionGraph:originalGraph,preAdmissionGraphHistory:originalGraphHistory}));
 	const started = read(['workdays', 'start', '--preflight', freeze.preflight.id, '--digest', freeze.preflight.preflightDigest,
 		'--yes', '--idempotency-key', `golden-start:${freeze.preflight.id}`], team);
 	const workdayId = started.workdayId;
@@ -72,7 +76,7 @@ test('Frozen SDK campaign drives planning acting review and terminal golden gate
   const accounting=()=>({usage:body.projects.flatMap((project:string)=>readCompleteEvidence(['capacity','usage','--project',project,'--workday',workdayId],team,100,'ACCEPTANCE_ACCOUNTING_USAGE')),ledger:body.projects.flatMap((project:string)=>readCompleteEvidence(['capacity','ledger','--project',project,'--workday',workdayId],team,100,'ACCEPTANCE_ACCOUNTING_LEDGER'))});
 		await observeLiveGraphRevisions(String(currentRun.teamId), () => read(['execution', 'graph', 'show'], team),
 			cursor => read(['execution', 'graph', 'watch', '--cursor', cursor], team), observedGraphRevisions,
-			(revision, graphHead) => console.log(JSON.stringify({ workdayId, observedAt: new Date().toISOString(), graphRevision: revision, graphHead })));
+			(revision, graphHead) => console.log(JSON.stringify({ workdayId, observedAt: new Date().toISOString(), graphRevision: revision, graphHead })), {baseline:originalGraph,baselineHistory:originalGraphHistory,proposalId:String(freeze.proposal.id),projectId:String(body.projects[0]),workdayId});
   let assignments=readCompleteEvidence(['assignments','list','--workday',workdayId],team,50,'ACCEPTANCE_LIVE_ASSIGNMENT');
   const seen=new Set(observedEvents.keys());let complete=false;
   for(let round=0;round<40;round++){

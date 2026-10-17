@@ -4311,3 +4311,28 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/guarantees/monitoring/graph/graph-retention-native.test.ts
     testName: "native original SDK graph inventory detects a lost unrelated component before progression and retains scoped stop failed observations and unchanged concurrent retry"
+  agent.golden.execution-component-isolation-1:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/monitoring/graph/graph-component-isolation.test.ts
+    testName: "denies a changed unrelated component even when all original nodes edges and canonical revision receipts remain present"
+  agent.golden.execution-component-isolation-2:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/monitoring/graph/graph-component-isolation.test.ts
+    testName: "retains unrelated operational progress and permits content changes inside the original connected component without rewriting either graph"
+  agent.golden.execution-component-isolation-3:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/monitoring/graph/graph-component-isolation.test.ts
+    testName: "denies malformed missing duplicated moved and unrelated graph authority while preserving failed original bytes"
+  agent.golden.execution-component-isolation-4:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/monitoring/graph/graph-component-isolation.test.ts
+    testName: "permits genuine selected workday births but denies a foreign proposal disguised with the same workday identity"
+  agent.golden.execution-component-isolation-5:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/monitoring/graph/graph-component-isolation.test.ts
+    testName: "captures public graph authority before actual admission and passes that same baseline into the existing normal campaign inspection"

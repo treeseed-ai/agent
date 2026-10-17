@@ -2523,3 +2523,21 @@ workflow:
   - id: execution-component-isolation-5
     action: { verifier: agent.golden.execution-component-isolation-5 }
     expect: { status: passed }
+  - id: provider-transition-history-unit
+    action: { verifier: agent.golden.provider-transition-history-unit }
+    expect: { status: passed }
+  - id: provider-transition-history-native
+    action: { verifier: agent.golden.provider-transition-history-native }
+    expect: { status: passed }
+  - id: provider-audit-pages-unit
+    action: { verifier: agent.golden.provider-audit-pages-unit }
+    expect: { status: passed }
+  - id: provider-inventory-stability-unit
+    action: { verifier: agent.golden.provider-inventory-stability-unit }
+    expect: { status: passed }
+  - id: provider-history-before-admission-unit
+    action: { verifier: agent.golden.provider-history-before-admission-unit }
+    expect: { status: passed }
+  - id: provider-history-scoped-stop-unit
+    action: { verifier: agent.golden.provider-history-scoped-stop-unit }
+    expect: { status: passed }

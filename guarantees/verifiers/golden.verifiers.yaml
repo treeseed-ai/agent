@@ -4336,3 +4336,33 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/guarantees/monitoring/graph/graph-component-isolation.test.ts
     testName: "captures public graph authority before actual admission and passes that same baseline into the existing normal campaign inspection"
+  agent.golden.provider-transition-history-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/monitoring/providers/provider-transition-history.test.ts
+    testName: "requires each original provider sequence health eligibility timing and closure observation from complete public history without changing unrelated retained sessions"
+  agent.golden.provider-transition-history-native:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/monitoring/providers/provider-transition-history-native.test.ts
+    testName: "native public provider audit pages retain health changes and exact scoped stop on omitted denied malformed or interrupted histories before unchanged concurrent retry"
+  agent.golden.provider-audit-pages-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/monitoring/providers/provider-audit-pages.test.ts
+    testName: "retains original raw capacity audit clocks and equal-clock identity pagination without translating records or inferring terminal pages"
+  agent.golden.provider-inventory-stability-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/monitoring/providers/provider-audit-pages.test.ts
+    testName: "rereads changing public provider roots within the original inspection bound and refuses incomplete or interrupted audit inventory before returning a stable observation"
+  agent.golden.provider-history-before-admission-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/campaign-cli.test.ts
+    testName: "requires original frozen provider history before metered admission and retains a denied baseline without starting or stopping unrelated work"
+  agent.golden.provider-history-scoped-stop-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/campaign-cli.test.ts
+    testName: "stops the exact admitted simulation on incomplete original provider history before assignment inspection collaboration approval and later gates"

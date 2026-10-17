@@ -78,7 +78,7 @@ it('native exact Git profile and public SDK graph reads reject changed governed 
 
 it('native public reconciliation denies changed previews before actual commands and retains original receipts through concurrent unchanged retry', async () => {
 	const sourceRef = { store: 'treedx', model: 'proposal', id: 'native-proposal', revision: 1, digest: 'sha256:' + 'a'.repeat(64), repository: 'native-library', commit: 'a'.repeat(40), path: 'proposals/native.mdx' };
-	const graph = { teamId: 'native-team', revision: 1, digest: `sha256:${'d'.repeat(64)}`, nodes: [{ id: 'original-node', teamId: 'native-team', projectId: 'native-project', kind: 'condition', pairRole: null, status: 'completed', ruleRevision: 1, nodeRevision: 1, sourceRef, condition: { conditionType: 'authority', subjectRef: sourceRef, expectedState: 'accepted' }, graphRevisionCreated: 1, graphRevisionUpdated: 1 }], edges: [] };
+	const graph = { teamId: 'native-team', revision: 1, digest: `sha256:${'d'.repeat(64)}`, nodes: [{ schemaVersion: 'treeseed.execution-node/v1', id: 'original-node', teamId: 'native-team', projectId: 'native-project', kind: 'condition', pairRole: null, status: 'completed', ruleRevision: 1, nodeRevision: 1, sourceRef, condition: { conditionType: 'authority', subjectRef: sourceRef, expectedState: 'accepted' }, graphRevisionCreated: 1, graphRevisionUpdated: 1 }], edges: [] };
 	const changes = { added: [], changed: [], completed: [], blocked: [], stale: [], removedEdges: [], addedEdges: [] };
 	const plan = { teamId: graph.teamId, baseRevision: 1, desiredRevision: 2, desiredDigest: graph.digest, changes };
 	const receipt = graphRevisionSchema.parse({ schemaVersion: 'treeseed.graph-revision/v1', teamId: graph.teamId, revision: 1,

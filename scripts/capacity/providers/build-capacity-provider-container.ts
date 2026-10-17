@@ -1,4 +1,4 @@
-import { copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync } from 'node:fs';
+import { copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
@@ -104,9 +104,11 @@ function runDockerBuildWithRetry(args: string[], cwd: string) {
 }
 
 function resolveSdkPackageRoot() {
-	const siblingRoot = resolve(packageRoot, '..', 'sdk');
-	if (existsSync(resolve(siblingRoot, 'package.json'))) {
-		return siblingRoot;
+	const installedRoot = resolve(packageRoot, 'node_modules', '@treeseed', 'sdk');
+	if (existsSync(resolve(installedRoot, 'package.json'))) {
+		const selected = JSON.parse(readFileSync(resolve(installedRoot, 'package.json'), 'utf8')) as { name?: string };
+		if (selected.name !== '@treeseed/sdk') throw new Error('Selected SDK package identity is invalid.');
+		return realpathSync(installedRoot);
 	}
 	let current = dirname(require.resolve('@treeseed/sdk/standards', { paths: [packageRoot] }));
 	while (true) {

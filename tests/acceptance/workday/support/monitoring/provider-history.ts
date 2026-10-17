@@ -1,13 +1,15 @@
+import {isDeepStrictEqual} from 'node:util';
+import {collectCompleteEvidence} from '../evidence-pages.ts';
 import {createHash} from 'node:crypto';
 import assert from 'node:assert/strict';
 import { decodeCapacityPageCursor } from '@treeseed/sdk/capacity-pagination';
 import { read, row, type Row } from '../../../acceptance-cli.ts';
 
-export function availabilityHistory(team: string) {
+export function availabilityHistory(team: string, reader: typeof read = read) {
 	const sessions = [], identities = new Set<string>(), cursors = new Set<string>(); let cursor: string | undefined;
 	let previous: { id: string; time: number } | undefined;
 	for (let pageNumber = 0; pageNumber < 40; pageNumber++) {
-		const observed = read(['capacity', 'status', '--limit', '100', ...(cursor ? ['--cursor', cursor] : [])], team), page = row(observed.page);
+		const observed = reader(['capacity', 'status', '--limit', '100', ...(cursor ? ['--cursor', cursor] : [])], team), page = row(observed.page);
 		assert.ok(Array.isArray(observed.items) && observed.items.length <= 100 && page.limit === 100 && typeof page.hasMore === 'boolean',
 			'ACCEPTANCE_AVAILABILITY_PAGE: Original complete page authority required');
 		for (const value of observed.items) {
@@ -52,7 +54,7 @@ function providerObservation(session:Row):Row{
 export function verifyProviderTransitionHistory(team:string,providers:readonly string[],baseline:readonly Row[],current:readonly Row[],events:readonly Row[],retained:Map<string,Row>):void{
  const code='ACCEPTANCE_PROVIDER_HISTORY';assert.ok(team&&providers.length&&providers.every(id=>typeof id==='string'&&id)&&new Set(providers).size===providers.length,code+': Exact frozen providers required');
  const scoped=(values:readonly Row[])=>{const selected=values.filter(value=>providers.includes(String(value.providerId)));assert.equal(new Set(selected.map(value=>value.id)).size,selected.length,code+': Ambiguous session identity');for(const value of selected)assert.equal(value.teamId,team,code+': Foreign session team');return new Map(selected.map(value=>[String(value.id),value]));};
- const bases=scoped(baseline),sessions=scoped(current),selected=new Map<string,Row>(),bySession=new Map<string,Array<{event:Row;metadata:Row}>>();
+ const bases=scoped(baseline),sessions=scoped(current);for(const provider of providers)assert.ok([...sessions.values()].some(value=>value.providerId===provider),code+': Frozen provider is absent from owning inventory');const selected=new Map<string,Row>(),bySession=new Map<string,Array<{event:Row;metadata:Row}>>();
  for(const[id,base]of bases){const value=sessions.get(id);assert.ok(value,code+': Original baseline session disappeared');if(base.status==='closed'||base.status==='expired')assert.deepEqual(value,base,code+': Historical unrelated session changed');}
  for(const event of events){if(event.action!=='provider.availability.updated')continue;const id=String(event.resource_id);if(!providers.includes(String(event.capacity_provider_id))&&!bases.has(id)&&!sessions.has(id))continue;
   const source=sessions.get(id);assert.ok(source,code+': Observed provider session omitted by owning inventory');const base=bases.get(id);if(base?.status==='closed'||base?.status==='expired')continue;
@@ -78,4 +80,16 @@ export function verifyProviderTransitionHistory(team:string,providers:readonly s
  }
  for(const[id,event]of retained)assert.deepEqual(selected.get(id),event,code+': Original retained transition disappeared');
  for(const[id,event]of selected)retained.set(id,structuredClone(event));
+}
+
+/** Hold independent public roots around complete audit paging; concurrent changes
+ * require a fresh observation inside the caller's original inspection deadline. */
+export function readProviderTransitionHistory(team:string,providers:readonly string[],deadline:number,reader:typeof read=read):{sessions:Row[];events:Row[]}{
+ const selected=(values:Row[])=>values.filter(value=>providers.includes(String(value.providerId)));
+ for(let round=0;round<40;round++){
+  assert.ok(Number.isFinite(deadline)&&Date.now()<=deadline,'ACCEPTANCE_PROVIDER_HISTORY: Original inspection deadline elapsed');
+  const before=availabilityHistory(team,reader),events=collectCompleteEvidence(cursor=>reader(['capacity','audit','--limit','100',...(cursor?['--cursor',cursor]:[])],team),100,'ACCEPTANCE_PROVIDER_AUDIT','descending','created_at'),after=availabilityHistory(team,reader);
+  if(isDeepStrictEqual(selected(before),selected(after)))return{sessions:before,events};
+ }
+ assert.fail('ACCEPTANCE_PROVIDER_HISTORY: Complete concurrent provider inventory not reached within the original forty-round bound');
 }

@@ -9,5 +9,6 @@ export function sandboxHistoryFixture(){
  const envelope={runId:run.id,teamId:run.teamId,projectId:attempt.projectId,workdayId:run.id,assignmentId:attempt.id,status:'recorded'};
  const events:Row[]=[{...envelope,id:'controlled-created',eventIndex:0,eventType:'provider.sandbox.created',createdAt:time(3),context:{sandboxId}},
   {...envelope,id:'controlled-destroyed',eventIndex:1,eventType:'provider.sandbox.destroyed',createdAt:time(10),context:{sandboxId,teardown,vmId},protectedPayload:{sandboxEvents:raw}}];
+ const closed=events.pop()!;events.push(...raw.map((event,index)=>({...envelope,id:'controlled-observation-'+index,eventIndex:index+1,eventType:'provider.sandbox.observed',createdAt:time(Math.max(3,index===7?9:Number((Date.parse(event.occurredAt)-Date.parse(attempt.createdAt))/1000))),context:{sandboxId,brokerSequence:event.sequence,brokerEventType:event.type},protectedPayload:{sandboxEvent:structuredClone(event)}})));closed.eventIndex=events.length;events.push(closed);
  return{item,run,events,raw,attempt,sandboxId,vmId,time};
 }

@@ -136,7 +136,7 @@ export function startSandboxToolPump(client: Pick<SandboxBrokerClient, 'nextTool
 	let failure: Error | undefined;
 	const completion = (async () => {
 		while (!controller.signal.aborted) {
-			await observe?.(controller.signal);if(controller.signal.aborted)break;
+			if(observe){await observe(controller.signal);if(controller.signal.aborted)break;}
 			const pending = await client.nextToolRequest(prepared.sandboxId, prepared.operationToken, controller.signal);
 			if (controller.signal.aborted) break;
 			if (!pending.request) { await delay(50, undefined, { signal: controller.signal }); continue; }

@@ -31,7 +31,7 @@ export async function broker(handle: (request: IncomingMessage, response: Server
 export async function microvmBroker(configure?: (manifest:CapacityProviderManifestV5)=>void) {
 	const paths: string[] = [], uploads = new Map<string, Buffer>();
 	const observations: Array<ReturnType<typeof sandboxResultSchema.parse>> = [];
-	let assigned: ReturnType<typeof sandboxAssignmentSchema.parse> | undefined, destroyedAt = '', beginCalls = 0, finishCalls = 0;
+	let assigned: ReturnType<typeof sandboxAssignmentSchema.parse> | undefined, destroyedAt = '', brokerCreatedAt='', beginCalls = 0, finishCalls = 0;
 	let resultPatch: Record<string, unknown> = {}, destroyReply: unknown, destroyFault = '', artifactBytes = Buffer.from('original artifact\n');
 	const events: Array<Parameters<NonNullable<ReturnType<typeof executionRequest>['emit']>>[0]> = [];
 	const fixture = await broker((request, response) => {
@@ -41,9 +41,10 @@ export async function microvmBroker(configure?: (manifest:CapacityProviderManife
 				const bytes = Buffer.concat(chunks); response.setHeader('content-type', 'application/json');
 				if(request.method==='GET'&&path==='/v1/status'){response.end('{"ready":true,"checks":{"native":true}}');return;}
 				if (path === '/v1/sandboxes') {
-					assigned = sandboxAssignmentSchema.parse(JSON.parse(bytes.toString('utf8')).assignment);
+					assigned = sandboxAssignmentSchema.parse(JSON.parse(bytes.toString('utf8')).assignment);brokerCreatedAt=new Date().toISOString();
 					response.end('{"sandboxId":"owned-native-sandbox","operationToken":"controlled-native-operation"}'); return;
 				}
+				if(request.method==='GET'&&path==='/v1/sandboxes/owned-native-sandbox'){expect(request.headers.authorization).toBe('Bearer controlled-native-operation');const supplied=destroyReply&&typeof destroyReply==='object'?Reflect.get(destroyReply,'events'):undefined;response.end(JSON.stringify({sandboxId:'owned-native-sandbox',assignmentId:assigned!.assignmentId,events:Array.isArray(supplied)&&supplied.length>=2&&supplied[0]?.type==='sandbox.created'&&supplied[1]?.type==='sandbox.ready'?supplied.slice(0,2):[{schemaVersion:'treeseed.sandbox-event/v1',sandboxId:'owned-native-sandbox',assignmentId:assigned!.assignmentId,sequence:0,occurredAt:brokerCreatedAt,type:'sandbox.created',payload:{}},{schemaVersion:'treeseed.sandbox-event/v1',sandboxId:'owned-native-sandbox',assignmentId:assigned!.assignmentId,sequence:1,occurredAt:brokerCreatedAt,type:'sandbox.ready',payload:{}}]}));return;}
 				if (request.method === 'PUT' && path.includes('/inputs/')) { uploads.set(path.split('/').at(-1)!, bytes); response.end('{}'); return; }
 				if (path.endsWith('/tool-requests/next')) { response.end('{"request":null}'); return; }
 				if (path.endsWith('/execute')) {
@@ -67,9 +68,9 @@ export async function microvmBroker(configure?: (manifest:CapacityProviderManife
 					if (destroyFault === 'reset') { request.socket.destroy(); return; }
 					if (destroyFault === 'json') { response.end('{'); return; }
 					if (destroyFault === '403' || destroyFault === '503') { response.statusCode = Number(destroyFault); response.end(JSON.stringify({ error: `original destroy ${destroyFault}` })); return; }
-					response.end(JSON.stringify(destroyReply ?? { sandboxId: 'owned-native-sandbox', destroyed: true, teardown: { verified: true, completedAt: destroyedAt },events:[
-      {schemaVersion:'treeseed.sandbox-event/v1',sandboxId:'owned-native-sandbox',assignmentId:assigned!.assignmentId,sequence:0,occurredAt:destroyedAt,type:'execution.progress',payload:{stage:'vm.assigned',warmed:true,vmId:'sandbox-warm-11111111-1111-4111-8111-111111111111'}},
-      {schemaVersion:'treeseed.sandbox-event/v1',sandboxId:'owned-native-sandbox',assignmentId:assigned!.assignmentId,sequence:1,occurredAt:destroyedAt,type:'sandbox.destroyed',payload:{verified:true,vmId:'sandbox-warm-11111111-1111-4111-8111-111111111111'}}] })); return;
+					response.end(JSON.stringify(destroyReply ?? { sandboxId: 'owned-native-sandbox', destroyed: true, teardown: { verified: true, completedAt: destroyedAt },events:[...[{schemaVersion:'treeseed.sandbox-event/v1',sandboxId:'owned-native-sandbox',assignmentId:assigned!.assignmentId,sequence:0,occurredAt:brokerCreatedAt,type:'sandbox.created',payload:{}},{schemaVersion:'treeseed.sandbox-event/v1',sandboxId:'owned-native-sandbox',assignmentId:assigned!.assignmentId,sequence:1,occurredAt:brokerCreatedAt,type:'sandbox.ready',payload:{}}],
+      {schemaVersion:'treeseed.sandbox-event/v1',sandboxId:'owned-native-sandbox',assignmentId:assigned!.assignmentId,sequence:2,occurredAt:destroyedAt,type:'execution.progress',payload:{stage:'vm.assigned',warmed:true,vmId:'sandbox-warm-11111111-1111-4111-8111-111111111111'}},
+      {schemaVersion:'treeseed.sandbox-event/v1',sandboxId:'owned-native-sandbox',assignmentId:assigned!.assignmentId,sequence:3,occurredAt:destroyedAt,type:'sandbox.destroyed',payload:{verified:true,vmId:'sandbox-warm-11111111-1111-4111-8111-111111111111'}}] })); return;
 				}
 				response.statusCode = 500; response.end('{"error":"Unexpected native broker operation"}');
 			} catch (error) { response.statusCode = 500; response.end(JSON.stringify({ error: error instanceof Error ? error.message : 'Native input failed' })); }

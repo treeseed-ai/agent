@@ -18,7 +18,10 @@ const sdkRoot = (() => {
 
 function fixture(native: boolean) {
   const allocation = mkdtempSync(join(tmpdir(), 'agent-provider-preparation-'));
-  const agent = join(allocation, 'agent'), sdk = join(allocation, 'sdk'), modules = join(agent, 'node_modules');
+  const agent = join(allocation, 'agent'), sdk = join(allocation, 'selected-sdk'), modules = join(agent, 'node_modules');
+  const neighbor = join(allocation, 'sdk'); mkdirSync(join(neighbor, 'src'), { recursive: true });
+  writeFileSync(join(neighbor, 'package.json'), JSON.stringify({ name: '@treeseed/sdk', version: '9.9.9', scripts: { 'build:dist': 'exit 78' }, dependencies: { 'unselected-sibling-helper': '9.9.9' } }));
+  writeFileSync(join(neighbor, 'src/untouched.txt'), 'Unrelated active SDK checkout must remain unchanged.');
   mkdirSync(join(agent, 'scripts/capacity/providers'), { recursive: true });
   mkdirSync(join(agent, 'scripts/packages'), { recursive: true });
   cpSync(join(root, script), join(agent, script));
@@ -49,7 +52,7 @@ function fixture(native: boolean) {
     }
     for (const name of readdirSync(join(root, 'node_modules/@treeseed'))) if (name !== 'sdk') symlinkSync(join(root, 'node_modules/@treeseed', name), join(modules, '@treeseed', name));
   }
-  return { allocation, agent, sdk, modules, dependency, runtime: join(agent, '.treeseed/docker/runtime/shared'), close: () => rmSync(allocation, { recursive: true, force: true }) };
+  return { allocation, agent, sdk, modules, dependency, neighbor, runtime: join(agent, '.treeseed/docker/runtime/shared'), close: () => rmSync(allocation, { recursive: true, force: true }) };
 }
 
 it('copies exact selected SDK production dependencies even when absent from the Agent installed tree without adding unrelated dev packages', async () => {
@@ -60,7 +63,7 @@ it('copies exact selected SDK production dependencies even when absent from the 
     const { runtimePackageNames, copyRuntimePackage } = await import('../../../../scripts/capacity/providers/build-capacity-provider-container.ts');
     const original = readFileSync(join(f.sdk, 'package.json')), bytes = readFileSync(join(f.dependency, 'input.txt'));
     const names = runtimePackageNames(f.modules);
-    expect(names).toContain('renamed-runtime-helper'); expect(names).not.toContain('unrelated-dev-tool');
+    expect(names).not.toContain('unselected-sibling-helper'); expect(names).toContain('renamed-runtime-helper'); expect(names).not.toContain('unrelated-dev-tool');
     copyRuntimePackage(f.modules, 'renamed-runtime-helper', f.runtime);
     expect(existsSync(join(f.runtime, 'node_modules/renamed-runtime-helper/input.txt'))).toBe(true);
     expect(readFileSync(join(f.runtime, 'node_modules/renamed-runtime-helper/input.txt'))).toEqual(bytes);
@@ -110,6 +113,10 @@ it('original native provider preparation runs its compiled health entrypoint wit
     expect(readFileSync(join(f.sdk, 'package.json'))).toEqual(sdkBytes); expect(readFileSync(join(f.agent, 'package-lock.json'))).toEqual(lockBytes);
     expect(existsSync(join(f.modules, 'zod-to-json-schema'))).toBe(false);
     expect(existsSync(join(f.runtime, 'node_modules/unrelated-dev-tool'))).toBe(false);
+    expect(readFileSync(join(f.neighbor, 'src/untouched.txt'), 'utf8')).toBe('Unrelated active SDK checkout must remain unchanged.');
+    expect(existsSync(join(f.neighbor, 'dist'))).toBe(false);
+    expect(existsSync(join(f.runtime, 'node_modules/@treeseed/sdk/src'))).toBe(false);
+    expect(readFileSync(join(f.runtime, 'node_modules/@treeseed/sdk/package.json'))).toEqual(sdkBytes);
     // Actual original script, strict compiler, native cp and Node SDK/provider
     // imports. No broker/model/registration/usage or managed golden proof.
   } finally { f.close(); }

@@ -42,8 +42,8 @@ it('native provider signs the canonical source attempt unchanged through Unix br
  for(const mode of ['missing','foreign','duplicate','gap','changed','private']) {
   const f=await microvmBroker();try{
    const now=new Date().toISOString(),vmId='sandbox-warm-11111111-1111-4111-8111-111111111111',sandboxId='owned-native-sandbox';
-   const events=[...[{schemaVersion:'treeseed.sandbox-event/v1',sandboxId:sandboxId,assignmentId:f.input.assignmentId,sequence:2,occurredAt:now,type:'sandbox.created',payload:{}},{schemaVersion:'treeseed.sandbox-event/v1',sandboxId:sandboxId,assignmentId:f.input.assignmentId,sequence:3,occurredAt:now,type:'sandbox.ready',payload:{}}],{schemaVersion:'treeseed.sandbox-event/v1',sandboxId,assignmentId:f.input.assignmentId,sequence:0,occurredAt:now,type:'execution.progress',payload:{stage:'vm.assigned',vmId}},
-    {schemaVersion:'treeseed.sandbox-event/v1',sandboxId,assignmentId:f.input.assignmentId,sequence:1,occurredAt:now,type:'sandbox.destroyed',payload:{verified:true,vmId}}];
+   const events=[...[{schemaVersion:'treeseed.sandbox-event/v1',sandboxId:sandboxId,assignmentId:f.input.assignmentId,sequence:0,occurredAt:now,type:'sandbox.created',payload:{}},{schemaVersion:'treeseed.sandbox-event/v1',sandboxId:sandboxId,assignmentId:f.input.assignmentId,sequence:1,occurredAt:now,type:'sandbox.ready',payload:{}}],{schemaVersion:'treeseed.sandbox-event/v1',sandboxId,assignmentId:f.input.assignmentId,sequence:2,occurredAt:now,type:'execution.progress',payload:{stage:'vm.assigned',vmId}},
+    {schemaVersion:'treeseed.sandbox-event/v1',sandboxId,assignmentId:f.input.assignmentId,sequence:3,occurredAt:now,type:'sandbox.destroyed',payload:{verified:true,vmId}}];
    if(mode==='foreign')events[2]!.assignmentId='foreign';if(mode==='duplicate')events.splice(3,0,structuredClone(events[2]!));
    if(mode==='gap')events[3]!.sequence=8;if(mode==='changed')events[3]!.payload.vmId='sandbox-warm-22222222-2222-4222-8222-222222222222';
    if(mode==='private')Object.assign(events[2]!.payload,{credential:'opaque-private-broker-value'});

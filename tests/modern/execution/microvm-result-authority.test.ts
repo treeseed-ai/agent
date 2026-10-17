@@ -75,9 +75,9 @@ describe('microvm result and closeout authority', () => {
   const vmId='sandbox-warm-11111111-1111-4111-8111-111111111111';
   for(const mode of ['exact','missing','foreign','duplicate','gap','changed','private']) {
    const f=await suppliedMicrovm(),sandboxId='owned-unit-sandbox',now=new Date().toISOString();
-   const events=[...[{schemaVersion:'treeseed.sandbox-event/v1',sandboxId:sandboxId,assignmentId:f.input.assignmentId,sequence:2,occurredAt:now,type:'sandbox.created',payload:{}},{schemaVersion:'treeseed.sandbox-event/v1',sandboxId:sandboxId,assignmentId:f.input.assignmentId,sequence:3,occurredAt:now,type:'sandbox.ready',payload:{}}],{schemaVersion:'treeseed.sandbox-event/v1',sandboxId,assignmentId:f.input.assignmentId,sequence:0,occurredAt:now,
+   const events=[...[{schemaVersion:'treeseed.sandbox-event/v1',sandboxId:sandboxId,assignmentId:f.input.assignmentId,sequence:0,occurredAt:now,type:'sandbox.created',payload:{}},{schemaVersion:'treeseed.sandbox-event/v1',sandboxId:sandboxId,assignmentId:f.input.assignmentId,sequence:1,occurredAt:now,type:'sandbox.ready',payload:{}}],{schemaVersion:'treeseed.sandbox-event/v1',sandboxId,assignmentId:f.input.assignmentId,sequence:2,occurredAt:now,
     type:'execution.progress',payload:{stage:'vm.assigned',warmed:true,vmId}},
-    {schemaVersion:'treeseed.sandbox-event/v1',sandboxId,assignmentId:f.input.assignmentId,sequence:1,occurredAt:now,
+    {schemaVersion:'treeseed.sandbox-event/v1',sandboxId,assignmentId:f.input.assignmentId,sequence:3,occurredAt:now,
      type:'sandbox.destroyed',payload:{verified:true,vmId}}];
    if(mode==='foreign')events[2]!.assignmentId='foreign';
    if(mode==='duplicate')events.splice(3,0,structuredClone(events[2]!));

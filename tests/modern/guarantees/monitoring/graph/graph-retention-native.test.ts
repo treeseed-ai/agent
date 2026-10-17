@@ -15,7 +15,7 @@ it('native original SDK graph inventory detects a lost unrelated component befor
   if(url.pathname===stopPath){response.end(JSON.stringify({data:{stopped:true}}));return;}
   if(mode==='interrupted'){request.socket.destroy();return;}if(mode==='denied'){response.writeHead(403).end('{}');return;}
   if(url.pathname===graphPath){const graph=structuredClone(f.graph);if(mode==='lost-node')graph.nodes.pop();if(mode==='lost-edge')graph.edges=[];if(mode==='unknown-node')graph.nodes.push({...structuredClone(f.outside),id:'unrecorded-node'});response.end(JSON.stringify({data:graph}));return;}
-  if(url.pathname===watchPath){const cursor=url.searchParams.get('cursor')??'0',items=cursor==='0'?f.history:[];response.end(JSON.stringify({data:{items,nextCursor:items.length?'1':cursor}}));return;}
+  if(url.pathname===watchPath){const cursor=url.searchParams.get('cursor')??'0',items=cursor==='0'?structuredClone(f.history):[];if(items[0]&&mode==='unknown-change')items[0].changes.changed.push('unknown-node');if(items[0]&&mode==='duplicate-change')items[0].changes.changed.push(f.graph.nodes[0]!.id,f.graph.nodes[0]!.id);response.end(JSON.stringify({data:{items,nextCursor:items.length?'1':cursor}}));return;}
   response.writeHead(404).end('{}');
  });
  try {
@@ -27,7 +27,7 @@ it('native original SDK graph inventory detects a lost unrelated component befor
    if(mode==='exact'){expect(failure).toBeUndefined();expect(progressed).toBe(1);expect(stops).toBe(0);expect(snapshots).toEqual(f.history);return;}
    expect(failure).toBeInstanceOf(Error);expect(progressed).toBe(0);expect(stops).toBe(1);expect(snapshots).toEqual([]);failures.push({mode,failure});
   };
-  await Promise.all([execute(),execute()]);for(mode of['lost-node','lost-edge','unknown-node','denied','interrupted'])await execute();
+  await Promise.all([execute(),execute()]);for(mode of['lost-node','lost-edge','unknown-node','unknown-change','duplicate-change','denied','interrupted'])await execute();
   const retained=[...failures];mode='exact';await Promise.all([execute(),execute()]);expect(failures).toEqual(retained);expect(f).toEqual(held);expect(requests.every(value=>[graphPath,watchPath,stopPath].includes(value.path))).toBe(true);
   // Real SDK/HTTP/original monitor and stop; graph/clock/admission DTOs are
   // controlled, not native SQL producer, model usage or managed golden proof.

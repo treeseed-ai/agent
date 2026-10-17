@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import {executionNodeSchema,executionEdgeSchema,validateExecutionGraph} from '@treeseed/sdk/agent-capacity';
+import type {GraphRevision} from '@treeseed/sdk/agent-capacity';
+import {verifyGraphRetention} from '../evidence-pages.ts';
 type Row=Record<string,unknown>;
-export type CampaignGraphIsolation={baseline:Row;proposalId:string;projectId:string;workdayId:string};
+export type CampaignGraphIsolation={baseline:Row;baselineHistory:GraphRevision[];proposalId:string;projectId:string;workdayId:string};
 
 /** Compare actual pre-admission authority, without inventing historical graphs.
  * Independent operational status may advance; unrelated content authority may not. */
@@ -21,6 +23,7 @@ export function verifyCampaignGraphIsolation(graph:Row,input:CampaignGraphIsolat
    for(const edge of edges)assert.equal(edge.teamId,value.teamId,label);
    return{nodes,edges};
   };
+  verifyGraphRetention(input.baseline,input.baselineHistory);
   const before=parse(input.baseline),after=parse(graph);assert.equal(graph.teamId,input.baseline.teamId,label);assert.ok(Number(graph.revision)>=Number(input.baseline.revision),label);
   const ownProposal=(node:typeof before.nodes[number])=>node.projectId===input.projectId&&node.sourceRef.store==='treedx'&&node.sourceRef.model==='proposal'&&node.sourceRef.id===input.proposalId;
   const allowed=new Set(before.nodes.filter(ownProposal).map(node=>node.id));

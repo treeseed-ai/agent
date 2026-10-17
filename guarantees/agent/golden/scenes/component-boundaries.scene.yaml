@@ -2508,3 +2508,18 @@ workflow:
   - id: execution-graph-retention-native
     action: { verifier: agent.golden.execution-graph-retention-native }
     expect: { status: passed }
+  - id: execution-component-isolation-1
+    action: { verifier: agent.golden.execution-component-isolation-1 }
+    expect: { status: passed }
+  - id: execution-component-isolation-2
+    action: { verifier: agent.golden.execution-component-isolation-2 }
+    expect: { status: passed }
+  - id: execution-component-isolation-3
+    action: { verifier: agent.golden.execution-component-isolation-3 }
+    expect: { status: passed }
+  - id: execution-component-isolation-4
+    action: { verifier: agent.golden.execution-component-isolation-4 }
+    expect: { status: passed }
+  - id: execution-component-isolation-5
+    action: { verifier: agent.golden.execution-component-isolation-5 }
+    expect: { status: passed }

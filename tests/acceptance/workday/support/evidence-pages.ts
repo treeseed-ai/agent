@@ -54,6 +54,10 @@ export function verifyGraphRetention(graph: Row, history: GraphRevision[]): void
 			const record = graphRevisionSchema.parse(value); assert.deepEqual(record, value, label);
 			assert.equal(record.teamId, graph.teamId, label); assert.equal(record.revision, index + 1, label);
 			for (const id of record.changes.added) { assert.ok(!born.has(id), label); born.set(id, record.revision); }
+			for (const field of ['changed', 'completed', 'blocked', 'stale'] as const) {
+				const ids = record.changes[field]; assert.equal(new Set(ids).size, ids.length, label);
+				assert.ok(ids.every(id => born.has(id)), label);
+			}
 			for (const id of record.changes.removedEdges) { assert.ok(active.delete(id), label); }
 			for (const id of record.changes.addedEdges) { assert.ok(!active.has(id), label); active.add(id); if (!edgeBirth.has(id)) edgeBirth.set(id, record.revision); }
 		}

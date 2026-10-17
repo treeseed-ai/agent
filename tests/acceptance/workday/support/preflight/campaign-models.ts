@@ -7,13 +7,23 @@ import {capabilityAccountingLimitsSchema} from '@treeseed/sdk/agent-capacity';
 const label='ACCEPTANCE_CAMPAIGN_MODELS';
 const row=(value:unknown):Record<string,unknown>=>{assert.ok(value&&typeof value==='object'&&!Array.isArray(value),label+': Original public object required');return value as Record<string,unknown>;};
 
-/** These are the prescribed local campaign installation inputs, not release
+/** Only live reads require current unexpired supply; a frozen configuration
+ * retains its original open-session bytes across naturally advancing time.
+ * These are the prescribed local campaign installation inputs, not release
  * defaults or runtime role rules. The owning producer supports arbitrary IDs. */
-export function verifySdkCampaignModels(input:unknown):ReadonlyMap<string,Record<string,unknown>>{
+export function verifySdkCampaignModels(input:unknown,observedAt:number|null=Date.now()):ReadonlyMap<string,Record<string,unknown>>{
  const supply=row(input);assert.equal(supply.healthy,true,label+': Original healthy provider readback required');
  const sessions=supply.availability;assert.ok(Array.isArray(sessions)&&sessions.length>0,label+': Complete original availability required');
  let latest:Record<string,unknown>|undefined,at=-Infinity;
- for(const value of sessions){const session=row(value),time=Date.parse(String(session.refreshed_at));assert.ok(Number.isFinite(time),label+': Unreadable availability clock');if(time>at){latest=session;at=time;}}
+ assert.ok(observedAt===null||(typeof observedAt==='number'&&Number.isFinite(observedAt)),label+': Original observation clock required');
+ const sessionIds=new Set<string>();
+ for(const value of sessions){const session=row(value),time=Date.parse(String(session.refreshed_at)),expires=Date.parse(String(session.expires_at));
+  assert.ok(typeof session.id==='string'&&session.id.length>0&&!sessionIds.has(session.id),label+': Complete unique availability identity required');sessionIds.add(session.id);
+  assert.ok(['open','draining','closed','expired'].includes(String(session.status))&&Number.isFinite(time)&&Number.isFinite(expires)&&expires>time,label+': Unreadable availability authority');
+  if(session.status!=='open'||(observedAt!==null&&expires<=observedAt))continue;
+  if(time>at){latest=session;at=time;}
+ }
+ assert.ok(latest,label+': Current runnable availability required');
  const providers=latest?.executionProviders;assert.ok(Array.isArray(providers),label+': Original execution-provider inventory required');
  const inventory:Record<string,unknown>[]=providers.map(row),ids=inventory.map(provider=>provider.id);
  assert.ok(ids.every(id=>typeof id==='string'&&id.length>0&&id.trim()===id)&&new Set(ids).size===ids.length,label+': Complete unique native execution-provider identities required');
@@ -39,7 +49,7 @@ export function verifyFrozenCampaignModels(frozen:unknown,current:unknown){
  const original=row(frozen),observed=row(current),providerId=row(original.provider).providerId;
  assert.ok(typeof providerId==='string'&&providerId.length>0&&providerId.trim()===providerId,label+': Original provider owner required');
  assert.equal(row(observed.provider).providerId,providerId,label+': Foreign live provider');
- const before=modelView(verifySdkCampaignModels(original)),after=modelView(verifySdkCampaignModels(observed));
+ const before=modelView(verifySdkCampaignModels(original,null)),after=modelView(verifySdkCampaignModels(observed));
  assert.deepEqual(after,before,label+': Native model or capability configuration changed after freeze');return{before,after};
 }
 
@@ -50,7 +60,7 @@ export async function readCampaignProviderModels(input:unknown,readStatus:(provi
  const path=original.path,bytes=Buffer.from(original.bytes);assert.deepEqual(Buffer.from(readBytes(path)),bytes,label+': Operator capture changed before model readback');assert.deepEqual(JSON.parse(original.bytes),manifest,label+': Operator object differs from original bytes');
  const supply=row(row(manifest.allocationInputsByRun).sdk).providerSupply;assert.ok(Array.isArray(supply)&&supply.length>0,label+': Original frozen supply inventory required');const frozen=supply.map(row),ids=frozen.map(value=>value.providerId);
  assert.ok(ids.every(id=>typeof id==='string'&&id.trim()===id&&id.length>0)&&new Set(ids).size===ids.length,label+': Unique original provider owners required');
- const held=new Map<string,Record<string,unknown>>();for(const value of frozen){const id=String(value.providerId);assert.equal(row(value.provider).providerId,id,label+': Foreign captured provider');verifySdkCampaignModels(value);held.set(id,structuredClone(value));}
+ const held=new Map<string,Record<string,unknown>>();for(const value of frozen){const id=String(value.providerId);assert.equal(row(value.provider).providerId,id,label+': Foreign captured provider');verifySdkCampaignModels(value,null);held.set(id,structuredClone(value));}
  const readbacks=new Map<string,{before:ReturnType<typeof modelView>;after:ReturnType<typeof modelView>}>();let failed:unknown;
  try{for(const value of frozen){const id=String(value.providerId),observed=row(await readStatus(id));readbacks.set(id,verifyFrozenCampaignModels(held.get(id)!,observed));}return readbacks;}
  catch(error){failed=error;throw error;}finally{try{assert.deepEqual(Buffer.from(readBytes(path)),bytes,label+': Operator capture changed during model readback');}catch(error){if(failed)throw new AggregateError([failed,error],label+': Original readback and capture integrity both failed');throw error;}}

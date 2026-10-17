@@ -42,6 +42,7 @@ it('native original SDK status and immutable operator bytes reject changed model
   try{await verify(double,async(id:string)=>{await read(id);writeFileSync(double.path,double.bytes+' ');throw interruption;});}catch(error){both=error;}
   expect(both).toBeInstanceOf(AggregateError);if(!(both instanceof AggregateError))throw new Error('Both original failures must remain available');expect(both.errors).toHaveLength(2);expect(both.errors[0]).toBe(interruption);expect(String(both.errors[1])).toContain('Operator capture changed during model readback');expect(readFileSync(double.path,'utf8')).toBe(double.bytes+' ');writeFileSync(double.path,double.bytes);
   await verify(double,read);expect(both.errors[0]).toBe(interruption);expect(readFileSync(double.path,'utf8')).toBe(double.bytes);
+  const expired=campaignModels();expired.availability[0]!.refreshed_at=new Date(Date.now()-180_000).toISOString();expired.availability[0]!.expires_at=new Date(Date.now()-120_000).toISOString();const retainedCapture=capture('naturally-expired-frozen-capture',expired);await verify(retainedCapture,read);expect(readFileSync(retainedCapture.path,'utf8')).toBe(retainedCapture.bytes);
   const retained=[...failures];await Promise.all([observe(),observe()]);expect(failures).toEqual(retained);expect(frozen).toEqual(held);expect(input).toEqual(heldInput);
   expect(requests.every(value=>value==='GET /v1/teams/native-team/capacity-providers/'+providerId+'/status')).toBe(true);
   // Real configured policy producer, public SDK/HTTP and original captured

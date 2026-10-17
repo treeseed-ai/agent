@@ -61,7 +61,7 @@ describe('independent governed profile assertion contract', () => {
 		state.replies.set(`library read ${f.file.path}`, { result: { resolvedRef: profile.profileRef.commit, files: [f.file] } });
 		state.replies.set('agents handlers --project', { projectId: attempt.projectId, handlers: [handler] });
 		state.replies.set(`agents handlers ${profile.handler}`, { projectId: attempt.projectId, handler });
-		const before = structuredClone([...state.replies]); inspectLiveAssignmentProfile(item, attempt.teamId, [item], Object.fromEntries(attempt.contextRefs.filter(ref => ref.store === 'git').map(ref => [ref.repository!, ref.commit])));
+		const before = structuredClone([...state.replies]); inspectLiveAssignmentProfile(item, attempt.teamId, [item], Object.fromEntries(attempt.contextRefs.filter(ref => ref.store === 'git').map(ref => [ref.repository!, ref.commit])), 'local');
 		expect(state.calls.map(args => args.slice(0, 3))).toEqual([
 			['assignments', 'show', attempt.id], ['execution', 'graph', 'show'], ['workdays', 'show', attempt.workdayId], ['capacity', 'status', '--limit'], ['library', 'read', attempt.projectId],
 			['agents', 'handlers', 'list'], ['agents', 'handlers', 'show'], ['execution', 'graph', 'show'],
@@ -75,9 +75,9 @@ describe('independent governed profile assertion contract', () => {
 		const f = input(), item = liveAssignmentRecord(f.item.assignmentAttempt), shown = structuredClone(item), before = structuredClone(item);
 		const attempt = shown.assignmentAttempt as Record<string, unknown>, provider = attempt.provider as Record<string, unknown>;
 		provider.runtimeBuild = `sha256:${'f'.repeat(64)}`; state.replies.set('assignments show', shown);
-		expect(() => inspectLiveAssignmentProfile(item, f.item.assignmentAttempt.teamId, [item], {})).toThrow('Independent public view changed issued authority');
+		expect(() => inspectLiveAssignmentProfile(item, f.item.assignmentAttempt.teamId, [item], {}, 'local')).toThrow('Independent public view changed issued authority');
 		state.failure = new Error('controlled_denial');
-		expect(() => inspectLiveAssignmentProfile(item, f.item.assignmentAttempt.teamId, [item], {})).toThrow('ACCEPTANCE_CLI_COMMAND');
+		expect(() => inspectLiveAssignmentProfile(item, f.item.assignmentAttempt.teamId, [item], {}, 'local')).toThrow('ACCEPTANCE_CLI_COMMAND');
 		expect(item).toEqual(before);
 	});
 	it('native handler readback composition uses exact project and server without attaching an unsupported team option', () => {

@@ -31,7 +31,7 @@ describe('capacity-provider guarantee execution bindings', () => {
         expect(inputs.find((value:{owner:string})=>value.owner==='deployment')).toMatchObject({commit:'1d5cd28504a44e2abf8dab45612567fae143c544',sha256:'2f71e344f2b72efd44d26d13e10bfbe1517a941648c0ddbb398087606017f7aa'});
         expect(native.steps.filter((step:{with?:{repository?:string;path?:string}})=>step.with?.repository==='treeseed-ai/deployment'&&step.with?.path==='.treeseed/installed-owner-inputs/deployment').map((step:{with:unknown})=>step.with)).toEqual([{'github-token':'${{ github.token }}',repository:'treeseed-ai/deployment','run-id':38910640363,name:'deployment-candidate-1d5cd28504a44e2abf8dab45612567fae143c544',path:'.treeseed/installed-owner-inputs/deployment'}]);
         expect(inputs.find((value:{owner:string})=>value.owner==='sdk')).toMatchObject({commit:'379fd0684375609601605edb3aac2c091ae0aa33',sha256:'df9bb10a77e0833e6a2d774c50b5d9c5ff8c7b22ef3017b5590a74d04b619e32'});
-        for(const [owner,runId] of [['api',38979708754],['cli',38647918411],['sdk',38970276890]] as const){
+        for(const [owner,runId] of [['api',38989219390],['cli',38647918411],['sdk',38970276890]] as const){
             const input=inputs.find((value:{owner:string})=>value.owner===owner);
             const downloads=native.steps.filter((step:{with?:{repository?:string;path?:string}})=>step.with?.repository==='treeseed-ai/'+owner&&step.with?.path==='.treeseed/installed-owner-inputs/'+owner);
             expect(downloads).toHaveLength(1);
@@ -41,7 +41,7 @@ describe('capacity-provider guarantee execution bindings', () => {
 		expect(inputs.find((value: { owner: string }) => value.owner === 'cli')).toMatchObject({
 			commit: '6e2579428f4959906cd5b9b669ebbb2b44cb495c', sha256: '49b6d24882af45ba39fd46cdcd999c9c54e84bd416f834fa0042ec5425dbea1a' });
 		expect(inputs.find((value: { owner: string }) => value.owner === 'api')).toMatchObject({
-			commit: 'adf495c2e0411a953b80c9137dd2a958c43a97c5', sha256: '815fec9ec71cd542d68ea8b27c06d1ff4a935965b002b5d625c3b0691e2cb4e0' });
+			commit: '8fb35aec91f436d08f7409fbd7a697bfff1acb82', sha256: '109fe8cafdb5a097194cfba44566fd89f5ed4abdce1d1d6f967992c10b4b9453' });
 		expect(inputs.find((value: { owner: string }) => value.owner === 'api').buildTreeDx).toEqual({
 			commit: '6d358bb2e536af24918f3c33acb2072b9093a603', sha256: 'd6de27b42704b4c899562f290950561132fd0d48f38a95e6624eb853e32691cb' });
 		expect(inputs.find((value: { owner: string }) => value.owner === 'api').buildSdk).toMatchObject({

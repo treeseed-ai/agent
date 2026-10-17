@@ -36,7 +36,7 @@ it('denies an omitted requested tool even when public assignment views and remai
 	state.item.assignmentAttempt.effectiveProfile.permissionCeiling.tools.push('verification');
 	state.graph = liveAssignmentGraph(state.item);
 	const held = structuredClone(state);
-	expect(() => inspectLiveAssignmentProfile(state.item, 'team', [state.item], state.frozen)).toThrow('ACCEPTANCE_LIVE_GRAPH');
+	expect(() => inspectLiveAssignmentProfile(state.item, 'team', [state.item], state.frozen, 'local')).toThrow('ACCEPTANCE_LIVE_GRAPH');
 	expect(state).toEqual(held);
 });
 
@@ -59,7 +59,7 @@ it('denies a self-consistent granted Book when its independent original content 
 	state.item.assignmentAttempt.grant.contentRead.push(ref);
 	state.item.assignmentAttempt.effectiveProfile.permissionCeiling.content.read.push('book');
 	const before = structuredClone(state);
-	expect(() => inspectLiveAssignmentProfile(state.item, state.item.teamId, [state.item], state.frozen)).toThrow('ACCEPTANCE_CONTEXT');
+	expect(() => inspectLiveAssignmentProfile(state.item, state.item.teamId, [state.item], state.frozen, 'local')).toThrow('ACCEPTANCE_CONTEXT');
 	expect(state).toEqual(before);
 });
 
@@ -82,12 +82,12 @@ it('accepts exact independent graph authority without rewriting source observati
 	expect(() => verifyLiveAssignmentGraph(state.item, state.graph)).toThrow('ACCEPTANCE_LIVE_GRAPH');
 	state.graph = structuredClone(before.graph); delete state.graph.nodes[0].workdayId;
 	expect(() => verifyLiveAssignmentGraph(state.item, state.graph)).not.toThrow(); // Shared governed nodes may omit a run binding.
-	state.graph = structuredClone(before.graph); expect(() => inspectLiveAssignmentProfile(state.item, state.item.teamId, [state.item], state.frozen)).not.toThrow();
+	state.graph = structuredClone(before.graph); expect(() => inspectLiveAssignmentProfile(state.item, state.item.teamId, [state.item], state.frozen, 'local')).not.toThrow();
 });
 
 it('denies missing independent graph before accepting a newly issued assignment', () => {
 	state.graph = {};
-	expect(() => inspectLiveAssignmentProfile(state.item, state.item.teamId, [state.item], state.frozen)).toThrow('ACCEPTANCE_LIVE_GRAPH');
+	expect(() => inspectLiveAssignmentProfile(state.item, state.item.teamId, [state.item], state.frozen, 'local')).toThrow('ACCEPTANCE_LIVE_GRAPH');
 });
 
 it('retains a legitimate earlier completed attempt when independently verified request-changes history advances its graph node', () => {
@@ -115,32 +115,33 @@ it('retains a legitimate earlier completed attempt when independently verified r
 
 it('denies a Git workspace base absent from original exact context before accepting matching assignment views', () => {
 	state.item.assignmentAttempt.workspace.baseCommit = 'f'.repeat(40);
-	expect(() => inspectLiveAssignmentProfile(state.item, state.item.teamId, [state.item], state.frozen)).toThrow('ACCEPTANCE_INTEGRATION_BASE');
+	expect(() => inspectLiveAssignmentProfile(state.item, state.item.teamId, [state.item], state.frozen, 'local')).toThrow('ACCEPTANCE_INTEGRATION_BASE');
 });
 
 it('denies a foreign simulation branch before accepting matching assignment views', () => {
 	state.item.assignmentAttempt.workspace.branch = 'simulation/foreign-campaign/workday/assignment';
-	expect(() => inspectLiveAssignmentProfile(state.item, state.item.teamId, [state.item], state.frozen)).toThrow('ACCEPTANCE_LIVE_WORKSPACE');
+	expect(() => inspectLiveAssignmentProfile(state.item, state.item.teamId, [state.item], state.frozen, 'local')).toThrow('ACCEPTANCE_LIVE_WORKSPACE');
 });
 
 it('denies writable paths outside the original simulation workspace contract', () => {
 	state.item.assignmentAttempt.workspace.writablePaths = ['docs'];
-	expect(() => inspectLiveAssignmentProfile(state.item, state.item.teamId, [state.item], state.frozen)).toThrow('ACCEPTANCE_LIVE_WORKSPACE');
+	expect(() => inspectLiveAssignmentProfile(state.item, state.item.teamId, [state.item], state.frozen, 'local')).toThrow('ACCEPTANCE_LIVE_WORKSPACE');
 });
 
 it('retains exact simulation workspace authority and rejects malformed or substituted branch scope without rewriting observations', () => {
 	const original = structuredClone(state);
-	verifyLiveSimulationWorkspace(state.item, state.run); expect(state).toEqual(original);
+	verifyLiveSimulationWorkspace(state.item, state.run, 'local'); expect(state).toEqual(original);
 	for (const field of ['branch', 'writablePaths']) for (const value of [undefined, null, '', [], ['docs'], ['.', '.'], 'simulation/foreign']) {
 		state.item = structuredClone(original.item); state.item.assignmentAttempt.workspace[field] = value;
 		const denied = structuredClone(state.item);
-		expect(() => verifyLiveSimulationWorkspace(state.item, state.run)).toThrow(); expect(state.item).toEqual(denied);
+		expect(() => verifyLiveSimulationWorkspace(state.item, state.run, 'local')).toThrow(); expect(state.item).toEqual(denied);
 	}
 	state.item = structuredClone(original.item);
 	for (const value of [undefined, '', 'foreign-workday']) {
-		const run = { ...state.run, id: value }; expect(() => verifyLiveSimulationWorkspace(state.item, run)).toThrow('ACCEPTANCE_LIVE_WORKSPACE');
+		const run = { ...state.run, id: value }; expect(() => verifyLiveSimulationWorkspace(state.item, run, 'local')).toThrow('ACCEPTANCE_LIVE_WORKSPACE');
 	}
-	verifyLiveSimulationWorkspace(state.item, state.run); expect(state).toEqual(original);
+	for(const frozen of ['different-frozen-campaign','',undefined,null,'local/foreign']){const held=structuredClone(state);expect(()=>verifyLiveSimulationWorkspace(state.item,state.run,frozen as string)).toThrow('ACCEPTANCE_LIVE_WORKSPACE');expect(state).toEqual(held);}
+	verifyLiveSimulationWorkspace(state.item, state.run, 'local'); expect(state).toEqual(original);
 });
 
 it('retains original provider publication when a later session opens after the observed assignment was issued', () => {
@@ -168,7 +169,7 @@ it('denies a self-consistent foreign Git base and context against the original f
 	const original = structuredClone(state.item.assignmentAttempt.contextRefs.find((ref: Record<string, any>) => ref.store === 'git'));
 	state.item.assignmentAttempt.workspace.baseCommit = 'f'.repeat(40);
 	for (const ref of state.item.assignmentAttempt.contextRefs) if (ref.store === 'git') ref.commit = 'f'.repeat(40);
-	expect(() => inspectLiveAssignmentProfile(state.item, state.item.teamId, [state.item], { [original.repository]: original.commit }))
+	expect(() => inspectLiveAssignmentProfile(state.item, state.item.teamId, [state.item], { [original.repository]: original.commit }, 'local'))
 		.toThrow('ACCEPTANCE_LIVE_SOURCE_CONTEXT');
 });
 
@@ -193,17 +194,17 @@ it('requires every frozen source and exact granted content while retaining origi
 
 it('denies a missing owning allocation receipt before allowing a newly observed assignment to continue', () => {
 	delete state.item.explanation.metadata;
-	expect(() => inspectLiveAssignmentProfile(state.item, state.item.teamId, [state.item], state.frozen)).toThrow('ACCEPTANCE_ALLOCATION_RECEIPT');
+	expect(() => inspectLiveAssignmentProfile(state.item, state.item.teamId, [state.item], state.frozen, 'local')).toThrow('ACCEPTANCE_ALLOCATION_RECEIPT');
 });
 
 it('denies a predecessor result absent from the complete owning assignment inventory before campaign progress', () => {
 	state.item.assignmentAttempt.predecessorResultIds = ['missing-original-result'];
-	expect(() => inspectLiveAssignmentProfile(state.item, state.item.teamId, [state.item], state.frozen)).toThrow('ACCEPTANCE_PREDECESSOR_MISSING');
+	expect(() => inspectLiveAssignmentProfile(state.item, state.item.teamId, [state.item], state.frozen, 'local')).toThrow('ACCEPTANCE_PREDECESSOR_MISSING');
 });
 
 it('denies absent independent provider publication rather than trusting the runtime build repeated in assignment views', () => {
 	state.publications = [];
-	expect(() => inspectLiveAssignmentProfile(state.item, state.item.teamId, [state.item], state.frozen)).toThrow(/ACCEPTANCE_(AVAILABILITY|LIVE_RUNTIME)/u);
+	expect(() => inspectLiveAssignmentProfile(state.item, state.item.teamId, [state.item], state.frozen, 'local')).toThrow(/ACCEPTANCE_(AVAILABILITY|LIVE_RUNTIME)/u);
 });
 
 it('requires the exact independently published provider adapter build model and canonical limits while retaining unrelated histories', () => {
@@ -245,7 +246,7 @@ it('denies foreign source estimate node and graph revisions rather than acceptin
 	]) {
 		state.graph = structuredClone(original); change();
 		const before = structuredClone(state);
-		expect.soft(() => inspectLiveAssignmentProfile(state.item, state.item.teamId, [state.item], state.frozen)).toThrow('ACCEPTANCE_LIVE_GRAPH');
+		expect.soft(() => inspectLiveAssignmentProfile(state.item, state.item.teamId, [state.item], state.frozen, 'local')).toThrow('ACCEPTANCE_LIVE_GRAPH');
 		expect(state).toEqual(before);
 	}
 });

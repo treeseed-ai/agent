@@ -1,3 +1,6 @@
+import {createHash} from 'node:crypto';
+import {compileWorkday,DEFAULT_WORKDAY_POLICY} from '@treeseed/sdk/agent-capacity';
+import {liveAssignmentRecord} from './monitoring/live-assignment-fixture.ts';
 import {campaignCliFixture} from './lifecycle/campaign-cli-fixture.ts';
 import {campaignPlanReviewRequired} from '../../acceptance/campaign.ts';
 import { describe, expect, it, vi } from 'vitest';
@@ -6,6 +9,15 @@ import { encodeCapacityPageCursor } from '@treeseed/sdk/capacity-pagination';
 
 const {state,workdayId,observed,event,transport}=campaignCliFixture();
 describe('campaign CLI composition units (mocked transport, not native or live acceptance)', () => {
+ it('passes the original captured campaign namespace into every new assignment inspection despite contradictory public metadata',async()=>{
+  const item=liveAssignmentRecord(),attempt=item.assignmentAttempt as Record<string,unknown>;attempt.workdayId=workdayId;attempt.teamId='team-fixture';
+  const plan=compileWorkday({id:workdayId,teamId:'team-fixture',executionMode:'simulation',policyId:'default',policyRevision:1,agentIds:[],startsAt:new Date(Date.parse(String(attempt.createdAt))-21*60_000).toISOString(),policy:{...DEFAULT_WORKDAY_POLICY,durationSeconds:3600,planningPercent:100/3}});plan.state='active';
+  const returned=observed('completed');returned.run.startedAt=plan.startsAt;Object.assign(returned.run.parameters,{...plan.policySnapshot,appliedPlan:plan,acceptanceCampaignId:'foreign-public-campaign'});
+  state.campaign={campaignId:'frozen-operator-campaign'};state.freeze.receipts['/operator-campaign.json']='sha256:'+createHash('sha256').update(JSON.stringify(state.campaign)).digest('hex');state.freeze.sourceHeads={sdk:'a'.repeat(40)};
+  const held=structuredClone(state.freeze);state.inspect.mockImplementation((_run,_items,_retained,inspect)=>inspect(item));transport(()=>returned);await state.run!();
+  expect(state.profileInspect).toHaveBeenCalledExactlyOnceWith(item,'treeseed',[],{'treeseed-ai/sdk':'a'.repeat(40)},'frozen-operator-campaign');expect(state.freeze).toEqual(held);expect(returned.run.parameters).toMatchObject({acceptanceCampaignId:'foreign-public-campaign'});
+ });
+
  it('stops the exact admitted simulation on an incomplete original Workday lifecycle chain before accounting collaboration or later gates',async()=>{
   transport(()=>observed('running'));const original=new Error('ACCEPTANCE_WORKDAY_TRANSITIONS: Original closing observation missing'),held=structuredClone(state.freeze);
   state.lifecycleTransitions.mockImplementation(()=>{throw original;});

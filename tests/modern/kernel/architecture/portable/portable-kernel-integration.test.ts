@@ -6,7 +6,6 @@ import { nativeCloseoutTransport, portableKernel, portableProfile } from './port
 import { contextPredecessor } from './context-fixture.ts';
 import { sandboxAccountingUsage } from '../../../../../src/provider/execution/microvm-executor.ts';
 import { verifyLiveWorkspaceBase } from '../../../../acceptance/workday/support/monitoring/live-assignment-records.ts';
-
 const closeoutTransport = (f: Awaited<ReturnType<typeof portableKernel>>) => nativeCloseoutTransport(f, dirname(f.checkout));
 
 describe('portable configured profiles through real provider Kernel and native Git', () => {

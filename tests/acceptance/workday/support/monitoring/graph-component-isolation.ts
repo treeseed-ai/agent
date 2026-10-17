@@ -12,6 +12,7 @@ export function verifyCampaignGraphIsolation(graph:Row,input:CampaignGraphIsolat
   const parse=(value:Row)=>{
    assert.ok(value&&typeof value==='object'&&typeof value.teamId==='string'&&value.teamId,label);
    assert.ok(Number.isSafeInteger(value.revision)&&Number(value.revision)>=0,label);
+   assert.ok(typeof value.digest==='string'&&(value.revision===0?value.digest==='':/^sha256:[a-f0-9]{64}$/u.test(value.digest)),label);
    assert.ok(Array.isArray(value.nodes)&&Array.isArray(value.edges),label);
    const nodes=executionNodeSchema.array().parse(value.nodes),edges=executionEdgeSchema.array().parse(value.edges);
    assert.deepEqual(nodes,value.nodes,label);assert.deepEqual(edges,value.edges,label);

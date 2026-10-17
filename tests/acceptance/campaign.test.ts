@@ -1,4 +1,4 @@
-import {readProviderTransitionHistory,verifyProviderTransitionHistory} from './workday/support/monitoring/provider-history.ts';
+import {readProviderTransitionHistory,verifyProviderTransitionHistory,verifySandboxTransitionHistory} from './workday/support/monitoring/provider-history.ts';
 import {verifyPlanningWindow} from './workday/support/monitoring/assignment-allocation.ts';
 import assert from 'node:assert/strict';
 import {isDeepStrictEqual} from 'node:util';
@@ -109,6 +109,7 @@ test('Frozen SDK campaign drives planning acting review and terminal golden gate
 		const providerObserved=readProviderTransitionHistory(team,providerIds,inspectionEndsAt);
 		console.log(JSON.stringify({workdayId,observedAt:new Date().toISOString(),providerAudit:providerObserved.events.filter(value=>value.action==='provider.availability.updated')}));
 		verifyProviderTransitionHistory(team,providerIds,providerBaseline.sessions,providerObserved.sessions,providerObserved.events,observedProviderEvents);
+		verifySandboxTransitionHistory(currentRun,assignments,[...observedEvents.values()]);
 		const inspectedRun=currentRun;
 		observeLiveAssignmentRecords(inspectedRun, assignments, observedAssignments, item => { verifyPlanningWindow(item,inspectedRun); inspectLiveAssignmentProfile(item, team, assignments, { 'treeseed-ai/sdk': row(freeze.sourceHeads).sdk }); });
 	}, now: Date.now, wait: () => new Promise(resolve => setTimeout(resolve, 30_000)), stop,

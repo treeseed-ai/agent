@@ -11,6 +11,19 @@ function record(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
 
+/** Lifecycle timestamps may advance; every issued authority field stays frozen. */
+function sameAttemptAuthority(current: AssignmentAttempt, frozen: AssignmentAttempt, assignment: Record<string, unknown>): boolean {
+  if (current.startedAt !== frozen.startedAt) {
+    const window = record(record(assignment.metadata).executionWindow);
+    if (frozen.startedAt !== undefined || current.startedAt === undefined || current.startedAt !== window.startedAt
+      || Date.parse(current.startedAt) < Date.parse(frozen.createdAt) || Date.parse(current.startedAt) > Date.parse(frozen.deadline)
+      || !isDeepStrictEqual(window.executionRef, { nodeId: frozen.nodeId, nodeRevision: frozen.nodeRevision,
+        graphRevision: frozen.graphRevision, attempt: frozen.attempt })) return false;
+  }
+  return isDeepStrictEqual({ ...current, status: frozen.status, startedAt: frozen.startedAt, finishedAt: frozen.finishedAt },
+    { ...frozen, startedAt: frozen.startedAt, finishedAt: frozen.finishedAt });
+}
+
 /** The original authenticated assignment read exposes the sole operator audit.
  * This never authorizes a measured charge or modifies the frozen attempt. */
 export function isUnresolvedUsageRecovery(observed: unknown, frozen: AssignmentAttempt): boolean {
@@ -19,7 +32,7 @@ export function isUnresolvedUsageRecovery(observed: unknown, frozen: AssignmentA
   const keys = ['assignmentId', 'reservationId', 'usageStatus', 'settled', 'expectedStateVersion', 'actorId', 'reason', 'recoveredAt'];
   return current.success && ['expired', 'failed', 'cancelled'].includes(textStatus(assignment.status))
     && current.data.status === assignment.status
-    && isDeepStrictEqual({ ...current.data, status: frozen.status, finishedAt: frozen.finishedAt }, { ...frozen, finishedAt: frozen.finishedAt })
+    && sameAttemptAuthority(current.data, frozen, assignment)
     && assignment.id === frozen.id && assignment.teamId === frozen.teamId && assignment.capacityProviderId === frozen.provider.providerId
     && Object.keys(audit).length === keys.length && keys.every(key => Object.hasOwn(audit, key))
     && audit.assignmentId === frozen.id && audit.reservationId === frozen.reservationId
@@ -68,7 +81,8 @@ export async function recoverProviderLocalLeases(input: { config: ProviderHostRu
         || assignment.capacityProviderId !== frozen.provider.providerId || connection.teamId !== frozen.teamId
         || connection.providerId !== frozen.provider.providerId
         || current.status !== status
-        || !isDeepStrictEqual({ ...current, status: frozen.status, finishedAt: ['leased', 'running'].includes(status) ? current.finishedAt : frozen.finishedAt }, { ...frozen, finishedAt: frozen.finishedAt })
+        || !(sameAttemptAuthority(current, frozen, assignment)
+        && (!['leased', 'running'].includes(status) || current.finishedAt === frozen.finishedAt))
         || !['leased', 'running', 'completed', 'failed', 'returned', 'cancelled', 'expired', 'responded', 'abstained'].includes(status)) {
         throw new Error('Provider recovery assignment authority does not match its retained lease.');
       }

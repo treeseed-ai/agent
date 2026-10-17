@@ -474,7 +474,7 @@ const treeDx = { projectId: 'project', handleId: 'handle-1', repositoryId: null,
 		expect(signal?.aborted).toBe(true);
 		expect(api.settleAssignment).toHaveBeenCalledBefore(api.returnAssignment);
 		expect(api.settleAssignment).toHaveBeenCalledWith('assignment-1', expect.objectContaining({ activeSeconds: 1 }), expect.any(String));
-		expect(api.returnAssignment).toHaveBeenCalledWith('assignment-1', expect.objectContaining({ code: 'assignment_lease_renewal_failed' }));
+		expect(api.returnAssignment).toHaveBeenCalledWith('assignment-1', expect.objectContaining({ code: 'assignment_lease_renewal_failed', activeSeconds: 1, elapsedSeconds: expect.any(Number), usage: expect.objectContaining({ activeSeconds: expect.any(Number) }) }));
 	});
 
 	it('keeps provider proxy credentials outside AgentKernel-visible assignment data', async () => {

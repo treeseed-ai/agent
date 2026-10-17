@@ -6,7 +6,6 @@ import { nativeCloseoutTransport, portableKernel, portableProfile } from './port
 import { contextPredecessor } from './context-fixture.ts';
 import { sandboxAccountingUsage } from '../../../../../src/provider/execution/microvm-executor.ts';
 import { verifyLiveWorkspaceBase } from '../../../../acceptance/workday/support/monitoring/live-assignment-records.ts';
-
 const closeoutTransport = (f: Awaited<ReturnType<typeof portableKernel>>) => nativeCloseoutTransport(f, dirname(f.checkout));
 
 describe('portable configured profiles through real provider Kernel and native Git', () => {
@@ -269,6 +268,7 @@ describe('portable configured profiles through real provider Kernel and native G
 				reason: outcome.code === 'execution_provider_unavailable'
 					? 'Kata guest exited 1: Codex execution failed: Selected model is at capacity. Please try a different model.'
 					: 'Kata guest exited 1: Agent timing-awareness contract requires first and final checks.', retryable: true,
+				activeSeconds: 2, elapsedSeconds: 3, usage: { activeSeconds: 1.125, elapsedSeconds: 2.25, inputTokens: 19, nativeUsage: { input_tokens: 19, output_tokens: 3 } },
 				output: outcome.expected });
 		}
 	});

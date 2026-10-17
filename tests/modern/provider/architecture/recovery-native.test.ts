@@ -295,4 +295,22 @@ describe('document-wide native provider recovery boundary', () => {
 			expect(await f.entries()).toEqual(['capacity-state.json']);
 		} finally { await f.close(); }
 	});
+ it('native recovery releases the terminal API started attempt only after exact lifecycle and frozen authority readback', async () => {
+  const f=await recoveryFixture();try{
+   const frozen=f.lease.dispatchEnvelope.assignment.assignmentAttempt,startedAt=frozen.createdAt;
+   const observed={id:frozen.id,teamId:frozen.teamId,capacityProviderId:frozen.provider.providerId,status:'failed',runnerId:f.claim.runnerId,
+    assignmentAttempt:{...frozen,status:'failed',startedAt,finishedAt:new Date().toISOString()},metadata:{executionWindow:{startedAt,
+     executionRef:{nodeId:frozen.nodeId,nodeRevision:frozen.nodeRevision,graphRevision:frozen.graphRevision,attempt:frozen.attempt}}}};
+   const before=structuredClone(observed),claim=(await f.reopen().claimsForRecovery())[0];
+   for(const changed of [{...observed,metadata:{}},{...observed,assignmentAttempt:{...observed.assignmentAttempt,leaseId:'foreign'}}]){
+    f.setReply(changed);expect((await f.run())[0]?.status).toBe('retained');
+    expect((await f.reopen().claimsForRecovery())[0]?.dispatchEnvelope).toEqual(claim?.dispatchEnvelope);
+   }
+   f.setReply(observed);expect((await f.run())[0]).toMatchObject({status:'released',observedStatus:'failed'});
+   expect(await f.run()).toEqual([]);expect(observed).toEqual(before);
+   expect(f.requests).toHaveLength(3);expect(f.requests.every(request=>request.method==='GET')).toBe(true);
+   expect((await f.reopen().snapshot()).events.filter(event=>event.outcome==='authoritative-failed')).toHaveLength(1);
+  }finally{await f.close();}
+ });
+
 });

@@ -94,4 +94,16 @@ describe('original operator unresolved usage authority', () => {
 			expect(isUnresolvedUsageRecovery(value, frozen)).toBe(false); expect(value).toEqual(before);
 		}
 	});
+ it('recognizes only the API issued started lifecycle while retaining every frozen authority field during unresolved recovery', () => {
+  const value={...observed(),assignmentAttempt:{...observed().assignmentAttempt,startedAt:frozen.createdAt},metadata:{executionWindow:{startedAt:frozen.createdAt,
+   executionRef:{nodeId:frozen.nodeId,nodeRevision:frozen.nodeRevision,graphRevision:frozen.graphRevision,attempt:frozen.attempt}}}};
+  const before=structuredClone(value);expect(isUnresolvedUsageRecovery(value,frozen)).toBe(true);expect(value).toEqual(before);
+  for(const changed of [
+   {...value,metadata:{}},
+   {...value,metadata:{executionWindow:{...value.metadata.executionWindow,startedAt:frozen.deadline}}},
+   {...value,metadata:{executionWindow:{...value.metadata.executionWindow,executionRef:{...value.metadata.executionWindow.executionRef,attempt:frozen.attempt+1}}}},
+   {...value,assignmentAttempt:{...value.assignmentAttempt,deadline:new Date(Date.parse(frozen.deadline)+1000).toISOString()}},
+  ])expect(isUnresolvedUsageRecovery(changed,frozen)).toBe(false);
+ });
+
 });

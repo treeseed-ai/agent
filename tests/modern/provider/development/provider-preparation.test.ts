@@ -77,8 +77,15 @@ it('fails closed for an absent required selected SDK dependency while permitting
   vi.doMock('../../../../scripts/packages/package-tools.ts', () => ({ packageRoot: f.agent }));
   vi.resetModules();
   try {
-    const { copyRuntimePackage } = await import('../../../../scripts/capacity/providers/build-capacity-provider-container.ts');
+    const { runtimePackageNames, copyRuntimePackage } = await import('../../../../scripts/capacity/providers/build-capacity-provider-container.ts');
     const original = readFileSync(join(f.sdk, 'package.json'));
+    for (const name of [undefined, '', 'foreign-sdk']) {
+      writeFileSync(join(f.sdk, 'package.json'), JSON.stringify({ ...JSON.parse(original.toString()), name }));
+      expect(() => runtimePackageNames(f.modules)).toThrow('Selected SDK package identity is invalid.');
+      expect(existsSync(join(f.neighbor, 'dist'))).toBe(false);
+    }
+    writeFileSync(join(f.sdk, 'package.json'), '{'); expect(() => runtimePackageNames(f.modules)).toThrow();
+    writeFileSync(join(f.sdk, 'package.json'), original);
     rmSync(f.dependency, { recursive: true });
     expect(() => copyRuntimePackage(f.modules, 'renamed-runtime-helper', f.runtime)).toThrow(/Missing required runtime dependency/u);
     expect(() => copyRuntimePackage(f.modules, 'absent-platform-helper', f.runtime)).not.toThrow();

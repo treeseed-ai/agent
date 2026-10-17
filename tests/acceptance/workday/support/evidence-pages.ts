@@ -196,7 +196,7 @@ export function readCompleteEvidence(args: string[], team: string, limit: number
 }
 
 /** One cursor validator for the existing public CLI and campaign show page. */
-export function collectCompleteEvidence(fetchPage: (cursor: string | undefined) => Row, limit: number, prefix: string, direction: 'descending' | 'ascending', clockField: 'createdAt' | 'openedAt' = 'createdAt'): Row[] {
+export function collectCompleteEvidence(fetchPage: (cursor: string | undefined) => Row, limit: number, prefix: string, direction: 'descending' | 'ascending', clockField: 'createdAt' | 'openedAt' | 'created_at' = 'createdAt'): Row[] {
 	const records: Row[] = [], identities = new Set<string>(), cursors = new Set<string>();
 	let cursor: string | undefined, previous: { id: string; time: number } | undefined;
 	for (let pageNumber = 0; pageNumber < 40; pageNumber += 1) {

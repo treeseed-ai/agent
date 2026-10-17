@@ -44,12 +44,13 @@ async function suppliedMicrovm() {
 	const destroy = vi.fn(async () => {
 		if (destroyFailure) throw destroyFailure;
 		const completedAt=new Date().toISOString(),sandboxId='owned-unit-sandbox',vmId='sandbox-warm-11111111-1111-4111-8111-111111111111';
-  return hasSuppliedDestroy ? suppliedDestroy : {sandboxId,destroyed:true,teardown:{verified:true,completedAt},events:[
-   {schemaVersion:'treeseed.sandbox-event/v1',sandboxId,assignmentId:input.assignmentId,sequence:0,occurredAt:completedAt,type:'execution.progress',payload:{stage:'vm.assigned',vmId}},
-   {schemaVersion:'treeseed.sandbox-event/v1',sandboxId,assignmentId:input.assignmentId,sequence:1,occurredAt:completedAt,type:'sandbox.destroyed',payload:{verified:true,vmId}}]};
+  return hasSuppliedDestroy ? suppliedDestroy : {sandboxId,destroyed:true,teardown:{verified:true,completedAt},events:[...[{schemaVersion:'treeseed.sandbox-event/v1',sandboxId:sandboxId,assignmentId:input.assignmentId,sequence:0,occurredAt:createdAt,type:'sandbox.created',payload:{}},{schemaVersion:'treeseed.sandbox-event/v1',sandboxId:sandboxId,assignmentId:input.assignmentId,sequence:1,occurredAt:createdAt,type:'sandbox.ready',payload:{}}],
+   {schemaVersion:'treeseed.sandbox-event/v1',sandboxId,assignmentId:input.assignmentId,sequence:2,occurredAt:completedAt,type:'execution.progress',payload:{stage:'vm.assigned',vmId}},
+   {schemaVersion:'treeseed.sandbox-event/v1',sandboxId,assignmentId:input.assignmentId,sequence:3,occurredAt:completedAt,type:'sandbox.destroyed',payload:{verified:true,vmId}}]};
 	});
 	const downloadArtifact = vi.fn(async () => Buffer.from(downloaded)), execute = vi.fn(async () => suppliedResult);
 	const client = {
+  inspect:vi.fn(async()=>{const supplied=suppliedDestroy&&typeof suppliedDestroy==='object'?Reflect.get(suppliedDestroy,'events'):undefined;return{sandboxId:'owned-unit-sandbox',assignmentId:input.assignmentId,events:Array.isArray(supplied)&&supplied.length>=2&&supplied[0]?.type==='sandbox.created'&&supplied[1]?.type==='sandbox.ready'?structuredClone(supplied.slice(0,2)):[{schemaVersion:'treeseed.sandbox-event/v1',sandboxId:'owned-unit-sandbox',assignmentId:input.assignmentId,sequence:0,occurredAt:createdAt,type:'sandbox.created',payload:{}},{schemaVersion:'treeseed.sandbox-event/v1',sandboxId:'owned-unit-sandbox',assignmentId:input.assignmentId,sequence:1,occurredAt:createdAt,type:'sandbox.ready',payload:{}}]};}),
 		prepare: vi.fn(async (assignment: SandboxAssignment) => { observed.push(structuredClone(assignment)); return { sandboxId: 'owned-unit-sandbox', operationToken: 'unit-operation' }; }),
 		upload: vi.fn(async () => undefined), execute, destroy, downloadArtifact,
 		nextToolRequest: vi.fn(async () => ({ request: null })), completeToolRequest: vi.fn(async () => undefined), cancel: vi.fn(async () => undefined),
@@ -74,23 +75,24 @@ describe('microvm result and closeout authority', () => {
   const vmId='sandbox-warm-11111111-1111-4111-8111-111111111111';
   for(const mode of ['exact','missing','foreign','duplicate','gap','changed','private']) {
    const f=await suppliedMicrovm(),sandboxId='owned-unit-sandbox',now=new Date().toISOString();
-   const events=[{schemaVersion:'treeseed.sandbox-event/v1',sandboxId,assignmentId:f.input.assignmentId,sequence:0,occurredAt:now,
+   const events=[...[{schemaVersion:'treeseed.sandbox-event/v1',sandboxId:sandboxId,assignmentId:f.input.assignmentId,sequence:0,occurredAt:now,type:'sandbox.created',payload:{}},{schemaVersion:'treeseed.sandbox-event/v1',sandboxId:sandboxId,assignmentId:f.input.assignmentId,sequence:1,occurredAt:now,type:'sandbox.ready',payload:{}}],{schemaVersion:'treeseed.sandbox-event/v1',sandboxId,assignmentId:f.input.assignmentId,sequence:2,occurredAt:now,
     type:'execution.progress',payload:{stage:'vm.assigned',warmed:true,vmId}},
-    {schemaVersion:'treeseed.sandbox-event/v1',sandboxId,assignmentId:f.input.assignmentId,sequence:1,occurredAt:now,
+    {schemaVersion:'treeseed.sandbox-event/v1',sandboxId,assignmentId:f.input.assignmentId,sequence:3,occurredAt:now,
      type:'sandbox.destroyed',payload:{verified:true,vmId}}];
-   if(mode==='foreign')events[0]!.assignmentId='foreign';
-   if(mode==='duplicate')events.splice(1,0,structuredClone(events[0]!));
-   if(mode==='gap')events[1]!.sequence=2;
-   if(mode==='changed')events[1]!.payload.vmId='sandbox-warm-22222222-2222-4222-8222-222222222222';
-   if(mode==='private')Object.assign(events[0]!.payload,{credential:'opaque-private-observation'});
+   if(mode==='foreign')events[2]!.assignmentId='foreign';
+   if(mode==='duplicate')events.splice(3,0,structuredClone(events[2]!));
+   if(mode==='gap')events[3]!.sequence=8;
+   if(mode==='changed')events[3]!.payload.vmId='sandbox-warm-22222222-2222-4222-8222-222222222222';
+   if(mode==='private')Object.assign(events[2]!.payload,{credential:'opaque-private-observation'});
    const receipt={sandboxId,destroyed:true,teardown:{verified:true,completedAt:now},...(mode==='missing'?{}:{events})},before=structuredClone(receipt);
    f.setDestroy(receipt);let failure:unknown;try{await f.executor.execute(f.input);}catch(error){failure=error;}
    const emitted=vi.mocked(f.input.emit!).mock.calls.map(([event])=>event),closed=emitted.filter(event=>event.type==='sandbox.destroyed');
    expect(closed).toHaveLength(1);
    if(mode==='exact'||mode==='private'){
     expect(failure).toBeUndefined();expect(closed[0]!.payload).toEqual({sandboxId,teardown:receipt.teardown,vmId});
-    expect(JSON.stringify(closed)).not.toContain('opaque-private-observation');
+    expect(closed[0]!.protectedPayload).toEqual({sandboxEvents:events});expect(JSON.stringify(closed.map(({protectedPayload:_protected,...publicEvent})=>publicEvent))).not.toContain('opaque-private-observation');
    }else{expect(failure).toMatchObject({code:'sandbox_vm_custody_invalid'});expect(closed[0]!.payload).not.toHaveProperty('vmId',vmId);}
+   if(mode!=='missing')expect(closed[0]!.protectedPayload).toEqual({sandboxEvents:events});
    expect(receipt).toEqual(before);expect(f.client.destroy).toHaveBeenCalledOnce();expect(f.cleanup).toHaveBeenCalledOnce();
   }
  });

@@ -1,3 +1,4 @@
+import {readProviderTransitionHistory,verifyProviderTransitionHistory,verifySandboxTransitionHistory} from './workday/support/monitoring/provider-history.ts';
 import {verifyPlanningWindow} from './workday/support/monitoring/assignment-allocation.ts';
 import assert from 'node:assert/strict';
 import {isDeepStrictEqual} from 'node:util';
@@ -45,6 +46,11 @@ test('Frozen SDK campaign drives planning acting review and terminal golden gate
 	const originalGraphHistory=Number(originalGraph.revision)===0?[]:completeGraphHistory(originalGraph,cursor=>read(['execution','graph','watch','--cursor',cursor],team));
 	verifyGraphRetention(originalGraph,originalGraphHistory);
 	console.log(JSON.stringify({observedAt:new Date().toISOString(),preAdmissionGraph:originalGraph,preAdmissionGraphHistory:originalGraphHistory}));
+	assert.ok(Array.isArray(freeze.providerSupply)&&freeze.providerSupply.length>0,'ACCEPTANCE_PROVIDER_HISTORY: Original frozen provider inventory required');
+	const providerIds=freeze.providerSupply.map((value:unknown)=>{const id=row(value).providerId;assert.ok(typeof id==='string'&&id,'ACCEPTANCE_PROVIDER_HISTORY: Exact frozen provider required');return id;}),observedProviderEvents=new Map<string,Record<string,unknown>>();
+	const providerBaseline=readProviderTransitionHistory(team,providerIds,Date.parse(freeze.preflight.expiresAt));
+	console.log(JSON.stringify({observedAt:new Date().toISOString(),providerAuditBaseline:providerBaseline.events.filter(value=>providerIds.includes(String(value.capacity_provider_id)))}));
+	verifyProviderTransitionHistory(team,providerIds,providerBaseline.sessions,providerBaseline.sessions,providerBaseline.events,observedProviderEvents);
 	const started = read(['workdays', 'start', '--preflight', freeze.preflight.id, '--digest', freeze.preflight.preflightDigest,
 		'--yes', '--idempotency-key', `golden-start:${freeze.preflight.id}`], team);
 	const workdayId = started.workdayId;
@@ -101,6 +107,10 @@ test('Frozen SDK campaign drives planning acting review and terminal golden gate
    assignments=[...known.values()]; // Preserve original public list rows; re-read history after fresh roots.
   }
   assert.ok(complete,'ACCEPTANCE_LIVE_ASSIGNMENT: Complete concurrent transition inventory not reached');
+		const providerObserved=readProviderTransitionHistory(team,providerIds,inspectionEndsAt);
+		console.log(JSON.stringify({workdayId,observedAt:new Date().toISOString(),providerAudit:providerObserved.events.filter(value=>providerIds.includes(String(value.capacity_provider_id)))}));
+		verifyProviderTransitionHistory(team,providerIds,providerBaseline.sessions,providerObserved.sessions,providerObserved.events,observedProviderEvents);
+		verifySandboxTransitionHistory(currentRun,assignments,[...observedEvents.values()]);
 		const inspectedRun=currentRun;
 		observeLiveAssignmentRecords(inspectedRun, assignments, observedAssignments, item => { verifyPlanningWindow(item,inspectedRun); inspectLiveAssignmentProfile(item, team, assignments, { 'treeseed-ai/sdk': row(freeze.sourceHeads).sdk }, campaignId); });
 	}, now: Date.now, wait: () => new Promise(resolve => setTimeout(resolve, 30_000)), stop,

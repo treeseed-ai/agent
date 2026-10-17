@@ -131,11 +131,12 @@ export function assignmentAllowedServices(executionKind: unknown, treeDxEnabled:
 /** Observe proxy failures immediately; never retry a failed delivery as a second response. */
 export function startSandboxToolPump(client: Pick<SandboxBrokerClient, 'nextToolRequest' | 'completeToolRequest'>,
 	prepared: { sandboxId: string; operationToken: string }, request: Parameters<AgentExecutor['execute']>[0],
-	executionTime: { startedAt: string; deadlineAt: string }, onFailure: () => void) {
+	executionTime: { startedAt: string; deadlineAt: string }, onFailure: () => void, observe?: (signal:AbortSignal)=>Promise<void>) {
 	const controller = new AbortController();
 	let failure: Error | undefined;
 	const completion = (async () => {
 		while (!controller.signal.aborted) {
+			if(observe){await observe(controller.signal);if(controller.signal.aborted)break;}
 			const pending = await client.nextToolRequest(prepared.sandboxId, prepared.operationToken, controller.signal);
 			if (controller.signal.aborted) break;
 			if (!pending.request) { await delay(50, undefined, { signal: controller.signal }); continue; }
@@ -219,12 +220,34 @@ export async function createMicrovmExecutor(config: ProviderHostRuntimeConfig, m
 				const preparationDeadlineAt = String(object(object(object(request.assignment.capacityEnvelope).budget).time).preparationDeadlineAt ?? '');
 				const prepared = await client.prepare(assignment, preparationDeadlineAt, request.signal); active.set(request.assignmentId, { sandboxId: prepared.sandboxId, operationToken: prepared.operationToken, providerId: assignment.providerId, teamId: assignment.teamId, renewals: new RenewalDrain() }); let result: ReturnType<typeof sandboxResultSchema.parse> | undefined; let sourceReference: AssignmentReference | undefined; let artifacts: Record<string, unknown>[] = []; let teardown: Record<string, unknown> = { verified: false, completedAt: null };
 				let transportFailure: unknown; let vmId:string|null=null;
+				const observedBrokerEvents:Array<ReturnType<typeof sandboxEventSchema.parse>>=[];
+				const observeBrokerEvents=async(raw:unknown)=>{
+					if(!Array.isArray(raw)||raw.length<2)throw Object.assign(new Error('Original complete live broker snapshot required'),{code:'sandbox_vm_custody_invalid'});
+					const events=raw.map(value=>{const event=sandboxEventSchema.parse(value);if(canonical(event)!==canonical(value))throw new Error('Original broker event was normalized');return event;});
+					if(events[0]!.type!=='sandbox.created'||events[1]!.type!=='sandbox.ready'||events.length<observedBrokerEvents.length)throw Object.assign(new Error('Original live broker history was omitted'),{code:'sandbox_vm_custody_invalid'});
+					let previous=-Infinity;
+					for(const[index,event]of events.entries()){
+						const clock=Date.parse(event.occurredAt);if(event.sandboxId!==prepared.sandboxId||event.assignmentId!==request.assignmentId||event.sequence!==index||!Number.isFinite(clock)||clock<previous||clock>Date.now()||(observedBrokerEvents[index]&&canonical(event)!==canonical(observedBrokerEvents[index])))throw Object.assign(new Error('Original live broker ownership sequence or clock changed'),{code:'sandbox_vm_custody_invalid'});previous=clock;
+					}
+					for(const event of events.slice(observedBrokerEvents.length)){
+						await request.emit?.({type:'sandbox.observed',occurredAt:new Date().toISOString(),summary:'Original owning broker lifecycle observed.',payload:{sandboxId:prepared.sandboxId,brokerSequence:event.sequence,brokerEventType:event.type},protectedPayload:{sandboxEvent:structuredClone(event)}});
+						observedBrokerEvents.push(structuredClone(event));
+					}
+				};
+				let lastBrokerObservation=0;
+				const inspectBroker=async(signal?:AbortSignal)=>{
+					const state=await client.inspect(prepared.sandboxId,prepared.operationToken,signal);
+					if(state.sandboxId!==prepared.sandboxId||state.assignmentId!==request.assignmentId)throw Object.assign(new Error('Foreign owning broker snapshot'),{code:'sandbox_vm_custody_invalid'});
+					await observeBrokerEvents(state.events);lastBrokerObservation=Date.now();
+				};
+
 				const cancelSandbox = () => { void client.cancel(prepared.sandboxId, prepared.operationToken).catch(() => undefined); };
 					if (request.signal?.aborted) cancelSandbox(); else request.signal?.addEventListener('abort', cancelSandbox, { once: true });
 				try {
 				await request.emit?.({ type: 'sandbox.created', occurredAt: new Date().toISOString(), summary: `Prepared Kata sandbox ${prepared.sandboxId}.`, payload: { sandboxId: prepared.sandboxId, profile: assignment.profile, guestImageDigest: assignment.guestImageDigest,
 					identityManifestDigest: assignment.identityManifestDigest, contextManifestDigest: assignment.contextManifestDigest, inputs: assignment.inputs.map(({ id, digest: inputDigest, bytes, disposition, mediaType, targetPath }) => ({ id, digest: inputDigest, bytes, disposition, mediaType, targetPath })) },
 					protectedPayload: { identityManifest: materialized.identityManifest, contextManifest: materialized.context } });
+					await inspectBroker(request.signal);
 					const current = active.get(request.assignmentId)!;
 					if (assignmentNeedsSourceWorkspace(attempt)) {
 						current.source = await prepareAssignmentSource(client, prepared, request);
@@ -250,7 +273,7 @@ export async function createMicrovmExecutor(config: ProviderHostRuntimeConfig, m
 					let toolFailure: Error | undefined;
 					let executionFailure: unknown;
 					const stopToolPump = startSandboxToolPump(client, prepared, request,
-						{ startedAt: executionStartedAt, deadlineAt: executionDeadlineAt }, cancelSandbox);
+						{ startedAt: executionStartedAt, deadlineAt: executionDeadlineAt }, cancelSandbox, async signal=>{if(Date.now()-lastBrokerObservation>=1000)await inspectBroker(signal);});
 					try { result = sandboxResultSchema.parse(await client.execute(prepared.sandboxId, prepared.operationToken, {}, request.signal)); }
 					catch (error) { executionFailure = error; }
 					finally {
@@ -313,8 +336,10 @@ export async function createMicrovmExecutor(config: ProviderHostRuntimeConfig, m
       try{vmId=destroyedVmId(receipt,prepared.sandboxId,assignment.assignmentId,Boolean(result));}
       catch(error){transportFailure=Object.assign(new Error('Sandbox VM custody could not be independently verified.',{cause:transportFailure?new AggregateError([transportFailure,error],'Original execution and broker custody failed'):error}),{code:'sandbox_vm_custody_invalid'});}
      }
+					try{if(Array.isArray(receipt?.events)&&receipt.events.length)await observeBrokerEvents(receipt.events);}
+					catch(error){transportFailure=Object.assign(new Error('Original broker lifecycle observation failed',{cause:transportFailure?new AggregateError([transportFailure,error]):error}),{code:'sandbox_vm_custody_invalid'});}
 					try {
-						await request.emit?.({ type: 'sandbox.destroyed', occurredAt: new Date().toISOString(), summary: `Kata sandbox ${prepared.sandboxId} teardown ${teardown.verified === true ? 'verified' : 'could not be verified'}.`, payload: { sandboxId: prepared.sandboxId, teardown, vmId } });
+						await request.emit?.({ type: 'sandbox.destroyed', occurredAt: new Date().toISOString(), summary: `Kata sandbox ${prepared.sandboxId} teardown ${teardown.verified === true ? 'verified' : 'could not be verified'}.`, payload: { sandboxId: prepared.sandboxId, teardown, vmId }, ...(Array.isArray(receipt?.events)&&receipt.events.length?{protectedPayload:{sandboxEvents:structuredClone(receipt.events)}}:{}) });
 					} catch (error) { if (!request.signal?.aborted) throw error; }
 				}
 				if (transportFailure) throw Object.assign(transportFailure instanceof Error ? transportFailure : new Error(String(transportFailure)), {

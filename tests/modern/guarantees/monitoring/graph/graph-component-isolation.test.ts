@@ -6,10 +6,7 @@ import type {GraphRevision} from '@treeseed/sdk/agent-capacity';
 import {observeLiveGraphRevisions} from '../../../../acceptance/workday/support/monitoring/live-graph-revisions.ts';
 import {retainedGraph} from './graph-retention-fixture.ts';
 
-// The original callable accepts an added owning baseline argument; a shorter
-// JavaScript implementation ignores it. That missing semantic check is RED.
-type Isolation={baseline:Record<string,unknown>;baselineHistory:GraphRevision[];proposalId:string;projectId:string;workdayId:string};
-const observe:(...args:[...Parameters<typeof observeLiveGraphRevisions>,Isolation])=>ReturnType<typeof observeLiveGraphRevisions>=observeLiveGraphRevisions;
+const observe=observeLiveGraphRevisions;
 it('denies a changed unrelated component even when all original nodes edges and canonical revision receipts remain present',async()=>{
  const f=retainedGraph(),baseline=structuredClone(f.graph),held=structuredClone(f),graph=structuredClone(f.graph);
  graph.nodes.find(node=>node.id===f.outside.id)!.condition!.expectedState='foreign-content-authority';

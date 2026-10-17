@@ -314,7 +314,7 @@ export async function createMicrovmExecutor(config: ProviderHostRuntimeConfig, m
       catch(error){transportFailure=Object.assign(new Error('Sandbox VM custody could not be independently verified.',{cause:transportFailure?new AggregateError([transportFailure,error],'Original execution and broker custody failed'):error}),{code:'sandbox_vm_custody_invalid'});}
      }
 					try {
-						await request.emit?.({ type: 'sandbox.destroyed', occurredAt: new Date().toISOString(), summary: `Kata sandbox ${prepared.sandboxId} teardown ${teardown.verified === true ? 'verified' : 'could not be verified'}.`, payload: { sandboxId: prepared.sandboxId, teardown, vmId } });
+						await request.emit?.({ type: 'sandbox.destroyed', occurredAt: new Date().toISOString(), summary: `Kata sandbox ${prepared.sandboxId} teardown ${teardown.verified === true ? 'verified' : 'could not be verified'}.`, payload: { sandboxId: prepared.sandboxId, teardown, vmId }, ...(Array.isArray(receipt?.events)&&receipt.events.length?{protectedPayload:{sandboxEvents:structuredClone(receipt.events)}}:{}) });
 					} catch (error) { if (!request.signal?.aborted) throw error; }
 				}
 				if (transportFailure) throw Object.assign(transportFailure instanceof Error ? transportFailure : new Error(String(transportFailure)), {

@@ -309,3 +309,5 @@ acceptanceCriteria:
     verifierRefs: ["agent.golden.live.campaign","agent.golden.execution-clock-observation-live-1","api.golden.execution-protected-observation-live-1","agent.golden.execution-normal-sdk-physical-absence-live-1"]
   - criterion: 7176aa4d3bf381690af4e016090cf096abf273cd5a4f15eae0286d0373827b5b
     verifierRefs: ["agent.golden.live.campaign-freeze","agent.golden.live.campaign"]
+  - criterion: 7647173a0e973e700a4eb74b9ecfe960ef408dfb6c2e34339ac7a0afac8a89c2
+    verifierRefs: ["agent.golden.live.campaign-freeze","deployment.golden.execution-selected-code-preflight-1","agent.golden.live.guest-model-smoke","agent.golden.live.campaign","api.golden.execution-protected-observation-live-1"]

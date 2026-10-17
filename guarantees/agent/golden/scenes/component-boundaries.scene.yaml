@@ -2561,3 +2561,6 @@ workflow:
   - id: live-broker-observation-failure-unit
     action: { verifier: agent.golden.live-broker-observation-failure-unit }
     expect: { status: passed }
+  - id: frozen-guest-smoke-unit
+    action: { verifier: agent.golden.frozen-guest-smoke-unit }
+    expect: { status: passed }

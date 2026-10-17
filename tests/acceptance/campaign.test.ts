@@ -110,7 +110,7 @@ test('Frozen SDK campaign drives planning acting review and terminal golden gate
 		const providerObserved=readProviderTransitionHistory(team,providerIds,inspectionEndsAt);
 		console.log(JSON.stringify({workdayId,observedAt:new Date().toISOString(),providerAudit:providerObserved.events.filter(value=>providerIds.includes(String(value.capacity_provider_id)))}));
 		verifyProviderTransitionHistory(team,providerIds,providerBaseline.sessions,providerObserved.sessions,providerObserved.events,observedProviderEvents);
-		verifySandboxTransitionHistory(currentRun,assignments,[...observedEvents.values()]);
+		verifySandboxTransitionHistory(currentRun,assignments,[...observedEvents.values()],row(freeze.guest).digest);
 		const inspectedRun=currentRun;
 		observeLiveAssignmentRecords(inspectedRun, assignments, observedAssignments, item => { verifyPlanningWindow(item,inspectedRun); inspectLiveAssignmentProfile(item, team, assignments, { 'treeseed-ai/sdk': row(freeze.sourceHeads).sdk }, campaignId); });
 	}, now: Date.now, wait: () => new Promise(resolve => setTimeout(resolve, 30_000)), stop,

@@ -4396,3 +4396,8 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/execution/sandbox-tool-pump.test.ts
     testName: "cancels the exact original execution once on a missing broker lifecycle snapshot before tool work and retains the original observer failure"
+  agent.golden.frozen-guest-smoke-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/monitoring/providers/frozen-guest-smoke.test.ts
+    testName: "requires immutable freeze and independent protected native image readback in the original measured guest smoke before allowing later work"

@@ -196,7 +196,7 @@ export function readCompleteEvidence(args: string[], team: string, limit: number
 }
 
 /** One cursor validator for the existing public CLI and campaign show page. */
-export function collectCompleteEvidence(fetchPage: (cursor: string | undefined) => Row, limit: number, prefix: string, direction: 'descending' | 'ascending', clockField: 'createdAt' | 'openedAt' = 'createdAt'): Row[] {
+export function collectCompleteEvidence(fetchPage: (cursor: string | undefined) => Row, limit: number, prefix: string, direction: 'descending' | 'ascending', clockField: 'createdAt' | 'openedAt' | 'created_at' = 'createdAt'): Row[] {
 	const records: Row[] = [], identities = new Set<string>(), cursors = new Set<string>();
 	let cursor: string | undefined, previous: { id: string; time: number } | undefined;
 	for (let pageNumber = 0; pageNumber < 40; pageNumber += 1) {
@@ -204,6 +204,7 @@ export function collectCompleteEvidence(fetchPage: (cursor: string | undefined) 
 		const page = row(observed.page);
 		assert.ok(Array.isArray(observed.items) && observed.items.length <= limit && page.limit === limit
 			&& typeof page.hasMore === 'boolean', `${prefix}_PAGE: Complete typed page authority required`);
+		assert.ok(!cursor || observed.items.length > 0, `${prefix}_PAGE: A promised continuation cannot omit its original tail`);
 		for (const value of observed.items) {
 			assert.ok(value && typeof value === 'object' && !Array.isArray(value), `${prefix}_ROW: Record required`);
 			const item = row(value), id = typeof item.id === 'string' ? item.id : '';

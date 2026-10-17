@@ -2528,3 +2528,36 @@ workflow:
       verifier: agent.golden.campaign-frozen-branch-namespace-unit
     expect:
       status: passed
+  - id: provider-transition-history-unit
+    action: { verifier: agent.golden.provider-transition-history-unit }
+    expect: { status: passed }
+  - id: provider-transition-history-native
+    action: { verifier: agent.golden.provider-transition-history-native }
+    expect: { status: passed }
+  - id: provider-audit-pages-unit
+    action: { verifier: agent.golden.provider-audit-pages-unit }
+    expect: { status: passed }
+  - id: provider-inventory-stability-unit
+    action: { verifier: agent.golden.provider-inventory-stability-unit }
+    expect: { status: passed }
+  - id: provider-history-before-admission-unit
+    action: { verifier: agent.golden.provider-history-before-admission-unit }
+    expect: { status: passed }
+  - id: provider-history-scoped-stop-unit
+    action: { verifier: agent.golden.provider-history-scoped-stop-unit }
+    expect: { status: passed }
+  - id: sandbox-transition-history-unit
+    action: { verifier: agent.golden.sandbox-transition-history-unit }
+    expect: { status: passed }
+  - id: sandbox-transition-history-native
+    action: { verifier: agent.golden.sandbox-transition-history-native }
+    expect: { status: passed }
+  - id: sandbox-history-scoped-stop-unit
+    action: { verifier: agent.golden.sandbox-history-scoped-stop-unit }
+    expect: { status: passed }
+  - id: live-broker-observation-drain-unit
+    action: { verifier: agent.golden.live-broker-observation-drain-unit }
+    expect: { status: passed }
+  - id: live-broker-observation-failure-unit
+    action: { verifier: agent.golden.live-broker-observation-failure-unit }
+    expect: { status: passed }

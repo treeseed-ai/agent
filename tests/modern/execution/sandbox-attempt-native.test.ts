@@ -31,6 +31,8 @@ it('native provider signs the canonical source attempt unchanged through Unix br
 				createPublicKey({ key: { ...identity.publicJwk }, format: 'jwk' }), Buffer.from(signature.value, 'base64url')) });
 			expect(result.status).toBe('completed'); expect(f.input.assignment).toEqual(held);
 			expect(f.events.filter(event=>event.type==='sandbox.destroyed').map(event=>event.payload)).toEqual([{sandboxId:'owned-native-sandbox',teardown:{verified:true,completedAt:f.destroyedAt()},vmId:'sandbox-warm-11111111-1111-4111-8111-111111111111'}]);
+			const snapshots=f.events.filter(event=>event.type==='sandbox.observed');expect(snapshots.map(event=>event.payload.brokerSequence)).toEqual([0,1,2,3]);expect(snapshots.slice(0,2).map(event=>event.payload.brokerEventType)).toEqual(['sandbox.created','sandbox.ready']);for(const event of snapshots.slice(0,2))expect(f.events.indexOf(event)).toBeLessThan(f.events.findIndex(value=>value.type==='execution.started'));
+			expect(f.paths.indexOf('GET /v1/sandboxes/owned-native-sandbox')).toBeLessThan(f.paths.indexOf('POST /v1/sandboxes/owned-native-sandbox/execute'));
 			expect(f.paths.filter(path => path === 'POST /v1/sandboxes')).toHaveLength(1);
 			expect(f.paths.filter(path => path.endsWith('/execute'))).toHaveLength(1);
 			expect(f.paths.filter(path => path.startsWith('DELETE '))).toEqual(['DELETE /v1/sandboxes/owned-native-sandbox']);
@@ -42,14 +44,15 @@ it('native provider signs the canonical source attempt unchanged through Unix br
  for(const mode of ['missing','foreign','duplicate','gap','changed','private']) {
   const f=await microvmBroker();try{
    const now=new Date().toISOString(),vmId='sandbox-warm-11111111-1111-4111-8111-111111111111',sandboxId='owned-native-sandbox';
-   const events=[{schemaVersion:'treeseed.sandbox-event/v1',sandboxId,assignmentId:f.input.assignmentId,sequence:0,occurredAt:now,type:'execution.progress',payload:{stage:'vm.assigned',vmId}},
-    {schemaVersion:'treeseed.sandbox-event/v1',sandboxId,assignmentId:f.input.assignmentId,sequence:1,occurredAt:now,type:'sandbox.destroyed',payload:{verified:true,vmId}}];
-   if(mode==='foreign')events[0]!.assignmentId='foreign';if(mode==='duplicate')events.splice(1,0,structuredClone(events[0]!));
-   if(mode==='gap')events[1]!.sequence=2;if(mode==='changed')events[1]!.payload.vmId='sandbox-warm-22222222-2222-4222-8222-222222222222';
-   if(mode==='private')Object.assign(events[0]!.payload,{credential:'opaque-private-broker-value'});
+   const events=[...[{schemaVersion:'treeseed.sandbox-event/v1',sandboxId:sandboxId,assignmentId:f.input.assignmentId,sequence:0,occurredAt:now,type:'sandbox.created',payload:{}},{schemaVersion:'treeseed.sandbox-event/v1',sandboxId:sandboxId,assignmentId:f.input.assignmentId,sequence:1,occurredAt:now,type:'sandbox.ready',payload:{}}],{schemaVersion:'treeseed.sandbox-event/v1',sandboxId,assignmentId:f.input.assignmentId,sequence:2,occurredAt:now,type:'execution.progress',payload:{stage:'vm.assigned',vmId}},
+    {schemaVersion:'treeseed.sandbox-event/v1',sandboxId,assignmentId:f.input.assignmentId,sequence:3,occurredAt:now,type:'sandbox.destroyed',payload:{verified:true,vmId}}];
+   if(mode==='foreign')events[2]!.assignmentId='foreign';if(mode==='duplicate')events.splice(3,0,structuredClone(events[2]!));
+   if(mode==='gap')events[3]!.sequence=8;if(mode==='changed')events[3]!.payload.vmId='sandbox-warm-22222222-2222-4222-8222-222222222222';
+   if(mode==='private')Object.assign(events[2]!.payload,{credential:'opaque-private-broker-value'});
    const receipt={sandboxId,destroyed:true,teardown:{verified:true,completedAt:now},...(mode==='missing'?{}:{events})},held=structuredClone(receipt);f.patchDestroy(receipt);
-   if(mode==='private'){await f.executor.execute(f.input);expect(f.events.filter(event=>event.type==='sandbox.destroyed')[0]!.payload).toEqual({sandboxId,teardown:receipt.teardown,vmId});expect(JSON.stringify(f.events)).not.toContain('opaque-private-broker-value');}
+   if(mode==='private'){await f.executor.execute(f.input);expect(f.events.filter(event=>event.type==='sandbox.destroyed')[0]!.payload).toEqual({sandboxId,teardown:receipt.teardown,vmId});expect(JSON.stringify(f.events.map(({protectedPayload:_protected,...publicEvent})=>publicEvent))).not.toContain('opaque-private-broker-value');}
    else await expect(f.executor.execute(f.input)).rejects.toMatchObject({code:'sandbox_vm_custody_invalid',usage:[{activeSeconds:1.125,elapsedSeconds:2.25,inputTokens:19,outputTokens:3}]});
+   if(mode!=='missing')expect(f.events.filter(event=>event.type==='sandbox.destroyed')[0]!.protectedPayload).toEqual({sandboxEvents:events});
    expect(receipt).toEqual(held);expect(f.paths.filter(path=>path.startsWith('DELETE '))).toHaveLength(1);
   }finally{await f.close();}expect(f.server.listening).toBe(false);await expect(stat(f.directory)).rejects.toMatchObject({code:'ENOENT'});
  }

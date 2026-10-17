@@ -4341,3 +4341,58 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/guarantees/campaign-cli.test.ts
     testName: "passes the original captured campaign namespace into every new assignment inspection despite contradictory public metadata"
+  agent.golden.provider-transition-history-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/monitoring/providers/provider-transition-history.test.ts
+    testName: "requires each original provider sequence health eligibility timing and closure observation from complete public history without changing unrelated retained sessions"
+  agent.golden.provider-transition-history-native:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/monitoring/providers/provider-transition-history-native.test.ts
+    testName: "native public provider audit pages retain health changes and exact scoped stop on omitted denied malformed or interrupted histories before unchanged concurrent retry"
+  agent.golden.provider-audit-pages-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/monitoring/providers/provider-audit-pages.test.ts
+    testName: "retains original raw capacity audit clocks and equal-clock identity pagination without translating records or inferring terminal pages"
+  agent.golden.provider-inventory-stability-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/monitoring/providers/provider-audit-pages.test.ts
+    testName: "rereads changing public provider roots within the original inspection bound and refuses incomplete or interrupted audit inventory before returning a stable observation"
+  agent.golden.provider-history-before-admission-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/campaign-cli.test.ts
+    testName: "requires original frozen provider history before metered admission and retains a denied baseline without starting or stopping unrelated work"
+  agent.golden.provider-history-scoped-stop-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/campaign-cli.test.ts
+    testName: "stops the exact admitted simulation on incomplete original provider history before assignment inspection collaboration approval and later gates"
+  agent.golden.sandbox-transition-history-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/monitoring/providers/sandbox-transition-history.test.ts
+    testName: "requires the original complete broker lifecycle and tool sequence in protected public history with exact assignment clocks and independently matching public teardown"
+  agent.golden.sandbox-transition-history-native:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/monitoring/providers/sandbox-transition-history-native.test.ts
+    testName: "native public assignment and protected broker event readback stops the exact simulation on missing altered denied or interrupted lifecycle history and preserves unchanged retry"
+  agent.golden.sandbox-history-scoped-stop-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/campaign-cli.test.ts
+    testName: "stops the exact live simulation on missing original protected sandbox history before assignment inspection or later gates"
+  agent.golden.live-broker-observation-drain-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/sandbox-tool-pump.test.ts
+    testName: "observes original broker lifecycle before tool polling and drains an interrupted observation without any late work or fabricated failure"
+  agent.golden.live-broker-observation-failure-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/sandbox-tool-pump.test.ts
+    testName: "cancels the exact original execution once on a missing broker lifecycle snapshot before tool work and retains the original observer failure"

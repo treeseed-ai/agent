@@ -237,7 +237,9 @@ export async function runProviderAssignment(input: ProviderAssignmentRunInput) {
   if (result.status === 'returned') {
 		await input.client.settleAssignment(assignmentId, { activeSeconds: settlementSeconds(usage.activeSeconds), elapsedSeconds: settlementSeconds(usage.elapsedSeconds),
 			usageDimension: 'aggregate', usageActual: usage }, `assignment-settlement:${assignmentId}:${input.runnerId}`);
-    return input.client.returnAssignment(assignmentId, { leaseToken: input.leaseToken, runnerId: input.runnerId, code: result.code ?? 'agent_executor_returned', reason: result.summary, retryable: result.retryable ?? true, output: { ...record(result.outputs), artifacts: result.artifacts ?? [] } });
+    return input.client.returnAssignment(assignmentId, { leaseToken: input.leaseToken, runnerId: input.runnerId, code: result.code ?? 'agent_executor_returned', reason: result.summary, retryable: result.retryable ?? true,
+			activeSeconds: settlementSeconds(usage.activeSeconds), elapsedSeconds: settlementSeconds(usage.elapsedSeconds), usage,
+			output: { ...record(result.outputs), artifacts: result.artifacts ?? [] } });
   }
   if (result.status === 'failed') {
     return input.client.failAssignment(assignmentId, { leaseToken: input.leaseToken, runnerId: input.runnerId, code: result.code ?? 'agent_executor_failed', message: result.summary, retryable: result.retryable ?? false,

@@ -41,8 +41,8 @@ jobs:
         with:
           github-token: ${{ github.token }}
           repository: treeseed-ai/deployment
-          run-id: 38910640363
-          name: deployment-candidate-1d5cd28504a44e2abf8dab45612567fae143c544
+          run-id: 39020653453
+          name: deployment-candidate-02f02baa6de001df91e026c20cc507ba1fc85d40
           path: .treeseed/tools/deployment-candidate
       - name: Read checked public CLI composition artifact
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
@@ -65,9 +65,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          jq -e '.repository == "treeseed-ai/deployment" and .commit == "1d5cd28504a44e2abf8dab45612567fae143c544"' .treeseed/tools/deployment-candidate/exact-head.json
+          jq -e '.repository == "treeseed-ai/deployment" and .commit == "02f02baa6de001df91e026c20cc507ba1fc85d40"' .treeseed/tools/deployment-candidate/exact-head.json
           test "$(gh api repos/treeseed-ai/cli/actions/runs/38647918411 --jq '[.head_sha,.status,.conclusion]|join(" ")')" == '2b27d26c23905423d90c73abb24c888c452a8745 completed success'
-          echo '2f71e344f2b72efd44d26d13e10bfbe1517a941648c0ddbb398087606017f7aa  .treeseed/tools/deployment-candidate/treeseed-deployment-runtime-0.1.0-rc.321.tgz' | sha256sum --check --strict
+          echo 'a584e6ed61185147d2f5fff237618a0035f868a31bf3e328cedcc3e0006659c1  .treeseed/tools/deployment-candidate/treeseed-deployment-runtime-0.1.0-rc.321.tgz' | sha256sum --check --strict
           echo '49b6d24882af45ba39fd46cdcd999c9c54e84bd416f834fa0042ec5425dbea1a  .treeseed/tools/cli-candidate/treeseed-cli-0.13.0-rc.85.tgz' | sha256sum --check --strict
           npm install --no-save --package-lock=false --ignore-scripts --no-audit --no-fund ./.treeseed/tools/deployment-candidate/treeseed-deployment-runtime-0.1.0-rc.321.tgz ./.treeseed/tools/cli-candidate/treeseed-cli-0.13.0-rc.85.tgz
           test "$(gh api repos/treeseed-ai/sdk/actions/runs/37451351249 --jq '[.head_sha,.status,.conclusion]|join(" ")')" == 'cbc03314871d271bce7275c5cee71d950397a0c3 completed success'
@@ -123,7 +123,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       TREESEED_INSTALLED_OWNER_INPUTS: >-
-        [{"owner":"agent","commit":"${{ github.sha }}","sha256":null},{"owner":"api","commit":"18c53846a4c85dc143511449b0a213f57196a74a","sha256":"1469153a030e8904807038fb69ca2385705a78149225aaa8c07676b8793a6fef","buildSdk":{"commit":"952195376b53bf39742e64f320f2a3b109cc77c0","sha256":"7ba46c788578f526692e81f3713f05e7c00db900b2d810ec27364cb41c008185"},"buildTreeDx":{"commit":"6d358bb2e536af24918f3c33acb2072b9093a603","sha256":"d6de27b42704b4c899562f290950561132fd0d48f38a95e6624eb853e32691cb"}},{"owner":"sdk","commit":"379fd0684375609601605edb3aac2c091ae0aa33","sha256":"df9bb10a77e0833e6a2d774c50b5d9c5ff8c7b22ef3017b5590a74d04b619e32"},{"owner":"cli","commit":"6e2579428f4959906cd5b9b669ebbb2b44cb495c","sha256":"49b6d24882af45ba39fd46cdcd999c9c54e84bd416f834fa0042ec5425dbea1a"},{"owner":"deployment","commit":"1d5cd28504a44e2abf8dab45612567fae143c544","sha256":"2f71e344f2b72efd44d26d13e10bfbe1517a941648c0ddbb398087606017f7aa"},{"owner":"reviewer","commit":"762725d3794b9f5b3128c1584d3a17495ab6a368","sha256":"e402cbde62812cc8c0d31a9dadc4e4c89bf8c4997e6f2e30870e7eb64b8c2627","buildSdk":{"commit":"77a6908d4e7580716e9e2ab92de80150b02cdb06","sha256":"a31b02194665e8705e8d81331da0901f4088f54deb50a34c236d3a661d2d1aa7"}}]
+        [{"owner":"agent","commit":"${{ github.sha }}","sha256":null},{"owner":"api","commit":"18c53846a4c85dc143511449b0a213f57196a74a","sha256":"1469153a030e8904807038fb69ca2385705a78149225aaa8c07676b8793a6fef","buildSdk":{"commit":"952195376b53bf39742e64f320f2a3b109cc77c0","sha256":"7ba46c788578f526692e81f3713f05e7c00db900b2d810ec27364cb41c008185"},"buildTreeDx":{"commit":"6d358bb2e536af24918f3c33acb2072b9093a603","sha256":"d6de27b42704b4c899562f290950561132fd0d48f38a95e6624eb853e32691cb"}},{"owner":"sdk","commit":"379fd0684375609601605edb3aac2c091ae0aa33","sha256":"df9bb10a77e0833e6a2d774c50b5d9c5ff8c7b22ef3017b5590a74d04b619e32"},{"owner":"cli","commit":"6e2579428f4959906cd5b9b669ebbb2b44cb495c","sha256":"49b6d24882af45ba39fd46cdcd999c9c54e84bd416f834fa0042ec5425dbea1a"},{"owner":"deployment","commit":"02f02baa6de001df91e026c20cc507ba1fc85d40","sha256":"a584e6ed61185147d2f5fff237618a0035f868a31bf3e328cedcc3e0006659c1"},{"owner":"reviewer","commit":"762725d3794b9f5b3128c1584d3a17495ab6a368","sha256":"e402cbde62812cc8c0d31a9dadc4e4c89bf8c4997e6f2e30870e7eb64b8c2627","buildSdk":{"commit":"77a6908d4e7580716e9e2ab92de80150b02cdb06","sha256":"a31b02194665e8705e8d81331da0901f4088f54deb50a34c236d3a661d2d1aa7"}}]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -176,8 +176,8 @@ jobs:
         with:
           github-token: ${{ github.token }}
           repository: treeseed-ai/deployment
-          run-id: 38910640363
-          name: deployment-candidate-1d5cd28504a44e2abf8dab45612567fae143c544
+          run-id: 39020653453
+          name: deployment-candidate-02f02baa6de001df91e026c20cc507ba1fc85d40
           path: .treeseed/installed-owner-inputs/deployment
       - name: Read held reviewer archive
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093

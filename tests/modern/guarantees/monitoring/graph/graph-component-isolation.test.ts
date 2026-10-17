@@ -31,6 +31,7 @@ it('denies malformed missing duplicated moved and unrelated graph authority whil
  const {f,input}=isolation();const changes:Array<(graph:typeof f.graph)=>void>=[
   graph=>{graph.nodes.find(node=>node.id===f.outside.id)!.sourceRef.id='foreign-content';},
   graph=>{graph.nodes.find(node=>node.id===f.outside.id)!.ruleRevision++;},
+  graph=>{graph.nodes.find(node=>node.id===f.outside.id)!.nodeRevision++;},
   graph=>{graph.nodes.find(node=>node.id===f.outside.id)!.graphRevisionCreated++;},
   graph=>{graph.nodes=graph.nodes.filter(node=>node.id!==f.outside.id);},
   graph=>{graph.nodes.push(structuredClone(f.outside));},

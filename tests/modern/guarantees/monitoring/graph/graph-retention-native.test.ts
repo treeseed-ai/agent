@@ -13,9 +13,10 @@ it('native original SDK graph inventory detects a lost unrelated component befor
  const route=(operation:string)=>{const descriptor=controlPlaneOperation(operation).descriptor.rest;if(!descriptor)throw new Error('Original public route required');return descriptor.path.replace('{teamId}',f.graph.teamId).replace('{runId}',workdayId);};
  const graphPath=route('execution.graph.show'),watchPath=route('execution.graph.watch'),stopPath=route('workdays.stop');
  const observedGraph=()=>{const graph=structuredClone(f.graph),history=structuredClone(f.history);
-  if(mode==='operational-progress'||mode==='unrelated-edge'){
+  if(mode==='operational-progress'||mode==='unrelated-edge'||mode==='unrelated-revision'){
    graph.revision=2;const record=structuredClone(history[0]!);record.revision=2;record.createdAt='2026-10-16T20:00:01.000Z';record.changes={added:[],changed:[],completed:[],blocked:[],stale:[],addedEdges:[],removedEdges:[]};
    if(mode==='operational-progress'){const node=graph.nodes.find(node=>node.id===f.outside.id)!;node.status='blocked';node.nodeRevision++;node.graphRevisionUpdated=2;record.changedSourceRefs=[node.sourceRef];record.changes.changed=[node.id];record.changes.blocked=[node.id];}
+   else if(mode==='unrelated-revision'){const node=graph.nodes.find(node=>node.id===f.outside.id)!;node.nodeRevision++;node.graphRevisionUpdated=2;record.changedSourceRefs=[node.sourceRef];record.changes.changed=[node.id];}
    else{const edge={...graph.edges[0]!,id:'new-unrelated-cross-component-edge',fromNodeId:f.outside.id,graphRevisionCreated:2};graph.edges.push(edge);record.changes.addedEdges=[edge.id];}
    history.push(record);
   }
@@ -37,7 +38,7 @@ it('native original SDK graph inventory detects a lost unrelated component befor
    if(mode==='exact'||mode==='operational-progress'){expect(failure).toBeUndefined();expect(progressed).toBe(1);expect(stops).toBe(0);expect(snapshots).toEqual(observedGraph().history);return;}
    expect(failure).toBeInstanceOf(Error);expect(progressed).toBe(0);expect(stops).toBe(1);expect(snapshots).toEqual([]);failures.push({mode,failure});
   };
-  await Promise.all([execute(),execute()]);mode='operational-progress';await Promise.all([execute(),execute()]);for(mode of['unrelated-edge','unrelated-change','lost-node','lost-edge','unknown-node','unknown-change','duplicate-change','denied','interrupted'])await execute();
+  await Promise.all([execute(),execute()]);mode='operational-progress';await Promise.all([execute(),execute()]);for(mode of['unrelated-revision','unrelated-edge','unrelated-change','lost-node','lost-edge','unknown-node','unknown-change','duplicate-change','denied','interrupted'])await execute();
   const retained=[...failures];mode='exact';await Promise.all([execute(),execute()]);expect(failures).toEqual(retained);expect(f).toEqual(held);expect(requests.every(value=>[graphPath,watchPath,stopPath].includes(value.path))).toBe(true);
   // Real SDK/HTTP/original monitor and stop; graph/clock/admission DTOs are
   // controlled, not native SQL producer, model usage or managed golden proof.

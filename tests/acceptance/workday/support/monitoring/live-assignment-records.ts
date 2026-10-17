@@ -92,12 +92,14 @@ export function verifyLiveAssignmentGraph(item: Row, graph: Row, items: readonly
 }
 
 /** Existing simulation branch derivation and owning API whole-checkout scope. */
-export function verifyLiveSimulationWorkspace(item: Row, run: Row): void {
+export function verifyLiveSimulationWorkspace(item: Row, run: Row, campaignId: string): void {
 	const attempt = assignmentAttemptSchema.parse(item.assignmentAttempt), code = 'ACCEPTANCE_LIVE_WORKSPACE';
 	assert.equal(run.executionMode, 'simulation', `${code}: Original simulation authority required`);
+	assert.ok(typeof campaignId==='string'&&campaignId.length>0&&campaignId.trim()===campaignId,`${code}: Exact original frozen campaign namespace required`);
 	if (attempt.workspace.mode !== 'git') return;
 	assert.ok(typeof run.id === 'string' && run.id === attempt.workdayId, `${code}: Exact owning workday required`);
-	assert.equal(attempt.workspace.branch, simulationSourceBranch(String(row(run.parameters).acceptanceCampaignId || 'local'), run.id, attempt.id),
+	let branch:string;try{branch=simulationSourceBranch(campaignId,run.id,attempt.id);}catch(cause){throw new Error(`${code}: Invalid original frozen campaign namespace`,{cause});}
+	assert.equal(attempt.workspace.branch, branch,
 		`${code}: Exact campaign/workday/assignment branch required`);
 	assert.deepEqual(attempt.workspace.writablePaths, ['.'], `${code}: Exact original simulation checkout write scope required`);
 }
@@ -185,7 +187,7 @@ export function verifyLiveWorkspaceBase(item: Row, items: readonly Row[], frozen
 	assert.equal(attempt.workspace.baseCommit, expected, `${code}: Workspace does not start on the original required source`);
 }
 
-export function inspectLiveAssignmentProfile(item: Row, team: string, items: readonly Row[], frozenBases: Readonly<Record<string, unknown>>): void {
+export function inspectLiveAssignmentProfile(item: Row, team: string, items: readonly Row[], frozenBases: Readonly<Record<string, unknown>>, campaignId: string): void {
 	const attempt = assignmentAttemptSchema.parse(item.assignmentAttempt), profile = attempt.effectiveProfile;
 	const shown = read(['assignments', 'show', attempt.id], team);
 	assert.ok(validateProviderAssignment(shown).ok, 'ACCEPTANCE_LIVE_ASSIGNMENT: Independent public record is malformed');
@@ -207,7 +209,7 @@ export function inspectLiveAssignmentProfile(item: Row, team: string, items: rea
 	assert.equal(run.id, attempt.workdayId, 'ACCEPTANCE_LIVE_ASSIGNMENT: Foreign owning workday');
 	assert.equal(run.teamId, attempt.teamId, 'ACCEPTANCE_LIVE_ASSIGNMENT: Foreign owning team');
 	verifyAppliedWorkdayCustody(run);
-	verifyLiveSimulationWorkspace(item, run);
+	verifyLiveSimulationWorkspace(item, run, campaignId);
 	verifyAllocation(shown, run);
 	verifyLiveProviderRuntime(item, availabilityHistory(team));
 	verifyGovernedProfile(item, readGovernedContentFile(profile.profileRef, attempt.projectId, team, new Map(), 'ACCEPTANCE_LIVE_PROFILE'), graph);

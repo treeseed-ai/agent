@@ -2541,3 +2541,18 @@ workflow:
   - id: provider-history-scoped-stop-unit
     action: { verifier: agent.golden.provider-history-scoped-stop-unit }
     expect: { status: passed }
+  - id: sandbox-transition-history-unit
+    action: { verifier: agent.golden.sandbox-transition-history-unit }
+    expect: { status: passed }
+  - id: sandbox-transition-history-native
+    action: { verifier: agent.golden.sandbox-transition-history-native }
+    expect: { status: passed }
+  - id: sandbox-history-scoped-stop-unit
+    action: { verifier: agent.golden.sandbox-history-scoped-stop-unit }
+    expect: { status: passed }
+  - id: live-broker-observation-drain-unit
+    action: { verifier: agent.golden.live-broker-observation-drain-unit }
+    expect: { status: passed }
+  - id: live-broker-observation-failure-unit
+    action: { verifier: agent.golden.live-broker-observation-failure-unit }
+    expect: { status: passed }

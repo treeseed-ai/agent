@@ -4366,3 +4366,28 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/guarantees/campaign-cli.test.ts
     testName: "stops the exact admitted simulation on incomplete original provider history before assignment inspection collaboration approval and later gates"
+  agent.golden.sandbox-transition-history-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/monitoring/providers/sandbox-transition-history.test.ts
+    testName: "requires the original complete broker lifecycle and tool sequence in protected public history with exact assignment clocks and independently matching public teardown"
+  agent.golden.sandbox-transition-history-native:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/monitoring/providers/sandbox-transition-history-native.test.ts
+    testName: "native public assignment and protected broker event readback stops the exact simulation on missing altered denied or interrupted lifecycle history and preserves unchanged retry"
+  agent.golden.sandbox-history-scoped-stop-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/campaign-cli.test.ts
+    testName: "stops the exact live simulation on missing original protected sandbox history before assignment inspection or later gates"
+  agent.golden.live-broker-observation-drain-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/sandbox-tool-pump.test.ts
+    testName: "observes original broker lifecycle before tool polling and drains an interrupted observation without any late work or fabricated failure"
+  agent.golden.live-broker-observation-failure-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/sandbox-tool-pump.test.ts
+    testName: "cancels the exact original execution once on a missing broker lifecycle snapshot before tool work and retains the original observer failure"

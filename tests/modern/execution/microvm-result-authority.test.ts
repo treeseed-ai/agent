@@ -89,8 +89,9 @@ describe('microvm result and closeout authority', () => {
    expect(closed).toHaveLength(1);
    if(mode==='exact'||mode==='private'){
     expect(failure).toBeUndefined();expect(closed[0]!.payload).toEqual({sandboxId,teardown:receipt.teardown,vmId});
-    expect(JSON.stringify(closed)).not.toContain('opaque-private-observation');
+    expect(closed[0]!.protectedPayload).toEqual({sandboxEvents:events});expect(JSON.stringify(closed.map(({protectedPayload:_protected,...publicEvent})=>publicEvent))).not.toContain('opaque-private-observation');
    }else{expect(failure).toMatchObject({code:'sandbox_vm_custody_invalid'});expect(closed[0]!.payload).not.toHaveProperty('vmId',vmId);}
+   if(mode!=='missing')expect(closed[0]!.protectedPayload).toEqual({sandboxEvents:events});
    expect(receipt).toEqual(before);expect(f.client.destroy).toHaveBeenCalledOnce();expect(f.cleanup).toHaveBeenCalledOnce();
   }
  });

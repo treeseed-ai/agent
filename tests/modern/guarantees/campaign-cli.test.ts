@@ -1,5 +1,5 @@
 import {createHash} from 'node:crypto';
-import {compileWorkday,DEFAULT_WORKDAY_POLICY} from '@treeseed/sdk/agent-capacity';
+import {allocateWorkdayCapacity,compileWorkday,DEFAULT_WORKDAY_POLICY} from '@treeseed/sdk/agent-capacity';
 import {liveAssignmentRecord} from './monitoring/live-assignment-fixture.ts';
 import {campaignCliFixture} from './lifecycle/campaign-cli-fixture.ts';
 import {campaignPlanReviewRequired} from '../../acceptance/campaign.ts';
@@ -12,6 +12,7 @@ describe('campaign CLI composition units (mocked transport, not native or live a
  it('passes the original captured campaign namespace into every new assignment inspection despite contradictory public metadata',async()=>{
   const item=liveAssignmentRecord(),attempt=item.assignmentAttempt as Record<string,unknown>;attempt.workdayId=workdayId;attempt.teamId='team-fixture';
   const plan=compileWorkday({id:workdayId,teamId:'team-fixture',executionMode:'simulation',policyId:'default',policyRevision:1,agentIds:[],startsAt:new Date(Date.parse(String(attempt.createdAt))-21*60_000).toISOString(),policy:{...DEFAULT_WORKDAY_POLICY,durationSeconds:3600,planningPercent:100/3}});plan.state='active';
+  const seconds=Number((attempt.limits as Record<string,unknown>).maximumSeconds);(item.explanation as {metadata:{allocation:{opportunity:unknown}}}).metadata.allocation.opportunity=allocateWorkdayCapacity({remainingSeconds:seconds,now:String(attempt.createdAt),workdays:[{plan,committedSeconds:0,planningCommittedSeconds:0,maximumAdditionalSeconds:seconds,actingReady:true}]})[plan.id];
   const returned=observed('completed');returned.run.startedAt=plan.startsAt;Object.assign(returned.run.parameters,{...plan.policySnapshot,appliedPlan:plan,acceptanceCampaignId:'foreign-public-campaign'});
   state.campaign={campaignId:'frozen-operator-campaign'};state.freeze.receipts['/operator-campaign.json']='sha256:'+createHash('sha256').update(JSON.stringify(state.campaign)).digest('hex');state.freeze.sourceHeads={sdk:'a'.repeat(40)};
   const held=structuredClone(state.freeze);state.inspect.mockImplementation((_run,_items,_retained,inspect)=>inspect(item));transport(()=>returned);await state.run!();

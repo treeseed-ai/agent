@@ -6,6 +6,15 @@ import { encodeCapacityPageCursor } from '@treeseed/sdk/capacity-pagination';
 
 const {state,workdayId,observed,event,transport}=campaignCliFixture();
 describe('campaign CLI composition units (mocked transport, not native or live acceptance)', () => {
+ it('requires original frozen provider history before metered admission and retains a denied baseline without starting or stopping unrelated work',async()=>{
+  transport(()=>observed('completed'));const original=new Error('ACCEPTANCE_PROVIDER_HISTORY: Missing baseline publication'),held=structuredClone(state.freeze);state.providerTransitions.mockImplementation(()=>{throw original;});
+  await expect(state.run!()).rejects.toThrow('ACCEPTANCE_PROVIDER_HISTORY');expect(state.providerRead).toHaveBeenCalledExactlyOnceWith('treeseed',['configured-provider'],expect.any(Number));expect(state.providerTransitions).toHaveBeenCalledOnce();expect(state.freeze).toEqual(held);expect(state.read.mock.calls.filter(call=>call[0][1]==='start'||call[0][1]==='stop')).toEqual([]);expect(state.inspect).not.toHaveBeenCalled();expect(state.verify).not.toHaveBeenCalled();
+ });
+ it('stops the exact admitted simulation on incomplete original provider history before assignment inspection collaboration approval and later gates',async()=>{
+  transport(()=>observed('running'));const original=new Error('ACCEPTANCE_PROVIDER_HISTORY: Missing intermediate health transition'),held=structuredClone(state.freeze);state.providerTransitions.mockImplementationOnce(()=>{}).mockImplementation(()=>{throw original;});
+  await expect(state.run!().catch((classified:Error&{classification?:string})=>{expect(classified.classification).toBe('IMPLEMENTATION_DEFECT');return classified.cause;})).resolves.toBe(original);expect(state.providerRead).toHaveBeenCalledTimes(2);expect(state.providerTransitions).toHaveBeenCalledTimes(2);expect(state.inspect).not.toHaveBeenCalled();expect(state.verify).not.toHaveBeenCalled();expect(state.freeze).toEqual(held);expect(state.read.mock.calls.filter(call=>call[0][1]==='evaluate')).toEqual([]);expect(state.read.mock.calls.filter(call=>call[0][1]==='stop')).toEqual([[['workdays','stop',workdayId,'--yes','--reason','Automated golden boundary failed','--idempotency-key','golden-stop:'+workdayId],'treeseed']]);
+ });
+
  it('stops the exact admitted simulation on an incomplete original Workday lifecycle chain before accounting collaboration or later gates',async()=>{
   transport(()=>observed('running'));const original=new Error('ACCEPTANCE_WORKDAY_TRANSITIONS: Original closing observation missing'),held=structuredClone(state.freeze);
   state.lifecycleTransitions.mockImplementation(()=>{throw original;});

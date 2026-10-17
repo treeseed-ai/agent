@@ -16,6 +16,9 @@ it('native original SDK status and immutable operator bytes reject changed model
   if(mode==='interrupted'){request.socket.destroy();return;}if(mode==='denied'||mode==='unavailable'){response.writeHead(mode==='denied'?403:503).end('{}');return;}if(mode==='json'){response.end('{');return;}
   const value=structuredClone(original);if(mode==='model')value.availability[0]!.executionProviders[0]!.modelPolicy.model='gpt-6-sol';if(mode==='cap')value.availability[0]!.executionProviders[0]!.nativeLimits.dailyActiveSecondsLimit++;
   if(mode==='foreign-duplicate')value.availability[0]!.executionProviders.push({...structuredClone(value.availability[0]!.executionProviders[0]!),id:'unrelated-provider'},{...structuredClone(value.availability[0]!.executionProviders[0]!),id:'unrelated-provider'});if(mode==='foreign-empty')value.availability[0]!.executionProviders.push({...structuredClone(value.availability[0]!.executionProviders[0]!),id:''});
+  if(mode==='closed-session'||mode==='expired-session'){
+   const active=value.availability[0]!,shadow=structuredClone(active),now=Date.now();active.refreshed_at=new Date(now-180_000).toISOString();active.executionProviders[0]!.modelPolicy.model='gpt-6-sol';shadow.id='misleading-historical-availability';shadow.status=mode==='closed-session'?'closed':'open';shadow.refreshed_at=new Date(now-120_000).toISOString();shadow.expires_at=new Date(now-1).toISOString();value.availability.push(shadow);
+  }
   if(mode==='foreign')value.provider.providerId='foreign';response.end(JSON.stringify({data:value}));
  });
  const platform=process.env.TREESEED_DEVELOPMENT_WORKSPACE_ROOT;if(!platform)throw new Error('Original pinned Platform fixture authority required');
@@ -30,7 +33,7 @@ it('native original SDK status and immutable operator bytes reject changed model
   const frozen=capture('exact'),held=structuredClone(frozen),read=async(id:string)=>{expect(id).toBe(providerId);return(await client.invoke(controlPlaneOperation('providers.status'),input)).data;};
   const observe=async(value=frozen)=>{let observed:unknown;try{return await verify(value,async(id:string)=>{observed=await read(id);return observed;});}catch(error){failures.push({mode,observed,error});throw error;}};
   await Promise.all([observe(),observe()]);expect(frozen).toEqual(held);expect(readFileSync(frozen.path,'utf8')).toBe(frozen.bytes);
-  for(const fault of ['foreign-duplicate','foreign-empty','model','cap','foreign','denied','unavailable','json','interrupted']){mode=fault;await expect(observe(),fault).rejects.toThrow();expect(frozen).toEqual(held);expect(input).toEqual(heldInput);expect(readFileSync(frozen.path,'utf8')).toBe(frozen.bytes);}
+  for(const fault of ['foreign-duplicate','foreign-empty','model','cap','closed-session','expired-session','foreign','denied','unavailable','json','interrupted']){mode=fault;await expect(observe(),fault).rejects.toThrow();expect(frozen).toEqual(held);expect(input).toEqual(heldInput);expect(readFileSync(frozen.path,'utf8')).toBe(frozen.bytes);}
   mode='exact';const bad=campaignModels();bad.availability[0]!.executionProviders[0]!.modelPolicy.reasoningEffort='high';const wrong=capture('wrong-frozen-model',bad),offset=requests.length;
   await expect(observe(wrong)).rejects.toThrow('ACCEPTANCE_CAMPAIGN_MODELS');expect(requests).toHaveLength(offset);expect(readFileSync(wrong.path,'utf8')).toBe(wrong.bytes);
   const changed=capture('changed-during-read');await expect(verify(changed,async(id:string)=>{const value=await read(id);writeFileSync(changed.path,changed.bytes+' ');return value;})).rejects.toThrow('Operator capture changed during model readback');

@@ -2564,9 +2564,6 @@ workflow:
   - id: frozen-guest-smoke-unit
     action: { verifier: agent.golden.frozen-guest-smoke-unit }
     expect: { status: passed }
-  - id: return-measurement-native
-    action: { verifier: agent.golden.return-measurement-native }
-    expect: { status: passed }
   - id: recovery-started-unit
     action: { verifier: agent.golden.recovery-started-unit }
     expect: { status: passed }

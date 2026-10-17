@@ -269,6 +269,7 @@ describe('portable configured profiles through real provider Kernel and native G
 				reason: outcome.code === 'execution_provider_unavailable'
 					? 'Kata guest exited 1: Codex execution failed: Selected model is at capacity. Please try a different model.'
 					: 'Kata guest exited 1: Agent timing-awareness contract requires first and final checks.', retryable: true,
+				activeSeconds: 2, elapsedSeconds: 3, usage: { activeSeconds: 1.125, elapsedSeconds: 2.25, inputTokens: 19, nativeUsage: { input_tokens: 19, output_tokens: 3 } },
 				output: outcome.expected });
 		}
 	});

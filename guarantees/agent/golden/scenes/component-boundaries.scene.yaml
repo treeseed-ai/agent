@@ -2502,3 +2502,9 @@ workflow:
   - id: campaign-model-policy-preflight
     action: { verifier: agent.golden.execution-campaign-model-policy-preflight }
     expect: { status: passed }
+  - id: execution-graph-retention-unit
+    action: { verifier: agent.golden.execution-graph-retention-unit }
+    expect: { status: passed }
+  - id: execution-graph-retention-native
+    action: { verifier: agent.golden.execution-graph-retention-native }
+    expect: { status: passed }

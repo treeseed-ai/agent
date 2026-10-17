@@ -77,7 +77,8 @@ it('native exact Git profile and public SDK graph reads reject changed governed 
 }, 30_000);
 
 it('native public reconciliation denies changed previews before actual commands and retains original receipts through concurrent unchanged retry', async () => {
-	const graph = { teamId: 'native-team', revision: 1, digest: `sha256:${'d'.repeat(64)}`, nodes: [], edges: [] };
+	const sourceRef = { store: 'treedx', model: 'proposal', id: 'native-proposal', revision: 1, digest: 'sha256:' + 'a'.repeat(64), repository: 'native-library', commit: 'a'.repeat(40), path: 'proposals/native.mdx' };
+	const graph = { teamId: 'native-team', revision: 1, digest: `sha256:${'d'.repeat(64)}`, nodes: [{ schemaVersion: 'treeseed.execution-node/v1', id: 'original-node', teamId: 'native-team', projectId: 'native-project', kind: 'condition', pairRole: null, status: 'completed', ruleRevision: 1, nodeRevision: 1, sourceRef, condition: { conditionType: 'authority', subjectRef: sourceRef, expectedState: 'accepted' }, graphRevisionCreated: 1, graphRevisionUpdated: 1 }], edges: [] };
 	const changes = { added: [], changed: [], completed: [], blocked: [], stale: [], removedEdges: [], addedEdges: [] };
 	const plan = { teamId: graph.teamId, baseRevision: 1, desiredRevision: 2, desiredDigest: graph.digest, changes };
 	const receipt = graphRevisionSchema.parse({ schemaVersion: 'treeseed.graph-revision/v1', teamId: graph.teamId, revision: 1,
@@ -86,7 +87,7 @@ it('native public reconciliation denies changed previews before actual commands 
 		graphDigest: graph.digest, changes: { ...changes, added: ['original-node'] }, createdAt: '2026-10-11T00:00:00.000Z' });
 	const held = structuredClone({ graph, plan, receipt }), requests: Array<{ method?: string; path?: string; body: unknown }> = [];
 	const failures: Array<{ mode: string; error: string }> = []; let mode = 'exact';
-	const next = graphRevisionSchema.parse({ ...receipt, revision: 2, graphDigest: 'sha256:' + 'e'.repeat(64), createdAt: '2026-10-11T00:00:01.000Z' });
+	const next = graphRevisionSchema.parse({ ...receipt, changes: { ...changes }, revision: 2, graphDigest: 'sha256:' + 'e'.repeat(64), createdAt: '2026-10-11T00:00:01.000Z' });
 	let liveRecords = [receipt], liveGraph = { ...graph }, advanced = false; const stopped: string[] = [];
 
 	const server = createServer((request, response) => {

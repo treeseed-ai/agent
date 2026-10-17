@@ -39,6 +39,45 @@ const graphList = (value: unknown): Row[] => {
 	assert.ok(Array.isArray(value), 'ACCEPTANCE_TEAM_GRAPH_COLLECTION: Complete array required');
 	return value.map(row);
 };
+
+/** Reconcile current public inventory against original births and edge removals. */
+export function verifyGraphRetention(graph: Row, history: GraphRevision[]): void {
+	const label = 'ACCEPTANCE_GRAPH_RETENTION: Current inventory must retain original graph authority';
+	try {
+		assert.equal(typeof graph.teamId, 'string', label);
+		assert.ok(Number.isSafeInteger(graph.revision) && Number(graph.revision) >= 0, label);
+		assert.equal(history.length, graph.revision, label);
+		const nodes = graphList(graph.nodes).map(value => { const parsed = executionNodeSchema.parse(value); assert.deepEqual(parsed, value, label); return parsed; });
+		const edges = graphList(graph.edges).map(value => { const parsed = executionEdgeSchema.parse(value); assert.deepEqual(parsed, value, label); return parsed; });
+		const born = new Map<string, number>(), edgeBirth = new Map<string, number>(), active = new Set<string>();
+		for (const [index, value] of history.entries()) {
+			const record = graphRevisionSchema.parse(value); assert.deepEqual(record, value, label);
+			assert.equal(record.teamId, graph.teamId, label); assert.equal(record.revision, index + 1, label);
+			for (const id of record.changes.added) { assert.ok(!born.has(id), label); born.set(id, record.revision); }
+			for (const field of ['changed', 'completed', 'blocked', 'stale'] as const) {
+				const ids = record.changes[field]; assert.equal(new Set(ids).size, ids.length, label);
+				assert.ok(ids.every(id => born.has(id)), label);
+			}
+			for (const id of record.changes.removedEdges) { assert.ok(active.delete(id), label); }
+			for (const id of record.changes.addedEdges) { assert.ok(!active.has(id), label); active.add(id); if (!edgeBirth.has(id)) edgeBirth.set(id, record.revision); }
+		}
+		if (history.length) assert.equal(history.at(-1)!.graphDigest, graph.digest, label);
+		assert.equal(new Set(nodes.map(node => node.id)).size, nodes.length, label);
+		assert.equal(new Set(edges.map(edge => edge.id)).size, edges.length, label);
+		assert.deepEqual(new Set(nodes.map(node => node.id)), new Set(born.keys()), label);
+		assert.deepEqual(new Set(edges.map(edge => edge.id)), active, label);
+		for (const node of nodes) {
+			assert.equal(node.teamId, graph.teamId, label); assert.equal(node.graphRevisionCreated, born.get(node.id), label);
+			assert.ok(node.graphRevisionUpdated >= node.graphRevisionCreated && node.graphRevisionUpdated <= Number(graph.revision), label);
+		}
+		for (const edge of edges) {
+			assert.equal(edge.teamId, graph.teamId, label); assert.equal(edge.graphRevisionCreated, edgeBirth.get(edge.id), label);
+			assert.equal(edge.graphRevisionRemoved, undefined, label);
+			assert.ok(born.has(edge.fromNodeId) && born.has(edge.toNodeId), label);
+		}
+	} catch (cause) { throw new Error(label, { cause }); }
+}
+
 export function verifyPredecessorCustody(assignments: Row[], graph: Row): Array<{ review: Row; actor: Row }> {
 	verifyGraphProvenance(graph);
 	const nodes = graphList(graph.nodes).map(value => executionNodeSchema.parse(value));

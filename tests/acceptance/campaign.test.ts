@@ -48,7 +48,7 @@ test('Frozen SDK campaign drives planning acting review and terminal golden gate
 	assert.ok(Array.isArray(freeze.providerSupply)&&freeze.providerSupply.length>0,'ACCEPTANCE_PROVIDER_HISTORY: Original frozen provider inventory required');
 	const providerIds=freeze.providerSupply.map((value:unknown)=>{const id=row(value).providerId;assert.ok(typeof id==='string'&&id,'ACCEPTANCE_PROVIDER_HISTORY: Exact frozen provider required');return id;}),observedProviderEvents=new Map<string,Record<string,unknown>>();
 	const providerBaseline=readProviderTransitionHistory(team,providerIds,Date.parse(freeze.preflight.expiresAt));
-	console.log(JSON.stringify({observedAt:new Date().toISOString(),providerAuditBaseline:providerBaseline.events.filter(value=>value.action==='provider.availability.updated')}));
+	console.log(JSON.stringify({observedAt:new Date().toISOString(),providerAuditBaseline:providerBaseline.events.filter(value=>providerIds.includes(String(value.capacity_provider_id)))}));
 	verifyProviderTransitionHistory(team,providerIds,providerBaseline.sessions,providerBaseline.sessions,providerBaseline.events,observedProviderEvents);
 	const started = read(['workdays', 'start', '--preflight', freeze.preflight.id, '--digest', freeze.preflight.preflightDigest,
 		'--yes', '--idempotency-key', `golden-start:${freeze.preflight.id}`], team);
@@ -107,7 +107,7 @@ test('Frozen SDK campaign drives planning acting review and terminal golden gate
   }
   assert.ok(complete,'ACCEPTANCE_LIVE_ASSIGNMENT: Complete concurrent transition inventory not reached');
 		const providerObserved=readProviderTransitionHistory(team,providerIds,inspectionEndsAt);
-		console.log(JSON.stringify({workdayId,observedAt:new Date().toISOString(),providerAudit:providerObserved.events.filter(value=>value.action==='provider.availability.updated')}));
+		console.log(JSON.stringify({workdayId,observedAt:new Date().toISOString(),providerAudit:providerObserved.events.filter(value=>providerIds.includes(String(value.capacity_provider_id)))}));
 		verifyProviderTransitionHistory(team,providerIds,providerBaseline.sessions,providerObserved.sessions,providerObserved.events,observedProviderEvents);
 		verifySandboxTransitionHistory(currentRun,assignments,[...observedEvents.values()]);
 		const inspectedRun=currentRun;

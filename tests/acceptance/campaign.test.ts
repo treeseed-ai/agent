@@ -6,7 +6,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { classifyObservedCampaignFailure, monitorCampaign, openSdkCampaignDiscussion, requirePlanningWindow, retainCampaignWorkdayStart, retainCampaignPlanReview, requireCampaignSimulation, requireFreshSdkSegment } from './campaign.ts';
-import { verifyFreezeIntegrity } from './freeze-integrity.ts';
+import { readCapturedCampaignManifest,verifyFreezeIntegrity } from './freeze-integrity.ts';
 import { read, row } from './acceptance-cli.ts';
 import { verifyGolden } from './sdk-runtime-golden.test.ts';
 import { prepareSdkCampaign, verifySdkExternalState } from './prepare-campaign.ts';
@@ -25,6 +25,7 @@ test('Frozen SDK campaign drives planning acting review and terminal golden gate
 		await prepareSdkCampaign(process.env.TREESEED_ACCEPTANCE_DRAFT_PATH, path, team);
 	const freeze = JSON.parse(readFileSync(path, 'utf8')) as Row;
 	verifyFreezeIntegrity(freeze, readFileSync);
+	const frozenCampaign=readCapturedCampaignManifest(path),campaignId=frozenCampaign.campaignId;assert.ok(typeof campaignId==='string'&&campaignId&&campaignId.trim()===campaignId,'ACCEPTANCE_LIVE_WORKSPACE: Original captured campaign namespace required');
 	const body = freeze.request?.body as Row, allocation = body?.allocation as Row;
 	requireCampaignSimulation(freeze, path, text => { retainCampaignPlanReview(text, path, freeze); console.error(text); });
 	requireFreshSdkSegment(freeze);
@@ -101,7 +102,7 @@ test('Frozen SDK campaign drives planning acting review and terminal golden gate
   }
   assert.ok(complete,'ACCEPTANCE_LIVE_ASSIGNMENT: Complete concurrent transition inventory not reached');
 		const inspectedRun=currentRun;
-		observeLiveAssignmentRecords(inspectedRun, assignments, observedAssignments, item => { verifyPlanningWindow(item,inspectedRun); inspectLiveAssignmentProfile(item, team, assignments, { 'treeseed-ai/sdk': row(freeze.sourceHeads).sdk }); });
+		observeLiveAssignmentRecords(inspectedRun, assignments, observedAssignments, item => { verifyPlanningWindow(item,inspectedRun); inspectLiveAssignmentProfile(item, team, assignments, { 'treeseed-ai/sdk': row(freeze.sourceHeads).sdk }, campaignId); });
 	}, now: Date.now, wait: () => new Promise(resolve => setTimeout(resolve, 30_000)), stop,
 		collaboration: () => {
 			verifyGolden('collaboration');

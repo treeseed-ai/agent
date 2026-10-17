@@ -2523,3 +2523,8 @@ workflow:
   - id: execution-component-isolation-5
     action: { verifier: agent.golden.execution-component-isolation-5 }
     expect: { status: passed }
+  - id: campaign-frozen-branch-namespace-unit
+    action:
+      verifier: agent.golden.campaign-frozen-branch-namespace-unit
+    expect:
+      status: passed

@@ -4336,3 +4336,8 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/guarantees/monitoring/graph/graph-component-isolation.test.ts
     testName: "captures public graph authority before actual admission and passes that same baseline into the existing normal campaign inspection"
+  agent.golden.campaign-frozen-branch-namespace-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/campaign-cli.test.ts
+    testName: "passes the original captured campaign namespace into every new assignment inspection despite contradictory public metadata"

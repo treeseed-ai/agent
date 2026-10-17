@@ -1,3 +1,4 @@
+import {monitorCampaign} from '../../../acceptance/campaign.ts';
 import * as normalHistory from '../../../acceptance/workday/support/monitoring/live-assignment-records.ts';
 import { verifyAssignmentContextRead } from '../../../acceptance/workday/support/monitoring/assignment-context.ts';
 import { createServer } from 'node:http';
@@ -107,8 +108,10 @@ it('native configured Kernel Git result and public SDK assignment reads reach th
 
 		const retained = new Map<string, Row>(), before = structuredClone({ item, run });
 		let mode = 'exact'; const requests: string[] = [], failed: Array<{ mode: string; record: Row }> = [];
+		const namespaceStops:Array<{path:string;key:string;body:string}>=[],stopOperation=controlPlaneOperation('workdays.stop'),stopRoute=stopOperation.descriptor.rest;if(!stopRoute)throw new Error('Original scoped stop route required');const stopPath=stopRoute.path.replace('{teamId}',f.attempt.teamId).replace('{runId}',f.attempt.workdayId);
 		server = createServer((request, response) => {
 			requests.push(`${request.method} ${request.url}`); response.setHeader('content-type', 'application/json');
+			if(request.method===stopRoute.method&&request.url===stopPath){let body='';request.setEncoding('utf8');request.on('data',part=>{body+=String(part);});request.on('end',()=>{namespaceStops.push({path:stopPath,key:String(request.headers['idempotency-key']??''),body});response.end(JSON.stringify({data:{run:{id:f.attempt.workdayId,status:'cancelled'}}}));});return;}
 			if (request.url?.split('?')[0] === `/v1/teams/${f.attempt.teamId}/capacity/availability-sessions`) {
 				const publication = liveProviderSession(item), adapter = row((row(publication.snapshot).adapters as Row[])[0]);
 				if (mode === 'publication-denied') { response.writeHead(403).end(JSON.stringify({ status: 403, title: 'Runtime inventory denied', code: 'runtime_denied' })); return; }
@@ -197,7 +200,7 @@ it('native configured Kernel Git result and public SDK assignment reads reach th
 		const address = server.address(); if (!address || typeof address === 'string') throw new Error('Native observer address required');
 		const client = new ControlPlaneClient({ profile: defaultLocalControlPlaneServer({ TREESEED_API_BASE_URL: `http://127.0.0.1:${address.port}` }), accessToken: 'controlled-read-input' });
 		let inspections = 0;
-		const execute = async (observations = retained, completeAuthority = false) => {
+		const execute = async (observations = retained, completeAuthority = false, frozenCampaign = campaign) => {
 			const observed = row((await client.invoke(controlPlaneOperation('workdays.show'), {
 				path: { teamId: f.attempt.teamId, runId: f.attempt.workdayId }, query: {}, body: undefined,
 			})).data);
@@ -212,7 +215,7 @@ it('native configured Kernel Git result and public SDK assignment reads reach th
 					verifyLiveAssignmentGraph(value, graph); verifyPredecessorCustody([value], graph); verifyLiveProviderRuntime(value, publication.items.map(row));
 					verifyGovernedProfile(value, { path, content }, graph);
 				}
-				inspections++; verifyLiveSourceContext(value, [value], { 'treeseed-ai/sdk': f.base }); verifyGitInputContext(value, []); verifyLiveSimulationWorkspace(value, run); verifyAllocation(value, run); verifyGovernedProfile(value, { path, content });
+				inspections++; verifyLiveSourceContext(value, [value], { 'treeseed-ai/sdk': f.base }); verifyGitInputContext(value, []); verifyLiveSimulationWorkspace(value, run, frozenCampaign); verifyAllocation(value, run); verifyGovernedProfile(value, { path, content });
 				const handler = { id: f.attempt.effectiveProfile.handler, origin: f.attempt.effectiveProfile.handlerOrigin };
 				verifyHandlerInspection(value, { projectId: f.attempt.projectId, handlers: [handler] }, { projectId: f.attempt.projectId, handler });
 			});
@@ -343,6 +346,10 @@ it('native configured Kernel Git result and public SDK assignment reads reach th
 		// Native owning Kernel/handler/Git and SDK transport; upstream record,
 		// profile bytes and handler catalog are controlled. This does not prove
 		// native API admission, TreeDX publication, model usage or physical closure.
+		mode='exact';const namespaceHistory=new Map<string,Row>(),namespaceHeld=structuredClone(retained);let namespaceLater=0;
+		await expect(monitorCampaign({admittedSimulation:true,read:()=>({status:'running',mode:'simulation',planningEndsAt:0,endsAt:1}),now:()=>1,inspect:()=>execute(namespaceHistory,true,'different-frozen-campaign'),collaboration:()=>{namespaceLater++;},verify:()=>{namespaceLater++;},wait:async()=>{namespaceLater++;throw new Error('No later namespace work permitted');},stop:async()=>{await client.invoke(stopOperation,{path:{teamId:f.attempt.teamId,runId:f.attempt.workdayId},query:{},body:{reason:'Automated golden boundary failed'}},{idempotencyKey:'golden-stop:'+f.attempt.workdayId});}})).rejects.toMatchObject({classification:'IMPLEMENTATION_DEFECT',cause:{message:expect.stringContaining('ACCEPTANCE_LIVE_WORKSPACE')}});
+		expect(namespaceLater).toBe(0);expect(namespaceHistory.size).toBe(0);expect(retained).toEqual(namespaceHeld);expect(namespaceStops).toEqual([{path:stopPath,key:'golden-stop:'+f.attempt.workdayId,body:JSON.stringify({reason:'Automated golden boundary failed'})}]);await execute(new Map(),true,campaign);expect(namespaceStops).toHaveLength(1);
+
 	} finally {
 		if (server?.listening) { server.closeAllConnections(); await new Promise<void>((accept, reject) => server!.close(error => error ? reject(error) : accept())); }
 		await f.close();

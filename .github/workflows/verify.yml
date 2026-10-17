@@ -104,7 +104,7 @@ jobs:
         run: node node_modules/vitest/vitest.mjs run --config ./vitest.config.ts tests/modern/sandbox/architecture/clock-native.test.ts tests/modern/guarantees/bindings.test.ts tests/modern/kernel/architecture/golden-planning-readback.test.ts tests/modern/guarantees/campaign-chat-native.test.ts tests/modern/kernel/architecture/portable/context-integration.test.ts tests/modern/guarantees/preflight/external/external-native.test.ts tests/modern/guarantees/preflight/packaging/installed-custody-binding.test.ts tests/modern/execution/microvm-result-authority.test.ts tests/modern/execution/sandbox-attempt-native.test.ts tests/modern/execution/sandbox-broker-preparation.test.ts tests/modern/kernel/architecture/custody/public-sandbox-inventory.test.ts tests/modern/guarantees/preflight/campaign-freeze-native.test.ts
       - run: bash -lc 'npm run verify:local'
       - name: Execute coded golden component scenes
-        uses: treeseed-ai/reviewer/.github/actions/run-scenes@c9a12fe72b9273bb95d22e3f57aa69b2d532aa7e
+        uses: treeseed-ai/reviewer/.github/actions/run-scenes@d42b257097d969e0ce96a154bda31344a352a50e
         with:
           ids: guarantee.agent.golden.component-boundaries,guarantee.agent.golden.planning-synthesis-recovery
       - name: Pack verified artifact
@@ -123,7 +123,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       TREESEED_INSTALLED_OWNER_INPUTS: >-
-        [{"owner":"agent","commit":"${{ github.sha }}","sha256":null},{"owner":"api","commit":"8fb35aec91f436d08f7409fbd7a697bfff1acb82","sha256":"109fe8cafdb5a097194cfba44566fd89f5ed4abdce1d1d6f967992c10b4b9453","buildSdk":{"commit":"952195376b53bf39742e64f320f2a3b109cc77c0","sha256":"7ba46c788578f526692e81f3713f05e7c00db900b2d810ec27364cb41c008185"},"buildTreeDx":{"commit":"6d358bb2e536af24918f3c33acb2072b9093a603","sha256":"d6de27b42704b4c899562f290950561132fd0d48f38a95e6624eb853e32691cb"}},{"owner":"sdk","commit":"379fd0684375609601605edb3aac2c091ae0aa33","sha256":"df9bb10a77e0833e6a2d774c50b5d9c5ff8c7b22ef3017b5590a74d04b619e32"},{"owner":"cli","commit":"6e2579428f4959906cd5b9b669ebbb2b44cb495c","sha256":"49b6d24882af45ba39fd46cdcd999c9c54e84bd416f834fa0042ec5425dbea1a"},{"owner":"deployment","commit":"1d5cd28504a44e2abf8dab45612567fae143c544","sha256":"2f71e344f2b72efd44d26d13e10bfbe1517a941648c0ddbb398087606017f7aa"},{"owner":"reviewer","commit":"36cae21aa080d800f0bbc8dd93353081efce89d7","sha256":"bdb0b2504844cd719e4c69745338fcc70e2cf42c9659c5176c2270b55a1f3c3a","buildSdk":{"commit":"77a6908d4e7580716e9e2ab92de80150b02cdb06","sha256":"a31b02194665e8705e8d81331da0901f4088f54deb50a34c236d3a661d2d1aa7"}}]
+        [{"owner":"agent","commit":"${{ github.sha }}","sha256":null},{"owner":"api","commit":"8fb35aec91f436d08f7409fbd7a697bfff1acb82","sha256":"109fe8cafdb5a097194cfba44566fd89f5ed4abdce1d1d6f967992c10b4b9453","buildSdk":{"commit":"952195376b53bf39742e64f320f2a3b109cc77c0","sha256":"7ba46c788578f526692e81f3713f05e7c00db900b2d810ec27364cb41c008185"},"buildTreeDx":{"commit":"6d358bb2e536af24918f3c33acb2072b9093a603","sha256":"d6de27b42704b4c899562f290950561132fd0d48f38a95e6624eb853e32691cb"}},{"owner":"sdk","commit":"379fd0684375609601605edb3aac2c091ae0aa33","sha256":"df9bb10a77e0833e6a2d774c50b5d9c5ff8c7b22ef3017b5590a74d04b619e32"},{"owner":"cli","commit":"6e2579428f4959906cd5b9b669ebbb2b44cb495c","sha256":"49b6d24882af45ba39fd46cdcd999c9c54e84bd416f834fa0042ec5425dbea1a"},{"owner":"deployment","commit":"1d5cd28504a44e2abf8dab45612567fae143c544","sha256":"2f71e344f2b72efd44d26d13e10bfbe1517a941648c0ddbb398087606017f7aa"},{"owner":"reviewer","commit":"762725d3794b9f5b3128c1584d3a17495ab6a368","sha256":"e402cbde62812cc8c0d31a9dadc4e4c89bf8c4997e6f2e30870e7eb64b8c2627","buildSdk":{"commit":"77a6908d4e7580716e9e2ab92de80150b02cdb06","sha256":"a31b02194665e8705e8d81331da0901f4088f54deb50a34c236d3a661d2d1aa7"}}]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -184,8 +184,8 @@ jobs:
         with:
           github-token: ${{ github.token }}
           repository: treeseed-ai/reviewer
-          run-id: 38926682695
-          name: reviewer-36cae21aa080d800f0bbc8dd93353081efce89d7
+          run-id: 38998444210
+          name: reviewer-762725d3794b9f5b3128c1584d3a17495ab6a368
           path: .treeseed/installed-owner-inputs/reviewer
       - name: Read original API SDK build input
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093

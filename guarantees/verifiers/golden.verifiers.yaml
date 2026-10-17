@@ -4281,3 +4281,13 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/kernel/closure/reporter-frozen-lifecycle.test.ts
     testName: "requires the exact original closing event and all ended planning rounds in frozen Reporter input before accepting its ordinary report"
+  agent.golden.execution-graph-retention-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/monitoring/graph/graph-retention.test.ts
+    testName: "requires every original graph node birth and active edge to remain represented without rewriting unrelated components or prior history"
+  agent.golden.execution-graph-retention-native:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/guarantees/monitoring/graph/graph-retention-native.test.ts
+    testName: "native original SDK graph inventory detects a lost unrelated component before progression and retains scoped stop failed observations and unchanged concurrent retry"

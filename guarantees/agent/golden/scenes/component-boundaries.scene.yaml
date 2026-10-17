@@ -2490,3 +2490,9 @@ workflow:
   - id: reporter-frozen-lifecycle
     action: { verifier: agent.golden.execution-reporter-frozen-lifecycle }
     expect: { status: passed }
+  - id: execution-graph-retention-unit
+    action: { verifier: agent.golden.execution-graph-retention-unit }
+    expect: { status: passed }
+  - id: execution-graph-retention-native
+    action: { verifier: agent.golden.execution-graph-retention-native }
+    expect: { status: passed }

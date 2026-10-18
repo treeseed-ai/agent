@@ -6,7 +6,7 @@ import { recoverProviderLocalLeases } from '../../../../src/provider/coordinatio
 import { capacityFixture } from './capacity-fixture.ts';
 import { publishProviderAvailability } from '../../../../src/provider/lifecycle/lifecycle.ts';
 
-async function recoveryFixture() {
+async function recoveryFixture(measured = false) {
 	const f = await capacityFixture();
 	const requests: Array<{ method: string; path: string; body: unknown }> = [];
 	let observed: unknown = { id: f.attempt.id, teamId: f.attempt.teamId, capacityProviderId: f.attempt.provider.providerId,
@@ -53,7 +53,9 @@ async function recoveryFixture() {
 		const lease = f.lease(); await f.store.attachLease(claim.id, lease); await f.store.claimDispatch(claim.id);
 		observed = { id: f.attempt.id, teamId: f.attempt.teamId, capacityProviderId: f.attempt.provider.providerId,
 			status: 'running', assignmentAttempt: { ...lease.dispatchEnvelope.assignment.assignmentAttempt, status: 'running' } };
-		await f.store.recordCloseoutOutput(claim.id, { status: 'blocked', unfinishedWork: ['unchanged original assignment'] });
+		if (measured) { await f.store.beginActiveExecution(claim.id); await new Promise(resolve => setTimeout(resolve, 10)); await f.store.finishActiveExecution(claim.id); }
+   await f.store.recordCloseoutOutput(claim.id, measured ? { sandboxId: 'original-sandbox', teardown: { verified: true, completedAt: new Date().toISOString() },
+    status: 'completed', originalArtifact: 'immutable original correction' } : { status: 'blocked', unfinishedWork: ['unchanged original assignment'] });
 		await f.store.recordFailure(claim.id, 'original interrupted provider execution');
 		return { ...f, claim, lease, connection, requests,
 			setAvailability(status: number, problemCode = 'isolated_denial', error = '') { availability = { status, code: problemCode }; fault = error; },
@@ -167,8 +169,10 @@ describe('document-wide native provider recovery boundary', () => {
 			} finally { await f.close(); }
 		}
 	});
-	it('native unresolved operator recovery frees only concurrency while preserving exact failed output and unknown period reservation across reopened stores', async () => {
-		const f = await recoveryFixture(); try {
+	it('native unresolved operator recovery frees only concurrency while preserving exact failed output and unknown period reservation across reopened stores', () => verifyUnresolvedRecovery(false));
+	it('native closed measured operator recovery frees only concurrency while retaining original clocks product and period reservation', () => verifyUnresolvedRecovery(true));
+	async function verifyUnresolvedRecovery(measured: boolean) {
+		const f = await recoveryFixture(measured); try {
 			const prior = (await f.reopen().claimsForRecovery())[0]!;
 			const frozen = f.lease.dispatchEnvelope.assignment.assignmentAttempt;
 			const accounting = await f.reopen().activeTimeObservation(frozen.provider.modelConfigurationId, [frozen.provider.executionCapabilityId]);
@@ -193,7 +197,7 @@ describe('document-wide native provider recovery boundary', () => {
 				.rejects.toThrow('daily active-time capacity');
 			expect(value).toEqual(before); expect(await f.entries()).toEqual(['capacity-state.json']);
 		} finally { await f.close(); }
-	});
+	}
 	it('native denied unavailable malformed and disconnected availability refresh retains the original session and failed assignment for exact retry instead of creating replacement authority', async () => {
 		const outcomes = [];
 		for (const failure of [{ status: 401 }, { status: 403 }, { status: 503 }, { status: 400 },

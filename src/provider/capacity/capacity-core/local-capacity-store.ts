@@ -319,8 +319,16 @@ export class ProviderLocalCapacityStore {
 		return this.update((state, now) => {
 			const claim = state.claims.find(entry => entry.id === claimId);
 			if (claim?.status === 'unresolved') return;
-			if (!claim || claim.status !== 'recovery' || claim.activeStartedAt || claim.activeFinishedAt || claim.accountedThrough)
-				throw new Error('Unresolved recovery requires original unmeasured failed custody.');
+			if (!claim || claim.status !== 'recovery') throw new Error('Unresolved recovery requires original failed custody.');
+			if (claim.activeStartedAt || claim.activeFinishedAt || claim.accountedThrough) {
+				const output = claim.closeoutOutput, teardown = output?.teardown;
+				const closed = teardown && typeof teardown === 'object' && !Array.isArray(teardown) ? teardown as Record<string, unknown> : {};
+				const completedAt = typeof closed.completedAt === 'string' ? Date.parse(closed.completedAt) : NaN;
+				if (!claim.activeStartedAt || !claim.activeFinishedAt || claim.accountedThrough !== claim.activeFinishedAt
+					|| typeof output?.sandboxId !== 'string' || !output.sandboxId || closed.verified !== true
+					|| !Number.isFinite(completedAt) || completedAt < Date.parse(claim.activeFinishedAt) || completedAt > Date.parse(now))
+					throw new Error('Unresolved measured recovery requires the original closed clock and verified physical teardown.');
+			}
 			claim.status = 'unresolved'; claim.updatedAt = now;
 			state.events.push({ id: randomUUID(), claimId, connectionId: claim.connectionId, assignmentId: claim.assignmentId,
 				outcome: 'operator-usage-unresolved', recordedAt: now });

@@ -2576,3 +2576,12 @@ workflow:
   - id: recovery-started-lease-native
     action: { verifier: agent.golden.recovery-started-lease-native }
     expect: { status: passed }
+
+  - id: closed-clock-recovery-unit
+    action: { verifier: agent.golden.closed-clock-recovery-unit }
+
+  - id: closed-clock-recovery-denial
+    action: { verifier: agent.golden.closed-clock-recovery-denial }
+
+  - id: closed-clock-recovery-native
+    action: { verifier: agent.golden.closed-clock-recovery-native }

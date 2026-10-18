@@ -3903,7 +3903,7 @@ verifiers:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/provider/architecture/recovery-native.test.ts
-    testName: "native unresolved operator recovery frees only concurrency while preserving exact failed output and unknown period reservation across reopened stores"
+    testName: "native unresolved operator recovery frees only concurrency while preserving exact failed output and unknown period reservation across reopened stores measured=false"
   agent.golden.unresolved-recovery-denial-native:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"
@@ -4421,3 +4421,21 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/provider/architecture/recovery-native.test.ts
     testName: "native recovery returns the exact started leased API record once and retains malformed execution-window authority without altering durable custody"
+
+  agent.golden.closed-clock-recovery-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/provider/architecture/unresolved-recovery.test.ts
+    testName: "retains closed measured recovery clocks and remaining reservation while releasing only concurrency exactly once"
+
+  agent.golden.closed-clock-recovery-denial:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/provider/architecture/unresolved-recovery.test.ts
+    testName: "denies unresolved release for ongoing measured work and missing unverified malformed or pre-finish physical closeout"
+
+  agent.golden.closed-clock-recovery-native:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/provider/architecture/recovery-native.test.ts
+    testName: "native unresolved operator recovery frees only concurrency while preserving exact failed output and unknown period reservation across reopened stores measured=true"

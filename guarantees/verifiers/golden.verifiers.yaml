@@ -4439,3 +4439,39 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/provider/architecture/recovery-native.test.ts
     testName: "native closed measured operator recovery frees only concurrency while retaining original clocks product and period reservation"
+
+  agent.golden.clock-subprocess-custody:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/sandbox/architecture/clock-authority.test.ts
+    testName: "assigns subprocess correlation only in the owning collector without rewriting native IDs or trusting provider-supplied scope"
+
+  agent.golden.clock-subprocess-replay:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/sandbox/architecture/clock-authority.test.ts
+    testName: "distinguishes fresh identified clock completions in a later native subprocess while denying replay inside either invocation"
+
+  agent.golden.clock-subprocess-public-readback:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/timing/guest-clock-contract.test.ts
+    testName: "reads distinct native subprocess clock identities while preserving original item IDs and denying a replay in the same subprocess"
+
+  agent.golden.closeout-lease-renewal:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/provider/closeout/renewal.test.ts
+    testName: "renews the original lease through delayed response publication and terminal closeout then drains every renewal on success or failure"
+
+  agent.golden.closeout-lease-renewal-native:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/provider/closeout/renewal-native.test.ts
+    testName: "native provider transport keeps the original lease alive through publication and terminal acknowledgment and closes on publication failure"
+
+  agent.golden.discussion-publication-denial:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: "tests/modern/provider/closeout/publication-denial.test.ts"
+    testName: "retains a definitive discussion publication denial as a failed result with original measured usage and no invented product"

@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import type { ProviderProtocolClient } from '@treeseed/sdk/capacity-provider';
+import { CapacityProviderApiError, type ProviderProtocolClient } from '@treeseed/sdk/capacity-provider';
 import { assignmentReferenceSchema, assignmentResultSchema } from '@treeseed/sdk/agent-capacity';
 import type { AgentExecutionRequest, AgentExecutor, AgentExecutionResult, AssignmentTreeDxFacade } from '../execution/contracts.ts';
 import { aggregateExecutionUsage, canonicalExecutionUsage, executeKernelAssignment } from '../../kernel/provider-kernel-executor.ts';
@@ -111,6 +111,7 @@ export async function runProviderAssignment(input: ProviderAssignmentRunInput) {
   let timer: ReturnType<typeof setTimeout> | null = null;
   let renewalInFlight: Promise<void> | null = null;
   const scheduleRenewal = () => {
+    if (stopped) return;
     timer = setTimeout(() => {
       renewalInFlight = renew();
     }, Math.min(input.renewalIntervalMs ?? Math.max(30_000, (input.leaseSeconds ?? 300) * 500), 10_000));
@@ -152,6 +153,7 @@ export async function runProviderAssignment(input: ProviderAssignmentRunInput) {
     }
   };
   try {
+  try {
     const executionRequest: AgentExecutionRequest = { assignment: executorAssignment(activeAssignment), assignmentId, leaseToken: input.leaseToken, runnerId: input.runnerId, treeDx,
       authorizeSource: recipientPublicKey => input.client.authorizeAssignmentSource(assignmentId, { runnerId: input.runnerId, leaseToken: input.leaseToken, recipientPublicKey }),
 		beginExecution,
@@ -171,7 +173,6 @@ export async function runProviderAssignment(input: ProviderAssignmentRunInput) {
 			usage: [{ activeSeconds: activeStartedAt === null ? 0 : ((activeFinishedAt ?? performance.now()) - activeStartedAt) / 1000,
 				elapsedSeconds: (performance.now() - elapsedStartedAt) / 1000 }] };
   } finally {
-		try {
 			// A timed-out or failed Kernel may have returned before its transport
 			// promise settled. Revoke the guest signal before closing accounting so
 			// no sandbox work continues after the assignment is terminalized.
@@ -190,12 +191,6 @@ export async function runProviderAssignment(input: ProviderAssignmentRunInput) {
 				if (canonical.success) result!.outputs = { ...result!.outputs,
 					assignmentResult: { ...canonical.data, usage: canonicalExecutionUsage(result!.usage) } };
 			}
-		} finally {
-			stopped = true;
-			if (timer) clearTimeout(timer);
-			await renewalInFlight;
-			input.signal?.removeEventListener('abort', abortFromCaller);
-		}
   }
 	await input.onCloseoutOutput?.({ ...record(result.outputs), artifacts: result.artifacts ?? [] });
 	if (renewalFailure && result.code !== 'assignment_timeout') {
@@ -219,6 +214,7 @@ export async function runProviderAssignment(input: ProviderAssignmentRunInput) {
 		code: 'agent_abstained', responseMarkdown: undefined, retryable: false };
 	if (result.status === 'responded' || result.status === 'abstained') {
 		if (result.status === 'responded' && !result.responseMarkdown) throw new Error('Communication executor omitted its durable Markdown response.');
+		try {
 		const response = await input.client.respondToAssignmentDiscussion(assignmentId, { leaseToken: input.leaseToken, runnerId: input.runnerId,
 			outcome: result.status, ...(result.responseMarkdown ? { markdown: result.responseMarkdown } : {}), summary: result.summary }, `discussion-response:${assignmentId}:${input.runnerId}`);
 		const reference = assignmentReferenceSchema.parse(record(response).reference);
@@ -226,6 +222,18 @@ export async function runProviderAssignment(input: ProviderAssignmentRunInput) {
 		const canonical = assignmentResultSchema.parse(outputs.assignmentResult);
 		result = { ...result, status: 'completed', responseMarkdown: undefined,
 			outputs: { ...outputs, assignmentResult: assignmentResultSchema.parse({ ...canonical, references: [...canonical.references, reference] }) } };
+		} catch (error) {
+			// A definitive pre-publication denial is a failed execution outcome with
+			// measured usage. Ambiguous network/server/conflict failures retain the
+			// original recovery path; never infer whether a product was committed.
+			if (!(error instanceof CapacityProviderApiError) || ![400, 401, 403, 404, 422].includes(error.status ?? 0)) throw error;
+			const code = error.code;
+			const summary = `Discussion publication denied: ${error.message}`, outputs = record(result.outputs);
+			const canonical = assignmentResultSchema.parse(outputs.assignmentResult);
+			result = { ...result, status: 'failed', code, summary, retryable: false, responseMarkdown: undefined,
+				outputs: { ...outputs, assignmentResult: assignmentResultSchema.parse({ ...canonical, status: 'failed', summary,
+					diagnostics: [...canonical.diagnostics, { code, severity: 'error', message: summary }] }) } };
+		}
 	}
 	if (!result.usage?.length && activeStartedAt === null) {
 		// No productive invocation occurred. Measure the real preparation scope;
@@ -237,12 +245,12 @@ export async function runProviderAssignment(input: ProviderAssignmentRunInput) {
   if (result.status === 'returned') {
 		await input.client.settleAssignment(assignmentId, { activeSeconds: settlementSeconds(usage.activeSeconds), elapsedSeconds: settlementSeconds(usage.elapsedSeconds),
 			usageDimension: 'aggregate', usageActual: usage }, `assignment-settlement:${assignmentId}:${input.runnerId}`);
-    return input.client.returnAssignment(assignmentId, { leaseToken: input.leaseToken, runnerId: input.runnerId, code: result.code ?? 'agent_executor_returned', reason: result.summary, retryable: result.retryable ?? true,
+    return await input.client.returnAssignment(assignmentId, { leaseToken: input.leaseToken, runnerId: input.runnerId, code: result.code ?? 'agent_executor_returned', reason: result.summary, retryable: result.retryable ?? true,
 			activeSeconds: settlementSeconds(usage.activeSeconds), elapsedSeconds: settlementSeconds(usage.elapsedSeconds), usage,
 			output: { ...record(result.outputs), artifacts: result.artifacts ?? [] } });
   }
   if (result.status === 'failed') {
-    return input.client.failAssignment(assignmentId, { leaseToken: input.leaseToken, runnerId: input.runnerId, code: result.code ?? 'agent_executor_failed', message: result.summary, retryable: result.retryable ?? false,
+    return await input.client.failAssignment(assignmentId, { leaseToken: input.leaseToken, runnerId: input.runnerId, code: result.code ?? 'agent_executor_failed', message: result.summary, retryable: result.retryable ?? false,
 			activeSeconds: settlementSeconds(usage.activeSeconds), elapsedSeconds: settlementSeconds(usage.elapsedSeconds), usage,
 			output: { ...record(result.outputs), ...(result.artifacts !== undefined ? { artifacts: result.artifacts } : {}) } });
   }
@@ -258,5 +266,11 @@ export async function runProviderAssignment(input: ProviderAssignmentRunInput) {
   };
   await input.client.settleAssignment(assignmentId, { activeSeconds: settlementSeconds(usage.activeSeconds), elapsedSeconds: settlementSeconds(usage.elapsedSeconds),
     usageDimension: 'aggregate', usageActual: usage }, `assignment-settlement:${assignmentId}:${input.runnerId}`);
-  return input.client.completeAssignment(assignmentId, completion);
+  return await input.client.completeAssignment(assignmentId, completion);
+  } finally {
+    stopped = true;
+    if (timer) clearTimeout(timer);
+    await renewalInFlight;
+    input.signal?.removeEventListener('abort', abortFromCaller);
+  }
 }

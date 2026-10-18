@@ -19,6 +19,14 @@ if (process.argv.includes('--guest')) {
 		if (mode === 'replayed-clock') await writeFile('/run/treeseed-output/provider-first-clock.json', JSON.stringify(event));
 		process.stdout.write(`${JSON.stringify(event)}\n`);
 	};
+
+ if(mode==='resumed-clock-id'){
+  process.stdout.write(`${JSON.stringify({type:'thread.started',thread_id:'12345678-1234-4234-8234-123456789012'})}\n`);
+  await clock('item_0');
+  const path=process.argv[process.argv.indexOf('--output-last-message')+1];
+  await writeFile(path,process.argv.includes('resume')?'Permitted final clock acknowledgment.':'Controlled original reply before its second clock.');
+  process.exit(0);
+ }
 	if (mode === 'first-clock-denied') {
 		let denied: unknown;
 		try { await invokeTreeDxRelay('treeseed_time_status', {}, process.env); } catch (error) { denied = error; }

@@ -2588,3 +2588,27 @@ workflow:
   - id: closed-clock-recovery-native
     action: { verifier: agent.golden.closed-clock-recovery-native }
     expect: { status: passed }
+
+  - id: clock-subprocess-custody
+    action: { verifier: agent.golden.clock-subprocess-custody }
+    expect: { status: passed }
+
+  - id: clock-subprocess-replay
+    action: { verifier: agent.golden.clock-subprocess-replay }
+    expect: { status: passed }
+
+  - id: clock-subprocess-public-readback
+    action: { verifier: agent.golden.clock-subprocess-public-readback }
+    expect: { status: passed }
+
+  - id: closeout-lease-renewal
+    action: { verifier: agent.golden.closeout-lease-renewal }
+    expect: { status: passed }
+
+  - id: closeout-lease-renewal-native
+    action: { verifier: agent.golden.closeout-lease-renewal-native }
+    expect: { status: passed }
+
+  - id: discussion-publication-denial
+    action: { verifier: agent.golden.discussion-publication-denial }
+    expect: { status: passed }

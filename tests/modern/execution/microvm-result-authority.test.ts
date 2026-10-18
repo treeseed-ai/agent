@@ -196,7 +196,7 @@ describe('microvm result and closeout authority', () => {
 		const clockOutcomes: Array<{ mode: string; result: unknown; failure: unknown; completed: boolean }> = [];
 			for (const mode of ['exact', 'missing', 'foreign-window', 'receipt-count', 'pending', 'zero', 'negative', 'string', 'null',
 				'fraction', 'over-window', 'increasing', 'absent-remaining', 'content-drift', 'clock-error', 'duplicate-clock',
-				'first-nonclock', 'final-nonclock', 'blocking-without-recheck', 'first-read-pending', 'recheck-pending', 'checked-command', 'wrong-server', 'wrong-tool', 'frequent']) {
+				'first-nonclock', 'final-nonclock', 'blocking-without-recheck', 'first-read-pending', 'recheck-pending', 'checked-command', 'wrong-server', 'wrong-tool', 'frequent', 'resumed-clock']) {
 				// Reset only per-input UNIT call counters, not recorded outcomes or authority.
 				vi.clearAllMocks();
 				const attempt = assignmentAttemptSchema.parse(f.input.assignment.assignmentAttempt);
@@ -221,6 +221,7 @@ describe('microvm result and closeout authority', () => {
 				if (mode === 'clock-error') events[1] = { type: 'item.completed', item: { id: 'final-clock', type: 'mcp_tool_call', server: 'treedx',
 					tool: 'treeseed_time_status', status: 'failed', error: { message: 'Original clock denial' }, result: { isError: true } } };
 				if (mode === 'duplicate-clock') events[1] = clock('first-clock', 29);
+					if (mode === 'resumed-clock') events[1] = { ...clock('first-clock',29), providerInvocation:1 };
 				// Supplied raw observations, not actual commands or model compliance.
 				const command = (id: string) => ({ type: 'item.completed', item: { id, type: 'command_execution',
 					status: 'completed', command: 'controlled-verification-input', exit_code: 0, aggregated_output: 'controlled output' } });
@@ -244,7 +245,7 @@ describe('microvm result and closeout authority', () => {
 				expect(f.client.destroy).toHaveBeenCalledTimes(1); expect(f.cleanup).toHaveBeenCalledTimes(1);
 			}
 		const verify = () => { for (const observed of clockOutcomes) {
-			if (['exact', 'frequent', 'checked-command'].includes(observed.mode)) { expect(observed.failure).toBeUndefined(); expect(observed.result).toMatchObject({ status: status === 'completed' ? 'completed' : status === 'failed' ? 'failed' : 'returned' }); }
+			if (['exact', 'frequent', 'checked-command', 'resumed-clock'].includes(observed.mode)) { expect(observed.failure).toBeUndefined(); expect(observed.result).toMatchObject({ status: status === 'completed' ? 'completed' : status === 'failed' ? 'failed' : 'returned' }); }
 			else {
 				expect(observed.result).toBeUndefined(); expect(observed.failure).toMatchObject({ message: `${status === 'completed' ? 'Completed' : 'Non-completed'} sandbox result lacks valid timing-awareness evidence.` }); expect(observed.completed).toBe(false);
 				if (status !== 'completed') expect(observed.failure).toMatchObject({ cause: { message: `Original ${status} provider observation` }, usage: [{ activeSeconds: 1.125, elapsedSeconds: 2.25, inputTokens: 19, outputTokens: 3 }] });

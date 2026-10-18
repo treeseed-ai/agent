@@ -1,3 +1,4 @@
+import {scopeProviderEvent,providerItemIdentity} from '../../../../src/sandbox/guest-contract.ts';
 import { describe, expect, it } from 'vitest';
 import { executeAssignmentTreeDxTool } from '../../../../src/provider/execution/microvm-executor.ts';
 import { completedTimeStatusChecks, timingAwarenessContract } from '../../../../src/sandbox/guest.ts';
@@ -25,6 +26,24 @@ describe('original productive clock and actual first final tool boundary contrac
 			expect(events).toEqual(before);
 		}
 	});
+
+
+ it('assigns subprocess correlation only in the owning collector without rewriting native IDs or trusting provider-supplied scope',()=>{
+  const raw={...clock(),providerInvocation:99,item:{...clock().item,id:'item_0'}},held=structuredClone(raw);
+  const initial=scopeProviderEvent(raw,0),resumed=scopeProviderEvent(raw,1);
+  expect(initial).toEqual({type:raw.type,item:raw.item});expect(resumed).toEqual({...raw,providerInvocation:1});expect(raw).toEqual(held);
+  expect(providerItemIdentity(initial)).toBe('0:item_0');expect(providerItemIdentity(resumed)).toBe('1:item_0');
+  for(const invalid of [-1,0.5,NaN,Infinity,'1',null,{}]){
+   expect(()=>scopeProviderEvent(raw,invalid as number)).toThrow('provider_invocation_identity_invalid');
+   expect(()=>providerItemIdentity({...raw,providerInvocation:invalid})).toThrow('provider_invocation_identity_invalid');
+  }
+ });
+ it('distinguishes fresh identified clock completions in a later native subprocess while denying replay inside either invocation',()=>{
+  const first={...clock(),item:{...clock().item,id:'item_0'}},final={...observedClock(mcpResult(reading(20))),providerInvocation:1,item:{...observedClock(mcpResult(reading(20))).item,id:'item_0'}};
+  const events=[first,command,final],held=structuredClone(events);
+  expect(timingAwarenessContract(events)).toMatchObject({completedChecks:2,firstToolCompliant:true,finalToolCompliant:true});expect(events).toEqual(held);
+  for(const replay of [structuredClone(final),{...final,item:{...final.item,result:mcpResult(reading(10))}}])expect(timingAwarenessContract([...events,replay])).toMatchObject({completedChecks:2,firstToolCompliant:false,finalToolCompliant:false});
+ });
 	it('denies work started before the original first clock read completes even when later clock results look valid', () => {
 		const first = { ...clock(), item: { ...clock().item, id: 'original-first' } }, final = { ...clock(), item: { ...clock().item, id: 'original-final' } };
 		const started = { type: 'item.started', item: { ...first.item, status: 'in_progress', result: undefined } };

@@ -100,7 +100,7 @@ describe('document-wide native provider recovery boundary', () => {
 	});
 
  it('native recovery acknowledges only exact closed measured API custody without replacing original usage or failed history',async()=>{
-  for(const mutation of ['valid','missing-output','changed-output','zero-usage','changed-usage','foreign-reservation','open-lease','unverified-teardown','ongoing-clock','foreign-performance','missing-clocks','future-teardown']){
+  for(const mutation of ['valid','missing-output','changed-output','zero-usage','changed-usage','foreign-reservation','open-lease','unverified-teardown','ongoing-clock','foreign-performance','missing-clocks','future-teardown','fabricated-completion']){
    const output=()=>({sandboxId:'original-sandbox',teardown:{verified:true,completedAt:new Date().toISOString()},assignmentResult:{schemaVersion:'treeseed.assignment-result/v1',id:'result',assignmentId:'assignment-1',status:'completed',summary:'Original retained output',references:[],verification:[],diagnostics:[],usage:{elapsedSeconds:2,modelInputTokens:5,modelOutputTokens:3,native:{activeSeconds:1.1,elapsedSeconds:1.2,cachedInputTokens:2,reasoningTokens:0}},completedAt:new Date().toISOString()}});
    const f=await recoveryFixture(mutation!=='missing-clocks',()=>{const v=output();if(mutation==='future-teardown')v.teardown.completedAt='2099-01-01T00:00:00.000Z';return v;});try{
     const prior=(await f.reopen().claimsForRecovery())[0]!,frozen=f.lease.dispatchEnvelope.assignment.assignmentAttempt;
@@ -108,7 +108,8 @@ describe('document-wide native provider recovery boundary', () => {
     // The fixture's canonical assignment ID is the original frozen ID.
     expect((prior.closeoutOutput!.assignmentResult as Record<string,unknown>).assignmentId).toBe(frozen.id);
     const actual={activeSeconds:2,elapsedSeconds:2,inputTokens:5,cachedInputTokens:2,reasoningTokens:0,outputTokens:3,attempts:frozen.attempt};
-    const value:any={id:frozen.id,teamId:frozen.teamId,projectId:frozen.projectId,workDayId:frozen.workdayId,capacityProviderId:frozen.provider.providerId,reservationId:frozen.reservationId,status:'cancelled',leaseState:'released',assignmentResult:null,assignmentAttempt:{...frozen,status:'cancelled',finishedAt:frozen.deadline},lifecycleOutput:{...original,performance:{assignmentId:frozen.id,teamId:frozen.teamId,projectId:frozen.projectId,workdayId:frozen.workdayId,capacityProviderId:frozen.provider.providerId,disposition:'failed',actual,systemAssessment:{generatedBy:'api-recovery'}}}};
+    const value:any={id:frozen.id,teamId:frozen.teamId,projectId:frozen.projectId,workDayId:frozen.workdayId,capacityProviderId:frozen.provider.providerId,reservationId:frozen.reservationId,status:'cancelled',leaseState:'released',assignmentResult:null,assignmentAttempt:{...frozen,status:'cancelled',finishedAt:frozen.deadline},lifecycleOutput:{...original,completion:null,performance:{assignmentId:frozen.id,teamId:frozen.teamId,projectId:frozen.projectId,workdayId:frozen.workdayId,capacityProviderId:frozen.provider.providerId,disposition:'failed',actual,systemAssessment:{generatedBy:'api-recovery'}}}};
+    if(mutation==='fabricated-completion')value.lifecycleOutput.completion={disposition:'completed'};
     if(mutation==='missing-output')delete value.lifecycleOutput.assignmentResult;
     if(mutation==='changed-output')value.lifecycleOutput.assignmentResult.summary='Substituted output';
     if(mutation==='zero-usage')actual.activeSeconds=0;

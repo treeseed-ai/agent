@@ -98,7 +98,7 @@ describe('original operator unresolved usage authority', () => {
   claim.closeoutOutput=output;
   const acknowledged={id:frozen.id,teamId:frozen.teamId,projectId:frozen.projectId,workDayId:frozen.workdayId,capacityProviderId:frozen.provider.providerId,reservationId:frozen.reservationId,
    status:'cancelled',leaseState:'released',assignmentResult:null,assignmentAttempt:{...frozen,status:'cancelled',finishedAt:'2026-09-13T12:00:03.000Z'},
-   lifecycleOutput:{...structuredClone(output),performance:{assignmentId:frozen.id,teamId:frozen.teamId,projectId:frozen.projectId,workdayId:frozen.workdayId,capacityProviderId:frozen.provider.providerId,
+   lifecycleOutput:{...structuredClone(output),completion:null,performance:{assignmentId:frozen.id,teamId:frozen.teamId,projectId:frozen.projectId,workdayId:frozen.workdayId,capacityProviderId:frozen.provider.providerId,
     disposition:'failed',actual:{activeSeconds:2,elapsedSeconds:2,inputTokens:5,cachedInputTokens:2,reasoningTokens:0,outputTokens:3,attempts:frozen.attempt},systemAssessment:{generatedBy:'api-recovery'}}}};
   for(const mutate of [
    (v:any)=>{v.lifecycleOutput.assignmentResult.summary='substitution';},

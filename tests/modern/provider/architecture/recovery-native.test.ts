@@ -72,6 +72,30 @@ async function recoveryFixture() {
 // real durable local files. Upstream JSON and principal/token are INPUTS,
 // NOT native API settlement, independent authentication or remote cleanup.
 describe('document-wide native provider recovery boundary', () => {
+	it('native recovery returns the exact started leased API record once and retains malformed execution-window authority without altering durable custody', async () => {
+		for (const valid of [true, false]) {
+			const f = await recoveryFixture(); try {
+				const frozen = f.lease.dispatchEnvelope.assignment.assignmentAttempt, prior = (await f.reopen().claimsForRecovery())[0]!;
+				const value = { id: frozen.id, teamId: frozen.teamId, capacityProviderId: frozen.provider.providerId,
+					status: 'leased', leaseState: 'leased', assignmentAttempt: { ...frozen, status: 'running', startedAt: frozen.createdAt },
+					metadata: { executionWindow: { startedAt: frozen.createdAt, executionRef: { nodeId: frozen.nodeId,
+						nodeRevision: frozen.nodeRevision, graphRevision: frozen.graphRevision, attempt: frozen.attempt + (valid ? 0 : 1) } } } };
+				const before = structuredClone(value); f.setReply(value);
+				expect((await f.run())[0]?.status).toBe(valid ? 'released' : 'retained');
+				if (valid) {
+					expect(f.requests).toHaveLength(2);
+					expect(f.requests[1]).toMatchObject({ method: 'POST', path: `/v1/provider/assignments/${frozen.id}/return`,
+						body: { leaseToken: prior.leaseToken, runnerId: prior.runnerId, output: prior.closeoutOutput } });
+					expect(await f.reopen().claimsForRecovery()).toEqual([]); expect(await f.run()).toEqual([]); expect(f.requests).toHaveLength(2);
+				} else {
+					expect(f.requests).toHaveLength(1);
+					const held = (await f.reopen().claimsForRecovery())[0]!;
+					expect(held).toEqual({ ...prior, updatedAt: held.updatedAt });
+				}
+				expect(value).toEqual(before);
+			} finally { await f.close(); }
+		}
+	});
 	it('native terminal recovery retains original failed custody across repeated API-generated unmeasured performance observations', async () => {
 		const outcomes = [];
 		for (const status of ['failed', 'cancelled', 'expired']) {

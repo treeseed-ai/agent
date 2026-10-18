@@ -68,6 +68,13 @@ export async function recoverProviderLocalLeases(input: { config: ProviderHostRu
       const status = textStatus(assignment.status);
       const frozen = assignmentAttemptSchema.parse(record(record(claim.dispatchEnvelope).assignment).assignmentAttempt);
       const current = assignmentAttemptSchema.parse(assignment.assignmentAttempt);
+      // The API retains the lease record while its canonical attempt executes.
+      // Accept that lifecycle only with the original, exact issued start window.
+      const window = record(record(assignment.metadata).executionWindow);
+      const startedLease = status === 'leased' && assignment.leaseState === 'leased' && current.status === 'running'
+        && current.startedAt !== undefined && current.startedAt === window.startedAt
+        && isDeepStrictEqual(window.executionRef, { nodeId: current.nodeId, nodeRevision: current.nodeRevision,
+          graphRevision: current.graphRevision, attempt: current.attempt });
       if (connection.teamId === frozen.teamId && connection.providerId === frozen.provider.providerId
         && isUnresolvedUsageRecovery(assignment, frozen)) {
         await store.retainUnresolvedUsage(claim.id);
@@ -80,7 +87,7 @@ export async function recoverProviderLocalLeases(input: { config: ProviderHostRu
       if (assignment.id !== claim.assignmentId || assignment.teamId !== frozen.teamId
         || assignment.capacityProviderId !== frozen.provider.providerId || connection.teamId !== frozen.teamId
         || connection.providerId !== frozen.provider.providerId
-        || current.status !== status
+        || !(current.status === status || startedLease)
         || !(sameAttemptAuthority(current, frozen, assignment)
         && (!['leased', 'running'].includes(status) || current.finishedAt === frozen.finishedAt))
         || !['leased', 'running', 'completed', 'failed', 'returned', 'cancelled', 'expired', 'responded', 'abstained'].includes(status)) {

@@ -17,6 +17,26 @@ const connections = [{ connection: { id: 'connection' }, teamId: frozen.teamId, 
 vi.mock('../../src/provider/coordination/client.ts', () => ({ createProviderControlPlaneClient: vi.fn() }));
 
 describe('provider local lease recovery', () => {
+	it('recovers the API leased record with its exact running attempt and original execution window while denying contradictory lifecycle authority', async () => {
+		const startedAt = frozen.createdAt, window = { startedAt, executionRef: { nodeId: frozen.nodeId,
+			nodeRevision: frozen.nodeRevision, graphRevision: frozen.graphRevision, attempt: frozen.attempt } };
+		const value = { ...observed, leaseState: 'leased', assignmentAttempt: { ...frozen, status: 'running', startedAt }, metadata: { executionWindow: window } };
+		const variants = [value, { ...value, leaseState: 'released' }, { ...value, metadata: {} },
+			{ ...value, metadata: { executionWindow: { ...window, startedAt: frozen.deadline } } },
+			{ ...value, metadata: { executionWindow: { ...window, executionRef: { ...window.executionRef, attempt: frozen.attempt + 1 } } } },
+			{ ...value, assignmentAttempt: { ...value.assignmentAttempt, deadline: new Date(Date.parse(frozen.deadline) + 1000).toISOString() } }];
+		for (const [index, observation] of variants.entries()) {
+			const held = structuredClone(observation), api = { assignment: vi.fn().mockResolvedValue(observation),
+				returnAssignment: vi.fn().mockResolvedValue({ assignment: { id: frozen.id, status: 'returned' } }) };
+			vi.mocked(createProviderControlPlaneClient).mockReturnValue(api as never);
+			const claim = { id: 'claim', connectionId: 'connection', assignmentId: frozen.id, leaseToken: 'lease', runnerId: 'runner', dispatchEnvelope };
+			const store = { claimsForRecovery: vi.fn().mockResolvedValue([claim]), finalize: vi.fn(), recordFailure: vi.fn() };
+			const result = await recoverProviderLocalLeases({ config: {} as never, store: store as never, connections: connections as never });
+			expect(result[0]?.status).toBe(index === 0 ? 'released' : 'retained');
+			expect(api.returnAssignment).toHaveBeenCalledTimes(index === 0 ? 1 : 0); expect(store.finalize).toHaveBeenCalledTimes(index === 0 ? 1 : 0);
+			expect(observation).toEqual(held);
+		}
+	});
 	it('requires an exact returned assignment receipt before finalizing recovery and retains every malformed successful transport reply', async () => {
 		for (const reply of [undefined, null, {}, { assignment: {} }, { assignment: { id: 'foreign', status: 'returned' } },
 			{ assignment: { id: frozen.id, status: 'running' } }, { assignment: { id: frozen.id, status: null } }]) {

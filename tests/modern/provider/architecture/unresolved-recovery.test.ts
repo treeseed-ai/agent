@@ -89,6 +89,23 @@ describe('original operator unresolved usage authority', () => {
 		}
 		expect(outcomes).toEqual(['retained', 'retained', 'retained']);
 		expect(finalize).not.toHaveBeenCalled(); expect(retain).toHaveBeenCalledTimes(3);
+  // The API may generate only terminal disposition while acknowledging the
+  // exact original measured executor output and settled performance.
+  claim.activeStartedAt=frozen.createdAt;claim.activeFinishedAt='2026-09-13T12:00:01.000Z';claim.accountedThrough=claim.activeFinishedAt;
+  const output={sandboxId:'original-sandbox',teardown:{verified:true,completedAt:'2026-09-13T12:00:02.000Z'},
+   assignmentResult:{schemaVersion:'treeseed.assignment-result/v1',id:'result',assignmentId:frozen.id,status:'completed',summary:'Retained original result',references:[],verification:[],diagnostics:[],
+    usage:{elapsedSeconds:2,modelInputTokens:5,modelOutputTokens:3,native:{activeSeconds:1.1,elapsedSeconds:1.2,cachedInputTokens:2,reasoningTokens:0}},completedAt:'2026-09-13T12:00:02.000Z'}};
+  claim.closeoutOutput=output;
+  const acknowledged={id:frozen.id,teamId:frozen.teamId,projectId:frozen.projectId,workDayId:frozen.workdayId,capacityProviderId:frozen.provider.providerId,reservationId:frozen.reservationId,
+   status:'cancelled',leaseState:'released',assignmentResult:null,assignmentAttempt:{...frozen,status:'cancelled',finishedAt:'2026-09-13T12:00:03.000Z'},
+   lifecycleOutput:{...structuredClone(output),performance:{assignmentId:frozen.id,teamId:frozen.teamId,projectId:frozen.projectId,workdayId:frozen.workdayId,capacityProviderId:frozen.provider.providerId,
+    disposition:'failed',actual:{activeSeconds:2,elapsedSeconds:2,inputTokens:5,cachedInputTokens:2,reasoningTokens:0,outputTokens:3,attempts:frozen.attempt},systemAssessment:{generatedBy:'api-recovery'}}}};
+  readAssignment.mockResolvedValue(acknowledged);
+  const original=structuredClone(claim),apiOriginal=structuredClone(acknowledged);
+  expect((await recoverProviderLocalLeases({config,connections:[connection],store}))[0]?.status).toBe('released');
+  expect(finalize).toHaveBeenCalledExactlyOnceWith('claim','authoritative-cancelled');
+  expect(claim).toEqual(original);expect(acknowledged).toEqual(apiOriginal);
+
 	});
 	it('uses the public capacityProviderId and frozen canonical provider without accepting a missing foreign or legacy-only provider identity', () => {
 		for (const value of [observed(), { ...observed(), providerId: 'non-authoritative-foreign-alias' }]) {

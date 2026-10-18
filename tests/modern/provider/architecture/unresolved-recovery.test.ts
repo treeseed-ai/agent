@@ -38,7 +38,7 @@ describe('original operator unresolved usage authority', () => {
    const observed = await f.reopen().activeTimeObservation(f.attempt.provider.modelConfigurationId, [f.attempt.provider.executionCapabilityId]);
    expect(observed.modelUsage).toEqual(accounting.modelUsage); expect(observed.capabilityUsage).toEqual(accounting.capabilityUsage);
    const next = await f.reopen().claim({ connectionId: 'team-a', globalLimit: 1, connectionLimit: 1 }); expect(next).not.toBeNull();
-   if (next) await f.store.release(next.id, 'isolated next slot cleanup');
+   if (next) await f.store.release(next.id);
   } finally { await f.close(); }
  });
  it('denies unresolved release for ongoing measured work and missing unverified malformed or pre-finish physical closeout', async () => {

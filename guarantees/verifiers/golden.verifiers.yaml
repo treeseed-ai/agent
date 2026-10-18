@@ -3928,7 +3928,7 @@ verifiers:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/provider/architecture/unresolved-recovery.test.ts
-    testName: "retains terminal API-recovery performance without treating synthesized zero values as measured settlement authority"
+    testName: "distinguishes exact measured terminal custody from synthesized unknown usage without mutating original evidence"
   agent.golden.recovery-synthesized-terminal-native:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"
@@ -4475,12 +4475,6 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: "tests/modern/provider/closeout/publication-denial.test.ts"
     testName: "retains a definitive discussion publication denial as a failed result with original measured usage and no invented product"
-
-  agent.golden.measured-terminal-custody-unit:
-    kind: vitestCase
-    ownerPackage: "@treeseed/agent"
-    testFile: tests/modern/provider/architecture/unresolved-recovery.test.ts
-    testName: "distinguishes exact measured terminal custody from synthesized unknown usage without mutating original evidence"
 
   agent.golden.measured-terminal-custody-native:
     kind: vitestCase

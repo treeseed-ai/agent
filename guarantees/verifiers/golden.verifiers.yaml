@@ -3903,7 +3903,7 @@ verifiers:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/provider/architecture/recovery-native.test.ts
-    testName: "native unresolved operator recovery frees only concurrency while preserving exact failed output and unknown period reservation across reopened stores measured=false"
+    testName: "native unresolved operator recovery frees only concurrency while preserving exact failed output and unknown period reservation across reopened stores"
   agent.golden.unresolved-recovery-denial-native:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"
@@ -4438,4 +4438,4 @@ verifiers:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/provider/architecture/recovery-native.test.ts
-    testName: "native unresolved operator recovery frees only concurrency while preserving exact failed output and unknown period reservation across reopened stores measured=true"
+    testName: "native closed measured operator recovery frees only concurrency while retaining original clocks product and period reservation"

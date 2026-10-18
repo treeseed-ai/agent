@@ -169,7 +169,9 @@ describe('document-wide native provider recovery boundary', () => {
 			} finally { await f.close(); }
 		}
 	});
-	it.each([false, true])('native unresolved operator recovery frees only concurrency while preserving exact failed output and unknown period reservation across reopened stores measured=%s', async measured => {
+	it('native unresolved operator recovery frees only concurrency while preserving exact failed output and unknown period reservation across reopened stores', () => verifyUnresolvedRecovery(false));
+	it('native closed measured operator recovery frees only concurrency while retaining original clocks product and period reservation', () => verifyUnresolvedRecovery(true));
+	async function verifyUnresolvedRecovery(measured: boolean) {
 		const f = await recoveryFixture(measured); try {
 			const prior = (await f.reopen().claimsForRecovery())[0]!;
 			const frozen = f.lease.dispatchEnvelope.assignment.assignmentAttempt;
@@ -195,7 +197,7 @@ describe('document-wide native provider recovery boundary', () => {
 				.rejects.toThrow('daily active-time capacity');
 			expect(value).toEqual(before); expect(await f.entries()).toEqual(['capacity-state.json']);
 		} finally { await f.close(); }
-	});
+	}
 	it('native denied unavailable malformed and disconnected availability refresh retains the original session and failed assignment for exact retry instead of creating replacement authority', async () => {
 		const outcomes = [];
 		for (const failure of [{ status: 401 }, { status: 403 }, { status: 503 }, { status: 400 },

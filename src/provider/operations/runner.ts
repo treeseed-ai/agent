@@ -234,7 +234,6 @@ export async function runProviderAssignment(input: ProviderAssignmentRunInput) {
 				outputs: { ...outputs, assignmentResult: assignmentResultSchema.parse({ ...canonical, status: 'failed', summary,
 					diagnostics: [...canonical.diagnostics, { code, severity: 'error', message: summary }] }) } };
 		}
-		await input.onCloseoutOutput?.({ ...record(result.outputs), artifacts: result.artifacts ?? [] });
 	}
 	if (!result.usage?.length && activeStartedAt === null) {
 		// No productive invocation occurred. Measure the real preparation scope;

@@ -4475,3 +4475,15 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: "tests/modern/provider/closeout/publication-denial.test.ts"
     testName: "retains a definitive discussion publication denial as a failed result with original measured usage and no invented product"
+
+  agent.golden.measured-terminal-custody-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/provider/architecture/unresolved-recovery.test.ts
+    testName: "distinguishes exact measured terminal custody from synthesized unknown usage without mutating original evidence"
+
+  agent.golden.measured-terminal-custody-native:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/provider/architecture/recovery-native.test.ts
+    testName: "native recovery acknowledges only exact closed measured API custody without replacing original usage or failed history"

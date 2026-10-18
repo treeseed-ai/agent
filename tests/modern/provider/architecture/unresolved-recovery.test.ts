@@ -57,7 +57,7 @@ describe('original operator unresolved usage authority', () => {
   }
  });
 
-	it('retains terminal API-recovery performance without treating synthesized zero values as measured settlement authority', async () => {
+	it('distinguishes exact measured terminal custody from synthesized unknown usage without mutating original evidence', async () => {
 		const store = new ProviderLocalCapacityStore('/unused-terminal-recovery');
 		const claim: ProviderLocalSlotClaim = { id: 'claim', connectionId: 'connection', runnerId: 'runner', status: 'recovery',
 			assignmentId: frozen.id, leaseToken: 'isolated-lease', leaseExpiresAt: frozen.deadline,
@@ -100,6 +100,18 @@ describe('original operator unresolved usage authority', () => {
    status:'cancelled',leaseState:'released',assignmentResult:null,assignmentAttempt:{...frozen,status:'cancelled',finishedAt:'2026-09-13T12:00:03.000Z'},
    lifecycleOutput:{...structuredClone(output),performance:{assignmentId:frozen.id,teamId:frozen.teamId,projectId:frozen.projectId,workdayId:frozen.workdayId,capacityProviderId:frozen.provider.providerId,
     disposition:'failed',actual:{activeSeconds:2,elapsedSeconds:2,inputTokens:5,cachedInputTokens:2,reasoningTokens:0,outputTokens:3,attempts:frozen.attempt},systemAssessment:{generatedBy:'api-recovery'}}}};
+  for(const mutate of [
+   (v:any)=>{v.lifecycleOutput.assignmentResult.summary='substitution';},
+   (v:any)=>{v.lifecycleOutput.performance.actual.activeSeconds=0;},
+   (v:any)=>{v.lifecycleOutput.performance.actual.outputTokens=4;},
+   (v:any)=>{v.lifecycleOutput.performance.actual.attempts=2;},
+   (v:any)=>{v.lifecycleOutput.performance.teamId='foreign';},
+   (v:any)=>{v.reservationId='foreign';},
+   (v:any)=>{v.assignmentAttempt.grant.tools=[];},
+   (v:any)=>{v.unresolvedUsageRecovery={usageStatus:'unresolved'};},
+  ]){const changed=structuredClone(acknowledged);mutate(changed);const prior=structuredClone(changed);readAssignment.mockResolvedValue(changed);expect((await recoverProviderLocalLeases({config,connections:[connection],store}))[0]?.status).toBe('retained');expect(changed).toEqual(prior);}
+  for(const field of ['activeStartedAt','activeFinishedAt','accountedThrough'] as const){const value=claim[field];delete claim[field];readAssignment.mockResolvedValue(acknowledged);expect((await recoverProviderLocalLeases({config,connections:[connection],store}))[0]?.status).toBe('retained');claim[field]=value;}
+  expect(finalize).not.toHaveBeenCalled();
   readAssignment.mockResolvedValue(acknowledged);
   const original=structuredClone(claim),apiOriginal=structuredClone(acknowledged);
   expect((await recoverProviderLocalLeases({config,connections:[connection],store}))[0]?.status).toBe('released');

@@ -100,9 +100,9 @@ describe('document-wide native provider recovery boundary', () => {
 	});
 
  it('native recovery acknowledges only exact closed measured API custody without replacing original usage or failed history',async()=>{
-  for(const mutation of ['valid','missing-output','changed-output','zero-usage','changed-usage','foreign-reservation','open-lease','unverified-teardown','ongoing-clock','foreign-performance']){
+  for(const mutation of ['valid','missing-output','changed-output','zero-usage','changed-usage','foreign-reservation','open-lease','unverified-teardown','ongoing-clock','foreign-performance','missing-clocks','future-teardown']){
    const output=()=>({sandboxId:'original-sandbox',teardown:{verified:true,completedAt:new Date().toISOString()},assignmentResult:{schemaVersion:'treeseed.assignment-result/v1',id:'result',assignmentId:'assignment-1',status:'completed',summary:'Original retained output',references:[],verification:[],diagnostics:[],usage:{elapsedSeconds:2,modelInputTokens:5,modelOutputTokens:3,native:{activeSeconds:1.1,elapsedSeconds:1.2,cachedInputTokens:2,reasoningTokens:0}},completedAt:new Date().toISOString()}});
-   const f=await recoveryFixture(true,output);try{
+   const f=await recoveryFixture(mutation!=='missing-clocks',()=>{const v=output();if(mutation==='future-teardown')v.teardown.completedAt='2099-01-01T00:00:00.000Z';return v;});try{
     const prior=(await f.reopen().claimsForRecovery())[0]!,frozen=f.lease.dispatchEnvelope.assignment.assignmentAttempt;
     const original=structuredClone(prior.closeoutOutput!);(original.assignmentResult as Record<string,unknown>).assignmentId=frozen.id;
     // The fixture's canonical assignment ID is the original frozen ID.

@@ -2612,3 +2612,11 @@ workflow:
   - id: discussion-publication-denial
     action: { verifier: agent.golden.discussion-publication-denial }
     expect: { status: passed }
+
+  - id: measured-terminal-custody-unit
+    action: { verifier: agent.golden.measured-terminal-custody-unit }
+    expect: { status: passed }
+
+  - id: measured-terminal-custody-native
+    action: { verifier: agent.golden.measured-terminal-custody-native }
+    expect: { status: passed }

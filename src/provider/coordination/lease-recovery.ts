@@ -1,9 +1,9 @@
 import type { ProviderConnectionRuntime } from './coordinator.ts';
 import { createProviderControlPlaneClient } from './client.ts';
 import type { ProviderHostRuntimeConfig } from '../configuration/config.ts';
-import { ProviderLocalCapacityStore } from '../capacity/capacity-core/local-capacity-store.ts';
+import { ProviderLocalCapacityStore, type ProviderLocalSlotClaim } from '../capacity/capacity-core/local-capacity-store.ts';
 import { providerFailureSummary } from '../../sandbox/provider-failure.ts';
-import { assignmentAttemptSchema } from '@treeseed/sdk/agent-capacity';
+import { assignmentAttemptSchema, assignmentResultSchema } from '@treeseed/sdk/agent-capacity';
 import { isDeepStrictEqual } from 'node:util';
 import type { AssignmentAttempt } from '@treeseed/sdk/agent-capacity';
 
@@ -41,6 +41,37 @@ export function isUnresolvedUsageRecovery(observed: unknown, frozen: AssignmentA
     && audit.expectedStateVersion === assignment.stateVersion
     && ['actorId', 'reason'].every(key => typeof audit[key] === 'string' && String(audit[key]).trim().length > 0)
     && typeof audit.recoveredAt === 'string' && /^\d{4}-\d{2}-\d{2}T.*Z$/u.test(audit.recoveredAt) && Number.isFinite(Date.parse(audit.recoveredAt));
+}
+
+/** API disposition generation is not itself a usage acknowledgment. Transfer
+ * only the exact retained, physically closed measured output to API custody;
+ * the canonical cancelled/failed result remains unsuccessful. */
+function acknowledgesMeasuredCloseout(assignment: Record<string, unknown>, claim: ProviderLocalSlotClaim, frozen: AssignmentAttempt): boolean {
+  if (!['failed', 'cancelled', 'expired'].includes(textStatus(assignment.status)) || assignment.leaseState !== 'released'
+    || assignment.reservationId !== frozen.reservationId || assignment.assignmentResult != null || !claim.closeoutOutput) return false;
+  const lifecycle = record(assignment.lifecycleOutput), { performance: _performance, ...acknowledged } = lifecycle;
+  // API terminalization adds an absent completion as null. This carries no
+  // agent completion authority; any non-null or replaced value still differs.
+  if (!Object.hasOwn(claim.closeoutOutput, 'completion') && acknowledged.completion === null) delete acknowledged.completion;
+  if (!isDeepStrictEqual(acknowledged, claim.closeoutOutput)) return false;
+  const output = claim.closeoutOutput, teardown = record(output.teardown);
+  const start = Date.parse(claim.activeStartedAt ?? ''), finish = Date.parse(claim.activeFinishedAt ?? ''), closed = Date.parse(String(teardown.completedAt ?? ''));
+  if (!Number.isFinite(start) || !Number.isFinite(finish) || !Number.isFinite(closed) || start > finish || finish > closed || closed > Date.now()
+    || claim.accountedThrough !== claim.activeFinishedAt || teardown.verified !== true || typeof output.sandboxId !== 'string' || !output.sandboxId) return false;
+  const parsed = assignmentResultSchema.safeParse(output.assignmentResult);
+  if (!parsed.success || !isDeepStrictEqual(parsed.data, output.assignmentResult) || parsed.data.assignmentId !== frozen.id) return false;
+  const usage = parsed.data.usage, native = record(usage.native);
+  const positive = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value) && value > 0;
+  if (!positive(native.activeSeconds) || !positive(native.elapsedSeconds) || native.activeSeconds > native.elapsedSeconds
+    || Math.ceil(native.elapsedSeconds) !== usage.elapsedSeconds) return false;
+  const performance = record(lifecycle.performance), actual = record(performance.actual);
+  if (performance.assignmentId !== frozen.id || performance.teamId !== frozen.teamId || performance.projectId !== frozen.projectId
+    || performance.workdayId !== frozen.workdayId || performance.capacityProviderId !== frozen.provider.providerId
+    || performance.disposition !== 'failed' || actual.attempts !== frozen.attempt) return false;
+  const expected = { activeSeconds: Math.ceil(native.activeSeconds), elapsedSeconds: usage.elapsedSeconds,
+    inputTokens: usage.modelInputTokens ?? 0, outputTokens: usage.modelOutputTokens ?? 0,
+    cachedInputTokens: native.cachedInputTokens ?? 0, reasoningTokens: native.reasoningTokens ?? 0 };
+  return Object.entries(expected).every(([key, value]) => typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 && actual[key] === value);
 }
 
 export async function recoverProviderLocalLeases(input: { config: ProviderHostRuntimeConfig; connections: ProviderConnectionRuntime[]; store?: ProviderLocalCapacityStore; includeRunning?: boolean }) {
@@ -93,11 +124,12 @@ export async function recoverProviderLocalLeases(input: { config: ProviderHostRu
         || !['leased', 'running', 'completed', 'failed', 'returned', 'cancelled', 'expired', 'responded', 'abstained'].includes(status)) {
         throw new Error('Provider recovery assignment authority does not match its retained lease.');
       }
-      // API recovery synthesizes disposition evidence, not measured settlement.
-      // Retain the original provider observation until its explicit recovery audit
-      // is present; a terminal status must not discard unresolved usage custody.
+      // A generated disposition alone cannot discard provider evidence. Exact
+      // measured output already durably acknowledged by API is distinct from
+      // synthesized unknown usage, which still requires the operator audit.
       if (!['leased', 'running'].includes(status)
-        && record(record(record(assignment.lifecycleOutput).performance).systemAssessment).generatedBy === 'api-recovery') {
+        && record(record(record(assignment.lifecycleOutput).performance).systemAssessment).generatedBy === 'api-recovery'
+        && !acknowledgesMeasuredCloseout(assignment, claim, frozen)) {
         throw new Error('Synthesized recovery performance does not acknowledge measured usage custody.');
       }
       if (status === 'leased' || status === 'running') {

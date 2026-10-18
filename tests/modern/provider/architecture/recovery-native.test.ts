@@ -6,7 +6,7 @@ import { recoverProviderLocalLeases } from '../../../../src/provider/coordinatio
 import { capacityFixture } from './capacity-fixture.ts';
 import { publishProviderAvailability } from '../../../../src/provider/lifecycle/lifecycle.ts';
 
-async function recoveryFixture(measured = false) {
+async function recoveryFixture(measured = false, output?: () => Record<string, unknown>) {
 	const f = await capacityFixture();
 	const requests: Array<{ method: string; path: string; body: unknown }> = [];
 	let observed: unknown = { id: f.attempt.id, teamId: f.attempt.teamId, capacityProviderId: f.attempt.provider.providerId,
@@ -54,7 +54,7 @@ async function recoveryFixture(measured = false) {
 		observed = { id: f.attempt.id, teamId: f.attempt.teamId, capacityProviderId: f.attempt.provider.providerId,
 			status: 'running', assignmentAttempt: { ...lease.dispatchEnvelope.assignment.assignmentAttempt, status: 'running' } };
 		if (measured) { await f.store.beginActiveExecution(claim.id); await new Promise(resolve => setTimeout(resolve, 10)); await f.store.finishActiveExecution(claim.id); }
-   await f.store.recordCloseoutOutput(claim.id, measured ? { sandboxId: 'original-sandbox', teardown: { verified: true, completedAt: new Date().toISOString() },
+   await f.store.recordCloseoutOutput(claim.id, output ? output() : measured ? { sandboxId: 'original-sandbox', teardown: { verified: true, completedAt: new Date().toISOString() },
     status: 'completed', originalArtifact: 'immutable original correction' } : { status: 'blocked', unfinishedWork: ['unchanged original assignment'] });
 		await f.store.recordFailure(claim.id, 'original interrupted provider execution');
 		return { ...f, claim, lease, connection, requests,
@@ -98,6 +98,36 @@ describe('document-wide native provider recovery boundary', () => {
 			} finally { await f.close(); }
 		}
 	});
+
+ it('native recovery acknowledges only exact closed measured API custody without replacing original usage or failed history',async()=>{
+  for(const mutation of ['valid','missing-output','changed-output','zero-usage','changed-usage','foreign-reservation','open-lease','unverified-teardown','ongoing-clock','foreign-performance','missing-clocks','future-teardown','fabricated-completion']){
+   const output=()=>({sandboxId:'original-sandbox',teardown:{verified:true,completedAt:new Date().toISOString()},assignmentResult:{schemaVersion:'treeseed.assignment-result/v1',id:'result',assignmentId:'assignment-1',status:'completed',summary:'Original retained output',references:[],verification:[],diagnostics:[],usage:{elapsedSeconds:2,modelInputTokens:5,modelOutputTokens:3,native:{activeSeconds:1.1,elapsedSeconds:1.2,cachedInputTokens:2,reasoningTokens:0}},completedAt:new Date().toISOString()}});
+   const f=await recoveryFixture(mutation!=='missing-clocks',()=>{const v=output();if(mutation==='future-teardown')v.teardown.completedAt='2099-01-01T00:00:00.000Z';return v;});try{
+    const prior=(await f.reopen().claimsForRecovery())[0]!,frozen=f.lease.dispatchEnvelope.assignment.assignmentAttempt;
+    const original=structuredClone(prior.closeoutOutput!);(original.assignmentResult as Record<string,unknown>).assignmentId=frozen.id;
+    // The fixture's canonical assignment ID is the original frozen ID.
+    expect((prior.closeoutOutput!.assignmentResult as Record<string,unknown>).assignmentId).toBe(frozen.id);
+    const actual={activeSeconds:2,elapsedSeconds:2,inputTokens:5,cachedInputTokens:2,reasoningTokens:0,outputTokens:3,attempts:frozen.attempt};
+    const value:any={id:frozen.id,teamId:frozen.teamId,projectId:frozen.projectId,workDayId:frozen.workdayId,capacityProviderId:frozen.provider.providerId,reservationId:frozen.reservationId,status:'cancelled',leaseState:'released',assignmentResult:null,assignmentAttempt:{...frozen,status:'cancelled',finishedAt:frozen.deadline},lifecycleOutput:{...original,completion:null,performance:{assignmentId:frozen.id,teamId:frozen.teamId,projectId:frozen.projectId,workdayId:frozen.workdayId,capacityProviderId:frozen.provider.providerId,disposition:'failed',actual,systemAssessment:{generatedBy:'api-recovery'}}}};
+    if(mutation==='fabricated-completion')value.lifecycleOutput.completion={disposition:'completed'};
+    if(mutation==='missing-output')delete value.lifecycleOutput.assignmentResult;
+    if(mutation==='changed-output')value.lifecycleOutput.assignmentResult.summary='Substituted output';
+    if(mutation==='zero-usage')actual.activeSeconds=0;
+    if(mutation==='changed-usage')actual.inputTokens=6;
+    if(mutation==='foreign-reservation')value.reservationId='foreign';
+    if(mutation==='open-lease')value.leaseState='leased';
+    if(mutation==='unverified-teardown')value.lifecycleOutput.teardown.verified=false;
+    if(mutation==='ongoing-clock')delete value.lifecycleOutput.teardown.completedAt;
+    if(mutation==='foreign-performance')value.lifecycleOutput.performance.assignmentId='foreign';
+    const before=JSON.parse(await f.bytes()),upstream=structuredClone(value);f.setReply(value);
+    expect((await f.run())[0]?.status).toBe(mutation==='valid'?'released':'retained');
+    const after=JSON.parse(await f.bytes());expect(after.usage).toEqual(before.usage);expect(value).toEqual(upstream);
+    if(mutation==='valid'){expect(after.claims).toEqual([]);expect(after.events.filter((e:any)=>e.outcome==='authoritative-cancelled')).toHaveLength(1);expect(await f.run()).toEqual([]);expect(f.requests).toHaveLength(1);}
+    else{expect(after.claims[0]).toEqual({...prior,updatedAt:after.claims[0].updatedAt});expect((await f.run())[0]?.status).toBe('retained');}
+    expect(f.requests.every(r=>r.method==='GET')).toBe(true);
+   }finally{await f.close();}
+  }
+ });
 	it('native terminal recovery retains original failed custody across repeated API-generated unmeasured performance observations', async () => {
 		const outcomes = [];
 		for (const status of ['failed', 'cancelled', 'expired']) {

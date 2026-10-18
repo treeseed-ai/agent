@@ -3,7 +3,7 @@ import {setTimeout as delay} from 'node:timers/promises';
 import {expect,it} from 'vitest';
 import {ProviderProtocolClient} from '@treeseed/sdk/capacity-provider';
 import {runProviderAssignment} from '../../../../src/provider/operations/runner.ts';
-import {assignment,runtimeBuild,timingAwareness,treeDx,responseReference} from './runner-fixture.ts';
+import {assignment,runtimeBuild,timingAwareness,treeDx,responseReference,deferred} from './runner-fixture.ts';
 
 async function awaitRenewal(gate:Promise<void>,reason:string){
  let timer:ReturnType<typeof setTimeout>|undefined;
@@ -16,7 +16,7 @@ it('native provider transport keeps the original lease alive through publication
  for(const failure of [false,true]){
   const calls:Array<{path:string;method:string;body:Record<string,unknown>;at:number}>=[];
   let renewals=0,publishing=false,completing=false;
-  const publicationGate=Promise.withResolvers<void>(),terminalGate=Promise.withResolvers<void>();
+  const publicationGate=deferred<void>(),terminalGate=deferred<void>();
   let publicationBaseline=0,terminalBaseline=0;
   const server=createServer((request,response)=>{let bytes='';request.setEncoding('utf8');request.on('data',chunk=>{bytes+=chunk;});request.on('end',()=>{void(async()=>{
    const path=request.url??'',method=request.method??'',body=bytes?JSON.parse(bytes):{};calls.push({path,method,body,at:performance.now()});

@@ -1,10 +1,10 @@
 import {expect,it,vi} from 'vitest';
 import {runProviderAssignment} from '../../../../src/provider/operations/runner.ts';
-import {assignment,client,runtimeBuild,timingAwareness,treeDx,responseReference} from './runner-fixture.ts';
+import {assignment,client,runtimeBuild,timingAwareness,treeDx,responseReference,deferred} from './runner-fixture.ts';
 
 it('renews the original lease through delayed response publication and terminal closeout then drains every renewal on success or failure',async()=>{
  for(const failure of [false,true]){
-  vi.useFakeTimers();const api=client(),published=Promise.withResolvers<{status:string;reference:typeof responseReference}>(),entered=Promise.withResolvers<void>();
+  vi.useFakeTimers();const api=client(),published=deferred<{status:string;reference:typeof responseReference}>(),entered=deferred<void>();
   api.respondToAssignmentDiscussion.mockImplementation(async()=>{entered.resolve();return published.promise;});
   const pending=runProviderAssignment({client:api,assignment:assignment('conversation'),treeDx,leaseToken:'lease',runnerId:'runner',runtimeBuild,renewalIntervalMs:10,
    executor:{id:'codex',observe:async()=>({available:true}),execute:async request=>{await request.beginExecution?.();return{status:'responded',summary:'Actual supplied reply.',responseMarkdown:'Actual supplied reply.',outputs:{timingAwareness},usage:[{activeSeconds:2,elapsedSeconds:3}]};}}});

@@ -4411,3 +4411,13 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/provider/architecture/recovery-native.test.ts
     testName: "native recovery releases the terminal API started attempt only after exact lifecycle and frozen authority readback"
+  agent.golden.recovery-started-lease-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/lease-recovery.test.ts
+    testName: "recovers the API leased record with its exact running attempt and original execution window while denying contradictory lifecycle authority"
+  agent.golden.recovery-started-lease-native:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/provider/architecture/recovery-native.test.ts
+    testName: "native recovery returns the exact started leased API record once and retains malformed execution-window authority without altering durable custody"

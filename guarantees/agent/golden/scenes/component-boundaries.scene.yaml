@@ -2570,3 +2570,9 @@ workflow:
   - id: recovery-started-native
     action: { verifier: agent.golden.recovery-started-native }
     expect: { status: passed }
+  - id: recovery-started-lease-unit
+    action: { verifier: agent.golden.recovery-started-lease-unit }
+    expect: { status: passed }
+  - id: recovery-started-lease-native
+    action: { verifier: agent.golden.recovery-started-lease-native }
+    expect: { status: passed }

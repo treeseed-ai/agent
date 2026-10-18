@@ -1,3 +1,4 @@
+import { capacityFixture } from './capacity-fixture.ts';
 import { describe, expect, it, vi } from 'vitest';
 const { readAssignment } = vi.hoisted(() => ({ readAssignment: vi.fn() }));
 vi.mock('../../../../src/provider/coordination/client.ts', () => ({
@@ -18,6 +19,44 @@ const observed = () => ({ id: frozen.id, teamId: frozen.teamId, capacityProvider
 		reason: 'Original active measurement is unavailable', recoveredAt: frozen.deadline } });
 
 describe('original operator unresolved usage authority', () => {
+
+ it('retains closed measured recovery clocks and remaining reservation while releasing only concurrency exactly once', async () => {
+  const f = await capacityFixture(); try {
+   const claim = await f.store.claim({ connectionId: 'team-a', globalLimit: 1, connectionLimit: 1 });
+   if (!claim) throw new Error('Original local claim required');
+   await f.store.attachLease(claim.id, f.lease()); await f.store.claimDispatch(claim.id);
+   await f.store.beginActiveExecution(claim.id); await new Promise(resolve => setTimeout(resolve, 10)); await f.store.finishActiveExecution(claim.id);
+   await f.store.recordCloseoutOutput(claim.id, { sandboxId: 'original-sandbox', teardown: { verified: true, completedAt: new Date().toISOString() }, original: 'immutable product' });
+   await f.store.recordFailure(claim.id, 'original measured settlement rejection');
+   const before = JSON.parse(await f.bytes()), prior = before.claims[0];
+   const accounting = await f.store.activeTimeObservation(f.attempt.provider.modelConfigurationId, [f.attempt.provider.executionCapabilityId]);
+   expect(accounting.modelUsage.activeSeconds).toBeGreaterThan(0);
+   await Promise.all([f.store.retainUnresolvedUsage(claim.id), f.reopen().retainUnresolvedUsage(claim.id)]);
+   const after = JSON.parse(await f.bytes()); expect(after.claims).toHaveLength(1);
+   expect(after.claims[0]).toEqual({ ...prior, status: 'unresolved', updatedAt: after.claims[0].updatedAt }); expect(after.usage).toEqual(before.usage);
+   expect(after.events.filter((event: { outcome: string }) => event.outcome === 'operator-usage-unresolved')).toHaveLength(1);
+   const observed = await f.reopen().activeTimeObservation(f.attempt.provider.modelConfigurationId, [f.attempt.provider.executionCapabilityId]);
+   expect(observed.modelUsage).toEqual(accounting.modelUsage); expect(observed.capabilityUsage).toEqual(accounting.capabilityUsage);
+   const next = await f.reopen().claim({ connectionId: 'team-a', globalLimit: 1, connectionLimit: 1 }); expect(next).not.toBeNull();
+   if (next) await f.store.release(next.id, 'isolated next slot cleanup');
+  } finally { await f.close(); }
+ });
+ it('denies unresolved release for ongoing measured work and missing unverified malformed or pre-finish physical closeout', async () => {
+  for (const shape of ['ongoing', 'missing', 'unverified', 'invalid-clock', 'pre-finish']) {
+   const f = await capacityFixture(); try {
+    const claim = await f.store.claim({ connectionId: 'team-a', globalLimit: 1, connectionLimit: 1 }); if (!claim) throw new Error('Original claim required');
+    await f.store.attachLease(claim.id, f.lease()); await f.store.claimDispatch(claim.id); await f.store.beginActiveExecution(claim.id);
+    if (shape !== 'ongoing') await f.store.finishActiveExecution(claim.id);
+    if (shape !== 'missing') await f.store.recordCloseoutOutput(claim.id, { sandboxId: 'original-sandbox', teardown: { verified: shape !== 'unverified',
+     completedAt: shape === 'invalid-clock' ? 'invalid' : shape === 'pre-finish' ? '2000-01-01T00:00:00.000Z' : new Date().toISOString() } });
+    await f.store.recordFailure(claim.id, 'original failure'); const before = JSON.parse(await f.bytes());
+    await expect(f.store.retainUnresolvedUsage(claim.id)).rejects.toThrow(); const after = JSON.parse(await f.bytes());
+    expect(after.claims[0].status).toBe('recovery'); expect(after.claims[0].closeoutOutput).toEqual(before.claims[0].closeoutOutput);
+    expect(after.events.filter((event: { outcome: string }) => event.outcome === 'operator-usage-unresolved')).toEqual([]);
+   } finally { await f.close(); }
+  }
+ });
+
 	it('retains terminal API-recovery performance without treating synthesized zero values as measured settlement authority', async () => {
 		const store = new ProviderLocalCapacityStore('/unused-terminal-recovery');
 		const claim: ProviderLocalSlotClaim = { id: 'claim', connectionId: 'connection', runnerId: 'runner', status: 'recovery',

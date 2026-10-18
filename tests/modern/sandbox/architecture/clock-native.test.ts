@@ -61,7 +61,7 @@ describe('native trusted guest clock relay and owning provider tool', () => {
 	it('native whole guest retains first and final clock bytes across a long provider stream and cannot forget an early killed command', async () => {
 		const outcomes: Array<{ mode: string; failure: string; events: Record<string, unknown>[]; clockValues: unknown[]; retainedPrivateFiles: string[];
 			usage?: ReturnType<typeof sandboxResultSchema.parse>['usage']; resultStatus?: string; summary?: string; responseMarkdown?: string }> = [];
-		for (const mode of ['completed', 'resource-abort', 'invalid-context', 'missing-subscription', 'provider-failure', 'provider-incomplete', 'first-clock-denied', 'replayed-clock']) {
+		for (const mode of ['completed', 'resource-abort', 'invalid-context', 'missing-subscription', 'provider-failure', 'provider-incomplete', 'first-clock-denied', 'replayed-clock', 'resumed-clock-id']) {
 			const f = await nativeClock();
 			try {
 				if (mode === 'first-clock-denied') f.set(200, 'first-model-clock-denied');
@@ -203,6 +203,13 @@ describe('native trusted guest clock relay and owning provider tool', () => {
 		expect(outcomes[6]!.clockValues).toHaveLength(2); expect(outcomes[6]!.resultStatus).toBeUndefined(); expect(outcomes[6]!.events).toEqual([]);
 		expect(outcomes[7]!.failure).toContain('Agent timing-awareness contract requires');
 		expect(outcomes[7]!.clockValues).toHaveLength(1); expect(outcomes[7]!.resultStatus).toBeUndefined(); expect(outcomes[7]!.events).toEqual([]);
+
+  const resumed=outcomes[8]!;expect(resumed.failure).toBe('');expect(resumed.resultStatus).toBe('completed');expect(resumed.clockValues).toHaveLength(2);
+  const clocks=resumed.events.filter(event=>event.type==='item.completed'&&(event.item as Record<string,unknown>)?.tool==='treeseed_time_status');
+  expect(clocks.map(event=>(event.item as Record<string,unknown>).id)).toEqual(['item_0','item_0']);
+  expect(clocks.map(event=>event.providerInvocation??0)).toEqual([0,1]);expect(timingAwarenessContract(resumed.events)).toMatchObject({completedChecks:2,firstToolCompliant:true,finalToolCompliant:true});
+  expect(resumed.responseMarkdown).toBe('Controlled original reply before its second clock.');
+
 		for (const outcome of outcomes) expect(outcome.retainedPrivateFiles,
 			JSON.stringify(outcomes.map(value => ({ mode: value.mode, retainedPrivateFiles: value.retainedPrivateFiles })))).toEqual([]);
 	}, 30_000);

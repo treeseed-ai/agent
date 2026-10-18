@@ -25,6 +25,13 @@ describe('original productive clock and actual first final tool boundary contrac
 			expect(events).toEqual(before);
 		}
 	});
+
+ it('distinguishes fresh identified clock completions in a later native subprocess while denying replay inside either invocation',()=>{
+  const first={...clock(),item:{...clock().item,id:'item_0'}},final={...observedClock(mcpResult(reading(20))),providerInvocation:1,item:{...observedClock(mcpResult(reading(20))).item,id:'item_0'}};
+  const events=[first,command,final],held=structuredClone(events);
+  expect(timingAwarenessContract(events)).toMatchObject({completedChecks:2,firstToolCompliant:true,finalToolCompliant:true});expect(events).toEqual(held);
+  for(const replay of [structuredClone(final),{...final,item:{...final.item,result:mcpResult(reading(10))}}])expect(timingAwarenessContract([...events,replay])).toMatchObject({completedChecks:2,firstToolCompliant:false,finalToolCompliant:false});
+ });
 	it('denies work started before the original first clock read completes even when later clock results look valid', () => {
 		const first = { ...clock(), item: { ...clock().item, id: 'original-first' } }, final = { ...clock(), item: { ...clock().item, id: 'original-final' } };
 		const started = { type: 'item.started', item: { ...first.item, status: 'in_progress', result: undefined } };

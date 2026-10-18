@@ -33,6 +33,13 @@ function publicClockEvidenceFixture() {
 			createdAt: '2026-10-04T00:00:02.001Z', protectedPayload: { providerEvents: events } } };
 }
 describe('Codex chat executor', () => {
+
+ it('reads distinct native subprocess clock identities while preserving original item IDs and denying a replay in the same subprocess',()=>{
+  const f=publicClockEvidenceFixture(),first=f.event.protectedPayload.providerEvents[0]!,last=f.event.protectedPayload.providerEvents[1]!;
+  last.item.id=first.item.id;Object.assign(last,{providerInvocation:1});const held=structuredClone(f);
+  expect(()=>verifyModelClockEvidence(f.item,f.event)).not.toThrow();expect(f).toEqual(held);
+  Object.assign(last,{providerInvocation:0});expect(()=>verifyModelClockEvidence(f.item,f.event)).toThrow();
+ });
 	it('rejects retrospectively legitimized command starts in exact public clock evidence without rewriting observations or receipts', () => {
 		const admitted: boolean[] = [];
 		for (const mode of ['checked', 'first-pending', 'recheck-pending']) {

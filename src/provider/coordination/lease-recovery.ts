@@ -50,6 +50,9 @@ function acknowledgesMeasuredCloseout(assignment: Record<string, unknown>, claim
   if (!['failed', 'cancelled', 'expired'].includes(textStatus(assignment.status)) || assignment.leaseState !== 'released'
     || assignment.reservationId !== frozen.reservationId || assignment.assignmentResult != null || !claim.closeoutOutput) return false;
   const lifecycle = record(assignment.lifecycleOutput), { performance: _performance, ...acknowledged } = lifecycle;
+  // API terminalization adds an absent completion as null. This carries no
+  // agent completion authority; any non-null or replaced value still differs.
+  if (!Object.hasOwn(claim.closeoutOutput, 'completion') && acknowledged.completion === null) delete acknowledged.completion;
   if (!isDeepStrictEqual(acknowledged, claim.closeoutOutput)) return false;
   const output = claim.closeoutOutput, teardown = record(output.teardown);
   const start = Date.parse(claim.activeStartedAt ?? ''), finish = Date.parse(claim.activeFinishedAt ?? ''), closed = Date.parse(String(teardown.completedAt ?? ''));

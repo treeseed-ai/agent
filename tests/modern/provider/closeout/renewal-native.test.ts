@@ -1,4 +1,8 @@
 import {createServer} from 'node:http';
+import {mkdtemp,rm} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import {ProviderLocalCapacityStore} from '../../../../src/provider/capacity/capacity-core/local-capacity-store.ts';
 import {setTimeout as delay} from 'node:timers/promises';
 import {expect,it} from 'vitest';
 import {ProviderProtocolClient} from '@treeseed/sdk/capacity-provider';
@@ -15,6 +19,7 @@ async function awaitRenewal(gate:Promise<void>,reason:string){
 it('native provider transport keeps the original lease alive through publication and terminal acknowledgment and closes on publication failure',async()=>{
  for(const publicationStatus of [200,503,404]){
   const failure=publicationStatus!==200;
+  const directory=await mkdtemp(join(tmpdir(),'treeseed-closeout-native-')),store=new ProviderLocalCapacityStore(directory);
   const calls:Array<{path:string;method:string;body:Record<string,unknown>;at:number}>=[];
   let renewals=0,publishing=false,completing=false;
   const publicationGate=deferred<void>(),terminalGate=deferred<void>();
@@ -42,7 +47,9 @@ it('native provider transport keeps the original lease alive through publication
    await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));const address=server.address();if(!address||typeof address==='string')throw new Error('Native HTTP address required');
    const client=new ProviderProtocolClient({controlPlaneUrl:`http://127.0.0.1:${address.port}`,accessToken:'native-control-token',requestTimeoutMs:2_000});
    const input=assignment('conversation'),held=structuredClone(input),outputs:Record<string,unknown>[]=[];
-   const run=runProviderAssignment({client,assignment:input,treeDx,leaseToken:'lease',runnerId:'runner',runtimeBuild,renewalIntervalMs:10,onCloseoutOutput:async output=>{outputs.push(structuredClone(output));},
+   const claim=await store.claim({connectionId:'native',globalLimit:1,connectionLimit:1});if(!claim)throw new Error('Original native claim required');
+   await store.attachLease(claim.id,{assignmentId:'assignment-1',leaseToken:'lease',leaseExpiresAt:new Date(Date.now()+60_000).toISOString(),requestedSeconds:30,dispatchEnvelope:{assignment:input}});await store.claimDispatch(claim.id);
+   const run=runProviderAssignment({client,assignment:input,treeDx,leaseToken:'lease',runnerId:'runner',runtimeBuild,renewalIntervalMs:10,onCloseoutOutput:async output=>{await store.recordCloseoutOutput(claim.id,output);outputs.push(structuredClone(output));},
     executor:{id:'codex',observe:async()=>({available:true}),execute:async request=>{await request.beginExecution?.();return{status:'responded',summary:'Native transport controlled reply.',responseMarkdown:'Native transport controlled reply.',outputs:{timingAwareness},usage:[{activeSeconds:2,elapsedSeconds:3}]};}}});
    if(publicationStatus===503){await expect(run).rejects.toThrow('Original native publication failure');expect(calls.some(call=>call.path.endsWith('/settle')||call.path.endsWith('/complete')||call.path.endsWith('/fail'))).toBe(false);}
    else if(publicationStatus===404){expect(await run).toMatchObject({status:'failed'});const failed=calls.filter(call=>call.path.endsWith('/fail'));expect(failed).toHaveLength(1);expect(failed[0]?.body).toMatchObject({code:'native_publication_failed',retryable:false,activeSeconds:2,elapsedSeconds:3,usage:{activeSeconds:2,elapsedSeconds:3},output:{assignmentResult:{status:'failed',references:[]}}});expect(calls.some(call=>call.path.endsWith('/settle')||call.path.endsWith('/complete'))).toBe(false);expect(outputs.at(-1)).toMatchObject({assignmentResult:{status:'failed',references:[]}});}
@@ -50,6 +57,6 @@ it('native provider transport keeps the original lease alive through publication
    expect(calls.filter(call=>call.path.endsWith('/discussion-response'))).toHaveLength(1);expect(renewals).toBeGreaterThanOrEqual(failure?1:2);
    for(const call of calls.filter(call=>call.path.endsWith('/renew')))expect(call.body).toEqual({leaseToken:'lease',runnerId:'runner',leaseSeconds:300});
    const count=calls.length;await delay(40);expect(calls).toHaveLength(count);expect(input).toEqual(held);
-  }finally{publicationGate.resolve();terminalGate.resolve();server.closeAllConnections();if(server.listening)await new Promise<void>(resolve=>server.close(()=>resolve()));}
+  }finally{publicationGate.resolve();terminalGate.resolve();server.closeAllConnections();if(server.listening)await new Promise<void>(resolve=>server.close(()=>resolve()));await rm(directory,{recursive:true,force:true});}
  }
 });

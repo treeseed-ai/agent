@@ -13,12 +13,24 @@ export function providerToolName(event: Record<string, unknown>) {
 	return null;
 }
 
+/** Codex JSON item counters restart for each exec/resume process. Keep native IDs unchanged. */
+export function providerItemIdentity(event: Record<string, unknown>): string {
+	const invocation = event.providerInvocation === undefined ? 0 : event.providerInvocation;
+	if (!Number.isSafeInteger(invocation) || Number(invocation) < 0) throw new Error('provider_invocation_identity_invalid');
+	return `${invocation}:${String(record(event.item).id)}`;
+}
+export function scopeProviderEvent(event: Record<string, unknown>, invocation: number): Record<string, unknown> {
+	if (!Number.isSafeInteger(invocation) || invocation < 0) throw new Error('provider_invocation_identity_invalid');
+	const { providerInvocation: _untrusted, ...original } = event;
+	return invocation === 0 ? original : { ...original, providerInvocation: invocation };
+}
+
 export function codexToolInFlight(events: Record<string, unknown>[]) {
 	const active = new Set<string>();
 	for (const event of events) {
 		const tool = providerToolName(event);
 		if (!tool) continue;
-		const key = text(record(event.item).id) || tool;
+		const key = providerItemIdentity(event);
 		if (event.type === 'item.started') active.add(key);
 		else active.delete(key);
 	}

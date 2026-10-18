@@ -9,7 +9,7 @@ import { chmod, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { sandboxAssignmentSchema, sandboxResultSchema, sourceWorkspaceKeySchema, type SandboxAssignment } from '@treeseed/sdk/capacity-provider/sandbox';
 import { providerCredentialValues, providerFailureSummary, redactProviderDiagnostic, redactProviderEvents } from './provider-failure.ts';
-import { activityAllowsVerification } from './guest-contract.ts';
+import { activityAllowsVerification, providerItemIdentity, scopeProviderEvent } from './guest-contract.ts';
 import { activityCompletionOutputSchema, validateActivityCompletion } from '../activity-completion.ts';
 import { completionFrontmatterSchema, completionOutputTargetVariants, promptFromContext, assertArchitectSourceCitation, assertTesterFailureEvidence, attachObservedTesterFailures, correctObservedTestFirstRedVerification, omitUnreplayableVerification, codexReasoningArguments, codexProjectInstructionArguments, codexInteractiveTimeoutMs, requiresActivityCompletion, record, text, providerToolName, codexToolInFlight, codexIdleTimeoutMs, codexCloseoutTimeoutMs, codexResumeIdleTimeoutMs } from './guest-contract.ts';
 import { planningSynthesisOutputSchema, assertPredecessorSynthesis } from '../kernel/handlers/planning-synthesis.ts';
@@ -108,14 +108,14 @@ export function clockReading(raw: unknown): TimingAwarenessTracker['clockWindow'
 export function observeTimingAwarenessEvent(tracker: TimingAwarenessTracker, event: Record<string, unknown>) {
 	const tool = providerToolName(event);
 	if (!tool) return tracker;
-	const item = record(event.item);
+	const item = record(event.item), identity = providerItemIdentity(event);
 	const completed = event.type === 'item.completed';
-	if (tracker.firstToolPending && (tool !== tracker.firstTool || item.id !== tracker.firstToolItemId)) tracker.clockInvalid = true;
+	if (tracker.firstToolPending && (tool !== tracker.firstTool || identity !== tracker.firstToolItemId)) tracker.clockInvalid = true;
 	let succeeded = completed && item.status === 'completed' && !item.error;
 	if (completed && tool === 'treedx:treeseed_time_status' && typeof item.id === 'string') {
 		const ids = tracker.completedClockItemIds ??= new Set<string>();
-		if (ids.has(item.id)) { tracker.clockInvalid = true; succeeded = false; }
-		else ids.add(item.id);
+		if (ids.has(identity)) { tracker.clockInvalid = true; succeeded = false; }
+		else ids.add(identity);
 	}
 	if (completed && tool === 'treedx:treeseed_time_status' && succeeded) {
 		const reading = clockReading(item.result), prior = tracker.clockWindow;
@@ -125,8 +125,8 @@ export function observeTimingAwarenessEvent(tracker: TimingAwarenessTracker, eve
 	}
 	if (!tracker.firstTool) {
 		tracker.firstTool = tool; tracker.firstToolSucceeded = succeeded;
-		tracker.firstToolItemId = item.id; tracker.firstToolPending = !completed;
-	} else if (tracker.firstToolPending && completed && tracker.firstTool === tool && tracker.firstToolItemId === item.id) {
+		tracker.firstToolItemId = identity; tracker.firstToolPending = !completed;
+	} else if (tracker.firstToolPending && completed && tracker.firstTool === tool && tracker.firstToolItemId === identity) {
 		tracker.firstToolSucceeded = succeeded; tracker.firstToolPending = false;
 	}
 	tracker.lastTool = tool;
@@ -314,7 +314,7 @@ export async function runSandboxGuest() {
 		...codexProjectInstructionArguments(),
 		...(structuredCompletion ? ['--output-schema', completionSchemaPath] : []),
 		'--disable', 'browser_use', '--disable', 'apps', '--disable', 'multi_agent_v2', '--disable', 'image_generation', '--color', 'never', '--output-last-message', responsePath, '-C', '/workspace/project', '-'];
-	let providerThreadId: string | null = null, closeoutInterrupted = false;
+	let providerInvocation = 0, providerThreadId: string | null = null, closeoutInterrupted = false;
 	const providerEnvironment = { PATH: '/usr/local/bin:/usr/bin:/bin', HOME: codexHome, CODEX_HOME: codexHome,
 		...relayEnvironment,
 		...(relay ? { OPENAI_BASE_URL: relay.baseUrl, OPENAI_API_KEY: 'treeseed-assignment-relay' } : {}),
@@ -328,7 +328,7 @@ export async function runSandboxGuest() {
 			...(idleTimeoutMs === undefined ? {} : { idleTimeoutMs }),
 			...(closeoutTimeoutMs === undefined ? {} : { closeoutTimeoutMs }),
 			canInterrupt: () => Boolean(providerThreadId && timingTracker.firstToolSucceeded && !codexToolInFlight(events)),
-			onLine(line) { let event: Record<string, unknown>; try { event = record(JSON.parse(line)); } catch { event = { type: 'provider.event.invalid', digest: createHash('sha256').update(line).digest('hex') }; }
+			onLine(line) { let event: Record<string, unknown>; try { event = record(JSON.parse(line)); } catch { event = { type: 'provider.event.invalid', digest: createHash('sha256').update(line).digest('hex') }; } event = scopeProviderEvent(event, 0);
 				providerThreadId ??= codexThreadId([event]);
 				const executionProgress = providerExecutionProgress(event); if (executionProgress) void progress(executionProgress).catch(() => undefined);
 				observeTimingAwarenessEvent(timingTracker, event); events.push(event); },
@@ -349,14 +349,14 @@ export async function runSandboxGuest() {
 				...(structuredCompletion ? ['--output-schema', completionSchemaPath] : []),
 				'--output-last-message', responsePath, '-'];
 			let finalCloseoutInterrupted = false;
-			const resumeIdleTimeoutMs = codexResumeIdleTimeoutMs(remainingMs);
+			const resumeIdleTimeoutMs = codexResumeIdleTimeoutMs(remainingMs), closeoutInvocation = ++providerInvocation;
 			await execute('/usr/local/bin/codex', resumeArguments, {
 				cwd: '/workspace/project', env: providerEnvironment,
 				input: `The prior turn was interrupted to preserve closeout time after its completed tools. Continue this SAME assignment using only evidence already inspected. Do not repeat inspection or start new work. You have at most ${Math.floor(remainingMs / 1_000)} seconds including closeout; the original deadline has not moved. Your NEXT and FINAL tool action must call mcp__treedx__treeseed_time_status through functions.exec with: text(await tools.mcp__treedx__treeseed_time_status({}));. Then immediately produce ${structuredCompletion ? 'the required structured result' : 'the substantive discussion reply'}. If evidence is insufficient, say so honestly rather than waiting for the deadline.`,
 				timeoutMs: Math.floor(remainingMs),
 				...(canonicalActivity === 'estimating' ? { ...(resumeIdleTimeoutMs === undefined ? {} : { idleTimeoutMs: resumeIdleTimeoutMs }),
 					canInterrupt: () => timingTracker.firstToolSucceeded && !codexToolInFlight(events) } : {}),
-				onLine(line) { let event: Record<string, unknown>; try { event = record(JSON.parse(line)); } catch { event = { type: 'provider.event.invalid', digest: createHash('sha256').update(line).digest('hex') }; }
+				onLine(line) { let event: Record<string, unknown>; try { event = record(JSON.parse(line)); } catch { event = { type: 'provider.event.invalid', digest: createHash('sha256').update(line).digest('hex') }; } event = scopeProviderEvent(event, closeoutInvocation);
 					const executionProgress = providerExecutionProgress(event); if (executionProgress) void progress(executionProgress).catch(() => undefined);
 					observeTimingAwarenessEvent(timingTracker, event); events.push(event); },
 			}).catch(error => {
@@ -364,14 +364,14 @@ export async function runSandboxGuest() {
 				throw error;
 			});
 			if (finalCloseoutInterrupted) {
-				const finalRemainingMs = getRemainingMs();
+				const finalRemainingMs = getRemainingMs(), finalCloseoutInvocation = ++providerInvocation;
 				if (!providerThreadId || finalRemainingMs < 25_000 || codexToolInFlight(events)) throw new Error('Codex estimate closeout has no safe remaining continuation.');
 				await progress('provider.final-closeout-recovery.starting');
 				await execute('/usr/local/bin/codex', resumeArguments, {
 					cwd: '/workspace/project', env: providerEnvironment,
 					input: `This is the FINAL continuation of the same estimating assignment. The original deadline has not moved. Use only evidence already inspected; do not inspect or run another command. You have at most ${Math.floor(finalRemainingMs / 1_000)} seconds. Call mcp__treedx__treeseed_time_status once through functions.exec with: text(await tools.mcp__treedx__treeseed_time_status({}));. Then immediately return the required compact estimate JSON. If evidence is incomplete, state the uncertainty in the rationale and finish now.`,
 					timeoutMs: Math.floor(finalRemainingMs),
-					onLine(line) { let event: Record<string, unknown>; try { event = record(JSON.parse(line)); } catch { event = { type: 'provider.event.invalid', digest: createHash('sha256').update(line).digest('hex') }; }
+					onLine(line) { let event: Record<string, unknown>; try { event = record(JSON.parse(line)); } catch { event = { type: 'provider.event.invalid', digest: createHash('sha256').update(line).digest('hex') }; } event = scopeProviderEvent(event, finalCloseoutInvocation);
 					const executionProgress = providerExecutionProgress(event); if (executionProgress) void progress(executionProgress).catch(() => undefined);
 					observeTimingAwarenessEvent(timingTracker, event); events.push(event); },
 				});
@@ -389,7 +389,7 @@ export async function runSandboxGuest() {
 		const threadId = providerThreadId;
 		if (!providerError && threadId && timingRecoveryEligible(initialTiming, remainingMs) && (await readFile(responsePath, 'utf8').catch(() => '')).trim()) {
 			await progress('provider.final-clock-recovery.starting');
-			const recoveryEvents: Record<string, unknown>[] = [];
+			const recoveryEvents: Record<string, unknown>[] = [], clockInvocation = ++providerInvocation;
 			const recoverySchemaPath = resolve(codexHome, 'final-clock.schema.json');
 			await writeFile(recoverySchemaPath, JSON.stringify({ type: 'object', properties: { ack: { type: 'string', const: 'done' } }, required: ['ack'], additionalProperties: false }), { mode: 0o600 });
 			const recoveryArguments = ['exec', 'resume', threadId, '--json', '--dangerously-bypass-approvals-and-sandbox', '--model', assignment.modelPolicy.model,
@@ -399,7 +399,7 @@ export async function runSandboxGuest() {
 				cwd: '/workspace/project', env: providerEnvironment,
 				input: 'The substantive response was already captured. Do not inspect or change files and do not repeat the task. Your NEXT and ONLY tool action must call mcp__treedx__treeseed_time_status using functions.exec with: text(await tools.mcp__treedx__treeseed_time_status({}));. After the successful clock result, return {"ack":"done"} without any other tool action.',
 				timeoutMs: Math.floor(remainingMs),
-				onLine(line) { let event: Record<string, unknown>; try { event = record(JSON.parse(line)); } catch { event = { type: 'provider.event.invalid', digest: createHash('sha256').update(line).digest('hex') }; }
+				onLine(line) { let event: Record<string, unknown>; try { event = record(JSON.parse(line)); } catch { event = { type: 'provider.event.invalid', digest: createHash('sha256').update(line).digest('hex') }; } event = scopeProviderEvent(event, clockInvocation);
 					observeTimingAwarenessEvent(timingTracker, event); events.push(event); recoveryEvents.push(event); },
 			});
 			const recoveryTiming = timingAwarenessContract(recoveryEvents);
@@ -413,11 +413,12 @@ export async function runSandboxGuest() {
 			}
 			await progress('provider.final-clock-recovery.completed');
 		}
+		const planningInvocation = ++providerInvocation;
 		if (!providerError && structuredCompletion && await recoverPlanningSynthesis({ context, activity: canonicalActivity, threadId,
 			responsePath, schemaPath: completionSchemaPath, allowVerification, remainingMs: getRemainingMs, execute,
 			model: assignment.modelPolicy.model, reasoningEffort: assignment.modelPolicy.reasoningEffort,
 			providerEnvironment, progress,
-			onEvent(event) { observeTimingAwarenessEvent(timingTracker, event); events.push(event); },
+			onEvent(raw) { const event=scopeProviderEvent(raw,planningInvocation); observeTimingAwarenessEvent(timingTracker, event); events.push(event); },
 			verifyClock(correctionEvents) { const correction = timingAwarenessContract(correctionEvents);
 				if (!correction.firstToolCompliant || !correction.finalToolCompliant || correctionEvents.some((event) => providerToolName(event) && providerToolName(event) !== 'treedx:treeseed_time_status')) throw new Error('Planning synthesis correction failed its clock-only tool boundary.'); },
 		}) && subscriptionAuth) {

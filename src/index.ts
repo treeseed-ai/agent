@@ -22,3 +22,5 @@ export { createDefaultHandlers } from './kernel/provider-kernel-executor.ts';
 export type { AgentRuntime, Handler, KernelAssignmentRequest } from './kernel/contracts.ts';
 export { assertPredecessorSynthesis } from './kernel/handlers/planning-synthesis.ts';
 export { clockReading, timingAwarenessContract } from './sandbox/guest.ts';
+
+export { providerItemIdentity } from './sandbox/guest-contract.ts';

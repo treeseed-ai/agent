@@ -14,7 +14,7 @@ it('renews the original lease through delayed response publication and terminal 
    if(failure)published.reject(new Error('Original publication failure'));else published.resolve({status:'responded',reference:responseReference});
    const result=await observed;if(failure){expect(result).toMatchObject({error:{message:'Original publication failure'}});expect(api.completeAssignment).not.toHaveBeenCalled();expect(api.settleAssignment).not.toHaveBeenCalled();}
    else{expect(result).toEqual({value:{status:'completed'}});expect(api.settleAssignment).toHaveBeenCalledOnce();expect(api.completeAssignment).toHaveBeenCalledOnce();}
-   const calls=api.renewAssignment.mock.calls.length;await vi.advanceTimersByTimeAsync(100);expect(api.renewAssignment).toHaveBeenCalledTimes(calls);
+   expect(vi.getTimerCount()).toBe(0);const calls=api.renewAssignment.mock.calls.length;await vi.advanceTimersByTimeAsync(100);expect(api.renewAssignment).toHaveBeenCalledTimes(calls);
   }finally{published.resolve({status:'responded',reference:responseReference});await observed;vi.useRealTimers();}
  }
 });

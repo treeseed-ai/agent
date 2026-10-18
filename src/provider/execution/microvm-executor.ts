@@ -15,6 +15,7 @@ import { publishSourceBranch } from './source-branch-publication.ts';
 import { assignmentRuntimeSeconds } from './activity/context.ts';
 import { RenewalDrain } from './activity/renewal-drain.ts';
 import { assignmentOfferId } from './assignment-selection.ts';
+import { providerItemIdentity } from '../../sandbox/guest-contract.ts';
 import { clockReading, timingAwarenessContract } from '../../sandbox/guest.ts';
 
 const canonical = (value: unknown): string => Array.isArray(value) ? `[${value.map(canonical).join(',')}]` : value && typeof value === 'object'
@@ -305,17 +306,17 @@ export async function createMicrovmExecutor(config: ProviderHostRuntimeConfig, m
 						const identities = new Set<string>(), pending = new Set<string>(); let remaining = Infinity, checkedBeforeBlocking = false;
 						let valid = !!actual && actual.completedChecks === receipt.completedChecks && actual.completedChecks >= 2 && actual.firstToolCompliant && actual.finalToolCompliant;
 						for (const event of Array.isArray(events) ? events : []) {
-							const row = object(event), item = object(row.item);
+							const row = object(event), item = object(row.item), identity = providerItemIdentity(row);
 							if (row.type === 'item.started' && item.type === 'command_execution') { if (!checkedBeforeBlocking) valid = false; checkedBeforeBlocking = false; }
-							if (row.type === 'item.started' && ['command_execution', 'mcp_tool_call'].includes(String(item.type))) pending.add(String(item.id));
+							if (row.type === 'item.started' && ['command_execution', 'mcp_tool_call'].includes(String(item.type))) pending.add(identity);
 							if (row.type !== 'item.completed') continue;
 							if (item.type === 'mcp_tool_call' && item.server === 'treedx' && item.tool === 'treeseed_time_status') {
 								const reading = clockReading(item.result);
-								if (typeof item.id !== 'string' || identities.has(item.id) || !reading || reading.startedAt !== executionStartedAt || reading.deadlineAt !== executionDeadlineAt
+								if (typeof item.id !== 'string' || identities.has(identity) || !reading || reading.startedAt !== executionStartedAt || reading.deadlineAt !== executionDeadlineAt
 									|| reading.remainingSeconds <= 0 || reading.remainingSeconds > remaining) valid = false;
-								identities.add(String(item.id)); remaining = reading?.remainingSeconds ?? remaining; checkedBeforeBlocking = true;
-							} else if (item.type === 'command_execution' && !pending.has(String(item.id))) { if (!checkedBeforeBlocking) valid = false; checkedBeforeBlocking = false; }
-							pending.delete(String(item.id));
+								identities.add(identity); remaining = reading?.remainingSeconds ?? remaining; checkedBeforeBlocking = true;
+							} else if (item.type === 'command_execution' && !pending.has(identity)) { if (!checkedBeforeBlocking) valid = false; checkedBeforeBlocking = false; }
+							pending.delete(identity);
 						}
 						if (!valid || pending.size) throw new Error(`${result.status === 'completed' ? 'Completed' : 'Non-completed'} sandbox result lacks valid timing-awareness evidence.`,
 							result.status === 'completed' ? undefined : { cause: new Error(result.summary) });

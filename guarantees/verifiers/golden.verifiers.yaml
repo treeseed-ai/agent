@@ -4469,3 +4469,9 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/provider/closeout/renewal-native.test.ts
     testName: "native provider transport keeps the original lease alive through publication and terminal acknowledgment and closes on publication failure"
+
+  agent.golden.discussion-publication-denial:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: "tests/modern/provider/closeout/publication-denial.test.ts"
+    testName: "retains a definitive discussion publication denial as a failed result with original measured usage and no invented product"

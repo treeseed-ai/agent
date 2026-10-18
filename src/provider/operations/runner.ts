@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import type { ProviderProtocolClient } from '@treeseed/sdk/capacity-provider';
+import { CapacityProviderApiError, type ProviderProtocolClient } from '@treeseed/sdk/capacity-provider';
 import { assignmentReferenceSchema, assignmentResultSchema } from '@treeseed/sdk/agent-capacity';
 import type { AgentExecutionRequest, AgentExecutor, AgentExecutionResult, AssignmentTreeDxFacade } from '../execution/contracts.ts';
 import { aggregateExecutionUsage, canonicalExecutionUsage, executeKernelAssignment } from '../../kernel/provider-kernel-executor.ts';
@@ -214,6 +214,7 @@ export async function runProviderAssignment(input: ProviderAssignmentRunInput) {
 		code: 'agent_abstained', responseMarkdown: undefined, retryable: false };
 	if (result.status === 'responded' || result.status === 'abstained') {
 		if (result.status === 'responded' && !result.responseMarkdown) throw new Error('Communication executor omitted its durable Markdown response.');
+		try {
 		const response = await input.client.respondToAssignmentDiscussion(assignmentId, { leaseToken: input.leaseToken, runnerId: input.runnerId,
 			outcome: result.status, ...(result.responseMarkdown ? { markdown: result.responseMarkdown } : {}), summary: result.summary }, `discussion-response:${assignmentId}:${input.runnerId}`);
 		const reference = assignmentReferenceSchema.parse(record(response).reference);
@@ -221,7 +222,19 @@ export async function runProviderAssignment(input: ProviderAssignmentRunInput) {
 		const canonical = assignmentResultSchema.parse(outputs.assignmentResult);
 		result = { ...result, status: 'completed', responseMarkdown: undefined,
 			outputs: { ...outputs, assignmentResult: assignmentResultSchema.parse({ ...canonical, references: [...canonical.references, reference] }) } };
-			await input.onCloseoutOutput?.({ ...record(result.outputs), artifacts: result.artifacts ?? [] });
+		} catch (error) {
+			// A definitive pre-publication denial is a failed execution outcome with
+			// measured usage. Ambiguous network/server/conflict failures retain the
+			// original recovery path; never infer whether a product was committed.
+			if (!(error instanceof CapacityProviderApiError) || ![400, 401, 403, 404, 422].includes(error.status ?? 0)) throw error;
+			const code = error.code;
+			const summary = `Discussion publication denied: ${error.message}`, outputs = record(result.outputs);
+			const canonical = assignmentResultSchema.parse(outputs.assignmentResult);
+			result = { ...result, status: 'failed', code, summary, retryable: false, responseMarkdown: undefined,
+				outputs: { ...outputs, assignmentResult: assignmentResultSchema.parse({ ...canonical, status: 'failed', summary,
+					diagnostics: [...canonical.diagnostics, { code, severity: 'error', message: summary }] }) } };
+		}
+		await input.onCloseoutOutput?.({ ...record(result.outputs), artifacts: result.artifacts ?? [] });
 	}
 	if (!result.usage?.length && activeStartedAt === null) {
 		// No productive invocation occurred. Measure the real preparation scope;

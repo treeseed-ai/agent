@@ -2608,3 +2608,7 @@ workflow:
   - id: closeout-lease-renewal-native
     action: { verifier: agent.golden.closeout-lease-renewal-native }
     expect: { status: passed }
+
+  - id: discussion-publication-denial
+    action: { verifier: agent.golden.discussion-publication-denial }
+    expect: { status: passed }

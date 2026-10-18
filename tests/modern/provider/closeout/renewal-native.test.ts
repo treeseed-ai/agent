@@ -13,7 +13,8 @@ async function awaitRenewal(gate:Promise<void>,reason:string){
 // Native HTTP, original SDK transport, Kernel and runner. Responses are controlled
 // protocol inputs, not real model clocks, TreeDX products or PostgreSQL settlement.
 it('native provider transport keeps the original lease alive through publication and terminal acknowledgment and closes on publication failure',async()=>{
- for(const failure of [false,true]){
+ for(const publicationStatus of [200,503,404]){
+  const failure=publicationStatus!==200;
   const calls:Array<{path:string;method:string;body:Record<string,unknown>;at:number}>=[];
   let renewals=0,publishing=false,completing=false;
   const publicationGate=deferred<void>(),terminalGate=deferred<void>();
@@ -27,7 +28,7 @@ it('native provider transport keeps the original lease alive through publication
     publishing=true;publicationBaseline=renewals;
     await awaitRenewal(publicationGate.promise,'Native publication lost its lease renewal');
     publishing=false;
-    if(failure){response.writeHead(503).end(JSON.stringify({type:'about:blank',title:'Original native publication failure',status:503,code:'native_publication_failed'}));return;}
+    if(failure){response.writeHead(publicationStatus).end(JSON.stringify({type:'about:blank',title:'Original native publication failure',status:503,code:'native_publication_failed'}));return;}
     response.end(JSON.stringify({data:{schemaVersion:'treeseed.provider-discussion-response-receipt/v1',assignmentId:'assignment-1',invocationId:'native-invocation',status:'responded',reference:responseReference,messageRef:responseReference.path,settledAt:new Date().toISOString()}}));return;
    }
    if(path.endsWith('/complete')){
@@ -35,7 +36,7 @@ it('native provider transport keeps the original lease alive through publication
     await awaitRenewal(terminalGate.promise,'Native terminal acknowledgment lost its lease renewal');
     completing=false;response.end(JSON.stringify({data:{status:'completed'}}));return;
    }
-   response.end(JSON.stringify({data:method==='GET'?{id:'assignment-1',stateVersion:7}:{ok:true}}));
+   response.end(JSON.stringify({data:method==='GET'?{id:'assignment-1',stateVersion:7}:path.endsWith('/fail')?{status:'failed'}:{ok:true}}));
   })().catch(error=>{response.writeHead(500).end(JSON.stringify({type:'about:blank',title:String(error),status:500}));});});});
   try{
    await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));const address=server.address();if(!address||typeof address==='string')throw new Error('Native HTTP address required');
@@ -43,7 +44,8 @@ it('native provider transport keeps the original lease alive through publication
    const input=assignment('conversation'),held=structuredClone(input),outputs:Record<string,unknown>[]=[];
    const run=runProviderAssignment({client,assignment:input,treeDx,leaseToken:'lease',runnerId:'runner',runtimeBuild,renewalIntervalMs:10,onCloseoutOutput:async output=>{outputs.push(structuredClone(output));},
     executor:{id:'codex',observe:async()=>({available:true}),execute:async request=>{await request.beginExecution?.();return{status:'responded',summary:'Native transport controlled reply.',responseMarkdown:'Native transport controlled reply.',outputs:{timingAwareness},usage:[{activeSeconds:2,elapsedSeconds:3}]};}}});
-   if(failure){await expect(run).rejects.toThrow('Original native publication failure');expect(calls.some(call=>call.path.endsWith('/settle')||call.path.endsWith('/complete'))).toBe(false);}
+   if(publicationStatus===503){await expect(run).rejects.toThrow('Original native publication failure');expect(calls.some(call=>call.path.endsWith('/settle')||call.path.endsWith('/complete')||call.path.endsWith('/fail'))).toBe(false);}
+   else if(publicationStatus===404){expect(await run).toMatchObject({status:'failed'});const failed=calls.filter(call=>call.path.endsWith('/fail'));expect(failed).toHaveLength(1);expect(failed[0]?.body).toMatchObject({code:'native_publication_failed',retryable:false,activeSeconds:2,elapsedSeconds:3,usage:{activeSeconds:2,elapsedSeconds:3},output:{assignmentResult:{status:'failed',references:[]}}});expect(calls.some(call=>call.path.endsWith('/settle')||call.path.endsWith('/complete'))).toBe(false);expect(outputs.at(-1)).toMatchObject({assignmentResult:{status:'failed',references:[]}});}
    else{expect(await run).toMatchObject({status:'completed'});expect(calls.filter(call=>call.path.endsWith('/settle'))).toHaveLength(1);expect(calls.filter(call=>call.path.endsWith('/complete'))).toHaveLength(1);expect(outputs.at(-1)).toMatchObject({assignmentResult:{references:[responseReference]}});}
    expect(calls.filter(call=>call.path.endsWith('/discussion-response'))).toHaveLength(1);expect(renewals).toBeGreaterThanOrEqual(failure?1:2);
    for(const call of calls.filter(call=>call.path.endsWith('/renew')))expect(call.body).toEqual({leaseToken:'lease',runnerId:'runner',leaseSeconds:300});

@@ -554,7 +554,7 @@ verifiers:
   agent.golden.execution-noncompleted-clock-native:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"
-    testFile: tests/modern/execution/sandbox-broker-preparation.test.ts
+    testFile: tests/modern/execution/sandbox-attempt-native.test.ts
     testName: "native microvm refuses missing substituted duplicate pending and unbracketed failed result clocks while preserving original measurements failure and allocated resource closure"
   agent.golden.execution-failed-guest-measurements-unit:
     kind: vitestCase

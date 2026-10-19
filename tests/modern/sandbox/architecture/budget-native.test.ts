@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
+import { codexCloseoutTimeoutMs } from '../../../../src/sandbox/guest-contract.ts';
 import { remainingExecutionMs, run, withinAssignmentBudget } from '../../../../src/sandbox/process-runner.ts';
 import { observeReportedActivityCommands } from '../../../../src/sandbox/verification.ts';
 
@@ -188,16 +189,20 @@ describe('native subprocess original budget and safe closeout', () => {
 		} finally { await rm(directory, { recursive: true, force: true }); }
 	}, 15_000);
 	it('safe native interruption is not success and its continuation consumes the same original closeout window', async () => {
-		const began = performance.now(), deadline = new Date(Date.now() + 13_000).toISOString();
-		const remaining = () => remainingExecutionMs(30, performance.now() - began, deadline);
+		// Reproduce the actual 39s Reviewer allocation; retain the original hard
+		// deadline and prove native drainage leaves the existing >=20s resume window.
+		const closeoutTimeoutMs = codexCloseoutTimeoutMs(39, 'chat');
+		expect(closeoutTimeoutMs).toBeGreaterThan(0);
+		const began = performance.now(), deadline = new Date(Date.now() + 39_000).toISOString();
+		const remaining = () => remainingExecutionMs(39, performance.now() - began, deadline);
 		const bounded = withinAssignmentBudget(run, remaining), lines: string[] = [];
 		await expect(bounded(process.execPath, args('closeout'), {
-			timeoutMs: 8_000, closeoutTimeoutMs: 1_500, canInterrupt: () => true, onLine: observe(lines),
+			timeoutMs: 34_000, closeoutTimeoutMs, canInterrupt: () => true, onLine: observe(lines),
 		})).rejects.toThrow('codex_closeout_interrupted');
 		assertExited(lines); expect(lines).toContain('closeout received');
-		const afterInterruption = remaining(); expect(afterInterruption).toBeGreaterThan(0);
+		const afterInterruption = remaining(); expect(afterInterruption).toBeGreaterThanOrEqual(20_000);
 		const replyLines: string[] = [];
-		const reply = await bounded(process.execPath, args('reply'), { timeoutMs: 8_000, captureStdout: true, onLine: observe(replyLines) });
+		const reply = await bounded(process.execPath, args('reply'), { timeoutMs: 34_000, captureStdout: true, onLine: observe(replyLines) });
 		expect(reply.stdout).toContain('same-window reply'); assertExited(replyLines);
 		expect(remaining()).toBeLessThan(afterInterruption); expect(remaining()).toBeGreaterThan(0);
 	}, 15_000);

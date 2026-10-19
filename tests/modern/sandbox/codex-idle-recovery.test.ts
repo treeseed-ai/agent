@@ -7,9 +7,20 @@ describe('bounded Codex idle recovery', () => {
 		for (const activity of ['planning', 'acting', 'reviewing', 'reporting']) {
 			expect(codexCloseoutTimeoutMs(180, activity)).toBe(135_000);
 			expect(codexCloseoutTimeoutMs(90, activity)).toBe(45_000);
-			expect(codexCloseoutTimeoutMs(60, activity)).toBeUndefined();
+			expect(codexCloseoutTimeoutMs(60, activity)).toBe(30_000);
 		}
 		expect(codexCloseoutTimeoutMs(180, 'unsupported')).toBeUndefined();
+	});
+	it('protects original short review windows while retaining enough time for safe same-session closeout', () => {
+		for (const activity of ['planning', 'estimating', 'acting', 'reviewing', 'reporting', 'chat']) {
+			expect(codexCloseoutTimeoutMs(39, activity)).toBe(9_000);
+			expect(codexCloseoutTimeoutMs(43, activity)).toBe(13_000);
+			expect(codexCloseoutTimeoutMs(35, activity)).toBe(5_000);
+			expect(codexCloseoutTimeoutMs(89, activity)).toBe(44_500);
+			// Below this window, the existing 20s resume guard plus hard-stop
+			// margin and process drainage cannot safely fit an initial turn.
+			expect(codexCloseoutTimeoutMs(34, activity)).toBeUndefined();
+		}
 	});
 	it('leaves time in the same assignment for a single continuation', () => {
 		expect(codexIdleTimeoutMs(120)).toBe(30_000);
@@ -42,7 +53,7 @@ describe('bounded Codex idle recovery', () => {
 		expect(codexCloseoutTimeoutMs(180, 'estimating')).toBe(90_000);
 		expect(codexCloseoutTimeoutMs(150, 'estimating')).toBe(90_000);
 		expect(codexCloseoutTimeoutMs(180, 'chat')).toBe(135_000);
-		expect(codexCloseoutTimeoutMs(60, 'estimating')).toBeUndefined();
+		expect(codexCloseoutTimeoutMs(60, 'estimating')).toBe(30_000);
 	});
 	it('bounds one final estimating continuation inside the unchanged deadline', () => {
 		expect(codexResumeIdleTimeoutMs(130_000)).toBe(40_000);

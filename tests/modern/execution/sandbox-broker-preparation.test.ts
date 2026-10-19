@@ -58,7 +58,7 @@ describe('sandbox broker control transport', () => {
 				if (mode === 'observation-denied') { expect(attemptedObservation).toBeDefined(); rejected.push(attemptedObservation!); }
 				if (rejected.length) {
 					expect(rejected[0]!.payload).toEqual({ sandboxId: 'owned-native-sandbox', stage: 'timing-awareness.rejected' });
-					expect(rejected[0]!.protectedPayload).toEqual({ timingAwareness: patch.timingAwareness, providerEvents: patch.diagnostics.providerEvents });
+					expect(rejected[0]!.protectedPayload).toEqual({ sandboxResult: f.observations.at(-1) });
 					expect(rejected[0]!.summary).toBe('Sandbox timing evidence was rejected.');
 					expect(JSON.stringify(rejected[0]!.payload)).not.toContain('providerEvents');
 					expect(JSON.stringify(rejected[0]!.payload)).not.toContain('timingAwareness');
@@ -77,7 +77,7 @@ describe('sandbox broker control transport', () => {
 					expect(observed.failure).toMatchObject({ message: 'Rejected sandbox timing evidence could not be retained.', errors: [{ message: `${observed.status === 'completed' ? 'Completed' : 'Non-completed'} sandbox result lacks valid timing-awareness evidence.` }, { message: 'Original rejected-clock observation failure.' }], usage: [{ activeSeconds: 1.125, elapsedSeconds: 2.25, inputTokens: 19, outputTokens: 3 }] });
 					continue;
 				}
-				expect(observed.failure).toMatchObject({ message: `${observed.status === 'completed' || observed.mode === 'receipt-invalid' ? 'Completed' : 'Non-completed'} sandbox result lacks valid timing-awareness evidence.`, ...(observed.status === 'completed' ? {} : { cause: { message: `Original ${observed.status} provider observation` } }),
+				expect(observed.failure).toMatchObject({ message: `${observed.status === 'completed' || observed.mode === 'receipt-invalid' ? 'Completed' : 'Non-completed'} sandbox result lacks valid timing-awareness evidence.`, ...(observed.status === 'completed' || observed.mode === 'receipt-invalid' ? {} : { cause: { message: `Original ${observed.status} provider observation` } }),
 					usage: [{ activeSeconds: 1.125, elapsedSeconds: 2.25, inputTokens: 19, outputTokens: 3 }] });
 			}
 		}

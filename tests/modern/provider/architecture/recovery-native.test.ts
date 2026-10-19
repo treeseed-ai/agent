@@ -131,7 +131,8 @@ describe('document-wide native provider recovery boundary', () => {
    }finally{await f.close();}
   }
  });
-	it.each(['expired_lease_settlement_without_success_evidence','expired_lease_side_effect_evidence_present'])('hands original measured expired output %s to the existing failure boundary and releases only after exact failed custody acknowledgement', async reasonCode => {
+	it('hands original measured settled or originally reported unsettled expired output to the existing failure boundary and releases only after exact failed custody acknowledgement', async () => {
+	 for(const reasonCode of ['expired_lease_settlement_without_success_evidence','expired_lease_side_effect_evidence_present']){
 		const output = () => ({ sandboxId: 'original-sandbox', teardown: { verified: true, completedAt: new Date().toISOString() },
 			assignmentResult: { schemaVersion: 'treeseed.assignment-result/v1', id: 'result', assignmentId: 'assignment-1', status: 'completed',
 				summary: 'Original retained output', references: [], verification: [], diagnostics: [], usage: { elapsedSeconds: 2,
@@ -163,6 +164,7 @@ describe('document-wide native provider recovery boundary', () => {
 				leaseToken: prior.leaseToken, runnerId: prior.runnerId, code: 'assignment_timeout', retryable: false, output: prior.closeoutOutput } });
 			expect(await f.run()).toEqual([]); expect({ prior, expired, acknowledged }).toEqual(original);
 		} finally { await f.close(); }
+	 }
 	});
 	it('native terminal recovery retains original failed custody across repeated API-generated unmeasured performance observations', async () => {
 		const outcomes = [];

@@ -47,6 +47,15 @@ describe('sandbox broker control transport', () => {
 				f.patchResult(patch); let result: unknown, failure: unknown;
 				try { result = await f.executor.execute(f.input); } catch (error) { failure = error; }
 				outcomes.push({ status, mode, result, failure, terminal: f.events.some(event => ['execution.completed', 'execution.failed'].includes(event.type)) });
+				const rejected = f.events.filter(event => event.type === 'execution.progress' && event.payload?.stage === 'timing-awareness.rejected');
+				expect(rejected).toHaveLength(['exact', 'checked-command'].includes(mode) ? 0 : 1);
+				if (rejected.length) {
+					expect(rejected[0]!.payload).toEqual({ sandboxId: 'owned-native-sandbox', stage: 'timing-awareness.rejected' });
+					expect(rejected[0]!.protectedPayload).toEqual({ timingAwareness: patch.timingAwareness, providerEvents: patch.diagnostics.providerEvents });
+					expect(rejected[0]!.summary).toBe('Sandbox timing evidence was rejected.');
+					expect(JSON.stringify(rejected[0]!.payload)).not.toContain('providerEvents');
+					expect(JSON.stringify(rejected[0]!.payload)).not.toContain('timingAwareness');
+				}
 				expect(patch).toEqual(held); expect(f.input.assignment).toEqual(before); expect(f.counters()).toEqual({ beginCalls: 1, finishCalls: 1 });
 				expect(f.paths.filter(path => path.endsWith('/execute'))).toHaveLength(1); expect(f.paths.filter(path => path.startsWith('DELETE '))).toEqual(['DELETE /v1/sandboxes/owned-native-sandbox']);
 			} finally { await f.close(); }

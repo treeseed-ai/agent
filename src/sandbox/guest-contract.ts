@@ -49,7 +49,13 @@ export function codexCloseoutTimeoutMs(durationSeconds: number, activity: string
 	// response and custody closeout for every canonical activity. An estimate has a structured proposal patch
 	// to return, so reserve up to 90s after bounded inspection. This guard does
 	// not extend the allocator-issued duration or change provider accounting.
-	if (durationSeconds < 90) return undefined;
+	if (durationSeconds < 35) return undefined;
+	if (durationSeconds < 90) {
+		// Short chat/review turns need the same bounded completion opportunity.
+		// Reserve at least 30s inside the issued window: the existing 5s hard
+		// margin and 3s process drainage still leave the unchanged 20s resume gate.
+		return (durationSeconds - Math.max(30, durationSeconds / 2)) * 1_000;
+	}
 	const reserveSeconds = activity === 'estimating'
 		? Math.min(90, Math.max(45, durationSeconds - 90)) : 45;
 	return (durationSeconds - reserveSeconds) * 1_000;

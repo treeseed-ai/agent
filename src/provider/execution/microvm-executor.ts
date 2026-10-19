@@ -299,7 +299,7 @@ export async function createMicrovmExecutor(config: ProviderHostRuntimeConfig, m
 						if (bytes.length !== artifact.bytes || `sha256:${createHash('sha256').update(bytes).digest('hex')}` !== artifact.digest) throw Object.assign(new Error('Sandbox artifact bytes disagree with their declared size or digest.'), { code: 'sandbox_artifact_integrity_invalid' });
 						return { ...artifact, content: bytes.toString('utf8') };
 					}));
-					{
+					try {
 						const events = object(result.diagnostics).providerEvents;
 						const receipt = timingAwarenessEvidence(result.timingAwareness);
 						const actual = Array.isArray(events) ? timingAwarenessContract(events.map(object)) : undefined;
@@ -320,6 +320,15 @@ export async function createMicrovmExecutor(config: ProviderHostRuntimeConfig, m
 						}
 						if (!valid || pending.size) throw new Error(`${result.status === 'completed' ? 'Completed' : 'Non-completed'} sandbox result lacks valid timing-awareness evidence.`,
 							result.status === 'completed' ? undefined : { cause: new Error(result.summary) });
+					} catch (error) {
+						try {
+							await request.emit?.({ type: 'execution.progress', occurredAt: new Date().toISOString(), summary: 'Sandbox timing evidence was rejected.',
+								payload: { sandboxId: prepared.sandboxId, stage: 'timing-awareness.rejected' },
+								protectedPayload: { sandboxResult: structuredClone(result) } });
+						} catch (observationFailure) {
+							throw new AggregateError([error, observationFailure], 'Rejected sandbox timing evidence could not be retained.');
+						}
+						throw error;
 					}
 					if (result.status === 'completed' && current.source?.authorization.mode === 'work') sourceReference = await publishSourceBranch(client, prepared, current.source, assignment, result, request);
 				} catch (error) { transportFailure = error; } finally {

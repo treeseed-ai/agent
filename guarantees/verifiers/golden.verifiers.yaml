@@ -4486,4 +4486,4 @@ verifiers:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/provider/architecture/recovery-native.test.ts
-    testName: "hands original settled-expired output to the existing failure boundary and releases only after exact failed custody acknowledgement"
+    testName: "hands original measured settled or originally reported unsettled expired output to the existing failure boundary and releases only after exact failed custody acknowledgement"

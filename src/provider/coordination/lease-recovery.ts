@@ -135,7 +135,7 @@ export async function recoverProviderLocalLeases(input: { config: ProviderHostRu
         let acknowledged = assignment;
         if (!acknowledgesMeasuredCloseout(assignment, claim, frozen)) {
           if (status !== 'expired' || assignment.leaseState !== 'expired'
-            || recovery.reasonCode !== 'expired_lease_settlement_without_success_evidence'
+            || !['expired_lease_settlement_without_success_evidence','expired_lease_side_effect_evidence_present'].includes(String(recovery.reasonCode))
             || !claim.runnerId || recovery.priorRunnerId !== claim.runnerId || !closedMeasuredResult(claim, frozen))
             throw new Error('Original measured expired closeout authority is unavailable.');
           const response = record(await client.failAssignment(claim.assignmentId, { leaseToken: claim.leaseToken,

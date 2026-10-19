@@ -54,8 +54,11 @@ describe('sandbox broker control transport', () => {
 				try { result = await f.executor.execute(f.input); } catch (error) { failure = error; }
 				outcomes.push({ status, mode, result, failure, terminal: f.events.some(event => ['execution.completed', 'execution.failed'].includes(event.type)) });
 				const rejected = f.events.filter(event => event.type === 'execution.progress' && event.payload?.stage === 'timing-awareness.rejected');
-				expect(rejected).toHaveLength(['exact', 'checked-command', 'observation-denied'].includes(mode) ? 0 : 1);
+				expect(rejected, `${status}/${mode} original protected clock evidence`).toHaveLength(['exact', 'checked-command', 'observation-denied', 'receipt-invalid'].includes(mode) ? 0 : 1);
 				if (mode === 'observation-denied') { expect(attemptedObservation).toBeDefined(); rejected.push(attemptedObservation!); }
+				// The owning broker rejects malformed wire receipts before creating a result.
+				// Do not manufacture an executor observation for an unparsed response.
+				if (mode === 'receipt-invalid') { expect(f.observations).toHaveLength(0); expect(failure).toBeInstanceOf(Error); }
 				if (rejected.length) {
 					expect(rejected[0]!.payload).toEqual({ sandboxId: 'owned-native-sandbox', stage: 'timing-awareness.rejected' });
 					expect(rejected[0]!.protectedPayload).toEqual({ sandboxResult: f.observations.at(-1) });
@@ -72,12 +75,13 @@ describe('sandbox broker control transport', () => {
 			if (['exact', 'checked-command'].includes(observed.mode)) { expect(observed.failure).toBeUndefined(); expect(observed.result).toMatchObject({ status: ['completed', 'failed'].includes(observed.status) ? observed.status : 'returned' }); expect(observed.terminal).toBe(true); }
 			else {
 				expect(observed.result).toBeUndefined(); expect(observed.terminal).toBe(false);
+				if (observed.mode === 'receipt-invalid') { expect(observed.failure).toBeInstanceOf(Error); continue; }
 				if (observed.mode === 'observation-denied') {
 					expect(observed.failure).toBeInstanceOf(AggregateError);
 					expect(observed.failure).toMatchObject({ message: 'Rejected sandbox timing evidence could not be retained.', errors: [{ message: `${observed.status === 'completed' ? 'Completed' : 'Non-completed'} sandbox result lacks valid timing-awareness evidence.` }, { message: 'Original rejected-clock observation failure.' }], usage: [{ activeSeconds: 1.125, elapsedSeconds: 2.25, inputTokens: 19, outputTokens: 3 }] });
 					continue;
 				}
-				expect(observed.failure).toMatchObject({ message: `${observed.status === 'completed' || observed.mode === 'receipt-invalid' ? 'Completed' : 'Non-completed'} sandbox result lacks valid timing-awareness evidence.`, ...(observed.status === 'completed' || observed.mode === 'receipt-invalid' ? {} : { cause: { message: `Original ${observed.status} provider observation` } }),
+				expect(observed.failure).toMatchObject({ message: `${observed.status === 'completed' ? 'Completed' : 'Non-completed'} sandbox result lacks valid timing-awareness evidence.`, ...(observed.status === 'completed' ? {} : { cause: { message: `Original ${observed.status} provider observation` } }),
 					usage: [{ activeSeconds: 1.125, elapsedSeconds: 2.25, inputTokens: 19, outputTokens: 3 }] });
 			}
 		}

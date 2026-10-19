@@ -2616,3 +2616,7 @@ workflow:
   - id: measured-terminal-custody-native
     action: { verifier: agent.golden.measured-terminal-custody-native }
     expect: { status: passed }
+
+  - id: expired-measured-closeout-native
+    action: { verifier: agent.golden.expired-measured-closeout-native }
+    expect: { status: passed }

@@ -46,29 +46,36 @@ export function isUnresolvedUsageRecovery(observed: unknown, frozen: AssignmentA
 /** API disposition generation is not itself a usage acknowledgment. Transfer
  * only the exact retained, physically closed measured output to API custody;
  * the canonical cancelled/failed result remains unsuccessful. */
+function closedMeasuredResult(claim: ProviderLocalSlotClaim, frozen: AssignmentAttempt) {
+  if (!claim.closeoutOutput) return null;
+  const output = claim.closeoutOutput, teardown = record(output.teardown);
+  const start = Date.parse(claim.activeStartedAt ?? ''), finish = Date.parse(claim.activeFinishedAt ?? ''), closed = Date.parse(String(teardown.completedAt ?? ''));
+  if (!Number.isFinite(start) || !Number.isFinite(finish) || !Number.isFinite(closed) || start > finish || finish > closed || closed > Date.now()
+    || claim.accountedThrough !== claim.activeFinishedAt || teardown.verified !== true || typeof output.sandboxId !== 'string' || !output.sandboxId) return null;
+  const parsed = assignmentResultSchema.safeParse(output.assignmentResult);
+  if (!parsed.success || !isDeepStrictEqual(parsed.data, output.assignmentResult) || parsed.data.assignmentId !== frozen.id) return null;
+  const usage = parsed.data.usage, native = record(usage.native);
+  const positive = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value) && value > 0;
+  if (!positive(native.activeSeconds) || !positive(native.elapsedSeconds) || native.activeSeconds > native.elapsedSeconds
+    || Math.ceil(native.elapsedSeconds) !== usage.elapsedSeconds) return null;
+  return { result: parsed.data, activeSeconds: native.activeSeconds };
+}
+
 function acknowledgesMeasuredCloseout(assignment: Record<string, unknown>, claim: ProviderLocalSlotClaim, frozen: AssignmentAttempt): boolean {
   if (!['failed', 'cancelled', 'expired'].includes(textStatus(assignment.status)) || assignment.leaseState !== 'released'
     || assignment.reservationId !== frozen.reservationId || assignment.assignmentResult != null || !claim.closeoutOutput) return false;
   const lifecycle = record(assignment.lifecycleOutput), { performance: _performance, ...acknowledged } = lifecycle;
-  // API terminalization adds an absent completion as null. This carries no
-  // agent completion authority; any non-null or replaced value still differs.
+  // This never makes the original completed model response a canonical result.
   if (!Object.hasOwn(claim.closeoutOutput, 'completion') && acknowledged.completion === null) delete acknowledged.completion;
   if (!isDeepStrictEqual(acknowledged, claim.closeoutOutput)) return false;
-  const output = claim.closeoutOutput, teardown = record(output.teardown);
-  const start = Date.parse(claim.activeStartedAt ?? ''), finish = Date.parse(claim.activeFinishedAt ?? ''), closed = Date.parse(String(teardown.completedAt ?? ''));
-  if (!Number.isFinite(start) || !Number.isFinite(finish) || !Number.isFinite(closed) || start > finish || finish > closed || closed > Date.now()
-    || claim.accountedThrough !== claim.activeFinishedAt || teardown.verified !== true || typeof output.sandboxId !== 'string' || !output.sandboxId) return false;
-  const parsed = assignmentResultSchema.safeParse(output.assignmentResult);
-  if (!parsed.success || !isDeepStrictEqual(parsed.data, output.assignmentResult) || parsed.data.assignmentId !== frozen.id) return false;
-  const usage = parsed.data.usage, native = record(usage.native);
-  const positive = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value) && value > 0;
-  if (!positive(native.activeSeconds) || !positive(native.elapsedSeconds) || native.activeSeconds > native.elapsedSeconds
-    || Math.ceil(native.elapsedSeconds) !== usage.elapsedSeconds) return false;
+  const parsed = closedMeasuredResult(claim, frozen);
+  if (!parsed) return false;
+  const usage = parsed.result.usage, native = record(usage.native);
   const performance = record(lifecycle.performance), actual = record(performance.actual);
   if (performance.assignmentId !== frozen.id || performance.teamId !== frozen.teamId || performance.projectId !== frozen.projectId
     || performance.workdayId !== frozen.workdayId || performance.capacityProviderId !== frozen.provider.providerId
     || performance.disposition !== 'failed' || actual.attempts !== frozen.attempt) return false;
-  const expected = { activeSeconds: Math.ceil(native.activeSeconds), elapsedSeconds: usage.elapsedSeconds,
+  const expected = { activeSeconds: Math.ceil(parsed.activeSeconds), elapsedSeconds: usage.elapsedSeconds,
     inputTokens: usage.modelInputTokens ?? 0, outputTokens: usage.modelOutputTokens ?? 0,
     cachedInputTokens: native.cachedInputTokens ?? 0, reasoningTokens: native.reasoningTokens ?? 0 };
   return Object.entries(expected).every(([key, value]) => typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 && actual[key] === value);
@@ -113,8 +120,6 @@ export async function recoverProviderLocalLeases(input: { config: ProviderHostRu
           usageStatus: 'unresolved', settled: false });
         continue;
       }
-      if (record(record(assignment.metadata).leaseRecovery).disposition === 'operator-action'
-        || assignment.unresolvedUsageRecovery !== undefined) throw new Error('Original operator unresolved recovery audit is missing or invalid.');
       if (assignment.id !== claim.assignmentId || assignment.teamId !== frozen.teamId
         || assignment.capacityProviderId !== frozen.provider.providerId || connection.teamId !== frozen.teamId
         || connection.providerId !== frozen.provider.providerId
@@ -124,6 +129,27 @@ export async function recoverProviderLocalLeases(input: { config: ProviderHostRu
         || !['leased', 'running', 'completed', 'failed', 'returned', 'cancelled', 'expired', 'responded', 'abstained'].includes(status)) {
         throw new Error('Provider recovery assignment authority does not match its retained lease.');
       }
+      const recovery = record(record(assignment.metadata).leaseRecovery);
+      if (recovery.disposition === 'operator-action') {
+        if (assignment.unresolvedUsageRecovery !== undefined) throw new Error('Original operator unresolved recovery audit is invalid.');
+        let acknowledged = assignment;
+        if (!acknowledgesMeasuredCloseout(assignment, claim, frozen)) {
+          if (status !== 'expired' || assignment.leaseState !== 'expired'
+            || !['expired_lease_settlement_without_success_evidence','expired_lease_side_effect_evidence_present'].includes(String(recovery.reasonCode))
+            || !claim.runnerId || recovery.priorRunnerId !== claim.runnerId || !closedMeasuredResult(claim, frozen))
+            throw new Error('Original measured expired closeout authority is unavailable.');
+          const response = record(await client.failAssignment(claim.assignmentId, { leaseToken: claim.leaseToken,
+            runnerId: claim.runnerId, code: 'assignment_timeout', retryable: false, output: claim.closeoutOutput }));
+          acknowledged = record(response.assignment);
+          const acknowledgedAttempt = assignmentAttemptSchema.safeParse(acknowledged.assignmentAttempt);
+          if (!acknowledgedAttempt.success || !isDeepStrictEqual(acknowledgedAttempt.data, current)
+            || acknowledged.id !== assignment.id || acknowledged.teamId !== assignment.teamId
+            || acknowledged.capacityProviderId !== assignment.capacityProviderId || acknowledged.status !== status
+            || !isDeepStrictEqual(acknowledged.metadata, assignment.metadata))
+            throw new Error('Expired closeout acknowledgement changed original authority.');
+        }
+        if (!acknowledgesMeasuredCloseout(acknowledged, claim, frozen)) throw new Error('API has not acknowledged original measured failed output.');
+      } else if (assignment.unresolvedUsageRecovery !== undefined) throw new Error('Original operator unresolved recovery audit is invalid.');
       // A generated disposition alone cannot discard provider evidence. Exact
       // measured output already durably acknowledged by API is distinct from
       // synthesized unknown usage, which still requires the operator audit.

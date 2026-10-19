@@ -12,7 +12,8 @@ async function recoveryFixture(measured = false, output?: () => Record<string, u
 	let observed: unknown = { id: f.attempt.id, teamId: f.attempt.teamId, capacityProviderId: f.attempt.provider.providerId,
 		status: 'running', assignmentAttempt: { ...f.attempt, status: 'running' } };
 	let code = 200, fault = '', returnCode = 200, returnReply: unknown = { assignment: { id: f.attempt.id, status: 'returned' } };
-	let availability: { status: number; code: string } | null = null;
+		let availability: { status: number; code: string } | null = null;
+		let failureReply: unknown;
 	const server = createServer((request, response) => {
 		let body = ''; request.setEncoding('utf8'); request.on('data', chunk => { body += chunk; });
 		request.on('end', () => {
@@ -26,11 +27,12 @@ async function recoveryFixture(measured = false, output?: () => Record<string, u
 					? { data: { id: 'native-session', sequence: request.method === 'POST' ? 1 : 2, status: 'open' } }
 					: { type: 'about:blank', title: 'Original publication failure', status: availability.status, code: availability.code })); return;
 			}
-			const returning = path.endsWith('/return'), status = returning ? returnCode : code;
+				const failing = path.endsWith('/fail');
+				const returning = path.endsWith('/return'), status = returning || failing ? returnCode : code;
 			response.statusCode = status; response.setHeader('content-type', 'application/json');
 			if (fault === 'json') response.end('{');
 			else if (status !== 200) response.end(JSON.stringify({ type: 'about:blank', title: 'Controlled denial', status, code: 'fixture_denied' }));
-			else response.end(JSON.stringify({ data: returning ? returnReply : observed }));
+				else response.end(JSON.stringify({ data: failing ? failureReply : returning ? returnReply : observed }));
 		});
 	});
 	try {
@@ -64,6 +66,7 @@ async function recoveryFixture(measured = false, output?: () => Record<string, u
 				accessToken: token, adapters: [], lanes: [], providerCapacity: { maxConcurrentWorkers: 1 } },
 				{ adapters: [], lanes: [], capacity: { maxConcurrentWorkers: 1 }, activeWorkers: 1 }, f.reopen()),
 			setReturnReply(value: unknown) { returnReply = value; },
+				setFailureReply(value: unknown) { failureReply = value; },
 			setReply(value: unknown, status = 200, error = '', returnedStatus = 200) { observed = value; code = status; fault = error; returnCode = returnedStatus; },
 			run: (connections = [connection]) => recoverProviderLocalLeases({ config, connections, store: f.reopen() }),
 			close: async () => { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); await f.close(); } };
@@ -128,6 +131,41 @@ describe('document-wide native provider recovery boundary', () => {
    }finally{await f.close();}
   }
  });
+	it('hands original measured settled or originally reported unsettled expired output to the existing failure boundary and releases only after exact failed custody acknowledgement', async () => {
+	 for(const reasonCode of ['expired_lease_settlement_without_success_evidence','expired_lease_side_effect_evidence_present']){
+		const output = () => ({ sandboxId: 'original-sandbox', teardown: { verified: true, completedAt: new Date().toISOString() },
+			assignmentResult: { schemaVersion: 'treeseed.assignment-result/v1', id: 'result', assignmentId: 'assignment-1', status: 'completed',
+				summary: 'Original retained output', references: [], verification: [], diagnostics: [], usage: { elapsedSeconds: 2,
+					modelInputTokens: 5, modelOutputTokens: 3, native: { activeSeconds: 1.1, elapsedSeconds: 1.2, cachedInputTokens: 2, reasoningTokens: 0 } }, completedAt: new Date().toISOString() } });
+		const f = await recoveryFixture(true, output); try {
+			const prior = (await f.reopen().claimsForRecovery())[0]!, frozen = f.lease.dispatchEnvelope.assignment.assignmentAttempt;
+			const expired = { id: frozen.id, teamId: frozen.teamId, projectId: frozen.projectId, workDayId: frozen.workdayId,
+				capacityProviderId: frozen.provider.providerId, reservationId: frozen.reservationId, status: 'expired', leaseState: 'expired',
+				assignmentResult: null, assignmentAttempt: { ...frozen, status: 'expired', finishedAt: frozen.deadline },
+				metadata: { leaseRecovery: { disposition: 'operator-action', reasonCode, priorRunnerId: prior.runnerId } }, lifecycleOutput: {} };
+			const acknowledged = { ...expired, leaseState: 'released', lifecycleOutput: { ...prior.closeoutOutput!, completion: null,
+				performance: { assignmentId: frozen.id, teamId: frozen.teamId, projectId: frozen.projectId, workdayId: frozen.workdayId,
+					capacityProviderId: frozen.provider.providerId, disposition: 'failed', actual: { activeSeconds: 2, elapsedSeconds: 2,
+						inputTokens: 5, outputTokens: 3, cachedInputTokens: 2, reasoningTokens: 0, attempts: frozen.attempt }, systemAssessment: { generatedBy: 'api-recovery' } } } };
+			const original = structuredClone({ prior, expired, acknowledged }), before = JSON.parse(await f.bytes());
+		for (const receipt of [null, {}, { assignment: { ...acknowledged, id: 'foreign' } },
+			{ assignment: { ...acknowledged, status: 'completed' } },
+			{ assignment: { ...acknowledged, lifecycleOutput: { ...acknowledged.lifecycleOutput, sandboxId: 'substituted' } } }]) {
+			f.setReply(expired); f.setFailureReply(receipt);
+			expect((await f.run())[0]?.status).toBe('retained');
+			expect((await f.reopen().claimsForRecovery())[0]?.closeoutOutput).toEqual(prior.closeoutOutput);
+			expect(JSON.parse(await f.bytes()).usage).toEqual(before.usage);
+		}
+		f.requests.splice(0); f.setReply(expired); f.setFailureReply({ assignment: acknowledged });
+			expect((await f.run())[0]).toMatchObject({ status: 'released', observedStatus: 'expired' });
+			const after = JSON.parse(await f.bytes()); expect(after.claims).toEqual([]); expect(after.usage).toEqual(before.usage);
+			expect(f.requests.map(request => request.method)).toEqual(['GET', 'POST']);
+			expect(f.requests[1]).toMatchObject({ path: `/v1/provider/assignments/${frozen.id}/fail`, body: {
+				leaseToken: prior.leaseToken, runnerId: prior.runnerId, code: 'assignment_timeout', retryable: false, output: prior.closeoutOutput } });
+			expect(await f.run()).toEqual([]); expect({ prior, expired, acknowledged }).toEqual(original);
+		} finally { await f.close(); }
+	 }
+	});
 	it('native terminal recovery retains original failed custody across repeated API-generated unmeasured performance observations', async () => {
 		const outcomes = [];
 		for (const status of ['failed', 'cancelled', 'expired']) {

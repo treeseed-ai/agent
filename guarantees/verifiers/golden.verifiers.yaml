@@ -4481,3 +4481,9 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/provider/architecture/recovery-native.test.ts
     testName: "native recovery acknowledges only exact closed measured API custody without replacing original usage or failed history"
+
+  agent.golden.expired-measured-closeout-native:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/provider/architecture/recovery-native.test.ts
+    testName: "hands original measured settled or originally reported unsettled expired output to the existing failure boundary and releases only after exact failed custody acknowledgement"

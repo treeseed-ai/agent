@@ -131,7 +131,7 @@ describe('document-wide native provider recovery boundary', () => {
    }finally{await f.close();}
   }
  });
-	it('hands original settled-expired output to the existing failure boundary and releases only after exact failed custody acknowledgement', async () => {
+	it.each(['expired_lease_settlement_without_success_evidence','expired_lease_side_effect_evidence_present'])('hands original measured expired output %s to the existing failure boundary and releases only after exact failed custody acknowledgement', async reasonCode => {
 		const output = () => ({ sandboxId: 'original-sandbox', teardown: { verified: true, completedAt: new Date().toISOString() },
 			assignmentResult: { schemaVersion: 'treeseed.assignment-result/v1', id: 'result', assignmentId: 'assignment-1', status: 'completed',
 				summary: 'Original retained output', references: [], verification: [], diagnostics: [], usage: { elapsedSeconds: 2,
@@ -141,7 +141,7 @@ describe('document-wide native provider recovery boundary', () => {
 			const expired = { id: frozen.id, teamId: frozen.teamId, projectId: frozen.projectId, workDayId: frozen.workdayId,
 				capacityProviderId: frozen.provider.providerId, reservationId: frozen.reservationId, status: 'expired', leaseState: 'expired',
 				assignmentResult: null, assignmentAttempt: { ...frozen, status: 'expired', finishedAt: frozen.deadline },
-				metadata: { leaseRecovery: { disposition: 'operator-action', reasonCode: 'expired_lease_settlement_without_success_evidence', priorRunnerId: prior.runnerId } }, lifecycleOutput: {} };
+				metadata: { leaseRecovery: { disposition: 'operator-action', reasonCode, priorRunnerId: prior.runnerId } }, lifecycleOutput: {} };
 			const acknowledged = { ...expired, leaseState: 'released', lifecycleOutput: { ...prior.closeoutOutput!, completion: null,
 				performance: { assignmentId: frozen.id, teamId: frozen.teamId, projectId: frozen.projectId, workdayId: frozen.workdayId,
 					capacityProviderId: frozen.provider.providerId, disposition: 'failed', actual: { activeSeconds: 2, elapsedSeconds: 2,

@@ -147,7 +147,15 @@ describe('document-wide native provider recovery boundary', () => {
 					capacityProviderId: frozen.provider.providerId, disposition: 'failed', actual: { activeSeconds: 2, elapsedSeconds: 2,
 						inputTokens: 5, outputTokens: 3, cachedInputTokens: 2, reasoningTokens: 0, attempts: frozen.attempt }, systemAssessment: { generatedBy: 'api-recovery' } } } };
 			const original = structuredClone({ prior, expired, acknowledged }), before = JSON.parse(await f.bytes());
-			f.setReply(expired); f.setFailureReply({ assignment: acknowledged });
+		for (const receipt of [null, {}, { assignment: { ...acknowledged, id: 'foreign' } },
+			{ assignment: { ...acknowledged, status: 'completed' } },
+			{ assignment: { ...acknowledged, lifecycleOutput: { ...acknowledged.lifecycleOutput, sandboxId: 'substituted' } } }]) {
+			f.setReply(expired); f.setFailureReply(receipt);
+			expect((await f.run())[0]?.status).toBe('retained');
+			expect((await f.reopen().claimsForRecovery())[0]?.closeoutOutput).toEqual(prior.closeoutOutput);
+			expect(JSON.parse(await f.bytes()).usage).toEqual(before.usage);
+		}
+		f.requests.splice(0); f.setReply(expired); f.setFailureReply({ assignment: acknowledged });
 			expect((await f.run())[0]).toMatchObject({ status: 'released', observedStatus: 'expired' });
 			const after = JSON.parse(await f.bytes()); expect(after.claims).toEqual([]); expect(after.usage).toEqual(before.usage);
 			expect(f.requests.map(request => request.method)).toEqual(['GET', 'POST']);

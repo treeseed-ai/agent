@@ -379,6 +379,7 @@ export async function createMicrovmExecutor(config: ProviderHostRuntimeConfig, m
 					return { status: abstained ? 'abstained' : result.responseMarkdown ? 'responded' : 'completed', summary: result.summary, ...(!abstained && result.responseMarkdown ? { responseMarkdown: result.responseMarkdown } : {}), outputs: { sandboxId: result.sandboxId, teardown, environmentReceipt,
 						verificationRecords: object(result.diagnostics).verificationRecords ?? [],
 						activityCompletion: object(result.diagnostics).activityCompletion ?? null,
+						changedPaths: diagnostics.changedPaths ?? [],
 						timingAwareness,
 						providerEventShapes: Array.isArray(diagnostics.providerEventShapes) ? diagnostics.providerEventShapes : [],
 						...(sourceReference ? { sourceReference } : {}) }, artifacts, usage: [usage] };

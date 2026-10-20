@@ -53,4 +53,4 @@ RUN DEBIAN_FRONTEND=noninteractive apt-get update \
 	&& chown -R 65532:65532 /workspace /run/treeseed-output /run/user/65532
 COPY --chown=65532:65532 dist ./dist
 USER treeseed
-ENTRYPOINT ["/bin/bash", "-lc", "ulimit -u \"${TREESEED_SANDBOX_PROCESS_LIMIT:?}\"; ulimit -f \"$((TREESEED_SANDBOX_DISK_LIMIT / 512))\"; exec node /app/dist/sandbox/guest.js"]
+ENTRYPOINT ["/usr/bin/tini", "--", "/bin/bash", "-lc", "ulimit -u \"${TREESEED_SANDBOX_PROCESS_LIMIT:?}\"; ulimit -f \"$((TREESEED_SANDBOX_DISK_LIMIT / 512))\"; exec node /app/dist/sandbox/guest.js"]

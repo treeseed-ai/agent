@@ -10,6 +10,10 @@ it('native declared guest init reaps failed interrupted and killed subprocess de
 	const shell = entrypoint.indexOf('/bin/bash');
 	if (shell < 0) throw new Error('Original guest shell entrypoint missing');
 	const init = entrypoint.slice(0, shell);
+	// CI installs the same packaged binary; local diagnosis may bind the binary
+	// copied from the exact published guest without modifying the host OS.
+	const suppliedInit = init[0] === '/usr/bin/tini' ? process.env.TREESEED_TEST_TINI : undefined;
+	const commandInit = suppliedInit ? ['/tmp/native-tini', ...init.slice(1)] : init;
 	const root = fileURLToPath(new URL('../../../..', import.meta.url));
 	const fixture = '/tmp/repo/tests/modern/sandbox/architecture/guest-init-process.ts';
 	for (const mode of ['descendant-failed', 'descendant-hard', 'descendant-closeout']) {
@@ -17,9 +21,8 @@ it('native declared guest init reaps failed interrupted and killed subprocess de
 			'--unshare-user', '--unshare-pid', '--as-pid-1', '--unshare-net', '--die-with-parent', '--new-session',
 			'--ro-bind', '/', '/', '--proc', '/proc', '--tmpfs', '/tmp', '--dev', '/dev',
 			'--ro-bind', root, '/tmp/repo', '--chdir', '/tmp/repo',
-			...(init[0] === '/usr/bin/tini' && process.env.TREESEED_TEST_TINI
-				? ['--ro-bind', process.env.TREESEED_TEST_TINI, '/usr/bin/tini'] : []),
-			...init, process.execPath, '--import', 'tsx', fixture, mode,
+			...(suppliedInit ? ['--ro-bind', suppliedInit, '/tmp/native-tini'] : []),
+			...commandInit, process.execPath, '--import', 'tsx', fixture, mode,
 		], { cwd: root, timeout: 12_000,
 			env: { PATH: process.env.PATH, HOME: '/tmp' }, maxBuffer: 16_384 });
 		const observed = JSON.parse(stdout) as Record<string, unknown>;

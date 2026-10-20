@@ -419,7 +419,10 @@ describe('Codex chat executor', () => {
 		expect(await prepareNodeWorkspace(root, 'http://assignment-proxy', execute)).toBe(true);
 		expect(execute).toHaveBeenCalledWith('npm', ['ci', '--prefer-offline', '--no-audit', '--no-fund'],
 			expect.objectContaining({ cwd: root, timeoutMs: 120_000,
-				env: expect.objectContaining({ HTTPS_PROXY: 'http://assignment-proxy', https_proxy: 'http://assignment-proxy' }) }));
+				env: expect.objectContaining({ HTTPS_PROXY: 'http://assignment-proxy', https_proxy: 'http://assignment-proxy',
+					GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null', GIT_TERMINAL_PROMPT: '0', GIT_CONFIG_COUNT: '2',
+					GIT_CONFIG_KEY_0: 'url.https://github.com/.insteadOf', GIT_CONFIG_VALUE_0: 'ssh://git@github.com/',
+					GIT_CONFIG_KEY_1: 'url.https://github.com/.insteadOf', GIT_CONFIG_VALUE_1: 'git@github.com:' }) }));
 	});
 	it('requires canonical assignment prompts to explain complete verification commands', () => {
 		const rendered = promptFromContext({ canonicalAssignmentContext: {

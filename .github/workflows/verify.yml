@@ -76,7 +76,7 @@ jobs:
           mkdir -p node_modules/@treeseed/deployment/node_modules/@treeseed/sdk
           tar -xzf .treeseed/tools/deployment-build-sdk/treeseed-sdk-0.13.0-rc.122.tgz --strip-components=1 -C node_modules/@treeseed/deployment/node_modules/@treeseed/sdk
           npm install --prefix node_modules/@treeseed/deployment/node_modules/@treeseed/sdk --omit=dev --ignore-scripts --package-lock=false --no-save --no-audit --no-fund
-      - uses: treeseed-ai/sdk/.github/actions/install-exact-sdk@69c07896708deaaed228cc6e14f12c41e5289981
+      - uses: treeseed-ai/sdk/.github/actions/install-exact-sdk@b754118c8035913b20ca9663ca418d48fa4dce05
         with:
           github-token: ${{ github.token }}
       - name: Prepare disposable native relay CA

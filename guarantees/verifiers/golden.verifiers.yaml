@@ -4493,3 +4493,21 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/sandbox/architecture/guest-init-native.test.ts
     testName: "native declared guest init reaps failed interrupted and killed subprocess descendants before the original runner settles"
+
+  agent.golden.node-dependency-proxy-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/codex/codex-chat-executor.test.ts
+    testName: "prepares a source-backed Node workspace before model execution"
+
+  agent.golden.node-dependency-proxy-native:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/codex/dependency-transport-native.test.ts
+    testName: "uses the authenticated HTTPS proxy and preserves its allowed=true decision"
+
+  agent.golden.node-dependency-proxy-denial-native:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/codex/dependency-transport-native.test.ts
+    testName: "uses the authenticated HTTPS proxy and preserves its allowed=false decision"

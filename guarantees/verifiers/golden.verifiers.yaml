@@ -4487,3 +4487,9 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/provider/architecture/recovery-native.test.ts
     testName: "hands original measured settled or originally reported unsettled expired output to the existing failure boundary and releases only after exact failed custody acknowledgement"
+
+  agent.golden.guest-init-descendant-native:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/sandbox/architecture/guest-init-native.test.ts
+    testName: "native declared guest init reaps failed interrupted and killed subprocess descendants before the original runner settles"

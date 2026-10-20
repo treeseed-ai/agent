@@ -2620,3 +2620,7 @@ workflow:
   - id: expired-measured-closeout-native
     action: { verifier: agent.golden.expired-measured-closeout-native }
     expect: { status: passed }
+
+  - id: guest-init-descendant-native
+    action: { verifier: agent.golden.guest-init-descendant-native }
+    expect: { status: passed }

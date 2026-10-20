@@ -2624,3 +2624,12 @@ workflow:
   - id: guest-init-descendant-native
     action: { verifier: agent.golden.guest-init-descendant-native }
     expect: { status: passed }
+  - id: node-dependency-proxy-unit
+    action: { verifier: agent.golden.node-dependency-proxy-unit }
+    expect: { status: passed }
+  - id: node-dependency-proxy-native
+    action: { verifier: agent.golden.node-dependency-proxy-native }
+    expect: { status: passed }
+  - id: node-dependency-proxy-denial-native
+    action: { verifier: agent.golden.node-dependency-proxy-denial-native }
+    expect: { status: passed }

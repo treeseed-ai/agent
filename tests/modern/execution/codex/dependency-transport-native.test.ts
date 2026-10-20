@@ -1,5 +1,6 @@
 import { createServer } from 'node:http';
-import { connect, type Socket } from 'node:net';
+import { connect } from 'node:net';
+import type { Duplex } from 'node:stream';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -10,13 +11,13 @@ import { run } from '../../../../src/sandbox/process-runner.ts';
 describe('native locked Git dependency transport', () => {
 	it.each([true, false])('uses the authenticated HTTPS proxy and preserves its allowed=%s decision', async allowed => {
 		const root = await mkdtemp(join(tmpdir(), 'treeseed-dependency-transport-'));
-		const sockets = new Set<Socket>(), targets: string[] = [];
+		const sockets = new Set<Duplex>(), targets: string[] = [];
 		const proxy = createServer();
 		proxy.on('connect', (request, client, head) => {
 			sockets.add(client); client.on('error', () => undefined); client.on('close', () => sockets.delete(client));
 			targets.push(request.url ?? '');
 			if (!allowed || request.url !== 'github.com:443' || request.headers['proxy-authorization'] !== 'Basic Zml4dHVyZTpuby1jcmVkZW50aWFs') {
-				client.end('HTTP/1.1 407 Proxy Authentication Required\r\nConnection: close\r\n\r\n'); return;
+				client.end('HTTP/1.1 407 Proxy Authentication Required\r\nProxy-Authenticate: Basic realm="fixture"\r\nConnection: close\r\n\r\n'); return;
 			}
 			const upstream = connect(443, 'github.com', () => {
 				client.write('HTTP/1.1 200 Connection Established\r\n\r\n');

@@ -52,6 +52,20 @@ async function inspectNativeTransport(allowed: boolean) {
 }
 
 describe('native locked Git dependency transport', () => {
+	it('restores dependencies without requiring a successful project build before the actor can repair it', async () => {
+		const root = await mkdtemp(join(tmpdir(), 'treeseed-source-prepare-'));
+		try {
+			const manifest = { name: 'source-prepare', version: '1.0.0', private: true,
+				scripts: { preinstall: 'touch install-ran', prepare: 'test "$TREESEED_SKIP_PACKAGE_PREPARE" = "1"' } };
+			await writeFile(join(root, 'package.json'), JSON.stringify(manifest));
+			await writeFile(join(root, 'package-lock.json'), JSON.stringify({ name: manifest.name, version: manifest.version,
+				lockfileVersion: 3, requires: true, packages: { '': { name: manifest.name, version: manifest.version, hasInstallScript: true } } }));
+			expect(await prepareNodeWorkspace(root, undefined, (command, args, options) => run(command, args, {
+				...options, env: { ...process.env, ...options.env, npm_config_cache: join(root, 'cache') },
+			}))).toBe(true);
+			expect(await readFile(join(root, 'install-ran'), 'utf8')).toBe('');
+		} finally { await rm(root, { recursive: true, force: true }); }
+	});
 	it('uses the authenticated HTTPS proxy and preserves its allowed=true decision', () => inspectNativeTransport(true), 120_000);
 	it('uses the authenticated HTTPS proxy and preserves its allowed=false decision', () => inspectNativeTransport(false), 120_000);
 });

@@ -152,6 +152,8 @@ describe('Codex chat executor', () => {
 		expect(prompt).toContain('not as a directly callable outer tool');
 		expect(prompt).toContain('fewer than two successful clock checks is rejected');
 		expect(prompt).toContain('Complete every shell command, verification, inspection, and other tool action before the final clock check');
+		expect(prompt).toContain('REQUIRED LOOP: successful clock -> ONE shell command -> NEW successful clock before ANY next shell command');
+		expect(prompt).toContain('This includes rg, sed and other quick inspection commands; their short expected duration is no exception');
 		expect(prompt).toMatch(/DO NOT ANSWER OR REASON ABOUT THE TASK YET[\s\S]*call time status again so it is truly your final tool action\.$/u);
 		expect(prompt).toContain('The provider publishes your final plain Markdown reply to the Discussion');
 		expect(prompt).toContain('you do not need or have a discussion-write tool');

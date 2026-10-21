@@ -170,7 +170,12 @@ export async function recoverProviderLocalLeases(input: { config: ProviderHostRu
       results.push({ claimId: claim.id, assignmentId: claim.assignmentId, status: 'released', observedStatus: status });
     } catch (error) {
       await store.recordFailure(claim.id, error instanceof Error ? error.message : String(error));
-      results.push({ claimId: claim.id, assignmentId: claim.assignmentId, status: 'retained', reason: 'control_plane_unavailable' });
+      const failure = record(error);
+      results.push({ claimId: claim.id, assignmentId: claim.assignmentId, status: 'retained', reason: 'control_plane_unavailable',
+        error: providerFailureSummary([{ type: 'error', message: error instanceof Error ? error.message : String(error) }],
+          [claim.leaseToken, connection.accessToken.accessToken]),
+        ...(Number.isSafeInteger(failure.status) && Number(failure.status) >= 0 && Number(failure.status) <= 599 ? { httpStatus: failure.status } : {}),
+        ...(typeof failure.code === 'string' && /^[a-z][a-z0-9_]{0,79}$/u.test(failure.code) ? { code: failure.code } : {}) });
     }
   }
   return results;

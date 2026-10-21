@@ -102,6 +102,41 @@ describe('document-wide native provider recovery boundary', () => {
 		}
 	});
 
+ it('releases only exactly acknowledged canonical completed results despite generated performance provenance', async () => {
+  for (const mutation of ['valid', 'missing-result', 'changed-result', 'changed-output', 'changed-usage', 'wrong-disposition', 'open-lease', 'foreign-reservation', 'unverified-teardown']) {
+   const f = await recoveryFixture(true, () => ({ sandboxId: 'original-sandbox', teardown: { verified: true, completedAt: new Date().toISOString() },
+    assignmentResult: { schemaVersion: 'treeseed.assignment-result/v1', id: 'result', assignmentId: 'assignment-1', status: 'completed', summary: 'Original accepted result',
+     references: [], verification: [], diagnostics: [], usage: { elapsedSeconds: 2, modelInputTokens: 5, modelOutputTokens: 3,
+      native: { activeSeconds: 1.1, elapsedSeconds: 1.2, cachedInputTokens: 2, reasoningTokens: 0 } }, completedAt: new Date().toISOString() } }));
+   try {
+    const prior = (await f.reopen().claimsForRecovery())[0]!, frozen = f.lease.dispatchEnvelope.assignment.assignmentAttempt;
+    const original = structuredClone(prior.closeoutOutput!);
+    const value: any = { id: frozen.id, teamId: frozen.teamId, capacityProviderId: frozen.provider.providerId, reservationId: frozen.reservationId,
+     status: 'completed', leaseState: 'released', assignmentAttempt: { ...frozen, status: 'completed', finishedAt: frozen.deadline },
+     assignmentResult: structuredClone(original.assignmentResult), lifecycleOutput: { ...original, completion: null,
+      performance: { assignmentId: frozen.id, teamId: frozen.teamId, projectId: frozen.projectId, workdayId: frozen.workdayId,
+       capacityProviderId: frozen.provider.providerId, disposition: 'completed', systemAssessment: { generatedBy: 'api-recovery' },
+       actual: { activeSeconds: 2, elapsedSeconds: 2, inputTokens: 5, cachedInputTokens: 2, reasoningTokens: 0, outputTokens: 3, attempts: frozen.attempt } } } };
+    if (mutation === 'missing-result') value.assignmentResult = null;
+    if (mutation === 'changed-result') value.assignmentResult.summary = 'Substituted canonical result';
+    if (mutation === 'changed-output') value.lifecycleOutput.assignmentResult.summary = 'Substituted retained output';
+    if (mutation === 'changed-usage') value.lifecycleOutput.performance.actual.inputTokens = 6;
+    if (mutation === 'wrong-disposition') value.lifecycleOutput.performance.disposition = 'failed';
+    if (mutation === 'open-lease') value.leaseState = 'leased';
+    if (mutation === 'foreign-reservation') value.reservationId = 'foreign';
+    if (mutation === 'unverified-teardown') value.lifecycleOutput.teardown.verified = false;
+    const before = JSON.parse(await f.bytes()), upstream = structuredClone(value); f.setReply(value);
+    expect((await f.run())[0]?.status).toBe(mutation === 'valid' ? 'released' : 'retained');
+    const after = JSON.parse(await f.bytes()); expect(after.usage).toEqual(before.usage); expect(value).toEqual(upstream);
+    if (mutation === 'valid') {
+     expect(after.claims).toEqual([]); expect(after.events.filter((e: any) => e.outcome === 'authoritative-completed')).toHaveLength(1);
+     expect(await f.run()).toEqual([]); expect(f.requests).toHaveLength(1);
+    } else expect(after.claims).toHaveLength(1);
+    expect(f.requests.every(request => request.method === 'GET')).toBe(true);
+   } finally { await f.close(); }
+  }
+ });
+
  it('native recovery acknowledges only exact closed measured API custody without replacing original usage or failed history',async()=>{
   for(const mutation of ['valid','missing-output','changed-output','zero-usage','changed-usage','foreign-reservation','open-lease','unverified-teardown','ongoing-clock','foreign-performance','missing-clocks','future-teardown','fabricated-completion']){
    const output=()=>({sandboxId:'original-sandbox',teardown:{verified:true,completedAt:new Date().toISOString()},assignmentResult:{schemaVersion:'treeseed.assignment-result/v1',id:'result',assignmentId:'assignment-1',status:'completed',summary:'Original retained output',references:[],verification:[],diagnostics:[],usage:{elapsedSeconds:2,modelInputTokens:5,modelOutputTokens:3,native:{activeSeconds:1.1,elapsedSeconds:1.2,cachedInputTokens:2,reasoningTokens:0}},completedAt:new Date().toISOString()}});

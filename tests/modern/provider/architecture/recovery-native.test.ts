@@ -1,4 +1,5 @@
 import { createServer } from 'node:http';
+import { assignmentAttemptSchema } from '@treeseed/sdk/agent-capacity';
 import { describe, expect, it } from 'vitest';
 import type { ProviderConnectionRuntime } from '../../../../src/provider/coordination/coordinator.ts';
 import type { ProviderHostRuntimeConfig } from '../../../../src/provider/configuration/config.ts';
@@ -6,7 +7,7 @@ import { recoverProviderLocalLeases } from '../../../../src/provider/coordinatio
 import { capacityFixture } from './capacity-fixture.ts';
 import { publishProviderAvailability } from '../../../../src/provider/lifecycle/lifecycle.ts';
 
-async function recoveryFixture(measured = false, output?: () => Record<string, unknown>) {
+async function recoveryFixture(measured = false, output?: () => Record<string, unknown>, native = false) {
 	const f = await capacityFixture();
 	const requests: Array<{ method: string; path: string; body: unknown }> = [];
 	let observed: unknown = { id: f.attempt.id, teamId: f.attempt.teamId, capacityProviderId: f.attempt.provider.providerId,
@@ -52,12 +53,27 @@ async function recoveryFixture(measured = false, output?: () => Record<string, u
 			monthlyAgentSecondsLimit: null, env: {}, redactedEnv: {} };
 		const claim = await f.store.claim({ connectionId: connection.connection.id, globalLimit: 1, connectionLimit: 1 });
 		if (!claim) throw new Error('Actual native recovery slot required');
-		const lease = f.lease(); await f.store.attachLease(claim.id, lease); await f.store.claimDispatch(claim.id);
+		const lease = f.lease();
+  if (native) {
+   const original=lease.dispatchEnvelope.assignment.assignmentAttempt,path='notes/native-report.mdx';
+   const frozen=assignmentAttemptSchema.parse({...original,effectiveProfile:{...original.effectiveProfile,handler:'reporter',handlerOrigin:'agent-package',activity:'reporting'},
+    workspace:{mode:'treedx',workspaceId:'native-workspace',repository:'native-library',baseCommit:'a'.repeat(40),writablePaths:[path]},
+    grant:{...original.grant,sourceWrite:[],contentWrite:[{store:'treedx',model:'note',id:'native-report',repository:'native-library',commit:'a'.repeat(40),path}]}});
+   lease.dispatchEnvelope.assignment.assignmentAttempt=frozen;lease.dispatchEnvelope.assignment.workspaceContext.assignmentAttempt=frozen;
+  }
+  await f.store.attachLease(claim.id, lease); await f.store.claimDispatch(claim.id);
 		observed = { id: f.attempt.id, teamId: f.attempt.teamId, capacityProviderId: f.attempt.provider.providerId,
 			status: 'running', assignmentAttempt: { ...lease.dispatchEnvelope.assignment.assignmentAttempt, status: 'running' } };
-		if (measured) { await f.store.beginActiveExecution(claim.id); await new Promise(resolve => setTimeout(resolve, 10)); await f.store.finishActiveExecution(claim.id); }
-   await f.store.recordCloseoutOutput(claim.id, output ? output() : measured ? { sandboxId: 'original-sandbox', teardown: { verified: true, completedAt: new Date().toISOString() },
-    status: 'completed', originalArtifact: 'immutable original correction' } : { status: 'blocked', unfinishedWork: ['unchanged original assignment'] });
+		let nativeOutput:Record<string,unknown>|undefined;
+  if (measured) { await f.store.beginActiveExecution(claim.id); await new Promise(resolve => setTimeout(resolve, 10));
+   if(native){const frozen=lease.dispatchEnvelope.assignment.assignmentAttempt,completedAt=new Date().toISOString();
+    nativeOutput={assignmentResult:{schemaVersion:'treeseed.assignment-result/v1',id:'native-result',assignmentId:frozen.id,status:'completed',summary:'Original native report',
+     references:[{kind:'treedx',projectId:frozen.projectId,repository:'native-library',commit:'b'.repeat(40),path:'notes/native-report.mdx',workspaceId:'native-workspace'}],
+     verification:[],diagnostics:[],usage:{elapsedSeconds:1,native:{activeSeconds:0.005}},completedAt},teardown:{verified:true,completedAt},artifacts:[]};
+    await new Promise(resolve=>setTimeout(resolve,5));}
+   await f.store.finishActiveExecution(claim.id); }
+   await f.store.recordCloseoutOutput(claim.id, nativeOutput ?? (output ? output() : measured ? { sandboxId: 'original-sandbox', teardown: { verified: true, completedAt: new Date().toISOString() },
+    status: 'completed', originalArtifact: 'immutable original correction' } : { status: 'blocked', unfinishedWork: ['unchanged original assignment'] }));
 		await f.store.recordFailure(claim.id, 'original interrupted provider execution');
 		return { ...f, claim, lease, connection, requests,
 			setAvailability(status: number, problemCode = 'isolated_denial', error = '') { availability = { status, code: problemCode }; fault = error; },
@@ -444,4 +460,28 @@ describe('document-wide native provider recovery boundary', () => {
   }finally{await f.close();}
  });
 
+});
+
+// Original API replies are controlled inputs; this proves the owning provider,
+// official SDK HTTP transport and durable local custody, not native API settlement.
+it.each(['unresolved','acknowledged'])('recovers native no-sandbox closure through original public HTTP %s custody',async mode=>{
+ const f=await recoveryFixture(true,undefined,true);try{
+  const frozen=f.lease.dispatchEnvelope.assignment.assignmentAttempt,prior=(await f.reopen().claimsForRecovery())[0]!,output=prior.closeoutOutput!;
+  const metadata={leaseRecovery:{disposition:'operator-action',reasonCode:'expired_lease_side_effect_evidence_present',priorRunnerId:prior.runnerId}};
+  const terminal={id:frozen.id,teamId:frozen.teamId,projectId:frozen.projectId,workDayId:frozen.workdayId,capacityProviderId:frozen.provider.providerId,
+   reservationId:frozen.reservationId,status:'expired',leaseState:'expired',stateVersion:7,assignmentResult:null,
+   assignmentAttempt:{...frozen,status:'expired',finishedAt:frozen.deadline},metadata};
+  if(mode==='unresolved')f.setReply({...terminal,unresolvedUsageRecovery:{assignmentId:frozen.id,reservationId:frozen.reservationId,usageStatus:'unresolved',settled:false,
+   expectedStateVersion:7,actorId:'operator',reason:'Preserve original unknown custody',recoveredAt:frozen.deadline}});
+  else{
+   f.setReply(terminal);f.setFailureReply({assignment:{...terminal,leaseState:'released',lifecycleOutput:{...output,completion:null,
+    performance:{assignmentId:frozen.id,teamId:frozen.teamId,projectId:frozen.projectId,workdayId:frozen.workdayId,capacityProviderId:frozen.provider.providerId,
+     disposition:'failed',actual:{activeSeconds:1,elapsedSeconds:1,inputTokens:0,outputTokens:0,cachedInputTokens:0,reasoningTokens:0,attempts:frozen.attempt}}}}});
+  }
+  expect((await f.run())[0]?.status).toBe('released');
+  expect(await f.run()).toEqual([]);
+  const after=JSON.parse(await f.bytes());
+  if(mode==='unresolved'){expect(after.claims[0].status).toBe('unresolved');expect(after.claims[0].closeoutOutput).toEqual(output);expect(f.requests).toHaveLength(1);}
+  else{expect(after.claims).toEqual([]);expect(f.requests).toHaveLength(2);expect(f.requests[1]!.body).toMatchObject({output});}
+ }finally{await f.close();}
 });

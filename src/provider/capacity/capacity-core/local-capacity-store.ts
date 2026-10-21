@@ -2,6 +2,8 @@ import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
+import { assignmentAttemptSchema } from '@treeseed/sdk/agent-capacity';
+import { ReporterHandler } from '../../../kernel/handlers/reporter.ts';
 import type { ProviderAccessTokenIssue } from '@treeseed/sdk/capacity-provider/contracts';
 import type { ProviderLocalNativeLimit } from './native-capacity-limits.ts';
 
@@ -324,9 +326,11 @@ export class ProviderLocalCapacityStore {
 				const output = claim.closeoutOutput, teardown = output?.teardown;
 				const closed = teardown && typeof teardown === 'object' && !Array.isArray(teardown) ? teardown as Record<string, unknown> : {};
 				const completedAt = typeof closed.completedAt === 'string' ? Date.parse(closed.completedAt) : NaN;
-				if (!claim.activeStartedAt || !claim.activeFinishedAt || claim.accountedThrough !== claim.activeFinishedAt
+				const frozen = assignmentAttemptSchema.safeParse((claim.dispatchEnvelope as { assignment?: { assignmentAttempt?: unknown } } | undefined)?.assignment?.assignmentAttempt);
+				const native = frozen.success && output && ReporterHandler.retainedNativeResult(frozen.data, output, claim);
+				if (!native && (!claim.activeStartedAt || !claim.activeFinishedAt || claim.accountedThrough !== claim.activeFinishedAt
 					|| typeof output?.sandboxId !== 'string' || !output.sandboxId || closed.verified !== true
-					|| !Number.isFinite(completedAt) || completedAt < Date.parse(claim.activeFinishedAt) || completedAt > Date.parse(now))
+					|| !Number.isFinite(completedAt) || completedAt < Date.parse(claim.activeFinishedAt) || completedAt > Date.parse(now)))
 					throw new Error('Unresolved measured recovery requires the original closed clock and verified physical teardown.');
 			}
 			claim.status = 'unresolved'; claim.updatedAt = now;

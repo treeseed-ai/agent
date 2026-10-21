@@ -62,10 +62,16 @@ function closedMeasuredResult(claim: ProviderLocalSlotClaim, frozen: AssignmentA
 }
 
 function acknowledgesMeasuredCloseout(assignment: Record<string, unknown>, claim: ProviderLocalSlotClaim, frozen: AssignmentAttempt): boolean {
-  if (!['failed', 'cancelled', 'expired'].includes(textStatus(assignment.status)) || assignment.leaseState !== 'released'
-    || assignment.reservationId !== frozen.reservationId || assignment.assignmentResult != null || !claim.closeoutOutput) return false;
+  const completed = assignment.status === 'completed';
+  if (!['completed', 'failed', 'cancelled', 'expired'].includes(textStatus(assignment.status)) || assignment.leaseState !== 'released'
+    || assignment.reservationId !== frozen.reservationId || !claim.closeoutOutput) return false;
+  if (completed) {
+    const accepted = assignmentResultSchema.safeParse(assignment.assignmentResult);
+    if (!accepted.success || accepted.data.status !== 'completed'
+      || !isDeepStrictEqual(accepted.data, claim.closeoutOutput.assignmentResult)) return false;
+  } else if (assignment.assignmentResult != null) return false;
   const lifecycle = record(assignment.lifecycleOutput), { performance: _performance, ...acknowledged } = lifecycle;
-  // This never makes the original completed model response a canonical result.
+  // A successful result must already be canonical; recovery never promotes it.
   if (!Object.hasOwn(claim.closeoutOutput, 'completion') && acknowledged.completion === null) delete acknowledged.completion;
   if (!isDeepStrictEqual(acknowledged, claim.closeoutOutput)) return false;
   const parsed = closedMeasuredResult(claim, frozen);
@@ -74,7 +80,7 @@ function acknowledgesMeasuredCloseout(assignment: Record<string, unknown>, claim
   const performance = record(lifecycle.performance), actual = record(performance.actual);
   if (performance.assignmentId !== frozen.id || performance.teamId !== frozen.teamId || performance.projectId !== frozen.projectId
     || performance.workdayId !== frozen.workdayId || performance.capacityProviderId !== frozen.provider.providerId
-    || performance.disposition !== 'failed' || actual.attempts !== frozen.attempt) return false;
+    || performance.disposition !== (completed ? 'completed' : 'failed') || actual.attempts !== frozen.attempt) return false;
   const expected = { activeSeconds: Math.ceil(parsed.activeSeconds), elapsedSeconds: usage.elapsedSeconds,
     inputTokens: usage.modelInputTokens ?? 0, outputTokens: usage.modelOutputTokens ?? 0,
     cachedInputTokens: native.cachedInputTokens ?? 0, reasoningTokens: native.reasoningTokens ?? 0 };
@@ -170,7 +176,12 @@ export async function recoverProviderLocalLeases(input: { config: ProviderHostRu
       results.push({ claimId: claim.id, assignmentId: claim.assignmentId, status: 'released', observedStatus: status });
     } catch (error) {
       await store.recordFailure(claim.id, error instanceof Error ? error.message : String(error));
-      results.push({ claimId: claim.id, assignmentId: claim.assignmentId, status: 'retained', reason: 'control_plane_unavailable' });
+      const failure = record(error);
+      results.push({ claimId: claim.id, assignmentId: claim.assignmentId, status: 'retained', reason: 'control_plane_unavailable',
+        error: providerFailureSummary([{ type: 'error', message: error instanceof Error ? error.message : String(error) }],
+          [claim.leaseToken, connection.accessToken.accessToken]),
+        ...(Number.isSafeInteger(failure.status) && Number(failure.status) >= 0 && Number(failure.status) <= 599 ? { httpStatus: failure.status } : {}),
+        ...(typeof failure.code === 'string' && /^[a-z][a-z0-9_]{0,79}$/u.test(failure.code) ? { code: failure.code } : {}) });
     }
   }
   return results;

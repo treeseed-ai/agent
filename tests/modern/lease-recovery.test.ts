@@ -17,6 +17,18 @@ const connections = [{ connection: { id: 'connection' }, teamId: frozen.teamId, 
 vi.mock('../../src/provider/coordination/client.ts', () => ({ createProviderControlPlaneClient: vi.fn() }));
 
 describe('provider local lease recovery', () => {
+	it('retains recovery custody and exposes the bounded original failure without lease or membership secrets', async () => {
+		const failure = Object.assign(new Error('assignment read denied for lease-secret and member-secret'), { status: 403, code: 'provider_assignment_forbidden' });
+		vi.mocked(createProviderControlPlaneClient).mockReturnValue({ assignment: vi.fn().mockRejectedValue(failure) } as never);
+		const claim = { id: 'claim', connectionId: 'connection', assignmentId: frozen.id, leaseToken: 'lease-secret', dispatchEnvelope };
+		const store = { claimsForRecovery: vi.fn().mockResolvedValue([claim]), finalize: vi.fn(), recordFailure: vi.fn() };
+		const result = await recoverProviderLocalLeases({ config: {} as never, store: store as never,
+			connections: [{ ...connections[0], accessToken: { accessToken: 'member-secret' } }] as never });
+		expect(result[0]).toMatchObject({ status: 'retained', reason: 'control_plane_unavailable', httpStatus: 403, code: 'provider_assignment_forbidden' });
+		expect(result[0]?.error).toContain('assignment read denied');
+		expect(JSON.stringify(result)).not.toContain('lease-secret'); expect(JSON.stringify(result)).not.toContain('member-secret');
+		expect(store.finalize).not.toHaveBeenCalled(); expect(store.recordFailure).toHaveBeenCalledWith('claim', failure.message);
+	});
 	it('recovers the API leased record with its exact running attempt and original execution window while denying contradictory lifecycle authority', async () => {
 		const startedAt = frozen.createdAt, window = { startedAt, executionRef: { nodeId: frozen.nodeId,
 			nodeRevision: frozen.nodeRevision, graphRevision: frozen.graphRevision, attempt: frozen.attempt } };

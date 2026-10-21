@@ -168,7 +168,13 @@ export async function recoverProviderLocalLeases(input: { config: ProviderHostRu
         throw new Error('Synthesized recovery performance does not acknowledge measured usage custody.');
       }
       if (status === 'leased' || status === 'running') {
+        const measured = closedMeasuredResult(claim, frozen);
+        const usage = measured?.result.usage, native = record(usage?.native);
         const response = record(await client.returnAssignment(claim.assignmentId, { leaseToken: claim.leaseToken, runnerId: claim.runnerId,
+        ...(measured && usage ? { activeSeconds: Math.ceil(measured.activeSeconds), elapsedSeconds: usage.elapsedSeconds,
+          usage: { ...native, elapsedSeconds: native.elapsedSeconds ?? usage.elapsedSeconds,
+            ...(usage.modelInputTokens !== undefined ? { inputTokens: usage.modelInputTokens } : {}),
+            ...(usage.modelOutputTokens !== undefined ? { outputTokens: usage.modelOutputTokens } : {}) } } : {}),
         ...(claim.closeoutOutput ? { output: claim.closeoutOutput } : {}),
         code: claim.failureMessage ? 'provider_runtime_recovery' : 'provider_restart_recovery',
         reason: claim.failureMessage ? `Provider runtime failed before durable completion: ${providerFailureSummary([{ type: 'error', message: claim.failureMessage }], [claim.leaseToken, connection.accessToken.accessToken])}` : 'Provider restarted before durable completion.' }));

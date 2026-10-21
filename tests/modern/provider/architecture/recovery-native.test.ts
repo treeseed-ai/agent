@@ -93,6 +93,18 @@ async function recoveryFixture(measured = false, output?: () => Record<string, u
 // real durable local files. Upstream JSON and principal/token are INPUTS,
 // NOT native API settlement, independent authentication or remote cleanup.
 describe('document-wide native provider recovery boundary', () => {
+	it('returns the exact closed measured usage with a retained live lease instead of omitting required accounting', async () => {
+		const usage = { elapsedSeconds: 2, modelInputTokens: 5, modelOutputTokens: 3,
+			native: { activeSeconds: 1.1, elapsedSeconds: 1.2, cachedInputTokens: 2, reasoningTokens: 0 } };
+		const f = await recoveryFixture(true, () => ({ sandboxId: 'original-sandbox', teardown: { verified: true, completedAt: new Date().toISOString() },
+			assignmentResult: { schemaVersion: 'treeseed.assignment-result/v1', id: 'result', assignmentId: 'assignment-1', status: 'completed', summary: 'Original retained product', references: [], verification: [], diagnostics: [], usage, completedAt: new Date().toISOString() } }));
+		try {
+			expect((await f.run())[0]?.status).toBe('released');
+			expect(f.requests[1]?.body).toMatchObject({ activeSeconds: 2, elapsedSeconds: 2,
+				usage: { activeSeconds: 1.1, elapsedSeconds: 1.2, inputTokens: 5, outputTokens: 3, cachedInputTokens: 2, reasoningTokens: 0 } });
+			expect(await f.run()).toEqual([]); expect(f.requests).toHaveLength(2);
+		} finally { await f.close(); }
+	});
 	it('native recovery returns the exact started leased API record once and retains malformed execution-window authority without altering durable custody', async () => {
 		for (const valid of [true, false]) {
 			const f = await recoveryFixture(); try {

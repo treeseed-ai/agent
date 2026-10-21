@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { assignmentAttemptSchema } from '@treeseed/sdk/agent-capacity';
-import { capacityFixture } from './capacity-fixture.ts';
+import { capacityFixture } from '../capacity-fixture.ts';
 
 describe('native TreeDX handler recovery through durable local capacity', () => {
  it('retains original native closure and measured usage while releasing only its terminal concurrency once', async () => {
@@ -38,8 +38,8 @@ describe('native TreeDX handler recovery through durable local capacity', () => 
  });
 });
 
-import { ReporterHandler } from '../../../../src/kernel/handlers/reporter.ts';
-import { request } from '../../kernel/provider-kernel-fixture.ts';
+import { ReporterHandler } from '../../../../../src/kernel/handlers/reporter.ts';
+import { request } from '../../../kernel/provider-kernel-fixture.ts';
 
 it('recognizes the registered native handler for renamed agents and rejects foreign, model, guest, unclosed and ungranted evidence', () => {
  const source = assignmentAttemptSchema.parse(request().assignment.assignmentAttempt);

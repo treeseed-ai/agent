@@ -6,6 +6,7 @@ import { providerFailureSummary } from '../../sandbox/provider-failure.ts';
 import { assignmentAttemptSchema, assignmentResultSchema } from '@treeseed/sdk/agent-capacity';
 import { isDeepStrictEqual } from 'node:util';
 import type { AssignmentAttempt } from '@treeseed/sdk/agent-capacity';
+import { ReporterHandler } from '../../kernel/handlers/reporter.ts';
 
 function record(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -48,6 +49,8 @@ export function isUnresolvedUsageRecovery(observed: unknown, frozen: AssignmentA
  * the canonical cancelled/failed result remains unsuccessful. */
 function closedMeasuredResult(claim: ProviderLocalSlotClaim, frozen: AssignmentAttempt) {
   if (!claim.closeoutOutput) return null;
+  const nativeResult = ReporterHandler.retainedNativeResult(frozen, claim.closeoutOutput, claim);
+  if (nativeResult) return { result: nativeResult, activeSeconds: Number(nativeResult.usage.native!.activeSeconds) };
   const output = claim.closeoutOutput, teardown = record(output.teardown);
   const start = Date.parse(claim.activeStartedAt ?? ''), finish = Date.parse(claim.activeFinishedAt ?? ''), closed = Date.parse(String(teardown.completedAt ?? ''));
   if (!Number.isFinite(start) || !Number.isFinite(finish) || !Number.isFinite(closed) || start > finish || finish > closed || closed > Date.now()

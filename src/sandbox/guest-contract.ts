@@ -336,6 +336,19 @@ export function codexInteractiveTimeoutMs(durationSeconds: number) {
 	return Math.max(1_000, durationSeconds * 1_000 - 5_000);
 }
 
+export function codexInvocationTimerOptions(remainingMs: number, activity: string) {
+	if (typeof remainingMs !== 'number' || !Number.isFinite(remainingMs)) throw new Error('assignment_execution_clock_invalid');
+	if (remainingMs <= 0) throw new Error('assignment_execution_budget_exhausted');
+	const remainingSeconds = remainingMs / 1_000;
+	const idleTimeoutMs = activity === 'estimating' ? codexIdleTimeoutMs(remainingSeconds) : undefined;
+	const closeoutTimeoutMs = codexCloseoutTimeoutMs(remainingSeconds, activity);
+	return {
+		timeoutMs: codexInteractiveTimeoutMs(remainingSeconds),
+		...(idleTimeoutMs === undefined ? {} : { idleTimeoutMs }),
+		...(closeoutTimeoutMs === undefined ? {} : { closeoutTimeoutMs }),
+	};
+}
+
 export function requiresActivityCompletion(sourceMode: unknown) {
 	return sourceMode === 'work';
 }

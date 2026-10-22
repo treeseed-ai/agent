@@ -11,7 +11,7 @@ import { sandboxAssignmentSchema, sandboxResultSchema, sourceWorkspaceKeySchema,
 import { providerCredentialValues, providerFailureSummary, redactProviderDiagnostic, redactProviderEvents } from './provider-failure.ts';
 import { activityAllowsVerification, providerItemIdentity, scopeProviderEvent } from './guest-contract.ts';
 import { activityCompletionOutputSchema, validateActivityCompletion } from '../activity-completion.ts';
-import { completionFrontmatterSchema, completionOutputTargetVariants, promptFromContext, assertArchitectSourceCitation, assertTesterFailureEvidence, attachObservedTesterFailures, correctObservedTestFirstRedVerification, omitUnreplayableVerification, codexReasoningArguments, codexProjectInstructionArguments, codexInteractiveTimeoutMs, requiresActivityCompletion, record, text, providerToolName, codexToolInFlight, codexIdleTimeoutMs, codexCloseoutTimeoutMs, codexResumeIdleTimeoutMs } from './guest-contract.ts';
+import { completionFrontmatterSchema, completionOutputTargetVariants, promptFromContext, assertArchitectSourceCitation, assertTesterFailureEvidence, attachObservedTesterFailures, correctObservedTestFirstRedVerification, omitUnreplayableVerification, codexReasoningArguments, codexProjectInstructionArguments, codexInvocationTimerOptions, requiresActivityCompletion, record, text, providerToolName, codexToolInFlight, codexResumeIdleTimeoutMs } from './guest-contract.ts';
 import { planningSynthesisOutputSchema, assertPredecessorSynthesis } from '../kernel/handlers/planning-synthesis.ts';
 import { recoverPlanningSynthesis } from './planning-synthesis-recovery.ts';
 import { objectDigest, observeReportedActivityCommands, prepareReleaseReview, prepareNodeWorkspace } from './verification.ts';
@@ -320,13 +320,10 @@ export async function runSandboxGuest() {
 		...(relay ? { OPENAI_BASE_URL: relay.baseUrl, OPENAI_API_KEY: 'treeseed-assignment-relay' } : {}),
 		...(subscriptionProxy ? { HTTPS_PROXY: subscriptionProxy, https_proxy: subscriptionProxy } : {}), LANG: 'C.UTF-8' };
 		await progress('provider.starting');
-		const idleTimeoutMs = canonicalActivity === 'estimating' ? codexIdleTimeoutMs(assignment.resources.durationSeconds) : undefined;
-		const closeoutTimeoutMs = codexCloseoutTimeoutMs(assignment.resources.durationSeconds, canonicalActivity);
+		const invocationTimers = codexInvocationTimerOptions(getRemainingMs(), canonicalActivity);
 		const providerError = await execute('/usr/local/bin/codex', providerArguments, {
 			cwd: '/workspace/project', input: composedPrompt, env: providerEnvironment,
-			timeoutMs: codexInteractiveTimeoutMs(assignment.resources.durationSeconds),
-			...(idleTimeoutMs === undefined ? {} : { idleTimeoutMs }),
-			...(closeoutTimeoutMs === undefined ? {} : { closeoutTimeoutMs }),
+			...invocationTimers,
 			canInterrupt: () => Boolean(providerThreadId && timingTracker.firstToolSucceeded && !codexToolInFlight(events)),
 			onLine(line) { let event: Record<string, unknown>; try { event = record(JSON.parse(line)); } catch { event = { type: 'provider.event.invalid', digest: createHash('sha256').update(line).digest('hex') }; } event = scopeProviderEvent(event, 0);
 				providerThreadId ??= codexThreadId([event]);

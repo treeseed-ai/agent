@@ -1,8 +1,22 @@
-import { describe, expect, it } from 'vitest';
-import { codexCloseoutTimeoutMs, codexIdleTimeoutMs, codexResumeIdleTimeoutMs, codexToolInFlight } from '../../../src/sandbox/guest-contract.ts';
-import { run } from '../../../src/sandbox/process-runner.ts';
+import { describe, expect, it, vi } from 'vitest';
+import { codexCloseoutTimeoutMs, codexIdleTimeoutMs, codexInvocationTimerOptions, codexResumeIdleTimeoutMs, codexToolInFlight } from '../../../src/sandbox/guest-contract.ts';
+import { run, withinAssignmentBudget } from '../../../src/sandbox/process-runner.ts';
 
 describe('bounded Codex idle recovery', () => {
+	it('derives invocation timers from one productive remainder snapshot without subtracting startup twice', async () => {
+		const timers = codexInvocationTimerOptions(35_000, 'reviewing');
+		expect(timers).toEqual({ timeoutMs: 30_000, closeoutTimeoutMs: 5_000 });
+		const execute = vi.fn(async (_executable: string, _args: string[], options: { timeoutMs?: number; closeoutTimeoutMs?: number } = {}) => ({
+			stdout: JSON.stringify(options), stderr: '',
+		}));
+		const response = await withinAssignmentBudget(execute, () => 35_000)('codex', [], timers);
+		expect(JSON.parse(response.stdout)).toEqual(timers);
+		expect(execute).toHaveBeenCalledOnce();
+	});
+	it('rejects invalid and exhausted invocation remainders before a child can start', () => {
+		expect(() => codexInvocationTimerOptions(Number.NaN, 'reviewing')).toThrow('assignment_execution_clock_invalid');
+		expect(() => codexInvocationTimerOptions(0, 'reviewing')).toThrow('assignment_execution_budget_exhausted');
+	});
 	it('reserves safe closeout for planning acting reviewing and reporting without extending their budgets', () => {
 		for (const activity of ['planning', 'acting', 'reviewing', 'reporting']) {
 			expect(codexCloseoutTimeoutMs(180, activity)).toBe(135_000);

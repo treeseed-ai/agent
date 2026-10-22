@@ -72,6 +72,7 @@ describe('whole native provider polling arbitration boundary', () => {
 		const f = await arbitrationFixture(1, true), outcomes: Array<{ mode: string; cause: unknown }> = [];
 		try {
 			await f.store.snapshot(); const baseline = await f.bytes(), routes = structuredClone(f.routes);
+			expect(baseline).toBeNull();
 			const original = structuredClone(f.manifest), bytes = await readFile(f.config.manifestPath!);
 			const offers = await f.openOffers();
 			const first = row(await offers()); expect(f.routes).toEqual(routes); expect(await f.bytes()).toBe(baseline);
@@ -128,6 +129,7 @@ describe('whole native provider polling arbitration boundary', () => {
 		try {
 			await f.store.snapshot();
 			const baseline = await f.bytes(), routes = structuredClone(f.routes);
+			expect(baseline).toBeNull();
 			const original = structuredClone(f.manifest), bytes = await readFile(f.config.manifestPath!);
 			f.manifest.adapters[0]!.offers[0]!.offer.conformance[0]!.status = 'failed';
 			f.manifest.adapters[0]!.offers[0]!.offer.conformance[1]!.status = 'revoked';
@@ -188,6 +190,7 @@ describe('whole native provider polling arbitration boundary', () => {
 			const startup = f.openRun().then(run => ({ run }), (error: unknown) => ({ error }));
 			await f.store.snapshot();
 			const original = structuredClone(f.manifest), baseline = await f.bytes(), routes = structuredClone(f.routes);
+			expect(baseline).toBeNull();
 			const limits = structuredClone(f.manifest.adapters[0]!.nativeLimits), capability = f.manifest.adapters[0]!.offers[0]!.offer.capabilities[0]!.id;
 			const manifestBytes = await readFile(f.config.manifestPath!, 'utf8');
 			const limitsNode: unknown = parseDocument(manifestBytes).getIn(['adapters', 0, 'nativeLimits'], true);
@@ -393,6 +396,7 @@ describe('whole native provider polling arbitration boundary', () => {
 		try {
 			await f.store.snapshot();
 			const original = structuredClone(f.manifest), baseline = await f.bytes(), routes = structuredClone(f.routes);
+			expect(baseline).toBeNull();
 			for (const field of ['teamId', 'membershipId', 'providerId'] as const) {
 				const first = f.manifest.connections[0]!, second = f.manifest.connections[1]!;
 				second[field] = field === 'providerId' ? 'foreign-global-provider' : first[field];

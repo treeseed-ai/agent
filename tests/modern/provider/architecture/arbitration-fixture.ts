@@ -155,7 +155,12 @@ export async function arbitrationFixture(workers = 1, initializeInOwnedChild = f
 				await new Promise(resolve => setTimeout(resolve, 20)); await store.finishActiveExecution(claim.id);
 				await store.finalize(claim.id, 'isolated-local-history');
 			},
-			bytes: () => readFile(join(directory, 'runtime', 'capacity-state.json'), 'utf8'),
+			// Absence is distinct from empty bytes: read-only observations must not
+			// bootstrap persisted state merely to make a preservation assertion.
+			bytes: () => readFile(join(directory, 'runtime', 'capacity-state.json'), 'utf8').catch((error: NodeJS.ErrnoException) => {
+				if (error.code === 'ENOENT') return null;
+				throw error;
+			}),
 			async close() {
 				held = false; for (const resolve of releases) resolve(); releases.clear();
 				if (offerSession?.connected) offerSession.disconnect();

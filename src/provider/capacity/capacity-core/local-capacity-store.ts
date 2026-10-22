@@ -95,6 +95,24 @@ function accountActiveTime(state: ProviderLocalCapacityState, claim: ProviderLoc
 	claim.accountedThrough = new Date(Math.max(cursor, Date.parse(claim.activeStartedAt))).toISOString();
 }
 
+function projectState(state: ProviderLocalCapacityState, now: string) {
+	for (const claim of state.claims) accountActiveTime(state, claim, now);
+	const expired = state.claims.filter((claim) => !['recovery', 'unresolved'].includes(claim.status) && Date.parse(claim.expiresAt) <= Date.parse(now));
+	const expiredIds = new Set(expired.map((claim) => claim.id));
+	state.claims = state.claims.flatMap((claim) => {
+		if (!expiredIds.has(claim.id)) return [claim];
+		if (claim.status === 'polling') return [];
+		return [{ ...claim, status: 'recovery' as const, updatedAt: now }];
+	});
+	for (const claim of expired) state.events.push({
+		id: randomUUID(), claimId: claim.id, connectionId: claim.connectionId,
+		...(claim.assignmentId ? { assignmentId: claim.assignmentId } : {}),
+		outcome: claim.status === 'polling' ? 'poll-expired' : 'lease-expired-recovery-required', recordedAt: now,
+	});
+	state.events = state.events.slice(-100);
+	return state;
+}
+
 function delay(milliseconds: number) {
 	return new Promise((resolveDelay) => setTimeout(resolveDelay, milliseconds));
 }
@@ -131,6 +149,12 @@ export class ProviderLocalCapacityStore {
 		}
 	}
 
+	private async observe() {
+		const state = await this.read();
+		const now = new Date().toISOString();
+		return { state: projectState(state, now), now };
+	}
+
 	private async lock() {
 		await mkdir(dirname(this.path), { recursive: true, mode: 0o700 });
 		for (let attempt = 0; attempt < 250; attempt += 1) {
@@ -152,20 +176,7 @@ export class ProviderLocalCapacityStore {
 		try {
 			const state = await this.read();
 			const now = new Date().toISOString();
-			for (const claim of state.claims) accountActiveTime(state, claim, now);
-			const expired = state.claims.filter((claim) => !['recovery', 'unresolved'].includes(claim.status) && Date.parse(claim.expiresAt) <= Date.parse(now));
-			const expiredIds = new Set(expired.map((claim) => claim.id));
-			state.claims = state.claims.flatMap((claim) => {
-				if (!expiredIds.has(claim.id)) return [claim];
-				if (claim.status === 'polling') return [];
-				return [{ ...claim, status: 'recovery' as const, updatedAt: now }];
-			});
-			for (const claim of expired) state.events.push({
-				id: randomUUID(), claimId: claim.id, connectionId: claim.connectionId,
-				...(claim.assignmentId ? { assignmentId: claim.assignmentId } : {}),
-				outcome: claim.status === 'polling' ? 'poll-expired' : 'lease-expired-recovery-required', recordedAt: now,
-			});
-			state.events = state.events.slice(-100);
+			projectState(state, now);
 			const result = await mutation(state, now);
 			state.revision += 1;
 			state.updatedAt = now;
@@ -389,36 +400,38 @@ export class ProviderLocalCapacityStore {
 	}
 
 	async snapshot() {
-		return this.update((state, now) => ({ revision: state.revision + 1,
+		const { state, now } = await this.observe();
+		return { revision: state.revision,
 			claims: state.claims.map(({ dispatchEnvelope: _dispatchEnvelope, closeoutOutput: _closeoutOutput, ...claim }) => ({ ...claim, leaseToken: claim.leaseToken ? '<redacted>' : undefined })),
 			events: state.events.map((event) => ({ ...event })),
 			activeSecondsByConnection: pollingSnapshot(state, now).activeSecondsByConnection,
-		}));
+		};
 	}
 
 	async activeTimeObservation(modelConfigurationId: string, capabilityIds: string[]) {
-		return this.update((state, now) => {
-			const day = now.slice(0, 10);
-			const usage = state.usage[day] ?? {};
-			const observation = (capabilityId?: string) => ({ day,
-				activeSeconds: usage[JSON.stringify(capabilityId ? [modelConfigurationId, capabilityId] : [modelConfigurationId])] ?? 0,
-				reservedSeconds: state.claims.filter(claim => claim.modelConfigurationId === modelConfigurationId
-					&& (!capabilityId || claim.capabilityId === capabilityId)).reduce((sum, claim) => sum + Math.max(0,
-					(claim.requestedSeconds ?? 0) - (claim.activeStartedAt ? (Date.parse(claim.accountedThrough ?? claim.activeStartedAt)
-						- Date.parse(claim.activeStartedAt)) / 1000 : 0)), 0),
-			});
-			return { observedAt: now, modelUsage: observation(), capabilityUsage: Object.fromEntries(capabilityIds.map(id => [id, observation(id)])) };
+		const { state, now } = await this.observe();
+		const day = now.slice(0, 10);
+		const usage = state.usage[day] ?? {};
+		const observation = (capabilityId?: string) => ({ day,
+			activeSeconds: usage[JSON.stringify(capabilityId ? [modelConfigurationId, capabilityId] : [modelConfigurationId])] ?? 0,
+			reservedSeconds: state.claims.filter(claim => claim.modelConfigurationId === modelConfigurationId
+				&& (!capabilityId || claim.capabilityId === capabilityId)).reduce((sum, claim) => sum + Math.max(0,
+				(claim.requestedSeconds ?? 0) - (claim.activeStartedAt ? (Date.parse(claim.accountedThrough ?? claim.activeStartedAt)
+					- Date.parse(claim.activeStartedAt)) / 1000 : 0)), 0),
 		});
+		return { observedAt: now, modelUsage: observation(), capabilityUsage: Object.fromEntries(capabilityIds.map(id => [id, observation(id)])) };
 	}
 
 	async claimsForRecovery(includeRunning = true) {
-		return this.update((state) => state.claims.filter((claim) => claim.status === 'recovery'
+		const { state } = await this.observe();
+		return state.claims.filter((claim) => claim.status === 'recovery'
 			|| (includeRunning && claim.status === 'ready')
-			|| (includeRunning && claim.status === 'running')).map((claim) => ({ ...claim })));
+			|| (includeRunning && claim.status === 'running')).map((claim) => ({ ...claim }));
 	}
 
 	async session(connectionId: string) {
-		return this.update((state) => state.sessions.find((session) => session.connectionId === connectionId) ?? null);
+		const { state } = await this.observe();
+		return state.sessions.find((session) => session.connectionId === connectionId) ?? null;
 	}
 
 	async saveSession(connectionId: string, session: { id: string; sequence: number }) {
@@ -434,7 +447,8 @@ export class ProviderLocalCapacityStore {
 	}
 
 	async token(connectionId: string) {
-		return this.update((state) => state.tokens.find((entry) => entry.connectionId === connectionId)?.token ?? null);
+		const { state } = await this.observe();
+		return state.tokens.find((entry) => entry.connectionId === connectionId)?.token ?? null;
 	}
 
 	async saveToken(connectionId: string, token: ProviderAccessTokenIssue) {
@@ -465,6 +479,7 @@ export class ProviderLocalCapacityStore {
 	}
 
 	async schedulableConnections() {
-		return this.update((state) => state.connections.filter((entry) => entry.schedulable).map((entry) => entry.connectionId).sort());
+		const { state } = await this.observe();
+		return state.connections.filter((entry) => entry.schedulable).map((entry) => entry.connectionId).sort();
 	}
 }

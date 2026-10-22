@@ -430,7 +430,7 @@ describe('document-wide native provider capacity custody', () => {
 	it('fails closed on malformed persisted financial authority without resetting history and retries only after restoring original isolated bytes', async () => {
 		const f = await capacityFixture();
 		try {
-			await f.store.snapshot(); const original = await f.bytes();
+			await f.store.setConnectionStatus('original', false); const original = await f.bytes();
 			const mutations = ['{', JSON.stringify({ ...JSON.parse(original), usage: { '2026-10-03': { '["model"]': -1 } } }),
 				JSON.stringify({ ...JSON.parse(original), claims: null })];
 			const outcomes = [];

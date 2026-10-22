@@ -77,6 +77,9 @@ function accountActiveTime(state: ProviderLocalCapacityState, claim: ProviderLoc
 		const start = clock(claim.activeStartedAt), end = clock(claim.activeFinishedAt ?? now), through = clock(claim.accountedThrough ?? claim.activeStartedAt);
 		if (start > end || end > observed || through < start || through > end) throw new Error('Provider-local active-time chronology is invalid.');
 	} else if (claim.activeFinishedAt !== undefined || claim.accountedThrough !== undefined) throw new Error('Provider-local active-time start is missing.');
+	// Interrupted execution without its original finish clock is unknown usage.
+	// Preserve the prior observation and reservation; idle recovery is not work.
+	if (!claim.activeFinishedAt && (claim.status === 'recovery' || claim.status === 'unresolved')) return;
 	if (!claim.activeStartedAt || !claim.modelConfigurationId || !claim.capabilityId) return;
 	let cursor = Date.parse(claim.accountedThrough ?? claim.activeStartedAt);
 	const end = Date.parse(claim.activeFinishedAt ?? now);

@@ -110,6 +110,9 @@ export async function microvmBroker(configure?: (manifest:CapacityProviderManife
 		const config: ProviderHostRuntimeConfig = { dataDir: fixture.directory, manifestPath: join(fixture.directory, 'manifest.yaml'), environment: 'local',
 			maxConcurrentRunners: 1, maxConcurrentWorkdays: 1, budgetFile: null, dailyAgentSecondsLimit: null, monthlyAgentSecondsLimit: null, env: {}, redactedEnv: {} };
 		const executor = await createMicrovmExecutor(config, manifest, adapter), input = executionRequest(), createdAt = new Date().toISOString();
+		// Direct executor tests supply the application-prepared request; the
+		// separate Kernel transport regression proves the real handler handoff.
+		input.modelInvocation = { prompt: 'Execute only the configured native broker test scope.', context: [] };
 		const attempt = assignmentAttemptSchema.parse({ ...assignmentAttemptSchema.parse(input.assignment.assignmentAttempt), createdAt,
 			deadline: new Date(Date.parse(createdAt) + 30_000).toISOString(), workspace: { mode: 'read-only' }, contextRefs: [],
 			grant: { contentRead: [], contentWrite: [], sourceRead: [], sourceWrite: [], tools: [] },

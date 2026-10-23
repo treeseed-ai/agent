@@ -45,7 +45,8 @@ abstract class ModelHandler implements Handler {
 	abstract readonly id: string;
 	async run(context: AssignmentContext, runtime: AgentRuntime): Promise<AssignmentResult> {
 		if (context.assignment.effectiveProfile.activity === 'estimating') return this.estimate(context, runtime);
-		return context.assignment.workspace.mode === 'treedx' ? this.content(context, runtime) : this.source(context, runtime);
+		return context.assignment.effectiveProfile.activity === 'chat' || context.assignment.workspace.mode === 'treedx'
+			? this.content(context, runtime) : this.source(context, runtime);
 	}
 
 	protected async invoke(context: AssignmentContext, runtime: AgentRuntime) {

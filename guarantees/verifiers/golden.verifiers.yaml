@@ -3130,7 +3130,7 @@ verifiers:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/execution/timing/time-budget-discipline.test.ts
-    testName: "retains ongoing time discipline for independently verified Git work"
+    testName: "keeps instruction authority in the configured profile for Git work"
   agent.golden.measured-time-discipline:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

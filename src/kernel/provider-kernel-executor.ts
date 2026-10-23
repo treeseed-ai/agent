@@ -132,7 +132,7 @@ export async function executeKernelAssignment(input: {
 	let predecessorResults: AssignmentResult[];
 	let predecessorAttempts: AssignmentAttempt[];
 	const preparationStarted = performance.now();
-	let context: AssignmentContext;
+	let context: AssignmentContext & { predecessorAttempts?: AssignmentAttempt[] };
 	try { predecessorResults = predecessorValues.map((value) => assignmentResultSchema.parse(value));
 		const predecessorAttemptValues = Array.isArray(record(visible.workspaceContext).predecessorAttempts)
 			? record(visible.workspaceContext).predecessorAttempts as unknown[] : [];

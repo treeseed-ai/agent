@@ -94,7 +94,7 @@ describe('selected project runtime handler through owning provider Kernel', () =
 		const f = await portableKernel(); try {
 			const handler = new CompiledProjectHandler(); f.attempt.effectiveProfile.handler = handler.id;
 			f.attempt.effectiveProfile.handlerOrigin = 'project-runtime'; const commit = await f.candidate(), before = structuredClone(f.input.assignment);
-			const result = await f.run([handler]); expect(result.status).toBe('completed'); expect(handler.observed).toHaveLength(1);
+			const result = await f.run([handler]); expect(result.status, JSON.stringify(result)).toBe('completed'); expect(handler.observed).toHaveLength(1);
 			expect(f.requests).toHaveLength(1); expect(f.git('rev-parse', 'HEAD')).toBe(commit); expect(f.git('rev-parse', 'fixture-base')).toBe(f.base);
 			expect(f.input.assignment).toEqual(before);
 		} finally { await f.close(); }

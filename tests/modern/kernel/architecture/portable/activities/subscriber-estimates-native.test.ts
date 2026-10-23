@@ -13,13 +13,14 @@ import { timingAwareness } from '../../../provider-kernel-fixture.ts';
 // API admission, canonical proposal integration or physical isolation evidence.
 it('publishes each subscriber contribution from a blank group draft through all model handlers and denies a forged attempt before writing', async () => {
 	for (const handler of ['writer', 'actor', 'estimate', 'reviewer', 'releaser']) {
-		for (const forged of [true, false]) {
+		for (const owner of ['own', 'shared']) for (const forged of [true, false]) {
 			const f = await portableKernel();
 			let boundary: Awaited<ReturnType<typeof contextBoundary>> | undefined;
 			try {
 				const repository = 'native-estimate-library', path = 'proposals/prepared-workload.mdx';
 				const body = 'Document, reproduce and repair the prepared workload request handoff.';
-				const proposal = { schemaVersion: 'treeseed.proposal/v2', id: 'prepared-workload', projectId: f.attempt.projectId,
+				const projectId = owner === 'own' ? f.attempt.projectId : 'portfolio-owner';
+				const proposal = { schemaVersion: 'treeseed.proposal/v2', id: 'prepared-workload', projectId,
 					groupIds: ['provider-runtime'], title: 'Repair prepared workload inputs', status: 'discussing', request: body,
 					summary: 'Each group subscriber contributes real portfolio work.' };
 				const bytes = `---\n${stringify(proposal)}---\n\n${body}\n`;
@@ -47,7 +48,7 @@ it('publishes each subscriber contribution from a blank group draft through all 
 				f.input.assignment = { ...f.input.assignment, assignmentAttempt: f.attempt,
 					workspaceContext: { assignmentAttempt: f.attempt, predecessorResults: [] } };
 				boundary = await contextBoundary(attempt.projectId, repository, {});
-				boundary.facade = { ...boundary.facade, workspaceId: 'own-estimate', readRepositories: [{ projectId: attempt.projectId,
+				boundary.facade = { ...boundary.facade, workspaceId: 'own-estimate', readRepositories: [{ projectId,
 					projectSlug: 'agent', repositoryId: repository, baseRef: commit, allowedPaths: ['proposals'], allowedModels: ['proposal'], source: 'same-team' }] };
 				f.input.treeDx = boundary.facade;
 				let candidate = '', writes = 0;
@@ -86,7 +87,7 @@ it('publishes each subscriber contribution from a blank group draft through all 
 					expect(f.git('rev-parse', `${candidate}^`)).toBe(commit);
 					expect(read(candidate).frontmatter).toEqual({ ...proposal, executionPlan: { workItems: [work] } });
 					expect(assignmentResultSchema.parse(result.outputs?.assignmentResult).references).toEqual([
-						{ kind: 'treedx', projectId: attempt.projectId, repository, path, commit: candidate, workspaceId: 'own-estimate' }]);
+						{ kind: 'treedx', projectId, repository, path, commit: candidate, workspaceId: 'own-estimate' }]);
 				}
 			} finally { await boundary?.close(); await f.close(); }
 		}

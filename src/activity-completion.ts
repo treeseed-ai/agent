@@ -1,4 +1,5 @@
-import { describeContentFrontmatterJsonSchema } from '@treeseed/sdk/content-validation';
+import { describeContentFrontmatterJsonSchema, validatePortableContentData } from '@treeseed/sdk/content-validation';
+import { isDeepStrictEqual } from 'node:util';
 
 type JsonRecord = Record<string, unknown>;
 const record = (value: unknown): JsonRecord => value && typeof value === 'object' && !Array.isArray(value) ? value as JsonRecord : {};
@@ -16,7 +17,7 @@ const fixedSchema = (value: unknown): JsonRecord => {
 	return { type: typeof value, const: value };
 };
 
-/** One class-owned estimate scope, shared by generation constraints and kernel validation. */
+/** Retained V1 authority only. Current group contributions never select a class. */
 export function estimateMutableField(item: JsonRecord, agentClass: string) {
 	return agentClass === 'reviewer'
 		? item.review === 'required' ? 'reviewEstimate' : undefined
@@ -33,8 +34,27 @@ export function assignmentProposalSource(context: JsonRecord): JsonRecord {
 	return proposal;
 }
 
-export function estimateProposalOutputSchema(proposal: JsonRecord, agentClass: string, workItemId?: string): JsonRecord {
-	const schema = describeContentFrontmatterJsonSchema('proposal');
+function estimateAuthority(proposal: JsonRecord, assignment: JsonRecord): JsonRecord {
+	if (!text(assignment.id) || !Number.isSafeInteger(assignment.attempt) || Number(assignment.attempt) < 1
+		|| record(assignment.effectiveProfile).activity !== 'estimating' || record(assignment.sourceRef).model !== 'proposal'
+		|| record(assignment.sourceRef).id !== proposal.id) throw new Error('estimate_assignment_authority_required');
+	return { store: 'postgresql', model: 'assignment-attempt', id: assignment.id, revision: assignment.attempt };
+}
+
+export function estimateProposalOutputSchema(proposal: JsonRecord, assignment: JsonRecord): JsonRecord {
+	const schema = describeContentFrontmatterJsonSchema('proposal', text(proposal.schemaVersion) || 'treeseed.proposal/v1');
+	if (proposal.schemaVersion === 'treeseed.proposal/v2') {
+		const reference = estimateAuthority(proposal, assignment);
+		const plan = record((record(record(schema.properties).executionPlan).anyOf as unknown[])[0]);
+		const items = record(record(plan.properties).workItems), item = record(items.items);
+		return { type: 'object', additionalProperties: false, required: ['executionPlan'], properties: {
+			executionPlan: { type: 'object', additionalProperties: false, required: ['workItems'], properties: {
+				workItems: { ...items, minItems: 1, items: { ...item,
+					properties: { ...record(item.properties), estimateRef: fixedSchema(reference) } } },
+			} },
+		} };
+	}
+	const agentClass = text(assignment.agentClass), workItemId = text(assignment.workItemId);
 	const plan = record(proposal.executionPlan), items = plan.workItems;
 	if (!Array.isArray(items) || !items.some(item => estimateMutableField(record(item), agentClass))) {
 		throw new Error('estimate_work_item_scope_missing');
@@ -59,6 +79,23 @@ export function estimateProposalOutputSchema(proposal: JsonRecord, agentClass: s
 			workItems: { type: 'array', minItems: owned.length, maxItems: owned.length, items: { anyOf: owned } },
 		} },
 	} };
+}
+
+/** Assemble a private candidate; canonical peer ownership is checked by the backend. */
+export function mergeSubscriberEstimateOutput(proposal: JsonRecord, output: JsonRecord, assignment: JsonRecord): JsonRecord {
+	if (proposal.schemaVersion !== 'treeseed.proposal/v2') throw new Error('estimate_current_group_proposal_required');
+	const reference = estimateAuthority(proposal, assignment), plan = record(output.executionPlan), items = plan.workItems;
+	if (Object.keys(output).some(key => key !== 'executionPlan') || Object.keys(plan).some(key => key !== 'workItems')
+		|| !Array.isArray(items) || !items.length) throw new Error('estimate_proposal_patch_invalid');
+	const owned = items.map(record), ids = new Set(owned.map(item => text(item.id)));
+	if (ids.size !== owned.length || ids.has('') || owned.some(item => !isDeepStrictEqual(item.estimateRef, reference))) {
+		throw new Error('estimate_proposal_patch_authority_invalid');
+	}
+	const frozenPlan = record(proposal.executionPlan), frozenItems = Array.isArray(frozenPlan.workItems) ? frozenPlan.workItems.map(record) : [];
+	const merged = { ...proposal, executionPlan: { ...frozenPlan,
+		workItems: [...frozenItems.filter(item => !ids.has(text(item.id))), ...owned].sort((a, b) => text(a.id).localeCompare(text(b.id))) } };
+	if (!validatePortableContentData('proposal', merged).ok) throw new Error('estimate_proposal_patch_invalid');
+	return merged;
 }
 const omitTransportNulls = (value: unknown): unknown => Array.isArray(value) ? value.map(omitTransportNulls)
 	: value && typeof value === 'object' ? Object.fromEntries(Object.entries(value as JsonRecord)

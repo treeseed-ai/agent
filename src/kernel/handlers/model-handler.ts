@@ -3,7 +3,7 @@ import { isDeepStrictEqual } from 'node:util';
 import type { AssignmentContext, AssignmentReference, AssignmentResult } from '@treeseed/sdk/agent-capacity';
 import type { AgentRuntime, Handler } from '../contracts.ts';
 import { prepareTreeDxContent } from '../treedx-content-commit.ts';
-import { estimateMutableField, assignmentProposalSource } from '../../activity-completion.ts';
+import { estimateMutableField, assignmentProposalSource, mergeSubscriberEstimateOutput } from '../../activity-completion.ts';
 import { assertPredecessorSynthesis } from './planning-synthesis.ts';
 import { promptFromContext } from './model-workload-contract.ts';
 
@@ -147,6 +147,12 @@ abstract class ModelHandler implements Handler {
 		const output = model.activityCompletion?.contentOutput;
 		if (!output || output.model !== 'proposal') throw new Error('estimate_proposal_output_required');
 		const base = assignmentProposalSource({ assignment: context.assignment, context: context.context });
+		if (base.schemaVersion === 'treeseed.proposal/v2') {
+			const merged = mergeSubscriberEstimateOutput(base, output.frontmatter, context.assignment);
+			const reference = await commitOne(runtime, target, { body: output.body, frontmatter: merged });
+			const result = this.result(context, runtime, model.text, [reference], model.timingAwareness, model.usage);
+			return { ...result, verification: model.verification ?? [] };
+		}
 		const plan = base.executionPlan as { workItems?: Record<string, unknown>[] } | undefined;
 		const patches = (output.frontmatter.executionPlan as { workItems?: Record<string, unknown>[] } | undefined)?.workItems;
 		if (!Array.isArray(plan?.workItems) || !Array.isArray(patches)) throw new Error('estimate_proposal_patch_invalid');

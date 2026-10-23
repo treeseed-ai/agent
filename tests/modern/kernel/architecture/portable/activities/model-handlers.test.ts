@@ -40,6 +40,30 @@ function input(activity: typeof activities[number], handler: string) {
 }
 
 describe('nondeterministic handlers support all configured activities', () => {
+	it('commits each group subscriber own V2 contribution through every configured model handler and retains peer scopes', async () => {
+		for (const Handler of handlers) {
+			const handler = new Handler(), { context, boundary } = input('estimating', handler.id), assignment = context.assignment;
+			delete assignment.workItemId;
+			const proposal = { schemaVersion: 'treeseed.proposal/v2', id: assignment.sourceRef.id, projectId: assignment.projectId,
+				groupIds: ['provider-runtime'], title: 'Repair prepared workload inputs', status: 'discussing',
+				request: 'Document, reproduce and repair the actual request handoff.', summary: 'Own source contributions from the whole subscribed team.' };
+			const estimate = { expectedSeconds: 120, maximumSeconds: 240, rationale: 'Controlled author estimate, not measured model work.' };
+			const work = { id: 'document-handoff', activity: 'acting', workspace: 'read-only', review: 'required', maximumReviewCycles: 2,
+				objective: 'Document the prepared handler request boundary.', estimate, reviewEstimate: estimate,
+				estimateRef: { store: 'postgresql', model: 'assignment-attempt', id: assignment.id, revision: assignment.attempt },
+				dependsOn: [], requestedPermissions: { content: { read: ['proposal'], write: [] }, tools: [] }, acceptanceCriteria: ['Describe the real request contract.'] };
+			const peer = { ...work, id: 'reproduce-handoff', estimateRef: { ...work.estimateRef, id: 'peer-estimate' } };
+			context.context[0]!.value = { frontmatter: { ...proposal, executionPlan: { workItems: [peer] } } };
+			vi.mocked(boundary.invokeModel).mockResolvedValue({ text: 'Own documented estimate.', timingAwareness: assignmentTimingAwarenessReceiptSchema.parse(timingAwareness), usage: { elapsedSeconds: 1 },
+				activityCompletion: { summary: 'Own documented estimate.', reviewDisposition: null,
+					contentOutput: { model: 'proposal', body: 'Existing proposal request.', frontmatter: { executionPlan: { workItems: [work] } } } } });
+			const before = structuredClone(context), result = await handler.run(context, boundary);
+			expect(result.status, handler.id).toBe('completed'); expect(boundary.commitTreeDx).toHaveBeenCalledOnce();
+			const write = vi.mocked(boundary.commitTreeDx).mock.calls[0]![0].writes[0]!;
+			expect(write.value).toEqual({ body: 'Existing proposal request.', frontmatter: { ...proposal, executionPlan: { workItems: [work, peer] } } });
+			expect(result.references).toHaveLength(1); expect(context).toEqual(before);
+		}
+	});
 	it('executes all six activities with every model handler without handler-name filtering', async () => {
 		for (const Handler of handlers) for (const activity of activities) {
 			const handler = new Handler(), { context, boundary } = input(activity, handler.id);

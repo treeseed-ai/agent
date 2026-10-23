@@ -34,9 +34,14 @@ export async function commitTreeDxContent(input: {
 	writes: Array<{ target: ExactEntityReference; value: unknown }>;
 }): Promise<AssignmentReference[]> {
 	const workspace = input.attempt.workspace;
-	if (workspace.mode !== 'treedx' || !input.treeDx.workspaceId || !input.treeDx.repositoryId || input.writes.length === 0) {
+	if (workspace.mode !== 'treedx' || !input.treeDx.workspaceId || !input.treeDx.repositoryId || input.writes.length === 0
+		|| input.treeDx.workspaceId !== workspace.workspaceId || input.treeDx.repositoryId !== workspace.repository) {
 		throw new Error('assignment_grant_denied:treedx.write');
 	}
+	const owners = new Set(input.treeDx.readRepositories?.filter(candidate => candidate.repositoryId === workspace.repository)
+		.map(candidate => candidate.projectId.trim()));
+	if (owners.size > 1 || owners.has('')) throw new Error('treedx_content_project_mismatch');
+	const repositoryProjectId = [...owners][0] ?? input.attempt.projectId;
 	const writes = input.writes.map(({ target: rawTarget, value: rawValue }) => {
 		const target = exactEntityReferenceSchema.parse(rawTarget);
 		if (target.store !== 'treedx' || target.repository !== workspace.repository
@@ -44,13 +49,16 @@ export async function commitTreeDxContent(input: {
 			throw new Error('assignment_grant_denied:treedx.write');
 		}
 		const value = record(rawValue), frontmatter = record(value.frontmatter ?? value);
-		if (frontmatter.projectId !== input.attempt.projectId) throw new Error('treedx_content_project_mismatch');
+		// A project may write its own Note in the shared team library. An exact
+		// cross-project content grant may also preserve the library owner's source.
+		if (frontmatter.projectId !== input.attempt.projectId && frontmatter.projectId !== repositoryProjectId) {
+			throw new Error('treedx_content_project_mismatch');
+		}
 		const { content } = prepareTreeDxContent(target, rawValue);
 		return { target, content };
 	});
 	if (new Set(writes.map(({ target }) => target.path)).size !== writes.length) throw new Error('treedx_content_duplicate_path');
 	const operationKey = createHash('sha256').update(`${input.attempt.id}\n${writes.map(({ target, content }) => `${key(target)}\n${content}`).join('\n')}`).digest('hex');
-	const repositoryProjectId = input.treeDx.readRepositories?.find((candidate) => candidate.repositoryId === input.treeDx.repositoryId)?.projectId ?? input.attempt.projectId;
 	const path = { projectId: repositoryProjectId, workspaceId: input.treeDx.workspaceId };
 	await input.treeDx.invoke('treedx.workspaces.files.batch', { path, body: { files: writes.map(({ target, content }) => ({ path: target.path, content })) } },
 		{ idempotencyKey: `assignment-content-write:${operationKey}` });

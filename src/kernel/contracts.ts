@@ -54,6 +54,8 @@ export interface AgentRuntime {
 	runVerification(request: VerificationRequest): Promise<VerificationResult>;
 	commitTreeDx(request: TreeDxCommitRequest): Promise<AssignmentReference[]>;
 	commitSource(request: SourceCommitRequest): Promise<AssignmentReference>;
+	/** Return the broker-verified frozen candidate for an unchanged, reviewed rework. */
+	retainSource?(): Promise<AssignmentReference>;
 	now(): string;
 }
 

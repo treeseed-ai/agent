@@ -46,7 +46,7 @@ export class AgentKernel {
 				|| productiveDeadline !== null && performance.now() >= productiveDeadline) throw Object.assign(
 				new Error('assignment_timeout'), { code: 'assignment_timeout' });
 		};
-		const runtime = enforceAssignmentGrant(request.runtime, assignment.grant, assignment.workspace, assertAuthority);
+		const runtime = enforceAssignmentGrant(request.runtime, assignment.grant, assignment.workspace, assertAuthority, context);
 		const result = await this.runBounded(
 			Promise.resolve().then(() => handler.run(context, runtime)),
 			assignment.limits.maximumSeconds,

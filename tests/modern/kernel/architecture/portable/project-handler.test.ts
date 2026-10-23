@@ -99,6 +99,51 @@ describe('selected project runtime handler through owning provider Kernel', () =
 			expect(f.input.assignment).toEqual(before);
 		} finally { await f.close(); }
 	});
+	it('retains only the broker verified frozen candidate bound to an immutable predecessor result after result only rework', async () => {
+		const f = await portableKernel(); try {
+			const candidate = { kind: 'git' as const, repository: 'treeseed-ai/sdk', commit: f.base,
+				branch: f.attempt.workspace.mode === 'git' ? f.attempt.workspace.branch : '' };
+			const predecessor = assignmentResultSchema.parse({ schemaVersion: 'treeseed.assignment-result/v1',
+				id: 'prior-actor-result', assignmentId: 'prior-actor-assignment', status: 'completed',
+				summary: 'Original Actor result retained as immutable predecessor evidence.', references: [candidate],
+				verification: [], diagnostics: [], usage: { elapsedSeconds: 1 }, completedAt: '2026-09-13T12:00:01.000Z' });
+			f.attempt.predecessorResultIds = [predecessor.id];
+			f.input.assignment.workspaceContext = { assignmentAttempt: f.attempt, predecessorResults: [predecessor] };
+			f.setReply({ status: 'completed', summary: 'Reviewer finding addressed in amended result.',
+				usage: [{ activeSeconds: 1, elapsedSeconds: 2, inputTokens: 7 }], outputs: { timingAwareness,
+					contentReferences: [{ kind: 'git', repository: candidate.repository, commit: 'c'.repeat(40), branch: candidate.branch }],
+					changedPaths: [], sourceReference: candidate } });
+			const result = await f.run();
+			expect(result.status).toBe('completed');
+			expect(assignmentResultSchema.parse(result.outputs?.assignmentResult).references).toEqual([candidate]);
+			expect(f.requests).toHaveLength(1); expect(f.git('rev-parse', 'HEAD')).toBe(f.base);
+		} finally { await f.close(); }
+	});
+	it('denies a broker candidate moved beyond the frozen base even when a predecessor is bound', async () => {
+		const f = await portableKernel(); try {
+			const predecessor = assignmentResultSchema.parse({ schemaVersion: 'treeseed.assignment-result/v1',
+				id: 'prior-actor-result', assignmentId: 'prior-actor-assignment', status: 'completed',
+				summary: 'Original Actor result retained as immutable predecessor evidence.',
+				references: [{ kind: 'git', repository: 'treeseed-ai/sdk', commit: f.base,
+					branch: f.attempt.workspace.mode === 'git' ? f.attempt.workspace.branch : '' }],
+				verification: [], diagnostics: [], usage: { elapsedSeconds: 1 }, completedAt: '2026-09-13T12:00:01.000Z' });
+			f.attempt.predecessorResultIds = [predecessor.id];
+			f.input.assignment.workspaceContext = { assignmentAttempt: f.attempt, predecessorResults: [predecessor] };
+			const moved = await f.candidate();
+			const reply = f.getReply(); reply.outputs = { ...reply.outputs, changedPaths: [] }; f.setReply(reply);
+			const result = await f.run(); expect(result.status).toBe('failed'); expect(f.git('rev-parse', 'HEAD')).toBe(moved);
+		} finally { await f.close(); }
+	});
+	it('denies result only publication without an exact predecessor candidate', async () => {
+		const f = await portableKernel(); try {
+			f.setReply({ status: 'completed', summary: 'Amended result with no retained source authority.',
+				usage: [{ activeSeconds: 1, elapsedSeconds: 2, inputTokens: 7 }], outputs: { timingAwareness,
+					changedPaths: [], sourceReference: { kind: 'git', repository: 'treeseed-ai/sdk', commit: f.base,
+						branch: f.attempt.workspace.mode === 'git' ? f.attempt.workspace.branch : '' } } });
+			const result = await f.run(); expect(result.status).toBe('failed');
+			expect(f.git('rev-parse', 'HEAD')).toBe(f.base);
+		} finally { await f.close(); }
+	});
 	it('denies missing duplicate and wrong-build compiled handlers before execution or source publication', async () => {
 		const results = [];
 		for (const mutation of ['missing', 'duplicate', 'build']) {

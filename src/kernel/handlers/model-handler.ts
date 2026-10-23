@@ -190,11 +190,18 @@ export class ActorHandler extends ModelHandler {
 	async run(context: AssignmentContext, runtime: AgentRuntime): Promise<AssignmentResult> {
 		if (context.assignment.workspace.mode === 'treedx') throw new Error('actor_source_workspace_required');
 		const model = await this.invoke(context, runtime);
-		const references: AssignmentReference[] = [...(model.references ?? [])];
-		if (context.assignment.workspace.mode === 'git') references.push(await runtime.commitSource({
-			message: `Complete ${context.assignment.sourceRef.model}/${context.assignment.sourceRef.id}`,
-			paths: model.changedPaths ?? [],
-		}));
+		const references: AssignmentReference[] = (model.references ?? []).filter((reference) => reference.kind !== 'git'
+			|| context.assignment.contextRefs.some((ref) => ref.store === 'git' && ref.repository === reference.repository
+				&& ref.commit === reference.commit && ref.path === reference.path && reference.branch === undefined));
+		if (context.assignment.workspace.mode === 'git') {
+			const paths = model.changedPaths ?? [];
+			if (paths.length === 0) {
+				if (!runtime.retainSource) throw new Error('assignment_retained_source_unavailable');
+				references.push(await runtime.retainSource());
+			} else references.push(await runtime.commitSource({
+				message: `Complete ${context.assignment.sourceRef.model}/${context.assignment.sourceRef.id}`, paths,
+			}));
+		}
 		const result = this.result(context, runtime, model.text, references, model.timingAwareness, model.usage);
 		return { ...result, verification: model.verification ?? [] };
 	}

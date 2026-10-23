@@ -1,4 +1,4 @@
-import { assignmentPathAllowed, type AssignmentAttempt, type ExactEntityReference } from '@treeseed/sdk/agent-capacity';
+import { assignmentPathAllowed, type AssignmentAttempt, type AssignmentContext, type AssignmentReference, type ExactEntityReference } from '@treeseed/sdk/agent-capacity';
 import type {
 	AgentRuntime,
 	ModelInvocationRequest,
@@ -19,7 +19,8 @@ export function assertAssignmentContextRead(ref: ExactEntityReference, grant: Pi
 }
 
 export function enforceAssignmentGrant(runtime: AgentRuntime, input: AssignmentAttempt['grant'],
-	workspace: { mode: string; writablePaths?: string[] }, assertAuthority: () => void): AgentRuntime {
+	workspace: { mode: string; writablePaths?: string[]; repository?: string; branch?: string; baseCommit?: string },
+	assertAuthority: () => void, context?: AssignmentContext): AgentRuntime {
 	const writable = new Set(input.contentWrite.map(referenceKey));
 	const tools = new Set(input.tools);
 	return {
@@ -49,6 +50,25 @@ export function enforceAssignmentGrant(runtime: AgentRuntime, input: AssignmentA
 			if (!input.sourceWrite.includes(repository) || request.paths.length === 0
 				|| request.paths.some((path) => !assignmentPathAllowed(path, paths))) throw new Error('assignment_grant_denied:source.path');
 			return runtime.commitSource(request);
+		},
+		retainSource: async (): Promise<AssignmentReference> => {
+			assertAuthority();
+			if (!context) throw new Error('assignment_retained_source_unbound');
+			const assignment = context.assignment;
+			const sourceWorkspace = assignment.workspace;
+			if (sourceWorkspace.mode !== 'git' || assignment.effectiveProfile.activity !== 'acting'
+				|| !tools.has('source.write') || !input.sourceWrite.includes(sourceWorkspace.repository)
+				|| !runtime.retainSource) throw new Error('assignment_grant_denied:source.path');
+			const priorCandidates = context.predecessorResults.filter(result => assignment.predecessorResultIds.includes(result.id))
+				.flatMap(result => result.references).filter((reference): reference is Extract<AssignmentReference, { kind: 'git' }> =>
+					reference.kind === 'git' && reference.repository === sourceWorkspace.repository && reference.commit === sourceWorkspace.baseCommit
+						&& reference.branch === sourceWorkspace.branch && reference.path === undefined);
+			if (priorCandidates.length !== 1) throw new Error('assignment_retained_source_unbound');
+			const actual = await runtime.retainSource();
+			assertAuthority();
+			if (actual.kind !== 'git' || actual.repository !== sourceWorkspace.repository || actual.commit !== sourceWorkspace.baseCommit
+				|| actual.branch !== sourceWorkspace.branch) throw new Error('assignment_retained_source_mismatch');
+			return actual;
 		},
 	};
 }

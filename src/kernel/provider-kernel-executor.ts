@@ -242,6 +242,10 @@ export async function executeKernelAssignment(input: {
 			if (!transport.result || attempt.data.workspace.mode !== 'git') throw new Error('source_transport_result_missing');
 			return gitReference(transport.result, attempt.data.workspace.repository);
 		},
+		retainSource: async () => {
+			if (!transport.result || attempt.data.workspace.mode !== 'git') throw new Error('source_transport_result_missing');
+			return gitReference(transport.result, attempt.data.workspace.repository);
+		},
 	};
 	const kernel = new AgentKernel(registry);
 	let result: AssignmentResult;

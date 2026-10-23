@@ -1,9 +1,10 @@
-import { assignmentContextSchema, assignmentResultSchema } from '@treeseed/sdk/agent-capacity';
+import { assignmentAttemptSchema, assignmentContextSchema, assignmentResultSchema } from '@treeseed/sdk/agent-capacity';
 import { assignmentPathAllowed } from '@treeseed/sdk/agent-capacity';
 import { enforceAssignmentGrant } from './granted-runtime.ts';
 import { HandlerRegistry } from './handler-registry.ts';
 import type { KernelAssignmentRequest } from './contracts.ts';
 import { assertPredecessorResultAuthority } from './materialize-context.ts';
+import { isDeepStrictEqual } from 'node:util';
 
 function encodedBytes(value: unknown): number {
 	return Buffer.byteLength(JSON.stringify(value), 'utf8');
@@ -22,7 +23,16 @@ export class AgentKernel {
 
 	async runAssignment(request: KernelAssignmentRequest) {
 		assertPredecessorResultAuthority(request.context.assignment, request.context.predecessorResults);
-		const context = assignmentContextSchema.parse(request.context);
+		const parsedAttempts = (request.context.predecessorAttempts ?? []).map(value => {
+			const parsed = assignmentAttemptSchema.parse(value);
+			if (!isDeepStrictEqual(parsed, value)) throw new Error('assignment_predecessor_attempt_invalid');
+			return parsed;
+		});
+		if (new Set(parsedAttempts.map(value => value.id)).size !== parsedAttempts.length
+			|| parsedAttempts.some(value => !request.context.predecessorResults.some(result => result.assignmentId === value.id))) {
+			throw new Error('assignment_predecessor_attempt_authority_mismatch');
+		}
+		const context = { ...assignmentContextSchema.parse(request.context), predecessorAttempts: parsedAttempts };
 		// The handler receives its own context, never the authority used by gates.
 		const assignment = structuredClone(context.assignment);
 		if (assignment.provider.runtimeBuild !== request.runtimeBuild) throw new Error('runtime_build_mismatch');

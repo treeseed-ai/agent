@@ -6,6 +6,7 @@ import {
 	assignmentTimingAwarenessReceiptSchema,
 	verificationRecordSchema,
 	type AssignmentReference,
+	type AssignmentAttempt,
 	type AssignmentResult,
 	type AssignmentContext,
 } from '@treeseed/sdk/agent-capacity';
@@ -129,16 +130,28 @@ export async function executeKernelAssignment(input: {
 	const predecessorValues = Array.isArray(record(visible.workspaceContext).predecessorResults)
 		? record(visible.workspaceContext).predecessorResults as unknown[] : [];
 	let predecessorResults: AssignmentResult[];
+	let predecessorAttempts: AssignmentAttempt[];
 	const preparationStarted = performance.now();
 	let context: AssignmentContext;
 	try { predecessorResults = predecessorValues.map((value) => assignmentResultSchema.parse(value));
-		context = assignmentContextSchema.parse(await materializeAssignmentContext({
+		const predecessorAttemptValues = Array.isArray(record(visible.workspaceContext).predecessorAttempts)
+			? record(visible.workspaceContext).predecessorAttempts as unknown[] : [];
+		predecessorAttempts = predecessorAttemptValues.map((value) => {
+			const parsed = assignmentAttemptSchema.parse(value);
+			if (!isDeepStrictEqual(parsed, value)) throw new Error('assignment_predecessor_attempt_invalid');
+			return parsed;
+		});
+		if (new Set(predecessorAttempts.map(value => value.id)).size !== predecessorAttempts.length
+			|| predecessorAttempts.some(value => !predecessorResults.some(result => result.assignmentId === value.id))) {
+			throw new Error('assignment_predecessor_attempt_authority_mismatch');
+		}
+		context = { ...assignmentContextSchema.parse(await materializeAssignmentContext({
 		attempt: attempt.data,
 		predecessorResults,
 		authorizedContext: Array.isArray(record(visible.workspaceContext).authorizedContext)
 			? record(visible.workspaceContext).authorizedContext as unknown[] : [],
 		treeDx: input.request.treeDx,
-	})); } catch (error) {
+		})), predecessorAttempts }; } catch (error) {
 		// Isolation has not been invoked: this closes an empty resource scope,
 		// not a claim that a Kata allocation was destroyed. After invocation only
 		// the executor's actual teardown receipt can attest resource closure.

@@ -1,5 +1,6 @@
 import type {
 	AssignmentContext,
+	AssignmentAttempt,
 	AssignmentReference,
 	AssignmentResult,
 	AssignmentTimingAwarenessReceipt,
@@ -65,7 +66,7 @@ export interface Handler {
 }
 
 export interface KernelAssignmentRequest {
-	context: AssignmentContext;
+	context: AssignmentContext & { predecessorAttempts?: AssignmentAttempt[] };
 	runtimeBuild: string;
 	runtime: AgentRuntime;
 	signal?: AbortSignal;

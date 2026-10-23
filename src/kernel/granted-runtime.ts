@@ -1,5 +1,6 @@
 import { assignmentPathAllowed, type AssignmentAttempt, type AssignmentContext, type AssignmentReference, type ExactEntityReference } from '@treeseed/sdk/agent-capacity';
 import type {
+	AssignmentAttempt,
 	AgentRuntime,
 	ModelInvocationRequest,
 	SourceCommitRequest,
@@ -59,7 +60,10 @@ export function enforceAssignmentGrant(runtime: AgentRuntime, input: AssignmentA
 			if (sourceWorkspace.mode !== 'git' || assignment.effectiveProfile.activity !== 'acting'
 				|| !tools.has('source.write') || !input.sourceWrite.includes(sourceWorkspace.repository)
 				|| !runtime.retainSource) throw new Error('assignment_grant_denied:source.path');
-			const priorCandidates = context.predecessorResults.filter(result => assignment.predecessorResultIds.includes(result.id))
+			const actorAssignments = (context as typeof context & { predecessorAttempts?: AssignmentAttempt[] }).predecessorAttempts ?? [];
+			const priorCandidates = context.predecessorResults.filter(result => assignment.predecessorResultIds.includes(result.id)
+				&& result.status === 'completed' && actorAssignments.some(prior => prior.id === result.assignmentId
+					&& prior.effectiveProfile.activity === 'acting' && prior.workspace.mode === 'git'))
 				.flatMap(result => result.references).filter((reference): reference is Extract<AssignmentReference, { kind: 'git' }> =>
 					reference.kind === 'git' && reference.repository === sourceWorkspace.repository && reference.commit === sourceWorkspace.baseCommit
 						&& reference.branch === sourceWorkspace.branch && reference.path === undefined);

@@ -27,8 +27,8 @@ describe('capacity-provider guarantee execution bindings', () => {
 		const inputs = JSON.parse(native.env.TREESEED_INSTALLED_OWNER_INPUTS);
         const agentSdk = inputs.find((value: { owner: string }) => value.owner === 'agent').buildSdk;
         expect(agentSdk).toEqual({ commit: 'f19cfabe70db9caa0d5888ca369609d4f56effa0', sha256: '272784b6865bc59301a4e4dff0171b172c31b340f89c17003c8b8398a7d37add' });
-        expect(workflow.jobs.verify.steps.some((step: { uses?: string }) =>
-            step.uses === `treeseed-ai/sdk/.github/actions/install-exact-sdk@${agentSdk.commit}`)).toBe(true);
+        expect(workflow.jobs.verify.steps.some((step: { uses?: string; env?: Record<string, string> }) =>
+            step.uses === `treeseed-ai/sdk/.github/actions/install-exact-sdk@${agentSdk.commit}` && step.env?.NODE_ENV === 'production')).toBe(true);
         expect(native.steps.filter((step: { with?: { path?: string } }) =>
             step.with?.path === `.treeseed/installed-owner-inputs/build-sdk-${agentSdk.commit}`).map((step: { with: unknown }) => step.with))
             .toEqual([{ 'github-token': '${{ github.token }}', repository: 'treeseed-ai/sdk', 'run-id': 39970985565,

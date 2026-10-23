@@ -1,6 +1,5 @@
 import { assignmentPathAllowed, type AssignmentAttempt, type AssignmentContext, type AssignmentReference, type ExactEntityReference } from '@treeseed/sdk/agent-capacity';
 import type {
-	AssignmentAttempt,
 	AgentRuntime,
 	ModelInvocationRequest,
 	SourceCommitRequest,

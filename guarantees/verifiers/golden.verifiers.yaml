@@ -2041,6 +2041,11 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/kernel/architecture/portable/activities/subscriber-estimates-native.test.ts
     testName: "publishes each subscriber contribution from a blank group draft through all model handlers and denies a forged attempt before writing"
+  agent.golden.content-workspace-custody:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/custody/content/treedx-commit-authority.test.ts
+    testName: "denies mismatched workspace repository or proposal-owner custody before any TreeDX write"
   agent.golden.architecture-portable-kernel-1:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

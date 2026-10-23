@@ -9,7 +9,7 @@ import { promptFromContext } from '../../../../src/sandbox/guest-contract.ts';
 const commit = 'a'.repeat(40), repositoryId = 'owner/package';
 const commands = ['npm run release:verify', 'npm pack', 'npm run standards:acceptance -- --archive package-1.0.0.tgz'];
 const context = () => ({ canonicalAssignmentContext: {
-	assignment: { predecessorResultIds: ['actor-result'], effectiveProfile: { activity: 'reviewing' },
+	assignment: { predecessorResultIds: ['actor-result'], requiredCapabilities: ['treeseed.engineering.release'], effectiveProfile: { activity: 'reviewing' },
 		acceptanceCriteria: ['Independently replay release, pack and archive checks.'], authorityRefs: [{ model: 'decision' }] },
 	predecessorResults: [{ id: 'actor-result', status: 'completed', references: [{ kind: 'git', repository: repositoryId, commit }],
 		verification: commands.map(command => ({ command, status: 'passed', exitCode: 0,
@@ -127,8 +127,12 @@ it('does not intercept other activities or ordinary content review', async () =>
 		const input = context(); input.canonicalAssignmentContext.assignment.effectiveProfile.activity = activity;
 		expect(await verification.prepareReleaseReview(input, [], executor())).toBeNull();
 	}
-	const input = context(); input.canonicalAssignmentContext.assignment.acceptanceCriteria = ['Inspect governed knowledge.'];
+	const input = context(); input.canonicalAssignmentContext.assignment.requiredCapabilities = [];
+	input.canonicalAssignmentContext.assignment.acceptanceCriteria = ['Run final validation at coordinator release gates.'];
 	expect(await verification.prepareReleaseReview(input, [], executor())).toBeNull();
+	const prompt = promptFromContext(input);
+	expect(prompt).not.toContain('CURRENT-ATTEMPT INDEPENDENT RELEASE VERIFICATION');
+	expect(prompt).not.toContain('tarball packed in this workspace');
 });
 
 it('gives the review model measured current-attempt evidence without asking it to repeat native release checks', async () => {

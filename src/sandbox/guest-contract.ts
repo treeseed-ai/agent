@@ -110,10 +110,10 @@ export function completionOutputTargetVariants(context: Record<string, unknown>)
 		});
 }
 
-export function isReleaseReview(assignment: Record<string, unknown>) {
+export function isReleaseReview(assignment: Record<string, unknown>, workItem?: Record<string, unknown>) {
+	const capabilities = Array.isArray(workItem?.requiredCapabilities) ? workItem.requiredCapabilities : assignment.requiredCapabilities;
 	return text(record(assignment.effectiveProfile).activity) === 'reviewing'
-		&& Array.isArray(assignment.acceptanceCriteria)
-		&& assignment.acceptanceCriteria.some(criterion => /\b(?:pack|release)\b/iu.test(text(criterion)));
+		&& Array.isArray(capabilities) && capabilities.some(capability => text(capability) === 'treeseed.engineering.release');
 }
 
 export function promptFromContext(context: Record<string, unknown>, reasoningEffort?: string, executionSeconds?: number,
@@ -154,7 +154,7 @@ export function promptFromContext(context: Record<string, unknown>, reasoningEff
 				truncated: summary.length > 600, references: result.references };
 		}) : predecessors;
 		const releasing = text(profile.handler) === 'releaser';
-		const reviewingRelease = isReleaseReview(assignment);
+		const reviewingRelease = isReleaseReview(assignment, workItem);
 		const targetPairs = completionOutputTargetVariants(context).map(({ model, frontmatter }) =>
 			`${model}/${text(record(record(frontmatter.properties).id).const)}`);
 		const proposalOutput = estimating

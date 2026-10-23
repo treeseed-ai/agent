@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { mkdtemp, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import type { ActivityCompletionReport } from '../activity-completion.ts';
+import { assignmentProposalSource, type ActivityCompletionReport } from '../activity-completion.ts';
 import { correctObservedTestFirstRedVerification, isTestFirstVerification, isReleaseReview, reportedVerificationCommands, record, text } from './guest-contract.ts';
 import { run } from './process-runner.ts';
 import { redactProviderDiagnostic } from './provider-failure.ts';
@@ -111,7 +111,10 @@ export async function prepareNodeWorkspace(
 /** Fresh Reviewer execution, not a cache of the predecessor's passing receipts. */
 export async function prepareReleaseReview(context: Record<string, unknown>, secrets: string[] = [], execute: typeof run = run) {
 	const canonicalContext = record(context.canonicalAssignmentContext), assignment = record(canonicalContext.assignment);
-	if (!isReleaseReview(assignment)) return null;
+	const workItems = text(record(assignment.sourceRef).model) === 'proposal' && text(assignment.workItemId)
+		? record(assignmentProposalSource(canonicalContext).executionPlan).workItems : undefined;
+	const workItem = Array.isArray(workItems) ? workItems.map(record).find(item => item.id === assignment.workItemId) : undefined;
+	if (!isReleaseReview(assignment, workItem)) return null;
 	const source = record(record(context.projectManifest).source), commit = text(source.commit), repository = text(source.repositoryId);
 	if (!repository || !/^[a-f0-9]{40}$/u.test(commit)) throw new Error('release_review_candidate_missing');
 	const ids = Array.isArray(assignment.predecessorResultIds) ? assignment.predecessorResultIds : [];

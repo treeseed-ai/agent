@@ -23,7 +23,8 @@ export class AgentKernel {
 
 	async runAssignment(request: KernelAssignmentRequest) {
 		assertPredecessorResultAuthority(request.context.assignment, request.context.predecessorResults);
-		const parsedAttempts = (request.context.predecessorAttempts ?? []).map(value => {
+		const { predecessorAttempts = [], ...assignmentContextValue } = request.context;
+		const parsedAttempts = predecessorAttempts.map(value => {
 			const parsed = assignmentAttemptSchema.parse(value);
 			if (!isDeepStrictEqual(parsed, value)) throw new Error('assignment_predecessor_attempt_invalid');
 			return parsed;
@@ -32,7 +33,7 @@ export class AgentKernel {
 			|| parsedAttempts.some(value => !request.context.predecessorResults.some(result => result.assignmentId === value.id))) {
 			throw new Error('assignment_predecessor_attempt_authority_mismatch');
 		}
-		const context = { ...assignmentContextSchema.parse(request.context), predecessorAttempts: parsedAttempts };
+		const context = { ...assignmentContextSchema.parse(assignmentContextValue), predecessorAttempts: parsedAttempts };
 		// The handler receives its own context, never the authority used by gates.
 		const assignment = structuredClone(context.assignment);
 		if (assignment.provider.runtimeBuild !== request.runtimeBuild) throw new Error('runtime_build_mismatch');

@@ -3,6 +3,22 @@ import { activityCompletionOutputSchema, validateActivityCompletion } from '../.
 import { completionFrontmatterSchema, completionOutputTargetVariants, promptFromContext } from '../../src/kernel/handlers/model-workload-contract.ts';
 
 describe('activity completion structured-output schema', () => {
+	it('generates subscriber-owned proposal work from the admitted estimate even when the group draft has no class-owned plan', () => {
+		const sourceRef = { store: 'treedx', model: 'proposal', id: 'prepared-workload-repair', revision: 1,
+			digest: `sha256:${'a'.repeat(64)}`, repository: 'agent-library', commit: 'a'.repeat(40), path: 'proposals/prepared-workload-repair.mdx' };
+		const proposal = { schemaVersion: 'treeseed.proposal/v2', id: sourceRef.id, projectId: 'agent', groupIds: ['provider-runtime'],
+			title: 'Preserve prepared workload inputs', request: 'Document, reproduce and repair the actual model request handoff.',
+			summary: 'Every group subscriber owns a meaningful contribution.', status: 'discussing' };
+		const assignment = { id: 'estimate-docs', attempt: 2, sourceRef, agentClass: 'maintenance',
+			effectiveProfile: { activity: 'estimating', handler: 'writer', profileRef: { id: 'agent/technical-writer' } } };
+		const context = { canonicalAssignmentContext: { assignment, context: [{ ref: sourceRef, value: { frontmatter: proposal } }] } };
+		expect(() => completionFrontmatterSchema(context)).not.toThrow();
+		const schema = completionFrontmatterSchema(context) as { properties: { executionPlan: { properties: { workItems: {
+			items: { properties: { estimateRef: { properties: { id: { const: string }; revision: { const: number } } } } };
+		} } } } };
+		expect(schema.properties.executionPlan.properties.workItems.items.properties.estimateRef.properties.id.const).toBe(assignment.id);
+		expect(schema.properties.executionPlan.properties.workItems.items.properties.estimateRef.properties.revision.const).toBe(assignment.attempt);
+	});
 	it('requires a real Reviewer disposition in structured output and null for non-review work', () => {
 		expect(activityCompletionOutputSchema(undefined, true, undefined, true).properties.reviewDisposition)
 			.toEqual({ type: 'string', enum: ['approved', 'rejected', 'revision-required'] });

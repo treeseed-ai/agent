@@ -2642,3 +2642,15 @@ workflow:
   - id: node-dependency-proxy-denial-native
     action: { verifier: agent.golden.node-dependency-proxy-denial-native }
     expect: { status: passed }
+
+  - id: opaque-workload-process
+    action: { verifier: agent.golden.opaque-workload-process }
+    expect: { status: passed }
+
+  - id: prepared-model-request
+    action: { verifier: agent.golden.prepared-model-request }
+    expect: { status: passed }
+
+  - id: governed-model-instructions
+    action: { verifier: agent.golden.governed-model-instructions }
+    expect: { status: passed }

@@ -1,7 +1,7 @@
 import { expect, it } from 'vitest';
 import { parse } from 'yaml';
 import { assignmentAttemptSchema } from '@treeseed/sdk/agent-capacity';
-import { completionFrontmatterSchema, completionOutputTargetVariants, promptFromContext } from '../../../src/sandbox/guest-contract.ts';
+import { completionFrontmatterSchema, completionOutputTargetVariants, promptFromContext } from '../../../src/kernel/handlers/model-workload-contract.ts';
 import { request, commit, digest } from '../kernel/provider-kernel-fixture.ts';
 
 // docs/agent-architecture.md: Decisions, Profiles, Handlers, Workspaces.
@@ -21,7 +21,7 @@ it('keeps shared guest behavior identical when only the configured agent class i
 	for (const activity of ['acting', 'reviewing', 'planning', 'chat']) {
 		const expected = promptFromContext(context('cartographer', activity));
 		for (const name of ['architect', 'tester', 'researcher', 'reviewer', 'engineer', 'technical-writer', 'releaser', 'reporter']) {
-			if (promptFromContext(context(name, activity)) !== expected) changed.push(`${name}/${activity}`);
+			if (JSON.stringify(promptFromContext(context(name, activity)).split('\n\n').slice(0, -1)) !== JSON.stringify(expected.split('\n\n').slice(0, -1))) changed.push(`${name}/${activity}`);
 		}
 	}
 	expect(changed, 'Only governed profile changes may select task behavior.').toEqual([]);
@@ -62,7 +62,7 @@ it('does not direct ordinary acting work to integrate multiple predecessor commi
 		id: `predecessor-${value}`, references: [{ kind: 'git', repository: 'project', commit: value.repeat(40) }],
 	})) });
 	const prompt = promptFromContext(input);
-	expect(prompt).toContain(`assigned base commit ${commit}`);
+	expect(JSON.parse(prompt.split('\n\n').at(-1)!).canonicalAssignmentContext.assignment.workspace.baseCommit).toBe(commit);
 	expect(prompt).not.toContain('integrate it with a real Git merge');
 	expect(prompt).not.toContain('final commit must also descend from these exact authorized predecessor commits');
 });

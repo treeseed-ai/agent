@@ -5,12 +5,12 @@ import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { executeAssignmentTreeDxTool } from '../../../../src/provider/execution/microvm-executor.ts';
-import { clockReading, providerExecutionProgress } from '../../../../src/sandbox/guest.ts';
-import { codexThreadId, codexTreeDxMcpConfig, completedTimeStatusChecks, prepareNodeWorkspace, providerEventShapeSummary, providerResourceAbort, providerResponsePreview, requiresNodeDependencyRestore, timingAwarenessContract, timingRecoveryEligible, treeDxToolDefinitions, verifyReportedActivityCommands } from '../../../../src/sandbox/guest.ts';
-import { assertArchitectSourceCitation, assertReplayableVerificationCommand, assertTesterFailureEvidence, attachObservedTesterFailures, correctObservedTestFirstRedVerification, omitUnreplayableVerification, codexInteractiveTimeoutMs, codexProjectInstructionArguments, codexReasoningArguments, completionFrontmatterSchema, completionOutputTargetVariants, promptFromContext, requiresActivityCompletion } from '../../../../src/sandbox/guest-contract.ts';
+import { clockReading, providerExecutionProgress } from '../../../../src/kernel/handlers/model-workload.ts';
+import { codexThreadId, codexTreeDxMcpConfig, completedTimeStatusChecks, prepareNodeWorkspace, providerEventShapeSummary, providerResourceAbort, providerResponsePreview, requiresNodeDependencyRestore, timingAwarenessContract, timingRecoveryEligible, treeDxToolDefinitions, verifyReportedActivityCommands } from '../../../../src/kernel/handlers/model-workload.ts';
+import { assertArchitectSourceCitation, assertReplayableVerificationCommand, assertTesterFailureEvidence, attachObservedTesterFailures, correctObservedTestFirstRedVerification, omitUnreplayableVerification, codexInteractiveTimeoutMs, codexProjectInstructionArguments, codexReasoningArguments, completionFrontmatterSchema, completionOutputTargetVariants, validateModelContext, promptFromContext, requiresActivityCompletion } from '../../../../src/kernel/handlers/model-workload-contract.ts';
 import { assertPredecessorSynthesis } from '../../../../src/kernel/handlers/planning-synthesis.ts';
 import { activityCompletionOutputSchema } from '../../../../src/activity-completion.ts';
-import { activityAllowsVerification } from '../../../../src/sandbox/guest-contract.ts';
+import { activityAllowsVerification } from '../../../../src/kernel/handlers/model-workload-contract.ts';
 import { architectureTaskInstructions } from '../../architecture/knowledge-task-fixture.ts';
 import { request as executionRequest } from '../../kernel/provider-kernel-fixture.ts';
 import { assignmentAttemptSchema } from '@treeseed/sdk/agent-capacity';
@@ -160,7 +160,7 @@ describe('Codex chat executor', () => {
 			const input = { canonicalAssignmentContext: { assignment: { id: 'supplied-assignment', sourceRef, workItemId: 'selected',
 				workspace: { mode: 'read-only' }, effectiveProfile: { activity: 'chat', handler: 'writer' } }, context, predecessorResults: [] } };
 			const before = structuredClone(input);
-			expect(() => promptFromContext(input)).toThrow(index < 2 ? 'assignment_exact_proposal_context_required' : 'assignment_work_item_context_required'); expect(input).toEqual(before);
+			expect(() => validateModelContext(input)).toThrow(index < 2 ? 'assignment_exact_proposal_context_required' : 'assignment_work_item_context_required'); expect(input).toEqual(before);
 		}
 	});
 	it('retains ordered untrimmed first and final clocks and early fatal command evidence through a long sanitized provider observation', () => {
@@ -280,11 +280,9 @@ describe('Codex chat executor', () => {
 			const prompt = promptFromContext({ canonicalAssignmentContext: { assignment: {
 				id: `assignment-${activity}`, workspace: { mode: 'read-only' },
 				...(activity === 'reviewing' ? { authorityRefs: [{ model: 'decision', id: 'accepted-decision' }] } : {}),
-				effectiveProfile: { activity, handler: 'writer', prompt: { system: 'Complete the assigned work.' } },
+				effectiveProfile: { activity, handler: 'writer', prompt: { system: 'Complete the assigned work.', instructions: ['Use the authoritative clock before work and before completion.'] } },
 			}, context: [], predecessorResults: [] } });
-			expect(prompt).toMatch(/^MANDATORY ASSIGNMENT CLOCK:/u);
-			expect(prompt).toContain('Your FIRST tool action must call mcp__treedx__treeseed_time_status');
-			expect(prompt).toContain('call mcp__treedx__treeseed_time_status again as your FINAL tool action');
+			expect(prompt.split('\n\n').slice(0, -1)).toEqual(['Complete the assigned work.', 'Use the authoritative clock before work and before completion.']);
 		},
 	);
 	it('summarizes provider event shapes without retaining arguments or output', () => {

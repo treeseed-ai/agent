@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { readFile, unlink } from 'node:fs/promises';
 import { validateActivityCompletion } from '../activity-completion.ts';
-import { codexProjectInstructionArguments, codexReasoningArguments, record } from './guest-contract.ts';
+import { codexProjectInstructionArguments, codexReasoningArguments, record } from '../kernel/handlers/model-workload-contract.ts';
 import { assertPredecessorSynthesis, missingPredecessorCitations, planningSynthesisCorrectionPrompt } from '../kernel/handlers/planning-synthesis.ts';
 import { run } from './process-runner.ts';
 

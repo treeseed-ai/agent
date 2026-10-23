@@ -3,8 +3,8 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { run } from '../../../../src/sandbox/process-runner.ts';
-import { verifyReportedActivityCommands } from '../../../../src/sandbox/guest.ts';
-import { promptFromContext } from '../../../../src/sandbox/guest-contract.ts';
+import { verifyReportedActivityCommands } from '../../../../src/kernel/handlers/model-workload.ts';
+import { promptFromContext } from '../../../../src/kernel/handlers/model-workload-contract.ts';
 
 describe('portable release verification in independent workspaces', () => {
 	it('reproduces missing scratch destination and replays default npm pack in a fresh Reviewer workspace', async () => {
@@ -22,17 +22,11 @@ describe('portable release verification in independent workspaces', () => {
 			}
 		} finally { for (const root of roots) await rm(root,{recursive:true,force:true}); }
 	}, 45000);
-	it('guides both release Actor and Reviewer to independently verify ordinary current-directory packaging', () => {
-		for (const [agentClass,activity] of [['releaser','acting'],['reviewer','reviewing']]) {
-			const prompt = promptFromContext({canonicalAssignmentContext:{assignment:{agentClass,effectiveProfile:{activity,handler:agentClass==='releaser'?'releaser':'writer'},
-				authorityRefs:[{model:'decision',id:'decision'}],acceptanceCriteria:['Pack the local release candidate.'],workItemId:'simulate-release',workspace:{mode:'git'}},source:{}}});
-			expect(prompt).toContain('standalone command npm pack in /workspace/project');
-			expect(prompt).toContain('default current-directory output');
-			expect(prompt).toContain('repository-owned standalone archive verification command');
-			expect(prompt).toContain('tarball packed in this workspace');
-			expect(prompt).toContain('report the missing replayable check as an unmet criterion');
-			expect(prompt).toContain('inspect their script composition');
-			expect(prompt).toContain('Do not run a separate build, generator or full suite already owned by that aggregate gate');
-		}
-	});
+	it('keeps packaging instructions in the accepted profile instead of inferring them from role names', () => {
+ for (const activity of ['acting','reviewing']) {
+  const prompt = promptFromContext({ canonicalAssignmentContext: { assignment: { agentClass: 'releaser', authorityRefs: [{model:'decision'}], effectiveProfile: { activity, handler: 'releaser', prompt: { system: 'Review the accepted interface change.' } }, acceptanceCriteria: ['Prepare this change for release.'] } } });
+  expect(prompt).not.toContain('standalone command npm pack');
+  expect(prompt).not.toContain('tarball packed in this workspace');
+ }
+});
 });

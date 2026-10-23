@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { codexCloseoutTimeoutMs, codexIdleTimeoutMs, codexInvocationTimerOptions, codexResumeIdleTimeoutMs, codexToolInFlight } from '../../../src/sandbox/guest-contract.ts';
+import { codexCloseoutTimeoutMs, codexIdleTimeoutMs, codexInvocationTimerOptions, codexResumeIdleTimeoutMs, codexToolInFlight } from '../../../src/kernel/handlers/model-workload-contract.ts';
 import { run, withinAssignmentBudget } from '../../../src/sandbox/process-runner.ts';
 
 describe('bounded Codex idle recovery', () => {

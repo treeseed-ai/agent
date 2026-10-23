@@ -1,35 +1,18 @@
 import { expect, it } from 'vitest';
-import { promptFromContext } from '../../../../src/sandbox/guest-contract.ts';
+import { promptFromContext } from '../../../../src/kernel/handlers/model-workload-contract.ts';
 
-it('reuses materialized exact context without skipping missing predecessor read-back', () => {
-	for (const activity of ['acting', 'reviewing']) {
-		const prompt = promptFromContext({ canonicalAssignmentContext: { assignment: {
-			id: 'bounded-work', agentClass: 'reviewer', workspace: { mode: 'git' },
-			authorityRefs: [{ model: 'decision' }], effectiveProfile: { activity, handler: 'actor', prompt: {} },
-		}, context: [{ ref: { commit: 'a'.repeat(40) }, value: { body: 'exact attached content' } }],
-		predecessorResults: [] } });
-		expect(prompt).toContain('The authorized context below is already materialized at its exact refs');
-		expect(prompt).toContain('Do not rebuild that same context with treedx_build_context');
-		expect(prompt).toContain('Read a missing or incomplete exact reference when needed');
-		if (activity === 'reviewing') expect(prompt).toContain('for every predecessor reference with kind treedx call treedx_read_files');
-	}
+it('preserves exact authorized context without adding rediscovery instructions', () => {
+ const content = { ref: { commit: 'a'.repeat(40) }, value: { body: 'Original exact content.' } };
+ const rendered = promptFromContext({ canonicalAssignmentContext: { assignment: { effectiveProfile: { activity: 'acting', handler: 'actor', prompt: { system: 'Implement the approved repair.' } } }, context: [content], predecessorResults: [] } });
+ expect(JSON.parse(rendered.split('\n\n').at(-1)!).canonicalAssignmentContext.context).toEqual([content]);
+ expect(rendered).not.toContain('Do not rebuild that same context');
 });
 
-it('avoids separate aggregate-owned builds without weakening independent release gates', () => {
-	for (const activity of ['acting', 'reviewing']) {
-		const prompt = promptFromContext({ canonicalAssignmentContext: { assignment: {
-			id: 'bounded-release', agentClass: activity === 'acting' ? 'releaser' : 'reviewer',
-			workspace: { mode: 'git' }, authorityRefs: [{ model: 'decision' }],
-			acceptanceCriteria: ['Verify build, full tests, pack and archive exports.'],
-			effectiveProfile: { activity, handler: activity === 'acting' ? 'releaser' : 'writer', prompt: {} },
-		}, context: [], predecessorResults: [] } });
-		expect(prompt).toContain('Do not run a separate build, generator or full suite already owned by that aggregate gate');
-		expect(prompt).toContain('Independent review still requires this workspace\'s actual checks');
-		expect(prompt).toContain('repository-owned standalone archive verification command');
-		if (activity === 'reviewing') {
-			expect(prompt).toContain('guest runner independently replays every reported passing verification command');
-			expect(prompt).toContain('CURRENT-ATTEMPT INDEPENDENT RELEASE VERIFICATION');
-			expect(prompt).toContain('do not execute an already observed check again');
-		}
-	}
+it('does not infer release instructions from class handler or criteria text', () => {
+ for(const activity of ['acting','reviewing']) {
+  const rendered = promptFromContext({ canonicalAssignmentContext: { assignment: { agentClass: 'releaser', authorityRefs: [{ model: 'decision' }], effectiveProfile: { activity, handler: 'releaser', prompt: { system: 'Follow the accepted repair boundary.' } }, acceptanceCriteria: ['Later checks are coordinator release gates.'] } } });
+  expect(rendered.split('\n\n').slice(0,-1)).toEqual(['Follow the accepted repair boundary.']);
+  expect(rendered).not.toContain('CURRENT-ATTEMPT INDEPENDENT RELEASE VERIFICATION');
+  expect(rendered).not.toContain('standalone archive verification command');
+ }
 });

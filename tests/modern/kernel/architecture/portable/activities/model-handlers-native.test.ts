@@ -17,6 +17,8 @@ describe('activity-complete handlers through the original execution path', () =>
 				const result = await f.run();
 				expect(result.status, `${handler}: ${result.summary}`).toBe('completed');
 				expect(f.requests).toHaveLength(1);
+				expect(f.modelRequests[0]).toBeDefined();
+				expect(f.modelRequests[0]).toHaveProperty('prompt', expect.stringContaining(acting.prompt.system));
 				expect(assignmentResultSchema.parse(result.outputs?.assignmentResult).references).toContainEqual(expect.objectContaining({ kind: 'git', commit: candidate }));
 				expect(f.git('rev-parse', 'HEAD')).toBe(candidate);
 				expect(f.input.assignment).toEqual(before);

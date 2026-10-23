@@ -1,7 +1,7 @@
 import * as authority from '../../../acceptance/workday/support/assignment-authority.ts';
 import { execFile, execFileSync } from 'node:child_process';
 import { createServer } from 'node:https';
-import { chmod, copyFile, mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from 'node:fs/promises';
+import { chmod, copyFile, mkdir, mkdtemp, readFile, realpath, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { promisify } from 'node:util';
@@ -9,9 +9,9 @@ import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import ts from 'typescript';
 import { sandboxAssignmentSchema, sandboxResultSchema } from '@treeseed/sdk/capacity-provider/sandbox';
-import { objectDigest } from '../../../../src/sandbox/verification.ts';
+import { objectDigest } from '../../../../src/kernel/handlers/model-verification.ts';
 import { executeAssignmentTreeDxTool } from '../../../../src/provider/execution/microvm-executor.ts';
-import { completedTimeStatusChecks, invokeTreeDxRelay, timingAwarenessContract } from '../../../../src/sandbox/guest.ts';
+import { completedTimeStatusChecks, invokeTreeDxRelay, timingAwarenessContract } from '../../../../src/kernel/handlers/model-workload.ts';
 import { clockRequest } from './clock-fixture.ts';
 
 // Existing guest HTTPS relay plus owning provider clock tool, not mocked
@@ -77,6 +77,12 @@ describe('native trusted guest clock relay and owning provider tool', () => {
 				if (mode === 'invalid-context') context.canonicalAssignmentContext.context = [];
 				const bytes = Buffer.from(JSON.stringify(context)), digest = (value: Buffer) => `sha256:${createHash('sha256').update(value).digest('hex')}`;
 				await writeFile(join(input, 'input-execution-context'), bytes); await copyFile(f.cert, join(input, 'input-relay-ca'));
+				const provider = resolve('tests/modern/sandbox/fixtures/clock-stream-provider.ts');
+				const prepared = Buffer.from(JSON.stringify({ prompt: 'Controlled native fixture only.' }));
+				const workload = Buffer.from(JSON.stringify({ executable: process.execPath,
+					arguments: ['--import', 'tsx', provider, '--workload-program'], workingDirectory: process.cwd() }));
+				await writeFile(join(input, 'input-model-request'), prepared);
+				await writeFile(join(input, 'input-workload'), workload);
 				const ca = await readFile(f.cert);
 				const assignment = sandboxAssignmentSchema.parse({ schemaVersion: 'treeseed.sandbox-assignment/v1',
 					assignmentId: f.attempt.id, attempt: f.attempt.attempt, runnerId: 'native-fixture', providerId: f.attempt.provider.providerId,
@@ -85,7 +91,9 @@ describe('native trusted guest clock relay and owning provider tool', () => {
 					resources: { cpuCores: 1, memoryBytes: 536870912, diskBytes: 67108864, durationSeconds: 30, processLimit: 32, outputBytes: 1048576 },
 					inputs: [{ id: 'execution-context', digest: digest(bytes), bytes: bytes.length, disposition: 'copy-on-write', mediaType: 'application/json',
 						targetPath: '/workspace/.treeseed/context.json' }, { id: 'relay-ca', digest: digest(ca), bytes: ca.length, disposition: 'copy-on-write',
-						mediaType: 'application/x-pem-file', targetPath: '/workspace/.treeseed/relay-ca.crt' }], outputs: [],
+						mediaType: 'application/x-pem-file', targetPath: '/workspace/.treeseed/relay-ca.crt' },
+						{ id: 'model-request', digest: digest(prepared), bytes: prepared.length, disposition: 'read-only', mediaType: 'application/json', targetPath: '/workspace/.treeseed/model-request.json' },
+						{ id: 'workload', digest: digest(workload), bytes: workload.length, disposition: 'read-only', mediaType: 'application/json', targetPath: '/workspace/.treeseed/workload.json' }], outputs: [],
 					network: { defaultDeny: true, relayUrl: f.environment.TREESEED_RELAY_URL, allowedServices: ['treedx'] },
 					modelPolicy: { provider: 'controlled-native-input', model: 'not-a-real-model', capabilities: [] }, credentialHandles: [], treeDxHandleIds: [],
 					leaseExpiresAt: f.attempt.deadline, signature: { keyId: 'controlled-native-input', algorithm: 'Ed25519', value: 'supplied-not-issued' } });
@@ -93,8 +101,10 @@ describe('native trusted guest clock relay and owning provider tool', () => {
 				const held = JSON.stringify(assignment); await writeFile(join(input, 'assignment.json'), held);
 				await writeFile(join(input, 'sandbox-id'), 'isolated-clock'); await writeFile(join(input, 'operation-token'), 'isolated-clock-token');
 				await writeFile(join(input, 'stream-mode'), mode);
-				const provider = resolve('tests/modern/sandbox/fixtures/clock-stream-provider.ts'), executable = join(input, 'codex');
-				const providerInput = (await readFile(provider, 'utf8')).replace("'../../../../src/sandbox/guest.ts'", JSON.stringify(resolve('src/sandbox/guest.ts')));
+				const executable = join(input, 'codex');
+				const providerInput = (await readFile(provider, 'utf8'))
+					.replace("'../../../../src/kernel/handlers/model-workload.ts'", JSON.stringify(resolve('src/kernel/handlers/model-workload.ts')))
+					.replace("'../../../../src/sandbox/guest.ts'", JSON.stringify(resolve('src/sandbox/guest.ts')));
 				await writeFile(executable, ts.transpileModule(providerInput, { compilerOptions: {
 					target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext,
 				} }).outputText);
@@ -104,8 +114,10 @@ describe('native trusted guest clock relay and owning provider tool', () => {
 				let failure = '';
 				try { await promisify(execFile)('bwrap', ['--unshare-user', '--unshare-pid', '--die-with-parent', '--new-session', '--tmpfs', '/',
 					'--ro-bind', '/usr', '/usr', '--ro-bind', '/lib', '/lib', '--ro-bind', '/lib64', '/lib64', '--ro-bind', '/etc', '/etc',
+					'--symlink', 'usr/bin', '/bin',
 					'--proc', '/proc', '--dev', '/dev', '--tmpfs', '/run', '--tmpfs', '/tmp', '--tmpfs', '/usr/local/bin',
 					'--ro-bind', resolve('..'), resolve('..'), '--ro-bind', dirname(dirname(process.execPath)), dirname(dirname(process.execPath)),
+					'--ro-bind', await realpath('node_modules'), await realpath('node_modules'),
 					'--ro-bind', input, '/run/treeseed-assignment', '--bind', output, '/run/treeseed-output', '--bind', workspace, '/workspace',
 					'--ro-bind', process.execPath, '/usr/local/bin/node', '--ro-bind', executable, '/usr/local/bin/codex',
 					'--chdir', process.cwd(), process.execPath, '--import', 'tsx', provider, '--guest'],
@@ -215,7 +227,7 @@ describe('native trusted guest clock relay and owning provider tool', () => {
 	}, 30_000);
 	it('native public guest MCP clock transports exact first and final HTTPS values and rejects corrupted observed payloads without rewriting native bytes', async () => {
 		const f = await nativeClock(); try {
-			const inputBefore = structuredClone(f.input.assignment), entrypoint = resolve('src/sandbox/guest.ts'), sourceBefore = await readFile(entrypoint);
+			const inputBefore = structuredClone(f.input.assignment), entrypoint = resolve('src/kernel/handlers/model-workload.ts'), sourceBefore = await readFile(entrypoint);
 			const requests = [1, 2].map(id => ({ jsonrpc: '2.0', id, method: 'tools/call', params: { name: 'treeseed_time_status', arguments: {} } }));
 			const began = Date.now();
 			// Async child is the ORIGINAL public guest --treedx-mcp mode; the parent

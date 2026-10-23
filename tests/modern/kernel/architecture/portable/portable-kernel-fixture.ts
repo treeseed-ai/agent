@@ -117,7 +117,7 @@ export async function portableKernel(responseReady?: Promise<void>, originalMaxi
 		const workspace = attempt.workspace;
 		git('switch', '-c', workspace.branch);
 		input.assignment = { ...input.assignment, assignmentAttempt: attempt, workspaceContext: { assignmentAttempt: attempt, predecessorResults: [] } };
-		const requests: unknown[] = [], begin: unknown[] = [];
+		const requests: unknown[] = [], modelRequests: unknown[] = [], begin: unknown[] = [];
 		let signalRequestArrived!: () => void;
 		const requestArrived = new Promise<void>(resolve => { signalRequestArrived = resolve; });
 		input.beginExecution = async () => { begin.push({ assignmentId: attempt.id, originalDeadline: attempt.deadline }); return {}; };
@@ -125,7 +125,8 @@ export async function portableKernel(responseReady?: Promise<void>, originalMaxi
 		server = createServer((req, res) => {
 			let body = ''; req.setEncoding('utf8'); req.on('data', chunk => { body += chunk; });
 			req.on('end', async () => {
-				requests.push(JSON.parse(body));
+				const observed = JSON.parse(body);
+				requests.push(observed.assignment); modelRequests.push(observed.modelInvocation);
 				signalRequestArrived();
 				if (responseReady) await responseReady;
 				if (fault === 'reset') { req.socket.destroy(); return; }
@@ -138,7 +139,7 @@ export async function portableKernel(responseReady?: Promise<void>, originalMaxi
 			execute: async execution => {
 				await execution.beginExecution?.();
 				const response = await fetch(`http://127.0.0.1:${address.port}/execute`, { method: 'POST', signal: execution.signal,
-					headers: { 'content-type': 'application/json' }, body: JSON.stringify(execution.assignment) });
+					headers: { 'content-type': 'application/json' }, body: JSON.stringify({ assignment: execution.assignment, modelInvocation: Reflect.get(execution, 'modelInvocation') }) });
 				if (!response.ok) throw new Error(`Controlled executor denied ${response.status}`);
 				return await response.json() as AgentExecutionResult;
 			} };
@@ -152,7 +153,7 @@ export async function portableKernel(responseReady?: Promise<void>, originalMaxi
 			return commit;
 		};
 		const close = async () => { server!.closeAllConnections(); await new Promise<void>((resolve, reject) => server!.close(error => error ? reject(error) : resolve())); await rm(directory, { recursive: true, force: true }); };
-		return { input, attempt, profile, git, checkout, base, requests, requestArrived, begin, candidate, close, executor,
+		return { input, attempt, profile, git, checkout, base, requests, modelRequests, requestArrived, begin, candidate, close, executor,
 			setReply(value: AgentExecutionResult, status = 200, error = '') { reply = value; code = status; fault = error; },
 			getReply() { if (!reply) throw new Error('Candidate response required'); return structuredClone(reply); },
 			run: (handlers?: Handler[]) => executeKernelAssignment({ request: input, executor, runtimeBuild: original.provider.runtimeBuild, handlers }) };

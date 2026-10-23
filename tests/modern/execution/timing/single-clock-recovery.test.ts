@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { timingAwarenessContract, timingRecoveryEligible } from '../../../../src/sandbox/guest.ts';
+import { timingAwarenessContract, timingRecoveryEligible } from '../../../../src/kernel/handlers/model-workload.ts';
 
 const value = { startedAt: '2026-10-04T00:00:00.000Z', deadlineAt: '2026-10-04T00:00:30.000Z', observedAt: '2026-10-04T00:00:00.000Z', remainingSeconds: 30 };
 const payload = { content: [{ type: 'text', text: JSON.stringify(value) }], structuredContent: value };

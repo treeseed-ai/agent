@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest';
-import { observeReportedActivityCommands } from '../../../../src/sandbox/guest.ts';
-import { objectDigest } from '../../../../src/sandbox/verification.ts';
+import { observeReportedActivityCommands } from '../../../../src/kernel/handlers/model-workload.ts';
+import { objectDigest } from '../../../../src/kernel/handlers/model-verification.ts';
 import { run } from '../../../../src/sandbox/process-runner.ts';
 import { createHash } from 'node:crypto';
 import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';

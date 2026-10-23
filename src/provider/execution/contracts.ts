@@ -1,5 +1,6 @@
 import type {SandboxAssignment} from '@treeseed/sdk/capacity-provider';
 import type { SourceWorkspaceResponse } from '@treeseed/sdk/capacity-provider/sandbox';
+import type { ModelInvocationRequest } from '../../kernel/contracts.ts';
 
 /** The existing sandbox translation and aggregate validator share one mapping. */
 export const SANDBOX_TOKEN_COUNTER_FIELDS = Object.freeze({ input_tokens: 'inputTokens', cached_input_tokens: 'cachedInputTokens',
@@ -16,6 +17,8 @@ export interface AssignmentTreeDxFacade {
 }
 
 export interface AgentExecutionRequest {
+  /** Prepared by the configured application handler, never reconstructed by the runner. */
+  modelInvocation?: ModelInvocationRequest;
   assignment: Record<string, unknown>;
   assignmentId: string;
   leaseToken: string;

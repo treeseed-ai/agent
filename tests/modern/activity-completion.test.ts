@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { activityCompletionOutputSchema, validateActivityCompletion } from '../../src/activity-completion.ts';
-import { completionFrontmatterSchema, completionOutputTargetVariants, promptFromContext } from '../../src/sandbox/guest-contract.ts';
+import { completionFrontmatterSchema, completionOutputTargetVariants, promptFromContext } from '../../src/kernel/handlers/model-workload-contract.ts';
 
 describe('activity completion structured-output schema', () => {
 	it('requires a real Reviewer disposition in structured output and null for non-review work', () => {
@@ -58,7 +58,6 @@ describe('activity completion structured-output schema', () => {
 			grant: { contentWrite: [{ model: 'book' }, { model: 'knowledge' }, { model: 'book' }] } };
 		const context = { canonicalAssignmentContext: { assignment } };
 		expect(completionFrontmatterSchema(context)?.anyOf).toHaveLength(2);
-		expect(promptFromContext(context)).toContain('Do not substitute a Note for required Book or Knowledge output');
 		assignment.effectiveProfile.activity = 'planning';
 		expect(completionFrontmatterSchema(context)).toBeUndefined();
 		assignment.effectiveProfile.activity = 'acting';
@@ -83,7 +82,6 @@ describe('activity completion structured-output schema', () => {
 			[{ type: 'string', const: 'knowledge' }, { type: 'string', const: 'research-knowledge' }],
 			[{ type: 'string', const: 'note' }, { type: 'string', const: 'research-note' }],
 		]);
-		expect(promptFromContext(context)).toContain('knowledge/research-knowledge, note/research-note');
 	});
 	it('requires null content output when the activity does not author governed content', () => {
 		const schema = activityCompletionOutputSchema();

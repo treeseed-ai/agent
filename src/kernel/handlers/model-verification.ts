@@ -2,11 +2,11 @@ import { createHash } from 'node:crypto';
 import { mkdtemp, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { assignmentProposalSource, type ActivityCompletionReport } from '../activity-completion.ts';
-import { correctObservedTestFirstRedVerification, isTestFirstVerification, isReleaseReview, reportedVerificationCommands, record, text } from './guest-contract.ts';
-import { run } from './process-runner.ts';
-import { redactProviderDiagnostic } from './provider-failure.ts';
-import type { VerificationResult } from '../kernel/contracts.ts';
+import { assignmentProposalSource, type ActivityCompletionReport } from '../../activity-completion.ts';
+import { correctObservedTestFirstRedVerification, isTestFirstVerification, isReleaseReview, reportedVerificationCommands, record, text } from './model-workload-contract.ts';
+import { run } from '../../sandbox/process-runner.ts';
+import { redactProviderDiagnostic } from '../../sandbox/provider-failure.ts';
+import type { VerificationResult } from '../contracts.ts';
 
 const canonical = (value: unknown): string => Array.isArray(value) ? `[${value.map(canonical).join(',')}]` : value && typeof value === 'object'
 	? `{${Object.entries(value as Record<string, unknown>).filter(([, item]) => item !== undefined).sort(([a], [b]) => a.localeCompare(b)).map(([key, item]) => `${JSON.stringify(key)}:${canonical(item)}`).join(',')}}` : JSON.stringify(value);

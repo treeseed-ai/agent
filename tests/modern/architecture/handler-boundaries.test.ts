@@ -106,5 +106,11 @@ it('uses the same Writer behavior after a class rename rather than imposing Arch
 	const expected = await new WriterHandler().run(context, runtime);
 	assignment.agentClass = 'architect';
 	expect(await new WriterHandler().run(context, runtime)).toEqual(expected);
-	expect(invocations[1]).toEqual(invocations[0]);
+	expect(invocations[1]?.context).toEqual(invocations[0]?.context);
+	expect(invocations[1]?.parameters).toEqual(invocations[0]?.parameters);
+	const sections = invocations.map(input => input.prompt.split('\n\n'));
+	expect(sections[1]!.slice(0, -1)).toEqual(sections[0]!.slice(0, -1));
+	const originalData = JSON.parse(sections[0]!.at(-1)!);
+	originalData.canonicalAssignmentContext.assignment.agentClass = 'architect';
+	expect(JSON.parse(sections[1]!.at(-1)!)).toEqual(originalData);
 });

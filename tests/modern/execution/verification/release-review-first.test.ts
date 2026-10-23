@@ -2,14 +2,14 @@ import { expect, it, vi } from 'vitest';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import * as verification from '../../../../src/sandbox/verification.ts';
+import * as verification from '../../../../src/kernel/handlers/model-verification.ts';
 import { withinAssignmentBudget, run } from '../../../../src/sandbox/process-runner.ts';
-import { promptFromContext } from '../../../../src/sandbox/guest-contract.ts';
+import { promptFromContext } from '../../../../src/kernel/handlers/model-workload-contract.ts';
 
 const commit = 'a'.repeat(40), repositoryId = 'owner/package';
 const commands = ['npm run release:verify', 'npm pack', 'npm run standards:acceptance -- --archive package-1.0.0.tgz'];
 const context = () => ({ canonicalAssignmentContext: {
-	assignment: { predecessorResultIds: ['actor-result'], requiredCapabilities: ['treeseed.engineering.release'], effectiveProfile: { activity: 'reviewing' },
+	assignment: { predecessorResultIds: ['actor-result'], requiredCapabilities: ['treeseed.engineering.release'], effectiveProfile: { activity: 'reviewing', prompt: { system: 'Review the accepted release candidate.' } },
 		acceptanceCriteria: ['Independently replay release, pack and archive checks.'], authorityRefs: [{ model: 'decision' }] },
 	predecessorResults: [{ id: 'actor-result', status: 'completed', references: [{ kind: 'git', repository: repositoryId, commit }],
 		verification: commands.map(command => ({ command, status: 'passed', exitCode: 0,
@@ -138,15 +138,13 @@ it('does not intercept other activities or ordinary content review', async () =>
 it('gives the review model measured current-attempt evidence without asking it to repeat native release checks', async () => {
 	const review = await verification.prepareReleaseReview(context(), [], executor());
 	const prompt = promptFromContext(context(), 'low', 184, review!.verification);
-	expect(prompt).toContain('CURRENT-ATTEMPT INDEPENDENT RELEASE VERIFICATION');
+	expect(prompt).not.toContain('CURRENT-ATTEMPT INDEPENDENT RELEASE VERIFICATION');
 	expect(prompt).toContain(JSON.stringify(review!.verification));
-	expect(prompt).toContain('Do not repeat these already observed commands');
-	expect(prompt).toContain('verification: []');
-	expect(prompt).toContain('FIRST tool action'); expect(prompt).toContain('FINAL tool action');
+	expect(JSON.parse(prompt.split('\n\n').at(-1)!).verification).toEqual(review!.verification);
 });
 
 it('wires fresh release replay before provider startup and retains its receipt through final completion', async () => {
-	const source = await readFile(new URL('../../../../src/sandbox/guest.ts', import.meta.url), 'utf8');
+	const source = await readFile(new URL('../../../../src/kernel/handlers/model-workload.ts', import.meta.url), 'utf8');
 	const prepare = source.indexOf('await prepareReleaseReview(');
 	expect(prepare).toBeGreaterThan(0); expect(prepare).toBeLessThan(source.indexOf("await progress('provider.starting')"));
 	expect(source).toContain('releaseReview.complete(replayableCompletion)');

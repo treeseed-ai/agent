@@ -8,7 +8,7 @@ import { activityCompletionOutputSchema, validateActivityCompletion } from '../.
 import { assertPredecessorSynthesis, planningSynthesisOutputSchema } from '../../../src/kernel/handlers/planning-synthesis.ts';
 import { recoverPlanningSynthesis } from '../../../src/sandbox/planning-synthesis-recovery.ts';
 import { run, withinAssignmentBudget } from '../../../src/sandbox/process-runner.ts';
-import { timingAwarenessContract } from '../../../src/sandbox/guest.ts';
+import { timingAwarenessContract } from '../../../src/kernel/handlers/model-workload.ts';
 
 async function exercise(mode: string, initial: 'missing' | 'reversed', operation: (input: Parameters<typeof recoverPlanningSynthesis>[0], root: string) => Promise<void>, expectedCalls = 1) {
 	const root = await mkdtemp(join(tmpdir(), 'treeseed-synthesis-process-'));

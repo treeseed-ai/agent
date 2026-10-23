@@ -5,6 +5,7 @@ import type { AgentRuntime, Handler } from '../contracts.ts';
 import { prepareTreeDxContent } from '../treedx-content-commit.ts';
 import { estimateMutableField, assignmentProposalSource } from '../../activity-completion.ts';
 import { assertPredecessorSynthesis } from './planning-synthesis.ts';
+import { promptFromContext } from './model-workload-contract.ts';
 
 export function resultId(assignmentId: string, summary: string): string {
 	return `result-${createHash('sha256').update(`${assignmentId}\n${summary}`).digest('hex').slice(0, 24)}`;
@@ -17,14 +18,7 @@ async function commitOne(runtime: AgentRuntime, target: Parameters<AgentRuntime[
 }
 
 function prompt(context: AssignmentContext): string {
-	const assignment = context.assignment;
-	return [
-		assignment.effectiveProfile.prompt.system,
-		...(assignment.effectiveProfile.prompt.instructions ?? []),
-		`Assignment: ${assignment.sourceRef.model}/${assignment.sourceRef.id}`,
-		`Workspace: ${assignment.workspace.mode}`,
-		`Acceptance criteria and exact source context are in the authorized assignment context.`,
-	].filter(Boolean).join('\n\n');
+	return promptFromContext({ canonicalAssignmentContext: context });
 }
 
 function authorizedKnowledgeBooks(context: AssignmentContext) {

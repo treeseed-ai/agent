@@ -292,7 +292,7 @@ it('fails closed on ambiguous or multiline planning predecessor identities', () 
 });
 
 it('uses the constrained completion schema for the initial model turn and original-session recovery', () => {
-	const guest = readFileSync(new URL('../../../src/sandbox/guest.ts', import.meta.url), 'utf8');
+	const guest = readFileSync(new URL('../../../src/kernel/handlers/model-workload.ts', import.meta.url), 'utf8');
 	expect(guest).toContain('planningSynthesisOutputSchema(context, activityCompletionOutputSchema(');
 	expect(guest).toContain("['--output-schema', completionSchemaPath]");
 	expect(guest).toContain('responsePath, schemaPath: completionSchemaPath, allowVerification');

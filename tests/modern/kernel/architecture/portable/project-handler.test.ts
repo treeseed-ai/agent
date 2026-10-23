@@ -116,7 +116,7 @@ describe('selected project runtime handler through owning provider Kernel', () =
 					contentReferences: [{ kind: 'git', repository: candidate.repository, commit: 'c'.repeat(40), branch: candidate.branch }],
 					changedPaths: [], sourceReference: candidate } });
 			const result = await f.run();
-			expect(result.status).toBe('completed');
+			expect(result.status, JSON.stringify(result)).toBe('completed');
 			expect(assignmentResultSchema.parse(result.outputs?.assignmentResult).references).toEqual([candidate]);
 			expect(f.requests).toHaveLength(1); expect(f.git('rev-parse', 'HEAD')).toBe(f.base);
 		} finally { await f.close(); }

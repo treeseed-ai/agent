@@ -2011,6 +2011,21 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/kernel/architecture/portable/portable-handler-contract.test.ts
     testName: "keeps prompts parameters context selectors and permission ceilings solely in the configured profile"
+  agent.golden.all-activity-handlers:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/portable/activities/model-handlers.test.ts
+    testName: "executes all six activities with every model handler without handler-name filtering"
+  agent.golden.all-activity-review-authority:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/portable/activities/model-handlers.test.ts
+    testName: "requires the same exact review finding grant for every handler"
+  agent.golden.all-activity-handlers-native:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/portable/activities/model-handlers-native.test.ts
+    testName: "uses every configured model handler for the same native Git product without role routing"
   agent.golden.architecture-portable-kernel-1:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

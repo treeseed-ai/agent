@@ -49,7 +49,10 @@ function assertKnowledgeOutput(context: AssignmentContext, output: { model: stri
 
 abstract class ModelHandler implements Handler {
 	abstract readonly id: string;
-	abstract run(context: AssignmentContext, runtime: AgentRuntime): Promise<AssignmentResult>;
+	async run(context: AssignmentContext, runtime: AgentRuntime): Promise<AssignmentResult> {
+		if (context.assignment.effectiveProfile.activity === 'estimating') return this.estimate(context, runtime);
+		return context.assignment.workspace.mode === 'treedx' ? this.content(context, runtime) : this.source(context, runtime);
+	}
 
 	protected async invoke(context: AssignmentContext, runtime: AgentRuntime) {
 		return runtime.invokeModel({
@@ -70,12 +73,7 @@ abstract class ModelHandler implements Handler {
 			diagnostics: [], timingAwareness, completedAt: runtime.now(),
 		};
 	}
-}
-
-export class WriterHandler extends ModelHandler {
-	readonly id: string = 'writer';
-
- async run(context: AssignmentContext, runtime: AgentRuntime): Promise<AssignmentResult> {
+	private async content(context: AssignmentContext, runtime: AgentRuntime): Promise<AssignmentResult> {
   if (context.assignment.effectiveProfile.activity === 'acting'
    && context.assignment.grant.contentWrite.some(target => target.model === 'knowledge')
    && authorizedKnowledgeBooks(context).length === 0) throw new Error('knowledge_book_context_required');
@@ -146,12 +144,7 @@ export class WriterHandler extends ModelHandler {
 		const result = this.result(context, runtime, summary, references, model.timingAwareness, model.usage);
 		return { ...result, verification: model.verification ?? [] };
 	}
-}
-
-export class EstimateHandler extends ModelHandler {
-	readonly id = 'estimate';
-
-	async run(context: AssignmentContext, runtime: AgentRuntime): Promise<AssignmentResult> {
+	private async estimate(context: AssignmentContext, runtime: AgentRuntime): Promise<AssignmentResult> {
 		if (context.assignment.workspace.mode !== 'treedx') throw new Error('estimate_treedx_workspace_required');
 		const target = context.assignment.grant.contentWrite.find((candidate) => candidate.model === 'proposal');
 		if (!target) throw new Error('estimate_proposal_commit_grant_required');
@@ -181,14 +174,7 @@ export class EstimateHandler extends ModelHandler {
 		const result = this.result(context, runtime, model.text, [reference], model.timingAwareness, model.usage);
 		return { ...result, verification: model.verification ?? [] };
 	}
-}
-export class ReviewerHandler extends WriterHandler { readonly id = 'reviewer'; }
-
-export class ActorHandler extends ModelHandler {
-	readonly id: string = 'actor';
-
-	async run(context: AssignmentContext, runtime: AgentRuntime): Promise<AssignmentResult> {
-		if (context.assignment.workspace.mode === 'treedx') throw new Error('actor_source_workspace_required');
+	private async source(context: AssignmentContext, runtime: AgentRuntime): Promise<AssignmentResult> {
 		const model = await this.invoke(context, runtime);
 		const references: AssignmentReference[] = [...(model.references ?? [])];
 		if (context.assignment.workspace.mode === 'git') references.push(await runtime.commitSource({
@@ -200,4 +186,8 @@ export class ActorHandler extends ModelHandler {
 	}
 }
 
-export class ReleaserHandler extends ActorHandler { readonly id = 'releaser'; }
+export class WriterHandler extends ModelHandler { readonly id = 'writer'; }
+export class ActorHandler extends ModelHandler { readonly id = 'actor'; }
+export class EstimateHandler extends ModelHandler { readonly id = 'estimate'; }
+export class ReviewerHandler extends ModelHandler { readonly id = 'reviewer'; }
+export class ReleaserHandler extends ModelHandler { readonly id = 'releaser'; }

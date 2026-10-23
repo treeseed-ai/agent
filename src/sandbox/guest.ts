@@ -12,7 +12,7 @@ const environmentSchema = sandboxAssignmentSchema.pick({ inputs: true, resources
 const progress = (stage: string) => writeFile(resolve(outputRoot, 'progress.json'),
 	`${JSON.stringify({ stage, occurredAt: new Date().toISOString() })}\n`, { mode: 0o600 });
 
-export async function prepareGuestEnvironment() {
+async function prepareGuestEnvironment() {
 	const started = performance.now();
 	const envelope = environmentSchema.parse(JSON.parse(await readFile(resolve(inputRoot, 'assignment.json'), 'utf8')));
 	const remaining = () => Math.floor(envelope.resources.durationSeconds * 1000 - (performance.now() - started));

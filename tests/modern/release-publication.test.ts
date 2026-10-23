@@ -159,7 +159,7 @@ describe('Agent RC publication', () => {
 		expect(compose).not.toContain('TREESEED_CODEX_AUTH_FILE');
 		expect(workflow).toContain("require('./package.json').dependencies['@openai/codex']");
 		expect(workflow).toContain('grep -Fx "codex-cli $expected"');
-		const guest = readFileSync('src/sandbox/guest.ts', 'utf8');
+		const guest = readFileSync('src/kernel/handlers/model-workload.ts', 'utf8');
 		expect(guest).toContain("'--dangerously-bypass-approvals-and-sandbox'");
 		expect(guest).not.toContain("'--approve-for-me'");
 		expect(guest).not.toContain("'--sandbox', 'workspace-write'");

@@ -1191,6 +1191,15 @@ workflow:
   - id: architecture-portable-handler-3
     action: { verifier: agent.golden.architecture-portable-handler-3 }
     expect: { status: passed }
+  - id: all-activity-handlers
+    action: { verifier: agent.golden.all-activity-handlers }
+    expect: { status: passed }
+  - id: all-activity-review-authority
+    action: { verifier: agent.golden.all-activity-review-authority }
+    expect: { status: passed }
+  - id: all-activity-handlers-native
+    action: { verifier: agent.golden.all-activity-handlers-native }
+    expect: { status: passed }
   - id: architecture-portable-kernel-1
     action: { verifier: agent.golden.architecture-portable-kernel-1 }
     expect: { status: passed }
@@ -2632,4 +2641,16 @@ workflow:
     expect: { status: passed }
   - id: node-dependency-proxy-denial-native
     action: { verifier: agent.golden.node-dependency-proxy-denial-native }
+    expect: { status: passed }
+
+  - id: opaque-workload-process
+    action: { verifier: agent.golden.opaque-workload-process }
+    expect: { status: passed }
+
+  - id: prepared-model-request
+    action: { verifier: agent.golden.prepared-model-request }
+    expect: { status: passed }
+
+  - id: governed-model-instructions
+    action: { verifier: agent.golden.governed-model-instructions }
     expect: { status: passed }

@@ -1,26 +1,24 @@
 import { describe, expect, it } from 'vitest';
-import { promptFromContext } from '../../../../src/sandbox/guest-contract.ts';
+import { promptFromContext } from '../../../../src/kernel/handlers/model-workload-contract.ts';
 
 describe('estimating predecessor context', () => {
-	it('bounds result summaries and drops usage while retaining exact content references', () => {
+	it('preserves authorized predecessor data without activity-specific prompt rewriting', () => {
 		const summary = 'contribution '.repeat(300);
 		const predecessor = { id: 'result-1', status: 'completed', summary,
 			references: [{ repositoryId: 'repo-exact', commitSha: 'a'.repeat(40), path: 'notes/one.mdx' }],
 			usage: { inputTokens: 999_999 }, timingAwareness: { internal: 'not-prompt-evidence' } };
 		const context = { canonicalAssignmentContext: { assignment: {
-			id: 'estimate-1', effectiveProfile: { activity: 'estimating', handler: 'estimate', prompt: {} },
+			id: 'estimate-1', effectiveProfile: { activity: 'estimating', handler: 'estimate', prompt: { system: 'Estimate the accepted scope.' } },
 		}, context: [], predecessorResults: [predecessor] } };
 		const prompt = promptFromContext(context);
-		expect(prompt).toContain('bounded excerpts; use exact references for full content');
+		expect(JSON.parse(prompt.split('\n\n').at(-1)!).canonicalAssignmentContext.predecessorResults).toEqual([predecessor]);
 		expect(prompt).toContain('repo-exact');
 		expect(prompt).toContain('result-1');
-		expect(prompt).not.toContain(summary);
-		expect(prompt).not.toContain('999999');
-		expect(prompt).not.toContain('not-prompt-evidence');
+		expect(prompt).toContain(summary);
 		const fullPrompt = promptFromContext({ canonicalAssignmentContext: {
 			...context.canonicalAssignmentContext,
 			assignment: { ...context.canonicalAssignmentContext.assignment,
-				effectiveProfile: { activity: 'planning', handler: 'planner', prompt: {} } },
+				effectiveProfile: { activity: 'planning', handler: 'planner', prompt: { system: 'Plan the accepted scope.' } } },
 		} });
 		expect(fullPrompt).toContain(summary);
 	});

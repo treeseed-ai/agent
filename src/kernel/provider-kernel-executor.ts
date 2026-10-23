@@ -174,9 +174,9 @@ export async function executeKernelAssignment(input: {
 			if (!item) throw new Error('assignment_context_reference_denied');
 			return item.value;
 		},
-		invokeModel: async () => {
+		invokeModel: async (modelInvocation) => {
 			if (transport.pending || transport.result) throw new Error('model_already_invoked');
-			transport.pending = input.executor.execute(transportRequest);
+			transport.pending = input.executor.execute({ ...transportRequest, modelInvocation });
 			transport.result = await transport.pending;
 			if (!executionStart) throw Object.assign(new Error('execution_start_not_observed'), { code: 'execution_start_not_observed' });
 			if (transport.result.status === 'abstained' && attempt.data.effectiveProfile.activity !== 'chat')

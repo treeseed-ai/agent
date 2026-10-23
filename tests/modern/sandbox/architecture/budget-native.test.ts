@@ -4,9 +4,9 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
-import { codexCloseoutTimeoutMs } from '../../../../src/sandbox/guest-contract.ts';
+import { codexCloseoutTimeoutMs } from '../../../../src/kernel/handlers/model-workload-contract.ts';
 import { remainingExecutionMs, run, withinAssignmentBudget } from '../../../../src/sandbox/process-runner.ts';
-import { observeReportedActivityCommands } from '../../../../src/sandbox/verification.ts';
+import { observeReportedActivityCommands } from '../../../../src/kernel/handlers/model-verification.ts';
 
 const fixture = fileURLToPath(new URL('./budget-process.ts', import.meta.url));
 const args = (mode: string, path?: string) => ['--import', 'tsx', fixture, mode, ...(path ? [path] : [])];

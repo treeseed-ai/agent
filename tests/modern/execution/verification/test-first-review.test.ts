@@ -1,6 +1,6 @@
 import { expect, it, vi } from 'vitest';
-import { verifyReportedActivityCommands } from '../../../../src/sandbox/guest.ts';
-import { correctObservedTestFirstRedVerification, isTestFirstVerification, reportedVerificationCommands } from '../../../../src/sandbox/guest-contract.ts';
+import { verifyReportedActivityCommands } from '../../../../src/kernel/handlers/model-workload.ts';
+import { correctObservedTestFirstRedVerification, isTestFirstVerification, reportedVerificationCommands } from '../../../../src/kernel/handlers/model-workload-contract.ts';
 
 it('preserves observed red tests in paired review without inventing passing verification', async () => {
 	const command = 'npx vitest run tests/unit/example.test.ts';

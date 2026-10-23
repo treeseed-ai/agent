@@ -15,8 +15,8 @@ import { publishSourceBranch } from './source-branch-publication.ts';
 import { assignmentRuntimeSeconds } from './activity/context.ts';
 import { RenewalDrain } from './activity/renewal-drain.ts';
 import { assignmentOfferId } from './assignment-selection.ts';
-import { providerItemIdentity } from '../../sandbox/guest-contract.ts';
-import { clockReading, timingAwarenessContract } from '../../sandbox/guest.ts';
+import { providerItemIdentity } from '../../kernel/handlers/model-workload-contract.ts';
+import { clockReading, timingAwarenessContract } from '../../kernel/handlers/model-workload.ts';
 
 const canonical = (value: unknown): string => Array.isArray(value) ? `[${value.map(canonical).join(',')}]` : value && typeof value === 'object'
 	? `{${Object.entries(value as Record<string, unknown>).filter(([, item]) => item !== undefined).sort(([a], [b]) => a.localeCompare(b)).map(([key, item]) => `${JSON.stringify(key)}:${canonical(item)}`).join(',')}}` : JSON.stringify(value);

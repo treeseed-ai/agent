@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import type { SandboxAssignment } from '@treeseed/sdk/capacity-provider';
 import { assignmentAttemptSchema, assignmentContextSchema } from '@treeseed/sdk/agent-capacity';
 import type { AgentExecutionRequest } from './contracts.ts';
+import type { Workload } from '../../sandbox/workload.ts';
 import { readDiscussionSourceContext, readFocusedTreeDxContext, readIdentityContext } from './codex-chat-executor.ts';
 import { readCoreContextPack } from './core-context-pack.ts';
 
@@ -25,8 +26,17 @@ async function removeMaterializedRoot(root: string) {
 }
 
 export async function materializeSandboxInputs(request: AgentExecutionRequest, publications: { reviewPublication?: boolean; proposalPublication?: boolean; executionPlanPublication?: boolean } = {}) {
+	if (!request.modelInvocation?.prompt?.trim()) throw new Error('prepared_model_request_required');
 	const root = await mkdtemp(join(tmpdir(), 'treeseed-sandbox-inputs-'));
 	try {
+		const modelPath = join(root, 'model-request.json'), workloadPath = join(root, 'workload.json');
+		const workload: Workload = { executable: '/usr/local/bin/node', arguments: ['/app/dist/kernel/handlers/model-workload.js'], workingDirectory: '/workspace' };
+		await writeFile(modelPath, `${JSON.stringify(request.modelInvocation)}\n`, { mode: 0o400 });
+		await writeFile(workloadPath, `${JSON.stringify(workload)}\n`, { mode: 0o400 });
+		const workloadInputs = await Promise.all([
+			descriptor('model-request', modelPath, '/workspace/.treeseed/model-request.json', 'read-only', 'application/json'),
+			descriptor('workload', workloadPath, '/workspace/.treeseed/workload.json', 'read-only', 'application/json'),
+		]);
 		const workspaceContext = request.assignment.workspaceContext && typeof request.assignment.workspaceContext === 'object'
 			? request.assignment.workspaceContext as Record<string, unknown> : {};
 		const canonicalAttempt = assignmentAttemptSchema.safeParse(request.assignment.assignmentAttempt ?? workspaceContext.assignmentAttempt);
@@ -49,6 +59,7 @@ export async function materializeSandboxInputs(request: AgentExecutionRequest, p
 				descriptor('execution-context', contextPath, '/workspace/.treeseed/context.json', 'read-only', 'application/json'),
 				descriptor('relay-ca', '/etc/treeseed/sandbox/relay-ca.crt', '/workspace/.treeseed/relay-ca.crt', 'read-only', 'application/x-pem-file'),
 			]);
+			inputs.push(...workloadInputs);
 			return { inputs, identityManifest, context, contextManifestDigest: inputs[0]!.digest,
 				async cleanup() { await removeMaterializedRoot(root); } };
 		}
@@ -73,6 +84,7 @@ export async function materializeSandboxInputs(request: AgentExecutionRequest, p
 			descriptor('execution-context', contextPath, '/workspace/.treeseed/context.json', 'read-only', 'application/json'),
 			descriptor('relay-ca', '/etc/treeseed/sandbox/relay-ca.crt', '/workspace/.treeseed/relay-ca.crt', 'read-only', 'application/x-pem-file'),
 		]);
+		inputs.push(...workloadInputs);
 		return { inputs, identityManifest: identity.manifest, context, contextManifestDigest: inputs.find((input) => input.id === 'execution-context')!.digest, async cleanup() { await removeMaterializedRoot(root); } };
 	} catch (error) {
 		await removeMaterializedRoot(root).catch(() => undefined);

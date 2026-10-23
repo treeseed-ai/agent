@@ -1,7 +1,7 @@
-import {scopeProviderEvent,providerItemIdentity} from '../../../../src/sandbox/guest-contract.ts';
+import {scopeProviderEvent,providerItemIdentity} from '../../../../src/kernel/handlers/model-workload-contract.ts';
 import { describe, expect, it } from 'vitest';
 import { executeAssignmentTreeDxTool } from '../../../../src/provider/execution/microvm-executor.ts';
-import { completedTimeStatusChecks, timingAwarenessContract } from '../../../../src/sandbox/guest.ts';
+import { completedTimeStatusChecks, timingAwarenessContract } from '../../../../src/kernel/handlers/model-workload.ts';
 import { clockRequest } from './clock-fixture.ts';
 const clock = (status = 'completed', error: unknown = null) => ({ type: 'item.completed', item: {
 	type: 'mcp_tool_call', server: 'treedx', tool: 'treeseed_time_status', status, error,

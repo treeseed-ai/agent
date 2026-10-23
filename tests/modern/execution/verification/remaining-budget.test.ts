@@ -1,6 +1,6 @@
 import { expect, it, vi } from 'vitest';
 import { withinAssignmentBudget, remainingExecutionMs, run } from '../../../../src/sandbox/process-runner.ts';
-import { observeReportedActivityCommands } from '../../../../src/sandbox/verification.ts';
+import { observeReportedActivityCommands } from '../../../../src/kernel/handlers/model-verification.ts';
 import { stat } from 'node:fs/promises';
 
 vi.mock('node:fs/promises', async importOriginal => ({

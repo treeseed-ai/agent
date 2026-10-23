@@ -11,6 +11,19 @@ The API owns scheduling, workdays, capacity plans, assignments, leases, authoriz
 
 The package does not host a control-plane API, persist control-plane resources, synthesize project work, expose a public Agent CLI, or construct raw API paths.
 
+The sandbox guest entrypoint materializes signed inputs and starts an opaque
+executable with bounded runtime resources. It does not interpret agent identity,
+class, activity, acceptance criteria, review disposition or release policy.
+The configured model handler prepares its request before transport; the separate
+model workload consumes those exact bytes inside the same sandbox. Task
+instructions come from the governed activity profile, without role-specific
+prompt injection. Every model handler supports all six activities; grants and
+activity output contracts still apply. The deterministic Reporter is specialized.
+
+This boundary change does not repair API workday audiences or class-keyed
+estimate storage. Those remain required before new group-driven portfolio runs;
+the previously deployed runtime is not evidence of the corrected architecture.
+
 ## Development
 
 ```bash

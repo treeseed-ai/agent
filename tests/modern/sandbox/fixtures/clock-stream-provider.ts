@@ -1,11 +1,14 @@
 #!/usr/bin/env -S node --import tsx
 import { readFile, writeFile } from 'node:fs/promises';
-import { invokeTreeDxRelay, runSandboxGuest } from '../../../../src/sandbox/guest.ts';
+import { invokeTreeDxRelay, runModelWorkload } from '../../../../src/kernel/handlers/model-workload.ts';
+import { runSandboxGuest } from '../../../../src/sandbox/guest.ts';
 
 // Controlled provider subprocess INPUT, not Codex/model execution or a second
 // guest implementation. The native fixture invokes the original whole guest.
 if (process.argv.includes('--guest')) {
 	await runSandboxGuest();
+} else if (process.argv.includes('--workload-program')) {
+	await runModelWorkload();
 } else {
 	await writeFile('/run/treeseed-output/provider-invoked', 'Controlled subprocess invoked.\n');
 	for await (const _chunk of process.stdin) { /* Consume the original prompt. */ }

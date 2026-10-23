@@ -1,7 +1,7 @@
 import { expect, it } from 'vitest';
 import { activityCompletionOutputSchema } from '../../../src/activity-completion.ts';
 import { assertPredecessorSynthesis, planningSynthesisCorrectionPrompt, planningSynthesisOutputSchema } from '../../../src/kernel/handlers/planning-synthesis.ts';
-import { promptFromContext } from '../../../src/sandbox/guest-contract.ts';
+import { promptFromContext } from '../../../src/kernel/handlers/model-workload-contract.ts';
 
 const ids = ['3ce1ea4725fdccfa3aa8668d', 'bad084c64c8ca3fbe2409eaf', '46f5cfb7465cc07cf5a05d54',
 	'f84ccbb7349c34dbf32f097c', '93be30d59ad99d879c4d765a', '8d272e7a141ee34d56b4f177',
@@ -18,7 +18,7 @@ it('gives generation and recovery the identical complete ordered contribution fo
 	const description = schema.properties.summary.description;
 	expect(description).toContain(starts);
 	expect(description).toContain('actual line break');
-	expect(promptFromContext(context)).toContain(description);
+	expect(JSON.parse(promptFromContext(context).split('\n\n').at(-1)!).canonicalAssignmentContext.predecessorResults).toEqual(predecessors);
 	expect(planningSynthesisCorrectionPrompt(ids.slice(1), completion, predecessors)).toContain(description);
 });
 

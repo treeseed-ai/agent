@@ -12,7 +12,7 @@ import { timingAwareness } from '../../provider-kernel-fixture.ts';
 import { row } from '../../../../acceptance/acceptance-cli.ts';
 import { verifyReviewFindingContent } from '../../../../acceptance/workday/support/decision-evidence.ts';
 import { verifyDraftProposalHandoff, verifyUnfinishedDraftHandoff, verifyTreeDxProductRead } from '../../../../acceptance/workday/support/assignment-authority.ts';
-import { objectDigest } from '../../../../../src/sandbox/verification.ts';
+import { objectDigest } from '../../../../../src/kernel/handlers/model-verification.ts';
 import { canonicalStandardsJson } from '@treeseed/sdk/standards';
 import { verifySdkArchitectureBook } from '../../../../acceptance/prepare-campaign.ts';
 

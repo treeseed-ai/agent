@@ -5,7 +5,7 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { prepareNodeWorkspace } from '../../../../src/sandbox/verification.ts';
+import { prepareNodeWorkspace } from '../../../../src/kernel/handlers/model-verification.ts';
 import { run } from '../../../../src/sandbox/process-runner.ts';
 
 async function inspectNativeTransport(allowed: boolean) {

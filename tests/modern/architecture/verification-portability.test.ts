@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest';
 import { activityAllowsVerification, assertTesterFailureEvidence, attachObservedTesterFailures,
-	correctObservedTestFirstRedVerification } from '../../../src/sandbox/guest-contract.ts';
+	correctObservedTestFirstRedVerification } from '../../../src/kernel/handlers/model-workload-contract.ts';
 import type { ActivityCompletionReport } from '../../../src/activity-completion.ts';
 
 // Architecture ownership: assigned criteria select evidence; identity never selects policy.

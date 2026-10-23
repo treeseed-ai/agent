@@ -2011,6 +2011,21 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/kernel/architecture/portable/portable-handler-contract.test.ts
     testName: "keeps prompts parameters context selectors and permission ceilings solely in the configured profile"
+  agent.golden.all-activity-handlers:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/portable/activities/model-handlers.test.ts
+    testName: "executes all six activities with every model handler without handler-name filtering"
+  agent.golden.all-activity-review-authority:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/portable/activities/model-handlers.test.ts
+    testName: "requires the same exact review finding grant for every handler"
+  agent.golden.all-activity-handlers-native:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/portable/activities/model-handlers-native.test.ts
+    testName: "uses every configured model handler for the same native Git product without role routing"
   agent.golden.architecture-portable-kernel-1:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"
@@ -3079,8 +3094,8 @@ verifiers:
   agent.golden.mandatory-replay-reserve:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"
-    testFile: tests/modern/execution/timing/time-budget-discipline.test.ts
-    testName: "reserves mandatory runner replay inside the original assignment budget"
+    testFile: tests/modern/execution/verification/release-review-first.test.ts
+    testName: "bounds early native checks and additional replay to the same original deadline without resetting it"
   agent.golden.synthesis-api-deadline:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"
@@ -3115,7 +3130,7 @@ verifiers:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/execution/timing/time-budget-discipline.test.ts
-    testName: "retains ongoing time discipline for independently verified Git work"
+    testName: "keeps instruction authority in the configured profile for Git work"
   agent.golden.measured-time-discipline:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"
@@ -3230,7 +3245,7 @@ verifiers:
     kind: vitestCase
     ownerPackage: '@treeseed/agent'
     testFile: tests/modern/execution/verification/canonical-work-reuse.test.ts
-    testName: reuses materialized exact context without skipping missing predecessor read-back
+    testName: preserves exact authorized context without adding rediscovery instructions
   agent.golden.revision-original-source:
     kind: vitestCase
     ownerPackage: '@treeseed/agent'
@@ -3250,7 +3265,7 @@ verifiers:
     kind: vitestCase
     ownerPackage: '@treeseed/agent'
     testFile: tests/modern/execution/verification/canonical-work-reuse.test.ts
-    testName: avoids separate aggregate-owned builds without weakening independent release gates
+    testName: does not infer release instructions from class handler or criteria text
   agent.golden.research-review-challenge:
     kind: vitestCase
     ownerPackage: '@treeseed/agent'
@@ -3335,7 +3350,7 @@ verifiers:
     kind: vitestCase
     ownerPackage: '@treeseed/agent'
     testFile: tests/modern/execution/verification/portable-release-pack.test.ts
-    testName: guides both release Actor and Reviewer to independently verify ordinary current-directory packaging
+    testName: keeps packaging instructions in the accepted profile instead of inferring them from role names
   agent.golden.continuation-revision-denial:
     kind: vitestCase
     ownerPackage: '@treeseed/agent'
@@ -3517,8 +3532,8 @@ verifiers:
   agent.golden.canonical-release-revision:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"
-    testFile: tests/modern/execution/codex/codex-chat-executor.test.ts
-    testName: "directs a releaser revision actor to apply exact reviewer corrections before gating"
+    testFile: tests/modern/execution/activities/workload-preparation.test.ts
+    testName: "takes all task instructions from governed YAML across arbitrary identities handlers and activities"
   agent.golden.recursive-workspace-grant:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"
@@ -3528,7 +3543,7 @@ verifiers:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/execution/codex/codex-context.test.ts
-    testName: gives all eight planning roles one kernel-owned Note completion contract
+    testName: does not inject planning-role instructions into the configured prompt
   agent.golden.discussion-publication:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"
@@ -3647,8 +3662,8 @@ verifiers:
   agent.golden.revision:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"
-    testFile: tests/modern/execution/codex/codex-chat-executor.test.ts
-    testName: "keeps Git work descended from the exact assigned candidate across review revisions"
+    testFile: tests/modern/kernel/architecture/portable/project-handler.test.ts
+    testName: "project-owned executable composition cannot widen the immutable workspace grant or rewrite the reviewed base"
   agent.golden.reporter:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"
@@ -4511,3 +4526,21 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/execution/codex/dependency-transport-native.test.ts
     testName: "uses the authenticated HTTPS proxy and preserves its allowed=false decision"
+
+  agent.golden.opaque-workload-process:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/sandbox/architecture/workload-native.test.ts
+    testName: "executes an ordinary program without any agent identity profile or model context"
+
+  agent.golden.prepared-model-request:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/activities/workload-preparation.test.ts
+    testName: "binds the exact prepared request and executable as signed read-only inputs and cleans its real files"
+
+  agent.golden.governed-model-instructions:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/activities/workload-preparation.test.ts
+    testName: "takes all task instructions from governed YAML across arbitrary identities handlers and activities"

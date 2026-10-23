@@ -33,6 +33,25 @@ async function suppliedRecoveryStore() {
 	} catch (error) { vi.doUnmock('node:fs/promises'); vi.resetModules(); throw error; }
 }
 describe('provider active-time accounting', () => {
+	it('retains unknown recovery clocks and period holds without charging idle time on reads or later writes', async () => {
+		const root = await mkdtemp(join(tmpdir(), 'treeseed-unknown-recovery-'));
+		vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date('2026-10-22T08:23:00Z'));
+		try {
+			const store = new ProviderLocalCapacityStore(root), claim = await store.claim({ connectionId: 'team', globalLimit: 1, connectionLimit: 1 });
+			await store.attachLease(claim!.id, { assignmentId: 'retained-original', leaseToken: 'test-only', leaseExpiresAt: '2026-10-22T09:23:00Z',
+				requestedSeconds: 30, dispatchEnvelope: {}, accounting: { capabilityId: 'implementation', modelConfigurationId: 'luna', dailyActiveSecondsLimit: 100, capabilityDailyActiveSecondsLimit: 100 } });
+			await store.claimDispatch(claim!.id); await store.beginActiveExecution(claim!.id);
+			vi.setSystemTime(new Date('2026-10-22T08:23:10Z')); await store.recordFailure(claim!.id, 'original interrupted closeout');
+			const original = (await store.claimsForRecovery())[0];
+			vi.setSystemTime(new Date('2026-10-22T21:48:00Z'));
+			for (let read = 0; read < 2; read++) expect((await store.activeTimeObservation('luna', ['implementation'])).modelUsage)
+				.toEqual({ day: '2026-10-22', activeSeconds: 10, reservedSeconds: 20 });
+			await store.saveSession('other', { id: 'new-session', sequence: 1 });
+			expect((await store.claimsForRecovery())[0]).toEqual(original);
+			expect(original?.activeFinishedAt).toBeUndefined(); expect(original?.closeoutOutput).toBeUndefined();
+			expect((await store.activeTimeObservation('luna', ['implementation'])).modelUsage).toEqual({ day: '2026-10-22', activeSeconds: 10, reservedSeconds: 20 });
+		} finally { await rm(root, { recursive: true, force: true }); }
+	});
 	it('denies a positive reservation against either valid zero quota without changing the supplied polling claim or prior recovery history', async () => {
 		const f = await suppliedRecoveryStore();
 		try {

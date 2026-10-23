@@ -8,12 +8,12 @@ import { workdayStartFixture } from './workday-start-fixture.ts';
 
 afterEach(() => vi.unstubAllEnvs());
 it('native public SDK start and independent child preserve the exact API receipt across process isolation without replaying admission', async () => {
-	const f = workdayStartFixture(), calls: Array<{ method: string | undefined; path: string | undefined; body: unknown }> = [];
+	const f = workdayStartFixture(), calls: Array<{ method: string | undefined; path: string | undefined; body: unknown; key: unknown }> = [];
 	let mode = 'exact'; const failed: unknown[] = [];
 	vi.stubEnv('TREESEED_ACCEPTANCE_WORKDAY_ID', '');
 	const server = createServer((request, response) => {
 		let body = ''; request.setEncoding('utf8'); request.on('data', chunk => { body += chunk; });
-		request.on('end', () => { calls.push({ method: request.method, path: request.url, body: body ? JSON.parse(body) : undefined });
+		request.on('end', () => { calls.push({ method: request.method, path: request.url, body: body ? JSON.parse(body) : undefined, key: request.headers['idempotency-key'] });
 			response.setHeader('content-type', 'application/json');
 			if (request.method === 'POST') { response.end(JSON.stringify({ data: f.receipt })); return; }
 			if (mode === 'denied') { failed.push({ mode, status: 403 }); response.writeHead(403).end(JSON.stringify({ status: 403, code: 'controlled-read-denied', title: 'Controlled denial' })); return; }
@@ -31,16 +31,21 @@ it('native public SDK start and independent child preserve the exact API receipt
 		const sdk = createRequire(import.meta.url).resolve('@treeseed/sdk/control-plane-client');
 		const operations = createRequire(import.meta.url).resolve('@treeseed/sdk/operator-contracts');
 		const helper = new URL('../../../acceptance/campaign.ts', import.meta.url).href;
+		const key = `golden-start:${f.receipt.preflightId}`, start = { path: { teamId: 'controlled-team' }, query: {},
+			body: { preflightId: f.receipt.preflightId, preflightDigest: f.receipt.preflightDigest } };
 		const code = `import{ControlPlaneClient,defaultLocalControlPlaneServer}from ${JSON.stringify(sdk)};
 import{controlPlaneOperation}from ${JSON.stringify(operations)};
 import{retainCampaignWorkdayStart}from ${JSON.stringify(helper)};
 const client=new ControlPlaneClient({profile:defaultLocalControlPlaneServer({TREESEED_API_BASE_URL:${JSON.stringify(`http://127.0.0.1:${address.port}`)}}),accessToken:'controlled-native-input'});
-const response=await client.invoke(controlPlaneOperation('workdays.start'),{path:{teamId:'controlled-team'},query:{},body:${JSON.stringify({ preflightId: f.receipt.preflightId, preflightDigest: f.receipt.preflightDigest, idempotencyKey: `golden-start:${f.receipt.preflightId}` })}});
+const response=await client.invoke(controlPlaneOperation('workdays.start'),${JSON.stringify(start)},${JSON.stringify({ idempotencyKey: key })});
 retainCampaignWorkdayStart(response.data,${JSON.stringify(f.path)},${JSON.stringify(f.freeze)});
 process.stdout.write(process.env.TREESEED_ACCEPTANCE_WORKDAY_ID);`;
 		const execute = promisify(execFile), options = { cwd: new URL('../../../../', import.meta.url), timeout: 5_000, maxBuffer: 131_072, env: { ...process.env }, killSignal: 'SIGKILL' as const };
 		const first = await execute(process.execPath, ['--import', 'tsx', '--input-type=module', '-e', code], options);
 		expect(first.stdout).toBe(f.receipt.workdayId); expect(process.env.TREESEED_ACCEPTANCE_WORKDAY_ID).toBe('');
+		const legacy = code.replace(JSON.stringify(start), JSON.stringify({ ...start, body: { ...start.body, idempotencyKey: key } }));
+		await expect(execute(process.execPath, ['--import', 'tsx', '--input-type=module', '-e', legacy], options)).rejects.toThrow('idempotencyKey');
+		expect(calls).toHaveLength(1);
 		const held = readFileSync(f.retained);
 		const duplicate = `import{retainCampaignWorkdayStart}from ${JSON.stringify(helper)};retainCampaignWorkdayStart(${JSON.stringify(f.receipt)},${JSON.stringify(f.path)},${JSON.stringify(f.freeze)});`;
 		await Promise.all(Array.from({ length: 4 }, () => execute(process.execPath, ['--import', 'tsx', '--input-type=module', '-e', duplicate], options)));
@@ -66,8 +71,8 @@ return observed.data;},'controlled-team',{TREESEED_ACCEPTANCE_FREEZE_PATH:${JSON
 		const originalFailures = structuredClone(failed); mode = 'exact'; expect((await observe()).stdout).toBe(f.receipt.workdayId);
 		expect(failed).toEqual(originalFailures); expect(failed).toHaveLength(5); expect(readFileSync(f.path)).toEqual(f.bytes);
 		expect(calls).toEqual([{ method: 'POST', path: '/v1/teams/controlled-team/workday-runs', body: { preflightId: f.receipt.preflightId,
-			preflightDigest: f.receipt.preflightDigest, idempotencyKey: `golden-start:${f.receipt.preflightId}` } },
-			...Array.from({ length: 7 }, () => ({ method: 'GET', path: `/v1/teams/controlled-team/workday-runs/${f.receipt.workdayId}`, body: undefined }))]);
+			preflightDigest: f.receipt.preflightDigest }, key },
+			...Array.from({ length: 7 }, () => ({ method: 'GET', path: `/v1/teams/controlled-team/workday-runs/${f.receipt.workdayId}`, body: undefined, key: undefined }))]);
 
 		const fs = await import('node:fs'), planPath = f.root + '/unsafe-sdk.freeze.json';
 		const unsafe = { ...f.freeze, proposal: { ...f.freeze.proposal, id: 'unsafe-controlled-proposal' }, request: { body: { ...f.freeze.request.body, executionMode: 'production' } } };

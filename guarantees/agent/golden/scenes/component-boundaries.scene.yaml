@@ -1200,6 +1200,15 @@ workflow:
   - id: all-activity-handlers-native
     action: { verifier: agent.golden.all-activity-handlers-native }
     expect: { status: passed }
+  - id: subscriber-estimate-schema
+    action: { verifier: agent.golden.subscriber-estimate-schema }
+    expect: { status: passed }
+  - id: subscriber-estimate-authority
+    action: { verifier: agent.golden.subscriber-estimate-authority }
+    expect: { status: passed }
+  - id: subscriber-estimate-native
+    action: { verifier: agent.golden.subscriber-estimate-native }
+    expect: { status: passed }
   - id: architecture-portable-kernel-1
     action: { verifier: agent.golden.architecture-portable-kernel-1 }
     expect: { status: passed }

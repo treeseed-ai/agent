@@ -2,6 +2,22 @@ import { describe, expect, it } from 'vitest';
 import { activityCompletionOutputSchema, validateActivityCompletion } from '../../src/activity-completion.ts';
 import { completionFrontmatterSchema, completionOutputTargetVariants, promptFromContext } from '../../src/kernel/handlers/model-workload-contract.ts';
 
+interface SchemaNode {
+	type?: string; anyOf?: readonly SchemaNode[]; const?: unknown; additionalProperties?: boolean;
+	required?: readonly string[]; properties?: Record<string, SchemaNode>; items?: SchemaNode;
+}
+function checkShape(node: SchemaNode) {
+	expect(Boolean(node.type || node.anyOf)).toBe(true);
+	if ('const' in node) expect(['string', 'number', 'boolean'].includes(typeof node.const)).toBe(true);
+	if (node.type === 'object') {
+		expect(node.additionalProperties).toBe(false);
+		expect(node.required?.slice().sort()).toEqual(Object.keys(node.properties ?? {}).sort());
+		Object.values(node.properties ?? {}).forEach(checkShape);
+	}
+	if (node.type === 'array') { expect(node.items).toBeDefined(); checkShape(node.items!); }
+	node.anyOf?.forEach(checkShape);
+}
+
 describe('activity completion structured-output schema', () => {
 	it('generates subscriber-owned proposal work from the admitted estimate even when the group draft has no class-owned plan', () => {
 		const sourceRef = { store: 'treedx', model: 'proposal', id: 'prepared-workload-repair', revision: 1,
@@ -18,6 +34,7 @@ describe('activity completion structured-output schema', () => {
 		} } } } };
 		expect(schema.properties.executionPlan.properties.workItems.items.properties.estimateRef.properties.id.const).toBe(assignment.id);
 		expect(schema.properties.executionPlan.properties.workItems.items.properties.estimateRef.properties.revision.const).toBe(assignment.attempt);
+		checkShape(activityCompletionOutputSchema(schema));
 	});
 	it('requires a real Reviewer disposition in structured output and null for non-review work', () => {
 		expect(activityCompletionOutputSchema(undefined, true, undefined, true).properties.reviewDisposition)
@@ -50,17 +67,6 @@ describe('activity completion structured-output schema', () => {
 		Object.assign(assignment, { workItemId: 'architecture' });
 		const scoped = completionFrontmatterSchema(context) as any;
 		expect(Object.keys(scoped.properties.executionPlan.properties.workItems.items.anyOf[0].properties)).toEqual(['estimate']);
-		const checkShape = (node: any) => {
-			expect(Boolean(node.type || node.anyOf)).toBe(true);
-			if ('const' in node) expect(['string', 'number', 'boolean'].includes(typeof node.const)).toBe(true);
-			if (node.type === 'object') {
-				expect(node.additionalProperties).toBe(false);
-				expect([...node.required].sort()).toEqual(Object.keys(node.properties).sort());
-				Object.values(node.properties).forEach(checkShape);
-			}
-			if (node.type === 'array') checkShape(node.items);
-			node.anyOf?.forEach(checkShape);
-		};
 		checkShape(activityCompletionOutputSchema(schema));
 		checkShape(activityCompletionOutputSchema(owner));
 		Object.assign(assignment, { agentClass: 'missing' });

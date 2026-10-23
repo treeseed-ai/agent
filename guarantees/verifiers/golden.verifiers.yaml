@@ -2026,6 +2026,21 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/kernel/architecture/portable/activities/model-handlers-native.test.ts
     testName: "uses every configured model handler for the same native Git product without role routing"
+  agent.golden.subscriber-estimate-schema:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/activity-completion.test.ts
+    testName: "generates subscriber-owned proposal work from the admitted estimate even when the group draft has no class-owned plan"
+  agent.golden.subscriber-estimate-authority:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/estimate-class-scope.test.ts
+    testName: "rejects forged malformed and unrelated output before any private content commit"
+  agent.golden.subscriber-estimate-native:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/portable/activities/subscriber-estimates-native.test.ts
+    testName: "publishes each subscriber contribution from a blank group draft through all model handlers and denies a forged attempt before writing"
   agent.golden.architecture-portable-kernel-1:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

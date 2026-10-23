@@ -70,7 +70,7 @@ export function completionFrontmatterSchema(context: Record<string, unknown>) {
 	const assignment = record(record(context.canonicalAssignmentContext).assignment), profile = record(assignment.effectiveProfile);
 	if (text(profile.activity) === 'estimating') {
 		const proposal = assignmentProposalSource(record(context.canonicalAssignmentContext));
-		return estimateProposalOutputSchema(proposal, text(assignment.agentClass), text(assignment.workItemId) || undefined);
+		return estimateProposalOutputSchema(proposal, assignment);
 	}
 	if (text(profile.activity) !== 'acting' || text(record(assignment.workspace).mode) !== 'treedx') return undefined;
 	const grants = record(assignment.grant).contentWrite;

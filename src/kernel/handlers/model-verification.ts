@@ -3,7 +3,7 @@ import { mkdtemp, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { assignmentProposalSource, type ActivityCompletionReport } from '../../activity-completion.ts';
-import { correctObservedTestFirstRedVerification, isTestFirstVerification, isTestVerificationCommand, isReleaseReview, reportedVerificationCommands, record, text } from './model-workload-contract.ts';
+import { correctObservedTestFirstRedVerification, isTestFirstVerification, isReleaseReview, reportedVerificationCommands, record, text } from './model-workload-contract.ts';
 import { run } from '../../sandbox/process-runner.ts';
 import { redactProviderDiagnostic } from '../../sandbox/provider-failure.ts';
 import type { VerificationResult } from '../contracts.ts';
@@ -57,18 +57,29 @@ export async function observeReportedActivityCommands(report: ActivityCompletion
 			const exit = /exited (\d+)/u.exec(message)?.[1] ?? 'unknown';
 			const diagnostics = `${redactProviderDiagnostic(error, secrets)}; ${failedOutput}`;
 			const observed = record(error);
+			// A declared failed check is factual command evidence, not an inferred
+			// assertion-only test or a passing product gate. The process boundary
+			// distinguishes a completed nonzero exit from timeout/signal/cleanup.
+			if (authoredFailure && observed.code === 'subprocess_nonzero_exit'
+				&& Number.isInteger(observed.exitCode) && Number(observed.exitCode) > 0 && Number(observed.exitCode) <= 255
+				&& typeof observed.stdout === 'string' && typeof observed.stderr === 'string') {
+				const receipt: VerificationResult = { command, status: 'failed', exitCode: Number(observed.exitCode),
+					outputDigest: objectDigest({ stdout: observed.stdout, stderr: observed.stderr }),
+					durationSeconds: Math.ceil(Number(process.hrtime.bigint() - started) / 1e9) };
+				verification.push(receipt); observations.push({ ...receipt, stdout: observed.stdout, stderr: observed.stderr });
+				continue;
+			}
 			const output = `${text(observed.stdout)}\n${text(observed.stderr)}`.replace(/\u001b\[[0-9;]*m/gu, '');
 			// Only actual assertion failures are test-first red evidence. Setup failures,
 			// killed processes and unknown exits remain fatal even in a test-first scope.
-			if ((authoredFailure && isTestVerificationCommand(command)
-				|| isTestFirstVerification(text(record(assignment.effectiveProfile).activity), assignment.acceptanceCriteria, command)) && observed.exitCode === 1 && typeof observed.stdout === 'string' && typeof observed.stderr === 'string'
+			if (!authoredFailure && isTestFirstVerification(text(record(assignment.effectiveProfile).activity), assignment.acceptanceCriteria, command) && observed.exitCode === 1 && typeof observed.stdout === 'string' && typeof observed.stderr === 'string'
 				&& /\bFAIL\s+\S+\.test\.tsx?\s+>/u.test(output) && /\bAssertionError\b/u.test(output)
 				&& !/Cannot find module|Failed to load|heap out of memory|Unhandled Error|SyntaxError|TypeError|ReferenceError|timed?\s*out|timeout|\bskipped\b|\btodo\b/iu.test(output)) {
-				const corrected = authoredFailure ? report : correctObservedTestFirstRedVerification(report,
+				const corrected = correctObservedTestFirstRedVerification(report,
 					[{ type: 'item.completed', item: { type: 'command_execution', command, exit_code: 1 } }],
 					text(assignment.agentClass), text(record(assignment.effectiveProfile).activity), assignment.acceptanceCriteria);
 				if (corrected.verification.some(entry => entry.status === 'failed' && entry.commands.length === 1 && entry.commands[0]!.trim() === command.trim())) {
-					if (!authoredFailure) report = { ...corrected, summary: `${corrected.summary}\nRunner-observed test-first red: ${redactProviderDiagnostic(command, secrets)} (exit 1); ${diagnostics}`,
+					report = { ...corrected, summary: `${corrected.summary}\nRunner-observed test-first red: ${redactProviderDiagnostic(command, secrets)} (exit 1); ${diagnostics}`,
 						verification: corrected.verification.map(entry => entry.status === 'failed'
 						&& entry.commands.length === 1 && entry.commands[0]!.trim() === command.trim() ? { ...entry, summary: `${entry.summary} ${diagnostics}` } : entry) };
 					const receipt: VerificationResult = { command, status: 'failed', exitCode: 1,

@@ -111,7 +111,9 @@ export function run(executable: string, args: string[], options: { cwd?: string;
 			if (child.pid) try { await drainOwnedProcessGroup(child.pid, group); } catch (error) { cleanupError = error; }
 			if (cleanupError) { reject(Object.assign(new Error('assignment_subprocess_cleanup_failed', { cause: cleanupError }), { exitCode: code, stdout, stderr })); return; }
 			interrupted ? reject(new Error('codex_closeout_interrupted')) : code === 0 ? accept({ stderr, stdout })
-				: reject(Object.assign(new Error(timedOut ? `${executable} exceeded its interactive execution deadline.` : `${executable} exited ${code ?? signal}: ${stderr}`), { exitCode: timedOut ? null : code, stdout, stderr }));
+				: reject(Object.assign(new Error(timedOut ? `${executable} exceeded its interactive execution deadline.` : `${executable} exited ${code ?? signal}: ${stderr}`), {
+					...(!timedOut && typeof code === 'number' && code > 0 ? { code: 'subprocess_nonzero_exit' } : {}),
+					exitCode: timedOut ? null : code, stdout, stderr }));
 		});
 		child.stdin?.on('error', (error: NodeJS.ErrnoException) => { if (error.code !== 'EPIPE') reject(error); });
 		if (options.input !== undefined) child.stdin?.end(options.input);

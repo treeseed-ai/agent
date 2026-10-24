@@ -3879,6 +3879,21 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/execution/verification/replay-failure.test.ts
     testName: "retains actual runner assertion failures for an arbitrarily renamed independent reviewer without claiming a passing replay"
+  agent.golden.execution-factual-failure-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/verification/factual-failure.test.ts
+    testName: "retains authored nonzero command facts without interpreting framework names or diagnostic prose"
+  agent.golden.execution-factual-failure-native:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/verification/factual-failure.test.ts
+    testName: "real filtered Vitest assertion retains failed evidence and unselected test output through the command observer"
+  agent.golden.execution-factual-failure-denial-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/verification/factual-failure.test.ts
+    testName: "denies untyped abnormal incomplete and unexpectedly successful failed-check observations"
   agent.golden.execution-compiler-batch-unit:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

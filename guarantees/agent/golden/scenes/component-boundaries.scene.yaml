@@ -2669,3 +2669,13 @@ workflow:
   - id: governed-model-instructions
     action: { verifier: agent.golden.governed-model-instructions }
     expect: { status: passed }
+
+  - id: execution-factual-failure-unit
+    action: { verifier: agent.golden.execution-factual-failure-unit }
+    expect: { status: passed }
+  - id: execution-factual-failure-native
+    action: { verifier: agent.golden.execution-factual-failure-native }
+    expect: { status: passed }
+  - id: execution-factual-failure-denial-unit
+    action: { verifier: agent.golden.execution-factual-failure-denial-unit }
+    expect: { status: passed }

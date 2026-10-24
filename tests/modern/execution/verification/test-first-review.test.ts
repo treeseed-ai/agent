@@ -5,7 +5,7 @@ it('replays truthful failed assertions without acceptance-prose or role selectio
 	const command = 'npx vitest run tests/unit/example.test.ts';
 	const report = { schemaVersion: 'treeseed.activity-completion/v1' as const, summary: 'Actual regression evidence',
 		reviewDisposition: null, contentOutput: null, verification: [{ status: 'failed' as const, summary: 'A real assertion failed.', commands: [command] }] };
-	const evidence = { exitCode: 1, stdout: 'FAIL tests/unit/example.test.ts > required behavior\nAssertionError: expected correct behavior\n', stderr: '' };
+	const evidence = { code: 'subprocess_nonzero_exit', exitCode: 1, stdout: 'FAIL tests/unit/example.test.ts > required behavior\nAssertionError: expected correct behavior\n', stderr: '' };
 	for (const activity of ['planning', 'estimating', 'acting', 'reviewing', 'chat']) {
 		const assignment = { agentClass: 'configured-contributor', effectiveProfile: { activity }, acceptanceCriteria: ['Develop executable regression coverage.'] };
 		const held = structuredClone({ report, assignment, evidence });

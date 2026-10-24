@@ -40,6 +40,27 @@ describe('subscriber-owned proposal estimating', () => {
 		dependsOn: [], requestedPermissions: { content: { read: ['proposal'], write: [] }, tools: [] },
 		acceptanceCriteria: ['Document the concrete interface that the regression and repair must implement.'] };
 	const patch = { executionPlan: { workItems: [work] } };
+	it('claims its own discussed item while retaining an unestimated downstream contribution', () => {
+		const unestimated = (item: Record<string, unknown>) => Object.fromEntries(Object.entries(item)
+			.filter(([key]) => !['estimate', 'estimateRef', 'reviewEstimate'].includes(key)));
+		const peer = unestimated({ ...work, id: 'implement-handoff', dependsOn: [work.id] });
+		const base = { ...proposal, executionPlan: { workItems: [unestimated(work), peer] } }, held = structuredClone(base);
+		expect(mergeSubscriberEstimateOutput(base, patch, assignment)).toEqual({ ...base,
+			executionPlan: { workItems: [work, peer] } });
+		expect(base).toEqual(held);
+	});
+	it('requires actual own estimates even while the shared plan permits unestimated peers', () => {
+		const schema = estimateProposalOutputSchema(proposal, assignment);
+		const item = (schema.properties as { executionPlan: { properties: { workItems: {
+			items: { required: string[] } } } } }).executionPlan.properties.workItems.items;
+		expect(item.required).toEqual(expect.arrayContaining(['estimateRef', 'estimate']));
+		for (const field of ['estimate', 'reviewEstimate']) {
+			const incomplete = { ...work } as Record<string, unknown>; Reflect.deleteProperty(incomplete, field);
+			const output = { executionPlan: { workItems: [incomplete] } }, held = structuredClone(output);
+			expect(() => mergeSubscriberEstimateOutput(proposal, output, assignment)).toThrow();
+			expect(output).toEqual(held);
+		}
+	});
 	it('pins the actual attempt without a role filter and preserves peers in one private candidate on first contribution and retry', () => {
 		const peer = { ...work, id: 'reproduce-handoff', estimateRef: { ...reference, id: 'estimate-peer' } };
 		const base = { ...proposal, executionPlan: { workItems: [peer] } }, held = structuredClone(base);

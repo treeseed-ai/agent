@@ -13,16 +13,21 @@ import { timingAwareness } from '../../../provider-kernel-fixture.ts';
 // API admission, canonical proposal integration or physical isolation evidence.
 it('publishes each subscriber contribution from a blank group draft through all model handlers and denies a forged attempt before writing', async () => {
 	for (const handler of ['writer', 'actor', 'estimate', 'reviewer', 'releaser']) {
-		for (const owner of ['own', 'shared']) for (const forged of [true, false]) {
+		for (const owner of ['own', 'shared']) for (const forged of [true, false]) for (const discussed of [false, true]) {
 			const f = await portableKernel();
 			let boundary: Awaited<ReturnType<typeof contextBoundary>> | undefined;
 			try {
 				const repository = 'native-estimate-library', path = 'proposals/prepared-workload.mdx';
 				const body = 'Document, reproduce and repair the prepared workload request handoff.';
 				const projectId = owner === 'own' ? f.attempt.projectId : 'portfolio-owner';
+				const planned = { id: 'document-handoff', activity: 'acting', workspace: 'read-only', review: 'required', maximumReviewCycles: 2,
+					objective: body, dependsOn: [] as string[], requestedPermissions: { content: { read: ['proposal'], write: [] }, tools: [] },
+					acceptanceCriteria: ['Document the real request contract.'] };
+				const peer = { ...planned, id: 'implement-handoff', dependsOn: [planned.id] };
 				const proposal = { schemaVersion: 'treeseed.proposal/v2', id: 'prepared-workload', projectId,
 					groupIds: ['provider-runtime'], title: 'Repair prepared workload inputs', status: 'discussing', request: body,
-					summary: 'Each group subscriber contributes real portfolio work.' };
+					summary: 'Each group subscriber contributes real portfolio work.',
+					...(discussed ? { executionPlan: { workItems: [planned, peer] } } : {}) };
 				const bytes = `---\n${stringify(proposal)}---\n\n${body}\n`;
 				mkdirSync(join(f.checkout, 'proposals')); writeFileSync(join(f.checkout, path), bytes);
 				f.git('add', path); f.git('commit', '-m', 'Controlled original group proposal');
@@ -85,7 +90,7 @@ it('publishes each subscriber contribution from a blank group draft through all 
 				} else {
 					expect(result.status, `${handler}: ${result.summary}`).toBe('completed'); expect(writes).toBe(1);
 					expect(f.git('rev-parse', `${candidate}^`)).toBe(commit);
-					expect(read(candidate).frontmatter).toEqual({ ...proposal, executionPlan: { workItems: [work] } });
+					expect(read(candidate).frontmatter).toEqual({ ...proposal, executionPlan: { workItems: discussed ? [work, peer] : [work] } });
 					expect(assignmentResultSchema.parse(result.outputs?.assignmentResult).references).toEqual([
 						{ kind: 'treedx', projectId, repository, path, commit: candidate, workspaceId: 'own-estimate' }]);
 				}

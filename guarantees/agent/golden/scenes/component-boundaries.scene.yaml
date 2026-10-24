@@ -2679,3 +2679,6 @@ workflow:
   - id: execution-factual-failure-denial-unit
     action: { verifier: agent.golden.execution-factual-failure-denial-unit }
     expect: { status: passed }
+  - id: execution-recovered-tool-resource-unit
+    action: { verifier: agent.golden.execution-recovered-tool-resource-unit }
+    expect: { status: passed }

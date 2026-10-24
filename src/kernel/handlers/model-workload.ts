@@ -181,7 +181,10 @@ export async function runTreeDxMcpServer(){
 	}
 }
 
-export function providerResourceAbort(events: Record<string, unknown>[]) {
+export function providerResourceAbort(events: Record<string, unknown>[], providerFailed: boolean) {
+	// A completed provider turn may have handled an inner-tool failure. Preserve
+	// that event as evidence; it does not establish failure of the whole workload.
+	if (!providerFailed) return null;
 	for (const event of events) {
 		const item = record(event.item);
 		if (text(event.type) !== 'item.completed' || text(item.type) !== 'command_execution') continue;
@@ -407,7 +410,7 @@ export async function runModelWorkload() {
 			throw new Error(`Agent timing-awareness contract requires treeseed_time_status as the first and final tool actions with two completed checks. Provider errors: ${providerError?.message ?? (providerFailureSummary(events, secrets) || '(none)')}. Observed ${JSON.stringify(timingAwareness)}. Provider event shapes: ${JSON.stringify(providerEventShapeSummary(events, secrets))}. Response preview: ${providerResponsePreview(events, secrets) || '(empty)'}`);
 		}
 		const rawResponse = providerError ? '' : (await readFile(responsePath, 'utf8')).trim(); if (!providerError && !rawResponse) throw new Error('Execution provider returned an empty response.');
-		const resourceAbort = providerResourceAbort(events);
+		const resourceAbort = providerResourceAbort(events, providerError !== null);
 		if (resourceAbort) throw new Error(`sandbox_resource_exhausted: command exited ${resourceAbort.exitCode}: ${resourceAbort.command}`);
 		const validatedCompletion = !providerError && structuredCompletion ? validateActivityCompletion(JSON.parse(rawResponse), allowVerification) : null;
 		const correctedCompletion = validatedCompletion ? correctObservedTestFirstRedVerification(validatedCompletion, events,

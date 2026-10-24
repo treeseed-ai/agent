@@ -38,7 +38,7 @@ if (process.argv.includes('--guest')) {
 			server: 'treedx', tool: 'treeseed_time_status', status: 'failed', error: denied.message } })}\n`);
 	}
 	await clock('original-first-clock');
-	if (mode === 'resource-abort') process.stdout.write(`${JSON.stringify({ type: 'item.completed', item: {
+	if (mode === 'resource-abort' || mode === 'provider-resource-abort') process.stdout.write(`${JSON.stringify({ type: 'item.completed', item: {
 		id: 'original-killed-command', type: 'command_execution', command: 'original controlled command', exit_code: 137, aggregated_output: 'Killed\n',
 	} })}\n`);
 	for (let index = 0; index < 300; index++) process.stdout.write(`${JSON.stringify({ type: 'item.completed', item: {

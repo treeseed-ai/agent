@@ -383,7 +383,7 @@ describe('capacity-provider guarantee execution bindings', () => {
 		const checkouts = steps.filter((step: { uses?: string; with?: { repository?: string } }) =>
 			step.uses?.startsWith('actions/checkout@') && step.with?.repository === 'treeseed-ai/platform');
 		expect(checkouts).toHaveLength(1);
-		expect(checkouts[0].with).toMatchObject({ ref: 'e4c4cad1e526f53d3549c8fc27c3e60122b20ee4', path: '.treeseed/platform-authority', 'persist-credentials': false });
+		expect(checkouts[0].with).toMatchObject({ ref: 'cddfafc226a950e28fc63f07ffbbf61c16a9e3a3', path: '.treeseed/platform-authority', 'persist-credentials': false });
 		expect(job.env.TREESEED_DEVELOPMENT_WORKSPACE_ROOT).toBe('${{ github.workspace }}/.treeseed/platform-authority');
 		const verify = steps.findIndex((step: { run?: string }) => step.run?.includes('npm run verify:local'));
 		const built = steps.findIndex((step: { name?: string }) => step.name === 'Build public Agent exports for native acceptance readback');

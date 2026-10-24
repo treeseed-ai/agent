@@ -11,7 +11,7 @@ import { timingAwareness } from '../../../provider-kernel-fixture.ts';
 // Original Kernel, registry, content commit and exact native Git read-back.
 // Model replies/TreeDX transport are controlled inputs; this is not live model,
 // API admission, canonical proposal integration or physical isolation evidence.
-it('publishes own contributions from blank and discussed plans through all model handlers and denies forged attempts before writing', async () => {
+it('publishes each subscriber contribution from a blank group draft through all model handlers and denies a forged attempt before writing', async () => {
 	for (const handler of ['writer', 'actor', 'estimate', 'reviewer', 'releaser']) {
 		for (const owner of ['own', 'shared']) for (const forged of [true, false]) for (const discussed of [false, true]) {
 			const f = await portableKernel();

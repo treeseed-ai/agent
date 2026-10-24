@@ -25,7 +25,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: treeseed-ai/platform
-          ref: e4c4cad1e526f53d3549c8fc27c3e60122b20ee4
+          ref: cddfafc226a950e28fc63f07ffbbf61c16a9e3a3
           path: .treeseed/platform-authority
           persist-credentials: false
       - uses: actions/setup-node@v4
@@ -76,7 +76,7 @@ jobs:
           mkdir -p node_modules/@treeseed/deployment/node_modules/@treeseed/sdk
           tar -xzf .treeseed/tools/deployment-build-sdk/treeseed-sdk-0.13.0-rc.122.tgz --strip-components=1 -C node_modules/@treeseed/deployment/node_modules/@treeseed/sdk
           npm install --prefix node_modules/@treeseed/deployment/node_modules/@treeseed/sdk --omit=dev --ignore-scripts --package-lock=false --no-save --no-audit --no-fund
-      - uses: treeseed-ai/sdk/.github/actions/install-exact-sdk@f19cfabe70db9caa0d5888ca369609d4f56effa0
+      - uses: treeseed-ai/sdk/.github/actions/install-exact-sdk@83fa5a5d72ae827a70c7846a52b3b2b74fa50678
         env:
           NODE_ENV: production
         with:

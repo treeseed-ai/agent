@@ -68,7 +68,7 @@
   "dependencies": {
     "@openai/codex": "0.158.0",
     "@treeseed/deployment": "https://github.com/treeseed-ai/deployment/releases/download/0.1.0-rc.243/treeseed-deployment-runtime-0.1.0-rc.243.tgz",
-    "@treeseed/sdk": "0.13.0-rc.128",
+    "@treeseed/sdk": "git+https://github.com/treeseed-ai/sdk.git#83fa5a5d72ae827a70c7846a52b3b2b74fa50678",
     "esbuild": "0.28.2",
     "typescript": "^5.9.3",
     "yaml": "^2.8.1"

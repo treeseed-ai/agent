@@ -1,4 +1,5 @@
 import { describeContentFrontmatterJsonSchema, validatePortableContentData } from '@treeseed/sdk/content-validation';
+import { estimateSchema } from '@treeseed/sdk/agent-capacity';
 import { isDeepStrictEqual } from 'node:util';
 
 type JsonRecord = Record<string, unknown>;
@@ -91,6 +92,8 @@ export function mergeSubscriberEstimateOutput(proposal: JsonRecord, output: Json
 	if (ids.size !== owned.length || ids.has('') || owned.some(item => !isDeepStrictEqual(item.estimateRef, reference))) {
 		throw new Error('estimate_proposal_patch_authority_invalid');
 	}
+	if (owned.some(item => !estimateSchema.safeParse(item.estimate).success
+		|| (item.review === 'required' && !estimateSchema.safeParse(item.reviewEstimate).success))) throw new Error('estimate_proposal_patch_invalid');
 	const frozenPlan = record(proposal.executionPlan), frozenItems = Array.isArray(frozenPlan.workItems) ? frozenPlan.workItems.map(record) : [];
 	const merged = { ...proposal, executionPlan: { ...frozenPlan,
 		workItems: [...frozenItems.filter(item => !ids.has(text(item.id))), ...owned].sort((a, b) => text(a.id).localeCompare(text(b.id))) } };

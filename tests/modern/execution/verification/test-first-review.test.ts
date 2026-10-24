@@ -1,5 +1,23 @@
 import { expect, it, vi } from 'vitest';
-import { verifyReportedActivityCommands } from '../../../../src/kernel/handlers/model-workload.ts';
+import { observeReportedActivityCommands, verifyReportedActivityCommands } from '../../../../src/kernel/handlers/model-workload.ts';
+
+it('replays truthful failed assertions without acceptance-prose or role selection and preserves authored claims', async () => {
+	const command = 'npx vitest run tests/unit/example.test.ts';
+	const report = { schemaVersion: 'treeseed.activity-completion/v1' as const, summary: 'Actual regression evidence',
+		reviewDisposition: null, contentOutput: null, verification: [{ status: 'failed' as const, summary: 'A real assertion failed.', commands: [command] }] };
+	const evidence = { exitCode: 1, stdout: 'FAIL tests/unit/example.test.ts > required behavior\nAssertionError: expected correct behavior\n', stderr: '' };
+	for (const activity of ['planning', 'estimating', 'acting', 'reviewing', 'chat']) {
+		const assignment = { agentClass: 'configured-contributor', effectiveProfile: { activity }, acceptanceCriteria: ['Develop executable regression coverage.'] };
+		const held = structuredClone({ report, assignment, evidence });
+		const execute = vi.fn(async () => { throw Object.assign(new Error('process exited 1'), evidence); });
+		const observed = await observeReportedActivityCommands(report, [], execute, assignment);
+		expect(execute).toHaveBeenCalledOnce(); expect(observed.report).toBe(report);
+		expect(observed.verification).toEqual([expect.objectContaining({ command, status: 'failed', exitCode: 1, outputDigest: expect.stringMatching(/^sha256:/u) })]);
+		expect({ report, assignment, evidence }).toEqual(held);
+		await expect(observeReportedActivityCommands(report, [], async () => ({ stdout: 'unexpected pass', stderr: '' }), assignment))
+			.rejects.toThrow('Runner-observed verification failed');
+	}
+});
 import { correctObservedTestFirstRedVerification, isTestFirstVerification, reportedVerificationCommands } from '../../../../src/kernel/handlers/model-workload-contract.ts';
 
 it('preserves observed red tests in paired review without inventing passing verification', async () => {

@@ -8,7 +8,8 @@ import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { verifyMeasuredVerification } from '../../../acceptance/workday/support/assignment-authority.ts';
 
-async function actualTestFirstRed(agentClass: string, activity: string, status: 'passed' | 'failed') {
+async function actualTestFirstRed(agentClass: string, activity: string, status: 'passed' | 'failed',
+	acceptanceCriteria = ['Tester commits failing-on-base SDK tests.']) {
 	const directory = await mkdtemp(resolve(tmpdir(), 'agent296-red-'));
 	const command = 'npx vitest run tests/unit/example.test.ts';
 	const report = { schemaVersion: 'treeseed.activity-completion/v1' as const, summary: 'Exact red suite reviewed',
@@ -29,20 +30,22 @@ async function actualTestFirstRed(agentClass: string, activity: string, status: 
 						nativeOutput = { stdout: error.stdout, stderr: error.stderr }; throw error;
 					}
 				},
-				{ agentClass, effectiveProfile: { activity }, acceptanceCriteria: ['Tester commits failing-on-base SDK tests.'] });
+				{ agentClass, effectiveProfile: { activity }, acceptanceCriteria });
 			if (!nativeOutput) throw new Error('Original native command output required');
 			const outputDigest = `sha256:${createHash('sha256').update(JSON.stringify({ stderr: nativeOutput.stderr, stdout: nativeOutput.stdout })).digest('hex')}`;
 			expect(result.report.reviewDisposition).toBe('approved');
 			expect(result.report.verification[0]?.status).toBe('failed');
 			expect(result.report.verification[0]?.commands).toEqual([command]);
-			expect(result.report.verification[0]?.summary).toContain('rejects duplicate decisions');
-			expect(result.report.verification[0]?.summary).toContain('AssertionError');
+			if (status === 'passed') {
+				expect(result.report.verification[0]?.summary).toContain('rejects duplicate decisions');
+				expect(result.report.verification[0]?.summary).toContain('AssertionError');
+			} else expect(result.report).toBe(report);
 			expect(result.verification).toEqual([{ command, status: 'failed', exitCode: 1, outputDigest, durationSeconds: expect.any(Number) }]);
 			expect(Reflect.get(result, 'observations')).toEqual([{ ...result.verification[0], ...nativeOutput }]);
 			expect(Number.isInteger(result.verification[0]!.durationSeconds)).toBe(true);
 			expect(result.verification[0]!.durationSeconds).toBeGreaterThanOrEqual(0);
 			expect(result.verification[0]!.durationSeconds).toBeLessThanOrEqual(Math.ceil(Number(process.hrtime.bigint() - began) / 1e9));
-			expect(result.report.summary).toContain('Runner-observed test-first red');
+			if (status === 'passed') expect(result.report.summary).toContain('Runner-observed test-first red');
 			const held = structuredClone(result);
 			expect(() => verifyMeasuredVerification(result)).not.toThrow();
 			const partial = { verification: result.verification.map(record => { const changed = { ...record }; delete changed.durationSeconds; return changed; }) };
@@ -51,7 +54,10 @@ async function actualTestFirstRed(agentClass: string, activity: string, status: 
 			expect(partial).toEqual(incomplete); expect(result).toEqual(held);
 	} finally { await rm(directory, { recursive: true, force: true }); }
 }
-it('retains actual runner assertion failures as failed evidence in scoped test-first review', async () => { for (const status of ['passed', 'failed'] as const) await actualTestFirstRed('reviewer', 'reviewing', status); });
+it('retains actual runner assertion failures as failed evidence in scoped test-first review', async () => {
+	for (const status of ['passed', 'failed'] as const) await actualTestFirstRed('reviewer', 'reviewing', status);
+	for (const activity of ['acting', 'reviewing']) await actualTestFirstRed('configured-contributor', activity, 'failed', ['Develop executable regression coverage.']);
+});
 it('retains actual runner assertion failures for the original test author without claiming a passing replay', async () => { for (const status of ['passed', 'failed'] as const) await actualTestFirstRed('tester', 'acting', status); });
 it('retains actual runner assertion failures for an arbitrarily renamed test author without claiming a passing replay', async () => { for (const status of ['passed', 'failed'] as const) await actualTestFirstRed('contract-author', 'acting', status); });
 it('retains actual runner assertion failures for an arbitrarily renamed independent reviewer without claiming a passing replay', async () => { for (const status of ['passed', 'failed'] as const) await actualTestFirstRed('independent-inspector', 'reviewing', status); });

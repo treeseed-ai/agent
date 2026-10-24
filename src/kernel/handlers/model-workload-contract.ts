@@ -196,7 +196,11 @@ export function isTestFirstVerification(activity: string, acceptanceCriteria: un
 	const criteria = Array.isArray(acceptanceCriteria) ? acceptanceCriteria.map(text).join(' ') : '';
 	return ['acting', 'reviewing'].includes(activity)
 		&& /report failing test names and paths|failing-on-base|tests?[^.]*fail on (?:the )?frozen base/iu.test(criteria)
-		&& (command === undefined || /\b(?:vitest|npm\s+(?:run\s+)?test)\b/iu.test(command));
+		&& (command === undefined || isTestVerificationCommand(command));
+}
+
+export function isTestVerificationCommand(command: string): boolean {
+	return /\b(?:vitest|npm\s+(?:run\s+)?test)\b/iu.test(command);
 }
 
 export function correctObservedTestFirstRedVerification(completion: ActivityCompletionReport, events: Array<Record<string, unknown>>,

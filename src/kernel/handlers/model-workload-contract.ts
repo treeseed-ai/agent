@@ -83,6 +83,10 @@ export function completionFrontmatterSchema(context: Record<string, unknown>) {
 
 export function completionOutputTargetVariants(context: Record<string, unknown>) {
 	const assignment = record(record(context.canonicalAssignmentContext).assignment), profile = record(assignment.effectiveProfile);
+	if (text(profile.activity) === 'estimating') {
+		const proposal = assignmentProposalSource(record(context.canonicalAssignmentContext));
+		return [{ model: 'proposal', frontmatter: estimateProposalOutputSchema(proposal, assignment) }];
+	}
 	if (text(profile.activity) !== 'acting' || text(record(assignment.workspace).mode) !== 'treedx') return [];
 	const grants = record(assignment.grant).contentWrite;
 	return (Array.isArray(grants) ? grants : []).map(record)

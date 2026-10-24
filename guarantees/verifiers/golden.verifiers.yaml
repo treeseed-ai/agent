@@ -2036,6 +2036,11 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/kernel/estimate-class-scope.test.ts
     testName: "rejects forged malformed and unrelated output before any private content commit"
+  agent.golden.subscriber-estimate-cli-schema:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/sandbox/codex-schema-transport.test.ts
+    testName: "transports the required proposal model for a renamed group subscriber estimate through the pinned CLI"
   agent.golden.subscriber-estimate-native:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

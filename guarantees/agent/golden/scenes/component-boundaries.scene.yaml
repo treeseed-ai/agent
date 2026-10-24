@@ -1209,6 +1209,9 @@ workflow:
   - id: subscriber-estimate-native
     action: { verifier: agent.golden.subscriber-estimate-native }
     expect: { status: passed }
+  - id: subscriber-estimate-cli-schema
+    action: { verifier: agent.golden.subscriber-estimate-cli-schema }
+    expect: { status: passed }
   - id: content-workspace-custody
     action: { verifier: agent.golden.content-workspace-custody }
     expect: { status: passed }

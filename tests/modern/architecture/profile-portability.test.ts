@@ -46,8 +46,7 @@ it('derives the same exact output targets and schema from grants after an agent 
 		{ store: 'treedx', model: 'note', id: 'assigned-note', repository: 'library', commit, path: 'notes/assigned-note.md' },
 	] });
 	const expectedTargets = completionOutputTargetVariants(input), expectedSchema = completionFrontmatterSchema(input);
-	expect(expectedTargets.map(target => [target.model, (target.frontmatter.properties.id as { const: string }).const]))
-		.toEqual([['note', 'assigned-note']]);
+	expect(expectedTargets).toMatchObject([{ model: 'note', frontmatter: { properties: { id: { const: 'assigned-note' } } } }]);
 	input.canonicalAssignmentContext.assignment.agentClass = 'architect';
 	expect(completionOutputTargetVariants(input)).toEqual(expectedTargets);
 	expect(completionFrontmatterSchema(input)).toEqual(expectedSchema);

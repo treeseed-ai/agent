@@ -3894,6 +3894,11 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/execution/verification/factual-failure.test.ts
     testName: "denies untyped abnormal incomplete and unexpectedly successful failed-check observations"
+  agent.golden.execution-recovered-tool-resource-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/codex/codex-chat-executor.test.ts
+    testName: "keeps recovered inner-tool resource outcomes distinct from unsuccessful provider execution"
   agent.golden.execution-compiler-batch-unit:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

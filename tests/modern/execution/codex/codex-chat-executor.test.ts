@@ -44,17 +44,26 @@ describe('Codex chat executor', () => {
 			.toBe('provider.command.started.other');
 		expect(providerExecutionProgress({ type: 'item.started', item: { type: 'agent_message', text: 'secret-value' } })).toBeNull();
 	});
+	it('keeps recovered inner-tool resource outcomes distinct from unsuccessful provider execution', () => {
+		for (const [exit_code, aggregated_output] of [[134, 'FATAL ERROR: Reached heap limit Allocation failed - JavaScript heap out of memory\nAborted\n'], [137, 'Killed\n']] as const) {
+			const events = [{ type: 'item.completed', item: { type: 'command_execution', command: 'npx tsc --noEmit -p tsconfig.json', exit_code, aggregated_output } }];
+			const before = structuredClone(events);
+			expect(providerResourceAbort(events, false)).toBeNull();
+			expect(providerResourceAbort(events, true)).toEqual({ exitCode: exit_code, command: 'npx tsc --noEmit -p tsconfig.json' });
+			expect(events).toEqual(before);
+		}
+	});
 	it('classifies only evidenced resource exhaustion, not a generic command abort', () => {
 		expect(providerResourceAbort([{ type: 'item.completed', item: { type: 'command_execution',
-			command: 'npm run build', aggregated_output: 'FATAL ERROR: Reached heap limit Allocation failed - JavaScript heap out of memory\nAborted\n', exit_code: 134 } }]))
+			command: 'npm run build', aggregated_output: 'FATAL ERROR: Reached heap limit Allocation failed - JavaScript heap out of memory\nAborted\n', exit_code: 134 } }], true))
 			.toEqual({ exitCode: 134, command: 'npm run build' });
 		expect(providerResourceAbort([{ type: 'item.completed', item: { type: 'command_execution',
-			command: 'npm run build', aggregated_output: 'Aborted\n', exit_code: 134 } }])).toBeNull();
+			command: 'npm run build', aggregated_output: 'Aborted\n', exit_code: 134 } }], true)).toBeNull();
 		expect(providerResourceAbort([{ type: 'item.completed', item: { type: 'command_execution',
-			command: 'npm run build', aggregated_output: 'Killed\n', exit_code: 137 } }]))
+			command: 'npm run build', aggregated_output: 'Killed\n', exit_code: 137 } }], true))
 			.toEqual({ exitCode: 137, command: 'npm run build' });
 		expect(providerResourceAbort([{ type: 'item.completed', item: { type: 'command_execution',
-			command: 'npm test', aggregated_output: 'assertion failed\n', exit_code: 1 } }])).toBeNull();
+			command: 'npm test', aggregated_output: 'assertion failed\n', exit_code: 1 } }], true)).toBeNull();
 	});
 	it('honors profile-owned Architecture Book instructions and an exact knowledge-only grant after a rename', () => {
 		const bookRef = { store: 'treedx', model: 'book', id: 'sdk-architecture', repository: 'library', commit: '9'.repeat(40),

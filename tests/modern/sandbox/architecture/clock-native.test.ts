@@ -61,7 +61,7 @@ describe('native trusted guest clock relay and owning provider tool', () => {
 	it('native whole guest retains first and final clock bytes across a long provider stream and cannot forget an early killed command', async () => {
 		const outcomes: Array<{ mode: string; failure: string; events: Record<string, unknown>[]; clockValues: unknown[]; retainedPrivateFiles: string[];
 			usage?: ReturnType<typeof sandboxResultSchema.parse>['usage']; resultStatus?: string; summary?: string; responseMarkdown?: string }> = [];
-		for (const mode of ['completed', 'resource-abort', 'invalid-context', 'missing-subscription', 'provider-failure', 'provider-incomplete', 'first-clock-denied', 'replayed-clock', 'resumed-clock-id']) {
+		for (const mode of ['completed', 'resource-abort', 'invalid-context', 'missing-subscription', 'provider-failure', 'provider-incomplete', 'first-clock-denied', 'replayed-clock', 'resumed-clock-id', 'provider-resource-abort']) {
 			const f = await nativeClock();
 			try {
 				if (mode === 'first-clock-denied') f.set(200, 'first-model-clock-denied');
@@ -186,7 +186,7 @@ describe('native trusted guest clock relay and owning provider tool', () => {
 			retainedClocks: completedTimeStatusChecks(value.events), resourceFailure: value.failure.includes('sandbox_resource_exhausted: command exited 137') }));
 		expect(summary, JSON.stringify(summary))
 			.toEqual([{ mode: 'completed', rawEvents: 302, retainedClocks: 2, resourceFailure: false },
-				{ mode: 'resource-abort', rawEvents: 0, retainedClocks: 0, resourceFailure: true }]);
+				{ mode: 'resource-abort', rawEvents: 303, retainedClocks: 2, resourceFailure: false }]);
 		expect(outcomes[0]!.events).toHaveLength(302);
 		for (const [index, id] of [[0, 'original-first-clock'], [301, 'original-final-clock']] as const) {
 			const value = outcomes[0]!.clockValues[index === 0 ? 0 : 1];
@@ -194,7 +194,15 @@ describe('native trusted guest clock relay and owning provider tool', () => {
 				tool: 'treeseed_time_status', status: 'completed', error: null, result: { content: [{ type: 'text', text: JSON.stringify(value) }], structuredContent: value } } });
 		}
 		expect(timingAwarenessContract(outcomes[0]!.events)).toMatchObject({ completedChecks: 2, firstToolCompliant: true, finalToolCompliant: true });
-		expect(outcomes[1]!.failure).toContain('sandbox_resource_exhausted: command exited 137'); expect(outcomes[1]!.events).toEqual([]);
+		const recoveredTool = outcomes[1]!;
+		expect(recoveredTool.failure).toBe(''); expect(recoveredTool.resultStatus).toBe('completed');
+		expect(recoveredTool.events).toContainEqual({ type: 'item.completed', item: { id: 'original-killed-command',
+			type: 'command_execution', command: 'original controlled command', exit_code: 137, aggregated_output: 'Killed\n' } });
+		expect(timingAwarenessContract(recoveredTool.events)).toMatchObject({ completedChecks: 2, firstToolCompliant: true, finalToolCompliant: true });
+		// Provider failure remains fatal; a surviving completed turn cannot erase
+		// its inner-tool failure, and an unsuccessful provider cannot claim recovery.
+		expect(outcomes[9]!.failure).toContain('sandbox_resource_exhausted: command exited 137');
+		expect(outcomes[9]!.resultStatus).toBeUndefined(); expect(outcomes[9]!.events).toEqual([]);
 		expect(outcomes[2]!.failure).toContain('assignment_exact_proposal_context_required'); expect(outcomes[2]!.events).toEqual([]);
 		expect(outcomes[3]!.failure).toContain('Authorized Codex subscription credential is missing'); expect(outcomes[3]!.events).toEqual([]);
 		const failed = outcomes[4]!;

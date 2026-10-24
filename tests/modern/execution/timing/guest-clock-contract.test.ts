@@ -173,7 +173,8 @@ describe('Codex chat executor', () => {
 		expect(sanitized).toHaveLength(303); expect(sanitized[0]).toEqual(before[0]); expect(sanitized.at(-1)).toEqual(before.at(-1));
 		expect(sanitized[2]).toMatchObject({ item: { text: '[redacted]' } });
 		expect(timingAwarenessContract(sanitized)).toMatchObject({ completedChecks: 2, firstToolCompliant: true, finalToolCompliant: true });
-		expect(providerResourceAbort(sanitized)).toEqual({ exitCode: 137, command: 'original command' }); expect(events).toEqual(before);
+		expect(providerResourceAbort(sanitized, true)).toEqual({ exitCode: 137, command: 'original command' });
+		expect(providerResourceAbort(sanitized, false)).toBeNull(); expect(events).toEqual(before);
 	});
 	it('binds public raw model clock evidence to its exact completed assignment event receipt and immutable original timestamps', () => {
 		const startedAt = '2026-10-04T00:00:00.000Z', deadlineAt = '2026-10-04T00:01:00.000Z';

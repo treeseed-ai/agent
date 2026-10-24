@@ -16,14 +16,14 @@ function suppliedStart() {
 		runId: plan.id, teamId: plan.teamId, status: 'recorded', createdAt: plan.startsAt, parameters: {}, context: {}, refs: {}, metadata: {} });
 	const events = [event('start', 'workday.started', 0, 'project-1'), event('ready', 'assignment.polling_ready', 1, null)];
 	const observed: Row = { run: { id: plan.id, teamId: plan.teamId, executionMode: plan.executionMode, status: 'running', startedAt: plan.startsAt,
-		parameters: { ...plan.policySnapshot, deadlineAt: plan.endsAt, scheduledProjectIds: ['project-1'], appliedPlan: { ...plan, state: 'active' } } },
+		parameters: { ...plan.policySnapshot, deadlineAt: plan.endsAt, scheduledProjectIds: ['project-1'], groupIds: ['portfolio-runtime'], appliedPlan: { ...plan, state: 'active' } } },
 		scheduling: { executionId: plan.id, executionMode: plan.executionMode, status: 'running', assignments: [], nodes: [] },
 		events,
 		eventPage: { limit: 50, hasMore: false, nextCursor: null } };
 	const assignments: Row[] = [{ id: attempt.id, assignmentAttempt: attempt }];
 	const schedule: Row = { id: 'schedule-1', teamId: plan.teamId, lastRunId: plan.id, cadenceSeconds: 60, stateVersion: 1,
 		intent: { schemaVersion: 'treeseed.workday-intent/v1',
-		teamId: plan.teamId, profileId: 'default', projects: ['project-1'], executionMode: 'simulation', startsAt: plan.startsAt, durationSeconds: 60 } };
+		teamId: plan.teamId, profileId: 'default', projects: ['project-1'], groupIds: ['portfolio-runtime'], executionMode: 'simulation', startsAt: plan.startsAt, durationSeconds: 60 } };
 	return { observed, assignments, schedule, events };
 }
 // UNIT of the actual native read-back assertions. Supplied DTOs are not an
@@ -117,13 +117,14 @@ describe('managed initial manual and recurring start custody', () => {
 		}
 	});
 	it('denies foreign conflicting or malformed recurring intent while retaining ordinary manual start and exact-duration recurrence', () => {
-		const modes = ['foreign', 'mode', 'duration', 'project', 'malformed'], outcomes = modes.map(mode => {
+		const modes = ['foreign', 'mode', 'duration', 'project', 'malformed', 'missing-group'], outcomes = modes.map(mode => {
 			const f = suppliedStart(), intent = row(f.schedule.intent);
 			if (mode === 'foreign') f.schedule.lastRunId = 'other-run';
 			if (mode === 'mode') intent.executionMode = 'production';
 			if (mode === 'duration') intent.durationSeconds = 61;
 			if (mode === 'project') intent.projects = ['foreign'];
 			if (mode === 'malformed') f.schedule.intent = {};
+			if (mode === 'missing-group') delete intent.groupIds;
 			try { verifyRecurringStartCustody(f.observed, f.assignments, f.schedule); return 'admitted'; } catch { return 'denied'; }
 		}); expect(outcomes).toEqual(modes.map(() => 'denied'));
 		expect(state.cases.has('Actual workday start retains exact applied policy original clocks and complete native readiness before every frozen attempt')).toBe(true);

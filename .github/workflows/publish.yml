@@ -29,7 +29,7 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with: { node-version: 24 }
       - run: npm ci --ignore-scripts --no-audit --no-fund
-      - uses: treeseed-ai/sdk/.github/actions/install-exact-sdk@f19cfabe70db9caa0d5888ca369609d4f56effa0
+      - uses: treeseed-ai/sdk/.github/actions/install-exact-sdk@83fa5a5d72ae827a70c7846a52b3b2b74fa50678
         with: { github-token: "${{ github.token }}" }
       - run: npm run capacity-provider:build -- --prepare-only
       - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f
@@ -69,7 +69,7 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with: { node-version: 24 }
       - run: npm ci --ignore-scripts --no-audit --no-fund
-      - uses: treeseed-ai/sdk/.github/actions/install-exact-sdk@f19cfabe70db9caa0d5888ca369609d4f56effa0
+      - uses: treeseed-ai/sdk/.github/actions/install-exact-sdk@83fa5a5d72ae827a70c7846a52b3b2b74fa50678
         with: { github-token: "${{ github.token }}" }
       - run: npm run capacity-provider:build -- --prepare-only
       - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f

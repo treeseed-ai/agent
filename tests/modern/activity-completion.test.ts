@@ -35,6 +35,17 @@ describe('activity completion structured-output schema', () => {
 		expect(schema.properties.executionPlan.properties.workItems.items.properties.estimateRef.properties.id.const).toBe(assignment.id);
 		expect(schema.properties.executionPlan.properties.workItems.items.properties.estimateRef.properties.revision.const).toBe(assignment.attempt);
 		checkShape(activityCompletionOutputSchema(schema));
+		for (const handler of ['writer', 'actor', 'estimate', 'reviewer', 'releaser']) {
+			assignment.effectiveProfile.handler = handler;
+			const variants = completionOutputTargetVariants(context);
+			expect(variants).toEqual([{ model: 'proposal', frontmatter: schema }]);
+			const output = activityCompletionOutputSchema(schema, false, variants).properties.contentOutput;
+			expect(output).toMatchObject({ anyOf: [{ type: 'object', properties: {
+				model: { type: 'string', const: 'proposal' }, frontmatter: schema,
+			} }] });
+			expect(output.anyOf).toHaveLength(1);
+			checkShape(activityCompletionOutputSchema(schema, false, variants));
+		}
 	});
 	it('requires a real Reviewer disposition in structured output and null for non-review work', () => {
 		expect(activityCompletionOutputSchema(undefined, true, undefined, true).properties.reviewDisposition)

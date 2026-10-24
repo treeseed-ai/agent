@@ -2,6 +2,7 @@ import { beforeEach, expect, it, vi } from 'vitest';
 import { activityCompletionOutputSchema, validateActivityCompletion } from '../../../src/activity-completion.ts';
 import { assertPredecessorSynthesis, planningSynthesisInstruction, planningSynthesisOutputSchema } from '../../../src/kernel/handlers/planning-synthesis.ts';
 import { codexSchemaTransport } from './fixtures/codex-schema-transport.ts';
+import { completionFrontmatterSchema, completionOutputTargetVariants } from '../../../src/kernel/handlers/model-workload-contract.ts';
 
 const nativeChildren = vi.hoisted(() => [] as Array<{ pid: number; detached: boolean }>);
 vi.mock('node:child_process', async importOriginal => {
@@ -51,4 +52,24 @@ it('does not contact the endpoint when the pinned CLI receives a malformed outpu
 	expect(observed.code).not.toBe(0);
 	expect(observed.requests).toEqual([]);
 	expect(observed.response).toBeNull();
+}, 20_000);
+
+it('transports the required proposal model for a renamed group subscriber estimate through the pinned CLI', async () => {
+	const sourceRef = { model: 'proposal', id: 'recovery', commit: 'a'.repeat(40) };
+	const input = { canonicalAssignmentContext: { assignment: { id: 'own-estimate', attempt: 1, sourceRef,
+		agentClass: 'configured-maintenance', effectiveProfile: { activity: 'estimating', handler: 'writer' } },
+		context: [{ ref: sourceRef, value: { frontmatter: { schemaVersion: 'treeseed.proposal/v2', id: sourceRef.id,
+			projectId: 'api', groupIds: ['project-api'], title: 'Recover interrupted initial authoring',
+			request: 'Recover exact same-identity proposal bytes without overwriting conflicts.', status: 'discussing' } } }] } };
+	const variants = completionOutputTargetVariants(input);
+	expect(variants).toHaveLength(1);
+	expect(variants[0]?.model).toBe('proposal');
+	const estimateSchema = activityCompletionOutputSchema(completionFrontmatterSchema(input), false, variants);
+	expect(estimateSchema.properties.contentOutput).toMatchObject({ anyOf: [{ type: 'object',
+		properties: { model: { type: 'string', const: 'proposal' } } }] });
+	const observed = await codexSchemaTransport(estimateSchema, JSON.stringify(report('Controlled transport only.')), 'Estimate your own group contribution.');
+	expect(observed.code).toBe(0);
+	expect(observed.requests).toHaveLength(1);
+	expect(observed.requests[0]).toMatchObject({ authorized: false, format: { type: 'json_schema', strict: true, schema: estimateSchema } });
+	// The loopback reply deliberately does not prove model compliance or an accepted estimate.
 }, 20_000);

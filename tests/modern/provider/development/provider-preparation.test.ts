@@ -106,6 +106,9 @@ it('original native provider preparation runs its compiled health entrypoint wit
     const dependency = join(f.runtime, 'node_modules/zod-to-json-schema/package.json');
     expect(existsSync(dependency), 'Current SDK required production package omitted').toBe(true);
     expect(readFileSync(dependency)).toEqual(readFileSync(join(f.sdk, 'node_modules/zod-to-json-schema/package.json')));
+    const sdkModules = join(f.runtime, 'node_modules/@treeseed/sdk/node_modules');
+    expect(readFileSync(join(sdkModules, 'zod/package.json'))).toEqual(readFileSync(join(f.sdk, 'node_modules/zod/package.json')));
+    expect(existsSync(join(sdkModules, 'vitest'))).toBe(false);
     const isolated = join(f.allocation, 'provider-runtime');
     cpSync(f.runtime, isolated, { recursive: true });
     expect(existsSync(join(f.allocation, 'node_modules'))).toBe(false);

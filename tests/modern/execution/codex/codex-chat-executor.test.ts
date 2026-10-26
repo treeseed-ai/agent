@@ -6,7 +6,8 @@ import { join } from 'node:path';
 import { executeAssignmentTreeDxTool } from '../../../../src/provider/execution/microvm-executor.ts';
 import { providerExecutionProgress } from '../../../../src/kernel/handlers/model-workload.ts';
 import { codexThreadId, codexTreeDxMcpConfig, completedTimeStatusChecks, prepareNodeWorkspace, providerEventShapeSummary, providerResourceAbort, providerResponsePreview, requiresNodeDependencyRestore, timingAwarenessContract, timingRecoveryEligible, treeDxToolDefinitions, verifyReportedActivityCommands } from '../../../../src/kernel/handlers/model-workload.ts';
-import { assertArchitectSourceCitation, assertReplayableVerificationCommand, assertTesterFailureEvidence, attachObservedTesterFailures, correctObservedTestFirstRedVerification, omitUnreplayableVerification, codexInteractiveTimeoutMs, codexProjectInstructionArguments, codexReasoningArguments, completionFrontmatterSchema, completionOutputTargetVariants, validateModelContext, promptFromContext, requiresActivityCompletion } from '../../../../src/kernel/handlers/model-workload-contract.ts';
+import { assertArchitectSourceCitation, assertReplayableVerificationCommand, assertTesterFailureEvidence, attachObservedTesterFailures, correctObservedTestFirstRedVerification, omitUnreplayableVerification, codexInteractiveTimeoutMs, completionFrontmatterSchema, completionOutputTargetVariants, validateModelContext, promptFromContext, requiresActivityCompletion } from '../../../../src/kernel/handlers/model-workload-contract.ts';
+import { codexThreadOptions } from '../../../../src/kernel/handlers/codex-sdk-session.ts';
 import { assertPredecessorSynthesis } from '../../../../src/kernel/handlers/planning-synthesis.ts';
 import { activityCompletionOutputSchema } from '../../../../src/activity-completion.ts';
 import { activityAllowsVerification } from '../../../../src/kernel/handlers/model-workload-contract.ts';
@@ -185,8 +186,8 @@ describe('Codex chat executor', () => {
 			.not.toThrow();
 	});
 	it('passes the configured reasoning effort to Codex', () => {
-		expect(codexReasoningArguments('high')).toEqual(['-c', 'model_reasoning_effort=high']);
-		expect(codexReasoningArguments(undefined)).toEqual([]);
+		expect(codexThreadOptions('assigned', 'high').modelReasoningEffort).toBe('high');
+		expect(codexThreadOptions('assigned', undefined).modelReasoningEffort).toBeUndefined();
 	});
 	it('respects the configured activity runtime for deeper chat reasoning', () => {
 		expect(codexInteractiveTimeoutMs(900)).toBe(895_000);

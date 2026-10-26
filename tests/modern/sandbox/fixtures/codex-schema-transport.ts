@@ -1,19 +1,26 @@
 // Real pinned CLI, synthetic loopback SSE: this proves transport, NOT live model compliance.
 import { createServer } from 'node:http';
+import { Codex } from '@openai/codex-sdk';
+import { codexClientConfig, codexThreadOptions } from '../../../../src/kernel/handlers/codex-sdk-session.ts';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { run } from '../../../../src/sandbox/process-runner.ts';
 
 export async function codexSchemaTransport(schema: unknown, responseText: string, prompt: string) {
 	const root = await mkdtemp(join(tmpdir(), 'agent-codex-schema-'));
 	const requests: Array<{ format: unknown; input: unknown; authorized: boolean }> = [];
+	const nativePids: number[] = [];
+	const children = async (pid: number): Promise<void> => {
+		const ids = (await readFile(`/proc/${pid}/task/${pid}/children`, 'utf8')).trim().split(/\s+/u).filter(Boolean).map(Number);
+		for (const id of ids) { nativePids.push(id); await children(id); }
+	};
 	const server = createServer(async (incoming, outgoing) => {
 		if (incoming.method === 'GET' && incoming.url?.startsWith('/v1/models')) { outgoing.writeHead(200, { 'content-type': 'application/json' }).end('{"models":[]}'); return; }
 		if (incoming.method !== 'POST' || incoming.url !== '/v1/responses') { outgoing.writeHead(404).end(); return; }
 		let body = ''; for await (const chunk of incoming) body += String(chunk);
 		const request = JSON.parse(body);
+		await children(process.pid);
 		requests.push({ format: request.text?.format, input: request.input, authorized: Boolean(incoming.headers.authorization) });
 		if (incoming.headers.authorization) { outgoing.writeHead(400).end('Fixture refuses credentials.'); return; }
 		const item = { id: 'msg_fixture', type: 'message', role: 'assistant', status: 'completed', content: [{ type: 'output_text', text: responseText, annotations: [] }] };
@@ -31,29 +38,30 @@ export async function codexSchemaTransport(schema: unknown, responseText: string
 		outgoing.end();
 	});
 	try {
-		await writeFile(join(root, 'schema.json'), typeof schema === 'string' ? schema : JSON.stringify(schema));
 		await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
 		const address = server.address(); if (!address || typeof address === 'string') throw new Error('Fixture address missing.');
 		const cli = join(dirname(createRequire(import.meta.url).resolve('@openai/codex/package.json')), 'bin/codex.js');
-		const args = [cli, 'exec', '--ephemeral', '--ignore-user-config', '--ignore-rules', '--skip-git-repo-check', '--json',
-			'--model', 'offline-fixture-model', '-c', 'model_provider="offline"', '-c', 'model_providers.offline.name="offline fixture"',
-			'-c', `model_providers.offline.base_url="http://127.0.0.1:${address.port}/v1"`, '-c', 'model_providers.offline.wire_api="responses"',
-			'-c', 'model_providers.offline.requires_openai_auth=false', '-c', 'model_providers.offline.supports_websockets=false',
-			'-c', 'model_providers.offline.request_max_retries=0', '-c', 'project_doc_max_bytes=0',
-			'--output-schema', join(root, 'schema.json'), '--output-last-message', join(root, 'response.json'), '-'];
+		const client = new Codex({ codexPathOverride: cli, env: { PATH: process.env.PATH ?? '', HOME: root, CODEX_HOME: root },
+			config: { ...codexClientConfig, model_provider: 'offline', model_providers: { offline: { name: 'offline fixture',
+				base_url: `http://127.0.0.1:${address.port}/v1`, wire_api: 'responses', requires_openai_auth: false,
+				supports_websockets: false, request_max_retries: 0 } } } });
+		const thread = client.startThread({ ...codexThreadOptions('offline-fixture-model'), workingDirectory: root });
 		let stdout = '', stderr = '', code = 0;
+		let response: string | null = null;
 		try {
-			({ stdout, stderr } = await run(process.execPath, args,
-				{ cwd: root, env: { PATH: process.env.PATH ?? '' }, input: prompt, captureStdout: true, timeoutMs: 15_000 }));
+			const stream = await thread.runStreamed(prompt, { outputSchema: schema, signal: AbortSignal.timeout(15_000) });
+			for await (const event of stream.events) {
+				stdout += `${JSON.stringify(event)}\n`;
+				if (event.type === 'item.completed' && event.item.type === 'agent_message') response = event.item.text;
+				if (event.type === 'turn.failed') throw new Error(event.error.message);
+			}
 		} catch (error) {
-			const native = error as Error & { exitCode?: number | null; stdout?: string; stderr?: string };
-			// Only an observed normal CLI rejection can satisfy the negative case.
-			// Timeouts, launch errors and incomplete descendant closure remain fatal.
-			if (!(error instanceof Error) || native.message === 'assignment_subprocess_cleanup_failed'
-				|| !Number.isInteger(native.exitCode) || native.exitCode! <= 0) throw error;
-			code = native.exitCode!; stdout = native.stdout ?? ''; stderr = native.stderr ?? '';
+			// Only the SDK's actual malformed-schema rejection satisfies this negative case.
+			// Authentication, cancellation, launch, endpoint and runtime failures remain fatal.
+			if (!(error instanceof Error) || error.message !== 'outputSchema must be a plain JSON object') throw error;
+			code = 1; stderr = error.message;
 		}
-		return { code, requests, stdout, stderr, response: await readFile(join(root, 'response.json'), 'utf8').catch(() => null) };
+		return { code, requests, stdout, stderr, response, nativePids };
 	} finally {
 		server.closeAllConnections(); if (server.listening) await new Promise<void>(resolve => server.close(() => resolve()));
 		await rm(root, { recursive: true, force: true });

@@ -1,5 +1,5 @@
 import { copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
+import { dirname, relative, resolve, sep } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
@@ -189,6 +189,27 @@ function prepareRuntimeDependencies(installedSdkRoot: string | null) {
 				return !relativePath.startsWith(`node_modules${process.platform === 'win32' ? '\\' : '/'}`);
 			},
 		});
+		// Retain npm's installed production layout below the exact selected SDK.
+		// Flattening replaces SDK-local versions with unrelated root versions.
+		const queue = [installedSdkRoot], seen = new Set<string>();
+		for (const owner of queue) {
+			const identity = realpathSync(owner);
+			if (seen.has(identity)) continue;
+			seen.add(identity);
+			const pkg = JSON.parse(readFileSync(resolve(owner, 'package.json'), 'utf8')) as {
+				dependencies?: Record<string, string>; optionalDependencies?: Record<string, string> };
+			for (const name of Object.keys({ ...pkg.dependencies, ...pkg.optionalDependencies })) {
+				const source = runtimePackageSource(installedNodeModules, name, owner, installedSdkRoot);
+				if (!source) { if (name in (pkg.optionalDependencies ?? {})) continue; throw new Error(`Missing required runtime dependency: ${name}`); }
+				queue.push(source);
+				const path = relative(installedSdkRoot, source);
+				if (!path.startsWith(`node_modules${sep}`)) continue; // Already in the root production closure.
+				const target = resolve(runtimeRoot, 'node_modules', '@treeseed', 'sdk', path);
+				mkdirSync(dirname(target), { recursive: true });
+				cpSync(source, target, { recursive: true, dereference: true,
+					filter: child => !relative(source, child).split(sep).includes('node_modules') });
+			}
+		}
 	} else {
 		const extractRoot = resolve(dockerContextRoot, 'sdk-extract');
 		rmSync(extractRoot, { recursive: true, force: true });

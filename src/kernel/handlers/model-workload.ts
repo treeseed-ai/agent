@@ -1,5 +1,4 @@
 import { run, withinAssignmentBudget, remainingExecutionMs } from '../../sandbox/process-runner.ts';
-import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { createServer } from 'node:http';
 import { request as httpsRequest } from 'node:https';
@@ -10,7 +9,7 @@ import { sandboxAssignmentSchema, sandboxResultSchema, sourceWorkspaceKeySchema,
 import { providerCredentialValues, providerFailureSummary, redactProviderDiagnostic, redactProviderEvents } from '../../sandbox/provider-failure.ts';
 import { activityAllowsVerification, providerItemIdentity, scopeProviderEvent, validateModelContext } from './model-workload-contract.ts';
 import { activityCompletionOutputSchema, validateActivityCompletion } from '../../activity-completion.ts';
-import { completionFrontmatterSchema, completionOutputTargetVariants, promptFromContext, assertArchitectSourceCitation, assertTesterFailureEvidence, attachObservedTesterFailures, correctObservedTestFirstRedVerification, omitUnreplayableVerification, codexReasoningArguments, codexProjectInstructionArguments, codexInvocationTimerOptions, requiresActivityCompletion, record, text, providerToolName, codexToolInFlight, codexResumeIdleTimeoutMs } from './model-workload-contract.ts';
+import { completionFrontmatterSchema, completionOutputTargetVariants, promptFromContext, assertArchitectSourceCitation, assertTesterFailureEvidence, attachObservedTesterFailures, correctObservedTestFirstRedVerification, omitUnreplayableVerification, codexInvocationTimerOptions, requiresActivityCompletion, record, text, providerToolName, codexToolInFlight, codexResumeIdleTimeoutMs } from './model-workload-contract.ts';
 import { planningSynthesisOutputSchema, assertPredecessorSynthesis } from './planning-synthesis.ts';
 import { recoverPlanningSynthesis } from '../../sandbox/planning-synthesis-recovery.ts';
 import { objectDigest, observeReportedActivityCommands, prepareReleaseReview, prepareNodeWorkspace } from './model-verification.ts';
@@ -69,6 +68,8 @@ export function clockReading(raw: unknown): TimingAwarenessTracker['clockWindow'
 	let parsed: unknown;
 	try { parsed = JSON.parse(content.text); } catch { return; }
 	if (result.structuredContent !== undefined && !isDeepStrictEqual(parsed, result.structuredContent)) return;
+	// Codex SDK events serialize the MCP result's structured field in snake case.
+	if (result.structured_content !== undefined && !isDeepStrictEqual(parsed, result.structured_content)) return;
 	const value = record(parsed), start = value.startedAt, end = value.deadlineAt, observed = value.observedAt, remaining = value.remainingSeconds;
 	const iso = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/u;
 	if (typeof start !== 'string' || typeof end !== 'string' || !iso.test(start) || !iso.test(end)
@@ -284,29 +285,27 @@ export async function runModelWorkload() {
 	const structuredCompletion = (Boolean(canonicalActivity) && canonicalActivity !== 'chat')
 		|| (sourceMetadata ? requiresActivityCompletion(sourceMetadata.mode) : false);
 	const completionSchemaPath = resolve(codexHome, 'activity-completion.schema.json');
-	if (structuredCompletion) {
-		await writeFile(completionSchemaPath, `${JSON.stringify(planningSynthesisOutputSchema(context, activityCompletionOutputSchema(completionFrontmatterSchema(context), allowVerification,
-			completionOutputTargetVariants(context), canonicalActivity === 'reviewing')))}\n`, { mode: 0o600 });
-	}
+	const completionSchema = structuredCompletion ? planningSynthesisOutputSchema(context, activityCompletionOutputSchema(completionFrontmatterSchema(context), allowVerification,
+		completionOutputTargetVariants(context), canonicalActivity === 'reviewing')) : undefined;
+	if (structuredCompletion) await writeFile(completionSchemaPath, `${JSON.stringify(completionSchema)}\n`, { mode: 0o600 });
 	// Session state stays inside this assignment's disposable Kata guest so a
 	// missing final clock check can be corrected in the same Codex conversation.
-	const providerArguments = ['exec', '--json', '--dangerously-bypass-approvals-and-sandbox', '--model', assignment.modelPolicy.model,
-		...codexReasoningArguments(assignment.modelPolicy.reasoningEffort),
-		...codexProjectInstructionArguments(),
-		...(structuredCompletion ? ['--output-schema', completionSchemaPath] : []),
-			'--disable', 'browser_use', '--disable', 'apps', '--disable', 'multi_agent', '--disable', 'multi_agent_v2', '--disable', 'image_generation', '--color', 'never', '--output-last-message', responsePath, '-C', '/workspace/project', '-'];
 	let providerInvocation = 0, providerThreadId: string | null = null, closeoutInterrupted = false;
 	const providerEnvironment = { PATH: '/usr/local/bin:/usr/bin:/bin', HOME: codexHome, CODEX_HOME: codexHome,
 		...relayEnvironment,
 		...(relay ? { OPENAI_BASE_URL: relay.baseUrl, OPENAI_API_KEY: 'treeseed-assignment-relay' } : {}),
 		...(subscriptionProxy ? { HTTPS_PROXY: subscriptionProxy, https_proxy: subscriptionProxy } : {}), LANG: 'C.UTF-8' };
+	// Provider hosts import clock evidence helpers from this module and contain no Codex packages.
+	const { CodexWorkloadSession, codexUsageEvidence } = await import('./codex-sdk-session.ts');
+	const session = new CodexWorkloadSession({ model: assignment.modelPolicy.model, reasoningEffort: assignment.modelPolicy.reasoningEffort,
+		environment: providerEnvironment, remainingMs: getRemainingMs });
 		await progress('provider.starting');
 		const invocationTimers = codexInvocationTimerOptions(getRemainingMs(), canonicalActivity);
-		const providerError = await execute('/usr/local/bin/codex', providerArguments, {
-			cwd: '/workspace/project', input: composedPrompt, env: providerEnvironment,
+		const providerError = await session.runTurn({
+			input: composedPrompt, outputSchema: completionSchema, responsePath,
 			...invocationTimers,
 			canInterrupt: () => Boolean(providerThreadId && timingTracker.firstToolSucceeded && !codexToolInFlight(events)),
-			onLine(line) { let event: Record<string, unknown>; try { event = record(JSON.parse(line)); } catch { event = { type: 'provider.event.invalid', digest: createHash('sha256').update(line).digest('hex') }; } event = scopeProviderEvent(event, 0);
+			onEvent(raw) { const event = scopeProviderEvent(raw, 0);
 				providerThreadId ??= codexThreadId([event]);
 				const executionProgress = providerExecutionProgress(event); if (executionProgress) void progress(executionProgress).catch(() => undefined);
 				observeTimingAwarenessEvent(timingTracker, event); events.push(event); },
@@ -322,19 +321,15 @@ export async function runModelWorkload() {
 			const remainingMs = getRemainingMs();
 			if (!providerThreadId || remainingMs < 20_000 || codexToolInFlight(events)) throw new Error('Codex turn ended without a safe bounded session continuation.');
 			await progress('provider.closeout-recovery.starting');
-			const resumeArguments = ['exec', 'resume', providerThreadId, '--json', '--dangerously-bypass-approvals-and-sandbox', '--model', assignment.modelPolicy.model,
-				...codexReasoningArguments(assignment.modelPolicy.reasoningEffort), ...codexProjectInstructionArguments(),
-				...(structuredCompletion ? ['--output-schema', completionSchemaPath] : []),
-				'--output-last-message', responsePath, '-'];
 			let finalCloseoutInterrupted = false;
 			const resumeIdleTimeoutMs = codexResumeIdleTimeoutMs(remainingMs), closeoutInvocation = ++providerInvocation;
-			await execute('/usr/local/bin/codex', resumeArguments, {
-				cwd: '/workspace/project', env: providerEnvironment,
+			await session.runTurn({
+				responsePath, outputSchema: completionSchema,
 				input: `The prior turn was interrupted to preserve closeout time after its completed tools. Continue this SAME assignment using only evidence already inspected. Do not repeat inspection or start new work. You have at most ${Math.floor(remainingMs / 1_000)} seconds including closeout; the original deadline has not moved. Your NEXT and FINAL tool action must call mcp__treedx__treeseed_time_status through functions.exec with: text(await tools.mcp__treedx__treeseed_time_status({}));. Then immediately produce ${structuredCompletion ? 'the required structured result' : 'the substantive discussion reply'}. If evidence is insufficient, say so honestly rather than waiting for the deadline.`,
 				timeoutMs: Math.floor(remainingMs),
 				...(canonicalActivity === 'estimating' ? { ...(resumeIdleTimeoutMs === undefined ? {} : { idleTimeoutMs: resumeIdleTimeoutMs }),
 					canInterrupt: () => timingTracker.firstToolSucceeded && !codexToolInFlight(events) } : {}),
-				onLine(line) { let event: Record<string, unknown>; try { event = record(JSON.parse(line)); } catch { event = { type: 'provider.event.invalid', digest: createHash('sha256').update(line).digest('hex') }; } event = scopeProviderEvent(event, closeoutInvocation);
+				onEvent(raw) { const event = scopeProviderEvent(raw, closeoutInvocation);
 					const executionProgress = providerExecutionProgress(event); if (executionProgress) void progress(executionProgress).catch(() => undefined);
 					observeTimingAwarenessEvent(timingTracker, event); events.push(event); },
 			}).catch(error => {
@@ -345,11 +340,11 @@ export async function runModelWorkload() {
 				const finalRemainingMs = getRemainingMs(), finalCloseoutInvocation = ++providerInvocation;
 				if (!providerThreadId || finalRemainingMs < 25_000 || codexToolInFlight(events)) throw new Error('Codex estimate closeout has no safe remaining continuation.');
 				await progress('provider.final-closeout-recovery.starting');
-				await execute('/usr/local/bin/codex', resumeArguments, {
-					cwd: '/workspace/project', env: providerEnvironment,
+				await session.runTurn({
+					responsePath, outputSchema: completionSchema,
 					input: `This is the FINAL continuation of the same estimating assignment. The original deadline has not moved. Use only evidence already inspected; do not inspect or run another command. You have at most ${Math.floor(finalRemainingMs / 1_000)} seconds. Call mcp__treedx__treeseed_time_status once through functions.exec with: text(await tools.mcp__treedx__treeseed_time_status({}));. Then immediately return the required compact estimate JSON. If evidence is incomplete, state the uncertainty in the rationale and finish now.`,
 					timeoutMs: Math.floor(finalRemainingMs),
-					onLine(line) { let event: Record<string, unknown>; try { event = record(JSON.parse(line)); } catch { event = { type: 'provider.event.invalid', digest: createHash('sha256').update(line).digest('hex') }; } event = scopeProviderEvent(event, finalCloseoutInvocation);
+					onEvent(raw) { const event = scopeProviderEvent(raw, finalCloseoutInvocation);
 					const executionProgress = providerExecutionProgress(event); if (executionProgress) void progress(executionProgress).catch(() => undefined);
 					observeTimingAwarenessEvent(timingTracker, event); events.push(event); },
 				});
@@ -370,14 +365,11 @@ export async function runModelWorkload() {
 			const recoveryEvents: Record<string, unknown>[] = [], clockInvocation = ++providerInvocation;
 			const recoverySchemaPath = resolve(codexHome, 'final-clock.schema.json');
 			await writeFile(recoverySchemaPath, JSON.stringify({ type: 'object', properties: { ack: { type: 'string', const: 'done' } }, required: ['ack'], additionalProperties: false }), { mode: 0o600 });
-			const recoveryArguments = ['exec', 'resume', threadId, '--json', '--dangerously-bypass-approvals-and-sandbox', '--model', assignment.modelPolicy.model,
-				...codexReasoningArguments(assignment.modelPolicy.reasoningEffort), ...codexProjectInstructionArguments(),
-				'--output-schema', recoverySchemaPath, '--output-last-message', resolve(codexHome, 'final-clock-response.txt'), '-'];
-			await execute('/usr/local/bin/codex', recoveryArguments, {
-				cwd: '/workspace/project', env: providerEnvironment,
+			await session.runTurn({
+				responsePath: resolve(codexHome, 'final-clock-response.txt'), outputSchema: JSON.parse(await readFile(recoverySchemaPath, 'utf8')),
 				input: 'The substantive response was already captured. Do not inspect or change files and do not repeat the task. Your NEXT and ONLY tool action must call mcp__treedx__treeseed_time_status using functions.exec with: text(await tools.mcp__treedx__treeseed_time_status({}));. After the successful clock result, return {"ack":"done"} without any other tool action.',
 				timeoutMs: Math.floor(remainingMs),
-				onLine(line) { let event: Record<string, unknown>; try { event = record(JSON.parse(line)); } catch { event = { type: 'provider.event.invalid', digest: createHash('sha256').update(line).digest('hex') }; } event = scopeProviderEvent(event, clockInvocation);
+				onEvent(raw) { const event = scopeProviderEvent(raw, clockInvocation);
 					observeTimingAwarenessEvent(timingTracker, event); events.push(event); recoveryEvents.push(event); },
 			});
 			const recoveryTiming = timingAwarenessContract(recoveryEvents);
@@ -393,9 +385,8 @@ export async function runModelWorkload() {
 		}
 		const planningInvocation = ++providerInvocation;
 		if (!providerError && structuredCompletion && await recoverPlanningSynthesis({ context, activity: canonicalActivity, threadId,
-			responsePath, schemaPath: completionSchemaPath, allowVerification, remainingMs: getRemainingMs, execute,
-			model: assignment.modelPolicy.model, reasoningEffort: assignment.modelPolicy.reasoningEffort,
-			providerEnvironment, progress,
+			responsePath, outputSchema: completionSchema, allowVerification, remainingMs: getRemainingMs,
+			execute: session.runTurn.bind(session), progress,
 			onEvent(raw) { const event=scopeProviderEvent(raw,planningInvocation); observeTimingAwarenessEvent(timingTracker, event); events.push(event); },
 			verifyClock(correctionEvents) { const correction = timingAwarenessContract(correctionEvents);
 				if (!correction.firstToolCompliant || !correction.finalToolCompliant || correctionEvents.some((event) => providerToolName(event) && providerToolName(event) !== 'treedx:treeseed_time_status')) throw new Error('Planning synthesis correction failed its clock-only tool boundary.'); },
@@ -455,11 +446,14 @@ export async function runModelWorkload() {
 		const artifacts: Array<{ id: string; path: string; digest: string; mediaType: string; bytes: number }> = [];
 		const completed = [...events].reverse().find((event) => text(event.type).includes('completed')) ?? {}, finished = process.hrtime.bigint(),
 			elapsedSeconds = Number(finished - started) / 1e9, activeSeconds = Number(finished - productiveStarted) / 1e9, usageAfter = process.resourceUsage();
+		const providerUsageEvidence = codexUsageEvidence(events);
+		const providerUsage = providerUsageEvidence ? providerUsageEvidence.complete ? providerUsageEvidence.observed : {} : record(completed.usage);
 		const result = sandboxResultSchema.parse({ schemaVersion: 'treeseed.sandbox-result/v1', sandboxId, assignmentId: assignment.assignmentId,
 			status: providerError ? 'failed' : 'completed', summary: providerError?.message ?? 'Kata assignment completed.', responseMarkdown: providerError ? undefined : responseMarkdown,
-			artifacts, timingAwareness, usage: { ...record(completed.usage), provenance: Object.keys(record(completed.usage)).length ? 'execution-provider' : 'unavailable', activeSeconds, elapsedSeconds,
+			artifacts, timingAwareness, usage: { ...providerUsage, provenance: Object.keys(providerUsage).length ? 'execution-provider' : 'unavailable', activeSeconds, elapsedSeconds,
 				cpuUserMicros: usageAfter.userCPUTime - usageBefore.userCPUTime, cpuSystemMicros: usageAfter.systemCPUTime - usageBefore.systemCPUTime, peakRssBytes: usageAfter.maxRSS * 1024 },
-			diagnostics: { systemPrompt: composedPrompt, providerEvents: redactProviderEvents(events, diagnosticSecrets), providerEventShapes, providerArguments, model: assignment.modelPolicy.model, provider: assignment.modelPolicy.provider, contextManifest: context, activityCompletion,
+			diagnostics: { systemPrompt: composedPrompt, providerEvents: redactProviderEvents(events, diagnosticSecrets), providerEventShapes,
+				providerSdk: { package: '@openai/codex-sdk', threadId: session.id }, providerUsageEvidence, model: assignment.modelPolicy.model, provider: assignment.modelPolicy.provider, contextManifest: context, activityCompletion,
 				verificationRecords: observedCompletion?.verification ?? [], changedPaths,
 				verificationObservations: redactProviderEvents((observedCompletion?.observations ?? []).map(value => ({ ...value })), diagnosticSecrets),
 				sourceCommit: sourceMetadata?.mode === 'work' ? (await execute('/usr/bin/git', ['rev-parse', '--verify', 'HEAD^{commit}'], { cwd: '/workspace/project', captureStdout: true, maxStdoutBytes: 128, timeoutMs: 10_000 })).stdout.trim() : source?.commit ?? null,

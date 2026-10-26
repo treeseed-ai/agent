@@ -6,6 +6,7 @@ USER root
 COPY --chown=65532:65532 .treeseed/docker/runtime/shared/package.json .treeseed/docker/runtime/shared/package-lock.json /app/
 COPY --chown=65532:65532 .treeseed/docker/runtime/shared/node_modules /app/node_modules
 RUN test -x /app/node_modules/@openai/codex/bin/codex.js \
+	&& node --input-type=module -e "import { Codex } from '@openai/codex-sdk'; if (typeof Codex !== 'function') process.exit(1)" \
 	&& ln -s /app/node_modules/@openai/codex/bin/codex.js /usr/local/bin/codex \
 	&& CODE_MODE_HOST="$(find /app/node_modules/@openai -type f -path '*/bin/codex-code-mode-host' -print -quit)" \
 	&& test -n "$CODE_MODE_HOST" \

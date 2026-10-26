@@ -1,6 +1,31 @@
 schemaVersion: treeseed.guarantee-verifiers/v1
 ownerPackage: "@treeseed/agent"
 verifiers:
+  agent.golden.codex-sdk-native-clock:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/codex/sdk/clock-events.test.ts
+    testName: "validates the SDK native structured_content clock against its original text without rewriting either representation"
+  agent.golden.codex-sdk-transport:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/codex/sdk/transport.test.ts
+    testName: "runs the official SDK with exact context schemas events usage and same-thread continuation"
+  agent.golden.codex-sdk-estimate-custody:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/codex/sdk/custody-native.test.ts
+    testName: "closes the real SDK verifier process group: transports the required proposal model for a renamed group subscriber estimate through the pinned CLI"
+  agent.golden.codex-sdk-synthesis-custody:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/codex/sdk/custody-native.test.ts
+    testName: "closes the real SDK verifier process group: rejects EN-shaped invalid output even when the real CLI exits zero after strict schema submission"
+  agent.golden.codex-sdk-deadline:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/codex/sdk/transport.test.ts
+    testName: "cancels the actual SDK native process at the original shortened budget"
   agent.golden.bounded-query-context-native:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

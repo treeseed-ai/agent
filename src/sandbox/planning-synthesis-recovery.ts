@@ -1,9 +1,8 @@
-import { createHash } from 'node:crypto';
 import { readFile, unlink } from 'node:fs/promises';
 import { validateActivityCompletion } from '../activity-completion.ts';
-import { codexProjectInstructionArguments, codexReasoningArguments, record } from '../kernel/handlers/model-workload-contract.ts';
+import { record } from '../kernel/handlers/model-workload-contract.ts';
+import type { CodexSdkTurn } from '../kernel/handlers/codex-sdk-session.ts';
 import { assertPredecessorSynthesis, missingPredecessorCitations, planningSynthesisCorrectionPrompt } from '../kernel/handlers/planning-synthesis.ts';
-import { run } from './process-runner.ts';
 
 type Event = Record<string, unknown>;
 
@@ -13,13 +12,10 @@ export async function recoverPlanningSynthesis(input: {
 	activity: string;
 	threadId: string | null;
 	responsePath: string;
-	schemaPath: string;
+	outputSchema: unknown;
 	allowVerification: boolean;
 	remainingMs(): number;
-	execute: typeof run;
-	model: string;
-	reasoningEffort?: string;
-	providerEnvironment: Record<string, string>;
+	execute(turn: CodexSdkTurn): Promise<void>;
 	onEvent(event: Event): void;
 	verifyClock(events: Event[]): void;
 	progress(stage: string): Promise<void>;
@@ -53,15 +49,10 @@ export async function recoverPlanningSynthesis(input: {
 	if (typeof launchRemaining !== 'number' || !Number.isFinite(launchRemaining) || launchRemaining < 30_000)
 		throw new Error('planning_synthesis_correction_budget_exhausted');
 	const events: Event[] = [];
-	await input.execute('/usr/local/bin/codex', ['exec', 'resume', input.threadId, '--json', '--dangerously-bypass-approvals-and-sandbox',
-		'--model', input.model, ...codexReasoningArguments(input.reasoningEffort), ...codexProjectInstructionArguments(),
-		'--output-schema', input.schemaPath, '--output-last-message', input.responsePath, '-'], {
-		cwd: '/workspace/project', env: input.providerEnvironment,
+	await input.execute({
+		responsePath: input.responsePath, outputSchema: input.outputSchema,
 		input: prompt, timeoutMs: Math.floor(Math.min(remainingMs, currentRemaining, launchRemaining)),
-		onLine(line) {
-			let event: Event;
-			try { event = record(JSON.parse(line)); }
-			catch { event = { type: 'provider.event.invalid', digest: createHash('sha256').update(line).digest('hex') }; }
+		onEvent(event) {
 			events.push(event); input.onEvent(event);
 		},
 	});

@@ -36,6 +36,7 @@ it('runs the official SDK with exact context schemas events usage and same-threa
 		expect(observations[0].prompt).toBe(context); expect(observations[0].schema).toEqual(schema);
 		expect(observations[0].args).toContain('danger-full-access'); expect(observations[0].args).toContain('approval_policy="never"');
 		expect(observations[0].args).toContain('project_doc_max_bytes=0'); expect(observations[0].args).toContain('model_reasoning_effort="high"');
+		expect(observations[0].args).toContain('features.plugins=false');
 		expect(observations[1].args.slice(-2)).toEqual(['resume', id]);
 		expect(observations[1].schema).toEqual(schema); expect(observations[1].home).toBe(root);
 		expect(observations[0].leakedHost).toBeNull();

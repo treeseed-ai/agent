@@ -1,7 +1,7 @@
 // Real pinned CLI, synthetic loopback SSE: this proves transport, NOT live model compliance.
 import { createServer } from 'node:http';
 import { Codex } from '@openai/codex-sdk';
-import { codexThreadOptions } from '../../../../src/kernel/handlers/codex-sdk-session.ts';
+import { codexClientConfig, codexThreadOptions } from '../../../../src/kernel/handlers/codex-sdk-session.ts';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
@@ -42,9 +42,9 @@ export async function codexSchemaTransport(schema: unknown, responseText: string
 		const address = server.address(); if (!address || typeof address === 'string') throw new Error('Fixture address missing.');
 		const cli = join(dirname(createRequire(import.meta.url).resolve('@openai/codex/package.json')), 'bin/codex.js');
 		const client = new Codex({ codexPathOverride: cli, env: { PATH: process.env.PATH ?? '', HOME: root, CODEX_HOME: root },
-			config: { model_provider: 'offline', model_providers: { offline: { name: 'offline fixture',
+			config: { ...codexClientConfig, model_provider: 'offline', model_providers: { offline: { name: 'offline fixture',
 				base_url: `http://127.0.0.1:${address.port}/v1`, wire_api: 'responses', requires_openai_auth: false,
-				supports_websockets: false, request_max_retries: 0 } }, project_doc_max_bytes: 0 } });
+				supports_websockets: false, request_max_retries: 0 } } } });
 		const thread = client.startThread({ ...codexThreadOptions('offline-fixture-model'), workingDirectory: root });
 		let stdout = '', stderr = '', code = 0;
 		let response: string | null = null;

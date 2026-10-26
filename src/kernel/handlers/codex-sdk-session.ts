@@ -1,6 +1,11 @@
 import { Codex, type ModelReasoningEffort, type Thread, type ThreadOptions } from '@openai/codex-sdk';
 import { writeFile } from 'node:fs/promises';
 
+// Canonical assignment context and governed tools are the guest's sole authority.
+// Disable ambient plugin discovery, including its background Git refresh work.
+export const codexClientConfig = { project_doc_max_bytes: 0, features: { browser_use: false, apps: false,
+	plugins: false, multi_agent: false, multi_agent_v2: false, image_generation: false } };
+
 export function codexThreadOptions(model: string, reasoningEffort?: string): ThreadOptions {
 	const efforts: readonly string[] = ['minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra', 'persistent'];
 	if (reasoningEffort !== undefined && !efforts.includes(reasoningEffort)) throw new Error('codex_reasoning_effort_invalid');
@@ -48,9 +53,7 @@ export class CodexWorkloadSession {
 		remainingMs(): number; executablePath?: string }) {
 		this.remainingMs = input.remainingMs;
 		const client = new Codex({ codexPathOverride: input.executablePath ?? '/usr/local/bin/codex', env: input.environment,
-			// Canonical assignment context is the existing sole guest instruction authority.
-			config: { project_doc_max_bytes: 0, features: { browser_use: false, apps: false,
-				multi_agent: false, multi_agent_v2: false, image_generation: false } } });
+			config: codexClientConfig });
 		this.thread = client.startThread(codexThreadOptions(input.model, input.reasoningEffort));
 	}
 	get id(): string | null { return this.thread.id; }

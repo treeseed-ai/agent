@@ -9,6 +9,12 @@ workflow:
   - id: codex-sdk-transport
     action: { verifier: agent.golden.codex-sdk-transport }
     expect: { status: passed }
+  - id: codex-sdk-estimate-custody
+    action: { verifier: agent.golden.codex-sdk-estimate-custody }
+    expect: { status: passed }
+  - id: codex-sdk-synthesis-custody
+    action: { verifier: agent.golden.codex-sdk-synthesis-custody }
+    expect: { status: passed }
   - id: codex-sdk-deadline
     action: { verifier: agent.golden.codex-sdk-deadline }
     expect: { status: passed }

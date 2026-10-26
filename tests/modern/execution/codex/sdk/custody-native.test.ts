@@ -19,9 +19,7 @@ async function groupMembers(group: number) {
 	return members;
 }
 
-it.each(['transports the required proposal model for a renamed group subscriber estimate through the pinned CLI',
-	'rejects EN-shaped invalid output even when the real CLI exits zero after strict schema submission'])(
-	'closes the real SDK verifier process group: %s', async name => {
+async function assertSdkVerifierClosure(name: string) {
 	const root = await mkdtemp(join(tmpdir(), 'sdk-verifier-custody-'));
 	const child = spawn(process.execPath, ['node_modules/vitest/vitest.mjs', 'run', '--config', 'vitest.config.ts',
 		'tests/modern/sandbox/codex-schema-transport.test.ts', '-t', `^.*${name}$`, '--reporter=json', `--outputFile=${join(root, 'report.json')}`],
@@ -43,4 +41,10 @@ it.each(['transports the required proposal model for a renamed group subscriber 
 		try { process.kill(-child.pid!, 'SIGKILL'); } catch (error) { expect((error as NodeJS.ErrnoException).code).toBe('ESRCH'); }
 		await rm(root, { recursive: true, force: true });
 	}
-}, 30_000);
+}
+
+it('closes the real SDK verifier process group: transports the required proposal model for a renamed group subscriber estimate through the pinned CLI',
+	() => assertSdkVerifierClosure('transports the required proposal model for a renamed group subscriber estimate through the pinned CLI'), 30_000);
+
+it('closes the real SDK verifier process group: rejects EN-shaped invalid output even when the real CLI exits zero after strict schema submission',
+	() => assertSdkVerifierClosure('rejects EN-shaped invalid output even when the real CLI exits zero after strict schema submission'), 30_000);

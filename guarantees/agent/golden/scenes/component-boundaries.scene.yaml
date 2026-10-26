@@ -3,6 +3,12 @@ id: agent.golden.component-boundaries
 title: Golden execution component boundaries
 scope: local-component-tests
 workflow:
+  - id: bounded-query-context-native
+    action: { verifier: agent.golden.bounded-query-context-native }
+    expect: { status: passed }
+  - id: bounded-query-context-unit
+    action: { verifier: agent.golden.bounded-query-context-unit }
+    expect: { status: passed }
   - id: external-bounded-reads
     action: { verifier: agent.golden.external-bounded-reads }
     expect: { status: passed }

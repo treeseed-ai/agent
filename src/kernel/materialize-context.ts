@@ -110,8 +110,25 @@ export async function materializeAssignmentContext(input: {
 	if (new Set(refs).size !== refs.length) throw new Error('assignment_context_reference_duplicate');
 	const inline = (input.authorizedContext ?? []).map(value => authorizedContextItemSchema.parse(value));
 	const reporting = input.attempt.effectiveProfile.activity === 'reporting';
-	if ((reporting && inline.length !== 1) || (!reporting && inline.length)) throw new Error('assignment_inline_context_denied');
+	const inlineRefs = inline.map(item => canonicalStandardsJson(item.ref));
+	if (new Set(inlineRefs).size !== inlineRefs.length) throw new Error('assignment_inline_context_duplicate');
+	const reports = inline.filter(item => item.ref.store === 'postgresql');
+	if ((reporting && reports.length !== 1) || (!reporting && reports.length)) throw new Error('assignment_inline_context_denied');
 	for (const item of inline) {
+		if (item.ref.store === 'treedx') {
+			// Immutable query views use the same exact grant as ordinary reads. Their
+			// content digest is bound into the admitted reference, so a bounded native
+			// view can be passed intact without replacing it with a full file read.
+			if (!item.ref.commit || !item.ref.path || !item.ref.anchor || !refs.includes(canonicalStandardsJson(item.ref))) {
+				throw new Error('assignment_inline_context_denied');
+			}
+			if (item.ref.digest !== item.digest || item.digest !== digest(item.value)) {
+				throw new Error('assignment_inline_context_authority_mismatch');
+			}
+			assertAssignmentContextRead(item.ref, input.attempt.grant);
+			projectFor(item.ref, input.treeDx);
+			continue;
+		}
 		const value = record(item.value);
 		if (canonicalStandardsJson(item.ref) !== canonicalStandardsJson(input.attempt.sourceRef)
 			|| item.ref.store !== 'postgresql' || item.ref.model !== 'workday'

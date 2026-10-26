@@ -1,6 +1,26 @@
 schemaVersion: treeseed.guarantee-verifiers/v1
 ownerPackage: "@treeseed/agent"
 verifiers:
+  agent.golden.provider-transcript-bounds:
+    kind: vitestCase
+    ownerPackage: '@treeseed/agent'
+    testFile: tests/modern/execution/microvm-result-authority.test.ts
+    testName: retains large provider transcripts through bounded protected events without masking completion or measured usage
+  agent.golden.provider-transcript-denial:
+    kind: vitestCase
+    ownerPackage: '@treeseed/agent'
+    testFile: tests/modern/execution/activities/execution-evidence.test.ts
+    testName: retains the original failure and measured usage when any transcript or terminal write is denied
+  agent.golden.provider-transcript-optional:
+    kind: vitestCase
+    ownerPackage: '@treeseed/agent'
+    testFile: tests/modern/execution/activities/execution-evidence.test.ts
+    testName: preserves unstreamed diagnostics and missing observers without manufacturing provider events
+  agent.golden.provider-transcript-readback:
+    kind: vitestCase
+    ownerPackage: '@treeseed/agent'
+    testFile: tests/modern/execution/activities/execution-evidence.test.ts
+    testName: joins only complete ordered owning transcript batches without modifying retained history
   agent.golden.external-bounded-reads:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

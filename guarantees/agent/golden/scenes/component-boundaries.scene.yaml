@@ -1689,6 +1689,9 @@ workflow:
   - id: provider-preparation-sdk-native
     action: { verifier: agent.golden.provider-preparation-sdk-native }
     expect: { status: passed }
+  - id: provider-preparation-linked-sdk-native
+    action: { verifier: agent.golden.provider-preparation-linked-sdk-native }
+    expect: { status: passed }
   - id: provider-source-fixture-link
     action: { verifier: agent.golden.provider-source-fixture-link }
     expect: { status: passed }

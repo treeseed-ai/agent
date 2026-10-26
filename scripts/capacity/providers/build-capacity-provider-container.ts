@@ -186,7 +186,7 @@ function prepareRuntimeDependencies(installedSdkRoot: string | null) {
 			recursive: true,
 			filter(source) {
 				const relativePath = source.slice(installedSdkRoot.length).replace(/^[/\\]/u, '');
-				return !relativePath.startsWith(`node_modules${process.platform === 'win32' ? '\\' : '/'}`);
+				return relativePath !== 'node_modules' && !relativePath.startsWith(`node_modules${sep}`);
 			},
 		});
 		// Retain npm's installed production layout below the exact selected SDK.

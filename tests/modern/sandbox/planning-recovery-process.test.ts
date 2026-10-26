@@ -7,10 +7,11 @@ import { existsSync } from 'node:fs';
 import { activityCompletionOutputSchema, validateActivityCompletion } from '../../../src/activity-completion.ts';
 import { assertPredecessorSynthesis, planningSynthesisOutputSchema } from '../../../src/kernel/handlers/planning-synthesis.ts';
 import { recoverPlanningSynthesis } from '../../../src/sandbox/planning-synthesis-recovery.ts';
-import { run, withinAssignmentBudget } from '../../../src/sandbox/process-runner.ts';
+import { run } from '../../../src/sandbox/process-runner.ts';
 import { timingAwarenessContract } from '../../../src/kernel/handlers/model-workload.ts';
 
-async function exercise(mode: string, initial: 'missing' | 'reversed', operation: (input: Parameters<typeof recoverPlanningSynthesis>[0], root: string) => Promise<void>, expectedCalls = 1) {
+type RecoveryInput = Parameters<typeof recoverPlanningSynthesis>[0] & { schemaPath: string };
+async function exercise(mode: string, initial: 'missing' | 'reversed', operation: (input: RecoveryInput, root: string) => Promise<void>, expectedCalls = 1) {
 	const root = await mkdtemp(join(tmpdir(), 'treeseed-synthesis-process-'));
 	try {
 		const predecessors = Array.from({ length: 8 }, (_, index) => ({ id: `result-process-${index}`, summary: `Observed contribution ${index}` }));
@@ -24,19 +25,18 @@ async function exercise(mode: string, initial: 'missing' | 'reversed', operation
 		await writeFile(schemaPath, JSON.stringify(planningSynthesisOutputSchema(context, activityCompletionOutputSchema())));
 		let calls = 0;
 		const deadline = Date.now() + 35_000;
-		const execute: typeof run = async (executable, args, options) => {
+		const execute: RecoveryInput['execute'] = async (options) => {
 			calls += 1;
-			expect(executable).toBe('/usr/local/bin/codex');
-			expect(args.slice(0, 3)).toEqual(['exec', 'resume', 'same-original-session']);
-			expect(args).toContain(schemaPath);
-			expect(args).toContain(responsePath);
+			expect(options.outputSchema).toEqual(JSON.parse(await readFile(schemaPath, 'utf8')));
+			expect(options.responsePath).toBe(responsePath);
 			expect(options?.timeoutMs).toBeLessThanOrEqual(deadline - Date.now() + 10);
-			return run(process.execPath, ['--import', 'tsx', fileURLToPath(new URL('./fixtures/synthesis-provider.ts', import.meta.url)), schemaPath, responsePath, mode],
-				{ ...options, cwd: process.cwd() });
+			await run(process.execPath, ['--import', 'tsx', fileURLToPath(new URL('./fixtures/synthesis-provider.ts', import.meta.url)), schemaPath, responsePath, mode],
+				{ input: options.input, timeoutMs: options.timeoutMs, cwd: process.cwd(),
+					onLine(line) { options.onEvent(JSON.parse(line)); } });
 		};
-		const request: Parameters<typeof recoverPlanningSynthesis>[0] = { context, activity: 'planning', threadId: 'same-original-session',
+		const request: RecoveryInput = { context, activity: 'planning', threadId: 'same-original-session',
 			responsePath, schemaPath, allowVerification: false, remainingMs: () => deadline - Date.now(), execute,
-			model: 'configured-model', providerEnvironment: { PATH: process.env.PATH ?? '' }, onEvent() {}, progress: async () => {},
+			outputSchema: JSON.parse(await readFile(schemaPath, 'utf8')), onEvent() {}, progress: async () => {},
 			verifyClock(events) { const clock = timingAwarenessContract(events);
 				expect(clock.firstToolCompliant).toBe(true); expect(clock.finalToolCompliant).toBe(true);
 				expect(clock.completedChecks).toBe(2); } };
@@ -74,7 +74,8 @@ it('rejects literal newline output from a real subprocess without rewriting or f
 
 it('kills a real correction subprocess when the shared original budget shrinks instead of extending it', async () => {
 	await exercise('delay', 'missing', async input => {
-		input.execute = withinAssignmentBudget(input.execute, () => 400);
+		const execute = input.execute;
+		input.execute = options => execute({ ...options, timeoutMs: Math.min(options.timeoutMs, 400) });
 		const startedAt = Date.now();
 		await expect(recoverPlanningSynthesis(input)).rejects.toThrow('exceeded its interactive execution deadline');
 		expect(Date.now() - startedAt).toBeLessThan(2_000);
@@ -176,9 +177,9 @@ it('native correction honors newly shortened authority after progress without in
 		let current = initial, measuredTimeout: number | undefined;
 		input.remainingMs = () => current;
 		input.progress = async stage => { if (stage === 'provider.planning-synthesis-recovery.starting') current = 30_000; };
-		input.execute = async (executable, args, options) => {
+		input.execute = async (options) => {
 			measuredTimeout = options?.timeoutMs;
-			return originalExecute(executable, args, options);
+			return originalExecute(options);
 		};
 		expect(await recoverPlanningSynthesis(input)).toBe(true);
 		expect(measuredTimeout).toBe(30_000); expect(current).toBe(30_000);
@@ -203,9 +204,9 @@ it('native correction child uses post-removal remaining authority through the or
 	await exercise('valid', 'missing', async input => {
 		const execute = input.execute, schema = await readFile(input.schemaPath), context = structuredClone(input.context);
 		input.remainingMs = () => existsSync(input.responsePath) ? 35_000 : 31_000;
-		input.execute = async (executable, args, options) => {
+		input.execute = async (options) => {
 			expect(options?.timeoutMs).toBe(31_000);
-			return execute(executable, args, options);
+			return execute(options);
 		};
 		expect(await recoverPlanningSynthesis(input)).toBe(true);
 		const report = validateActivityCompletion(JSON.parse(await readFile(input.responsePath, 'utf8')), false);

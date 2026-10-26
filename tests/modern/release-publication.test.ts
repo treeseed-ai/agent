@@ -160,7 +160,12 @@ describe('Agent RC publication', () => {
 		expect(workflow).toContain("require('./package.json').dependencies['@openai/codex']");
 		expect(workflow).toContain('grep -Fx "codex-cli $expected"');
 		const guest = readFileSync('src/kernel/handlers/model-workload.ts', 'utf8');
-		expect(guest).toContain("'--dangerously-bypass-approvals-and-sandbox'");
+		const sdk = readFileSync('src/kernel/handlers/codex-sdk-session.ts', 'utf8');
+		expect(sdk).toContain("sandboxMode: 'danger-full-access', approvalPolicy: 'never'");
+		expect(guest).toContain("await import('./codex-sdk-session.ts')");
+		expect(packageJson.dependencies['@openai/codex-sdk']).toBe(packageJson.dependencies['@openai/codex']);
+		expect(packageLock.packages['node_modules/@openai/codex-sdk'].version).toBe(packageJson.dependencies['@openai/codex-sdk']);
+		expect(guest).not.toContain("execute('/usr/local/bin/codex'");
 		expect(guest).not.toContain("'--approve-for-me'");
 		expect(guest).not.toContain("'--sandbox', 'workspace-write'");
 		expect(guest).toContain("resolve(inputRoot, 'codex-auth.json')");

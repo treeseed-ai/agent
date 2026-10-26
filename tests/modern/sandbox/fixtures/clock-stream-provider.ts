@@ -13,6 +13,10 @@ if (process.argv.includes('--guest')) {
 	await writeFile('/run/treeseed-output/provider-invoked', 'Controlled subprocess invoked.\n');
 	for await (const _chunk of process.stdin) { /* Consume the original prompt. */ }
 	const mode = (await readFile('/run/treeseed-assignment/stream-mode', 'utf8')).trim();
+	const complete = (response: string) => {
+		process.stdout.write(`${JSON.stringify({ type: 'item.completed', item: { id: 'reply', type: 'agent_message', text: response } })}\n`);
+		process.stdout.write(`${JSON.stringify({ type: 'turn.completed', usage: { input_tokens: 19, cached_input_tokens: 0, output_tokens: 3 } })}\n`);
+	};
 	const clock = async (id: string) => {
 		const value = await invokeTreeDxRelay('treeseed_time_status', {}, process.env);
 		const event = { type: 'item.completed', ...(mode.startsWith('provider-') ? { usage: { input_tokens: 19, output_tokens: 3 } } : {}), item: {
@@ -26,8 +30,7 @@ if (process.argv.includes('--guest')) {
  if(mode==='resumed-clock-id'){
   process.stdout.write(`${JSON.stringify({type:'thread.started',thread_id:'12345678-1234-4234-8234-123456789012'})}\n`);
   await clock('item_0');
-  const path=process.argv[process.argv.indexOf('--output-last-message')+1];
-  await writeFile(path,process.argv.includes('resume')?'Permitted final clock acknowledgment.':'Controlled original reply before its second clock.');
+  complete(process.argv.includes('resume')?'Permitted final clock acknowledgment.':'Controlled original reply before its second clock.');
   process.exit(0);
  }
 	if (mode === 'first-clock-denied') {
@@ -48,8 +51,6 @@ if (process.argv.includes('--guest')) {
 	else if (mode !== 'provider-incomplete') await clock('original-final-clock');
 	if (mode.startsWith('provider-')) { process.stderr.write('Original controlled provider exit 23.\n'); process.exitCode = 23; }
 	else {
-		const path = process.argv[process.argv.indexOf('--output-last-message') + 1];
-		if (!path?.startsWith('/workspace/')) throw new Error('Original guest response path required');
-		await writeFile(path, 'Controlled provider response; not real model evidence.\n');
+		complete('Controlled provider response; not real model evidence.\n');
 	}
 }

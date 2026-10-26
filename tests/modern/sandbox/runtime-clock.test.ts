@@ -11,6 +11,15 @@ import { clockRequest } from './architecture/clock-fixture.ts';
 import { objectDigest } from '../../../src/kernel/handlers/model-verification.ts';
 import { invokeTreeDxRelay, runModelWorkload, timingAwarenessContract } from '../../../src/kernel/handlers/model-workload.ts';
 import { run } from '../../../src/sandbox/process-runner.ts';
+import type { CodexSdkTurn } from '../../../src/kernel/handlers/codex-sdk-session.ts';
+import { codexUsageEvidence } from '../../../src/kernel/handlers/codex-sdk-session.ts';
+
+const sdk = vi.hoisted(() => ({ construct: vi.fn(), runTurn: vi.fn<(turn: CodexSdkTurn) => Promise<void>>() }));
+vi.mock('../../../src/kernel/handlers/codex-sdk-session.ts', async original => ({ ...await original<object>(), CodexWorkloadSession: class {
+	readonly id = null;
+	constructor(options: unknown) { sdk.construct(options); }
+	runTurn = sdk.runTurn;
+} }));
 
 vi.mock('node:https', () => ({ request: vi.fn() }));
 vi.mock('../../../src/sandbox/process-runner.ts', async original => ({ ...await original<typeof import('../../../src/sandbox/process-runner.ts')>(), run: vi.fn() }));
@@ -116,19 +125,19 @@ async function suppliedGuestExecution(providerFailure?: Error, incompleteClock =
 		return result;
 	});
 	response(JSON.stringify({ ...f.execution, observedAt: f.execution.startedAt, remainingSeconds: 30 }));
-	vi.mocked(run).mockImplementation(async (executable, args, options) => {
-		expect(executable).toBe('/usr/local/bin/codex'); expect(options?.timeoutMs).toBeGreaterThan(0);
+	sdk.runTurn.mockImplementation(async (options) => {
+		expect(sdk.construct).toHaveBeenCalledWith(expect.objectContaining({ model: 'not-a-real-model', remainingMs: expect.any(Function) }));
+		expect(options.timeoutMs).toBeGreaterThan(0);
 		for (const [id, seconds] of [['original-first', 0], ['original-final', 2]] as const) {
 			if (incompleteClock && id === 'original-final') continue;
 			const value = { ...f.execution, observedAt: new Date(Date.parse(f.execution.startedAt) + seconds * 1_000).toISOString(), remainingSeconds: 30 - seconds };
-			options?.onLine?.(JSON.stringify({ type: 'item.completed', usage: { input_tokens: 19, output_tokens: 3 }, item: {
+			options.onEvent({ type: 'item.completed', usage: { input_tokens: 19, output_tokens: 3 }, item: {
 				id, type: 'mcp_tool_call', server: 'treedx', tool: 'treeseed_time_status', status: 'completed', error: null,
-				result: { content: [{ type: 'text', text: JSON.stringify(value) }], structuredContent: value } } }));
+				result: { content: [{ type: 'text', text: JSON.stringify(value) }], structuredContent: value } } });
 		}
 		observed = 7_000_000_000n;
 		if (providerFailure) throw providerFailure;
-		f.files.set(args[args.indexOf('--output-last-message') + 1]!, Buffer.from('Controlled unit response.'));
-		return { stdout: '', stderr: '' };
+		f.files.set(options.responsePath, Buffer.from('Controlled unit response.'));
 	});
 	try {
 		await runModelWorkload();

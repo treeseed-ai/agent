@@ -12,7 +12,7 @@ export function providerToolName(event: Record<string, unknown>) {
 	return null;
 }
 
-/** Codex JSON item counters restart for each exec/resume process. Keep native IDs unchanged. */
+/** SDK turn item counters can restart across continuations. Keep native IDs unchanged. */
 export function providerItemIdentity(event: Record<string, unknown>): string {
 	const invocation = event.providerInvocation === undefined ? 0 : event.providerInvocation;
 	if (!Number.isSafeInteger(invocation) || Number(invocation) < 0) throw new Error('provider_invocation_identity_invalid');
@@ -233,18 +233,6 @@ export function omitUnreplayableVerification(completion: ActivityCompletionRepor
 	});
 	return omitted ? { ...completion, verification,
 		summary: `${completion.summary}\n\n${omitted} claimed passing verification item(s) were omitted because their commands were not standalone/replayable; those gates remain unproven.` } : completion;
-}
-
-export function codexReasoningArguments(reasoningEffort: string | undefined) {
-	return reasoningEffort && ['minimal', 'low', 'medium', 'high', 'xhigh'].includes(reasoningEffort)
-		? ['-c', `model_reasoning_effort=${reasoningEffort}`] : [];
-}
-
-export function codexProjectInstructionArguments() {
-	// Repository AGENTS.md files describe trusted host workspaces and may require
-	// tools such as trsd that intentionally do not exist inside an assignment VM.
-	// The canonical assignment prompt is the only guest execution instruction.
-	return ['-c', 'project_doc_max_bytes=0'];
 }
 
 export function codexInteractiveTimeoutMs(durationSeconds: number) {

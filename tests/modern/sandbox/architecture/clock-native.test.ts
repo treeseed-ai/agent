@@ -116,12 +116,14 @@ describe('native trusted guest clock relay and owning provider tool', () => {
 					'--ro-bind', '/usr', '/usr', '--ro-bind', '/lib', '/lib', '--ro-bind', '/lib64', '/lib64', '--ro-bind', '/etc', '/etc',
 					'--symlink', 'usr/bin', '/bin',
 					'--proc', '/proc', '--dev', '/dev', '--tmpfs', '/run', '--tmpfs', '/tmp', '--tmpfs', '/usr/local/bin',
-					'--ro-bind', resolve('..'), resolve('..'), '--ro-bind', dirname(dirname(process.execPath)), dirname(dirname(process.execPath)),
+					'--ro-bind', resolve('..'), resolve('..'),
+					...(dirname(dirname(process.execPath)) === '/usr' ? [] : ['--ro-bind', dirname(dirname(process.execPath)), dirname(dirname(process.execPath))]),
 					'--ro-bind', await realpath('node_modules'), await realpath('node_modules'),
 					'--ro-bind', input, '/run/treeseed-assignment', '--bind', output, '/run/treeseed-output', '--bind', workspace, '/workspace',
 					'--ro-bind', process.execPath, '/usr/local/bin/node', '--ro-bind', executable, '/usr/local/bin/codex',
 					'--chdir', process.cwd(), process.execPath, '--import', 'tsx', provider, '--guest'],
-					{ timeout: 20_000, killSignal: 'SIGKILL', maxBuffer: 1_048_576, env: { PATH: `${dirname(process.execPath)}:/usr/bin:/bin` } });
+					// SDK schema scratch belongs to the allocated guest workspace; the source checkout mount is read-only.
+					{ timeout: 20_000, killSignal: 'SIGKILL', maxBuffer: 1_048_576, env: { PATH: `${dirname(process.execPath)}:/usr/bin:/bin`, TMPDIR: '/workspace' } });
 				} catch (error) { failure = error instanceof Error ? error.message : String(error); }
 				let events: Record<string, unknown>[] = [], usage: ReturnType<typeof sandboxResultSchema.parse>['usage'] | undefined,
 					resultStatus: string | undefined, summary: string | undefined, responseMarkdown: string | undefined;
@@ -185,9 +187,13 @@ describe('native trusted guest clock relay and owning provider tool', () => {
 		const summary = outcomes.slice(0, 2).map(value => ({ mode: value.mode, rawEvents: value.events.length,
 			retainedClocks: completedTimeStatusChecks(value.events), resourceFailure: value.failure.includes('sandbox_resource_exhausted: command exited 137') }));
 		expect(summary, JSON.stringify(summary))
-			.toEqual([{ mode: 'completed', rawEvents: 302, retainedClocks: 2, resourceFailure: false },
-				{ mode: 'resource-abort', rawEvents: 303, retainedClocks: 2, resourceFailure: false }]);
-		expect(outcomes[0]!.events).toHaveLength(302);
+			.toEqual([{ mode: 'completed', rawEvents: 304, retainedClocks: 2, resourceFailure: false },
+				{ mode: 'resource-abort', rawEvents: 305, retainedClocks: 2, resourceFailure: false }]);
+		expect(outcomes[0]!.events).toHaveLength(304);
+		expect(outcomes[0]!.events.slice(-2)).toEqual([
+			{ type: 'item.completed', item: { id: 'reply', type: 'agent_message', text: 'Controlled provider response; not real model evidence.\n' } },
+			{ type: 'turn.completed', usage: { input_tokens: 19, cached_input_tokens: 0, cache_write_input_tokens: 0, output_tokens: 3 } },
+		]);
 		for (const [index, id] of [[0, 'original-first-clock'], [301, 'original-final-clock']] as const) {
 			const value = outcomes[0]!.clockValues[index === 0 ? 0 : 1];
 			expect(outcomes[0]!.events[index]).toEqual({ type: 'item.completed', item: { id, type: 'mcp_tool_call', server: 'treedx',
@@ -206,7 +212,7 @@ describe('native trusted guest clock relay and owning provider tool', () => {
 		expect(outcomes[2]!.failure).toContain('assignment_exact_proposal_context_required'); expect(outcomes[2]!.events).toEqual([]);
 		expect(outcomes[3]!.failure).toContain('Authorized Codex subscription credential is missing'); expect(outcomes[3]!.events).toEqual([]);
 		const failed = outcomes[4]!;
-		expect(failed.failure).toBe(''); expect(failed.resultStatus).toBe('failed'); expect(failed.summary).toContain('exited 23: Original controlled provider exit 23.');
+		expect(failed.failure).toBe(''); expect(failed.resultStatus).toBe('failed'); expect(failed.summary).toContain('Codex Exec exited with code 23: Original controlled provider exit 23.');
 		expect(failed.responseMarkdown).toBeUndefined(); expect(failed.events).toHaveLength(302);
 		expect(failed.usage).toMatchObject({ input_tokens: 19, output_tokens: 3, provenance: 'execution-provider' });
 		expect(Number(failed.usage?.activeSeconds)).toBeGreaterThan(0); expect(Number(failed.usage?.activeSeconds)).toBeLessThan(Number(failed.usage?.elapsedSeconds));
@@ -218,7 +224,7 @@ describe('native trusted guest clock relay and owning provider tool', () => {
 		}
 		expect(timingAwarenessContract(failed.events)).toMatchObject({ completedChecks: 2, firstToolCompliant: true, finalToolCompliant: true });
 		expect(outcomes[5]!.failure).toContain('Agent timing-awareness contract requires'); expect(outcomes[5]!.resultStatus).toBeUndefined(); expect(outcomes[5]!.events).toEqual([]);
-		expect(outcomes[5]!.failure).toContain('exited 23: Original controlled provider exit 23.');
+		expect(outcomes[5]!.failure).toContain('Codex Exec exited with code 23: Original controlled provider exit 23.');
 		expect(outcomes[6]!.failure).toContain('Agent timing-awareness contract requires');
 		expect(outcomes[6]!.clockValues).toHaveLength(2); expect(outcomes[6]!.resultStatus).toBeUndefined(); expect(outcomes[6]!.events).toEqual([]);
 		expect(outcomes[7]!.failure).toContain('Agent timing-awareness contract requires');

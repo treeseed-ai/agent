@@ -1,13 +1,13 @@
 import { beforeEach, expect, it, vi } from 'vitest';
 import { assertPredecessorSynthesis, missingPredecessorCitations, planningSynthesisCorrectionPrompt, planningSynthesisOutputSchema } from '../../../src/kernel/handlers/planning-synthesis.ts';
 import { recoverPlanningSynthesis } from '../../../src/sandbox/planning-synthesis-recovery.ts';
-import { run } from '../../../src/sandbox/process-runner.ts';
+import type { CodexSdkTurn } from '../../../src/kernel/handlers/codex-sdk-session.ts';
 import { readFile, unlink } from 'node:fs/promises';
 import { readFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { activityCompletionOutputSchema } from '../../../src/activity-completion.ts';
 
-vi.mock('../../../src/sandbox/process-runner.ts', () => ({ run: vi.fn() }));
+const run = vi.fn<(turn: CodexSdkTurn) => Promise<void>>();
 vi.mock('node:fs/promises', () => ({ readFile: vi.fn(), unlink: vi.fn(async () => {}) }));
 beforeEach(() => vi.resetAllMocks());
 
@@ -37,22 +37,22 @@ const first = { schemaVersion: 'treeseed.activity-completion/v1', summary: prede
 const corrected = { ...first, summary: predecessors.map(result => `- ${result.id}: ${result.summary}`).join('\n') };
 function input() {
 	return { context: { canonicalAssignmentContext: { assignment: { effectiveProfile: { activity: 'planning' } }, predecessorResults: predecessors } },
-		activity: 'planning', threadId: '00000000-0000-0000-0000-000000000001', responsePath: '/response.json', schemaPath: '/schema.json',
-		allowVerification: false, remainingMs: () => 175_000, execute: run, model: 'configured-model', reasoningEffort: 'low',
-		providerEnvironment: {}, onEvent: vi.fn(), verifyClock: vi.fn(), progress: vi.fn(async (_stage: string) => {}) };
+		activity: 'planning', threadId: '00000000-0000-0000-0000-000000000001', responsePath: '/response.json', outputSchema: activityCompletionOutputSchema(),
+		allowVerification: false, remainingMs: () => 175_000, execute: run,
+		onEvent: vi.fn(), verifyClock: vi.fn(), progress: vi.fn(async (_stage: string) => {}) };
 }
 
 it('corrects nine-predecessor synthesis using the captured completion and exact missing evidence within one original-budget continuation', async () => {
 	vi.mocked(readFile).mockResolvedValueOnce(JSON.stringify(first)).mockResolvedValueOnce(JSON.stringify(corrected));
-	vi.mocked(run).mockImplementationOnce(async (_command, _args, options) => {
-		options?.onLine?.(JSON.stringify({ type: 'turn.completed' })); return { stdout: '', stderr: '' };
+	vi.mocked(run).mockImplementationOnce(async (options) => {
+		options.onEvent({ type: 'turn.completed' });
 	});
 	const request = input();
 	expect(await recoverPlanningSynthesis(request)).toBe(true);
 	expect(run).toHaveBeenCalledTimes(1);
-	const [command, args, options] = vi.mocked(run).mock.calls[0]!;
-	expect(command).toBe('/usr/local/bin/codex');
-	expect(args?.slice(0, 3)).toEqual(['exec', 'resume', request.threadId]);
+	const [options] = vi.mocked(run).mock.calls[0]!;
+	expect(options.outputSchema).toEqual(request.outputSchema);
+	expect(options.responsePath).toBe(request.responsePath);
 	expect(options?.timeoutMs).toBeGreaterThan(30_000);
 	expect(options?.timeoutMs).toBeLessThanOrEqual(175_000);
 	expect(options?.input).toContain(JSON.stringify(first));
@@ -65,7 +65,7 @@ it('corrects nine-predecessor synthesis using the captured completion and exact 
 
 it('fails closed when the bounded citation correction still omits a predecessor', async () => {
 	vi.mocked(readFile).mockResolvedValue(JSON.stringify(first));
-	vi.mocked(run).mockResolvedValue({ stdout: '', stderr: '' });
+	vi.mocked(run).mockResolvedValue(undefined);
 	const request = input();
 	await expect(recoverPlanningSynthesis(request)).rejects.toThrow('predecessor_result_citation_missing:result-2');
 	expect(run).toHaveBeenCalledTimes(1);
@@ -74,7 +74,7 @@ it('fails closed when the bounded citation correction still omits a predecessor'
 
 it('does not accept a corrected response when its clock-only boundary fails', async () => {
 	vi.mocked(readFile).mockResolvedValueOnce(JSON.stringify(first)).mockResolvedValueOnce(JSON.stringify(corrected));
-	vi.mocked(run).mockResolvedValue({ stdout: '', stderr: '' });
+	vi.mocked(run).mockResolvedValue(undefined);
 	const request = input(); request.verifyClock.mockImplementation(() => { throw new Error('clock-only boundary failed'); });
 	await expect(recoverPlanningSynthesis(request)).rejects.toThrow('clock-only boundary failed');
 	expect(readFile).toHaveBeenCalledTimes(1);
@@ -90,9 +90,9 @@ it('does not start citation recovery without an original session or enough remai
 
 it('uses the same shrinking API deadline executor for citation recovery', async () => {
 	vi.mocked(readFile).mockResolvedValueOnce(JSON.stringify(first)).mockResolvedValueOnce(JSON.stringify(corrected));
-	const execute = vi.fn<typeof run>(async () => ({ stdout: '', stderr: '' }));
+	const execute = vi.fn(async (_turn: CodexSdkTurn) => {});
 	expect(await recoverPlanningSynthesis({ ...input(), remainingMs: () => 35_000, execute })).toBe(true);
-	expect(execute).toHaveBeenCalledWith('/usr/local/bin/codex', expect.any(Array), expect.objectContaining({ timeoutMs: 35_000 }));
+	expect(execute).toHaveBeenCalledWith(expect.objectContaining({ timeoutMs: 35_000, outputSchema: expect.any(Object) }));
 	expect(run).not.toHaveBeenCalled();
 });
 
@@ -114,13 +114,13 @@ it('remeasures post-removal correction time without increasing either earlier re
 	for (const remaining of [31_000, 45_000]) {
 		vi.resetAllMocks();
 		vi.mocked(readFile).mockResolvedValueOnce(JSON.stringify(first)).mockResolvedValueOnce(JSON.stringify(corrected));
-		vi.mocked(run).mockResolvedValue({ stdout: '', stderr: '' });
+		vi.mocked(run).mockResolvedValue(undefined);
 		let current = 35_000;
 		vi.mocked(unlink).mockImplementation(async () => { current = remaining; });
 		const request = { ...input(), remainingMs: () => current }, before = structuredClone(request.context);
 		expect(await recoverPlanningSynthesis(request)).toBe(true);
 		expect(run).toHaveBeenCalledTimes(1);
-		expect(vi.mocked(run).mock.calls[0]![2]?.timeoutMs).toBe(Math.min(35_000, remaining));
+		expect(vi.mocked(run).mock.calls[0]![0]?.timeoutMs).toBe(Math.min(35_000, remaining));
 		expect(request.context).toEqual(before);
 	}
 });
@@ -131,7 +131,7 @@ it('denies malformed remaining authority before removing captured synthesis or i
 	for (const value of values) {
 		vi.resetAllMocks();
 		vi.mocked(readFile).mockResolvedValueOnce(JSON.stringify(first)).mockResolvedValueOnce(JSON.stringify(corrected));
-		vi.mocked(run).mockResolvedValue({ stdout: '', stderr: '' });
+		vi.mocked(run).mockResolvedValue(undefined);
 		const supplied = Object.assign({ remainingMs: 35_000 }, { remainingMs: value });
 		const request = { ...input(), remainingMs: () => supplied.remainingMs }, before = structuredClone(request.context);
 		outcomes.push({ recovered: await recoverPlanningSynthesis(request), executions: vi.mocked(run).mock.calls.length,
@@ -145,7 +145,7 @@ it('remeasures synthesis recovery authority after progress delivery before delet
 	for (const remaining of [29_999, 0, -1, NaN, Infinity]) {
 		vi.resetAllMocks();
 		vi.mocked(readFile).mockResolvedValueOnce(JSON.stringify(first)).mockResolvedValueOnce(JSON.stringify(corrected));
-		vi.mocked(run).mockResolvedValue({ stdout: '', stderr: '' });
+		vi.mocked(run).mockResolvedValue(undefined);
 		let current = 35_000;
 		const request = { ...input(), remainingMs: () => current };
 		request.progress.mockImplementation(async stage => { if (stage === 'provider.planning-synthesis-recovery.starting') current = remaining; });
@@ -294,10 +294,10 @@ it('fails closed on ambiguous or multiline planning predecessor identities', () 
 it('uses the constrained completion schema for the initial model turn and original-session recovery', () => {
 	const guest = readFileSync(new URL('../../../src/kernel/handlers/model-workload.ts', import.meta.url), 'utf8');
 	expect(guest).toContain('planningSynthesisOutputSchema(context, activityCompletionOutputSchema(');
-	expect(guest).toContain("['--output-schema', completionSchemaPath]");
-	expect(guest).toContain('responsePath, schemaPath: completionSchemaPath, allowVerification');
+	expect(guest).toContain('outputSchema: completionSchema');
+	expect(guest).toContain('responsePath, outputSchema: completionSchema, allowVerification');
 	const recovery = readFileSync(new URL('../../../src/sandbox/planning-synthesis-recovery.ts', import.meta.url), 'utf8');
-	expect(recovery).toContain("'--output-schema', input.schemaPath");
+	expect(recovery).toContain('outputSchema: input.outputSchema');
 	expect(recovery).toContain('assertPredecessorSynthesis(input.context, corrected)');
 });
 

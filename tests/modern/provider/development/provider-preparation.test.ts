@@ -93,7 +93,7 @@ it('fails closed for an absent required selected SDK dependency while permitting
   } finally { vi.doUnmock('../../../../scripts/packages/package-tools.ts'); vi.resetModules(); f.close(); }
 });
 
-it.each(['directory', 'symlink'] as const)('original native provider preparation runs its compiled health entrypoint with a selected SDK dependency %s without borrowing parent packages', (layout) => {
+function verifyNativePreparation(layout: 'directory' | 'symlink') {
   const f = fixture(true);
   const manifest = parse(readFileSync(join(root, 'treeseed.package.yaml'), 'utf8')) as { development: unknown };
   const operation = developmentRuntimeSchema.parse(manifest.development).targets.find(target => target.id === 'provider')!.operations.build!;
@@ -136,4 +136,7 @@ it.each(['directory', 'symlink'] as const)('original native provider preparation
     // Actual original script, strict compiler, native cp and Node SDK/provider
     // imports. No broker/model/registration/usage or managed golden proof.
   } finally { f.close(); }
-}, developmentRuntimeSchema.parse((parse(readFileSync(join(root, 'treeseed.package.yaml'), 'utf8')) as { development: unknown }).development).targets.find(target => target.id === 'provider')!.operations.build!.timeoutSeconds * 1000);
+}
+const preparationTimeout = developmentRuntimeSchema.parse((parse(readFileSync(join(root, 'treeseed.package.yaml'), 'utf8')) as { development: unknown }).development).targets.find(target => target.id === 'provider')!.operations.build!.timeoutSeconds * 1000;
+it('original native provider preparation runs its compiled health entrypoint with the selected SDK dependency closure without borrowing parent packages', () => verifyNativePreparation('directory'), preparationTimeout);
+it('original native provider preparation handles a linked SDK dependency root without retaining host aliases', () => verifyNativePreparation('symlink'), preparationTimeout);

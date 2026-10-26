@@ -2805,7 +2805,12 @@ verifiers:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/provider/development/provider-preparation.test.ts
-    testName: "original native provider preparation runs its compiled health entrypoint with a selected SDK dependency (directory|symlink) without borrowing parent packages"
+    testName: "original native provider preparation runs its compiled health entrypoint with the selected SDK dependency closure without borrowing parent packages"
+  agent.golden.provider-preparation-linked-sdk-native:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/provider/development/provider-preparation.test.ts
+    testName: "original native provider preparation handles a linked SDK dependency root without retaining host aliases"
   agent.golden.provider-source-fixture-link:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

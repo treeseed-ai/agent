@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
@@ -93,12 +93,17 @@ it('fails closed for an absent required selected SDK dependency while permitting
   } finally { vi.doUnmock('../../../../scripts/packages/package-tools.ts'); vi.resetModules(); f.close(); }
 });
 
-it('original native provider preparation runs its compiled health entrypoint with the selected SDK dependency closure without borrowing parent packages', () => {
+it.each(['directory', 'symlink'] as const)('original native provider preparation runs its compiled health entrypoint with a selected SDK dependency %s without borrowing parent packages', (layout) => {
   const f = fixture(true);
   const manifest = parse(readFileSync(join(root, 'treeseed.package.yaml'), 'utf8')) as { development: unknown };
   const operation = developmentRuntimeSchema.parse(manifest.development).targets.find(target => target.id === 'provider')!.operations.build!;
   const nativeBound = operation.timeoutSeconds * 1000;
   try {
+    if (layout === 'symlink') {
+      const dependencies = join(f.allocation, 'selected-sdk-dependencies');
+      renameSync(join(f.sdk, 'node_modules'), dependencies);
+      symlinkSync(dependencies, join(f.sdk, 'node_modules'));
+    }
     const sdkBytes = readFileSync(join(f.sdk, 'package.json')), lockBytes = readFileSync(join(f.agent, 'package-lock.json'));
     const built = spawnSync(operation.command, operation.args, { cwd: f.agent, env: process.env, encoding: 'utf8', timeout: nativeBound, maxBuffer: 16_777_216 });
     expect(built.error).toBeUndefined(); expect(built.signal).toBe(null); expect(built.status, built.stderr).toBe(0);
@@ -107,6 +112,7 @@ it('original native provider preparation runs its compiled health entrypoint wit
     expect(existsSync(dependency), 'Current SDK required production package omitted').toBe(true);
     expect(readFileSync(dependency)).toEqual(readFileSync(join(f.sdk, 'node_modules/zod-to-json-schema/package.json')));
     const sdkModules = join(f.runtime, 'node_modules/@treeseed/sdk/node_modules');
+    expect(lstatSync(sdkModules).isSymbolicLink()).toBe(false);
     expect(readFileSync(join(sdkModules, 'zod/package.json'))).toEqual(readFileSync(join(f.sdk, 'node_modules/zod/package.json')));
     expect(existsSync(join(sdkModules, 'vitest'))).toBe(false);
     const isolated = join(f.allocation, 'provider-runtime');

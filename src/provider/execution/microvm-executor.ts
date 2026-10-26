@@ -12,6 +12,7 @@ import { SandboxBrokerClient } from './sandbox-broker-client.ts';
 import { materializeSandboxInputs } from './sandbox-input-materializer.ts';
 import { activeSandboxAttempt, prepareAssignmentSource, renewAssignmentSource, type ActiveSource } from './source-workspace.ts';
 import { publishSourceBranch } from './source-branch-publication.ts';
+import { emitExecutionEvidence } from './activity/execution-evidence.ts';
 import { assignmentRuntimeSeconds } from './activity/context.ts';
 import { RenewalDrain } from './activity/renewal-drain.ts';
 import { assignmentOfferId } from './assignment-selection.ts';
@@ -369,13 +370,13 @@ export async function createMicrovmExecutor(config: ProviderHostRuntimeConfig, m
 					provider: assignment.modelPolicy.provider, capabilities: assignment.modelPolicy.capabilities, usage: [usage],
 					timing: { elapsedSeconds: result.usage.elapsedSeconds }, resources: { cpuUserMicros: result.usage.cpuUserMicros,
 						cpuSystemMicros: result.usage.cpuSystemMicros, peakRssBytes: result.usage.peakRssBytes }, artifacts: result.artifacts,
-					activityCompletion: diagnostics.activityCompletion ?? null, timingAwareness: result.timingAwareness,
+					activityCompletion: diagnostics.activityCompletion ?? null, timingAwareness: timingAwarenessEvidence(result.timingAwareness),
 					changedPaths: diagnostics.changedPaths ?? [], teardown };
 				if (result.status === 'completed') {
 					const abstained = result.responseMarkdown?.trim() === '<!-- treeseed:abstain -->';
 					const timingAwareness = timingAwarenessEvidence(result.timingAwareness);
-					await request.emit?.({ type: 'execution.completed', occurredAt: new Date().toISOString(), summary: result.summary,
-						payload: { ...observation, timingAwareness }, protectedPayload: result.diagnostics });
+					await emitExecutionEvidence(request.emit, { type: 'execution.completed', occurredAt: new Date().toISOString(), summary: result.summary,
+						payload: { ...observation, timingAwareness }, protectedPayload: result.diagnostics }, usage, { sandboxId: result.sandboxId, teardown });
 					return { status: abstained ? 'abstained' : result.responseMarkdown ? 'responded' : 'completed', summary: result.summary, ...(!abstained && result.responseMarkdown ? { responseMarkdown: result.responseMarkdown } : {}), outputs: { sandboxId: result.sandboxId, teardown, environmentReceipt,
 						verificationRecords: object(result.diagnostics).verificationRecords ?? [],
 						activityCompletion: object(result.diagnostics).activityCompletion ?? null,
@@ -384,8 +385,8 @@ export async function createMicrovmExecutor(config: ProviderHostRuntimeConfig, m
 						providerEventShapes: Array.isArray(diagnostics.providerEventShapes) ? diagnostics.providerEventShapes : [],
 						...(sourceReference ? { sourceReference } : {}) }, artifacts, usage: [usage] };
 				}
-				await request.emit?.({ type: 'execution.failed', occurredAt: new Date().toISOString(), summary: result.summary,
-					payload: { ...observation, status: result.status }, protectedPayload: result.diagnostics });
+				await emitExecutionEvidence(request.emit, { type: 'execution.failed', occurredAt: new Date().toISOString(), summary: result.summary,
+					payload: { ...observation, status: result.status }, protectedPayload: result.diagnostics }, usage, { sandboxId: result.sandboxId, teardown });
 				const resourceExhausted = result.summary.includes('sandbox_resource_exhausted:');
 				return { status: result.status === 'failed' && !resourceExhausted ? 'failed' : 'returned',
 					code: resourceExhausted ? 'sandbox_resource_exhausted' : `sandbox_${result.status}`,

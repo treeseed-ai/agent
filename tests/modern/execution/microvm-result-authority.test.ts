@@ -90,7 +90,7 @@ describe('microvm result and closeout authority', () => {
 			const terminal = retained.find(event => event.type === (status === 'completed' ? 'execution.completed' : 'execution.failed'));
 			expect(terminal).toBeDefined();
 			expect(retained.filter(event => event.payload.stage === 'provider.events').flatMap(event => event.protectedPayload!.providerEvents)).toEqual(supplied.diagnostics.providerEvents);
-			expect(terminal!.protectedPayload).toEqual({});
+			expect(terminal!.protectedPayload).toEqual({ providerEventCount: supplied.diagnostics.providerEvents.length });
 			expect(result.usage).toMatchObject([{ inputTokens: 19, outputTokens: 3, activeSeconds: 1.125, elapsedSeconds: 2.25 }]);
 			expect(JSON.stringify(retained.map(event => event.payload))).not.toContain('meaningful project discussion');
 			expect(f.result()).toEqual(supplied); expect(f.client.destroy).toHaveBeenCalledTimes(1); expect(f.cleanup).toHaveBeenCalledTimes(1);
@@ -195,7 +195,8 @@ describe('microvm result and closeout authority', () => {
 				model: f.observed[0]!.modelPolicy.model, provider: f.observed[0]!.modelPolicy.provider,
 				capabilities: f.observed[0]!.modelPolicy.capabilities, usage: result.usage, timing: { elapsedSeconds: original.usage.elapsedSeconds },
 				resources: { cpuUserMicros: 123, cpuSystemMicros: 45, peakRssBytes: 4096 },
-				timingAwareness: original.timingAwareness }, protectedPayload: original.diagnostics });
+				timingAwareness: original.timingAwareness }, protectedPayload: { providerEventCount: 2 } });
+			expect(emitted.filter(event => event.payload.stage === 'provider.events').flatMap(event => event.protectedPayload!.providerEvents)).toEqual(original.diagnostics!.providerEvents);
 			expect(result.status).toBe(status === 'failed' ? 'failed' : 'returned'); expect(result.summary).toBe(supplied.summary);
 			expect(result.outputs?.timingAwareness).toEqual(original.timingAwareness);
 			expect(result.usage).toEqual([{ activeSeconds: 1.125, elapsedSeconds: 2.25, inputTokens: 19, outputTokens: 3,

@@ -10,7 +10,7 @@ import { request as executionRequest, timingAwareness } from '../kernel/provider
 import { nativeCloseoutTransport } from '../kernel/architecture/portable/portable-kernel-fixture.ts';
 import { broker, microvmBroker } from './fixtures/broker-preparation.ts';
 import { executeKernelAssignment } from '../../../src/kernel/provider-kernel-executor.ts';
-import { verifyModelClockEvidence } from '../../acceptance/workday/support/assignment-authority.ts';
+import { modelExecutionInventory, verifyModelClockEvidence } from '../../acceptance/workday/support/assignment-authority.ts';
 describe('sandbox broker preparation authority', () => {
 	it('uses the API-issued preparation deadline instead of an independent fifteen-second cutoff', () => {
 		const now = Date.parse('2026-09-28T00:00:00.000Z');
@@ -85,9 +85,10 @@ describe('sandbox broker control transport', () => {
 			expect(Date.parse(executionDeadlineAt)).toBeLessThan(Date.parse(attempt.deadline));
 			const item = { id: attempt.id, status, assignmentAttempt: attempt, assignmentResult: canonical,
 				capacityEnvelope: { budget: { time: { executionStartedAt, executionDeadlineAt } } } };
-			const event = { ...terminal[0], id: 'native-short-clock-event', assignmentId: attempt.id, runId: attempt.workdayId,
-				workdayId: attempt.workdayId, teamId: attempt.teamId, projectId: attempt.projectId, eventIndex: 1,
-				eventType: `provider.execution.${status}`, status: 'recorded', createdAt: new Date().toISOString() };
+			const rows = f.events.map((event, eventIndex) => ({ ...event, context: event.payload, id: `native-short-clock-${eventIndex}`,
+				assignmentId: attempt.id, runId: attempt.workdayId, workdayId: attempt.workdayId, teamId: attempt.teamId,
+				projectId: attempt.projectId, eventIndex, eventType: `provider.${event.type}`, status: 'recorded', createdAt: new Date().toISOString() }));
+			const event = modelExecutionInventory([item], rows, { id: attempt.workdayId, teamId: attempt.teamId })[0]!.terminal;
 			const held = structuredClone({ item, event }); expect(() => verifyModelClockEvidence(item, event)).not.toThrow();
 			expect({ item, event }).toEqual(held); expect(f.input.assignment).toEqual(before); expect(f.observations).toHaveLength(1);
 			expect(f.paths.filter(path => path.endsWith('/execute'))).toHaveLength(1);
@@ -98,7 +99,7 @@ describe('sandbox broker control transport', () => {
 		expect(f.server.listening).toBe(false); await expect(stat(f.directory)).rejects.toMatchObject({ code: 'ENOENT' }); }
 	});
 	it('native microvm Kernel and provider runner retain original successful and failed executor measurements through exact public delivery and denied closeout', async () => {
-		for (const mode of ['completed', 'failed', 'expired', 'diagnostic-denied', 'settlement-denied'] as const) {
+		for (const mode of ['completed', 'large-transcript', 'failed', 'expired', 'diagnostic-denied', 'settlement-denied'] as const) {
 			const f = await microvmBroker(); let api: Awaited<ReturnType<typeof nativeCloseoutTransport>> | undefined;
 			try {
 				const attempt = assignmentAttemptSchema.parse(f.input.assignment.assignmentAttempt), before = structuredClone(f.input.assignment);
@@ -110,7 +111,8 @@ describe('sandbox broker control transport', () => {
 				};
 				f.patchResult({ ...(mode === 'failed' || mode === 'expired' ? { status: mode } : {}),
 					usage: { activeSeconds: 1.125, elapsedSeconds: 2.25, input_tokens: 19, output_tokens: 3, provenance: 'execution-provider' },
-					diagnostics: { providerEvents: [clock('original-first-clock', 30), clock('original-final-clock', 29)] } });
+					diagnostics: { providerEvents: [clock('original-first-clock', 30), ...(mode === 'large-transcript' ? Array.from({ length: 24 }, (_, index) => ({
+						type: 'item.completed', item: { id: `discussion-${index}`, type: 'agent_message', text: 'project proposal context '.repeat(2500) } })) : []), clock('original-final-clock', 29)] } });
 				api = await nativeCloseoutTransport({ attempt, input: f.input, executor: f.executor }, f.directory, true);
 				if (mode === 'diagnostic-denied') api.deny('reportUsage', 403); if (mode === 'settlement-denied') api.deny('settleAssignment', 503);
 				let failure: unknown; try { await api.run(); } catch (error) { failure = error; }
@@ -121,7 +123,16 @@ describe('sandbox broker control transport', () => {
 				expect(api.requests.filter(item=>item.operation==='createEvent'&&item.body.eventType==='provider.sandbox.destroyed').map(item=>item.body.context)).toEqual([{sandboxId:'owned-native-sandbox',teardown:{verified:true,completedAt:f.destroyedAt()},vmId:'sandbox-warm-11111111-1111-4111-8111-111111111111'}]);
 				expect(diagnosticEvents[0]!.body).toMatchObject({ leaseToken: f.input.leaseToken, runnerId: f.input.runnerId,
 					context: { model: f.assignment()!.modelPolicy.model, provider: f.assignment()!.modelPolicy.provider,
-						timingAwareness: raw.timingAwareness, timing: { elapsedSeconds: raw.usage.elapsedSeconds } }, protectedPayload: raw.diagnostics });
+						timingAwareness: raw.timingAwareness, timing: { elapsedSeconds: raw.usage.elapsedSeconds } }, protectedPayload: { providerEventCount: mode === 'large-transcript' ? 26 : 2 } });
+				expect(api.requests.filter(item => item.operation === 'createEvent' && item.body.context && typeof item.body.context === 'object'
+					&& Reflect.get(item.body.context, 'stage') === 'provider.events').flatMap(item => {
+					const payload = item.body.protectedPayload;
+					return payload && typeof payload === 'object' ? Reflect.get(payload, 'providerEvents') : [];
+				})).toEqual(raw.diagnostics!.providerEvents);
+				for (const event of api.requests.filter(item => item.operation === 'createEvent')) {
+					expect(JSON.stringify(event.body.context).length).toBeLessThanOrEqual(262_144);
+					expect(JSON.stringify(event.body.protectedPayload ?? null).length).toBeLessThanOrEqual(1_048_576);
+				}
 				expect(Number.isInteger(diagnosticEvents[0]!.body.sequence)).toBe(true);
 				expect(Object.hasOwn(diagnosticEvents[0]!.body.context ?? {}, 'providerEvents')).toBe(false);
 				const usage = { activeSeconds: 1.125, elapsedSeconds: 2.25, inputTokens: 19, outputTokens: 3,

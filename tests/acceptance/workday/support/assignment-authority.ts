@@ -41,7 +41,20 @@ export function modelExecutionInventory(items: Row[], events: Row[], run: Row): 
 		}
 		assert.ok(Number(started.eventIndex) < Number(terminal.eventIndex)
 			&& Date.parse(String(started.createdAt)) <= Date.parse(String(terminal.createdAt)), 'ACCEPTANCE_MODEL_INVENTORY_ORDER');
-		return { item, started, terminal };
+		const count = row(terminal.protectedPayload).providerEventCount;
+		if (count === undefined) return { item, started, terminal };
+		assert.ok(Number.isSafeInteger(count) && Number(count) >= 0, 'ACCEPTANCE_MODEL_TRANSCRIPT_COUNT');
+		const providerEvents: unknown[] = [];
+		for (const event of events.filter(event => event.assignmentId === item.id && row(event.context).stage === 'provider.events')
+			.sort((left, right) => Number(left.eventIndex) - Number(right.eventIndex))) {
+			assert.equal(event.eventType, 'provider.execution.progress'); assert.equal(event.workdayId, run.id); assert.equal(event.projectId, attempt.projectId);
+			assert.ok(Number(started.eventIndex) < Number(event.eventIndex) && Number(event.eventIndex) < Number(terminal.eventIndex), 'ACCEPTANCE_MODEL_TRANSCRIPT_ORDER');
+			const batch = row(event.protectedPayload).providerEvents;
+			assert.ok(Array.isArray(batch) && batch.length > 0, 'ACCEPTANCE_MODEL_TRANSCRIPT_BATCH');
+			assert.equal(row(event.context).offset, providerEvents.length); assert.equal(row(event.context).count, batch.length); providerEvents.push(...batch);
+		}
+		assert.equal(providerEvents.length, count, 'ACCEPTANCE_MODEL_TRANSCRIPT_COMPLETE');
+		return { item, started, terminal: { ...terminal, protectedPayload: { ...row(terminal.protectedPayload), providerEvents } } };
 	});
 	for (const event of events.filter(event => ['provider.execution.completed', 'provider.execution.failed'].includes(String(event.eventType)) && modelEvent(event)))
 		assert.ok(seen.has(String(event.assignmentId)), 'ACCEPTANCE_MODEL_INVENTORY_MISSING_START');

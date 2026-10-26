@@ -71,6 +71,31 @@ async function suppliedMicrovm() {
 }
 
 describe('microvm result and closeout authority', () => {
+	it('retains large provider transcripts through bounded protected events without masking completion or measured usage', async () => {
+		for (const status of ['completed', 'failed', 'cancelled', 'expired'] as const) {
+			const f = await suppliedMicrovm(), original = sandboxResultSchema.parse(f.result());
+			const clocks = original.diagnostics!.providerEvents as Record<string, unknown>[];
+			const transcript = Array.from({ length: 24 }, (_, index) => ({ type: 'item.completed',
+				item: { id: `reply-${index}`, type: 'agent_message', text: `${index}:` + 'meaningful project discussion '.repeat(2000) } }));
+			const supplied = { ...original, status, diagnostics: { ...original.diagnostics, providerEvents: [clocks[0], ...transcript, clocks[1]] } };
+			f.setResult(supplied);
+			const retained: Parameters<NonNullable<typeof f.input.emit>>[0][] = [];
+			f.input.emit = async event => {
+				if (JSON.stringify(event.payload).length > 262_144 || JSON.stringify(event.protectedPayload ?? null).length > 1_048_576)
+					throw new Error('communication_trace_payload_too_large');
+				retained.push(structuredClone(event));
+			};
+			const result = await f.executor.execute(f.input);
+			expect(result.status).toBe(['completed', 'failed'].includes(status) ? status : 'returned');
+			const terminal = retained.find(event => event.type === (status === 'completed' ? 'execution.completed' : 'execution.failed'));
+			expect(terminal).toBeDefined();
+			expect(retained.filter(event => event.payload.stage === 'provider.events').flatMap(event => event.protectedPayload!.providerEvents)).toEqual(supplied.diagnostics.providerEvents);
+			expect(terminal!.protectedPayload).toEqual({});
+			expect(result.usage).toMatchObject([{ inputTokens: 19, outputTokens: 3, activeSeconds: 1.125, elapsedSeconds: 2.25 }]);
+			expect(JSON.stringify(retained.map(event => event.payload))).not.toContain('meaningful project discussion');
+			expect(f.result()).toEqual(supplied); expect(f.client.destroy).toHaveBeenCalledTimes(1); expect(f.cleanup).toHaveBeenCalledTimes(1);
+		}
+	});
  it('retains only exact acquired VM identity from complete original broker destruction history in the public closeout event', async () => {
   const vmId='sandbox-warm-11111111-1111-4111-8111-111111111111';
   for(const mode of ['exact','missing','foreign','duplicate','gap','changed','private']) {

@@ -130,7 +130,7 @@ describe('native trusted guest clock relay and owning provider tool', () => {
 				const resultPath = join(output, 'result.json'), independentlyFinishedAt = new Date().toISOString();
 				if (mode === 'replayed-clock') {
 					const retained = await readFile(join(output, 'provider-first-clock.json'), 'utf8'), raw = JSON.parse(retained);
-					expect(raw.item.id).toBe('original-first-clock'); expect(raw.item.result.structuredContent).toEqual(f.readings[1]);
+					expect(raw.item.id).toBe('original-first-clock'); expect(raw.item.result.structured_content).toEqual(f.readings[1]);
 					expect(raw.item.result.content).toEqual([{ type: 'text', text: JSON.stringify(f.readings[1]) }]);
 					expect(await readFile(join(output, 'provider-first-clock.json'), 'utf8')).toBe(retained);
 				}
@@ -197,7 +197,7 @@ describe('native trusted guest clock relay and owning provider tool', () => {
 		for (const [index, id] of [[0, 'original-first-clock'], [301, 'original-final-clock']] as const) {
 			const value = outcomes[0]!.clockValues[index === 0 ? 0 : 1];
 			expect(outcomes[0]!.events[index]).toEqual({ type: 'item.completed', item: { id, type: 'mcp_tool_call', server: 'treedx',
-				tool: 'treeseed_time_status', status: 'completed', error: null, result: { content: [{ type: 'text', text: JSON.stringify(value) }], structuredContent: value } } });
+				tool: 'treeseed_time_status', status: 'completed', error: null, result: { content: [{ type: 'text', text: JSON.stringify(value) }], structured_content: value } } });
 		}
 		expect(timingAwarenessContract(outcomes[0]!.events)).toMatchObject({ completedChecks: 2, firstToolCompliant: true, finalToolCompliant: true });
 		const recoveredTool = outcomes[1]!;
@@ -220,7 +220,7 @@ describe('native trusted guest clock relay and owning provider tool', () => {
 			const value = failed.clockValues[index === 0 ? 0 : 1];
 			expect(failed.events[index]).toEqual({ type: 'item.completed', usage: { input_tokens: 19, output_tokens: 3 }, item: { id,
 				type: 'mcp_tool_call', server: 'treedx', tool: 'treeseed_time_status', status: 'completed', error: null,
-				result: { content: [{ type: 'text', text: JSON.stringify(value) }], structuredContent: value } } });
+				result: { content: [{ type: 'text', text: JSON.stringify(value) }], structured_content: value } } });
 		}
 		expect(timingAwarenessContract(failed.events)).toMatchObject({ completedChecks: 2, firstToolCompliant: true, finalToolCompliant: true });
 		expect(outcomes[5]!.failure).toContain('Agent timing-awareness contract requires'); expect(outcomes[5]!.resultStatus).toBeUndefined(); expect(outcomes[5]!.events).toEqual([]);

@@ -1,6 +1,11 @@
 schemaVersion: treeseed.guarantee-verifiers/v1
 ownerPackage: "@treeseed/agent"
 verifiers:
+  agent.golden.codex-sdk-native-clock:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/codex/sdk/clock-events.test.ts
+    testName: "validates the SDK native structured_content clock against its original text without rewriting either representation"
   agent.golden.codex-sdk-transport:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

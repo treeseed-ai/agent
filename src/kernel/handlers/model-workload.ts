@@ -68,6 +68,8 @@ export function clockReading(raw: unknown): TimingAwarenessTracker['clockWindow'
 	let parsed: unknown;
 	try { parsed = JSON.parse(content.text); } catch { return; }
 	if (result.structuredContent !== undefined && !isDeepStrictEqual(parsed, result.structuredContent)) return;
+	// Codex SDK events serialize the MCP result's structured field in snake case.
+	if (result.structured_content !== undefined && !isDeepStrictEqual(parsed, result.structured_content)) return;
 	const value = record(parsed), start = value.startedAt, end = value.deadlineAt, observed = value.observedAt, remaining = value.remainingSeconds;
 	const iso = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/u;
 	if (typeof start !== 'string' || typeof end !== 'string' || !iso.test(start) || !iso.test(end)

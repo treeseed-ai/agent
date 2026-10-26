@@ -21,7 +21,7 @@ if (process.argv.includes('--guest')) {
 		const value = await invokeTreeDxRelay('treeseed_time_status', {}, process.env);
 		const event = { type: 'item.completed', ...(mode.startsWith('provider-') ? { usage: { input_tokens: 19, output_tokens: 3 } } : {}), item: {
 			id, type: 'mcp_tool_call', server: 'treedx', tool: 'treeseed_time_status', status: 'completed', error: null,
-			result: { content: [{ type: 'text', text: JSON.stringify(value) }], structuredContent: value },
+			result: { content: [{ type: 'text', text: JSON.stringify(value) }], structured_content: value },
 		} };
 		if (mode === 'replayed-clock') await writeFile('/run/treeseed-output/provider-first-clock.json', JSON.stringify(event));
 		process.stdout.write(`${JSON.stringify(event)}\n`);

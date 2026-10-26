@@ -3,6 +3,9 @@ id: agent.golden.component-boundaries
 title: Golden execution component boundaries
 scope: local-component-tests
 workflow:
+  - id: codex-sdk-native-clock
+    action: { verifier: agent.golden.codex-sdk-native-clock }
+    expect: { status: passed }
   - id: codex-sdk-transport
     action: { verifier: agent.golden.codex-sdk-transport }
     expect: { status: passed }

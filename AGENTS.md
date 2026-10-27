@@ -320,3 +320,10 @@ Agents must not repeat the same action without progress. This prevents token was
 **Enforcement:** When an agent detects it is in a loop, it must state so explicitly ("I have
 attempted X three times with the same result; switching approach / reporting blocker") rather
 than silently continuing. Silence during a loop is the failure mode this rule prevents.
+
+## Policy-only baseline verification
+
+This independent policy candidate adds development tooling, not the separate Agent runtime draft.
+Run `bun run verify` after the frozen, script-free dependency install. Its fixture program creates
+the currently empty regression/integration/unit tier directories before Bun discovery; acceptance
+executes the real copied checker. Empty tiers remain explicitly empty rather than redundant tests.

@@ -406,7 +406,8 @@ export async function runModelWorkload() {
 		if (resourceAbort) throw new Error(`sandbox_resource_exhausted: command exited ${resourceAbort.exitCode}: ${resourceAbort.command}`);
 		const diagnosticSecrets = [operationToken, ...(subscriptionAuth ? providerCredentialValues(JSON.parse(subscriptionAuth.toString('utf8'))) : []), ...(subscriptionAuth ? providerCredentialValues(JSON.parse(await readFile(resolve(codexHome, 'auth.json'), 'utf8'))) : [])];
 		const closeoutFailures: Array<{ message: string; code: unknown; response: string }> = [];
-		const { activityCompletion, observedCompletion, responseMarkdown } = await closeModelProduct({
+		let failureRetained = false;
+		const closed = await closeModelProduct({
 			complete: async () => {
 			rawResponse = providerError ? '' : (await readFile(responsePath, 'utf8')).trim();
 			const validatedCompletion = !providerError && structuredCompletion ? validateActivityCompletion(JSON.parse(rawResponse), allowVerification) : null;
@@ -437,7 +438,7 @@ export async function runModelWorkload() {
 			},
 			canCorrect: () => !providerError && Boolean(providerThreadId) && !codexToolInFlight(events), remainingMs: getRemainingMs,
 			correct: async (error, remaining) => {
-				const invocation = ++providerInvocation;
+				failureRetained = false; const invocation = ++providerInvocation;
 				try { await session.runTurn({ responsePath, outputSchema: completionSchema, timeoutMs: Math.floor(remaining - 5_000),
 					input: JSON.stringify({ type: 'activity-completion-rejected', validationFailure: { code: record(error).code,
 						message: redactProviderDiagnostic(error, diagnosticSecrets) }, remainingSeconds: Math.floor(remaining / 1_000), deadlineAt: executionDeadlineAt }),
@@ -448,6 +449,7 @@ export async function runModelWorkload() {
 				}
 			},
 			retainFailure: async error => {
+				failureRetained = false;
 				closeoutFailures.push({ message: redactProviderDiagnostic(error, diagnosticSecrets), code: record(error).code ?? null,
 					response: redactProviderDiagnostic(await readFile(responsePath, 'utf8').catch(() => ''), diagnosticSecrets) });
 				const finished = process.hrtime.bigint(), nativeUsage = process.resourceUsage(), evidence = codexUsageEvidence(events);
@@ -458,9 +460,13 @@ export async function runModelWorkload() {
 						activeSeconds: Number(finished - productiveStarted) / 1e9, elapsedSeconds: Number(finished - started) / 1e9,
 						cpuUserMicros: nativeUsage.userCPUTime - usageBefore.userCPUTime, cpuSystemMicros: nativeUsage.systemCPUTime - usageBefore.systemCPUTime, peakRssBytes: nativeUsage.maxRSS * 1024 },
 					diagnostics: { providerEvents: redactProviderEvents(events, diagnosticSecrets), providerSdk: { package: '@openai/codex-sdk', threadId: session.id },
-						providerUsageEvidence: evidence, contextManifest: context, closeoutFailures }, teardown: { verified: false, completedAt: null } })), { mode: 0o600 });
+						providerUsageEvidence: evidence, contextManifest: context, closeoutFailures,
+						guestKernel: (await readFile('/proc/version', 'utf8')).trim(), guestUid: process.getuid?.() ?? null, sandboxProfile: assignment.profile }, teardown: { verified: false, completedAt: null } })), { mode: 0o600 });
+				failureRetained = true;
 			},
-		});
+		}).catch(error => { if (!failureRetained) throw error; return null; });
+		if (!closed) return; // A declared failed result must reach the broker through its normal zero-exit output path.
+		const { activityCompletion, observedCompletion, responseMarkdown } = closed;
 		const changedPaths = sourceMetadata?.mode === 'work' && source
 			? (await execute('/usr/bin/git', ['diff', '--name-only', `${source.commit}..HEAD`], { cwd: '/workspace/project', captureStdout: true, maxStdoutBytes: 1_048_576, timeoutMs: 10_000 })).stdout.split('\n').map((path) => path.trim()).filter(Boolean)
 			: [];

@@ -158,8 +158,7 @@ async function suppliedGuestExecution(providerFailure?: Error, incompleteClock =
 		f.files.set(options.responsePath, Buffer.from(closeoutFailure ? JSON.stringify({ schemaVersion: 'treeseed.activity-completion/v1', summary: 'Controlled invalid closeout, not live work.', contentOutput: null, reviewDisposition: null, verification: [{ status: 'passed', summary: 'Claimed link check', commands: [correction && turn > 0 ? 'node --version' : 'Python check of Markdown links in docs/runbooks/federated-query.md'] }] }) : 'Controlled unit response.'));
 	});
 	try {
-		if (closeoutFailure && !correction) await expect(runModelWorkload()).rejects.toThrow('Runner-observed verification failed (exit 127)');
-		else await runModelWorkload();
+		await runModelWorkload();
 		const result = sandboxResultSchema.parse(JSON.parse(f.files.get('/run/treeseed-output/result.json')!.toString('utf8')));
 		expect(result.usage).toMatchObject({ activeSeconds: correction ? 4 : 2, elapsedSeconds: correction ? 9 : 7, input_tokens: correction ? 38 : 19, output_tokens: correction ? 6 : 3, provenance: 'execution-provider' });
 		expect(result.timingAwareness).toMatchObject({ completedChecks: correction ? 4 : 2, firstToolCompliant: true, finalToolCompliant: true });

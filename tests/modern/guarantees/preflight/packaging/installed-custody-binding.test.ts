@@ -17,7 +17,11 @@ describe('capacity-provider guarantee execution bindings', () => {
 		const installed = JSON.parse(readFileSync(resolve(root, 'node_modules/@treeseed/deployment/package.json'), 'utf8'));
 		expect(manifest.dependencies['@treeseed/deployment']).toBe(`https://github.com/treeseed-ai/deployment/releases/download/${installed.version}/treeseed-deployment-runtime-${installed.version}.tgz`);
 		const runtime = await import('@treeseed/deployment');
-		expect(typeof Reflect.get(runtime, 'agentDevelopmentRuntimeRoots')).toBe('function');
+		const roots: unknown = Reflect.get(runtime, 'agentDevelopmentRuntimeRoots');
+		expect(Array.isArray(roots)).toBe(true);
+		if (!Array.isArray(roots)) throw new Error('Deployment runtime roots must be an array.');
+		expect(roots.length).toBeGreaterThan(0);
+		for (const entry of roots) expect(entry).toEqual({ source: expect.any(String), target: expect.any(String) });
 		expect(typeof Reflect.get(runtime, 'copyDevelopmentRuntime')).toBe('function');
 	});
 	it('binds installed owner custody to every original integrated SDK step without source-only execution credit', () => {
@@ -57,8 +61,8 @@ describe('capacity-provider guarantee execution bindings', () => {
 		expect(inputs.find((value:{owner:string})=>value.owner==='reviewer')).toMatchObject({"commit":"762725d3794b9f5b3128c1584d3a17495ab6a368","sha256":"e402cbde62812cc8c0d31a9dadc4e4c89bf8c4997e6f2e30870e7eb64b8c2627"});
 		expect(native.steps.filter((step:{with?:{repository?:string;path?:string}})=>step.with?.repository==='treeseed-ai/reviewer'&&step.with?.path==='.treeseed/installed-owner-inputs/reviewer').map((step:{with:unknown})=>step.with)).toEqual([{"github-token":"${{ github.token }}","repository":"treeseed-ai/reviewer","run-id":38998444210,"name":"reviewer-762725d3794b9f5b3128c1584d3a17495ab6a368","path":".treeseed/installed-owner-inputs/reviewer"}]);
 		expect(workflow.jobs.verify.steps.filter((step:{uses?:string})=>step.uses?.startsWith('treeseed-ai/reviewer/.github/actions/run-scenes@')).map((step:{uses:string})=>step.uses)).toEqual(["treeseed-ai/reviewer/.github/actions/run-scenes@d42b257097d969e0ce96a154bda31344a352a50e"]);
-        expect(inputs.find((value:{owner:string})=>value.owner==='deployment')).toMatchObject({commit:'02f02baa6de001df91e026c20cc507ba1fc85d40',sha256:'a584e6ed61185147d2f5fff237618a0035f868a31bf3e328cedcc3e0006659c1'});
-        expect(native.steps.filter((step:{with?:{repository?:string;path?:string}})=>step.with?.repository==='treeseed-ai/deployment'&&step.with?.path==='.treeseed/installed-owner-inputs/deployment').map((step:{with:unknown})=>step.with)).toEqual([{'github-token':'${{ github.token }}',repository:'treeseed-ai/deployment','run-id':39020653453,name:'deployment-candidate-02f02baa6de001df91e026c20cc507ba1fc85d40',path:'.treeseed/installed-owner-inputs/deployment'}]);
+        expect(inputs.find((value:{owner:string})=>value.owner==='deployment')).toMatchObject({commit:'fbb3046847f074e004f4bc82c8c842feecadc5fa',sha256:'435b3393b0168fee48d7c8d128763458edf2c5a84b8f032c5a6100800e1c2d2e'});
+        expect(native.steps.filter((step:{with?:{repository?:string;path?:string}})=>step.with?.repository==='treeseed-ai/deployment'&&step.with?.path==='.treeseed/installed-owner-inputs/deployment').map((step:{with:unknown})=>step.with)).toEqual([{'github-token':'${{ github.token }}',repository:'treeseed-ai/deployment','run-id':40593520279,name:'deployment-release-fbb3046847f074e004f4bc82c8c842feecadc5fa',path:'.treeseed/installed-owner-inputs/deployment'}]);
         expect(inputs.find((value:{owner:string})=>value.owner==='sdk')).toMatchObject({commit:'379fd0684375609601605edb3aac2c091ae0aa33',sha256:'df9bb10a77e0833e6a2d774c50b5d9c5ff8c7b22ef3017b5590a74d04b619e32'});
         for(const [owner,runId] of [['api',39009778325],['cli',38647918411],['sdk',38970276890]] as const){
             const input=inputs.find((value:{owner:string})=>value.owner===owner);

@@ -2,9 +2,24 @@
 
 Owner execution plan for Agent #525; portfolio plan is Platform's `docs/superpowers/plans/2026-10-27-agent-composition.md`. The approved setup baseline is published; no reinitialization.
 
-1. Map original `src/kernel/handler-registry.ts` registration/selection to native `agent.handler` plugins; map provider-kernel orchestration to `agent.execution`. Preserve original files and defer all real handlers/models/Work/sandbox behavior to Task 10.
-2. Commit documentation for AgentApplication admission, native execution-child context, typed tool/context/reporting/authority seams, generation pinning, cancellation and cleanup fencing.
-3. Consume verified exact SDK contracts and UI renderers. Add class-based strict compiler/source/test-layout tooling with the first implementation. All permanent tests use the four tiers; setup was not allowed to add scaffolding.
-4. Write actual built-program acceptance and two-provider contract tests before implementing the minimum root. Add integration failure cases for missing/duplicate provider, authority revocation, scope leakage, held execution/drain, stale leases, cancellation and failed cleanup.
-5. Implement through CordisScope/ServiceLocator and native effects. Hold host/child leases through awaited cleanup. The program is a harmless composition probe, not a Work/model executor or new identity service.
-6. Verify owner check/build/all applicable suites and real default program, then exact assembled common-manager installation. Split PRs at public gate boundaries; leave every issue open and hand back for review.
+1. Preserve the existing probe draft and uncommitted metadata corrections. Refactor all changed
+   behavior into small typed classes under the shared twenty-line rule; do not grandfather draft code.
+2. Consume exact SDK capacity/profile/environment/pool contracts and reusable UI providers through
+   genuine owner archives. Keep SDK portable data separate from Agent runtime behavior.
+3. Document then specify built manager, worker and guest programs outside-in. Each owns a native
+   Cordis root; only versioned public protocols cross process boundaries.
+4. Implement typed plugins for definitions, extensible activity profiles, kernel, live team authority,
+   worker communication/admission, warm pool, bounded sandbox access, runner sessions, environment
+   preparation/verification, handlers, execution, tools, context and reporting.
+5. Keep authorization, lease fencing and result custody coherent in the kernel. Resolve native
+   services through the SDK facade; metadata catalogues contain declarations, never instances.
+6. Use Deployment's separate service-scoped sandbox-control socket. Qualify exclusive virgin claims,
+   background refill, generation invalidation and verified destruction; never recycle used guests.
+7. Add Agent-owned manager/worker container and readiness plugins. API coordinates seed resources;
+   installation does not embed Agent in Deployment's worker or create an alternate identity authority.
+8. Qualify real Keycloak plus existing-control-plane fixtures and harmless probes. Productive handlers,
+   Work/model execution and accounting remain Task 10; real Kata infrastructure is required now.
+9. Run checks/build/all tiers and genuine package/assembled acceptance. Qualify hosted Ubuntu 26.04
+   KVM/Kata first; isolated self-hosting is an explicit fallback, never implicit workstation registration.
+10. Hand back bounded PR waves targeting cordis. Do not merge, publish production artifacts or close
+    issues; preserve all issues including Platform #678.

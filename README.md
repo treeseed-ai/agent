@@ -1,6 +1,13 @@
 # Cordis Agent composition infrastructure
 
-Task 3D implements a bounded composition probe, not Work or model execution. Durable Work, real handlers, model providers, accounting and sandboxes remain Task 10. Keycloak stays the shared user identity authority; this probe neither creates users nor accepts OAuth tokens as request data.
+Task 3D delivers a seed-driven Capacity Provider with separate manager, worker and Kata guest
+programs. Real sandbox infrastructure and harmless probes belong here; productive Work/model
+execution, productive handlers and accounting remain Task 10. Keycloak stays the shared identity
+authority. See [Agent architecture](docs/agent-architecture.md) for the required composition.
+
+The existing implementation below is an unmerged, in-process probe foundation. Manager/worker
+services, the real warm pool, seed reconciliation and live enrollment are still under development;
+these probe interfaces alone do not deliver or qualify that system.
 
 ## Public boundaries
 
@@ -16,7 +23,14 @@ The standalone built program accepts `--configuration <absolute owner-private JS
 
 ## Ownership and legacy mapping
 
-Legacy `src/kernel/handler-registry.ts` registration/selection maps to native `agent.handler` bindings. Legacy `src/kernel/provider-kernel-executor.ts` orchestration maps only to the bounded `agent.execution` adapter. The original writer/actor/reviewer/releaser/reporter handlers, provider execution, usage, Work authority and sandbox cleanup are not ported. Agent owns contracts/plugins/root/children; Deployment owns NPM/Git acquisition, immutable staging, target journals, owner transport and grant provisioning; SDK owns portable schemas; UI owns rendering; Platform owns exact assembly.
+Legacy `src/kernel/handler-registry.ts` registration/selection maps to native `agent.handler`
+bindings. Legacy `src/kernel/provider-kernel-executor.ts` orchestration maps to the Agent kernel
+and selectable execution adapter. Productive handlers, usage and Work authority remain Task 10;
+real sandbox lifecycle and environment preparation are required by Task 3D. Agent owns the
+manager, worker/pool policy, guest runner, profiles, handlers, environments and team adapter.
+Deployment owns common acquisition/custody, service supervision and bounded host operations.
+SDK owns portable contracts, API owns seed reconciliation, Identity owns Keycloak integration,
+UI owns presentation and Platform owns exact assembly. No Agent root is hosted in Deployment's worker.
 
 ## Verification
 

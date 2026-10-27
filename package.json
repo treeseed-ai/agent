@@ -1,0 +1,10 @@
+{
+ "name":"@treeseed-cordis/agent","version":"0.0.0-cordis.1","private":true,"type":"module","license":"Apache-2.0","packageManager":"bun@1.4.4","engines":{"node":">=24.19.0"},
+ "exports":{".":{"types":"./dist/src/application.d.ts","default":"./dist/src/application.js"},"./contracts":{"types":"./dist/src/contracts.d.ts","default":"./dist/src/contracts.js"}},
+ "bin":{"trsd-agent":"./dist/src/main.js"},"files":["dist/src","README.md","LICENSE"],
+ "scripts":{"check:test-layout":"bun .agents/skills/release-workflow/scripts/test-layout.ts","check":"bun run check:test-layout && bun scripts/tooling.ts check","build":"bun scripts/tooling.ts build","test:acceptance":"bun test ./tests/acceptance","test:regression":"bun test ./tests/regression","test:integration":"bun test ./tests/integration","test:unit":"bun test ./tests/unit","verify":"bun run check && bun run build && bun run test:acceptance && bun run test:regression && bun run test:integration && bun run test:unit"},
+ "peerDependencies":{"@treeseed-cordis/sdk":"0.0.0-cordis.17","@treeseed-cordis/ui":"0.0.0-cordis.17"},"peerDependenciesMeta":{"@treeseed-cordis/ui":{"optional":true}},
+ "dependencies":{"cordis":"4.0.0-rc.12","zod":"4.6.7"},
+ "devDependencies":{"@treeseed-cordis/sdk":"file:vendor/sdk.tgz","@treeseed-cordis/ui":"file:vendor/ui.tgz","typescript":"5.9.3","react":"19.3.1","react-dom":"19.3.1","@types/bun":"1.4.4","@types/node":"24.10.1"},
+ "cordisCandidate":{"sdk":{"repository":"https://github.com/treeseed-ai/sdk.git","commit":"890902948c9ca9df778a90d4fde975d33e29142d","sha256":"a1e32909f12a1d93d6929a67eee1460f6abb7c5a507ca7262a8d74f8611f541a"}}
+}

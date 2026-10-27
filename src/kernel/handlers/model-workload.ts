@@ -300,6 +300,13 @@ export async function runModelWorkload() {
 	const { CodexWorkloadSession, codexUsageEvidence } = await import('./codex-sdk-session.ts');
 	const session = new CodexWorkloadSession({ model: assignment.modelPolicy.model, reasoningEffort: assignment.modelPolicy.reasoningEffort,
 		environment: providerEnvironment, remainingMs: getRemainingMs });
+	const measuredUsage = () => {
+		const finished = process.hrtime.bigint(), after = process.resourceUsage(), evidence = codexUsageEvidence(events);
+		const observed = evidence ? evidence.complete ? evidence.observed : {} : record([...events].reverse().find(event => text(event.type).includes('completed'))?.usage);
+		return { evidence, usage: { ...observed, provenance: Object.keys(observed).length ? 'execution-provider' : 'unavailable',
+			activeSeconds: Number(finished - productiveStarted) / 1e9, elapsedSeconds: Number(finished - started) / 1e9,
+			cpuUserMicros: after.userCPUTime - usageBefore.userCPUTime, cpuSystemMicros: after.systemCPUTime - usageBefore.systemCPUTime, peakRssBytes: after.maxRSS * 1024 } };
+	};
 		await progress('provider.starting');
 		const invocationTimers = codexInvocationTimerOptions(getRemainingMs(), canonicalActivity);
 		const providerError = await session.runTurn({
@@ -452,15 +459,12 @@ export async function runModelWorkload() {
 				failureRetained = false;
 				closeoutFailures.push({ message: redactProviderDiagnostic(error, diagnosticSecrets), code: record(error).code ?? null,
 					response: redactProviderDiagnostic(await readFile(responsePath, 'utf8').catch(() => ''), diagnosticSecrets) });
-				const finished = process.hrtime.bigint(), nativeUsage = process.resourceUsage(), evidence = codexUsageEvidence(events);
-				const observed = evidence ? evidence.complete ? evidence.observed : {} : record([...events].reverse().find(event => text(event.type).includes('completed'))?.usage);
+				const snapshot = measuredUsage();
 				await writeFile(resolve(outputRoot, 'result.json'), JSON.stringify(sandboxResultSchema.parse({ schemaVersion: 'treeseed.sandbox-result/v1',
 					sandboxId, assignmentId: assignment.assignmentId, status: 'failed', summary: redactProviderDiagnostic(error, diagnosticSecrets), artifacts: [],
-					timingAwareness: timingAwarenessContract(events), usage: { ...observed, provenance: Object.keys(observed).length ? 'execution-provider' : 'unavailable',
-						activeSeconds: Number(finished - productiveStarted) / 1e9, elapsedSeconds: Number(finished - started) / 1e9,
-						cpuUserMicros: nativeUsage.userCPUTime - usageBefore.userCPUTime, cpuSystemMicros: nativeUsage.systemCPUTime - usageBefore.systemCPUTime, peakRssBytes: nativeUsage.maxRSS * 1024 },
+					timingAwareness: timingAwarenessContract(events), usage: snapshot.usage,
 					diagnostics: { providerEvents: redactProviderEvents(events, diagnosticSecrets), providerSdk: { package: '@openai/codex-sdk', threadId: session.id },
-						providerUsageEvidence: evidence, contextManifest: context, closeoutFailures,
+						providerUsageEvidence: snapshot.evidence, contextManifest: context, closeoutFailures,
 						guestKernel: (await readFile('/proc/version', 'utf8')).trim(), guestUid: process.getuid?.() ?? null, sandboxProfile: assignment.profile }, teardown: { verified: false, completedAt: null } })), { mode: 0o600 });
 				failureRetained = true;
 			},
@@ -472,16 +476,12 @@ export async function runModelWorkload() {
 			: [];
 		const providerEventShapes = providerEventShapeSummary(events, diagnosticSecrets);
 		const artifacts: Array<{ id: string; path: string; digest: string; mediaType: string; bytes: number }> = [];
-		const completed = [...events].reverse().find((event) => text(event.type).includes('completed')) ?? {}, finished = process.hrtime.bigint(),
-			elapsedSeconds = Number(finished - started) / 1e9, activeSeconds = Number(finished - productiveStarted) / 1e9, usageAfter = process.resourceUsage();
-		const providerUsageEvidence = codexUsageEvidence(events);
-		const providerUsage = providerUsageEvidence ? providerUsageEvidence.complete ? providerUsageEvidence.observed : {} : record(completed.usage);
+		const snapshot = measuredUsage();
 		const result = sandboxResultSchema.parse({ schemaVersion: 'treeseed.sandbox-result/v1', sandboxId, assignmentId: assignment.assignmentId,
 			status: providerError ? 'failed' : 'completed', summary: providerError?.message ?? 'Kata assignment completed.', responseMarkdown: providerError ? undefined : responseMarkdown,
-			artifacts, timingAwareness: timingAwarenessContract(events), usage: { ...providerUsage, provenance: Object.keys(providerUsage).length ? 'execution-provider' : 'unavailable', activeSeconds, elapsedSeconds,
-				cpuUserMicros: usageAfter.userCPUTime - usageBefore.userCPUTime, cpuSystemMicros: usageAfter.systemCPUTime - usageBefore.systemCPUTime, peakRssBytes: usageAfter.maxRSS * 1024 },
+			artifacts, timingAwareness: timingAwarenessContract(events), usage: snapshot.usage,
 			diagnostics: { systemPrompt: composedPrompt, providerEvents: redactProviderEvents(events, diagnosticSecrets), providerEventShapes,
-				providerSdk: { package: '@openai/codex-sdk', threadId: session.id }, providerUsageEvidence, closeoutFailures, model: assignment.modelPolicy.model, provider: assignment.modelPolicy.provider, contextManifest: context, activityCompletion,
+				providerSdk: { package: '@openai/codex-sdk', threadId: session.id }, providerUsageEvidence: snapshot.evidence, closeoutFailures, model: assignment.modelPolicy.model, provider: assignment.modelPolicy.provider, contextManifest: context, activityCompletion,
 				verificationRecords: observedCompletion?.verification ?? [], changedPaths,
 				verificationObservations: redactProviderEvents((observedCompletion?.observations ?? []).map(value => ({ ...value })), diagnosticSecrets),
 				sourceCommit: sourceMetadata?.mode === 'work' ? (await execute('/usr/bin/git', ['rev-parse', '--verify', 'HEAD^{commit}'], { cwd: '/workspace/project', captureStdout: true, maxStdoutBytes: 128, timeoutMs: 10_000 })).stdout.trim() : source?.commit ?? null,

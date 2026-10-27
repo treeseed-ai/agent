@@ -6,13 +6,19 @@ import { parse } from 'yaml';
 import { describe, expect, it } from 'vitest';
 const root = resolve(import.meta.dirname, '../../../../..');
 describe('capacity-provider guarantee execution bindings', () => {
-	it('keeps owning verification on the declared Deployment release', () => {
+	it('keeps owning verification on the declared Deployment release', async () => {
 		const workflow = parse(readFileSync(resolve(root, '.github/workflows/verify.yml'), 'utf8'));
 		const steps = workflow.jobs.verify.steps as Array<{ run?: string; with?: { repository?: string; path?: string } }>;
 		expect(steps.filter(step => step.with?.repository === 'treeseed-ai/deployment'
 			&& step.with.path === '.treeseed/tools/deployment-candidate')).toEqual([]);
 		expect(steps.filter(step => step.run?.includes('npm install')
 			&& step.run.includes('./.treeseed/tools/deployment-candidate/'))).toEqual([]);
+		const manifest = JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf8'));
+		const installed = JSON.parse(readFileSync(resolve(root, 'node_modules/@treeseed/deployment/package.json'), 'utf8'));
+		expect(manifest.dependencies['@treeseed/deployment']).toBe(`https://github.com/treeseed-ai/deployment/releases/download/${installed.version}/treeseed-deployment-runtime-${installed.version}.tgz`);
+		const runtime = await import('@treeseed/deployment');
+		expect(typeof Reflect.get(runtime, 'agentDevelopmentRuntimeRoots')).toBe('function');
+		expect(typeof Reflect.get(runtime, 'copyDevelopmentRuntime')).toBe('function');
 	});
 	it('binds installed owner custody to every original integrated SDK step without source-only execution credit', () => {
 		const manifest = parse(readFileSync(resolve(root, 'guarantees/agent/golden/sdk-complete.guarantee.yaml'), 'utf8'));

@@ -894,6 +894,21 @@ workflow:
   - id: architecture-cross-project-native-4
     action: { verifier: agent.golden.architecture-cross-project-native-4 }
     expect: { status: passed }
+  - id: own-current-view-unit
+    action: { verifier: agent.golden.own-current-view-unit }
+    expect: { status: passed }
+  - id: own-current-view-denials
+    action: { verifier: agent.golden.own-current-view-denials }
+    expect: { status: passed }
+  - id: secondary-current-view-denial
+    action: { verifier: agent.golden.secondary-current-view-denial }
+    expect: { status: passed }
+  - id: own-current-view-native
+    action: { verifier: agent.golden.own-current-view-native }
+    expect: { status: passed }
+  - id: own-current-view-native-denials
+    action: { verifier: agent.golden.own-current-view-native-denials }
+    expect: { status: passed }
   - id: execution-descendant-closeout-unit-1
     action: { verifier: agent.golden.execution-descendant-closeout-unit-1 }
     expect: { status: passed }

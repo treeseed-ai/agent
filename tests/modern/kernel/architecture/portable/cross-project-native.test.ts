@@ -4,6 +4,43 @@ import { executeAssignmentTreeDxTool } from '../../../../../src/provider/executi
 import { crossProjectKernel } from './cross-project-fixture.ts';
 
 describe('secondary read through owning Kernel official client native HTTP and Git', () => {
+	it('invalid owning current authority cannot reach official HTTP or mutate native source', async () => {
+		for (const fault of ['missing-current', 'duplicate-current', 'conflicting-alias', 'contradictory']) {
+			const f = await crossProjectKernel(); try {
+				const own = f.data.grants[0]!;
+				f.data.grants.unshift({ ...own, baseRef: 'b'.repeat(40) });
+				if (fault === 'missing-current') f.data.grants.splice(1, 1);
+				if (fault === 'duplicate-current') f.data.grants.push({ ...own });
+				if (fault === 'conflicting-alias') f.data.grants.push({ ...f.data.grants[2]!, projectSlug: own.projectSlug });
+				const before = structuredClone({ assignment: f.input.assignment, grants: f.data.grants });
+				await expect(executeAssignmentTreeDxTool(f.input, 'treedx_search_files', { project: own.projectSlug,
+					projectId: fault === 'contradictory' ? f.data.projectId : own.projectId })).rejects.toThrow();
+				expect(f.calls).toEqual([]); expect(f.requests).toEqual([]); expect(f.begin).toEqual([]);
+				expect(f.git('rev-parse', 'HEAD')).toBe(f.base); expect(f.git('show', 'HEAD:src/output.txt')).toBe('original base');
+				expect({ assignment: f.input.assignment, grants: f.data.grants }).toEqual(before);
+			} finally { await f.close(); }
+		}
+	});
+	it('explicit owning current search and exact historical read use official HTTP without changing native source or grants', async () => {
+		const f = await crossProjectKernel(); try {
+			const own = f.data.grants[0]!, history = { ...own, baseRef: 'b'.repeat(40), allowedPaths: ['notes/history.mdx'] };
+			f.data.grants.unshift(history);
+			const before = structuredClone({ assignment: f.input.assignment, grants: f.data.grants });
+			await executeAssignmentTreeDxTool(f.input, 'treedx_search_files', { project: own.projectSlug,
+				projectId: own.projectId, query: 'relevant history', paths: own.allowedPaths });
+			await executeAssignmentTreeDxTool(f.input, 'treedx_read_files', { project: own.projectId,
+				ref: history.baseRef, paths: history.allowedPaths });
+			expect(f.calls).toEqual([
+				{ path: `/v1/dx/projects/${own.projectId}/repos/${own.repositoryId}/files/search`, body: {
+					paths: own.allowedPaths, query: 'relevant history', limit: 30, includeBody: false, includeFrontmatter: true },
+					assignmentId: f.attempt.id, handleId: 'cross-project-handle' },
+				{ path: `/v1/dx/projects/${own.projectId}/repos/${own.repositoryId}/files/read`, body: {
+					ref: history.baseRef, paths: history.allowedPaths, encoding: 'utf8', parseFrontmatter: true, allowProtected: true },
+					assignmentId: f.attempt.id, handleId: 'cross-project-handle' }]);
+			expect({ assignment: f.input.assignment, grants: f.data.grants }).toEqual(before);
+			expect(f.requests).toEqual([]); expect(f.begin).toEqual([]); expect(f.git('rev-parse', 'HEAD')).toBe(f.base);
+		} finally { await f.close(); }
+	});
 	it('unmatched pinned file-tool scope denies before official HTTP while native source and authority remain unchanged', async () => {
 		for (const mismatch of ['commit', 'path']) {
 			const f = await crossProjectKernel(); try {

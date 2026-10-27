@@ -13,6 +13,39 @@ function unit() {
 	return { ...f, calls, facade };
 }
 describe('exact secondary content route authority', () => {
+	it('explicit owning project selectors use the frozen current view when historical grants coexist', async () => {
+		for (const tool of ['treedx_read_files', 'treedx_search_files', 'treedx_list_paths', 'treedx_build_context']) {
+			for (const selector of ['owning', 'owning-library', 'id']) {
+				const f = unit(), own = f.grants[0]!;
+				f.grants.unshift({ ...own, baseRef: 'b'.repeat(40), allowedPaths: ['notes/history.mdx'] });
+				const args = { project: selector === 'id' ? own.projectId : selector, projectId: own.projectId,
+					paths: ['books/owning.md'], query: 'relevant history' };
+				const before = structuredClone({ args, assignment: f.input.assignment, grants: f.grants });
+				expect(await executeAssignmentTreeDxTool(f.input, tool, args)).toEqual(f.response);
+				expect(f.calls).toHaveLength(1);
+				expect(f.calls[0]!.input.path).toEqual({ projectId: own.projectId, repoId: own.repositoryId });
+				expect({ args, assignment: f.input.assignment, grants: f.grants }).toEqual(before);
+			}
+		}
+	});
+	it('owning current selection denies absent duplicate conflicting and contradictory authority without fallback', async () => {
+		for (const fault of ['missing-current', 'duplicate-current', 'conflicting-alias', 'contradictory']) {
+			const f = unit(), own = f.grants[0]!;
+			f.grants.unshift({ ...own, baseRef: 'b'.repeat(40) });
+			if (fault === 'missing-current') f.grants.splice(1, 1);
+			if (fault === 'duplicate-current') f.grants.push({ ...own });
+			if (fault === 'conflicting-alias') f.grants.push({ ...f.grants[2]!, projectSlug: own.projectSlug });
+			const args = { project: own.projectSlug, projectId: fault === 'contradictory' ? f.projectId : own.projectId };
+			const before = structuredClone({ args, assignment: f.input.assignment, grants: f.grants });
+			await expect(executeAssignmentTreeDxTool(f.input, 'treedx_search_files', args)).rejects.toThrow();
+			expect(f.calls).toEqual([]); expect({ args, assignment: f.input.assignment, grants: f.grants }).toEqual(before);
+		}
+	});
+	it('secondary current requests remain ambiguous without an authoritative current view', async () => {
+		const f = unit(); f.grants.push({ ...f.grants[1]!, baseRef: 'b'.repeat(40) });
+		await expect(executeAssignmentTreeDxTool(f.input, 'treedx_search_files', { project: 'secondary' }))
+			.rejects.toThrow('ambiguous'); expect(f.calls).toEqual([]);
+	});
 	it('denies unmatched pinned file-tool commits and paths before invocation without primary fallback', async () => {
 		for (const mismatch of ['commit', 'path']) {
 			const f = unit(); f.input.treeDx = { ...f.facade, repositoryId: f.ref.repository, baseRef: f.ref.commit };

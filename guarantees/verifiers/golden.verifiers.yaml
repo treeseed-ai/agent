@@ -1496,6 +1496,31 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/kernel/architecture/portable/cross-project-native.test.ts
     testName: "denied moved missing malformed and foreign secondary content retains failed history without a model call or implicit retry"
+  agent.golden.own-current-view-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/portable/cross-project-authority.test.ts
+    testName: "explicit owning project selectors use the frozen current view when historical grants coexist"
+  agent.golden.own-current-view-denials:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/portable/cross-project-authority.test.ts
+    testName: "owning current selection denies absent duplicate conflicting and contradictory authority without fallback"
+  agent.golden.secondary-current-view-denial:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/portable/cross-project-authority.test.ts
+    testName: "secondary current requests remain ambiguous without an authoritative current view"
+  agent.golden.own-current-view-native:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/portable/cross-project-native.test.ts
+    testName: "explicit owning current search and exact historical read use official HTTP without changing native source or grants"
+  agent.golden.own-current-view-native-denials:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/portable/cross-project-native.test.ts
+    testName: "invalid owning current authority cannot reach official HTTP or mutate native source"
   agent.golden.execution-descendant-closeout-unit-1:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

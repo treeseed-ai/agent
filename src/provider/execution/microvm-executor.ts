@@ -108,7 +108,12 @@ export async function executeAssignmentTreeDxTool(request:Parameters<AgentExecut
 	const exact=(candidate:typeof inventory[number])=>!ref||(candidate.baseRef===ref&&paths.every(path=>assignmentPathAllowed(path,candidate.allowedPaths)));
 	const primary=inventory.filter(candidate=>candidate.repositoryId===request.treeDx.repositoryId);
 	const current=primary.filter(candidate=>exact(candidate)&&(ref||candidate.baseRef===request.treeDx.baseRef));
-	const matching=(selector:string)=>inventory.filter(candidate=>(candidate.projectId===selector||candidate.projectSlug===selector||candidate.repositoryId===selector)&&exact(candidate));
+		const matching=(selector:string)=>{
+			const candidates=inventory.filter(candidate=>(candidate.projectId===selector||candidate.projectSlug===selector||candidate.repositoryId===selector)&&exact(candidate));
+			if(ref||!candidates.some(candidate=>candidate.repositoryId===request.treeDx.repositoryId))return candidates;
+			if(candidates.some(candidate=>candidate.repositoryId!==request.treeDx.repositoryId))throw new Error('Assignment TreeDX project selector is ambiguous.');
+			return candidates.filter(candidate=>candidate.baseRef===request.treeDx.baseRef);
+		};
 	const matches=selected?matching(selected):current;
 	if(matches.length>1)throw new Error('Assignment TreeDX project selector is ambiguous.');
 	const grant=matches[0];

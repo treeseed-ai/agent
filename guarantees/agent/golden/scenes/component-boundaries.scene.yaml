@@ -41,6 +41,8 @@ workflow:
     expect: { status: passed }
   - id: sdk-installed-custody-binding-unit
     action: { verifier: agent.golden.sdk-installed-custody-binding-unit }
+  - id: declared-deployment-input-unit
+    action: { verifier: agent.golden.declared-deployment-input-unit }
     expect: { status: passed }
   - id: sdk-integration-binding-unit
     action: { verifier: agent.golden.sdk-integration-binding-unit }

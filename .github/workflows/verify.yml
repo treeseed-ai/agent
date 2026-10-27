@@ -36,14 +36,6 @@ jobs:
       - name: Install dependencies
         timeout-minutes: 20
         run: npm ci --ignore-scripts --no-audit --no-fund
-      - name: Read checked development materialization artifact
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
-        with:
-          github-token: ${{ github.token }}
-          repository: treeseed-ai/deployment
-          run-id: 39020653453
-          name: deployment-candidate-02f02baa6de001df91e026c20cc507ba1fc85d40
-          path: .treeseed/tools/deployment-candidate
       - name: Read checked public CLI composition artifact
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
@@ -60,16 +52,14 @@ jobs:
           run-id: 37451351249
           name: sdk-cbc03314871d271bce7275c5cee71d950397a0c3
           path: .treeseed/tools/deployment-build-sdk
-      - name: Install exact checked development inputs without publication
+      - name: Install checked CLI input and original Deployment SDK build input
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          jq -e '.repository == "treeseed-ai/deployment" and .commit == "02f02baa6de001df91e026c20cc507ba1fc85d40"' .treeseed/tools/deployment-candidate/exact-head.json
           test "$(gh api repos/treeseed-ai/cli/actions/runs/38647918411 --jq '[.head_sha,.status,.conclusion]|join(" ")')" == '2b27d26c23905423d90c73abb24c888c452a8745 completed success'
-          echo 'a584e6ed61185147d2f5fff237618a0035f868a31bf3e328cedcc3e0006659c1  .treeseed/tools/deployment-candidate/treeseed-deployment-runtime-0.1.0-rc.321.tgz' | sha256sum --check --strict
           echo '49b6d24882af45ba39fd46cdcd999c9c54e84bd416f834fa0042ec5425dbea1a  .treeseed/tools/cli-candidate/treeseed-cli-0.13.0-rc.85.tgz' | sha256sum --check --strict
-          npm install --no-save --package-lock=false --ignore-scripts --no-audit --no-fund ./.treeseed/tools/deployment-candidate/treeseed-deployment-runtime-0.1.0-rc.321.tgz ./.treeseed/tools/cli-candidate/treeseed-cli-0.13.0-rc.85.tgz
+          npm install --no-save --package-lock=false --ignore-scripts --no-audit --no-fund ./.treeseed/tools/cli-candidate/treeseed-cli-0.13.0-rc.85.tgz
           test "$(gh api repos/treeseed-ai/sdk/actions/runs/37451351249 --jq '[.head_sha,.status,.conclusion]|join(" ")')" == 'cbc03314871d271bce7275c5cee71d950397a0c3 completed success'
           echo 'ef262c2a69fdbd53cea81b60f21817275df0a0a6d40af7df32c4405b6f724e47  .treeseed/tools/deployment-build-sdk/treeseed-sdk-0.13.0-rc.122.tgz' | sha256sum --check --strict
           rm -rf node_modules/@treeseed/deployment/node_modules/@treeseed/sdk

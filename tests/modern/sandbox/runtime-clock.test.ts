@@ -73,8 +73,8 @@ it('fails before opening a relay request when its private runtime environment is
 	expect(request).not.toHaveBeenCalled();
 });
 
-function suppliedGuestFiles(mode: string) {
-		const { attempt, execution } = clockRequest();
+function suppliedGuestFiles(mode: string, duration = 30) {
+		const { attempt, execution } = clockRequest(duration);
 		const context = { identity: { manifest: {} }, canonicalAssignmentContext: { assignment: { ...attempt,
 			workspace: { mode: 'read-only' }, effectiveProfile: { activity: 'chat', handler: 'writer' } }, context: mode === 'completed' ? [{ ref: attempt.sourceRef,
 				value: { frontmatter: { executionPlan: { workItems: [{ id: attempt.workItemId }] } } } }] : [], predecessorResults: [] } };
@@ -82,7 +82,7 @@ function suppliedGuestFiles(mode: string) {
 		const assignment = sandboxAssignmentSchema.parse({ schemaVersion: 'treeseed.sandbox-assignment/v1', assignmentId: attempt.id,
 			attempt: attempt.attempt, runnerId: 'supplied-unit', providerId: attempt.provider.providerId, teamId: attempt.teamId, projectId: attempt.projectId,
 			profile: 'supplied-unit', guestImage: 'supplied-unit', guestImageDigest: digest, identityManifestDigest: objectDigest(context.identity.manifest),
-			contextManifestDigest: digest, resources: { cpuCores: 1, memoryBytes: 536870912, diskBytes: 67108864, durationSeconds: 30, processLimit: 32, outputBytes: 1048576 },
+			contextManifestDigest: digest, resources: { cpuCores: 1, memoryBytes: 536870912, diskBytes: 67108864, durationSeconds: duration, processLimit: 32, outputBytes: 1048576 },
 			inputs: [{ id: 'execution-context', digest, bytes: bytes.length, disposition: 'copy-on-write', mediaType: 'application/json', targetPath: '/workspace/.treeseed/context.json' }],
 			outputs: [], network: { defaultDeny: true, relayUrl: 'https://relay.invalid:7444', allowedServices: mode === 'completed' ? ['treedx'] : ['treedx', 'codex-subscription'] },
 			modelPolicy: { provider: 'supplied-unit', model: 'not-a-real-model', capabilities: [] }, credentialHandles: [], treeDxHandleIds: [],
@@ -114,8 +114,21 @@ function mockGuestFiles(files: Map<string, Buffer<ArrayBuffer>>) {
 		vi.mocked(createReadStream).mockImplementation(path => Object.assign(Readable.from([files.get(String(path))]), { path: String(path), pending: false, bytesRead: 0, close() {} }));
 }
 
-async function suppliedGuestExecution(providerFailure?: Error, incompleteClock = false) {
-	const f = suppliedGuestFiles('completed'); f.files.set('/proc/version', Buffer.from('Controlled unit kernel input.')); mockGuestFiles(f.files);
+async function suppliedGuestExecution(providerFailure?: Error, incompleteClock = false, closeoutFailure = false, correction = false) {
+	const f = suppliedGuestFiles('completed', correction ? 120 : 30);
+	if (closeoutFailure) {
+		const context = JSON.parse(f.files.get('/workspace/.treeseed/context.json')!.toString());
+		context.canonicalAssignmentContext.assignment.effectiveProfile.activity = 'acting';
+		f.files.set('/workspace/.treeseed/context.json', Buffer.from(JSON.stringify(context)));
+		const assignment = JSON.parse(f.files.get(f.root + 'assignment.json')!.toString());
+		assignment.contextManifestDigest = `sha256:${createHash('sha256').update(f.files.get('/workspace/.treeseed/context.json')!).digest('hex')}`;
+		assignment.inputs[0].digest = assignment.contextManifestDigest;
+		f.files.set(f.root + 'assignment.json', Buffer.from(JSON.stringify(assignment)));
+		f.held.set('/workspace/.treeseed/context.json', f.files.get('/workspace/.treeseed/context.json')!);
+		f.held.set(f.root + 'assignment.json', f.files.get(f.root + 'assignment.json')!);
+		vi.mocked(run).mockRejectedValue(Object.assign(new Error('/bin/sh exited 127: Python: not found'), { code: 'subprocess_nonzero_exit', exitCode: 127, stdout: '', stderr: 'Python: not found' }));
+	}
+	f.files.set('/proc/version', Buffer.from('Controlled unit kernel input.')); mockGuestFiles(f.files);
 	// Supplied monotonic UNIT observations, not native elapsed time or usage.
 	let observed = 0n; const monotonic = vi.spyOn(process.hrtime, 'bigint').mockImplementation(() => observed);
 	const materializedRead = vi.mocked(readFile).getMockImplementation()!;
@@ -125,25 +138,30 @@ async function suppliedGuestExecution(providerFailure?: Error, incompleteClock =
 		return result;
 	});
 	response(JSON.stringify({ ...f.execution, observedAt: f.execution.startedAt, remainingSeconds: 30 }));
+	let turns = 0;
 	sdk.runTurn.mockImplementation(async (options) => {
+		const turn = turns++;
+		if (correction && turn === 0) options.onEvent({ type: 'thread.started', thread_id: '00000000-0000-4000-8000-000000000001' });
+		if (correction && turn === 1) vi.mocked(run).mockResolvedValue({ stdout: 'v24.0.0\n', stderr: '' });
 		expect(sdk.construct).toHaveBeenCalledWith(expect.objectContaining({ model: 'not-a-real-model', remainingMs: expect.any(Function) }));
 		expect(options.timeoutMs).toBeGreaterThan(0);
 		for (const [id, seconds] of [['original-first', 0], ['original-final', 2]] as const) {
 			if (incompleteClock && id === 'original-final') continue;
-			const value = { ...f.execution, observedAt: new Date(Date.parse(f.execution.startedAt) + seconds * 1_000).toISOString(), remainingSeconds: 30 - seconds };
+			const value = { ...f.execution, observedAt: new Date(Date.parse(f.execution.startedAt) + (seconds + turn * 3) * 1_000).toISOString(), remainingSeconds: (correction ? 120 : 30) - seconds - turn * 3 };
 			options.onEvent({ type: 'item.completed', usage: { input_tokens: 19, output_tokens: 3 }, item: {
 				id, type: 'mcp_tool_call', server: 'treedx', tool: 'treeseed_time_status', status: 'completed', error: null,
 				result: { content: [{ type: 'text', text: JSON.stringify(value) }], structuredContent: value } } });
 		}
-		observed = 7_000_000_000n;
+		observed = BigInt(7 + turn * 2) * 1_000_000_000n;
+		if (correction) options.onEvent({ type: 'turn.completed', usage: { input_tokens: 19, output_tokens: 3 } });
 		if (providerFailure) throw providerFailure;
-		f.files.set(options.responsePath, Buffer.from('Controlled unit response.'));
+		f.files.set(options.responsePath, Buffer.from(closeoutFailure ? JSON.stringify({ schemaVersion: 'treeseed.activity-completion/v1', summary: 'Controlled invalid closeout, not live work.', contentOutput: null, reviewDisposition: null, verification: [{ status: 'passed', summary: 'Claimed link check', commands: [correction && turn > 0 ? 'node --version' : 'Python check of Markdown links in docs/runbooks/federated-query.md'] }] }) : 'Controlled unit response.'));
 	});
 	try {
 		await runModelWorkload();
 		const result = sandboxResultSchema.parse(JSON.parse(f.files.get('/run/treeseed-output/result.json')!.toString('utf8')));
-		expect(result.usage).toMatchObject({ activeSeconds: 2, elapsedSeconds: 7, input_tokens: 19, output_tokens: 3, provenance: 'execution-provider' });
-		expect(result.timingAwareness).toMatchObject({ completedChecks: 2, firstToolCompliant: true, finalToolCompliant: true });
+		expect(result.usage).toMatchObject({ activeSeconds: correction ? 4 : 2, elapsedSeconds: correction ? 9 : 7, input_tokens: correction ? 38 : 19, output_tokens: correction ? 6 : 3, provenance: 'execution-provider' });
+		expect(result.timingAwareness).toMatchObject({ completedChecks: correction ? 4 : 2, firstToolCompliant: true, finalToolCompliant: true });
 		for (const [path, value] of f.held) expect(f.files.get(path)).toEqual(value);
 		expect(['auth.json', 'config.toml', 'activity-completion.schema.json'].filter(name => f.files.has(f.privateRoot + name))).toEqual([]);
 		return result;
@@ -158,6 +176,24 @@ it('publishes original failed provider measurements and complete raw clocks as a
 	expect(result.responseMarkdown).toBeUndefined();
 	expect(result.diagnostics.providerEvents).toHaveLength(2);
 	await expect(suppliedGuestExecution(new Error('Original controlled provider exit 23.'), true)).rejects.toThrow('Agent timing-awareness contract requires');
+});
+
+it('retains observed SDK usage and transcript when real closeout command validation rejects a reported description', async () => {
+	const result = await suppliedGuestExecution(undefined, false, true);
+	expect(result.status).toBe('failed');
+	expect(result.summary).toContain('Runner-observed verification failed');
+	expect(result.responseMarkdown).toBeUndefined();
+	expect(result.diagnostics.providerEvents).toHaveLength(2);
+});
+
+it('corrects the rejected completion in one original SDK session with fresh clocks and summed actual turn usage', async () => {
+ const result = await suppliedGuestExecution(undefined, false, true, true);
+ expect(result.status).toBe('completed'); expect(sdk.construct).toHaveBeenCalledTimes(1); expect(sdk.runTurn).toHaveBeenCalledTimes(2);
+ const feedback = JSON.parse(sdk.runTurn.mock.calls[1]![0].input);
+ expect(feedback).toMatchObject({ type: 'activity-completion-rejected', validationFailure: { code: 'activity_verification_failed' } });
+ expect(sdk.runTurn.mock.calls[1]![0].timeoutMs).toBeLessThan(sdk.runTurn.mock.calls[0]![0].timeoutMs);
+ expect(result.diagnostics.closeoutFailures).toEqual([expect.objectContaining({ message: expect.stringContaining('exit 127') })]);
+ expect(result.diagnostics.verificationRecords).toEqual([expect.objectContaining({ command: 'node --version', status: 'passed', exitCode: 0 })]);
 });
 
 it('removes private guest configuration and supplied auth on preparation denial while retaining the protected credential return', async () => {

@@ -1884,6 +1884,27 @@ workflow:
   - id: synthesis-api-deadline
     action: { verifier: agent.golden.synthesis-api-deadline }
     expect: { status: passed }
+  - id: closeout-git-correction
+    action: { verifier: agent.golden.closeout-git-correction }
+    expect: { status: passed }
+  - id: closeout-command-correction
+    action: { verifier: agent.golden.closeout-command-correction }
+    expect: { status: passed }
+  - id: closeout-fatal-denial
+    action: { verifier: agent.golden.closeout-fatal-denial }
+    expect: { status: passed }
+  - id: closeout-second-failure
+    action: { verifier: agent.golden.closeout-second-failure }
+    expect: { status: passed }
+  - id: closeout-original-window
+    action: { verifier: agent.golden.closeout-original-window }
+    expect: { status: passed }
+  - id: closeout-failed-evidence
+    action: { verifier: agent.golden.closeout-failed-evidence }
+    expect: { status: passed }
+  - id: closeout-sdk-continuation
+    action: { verifier: agent.golden.closeout-sdk-continuation }
+    expect: { status: passed }
   - id: runtime-api-clock
     action: { verifier: agent.golden.runtime-api-clock }
     expect: { status: passed }

@@ -3176,6 +3176,41 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/sandbox/planning-synthesis-recovery.test.ts
     testName: "uses the same shrinking API deadline executor for citation recovery"
+  agent.golden.closeout-git-correction:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/verification/closeout-correction.test.ts
+    testName: "lets the same controlled contributor commit its actual dirty Git product once and rechecks the unchanged clean-tree gate"
+  agent.golden.closeout-command-correction:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/verification/closeout-correction.test.ts
+    testName: "retains the native prose-command exit and accepts only an actually replayed corrected command"
+  agent.golden.closeout-fatal-denial:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/verification/closeout-correction.test.ts
+    testName: "never corrects fatal errors absent session authority or an exhausted original window"
+  agent.golden.closeout-second-failure:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/verification/closeout-correction.test.ts
+    testName: "keeps an invalid correction failed with both original observations and never launches a third turn"
+  agent.golden.closeout-original-window:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/verification/closeout-correction.test.ts
+    testName: "rechecks remaining authority after failure retention without resetting a shrinking deadline"
+  agent.golden.closeout-failed-evidence:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/sandbox/runtime-clock.test.ts
+    testName: "retains observed SDK usage and transcript when real closeout command validation rejects a reported description"
+  agent.golden.closeout-sdk-continuation:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/sandbox/runtime-clock.test.ts
+    testName: "corrects the rejected completion in one original SDK session with fresh clocks and summed actual turn usage"
   agent.golden.runtime-api-clock:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

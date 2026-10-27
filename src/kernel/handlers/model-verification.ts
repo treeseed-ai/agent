@@ -89,10 +89,25 @@ export async function observeReportedActivityCommands(report: ActivityCompletion
 					continue;
 				}
 			}
-			throw new Error(`Runner-observed verification failed (exit ${exit}): ${redactProviderDiagnostic(command, secrets)}; ${diagnostics}`);
+			throw Object.assign(new Error(`Runner-observed verification failed (exit ${exit}): ${redactProviderDiagnostic(command, secrets)}; ${diagnostics}`),
+				{ code: 'activity_verification_failed', exitCode: observed.code === 'subprocess_nonzero_exit' ? observed.exitCode : undefined });
 		}
 	}
 	return { report, verification, observations };
+}
+
+export async function assertCleanWorkSource(assignmentId: string, execute: typeof run = run) {
+	const verificationIndex = resolve('/tmp', `treeseed-clean-${assignmentId}`);
+	const env = { PATH: '/usr/bin:/bin', GIT_INDEX_FILE: verificationIndex,
+		GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null', GIT_OPTIONAL_LOCKS: '0' };
+	const args = ['-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor=false', '-c', 'core.untrackedCache=false'];
+	try {
+		await execute('/usr/bin/git', [...args, 'read-tree', 'HEAD'], { cwd: '/workspace/project', env, timeoutMs: 10_000 });
+		const status = (await execute('/usr/bin/git', [...args, 'status', '--porcelain', '--untracked-files=all'], {
+			cwd: '/workspace/project', env, captureStdout: true, maxStdoutBytes: 1_048_576, timeoutMs: 10_000 })).stdout.replace(/\n$/u, '');
+		if (status) throw Object.assign(new Error(`Work-mode execution left uncommitted changes: ${status.split('\n').slice(0, 20)
+			.map(line => line.length >= 4 ? line.slice(3) : line).join(', ')}`), { code: 'activity_git_worktree_dirty' });
+	} finally { await rm(verificationIndex, { force: true }); }
 }
 
 export function requiresNodeDependencyRestore(command: string) {

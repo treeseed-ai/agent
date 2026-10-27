@@ -12,7 +12,8 @@ import { activityCompletionOutputSchema, validateActivityCompletion } from '../.
 import { completionFrontmatterSchema, completionOutputTargetVariants, promptFromContext, assertArchitectSourceCitation, assertTesterFailureEvidence, attachObservedTesterFailures, correctObservedTestFirstRedVerification, omitUnreplayableVerification, codexInvocationTimerOptions, requiresActivityCompletion, record, text, providerToolName, codexToolInFlight, codexResumeIdleTimeoutMs } from './model-workload-contract.ts';
 import { planningSynthesisOutputSchema, assertPredecessorSynthesis } from './planning-synthesis.ts';
 import { recoverPlanningSynthesis } from '../../sandbox/planning-synthesis-recovery.ts';
-import { objectDigest, observeReportedActivityCommands, prepareReleaseReview, prepareNodeWorkspace } from './model-verification.ts';
+import { closeModelProduct } from './model-product-closeout.ts';
+import { assertCleanWorkSource, objectDigest, observeReportedActivityCommands, prepareReleaseReview, prepareNodeWorkspace } from './model-verification.ts';
 export { observeReportedActivityCommands, verifyReportedActivityCommands, requiresNodeDependencyRestore, prepareNodeWorkspace } from './model-verification.ts';
 
 const inputRoot = '/run/treeseed-assignment';
@@ -400,45 +401,66 @@ export async function runModelWorkload() {
 			const secrets = [operationToken, ...(subscriptionAuth ? providerCredentialValues(JSON.parse(subscriptionAuth.toString('utf8'))) : [])];
 			throw new Error(`Agent timing-awareness contract requires treeseed_time_status as the first and final tool actions with two completed checks. Provider errors: ${providerError?.message ?? (providerFailureSummary(events, secrets) || '(none)')}. Observed ${JSON.stringify(timingAwareness)}. Provider event shapes: ${JSON.stringify(providerEventShapeSummary(events, secrets))}. Response preview: ${providerResponsePreview(events, secrets) || '(empty)'}`);
 		}
-		const rawResponse = providerError ? '' : (await readFile(responsePath, 'utf8')).trim(); if (!providerError && !rawResponse) throw new Error('Execution provider returned an empty response.');
+		let rawResponse = providerError ? '' : (await readFile(responsePath, 'utf8')).trim(); if (!providerError && !rawResponse) throw new Error('Execution provider returned an empty response.');
 		const resourceAbort = providerResourceAbort(events, providerError !== null);
 		if (resourceAbort) throw new Error(`sandbox_resource_exhausted: command exited ${resourceAbort.exitCode}: ${resourceAbort.command}`);
-		const validatedCompletion = !providerError && structuredCompletion ? validateActivityCompletion(JSON.parse(rawResponse), allowVerification) : null;
-		const correctedCompletion = validatedCompletion ? correctObservedTestFirstRedVerification(validatedCompletion, events,
-			text(canonicalAssignment.agentClass), canonicalActivity, canonicalAssignment.acceptanceCriteria) : null;
-		const replayableCompletion = correctedCompletion ? omitUnreplayableVerification(correctedCompletion) : null;
 		const diagnosticSecrets = [operationToken, ...(subscriptionAuth ? providerCredentialValues(JSON.parse(subscriptionAuth.toString('utf8'))) : []), ...(subscriptionAuth ? providerCredentialValues(JSON.parse(await readFile(resolve(codexHome, 'auth.json'), 'utf8'))) : [])];
-		const observedCompletion = replayableCompletion ? releaseReview ? await releaseReview.complete(replayableCompletion)
-			: await observeReportedActivityCommands(replayableCompletion, diagnosticSecrets, execute, canonicalAssignment) : null;
-		const activityCompletion = attachObservedTesterFailures(observedCompletion?.report ?? null, events,
-			text(canonicalAssignment.agentClass), canonicalActivity, canonicalAssignment.acceptanceCriteria);
-		if (!providerError) {
-			assertArchitectSourceCitation(activityCompletion, source?.commit ?? null, text(canonicalAssignment.agentClass), canonicalActivity);
-			assertTesterFailureEvidence(activityCompletion, text(canonicalAssignment.agentClass), canonicalActivity, canonicalAssignment.acceptanceCriteria);
-			assertPredecessorSynthesis(context, activityCompletion);
-		}
-		const responseMarkdown = activityCompletion?.summary ?? rawResponse;
-		if (!providerError && sourceMetadata?.mode === 'work') {
-			// Do not trust the execution repository's index flags or stat cache when
-			// deciding whether a candidate is clean. The later verifier uses a fresh
-			// index as well, so both boundaries now evaluate the same committed tree.
-			const verificationIndex = resolve('/tmp', `treeseed-clean-${assignment.assignmentId}`);
-			const verificationEnvironment = { PATH: '/usr/bin:/bin', GIT_INDEX_FILE: verificationIndex,
-				GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null', GIT_OPTIONAL_LOCKS: '0' };
-			const gitArguments = ['-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor=false', '-c', 'core.untrackedCache=false'];
-			try {
-				await execute('/usr/bin/git', [...gitArguments, 'read-tree', 'HEAD'], { cwd: '/workspace/project', env: verificationEnvironment, timeoutMs: 10_000 });
-				const status = (await execute('/usr/bin/git', [...gitArguments, 'status', '--porcelain', '--untracked-files=all'], {
-					cwd: '/workspace/project', env: verificationEnvironment, captureStdout: true, maxStdoutBytes: 1_048_576, timeoutMs: 10_000,
-				})).stdout.replace(/\n$/u, '');
-				if (status) throw new Error(`Work-mode execution left uncommitted changes: ${status.split('\n').slice(0, 20).map(line => line.length >= 4 ? line.slice(3) : line).join(', ')}`);
-			} finally { await rm(verificationIndex, { force: true }); }
-			// Candidate verification intentionally runs in a different Kata VM after the
-			// execution VM has stopped. Flush the committed tree and Git object database
-			// before returning success so that verifier reads cannot observe a newer ref
-			// with stale worktree blocks from the executed overlay.
-			await execute('/bin/sync', [], { timeoutMs: 30_000 });
-		}
+		const closeoutFailures: Array<{ message: string; code: unknown; response: string }> = [];
+		const { activityCompletion, observedCompletion, responseMarkdown } = await closeModelProduct({
+			complete: async () => {
+			rawResponse = providerError ? '' : (await readFile(responsePath, 'utf8')).trim();
+			const validatedCompletion = !providerError && structuredCompletion ? validateActivityCompletion(JSON.parse(rawResponse), allowVerification) : null;
+			const correctedCompletion = validatedCompletion ? correctObservedTestFirstRedVerification(validatedCompletion, events,
+				text(canonicalAssignment.agentClass), canonicalActivity, canonicalAssignment.acceptanceCriteria) : null;
+			const replayableCompletion = correctedCompletion ? omitUnreplayableVerification(correctedCompletion) : null;
+			const observedCompletion = replayableCompletion ? releaseReview ? await releaseReview.complete(replayableCompletion)
+				: await observeReportedActivityCommands(replayableCompletion, diagnosticSecrets, execute, canonicalAssignment) : null;
+			const activityCompletion = attachObservedTesterFailures(observedCompletion?.report ?? null, events,
+				text(canonicalAssignment.agentClass), canonicalActivity, canonicalAssignment.acceptanceCriteria);
+			if (!providerError) {
+				assertArchitectSourceCitation(activityCompletion, source?.commit ?? null, text(canonicalAssignment.agentClass), canonicalActivity);
+				assertTesterFailureEvidence(activityCompletion, text(canonicalAssignment.agentClass), canonicalActivity, canonicalAssignment.acceptanceCriteria);
+				assertPredecessorSynthesis(context, activityCompletion);
+			}
+			const responseMarkdown = activityCompletion?.summary ?? rawResponse;
+			if (!providerError && sourceMetadata?.mode === 'work') {
+				await assertCleanWorkSource(assignment.assignmentId, execute);
+				// Candidate verification intentionally runs in a different Kata VM after the
+				// execution VM has stopped. Flush the committed tree and Git object database
+				// before returning success so that verifier reads cannot observe a newer ref
+				// with stale worktree blocks from the executed overlay.
+				await execute('/bin/sync', [], { timeoutMs: 30_000 });
+			}
+			const finalTiming = timingAwarenessContract(events);
+			if (finalTiming.completedChecks < 2 || !finalTiming.firstToolCompliant || !finalTiming.finalToolCompliant) throw new Error('Agent timing-awareness contract requires first and final clock checks.');
+			return { activityCompletion, observedCompletion, responseMarkdown };
+			},
+			canCorrect: () => !providerError && Boolean(providerThreadId) && !codexToolInFlight(events), remainingMs: getRemainingMs,
+			correct: async (error, remaining) => {
+				const invocation = ++providerInvocation;
+				try { await session.runTurn({ responsePath, outputSchema: completionSchema, timeoutMs: Math.floor(remaining - 5_000),
+					input: JSON.stringify({ type: 'activity-completion-rejected', validationFailure: { code: record(error).code,
+						message: redactProviderDiagnostic(error, diagnosticSecrets) }, remainingSeconds: Math.floor(remaining / 1_000), deadlineAt: executionDeadlineAt }),
+					onEvent(raw) { const event = scopeProviderEvent(raw, invocation); observeTimingAwarenessEvent(timingTracker, event); events.push(event); } }); } finally {
+				if (subscriptionAuth) { const refreshed = await readFile(resolve(codexHome, 'auth.json'));
+					await writeFile(resolve(outputRoot, 'codex-auth.json'), refreshed, { mode: 0o600 });
+					diagnosticSecrets.push(...providerCredentialValues(JSON.parse(refreshed.toString('utf8')))); }
+				}
+			},
+			retainFailure: async error => {
+				closeoutFailures.push({ message: redactProviderDiagnostic(error, diagnosticSecrets), code: record(error).code ?? null,
+					response: redactProviderDiagnostic(await readFile(responsePath, 'utf8').catch(() => ''), diagnosticSecrets) });
+				const finished = process.hrtime.bigint(), nativeUsage = process.resourceUsage(), evidence = codexUsageEvidence(events);
+				const observed = evidence ? evidence.complete ? evidence.observed : {} : record([...events].reverse().find(event => text(event.type).includes('completed'))?.usage);
+				await writeFile(resolve(outputRoot, 'result.json'), JSON.stringify(sandboxResultSchema.parse({ schemaVersion: 'treeseed.sandbox-result/v1',
+					sandboxId, assignmentId: assignment.assignmentId, status: 'failed', summary: redactProviderDiagnostic(error, diagnosticSecrets), artifacts: [],
+					timingAwareness: timingAwarenessContract(events), usage: { ...observed, provenance: Object.keys(observed).length ? 'execution-provider' : 'unavailable',
+						activeSeconds: Number(finished - productiveStarted) / 1e9, elapsedSeconds: Number(finished - started) / 1e9,
+						cpuUserMicros: nativeUsage.userCPUTime - usageBefore.userCPUTime, cpuSystemMicros: nativeUsage.systemCPUTime - usageBefore.systemCPUTime, peakRssBytes: nativeUsage.maxRSS * 1024 },
+					diagnostics: { providerEvents: redactProviderEvents(events, diagnosticSecrets), providerSdk: { package: '@openai/codex-sdk', threadId: session.id },
+						providerUsageEvidence: evidence, contextManifest: context, closeoutFailures }, teardown: { verified: false, completedAt: null } })), { mode: 0o600 });
+			},
+		});
 		const changedPaths = sourceMetadata?.mode === 'work' && source
 			? (await execute('/usr/bin/git', ['diff', '--name-only', `${source.commit}..HEAD`], { cwd: '/workspace/project', captureStdout: true, maxStdoutBytes: 1_048_576, timeoutMs: 10_000 })).stdout.split('\n').map((path) => path.trim()).filter(Boolean)
 			: [];
@@ -450,10 +472,10 @@ export async function runModelWorkload() {
 		const providerUsage = providerUsageEvidence ? providerUsageEvidence.complete ? providerUsageEvidence.observed : {} : record(completed.usage);
 		const result = sandboxResultSchema.parse({ schemaVersion: 'treeseed.sandbox-result/v1', sandboxId, assignmentId: assignment.assignmentId,
 			status: providerError ? 'failed' : 'completed', summary: providerError?.message ?? 'Kata assignment completed.', responseMarkdown: providerError ? undefined : responseMarkdown,
-			artifacts, timingAwareness, usage: { ...providerUsage, provenance: Object.keys(providerUsage).length ? 'execution-provider' : 'unavailable', activeSeconds, elapsedSeconds,
+			artifacts, timingAwareness: timingAwarenessContract(events), usage: { ...providerUsage, provenance: Object.keys(providerUsage).length ? 'execution-provider' : 'unavailable', activeSeconds, elapsedSeconds,
 				cpuUserMicros: usageAfter.userCPUTime - usageBefore.userCPUTime, cpuSystemMicros: usageAfter.systemCPUTime - usageBefore.systemCPUTime, peakRssBytes: usageAfter.maxRSS * 1024 },
 			diagnostics: { systemPrompt: composedPrompt, providerEvents: redactProviderEvents(events, diagnosticSecrets), providerEventShapes,
-				providerSdk: { package: '@openai/codex-sdk', threadId: session.id }, providerUsageEvidence, model: assignment.modelPolicy.model, provider: assignment.modelPolicy.provider, contextManifest: context, activityCompletion,
+				providerSdk: { package: '@openai/codex-sdk', threadId: session.id }, providerUsageEvidence, closeoutFailures, model: assignment.modelPolicy.model, provider: assignment.modelPolicy.provider, contextManifest: context, activityCompletion,
 				verificationRecords: observedCompletion?.verification ?? [], changedPaths,
 				verificationObservations: redactProviderEvents((observedCompletion?.observations ?? []).map(value => ({ ...value })), diagnosticSecrets),
 				sourceCommit: sourceMetadata?.mode === 'work' ? (await execute('/usr/bin/git', ['rev-parse', '--verify', 'HEAD^{commit}'], { cwd: '/workspace/project', captureStdout: true, maxStdoutBytes: 128, timeoutMs: 10_000 })).stdout.trim() : source?.commit ?? null,

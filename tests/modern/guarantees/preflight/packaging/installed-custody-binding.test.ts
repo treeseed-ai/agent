@@ -41,6 +41,12 @@ describe('capacity-provider guarantee execution bindings', () => {
             step.with?.path === `.treeseed/installed-owner-inputs/build-sdk-${agentSdk.commit}`).map((step: { with: unknown }) => step.with))
             .toEqual([{ 'github-token': '${{ github.token }}', repository: 'treeseed-ai/sdk', 'run-id': 40271189010,
                 name: `sdk-${agentSdk.commit}`, path: `.treeseed/installed-owner-inputs/build-sdk-${agentSdk.commit}` }]);
+        const deploymentSdk = inputs.find((value: { owner: string }) => value.owner === 'deployment').buildSdk;
+        expect(deploymentSdk).toEqual({ commit: 'cbc03314871d271bce7275c5cee71d950397a0c3', sha256: 'ef262c2a69fdbd53cea81b60f21817275df0a0a6d40af7df32c4405b6f724e47' });
+        expect(native.steps.filter((step: { with?: { path?: string } }) =>
+            step.with?.path === `.treeseed/installed-owner-inputs/build-sdk-${deploymentSdk.commit}`).map((step: { with: unknown }) => step.with))
+            .toEqual([{ 'github-token': '${{ github.token }}', repository: 'treeseed-ai/sdk', 'run-id': 37451351249,
+                name: `sdk-${deploymentSdk.commit}`, path: `.treeseed/installed-owner-inputs/build-sdk-${deploymentSdk.commit}` }]);
 
 		expect(inputs.find((value:{owner:string})=>value.owner==='reviewer')).toMatchObject({"commit":"762725d3794b9f5b3128c1584d3a17495ab6a368","sha256":"e402cbde62812cc8c0d31a9dadc4e4c89bf8c4997e6f2e30870e7eb64b8c2627"});
 		expect(native.steps.filter((step:{with?:{repository?:string;path?:string}})=>step.with?.repository==='treeseed-ai/reviewer'&&step.with?.path==='.treeseed/installed-owner-inputs/reviewer').map((step:{with:unknown})=>step.with)).toEqual([{"github-token":"${{ github.token }}","repository":"treeseed-ai/reviewer","run-id":38998444210,"name":"reviewer-762725d3794b9f5b3128c1584d3a17495ab6a368","path":".treeseed/installed-owner-inputs/reviewer"}]);

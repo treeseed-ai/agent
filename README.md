@@ -9,6 +9,14 @@ The existing implementation below is an unmerged, in-process probe foundation. M
 services, the real warm pool, seed reconciliation and live enrollment are still under development;
 these probe interfaces alone do not deliver or qualify that system.
 
+Development integration consumes exact public owner archives, with one SDK version in the
+closure: SDK `0.0.0-cordis.19` from `90cf4f3cc62e166685280450c727499defd2af5b`
+(`93dd549c98aba180306e9b19cc1cbc37494544b2764ed341c531c9af618c6f81`) and UI
+`0.0.0-cordis.18` from `e2b9c5e10611c196834fd57ba5358a74304e373c`
+(`d09e6ed33f7f1bc2f7210208a94f33bbd2a6453d8fe886f75a1f950887223e48`).
+UI remains optional for headless library construction and required for human program rendering.
+Neither archive provides team authority, working Kata capacity or seed activation by itself.
+
 ## Public boundaries
 
 `AgentApplication.start({binding, authorityFile, handler?})` owns one native CordisScope. `binding` is SDK AgentAuthorityBinding supplied by the trusted host, and `authorityFile` is an absolute owner-private grant record. Its exact parsed contents must equal the binding. Every execution boundary rereads that record; revocation/revision changes fail closed. File access rejects symlinks, foreign ownership, hard links and permissions other than directory 0700 / file 0600. A probe grant confers only the harmless composition-probe capability.

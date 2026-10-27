@@ -6,6 +6,14 @@ import { parse } from 'yaml';
 import { describe, expect, it } from 'vitest';
 const root = resolve(import.meta.dirname, '../../../../..');
 describe('capacity-provider guarantee execution bindings', () => {
+	it('keeps owning verification on the declared Deployment release', () => {
+		const workflow = parse(readFileSync(resolve(root, '.github/workflows/verify.yml'), 'utf8'));
+		const steps = workflow.jobs.verify.steps as Array<{ run?: string; with?: { repository?: string; path?: string } }>;
+		expect(steps.filter(step => step.with?.repository === 'treeseed-ai/deployment'
+			&& step.with.path === '.treeseed/tools/deployment-candidate')).toEqual([]);
+		expect(steps.filter(step => step.run?.includes('npm install')
+			&& step.run.includes('./.treeseed/tools/deployment-candidate/'))).toEqual([]);
+	});
 	it('binds installed owner custody to every original integrated SDK step without source-only execution credit', () => {
 		const manifest = parse(readFileSync(resolve(root, 'guarantees/agent/golden/sdk-complete.guarantee.yaml'), 'utf8'));
 		const scene = parse(readFileSync(resolve(root, manifest.scene.manifest), 'utf8'));

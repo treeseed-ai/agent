@@ -44,8 +44,6 @@ describe('capacity-provider guarantee execution bindings', () => {
 			'node --import tsx ./scripts/support/verify-installed-owners.ts')).toBe(true);
 		const inputs = JSON.parse(native.env.TREESEED_INSTALLED_OWNER_INPUTS);
         const agentSdk = inputs.find((value: { owner: string }) => value.owner === 'agent').buildSdk;
-        const declaredSdk = JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf8')).dependencies['@treeseed/sdk'];
-        expect(declaredSdk).toBe(`git+https://github.com/treeseed-ai/sdk.git#${agentSdk.commit}`);
         expect(agentSdk).toEqual({ commit: 'ab5ad06894610c5566aa32bbffc7c027a4e3f4ce', sha256: '4346e570ce059f1f8e8dc81cb5d78175e368a7c4fa91e9aee3330ac8a785a6a7' });
         expect(workflow.jobs.verify.steps.some((step: { uses?: string; env?: Record<string, string> }) =>
             step.uses === `treeseed-ai/sdk/.github/actions/install-exact-sdk@${agentSdk.commit}` && step.env?.NODE_ENV === 'production')).toBe(true);

@@ -19,8 +19,8 @@
         "typescript": "5.9.3",
       },
       "peerDependencies": {
-        "@treeseed-cordis/sdk": "0.0.0-cordis.17",
-        "@treeseed-cordis/ui": "0.0.0-cordis.17",
+        "@treeseed-cordis/sdk": "0.0.0-cordis.19",
+        "@treeseed-cordis/ui": "0.0.0-cordis.18",
       },
       "optionalPeers": [
         "@treeseed-cordis/ui",
@@ -30,9 +30,9 @@
   "packages": {
     "@standard-schema/spec": ["@standard-schema/spec@1.1.0", "", {}, "sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w=="],
 
-    "@treeseed-cordis/sdk": ["@treeseed-cordis/sdk@vendor/sdk.tgz", { "dependencies": { "cordis": "4.0.0-rc.12", "jsonc-parser": "3.3.1", "semver": "7.8.5", "zod": "4.6.7" } }, "sha512-dHBHy0LM8/MbNhP43chNPx1Ll02iyiuJHNsmYzTDG3k/pMWjRRra3J0TSLL0ZgkbglObiAw9Dxb2KVI1UEJ+BQ=="],
+    "@treeseed-cordis/sdk": ["@treeseed-cordis/sdk@vendor/sdk.tgz", { "dependencies": { "cordis": "4.0.0-rc.12", "jsonc-parser": "3.3.1", "semver": "7.8.5", "zod": "4.6.7" } }, "sha512-Z3l9ZnIYwvICaafrklKPGKnIuuXYjopxpP9j9qxN/AdyP5NcjD4L47D+oYgJRVcsfNaQmka5IhuYmQ58ROS8dA=="],
 
-    "@treeseed-cordis/ui": ["@treeseed-cordis/ui@vendor/ui.tgz", { "dependencies": { "cordis": "4.0.0-rc.12", "zod": "4.6.7" }, "peerDependencies": { "@treeseed-cordis/sdk": "0.0.0-cordis.17", "react": "19.3.1", "react-dom": "19.3.1", "typescript": "5.9.3" }, "optionalPeers": ["typescript"] }, "sha512-9REHNg9/esikM4dPsmJ5kU5lZRjaL5xf1nCkkftjCc9HgKGQpWeXlO7WT5WL2l4P9cq1K31EUmQmNERCeZvL1g=="],
+    "@treeseed-cordis/ui": ["@treeseed-cordis/ui@vendor/ui.tgz", { "dependencies": { "cordis": "4.0.0-rc.12", "zod": "4.6.7" }, "peerDependencies": { "@treeseed-cordis/sdk": "0.0.0-cordis.19", "react": "19.3.1", "react-dom": "19.3.1", "typescript": "5.9.3" }, "optionalPeers": ["typescript"] }, "sha512-cykVCpJC02KxtG+zaqR+2lh383GPjGZNzxi0u9u6iJUUhL59HWUL5nlLRTpo9c7ShdEJdNDNBX+8Y/Nc+FVWWQ=="],
 
     "@types/bun": ["@types/bun@1.4.4", "", { "dependencies": { "bun-types": "1.4.4" } }, "sha512-9wkRDXUXK124pEnAutE6n/l18j+i9GC5IAHK8TmX/2nlySETmky0OU6yL5U8pW1AoKh++AN9auDCr647BfurjQ=="],
 

@@ -38,8 +38,8 @@
     "check:readability": "bun .agents/skills/release-workflow/scripts/source-readability.ts"
   },
   "peerDependencies": {
-    "@treeseed-cordis/sdk": "0.0.0-cordis.17",
-    "@treeseed-cordis/ui": "0.0.0-cordis.17"
+    "@treeseed-cordis/sdk": "0.0.0-cordis.19",
+    "@treeseed-cordis/ui": "0.0.0-cordis.18"
   },
   "peerDependenciesMeta": {
     "@treeseed-cordis/ui": {
@@ -63,8 +63,13 @@
   "cordisCandidate": {
     "sdk": {
       "repository": "https://github.com/treeseed-ai/sdk.git",
-      "commit": "890902948c9ca9df778a90d4fde975d33e29142d",
-      "sha256": "a1e32909f12a1d93d6929a67eee1460f6abb7c5a507ca7262a8d74f8611f541a"
+      "commit": "90cf4f3cc62e166685280450c727499defd2af5b",
+      "sha256": "93dd549c98aba180306e9b19cc1cbc37494544b2764ed341c531c9af618c6f81"
+    },
+    "ui": {
+      "repository": "https://github.com/treeseed-ai/ui.git",
+      "commit": "e2b9c5e10611c196834fd57ba5358a74304e373c",
+      "sha256": "d09e6ed33f7f1bc2f7210208a94f33bbd2a6453d8fe886f75a1f950887223e48"
     }
   },
   "cordisPackage": {

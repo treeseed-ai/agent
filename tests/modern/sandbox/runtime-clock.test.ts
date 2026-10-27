@@ -114,8 +114,21 @@ function mockGuestFiles(files: Map<string, Buffer<ArrayBuffer>>) {
 		vi.mocked(createReadStream).mockImplementation(path => Object.assign(Readable.from([files.get(String(path))]), { path: String(path), pending: false, bytesRead: 0, close() {} }));
 }
 
-async function suppliedGuestExecution(providerFailure?: Error, incompleteClock = false) {
-	const f = suppliedGuestFiles('completed'); f.files.set('/proc/version', Buffer.from('Controlled unit kernel input.')); mockGuestFiles(f.files);
+async function suppliedGuestExecution(providerFailure?: Error, incompleteClock = false, closeoutFailure = false) {
+	const f = suppliedGuestFiles('completed');
+	if (closeoutFailure) {
+		const context = JSON.parse(f.files.get('/workspace/.treeseed/context.json')!.toString());
+		context.canonicalAssignmentContext.assignment.effectiveProfile.activity = 'acting';
+		f.files.set('/workspace/.treeseed/context.json', Buffer.from(JSON.stringify(context)));
+		const assignment = JSON.parse(f.files.get(f.root + 'assignment.json')!.toString());
+		assignment.contextManifestDigest = `sha256:${createHash('sha256').update(f.files.get('/workspace/.treeseed/context.json')!).digest('hex')}`;
+		assignment.inputs[0].digest = assignment.contextManifestDigest;
+		f.files.set(f.root + 'assignment.json', Buffer.from(JSON.stringify(assignment)));
+		f.held.set('/workspace/.treeseed/context.json', f.files.get('/workspace/.treeseed/context.json')!);
+		f.held.set(f.root + 'assignment.json', f.files.get(f.root + 'assignment.json')!);
+		vi.mocked(run).mockRejectedValue(Object.assign(new Error('/bin/sh exited 127: Python: not found'), { code: 'subprocess_nonzero_exit', exitCode: 127, stdout: '', stderr: 'Python: not found' }));
+	}
+	f.files.set('/proc/version', Buffer.from('Controlled unit kernel input.')); mockGuestFiles(f.files);
 	// Supplied monotonic UNIT observations, not native elapsed time or usage.
 	let observed = 0n; const monotonic = vi.spyOn(process.hrtime, 'bigint').mockImplementation(() => observed);
 	const materializedRead = vi.mocked(readFile).getMockImplementation()!;
@@ -137,10 +150,11 @@ async function suppliedGuestExecution(providerFailure?: Error, incompleteClock =
 		}
 		observed = 7_000_000_000n;
 		if (providerFailure) throw providerFailure;
-		f.files.set(options.responsePath, Buffer.from('Controlled unit response.'));
+		f.files.set(options.responsePath, Buffer.from(closeoutFailure ? JSON.stringify({ schemaVersion: 'treeseed.activity-completion/v1', summary: 'Controlled invalid closeout, not live work.', contentOutput: null, reviewDisposition: null, verification: [{ status: 'passed', summary: 'Claimed link check', commands: ['Python check of Markdown links in docs/runbooks/federated-query.md'] }] }) : 'Controlled unit response.'));
 	});
 	try {
-		await runModelWorkload();
+		if (closeoutFailure) await expect(runModelWorkload()).rejects.toThrow('Runner-observed verification failed (exit 127)');
+		else await runModelWorkload();
 		const result = sandboxResultSchema.parse(JSON.parse(f.files.get('/run/treeseed-output/result.json')!.toString('utf8')));
 		expect(result.usage).toMatchObject({ activeSeconds: 2, elapsedSeconds: 7, input_tokens: 19, output_tokens: 3, provenance: 'execution-provider' });
 		expect(result.timingAwareness).toMatchObject({ completedChecks: 2, firstToolCompliant: true, finalToolCompliant: true });
@@ -158,6 +172,14 @@ it('publishes original failed provider measurements and complete raw clocks as a
 	expect(result.responseMarkdown).toBeUndefined();
 	expect(result.diagnostics.providerEvents).toHaveLength(2);
 	await expect(suppliedGuestExecution(new Error('Original controlled provider exit 23.'), true)).rejects.toThrow('Agent timing-awareness contract requires');
+});
+
+it('retains observed SDK usage and transcript when real closeout command validation rejects a reported description', async () => {
+	const result = await suppliedGuestExecution(undefined, false, true);
+	expect(result.status).toBe('failed');
+	expect(result.summary).toContain('Runner-observed verification failed');
+	expect(result.responseMarkdown).toBeUndefined();
+	expect(result.diagnostics.providerEvents).toHaveLength(2);
 });
 
 it('removes private guest configuration and supplied auth on preparation denial while retaining the protected credential return', async () => {

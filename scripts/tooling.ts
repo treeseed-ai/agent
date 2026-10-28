@@ -1,3 +1,5 @@
+import { AgentHostPlugin } from '../src/execution.js';
+import { AgentContextPlugin, AgentEchoToolPlugin, AgentEchoHandlerPlugin, AgentReporterPlugin, AgentExecutionPlugin } from '../src/providers.js';
 import { AgentPackageIdentity } from '../src/package-identity.js';
 import { createHash } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -16,9 +18,22 @@ class AgentTooling {
     new SourcePolicy().check(process.cwd(), process.argv[2] === 'build');
     this.project(metadata, process.argv[2] === 'build');
   }
+  private static readonly definitions = [
+    {plugin: AgentFileGrantPlugin, entry: 'dist/src/authority.js', name: 'AgentFileGrantPlugin'},
+    {plugin: AgentHostPlugin, entry: 'dist/src/execution.js', name: 'AgentHostPlugin'},
+    {plugin: AgentContextPlugin, entry: 'dist/src/providers.js', name: 'AgentContextPlugin'},
+    {plugin: AgentEchoToolPlugin, entry: 'dist/src/providers.js', name: 'AgentEchoToolPlugin'},
+    {plugin: AgentEchoHandlerPlugin, entry: 'dist/src/providers.js', name: 'AgentEchoHandlerPlugin'},
+    {plugin: AgentReporterPlugin, entry: 'dist/src/providers.js', name: 'AgentReporterPlugin'},
+    {plugin: AgentExecutionPlugin, entry: 'dist/src/providers.js', name: 'AgentExecutionPlugin'},
+  ];
+  private static providers() {
+    const providers = [];
+    for (const {plugin, entry, name} of this.definitions) providers.push(PackageDefinition.export(plugin, entry, name));
+    return providers;
+  }
   private static project(metadata: Record<string, unknown>, build: boolean): void {
-    const provider = PackageDefinition.export(AgentFileGrantPlugin, 'dist/src/authority.js', 'AgentFileGrantPlugin');
-    const descriptor = PackageDefinition.define(String(metadata.name), String(metadata.version), 'agent', [provider]);
+    const descriptor = PackageDefinition.define(String(metadata.name), String(metadata.version), 'agent', this.providers());
     if (build) {
       metadata.cordisPackage = descriptor;
       writeFileSync('package.json', JSON.stringify(metadata, null, 2) + '\n');

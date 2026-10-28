@@ -1,6 +1,6 @@
 {
   "name": "@treeseed-cordis/agent",
-  "version": "0.0.0-cordis.7",
+  "version": "0.0.0-cordis.8",
   "private": true,
   "type": "module",
   "license": "Apache-2.0",
@@ -38,6 +38,14 @@
     "./authority": {
       "types": "./dist/src/authority.d.ts",
       "default": "./dist/src/authority.js"
+    },
+    ".": {
+      "types": "./dist/src/application.d.ts",
+      "default": "./dist/src/application.js"
+    },
+    "./contracts": {
+      "types": "./dist/src/contracts.d.ts",
+      "default": "./dist/src/contracts.js"
     }
   },
   "files": [
@@ -54,7 +62,7 @@
     "pluginId": "agent",
     "package": {
       "name": "@treeseed-cordis/agent",
-      "version": "0.0.0-cordis.7"
+      "version": "0.0.0-cordis.8"
     },
     "providers": [
       {
@@ -125,6 +133,176 @@
             "file",
             "binding"
           ],
+          "additionalProperties": false
+        },
+        "replacement": {
+          "kind": "restart",
+          "stateVersion": 1,
+          "qualificationDigest": null
+        },
+        "commandIds": []
+      },
+      {
+        "declaration": {
+          "id": "agent.host.native",
+          "pluginId": "agent",
+          "capability": "agent.host",
+          "contractVersion": "0.4.0-cordis.1",
+          "target": "agent",
+          "provide": [
+            "agent.host"
+          ],
+          "inject": [
+            "cordis.composition",
+            "agent.authority",
+            "agent.context",
+            "agent.handler",
+            "agent.tool",
+            "agent.reporting",
+            "agent.execution"
+          ]
+        },
+        "entry": "dist/src/execution.js",
+        "classExport": "AgentHostPlugin",
+        "configurationSchema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        },
+        "replacement": {
+          "kind": "restart",
+          "stateVersion": 1,
+          "qualificationDigest": null
+        },
+        "commandIds": []
+      },
+      {
+        "declaration": {
+          "id": "agent.context.isolated",
+          "pluginId": "agent",
+          "capability": "agent.context",
+          "contractVersion": "0.4.0-cordis.1",
+          "target": "agent",
+          "provide": [
+            "agent.context"
+          ],
+          "inject": []
+        },
+        "entry": "dist/src/providers.js",
+        "classExport": "AgentContextPlugin",
+        "configurationSchema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        },
+        "replacement": {
+          "kind": "restart",
+          "stateVersion": 1,
+          "qualificationDigest": null
+        },
+        "commandIds": []
+      },
+      {
+        "declaration": {
+          "id": "agent.tool.probe-echo",
+          "pluginId": "agent",
+          "capability": "agent.tool",
+          "contractVersion": "0.4.0-cordis.1",
+          "target": "agent",
+          "provide": [
+            "agent.tool"
+          ],
+          "inject": []
+        },
+        "entry": "dist/src/providers.js",
+        "classExport": "AgentEchoToolPlugin",
+        "configurationSchema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        },
+        "replacement": {
+          "kind": "restart",
+          "stateVersion": 1,
+          "qualificationDigest": null
+        },
+        "commandIds": []
+      },
+      {
+        "declaration": {
+          "id": "agent.handler.echo",
+          "pluginId": "agent",
+          "capability": "agent.handler",
+          "contractVersion": "0.4.0-cordis.1",
+          "target": "agent",
+          "provide": [
+            "agent.handler"
+          ],
+          "inject": []
+        },
+        "entry": "dist/src/providers.js",
+        "classExport": "AgentEchoHandlerPlugin",
+        "configurationSchema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        },
+        "replacement": {
+          "kind": "restart",
+          "stateVersion": 1,
+          "qualificationDigest": null
+        },
+        "commandIds": []
+      },
+      {
+        "declaration": {
+          "id": "agent.reporting.probe",
+          "pluginId": "agent",
+          "capability": "agent.reporting",
+          "contractVersion": "0.4.0-cordis.1",
+          "target": "agent",
+          "provide": [
+            "agent.reporting"
+          ],
+          "inject": []
+        },
+        "entry": "dist/src/providers.js",
+        "classExport": "AgentReporterPlugin",
+        "configurationSchema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        },
+        "replacement": {
+          "kind": "restart",
+          "stateVersion": 1,
+          "qualificationDigest": null
+        },
+        "commandIds": []
+      },
+      {
+        "declaration": {
+          "id": "agent.execution.probe",
+          "pluginId": "agent",
+          "capability": "agent.execution",
+          "contractVersion": "0.4.0-cordis.1",
+          "target": "agent",
+          "provide": [
+            "agent.execution"
+          ],
+          "inject": []
+        },
+        "entry": "dist/src/providers.js",
+        "classExport": "AgentExecutionPlugin",
+        "configurationSchema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {},
           "additionalProperties": false
         },
         "replacement": {

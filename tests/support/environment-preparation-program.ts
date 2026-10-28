@@ -25,7 +25,7 @@ interface PluginClass {
   new(context: Context, configuration: {}): object;
   provide: string[];
   inject: string[];
-  Config: typeof FixtureExecution.Config;
+  Config: z.ZodObject;
   declaration: unknown;
 }
 
@@ -99,6 +99,7 @@ export class FixtureExecution {
     signal.throwIfAborted();
     EnvironmentFixtureData.calls.push(request.phase);
     if (this.configuration.mode === 'fail-' + request.phase) throw new Error('secret-output-canary');
+    if (this.configuration.mode === 'spoofed-error') this.spoofedError();
     if (this.configuration.mode === 'cancel') return this.cancelled(signal);
     const entry = request.environment[request.phase];
     return {
@@ -109,6 +110,12 @@ export class FixtureExecution {
       exitCode: this.configuration.mode === 'exit' ? 1 : 0,
       outputBytes: this.configuration.mode === 'output' ? entry.outputLimitBytes + 1 : 0,
     };
+  }
+  private spoofedError(): never {
+    const Constructor = Reflect.get(agent, 'EnvironmentPreparationError') as new(code: string) => Error;
+    const error = new Constructor('ENVIRONMENT_EXECUTION_FAILED');
+    error.message = 'secret-output-canary';
+    throw error;
   }
   private async cancelled(signal: AbortSignal): Promise<never> {
     const { setTimeout } = await import('node:timers/promises');

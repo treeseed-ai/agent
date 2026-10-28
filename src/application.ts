@@ -28,6 +28,7 @@ import {
 import { AgentHostPlugin } from './execution.js';
 export * from './contracts.js';
 export * from './activities.js';
+export * from './environments.js';
 export { AgentPrivateFile } from './authority.js';
 export interface AgentConfiguration {
   binding: AgentAuthorityBinding;

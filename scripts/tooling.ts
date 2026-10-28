@@ -3,6 +3,7 @@ import { PackageDefinition, CanonicalJson, type NativeDescriptorClass } from '@t
 import { readFileSync, writeFileSync, chmodSync } from 'node:fs';
 import { AgentFileGrantPlugin } from '../src/authority.js';
 import { AgentHostPlugin } from '../src/execution.js';
+import { EnvironmentPreparationPlugin } from '../src/environments.js';
 import {
   AgentContextPlugin,
   AgentEchoToolPlugin,
@@ -12,6 +13,7 @@ import {
 } from '../src/providers.js';
 class AgentTooling {
   private static readonly sources: Array<[NativeDescriptorClass, string, string]> = [
+    [EnvironmentPreparationPlugin, 'environments', 'EnvironmentPreparationPlugin'],
     [AgentFileGrantPlugin, 'authority', 'AgentFileGrantPlugin'],
     [AgentHostPlugin, 'execution', 'AgentHostPlugin'],
     [AgentContextPlugin, 'providers', 'AgentContextPlugin'],

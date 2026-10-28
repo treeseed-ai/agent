@@ -19,7 +19,7 @@ class EnvironmentPreparationBoundaries {
     await this.blocked('fail-verification', ['setup', 'verification']);
   }
   async receipts(): Promise<void> {
-    for (const mode of ['foreign', 'entry', 'exit', 'output'])
+    for (const mode of ['foreign', 'entry', 'exit', 'output', 'spoofed-error'])
       await this.blocked(mode, ['setup']);
   }
   async policyDenial(): Promise<void> {

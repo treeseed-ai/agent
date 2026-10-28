@@ -1,3 +1,4 @@
+import { AgentPackageIdentity } from '../src/package-identity.js';
 import { createHash } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { SourcePolicy } from '@treeseed-cordis/sdk/source-policy';
@@ -8,6 +9,7 @@ import { AgentFileGrantPlugin } from '../src/authority.js';
 class AgentTooling {
   static run(): void {
     const metadata = JSON.parse(readFileSync('package.json', 'utf8'));
+    if (metadata.version !== AgentPackageIdentity.version) throw new Error('AGENT_PACKAGE_IDENTITY_DRIFT');
     const expected = metadata.cordisCandidate.sdk.sha256;
     const actual = createHash('sha256').update(readFileSync('vendor/sdk.tgz')).digest('hex');
     if (actual !== expected) throw new Error('AGENT_SDK_ARCHIVE_CHANGED');

@@ -23,7 +23,7 @@ class GuestProgramLauncher {
   }
   private prepare(): void {
     const manifest = JSON.parse(readFileSync('dist/bin/guest-runtime.json', 'utf8'));
-    const compressed = readFileSync('dist/bin/trsd-agent-guest.gz');
+    const compressed = this.compressed(manifest.compressed.parts);
     assert.equal(createHash('sha256').update(compressed).digest('hex'), manifest.compressed.sha256);
     const expanded = gunzipSync(compressed, { maxOutputLength: 128 * 1024 * 1024 });
     assert.equal(expanded.length, manifest.executable.size);
@@ -31,6 +31,18 @@ class GuestProgramLauncher {
     writeFileSync(this.file, expanded, { mode: 0o755 });
     mkdirSync(join(this.directory, 'empty'));
     this.ambientCanary();
+  }
+  private compressed(parts: { file: string; size: number; sha256: string }[]): Buffer {
+    const chunks = [];
+    for (const part of parts) {
+      assert.match(part.file, /^trsd-agent-guest\.[0-9]{3}\.gzpart$/);
+      const bytes = readFileSync(join('dist/bin', part.file));
+      assert(bytes.length <= 7 * 1024 * 1024);
+      assert.equal(bytes.length, part.size);
+      assert.equal(createHash('sha256').update(bytes).digest('hex'), part.sha256);
+      chunks.push(bytes);
+    }
+    return Buffer.concat(chunks);
   }
   private ambientCanary(): void {
     writeFileSync(join(this.directory, 'bunfig.toml'), 'preload = ["./ambient.ts"]\n');

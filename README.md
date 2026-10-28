@@ -6,23 +6,32 @@ Deployment owns bounded host/runtime operations; SDK owns portable contracts; AP
 coordination; Identity preserves Keycloak and existing control-plane authority. Real Work/model
 execution remains Task 10. No Agent root belongs inside Deployment's worker.
 
-This first bounded delivery restores the preserved draft's independent strict TypeScript build
-and public SDK development boundary before runtime slices. It consumes one exact immutable SDK
-archive through public exports, never another checkout's source. It introduces no running Agent
-service, productive handler, pool or team enrollment; those remain explicit runtime obligations.
+The native guest program and trusted assignment reader are implemented. Manager/worker services,
+real warm-pool orchestration, live team enrollment, seeds/CLI and final installed assembly remain
+required. Existing profile preparation and external-package proofs do not claim installed capacity.
 
-`bun run check` runs canonical method-size enforcement, test-layout/discovery and SDK-owned
-semantic class/import policy. `bun run build` compiles strict TypeScript and emits declarations.
-`bun run verify` then runs all four tier directories. Regression is honestly empty; real authority integration cases are now included; the retained setup helper creates those directories. Acceptance
-spawns the actual built Node consumer, and unit controls prove class/import policy denials.
+`bun run check` runs canonical method limits, test layout and semantic class/import policy.
+`bun run build` emits strict TypeScript/declarations plus `dist/bin/trsd-agent-guest`, using
+pinned Bun 1.4.4 and the Linux x64 GNU baseline target with ambient autoload disabled. The
+standalone program requires only its recorded GNU OS libraries, not Node/Bun on PATH.
+Run the developer artifact with `dist/bin/trsd-agent-guest --config /absolute/private/guest.json`.
+See [service programs](docs/service-programs.md) for exact configuration, SDK protocol, native
+provider seams and required installation boundaries.
 
-The build tool is development only and cannot establish sandbox isolation, authorization or a
-usable capacity provider. Future runtime code uses typed native Cordis providers and concise
-named capabilities. No production publication, original-system mutation or issue closure.
+The owner package transports the executable as 7 MiB gzip chunks with individual/aggregate hashes
+and a bounded expansion manifest. It passes accepted Deployment's public archive custody without
+changing its 8 MiB per-file / 64 MiB aggregate limits. This artifact must still run inside real
+Kata before claiming an installed runner. No package lifecycle script or host-side setup is used.
 
-The development SDK .27 source is `7eb60a4a68ca770f896e07d0e3d8d2324154e6e9`; archive
-SHA-256 is `ee30dbacf0e95d3fd9f88d097b15332c3dbf8020c3313c90e0a0578937a5d1df`.
-Build and check verify those archive bytes before consuming their public policy export.
+`bun run verify` checks/builds and runs all applicable tiers, including genuine owner archive custody
+and source-free standalone program acceptance with an empty tool PATH and ambient-preload canaries.
+Regression remains honestly empty. No production publication, legacy mutation or issue closure.
+
+Current SDK .37 source: `dce3108e061ecaf0cfa2915c03698f0e3170a67b`; archive SHA-256
+`886a9f359148a1aee49997de7e0604c65c87bf16c693d23781c5732f41990384`. Development-only
+Deployment .83 custody consumer: source `386a09c909d200176e7c0d324ca915a5503e6740`; archive
+`03956a2484bd14194c9bcac58178f8efcd77eb54760ef480204c441f048badfa`. These are exact public
+archives, never sibling source imports. Historical owner slices below retain their original pins.
 
 ## Native Agent probe-grant authority
 

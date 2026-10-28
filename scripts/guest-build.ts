@@ -1,5 +1,12 @@
 import { spawnSync } from 'node:child_process';
-import { readFileSync, writeFileSync, mkdirSync, chmodSync } from 'node:fs';
+import {
+  readFileSync,
+  writeFileSync,
+  mkdirSync,
+  chmodSync,
+  readdirSync,
+  unlinkSync,
+} from 'node:fs';
 import { createHash } from 'node:crypto';
 import { gzipSync } from 'node:zlib';
 /** Explicit development build only; never invoked by plugin acquisition or guest startup. */
@@ -67,11 +74,27 @@ class GuestBinaryBuild {
   private static identity(bytes: Buffer): { size: number; sha256: string } {
     return { size: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex') };
   }
+  private static clearParts(): void {
+    for (const file of readdirSync('dist/bin'))
+      if (/^trsd-agent-guest\.[0-9]{3}\.gzpart$/.test(file)) unlinkSync('dist/bin/' + file);
+  }
+  private static parts(bytes: Buffer): { file: string; size: number; sha256: string }[] {
+    this.clearParts();
+    const parts: { file: string; size: number; sha256: string }[] = [];
+    const limit = 7 * 1024 * 1024;
+    for (let offset = 0; offset < bytes.length; offset += limit) {
+      const file = 'trsd-agent-guest.' + String(parts.length).padStart(3, '0') + '.gzpart';
+      const part = bytes.subarray(offset, offset + limit);
+      writeFileSync('dist/bin/' + file, part, { mode: 0o644 });
+      parts.push({ file, ...this.identity(part) });
+    }
+    return parts;
+  }
   private static package(binary: Buffer): void {
     const compressed = gzipSync(binary, { level: 9 });
     if (compressed.length > 64 * 1024 * 1024)
       throw new Error('GUEST_COMPRESSED_ARTIFACT_TOO_LARGE');
-    writeFileSync(this.output + '.gz', compressed, { mode: 0o644 });
+    const parts = this.parts(compressed);
     const manifest = {
       schemaVersion: 'treeseed.guest-runtime/v1',
       compiler: 'bun@1.4.4',
@@ -80,7 +103,7 @@ class GuestBinaryBuild {
       architecture: 'amd64',
       interpreter: '/lib64/ld-linux-x86-64.so.2',
       requiredLibraries: this.libraries,
-      compressed: { file: 'trsd-agent-guest.gz', format: 'gzip', ...this.identity(compressed) },
+      compressed: { parts, format: 'gzip', ...this.identity(compressed) },
       executable: { mode: 0o755, ...this.identity(binary) },
     };
     writeFileSync('dist/bin/guest-runtime.json', JSON.stringify(manifest, null, 2) + '\n', {

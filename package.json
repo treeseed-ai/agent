@@ -1,6 +1,6 @@
 {
   "name": "@treeseed-cordis/agent",
-  "version": "0.0.0-cordis.17",
+  "version": "0.0.0-cordis.18",
   "private": true,
   "type": "module",
   "license": "Apache-2.0",
@@ -24,7 +24,8 @@
     "@types/bun": "1.4.4",
     "@types/node": "24.10.1",
     "prettier": "3.6.2",
-    "@treeseed-cordis/sdk": "file:vendor/sdk.tgz"
+    "@treeseed-cordis/sdk": "file:vendor/sdk.tgz",
+    "@treeseed-cordis/deployment": "file:vendor/deployment.tgz"
   },
   "description": "Native bounded probe grant authority; live team enrollment remains a separate capability.",
   "cordisCandidate": {
@@ -32,6 +33,11 @@
       "repository": "https://github.com/treeseed-ai/sdk.git",
       "commit": "dce3108e061ecaf0cfa2915c03698f0e3170a67b",
       "sha256": "886a9f359148a1aee49997de7e0604c65c87bf16c693d23781c5732f41990384"
+    },
+    "deployment": {
+      "repository": "https://github.com/treeseed-ai/deployment.git",
+      "commit": "386a09c909d200176e7c0d324ca915a5503e6740",
+      "sha256": "03956a2484bd14194c9bcac58178f8efcd77eb54760ef480204c441f048badfa"
     }
   },
   "exports": {
@@ -60,8 +66,8 @@
     "dist/src",
     "README.md",
     "LICENSE",
-    "dist/bin/trsd-agent-guest.gz",
-    "dist/bin/guest-runtime.json"
+    "dist/bin/guest-runtime.json",
+    "dist/bin/*.gzpart"
   ],
   "peerDependencies": {
     "@treeseed-cordis/sdk": "0.0.0-cordis.37"
@@ -72,7 +78,7 @@
     "pluginId": "agent",
     "package": {
       "name": "@treeseed-cordis/agent",
-      "version": "0.0.0-cordis.17"
+      "version": "0.0.0-cordis.18"
     },
     "providers": [
       {

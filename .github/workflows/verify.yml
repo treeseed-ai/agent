@@ -44,15 +44,7 @@ jobs:
           run-id: 38647918411
           name: cli-6e2579428f4959906cd5b9b669ebbb2b44cb495c
           path: .treeseed/tools/cli-candidate
-      - name: Read original checked Deployment SDK build input
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
-        with:
-          github-token: ${{ github.token }}
-          repository: treeseed-ai/sdk
-          run-id: 37451351249
-          name: sdk-cbc03314871d271bce7275c5cee71d950397a0c3
-          path: .treeseed/tools/deployment-build-sdk
-      - name: Install checked CLI input and original Deployment SDK build input
+      - name: Install checked CLI input
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -60,12 +52,6 @@ jobs:
           test "$(gh api repos/treeseed-ai/cli/actions/runs/38647918411 --jq '[.head_sha,.status,.conclusion]|join(" ")')" == '2b27d26c23905423d90c73abb24c888c452a8745 completed success'
           echo '49b6d24882af45ba39fd46cdcd999c9c54e84bd416f834fa0042ec5425dbea1a  .treeseed/tools/cli-candidate/treeseed-cli-0.13.0-rc.85.tgz' | sha256sum --check --strict
           npm install --no-save --package-lock=false --ignore-scripts --no-audit --no-fund ./.treeseed/tools/cli-candidate/treeseed-cli-0.13.0-rc.85.tgz
-          test "$(gh api repos/treeseed-ai/sdk/actions/runs/37451351249 --jq '[.head_sha,.status,.conclusion]|join(" ")')" == 'cbc03314871d271bce7275c5cee71d950397a0c3 completed success'
-          echo 'ef262c2a69fdbd53cea81b60f21817275df0a0a6d40af7df32c4405b6f724e47  .treeseed/tools/deployment-build-sdk/treeseed-sdk-0.13.0-rc.122.tgz' | sha256sum --check --strict
-          rm -rf node_modules/@treeseed/deployment/node_modules/@treeseed/sdk
-          mkdir -p node_modules/@treeseed/deployment/node_modules/@treeseed/sdk
-          tar -xzf .treeseed/tools/deployment-build-sdk/treeseed-sdk-0.13.0-rc.122.tgz --strip-components=1 -C node_modules/@treeseed/deployment/node_modules/@treeseed/sdk
-          npm install --prefix node_modules/@treeseed/deployment/node_modules/@treeseed/sdk --omit=dev --ignore-scripts --package-lock=false --no-save --no-audit --no-fund
       - uses: treeseed-ai/sdk/.github/actions/install-exact-sdk@ab5ad06894610c5566aa32bbffc7c027a4e3f4ce
         env:
           NODE_ENV: production
@@ -122,7 +108,7 @@ jobs:
         {"owner":"api","commit":"18c53846a4c85dc143511449b0a213f57196a74a","sha256":"1469153a030e8904807038fb69ca2385705a78149225aaa8c07676b8793a6fef","buildSdk":{"commit":"952195376b53bf39742e64f320f2a3b109cc77c0","sha256":"7ba46c788578f526692e81f3713f05e7c00db900b2d810ec27364cb41c008185"},"buildTreeDx":{"commit":"6d358bb2e536af24918f3c33acb2072b9093a603","sha256":"d6de27b42704b4c899562f290950561132fd0d48f38a95e6624eb853e32691cb"}},
         {"owner":"sdk","commit":"379fd0684375609601605edb3aac2c091ae0aa33","sha256":"df9bb10a77e0833e6a2d774c50b5d9c5ff8c7b22ef3017b5590a74d04b619e32"},
         {"owner":"cli","commit":"6e2579428f4959906cd5b9b669ebbb2b44cb495c","sha256":"49b6d24882af45ba39fd46cdcd999c9c54e84bd416f834fa0042ec5425dbea1a"},
-        {"owner":"deployment","commit":"fbb3046847f074e004f4bc82c8c842feecadc5fa","sha256":"435b3393b0168fee48d7c8d128763458edf2c5a84b8f032c5a6100800e1c2d2e","buildSdk":{"commit":"cbc03314871d271bce7275c5cee71d950397a0c3","sha256":"ef262c2a69fdbd53cea81b60f21817275df0a0a6d40af7df32c4405b6f724e47"}},
+        {"owner":"deployment","commit":"0c83197373c60a208431315756a26d866f319d9b","sha256":"09545da80f0f8c59549adc4be13270f6793c6e69a2da57f2a754db80622b8761","buildSdk":{"commit":"8e07d9adaf45ff75e9ea16de691b90d182aa30f8","sha256":"3d4cf536be0e5061485e0e07289cf849166df76cc4aecb1af457e84ce0c40dc9"}},
         {"owner":"reviewer","commit":"762725d3794b9f5b3128c1584d3a17495ab6a368","sha256":"e402cbde62812cc8c0d31a9dadc4e4c89bf8c4997e6f2e30870e7eb64b8c2627","buildSdk":{"commit":"77a6908d4e7580716e9e2ab92de80150b02cdb06","sha256":"a31b02194665e8705e8d81331da0901f4088f54deb50a34c236d3a661d2d1aa7"}}
         ]
     steps:
@@ -177,17 +163,17 @@ jobs:
         with:
           github-token: ${{ github.token }}
           repository: treeseed-ai/deployment
-          run-id: 40593520279
-          name: deployment-release-fbb3046847f074e004f4bc82c8c842feecadc5fa
+          run-id: 40608156441
+          name: deployment-release-0c83197373c60a208431315756a26d866f319d9b
           path: .treeseed/installed-owner-inputs/deployment
       - name: Read held Deployment SDK build archive
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
           github-token: ${{ github.token }}
           repository: treeseed-ai/sdk
-          run-id: 37451351249
-          name: sdk-cbc03314871d271bce7275c5cee71d950397a0c3
-          path: .treeseed/installed-owner-inputs/build-sdk-cbc03314871d271bce7275c5cee71d950397a0c3
+          run-id: 40047402846
+          name: sdk-8e07d9adaf45ff75e9ea16de691b90d182aa30f8
+          path: .treeseed/installed-owner-inputs/build-sdk-8e07d9adaf45ff75e9ea16de691b90d182aa30f8
       - name: Read held reviewer archive
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:

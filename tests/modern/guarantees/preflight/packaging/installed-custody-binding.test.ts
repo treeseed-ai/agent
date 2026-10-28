@@ -52,17 +52,17 @@ describe('capacity-provider guarantee execution bindings', () => {
             .toEqual([{ 'github-token': '${{ github.token }}', repository: 'treeseed-ai/sdk', 'run-id': 40271189010,
                 name: `sdk-${agentSdk.commit}`, path: `.treeseed/installed-owner-inputs/build-sdk-${agentSdk.commit}` }]);
         const deploymentSdk = inputs.find((value: { owner: string }) => value.owner === 'deployment').buildSdk;
-        expect(deploymentSdk).toEqual({ commit: 'cbc03314871d271bce7275c5cee71d950397a0c3', sha256: 'ef262c2a69fdbd53cea81b60f21817275df0a0a6d40af7df32c4405b6f724e47' });
+        expect(deploymentSdk).toEqual({ commit: '8e07d9adaf45ff75e9ea16de691b90d182aa30f8', sha256: '3d4cf536be0e5061485e0e07289cf849166df76cc4aecb1af457e84ce0c40dc9' });
         expect(native.steps.filter((step: { with?: { path?: string } }) =>
             step.with?.path === `.treeseed/installed-owner-inputs/build-sdk-${deploymentSdk.commit}`).map((step: { with: unknown }) => step.with))
-            .toEqual([{ 'github-token': '${{ github.token }}', repository: 'treeseed-ai/sdk', 'run-id': 37451351249,
+            .toEqual([{ 'github-token': '${{ github.token }}', repository: 'treeseed-ai/sdk', 'run-id': 40047402846,
                 name: `sdk-${deploymentSdk.commit}`, path: `.treeseed/installed-owner-inputs/build-sdk-${deploymentSdk.commit}` }]);
 
 		expect(inputs.find((value:{owner:string})=>value.owner==='reviewer')).toMatchObject({"commit":"762725d3794b9f5b3128c1584d3a17495ab6a368","sha256":"e402cbde62812cc8c0d31a9dadc4e4c89bf8c4997e6f2e30870e7eb64b8c2627"});
 		expect(native.steps.filter((step:{with?:{repository?:string;path?:string}})=>step.with?.repository==='treeseed-ai/reviewer'&&step.with?.path==='.treeseed/installed-owner-inputs/reviewer').map((step:{with:unknown})=>step.with)).toEqual([{"github-token":"${{ github.token }}","repository":"treeseed-ai/reviewer","run-id":38998444210,"name":"reviewer-762725d3794b9f5b3128c1584d3a17495ab6a368","path":".treeseed/installed-owner-inputs/reviewer"}]);
 		expect(workflow.jobs.verify.steps.filter((step:{uses?:string})=>step.uses?.startsWith('treeseed-ai/reviewer/.github/actions/run-scenes@')).map((step:{uses:string})=>step.uses)).toEqual(["treeseed-ai/reviewer/.github/actions/run-scenes@d42b257097d969e0ce96a154bda31344a352a50e"]);
-        expect(inputs.find((value:{owner:string})=>value.owner==='deployment')).toMatchObject({commit:'fbb3046847f074e004f4bc82c8c842feecadc5fa',sha256:'435b3393b0168fee48d7c8d128763458edf2c5a84b8f032c5a6100800e1c2d2e'});
-        expect(native.steps.filter((step:{with?:{repository?:string;path?:string}})=>step.with?.repository==='treeseed-ai/deployment'&&step.with?.path==='.treeseed/installed-owner-inputs/deployment').map((step:{with:unknown})=>step.with)).toEqual([{'github-token':'${{ github.token }}',repository:'treeseed-ai/deployment','run-id':40593520279,name:'deployment-release-fbb3046847f074e004f4bc82c8c842feecadc5fa',path:'.treeseed/installed-owner-inputs/deployment'}]);
+        expect(inputs.find((value:{owner:string})=>value.owner==='deployment')).toMatchObject({commit:'0c83197373c60a208431315756a26d866f319d9b',sha256:'09545da80f0f8c59549adc4be13270f6793c6e69a2da57f2a754db80622b8761'});
+        expect(native.steps.filter((step:{with?:{repository?:string;path?:string}})=>step.with?.repository==='treeseed-ai/deployment'&&step.with?.path==='.treeseed/installed-owner-inputs/deployment').map((step:{with:unknown})=>step.with)).toEqual([{'github-token':'${{ github.token }}',repository:'treeseed-ai/deployment','run-id':40608156441,name:'deployment-release-0c83197373c60a208431315756a26d866f319d9b',path:'.treeseed/installed-owner-inputs/deployment'}]);
         expect(inputs.find((value:{owner:string})=>value.owner==='sdk')).toMatchObject({commit:'379fd0684375609601605edb3aac2c091ae0aa33',sha256:'df9bb10a77e0833e6a2d774c50b5d9c5ff8c7b22ef3017b5590a74d04b619e32'});
         for(const [owner,runId] of [['api',39009778325],['cli',38647918411],['sdk',38970276890]] as const){
             const input=inputs.find((value:{owner:string})=>value.owner===owner);

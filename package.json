@@ -1,6 +1,6 @@
 {
   "name": "@treeseed-cordis/agent",
-  "version": "0.0.0-cordis.1",
+  "version": "0.0.0-cordis.3",
   "private": true,
   "type": "module",
   "license": "Apache-2.0",
@@ -10,8 +10,8 @@
   },
   "scripts": {
     "check:test-layout": "bun .agents/skills/release-workflow/scripts/test-layout.ts",
-    "check": "bun run check:readability && bun run check:test-layout",
-    "build": "tsc --strict --noUncheckedIndexedAccess --noEmit --module nodenext --target es2022 --skipLibCheck --types bun,node tests/acceptance/source-readability.test.ts .agents/skills/release-workflow/scripts/source-readability.ts",
+    "check": "bun run check:readability && bun run check:test-layout && bun scripts/tooling.ts check",
+    "build": "bun scripts/tooling.ts build",
     "test:acceptance": "bun test ./tests/acceptance --pass-with-no-tests",
     "test:regression": "bun test ./tests/regression --pass-with-no-tests",
     "test:integration": "bun test ./tests/integration --pass-with-no-tests",
@@ -23,7 +23,73 @@
     "typescript": "5.9.3",
     "@types/bun": "1.4.4",
     "@types/node": "24.10.1",
-    "prettier": "3.6.2"
+    "prettier": "3.6.2",
+    "@treeseed-cordis/sdk": "file:vendor/sdk.tgz"
   },
-  "description": "Development policy qualification only; regression, integration and unit tiers remain empty until Agent implementation."
+  "description": "Native guest environment preparation; qualified sandbox execution remains an explicit integration gate.",
+  "cordisCandidate": {
+    "sdk": {
+      "repository": "https://github.com/treeseed-ai/sdk.git",
+      "commit": "eabe9b892ad1d2f73ef4ea75405965c3c9cc3cee",
+      "sha256": "b06c943463c3aa87d8e4101088e355af487aefbac67aa99c4947b3040872a321"
+    }
+  },
+  "exports": {
+    "./environments": {
+      "types": "./dist/src/environments.d.ts",
+      "default": "./dist/src/environments.js"
+    }
+  },
+  "files": [
+    "dist/src",
+    "README.md",
+    "LICENSE"
+  ],
+  "peerDependencies": {
+    "@treeseed-cordis/sdk": "0.0.0-cordis.28"
+  },
+  "cordisPackage": {
+    "formatVersion": 4,
+    "contractVersion": "0.4.0-cordis.1",
+    "pluginId": "agent",
+    "package": {
+      "name": "@treeseed-cordis/agent",
+      "version": "0.0.0-cordis.3"
+    },
+    "providers": [
+      {
+        "declaration": {
+          "id": "agent.environment.preparation",
+          "pluginId": "agent",
+          "capability": "agent.environment",
+          "contractVersion": "0.4.0-cordis.1",
+          "target": "agent",
+          "provide": [
+            "agent.environment"
+          ],
+          "inject": [
+            "cordis.composition",
+            "agent.environment.authority",
+            "agent.environment.execution"
+          ]
+        },
+        "entry": "dist/src/environments.js",
+        "classExport": "EnvironmentPreparationPlugin",
+        "configurationSchema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        },
+        "replacement": {
+          "kind": "restart",
+          "stateVersion": 1,
+          "qualificationDigest": null
+        },
+        "commandIds": []
+      }
+    ],
+    "assets": [],
+    "images": []
+  }
 }

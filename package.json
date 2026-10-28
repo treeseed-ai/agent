@@ -1,6 +1,6 @@
 {
   "name": "@treeseed-cordis/agent",
-  "version": "0.0.0-cordis.1",
+  "version": "0.0.0-cordis.5",
   "private": true,
   "type": "module",
   "license": "Apache-2.0",
@@ -26,12 +26,116 @@
     "prettier": "3.6.2",
     "@treeseed-cordis/sdk": "file:vendor/sdk.tgz"
   },
-  "description": "Independent Agent development build; runtime composition is delivered in subsequent owner slices.",
+  "description": "Native bounded probe grant authority; live team enrollment remains a separate capability.",
   "cordisCandidate": {
     "sdk": {
       "repository": "https://github.com/treeseed-ai/sdk.git",
       "commit": "7eb60a4a68ca770f896e07d0e3d8d2324154e6e9",
       "sha256": "ee30dbacf0e95d3fd9f88d097b15332c3dbf8020c3313c90e0a0578937a5d1df"
     }
+  },
+  "exports": {
+    "./authority": {
+      "types": "./dist/src/authority.d.ts",
+      "default": "./dist/src/authority.js"
+    }
+  },
+  "files": [
+    "dist/src",
+    "README.md",
+    "LICENSE"
+  ],
+  "peerDependencies": {
+    "@treeseed-cordis/sdk": "0.0.0-cordis.27"
+  },
+  "cordisPackage": {
+    "formatVersion": 4,
+    "contractVersion": "0.4.0-cordis.1",
+    "pluginId": "agent",
+    "package": {
+      "name": "@treeseed-cordis/agent",
+      "version": "0.0.0-cordis.5"
+    },
+    "providers": [
+      {
+        "declaration": {
+          "id": "agent.authority.private-file",
+          "pluginId": "agent",
+          "capability": "agent.authority",
+          "contractVersion": "0.4.0-cordis.1",
+          "target": "agent",
+          "provide": [
+            "agent.authority"
+          ],
+          "inject": []
+        },
+        "entry": "dist/src/authority.js",
+        "classExport": "AgentFileGrantPlugin",
+        "configurationSchema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {
+            "file": {
+              "type": "string"
+            },
+            "binding": {
+              "type": "object",
+              "properties": {
+                "scopeId": {
+                  "type": "string",
+                  "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$"
+                },
+                "principalId": {
+                  "type": "string",
+                  "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$"
+                },
+                "resourceScope": {
+                  "type": "string",
+                  "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$"
+                },
+                "grantId": {
+                  "type": "string",
+                  "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$"
+                },
+                "grantRevision": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 9007199254740991
+                },
+                "state": {
+                  "type": "string",
+                  "enum": [
+                    "granted",
+                    "revoked"
+                  ]
+                }
+              },
+              "required": [
+                "scopeId",
+                "principalId",
+                "resourceScope",
+                "grantId",
+                "grantRevision",
+                "state"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "file",
+            "binding"
+          ],
+          "additionalProperties": false
+        },
+        "replacement": {
+          "kind": "restart",
+          "stateVersion": 1,
+          "qualificationDigest": null
+        },
+        "commandIds": []
+      }
+    ],
+    "assets": [],
+    "images": []
   }
 }

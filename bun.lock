@@ -11,6 +11,9 @@
         "prettier": "3.6.2",
         "typescript": "5.9.3",
       },
+      "peerDependencies": {
+        "@treeseed-cordis/sdk": "0.0.0-cordis.27",
+      },
     },
   },
   "packages": {

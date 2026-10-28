@@ -27,11 +27,24 @@ Kata before claiming an installed runner. No package lifecycle script or host-si
 and source-free standalone program acceptance with an empty tool PATH and ambient-preload canaries.
 Regression remains honestly empty. No production publication, legacy mutation or issue closure.
 
-Current SDK .37 source: `dce3108e061ecaf0cfa2915c03698f0e3170a67b`; archive SHA-256
-`886a9f359148a1aee49997de7e0604c65c87bf16c693d23781c5732f41990384`. Development-only
-Deployment .83 custody consumer: source `386a09c909d200176e7c0d324ca915a5503e6740`; archive
-`03956a2484bd14194c9bcac58178f8efcd77eb54760ef480204c441f048badfa`. These are exact public
-archives, never sibling source imports. Historical owner slices below retain their original pins.
+Current SDK .39 source: `f09247dbf020f0354edce9af2f9ccef6ba351ff3`; archive SHA-256
+`ddfb91a065bee6d7e9482427570e7c036b18f0fbbcaa09c0fc62fee094abdbd4`. Development-only
+Deployment .88 custody consumer: source `c207f730d3302c0cb926fd746295b720a96cf22b`; archive
+`6bd2ee05e5c705e65aca703be1ff1d4faa725578689e1c7a808a789163d16b78`. These accepted public
+archives select one SDK version throughout the build/audit closure. The build admits its payload
+manifest through SDK's GuestRuntimeBinding before publication. Historical slices below retain
+their original pins; no sibling source import or unaccepted Deployment runtime is consumed.
+
+## Shared guest payload contract
+
+The current producer selects accepted SDK .39 and validates every generated standalone manifest
+through GuestRuntimeBinding, including consecutive 7 MiB parts, aggregate size and the exact GNU
+library set. The accepted Deployment .88 development auditor selects the same SDK peer. Only
+these public immutable owner archives are installed; the Agent runtime dependency remains SDK,
+and no Deployment implementation is bundled into its guest. Keep full Node/standalone contracts,
+empty-tool-path and ambient-preload canaries, archive limits and native generation read-back.
+This aligns owner contracts before actual guest sessions; it creates no capacity or authority.
+All issues remain open and real Work/model execution remains Task 10.
 
 ## Native Agent probe-grant authority
 
@@ -190,9 +203,9 @@ Preparation is exposed through the existing Agent public root. Genuine external 
 now qualify that boundary; current native fixtures remain explicitly component controls.
 No handler execution, live authority, seed activation or Kata capacity is claimed.
 
-## Private worker sandbox contract selection
+## Historical private worker sandbox contract selection
 
-The Agent development closure selects SDK .37 from reviewed source
+The earlier Agent development closure selected SDK .37 from reviewed source
 `dce3108e061ecaf0cfa2915c03698f0e3170a67b`; archive SHA-256
 `886a9f359148a1aee49997de7e0604c65c87bf16c693d23781c5732f41990384`.
 The peer, frozen lock, installed package and portable sandbox-control schema must agree.

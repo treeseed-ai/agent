@@ -4,6 +4,8 @@
 
 ### Added
 
+- Validate standalone guest payloads through the shared exact SDK and Deployment audit closure (#525).
+
 - Package a source-free standalone guest executable for offline sandbox integration (#525).
 
 - Run a separate native capacity guest program with trusted single-assignment admission (#525).

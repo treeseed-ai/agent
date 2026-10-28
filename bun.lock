@@ -17,7 +17,7 @@
         "typescript": "5.9.3",
       },
       "peerDependencies": {
-        "@treeseed-cordis/sdk": "0.0.0-cordis.37",
+        "@treeseed-cordis/sdk": "0.0.0-cordis.39",
       },
     },
   },
@@ -26,9 +26,9 @@
 
     "@standard-schema/spec": ["@standard-schema/spec@1.1.0", "", {}, "sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w=="],
 
-    "@treeseed-cordis/deployment": ["@treeseed-cordis/deployment@vendor/deployment.tgz", { "dependencies": { "ajv": "8.17.1", "ajv-formats": "3.0.1", "cordis": "4.0.0-rc.12", "jsonc-parser": "3.3.1", "postgres": "3.4.9", "semver": "7.8.5", "tar": "7.5.22", "zod": "4.6.7" }, "peerDependencies": { "@treeseed-cordis/sdk": "0.0.0-cordis.37" } }, "sha512-RFhG/BbCh2SBfh0q0kdPkVmf2jxWJG3fu4bVGpW1zXL9rzsMvga8jiuV54qiKyRQmDS6HycG/ymIl5ZVmzc5qQ=="],
+    "@treeseed-cordis/deployment": ["@treeseed-cordis/deployment@vendor/deployment.tgz", { "dependencies": { "ajv": "8.17.1", "ajv-formats": "3.0.1", "cordis": "4.0.0-rc.12", "jsonc-parser": "3.3.1", "postgres": "3.4.9", "semver": "7.8.5", "tar": "7.5.22", "zod": "4.6.7" }, "peerDependencies": { "@treeseed-cordis/sdk": "0.0.0-cordis.39" } }, "sha512-CVOsS7vC6fCgR8UIZYIJUyqWankFm596Y76z/vbhqs2p8VSlq+j4KbSRJpZuiJip6BlsC3B2LtYvA5cg5z+xgw=="],
 
-    "@treeseed-cordis/sdk": ["@treeseed-cordis/sdk@vendor/sdk.tgz", { "dependencies": { "cordis": "4.0.0-rc.12", "jsonc-parser": "3.3.1", "semver": "7.8.5", "zod": "4.6.7" } }, "sha512-JDRvdQ8xNyPhijvBc2GfBtEYtyp5DU6n+1YzGNXDYQRf0Jkm/tyxBEwWsjbQcOgtjA0CHw8qUUjm4PKEHXQ4+Q=="],
+    "@treeseed-cordis/sdk": ["@treeseed-cordis/sdk@vendor/sdk.tgz", { "dependencies": { "cordis": "4.0.0-rc.12", "jsonc-parser": "3.3.1", "semver": "7.8.5", "zod": "4.6.7" } }, "sha512-nWPhVXLdQL+YaAX4EXiYKBrFvtHN6Im4V9WeMhdrewSay7aXHkbE48JvsvnVShxCMCX54uzHpurHRlkZCHLVGg=="],
 
     "@types/bun": ["@types/bun@1.4.4", "", { "dependencies": { "bun-types": "1.4.4" } }, "sha512-9wkRDXUXK124pEnAutE6n/l18j+i9GC5IAHK8TmX/2nlySETmky0OU6yL5U8pW1AoKh++AN9auDCr647BfurjQ=="],
 

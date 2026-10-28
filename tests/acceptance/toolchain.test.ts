@@ -6,6 +6,7 @@ import { createHash } from 'node:crypto';
 import { expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync, mkdtempSync } from 'node:fs';
+import * as sdk from '@treeseed-cordis/sdk/portable';
 
 class AgentToolchainAcceptance {
   compiled(): void {
@@ -38,6 +39,13 @@ test(
 );
 
 class StandaloneGuestAcceptance {
+  manifest(): void {
+    const binding = Reflect.get(sdk, 'GuestRuntimeBinding');
+    assert.equal(typeof binding, 'function', 'shared guest payload admission must be selected');
+    const input = JSON.parse(readFileSync('dist/bin/guest-runtime.json', 'utf8'));
+    assert.deepEqual(binding.assert(input), input);
+    assert.throws(binding.assert.bind(binding, { ...input, compiler: 'bun@latest' }));
+  }
   async archive(): Promise<void> {
     this.selection();
     const directory = mkdtempSync(join(tmpdir(), 'guest-owner-archive-'));
@@ -73,13 +81,13 @@ class StandaloneGuestAcceptance {
       readFileSync('node_modules/@treeseed-cordis/deployment/package.json', 'utf8'),
     );
     const hash = createHash('sha256').update(readFileSync('vendor/deployment.tgz')).digest('hex');
-    assert.equal(hash, '03956a2484bd14194c9bcac58178f8efcd77eb54760ef480204c441f048badfa');
+    assert.equal(hash, '6bd2ee05e5c705e65aca703be1ff1d4faa725578689e1c7a808a789163d16b78');
     assert.equal(metadata.cordisCandidate.deployment.sha256, hash);
     assert.equal(
       metadata.cordisCandidate.deployment.commit,
-      '386a09c909d200176e7c0d324ca915a5503e6740',
+      'c207f730d3302c0cb926fd746295b720a96cf22b',
     );
-    assert.equal(installed.version, '0.0.0-cordis.83');
+    assert.equal(installed.version, '0.0.0-cordis.88');
   }
   programs(): void {
     for (const mode of [
@@ -101,6 +109,10 @@ class StandaloneGuestAcceptance {
   }
 }
 const standalone = new StandaloneGuestAcceptance();
+test(
+  'acceptance: built standalone Agent payload agrees with shared portable SDK admission',
+  standalone.manifest.bind(standalone),
+);
 test(
   'acceptance: source-free standalone guest passes the full program contract with no developer tools or ambient preload',
   standalone.programs.bind(standalone),

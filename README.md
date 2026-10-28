@@ -180,3 +180,13 @@ isolated validator execution, enrollment or a real Kata workload.
 Preparation is exposed through the existing Agent public root. Genuine external archive controls
 now qualify that boundary; current native fixtures remain explicitly component controls.
 No handler execution, live authority, seed activation or Kata capacity is claimed.
+
+## Private worker sandbox contract selection
+
+The Agent development closure selects SDK .36 from reviewed source
+`0ae4f3973672e5c66ee021e7748c2ea73f7cb21c`; archive SHA-256
+`04cea0518a3d64228cfbdad73a357d18cc7040e4bc7a122833dddd9de96ed000`.
+The peer, frozen lock, installed package and portable sandbox-control schema must agree.
+This prepares the worker's SDK-owned logical sandbox client without granting host access or
+implementing an in-process substitute for Deployment. The seven platform operation IDs stay
+unchanged. Separate programs, real pool/session integration and installed grants remain required.

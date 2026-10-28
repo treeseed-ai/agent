@@ -10,10 +10,10 @@ services, the real warm pool, seed reconciliation and live enrollment are still 
 these probe interfaces alone do not deliver or qualify that system.
 
 Development integration consumes exact public owner archives, with one SDK version in the
-closure: SDK `0.0.0-cordis.19` from `90cf4f3cc62e166685280450c727499defd2af5b`
-(`93dd549c98aba180306e9b19cc1cbc37494544b2764ed341c531c9af618c6f81`) and UI
-`0.0.0-cordis.18` from `e2b9c5e10611c196834fd57ba5358a74304e373c`
-(`d09e6ed33f7f1bc2f7210208a94f33bbd2a6453d8fe886f75a1f950887223e48`).
+closure: SDK `0.0.0-cordis.22` from `c4f7849d402fc60bd1ee8274f647dac71a45b76e`
+(`dc9a91c26b12180a6dd003a8f7b56e1bc76c19c48fde42feaa0026765dd6583f`) and UI
+`0.0.0-cordis.19` from `1dd048ddbcb55124840b94e843e1ed1b5fa8ba2b`
+(`cc78d9a007d9c2bb077f709d6ab72ef2d4861a52ef78d310cea3680d28bf4ec2`).
 UI remains optional for headless library construction and required for human program rendering.
 Neither archive provides team authority, working Kata capacity or seed activation by itself.
 

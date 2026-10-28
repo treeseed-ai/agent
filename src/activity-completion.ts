@@ -116,7 +116,7 @@ export const maximumVerificationCommands = 8;
 export const maximumVerificationCommandLength = 4096;
 
 export function activityCompletionOutputSchema(frontmatterSchema?: Record<string, unknown>, allowVerification = true,
-	outputVariants?: Array<{ model: string; frontmatter: Record<string, unknown> }>, reviewing = false) { return {
+	outputVariants?: Array<{ model: string; frontmatter: Record<string, unknown> }>, reviewing = false, contentOptional = false) { return {
 	type: 'object',
 	additionalProperties: false,
 	required: ['schemaVersion', 'summary', 'verification', 'reviewDisposition', 'contentOutput'],
@@ -142,13 +142,12 @@ export function activityCompletionOutputSchema(frontmatterSchema?: Record<string
 		reviewDisposition: reviewing
 			? { type: 'string', enum: ['approved', 'rejected', 'revision-required'] }
 			: { type: 'null' },
-		// Exact output variants are supplied only for acting TreeDX Writer assignments.
-		// Requiring one here prevents the provider from satisfying the transport schema
-		// with null and failing later at the AgentKernel commit boundary.
-		contentOutput: outputVariants?.length ? { anyOf: outputVariants.map(({ model, frontmatter }) => ({
+		// Acting and estimating require their exact governed product. Planning and
+		// reporting may instead retain a summary Note through the same commit path.
+		contentOutput: outputVariants?.length ? { anyOf: [...(contentOptional ? [{ type: 'null' }] : []), ...outputVariants.map(({ model, frontmatter }) => ({
 			type: 'object', additionalProperties: false, required: ['model', 'body', 'frontmatter'],
 			properties: { model: { type: 'string', const: model }, body: { type: 'string', minLength: 1 }, frontmatter },
-		})) } : frontmatterSchema ? {
+		}))] } : frontmatterSchema ? {
 			anyOf: [{ type: 'null' }, {
 					type: 'object', additionalProperties: false,
 					required: ['model', 'body', 'frontmatter'],

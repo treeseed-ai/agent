@@ -72,7 +72,7 @@ export function completionFrontmatterSchema(context: Record<string, unknown>) {
 		const proposal = assignmentProposalSource(record(context.canonicalAssignmentContext));
 		return estimateProposalOutputSchema(proposal, assignment);
 	}
-	if (text(profile.activity) !== 'acting' || text(record(assignment.workspace).mode) !== 'treedx') return undefined;
+	if (!['planning', 'acting', 'reporting'].includes(text(profile.activity)) || text(record(assignment.workspace).mode) !== 'treedx') return undefined;
 	const grants = record(assignment.grant).contentWrite;
 	const models = [...new Set((Array.isArray(grants) ? grants : []).map(reference => text(record(reference).model)))];
 	return models.length ? { anyOf: models.map(model => {
@@ -87,7 +87,7 @@ export function completionOutputTargetVariants(context: Record<string, unknown>)
 		const proposal = assignmentProposalSource(record(context.canonicalAssignmentContext));
 		return [{ model: 'proposal', frontmatter: estimateProposalOutputSchema(proposal, assignment) }];
 	}
-	if (text(profile.activity) !== 'acting' || text(record(assignment.workspace).mode) !== 'treedx') return [];
+	if (!['planning', 'acting', 'reporting'].includes(text(profile.activity)) || text(record(assignment.workspace).mode) !== 'treedx') return [];
 	const grants = record(assignment.grant).contentWrite;
 	return (Array.isArray(grants) ? grants : []).map(record)
 		.filter((target) => text(target.id))

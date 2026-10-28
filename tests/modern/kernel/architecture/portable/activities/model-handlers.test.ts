@@ -40,6 +40,26 @@ function input(activity: typeof activities[number], handler: string) {
 }
 
 describe('nondeterministic handlers support all configured activities', () => {
+	it.each(handlers.map(Handler => [new Handler().id, Handler] as const))('publishes an authorized planning proposal through %s without replacing it with a Note', async (id, Handler) => {
+		const handler = new Handler(), { context, boundary } = input('planning', id);
+		const target = context.assignment.grant.contentWrite.find(reference => reference.model === 'proposal')!;
+		const frontmatter = { schemaVersion: 'treeseed.proposal/v2', id: target.id, projectId: context.assignment.projectId,
+			groupIds: ['provider-runtime'], title: 'Preserve authorized TreeDX read scopes', status: 'discussing',
+			request: 'Deliver the group-discussed source-read repair through the shared backend.',
+			summary: 'The group will supply its own contributions and estimates.' };
+		const body = 'Retain the discussed objective and let every subscribed contributor estimate its own work.';
+		vi.mocked(boundary.invokeModel).mockResolvedValue({ text: 'Proposed the discussed repair.',
+			timingAwareness: assignmentTimingAwarenessReceiptSchema.parse(timingAwareness), usage: { elapsedSeconds: 1 },
+			activityCompletion: { summary: 'Proposed the discussed repair.', reviewDisposition: null,
+				contentOutput: { model: 'proposal', body, frontmatter } } });
+		const before = structuredClone(context);
+		const result = await handler.run(context, boundary);
+		expect(boundary.commitTreeDx).toHaveBeenCalledExactlyOnceWith({ writes: [{ target, value: { body, frontmatter } }] });
+		expect(result.references).toEqual([expect.objectContaining({ kind: 'treedx', repository: target.repository, path: target.path })]);
+		expect(result.summary).toContain('Proposed the discussed repair.');
+		expect(boundary.commitSource).not.toHaveBeenCalled();
+		expect(context).toEqual(before);
+	});
 	it('commits each group subscriber own V2 contribution through every configured model handler and retains peer scopes', async () => {
 		for (const Handler of handlers) {
 			const handler = new Handler(), { context, boundary } = input('estimating', handler.id), assignment = context.assignment;
@@ -83,6 +103,27 @@ describe('nondeterministic handlers support all configured activities', () => {
 			context.assignment.grant.contentWrite = context.assignment.grant.contentWrite.filter(ref => ref.model !== 'note');
 			await expect(handler.run(context, boundary)).rejects.toThrow('review_finding_commit_grant_required');
 			expect(boundary.commitTreeDx).not.toHaveBeenCalled();
+		}
+	});
+	it('retains explicitly granted reporting products without allowing them to bypass review dispositions', async () => {
+		for (const Handler of handlers) {
+			const handler = new Handler();
+			for (const activity of ['reporting', 'reviewing'] as const) {
+				const { context, boundary } = input(activity, handler.id);
+				const target = context.assignment.grant.contentWrite.find(reference => reference.model === 'proposal')!;
+				const output = { model: 'proposal', body: 'Governed reporting product.', frontmatter: { id: target.id } };
+				const original = await boundary.invokeModel({ prompt: '', context: [] });
+				vi.mocked(boundary.invokeModel).mockClear();
+				vi.mocked(boundary.invokeModel).mockResolvedValue({ ...original, activityCompletion: {
+					summary: 'Governed reporting product.', reviewDisposition: null, contentOutput: output } });
+				if (activity === 'reviewing') {
+					await expect(handler.run(context, boundary)).rejects.toThrow('review_disposition_required');
+					expect(boundary.commitTreeDx).not.toHaveBeenCalled();
+				} else {
+					await handler.run(context, boundary);
+					expect(boundary.commitTreeDx).toHaveBeenCalledExactlyOnceWith({ writes: [{ target, value: { body: output.body, frontmatter: output.frontmatter } }] });
+				}
+			}
 		}
 	});
 });

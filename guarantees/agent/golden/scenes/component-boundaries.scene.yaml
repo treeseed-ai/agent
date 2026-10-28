@@ -1254,6 +1254,18 @@ workflow:
   - id: subscriber-estimate-schema
     action: { verifier: agent.golden.subscriber-estimate-schema }
     expect: { status: passed }
+  - id: planning-proposal-schema
+    action: { verifier: agent.golden.planning-proposal-schema }
+    expect: { status: passed }
+  - id: planning-proposal-native
+    action: { verifier: agent.golden.planning-proposal-native }
+    expect: { status: passed }
+  - id: planning-proposal-cli-schema
+    action: { verifier: agent.golden.planning-proposal-cli-schema }
+    expect: { status: passed }
+  - id: planning-product-review-isolation
+    action: { verifier: agent.golden.planning-product-review-isolation }
+    expect: { status: passed }
   - id: subscriber-estimate-authority
     action: { verifier: agent.golden.subscriber-estimate-authority }
     expect: { status: passed }

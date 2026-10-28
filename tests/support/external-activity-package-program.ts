@@ -67,7 +67,7 @@ class ExternalActivityArchives {
       exports: { '.': { types: './dist/plugin.d.ts', default: './dist/plugin.js' } },
       files: ['dist'],
       scripts: { postinstall: 'touch postinstall-ran' },
-      peerDependencies: { '@treeseed-cordis/sdk': '0.0.0-cordis.19', zod: '4.6.7' },
+      peerDependencies: { '@treeseed-cordis/sdk': '0.0.0-cordis.22', zod: '4.6.7' },
       cordisPackage: this.projection(),
     };
   }

@@ -144,18 +144,23 @@ class EnvironmentPreparationRun {
   private async execute(phase: 'setup' | 'verification', network: EnvironmentNetworkPolicy): Promise<void> {
     this.checkpoint();
     const entry = this.environment[phase];
+    const deadline = performance.now() + entry.deadlineMs;
     const signal = AbortSignal.any([this.signal, AbortSignal.timeout(entry.deadlineMs)]);
     try {
       const request = structuredClone({ environment: this.environment, phase, target: this.target, network });
       const result = await this.executor.execute(request, signal);
       this.checkpoint();
-      if (signal.aborted) throw new EnvironmentPreparationError('ENVIRONMENT_DEADLINE_EXCEEDED');
+      this.deadline(signal, deadline);
       this.receipt(result, entry, network);
     } catch {
       this.checkpoint();
-      if (signal.aborted) throw new EnvironmentPreparationError('ENVIRONMENT_DEADLINE_EXCEEDED');
+      this.deadline(signal, deadline);
       throw new EnvironmentPreparationError('ENVIRONMENT_EXECUTION_FAILED');
     }
+  }
+  private deadline(signal: AbortSignal, deadline: number): void {
+    if (signal.aborted || performance.now() >= deadline)
+      throw new EnvironmentPreparationError('ENVIRONMENT_DEADLINE_EXCEEDED');
   }
   private receipt(input: unknown, entry: EnvironmentDefinition['setup'], network: EnvironmentNetworkPolicy): void {
     const result = PreparationSchemas.parse(PreparationSchemas.execution, input, 'ENVIRONMENT_EXECUTION_FAILED');
@@ -188,7 +193,9 @@ export class EnvironmentPreparationPlugin implements EnvironmentPreparer {
     if (signal.aborted) throw new EnvironmentPreparationError('ENVIRONMENT_CANCELLED');
     const environment = PreparationSchemas.parse(EnvironmentSchemas.definition, input, 'ENVIRONMENT_CONTRACT_INVALID');
     const admitted = PreparationSchemas.parse(PreparationSchemas.target, target, 'ENVIRONMENT_CONTRACT_INVALID');
-    return this.prepared(environment, admitted, signal);
+    const receipt = await this.prepared(environment, admitted, signal);
+    if (signal.aborted) throw new EnvironmentPreparationError('ENVIRONMENT_CANCELLED');
+    return receipt;
   }
   private async prepared(environment: EnvironmentDefinition, target: EnvironmentTarget, signal: AbortSignal): Promise<EnvironmentPreparationReceipt> {
     const leases: ProviderLease<object>[] = [];

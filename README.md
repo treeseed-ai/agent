@@ -40,3 +40,7 @@ b06c943463c3aa87d8e4101088e355af487aefbac67aa99c4947b3040872a321).
 The native fixture controls were introduced before the implementation in the preserved owner
 branch; this extraction preserves their assertions. Real default sandbox/authority construction
 and Kata egress remain explicit gates; do not report the full capacity provider complete.
+
+Entrypoint deadlines also use a monotonic clock: a late provider result cannot bypass the
+budget by delaying delivery of an abort timer. The original .3 archive stays immutable; the
+corrected candidate advances to .4.

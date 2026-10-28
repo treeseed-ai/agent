@@ -13,4 +13,7 @@ class ActivityPreparationProgramAcceptance {
   }
 }
 const suite = new ActivityPreparationProgramAcceptance();
-test('acceptance: built native activity preparation validates external profiles without dispatch', suite.run.bind(suite));
+test(
+  'acceptance: built native activity preparation validates external profiles without dispatch',
+  suite.run.bind(suite),
+);

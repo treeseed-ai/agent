@@ -1,11 +1,17 @@
 import assert from 'node:assert/strict';
 import { z } from 'zod';
 import {
-  CapabilityToken, ProviderV4Schemas, CanonicalJson,
-  type ActivityCapability, type ActivityProfile, type AgentDefinition,
+  CapabilityToken,
+  ProviderV4Schemas,
+  CanonicalJson,
+  type ActivityCapability,
+  type ActivityProfile,
+  type AgentDefinition,
 } from '@treeseed-cordis/sdk';
 import {
-  Context, type CompositionDescriptor, type TrustedCompositionContext,
+  Context,
+  type CompositionDescriptor,
+  type TrustedCompositionContext,
 } from '@treeseed-cordis/sdk/runtime';
 import * as agent from '../../src/application.js';
 import { PoolBarrier } from './warm-pool-program.js';
@@ -42,17 +48,31 @@ export class ProfileObservations {
 export class FixtureProfilePlugin {
   static readonly provide = ['agent.profile.fixture'];
   static readonly inject: string[] = [];
-  static readonly Config = z.strictObject({ behavior: z.enum(['accept', 'reject', 'mutate', 'block']) });
-  static readonly declaration = ProviderV4Schemas.declaration.parse({
-    id: 'fixture.profile', pluginId: 'fixture', capability: this.provide[0],
-    contractVersion: ProviderV4Schemas.version, target: 'agent', provide: this.provide, inject: this.inject,
+  static readonly Config = z.strictObject({
+    behavior: z.enum(['accept', 'reject', 'mutate', 'block']),
   });
-  constructor(context: Context, private readonly configuration: z.infer<typeof FixtureProfilePlugin.Config>) {
+  static readonly declaration = ProviderV4Schemas.declaration.parse({
+    id: 'fixture.profile',
+    pluginId: 'fixture',
+    capability: this.provide[0],
+    contractVersion: ProviderV4Schemas.version,
+    target: 'agent',
+    provide: this.provide,
+    inject: this.inject,
+  });
+  constructor(
+    context: Context,
+    private readonly configuration: z.infer<typeof FixtureProfilePlugin.Config>,
+  ) {
     context.provide('agent.profile.fixture', this);
     context.effect(this.disposal.bind(this));
   }
-  private disposal(): () => void { return this.dispose.bind(this); }
-  private dispose(): void { ProfileObservations.calls.push('profile-disposed'); }
+  private disposal(): () => void {
+    return this.dispose.bind(this);
+  }
+  private dispose(): void {
+    ProfileObservations.calls.push('profile-disposed');
+  }
   async validate(profile: ActivityProfile, signal: AbortSignal): Promise<void> {
     ProfileObservations.calls.push('validate:' + profile.id);
     ProfileObservations.entered.release();
@@ -69,10 +89,17 @@ export class FixtureProfileHandler {
   static readonly inject: string[] = [];
   static readonly Config = z.strictObject({});
   static readonly declaration = ProviderV4Schemas.declaration.parse({
-    id: 'fixture.handler', pluginId: 'fixture', capability: this.provide[0],
-    contractVersion: ProviderV4Schemas.version, target: 'agent', provide: this.provide, inject: this.inject,
+    id: 'fixture.handler',
+    pluginId: 'fixture',
+    capability: this.provide[0],
+    contractVersion: ProviderV4Schemas.version,
+    target: 'agent',
+    provide: this.provide,
+    inject: this.inject,
   });
-  constructor(context: Context) { context.provide('agent.profile.handler', this); }
+  constructor(context: Context) {
+    context.provide('agent.profile.handler', this);
+  }
   async execute(profile: ActivityProfile, signal: AbortSignal): Promise<string> {
     signal.throwIfAborted();
     ProfileObservations.calls.push('HANDLER-MUST-NOT-EXECUTE');
@@ -92,28 +119,45 @@ class ProfileAdapter {
 export class ActivityPreparationFixture {
   readonly signal = new AbortController();
   readonly scope: TrustedCompositionContext = {
-    scopeId: 'installation:fixture:manager', target: 'agent',
-    principalId: 'subject:fixture', resourceScope: 'installation:fixture',
+    scopeId: 'installation:fixture:manager',
+    target: 'agent',
+    principalId: 'subject:fixture',
+    resourceScope: 'installation:fixture',
   };
   readonly capability: ActivityCapability = {
-    typeId: 'external.health-probe', revision: 'a'.repeat(64),
+    typeId: 'external.health-probe',
+    revision: 'a'.repeat(64),
     provider: {
-      id: 'fixture.profile', capability: 'agent.profile.fixture', target: 'agent',
-      scopeId: this.scope.scopeId, contractVersion: ProviderV4Schemas.version,
+      id: 'fixture.profile',
+      capability: 'agent.profile.fixture',
+      target: 'agent',
+      scopeId: this.scope.scopeId,
+      contractVersion: ProviderV4Schemas.version,
       artifact: { package: '@fixture/profile', version: '1.0.0', integrity: 'b'.repeat(64) },
       executableDigest: 'c'.repeat(64),
     },
     parameterSchema: { id: 'fixture.parameters', version: '1.0.0', digest: 'd'.repeat(64) },
     handler: { capability: 'agent.profile.handler', contractVersion: ProviderV4Schemas.version },
-    orchestration: { capability: 'agent.orchestration.probe', contractVersion: ProviderV4Schemas.version },
+    orchestration: {
+      capability: 'agent.orchestration.probe',
+      contractVersion: ProviderV4Schemas.version,
+    },
   };
   readonly definition: AgentDefinition = {
-    schemaVersion: 'treeseed.agent-definition/v1', id: 'fixture.agent', revision: 'e'.repeat(64),
-    profiles: [{
-      id: 'profile:one', typeId: this.capability.typeId, capabilityRevision: this.capability.revision,
-      handler: { providerId: 'fixture.handler', ...this.capability.handler },
-      environmentId: 'environment:probe', parameters: { message: 'harmless fixture' }, dependsOn: [],
-    }],
+    schemaVersion: 'treeseed.agent-definition/v1',
+    id: 'fixture.agent',
+    revision: 'e'.repeat(64),
+    profiles: [
+      {
+        id: 'profile:one',
+        typeId: this.capability.typeId,
+        capabilityRevision: this.capability.revision,
+        handler: { providerId: 'fixture.handler', ...this.capability.handler },
+        environmentId: 'environment:probe',
+        parameters: { message: 'harmless fixture' },
+        dependsOn: [],
+      },
+    ],
   };
   descriptor(behavior = 'accept'): CompositionDescriptor {
     return {
@@ -122,26 +166,48 @@ export class ActivityPreparationFixture {
         this.registration(FixtureProfileHandler, {}, 'execute'),
       ],
       selections: [
-        { scopeId: this.scope.scopeId, capability: 'agent.profile.fixture', providerId: 'fixture.profile' },
-        { scopeId: this.scope.scopeId, capability: 'agent.profile.handler', providerId: 'fixture.handler' },
+        {
+          scopeId: this.scope.scopeId,
+          capability: 'agent.profile.fixture',
+          providerId: 'fixture.profile',
+        },
+        {
+          scopeId: this.scope.scopeId,
+          capability: 'agent.profile.handler',
+          providerId: 'fixture.handler',
+        },
       ],
     };
   }
   private registration(
     plugin: typeof FixtureProfilePlugin | typeof FixtureProfileHandler,
-    configuration: unknown, method: string,
+    configuration: unknown,
+    method: string,
   ) {
     return {
-      plugin, configuration, declaration: plugin.declaration,
-      token: new CapabilityToken(plugin.provide[0]!, ProviderV4Schemas.version, new ProfileAdapter(method)),
+      plugin,
+      configuration,
+      declaration: plugin.declaration,
+      token: new CapabilityToken(
+        plugin.provide[0]!,
+        ProviderV4Schemas.version,
+        new ProfileAdapter(method),
+      ),
       artifact: { kind: 'bundled' as const, identity: '@fixture/profile@1.0.0' },
     };
   }
-  async open(behavior = 'accept', capabilities: unknown = [this.capability]): Promise<ProfileResolver> {
+  async open(
+    behavior = 'accept',
+    capabilities: unknown = [this.capability],
+  ): Promise<ProfileResolver> {
     ProfileObservations.reset();
     const constructor = Reflect.get(agent, 'ActivityDefinitionResolver') as ResolverConstructor;
     assert.equal(typeof constructor, 'function', 'native activity resolver must exist');
-    return constructor.start({ capabilities, descriptor: this.descriptor(behavior), scope: this.scope });
+    return constructor.start({
+      capabilities,
+      descriptor: this.descriptor(behavior),
+      scope: this.scope,
+    });
   }
 }
 
@@ -152,10 +218,15 @@ class ActivityPreparationProgram {
     try {
       const result = await resolver.resolve(fixture.definition, fixture.signal.signal);
       assert.equal(result.length, 1);
-      assert.equal(CanonicalJson.stringify(result[0]!.instance), CanonicalJson.stringify(fixture.definition.profiles[0]));
+      assert.equal(
+        CanonicalJson.stringify(result[0]!.instance),
+        CanonicalJson.stringify(fixture.definition.profiles[0]),
+      );
       assert.match(result[0]!.generation, /^[a-f0-9]{64}$/);
       assert.deepEqual(ProfileObservations.calls, ['validate:profile:one']);
-    } finally { await resolver.close(); }
+    } finally {
+      await resolver.close();
+    }
     assert.deepEqual(ProfileObservations.calls, ['validate:profile:one', 'profile-disposed']);
     process.stdout.write('native-activity-preparation-fixture-ok\n');
   }

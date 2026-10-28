@@ -89,3 +89,17 @@ The enclosing execution-child/host root is delivered separately before service p
 Built public Node acceptance selects the shipped classes through their public contracts,
 checks bounded echo output and real grant revocation, and awaits all leases/root disposal.
 Existing tests remain intact; Work/model execution stays Task 10 and all issues stay open.
+
+## Capacity service contract closure
+
+Manager, worker and guest transport development consumes the reviewed SDK .35 public
+archive, preserving one exact activity/environment/lease/pool/protocol closure. The selected
+source is bc6cb6610fd5ddc13639b3c3bc8b709ed930d647, SHA-256
+98a4474726b79c1ce1a4b96a76e636a3dafa8e20df3dc66db89331ae79b31fbf, integrated
+by SDK #493–#497. Root/portable contracts remain data; Agent owns native service roots,
+live authority, orchestration and transport. All seven global operations are preserved.
+
+The build checks archive bytes; owner unit verification additionally binds selected peer,
+installed package identity and archive integrity. A fresh empty-cache frozen install and
+genuine public archive/declaration consumer must prove the closure before integration.
+Earlier archives remain immutable; this does not activate capacity or change Keycloak.

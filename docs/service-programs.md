@@ -138,3 +138,41 @@ foreign generation/assignment, revoked/missing authority and safe malformed inpu
 Implementation sequence for this bounded owner slice: commit this interface; commit and observe
 failing built-program acceptance; add the native guest capabilities/kernel and bounded stdin
 program; run owner checks/all applicable tiers, genuine public archive consumers and hosted CI.
+
+## Standalone offline guest artifact
+
+The normal owner build also emits `dist/bin/trsd-agent-guest`, a Linux x64 GNU baseline
+standalone executable compiled with the pinned Bun 1.4.4 toolchain. The exact target is qualified
+against that compiler's help/output and actual ELF headers, rather than assuming Node package
+acceptance proves an executable works. The ELF interpreter and exact shared-library names are recorded and checked; the selected
+immutable guest image must supply those OS libraries. It retains the same strict configuration, SDK wire protocol, native roots
+and trusted assignment checks as the Node program. No Node, Bun, package manager or developer
+checkout is required on PATH at runtime.
+
+The owner package includes a bounded gzip payload split into 7 MiB verified chunks plus a versioned manifest binding compressed
+and expanded sizes/hashes, executable mode 0755, compiler/target and OS library requirements.
+The uncompressed compiler runtime exceeds the current 64 MiB package-asset bound; transport it
+as bounded compressed chunks without weakening shared limits. Deployment also enforces an
+8 MiB per-entry and 64 MiB aggregate custody limit; the genuine owner package must pass its
+accepted public inspector in permanent Agent acceptance. A source-free copy, launched
+from an unrelated working directory with an empty tool PATH, must pass the same six built-program
+behavior cases. Owner checks/build and hosted CI include this gate. Deployment consumes an exact
+owner artifact when adding the actual runner session; it must not execute the guest on the host
+as a substitute for proving its operation within Kata. This slice qualifies packaging only,
+not pool readiness, setup ordering, live enrollment or VM isolation.
+
+Compiler target reference: [Bun executable documentation](https://bun.sh/docs/compiler/executables).
+The pinned compiler and ELF/program tests are the executable evidence for this owner artifact.
+All four ambient autoload modes (dotenv, bunfig, tsconfig and package.json) are explicitly disabled.
+
+Qualification: Bun 1.4.4 with `--compile --target=bun-linux-x64-musl-baseline` and all four
+`--no-compile-autoload-*` flags produced an ELF requiring `/lib/ld-musl-x86_64.so.1`,
+`libstdc++.so.6` and musl libc. It exited 127 on this Ubuntu 26.04 host because that loader was
+absent. The GNU baseline target produced the expected invalid-configuration exit 2 on the same
+host and depends on glibc/loader/pthread/dl/m, which the immutable GNU guest image must supply.
+This is a pinned configuration finding, not a claim that musl or Bun cannot support the guest.
+
+
+A single 51 MiB gzip entry passed Node installation but was rejected by accepted Deployment .83
+public archive custody. Preserve that failed .17 candidate as evidence; the revised .18 transport
+uses individually hashed chunks and an aggregate compressed hash before bounded expansion.

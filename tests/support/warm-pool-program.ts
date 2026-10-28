@@ -1,13 +1,23 @@
 import assert from 'node:assert/strict';
 import { PoolSchemas, type VirginSandbox } from '@treeseed-cordis/sdk';
-import { WarmSandboxPool, type SandboxPoolProvider, type SandboxDestruction } from '../../src/warm-pool.js';
+import {
+  WarmSandboxPool,
+  type SandboxPoolProvider,
+  type SandboxDestruction,
+} from '../../src/warm-pool.js';
 
 export class PoolBarrier {
   private resolve: (() => void) | null = null;
   readonly promise: Promise<void>;
-  constructor() { this.promise = new Promise<void>(this.capture.bind(this)); }
-  private capture(resolve: () => void): void { this.resolve = resolve; }
-  release(): void { this.resolve!(); }
+  constructor() {
+    this.promise = new Promise<void>(this.capture.bind(this));
+  }
+  private capture(resolve: () => void): void {
+    this.resolve = resolve;
+  }
+  release(): void {
+    this.resolve!();
+  }
 }
 
 /** In-memory lifecycle fixture only. It does not create or attest a Kata sandbox. */
@@ -23,11 +33,21 @@ export class FixtureSandboxPool implements SandboxPoolProvider {
   foreignBase = false;
   assignmentBarrier: PoolBarrier | null = null;
   readonly assignmentStarted = new PoolBarrier();
-  async create(id: string, compatibilityDigest: string, signal: AbortSignal): Promise<VirginSandbox> {
+  async create(
+    id: string,
+    compatibilityDigest: string,
+    signal: AbortSignal,
+  ): Promise<VirginSandbox> {
     signal.throwIfAborted();
     this.created.push(id);
-    const base = PoolSchemas.base.parse({ schemaVersion: 'treeseed.virgin-sandbox/v1',
-      id, compatibilityDigest, inspectionDigest: 'b'.repeat(64), credentials: 'absent', assigned: false });
+    const base = PoolSchemas.base.parse({
+      schemaVersion: 'treeseed.virgin-sandbox/v1',
+      id,
+      compatibilityDigest,
+      inspectionDigest: 'b'.repeat(64),
+      credentials: 'absent',
+      assigned: false,
+    });
     this.bases.set(id, base);
     if (this.loseCreateReply) throw new Error('private-create-canary');
     return this.foreignBase ? { ...base, id: 'foreign:unowned' } : structuredClone(base);
@@ -62,7 +82,9 @@ export class PoolFixture {
   readonly pool: WarmSandboxPool;
   constructor(warmTarget = 1, maximumSandboxes = 2) {
     this.pool = new WarmSandboxPool(this.provider, 'a'.repeat(64), {
-      warmTarget, maximumSandboxes, claimDeadlineMs: 1000,
+      warmTarget,
+      maximumSandboxes,
+      claimDeadlineMs: 1000,
     });
   }
 }

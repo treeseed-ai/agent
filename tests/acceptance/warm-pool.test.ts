@@ -3,7 +3,8 @@ import { spawnSync } from 'node:child_process';
 class WarmPoolProgramAcceptance {
   run(): void {
     const result = spawnSync('node', ['dist/tests/support/warm-pool-program.js'], {
-      encoding: 'utf8', timeout: 5000,
+      encoding: 'utf8',
+      timeout: 5000,
     });
     expect(result.status).toBe(0);
     expect(result.stderr).toBe('');
@@ -11,4 +12,7 @@ class WarmPoolProgramAcceptance {
   }
 }
 const suite = new WarmPoolProgramAcceptance();
-test('acceptance: built worker pool policy claims once and verifies teardown with explicit fixtures', suite.run.bind(suite));
+test(
+  'acceptance: built worker pool policy claims once and verifies teardown with explicit fixtures',
+  suite.run.bind(suite),
+);

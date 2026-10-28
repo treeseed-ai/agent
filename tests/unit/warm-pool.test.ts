@@ -6,11 +6,15 @@ class WarmPoolContracts {
     expect(this.invalidBounds.bind(this)).toThrow('POOL_POLICY_INVALID');
     expect(this.invalidCompatibility.bind(this)).toThrow('POOL_COMPATIBILITY_INVALID');
   }
-  private invalidBounds(): void { new PoolFixture(2, 1); }
+  private invalidBounds(): void {
+    new PoolFixture(2, 1);
+  }
   private invalidCompatibility(): void {
     const fixture = new PoolFixture();
     new WarmSandboxPool(fixture.provider, 'mutable', {
-      warmTarget: 0, maximumSandboxes: 1, claimDeadlineMs: 1000,
+      warmTarget: 0,
+      maximumSandboxes: 1,
+      claimDeadlineMs: 1000,
     });
   }
   async zeroTarget(): Promise<void> {
@@ -22,5 +26,8 @@ class WarmPoolContracts {
   }
 }
 const suite = new WarmPoolContracts();
-test('unit: pool policy rejects invalid bounds and compatibility identities', suite.invalidPolicy.bind(suite));
+test(
+  'unit: pool policy rejects invalid bounds and compatibility identities',
+  suite.invalidPolicy.bind(suite),
+);
 test('unit: an explicit zero warm target creates no bases', suite.zeroTarget.bind(suite));

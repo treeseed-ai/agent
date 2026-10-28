@@ -82,7 +82,8 @@ exact source/archive/image identities and separate owner receipts. All issues re
 The first guest boundary is `CapacityAssignmentFile`, backed by the native
 `AgentCapacityAssignmentFilePlugin` and `agent.capacity.assignment` token. Its typed
 `observe(signal)` returns a fresh SDK `CapacityDispatch` read from an explicitly selected
-owner-private assignment file. Construction composes providers without creating that file;
+owner-private assignment file, bounded to 64 KiB by the existing custody primitive.
+Construction composes providers without creating that file;
 a clean warm guest therefore receives no assignment credential or invented grant.
 
 The provider preserves the complete issuer, subject, team/provider, credential/grant revisions,

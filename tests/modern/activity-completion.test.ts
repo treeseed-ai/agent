@@ -19,6 +19,22 @@ function checkShape(node: SchemaNode) {
 }
 
 describe('activity completion structured-output schema', () => {
+	it('offers a group proposal at the exact planning grant instead of limiting proposal authoring to acting', () => {
+		const context = { canonicalAssignmentContext: { assignment: {
+			effectiveProfile: { activity: 'planning', handler: 'writer' }, workspace: { mode: 'treedx' },
+			grant: { contentWrite: [{ model: 'proposal', id: 'planning-contribution:proposal' }] },
+		} } };
+		const variants = completionOutputTargetVariants(context);
+		expect(variants).toHaveLength(1);
+		expect(variants[0]).toMatchObject({ model: 'proposal', frontmatter: { properties: {
+			id: { type: 'string', const: 'planning-contribution:proposal' }, groupIds: { type: 'array' },
+		} } });
+		expect(completionFrontmatterSchema(context)).toBeDefined();
+		const schema = activityCompletionOutputSchema(completionFrontmatterSchema(context), false, variants);
+		expect(schema.properties.contentOutput).toMatchObject({ anyOf: [expect.objectContaining({ properties: {
+			model: { type: 'string', const: 'proposal' }, frontmatter: expect.any(Object), body: expect.any(Object),
+		} })] });
+	});
 	it('generates subscriber-owned proposal work from the admitted estimate even when the group draft has no class-owned plan', () => {
 		const sourceRef = { store: 'treedx', model: 'proposal', id: 'prepared-workload-repair', revision: 1,
 			digest: `sha256:${'a'.repeat(64)}`, repository: 'agent-library', commit: 'a'.repeat(40), path: 'proposals/prepared-workload-repair.mdx' };

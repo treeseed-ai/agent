@@ -125,3 +125,22 @@ The build checks archive bytes; owner unit verification additionally binds selec
 installed package identity and archive integrity. A fresh empty-cache frozen install and
 genuine public archive/declaration consumer must prove the closure before integration.
 Earlier archives remain immutable; this does not activate capacity or change Keycloak.
+
+## External profile package boundary
+
+Accepted NPM packages may supply additional activity types, semantic parameter validators
+and compatible handlers without editing Agent's catalogue. This capability consumes the
+reviewed SDK .35 and public ActivityDefinitionResolver contracts. Package metadata must
+project the same native Config/provide/inject declarations as the shipped classes.
+
+The permanent acceptance builds genuine Agent and independent profile archives, installs
+only exact archives with lifecycle scripts disabled, checks the external script canary,
+loads providers through public package entries and type-checks emitted declarations. It
+proves successful semantic preparation and rejection of unknown, duplicate, mismatched
+or invalid selections; preparation never invokes a handler. This is package extensibility
+coverage, not acquisition-policy admission, isolated validator execution, live enrollment
+or a real Kata workload. Those remain explicit owner/assembled gates. Work stays Task 10.
+
+Provider implementations and their service instances belong to native Cordis scopes. A
+capability catalogue carries metadata only. Previous archives/fixtures remain immutable;
+all issues stay open under the release policy.

@@ -151,7 +151,7 @@ is executable package code and therefore belongs only in an already accepted pre
 Cordis contexts do not isolate untrusted code. Artifact acquisition, validator sandboxing and live
 authority remain separate owner boundaries and are not supplied by this resolver.
 
-The public archive-consumer acceptance packs the Agent candidate and an independent profile/handler
+The follow-up public archive-consumer acceptance must pack the Agent candidate and an independent profile/handler
 fixture package, installs exact local archives with lifecycle scripts disabled, and runs a fresh
 Node consumer through public package imports. The fixture owns its profile identity and parameter
 schema. Its installation-script canary must remain absent; successful preparation must not invoke

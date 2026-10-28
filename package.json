@@ -1,6 +1,6 @@
 {
   "name": "@treeseed-cordis/agent",
-  "version": "0.0.0-cordis.15",
+  "version": "0.0.0-cordis.16",
   "private": true,
   "type": "module",
   "license": "Apache-2.0",
@@ -50,6 +50,10 @@
     "./providers": {
       "types": "./dist/src/providers.d.ts",
       "default": "./dist/src/providers.js"
+    },
+    "./guest": {
+      "types": "./dist/src/guest.d.ts",
+      "default": "./dist/src/guest.js"
     }
   },
   "files": [
@@ -66,9 +70,171 @@
     "pluginId": "agent",
     "package": {
       "name": "@treeseed-cordis/agent",
-      "version": "0.0.0-cordis.15"
+      "version": "0.0.0-cordis.16"
     },
     "providers": [
+      {
+        "declaration": {
+          "id": "agent.guest.profile.probe",
+          "pluginId": "agent",
+          "capability": "agent.guest.profile",
+          "contractVersion": "0.4.0-cordis.1",
+          "target": "agent",
+          "provide": [
+            "agent.guest.profile"
+          ],
+          "inject": []
+        },
+        "entry": "dist/src/guest-providers.js",
+        "classExport": "GuestProfilePlugin",
+        "configurationSchema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        },
+        "replacement": {
+          "kind": "restart",
+          "stateVersion": 1,
+          "qualificationDigest": null
+        },
+        "commandIds": []
+      },
+      {
+        "declaration": {
+          "id": "agent.guest.context.isolated",
+          "pluginId": "agent",
+          "capability": "agent.guest.context",
+          "contractVersion": "0.4.0-cordis.1",
+          "target": "agent",
+          "provide": [
+            "agent.guest.context"
+          ],
+          "inject": []
+        },
+        "entry": "dist/src/guest-providers.js",
+        "classExport": "GuestContextPlugin",
+        "configurationSchema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        },
+        "replacement": {
+          "kind": "restart",
+          "stateVersion": 1,
+          "qualificationDigest": null
+        },
+        "commandIds": []
+      },
+      {
+        "declaration": {
+          "id": "agent.guest.handler.echo",
+          "pluginId": "agent",
+          "capability": "agent.guest.handler",
+          "contractVersion": "0.4.0-cordis.1",
+          "target": "agent",
+          "provide": [
+            "agent.guest.handler"
+          ],
+          "inject": []
+        },
+        "entry": "dist/src/guest-providers.js",
+        "classExport": "GuestHandlerPlugin",
+        "configurationSchema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        },
+        "replacement": {
+          "kind": "restart",
+          "stateVersion": 1,
+          "qualificationDigest": null
+        },
+        "commandIds": []
+      },
+      {
+        "declaration": {
+          "id": "agent.guest.tool.echo",
+          "pluginId": "agent",
+          "capability": "agent.guest.tool",
+          "contractVersion": "0.4.0-cordis.1",
+          "target": "agent",
+          "provide": [
+            "agent.guest.tool"
+          ],
+          "inject": []
+        },
+        "entry": "dist/src/guest-providers.js",
+        "classExport": "GuestToolPlugin",
+        "configurationSchema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        },
+        "replacement": {
+          "kind": "restart",
+          "stateVersion": 1,
+          "qualificationDigest": null
+        },
+        "commandIds": []
+      },
+      {
+        "declaration": {
+          "id": "agent.guest.reporting.probe",
+          "pluginId": "agent",
+          "capability": "agent.guest.reporting",
+          "contractVersion": "0.4.0-cordis.1",
+          "target": "agent",
+          "provide": [
+            "agent.guest.reporting"
+          ],
+          "inject": []
+        },
+        "entry": "dist/src/guest-providers.js",
+        "classExport": "GuestReportingPlugin",
+        "configurationSchema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        },
+        "replacement": {
+          "kind": "restart",
+          "stateVersion": 1,
+          "qualificationDigest": null
+        },
+        "commandIds": []
+      },
+      {
+        "declaration": {
+          "id": "agent.guest.execution.probe",
+          "pluginId": "agent",
+          "capability": "agent.guest.execution",
+          "contractVersion": "0.4.0-cordis.1",
+          "target": "agent",
+          "provide": [
+            "agent.guest.execution"
+          ],
+          "inject": []
+        },
+        "entry": "dist/src/guest-providers.js",
+        "classExport": "GuestExecutionPlugin",
+        "configurationSchema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        },
+        "replacement": {
+          "kind": "restart",
+          "stateVersion": 1,
+          "qualificationDigest": null
+        },
+        "commandIds": []
+      },
       {
         "declaration": {
           "id": "agent.capacity.assignment.private-file",

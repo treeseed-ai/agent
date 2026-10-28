@@ -102,3 +102,39 @@ claim a ready pool, a running handler or successful sandbox cleanup.
 Agent selects accepted SDK .37 (source dce3108e061ecaf0cfa2915c03698f0e3170a67b; archive
 886a9f359148a1aee49997de7e0604c65c87bf16c693d23781c5732f41990384). Owner checks and genuine
 public archive tests must bind this exact closure; productive Work/models remain Task 10.
+
+## Guest program and kernel
+
+`node dist/src/guest-main.js --config /absolute/private/guest.json` runs the actual guest
+program. The owner-private configuration has exactly `schemaVersion: treeseed.guest-configuration/v1`,
+`scope` (SDK capacity scope) and `assignmentFile` (an absolute canonical path). It creates one native
+Cordis root before any assignment exists. It accepts one strict SDK capacity-channel JSON frame
+per newline on stdin and returns one SDK response per newline on stdout. Frames are bounded to
+64 KiB; malformed/duplicate-key frames exit 2 with fixed safe stderr. EOF drains work and native
+disposal; signals cancel admitted work. Configuration failure exits 2, unexpected failures exit 1.
+
+Ready reports this root's actual composition generation and a fresh process nonce digest. Warm
+readiness means only that the guest root is composed, not that an assignment is authorized or its
+environment prepared. A runner run must match the complete freshly read trusted dispatch and the
+actual runner generation. The kernel requires `agent.probe`, retains selected native leases,
+rechecks assignment authority before and after every execution layer, and accepts at most one
+assignment attempt. Failed or cancelled attempts never make a guest reusable. Cancellation binds
+the exact active lease; late or foreign cancellation cannot change another execution.
+
+Typed native profile, context, handler, tool, reporting and execution seams are selectable through
+`CapacityGuest.start(configuration, overrides)`. The coherent admission kernel is not replaceable.
+The bundled `probe.echo` profile accepts only empty parameters, no profile dependencies, and the
+exact bundled harmless handler selection. Other profile types require a selected compatible
+provider; no productive core profile or model execution is implied. A provider cannot rewrite the
+trusted dispatch or return more than 1024 characters. Provider failures expose fixed blockers only.
+
+This program does not run environment scripts, establish live team authority or destroy its own
+sandbox. Worker-owned setup/verification must precede run, live authorization must precede trusted
+assignment publication, and Deployment must physically destroy every assigned guest. Installed
+transport and real Kata assembly must qualify this actual program separately. Permanent built
+program acceptance covers warm construction, fresh process identity, exact run/read-back, replay,
+foreign generation/assignment, revoked/missing authority and safe malformed input.
+
+Implementation sequence for this bounded owner slice: commit this interface; commit and observe
+failing built-program acceptance; add the native guest capabilities/kernel and bounded stdin
+program; run owner checks/all applicable tiers, genuine public archive consumers and hosted CI.

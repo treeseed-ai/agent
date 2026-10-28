@@ -1,3 +1,4 @@
+import { GuestRuntimeBinding, type GuestRuntimeManifest } from '@treeseed-cordis/sdk';
 import { spawnSync } from 'node:child_process';
 import {
   readFileSync,
@@ -90,12 +91,9 @@ class GuestBinaryBuild {
     }
     return parts;
   }
-  private static package(binary: Buffer): void {
-    const compressed = gzipSync(binary, { level: 9 });
-    if (compressed.length > 64 * 1024 * 1024)
-      throw new Error('GUEST_COMPRESSED_ARTIFACT_TOO_LARGE');
+  private static manifest(binary: Buffer, compressed: Buffer): GuestRuntimeManifest {
     const parts = this.parts(compressed);
-    const manifest = {
+    return GuestRuntimeBinding.assert({
       schemaVersion: 'treeseed.guest-runtime/v1',
       compiler: 'bun@1.4.4',
       target: this.target,
@@ -105,7 +103,13 @@ class GuestBinaryBuild {
       requiredLibraries: this.libraries,
       compressed: { parts, format: 'gzip', ...this.identity(compressed) },
       executable: { mode: 0o755, ...this.identity(binary) },
-    };
+    });
+  }
+  private static package(binary: Buffer): void {
+    const compressed = gzipSync(binary, { level: 9 });
+    if (compressed.length > 64 * 1024 * 1024)
+      throw new Error('GUEST_COMPRESSED_ARTIFACT_TOO_LARGE');
+    const manifest = this.manifest(binary, compressed);
     writeFileSync('dist/bin/guest-runtime.json', JSON.stringify(manifest, null, 2) + '\n', {
       mode: 0o644,
     });

@@ -138,3 +138,23 @@ foreign generation/assignment, revoked/missing authority and safe malformed inpu
 Implementation sequence for this bounded owner slice: commit this interface; commit and observe
 failing built-program acceptance; add the native guest capabilities/kernel and bounded stdin
 program; run owner checks/all applicable tiers, genuine public archive consumers and hosted CI.
+
+## Standalone offline guest artifact
+
+The normal owner build also emits `dist/bin/trsd-agent-guest`, a Linux x64 musl baseline
+standalone executable compiled with the pinned Bun 1.4.4 toolchain. The exact target is qualified
+against that compiler's help/output and actual ELF headers, rather than assuming Node package
+acceptance proves an executable works. The artifact must have no ELF interpreter or dynamic
+library requirements. It retains the same strict configuration, SDK wire protocol, native roots
+and trusted assignment checks as the Node program. No Node, Bun, package manager or developer
+checkout is required on PATH at runtime.
+
+The executable is included in the owner package with mode 0755. A source-free copy, launched
+from an unrelated working directory with an empty tool PATH, must pass the same six built-program
+behavior cases. Owner checks/build and hosted CI include this gate. Deployment consumes an exact
+owner artifact when adding the actual runner session; it must not execute the guest on the host
+as a substitute for proving its operation within Kata. This slice qualifies packaging only,
+not pool readiness, setup ordering, live enrollment or VM isolation.
+
+Compiler target reference: [Bun executable documentation](https://bun.sh/docs/compiler/executables).
+The pinned compiler and ELF/program tests are the executable evidence for this owner artifact.

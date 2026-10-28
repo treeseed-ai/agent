@@ -20,3 +20,7 @@ spawns the actual built Node consumer, and unit controls prove class/import poli
 The build tool is development only and cannot establish sandbox isolation, authorization or a
 usable capacity provider. Future runtime code uses typed native Cordis providers and concise
 named capabilities. No production publication, original-system mutation or issue closure.
+
+The development SDK .27 source is `7eb60a4a68ca770f896e07d0e3d8d2324154e6e9`; archive
+SHA-256 is `ee30dbacf0e95d3fd9f88d097b15332c3dbf8020c3313c90e0a0578937a5d1df`.
+Build and check verify those archive bytes before consuming their public policy export.

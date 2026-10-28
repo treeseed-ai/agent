@@ -10,8 +10,8 @@
   },
   "scripts": {
     "check:test-layout": "bun .agents/skills/release-workflow/scripts/test-layout.ts",
-    "check": "bun run check:readability && bun run check:test-layout",
-    "build": "tsc --strict --noUncheckedIndexedAccess --noEmit --module nodenext --target es2022 --skipLibCheck --types bun,node tests/acceptance/source-readability.test.ts .agents/skills/release-workflow/scripts/source-readability.ts",
+    "check": "bun run check:readability && bun run check:test-layout && bun scripts/tooling.ts check",
+    "build": "bun scripts/tooling.ts build",
     "test:acceptance": "bun test ./tests/acceptance --pass-with-no-tests",
     "test:regression": "bun test ./tests/regression --pass-with-no-tests",
     "test:integration": "bun test ./tests/integration --pass-with-no-tests",
@@ -23,7 +23,15 @@
     "typescript": "5.9.3",
     "@types/bun": "1.4.4",
     "@types/node": "24.10.1",
-    "prettier": "3.6.2"
+    "prettier": "3.6.2",
+    "@treeseed-cordis/sdk": "file:vendor/sdk.tgz"
   },
-  "description": "Development policy qualification only; regression, integration and unit tiers remain empty until Agent implementation."
+  "description": "Independent Agent development build; runtime composition is delivered in subsequent owner slices.",
+  "cordisCandidate": {
+    "sdk": {
+      "repository": "https://github.com/treeseed-ai/sdk.git",
+      "commit": "7eb60a4a68ca770f896e07d0e3d8d2324154e6e9",
+      "sha256": "ee30dbacf0e95d3fd9f88d097b15332c3dbf8020c3313c90e0a0578937a5d1df"
+    }
+  }
 }

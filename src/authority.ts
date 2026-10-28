@@ -1,7 +1,7 @@
 import {
   openSync,
   closeSync,
-  readFileSync,
+  readSync,
   fstatSync,
   lstatSync,
   constants,
@@ -32,18 +32,21 @@ export class AgentPrivateFile {
     }
   }
   static read(file: string): unknown {
-    this.require(isAbsolute(file) && resolve(file) === file);
-    this.ancestors(file);
+    try {
+      this.require(isAbsolute(file) && resolve(file) === file);
+      this.ancestors(file);
+      return this.opened(file);
+    } catch {
+      throw new Error('AGENT_PRIVATE_FILE');
+    }
+  }
+  private static opened(file: string): unknown {
     const flags =
       constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW | constants.O_NONBLOCK;
     const directory = openSync(dirname(file), flags);
     try {
       const anchor = fstatSync(directory);
-      this.require(
-        anchor.isDirectory() &&
-          anchor.uid === process.getuid?.() &&
-          (anchor.mode & 0o777) === 0o700,
-      );
+      this.directoryOwner(anchor);
       return this.anchored(file, directory, anchor);
     } finally {
       closeSync(directory);
@@ -55,15 +58,30 @@ export class AgentPrivateFile {
     try {
       const before = fstatSync(fd);
       this.fileOwner(before);
-      const bytes = readFileSync(fd);
+      const bytes = this.bounded(fd);
       this.unchanged(before, fstatSync(fd), bytes.length);
       this.sameEntry(before, lstatSync(path));
       this.sameEntry(anchor, lstatSync(dirname(file)));
+      this.directoryOwner(fstatSync(directory));
       this.ancestors(file);
       return InstalledProviderLoader.json(bytes);
     } finally {
       closeSync(fd);
     }
+  }
+  private static bounded(fd: number): Buffer {
+    const bytes = Buffer.alloc(65537);
+    let size = 0;
+    while (size < bytes.length) {
+      const count = readSync(fd, bytes, size, bytes.length - size, null);
+      if (count === 0) break;
+      size += count;
+    }
+    this.require(size <= 65536);
+    return bytes.subarray(0, size);
+  }
+  private static directoryOwner(stat: Stats): void {
+    this.require(stat.isDirectory() && stat.uid === process.getuid?.() && (stat.mode & 0o777) === 0o700);
   }
   private static fileOwner(stat: Stats): void {
     this.require(

@@ -76,3 +76,28 @@ existing diagnostics. Genuine external profile/handler/execution/environment pac
 same contract suites. Hosted Ubuntu 26.04/KVM proves warming, exclusive claim, setup-before-probe,
 replenishment, allowed/denied egress, cancellation and physical teardown. Final assembly records
 exact source/archive/image identities and separate owner receipts. All issues remain open.
+
+## Trusted guest assignment read-back
+
+The first guest boundary is `CapacityAssignmentFile`, backed by the native
+`AgentCapacityAssignmentFilePlugin` and `agent.capacity.assignment` token. Its typed
+`observe(signal)` returns a fresh SDK `CapacityDispatch` read from an explicitly selected
+owner-private assignment file. Construction composes providers without creating that file;
+a clean warm guest therefore receives no assignment credential or invented grant.
+
+The provider preserves the complete issuer, subject, team/provider, credential/grant revisions,
+lease, fence, process generations, definition/profile and environment record. It verifies the
+selected capacity scope and current SDK lease/authority deadlines on every observation. Missing,
+malformed, foreign, symlinked or incorrectly permissioned records fail safely. No raw paths or
+record bytes enter errors. A cancelled or disposed reader cannot admit an assignment.
+
+This is read-back of a host-authorized assignment, not live team enrollment or a new identity
+authority. The manager and worker must obtain current existing-control-plane authority and
+publish the selected record only after exclusive assignment. The guest kernel must compare
+the complete incoming dispatch to this trusted record, bind its actual runner generation and
+recheck before and after the selected execution provider. An accepted observation does not
+claim a ready pool, a running handler or successful sandbox cleanup.
+
+Agent selects accepted SDK .37 (source dce3108e061ecaf0cfa2915c03698f0e3170a67b; archive
+886a9f359148a1aee49997de7e0604c65c87bf16c693d23781c5732f41990384). Owner checks and genuine
+public archive tests must bind this exact closure; productive Work/models remain Task 10.

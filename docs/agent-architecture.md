@@ -45,6 +45,31 @@ editing core catalogues. Unsupported productive selections block until Task 10.
 
 ## Sandbox and setup lifecycle
 
+### Native activity preparation
+
+`ActivityDefinitionResolver.start(configuration)` creates a process-local native Cordis scope.
+Its configuration contains the accepted activity capability catalogue, selected provider
+registrations and the trusted composition identity. The catalogue contains immutable metadata,
+never service instances. `resolve(definition, signal)` validates the complete definition and
+profile graph before invoking any selected profile validator. Each validator receives a private
+copy of its profile; validation may reject parameters but cannot silently rewrite the definition.
+
+Profile providers implement `ActivityParameterProvider.validate(profile, signal)`. Handler
+providers implement `ActivityHandlerProvider.execute(profile, signal)`. Selection binds the exact
+provider ID, capability, contract version and scope declared in the accepted catalogue and Agent
+definition. The resolver acquires both through native Cordis and releases every acquired lease,
+including on validation, cancellation or disposal failure. It returns validated metadata and the
+composition generation; it never calls a handler, grants authority or claims sandbox readiness.
+The kernel must freshly admit authority and retain execution providers through final cleanup.
+
+Core profile identifiers remain planning, estimating, acting, reviewing, reporting and chat.
+Their productive handlers are unavailable until Task 10. External accepted capabilities may use
+other identifiers and parameter schemas without changing the resolver or a core enum. Unknown,
+ambiguous, incompatible, missing or cyclic selections fail before dispatch. The runtime validator
+is executable package code and therefore belongs only in an already accepted preparation scope;
+Cordis contexts do not isolate untrusted code. Artifact acquisition, validator sandboxing and live
+authority remain separate owner boundaries and are not supplied by this resolver.
+
 Pool compatibility binds exact runtime/archive/image, resource shape, network/isolation policy
 and relevant provider/process generations. Only credential-free, clean, never-assigned guests
 enter the pool. Claim removes a base from available inventory before yielding. Worker policy

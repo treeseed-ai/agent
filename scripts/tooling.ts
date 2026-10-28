@@ -1,3 +1,4 @@
+import { AgentHostPlugin } from '../src/execution.js';
 import { AgentContextPlugin, AgentEchoToolPlugin, AgentEchoHandlerPlugin, AgentReporterPlugin, AgentExecutionPlugin } from '../src/providers.js';
 import { AgentPackageIdentity } from '../src/package-identity.js';
 import { createHash } from 'node:crypto';
@@ -19,6 +20,7 @@ class AgentTooling {
   }
   private static readonly definitions = [
     {plugin: AgentFileGrantPlugin, entry: 'dist/src/authority.js', name: 'AgentFileGrantPlugin'},
+    {plugin: AgentHostPlugin, entry: 'dist/src/execution.js', name: 'AgentHostPlugin'},
     {plugin: AgentContextPlugin, entry: 'dist/src/providers.js', name: 'AgentContextPlugin'},
     {plugin: AgentEchoToolPlugin, entry: 'dist/src/providers.js', name: 'AgentEchoToolPlugin'},
     {plugin: AgentEchoHandlerPlugin, entry: 'dist/src/providers.js', name: 'AgentEchoHandlerPlugin'},

@@ -4,6 +4,8 @@
 
 ### Added
 - Select the reviewed capacity SDK closure for separate Agent services (#525).
+- Compose harmless Agent probes through native capability providers and child contexts (#525).
+
 - Export native probe context, tool, handler, reporting and execution providers (#525).
 - Bind bundled Agent provider identity to checked package metadata (#525).
 - Provide native Agent probe authority with verified private grant read-back (#525).

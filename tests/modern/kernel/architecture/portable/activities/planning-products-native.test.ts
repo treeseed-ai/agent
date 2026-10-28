@@ -9,8 +9,8 @@ import { timingAwareness } from '../../../provider-kernel-fixture.ts';
 
 // Original public HTTP executor, Kernel, content validation, commit and native Git.
 // Supplied model/TreeDX responses do not prove live planning, API publication or billing.
-it.each(['writer', 'actor', 'estimate', 'reviewer', 'releaser'])('persists a group planning Proposal through %s with exact grant and native readback', async handler => {
-	for (const mutation of ['valid', 'missing-grant', 'wrong-id', 'wrong-project', 'missing-groups', 'readback']) {
+it('persists a group planning Proposal through every model handler with exact grant and native readback', async () => {
+	for (const handler of ['writer', 'actor', 'estimate', 'reviewer', 'releaser']) for (const mutation of ['valid', 'missing-grant', 'wrong-id', 'wrong-project', 'missing-groups', 'readback']) {
 		const f = await portableKernel();
 		let boundary: Awaited<ReturnType<typeof contextBoundary>> | undefined;
 		try {

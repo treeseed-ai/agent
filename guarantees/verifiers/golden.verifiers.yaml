@@ -2090,12 +2090,17 @@ verifiers:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/kernel/architecture/portable/activities/planning-products-native.test.ts
-    testName: "persists a group planning Proposal through"
+    testName: "persists a group planning Proposal through every model handler with exact grant and native readback"
   agent.golden.planning-proposal-cli-schema:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/sandbox/codex-schema-transport.test.ts
     testName: "transports optional exact group Proposal output for planning without changing review or estimate schemas"
+  agent.golden.planning-product-review-isolation:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/portable/activities/model-handlers.test.ts
+    testName: "retains explicitly granted reporting products without allowing them to bypass review dispositions"
   agent.golden.subscriber-estimate-authority:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

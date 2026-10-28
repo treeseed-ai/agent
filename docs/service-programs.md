@@ -176,3 +176,14 @@ This is a pinned configuration finding, not a claim that musl or Bun cannot supp
 A single 51 MiB gzip entry passed Node installation but was rejected by accepted Deployment .83
 public archive custody. Preserve that failed .17 candidate as evidence; the revised .18 transport
 uses individually hashed chunks and an aggregate compressed hash before bounded expansion.
+
+## Shared guest payload contract
+
+The current producer selects accepted SDK .39 and validates every generated standalone manifest
+through GuestRuntimeBinding, including consecutive 7 MiB parts, aggregate size and the exact GNU
+library set. The accepted Deployment .88 development auditor selects the same SDK peer. Only
+these public immutable owner archives are installed; the Agent runtime dependency remains SDK,
+and no Deployment implementation is bundled into its guest. Keep full Node/standalone contracts,
+empty-tool-path and ambient-preload canaries, archive limits and native generation read-back.
+This aligns owner contracts before actual guest sessions; it creates no capacity or authority.
+All issues remain open and real Work/model execution remains Task 10.

@@ -45,7 +45,7 @@ export class FixtureProfilePlugin {
   static readonly Config = z.strictObject({ behavior: z.enum(['accept', 'reject', 'mutate', 'block']) });
   static readonly declaration = ProviderV4Schemas.declaration.parse({
     id: 'fixture.profile', pluginId: 'fixture', capability: this.provide[0],
-    contractVersion: '1.0.0', target: 'agent', provide: this.provide, inject: this.inject,
+    contractVersion: ProviderV4Schemas.version, target: 'agent', provide: this.provide, inject: this.inject,
   });
   constructor(context: Context, private readonly configuration: z.infer<typeof FixtureProfilePlugin.Config>) {
     context.provide('agent.profile.fixture', this);
@@ -70,7 +70,7 @@ export class FixtureProfileHandler {
   static readonly Config = z.strictObject({});
   static readonly declaration = ProviderV4Schemas.declaration.parse({
     id: 'fixture.handler', pluginId: 'fixture', capability: this.provide[0],
-    contractVersion: '1.0.0', target: 'agent', provide: this.provide, inject: this.inject,
+    contractVersion: ProviderV4Schemas.version, target: 'agent', provide: this.provide, inject: this.inject,
   });
   constructor(context: Context) { context.provide('agent.profile.handler', this); }
   async execute(profile: ActivityProfile, signal: AbortSignal): Promise<string> {
@@ -99,13 +99,13 @@ export class ActivityPreparationFixture {
     typeId: 'external.health-probe', revision: 'a'.repeat(64),
     provider: {
       id: 'fixture.profile', capability: 'agent.profile.fixture', target: 'agent',
-      scopeId: this.scope.scopeId, contractVersion: '1.0.0',
+      scopeId: this.scope.scopeId, contractVersion: ProviderV4Schemas.version,
       artifact: { package: '@fixture/profile', version: '1.0.0', integrity: 'b'.repeat(64) },
       executableDigest: 'c'.repeat(64),
     },
     parameterSchema: { id: 'fixture.parameters', version: '1.0.0', digest: 'd'.repeat(64) },
-    handler: { capability: 'agent.profile.handler', contractVersion: '1.0.0' },
-    orchestration: { capability: 'agent.orchestration.probe', contractVersion: '1.0.0' },
+    handler: { capability: 'agent.profile.handler', contractVersion: ProviderV4Schemas.version },
+    orchestration: { capability: 'agent.orchestration.probe', contractVersion: ProviderV4Schemas.version },
   };
   readonly definition: AgentDefinition = {
     schemaVersion: 'treeseed.agent-definition/v1', id: 'fixture.agent', revision: 'e'.repeat(64),
@@ -133,7 +133,7 @@ export class ActivityPreparationFixture {
   ) {
     return {
       plugin, configuration, declaration: plugin.declaration,
-      token: new CapabilityToken(plugin.provide[0]!, '1.0.0', new ProfileAdapter(method)),
+      token: new CapabilityToken(plugin.provide[0]!, ProviderV4Schemas.version, new ProfileAdapter(method)),
       artifact: { kind: 'bundled' as const, identity: '@fixture/profile@1.0.0' },
     };
   }

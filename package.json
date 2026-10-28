@@ -1,6 +1,6 @@
 {
   "name": "@treeseed-cordis/agent",
-  "version": "0.0.0-cordis.10",
+  "version": "0.0.0-cordis.11",
   "private": true,
   "type": "module",
   "license": "Apache-2.0",
@@ -66,7 +66,7 @@
     "pluginId": "agent",
     "package": {
       "name": "@treeseed-cordis/agent",
-      "version": "0.0.0-cordis.10"
+      "version": "0.0.0-cordis.11"
     },
     "providers": [
       {

@@ -73,6 +73,17 @@ class EnvironmentPreparationBoundaries {
       await scope.dispose();
     }
   }
+  async late(): Promise<void> {
+    const fixture = new EnvironmentPreparationFixture();
+    const scope = await fixture.open('late');
+    const environment = { ...Data.environment, setup: { ...Data.environment.setup, deadlineMs: 10 } };
+    try {
+      await expect(fixture.prepare(scope, environment)).rejects.toMatchObject({ code: 'ENVIRONMENT_DEADLINE_EXCEEDED' });
+      expect(Data.calls).toEqual(['setup']);
+    } finally {
+      await scope.dispose();
+    }
+  }
 }
 const suite = new EnvironmentPreparationBoundaries();
 test('integration: guest setup failure prevents verification and exposes no provider diagnostic', suite.setupFailure.bind(suite));
@@ -83,3 +94,4 @@ test('integration: changed authority after setup prevents verification', suite.c
 test('integration: cancelled guest preparation awaits provider cancellation before disposal', suite.cancelled.bind(suite));
 test('integration: guest entrypoint deadline prevents late preparation success', suite.timeout.bind(suite));
 test('integration: malformed environment never reaches executable providers', suite.malformed.bind(suite));
+test('integration: late guest completion cannot outrun delayed timer delivery', suite.late.bind(suite));

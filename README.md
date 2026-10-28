@@ -125,3 +125,39 @@ The build checks archive bytes; owner unit verification additionally binds selec
 installed package identity and archive integrity. A fresh empty-cache frozen install and
 genuine public archive/declaration consumer must prove the closure before integration.
 Earlier archives remain immutable; this does not activate capacity or change Keycloak.
+
+## Native activity-definition preparation
+
+`ActivityDefinitionResolver.start(configuration)` creates a process-local native Cordis scope.
+Its configuration contains the accepted activity capability catalogue, selected provider
+registrations and the trusted composition identity. The catalogue contains immutable metadata,
+never service instances. `resolve(definition, signal)` validates the complete definition and
+profile graph before invoking any selected profile validator. Each validator receives a private
+copy of its profile; validation may reject parameters but cannot silently rewrite the definition.
+
+Profile providers implement `ActivityParameterProvider.validate(profile, signal)`. Handler
+providers implement `ActivityHandlerProvider.execute(profile, signal)`. Selection binds the exact
+provider ID, capability, contract version and scope declared in the accepted catalogue and Agent
+definition. The resolver acquires both through native Cordis and releases every acquired lease,
+including on validation, cancellation or disposal failure. It returns validated metadata and the
+composition generation; it never calls a handler, grants authority or claims sandbox readiness.
+The kernel must freshly admit authority and retain execution providers through final cleanup.
+
+Core profile identifiers remain planning, estimating, acting, reviewing, reporting and chat.
+Their productive handlers are unavailable until Task 10. External accepted capabilities may use
+other identifiers and parameter schemas without changing the resolver or a core enum. Unknown,
+ambiguous, incompatible, missing or cyclic selections fail before dispatch. The runtime validator
+is executable package code and therefore belongs only in an already accepted preparation scope;
+Cordis contexts do not isolate untrusted code. Artifact acquisition, validator sandboxing and live
+authority remain separate owner boundaries and are not supplied by this resolver.
+
+The follow-up public archive-consumer acceptance must pack the Agent candidate and an independent profile/handler
+fixture package, installs exact local archives with lifecycle scripts disabled, and runs a fresh
+Node consumer through public package imports. The fixture owns its profile identity and parameter
+schema. Its installation-script canary must remain absent; successful preparation must not invoke
+its handler. These are genuine package-boundary fixtures, not proof of deployment acquisition,
+isolated validator execution, enrollment or a real Kata workload.
+
+This bounded slice exposes preparation through the existing Agent public root. Genuine external
+archive delivery follows separately; current native fixtures are explicitly component controls.
+No handler execution, live authority, seed activation or Kata capacity is claimed.

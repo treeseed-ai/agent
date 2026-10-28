@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Added
+- Resolve extensible activity definitions through native profile and handler providers (#525).
 - Select the reviewed capacity SDK closure for separate Agent services (#525).
 - Compose harmless Agent probes through native capability providers and child contexts (#525).
 

@@ -1,10 +1,12 @@
+import { GuestProfilePlugin } from '@treeseed-cordis/agent/guest';
 import assert from 'node:assert/strict';
-import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
+import { spawn, spawnSync, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { mkdtempSync, writeFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { once } from 'node:events';
 import {
+  CanonicalJson,
   CapacityProtocolSchemas,
   CapacityChannelSchemas,
   type CapacityDispatch,
@@ -149,11 +151,8 @@ class GuestProgramFixture {
     const profile = this.record.definition.profiles[0]!;
     profile.typeId = 'probe.echo';
     profile.parameters = {};
-    profile.handler = {
-      providerId: 'agent.guest.handler.echo',
-      capability: 'agent.guest.handler',
-      contractVersion: '0.4.0-cordis.1',
-    };
+    profile.capabilityRevision = GuestProfilePlugin.revision;
+    profile.handler = structuredClone(GuestProfilePlugin.capability.handler);
     writeFileSync(
       this.configurationFile,
       JSON.stringify({
@@ -185,12 +184,21 @@ class GuestProgramFixture {
     else this.waiting.push(resolve);
   }
   request(
-    operation: 'ready' | 'run',
+    operation: 'ready' | 'run' | 'cancel',
     expectedGeneration: unknown,
     record = this.record,
   ): Promise<CapacityChannelResponse> {
-    const parameters = operation === 'run' ? { request: record } : {};
-    this.child.stdin.write(
+    const parameters =
+      operation === 'run'
+        ? { request: record }
+        : operation === 'cancel'
+          ? { lease: record.lease }
+          : {};
+    this.child.stdin.write(this.encoded(operation, expectedGeneration, parameters));
+    return new Promise(this.response.bind(this));
+  }
+  private encoded(operation: string, expectedGeneration: unknown, parameters: object): string {
+    return (
       JSON.stringify({
         schemaVersion: 'treeseed.capacity-channel/v1',
         requestId: 'fixture.' + operation,
@@ -199,9 +207,8 @@ class GuestProgramFixture {
         operation,
         expectedGeneration,
         parameters,
-      }) + '\n',
+      }) + '\n'
     );
-    return new Promise(this.response.bind(this));
   }
   publish(): void {
     writeFileSync(this.assignmentFile, JSON.stringify(this.record), { mode: 0o600 });
@@ -221,6 +228,7 @@ class GuestProgramFixture {
     assert.equal(ready.success, true);
     assert.equal(existsSync(this.assignmentFile), false);
     assert.match(ready.generation.processGeneration, /^[a-f0-9]{64}$/);
+    this.anotherProcess(ready);
     this.record.lease.generations.runner = ready.generation;
     this.publish();
     const response = await this.request('run', ready.generation);
@@ -234,21 +242,67 @@ class GuestProgramFixture {
     assert.equal(repeated.success, false);
     await this.close();
   }
+  private anotherProcess(ready: CapacityChannelResponse): void {
+    const input = {
+      schemaVersion: 'treeseed.capacity-channel/v1',
+      requestId: 'fixture.ready',
+      scope: this.record.lease.scope,
+      role: 'runner',
+      operation: 'ready',
+      expectedGeneration: null,
+      parameters: {},
+    };
+    const second = spawnSync(
+      'node',
+      ['dist/src/guest-main.js', '--config', this.configurationFile],
+      { encoding: 'utf8', input: JSON.stringify(input) + '\n', timeout: 8000 },
+    );
+    assert.equal(second.status, 0, second.stderr);
+    const response = CapacityChannelSchemas.response.parse(JSON.parse(second.stdout));
+    assert.equal(response.generation.compositionGeneration, ready.generation.compositionGeneration);
+    assert.notEqual(response.generation.processGeneration, ready.generation.processGeneration);
+  }
   async denied(): Promise<void> {
     const ready = await this.request('ready', null);
     this.record.lease.generations.runner = ready.generation;
-    const missing = await this.request('run', ready.generation);
-    assert.equal(missing.success, false);
+    const mode = process.argv[2];
+    if (mode === '--foreign') {
+      this.publish();
+      const changed = structuredClone(this.record);
+      changed.input = 'foreign-output-canary';
+      this.assertDenied(await this.request('run', ready.generation, changed));
+    } else {
+      if (mode === '--ungranted') {
+        this.record.lease.authority.capabilities = [];
+        this.publish();
+      }
+      this.assertDenied(await this.request('run', ready.generation));
+    }
+    await this.close();
+  }
+  private assertDenied(reply: CapacityChannelResponse): void {
+    assert.equal(reply.success, false);
+    assert(!JSON.stringify(reply).includes('foreign-output-canary'));
+  }
+  async cancelled(): Promise<void> {
+    const ready = await this.request('ready', null);
+    this.record.lease.generations.runner = ready.generation;
     this.publish();
-    const foreign = structuredClone(this.record);
-    foreign.input = 'foreign-output-canary';
-    const altered = await this.request('run', ready.generation, foreign);
-    assert.equal(altered.success, false);
-    this.record.lease.authority.capabilities = [];
-    this.publish();
-    const denied = await this.request('run', ready.generation);
-    assert.equal(denied.success, false);
-    assert(!JSON.stringify(denied).includes('foreign-output-canary'));
+    const run = new Promise<CapacityChannelResponse>(this.response.bind(this));
+    const cancel = new Promise<CapacityChannelResponse>(this.response.bind(this));
+    this.child.stdin.write(
+      this.encoded('run', ready.generation, { request: this.record }) +
+        this.encoded('cancel', ready.generation, { lease: this.record.lease }),
+    );
+    const responses = await Promise.all([run, cancel]);
+    for (const response of responses) {
+      if (
+        response.success &&
+        response.role === 'runner' &&
+        (response.operation === 'run' || response.operation === 'cancel')
+      )
+        assert.notEqual(response.result.state, 'completed');
+    }
     await this.close();
   }
   async malformed(): Promise<void> {
@@ -264,7 +318,8 @@ class GuestProgramAcceptance {
     const timer = setTimeout(fixture.kill.bind(fixture), 8000);
     try {
       const mode = process.argv[2];
-      if (mode === '--deny') await fixture.denied();
+      if (['--deny', '--foreign', '--ungranted'].includes(mode!)) await fixture.denied();
+      else if (mode === '--cancel') await fixture.cancelled();
       else if (mode === '--malformed') await fixture.malformed();
       else await fixture.normal();
     } finally {

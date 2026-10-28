@@ -1,3 +1,4 @@
+import { GuestProfilePlugin, GuestContextPlugin, GuestHandlerPlugin, GuestToolPlugin, GuestReportingPlugin, GuestExecutionPlugin } from '../src/guest-providers.js';
 import { AgentHostPlugin } from '../src/execution.js';
 import { AgentContextPlugin, AgentEchoToolPlugin, AgentEchoHandlerPlugin, AgentReporterPlugin, AgentExecutionPlugin } from '../src/providers.js';
 import { AgentPackageIdentity } from '../src/package-identity.js';
@@ -19,6 +20,12 @@ class AgentTooling {
     this.project(metadata, process.argv[2] === 'build');
   }
   private static readonly definitions = [
+    {plugin: GuestProfilePlugin, entry: 'dist/src/guest-providers.js', name: 'GuestProfilePlugin'},
+    {plugin: GuestContextPlugin, entry: 'dist/src/guest-providers.js', name: 'GuestContextPlugin'},
+    {plugin: GuestHandlerPlugin, entry: 'dist/src/guest-providers.js', name: 'GuestHandlerPlugin'},
+    {plugin: GuestToolPlugin, entry: 'dist/src/guest-providers.js', name: 'GuestToolPlugin'},
+    {plugin: GuestReportingPlugin, entry: 'dist/src/guest-providers.js', name: 'GuestReportingPlugin'},
+    {plugin: GuestExecutionPlugin, entry: 'dist/src/guest-providers.js', name: 'GuestExecutionPlugin'},
     {plugin: AgentCapacityAssignmentFilePlugin, entry: 'dist/src/authority.js', name: 'AgentCapacityAssignmentFilePlugin'},
     {plugin: AgentFileGrantPlugin, entry: 'dist/src/authority.js', name: 'AgentFileGrantPlugin'},
     {plugin: AgentHostPlugin, entry: 'dist/src/execution.js', name: 'AgentHostPlugin'},

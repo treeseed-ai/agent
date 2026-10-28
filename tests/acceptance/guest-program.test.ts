@@ -11,6 +11,15 @@ class GuestProgramTests {
   malformed(): void {
     this.run('--malformed');
   }
+  foreign(): void {
+    this.run('--foreign');
+  }
+  ungranted(): void {
+    this.run('--ungranted');
+  }
+  cancelled(): void {
+    this.run('--cancel');
+  }
   private run(mode: string): void {
     const result = spawnSync('node', ['dist/tests/support/guest-program.js', mode], {
       encoding: 'utf8',
@@ -34,5 +43,21 @@ test(
 test(
   'acceptance: separate built guest rejects duplicate-key input without leaking bytes',
   suite.malformed.bind(suite),
+  15000,
+);
+
+test(
+  'acceptance: separate built guest compares the entire dispatch to trusted custody',
+  suite.foreign.bind(suite),
+  15000,
+);
+test(
+  'acceptance: separate built guest denies a trusted assignment without probe authority',
+  suite.ungranted.bind(suite),
+  15000,
+);
+test(
+  'acceptance: separate built guest cancellation fences an in-progress admission',
+  suite.cancelled.bind(suite),
   15000,
 );

@@ -79,6 +79,27 @@ atomicity or destructive automatic rollback.
 
 ## Evidence and status
 
+### Worker pool policy boundary
+
+`WarmSandboxPool` owns a bounded inventory of never-assigned sandbox identities for one exact
+compatibility digest. Its sandbox provider contract creates a caller-named base, verifies virgin
+state, atomically assigns against that evidence and destroys with an inspection receipt.
+The production provider must enforce those operations through Deployment's service-scoped private
+control boundary. Contract fixture evidence cannot substitute for a real Kata host receipt.
+
+Warming is serialized and includes pending creates and assigned sandboxes in the total capacity
+bound. Claim removes a base synchronously before any asynchronous admission operation. A claimed
+base never returns to the ready inventory. Refill runs in the background when capacity permits;
+closing the claim destroys its sandbox and verifies teardown before releasing its capacity slot.
+Unknown or failed teardown quarantines the identity and blocks further admission. A failed create
+also requires cleanup of its caller-owned identity, even when its reply was lost.
+
+Pool closure rejects new claims, waits for pending creation, destroys all unused bases and reports
+live claims as incomplete disposal. In-flight claims retain their provider through cleanup and can
+be closed before retrying disposal. Compatibility changes require a new pool generation; old ready
+bases must be disposed before replacement succeeds. No method can silently turn an ordinary
+container, fixture base, assigned sandbox or failed cleanup into a clean warm Kata base.
+
 The existing unmerged probe root and SDK contract candidates are foundations. They do not prove
 working manager/worker services, a real warm pool, enrollment or seed reconciliation. Required
 evidence includes actual built programs/default composition, genuine external provider archives,

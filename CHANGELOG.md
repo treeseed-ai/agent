@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Added
+- Define exclusive virgin pool claims, bounded background refill and verified teardown policy (#525).
 - Add native Agent composition and bounded execution scopes (#525).
 
 ### Changed

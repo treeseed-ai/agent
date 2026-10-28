@@ -6,11 +6,11 @@ class AgentPackageIdentityTests {
   private readonly metadata = JSON.parse(readFileSync('package.json', 'utf8'));
 
   sdk(): void {
-    expect(this.metadata.peerDependencies['@treeseed-cordis/sdk']).toBe('0.0.0-cordis.19');
+    expect(this.metadata.peerDependencies['@treeseed-cordis/sdk']).toBe('0.0.0-cordis.22');
     const selected = this.metadata.cordisCandidate.sdk;
-    expect(selected.commit).toBe('90cf4f3cc62e166685280450c727499defd2af5b');
+    expect(selected.commit).toBe('c4f7849d402fc60bd1ee8274f647dac71a45b76e');
     expect(selected.sha256).toBe(
-      '93dd549c98aba180306e9b19cc1cbc37494544b2764ed341c531c9af618c6f81',
+      'dc9a91c26b12180a6dd003a8f7b56e1bc76c19c48fde42feaa0026765dd6583f',
     );
     expect(this.hash('vendor/sdk.tgz')).toBe(selected.sha256);
     const installed = JSON.parse(
@@ -20,18 +20,18 @@ class AgentPackageIdentityTests {
   }
 
   ui(): void {
-    expect(this.metadata.peerDependencies['@treeseed-cordis/ui']).toBe('0.0.0-cordis.18');
+    expect(this.metadata.peerDependencies['@treeseed-cordis/ui']).toBe('0.0.0-cordis.19');
     expect(this.metadata.peerDependenciesMeta['@treeseed-cordis/ui'].optional).toBe(true);
     const selected = this.metadata.cordisCandidate.ui;
-    expect(selected.commit).toBe('e2b9c5e10611c196834fd57ba5358a74304e373c');
+    expect(selected.commit).toBe('1dd048ddbcb55124840b94e843e1ed1b5fa8ba2b');
     expect(selected.sha256).toBe(
-      'd09e6ed33f7f1bc2f7210208a94f33bbd2a6453d8fe886f75a1f950887223e48',
+      'cc78d9a007d9c2bb077f709d6ab72ef2d4861a52ef78d310cea3680d28bf4ec2',
     );
     expect(this.hash('vendor/ui.tgz')).toBe(selected.sha256);
     const installed = JSON.parse(
       readFileSync('node_modules/@treeseed-cordis/ui/package.json', 'utf8'),
     );
-    expect(installed.peerDependencies['@treeseed-cordis/sdk']).toBe('0.0.0-cordis.19');
+    expect(installed.peerDependencies['@treeseed-cordis/sdk']).toBe('0.0.0-cordis.22');
   }
 
   private hash(path: string): string {

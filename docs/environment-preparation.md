@@ -1,13 +1,14 @@
 # Guest environment preparation
 
 Agent #525 owns the native `agent.environment` capability and its typed
-`EnvironmentPreparer.prepare(definition, trustedPolicy, signal)` interface. It uses selected
+`EnvironmentPreparer.prepare(definition, target, signal)` interface. It uses selected
 `agent.environment.execution` and `agent.environment.authority` capabilities through native
 Cordis injection and leases, never a second container or cached service registry.
 
 An immutable environment is SDK `EnvironmentDefinition`: exact package/image, setup and
 verification entries, explicit deadlines/output limits and offline-by-default network policy.
-The authority provider obtains fresh host and assignment policies; SDK intersection fails
+The trusted kernel supplies the exact sandbox ID and runner generation as `target`.
+The authority provider authenticates that target and obtains fresh host and assignment policies; SDK intersection fails
 before execution when a destination is not granted by both. Repeat live authority checks
 before setup, before verification and before reporting success. A changed policy must not be
 silently substituted after setup. The kernel separately retains exact authority and fences.

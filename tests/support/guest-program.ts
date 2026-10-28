@@ -1,7 +1,9 @@
+import { createHash } from 'node:crypto';
+import { gunzipSync } from 'node:zlib';
 import { GuestProfilePlugin } from '@treeseed-cordis/agent/guest';
 import assert from 'node:assert/strict';
 import { spawn, spawnSync, type ChildProcessWithoutNullStreams } from 'node:child_process';
-import { mkdtempSync, writeFileSync, existsSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, existsSync, readFileSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { once } from 'node:events';
@@ -12,6 +14,61 @@ import {
   type CapacityDispatch,
   type CapacityChannelResponse,
 } from '@treeseed-cordis/sdk';
+class GuestProgramLauncher {
+  private readonly directory = mkdtempSync(join(tmpdir(), 'guest-runtime-'));
+  private readonly standalone = process.argv.includes('--standalone');
+  private readonly file = join(this.directory, 'guest');
+  constructor() {
+    if (this.standalone) this.prepare();
+  }
+  private prepare(): void {
+    const manifest = JSON.parse(readFileSync('dist/bin/guest-runtime.json', 'utf8'));
+    const compressed = readFileSync('dist/bin/trsd-agent-guest.gz');
+    assert.equal(createHash('sha256').update(compressed).digest('hex'), manifest.compressed.sha256);
+    const expanded = gunzipSync(compressed, { maxOutputLength: 128 * 1024 * 1024 });
+    assert.equal(expanded.length, manifest.executable.size);
+    assert.equal(createHash('sha256').update(expanded).digest('hex'), manifest.executable.sha256);
+    writeFileSync(this.file, expanded, { mode: 0o755 });
+    mkdirSync(join(this.directory, 'empty'));
+    this.ambientCanary();
+  }
+  private ambientCanary(): void {
+    writeFileSync(join(this.directory, 'bunfig.toml'), 'preload = ["./ambient.ts"]\n');
+    writeFileSync(
+      join(this.directory, 'ambient.ts'),
+      "import {writeFileSync} from 'node:fs'; class AmbientCanary {static run():void {writeFileSync('ambient-canary','unexpected');}} AmbientCanary.run();",
+    );
+    writeFileSync(join(this.directory, '.env'), 'BUN_OPTIONS=--preload ./ambient.ts\n');
+  }
+  private command(configuration: string): string[] {
+    return this.standalone
+      ? [this.file, '--config', configuration]
+      : ['node', 'dist/src/guest-main.js', '--config', configuration];
+  }
+  private options(): { cwd?: string; env: NodeJS.ProcessEnv } {
+    return this.standalone
+      ? {
+          cwd: this.directory,
+          env: {
+            PATH: join(this.directory, 'empty'),
+            HOME: this.directory,
+            TMPDIR: this.directory,
+          },
+        }
+      : { env: process.env };
+  }
+  start(configuration: string): ChildProcessWithoutNullStreams {
+    const [command, ...args] = this.command(configuration);
+    return spawn(command!, args, this.options());
+  }
+  second(configuration: string, input: string): ReturnType<typeof spawnSync> {
+    const [command, ...args] = this.command(configuration);
+    return spawnSync(command!, args, { ...this.options(), encoding: 'utf8', input, timeout: 8000 });
+  }
+  verify(): void {
+    assert.equal(existsSync(join(this.directory, 'ambient-canary')), false);
+  }
+}
 /** Data-only protocol fixture, never live authority or a Kata assignment. */
 class GuestProgramFixture {
   private static readonly data = {
@@ -133,6 +190,7 @@ class GuestProgramFixture {
   readonly configurationFile = join(this.directory, 'guest.json');
   readonly record: CapacityDispatch;
   readonly child: ChildProcessWithoutNullStreams;
+  private readonly launcher = new GuestProgramLauncher();
   private buffered = '';
   private error = '';
   private readonly replies: CapacityChannelResponse[] = [];
@@ -140,7 +198,7 @@ class GuestProgramFixture {
   constructor() {
     this.record = CapacityProtocolSchemas.dispatch.parse(structuredClone(GuestProgramFixture.data));
     this.configure();
-    this.child = spawn('node', ['dist/src/guest-main.js', '--config', this.configurationFile]);
+    this.child = this.launcher.start(this.configurationFile);
     this.child.stdout.on('data', this.output.bind(this));
     this.child.stderr.on('data', this.errors.bind(this));
   }
@@ -219,6 +277,7 @@ class GuestProgramFixture {
     const [code] = await exited;
     assert.equal(code, expected, this.error);
     if (expected === 0) assert.equal(this.error, '');
+    this.launcher.verify();
   }
   kill(): void {
     this.child.kill('SIGKILL');
@@ -252,13 +311,9 @@ class GuestProgramFixture {
       expectedGeneration: null,
       parameters: {},
     };
-    const second = spawnSync(
-      'node',
-      ['dist/src/guest-main.js', '--config', this.configurationFile],
-      { encoding: 'utf8', input: JSON.stringify(input) + '\n', timeout: 8000 },
-    );
+    const second = this.launcher.second(this.configurationFile, JSON.stringify(input) + '\n');
     assert.equal(second.status, 0, second.stderr);
-    const response = CapacityChannelSchemas.response.parse(JSON.parse(second.stdout));
+    const response = CapacityChannelSchemas.response.parse(JSON.parse(String(second.stdout)));
     assert.equal(response.generation.compositionGeneration, ready.generation.compositionGeneration);
     assert.notEqual(response.generation.processGeneration, ready.generation.processGeneration);
   }

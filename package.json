@@ -1,6 +1,6 @@
 {
   "name": "@treeseed-cordis/agent",
-  "version": "0.0.0-cordis.8",
+  "version": "0.0.0-cordis.9",
   "private": true,
   "type": "module",
   "license": "Apache-2.0",
@@ -39,13 +39,17 @@
       "types": "./dist/src/authority.d.ts",
       "default": "./dist/src/authority.js"
     },
-    "./providers": {
-      "types": "./dist/src/providers.d.ts",
-      "default": "./dist/src/providers.js"
+    ".": {
+      "types": "./dist/src/application.d.ts",
+      "default": "./dist/src/application.js"
     },
     "./contracts": {
       "types": "./dist/src/contracts.d.ts",
       "default": "./dist/src/contracts.js"
+    },
+    "./providers": {
+      "types": "./dist/src/providers.d.ts",
+      "default": "./dist/src/providers.js"
     }
   },
   "files": [
@@ -62,7 +66,7 @@
     "pluginId": "agent",
     "package": {
       "name": "@treeseed-cordis/agent",
-      "version": "0.0.0-cordis.8"
+      "version": "0.0.0-cordis.9"
     },
     "providers": [
       {
@@ -133,6 +137,41 @@
             "file",
             "binding"
           ],
+          "additionalProperties": false
+        },
+        "replacement": {
+          "kind": "restart",
+          "stateVersion": 1,
+          "qualificationDigest": null
+        },
+        "commandIds": []
+      },
+      {
+        "declaration": {
+          "id": "agent.host.native",
+          "pluginId": "agent",
+          "capability": "agent.host",
+          "contractVersion": "0.4.0-cordis.1",
+          "target": "agent",
+          "provide": [
+            "agent.host"
+          ],
+          "inject": [
+            "cordis.composition",
+            "agent.authority",
+            "agent.context",
+            "agent.handler",
+            "agent.tool",
+            "agent.reporting",
+            "agent.execution"
+          ]
+        },
+        "entry": "dist/src/execution.js",
+        "classExport": "AgentHostPlugin",
+        "configurationSchema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {},
           "additionalProperties": false
         },
         "replacement": {

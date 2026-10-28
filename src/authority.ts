@@ -159,7 +159,7 @@ export class AgentFileAuthority {
   private static registration(configuration: AgentFileAuthorityConfiguration): ProviderRegistration {
     return {
       token: AgentGrantAuthorityToken, plugin: AgentFileGrantPlugin, declaration: AgentFileGrantPlugin.declaration,
-      configuration, artifact: { kind: 'bundled' as const, identity: '@treeseed-cordis/agent@0.0.0-cordis.2' },
+      configuration, artifact: { kind: 'bundled' as const, identity: '@treeseed-cordis/agent@0.0.0-cordis.5' },
     };
   }
   get generation(): string {

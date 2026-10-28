@@ -77,3 +77,18 @@ provider replacement. Qualified replacement and separate manager/worker/guest pr
 live team authority, warm Kata claims, setup and egress remain subsequent owner gates.
 Acceptance spawns the actual built Node public consumer, runs the real default root, checks
 revocation/generation fencing and awaits cleanup. Productive execution remains Task 10.
+
+## Package and native artifact identity
+
+The public `AgentPackageIdentity` data declaration is the single bundled identity used by
+Agent roots. Normal check/build rejects a package-version mismatch before compilation;
+future provider roots must use that declaration rather than copying version strings. The
+identity is exported from the authority entry without opening private package metadata at
+runtime. SDK artifact hashes remain independently verified; this creates no authority,
+provider cache or runtime dependency container. Built public Node acceptance compares the
+identity with the shipped package, and a hostile version-change control proves build denial.
+
+The package declares exact `cordis` and `zod` runtime dependencies used by its public
+authority/provider modules; consumers must not depend on incidental peer hoisting. The
+normal checks pin those owned runtime dependencies, and the archive smoke consumes only
+public entries with lifecycle scripts disabled.

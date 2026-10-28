@@ -1,3 +1,5 @@
+import { AgentPackageIdentity } from './package-identity.js';
+export { AgentPackageIdentity } from './package-identity.js';
 import { openSync, closeSync, readSync, fstatSync, lstatSync, constants, type Stats } from 'node:fs';
 import { dirname, basename, isAbsolute, resolve } from 'node:path';
 import { Context, CordisScope, InstalledProviderLoader, type ProviderRegistration } from '@treeseed-cordis/sdk/runtime';
@@ -159,7 +161,7 @@ export class AgentFileAuthority {
   private static registration(configuration: AgentFileAuthorityConfiguration): ProviderRegistration {
     return {
       token: AgentGrantAuthorityToken, plugin: AgentFileGrantPlugin, declaration: AgentFileGrantPlugin.declaration,
-      configuration, artifact: { kind: 'bundled' as const, identity: '@treeseed-cordis/agent@0.0.0-cordis.5' },
+      configuration, artifact: { kind: 'bundled' as const, identity: AgentPackageIdentity.artifact },
     };
   }
   get generation(): string {

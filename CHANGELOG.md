@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Added
+- Select the reviewed sandbox-control SDK contract for Agent workers (#525).
 - Qualify external activity profile and handler packages through public archives (#525).
 
 - Resolve extensible activity definitions through native profile and handler providers (#525).

@@ -293,6 +293,8 @@ it('uses the original operator proposal and start and denies changed CLI intent 
 	const seed = nativeFs.readFileSync(resolve(authority!, 'seeds/treeseed.yaml'), 'utf8');
 	const canonical = sdkProposalText(document), head = 'a'.repeat(40);
 	const supplied = campaignInputs(portfolioRelations(document, seed).projects.map(project => project.slug), seed);
+	const profileSources = new Map(supplied.proposals.map(({ slug }) => [slug, campaignProfiles(slug, head, `repository-${slug}`)]));
+	const sourceFor = (slug: string) => structuredClone(profileSources.get(slug) ?? campaignProfiles(slug, head, `repository-${slug}`));
 	const sdk = supplied.allocationInputsByRun.sdk!;
 	const frozenOffers = campaignOffers().inventory.offers;
 	const modelStatus=campaignModels();
@@ -332,12 +334,12 @@ it('uses the original operator proposal and start and denies changed CLI intent 
 				revision: scenario === 'policy-drift' ? 3 : supplied.workdayPolicy.revision };
 			if (args[0] === 'dev' && args.includes('--all')) return {sessions:[]};
 			if (args[0] === 'dev') return { status: 'active', manifestDigest: digest, guestImageDigest: digest };
-			if (args[0] === 'library' && args[1] === 'paths') return { result: campaignProfiles(args[2]!, head, `repository-${args[2]}`).paths };
+			if (args[0] === 'library' && args[1] === 'paths') return { result: sourceFor(args[2]!).paths };
 			if (args[0] === 'library' && args[1] === 'read' && args[3]?.startsWith('agents/')) return {
-				result: campaignProfiles(args[2]!, head, `repository-${args[2]}`).files.find(value => value.files[0]!.path === args[3]) };
+				result: sourceFor(args[2]!).files.find(value => value.files[0]!.path === args[3]) };
 			if (args[0] === 'library') return { result: { repoId: 'repo_supplied', resolvedRef: head,
 				files: [{ path: canonical.architectureBook.path, content, frontmatter: bookFrontmatter }] } };
-			if (args[0] === 'agents') return campaignProfiles(args[3]!, head, `repository-${args[3]}`).inventory;
+			if (args[0] === 'agents') return sourceFor(args[3]!).inventory;
 			if (args[0] === 'providers' && args[1] === 'offers') {
 				if (scenario === 'offer-denied') throw new Error('ACCEPTANCE_CLI_COMMAND: providers.offers.show denied');
 				return { schemaVersion: 'treeseed.provider-offer-inventory/v1', providerId: scenario === 'offer-provider' ? 'foreign' : args[3],

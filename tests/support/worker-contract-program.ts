@@ -11,8 +11,7 @@ class WorkerContractProgram {
     const schema = Reflect.get(sdk, 'SandboxControlSchemas');
     assert.equal(typeof schema, 'function', 'portable sandbox-control contracts must be selected');
     const binding = Reflect.get(sdk, 'SandboxControlBinding');
-    assert.equal(typeof Reflect.get(sdk, 'CapacityChannelSchemas'), 'function');
-    assert.equal(typeof Reflect.get(sdk, 'CapacityChannelBinding'), 'function');
+    this.capacityFamily();
     const request = this.request();
     const grant = this.grant();
     assert.equal(binding.assertRequest(request, grant, 1000).operation, 'ready');
@@ -23,6 +22,10 @@ class WorkerContractProgram {
     );
     assert.equal(sdk.PlatformOperations.all.length, 7);
     process.stdout.write('agent-worker-contract-ok\n');
+  }
+  private capacityFamily(): void {
+    assert.equal(typeof Reflect.get(sdk, 'CapacityChannelSchemas'), 'function');
+    assert.equal(typeof Reflect.get(sdk, 'CapacityChannelBinding'), 'function');
   }
   private denials(binding: typeof sdk.SandboxControlBinding, request: object, grant: object): void {
     assert.throws(binding.assertRequest.bind(binding, request, grant, 2000), {

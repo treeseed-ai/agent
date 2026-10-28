@@ -92,3 +92,22 @@ The package declares exact `cordis` and `zod` runtime dependencies used by its p
 authority/provider modules; consumers must not depend on incidental peer hoisting. The
 normal checks pin those owned runtime dependencies, and the archive smoke consumes only
 public entries with lifecycle scripts disabled.
+
+## Native probe capability providers
+
+The public `./providers` entry exports native Cordis class plugins for isolated request
+context, a bounded echo tool, the harmless composition-probe handler, probe reporting and
+execution orchestration. `./contracts` exposes their typed contracts and `AgentTokens`.
+The authority token is the already accepted `AgentGrantAuthorityToken`, not another resolver.
+Their package projections are generated from the same provide/inject/Config declarations.
+
+Execution reads context, calls the selected handler/tool, and reports only between fresh
+authority/cancellation checkpoints supplied by its owning execution session. Providers
+do not grant authority, start sandboxes, execute setup scripts or perform productive Work.
+Native Cordis owns their instances/lifecycle. Defaults are qualified through actual SDK
+CordisScope construction and real private grant reads; no fake provider is injected.
+The enclosing execution-child/host root is delivered separately before service programs.
+
+Built public Node acceptance selects the shipped classes through their public contracts,
+checks bounded echo output and real grant revocation, and awaits all leases/root disposal.
+Existing tests remain intact; Work/model execution stays Task 10 and all issues stay open.

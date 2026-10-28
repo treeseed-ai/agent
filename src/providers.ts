@@ -1,3 +1,4 @@
+export { AgentPackageIdentity } from './package-identity.js';
 import {
   CanonicalJson,
   ProviderV4Schemas,

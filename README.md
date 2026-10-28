@@ -55,3 +55,25 @@ ee30dbacf0e95d3fd9f88d097b15332c3dbf8020c3313c90e0a0578937a5d1df.
 Development build/check verifies archive bytes before semantic compilation. Subsequent manager,
 worker and guest roots consume the provider through its public contract; contexts are not isolation.
 All issues remain open and delivery targets cordis for review, without production publication.
+
+## Native probe execution root
+
+`AgentApplication.start({binding, authorityFile})` composes the real private grant, context,
+tool, handler, reporting, execution and host providers through a process-local native Cordis
+root. `status()` exposes its generation; `execute(request, signal?)` accepts only the
+SDK composition probe bound to that generation and exact authority. `cancel(executionId)`
+requests cancellation; awaited `dispose()` drains jobs and native effects. The default echo
+probe performs no Work, model call or host/container execution. It is reusable inside the
+future guest runner, not a replacement for manager/worker services or Kata isolation.
+
+Every execution gets a native child context and fresh authority checkpoints around context,
+handler and reporting capabilities. Results distinguish blocked/cancelled/recovery-required;
+failed native cleanup fences admission. Pluggable overrides use typed native registrations;
+there is no instance cache or parallel scheduler. Missing/duplicate/incompatible selections
+fail composition. Only real private grant files admit the default construction path.
+
+This bounded slice preserves the useful draft as a public root without claiming live
+provider replacement. Qualified replacement and separate manager/worker/guest programs,
+live team authority, warm Kata claims, setup and egress remain subsequent owner gates.
+Acceptance spawns the actual built Node public consumer, runs the real default root, checks
+revocation/generation fencing and awaits cleanup. Productive execution remains Task 10.

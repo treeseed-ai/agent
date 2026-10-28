@@ -149,10 +149,12 @@ immutable guest image must supply those OS libraries. It retains the same strict
 and trusted assignment checks as the Node program. No Node, Bun, package manager or developer
 checkout is required on PATH at runtime.
 
-The owner package includes a bounded gzip payload plus a versioned manifest binding compressed
+The owner package includes a bounded gzip payload split into 7 MiB verified chunks plus a versioned manifest binding compressed
 and expanded sizes/hashes, executable mode 0755, compiler/target and OS library requirements.
 The uncompressed compiler runtime exceeds the current 64 MiB package-asset bound; transport it
-as bounded compressed bytes without weakening shared limits. A source-free copy, launched
+as bounded compressed chunks without weakening shared limits. Deployment also enforces an
+8 MiB per-entry and 64 MiB aggregate custody limit; the genuine owner package must pass its
+accepted public inspector in permanent Agent acceptance. A source-free copy, launched
 from an unrelated working directory with an empty tool PATH, must pass the same six built-program
 behavior cases. Owner checks/build and hosted CI include this gate. Deployment consumes an exact
 owner artifact when adding the actual runner session; it must not execute the guest on the host
@@ -170,3 +172,7 @@ absent. The GNU baseline target produced the expected invalid-configuration exit
 host and depends on glibc/loader/pthread/dl/m, which the immutable GNU guest image must supply.
 This is a pinned configuration finding, not a claim that musl or Bun cannot support the guest.
 
+
+A single 51 MiB gzip entry passed Node installation but was rejected by accepted Deployment .83
+public archive custody. Preserve that failed .17 candidate as evidence; the revised .18 transport
+uses individually hashed chunks and an aggregate compressed hash before bounded expansion.

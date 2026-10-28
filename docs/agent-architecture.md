@@ -70,6 +70,32 @@ protocols through a swappable adapter. Preserve issuer, subject, team, provider,
 grant identities exactly. Do not replace team approval with a new client-credentials authority.
 Tests use isolated Keycloak and contract fixtures, never production/legacy enrollment.
 
+### Existing control-plane enrollment contract
+
+The same-repository legacy public SDK separates human approval from provider proof. Preserve
+that boundary in the replacement SDK client and Agent team-connection provider:
+
+| Public operation | Existing provider authentication |
+| --- | --- |
+| `POST /v1/provider-registrations` | `Treeseed-Registration` registration key; signed submission and explicit idempotency key |
+| `GET /v1/provider-registrations/{requestId}` | No bearer substitution; base64url signed proof in `x-treeseed-provider-proof` |
+| `POST /v1/provider-registrations/{requestId}/credential` | Signed proof in the body; explicit idempotency key |
+| `POST /v1/provider/access-tokens` | `Treeseed-Credential` credential; body binds credential ID and signed proof |
+
+The Ed25519 proof binds provider fingerprint, identity version, HTTP method/path, body SHA-256,
+audience, issue/expiry times and a unique proof ID. The credential result retains membership ID,
+team ID, provider ID, issuance generation, state and scopes. The access-token result additionally
+retains credential ID, identity version and expiry. Do not infer those identities from CLI input,
+an Agent definition or a syntactically valid SDK data object.
+
+Existing membership scopes include availability, assignment read/write, usage and credential
+rotation. An internal `agent.probe` capability is a local admission projection, not a new wire
+scope, a replacement credential or authority to execute productive Work. Its trusted adapter must
+intersect live membership/credential authority with the bounded local policy and retain exact
+team/provider/credential/grant identities. Human approval remains Keycloak-governed; registering
+a package or preparing a seed cannot approve membership. Public protocol bindings and this
+adapter still require implementation and isolated real-Keycloak contract qualification.
+
 Seeds compose host capabilities, plugin selections, capacity configuration, Agent definitions and
 environments. Profile instances remain inside definitions. API owns the journal and reconciliation;
 owners keep resource receipts. Planning validates exact artifacts and prerequisites before state

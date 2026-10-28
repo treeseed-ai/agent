@@ -17,7 +17,7 @@ class AgentToolchainAcceptance {
   wired(): void {
     const metadata = JSON.parse(readFileSync('package.json', 'utf8'));
     expect(metadata.scripts.check).toContain('bun scripts/tooling.ts check');
-    expect(metadata.scripts.build).toBe('bun scripts/tooling.ts build');
+    expect(metadata.scripts.build).toBe('bun scripts/tooling.ts build && bun scripts/guest-build.ts');
   }
 }
 const suite = new AgentToolchainAcceptance();

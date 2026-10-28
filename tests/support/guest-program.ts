@@ -312,7 +312,7 @@ class GuestProgramFixture {
       parameters: {},
     };
     const second = this.launcher.second(this.configurationFile, JSON.stringify(input) + '\n');
-    assert.equal(second.status, 0, second.stderr);
+    assert.equal(second.status, 0, String(second.stderr));
     const response = CapacityChannelSchemas.response.parse(JSON.parse(String(second.stdout)));
     assert.equal(response.generation.compositionGeneration, ready.generation.compositionGeneration);
     assert.notEqual(response.generation.processGeneration, ready.generation.processGeneration);

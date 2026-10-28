@@ -39,7 +39,15 @@ class PrivateAuthorityBoundaries {
         fixture.write({ ...fixture.binding, [field]: field === 'grantRevision' ? 2 : 'other:identity' });
         await expect(authority.check(fixture.request(authority.generation))).rejects.toThrow('AGENT_SCOPE_MISMATCH');
       }
-      fixture.write(fixture.binding);
+    } finally {
+      await authority.close();
+      fixture.close();
+    }
+  }
+  async staleProcess(): Promise<void> {
+    const fixture = new AgentAuthorityFixture();
+    const authority = await fixture.open();
+    try {
       const request = { ...fixture.request(authority.generation), expectedGeneration: 'b'.repeat(64) };
       await expect(authority.check(request)).rejects.toThrow('STALE_AGENT_GENERATION');
     } finally {
@@ -80,6 +88,7 @@ class PrivateAuthorityBoundaries {
 const suite = new PrivateAuthorityBoundaries();
 test('integration: native Agent authority denies invalid private custody and binding', suite.custody.bind(suite));
 test('integration: native Agent authority rereads exact grant identities and process generation', suite.freshGrant.bind(suite));
+test('integration: native Agent authority rejects a stale process generation', suite.staleProcess.bind(suite));
 test('integration: native Agent authority detects permission changes after construction', suite.changedCustody.bind(suite));
 test('integration: native Agent authority rejects credential-bearing requests with safe errors', suite.safeContract.bind(suite));
 test('integration: private grant paths fail safely without exposing input', suite.paths.bind(suite));

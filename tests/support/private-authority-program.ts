@@ -50,17 +50,20 @@ class AgentAuthorityProgram {
     let authority: Authority | undefined;
     try {
       authority = await fixture.open();
-      assert.match(authority.generation, /^[a-f0-9]{64}$/);
-      await authority.check(fixture.request(authority.generation));
-      fixture.write({ ...fixture.binding, state: 'revoked' });
-      await assert.rejects(authority.check(fixture.request(authority.generation)), /AGENT_GRANT_REVOKED/);
-      await authority.close();
-      await assert.rejects(authority.check(fixture.request(authority.generation)), /AGENT_AUTHORITY_CLOSED/);
+      await this.revocation(fixture, authority);
     } finally {
       await authority?.close();
       fixture.close();
     }
     process.stdout.write('native-agent-authority-ok\n');
+  }
+  private async revocation(fixture: AgentAuthorityFixture, authority: Authority): Promise<void> {
+    assert.match(authority.generation, /^[a-f0-9]{64}$/);
+    await authority.check(fixture.request(authority.generation));
+    fixture.write({ ...fixture.binding, state: 'revoked' });
+    await assert.rejects(authority.check(fixture.request(authority.generation)), /AGENT_GRANT_REVOKED/);
+    await authority.close();
+    await assert.rejects(authority.check(fixture.request(authority.generation)), /AGENT_AUTHORITY_CLOSED/);
   }
 }
 if (import.meta.main) await new AgentAuthorityProgram().run();

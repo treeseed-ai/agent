@@ -183,10 +183,14 @@ No handler execution, live authority, seed activation or Kata capacity is claime
 
 ## Private worker sandbox contract selection
 
-The Agent development closure selects SDK .36 from reviewed source
-`0ae4f3973672e5c66ee021e7748c2ea73f7cb21c`; archive SHA-256
-`04cea0518a3d64228cfbdad73a357d18cc7040e4bc7a122833dddd9de96ed000`.
+The Agent development closure selects SDK .37 from reviewed source
+`dce3108e061ecaf0cfa2915c03698f0e3170a67b`; archive SHA-256
+`886a9f359148a1aee49997de7e0604c65c87bf16c693d23781c5732f41990384`.
 The peer, frozen lock, installed package and portable sandbox-control schema must agree.
 This prepares the worker's SDK-owned logical sandbox client without granting host access or
 implementing an in-process substitute for Deployment. The seven platform operation IDs stay
 unchanged. Separate programs, real pool/session integration and installed grants remain required.
+
+The selected successor includes SDK #500's separate worker/guest service envelopes. The built
+Agent consumer requires both the sandbox and capacity-channel families from this single exact
+peer. This contract-only prerequisite does not add a service or replace live enrollment.

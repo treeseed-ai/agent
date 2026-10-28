@@ -1,3 +1,4 @@
+export * from './activities.js';
 import {
   AgentSchemas,
   AgentContractBinding,

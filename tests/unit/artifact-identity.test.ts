@@ -1,9 +1,13 @@
 import {test,expect} from 'bun:test';
 import {spawnSync} from 'node:child_process';
-import {mkdtempSync,writeFileSync,rmSync} from 'node:fs';
+import {mkdtempSync,writeFileSync,rmSync,readFileSync} from 'node:fs';
 import {join,resolve} from 'node:path';
 import {tmpdir} from 'node:os';
 class ArtifactIdentityControl {
+  runtimeDependencies():void {
+    const metadata=JSON.parse(readFileSync('package.json','utf8'));
+    expect(metadata.dependencies).toEqual({cordis:'4.0.0-rc.12',zod:'4.6.7'});
+  }
   mismatch():void {
     const directory=mkdtempSync(join(tmpdir(),'cordis-agent-identity-'));
     try {
@@ -16,3 +20,4 @@ class ArtifactIdentityControl {
 }
 const suite=new ArtifactIdentityControl();
 test('unit: package identity drift fails before source compilation or metadata rewrite',suite.mismatch.bind(suite));
+test('unit: native Agent imports have explicit exact runtime dependencies',suite.runtimeDependencies.bind(suite));

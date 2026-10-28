@@ -287,7 +287,7 @@ export async function runModelWorkload() {
 		|| (sourceMetadata ? requiresActivityCompletion(sourceMetadata.mode) : false);
 	const completionSchemaPath = resolve(codexHome, 'activity-completion.schema.json');
 	const completionSchema = structuredCompletion ? planningSynthesisOutputSchema(context, activityCompletionOutputSchema(completionFrontmatterSchema(context), allowVerification,
-		completionOutputTargetVariants(context), canonicalActivity === 'reviewing')) : undefined;
+		completionOutputTargetVariants(context), canonicalActivity === 'reviewing', ['planning', 'reporting'].includes(canonicalActivity))) : undefined;
 	if (structuredCompletion) await writeFile(completionSchemaPath, `${JSON.stringify(completionSchema)}\n`, { mode: 0o600 });
 	// Session state stays inside this assignment's disposable Kata guest so a
 	// missing final clock check can be corrected in the same Codex conversation.

@@ -83,9 +83,9 @@ abstract class ModelHandler implements Handler {
 		// would create a second write path and the wrong content model.
 		if (governedTreeDxWrite) {
 			const reviewing = context.assignment.effectiveProfile.activity === 'reviewing';
-			const output = actingContent ? model.activityCompletion?.contentOutput : null;
+			const output = reviewing ? null : model.activityCompletion?.contentOutput;
 			if (actingContent && !output) throw new Error('writer_content_output_required');
-   if (actingContent && output) assertKnowledgeOutput(context, output);
+   if (output) assertKnowledgeOutput(context, output);
 			const target = context.assignment.grant.contentWrite.find((candidate) => candidate.model === (output?.model ?? (reviewing ? 'decision' : 'note'))
 				&& (!output || candidate.id === output.frontmatter.id));
 			if (!target) throw new Error('writer_content_commit_grant_required');

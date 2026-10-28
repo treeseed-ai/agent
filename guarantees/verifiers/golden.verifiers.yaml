@@ -2081,6 +2081,21 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/activity-completion.test.ts
     testName: "generates subscriber-owned proposal work from the admitted estimate even when the group draft has no class-owned plan"
+  agent.golden.planning-proposal-schema:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/activity-completion.test.ts
+    testName: "offers a group proposal at the exact planning grant instead of limiting proposal authoring to acting"
+  agent.golden.planning-proposal-native:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/portable/activities/planning-products-native.test.ts
+    testName: "persists a group planning Proposal through"
+  agent.golden.planning-proposal-cli-schema:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/sandbox/codex-schema-transport.test.ts
+    testName: "transports optional exact group Proposal output for planning without changing review or estimate schemas"
   agent.golden.subscriber-estimate-authority:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

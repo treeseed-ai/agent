@@ -105,4 +105,25 @@ describe('nondeterministic handlers support all configured activities', () => {
 			expect(boundary.commitTreeDx).not.toHaveBeenCalled();
 		}
 	});
+	it('retains explicitly granted reporting products without allowing them to bypass review dispositions', async () => {
+		for (const Handler of handlers) {
+			const handler = new Handler();
+			for (const activity of ['reporting', 'reviewing'] as const) {
+				const { context, boundary } = input(activity, handler.id);
+				const target = context.assignment.grant.contentWrite.find(reference => reference.model === 'proposal')!;
+				const output = { model: 'proposal', body: 'Governed reporting product.', frontmatter: { id: target.id } };
+				const original = await boundary.invokeModel({ prompt: '', context: [] });
+				vi.mocked(boundary.invokeModel).mockClear();
+				vi.mocked(boundary.invokeModel).mockResolvedValue({ ...original, activityCompletion: {
+					summary: 'Governed reporting product.', reviewDisposition: null, contentOutput: output } });
+				if (activity === 'reviewing') {
+					await expect(handler.run(context, boundary)).rejects.toThrow('review_disposition_required');
+					expect(boundary.commitTreeDx).not.toHaveBeenCalled();
+				} else {
+					await handler.run(context, boundary);
+					expect(boundary.commitTreeDx).toHaveBeenCalledExactlyOnceWith({ writes: [{ target, value: { body: output.body, frontmatter: output.frontmatter } }] });
+				}
+			}
+		}
+	});
 });

@@ -61,3 +61,23 @@ it('transports the required proposal model for a renamed group subscriber estima
 	expect(observed.requests[0]).toMatchObject({ authorized: false, format: { type: 'json_schema', strict: true, schema: estimateSchema } });
 	// The loopback reply deliberately does not prove model compliance or an accepted estimate.
 }, 20_000);
+
+it('transports optional exact group Proposal output for planning without changing review or estimate schemas', async () => {
+	const input = { canonicalAssignmentContext: { assignment: { effectiveProfile: { activity: 'planning', handler: 'writer' },
+		workspace: { mode: 'treedx' }, grant: { contentWrite: [{ model: 'proposal', id: 'native-product-delivery' }] } } } };
+	const variants = completionOutputTargetVariants(input);
+	expect(variants).toHaveLength(1);
+	const output = activityCompletionOutputSchema(completionFrontmatterSchema(input), false, variants, false, true);
+	expect(output.properties.contentOutput).toMatchObject({ anyOf: [{ type: 'null' }, { type: 'object', properties: {
+		model: { const: 'proposal' }, frontmatter: { properties: { id: { const: 'native-product-delivery' }, groupIds: { type: 'array' } } },
+	} }] });
+	const completion = { ...report('Proposed the discussed repair.'), contentOutput: { model: 'proposal',
+		frontmatter: { schemaVersion: 'treeseed.proposal/v2', id: 'native-product-delivery', projectId: 'agent', groupIds: ['project-agent'],
+			title: 'Retrieve reviewed source through MCP', request: 'Deliver retained source through the shared backend.', status: 'discussing' },
+		body: 'Subscribers will estimate their own contributions.' } };
+	const observed = await codexSchemaTransport(output, JSON.stringify(completion), 'Propose the group-discussed work.');
+	expect(observed.code).toBe(0); expect(observed.requests).toHaveLength(1);
+	expect(observed.requests[0]).toMatchObject({ authorized: false, format: { type: 'json_schema', strict: true, schema: output } });
+	expect(validateActivityCompletion(JSON.parse(observed.response!), false).contentOutput).toEqual(completion.contentOutput);
+	// Pinned CLI and HTTP schema transport only; the reply is controlled, not model-authored work.
+}, 20_000);

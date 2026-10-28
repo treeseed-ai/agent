@@ -30,8 +30,8 @@ describe('activity completion structured-output schema', () => {
 			id: { type: 'string', const: 'planning-contribution:proposal' }, groupIds: { type: 'array' },
 		} } });
 		expect(completionFrontmatterSchema(context)).toBeDefined();
-		const schema = activityCompletionOutputSchema(completionFrontmatterSchema(context), false, variants);
-		expect(schema.properties.contentOutput).toMatchObject({ anyOf: [expect.objectContaining({ properties: {
+		const schema = activityCompletionOutputSchema(completionFrontmatterSchema(context), false, variants, false, true);
+		expect(schema.properties.contentOutput).toMatchObject({ anyOf: [{ type: 'null' }, expect.objectContaining({ properties: {
 			model: { type: 'string', const: 'proposal' }, frontmatter: expect.any(Object), body: expect.any(Object),
 		} })] });
 	});
@@ -102,13 +102,20 @@ describe('activity completion structured-output schema', () => {
 		expect(() => completionFrontmatterSchema(context)).toThrow('assignment_exact_proposal_context_required');
 	});
 
-	it('uses only authorized acting Writer content contracts and retains the one kernel commit path', () => {
+	it('uses authorized content contracts for planning acting and reporting while retaining the one kernel commit path', () => {
 		const assignment = { effectiveProfile: { activity: 'acting', handler: 'writer' }, workspace: { mode: 'treedx' },
 			grant: { contentWrite: [{ model: 'book' }, { model: 'knowledge' }, { model: 'book' }] } };
 		const context = { canonicalAssignmentContext: { assignment } };
 		expect(completionFrontmatterSchema(context)?.anyOf).toHaveLength(2);
 		assignment.effectiveProfile.activity = 'planning';
-		expect(completionFrontmatterSchema(context)).toBeUndefined();
+		expect(completionFrontmatterSchema(context)?.anyOf).toHaveLength(2);
+		assignment.effectiveProfile.activity = 'reporting';
+		expect(completionFrontmatterSchema(context)?.anyOf).toHaveLength(2);
+		for (const activity of ['chat', 'reviewing']) {
+			assignment.effectiveProfile.activity = activity;
+			expect(completionFrontmatterSchema(context)).toBeUndefined();
+			expect(completionOutputTargetVariants(context)).toEqual([]);
+		}
 		assignment.effectiveProfile.activity = 'acting';
 		assignment.workspace.mode = 'git';
 		expect(completionFrontmatterSchema(context)).toBeUndefined();

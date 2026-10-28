@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Added
+- Select accepted worker and guest channel contracts for separate Agent programs (#525).
 - Select the reviewed sandbox-control SDK contract for Agent workers (#525).
 - Qualify external activity profile and handler packages through public archives (#525).
 

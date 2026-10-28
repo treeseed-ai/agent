@@ -1,6 +1,6 @@
 {
   "name": "@treeseed-cordis/agent",
-  "version": "0.0.0-cordis.14",
+  "version": "0.0.0-cordis.15",
   "private": true,
   "type": "module",
   "license": "Apache-2.0",
@@ -66,9 +66,83 @@
     "pluginId": "agent",
     "package": {
       "name": "@treeseed-cordis/agent",
-      "version": "0.0.0-cordis.14"
+      "version": "0.0.0-cordis.15"
     },
     "providers": [
+      {
+        "declaration": {
+          "id": "agent.capacity.assignment.private-file",
+          "pluginId": "agent",
+          "capability": "agent.capacity.assignment",
+          "contractVersion": "0.4.0-cordis.1",
+          "target": "agent",
+          "provide": [
+            "agent.capacity.assignment"
+          ],
+          "inject": []
+        },
+        "entry": "dist/src/authority.js",
+        "classExport": "AgentCapacityAssignmentFilePlugin",
+        "configurationSchema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {
+            "file": {
+              "type": "string",
+              "pattern": "^\\/"
+            },
+            "scope": {
+              "type": "object",
+              "properties": {
+                "installationId": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+                },
+                "installationDirectory": {
+                  "type": "string",
+                  "pattern": "^\\/"
+                },
+                "capacityProviderId": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+                },
+                "project": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+                },
+                "platformProfile": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+                },
+                "workerId": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+                }
+              },
+              "required": [
+                "installationId",
+                "installationDirectory",
+                "capacityProviderId",
+                "project",
+                "platformProfile",
+                "workerId"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "file",
+            "scope"
+          ],
+          "additionalProperties": false
+        },
+        "replacement": {
+          "kind": "restart",
+          "stateVersion": 1,
+          "qualificationDigest": null
+        },
+        "commandIds": []
+      },
       {
         "declaration": {
           "id": "agent.authority.private-file",

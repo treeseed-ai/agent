@@ -1,3 +1,5 @@
+import { CapacitySchemas, CapacityProtocolSchemas, CapacityContractBinding, CapacityContractError, PlatformSchemas, type CapacityDispatch } from '@treeseed-cordis/sdk';
+import type { ProviderLease } from '@treeseed-cordis/sdk/runtime';
 import { AgentPackageIdentity } from './package-identity.js';
 export { AgentPackageIdentity } from './package-identity.js';
 import { openSync, closeSync, readSync, fstatSync, lstatSync, constants, type Stats } from 'node:fs';
@@ -183,5 +185,164 @@ export class AgentFileAuthority {
     this.closed = true;
     if (!this.disposal) this.disposal = this.scope.dispose();
     return this.disposal;
+  }
+}
+
+/** Host-authorized dispatch read-back only; live control-plane authority belongs to the manager. */
+export interface CapacityAssignmentSource {
+  observe(signal: AbortSignal): Promise<CapacityDispatch>;
+}
+class CapacityAssignmentAdapter {
+  parse(input: unknown): CapacityAssignmentSource {
+    if (!input || typeof input !== 'object' || typeof Reflect.get(input, 'observe') !== 'function')
+      throw new CapacityContractError('CAPACITY_TARGET_UNREADY');
+    return input as CapacityAssignmentSource;
+  }
+}
+export const CapacityAssignmentToken = new CapabilityToken<CapacityAssignmentSource>(
+  'agent.capacity.assignment',
+  ProviderV4Schemas.version,
+  new CapacityAssignmentAdapter(),
+);
+export class AgentCapacityAssignmentFilePlugin implements CapacityAssignmentSource {
+  static readonly provide = ['agent.capacity.assignment'];
+  static readonly inject: string[] = [];
+  static readonly Config = z.strictObject({
+    file: PlatformSchemas.absolute,
+    scope: CapacitySchemas.scope,
+  });
+  static readonly replacement = AgentFileGrantPlugin.replacement;
+  static readonly declaration = ProviderV4Schemas.declaration.parse({
+    id: 'agent.capacity.assignment.private-file',
+    pluginId: 'agent',
+    capability: this.provide[0],
+    contractVersion: ProviderV4Schemas.version,
+    target: 'agent',
+    provide: this.provide,
+    inject: this.inject,
+  });
+  constructor(
+    context: Context,
+    private readonly configuration: z.infer<typeof AgentCapacityAssignmentFilePlugin.Config>,
+  ) {
+    context.provide(CapacityAssignmentToken.id, this);
+  }
+  private checkpoint(signal: AbortSignal): void {
+    if (signal.aborted) throw new CapacityContractError('CAPACITY_CANCELLED');
+  }
+  private record(): CapacityDispatch {
+    let input: unknown;
+    try {
+      input = AgentPrivateFile.read(this.configuration.file);
+    } catch {
+      throw new CapacityContractError('CAPACITY_TARGET_UNREADY');
+    }
+    const parsed = CapacityProtocolSchemas.dispatch.safeParse(input);
+    if (!parsed.success) throw new CapacityContractError('INVALID_CAPACITY_CONTRACT');
+    if (
+      CanonicalJson.stringify(parsed.data.lease.scope) !==
+      CanonicalJson.stringify(this.configuration.scope)
+    )
+      throw new CapacityContractError('CAPACITY_SCOPE_MISMATCH');
+    return parsed.data;
+  }
+  async observe(signal: AbortSignal): Promise<CapacityDispatch> {
+    this.checkpoint(signal);
+    const record = this.record();
+    const lease = record.lease;
+    CapacityContractBinding.assertLease(
+      lease,
+      {
+        lease,
+        authority: lease.authority,
+        generations: lease.generations,
+        fence: lease.fence,
+      },
+      Date.now(),
+    );
+    this.checkpoint(signal);
+    return record;
+  }
+}
+type CapacityAssignmentConfiguration = z.infer<typeof AgentCapacityAssignmentFilePlugin.Config>;
+/** Default native construction without assignment creation or a claim of live team authority. */
+export class CapacityAssignmentFile implements CapacityAssignmentSource {
+  private closed = false;
+  private disposal: Promise<void> | null = null;
+  private constructor(private readonly scope: CordisScope) {}
+  get generation(): string {
+    return this.scope.generation;
+  }
+  static async start(input: unknown): Promise<CapacityAssignmentFile> {
+    const parsed = AgentCapacityAssignmentFilePlugin.Config.safeParse(input);
+    if (!parsed.success || resolve(parsed.data.file) !== parsed.data.file)
+      throw new CapacityContractError('INVALID_CAPACITY_CONTRACT');
+    return new CapacityAssignmentFile(await this.mount(parsed.data));
+  }
+  private static async mount(configuration: CapacityAssignmentConfiguration): Promise<CordisScope> {
+    const scopeId = 'capacity-file:' + CanonicalJson.digest(configuration.scope);
+    return CordisScope.start(
+      {
+        registrations: [this.registration(configuration)],
+        selections: [
+          {
+            scopeId,
+            capability: CapacityAssignmentToken.id,
+            providerId: AgentCapacityAssignmentFilePlugin.declaration.id,
+          },
+        ],
+      },
+      {
+        scopeId,
+        target: 'agent',
+        principalId: configuration.scope.capacityProviderId,
+        resourceScope: configuration.scope.installationId,
+      },
+    );
+  }
+  private static registration(
+    configuration: CapacityAssignmentConfiguration,
+  ): ProviderRegistration {
+    return {
+      token: CapacityAssignmentToken,
+      plugin: AgentCapacityAssignmentFilePlugin,
+      declaration: AgentCapacityAssignmentFilePlugin.declaration,
+      configuration,
+      artifact: { kind: 'bundled', identity: AgentPackageIdentity.artifact },
+    };
+  }
+  async observe(signal: AbortSignal): Promise<CapacityDispatch> {
+    if (this.closed) throw new CapacityContractError('CAPACITY_TARGET_UNREADY');
+    let lease: ProviderLease<CapacityAssignmentSource> | null = null;
+    try {
+      lease = await this.scope.acquire(CapacityAssignmentToken);
+      return await lease.value.observe(signal);
+    } catch (error) {
+      if (error instanceof CapacityContractError) throw error;
+      throw new CapacityContractError('CAPACITY_TARGET_UNREADY');
+    } finally {
+      await this.release(lease);
+    }
+  }
+  private async release(lease: ProviderLease<CapacityAssignmentSource> | null): Promise<void> {
+    try {
+      await lease?.release();
+    } catch {
+      throw new CapacityContractError('CAPACITY_CLEANUP_FAILED');
+    }
+  }
+  close(): Promise<void> {
+    if (!this.disposal) {
+      this.closed = true;
+      this.disposal = this.dispose();
+    }
+    return this.disposal;
+  }
+  private async dispose(): Promise<void> {
+    try {
+      await this.scope.dispose();
+    } catch {
+      throw new CapacityContractError('CAPACITY_CLEANUP_FAILED');
+    }
   }
 }

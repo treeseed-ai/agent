@@ -3,6 +3,8 @@
 ## [Unreleased]
 
 ### Added
+
+- Run a separate native capacity guest program with trusted single-assignment admission (#525).
 - Read trusted guest assignments through a native private-file capability (#525).
 - Select accepted worker and guest channel contracts for separate Agent programs (#525).
 - Select the reviewed sandbox-control SDK contract for Agent workers (#525).

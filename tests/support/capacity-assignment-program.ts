@@ -1,7 +1,15 @@
 import assert from 'node:assert/strict';
 import * as authority from '@treeseed-cordis/agent/authority';
 import * as sdk from '@treeseed-cordis/sdk';
-import { mkdtempSync, writeFileSync, existsSync, chmodSync, unlinkSync, symlinkSync, linkSync } from 'node:fs';
+import {
+  mkdtempSync,
+  writeFileSync,
+  existsSync,
+  chmodSync,
+  unlinkSync,
+  symlinkSync,
+  linkSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 interface AssignmentReader {
@@ -9,128 +17,131 @@ interface AssignmentReader {
   observe(signal: AbortSignal): Promise<sdk.CapacityDispatch>;
   close(): Promise<void>;
 }
-interface AssignmentConstructor { start(input: unknown): Promise<AssignmentReader> }
+interface AssignmentConstructor {
+  start(input: unknown): Promise<AssignmentReader>;
+}
 /** Data-only assignment fixture; no live enrollment, worker or sandbox claim. */
 class AssignmentFixture {
   readonly directory = mkdtempSync(join(tmpdir(), 'capacity-assignment-'));
   readonly file = join(this.directory, 'assignment.json');
   private static readonly data = {
-  "schemaVersion": "treeseed.capacity-dispatch/v1",
-  "reservationId": "fixture.reservation",
-  "requestId": "fixture.request",
-  "lease": {
-    "schemaVersion": "treeseed.capacity-lease/v1",
-    "operation": "capacity-probe",
-    "id": "fixture.lease",
-    "assignmentId": "fixture.assignment",
-    "sandboxId": "fixture.sandbox",
-    "scope": {
-      "installationId": "fixture.installation",
-      "installationDirectory": "/fixture/capacity",
-      "capacityProviderId": "fixture.capacity",
-      "project": "fixture.project",
-      "platformProfile": "default",
-      "workerId": "fixture.worker"
+    schemaVersion: 'treeseed.capacity-dispatch/v1',
+    reservationId: 'fixture.reservation',
+    requestId: 'fixture.request',
+    lease: {
+      schemaVersion: 'treeseed.capacity-lease/v1',
+      operation: 'capacity-probe',
+      id: 'fixture.lease',
+      assignmentId: 'fixture.assignment',
+      sandboxId: 'fixture.sandbox',
+      scope: {
+        installationId: 'fixture.installation',
+        installationDirectory: '/fixture/capacity',
+        capacityProviderId: 'fixture.capacity',
+        project: 'fixture.project',
+        platformProfile: 'default',
+        workerId: 'fixture.worker',
+      },
+      authority: {
+        issuer: 'https://identity.example.invalid/realms/fixture',
+        subject: 'fixture.subject',
+        teamId: 'fixture.team',
+        providerId: 'fixture.capacity',
+        credentialId: 'fixture.credential',
+        credentialRevision: 1,
+        grantId: 'fixture.grant',
+        grantRevision: 1,
+        capabilities: ['agent.probe'],
+        state: 'granted',
+        expiresAtEpochMs: 5000,
+      },
+      generations: {
+        manager: {
+          compositionGeneration: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+          processGeneration: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+        },
+        worker: {
+          compositionGeneration: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+          processGeneration: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+        },
+        runner: {
+          compositionGeneration: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+          processGeneration: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+        },
+        pool: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+        sandbox: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+        environment: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      },
+      compatibilityDigest: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      fence: 1,
+      expiresAtEpochMs: 4000,
     },
-    "authority": {
-      "issuer": "https://identity.example.invalid/realms/fixture",
-      "subject": "fixture.subject",
-      "teamId": "fixture.team",
-      "providerId": "fixture.capacity",
-      "credentialId": "fixture.credential",
-      "credentialRevision": 1,
-      "grantId": "fixture.grant",
-      "grantRevision": 1,
-      "capabilities": [
-        "agent.probe"
+    definition: {
+      schemaVersion: 'treeseed.agent-definition/v1',
+      id: 'fixture.agent',
+      revision: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      profiles: [
+        {
+          id: 'fixture.check',
+          typeId: 'external.health-probe',
+          capabilityRevision: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+          handler: {
+            providerId: 'fixture.handler',
+            capability: 'agent.handler.probe',
+            contractVersion: '1.0.0',
+          },
+          environmentId: 'fixture.environment',
+          parameters: {
+            message: 'harmless fixture',
+          },
+          dependsOn: [],
+        },
       ],
-      "state": "granted",
-      "expiresAtEpochMs": 5000
     },
-    "generations": {
-      "manager": {
-        "compositionGeneration": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        "processGeneration": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    profileId: 'fixture.check',
+    environment: {
+      schemaVersion: 'treeseed.agent-environment/v1',
+      id: 'fixture.environment',
+      revision: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      artifact: {
+        package: '@fixture/environment',
+        version: '1.0.0',
+        integrity: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
       },
-      "worker": {
-        "compositionGeneration": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        "processGeneration": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      image: {
+        reference:
+          'fixture/base@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+        manifestDigest: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+        os: 'linux',
+        architecture: 'amd64',
       },
-      "runner": {
-        "compositionGeneration": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        "processGeneration": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-      },
-      "pool": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-      "sandbox": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-      "environment": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-    },
-    "compatibilityDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-    "fence": 1,
-    "expiresAtEpochMs": 4000
-  },
-  "definition": {
-    "schemaVersion": "treeseed.agent-definition/v1",
-    "id": "fixture.agent",
-    "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-    "profiles": [
-      {
-        "id": "fixture.check",
-        "typeId": "external.health-probe",
-        "capabilityRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        "handler": {
-          "providerId": "fixture.handler",
-          "capability": "agent.handler.probe",
-          "contractVersion": "1.0.0"
+      setup: {
+        file: {
+          path: 'dist/setup',
+          sha256: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+          size: 1,
         },
-        "environmentId": "fixture.environment",
-        "parameters": {
-          "message": "harmless fixture"
+        arguments: [],
+        deadlineMs: 30000,
+        outputLimitBytes: 4096,
+      },
+      verification: {
+        file: {
+          path: 'dist/setup',
+          sha256: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+          size: 1,
         },
-        "dependsOn": []
-      }
-    ]
-  },
-  "profileId": "fixture.check",
-  "environment": {
-    "schemaVersion": "treeseed.agent-environment/v1",
-    "id": "fixture.environment",
-    "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-    "artifact": {
-      "package": "@fixture/environment",
-      "version": "1.0.0",
-      "integrity": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-    },
-    "image": {
-      "reference": "fixture/base@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-      "manifestDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-      "os": "linux",
-      "architecture": "amd64"
-    },
-    "setup": {
-      "file": {
-        "path": "dist/setup",
-        "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        "size": 1
+        arguments: [],
+        deadlineMs: 30000,
+        outputLimitBytes: 4096,
       },
-      "arguments": [],
-      "deadlineMs": 30000,
-      "outputLimitBytes": 4096
     },
-    "verification": {
-      "file": {
-        "path": "dist/setup",
-        "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        "size": 1
-      },
-      "arguments": [],
-      "deadlineMs": 30000,
-      "outputLimitBytes": 4096
-    }
-  },
-  "input": "harmless fixture"
-};
+    input: 'harmless fixture',
+  };
   record(): sdk.CapacityDispatch {
-    const record = sdk.CapacityProtocolSchemas.dispatch.parse(structuredClone(AssignmentFixture.data));
+    const record = sdk.CapacityProtocolSchemas.dispatch.parse(
+      structuredClone(AssignmentFixture.data),
+    );
     record.lease.scope.installationDirectory = this.directory;
     record.lease.expiresAtEpochMs = Date.now() + 30000;
     record.lease.authority.expiresAtEpochMs = Date.now() + 60000;
@@ -155,9 +166,13 @@ class CapacityAssignmentProgram {
     try {
       if (process.argv[2] === '--deny') await this.denied(reader, record);
       else await this.read(reader, record);
-    } finally { await reader.close(); }
+    } finally {
+      await reader.close();
+    }
     await assert.rejects(reader.observe(this.signal), { message: 'CAPACITY_TARGET_UNREADY' });
-    process.stdout.write('capacity-assignment-' + (process.argv[2] === '--deny' ? 'deny' : 'read') + '-ok\n');
+    process.stdout.write(
+      'capacity-assignment-' + (process.argv[2] === '--deny' ? 'deny' : 'read') + '-ok\n',
+    );
   }
   private async read(reader: AssignmentReader, record: sdk.CapacityDispatch): Promise<void> {
     assert.match(reader.generation, /^[a-f0-9]{64}$/);

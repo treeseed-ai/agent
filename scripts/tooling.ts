@@ -5,7 +5,7 @@ import { createHash } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { SourcePolicy } from '@treeseed-cordis/sdk/source-policy';
 import { CanonicalJson, PackageDefinition } from '@treeseed-cordis/sdk';
-import { AgentFileGrantPlugin } from '../src/authority.js';
+import { AgentFileGrantPlugin, AgentCapacityAssignmentFilePlugin } from '../src/authority.js';
 
 /** Development-only owner gate; never a runtime composition or dependency resolver. */
 class AgentTooling {
@@ -19,6 +19,7 @@ class AgentTooling {
     this.project(metadata, process.argv[2] === 'build');
   }
   private static readonly definitions = [
+    {plugin: AgentCapacityAssignmentFilePlugin, entry: 'dist/src/authority.js', name: 'AgentCapacityAssignmentFilePlugin'},
     {plugin: AgentFileGrantPlugin, entry: 'dist/src/authority.js', name: 'AgentFileGrantPlugin'},
     {plugin: AgentHostPlugin, entry: 'dist/src/execution.js', name: 'AgentHostPlugin'},
     {plugin: AgentContextPlugin, entry: 'dist/src/providers.js', name: 'AgentContextPlugin'},

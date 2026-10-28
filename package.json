@@ -1,6 +1,6 @@
 {
   "name": "@treeseed-cordis/agent",
-  "version": "0.0.0-cordis.13",
+  "version": "0.0.0-cordis.15",
   "private": true,
   "type": "module",
   "license": "Apache-2.0",
@@ -30,8 +30,8 @@
   "cordisCandidate": {
     "sdk": {
       "repository": "https://github.com/treeseed-ai/sdk.git",
-      "commit": "0ae4f3973672e5c66ee021e7748c2ea73f7cb21c",
-      "sha256": "04cea0518a3d64228cfbdad73a357d18cc7040e4bc7a122833dddd9de96ed000"
+      "commit": "dce3108e061ecaf0cfa2915c03698f0e3170a67b",
+      "sha256": "886a9f359148a1aee49997de7e0604c65c87bf16c693d23781c5732f41990384"
     }
   },
   "exports": {
@@ -58,7 +58,7 @@
     "LICENSE"
   ],
   "peerDependencies": {
-    "@treeseed-cordis/sdk": "0.0.0-cordis.36"
+    "@treeseed-cordis/sdk": "0.0.0-cordis.37"
   },
   "cordisPackage": {
     "formatVersion": 4,
@@ -66,9 +66,83 @@
     "pluginId": "agent",
     "package": {
       "name": "@treeseed-cordis/agent",
-      "version": "0.0.0-cordis.13"
+      "version": "0.0.0-cordis.15"
     },
     "providers": [
+      {
+        "declaration": {
+          "id": "agent.capacity.assignment.private-file",
+          "pluginId": "agent",
+          "capability": "agent.capacity.assignment",
+          "contractVersion": "0.4.0-cordis.1",
+          "target": "agent",
+          "provide": [
+            "agent.capacity.assignment"
+          ],
+          "inject": []
+        },
+        "entry": "dist/src/authority.js",
+        "classExport": "AgentCapacityAssignmentFilePlugin",
+        "configurationSchema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {
+            "file": {
+              "type": "string",
+              "pattern": "^\\/"
+            },
+            "scope": {
+              "type": "object",
+              "properties": {
+                "installationId": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+                },
+                "installationDirectory": {
+                  "type": "string",
+                  "pattern": "^\\/"
+                },
+                "capacityProviderId": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+                },
+                "project": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+                },
+                "platformProfile": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+                },
+                "workerId": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+                }
+              },
+              "required": [
+                "installationId",
+                "installationDirectory",
+                "capacityProviderId",
+                "project",
+                "platformProfile",
+                "workerId"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "file",
+            "scope"
+          ],
+          "additionalProperties": false
+        },
+        "replacement": {
+          "kind": "restart",
+          "stateVersion": 1,
+          "qualificationDigest": null
+        },
+        "commandIds": []
+      },
       {
         "declaration": {
           "id": "agent.authority.private-file",

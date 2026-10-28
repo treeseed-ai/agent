@@ -170,13 +170,13 @@ is executable package code and therefore belongs only in an already accepted pre
 Cordis contexts do not isolate untrusted code. Artifact acquisition, validator sandboxing and live
 authority remain separate owner boundaries and are not supplied by this resolver.
 
-The follow-up public archive-consumer acceptance must pack the Agent candidate and an independent profile/handler
+Public archive-consumer acceptance packs the Agent candidate and an independent profile/handler
 fixture package, installs exact local archives with lifecycle scripts disabled, and runs a fresh
 Node consumer through public package imports. The fixture owns its profile identity and parameter
 schema. Its installation-script canary must remain absent; successful preparation must not invoke
 its handler. These are genuine package-boundary fixtures, not proof of deployment acquisition,
 isolated validator execution, enrollment or a real Kata workload.
 
-This bounded slice exposes preparation through the existing Agent public root. Genuine external
-archive delivery follows separately; current native fixtures are explicitly component controls.
+Preparation is exposed through the existing Agent public root. Genuine external archive controls
+now qualify that boundary; current native fixtures remain explicitly component controls.
 No handler execution, live authority, seed activation or Kata capacity is claimed.

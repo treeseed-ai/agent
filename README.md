@@ -65,3 +65,8 @@ identity is exported from the authority entry without opening private package me
 runtime. SDK artifact hashes remain independently verified; this creates no authority,
 provider cache or runtime dependency container. Built public Node acceptance compares the
 identity with the shipped package, and a hostile version-change control proves build denial.
+
+The package declares exact `cordis` and `zod` runtime dependencies used by its public
+authority/provider modules; consumers must not depend on incidental peer hoisting. The
+normal checks pin those owned runtime dependencies, and the archive smoke consumes only
+public entries with lifecycle scripts disabled.

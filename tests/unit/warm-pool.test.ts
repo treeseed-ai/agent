@@ -3,11 +3,15 @@ import { PoolFixture } from '../support/warm-pool-program.js';
 import { WarmSandboxPool } from '../../src/warm-pool.js';
 class WarmPoolContracts {
   invalidPolicy(): void {
-    expect(PoolFixture.bind(null, 2, 1)).toThrow();
+    expect(this.invalidBounds.bind(this)).toThrow('POOL_POLICY_INVALID');
+    expect(this.invalidCompatibility.bind(this)).toThrow('POOL_COMPATIBILITY_INVALID');
+  }
+  private invalidBounds(): void { new PoolFixture(2, 1); }
+  private invalidCompatibility(): void {
     const fixture = new PoolFixture();
-    expect(WarmSandboxPool.bind(null, fixture.provider, 'mutable', {
+    new WarmSandboxPool(fixture.provider, 'mutable', {
       warmTarget: 0, maximumSandboxes: 1, claimDeadlineMs: 1000,
-    })).toThrow();
+    });
   }
   async zeroTarget(): Promise<void> {
     const fixture = new PoolFixture(0, 1);

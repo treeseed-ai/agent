@@ -2,6 +2,14 @@ import assert from 'node:assert/strict';
 import { PoolSchemas, type VirginSandbox } from '@treeseed-cordis/sdk';
 import { WarmSandboxPool, type SandboxPoolProvider, type SandboxDestruction } from '../../src/warm-pool.js';
 
+export class PoolBarrier {
+  private resolve: (() => void) | null = null;
+  readonly promise: Promise<void>;
+  constructor() { this.promise = new Promise<void>(this.capture.bind(this)); }
+  private capture(resolve: () => void): void { this.resolve = resolve; }
+  release(): void { this.resolve!(); }
+}
+
 /** In-memory lifecycle fixture only. It does not create or attest a Kata sandbox. */
 export class FixtureSandboxPool implements SandboxPoolProvider {
   readonly created: string[] = [];
@@ -12,6 +20,9 @@ export class FixtureSandboxPool implements SandboxPoolProvider {
   loseCreateReply = false;
   failAssign = false;
   failInspection = false;
+  foreignBase = false;
+  assignmentBarrier: PoolBarrier | null = null;
+  readonly assignmentStarted = new PoolBarrier();
   async create(id: string, compatibilityDigest: string, signal: AbortSignal): Promise<VirginSandbox> {
     signal.throwIfAborted();
     this.created.push(id);
@@ -19,7 +30,7 @@ export class FixtureSandboxPool implements SandboxPoolProvider {
       id, compatibilityDigest, inspectionDigest: 'b'.repeat(64), credentials: 'absent', assigned: false });
     this.bases.set(id, base);
     if (this.loseCreateReply) throw new Error('private-create-canary');
-    return structuredClone(base);
+    return this.foreignBase ? { ...base, id: 'foreign:unowned' } : structuredClone(base);
   }
   async inspect(base: VirginSandbox, signal: AbortSignal): Promise<VirginSandbox> {
     signal.throwIfAborted();
@@ -33,6 +44,8 @@ export class FixtureSandboxPool implements SandboxPoolProvider {
     assert(assignmentId.length > 0);
     assert(!this.assigned.includes(base.id));
     if (this.failAssign) throw new Error('private-assignment-canary');
+    this.assignmentStarted.release();
+    if (this.assignmentBarrier) await this.assignmentBarrier.promise;
     this.assigned.push(base.id);
   }
   async destroy(id: string): Promise<SandboxDestruction> {

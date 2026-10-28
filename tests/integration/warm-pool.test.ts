@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { PoolFixture } from '../support/warm-pool-program.js';
+import { PoolFixture, PoolBarrier } from '../support/warm-pool-program.js';
 class WarmPoolBoundaries {
   async exclusive(): Promise<void> {
     const fixture = new PoolFixture(1, 1);
@@ -78,6 +78,40 @@ class WarmPoolBoundaries {
     expect(fixture.provider.assigned).toEqual([]);
     await fixture.pool.close();
   }
+  async closingAdmission(): Promise<void> {
+    const fixture = new PoolFixture(1, 1);
+    await fixture.pool.warm();
+    fixture.provider.assignmentBarrier = new PoolBarrier();
+    const pending = fixture.pool.claim('assignment:one', fixture.signal.signal).catch(this.failure.bind(this));
+    await fixture.provider.assignmentStarted.promise;
+    try {
+      await expect(fixture.pool.close()).rejects.toThrow('POOL_CLAIMS_ACTIVE');
+      expect(fixture.provider.destroyed).toEqual([]);
+    } finally { fixture.provider.assignmentBarrier.release(); }
+    expect(await pending).toMatchObject({ code: 'POOL_CLAIM_FAILED' });
+    await fixture.pool.close();
+    expect(fixture.provider.destroyed).toHaveLength(1);
+  }
+  private failure(error: unknown): unknown { return error; }
+  async uncertainCreate(): Promise<void> {
+    const fixture = new PoolFixture();
+    fixture.provider.loseCreateReply = true;
+    fixture.provider.failDestroy = true;
+    await expect(fixture.pool.warm()).rejects.toThrow('POOL_TEARDOWN_UNVERIFIED');
+    expect(fixture.pool.status()).toMatchObject({ allocated: 1, quarantined: 1 });
+    fixture.provider.failDestroy = false;
+    await fixture.pool.close();
+    expect(fixture.pool.status().allocated).toBe(0);
+    expect(fixture.provider.destroyed).toEqual(fixture.provider.created);
+  }
+  async foreignBase(): Promise<void> {
+    const fixture = new PoolFixture();
+    fixture.provider.foreignBase = true;
+    await expect(fixture.pool.warm()).rejects.toThrow('POOL_CREATE_FAILED');
+    expect(fixture.provider.destroyed).toEqual(fixture.provider.created);
+    expect(fixture.provider.destroyed).not.toContain('foreign:unowned');
+    await fixture.pool.close();
+  }
 }
 const suite = new WarmPoolBoundaries();
 test('integration: concurrent pool claims cannot share a virgin base', suite.exclusive.bind(suite));
@@ -87,3 +121,6 @@ test('integration: failed assignment destroys its selected base', suite.failedAs
 test('integration: unverified pool teardown quarantines capacity until explicit retry', suite.quarantine.bind(suite));
 test('integration: pool disposal cannot succeed while claims remain active', suite.activeDisposal.bind(suite));
 test('integration: cancelled claims leave clean warm inventory unassigned', suite.cancellation.bind(suite));
+test('integration: pool close retains in-flight assignment custody until its outcome', suite.closingAdmission.bind(suite));
+test('integration: explicit pool disposal repairs an unverified lost-create identity', suite.uncertainCreate.bind(suite));
+test('integration: foreign returned base identities cannot redirect pool cleanup', suite.foreignBase.bind(suite));

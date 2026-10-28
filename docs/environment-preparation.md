@@ -33,3 +33,6 @@ same orchestration tests; those tests prove sequencing/binding only, not real Ka
 The worker owns verified guest destruction even after preparation failure. Productive Work
 and model execution remain Task 10. Permanent tests use the four tier directories; all issues
 remain open and owner PRs target cordis for maintainer review.
+
+Deadline checks use the monotonic clock as well as abort delivery, so a provider cannot publish
+a late result by delaying timers. Cancellation is checked again after native lease release.

@@ -100,6 +100,7 @@ export class FixtureExecution {
     EnvironmentFixtureData.calls.push(request.phase);
     if (this.configuration.mode === 'fail-' + request.phase) throw new Error('secret-output-canary');
     if (this.configuration.mode === 'spoofed-error') this.spoofedError();
+    if (this.configuration.mode === 'late') this.late();
     if (this.configuration.mode === 'cancel') return this.cancelled(signal);
     const entry = request.environment[request.phase];
     return {
@@ -116,6 +117,10 @@ export class FixtureExecution {
     const error = new Constructor('ENVIRONMENT_EXECUTION_FAILED');
     error.message = 'secret-output-canary';
     throw error;
+  }
+  private late(): void {
+    const deadline = performance.now() + 40;
+    while (performance.now() < deadline) { /* A guest provider can delay timer delivery. */ }
   }
   private async cancelled(signal: AbortSignal): Promise<never> {
     const { setTimeout } = await import('node:timers/promises');

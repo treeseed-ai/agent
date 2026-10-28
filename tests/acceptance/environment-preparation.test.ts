@@ -13,4 +13,4 @@ class EnvironmentPreparationAcceptance {
   }
 }
 const suite = new EnvironmentPreparationAcceptance();
-test('acceptance: built native environment preparation verifies setup before admitting a handler', suite.run.bind(suite));
+test('acceptance: built native environment preparation requires setup and verification through selected providers', suite.run.bind(suite));

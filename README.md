@@ -55,3 +55,13 @@ ee30dbacf0e95d3fd9f88d097b15332c3dbf8020c3313c90e0a0578937a5d1df.
 Development build/check verifies archive bytes before semantic compilation. Subsequent manager,
 worker and guest roots consume the provider through its public contract; contexts are not isolation.
 All issues remain open and delivery targets cordis for review, without production publication.
+
+## Package and native artifact identity
+
+The public `AgentPackageIdentity` data declaration is the single bundled identity used by
+Agent roots. Normal check/build rejects a package-version mismatch before compilation;
+future provider roots must use that declaration rather than copying version strings. The
+identity is exported from the authority entry without opening private package metadata at
+runtime. SDK artifact hashes remain independently verified; this creates no authority,
+provider cache or runtime dependency container. Built public Node acceptance compares the
+identity with the shipped package, and a hostile version-change control proves build denial.

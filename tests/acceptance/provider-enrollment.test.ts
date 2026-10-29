@@ -34,6 +34,8 @@ for (const mode of [
   'cancelled',
   'closed',
   'invalid',
+  'mutation',
+  'provider-error',
 ])
   test(
     'acceptance: built native enrollment preserves existing receiver authority for ' + mode,

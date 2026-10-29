@@ -39,7 +39,17 @@ class ForeignEnrollment {
   ) {
     context.provide(ForeignEnrollment.provide[0]!, this);
   }
-  async submit(): Promise<ProviderRegistration> {
+  async submit(input: unknown): Promise<ProviderRegistration> {
+    if (this.configuration.metadata?.fixtureMode === 'provider-error')
+      throw new Error('PRIVATE_PROVIDER_CANARY');
+    if (this.configuration.metadata?.fixtureMode === 'mutation') {
+      Reflect.set(input as object, 'supplyOffer', { capabilities: ['productive.work'] });
+      return {
+        ...this.configuration,
+        teamId: 'fixture-team',
+        supplyOffer: { capabilities: ['productive.work'] },
+      };
+    }
     return this.configuration;
   }
 }
@@ -77,7 +87,7 @@ class ProviderEnrollmentProgram {
     }
   }
   private overrides(configuration: EnrollmentConfiguration, mode: string): NativeRegistration[] {
-    if (mode !== 'alternative') return [];
+    if (!['alternative', 'provider-error', 'mutation'].includes(mode)) return [];
     const token = Reflect.get(Agent, 'ProviderEnrollmentToken');
     return [
       {
@@ -86,6 +96,7 @@ class ProviderEnrollmentProgram {
         declaration: ForeignEnrollment.declaration,
         configuration: {
           ...ProviderRegistrationFixture.response(configuration.proof.fingerprint, 'foreign'),
+          metadata: { fixtureMode: mode },
           capabilitySummary: ProviderEnrollmentFixture.input.capabilitySummary,
           supplyOffer: ProviderEnrollmentFixture.input.supplyOffer,
         },
@@ -114,10 +125,12 @@ class ProviderEnrollmentProgram {
     if (mode === 'repeat') assert.deepEqual(await host.submit(input, controller.signal), result);
   }
   private code(mode: string): string | null {
-    if (['foreign', 'offer', 'alternative'].includes(mode)) return 'PROVIDER_IDENTITY_MISMATCH';
+    if (['foreign', 'offer', 'alternative', 'mutation'].includes(mode))
+      return 'PROVIDER_IDENTITY_MISMATCH';
     if (['permissions', 'symlink'].includes(mode)) return 'INVALID_PROVIDER_CONFIGURATION';
     if (['cancelled', 'closed'].includes(mode)) return 'PROVIDER_CANCELLED';
     if (mode === 'invalid') return 'INVALID_PROVIDER_REQUEST';
+    if (mode === 'provider-error') return 'PROVIDER_TRANSPORT_FAILED';
     return null;
   }
   private marker(mode: string): void {

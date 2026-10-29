@@ -1,5 +1,5 @@
 /** Public immutable data; never reads installation files or owns service instances. */
 export class AgentPackageIdentity {
-  static readonly version = '0.0.0-cordis.26';
+  static readonly version = '0.0.0-cordis.27';
   static readonly artifact = '@treeseed-cordis/agent@' + this.version;
 }

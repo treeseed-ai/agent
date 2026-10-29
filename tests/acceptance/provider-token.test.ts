@@ -51,6 +51,7 @@ for (const mode of [
   'token-revocation',
   'late-revoked',
   'late-credential',
+  'late-cancel',
   'alternative',
   'alternative-error',
   'cancel',

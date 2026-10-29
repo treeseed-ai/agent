@@ -2,9 +2,12 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { Context, type ProviderRegistration } from '@treeseed-cordis/sdk/runtime';
 import { ProviderV4Schemas } from '@treeseed-cordis/sdk';
+import { ProviderCredentialToken } from '@treeseed-cordis/agent/provider-credentials';
+import { ProviderCredentialFixture } from './provider-credential-fixture.js';
 import {
   ProviderControlSchemas,
   type ProviderTokenIssue,
+  type ProviderCredentialIssue,
 } from '@treeseed-cordis/sdk/provider-control';
 import { ProviderTokenFixture } from './provider-token-fixture.js';
 interface TokenHost {
@@ -39,6 +42,43 @@ class ForeignTokenPlugin {
     return structuredClone(this.result);
   }
 }
+/** Cancellation during selected-provider read-back, with no private root access. */
+class LateCancellationCredentialPlugin {
+  static cancellation: AbortController | null = null;
+  static readonly provide = ['agent.provider.credential'];
+  static readonly inject: string[] = [];
+  static readonly Config = ProviderControlSchemas.credentialIssue;
+  static readonly declaration = ProviderV4Schemas.declaration.parse({
+    id: 'fixture.credential.late-cancel',
+    pluginId: 'fixture',
+    capability: this.provide[0],
+    target: 'agent',
+    contractVersion: ProviderV4Schemas.version,
+    provide: this.provide,
+    inject: this.inject,
+  });
+  private reads = 0;
+  constructor(
+    context: Context,
+    private readonly result: ProviderCredentialIssue,
+  ) {
+    context.provide('agent.provider.credential', this);
+  }
+  async exchange(): Promise<ProviderCredentialIssue> {
+    const result = structuredClone(this.result);
+    if (++this.reads > 1)
+      Object.defineProperty(result, 'credential', {
+        enumerable: true,
+        get: this.credential.bind(this),
+      });
+    return result;
+  }
+  private credential(): string {
+    const controller = LateCancellationCredentialPlugin.cancellation!;
+    queueMicrotask(controller.abort.bind(controller));
+    return this.result.credential;
+  }
+}
 class ProviderTokenProgram {
   private readonly input = {
     credentialIssueKey: 'fixture-issue',
@@ -58,6 +98,16 @@ class ProviderTokenProgram {
     }
   }
   private overrides(module: object): ProviderRegistration[] {
+    if (process.argv[3] === 'late-cancel')
+      return [
+        {
+          token: ProviderCredentialToken,
+          plugin: LateCancellationCredentialPlugin,
+          declaration: LateCancellationCredentialPlugin.declaration,
+          configuration: ProviderCredentialFixture.issue('accepted'),
+          artifact: { kind: 'bundled', identity: 'fixture:late-credential-cancellation' },
+        },
+      ];
     if (!process.argv[3]?.startsWith('alternative')) return [];
     return [
       {
@@ -71,6 +121,7 @@ class ProviderTokenProgram {
   }
   private async exercise(host: TokenHost): Promise<void> {
     const controller = new AbortController();
+    LateCancellationCredentialPlugin.cancellation = controller;
     if (process.argv[3] === 'cancel') controller.abort();
     const input =
       process.argv[3] === 'invalid' ? { ...this.input, tokenIssueKey: '../unsafe' } : this.input;

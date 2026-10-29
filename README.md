@@ -232,7 +232,7 @@ reads the file afresh through Agent's descriptor-anchored private-file reader, v
 private/public key pair and exact pinned fingerprint, and signs only validated GET/POST provider
 registration or access-token request paths. Missing, replaced, malformed or mismatched private
 identity blocks with fixed safe `PROVIDER_PROOF_INVALID`; pre-cancellation and closed roots block
-without signing. Caller supplies an explicit JSON body (use `{}` for GET); input is bounded to
+without signing. Caller supplies the exact endpoint-specific signed JSON body; input is bounded to
 64 KiB and 32 levels. Raw key values, errors and body contents never enter error messages.
 
 The existing protocol uses canonical recursively locale-sorted object keys, SHA-256 base64url
@@ -252,3 +252,33 @@ Implementation: documentation → built public missing-provider red → filesyst
 and canonical/protocol controls → implementation → owner tiers/checks/build, genuine immutable
 archive consumer and hosted verification. Node's [crypto contract](https://nodejs.org/docs/latest-v24.x/api/crypto.html)
 specifies Ed25519 `sign(null, data, key)` and JWK key import; owner tests qualify the pinned runtimes.
+
+## Registration-status connection provider
+
+`ProviderConnectionApplication.start(configuration)` in `@treeseed-cordis/agent/provider-control`
+composes the native proof and registration-status providers in one process-local Cordis scope.
+`status(requestId, signal)` signs `{requestId}` for GET `/v1/provider-registrations/:requestId`
+and calls the SDK's real default HTTPS protocol client. The caller does not construct this signed
+body. Configuration contains `proof` (the existing private proof configuration), canonical HTTPS
+`controlPlaneUrl`, and exact expected `teamId`, `providerId` and `registrationKeyGeneration`.
+The returned SDK registration must match these pins and the proof fingerprint. Foreign identity
+blocks; pending/rejected/expired status stays explicit and is never interpreted as active authority.
+The control-plane endpoint and proof audience are separately explicit pins, with no inferred fallback.
+
+This is Agent's successor of legacy coordinator `pollRegistrationRequest`, checked against API's
+legacy `registrationStatus` verifier at staging 788539ae3b15f98654212a0bbf4c0c30a782355d.
+Both sides reconstruct `{requestId}` despite an empty HTTP GET entity. The original empty-body
+example was wrong; the real TLS regression receiver rejects it. Credential exchange separately
+signs `{requestId,idempotencyKey}`; access-token issue signs `{credentialId,idempotencyKey}` plus
+`requestedValiditySeconds` when selected. These values are protocol evidence, not a new authority.
+Credential exchange/token renewal, durable enrollment, heartbeat and Keycloak/live grant checks
+remain later connection operations; this status provider creates no credentials or approval.
+
+`ProviderRegistrationPlugin` and `ProviderConnectionToken` expose the selectable typed connection
+seam. The plugin acquires the native proof service for each operation and retains it through the
+actual response/binding checks. The facade resolves the connection service per request, drains
+through native lifecycle and exposes safe SDK errors only. No service cache or second container.
+Replacement remains restart-required. Tests launch built Node artifacts over real isolated TLS
+with the default signer/client; the receiver independently verifies Ed25519, endpoint, exact body,
+nonce/time and identity. A permanent regression rejects the old empty-body proof. Fixtures provide
+no live enrollment authority and contact no production/legacy installation. All issues stay open.

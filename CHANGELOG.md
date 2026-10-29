@@ -4,6 +4,8 @@
 
 ### Added
 
+- Bind native registration-status proofs to the existing receiver and exact enrollment identity (#546).
+
 - Sign existing enrollment protocol proofs through a private-identity Cordis provider (#525).
 
 - Validate standalone guest payloads through the shared exact SDK and Deployment audit closure (#525).

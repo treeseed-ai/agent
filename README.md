@@ -524,6 +524,10 @@ process requests fail before proof-file or network access. A valid ready request
 native connection provider, freshly reads the exact configured registration over signed HTTPS,
 checks registration ID and complete team/provider/fingerprint/key-generation identity, then
 releases its native lease. Selected providers cannot bypass these coherent identity checks.
+The same readiness contract runs with an alternative native registration-status provider. Its
+exact returned identity is still checked by the manager; foreign results are denied. Duplicate
+or unknown override selections fail before network access. These explicit fixture providers
+prove selection, not real team authority or safe live replacement.
 
 A successful status observation returns a successful ready operation with `ready:false` and
 `CAPACITY_TARGET_UNREADY`: this initial manager has no qualified pool or live execution-grant

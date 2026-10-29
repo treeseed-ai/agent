@@ -217,3 +217,8 @@ slices. No handler or Work/model runs; Task 10 remains deferred and all issues s
 Delivery: commit this interface; observe missing built qualification program fail; compose public
 owner fixtures and actual Node default root; run local checks/build/tiers and full exact-head
 hosted qualification. Preserve all preceding tests and timeouts, and keep support registration-free.
+
+The hosted checkout remains owned by the runner user. Copy the pinned guest archive into the
+fixture parent's private custody with mode 0600 before calling Deployment's ownership-enforcing
+archive inspector as root. Validate the copied hash and worker entry there before daemon startup;
+do not relax ownership checks or inspect the runner-owned checkout as if it were private host state.

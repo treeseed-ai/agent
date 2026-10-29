@@ -3,7 +3,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { readFileSync, writeFileSync, chmodSync } from 'node:fs';
 import { resolve, join } from 'node:path';
 import { once } from 'node:events';
-import * as Agent from '@treeseed-cordis/agent';
+import * as Manager from '@treeseed-cordis/agent/manager-service';
 import { CapacityChannelSchemas, CapacityContractError } from '@treeseed-cordis/sdk';
 import { ProviderRegistrationFixture } from './provider-registration-program.js';
 interface ManagerService {
@@ -70,15 +70,14 @@ export class ManagerProgramFixture extends ProviderRegistrationFixture {
     };
   }
   private launch(): ChildProcess {
-    const args =
-      this.scenario === 'root' || this.scenario === 'foreign'
-        ? [
-            resolve('dist/tests/support/manager-program-fixture.js'),
-            '--library',
-            this.inputFile,
-            this.scenario,
-          ]
-        : [resolve('dist/src/manager-main.js'), '--config', this.inputFile];
+    const args = ['root', 'foreign', 'composition'].includes(this.scenario)
+      ? [
+          resolve('dist/tests/support/manager-program-fixture.js'),
+          '--library',
+          this.inputFile,
+          this.scenario,
+        ]
+      : [resolve('dist/src/manager-main.js'), '--config', this.inputFile];
     this.child = spawn('node', args, {
       env: { ...process.env, NODE_EXTRA_CA_CERTS: join(this.directory, 'cert.pem') },
       stdio: ['pipe', 'pipe', 'pipe'],
@@ -95,7 +94,7 @@ export class ManagerProgramFixture extends ProviderRegistrationFixture {
   }
   private send(): void {
     const frame = this.frame();
-    if (['root', 'foreign', 'permissions'].includes(this.scenario)) {
+    if (['root', 'foreign', 'composition', 'permissions'].includes(this.scenario)) {
       this.child!.stdin!.end();
       return;
     }
@@ -128,15 +127,21 @@ export class ManagerProgramFixture extends ProviderRegistrationFixture {
 }
 class ManagerLibraryProgram {
   async run(): Promise<void> {
-    const Root = Reflect.get(Agent, 'CapacityManagerService') as ManagerRoot;
+    const Root = Reflect.get(Manager, 'CapacityManagerService') as ManagerRoot;
     assert(Root && typeof Root.start === 'function', 'default manager native root missing');
     const configuration = JSON.parse(readFileSync(process.argv[3]!, 'utf8'));
     const manager = await Root.start(configuration);
     try {
-      await this.observe(manager, configuration.scope);
+      if (process.argv[4] === 'composition') this.composition(manager);
+      else await this.observe(manager, configuration.scope);
     } finally {
       await manager.close();
     }
+    process.stdout.write('manager-library-' + process.argv[4] + '-ok\n');
+  }
+  private composition(manager: ManagerService): void {
+    assert.match(Reflect.get(manager.generation, 'compositionGeneration'), /^[a-f0-9]{64}$/);
+    assert.match(Reflect.get(manager.generation, 'processGeneration'), /^[a-f0-9]{64}$/);
   }
   private async observe(manager: ManagerService, scope: object): Promise<void> {
     const response = CapacityChannelSchemas.response.parse(
@@ -145,7 +150,6 @@ class ManagerLibraryProgram {
     assert.deepEqual(response.generation, manager.generation);
     assert.equal(response.role, 'manager');
     this.result(response);
-    process.stdout.write('manager-library-' + process.argv[4] + '-ok\n');
   }
   private result(response: ReturnType<typeof CapacityChannelSchemas.response.parse>): void {
     if (process.argv[4] === 'foreign') {

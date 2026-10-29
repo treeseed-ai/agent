@@ -3,6 +3,9 @@
 ## [Unreleased]
 
 ### Added
+- Select exact prepared native profile, handler and execution providers in the guest program (#525).
+
+### Added
 
 - Bind native registration-status proofs to the existing receiver and exact enrollment identity (#546).
 

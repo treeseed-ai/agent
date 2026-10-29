@@ -107,7 +107,8 @@ public archive tests must bind this exact closure; productive Work/models remain
 
 `node dist/src/guest-main.js --config /absolute/private/guest.json` runs the actual guest
 program. The owner-private configuration has exactly `schemaVersion: treeseed.guest-configuration/v1`,
-`scope` (SDK capacity scope) and `assignmentFile` (an absolute canonical path). It creates one native
+`scope` (SDK capacity scope), `assignmentFile` (an absolute canonical path), and optional exact
+`providers` selections described in the [current package interface](../README.md#prepared-providers-in-the-guest-program). It creates one native
 Cordis root before any assignment exists. It accepts one strict SDK capacity-channel JSON frame
 per newline on stdin and returns one SDK response per newline on stdout. Frames are bounded to
 64 KiB; malformed/duplicate-key frames exit 2 with fixed safe stderr. EOF drains work and native
@@ -163,7 +164,10 @@ not pool readiness, setup ordering, live enrollment or VM isolation.
 
 Compiler target reference: [Bun executable documentation](https://bun.sh/docs/compiler/executables).
 The pinned compiler and ELF/program tests are the executable evidence for this owner artifact.
-All four ambient autoload modes (dotenv, bunfig, tsconfig and package.json) are explicitly disabled.
+The current external-provider build explicitly disables dotenv, bunfig and tsconfig autoload;
+it enables package.json resolution for verified external package dependencies. Foreign working
+directory scripts/preload/path canaries remain mandatory. The earlier packaging-only compiler
+qualification below used all four disabled flags; it did not prove external package resolution.
 
 Qualification: Bun 1.4.4 with `--compile --target=bun-linux-x64-musl-baseline` and all four
 `--no-compile-autoload-*` flags produced an ELF requiring `/lib/ld-musl-x86_64.so.1`,

@@ -96,7 +96,8 @@ Configuration pins the SDK capacity scope, private host service scope, expected 
 digest, endpoint directory and owner-private authority record. Host and capacity installation IDs
 must match. The default provider constructs Deployment's public `SandboxSocketClient` and
 `SandboxRunnerSocketClient`; no sibling source, raw runtime socket, executable or command enters
-Agent. Consume exact owner archives; the Deployment #1040 and Agent #553 are integrated on their owning Cordis branches. SDK .39 and the seven platform operation IDs stay unchanged.
+Agent. Consume exact owner archives. Deployment #1040 and Agent #553 are integrated on their
+owning Cordis branches. SDK .39 and the seven platform operation IDs stay unchanged.
 Independent external-plugin consumers explicitly select the exact Deployment archive alongside Agent
 and SDK; they never resolve this unpublished runtime peer through a registry. Preserve strict public
 declaration checking and lifecycle-script canaries. The guest executable still bundles no Deployment

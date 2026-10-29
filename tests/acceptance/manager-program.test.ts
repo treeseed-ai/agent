@@ -8,7 +8,7 @@ class ManagerProgramAcceptance {
     try {
       await fixture.start();
       const result = await fixture.program();
-      this.output(result, mode);
+      this.output(result, mode, fixture.scope);
       assert.deepEqual(fixture.evidence(), {
         accepted: ['root', 'foreign', 'ready', 'signal'].includes(mode) ? 1 : 0,
         rejected: 0,
@@ -18,9 +18,27 @@ class ManagerProgramAcceptance {
       await fixture.close();
     }
   }
+  async process(): Promise<void> {
+    const fixture = new ManagerProgramFixture('process');
+    try {
+      await fixture.start();
+      const first = await fixture.program();
+      this.output(first, 'ready', fixture.scope);
+      const second = await fixture.program();
+      this.output(second, 'ready', fixture.scope);
+      const a = JSON.parse(first.stdout),
+        b = JSON.parse(second.stdout);
+      assert.equal(a.generation.compositionGeneration, b.generation.compositionGeneration);
+      assert.notEqual(a.generation.processGeneration, b.generation.processGeneration);
+      assert.deepEqual(fixture.evidence(), { accepted: 2, rejected: 0, failure: null });
+    } finally {
+      await fixture.close();
+    }
+  }
   private output(
     result: { code: number | null; stdout: string; stderr: string },
     mode: string,
+    scope: object,
   ): void {
     const invalid = ['permissions', 'malformed', 'oversize'].includes(mode);
     assert.equal(result.code, invalid ? 2 : 0, result.stderr);
@@ -30,6 +48,8 @@ class ManagerProgramAcceptance {
       return assert.equal(result.stdout, 'manager-library-' + mode + '-ok\n');
     const response = CapacityChannelSchemas.response.parse(JSON.parse(result.stdout));
     assert.equal(response.operation, 'ready');
+    assert.deepEqual(response.scope, scope);
+    assert.equal(response.requestId, 'fixture.manager');
     assert.match(response.generation.processGeneration, /^[a-f0-9]{64}$/);
     if (!['scope', 'role', 'generation'].includes(mode)) assert.equal(response.role, 'manager');
     this.readiness(response, mode);
@@ -72,3 +92,8 @@ for (const mode of [
     suite.run.bind(suite, mode),
     20000,
   );
+test(
+  'acceptance: separate built manager preserves composition and renews each process generation',
+  suite.process.bind(suite),
+  20000,
+);

@@ -41,6 +41,9 @@ Exact peer, provenance, vendor, lock, installed identity and public archive asse
 Only the public package-version identity literal changes in runtime source; all behavior and
 frozen guest archive bytes remain unchanged. Existing exact-selection expectations advance
 with their owner archives; runtime assertions, deadlines and scope remain intact.
+The genuine external guest archive fixture must read this owner's selected SDK peer, preserving
+script canaries and every positive/negative Node and standalone plugin case. Contract-inventory
+checks belong in the unit closure suite; executable guest/archive acceptance remains required.
 
 SDK44 supplies transport, not Agent availability orchestration. Deployment127 includes accepted
 private record custody, bounded archive publication, retained kit/component/configuration proof

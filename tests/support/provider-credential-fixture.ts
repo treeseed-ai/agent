@@ -11,10 +11,11 @@ import { ProviderRegistrationFixture } from './provider-registration-program.js'
 /** Existing public protocol receiver only; no real team approval or Keycloak authority. */
 export class ProviderCredentialFixture extends ProviderIdentityFixture {
   private server: Server | null = null;
-  private failure: string | null = null;
+  protected failure: string | null = null;
   private readonly nonces = new Set<string>();
-  private posts = 0;
-  private gets = 0;
+  protected posts = 0;
+  protected gets = 0;
+  protected readonly programFile: string = 'dist/tests/support/provider-credential-program.js';
   readonly inputFile = join(this.directory, 'credential-request.json');
   private readonly certificateArgs = [
     'req',
@@ -33,7 +34,7 @@ export class ProviderCredentialFixture extends ProviderIdentityFixture {
     '-out',
     join(this.directory, 'cert.pem'),
   ];
-  constructor(private readonly mode: string) {
+  constructor(protected readonly mode: string) {
     super();
   }
   async start(): Promise<void> {
@@ -53,7 +54,7 @@ export class ProviderCredentialFixture extends ProviderIdentityFixture {
     await once(this.server, 'listening');
     writeFileSync(this.inputFile, JSON.stringify(this.connection()), { mode: 0o600 });
   }
-  private origin(): string {
+  protected origin(): string {
     return 'https://127.0.0.1:' + (this.server!.address() as { port: number }).port;
   }
   private connection(): object {
@@ -70,7 +71,7 @@ export class ProviderCredentialFixture extends ProviderIdentityFixture {
   private receive(request: IncomingMessage, response: ServerResponse): void {
     void this.respond(request, response).catch(this.failed.bind(this, response));
   }
-  private async respond(request: IncomingMessage, response: ServerResponse): Promise<void> {
+  protected async respond(request: IncomingMessage, response: ServerResponse): Promise<void> {
     response.setHeader('content-type', 'application/json');
     const input = await this.body(request);
     if (request.method === 'GET') this.registrationResponse(request, response, input);
@@ -109,14 +110,16 @@ export class ProviderCredentialFixture extends ProviderIdentityFixture {
     this.posts++;
     response.end(
       JSON.stringify({
-        data:
-          this.mode === 'malformed'
-            ? { credential: 'PRIVATE_CREDENTIAL_CANARY' }
-            : ProviderCredentialFixture.issue(this.mode),
+        data: this.credentialData(),
       }),
     );
   }
-  private async body(request: IncomingMessage): Promise<string> {
+  protected credentialData(): object {
+    return this.mode === 'malformed'
+      ? { credential: 'PRIVATE_CREDENTIAL_CANARY' }
+      : ProviderCredentialFixture.issue(this.mode);
+  }
+  protected async body(request: IncomingMessage): Promise<string> {
     const chunks = [];
     let size = 0;
     for await (const bytes of request) {
@@ -126,7 +129,7 @@ export class ProviderCredentialFixture extends ProviderIdentityFixture {
     }
     return Buffer.concat(chunks).toString();
   }
-  private proof(
+  protected proof(
     proof: { protected: string; payload: string; signature: string },
     request: IncomingMessage,
     body: string,
@@ -166,7 +169,7 @@ export class ProviderCredentialFixture extends ProviderIdentityFixture {
     assert(!this.nonces.has(payload.jti));
     this.nonces.add(payload.jti);
   }
-  private registration(): object {
+  protected registration(): object {
     return {
       ...ProviderRegistrationFixture.response(
         this.fingerprint,
@@ -210,7 +213,7 @@ export class ProviderCredentialFixture extends ProviderIdentityFixture {
   async program(): Promise<{ code: number | null; stdout: string; stderr: string }> {
     const child = spawn(
       'node',
-      [resolve('dist/tests/support/provider-credential-program.js'), this.inputFile, this.mode],
+      [resolve(this.programFile), this.inputFile, this.mode],
       {
         env: { ...process.env, NODE_EXTRA_CA_CERTS: join(this.directory, 'cert.pem') },
         stdio: ['ignore', 'pipe', 'pipe'],

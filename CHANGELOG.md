@@ -3,6 +3,9 @@
 ## [Unreleased]
 
 ### Added
+- Exchange approved credentials for exact existing control-plane provider access tokens through native composition (#525).
+
+### Added
 - Exchange approved provider registrations through a native credential provider with exact identity binding (#525).
 
 ### Added

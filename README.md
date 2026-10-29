@@ -84,6 +84,43 @@ empty-tool-path and ambient-preload canaries, archive limits and native generati
 This aligns owner contracts before actual guest sessions; it creates no capacity or authority.
 All issues remain open and real Work/model execution remains Task 10.
 
+## Provider access token
+
+`@treeseed-cordis/agent/provider-token` exports the headless native `ProviderTokenApplication` and
+selectable `agent.provider.token` provider. Its default root binds the existing private-file proof
+and approved credential providers; it starts no manager, worker, browser or guest. Configuration
+matches the approved credential root configuration, including its exact proof identity version.
+Replacement remains restart-only.
+
+`issue({credentialIssueKey, tokenIssueKey, requestedValiditySeconds?}, signal)` retains native
+credential/proof leases. It exchanges the exact approved registration credential, signs
+`POST /v1/provider/access-tokens` over `{credentialId, idempotencyKey, requestedValiditySeconds?}`,
+and sends the existing `Treeseed-Credential` authorization and `Idempotency-Key` headers through the
+public SDK client. Repeating the same keys requests the original identities; no automatic retry,
+secret cache or alternate account is introduced. A final approved credential exchange rechecks
+authority and the same credential issuance before accepting the token.
+
+Validate SDK token structure, exact team/provider/membership/credential, configured identity version,
+active status, lifetime and unique scopes contained in the credential's grants. The coherent public
+facade repeats these checks above a selected implementation; closure/cancellation/native lease
+failure refuses acceptance. Errors carry only fixed safe codes. Opaque credentials/access tokens
+remain internal return data and never enter stdout, stderr, user envelopes or newly created files.
+They are existing control-plane secrets, not Keycloak JWTs or guest assignment grants.
+
+Recheck cancellation/closure after awaited native lease cleanup, immediately before returning.
+Cancellation triggered during the final credential read-back must never escape as an accepted token.
+
+The same-repository legacy authority is `CapacityRegistrationService.issueAccessToken` at API
+`e3b3a05892eb25ef5f2fd77c476788f2870118d2`; its signed-body and idempotent issuance semantics are
+preserved. Keycloak-governed approval remains behind that public boundary. Acceptance uses a real
+isolated HTTPS receiver and real Ed25519 proofs, explicitly a protocol fixture rather than a live
+team/Keycloak service. Live token authentication, heartbeat/revocation, registration submission,
+private secret custody and the actual manager program remain required before claiming enrollment.
+
+Implementation order: committed interface/changelog; built default missing-root red and HTTPS
+negative controls; concise native token/root classes and metadata; complete owner tiers/build,
+genuine script-free public archive consumer and exact-head CI/review. Work/models remain Task 10.
+
 ## Approved registration credential exchange
 
 `ProviderCredentialApplication.start(configuration)` is a separate native Agent root facade for

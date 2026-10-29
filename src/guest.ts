@@ -27,6 +27,7 @@ import {
   type CapacityAssignmentSource,
 } from './authority.js';
 import { AgentPackageIdentity } from './package-identity.js';
+import { GuestPackages } from './guest-packages.js';
 import {
   GuestTokens,
   GuestProfilePlugin,
@@ -47,6 +48,7 @@ export class GuestConfiguration {
   static readonly schema = AgentCapacityAssignmentFilePlugin.Config.omit({ file: true }).extend({
     schemaVersion: z.literal('treeseed.guest-configuration/v1'),
     assignmentFile: AgentCapacityAssignmentFilePlugin.Config.shape.file,
+    providers: GuestPackages.references.default([]),
   });
   static parse(input: unknown): z.infer<typeof this.schema> {
     const parsed = this.schema.safeParse(input);
@@ -184,8 +186,16 @@ export class CapacityGuest {
     overrides: readonly ProviderRegistration[] = [],
   ): Promise<CapacityGuest> {
     const configuration = GuestConfiguration.parse(input);
-    const registrations = this.registrations(configuration, overrides);
-    const scopeId = 'capacity-guest:' + CanonicalJson.digest(configuration.scope);
+    const prepared = await GuestPackages.load(configuration.scope, configuration.providers);
+    const registrations = this.registrations(configuration, [...prepared, ...overrides]);
+    const scope = await this.compose(configuration, registrations);
+    return new CapacityGuest(configuration, scope, this.handler(registrations));
+  }
+  private static async compose(
+    configuration: z.infer<typeof GuestConfiguration.schema>,
+    registrations: ProviderRegistration[],
+  ): Promise<CordisScope> {
+    const scopeId = GuestPackages.scopeId(configuration.scope);
     const selections = [];
     for (const registration of registrations)
       selections.push({
@@ -193,7 +203,7 @@ export class CapacityGuest {
         capability: registration.token.id,
         providerId: (registration.declaration as { id: string }).id,
       });
-    const scope = await CordisScope.start(
+    return CordisScope.start(
       { registrations, selections },
       {
         scopeId,
@@ -202,7 +212,6 @@ export class CapacityGuest {
         resourceScope: configuration.scope.installationId,
       },
     );
-    return new CapacityGuest(configuration, scope, this.handler(registrations));
   }
   private static registrations(
     configuration: z.infer<typeof GuestConfiguration.schema>,

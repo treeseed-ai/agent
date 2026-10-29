@@ -39,7 +39,7 @@ class GuestBinaryBuild {
         '--no-compile-autoload-dotenv',
         '--no-compile-autoload-bunfig',
         '--no-compile-autoload-tsconfig',
-        '--no-compile-autoload-package-json',
+        '--compile-autoload-package-json',
         'src/guest-main.ts',
         '--outfile',
         this.output,

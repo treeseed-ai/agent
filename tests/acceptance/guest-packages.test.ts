@@ -1,4 +1,4 @@
-import { test } from 'bun:test';
+import { afterAll, test } from 'bun:test';
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import { spawnSync } from 'node:child_process';
@@ -42,6 +42,9 @@ class GuestPackageArchive {
     this.prepare();
     this.command(['pm', 'pack', '--destination', this.directory], join(this.directory, 'source'));
     this.install();
+  }
+  close(): void {
+    rmSync(this.directory, { recursive: true });
   }
   private command(args: string[], cwd: string): void {
     const result = spawnSync('bun', args, { cwd, encoding: 'utf8', timeout: 60000 });
@@ -240,6 +243,9 @@ class GuestPackageAcceptance {
     this.archive ??= new GuestPackageArchive();
     return new GuestPreparedPackage(this.archive, mode);
   }
+  close(): void {
+    this.archive?.close();
+  }
   async node(): Promise<void> {
     await this.run(false);
   }
@@ -283,6 +289,7 @@ class GuestPackageAcceptance {
   }
 }
 const suite = new GuestPackageAcceptance();
+afterAll(suite.close.bind(suite));
 test(
   'acceptance: Node guest executes an external profile handler and execution package through native services',
   suite.node.bind(suite),

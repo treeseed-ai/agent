@@ -67,7 +67,7 @@ class GuestPackageArchive {
       type: 'module',
       files: ['dist'],
       scripts: { postinstall: 'touch postinstall-canary' },
-      peerDependencies: { '@treeseed-cordis/sdk': '0.0.0-cordis.41', zod: '4.6.7' },
+      peerDependencies: { '@treeseed-cordis/sdk': '0.0.0-cordis.42', zod: '4.6.7' },
       cordisPackage: PackageDefinition.define(
         '@fixture/guest',
         '1.0.0',

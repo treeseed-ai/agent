@@ -102,6 +102,53 @@ class ProviderProofIntegration {
       fixture.close();
     }
   }
+  async configuration(): Promise<void> {
+    const fixture = new ProviderIdentityFixture();
+    try {
+      for (const audience of [
+        'http://example.com',
+        'https://example.com/path',
+        'https://u:p@example.com',
+        'https://example.com/?q=CANARY',
+      ])
+        await this.deniedConfiguration({ ...fixture.configuration, audience });
+      await this.deniedConfiguration({ ...fixture.configuration, identityVersion: 0 });
+      await this.deniedConfiguration({ ...fixture.configuration, fingerprint: 'CANARY' });
+    } finally {
+      fixture.close();
+    }
+  }
+  private async deniedConfiguration(input: unknown): Promise<void> {
+    const Root = Reflect.get(Agent, 'ProviderProofApplication') as ProofRoot;
+    await assert.rejects(Root.start(input), /^Error: PROVIDER_PROOF_INVALID$/);
+  }
+  private getterCalled = false;
+  private getter(): string {
+    this.getterCalled = true;
+    return 'PRIVATE_CANARY';
+  }
+  async json(): Promise<void> {
+    const fixture = new ProviderIdentityFixture();
+    let host: ProofHost | undefined;
+    try {
+      host = await this.host(fixture);
+      const body = Object.defineProperty({}, 'secret', {
+        enumerable: true,
+        get: this.getter.bind(this),
+      });
+      for (const input of this.invalidJson(body))
+        await this.denied(host, { ...fixture.request, body: input });
+      assert.equal(this.getterCalled, false);
+    } finally {
+      await host?.close();
+      fixture.close();
+    }
+  }
+  private invalidJson(getter: object): unknown[] {
+    const cycle: Record<string, unknown> = {};
+    cycle.self = cycle;
+    return [getter, cycle, new Array(2), { invalid: undefined }, { invalid: Infinity }];
+  }
   private invalid(fixture: ProviderIdentityFixture): unknown[] {
     let nested: unknown = null;
     for (let count = 0; count < 33; count++) nested = { child: nested };
@@ -137,4 +184,13 @@ test(
 test(
   'integration: native proof root rejects unsupported requests oversized or deep bodies and pre-cancellation with safe errors',
   suite.bounds.bind(suite),
+);
+
+test(
+  'integration: native proof configuration rejects foreign noncanonical audiences and malformed pinned identities',
+  suite.configuration.bind(suite),
+);
+test(
+  'integration: proof canonicalization rejects cyclic sparse and non-JSON bodies without invoking body getters',
+  suite.json.bind(suite),
 );

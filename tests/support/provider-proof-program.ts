@@ -98,9 +98,9 @@ class ProviderProofProgram {
     this.freshness(payload);
   }
   private freshness(payload: Record<string, string>): void {
-    assert.equal(Date.parse(payload.expiresAt) - Date.parse(payload.issuedAt), 60000);
-    assert(Math.abs(Date.now() - Date.parse(payload.issuedAt) - 1000) < 5000);
-    assert.match(payload.jti, /^[0-9a-f-]{36}$/);
+    assert.equal(Date.parse(payload.expiresAt!) - Date.parse(payload.issuedAt!), 60000);
+    assert(Math.abs(Date.now() - Date.parse(payload.issuedAt!) - 1000) < 5000);
+    assert.match(payload.jti!, /^[0-9a-f-]{36}$/);
   }
 }
 if (import.meta.main) await new ProviderProofProgram().run();

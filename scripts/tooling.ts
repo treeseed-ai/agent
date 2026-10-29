@@ -1,3 +1,4 @@
+import { ProviderFileProofPlugin } from '../src/provider-proof.js';
 import { GuestProfilePlugin, GuestContextPlugin, GuestHandlerPlugin, GuestToolPlugin, GuestReportingPlugin, GuestExecutionPlugin } from '../src/guest-providers.js';
 import { AgentHostPlugin } from '../src/execution.js';
 import { AgentContextPlugin, AgentEchoToolPlugin, AgentEchoHandlerPlugin, AgentReporterPlugin, AgentExecutionPlugin } from '../src/providers.js';
@@ -20,6 +21,7 @@ class AgentTooling {
     this.project(metadata, process.argv[2] === 'build');
   }
   private static readonly definitions = [
+    {plugin: ProviderFileProofPlugin, entry: 'dist/src/provider-proof.js', name: 'ProviderFileProofPlugin'},
     {plugin: GuestProfilePlugin, entry: 'dist/src/guest-providers.js', name: 'GuestProfilePlugin'},
     {plugin: GuestContextPlugin, entry: 'dist/src/guest-providers.js', name: 'GuestContextPlugin'},
     {plugin: GuestHandlerPlugin, entry: 'dist/src/guest-providers.js', name: 'GuestHandlerPlugin'},

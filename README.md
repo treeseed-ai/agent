@@ -107,6 +107,9 @@ failure refuses acceptance. Errors carry only fixed safe codes. Opaque credentia
 remain internal return data and never enter stdout, stderr, user envelopes or newly created files.
 They are existing control-plane secrets, not Keycloak JWTs or guest assignment grants.
 
+Recheck cancellation/closure after awaited native lease cleanup, immediately before returning.
+Cancellation triggered during the final credential read-back must never escape as an accepted token.
+
 The same-repository legacy authority is `CapacityRegistrationService.issueAccessToken` at API
 `e3b3a05892eb25ef5f2fd77c476788f2870118d2`; its signed-body and idempotent issuance semantics are
 preserved. Keycloak-governed approval remains behind that public boundary. Acceptance uses a real

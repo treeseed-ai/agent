@@ -38,6 +38,9 @@ class WorkerProgramChild {
     this.child.stdin.write(input);
     return CapacityChannelSchemas.response.parse(JSON.parse(await this.initial()));
   }
+  terminate(): void {
+    this.child.kill('SIGTERM');
+  }
   stop(): void {
     if (this.child.exitCode === null && this.child.signalCode === null) this.child.kill('SIGKILL');
   }
@@ -58,7 +61,13 @@ class WorkerProgramChild {
 export class WorkerProgramScenario {
   async run(mode: string): Promise<void> {
     const hostMode =
-      mode === 'malformed-host' ? 'malformed' : mode === 'foreign-host' ? mode : 'accepted';
+      mode === 'cancel-inflight'
+        ? 'silent-ready'
+        : mode === 'malformed-host'
+          ? 'malformed'
+          : mode === 'foreign-host'
+            ? mode
+            : 'accepted';
     const fixture = new WorkerHostFixture(hostMode);
     try {
       await fixture.start();
@@ -97,6 +106,7 @@ export class WorkerProgramScenario {
   }
   private async exercise(fixture: WorkerHostFixture, mode: string): Promise<void> {
     if (mode === 'reserve') return this.reserve(fixture);
+    if (mode === 'cancel-inflight') return this.cancel(fixture);
     const reply = await new WorkerProgramChild(fixture.inputFile).run(
       this.frame(fixture, mode),
       mode === 'signal',
@@ -218,6 +228,30 @@ export class WorkerProgramScenario {
       expectedGeneration: generation,
       parameters: { request },
     };
+  }
+  private async cancel(fixture: WorkerHostFixture): Promise<void> {
+    const child = new WorkerProgramChild(fixture.inputFile);
+    try {
+      const pending = child.first(this.frame(fixture, 'ready'));
+      await this.pendingObservation(fixture);
+      child.terminate();
+      const response = await pending;
+      const result = await child.run('');
+      assert.equal(result.code, 0, result.stderr);
+      assert.equal(result.stderr, '');
+      assert.equal(response.success, false);
+      assert.equal(response.problem?.code, 'CAPACITY_CANCELLED');
+      fixture.assertIdle(1);
+    } finally {
+      child.stop();
+    }
+  }
+  private async pendingObservation(fixture: WorkerHostFixture): Promise<void> {
+    const deadline = Date.now() + 5000;
+    while (fixture.observations === 0) {
+      assert(Date.now() < deadline, 'worker observation was not admitted');
+      await delay(10);
+    }
   }
   private async reserve(fixture: WorkerHostFixture): Promise<void> {
     const child = new WorkerProgramChild(fixture.inputFile);

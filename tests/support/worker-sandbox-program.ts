@@ -160,6 +160,7 @@ export class WorkerHostFixture {
       socket.end('{"private":"PRIVATE_WORKER_CANARY"}\n');
       return;
     }
+    if (this.mode === 'silent-ready') return;
     const request = frame.request;
     const response =
       request.schemaVersion === 'treeseed.sandbox-control/v1'
@@ -269,6 +270,9 @@ export class WorkerHostFixture {
       result: ready,
       problem: null,
     });
+  }
+  get observations(): number {
+    return this.requests;
   }
   assertIdle(requests: number): void {
     assert.equal(this.failure, null);

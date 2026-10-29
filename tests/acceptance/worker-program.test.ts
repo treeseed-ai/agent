@@ -15,6 +15,7 @@ for (const mode of [
   'truncated',
   'private-configuration',
   'signal',
+  'cancel-inflight',
 ])
   test(
     'acceptance: separate built worker program preserves safe native lifecycle for ' + mode,

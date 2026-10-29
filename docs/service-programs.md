@@ -222,3 +222,39 @@ The hosted checkout remains owned by the runner user. Copy the pinned guest arch
 fixture parent's private custody with mode 0600 before calling Deployment's ownership-enforcing
 archive inspector as root. Validate the copied hash and worker entry there before daemon startup;
 do not relax ownership checks or inspect the runner-owned checkout as if it were private host state.
+
+## Separate worker program and honest initial readiness
+
+`node dist/src/worker-main.js --config /absolute/private/worker.json` starts the separate
+worker process. The configuration is exactly `WorkerApplication.Config` plus
+`schemaVersion: treeseed.worker-configuration/v1`; private descriptor-anchored read-back and
+canonical installation/scope checks occur before composition. It creates the default native
+worker root and uses its selected typed sandbox provider, without embedding Agent in Deployment.
+
+The stdin/stdout protocol is SDK `treeseed.capacity-channel/v1`, worker role. Each strict JSON
+frame has one newline, at most 64 KiB, with at most sixteen admitted replies. Output contains
+only schema-validated canonical envelopes; errors contain fixed SDK codes/messages. Ready binds
+this actual native composition generation and a fresh per-process nonce. It acquires a native
+provider lease, freshly checks the host identity/grant through the default private client, then
+releases the lease before returning. Foreign scope/role/stale generations fail before host I/O.
+
+This initial service has no qualified pool or live manager admission yet. A successful host
+inspection therefore returns a successful ready *operation* whose result is `ready: false` with
+`CAPACITY_TARGET_UNREADY`. Failed host inspection returns a failed operation. Reserve, dispatch
+and cancel return `CAPACITY_CAPABILITY_DENIED` without touching host resources. A composed root
+or reachable host is never reported as usable capacity. The following pool/kernel contribution
+must supply real admission, reservations and trusted assignment before this can become ready.
+
+EOF drains admitted requests and native disposal. SIGTERM/SIGINT cancel ongoing observations,
+stop accepting frames and await lease/root cleanup. Cleanup failure exits 1 with fixed
+`CAPACITY_CLEANUP_FAILED`; malformed arguments/configuration/JSON/frames exit 2; unexpected runtime
+failure exits 1. A clean blocked readiness result exits 0 after EOF: it is a truthful diagnostic,
+not an installation or activation receipt. No credentials, pool bases, scripts or containers are
+created by these diagnostic operations.
+
+Delivery sequence: commit this interface → failing built Node acceptance over real Unix protocol
+peers → native service/stdio implementation → checks/build/all tiers and genuine archive consumer
+→ full hosted verification, including the retained actual Kata worker/guest boundary. Fixtures are
+explicit external protocol peers, never substituted internal WorkerApplication collaborators.
+Preserve every prior assertion/deadline, exact owner artifacts, Keycloak authority and open issue.
+Work/model execution remains Task 10.

@@ -501,3 +501,45 @@ receiver and identity/private-file/cancellation/replacement boundaries → plugi
 checks/build/all applicable tiers, exact archive consumer and full hosted verification. Permanent
 tests use behavior names in their owning tiers. Test TLS uses a private temporary CA trusted
 only by its child; no global trust change. All issues remain open under release policy.
+
+## Separate manager program and authority diagnostics
+
+`node dist/src/manager-main.js --config /absolute/private/manager.json` starts the separate
+manager process. `CapacityManagerService.start(configuration, overrides?)` exposes the same
+coherent admission kernel through `@treeseed-cordis/agent/manager-service`. It creates one
+process-local native root containing the selected proof and registration-status providers;
+no application/root is nested inside Deployment or another Agent root.
+
+Configuration extends `ProviderConnectionApplication.Config` with
+`schemaVersion: treeseed.manager-configuration/v1`, SDK capacity `scope` and `registrationId`.
+The selected capacity provider must equal the control-plane provider, installation path must
+be canonical and proof audience must equal the control-plane origin. Starting composition
+creates no credentials, enrollment request, pool base or runtime service.
+
+The program consumes SDK capacity-channel manager ready-only frames. Each response binds its
+actual composition generation and a fresh per-process nonce. Foreign role/scope or stale
+process requests fail before proof-file or network access. A valid ready request acquires the
+native connection provider, freshly reads the exact configured registration over signed HTTPS,
+checks registration ID and complete team/provider/fingerprint/key-generation identity, then
+releases its native lease. Selected providers cannot bypass these coherent identity checks.
+
+A successful status observation returns a successful ready operation with `ready:false` and
+`CAPACITY_TARGET_UNREADY`: this initial manager has no qualified pool or live execution-grant
+admission yet. An approved registration alone never makes capacity ready. Failed observations
+return fixed safe blockers with null results; private provider errors never reach envelopes.
+The complete manager authorization, lease/fence orchestration and result-custody kernel remains
+required before reserve/dispatch/execution can be enabled. Work/models remain Task 10.
+
+Manager and worker share one bounded stdio framing implementation with a typed service contract.
+Its positive parser/admission scheduler is a coherent wire invariant, not a second plugin
+container or lifecycle scheduler. Preserve the worker's 64 KiB frames, sixteen pending replies,
+strict duplicate-key JSON, output bound, EOF drain, signal cancellation and native disposal.
+Configuration/argument/frame errors exit 2; runtime/cleanup failure exits 1 with fixed codes.
+Every previous worker program assertion remains required after this transport refactor.
+
+Delivery follows this committed interface, missing built manager acceptance, real isolated
+HTTPS and native selection/cancellation boundaries, then concise classes and full verification.
+First consume accepted SDK .42 and a matching Deployment/Agent archive closure through public
+interfaces; do not rely on a sibling checkout or permit two SDK versions. Final current manager
+qualification must spawn the actual program, verify safe output/exit/disposal, retain real
+hosted Kata gates and keep all issues open. It does not claim full installed manager capacity.

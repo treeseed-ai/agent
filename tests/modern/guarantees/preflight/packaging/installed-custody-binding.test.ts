@@ -45,8 +45,10 @@ describe('capacity-provider guarantee execution bindings', () => {
 		const inputs = JSON.parse(native.env.TREESEED_INSTALLED_OWNER_INPUTS);
         const agentSdk = inputs.find((value: { owner: string }) => value.owner === 'agent').buildSdk;
         expect(agentSdk).toEqual({ commit: 'ab5ad06894610c5566aa32bbffc7c027a4e3f4ce', sha256: '4346e570ce059f1f8e8dc81cb5d78175e368a7c4fa91e9aee3330ac8a785a6a7' });
+        // Current-source qualification consumes the repaired shared SDK. The
+        // retained owner artifact below keeps its ORIGINAL build SDK custody.
         expect(workflow.jobs.verify.steps.some((step: { uses?: string; env?: Record<string, string> }) =>
-            step.uses === `treeseed-ai/sdk/.github/actions/install-exact-sdk@${agentSdk.commit}` && step.env?.NODE_ENV === 'production')).toBe(true);
+            step.uses === 'treeseed-ai/sdk/.github/actions/install-exact-sdk@d5ef1e2985a639e7bd197d94847d66ce06b98f84' && step.env?.NODE_ENV === 'production')).toBe(true);
         expect(native.steps.filter((step: { with?: { path?: string } }) =>
             step.with?.path === `.treeseed/installed-owner-inputs/build-sdk-${agentSdk.commit}`).map((step: { with: unknown }) => step.with))
             .toEqual([{ 'github-token': '${{ github.token }}', repository: 'treeseed-ai/sdk', 'run-id': 40271189010,

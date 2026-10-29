@@ -52,7 +52,7 @@ jobs:
           test "$(gh api repos/treeseed-ai/cli/actions/runs/38647918411 --jq '[.head_sha,.status,.conclusion]|join(" ")')" == '2b27d26c23905423d90c73abb24c888c452a8745 completed success'
           echo '49b6d24882af45ba39fd46cdcd999c9c54e84bd416f834fa0042ec5425dbea1a  .treeseed/tools/cli-candidate/treeseed-cli-0.13.0-rc.85.tgz' | sha256sum --check --strict
           npm install --no-save --package-lock=false --ignore-scripts --no-audit --no-fund ./.treeseed/tools/cli-candidate/treeseed-cli-0.13.0-rc.85.tgz
-      - uses: treeseed-ai/sdk/.github/actions/install-exact-sdk@ab5ad06894610c5566aa32bbffc7c027a4e3f4ce
+      - uses: treeseed-ai/sdk/.github/actions/install-exact-sdk@d5ef1e2985a639e7bd197d94847d66ce06b98f84
         env:
           NODE_ENV: production
         with:

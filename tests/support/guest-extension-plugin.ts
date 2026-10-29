@@ -110,7 +110,7 @@ export class ExtensionHandlerPlugin {
 }
 export class ExtensionExecutionPlugin {
   static readonly provide = ['agent.guest.execution'];
-  static readonly inject: string[] = [];
+  static readonly inject = ['agent.guest.handler'];
   static readonly Config = z.strictObject({ missing: z.boolean().default(false) });
   static readonly replacement = GuestExtension.replacement;
   static readonly declaration = GuestExtension.declaration(
@@ -129,4 +129,21 @@ export class ExtensionExecutionPlugin {
     await session.checkpoint();
     return session.handler.execute(request, session.tool, session.signal);
   }
+}
+
+export class MissingExecutionPlugin extends ExtensionExecutionPlugin {
+  static readonly inject = ['fixture.missing'];
+  static readonly declaration = GuestExtension.declaration(
+    'fixture.guest.missing',
+    this.provide,
+    this.inject,
+  );
+}
+export class CyclicHandlerPlugin extends ExtensionHandlerPlugin {
+  static readonly inject = ['cordis.composition', 'agent.guest.tool', 'agent.guest.execution'];
+  static readonly declaration = GuestExtension.declaration(
+    'fixture.guest.cyclic',
+    this.provide,
+    this.inject,
+  );
 }

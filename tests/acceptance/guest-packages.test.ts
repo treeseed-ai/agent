@@ -29,6 +29,8 @@ import {
   ExtensionProfilePlugin,
   ExtensionHandlerPlugin,
   ExtensionExecutionPlugin,
+  MissingExecutionPlugin,
+  CyclicHandlerPlugin,
 } from '../support/guest-extension-plugin.js';
 
 type Reference = { capability: string; file: string; sha256: string };
@@ -55,9 +57,7 @@ class GuestPackageArchive {
     mkdirSync(join(this.directory, 'consumer'));
   }
   private metadata(): object {
-    const providers = [];
-    for (const plugin of [ExtensionProfilePlugin, ExtensionHandlerPlugin, ExtensionExecutionPlugin])
-      providers.push(PackageDefinition.export(plugin, 'dist/plugin.js', plugin.name));
+    const providers = this.providers();
     return {
       name: '@fixture/guest',
       version: '1.0.0',
@@ -72,6 +72,18 @@ class GuestPackageArchive {
         providers,
       ),
     };
+  }
+  private providers() {
+    const providers = [];
+    for (const plugin of [
+      ExtensionProfilePlugin,
+      ExtensionHandlerPlugin,
+      ExtensionExecutionPlugin,
+      MissingExecutionPlugin,
+      CyclicHandlerPlugin,
+    ])
+      providers.push(PackageDefinition.export(plugin, 'dist/plugin.js', plugin.name));
+    return providers;
   }
   private install(): void {
     const dependencies = {
@@ -110,7 +122,11 @@ class GuestPreparedPackage implements GuestFixturePreparation {
     profile.capabilityRevision = GuestExtension.revision;
     profile.handler = structuredClone(GuestExtension.handler);
     profile.parameters = {};
-    for (const plugin of [ExtensionProfilePlugin, ExtensionHandlerPlugin, ExtensionExecutionPlugin])
+    for (const plugin of [
+      ExtensionProfilePlugin,
+      this.mode === 'cycle' ? CyclicHandlerPlugin : ExtensionHandlerPlugin,
+      this.mode === 'missing' ? MissingExecutionPlugin : ExtensionExecutionPlugin,
+    ])
       this.references.push(this.prepare(plugin.declaration, plugin.name, record));
     this.alter();
     configuration.providers = this.references;
@@ -144,7 +160,10 @@ class GuestPreparedPackage implements GuestFixturePreparation {
       formatVersion: 2,
       contractVersion: ProviderV4Schemas.version,
       target: 'agent',
-      scopeId: 'capacity-guest:' + CanonicalJson.digest(record.lease.scope),
+      scopeId:
+        this.mode === 'scope'
+          ? 'foreign.scope'
+          : 'capacity-guest:' + CanonicalJson.digest(record.lease.scope),
       providerId,
       package: { name: '@fixture/guest', version: '1.0.0' },
       entry: 'dist/plugin.js',
@@ -233,7 +252,7 @@ class GuestPackageAcceptance {
     try {
       const ready = await Promise.race([
         fixture.request('ready', null),
-        once(fixture.child, 'exit').then(this.unexpected.bind(this)),
+        once(fixture.child, 'exit').then(this.unexpected.bind(this, fixture)),
       ]);
       assert(ready.success);
       fixture.record.lease.generations.runner = ready.generation;
@@ -248,14 +267,15 @@ class GuestPackageAcceptance {
       prepared.close();
     }
   }
-  private unexpected(): never {
-    throw new Error('guest exited before external-provider readiness');
+  private unexpected(fixture: GuestProgramFixture): never {
+    throw new Error('guest exited before external-provider readiness: ' + fixture.stderr);
   }
   async invalid(mode: string): Promise<void> {
     const prepared = this.preparation(mode);
     const fixture = new GuestProgramFixture(prepared);
     try {
       await fixture.close(2);
+      assert.equal(fixture.stderr, 'INVALID_CAPACITY_CONTRACT\n');
     } finally {
       fixture.kill();
       prepared.close();
@@ -273,7 +293,7 @@ test(
   suite.standalone.bind(suite),
   95000,
 );
-for (const mode of ['duplicate', 'unknown', 'tamper', 'constructor'])
+for (const mode of ['duplicate', 'unknown', 'tamper', 'constructor', 'missing', 'cycle', 'scope'])
   test(
     'acceptance: guest safely rejects external package ' + mode,
     suite.invalid.bind(suite, mode),

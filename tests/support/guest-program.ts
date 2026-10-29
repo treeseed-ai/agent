@@ -49,7 +49,26 @@ export class GuestProgramLauncher {
       join(this.directory, 'ambient.ts'),
       "import {writeFileSync} from 'node:fs'; class AmbientCanary {static run():void {writeFileSync('ambient-canary','unexpected');}} AmbientCanary.run();",
     );
+    this.packageCanary();
     writeFileSync(join(this.directory, '.env'), 'BUN_OPTIONS=--preload ./ambient.ts\n');
+  }
+  private packageCanary(): void {
+    writeFileSync(
+      join(this.directory, 'package.json'),
+      JSON.stringify({
+        type: 'module',
+        main: './ambient.ts',
+        module: './ambient.ts',
+        preload: ['./ambient.ts'],
+        scripts: { preinstall: 'bun ambient.ts', postinstall: 'bun ambient.ts' },
+      }),
+    );
+    writeFileSync(
+      join(this.directory, 'tsconfig.json'),
+      JSON.stringify({
+        compilerOptions: { paths: { '@treeseed-cordis/sdk': ['./ambient.ts'] } },
+      }),
+    );
   }
   private command(configuration: string): string[] {
     return this.standalone
@@ -239,6 +258,9 @@ export class GuestProgramFixture {
     profile.parameters = {};
     profile.capabilityRevision = GuestProfilePlugin.revision;
     profile.handler = structuredClone(GuestProfilePlugin.capability.handler);
+  }
+  get stderr(): string {
+    return this.error;
   }
   private errors(bytes: Buffer): void {
     this.error += bytes.toString();

@@ -171,6 +171,16 @@ class ManagerConnectionFixture {
   ) {
     context.provide(ProviderConnectionToken.id, this);
   }
+  static observation(fingerprint: string, mode: string): ProviderRegistration {
+    const record = ProviderControlSchemas.registration.parse(
+      ProviderRegistrationFixture.response(
+        fingerprint,
+        mode === 'foreign-provider' ? 'foreign' : 'status',
+      ),
+    );
+    if (mode === 'alternative') record.status = 'approved';
+    return record;
+  }
   async status(): Promise<ProviderRegistration> {
     return structuredClone(this.record);
   }
@@ -216,10 +226,7 @@ class ManagerLibraryProgram {
       plugin: ManagerConnectionFixture,
       declaration: ManagerConnectionFixture.declaration,
       artifact: { kind: 'bundled', identity: 'explicit-manager-test-fixture' },
-      configuration: ProviderRegistrationFixture.response(
-        fingerprint,
-        mode === 'foreign-provider' ? 'foreign' : 'status',
-      ),
+      configuration: ManagerConnectionFixture.observation(fingerprint, mode),
     };
     return mode === 'duplicate-provider' ? [registration, registration] : [registration];
   }

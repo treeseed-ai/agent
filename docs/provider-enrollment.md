@@ -15,8 +15,9 @@ fingerprint, and proof audience must exactly equal the selected control-plane or
 
 Input contains `idempotencyKey`, `displayName`, `capabilitySummary`, `supplyOffer` and optional
 `metadata`, using existing SDK wire schemas. The coherent application validates configuration,
-input and complete returned team/provider/fingerprint/key-generation identity even for selected
-alternative enrollment providers. Foreign identity, missing/duplicate selections, cancellation,
+input, an isolated submission snapshot and complete returned team/provider/fingerprint/key-generation identity even for selected
+alternative enrollment providers. Returned capability summaries/offers must match the requested values.
+Selected providers cannot rewrite the caller's admitted intent or leak exception text. Foreign identity, missing/duplicate selections, cancellation,
 private-file failures or unexpected provider errors expose fixed safe codes only.
 
 The default plugin reads the registration code, signs the canonical unsigned submission

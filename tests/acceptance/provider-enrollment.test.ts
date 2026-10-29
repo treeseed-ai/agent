@@ -36,6 +36,9 @@ for (const mode of [
   'invalid',
   'mutation',
   'provider-error',
+  'duplicate',
+  'unknown',
+  'hardlink',
 ])
   test(
     'acceptance: built native enrollment preserves existing receiver authority for ' + mode,

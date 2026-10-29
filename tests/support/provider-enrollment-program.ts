@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { readFileSync, chmodSync, renameSync, symlinkSync } from 'node:fs';
+import { readFileSync, chmodSync, renameSync, symlinkSync, linkSync } from 'node:fs';
 import * as Agent from '@treeseed-cordis/agent';
 import {
   ProviderControlSchemas,
@@ -65,8 +65,10 @@ class ProviderEnrollmentProgram {
     const configuration = JSON.parse(readFileSync(process.argv[2]!, 'utf8'));
     const mode = process.argv[3]!;
     this.corrupt(configuration, mode);
-    if (mode === 'identity' || mode === 'audience') {
-      await assert.rejects(Root.start(configuration), { code: 'INVALID_PROVIDER_CONFIGURATION' });
+    if (['identity', 'audience', 'duplicate', 'unknown'].includes(mode)) {
+      await assert.rejects(Root.start(configuration, this.overrides(configuration, mode)), {
+        code: 'INVALID_PROVIDER_CONFIGURATION',
+      });
       return this.marker(mode);
     }
     const host = await Root.start(configuration, this.overrides(configuration, mode));
@@ -81,17 +83,22 @@ class ProviderEnrollmentProgram {
     if (mode === 'identity') configuration.publicJwk.x = 'A'.repeat(43);
     if (mode === 'audience') configuration.proof.audience = 'https://foreign.fixture.invalid';
     if (mode === 'permissions') chmodSync(configuration.registrationKeyFile, 0o644);
+    if (mode === 'hardlink')
+      linkSync(configuration.registrationKeyFile, configuration.registrationKeyFile + '.link');
     if (mode === 'symlink') {
       renameSync(configuration.registrationKeyFile, configuration.registrationKeyFile + '.held');
       symlinkSync(configuration.registrationKeyFile + '.held', configuration.registrationKeyFile);
     }
   }
   private overrides(configuration: EnrollmentConfiguration, mode: string): NativeRegistration[] {
-    if (!['alternative', 'provider-error', 'mutation'].includes(mode)) return [];
-    const token = Reflect.get(Agent, 'ProviderEnrollmentToken');
-    return [
+    if (!['alternative', 'provider-error', 'mutation', 'duplicate', 'unknown'].includes(mode))
+      return [];
+    const registrations = [
       {
-        token,
+        token:
+          mode === 'unknown'
+            ? Agent.ProviderConnectionToken
+            : Reflect.get(Agent, 'ProviderEnrollmentToken'),
         plugin: ForeignEnrollment,
         declaration: ForeignEnrollment.declaration,
         configuration: {
@@ -100,9 +107,10 @@ class ProviderEnrollmentProgram {
           capabilitySummary: ProviderEnrollmentFixture.input.capabilitySummary,
           supplyOffer: ProviderEnrollmentFixture.input.supplyOffer,
         },
-        artifact: { kind: 'bundled', identity: 'fixture:foreign-enrollment' },
+        artifact: { kind: 'bundled' as const, identity: 'fixture:foreign-enrollment' },
       },
     ];
+    return mode === 'duplicate' ? [...registrations, ...registrations] : registrations;
   }
   private async exercise(host: EnrollmentHost, mode: string): Promise<void> {
     const controller = new AbortController();
@@ -127,7 +135,8 @@ class ProviderEnrollmentProgram {
   private code(mode: string): string | null {
     if (['foreign', 'offer', 'alternative', 'mutation'].includes(mode))
       return 'PROVIDER_IDENTITY_MISMATCH';
-    if (['permissions', 'symlink'].includes(mode)) return 'INVALID_PROVIDER_CONFIGURATION';
+    if (['permissions', 'symlink', 'hardlink'].includes(mode))
+      return 'INVALID_PROVIDER_CONFIGURATION';
     if (['cancelled', 'closed'].includes(mode)) return 'PROVIDER_CANCELLED';
     if (mode === 'invalid') return 'INVALID_PROVIDER_REQUEST';
     if (mode === 'provider-error') return 'PROVIDER_TRANSPORT_FAILED';

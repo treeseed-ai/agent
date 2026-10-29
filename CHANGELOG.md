@@ -4,6 +4,8 @@
 
 ### Added
 
+- Sign existing enrollment protocol proofs through a private-identity Cordis provider (#525).
+
 - Validate standalone guest payloads through the shared exact SDK and Deployment audit closure (#525).
 
 - Package a source-free standalone guest executable for offline sandbox integration (#525).

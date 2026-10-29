@@ -29,15 +29,32 @@ Kata before claiming an installed runner. No package lifecycle script or host-si
 and source-free standalone program acceptance with an empty tool PATH and ambient-preload canaries.
 No production publication, legacy mutation or issue closure.
 
-Current SDK .42 source: `afdfac7bdd3c9c1f783362cd1d50324181e1d725`; archive SHA-256
-`0ecfe599916fe8ef364fc4b73203c810981f163109fbe71a0dd4c01a9dfb7bbc`. Selected
-Deployment .113 source: `2437ae293799cfed57ee1ac8ecb760f16f06447c`; archive SHA-256
-`1b0b59ffafef652f8be0f32cd5ab549cf25df7f20ba220c54de60c39f7d604c9`.
-SDK #506 supplies the manager ready-only channel alongside the unchanged worker/runner contract.
-Deployment #1045 is the matching dependency candidate; its complete hosted/review gates must pass
-before this dependent owner closure can integrate. Exact peer, vendor, lock, installed identity
-and public archive assertions must agree. The external guest package selects that same SDK peer
-and retains script canaries and native replacement assertions.
+Current SDK .44 source: `00be028b92998f8d7039a3906e784c6b8598e730`; archive SHA-256
+`d95c54cf6081c7634498dfb4f3235d42d65b8664a5d62cc87c4dd4e85381f0f3`. Selected
+Deployment .127 source: `d9e2d66a7039c545546e7f303648b4bcbfea11ed`; archive SHA-256
+`9d2bcbba291151413af4d9108cb5e2c9b738b1c26e4c0a732b41640666d1d11a`.
+Under #561, the .35 dependency-only closure exposes SDK #508's availability contracts/client
+while preserving seven operation IDs, manager channel 1.1.0-cordis.1, twenty native providers
+and existing separate manager/worker/guest diagnostics. The manager remains honestly unready.
+Deployment #1059 must pass its own hosted Kata/review gates before this candidate can integrate.
+Exact peer, provenance, vendor, lock, installed identity and public archive assertions agree.
+Only the public package-version identity literal changes in runtime source; all behavior and
+frozen guest archive bytes remain unchanged. Existing exact-selection expectations advance
+with their owner archives; runtime assertions, deadlines and scope remain intact.
+The genuine external guest archive fixture must read this owner's selected SDK peer, preserving
+script canaries and every positive/negative Node and standalone plugin case. Contract-inventory
+checks belong in the unit closure suite; executable guest/archive acceptance remains required.
+
+SDK44 supplies transport, not Agent availability orchestration. Deployment127 includes accepted
+private record custody, bounded archive publication, retained kit/component/configuration proof
+and startup shape inspection. Full physical profile qualification, pool admission, setup/egress,
+live manager authority and final seed/CLI/service assembly remain required. Installation is
+not activation and these diagnostics cannot reserve or dispatch real work. Work/models stay
+Task 10; Keycloak and repository boundaries remain unchanged and all issues stay open.
+
+Historical .33/.34 closure observations below retain their original scope; current artifacts
+must be separately qualified. The owner sequence is documentation, built selection failure,
+exact archive/pin adoption, owner tiers/public archive proof, then hosted Kata and review.
 
 The preceding .33 dependency closure preserves twenty native provider declarations, signed enrollment,
 the separate worker program and the guest. It contains no manager implementation. Deployment's

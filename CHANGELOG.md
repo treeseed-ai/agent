@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Changed
+- Select the availability-ready capacity owner closure (#561).
+
 ### Fixed
 - Retain the verified Kata kit for owner qualification (#563).
 

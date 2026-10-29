@@ -30,8 +30,8 @@ No production publication, legacy mutation or issue closure.
 
 Current SDK .39 source: `f09247dbf020f0354edce9af2f9ccef6ba351ff3`; archive SHA-256
 `ddfb91a065bee6d7e9482427570e7c036b18f0fbbcaa09c0fc62fee094abdbd4`. Development-only
-Deployment .88 custody consumer: source `c207f730d3302c0cb926fd746295b720a96cf22b`; archive
-`6bd2ee05e5c705e65aca703be1ff1d4faa725578689e1c7a808a789163d16b78`. These accepted public
+Deployment .106 custody and worker client: source `ce08082de6130f311f37e9bd13cd37f41e4bf31a`; archive
+`e0fdebbdeb81a374a58437179bec2a79a5074e52705aa927d7d4865426ab398c`. These exact public
 archives select one SDK version throughout the build/audit closure. The build admits its payload
 manifest through SDK's GuestRuntimeBinding before publication. Historical slices below retain
 their original pins; no sibling source import or unaccepted Deployment runtime is consumed.
@@ -77,9 +77,9 @@ not authorize package-manager execution or lifecycle scripts.
 
 The current producer selects accepted SDK .39 and validates every generated standalone manifest
 through GuestRuntimeBinding, including consecutive 7 MiB parts, aggregate size and the exact GNU
-library set. The accepted Deployment .88 development auditor selects the same SDK peer. Only
-these public immutable owner archives are installed; the Agent runtime dependency remains SDK,
-and no Deployment implementation is bundled into its guest. Keep full Node/standalone contracts,
+library set. The Deployment .106 development auditor selects the same SDK peer. Only
+these public immutable owner archives are installed. The worker uses Deployment’s public clients;
+no Deployment implementation is bundled into the standalone guest. Keep full Node/standalone contracts,
 empty-tool-path and ambient-preload canaries, archive limits and native generation read-back.
 This aligns owner contracts before actual guest sessions; it creates no capacity or authority.
 All issues remain open and real Work/model execution remains Task 10.

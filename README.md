@@ -508,7 +508,9 @@ only by its child; no global trust change. All issues remain open under release 
 manager process. `CapacityManagerService.start(configuration, overrides?)` exposes the same
 coherent admission kernel through `@treeseed-cordis/agent/manager-service`. It creates one
 process-local native root containing the selected proof and registration-status providers;
-no application/root is nested inside Deployment or another Agent root.
+no application/root is nested inside Deployment or another Agent root. The reusable service
+module has no startup side effects or top-level await; the manager entrypoint remains separate
+so existing synchronous package-root consumers stay compatible.
 
 Configuration extends `ProviderConnectionApplication.Config` with
 `schemaVersion: treeseed.manager-configuration/v1`, SDK capacity `scope` and `registrationId`.

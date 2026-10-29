@@ -1,6 +1,6 @@
 {
   "name": "@treeseed-cordis/agent",
-  "version": "0.0.0-cordis.26",
+  "version": "0.0.0-cordis.28",
   "private": true,
   "type": "module",
   "license": "Apache-2.0",
@@ -36,8 +36,8 @@
     },
     "deployment": {
       "repository": "https://github.com/treeseed-ai/deployment.git",
-      "commit": "faaa524d06f37155faf8983fd9cd1f81c1d646e6",
-      "sha256": "a4e0afdb356c060433eac52c51389ad5341fce8b7f541e1a917be1ba7fd17813"
+      "commit": "ce08082de6130f311f37e9bd13cd37f41e4bf31a",
+      "sha256": "e0fdebbdeb81a374a58437179bec2a79a5074e52705aa927d7d4865426ab398c"
     }
   },
   "exports": {
@@ -87,7 +87,7 @@
   ],
   "peerDependencies": {
     "@treeseed-cordis/sdk": "0.0.0-cordis.39",
-    "@treeseed-cordis/deployment": "0.0.0-cordis.105"
+    "@treeseed-cordis/deployment": "0.0.0-cordis.106"
   },
   "cordisPackage": {
     "formatVersion": 4,
@@ -95,7 +95,7 @@
     "pluginId": "agent",
     "package": {
       "name": "@treeseed-cordis/agent",
-      "version": "0.0.0-cordis.26"
+      "version": "0.0.0-cordis.28"
     },
     "providers": [
       {

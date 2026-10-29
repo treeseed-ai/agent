@@ -35,6 +35,38 @@ archives select one SDK version throughout the build/audit closure. The build ad
 manifest through SDK's GuestRuntimeBinding before publication. Historical slices below retain
 their original pins; no sibling source import or unaccepted Deployment runtime is consumed.
 
+## Prepared providers in the guest program
+
+Guest configuration may include `providers`, an optional array of at most six exact prepared
+references: `{capability, file, sha256}`. Omission preserves bundled defaults. Each capability
+appears at most once and selects one of `agent.guest.profile`, `.context`, `.handler`, `.tool`,
+`.reporting` or `.execution` (each suffix follows `agent.guest`). Files are absolute SDK prepared
+manifest paths; SHA-256 binds their complete immutable, owner-controlled package closure.
+Unknown capabilities, duplicate selections and noncanonical paths fail before imports/readiness.
+The private assignment source cannot be overridden.
+
+Startup loads accepted classes through SDK's InstalledProviderLoader inside the guest process,
+then passes registrations into the same native Cordis root. Scope remains `capacity-guest:` plus
+the canonical scope digest. Native resolution validates required dependencies, uniqueness and
+cycles. No service-instance cache, package acquisition, ambient scripts or second container is
+introduced. Installed provider errors produce fixed safe startup failure; no arbitrary module
+message or source bytes enter stdout/stderr. Reconfiguration requires a new guest generation.
+
+An external package may implement a new profile type plus compatible handler and execution
+provider without editing Agent's core. Dispatch must still match the complete trusted assignment,
+selected handler and exact definition profile; authority checkpoints, cancellation, exclusive use
+and verified disposal remain mandatory. General extra capability contribution is Task 4. Real
+Work/model execution remains Task 10; local program proof does not qualify a Kata session.
+
+Implementation sequence for #525: document this contract; build genuine independent fixture
+archives and exercise actual Node and standalone guest processes (including filesystem SDK/Cordis
+interop); observe unsupported selection fail; implement exact loading; verify tamper, unknown,
+duplicate, dependency and lifecycle-script canaries; run all owner tiers, genuine public archive
+consumers and hosted checks. Keep the bounded change within ten files and all methods within
+canonical twenty-line limits. Preserve prior immutable artifacts and all existing program cases.
+Bun's [standalone executable documentation](https://bun.sh/docs/compiler/executables) describes
+the embedded runtime; actual pinned Bun 1.4.4 program tests qualify dynamic package loading.
+
 ## Shared guest payload contract
 
 The current producer selects accepted SDK .39 and validates every generated standalone manifest

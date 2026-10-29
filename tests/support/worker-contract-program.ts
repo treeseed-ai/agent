@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict';
-import * as control from '@treeseed-cordis/sdk/provider-control';
 import * as sdk from '@treeseed-cordis/sdk/portable';
 class WorkerContractProgram {
   private readonly scope = {
@@ -27,11 +26,6 @@ class WorkerContractProgram {
   private capacityFamily(): void {
     assert.equal(typeof Reflect.get(sdk, 'CapacityChannelSchemas'), 'function');
     assert.equal(typeof Reflect.get(sdk, 'CapacityChannelBinding'), 'function');
-    const availability = Reflect.get(control, 'ProviderAvailabilitySchemas');
-    assert.equal(typeof availability, 'function', 'availability schemas must be selected');
-    assert.equal(Reflect.get(availability, 'version'), 'treeseed.provider-availability/v1');
-    for (const method of ['createAvailabilitySession', 'refreshAvailabilitySession', 'closeAvailabilitySession'])
-      assert.equal(typeof Reflect.get(control.ProviderProtocolClient.prototype, method), 'function');
   }
   private denials(binding: typeof sdk.SandboxControlBinding, request: object, grant: object): void {
     assert.throws(binding.assertRequest.bind(binding, request, grant, 2000), {

@@ -1,6 +1,6 @@
 {
   "name": "@treeseed-cordis/agent",
-  "version": "0.0.0-cordis.28",
+  "version": "0.0.0-cordis.29",
   "private": true,
   "type": "module",
   "license": "Apache-2.0",
@@ -76,6 +76,10 @@
     "./worker": {
       "types": "./dist/src/worker.d.ts",
       "default": "./dist/src/worker.js"
+    },
+    "./worker-service": {
+      "types": "./dist/src/worker-service.d.ts",
+      "default": "./dist/src/worker-service.js"
     }
   },
   "files": [
@@ -95,7 +99,7 @@
     "pluginId": "agent",
     "package": {
       "name": "@treeseed-cordis/agent",
-      "version": "0.0.0-cordis.28"
+      "version": "0.0.0-cordis.29"
     },
     "providers": [
       {

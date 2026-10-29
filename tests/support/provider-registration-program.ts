@@ -12,13 +12,19 @@ import {
   ProviderControlError,
   type ProviderRegistration,
 } from '@treeseed-cordis/sdk/provider-control';
+import { ProviderV4Schemas } from '@treeseed-cordis/sdk';
+import {
+  Context,
+  type ProviderRegistration as NativeRegistration,
+} from '@treeseed-cordis/sdk/runtime';
+import { ProviderControlSchemas } from '@treeseed-cordis/sdk/provider-control';
 import { ProviderIdentityFixture } from './provider-proof-program.js';
 interface ConnectionHost {
   status(id: string, signal: AbortSignal): Promise<ProviderRegistration>;
   close(): Promise<void>;
 }
 interface ConnectionRoot {
-  start(input: unknown): Promise<ConnectionHost>;
+  start(input: unknown, overrides?: NativeRegistration[]): Promise<ConnectionHost>;
 }
 /** Isolated legacy receiver contract, not a live team approval authority. */
 export class ProviderRegistrationFixture extends ProviderIdentityFixture {
@@ -142,12 +148,15 @@ export class ProviderRegistrationFixture extends ProviderIdentityFixture {
     this.nonces.add(payload.jti);
   }
   private registration(): object {
+    return ProviderRegistrationFixture.response(this.fingerprint, this.mode);
+  }
+  static response(fingerprint: string, mode: string): object {
     const now = new Date().toISOString();
     return {
       id: 'fixture-request',
-      teamId: this.mode === 'foreign' ? 'foreign-team' : 'fixture-team',
+      teamId: mode === 'foreign' ? 'foreign-team' : 'fixture-team',
       providerId: 'fixture-provider',
-      providerFingerprint: this.fingerprint,
+      providerFingerprint: fingerprint,
       registrationKeyGeneration: 3,
       status: 'pending',
       capabilitySummary: ['fixture.probe'],
@@ -191,15 +200,40 @@ export class ProviderRegistrationFixture extends ProviderIdentityFixture {
     super.close();
   }
 }
+/** Deliberately unsafe selected provider; the coherent facade must still enforce identity. */
+class ForeignConnectionFixture {
+  static readonly provide = ['agent.provider.connection'];
+  static readonly inject: string[] = [];
+  static readonly Config = ProviderControlSchemas.registration;
+  static readonly declaration = ProviderV4Schemas.declaration.parse({
+    id: 'fixture.foreign.connection',
+    pluginId: 'fixture',
+    capability: this.provide[0],
+    contractVersion: ProviderV4Schemas.version,
+    target: 'agent',
+    provide: this.provide,
+    inject: this.inject,
+  });
+  constructor(
+    context: Context,
+    private readonly response: ProviderRegistration,
+  ) {
+    context.provide('agent.provider.connection', this);
+  }
+  async status(): Promise<ProviderRegistration> {
+    return structuredClone(this.response);
+  }
+}
 class ProviderRegistrationProgram {
   private readonly configuration = JSON.parse(readFileSync(process.argv[2]!, 'utf8'));
   async run(): Promise<void> {
     if (process.argv[3] === 'empty') return this.empty();
     const Root = Reflect.get(Agent, 'ProviderConnectionApplication') as ConnectionRoot;
     assert(Root && typeof Root.start === 'function', 'native registration connection missing');
-    const host = await Root.start(this.configuration);
+    const overrides = process.argv[3] === 'alternative' ? this.alternative() : [];
+    const host = await Root.start(this.configuration, overrides);
     try {
-      if (process.argv[3] === 'foreign') return await this.foreign(host);
+      if (['foreign', 'alternative'].includes(process.argv[3]!)) return await this.foreign(host);
       const registration = await host.status('fixture-request', new AbortController().signal);
       assert.equal(registration.teamId, 'fixture-team');
       assert.equal(registration.status, 'pending');
@@ -207,6 +241,20 @@ class ProviderRegistrationProgram {
     } finally {
       await host.close();
     }
+  }
+  private alternative(): NativeRegistration[] {
+    return [
+      {
+        token: Reflect.get(Agent, 'ProviderConnectionToken'),
+        plugin: ForeignConnectionFixture,
+        declaration: ForeignConnectionFixture.declaration,
+        configuration: ProviderRegistrationFixture.response(
+          this.configuration.proof.fingerprint,
+          'foreign',
+        ),
+        artifact: { kind: 'bundled', identity: 'fixture:foreign-registration' },
+      },
+    ];
   }
   private async foreign(host: ConnectionHost): Promise<void> {
     await assert.rejects(host.status('fixture-request', new AbortController().signal), {

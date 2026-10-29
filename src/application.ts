@@ -1,3 +1,5 @@
+export { ProviderConnectionApplication, ProviderRegistrationPlugin, ProviderConnectionToken } from './provider-connection.js';
+export type { ProviderConnection } from './provider-connection.js';
 export { ProviderProofApplication, ProviderFileProofPlugin, ProviderProofToken } from './provider-proof.js';
 export type { ProviderProofSigner } from './provider-proof.js';
 export * from './activities.js';

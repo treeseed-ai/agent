@@ -1,3 +1,5 @@
+export { ProviderProofApplication, ProviderFileProofPlugin, ProviderProofToken } from './provider-proof.js';
+export type { ProviderProofSigner } from './provider-proof.js';
 export * from './activities.js';
 import {
   AgentSchemas,

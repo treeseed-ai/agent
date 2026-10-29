@@ -216,3 +216,39 @@ unchanged. Separate programs, real pool/session integration and installed grants
 The selected successor includes SDK #500's separate worker/guest service envelopes. The built
 Agent consumer requires both the sandbox and capacity-channel families from this single exact
 peer. This contract-only prerequisite does not add a service or replace live enrollment.
+
+## Provider enrollment proof provider
+
+`@treeseed-cordis/agent/provider-control` supplies `ProviderProofApplication.start(configuration)`
+and the selectable native `ProviderFileProofPlugin` / `ProviderProofToken`. This is the Agent-owned
+successor of legacy `src/provider/accounts/identity.ts` signing, retained in the same repository.
+SDK owns the existing `ProviderSignedProof` wire envelope and public protocol client; API owns
+registration/approval and Identity retains Keycloak authority. Signing does not establish a team
+grant, approve enrollment or turn opaque provider credentials into OIDC tokens.
+
+Configuration pins an existing owner-private `keyFile`, `fingerprint`, positive `identityVersion`
+and exact HTTPS origin `audience`. No key is generated, provisioned or written. Each `sign` call
+reads the file afresh through Agent's descriptor-anchored private-file reader, verifies the Ed25519
+private/public key pair and exact pinned fingerprint, and signs only validated GET/POST provider
+registration or access-token request paths. Missing, replaced, malformed or mismatched private
+identity blocks with fixed safe `PROVIDER_PROOF_INVALID`; pre-cancellation and closed roots block
+without signing. Caller supplies an explicit JSON body (use `{}` for GET); input is bounded to
+64 KiB and 32 levels. Raw key values, errors and body contents never enter error messages.
+
+The existing protocol uses canonical recursively locale-sorted object keys, SHA-256 base64url
+body digest and `{crv,kty,x}` fingerprint, EdDSA/JOSE protected header, schemaVersion 1, Ed25519,
+identityVersion, exact method/path/audience, a fresh UUID jti and timestamps now minus one second
+and now plus 59 seconds. Successful output is the SDK proof envelope only. No credentials are
+returned. Request equality is not authority. Future enrollment uses the actual public protocol
+client and independently verifies approved team/provider/credential/grant bindings.
+
+This provider has a process-local Cordis scope and resolver-backed lease per call; manager roots
+may mount its native plugin directly or select an accepted compatible signer. The facade holds
+no service-instance cache. Replacement is restart-required until qualified. Tests exercise the
+real default root and actual cryptographic verification through built public consumers, altered
+bodies/signatures/identities, fresh file reads and safe disposal. Work/model execution stays Task 10.
+
+Implementation: documentation → built public missing-provider red → filesystem/native boundary
+and canonical/protocol controls → implementation → owner tiers/checks/build, genuine immutable
+archive consumer and hosted verification. Node's [crypto contract](https://nodejs.org/docs/latest-v24.x/api/crypto.html)
+specifies Ed25519 `sign(null, data, key)` and JWK key import; owner tests qualify the pinned runtimes.

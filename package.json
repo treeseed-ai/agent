@@ -1,6 +1,6 @@
 {
   "name": "@treeseed-cordis/agent",
-  "version": "0.0.0-cordis.19",
+  "version": "0.0.0-cordis.20",
   "private": true,
   "type": "module",
   "license": "Apache-2.0",
@@ -60,6 +60,10 @@
     "./guest": {
       "types": "./dist/src/guest.d.ts",
       "default": "./dist/src/guest.js"
+    },
+    "./provider-control": {
+      "types": "./dist/src/provider-proof.d.ts",
+      "default": "./dist/src/provider-proof.js"
     }
   },
   "files": [
@@ -78,9 +82,60 @@
     "pluginId": "agent",
     "package": {
       "name": "@treeseed-cordis/agent",
-      "version": "0.0.0-cordis.19"
+      "version": "0.0.0-cordis.20"
     },
     "providers": [
+      {
+        "declaration": {
+          "id": "agent.provider.proof.private-file",
+          "pluginId": "agent",
+          "capability": "agent.provider.proof",
+          "contractVersion": "0.4.0-cordis.1",
+          "target": "agent",
+          "provide": [
+            "agent.provider.proof"
+          ],
+          "inject": []
+        },
+        "entry": "dist/src/provider-proof.js",
+        "classExport": "ProviderFileProofPlugin",
+        "configurationSchema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {
+            "keyFile": {
+              "type": "string",
+              "minLength": 1
+            },
+            "fingerprint": {
+              "type": "string",
+              "pattern": "^sha256:[A-Za-z0-9_-]{43}$"
+            },
+            "identityVersion": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            },
+            "audience": {
+              "type": "string",
+              "format": "uri"
+            }
+          },
+          "required": [
+            "keyFile",
+            "fingerprint",
+            "identityVersion",
+            "audience"
+          ],
+          "additionalProperties": false
+        },
+        "replacement": {
+          "kind": "restart",
+          "stateVersion": 1,
+          "qualificationDigest": null
+        },
+        "commandIds": []
+      },
       {
         "declaration": {
           "id": "agent.guest.profile.probe",

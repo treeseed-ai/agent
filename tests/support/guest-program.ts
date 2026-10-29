@@ -14,11 +14,10 @@ import {
   type CapacityDispatch,
   type CapacityChannelResponse,
 } from '@treeseed-cordis/sdk';
-class GuestProgramLauncher {
+export class GuestProgramLauncher {
   private readonly directory = mkdtempSync(join(tmpdir(), 'guest-runtime-'));
-  private readonly standalone = process.argv.includes('--standalone');
   private readonly file = join(this.directory, 'guest');
-  constructor() {
+  constructor(private readonly standalone = process.argv.includes('--standalone')) {
     if (this.standalone) this.prepare();
   }
   private prepare(): void {
@@ -82,7 +81,10 @@ class GuestProgramLauncher {
   }
 }
 /** Data-only protocol fixture, never live authority or a Kata assignment. */
-class GuestProgramFixture {
+export interface GuestFixturePreparation {
+  configure(record: CapacityDispatch, configuration: Record<string, unknown>): void;
+}
+export class GuestProgramFixture {
   private static readonly data = {
     schemaVersion: 'treeseed.capacity-dispatch/v1',
     reservationId: 'fixture.reservation',
@@ -202,36 +204,41 @@ class GuestProgramFixture {
   readonly configurationFile = join(this.directory, 'guest.json');
   readonly record: CapacityDispatch;
   readonly child: ChildProcessWithoutNullStreams;
-  private readonly launcher = new GuestProgramLauncher();
+  private readonly launcher: GuestProgramLauncher;
   private buffered = '';
   private error = '';
   private readonly replies: CapacityChannelResponse[] = [];
   private readonly waiting: ((reply: CapacityChannelResponse) => void)[] = [];
-  constructor() {
+  constructor(
+    preparation?: GuestFixturePreparation,
+    standalone = process.argv.includes('--standalone'),
+  ) {
+    this.launcher = new GuestProgramLauncher(standalone);
     this.record = CapacityProtocolSchemas.dispatch.parse(structuredClone(GuestProgramFixture.data));
-    this.configure();
+    this.configure(preparation);
     this.child = this.launcher.start(this.configurationFile);
     this.child.stdout.on('data', this.output.bind(this));
     this.child.stderr.on('data', this.errors.bind(this));
   }
-  private configure(): void {
+  private configure(preparation?: GuestFixturePreparation): void {
     this.record.lease.scope.installationDirectory = this.directory;
     this.record.lease.expiresAtEpochMs = Date.now() + 30000;
     this.record.lease.authority.expiresAtEpochMs = Date.now() + 60000;
+    this.defaultProfile();
+    const configuration: Record<string, unknown> = {
+      schemaVersion: 'treeseed.guest-configuration/v1',
+      scope: this.record.lease.scope,
+      assignmentFile: this.assignmentFile,
+    };
+    preparation?.configure(this.record, configuration);
+    writeFileSync(this.configurationFile, JSON.stringify(configuration), { mode: 0o600 });
+  }
+  private defaultProfile(): void {
     const profile = this.record.definition.profiles[0]!;
     profile.typeId = 'probe.echo';
     profile.parameters = {};
     profile.capabilityRevision = GuestProfilePlugin.revision;
     profile.handler = structuredClone(GuestProfilePlugin.capability.handler);
-    writeFileSync(
-      this.configurationFile,
-      JSON.stringify({
-        schemaVersion: 'treeseed.guest-configuration/v1',
-        scope: this.record.lease.scope,
-        assignmentFile: this.assignmentFile,
-      }),
-      { mode: 0o600 },
-    );
   }
   private errors(bytes: Buffer): void {
     this.error += bytes.toString();
@@ -396,4 +403,4 @@ class GuestProgramAcceptance {
     process.stdout.write('guest-program-ok\n');
   }
 }
-await new GuestProgramAcceptance().run();
+if (import.meta.main) await new GuestProgramAcceptance().run();

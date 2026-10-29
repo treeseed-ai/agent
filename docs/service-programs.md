@@ -180,3 +180,40 @@ This is a pinned configuration finding, not a claim that musl or Bun cannot supp
 A single 51 MiB gzip entry passed Node installation but was rejected by accepted Deployment .83
 public archive custody. Preserve that failed .17 candidate as evidence; the revised .18 transport
 uses individually hashed chunks and an aggregate compressed hash before bounded expansion.
+
+## Native worker with the actual guest in Kata
+
+The worker host seam must also qualify against actual Deployment infrastructure, beyond its
+external Unix-protocol fixtures. Use the public development-only
+`@treeseed-cordis/deployment/testing/kata` fixture from accepted Deployment .106. Never copy its
+host implementation into Agent or expose the fixture/raw daemon endpoint to the worker.
+
+The qualification parent owns the private host root, immutable Ubuntu image and accepted Agent
+.28 guest archive. A separate Node process constructs the default public `WorkerApplication`
+with no injected collaborators. It receives only the scoped private client configuration and a
+known logical sandbox ID. Create one virgin guest, read its actual runner generation, inspect
+against that generation, destroy it and verify native lease/root disposal. The parent retains the
+known ID through failure, verifies physical teardown and closes the host before its private daemon.
+Daemon shutdown is not a destruction receipt. Failed or uncertain cleanup fails qualification.
+
+Guest artifact: source `66243e38799698a35e3af89aead6d41c53a2e096`, archive SHA-256
+`93f0ab94247dc253a227cf92c85e6393fd238965da252b2ff31069ee8dce9679`, version
+`0.0.0-cordis.28`. It is an immutable test selection, excluded from the shipped NPM package.
+The worker's built JavaScript must match the same archive before it executes; do not silently
+qualify another worker or guest. SDK .39 and Deployment .106 retain their recorded exact pins.
+The image is `docker.io/library/ubuntu@sha256:157dc3d6e4a3e4f2c68d12df9df9ed6e808b59af6d4c3757b432b4f519916725`.
+
+Run the complete owner suite on trusted exact-head GitHub-hosted Ubuntu 26.04 x64 with real
+KVM and the owner's pinned Kata 4.1.0 prerequisite archive. Missing prerequisites fail visibly;
+no environment spoofing, workstation daemon/VM, self-hosted runner registration or skip-to-green.
+An unqualified interface check may run locally without host effects. Local lower tiers and the
+remaining acceptance cases do not substitute for the complete hosted gate.
+
+This qualifies the existing root/client/guest boundary under the current root/same-UID test
+boundary. It does not implement a worker program, real pool policy, assignment/setup dispatch,
+allowlisted egress, installed service grants or live authority. Those remain required following
+slices. No handler or Work/model runs; Task 10 remains deferred and all issues stay open.
+
+Delivery: commit this interface; observe missing built qualification program fail; compose public
+owner fixtures and actual Node default root; run local checks/build/tiers and full exact-head
+hosted qualification. Preserve all preceding tests and timeouts, and keep support registration-free.

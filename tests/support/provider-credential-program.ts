@@ -83,7 +83,7 @@ class CredentialProgram {
   }
   private safe(error: unknown): boolean {
     assert(error instanceof Error);
-    assert.match(error.message, /^PROVIDER_[A-Z_]+$/);
+    assert.match(error.message, /^(?:PROVIDER|INVALID_PROVIDER)_[A-Z_]+$/);
     assert(!error.message.includes('PRIVATE_CREDENTIAL_CANARY'));
     return true;
   }

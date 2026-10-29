@@ -84,6 +84,48 @@ empty-tool-path and ambient-preload canaries, archive limits and native generati
 This aligns owner contracts before actual guest sessions; it creates no capacity or authority.
 All issues remain open and real Work/model execution remains Task 10.
 
+## Approved registration credential exchange
+
+`ProviderCredentialApplication.start(configuration)` is a separate native Agent root facade for
+`agent.provider.credential` and the existing `agent.provider.proof` capability. A manager root can
+mount those same native classes directly. The configuration binds canonical HTTPS control-plane
+origin, exact team/provider/fingerprint/registration-key generation, approved registration ID,
+membership ID and private proof identity configuration. Public contracts are exported through
+`@treeseed-cordis/agent/provider-credentials`. Replacement is restart-only.
+
+`exchange(idempotencyKey, signal)` freshly reads the selected registration, requires approved
+status and the configured membership, signs the existing POST credential request and repeats
+registration read-back before accepting its result. Preserve the legacy signed body exactly:
+`{requestId, idempotencyKey}`; the HTTP body contains the proof and the idempotency key remains in
+its established header. GET status still signs `{requestId}` despite its empty HTTP entity.
+Caller-owned stable idempotency keys permit explicit reconciliation after lost replies; this
+provider never silently retries or chooses a new key.
+
+The result is the SDK ProviderCredentialIssue, bound to exact team/provider/membership and active
+credential state. The coherent facade repeats contract/identity checks above selectable native
+implementations. It retains the selected provider generation through validation/release. Private
+proof leases span the complete exchange and final read-back. Pending/rejected/expired/cancelled,
+foreign identity/membership, revoked/expired credential, malformed response, cancellation, native
+disposal or provider failure cannot be reported as an accepted credential.
+
+Credential material is opaque control-plane secret data, not a new Keycloak token or a guest grant.
+It is returned only to the internal owner client for future private custody. Never print it, include
+it in CLI/machine envelopes, expose it in errors or treat possession as current execution authority.
+This slice creates no local credential files or identity keys. Deployment custody, actual live token
+validation/heartbeat/revocation, enrollment submission and isolated Keycloak assembly remain required.
+The existing control plane remains the authority behind Keycloak-governed team approval.
+
+Owner source mapping: existing API CapacityRegistrationService.exchangeCredential at legacy commit
+`e3b3a05892eb25ef5f2fd77c476788f2870118d2` supplies the public boundary, approval, membership and
+idempotent replay semantics. Agent supplies only its client/provider; no legacy code/service is
+modified and no API capability moves to Agent.
+
+Implementation sequence for #525: document; commit and observe built default missing-provider red;
+exercise actual TLS receivers verifying Ed25519, body/method/path/audience/nonces/idempotency;
+implement concise native provider/facade; verify foreign/pending/revoked/secret/error/replacement
+controls, all owner tiers, strict genuine public archive programs and hosted gates. No productive
+Work/model execution; Task 10 remains deferred and every issue stays open.
+
 ## Native Agent probe-grant authority
 
 Agent #525 owns `AgentFileAuthority.start({file, binding})`, its generation-bound `check(request)`

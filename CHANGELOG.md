@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Added
+- Select the exact manager protocol and host dependency closure (#525).
 - Submit exact signed provider enrollment through selectable native providers (#525).
 - Select exact corrected resource-profile contracts for native worker pool integration (#525).
 - Run a separate native worker program with bounded protocol and honest blocked capacity readiness (#525).

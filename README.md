@@ -29,26 +29,29 @@ Kata before claiming an installed runner. No package lifecycle script or host-si
 and source-free standalone program acceptance with an empty tool PATH and ambient-preload canaries.
 No production publication, legacy mutation or issue closure.
 
-Current SDK .41 source: `4bb54954ac6d636309a8312c2bf71536b5aefb73`; archive SHA-256
-`2bbde1a4ca35fbffaeacb2fbeab40b49f56dc57dca3355e8e47e22ed5f0f822a`. Selected
-Deployment .107 custody/worker client: source `8c4a55a1260c3f125f8e914168bf517b61808a1b`; archive
-`156dd21e2f4f9126f48e3db4324b44121a0093af0469bc9834dbfa340efcede5`. Accepted SDK #505 and
-Deployment #1041 supply the corrected asynchronous profile binding and one exact SDK version
-throughout the runtime/build/audit closure. The public prepared external guest package uses that
-same exact SDK peer, retaining its lifecycle-script canary and all native replacement assertions.
+Current SDK .42 source: `afdfac7bdd3c9c1f783362cd1d50324181e1d725`; archive SHA-256
+`0ecfe599916fe8ef364fc4b73203c810981f163109fbe71a0dd4c01a9dfb7bbc`. Selected
+Deployment .113 source: `2437ae293799cfed57ee1ac8ecb760f16f06447c`; archive SHA-256
+`1b0b59ffafef652f8be0f32cd5ab549cf25df7f20ba220c54de60c39f7d604c9`.
+SDK #506 supplies the manager ready-only channel alongside the unchanged worker/runner contract.
+Deployment #1045 is the matching dependency candidate; its complete hosted/review gates must pass
+before this dependent owner closure can integrate. Exact peer, vendor, lock, installed identity
+and public archive assertions must agree. The external guest package selects that same SDK peer
+and retains script canaries and native replacement assertions.
 
-This .32 capability addition preserves the separate worker program and advertises twenty native
-provider declarations with the same exact SDK/Deployment dependency selection. It does not consume the unaccepted Deployment .108 resource candidate,
-advertise a host resource profile or make pool readiness true. Physical limits, profile provenance,
-actual pool/manager authority and final installed exact composition remain required. The existing
-hosted fixture retains the accepted .28 guest; current artifacts must be qualified explicitly in
-final assembly. The build admits its own payload through SDK GuestRuntimeBinding. Historical
-sections/archives retain their original pins; no sibling checkout source is imported.
+This .33 dependency closure preserves twenty native provider declarations, signed enrollment,
+the separate worker program and the guest. It contains no manager implementation. Deployment's
+qualified .109 workload limits and .110 retained archive identity are available through .113;
+unmerged native-kit #1044 remains excluded. Complete component/configuration/isolation binding,
+resource-profile advertisement and real pool admission remain required. Readiness stays blocked.
+The hosted physical fixture retains the accepted .28 guest; current artifacts must be qualified
+explicitly in final assembly. Historical sections and immutable archives retain their original
+pins. No sibling checkout source is imported.
 
-Implementation sequence: commit this selection interface; fail the genuine archive acceptance
-and lower exact-pin contract checks; replace accepted immutable archives and regenerate only their
-lock entries/metadata; run complete owner verification, strict genuine program consumers and
-current-head hosted gates. Work/models remain Task 10 and all issues stay open.
+Implementation sequence: commit this selection interface; fail genuine owner archive and exact
+SDK pin assertions; replace immutable archives and regenerate only their lock entries/metadata;
+run all owner tiers, strict genuine program consumers and current-head hosted gates. Real
+Work/model execution remains Task 10; all issues remain open.
 
 ## Prepared providers in the guest program
 

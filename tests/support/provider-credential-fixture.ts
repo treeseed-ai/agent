@@ -110,12 +110,14 @@ export class ProviderCredentialFixture extends ProviderIdentityFixture {
     this.posts++;
     response.end(
       JSON.stringify({
-        data:
-          this.mode === 'malformed'
-            ? { credential: 'PRIVATE_CREDENTIAL_CANARY' }
-            : ProviderCredentialFixture.issue(this.mode),
+        data: this.credentialData(),
       }),
     );
+  }
+  protected credentialData(): object {
+    return this.mode === 'malformed'
+      ? { credential: 'PRIVATE_CREDENTIAL_CANARY' }
+      : ProviderCredentialFixture.issue(this.mode);
   }
   protected async body(request: IncomingMessage): Promise<string> {
     const chunks = [];
@@ -167,7 +169,7 @@ export class ProviderCredentialFixture extends ProviderIdentityFixture {
     assert(!this.nonces.has(payload.jti));
     this.nonces.add(payload.jti);
   }
-  private registration(): object {
+  protected registration(): object {
     return {
       ...ProviderRegistrationFixture.response(
         this.fingerprint,

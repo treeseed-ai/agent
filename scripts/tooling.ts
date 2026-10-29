@@ -1,3 +1,4 @@
+import { ProviderTokenPlugin } from '../src/provider-token.js';
 import { ProviderCredentialPlugin } from '../src/provider-credentials.js';
 import { ProviderRegistrationPlugin } from '../src/provider-connection.js';
 import { ProviderFileProofPlugin } from '../src/provider-proof.js';
@@ -23,6 +24,7 @@ class AgentTooling {
     this.project(metadata, process.argv[2] === 'build');
   }
   private static readonly definitions = [
+    {plugin: ProviderTokenPlugin, entry: 'dist/src/provider-token.js', name: 'ProviderTokenPlugin'},
     {plugin: ProviderCredentialPlugin, entry: 'dist/src/provider-credentials.js', name: 'ProviderCredentialPlugin'},
     {plugin: ProviderRegistrationPlugin, entry: 'dist/src/provider-connection.js', name: 'ProviderRegistrationPlugin'},
     {plugin: ProviderFileProofPlugin, entry: 'dist/src/provider-proof.js', name: 'ProviderFileProofPlugin'},

@@ -5,6 +5,18 @@ import { ProviderCredentialFixture } from './provider-credential-fixture.js';
 export class ProviderTokenFixture extends ProviderCredentialFixture {
   protected override readonly programFile = 'dist/tests/support/provider-token-program.js';
   private tokens = 0;
+  protected override registration(): object {
+    const registration = super.registration();
+    return this.mode === 'late-revoked' && this.tokens > 0
+      ? { ...registration, status: 'rejected' }
+      : registration;
+  }
+  protected override credentialData(): object {
+    const credential = super.credentialData();
+    return this.mode === 'late-credential' && this.tokens > 0
+      ? { ...credential, issuanceGeneration: 2 }
+      : credential;
+  }
   protected override async respond(
     request: IncomingMessage,
     response: ServerResponse,
@@ -63,10 +75,11 @@ export class ProviderTokenFixture extends ProviderCredentialFixture {
           : mode === 'token-duplicate'
             ? ['provider:availability:write', 'provider:availability:write']
             : ['provider:availability:write'],
-      issuedAt,
+      issuedAt: mode === 'token-future' ? new Date(Date.now() + 10000).toISOString() : issuedAt,
       expiresAt: new Date(Date.now() + (mode === 'token-expired' ? -500 : 59000)).toISOString(),
       accessToken: 'PRIVATE_TOKEN_CANARY',
       identityVersion: mode === 'token-version' ? 8 : 7,
+      ...(mode === 'token-revocation' ? { revokedAt: issuedAt } : {}),
     };
   }
   override verify(): void {
@@ -81,7 +94,7 @@ export class ProviderTokenFixture extends ProviderCredentialFixture {
     } else if (['revoked', 'expired', 'foreign-member'].includes(this.mode)) {
       assert.equal(this.tokens, 0);
       assert.equal(this.posts, 1);
-    } else if (this.mode === 'alternative') assert.equal(this.tokens, 0);
+    } else if (this.mode.startsWith('alternative')) assert.equal(this.tokens, 0);
     else assert.equal(this.tokens, 1);
   }
 }

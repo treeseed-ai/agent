@@ -1,11 +1,13 @@
 import { test } from 'bun:test';
 import assert from 'node:assert/strict';
+import { readdirSync } from 'node:fs';
 import { ProviderTokenFixture } from '../support/provider-token-fixture.js';
 class ProviderTokenAcceptance {
   async run(mode: string): Promise<void> {
     const fixture = new ProviderTokenFixture(mode);
     try {
       await fixture.start();
+      const before = readdirSync(fixture.directory);
       const result = await fixture.program();
       assert.equal(result.code, 0, result.stderr);
       assert.equal(result.stderr, '');
@@ -16,6 +18,7 @@ class ProviderTokenAcceptance {
       assert(!JSON.stringify(result).includes('PRIVATE_CREDENTIAL_CANARY'));
       assert(!JSON.stringify(result).includes('PRIVATE_TOKEN_CANARY'));
       fixture.verify();
+      assert.deepEqual(readdirSync(fixture.directory), before);
     } finally {
       await fixture.close();
     }
@@ -44,7 +47,12 @@ for (const mode of [
   'token-duplicate',
   'token-expired',
   'token-version',
+  'token-future',
+  'token-revocation',
+  'late-revoked',
+  'late-credential',
   'alternative',
+  'alternative-error',
   'cancel',
   'invalid',
 ])

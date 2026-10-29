@@ -35,6 +35,7 @@ class ForeignTokenPlugin {
     context.provide('agent.provider.token', this);
   }
   async issue(): Promise<ProviderTokenIssue> {
+    if (process.argv[3] === 'alternative-error') throw new Error('PRIVATE_TOKEN_CANARY');
     return structuredClone(this.result);
   }
 }
@@ -57,7 +58,7 @@ class ProviderTokenProgram {
     }
   }
   private overrides(module: object): ProviderRegistration[] {
-    if (process.argv[3] !== 'alternative') return [];
+    if (!process.argv[3]?.startsWith('alternative')) return [];
     return [
       {
         token: Reflect.get(module, 'ProviderTokenToken'),

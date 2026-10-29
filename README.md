@@ -84,7 +84,6 @@ empty-tool-path and ambient-preload canaries, archive limits and native generati
 This aligns owner contracts before actual guest sessions; it creates no capacity or authority.
 All issues remain open and real Work/model execution remains Task 10.
 
-## Provider access token
 ## Worker host composition
 
 The worker's process-local native root is `WorkerApplication`, exported by

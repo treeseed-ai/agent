@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Added
+- Compose the separate manager diagnostic program with native authority providers (#525).
 - Select the exact manager protocol and host dependency closure (#525).
 - Submit exact signed provider enrollment through selectable native providers (#525).
 - Select exact corrected resource-profile contracts for native worker pool integration (#525).

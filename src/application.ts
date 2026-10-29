@@ -1,3 +1,4 @@
+export * from './provider-enrollment.js';
 export { ProviderCredentialApplication, ProviderCredentialPlugin, ProviderCredentialToken } from './provider-credentials.js';
 export type { ProviderCredentialExchange } from './provider-credentials.js';
 export { ProviderConnectionApplication, ProviderRegistrationPlugin, ProviderConnectionToken } from './provider-connection.js';

@@ -7,7 +7,7 @@ coordination; Identity preserves Keycloak and existing control-plane authority. 
 execution remains Task 10. No Agent root belongs inside Deployment's worker.
 
 The native guest program, trusted assignment reader and separate worker protocol program are
-implemented; worker capacity readiness remains blocked. Installed manager/worker services,
+implemented, along with signed enrollment submission described below; worker capacity readiness remains blocked. Installed manager/worker services,
 real warm-pool orchestration, live team enrollment, seeds/CLI and final installed assembly remain
 required. Existing profile preparation and external-package proofs do not claim installed capacity.
 
@@ -37,8 +37,8 @@ Deployment #1041 supply the corrected asynchronous profile binding and one exact
 throughout the runtime/build/audit closure. The public prepared external guest package uses that
 same exact SDK peer, retaining its lifecycle-script canary and all native replacement assertions.
 
-This .30 dependency selection preserves the separate worker program and all nineteen native
-provider declarations. It does not consume the unaccepted Deployment .108 resource candidate,
+This .32 capability addition preserves the separate worker program and advertises twenty native
+provider declarations with the same exact SDK/Deployment dependency selection. It does not consume the unaccepted Deployment .108 resource candidate,
 advertise a host resource profile or make pool readiness true. Physical limits, profile provenance,
 actual pool/manager authority and final installed exact composition remain required. The existing
 hosted fixture retains the accepted .28 guest; current artifacts must be qualified explicitly in
@@ -170,8 +170,9 @@ The same-repository legacy authority is `CapacityRegistrationService.issueAccess
 `e3b3a05892eb25ef5f2fd77c476788f2870118d2`; its signed-body and idempotent issuance semantics are
 preserved. Keycloak-governed approval remains behind that public boundary. Acceptance uses a real
 isolated HTTPS receiver and real Ed25519 proofs, explicitly a protocol fixture rather than a live
-team/Keycloak service. Live token authentication, heartbeat/revocation, registration submission,
-private secret custody and the actual manager program remain required before claiming enrollment.
+team/Keycloak service. Registration submission is implemented below. Live token authentication,
+heartbeat/revocation, durable private secret custody and the actual manager program remain required
+before claiming live enrollment.
 
 Implementation order: committed interface/changelog; built default missing-root red and HTTPS
 negative controls; concise native token/root classes and metadata; complete owner tiers/build,
@@ -205,7 +206,8 @@ Credential material is opaque control-plane secret data, not a new Keycloak toke
 It is returned only to the internal owner client for future private custody. Never print it, include
 it in CLI/machine envelopes, expose it in errors or treat possession as current execution authority.
 This slice creates no local credential files or identity keys. Deployment custody, actual live token
-validation/heartbeat/revocation, enrollment submission and isolated Keycloak assembly remain required.
+validation/heartbeat/revocation and isolated Keycloak assembly remain required. Signed enrollment
+submission is implemented below.
 The existing control plane remains the authority behind Keycloak-governed team approval.
 
 Owner source mapping: existing API CapacityRegistrationService.exchangeCredential at legacy commit
@@ -444,8 +446,8 @@ Both sides reconstruct `{requestId}` despite an empty HTTP GET entity. The origi
 example was wrong; the real TLS regression receiver rejects it. Credential exchange separately
 signs `{requestId,idempotencyKey}`; access-token issue signs `{credentialId,idempotencyKey}` plus
 `requestedValiditySeconds` when selected. These values are protocol evidence, not a new authority.
-Credential exchange/token renewal, durable enrollment, heartbeat and Keycloak/live grant checks
-remain later connection operations; this status provider creates no credentials or approval.
+Credential exchange/token issuance and submission are implemented above/below; durable enrollment,
+heartbeat and Keycloak/live grant checks remain required; this status provider creates no credentials or approval.
 
 `ProviderRegistrationPlugin` and `ProviderConnectionToken` expose the selectable typed connection
 seam. The plugin acquires the native proof service for each operation and retains it through the
@@ -458,3 +460,44 @@ no live enrollment authority and contact no production/legacy installation. All 
 
 The development-only qualification subpath remains hosted-runner-only; importing it grants no
 host capability to an Agent process. Deployment #1040 passed both complete hosted qualification runs and is integrated. The earlier .26/.105 archive is retained unchanged.
+
+## Capacity provider enrollment submission
+
+Agent owns a selectable `agent.provider.enrollment` native Cordis capability. Its public
+`ProviderEnrollmentApplication.start(configuration, overrides?)` creates one native root with
+selected proof and enrollment providers. `submit(input, signal)` invokes the existing control
+plane registration endpoint over HTTPS using SDK `ProviderProtocolClient`; `close()` awaits
+native disposal. The future manager composes these providers into its own root, rather than
+nesting this standalone application.
+
+Configuration contains the existing `ProviderConnectionApplication.Config` fields plus
+`publicJwk` and an absolute owner-private `registrationKeyFile`. The latter contains exactly
+`{registrationKey: string}` and is freshly read for each submission. No secret is accepted in
+command output or returned registration. Public Ed25519 identity must hash to the configured
+fingerprint, and proof audience must exactly equal the selected control-plane origin.
+
+Input contains `idempotencyKey`, `displayName`, `capabilitySummary`, `supplyOffer` and optional
+`metadata`, using existing SDK wire schemas. The coherent application validates configuration,
+input, an isolated submission snapshot and complete returned team/provider/fingerprint/key-generation identity even for selected
+alternative enrollment providers. Returned capability summaries/offers must match the requested values.
+Selected providers cannot rewrite the caller's admitted intent or leak exception text. Foreign identity, missing/duplicate selections, cancellation,
+private-file failures or unexpected provider errors expose fixed safe codes only.
+
+The default plugin reads the registration code, signs the canonical unsigned submission
+`{schemaVersion:1, displayName, publicJwk, capabilitySummary, supplyOffer, metadata?}` and sends
+`{...unsigned, proof}` to `POST /v1/provider-registrations` with the existing
+`Treeseed-Registration` authorization and stable idempotency key. Proof binds method, path,
+audience, identity/version, fresh nonce/deadlines and unsigned body hash. The proof itself is
+excluded from that body hash. This preserves the legacy Agent coordinator/identity boundary at
+commit `7296807ee190eb024dd6de086aae65e43f1da1a3` in the same canonical repository.
+
+A registration response retains its actual pending/approved/rejected/cancelled/expired state.
+Submission alone does not approve membership, issue credentials/tokens, establish a live grant,
+advertise productive capacity or enroll against production during verification. API/Identity
+retain existing team authority and Keycloak-governed approval; Work/models remain Task 10.
+
+Delivery: documentation → missing built public-interface acceptance → independent isolated TLS
+receiver and identity/private-file/cancellation/replacement boundaries → plugin/application →
+checks/build/all applicable tiers, exact archive consumer and full hosted verification. Permanent
+tests use behavior names in their owning tiers. Test TLS uses a private temporary CA trusted
+only by its child; no global trust change. All issues remain open under release policy.

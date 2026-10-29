@@ -1,6 +1,6 @@
 {
   "name": "@treeseed-cordis/agent",
-  "version": "0.0.0-cordis.30",
+  "version": "0.0.0-cordis.32",
   "private": true,
   "type": "module",
   "license": "Apache-2.0",
@@ -99,9 +99,110 @@
     "pluginId": "agent",
     "package": {
       "name": "@treeseed-cordis/agent",
-      "version": "0.0.0-cordis.30"
+      "version": "0.0.0-cordis.32"
     },
     "providers": [
+      {
+        "declaration": {
+          "id": "agent.provider.enrollment.registration",
+          "pluginId": "agent",
+          "capability": "agent.provider.enrollment",
+          "contractVersion": "0.4.0-cordis.1",
+          "target": "agent",
+          "provide": [
+            "agent.provider.enrollment"
+          ],
+          "inject": [
+            "cordis.composition",
+            "agent.provider.proof"
+          ]
+        },
+        "entry": "dist/src/provider-enrollment.js",
+        "classExport": "ProviderEnrollmentPlugin",
+        "configurationSchema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {
+            "controlPlaneUrl": {
+              "type": "string",
+              "format": "uri"
+            },
+            "teamId": {
+              "type": "string",
+              "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$"
+            },
+            "providerId": {
+              "type": "string",
+              "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$"
+            },
+            "registrationKeyGeneration": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            },
+            "fingerprint": {
+              "type": "string",
+              "pattern": "^sha256:[A-Za-z0-9_-]{43}$"
+            },
+            "publicJwk": {
+              "type": "object",
+              "properties": {
+                "kty": {
+                  "type": "string",
+                  "const": "OKP"
+                },
+                "crv": {
+                  "type": "string",
+                  "const": "Ed25519"
+                },
+                "x": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_-]{43}$"
+                },
+                "kid": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256
+                },
+                "use": {
+                  "type": "string",
+                  "const": "sig"
+                },
+                "alg": {
+                  "type": "string",
+                  "const": "EdDSA"
+                }
+              },
+              "required": [
+                "kty",
+                "crv",
+                "x"
+              ],
+              "additionalProperties": false
+            },
+            "registrationKeyFile": {
+              "type": "string",
+              "pattern": "^\\/"
+            }
+          },
+          "required": [
+            "controlPlaneUrl",
+            "teamId",
+            "providerId",
+            "registrationKeyGeneration",
+            "fingerprint",
+            "publicJwk",
+            "registrationKeyFile"
+          ],
+          "additionalProperties": false
+        },
+        "replacement": {
+          "kind": "restart",
+          "stateVersion": 1,
+          "qualificationDigest": null
+        },
+        "commandIds": []
+      },
       {
         "declaration": {
           "id": "agent.worker.sandbox.private",

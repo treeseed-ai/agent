@@ -1,3 +1,4 @@
+import { ProviderEnrollmentPlugin } from '../src/provider-enrollment.js';
 import { WorkerSandboxPlugin } from '../src/worker.js';
 import { ProviderTokenPlugin } from '../src/provider-token.js';
 import { ProviderCredentialPlugin } from '../src/provider-credentials.js';
@@ -25,6 +26,7 @@ class AgentTooling {
     this.project(metadata, process.argv[2] === 'build');
   }
   private static readonly definitions = [
+    {plugin: ProviderEnrollmentPlugin, entry: 'dist/src/provider-enrollment.js', name: 'ProviderEnrollmentPlugin'},
     {plugin: WorkerSandboxPlugin, entry: 'dist/src/worker.js', name: 'WorkerSandboxPlugin'},
     {plugin: ProviderTokenPlugin, entry: 'dist/src/provider-token.js', name: 'ProviderTokenPlugin'},
     {plugin: ProviderCredentialPlugin, entry: 'dist/src/provider-credentials.js', name: 'ProviderCredentialPlugin'},

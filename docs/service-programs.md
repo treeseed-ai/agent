@@ -236,7 +236,9 @@ frame has one newline, at most 64 KiB, with at most sixteen admitted replies. Ou
 only schema-validated canonical envelopes; errors contain fixed SDK codes/messages. Ready binds
 this actual native composition generation and a fresh per-process nonce. It acquires a native
 provider lease, freshly checks the host identity/grant through the default private client, then
-releases the lease before returning. Foreign scope/role/stale generations fail before host I/O.
+releases the lease before returning. Foreign scope/role/stale generations fail before host I/O. A failure echoes the request
+role/operation while binding the response to this worker's actual scope and generation; it never
+reports a successful runner operation.
 
 This initial service has no qualified pool or live manager admission yet. A successful host
 inspection therefore returns a successful ready *operation* whose result is `ready: false` with

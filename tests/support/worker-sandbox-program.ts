@@ -68,6 +68,7 @@ export class WorkerHostFixture {
   private readonly sockets = new Map<Socket, Buffer>();
   private readonly bases = new Set<string>();
   private creates = 0;
+  private requests = 0;
   private replies = 0;
   private failure: string | null = null;
   readonly inputFile = join(this.directory, 'configuration.json');
@@ -151,6 +152,7 @@ export class WorkerHostFixture {
     }
   }
   private reply(socket: Socket, bytes: Buffer): void {
+    this.requests++;
     assert.equal(bytes.indexOf(10), bytes.length - 1);
     const frame = JSON.parse(bytes.toString());
     assert.equal(frame.credential, 'f'.repeat(64));
@@ -158,6 +160,7 @@ export class WorkerHostFixture {
       socket.end('{"private":"PRIVATE_WORKER_CANARY"}\n');
       return;
     }
+    if (this.mode === 'silent-ready') return;
     const request = frame.request;
     const response =
       request.schemaVersion === 'treeseed.sandbox-control/v1'
@@ -267,6 +270,15 @@ export class WorkerHostFixture {
       result: ready,
       problem: null,
     });
+  }
+  get observations(): number {
+    return this.requests;
+  }
+  assertIdle(requests: number): void {
+    assert.equal(this.failure, null);
+    assert.equal(this.requests, requests);
+    assert.equal(this.creates, 0);
+    assert.equal(this.bases.size, 0);
   }
   verify(): void {
     assert.equal(this.failure, null);

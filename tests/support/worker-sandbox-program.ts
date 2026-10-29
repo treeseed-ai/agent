@@ -174,7 +174,10 @@ export class WorkerHostFixture {
       success: true,
       problem: null,
     };
-    if (request.operation === 'ready') return { ...common, result: this.availability() };
+    return { ...common, result: this.controlResult(request) };
+  }
+  private controlResult(request: SandboxControlRequest): object {
+    if (request.operation === 'ready') return this.availability();
     assert(
       request.operation === 'create' ||
         request.operation === 'inspect' ||
@@ -186,14 +189,12 @@ export class WorkerHostFixture {
       this.bases.add(id);
     }
     assert(this.bases.has(id));
-    if (request.operation === 'destroy') {
-      this.bases.delete(id);
-      return {
-        ...common,
-        result: { sandboxId: id, destroyed: true, inspectionDigest: '1'.repeat(64) },
-      };
-    }
-    return { ...common, result: this.evidence(id) };
+    if (request.operation === 'destroy') return this.destroyed(id);
+    return this.evidence(id);
+  }
+  private destroyed(id: string): object {
+    this.bases.delete(id);
+    return { sandboxId: id, destroyed: true, inspectionDigest: '1'.repeat(64) };
   }
   private availability(): object {
     const moved = this.mode === 'foreign-host' || (this.mode === 'moved-host' && this.creates > 0);
@@ -236,9 +237,8 @@ export class WorkerHostFixture {
       };
     return { ...common, success: true, result: this.frame(request), problem: null };
   }
-  private frame(request: SandboxRunnerRequest): object {
-    this.replies++;
-    const ready = CapacitySchemas.readiness.parse({
+  private readiness(): CapacityReadiness {
+    return CapacitySchemas.readiness.parse({
       schemaVersion: 'treeseed.capacity-readiness/v1',
       role: 'runner',
       scope:
@@ -252,6 +252,10 @@ export class WorkerHostFixture {
       ready: true,
       blockers: [],
     });
+  }
+  private frame(request: SandboxRunnerRequest): object {
+    this.replies++;
+    const ready = this.readiness();
     return CapacityChannelSchemas.response.parse({
       schemaVersion: request.frame.schemaVersion,
       requestId: request.requestId,
@@ -278,6 +282,7 @@ export class WorkerHostFixture {
       assert.equal(this.creates, 0);
     if (this.mode === 'moved-host')
       assert.equal(this.bases.size, 1, 'uncertain old-generation state requires explicit repair');
+    else assert.equal(this.bases.size, 0);
   }
   async program(): Promise<{ code: number | null; stdout: string; stderr: string }> {
     const child = spawn(
@@ -346,7 +351,7 @@ class WorkerSandboxProgram {
     await this.operations();
     await this.lease!.release();
     await this.root!.close();
-    assert.throws(this.lease!.assertOpen.bind(this.lease), this.safe.bind(this));
+    assert.throws(this.lease!.assertOpen.bind(this.lease));
     await assert.rejects(this.root!.acquireSandbox(), this.safe.bind(this));
     process.stdout.write('worker-sandbox-ok\n');
   }

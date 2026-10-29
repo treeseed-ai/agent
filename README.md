@@ -113,7 +113,10 @@ Deployment retains artifact custody and physical sandbox operations. Replacement
 This slice does not dispatch, publish assignments, run setup, grant egress or claim live authority.
 The separate worker program, real pool and installed service grants remain subsequent slices.
 
-Verification follows committed documentation → built default missing-root red → real private socket
+Configuration fields have a portable machine projection; the root and native provider explicitly
+validate cross-scope identity and canonical installation paths before I/O.
+
+Verification follows committed documentation → missing public module compile-red → built private socket
 protocol controls → implementation → all owner tiers/build and exact public archive consumer →
 current-head CI/review and assembled real Kata. Default-construction protocol fixtures are explicitly
 fixtures; they cannot substitute for the final real manager/worker/guest assembly. All issues remain

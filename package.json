@@ -1,6 +1,6 @@
 {
   "name": "@treeseed-cordis/agent",
-  "version": "0.0.0-cordis.25",
+  "version": "0.0.0-cordis.26",
   "private": true,
   "type": "module",
   "license": "Apache-2.0",
@@ -36,8 +36,8 @@
     },
     "deployment": {
       "repository": "https://github.com/treeseed-ai/deployment.git",
-      "commit": "c207f730d3302c0cb926fd746295b720a96cf22b",
-      "sha256": "6bd2ee05e5c705e65aca703be1ff1d4faa725578689e1c7a808a789163d16b78"
+      "commit": "faaa524d06f37155faf8983fd9cd1f81c1d646e6",
+      "sha256": "a4e0afdb356c060433eac52c51389ad5341fce8b7f541e1a917be1ba7fd17813"
     }
   },
   "exports": {
@@ -72,6 +72,10 @@
     "./provider-token": {
       "types": "./dist/src/provider-token.d.ts",
       "default": "./dist/src/provider-token.js"
+    },
+    "./worker": {
+      "types": "./dist/src/worker.d.ts",
+      "default": "./dist/src/worker.js"
     }
   },
   "files": [
@@ -82,7 +86,8 @@
     "dist/bin/*.gzpart"
   ],
   "peerDependencies": {
-    "@treeseed-cordis/sdk": "0.0.0-cordis.39"
+    "@treeseed-cordis/sdk": "0.0.0-cordis.39",
+    "@treeseed-cordis/deployment": "0.0.0-cordis.105"
   },
   "cordisPackage": {
     "formatVersion": 4,
@@ -90,9 +95,130 @@
     "pluginId": "agent",
     "package": {
       "name": "@treeseed-cordis/agent",
-      "version": "0.0.0-cordis.25"
+      "version": "0.0.0-cordis.26"
     },
     "providers": [
+      {
+        "declaration": {
+          "id": "agent.worker.sandbox.private",
+          "pluginId": "agent",
+          "capability": "agent.worker.sandbox",
+          "contractVersion": "0.4.0-cordis.1",
+          "target": "agent",
+          "provide": [
+            "agent.worker.sandbox"
+          ],
+          "inject": [
+            "cordis.composition"
+          ]
+        },
+        "entry": "dist/src/worker.js",
+        "classExport": "WorkerSandboxPlugin",
+        "configurationSchema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {
+            "scope": {
+              "type": "object",
+              "properties": {
+                "installationId": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+                },
+                "installationDirectory": {
+                  "type": "string",
+                  "pattern": "^\\/"
+                },
+                "capacityProviderId": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+                },
+                "project": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+                },
+                "platformProfile": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+                },
+                "workerId": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+                }
+              },
+              "required": [
+                "installationId",
+                "installationDirectory",
+                "capacityProviderId",
+                "project",
+                "platformProfile",
+                "workerId"
+              ],
+              "additionalProperties": false
+            },
+            "hostScope": {
+              "type": "object",
+              "properties": {
+                "installationId": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+                },
+                "serviceId": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9-]{0,62}$"
+                },
+                "providerGeneration": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{64}$"
+                },
+                "serviceGeneration": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{64}$"
+                }
+              },
+              "required": [
+                "installationId",
+                "serviceId",
+                "providerGeneration",
+                "serviceGeneration"
+              ],
+              "additionalProperties": false
+            },
+            "hostConfigurationDigest": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "endpointDirectory": {
+              "type": "string",
+              "pattern": "^\\/"
+            },
+            "authorityFile": {
+              "type": "string",
+              "pattern": "^\\/"
+            },
+            "timeoutMs": {
+              "default": 120000,
+              "type": "integer",
+              "minimum": 50,
+              "maximum": 120000
+            }
+          },
+          "required": [
+            "scope",
+            "hostScope",
+            "hostConfigurationDigest",
+            "endpointDirectory",
+            "authorityFile"
+          ],
+          "additionalProperties": false
+        },
+        "replacement": {
+          "kind": "restart",
+          "stateVersion": 1,
+          "qualificationDigest": null
+        },
+        "commandIds": []
+      },
       {
         "declaration": {
           "id": "agent.provider.token.approved",

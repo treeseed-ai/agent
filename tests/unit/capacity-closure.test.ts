@@ -8,30 +8,34 @@ class CapacityClosureTests {
     const installed = JSON.parse(
       readFileSync('node_modules/@treeseed-cordis/sdk/package.json', 'utf8'),
     );
-    expect(metadata.peerDependencies['@treeseed-cordis/sdk']).toBe('0.0.0-cordis.39');
+    expect(metadata.peerDependencies['@treeseed-cordis/sdk']).toBe('0.0.0-cordis.41');
     expect(installed.version).toBe(metadata.peerDependencies['@treeseed-cordis/sdk']);
-    expect(metadata.cordisCandidate.sdk.commit).toBe('f09247dbf020f0354edce9af2f9ccef6ba351ff3');
-    const expected = 'ddfb91a065bee6d7e9482427570e7c036b18f0fbbcaa09c0fc62fee094abdbd4';
+    expect(metadata.cordisCandidate.sdk.commit).toBe('4bb54954ac6d636309a8312c2bf71536b5aefb73');
+    const expected = '2bbde1a4ca35fbffaeacb2fbeab40b49f56dc57dca3355e8e47e22ed5f0f822a';
     expect(metadata.cordisCandidate.sdk.sha256).toBe(expected);
     expect(createHash('sha256').update(readFileSync('vendor/sdk.tgz')).digest('hex')).toBe(
       expected,
     );
   }
+  private static readonly contracts = [
+    'ActivitySchemas',
+    'EnvironmentSchemas',
+    'CapacitySchemas',
+    'PoolSchemas',
+    'CapacityProtocolSchemas',
+    'SandboxControlSchemas',
+    'CapacityChannelSchemas',
+    'CapacityChannelBinding',
+    'SandboxRunnerSchemas',
+    'SandboxRunnerBinding',
+    'GuestRuntimeSchemas',
+    'GuestRuntimeBinding',
+    'SandboxProfileSchemas',
+    'SandboxProfileBinding',
+    'SandboxProfileError',
+  ];
   protocols(): void {
-    for (const name of [
-      'ActivitySchemas',
-      'EnvironmentSchemas',
-      'CapacitySchemas',
-      'PoolSchemas',
-      'CapacityProtocolSchemas',
-      'SandboxControlSchemas',
-      'CapacityChannelSchemas',
-      'CapacityChannelBinding',
-      'SandboxRunnerSchemas',
-      'SandboxRunnerBinding',
-      'GuestRuntimeSchemas',
-      'GuestRuntimeBinding',
-    ])
+    for (const name of CapacityClosureTests.contracts)
       expect(typeof Reflect.get(sdk, name)).toBe('function');
     expect(sdk.PlatformOperations.all).toHaveLength(7);
   }

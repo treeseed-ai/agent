@@ -70,6 +70,7 @@ class WorkerKataQualification {
     workerId: 'fixture.worker',
   });
   private readonly archive = resolve('vendor/agent-guest.tgz');
+  private readonly artifactDirectory = join(this.fixture.directory, 'guest-artifact');
   private readonly digest = '93f0ab94247dc253a227cf92c85e6393fd238965da252b2ff31069ee8dce9679';
   private readonly image =
     'docker.io/library/ubuntu@sha256:157dc3d6e4a3e4f2c68d12df9df9ed6e808b59af6d4c3757b432b4f519916725';
@@ -122,7 +123,10 @@ class WorkerKataQualification {
     this.destroyed = true;
   }
   private async artifact(): Promise<void> {
-    const index = await PackageArchiveInspector.inspect(this.archive, this.digest);
+    const index = await PackageArchiveInspector.inspect(
+      join(this.artifactDirectory, 'agent.tgz'),
+      this.digest,
+    );
     assert.equal(index.metadata.name, '@treeseed-cordis/agent');
     assert.equal(index.metadata.version, '0.0.0-cordis.28');
     const file = index.files.find(WorkerKataQualification.workerFile);
@@ -134,6 +138,7 @@ class WorkerKataQualification {
     return file.path === 'dist/src/worker.js';
   }
   private async exercise(): Promise<void> {
+    this.stage();
     await this.artifact();
     await this.fixture.start();
     const host = await this.host();
@@ -149,14 +154,17 @@ class WorkerKataQualification {
     this.absent();
     this.fixture.workloads.canaries();
   }
+  private stage(): void {
+    mkdirSync(this.artifactDirectory, { mode: 0o700 });
+    const file = join(this.artifactDirectory, 'agent.tgz');
+    copyFileSync(this.archive, file);
+    chmodSync(file, 0o600);
+  }
   private async host(): Promise<unknown> {
     const { workloads, ...base } = KataSandboxPlugin.Config.parse(
       await this.fixture.configuration(),
     );
-    const directory = join(this.fixture.directory, 'guest-artifact');
-    mkdirSync(directory, { mode: 0o700 });
-    copyFileSync(this.archive, join(directory, 'agent.tgz'));
-    chmodSync(join(directory, 'agent.tgz'), 0o600);
+    const directory = this.artifactDirectory;
     this.fixture.run(this.imageArguments);
     return {
       ...base,

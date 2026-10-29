@@ -123,7 +123,9 @@ export class ProviderTokenPlugin implements ProviderTokenIssuer {
       if (!request.success) throw new ProviderControlError('INVALID_PROVIDER_REQUEST');
       const admitted = ProviderCredentialPlugin.assertIssue(credential, this.configuration);
       if (signal.aborted) throw new ProviderControlError('PROVIDER_CANCELLED');
-      return await this.invoke(admitted, request.data, signal);
+      const token = await this.invoke(admitted, request.data, signal);
+      if (signal.aborted) throw new ProviderControlError('PROVIDER_CANCELLED');
+      return token;
     } catch (error) {
       throw TokenFailure.safe(error);
     }
@@ -322,7 +324,9 @@ export class ProviderTokenApplication {
       if (this.closed || signal.aborted) throw new ProviderControlError('PROVIDER_CANCELLED');
       const request = ProviderTokenPlugin.Input.safeParse(input);
       if (!request.success) throw new ProviderControlError('INVALID_PROVIDER_REQUEST');
-      return await this.invoke(request.data, signal);
+      const token = await this.invoke(request.data, signal);
+      if (this.closed || signal.aborted) throw new ProviderControlError('PROVIDER_CANCELLED');
+      return token;
     } catch (error) {
       throw TokenFailure.safe(error);
     }

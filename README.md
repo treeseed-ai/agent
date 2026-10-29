@@ -29,7 +29,7 @@ and source-free standalone program acceptance with an empty tool PATH and ambien
 No production publication, legacy mutation or issue closure.
 
 Current SDK .39 source: `f09247dbf020f0354edce9af2f9ccef6ba351ff3`; archive SHA-256
-`ddfb91a065bee6d7e9482427570e7c036b18f0fbbcaa09c0fc62fee094abdbd4`. Development-only
+`ddfb91a065bee6d7e9482427570e7c036b18f0fbbcaa09c0fc62fee094abdbd4`. Selected
 Deployment .106 custody and worker client: source `ce08082de6130f311f37e9bd13cd37f41e4bf31a`; archive
 `e0fdebbdeb81a374a58437179bec2a79a5074e52705aa927d7d4865426ab398c`. These exact public
 archives select one SDK version throughout the build/audit closure. The build admits its payload
@@ -96,8 +96,7 @@ Configuration pins the SDK capacity scope, private host service scope, expected 
 digest, endpoint directory and owner-private authority record. Host and capacity installation IDs
 must match. The default provider constructs Deployment's public `SandboxSocketClient` and
 `SandboxRunnerSocketClient`; no sibling source, raw runtime socket, executable or command enters
-Agent. Consume exact owner archives; the Deployment #1040 and Agent #553 dependency candidates must pass before this
-dependent worker slice can integrate. SDK .39 and the seven platform operation IDs stay unchanged.
+Agent. Consume exact owner archives; the Deployment #1040 and Agent #553 are integrated on their owning Cordis branches. SDK .39 and the seven platform operation IDs stay unchanged.
 Independent external-plugin consumers explicitly select the exact Deployment archive alongside Agent
 and SDK; they never resolve this unpublished runtime peer through a registry. Preserve strict public
 declaration checking and lifecycle-script canaries. The guest executable still bundles no Deployment
@@ -441,3 +440,6 @@ Replacement remains restart-required. Tests launch built Node artifacts over rea
 with the default signer/client; the receiver independently verifies Ed25519, endpoint, exact body,
 nonce/time and identity. A permanent regression rejects the old empty-body proof. Fixtures provide
 no live enrollment authority and contact no production/legacy installation. All issues stay open.
+
+The development-only qualification subpath remains hosted-runner-only; importing it grants no
+host capability to an Agent process. Deployment #1040 passed both complete hosted qualification runs and is integrated. The earlier .26/.105 archive is retained unchanged.

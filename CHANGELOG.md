@@ -4,6 +4,7 @@
 
 ### Added
 - Compose the Agent worker host seam through scoped public sandbox clients and native leases (#525).
+- Select the private sandbox owner and guarded qualification archives while preserving the standalone guest closure (#525).
 
 ### Added
 - Exchange approved credentials for exact existing control-plane provider access tokens through native composition (#525).

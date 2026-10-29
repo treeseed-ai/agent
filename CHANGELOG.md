@@ -3,6 +3,9 @@
 ## [Unreleased]
 
 ### Added
+- Select the private sandbox owner and guarded qualification archives while preserving the standalone guest closure (#525).
+
+### Added
 - Exchange approved credentials for exact existing control-plane provider access tokens through native composition (#525).
 
 ### Added

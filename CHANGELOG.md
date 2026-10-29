@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Added
+- Qualify the default worker host root with the exact guest archive and real hosted Kata infrastructure (#525).
 - Compose the Agent worker host seam through scoped public sandbox clients and native leases (#525).
 - Select the private sandbox owner and guarded qualification archives while preserving the standalone guest closure (#525).
 

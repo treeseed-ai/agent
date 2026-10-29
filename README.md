@@ -96,8 +96,12 @@ Configuration pins the SDK capacity scope, private host service scope, expected 
 digest, endpoint directory and owner-private authority record. Host and capacity installation IDs
 must match. The default provider constructs Deployment's public `SandboxSocketClient` and
 `SandboxRunnerSocketClient`; no sibling source, raw runtime socket, executable or command enters
-Agent. Consume exact owner archives; the pending Deployment #1039 candidate must pass before this
+Agent. Consume exact owner archives; the Deployment #1040 and Agent #553 dependency candidates must pass before this
 dependent worker slice can integrate. SDK .39 and the seven platform operation IDs stay unchanged.
+Independent external-plugin consumers explicitly select the exact Deployment archive alongside Agent
+and SDK; they never resolve this unpublished runtime peer through a registry. Preserve strict public
+declaration checking and lifecycle-script canaries. The guest executable still bundles no Deployment
+implementation.
 
 The typed `WorkerSandboxHost` seam exposes host availability, create/inspect and verified destroy.
 Evidence pairs the SDK sandbox record with freshly read actual guest readiness. Require the exact

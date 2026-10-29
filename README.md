@@ -29,8 +29,8 @@ and source-free standalone program acceptance with an empty tool PATH and ambien
 No production publication, legacy mutation or issue closure.
 
 Current SDK .39 source: `f09247dbf020f0354edce9af2f9ccef6ba351ff3`; archive SHA-256
-`ddfb91a065bee6d7e9482427570e7c036b18f0fbbcaa09c0fc62fee094abdbd4`. Development-only
-Deployment .106 custody and qualification consumer: source `ce08082de6130f311f37e9bd13cd37f41e4bf31a`; archive
+`ddfb91a065bee6d7e9482427570e7c036b18f0fbbcaa09c0fc62fee094abdbd4`. Selected
+Deployment .106 custody and worker client: source `ce08082de6130f311f37e9bd13cd37f41e4bf31a`; archive
 `e0fdebbdeb81a374a58437179bec2a79a5074e52705aa927d7d4865426ab398c`. These exact public
 archives select one SDK version throughout the build/audit closure. The build admits its payload
 manifest through SDK's GuestRuntimeBinding before publication. Historical slices below retain
@@ -78,11 +78,53 @@ not authorize package-manager execution or lifecycle scripts.
 The current producer selects accepted SDK .39 and validates every generated standalone manifest
 through GuestRuntimeBinding, including consecutive 7 MiB parts, aggregate size and the exact GNU
 library set. The Deployment .106 development auditor selects the same SDK peer. Only
-these public immutable owner archives are installed; the Agent runtime dependency remains SDK,
-and no Deployment implementation is bundled into its guest. Keep full Node/standalone contracts,
+these public immutable owner archives are installed. The worker uses Deployment’s public clients;
+no Deployment implementation is bundled into the standalone guest. Keep full Node/standalone contracts,
 empty-tool-path and ambient-preload canaries, archive limits and native generation read-back.
 This aligns owner contracts before actual guest sessions; it creates no capacity or authority.
 All issues remain open and real Work/model execution remains Task 10.
+
+## Worker host composition
+
+The worker's process-local native root is `WorkerApplication`, exported by
+`@treeseed-cordis/agent/worker`. It registers selectable `agent.worker.sandbox` through
+`WorkerSandboxPlugin` (`agent.worker.sandbox.private`). `acquireSandbox()` returns the actual native
+provider lease; callers retain it through operations and cleanup. The root is the future worker
+program's composition root, not another provider-instance cache or an Agent root inside Deployment.
+
+Configuration pins the SDK capacity scope, private host service scope, expected host configuration
+digest, endpoint directory and owner-private authority record. Host and capacity installation IDs
+must match. The default provider constructs Deployment's public `SandboxSocketClient` and
+`SandboxRunnerSocketClient`; no sibling source, raw runtime socket, executable or command enters
+Agent. Consume exact owner archives. Deployment #1040 and Agent #553 are integrated on their
+owning Cordis branches. SDK .39 and the seven platform operation IDs stay unchanged.
+Independent external-plugin consumers explicitly select the exact Deployment archive alongside Agent
+and SDK; they never resolve this unpublished runtime peer through a registry. Preserve strict public
+declaration checking and lifecycle-script canaries. The guest executable still bundles no Deployment
+implementation.
+
+The typed `WorkerSandboxHost` seam exposes host availability, create/inspect and verified destroy.
+Evidence pairs the SDK sandbox record with freshly read actual guest readiness. Require the exact
+sandbox ID, configured host digest, capacity scope, runner role/ready state, empty blockers and
+the caller's expected runner generation. New bases must have no assignment. Never infer a guest
+generation from configuration, transport availability or prior samples. Recheck host identity after
+the operation before accepting evidence. Expected blocker/error detail is projected to safe SDK
+codes; no credentials, private file contents or subprocess output are printed or created.
+
+The root supplies native composition and lifecycle only. Agent's pool admission, exclusive claims,
+replenishment, quarantine, generation changes and assignment orchestration remain Agent-owned;
+Deployment retains artifact custody and physical sandbox operations. Replacement stays restart-only.
+This slice does not dispatch, publish assignments, run setup, grant egress or claim live authority.
+The separate worker program, real pool and installed service grants remain subsequent slices.
+
+Configuration fields have a portable machine projection; the root and native provider explicitly
+validate cross-scope identity and canonical installation paths before I/O.
+
+Verification follows committed documentation → missing public module compile-red → built private socket
+protocol controls → implementation → all owner tiers/build and exact public archive consumer →
+current-head CI/review and assembled real Kata. Default-construction protocol fixtures are explicitly
+fixtures; they cannot substitute for the final real manager/worker/guest assembly. All issues remain
+open and real Work/model execution stays Task 10.
 
 ## Provider access token
 
@@ -401,5 +443,4 @@ nonce/time and identity. A permanent regression rejects the old empty-body proof
 no live enrollment authority and contact no production/legacy installation. All issues stay open.
 
 The development-only qualification subpath remains hosted-runner-only; importing it grants no
-host capability to an Agent process. Deployment #1040 must pass qualification and integrate before
-this dependency candidate can integrate. The earlier .26/.105 archive is retained unchanged.
+host capability to an Agent process. Deployment #1040 passed both complete hosted qualification runs and is integrated. The earlier .26/.105 archive is retained unchanged.

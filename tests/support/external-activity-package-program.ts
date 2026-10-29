@@ -119,20 +119,21 @@ class ExternalActivityArchives {
     return {
       private: true,
       type: "module",
-      dependencies: {
-        "@treeseed-cordis/agent":
-          "file:" +
-          join(
-            this.archives,
-            "treeseed-cordis-agent-" + this.selected.version + ".tgz",
-          ),
-        "@treeseed-cordis/sdk": "file:" + resolve("vendor/sdk.tgz"),
-        "@fixture/cordis-activity-profile":
-          "file:" +
-          join(this.archives, "fixture-cordis-activity-profile-1.0.0.tgz"),
-        zod: "4.6.7",
-        "@types/node": "24.10.1",
-      },
+      dependencies: this.consumerDependencies(),
+    };
+  }
+  private consumerDependencies(): object {
+    return {
+      "@treeseed-cordis/agent": "file:" + join(
+        this.archives, "treeseed-cordis-agent-" + this.selected.version + ".tgz",
+      ),
+      "@treeseed-cordis/sdk": "file:" + resolve("vendor/sdk.tgz"),
+      "@treeseed-cordis/deployment": "file:" + resolve("vendor/deployment.tgz"),
+      "@fixture/cordis-activity-profile": "file:" + join(
+        this.archives, "fixture-cordis-activity-profile-1.0.0.tgz",
+      ),
+      zod: "4.6.7",
+      "@types/node": "24.10.1",
     };
   }
   private install(): void {

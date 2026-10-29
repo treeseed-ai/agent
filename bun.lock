@@ -17,6 +17,7 @@
         "typescript": "5.9.3",
       },
       "peerDependencies": {
+        "@treeseed-cordis/deployment": "0.0.0-cordis.106",
         "@treeseed-cordis/sdk": "0.0.0-cordis.39",
       },
     },

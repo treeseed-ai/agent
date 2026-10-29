@@ -4,7 +4,21 @@ import { readFileSync, writeFileSync, chmodSync } from 'node:fs';
 import { resolve, join } from 'node:path';
 import { once } from 'node:events';
 import * as Manager from '@treeseed-cordis/agent/manager-service';
-import { CapacityChannelSchemas, CapacityContractError } from '@treeseed-cordis/sdk';
+import {
+  Context,
+  type ProviderRegistration as NativeRegistration,
+} from '@treeseed-cordis/sdk/runtime';
+import {
+  ProviderControlSchemas,
+  type ProviderRegistration,
+} from '@treeseed-cordis/sdk/provider-control';
+import { ProviderConnectionToken } from '@treeseed-cordis/agent/provider-control';
+import {
+  CapacityChannelSchemas,
+  CapacityContractError,
+  ProviderV4Schemas,
+  CapabilityToken,
+} from '@treeseed-cordis/sdk';
 import { ProviderRegistrationFixture } from './provider-registration-program.js';
 interface ManagerService {
   readonly generation: object;
@@ -12,10 +26,19 @@ interface ManagerService {
   close(): Promise<void>;
 }
 interface ManagerRoot {
-  start(input: unknown): Promise<ManagerService>;
+  start(input: unknown, overrides?: NativeRegistration[]): Promise<ManagerService>;
 }
 /** Real signed HTTPS receiver and actual manager program; no injected owner collaborators. */
 export class ManagerProgramFixture extends ProviderRegistrationFixture {
+  static readonly libraryModes = [
+    'root',
+    'foreign',
+    'composition',
+    'alternative',
+    'foreign-provider',
+    'duplicate-provider',
+    'unknown-provider',
+  ];
   private child: ChildProcess | null = null;
   private signalled = false;
   readonly scope = {
@@ -69,8 +92,11 @@ export class ManagerProgramFixture extends ProviderRegistrationFixture {
       stderr: Buffer.concat(errors).toString(),
     };
   }
+  private library(): boolean {
+    return ManagerProgramFixture.libraryModes.includes(this.scenario);
+  }
   private launch(): ChildProcess {
-    const args = ['root', 'foreign', 'composition'].includes(this.scenario)
+    const args = this.library()
       ? [
           resolve('dist/tests/support/manager-program-fixture.js'),
           '--library',
@@ -94,7 +120,7 @@ export class ManagerProgramFixture extends ProviderRegistrationFixture {
   }
   private send(): void {
     const frame = this.frame();
-    if (['root', 'foreign', 'composition', 'permissions'].includes(this.scenario)) {
+    if (this.library() || this.scenario === 'permissions') {
       this.child!.stdin!.end();
       return;
     }
@@ -125,18 +151,86 @@ export class ManagerProgramFixture extends ProviderRegistrationFixture {
     await super.close();
   }
 }
+/** Deliberate alternative native provider; the manager must still fence its returned identity. */
+class ManagerConnectionFixture {
+  static readonly provide = ['agent.provider.connection'];
+  static readonly inject: string[] = [];
+  static readonly Config = ProviderControlSchemas.registration;
+  static readonly declaration = ProviderV4Schemas.declaration.parse({
+    id: 'fixture.manager.connection',
+    pluginId: 'fixture',
+    capability: this.provide[0],
+    contractVersion: ProviderV4Schemas.version,
+    target: 'agent',
+    provide: this.provide,
+    inject: this.inject,
+  });
+  constructor(
+    context: Context,
+    private readonly record: ProviderRegistration,
+  ) {
+    context.provide(ProviderConnectionToken.id, this);
+  }
+  async status(): Promise<ProviderRegistration> {
+    return structuredClone(this.record);
+  }
+}
 class ManagerLibraryProgram {
+  private static readonly unknownToken = new CapabilityToken(
+    'fixture.unknown',
+    ProviderV4Schemas.version,
+    {
+      parse: ManagerLibraryProgram.unknown,
+    },
+  );
   async run(): Promise<void> {
     const Root = Reflect.get(Manager, 'CapacityManagerService') as ManagerRoot;
     assert(Root && typeof Root.start === 'function', 'default manager native root missing');
     const configuration = JSON.parse(readFileSync(process.argv[3]!, 'utf8'));
-    const manager = await Root.start(configuration);
+    const overrides = this.overrides(configuration.proof.fingerprint);
+    if (['duplicate-provider', 'unknown-provider'].includes(process.argv[4]!))
+      return this.rejected(Root, configuration, overrides);
+    const manager = await Root.start(configuration, overrides);
     try {
       if (process.argv[4] === 'composition') this.composition(manager);
       else await this.observe(manager, configuration.scope);
     } finally {
       await manager.close();
     }
+    process.stdout.write('manager-library-' + process.argv[4] + '-ok\n');
+  }
+  private static unknown(value: unknown): object {
+    if (!value || typeof value !== 'object')
+      throw new Error('Fixture capability requires an object');
+    return value;
+  }
+  private overrides(fingerprint: string): NativeRegistration[] {
+    const mode = process.argv[4]!;
+    if (
+      !['alternative', 'foreign-provider', 'duplicate-provider', 'unknown-provider'].includes(mode)
+    )
+      return [];
+    const registration: NativeRegistration = {
+      token:
+        mode === 'unknown-provider' ? ManagerLibraryProgram.unknownToken : ProviderConnectionToken,
+      plugin: ManagerConnectionFixture,
+      declaration: ManagerConnectionFixture.declaration,
+      artifact: { kind: 'bundled', identity: 'explicit-manager-test-fixture' },
+      configuration: ProviderRegistrationFixture.response(
+        fingerprint,
+        mode === 'foreign-provider' ? 'foreign' : 'status',
+      ),
+    };
+    return mode === 'duplicate-provider' ? [registration, registration] : [registration];
+  }
+  private async rejected(
+    Root: ManagerRoot,
+    configuration: unknown,
+    overrides: NativeRegistration[],
+  ): Promise<void> {
+    await assert.rejects(Root.start(configuration, overrides), {
+      code: 'INVALID_CAPACITY_CONTRACT',
+    });
     process.stdout.write('manager-library-' + process.argv[4] + '-ok\n');
   }
   private composition(manager: ManagerService): void {
@@ -152,7 +246,7 @@ class ManagerLibraryProgram {
     this.result(response);
   }
   private result(response: ReturnType<typeof CapacityChannelSchemas.response.parse>): void {
-    if (process.argv[4] === 'foreign') {
+    if (['foreign', 'foreign-provider'].includes(process.argv[4]!)) {
       assert.equal(response.success, false);
       if (response.success) throw new Error('Foreign registration accepted');
       assert.equal(response.problem.code, 'CAPACITY_SCOPE_MISMATCH');

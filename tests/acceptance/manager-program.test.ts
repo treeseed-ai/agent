@@ -44,7 +44,7 @@ class ManagerProgramAcceptance {
     assert.equal(result.code, invalid ? 2 : 0, result.stderr);
     assert.equal(result.stderr, invalid ? 'INVALID_CAPACITY_CONTRACT\n' : '');
     if (invalid) return assert.equal(result.stdout, '');
-    if (['root', 'foreign', 'composition'].includes(mode))
+    if (ManagerProgramFixture.libraryModes.includes(mode))
       return assert.equal(result.stdout, 'manager-library-' + mode + '-ok\n');
     const response = CapacityChannelSchemas.response.parse(JSON.parse(result.stdout));
     assert.equal(response.operation, 'ready');
@@ -76,6 +76,10 @@ const suite = new ManagerProgramAcceptance();
 for (const mode of [
   'root',
   'composition',
+  'alternative',
+  'foreign-provider',
+  'duplicate-provider',
+  'unknown-provider',
   'foreign',
   'ready',
   'scope',

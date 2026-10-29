@@ -81,13 +81,15 @@ class StandaloneGuestAcceptance {
       readFileSync('node_modules/@treeseed-cordis/deployment/package.json', 'utf8'),
     );
     const hash = createHash('sha256').update(readFileSync('vendor/deployment.tgz')).digest('hex');
-    assert.equal(hash, 'e0fdebbdeb81a374a58437179bec2a79a5074e52705aa927d7d4865426ab398c');
+    assert.equal(hash, '156dd21e2f4f9126f48e3db4324b44121a0093af0469bc9834dbfa340efcede5');
     assert.equal(metadata.cordisCandidate.deployment.sha256, hash);
     assert.equal(
       metadata.cordisCandidate.deployment.commit,
-      'ce08082de6130f311f37e9bd13cd37f41e4bf31a',
+      '8c4a55a1260c3f125f8e914168bf517b61808a1b',
     );
-    assert.equal(installed.version, '0.0.0-cordis.106');
+    assert.equal(installed.version, '0.0.0-cordis.107');
+    for (const name of ['SandboxProfileSchemas', 'SandboxProfileBinding', 'SandboxProfileError'])
+      assert.equal(typeof Reflect.get(sdk, name), 'function');
   }
   programs(): void {
     for (const mode of [

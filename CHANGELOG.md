@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Added
+- Select exact corrected resource-profile contracts for native worker pool integration (#525).
 - Run a separate native worker program with bounded protocol and honest blocked capacity readiness (#525).
 - Qualify the default worker host root with the exact guest archive and real hosted Kata infrastructure (#525).
 - Compose the Agent worker host seam through scoped public sandbox clients and native leases (#525).

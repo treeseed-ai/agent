@@ -5,6 +5,7 @@ for (const mode of [
   'ready',
   'process-generation',
   'foreign-scope',
+  'foreign-role',
   'stale-generation',
   'reserve',
   'foreign-host',

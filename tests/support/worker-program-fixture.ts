@@ -85,7 +85,7 @@ export class WorkerProgramScenario {
         mode === 'foreign-scope'
           ? { ...fixture.capacityScope, workerId: 'foreign' }
           : fixture.capacityScope,
-      role: 'worker',
+      role: mode === 'foreign-role' ? 'runner' : 'worker',
       operation: 'ready',
       expectedGeneration: mode === 'stale-generation' ? fixture.generation : null,
       parameters: {},
@@ -117,9 +117,17 @@ export class WorkerProgramScenario {
     mode: string,
     response: ReturnType<typeof CapacityChannelSchemas.response.parse>,
   ): Promise<void> {
-    assert.equal(response.role, 'worker');
+    assert.equal(response.role, mode === 'foreign-role' ? 'runner' : 'worker');
     assert.deepEqual(response.scope, fixture.capacityScope);
-    if (['foreign-scope', 'stale-generation', 'foreign-host', 'malformed-host'].includes(mode)) {
+    if (
+      [
+        'foreign-scope',
+        'foreign-role',
+        'stale-generation',
+        'foreign-host',
+        'malformed-host',
+      ].includes(mode)
+    ) {
       this.denied(response, mode);
       fixture.assertIdle(['foreign-host', 'malformed-host'].includes(mode) ? 1 : 0);
       return;
@@ -136,7 +144,7 @@ export class WorkerProgramScenario {
     assert.equal(response.result, null);
     assert.equal(
       response.problem?.code,
-      mode === 'foreign-scope'
+      ['foreign-scope', 'foreign-role'].includes(mode)
         ? 'CAPACITY_SCOPE_MISMATCH'
         : mode === 'stale-generation'
           ? 'STALE_CAPACITY_GENERATION'

@@ -1,3 +1,5 @@
+export { ProviderCredentialApplication, ProviderCredentialPlugin, ProviderCredentialToken } from './provider-credentials.js';
+export type { ProviderCredentialExchange } from './provider-credentials.js';
 export { ProviderConnectionApplication, ProviderRegistrationPlugin, ProviderConnectionToken } from './provider-connection.js';
 export type { ProviderConnection } from './provider-connection.js';
 export { ProviderProofApplication, ProviderFileProofPlugin, ProviderProofToken } from './provider-proof.js';

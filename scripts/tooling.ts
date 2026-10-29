@@ -1,3 +1,4 @@
+import { ProviderCredentialPlugin } from '../src/provider-credentials.js';
 import { ProviderRegistrationPlugin } from '../src/provider-connection.js';
 import { ProviderFileProofPlugin } from '../src/provider-proof.js';
 import { GuestProfilePlugin, GuestContextPlugin, GuestHandlerPlugin, GuestToolPlugin, GuestReportingPlugin, GuestExecutionPlugin } from '../src/guest-providers.js';
@@ -22,6 +23,7 @@ class AgentTooling {
     this.project(metadata, process.argv[2] === 'build');
   }
   private static readonly definitions = [
+    {plugin: ProviderCredentialPlugin, entry: 'dist/src/provider-credentials.js', name: 'ProviderCredentialPlugin'},
     {plugin: ProviderRegistrationPlugin, entry: 'dist/src/provider-connection.js', name: 'ProviderRegistrationPlugin'},
     {plugin: ProviderFileProofPlugin, entry: 'dist/src/provider-proof.js', name: 'ProviderFileProofPlugin'},
     {plugin: GuestProfilePlugin, entry: 'dist/src/guest-providers.js', name: 'GuestProfilePlugin'},

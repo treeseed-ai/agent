@@ -1,6 +1,6 @@
 {
   "name": "@treeseed-cordis/agent",
-  "version": "0.0.0-cordis.22",
+  "version": "0.0.0-cordis.23",
   "private": true,
   "type": "module",
   "license": "Apache-2.0",
@@ -64,6 +64,10 @@
     "./provider-control": {
       "types": "./dist/src/provider-connection.d.ts",
       "default": "./dist/src/provider-connection.js"
+    },
+    "./provider-credentials": {
+      "types": "./dist/src/provider-credentials.d.ts",
+      "default": "./dist/src/provider-credentials.js"
     }
   },
   "files": [
@@ -82,9 +86,78 @@
     "pluginId": "agent",
     "package": {
       "name": "@treeseed-cordis/agent",
-      "version": "0.0.0-cordis.22"
+      "version": "0.0.0-cordis.23"
     },
     "providers": [
+      {
+        "declaration": {
+          "id": "agent.provider.credential.approved",
+          "pluginId": "agent",
+          "capability": "agent.provider.credential",
+          "contractVersion": "0.4.0-cordis.1",
+          "target": "agent",
+          "provide": [
+            "agent.provider.credential"
+          ],
+          "inject": [
+            "cordis.composition",
+            "agent.provider.proof"
+          ]
+        },
+        "entry": "dist/src/provider-credentials.js",
+        "classExport": "ProviderCredentialPlugin",
+        "configurationSchema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {
+            "controlPlaneUrl": {
+              "type": "string",
+              "format": "uri"
+            },
+            "teamId": {
+              "type": "string",
+              "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$"
+            },
+            "providerId": {
+              "type": "string",
+              "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$"
+            },
+            "registrationKeyGeneration": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            },
+            "fingerprint": {
+              "type": "string",
+              "pattern": "^sha256:[A-Za-z0-9_-]{43}$"
+            },
+            "registrationId": {
+              "type": "string",
+              "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$"
+            },
+            "membershipId": {
+              "type": "string",
+              "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$"
+            }
+          },
+          "required": [
+            "controlPlaneUrl",
+            "teamId",
+            "providerId",
+            "registrationKeyGeneration",
+            "fingerprint",
+            "registrationId",
+            "membershipId"
+          ],
+          "additionalProperties": false
+        },
+        "replacement": {
+          "kind": "restart",
+          "stateVersion": 1,
+          "qualificationDigest": null
+        },
+        "commandIds": []
+      },
       {
         "declaration": {
           "id": "agent.provider.connection.registration",

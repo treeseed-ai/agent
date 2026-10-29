@@ -3,6 +3,9 @@
 ## [Unreleased]
 
 ### Added
+- Exchange approved provider registrations through a native credential provider with exact identity binding (#525).
+
+### Added
 - Select exact prepared native profile, handler and execution providers in the guest program (#525).
 
 ### Added

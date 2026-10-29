@@ -12,7 +12,8 @@ required. Existing profile preparation and external-package proofs do not claim 
 
 `bun run check` runs canonical method limits, test layout and semantic class/import policy.
 `bun run build` emits strict TypeScript/declarations plus `dist/bin/trsd-agent-guest`, using
-pinned Bun 1.4.4 and the Linux x64 GNU baseline target with ambient autoload disabled. The
+pinned Bun 1.4.4 and the Linux x64 GNU baseline target. Dotenv, bunfig and tsconfig autoload
+remain disabled; package.json resolution is enabled for verified external package imports. The
 standalone program requires only its recorded GNU OS libraries, not Node/Bun on PATH.
 Run the developer artifact with `dist/bin/trsd-agent-guest --config /absolute/private/guest.json`.
 See [service programs](docs/service-programs.md) for exact configuration, SDK protocol, native
@@ -25,7 +26,7 @@ Kata before claiming an installed runner. No package lifecycle script or host-si
 
 `bun run verify` checks/builds and runs all applicable tiers, including genuine owner archive custody
 and source-free standalone program acceptance with an empty tool PATH and ambient-preload canaries.
-Regression remains honestly empty. No production publication, legacy mutation or issue closure.
+No production publication, legacy mutation or issue closure.
 
 Current SDK .39 source: `f09247dbf020f0354edce9af2f9ccef6ba351ff3`; archive SHA-256
 `ddfb91a065bee6d7e9482427570e7c036b18f0fbbcaa09c0fc62fee094abdbd4`. Development-only
@@ -64,8 +65,13 @@ interop); observe unsupported selection fail; implement exact loading; verify ta
 duplicate, dependency and lifecycle-script canaries; run all owner tiers, genuine public archive
 consumers and hosted checks. Keep the bounded change within ten files and all methods within
 canonical twenty-line limits. Preserve prior immutable artifacts and all existing program cases.
-Bun's [standalone executable documentation](https://bun.sh/docs/compiler/executables) describes
-the embedded runtime; actual pinned Bun 1.4.4 program tests qualify dynamic package loading.
+Bun's [standalone executable documentation](https://bun.sh/docs/compiler/executables#automatic-config-loading)
+describes explicit runtime package resolution. Pinned Bun 1.4.4 with all four autoload switches
+disabled fails bare SDK imports in an otherwise verified closure (`Cannot find module`). The
+same exact program/closure succeeds with package.json resolution enabled, matching the accepted
+CLI configuration. Keep dotenv/bunfig/tsconfig disabled, launch with a bounded environment and
+retain foreign-working-directory package scripts/preload/path canaries. Package resolution does
+not authorize package-manager execution or lifecycle scripts.
 
 ## Shared guest payload contract
 

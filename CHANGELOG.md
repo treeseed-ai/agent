@@ -3,6 +3,9 @@
 ## [Unreleased]
 
 ### Added
+- Compose the Agent worker host seam through scoped public sandbox clients and native leases (#525).
+
+### Added
 - Exchange approved credentials for exact existing control-plane provider access tokens through native composition (#525).
 
 ### Added

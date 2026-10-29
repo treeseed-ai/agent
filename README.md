@@ -85,6 +85,42 @@ This aligns owner contracts before actual guest sessions; it creates no capacity
 All issues remain open and real Work/model execution remains Task 10.
 
 ## Provider access token
+## Worker host composition
+
+The worker's process-local native root is `WorkerApplication`, exported by
+`@treeseed-cordis/agent/worker`. It registers selectable `agent.worker.sandbox` through
+`WorkerSandboxPlugin` (`agent.worker.sandbox.private`). `acquireSandbox()` returns the actual native
+provider lease; callers retain it through operations and cleanup. The root is the future worker
+program's composition root, not another provider-instance cache or an Agent root inside Deployment.
+
+Configuration pins the SDK capacity scope, private host service scope, expected host configuration
+digest, endpoint directory and owner-private authority record. Host and capacity installation IDs
+must match. The default provider constructs Deployment's public `SandboxSocketClient` and
+`SandboxRunnerSocketClient`; no sibling source, raw runtime socket, executable or command enters
+Agent. Consume exact owner archives; the pending Deployment #1039 candidate must pass before this
+dependent worker slice can integrate. SDK .39 and the seven platform operation IDs stay unchanged.
+
+The typed `WorkerSandboxHost` seam exposes host availability, create/inspect and verified destroy.
+Evidence pairs the SDK sandbox record with freshly read actual guest readiness. Require the exact
+sandbox ID, configured host digest, capacity scope, runner role/ready state, empty blockers and
+the caller's expected runner generation. New bases must have no assignment. Never infer a guest
+generation from configuration, transport availability or prior samples. Recheck host identity after
+the operation before accepting evidence. Expected blocker/error detail is projected to safe SDK
+codes; no credentials, private file contents or subprocess output are printed or created.
+
+The root supplies native composition and lifecycle only. Agent's pool admission, exclusive claims,
+replenishment, quarantine, generation changes and assignment orchestration remain Agent-owned;
+Deployment retains artifact custody and physical sandbox operations. Replacement stays restart-only.
+This slice does not dispatch, publish assignments, run setup, grant egress or claim live authority.
+The separate worker program, real pool and installed service grants remain subsequent slices.
+
+Verification follows committed documentation → built default missing-root red → real private socket
+protocol controls → implementation → all owner tiers/build and exact public archive consumer →
+current-head CI/review and assembled real Kata. Default-construction protocol fixtures are explicitly
+fixtures; they cannot substitute for the final real manager/worker/guest assembly. All issues remain
+open and real Work/model execution stays Task 10.
+
+## Provider access token
 
 `@treeseed-cordis/agent/provider-token` exports the headless native `ProviderTokenApplication` and
 selectable `agent.provider.token` provider. Its default root binds the existing private-file proof

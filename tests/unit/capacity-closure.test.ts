@@ -42,7 +42,11 @@ class CapacityClosureTests {
     const availability = Reflect.get(control, 'ProviderAvailabilitySchemas');
     expect(typeof availability).toBe('function');
     expect(Reflect.get(availability, 'version')).toBe('treeseed.provider-availability/v1');
-    for (const method of ['createAvailabilitySession', 'refreshAvailabilitySession', 'closeAvailabilitySession'])
+    for (const method of [
+      'createAvailabilitySession',
+      'refreshAvailabilitySession',
+      'closeAvailabilitySession',
+    ])
       expect(typeof Reflect.get(control.ProviderProtocolClient.prototype, method)).toBe('function');
   }
 }

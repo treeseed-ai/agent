@@ -67,7 +67,7 @@ class GuestPackageArchive {
       type: 'module',
       files: ['dist'],
       scripts: { postinstall: 'touch postinstall-canary' },
-      peerDependencies: { '@treeseed-cordis/sdk': '0.0.0-cordis.42', zod: '4.6.7' },
+      peerDependencies: this.peerDependencies(),
       cordisPackage: PackageDefinition.define(
         '@fixture/guest',
         '1.0.0',
@@ -75,6 +75,10 @@ class GuestPackageArchive {
         providers,
       ),
     };
+  }
+  private peerDependencies(): Record<string, string> {
+    const owner = JSON.parse(readFileSync('package.json', 'utf8'));
+    return { '@treeseed-cordis/sdk': owner.peerDependencies['@treeseed-cordis/sdk'], zod: '4.6.7' };
   }
   private providers() {
     const providers = [];

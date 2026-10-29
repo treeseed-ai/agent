@@ -5,6 +5,9 @@
 ### Changed
 - Select the availability-ready capacity owner closure (#561).
 
+### Fixed
+- Retain the verified Kata kit for owner qualification (#563).
+
 ### Added
 - Compose the separate manager diagnostic program with native authority providers (#525).
 - Select the exact manager protocol and host dependency closure (#525).

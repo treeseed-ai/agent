@@ -81,13 +81,13 @@ class StandaloneGuestAcceptance {
       readFileSync('node_modules/@treeseed-cordis/deployment/package.json', 'utf8'),
     );
     const hash = createHash('sha256').update(readFileSync('vendor/deployment.tgz')).digest('hex');
-    assert.equal(hash, 'a4e0afdb356c060433eac52c51389ad5341fce8b7f541e1a917be1ba7fd17813');
+    assert.equal(hash, 'e0fdebbdeb81a374a58437179bec2a79a5074e52705aa927d7d4865426ab398c');
     assert.equal(metadata.cordisCandidate.deployment.sha256, hash);
     assert.equal(
       metadata.cordisCandidate.deployment.commit,
-      'faaa524d06f37155faf8983fd9cd1f81c1d646e6',
+      'ce08082de6130f311f37e9bd13cd37f41e4bf31a',
     );
-    assert.equal(installed.version, '0.0.0-cordis.105');
+    assert.equal(installed.version, '0.0.0-cordis.106');
   }
   programs(): void {
     for (const mode of [

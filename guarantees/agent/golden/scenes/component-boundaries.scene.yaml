@@ -2756,6 +2756,9 @@ workflow:
   - id: governed-model-instructions
     action: { verifier: agent.golden.governed-model-instructions }
     expect: { status: passed }
+  - id: retained-planning-peers-native
+    action: { verifier: agent.golden.retained-planning-peers-native }
+    expect: { status: passed }
 
   - id: execution-factual-failure-unit
     action: { verifier: agent.golden.execution-factual-failure-unit }

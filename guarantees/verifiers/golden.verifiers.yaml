@@ -4699,3 +4699,8 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/execution/activities/workload-preparation.test.ts
     testName: "takes all task instructions from governed YAML across arbitrary identities handlers and activities"
+  agent.golden.retained-planning-peers-native:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/portable/activities/planning-products-native.test.ts
+    testName: "retains frozen peer planning scope and known dependencies across every handler through HTTP and Git"

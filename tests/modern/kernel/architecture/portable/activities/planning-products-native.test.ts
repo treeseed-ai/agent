@@ -1,11 +1,13 @@
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parse } from 'yaml';
+import { isDeepStrictEqual } from 'node:util';
 import { expect, it } from 'vitest';
 import { assignmentResultSchema, validateAgentDefinitionModel } from '@treeseed/sdk/agent-capacity';
 import { portableKernel } from '../portable-kernel-fixture.ts';
 import { contextBoundary } from '../context-fixture.ts';
 import { timingAwareness } from '../../../provider-kernel-fixture.ts';
+import { prepareTreeDxContent } from '../../../../../../src/kernel/treedx-content-commit.ts';
 
 // Original public HTTP executor, Kernel, content validation, commit and native Git.
 // Supplied model/TreeDX responses do not prove live planning, API publication or billing.
@@ -77,4 +79,88 @@ it('persists a group planning Proposal through every model handler with exact gr
 			}
 		} finally { try { await boundary?.close(); } finally { await f.close(); expect(existsSync(f.checkout)).toBe(false); } }
 	}
+});
+
+// Real public executor/Kernel, loopback HTTP and Git. TreeDX/model inputs remain
+// controlled; this does not prove a native TreeDX server, API adoption or billing.
+// Red preservation/composition proposal only: full-Proposal planning semantics
+// and existing-item ownership/removal authority remain to be resolved.
+it('retains frozen peer planning scope and known dependencies across every handler through HTTP and Git', async () => {
+	const outcomes: Array<{ handler: string; mode: string; status: string; peerRetained: boolean; dependenciesResolved: boolean }> = [];
+	for (const handler of ['writer', 'actor', 'estimate', 'reviewer', 'releaser']) for (const mode of ['omitted', 'fragment']) {
+		const f = await portableKernel();
+		let boundary: Awaited<ReturnType<typeof contextBoundary>> | undefined;
+		try {
+			const repository = 'agent-library', path = 'proposals/native-retained-planning.mdx';
+			const estimate = { expectedSeconds: 10, maximumSeconds: 20, rationale: 'Controlled historical estimate input.' };
+			const peer = { id: 'peer-document', activity: 'acting', workspace: 'read-only', review: 'required', maximumReviewCycles: 2,
+				objective: 'Document the actual interface.', dependsOn: [], estimate, reviewEstimate: estimate,
+				estimateRef: { store: 'postgresql', model: 'assignment-attempt', id: 'controlled-peer-estimate', revision: 1 },
+				requestedPermissions: { content: { read: ['proposal'], write: [] }, tools: [] }, acceptanceCriteria: ['Describe the actual interface.'] };
+			const own = { id: 'new-regression', activity: peer.activity, workspace: peer.workspace, review: peer.review,
+				maximumReviewCycles: peer.maximumReviewCycles, objective: 'Reproduce the documented interface failure.',
+				dependsOn: [peer.id], requestedPermissions: peer.requestedPermissions, acceptanceCriteria: ['Reproduce the documented failure.'] };
+			const metadata = { schemaVersion: 'treeseed.proposal/v2', id: 'native-retained-planning', projectId: f.attempt.projectId,
+				groupIds: ['project-agent'], title: 'Retain group planning scope', status: 'discussing', request: 'Refine the shared source repair.' };
+			const frozen = { ...metadata, executionPlan: { workItems: [peer] } };
+			const prepared = prepareTreeDxContent({ store: 'treedx', model: 'proposal', id: metadata.id },
+				{ body: 'Retained group planning input.', frontmatter: frozen });
+			const frozenFrontmatter = parse(prepared.content.match(/^---\n([\s\S]*?)\n---(?:\n|$)/u)![1]!);
+			mkdirSync(join(f.checkout, 'proposals'), { recursive: true }); writeFileSync(join(f.checkout, path), prepared.content);
+			f.git('add', path); f.git('commit', '-m', 'Controlled frozen peer plan'); const base = f.git('rev-parse', 'HEAD');
+			const target = { store: 'treedx' as const, model: 'proposal', id: metadata.id, repository, path, commit: base, revision: 1, digest: prepared.digest };
+			Object.assign(f.attempt, { sourceRef: target, contextRefs: [target], predecessorResultIds: [], agentClass: 'renamed-planner',
+				workspace: { mode: 'treedx', workspaceId: 'retained-planning', repository, baseCommit: base, writablePaths: ['proposals'] },
+				grant: { contentRead: [target], contentWrite: [target], sourceRead: [], sourceWrite: [], tools: [] },
+				// This NEW controlled full-proposal input uses the observed 4MB
+				// assignment ceiling; no issued lease or productive deadline changes.
+				limits: { ...f.attempt.limits, maximumContextBytes: 4_000_000 },
+				effectiveProfile: { ...f.attempt.effectiveProfile, activity: 'planning', handler,
+					prompt: { system: 'Refine only the supplied shared planning scope.' },
+					permissionCeiling: { content: { read: ['proposal'], write: ['proposal'] }, tools: [] } } });
+			boundary = await contextBoundary(f.attempt.projectId, repository, {});
+			boundary.facade = { ...boundary.facade, workspaceId: 'retained-planning', readRepositories: [{ projectId: f.attempt.projectId,
+				projectSlug: 'agent', repositoryId: repository, baseRef: base, allowedPaths: [path], allowedModels: ['proposal'], source: 'same-team' }] };
+			f.input.treeDx = boundary.facade;
+			let candidate = '', content = '';
+			boundary.setResponder(input => {
+				const body = input.body as Record<string, unknown>;
+				if (Array.isArray(body.files)) {
+					expect(body.files).toHaveLength(1); const file = body.files[0] as { path: string; content: string };
+					expect(file.path).toBe(path); content = file.content; writeFileSync(join(f.checkout, path), content); return {};
+				}
+				if (typeof body.message === 'string') {
+					f.git('add', path); f.git('commit', '-m', body.message); candidate = f.git('rev-parse', 'HEAD'); return { commitSha: candidate };
+				}
+				expect([base, candidate]).toContain(body.ref);
+				return { resolvedRef: body.ref, files: [{ path, requestedPath: path,
+					content: body.ref === base ? prepared.content : content, ...(body.ref === base ? { frontmatter: frozenFrontmatter } : {}) }] };
+			});
+			const frontmatter = { ...metadata, summary: 'Current planner refinement.', ...(mode === 'fragment' ? { executionPlan: { workItems: [own] } } : {}) };
+			f.setReply({ status: 'completed', summary: 'Controlled planning response.', usage: [{ activeSeconds: 1, elapsedSeconds: 2 }],
+				outputs: { timingAwareness, activityCompletion: { summary: 'Controlled planning response.', reviewDisposition: null,
+					contentOutput: { model: 'proposal', body: 'Refined planning text.', frontmatter } } } });
+			const before = structuredClone(f.input.assignment), reply = f.getReply(), result = await f.run();
+			expect(f.input.assignment).toEqual(before); expect(f.getReply()).toEqual(reply);
+			expect(f.requests).toHaveLength(1); expect(f.begin).toHaveLength(1);
+			expect(boundary.calls.some(call => (call.input.body as Record<string, unknown>).ref === base)).toBe(true);
+			expect(f.git('show', `${base}:${path}`) + '\n').toBe(prepared.content);
+			if (result.status === 'completed') {
+				expect(assignmentResultSchema.parse(result.outputs?.assignmentResult).references).toEqual([
+					{ kind: 'treedx', projectId: f.attempt.projectId, repository, path, commit: candidate, workspaceId: 'retained-planning' }]);
+				expect(f.git('rev-parse', `${candidate}^`)).toBe(base);
+			} else if (mode === 'fragment') {
+				expect(result.summary).toContain('treedx_content_invalid'); expect(result.summary).toContain(peer.id);
+				expect(candidate).toBe(''); expect(content).toBe('');
+			}
+			expect(f.git('status', '--porcelain')).toBe('');
+			const match = candidate ? f.git('show', `${candidate}:${path}`).match(/^---\n([\s\S]*?)\n---(?:\n|$)/u) : null;
+			const actual = match ? parse(match[1]!).executionPlan?.workItems as Array<Record<string, unknown>> | undefined : undefined;
+			outcomes.push({ handler, mode, status: result.status,
+				peerRetained: isDeepStrictEqual(actual?.find(item => item.id === peer.id), frozenFrontmatter.executionPlan.workItems[0]),
+				dependenciesResolved: mode === 'omitted' || Boolean(actual?.some(item => item.id === own.id && JSON.stringify(item.dependsOn) === JSON.stringify([peer.id]))) });
+		} finally { try { await boundary?.close(); } finally { await f.close(); expect(existsSync(f.checkout)).toBe(false); } }
+	}
+	expect(outcomes).toEqual(['writer', 'actor', 'estimate', 'reviewer', 'releaser'].flatMap(handler => ['omitted', 'fragment'].map(mode =>
+		({ handler, mode, status: 'completed', peerRetained: true, dependenciesResolved: true }))));
 });

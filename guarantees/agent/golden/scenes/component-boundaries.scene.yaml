@@ -1932,6 +1932,9 @@ workflow:
   - id: runtime-clock-budget
     action: { verifier: agent.golden.runtime-clock-budget }
     expect: { status: passed }
+  - id: runtime-pretool-provider-cause
+    action: { verifier: agent.golden.runtime-pretool-provider-cause }
+    expect: { status: passed }
   - id: runtime-clock-denial
     action: { verifier: agent.golden.runtime-clock-denial }
     expect: { status: passed }

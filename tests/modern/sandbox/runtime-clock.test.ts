@@ -115,6 +115,26 @@ function mockGuestFiles(files: Map<string, Buffer<ArrayBuffer>>) {
 		vi.mocked(createReadStream).mockImplementation(path => Object.assign(Readable.from([files.get(String(path))]), { path: String(path), pending: false, bytesRead: 0, close() {} }));
 }
 
+it('retains a pre-tool incomplete provider cause alongside the independent clock rejection without inventing usage', async () => {
+	const f = suppliedGuestFiles('completed'); mockGuestFiles(f.files);
+	response(JSON.stringify({ ...f.execution, observedAt: f.execution.startedAt, remainingSeconds: 30 }));
+	const cause = 'Codex execution failed: Reconnecting... 2/5 (stream disconnected before completion: Incomplete response returned, reason: max_output_tokens)';
+	const events = [{ type: 'thread.started', thread_id: '00000000-0000-4000-8000-000000000001' },
+		{ type: 'turn.started' }, { type: 'error', message: cause }];
+	sdk.runTurn.mockImplementation(async options => { for (const event of events) options.onEvent(event); throw new Error(cause); });
+	let failure: unknown;
+	try { await runModelWorkload(); } catch (error) { failure = error; }
+	expect(failure).toBeInstanceOf(Error);
+	expect(String(failure)).toContain(cause);
+	expect(String(failure)).toContain('Agent timing-awareness contract requires');
+	expect(String(failure)).toContain('"completedChecks":0');
+	expect(String(failure)).toContain('Response preview: (empty)');
+	expect(sdk.runTurn).toHaveBeenCalledTimes(1);
+	expect(codexUsageEvidence(events)).toBeNull();
+	expect(f.files.has('/run/treeseed-output/result.json')).toBe(false);
+	for (const [path, value] of f.held) expect(f.files.get(path)).toEqual(value);
+});
+
 async function suppliedGuestExecution(providerFailure?: Error, incompleteClock = false, closeoutFailure = false, correction = false, documentedPreparation = false,
 	correctionInput: { invalidPreparation?: boolean; omitCorrectionClocks?: 'first' | 'final' | 'both' } = {}) {
 	const { invalidPreparation = false, omitCorrectionClocks } = correctionInput;

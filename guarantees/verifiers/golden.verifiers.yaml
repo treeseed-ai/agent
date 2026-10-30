@@ -3276,6 +3276,11 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/sandbox/runtime-clock.test.ts
     testName: "bounds the runtime clock request by its caller remaining execution window"
+  agent.golden.runtime-pretool-provider-cause:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/sandbox/runtime-clock.test.ts
+    testName: "retains a pre-tool incomplete provider cause alongside the independent clock rejection without inventing usage"
   agent.golden.runtime-clock-denial:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

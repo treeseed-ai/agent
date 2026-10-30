@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { assignmentAttemptSchema, assignmentTimingAwarenessReceiptSchema, type AssignmentContext } from '@treeseed/sdk/agent-capacity';
 import type { AgentRuntime } from '../../../../../../src/kernel/contracts.ts';
 import { ActorHandler, EstimateHandler, ReleaserHandler, ReviewerHandler, WriterHandler } from '../../../../../../src/kernel/handlers/model-handler.ts';
+import { prepareTreeDxContent } from '../../../../../../src/kernel/treedx-content-commit.ts';
 import { request, timingAwareness } from '../../../provider-kernel-fixture.ts';
 
 const handlers = [WriterHandler, ActorHandler, EstimateHandler, ReviewerHandler, ReleaserHandler];
@@ -40,6 +41,47 @@ function input(activity: typeof activities[number], handler: string) {
 }
 
 describe('nondeterministic handlers support all configured activities', () => {
+	it.each(handlers.flatMap(Handler => ['omitted', 'fragment'].map(mode => [new Handler().id, mode, Handler] as const)))
+	('preserves peer planning work through %s when executionPlan is %s', async (id, mode, Handler) => {
+		const handler = new Handler(), { context, boundary } = input('planning', id), assignment = context.assignment;
+		const target = assignment.grant.contentWrite.find(reference => reference.model === 'proposal')!;
+		assignment.sourceRef = target; assignment.contextRefs = [target];
+		const estimate = { expectedSeconds: 10, maximumSeconds: 20, rationale: 'Controlled historical estimate fixture.' };
+		const peer = { id: 'peer-document', activity: 'acting', workspace: 'read-only', review: 'required',
+			maximumReviewCycles: 2, objective: 'Document the existing interface.', estimate, reviewEstimate: estimate,
+			estimateRef: { store: 'postgresql', model: 'assignment-attempt', id: 'controlled-peer-estimate', revision: 1 },
+			dependsOn: [], requestedPermissions: { content: { read: ['proposal'], write: [] }, tools: [] },
+			acceptanceCriteria: ['Describe the actual interface.'] };
+		const own = { id: 'new-regression', activity: peer.activity, workspace: peer.workspace, review: peer.review,
+			maximumReviewCycles: peer.maximumReviewCycles, objective: 'Reproduce the documented interface failure.',
+			dependsOn: [peer.id], requestedPermissions: peer.requestedPermissions,
+			acceptanceCriteria: ['Reproduce the documented interface failure.'] };
+		const metadata = { schemaVersion: 'treeseed.proposal/v2', id: target.id, projectId: assignment.projectId,
+			groupIds: ['provider-runtime'], title: 'Retain group planning contributions', status: 'discussing',
+			request: 'Refine the existing group proposal without losing peer work.', summary: 'Existing governed group scope.' };
+		const base = { ...metadata, executionPlan: { workItems: [peer] } };
+		context.context = [{ ref: target, digest: target.digest!, mediaType: 'application/json', value: { frontmatter: base } }];
+		const frontmatter = { ...metadata, summary: 'Refined by the current admitted planner.',
+			...(mode === 'fragment' ? { executionPlan: { workItems: [own] } } : {}) };
+		vi.mocked(boundary.invokeModel).mockResolvedValue({ text: 'Refined the retained proposal.',
+			timingAwareness: assignmentTimingAwarenessReceiptSchema.parse(timingAwareness), usage: { elapsedSeconds: 1 },
+			activityCompletion: { summary: 'Refined the retained proposal.', reviewDisposition: null,
+				contentOutput: { model: 'proposal', body: 'Source-grounded planning refinement.', frontmatter } } });
+		vi.mocked(boundary.commitTreeDx).mockImplementation(async ({ writes }) => {
+			for (const write of writes) prepareTreeDxContent(write.target, write.value);
+			return writes.map(({ target: written }) => ({ kind: 'treedx' as const, projectId: assignment.projectId,
+				repository: written.repository!, path: written.path!, commit: 'b'.repeat(40) }));
+		});
+		const before = structuredClone(context), result = await handler.run(context, boundary);
+		expect(result.status).toBe('completed'); expect(boundary.commitTreeDx).toHaveBeenCalledOnce();
+		const write = vi.mocked(boundary.commitTreeDx).mock.calls[0]![0].writes[0]!;
+		expect(write.value).toMatchObject({ body: 'Source-grounded planning refinement.',
+			frontmatter: { ...metadata, summary: frontmatter.summary } });
+		const actual = (write.value as { frontmatter: { executionPlan?: { workItems: unknown[] } } }).frontmatter.executionPlan?.workItems;
+		expect(actual).toHaveLength(mode === 'fragment' ? 2 : 1);
+		expect(actual).toEqual(expect.arrayContaining(mode === 'fragment' ? [peer, own] : [peer]));
+		expect(context).toEqual(before);
+	});
 	it.each(handlers.map(Handler => [new Handler().id, Handler] as const))('publishes an authorized planning proposal through %s without replacing it with a Note', async (id, Handler) => {
 		const handler = new Handler(), { context, boundary } = input('planning', id);
 		const target = context.assignment.grant.contentWrite.find(reference => reference.model === 'proposal')!;

@@ -30,7 +30,7 @@ describe('activity completion structured-output schema', () => {
 			agentClass: 'renamed-document-author', effectiveProfile: { activity: 'acting', handler: 'actor',
 				prompt: { system: 'Perform the exact governed documentation task.' } },
 		} } });
-		expect(prompt.split(guidance as string)).toHaveLength(2);
+		expect(prompt.split('\n\n').slice(0, -1)).toEqual(['Perform the exact governed documentation task.']);
 		expect(prompt).toContain('Perform the exact governed documentation task.');
 	});
 	it('offers a group proposal at the exact planning grant instead of limiting proposal authoring to acting', () => {

@@ -2769,3 +2769,12 @@ workflow:
   - id: execution-recovered-tool-resource-unit
     action: { verifier: agent.golden.execution-recovered-tool-resource-unit }
     expect: { status: passed }
+  - id: completion-verification-contract
+    action: { verifier: agent.golden.completion-verification-contract }
+    expect: { status: passed }
+  - id: completion-verification-guest
+    action: { verifier: agent.golden.completion-verification-guest }
+    expect: { status: passed }
+  - id: completion-verification-native
+    action: { verifier: agent.golden.completion-verification-native }
+    expect: { status: passed }

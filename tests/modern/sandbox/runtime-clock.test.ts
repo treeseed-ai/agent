@@ -9,6 +9,7 @@ import { createHash } from 'node:crypto';
 import { sandboxAssignmentSchema, sandboxResultSchema } from '@treeseed/sdk/capacity-provider/sandbox';
 import { clockRequest } from './architecture/clock-fixture.ts';
 import { objectDigest } from '../../../src/kernel/handlers/model-verification.ts';
+import { verificationCompletionInstructions } from '../../../src/activity-completion.ts';
 import { invokeTreeDxRelay, runModelWorkload, timingAwarenessContract } from '../../../src/kernel/handlers/model-workload.ts';
 import { run } from '../../../src/sandbox/process-runner.ts';
 import type { CodexSdkTurn } from '../../../src/kernel/handlers/codex-sdk-session.ts';
@@ -114,9 +115,9 @@ function mockGuestFiles(files: Map<string, Buffer<ArrayBuffer>>) {
 		vi.mocked(createReadStream).mockImplementation(path => Object.assign(Readable.from([files.get(String(path))]), { path: String(path), pending: false, bytesRead: 0, close() {} }));
 }
 
-async function suppliedGuestExecution(providerFailure?: Error, incompleteClock = false, closeoutFailure = false, correction = false) {
+async function suppliedGuestExecution(providerFailure?: Error, incompleteClock = false, closeoutFailure = false, correction = false, documentedPreparation = false) {
 	const f = suppliedGuestFiles('completed', correction ? 120 : 30);
-	if (closeoutFailure) {
+	if (closeoutFailure || documentedPreparation) {
 		const context = JSON.parse(f.files.get('/workspace/.treeseed/context.json')!.toString());
 		context.canonicalAssignmentContext.assignment.effectiveProfile.activity = 'acting';
 		f.files.set('/workspace/.treeseed/context.json', Buffer.from(JSON.stringify(context)));
@@ -126,7 +127,8 @@ async function suppliedGuestExecution(providerFailure?: Error, incompleteClock =
 		f.files.set(f.root + 'assignment.json', Buffer.from(JSON.stringify(assignment)));
 		f.held.set('/workspace/.treeseed/context.json', f.files.get('/workspace/.treeseed/context.json')!);
 		f.held.set(f.root + 'assignment.json', f.files.get(f.root + 'assignment.json')!);
-		vi.mocked(run).mockRejectedValue(Object.assign(new Error('/bin/sh exited 127: Python: not found'), { code: 'subprocess_nonzero_exit', exitCode: 127, stdout: '', stderr: 'Python: not found' }));
+		if (closeoutFailure) vi.mocked(run).mockRejectedValue(Object.assign(new Error('/bin/sh exited 127: Python: not found'), { code: 'subprocess_nonzero_exit', exitCode: 127, stdout: '', stderr: 'Python: not found' }));
+		else vi.mocked(run).mockResolvedValue({ stdout: 'v24.0.0\n', stderr: '' });
 	}
 	f.files.set('/proc/version', Buffer.from('Controlled unit kernel input.')); mockGuestFiles(f.files);
 	// Supplied monotonic UNIT observations, not native elapsed time or usage.
@@ -155,6 +157,15 @@ async function suppliedGuestExecution(providerFailure?: Error, incompleteClock =
 		observed = BigInt(7 + turn * 2) * 1_000_000_000n;
 		if (correction) options.onEvent({ type: 'turn.completed', usage: { input_tokens: 19, output_tokens: 3 } });
 		if (providerFailure) throw providerFailure;
+		if (documentedPreparation) {
+			expect(options.input).toBe('Controlled unit instructions.');
+			expect(options.outputSchema).toMatchObject({ properties: { verification: { items: { properties: {
+				commands: { description: verificationCompletionInstructions },
+			} } } } });
+			f.files.set(options.responsePath, Buffer.from(JSON.stringify({ schemaVersion: 'treeseed.activity-completion/v1', summary: 'Controlled fixture describes git add and git commit as source preparation, not replayable checks.',
+				contentOutput: null, reviewDisposition: null, verification: [{ status: 'passed', summary: 'Controlled standalone check', commands: ['node --version'] }] })));
+			return;
+		}
 		f.files.set(options.responsePath, Buffer.from(closeoutFailure ? JSON.stringify({ schemaVersion: 'treeseed.activity-completion/v1', summary: 'Controlled invalid closeout, not live work.', contentOutput: null, reviewDisposition: null, verification: [{ status: 'passed', summary: 'Claimed link check', commands: [correction && turn > 0 ? 'node --version' : 'Python check of Markdown links in docs/runbooks/federated-query.md'] }] }) : 'Controlled unit response.'));
 	});
 	try {
@@ -169,6 +180,12 @@ async function suppliedGuestExecution(providerFailure?: Error, incompleteClock =
 }
 it('measures active guest preparation model tools and closeout separately from infrastructure materialization without moving the original execution clock', async () => {
 	expect((await suppliedGuestExecution()).status).toBe('completed');
+});
+it('delivers one shared completion contract to the guest model and schema while replaying only the reported standalone check', async () => {
+	const result = await suppliedGuestExecution(undefined, false, false, false, true);
+	expect(result.status, result.summary).toBe('completed'); expect(sdk.runTurn).toHaveBeenCalledTimes(1);
+	expect(result.diagnostics.verificationRecords).toEqual([expect.objectContaining({ command: 'node --version', status: 'passed', exitCode: 0 })]);
+	expect(vi.mocked(run).mock.calls.every(([command, argv]) => !`${command} ${argv.join(' ')}`.includes('git commit'))).toBe(true);
 });
 it('publishes original failed provider measurements and complete raw clocks as a failed sandbox result without manufacturing a successful response or an incomplete receipt', async () => {
 	const result = await suppliedGuestExecution(new Error('Original controlled provider exit 23.'));

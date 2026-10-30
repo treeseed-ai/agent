@@ -114,6 +114,7 @@ export interface ActivityCompletionReport {
 
 export const maximumVerificationCommands = 8;
 export const maximumVerificationCommandLength = 4096;
+export const verificationCompletionInstructions = 'Describe authorized local source preparation (including git add, git commit and dependency installation) in summary, never in verification.commands. verification.commands contains only exact standalone non-mutating checks you actually ran, with honest outcomes; do not include shell workflows, prose or publication commands. If no check was run, return verification: [].';
 
 export function activityCompletionOutputSchema(frontmatterSchema?: Record<string, unknown>, allowVerification = true,
 	outputVariants?: Array<{ model: string; frontmatter: Record<string, unknown> }>, reviewing = false, contentOptional = false) { return {
@@ -135,7 +136,7 @@ export function activityCompletionOutputSchema(frontmatterSchema?: Record<string
 					summary: { type: 'string', minLength: 1 },
 					// The model API does not accept lookaround patterns. The guest
 					// validates each command before runner-observed replay instead.
-					commands: { type: 'array', maxItems: 1, items: { type: 'string', minLength: 1, maxLength: maximumVerificationCommandLength } },
+					commands: { type: 'array', description: verificationCompletionInstructions, maxItems: 1, items: { type: 'string', minLength: 1, maxLength: maximumVerificationCommandLength } },
 				},
 			},
 		},

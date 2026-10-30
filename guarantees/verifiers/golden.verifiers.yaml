@@ -4699,3 +4699,18 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/execution/activities/workload-preparation.test.ts
     testName: "takes all task instructions from governed YAML across arbitrary identities handlers and activities"
+  agent.golden.completion-verification-contract:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/activity-completion.test.ts
+    testName: "explains source preparation separately from replayable verification for arbitrary configured agents"
+  agent.golden.completion-verification-guest:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/sandbox/runtime-clock.test.ts
+    testName: "delivers one shared completion contract to the guest model and schema while replaying only the reported standalone check"
+  agent.golden.completion-verification-native:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/sandbox/architecture/budget-native.test.ts
+    testName: "keeps committed source preparation in the summary and rejects mutation before native verification replay"

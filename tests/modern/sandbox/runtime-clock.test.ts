@@ -115,7 +115,7 @@ function mockGuestFiles(files: Map<string, Buffer<ArrayBuffer>>) {
 		vi.mocked(createReadStream).mockImplementation(path => Object.assign(Readable.from([files.get(String(path))]), { path: String(path), pending: false, bytesRead: 0, close() {} }));
 }
 
-async function suppliedGuestExecution(providerFailure?: Error, incompleteClock = false, closeoutFailure = false, correction = false, documentedPreparation = false) {
+async function suppliedGuestExecution(providerFailure?: Error, incompleteClock = false, closeoutFailure = false, correction = false, documentedPreparation = false, invalidPreparation = false) {
 	const f = suppliedGuestFiles('completed', correction ? 120 : 30);
 	if (closeoutFailure || documentedPreparation) {
 		const context = JSON.parse(f.files.get('/workspace/.treeseed/context.json')!.toString());
@@ -166,11 +166,12 @@ async function suppliedGuestExecution(providerFailure?: Error, incompleteClock =
 				contentOutput: null, reviewDisposition: null, verification: [{ status: 'passed', summary: 'Controlled standalone check', commands: ['node --version'] }] })));
 			return;
 		}
-		f.files.set(options.responsePath, Buffer.from(closeoutFailure ? JSON.stringify({ schemaVersion: 'treeseed.activity-completion/v1', summary: 'Controlled invalid closeout, not live work.', contentOutput: null, reviewDisposition: null, verification: [{ status: 'passed', summary: 'Claimed link check', commands: [correction && turn > 0 ? 'node --version' : 'Python check of Markdown links in docs/runbooks/federated-query.md'] }] }) : 'Controlled unit response.'));
+		f.files.set(options.responsePath, Buffer.from(closeoutFailure ? JSON.stringify({ schemaVersion: 'treeseed.activity-completion/v1', summary: 'Controlled invalid closeout, not live work.', contentOutput: null, reviewDisposition: null, verification: [{ status: invalidPreparation && turn === 0 ? 'failed' : 'passed', summary: 'Claimed link check', commands: [correction && turn > 0 ? 'node --version' : invalidPreparation ? 'git commit -m "docs: define remote git ref operator contract"' : 'Python check of Markdown links in docs/runbooks/federated-query.md'] }] }) : 'Controlled unit response.'));
 	});
 	try {
 		await runModelWorkload();
 		const result = sandboxResultSchema.parse(JSON.parse(f.files.get('/run/treeseed-output/result.json')!.toString('utf8')));
+		if (invalidPreparation) expect(result.status, result.summary).toBe('completed');
 		expect(result.usage).toMatchObject({ activeSeconds: correction ? 4 : 2, elapsedSeconds: correction ? 9 : 7, input_tokens: correction ? 38 : 19, output_tokens: correction ? 6 : 3, provenance: 'execution-provider' });
 		expect(result.timingAwareness).toMatchObject({ completedChecks: correction ? 4 : 2, firstToolCompliant: true, finalToolCompliant: true });
 		for (const [path, value] of f.held) expect(f.files.get(path)).toEqual(value);
@@ -211,6 +212,18 @@ it('corrects the rejected completion in one original SDK session with fresh cloc
  expect(sdk.runTurn.mock.calls[1]![0].timeoutMs).toBeLessThan(sdk.runTurn.mock.calls[0]![0].timeoutMs);
  expect(result.diagnostics.closeoutFailures).toEqual([expect.objectContaining({ message: expect.stringContaining('exit 127') })]);
  expect(result.diagnostics.verificationRecords).toEqual([expect.objectContaining({ command: 'node --version', status: 'passed', exitCode: 0 })]);
+});
+
+it('returns rejected source-preparation metadata to the same guest model without replaying mutation or moving its deadline', async () => {
+	const result = await suppliedGuestExecution(undefined, false, true, true, false, true);
+	expect(sdk.construct).toHaveBeenCalledTimes(1); expect(sdk.runTurn).toHaveBeenCalledTimes(2);
+	const feedback = JSON.parse(sdk.runTurn.mock.calls[1]![0].input);
+	expect(feedback).toMatchObject({ type: 'activity-completion-rejected', validationFailure: { code: 'activity_verification_report_invalid' } });
+	expect(feedback.validationFailure.message).toContain('git commit');
+	expect(result.diagnostics.closeoutFailures).toEqual([expect.objectContaining({ code: 'activity_verification_report_invalid', response: expect.stringContaining('git commit') })]);
+	expect(result.diagnostics.verificationRecords).toEqual([expect.objectContaining({ command: 'node --version', status: 'passed', exitCode: 0 })]);
+	expect(vi.mocked(run).mock.calls.every(([binary, args]) => !`${binary} ${args.join(' ')}`.includes('git commit'))).toBe(true);
+	expect(sdk.runTurn.mock.calls[1]![0].timeoutMs).toBeLessThan(sdk.runTurn.mock.calls[0]![0].timeoutMs);
 });
 
 it('removes private guest configuration and supplied auth on preparation denial while retaining the protected credential return', async () => {

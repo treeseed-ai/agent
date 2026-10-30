@@ -20,17 +20,21 @@ import { request, timingAwareness } from '../../provider-kernel-fixture.ts';
 // responses and executor counters remain controlled inputs, not native API
 // authentication, generated provider charges or physical Kata closure.
 export async function nativeCloseoutTransport(f: Pick<Awaited<ReturnType<typeof portableKernel>>, 'attempt' | 'input' | 'executor'>, directory: string, executionWindow = false) {
-	const keys = ['assignment', 'startExecution', 'createEvent', 'reportUsage', 'settleAssignment', 'returnAssignment', 'startCloseout', 'completeAssignment', 'failAssignment'] as const;
+	const keys = ['assignment', 'sourceWorkspace', 'startExecution', 'createEvent', 'reportUsage', 'settleAssignment', 'returnAssignment', 'startCloseout', 'completeAssignment', 'failAssignment'] as const;
 	const paths = new Map(keys.map(key => [providerOperationPath(CONTROL_PLANE_OPERATIONS.providers[key], { assignmentId: f.attempt.id }), key]));
 	const requests: Array<{ operation: string; body: Record<string, unknown>; key: string | undefined }> = [];
 	let denied: 'reportUsage' | 'settleAssignment' | undefined, status = 503, fault = '';
 	const server = createServer((request, response) => {
 		let raw = ''; request.setEncoding('utf8'); request.on('data', chunk => { raw += chunk; });
-		request.on('end', () => {
+		request.on('end', async () => {
 			const operation = paths.get(new URL(request.url ?? '', 'http://127.0.0.1').pathname);
 			if (!operation) { response.writeHead(500).end(JSON.stringify({ error: 'unexpected native operation' })); return; }
 			const key = request.headers['idempotency-key'];
 			requests.push({ operation, body: raw ? JSON.parse(raw) : {}, key: typeof key === 'string' ? key : undefined });
+			if (operation === 'sourceWorkspace') {
+				const source = await f.input.authorizeSource?.(String(requests.at(-1)!.body.recipientPublicKey));
+				response.setHeader('content-type', 'application/json'); response.end(JSON.stringify({ data: source })); return;
+			}
 			if (operation === denied && fault === 'reset') { request.socket.destroy(); return; }
 			response.statusCode = operation === denied ? status : 200; response.setHeader('content-type', 'application/json');
 			if (operation === denied && fault === 'json') { response.end('{'); return; }

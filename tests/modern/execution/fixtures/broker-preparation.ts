@@ -34,12 +34,22 @@ export async function microvmBroker(configure?: (manifest:CapacityProviderManife
 	let assigned: ReturnType<typeof sandboxAssignmentSchema.parse> | undefined, destroyedAt = '', brokerCreatedAt='', beginCalls = 0, finishCalls = 0;
 	let resultPatch: Record<string, unknown> = {}, destroyReply: unknown, destroyFault = '', artifactBytes = Buffer.from('original artifact\n');
 	const events: Array<Parameters<NonNullable<ReturnType<typeof executionRequest>['emit']>>[0]> = [];
+	let sourcePublicationFailure: string | undefined;
 	const fixture = await broker((request, response) => {
 		const path = request.url ?? ''; paths.push(`${request.method} ${path}`); const chunks: Buffer[] = [];
 		request.on('data', chunk => { chunks.push(Buffer.from(chunk)); }); request.on('end', () => {
 			try {
 				const bytes = Buffer.concat(chunks); response.setHeader('content-type', 'application/json');
 				if(request.method==='GET'&&path==='/v1/status'){response.end('{"ready":true,"checks":{"native":true}}');return;}
+				if (sourcePublicationFailure && /\/source\/(status|prepare|attach)$/u.test(path)) {
+					expect(request.headers.authorization).toBe('Bearer controlled-native-operation');
+					response.end(JSON.stringify({ state: path.endsWith('/attach') ? 'attached' : 'ready',
+						recipientPublicKey: Buffer.alloc(32, 1).toString('base64'), leaseId: 'controlled-source-lease' })); return;
+				}
+				if (sourcePublicationFailure && path.endsWith('/source-publication/start')) {
+					expect(request.headers.authorization).toBe('Bearer controlled-native-operation');
+					response.end(JSON.stringify({ state: 'retained', failure: sourcePublicationFailure })); return;
+				}
 				if (path === '/v1/sandboxes') {
 					assigned = sandboxAssignmentSchema.parse(JSON.parse(bytes.toString('utf8')).assignment);brokerCreatedAt=new Date().toISOString();
 					response.end('{"sandboxId":"owned-native-sandbox","operationToken":"controlled-native-operation"}'); return;
@@ -125,6 +135,7 @@ export async function microvmBroker(configure?: (manifest:CapacityProviderManife
 		return { ...fixture, close, executor, input, paths, uploads, events, relayBytes, manifest, observations,
 			assignment: () => assigned, counters: () => ({ beginCalls, finishCalls }), destroyedAt: () => destroyedAt,
 			patchResult(value: Record<string, unknown>) { resultPatch = value; },
+			failPublication(reason: string) { sourcePublicationFailure = reason; },
 			patchDestroy(value: unknown, fault = '') { destroyReply = value; destroyFault = fault; },
 			artifact(value: Buffer) { artifactBytes = Buffer.from(value); } };
 	} catch (error) { await close(); throw error; }

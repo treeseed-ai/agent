@@ -107,6 +107,35 @@ describe('microvm result and closeout authority', () => {
 		expect(failure).not.toHaveProperty('outputs.sourceReference');
 		expect(f.result()).toEqual(before); expect(f.client.destroy).toHaveBeenCalledOnce(); expect(f.cleanup).toHaveBeenCalledOnce();
 	});
+	it('preserves publication and evidence-write failures together without replaying closeout', async () => {
+		for (const stage of ['provider.events', 'terminal', 'sandbox.destroyed']) {
+			const publication = new Error('Original source publication rejection'), denied = new Error('Original protected evidence denial');
+			const f = await suppliedMicrovm(publication), original = sandboxResultSchema.parse(f.result());
+			f.setResult({ ...original, diagnostics: { ...original.diagnostics, sourceCommit: 'b'.repeat(40) } });
+			f.input.emit = vi.fn(async event => {
+				if (stage === 'provider.events' ? event.payload.stage === stage
+					: event.type === (stage === 'terminal' ? 'execution.failed' : stage)) throw denied;
+			});
+			let failed: unknown; try { await f.executor.execute(f.input); } catch (error) { failed = error; }
+			expect(failed).toBeInstanceOf(AggregateError);
+			expect(failed).toMatchObject({ message: publication.message, cause: publication, errors: [publication, denied],
+				outputs: { teardown: { verified: true } }, usage: [{ inputTokens: 19, outputTokens: 3 }] });
+			expect(f.client.destroy).toHaveBeenCalledOnce(); expect(f.cleanup).toHaveBeenCalledOnce();
+			expect(vi.mocked(f.input.emit!).mock.calls.filter(([event]) => event.type === 'execution.completed')).toEqual([]);
+		}
+	});
+	it('retains both original publication and destroy errors when teardown cannot be verified', async () => {
+		const publication = new Error('Original source publication rejection'), destroy = new Error('Original broker destroy rejection');
+		const f = await suppliedMicrovm(publication); f.setDestroy(undefined, destroy);
+		let failed: unknown; try { await f.executor.execute(f.input); } catch (error) { failed = error; }
+		expect(failed).toMatchObject({ code: 'sandbox_teardown_unverified', cause: { errors: [publication, destroy] },
+			outputs: { teardown: {} }, usage: [{ inputTokens: 19, outputTokens: 3 }] });
+		expect(failed).not.toHaveProperty('outputs.teardown.verified', true);
+		const events = vi.mocked(f.input.emit!).mock.calls.map(([event]) => event);
+		expect(events.filter(event => event.type === 'execution.failed')).toHaveLength(1);
+		expect(events.some(event => event.type === 'execution.completed')).toBe(false);
+		expect(f.client.destroy).toHaveBeenCalledOnce(); expect(f.cleanup).toHaveBeenCalledOnce();
+	});
 	it('retains large provider transcripts through bounded protected events without masking completion or measured usage', async () => {
 		for (const status of ['completed', 'failed', 'cancelled', 'expired'] as const) {
 			const f = await suppliedMicrovm(), original = sandboxResultSchema.parse(f.result());

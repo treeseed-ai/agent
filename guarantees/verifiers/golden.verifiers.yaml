@@ -1,6 +1,26 @@
 schemaVersion: treeseed.guarantee-verifiers/v1
 ownerPackage: "@treeseed/agent"
 verifiers:
+  agent.golden.publication-failure-evidence-unit:
+    kind: vitestCase
+    ownerPackage: '@treeseed/agent'
+    testFile: tests/modern/execution/microvm-result-authority.test.ts
+    testName: retains correlated failed publication diagnostics and native transcript once without a passing source result
+  agent.golden.publication-failure-evidence-denial:
+    kind: vitestCase
+    ownerPackage: '@treeseed/agent'
+    testFile: tests/modern/execution/microvm-result-authority.test.ts
+    testName: preserves publication and evidence-write failures together without replaying closeout
+  agent.golden.publication-failure-evidence-destroy:
+    kind: vitestCase
+    ownerPackage: '@treeseed/agent'
+    testFile: tests/modern/execution/microvm-result-authority.test.ts
+    testName: retains both original publication and destroy errors when teardown cannot be verified
+  agent.golden.publication-failure-evidence-native:
+    kind: vitestCase
+    ownerPackage: '@treeseed/agent'
+    testFile: tests/modern/execution/architecture/publication-failure-native.test.ts
+    testName: native publication failure retains original diagnostics through Kernel runner and public event delivery without a source result
   agent.golden.provider-transcript-bounds:
     kind: vitestCase
     ownerPackage: '@treeseed/agent'

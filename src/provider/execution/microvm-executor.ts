@@ -347,7 +347,8 @@ export async function createMicrovmExecutor(config: ProviderHostRuntimeConfig, m
 					teardown = object(receipt?.teardown);
 					if (!receipt || receipt.sandboxId !== prepared.sandboxId || receipt.destroyed !== true || teardown.verified !== true
 						|| typeof teardown.completedAt !== 'string' || !Number.isFinite(Date.parse(teardown.completedAt)) || Date.parse(teardown.completedAt) > Date.now()) {
-						transportFailure = Object.assign(new Error(`Sandbox teardown could not be independently verified.${destroyFailure instanceof Error ? ` ${destroyFailure.message}` : ''}`), { code: 'sandbox_teardown_unverified', cause: destroyFailure ?? transportFailure });
+						transportFailure = Object.assign(new Error(`Sandbox teardown could not be independently verified.${destroyFailure instanceof Error ? ` ${destroyFailure.message}` : ''}`), { code: 'sandbox_teardown_unverified',
+							cause: destroyFailure && transportFailure ? new AggregateError([transportFailure, destroyFailure], 'Original execution and broker destruction failed') : destroyFailure ?? transportFailure });
 					} else {
       try{vmId=destroyedVmId(receipt,prepared.sandboxId,assignment.assignmentId,Boolean(result));}
       catch(error){transportFailure=Object.assign(new Error('Sandbox VM custody could not be independently verified.',{cause:transportFailure?new AggregateError([transportFailure,error],'Original execution and broker custody failed'):error}),{code:'sandbox_vm_custody_invalid'});}
@@ -356,11 +357,30 @@ export async function createMicrovmExecutor(config: ProviderHostRuntimeConfig, m
 					catch(error){transportFailure=Object.assign(new Error('Original broker lifecycle observation failed',{cause:transportFailure?new AggregateError([transportFailure,error]):error}),{code:'sandbox_vm_custody_invalid'});}
 					try {
 						await request.emit?.({ type: 'sandbox.destroyed', occurredAt: new Date().toISOString(), summary: `Kata sandbox ${prepared.sandboxId} teardown ${teardown.verified === true ? 'verified' : 'could not be verified'}.`, payload: { sandboxId: prepared.sandboxId, teardown, vmId }, ...(Array.isArray(receipt?.events)&&receipt.events.length?{protectedPayload:{sandboxEvents:structuredClone(receipt.events)}}:{}) });
-					} catch (error) { if (!request.signal?.aborted) throw error; }
+					} catch (error) {
+						if (!request.signal?.aborted) transportFailure = transportFailure
+							? Object.assign(new AggregateError([transportFailure, error], transportFailure instanceof Error ? transportFailure.message : String(transportFailure), { cause: transportFailure }),
+								{ ...(typeof object(transportFailure).code === 'string' ? { code: object(transportFailure).code } : {}) }) : error;
+					}
 				}
-				if (transportFailure) throw Object.assign(transportFailure instanceof Error ? transportFailure : new Error(String(transportFailure)), {
-					outputs: { sandboxId: prepared.sandboxId, teardown }, ...(result ? { usage: [sandboxAccountingUsage(result.usage)] } : {}),
-				});
+				if (transportFailure) {
+					const outputs = { sandboxId: prepared.sandboxId, teardown }, usage = result ? sandboxAccountingUsage(result.usage) : undefined;
+					const failure = Object.assign(transportFailure instanceof Error ? transportFailure : new Error(String(transportFailure)), {
+						outputs, ...(usage ? { usage: [usage] } : {}),
+					});
+					if (result && usage && result.sandboxId === prepared.sandboxId && result.assignmentId === assignment.assignmentId) {
+						try {
+							await emitExecutionEvidence(request.emit, { type: 'execution.failed', occurredAt: new Date().toISOString(), summary: failure.message,
+								payload: { sandboxId: prepared.sandboxId, model: assignment.modelPolicy.model, provider: assignment.modelPolicy.provider,
+									usage: [usage], teardown, status: 'failed' }, protectedPayload: result.diagnostics }, usage, outputs);
+						} catch (observationFailure) {
+							throw Object.assign(new AggregateError([failure, observationFailure], failure.message, { cause: failure }), {
+								...(typeof object(failure).code === 'string' ? { code: object(failure).code } : {}), outputs, usage: [usage],
+							});
+						}
+					}
+					throw failure;
+				}
 				if (!result) throw new Error('Sandbox broker returned no assignment result.');
 				const environmentReceipt = profile.lineage ? (() => {
 					const unsigned = { schemaVersion: 'treeseed.provider-environment-receipt/v1' as const, assignmentId: request.assignmentId, offerId,

@@ -44,7 +44,8 @@ it('native publication failure retains original diagnostics through Kernel runne
 			workdayId: attempt.workdayId, teamId: attempt.teamId, projectId: attempt.projectId, createdAt: x.body.createdAt }));
 		const inventory = modelExecutionInventory([{ id: attempt.id, status: 'failed', assignmentAttempt: attempt }], rows,
 			{ id: attempt.workdayId, teamId: attempt.teamId });
-		expect(inventory[0]!.terminal.protectedPayload.providerEvents).toEqual(diagnostics.providerEvents);
+		expect(inventory[0]!.terminal.protectedPayload).toEqual({ sourceCommit: source.reference.commit,
+			providerEventCount: diagnostics.providerEvents.length, providerEvents: diagnostics.providerEvents });
 		expect(api.requests.filter(x => x.operation === 'failAssignment')).toHaveLength(1);
 		expect(api.requests.some(x => x.operation === 'completeAssignment')).toBe(false);
 		expect(delivered.some(x => (x.body.context as Record<string, unknown>)?.stage === 'source.published')).toBe(false);

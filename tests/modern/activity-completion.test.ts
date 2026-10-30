@@ -19,6 +19,20 @@ function checkShape(node: SchemaNode) {
 }
 
 describe('activity completion structured-output schema', () => {
+	it('explains source preparation separately from replayable verification for arbitrary configured agents', () => {
+		const commands = activityCompletionOutputSchema().properties.verification.items.properties.commands;
+		const guidance = Reflect.get(commands, 'description');
+		expect(guidance).toBeTypeOf('string');
+		for (const phrase of ['summary', 'git add', 'git commit', 'standalone', 'non-mutating', 'actually ran', 'verification: []']) {
+			expect(guidance).toContain(phrase);
+		}
+		const prompt = promptFromContext({ canonicalAssignmentContext: { assignment: {
+			agentClass: 'renamed-document-author', effectiveProfile: { activity: 'acting', handler: 'actor',
+				prompt: { system: 'Perform the exact governed documentation task.' } },
+		} } });
+		expect(prompt.split(guidance as string)).toHaveLength(2);
+		expect(prompt).toContain('Perform the exact governed documentation task.');
+	});
 	it('offers a group proposal at the exact planning grant instead of limiting proposal authoring to acting', () => {
 		const context = { canonicalAssignmentContext: { assignment: {
 			effectiveProfile: { activity: 'planning', handler: 'writer' }, workspace: { mode: 'treedx' },

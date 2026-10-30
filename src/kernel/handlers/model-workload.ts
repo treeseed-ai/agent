@@ -12,7 +12,7 @@ import { activityCompletionOutputSchema, validateActivityCompletion } from '../.
 import { completionFrontmatterSchema, completionOutputTargetVariants, promptFromContext, assertArchitectSourceCitation, assertTesterFailureEvidence, attachObservedTesterFailures, correctObservedTestFirstRedVerification, omitUnreplayableVerification, codexInvocationTimerOptions, requiresActivityCompletion, record, text, providerToolName, codexToolInFlight, codexResumeIdleTimeoutMs } from './model-workload-contract.ts';
 import { planningSynthesisOutputSchema, assertPredecessorSynthesis } from './planning-synthesis.ts';
 import { recoverPlanningSynthesis } from '../../sandbox/planning-synthesis-recovery.ts';
-import { closeModelProduct } from './model-product-closeout.ts';
+import { assertCloseoutClock, closeModelProduct } from './model-product-closeout.ts';
 import { assertCleanWorkSource, objectDigest, observeReportedActivityCommands, prepareReleaseReview, prepareNodeWorkspace } from './model-verification.ts';
 export { observeReportedActivityCommands, verifyReportedActivityCommands, requiresNodeDependencyRestore, prepareNodeWorkspace } from './model-verification.ts';
 
@@ -439,8 +439,7 @@ export async function runModelWorkload() {
 				// with stale worktree blocks from the executed overlay.
 				await execute('/bin/sync', [], { timeoutMs: 30_000 });
 			}
-			const finalTiming = timingAwarenessContract(events);
-			if (finalTiming.completedChecks < 2 || !finalTiming.firstToolCompliant || !finalTiming.finalToolCompliant) throw new Error('Agent timing-awareness contract requires first and final clock checks.');
+			assertCloseoutClock(timingAwarenessContract(events), 'Agent timing-awareness contract requires first and final clock checks.');
 			return { activityCompletion, observedCompletion, responseMarkdown };
 			},
 			canCorrect: () => !providerError && Boolean(providerThreadId) && !codexToolInFlight(events), remainingMs: getRemainingMs,
@@ -454,6 +453,7 @@ export async function runModelWorkload() {
 					await writeFile(resolve(outputRoot, 'codex-auth.json'), refreshed, { mode: 0o600 });
 					diagnosticSecrets.push(...providerCredentialValues(JSON.parse(refreshed.toString('utf8')))); }
 				}
+				assertCloseoutClock(timingAwarenessContract(events.filter(event => event.providerInvocation === invocation)), 'Correction timing-awareness contract requires fresh first and final clock checks.');
 			},
 			retainFailure: async error => {
 				failureRetained = false;

@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, symlink } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -30,6 +30,30 @@ function assertExited(lines: string[]) {
 // actual PID/output/error and local clocks. NOT Kata/provider teardown,
 // API-authenticated clock, model adaptation or provider-generated usage.
 describe('native subprocess original budget and safe closeout', () => {
+	it('keeps committed source preparation in the summary and rejects mutation before native verification replay', async () => {
+		const root = await mkdtemp(join(tmpdir(), 'agent-completion-git-'));
+		try {
+			await run('/usr/bin/git', ['init', '-q'], { cwd: root });
+			await writeFile(join(root, 'README.md'), 'Controlled native documentation product.\n');
+			await run('/usr/bin/git', ['add', 'README.md'], { cwd: root });
+			await run('/usr/bin/git', ['-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', '-c', 'core.hooksPath=/dev/null', 'commit', '-qm', 'docs'], { cwd: root });
+			const head = (await run('/usr/bin/git', ['rev-parse', 'HEAD'], { cwd: root, captureStdout: true })).stdout.trim();
+			const input = { schemaVersion: 'treeseed.activity-completion/v1' as const, summary: `Prepared with git add and git commit; exact product ${head}.`,
+				contentOutput: null, reviewDisposition: null, verification: [{ status: 'passed' as const, summary: 'Misreported preparation', commands: ['git commit --allow-empty -m forbidden'] }] };
+			const held = structuredClone(input), calls: string[] = [], began = performance.now();
+			const execute: typeof run = (command, argv, options) => { calls.push(argv.join(' ')); return run(command, argv, { ...options, cwd: root }); };
+			const bounded = withinAssignmentBudget(execute, () => 10_000 - (performance.now() - began));
+			await expect(observeReportedActivityCommands(input, [], bounded)).rejects.toThrow('may not mutate or prepare the workspace');
+			expect(calls).toEqual([]); expect(input).toEqual(held);
+			const corrected = { ...input, verification: [{ status: 'passed' as const, summary: 'Actual read-only whitespace check', commands: ['git diff --check'] }] };
+			const observed = await observeReportedActivityCommands(corrected, [], bounded);
+			expect(observed.report.summary).toBe(input.summary);
+			expect(observed.verification).toEqual([expect.objectContaining({ command: 'git diff --check', status: 'passed', exitCode: 0 })]);
+			expect(calls).toHaveLength(1);
+			expect((await run('/usr/bin/git', ['rev-parse', 'HEAD'], { cwd: root, captureStdout: true })).stdout.trim()).toBe(head);
+			expect(await readFile(join(root, 'README.md'), 'utf8')).toBe('Controlled native documentation product.\n');
+		} finally { await rm(root, { recursive: true, force: true }); }
+	});
 	it('native mandatory verification replays measured commands inside one original window and retains an overrun without a passing receipt or later replay', async () => {
 		const root = await mkdtemp(join(tmpdir(), 'agent-verification-window-'));
 		await symlink(fileURLToPath(new URL('../../../../node_modules', import.meta.url)), join(root, 'node_modules'), 'dir');

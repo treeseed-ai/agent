@@ -4699,3 +4699,38 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/execution/activities/workload-preparation.test.ts
     testName: "takes all task instructions from governed YAML across arbitrary identities handlers and activities"
+  agent.golden.completion-verification-contract:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/activity-completion.test.ts
+    testName: "explains source preparation separately from replayable verification for arbitrary configured agents"
+  agent.golden.completion-verification-guest:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/sandbox/runtime-clock.test.ts
+    testName: "delivers one shared completion contract to the guest model and schema while replaying only the reported standalone check"
+  agent.golden.completion-verification-native:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/sandbox/architecture/budget-native.test.ts
+    testName: "keeps committed source preparation in the summary and rejects mutation before native verification replay"
+  agent.golden.completion-report-correction-native:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/verification/closeout-correction.test.ts
+    testName: "corrects rejected commit install and compound report metadata once without executing any invalid command"
+  agent.golden.completion-report-correction-bound:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/execution/verification/closeout-correction.test.ts
+    testName: "retains both invalid command reports and denies a third correction turn"
+  agent.golden.completion-report-correction-guest:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/sandbox/runtime-clock.test.ts
+    testName: "returns rejected source-preparation metadata to the same guest model without replaying mutation or moving its deadline"
+  agent.golden.completion-report-correction-clock:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/sandbox/runtime-clock.test.ts
+    testName: "rejects completion corrections missing first final or both fresh clocks even when the original turn had both"

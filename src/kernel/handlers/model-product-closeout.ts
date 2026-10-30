@@ -1,3 +1,7 @@
+export function assertCloseoutClock(clock: { completedChecks: number; firstToolCompliant: boolean; finalToolCompliant: boolean }, message: string): void {
+	if (clock.completedChecks < 2 || !clock.firstToolCompliant || !clock.finalToolCompliant) throw new Error(message);
+}
+
 /** One correction inside the same admitted workload; no new authority or execution. */
 export async function closeModelProduct<T>(input: {
 	complete(): Promise<T>;
@@ -11,6 +15,7 @@ export async function closeModelProduct<T>(input: {
 		await input.retainFailure(error);
 		const failure = error && typeof error === 'object' ? error as { code?: unknown; exitCode?: unknown } : {};
 		const recoverable = failure.code === 'activity_git_worktree_dirty'
+			|| failure.code === 'activity_verification_report_invalid'
 			|| failure.code === 'activity_verification_failed' && failure.exitCode === 127;
 		if (!recoverable || !input.canCorrect()) throw error;
 		const remaining = input.remainingMs();

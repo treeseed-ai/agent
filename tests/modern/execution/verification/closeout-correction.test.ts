@@ -42,6 +42,23 @@ it('retains the native prose-command exit and accepts only an actually replayed 
 	expect(observed.verification[0]).toMatchObject({ command: 'node --version', status: 'passed', exitCode: 0 });
 });
 
+it('corrects rejected commit install and compound report metadata once without executing any invalid command', async () => {
+	for (const invalid of ['git commit -m "docs: define remote git ref operator contract"', 'npm ci', 'git diff --check && git status --short']) {
+		let command = invalid, corrections = 0; const retained: unknown[] = [], executed: string[] = [];
+		const observed = await closeModelProduct({ complete: () => observeReportedActivityCommands({ schemaVersion: 'treeseed.activity-completion/v1',
+			summary: 'Controlled report retains the failed preparation in its summary.', contentOutput: null, reviewDisposition: null,
+			verification: [{ status: command === invalid ? 'failed' : 'passed', summary: 'Controlled reported command', commands: [command] }] }, [],
+			(binary, args, options) => { executed.push(args[1]!); return run(binary, args, { ...options, cwd: process.cwd() }); }),
+			retainFailure: async error => { retained.push(error); }, remainingMs: () => 60_000, canCorrect: () => true,
+			correct: async (error, remaining) => {
+				expect(error).toMatchObject({ code: 'activity_verification_report_invalid' }); expect(remaining).toBe(60_000);
+				expect(executed).toEqual([]); corrections++; command = 'node --version';
+			} });
+		expect(corrections).toBe(1); expect(retained).toHaveLength(1); expect(executed).toEqual(['node --version']);
+		expect(observed.verification).toEqual([expect.objectContaining({ command: 'node --version', status: 'passed', exitCode: 0 })]);
+	}
+});
+
 it('never corrects fatal errors absent session authority or an exhausted original window', async () => {
 	for (const [error, session, time] of [
 		[Object.assign(new Error('native assertion failed'), { code: 'activity_verification_failed', exitCode: 1 }), true, 60_000],
@@ -51,6 +68,9 @@ it('never corrects fatal errors absent session authority or an exhausted origina
 		[Object.assign(new Error('dirty'), { code: 'activity_git_worktree_dirty' }), false, 60_000],
 		[Object.assign(new Error('dirty'), { code: 'activity_git_worktree_dirty' }), true, 29_999],
 		[Object.assign(new Error('dirty'), { code: 'activity_git_worktree_dirty' }), true, Number.NaN],
+		[Object.assign(new Error('invalid report'), { code: 'activity_verification_report_invalid' }), false, 60_000],
+		[Object.assign(new Error('invalid report'), { code: 'activity_verification_report_invalid' }), true, 29_999],
+		[Object.assign(new Error('invalid report'), { code: 'activity_verification_report_invalid' }), true, Number.NaN],
 	] as const) {
 		let corrections = 0; const retained: unknown[] = [];
 		await expect(closeModelProduct({ complete: async () => { throw error; }, canCorrect: () => session, remainingMs: () => time,
@@ -66,6 +86,14 @@ it('keeps an invalid correction failed with both original observations and never
 	await expect(closeModelProduct({ complete: async () => { throw ++calls === 1 ? first : second; }, canCorrect: () => true,
 		remainingMs: () => 60_000, retainFailure: async error => { retained.push(error); }, correct: async () => { corrections++; } })).rejects.toBe(second);
 	expect(calls).toBe(2); expect(corrections).toBe(1); expect(retained).toEqual([first, second]);
+});
+
+it('retains both invalid command reports and denies a third correction turn', async () => {
+	const retained: unknown[] = []; let corrections = 0, checks = 0;
+	await expect(closeModelProduct({ complete: async () => { checks++; throw Object.assign(new Error(`Invalid report ${checks}`), { code: 'activity_verification_report_invalid' }); },
+		canCorrect: () => true, remainingMs: () => 60_000,
+		retainFailure: async error => { retained.push(error); }, correct: async () => { corrections++; } })).rejects.toThrow('Invalid report 2');
+	expect(checks).toBe(2); expect(corrections).toBe(1); expect(retained).toHaveLength(2);
 });
 
 it('rechecks remaining authority after failure retention without resetting a shrinking deadline', async () => {

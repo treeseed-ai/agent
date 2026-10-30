@@ -9,6 +9,7 @@ import { createHash } from 'node:crypto';
 import { sandboxAssignmentSchema, sandboxResultSchema } from '@treeseed/sdk/capacity-provider/sandbox';
 import { clockRequest } from './architecture/clock-fixture.ts';
 import { objectDigest } from '../../../src/kernel/handlers/model-verification.ts';
+import { verificationCompletionInstructions } from '../../../src/activity-completion.ts';
 import { invokeTreeDxRelay, runModelWorkload, timingAwarenessContract } from '../../../src/kernel/handlers/model-workload.ts';
 import { run } from '../../../src/sandbox/process-runner.ts';
 import type { CodexSdkTurn } from '../../../src/kernel/handlers/codex-sdk-session.ts';
@@ -114,9 +115,11 @@ function mockGuestFiles(files: Map<string, Buffer<ArrayBuffer>>) {
 		vi.mocked(createReadStream).mockImplementation(path => Object.assign(Readable.from([files.get(String(path))]), { path: String(path), pending: false, bytesRead: 0, close() {} }));
 }
 
-async function suppliedGuestExecution(providerFailure?: Error, incompleteClock = false, closeoutFailure = false, correction = false) {
+async function suppliedGuestExecution(providerFailure?: Error, incompleteClock = false, closeoutFailure = false, correction = false, documentedPreparation = false,
+	correctionInput: { invalidPreparation?: boolean; omitCorrectionClocks?: 'first' | 'final' | 'both' } = {}) {
+	const { invalidPreparation = false, omitCorrectionClocks } = correctionInput;
 	const f = suppliedGuestFiles('completed', correction ? 120 : 30);
-	if (closeoutFailure) {
+	if (closeoutFailure || documentedPreparation) {
 		const context = JSON.parse(f.files.get('/workspace/.treeseed/context.json')!.toString());
 		context.canonicalAssignmentContext.assignment.effectiveProfile.activity = 'acting';
 		f.files.set('/workspace/.treeseed/context.json', Buffer.from(JSON.stringify(context)));
@@ -126,7 +129,8 @@ async function suppliedGuestExecution(providerFailure?: Error, incompleteClock =
 		f.files.set(f.root + 'assignment.json', Buffer.from(JSON.stringify(assignment)));
 		f.held.set('/workspace/.treeseed/context.json', f.files.get('/workspace/.treeseed/context.json')!);
 		f.held.set(f.root + 'assignment.json', f.files.get(f.root + 'assignment.json')!);
-		vi.mocked(run).mockRejectedValue(Object.assign(new Error('/bin/sh exited 127: Python: not found'), { code: 'subprocess_nonzero_exit', exitCode: 127, stdout: '', stderr: 'Python: not found' }));
+		if (closeoutFailure) vi.mocked(run).mockRejectedValue(Object.assign(new Error('/bin/sh exited 127: Python: not found'), { code: 'subprocess_nonzero_exit', exitCode: 127, stdout: '', stderr: 'Python: not found' }));
+		else vi.mocked(run).mockResolvedValue({ stdout: 'v24.0.0\n', stderr: '' });
 	}
 	f.files.set('/proc/version', Buffer.from('Controlled unit kernel input.')); mockGuestFiles(f.files);
 	// Supplied monotonic UNIT observations, not native elapsed time or usage.
@@ -146,6 +150,7 @@ async function suppliedGuestExecution(providerFailure?: Error, incompleteClock =
 		expect(sdk.construct).toHaveBeenCalledWith(expect.objectContaining({ model: 'not-a-real-model', remainingMs: expect.any(Function) }));
 		expect(options.timeoutMs).toBeGreaterThan(0);
 		for (const [id, seconds] of [['original-first', 0], ['original-final', 2]] as const) {
+			if (turn > 0 && (omitCorrectionClocks === 'both' || omitCorrectionClocks === 'first' && id === 'original-first' || omitCorrectionClocks === 'final' && id === 'original-final')) continue;
 			if (incompleteClock && id === 'original-final') continue;
 			const value = { ...f.execution, observedAt: new Date(Date.parse(f.execution.startedAt) + (seconds + turn * 3) * 1_000).toISOString(), remainingSeconds: (correction ? 120 : 30) - seconds - turn * 3 };
 			options.onEvent({ type: 'item.completed', usage: { input_tokens: 19, output_tokens: 3 }, item: {
@@ -155,13 +160,23 @@ async function suppliedGuestExecution(providerFailure?: Error, incompleteClock =
 		observed = BigInt(7 + turn * 2) * 1_000_000_000n;
 		if (correction) options.onEvent({ type: 'turn.completed', usage: { input_tokens: 19, output_tokens: 3 } });
 		if (providerFailure) throw providerFailure;
-		f.files.set(options.responsePath, Buffer.from(closeoutFailure ? JSON.stringify({ schemaVersion: 'treeseed.activity-completion/v1', summary: 'Controlled invalid closeout, not live work.', contentOutput: null, reviewDisposition: null, verification: [{ status: 'passed', summary: 'Claimed link check', commands: [correction && turn > 0 ? 'node --version' : 'Python check of Markdown links in docs/runbooks/federated-query.md'] }] }) : 'Controlled unit response.'));
+		if (documentedPreparation) {
+			expect(options.input).toBe('Controlled unit instructions.');
+			expect(options.outputSchema).toMatchObject({ properties: { verification: { items: { properties: {
+				commands: { description: verificationCompletionInstructions },
+			} } } } });
+			f.files.set(options.responsePath, Buffer.from(JSON.stringify({ schemaVersion: 'treeseed.activity-completion/v1', summary: 'Controlled fixture describes git add and git commit as source preparation, not replayable checks.',
+				contentOutput: null, reviewDisposition: null, verification: [{ status: 'passed', summary: 'Controlled standalone check', commands: ['node --version'] }] })));
+			return;
+		}
+		f.files.set(options.responsePath, Buffer.from(closeoutFailure ? JSON.stringify({ schemaVersion: 'treeseed.activity-completion/v1', summary: 'Controlled invalid closeout, not live work.', contentOutput: null, reviewDisposition: null, verification: [{ status: invalidPreparation && turn === 0 ? 'failed' : 'passed', summary: 'Claimed link check', commands: [correction && turn > 0 ? 'node --version' : invalidPreparation ? 'git commit -m "docs: define remote git ref operator contract"' : 'Python check of Markdown links in docs/runbooks/federated-query.md'] }] }) : 'Controlled unit response.'));
 	});
 	try {
 		await runModelWorkload();
 		const result = sandboxResultSchema.parse(JSON.parse(f.files.get('/run/treeseed-output/result.json')!.toString('utf8')));
+		if (invalidPreparation) expect(result.status, result.summary).toBe(omitCorrectionClocks ? 'failed' : 'completed');
 		expect(result.usage).toMatchObject({ activeSeconds: correction ? 4 : 2, elapsedSeconds: correction ? 9 : 7, input_tokens: correction ? 38 : 19, output_tokens: correction ? 6 : 3, provenance: 'execution-provider' });
-		expect(result.timingAwareness).toMatchObject({ completedChecks: correction ? 4 : 2, firstToolCompliant: true, finalToolCompliant: true });
+		expect(result.timingAwareness).toMatchObject({ completedChecks: correction ? omitCorrectionClocks ? omitCorrectionClocks === 'both' ? 2 : 3 : 4 : 2, firstToolCompliant: true, finalToolCompliant: true });
 		for (const [path, value] of f.held) expect(f.files.get(path)).toEqual(value);
 		expect(['auth.json', 'config.toml', 'activity-completion.schema.json'].filter(name => f.files.has(f.privateRoot + name))).toEqual([]);
 		return result;
@@ -169,6 +184,12 @@ async function suppliedGuestExecution(providerFailure?: Error, incompleteClock =
 }
 it('measures active guest preparation model tools and closeout separately from infrastructure materialization without moving the original execution clock', async () => {
 	expect((await suppliedGuestExecution()).status).toBe('completed');
+});
+it('delivers one shared completion contract to the guest model and schema while replaying only the reported standalone check', async () => {
+	const result = await suppliedGuestExecution(undefined, false, false, false, true);
+	expect(result.status, result.summary).toBe('completed'); expect(sdk.runTurn).toHaveBeenCalledTimes(1);
+	expect(result.diagnostics.verificationRecords).toEqual([expect.objectContaining({ command: 'node --version', status: 'passed', exitCode: 0 })]);
+	expect(vi.mocked(run).mock.calls.every(([command, argv]) => !`${command} ${argv.join(' ')}`.includes('git commit'))).toBe(true);
 });
 it('publishes original failed provider measurements and complete raw clocks as a failed sandbox result without manufacturing a successful response or an incomplete receipt', async () => {
 	const result = await suppliedGuestExecution(new Error('Original controlled provider exit 23.'));
@@ -194,6 +215,29 @@ it('corrects the rejected completion in one original SDK session with fresh cloc
  expect(sdk.runTurn.mock.calls[1]![0].timeoutMs).toBeLessThan(sdk.runTurn.mock.calls[0]![0].timeoutMs);
  expect(result.diagnostics.closeoutFailures).toEqual([expect.objectContaining({ message: expect.stringContaining('exit 127') })]);
  expect(result.diagnostics.verificationRecords).toEqual([expect.objectContaining({ command: 'node --version', status: 'passed', exitCode: 0 })]);
+});
+
+it('returns rejected source-preparation metadata to the same guest model without replaying mutation or moving its deadline', async () => {
+	const result = await suppliedGuestExecution(undefined, false, true, true, false, { invalidPreparation: true });
+	expect(sdk.construct).toHaveBeenCalledTimes(1); expect(sdk.runTurn).toHaveBeenCalledTimes(2);
+	const feedback = JSON.parse(sdk.runTurn.mock.calls[1]![0].input);
+	expect(feedback).toMatchObject({ type: 'activity-completion-rejected', validationFailure: { code: 'activity_verification_report_invalid' } });
+	expect(feedback.validationFailure.message).toContain('git commit');
+	expect(result.diagnostics.closeoutFailures).toEqual([expect.objectContaining({ code: 'activity_verification_report_invalid', response: expect.stringContaining('git commit') })]);
+	expect(result.diagnostics.verificationRecords).toEqual([expect.objectContaining({ command: 'node --version', status: 'passed', exitCode: 0 })]);
+	expect(vi.mocked(run).mock.calls.every(([binary, args]) => !`${binary} ${args.join(' ')}`.includes('git commit'))).toBe(true);
+	expect(sdk.runTurn.mock.calls[1]![0].timeoutMs).toBeLessThan(sdk.runTurn.mock.calls[0]![0].timeoutMs);
+});
+
+it('rejects completion corrections missing first final or both fresh clocks even when the original turn had both', async () => {
+	for (const omitted of ['first', 'final', 'both'] as const) {
+		vi.clearAllMocks();
+		const result = await suppliedGuestExecution(undefined, false, true, true, false, { invalidPreparation: true, omitCorrectionClocks: omitted });
+		expect(result.status).toBe('failed'); expect(sdk.runTurn).toHaveBeenCalledTimes(2);
+		expect(result.summary).toContain('Correction timing-awareness');
+		expect(result.diagnostics.closeoutFailures).toHaveLength(2);
+		expect(result.responseMarkdown).toBeUndefined();
+	}
 });
 
 it('removes private guest configuration and supplied auth on preparation denial while retaining the protected credential return', async () => {

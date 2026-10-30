@@ -11,12 +11,14 @@ afterEach(() => {
 	vi.doUnmock('../../../src/provider/accounts/identity.ts');
 	vi.doUnmock('../../../src/provider/execution/sandbox-input-materializer.ts');
 	vi.doUnmock('../../../src/provider/execution/sandbox-broker-client.ts');
+	vi.doUnmock('../../../src/provider/execution/source-workspace.ts');
+	vi.doUnmock('../../../src/provider/execution/source-branch-publication.ts');
 	vi.resetModules();
 });
 
 // UNIT: only external custody/materialization/Unix transport are substituted.
 // The original executor owns selection, signing, correlation and closeout.
-async function suppliedMicrovm() {
+async function suppliedMicrovm(publicationFailure?: Error) {
 	vi.resetModules();
 	const privateJwk = generateCapacityProviderIdentity(), manifest = createManagedProviderManifestV5({ release: 'unit-result-authority',
 		guestImage: 'isolated/guest', guestImageDigest: digest, baseImageDigest: digest, provenanceDigest: digest });
@@ -31,6 +33,18 @@ async function suppliedMicrovm() {
 		leaseExpiresAt: attempt.deadline, capacityEnvelope: { budget: { time: { preparationDeadlineAt: attempt.deadline } } } };
 	input.beginExecution = vi.fn(async () => ({ capacityEnvelope: { budget: { time: { executionStartedAt: createdAt, executionDeadlineAt: attempt.deadline } } } }));
 	input.finishExecution = vi.fn(async () => undefined); input.emit = vi.fn(async () => undefined);
+	if (publicationFailure) {
+		const original = assignmentAttemptSchema.parse(request().assignment.assignmentAttempt);
+		Object.assign(attempt, { workspace: original.workspace, grant: original.grant });
+		vi.doMock('../../../src/provider/execution/source-workspace.ts', async () => ({
+			...await vi.importActual<typeof import('../../../src/provider/execution/source-workspace.ts')>('../../../src/provider/execution/source-workspace.ts'),
+			prepareAssignmentSource: async () => ({ authorization: { mode: 'work', publication: 'simulation-branch' } }),
+			renewAssignmentSource: async () => undefined,
+		}));
+		vi.doMock('../../../src/provider/execution/source-branch-publication.ts', () => ({
+			publishSourceBranch: async () => { throw publicationFailure; },
+		}));
+	}
 	const cleanup = vi.fn(async () => undefined), observed: SandboxAssignment[] = [];
 	const clock = (id: string, remainingSeconds: number) => { const value = { startedAt: createdAt, deadlineAt: attempt.deadline, remainingSeconds,
 		observedAt: new Date(Date.parse(attempt.deadline) - remainingSeconds * 1_000).toISOString() }; return {
@@ -71,6 +85,28 @@ async function suppliedMicrovm() {
 }
 
 describe('microvm result and closeout authority', () => {
+	it('retains correlated failed publication diagnostics and native transcript once without a passing source result', async () => {
+		const failure = new Error('Source publication failed; execution storage remains retained: Refusing to create empty bundle.');
+		const f = await suppliedMicrovm(failure), original = sandboxResultSchema.parse(f.result());
+		const diagnostics = { ...original.diagnostics, sourceCommit: 'b'.repeat(40),
+			providerEvents: [...original.diagnostics!.providerEvents as unknown[],
+				{ type: 'turn.completed', usage: { input_tokens: 19, output_tokens: 3 } }] };
+		f.setResult({ ...original, diagnostics });
+		const before = f.result();
+		await expect(f.executor.execute(f.input)).rejects.toBe(failure);
+		const events = vi.mocked(f.input.emit!).mock.calls.map(([event]) => event);
+		const failed = events.filter(event => event.type === 'execution.failed');
+		expect(failed).toHaveLength(1);
+		expect(failed[0]!.summary).toBe(failure.message);
+		expect(failed[0]!.protectedPayload).toMatchObject({ sourceCommit: diagnostics.sourceCommit,
+			providerEventCount: diagnostics.providerEvents.length });
+		expect(events.filter(event => event.payload.stage === 'provider.events')
+			.flatMap(event => event.protectedPayload!.providerEvents)).toEqual(diagnostics.providerEvents);
+		expect(events.some(event => event.type === 'execution.completed' || event.payload.stage === 'source.published')).toBe(false);
+		expect(failure).toMatchObject({ outputs: { teardown: { verified: true } }, usage: [{ inputTokens: 19, outputTokens: 3 }] });
+		expect(failure).not.toHaveProperty('outputs.sourceReference');
+		expect(f.result()).toEqual(before); expect(f.client.destroy).toHaveBeenCalledOnce(); expect(f.cleanup).toHaveBeenCalledOnce();
+	});
 	it('retains large provider transcripts through bounded protected events without masking completion or measured usage', async () => {
 		for (const status of ['completed', 'failed', 'cancelled', 'expired'] as const) {
 			const f = await suppliedMicrovm(), original = sandboxResultSchema.parse(f.result());

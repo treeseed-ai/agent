@@ -2790,3 +2790,15 @@ workflow:
   - id: completion-report-correction-clock
     action: { verifier: agent.golden.completion-report-correction-clock }
     expect: { status: passed }
+  - id: publication-failure-evidence-unit
+    action: { verifier: agent.golden.publication-failure-evidence-unit }
+    expect: { status: passed }
+  - id: publication-failure-evidence-denial
+    action: { verifier: agent.golden.publication-failure-evidence-denial }
+    expect: { status: passed }
+  - id: publication-failure-evidence-destroy
+    action: { verifier: agent.golden.publication-failure-evidence-destroy }
+    expect: { status: passed }
+  - id: publication-failure-evidence-native
+    action: { verifier: agent.golden.publication-failure-evidence-native }
+    expect: { status: passed }

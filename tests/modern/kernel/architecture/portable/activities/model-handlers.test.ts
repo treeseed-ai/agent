@@ -40,6 +40,28 @@ function input(activity: typeof activities[number], handler: string) {
 }
 
 describe('nondeterministic handlers support all configured activities', () => {
+	it.each(handlers.map(Handler => [new Handler().id, Handler] as const))('preserves predecessor citations in the authorized planning Proposal product through %s', async (_id, Handler) => {
+			const handler = new Handler(), { context, boundary } = input('planning', handler.id);
+			const target = context.assignment.grant.contentWrite.find(ref => ref.model === 'proposal')!;
+			context.assignment.grant.contentWrite = [target];
+			context.predecessorResults = ['first', 'second'].map(id => ({
+				schemaVersion: 'treeseed.assignment-result/v1', id: `result-${id}`, assignmentId: `attempt-${id}`,
+				status: 'completed', summary: `Supplied ${id} planning contribution.`, references: [], verification: [],
+				usage: { elapsedSeconds: 1 }, diagnostics: [], completedAt: '2026-10-23T00:00:00Z',
+			}));
+			context.assignment.predecessorResultIds = context.predecessorResults.map(result => result.id);
+			const body = '- result-first: Retained the first supplied requirement.\n- result-second: Retained the second supplied requirement.\nOwn coherent planning contribution.';
+			const frontmatter = { schemaVersion: 'treeseed.proposal/v2', id: target.id, projectId: context.assignment.projectId,
+				groupIds: ['configured-group'], title: 'Coordinate source integration', request: 'Preserve each contribution.', status: 'draft' };
+			vi.mocked(boundary.invokeModel).mockResolvedValue({ text: 'Published the governed planning product.',
+				timingAwareness: assignmentTimingAwarenessReceiptSchema.parse(timingAwareness), usage: { elapsedSeconds: 1 },
+				activityCompletion: { summary: 'Published the governed planning product.', reviewDisposition: null,
+					contentOutput: { model: 'proposal', body, frontmatter } } });
+			const before = structuredClone(context), result = await handler.run(context, boundary);
+			expect(result.status, handler.id).toBe('completed');
+			expect(boundary.commitTreeDx).toHaveBeenCalledExactlyOnceWith({ writes: [{ target, value: { body, frontmatter } }] });
+			expect(result.references).toHaveLength(1); expect(context).toEqual(before);
+	});
 	it.each(handlers.map(Handler => [new Handler().id, Handler] as const))('publishes an authorized planning proposal through %s without replacing it with a Note', async (id, Handler) => {
 		const handler = new Handler(), { context, boundary } = input('planning', id);
 		const target = context.assignment.grant.contentWrite.find(reference => reference.model === 'proposal')!;

@@ -2111,6 +2111,16 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/kernel/architecture/portable/activities/planning-products-native.test.ts
     testName: "persists a group planning Proposal through every model handler with exact grant and native readback"
+  agent.golden.planning-proposal-predecessor-unit:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/portable/activities/model-handlers.test.ts
+    testName: "preserves predecessor citations in the authorized planning Proposal product through"
+  agent.golden.planning-proposal-predecessor-native:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/kernel/architecture/portable/activities/planning-products-native.test.ts
+    testName: "persists an authorized planning Proposal with predecessor citations in its governed body through native HTTP and Git"
   agent.golden.planning-proposal-cli-schema:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"

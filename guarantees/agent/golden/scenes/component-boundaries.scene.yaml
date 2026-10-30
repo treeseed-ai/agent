@@ -1260,6 +1260,12 @@ workflow:
   - id: planning-proposal-native
     action: { verifier: agent.golden.planning-proposal-native }
     expect: { status: passed }
+  - id: planning-proposal-predecessor-unit
+    action: { verifier: agent.golden.planning-proposal-predecessor-unit }
+    expect: { status: passed }
+  - id: planning-proposal-predecessor-native
+    action: { verifier: agent.golden.planning-proposal-predecessor-native }
+    expect: { status: passed }
   - id: planning-proposal-cli-schema
     action: { verifier: agent.golden.planning-proposal-cli-schema }
     expect: { status: passed }

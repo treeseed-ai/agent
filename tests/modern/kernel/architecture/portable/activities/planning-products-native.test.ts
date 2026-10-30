@@ -7,6 +7,58 @@ import { portableKernel } from '../portable-kernel-fixture.ts';
 import { contextBoundary } from '../context-fixture.ts';
 import { timingAwareness } from '../../../provider-kernel-fixture.ts';
 
+it('persists an authorized planning Proposal with predecessor citations in its governed body through native HTTP and Git', async () => {
+	const f = await portableKernel();
+	let boundary: Awaited<ReturnType<typeof contextBoundary>> | undefined;
+	try {
+		const repository = 'agent-library', path = 'proposals/native-synthesis.mdx';
+		const definition = validateAgentDefinitionModel({ schemaVersion: 'treeseed.agent/v1', id: 'configured/composition-author',
+			name: 'Composition author', agentClass: 'renamed-composition-author', purpose: 'Preserve actual group contributions.',
+			responsibilities: ['Publish the exact authorized planning product.'], capabilities: ['planning'],
+			context: { include: ['assignment-subject'] }, activityProfiles: { planning: { handler: 'actor',
+				prompt: { system: 'Coordinate the group proposal while retaining every supplied contribution.' },
+				permissions: { content: { read: [], write: ['proposal'] }, tools: [] } } } });
+		if (!definition.ok || !definition.data?.activityProfiles.planning) throw new Error('Governed profile required');
+		const profile = definition.data.activityProfiles.planning;
+		const target = { store: 'treedx' as const, model: 'proposal', id: 'native-synthesis', repository, path, commit: f.base };
+		const predecessors = ['first', 'second'].map(id => assignmentResultSchema.parse({
+			schemaVersion: 'treeseed.assignment-result/v1', id: `result-${id}`, assignmentId: `attempt-${id}`, status: 'completed',
+			summary: `Supplied ${id} requirement, not native model work.`, references: [], verification: [], usage: { elapsedSeconds: 1 },
+			diagnostics: [], completedAt: f.attempt.createdAt,
+		}));
+		Object.assign(f.attempt, { agentClass: definition.data.agentClass, contextRefs: [], predecessorResultIds: predecessors.map(result => result.id),
+			workspace: { mode: 'treedx', workspaceId: 'planning-synthesis', repository, baseCommit: f.base, writablePaths: ['proposals'] },
+			grant: { contentRead: [], contentWrite: [target], sourceRead: [], sourceWrite: [], tools: [] },
+			effectiveProfile: { ...f.attempt.effectiveProfile, activity: 'planning', handler: 'actor',
+				profileRef: { ...f.attempt.effectiveProfile.profileRef, id: definition.data.id }, prompt: profile.prompt, permissionCeiling: profile.permissions } });
+		f.input.assignment.workspaceContext = { assignmentAttempt: f.attempt, predecessorResults: predecessors };
+		boundary = await contextBoundary(f.attempt.projectId, repository, {});
+		boundary.facade = { ...boundary.facade, workspaceId: 'planning-synthesis' }; f.input.treeDx = boundary.facade;
+		let content = '', candidate = '', writes = 0;
+		boundary.setResponder(input => {
+			const body = input.body as Record<string, unknown>;
+			if (Array.isArray(body.files)) {
+				const file = body.files[0] as { path: string; content: string }; expect(file.path).toBe(path);
+				content = file.content; mkdirSync(join(f.checkout, 'proposals'), { recursive: true }); writeFileSync(join(f.checkout, path), content); writes++; return {};
+			}
+			if (typeof body.message === 'string') { f.git('add', path); f.git('commit', '-m', body.message); candidate = f.git('rev-parse', 'HEAD'); return { commitSha: candidate }; }
+			expect(body.ref).toBe(candidate); return { resolvedRef: candidate, files: [{ path, content }] };
+		});
+		const body = '- result-first: Incorporated the supplied first requirement.\n- result-second: Incorporated the supplied second requirement.\nOwn scoped proposal synthesis.';
+		const frontmatter = { schemaVersion: 'treeseed.proposal/v2', id: target.id, projectId: f.attempt.projectId,
+			groupIds: ['configured-group'], title: 'Coordinate source integration', status: 'draft', request: 'Preserve both supplied contributions.' };
+		f.setReply({ status: 'completed', summary: 'Published the authorized group proposal.', usage: [{ activeSeconds: 1, elapsedSeconds: 2 }],
+			outputs: { timingAwareness, activityCompletion: { summary: 'Published the authorized group proposal.', reviewDisposition: null,
+				contentOutput: { model: 'proposal', body, frontmatter } } } });
+		const before = structuredClone(f.input.assignment), result = await f.run();
+		expect(result.status, result.summary).toBe('completed'); expect(writes).toBe(1);
+		const canonical = assignmentResultSchema.parse(result.outputs?.assignmentResult);
+		expect(canonical.references).toEqual([{ kind: 'treedx', projectId: f.attempt.projectId, repository, path, commit: candidate, workspaceId: 'planning-synthesis' }]);
+		const raw = f.git('show', `${candidate}:${path}`); expect(raw).toContain(body); expect(raw).toContain('treeseed.proposal/v2');
+		expect(f.git('rev-parse', `${candidate}^`)).toBe(f.base); expect(f.git('status', '--porcelain')).toBe(''); expect(f.input.assignment).toEqual(before);
+	} finally { try { await boundary?.close(); } finally { await f.close(); expect(existsSync(f.checkout)).toBe(false); } }
+});
+
 // Original public HTTP executor, Kernel, content validation, commit and native Git.
 // Supplied model/TreeDX responses do not prove live planning, API publication or billing.
 it('persists a group planning Proposal through every model handler with exact grant and native readback', async () => {

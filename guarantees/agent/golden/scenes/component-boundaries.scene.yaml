@@ -2778,3 +2778,12 @@ workflow:
   - id: completion-verification-native
     action: { verifier: agent.golden.completion-verification-native }
     expect: { status: passed }
+  - id: completion-report-correction-native
+    action: { verifier: agent.golden.completion-report-correction-native }
+    expect: { status: passed }
+  - id: completion-report-correction-bound
+    action: { verifier: agent.golden.completion-report-correction-bound }
+    expect: { status: passed }
+  - id: completion-report-correction-guest
+    action: { verifier: agent.golden.completion-report-correction-guest }
+    expect: { status: passed }

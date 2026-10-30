@@ -260,7 +260,7 @@ export function reportedVerificationCommands(report: ActivityCompletionReport, i
 	const commands = [...new Set(report.verification.filter((entry) => entry.status === 'passed' || includeFailed && entry.status === 'failed').flatMap((entry) => entry.commands))];
 	const longest = Math.max(0, ...commands.map(command => command.length));
 	if (commands.length > maximumVerificationCommands || longest > maximumVerificationCommandLength || commands.some(command => command.includes('\0'))) {
-		throw new Error(`Activity completion verification exceeds bounded policy: ${commands.length}/${maximumVerificationCommands} commands, longest ${longest}/${maximumVerificationCommandLength} characters; NUL bytes are prohibited.`);
+		throw Object.assign(new Error(`Activity completion verification exceeds bounded policy: ${commands.length}/${maximumVerificationCommands} commands, longest ${longest}/${maximumVerificationCommandLength} characters; NUL bytes are prohibited.`), { code: 'activity_verification_report_invalid' });
 	}
 	for (const command of commands) assertReplayableVerificationCommand(command);
 	return commands;
@@ -269,13 +269,13 @@ export function reportedVerificationCommands(report: ActivityCompletionReport, i
 export function assertReplayableVerificationCommand(command: string) {
 	const normalized = command.trim();
 	if (!normalized || hasUnsafeShellControl(normalized)) {
-		throw new Error(`Activity completion verification must be one standalone command: ${command}`);
+		throw Object.assign(new Error(`Activity completion verification must be one standalone command: ${command}`), { code: 'activity_verification_report_invalid' });
 	}
 	if (/\b(?:sudo|su|doas|rm|mv|cp|install|chmod|chown|truncate|tee)\b/u.test(normalized)
 		|| /\bgit\s+(?:add|commit|push|reset|checkout|switch|clean|merge|rebase|tag|branch|restore)(?=\s|$)/u.test(normalized)
 		|| /\b(?:npm|pnpm|yarn|bun)\s+(?:i|install|ci|add|remove|uninstall|update|upgrade)\b/u.test(normalized)
 		|| /\b(?:sh|bash|zsh|dash)\s+-c\b/u.test(normalized)) {
-		throw new Error(`Activity completion verification may not mutate or prepare the workspace: ${command}`);
+		throw Object.assign(new Error(`Activity completion verification may not mutate or prepare the workspace: ${command}`), { code: 'activity_verification_report_invalid' });
 	}
 	return normalized;
 }

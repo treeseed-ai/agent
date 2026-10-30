@@ -116,8 +116,8 @@ function mockGuestFiles(files: Map<string, Buffer<ArrayBuffer>>) {
 }
 
 async function suppliedGuestExecution(providerFailure?: Error, incompleteClock = false, closeoutFailure = false, correction = false, documentedPreparation = false,
-	correctionInput: { invalidPreparation?: boolean; omitCorrectionClocks?: boolean } = {}) {
-	const { invalidPreparation = false, omitCorrectionClocks = false } = correctionInput;
+	correctionInput: { invalidPreparation?: boolean; omitCorrectionClocks?: 'first' | 'final' | 'both' } = {}) {
+	const { invalidPreparation = false, omitCorrectionClocks } = correctionInput;
 	const f = suppliedGuestFiles('completed', correction ? 120 : 30);
 	if (closeoutFailure || documentedPreparation) {
 		const context = JSON.parse(f.files.get('/workspace/.treeseed/context.json')!.toString());
@@ -150,7 +150,7 @@ async function suppliedGuestExecution(providerFailure?: Error, incompleteClock =
 		expect(sdk.construct).toHaveBeenCalledWith(expect.objectContaining({ model: 'not-a-real-model', remainingMs: expect.any(Function) }));
 		expect(options.timeoutMs).toBeGreaterThan(0);
 		for (const [id, seconds] of [['original-first', 0], ['original-final', 2]] as const) {
-			if (omitCorrectionClocks && turn > 0) continue;
+			if (turn > 0 && (omitCorrectionClocks === 'both' || omitCorrectionClocks === 'first' && id === 'original-first' || omitCorrectionClocks === 'final' && id === 'original-final')) continue;
 			if (incompleteClock && id === 'original-final') continue;
 			const value = { ...f.execution, observedAt: new Date(Date.parse(f.execution.startedAt) + (seconds + turn * 3) * 1_000).toISOString(), remainingSeconds: (correction ? 120 : 30) - seconds - turn * 3 };
 			options.onEvent({ type: 'item.completed', usage: { input_tokens: 19, output_tokens: 3 }, item: {
@@ -176,7 +176,7 @@ async function suppliedGuestExecution(providerFailure?: Error, incompleteClock =
 		const result = sandboxResultSchema.parse(JSON.parse(f.files.get('/run/treeseed-output/result.json')!.toString('utf8')));
 		if (invalidPreparation) expect(result.status, result.summary).toBe(omitCorrectionClocks ? 'failed' : 'completed');
 		expect(result.usage).toMatchObject({ activeSeconds: correction ? 4 : 2, elapsedSeconds: correction ? 9 : 7, input_tokens: correction ? 38 : 19, output_tokens: correction ? 6 : 3, provenance: 'execution-provider' });
-		expect(result.timingAwareness).toMatchObject({ completedChecks: correction && !omitCorrectionClocks ? 4 : 2, firstToolCompliant: true, finalToolCompliant: true });
+		expect(result.timingAwareness).toMatchObject({ completedChecks: correction ? omitCorrectionClocks ? omitCorrectionClocks === 'both' ? 2 : 3 : 4 : 2, firstToolCompliant: true, finalToolCompliant: true });
 		for (const [path, value] of f.held) expect(f.files.get(path)).toEqual(value);
 		expect(['auth.json', 'config.toml', 'activity-completion.schema.json'].filter(name => f.files.has(f.privateRoot + name))).toEqual([]);
 		return result;
@@ -229,12 +229,15 @@ it('returns rejected source-preparation metadata to the same guest model without
 	expect(sdk.runTurn.mock.calls[1]![0].timeoutMs).toBeLessThan(sdk.runTurn.mock.calls[0]![0].timeoutMs);
 });
 
-it('rejects a completion correction without fresh first and final clocks even when the original turn had both', async () => {
-	const result = await suppliedGuestExecution(undefined, false, true, true, false, { invalidPreparation: true, omitCorrectionClocks: true });
-	expect(result.status).toBe('failed'); expect(sdk.runTurn).toHaveBeenCalledTimes(2);
-	expect(result.summary).toContain('Correction timing-awareness');
-	expect(result.diagnostics.closeoutFailures).toHaveLength(2);
-	expect(result.responseMarkdown).toBeUndefined();
+it('rejects completion corrections missing first final or both fresh clocks even when the original turn had both', async () => {
+	for (const omitted of ['first', 'final', 'both'] as const) {
+		vi.clearAllMocks();
+		const result = await suppliedGuestExecution(undefined, false, true, true, false, { invalidPreparation: true, omitCorrectionClocks: omitted });
+		expect(result.status).toBe('failed'); expect(sdk.runTurn).toHaveBeenCalledTimes(2);
+		expect(result.summary).toContain('Correction timing-awareness');
+		expect(result.diagnostics.closeoutFailures).toHaveLength(2);
+		expect(result.responseMarkdown).toBeUndefined();
+	}
 });
 
 it('removes private guest configuration and supplied auth on preparation denial while retaining the protected credential return', async () => {

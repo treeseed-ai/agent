@@ -42,8 +42,8 @@ it('retains the native prose-command exit and accepts only an actually replayed 
 	expect(observed.verification[0]).toMatchObject({ command: 'node --version', status: 'passed', exitCode: 0 });
 });
 
-it.each(['git commit -m "docs: define remote git ref operator contract"', 'npm ci', 'git diff --check && git status --short'])(
-	'corrects rejected completion metadata once without executing the invalid command: %s', async invalid => {
+it('corrects rejected commit install and compound report metadata once without executing any invalid command', async () => {
+	for (const invalid of ['git commit -m "docs: define remote git ref operator contract"', 'npm ci', 'git diff --check && git status --short']) {
 		let command = invalid, corrections = 0; const retained: unknown[] = [], executed: string[] = [];
 		const observed = await closeModelProduct({ complete: () => observeReportedActivityCommands({ schemaVersion: 'treeseed.activity-completion/v1',
 			summary: 'Controlled report retains the failed preparation in its summary.', contentOutput: null, reviewDisposition: null,
@@ -56,7 +56,8 @@ it.each(['git commit -m "docs: define remote git ref operator contract"', 'npm c
 			} });
 		expect(corrections).toBe(1); expect(retained).toHaveLength(1); expect(executed).toEqual(['node --version']);
 		expect(observed.verification).toEqual([expect.objectContaining({ command: 'node --version', status: 'passed', exitCode: 0 })]);
-	});
+	}
+});
 
 it('never corrects fatal errors absent session authority or an exhausted original window', async () => {
 	for (const [error, session, time] of [

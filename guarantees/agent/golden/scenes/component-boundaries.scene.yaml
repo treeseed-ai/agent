@@ -2787,3 +2787,6 @@ workflow:
   - id: completion-report-correction-guest
     action: { verifier: agent.golden.completion-report-correction-guest }
     expect: { status: passed }
+  - id: completion-report-correction-clock
+    action: { verifier: agent.golden.completion-report-correction-clock }
+    expect: { status: passed }

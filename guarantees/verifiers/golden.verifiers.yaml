@@ -4718,7 +4718,7 @@ verifiers:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/execution/verification/closeout-correction.test.ts
-    testName: 'corrects rejected completion metadata once without executing the invalid command: git commit -m "docs: define remote git ref operator contract"'
+    testName: "corrects rejected commit install and compound report metadata once without executing any invalid command"
   agent.golden.completion-report-correction-bound:
     kind: vitestCase
     ownerPackage: "@treeseed/agent"
@@ -4729,3 +4729,8 @@ verifiers:
     ownerPackage: "@treeseed/agent"
     testFile: tests/modern/sandbox/runtime-clock.test.ts
     testName: "returns rejected source-preparation metadata to the same guest model without replaying mutation or moving its deadline"
+  agent.golden.completion-report-correction-clock:
+    kind: vitestCase
+    ownerPackage: "@treeseed/agent"
+    testFile: tests/modern/sandbox/runtime-clock.test.ts
+    testName: "rejects completion corrections missing first final or both fresh clocks even when the original turn had both"

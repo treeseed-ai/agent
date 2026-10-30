@@ -1,3 +1,7 @@
+export function assertCloseoutClock(clock: { completedChecks: number; firstToolCompliant: boolean; finalToolCompliant: boolean }, message: string): void {
+	if (clock.completedChecks < 2 || !clock.firstToolCompliant || !clock.finalToolCompliant) throw new Error(message);
+}
+
 /** One correction inside the same admitted workload; no new authority or execution. */
 export async function closeModelProduct<T>(input: {
 	complete(): Promise<T>;

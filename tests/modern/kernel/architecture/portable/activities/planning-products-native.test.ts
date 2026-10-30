@@ -83,11 +83,11 @@ it('persists a group planning Proposal through every model handler with exact gr
 
 // Real public executor/Kernel, loopback HTTP and Git. TreeDX/model inputs remain
 // controlled; this does not prove a native TreeDX server, API adoption or billing.
-// Red preservation/composition proposal only: full-Proposal planning semantics
-// and existing-item ownership/removal authority remain to be resolved.
-it('retains frozen peer planning scope and known dependencies across every handler through HTTP and Git', async () => {
-	const outcomes: Array<{ handler: string; mode: string; status: string; peerRetained: boolean; dependenciesResolved: boolean }> = [];
-	for (const handler of ['writer', 'actor', 'estimate', 'reviewer', 'releaser']) for (const mode of ['omitted', 'fragment']) {
+// Complete-document planning: no implicit merge of an incomplete response.
+// Per-item removal consent is unresolved and is not inferred by these tests.
+it('refuses incomplete shared planning documents and publishes exact full revisions through HTTP and Git', async () => {
+	const outcomes: Array<{ handler: string; mode: string; status: string; published: boolean }> = [];
+	for (const handler of ['writer', 'actor', 'estimate', 'reviewer', 'releaser']) for (const mode of ['omitted', 'fragment', 'complete']) {
 		const f = await portableKernel();
 		let boundary: Awaited<ReturnType<typeof contextBoundary>> | undefined;
 		try {
@@ -136,7 +136,8 @@ it('retains frozen peer planning scope and known dependencies across every handl
 				return { resolvedRef: body.ref, files: [{ path, requestedPath: path,
 					content: body.ref === base ? prepared.content : content, ...(body.ref === base ? { frontmatter: frozenFrontmatter } : {}) }] };
 			});
-			const frontmatter = { ...metadata, summary: 'Current planner refinement.', ...(mode === 'fragment' ? { executionPlan: { workItems: [own] } } : {}) };
+			const frontmatter = { ...metadata, summary: 'Current planner refinement.',
+				...(mode === 'omitted' ? {} : { executionPlan: { workItems: mode === 'fragment' ? [own] : [peer, own] } }) };
 			f.setReply({ status: 'completed', summary: 'Controlled planning response.', usage: [{ activeSeconds: 1, elapsedSeconds: 2 }],
 				outputs: { timingAwareness, activityCompletion: { summary: 'Controlled planning response.', reviewDisposition: null,
 					contentOutput: { model: 'proposal', body: 'Refined planning text.', frontmatter } } } });
@@ -149,18 +150,24 @@ it('retains frozen peer planning scope and known dependencies across every handl
 				expect(assignmentResultSchema.parse(result.outputs?.assignmentResult).references).toEqual([
 					{ kind: 'treedx', projectId: f.attempt.projectId, repository, path, commit: candidate, workspaceId: 'retained-planning' }]);
 				expect(f.git('rev-parse', `${candidate}^`)).toBe(base);
-			} else if (mode === 'fragment') {
-				expect(result.summary).toContain('treedx_content_invalid'); expect(result.summary).toContain(peer.id);
+			} else {
+				expect(result.outputs?.assignmentResult).toBeUndefined();
+				if (mode === 'fragment') { expect(result.summary).toContain('treedx_content_invalid'); expect(result.summary).toContain(peer.id); }
 				expect(candidate).toBe(''); expect(content).toBe('');
+				expect(f.git('rev-parse', 'HEAD')).toBe(base);
 			}
 			expect(f.git('status', '--porcelain')).toBe('');
 			const match = candidate ? f.git('show', `${candidate}:${path}`).match(/^---\n([\s\S]*?)\n---(?:\n|$)/u) : null;
 			const actual = match ? parse(match[1]!).executionPlan?.workItems as Array<Record<string, unknown>> | undefined : undefined;
-			outcomes.push({ handler, mode, status: result.status,
-				peerRetained: isDeepStrictEqual(actual?.find(item => item.id === peer.id), frozenFrontmatter.executionPlan.workItems[0]),
-				dependenciesResolved: mode === 'omitted' || Boolean(actual?.some(item => item.id === own.id && JSON.stringify(item.dependsOn) === JSON.stringify([peer.id]))) });
+			if (mode === 'complete') {
+				expect(actual).toHaveLength(2);
+				expect(isDeepStrictEqual(actual?.find(item => item.id === peer.id), frozenFrontmatter.executionPlan.workItems[0])).toBe(true);
+				expect(actual?.find(item => item.id === own.id)).toEqual(own);
+				expect(parse(match![1]!)).toEqual(frontmatter);
+			}
+			outcomes.push({ handler, mode, status: result.status, published: Boolean(candidate) });
 		} finally { try { await boundary?.close(); } finally { await f.close(); expect(existsSync(f.checkout)).toBe(false); } }
 	}
-	expect(outcomes).toEqual(['writer', 'actor', 'estimate', 'reviewer', 'releaser'].flatMap(handler => ['omitted', 'fragment'].map(mode =>
-		({ handler, mode, status: 'completed', peerRetained: true, dependenciesResolved: true }))));
+	expect(outcomes).toEqual(['writer', 'actor', 'estimate', 'reviewer', 'releaser'].flatMap(handler => ['omitted', 'fragment', 'complete'].map(mode =>
+		({ handler, mode, status: mode === 'complete' ? 'completed' : 'failed', published: mode === 'complete' }))));
 });

@@ -41,8 +41,10 @@ function input(activity: typeof activities[number], handler: string) {
 }
 
 describe('nondeterministic handlers support all configured activities', () => {
-	it.each(handlers.flatMap(Handler => ['omitted', 'fragment'].map(mode => [new Handler().id, mode, Handler] as const)))
-	('preserves peer planning work through %s when executionPlan is %s', async (id, mode, Handler) => {
+	// Planning publishes a complete document; it must not silently invent patch
+	// composition. Per-item removal authority is outside this regression.
+	it.each(handlers.flatMap(Handler => ['omitted', 'fragment', 'complete'].map(mode => [new Handler().id, mode, Handler] as const)))
+	('requires a complete shared planning document through %s when executionPlan is %s', async (id, mode, Handler) => {
 		const handler = new Handler(), { context, boundary } = input('planning', id), assignment = context.assignment;
 		const target = assignment.grant.contentWrite.find(reference => reference.model === 'proposal')!;
 		assignment.sourceRef = target; assignment.contextRefs = [target];
@@ -62,25 +64,29 @@ describe('nondeterministic handlers support all configured activities', () => {
 		const base = { ...metadata, executionPlan: { workItems: [peer] } };
 		context.context = [{ ref: target, digest: target.digest!, mediaType: 'application/json', value: { frontmatter: base } }];
 		const frontmatter = { ...metadata, summary: 'Refined by the current admitted planner.',
-			...(mode === 'fragment' ? { executionPlan: { workItems: [own] } } : {}) };
+			...(mode === 'omitted' ? {} : { executionPlan: { workItems: mode === 'fragment' ? [own] : [peer, own] } }) };
 		vi.mocked(boundary.invokeModel).mockResolvedValue({ text: 'Refined the retained proposal.',
 			timingAwareness: assignmentTimingAwarenessReceiptSchema.parse(timingAwareness), usage: { elapsedSeconds: 1 },
 			activityCompletion: { summary: 'Refined the retained proposal.', reviewDisposition: null,
 				contentOutput: { model: 'proposal', body: 'Source-grounded planning refinement.', frontmatter } } });
+		const published: unknown[] = [];
 		vi.mocked(boundary.commitTreeDx).mockImplementation(async ({ writes }) => {
 			for (const write of writes) prepareTreeDxContent(write.target, write.value);
+			published.push(...writes.map(write => write.value));
 			return writes.map(({ target: written }) => ({ kind: 'treedx' as const, projectId: assignment.projectId,
 				repository: written.repository!, path: written.path!, commit: 'b'.repeat(40) }));
 		});
-		const before = structuredClone(context), result = await handler.run(context, boundary);
-		expect(result.status).toBe('completed'); expect(boundary.commitTreeDx).toHaveBeenCalledOnce();
-		const write = vi.mocked(boundary.commitTreeDx).mock.calls[0]![0].writes[0]!;
-		expect(write.value).toMatchObject({ body: 'Source-grounded planning refinement.',
-			frontmatter: { ...metadata, summary: frontmatter.summary } });
-		const actual = (write.value as { frontmatter: { executionPlan?: { workItems: unknown[] } } }).frontmatter.executionPlan?.workItems;
-		expect(actual).toHaveLength(mode === 'fragment' ? 2 : 1);
-		expect(actual).toEqual(expect.arrayContaining(mode === 'fragment' ? [peer, own] : [peer]));
-		expect(context).toEqual(before);
+		const before = structuredClone(context);
+		try {
+			if (mode !== 'complete') {
+				await expect(handler.run(context, boundary)).rejects.toThrow();
+				expect(published).toEqual([]);
+			} else {
+				const result = await handler.run(context, boundary);
+				expect(result.status).toBe('completed'); expect(boundary.commitTreeDx).toHaveBeenCalledOnce();
+				expect(published).toEqual([{ body: 'Source-grounded planning refinement.', frontmatter }]);
+			}
+		} finally { expect(context).toEqual(before); }
 	});
 	it.each(handlers.map(Handler => [new Handler().id, Handler] as const))('publishes an authorized planning proposal through %s without replacing it with a Note', async (id, Handler) => {
 		const handler = new Handler(), { context, boundary } = input('planning', id);

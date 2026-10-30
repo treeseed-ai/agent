@@ -226,7 +226,7 @@ export async function createMicrovmExecutor(config: ProviderHostRuntimeConfig, m
 				await request.emit?.({ type: 'execution.preparing', occurredAt: new Date().toISOString(), summary: 'Requesting a bounded Kata sandbox from the host broker.', payload: { profile: assignment.profile, guestImageDigest: assignment.guestImageDigest } });
 				const preparationDeadlineAt = String(object(object(object(request.assignment.capacityEnvelope).budget).time).preparationDeadlineAt ?? '');
 				const prepared = await client.prepare(assignment, preparationDeadlineAt, request.signal); active.set(request.assignmentId, { sandboxId: prepared.sandboxId, operationToken: prepared.operationToken, providerId: assignment.providerId, teamId: assignment.teamId, renewals: new RenewalDrain() }); let result: ReturnType<typeof sandboxResultSchema.parse> | undefined; let sourceReference: AssignmentReference | undefined; let artifacts: Record<string, unknown>[] = []; let teardown: Record<string, unknown> = { verified: false, completedAt: null };
-				let transportFailure: unknown; let vmId:string|null=null;
+				let transportFailure: unknown; let vmId:string|null=null; let timingValidated = false;
 				const observedBrokerEvents:Array<ReturnType<typeof sandboxEventSchema.parse>>=[];
 				const observeBrokerEvents=async(raw:unknown)=>{
 					if(!Array.isArray(raw)||raw.length<2)throw Object.assign(new Error('Original complete live broker snapshot required'),{code:'sandbox_vm_custody_invalid'});
@@ -336,6 +336,7 @@ export async function createMicrovmExecutor(config: ProviderHostRuntimeConfig, m
 						}
 						throw error;
 					}
+					timingValidated = true;
 					if (result.status === 'completed' && current.source?.authorization.mode === 'work') sourceReference = await publishSourceBranch(client, prepared, current.source, assignment, result, request);
 				} catch (error) { transportFailure = error; } finally {
 					request.signal?.removeEventListener('abort', cancelSandbox);
@@ -368,7 +369,7 @@ export async function createMicrovmExecutor(config: ProviderHostRuntimeConfig, m
 					const failure = Object.assign(transportFailure instanceof Error ? transportFailure : new Error(String(transportFailure)), {
 						outputs, ...(usage ? { usage: [usage] } : {}),
 					});
-					if (result && usage && result.sandboxId === prepared.sandboxId && result.assignmentId === assignment.assignmentId) {
+					if (result && usage && timingValidated && result.sandboxId === prepared.sandboxId && result.assignmentId === assignment.assignmentId) {
 						try {
 							await emitExecutionEvidence(request.emit, { type: 'execution.failed', occurredAt: new Date().toISOString(), summary: failure.message,
 								payload: { sandboxId: prepared.sandboxId, model: assignment.modelPolicy.model, provider: assignment.modelPolicy.provider,
